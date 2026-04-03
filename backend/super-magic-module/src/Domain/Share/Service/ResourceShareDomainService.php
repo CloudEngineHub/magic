@@ -742,9 +742,9 @@ class ResourceShareDomainService
             }
 
             // 必须是同一组织
-            if ($shareEntity->getOrganizationCode() !== $userOrganizationCode) {
-                ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.permission_denied', [$shareCode]);
-            }
+//            if ($shareEntity->getOrganizationCode() !== $userOrganizationCode) {
+//                ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.permission_denied', [$shareCode]);
+//            }
 
             $shareRange = $shareEntity->getShareRange();
 

@@ -565,6 +565,7 @@ class ResourceShareAppService extends AbstractShareAppService
         return [
             'has_password' => ! empty($shareEntity->getPassword()),
             'user_id' => ! is_null($userAuthorization) ? $userAuthorization->getId() : '',
+            'required_magic_organization_code' => $shareEntity->getOrganizationCode(),
         ];
     }
 
