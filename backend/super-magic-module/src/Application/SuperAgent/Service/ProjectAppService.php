@@ -9,6 +9,7 @@ namespace Dtyq\SuperMagic\Application\SuperAgent\Service;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
+use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\LongTermMemory\Service\LongTermMemoryDomainService;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\ErrorCode\GenericErrorCode;
@@ -123,6 +124,7 @@ class ProjectAppService extends AbstractAppService
         private readonly ChatAppService $chatAppService,
         private readonly ResourceShareDomainService $resourceShareDomainService,
         private readonly LongTermMemoryDomainService $longTermMemoryDomainService,
+        private readonly MagicUserDomainService $magicUserDomainService,
         private readonly MagicDepartmentUserDomainService $magicDepartmentUserDomainService,
         private readonly Producer $producer,
         private readonly EventDispatcherInterface $eventDispatcher,
@@ -2038,6 +2040,40 @@ class ProjectAppService extends AbstractAppService
 
         // Delete core project
         $this->projectDomainService->deleteProject($projectId, $project->getUserId());
+    }
+
+    /**
+     * 项目可访问性与资源侧上下文.
+     */
+    public function getProjectAccessibility(RequestContext $requestContext, int $projectId): ?ProjectEntity
+    {
+        $project = $this->projectDomainService->findProjectByIdOrNull($projectId);
+        if ($project === null) {
+            return null;
+        }
+
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $projectOrgCode = $project->getUserOrganizationCode();
+        $magicId = trim($userAuthorization->getMagicId());
+        $currentOrgCode = $userAuthorization->getOrganizationCode();
+
+        if ($currentOrgCode === $projectOrgCode) {
+            $effectiveUserId = $userAuthorization->getId();
+        } else {
+            $userInProjectOrg = $this->magicUserDomainService->getUserByMagicIdInOrganization($magicId, $projectOrgCode);
+            if ($userInProjectOrg === null) {
+                return null;
+            }
+            $effectiveUserId = $userInProjectOrg->getUserId();
+        }
+
+        try {
+            $project = $this->getAccessibleProject($projectId, $effectiveUserId, $projectOrgCode);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $project;
     }
 
     private function shouldForceMagicVisible(string $relativeFilePath, string $fileKey): bool

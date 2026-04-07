@@ -615,6 +615,14 @@ class ProjectDomainService
     }
 
     /**
+     * 按 ID 查询项目，不存在时返回 null（不抛错）.
+     */
+    public function findProjectByIdOrNull(int $projectId): ?ProjectEntity
+    {
+        return $this->projectRepository->findById($projectId);
+    }
+
+    /**
      * Create forked project from source project.
      */
     private function createForkedProjectFromSource(
