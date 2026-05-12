@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\Provider\Official;
 
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\DbConnection\Db;
 use Throwable;
 
@@ -41,18 +42,24 @@ class ServiceProviderInitializer
             Db::beginTransaction();
 
             // Step 1: Initialize service_provider table (provider definitions)
-            $existingProviderCount = Db::table('service_provider')->count();
-            if ($existingProviderCount === 0) {
-                $providers = self::getProviderData($officialOrgCode);
-                foreach ($providers as $provider) {
-                    Db::table('service_provider')->insert($provider);
-                    ++$insertedCount;
-                }
-            }
+            $createdProviderCount = 0;
+            $providers = self::getProviderData($officialOrgCode);
+            foreach ($providers as $provider) {
+                $exists = Db::table('service_provider')
+                    ->where('provider_code', $provider['provider_code'])
+                    ->where('category', $provider['category'])
+                    ->whereNull('deleted_at')
+                    ->exists();
 
-            // Step 2: Initialize service_provider_configs table (organization-specific configurations)
-            $configCount = self::initializeProviderConfigs($officialOrgCode);
-            $insertedCount += $configCount;
+                if ($exists) {
+                    continue;
+                }
+
+                $provider['id'] = IdGenerator::getSnowId();
+                Db::table('service_provider')->insert($provider);
+                ++$createdProviderCount;
+                ++$insertedCount;
+            }
 
             Db::commit();
         } catch (Throwable $e) {
@@ -64,9 +71,7 @@ class ServiceProviderInitializer
             ];
         }
 
-        $message = $existingProviderCount > 0
-            ? "Service provider table already has {$existingProviderCount} records. Configs initialized: {$configCount}."
-            : "Successfully initialized {$insertedCount} items (providers + configs).";
+        $message = "Successfully initialized {$insertedCount} items (providers: {$createdProviderCount}.";
         $message .= ' Official video providers must be initialized manually via /api/v1/bootstrap/video-providers.';
 
         return [
@@ -74,68 +79,6 @@ class ServiceProviderInitializer
             'message' => $message,
             'count' => $insertedCount,
         ];
-    }
-
-    /**
-     * Initialize service provider configurations for the organization.
-     * Ensures that the official provider config exists and is enabled.
-     * @param string $orgCode Organization code
-     * @return int Number of configs created or updated
-     */
-    private static function initializeProviderConfigs(string $orgCode): int
-    {
-        $count = 0;
-        $now = now();
-
-        $officialProviders = Db::table('service_provider')
-            ->where('provider_type', 1) // Official provider type
-            ->whereIn('category', ['llm', 'vlm'])
-            ->get();
-
-        if ($officialProviders->isEmpty()) {
-            return 0;
-        }
-
-        foreach ($officialProviders as $officialProvider) {
-            $providerData = is_object($officialProvider) ? $officialProvider : (object) $officialProvider;
-            $officialProviderId = $providerData->id;
-
-            $existingConfig = Db::table('service_provider_configs')
-                ->where('organization_code', $orgCode)
-                ->where('service_provider_id', $officialProviderId)
-                ->first();
-
-            if ($existingConfig) {
-                $configData = is_object($existingConfig) ? $existingConfig : (object) $existingConfig;
-                if ($configData->status != 1) {
-                    Db::table('service_provider_configs')
-                        ->where('id', $configData->id)
-                        ->update(['status' => 1, 'updated_at' => $now]);
-                    ++$count;
-                }
-                continue;
-            }
-
-            Db::table('service_provider_configs')->insert([
-                'organization_code' => $orgCode,
-                'service_provider_id' => $officialProviderId,
-                'alias' => $providerData->category === 'vlm' ? 'Magic Official Vision' : 'Magic Official',
-                'translate' => json_encode([
-                    'alias' => [
-                        'en_US' => $providerData->category === 'vlm' ? 'Magic Official Vision' : 'Magic Official',
-                        'zh_CN' => $providerData->category === 'vlm' ? 'Magic 官方视觉' : 'Magic 官方',
-                    ],
-                ]),
-                'config' => json_encode([]),
-                'status' => 1, // Enabled
-                'sort' => 0,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-            ++$count;
-        }
-
-        return $count;
     }
 
     /**
