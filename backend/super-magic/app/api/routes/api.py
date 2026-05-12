@@ -17,6 +17,7 @@ from app.api.routes.sdk import router as sdk_router
 from app.api.routes.models import router as models_router
 from app.api.routes.media import router as media_router
 from app.api.routes.debug import router as debug_router
+from app.api.routes.agent_control import router as agent_control_router
 
 
 # 创建主路由器，设置统一前缀
@@ -54,6 +55,9 @@ api_router.include_router(media_router, tags=["媒体预览"])
 
 # 注册本地调试路由
 api_router.include_router(debug_router, tags=["本地调试"])
+
+# 注册 Agent 控制路由
+api_router.include_router(agent_control_router, tags=["Agent 控制"])
 
 @api_router.get("/health", tags=["系统"])
 async def health_check():
