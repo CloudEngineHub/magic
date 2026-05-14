@@ -11,8 +11,7 @@ use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 use App\Domain\MagicBase\Entity\ValueObject\ActorContext;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnIndex;
-use App\ErrorCode\GenericErrorCode;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use DateTime;
 
@@ -120,11 +119,11 @@ class MagicBaseRowDomainService
 
     private function empty(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.empty', ['label' => $label]);
+        MagicBaseExceptionBuilder::parameterMissing($label);
     }
 
     private function invalid(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::validateFailed($label);
     }
 }

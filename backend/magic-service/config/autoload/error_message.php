@@ -18,6 +18,7 @@ use App\ErrorCode\ImageGenerateErrorCode;
 use App\ErrorCode\LongTermMemoryErrorCode;
 use App\ErrorCode\MagicAccountErrorCode;
 use App\ErrorCode\MagicApiErrorCode;
+use App\ErrorCode\MagicBaseErrorCode;
 use App\ErrorCode\MCPErrorCode;
 use App\ErrorCode\ModeErrorCode;
 use App\ErrorCode\PermissionErrorCode;
@@ -50,6 +51,7 @@ return [
         ServiceProviderErrorCode::class => [44000, 44999],
         LongTermMemoryErrorCode::class => [45000, 45999],
         AppMenuErrorCode::class => [46000, 46999],
+        MagicBaseErrorCode::class => [47000, 47999],
         MCPErrorCode::class => [51500, 51599],
         SuperMagicErrorCode::class => [60000, 60999],
         DesignErrorCode::class => [14000, 14999],

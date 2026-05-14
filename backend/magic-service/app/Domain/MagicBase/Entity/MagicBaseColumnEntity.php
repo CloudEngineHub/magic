@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\MagicBase\Entity;
 
+use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnDynamicPermission;
 use DateTime;
 
 class MagicBaseColumnEntity extends AbstractEntity
@@ -31,13 +32,19 @@ class MagicBaseColumnEntity extends AbstractEntity
 
     protected string $status = '';
 
-    protected array $dynamicPermission = [];
+    protected MagicBaseColumnDynamicPermission $dynamicPermission;
 
     protected ?DateTime $createdAt = null;
 
     protected ?DateTime $updatedAt = null;
 
     protected ?DateTime $deletedAt = null;
+
+    public function __construct(?array $data = null)
+    {
+        $this->dynamicPermission = MagicBaseColumnDynamicPermission::fromArray(null);
+        parent::__construct($data);
+    }
 
     public function getId(): ?int
     {
@@ -148,22 +155,23 @@ class MagicBaseColumnEntity extends AbstractEntity
         $this->status = $value === null ? '' : (string) $value;
     }
 
-    /**
-     * @return array{read_scope?: string, edit_scope?: string}
-     */
-    public function getDynamicPermission(): array
+    public function getDynamicPermission(): MagicBaseColumnDynamicPermission
     {
         return $this->dynamicPermission;
     }
 
-    public function setDynamicPermission(null|array|string $value): void
+    public function setDynamicPermission(null|array|MagicBaseColumnDynamicPermission|string $value): void
     {
-        if (is_string($value)) {
-            $decoded = json_decode($value, true);
-            $this->dynamicPermission = is_array($decoded) ? $decoded : [];
+        if ($value instanceof MagicBaseColumnDynamicPermission) {
+            $this->dynamicPermission = $value;
             return;
         }
-        $this->dynamicPermission = is_array($value) ? $value : [];
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $this->dynamicPermission = MagicBaseColumnDynamicPermission::fromArray(is_array($decoded) ? $decoded : null);
+            return;
+        }
+        $this->dynamicPermission = MagicBaseColumnDynamicPermission::fromArray(is_array($value) ? $value : null);
     }
 
     public function getCreatedAt(): ?DateTime
@@ -194,5 +202,15 @@ class MagicBaseColumnEntity extends AbstractEntity
     public function setDeletedAt(null|array|DateTime|int|string $value): void
     {
         $this->deletedAt = $value === null ? null : $this->createDatetime($value);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        $payload = parent::toArray();
+        $payload['dynamic_permission'] = $this->getDynamicPermission()->toArray();
+        return $payload;
     }
 }

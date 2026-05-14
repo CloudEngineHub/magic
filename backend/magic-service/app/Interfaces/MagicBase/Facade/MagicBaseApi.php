@@ -14,9 +14,8 @@ use App\Application\MagicBase\Service\MagicBaseQueryAppService;
 use App\Application\MagicBase\Service\MagicBaseRelationAppService;
 use App\Application\MagicBase\Service\MagicBaseRowAppService;
 use App\Application\MagicBase\Service\MagicBaseTableAppService;
-use App\ErrorCode\GenericErrorCode;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Infrastructure\Core\AbstractApi;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\MagicBase\Assembler\MagicBaseResponseAssembler;
 use App\Interfaces\MagicBase\DTO\CreateColumnRequest;
 use App\Interfaces\MagicBase\DTO\CreateRelationRequest;
@@ -280,7 +279,7 @@ class MagicBaseApi extends AbstractApi
     private static function parseId(string $id, string $label): int
     {
         if (! ctype_digit($id)) {
-            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+            MagicBaseExceptionBuilder::validateFailed($label);
         }
         return (int) $id;
     }

@@ -50,6 +50,14 @@ class MagicBaseAccessContext
         return $this->rowPermissions->get($recordId);
     }
 
+    /**
+     * @return array<int, MagicBaseEntityCollection>
+     */
+    public function getRowPermissionsByRecord(): array
+    {
+        return $this->rowPermissions->all();
+    }
+
     public function isManager(): bool
     {
         return $this->manager;

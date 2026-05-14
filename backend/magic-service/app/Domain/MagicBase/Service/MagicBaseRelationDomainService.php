@@ -9,8 +9,7 @@ namespace App\Domain\MagicBase\Service;
 
 use App\Domain\MagicBase\Entity\MagicBaseRelationEntity;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
-use App\ErrorCode\GenericErrorCode;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use DateTime;
 
 class MagicBaseRelationDomainService
@@ -21,7 +20,7 @@ class MagicBaseRelationDomainService
             $this->invalid('关系类型');
         }
         if ($relationName === '') {
-            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.empty', ['label' => '关系名称']);
+            MagicBaseExceptionBuilder::parameterMissing('关系名称');
         }
     }
 
@@ -56,6 +55,6 @@ class MagicBaseRelationDomainService
 
     private function invalid(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::relationInvalid($label);
     }
 }

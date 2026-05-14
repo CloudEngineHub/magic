@@ -13,16 +13,16 @@ use App\Application\MagicBase\DTO\MagicBaseTableDetailDTO;
 use App\Application\MagicBase\DTO\UpdateTableRequestDTO;
 use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
+use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnDynamicPermission;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseDynamicPermissions;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
 use App\Domain\MagicBase\Service\MagicBaseAccessControlDomainService;
 use App\Domain\MagicBase\Service\MagicBaseColumnDomainService;
 use App\Domain\MagicBase\Service\MagicBaseMigrationLogDomainService;
 use App\Domain\MagicBase\Service\MagicBaseTableDomainService;
-use App\ErrorCode\GenericErrorCode;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use DateTime;
 use Hyperf\DbConnection\Db;
@@ -43,9 +43,7 @@ readonly class MagicBaseTableAppService
         $payload = $requestDTO->toArray();
         $this->tableDomainService->validateCreatePayload($payload);
         $this->columnDomainService->validateCreateList($requestDTO->columns);
-        $this->tableDomainService->normalizeDynamicPermissions(MagicBaseDynamicPermissions::fromArray(
-            is_array($payload['dynamic_permissions'] ?? null) ? $payload['dynamic_permissions'] : null
-        ));
+        $this->tableDomainService->normalizeDynamicPermissions($requestDTO->dynamicPermissions);
 
         return Db::transaction(function () use ($authorization, $projectId, $payload): MagicBaseTableDetailDTO {
             $organizationCode = $authorization->getOrganizationCode();
@@ -73,7 +71,7 @@ readonly class MagicBaseTableAppService
             $now = $this->now();
             $dynamicPermissions = $this->tableDomainService->normalizeDynamicPermissions(MagicBaseDynamicPermissions::fromArray(
                 is_array($payload['dynamic_permissions'] ?? null) ? $payload['dynamic_permissions'] : null
-            ))->toArray();
+            ));
             $table = $this->repository->saveTable([
                 'organization_code' => $organizationCode,
                 'project_id' => $projectId,
@@ -81,7 +79,7 @@ readonly class MagicBaseTableAppService
                 'table_name' => trim((string) $payload['table_name']),
                 'description' => trim((string) ($payload['description'] ?? '')),
                 'status' => MagicBaseConst::STATUS_ENABLED,
-                'dynamic_permissions' => $dynamicPermissions,
+                'dynamic_permissions' => $dynamicPermissions->toArray(),
                 'created_by' => $authorization->getId(),
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -91,8 +89,8 @@ readonly class MagicBaseTableAppService
             foreach ($payload['columns'] as $columnPayload) {
                 $columnKey = trim((string) $columnPayload['column_key']);
                 $columnDynamicPermission = is_array($columnPayload['dynamic_permission'] ?? null)
-                    ? $columnPayload['dynamic_permission']
-                    : (is_array($dynamicPermissions['columns'][$columnKey] ?? null) ? $dynamicPermissions['columns'][$columnKey] : null);
+                    ? MagicBaseColumnDynamicPermission::fromArray($columnPayload['dynamic_permission'])
+                    : $dynamicPermissions->getColumn($columnKey);
 
                 $column = $this->repository->saveColumn([
                     'organization_code' => $organizationCode,
@@ -167,7 +165,7 @@ readonly class MagicBaseTableAppService
             if (array_key_exists('dynamic_permissions', $payload)) {
                 $table->setDynamicPermissions($this->tableDomainService->normalizeDynamicPermissions(MagicBaseDynamicPermissions::fromArray(
                     is_array($payload['dynamic_permissions']) ? $payload['dynamic_permissions'] : null
-                ))->toArray());
+                )));
             }
 
             $table->setUpdatedAt($this->now());
@@ -284,7 +282,7 @@ readonly class MagicBaseTableAppService
             $column->setOptions(isset($merged['options']) && is_array($merged['options']) ? $merged['options'] : null);
             $column->setDynamicPermission($this->columnDomainService->normalizeDynamicPermission(
                 is_array($merged['dynamic_permission'] ?? null) ? $merged['dynamic_permission'] : null
-            )->toArray());
+            ));
             $column->setUpdatedAt($this->now());
             $column = $this->repository->saveColumn($column);
 
@@ -327,7 +325,7 @@ readonly class MagicBaseTableAppService
     {
         $table = $this->repository->getTable($authorization->getOrganizationCode(), $projectId, $tableId);
         if ($table === null) {
-            $this->invalid('数据表');
+            $this->notFound('数据表');
         }
         return $table;
     }
@@ -336,7 +334,7 @@ readonly class MagicBaseTableAppService
     {
         $column = $this->repository->getColumn($authorization->getOrganizationCode(), $tableId, $columnId);
         if ($column === null) {
-            $this->invalid('字段');
+            $this->notFound('字段');
         }
         return $column;
     }
@@ -349,12 +347,17 @@ readonly class MagicBaseTableAppService
     private function requireString(mixed $value, string $label): void
     {
         if (! is_string($value) || trim($value) === '') {
-            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.empty', ['label' => $label]);
+            MagicBaseExceptionBuilder::parameterMissing($label);
         }
     }
 
     private function invalid(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::validateFailed($label);
+    }
+
+    private function notFound(string $label): void
+    {
+        MagicBaseExceptionBuilder::resourceNotFound($label);
     }
 }

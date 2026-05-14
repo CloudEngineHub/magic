@@ -41,6 +41,28 @@ class SelectQuery extends AbstractEntity
         return $this->relations;
     }
 
+    public function withoutRelations(): self
+    {
+        return new self([
+            'fields' => $this->fields,
+            'relations' => [],
+        ]);
+    }
+
+    public function getRelationSourceColumn(string $alias): string
+    {
+        return (string) ($this->relations[$alias]['source_column'] ?? '');
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getRelationFields(string $alias): array
+    {
+        $fields = $this->relations[$alias]['fields'] ?? [];
+        return is_array($fields) ? array_values(array_filter($fields, 'is_string')) : [];
+    }
+
     /**
      * @param array<string, array{source_column?: string, fields?: list<string>}> $relations
      */

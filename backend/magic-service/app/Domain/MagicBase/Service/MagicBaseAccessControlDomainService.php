@@ -13,9 +13,8 @@ use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\ValueObject\ActorContext;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseTableAccessContext;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
-use App\ErrorCode\GenericErrorCode;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 
 readonly class MagicBaseAccessControlDomainService
@@ -188,11 +187,11 @@ readonly class MagicBaseAccessControlDomainService
 
     private function invalid(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::resourceNotFound($label);
     }
 
     private function forbidden(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::accessDenied($label);
     }
 }

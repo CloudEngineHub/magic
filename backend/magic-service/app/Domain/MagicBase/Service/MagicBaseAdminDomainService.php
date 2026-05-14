@@ -12,9 +12,8 @@ use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\MagicBase\Entity\ValueObject\ActorContext;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBasePermissionSubject;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
-use App\ErrorCode\GenericErrorCode;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 
 readonly class MagicBaseAdminDomainService
@@ -70,7 +69,7 @@ readonly class MagicBaseAdminDomainService
             $this->invalid('subject_type');
         }
         if ($subjectType !== MagicBaseConst::SUBJECT_ANONYMOUS && $subjectId === '') {
-            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.empty', ['label' => 'subject_id']);
+            MagicBaseExceptionBuilder::parameterMissing('subject_id');
         }
 
         return new MagicBasePermissionSubject($subjectType, $subjectId);
@@ -78,11 +77,11 @@ readonly class MagicBaseAdminDomainService
 
     private function invalid(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::permissionInvalid($label);
     }
 
     private function forbidden(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::accessDenied($label);
     }
 }

@@ -154,12 +154,12 @@ use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseFragmentReposit
 use App\Domain\LongTermMemory\Repository\LongTermMemoryRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseMigrationLogRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBasePermissionRepositoryInterface;
-use App\Domain\MagicBase\Repository\Facade\MagicBaseProjectRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRelationRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowQueryRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowStoreRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseTableRepositoryInterface;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
+use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
 use App\Domain\MCP\Repository\Facade\MCPServerRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPServerToolRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPUserSettingRepositoryInterface;
@@ -417,12 +417,11 @@ $dependencies = [
     MagicProviderAndModelsInterface::class => MagicProviderAndModelsRepository::class,
     AiAbilityRepositoryInterface::class => AiAbilityRepository::class,
     // magicbase
-    MagicBaseProjectRepositoryInterface::class => MagicBaseTableRepository::class,
     MagicBaseTableRepositoryInterface::class => MagicBaseTableRepository::class,
     MagicBaseRelationRepositoryInterface::class => MagicBaseTableRepository::class,
     MagicBasePermissionRepositoryInterface::class => MagicBaseTableRepository::class,
-    MagicBaseRowStoreRepositoryInterface::class => MagicBaseTableRepository::class,
-    MagicBaseRowQueryRepositoryInterface::class => MagicBaseTableRepository::class,
+    MagicBaseRowStoreRepositoryInterface::class => MagicBaseRowStorageResolverDomainService::class,
+    MagicBaseRowQueryRepositoryInterface::class => MagicBaseRowStorageResolverDomainService::class,
     MagicBaseMigrationLogRepositoryInterface::class => MagicBaseTableRepository::class,
     // mcp
     MCPServerRepositoryInterface::class => MCPServerRepository::class,

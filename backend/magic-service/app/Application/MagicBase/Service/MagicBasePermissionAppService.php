@@ -15,13 +15,12 @@ use App\Domain\MagicBase\Entity\MagicBaseColumnPermissionEntity;
 use App\Domain\MagicBase\Entity\MagicBaseRowPermissionEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTablePermissionEntity;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
 use App\Domain\MagicBase\Service\MagicBaseAccessControlDomainService;
 use App\Domain\MagicBase\Service\MagicBaseAdminDomainService;
 use App\Domain\MagicBase\Service\MagicBaseMigrationLogDomainService;
 use App\Domain\MagicBase\Service\MagicBaseQueryDomainService;
-use App\ErrorCode\GenericErrorCode;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use DateTime;
 
@@ -140,7 +139,7 @@ readonly class MagicBasePermissionAppService
     {
         $column = $this->repository->getColumn($authorization->getOrganizationCode(), $tableId, $columnId);
         if ($column === null) {
-            $this->invalid('字段');
+            $this->notFound('字段');
         }
         return $column;
     }
@@ -158,6 +157,11 @@ readonly class MagicBasePermissionAppService
 
     private function invalid(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::permissionInvalid($label);
+    }
+
+    private function notFound(string $label): void
+    {
+        MagicBaseExceptionBuilder::resourceNotFound($label);
     }
 }

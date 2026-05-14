@@ -10,8 +10,7 @@ namespace App\Domain\MagicBase\Service;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnDefinitionCollection;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnDynamicPermission;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
-use App\ErrorCode\GenericErrorCode;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 
 class MagicBaseColumnDomainService
 {
@@ -68,11 +67,11 @@ class MagicBaseColumnDomainService
     }
 
     /**
-     * @param null|array{read_scope?: string, edit_scope?: string} $permission
+     * @param null|array{read_scope?: string, edit_scope?: string}|MagicBaseColumnDynamicPermission $permission
      */
-    public function normalizeDynamicPermission(?array $permission): MagicBaseColumnDynamicPermission
+    public function normalizeDynamicPermission(null|array|MagicBaseColumnDynamicPermission $permission): MagicBaseColumnDynamicPermission
     {
-        $normalized = array_merge(MagicBaseConst::DEFAULT_COLUMN_PERMISSIONS, $permission ?? []);
+        $normalized = array_merge(MagicBaseConst::DEFAULT_COLUMN_PERMISSIONS, $permission instanceof MagicBaseColumnDynamicPermission ? $permission->toArray() : ($permission ?? []));
         foreach (['column.read_scope' => $normalized['read_scope'], 'column.edit_scope' => $normalized['edit_scope']] as $label => $scope) {
             if (! in_array((string) $scope, MagicBaseConst::SCOPES, true)) {
                 $this->invalid($label);
@@ -84,12 +83,12 @@ class MagicBaseColumnDomainService
     private function requireString(mixed $value, string $label): void
     {
         if (! is_string($value) || trim($value) === '') {
-            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.empty', ['label' => $label]);
+            MagicBaseExceptionBuilder::parameterMissing($label);
         }
     }
 
     private function invalid(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::validateFailed($label);
     }
 }

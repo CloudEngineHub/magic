@@ -19,6 +19,19 @@ class CreateRowRequestDTO
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public function getData(): array
+    {
+        return $this->data;
+    }
+
+    public function getSelect(): string
+    {
+        return $this->select;
+    }
+
+    /**
      * @return array{data: array<string, mixed>, select: string}
      */
     public function toArray(): array

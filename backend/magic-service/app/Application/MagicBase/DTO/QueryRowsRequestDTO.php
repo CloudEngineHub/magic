@@ -23,6 +23,37 @@ class QueryRowsRequestDTO
     }
 
     /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function getFilter(): array
+    {
+        return $this->filter;
+    }
+
+    /**
+     * @return list<array{field?: string, order?: 'asc'|'desc'|string}>
+     */
+    public function getSort(): array
+    {
+        return $this->sort;
+    }
+
+    public function getPage(): int
+    {
+        return $this->page;
+    }
+
+    public function getPageSize(): int
+    {
+        return $this->pageSize;
+    }
+
+    public function getSelect(): string
+    {
+        return $this->select;
+    }
+
+    /**
      * @return array{
      *     filter: array<string, array<string, mixed>>,
      *     sort: list<array{field?: string, order?: 'asc'|'desc'|string}>,

@@ -294,22 +294,35 @@ class MagicBasePermissionDomainService
 
     private function getTableScope(MagicBaseTableEntity $table, string $scopeField): string
     {
-        $permissions = $table->getDynamicPermissions();
+        $permission = $table->getDynamicPermissions()->getTable();
 
-        return (string) ($permissions['table'][$scopeField] ?? MagicBaseConst::SCOPE_PUBLIC);
+        return match ($scopeField) {
+            'read_scope' => $permission->getReadScope(),
+            'insert_scope' => $permission->getInsertScope(),
+            default => MagicBaseConst::SCOPE_PUBLIC,
+        };
     }
 
     private function getRowScope(MagicBaseTableEntity $table, string $scopeField): string
     {
-        $permissions = $table->getDynamicPermissions();
+        $permission = $table->getDynamicPermissions()->getRow();
 
-        return (string) ($permissions['row'][$scopeField] ?? MagicBaseConst::SCOPE_PUBLIC);
+        return match ($scopeField) {
+            'read_scope' => $permission->getReadScope(),
+            'edit_scope' => $permission->getEditScope(),
+            'delete_scope' => $permission->getDeleteScope(),
+            default => MagicBaseConst::SCOPE_PUBLIC,
+        };
     }
 
     private function getColumnScope(MagicBaseColumnEntity $column, string $scopeField): string
     {
         $permission = $column->getDynamicPermission();
 
-        return (string) ($permission[$scopeField] ?? MagicBaseConst::SCOPE_PUBLIC);
+        return match ($scopeField) {
+            'read_scope' => $permission->getReadScope(),
+            'edit_scope' => $permission->getEditScope(),
+            default => MagicBaseConst::SCOPE_PUBLIC,
+        };
     }
 }

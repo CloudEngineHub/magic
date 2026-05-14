@@ -30,12 +30,11 @@ readonly class MagicBaseRowAppService
 
     public function createRow(MagicUserAuthorization $authorization, int $projectId, int $tableId, CreateRowRequestDTO $requestDTO): MagicBaseRowDTO
     {
-        $payload = $requestDTO->toArray();
-        return Db::transaction(function () use ($authorization, $projectId, $tableId, $payload): MagicBaseRowDTO {
+        return Db::transaction(function () use ($authorization, $projectId, $tableId, $requestDTO): MagicBaseRowDTO {
             $context = $this->accessControlDomainService->requireInsertableTable($authorization, $projectId, $tableId);
 
             $data = $this->rowDomainService->normalizeRowPayload(
-                is_array($payload['data'] ?? null) ? $payload['data'] : null,
+                $requestDTO->getData(),
                 $context->getAccess()->getColumns(),
                 true
             );
@@ -54,7 +53,7 @@ readonly class MagicBaseRowAppService
                 $context->getTable(),
                 $row,
                 $context->getAccess(),
-                $this->selectParserDomainService->parse((string) ($payload['select'] ?? ''))->toArray(),
+                $this->selectParserDomainService->parse($requestDTO->getSelect()),
                 $context->getActor(),
             ));
         });
@@ -62,13 +61,11 @@ readonly class MagicBaseRowAppService
 
     public function updateRow(MagicUserAuthorization $authorization, int $projectId, int $tableId, int $recordId, CreateRowRequestDTO $requestDTO): MagicBaseRowDTO
     {
-        $payload = $requestDTO->toArray();
-        return Db::transaction(function () use ($authorization, $projectId, $tableId, $recordId, $payload): MagicBaseRowDTO {
+        return Db::transaction(function () use ($authorization, $projectId, $tableId, $recordId, $requestDTO): MagicBaseRowDTO {
             $context = $this->accessControlDomainService->loadTableContext($authorization, $projectId, $tableId);
             $row = $this->accessControlDomainService->requireEditableRow($authorization, $context, $recordId);
 
-            $inputData = is_array($payload['data'] ?? null) ? $payload['data'] : null;
-            $normalized = $this->rowDomainService->normalizeRowPayload($inputData, $context->getAccess()->getColumns(), false);
+            $normalized = $this->rowDomainService->normalizeRowPayload($requestDTO->getData(), $context->getAccess()->getColumns(), false);
             $this->accessControlDomainService->assertEditableColumns($context, $row, array_values(array_map('strval', array_keys($normalized))));
 
             $row = $this->rowStorageResolver->saveRow($this->rowDomainService->applyUpdate($row, $normalized));
@@ -78,7 +75,7 @@ readonly class MagicBaseRowAppService
                 $context->getTable(),
                 $row,
                 $context->getAccess(),
-                $this->selectParserDomainService->parse((string) ($payload['select'] ?? ''))->toArray(),
+                $this->selectParserDomainService->parse($requestDTO->getSelect()),
                 $context->getActor(),
             ));
         });

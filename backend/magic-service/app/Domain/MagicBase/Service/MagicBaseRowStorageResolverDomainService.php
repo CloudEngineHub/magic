@@ -9,6 +9,8 @@ namespace App\Domain\MagicBase\Service;
 
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
+use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQuery;
+use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQueryResult;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowQueryRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowStoreRepositoryInterface;
 use App\Domain\MagicBase\Repository\Persistence\Storage\OpenSearch\MagicBaseOpenSearchRowQueryRepository;
@@ -30,6 +32,11 @@ readonly class MagicBaseRowStorageResolverDomainService implements MagicBaseRowS
     public function getRow(string $organizationCode, int $tableId, int $recordId): ?MagicBaseRowEntity
     {
         return $this->openSearchRowQueryRepository->getRow($organizationCode, $tableId, $recordId);
+    }
+
+    public function queryRows(MagicBaseRowQuery $query): MagicBaseRowQueryResult
+    {
+        return $this->openSearchRowQueryRepository->queryRows($query);
     }
 
     /** @return MagicBaseEntityCollection<MagicBaseRowEntity> */

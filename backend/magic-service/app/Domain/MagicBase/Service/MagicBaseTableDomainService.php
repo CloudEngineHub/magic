@@ -9,8 +9,7 @@ namespace App\Domain\MagicBase\Service;
 
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseDynamicPermissions;
-use App\ErrorCode\GenericErrorCode;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 
 class MagicBaseTableDomainService
 {
@@ -73,11 +72,11 @@ class MagicBaseTableDomainService
 
     private function empty(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.empty', ['label' => $label]);
+        MagicBaseExceptionBuilder::parameterMissing($label);
     }
 
     private function invalid(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::validateFailed($label);
     }
 }

@@ -13,6 +13,7 @@ use App\Application\MagicBase\DTO\QueryRowsRequestDTO;
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 use App\Domain\MagicBase\Service\MagicBaseAccessControlDomainService;
 use App\Domain\MagicBase\Service\MagicBaseQueryDomainService;
+use App\Domain\MagicBase\Service\MagicBaseRowQueryCriteriaDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
 use App\Domain\MagicBase\Service\MagicBaseSelectParserDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -22,6 +23,7 @@ readonly class MagicBaseQueryAppService
     public function __construct(
         private MagicBaseAccessControlDomainService $accessControlDomainService,
         private MagicBaseQueryDomainService $queryDomainService,
+        private MagicBaseRowQueryCriteriaDomainService $rowQueryCriteriaDomainService,
         private MagicBaseRowStorageResolverDomainService $rowStorageResolver,
         private MagicBaseSelectParserDomainService $selectParserDomainService,
     ) {
@@ -29,28 +31,43 @@ readonly class MagicBaseQueryAppService
 
     public function queryRows(MagicUserAuthorization $authorization, int $projectId, int $tableId, QueryRowsRequestDTO $requestDTO): MagicBasePageDTO
     {
-        $payload = $requestDTO->toArray();
         $context = $this->accessControlDomainService->requireReadableTable($authorization, $projectId, $tableId);
-        $rows = $this->accessControlDomainService->filterReadableRows($context, $this->rowStorageResolver->listRows($authorization->getOrganizationCode(), $tableId));
-
-        $rows = $this->queryDomainService->applyFilters($authorization, $projectId, $context->getTable(), $rows, $payload['filter'] ?? [], $context->getActor(), $context->getAccess());
-        $total = count($rows);
-        $rows = $this->queryDomainService->applySort($rows, is_array($payload['sort'] ?? null) ? $payload['sort'] : []);
-
-        $page = max(1, (int) ($payload['page'] ?? 1));
-        $pageSize = max(1, (int) ($payload['page_size'] ?? 20));
+        $sorts = $requestDTO->getSort();
+        $this->queryDomainService->assertSortableByOpenSearch($sorts);
+        $filters = $this->queryDomainService->resolveFiltersForOpenSearch(
+            $authorization,
+            $projectId,
+            $context->getTable(),
+            $context->getAccess(),
+            $context->getActor(),
+            $requestDTO->getFilter()
+        );
+        $page = max(1, $requestDTO->getPage());
+        $pageSize = max(1, $requestDTO->getPageSize());
+        $query = $this->rowQueryCriteriaDomainService->buildReadableQuery(
+            $authorization->getOrganizationCode(),
+            $context->getTable(),
+            $context->getAccess(),
+            $context->getActor(),
+            $filters,
+            $sorts,
+            $page,
+            $pageSize,
+        );
+        $result = $this->rowStorageResolver->queryRows($query);
         /** @var MagicBaseRowEntity[] $rows */
-        $rows = array_slice($rows->all(), ($page - 1) * $pageSize, $pageSize);
-        $select = $this->selectParserDomainService->parse((string) ($payload['select'] ?? ''))->toArray();
+        $rows = $result->getRows()->all();
+        $select = $this->selectParserDomainService->parse($requestDTO->getSelect());
+        $formattedRows = $this->queryDomainService->formatRows($authorization, $projectId, $context->getTable(), $rows, $context->getAccess(), $select, $context->getActor());
 
         return new MagicBasePageDTO(
             array_map(
-                fn (MagicBaseRowEntity $row): MagicBaseRowDTO => new MagicBaseRowDTO($this->queryDomainService->formatRow($authorization, $projectId, $context->getTable(), $row, $context->getAccess(), $select, $context->getActor())),
-                $rows
+                static fn ($row): MagicBaseRowDTO => new MagicBaseRowDTO($row),
+                $formattedRows
             ),
             $page,
             $pageSize,
-            $total,
+            $result->getTotal(),
         );
     }
 
@@ -64,7 +81,7 @@ readonly class MagicBaseQueryAppService
             $context->getTable(),
             $row,
             $context->getAccess(),
-            $this->selectParserDomainService->parse($select)->toArray(),
+            $this->selectParserDomainService->parse($select),
             $context->getActor(),
         ));
     }

@@ -13,12 +13,11 @@ use App\Domain\MagicBase\Entity\MagicBaseRelationEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
 use App\Domain\MagicBase\Service\MagicBaseAccessControlDomainService;
 use App\Domain\MagicBase\Service\MagicBaseMigrationLogDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRelationDomainService;
-use App\ErrorCode\GenericErrorCode;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Hyperf\DbConnection\Db;
 
@@ -154,7 +153,7 @@ readonly class MagicBaseRelationAppService
     {
         $table = $this->repository->getTable($authorization->getOrganizationCode(), $projectId, $tableId);
         if ($table === null) {
-            $this->invalid('数据表');
+            $this->notFound('数据表');
         }
         return $table;
     }
@@ -163,7 +162,7 @@ readonly class MagicBaseRelationAppService
     {
         $column = $this->repository->getColumn($authorization->getOrganizationCode(), $tableId, $columnId);
         if ($column === null) {
-            $this->invalid('字段');
+            $this->notFound('字段');
         }
         return $column;
     }
@@ -172,7 +171,7 @@ readonly class MagicBaseRelationAppService
     {
         $relation = $this->repository->getRelation($authorization->getOrganizationCode(), $projectId, $relationId);
         if ($relation === null) {
-            $this->invalid('关系');
+            $this->notFound('关系');
         }
         return $relation;
     }
@@ -190,6 +189,11 @@ readonly class MagicBaseRelationAppService
 
     private function invalid(string $label): void
     {
-        ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => $label]);
+        MagicBaseExceptionBuilder::validateFailed($label);
+    }
+
+    private function notFound(string $label): void
+    {
+        MagicBaseExceptionBuilder::resourceNotFound($label);
     }
 }
