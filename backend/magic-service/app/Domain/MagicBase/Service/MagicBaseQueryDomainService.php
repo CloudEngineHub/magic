@@ -115,16 +115,6 @@ readonly class MagicBaseQueryDomainService
                 continue;
             }
 
-            if (! $this->permissionDomainService->canReadColumn(
-                $actor,
-                $row,
-                $column,
-                $access->getColumnPermissions((int) $column->getId()),
-                $access->isManager()
-            )) {
-                continue;
-            }
-
             $result[$field] = $row->getData()[$field] ?? null;
         }
 
@@ -399,22 +389,10 @@ readonly class MagicBaseQueryDomainService
         }
         $targetTable = $this->enrichTableScope($targetTable);
         $targetAccess = $this->loadAccessContext($authorization, $projectId, $targetTableId, $actor);
-        if (! $this->permissionDomainService->canReadTable($actor, $targetTable, $targetAccess->getTablePermissions(), $targetAccess->isManager())) {
-            return [];
-        }
 
         $matched = [];
         /** @var MagicBaseRowEntity $targetRow */
         foreach ($this->rowStorageResolver->listRows($authorization->getOrganizationCode(), $targetTableId) as $targetRow) {
-            if (! $this->permissionDomainService->canReadRow(
-                $actor,
-                $targetRow,
-                $targetTable,
-                $targetAccess->getRowPermissions((int) $targetRow->getRecordId()),
-                $targetAccess->isManager()
-            )) {
-                continue;
-            }
             if ($this->readFieldValue($targetRow, $relation->getTargetColumnKey()) != $sourceValue) {
                 continue;
             }
@@ -467,9 +445,6 @@ readonly class MagicBaseQueryDomainService
         }
         $targetTable = $this->enrichTableScope($targetTable);
         $targetAccess = $this->loadAccessContext($authorization, $projectId, $targetTableId, $actor);
-        if (! $this->permissionDomainService->canReadTable($actor, $targetTable, $targetAccess->getTablePermissions(), $targetAccess->isManager())) {
-            return [];
-        }
 
         $query = $this->rowQueryCriteriaDomainService->buildReadableQuery(
             $authorization->getOrganizationCode(),
@@ -533,9 +508,6 @@ readonly class MagicBaseQueryDomainService
         }
         $targetTable = $this->enrichTableScope($targetTable);
         $targetAccess = $this->loadAccessContext($authorization, $projectId, $targetTableId, $actor);
-        if (! $this->permissionDomainService->canReadTable($actor, $targetTable, $targetAccess->getTablePermissions(), $targetAccess->isManager())) {
-            return [];
-        }
 
         $query = $this->rowQueryCriteriaDomainService->buildReadableQuery(
             $authorization->getOrganizationCode(),

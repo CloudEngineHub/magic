@@ -62,7 +62,7 @@ readonly class MagicBaseRowAppService
     public function updateRow(MagicUserAuthorization $authorization, int $projectId, int $tableId, int $recordId, CreateRowRequestDTO $requestDTO): MagicBaseRowDTO
     {
         return Db::transaction(function () use ($authorization, $projectId, $tableId, $recordId, $requestDTO): MagicBaseRowDTO {
-            $context = $this->accessControlDomainService->loadTableContext($authorization, $projectId, $tableId);
+            $context = $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
             $row = $this->accessControlDomainService->requireEditableRow($authorization, $context, $recordId);
 
             $normalized = $this->rowDomainService->normalizeRowPayload($requestDTO->getData(), $context->getAccess()->getColumns(), false);
@@ -84,7 +84,7 @@ readonly class MagicBaseRowAppService
     public function deleteRow(MagicUserAuthorization $authorization, int $projectId, int $tableId, int $recordId): void
     {
         Db::transaction(function () use ($authorization, $projectId, $tableId, $recordId): void {
-            $context = $this->accessControlDomainService->loadTableContext($authorization, $projectId, $tableId);
+            $context = $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
             $row = $this->accessControlDomainService->requireDeletableRow($authorization, $context, $recordId);
 
             $this->rowStorageResolver->saveRow($this->rowDomainService->markDeleted($row));

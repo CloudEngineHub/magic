@@ -7,7 +7,8 @@ declare(strict_types=1);
 
 namespace App\Domain\MagicBase\Service;
 
-use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\ValueObject\ActorContext;
@@ -16,110 +17,81 @@ use App\Domain\MagicBase\Entity\ValueObject\MagicBaseTableAccessContext;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectMemberDomainService;
+use LogicException;
 
 readonly class MagicBaseAccessControlDomainService
 {
     public function __construct(
         private MagicBaseTableRepository $repository,
         private MagicBaseAdminDomainService $adminDomainService,
-        private MagicBasePermissionDomainService $permissionDomainService,
         private MagicBaseQueryDomainService $queryDomainService,
+        private ProjectDomainService $projectDomainService,
+        private ProjectMemberDomainService $projectMemberDomainService,
+        private MagicDepartmentUserDomainService $departmentUserDomainService,
     ) {
     }
 
     public function requireReadableTable(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableAccessContext
     {
-        $context = $this->loadTableContext($authorization, $projectId, $tableId);
-        if (! $this->permissionDomainService->canReadTable(
-            $context->getActor(),
-            $context->getTable(),
-            $context->getAccess()->getTablePermissions(),
-            $context->getAccess()->isManager()
-        )) {
-            $this->forbidden('无查看权限');
-        }
-
-        return $context;
+        $this->requireReadableProject($authorization, $projectId);
+        return $this->loadTableContext($authorization, $projectId, $tableId);
     }
 
     public function requireInsertableTable(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableAccessContext
     {
-        $context = $this->loadTableContext($authorization, $projectId, $tableId);
-        if (! $this->permissionDomainService->canInsertTable(
-            $context->getActor(),
-            $context->getTable(),
-            $context->getAccess()->getTablePermissions(),
-            $context->getAccess()->isManager()
-        )) {
-            $this->forbidden('无新增权限');
-        }
+        return $this->requireWritableTable($authorization, $projectId, $tableId);
+    }
 
-        return $context;
+    public function requireWritableTable(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableAccessContext
+    {
+        $this->requireWritableProject($authorization, $projectId);
+        return $this->loadTableContext($authorization, $projectId, $tableId);
     }
 
     public function requireTableManager(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableAccessContext
     {
-        $context = $this->loadTableContext($authorization, $projectId, $tableId);
-        if (! $context->getAccess()->isManager()) {
-            $this->forbidden('无表管理权限');
-        }
-
-        return $context;
+        $this->requireManageableProject($authorization, $projectId);
+        return $this->loadTableContext($authorization, $projectId, $tableId);
     }
 
     public function requireProjectManager(MagicUserAuthorization $authorization, int $projectId): ActorContext
     {
-        $actor = $this->adminDomainService->buildActorContext($authorization);
-        $this->adminDomainService->assertProjectManager($authorization, $projectId, $actor);
-        return $actor;
+        $this->requireManageableProject($authorization, $projectId);
+        return $this->adminDomainService->buildActorContext($authorization);
+    }
+
+    public function requireReadableProject(MagicUserAuthorization $authorization, int $projectId): void
+    {
+        $this->requireProjectRole($authorization, $projectId, MemberRole::VIEWER, '无项目访问权限');
+    }
+
+    public function requireWritableProject(MagicUserAuthorization $authorization, int $projectId): void
+    {
+        $this->requireProjectRole($authorization, $projectId, MemberRole::EDITOR, '无项目编辑权限');
+    }
+
+    public function requireManageableProject(MagicUserAuthorization $authorization, int $projectId): void
+    {
+        $this->requireProjectRole($authorization, $projectId, MemberRole::MANAGE, '无项目管理权限');
     }
 
     public function requireReadableRow(MagicUserAuthorization $authorization, MagicBaseTableAccessContext $context, int $recordId): MagicBaseRowEntity
     {
-        $row = $this->queryDomainService->getRowOrFail($authorization, $context->getTableId(), $recordId);
-        if (! $this->permissionDomainService->canReadRow(
-            $context->getActor(),
-            $row,
-            $context->getTable(),
-            $context->getAccess()->getRowPermissions((int) $row->getRecordId()),
-            $context->getAccess()->isManager()
-        )) {
-            $this->forbidden('无查看权限');
-        }
-
-        return $row;
+        return $this->queryDomainService->getRowOrFail($authorization, $context->getTableId(), $recordId);
     }
 
     public function requireEditableRow(MagicUserAuthorization $authorization, MagicBaseTableAccessContext $context, int $recordId): MagicBaseRowEntity
     {
-        $row = $this->queryDomainService->getRowOrFail($authorization, $context->getTableId(), $recordId);
-        if (! $this->permissionDomainService->canEditRow(
-            $context->getActor(),
-            $row,
-            $context->getTable(),
-            $context->getAccess()->getRowPermissions((int) $row->getRecordId()),
-            $context->getAccess()->isManager()
-        )) {
-            $this->forbidden('无编辑权限');
-        }
-
-        return $row;
+        return $this->queryDomainService->getRowOrFail($authorization, $context->getTableId(), $recordId);
     }
 
     public function requireDeletableRow(MagicUserAuthorization $authorization, MagicBaseTableAccessContext $context, int $recordId): MagicBaseRowEntity
     {
-        $row = $this->queryDomainService->getRowOrFail($authorization, $context->getTableId(), $recordId);
-        if (! $this->permissionDomainService->canDeleteRow(
-            $context->getActor(),
-            $row,
-            $context->getTable(),
-            $context->getAccess()->getRowPermissions((int) $row->getRecordId()),
-            $context->getAccess()->isManager()
-        )) {
-            $this->forbidden('无删除权限');
-        }
-
-        return $row;
+        return $this->queryDomainService->getRowOrFail($authorization, $context->getTableId(), $recordId);
     }
 
     /**
@@ -127,43 +99,13 @@ readonly class MagicBaseAccessControlDomainService
      */
     public function assertEditableColumns(MagicBaseTableAccessContext $context, MagicBaseRowEntity $row, array $fieldKeys): void
     {
-        foreach ($fieldKeys as $fieldKey) {
-            $column = $context->getAccess()->getColumns()->get($fieldKey);
-            if (! $column instanceof MagicBaseColumnEntity) {
-                $this->forbidden('字段无编辑权限');
-            }
-            if (! $this->permissionDomainService->canEditColumn(
-                $context->getActor(),
-                $row,
-                $column,
-                $context->getAccess()->getColumnPermissions((int) $column->getId()),
-                $context->getAccess()->isManager()
-            )) {
-                $this->forbidden('字段无编辑权限');
-            }
-        }
+        unset($context, $row, $fieldKeys);
     }
 
     public function filterReadableRows(MagicBaseTableAccessContext $context, MagicBaseEntityCollection $rows): MagicBaseEntityCollection
     {
-        $readableRows = [];
-        foreach ($rows as $row) {
-            if (! $row instanceof MagicBaseRowEntity) {
-                continue;
-            }
-            if (! $this->permissionDomainService->canReadRow(
-                $context->getActor(),
-                $row,
-                $context->getTable(),
-                $context->getAccess()->getRowPermissions((int) $row->getRecordId()),
-                $context->getAccess()->isManager()
-            )) {
-                continue;
-            }
-            $readableRows[] = $row;
-        }
-
-        return new MagicBaseEntityCollection($readableRows);
+        unset($context);
+        return $rows;
     }
 
     public function loadTableContext(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableAccessContext
@@ -193,5 +135,60 @@ readonly class MagicBaseAccessControlDomainService
     private function forbidden(string $label): void
     {
         MagicBaseExceptionBuilder::accessDenied($label);
+    }
+
+    private function requireProjectRole(
+        MagicUserAuthorization $authorization,
+        int $projectId,
+        MemberRole $requiredRole,
+        string $deniedMessage,
+    ): ProjectEntity {
+        $project = $this->getProjectOrFail($projectId);
+        if (! $this->isSameOrganization($authorization, $project)) {
+            $this->forbidden($deniedMessage);
+        }
+        if ($this->isProjectOwner($authorization, $project)) {
+            return $project;
+        }
+
+        $member = $this->projectMemberDomainService->getMemberByProjectAndUser($projectId, $authorization->getId());
+        if ($member !== null && $member->getRole()->isHigherOrEqualThan($requiredRole)) {
+            return $project;
+        }
+
+        $dataIsolation = DataIsolation::simpleMake($authorization->getOrganizationCode(), $authorization->getId());
+        $departmentIds = $this->departmentUserDomainService->getDepartmentIdsByUserId($dataIsolation, $authorization->getId(), true);
+        foreach ($this->projectMemberDomainService->getMembersByProjectAndDepartmentIds($projectId, $departmentIds) as $departmentMember) {
+            if ($departmentMember->getRole()->isHigherOrEqualThan($requiredRole)) {
+                return $project;
+            }
+        }
+
+        $this->forbidden($deniedMessage);
+        throw new LogicException('Unreachable');
+    }
+
+    private function getProjectOrFail(int $projectId): ProjectEntity
+    {
+        $projects = $this->projectDomainService->getProjectsByIds([$projectId]);
+        foreach ($projects as $project) {
+            if ($project instanceof ProjectEntity && $project->getId() === $projectId) {
+                return $project;
+            }
+        }
+
+        MagicBaseExceptionBuilder::resourceNotFound('项目');
+        throw new LogicException('Unreachable');
+    }
+
+    private function isSameOrganization(MagicUserAuthorization $authorization, ProjectEntity $project): bool
+    {
+        return $project->getUserOrganizationCode() === ''
+            || $project->getUserOrganizationCode() === $authorization->getOrganizationCode();
+    }
+
+    private function isProjectOwner(MagicUserAuthorization $authorization, ProjectEntity $project): bool
+    {
+        return in_array($authorization->getId(), [$project->getUserId(), $project->getCreatedUid()], true);
     }
 }

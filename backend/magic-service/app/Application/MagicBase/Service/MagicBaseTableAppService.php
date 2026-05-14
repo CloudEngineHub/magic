@@ -12,7 +12,6 @@ use App\Application\MagicBase\DTO\CreateTableRequestDTO;
 use App\Application\MagicBase\DTO\MagicBaseTableDetailDTO;
 use App\Application\MagicBase\DTO\UpdateTableRequestDTO;
 use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
-use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnDynamicPermission;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseDynamicPermissions;
@@ -46,23 +45,8 @@ readonly class MagicBaseTableAppService
         $this->tableDomainService->normalizeDynamicPermissions($requestDTO->dynamicPermissions);
 
         return Db::transaction(function () use ($authorization, $projectId, $payload): MagicBaseTableDetailDTO {
+            $this->accessControlDomainService->requireWritableProject($authorization, $projectId);
             $organizationCode = $authorization->getOrganizationCode();
-            $projectAdmins = $this->repository->listProjectAdmins($organizationCode, $projectId);
-            if (! $projectAdmins->isEmpty()) {
-                $this->accessControlDomainService->requireProjectManager($authorization, $projectId);
-            }
-
-            if ($projectAdmins->isEmpty()) {
-                $now = $this->now();
-                $this->repository->createProjectAdmin([
-                    'organization_code' => $organizationCode,
-                    'project_id' => $projectId,
-                    'subject_type' => MagicBaseConst::SUBJECT_USER,
-                    'subject_id' => $authorization->getId(),
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
-            }
 
             if ($this->repository->getTableByKey($organizationCode, $projectId, trim((string) $payload['table_key'])) !== null) {
                 $this->invalid('表标识已存在');
@@ -126,12 +110,13 @@ readonly class MagicBaseTableAppService
 
     public function listTables(MagicUserAuthorization $authorization, int $projectId): MagicBaseEntityCollection
     {
+        $this->accessControlDomainService->requireReadableProject($authorization, $projectId);
         return $this->repository->listTables($authorization->getOrganizationCode(), $projectId);
     }
 
     public function getTable(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableDetailDTO
     {
-        $table = $this->findTable($authorization, $projectId, $tableId);
+        $table = $this->accessControlDomainService->requireReadableTable($authorization, $projectId, $tableId)->getTable();
         $columns = $this->repository->listColumns($authorization->getOrganizationCode(), $tableId);
         return new MagicBaseTableDetailDTO($table, $columns);
     }
@@ -140,7 +125,7 @@ readonly class MagicBaseTableAppService
     {
         $payload = $requestDTO->toArray();
         return Db::transaction(function () use ($authorization, $projectId, $tableId, $payload): MagicBaseTableDetailDTO {
-            $context = $this->accessControlDomainService->requireTableManager($authorization, $projectId, $tableId);
+            $context = $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
             $table = $context->getTable();
             $before = $table;
 
@@ -190,7 +175,7 @@ readonly class MagicBaseTableAppService
     public function deleteTable(MagicUserAuthorization $authorization, int $projectId, int $tableId): void
     {
         Db::transaction(function () use ($authorization, $projectId, $tableId): void {
-            $context = $this->accessControlDomainService->requireTableManager($authorization, $projectId, $tableId);
+            $context = $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
             $table = $context->getTable();
             $columns = $this->repository->listColumns($authorization->getOrganizationCode(), $tableId);
             foreach ($columns as $column) {
@@ -217,7 +202,7 @@ readonly class MagicBaseTableAppService
     {
         $payload = $requestDTO->toArray();
         return Db::transaction(function () use ($authorization, $projectId, $tableId, $payload): MagicBaseColumnEntity {
-            $this->accessControlDomainService->requireTableManager($authorization, $projectId, $tableId);
+            $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
             $this->columnDomainService->validatePayload($payload);
 
             if ($this->repository->getColumnByKey($authorization->getOrganizationCode(), $tableId, trim((string) $payload['column_key'])) !== null) {
@@ -260,7 +245,7 @@ readonly class MagicBaseTableAppService
     {
         $payload = $requestDTO->toArray();
         return Db::transaction(function () use ($authorization, $projectId, $tableId, $columnId, $payload): MagicBaseColumnEntity {
-            $this->accessControlDomainService->requireTableManager($authorization, $projectId, $tableId);
+            $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
             $column = $this->findColumn($authorization, $tableId, $columnId);
             $before = $column;
 
@@ -304,7 +289,7 @@ readonly class MagicBaseTableAppService
     public function deleteColumn(MagicUserAuthorization $authorization, int $projectId, int $tableId, int $columnId): void
     {
         Db::transaction(function () use ($authorization, $projectId, $tableId, $columnId): void {
-            $this->accessControlDomainService->requireTableManager($authorization, $projectId, $tableId);
+            $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
             $column = $this->findColumn($authorization, $tableId, $columnId);
             $this->repository->deleteColumn($columnId);
 
@@ -319,15 +304,6 @@ readonly class MagicBaseTableAppService
                 null,
             ));
         });
-    }
-
-    private function findTable(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableEntity
-    {
-        $table = $this->repository->getTable($authorization->getOrganizationCode(), $projectId, $tableId);
-        if ($table === null) {
-            $this->notFound('数据表');
-        }
-        return $table;
     }
 
     private function findColumn(MagicUserAuthorization $authorization, int $tableId, int $columnId): MagicBaseColumnEntity

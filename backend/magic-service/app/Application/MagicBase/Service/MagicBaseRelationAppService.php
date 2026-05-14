@@ -41,7 +41,7 @@ readonly class MagicBaseRelationAppService
             $relationType = trim((string) $requestDTO->getRelationType());
             $relationName = trim((string) $requestDTO->getRelationName());
 
-            $sourceTable = $this->accessControlDomainService->requireTableManager($authorization, $projectId, $sourceTableId)->getTable();
+            $sourceTable = $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $sourceTableId)->getTable();
             $targetTable = $this->getTableOrFail($authorization, $projectId, $targetTableId);
             $sourceColumn = $this->getColumnOrFail($authorization, $sourceTableId, $sourceColumnId);
             $targetColumn = $this->getColumnOrFail($authorization, $targetTableId, $targetColumnId);
@@ -80,6 +80,7 @@ readonly class MagicBaseRelationAppService
 
     public function listRelations(MagicUserAuthorization $authorization, int $projectId): MagicBaseEntityCollection
     {
+        $this->accessControlDomainService->requireReadableProject($authorization, $projectId);
         return $this->repository->listRelations($authorization->getOrganizationCode(), $projectId);
     }
 
@@ -87,7 +88,7 @@ readonly class MagicBaseRelationAppService
     {
         return Db::transaction(function () use ($authorization, $projectId, $relationId, $requestDTO): MagicBaseRelationEntity {
             $relation = $this->getRelationOrFail($authorization, $projectId, $relationId);
-            $this->accessControlDomainService->requireTableManager($authorization, $projectId, (int) $relation->getSourceTableId());
+            $this->accessControlDomainService->requireWritableTable($authorization, $projectId, (int) $relation->getSourceTableId());
             $before = $relation;
 
             $sourceTableId = $requestDTO->hasSourceTableId() ? $this->parsePayloadId($requestDTO->getSourceTableId(), '源表ID') : (int) $relation->getSourceTableId();
@@ -134,7 +135,7 @@ readonly class MagicBaseRelationAppService
     {
         Db::transaction(function () use ($authorization, $projectId, $relationId): void {
             $relation = $this->getRelationOrFail($authorization, $projectId, $relationId);
-            $this->accessControlDomainService->requireTableManager($authorization, $projectId, (int) $relation->getSourceTableId());
+            $this->accessControlDomainService->requireWritableTable($authorization, $projectId, (int) $relation->getSourceTableId());
             $this->repository->deleteRelation($relationId);
             $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,

@@ -27,7 +27,10 @@ readonly class MagicBaseAdminAppService
 
     public function createProjectAdmin(MagicUserAuthorization $authorization, int $projectId, SubjectRequestDTO $requestDTO): MagicBaseProjectAdminEntity
     {
-        $this->accessControlDomainService->requireProjectManager($authorization, $projectId);
+        $this->accessControlDomainService->requireManageableProject($authorization, $projectId);
+        if (! $this->repository->listProjectAdmins($authorization->getOrganizationCode(), $projectId)->isEmpty()) {
+            $this->accessControlDomainService->requireProjectManager($authorization, $projectId);
+        }
         $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->toArray(), false);
         return $this->repository->createProjectAdmin([
             'organization_code' => $authorization->getOrganizationCode(),

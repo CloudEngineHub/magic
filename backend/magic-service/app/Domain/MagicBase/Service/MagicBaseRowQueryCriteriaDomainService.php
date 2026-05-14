@@ -44,7 +44,7 @@ readonly class MagicBaseRowQueryCriteriaDomainService
             max(1, $page),
             max(1, $pageSize),
             $includeDeleted,
-            $access->isManager(),
+            true,
             $this->getRowReadScope($table),
             $actor->getUserId(),
             $actor->getOrganizationCode(),
