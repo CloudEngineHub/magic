@@ -8,30 +8,31 @@ declare(strict_types=1);
 namespace App\Application\MagicBase\Service;
 
 use App\Application\MagicBase\DTO\SubjectRequestDTO;
+use App\Application\MagicBase\Support\MagicBaseAccessControl;
 use App\Domain\MagicBase\Entity\MagicBaseProjectAdminEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableAdminEntity;
-use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
 use App\Domain\MagicBase\Service\MagicBaseAdminDomainService;
+use App\Domain\MagicBase\Service\MagicBaseMetadataDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use DateTime;
 
 readonly class MagicBaseAdminAppService
 {
     public function __construct(
-        private MagicBaseTableRepository $repository,
-        private MagicBaseAccessControlAppService $accessControlDomainService,
+        private MagicBaseMetadataDomainService $metadataDomainService,
+        private MagicBaseAccessControl $accessControl,
         private MagicBaseAdminDomainService $adminDomainService,
     ) {
     }
 
     public function createProjectAdmin(MagicUserAuthorization $authorization, int $projectId, SubjectRequestDTO $requestDTO): MagicBaseProjectAdminEntity
     {
-        $this->accessControlDomainService->requireManageableProject($authorization, $projectId);
-        if (! $this->repository->listProjectAdmins($authorization->getOrganizationCode(), $projectId)->isEmpty()) {
-            $this->accessControlDomainService->requireProjectManager($authorization, $projectId);
+        $this->accessControl->requireManageableProject($authorization, $projectId);
+        if (! $this->metadataDomainService->listProjectAdmins($authorization->getOrganizationCode(), $projectId)->isEmpty()) {
+            $this->accessControl->requireProjectManager($authorization, $projectId);
         }
         $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->toArray(), false);
-        return $this->repository->createProjectAdmin([
+        return $this->metadataDomainService->createProjectAdmin([
             'organization_code' => $authorization->getOrganizationCode(),
             'project_id' => $projectId,
             'subject_type' => $subject->getSubjectType(),
@@ -43,9 +44,9 @@ readonly class MagicBaseAdminAppService
 
     public function createTableAdmin(MagicUserAuthorization $authorization, int $projectId, int $tableId, SubjectRequestDTO $requestDTO): MagicBaseTableAdminEntity
     {
-        $this->accessControlDomainService->requireTableManager($authorization, $projectId, $tableId);
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
         $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->toArray(), false);
-        return $this->repository->createTableAdmin([
+        return $this->metadataDomainService->createTableAdmin([
             'organization_code' => $authorization->getOrganizationCode(),
             'table_id' => $tableId,
             'subject_type' => $subject->getSubjectType(),

@@ -57,6 +57,8 @@ final class MagicBaseConst
 
     public const SOURCE_MANUAL = 'manual';
 
+    public const SOURCE_REF_API = 'api:magicbase';
+
     public const STATUS_ENABLED = 'enabled';
 
     public const STATUS_DISABLED = 'disabled';
@@ -112,16 +114,16 @@ final class MagicBaseConst
     ];
 
     public const DATA_TYPES = [
-        'text',
-        'number',
-        'datetime',
-        'boolean',
-        'single_select',
-        'multi_select',
-        'user',
-        'department',
-        'attachment',
-        'json',
-        'reference',
+        ColumnType::Text->value,
+        ColumnType::Number->value,
+        ColumnType::Datetime->value,
+        ColumnType::Boolean->value,
+        ColumnType::SingleSelect->value,
+        ColumnType::MultiSelect->value,
+        ColumnType::User->value,
+        ColumnType::Department->value,
+        ColumnType::Attachment->value,
+        ColumnType::Json->value,
+        ColumnType::Reference->value,
     ];
 }

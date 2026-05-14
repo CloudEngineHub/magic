@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\MagicBase\Repository\Facade;
 
 use App\Domain\MagicBase\Entity\MagicBaseColumnPermissionEntity;
+use App\Domain\MagicBase\Entity\MagicBaseProjectAdminEntity;
 use App\Domain\MagicBase\Entity\MagicBaseRowPermissionEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableAdminEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTablePermissionEntity;
@@ -15,6 +16,11 @@ use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 
 interface MagicBasePermissionRepositoryInterface
 {
+    /** @return MagicBaseEntityCollection<MagicBaseProjectAdminEntity> */
+    public function listProjectAdmins(string $organizationCode, int $projectId): MagicBaseEntityCollection;
+
+    public function createProjectAdmin(MagicBaseProjectAdminEntity $entity): MagicBaseProjectAdminEntity;
+
     /** @return MagicBaseEntityCollection<MagicBaseTableAdminEntity> */
     public function listTableAdmins(string $organizationCode, int $tableId): MagicBaseEntityCollection;
 

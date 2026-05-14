@@ -10,8 +10,9 @@ namespace App\Application\MagicBase\Service;
 use App\Application\MagicBase\DTO\MagicBasePageDTO;
 use App\Application\MagicBase\DTO\MagicBaseRowDTO;
 use App\Application\MagicBase\DTO\QueryRowsRequestDTO;
+use App\Application\MagicBase\Support\MagicBaseAccessControl;
+use App\Application\MagicBase\Support\MagicBaseRowQuerySupport;
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
-use App\Domain\MagicBase\Service\MagicBaseQueryDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowQueryCriteriaDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
 use App\Domain\MagicBase\Service\MagicBaseSelectParserDomainService;
@@ -20,8 +21,8 @@ use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 readonly class MagicBaseQueryAppService
 {
     public function __construct(
-        private MagicBaseAccessControlAppService $accessControlDomainService,
-        private MagicBaseQueryDomainService $queryDomainService,
+        private MagicBaseAccessControl $accessControl,
+        private MagicBaseRowQuerySupport $rowQuerySupport,
         private MagicBaseRowQueryCriteriaDomainService $rowQueryCriteriaDomainService,
         private MagicBaseRowStorageResolverDomainService $rowStorageResolver,
         private MagicBaseSelectParserDomainService $selectParserDomainService,
@@ -30,10 +31,10 @@ readonly class MagicBaseQueryAppService
 
     public function queryRows(MagicUserAuthorization $authorization, int $projectId, int $tableId, QueryRowsRequestDTO $requestDTO): MagicBasePageDTO
     {
-        $context = $this->accessControlDomainService->requireReadableTable($authorization, $projectId, $tableId);
+        $context = $this->accessControl->requireReadableTable($authorization, $projectId, $tableId);
         $sorts = $requestDTO->getSort();
-        $this->queryDomainService->assertSortableByOpenSearch($sorts);
-        $filters = $this->queryDomainService->resolveFiltersForOpenSearch(
+        $this->rowQuerySupport->assertSortableByOpenSearch($sorts);
+        $filters = $this->rowQuerySupport->resolveFiltersForOpenSearch(
             $authorization,
             $projectId,
             $context->getTable(),
@@ -52,12 +53,14 @@ readonly class MagicBaseQueryAppService
             $sorts,
             $page,
             $pageSize,
+            false,
+            $this->accessControl->getStaticReadableRecordIds($context),
         );
         $result = $this->rowStorageResolver->queryRows($query);
         /** @var MagicBaseRowEntity[] $rows */
         $rows = $result->getRows()->all();
         $select = $this->selectParserDomainService->parse($requestDTO->getSelect());
-        $formattedRows = $this->queryDomainService->formatRows($authorization, $projectId, $context->getTable(), $rows, $context->getAccess(), $select, $context->getActor());
+        $formattedRows = $this->rowQuerySupport->formatRows($authorization, $projectId, $context->getTable(), $rows, $context->getAccess(), $select, $context->getActor());
 
         return new MagicBasePageDTO(
             array_map(
@@ -72,9 +75,9 @@ readonly class MagicBaseQueryAppService
 
     public function showRow(MagicUserAuthorization $authorization, int $projectId, int $tableId, int $recordId, ?string $select = null): MagicBaseRowDTO
     {
-        $context = $this->accessControlDomainService->requireReadableTable($authorization, $projectId, $tableId);
-        $row = $this->accessControlDomainService->requireReadableRow($authorization, $context, $recordId);
-        return new MagicBaseRowDTO($this->queryDomainService->formatRow(
+        $context = $this->accessControl->requireReadableTable($authorization, $projectId, $tableId);
+        $row = $this->accessControl->requireReadableRow($authorization, $context, $recordId);
+        return new MagicBaseRowDTO($this->rowQuerySupport->formatRow(
             $authorization,
             $projectId,
             $context->getTable(),

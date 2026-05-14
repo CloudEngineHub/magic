@@ -5,86 +5,34 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 
-namespace App\Domain\MagicBase\Service;
+namespace App\Application\MagicBase\Support;
 
-use App\Domain\Contact\Entity\ValueObject\DataIsolation;
-use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
-use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
 use App\Domain\MagicBase\Entity\MagicBaseRelationEntity;
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\ValueObject\ActorContext;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseAccessContext;
-use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnIndex;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
-use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseFormattedRow;
-use App\Domain\MagicBase\Entity\ValueObject\MagicBasePermissionIndex;
+use App\Domain\MagicBase\Entity\ValueObject\MagicBaseTableAccessContext;
 use App\Domain\MagicBase\Entity\ValueObject\SelectQuery;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Exception\MagicBaseUnsupportedQueryException;
-use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
+use App\Domain\MagicBase\Service\MagicBaseMetadataDomainService;
+use App\Domain\MagicBase\Service\MagicBaseRowQueryCriteriaDomainService;
+use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use DateTimeInterface;
 use LogicException;
 
-readonly class MagicBaseQueryDomainService
+readonly class MagicBaseRowQuerySupport
 {
     public function __construct(
-        private MagicBaseTableRepository $repository,
-        private MagicDepartmentUserDomainService $departmentUserDomainService,
-        private MagicBasePermissionDomainService $permissionDomainService,
+        private MagicBaseMetadataDomainService $metadataDomainService,
+        private MagicBaseAccessControl $accessControl,
         private MagicBaseRowStorageResolverDomainService $rowStorageResolver,
         private MagicBaseRowQueryCriteriaDomainService $rowQueryCriteriaDomainService,
     ) {
-    }
-
-    public function loadAccessContext(MagicUserAuthorization $authorization, int $projectId, int $tableId, ActorContext $actor): MagicBaseAccessContext
-    {
-        $projectAdmins = $this->repository->listProjectAdmins($authorization->getOrganizationCode(), $projectId);
-        $tableAdmins = $this->repository->listTableAdmins($authorization->getOrganizationCode(), $tableId);
-        $tablePermissions = $this->repository->listTablePermissions($authorization->getOrganizationCode(), $tableId);
-        $columnPermissions = $this->repository->listColumnPermissions($authorization->getOrganizationCode(), $tableId);
-        $rowPermissions = $this->repository->listRowPermissions($authorization->getOrganizationCode(), $tableId);
-
-        return new MagicBaseAccessContext(
-            $this->getColumnsByKey($authorization, $tableId),
-            $tablePermissions,
-            $projectAdmins,
-            $tableAdmins,
-            MagicBasePermissionIndex::fromCollection($columnPermissions, 'column_id'),
-            MagicBasePermissionIndex::fromCollection($rowPermissions, 'record_id'),
-            $this->permissionDomainService->isManager($actor, $projectAdmins, $tableAdmins, $tablePermissions),
-        );
-    }
-
-    public function enrichTableScope(MagicBaseTableEntity $table): MagicBaseTableEntity
-    {
-        if ($table->getCreatedBy() === '') {
-            $table->setOwnerDepartmentIds([]);
-            return $table;
-        }
-
-        $dataIsolation = DataIsolation::simpleMake($table->getOrganizationCode(), $table->getCreatedBy());
-        $departmentIds = $this->departmentUserDomainService->getDepartmentIdsByUserId(
-            $dataIsolation,
-            $table->getCreatedBy(),
-            true
-        );
-        $table->setOwnerDepartmentIds($departmentIds);
-        return $table;
-    }
-
-    public function getColumnsByKey(MagicUserAuthorization $authorization, int $tableId): MagicBaseColumnIndex
-    {
-        $columns = [];
-        foreach ($this->repository->listColumns($authorization->getOrganizationCode(), $tableId) as $column) {
-            if (! $column instanceof MagicBaseColumnEntity) {
-                continue;
-            }
-            $columns[$column->getColumnKey()] = $column;
-        }
-        return new MagicBaseColumnIndex($columns);
     }
 
     public function formatRow(
@@ -110,8 +58,7 @@ readonly class MagicBaseQueryDomainService
                 $result[$field] = $this->formatRootField($row, $field);
                 continue;
             }
-            $column = $access->getColumns()->get($field);
-            if ($column === null) {
+            if ($access->getColumns()->get($field) === null) {
                 continue;
             }
 
@@ -204,6 +151,7 @@ readonly class MagicBaseQueryDomainService
         ActorContext $actor,
         array $filters,
     ): array {
+        unset($access);
         $resolved = [];
         foreach ($filters as $field => $condition) {
             if (! is_string($field) || ! is_array($condition)) {
@@ -248,86 +196,6 @@ readonly class MagicBaseQueryDomainService
         }
     }
 
-    public function applyFilters(
-        MagicUserAuthorization $authorization,
-        int $projectId,
-        MagicBaseTableEntity $table,
-        MagicBaseEntityCollection $rows,
-        mixed $filters,
-        ActorContext $actor,
-        MagicBaseAccessContext $access,
-    ): MagicBaseEntityCollection {
-        if (! is_array($filters) || $filters === []) {
-            return $rows;
-        }
-
-        /** @var MagicBaseRowEntity[] $items */
-        $items = $rows->all();
-        return new MagicBaseEntityCollection(array_values(array_filter($items, function (MagicBaseRowEntity $row) use ($authorization, $projectId, $table, $filters, $actor): bool {
-            foreach ($filters as $field => $condition) {
-                if (! is_array($condition) || ! array_key_exists('eq', $condition)) {
-                    continue;
-                }
-
-                $expected = $condition['eq'];
-                if (is_string($field) && str_contains($field, '.')) {
-                    [$relationName, $relationField] = explode('.', $field, 2);
-                    $relation = $this->findRelation($authorization, $projectId, (int) $table->getId(), $relationName);
-                    $relatedRows = $this->resolveRelationRows($authorization, $projectId, $relation, $row, $actor, []);
-                    $matched = false;
-                    foreach ($relatedRows as $relatedRow) {
-                        $relatedPayload = $relatedRow->toArray();
-                        if (($relatedPayload[$relationField] ?? null) == $expected) {
-                            $matched = true;
-                            break;
-                        }
-                    }
-                    if (! $matched) {
-                        return false;
-                    }
-                    continue;
-                }
-
-                if (! is_string($field) || $this->readFieldValue($row, $field) != $expected) {
-                    return false;
-                }
-            }
-            return true;
-        })));
-    }
-
-    /**
-     * @param list<array{field?: string, order?: 'asc'|'desc'|string}> $sorts
-     */
-    public function applySort(MagicBaseEntityCollection $rows, array $sorts): MagicBaseEntityCollection
-    {
-        if ($sorts === []) {
-            return $rows;
-        }
-
-        /** @var MagicBaseRowEntity[] $items */
-        $items = $rows->all();
-        usort($items, function (MagicBaseRowEntity $left, MagicBaseRowEntity $right) use ($sorts): int {
-            foreach ($sorts as $sort) {
-                $field = (string) ($sort['field'] ?? '');
-                if ($field === '') {
-                    continue;
-                }
-                $order = strtolower((string) ($sort['order'] ?? 'asc')) === 'desc' ? -1 : 1;
-                $leftValue = $this->readFieldValue($left, $field);
-                $rightValue = $this->readFieldValue($right, $field);
-                if ($leftValue == $rightValue) {
-                    continue;
-                }
-                $comparison = $leftValue <=> $rightValue;
-                return $comparison === 0 ? 0 : $comparison * $order;
-            }
-            return 0;
-        });
-
-        return new MagicBaseEntityCollection($items);
-    }
-
     public function readFieldValue(MagicBaseRowEntity $row, string $field): mixed
     {
         return match ($field) {
@@ -343,71 +211,9 @@ readonly class MagicBaseQueryDomainService
     {
         $row = $this->rowStorageResolver->getRow($authorization->getOrganizationCode(), $tableId, $recordId);
         if ($row === null || $row->getDeleted()) {
-            $this->invalid('记录');
+            $this->notFound('记录');
         }
         return $row;
-    }
-
-    public function getReadableRowOrFail(
-        MagicUserAuthorization $authorization,
-        MagicBaseTableEntity $table,
-        int $recordId,
-        ActorContext $actor,
-        MagicBaseAccessContext $access,
-        string $message,
-    ): MagicBaseRowEntity {
-        $row = $this->getRowOrFail($authorization, (int) $table->getId(), $recordId);
-        if (! $this->permissionDomainService->canReadRow(
-            $actor,
-            $row,
-            $table,
-            $access->getRowPermissions((int) $row->getRecordId()),
-            $access->isManager()
-        )) {
-            $this->forbidden($message);
-        }
-        return $row;
-    }
-
-    private function resolveRelationRows(
-        MagicUserAuthorization $authorization,
-        int $projectId,
-        MagicBaseRelationEntity $relation,
-        MagicBaseRowEntity $row,
-        ActorContext $actor,
-        array $selectedFields,
-    ): array {
-        $sourceValue = $this->readFieldValue($row, $relation->getSourceColumnKey());
-        if ($sourceValue === null || $sourceValue === '') {
-            return [];
-        }
-
-        $targetTableId = (int) $relation->getTargetTableId();
-        $targetTable = $this->repository->getTable($authorization->getOrganizationCode(), $projectId, $targetTableId);
-        if ($targetTable === null) {
-            return [];
-        }
-        $targetTable = $this->enrichTableScope($targetTable);
-        $targetAccess = $this->loadAccessContext($authorization, $projectId, $targetTableId, $actor);
-
-        $matched = [];
-        /** @var MagicBaseRowEntity $targetRow */
-        foreach ($this->rowStorageResolver->listRows($authorization->getOrganizationCode(), $targetTableId) as $targetRow) {
-            if ($this->readFieldValue($targetRow, $relation->getTargetColumnKey()) != $sourceValue) {
-                continue;
-            }
-            $matched[] = $this->formatRow(
-                $authorization,
-                $projectId,
-                $targetTable,
-                $targetRow,
-                $targetAccess,
-                new SelectQuery(['fields' => $selectedFields, 'relations' => []]),
-                $actor,
-            );
-        }
-
-        return $matched;
     }
 
     /**
@@ -423,6 +229,7 @@ readonly class MagicBaseQueryDomainService
         ActorContext $actor,
         array $selectedFields,
     ): array {
+        unset($actor);
         $sourceValuesByRecord = [];
         $sourceValues = [];
         foreach ($rows as $row) {
@@ -438,23 +245,18 @@ readonly class MagicBaseQueryDomainService
             return [];
         }
 
-        $targetTableId = (int) $relation->getTargetTableId();
-        $targetTable = $this->repository->getTable($authorization->getOrganizationCode(), $projectId, $targetTableId);
-        if ($targetTable === null) {
-            return [];
-        }
-        $targetTable = $this->enrichTableScope($targetTable);
-        $targetAccess = $this->loadAccessContext($authorization, $projectId, $targetTableId, $actor);
-
+        $targetContext = $this->loadTargetContext($authorization, $projectId, (int) $relation->getTargetTableId());
         $query = $this->rowQueryCriteriaDomainService->buildReadableQuery(
             $authorization->getOrganizationCode(),
-            $targetTable,
-            $targetAccess,
-            $actor,
+            $targetContext->getTable(),
+            $targetContext->getAccess(),
+            $targetContext->getActor(),
             [$relation->getTargetColumnKey() => ['in' => $sourceValues]],
             [],
             1,
             max(1, (int) config('magicbase.opensearch.search_size', 10000)),
+            false,
+            $this->accessControl->getStaticReadableRecordIds($targetContext),
         );
         $targetRows = $this->rowStorageResolver->queryRows($query)->getRows()->all();
         $targetRowsByValue = [];
@@ -469,17 +271,68 @@ readonly class MagicBaseQueryDomainService
             $targetRowsByValue[$this->normalizeRelationValueKey($targetValue)][] = $this->formatRow(
                 $authorization,
                 $projectId,
-                $targetTable,
+                $targetContext->getTable(),
                 $targetRow,
-                $targetAccess,
+                $targetContext->getAccess(),
                 new SelectQuery(['fields' => $selectedFields, 'relations' => []]),
-                $actor,
+                $targetContext->getActor(),
             );
         }
 
         $matched = [];
         foreach ($sourceValuesByRecord as $recordId => $sourceValue) {
             $matched[$recordId] = $targetRowsByValue[$this->normalizeRelationValueKey($sourceValue)] ?? [];
+        }
+
+        return $matched;
+    }
+
+    /**
+     * @param list<string> $selectedFields
+     * @return list<MagicBaseFormattedRow>
+     */
+    private function resolveRelationRows(
+        MagicUserAuthorization $authorization,
+        int $projectId,
+        MagicBaseRelationEntity $relation,
+        MagicBaseRowEntity $row,
+        ActorContext $actor,
+        array $selectedFields,
+    ): array {
+        unset($actor);
+        $sourceValue = $this->readFieldValue($row, $relation->getSourceColumnKey());
+        if ($sourceValue === null || $sourceValue === '') {
+            return [];
+        }
+
+        $targetContext = $this->loadTargetContext($authorization, $projectId, (int) $relation->getTargetTableId());
+        $query = $this->rowQueryCriteriaDomainService->buildReadableQuery(
+            $authorization->getOrganizationCode(),
+            $targetContext->getTable(),
+            $targetContext->getAccess(),
+            $targetContext->getActor(),
+            [$relation->getTargetColumnKey() => ['eq' => $sourceValue]],
+            [],
+            1,
+            max(1, (int) config('magicbase.opensearch.search_size', 10000)),
+            false,
+            $this->accessControl->getStaticReadableRecordIds($targetContext),
+        );
+
+        $matched = [];
+        foreach ($this->rowStorageResolver->queryRows($query)->getRows() as $targetRow) {
+            if (! $targetRow instanceof MagicBaseRowEntity) {
+                continue;
+            }
+            $matched[] = $this->formatRow(
+                $authorization,
+                $projectId,
+                $targetContext->getTable(),
+                $targetRow,
+                $targetContext->getAccess(),
+                new SelectQuery(['fields' => $selectedFields, 'relations' => []]),
+                $targetContext->getActor(),
+            );
         }
 
         return $matched;
@@ -497,27 +350,23 @@ readonly class MagicBaseQueryDomainService
         array $condition,
         ActorContext $actor,
     ): array {
+        unset($actor);
         if (! array_key_exists('eq', $condition)) {
             return [];
         }
 
-        $targetTableId = (int) $relation->getTargetTableId();
-        $targetTable = $this->repository->getTable($authorization->getOrganizationCode(), $projectId, $targetTableId);
-        if ($targetTable === null) {
-            return [];
-        }
-        $targetTable = $this->enrichTableScope($targetTable);
-        $targetAccess = $this->loadAccessContext($authorization, $projectId, $targetTableId, $actor);
-
+        $targetContext = $this->loadTargetContext($authorization, $projectId, (int) $relation->getTargetTableId());
         $query = $this->rowQueryCriteriaDomainService->buildReadableQuery(
             $authorization->getOrganizationCode(),
-            $targetTable,
-            $targetAccess,
-            $actor,
+            $targetContext->getTable(),
+            $targetContext->getAccess(),
+            $targetContext->getActor(),
             [$relationField => ['eq' => $condition['eq']]],
             [],
             1,
             max(1, (int) config('magicbase.opensearch.search_size', 10000)),
+            false,
+            $this->accessControl->getStaticReadableRecordIds($targetContext),
         );
 
         $values = [];
@@ -535,6 +384,11 @@ readonly class MagicBaseQueryDomainService
         return array_values(array_unique($values, SORT_REGULAR));
     }
 
+    private function loadTargetContext(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableAccessContext
+    {
+        return $this->accessControl->loadTableContext($authorization, $projectId, $tableId);
+    }
+
     private function normalizeRelationValueKey(mixed $value): string
     {
         return is_scalar($value) || $value === null ? (string) $value : md5(json_encode($value) ?: '');
@@ -547,7 +401,7 @@ readonly class MagicBaseQueryDomainService
         string $relationName,
         ?string $sourceColumn = null,
     ): MagicBaseRelationEntity {
-        foreach ($this->repository->listRelations($authorization->getOrganizationCode(), $projectId) as $relation) {
+        foreach ($this->metadataDomainService->listRelations($authorization->getOrganizationCode(), $projectId) as $relation) {
             if (! $relation instanceof MagicBaseRelationEntity || (int) $relation->getSourceTableId() !== $sourceTableId) {
                 continue;
             }
@@ -558,7 +412,7 @@ readonly class MagicBaseQueryDomainService
             }
         }
 
-        $this->invalid('关系');
+        $this->notFound('关系');
         throw new LogicException('Unreachable');
     }
 
@@ -581,13 +435,8 @@ readonly class MagicBaseQueryDomainService
         return is_string($value) ? $value : null;
     }
 
-    private function invalid(string $label): void
+    private function notFound(string $label): void
     {
         MagicBaseExceptionBuilder::resourceNotFound($label);
-    }
-
-    private function forbidden(string $message): void
-    {
-        MagicBaseExceptionBuilder::accessDenied($message);
     }
 }

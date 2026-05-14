@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\MagicBase\Service;
 
+use App\Domain\MagicBase\Entity\ValueObject\ColumnType;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnDefinitionCollection;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnDynamicPermission;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
@@ -49,13 +50,18 @@ class MagicBaseColumnDomainService
 
         $defaultValue = $payload['default_value'] ?? null;
         if ($defaultValue !== null) {
-            $isValid = match ($dataType) {
-                'text', 'single_select', 'user', 'department', 'attachment', 'reference' => is_string($defaultValue),
-                'number' => is_numeric($defaultValue),
-                'datetime' => is_string($defaultValue),
-                'boolean' => is_bool($defaultValue) || $defaultValue === 0 || $defaultValue === 1 || $defaultValue === '0' || $defaultValue === '1',
-                'multi_select' => is_array($defaultValue),
-                'json' => is_array($defaultValue) || is_object($defaultValue) || is_string($defaultValue),
+            $isValid = match (ColumnType::tryFrom($dataType)) {
+                ColumnType::Text,
+                ColumnType::SingleSelect,
+                ColumnType::User,
+                ColumnType::Department,
+                ColumnType::Attachment,
+                ColumnType::Reference => is_string($defaultValue),
+                ColumnType::Number => is_numeric($defaultValue),
+                ColumnType::Datetime => is_string($defaultValue),
+                ColumnType::Boolean => is_bool($defaultValue) || $defaultValue === 0 || $defaultValue === 1 || $defaultValue === '0' || $defaultValue === '1',
+                ColumnType::MultiSelect => is_array($defaultValue),
+                ColumnType::Json => is_array($defaultValue) || is_object($defaultValue) || is_string($defaultValue),
                 default => false,
             };
             if (! $isValid) {

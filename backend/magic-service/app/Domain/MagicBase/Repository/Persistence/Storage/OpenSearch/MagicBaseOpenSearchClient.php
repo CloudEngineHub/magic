@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\MagicBase\Repository\Persistence\Storage\OpenSearch;
 
+use App\Domain\MagicBase\Entity\ValueObject\ColumnType;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQuery;
 use OpenSearch\Client;
@@ -356,7 +357,15 @@ class MagicBaseOpenSearchClient
 
         $dataType = $query->getFieldTypes()[$field] ?? '';
         $path = 'data.' . $field;
-        if (in_array($dataType, ['text', 'single_select', 'user', 'department', 'attachment', 'reference', 'datetime'], true)) {
+        if (in_array($dataType, [
+            ColumnType::Text->value,
+            ColumnType::SingleSelect->value,
+            ColumnType::User->value,
+            ColumnType::Department->value,
+            ColumnType::Attachment->value,
+            ColumnType::Reference->value,
+            ColumnType::Datetime->value,
+        ], true)) {
             return $path . '.keyword';
         }
 

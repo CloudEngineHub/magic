@@ -11,14 +11,15 @@ use App\Application\MagicBase\DTO\CreateColumnRequestDTO;
 use App\Application\MagicBase\DTO\CreateTableRequestDTO;
 use App\Application\MagicBase\DTO\MagicBaseTableDetailDTO;
 use App\Application\MagicBase\DTO\UpdateTableRequestDTO;
+use App\Application\MagicBase\Support\MagicBaseAccessControl;
 use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnDynamicPermission;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseDynamicPermissions;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
-use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
 use App\Domain\MagicBase\Service\MagicBaseColumnDomainService;
+use App\Domain\MagicBase\Service\MagicBaseMetadataDomainService;
 use App\Domain\MagicBase\Service\MagicBaseMigrationLogDomainService;
 use App\Domain\MagicBase\Service\MagicBaseTableDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -28,10 +29,10 @@ use Hyperf\DbConnection\Db;
 readonly class MagicBaseTableAppService
 {
     public function __construct(
-        private MagicBaseTableRepository $repository,
+        private MagicBaseMetadataDomainService $metadataDomainService,
         private MagicBaseTableDomainService $tableDomainService,
         private MagicBaseColumnDomainService $columnDomainService,
-        private MagicBaseAccessControlAppService $accessControlDomainService,
+        private MagicBaseAccessControl $accessControl,
         private MagicBaseMigrationLogDomainService $migrationLogDomainService,
     ) {
     }
@@ -44,10 +45,10 @@ readonly class MagicBaseTableAppService
         $this->tableDomainService->normalizeDynamicPermissions($requestDTO->dynamicPermissions);
 
         return Db::transaction(function () use ($authorization, $projectId, $payload): MagicBaseTableDetailDTO {
-            $this->accessControlDomainService->requireWritableProject($authorization, $projectId);
+            $this->accessControl->requireWritableProject($authorization, $projectId);
             $organizationCode = $authorization->getOrganizationCode();
 
-            if ($this->repository->getTableByKey($organizationCode, $projectId, trim((string) $payload['table_key'])) !== null) {
+            if ($this->metadataDomainService->getTableByKey($organizationCode, $projectId, trim((string) $payload['table_key'])) !== null) {
                 $this->invalid('表标识已存在');
             }
 
@@ -55,7 +56,7 @@ readonly class MagicBaseTableAppService
             $dynamicPermissions = $this->tableDomainService->normalizeDynamicPermissions(MagicBaseDynamicPermissions::fromArray(
                 is_array($payload['dynamic_permissions'] ?? null) ? $payload['dynamic_permissions'] : null
             ));
-            $table = $this->repository->saveTable([
+            $table = $this->metadataDomainService->saveTable([
                 'organization_code' => $organizationCode,
                 'project_id' => $projectId,
                 'table_key' => trim((string) $payload['table_key']),
@@ -75,7 +76,7 @@ readonly class MagicBaseTableAppService
                     ? MagicBaseColumnDynamicPermission::fromArray($columnPayload['dynamic_permission'])
                     : $dynamicPermissions->getColumn($columnKey);
 
-                $column = $this->repository->saveColumn([
+                $column = $this->metadataDomainService->saveColumn([
                     'organization_code' => $organizationCode,
                     'table_id' => (int) $table->getId(),
                     'column_key' => $columnKey,
@@ -92,7 +93,7 @@ readonly class MagicBaseTableAppService
                 $columns[] = $column;
             }
 
-            $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+            $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,
                 $projectId,
                 (int) $table->getId(),
@@ -109,14 +110,14 @@ readonly class MagicBaseTableAppService
 
     public function listTables(MagicUserAuthorization $authorization, int $projectId): MagicBaseEntityCollection
     {
-        $this->accessControlDomainService->requireReadableProject($authorization, $projectId);
-        return $this->repository->listTables($authorization->getOrganizationCode(), $projectId);
+        $this->accessControl->requireReadableProject($authorization, $projectId);
+        return $this->metadataDomainService->listTables($authorization->getOrganizationCode(), $projectId);
     }
 
     public function getTable(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableDetailDTO
     {
-        $table = $this->accessControlDomainService->requireReadableTable($authorization, $projectId, $tableId)->getTable();
-        $columns = $this->repository->listColumns($authorization->getOrganizationCode(), $tableId);
+        $table = $this->accessControl->requireReadableTable($authorization, $projectId, $tableId)->getTable();
+        $columns = $this->metadataDomainService->listColumns($authorization->getOrganizationCode(), $tableId);
         return new MagicBaseTableDetailDTO($table, $columns);
     }
 
@@ -124,13 +125,13 @@ readonly class MagicBaseTableAppService
     {
         $payload = $requestDTO->toArray();
         return Db::transaction(function () use ($authorization, $projectId, $tableId, $payload): MagicBaseTableDetailDTO {
-            $context = $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
+            $context = $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
             $table = $context->getTable();
             $before = $table;
 
             if (isset($payload['table_key'])) {
                 $this->requireString($payload['table_key'], '表标识');
-                $exists = $this->repository->getTableByKey($authorization->getOrganizationCode(), $projectId, trim((string) $payload['table_key']));
+                $exists = $this->metadataDomainService->getTableByKey($authorization->getOrganizationCode(), $projectId, trim((string) $payload['table_key']));
                 if ($exists !== null && (int) $exists->getId() !== $tableId) {
                     $this->invalid('表标识已存在');
                 }
@@ -153,10 +154,10 @@ readonly class MagicBaseTableAppService
             }
 
             $table->setUpdatedAt($this->now());
-            $table = $this->repository->saveTable($table);
-            $columns = $this->repository->listColumns($authorization->getOrganizationCode(), $tableId);
+            $table = $this->metadataDomainService->saveTable($table);
+            $columns = $this->metadataDomainService->listColumns($authorization->getOrganizationCode(), $tableId);
 
-            $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+            $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,
                 $projectId,
                 $tableId,
@@ -174,17 +175,17 @@ readonly class MagicBaseTableAppService
     public function deleteTable(MagicUserAuthorization $authorization, int $projectId, int $tableId): void
     {
         Db::transaction(function () use ($authorization, $projectId, $tableId): void {
-            $context = $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
+            $context = $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
             $table = $context->getTable();
-            $columns = $this->repository->listColumns($authorization->getOrganizationCode(), $tableId);
+            $columns = $this->metadataDomainService->listColumns($authorization->getOrganizationCode(), $tableId);
             foreach ($columns as $column) {
                 if ($column instanceof MagicBaseColumnEntity) {
-                    $this->repository->deleteColumn((int) $column->getId());
+                    $this->metadataDomainService->deleteColumn((int) $column->getId());
                 }
             }
-            $this->repository->deleteTable($tableId);
+            $this->metadataDomainService->deleteTable($tableId);
 
-            $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+            $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,
                 $projectId,
                 $tableId,
@@ -201,14 +202,14 @@ readonly class MagicBaseTableAppService
     {
         $payload = $requestDTO->toArray();
         return Db::transaction(function () use ($authorization, $projectId, $tableId, $payload): MagicBaseColumnEntity {
-            $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
+            $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
             $this->columnDomainService->validatePayload($payload);
 
-            if ($this->repository->getColumnByKey($authorization->getOrganizationCode(), $tableId, trim((string) $payload['column_key'])) !== null) {
+            if ($this->metadataDomainService->getColumnByKey($authorization->getOrganizationCode(), $tableId, trim((string) $payload['column_key'])) !== null) {
                 $this->invalid('字段标识已存在');
             }
 
-            $column = $this->repository->saveColumn([
+            $column = $this->metadataDomainService->saveColumn([
                 'organization_code' => $authorization->getOrganizationCode(),
                 'table_id' => $tableId,
                 'column_key' => trim((string) $payload['column_key']),
@@ -225,7 +226,7 @@ readonly class MagicBaseTableAppService
                 'updated_at' => $this->now(),
             ]);
 
-            $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+            $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,
                 $projectId,
                 $tableId,
@@ -244,7 +245,7 @@ readonly class MagicBaseTableAppService
     {
         $payload = $requestDTO->toArray();
         return Db::transaction(function () use ($authorization, $projectId, $tableId, $columnId, $payload): MagicBaseColumnEntity {
-            $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
+            $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
             $column = $this->findColumn($authorization, $tableId, $columnId);
             $before = $column;
 
@@ -252,7 +253,7 @@ readonly class MagicBaseTableAppService
             $this->columnDomainService->validatePayload($merged);
 
             if (isset($payload['column_key'])) {
-                $exists = $this->repository->getColumnByKey($authorization->getOrganizationCode(), $tableId, trim((string) $payload['column_key']));
+                $exists = $this->metadataDomainService->getColumnByKey($authorization->getOrganizationCode(), $tableId, trim((string) $payload['column_key']));
                 if ($exists !== null && (int) $exists->getId() !== $columnId) {
                     $this->invalid('字段标识已存在');
                 }
@@ -268,9 +269,9 @@ readonly class MagicBaseTableAppService
                 is_array($merged['dynamic_permission'] ?? null) ? $merged['dynamic_permission'] : null
             ));
             $column->setUpdatedAt($this->now());
-            $column = $this->repository->saveColumn($column);
+            $column = $this->metadataDomainService->saveColumn($column);
 
-            $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+            $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,
                 $projectId,
                 $tableId,
@@ -288,11 +289,11 @@ readonly class MagicBaseTableAppService
     public function deleteColumn(MagicUserAuthorization $authorization, int $projectId, int $tableId, int $columnId): void
     {
         Db::transaction(function () use ($authorization, $projectId, $tableId, $columnId): void {
-            $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $tableId);
+            $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
             $column = $this->findColumn($authorization, $tableId, $columnId);
-            $this->repository->deleteColumn($columnId);
+            $this->metadataDomainService->deleteColumn($columnId);
 
-            $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+            $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,
                 $projectId,
                 $tableId,
@@ -307,7 +308,7 @@ readonly class MagicBaseTableAppService
 
     private function findColumn(MagicUserAuthorization $authorization, int $tableId, int $columnId): MagicBaseColumnEntity
     {
-        $column = $this->repository->getColumn($authorization->getOrganizationCode(), $tableId, $columnId);
+        $column = $this->metadataDomainService->getColumn($authorization->getOrganizationCode(), $tableId, $columnId);
         if ($column === null) {
             $this->notFound('字段');
         }

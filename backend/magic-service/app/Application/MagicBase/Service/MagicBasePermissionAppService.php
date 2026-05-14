@@ -10,39 +10,41 @@ namespace App\Application\MagicBase\Service;
 use App\Application\MagicBase\DTO\ColumnPermissionRequestDTO;
 use App\Application\MagicBase\DTO\RowPermissionRequestDTO;
 use App\Application\MagicBase\DTO\TablePermissionRequestDTO;
+use App\Application\MagicBase\Support\MagicBaseAccessControl;
+use App\Application\MagicBase\Support\MagicBaseRowQuerySupport;
 use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
 use App\Domain\MagicBase\Entity\MagicBaseColumnPermissionEntity;
 use App\Domain\MagicBase\Entity\MagicBaseRowPermissionEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTablePermissionEntity;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
-use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
 use App\Domain\MagicBase\Service\MagicBaseAdminDomainService;
+use App\Domain\MagicBase\Service\MagicBaseMetadataDomainService;
 use App\Domain\MagicBase\Service\MagicBaseMigrationLogDomainService;
-use App\Domain\MagicBase\Service\MagicBaseQueryDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use DateTime;
 
 readonly class MagicBasePermissionAppService
 {
     public function __construct(
-        private MagicBaseTableRepository $repository,
+        private MagicBaseMetadataDomainService $metadataDomainService,
+        private MagicBaseAccessControl $accessControl,
         private MagicBaseAdminDomainService $adminDomainService,
         private MagicBaseMigrationLogDomainService $migrationLogDomainService,
-        private MagicBaseQueryDomainService $queryDomainService,
+        private MagicBaseRowQuerySupport $rowQuerySupport,
     ) {
     }
 
     public function createTablePermission(MagicUserAuthorization $authorization, int $projectId, int $tableId, TablePermissionRequestDTO $requestDTO): MagicBaseTablePermissionEntity
     {
-        $this->getMagicBaseAccessControlAppService()->requireTableManager($authorization, $projectId, $tableId);
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
         $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->toArray(), true);
         $permissionLevel = trim((string) $requestDTO->getPermissionLevel());
         if (! in_array($permissionLevel, MagicBaseConst::PERMISSION_LEVELS, true)) {
             $this->invalid('permission_level');
         }
 
-        $saved = $this->repository->upsertTablePermission([
+        $saved = $this->metadataDomainService->upsertTablePermission([
             'organization_code' => $authorization->getOrganizationCode(),
             'table_id' => $tableId,
             'subject_type' => $subject->getSubjectType(),
@@ -52,7 +54,7 @@ readonly class MagicBasePermissionAppService
             'updated_at' => new DateTime(),
         ]);
 
-        $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+        $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
             $authorization,
             $projectId,
             $tableId,
@@ -68,12 +70,12 @@ readonly class MagicBasePermissionAppService
 
     public function createColumnPermission(MagicUserAuthorization $authorization, int $projectId, int $tableId, ColumnPermissionRequestDTO $requestDTO): MagicBaseColumnPermissionEntity
     {
-        $this->getMagicBaseAccessControlAppService()->requireTableManager($authorization, $projectId, $tableId);
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
         $columnId = $this->parsePayloadId($requestDTO->getColumnId(), '字段ID');
         $column = $this->getColumnOrFail($authorization, $tableId, $columnId);
         $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->toArray(), true);
 
-        $saved = $this->repository->upsertColumnPermission([
+        $saved = $this->metadataDomainService->upsertColumnPermission([
             'organization_code' => $authorization->getOrganizationCode(),
             'table_id' => $tableId,
             'column_id' => $columnId,
@@ -85,7 +87,7 @@ readonly class MagicBasePermissionAppService
             'updated_at' => new DateTime(),
         ]);
 
-        $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+        $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
             $authorization,
             $projectId,
             $tableId,
@@ -101,12 +103,12 @@ readonly class MagicBasePermissionAppService
 
     public function createRowPermission(MagicUserAuthorization $authorization, int $projectId, int $tableId, RowPermissionRequestDTO $requestDTO): MagicBaseRowPermissionEntity
     {
-        $this->getMagicBaseAccessControlAppService()->requireTableManager($authorization, $projectId, $tableId);
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
         $recordId = $this->parsePayloadId($requestDTO->getRecordId(), 'record_id');
-        $this->queryDomainService->getRowOrFail($authorization, $tableId, $recordId);
+        $this->rowQuerySupport->getRowOrFail($authorization, $tableId, $recordId);
         $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->toArray(), true);
 
-        $saved = $this->repository->upsertRowPermission([
+        $saved = $this->metadataDomainService->upsertRowPermission([
             'organization_code' => $authorization->getOrganizationCode(),
             'table_id' => $tableId,
             'record_id' => $recordId,
@@ -119,7 +121,7 @@ readonly class MagicBasePermissionAppService
             'updated_at' => new DateTime(),
         ]);
 
-        $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+        $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
             $authorization,
             $projectId,
             $tableId,
@@ -135,7 +137,7 @@ readonly class MagicBasePermissionAppService
 
     private function getColumnOrFail(MagicUserAuthorization $authorization, int $tableId, int $columnId): MagicBaseColumnEntity
     {
-        $column = $this->repository->getColumn($authorization->getOrganizationCode(), $tableId, $columnId);
+        $column = $this->metadataDomainService->getColumn($authorization->getOrganizationCode(), $tableId, $columnId);
         if ($column === null) {
             $this->notFound('字段');
         }
@@ -161,10 +163,5 @@ readonly class MagicBasePermissionAppService
     private function notFound(string $label): void
     {
         MagicBaseExceptionBuilder::resourceNotFound($label);
-    }
-
-    private function getMagicBaseAccessControlAppService(): MagicBaseAccessControlAppService
-    {
-        return di(MagicBaseAccessControlAppService::class);
     }
 }

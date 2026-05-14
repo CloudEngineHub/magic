@@ -8,13 +8,14 @@ declare(strict_types=1);
 namespace App\Application\MagicBase\Service;
 
 use App\Application\MagicBase\DTO\RelationRequestDTO;
+use App\Application\MagicBase\Support\MagicBaseAccessControl;
 use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
 use App\Domain\MagicBase\Entity\MagicBaseRelationEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
-use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
+use App\Domain\MagicBase\Service\MagicBaseMetadataDomainService;
 use App\Domain\MagicBase\Service\MagicBaseMigrationLogDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRelationDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -23,8 +24,8 @@ use Hyperf\DbConnection\Db;
 readonly class MagicBaseRelationAppService
 {
     public function __construct(
-        private MagicBaseTableRepository $repository,
-        private MagicBaseAccessControlAppService $accessControlDomainService,
+        private MagicBaseMetadataDomainService $metadataDomainService,
+        private MagicBaseAccessControl $accessControl,
         private MagicBaseRelationDomainService $relationDomainService,
         private MagicBaseMigrationLogDomainService $migrationLogDomainService,
     ) {
@@ -40,18 +41,18 @@ readonly class MagicBaseRelationAppService
             $relationType = trim((string) $requestDTO->getRelationType());
             $relationName = trim((string) $requestDTO->getRelationName());
 
-            $sourceTable = $this->accessControlDomainService->requireWritableTable($authorization, $projectId, $sourceTableId)->getTable();
+            $sourceTable = $this->accessControl->requireWritableTable($authorization, $projectId, $sourceTableId)->getTable();
             $targetTable = $this->getTableOrFail($authorization, $projectId, $targetTableId);
             $sourceColumn = $this->getColumnOrFail($authorization, $sourceTableId, $sourceColumnId);
             $targetColumn = $this->getColumnOrFail($authorization, $targetTableId, $targetColumnId);
             if ((int) $sourceColumn->getTableId() !== (int) $sourceTable->getId() || (int) $targetColumn->getTableId() !== (int) $targetTable->getId()) {
                 $this->invalid('关系字段');
             }
-            if ($this->repository->getRelationByName($authorization->getOrganizationCode(), $sourceTableId, $relationName) !== null) {
+            if ($this->metadataDomainService->getRelationByName($authorization->getOrganizationCode(), $sourceTableId, $relationName) !== null) {
                 $this->invalid('关系名称已存在');
             }
 
-            $relation = $this->repository->saveRelation($this->relationDomainService->buildCreatePayload(
+            $relation = $this->metadataDomainService->saveRelation($this->relationDomainService->buildCreatePayload(
                 $authorization->getOrganizationCode(),
                 $projectId,
                 $sourceTableId,
@@ -62,7 +63,7 @@ readonly class MagicBaseRelationAppService
                 $relationName,
             ));
 
-            $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+            $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,
                 $projectId,
                 null,
@@ -79,15 +80,15 @@ readonly class MagicBaseRelationAppService
 
     public function listRelations(MagicUserAuthorization $authorization, int $projectId): MagicBaseEntityCollection
     {
-        $this->accessControlDomainService->requireReadableProject($authorization, $projectId);
-        return $this->repository->listRelations($authorization->getOrganizationCode(), $projectId);
+        $this->accessControl->requireReadableProject($authorization, $projectId);
+        return $this->metadataDomainService->listRelations($authorization->getOrganizationCode(), $projectId);
     }
 
     public function updateRelation(MagicUserAuthorization $authorization, int $projectId, int $relationId, RelationRequestDTO $requestDTO): MagicBaseRelationEntity
     {
         return Db::transaction(function () use ($authorization, $projectId, $relationId, $requestDTO): MagicBaseRelationEntity {
             $relation = $this->getRelationOrFail($authorization, $projectId, $relationId);
-            $this->accessControlDomainService->requireWritableTable($authorization, $projectId, (int) $relation->getSourceTableId());
+            $this->accessControl->requireWritableTable($authorization, $projectId, (int) $relation->getSourceTableId());
             $before = $relation;
 
             $sourceTableId = $requestDTO->hasSourceTableId() ? $this->parsePayloadId($requestDTO->getSourceTableId(), '源表ID') : (int) $relation->getSourceTableId();
@@ -108,14 +109,14 @@ readonly class MagicBaseRelationAppService
                 $relation->setTargetColumnKey($targetColumn->getColumnKey());
             }
 
-            $existing = $this->repository->getRelationByName($authorization->getOrganizationCode(), $sourceTableId, $relationName);
+            $existing = $this->metadataDomainService->getRelationByName($authorization->getOrganizationCode(), $sourceTableId, $relationName);
             if ($existing !== null && (int) $existing->getId() !== $relationId) {
                 $this->invalid('关系名称已存在');
             }
 
             $relation = $this->relationDomainService->applyUpdate($relation, $sourceTableId, $targetTableId, $relationType, $relationName);
-            $relation = $this->repository->saveRelation($relation);
-            $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+            $relation = $this->metadataDomainService->saveRelation($relation);
+            $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,
                 $projectId,
                 null,
@@ -134,9 +135,9 @@ readonly class MagicBaseRelationAppService
     {
         Db::transaction(function () use ($authorization, $projectId, $relationId): void {
             $relation = $this->getRelationOrFail($authorization, $projectId, $relationId);
-            $this->accessControlDomainService->requireWritableTable($authorization, $projectId, (int) $relation->getSourceTableId());
-            $this->repository->deleteRelation($relationId);
-            $this->repository->createMigrationLog($this->migrationLogDomainService->buildPayload(
+            $this->accessControl->requireWritableTable($authorization, $projectId, (int) $relation->getSourceTableId());
+            $this->metadataDomainService->deleteRelation($relationId);
+            $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
                 $authorization,
                 $projectId,
                 null,
@@ -151,7 +152,7 @@ readonly class MagicBaseRelationAppService
 
     private function getTableOrFail(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableEntity
     {
-        $table = $this->repository->getTable($authorization->getOrganizationCode(), $projectId, $tableId);
+        $table = $this->metadataDomainService->getTable($authorization->getOrganizationCode(), $projectId, $tableId);
         if ($table === null) {
             $this->notFound('数据表');
         }
@@ -160,7 +161,7 @@ readonly class MagicBaseRelationAppService
 
     private function getColumnOrFail(MagicUserAuthorization $authorization, int $tableId, int $columnId): MagicBaseColumnEntity
     {
-        $column = $this->repository->getColumn($authorization->getOrganizationCode(), $tableId, $columnId);
+        $column = $this->metadataDomainService->getColumn($authorization->getOrganizationCode(), $tableId, $columnId);
         if ($column === null) {
             $this->notFound('字段');
         }
@@ -169,7 +170,7 @@ readonly class MagicBaseRelationAppService
 
     private function getRelationOrFail(MagicUserAuthorization $authorization, int $projectId, int $relationId): MagicBaseRelationEntity
     {
-        $relation = $this->repository->getRelation($authorization->getOrganizationCode(), $projectId, $relationId);
+        $relation = $this->metadataDomainService->getRelation($authorization->getOrganizationCode(), $projectId, $relationId);
         if ($relation === null) {
             $this->notFound('关系');
         }

@@ -10,6 +10,7 @@ namespace App\Domain\MagicBase\Service;
 use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 use App\Domain\MagicBase\Entity\ValueObject\ActorContext;
+use App\Domain\MagicBase\Entity\ValueObject\ColumnType;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseColumnIndex;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -101,14 +102,19 @@ class MagicBaseRowDomainService
             return;
         }
 
-        $dataType = $column->getDataType();
+        $dataType = ColumnType::tryFrom($column->getDataType());
         $isValid = match ($dataType) {
-            'text', 'single_select', 'user', 'department', 'attachment', 'reference' => is_string($value),
-            'number' => is_numeric($value),
-            'datetime' => is_string($value),
-            'boolean' => is_bool($value) || $value === 0 || $value === 1 || $value === '0' || $value === '1',
-            'multi_select' => is_array($value),
-            'json' => is_array($value) || is_string($value) || is_object($value),
+            ColumnType::Text,
+            ColumnType::SingleSelect,
+            ColumnType::User,
+            ColumnType::Department,
+            ColumnType::Attachment,
+            ColumnType::Reference => is_string($value),
+            ColumnType::Number => is_numeric($value),
+            ColumnType::Datetime => is_string($value),
+            ColumnType::Boolean => is_bool($value) || $value === 0 || $value === 1 || $value === '0' || $value === '1',
+            ColumnType::MultiSelect => is_array($value),
+            ColumnType::Json => is_array($value) || is_string($value) || is_object($value),
             default => false,
         };
 
