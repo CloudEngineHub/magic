@@ -9,7 +9,6 @@ namespace App\Application\MagicBase\Service;
 
 use App\Application\MagicBase\DTO\CreateRowRequestDTO;
 use App\Application\MagicBase\DTO\MagicBaseRowDTO;
-use App\Domain\MagicBase\Service\MagicBaseAccessControlDomainService;
 use App\Domain\MagicBase\Service\MagicBaseQueryDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
@@ -20,7 +19,7 @@ use Hyperf\DbConnection\Db;
 readonly class MagicBaseRowAppService
 {
     public function __construct(
-        private MagicBaseAccessControlDomainService $accessControlDomainService,
+        private MagicBaseAccessControlAppService $accessControlDomainService,
         private MagicBaseQueryDomainService $queryDomainService,
         private MagicBaseRowDomainService $rowDomainService,
         private MagicBaseRowStorageResolverDomainService $rowStorageResolver,

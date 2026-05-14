@@ -17,6 +17,7 @@ use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTablePermissionEntity;
 use App\Domain\MagicBase\Entity\ValueObject\ActorContext;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
+use App\Domain\MagicBase\Entity\ValueObject\MagicBasePermissionAction;
 
 class MagicBasePermissionDomainService
 {
@@ -87,7 +88,7 @@ class MagicBasePermissionDomainService
             $tablePermissions,
             $isManager,
             MagicBaseConst::PERMISSION_READ,
-            'read_scope'
+            MagicBasePermissionAction::Read
         );
     }
 
@@ -99,7 +100,7 @@ class MagicBasePermissionDomainService
             $tablePermissions,
             $isManager,
             MagicBaseConst::PERMISSION_INSERT,
-            'insert_scope'
+            MagicBasePermissionAction::Insert
         );
     }
 
@@ -111,8 +112,8 @@ class MagicBasePermissionDomainService
         bool $isManager,
     ): bool {
         return $isManager
-            || $this->hasMatchingBooleanPermission($rowPermissions, $actor, 'can_read')
-            || $this->matchScope($this->getRowScope($table, 'read_scope'), $actor, $document);
+            || $this->hasMatchingBooleanPermission($rowPermissions, $actor, MagicBasePermissionAction::Read)
+            || $this->matchScope($this->getRowScope($table, MagicBasePermissionAction::Read), $actor, $document);
     }
 
     public function canEditRow(
@@ -123,8 +124,8 @@ class MagicBasePermissionDomainService
         bool $isManager,
     ): bool {
         return $isManager
-            || $this->hasMatchingBooleanPermission($rowPermissions, $actor, 'can_edit')
-            || $this->matchScope($this->getRowScope($table, 'edit_scope'), $actor, $document);
+            || $this->hasMatchingBooleanPermission($rowPermissions, $actor, MagicBasePermissionAction::Edit)
+            || $this->matchScope($this->getRowScope($table, MagicBasePermissionAction::Edit), $actor, $document);
     }
 
     public function canDeleteRow(
@@ -135,8 +136,8 @@ class MagicBasePermissionDomainService
         bool $isManager,
     ): bool {
         return $isManager
-            || $this->hasMatchingBooleanPermission($rowPermissions, $actor, 'can_delete')
-            || $this->matchScope($this->getRowScope($table, 'delete_scope'), $actor, $document);
+            || $this->hasMatchingBooleanPermission($rowPermissions, $actor, MagicBasePermissionAction::Delete)
+            || $this->matchScope($this->getRowScope($table, MagicBasePermissionAction::Delete), $actor, $document);
     }
 
     public function canReadColumn(
@@ -147,8 +148,8 @@ class MagicBasePermissionDomainService
         bool $isManager,
     ): bool {
         return $isManager
-            || $this->hasMatchingBooleanPermission($columnPermissions, $actor, 'can_read')
-            || $this->matchScope($this->getColumnScope($column, 'read_scope'), $actor, $document);
+            || $this->hasMatchingBooleanPermission($columnPermissions, $actor, MagicBasePermissionAction::Read)
+            || $this->matchScope($this->getColumnScope($column, MagicBasePermissionAction::Read), $actor, $document);
     }
 
     public function canEditColumn(
@@ -159,8 +160,8 @@ class MagicBasePermissionDomainService
         bool $isManager,
     ): bool {
         return $isManager
-            || $this->hasMatchingBooleanPermission($columnPermissions, $actor, 'can_edit')
-            || $this->matchScope($this->getColumnScope($column, 'edit_scope'), $actor, $document);
+            || $this->hasMatchingBooleanPermission($columnPermissions, $actor, MagicBasePermissionAction::Edit)
+            || $this->matchScope($this->getColumnScope($column, MagicBasePermissionAction::Edit), $actor, $document);
     }
 
     private function canAccessTableByLevel(
@@ -169,7 +170,7 @@ class MagicBasePermissionDomainService
         iterable $tablePermissions,
         bool $isManager,
         string $requiredLevel,
-        string $scopeField,
+        MagicBasePermissionAction $action,
     ): bool {
         if ($isManager) {
             return true;
@@ -187,16 +188,16 @@ class MagicBasePermissionDomainService
         }
 
         return $this->matchScope(
-            $this->getTableScope($table, $scopeField),
+            $this->getTableScope($table, $action),
             $actor,
             $table
         );
     }
 
-    private function hasMatchingBooleanPermission(iterable $entries, ActorContext $actor, string $field): bool
+    private function hasMatchingBooleanPermission(iterable $entries, ActorContext $actor, MagicBasePermissionAction $action): bool
     {
         foreach ($entries as $entry) {
-            if ($this->matchSubject($entry, $actor) && $this->getBooleanPermission($entry, $field)) {
+            if ($this->matchSubject($entry, $actor) && $this->getBooleanPermission($entry, $action)) {
                 return true;
             }
         }
@@ -257,21 +258,21 @@ class MagicBasePermissionDomainService
         return '';
     }
 
-    private function getBooleanPermission(mixed $entry, string $field): bool
+    private function getBooleanPermission(mixed $entry, MagicBasePermissionAction $action): bool
     {
         if ($entry instanceof MagicBaseColumnPermissionEntity) {
-            return match ($field) {
-                'can_read' => $entry->getCanRead(),
-                'can_edit' => $entry->getCanEdit(),
+            return match ($action) {
+                MagicBasePermissionAction::Read => $entry->getCanRead(),
+                MagicBasePermissionAction::Edit => $entry->getCanEdit(),
                 default => false,
             };
         }
 
         if ($entry instanceof MagicBaseRowPermissionEntity) {
-            return match ($field) {
-                'can_read' => $entry->getCanRead(),
-                'can_edit' => $entry->getCanEdit(),
-                'can_delete' => $entry->getCanDelete(),
+            return match ($action) {
+                MagicBasePermissionAction::Read => $entry->getCanRead(),
+                MagicBasePermissionAction::Edit => $entry->getCanEdit(),
+                MagicBasePermissionAction::Delete => $entry->getCanDelete(),
                 default => false,
             };
         }
@@ -292,37 +293,37 @@ class MagicBasePermissionDomainService
         return $document->getOwnerDepartmentIds();
     }
 
-    private function getTableScope(MagicBaseTableEntity $table, string $scopeField): string
+    private function getTableScope(MagicBaseTableEntity $table, MagicBasePermissionAction $action): string
     {
         $permission = $table->getDynamicPermissions()->getTable();
 
-        return match ($scopeField) {
-            'read_scope' => $permission->getReadScope(),
-            'insert_scope' => $permission->getInsertScope(),
-            default => MagicBaseConst::SCOPE_PUBLIC,
+        return match ($action) {
+            MagicBasePermissionAction::Read => $permission->getReadScope(),
+            MagicBasePermissionAction::Insert => $permission->getInsertScope(),
+            default => MagicBaseConst::SCOPE_DISABLED,
         };
     }
 
-    private function getRowScope(MagicBaseTableEntity $table, string $scopeField): string
+    private function getRowScope(MagicBaseTableEntity $table, MagicBasePermissionAction $action): string
     {
         $permission = $table->getDynamicPermissions()->getRow();
 
-        return match ($scopeField) {
-            'read_scope' => $permission->getReadScope(),
-            'edit_scope' => $permission->getEditScope(),
-            'delete_scope' => $permission->getDeleteScope(),
-            default => MagicBaseConst::SCOPE_PUBLIC,
+        return match ($action) {
+            MagicBasePermissionAction::Read => $permission->getReadScope(),
+            MagicBasePermissionAction::Edit => $permission->getEditScope(),
+            MagicBasePermissionAction::Delete => $permission->getDeleteScope(),
+            default => MagicBaseConst::SCOPE_DISABLED,
         };
     }
 
-    private function getColumnScope(MagicBaseColumnEntity $column, string $scopeField): string
+    private function getColumnScope(MagicBaseColumnEntity $column, MagicBasePermissionAction $action): string
     {
         $permission = $column->getDynamicPermission();
 
-        return match ($scopeField) {
-            'read_scope' => $permission->getReadScope(),
-            'edit_scope' => $permission->getEditScope(),
-            default => MagicBaseConst::SCOPE_PUBLIC,
+        return match ($action) {
+            MagicBasePermissionAction::Read => $permission->getReadScope(),
+            MagicBasePermissionAction::Edit => $permission->getEditScope(),
+            default => MagicBaseConst::SCOPE_DISABLED,
         };
     }
 }

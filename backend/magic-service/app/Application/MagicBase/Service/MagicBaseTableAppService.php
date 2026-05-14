@@ -18,7 +18,6 @@ use App\Domain\MagicBase\Entity\ValueObject\MagicBaseDynamicPermissions;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
-use App\Domain\MagicBase\Service\MagicBaseAccessControlDomainService;
 use App\Domain\MagicBase\Service\MagicBaseColumnDomainService;
 use App\Domain\MagicBase\Service\MagicBaseMigrationLogDomainService;
 use App\Domain\MagicBase\Service\MagicBaseTableDomainService;
@@ -32,7 +31,7 @@ readonly class MagicBaseTableAppService
         private MagicBaseTableRepository $repository,
         private MagicBaseTableDomainService $tableDomainService,
         private MagicBaseColumnDomainService $columnDomainService,
-        private MagicBaseAccessControlDomainService $accessControlDomainService,
+        private MagicBaseAccessControlAppService $accessControlDomainService,
         private MagicBaseMigrationLogDomainService $migrationLogDomainService,
     ) {
     }

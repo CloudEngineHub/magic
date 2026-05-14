@@ -15,7 +15,6 @@ use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
-use App\Domain\MagicBase\Service\MagicBaseAccessControlDomainService;
 use App\Domain\MagicBase\Service\MagicBaseMigrationLogDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRelationDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -25,7 +24,7 @@ readonly class MagicBaseRelationAppService
 {
     public function __construct(
         private MagicBaseTableRepository $repository,
-        private MagicBaseAccessControlDomainService $accessControlDomainService,
+        private MagicBaseAccessControlAppService $accessControlDomainService,
         private MagicBaseRelationDomainService $relationDomainService,
         private MagicBaseMigrationLogDomainService $migrationLogDomainService,
     ) {

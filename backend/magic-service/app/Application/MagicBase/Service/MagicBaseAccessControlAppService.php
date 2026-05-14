@@ -5,7 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 
-namespace App\Domain\MagicBase\Service;
+namespace App\Application\MagicBase\Service;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
@@ -16,6 +16,8 @@ use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseTableAccessContext;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
+use App\Domain\MagicBase\Service\MagicBaseAdminDomainService;
+use App\Domain\MagicBase\Service\MagicBaseQueryDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
@@ -23,7 +25,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectMemberDomainService;
 use LogicException;
 
-readonly class MagicBaseAccessControlDomainService
+readonly class MagicBaseAccessControlAppService
 {
     public function __construct(
         private MagicBaseTableRepository $repository,
@@ -122,14 +124,9 @@ readonly class MagicBaseAccessControlDomainService
     {
         $table = $this->repository->getTable($authorization->getOrganizationCode(), $projectId, $tableId);
         if ($table === null) {
-            $this->invalid('数据表');
+            MagicBaseExceptionBuilder::resourceNotFound('数据表');
         }
         return $table;
-    }
-
-    private function invalid(string $label): void
-    {
-        MagicBaseExceptionBuilder::resourceNotFound($label);
     }
 
     private function forbidden(string $label): void

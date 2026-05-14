@@ -11,7 +11,6 @@ use App\Application\MagicBase\DTO\SubjectRequestDTO;
 use App\Domain\MagicBase\Entity\MagicBaseProjectAdminEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableAdminEntity;
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
-use App\Domain\MagicBase\Service\MagicBaseAccessControlDomainService;
 use App\Domain\MagicBase\Service\MagicBaseAdminDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use DateTime;
@@ -20,7 +19,7 @@ readonly class MagicBaseAdminAppService
 {
     public function __construct(
         private MagicBaseTableRepository $repository,
-        private MagicBaseAccessControlDomainService $accessControlDomainService,
+        private MagicBaseAccessControlAppService $accessControlDomainService,
         private MagicBaseAdminDomainService $adminDomainService,
     ) {
     }

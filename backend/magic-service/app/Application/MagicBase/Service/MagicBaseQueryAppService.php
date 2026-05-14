@@ -11,7 +11,6 @@ use App\Application\MagicBase\DTO\MagicBasePageDTO;
 use App\Application\MagicBase\DTO\MagicBaseRowDTO;
 use App\Application\MagicBase\DTO\QueryRowsRequestDTO;
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
-use App\Domain\MagicBase\Service\MagicBaseAccessControlDomainService;
 use App\Domain\MagicBase\Service\MagicBaseQueryDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowQueryCriteriaDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
@@ -21,7 +20,7 @@ use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 readonly class MagicBaseQueryAppService
 {
     public function __construct(
-        private MagicBaseAccessControlDomainService $accessControlDomainService,
+        private MagicBaseAccessControlAppService $accessControlDomainService,
         private MagicBaseQueryDomainService $queryDomainService,
         private MagicBaseRowQueryCriteriaDomainService $rowQueryCriteriaDomainService,
         private MagicBaseRowStorageResolverDomainService $rowStorageResolver,
