@@ -1,10 +1,13 @@
 import type { CSSProperties, ReactNode } from "react"
+import type { AudioChunkParams } from "@/services/voiceToText"
 import { VoiceResultUtterance } from "./services/VoiceClient/types"
 import { MessageEditorSize } from "@/pages/superMagic/components/MessageEditor/types"
 
 export interface VoiceInputRef {
 	/** 停止录音 */
-	stopRecording: () => void
+	stopRecording: () => Promise<void> | void
+	/** 主动断开语音连接 */
+	disconnect: () => void
 	/** 当前是否正在录音 */
 	readonly isRecording: boolean
 	/** 当前状态 */
@@ -20,6 +23,10 @@ export interface VoiceInputProps {
 	onStatusChange?: (status: VoiceInputStatus) => void
 	/** 录音状态变化回调 */
 	onRecordingChange?: (isRecording: boolean) => void
+	/** 音频分片回调 */
+	onAudioChunk?: (params: AudioChunkParams) => void
+	/** 声纹高度变化回调 */
+	onWaveformLevelsChange?: (levels: number[]) => void
 	/** 是否禁用 */
 	disabled?: boolean
 	/** 占位符文本 */
@@ -38,6 +45,12 @@ export interface VoiceInputProps {
 	size?: MessageEditorSize
 	/** 是否启用快捷键 (⌘+Shift+E / Ctrl+Shift+E) */
 	enableHotkey?: boolean
+	/** 点击组件自身时是否切换录音状态 */
+	toggleOnClick?: boolean
+	/** 声纹条数量 */
+	waveformBarCount?: number
+	/** 自定义声纹容器类名 */
+	waveformClassName?: string
 }
 
 /**

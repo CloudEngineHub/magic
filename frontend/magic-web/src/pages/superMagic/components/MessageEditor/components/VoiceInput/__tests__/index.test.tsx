@@ -1,41 +1,52 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest"
-import { forwardRef, useRef } from "react"
+import { forwardRef, useImperativeHandle, useRef } from "react"
 import SuperMagicVoiceInput from ".."
-import { VoiceInputRef } from "@/components/business/VoiceInput"
+import type { VoiceInputProps, VoiceInputRef } from "@/components/business/VoiceInput"
 
-// Mock dependencies
 let mockStopRecording = vi.fn()
+let mockDisconnect = vi.fn()
+let mockIsRecording = false
+let mockLatestVoiceInputProps: VoiceInputProps | undefined
+
+function mockAssignVoiceInputRef(
+	ref: React.ForwardedRef<VoiceInputRef>,
+	mockVoiceInput: VoiceInputRef,
+) {
+	if (!ref) return
+	if (typeof ref === "function") {
+		ref(mockVoiceInput)
+		return
+	}
+
+	ref.current = mockVoiceInput
+}
 
 vi.mock("@/components/business/VoiceInput", () => ({
-	default: forwardRef<VoiceInputRef, any>(({ onRecordingChange, onResult }, ref) => {
-		// 重置mock实现
-		mockStopRecording.mockImplementation(() => {
-			// 模拟stopRecording调用后的状态变化
-			onRecordingChange?.(false)
-		})
+	default: forwardRef<VoiceInputRef, VoiceInputProps>((props, ref) => {
+		mockLatestVoiceInputProps = props
 
-		// Mock VoiceInput component
 		const mockVoiceInput = {
 			stopRecording: mockStopRecording,
-			isRecording: false,
-			status: "idle" as const,
-		}
+			disconnect: mockDisconnect,
+			isRecording: mockIsRecording,
+			status: mockIsRecording ? "recording" : "idle",
+		} satisfies VoiceInputRef
 
-			// 暴露mock方法给测试
-			; (ref as any).current = mockVoiceInput
+		useImperativeHandle(ref, () => mockVoiceInput)
+		mockAssignVoiceInputRef(ref, mockVoiceInput)
 
 		return (
 			<div data-testid="voice-input">
 				<button
 					data-testid="voice-button"
 					onClick={() => {
-						// 模拟权限被拒绝 - 现在VoiceInput内部处理权限，会自动调用stopRecording
-						onRecordingChange?.(true) // 先模拟开始录音
+						mockIsRecording = true
+						props.onRecordingChange?.(true)
 						setTimeout(() => {
-							// 模拟权限错误时的内部处理
+							mockIsRecording = false
 							mockStopRecording()
-							onRecordingChange?.(false) // 然后自动停止
+							props.onRecordingChange?.(false)
 						}, 50)
 					}}
 				>
@@ -51,10 +62,10 @@ vi.mock("@/hooks/useMicrophonePermission", () => ({
 		const mockHandlePermissionError = vi.fn((error) => {
 			if (error.name === "NotAllowedError") {
 				onStateReset?.()
-				// 不抛出错误，只处理权限错误
-			} else {
-				throw error
+				return
 			}
+
+			throw error
 		})
 
 		return {
@@ -63,7 +74,6 @@ vi.mock("@/hooks/useMicrophonePermission", () => ({
 	},
 }))
 
-// Mock antd components
 vi.mock("antd", () => ({
 	Modal: {
 		confirm: vi.fn(),
@@ -83,7 +93,6 @@ describe("SuperMagicVoiceInput", () => {
 	let mockUpdateValue: ReturnType<typeof vi.fn>
 	let voiceInputRef: React.RefObject<VoiceInputRef>
 
-	// Test wrapper component
 	const TestComponent = () => {
 		const ref = useRef<VoiceInputRef>(null)
 		voiceInputRef = ref
@@ -94,6 +103,9 @@ describe("SuperMagicVoiceInput", () => {
 	beforeEach(() => {
 		mockUpdateValue = vi.fn()
 		mockStopRecording = vi.fn()
+		mockDisconnect = vi.fn()
+		mockIsRecording = false
+		mockLatestVoiceInputProps = undefined
 		vi.clearAllMocks()
 	})
 
@@ -111,17 +123,13 @@ describe("SuperMagicVoiceInput", () => {
 
 		const voiceButton = screen.getByTestId("voice-button")
 
-		// 初始状态应该是idle和not recording
 		expect(voiceInputRef.current?.isRecording).toBe(false)
 		expect(voiceInputRef.current?.status).toBe("idle")
 
-		// 点击开始录音
 		fireEvent.click(voiceButton)
 
-		// 等待VoiceInput内部的权限处理完成
 		await waitFor(
 			() => {
-				// 权限被拒绝后，状态应该重置为idle和not recording
 				expect(voiceInputRef.current?.isRecording).toBe(false)
 				expect(voiceInputRef.current?.status).toBe("idle")
 			},
@@ -134,7 +142,6 @@ describe("SuperMagicVoiceInput", () => {
 
 		const voiceButton = screen.getByTestId("voice-button")
 
-		// 多次点击测试状态一致性
 		for (let i = 0; i < 3; i++) {
 			fireEvent.click(voiceButton)
 
@@ -151,14 +158,11 @@ describe("SuperMagicVoiceInput", () => {
 	it("should call stopRecording when permission is denied", async () => {
 		render(<TestComponent />)
 
-		// 等待组件完全渲染，确保ref已经设置
 		await waitFor(() => {
 			expect(voiceInputRef.current).toBeTruthy()
 		})
 
-		const voiceButton = screen.getByTestId("voice-button")
-
-		fireEvent.click(voiceButton)
+		fireEvent.click(screen.getByTestId("voice-button"))
 
 		await waitFor(
 			() => {
@@ -168,30 +172,22 @@ describe("SuperMagicVoiceInput", () => {
 		)
 	})
 
-	it("should handle updateValue correctly when recording", async () => {
-		// 模拟正常录音场景
+	it("should handle updateValue correctly when recording", () => {
 		render(<TestComponent />)
 
-		const component = screen.getByTestId("voice-input")
-
-		// 这里需要访问组件内部的方法，实际测试中可能需要更复杂的mock
 		expect(mockUpdateValue).not.toHaveBeenCalled()
 	})
 
 	it("should reset state immediately on permission error", async () => {
 		render(<TestComponent />)
 
-		const voiceButton = screen.getByTestId("voice-button")
-
-		// 记录开始时间
 		const startTime = Date.now()
 
-		fireEvent.click(voiceButton)
+		fireEvent.click(screen.getByTestId("voice-button"))
 
-		// 验证状态重置是立即的
 		await waitFor(() => {
 			const elapsedTime = Date.now() - startTime
-			expect(elapsedTime).toBeLessThan(250) // 应该在250ms内完成重置
+			expect(elapsedTime).toBeLessThan(250)
 			expect(voiceInputRef.current?.isRecording).toBe(false)
 			expect(voiceInputRef.current?.status).toBe("idle")
 		})
@@ -204,9 +200,119 @@ describe("SuperMagicVoiceInput", () => {
 			expect(voiceInputRef.current).toBeTruthy()
 		})
 
-		// 测试SuperMagicVoiceInput是否正确委托给VoiceInput
 		expect(voiceInputRef.current?.isRecording).toBe(false)
 		expect(voiceInputRef.current?.status).toBe("idle")
 		expect(typeof voiceInputRef.current?.stopRecording).toBe("function")
+		expect(typeof voiceInputRef.current?.disconnect).toBe("function")
+	})
+
+	it("should emit deferred text instead of writing editor for interim result", () => {
+		const onDeferredTextChange = vi.fn()
+
+		render(
+			<SuperMagicVoiceInput
+				commitMode="deferred"
+				onDeferredTextChange={onDeferredTextChange}
+				updateValue={mockUpdateValue}
+			/>,
+		)
+
+		act(() => {
+			mockIsRecording = true
+			mockLatestVoiceInputProps?.onResult("hello", {
+				text: "hello",
+				utterances: [
+					{
+						text: "hello",
+						start_time: 0,
+						end_time: 1000,
+						definite: false,
+					},
+				],
+			})
+		})
+
+		expect(onDeferredTextChange).toHaveBeenLastCalledWith("hello")
+		expect(mockUpdateValue).not.toHaveBeenCalled()
+	})
+
+	it("should replace overlapping pending text with definite text", () => {
+		const onDeferredTextChange = vi.fn()
+
+		render(
+			<SuperMagicVoiceInput
+				commitMode="deferred"
+				onDeferredTextChange={onDeferredTextChange}
+				updateValue={mockUpdateValue}
+			/>,
+		)
+
+		act(() => {
+			mockIsRecording = true
+			mockLatestVoiceInputProps?.onResult("hello", {
+				text: "hello",
+				utterances: [
+					{
+						text: "hello",
+						start_time: 0,
+						end_time: 1000,
+						definite: false,
+					},
+				],
+			})
+			mockLatestVoiceInputProps?.onResult("hello", {
+				text: "hello",
+				utterances: [
+					{
+						text: "hello",
+						start_time: 0,
+						end_time: 1000,
+						definite: true,
+					},
+				],
+			})
+		})
+
+		expect(onDeferredTextChange).toHaveBeenLastCalledWith("hello")
+	})
+
+	it("should replace overlapping pending text when final text changes", () => {
+		const onDeferredTextChange = vi.fn()
+
+		render(
+			<SuperMagicVoiceInput
+				commitMode="deferred"
+				onDeferredTextChange={onDeferredTextChange}
+				updateValue={mockUpdateValue}
+			/>,
+		)
+
+		act(() => {
+			mockIsRecording = true
+			mockLatestVoiceInputProps?.onResult("hello.", {
+				text: "hello.",
+				utterances: [
+					{
+						text: "hello.",
+						start_time: 0,
+						end_time: 1100,
+						definite: false,
+					},
+				],
+			})
+			mockLatestVoiceInputProps?.onResult("hello", {
+				text: "hello",
+				utterances: [
+					{
+						text: "hello",
+						start_time: 0,
+						end_time: 1000,
+						definite: true,
+					},
+				],
+			})
+		})
+
+		expect(onDeferredTextChange).toHaveBeenLastCalledWith("hello")
 	})
 })

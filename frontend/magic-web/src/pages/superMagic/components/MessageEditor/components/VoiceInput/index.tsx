@@ -1,4 +1,7 @@
-import VoiceInput, { VoiceInputRef } from "@/components/business/VoiceInput"
+import VoiceInput, {
+	VoiceInputRef,
+	type VoiceInputStatus,
+} from "@/components/business/VoiceInput"
 import { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import { VoiceResult } from "@/components/business/VoiceInput/types"
 import AiCompletionService from "@/services/chat/editor/AiCompletionService"
@@ -6,7 +9,7 @@ import { isMobile } from "@/utils/devices"
 import { Editor, JSONContent } from "@tiptap/core"
 import { logger as Logger } from "@/utils/log"
 import { useMemoizedFn } from "ahooks"
-import { forwardRef, Ref, useRef, useImperativeHandle, useEffect } from "react"
+import { forwardRef, Ref, useRef, useImperativeHandle, useEffect, type ReactNode } from "react"
 
 interface SuperMagicVoiceInputProps {
 	className?: string
@@ -14,9 +17,28 @@ interface SuperMagicVoiceInputProps {
 	tiptapEditor?: Editor | null
 	updateValue?: (value: JSONContent) => void
 	iconSize?: number
+	commitMode?: VoiceInputCommitMode
+	onRecordingChange?: (isRecording: boolean) => void
+	onStatusChange?: (status: VoiceInputStatus) => void
+	onDeferredTextChange?: (text: string) => void
+	onWaveformLevelsChange?: (levels: number[]) => void
+	children?: ReactNode
+	toggleOnClick?: boolean
+	waveformBarCount?: number
+	waveformClassName?: string
 }
 
 const logger = Logger.createLogger("SuperMagicVoiceInput")
+
+type VoiceInputCommitMode = "live" | "deferred"
+
+interface DeferredVoiceSegment {
+	key: string
+	text: string
+	startTime: number
+	endTime: number
+	isDefinite: boolean
+}
 
 /**
  * Realtime voice input configuration - optimized for ultra-low latency
@@ -36,7 +58,21 @@ const config = {
 
 const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps>(
 	(
-		{ tiptapEditor, updateValue, iconSize = 20, className }: SuperMagicVoiceInputProps,
+		{
+			tiptapEditor,
+			updateValue,
+			iconSize = 20,
+			className,
+			commitMode = "live",
+			onRecordingChange,
+			onStatusChange,
+			onDeferredTextChange,
+			onWaveformLevelsChange,
+			children,
+			toggleOnClick,
+			waveformBarCount,
+			waveformClassName,
+		}: SuperMagicVoiceInputProps,
 		ref: Ref<VoiceInputRef>,
 	) => {
 		const voiceInputRef = useRef<VoiceInputRef>(null)
@@ -50,6 +86,91 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 			end: number
 			length: number
 		} | null>(null)
+		const deferredSegmentsRef = useRef<DeferredVoiceSegment[]>([])
+
+		const getUtteranceKey = useMemoizedFn((utterance: VoiceResultUtterance) => {
+			return `${utterance.start_time ?? -1}:${utterance.end_time ?? -1}`
+		})
+
+		const emitDeferredText = useMemoizedFn(() => {
+			const text = deferredSegmentsRef.current.map((segment) => segment.text).join("")
+			onDeferredTextChange?.(text)
+		})
+
+		const resetDeferredText = useMemoizedFn(() => {
+			deferredSegmentsRef.current = []
+			onDeferredTextChange?.("")
+		})
+
+		const doVoiceSegmentsOverlap = useMemoizedFn(
+			(currentSegment: DeferredVoiceSegment, nextSegment: DeferredVoiceSegment) => {
+				return (
+					currentSegment.startTime < nextSegment.endTime &&
+					nextSegment.startTime < currentSegment.endTime
+				)
+			},
+		)
+
+		const upsertDeferredSegment = useMemoizedFn((nextSegment: DeferredVoiceSegment) => {
+			const hasOverlappingDefiniteSegment = deferredSegmentsRef.current.some(
+				(currentSegment) =>
+					currentSegment.isDefinite &&
+					!nextSegment.isDefinite &&
+					doVoiceSegmentsOverlap(currentSegment, nextSegment),
+			)
+			if (hasOverlappingDefiniteSegment) return
+
+			const keptSegments = deferredSegmentsRef.current.filter((currentSegment) => {
+				const isSameSegment = currentSegment.key === nextSegment.key
+				const isOverlapped = doVoiceSegmentsOverlap(currentSegment, nextSegment)
+
+				if (!isSameSegment && !isOverlapped) return true
+				if (currentSegment.isDefinite && !nextSegment.isDefinite) return true
+
+				return false
+			})
+
+			deferredSegmentsRef.current = [...keptSegments, nextSegment].sort(
+				(currentSegment, nextSegment) => currentSegment.startTime - nextSegment.startTime,
+			)
+		})
+
+		const processDeferredUtterances = useMemoizedFn(
+			(utterances: VoiceResultUtterance[] | undefined, fallbackText: string) => {
+				if (!utterances?.length) {
+					const normalizedText = fallbackText.trim()
+					deferredSegmentsRef.current = normalizedText
+						? [
+								{
+									key: "fallback",
+									text: normalizedText,
+									startTime: 0,
+									endTime: Number.MAX_SAFE_INTEGER,
+									isDefinite: true,
+								},
+							]
+						: []
+					emitDeferredText()
+					return
+				}
+
+				for (const utterance of utterances) {
+					const startTime = utterance.start_time ?? -1
+					const endTime = utterance.end_time ?? -1
+					if (!utterance.text || startTime < 0 || endTime < 0) continue
+
+					upsertDeferredSegment({
+						key: getUtteranceKey(utterance),
+						text: utterance.text,
+						startTime,
+						endTime,
+						isDefinite: Boolean(utterance.definite),
+					})
+				}
+
+				emitDeferredText()
+			},
+		)
 
 		const handleResult = useMemoizedFn((result: string, response: VoiceResult) => {
 			// Early return: abnormal data check
@@ -59,7 +180,14 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 			}
 
 			// Early return: only process when recording and editor is available
-			if (!voiceInputRef.current?.isRecording || !tiptapEditor) return
+			if (!voiceInputRef.current?.isRecording) return
+
+			if (commitMode === "deferred") {
+				processDeferredUtterances(response.utterances, result)
+				return
+			}
+
+			if (!tiptapEditor) return
 
 			try {
 				if (!isMobile && !tiptapEditor.isFocused) {
@@ -172,6 +300,13 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 		}
 
 		const handleRecordingChange = useMemoizedFn((isRecording: boolean) => {
+			onRecordingChange?.(isRecording)
+
+			if (isRecording && commitMode === "deferred") {
+				resetDeferredText()
+				return
+			}
+
 			/**
 			 * 录音时禁用AI自动补全
 			 * 录音时禁用AI自动补全，避免AI自动补全与语音识别结果冲突
@@ -264,7 +399,10 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 			ref,
 			() => ({
 				stopRecording: () => {
-					voiceInputRef.current?.stopRecording()
+					return voiceInputRef.current?.stopRecording()
+				},
+				disconnect: () => {
+					voiceInputRef.current?.disconnect()
 				},
 				isRecording: voiceInputRef.current?.isRecording ?? false,
 				status: voiceInputRef.current?.status ?? "idle",
@@ -278,11 +416,18 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 				ref={voiceInputRef}
 				onResult={handleResult}
 				onRecordingChange={handleRecordingChange}
+				onStatusChange={onStatusChange}
+				onWaveformLevelsChange={onWaveformLevelsChange}
 				iconSize={iconSize}
 				className={className}
 				enableHotkey={!isMobile}
 				config={config}
-			/>
+				toggleOnClick={toggleOnClick}
+				waveformBarCount={waveformBarCount}
+				waveformClassName={waveformClassName}
+			>
+				{children}
+			</VoiceInput>
 		)
 	},
 )
