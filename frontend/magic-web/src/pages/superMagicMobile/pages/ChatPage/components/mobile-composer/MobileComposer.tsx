@@ -5,13 +5,13 @@ import { observer } from "mobx-react-lite"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
+import type { VoiceInputStatus } from "@/components/business/VoiceInput"
 import type {
 	SceneEditorContext,
 	SceneEditorNodes,
 } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import { MessageEditorStoreProvider } from "@/pages/superMagic/components/MessageEditor/stores"
 import SuperMagicVoiceInput from "@/pages/superMagic/components/MessageEditor/components/VoiceInput"
-import type { VoiceInputStatus } from "@/components/business/VoiceInput"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { SceneItem } from "@/pages/superMagic/types/skill"
 import { useSceneSelection } from "@/pages/superMagic/components/MainInputContainer/hooks"
@@ -50,27 +50,28 @@ const mobileComposerEditorClassName = cn(
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]",
 )
 
-const voiceRecordingWaveformClassName = cn(
-	"flex h-9 flex-1 items-center justify-center gap-1 overflow-hidden px-2",
-)
+const voiceRecordingWaveformClassName =
+	"flex h-10 min-w-0 flex-1 items-center justify-between overflow-hidden text-muted-foreground"
 
-function createMobileVoiceWaveformLevels(barCount = 44) {
-	return Array.from({ length: barCount }, (_, index) => {
-		const middle = (barCount - 1) / 2
-		const distanceFromMiddle = middle > 0 ? Math.abs(index - middle) / middle : 0
-		return Math.max(0.18, 0.62 - distanceFromMiddle * 0.32)
+function createMobileVoiceWaveformLevels(): number[] {
+	return Array.from({ length: 44 }, (_, index) => {
+		const center = (44 - 1) / 2
+		const distanceFromCenter = Math.abs(index - center) / center
+		return 0.16 + (1 - distanceFromCenter) * 0.18
 	})
 }
 
 function MobileVoiceRecordingWaveform({ levels }: { levels: number[] }) {
 	return (
-		<div className={voiceRecordingWaveformClassName} data-testid="mobile-voice-waveform">
+		<div
+			className={voiceRecordingWaveformClassName}
+			data-testid="mobile-composer-voice-waveform"
+		>
 			{levels.map((level, index) => (
-				<span
+				<div
 					key={index}
-					className="w-0.5 shrink-0 rounded-full bg-primary transition-[height] duration-100"
-					style={{ height: `${Math.max(6, level * 34)}px` }}
-					data-testid="mobile-voice-waveform-bar"
+					className="w-0.5 shrink-0 rounded-full bg-current transition-[height] duration-150 ease-out"
+					style={{ height: Math.max(4, 40 * Math.min(1, Math.max(0.16, level))) }}
 				/>
 			))}
 		</div>
@@ -84,21 +85,19 @@ function MobileComposerComponent({
 	enableReEditMessageFromPubSub = false,
 }: MobileComposerProps) {
 	const [isAddSheetOpen, setIsAddSheetOpen] = useState(false)
-	const logic = useMobileComposerLogic({
-		editorContext,
-		enableReEditMessageFromPubSub,
-	})
 	const [isVoicePanelActive, setIsVoicePanelActive] = useState(false)
 	const [isVoiceRecording, setIsVoiceRecording] = useState(false)
 	const [isVoiceConfirming, setIsVoiceConfirming] = useState(false)
-	const [voiceWaveformLevels, setVoiceWaveformLevels] = useState(() =>
-		createMobileVoiceWaveformLevels(),
-	)
+	const [voiceWaveformLevels, setVoiceWaveformLevels] = useState(createMobileVoiceWaveformLevels)
 	const [voiceRecordingStartedAt, setVoiceRecordingStartedAt] = useState<number | null>(null)
 	const [voiceRecordingElapsedSeconds, setVoiceRecordingElapsedSeconds] = useState(0)
 	const voiceInputTextRef = useRef("")
 	const isVoiceConfirmingRef = useRef(false)
-	const voicePanelIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const voicePanelIdleTimerRef = useRef<number | null>(null)
+	const logic = useMobileComposerLogic({
+		editorContext,
+		enableReEditMessageFromPubSub,
+	})
 	const isRecordSummaryMode = editorContext.topicMode === TopicMode.RecordSummary
 	const effectiveScenes =
 		scenes ??
@@ -151,119 +150,125 @@ function MobileComposerComponent({
 			trailing: false,
 		},
 	)
-
 	const clearVoicePanelIdleTimer = useCallback(() => {
 		if (!voicePanelIdleTimerRef.current) return
 
-		clearTimeout(voicePanelIdleTimerRef.current)
+		window.clearTimeout(voicePanelIdleTimerRef.current)
 		voicePanelIdleTimerRef.current = null
 	}, [])
-
-	const resetVoicePanel = useCallback(() => {
-		clearVoicePanelIdleTimer()
-		voiceInputTextRef.current = ""
-		isVoiceConfirmingRef.current = false
-		setIsVoicePanelActive(false)
-		setIsVoiceRecording(false)
-		setIsVoiceConfirming(false)
-		setVoiceWaveformLevels(createMobileVoiceWaveformLevels())
-		setVoiceRecordingStartedAt(null)
-		setVoiceRecordingElapsedSeconds(0)
-	}, [clearVoicePanelIdleTimer])
-
 	const handleVoiceRecordingChange = useCallback(
-		(isRecording: boolean) => {
-			if (!isRecording) {
-				setIsVoiceRecording(false)
+		(nextIsRecording: boolean) => {
+			setIsVoiceRecording(nextIsRecording)
+			if (nextIsRecording) {
+				clearVoicePanelIdleTimer()
+				setIsVoicePanelActive(true)
+				voiceInputTextRef.current = ""
+				setVoiceWaveformLevels(createMobileVoiceWaveformLevels())
+				setVoiceRecordingElapsedSeconds(0)
+				setVoiceRecordingStartedAt(Date.now())
 				return
 			}
 
-			clearVoicePanelIdleTimer()
-			voiceInputTextRef.current = ""
-			isVoiceConfirmingRef.current = false
-			setIsVoicePanelActive(true)
-			setIsVoiceRecording(true)
-			setIsVoiceConfirming(false)
-			setVoiceWaveformLevels(createMobileVoiceWaveformLevels())
-			setVoiceRecordingStartedAt(Date.now())
-			setVoiceRecordingElapsedSeconds(0)
+			setVoiceRecordingStartedAt(null)
 		},
 		[clearVoicePanelIdleTimer],
 	)
-
 	const handleVoiceStatusChange = useCallback(
-		(status: VoiceInputStatus) => {
-			if (status === "connecting" || status === "recording" || status === "processing") {
+		(nextStatus: VoiceInputStatus) => {
+			if (
+				nextStatus === "connecting" ||
+				nextStatus === "recording" ||
+				nextStatus === "processing"
+			) {
 				clearVoicePanelIdleTimer()
 				setIsVoicePanelActive(true)
 				return
 			}
 
-			if (status === "error") {
-				resetVoicePanel()
+			if (nextStatus === "error") {
+				clearVoicePanelIdleTimer()
+				setIsVoicePanelActive(false)
 				return
 			}
 
-			if (status !== "idle") return
+			if (nextStatus !== "idle") return
 
 			clearVoicePanelIdleTimer()
-			voicePanelIdleTimerRef.current = setTimeout(() => {
-				if (isVoiceConfirmingRef.current) return
+			voicePanelIdleTimerRef.current = window.setTimeout(() => {
 				setIsVoicePanelActive(false)
+				voicePanelIdleTimerRef.current = null
 			}, 180)
 		},
-		[clearVoicePanelIdleTimer, resetVoicePanel],
+		[clearVoicePanelIdleTimer],
 	)
-
-	const handleDeferredVoiceTextChange = useCallback((text: string) => {
-		voiceInputTextRef.current = text
+	const handleDeferredVoiceTextChange = useCallback((nextText: string) => {
+		voiceInputTextRef.current = nextText
 	}, [])
-
 	const appendVoiceTextToEditor = useCallback(
 		(text: string) => {
+			const normalizedText = text.trim()
+			if (!normalizedText) return
+
 			const editor = logic.tiptapEditor
 			if (!editor || editor.isDestroyed) return
-			if (!text) return
 
 			const insertPosition = Math.max(1, editor.state.doc.content.size - 1)
-			editor.chain().focus().insertContentAt(insertPosition, text).run()
+			editor.chain().focus().insertContentAt(insertPosition, normalizedText).run()
 			logic.store.editorStore.setValue(editor.getJSON())
 		},
 		[logic.store.editorStore, logic.tiptapEditor],
 	)
-
 	const handleCancelVoiceInput = useCallback(() => {
 		logic.voiceInputRef.current?.disconnect()
-		resetVoicePanel()
-	}, [logic.voiceInputRef, resetVoicePanel])
-
+		clearVoicePanelIdleTimer()
+		setIsVoicePanelActive(false)
+		setIsVoiceRecording(false)
+		setIsVoiceConfirming(false)
+		isVoiceConfirmingRef.current = false
+		voiceInputTextRef.current = ""
+		setVoiceWaveformLevels(createMobileVoiceWaveformLevels())
+		setVoiceRecordingStartedAt(null)
+		setVoiceRecordingElapsedSeconds(0)
+	}, [clearVoicePanelIdleTimer, logic.voiceInputRef])
 	const handleConfirmVoiceInput = useCallback(async () => {
 		if (isVoiceConfirmingRef.current) return
 
 		isVoiceConfirmingRef.current = true
 		setIsVoiceConfirming(true)
-
 		try {
-			await Promise.resolve(logic.voiceInputRef.current?.stopRecording())
-			appendVoiceTextToEditor(voiceInputTextRef.current.trim())
-			resetVoicePanel()
+			await logic.voiceInputRef.current?.stopRecording()
+			appendVoiceTextToEditor(voiceInputTextRef.current)
 		} finally {
+			clearVoicePanelIdleTimer()
+			setIsVoicePanelActive(false)
+			setIsVoiceRecording(false)
 			isVoiceConfirmingRef.current = false
 			setIsVoiceConfirming(false)
+			voiceInputTextRef.current = ""
+			setVoiceWaveformLevels(createMobileVoiceWaveformLevels())
+			setVoiceRecordingStartedAt(null)
+			setVoiceRecordingElapsedSeconds(0)
 		}
-	}, [appendVoiceTextToEditor, logic.voiceInputRef, resetVoicePanel])
+	}, [appendVoiceTextToEditor, clearVoicePanelIdleTimer, logic.voiceInputRef])
+	const formattedVoiceRecordingTime = useMemo(() => {
+		const minutes = Math.floor(voiceRecordingElapsedSeconds / 60)
+		const seconds = voiceRecordingElapsedSeconds % 60
+		return `${minutes}:${seconds.toString().padStart(2, "0")}`
+	}, [voiceRecordingElapsedSeconds])
+	const isVoiceInputInitializing = isVoicePanelActive && !isVoiceRecording
+	const shouldShowVoiceRecordingUi = isVoicePanelActive || isVoiceRecording
 
 	useEffect(() => {
-		if (!isVoiceRecording || !voiceRecordingStartedAt) return
+		if (!voiceRecordingStartedAt) return
 
-		const timer = window.setInterval(() => {
+		const timerId = window.setInterval(() => {
 			setVoiceRecordingElapsedSeconds(
 				Math.max(0, Math.floor((Date.now() - voiceRecordingStartedAt) / 1000)),
 			)
-		}, 1000)
+		}, 250)
 
-		return () => window.clearInterval(timer)
-	}, [isVoiceRecording, voiceRecordingStartedAt])
+		return () => window.clearInterval(timerId)
+	}, [voiceRecordingStartedAt])
 
 	useEffect(() => {
 		return () => {
@@ -271,22 +276,13 @@ function MobileComposerComponent({
 		}
 	}, [clearVoicePanelIdleTimer])
 
-	const voiceRecordingDurationText = useMemo(() => {
-		const minutes = Math.floor(voiceRecordingElapsedSeconds / 60)
-		const seconds = voiceRecordingElapsedSeconds % 60
-		return `${minutes}:${seconds.toString().padStart(2, "0")}`
-	}, [voiceRecordingElapsedSeconds])
-
 	const taskAndQueueNodes = (
 		<div className="flex flex-col gap-2 [&:empty]:hidden">
 			{editorNodes?.taskDataNode}
 			{editorNodes?.messageQueueNode}
 		</div>
 	)
-	const headerScenePanelsNode = shouldRenderPanelsInHeader ? (
-		<MobileScenePanels editorContext={editorContext} compact />
-	) : null
-	const voiceInputNode = logic.voiceInputEnabled ? (
+	const voiceInputNode = (
 		<SuperMagicVoiceInput
 			ref={logic.voiceInputRef}
 			initValue={logic.store.editorStore.value}
@@ -301,142 +297,158 @@ function MobileComposerComponent({
 			onWaveformLevelsChange={setVoiceWaveformLevels}
 			waveformBarCount={44}
 		/>
-	) : null
-	const voiceRecordingContent = isVoicePanelActive ? (
+	)
+	const voiceRecordingContent = (
 		<div
-			className="absolute inset-0 z-10 flex items-center bg-background px-3 py-2"
-			data-testid="mobile-voice-recording-panel"
+			className="flex h-10 w-full shrink-0 items-center gap-2 px-3"
+			data-testid="mobile-composer-voice-recording"
 		>
-			<div className="flex min-h-10 w-full items-center gap-3">
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon"
-					className="size-9 shrink-0 rounded-full bg-muted p-0 text-foreground shadow-none hover:bg-muted/80"
-					onClick={handleCancelVoiceInput}
-					aria-label="cancel voice input"
-					data-testid="mobile-voice-cancel-button"
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="size-10 shrink-0 rounded-full border border-border bg-transparent text-foreground shadow-none ring-offset-2 transition-colors hover:bg-background focus-visible:ring-2 focus-visible:ring-foreground/20"
+				onClick={handleCancelVoiceInput}
+				aria-label="cancel voice input"
+				data-testid="mobile-composer-cancel-voice-button"
+			>
+				<X className="size-6" strokeWidth={1.5} />
+			</Button>
+
+			{isVoiceInputInitializing ? (
+				<div
+					className="flex min-w-0 flex-1 items-center justify-center"
+					data-testid="mobile-composer-voice-connecting-loading"
 				>
-					<X className="size-4" />
-				</Button>
-				<MobileVoiceRecordingWaveform levels={voiceWaveformLevels} />
-				<span
-					className="min-w-10 text-right text-sm font-medium tabular-nums text-muted-foreground"
-					data-testid="mobile-voice-recording-duration"
-				>
-					{voiceRecordingDurationText}
-				</span>
-				<Button
-					type="button"
-					size="icon"
-					className="size-9 shrink-0 rounded-full bg-primary p-0 text-background shadow-none"
-					onClick={handleConfirmVoiceInput}
-					disabled={isVoiceConfirming}
-					aria-label="confirm voice input"
-					data-testid="mobile-voice-confirm-button"
-				>
-					{isVoiceConfirming ? (
-						<Loader2 className="size-4 animate-spin" />
-					) : (
-						<ArrowUp className="size-5" />
-					)}
-				</Button>
-			</div>
+					<Loader2 className="size-5 animate-spin text-muted-foreground" />
+				</div>
+			) : (
+				<>
+					<MobileVoiceRecordingWaveform levels={voiceWaveformLevels} />
+
+					<span
+						className="shrink-0 text-[13px] tabular-nums leading-4 text-muted-foreground"
+						data-testid="mobile-composer-voice-recording-time"
+					>
+						{formattedVoiceRecordingTime}
+					</span>
+				</>
+			)}
+
+			<Button
+				type="button"
+				size="icon"
+				className="size-10 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none ring-offset-2 transition-opacity focus-visible:ring-2 focus-visible:ring-foreground/25 disabled:pointer-events-none disabled:opacity-40"
+				onClick={handleConfirmVoiceInput}
+				disabled={isVoiceInputInitializing || isVoiceConfirming}
+				aria-label="confirm voice input"
+				data-testid="mobile-composer-confirm-voice-button"
+			>
+				{isVoiceConfirming ? (
+					<Loader2 className="size-5 animate-spin" />
+				) : (
+					<ArrowUp className="size-6" strokeWidth={1.5} />
+				)}
+			</Button>
 		</div>
+	)
+	const headerScenePanelsNode = shouldRenderPanelsInHeader ? (
+		<MobileScenePanels editorContext={editorContext} compact />
 	) : null
 
 	const composerInnerContent = (
-		<>
-			<MobileComposerAttachments files={files} onRemove={logic.handleRemoveUploadedFile} />
-
-			<div
-				className="px-4 pb-2 pt-3"
-				onPaste={logic.handlePaste}
-				onCompositionStart={logic.handleCompositionStart}
-				onCompositionEnd={logic.handleCompositionEnd}
-			>
-				<div
-					ref={logic.domRef}
-					className={mobileComposerEditorClassName}
-					data-testid="mobile-composer-editor"
-				>
-					<EditorContent editor={logic.tiptapEditor} />
-				</div>
-			</div>
-
-			<div className="flex items-center justify-between gap-2 px-1.5 py-1.5">
-				<div className="flex items-center">
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon"
-						className="size-10 rounded-none bg-transparent p-0 shadow-none hover:bg-transparent"
-						onClick={() => setIsAddSheetOpen(true)}
-						aria-label="open more tools"
-						data-testid="mobile-composer-open-sheet-button"
-					>
-						<Plus className="size-6" />
-					</Button>
-					{logic.selectedPluginCount > 0 && (
-						<span
-							className={cn(
-								"flex h-6 shrink-0 items-center justify-center rounded-full bg-foreground px-2 text-sm font-semibold leading-none text-background",
-								logic.selectedPluginCount < 10 && "w-6 px-0",
-							)}
-							data-testid="mobile-composer-open-sheet-plugin-count"
-						>
-							{logic.selectedPluginCount}
-						</span>
-					)}
-				</div>
-
-				<div className="flex items-center gap-1">
-					{editorModeSwitchNode}
-					{voiceInputNode}
-
-					<Button
-						type="button"
-						size="icon"
-						className={cn(
-							"size-10 rounded-full bg-primary text-background shadow-none",
-							sendButtonDisabled && "opacity-60",
-						)}
-						disabled={sendButtonDisabled}
-						onClick={handleActionClick}
-						aria-label={shouldShowInterrupt ? "interrupt task" : "send message"}
-						data-testid="mobile-composer-send-button"
-					>
-						{shouldShowInterrupt ? (
-							<Square className="size-4 fill-current" />
-						) : logic.isPreparingSend || logic.showLoading ? (
-							<Loader2 className="size-6 animate-spin" />
-						) : (
-							<ArrowUp className="size-6" />
-						)}
-					</Button>
-				</div>
-			</div>
-		</>
-	)
-	const composerContent = (
 		<div className="relative">
 			<div
 				className={cn(
 					"transition-opacity",
-					isVoicePanelActive && "pointer-events-none opacity-0",
+					shouldShowVoiceRecordingUi &&
+					"pointer-events-none absolute inset-x-0 top-0 opacity-0",
 				)}
-				aria-hidden={isVoicePanelActive}
+				aria-hidden={shouldShowVoiceRecordingUi}
 			>
-				{composerInnerContent}
+				<MobileComposerAttachments
+					files={files}
+					onRemove={logic.handleRemoveUploadedFile}
+				/>
+
+				<div
+					className="px-4 pb-2 pt-3"
+					onPaste={logic.handlePaste}
+					onCompositionStart={logic.handleCompositionStart}
+					onCompositionEnd={logic.handleCompositionEnd}
+				>
+					<div
+						ref={logic.domRef}
+						className={mobileComposerEditorClassName}
+						data-testid="mobile-composer-editor"
+					>
+						<EditorContent editor={logic.tiptapEditor} />
+					</div>
+				</div>
+
+				<div className="flex items-center justify-between gap-2 px-1.5 py-1.5">
+					<div className="flex items-center">
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							className="size-10 rounded-none bg-transparent p-0 shadow-none hover:bg-transparent"
+							onClick={() => setIsAddSheetOpen(true)}
+							aria-label="open more tools"
+							data-testid="mobile-composer-open-sheet-button"
+						>
+							<Plus className="size-6" />
+						</Button>
+						{logic.selectedPluginCount > 0 && (
+							<span
+								className={cn(
+									"flex h-6 shrink-0 items-center justify-center rounded-full bg-foreground px-2 text-sm font-semibold leading-none text-background",
+									logic.selectedPluginCount < 10 && "w-6 px-0",
+								)}
+								data-testid="mobile-composer-open-sheet-plugin-count"
+							>
+								{logic.selectedPluginCount}
+							</span>
+						)}
+					</div>
+
+					<div className="flex items-center gap-1">
+						{editorModeSwitchNode}
+						{logic.voiceInputEnabled && voiceInputNode}
+
+						<Button
+							type="button"
+							size="icon"
+							className={cn(
+								"size-10 rounded-full bg-primary text-background shadow-none",
+								sendButtonDisabled && "opacity-60",
+							)}
+							disabled={sendButtonDisabled}
+							onClick={handleActionClick}
+							aria-label={shouldShowInterrupt ? "interrupt task" : "send message"}
+							data-testid="mobile-composer-send-button"
+						>
+							{shouldShowInterrupt ? (
+								<Square className="size-4 fill-current" />
+							) : logic.isPreparingSend || logic.showLoading ? (
+								<Loader2 className="size-6 animate-spin" />
+							) : (
+								<ArrowUp className="size-6" />
+							)}
+						</Button>
+					</div>
+				</div>
 			</div>
-			{voiceRecordingContent}
+			{shouldShowVoiceRecordingUi && (
+				<div className="flex items-center py-2">{voiceRecordingContent}</div>
+			)}
 		</div>
 	)
 
 	const content = isRecordSummaryMode ? (
 		<>
 			{taskAndQueueNodes}
-			{composerContent}
+			{composerInnerContent}
 			<MobileComposerAddSheet
 				open={isAddSheetOpen}
 				onOpenChange={setIsAddSheetOpen}
@@ -483,7 +495,7 @@ function MobileComposerComponent({
 						<MobileScenePanels editorContext={editorContext} />
 					)}
 				</div>
-				{composerContent}
+				{composerInnerContent}
 			</div>
 
 			<MobileComposerAddSheet
