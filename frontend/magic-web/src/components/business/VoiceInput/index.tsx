@@ -11,59 +11,53 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/
 import { useTranslation } from "react-i18next"
 import { useVoiceInput, getHotkeyDisplayText } from "./hooks"
 import type { VoiceInputProps, VoiceInputRef } from "./types"
-import type { AudioChunkParams } from "@/services/voiceToText"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import { cn } from "@/lib/utils"
 import { Mic } from "lucide-react"
+import type { AudioChunkParams } from "@/services/voiceToText"
 
-const DEFAULT_WAVE_BAR_COUNT = 5
-const WAVE_MIN_LEVEL = 0.18
-const WAVE_SMOOTHING_FACTOR = 0.45
-const WAVE_GAIN = 2.4
+const DEFAULT_WAVE_BAR_COUNT = 11
+const WAVE_MIN_LEVEL = 0.16
+const WAVE_SMOOTHING_FACTOR = 0.65
+const WAVE_GAIN = 9
 
-function createIdleWaveLevels(barCount = DEFAULT_WAVE_BAR_COUNT) {
+function createIdleWaveLevels(barCount = DEFAULT_WAVE_BAR_COUNT): number[] {
 	return Array.from({ length: barCount }, (_, index) => {
-		const middle = (barCount - 1) / 2
-		const distanceFromMiddle = Math.abs(index - middle)
-		const normalizedDistance = middle > 0 ? distanceFromMiddle / middle : 0
-
-		return clampLevel(0.65 - normalizedDistance * 0.25)
+		const center = (barCount - 1) / 2
+		const distanceFromCenter = Math.abs(index - center) / center
+		return WAVE_MIN_LEVEL + (1 - distanceFromCenter) * 0.18
 	})
 }
 
-function clampLevel(level: number) {
-	return Math.min(1, Math.max(WAVE_MIN_LEVEL, level))
+function clampLevel(level: number): number {
+	if (Number.isNaN(level) || !Number.isFinite(level)) return WAVE_MIN_LEVEL
+	if (level < WAVE_MIN_LEVEL) return WAVE_MIN_LEVEL
+	if (level > 1) return 1
+	return level
 }
 
-function calculateAudioLevel(audioData: ArrayBuffer) {
-	if (!audioData.byteLength) return WAVE_MIN_LEVEL
+function calculateAudioLevel(audioData: ArrayBuffer): number {
+	if (audioData.byteLength < Int16Array.BYTES_PER_ELEMENT) return WAVE_MIN_LEVEL
 
-	const samples = new Int16Array(audioData, 0, Math.floor(audioData.byteLength / 2))
-	if (!samples.length) return WAVE_MIN_LEVEL
+	const samples = new Int16Array(audioData)
+	if (samples.length === 0) return WAVE_MIN_LEVEL
 
-	const sumOfSquares = samples.reduce((sum, sample) => {
-		const normalizedSample = sample / 32768
-		return sum + normalizedSample * normalizedSample
-	}, 0)
-	const rms = Math.sqrt(sumOfSquares / samples.length)
+	let sumSquares = 0
+	for (let index = 0; index < samples.length; index += 1) {
+		const normalizedSample = samples[index] / 32768
+		sumSquares += normalizedSample * normalizedSample
+	}
 
+	const rms = Math.sqrt(sumSquares / samples.length)
 	return clampLevel(rms * WAVE_GAIN)
 }
 
-function createNextWaveLevels(previousLevels: number[], audioLevel: number) {
-	const middle = (previousLevels.length - 1) / 2
+function createNextWaveLevels(previousLevels: number[], level: number): number[] {
+	const previousTail = previousLevels[previousLevels.length - 1] ?? WAVE_MIN_LEVEL
+	const smoothedLevel = previousTail * WAVE_SMOOTHING_FACTOR + level * (1 - WAVE_SMOOTHING_FACTOR)
 
-	return previousLevels.map((previousLevel, index) => {
-		const distanceFromMiddle = middle > 0 ? Math.abs(index - middle) / middle : 0
-		const shapeLevel = audioLevel * (1 - distanceFromMiddle * 0.42)
-		const phaseLevel = Math.sin(index * 0.75 + audioLevel * Math.PI) * 0.08
-		const targetLevel = clampLevel(shapeLevel + phaseLevel)
-
-		return clampLevel(
-			previousLevel * WAVE_SMOOTHING_FACTOR + targetLevel * (1 - WAVE_SMOOTHING_FACTOR),
-		)
-	})
+	return [...previousLevels.slice(1), clampLevel(smoothedLevel)]
 }
 
 function VoiceWave({
@@ -77,16 +71,19 @@ function VoiceWave({
 }) {
 	return (
 		<div
-			className={cn("flex h-full w-full items-center justify-center", className)}
-			style={{ height: iconSize, gap: iconSize * 0.1 }}
+			className={cn(
+				"flex h-full w-full items-center justify-center overflow-hidden",
+				className,
+			)}
 			data-testid="voice-input-waveform"
+			style={{ height: iconSize, gap: iconSize * 0.1 }}
 		>
 			{levels.map((level, index) => (
 				<div
 					key={index}
-					className="w-0.5 rounded-full bg-orange-500 transition-[height] duration-100"
-					style={{ height: Math.max(2, iconSize * level) }}
+					className="w-0.5 shrink-0 rounded-full bg-orange-500 transition-[height] duration-150 ease-out"
 					data-testid="voice-input-waveform-bar"
+					style={{ height: Math.max(3, iconSize * clampLevel(level)) }}
 				/>
 			))}
 		</div>
@@ -101,59 +98,51 @@ export const VoiceInput = memo(
 				onError,
 				onStatusChange,
 				onRecordingChange,
+				onAudioChunk,
+				onWaveformLevelsChange,
 				disabled = false,
 				placeholder,
 				className,
 				children,
+				toggleOnClick = true,
 				config,
 				iconSize = 20,
-				enableHotkey = true,
-				onAudioChunk,
-				onWaveformLevelsChange,
-				toggleOnClick = true,
 				waveformBarCount = DEFAULT_WAVE_BAR_COUNT,
 				waveformClassName,
+				enableHotkey = true,
 			},
 			ref,
 		) => {
 			const { t } = useTranslation("component")
-			const [waveLevels, setWaveLevels] = useState(() => createIdleWaveLevels(waveformBarCount))
-			const didReportRecordingChangeRef = useRef(false)
-
-			const updateWaveLevels = useCallback(
-				(nextLevels: number[]) => {
-					setWaveLevels(nextLevels)
-					onWaveformLevelsChange?.(nextLevels)
-				},
-				[onWaveformLevelsChange],
+			const [waveLevels, setWaveLevels] = useState(() =>
+				createIdleWaveLevels(waveformBarCount),
 			)
-
+			const isVoiceWaveVisibleRef = useRef(false)
 			const handleAudioChunk = useCallback(
 				(params: AudioChunkParams) => {
 					onAudioChunk?.(params)
-					const audioLevel = calculateAudioLevel(params.audioData)
-					setWaveLevels((previousLevels) => {
-						const sourceLevels =
-							previousLevels.length === waveformBarCount
-								? previousLevels
-								: createIdleWaveLevels(waveformBarCount)
-						const nextLevels = createNextWaveLevels(sourceLevels, audioLevel)
+					if (!isVoiceWaveVisibleRef.current) return
+
+					const nextLevel = calculateAudioLevel(params.audioData)
+					setWaveLevels((currentLevels) => {
+						const nextLevels = createNextWaveLevels(currentLevels, nextLevel)
 						onWaveformLevelsChange?.(nextLevels)
 						return nextLevels
 					})
 				},
-				[onAudioChunk, onWaveformLevelsChange, waveformBarCount],
+				[onAudioChunk, onWaveformLevelsChange],
 			)
-
-			const { status, isRecording, toggleRecording, stopRecording, disconnect } = useVoiceInput({
-				config,
-				onResult,
-				onError,
-				onStatusChange,
-				onAudioChunk: handleAudioChunk,
-			})
-			const isWaveformVisible =
+			const { status, isRecording, toggleRecording, stopRecording, disconnect } =
+				useVoiceInput({
+					config,
+					onResult,
+					onError,
+					onStatusChange,
+					onAudioChunk: handleAudioChunk,
+				})
+			const isVoiceWaveVisible =
 				status === "connecting" || status === "recording" || status === "processing"
+			const hasReportedRecordingStateRef = useRef(false)
 
 			// Handle hotkey press
 			const handleHotkey = useCallback(() => {
@@ -179,18 +168,24 @@ export const VoiceInput = memo(
 			)
 
 			useEffect(() => {
-				if (!didReportRecordingChangeRef.current) {
-					didReportRecordingChangeRef.current = true
-					if (!isRecording) return
+				isVoiceWaveVisibleRef.current = isVoiceWaveVisible
+				if (!isVoiceWaveVisible) {
+					const idleLevels = createIdleWaveLevels(waveformBarCount)
+					setWaveLevels(idleLevels)
+					onWaveformLevelsChange?.(idleLevels)
 				}
+			}, [isVoiceWaveVisible, onWaveformLevelsChange, waveformBarCount])
+
+			useEffect(() => {
+				if (!hasReportedRecordingStateRef.current && !isRecording) {
+					hasReportedRecordingStateRef.current = true
+					return
+				}
+
+				hasReportedRecordingStateRef.current = true
 				onRecordingChange?.(isRecording)
 				// eslint-disable-next-line react-hooks/exhaustive-deps
 			}, [isRecording])
-
-			useEffect(() => {
-				if (isWaveformVisible) return
-				updateWaveLevels(createIdleWaveLevels(waveformBarCount))
-			}, [isWaveformVisible, updateWaveLevels, waveformBarCount])
 
 			useEffect(() => {
 				const handleVoiceInputToggle = () => {
@@ -247,17 +242,17 @@ export const VoiceInput = memo(
 							id={GuideTourElementId.VoiceInputButton}
 							type="button"
 							className={cn(
-								"relative flex size-8 items-center justify-center rounded-md border-0 transition-all",
+								"relative flex items-center justify-center rounded-md border-0 transition-all",
 								"hover:opacity-80 active:opacity-60",
 								"disabled:cursor-not-allowed disabled:opacity-60",
 								// base: idle, connecting, default
-								"bg-fill text-foreground dark:bg-sidebar dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",
+								"size-8 bg-fill text-foreground dark:bg-sidebar dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",
 								// recording / processing
 								(status === "recording" || status === "processing") &&
-									"bg-orange-50 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400",
+								"bg-orange-50 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400",
 								// error
 								status === "error" &&
-									"bg-destructive text-destructive-foreground opacity-90 dark:bg-destructive dark:text-destructive-foreground",
+								"bg-destructive text-destructive-foreground opacity-90 dark:bg-destructive dark:text-destructive-foreground",
 								className,
 							)}
 							onClick={handleClick}

@@ -1,28 +1,39 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
+import type { CSSProperties, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import VoiceInput from ".."
-import type { UseVoiceInputOptions } from "../hooks"
+import type { UseVoiceInputOptions } from "../hooks/useVoiceInput"
+import type { VoiceInputStatus } from "../types"
 
-const mockToggleRecording = vi.fn()
-const mockStopRecording = vi.fn()
-const mockDisconnect = vi.fn()
+interface MockVoiceInputState {
+	status: VoiceInputStatus
+	isRecording: boolean
+}
 
-let mockVoiceState = {
-	status: "idle" as const,
+let latestUseVoiceInputOptions: UseVoiceInputOptions | undefined
+let mockToggleRecording = vi.fn()
+let mockDisconnect = vi.fn()
+let mockVoiceInputState: MockVoiceInputState = {
+	status: "idle",
 	isRecording: false,
 }
-let mockLatestUseVoiceInputOptions: UseVoiceInputOptions | undefined
 
 vi.mock("@/components/shadcn-ui/tooltip", () => ({
-	Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-	TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-	TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+	Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+	TooltipContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+	TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
+}))
+
+vi.mock("antd-mobile", () => ({
+	SpinLoading: ({ style }: { style?: CSSProperties }) => (
+		<div data-testid="voice-input-loading" style={style} />
+	),
 }))
 
 vi.mock("@/pages/superMagic/components/LazyGuideTour", () => ({
@@ -37,42 +48,44 @@ vi.mock("@/utils/pubsub", () => ({
 		unsubscribe: vi.fn(),
 	},
 	PubSubEvents: {
-		Toggle_Voice_Input: "Toggle_Voice_Input",
+		Toggle_Voice_Input: "toggle-voice-input",
 	},
 }))
 
 vi.mock("../hooks", () => ({
-	getHotkeyDisplayText: () => "Ctrl+Shift+E",
-	useVoiceInput: (options: UseVoiceInputOptions = {}) => {
-		mockLatestUseVoiceInputOptions = options
+	getHotkeyDisplayText: () => "⌘⇧E",
+	useVoiceInput: (options: UseVoiceInputOptions) => {
+		latestUseVoiceInputOptions = options
 
 		return {
-			status: mockVoiceState.status,
-			isConnected: mockVoiceState.status !== "idle",
-			isRecording: mockVoiceState.isRecording,
-			connect: vi.fn(),
-			disconnect: mockDisconnect,
-			startRecording: vi.fn(),
-			stopRecording: mockStopRecording,
+			status: mockVoiceInputState.status,
+			isRecording: mockVoiceInputState.isRecording,
 			toggleRecording: mockToggleRecording,
+			stopRecording: vi.fn(),
+			disconnect: mockDisconnect,
 		}
 	},
 }))
 
+function createAudioChunk(sampleValue: number): ArrayBuffer {
+	const samples = new Int16Array(64)
+	samples.fill(sampleValue)
+	return samples.buffer
+}
+
 describe("VoiceInput", () => {
 	beforeEach(() => {
-		mockVoiceState = {
+		latestUseVoiceInputOptions = undefined
+		mockToggleRecording = vi.fn()
+		mockDisconnect = vi.fn()
+		mockVoiceInputState = {
 			status: "idle",
 			isRecording: false,
 		}
-		mockLatestUseVoiceInputOptions = undefined
-		mockToggleRecording.mockClear()
-		mockStopRecording.mockClear()
-		mockDisconnect.mockClear()
 	})
 
 	it("renders realtime waveform while recording", () => {
-		mockVoiceState = {
+		mockVoiceInputState = {
 			status: "recording",
 			isRecording: true,
 		}
@@ -80,62 +93,57 @@ describe("VoiceInput", () => {
 		render(<VoiceInput onResult={vi.fn()} />)
 
 		expect(screen.getByTestId("voice-input-waveform")).toBeInTheDocument()
-		expect(screen.getAllByTestId("voice-input-waveform-bar")).toHaveLength(5)
+		expect(screen.getAllByTestId("voice-input-waveform-bar")).toHaveLength(11)
 	})
 
-	it("renders configured waveform bar count", () => {
-		mockVoiceState = {
+	it("supports wider waveform display without toggling on click", () => {
+		mockVoiceInputState = {
 			status: "recording",
 			isRecording: true,
 		}
 
-		render(<VoiceInput onResult={vi.fn()} waveformBarCount={44} />)
-
-		expect(screen.getAllByTestId("voice-input-waveform-bar")).toHaveLength(44)
-	})
-
-	it("does not toggle recording when toggleOnClick is false", () => {
-		render(<VoiceInput onResult={vi.fn()} toggleOnClick={false} />)
-
+		render(<VoiceInput onResult={vi.fn()} toggleOnClick={false} waveformBarCount={44} />)
 		fireEvent.click(screen.getByTestId("voice-input-button"))
 
+		expect(screen.getAllByTestId("voice-input-waveform-bar")).toHaveLength(44)
 		expect(mockToggleRecording).not.toHaveBeenCalled()
 	})
 
-	it("updates waveform height after receiving an audio chunk", () => {
-		mockVoiceState = {
+	it("updates waveform height when audio chunks arrive", () => {
+		mockVoiceInputState = {
 			status: "recording",
 			isRecording: true,
 		}
-		const onWaveformLevelsChange = vi.fn()
 
-		render(<VoiceInput onResult={vi.fn()} onWaveformLevelsChange={onWaveformLevelsChange} />)
+		render(<VoiceInput onResult={vi.fn()} iconSize={24} />)
 
-		const firstBar = screen.getAllByTestId("voice-input-waveform-bar")[0]
-		const initialHeight = firstBar.style.height
-		const audioData = new Int16Array([0, 12000, -12000, 16000, -16000]).buffer
+		const initialLastBar = screen.getAllByTestId("voice-input-waveform-bar").at(-1)
+		const initialHeight = Number.parseFloat(initialLastBar?.style.height ?? "0")
 
 		act(() => {
-			mockLatestUseVoiceInputOptions?.onAudioChunk?.({
-				audioData,
+			latestUseVoiceInputOptions?.onAudioChunk?.({
+				audioData: createAudioChunk(16000),
 				recordingId: "recording-id",
+				chunkIndex: 0,
 			})
 		})
 
-		expect(firstBar.style.height).not.toBe(initialHeight)
-		expect(onWaveformLevelsChange).toHaveBeenCalled()
+		const updatedLastBar = screen.getAllByTestId("voice-input-waveform-bar").at(-1)
+		const updatedHeight = Number.parseFloat(updatedLastBar?.style.height ?? "0")
+
+		expect(updatedHeight).toBeGreaterThan(initialHeight)
 	})
 
-	it("hides waveform and keeps idle status after recording stops", () => {
-		mockVoiceState = {
+	it("hides waveform after recording stops", () => {
+		mockVoiceInputState = {
 			status: "recording",
 			isRecording: true,
 		}
-		const { rerender } = render(<VoiceInput onResult={vi.fn()} />)
 
+		const { rerender } = render(<VoiceInput onResult={vi.fn()} />)
 		expect(screen.getByTestId("voice-input-waveform")).toBeInTheDocument()
 
-		mockVoiceState = {
+		mockVoiceInputState = {
 			status: "idle",
 			isRecording: false,
 		}
