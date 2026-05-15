@@ -105,6 +105,7 @@ const SuperMagicNavigate = lazy(() => import("@/pages/superMagic/lazy/SuperMagic
 const SuperRootRedirect = lazy(() => import("@/pages/superMagic/lazy/SuperRootRedirect"))
 const WorkspacePage = lazy(() => import("@/pages/superMagic/lazy/WorkspacePage"))
 const TopicPage = lazy(() => import("@/pages/superMagic/lazy/TopicPage"))
+const AppPage = lazy(() => import("@/pages/superMagic/lazy/AppPage"))
 const MobileTabs = lazy(() => import("@/pages/mobileTabs"))
 
 const SuperMagicShare = lazy(() => import("@/pages/share"))
@@ -346,6 +347,11 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						name: RouteName.SuperWorkspaceState,
 						path: `/:clusterCode${RoutePath.SuperWorkspaceState}`,
 						element: <WorkspacePage />,
+					},
+					{
+						name: RouteName.SuperApp,
+						path: `/:clusterCode${RoutePath.SuperApp}`,
+						element: <AppPage />,
 					},
 					{
 						name: RouteName.SuperWorkspaceProjectState,

@@ -35,6 +35,27 @@ export const LLM_MESSAGE_TYPES = {
 
 export type LLMMessageType = (typeof LLM_MESSAGE_TYPES)[keyof typeof LLM_MESSAGE_TYPES]
 
+export const DB_MESSAGE_TYPES = {
+	GET_TABLES_REQUEST: "MAGIC_DB_GET_TABLES_REQUEST",
+	GET_TABLES_RESPONSE: "MAGIC_DB_GET_TABLES_RESPONSE",
+	GET_TABLE_REQUEST: "MAGIC_DB_GET_TABLE_REQUEST",
+	GET_TABLE_RESPONSE: "MAGIC_DB_GET_TABLE_RESPONSE",
+	CREATE_ROW_REQUEST: "MAGIC_DB_CREATE_ROW_REQUEST",
+	CREATE_ROW_RESPONSE: "MAGIC_DB_CREATE_ROW_RESPONSE",
+	QUERY_ROWS_REQUEST: "MAGIC_DB_QUERY_ROWS_REQUEST",
+	QUERY_ROWS_RESPONSE: "MAGIC_DB_QUERY_ROWS_RESPONSE",
+	GET_ROW_REQUEST: "MAGIC_DB_GET_ROW_REQUEST",
+	GET_ROW_RESPONSE: "MAGIC_DB_GET_ROW_RESPONSE",
+	UPDATE_ROW_REQUEST: "MAGIC_DB_UPDATE_ROW_REQUEST",
+	UPDATE_ROW_RESPONSE: "MAGIC_DB_UPDATE_ROW_RESPONSE",
+	DELETE_ROW_REQUEST: "MAGIC_DB_DELETE_ROW_REQUEST",
+	DELETE_ROW_RESPONSE: "MAGIC_DB_DELETE_ROW_RESPONSE",
+	GET_RELATIONS_REQUEST: "MAGIC_DB_GET_RELATIONS_REQUEST",
+	GET_RELATIONS_RESPONSE: "MAGIC_DB_GET_RELATIONS_RESPONSE",
+} as const
+
+export type DBMessageType = (typeof DB_MESSAGE_TYPES)[keyof typeof DB_MESSAGE_TYPES]
+
 // ─── FS 消息报文 ─────────────────────────────────────────────────────────────
 
 export interface FSReadRequest {
@@ -177,6 +198,133 @@ export interface LLMStreamError {
 	type: typeof LLM_MESSAGE_TYPES.STREAM_ERROR
 	requestId: string
 	error: string
+}
+
+// ─── DB 消息报文 ─────────────────────────────────────────────────────────────
+
+export interface DBGetTablesRequest {
+	type: typeof DB_MESSAGE_TYPES.GET_TABLES_REQUEST
+	requestId: string
+}
+
+export interface DBGetTablesResponse {
+	type: typeof DB_MESSAGE_TYPES.GET_TABLES_RESPONSE
+	requestId: string
+	success: boolean
+	content?: unknown[]
+	error?: string
+}
+
+export interface DBGetTableRequest {
+	type: typeof DB_MESSAGE_TYPES.GET_TABLE_REQUEST
+	requestId: string
+	tableId: string
+}
+
+export interface DBGetTableResponse {
+	type: typeof DB_MESSAGE_TYPES.GET_TABLE_RESPONSE
+	requestId: string
+	success: boolean
+	content?: unknown
+	error?: string
+}
+
+export interface DBCreateRowRequest {
+	type: typeof DB_MESSAGE_TYPES.CREATE_ROW_REQUEST
+	requestId: string
+	tableId: string
+	data: Record<string, unknown>
+	select?: string[]
+}
+
+export interface DBCreateRowResponse {
+	type: typeof DB_MESSAGE_TYPES.CREATE_ROW_RESPONSE
+	requestId: string
+	success: boolean
+	content?: unknown
+	error?: string
+}
+
+export interface DBQueryRowsRequest {
+	type: typeof DB_MESSAGE_TYPES.QUERY_ROWS_REQUEST
+	requestId: string
+	tableId: string
+	query: {
+		filter?: unknown
+		sort?: unknown
+		select?: string[]
+		page?: number
+		page_size?: number
+		with?: unknown
+	}
+}
+
+export interface DBQueryRowsResponse {
+	type: typeof DB_MESSAGE_TYPES.QUERY_ROWS_RESPONSE
+	requestId: string
+	success: boolean
+	content?: unknown
+	error?: string
+}
+
+export interface DBGetRowRequest {
+	type: typeof DB_MESSAGE_TYPES.GET_ROW_REQUEST
+	requestId: string
+	tableId: string
+	recordId: string
+	select?: string[]
+}
+
+export interface DBGetRowResponse {
+	type: typeof DB_MESSAGE_TYPES.GET_ROW_RESPONSE
+	requestId: string
+	success: boolean
+	content?: unknown
+	error?: string
+}
+
+export interface DBUpdateRowRequest {
+	type: typeof DB_MESSAGE_TYPES.UPDATE_ROW_REQUEST
+	requestId: string
+	tableId: string
+	recordId: string
+	data: Record<string, unknown>
+	select?: string[]
+}
+
+export interface DBUpdateRowResponse {
+	type: typeof DB_MESSAGE_TYPES.UPDATE_ROW_RESPONSE
+	requestId: string
+	success: boolean
+	content?: unknown
+	error?: string
+}
+
+export interface DBDeleteRowRequest {
+	type: typeof DB_MESSAGE_TYPES.DELETE_ROW_REQUEST
+	requestId: string
+	tableId: string
+	recordId: string
+}
+
+export interface DBDeleteRowResponse {
+	type: typeof DB_MESSAGE_TYPES.DELETE_ROW_RESPONSE
+	requestId: string
+	success: boolean
+	error?: string
+}
+
+export interface DBGetRelationsRequest {
+	type: typeof DB_MESSAGE_TYPES.GET_RELATIONS_REQUEST
+	requestId: string
+}
+
+export interface DBGetRelationsResponse {
+	type: typeof DB_MESSAGE_TYPES.GET_RELATIONS_RESPONSE
+	requestId: string
+	success: boolean
+	content?: unknown[]
+	error?: string
 }
 
 // ─── HTML 应用配置（app.json，可选） ─────────────────────────────────────────

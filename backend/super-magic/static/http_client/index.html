@@ -14,7 +14,8 @@
         <div class="sidebar">
             <h1>超级麦吉调试客户端</h1>
             <div style="text-align:center;margin-bottom:10px;">
-                <a href="tool_debugger.html" style="font-size:12px;color:#0066cc;text-decoration:none;padding:4px 10px;border:1px solid rgba(0,102,204,0.2);border-radius:6px;background:rgba(0,122,255,0.05);">工具调试面板</a>
+                <a href="tool_debugger.html"
+                    style="font-size:12px;color:#0066cc;text-decoration:none;padding:4px 10px;border:1px solid rgba(0,102,204,0.2);border-radius:6px;background:rgba(0,122,255,0.05);">工具调试面板</a>
             </div>
 
             <!-- 连接配置（紧凑） -->
@@ -87,14 +88,19 @@
                     <div class="filetree-actions">
                         <button id="refreshTreeBtn" class="icon-btn" title="刷新" aria-label="刷新工作区文件">
                             <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                                <path d="M20 4.5v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor"
+                                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                <path d="M20 4.5v5h-5" fill="none" stroke="currentColor" stroke-width="1.8"
+                                    stroke-linecap="round" stroke-linejoin="round"></path>
                             </svg>
                         </button>
                         <button id="selectWorkspaceBtn" class="icon-btn" title="选择项目根目录" aria-label="选择项目根目录">
                             <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M3.5 7.5a2 2 0 0 1 2-2h4.2l1.7 2H18.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
-                                <path d="M4 10h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                                <path
+                                    d="M3.5 7.5a2 2 0 0 1 2-2h4.2l1.7 2H18.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9Z"
+                                    fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
+                                <path d="M4 10h16" fill="none" stroke="currentColor" stroke-width="1.8"
+                                    stroke-linecap="round"></path>
                             </svg>
                         </button>
                     </div>
@@ -104,7 +110,8 @@
                     <input type="text" id="mountDirInput" class="mount-dir-input" placeholder="留空为根目录">
                     <button id="applyMountDirBtn" class="icon-btn" title="应用挂载目录" aria-label="应用挂载目录">
                         <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round"></path>
                         </svg>
                     </button>
                 </div>
@@ -121,7 +128,8 @@
                 <div class="file-preview-tabbar">
                     <div id="filePreviewTabs" class="file-preview-tabs" role="tablist" aria-label="文件预览"></div>
                     <div class="file-preview-actions">
-                        <button id="filePreviewRenderBtn" class="file-preview-action-btn" title="渲染 HTML 预览" style="display:none">渲染预览</button>
+                        <button id="filePreviewRenderBtn" class="file-preview-action-btn" title="渲染 HTML 预览"
+                            style="display:none">渲染预览</button>
                         <button id="filePreviewOpenBtn" class="file-preview-action-btn" title="在新窗口打开">新窗口打开</button>
                         <button id="filePreviewClose" class="file-preview-close" title="关闭当前预览">✕</button>
                     </div>
@@ -175,6 +183,7 @@
                                 <option value="skill">skill — Skill 模式</option>
                                 <option value="crew-creator">crew-creator — Crew 管理</option>
                                 <option value="skill-creator">skill-creator — Skill 创作</option>
+                                <option value="html-app">html-app — HTML APP 开发</option>
                                 <option value="magiclaw">magiclaw — Magic Claw（需传 agent_code）</option>
                                 <option value="custom_agent">custom_agent — 自定义 Agent（需传 agent_code）</option>
                             </select>
@@ -196,8 +205,7 @@
 
                         <!-- Model ID 配置（IM 模式下隐藏） -->
                         <div class="model-config" id="modelIdGroup">
-                            <input type="text" id="modelIdInput" class="model-id-input"
-                                placeholder="Model ID (留空默认)">
+                            <input type="text" id="modelIdInput" class="model-id-input" placeholder="Model ID (留空默认)">
                             <select id="modelIdSelect" class="agent-mode-select" style="display:none">
                                 <option value="">选择文本模型（留空默认）</option>
                             </select>

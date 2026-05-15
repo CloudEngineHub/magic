@@ -367,7 +367,10 @@ function CrewEditPanels({
 		>
 			<div
 				className="flex h-full shrink-0 flex-col overflow-hidden"
-				style={{ width: sidebarWidthPx }}
+				style={{
+					width: sidebarWidthPx,
+					transition: panelResizeTransition,
+				}}
 				data-testid="crew-edit-sidebar"
 			>
 				{sidebar}
@@ -375,7 +378,11 @@ function CrewEditPanels({
 
 			<TopicResizeHandle
 				onMouseDown={(e) => onSidebarResizeStart?.(e)}
-				className={cn("shrink-0", isDraggingSidebar && "before:opacity-100")}
+				className={cn(
+					"shrink-0",
+					isDraggingSidebar && "before:opacity-100",
+					!onSidebarResizeStart && "pointer-events-none !w-0 !min-w-0 opacity-0",
+				)}
 			/>
 
 			<div className="relative flex h-full min-w-0 flex-1 overflow-hidden">

@@ -75,6 +75,7 @@ import { useFetchInterceptionCache } from "./hooks/useFetchInterceptionCache"
 import { POST_MESSAGE_TARGET_STRATEGIES, type OnFetchIntercepted } from "./utils/fetchInterceptor"
 import { useIframeFS } from "./iframe-api/hooks/useIframeFS"
 import { useIframeLLM } from "./iframe-api/hooks/useIframeLLM"
+import { useIframeDatabase } from "./iframe-api/hooks/useIframeDatabase"
 import { useMagicFiles } from "./iframe-api/hooks/useMagicFiles"
 import { saveIframeFileContent, createIframeFile } from "./iframe-api/iframeApi"
 
@@ -525,6 +526,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			baseUrl: (env("MAGIC_SERVICE_BASE_URL") as string) || "",
 			getAuthorization: () => userStore.user.authorization?.trim() || "",
 			getOrganizationCode: () => userStore.user.organizationCode?.trim() || "",
+		})
+
+		const { handleDatabaseMessage } = useIframeDatabase({
+			iframeRef,
+			projectId: selectedProject?.id,
 		})
 
 		const isDynamicInterceptionEnabled = !disableDynamicResourceInterception
@@ -1271,6 +1277,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				} else if (event.data?.type?.startsWith("MAGIC_LLM_")) {
 					// 处理 window.Magic.llm.* 请求
 					await handleLLMMessage(event.data.type, event.data)
+				} else if (event.data?.type?.startsWith("MAGIC_DB_")) {
+					// 处理 window.Magic.db.* 请求
+					await handleDatabaseMessage(event.data.type, event.data)
 				} else if (event.data && event.data.type === "MAGIC_RELOAD_REQUEST") {
 					// 处理 window.Magic.reload() 请求
 					reloadIframeContent()

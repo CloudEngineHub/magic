@@ -62,3 +62,102 @@ export async function createIframeFile(data: {
 }): Promise<{ file_id?: string }> {
 	return iframeClient.post("/api/v1/super-agent/file", data)
 }
+
+// ─── MagicBase 数据库操作 ────────────────────────────────────────────────────
+
+/**
+ * 获取项目下所有表。
+ */
+export async function getMagicBaseTables(projectId: string): Promise<unknown[]> {
+	return iframeClient.get(`/api/v1/magicbase/projects/${projectId}/tables`)
+}
+
+/**
+ * 获取单张表详情（含字段定义）。
+ */
+export async function getMagicBaseTable(projectId: string, tableId: string): Promise<unknown> {
+	return iframeClient.get(`/api/v1/magicbase/projects/${projectId}/tables/${tableId}`)
+}
+
+/**
+ * 新增一行数据。
+ */
+export async function createMagicBaseRow(
+	projectId: string,
+	tableId: string,
+	data: Record<string, unknown>,
+	select?: string[],
+): Promise<unknown> {
+	return iframeClient.post(`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows`, {
+		...data,
+		...(select ? { _select: select } : {}),
+	})
+}
+
+/**
+ * 分页查询行。
+ */
+export async function queryMagicBaseRows(
+	projectId: string,
+	tableId: string,
+	query: Record<string, unknown>,
+): Promise<unknown> {
+	return iframeClient.post(
+		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/query`,
+		query,
+	)
+}
+
+/**
+ * 获取单行详情。
+ */
+export async function getMagicBaseRow(
+	projectId: string,
+	tableId: string,
+	recordId: string,
+	select?: string[],
+): Promise<unknown> {
+	const params = select ? `?select=${select.join(",")}` : ""
+	return iframeClient.get(
+		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows/${recordId}${params}`,
+	)
+}
+
+/**
+ * 更新一行数据。
+ */
+export async function updateMagicBaseRow(
+	projectId: string,
+	tableId: string,
+	recordId: string,
+	data: Record<string, unknown>,
+	select?: string[],
+): Promise<unknown> {
+	return iframeClient.patch(
+		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows/${recordId}`,
+		{
+			...data,
+			...(select ? { _select: select } : {}),
+		},
+	)
+}
+
+/**
+ * 删除一行数据。
+ */
+export async function deleteMagicBaseRow(
+	projectId: string,
+	tableId: string,
+	recordId: string,
+): Promise<void> {
+	return iframeClient.delete(
+		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows/${recordId}`,
+	)
+}
+
+/**
+ * 获取项目关系列表。
+ */
+export async function getMagicBaseRelations(projectId: string): Promise<unknown[]> {
+	return iframeClient.get(`/api/v1/magicbase/projects/${projectId}/relations`)
+}

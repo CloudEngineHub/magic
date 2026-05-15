@@ -423,7 +423,149 @@ window.Magic.llm.stream(messages, (delta, done) => {
 
 ---
 
-## 六、API 速查表
+## 六、数据库 API（`window.Magic.db`）
+
+数据库 API 提供对当前项目 MagicBase 数据库的 CRUD 操作。所有操作自动关联当前项目，iframe 内无需指定 projectId。
+
+### 6.1 获取所有表 `getTables()`
+
+```javascript
+const tables = await window.Magic.db.getTables()
+// tables: [{ id: "tbl_xxx", name: "users", ... }, ...]
+```
+
+**返回**：`Promise<Array<{ id: string; name: string; ... }>>` — 表摘要列表。
+
+---
+
+### 6.2 获取单表详情 `getTable(tableId)`
+
+```javascript
+const table = await window.Magic.db.getTable("tbl_xxx")
+// table: { id: "tbl_xxx", name: "users", fields: [...], ... }
+```
+
+**参数**：`tableId: string` — 表 ID。  
+**返回**：`Promise<object>` — 表详情（含字段定义）。
+
+---
+
+### 6.3 新增行 `createRow(tableId, data, select?)`
+
+```javascript
+const newRow = await window.Magic.db.createRow("tbl_xxx", {
+  name: "Alice",
+  age: 30,
+  email: "alice@example.com"
+})
+// newRow: { id: "rec_yyy", name: "Alice", age: 30, ... }
+```
+
+**参数**：
+- `tableId: string` — 目标表 ID
+- `data: Record<string, unknown>` — 行数据（字段名 → 值）
+- `select?: string[]` — 可选，指定返回的字段列表
+
+**返回**：`Promise<object>` — 新创建的行数据。
+
+---
+
+### 6.4 查询行 `queryRows(tableId, query)`
+
+```javascript
+const result = await window.Magic.db.queryRows("tbl_xxx", {
+  filter: { name: { $contains: "Ali" } },
+  sort: [{ field: "created_at", direction: "desc" }],
+  select: ["name", "email"],
+  page: 1,
+  page_size: 20
+})
+// result: { rows: [...], total: 42, page: 1, page_size: 20 }
+```
+
+**参数**：
+- `tableId: string` — 目标表 ID
+- `query: object` — 查询参数：
+  - `filter?` — 过滤条件
+  - `sort?` — 排序规则
+  - `select?: string[]` — 返回字段列表
+  - `page?: number` — 页码（默认 1）
+  - `page_size?: number` — 每页行数（默认 20）
+  - `with?` — 关联查询配置
+
+**返回**：`Promise<object>` — 分页结果。  
+**超时**：30 秒（其他操作为 15 秒）。
+
+---
+
+### 6.5 获取单行 `getRow(tableId, recordId, select?)`
+
+```javascript
+const row = await window.Magic.db.getRow("tbl_xxx", "rec_yyy")
+```
+
+**参数**：`tableId: string`、`recordId: string`、`select?: string[]`。  
+**返回**：`Promise<object>` — 行数据。
+
+---
+
+### 6.6 更新行 `updateRow(tableId, recordId, data, select?)`
+
+```javascript
+const updated = await window.Magic.db.updateRow("tbl_xxx", "rec_yyy", {
+  name: "Bob",
+  age: 25
+})
+```
+
+**参数**：
+- `tableId: string` — 表 ID
+- `recordId: string` — 行 ID
+- `data: Record<string, unknown>` — 要更新的字段
+- `select?: string[]` — 可选返回字段列表
+
+**返回**：`Promise<object>` — 更新后的行数据。
+
+---
+
+### 6.7 删除行 `deleteRow(tableId, recordId)`
+
+```javascript
+await window.Magic.db.deleteRow("tbl_xxx", "rec_yyy")
+```
+
+**参数**：`tableId: string`、`recordId: string`。  
+**返回**：`Promise<void>`。
+
+---
+
+### 6.8 获取关系列表 `getRelations()`
+
+```javascript
+const relations = await window.Magic.db.getRelations()
+```
+
+**返回**：`Promise<Array<object>>` — 当前项目的表关系列表。
+
+---
+
+### 6.9 错误处理
+
+```javascript
+try {
+  const row = await window.Magic.db.getRow("tbl_xxx", "rec_notfound")
+} catch (err) {
+  console.error("数据库操作失败：", err.message)
+  // 可能的错误：
+  // - "No project selected" — 未选中项目
+  // - "getRow: tableId must be a non-empty string" — 参数校验失败
+  // - HTTP 错误信息（404, 500 等）
+}
+```
+
+---
+
+## 七、API 速查表
 
 | API                                             | 说明               | 返回                     |
 | ----------------------------------------------- | ------------------ | ------------------------ |
@@ -439,3 +581,11 @@ window.Magic.llm.stream(messages, (delta, done) => {
 | `window.Magic.uploadFiles(files)`               | 上传文件到工作区   | `Promise<unknown>`       |
 | `window.Magic.downloadFiles(paths)`             | 下载工作区文件     | `Promise<unknown>`       |
 | `window.Magic.addFilesToMessage(files)`         | 将文件附加到输入框 | `void`                   |
+| `window.Magic.db.getTables()`                   | 获取所有表         | `Promise<Array>`         |
+| `window.Magic.db.getTable(tableId)`             | 获取表详情         | `Promise<object>`        |
+| `window.Magic.db.createRow(tableId, data)`      | 新增行             | `Promise<object>`        |
+| `window.Magic.db.queryRows(tableId, query)`     | 查询行（分页）     | `Promise<object>`        |
+| `window.Magic.db.getRow(tableId, recordId)`     | 获取单行           | `Promise<object>`        |
+| `window.Magic.db.updateRow(tableId, id, data)`  | 更新行             | `Promise<object>`        |
+| `window.Magic.db.deleteRow(tableId, recordId)`  | 删除行             | `Promise<void>`          |
+| `window.Magic.db.getRelations()`                | 获取关系列表       | `Promise<Array>`         |

@@ -26,6 +26,8 @@ export enum RouteName {
 	SuperWorkspaceProjectState = "SuperWorkspaceProjectState",
 	/**  */
 	SuperWorkspaceProjectTopicState = "SuperWorkspaceProjectTopicState",
+	/** 微应用开发页面 */
+	SuperApp = "SuperApp",
 	/** 协作邀请 */
 	CollaborationInvite = "CollaborationInvite",
 	/** 用户 - 个人中心（移动端） */
