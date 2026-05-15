@@ -16,6 +16,7 @@ use Dtyq\SuperMagic\Application\SuperAgent\Service\TransferAppService;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\BatchDeleteProjectsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\BatchMoveProjectsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateProjectRequestDTO;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateSpecialProjectRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\ForkProjectRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetParticipatedProjectsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetProjectAttachmentsRequestDTO;
@@ -54,7 +55,35 @@ class ProjectApi extends AbstractApi
 
         $requestDTO = CreateProjectRequestDTO::fromRequest($this->request);
 
-        return $this->projectAppService->createOrReuseProject($requestContext, $requestDTO);
+        $result = $this->projectAppService->createOrReuseProject($requestContext, $requestDTO);
+
+        $userAuthorization = $this->getAuthorization();
+        $userId = $userAuthorization->getId();
+        $organizationCode = $userAuthorization->getOrganizationCode();
+        $projectId = (int) ($result['project']['id'] ?? 0);
+
+        $userRole = $this->projectAppService->getProjectRoleByUserId($projectId, $userId, $organizationCode);
+        $memberSetting = $this->projectMemberAppService->getProjectMemberSetting($userId, $projectId);
+
+        $result['project'] = array_merge($result['project'], [
+            'user_role' => $userRole,
+            'is_bind_workspace' => $memberSetting?->isBindWorkspace() ?? false,
+            'bind_workspace_id' => (string) ($memberSetting?->getBindWorkspaceId() ?? 0),
+        ]);
+
+        return $result;
+    }
+
+    /**
+     * Create or get special project by key.
+     */
+    public function storeSpecial(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        $requestDTO = CreateSpecialProjectRequestDTO::fromRequest($this->request);
+
+        return $this->projectAppService->createOrGetSpecialProject($requestContext, $requestDTO);
     }
 
     /**
@@ -139,9 +168,15 @@ class ProjectApi extends AbstractApi
 
         $userRole = $this->projectAppService->getProjectRoleByUserId($project->getId(), $userId, $organizationCode);
 
+        $memberSetting = $this->projectMemberAppService->getProjectMemberSetting($userId, $project->getId());
+
         $projectDTO = ProjectItemDTO::fromEntity($project, null, null, $hasProjectMember);
 
-        return array_merge($projectDTO->toArray(), ['user_role' => $userRole]);
+        return array_merge($projectDTO->toArray(), [
+            'user_role' => $userRole,
+            'is_bind_workspace' => $memberSetting?->isBindWorkspace() ?? false,
+            'bind_workspace_id' => (string) ($memberSetting?->getBindWorkspaceId() ?? 0),
+        ]);
     }
 
     /**

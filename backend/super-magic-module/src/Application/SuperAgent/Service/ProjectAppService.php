@@ -7,8 +7,11 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Application\SuperAgent\Service;
 
+use App\Application\Contact\UserSetting\UserSettingKey;
+use App\Domain\Contact\Entity\MagicUserSettingEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
+use App\Domain\Contact\Service\MagicUserSettingDomainService;
 use App\Domain\LongTermMemory\Service\LongTermMemoryDomainService;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\ErrorCode\GenericErrorCode;
@@ -16,6 +19,7 @@ use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\EventException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Infrastructure\Util\Locker\LockerInterface;
 use DirectoryIterator;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\SuperMagic\Application\Chat\Service\ChatAppService;
@@ -77,6 +81,7 @@ use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CreateShareRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\BatchDeleteProjectsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\BatchMoveProjectsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateProjectRequestDTO;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateSpecialProjectRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\ForkProjectRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetProjectAttachmentsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetProjectAttachmentsV2RequestDTO;
@@ -135,6 +140,8 @@ class ProjectAppService extends AbstractAppService
         private readonly AudioProjectDomainService $audioProjectDomainService,
         private readonly RecycleBinDomainService $recycleBinDomainService,
         private readonly FileTreeBuilder $fileTreeBuilder,
+        private readonly MagicUserSettingDomainService $magicUserSettingDomainService,
+        private readonly LockerInterface $locker,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(self::class);
@@ -298,6 +305,132 @@ class ProjectAppService extends AbstractAppService
     }
 
     /**
+     * 创建或获取特殊项目.
+     * 根据前端传入的 key 判断项目是否已存在，不存在则在 default 工作区下创建.
+     * 项目 ID 通过 MagicUserSettingDomainService 存储映射关系.
+     *
+     * @return array 返回格式：['key' => string, 'project' => array, 'is_existing' => bool]
+     */
+    public function createOrGetSpecialProject(
+        RequestContext $requestContext,
+        CreateSpecialProjectRequestDTO $requestDTO
+    ): array {
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $dataIsolation = $this->createDataIsolation($userAuthorization);
+
+        $specialKey = $requestDTO->getKey();
+        if (empty($specialKey)) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'project.special_key_required');
+        }
+
+        $settingKey = UserSettingKey::genSuperMagicSpecialProject($specialKey);
+
+        // 1. 快速路径：无锁查询 UserSetting 是否已有 project_id
+        $setting = $this->magicUserSettingDomainService->get($dataIsolation, $settingKey);
+
+        if ($setting) {
+            $projectId = (int) ($setting->getValue()['project_id'] ?? 0);
+            if ($projectId > 0) {
+                // 校验项目是否真实存在
+                $projectEntity = $this->projectRepository->findById($projectId);
+                if ($projectEntity && $projectEntity->getUserId() === $dataIsolation->getCurrentUserId()) {
+                    $this->logger->info(sprintf('特殊项目已存在, key=%s, projectId=%d', $specialKey, $projectId));
+                    return [
+                        'key' => $specialKey,
+                        'project' => ProjectItemDTO::fromEntity($projectEntity)->toArray(),
+                        'is_existing' => true,
+                    ];
+                }
+            }
+        }
+
+        // 2. 获取分布式锁，防止并发为同一 key 创建多个项目
+        $lockName = sprintf('special_project:create:%s:%s', $dataIsolation->getCurrentUserId(), $specialKey);
+        $lockOwner = uniqid('special_project_', true);
+
+        if (! $this->locker->mutexLock($lockName, $lockOwner, 10)) {
+            ExceptionBuilder::throw(GenericErrorCode::TooManyRequests, 'project.create_project_too_frequent');
+        }
+
+        try {
+            // 3. Double-check：获取锁后再次检查，防止并发请求重复创建
+            $setting = $this->magicUserSettingDomainService->get($dataIsolation, $settingKey);
+            if ($setting) {
+                $projectId = (int) ($setting->getValue()['project_id'] ?? 0);
+                if ($projectId > 0) {
+                    $projectEntity = $this->projectRepository->findById($projectId);
+                    if ($projectEntity && $projectEntity->getUserId() === $dataIsolation->getCurrentUserId()) {
+                        $this->logger->info(sprintf('特殊项目已存在(并发检查), key=%s, projectId=%d', $specialKey, $projectId));
+                        return [
+                            'key' => $specialKey,
+                            'project' => ProjectItemDTO::fromEntity($projectEntity)->toArray(),
+                            'is_existing' => true,
+                        ];
+                    }
+                }
+            }
+
+            // 4. 获取或创建 UserSpecial 工作区
+            $workspaceEntity = $this->workspaceDomainService->getOrCreateWorkspaceByType(
+                $dataIsolation,
+                WorkspaceType::UserSpecial
+            );
+
+            // 5. 创建项目
+            Db::beginTransaction();
+            try {
+                $projectEntity = $this->projectDomainService->createProject(
+                    $workspaceEntity->getId(),
+                    $requestDTO->getProjectName(),
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    '',
+                    '',
+                    $requestDTO->getProjectMode() ?: null
+                );
+                $this->logger->info(sprintf('创建特殊项目, key=%s, projectId=%s', $specialKey, $projectEntity->getId()));
+
+                // 6. 初始化项目
+                $dynamicParams = ! empty($requestDTO->getDynamicParams()) ? $requestDTO->getDynamicParams() : null;
+                $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $dynamicParams);
+
+                // 7. 创建项目根目录
+                $this->taskFileDomainService->findOrCreateProjectRootDirectory(
+                    projectId: $projectEntity->getId(),
+                    workDir: $projectEntity->getWorkDir(),
+                    userId: $dataIsolation->getCurrentUserId(),
+                    organizationCode: $dataIsolation->getCurrentOrganizationCode(),
+                    projectOrganizationCode: $projectEntity->getUserOrganizationCode(),
+                );
+
+                // 8. 保存 key → project_id 映射到 UserSetting
+                $settingEntity = new MagicUserSettingEntity();
+                $settingEntity->setKey($settingKey);
+                $settingEntity->setValue(['project_id' => $projectEntity->getId()]);
+                $this->magicUserSettingDomainService->save($dataIsolation, $settingEntity);
+
+                Db::commit();
+
+                // 触发项目创建事件
+                $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
+                $this->eventDispatcher->dispatch($projectCreatedEvent);
+
+                return [
+                    'key' => $specialKey,
+                    'project' => ProjectItemDTO::fromEntity($projectEntity)->toArray(),
+                    'is_existing' => false,
+                ];
+            } catch (Throwable $e) {
+                Db::rollBack();
+                $this->logger->error('Create Special Project Failed, err: ' . $e->getMessage(), ['key' => $specialKey]);
+                ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, 'project.create_project_failed');
+            }
+        } finally {
+            $this->locker->release($lockName, $lockOwner);
+        }
+    }
+
+    /**
      * 更新项目.
      */
     public function updateProject(RequestContext $requestContext, UpdateProjectRequestDTO $requestDTO): array
@@ -319,14 +452,6 @@ class ProjectAppService extends AbstractAppService
         if (! is_null($requestDTO->getProjectDescription())) {
             $projectEntity->setProjectDescription($requestDTO->getProjectDescription());
         }
-        if (! is_null($requestDTO->getWorkspaceId())) {
-            // 检查话题是否存在
-            $workspaceEntity = $this->workspaceDomainService->getWorkspaceDetail($requestDTO->getWorkspaceId());
-            if (empty($workspaceEntity)) {
-                ExceptionBuilder::throw(SuperAgentErrorCode::WORKSPACE_NOT_FOUND, 'workspace.workspace_not_found');
-            }
-            $projectEntity->setWorkspaceId($requestDTO->getWorkspaceId());
-        }
         if (! is_null($requestDTO->getIsCollaborationEnabled())) {
             $projectEntity->setIsCollaborationEnabled($requestDTO->getIsCollaborationEnabled());
         }
@@ -343,7 +468,8 @@ class ProjectAppService extends AbstractAppService
             $projectEntity->setProjectMode($newMode);
         }
 
-        // Handle workspace change / detach (cascades workspace_id to topics and tasks)
+        // TODO: Remove workspace changes from updateProject; clients should use the move API instead.
+        // Handle target_workspace_id only during the transition period.
         if ($requestDTO->hasTargetWorkspaceId()) {
             $targetWorkspaceId = $requestDTO->getTargetWorkspaceId();
 
@@ -1244,7 +1370,7 @@ class ProjectAppService extends AbstractAppService
 
         if (! empty($validProjectIds)) {
             try {
-                $successResults = Db::transaction(function () use ($validProjectIds, $targetWorkspaceId, $now) {
+                $successResults = Db::transaction(function () use ($validProjectIds, $targetWorkspaceId, $now, $userId, $organizationCode) {
                     // Step 4.1: Batch update projects (1 query)
                     $updatedCount = $this->projectRepository->batchUpdateWorkspace(
                         $validProjectIds,
@@ -1267,7 +1393,19 @@ class ProjectAppService extends AbstractAppService
                         'updated_count' => $topicUpdatedCount,
                     ]);
 
-                    // Step 4.3: Build success results
+                    // Step 4.3: Sync owner's personal workspace binding.
+                    $settingUpdatedCount = $this->projectMemberDomainService->syncOwnerProjectWorkspaceBindings(
+                        $userId,
+                        $validProjectIds,
+                        $targetWorkspaceId,
+                        $organizationCode
+                    );
+
+                    $this->logger->info('Batch synced owner project workspace bindings', [
+                        'updated_count' => $settingUpdatedCount,
+                    ]);
+
+                    // Step 4.4: Build success results
                     $results = [];
                     foreach ($validProjectIds as $projectId) {
                         $projectIdStr = (string) $projectId;
