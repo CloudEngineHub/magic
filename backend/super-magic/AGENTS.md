@@ -283,23 +283,48 @@ return ToolResult.error("转换失败", extra_info={"path": "/tmp/file"})    # �
 - 检查所有 `except Exception` / `except BaseException` / 裸 `except:` 块，确认不会吞掉 `CancelledError`。如果 fallback 逻辑需要在中断时跳过，在进入 fallback 前先检查 `agent_context.is_interruption_requested()`。
 - 新建的 `asyncio.create_task()` 子任务若需随父级一并取消（如调用子 Agent），在父级的 `_run_cleanup_registry` 中注册清理逻辑，不要依赖 Python 自动传播（父 Task 被 cancel 不会自动取消独立创建的子 Task）。
 
-## 12. 业务逻辑必须保持主线程单事件循环语义
+## 12. 长时间阻塞的工具必须续期活跃时间
+
+沙盒环境会检测进程闲置时间，超过阈值后自动杀掉沙盒。工具执行期间若长时间无输出（如等待后台任务、轮询 API 结果），沙盒会误判为闲置。
+
+统一入口 `app/tools/core/tool_keepalive.py`：
+
+```python
+from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
+
+keep_alive_task = start_tool_keep_alive(tool_context)
+try:
+    await some_long_blocking_operation()
+finally:
+    stop_tool_keep_alive(keep_alive_task)
+```
+
+规则：
+
+- 预期等待超过 60 秒的阻塞操作，必须启动续期
+- 续期默认每 30 秒调用一次 `agent_context.update_activity_time()`
+- `start_tool_keep_alive` 返回 `None` 时为 no-op（agent_context 不可用），`stop_tool_keep_alive` 接受 `None` 无副作用
+- 必须在 `finally` 中取消续期任务，避免泄漏
+- 对于自带轮询循环的工具（如 audio_understanding 的进度轮询），可以在每次轮询迭代中直接调用 `agent_context.update_activity_time()` 代替独立续期任务，效果等价
+- 不要与 `KeepaliveRegistry`（全局 72h 连接保活）混淆，两者职责不同：`tool_keepalive` 是工具执行期的短期续期，`KeepaliveRegistry` 是沙盒生命周期的长期保活
+
+## 13. 业务逻辑必须保持主线程单事件循环语义
 
 - 项目的业务逻辑一律运行在主线程的主事件循环中；`AgentDispatcher`、`AgentContext`、subagent 运行时、工具调度、运行时注册表等设施默认都建立在这个前提上
 - 子线程只允许用于文件 I/O、同步库封装、阻塞式 SDK 回调桥接等辅助工作，不允许在子线程中直接执行业务逻辑，也不允许直接读写上述运行时设施
 - 来自子线程的回调或事件，必须先通过 `asyncio.run_coroutine_threadsafe(...)` 或 `loop.call_soon_threadsafe(...)` 切回主事件循环，再进入业务逻辑
 - 默认不要为业务运行时设施增加多线程锁；如果未来某个设施必须被多线程直接访问，必须先明确这是架构变更，并单独设计线程安全边界，而不是局部补锁
 
-## 13. 工具新增后需在 `__init__.py` 显式导入
+## 14. 工具新增后需在 `__init__.py` 显式导入
 
 在 `app/tools/` 增加新工具，需同步在 `app/tools/__init__.py` 中 `import` 该类并加入 `__all__`。未在 `__init__.py` 显式导入将导致工具模块未被加载，运行期报错 `No module named 'app.tools.<tool_name>'`。
 
-## 14. 不要手动修改工具定义缓存
+## 15. 不要手动修改工具定义缓存
 
 - `config/tool_definitions.json` 是缓存文件，不要手动编辑
 - 修改工具的真实来源应为 `app/tools/` 下的工具代码；缓存如有需要应走项目既有生成流程刷新
 
-## 15. 工具失败时必须提供人类友好的错误展示
+## 16. 工具失败时必须提供人类友好的错误展示
 
 工具执行失败时，用户看到的 `remark` 和 `ToolDetail` 必须有信息量，不能只显示"工具调用失败"这类空洞文案。
 
@@ -312,7 +337,7 @@ return ToolResult.error("转换失败", extra_info={"path": "/tmp/file"})    # �
 
 存量工具的 `get_tool_detail()` 大多在失败时返回 `None`，等后续统一治理。新增工具必须遵守此规范。
 
-## 16. 工作区文件转 URL 必须走统一入口
+## 17. 工作区文件转 URL 必须走统一入口
 
 `.workspace/` 下的本地文件转可访问 URL，统一调用：
 
@@ -351,7 +376,7 @@ xattr 缺失说明文件尚未与对象存储同步完成，应直接抛错让�
 - `app/api/routes/file.py::get_file_download_url`
   对外 HTTP API，路径由外部调用方传入，不属于"本机本地文件 → URL"的范畴。
 
-## 17. 深度参考文档索引
+## 18. 深度参考文档索引
 
 以下文档不需要常驻上下文，按需查阅：
 
@@ -363,7 +388,7 @@ xattr 缺失说明文件尚未与对象存储同步完成，应直接抛错让�
 | Skill 概念与加载链路 | `agents/guides/SKILLS_OVERVIEW.md` | 快速了解 Skill 是什么、加载方式、来源与模型使用规则时 |
 | Skill 开发指南 | `agents/guides/SKILLS_DEVELOPMENT_GUIDE.md` | 新建或修改 Skill、需要了解 SKILL.md 规范和最佳实践时 |
 
-## 18. 每次改动前自检
+## 19. 每次改动前自检
 
 - 这是在解决真实问题，还是在满足抽象冲动？
 - 这层包装有没有新增语义？
