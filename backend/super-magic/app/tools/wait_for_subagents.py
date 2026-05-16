@@ -1,5 +1,6 @@
 import asyncio
-from dataclasses import asdict
+import re
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
 from pydantic import Field
@@ -19,11 +20,20 @@ from app.tools.subagent_runtime_models import (
 )
 from app.tools.subagent_runtime_store import SubagentRuntimeStore
 from app.tools.subagent_session_manager import SubagentSessionHandle, subagent_session_manager
+from app.tools.call_subagent import _localize_agent_name
+from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
 from app.utils.async_file_utils import async_exists, async_read_json
 
 # 超时时返回给父 Agent 的进度快照最大字符数
 _LAST_ACTIVITY_MAX_CHARS = 500
+
+# 无限等待（timeout=-1）的最大兜底时间：60 分钟
+_MAX_INFINITE_WAIT_SECONDS = 3600.0
+# 超过此阈值的等待触发定期续期（防止沙盒因闲置被杀）
+_KEEP_ALIVE_THRESHOLD = 60.0
+# pattern 轮询扫描间隔（大模型输出不快，1s 足够）
+_POLL_INTERVAL = 1.0
 
 
 class WaitForSubagentsParams(BaseToolParams):
@@ -33,13 +43,54 @@ class WaitForSubagentsParams(BaseToolParams):
     )
     timeout: float = Field(
         30.0,
-        description="Max seconds to wait for all agents to finish. Default: 30 seconds."
+        description="""<!--zh\n等待超时秒数（POSIX 语义）：\n- timeout > 0：最长等待时间，超时后返回当前状态快照（可再次调用继续等）\n- timeout = 0：立即返回当前状态快照，不等待\n- timeout = -1：无限等待，直到所有子智能体完成（兜底上限 60 分钟）\n-->\nTimeout in seconds (POSIX semantics):\n- timeout > 0: max wait time. If reached, returns current status with progress snapshot. Call again to keep waiting.\n- timeout = 0: return current status snapshot immediately without waiting.\n- timeout = -1: wait indefinitely until all agents finish (capped at 60 minutes)."""
+    )
+    kill: bool = Field(
+        False,
+        description="""<!--zh\n设为 True 时终止所有指定的子智能体并返回结果。timeout 参数被忽略。\n对已完成的子智能体无副作用。\n-->\nIf True, kill all specified sub-agents and return their results. The timeout parameter is ignored.\nSafe to call on already-finished agents."""
+    )
+    pattern: Optional[str] = Field(
+        None,
+        description="""<!--zh\n正则表达式（Python re 模块语法）；子智能体的 assistant 消息匹配到时提前返回。\n仅 timeout != 0 且 kill=False 时有效。\n典型用法：让子智能体在关键阶段输出约定文本（如 "CHECKPOINT_PHASE_1"），用 pattern 等待该文本出现后验收。\n-->\nRegex pattern (Python re syntax). Returns early when matched in any sub-agent's assistant message.\nOnly effective when timeout != 0 and kill=False.\nTypical usage: instruct the sub-agent to output agreed-upon text at key milestones (e.g., "CHECKPOINT_PHASE_1"), then use pattern to wait for it."""
     )
 
 
 @tool()
 class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
-    """Wait for specified background sub-agents to finish."""
+    """<!--zh: 等待或终止后台子智能体。-->
+    Wait for or kill background sub-agents."""
+
+    def get_prompt_hint(self) -> str:
+        return """\
+<!--zh
+wait_for_subagents 使用规则：
+- timeout > 0：等待最多 N 秒。超时后子智能体仍在运行，你必须选择：
+  1. 再次调用 wait_for_subagents 继续等待
+  2. 用 kill=True 终止它们
+  不处理的子智能体会无限运行并持续消耗资源，不要放任不管。
+- timeout = 0：不等待，立即返回各子智能体的当前状态快照
+- timeout = -1：无限等待，直到所有子智能体完成（兜底上限 60 分钟）
+- kill=True：终止所有指定的子智能体并返回结果（timeout 被忽略）
+- 超时 ≠ 失败：超时只是说明任务还在跑，不是出错了。看 Last message 判断进度，决定是继续 wait 还是 kill
+- 对已完成的子智能体调用 kill 无副作用，安全返回已有结果
+- pattern：Python 正则表达式，用于匹配子智能体的 assistant 消息。任意一个子智能体的新消息命中时立即返回。
+  典型用法：子智能体约定输出 checkpoint 标记（如 [CHECKPOINT:...]），父 agent 用 pattern 等到标记后处理中间结果，再继续等待。
+  规则：只扫描等待开始后产生的新消息，不会匹配历史内容。匹配后子智能体仍在运行，必须再次 wait 或 kill。
+-->
+Rules for wait_for_subagents:
+- timeout > 0: wait up to N seconds. If agents are still running after timeout, you MUST either:
+  1. Call wait_for_subagents again to keep waiting
+  2. Use kill=True to terminate them
+  Unattended agents run indefinitely and consume resources — do not ignore them.
+- timeout = 0: return current status snapshot immediately without waiting
+- timeout = -1: wait indefinitely until all agents finish (capped at 60 minutes)
+- kill=True: kill all specified sub-agents and return their results (timeout is ignored)
+- Timeout does NOT mean failure — it means the agents are still working. Read the "Last message" to gauge progress, then decide: keep waiting or kill.
+- Calling kill on already-finished agents is safe and returns their existing results
+- pattern: Python regex to match against sub-agent assistant messages. Returns immediately when any agent emits a matching message.
+  Typical usage: sub-agents output checkpoint markers (e.g. [CHECKPOINT:...]), parent waits for the marker, processes intermediate results, then resumes waiting.
+  Rules: only scans messages produced AFTER the wait call starts — never matches historical content. The sub-agent keeps running after a match — you must call wait_for_subagents again or kill it.
+"""
 
     async def execute(self, tool_context: ToolContext, params: WaitForSubagentsParams) -> ToolResult:
         # Phase 1: resolve agent_ids to handles or immediate error results
@@ -64,7 +115,7 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
             handle = await subagent_session_manager.get_handle(state.agent_name, agent_id)
             resolved.append((agent_id, state.agent_name, handle, None))
 
-        # Phase 2: wait for all still-running tasks
+        # Phase 2: kill 或 wait
         running_task_refs: dict[asyncio.Task, tuple[str, str]] = {
             handle.task: (agent_name, agent_id)
             for (agent_id, agent_name, handle, err) in resolved
@@ -74,8 +125,34 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
             and handle.is_running()
             and handle.task is not None
         }
-        if running_task_refs and params.timeout != 0:
-            await _wait_for_tasks(running_task_refs, params.timeout, tool_context)
+
+        if params.kill:
+            # kill 语义：终止所有仍在运行的子 Agent
+            if running_task_refs:
+                await asyncio.gather(*(
+                    subagent_session_manager.interrupt_run(
+                        agent_name, agent_id,
+                        reason="Killed by parent agent via wait_for_subagents(kill=True)",
+                        timeout=15.0,
+                    )
+                    for agent_name, agent_id in running_task_refs.values()
+                ))
+            wait_result = None
+        elif running_task_refs and params.timeout != 0:
+            # 编译 pattern
+            compiled_pattern: Optional[re.Pattern] = None
+            if params.pattern:
+                try:
+                    compiled_pattern = re.compile(params.pattern)
+                except re.error as e:
+                    return ToolResult.error(
+                        f"Invalid pattern: {e}. Pattern must be valid Python regex syntax."
+                    )
+            wait_result = await _wait_for_tasks(
+                running_task_refs, params.timeout, tool_context, compiled_pattern,
+            )
+        else:
+            wait_result = None
 
         # Phase 3: read final state for each resolved agent
         results: list[SubagentQueryResult] = []
@@ -91,8 +168,17 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
                     await SubagentRuntimeStore.save_state(state)
             # 超时但仍在运行时，附上最近一条 assistant 消息作为进度快照
             last_activity = None
+            matched_content = None
             if state.status in _IN_FLIGHT_STATUSES:
-                last_activity = await _get_last_assistant_message(state.agent_name, agent_id)
+                # pattern 匹配的 agent 用 matched_content，其余用 last_activity
+                if (
+                    wait_result is not None
+                    and wait_result.reason == "pattern_matched"
+                    and wait_result.matched_agent_id == agent_id
+                ):
+                    matched_content = wait_result.matched_content
+                else:
+                    last_activity = await _get_last_assistant_message(state.agent_name, agent_id)
             results.append(SubagentQueryResult(
                 agent_id=agent_id,
                 agent_name=state.agent_name,
@@ -100,10 +186,11 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
                 result=state.last_result,
                 error=state.last_error,
                 last_activity=last_activity,
+                matched_content=matched_content,
             ))
 
         return ToolResult(
-            content=_build_results_text(results),
+            content=_build_results_text(results, wait_result),
             data={"results": [asdict(result) for result in results]},
         )
 
@@ -133,7 +220,8 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
             error = item.get("error") or ""
 
             status_emoji = _status_emoji.get(status, "🔄")
-            header = f"=== {agent_name} / {agent_id} ===" if agent_name else f"=== {agent_id} ==="
+            display_name = _localize_agent_name(agent_name) if agent_name else ""
+            header = f"=== {display_name} / {agent_id} ===" if agent_name else f"=== {agent_id} ==="
             lines = [header]
             if status:
                 lines.append(f"{t('status')}: {status_emoji} {status}")
@@ -147,11 +235,22 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
             return None
 
         agent_count = len(items)
-        command = (
-            f"wait_for_subagents ({agent_count} agents)"
-            if agent_count > 1
-            else f"wait_for_subagents {items[0].get('agent_id', '')}"
-        )
+        args = arguments or {}
+        is_kill = args.get("kill", False)
+        pattern_arg = args.get("pattern")
+        if is_kill:
+            command = (
+                f"wait_for_subagents --kill ({agent_count} agents)"
+                if agent_count > 1
+                else f"wait_for_subagents --kill {items[0].get('agent_id', '')}"
+            )
+        elif pattern_arg:
+            target = f"({agent_count} agents)" if agent_count > 1 else items[0].get("agent_id", "")
+            command = f"wait_for_subagents --pattern '{pattern_arg}' {target}"
+        elif agent_count > 1:
+            command = f"wait_for_subagents ({agent_count} agents)"
+        else:
+            command = f"wait_for_subagents {items[0].get('agent_id', '')}"
         return ToolDetail(
             type=DisplayType.TERMINAL,
             data=TerminalContent(
@@ -180,23 +279,24 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
             if len(results) == 1 and results[0].get("agent_name"):
                 item = results[0]
                 agent_name = item["agent_name"]
-                action = i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
+                display_name = _localize_agent_name(agent_name)
+                action = i18n.translate("call_subagent.assign", category="tool.messages", agent_name=display_name)
                 status = item.get("status", "")
                 if status in {SubagentStatus.PENDING, SubagentStatus.RUNNING}:
-                    summary = i18n.translate("call_subagent.running", category="tool.messages", agent_name=agent_name)
+                    summary = i18n.translate("call_subagent.running", category="tool.messages", agent_name=display_name)
                 elif status == SubagentStatus.DONE:
-                    summary = i18n.translate("call_subagent.done", category="tool.messages", agent_name=agent_name)
+                    summary = i18n.translate("call_subagent.done", category="tool.messages", agent_name=display_name)
                 elif status == SubagentStatus.ERROR:
                     summary = i18n.translate(
                         "call_subagent.failed",
                         category="tool.messages",
-                        agent_name=agent_name,
+                        agent_name=display_name,
                         error=item.get("error", i18n.translate("unknown.message", category="tool.messages")),
                     )
                 elif status == SubagentStatus.INTERRUPTED:
-                    summary = i18n.translate("call_subagent.interrupted", category="tool.messages", agent_name=agent_name)
+                    summary = i18n.translate("call_subagent.interrupted", category="tool.messages", agent_name=display_name)
                 else:
-                    summary = f"{agent_name}: {status}"
+                    summary = f"{display_name}: {status}"
             else:
                 summary = ", ".join(f"{item['agent_id']}: {item['status']}" for item in results)
             return {"action": action, "remark": summary}
@@ -204,18 +304,34 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
             return {"action": action, "remark": ""}
 
 
+@dataclass
+class WaitResult:
+    """_wait_for_tasks 的返回值，描述等待结束的原因。"""
+    reason: str  # "all_completed" | "timeout" | "pattern_matched"
+    matched_agent_id: Optional[str] = None
+    matched_agent_name: Optional[str] = None
+    matched_content: Optional[str] = None
+
+
 async def _wait_for_tasks(
     task_refs: dict[asyncio.Task, tuple[str, str]],
     timeout: float,
     tool_context: ToolContext,
-) -> None:
-    """等待所有子 agent task 完成，支持超时和父 agent 中断信号。
-    超时后直接返回（不抛异常），调用方读当前状态即可。
-    收到中断信号时抛 CancelledError。
+    pattern: Optional[re.Pattern] = None,
+) -> WaitResult:
+    """等待所有子 agent task 完成，支持超时、pattern 匹配和父 agent 中断信号。
+    - 超时后直接返回 reason="timeout"
+    - pattern 匹配时返回 reason="pattern_matched"
+    - 所有 task 完成时返回 reason="all_completed"
+    - 收到中断信号时抛 CancelledError
+    timeout < 0 视为无限等待，兜底上限 60 分钟。
     """
     tasks = set(task_refs.keys())
     agent_context = tool_context.get_extension("agent_context")
     interruption_event = agent_context.get_interruption_event() if agent_context else None
+
+    # 无限等待时使用 60 分钟兜底
+    effective_timeout = _MAX_INFINITE_WAIT_SECONDS if timeout < 0 else timeout
 
     # 用 wrapper task 等待所有 agent task；父中断时会显式 interrupt 真实子任务。
     async def _wait_all() -> None:
@@ -227,32 +343,80 @@ async def _wait_for_tasks(
     if interruption_event is not None:
         interrupt_task = asyncio.create_task(interruption_event.wait())
 
+    # 长时间等待时定期续期活跃时间，防止沙盒因闲置被杀
+    keep_alive_task = (
+        start_tool_keep_alive(tool_context) if effective_timeout > _KEEP_ALIVE_THRESHOLD else None
+    )
+
     awaitables: set[asyncio.Task] = {wait_task}
     if interrupt_task is not None:
         awaitables.add(interrupt_task)
 
     try:
+        result = WaitResult(reason="timeout")  # 默认
         try:
-            if timeout < 0:
-                done, _ = await asyncio.wait(awaitables, return_when=asyncio.FIRST_COMPLETED)
+            if pattern is not None:
+                # ── 增量轮询模式：每 _POLL_INTERVAL 扫描新消息 ──────
+                message_offsets = await _get_initial_message_counts(task_refs)
+                loop = asyncio.get_event_loop()
+                deadline = loop.time() + effective_timeout
+                while True:
+                    remaining = deadline - loop.time()
+                    if remaining <= 0:
+                        break
+                    poll_wait = min(_POLL_INTERVAL, remaining)
+                    done, _ = await asyncio.wait(
+                        awaitables, timeout=poll_wait,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if interrupt_task is not None and interrupt_task in done:
+                        break  # 下方统一处理中断
+                    if wait_task in done:
+                        result = WaitResult(reason="all_completed")
+                        break
+                    # 增量扫描子 Agent 新消息
+                    match = await _scan_messages_for_pattern(task_refs, pattern, message_offsets)
+                    if match:
+                        agent_id, agent_name, content = match
+                        result = WaitResult(
+                            reason="pattern_matched",
+                            matched_agent_id=agent_id,
+                            matched_agent_name=agent_name,
+                            matched_content=content,
+                        )
+                        break
             else:
-                done, _ = await asyncio.wait(awaitables, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+                # ── 事件驱动模式（无 pattern，零开销等待）──────────
+                done, _ = await asyncio.wait(
+                    awaitables, timeout=effective_timeout,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if wait_task in done:
+                    result = WaitResult(reason="all_completed")
+                # else: timeout (default)
         finally:
             # 清理 wrapper tasks（不影响实际 agent task）
             wait_task.cancel()
             if interrupt_task is not None:
                 interrupt_task.cancel()
+
+        # 中断检查（两种模式共用）
+        if interrupt_task is not None and (
+            interrupt_task.done() or (interruption_event and interruption_event.is_set())
+        ):
+            reason = agent_context.get_interruption_reason() or "Parent agent was interrupted while waiting."
+            await _interrupt_subagents_and_record_notice(task_refs, agent_context, reason)
+            raise asyncio.CancelledError("Interrupted while waiting for sub-agents")
+
+        return result
+
     except asyncio.CancelledError:
         if agent_context is not None:
             reason = agent_context.get_interruption_reason() or "Parent agent was interrupted while waiting."
             await asyncio.shield(_interrupt_subagents_and_record_notice(task_refs, agent_context, reason))
         raise
-
-    if interrupt_task is not None and interrupt_task in done:
-        reason = agent_context.get_interruption_reason() or "Parent agent was interrupted while waiting."
-        await _interrupt_subagents_and_record_notice(task_refs, agent_context, reason)
-        raise asyncio.CancelledError("Interrupted while waiting for sub-agents")
-    # 超时（wait_task 未完成）→ 直接返回，调用方会读到仍在 running 的状态
+    finally:
+        stop_tool_keep_alive(keep_alive_task)
 
 
 async def _interrupt_subagents_and_record_notice(
@@ -328,6 +492,72 @@ def _resolve_terminal_exit_code(items: list[dict[str, Any]]) -> int:
     return 0
 
 
+async def _get_initial_message_counts(
+    task_refs: dict[asyncio.Task, tuple[str, str]],
+) -> dict[str, int]:
+    """获取每个运行中子 Agent 的当前消息总数，作为增量扫描的起始偏移。
+    返回 {agent_id: message_count}。
+    """
+    counts: dict[str, int] = {}
+    for task, (agent_name, agent_id) in task_refs.items():
+        if task.done():
+            continue
+        chat_file = PathManager.get_subagents_chat_history_dir() / f"{agent_name}<{agent_id}>.json"
+        try:
+            if await async_exists(chat_file):
+                data = await async_read_json(chat_file)
+                counts[agent_id] = len(data) if isinstance(data, list) else 0
+            else:
+                counts[agent_id] = 0
+        except Exception:
+            counts[agent_id] = 0
+    return counts
+
+
+async def _scan_messages_for_pattern(
+    task_refs: dict[asyncio.Task, tuple[str, str]],
+    pattern: re.Pattern,
+    message_offsets: dict[str, int],
+) -> Optional[tuple[str, str, str]]:
+    """增量扫描运行中子 Agent 的 assistant 消息，返回首个匹配的 (agent_id, agent_name, matched_content)。
+    只扫描 index >= offset 的新增消息中 role=assistant 的条目。
+    如果检测到上下文压缩（消息数 < offset），重置 offset 到当前长度以跳过压缩摘要。
+    已结束的 agent 跳过（结果由 Phase 3 读取）。
+    """
+    for task, (agent_name, agent_id) in task_refs.items():
+        if task.done():
+            continue
+        chat_file = PathManager.get_subagents_chat_history_dir() / f"{agent_name}<{agent_id}>.json"
+        try:
+            if not await async_exists(chat_file):
+                continue
+            data = await async_read_json(chat_file)
+        except Exception:
+            continue
+        if not isinstance(data, list):
+            continue
+        offset = message_offsets.get(agent_id, 0)
+        current_len = len(data)
+        if current_len < offset:
+            # 上下文压缩：消息数减少，重置 offset 到当前长度
+            # 压缩后内容为 [system_msg, summary_user_msg]，跳过它们
+            offset = current_len
+            message_offsets[agent_id] = offset
+        for msg in data[offset:]:
+            if (
+                isinstance(msg, dict)
+                and msg.get("role") == "assistant"
+                and isinstance(msg.get("content"), str)
+                and msg["content"].strip()
+                and pattern.search(msg["content"])
+            ):
+                content = msg["content"].strip()
+                if len(content) > _LAST_ACTIVITY_MAX_CHARS:
+                    content = content[:_LAST_ACTIVITY_MAX_CHARS] + "..."
+                return (agent_id, agent_name, content)
+    return None
+
+
 async def _get_last_assistant_message(agent_name: str, agent_id: str) -> Optional[str]:
     """从子 Agent 的聊天历史文件中读取最后一条有内容的 assistant 消息，用于超时时的进度快照。"""
     chat_file = PathManager.get_subagents_chat_history_dir() / f"{agent_name}<{agent_id}>.json"
@@ -351,7 +581,10 @@ async def _get_last_assistant_message(agent_name: str, agent_id: str) -> Optiona
     return None
 
 
-def _build_results_text(results: list[SubagentQueryResult]) -> str:
+def _build_results_text(
+    results: list[SubagentQueryResult],
+    wait_result: Optional["WaitResult"] = None,
+) -> str:
     if not results:
         return "No sub-agent results found."
 
@@ -368,9 +601,40 @@ def _build_results_text(results: list[SubagentQueryResult]) -> str:
         if result.result:
             parts.append(f"Result:\n```\n{result.result.strip()}\n```")
 
-        if result.last_activity:
+        # pattern 匹配的消息（与 last_activity 互斥）
+        if result.matched_content:
+            parts.append(f"Pattern matched:\n```\n{result.matched_content.strip()}\n```")
+        elif result.last_activity:
             parts.append(f"Last message:\n```\n{result.last_activity.strip()}\n```")
 
         sections.append("\n".join(parts))
+
+    # 尾部决策引导：告诉模型仍在运行的 agent 必须被处理
+    running_ids = [r.agent_id for r in results if r.status in _IN_FLIGHT_STATUSES]
+    if running_ids:
+        reason = wait_result.reason if wait_result else None
+        ids_str = ", ".join(running_ids)
+        if reason == "pattern_matched":
+            sections.append(
+                f"--- {len(running_ids)} agent(s) still running after pattern match ({ids_str}). "
+                "Sub-agents keep running after a match. You must either: "
+                "(1) call wait_for_subagents again to continue monitoring, or "
+                "(2) use kill=True to terminate. Do not leave running agents unattended."
+            )
+        elif reason == "timeout":
+            sections.append(
+                f"--- {len(running_ids)} agent(s) still running after timeout ({ids_str}). "
+                "Timeout is NOT failure — the agents are still working. You must either: "
+                "(1) call wait_for_subagents again to keep waiting, or "
+                "(2) use kill=True to terminate. "
+                "Unattended agents run indefinitely and consume resources."
+            )
+        else:
+            # timeout=0 快照或其他场景
+            sections.append(
+                f"--- {len(running_ids)} agent(s) still running ({ids_str}). "
+                "Use wait_for_subagents with timeout > 0 to wait for completion, "
+                "or kill=True to terminate."
+            )
 
     return "\n\n".join(sections)

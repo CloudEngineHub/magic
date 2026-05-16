@@ -34,6 +34,11 @@ if TYPE_CHECKING:
 _MAX_AGENT_DEPTH = 1
 
 
+def _localize_agent_name(agent_name: str) -> str:
+    """将 agent_name 翻译为当前语言的展示名称（如 magic → 通用智能体），未命中时原样返回。"""
+    return i18n.translate(agent_name, category="tool.agent_names")
+
+
 class CallSubagentParams(BaseToolParams):
     agent_name: str = Field(
         ...,
@@ -61,10 +66,14 @@ class CallSubagentParams(BaseToolParams):
         False,
         description=(
             "If true, dispatch sub-agent as background asyncio task and return immediately. "
-            "Use wait_for_subagents(agent_ids=[agent_id]) to wait for the result. "
-            "Use this for ALL parallel workloads — call multiple agents with background=True "
-            "sequentially, they run concurrently regardless of whether the model supports "
-            "parallel tool call output. Also used for in-process scheduler tasks."
+            "Use wait_for_subagents(agent_ids=[agent_id]) to wait for the result, "
+            "or wait_for_subagents(agent_ids=[agent_id], kill=True) to kill a running agent. "
+            "Use background=True in two scenarios: "
+            "(1) Parallel workloads — call multiple agents with background=True sequentially, "
+            "they run concurrently regardless of parallel tool call support. "
+            "(2) Long-running tasks — sync mode blocks the parent agent with no progress visibility; "
+            "use background=True + wait_for_subagents to monitor progress, set timeouts, "
+            "or use pattern matching to react to intermediate checkpoints."
         )
     )
 
@@ -232,8 +241,9 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
+        display_name = _localize_agent_name(agent_name) if agent_name else ""
         action = (
-            i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
+            i18n.translate("call_subagent.assign", category="tool.messages", agent_name=display_name)
             if agent_name
             else i18n.translate("call_subagent", category="tool.actions")
         )
@@ -256,7 +266,7 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         t = lambda key: i18n.translate(f"call_subagent.detail.{key}", category="tool.messages")
         lines = []
         if agent_name:
-            lines.append(f"{t('sub_agent')}: {agent_name}")
+            lines.append(f"{t('sub_agent')}: {_localize_agent_name(agent_name)}")
         if agent_id:
             lines.append(f"{t('session_id')}: {agent_id}")
         mode_text = t("mode_background") if background else t("mode_sync")
@@ -329,6 +339,17 @@ Three patterns to follow based on task type:
 3. Fully independent outputs (separate reports per topic, separate canvases per theme, etc.): each agent produces its own distinct deliverable. Specify each agent's output target separately. No coordination needed.
 
 <!--zh
+background 不只是用于并行——任何预计执行时间超过几秒的子智能体任务都应该用 background=True 配合 wait_for_subagents：
+- sync 模式（background=False）会让父智能体完全阻塞，看不到进度，也无法续期沙盒活跃时间
+- background 模式下可以通过 wait_for_subagents 的超时快照、pattern 匹配等机制感知子智能体进度
+- 只有确认能在几秒内完成的轻量任务才适合 sync 模式
+-->
+background is not just for parallelism — use `background=True` + `wait_for_subagents` for any sub-agent task expected to take more than a few seconds:
+- Sync mode (`background=False`) blocks the parent agent entirely with no progress visibility and no sandbox keep-alive
+- Background mode provides progress monitoring via `wait_for_subagents` timeout snapshots and `pattern` matching for checkpoint-based interleaving
+- Only use sync mode for lightweight tasks that finish within seconds
+
+<!--zh
 子智能体可能在结果里包含产物文件路径。向用户汇报时，将这些路径转为 [@file_path:路径] 格式，
 前端会渲染为可点击蓝色链接。
 示例：调研报告已完成：[@file_path:reports/market-research.md]
@@ -353,8 +374,9 @@ Example: Research report is ready: [@file_path:reports/market-research.md]
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
+        display_name = _localize_agent_name(agent_name) if agent_name else ""
         action = (
-            i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
+            i18n.translate("call_subagent.assign", category="tool.messages", agent_name=display_name)
             if agent_name
             else i18n.translate("call_subagent", category="tool.actions")
         )
@@ -654,9 +676,10 @@ def _build_subagent_tool_detail(
     """构建子智能体终端风格详情卡片，供 before/after detail 复用。"""
     t = lambda key: i18n.translate(f"call_subagent.detail.{key}", category="tool.messages")
     status_emoji = _STATUS_EMOJI.get(status, "🔄")
+    display_name = _localize_agent_name(agent_name) if agent_name else ""
     lines = []
     if agent_name:
-        lines.append(f"{t('sub_agent')}: {agent_name}")
+        lines.append(f"{t('sub_agent')}: {display_name}")
     if agent_id:
         lines.append(f"{t('session_id')}: {agent_id}")
     if status:

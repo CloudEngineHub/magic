@@ -83,10 +83,13 @@ Focus on product launch articles, review sites, and tech media. Do not modify fi
 
 ### background
 
-- `False` (default): run synchronously, block until the sub-agent finishes, return result immediately.
+- `False` (default): run synchronously, block until the sub-agent finishes, return result immediately. The parent agent is completely blocked with no progress visibility — only suitable for quick tasks that finish in seconds.
 - `True`: dispatch as a background task and return immediately. Must follow with `wait_for_subagents` to collect the result.
 
-Use `background=True` for all parallel workloads. Sequential `call_subagent(..., background=True)` calls result in concurrent execution regardless of whether the model supports parallel tool calls.
+Use `background=True` in two scenarios:
+
+1. **Parallel workloads**: sequential `call_subagent(..., background=True)` calls result in concurrent execution regardless of whether the model supports parallel tool calls.
+2. **Long-running tasks**: even a single sub-agent should use `background=True` when the task may take more than a few seconds. This gives the parent progress visibility via `wait_for_subagents` (timeout snapshots, `pattern` matching for checkpoint-based interleaving), and keeps the sandbox alive during long waits.
 
 ## Tool: wait_for_subagents
 
@@ -95,9 +98,34 @@ from sdk.tool import tool
 
 result = tool.call("wait_for_subagents", {
     "agent_ids": ["id-a", "id-b"],  # required, list of agent_ids from background calls
-    "timeout":   30,                # optional, seconds, default 30, recommended 30–60
+    "timeout":   30,                # optional, seconds (POSIX: -1 = infinite wait), default 30
+    "kill":      False,             # optional, if True: kill all listed agents immediately
+    "pattern":   None,              # optional, Python regex to match against new assistant messages
 })
 ```
+
+### timeout (POSIX semantics)
+
+| Value | Behavior |
+|-------|----------|
+| `> 0` | Wait up to N seconds. If agents are still running, returns current status with progress snapshot. You must either call again to keep waiting, or use kill=True. Unattended agents run indefinitely. |
+| `= 0` | Return current status snapshot immediately without waiting. |
+| `= -1` | Wait indefinitely until all agents finish (capped at 60 minutes). |
+
+Default is 30 seconds. The tool is designed for repeated calls — timeout does NOT mean failure, it means "still running". Read the `Last message:` progress snapshot to decide whether to keep waiting or kill.
+
+### kill
+
+Set `kill=True` to immediately terminate all specified sub-agents and return their results. The `timeout` parameter is ignored when `kill=True`. Safe to call on already-finished agents.
+
+### Handling `running` status
+
+When `wait_for_subagents` returns agents with status `running`, those agents are still executing in the background. You must take one of these actions:
+
+1. **Keep waiting**: call `wait_for_subagents` again with the same `agent_ids` (and optionally a longer timeout)
+2. **Kill**: call `wait_for_subagents` with `kill=True` to terminate them immediately
+
+Do not proceed without dealing with running agents — they run indefinitely and consume resources until explicitly waited on or killed. Read the `Last message:` progress snapshot in the result to decide: if the agent is making progress, wait longer; if it looks stuck or the task is no longer needed, kill it.
 
 Awaits all listed agents together. `result.content` uses this format per agent:
 
@@ -110,8 +138,8 @@ Result:
 - `status` values: `done`, `error`, `interrupted`, `running`, `not_found`, `ambiguous`
 - `Result:` appears only when status is `done` — contains the sub-agent's final output
 - When status is `running` (timed out), `Result:` is replaced by `Last message:` — this is the last assistant message the sub-agent produced before the timeout, useful for gauging progress
-- `wait_for_subagents` is idempotent — if status is still `running`, call it again or decide to stop waiting
-- `result.data["results"]`: structured list for programmatic access, fields: `agent_id`, `agent_name`, `status`, `result`, `error`, `last_activity`
+- `wait_for_subagents` is idempotent — if status is still `running`, call it again or kill it. Do not ignore running agents — they consume resources indefinitely until explicitly waited on or killed.
+- `result.data["results"]`: structured list for programmatic access, fields: `agent_id`, `agent_name`, `status`, `result`, `error`, `last_activity`, `matched_content`
 
 ## Output Target
 
@@ -188,7 +216,48 @@ result = tool.call("wait_for_subagents", {
 })
 
 print(result.content)
+# If result shows any agent with status "running":
+# - Read "Last message:" to gauge progress
+# - Call wait_for_subagents again to keep waiting, OR
+# - Call wait_for_subagents with kill=True to terminate
+# Do NOT ignore running agents — they consume resources indefinitely.
 ```
+
+## Advanced: Checkpoint Pattern Matching
+
+Use `pattern` to implement interleaved parent/sub-agent execution. The sub-agent outputs a checkpoint marker; the parent wakes up on match, processes intermediate results, then resumes waiting.
+
+```python
+from sdk.tool import tool
+
+# Dispatch a sub-agent that outputs checkpoints
+tool.call("call_subagent", {
+    "agent_name": "explore",
+    "agent_id": "long-research",
+    "prompt": """Research X thoroughly. After each major section, output exactly:
+[CHECKPOINT: section_name]
+followed by your findings so far. Continue until all sections are done.""",
+    "background": True,
+})
+
+# Wait for the first checkpoint
+result = tool.call("wait_for_subagents", {
+    "agent_ids": ["long-research"],
+    "timeout": 120,
+    "pattern": r"\[CHECKPOINT:",
+})
+
+# result.data["results"][0]["matched_content"] contains the message with the checkpoint
+# Process intermediate results, then wait for next checkpoint or completion
+```
+
+Rules:
+- `pattern` is a Python regex matched against each new assistant message (after the wait call starts)
+- Only messages produced AFTER the wait call are scanned — no false triggers from historical content
+- When matched, `result.data["results"][i]["matched_content"]` contains the full message that triggered the match
+- The sub-agent continues running after a pattern match — call `wait_for_subagents` again to keep collecting, or use `kill=True` to terminate if the task is done
+- If the agent finishes before any match, returns normally with `status: done`
+- Pattern errors (invalid regex) return an immediate error result
 
 ## Checklist
 
@@ -199,3 +268,4 @@ Before dispatching:
 - Is `agent_id` stable, human-readable, and unique to this task branch?
 - Is the output target explicit and conflict-free?
 - If `background=True`, is there a matching `wait_for_subagents`?
+- If an agent needs to be stopped, use `wait_for_subagents(agent_ids=[...], kill=True)` instead of re-dispatching
