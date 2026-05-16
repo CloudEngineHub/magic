@@ -25,8 +25,14 @@ from app.tools.shell_exec_utils.bg_errors import (
 )
 from app.tools.shell_exec_utils.bg_process_manager import BackgroundProcessManager
 from app.tools.shell_exec_utils.bg_task_models import TaskStatus
+from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 
 logger = get_logger(__name__)
+
+# 无限等待（timeout=-1）的最大兜底时间：60 分钟
+_MAX_INFINITE_WAIT_SECONDS = 3600.0
+# 超过此阈值的等待触发定期续期（防止沙盒因闲置被杀）
+_KEEP_ALIVE_THRESHOLD = 60.0
 
 
 class ShellAwaitParams(BaseToolParams):
@@ -41,17 +47,26 @@ If omitted, the tool simply sleeps for timeout seconds (useful as an async alter
     )
     timeout: int = Field(
         description="""<!--zh
-等待超时秒数。含义取决于 task_id 是否提供：
+等待超时秒数（POSIX 语义）。含义取决于 task_id 是否提供：
 - 无 task_id：sleep 时长（须 >= 0）
 - 有 task_id，timeout > 0：最长等待时间
 - 有 task_id，timeout = 0：立即返回当前输出，不等待
-- 有 task_id，timeout = -1：立即 kill 该任务并返回已有输出
+- 有 task_id，timeout = -1：无限等待，直到进程结束（兜底上限 60 分钟）
 -->
-Timeout in seconds.
+Timeout in seconds (POSIX semantics).
 - No task_id: sleep duration (must be >= 0).
 - With task_id and timeout > 0: max wait time for output or process completion.
 - With task_id and timeout = 0: return current output immediately without waiting.
-- With task_id and timeout = -1: immediately kill the task and return its current output."""
+- With task_id and timeout = -1: wait indefinitely until the process finishes (capped at 60 minutes)."""
+    )
+    kill: bool = Field(
+        False,
+        description="""<!--zh
+设为 True 时立即终止该后台任务并返回已有输出。timeout 参数被忽略。
+对已结束的任务无副作用。
+-->
+If True, immediately kill the task and return its current output. The timeout parameter is ignored.
+Safe to call on already-finished tasks."""
     )
 
     pattern: Optional[str] = Field(
@@ -67,10 +82,10 @@ Only effective when task_id is provided and timeout > 0."""
         None,
         description="""<!--zh
 向进程 stdin 写入的文本（交互命令场景）。末尾须含换行符 \\n 才能触发命令行读取。
-仅 timeout >= 0 且 task_id 有值时有效；kill 模式（timeout=-1）下忽略。
+仅 timeout >= 0 且 task_id 有值时有效；kill 模式下忽略。
 -->
 Text to write to the process stdin (for interactive commands).
-Must end with \\n to trigger readline. Ignored in kill mode (timeout=-1)."""
+Must end with \\n to trigger readline. Ignored when kill=True."""
     )
 
     @model_validator(mode="before")
@@ -99,7 +114,8 @@ shell_await 使用规则：
 - pattern 为 Python 正则，匹配到新输出即提前返回，适合等待特定日志行出现
 - input_text 末尾必须含 \\n 才能触发交互命令的 readline
 - timeout=0 且有 task_id 时：立即返回当前输出快照，不等待进程结束
-- timeout=-1 且有 task_id 时为 kill 语义，立即终止后台任务并返回已有输出；对已结束任务无副作用
+- timeout=-1 且有 task_id 时：无限等待，直到进程结束（兜底上限 60 分钟）
+- kill=True：立即终止后台任务并返回已有输出；对已结束任务无副作用
 - 对 waiting_for_input 状态的任务：先用 ask_user 向用户收集输入，再通过 input_text 参数发送；不要直接 kill
 - ask_user 类型选择（根据命令输出中的提示内容判断）：
   - 输出含 (y/n)、(yes/no) → 用 confirm 类型或带 y/n 选项的 select 类型
@@ -112,7 +128,8 @@ Rules for shell_await:
 - pattern: Python regex; matched against new output, triggers early return when found
 - input_text MUST end with \\n to trigger readline in interactive commands
 - timeout=0 with task_id: return current output snapshot immediately without waiting
-- timeout=-1 with task_id: kills the task immediately; safe to call on already-finished tasks
+- timeout=-1 with task_id: wait indefinitely until the process finishes (capped at 60 minutes)
+- kill=True: immediately kill the task and return its current output; safe to call on already-finished tasks
 - For waiting_for_input tasks: collect input via ask_user first, then send via input_text; do not kill
 - Choosing the ask_user question type (infer from the prompt text in command output):
   - Output contains (y/n) or (yes/no) → use confirm type or select with y/n options
@@ -145,8 +162,8 @@ Rules for shell_await:
                 result.set_exit_code(-1)
                 return result
 
-            # ── kill 模式（timeout=-1）───────────────────────────────────────
-            if params.timeout == -1:
+            # ── kill 模式（kill=True）────────────────────────────────────────
+            if params.kill:
                 if task.status != TaskStatus.RUNNING:
                     content = err_kill_on_finished_task(params.task_id, task.status.value)
                     output = truncate_output_for_llm(await manager._store.read_full(params.task_id))
@@ -173,7 +190,7 @@ Rules for shell_await:
                 result.set_exit_code(0)
                 return result
 
-            # ── 等待模式（timeout >= 0）──────────────────────────────────────
+            # ── 等待模式（timeout >= 0 或 timeout == -1 无限等待）──────────────
             # 编译 pattern（如果有）
             compiled_pattern: Optional[re.Pattern] = None
             if params.pattern:
@@ -199,12 +216,17 @@ Rules for shell_await:
                     except Exception as e:
                         logger.warning("shell_await: write_stdin failed for %s: %s", params.task_id, e)
 
-            # 轮询等待
-            output, reason, exit_code = await manager.wait_for_pattern(
-                task_id=params.task_id,
-                pattern=compiled_pattern,
-                timeout=float(params.timeout),
-            )
+            # 轮询等待（timeout=-1 时无限等待，60 分钟兜底；长等待定期续期防止沙盒闲置被杀）
+            effective_timeout = _MAX_INFINITE_WAIT_SECONDS if params.timeout < 0 else float(params.timeout)
+            keep_alive_task = start_tool_keep_alive(tool_context) if effective_timeout > _KEEP_ALIVE_THRESHOLD else None
+            try:
+                output, reason, exit_code = await manager.wait_for_pattern(
+                    task_id=params.task_id,
+                    pattern=compiled_pattern,
+                    timeout=effective_timeout,
+                )
+            finally:
+                stop_tool_keep_alive(keep_alive_task)
 
             # 检查日志文件是否存在（极端情况：被手动删除）
             if not output and reason not in ("completed", "killed", "error"):
@@ -323,6 +345,10 @@ Rules for shell_await:
             status = ""
             exit_code = 0
 
-        cmd_label = f"shell_await task_id={task_id}" if task_id else "shell_await(sleep)"
+        is_kill = (arguments or {}).get("kill", False)
+        if is_kill:
+            cmd_label = f"shell_await --kill task_id={task_id}" if task_id else "shell_await --kill"
+        else:
+            cmd_label = f"shell_await task_id={task_id}" if task_id else "shell_await(sleep)"
         terminal_content = TerminalContent(command=cmd_label, output=output, exit_code=exit_code)
         return ToolDetail(type=DisplayType.TERMINAL, data=terminal_content)
