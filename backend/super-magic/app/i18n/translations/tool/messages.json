@@ -1028,8 +1028,8 @@
         "en_US": "Sub-agent call failed: {{error}}"
     },
     "call_subagent.assign": {
-        "zh_CN": "{{agent_name}} 子智能体",
-        "en_US": "{{agent_name}} sub-agent"
+        "zh_CN": "{{agent_name}}",
+        "en_US": "{{agent_name}}"
     },
     "call_subagent.running": {
         "zh_CN": "{{agent_name}} 正在执行任务",
