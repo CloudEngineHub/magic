@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Application\Agent\Assembler;
 
+use App\Domain\Contact\Entity\MagicDepartmentEntity;
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\OrganizationEnvironment\Entity\OrganizationEntity;
@@ -39,13 +40,21 @@ class AdminSuperMagicAgentAssembler
     public function createQueryVersionsResponseDTO(
         array $versions,
         Page $page,
-        int $total
+        int $total,
+        array $publishTargetUserMap = [],
+        array $memberDepartmentMap = []
     ): QueryAgentVersionsResponseAdminDTO {
         $publisherUserMap = $this->buildPublisherUserMap($versions);
         $organizationMap = $this->buildOrganizationMap($versions);
 
         $list = array_map(
-            fn (AgentVersionEntity $entity) => $this->createVersionListItemDTO($entity, $publisherUserMap, $organizationMap),
+            fn (AgentVersionEntity $entity) => $this->createVersionListItemDTO(
+                $entity,
+                $publisherUserMap,
+                $organizationMap,
+                $publishTargetUserMap,
+                $memberDepartmentMap
+            ),
             $versions
         );
 
@@ -178,11 +187,15 @@ class AdminSuperMagicAgentAssembler
     /**
      * @param array<string, MagicUserEntity> $publisherUserMap
      * @param array<string, OrganizationEntity> $organizationMap
+     * @param array<string, MagicUserEntity> $publishTargetUserMap
+     * @param array<string, MagicDepartmentEntity> $memberDepartmentMap
      */
     private function createVersionListItemDTO(
         AgentVersionEntity $entity,
         array $publisherUserMap,
-        array $organizationMap
+        array $organizationMap,
+        array $publishTargetUserMap,
+        array $memberDepartmentMap
     ): AgentVersionListItemAdminDTO {
         $publisher = PublisherInfoAdminDTO::empty();
         $publisherUserId = $entity->getPublisherUserId();
@@ -213,12 +226,54 @@ class AdminSuperMagicAgentAssembler
             reviewStatus: $entity->getReviewStatus()->value,
             reviewRemark: $entity->getReviewRemark(),
             publishTargetType: $entity->getPublishTargetType()->value,
+            publishTargetValue: $this->buildEnrichedPublishTargetValue($entity, $publishTargetUserMap, $memberDepartmentMap),
             type: $entity->getType(),
             isCurrentVersion: $entity->isCurrentVersion(),
             publisher: $publisher,
             createdAt: $entity->getCreatedAt() ?? '',
             publishedAt: $entity->getPublishedAt()
         );
+    }
+
+    /**
+     * 构建 MEMBER 发布目标的用户和部门展示值.
+     *
+     * @param array<string, MagicUserEntity> $userMap
+     * @param array<string, MagicDepartmentEntity> $memberDepartmentMap
+     * @return null|array{users: array<array{id: string, name: string}>, departments: array<array{id: string, name: string}>}
+     */
+    private function buildEnrichedPublishTargetValue(
+        AgentVersionEntity $version,
+        array $userMap,
+        array $memberDepartmentMap
+    ): ?array {
+        $targetValue = $version->getPublishTargetValue();
+        if ($targetValue === null || ! $version->getPublishTargetType()->requiresTargetValue()) {
+            return null;
+        }
+
+        $users = [];
+        foreach ($targetValue->getUserIds() as $userId) {
+            $userEntity = $userMap[$userId] ?? null;
+            $users[] = [
+                'id' => $userId,
+                'name' => $userEntity?->getNickname() ?: $userId,
+            ];
+        }
+
+        $departments = [];
+        foreach ($targetValue->getDepartmentIds() as $departmentId) {
+            $departmentEntity = $memberDepartmentMap[$departmentId] ?? null;
+            $departments[] = [
+                'id' => $departmentId,
+                'name' => $departmentEntity?->getName() ?: $departmentId,
+            ];
+        }
+
+        return [
+            'users' => $users,
+            'departments' => $departments,
+        ];
     }
 
     /**

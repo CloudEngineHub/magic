@@ -2099,6 +2099,25 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         $this->assertEquals('UNDER_REVIEW', $memberResponse['data']['review_status']);
         $this->assertEquals('MEMBER', $memberResponse['data']['publish_target_type']);
 
+        $memberListResponse = $this->post(
+            '/api/v1/organization/admin/super-magic/agents/versions/queries',
+            [
+                'page' => 1,
+                'page_size' => 20,
+                'review_status' => 'UNDER_REVIEW',
+            ],
+            $headers
+        );
+        $this->assertEquals(1000, $memberListResponse['code'], $memberListResponse['message'] ?? '');
+        $memberListItem = array_values(array_filter(
+            $memberListResponse['data']['list'],
+            static fn (array $item): bool => $item['id'] === (string) $memberResponse['data']['version_id']
+        ))[0] ?? null;
+        $this->assertNotNull($memberListItem);
+        $this->assertSame('MEMBER', $memberListItem['publish_target_type']);
+        $this->assertSame($targetUserId, $memberListItem['publish_target_value']['users'][0]['id']);
+        $this->assertSame($targetDepartmentId, $memberListItem['publish_target_value']['departments'][0]['id']);
+
         $memberApproveResponse = $this->put(
             '/api/v1/organization/admin/super-magic/agents/versions/' . $memberResponse['data']['version_id'] . '/review',
             [

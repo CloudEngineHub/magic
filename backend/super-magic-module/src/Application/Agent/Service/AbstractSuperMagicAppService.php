@@ -10,7 +10,10 @@ namespace Dtyq\SuperMagic\Application\Agent\Service;
 use App\Application\Contact\UserSetting\UserSettingKey;
 use App\Application\Kernel\AbstractKernelAppService;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
+use App\Domain\Contact\Entity\MagicDepartmentEntity;
+use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
+use App\Domain\Contact\Service\MagicDepartmentDomainService;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\Flow\Entity\ValueObject\FlowDataIsolation;
@@ -96,6 +99,65 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
         // 先创建SuperMagicDataIsolation，然后转换为ContactDataIsolation
         $superMagicDataIsolation = $this->createSuperMagicDataIsolation($authorization);
         return $this->createContactDataIsolationByBase($superMagicDataIsolation);
+    }
+
+    /**
+     * 批量加载 Agent 版本列表关联的用户与部门信息.
+     *
+     * 传入组织编码时按该组织查询；不传时按版本所属组织分组查询，适用于管理后台跨组织列表。
+     *
+     * @param null|string $organizationCode 指定组织编码；为 null 时使用版本实体上的组织编码
+     * @param AgentVersionEntity[] $versions
+     * @return array{0: array<string, MagicUserEntity>, 1: array<string, MagicDepartmentEntity>}
+     */
+    protected function batchLoadAgentVersionRelatedEntities(?string $organizationCode, array $versions): array
+    {
+        $userIdsByOrganization = [];
+        $departmentIdsByOrganization = [];
+
+        foreach ($versions as $version) {
+            $currentOrganizationCode = $organizationCode ?? $version->getOrganizationCode();
+            if ($currentOrganizationCode === '') {
+                continue;
+            }
+
+            if (! empty($version->getPublisherUserId())) {
+                $userIdsByOrganization[$currentOrganizationCode][] = $version->getPublisherUserId();
+            }
+
+            $targetValue = $version->getPublishTargetValue();
+            if ($targetValue === null || ! $version->getPublishTargetType()->requiresTargetValue()) {
+                continue;
+            }
+
+            foreach ($targetValue->getUserIds() as $userId) {
+                $userIdsByOrganization[$currentOrganizationCode][] = $userId;
+            }
+            foreach ($targetValue->getDepartmentIds() as $departmentId) {
+                $departmentIdsByOrganization[$currentOrganizationCode][] = $departmentId;
+            }
+        }
+
+        $userMap = [];
+        foreach ($userIdsByOrganization as $currentOrganizationCode => $userIds) {
+            foreach ($this->getUsers($currentOrganizationCode, array_values(array_unique($userIds))) as $userId => $userEntity) {
+                $userMap[$userId] = $userEntity;
+            }
+        }
+
+        $memberDepartmentMap = [];
+        foreach ($departmentIdsByOrganization as $currentOrganizationCode => $departmentIds) {
+            $departmentEntities = di(MagicDepartmentDomainService::class)->getDepartmentByIds(
+                ContactDataIsolation::simpleMake($currentOrganizationCode),
+                array_values(array_unique($departmentIds)),
+                true
+            );
+            foreach ($departmentEntities as $departmentId => $departmentEntity) {
+                $memberDepartmentMap[$departmentId] = $departmentEntity;
+            }
+        }
+
+        return [$userMap, $memberDepartmentMap];
     }
 
     /**

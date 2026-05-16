@@ -70,11 +70,16 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $query,
             $page
         );
+        /** @var AgentVersionEntity[] $versions */
+        $versions = $result['list'];
+        [$publishTargetUserMap, $memberDepartmentMap] = $this->batchLoadAgentVersionRelatedEntities(null, $versions);
 
         return $this->adminSuperMagicAgentAssembler->createQueryVersionsResponseDTO(
-            $result['list'],
+            $versions,
             $page,
-            $result['total']
+            $result['total'],
+            $publishTargetUserMap,
+            $memberDepartmentMap
         );
     }
 
@@ -135,11 +140,16 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $query,
             $page
         );
+        /** @var AgentVersionEntity[] $versions */
+        $versions = $result['list'];
+        [$publishTargetUserMap, $memberDepartmentMap] = $this->batchLoadAgentVersionRelatedEntities(null, $versions);
 
         return $this->adminSuperMagicAgentAssembler->createQueryVersionsResponseDTO(
-            $result['list'],
+            $versions,
             $page,
-            $result['total']
+            $result['total'],
+            $publishTargetUserMap,
+            $memberDepartmentMap
         );
     }
 
