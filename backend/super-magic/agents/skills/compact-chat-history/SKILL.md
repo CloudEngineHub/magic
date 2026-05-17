@@ -34,7 +34,8 @@ Your summary must include the following sections:
 
 **3. Skills Needed to Resume This Task**
 - List skills that are helpful or relevant to continuing the current task, in order of importance
-- Include skill name and purpose
+- Include skill name and a one-line purpose description
+- Do NOT reproduce, summarize, or paraphrase any skill content — skills will be re-loaded via `read_skills()` after compression, so repeating their content here wastes context budget
 - Write "None" if there are no relevant skills
 
 **4. Resolved Issues and Current State**
@@ -79,9 +80,9 @@ If any of the above sections overlap, merge them — no need to repeat.
    - Avoid reading all files at once to prevent filling up context again
 
 3. Skills Needed to Resume This Task:
-   - [High] [Skill name] - [purpose]
-   - [Medium] [Skill name] - [purpose]
-   - [Low] [Skill name] - [purpose]
+   - [Skill name] - [one-line purpose]
+   - [Skill name] - [one-line purpose]
+   (Do NOT include skill content — it will be re-loaded automatically)
 
 4. Resolved Issues and Current State:
    [Description of resolved issues and ongoing troubleshooting]

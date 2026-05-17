@@ -2277,9 +2277,10 @@ class Agent(BaseAgent):
 
 ---
 You were interrupted. The above contains a summary of your previous thinking and work. Resume in this order:
-1. Read all files listed in the key files section first — these are essential to restoring your work state
-2. Review reference files as needed for background context
-3. Once you understand the current project state, continue the interrupted task
+1. If the summary lists skills needed to resume, call `read_skills()` to reload them first — they provide the methodology and workflow constraints for your task
+2. Read all files listed in the key files section — these are essential to restoring your work state
+3. Review reference files as needed for background context
+4. Once you understand the current project state, continue the interrupted task
 Since your subsequent output will be merged with pre-interruption content and displayed together in the frontend, conversational continuity is critical. Please assume:
 1. You were not interrupted
 2. You are simply reviewing prior work details after a brief pause
