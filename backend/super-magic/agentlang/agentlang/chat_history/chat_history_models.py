@@ -56,6 +56,17 @@ class CompactionConfig:
     token_threshold: int = 0  # 触发压缩的 Token 阈值
     max_conversation_rounds: int = 500  # 触发压缩的消息数量阈值
 
+    # 后台压缩提前比例（到达 token_threshold 的此比例时启动后台压缩）
+    early_compact_ratio: float = 0.8
+
+    @property
+    def early_compact_threshold(self) -> int:
+        """后台压缩触发阈值 = token_threshold × early_compact_ratio"""
+        return max(
+            self.min_token_threshold,
+            int(self.token_threshold * self.early_compact_ratio),
+        )
+
     # Dynamic threshold calculation (kept for compatibility)
     default_token_threshold: int = 100_000
     min_token_threshold: int = 100_000
@@ -63,41 +74,58 @@ class CompactionConfig:
     context_usage_ratio: float = 0.9
     # FIXME: 临时措施：定价分区压缩策略表（硬编码）
     # 命中规则优先于 context_usage_ratio；未命中时回退到比例策略。
+    # 只收录上下文窗口 >200K 且需要显式规则的模型。
+    # 以下模型 ≤205K 上下文，回退到 context_usage_ratio 即可得到合理阈值（≤184K），无需加入规则：
+    #   MiniMax M2.7 (205K, 线性), GLM 5.1 (200K, 32K处跳档)
     pricing_tier_rules: List[PricingTierCompactionRule] = field(
         default_factory=lambda: [
-            # 已知价格在 200K 输入附近跳档的模型，固定在 180K 触发压缩。
-            # Claude 关键词同时兼容两种命名顺序，这是历史遗留导致的模型命名不规范问题。
+            # 200K 跳档：价格在 200K 输入附近翻倍的模型，固定在 180K 触发压缩。
+            # Claude $3→$6/MTok（Sonnet/Opus 均在 200K 处跳档）。
+            # Gemini Pro $1.25→$2.50 / $2→$4/MTok（200K 处跳档）。
+            # Claude 关键词同时兼容两种命名顺序（历史遗留的命名不规范问题）。
             PricingTierCompactionRule(
                 name="pricing_cliff_200k",
                 pricing_interval="200K",
                 model_keywords=(
                     "claude-sonnet-4.6",
                     "claude-4.6-sonnet",
-                    "claude-sonnet-4.5",
-                    "claude-4.5-sonnet",
-                    "claude-sonnet-4",
-                    "claude-4-sonnet",
-                    "gemini-3-pro",
-                    "gemini-3-pro-preview",
+                    "claude-opus-4.6",
+                    "claude-4.6-opus",
+                    # "gemini-3.1-pro" 子串覆盖 gemini-3.1-pro-preview
                     "gemini-3.1-pro",
-                    "gemini-3.1-pro-preview",
+                    # Step / MiMo 系列（上下文窗口待确认，保守归入 200K 档）
+                    "step-3.5-flash",
+                    "mimo-v2.5",
                 ),
                 token_threshold=180_000,
             ),
-            # 已知价格在 256K 输入附近跳档的模型，固定在 230K 触发压缩
+            # 230K 通用档：256K 跳档模型 + 1M 大上下文线性计费模型，统一在 230K 触发压缩。
+            # - Qwen/Doubao Seed: 价格在 256K 附近跳档
+            # - GPT-5.x, DeepSeek V4: 1M 上下文无跳档，但线性成本仍需控制
+            # - Kimi K2.6: 256K 上下文，线性计费
+            # - Gemini Flash: 1M 上下文无跳档，线性计费
+            # 前缀/子串匹配：如 "gpt-5.4" 覆盖 mini/nano，"doubao-seed-2.0" 覆盖 pro/lite/code。
             PricingTierCompactionRule(
-                name="pricing_cliff_256k",
-                pricing_interval="256K",
+                name="threshold_230k",
+                pricing_interval="256K+",
                 model_keywords=(
+                    # Qwen 系列（256K 跳档）
                     "qwen3-max",
                     "qwen3-coder-plus",
+                    "qwen3.6-plus",
                     "qwen3.5-plus",
                     "qwen3.5-flash",
-                    "qwen-plus",
-                    "seed-2.0-pro",
-                    "seed-2.0-lite",
-                    "doubao-seed-2.0-pro",
-                    "doubao-seed-2.0-lite",
+                    # Doubao Seed 系列（256K 跳档，子串覆盖 pro/lite/code）
+                    "doubao-seed-2.0",
+                    # GPT 系列（1M 上下文，线性计费）
+                    "gpt-5.4",
+                    # DeepSeek V4 系列（1M 上下文，线性计费）
+                    "deepseek-v4",
+                    "deepseek-v4-flash",
+                    # Kimi K2 系列（256K 上下文，线性计费）
+                    "kimi-k2",
+                    # Gemini Flash 系列（1M 上下文，线性计费）
+                    "gemini-3-flash",
                 ),
                 token_threshold=230_000,
             ),
