@@ -35,6 +35,7 @@ result = tool.call("call_subagent", {
     "prompt":     str,   # required
     "model_id":   str,   # optional, defaults to inheriting the caller's model
     "background": bool,  # optional, default False
+    "fork":       bool,  # optional, default False
 })
 ```
 
@@ -90,6 +91,13 @@ Use `background=True` in two scenarios:
 
 1. **Parallel workloads**: sequential `call_subagent(..., background=True)` calls result in concurrent execution regardless of whether the model supports parallel tool calls.
 2. **Long-running tasks**: even a single sub-agent should use `background=True` when the task may take more than a few seconds. This gives the parent progress visibility via `wait_for_subagents` (timeout snapshots, `pattern` matching for checkpoint-based interleaving), and keeps the sandbox alive during long waits.
+
+### fork
+
+- `False` (default): sub-agent starts with empty conversation history. The `prompt` must be fully self-contained.
+- `True`: sub-agent inherits the parent's full conversation history. The `prompt` is a **directive** (what to do), not a briefing (what happened) — the fork already has full context.
+
+Fork mode is useful when the sub-agent needs to reason over the same conversation context as the parent, e.g. generating a summary, extracting decisions, or continuing a task in isolation.
 
 ## Tool: wait_for_subagents
 

@@ -13,6 +13,7 @@ from app.tools.subagent_runtime_store import SubagentRuntimeStore
 from app.tools.subagent_session_manager import subagent_session_manager
 
 if TYPE_CHECKING:
+    from agentlang.chat_history.chat_history import ChatHistory
     from app.core.context.agent_context import AgentContext
     from app.magic.agent import Agent
 
@@ -118,6 +119,8 @@ async def run_isolated_agent(
     parent_context: Optional["AgentContext"] = None,
     model_id: Optional[str] = None,
     image_model_id: Optional[str] = None,
+    fork_source_chat_history: Optional["ChatHistory"] = None,
+    disable_compaction: bool = False,
 ) -> Optional[str]:
     """
     运行一个隔离 sub-agent，等待完成并返回结果。
@@ -126,6 +129,10 @@ async def run_isolated_agent(
     parent_context 为 None 时（cron 等系统级调用场景），
     内部创建独立的 root context，从全局配置读取必要参数，
     不继承任何运行时父 context。
+
+    fork_source_chat_history: 从指定 ChatHistory 分叉（浅拷贝消息列表），
+        子 Agent 继承完整对话上下文。用于后台压缩等需要上下文连贯的场景。
+    disable_compaction: 禁用子 Agent 的上下文压缩，防止 fork 出的 Agent 自触发压缩。
     """
     from app.core.context.agent_context import AgentContext
     from app.magic.agent import Agent
@@ -149,6 +156,15 @@ async def run_isolated_agent(
     task: Optional[asyncio.Task] = None
     try:
         agent = Agent(agent_name, agent_id=agent_id, agent_context=new_context)
+
+        # Fork: 从源 ChatHistory 分叉，子 Agent 继承父 Agent 的完整对话上下文
+        if fork_source_chat_history is not None:
+            await agent.chat_history.fork_from(fork_source_chat_history)
+
+        # 禁用压缩：防止 fork 出的 Agent（上下文已接近阈值）自触发压缩
+        if disable_compaction:
+            agent.compaction_config.enable_compaction = False
+
         handle = await subagent_session_manager.get_handle(agent_name, agent_id)
 
         async with handle.lock:

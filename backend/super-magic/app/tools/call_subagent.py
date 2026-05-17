@@ -76,6 +76,14 @@ class CallSubagentParams(BaseToolParams):
             "or use pattern matching to react to intermediate checkpoints."
         )
     )
+    fork: bool = Field(
+        False,
+        description=(
+            "Fork mode: the sub-agent starts with your full conversation history "
+            "and context. The prompt is a directive — what to do, not a briefing "
+            "of what happened (because the fork already knows)."
+        ),
+    )
 
 
 @tool()
@@ -153,6 +161,12 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                     agent_id=params.agent_id,
                     agent_context=new_agent_context,
                 )
+
+                # Fork: 从父 Agent 分叉对话历史，子 Agent 继承完整上下文
+                if params.fork and parent is not None:
+                    parent_chat_history = getattr(parent, "chat_history", None)
+                    if parent_chat_history is not None:
+                        await agent.chat_history.fork_from(parent_chat_history)
 
                 _prepare_state_for_dispatch(
                     state=state,

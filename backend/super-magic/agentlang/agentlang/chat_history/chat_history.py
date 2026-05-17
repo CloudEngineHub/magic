@@ -527,6 +527,16 @@ class ChatHistory:
         self.messages = []
         await self.load()
 
+    async def fork_from(self, source: "ChatHistory") -> None:
+        """从另一个 ChatHistory 分叉，复制其消息列表。
+
+        用于 subagent fork 场景：子 Agent 继承父 Agent 的完整对话上下文。
+        浅拷贝 messages 列表安全——ChatMessage 是 dataclass，不会被原地修改。
+        """
+        self.messages = list(source.messages)
+        self._loaded = True
+        await self.save()
+
     async def load(self) -> None:
         """
         从 JSON 文件异步加载聊天记录。
