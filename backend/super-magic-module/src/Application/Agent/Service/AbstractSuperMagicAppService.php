@@ -213,16 +213,18 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
     /**
      * 获取用户可访问的智能体编码列表.
-     * @return array{accessible: array<string>, creator: array<string>, codes: array<string>}
+     * @return array{accessible: array<string>, creator: array<string>, codes: array<string>, operations: array<string, Operation>}
      */
     protected function getAccessibleAgentCodes(SuperMagicAgentDataIsolation $dataIsolation, string $userId): array
     {
-        /** @var array<string> $accessibleCodes */
-        $accessibleCodes = $this->resourceAccessPolicyService->getReadableResourceCodes(
+        /** @var array{operations: array<string, Operation>, all_codes: array<string>} $accessibleAgentResult */
+        $accessibleAgentResult = $this->resourceAccessPolicyService->getReadableResourceCodes(
             $dataIsolation,
             OperationPermissionResourceType::CustomAgent,
             ResourceVisibilityResourceType::SUPER_MAGIC_AGENT
-        )['all_codes'] ?? [];
+        );
+        /** @var array<string> $accessibleCodes */
+        $accessibleCodes = $accessibleAgentResult['all_codes'] ?? [];
         // 查询用户自己创建的智能体编码（用户创建的必然可见）
         /** @var array<string> $creatorCodes */
         $creatorCodes = $this->superMagicAgentDomainService->getCodesByCreator($dataIsolation, $userId);
@@ -235,6 +237,7 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
             'accessible' => $accessibleCodes,
             'creator' => $creatorCodes,
             'codes' => array_values(array_unique(array_merge($creatorCodes, $accessibleCodes))),
+            'operations' => $accessibleAgentResult['operations'] ?? [],
         ];
     }
 

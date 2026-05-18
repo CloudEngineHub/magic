@@ -259,6 +259,101 @@ class SuperMagicAgentApiV2Test extends AbstractApiTest
         $this->assertSame($marketAgentCode, $marketItem['user_code']);
     }
 
+    public function testUnifiedAgentListQueriesCreatedAgentInAllScope(): void
+    {
+        $this->switchUserTest1();
+        $headers = $this->getCommonHeaders();
+        $agentCode = $this->createTestAgent();
+
+        $response = $this->post(
+            self::BASE_URI . '/list/queries',
+            [
+                'page' => 1,
+                'page_size' => 20,
+                'scope' => 'all',
+                'sort' => 'updated_at',
+                'keyword' => 'Test Agent',
+            ],
+            $headers
+        );
+
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $this->assertGreaterThanOrEqual(1, $response['data']['total']);
+        $this->assertContains($agentCode, array_column($response['data']['list'], 'code'));
+
+        $createdResponse = $this->post(
+            self::BASE_URI . '/list/queries',
+            [
+                'page' => 1,
+                'page_size' => 20,
+                'scope' => 'created',
+                'sort' => 'created_at',
+                'keyword' => 'Test Agent',
+            ],
+            $headers
+        );
+
+        $this->assertEquals(1000, $createdResponse['code'], $createdResponse['message'] ?? '');
+        $this->assertGreaterThanOrEqual(1, $createdResponse['data']['total']);
+        $this->assertContains($agentCode, array_column($createdResponse['data']['list'], 'code'));
+    }
+
+    public function testUnifiedAgentListQueriesIncludesInstalledMarketAgent(): void
+    {
+        $this->switchUserTest2();
+        $publisherHeaders = $this->getCommonHeaders();
+        $marketAgentCode = 'market_' . IdGenerator::getUniqueId32();
+        $this->createPublishedAgentVersionRecord($marketAgentCode, '7.0.0', $publisherHeaders, true);
+
+        $this->switchUserTest1();
+        $headers = $this->getCommonHeaders();
+
+        $hireResponse = $this->post(
+            '/api/v2/super-magic/agent-market/' . $marketAgentCode . '/hire',
+            [],
+            $headers
+        );
+        $this->assertEquals(1000, $hireResponse['code'], $hireResponse['message'] ?? '');
+
+        $response = $this->post(
+            self::BASE_URI . '/list/queries',
+            [
+                'page' => 1,
+                'page_size' => 20,
+                'scope' => 'all',
+                'sort' => 'updated_at',
+                'keyword' => 'Published Test Agent',
+            ],
+            $headers
+        );
+
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $itemsByCode = array_column($response['data']['list'], null, 'code');
+        $this->assertArrayHasKey($marketAgentCode, $itemsByCode);
+        $this->assertSame('MARKET', $itemsByCode[$marketAgentCode]['source_type']);
+        $this->assertTrue($itemsByCode[$marketAgentCode]['allow_delete']);
+        $this->assertSame('7.0.0', $itemsByCode[$marketAgentCode]['latest_version_code']);
+
+        $marketInstalledResponse = $this->post(
+            self::BASE_URI . '/list/queries',
+            [
+                'page' => 1,
+                'page_size' => 20,
+                'scope' => 'market_installed',
+                'sort' => 'created_at',
+                'keyword' => 'Published Test Agent',
+            ],
+            $headers
+        );
+
+        $this->assertEquals(1000, $marketInstalledResponse['code'], $marketInstalledResponse['message'] ?? '');
+        $marketInstalledItemsByCode = array_column($marketInstalledResponse['data']['list'], null, 'code');
+        $this->assertArrayHasKey($marketAgentCode, $marketInstalledItemsByCode);
+        $this->assertSame('MARKET', $marketInstalledItemsByCode[$marketAgentCode]['source_type']);
+        $this->assertTrue($marketInstalledItemsByCode[$marketAgentCode]['allow_delete']);
+        $this->assertSame('7.0.0', $marketInstalledItemsByCode[$marketAgentCode]['latest_version_code']);
+    }
+
     public function testExternalQueriesReturnsInstalledMarketAgentWhenStoreRecordOffline(): void
     {
         $this->switchUserTest2();
@@ -405,6 +500,40 @@ class SuperMagicAgentApiV2Test extends AbstractApiTest
         $userId = $headers['user-id'];
         $versionId = IdGenerator::getSnowId();
         $publishedAt = date('Y-m-d H:i:s');
+
+        SuperMagicAgentModel::query()->create([
+            'id' => $versionId,
+            'code' => $agentCode,
+            'organization_code' => $organizationCode,
+            'name' => 'Published Agent',
+            'description' => 'Published agent for test',
+            'icon' => [
+                'type' => 'IconAccessibleFilled',
+                'url' => '',
+                'color' => '#4F46E5',
+            ],
+            'icon_type' => 1,
+            'type' => 2,
+            'enabled' => true,
+            'prompt' => [],
+            'tools' => [],
+            'creator' => $userId,
+            'modifier' => $userId,
+            'name_i18n' => [
+                'zh_CN' => '测试发布员工',
+                'en_US' => 'Published Test Agent',
+            ],
+            'role_i18n' => [
+                'zh_CN' => ['测试角色'],
+                'en_US' => ['Tester'],
+            ],
+            'description_i18n' => [
+                'zh_CN' => '测试发布员工描述',
+                'en_US' => 'Published test agent description',
+            ],
+            'created_at' => $publishedAt,
+            'updated_at' => $publishedAt,
+        ]);
 
         AgentVersionModel::query()->create([
             'id' => $versionId,

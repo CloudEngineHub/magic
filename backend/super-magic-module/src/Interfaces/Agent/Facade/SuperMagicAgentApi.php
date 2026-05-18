@@ -22,6 +22,7 @@ use Dtyq\SuperMagic\Interfaces\Agent\Assembler\MentionSkillAssembler;
 use Dtyq\SuperMagic\Interfaces\Agent\Assembler\SuperMagicAgentAssembler;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\CreateAgentRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\PublishAgentRequestDTO;
+use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentListRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentVersionsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\UpdateAgentInfoRequestDTO;
@@ -228,6 +229,33 @@ class SuperMagicAgentApi extends AbstractApi
         );
 
         // 返回数组格式
+        return $responseDTO->toArray();
+    }
+
+    /**
+     * 统一查询智能体列表.
+     */
+    public function queryList(): array
+    {
+        $authorization = $this->getAuthorization();
+        $requestDTO = QueryAgentListRequestDTO::fromRequest($this->request);
+
+        $result = $this->superMagicAgentAppService->queryList($authorization, $requestDTO);
+        $responseDTO = SuperMagicAgentAssembler::createExternalAgentsResponseDTO(
+            agents: $result['agents'],
+            playbooksMap: $result['playbooks_map'],
+            storeAgentsMap: $result['agent_market_map'],
+            latestVersionsMap: $result['latest_versions_map'],
+            userAgentsMap: $result['user_agents_map'] ?? [],
+            currentUserId: $authorization->getId(),
+            page: $requestDTO->getPage(),
+            pageSize: $requestDTO->getPageSize(),
+            total: $result['total'],
+            agentOperations: $result['agent_operations'] ?? [],
+            publisherUserMap: $result['publisher_user_map'] ?? [],
+            creatorUserMap: $result['creator_user_map'] ?? []
+        );
+
         return $responseDTO->toArray();
     }
 
