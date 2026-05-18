@@ -388,7 +388,12 @@ class AgentDispatcher(Base):
         output_agent_file = PathManager.get_compiled_agent_file(claw_code)
         claw_src = PathManager.get_claw_agent_dir(claw_code)
 
-        if await async_exists(output_agent_file):
+        # 用工作区内的 IDENTITY.md 判断是否已完成过首次初始化。
+        # 不能用 output_agent_file（服务端编译产物）——它被 gitignore，
+        # 容器重建后必然不存在，会导致误走首次初始化分支、重新写入 BOOTSTRAP.md。
+        already_initialized = await async_exists(magic_dir / "IDENTITY.md")
+
+        if already_initialized:
             # 已初始化：补全可能缺失的模板文件，但跳过 BOOTSTRAP.md
             # （BOOTSTRAP 仅用于首次初始化，agent 处理完后会自行删除，不应重新写入）
             await async_copytree(claw_src, magic_dir, on_conflict=CopyConflict.SKIP, exclude={"BOOTSTRAP.md", "memory"})
