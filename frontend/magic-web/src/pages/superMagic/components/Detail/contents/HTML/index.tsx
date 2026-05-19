@@ -47,7 +47,8 @@ import type { HeaderActionConfig } from "../../components/CommonHeaderV2/types"
 import useServerUpdate from "../../hooks/useServerUpdate"
 import CodeVersionCompareDialog from "../../components/versioning/CodeVersionCompareDialog"
 import VersionCompareDialog from "../../components/versioning/VersionCompareDialog"
-import { getFileContentById } from "@/pages/superMagic/utils/api"
+import HistoryVersionCompareDialog from "../../components/PPTRender/components/HistoryVersionCompareDialog"
+import { getFileContentById, getTemporaryDownloadUrl, downloadFileContent } from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -463,6 +464,100 @@ export default memo(function HTML(props: HTMLProps) {
 		getCurrentEditingContent,
 		applyContent: applyEditingContent,
 	})
+
+	// ==================== 历史版本对比 ====================
+	const [showHistoryCompareDialog, setShowHistoryCompareDialog] = useState(false)
+	const [compareHistoryVersion, setCompareHistoryVersion] = useState<number | undefined>(undefined)
+	const [compareHistoryContent, setCompareHistoryContent] = useState<string>("")
+
+	/** 获取指定版本内容用于对比（不改变当前显示版本） */
+	const getVersionContentForCompare = useMemoizedFn(async (targetVersion: number): Promise<string | null> => {
+		if (!fileId) return null
+		try {
+			const urlRes = await getTemporaryDownloadUrl({
+				file_ids: [fileId],
+				file_versions: { [fileId]: targetVersion },
+			})
+			if (!urlRes[0]?.url) {
+				magicToast.error(t("common.fileUrlFetchFailed"))
+				return null
+			}
+			const content = await downloadFileContent(urlRes[0].url, { responseType: "text" })
+			return content as string
+		} catch (error) {
+			console.error("Failed to download version content for compare:", error)
+			magicToast.error(t("common.fileDownloadFailed"))
+			return null
+		}
+	})
+
+	/** 处理历史版本内容（路径替换） */
+	const processHistoricalContent = useMemoizedFn(async (rawHtml: string): Promise<string> => {
+		try {
+			const result = await processHtmlContent({
+				content: rawHtml,
+				attachments,
+				fileId,
+				fileName: data?.file_name,
+				attachmentList,
+				displayConfig,
+			})
+			return result.processedContent
+		} catch {
+			return rawHtml
+		}
+	})
+
+	/** 点击历史版本 → 打开对比弹窗 */
+	const handleCompareVersion = useMemoizedFn(async (version: number) => {
+		try {
+			const raw = await getVersionContentForCompare(version)
+			if (raw) {
+				const processed = await processHistoricalContent(raw)
+				// 将三个状态更新批量提交，确保 HistoryVersionCompareDialog 首次挂载时
+				// historyContent 已就绪，避免组件以空内容初始化后无法正确渲染
+				setCompareHistoryVersion(version)
+				setCompareHistoryContent(processed)
+				setShowHistoryCompareDialog(true)
+			}
+		} catch (error) {
+			console.error("Failed to load version for comparison:", error)
+		}
+	})
+
+	/** 在对比弹窗中切换历史版本 */
+	const handleSwitchHistoryVersion = useMemoizedFn(async (version: number) => {
+		try {
+			setCompareHistoryVersion(version)
+			const raw = await getVersionContentForCompare(version)
+			if (raw) {
+				const processed = await processHistoricalContent(raw)
+				setCompareHistoryContent(processed)
+			}
+		} catch (error) {
+			console.error("Failed to switch history version:", error)
+		}
+	})
+
+	/** 使用历史版本 → 执行回滚并刷新 */
+	const handleUseHistoryVersionFromCompare = useMemoizedFn(async (version: number) => {
+		try {
+			setShowHistoryCompareDialog(false)
+			await activeHistory.handleVersionRollback(version)
+			onRefreshFile?.()
+			if (fileId) {
+				await fetchHtmlFileVersions(fileId, true)
+			}
+		} catch (error) {
+			console.error("Failed to rollback to history version:", error)
+		}
+	})
+
+	/** 保留最新版本 → 关闭对比弹窗 */
+	const handleUseLatestVersionFromCompare = useMemoizedFn(() => {
+		setShowHistoryCompareDialog(false)
+	})
+	// ======================================================
 
 	useEffect(() => {
 		setServerUpdatedContent(undefined)
@@ -1266,6 +1361,7 @@ export default memo(function HTML(props: HTMLProps) {
 		allowEdit,
 		attachments,
 		actionConfig: headerActionConfig,
+		onCompareVersion: handleCompareVersion,
 		extraMoreMenuItems:
 			!isDataAnalysis && !isCodeViewMode
 				? [
@@ -1435,6 +1531,26 @@ export default memo(function HTML(props: HTMLProps) {
 					serverContent={actualServerContent}
 					onUseMyVersion={handleAcceptMyVersion}
 					onUseServerVersion={handleAcceptServerVersion}
+					filePathMapping={filePathMapping}
+					fileId={displayData?.file_id}
+					openNewTab={openNewTab}
+					selectedProject={selectedProject}
+					attachmentList={attachmentList}
+				/>
+			)}
+
+			{/* 历史版本对比弹窗 */}
+			{compareHistoryVersion && (
+				<HistoryVersionCompareDialog
+					open={showHistoryCompareDialog}
+					onOpenChange={setShowHistoryCompareDialog}
+					latestContent={processedContent}
+					historyContent={compareHistoryContent}
+					historyVersion={compareHistoryVersion}
+					fileVersionsList={activeHistory.fileVersionsList}
+					onUseHistoryVersion={handleUseHistoryVersionFromCompare}
+					onUseLatestVersion={handleUseLatestVersionFromCompare}
+					onSwitchHistoryVersion={handleSwitchHistoryVersion}
 					filePathMapping={filePathMapping}
 					fileId={displayData?.file_id}
 					openNewTab={openNewTab}
