@@ -164,13 +164,9 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 			deferredSegmentsRef.current.push(nextSegment)
 		}
 
-		function processDeferredUtterances(
-			utterances: VoiceResultUtterance[] | undefined,
-			fallbackText: string,
-		) {
-			if (!utterances || utterances.length === 0) {
-				deferredSegmentsRef.current = fallbackText
-					? [
+		function applyDeferredFallbackText(fallbackText: string) {
+			deferredSegmentsRef.current = fallbackText
+				? [
 						{
 							key: "fallback",
 							text: fallbackText,
@@ -179,8 +175,16 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 							definite: true,
 						},
 					]
-					: []
-				emitDeferredText()
+				: []
+			emitDeferredText()
+		}
+
+		function processDeferredUtterances(
+			utterances: VoiceResultUtterance[] | undefined,
+			fallbackText: string,
+		) {
+			if (!utterances || utterances.length === 0) {
+				applyDeferredFallbackText(fallbackText)
 				return
 			}
 
@@ -205,7 +209,12 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 				})
 			}
 
-			if (hasAcceptedUtterance) emitDeferredText()
+			if (hasAcceptedUtterance) {
+				emitDeferredText()
+				return
+			}
+
+			applyDeferredFallbackText(fallbackText)
 		}
 
 		// Helper: process utterances and update editor incrementally
@@ -377,7 +386,7 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 				if (
 					scrollElement &&
 					scrollElement.scrollTop + scrollElement.clientHeight >=
-					scrollElement.scrollHeight
+						scrollElement.scrollHeight
 				) {
 					enableScrollIntoViewRef.current = true
 				}
