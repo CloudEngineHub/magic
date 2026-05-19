@@ -14,7 +14,7 @@ from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.config import MagicServiceConfigLoader, ConfigurationError
 from app.infrastructure.magic_service.constants import FileEditType
 from app.service.agent_event.file_storage_listener_service import FileStorageListenerService
-from app.utils.async_file_utils import get_content_version_from_xattr, get_s3_key_from_xattr, set_content_version_to_xattr
+from app.utils.async_file_utils import get_content_version_from_xattr, get_file_id_from_xattr, get_s3_key_from_xattr, set_content_version_to_xattr
 
 logger = get_logger(__name__)
 
@@ -80,7 +80,6 @@ class FileVersionService:
                     if result.get("success", True):
                         success_count += 1
                         logger.info(f"文件版本创建成功: {filepath}")
-                        await self.set_file_version(filepath, result)
                     else:
                         failed_files.append(filepath)
                         logger.warning(f"文件版本创建失败: {filepath}, 结果: {result}")
@@ -113,6 +112,38 @@ class FileVersionService:
         except Exception as e:
             logger.error(f"创建文件版本过程中发生异常: {e}", exc_info=True)
             return {"success": False, "total_count": len(file_paths), "success_count": 0, "failed_files": file_paths}
+
+    async def get_file_latest_version(self, filepath: str) -> Optional[int]:
+        """
+        获取文件当前最新内容版本号。
+
+        Args:
+            filepath: 文件本地路径
+
+        Returns:
+            最新版本号，若无法获取则返回 None
+        """
+        file_id = await get_file_id_from_xattr(filepath)
+        if not file_id:
+            logger.warning(f"无法从 xattr 读取 file_id，跳过获取版本: {filepath}")
+            return None
+
+        client = await self._get_magic_service_client()
+        if not client:
+            logger.error("无法获取 Magic Service 客户端，跳过获取文件版本")
+            return None
+
+        try:
+            data = await client.get_file_latest_version(file_id)
+            latest_version = data.get("latest_version")
+            if latest_version is None:
+                logger.warning(f"API 未返回 latest_version: file_id={file_id}, filepath={filepath}")
+                return None
+            logger.info(f"获取文件最新版本成功: {filepath}, version={latest_version}")
+            return int(latest_version)
+        except Exception as e:
+            logger.error(f"获取文件最新版本失败: {filepath}, 错误: {e}")
+            return None
 
     async def set_file_version(self, filepath: str, result: Dict[str, Any]) -> None:
         """
