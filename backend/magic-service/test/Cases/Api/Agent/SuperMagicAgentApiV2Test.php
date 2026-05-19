@@ -279,7 +279,10 @@ class SuperMagicAgentApiV2Test extends AbstractApiTest
 
         $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
         $this->assertGreaterThanOrEqual(1, $response['data']['total']);
-        $this->assertContains($agentCode, array_column($response['data']['list'], 'code'));
+        $itemsByCode = array_column($response['data']['list'], null, 'code');
+        $this->assertArrayHasKey($agentCode, $itemsByCode);
+        $this->assertSame('created', $itemsByCode[$agentCode]['scope']);
+        $this->assertArrayHasKey('name', $itemsByCode[$agentCode]['organization_info']);
 
         $createdResponse = $this->post(
             self::BASE_URI . '/list/queries',
@@ -295,7 +298,10 @@ class SuperMagicAgentApiV2Test extends AbstractApiTest
 
         $this->assertEquals(1000, $createdResponse['code'], $createdResponse['message'] ?? '');
         $this->assertGreaterThanOrEqual(1, $createdResponse['data']['total']);
-        $this->assertContains($agentCode, array_column($createdResponse['data']['list'], 'code'));
+        $createdItemsByCode = array_column($createdResponse['data']['list'], null, 'code');
+        $this->assertArrayHasKey($agentCode, $createdItemsByCode);
+        $this->assertSame('created', $createdItemsByCode[$agentCode]['scope']);
+        $this->assertArrayHasKey('name', $createdItemsByCode[$agentCode]['organization_info']);
     }
 
     public function testUnifiedAgentListQueriesIncludesInstalledMarketAgent(): void
@@ -330,6 +336,8 @@ class SuperMagicAgentApiV2Test extends AbstractApiTest
         $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
         $itemsByCode = array_column($response['data']['list'], null, 'code');
         $this->assertArrayHasKey($marketAgentCode, $itemsByCode);
+        $this->assertSame('market_installed', $itemsByCode[$marketAgentCode]['scope']);
+        $this->assertArrayHasKey('name', $itemsByCode[$marketAgentCode]['organization_info']);
         $this->assertSame('MARKET', $itemsByCode[$marketAgentCode]['source_type']);
         $this->assertTrue($itemsByCode[$marketAgentCode]['allow_delete']);
         $this->assertSame('7.0.0', $itemsByCode[$marketAgentCode]['latest_version_code']);
@@ -349,6 +357,8 @@ class SuperMagicAgentApiV2Test extends AbstractApiTest
         $this->assertEquals(1000, $marketInstalledResponse['code'], $marketInstalledResponse['message'] ?? '');
         $marketInstalledItemsByCode = array_column($marketInstalledResponse['data']['list'], null, 'code');
         $this->assertArrayHasKey($marketAgentCode, $marketInstalledItemsByCode);
+        $this->assertSame('market_installed', $marketInstalledItemsByCode[$marketAgentCode]['scope']);
+        $this->assertArrayHasKey('name', $marketInstalledItemsByCode[$marketAgentCode]['organization_info']);
         $this->assertSame('MARKET', $marketInstalledItemsByCode[$marketAgentCode]['source_type']);
         $this->assertTrue($marketInstalledItemsByCode[$marketAgentCode]['allow_delete']);
         $this->assertSame('7.0.0', $marketInstalledItemsByCode[$marketAgentCode]['latest_version_code']);
