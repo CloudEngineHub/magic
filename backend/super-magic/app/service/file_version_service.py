@@ -14,6 +14,7 @@ from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.config import MagicServiceConfigLoader, ConfigurationError
 from app.infrastructure.magic_service.constants import FileEditType
 from app.service.agent_event.file_storage_listener_service import FileStorageListenerService
+from app.utils.async_file_utils import get_content_version_from_xattr, get_s3_key_from_xattr, set_content_version_to_xattr
 
 logger = get_logger(__name__)
 
@@ -39,75 +40,70 @@ class FileVersionService:
                 return None
         return self.magic_service_client
 
-    async def create_file_versions(self, file_keys: List[str], edit_type: int = FileEditType.AI) -> Dict[str, Any]:
+    async def create_file_versions(self, file_paths: List[str], edit_type: int = FileEditType.AI) -> Dict[str, Any]:
         """
         为多个文件创建版本信息（通用方法）
 
         Args:
-            file_keys: 文件键列表
+            file_paths: 文件本地路径列表
             edit_type: 编辑类型，默认为AI编辑
 
         Returns:
             Dict[str, Any]: 创建结果，包含成功/失败统计
         """
-        # 过滤掉目录（file_key以'/'结尾的是目录）
-        original_count = len(file_keys)
-        file_keys = [fk for fk in file_keys if not fk.endswith('/')]
-
-        if len(file_keys) < original_count:
-            logger.info(f"过滤掉 {original_count - len(file_keys)} 个目录，剩余 {len(file_keys)} 个文件")
-
-        if not file_keys:
-            logger.info("文件列表为空或全部是目录，跳过创建文件版本")
+        if not file_paths:
+            logger.info("文件列表为空，跳过创建文件版本")
             return {"success": True, "total_count": 0, "success_count": 0, "failed_files": []}
 
-        logger.info(f"开始为 {len(file_keys)} 个文件创建版本")
+        logger.info(f"开始为 {len(file_paths)} 个文件创建版本")
 
         try:
-            # 获取 Magic Service 客户端
             client = await self._get_magic_service_client()
             if not client:
                 logger.error("无法获取 Magic Service 客户端，跳过创建文件版本")
-                return {"success": False, "total_count": len(file_keys), "success_count": 0, "failed_files": file_keys}
+                return {"success": False, "total_count": len(file_paths), "success_count": 0, "failed_files": file_paths}
 
-            # 批量处理：逐个调用单个文件版本创建 API
-            results = []
             success_count = 0
             failed_files = []
 
-            for file_key in file_keys:
+            for filepath in file_paths:
                 try:
+                    file_key = await get_s3_key_from_xattr(filepath)
+                    if not file_key:
+                        logger.warning(f"无法从 xattr 读取 file_key，跳过: {filepath}")
+                        failed_files.append(filepath)
+                        continue
+
                     result = await client.create_file_version(file_key, edit_type=edit_type)
 
                     # API成功时通常返回data，没有success字段，默认认为成功
                     if result.get("success", True):
                         success_count += 1
-                        logger.info(f"文件版本创建成功: {file_key}")
+                        logger.info(f"文件版本创建成功: {filepath}")
+                        await self.set_file_version(filepath, result)
                     else:
-                        failed_files.append(file_key)
-                        logger.warning(f"文件版本创建失败: {file_key}, 结果: {result}")
+                        failed_files.append(filepath)
+                        logger.warning(f"文件版本创建失败: {filepath}, 结果: {result}")
 
                 except Exception as e:
-                    failed_files.append(file_key)
-                    logger.error(f"创建文件版本时发生异常: {file_key}, 错误: {e}")
+                    failed_files.append(filepath)
+                    logger.error(f"创建文件版本时发生异常: {filepath}, 错误: {e}")
 
-            # 返回详细的结果统计
-            total_count = len(file_keys)
+            total_count = len(file_paths)
             result_data = {
-                "success": success_count > 0,  # 至少有一个成功就认为成功
+                "success": success_count > 0,
                 "total_count": total_count,
                 "success_count": success_count,
                 "failed_files": failed_files
             }
 
-            # 记录最终结果
             if success_count == total_count:
                 logger.info(f"文件版本创建全部成功: {success_count}/{total_count}")
                 result_data["success"] = True
             elif success_count > 0:
                 logger.warning(f"文件版本创建部分成功: {success_count}/{total_count}")
                 logger.warning(f"失败的文件: {failed_files}")
-                result_data["success"] = True  # 部分成功也认为是成功的
+                result_data["success"] = True
             else:
                 logger.error(f"文件版本创建全部失败: {success_count}/{total_count}")
                 result_data["success"] = False
@@ -116,7 +112,32 @@ class FileVersionService:
 
         except Exception as e:
             logger.error(f"创建文件版本过程中发生异常: {e}", exc_info=True)
-            return {"success": False, "total_count": len(file_keys), "success_count": 0, "failed_files": file_keys}
+            return {"success": False, "total_count": len(file_paths), "success_count": 0, "failed_files": file_paths}
+
+    async def set_file_version(self, filepath: str, result: Dict[str, Any]) -> None:
+        """
+        根据 API 返回结果更新文件的 content version xattr。
+
+        仅当返回的 latest_version 大于当前 xattr 中记录的版本时才写入，失败只记录 warning。
+        """
+        try:
+            latest_version = result.get("latest_version")
+            if latest_version is None:
+                return
+
+            current_version_str = await get_content_version_from_xattr(filepath)
+            if current_version_str is not None:
+                try:
+                    if int(latest_version) <= int(current_version_str):
+                        logger.debug(f"content_version 无需更新: {filepath}, current={current_version_str}, latest={latest_version}")
+                        return
+                except (ValueError, TypeError):
+                    pass
+
+            await set_content_version_to_xattr(filepath, str(latest_version))
+            logger.info(f"content_version 已更新: {filepath}, version={latest_version}")
+        except Exception as e:
+            logger.warning(f"更新 content_version 失败: {filepath}, 错误: {e}")
 
     async def create_changed_files_versions(self, agent_context: AgentContext) -> bool:
         """
@@ -129,16 +150,14 @@ class FileVersionService:
             bool: 是否成功创建版本
         """
         try:
-            # 直接获取变更文件的 file_key 列表
-            file_keys = agent_context.get_changed_file_keys()
-            if not file_keys:
+            file_paths = [a.filepath for a in agent_context.get_attachments() if a.filepath]
+            if not file_paths:
                 logger.info("没有检测到文件变更，跳过创建文件版本")
                 return True
 
-            logger.info(f"准备创建 {len(file_keys)} 个文件的版本信息")
+            logger.info(f"准备创建 {len(file_paths)} 个文件的版本信息")
 
-            # 调用公共的创建方法
-            result = await self.create_file_versions(file_keys, edit_type=FileEditType.AI)
+            result = await self.create_file_versions(file_paths, edit_type=FileEditType.AI)
             return result["success"]
 
         except Exception as e:

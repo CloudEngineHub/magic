@@ -290,21 +290,22 @@ class RollbackService:
             file_paths: 文件路径列表
         """
         try:
-            # 将文件路径转换为file_key列表
-            file_keys = []
+            # 将文件路径归一化为本地绝对路径，过滤不存在的文件
+            absolute_paths = []
             for file_path in file_paths:
-                file_key = await self._resolve_file_key_from_xattr(file_path)
-                if file_key:
-                    file_keys.append(file_key)
+                path_obj = Path(file_path)
+                local_path = path_obj if path_obj.is_absolute() else PathManager.get_workspace_dir() / file_path.lstrip("/")
+                if await async_exists(local_path):
+                    absolute_paths.append(str(local_path))
                 else:
-                    logger.warning(f"无法从 magicfs xattr 解析 file_key，跳过: {file_path}")
+                    logger.warning(f"文件不存在，跳过: {local_path}")
 
-            if not file_keys:
-                logger.info("没有有效的file_key，跳过文件版本创建")
+            if not absolute_paths:
+                logger.info("没有有效的文件，跳过文件版本创建")
                 return
 
             # 调用FileVersionService的公共方法创建版本
-            result = await self.file_version_service.create_file_versions(file_keys, edit_type=FileEditType.AI)
+            result = await self.file_version_service.create_file_versions(absolute_paths, edit_type=FileEditType.AI)
 
             # 记录结果
             if result["success"]:
@@ -317,45 +318,3 @@ class RollbackService:
         except Exception as e:
             logger.error(f"异步创建文件版本失败: {e}")
 
-    async def _resolve_file_key_from_xattr(self, file_path: str) -> Optional[str]:
-        """
-        从 magicfs xattr 解析文件对应的对象存储 file_key。
-
-        唯一合法链路: 本地文件 → xattr user.magicfs.s3_key → file_key。
-        不允许根据相对路径拼接 OSS key, 因为 magicfs 实际使用 file_id 作为
-        存储键 (例如 ".../workspace/<file_id>"), 路径拼出来的 key 在后端
-        根本不存在, 会触发 "文件未找到"。
-
-        Args:
-            file_path: checkpoint 中记录的文件路径, 可能是 workspace 下的
-                相对路径, 也可能是历史数据里的绝对路径
-
-        Returns:
-            Optional[str]: 真实的对象存储 file_key; 文件不存在或 xattr 缺失
-            时返回 None, 由调用方跳过。
-        """
-        try:
-            # 归一化为本地绝对路径
-            path_obj = Path(file_path)
-            if path_obj.is_absolute():
-                local_path = path_obj
-            else:
-                local_path = PathManager.get_workspace_dir() / file_path.lstrip("/")
-
-            if not await async_exists(local_path):
-                logger.warning(f"文件不存在，跳过 file_key 解析: {local_path}")
-                return None
-
-            s3_key = await get_s3_key_from_xattr(local_path)
-            if not s3_key:
-                logger.error(
-                    f"文件缺少 magicfs xattr (user.magicfs.s3_key)，跳过 file_key 解析: {local_path}"
-                )
-                return None
-
-            logger.debug(f"文件路径解析成功: {file_path} -> {s3_key}")
-            return s3_key
-
-        except Exception as e:
-            logger.error(f"从 xattr 解析 file_key 失败: {file_path}, 错误: {e}")
-            return None
