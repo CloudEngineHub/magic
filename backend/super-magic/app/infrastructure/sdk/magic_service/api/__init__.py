@@ -6,6 +6,7 @@ Concrete API implementations for various Magic Service endpoints.
 
 from .agent_api import AgentApi
 from .file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
+from .magicbase_api import MagicBaseApi
 from .message_schedule_api import MessageScheduleApi
 from .share_api import ShareApi
 from app.infrastructure.sdk.magic_service.api.web_scrape_client import WebScrapeClient, WebScrapeResponse
@@ -14,6 +15,7 @@ from app.infrastructure.sdk.magic_service.api.web_scrape_client import WebScrape
 __all__ = [
     'AgentApi',
     'FileApi',
+    'MagicBaseApi',
     'MessageScheduleApi',
     'ShareApi',
     "WebScrapeClient",

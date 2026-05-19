@@ -89,8 +89,8 @@ export async function createMagicBaseRow(
 	select?: string[],
 ): Promise<unknown> {
 	return iframeClient.post(`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows`, {
-		...data,
-		...(select ? { _select: select } : {}),
+		data,
+		...(select ? { select: select.join(",") } : {}),
 	})
 }
 
@@ -102,9 +102,14 @@ export async function queryMagicBaseRows(
 	tableId: string,
 	query: Record<string, unknown>,
 ): Promise<unknown> {
+	const requestBody = {
+		...query,
+		...(Array.isArray(query.select) ? { select: query.select.join(",") } : {}),
+	}
+
 	return iframeClient.post(
 		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/query`,
-		query,
+		requestBody,
 	)
 }
 
@@ -136,8 +141,8 @@ export async function updateMagicBaseRow(
 	return iframeClient.patch(
 		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows/${recordId}`,
 		{
-			...data,
-			...(select ? { _select: select } : {}),
+			data,
+			...(select ? { select: select.join(",") } : {}),
 		},
 	)
 }

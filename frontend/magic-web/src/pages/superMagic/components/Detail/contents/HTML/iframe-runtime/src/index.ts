@@ -19,6 +19,7 @@ import { MagicReloadApi } from "./magic-api/MagicReloadApi"
 import { MagicInputApi } from "./magic-api/MagicInputApi"
 import { MagicI18nApi } from "./magic-api/MagicI18nApi"
 import { MagicWorkspaceApi } from "./magic-api/MagicWorkspaceApi"
+import { MagicDatabaseApi } from "./magic-api/MagicDatabaseApi"
 import { DevToolsCollector, DEVTOOLS_MSG } from "./features/DevToolsCollector"
 import { ElementInspectorHandler } from "./features/ElementInspectorHandler"
 
@@ -286,6 +287,7 @@ function installAPIs(): void {
 	new MagicInputApi().install()
 	new MagicI18nApi().install()
 	new MagicWorkspaceApi().install() // 工作区文件操作（上传/下载/附加到消息）
+	new MagicDatabaseApi().install()
 }
 
 // ─── Phase 2: Activate editor (on demand) ──────────────────────────────────

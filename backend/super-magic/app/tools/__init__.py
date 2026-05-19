@@ -103,6 +103,12 @@ from app.tools.design.tools import (
 
 # 用户信息工具
 from app.tools.get_user_info import GetUserInfo
+from app.tools.magicbase_tools import (
+    CreateMagicColumn,
+    CreateMagicTable,
+    GetMagicTable,
+    QueryMagicTables,
+)
 
 # Skill 管理工具
 from app.tools.find_skills import FindSkillsTool
@@ -164,6 +170,10 @@ __all__ = [
     "GetIMChannelStatus",
     "FindSkillsTool",
     "GetUserInfo",
+    "QueryMagicTables",
+    "GetMagicTable",
+    "CreateMagicTable",
+    "CreateMagicColumn",
     "InstallSkillsTool",
     "ListDir",
     "Purify",

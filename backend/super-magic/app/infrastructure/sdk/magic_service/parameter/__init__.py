@@ -21,6 +21,10 @@ from .ingest_third_party_message_parameter import IngestThirdPartyMessageParamet
 from .scan_wav_parameter import ScanWavParameter  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
 from .search_knowledge_parameter import SearchKnowledgeParameter
 from .update_file_source_parameter import UpdateFileSourceParameter, FileSource
+from .create_magicbase_column_parameter import CreateMagicBaseColumnParameter
+from .create_magicbase_table_parameter import CreateMagicBaseTableParameter
+from .get_magicbase_table_parameter import GetMagicBaseTableParameter
+from .query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
 
 __all__ = [
     'GetAgentDetailsParameter',
@@ -43,4 +47,8 @@ __all__ = [
     'SearchKnowledgeParameter',
     'UpdateFileSourceParameter',
     'FileSource',
+    'CreateMagicBaseColumnParameter',
+    'CreateMagicBaseTableParameter',
+    'GetMagicBaseTableParameter',
+    'QueryMagicBaseTablesParameter',
 ]

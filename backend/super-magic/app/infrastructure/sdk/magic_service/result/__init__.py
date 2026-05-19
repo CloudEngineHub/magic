@@ -16,6 +16,8 @@ from .ingest_third_party_message_result import IngestThirdPartyMessageResult
 from .scan_wav_result import ScanWavResult  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
 from .search_knowledge_result import SearchKnowledgeResult
 from .update_file_source_result import UpdateFileSourceResult
+from .magicbase_column_result import MagicBaseColumnResult
+from .magicbase_table_result import MagicBaseTableResult, MagicBaseTablesResult
 
 __all__ = [
     'AgentDetailsResult',
@@ -37,4 +39,7 @@ __all__ = [
     'ScanWavResult',
     'SearchKnowledgeResult',
     'UpdateFileSourceResult',
+    'MagicBaseColumnResult',
+    'MagicBaseTableResult',
+    'MagicBaseTablesResult',
 ]

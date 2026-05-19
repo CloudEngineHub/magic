@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from app.infrastructure.sdk.base import SdkBase, SdkContext
 from .api.agent_api import AgentApi
 from .api.file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
+from .api.magicbase_api import MagicBaseApi
 from .api.message_schedule_api import MessageScheduleApi
 from .api.skill_api import SkillApi
 from .api.share_api import ShareApi
@@ -41,6 +42,7 @@ class MagicService:
         self._routes = {
             'agent': AgentApi,
             'file': FileApi,  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
+            'magicbase': MagicBaseApi,
             'message_schedule': MessageScheduleApi,
             'skill': SkillApi,
             'share': ShareApi,
@@ -80,6 +82,11 @@ class MagicService:
         # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes.
         """
         return self._fetched_definitions['file']
+
+    @property
+    def magicbase(self) -> 'MagicBaseApi':
+        """Get MagicBase API instance"""
+        return self._fetched_definitions['magicbase']
 
     @property
     def message_schedule(self) -> 'MessageScheduleApi':

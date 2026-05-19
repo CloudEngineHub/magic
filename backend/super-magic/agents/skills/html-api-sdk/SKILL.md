@@ -243,13 +243,24 @@ window.Magic.addFilesToMessage(files); // 返回 void
 
 ## 四、数据库 API（`window.Magic.db`）
 
-数据库 API 提供对当前项目 MagicBase 数据库的 CRUD 操作。所有操作自动关联当前项目，iframe 内无需指定 projectId。
+The HTML runtime database API only supports row-level operations on existing MagicBase tables. It does not create tables, create columns, or manage schema.
+
+When the user asks for persistence, database storage, CRUD, or form submission saving, the agent must prepare the table schema before generating HTML:
+
+1. Call `query_magicbase_tables` to check whether the required table already exists.
+2. If the table is missing, call `create_magicbase_table`.
+3. If columns are missing, call `create_magicbase_column`.
+4. Generate HTML only after you have a real `table.id` from MagicBase tools.
+
+Never pass `table_key` or `table_name` as `tableId` to `window.Magic.db`. The HTML code must use the real table id returned by MagicBase tools.
+
+Database API calls are automatically associated with the current project inside the iframe, so HTML code does not pass `projectId`.
 
 ### 获取所有表 `getTables()`
 
 ```javascript
 const tables = await window.Magic.db.getTables();
-// tables: [{ id: "tbl_xxx", name: "users", ... }, ...]
+// tables: [{ id: "1234567890", name: "users", ... }, ...]
 ```
 
 - **返回**：`Promise<Array<{ id: string; name: string; ... }>>` — 表摘要列表
@@ -257,8 +268,8 @@ const tables = await window.Magic.db.getTables();
 ### 获取单表详情 `getTable(tableId)`
 
 ```javascript
-const table = await window.Magic.db.getTable("tbl_xxx");
-// table: { id: "tbl_xxx", name: "users", fields: [...], ... }
+const table = await window.Magic.db.getTable(TABLE_ID_FROM_MAGICBASE_TOOL);
+// table: { id: "1234567890", name: "users", fields: [...], ... }
 ```
 
 - **参数**：`tableId: string` — 表 ID
@@ -267,7 +278,7 @@ const table = await window.Magic.db.getTable("tbl_xxx");
 ### 新增行 `createRow(tableId, data, select?)`
 
 ```javascript
-const newRow = await window.Magic.db.createRow("tbl_xxx", {
+const newRow = await window.Magic.db.createRow(TABLE_ID_FROM_MAGICBASE_TOOL, {
   name: "Alice",
   age: 30,
   email: "alice@example.com",
@@ -281,7 +292,7 @@ const newRow = await window.Magic.db.createRow("tbl_xxx", {
 ### 查询行 `queryRows(tableId, query)`
 
 ```javascript
-const result = await window.Magic.db.queryRows("tbl_xxx", {
+const result = await window.Magic.db.queryRows(TABLE_ID_FROM_MAGICBASE_TOOL, {
   filter: { name: { $contains: "Ali" } },
   sort: [{ field: "created_at", direction: "desc" }],
   select: ["name", "email"],
@@ -304,7 +315,7 @@ const result = await window.Magic.db.queryRows("tbl_xxx", {
 ### 获取单行 `getRow(tableId, recordId, select?)`
 
 ```javascript
-const row = await window.Magic.db.getRow("tbl_xxx", "rec_yyy");
+const row = await window.Magic.db.getRow(TABLE_ID_FROM_MAGICBASE_TOOL, "rec_yyy");
 ```
 
 - **参数**：`tableId: string`、`recordId: string`、`select?: string[]`
@@ -313,7 +324,7 @@ const row = await window.Magic.db.getRow("tbl_xxx", "rec_yyy");
 ### 更新行 `updateRow(tableId, recordId, data, select?)`
 
 ```javascript
-const updated = await window.Magic.db.updateRow("tbl_xxx", "rec_yyy", {
+const updated = await window.Magic.db.updateRow(TABLE_ID_FROM_MAGICBASE_TOOL, "rec_yyy", {
   name: "Bob",
   age: 25,
 });
@@ -325,7 +336,7 @@ const updated = await window.Magic.db.updateRow("tbl_xxx", "rec_yyy", {
 ### 删除行 `deleteRow(tableId, recordId)`
 
 ```javascript
-await window.Magic.db.deleteRow("tbl_xxx", "rec_yyy");
+await window.Magic.db.deleteRow(TABLE_ID_FROM_MAGICBASE_TOOL, "rec_yyy");
 ```
 
 - **参数**：`tableId: string`、`recordId: string`
@@ -343,7 +354,7 @@ const relations = await window.Magic.db.getRelations();
 
 ```javascript
 try {
-  const row = await window.Magic.db.getRow("tbl_xxx", "rec_notfound");
+  const row = await window.Magic.db.getRow(TABLE_ID_FROM_MAGICBASE_TOOL, "rec_notfound");
 } catch (err) {
   console.error("数据库操作失败：", err.message);
   // 可能的错误：
