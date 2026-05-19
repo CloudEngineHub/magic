@@ -16,6 +16,8 @@ use App\Domain\Contact\Service\MagicDepartmentDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Mode\Entity\ModeEntity;
 use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
+use App\Domain\OrganizationEnvironment\Entity\OrganizationEntity;
+use App\Domain\OrganizationEnvironment\Service\OrganizationDomainService;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
@@ -116,6 +118,9 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
     #[Inject]
     protected MagicUserDomainService $magicUserDomainService;
+
+    #[Inject]
+    protected OrganizationDomainService $organizationDomainService;
 
     #[Inject]
     protected AgentDomainService $agentDomainService;
@@ -329,6 +334,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 'agent_market_map' => [],
                 'user_agents_map' => [],
                 'latest_versions_map' => [],
+                'organization_info_map' => [],
                 'total' => $total,
             ];
         }
@@ -348,6 +354,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $latestVersionsMap = $this->superMagicAgentVersionDomainService->getCurrentOrLatestByCodes($dataIsolation, $agentCodes);
 
         $publisherUserMap = $this->loadAgentPublisherUserMap($agents);
+        $organizationInfoMap = $this->loadAgentOrganizationInfoMap($agents);
 
         return [
             'agents' => $agents,
@@ -356,6 +363,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             'user_agents_map' => $userAgentsMap,
             'latest_versions_map' => $latestVersionsMap,
             'publisher_user_map' => $publisherUserMap,
+            'organization_info_map' => $organizationInfoMap,
             'total' => $total,
         ];
     }
@@ -403,6 +411,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 'agent_operations' => [],
                 'latest_versions_map' => [],
                 'publisher_user_map' => [],
+                'organization_info_map' => [],
                 'total' => 0,
             ];
         }
@@ -422,6 +431,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 'agent_operations' => [],
                 'latest_versions_map' => [],
                 'publisher_user_map' => [],
+                'organization_info_map' => [],
                 'total' => $agentQueriesResult['total'],
             ];
         }
@@ -450,6 +460,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $playbooksMap = $this->superMagicAgentPlaybookDomainService->getByAgentCodesForCurrentVersion($dataIsolation, $agentCodes, true);
         $agentMarketMap = $this->superMagicAgentDomainService->getStoreAgentsByAgentCodes($agentCodes);
         $publisherUserMap = $this->loadAgentPublisherUserMap($agents);
+        $organizationInfoMap = $this->loadAgentOrganizationInfoMap($agents);
 
         return [
             'agents' => $agents,
@@ -458,6 +469,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             'agent_operations' => $agentOperations,
             'latest_versions_map' => $agentVersionEntities,
             'publisher_user_map' => $publisherUserMap,
+            'organization_info_map' => $organizationInfoMap,
             'total' => $agentQueriesResult['total'],
         ];
     }
@@ -712,6 +724,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 'agent_market_map' => [],
                 'user_agents_map' => [],
                 'latest_versions_map' => [],
+                'organization_info_map' => [],
                 'total' => 0,
             ];
         }
@@ -741,6 +754,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 'agent_market_map' => [],
                 'user_agents_map' => [],
                 'latest_versions_map' => [],
+                'organization_info_map' => [],
                 'total' => $total,
             ];
         }
@@ -767,6 +781,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         // Batch load publisher user map once for all list items used by the API assembler.
         $publisherUserMap = $this->loadAgentPublisherUserMap($agents);
+        $organizationInfoMap = $this->loadAgentOrganizationInfoMap($agents);
 
         foreach ($agentMarketMap as $agentCode => $agentMarket) {
             if (in_array($agentCode, $officialAgentCodes)) {
@@ -781,6 +796,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             'user_agents_map' => $userAgentOwnershipMap,
             'latest_versions_map' => $currentVersionsMap,
             'publisher_user_map' => $publisherUserMap,
+            'organization_info_map' => $organizationInfoMap,
             'total' => $total,
         ];
     }
@@ -1462,6 +1478,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 'user_agents_map' => [],
                 'latest_versions_map' => [],
                 'publisher_user_map' => [],
+                'organization_info_map' => [],
                 'total' => 0,
             ];
         }
@@ -1490,6 +1507,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 'user_agents_map' => [],
                 'latest_versions_map' => [],
                 'publisher_user_map' => [],
+                'organization_info_map' => [],
                 'total' => $versionQueryResult['total'],
             ];
         }
@@ -1510,6 +1528,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $playbooksMap = $this->superMagicAgentPlaybookDomainService->getByAgentCodesForCurrentVersion($dataIsolation, $agentCodes, true);
         $agentMarketMap = $this->superMagicAgentDomainService->getStoreAgentsByAgentCodes($agentCodes);
         $publisherUserMap = $this->loadAgentPublisherUserMap($agents);
+        $organizationInfoMap = $this->loadAgentOrganizationInfoMap($agents);
 
         return [
             'agents' => $agents,
@@ -1518,6 +1537,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             'user_agents_map' => $userAgentOwnershipMap,
             'latest_versions_map' => $currentVersionsMap,
             'publisher_user_map' => $publisherUserMap,
+            'organization_info_map' => $organizationInfoMap,
             'total' => $versionQueryResult['total'],
         ];
     }
@@ -1538,6 +1558,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             'latest_versions_map' => $result['latest_versions_map'],
             'publisher_user_map' => $publisherUserMap,
             'creator_user_map' => $result['creator_user_map'] ?? $publisherUserMap,
+            'organization_info_map' => $result['organization_info_map'] ?? [],
             'total' => $result['total'],
         ];
     }
@@ -1560,6 +1581,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 'latest_versions_map' => [],
                 'publisher_user_map' => [],
                 'creator_user_map' => [],
+                'organization_info_map' => [],
                 'total' => $total,
             ];
         }
@@ -1576,6 +1598,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $agentMarketMap = $this->superMagicAgentDomainService->getStoreAgentsByAgentCodes($agentCodes);
         $userAgentsMap = $this->userAgentDomainService->findUserAgentOwnershipsByCodes($queryDataIsolation, $agentCodes);
         $userMap = $this->loadAgentPublisherUserMap($agents);
+        $organizationInfoMap = $this->loadAgentOrganizationInfoMap($agents);
 
         return [
             'agents' => $agents,
@@ -1586,6 +1609,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             'latest_versions_map' => array_intersect_key($latestVersionsMap, $agentCodeMap),
             'publisher_user_map' => $userMap,
             'creator_user_map' => $userMap,
+            'organization_info_map' => $organizationInfoMap,
             'total' => $total,
         ];
     }
@@ -1617,6 +1641,37 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         }
 
         return $publisherUserMap;
+    }
+
+    /**
+     * @param SuperMagicAgentEntity[] $agents
+     * @return array<string, array{name: string}>
+     */
+    private function loadAgentOrganizationInfoMap(array $agents): array
+    {
+        $organizationCodes = [];
+        foreach ($agents as $agent) {
+            $organizationCode = $agent->getOrganizationCode();
+            if ($organizationCode !== '') {
+                $organizationCodes[] = $organizationCode;
+            }
+        }
+
+        $organizationCodes = array_values(array_unique($organizationCodes));
+        if ($organizationCodes === []) {
+            return [];
+        }
+
+        /** @var array<string, OrganizationEntity> $organizationMap */
+        $organizationMap = $this->organizationDomainService->getByCodes($organizationCodes);
+        $organizationInfoMap = [];
+        foreach ($organizationCodes as $organizationCode) {
+            $organizationInfoMap[$organizationCode] = [
+                'name' => ($organizationMap[$organizationCode] ?? null)?->getName() ?: $organizationCode,
+            ];
+        }
+
+        return $organizationInfoMap;
     }
 
     /**

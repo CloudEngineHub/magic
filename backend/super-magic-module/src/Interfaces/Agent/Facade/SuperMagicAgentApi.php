@@ -225,7 +225,8 @@ class SuperMagicAgentApi extends AbstractApi
             userAgentsMap: $result['user_agents_map'] ?? [],
             page: $requestDTO->getPage(),
             pageSize: $requestDTO->getPageSize(),
-            total: $result['total']
+            total: $result['total'],
+            organizationInfoMap: $result['organization_info_map'] ?? []
         );
 
         // 返回数组格式
@@ -253,7 +254,8 @@ class SuperMagicAgentApi extends AbstractApi
             total: $result['total'],
             agentOperations: $result['agent_operations'] ?? [],
             publisherUserMap: $result['publisher_user_map'] ?? [],
-            creatorUserMap: $result['creator_user_map'] ?? []
+            creatorUserMap: $result['creator_user_map'] ?? [],
+            organizationInfoMap: $result['organization_info_map'] ?? []
         );
 
         return $responseDTO->toArray();
@@ -276,7 +278,8 @@ class SuperMagicAgentApi extends AbstractApi
             userAgentsMap: $result['user_agents_map'] ?? [],
             page: $requestDTO->getPage(),
             pageSize: $requestDTO->getPageSize(),
-            total: $result['total']
+            total: $result['total'],
+            organizationInfoMap: $result['organization_info_map'] ?? []
         );
 
         return $responseDTO->toArray();
@@ -304,7 +307,8 @@ class SuperMagicAgentApi extends AbstractApi
             pageSize: $requestDTO->getPageSize(),
             total: $result['total'],
             publisherUserMap: $result['publisher_user_map'] ?? [],
-            creatorUserMap: $result['publisher_user_map'] ?? []
+            creatorUserMap: $result['publisher_user_map'] ?? [],
+            organizationInfoMap: $result['organization_info_map'] ?? []
         );
 
         return $responseDTO->toArray();
@@ -330,7 +334,8 @@ class SuperMagicAgentApi extends AbstractApi
             page: $requestDTO->getPage(),
             pageSize: $requestDTO->getPageSize(),
             total: $result['total'],
-            publisherUserMap: $result['publisher_user_map'] ?? []
+            publisherUserMap: $result['publisher_user_map'] ?? [],
+            organizationInfoMap: $result['organization_info_map'] ?? []
         );
 
         return $responseDTO->toArray();
@@ -371,7 +376,8 @@ class SuperMagicAgentApi extends AbstractApi
             page: $requestDTO->getPage(),
             pageSize: $requestDTO->getPageSize(),
             total: $result['total'],
-            publisherUserMap: $result['publisher_user_map'] ?? []
+            publisherUserMap: $result['publisher_user_map'] ?? [],
+            organizationInfoMap: $result['organization_info_map'] ?? []
         );
 
         return $responseDTO->toArray();
