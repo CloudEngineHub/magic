@@ -1,0 +1,946 @@
+/*
+ * neo-brutalism.css
+ * Neo-Brutalism complete visual style CSS library
+ *
+ * Design principles:
+ *   Bold black borders, hard shadows (no blur offset), high-contrast colors, heavy typography.
+ *   Covers three layers: (1) utility classes (nb-*), (2) card components (xhs-card system), (3) layout helpers
+ *
+ * Color palette:
+ *   Yellow  #FFE566   Red    #FF2442   Black  #111
+ *   Blue    #3B82F6   Green  #10B981   Purple #8B5CF6
+ *   Pink    #EC4899   Amber  #F59E0B   Mint   #B8F5C8
+ *
+ * ─────────────────────────────────────────────────────────────
+ * Table of Contents
+ *
+ * §0  Base Reset & Fonts
+ * §1  Card Shell (.xhs-card)
+ *     §1.1  Cover type (.is-cover)
+ *     §1.2  Content type (.is-content)
+ * §2  Content Components
+ *     §2.1  Header area (.header-area)
+ *     §2.2  Body area (.body-area)
+ *     §2.3  Data card (.data-card)
+ *     §2.4  Rank row (.rank-row)
+ *     §2.5  Bar chart (.bar-row)
+ *     §2.6  Footer bubble (.footer-bubble)
+ *     §2.7  Image block (.nb-img-block)
+ * §3  Utility Classes (nb-*)
+ *     §3.1  Badges & Tags
+ *     §3.2  Inline highlights
+ *     §3.3  Card variants
+ *     §3.4  Text colors & background highlights
+ * §4  Layout Helpers
+ * ─────────────────────────────────────────────────────────────
+ */
+
+
+/* ════════════════════════════════════════
+   §0  Base Reset & Fonts
+   ════════════════════════════════════════ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  background: transparent;
+  color: #111;
+}
+
+
+/* ════════════════════════════════════════
+   §1  Card Shell
+   ════════════════════════════════════════ */
+
+.xhs-card {
+  width: 540px;
+  height: 720px;
+  position: relative;
+  overflow: hidden;
+}
+
+
+/* ────────────────────────────────────────
+   §1.1  Cover type (.is-cover)
+   Notebook ruled-paper background + red margin line
+   ──────────────────────────────────────── */
+
+.is-cover {
+  background: #FAFAF8;
+}
+
+/* Horizontal ruled lines */
+.is-cover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    transparent,
+    transparent 39px,
+    #E0E0DE 39px,
+    #E0E0DE 40px
+  );
+  z-index: 0;
+}
+
+/* Left red margin line */
+.is-cover::after {
+  content: '';
+  position: absolute;
+  left: 76px;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: rgba(220, 60, 60, 0.18);
+  z-index: 1;
+}
+
+/* Cover main container */
+.xhs-memo-cover {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 55px 52px 145px;
+}
+
+.xhs-memo-body {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  width: 100%;
+}
+
+/* Cover headline (question line) */
+.q-line {
+  font-size: 76px;
+  font-weight: 900;
+  color: #111;
+  line-height: 1.05;
+  letter-spacing: -2px;
+  text-align: center;
+}
+
+/* Yellow underline highlight */
+.hl {
+  background: linear-gradient(180deg, transparent 58%, #FFE566 58%);
+  padding: 0 4px;
+}
+
+/* Green underline highlight */
+.hl-g {
+  background: linear-gradient(180deg, transparent 58%, #B8F5C8 58%);
+  padding: 0 3px;
+}
+
+/* Red underline highlight */
+.hl-r {
+  background: linear-gradient(180deg, transparent 58%, #FFB3BC 58%);
+  padding: 0 3px;
+}
+
+/* Divider rule */
+.rule {
+  width: 36px;
+  height: 3px;
+  background: #111;
+  margin: 30px auto;
+}
+
+/* Cover subtitle (answer line) */
+.ans-line {
+  font-size: 26px;
+  font-weight: 700;
+  color: #555;
+  line-height: 1.9;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+/* Cover bottom slogan — two-color block */
+.slogan-xhs {
+  position: absolute;
+  bottom: 120px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  z-index: 2;
+}
+
+.slogan-inner-xhs {
+  display: inline-flex;
+  align-items: stretch;
+  margin: 0 48px;
+}
+
+.xhs-s-token {
+  font-size: 32px;
+  font-weight: 900;
+  color: #111;
+  background: #FFE566;
+  padding: 10px 22px;
+  letter-spacing: 3px;
+}
+
+.xhs-s-bill {
+  font-size: 32px;
+  font-weight: 900;
+  color: #fff;
+  background: #FF2442;
+  padding: 10px 22px;
+  letter-spacing: 3px;
+}
+
+/* Cover author byline */
+.xhs-author {
+  position: absolute;
+  bottom: 22px;
+  right: 24px;
+  font-size: 18px;
+  color: #aaa;
+  font-weight: 700;
+  z-index: 2;
+  letter-spacing: 0.5px;
+}
+
+
+/* ────────────────────────────────────────
+   §1.2  Content type (.is-content)
+   ──────────────────────────────────────── */
+
+.is-content {
+  background: #F4F4F4;
+  padding: 32px 32px 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+
+/* ════════════════════════════════════════
+   §2  Content Components
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §2.1  Header area
+   ──────────────────────────────────────── */
+
+.header-area {
+  margin-bottom: 12px;
+  position: relative;
+}
+
+/* Page tag — red background, white text */
+.page-tag {
+  display: inline-block;
+  font-size: 16px;
+  font-weight: 900;
+  color: #fff;
+  background: #FF2442;
+  padding: 4px 12px;
+  margin-bottom: 10px;
+  border: 2px solid #111;
+  box-shadow: 3px 3px 0 #111;
+}
+
+/* Page tag variant: black background, yellow text */
+.page-tag-dark {
+  display: inline-block;
+  font-size: 16px;
+  font-weight: 900;
+  color: #FFE566;
+  background: #111;
+  padding: 4px 12px;
+  margin-bottom: 10px;
+  border: 2px solid #111;
+  box-shadow: 3px 3px 0 #FF2442;
+}
+
+/* Page tag variant: yellow background, black text */
+.page-tag-yellow {
+  display: inline-block;
+  font-size: 16px;
+  font-weight: 900;
+  color: #111;
+  background: #FFE566;
+  padding: 4px 12px;
+  margin-bottom: 10px;
+  border: 2px solid #111;
+  box-shadow: 3px 3px 0 #111;
+}
+
+/* Main title */
+.main-title {
+  font-size: 38px;
+  font-weight: 900;
+  color: #111;
+  line-height: 1.3;
+  letter-spacing: -1px;
+}
+
+/* Main title variant: larger */
+.main-title-xl {
+  font-size: 46px;
+  font-weight: 900;
+  color: #111;
+  line-height: 1.2;
+  letter-spacing: -2px;
+}
+
+/* Main title variant: smaller */
+.main-title-sm {
+  font-size: 30px;
+  font-weight: 900;
+  color: #111;
+  line-height: 1.35;
+  letter-spacing: -0.5px;
+}
+
+
+/* ────────────────────────────────────────
+   §2.2  Body area
+   ──────────────────────────────────────── */
+
+.body-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+
+/* ────────────────────────────────────────
+   §2.3  Data card
+   ──────────────────────────────────────── */
+
+.data-card {
+  background: #fff;
+  padding: 20px;
+  border: 3px solid #111;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* Highlight card: heavier shadow */
+.data-card.highlight {
+  box-shadow: 6px 6px 0 #111;
+}
+
+/* Danger card: red border */
+.data-card.danger {
+  border-color: #FF2442;
+  box-shadow: 4px 4px 0 #FF2442;
+}
+
+/* Success card: green border */
+.data-card.success {
+  border-color: #10B981;
+  box-shadow: 4px 4px 0 #10B981;
+}
+
+/* Card title */
+.dc-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+/* Large numeric value */
+.dc-value {
+  font-size: 52px;
+  font-weight: 900;
+  color: #111;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+
+.dc-value.red   { color: #FF2442; }
+.dc-value.green { color: #10B981; }
+.dc-value.blue  { color: #3B82F6; }
+.dc-value.amber { color: #F59E0B; }
+
+/* Card sub-text */
+.dc-sub {
+  font-size: 16px;
+  font-weight: 700;
+  color: #777;
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+
+/* ────────────────────────────────────────
+   §2.4  Rank row
+   ──────────────────────────────────────── */
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  padding: 16px 20px;
+  gap: 16px;
+  border: 3px solid #111;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.05);
+}
+
+.rank-num {
+  font-size: 32px;
+  font-weight: 900;
+  color: #ccc;
+  font-style: italic;
+  width: 40px;
+  flex-shrink: 0;
+}
+
+.rank-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rank-name {
+  font-size: 24px;
+  font-weight: 900;
+  color: #111;
+  line-height: 1.2;
+}
+
+.rank-desc {
+  font-size: 15px;
+  color: #777;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.rank-val {
+  font-size: 28px;
+  font-weight: 900;
+  color: #FF2442;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* TOP1 highlight row: yellow background + heavy shadow */
+.rank-row.top1 {
+  background: #FFFBEB;
+  box-shadow: 6px 6px 0 #111;
+}
+
+.rank-row.top1 .rank-num {
+  color: #F59E0B;
+}
+
+/* Compact row */
+.rank-row.compact {
+  padding: 8px 14px;
+  gap: 10px;
+  border-width: 2.5px;
+}
+
+.rank-row.compact .rank-num  { font-size: 26px; width: 28px; }
+.rank-row.compact .rank-name { font-size: 20px; }
+.rank-row.compact .rank-desc { font-size: 13px; margin-top: 2px; }
+.rank-row.compact .rank-val  { font-size: 22px; }
+
+
+/* ────────────────────────────────────────
+   §2.5  Bar chart
+   ──────────────────────────────────────── */
+
+.bar-row {
+  background: #fff;
+  padding: 16px;
+  border: 3px solid #111;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.05);
+}
+
+.bar-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 10px;
+}
+
+.bar-name {
+  font-size: 20px;
+  font-weight: 900;
+  color: #111;
+}
+
+.bar-val {
+  font-size: 22px;
+  font-weight: 900;
+  color: #FF2442;
+}
+
+.bar-track {
+  height: 14px;
+  background: #E5E5E5;
+  border: 2px solid #111;
+}
+
+.bar-fill {
+  height: 100%;
+  background: #111;
+  transition: width 0.4s ease;
+}
+
+.bar-fill.yellow { background: #FFE566; border-right: 2px solid #111; }
+.bar-fill.red    { background: #FF2442; border-right: 2px solid #111; }
+.bar-fill.green  { background: #10B981; border-right: 2px solid #111; }
+.bar-fill.blue   { background: #3B82F6; border-right: 2px solid #111; }
+
+
+/* ────────────────────────────────────────
+   §2.6  Footer bubble
+   Speech bubble with triangle pointer
+   ──────────────────────────────────────── */
+
+.footer-bubble {
+  --bubble-bg: #fff;
+  --bubble-text: #111;
+  margin-top: 12px;
+  background: var(--bubble-bg);
+  color: var(--bubble-text);
+  padding: 16px 20px;
+  border: 3px solid #111;
+  box-shadow: 6px 6px 0 #111;
+  position: relative;
+}
+
+/* Triangle outer layer (black border) */
+.footer-bubble::before {
+  content: '';
+  position: absolute;
+  top: -14px;
+  left: 32px;
+  border-width: 0 14px 14px 0;
+  border-style: solid;
+  border-color: transparent transparent #111 transparent;
+}
+
+/* Triangle inner layer (fills background color, covers border) */
+.footer-bubble::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 35px;
+  border-width: 0 8px 8px 0;
+  border-style: solid;
+  border-color: transparent transparent var(--bubble-bg) transparent;
+}
+
+.bubble-text {
+  font-size: 18px;
+  font-weight: 900;
+  color: inherit;
+  line-height: 1.5;
+}
+
+.bubble-tag {
+  font-size: 14px;
+  color: #FF2442;
+  font-weight: 900;
+  margin-top: 4px;
+}
+
+/* Bubble variant: black background, red shadow */
+.footer-bubble.dark {
+  --bubble-bg: #111;
+  --bubble-text: #fff;
+  box-shadow: 6px 6px 0 #FF2442;
+}
+
+.footer-bubble.dark .bubble-tag {
+  color: #FFE566;
+}
+
+/* Bubble variant: yellow background */
+.footer-bubble.yellow {
+  --bubble-bg: #FFF8E1;
+  --bubble-text: #111;
+  box-shadow: 6px 6px 0 #F59E0B;
+  border-color: #F59E0B;
+}
+
+
+/* ────────────────────────────────────────
+   §2.7  Image block
+   Bordered image container with caption bar
+   ──────────────────────────────────────── */
+
+.nb-img-block {
+  border: 3px solid #111;
+  box-shadow: 4px 4px 0 #111;
+  overflow: hidden;
+}
+
+.nb-img-block img {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+/* Image caption bar — black background, white text */
+.nb-img-caption {
+  background: #111;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 5px 12px;
+  line-height: 1.4;
+}
+
+/* Caption variant: yellow background */
+.nb-img-caption.yellow {
+  background: #FFE566;
+  color: #111;
+}
+
+/* Caption variant: red background */
+.nb-img-caption.red {
+  background: #FF2442;
+  color: #fff;
+}
+
+
+/* ════════════════════════════════════════
+   §3  Utility Classes (nb-*)
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §3.1  Badges & Tags
+   ──────────────────────────────────────── */
+
+/* Role badge next to a person's name */
+.nb-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 900;
+  color: #fff;
+  padding: 1px 6px;
+  border: 1px solid #111;
+  box-shadow: 1.5px 1.5px 0 #111;
+  vertical-align: middle;
+  margin-left: 6px;
+  transform: translateY(-1px);
+}
+
+/* Tag: white background, black text */
+.nb-tag {
+  display: inline-block;
+  background: #fff;
+  color: #111;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border: 2px solid #111;
+  box-shadow: 2px 2px 0 #111;
+}
+
+/* Tag variant: yellow background, black text */
+.nb-tag-yellow {
+  display: inline-block;
+  background: #FFE566;
+  color: #111;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border: 2px solid #111;
+  box-shadow: 2px 2px 0 #111;
+}
+
+/* Tag variant: red tint, red text (alert) */
+.nb-tag-red {
+  display: inline-block;
+  background: #FFF1F2;
+  color: #FF2442;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border: 2px solid #FF2442;
+  box-shadow: 2px 2px 0 #FF2442;
+}
+
+/* Tag variant: black background, yellow text */
+.nb-tag-dark {
+  display: inline-block;
+  background: #111;
+  color: #FFE566;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border: 2px solid #111;
+  box-shadow: 2px 2px 0 #FF2442;
+}
+
+/* Tag variant: green background, white text */
+.nb-tag-green {
+  display: inline-block;
+  background: #10B981;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border: 2px solid #111;
+  box-shadow: 2px 2px 0 #111;
+}
+
+/* Tag variant: blue background, white text */
+.nb-tag-blue {
+  display: inline-block;
+  background: #3B82F6;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border: 2px solid #111;
+  box-shadow: 2px 2px 0 #111;
+}
+
+
+/* ────────────────────────────────────────
+   §3.2  Inline highlight text blocks
+   ──────────────────────────────────────── */
+
+.nb-inline {
+  font-weight: 900;
+  color: #fff;
+  background: #111;
+  padding: 2px 6px;
+  margin: 0 2px;
+}
+
+.nb-inline-red {
+  font-weight: 900;
+  color: #fff;
+  background: #FF2442;
+  padding: 2px 6px;
+  margin: 0 2px;
+}
+
+.nb-inline-yellow {
+  font-weight: 900;
+  color: #111;
+  background: #FFE566;
+  padding: 2px 6px;
+  margin: 0 2px;
+}
+
+.nb-inline-green {
+  font-weight: 900;
+  color: #fff;
+  background: #10B981;
+  padding: 2px 6px;
+  margin: 0 2px;
+}
+
+.nb-inline-blue {
+  font-weight: 900;
+  color: #fff;
+  background: #3B82F6;
+  padding: 2px 6px;
+  margin: 0 2px;
+}
+
+.nb-inline-purple {
+  font-weight: 900;
+  color: #fff;
+  background: #8B5CF6;
+  padding: 2px 6px;
+  margin: 0 2px;
+}
+
+.nb-inline-amber {
+  font-weight: 900;
+  color: #111;
+  background: #F59E0B;
+  padding: 2px 6px;
+  margin: 0 2px;
+}
+
+
+/* ────────────────────────────────────────
+   §3.3  Card variants (standalone, no .data-card needed)
+   ──────────────────────────────────────── */
+
+.nb-card-yellow {
+  background: #FFFBEB;
+  border: 3px solid #111;
+  box-shadow: 4px 4px 0 #111;
+  padding: 16px;
+}
+
+.nb-card-pink {
+  background: #FFF1F2;
+  border: 3px solid #FF2442;
+  box-shadow: 4px 4px 0 #FF2442;
+  padding: 16px;
+}
+
+.nb-card-black {
+  background: #111;
+  color: #FFE566;
+  border: 3px solid #111;
+  box-shadow: 6px 6px 0 #FF2442;
+  padding: 16px;
+}
+
+.nb-card-green {
+  background: #ECFDF5;
+  border: 3px solid #10B981;
+  box-shadow: 4px 4px 0 #10B981;
+  padding: 16px;
+}
+
+.nb-card-blue {
+  background: #EFF6FF;
+  border: 3px solid #3B82F6;
+  box-shadow: 4px 4px 0 #3B82F6;
+  padding: 16px;
+}
+
+.nb-card-purple {
+  background: #F5F3FF;
+  border: 3px solid #8B5CF6;
+  box-shadow: 4px 4px 0 #8B5CF6;
+  padding: 16px;
+}
+
+
+/* ────────────────────────────────────────
+   §3.4  Text colors & background highlights
+   ──────────────────────────────────────── */
+
+/* Text colors */
+.text-red    { color: #FF2442; }
+.text-yellow { color: #F59E0B; }
+.text-green  { color: #10B981; }
+.text-blue   { color: #3B82F6; }
+.text-purple { color: #8B5CF6; }
+.text-gray   { color: #777; }
+.text-muted  { color: #aaa; }
+
+/* Inline background highlight */
+.bg-yellow { background: #FFE566; padding: 0 6px; }
+.bg-red    { background: #FF2442; color: #fff; padding: 0 6px; }
+.bg-green  { background: #B8F5C8; padding: 0 6px; }
+.bg-blue   { background: #DBEAFE; padding: 0 6px; }
+.bg-black  { background: #111;    color: #fff; padding: 0 6px; }
+
+
+/* ════════════════════════════════════════
+   §4  Layout Helpers
+   ════════════════════════════════════════ */
+
+/* Two-column equal-width grid */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.grid-2 .data-card {
+  padding: 16px;
+}
+
+.grid-2 .dc-value {
+  font-size: 36px;
+}
+
+/* Three-column equal-width grid */
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+/* Two-column layout (3:2 ratio) */
+.grid-3-2 {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 16px;
+}
+
+/* Horizontal divider */
+.nb-divider {
+  width: 100%;
+  height: 3px;
+  background: #111;
+  margin: 8px 0;
+}
+
+.nb-divider.dashed {
+  background: repeating-linear-gradient(
+    to right,
+    #111 0px,
+    #111 8px,
+    transparent 8px,
+    transparent 14px
+  );
+  height: 2px;
+}
+
+/* Step number circle */
+.nb-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  font-weight: 900;
+  color: #fff;
+  background: #111;
+  border: 2px solid #111;
+  flex-shrink: 0;
+}
+
+.nb-step-num.red    { background: #FF2442; border-color: #FF2442; }
+.nb-step-num.yellow { background: #FFE566; color: #111; border-color: #111; }
+.nb-step-num.green  { background: #10B981; border-color: #10B981; }
+
+/* Stat number + unit combination */
+.nb-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.nb-stat-num {
+  font-size: 48px;
+  font-weight: 900;
+  color: #111;
+  line-height: 1;
+  letter-spacing: -2px;
+}
+
+.nb-stat-unit {
+  font-size: 18px;
+  font-weight: 900;
+  color: #555;
+}
+
+.nb-stat-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #777;
+  margin-top: 4px;
+}
