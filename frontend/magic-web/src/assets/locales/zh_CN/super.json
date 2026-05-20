@@ -628,6 +628,203 @@
 				"selectedSummary": "已选 {{count}}/{{total}} 张",
 				"success": "导出成功"
 			},
+			"initPanel": {
+				"draft": {
+					"detected": "检测到未完成的编辑",
+					"discard": "丢弃",
+					"restore": "恢复草稿",
+					"resumeHint": "你上次编辑到第 {{step}} 步，是否恢复继续？"
+				},
+				"nav": {
+					"jumpTo": "跳转到{{title}}",
+					"next": "下一步",
+					"prev": "上一步"
+				},
+				"platforms": {
+					"facebook": "Facebook",
+					"instagram": "Instagram",
+					"rednote": "小红书",
+					"tiktok": "抖音",
+					"wechatChannels": "微信视频号",
+					"wechatOfficialAccounts": "微信公众号",
+					"x": "X (Twitter)"
+				},
+				"referenceFilePicker": {
+					"hint": "选填，支持任意格式参考文件",
+					"localUpload": "本地上传",
+					"noProjectFiles": "项目中暂无可选文件",
+					"pickProjectTitle": "选择项目文件",
+					"projectFile": "项目文件",
+					"readLocalError": "读取本地文件失败，请重试",
+					"readProjectError": "读取项目文件失败，请重试"
+				},
+				"stepBrand": {
+					"accountName": "账号名称",
+					"accountPlaceholder": "如：@超级麦吉",
+					"brandImages": "品牌形象素材",
+					"brandImagesDescPlaceholder": "描述（如：品牌吉祥物）",
+					"brandImagesHint": "上传品牌 IP 形象、Logo 或风格参考图，AI 生图时将融合这些元素",
+					"brandImagesUpload": "点击上传图片或文件",
+					"brandImagesUploadFailed": "「{{name}}」上传失败，请重试",
+					"brandImagesUploadHint": "上传后将保存到项目 __drafts/brand-images/ 目录",
+					"brandPosition": "品牌/IP 定位",
+					"brandPositionHint": "清晰的定位能帮助 AI 生成更精准的内容策略",
+					"brandPositionPlaceholder": "一句话描述你的品牌定位，如：AI 效率工具分享",
+					"historyRecords": "历史记录",
+					"optional": "选填",
+					"platformFetchLoading": "正在从平台获取账号信息，完成后将自动填入表单…",
+					"platformFetchTimeout": "获取账号信息超时，请稍后重试或在对话中查看进度",
+					"platformFetching": "获取中…",
+					"quickFillHint": "提示：填写越详细，AI 生成的选题越精准",
+					"required": "必填",
+					"saveAsNew": "保存为新记录",
+					"saveConfirmDesc": "是否将当前品牌信息保存为历史记录，方便下次快速回填？",
+					"saveConfirmSave": "保存并继续",
+					"saveConfirmSkip": "暂不保存",
+					"saveConfirmTitle": "保存品牌信息？",
+					"selectRecordHint": "选择历史记录以回填",
+					"subtitle": "填写基础品牌定位，AI 将据此理解你的内容方向并生成匹配的选题",
+					"targetAudience": "目标受众",
+					"targetAudienceHint": "帮助 AI 调整内容口吻与选题方向",
+					"targetAudiencePlaceholder": "如：25-35岁职场人、大学生、宝妈群体",
+					"title": "账号与品牌信息"
+				},
+				"stepDetail": {
+					"aiAutoFillBtn": "AI 智能填充下方配置",
+					"aiAutoFillHint": "根据描述自动推荐风格、模板、大纲等",
+					"aiAutoFilling": "智能填充中…",
+					"articleFallback": "文章 {{index}}",
+					"cardCountHint": "小红书/Instagram 建议 6-9 张",
+					"cardCountLabel": "卡片数量",
+					"currentArticle": "当前文章",
+					"descriptionLabel": "内容描述",
+					"descriptionPlaceholder": "随便说说这篇文章想表达什么，口语化也没关系，AI 帮你润色…",
+					"expandConfig": "展开高级配置（风格、模板、大纲）",
+					"materialsLabel": "素材上传",
+					"notesLabel": "补充说明",
+					"notesPlaceholder": "任何额外的创作要求或注意事项…",
+					"outlineAddChildBtn": "添加子节点 (Tab)",
+					"outlineAddRootBtn": "添加要点",
+					"outlineAttachBtn": "添加附件",
+					"outlineAttachPlaceholder": "说明此附件与该要点的关系…",
+					"outlineEmpty": "暂无大纲内容，点击下方按钮或使用 AI 生成",
+					"outlineGenerateBtn": "AI 生成大纲",
+					"outlineGenerating": "生成中…",
+					"outlineLabel": "文章大纲",
+					"outlineNodePlaceholder": "输入要点…",
+					"outlineOptimizeBtn": "AI 优化",
+					"outlineOptimizePlaceholder": "描述你想如何调整大纲，例如：增加案例、缩短篇幅、调整顺序…",
+					"outlineOptimizeSubmit": "生成",
+					"outlineOptimizing": "优化中…",
+					"outlineRemoveBtn": "删除",
+					"platformLabel": "发布平台",
+					"platformRequired": "请选择本文的发布平台",
+					"referencesFilePlaceholder": "说明此附件用途…",
+					"referencesHint": "可选补充文字说明，或上传参考附件",
+					"referencesLabel": "参考资料",
+					"referencesTextPlaceholder": "补充创作要求、背景信息、注意事项…",
+					"referencesUploadHint": "支持图片、视频、PDF、Office 文档等",
+					"referencesUploadLabel": "点击或拖拽上传参考附件",
+					"styleLabel": "内容风格",
+					"stylePlaceholder": "描述你想要的内容风格…",
+					"subtitle": "为每篇文章配置风格、大纲和结构，AI 可帮你快速生成大纲框架",
+					"title": "内容规划",
+					"untitled": "未命名",
+					"visualCustomPlaceholder": "描述你想要的视觉风格（配色、字体、装饰、氛围）…",
+					"visualHint": "选择卡片的视觉风格预设，AI 将使用对应的 CSS/JS 模板生成内容",
+					"visualLabel": "视觉模板",
+					"visualReferenceLabel": "或上传参考文件（可多选）"
+				},
+				"stepTopic": {
+					"addManual": "手动添加选题",
+					"aiAssistantTitle": "AI 选题助手",
+					"aiGenerateBtn": "AI 智能生成选题",
+					"directionPlaceholder": "输入创作方向或关键词（选填），如：职场效率、AI工具测评...",
+					"errorEmpty": "生成失败，请重试或手动添加选题",
+					"errorNetwork": "网络异常，请稍后重试",
+					"folderPlaceholder": "文件夹名（选填，留空自动生成）",
+					"generateBtn": "生成选题",
+					"generateCount": "生成",
+					"generateCountUnit": "个选题",
+					"stopBtn": "停止",
+					"subtitle": "手动添加或使用 AI 智能生成选题，每篇文章将在下一步详细规划",
+					"title": "选题策划",
+					"titlePlaceholder": "文章标题（必填）",
+					"totalTopics": "共 {{count}} 个选题 · 下一步可为每篇配置风格和大纲"
+				},
+				"stepConfirm": {
+					"accountLabel": "账号",
+					"audienceLabel": "受众",
+					"cancel": "取消",
+					"cardCount": "{{count}} 张卡片",
+					"creatingTopic": "正在创建话题…",
+					"doneDesc": "已为 {{count}} 篇文章创建独立话题，由 IP 操盘手继续创作",
+					"doneTitle": "创作已启动",
+					"generatingBtn": "AI 创作中…",
+					"generatingDesc": "正在创建话题并交由 IP 操盘手处理（{{done}}/{{total}}）",
+					"generatingTitle": "正在启动创作",
+					"globalSummary": "全局设置",
+					"outlinePoints": "{{count}} 个大纲要点",
+					"positionLabel": "定位",
+					"refCount": "{{count}} 个参考资料",
+					"saveAsTemplate": "保存为模板",
+					"saveTemplate": "保存",
+					"startBtn": "开始 AI 创作（共 {{count}} 篇）",
+					"subtitle": "确认信息无误后开始，每篇文章将创建独立话题并由 IP 操盘手执行",
+					"templateNamePlaceholder": "输入模板名称",
+					"templateSaved": "模板已保存",
+					"title": "确认并生成",
+					"topicListHint": "点击切换到对应话题，查看 IP 操盘手的创作进度",
+					"viewing": "查看中"
+				},
+				"steps": {
+					"brand": "品牌信息",
+					"confirm": "确认生成",
+					"detail": "内容规划",
+					"topics": "选题策划"
+				},
+				"styles": {
+					"casual": "轻松活泼",
+					"custom": "自定义",
+					"emotional": "情感共鸣",
+					"professional": "专业严谨",
+					"storytelling": "故事型",
+					"tutorial": "干货教程"
+				},
+				"template": {
+					"articleCount": "{{count}} 篇文章",
+					"blank": "空白开始",
+					"blankDesc": "从零开始创建新的内容方案",
+					"selectSubtitle": "从已保存的模板快速开始，或创建全新方案",
+					"selectTitle": "选择开始方式"
+				},
+				"visuals": {
+					"codeDispatch": {
+						"description": "高对比编辑风、黑白红配色、等宽标签、网格纹理，适合科技/编程/AI话题",
+						"label": "代码快报"
+					},
+					"custom": {
+						"description": "描述你想要的视觉语言，AI 将为你生成专属预设",
+						"label": "自定义风格"
+					},
+					"darkTech": {
+						"description": "深黑背景、金色强调、细边框、字重对比强烈，适合产品/装备测评",
+						"label": "暗黑科技"
+					},
+					"insModern": {
+						"description": "白色背景、充裕留白、极简排版",
+						"label": "现代简约"
+					},
+					"neoBrutalism": {
+						"description": "粗黑边框、硬偏移阴影、高饱和配色",
+						"label": "新布鲁塔主义"
+					},
+					"none": {
+						"description": "按平台默认规范自由设计",
+						"label": "不使用模板"
+					}
+				}
+			},
 			"platform": {
 				"instagram": {
 					"commentsTotal": "{{count}} 条评论",
@@ -2923,6 +3120,8 @@
 			"createFileSuccess": "创建文件成功",
 			"createFolder": "新建文件夹",
 			"createFolderSuccess": "创建文件夹成功",
+			"createSelfMediaFailed": "创建自媒体项目失败",
+			"createSelfMediaSuccess": "创建自媒体项目成功",
 			"createSubMenu": {
 				"customFile": "自定义格式",
 				"designFile": "画布",
@@ -2931,6 +3130,7 @@
 				"mdFile": "Markdown",
 				"phpFile": "PHP",
 				"pythonFile": "Python",
+				"selfMediaFile": "自媒体项目",
 				"txtFile": "TXT"
 			},
 			"createUploadTaskFailed": "创建上传任务失败",
@@ -2980,6 +3180,9 @@
 			"newFolder": {
 				"defaultName": "新建文件夹",
 				"duplicateError": "当前目录已经存在该名称的文件夹，请使用其他名称"
+			},
+			"newSelfMedia": {
+				"defaultName": "新建自媒体项目"
 			},
 			"noEditPermission": "没有编辑权限",
 			"noFilesSelected": "未选择任何文件",

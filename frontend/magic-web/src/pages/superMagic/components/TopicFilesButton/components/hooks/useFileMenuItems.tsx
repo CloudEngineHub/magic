@@ -17,6 +17,11 @@ interface CreateFileMenuItemsParams {
 	 * If provided, design file option will be included
 	 */
 	onAddDesign?: () => void
+	/**
+	 * Optional callback for creating self-media project
+	 * If provided, self-media project option will be included
+	 */
+	onAddSelfMedia?: () => void
 }
 
 /**
@@ -27,6 +32,7 @@ export function createFileMenuItems({
 	t,
 	onAddFile,
 	onAddDesign,
+	onAddSelfMedia,
 }: CreateFileMenuItemsParams): MenuProps["items"] {
 	return [
 		{
@@ -75,9 +81,19 @@ export function createFileMenuItems({
 						onClick: () => onAddDesign(),
 						icon: <MagicFileIcon type="design" size={18} />,
 					},
-					{ type: "divider" as const },
 				]
 			: []),
+		...(onAddSelfMedia
+			? [
+					{
+						key: "createSelfMedia",
+						label: t("topicFiles.contextMenu.createSubMenu.selfMediaFile"),
+						onClick: () => onAddSelfMedia(),
+						icon: <MagicFileIcon type="self-media" size={18} />,
+					},
+				]
+			: []),
+		...(onAddDesign || onAddSelfMedia ? [{ type: "divider" as const }] : []),
 		{
 			key: "createCustom",
 			label: t("topicFiles.contextMenu.createSubMenu.customFile"),
@@ -98,19 +114,28 @@ interface UseFileMenuItemsParams {
 	 * If provided, design file option will be included
 	 */
 	onAddDesign?: () => void
+	/**
+	 * Optional callback for creating self-media project
+	 * If provided, self-media project option will be included
+	 */
+	onAddSelfMedia?: () => void
 }
 
 /**
  * Hook for generating file operation menu items
  * Includes create file submenu for various file types
  */
-function useFileMenuItems({ onAddFile, onAddDesign }: UseFileMenuItemsParams): MenuProps["items"] {
+function useFileMenuItems({
+	onAddFile,
+	onAddDesign,
+	onAddSelfMedia,
+}: UseFileMenuItemsParams): MenuProps["items"] {
 	const { t } = useTranslation("super")
 
 	// File operation menu items
 	const fileMenuItems: MenuProps["items"] = useMemo(
-		() => createFileMenuItems({ t, onAddFile, onAddDesign }),
-		[t, onAddFile, onAddDesign],
+		() => createFileMenuItems({ t, onAddFile, onAddDesign, onAddSelfMedia }),
+		[t, onAddFile, onAddDesign, onAddSelfMedia],
 	)
 
 	return fileMenuItems

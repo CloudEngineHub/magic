@@ -14,6 +14,7 @@ import PlatformSwitcher from "./components/PlatformSwitcher"
 import UnsupportedPlatform from "./components/UnsupportedPlatform"
 import { getPlatformComponent } from "./platforms"
 import { SelfMediaStoreProvider, useSelfMediaStore } from "./stores"
+import SelfMediaInitPanel from "./components/SelfMediaInitPanel"
 import type { SelfMediaRootRenderProps } from "./types"
 
 /**
@@ -40,6 +41,7 @@ function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
 		allowEdit = false,
 	} = props
 	const folderFileId = data?.file_id
+	const folderPath = data?.file_name || ""
 
 	// Access array lengths so that this observer component re-renders when items
 	// are added to / removed from MobX observable arrays. Without this, mutations
@@ -61,6 +63,8 @@ function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
 					allowEdit={allowEdit}
 					saveEditContent={saveEditContent}
 					selectedProject={selectedProject}
+					folderFileId={folderFileId}
+					folderPath={folderPath}
 				/>
 			</SelfMediaPlatformChromeProvider>
 		</SelfMediaStoreProvider>
@@ -73,6 +77,8 @@ interface SelfMediaRootRenderInnerProps {
 	allowEdit?: boolean
 	saveEditContent?: SelfMediaRootRenderProps["saveEditContent"]
 	selectedProject?: SelfMediaRootRenderProps["selectedProject"]
+	folderFileId?: string
+	folderPath?: string
 }
 
 const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
@@ -81,12 +87,17 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	allowEdit,
 	saveEditContent,
 	selectedProject,
+	folderFileId,
+	folderPath,
 }: SelfMediaRootRenderInnerProps) {
 	const { t } = useTranslation("super")
 	const store = useSelfMediaStore()
 	const { hostElement } = useSelfMediaPlatformChrome()
 
 	const { platforms, resolvedPlatform: platform, rootLoading } = store
+
+	// Detect empty project: no platforms configured and not loading
+	const isEmptyProject = !rootLoading && platforms.length === 0
 
 	const handleChangePlatform = useCallback(
 		(next: SelfMediaPlatform) => {
@@ -107,6 +118,19 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 			>
 				<MagicSpin spinning />
 			</Flex>
+		)
+	}
+
+	if (isEmptyProject) {
+		return (
+			<div className={cn("h-full w-full", className)} data-testid="self-media-init-panel">
+				<SelfMediaInitPanel
+					selectedProject={selectedProject}
+					folderFileId={folderFileId}
+					folderPath={folderPath}
+					attachmentList={attachmentList}
+				/>
+			</div>
 		)
 	}
 

@@ -9,3 +9,5 @@ export type {
 	PlatformSlice,
 	TreeSnapshot,
 } from "./selfMediaHelpers"
+export { generateTopics, generateOutline, streamGenerate } from "./selfMediaAiGenerate"
+export type { GenerateTopicsOptions, GeneratedTopic, GenerateOutlineOptions, StreamGenerateOptions } from "./selfMediaAiGenerate"

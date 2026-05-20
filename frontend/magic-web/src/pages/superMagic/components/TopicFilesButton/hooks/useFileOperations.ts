@@ -85,7 +85,7 @@ const findParentSlideFolder = (
 			// 检查目标文件是否是该文件夹的直接子项
 			if (item.children.some((child) => child.file_id === targetFileId)) {
 				const config = (item.display_config || item.metadata) as
-					| { type?: string; [key: string]: unknown }
+					| { type?: string;[key: string]: unknown }
 					| undefined
 				if (config?.type === "slide") {
 					return item
@@ -635,6 +635,80 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		}
 	}
 
+	const createSelfMediaProject = async (folderName: string, parentPath?: string) => {
+		if (!projectId) {
+			throw new Error("项目ID不能为空")
+		}
+
+		const projectKey = `${Date.now()}-${Math.random()}`
+		setCreatingFiles((prev) => new Set(prev).add(projectKey))
+
+		try {
+			// 获取父文件夹ID
+			const parent_id = getParentIdFromPath(parentPath)
+
+			// 直接调用 API 创建文件夹（不触发刷新）
+			const folderResponse = await SuperMagicApi.createFile({
+				project_id: projectId,
+				parent_id,
+				file_name: folderName,
+				is_directory: true,
+			})
+
+			if (!folderResponse?.file_id) {
+				throw new Error("文件夹创建失败")
+			}
+
+			// 在文件夹中创建 magic.project.js 文件
+			const fileContent = `window.magicProjectConfig = {
+	"version": "1.0.0",
+	"type": "self-media",
+	"name": "${folderName}",
+	"self-media": {}
+}
+
+window.magicProjectConfigure(window.magicProjectConfig)`
+			const fileName = "magic.project.js"
+
+			// 直接使用文件夹的 file_id 作为 parent_id 创建文件
+			const fileResponse = await SuperMagicApi.createFile({
+				project_id: projectId,
+				parent_id: folderResponse.file_id,
+				file_name: fileName,
+				is_directory: false,
+			})
+
+			if (!fileResponse?.file_id) {
+				throw new Error("文件创建失败")
+			}
+
+			// 保存文件内容
+			await SuperMagicApi.saveFileContent([
+				{
+					file_id: fileResponse.file_id,
+					content: fileContent,
+				},
+			])
+
+			// 所有操作完成后，统一触发文件列表更新（只刷新一次）
+			pubsub.publish(PubSubEvents.Update_Attachments)
+			onUpdateAttachments?.()
+
+			magicToast.success(t("topicFiles.contextMenu.createSelfMediaSuccess"))
+
+			return folderResponse
+		} catch (error) {
+			magicToast.error(t("topicFiles.contextMenu.createSelfMediaFailed"))
+			throw error
+		} finally {
+			setCreatingFiles((prev) => {
+				const newSet = new Set(prev)
+				newSet.delete(projectKey)
+				return newSet
+			})
+		}
+	}
+
 	const handleUploadFile = (item?: AttachmentItem) => {
 		// 获取上传目标文件夹路径
 		const targetPath = item?.is_directory ? item.relative_file_path || item.name : undefined
@@ -875,10 +949,10 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 			const toastId = createRandomUuidV4()
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
+				| { type?: string; slides?: string[];[key: string]: unknown }
 				| undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
+				| { type?: string; slides?: string[];[key: string]: unknown }
 				| undefined
 			let mergedDisplayConfig = displayConfig || metadata
 			let slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
@@ -892,7 +966,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				if (parentFolder) {
 					isSlideFolder = true
 					const parentConfig = (parentFolder.display_config || parentFolder.metadata) as
-						| { type?: string; slides?: string[]; [key: string]: unknown }
+						| { type?: string; slides?: string[];[key: string]: unknown }
 						| undefined
 					mergedDisplayConfig = parentConfig
 					slidePaths = [] // 单文件，不走多 slide 路径
@@ -918,17 +992,17 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					const isSingleFile = !slidePaths.length
 					const result = isSingleFile
 						? await prepareSingleSlideExport({
-								fileId: entryFileId,
-								fileName: entryFileName,
-								attachmentList: attachments ?? [],
-							})
+							fileId: entryFileId,
+							fileName: entryFileName,
+							attachmentList: attachments ?? [],
+						})
 						: await prepareExportSlides({
-								slidePaths,
-								attachmentList: children.length ? children : (attachments ?? []),
-								mainFileId: entryFileId,
-								mainFileName: entryFileName,
-								displayConfig: mergedDisplayConfig,
-							})
+							slidePaths,
+							attachmentList: children.length ? children : (attachments ?? []),
+							mainFileId: entryFileId,
+							mainFileName: entryFileName,
+							displayConfig: mergedDisplayConfig,
+						})
 
 					if (!result.htmlSlides.some(Boolean)) {
 						magicToast.error({
@@ -1098,10 +1172,10 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 			const toastId = createRandomUuidV4()
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
+				| { type?: string; slides?: string[];[key: string]: unknown }
 				| undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
+				| { type?: string; slides?: string[];[key: string]: unknown }
 				| undefined
 			const mergedDisplayConfig = displayConfig || metadata
 			const slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
@@ -1122,19 +1196,19 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 				const result = isSingleFile
 					? await prepareSingleSlideExport({
-							fileId: item.file_id,
-							fileName: item.file_name,
-							attachmentList: attachments ?? [],
-						})
+						fileId: item.file_id,
+						fileName: item.file_name,
+						attachmentList: attachments ?? [],
+					})
 					: await prepareExportSlides({
-							slidePaths,
-							attachmentList: folderChildren?.length
-								? folderChildren
-								: (attachments ?? []),
-							mainFileId: item.file_id,
-							mainFileName: item.file_name,
-							displayConfig: mergedDisplayConfig,
-						})
+						slidePaths,
+						attachmentList: folderChildren?.length
+							? folderChildren
+							: (attachments ?? []),
+						mainFileId: item.file_id,
+						mainFileName: item.file_name,
+						displayConfig: mergedDisplayConfig,
+					})
 
 				if (!result.htmlSlides.some(Boolean)) {
 					magicToast.error({
@@ -1579,6 +1653,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		createFolderAndUpload,
 		// 新增：画布项目创建回调
 		createDesignProject,
+		// 新增：自媒体项目创建回调
+		createSelfMediaProject,
 		// 新增：文件创建loading状态
 		creatingFiles,
 		// 新增：文件列表更新回调

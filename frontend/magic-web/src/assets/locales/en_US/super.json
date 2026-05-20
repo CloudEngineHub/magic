@@ -627,6 +627,203 @@
 				"selectedSummary": "{{count}}/{{total}} selected",
 				"success": "Export complete"
 			},
+			"initPanel": {
+				"draft": {
+					"detected": "Unfinished edit detected",
+					"discard": "Discard",
+					"restore": "Restore draft",
+					"resumeHint": "You were on step {{step}} last time. Resume?"
+				},
+				"nav": {
+					"jumpTo": "Jump to {{title}}",
+					"next": "Next",
+					"prev": "Previous"
+				},
+				"platforms": {
+					"facebook": "Facebook",
+					"instagram": "Instagram",
+					"rednote": "Rednote (Xiaohongshu)",
+					"tiktok": "TikTok (Douyin)",
+					"wechatChannels": "WeChat Channels",
+					"wechatOfficialAccounts": "WeChat Official Account",
+					"x": "X (Twitter)"
+				},
+				"referenceFilePicker": {
+					"hint": "Optional. All file formats supported",
+					"localUpload": "Upload local file",
+					"noProjectFiles": "No files in this project",
+					"pickProjectTitle": "Select project file",
+					"projectFile": "Project file",
+					"readLocalError": "Failed to read local file. Please retry",
+					"readProjectError": "Failed to read project file. Please retry"
+				},
+				"stepBrand": {
+					"accountName": "Account Name",
+					"accountPlaceholder": "e.g. @SuperMagic",
+					"brandImages": "Brand Image Assets",
+					"brandImagesDescPlaceholder": "Description (e.g. brand mascot)",
+					"brandImagesHint": "Upload brand IP images, logos, or style references. AI will incorporate these elements when generating images",
+					"brandImagesUpload": "Click to upload images or files",
+					"brandImagesUploadFailed": "Failed to upload \"{{name}}\". Please try again.",
+					"brandImagesUploadHint": "Files are saved under project __drafts/brand-images/",
+					"brandPosition": "Brand / IP Positioning",
+					"brandPositionHint": "A clear positioning helps AI generate more accurate content strategies",
+					"brandPositionPlaceholder": "Describe your brand positioning in one sentence, e.g. AI productivity tools",
+					"historyRecords": "History",
+					"optional": "Optional",
+					"platformFetchLoading": "Fetching account info from the platform. The form will auto-fill when ready…",
+					"platformFetchTimeout": "Account fetch timed out. Retry later or check the conversation for progress.",
+					"platformFetching": "Fetching…",
+					"quickFillHint": "Tip: The more detail you provide, the more accurate AI-generated topics will be",
+					"required": "Required",
+					"saveAsNew": "Save as new record",
+					"saveConfirmDesc": "Save this brand info as a history record for quick fill next time?",
+					"saveConfirmSave": "Save and continue",
+					"saveConfirmSkip": "Skip",
+					"saveConfirmTitle": "Save brand info?",
+					"selectRecordHint": "Select a record to auto-fill",
+					"subtitle": "Set up your brand positioning so AI can understand your content direction and generate matching topics",
+					"targetAudience": "Target Audience",
+					"targetAudienceHint": "Helps AI adjust tone and topic direction",
+					"targetAudiencePlaceholder": "e.g. 25-35 year old professionals, students, new parents",
+					"title": "Account & Brand Info"
+				},
+				"stepDetail": {
+					"aiAutoFillBtn": "AI Auto-fill Configuration",
+					"aiAutoFillHint": "Auto-recommend style, template, outline based on description",
+					"aiAutoFilling": "Auto-filling...",
+					"articleFallback": "Article {{index}}",
+					"cardCountHint": "6-9 cards recommended for Rednote/Instagram",
+					"cardCountLabel": "Card Count",
+					"currentArticle": "Current Article",
+					"descriptionLabel": "Content Description",
+					"descriptionPlaceholder": "Describe what this article is about in your own words, AI will help polish it...",
+					"expandConfig": "Expand advanced config (style, template, outline)",
+					"materialsLabel": "Materials",
+					"notesLabel": "Additional Notes",
+					"notesPlaceholder": "Any extra requirements or instructions...",
+					"outlineAddChildBtn": "Add child (Tab)",
+					"outlineAddRootBtn": "Add point",
+					"outlineAttachBtn": "Attach file",
+					"outlineAttachPlaceholder": "Describe how this file relates to the point…",
+					"outlineEmpty": "No outline yet. Add points below or use AI generate",
+					"outlineGenerateBtn": "AI Generate Outline",
+					"outlineGenerating": "Generating...",
+					"outlineLabel": "Article Outline",
+					"outlineNodePlaceholder": "Enter key point…",
+					"outlineOptimizeBtn": "AI Optimize",
+					"outlineOptimizePlaceholder": "Describe how to adjust the outline, e.g. add examples, shorten, reorder...",
+					"outlineOptimizeSubmit": "Generate",
+					"outlineOptimizing": "Optimizing...",
+					"outlineRemoveBtn": "Remove",
+					"platformLabel": "Platform",
+					"platformRequired": "Please select a platform for this article",
+					"referencesFilePlaceholder": "Describe how to use this file…",
+					"referencesHint": "Optional notes and/or reference attachments",
+					"referencesLabel": "References",
+					"referencesTextPlaceholder": "Extra requirements, context, or instructions…",
+					"referencesUploadHint": "Images, videos, PDF, Office docs, etc.",
+					"referencesUploadLabel": "Click or drag to upload references",
+					"styleLabel": "Content Style",
+					"stylePlaceholder": "Describe the content style you want...",
+					"subtitle": "Configure style, outline, and structure for each article. AI can help generate outline drafts",
+					"title": "Content Planning",
+					"untitled": "Untitled",
+					"visualCustomPlaceholder": "Describe the visual style you want (colors, fonts, decorations, mood)...",
+					"visualHint": "Choose a visual style preset for cards. AI will use the corresponding CSS/JS template",
+					"visualLabel": "Visual Template",
+					"visualReferenceLabel": "Or upload reference files (multiple allowed)"
+				},
+				"stepTopic": {
+					"addManual": "Add topic manually",
+					"aiAssistantTitle": "AI Topic Assistant",
+					"aiGenerateBtn": "AI Generate Topics",
+					"directionPlaceholder": "Enter direction or keywords (optional), e.g.: productivity, AI tool reviews...",
+					"errorEmpty": "Generation failed, please retry or add topics manually",
+					"errorNetwork": "Network error, please try again later",
+					"folderPlaceholder": "Folder name (optional, auto-generated if empty)",
+					"generateBtn": "Generate",
+					"generateCount": "Generate",
+					"generateCountUnit": "topics",
+					"stopBtn": "Stop",
+					"subtitle": "Add topics manually or use AI to generate them. Each article can be configured in the next step",
+					"title": "Topic Planning",
+					"titlePlaceholder": "Article title (required)",
+					"totalTopics": "{{count}} topics · Configure style and outline in the next step"
+				},
+				"stepConfirm": {
+					"accountLabel": "Account",
+					"audienceLabel": "Audience",
+					"cancel": "Cancel",
+					"cardCount": "{{count}} cards",
+					"creatingTopic": "Creating topic…",
+					"doneDesc": "{{count}} topics created. IP Manager is working on each article.",
+					"doneTitle": "Generation started",
+					"generatingBtn": "Generating…",
+					"generatingDesc": "Creating topics via IP Manager ({{done}}/{{total}})",
+					"generatingTitle": "Starting generation",
+					"globalSummary": "Global settings",
+					"outlinePoints": "{{count}} outline points",
+					"positionLabel": "Positioning",
+					"refCount": "{{count}} references",
+					"saveAsTemplate": "Save as template",
+					"saveTemplate": "Save",
+					"startBtn": "Start AI creation ({{count}} articles)",
+					"subtitle": "Each article gets its own topic handled by IP Manager",
+					"templateNamePlaceholder": "Template name",
+					"templateSaved": "Template saved",
+					"title": "Confirm & generate",
+					"topicListHint": "Click a topic to switch and view IP Manager progress",
+					"viewing": "Viewing"
+				},
+				"steps": {
+					"brand": "Brand Info",
+					"confirm": "Confirm",
+					"detail": "Content Planning",
+					"topics": "Topic Planning"
+				},
+				"styles": {
+					"casual": "Casual & Lively",
+					"custom": "Custom",
+					"emotional": "Emotional",
+					"professional": "Professional",
+					"storytelling": "Storytelling",
+					"tutorial": "Tutorial"
+				},
+				"template": {
+					"articleCount": "{{count}} articles",
+					"blank": "Start blank",
+					"blankDesc": "Create a new content plan from scratch",
+					"selectSubtitle": "Start quickly from a saved template, or create a new plan from scratch",
+					"selectTitle": "Choose how to start"
+				},
+				"visuals": {
+					"codeDispatch": {
+						"description": "High contrast editorial style, monochrome+red palette, monospace tags, grid texture. Great for tech/coding/AI topics",
+						"label": "Code Dispatch"
+					},
+					"custom": {
+						"description": "Describe your visual language, AI will generate a custom preset for you",
+						"label": "Custom Style"
+					},
+					"darkTech": {
+						"description": "Dark background, gold accents, thin borders, strong font-weight contrast. Great for product/gear reviews",
+						"label": "Dark Tech"
+					},
+					"insModern": {
+						"description": "White background, generous whitespace, minimal typography",
+						"label": "Modern Minimal"
+					},
+					"neoBrutalism": {
+						"description": "Bold borders, hard offset shadows, high saturation colors",
+						"label": "Neo Brutalism"
+					},
+					"none": {
+						"description": "Design freely following platform defaults",
+						"label": "No Template"
+					}
+				}
+			},
 			"platform": {
 				"instagram": {
 					"commentsTotal": "{{count}} comments",
@@ -2910,6 +3107,8 @@
 			"createFileSuccess": "File created successfully",
 			"createFolder": "New Folder",
 			"createFolderSuccess": "Folder created successfully",
+			"createSelfMediaFailed": "Failed to create self-media project",
+			"createSelfMediaSuccess": "Self-media project created successfully",
 			"createSubMenu": {
 				"customFile": "Custom Format",
 				"designFile": "Design",
@@ -2918,6 +3117,7 @@
 				"mdFile": "Markdown",
 				"phpFile": "PHP",
 				"pythonFile": "Python",
+				"selfMediaFile": "Self-Media Project",
 				"txtFile": "TXT"
 			},
 			"createUploadTaskFailed": "Failed to create upload task",
@@ -2967,6 +3167,9 @@
 			"newFolder": {
 				"defaultName": "New Folder",
 				"duplicateError": "A folder with this name already exists in the current directory, please use a different name"
+			},
+			"newSelfMedia": {
+				"defaultName": "New Self-Media Project"
 			},
 			"noEditPermission": "No edit permission",
 			"noFilesSelected": "No files selected",

@@ -1,0 +1,222 @@
+import type { SelfMediaPlatform } from "../../../../types"
+
+/** An outline node in the tree structure */
+export interface OutlineNode {
+	id: string
+	text: string
+	children?: OutlineNode[]
+	/** Optional reference attachments bound to this outline point */
+	materials?: MaterialItem[]
+}
+
+/** Reference file (local upload or project file) */
+export interface ReferenceFileValue {
+	name: string
+	content: string
+	/** text content or data-url for binary/image files */
+	kind?: "text" | "data-url"
+	/** Present when file was picked from the project workspace */
+	file_id?: string
+	/** Workspace-relative path, e.g. "posts/foo/ref.png" */
+	file_path?: string
+}
+
+/** A material item with file and description */
+export interface MaterialItem {
+	/** Unique id for list key */
+	id: string
+	/** The File object (local, before upload) */
+	file: File
+	/** Local preview URL (object URL) */
+	previewUrl: string
+	/** User-provided description/note for this material */
+	description: string
+	/** After upload: the remote file path/key */
+	uploadedPath?: string
+}
+
+/** Per-article detailed planning */
+export interface ArticleDetail {
+	/** Article title */
+	title: string
+	/** Custom folder name (optional, auto-generated if empty) */
+	folderName: string
+	/** Content style/tone for this article */
+	style: string
+	/** Visual CSS+JS preset ID (e.g. "neo-brutalism", "dark-tech", "none") */
+	visualPreset?: string
+	/** Tree-structured outline */
+	outline: OutlineNode[]
+	/** Number of cards (for card-based platforms) */
+	cardCount: number
+	/** Attached materials with descriptions */
+	materials: MaterialItem[]
+	/** Additional notes/instructions */
+	notes: string
+	/** Target platform for this article */
+	platform: SelfMediaPlatform
+	/** User's casual description (voice/text input) */
+	description?: string
+	/** Reference files for custom visual style */
+	visualReferenceFiles?: ReferenceFileValue[]
+}
+
+/** A brand image/asset uploaded by the user */
+export interface BrandImageItem {
+	/** Unique id for list key */
+	id: string
+	/** The File object (local, before upload) */
+	file: File
+	/** Local preview URL (object URL for images) */
+	previewUrl: string
+	/** User-provided description/note for this brand image */
+	description: string
+	/** Whether this file is an image (for preview) */
+	isImage: boolean
+	/** After upload: the remote file path/key */
+	uploadedPath?: string
+}
+
+/** Global settings collected in brand info step */
+export interface SelfMediaInitGlobalSettings {
+	/** Account/author name */
+	author: string
+	/** Brand/IP positioning (one sentence) */
+	brandPosition: string
+	/** Target audience (optional) */
+	targetAudience: string
+	/** Brand image/IP assets for image generation reference */
+	brandImages: BrandImageItem[]
+}
+
+/** Full data model for the init panel */
+export interface SelfMediaInitData {
+	global: SelfMediaInitGlobalSettings
+	articles: ArticleDetail[]
+}
+
+/** Style presets — labels resolved via i18n key: selfMedia.initPanel.styles.{value} */
+export const STYLE_PRESETS = [
+	{ value: "professional", labelKey: "detail.selfMedia.initPanel.styles.professional" },
+	{ value: "casual", labelKey: "detail.selfMedia.initPanel.styles.casual" },
+	{ value: "storytelling", labelKey: "detail.selfMedia.initPanel.styles.storytelling" },
+	{ value: "tutorial", labelKey: "detail.selfMedia.initPanel.styles.tutorial" },
+	{ value: "emotional", labelKey: "detail.selfMedia.initPanel.styles.emotional" },
+	{ value: "custom", labelKey: "detail.selfMedia.initPanel.styles.custom" },
+] as const
+
+/** Platforms that are currently implemented */
+export const IMPLEMENTED_PLATFORMS: SelfMediaPlatform[] = [
+	"rednote",
+	"instagram",
+	"wechat-official-accounts",
+]
+
+/** All platforms including upcoming — labels resolved via i18n key: selfMedia.initPanel.platforms.{value} */
+export const ALL_PLATFORMS: Array<{
+	value: SelfMediaPlatform
+	labelKey: string
+	disabled: boolean
+}> = [
+	{ value: "rednote", labelKey: "detail.selfMedia.initPanel.platforms.rednote", disabled: false },
+	{
+		value: "instagram",
+		labelKey: "detail.selfMedia.initPanel.platforms.instagram",
+		disabled: false,
+	},
+	{
+		value: "wechat-official-accounts",
+		labelKey: "detail.selfMedia.initPanel.platforms.wechatOfficialAccounts",
+		disabled: false,
+	},
+	{ value: "tiktok", labelKey: "detail.selfMedia.initPanel.platforms.tiktok", disabled: true },
+	{ value: "x", labelKey: "detail.selfMedia.initPanel.platforms.x", disabled: true },
+	{
+		value: "facebook",
+		labelKey: "detail.selfMedia.initPanel.platforms.facebook",
+		disabled: true,
+	},
+	{
+		value: "wechat-channels",
+		labelKey: "detail.selfMedia.initPanel.platforms.wechatChannels",
+		disabled: true,
+	},
+]
+
+/** Visual presets organized by platform — maps to backend skill presets/ directory */
+export interface VisualPresetOption {
+	value: string
+	labelKey: string
+	descriptionKey: string
+	platforms: SelfMediaPlatform[]
+}
+
+export const VISUAL_PRESETS: VisualPresetOption[] = [
+	{
+		value: "neo-brutalism",
+		labelKey: "detail.selfMedia.initPanel.visuals.neoBrutalism.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.neoBrutalism.description",
+		platforms: ["rednote"],
+	},
+	{
+		value: "code-dispatch",
+		labelKey: "detail.selfMedia.initPanel.visuals.codeDispatch.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.codeDispatch.description",
+		platforms: ["rednote"],
+	},
+	{
+		value: "dark-tech",
+		labelKey: "detail.selfMedia.initPanel.visuals.darkTech.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.darkTech.description",
+		platforms: ["rednote"],
+	},
+	{
+		value: "ins-modern",
+		labelKey: "detail.selfMedia.initPanel.visuals.insModern.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insModern.description",
+		platforms: ["instagram"],
+	},
+	{
+		value: "custom",
+		labelKey: "detail.selfMedia.initPanel.visuals.custom.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.custom.description",
+		platforms: ["rednote", "instagram", "wechat-official-accounts"],
+	},
+	{
+		value: "none",
+		labelKey: "detail.selfMedia.initPanel.visuals.none.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.none.description",
+		platforms: ["rednote", "instagram", "wechat-official-accounts"],
+	},
+]
+
+/** Get visual presets available for a given platform */
+export function getVisualPresetsForPlatform(platform: SelfMediaPlatform): VisualPresetOption[] {
+	return VISUAL_PRESETS.filter((p) => p.platforms.includes(platform))
+}
+
+/** Collect article-level and outline-bound reference materials */
+export function collectArticleMaterials(article: ArticleDetail): MaterialItem[] {
+	const items = [...(article.materials || [])]
+	const visit = (nodes: OutlineNode[]) => {
+		for (const node of nodes) {
+			if (node.materials?.length) items.push(...node.materials)
+			if (node.children?.length) visit(node.children)
+		}
+	}
+	visit(article.outline || [])
+	return items
+}
+
+/** Default card count by platform */
+export function getDefaultCardCount(platform: SelfMediaPlatform): number {
+	switch (platform) {
+		case "rednote":
+		case "instagram":
+			return 6
+		case "wechat-official-accounts":
+			return 0 // not applicable
+		default:
+			return 6
+	}
+}
