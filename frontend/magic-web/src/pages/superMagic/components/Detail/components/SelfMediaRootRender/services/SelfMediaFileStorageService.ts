@@ -121,11 +121,7 @@ interface ReferenceIndexPayload {
 	items: ReferenceIndexItem[]
 }
 
-type ReferenceIndexRole =
-	| "brand"
-	| "article-material"
-	| "outline-material"
-	| "visual-reference"
+type ReferenceIndexRole = "brand" | "article-material" | "outline-material" | "visual-reference"
 
 interface ReferenceIndexItem {
 	id: string
@@ -190,7 +186,9 @@ export class SelfMediaFileStorageService {
 			const archiveSnapshot = this.buildArchiveSnapshotData(data, archiveId)
 			const payload = await this.buildDraftPayload(archiveSnapshot, currentStep, now)
 			const referenceIndex = this.buildReferenceIndexPayload(archiveSnapshot, now)
-			const archiveDir = await this.ensureDirectory(`${this.getBasePath()}/${ARCHIVE_DIR}/${archiveId}`)
+			const archiveDir = await this.ensureDirectory(
+				`${this.getBasePath()}/${ARCHIVE_DIR}/${archiveId}`,
+			)
 			if (!archiveDir) return null
 
 			const manifestFileId = await this.createAndWriteFile(
@@ -896,7 +894,9 @@ export class SelfMediaFileStorageService {
 	private async archiveDraftMaterials(archiveDirId: string): Promise<boolean> {
 		const files = await this.getProjectFileList()
 		const materialsDirPath = this.folderRelativePath
-			? this.normalizeRelativePath(`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
+			? this.normalizeRelativePath(
+					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+				)
 			: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 		const materialsDir = files.find(
 			(item) =>
@@ -946,12 +946,15 @@ export class SelfMediaFileStorageService {
 			currentStep,
 			createdAt,
 			updatedAt: now,
-			global: this.serializeGlobal(data.global),
+			global: await this.buildDraftGlobalSettings(data.global),
 			articles: this.serializeArticles(data.articles),
 		}
 	}
 
-	private buildReferenceIndexPayload(data: SelfMediaInitData, now: string): ReferenceIndexPayload {
+	private buildReferenceIndexPayload(
+		data: SelfMediaInitData,
+		now: string,
+	): ReferenceIndexPayload {
 		const items: ReferenceIndexItem[] = []
 
 		data.global.brandImages.forEach((item) => {
@@ -1034,9 +1037,14 @@ export class SelfMediaFileStorageService {
 				outline: this.rewriteOutlineForArchive(article.outline || [], archiveId),
 				materials: (article.materials || []).map((item) => ({
 					...item,
-					uploadedPath: this.rewriteDraftMaterialPathForArchive(item.uploadedPath, archiveId),
+					uploadedPath: this.rewriteDraftMaterialPathForArchive(
+						item.uploadedPath,
+						archiveId,
+					),
 				})),
-				visualReferenceFiles: (article.visualReferenceFiles || []).map((item) => ({ ...item })),
+				visualReferenceFiles: (article.visualReferenceFiles || []).map((item) => ({
+					...item,
+				})),
 			})),
 		}
 	}
@@ -1060,7 +1068,9 @@ export class SelfMediaFileStorageService {
 		const normalized = this.normalizeRelativePath(path)
 		const draftMaterialsPrefix = `${
 			this.folderRelativePath
-				? this.normalizeRelativePath(`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
+				? this.normalizeRelativePath(
+						`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+					)
 				: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 		}/`
 		if (!normalized.startsWith(draftMaterialsPrefix)) return path
@@ -1143,6 +1153,56 @@ export class SelfMediaFileStorageService {
 				isImage: img.isImage,
 			})),
 		}
+	}
+
+	private async buildDraftGlobalSettings(
+		global: SelfMediaInitGlobalSettings,
+	): Promise<SerializedGlobalSettings> {
+		const serializedGlobal = this.serializeGlobal(global)
+		if (serializedGlobal.brandImages.length > 0) return serializedGlobal
+
+		return {
+			...serializedGlobal,
+			brandImages: await this.listDraftBrandImagesFromDirectory(),
+		}
+	}
+
+	private async listDraftBrandImagesFromDirectory(): Promise<SerializedBrandImage[]> {
+		const files = await this.getProjectFileList()
+		const brandImagesDir = this.toProjectRelativePath(
+			`${this.getBasePath()}/${BRAND_IMAGES_DIR}`,
+		)
+
+		return files
+			.filter(
+				(item) =>
+					!item.is_directory &&
+					item.relative_file_path &&
+					this.normalizeRelativePath(item.relative_file_path).startsWith(
+						`${brandImagesDir}/`,
+					),
+			)
+			.sort((a, b) =>
+				this.normalizeRelativePath(a.relative_file_path || "").localeCompare(
+					this.normalizeRelativePath(b.relative_file_path || ""),
+				),
+			)
+			.map((item) => {
+				const relativePath = this.normalizeRelativePath(item.relative_file_path || "")
+				const name = item.file_name || relativePath.split("/").pop() || "unknown"
+
+				return {
+					id: `brand-image:${relativePath}`,
+					name,
+					description: "",
+					relativePath,
+					isImage: this.isImageFileName(name),
+				}
+			})
+	}
+
+	private isImageFileName(fileName: string): boolean {
+		return /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)$/i.test(fileName)
 	}
 
 	private async ensureBrandImagesUploaded(brandImages: BrandImageItem[]): Promise<void> {

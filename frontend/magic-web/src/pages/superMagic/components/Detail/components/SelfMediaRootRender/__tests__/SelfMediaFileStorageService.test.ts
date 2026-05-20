@@ -338,14 +338,16 @@ describe("SelfMediaFileStorageService", () => {
 		})
 
 		let writeCount = 0
-		mockSaveFileContent.mockImplementation(async (entries: Array<{ file_id: string; content: string }>) => {
-			writeCount += 1
-			if (writeCount === 4) {
-				throw new Error("reference index write failed")
-			}
-			entries.forEach((entry) => contentByFileId.set(entry.file_id, entry.content))
-			return {}
-		})
+		mockSaveFileContent.mockImplementation(
+			async (entries: Array<{ file_id: string; content: string }>) => {
+				writeCount += 1
+				if (writeCount === 4) {
+					throw new Error("reference index write failed")
+				}
+				entries.forEach((entry) => contentByFileId.set(entry.file_id, entry.content))
+				return {}
+			},
+		)
 
 		const service = new SelfMediaFileStorageService(
 			"project-1",
@@ -420,5 +422,148 @@ describe("SelfMediaFileStorageService", () => {
 				(item) => item.relative_file_path === "self-media/__drafts/draft.json",
 			),
 		).toBe(true)
+	})
+
+	it("backfills brand images into draft json when memory data is empty", async () => {
+		seedNode({
+			file_id: "brand-images-dir",
+			file_name: "brand-images",
+			is_directory: true,
+			parent_id: "file-1",
+			relative_file_path: "self-media/__drafts/brand-images",
+		})
+		seedNode({
+			file_id: "brand-image-1",
+			file_name: "logo.png",
+			is_directory: false,
+			parent_id: "brand-images-dir",
+			relative_file_path: "self-media/__drafts/brand-images/logo.png",
+		})
+		seedNode({
+			file_id: "brand-image-2",
+			file_name: "manual.pdf",
+			is_directory: false,
+			parent_id: "brand-images-dir",
+			relative_file_path: "self-media/__drafts/brand-images/manual.pdf",
+		})
+
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.saveDraft(
+			{
+				...data,
+				global: {
+					...data.global,
+					brandImages: [],
+				},
+			},
+			2,
+		)
+
+		const draftFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/__drafts/draft.json",
+		)
+		const draftContent = JSON.parse(contentByFileId.get(draftFile!.file_id) || "{}")
+
+		expect(draftContent.global.brandImages).toEqual([
+			expect.objectContaining({
+				name: "logo.png",
+				description: "",
+				relativePath: "self-media/__drafts/brand-images/logo.png",
+				isImage: true,
+			}),
+			expect.objectContaining({
+				name: "manual.pdf",
+				description: "",
+				relativePath: "self-media/__drafts/brand-images/manual.pdf",
+				isImage: false,
+			}),
+		])
+	})
+
+	it("keeps in-memory brand images when saving draft", async () => {
+		seedNode({
+			file_id: "brand-images-dir",
+			file_name: "brand-images",
+			is_directory: true,
+			parent_id: "file-1",
+			relative_file_path: "self-media/__drafts/brand-images",
+		})
+		seedNode({
+			file_id: "brand-image-1",
+			file_name: "logo.png",
+			is_directory: false,
+			parent_id: "brand-images-dir",
+			relative_file_path: "self-media/__drafts/brand-images/logo.png",
+		})
+
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.saveDraft(data, 2)
+
+		const draftFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/__drafts/draft.json",
+		)
+		const draftContent = JSON.parse(contentByFileId.get(draftFile!.file_id) || "{}")
+
+		expect(draftContent.global.brandImages).toEqual([
+			expect.objectContaining({
+				id: "brand-1",
+				name: "brand.png",
+				description: "brand mascot",
+				relativePath: "self-media/__drafts/brand-images/brand.png",
+				isImage: true,
+			}),
+		])
+	})
+
+	it("does not backfill brand images when saving template", async () => {
+		seedNode({
+			file_id: "brand-images-dir",
+			file_name: "brand-images",
+			is_directory: true,
+			parent_id: "file-1",
+			relative_file_path: "self-media/__drafts/brand-images",
+		})
+		seedNode({
+			file_id: "brand-image-1",
+			file_name: "logo.png",
+			is_directory: false,
+			parent_id: "brand-images-dir",
+			relative_file_path: "self-media/__drafts/brand-images/logo.png",
+		})
+
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		const templateId = await service.saveTemplate(
+			{
+				...data,
+				global: {
+					...data.global,
+					brandImages: [],
+				},
+			},
+			"Template A",
+		)
+
+		const templateFile = attachments.find(
+			(item) =>
+				item.relative_file_path === `self-media/__drafts/templates/${templateId}.json`,
+		)
+		const templateContent = JSON.parse(contentByFileId.get(templateFile!.file_id) || "{}")
+
+		expect(templateContent.global.brandImages).toEqual([])
 	})
 })

@@ -88,7 +88,7 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 		Record<string, number>
 	>({})
 
-	useBrandImagePreviewHydration({
+	const { hydratingImageIds } = useBrandImagePreviewHydration({
 		attachmentList,
 		brandImages,
 		onBrandImagesChange,
@@ -739,6 +739,7 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 							{brandImages.map((item) => {
 								const uploadProgress = brandImageUploadProgress[item.id]
 								const isUploading = uploadProgress !== undefined
+								const isHydratingPreview = hydratingImageIds.has(item.id)
 
 								return (
 									<div
@@ -747,11 +748,53 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 									>
 										{item.isImage ? (
 											<div className="relative h-16 w-full overflow-hidden bg-muted/30">
-												<img
-													src={item.previewUrl}
-													alt={item.description || item.file.name}
-													className="h-full w-full object-cover"
-												/>
+												{item.previewUrl ? (
+													<img
+														src={item.previewUrl}
+														alt={item.description || item.file.name}
+														className="h-full w-full object-cover"
+													/>
+												) : isHydratingPreview ? (
+													<div className="flex h-full w-full animate-pulse items-center justify-center bg-muted/40">
+														<div className="flex flex-col items-center gap-1 text-muted-foreground/70">
+															<svg
+																className="animate-spin"
+																width="16"
+																height="16"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																strokeWidth="2"
+															>
+																<path d="M21 12a9 9 0 1 1-6.219-8.56" />
+															</svg>
+															<div className="h-1 w-8 rounded-full bg-muted-foreground/20" />
+														</div>
+													</div>
+												) : (
+													<div className="flex h-full w-full items-center justify-center bg-muted/40 text-muted-foreground/70">
+														<svg
+															width="18"
+															height="18"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															strokeWidth="1.5"
+															strokeLinecap="round"
+															strokeLinejoin="round"
+														>
+															<rect
+																x="3"
+																y="3"
+																width="18"
+																height="18"
+																rx="2"
+															/>
+															<circle cx="8.5" cy="8.5" r="1.5" />
+															<path d="m21 15-5-5L5 21" />
+														</svg>
+													</div>
+												)}
 												{isUploading ? (
 													<div className="absolute inset-0 flex flex-col justify-end bg-black/35 p-1">
 														<Progress

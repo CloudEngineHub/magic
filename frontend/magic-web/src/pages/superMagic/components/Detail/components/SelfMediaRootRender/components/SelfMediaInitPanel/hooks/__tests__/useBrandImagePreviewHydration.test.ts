@@ -19,6 +19,18 @@ function makeBrandImage(overrides: Partial<BrandImageItem> = {}): BrandImageItem
 	}
 }
 
+function createDeferred<T>() {
+	let resolve!: (value: T | PromiseLike<T>) => void
+	let reject!: (reason?: unknown) => void
+
+	const promise = new Promise<T>((res, rej) => {
+		resolve = res
+		reject = rej
+	})
+
+	return { promise, resolve, reject }
+}
+
 describe("useBrandImagePreviewHydration", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -70,17 +82,19 @@ describe("useBrandImagePreviewHydration", () => {
 		vi.mocked(getFileContentById).mockResolvedValue(new Blob(["image"], { type: "image/png" }))
 
 		const onBrandImagesChange = vi.fn()
+		const attachmentList = [
+			{
+				file_id: "file-2",
+				is_directory: false,
+				relative_file_path: "/__drafts/brand-images/brand.png",
+			},
+		]
+		const brandImages = [makeBrandImage({ uploadedPath: "__drafts/brand-images/brand.png" })]
 
 		renderHook(() =>
 			useBrandImagePreviewHydration({
-				attachmentList: [
-					{
-						file_id: "file-2",
-						is_directory: false,
-						relative_file_path: "/__drafts/brand-images/brand.png",
-					},
-				],
-				brandImages: [makeBrandImage({ uploadedPath: "__drafts/brand-images/brand.png" })],
+				attachmentList,
+				brandImages,
 				onBrandImagesChange,
 			}),
 		)
@@ -94,17 +108,19 @@ describe("useBrandImagePreviewHydration", () => {
 	it("skips images that already have previewUrl", async () => {
 		const { getFileContentById } = await import("@/pages/superMagic/utils/api")
 		const onBrandImagesChange = vi.fn()
+		const attachmentList = [
+			{
+				file_id: "file-1",
+				is_directory: false,
+				relative_file_path: "__drafts/brand-images/brand.png",
+			},
+		]
+		const brandImages = [makeBrandImage({ previewUrl: "blob:existing-preview" })]
 
 		renderHook(() =>
 			useBrandImagePreviewHydration({
-				attachmentList: [
-					{
-						file_id: "file-1",
-						is_directory: false,
-						relative_file_path: "__drafts/brand-images/brand.png",
-					},
-				],
-				brandImages: [makeBrandImage({ previewUrl: "blob:existing-preview" })],
+				attachmentList,
+				brandImages,
 				onBrandImagesChange,
 			}),
 		)
@@ -112,6 +128,40 @@ describe("useBrandImagePreviewHydration", () => {
 		await waitFor(() => {
 			expect(getFileContentById).not.toHaveBeenCalled()
 			expect(onBrandImagesChange).not.toHaveBeenCalled()
+		})
+	})
+
+	it("exposes loading ids while preview hydration is in progress", async () => {
+		const { getFileContentById } = await import("@/pages/superMagic/utils/api")
+		const deferred = createDeferred<Blob>()
+		vi.mocked(getFileContentById).mockReturnValue(deferred.promise)
+
+		const onBrandImagesChange = vi.fn()
+		const attachmentList = [
+			{
+				file_id: "file-1",
+				is_directory: false,
+				relative_file_path: "__drafts/brand-images/brand.png",
+			},
+		]
+		const brandImages = [makeBrandImage()]
+		const { result } = renderHook(() =>
+			useBrandImagePreviewHydration({
+				attachmentList,
+				brandImages,
+				onBrandImagesChange,
+			}),
+		)
+
+		await waitFor(() => {
+			expect(result.current.hydratingImageIds.has("brand-image-1")).toBe(true)
+		})
+
+		deferred.resolve(new Blob(["image"], { type: "image/png" }))
+
+		await waitFor(() => {
+			expect(result.current.hydratingImageIds.size).toBe(0)
+			expect(onBrandImagesChange).toHaveBeenCalled()
 		})
 	})
 })

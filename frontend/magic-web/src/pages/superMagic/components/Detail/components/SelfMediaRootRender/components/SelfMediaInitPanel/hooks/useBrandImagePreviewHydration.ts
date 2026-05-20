@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import type { BrandImageItem } from "../types"
 import type { AttachmentNode } from "../../../services"
@@ -71,6 +71,7 @@ export function useBrandImagePreviewHydration({
 	onBrandImagesChange,
 }: UseBrandImagePreviewHydrationParams) {
 	const previewUrlsRef = useRef(new Map<string, string>())
+	const [hydratingImageIds, setHydratingImageIds] = useState<Set<string>>(new Set())
 
 	useEffect(() => {
 		for (const [id, previewUrl] of previewUrlsRef.current) {
@@ -87,9 +88,15 @@ export function useBrandImagePreviewHydration({
 		if (!pendingItems.length || !attachmentList?.length) return
 
 		let cancelled = false
+		const pendingIds = new Set(pendingItems.map((item) => item.id))
+		setHydratingImageIds((prev) => {
+			const next = new Set(prev)
+			pendingIds.forEach((id) => next.add(id))
+			return next
+		})
 
-		void Promise.all(pendingItems.map((item) => loadPreviewUrl(item, attachmentList))).then(
-			(results) => {
+		void Promise.all(pendingItems.map((item) => loadPreviewUrl(item, attachmentList)))
+			.then((results) => {
 				const hydratedItems = results.filter((result): result is PreviewResult =>
 					Boolean(result?.previewUrl),
 				)
@@ -118,8 +125,14 @@ export function useBrandImagePreviewHydration({
 						return { ...item, previewUrl }
 					}),
 				)
-			},
-		)
+			})
+			.finally(() => {
+				setHydratingImageIds((prev) => {
+					const next = new Set(prev)
+					pendingIds.forEach((id) => next.delete(id))
+					return next
+				})
+			})
 
 		return () => {
 			cancelled = true
@@ -134,4 +147,8 @@ export function useBrandImagePreviewHydration({
 			previewUrlsRef.current.clear()
 		}
 	}, [])
+
+	return {
+		hydratingImageIds,
+	}
 }

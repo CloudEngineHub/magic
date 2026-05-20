@@ -632,7 +632,8 @@
 					"detected": "Unfinished edit detected",
 					"discard": "Discard",
 					"restore": "Restore draft",
-					"resumeHint": "You were on step {{step}} last time. Resume?"
+					"resumeHint": "You were on step {{step}} last time. Resume?",
+					"saveError": "Failed to save draft. Please try again later."
 				},
 				"nav": {
 					"jumpTo": "Jump to {{title}}",
@@ -687,6 +688,31 @@
 					"targetAudienceHint": "Helps AI adjust tone and topic direction",
 					"targetAudiencePlaceholder": "e.g. 25-35 year old professionals, students, new parents",
 					"title": "Account & Brand Info"
+				},
+				"stepConfirm": {
+					"accountLabel": "Account",
+					"audienceLabel": "Audience",
+					"cancel": "Cancel",
+					"cardCount": "{{count}} cards",
+					"creatingTopic": "Creating topic…",
+					"doneDesc": "{{count}} topics created. IP Manager is working on each article.",
+					"doneTitle": "Generation started",
+					"generatingBtn": "Generating…",
+					"generatingDesc": "Creating topics via IP Manager ({{done}}/{{total}})",
+					"generatingTitle": "Starting generation",
+					"globalSummary": "Global settings",
+					"outlinePoints": "{{count}} outline points",
+					"positionLabel": "Positioning",
+					"refCount": "{{count}} references",
+					"saveAsTemplate": "Save as template",
+					"saveTemplate": "Save",
+					"startBtn": "Start AI creation ({{count}} articles)",
+					"subtitle": "Each article gets its own topic handled by IP Manager",
+					"templateNamePlaceholder": "Template name",
+					"templateSaved": "Template saved",
+					"title": "Confirm & generate",
+					"topicListHint": "Click a topic to switch and view IP Manager progress",
+					"viewing": "Viewing"
 				},
 				"stepDetail": {
 					"aiAutoFillBtn": "AI Auto-fill Configuration",
@@ -750,31 +776,6 @@
 					"title": "Topic Planning",
 					"titlePlaceholder": "Article title (required)",
 					"totalTopics": "{{count}} topics · Configure style and outline in the next step"
-				},
-				"stepConfirm": {
-					"accountLabel": "Account",
-					"audienceLabel": "Audience",
-					"cancel": "Cancel",
-					"cardCount": "{{count}} cards",
-					"creatingTopic": "Creating topic…",
-					"doneDesc": "{{count}} topics created. IP Manager is working on each article.",
-					"doneTitle": "Generation started",
-					"generatingBtn": "Generating…",
-					"generatingDesc": "Creating topics via IP Manager ({{done}}/{{total}})",
-					"generatingTitle": "Starting generation",
-					"globalSummary": "Global settings",
-					"outlinePoints": "{{count}} outline points",
-					"positionLabel": "Positioning",
-					"refCount": "{{count}} references",
-					"saveAsTemplate": "Save as template",
-					"saveTemplate": "Save",
-					"startBtn": "Start AI creation ({{count}} articles)",
-					"subtitle": "Each article gets its own topic handled by IP Manager",
-					"templateNamePlaceholder": "Template name",
-					"templateSaved": "Template saved",
-					"title": "Confirm & generate",
-					"topicListHint": "Click a topic to switch and view IP Manager progress",
-					"viewing": "Viewing"
 				},
 				"steps": {
 					"brand": "Brand Info",

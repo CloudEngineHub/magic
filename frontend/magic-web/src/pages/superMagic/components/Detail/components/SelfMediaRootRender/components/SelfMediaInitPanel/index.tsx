@@ -308,6 +308,16 @@ function SelfMediaInitPanel({
 		],
 	)
 
+	const saveDraftInBackground = useCallback(
+		(step = currentStep) => {
+			void saveDraftIfNeeded(step).catch((error) => {
+				console.error("Failed to save draft in background:", error)
+				message.error(t("detail.selfMedia.initPanel.draft.saveError"))
+			})
+		},
+		[currentStep, saveDraftIfNeeded, t],
+	)
+
 	const navigateToStep = useCallback(
 		async (step: number) => {
 			await saveDraftIfNeeded(currentStep)
@@ -316,16 +326,16 @@ function SelfMediaInitPanel({
 		[saveDraftIfNeeded, currentStep],
 	)
 
-	const handleNext = useCallback(async () => {
+	const handleNext = useCallback(() => {
 		if (currentStep === 0 && brandInfoRef.current) {
 			const canProceedNow = brandInfoRef.current.checkBeforeNext()
 			if (!canProceedNow) return
 		}
 
 		const nextStep = Math.min(currentStep + 1, STEPS.length - 1)
-		await saveDraftIfNeeded(nextStep)
 		setCurrentStep(nextStep)
-	}, [currentStep, saveDraftIfNeeded])
+		saveDraftInBackground(nextStep)
+	}, [currentStep, saveDraftInBackground])
 
 	const handlePrev = useCallback(async () => {
 		const prevStep = Math.max(currentStep - 1, 0)
@@ -619,12 +629,15 @@ function SelfMediaInitPanel({
 										? async () => {
 												skipDraftPersistenceRef.current = true
 												try {
-													const archiveId = await fileStorageService.archiveDraft(
-														dataRef.current,
-														currentStepRef.current,
-													)
+													const archiveId =
+														await fileStorageService.archiveDraft(
+															dataRef.current,
+															currentStepRef.current,
+														)
 													if (!archiveId) {
-														throw new Error("Failed to archive draft before generation")
+														throw new Error(
+															"Failed to archive draft before generation",
+														)
 													}
 												} catch (error) {
 													skipDraftPersistenceRef.current = false
