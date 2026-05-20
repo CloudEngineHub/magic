@@ -629,6 +629,7 @@
 			},
 			"initPanel": {
 				"draft": {
+					"clearError": "Failed to clear draft. Please try again later.",
 					"detected": "Unfinished edit detected",
 					"discard": "Discard",
 					"restore": "Restore draft",
@@ -636,6 +637,7 @@
 					"saveError": "Failed to save draft. Please try again later."
 				},
 				"nav": {
+					"clear": "Clear data",
 					"jumpTo": "Jump to {{title}}",
 					"next": "Next",
 					"prev": "Previous"
@@ -826,6 +828,10 @@
 				}
 			},
 			"platform": {
+				"actions": {
+					"back": "Back to content",
+					"create": "New article"
+				},
 				"instagram": {
 					"commentsTotal": "{{count}} comments",
 					"footer": {

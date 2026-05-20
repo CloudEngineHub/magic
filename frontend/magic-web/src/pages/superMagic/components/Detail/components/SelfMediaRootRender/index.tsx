@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useMemo } from "react"
+import { Suspense, useCallback, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -93,6 +93,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	const { t } = useTranslation("super")
 	const store = useSelfMediaStore()
 	const { hostElement } = useSelfMediaPlatformChrome()
+	const [isCreatingArticle, setIsCreatingArticle] = useState(false)
 
 	const { platforms, resolvedPlatform: platform, rootLoading } = store
 
@@ -105,6 +106,12 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		},
 		[store],
 	)
+	const handleStartCreateArticle = useCallback(() => {
+		setIsCreatingArticle(true)
+	}, [])
+	const handleBackToContent = useCallback(() => {
+		setIsCreatingArticle(false)
+	}, [])
 
 	const PlatformComponent = useMemo(() => getPlatformComponent(platform), [platform])
 
@@ -123,13 +130,71 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 
 	if (isEmptyProject) {
 		return (
-			<div className={cn("h-full w-full", className)} data-testid="self-media-init-panel">
+			<div
+				className={cn("h-full min-h-0 w-full", className)}
+				data-testid="self-media-init-panel"
+			>
 				<SelfMediaInitPanel
 					selectedProject={selectedProject}
 					folderFileId={folderFileId}
 					folderPath={folderPath}
 					attachmentList={attachmentList}
 				/>
+			</div>
+		)
+	}
+
+	const platformSwitcherNode =
+		hostElement &&
+		createPortal(
+			<div className="flex items-center gap-2">
+				{isCreatingArticle ? (
+					<button
+						type="button"
+						className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+						onClick={handleBackToContent}
+						data-testid="self-media-back-to-content"
+					>
+						{t("detail.selfMedia.platform.actions.back")}
+					</button>
+				) : (
+					<>
+						{platforms.length > 1 && (
+							<span className="text-xs text-muted-foreground">
+								{t("detail.selfMedia.platform.switcher.label")}
+							</span>
+						)}
+						<PlatformSwitcher
+							platforms={platforms}
+							activePlatform={platform}
+							onChange={handleChangePlatform}
+						/>
+						<button
+							type="button"
+							className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+							onClick={handleStartCreateArticle}
+							data-testid="self-media-create-article"
+						>
+							{t("detail.selfMedia.platform.actions.create")}
+						</button>
+					</>
+				)}
+			</div>,
+			hostElement,
+		)
+
+	if (isCreatingArticle) {
+		return (
+			<div className={cn("h-full min-h-0 w-full", className)} data-testid="self-media-root">
+				{platformSwitcherNode}
+				<div className="min-h-0" data-testid="self-media-init-panel">
+					<SelfMediaInitPanel
+						selectedProject={selectedProject}
+						folderFileId={folderFileId}
+						folderPath={folderPath}
+						attachmentList={attachmentList}
+					/>
+				</div>
 			</div>
 		)
 	}
@@ -141,24 +206,6 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 			</div>
 		)
 	}
-
-	const platformSwitcherNode =
-		hostElement &&
-		createPortal(
-			<div className="flex items-center gap-2">
-				{platforms.length > 1 && (
-					<span className="text-xs text-muted-foreground">
-						{t("detail.selfMedia.platform.switcher.label")}
-					</span>
-				)}
-				<PlatformSwitcher
-					platforms={platforms}
-					activePlatform={platform}
-					onChange={handleChangePlatform}
-				/>
-			</div>,
-			hostElement,
-		)
 
 	return (
 		<div className={cn("h-full w-full", className)} data-testid="self-media-root">

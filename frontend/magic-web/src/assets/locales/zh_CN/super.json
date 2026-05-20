@@ -630,6 +630,7 @@
 			},
 			"initPanel": {
 				"draft": {
+					"clearError": "清空草稿失败，请稍后重试",
 					"detected": "检测到未完成的编辑",
 					"discard": "丢弃",
 					"restore": "恢复草稿",
@@ -637,6 +638,7 @@
 					"saveError": "草稿保存失败，请稍后重试"
 				},
 				"nav": {
+					"clear": "清空数据",
 					"jumpTo": "跳转到{{title}}",
 					"next": "下一步",
 					"prev": "上一步"
@@ -827,6 +829,10 @@
 				}
 			},
 			"platform": {
+				"actions": {
+					"back": "返回内容页",
+					"create": "新增文章"
+				},
 				"instagram": {
 					"commentsTotal": "{{count}} 条评论",
 					"footer": {

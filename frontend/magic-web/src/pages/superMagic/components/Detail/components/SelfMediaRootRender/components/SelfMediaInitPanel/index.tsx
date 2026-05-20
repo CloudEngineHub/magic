@@ -22,6 +22,18 @@ interface SelfMediaInitPanelProps {
 	attachmentList?: AttachmentNode[]
 }
 
+function createEmptyInitData(): SelfMediaInitData {
+	return {
+		global: {
+			author: "",
+			brandPosition: "",
+			targetAudience: "",
+			brandImages: [],
+		},
+		articles: [],
+	}
+}
+
 const STEPS = [
 	{ key: "brand", titleKey: "detail.selfMedia.initPanel.steps.brand" },
 	{ key: "topics", titleKey: "detail.selfMedia.initPanel.steps.topics" },
@@ -39,21 +51,12 @@ function SelfMediaInitPanel({
 }: SelfMediaInitPanelProps) {
 	const { t } = useTranslation("super")
 	const [currentStep, setCurrentStep] = useState(0)
-	const [data, setData] = useState<SelfMediaInitData>({
-		global: {
-			author: "",
-			brandPosition: "",
-			targetAudience: "",
-			brandImages: [],
-		},
-		articles: [],
-	})
+	const [data, setData] = useState<SelfMediaInitData>(createEmptyInitData)
 
 	// ─── Draft & Template ──────────────────────────────────────────────────
 	const [showTemplateSelector, setShowTemplateSelector] = useState(false)
 	const [templates, setTemplates] = useState<TemplateMeta[]>([])
 	const [draftLoaded, setDraftLoaded] = useState(false)
-	const [showDraftPrompt, setShowDraftPrompt] = useState(false)
 	const [platformFetchInProgress, setPlatformFetchInProgress] = useState(false)
 	const [brandImagesUploading, setBrandImagesUploading] = useState(false)
 
@@ -108,8 +111,8 @@ function SelfMediaInitPanel({
 			setTemplates(templateList)
 
 			if (draft) {
-				setShowDraftPrompt(true)
-				draftRef.current = draft
+				setData(draft.data)
+				setCurrentStep(draft.currentStep ?? 0)
 			} else if (templateList.length > 0) {
 				setShowTemplateSelector(true)
 			}
@@ -120,26 +123,6 @@ function SelfMediaInitPanel({
 			cancelled = true
 		}
 	}, [fileStorageService, draftLoaded])
-
-	const draftRef = useRef<any>(null)
-
-	const handleRestoreDraft = useCallback(() => {
-		if (draftRef.current) {
-			setData(draftRef.current.data)
-			setCurrentStep(draftRef.current.currentStep)
-		}
-		setShowDraftPrompt(false)
-		draftRef.current = null
-	}, [])
-
-	const handleDiscardDraft = useCallback(() => {
-		setShowDraftPrompt(false)
-		draftRef.current = null
-		fileStorageService?.clearDraft()
-		if (templates.length > 0) {
-			setShowTemplateSelector(true)
-		}
-	}, [fileStorageService, templates.length])
 
 	const handleLoadTemplate = useCallback(
 		async (templateId: string) => {
@@ -280,7 +263,6 @@ function SelfMediaInitPanel({
 				!draftLoaded ||
 				!hasDraftContent ||
 				platformFetchInProgress ||
-				showDraftPrompt ||
 				showTemplateSelector
 			) {
 				return
@@ -301,7 +283,6 @@ function SelfMediaInitPanel({
 			draftLoaded,
 			hasDraftContent,
 			platformFetchInProgress,
-			showDraftPrompt,
 			showTemplateSelector,
 			data,
 			currentStep,
@@ -342,10 +323,31 @@ function SelfMediaInitPanel({
 		await saveDraftIfNeeded(currentStep)
 		setCurrentStep(prevStep)
 	}, [currentStep, saveDraftIfNeeded])
+	const handleClearData = useCallback(async () => {
+		try {
+			await fileStorageService?.clearDraft()
+			const emptyData = createEmptyInitData()
+			pendingSelfSaveCount.current = 0
+			selfSaveTimestamp.current = 0
+			lastDraftUpdatedAt.current = undefined
+			skipDraftPersistenceRef.current = false
+			dataRef.current = emptyData
+			currentStepRef.current = 0
+			setData(emptyData)
+			setCurrentStep(0)
+			setShowTemplateSelector(false)
+			setPlatformFetchInProgress(false)
+			setBrandImagesUploading(false)
+		} catch (error) {
+			console.error("Failed to clear self-media draft:", error)
+			message.error(t("detail.selfMedia.initPanel.draft.clearError"))
+		}
+	}, [fileStorageService, t])
 
 	const hasPendingBrandImageUploads = data.global.brandImages.some(
 		(img) => img.file.size > 0 && !img.uploadedPath,
 	)
+	const hasAnyInitData = showTemplateSelector || currentStep > 0 || hasDraftContent
 
 	const canProceed = (): boolean => {
 		switch (currentStep) {
@@ -366,9 +368,15 @@ function SelfMediaInitPanel({
 	}
 
 	return (
-		<div className="flex h-full w-full flex-col overflow-hidden bg-gradient-to-br from-background via-background to-primary/[0.02]">
+		<div
+			className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-background via-background to-primary/[0.02]"
+			data-testid="self-media-init-panel-root"
+		>
 			{/* Header with step indicator */}
-			<div className="relative border-b border-border/50 bg-background/80 backdrop-blur-sm">
+			<div
+				className="relative shrink-0 border-b border-border/50 bg-background/80 backdrop-blur-sm"
+				data-testid="self-media-init-panel-header"
+			>
 				{/* Progress bar */}
 				<div className="absolute bottom-0 left-0 h-[2px] w-full bg-primary/10">
 					<div
@@ -442,55 +450,10 @@ function SelfMediaInitPanel({
 			</div>
 
 			{/* Step content */}
-			<div className="flex-1 overflow-y-auto px-6 py-8">
-				{/* Draft recovery prompt */}
-				{showDraftPrompt && (
-					<div className="mx-auto mb-6 max-w-lg rounded-xl border border-primary/30 bg-primary/5 p-5 shadow-sm">
-						<div className="mb-3 flex items-center gap-2">
-							<svg
-								width="18"
-								height="18"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								className="text-primary"
-							>
-								<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-								<polyline points="14 2 14 8 20 8" />
-								<line x1="16" y1="13" x2="8" y2="13" />
-								<line x1="16" y1="17" x2="8" y2="17" />
-							</svg>
-							<h3 className="text-sm font-semibold">
-								{t("detail.selfMedia.initPanel.draft.detected")}
-							</h3>
-						</div>
-						<p className="mb-4 text-xs text-muted-foreground">
-							{t("detail.selfMedia.initPanel.draft.resumeHint", {
-								step: (draftRef.current?.currentStep ?? 0) + 1,
-							})}
-						</p>
-						<div className="flex items-center gap-3">
-							<button
-								type="button"
-								className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
-								onClick={handleRestoreDraft}
-							>
-								恢复草稿
-							</button>
-							<button
-								type="button"
-								className="rounded-lg border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-								onClick={handleDiscardDraft}
-							>
-								丢弃
-							</button>
-						</div>
-					</div>
-				)}
-
+			<div
+				className="min-h-0 flex-1 overflow-y-auto px-6 py-8"
+				data-testid="self-media-init-panel-content"
+			>
 				{/* Template selector (shown before Step 1 when templates exist) */}
 				{showTemplateSelector && (
 					<div className="mx-auto mb-6 max-w-lg">
@@ -573,7 +536,7 @@ function SelfMediaInitPanel({
 					</div>
 				)}
 
-				{!showDraftPrompt && !showTemplateSelector && (
+				{!showTemplateSelector && (
 					<>
 						{currentStep === 0 && (
 							<StepBrandInfo
@@ -656,31 +619,51 @@ function SelfMediaInitPanel({
 			</div>
 
 			{/* Navigation buttons */}
-			<div className="flex items-center justify-between border-t border-border/50 bg-background/80 backdrop-blur-sm px-6 py-4">
-				<button
-					type="button"
-					className={cn(
-						"flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200",
-						currentStep === 0
-							? "invisible"
-							: "text-foreground hover:bg-muted active:scale-[0.98]",
-					)}
-					onClick={handlePrev}
-				>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="2"
-						strokeLinecap="round"
-						strokeLinejoin="round"
+			<div
+				className="flex shrink-0 items-center justify-between border-t border-border/50 bg-background/80 backdrop-blur-sm px-6 py-4"
+				data-testid="self-media-init-panel-footer"
+			>
+				<div className="flex items-center gap-2">
+					<button
+						type="button"
+						className={cn(
+							"flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200",
+							hasAnyInitData
+								? "text-destructive hover:bg-destructive/10 active:scale-[0.98]"
+								: "cursor-not-allowed text-muted-foreground",
+						)}
+						onClick={() => void handleClearData()}
+						disabled={!hasAnyInitData}
+						data-testid="self-media-init-panel-clear-button"
 					>
-						<polyline points="15 18 9 12 15 6" />
-					</svg>
-					{t("detail.selfMedia.initPanel.nav.prev")}
-				</button>
+						{t("detail.selfMedia.initPanel.nav.clear")}
+					</button>
+					<button
+						type="button"
+						className={cn(
+							"flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200",
+							currentStep === 0
+								? "invisible"
+								: "text-foreground hover:bg-muted active:scale-[0.98]",
+						)}
+						onClick={handlePrev}
+						data-testid="self-media-init-panel-prev-button"
+					>
+						<svg
+							width="16"
+							height="16"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<polyline points="15 18 9 12 15 6" />
+						</svg>
+						{t("detail.selfMedia.initPanel.nav.prev")}
+					</button>
+				</div>
 
 				<div className="flex items-center gap-1.5">
 					{STEPS.map((_, index) => (

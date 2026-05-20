@@ -162,6 +162,123 @@ describe("SelfMediaInitPanel", () => {
 		deferred.resolve()
 	})
 
+	it("applies detected draft immediately without showing restore prompt", async () => {
+		mockLoadDraft.mockResolvedValue({
+			currentStep: 2,
+			data: {
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+					targetAudience: "",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "Draft article",
+						platform: "rednote",
+					},
+				],
+			},
+		})
+		mockListTemplates.mockResolvedValue([
+			{
+				id: "template-1",
+				name: "Template A",
+				articleCount: 1,
+				createdAt: "2026-05-20T00:00:00.000Z",
+			},
+		])
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByText("detail-step")).toBeInTheDocument()
+		})
+
+		expect(
+			screen.queryByText("detail.selfMedia.initPanel.draft.detected"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByText("detail.selfMedia.initPanel.template.selectTitle"),
+		).not.toBeInTheDocument()
+	})
+
+	it("clears all data, deletes draft, and returns to the first step", async () => {
+		mockLoadDraft.mockResolvedValue({
+			currentStep: 2,
+			data: {
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+					targetAudience: "",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "Draft article",
+						platform: "rednote",
+					},
+				],
+			},
+		})
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByText("detail-step")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-init-panel-clear-button"))
+
+		await waitFor(() => {
+			expect(screen.getByText("brand-step")).toBeInTheDocument()
+		})
+
+		expect(screen.queryByText("detail-step")).not.toBeInTheDocument()
+		expect(mockClearDraft).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps header and footer fixed while middle content owns scrolling", async () => {
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByText("brand-step")).toBeInTheDocument()
+		})
+
+		const root = screen.getByTestId("self-media-init-panel-root")
+		const header = screen.getByTestId("self-media-init-panel-header")
+		const content = screen.getByTestId("self-media-init-panel-content")
+		const footer = screen.getByTestId("self-media-init-panel-footer")
+
+		expect(root.className).toContain("overflow-hidden")
+		expect(header.className).toContain("shrink-0")
+		expect(content.className).toContain("flex-1")
+		expect(content.className).toContain("min-h-0")
+		expect(content.className).toContain("overflow-y-auto")
+		expect(footer.className).toContain("shrink-0")
+	})
+
 	it("shows an error toast when background draft save fails", async () => {
 		mockSaveDraft.mockRejectedValueOnce(new Error("save failed"))
 		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
