@@ -299,7 +299,8 @@ const result = await window.Magic.db.queryRows(TABLE_ID_FROM_MAGICBASE_TOOL, {
   page: 1,
   page_size: 20,
 });
-// result: { rows: [...], total: 42, page: 1, page_size: 20 }
+// result: { list: [...], total: 42, page: 1, page_size: 20 }
+const rows = result.list;
 ```
 
 - **参数**：`tableId: string`、`query: object`
@@ -309,7 +310,7 @@ const result = await window.Magic.db.queryRows(TABLE_ID_FROM_MAGICBASE_TOOL, {
   - `page?: number` — 页码（默认 1）
   - `page_size?: number` — 每页行数（默认 20）
   - `with?` — 关联查询配置
-- **返回**：`Promise<object>` — 分页结果
+- **返回**：`Promise<{ list: Array<object>; total: number; page: number; page_size: number }>` — 分页结果。行数组字段是 `list`，不要使用 `rows`
 - **超时**：30 秒（其他操作为 15 秒）
 
 ### 获取单行 `getRow(tableId, recordId, select?)`
