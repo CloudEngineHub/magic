@@ -38,6 +38,7 @@ import { MediaResourceOfflineCacheManager } from "./utils/MediaResourceOfflineCa
 import { CropManager } from "./interaction/CropManager"
 import { ExtendManager } from "./interaction/ExtendManager"
 import { EraserManager } from "./interaction/EraserManager"
+import { PluginManager } from "./plugins/PluginManager"
 import { ElementRenameManager } from "./interaction/ElementRenameManager"
 import { TextEditingManager } from "./interaction/TextEditingManager"
 import { TextFormattingManager } from "./interaction/TextFormattingManager"
@@ -109,6 +110,7 @@ export class Canvas {
 	public eraserManager: EraserManager
 	public textEditingManager: TextEditingManager
 	public textFormattingManager: TextFormattingManager
+	public pluginManager: PluginManager
 
 	public readonly: boolean
 	public isMobileDevice: boolean
@@ -172,6 +174,15 @@ export class Canvas {
 
 		// 创建事件发射器
 		this.eventEmitter = new EventEmitter()
+
+		this.pluginManager = new PluginManager()
+		this.pluginManager.registerMany(options.plugins?.builtin ?? [])
+		void this.pluginManager.loadUserPluginsFromCanvasResources({
+			rootPath: options.plugins?.user?.rootPath,
+			directories: options.plugins?.user?.directories,
+			getFileInfo: options.magic?.methods?.getFileInfo,
+			resolveAbsolutePath: options.magic?.methods?.resolveAbsolutePath,
+		})
 
 		// 初始化 MagicConfigManager
 		this.magicConfigManager = new MagicConfigManager({
@@ -1068,6 +1079,7 @@ export class Canvas {
 		this.videoPlaybackManager.destroy()
 		this.videoResourceManager.destroy()
 		this.mediaResourceOfflineCacheManager.destroy()
+		this.pluginManager.destroy()
 		this.stage.destroy()
 	}
 }

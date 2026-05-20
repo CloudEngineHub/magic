@@ -865,11 +865,12 @@ export interface GetFileInfoResponse {
 	source?: AttachmentSourceEnum
 }
 
-/** 上传子目录枚举值，内部用常量控制 images / videos / audios */
+/** 上传子目录枚举值，内部用常量控制 images / videos / audios / plugins */
 export const UploadSubDir = {
 	Images: "images",
 	Videos: "videos",
 	Audios: "audios",
+	Plugins: "plugins",
 } as const
 
 export type UploadSubDirType = (typeof UploadSubDir)[keyof typeof UploadSubDir]
@@ -886,7 +887,7 @@ export interface UploadFile {
 	 * 如果为 false，则上传的文件会自动重命名
 	 */
 	overwrite?: boolean
-	/** 上传子目录，使用 UploadSubDir.Images | UploadSubDir.Videos | UploadSubDir.Audios */
+	/** 上传子目录，使用 UploadSubDir.Images | UploadSubDir.Videos | UploadSubDir.Audios | UploadSubDir.Plugins */
 	uploadSubDir: UploadSubDirType
 	/** 单个文件上传完成回调 */
 	onUploadComplete: (result: UploadFileResponse) => void

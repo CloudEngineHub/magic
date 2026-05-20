@@ -28,6 +28,7 @@ import ImageCropPanel from "./components/ImageCropPanel"
 import ImageExtendPanel from "./components/ImageExtendPanel"
 import ImageEraserPanel from "./components/ImageEraserPanel"
 import ElementRenameOverlay from "./components/ElementRenameOverlay"
+import PluginPanel from "./components/PluginPanel"
 
 import styles from "./index.module.css"
 
@@ -110,6 +111,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 				scopeElement instanceof HTMLElement ? scopeElement : canvasContainerRef.current,
 			id: designProjectId,
 			defaultReadyonly: readonly,
+			plugins: props.plugins,
 			magic: {
 				methods: methods,
 				permissions: permissions,
@@ -199,18 +201,17 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			{fullscreenVideoElementId ? <VideoFullscreenOverlay /> : null}
 			<Layers />
 			{!readonly && <Tools />}
+			{!readonly && <PluginPanel />}
 			{!readonly && <CanvasTips />}
 			<Zoom shareHostBottomChrome={shareHostBottomChrome} />
 		</FloatingUIProvider>
 	)
 })
 
-CanvasDesignContent.displayName = "CanvasDesignContent"
-
 const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref) => {
 	const { getIsMobile } = props
 
-	const appContainerRef = useRef<HTMLDivElement>(null)
+	const appContainerRef = useRef<HTMLDivElement | null>(null)
 
 	const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
 
@@ -260,7 +261,5 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 		</MagicProvider>
 	)
 })
-
-CanvasDesign.displayName = "CanvasDesign"
 
 export default CanvasDesign

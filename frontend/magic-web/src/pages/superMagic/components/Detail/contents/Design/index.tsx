@@ -18,6 +18,7 @@ import { useDesignProjectManager } from "./hooks/useDesignProjectManager"
 import {
 	getDesignDirectoryInfo,
 	fileItemsToProjectAttachmentMentionTree,
+	normalizePath,
 	normalizeMentionFolderId,
 	resolveActualDesignCurrentFile,
 	resolveDesignProjectBasePathFromAttachments,
@@ -43,6 +44,8 @@ import { useCanvasResourceRefresh } from "./hooks/useCanvasResourceRefresh"
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useNetwork } from "ahooks"
 import { CloudOff } from "lucide-react"
+import { designBuiltinPlugins } from "./plugins/options"
+import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
 
 // 懒加载协议弹窗
 const loadWaterMarkFreeModal = async () => {
@@ -132,6 +135,34 @@ const useStyles = createStyles(({ token }) => ({
 		whiteSpace: "nowrap",
 	},
 }))
+
+function resolveDesignPluginDirectories(options: {
+	flatAttachments?: FileItem[]
+	designProjectBasePath?: string
+}) {
+	const { flatAttachments, designProjectBasePath } = options
+	if (!flatAttachments?.length) return []
+
+	const pluginRootPath = normalizePath(
+		[normalizePath(designProjectBasePath ?? ""), UploadSubDir.Plugins]
+			.filter(Boolean)
+			.join("/"),
+	)
+	const pluginRootPrefix = `${pluginRootPath}/`
+	const directories = new Set<string>()
+
+	flatAttachments.forEach((item) => {
+		if (!item.is_directory || !item.relative_file_path) return
+		const relativePath = normalizePath(item.relative_file_path)
+		if (!relativePath.startsWith(pluginRootPrefix)) return
+
+		const pluginDirectory = relativePath.slice(pluginRootPrefix.length)
+		if (!pluginDirectory || pluginDirectory.includes("/")) return
+		directories.add(pluginDirectory)
+	})
+
+	return Array.from(directories)
+}
 
 interface DesignViewerProps {
 	attachments?: FileItem[]
@@ -249,6 +280,19 @@ function DesignViewer(props: DesignViewerProps) {
 	const projectAttachmentMentionTree = useMemo(
 		() => fileItemsToProjectAttachmentMentionTree(attachments, designProjectBasePath),
 		[attachments, designProjectBasePath],
+	)
+	const canvasPluginConfig = useMemo(
+		() => ({
+			builtin: designBuiltinPlugins,
+			user: {
+				rootPath: `./${UploadSubDir.Plugins}`,
+				directories: resolveDesignPluginDirectories({
+					flatAttachments,
+					designProjectBasePath,
+				}),
+			},
+		}),
+		[designProjectBasePath, flatAttachments],
 	)
 
 	// CanvasDesign ref（需在 designProjectManager 之前，onRemoteDesignDataUpdate 回调中使用）
@@ -786,6 +830,7 @@ function DesignViewer(props: DesignViewerProps) {
 									permissions: designCanvasMagicPermissions,
 									hostUiLocale,
 								}}
+								plugins={canvasPluginConfig}
 								viewport={{
 									autoLoadCacheViewport: !isPlaybackMode && !isMobile,
 								}}

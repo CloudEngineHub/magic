@@ -1,0 +1,124 @@
+.plugin-window {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 50;
+	display: flex;
+	flex-direction: column;
+	width: 420px;
+	overflow: hidden;
+	background: var(--base-background, #fff);
+	border: 1px solid var(--base-border, #e5e5e5);
+	border-radius: 12px;
+	box-shadow: 0 12px 32px rgb(0 0 0 / 12%), 0 4px 12px rgb(0 0 0 / 8%);
+	will-change: transform;
+}
+
+.plugin-window-header {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--base-border, #e5e5e5);
+	cursor: grab;
+	user-select: none;
+}
+
+.plugin-window-header:active {
+	cursor: grabbing;
+}
+
+.plugin-title-icon {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	font-size: 16px;
+	background: var(--base-accent, #f5f5f5);
+	border-radius: 6px;
+}
+
+.plugin-title-icon-image {
+	width: 16px;
+	height: 16px;
+	object-fit: contain;
+}
+
+.plugin-window-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--base-foreground, #0a0a0a);
+	font-weight: 500;
+	font-size: 14px;
+	line-height: 20px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.plugin-window-close {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	color: var(--base-muted-foreground, #737373);
+	background: transparent;
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+.plugin-window-close:hover {
+	color: var(--base-foreground, #0a0a0a);
+	background: var(--base-muted, #f5f5f5);
+}
+
+.plugin-frame {
+	width: 100%;
+	height: 360px;
+	background: #fff;
+	border: none;
+}
+
+.plugin-runtime-empty {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 16px;
+	color: var(--base-muted-foreground, #737373);
+	font-size: 13px;
+	line-height: 20px;
+}
+
+.plugin-runtime-empty-title {
+	color: var(--base-foreground, #0a0a0a);
+	font-weight: 500;
+}
+
+.plugin-file-picker-input {
+	display: none;
+}
+
+.plugin-file-picker-host {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+
+.plugin-file-picker-anchor {
+	position: absolute;
+	top: var(--plugin-file-picker-y, auto);
+	bottom: var(--plugin-file-picker-bottom, 16px);
+	left: var(--plugin-file-picker-x, 16px);
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	background: transparent;
+	border: 0;
+	opacity: 0;
+	pointer-events: none;
+}

@@ -2,7 +2,12 @@ import type { Node as TiptapNode } from "@tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "./canvas/interaction/shortcuts/types"
 import type { MagicConfig } from "./types.magic"
-import type { CanvasDocument, Marker, PaddingInsetConfig } from "./canvas/types"
+import type {
+	CanvasDesignPluginModuleConfig,
+	CanvasDocument,
+	Marker,
+	PaddingInsetConfig,
+} from "./canvas/types"
 import type { TFunction } from "./context/I18nContext"
 import type {
 	ReferenceAssetPerTypeLimits,
@@ -282,6 +287,8 @@ export interface CanvasDesignProps {
 	readonly?: boolean
 	/** Magic 配置 */
 	magic?: MagicConfig
+	/** 插件配置，由宿主注入系统内置插件，并可声明用户插件资源目录 */
+	plugins?: CanvasDesignPluginModuleConfig
 	/** 数据 配置 */
 	data?: {
 		/** 默认画布数据，用于初始化画布 */
