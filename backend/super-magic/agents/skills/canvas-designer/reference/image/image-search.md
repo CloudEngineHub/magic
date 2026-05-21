@@ -32,9 +32,9 @@ result = tool.call('search_canvas_images', {
     "topic_id": "home-design",
     "tasks": [
         {
-            "name": "极简家居",
-            "query": "极简主义家居设计 室内装修",
-            "requirement_explanation": "需要现代简约风格的家居室内图片",
+            "name": "minimalist home",
+            "query": "minimalist home interior design",
+            "requirement_explanation": "Modern minimalist style home interior photos",
             "expected_aspect_ratio": "16:9",
             "count": 10
         }
@@ -53,14 +53,14 @@ from sdk.tool import tool
 tool.call('search_canvas_images', {
     "project_path": "my-project",
     "topic_id": "cats",
-    "tasks": [{"name": "猫咪", "query": "猫咪 宠物摄影", "count": 10}]
+    "tasks": [{"name": "cats", "query": "cat pet photography", "count": 10}]
 })
 
 # Second search — same topic_id automatically filters already-seen images
 tool.call('search_canvas_images', {
     "project_path": "my-project",
     "topic_id": "cats",
-    "tasks": [{"name": "可爱猫", "query": "可爱的猫 萌宠", "count": 10}]
+    "tasks": [{"name": "cute cats", "query": "cute cat adorable pet", "count": 10}]
 })
 ```
 
@@ -74,14 +74,14 @@ result = tool.call('search_canvas_images', {
     "topic_id": "pets",
     "tasks": [
         {
-            "name": "狗狗",
-            "query": "可爱的狗 宠物摄影",
+            "name": "dogs",
+            "query": "cute dog pet photography",
             "expected_aspect_ratio": "1:1",
             "count": 5
         },
         {
-            "name": "猫咪",
-            "query": "猫咪 宠物摄影",
+            "name": "cats",
+            "query": "cat pet photography",
             "expected_aspect_ratio": "1:1",
             "count": 5
         }

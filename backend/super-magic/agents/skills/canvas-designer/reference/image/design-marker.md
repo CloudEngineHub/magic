@@ -8,7 +8,7 @@ Users mark areas on canvas images that need modification. The marker encodes the
 
 **Example:**
 ```
-[@design_marker:红色耳朵]
+[@design_marker:red-ears]
 - Image location: my-design/images/dog.jpg
 - Marked area: Small area at top right of image
 - Coordinates: Top left (64.0%, 7.0%)
