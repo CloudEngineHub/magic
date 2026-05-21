@@ -6,6 +6,7 @@ import { generateTopics } from "../../services/selfMediaAiGenerate"
 import type { GeneratedTopic } from "../../services/selfMediaAiGenerate"
 import ModelSelector from "./ModelSelector"
 import ReferenceFilePicker from "./ReferenceFilePicker"
+import InlineVoiceButton from "./InlineVoiceButton"
 import type { ReferenceFileValue } from "./types"
 
 interface StepTopicListProps {
@@ -210,21 +211,26 @@ export default function StepTopicList({
 						</div>
 
 						<div className="mb-3">
-							<input
-								type="text"
-								className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-								placeholder={t(
-									"detail.selfMedia.initPanel.stepTopic.directionPlaceholder",
-								)}
-								value={aiDirection}
-								onChange={(e) => setAiDirection(e.target.value)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" && !aiGenerating) {
-										handleAiGenerate()
-									}
-								}}
-								disabled={aiGenerating}
-							/>
+							<div className="group relative">
+								<input
+									type="text"
+									className="w-full rounded-lg border border-input bg-background px-3 py-2.5 pr-7 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+									placeholder={t(
+										"detail.selfMedia.initPanel.stepTopic.directionPlaceholder",
+									)}
+									value={aiDirection}
+									onChange={(e) => setAiDirection(e.target.value)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" && !aiGenerating) {
+											handleAiGenerate()
+										}
+									}}
+									disabled={aiGenerating}
+								/>
+								<InlineVoiceButton
+									onResult={(text) => setAiDirection((prev) => prev + text)}
+								/>
+							</div>
 						</div>
 
 						<div className="mb-3">
@@ -325,24 +331,38 @@ export default function StepTopicList({
 							{index + 1}
 						</span>
 						<div className="flex flex-1 flex-col gap-2">
-							<input
-								type="text"
-								className="w-full rounded-lg border-0 bg-transparent px-1 py-1 text-sm font-medium placeholder:text-muted-foreground/50 focus:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
-								placeholder={t(
-									"detail.selfMedia.initPanel.stepTopic.titlePlaceholder",
-								)}
-								value={article.title}
-								onChange={(e) => handleTitleChange(index, e.target.value)}
-							/>
-							<input
-								type="text"
-								className="w-full rounded-lg border-0 bg-transparent px-1 py-0.5 text-xs text-muted-foreground placeholder:text-muted-foreground/40 focus:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
-								placeholder={t(
-									"detail.selfMedia.initPanel.stepTopic.folderPlaceholder",
-								)}
-								value={article.folderName}
-								onChange={(e) => handleFolderNameChange(index, e.target.value)}
-							/>
+							<div className="group relative">
+								<input
+									type="text"
+									className="w-full rounded-lg border-0 bg-transparent px-1 py-1 pr-7 text-sm font-medium placeholder:text-muted-foreground/50 focus:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+									placeholder={t(
+										"detail.selfMedia.initPanel.stepTopic.titlePlaceholder",
+									)}
+									value={article.title}
+									onChange={(e) => handleTitleChange(index, e.target.value)}
+								/>
+								<InlineVoiceButton
+									onResult={(text) =>
+										handleTitleChange(index, article.title + text)
+									}
+								/>
+							</div>
+							<div className="group relative">
+								<input
+									type="text"
+									className="w-full rounded-lg border-0 bg-transparent px-1 py-0.5 pr-7 text-xs text-muted-foreground placeholder:text-muted-foreground/40 focus:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+									placeholder={t(
+										"detail.selfMedia.initPanel.stepTopic.folderPlaceholder",
+									)}
+									value={article.folderName}
+									onChange={(e) => handleFolderNameChange(index, e.target.value)}
+								/>
+								<InlineVoiceButton
+									onResult={(text) =>
+										handleFolderNameChange(index, article.folderName + text)
+									}
+								/>
+							</div>
 							{article.notes && (
 								<p className="px-1 text-xs text-muted-foreground/80 line-clamp-1">
 									{article.notes}

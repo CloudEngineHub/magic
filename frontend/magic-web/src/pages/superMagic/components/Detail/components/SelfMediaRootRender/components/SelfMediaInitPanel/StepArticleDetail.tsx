@@ -9,11 +9,9 @@ import AiInputBox from "./AiInputBox"
 import ModelSelector from "./ModelSelector"
 import ReferenceSection from "./ReferenceSection"
 import ReferenceFilePicker from "./ReferenceFilePicker"
-import {
-	generateOutline,
-	generateArticleDetails,
-	optimizeOutline,
-} from "../../services/selfMediaAiGenerate"
+import VisualPresetPicker from "./VisualPresetPicker"
+import InlineVoiceButton from "./InlineVoiceButton"
+import { generateOutline, optimizeOutline } from "../../services/selfMediaAiGenerate"
 
 interface StepArticleDetailProps {
 	articles: ArticleDetail[]
@@ -30,14 +28,12 @@ export default function StepArticleDetail({
 }: StepArticleDetailProps) {
 	const [activeTab, setActiveTab] = useState(0)
 	const [generatingOutline, setGeneratingOutline] = useState(false)
-	const [generatingDetails, setGeneratingDetails] = useState(false)
 	const [configExpanded, setConfigExpanded] = useState(false)
 	const [outlineModel, setOutlineModel] = useState("")
 	const [sharedModel, setSharedModel] = useState("")
 	const [optimizePopoverOpen, setOptimizePopoverOpen] = useState(false)
 	const [optimizeInstruction, setOptimizeInstruction] = useState("")
 	const abortRef = useRef<AbortController | null>(null)
-	const detailsAbortRef = useRef<AbortController | null>(null)
 	const outlineActionRef = useRef<HTMLDivElement>(null)
 	const { t } = useTranslation("super")
 
@@ -182,39 +178,6 @@ export default function StepArticleDetail({
 		handleAiOutline()
 	}, [generatingOutline, hasOutline, handleAiOutline])
 
-	const handleAiAutoFill = useCallback(async () => {
-		if (generatingDetails || !currentArticle?.description?.trim()) return
-		setGeneratingDetails(true)
-
-		const controller = new AbortController()
-		detailsAbortRef.current = controller
-
-		try {
-			const details = await generateArticleDetails({
-				global: globalSettings,
-				article: currentArticle,
-				model: sharedModel || undefined,
-				signal: controller.signal,
-			})
-			onArticleUpdate(activeTab, {
-				...currentArticle,
-				style: details.style,
-				visualPreset: details.visualPreset,
-				cardCount: details.cardCount,
-				outline: details.outline.length > 0 ? details.outline : currentArticle.outline,
-				notes: details.notes || currentArticle.notes,
-			})
-			setConfigExpanded(true)
-		} catch (err) {
-			if ((err as Error).name !== "AbortError") {
-				console.error("Failed to generate article details:", err)
-			}
-		} finally {
-			setGeneratingDetails(false)
-			detailsAbortRef.current = null
-		}
-	}, [generatingDetails, globalSettings, currentArticle, sharedModel, activeTab, onArticleUpdate])
-
 	if (!currentArticle) return null
 
 	return (
@@ -307,64 +270,8 @@ export default function StepArticleDetail({
 					onBlur={onPersistDraft}
 					polishContext={`Article title: ${currentArticle.title}, Platform: ${currentArticle.platform || ""}`}
 					placeholder={t("detail.selfMedia.initPanel.stepDetail.descriptionPlaceholder")}
-					hint={
-						currentArticle.description?.trim()
-							? t("detail.selfMedia.initPanel.stepDetail.aiAutoFillHint")
-							: undefined
-					}
 					model={sharedModel}
 					onModelChange={setSharedModel}
-					extraActions={
-						currentArticle.description?.trim() ? (
-							<button
-								type="button"
-								className={cn(
-									"inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all",
-									generatingDetails
-										? "bg-primary/10 text-primary cursor-wait"
-										: "text-primary hover:bg-primary/10",
-								)}
-								onClick={
-									generatingDetails
-										? () => detailsAbortRef.current?.abort()
-										: handleAiAutoFill
-								}
-							>
-								{generatingDetails ? (
-									<>
-										<svg
-											className="animate-spin"
-											width="12"
-											height="12"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											strokeWidth="2"
-										>
-											<path d="M21 12a9 9 0 1 1-6.219-8.56" />
-										</svg>
-										{t("detail.selfMedia.initPanel.stepDetail.aiAutoFilling")}
-									</>
-								) : (
-									<>
-										<svg
-											width="12"
-											height="12"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											strokeWidth="2"
-											strokeLinecap="round"
-											strokeLinejoin="round"
-										>
-											<path d="M12 2v4M16.2 7.8l2.9-2.9M18 12h4M16.2 16.2l2.9 2.9M12 18v4M4.9 19.1l2.9-2.9M2 12h4M4.9 4.9l2.9 2.9" />
-										</svg>
-										{t("detail.selfMedia.initPanel.stepDetail.aiAutoFillBtn")}
-									</>
-								)}
-							</button>
-						) : undefined
-					}
 				/>
 
 				{/* Collapsible config toggle */}
@@ -428,22 +335,34 @@ export default function StepArticleDetail({
 								))}
 							</div>
 							{currentArticle.style === "custom" && (
-								<input
-									type="text"
-									className="mt-3 w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-									placeholder={t(
-										"detail.selfMedia.initPanel.stepDetail.stylePlaceholder",
-									)}
-									value={
-										typeof currentArticle.style === "string" &&
-										currentArticle.style !== "custom"
-											? currentArticle.style
-											: ""
-									}
-									onChange={(e) =>
-										handleFieldChange("style", e.target.value || "custom")
-									}
-								/>
+								<div className="group relative mt-3">
+									<input
+										type="text"
+										className="w-full rounded-lg border border-input bg-background px-4 py-2.5 pr-7 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+										placeholder={t(
+											"detail.selfMedia.initPanel.stepDetail.stylePlaceholder",
+										)}
+										value={
+											typeof currentArticle.style === "string" &&
+											currentArticle.style !== "custom"
+												? currentArticle.style
+												: ""
+										}
+										onChange={(e) =>
+											handleFieldChange("style", e.target.value || "custom")
+										}
+									/>
+									<InlineVoiceButton
+										onResult={(text) => {
+											const current =
+												typeof currentArticle.style === "string" &&
+												currentArticle.style !== "custom"
+													? currentArticle.style
+													: ""
+											handleFieldChange("style", current + text || "custom")
+										}}
+									/>
+								</div>
 							)}
 						</div>
 
@@ -455,78 +374,32 @@ export default function StepArticleDetail({
 							<p className="mb-2 text-xs text-muted-foreground">
 								{t("detail.selfMedia.initPanel.stepDetail.visualHint")}
 							</p>
-							<div className="flex flex-wrap gap-2">
-								{availableVisualPresets.map((preset) => (
-									<button
-										key={preset.value}
-										type="button"
-										className={cn(
-											"group flex flex-col items-start rounded-xl border px-3.5 py-2.5 text-left transition-all duration-200",
-											(currentArticle.visualPreset || "none") === preset.value
-												? "border-primary bg-primary/10 shadow-sm shadow-primary/10"
-												: "border-border/60 hover:border-primary/40",
-										)}
-										onClick={() =>
-											handleFieldChange("visualPreset", preset.value)
-										}
-									>
-										<span
-											className={cn(
-												"text-xs font-medium",
-												(currentArticle.visualPreset || "none") ===
-													preset.value
-													? "text-primary"
-													: "text-foreground",
-											)}
-										>
-											{t(preset.labelKey)}
-										</span>
-										<span className="mt-0.5 text-[11px] text-muted-foreground line-clamp-1">
-											{t(preset.descriptionKey)}
-										</span>
-									</button>
-								))}
-							</div>
-							{currentArticle.visualPreset === "custom" && (
-								<div className="mt-3 flex flex-col gap-3">
-									<input
-										type="text"
-										className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-										placeholder={t(
-											"detail.selfMedia.initPanel.stepDetail.visualCustomPlaceholder",
-										)}
-										value={
-											currentArticle.notes.includes("[视觉描述]")
-												? currentArticle.notes
-														.split("[视觉描述]")[1]
-														?.split("[/视觉描述]")[0] || ""
-												: ""
-										}
-										onChange={(e) => {
-											const base = currentArticle.notes
-												.replace(/\[视觉描述\].*?\[\/视觉描述\]/g, "")
-												.trim()
-											const newNotes = e.target.value
-												? `${base}\n[视觉描述]${e.target.value}[/视觉描述]`.trim()
-												: base
-											handleFieldChange("notes", newNotes)
-										}}
-									/>
-									<div>
-										<p className="mb-2 text-xs text-muted-foreground">
-											{t(
-												"detail.selfMedia.initPanel.stepDetail.visualReferenceLabel",
-											)}
-										</p>
-										<ReferenceFilePicker
-											value={currentArticle.visualReferenceFiles || []}
-											onChange={(files) =>
-												handleFieldChange("visualReferenceFiles", files)
-											}
-										/>
-									</div>
-								</div>
-							)}
+							<VisualPresetPicker
+								presets={availableVisualPresets}
+								value={currentArticle.visualPreset || "none"}
+								onChange={(v) => handleFieldChange("visualPreset", v)}
+								size="md"
+								customDescription={
+									currentArticle.notes.includes("[视觉描述]")
+										? currentArticle.notes
+												.split("[视觉描述]")[1]
+												?.split("[/视觉描述]")[0] || ""
+										: ""
+								}
+								onCustomDescriptionChange={(desc) => {
+									const base = currentArticle.notes
+										.replace(/\[视觉描述\].*?\[\/视觉描述\]/g, "")
+										.trim()
+									const newNotes = desc
+										? `${base}\n[视觉描述]${desc}[/视觉描述]`.trim()
+										: base
+									handleFieldChange("notes", newNotes)
+								}}
+								visualReferenceFiles={currentArticle.visualReferenceFiles || []}
+								onVisualReferenceFilesChange={(files) =>
+									handleFieldChange("visualReferenceFiles", files)
+								}
+							/>
 						</div>
 
 						{/* Outline */}
@@ -598,18 +471,30 @@ export default function StepArticleDetail({
 											hasOutline &&
 											!generatingOutline && (
 												<div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl border border-border bg-popover p-3 shadow-lg animate-in fade-in-0 zoom-in-95">
-													<textarea
-														className="min-h-[96px] w-full resize-none rounded-lg border border-input bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-														placeholder={t(
-															"detail.selfMedia.initPanel.stepDetail.outlineOptimizePlaceholder",
-														)}
-														rows={4}
-														value={optimizeInstruction}
-														onChange={(e) =>
-															setOptimizeInstruction(e.target.value)
-														}
-														autoFocus
-													/>
+													<div className="group relative">
+														<textarea
+															className="min-h-[96px] w-full resize-none rounded-lg border border-input bg-background px-3 py-2.5 pr-7 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+															placeholder={t(
+																"detail.selfMedia.initPanel.stepDetail.outlineOptimizePlaceholder",
+															)}
+															rows={4}
+															value={optimizeInstruction}
+															onChange={(e) =>
+																setOptimizeInstruction(
+																	e.target.value,
+																)
+															}
+															autoFocus
+														/>
+														<InlineVoiceButton
+															variant="textarea"
+															onResult={(text) =>
+																setOptimizeInstruction(
+																	(prev) => prev + text,
+																)
+															}
+														/>
+													</div>
 													<div className="mt-2 flex justify-end">
 														<button
 															type="button"

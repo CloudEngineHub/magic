@@ -70,7 +70,12 @@ async function uploadMaterials(
 	const materialDir = `${folderPath}/materials`
 
 	for (const item of materials) {
-		if (item.uploadedPath || !item.file?.size) continue
+		// Skip items already at the target location (e.g., picked from project files)
+		// but re-upload items from __drafts/ paths since those may have been archived/moved
+		if (item.uploadedPath && !item.uploadedPath.includes("__drafts/")) continue
+		if (!item.file?.size) continue
+		// Clear stale draft path so it gets updated with the new location
+		item.uploadedPath = undefined as any
 		try {
 			const uploader = new Upload()
 
@@ -121,6 +126,12 @@ export interface SendArticleBatchParams {
 		directoryPath?: string
 		directoryName?: string
 	}
+	/** Model ID to use for AI generation */
+	modelId?: string
+	/** Image model ID */
+	imageModelId?: string
+	/** Video model ID */
+	videoModelId?: string
 	/** Called after each topic is created and its first message is sent */
 	onTopicCreated?: (item: ArticleBatchTopicItem) => void
 }
@@ -133,6 +144,9 @@ export async function sendArticleBatch({
 	globalSettings,
 	selectedProject,
 	selfMediaProjectDirectory,
+	modelId,
+	imageModelId,
+	videoModelId,
 	onTopicCreated,
 }: SendArticleBatchParams): Promise<ArticleBatchTopicItem[]> {
 	if (!selectedProject?.id) {
@@ -212,6 +226,9 @@ export async function sendArticleBatch({
 							mentions,
 							topic_pattern: SELF_MEDIA_TOPIC_PATTERN,
 							chat_mode: "normal",
+							...(modelId ? { model: { model_id: modelId } } : {}),
+							...(imageModelId ? { image_model: { model_id: imageModelId } } : {}),
+							...(videoModelId ? { video_model: { model_id: videoModelId } } : {}),
 							dynamic_params: {
 								message_version: "v2",
 							},

@@ -290,7 +290,7 @@ export class SelfMediaFileStorageService {
 			})
 			for (const f of draftFiles) {
 				if (f.file_id) {
-					await SuperMagicApi.deleteFile(f.file_id).catch(() => {})
+					await SuperMagicApi.deleteFile(f.file_id).catch(() => { })
 				}
 			}
 
@@ -298,8 +298,8 @@ export class SelfMediaFileStorageService {
 
 			const materialsDirPath = this.folderRelativePath
 				? this.normalizeRelativePath(
-						`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-					)
+					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+				)
 				: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 			const materialsDir = files.find(
 				(f) =>
@@ -308,7 +308,7 @@ export class SelfMediaFileStorageService {
 					this.normalizeRelativePath(f.relative_file_path) === materialsDirPath,
 			)
 			if (materialsDir?.file_id) {
-				await SuperMagicApi.deleteFile(materialsDir.file_id).catch(() => {})
+				await SuperMagicApi.deleteFile(materialsDir.file_id).catch(() => { })
 			}
 		} catch {
 			// silent
@@ -441,7 +441,7 @@ export class SelfMediaFileStorageService {
 			)
 			for (const f of toDelete) {
 				if (f.file_id) {
-					await SuperMagicApi.deleteFile(f.file_id).catch(() => {})
+					await SuperMagicApi.deleteFile(f.file_id).catch(() => { })
 				}
 			}
 
@@ -450,10 +450,10 @@ export class SelfMediaFileStorageService {
 				(f) =>
 					f.is_directory &&
 					f.relative_file_path ===
-						`${this.getBasePath()}/${TEMPLATES_MATERIALS_DIR}/${templateId}`,
+					`${this.getBasePath()}/${TEMPLATES_MATERIALS_DIR}/${templateId}`,
 			)
 			if (matDir?.file_id) {
-				await SuperMagicApi.deleteFile(matDir.file_id).catch(() => {})
+				await SuperMagicApi.deleteFile(matDir.file_id).catch(() => { })
 			}
 		} catch {
 			// silent
@@ -581,7 +581,7 @@ export class SelfMediaFileStorageService {
 
 	// ─── Cleanup ─────────────────────────────────────────────────────────────
 
-	dispose(): void {}
+	dispose(): void { }
 
 	// ─── Private Helpers ─────────────────────────────────────────────────────
 
@@ -895,8 +895,8 @@ export class SelfMediaFileStorageService {
 		const files = await this.getProjectFileList()
 		const materialsDirPath = this.folderRelativePath
 			? this.normalizeRelativePath(
-					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-				)
+				`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+			)
 			: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 		const materialsDir = files.find(
 			(item) =>
@@ -1066,24 +1066,22 @@ export class SelfMediaFileStorageService {
 	): string | undefined {
 		if (!path) return path
 		const normalized = this.normalizeRelativePath(path)
-		const draftMaterialsPrefix = `${
-			this.folderRelativePath
-				? this.normalizeRelativePath(
-						`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-					)
-				: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
-		}/`
+		const draftMaterialsPrefix = `${this.folderRelativePath
+			? this.normalizeRelativePath(
+				`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+			)
+			: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
+			}/`
 		if (!normalized.startsWith(draftMaterialsPrefix)) return path
 		const suffix = normalized.slice(draftMaterialsPrefix.length)
-		const archivePrefix = `${
-			this.folderRelativePath
-				? this.normalizeRelativePath(
-						`${this.folderRelativePath}/${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
-					)
-				: this.normalizeRelativePath(
-						`${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
-					)
-		}/`
+		const archivePrefix = `${this.folderRelativePath
+			? this.normalizeRelativePath(
+				`${this.folderRelativePath}/${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
+			)
+			: this.normalizeRelativePath(
+				`${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
+			)
+			}/`
 		return `${archivePrefix}${suffix}`
 	}
 
@@ -1242,24 +1240,24 @@ export class SelfMediaFileStorageService {
 				outline: this.normalizeOutline(a.outline),
 				materials: Array.isArray(a.materials)
 					? a.materials.map((m) => ({
-							id: m.id || `material_${Date.now()}`,
-							file: new File([], m.name || "file"),
-							previewUrl: "",
-							description: m.description || "",
-							uploadedPath: m.relativePath,
-						}))
+						id: m.id || `material_${Date.now()}`,
+						file: new File([], m.name || "file"),
+						previewUrl: "",
+						description: m.description || "",
+						uploadedPath: m.relativePath,
+					}))
 					: [],
 				notes: a.notes,
 				platform: a.platform as any,
 				description: a.description,
 				visualReferenceFiles: Array.isArray(a.visualReferenceFiles)
 					? a.visualReferenceFiles.map((f) => ({
-							name: f.name || "file",
-							content: f.content || "",
-							kind: f.kind,
-							file_id: f.file_id,
-							file_path: f.file_path,
-						}))
+						name: f.name || "file",
+						content: f.content || "",
+						kind: f.kind,
+						file_id: f.file_id,
+						file_path: f.file_path,
+					}))
 					: [],
 			})),
 		}
@@ -1294,12 +1292,12 @@ export class SelfMediaFileStorageService {
 					children: Array.isArray(node.children) ? normalize(node.children) : [],
 					materials: Array.isArray(node.materials)
 						? node.materials.map((m, idx) => ({
-								id: m.id || `outline_mat_${idx}`,
-								file: new File([], m.name || "file"),
-								previewUrl: "",
-								description: m.description || "",
-								uploadedPath: m.relativePath || m.uploadedPath,
-							}))
+							id: m.id || `outline_mat_${idx}`,
+							file: new File([], m.name || "file"),
+							previewUrl: "",
+							description: m.description || "",
+							uploadedPath: m.relativePath || m.uploadedPath,
+						}))
 						: [],
 				}
 			})

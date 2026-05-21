@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import type { MaterialItem } from "./types"
 import MaterialAttachmentList from "./MaterialAttachmentList"
+import InlineVoiceButton from "./InlineVoiceButton"
 
 interface ReferenceSectionProps {
 	text: string
@@ -34,16 +35,22 @@ export default function ReferenceSection({
 			</div>
 
 			<div className="space-y-3 rounded-xl border border-border/50 bg-muted/10 p-4">
-				<textarea
-					className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-					placeholder={t(
-						"detail.selfMedia.initPanel.stepDetail.referencesTextPlaceholder",
-					)}
-					rows={3}
-					value={text}
-					onChange={(e) => onTextChange(e.target.value)}
-					onBlur={onBlur}
-				/>
+				<div className="group relative">
+					<textarea
+						className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2.5 pr-7 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+						placeholder={t(
+							"detail.selfMedia.initPanel.stepDetail.referencesTextPlaceholder",
+						)}
+						rows={3}
+						value={text}
+						onChange={(e) => onTextChange(e.target.value)}
+						onBlur={onBlur}
+					/>
+					<InlineVoiceButton
+						variant="textarea"
+						onResult={(t) => onTextChange(text + t)}
+					/>
+				</div>
 
 				<MaterialAttachmentList
 					materials={materials}

@@ -24,6 +24,10 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
+	initReactI18next: {
+		type: "3rdParty",
+		init: () => {},
+	},
 }))
 
 vi.mock("mobx-react-lite", () => ({
@@ -65,15 +69,9 @@ vi.mock("../services/SelfMediaFileStorageService", () => ({
 	})),
 }))
 
-vi.mock("../components/SelfMediaInitPanel/StepTopicList", () => ({
-	default: function MockStepTopicList() {
+vi.mock("../components/SelfMediaInitPanel/StepTopicAndDetail", () => ({
+	default: function MockStepTopicAndDetail() {
 		return <div>topics-step</div>
-	},
-}))
-
-vi.mock("../components/SelfMediaInitPanel/StepArticleDetail", () => ({
-	default: function MockStepArticleDetail() {
-		return <div>detail-step</div>
 	},
 }))
 
@@ -164,7 +162,7 @@ describe("SelfMediaInitPanel", () => {
 
 	it("applies detected draft immediately without showing restore prompt", async () => {
 		mockLoadDraft.mockResolvedValue({
-			currentStep: 2,
+			currentStep: 1,
 			data: {
 				global: {
 					author: "Magic Lab",
@@ -199,7 +197,7 @@ describe("SelfMediaInitPanel", () => {
 		)
 
 		await waitFor(() => {
-			expect(screen.getByText("detail-step")).toBeInTheDocument()
+			expect(screen.getByText("topics-step")).toBeInTheDocument()
 		})
 
 		expect(
@@ -212,7 +210,7 @@ describe("SelfMediaInitPanel", () => {
 
 	it("clears all data, deletes draft, and returns to the first step", async () => {
 		mockLoadDraft.mockResolvedValue({
-			currentStep: 2,
+			currentStep: 1,
 			data: {
 				global: {
 					author: "Magic Lab",
@@ -239,7 +237,7 @@ describe("SelfMediaInitPanel", () => {
 		)
 
 		await waitFor(() => {
-			expect(screen.getByText("detail-step")).toBeInTheDocument()
+			expect(screen.getByText("topics-step")).toBeInTheDocument()
 		})
 
 		fireEvent.click(screen.getByTestId("self-media-init-panel-clear-button"))
@@ -248,7 +246,7 @@ describe("SelfMediaInitPanel", () => {
 			expect(screen.getByText("brand-step")).toBeInTheDocument()
 		})
 
-		expect(screen.queryByText("detail-step")).not.toBeInTheDocument()
+		expect(screen.queryByText("topics-step")).not.toBeInTheDocument()
 		expect(mockClearDraft).toHaveBeenCalledTimes(1)
 	})
 

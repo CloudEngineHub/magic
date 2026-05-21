@@ -658,7 +658,8 @@
 					"pickProjectTitle": "Select project file",
 					"projectFile": "Project file",
 					"readLocalError": "Failed to read local file. Please retry",
-					"readProjectError": "Failed to read project file. Please retry"
+					"readProjectError": "Failed to read project file. Please retry",
+					"uploadLabel": "Upload references"
 				},
 				"stepBrand": {
 					"accountName": "Account Name",
@@ -721,6 +722,12 @@
 					"aiAutoFillHint": "Auto-recommend style, template, outline based on description",
 					"aiAutoFilling": "Auto-filling...",
 					"articleFallback": "Article {{index}}",
+					"cardContentEmpty": "Please set the card count first",
+					"cardContentGenerateBtn": "AI Generate Cards",
+					"cardContentLabel": "Card Content Plan",
+					"cardContentOptimizeBtn": "AI Optimize",
+					"cardContentOptimizePlaceholder": "Describe how to adjust card content, e.g. make cover more engaging, add CTA...",
+					"cardContentPlaceholder": "Content for card {{index}}…",
 					"cardCountHint": "6-9 cards recommended for Rednote/Instagram",
 					"cardCountLabel": "Card Count",
 					"currentArticle": "Current Article",
@@ -760,30 +767,33 @@
 					"visualCustomPlaceholder": "Describe the visual style you want (colors, fonts, decorations, mood)...",
 					"visualHint": "Choose a visual style preset for cards. AI will use the corresponding CSS/JS template",
 					"visualLabel": "Visual Template",
-					"visualReferenceLabel": "Or upload reference files (multiple allowed)"
+					"visualReferenceLabel": "Add visual reference"
 				},
 				"stepTopic": {
 					"addManual": "Add topic manually",
 					"aiAssistantTitle": "AI Topic Assistant",
 					"aiGenerateBtn": "AI Generate Topics",
+					"collapseDetail": "Collapse details",
 					"directionPlaceholder": "Enter direction or keywords (optional), e.g.: productivity, AI tool reviews...",
 					"errorEmpty": "Generation failed, please retry or add topics manually",
 					"errorNetwork": "Network error, please try again later",
+					"expandDetail": "Expand details",
 					"folderPlaceholder": "Folder name (optional, auto-generated if empty)",
 					"generateBtn": "Generate",
 					"generateCount": "Generate",
 					"generateCountUnit": "topics",
+					"generateWithDetails": "Also generate content plan",
 					"stopBtn": "Stop",
-					"subtitle": "Add topics manually or use AI to generate them. Each article can be configured in the next step",
+					"subtitle": "Use AI to generate topics with content plans, or add manually and expand to configure",
 					"title": "Topic Planning",
 					"titlePlaceholder": "Article title (required)",
-					"totalTopics": "{{count}} topics · Configure style and outline in the next step"
+					"totalTopics": "{{count}} topics"
 				},
 				"steps": {
-					"brand": "Brand Info",
+					"brand": "Welcome & Brand",
 					"confirm": "Confirm",
 					"detail": "Content Planning",
-					"topics": "Topic Planning"
+					"topics": "Topics & Planning"
 				},
 				"styles": {
 					"casual": "Casual & Lively",

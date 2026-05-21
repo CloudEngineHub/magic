@@ -65,42 +65,40 @@ export async function generateTopics(options: GenerateTopicsOptions): Promise<Ge
 
 	const prompt =
 		locale === "en"
-			? `You are an expert social media content strategist who specializes in creating compelling content topics for brands.
+			? `You are an expert social media content strategist who specializes in creating compelling content topics.
 
-## Brand Information
+## Account Context
 - Account Name: ${global.author}
-- Brand Positioning: ${global.brandPosition}
 ${global.targetAudience ? `- Target Audience: ${global.targetAudience}` : ""}
 
 ## Task
-Generate ${count} high-quality content topics for this brand. Requirements:
-1. Align with brand positioning and target audience
-2. Suitable for social media content format and distribution
-3. Have viral potential and engagement appeal
-4. Titles should be attention-grabbing
-${direction ? `\n## Direction\n${direction}` : ""}
-${referenceText ? `\n## Reference Material\nUser-provided reference material for topic planning:\n${referenceText}` : ""}
+${referenceText && !direction ? `Analyze the following reference material and extract ${count} content topic ideas from it. The topics should be directly inspired by and derived from the reference material's themes, viewpoints, or knowledge points. Adapt them into formats suitable for social media distribution.` : `Generate ${count} high-quality content topics. Requirements:
+1. Suitable for social media content format and distribution
+2. Have viral potential and engagement appeal
+3. Titles should be attention-grabbing`}
+${direction ? `\n## Creative Direction\n${direction}` : ""}
+${referenceText ? `\n## Reference Material (Primary Source)\nThe following is user-provided reference material. ${direction ? "Use it as inspiration combined with the direction above." : "Extract topic ideas directly from this material — focus on its core themes, insights, and knowledge points rather than brand marketing angles."}\n${referenceText}` : ""}
+${!referenceText && global.brandPosition ? `\n## Brand Context (for tone reference only)\n- Brand Positioning: ${global.brandPosition}` : ""}
 
 ## Output Format
 Output strictly in the following JSON format with no other text:
 [
   { "title": "Topic title", "description": "One-line content direction summary" }
 ]`
-			: `你是一位资深自媒体内容策划专家，擅长为品牌制定有吸引力的内容选题。
+			: `你是一位资深自媒体内容策划专家，擅长从素材中提炼有吸引力的内容选题。
 
-## 品牌信息
+## 账号信息
 - 账号名称：${global.author}
-- 品牌定位：${global.brandPosition}
 ${global.targetAudience ? `- 目标受众：${global.targetAudience}` : ""}
 
 ## 任务
-请为该品牌生成 ${count} 个优质内容选题。选题要求：
-1. 贴合品牌定位和目标受众
-2. 适合社交媒体的内容形式和传播特点
-3. 具有话题性和传播潜力
-4. 标题要有吸引力，能引发用户点击
+${referenceText && !direction ? `请仔细分析以下参考资料，从中提炼出 ${count} 个内容选题。选题应直接来源于参考资料中的主题、观点或知识点，并将其转化为适合社交媒体传播的内容形式。` : `请生成 ${count} 个优质内容选题。选题要求：
+1. 适合社交媒体的内容形式和传播特点
+2. 具有话题性和传播潜力
+3. 标题要有吸引力，能引发用户点击`}
 ${direction ? `\n## 创作方向\n${direction}` : ""}
-${referenceText ? `\n## 参考资料\n以下是用户提供的参考资料，请结合这些内容进行选题策划：\n${referenceText}` : ""}
+${referenceText ? `\n## 参考资料（核心素材）\n以下是用户提供的参考资料。${direction ? "请结合上方的创作方向，从参考资料中获取灵感。" : "请直接从资料中提取选题——聚焦其核心主题、观点洞察和知识要点，不要偏向品牌营销角度。"}\n${referenceText}` : ""}
+${!referenceText && global.brandPosition ? `\n## 品牌背景（仅供语气参考）\n- 品牌定位：${global.brandPosition}` : ""}
 
 ## 输出格式
 请严格按照以下 JSON 格式输出，不要有任何其他文字：
@@ -128,6 +126,146 @@ ${referenceText ? `\n## 参考资料\n以下是用户提供的参考资料，请
 			.trim()
 		const topics = JSON.parse(cleaned) as GeneratedTopic[]
 		return Array.isArray(topics) ? topics.slice(0, count) : []
+	} catch {
+		return []
+	}
+}
+
+// ─── 选题 + 详情一体化生成 ──────────────────────────────────────────────────────
+
+export interface GenerateTopicsWithDetailsOptions {
+	global: SelfMediaInitGlobalSettings
+	count?: number
+	direction?: string
+	referenceText?: string
+	model?: string
+	signal?: AbortSignal
+}
+
+export interface GeneratedTopicWithDetails {
+	title: string
+	description: string
+	platform: string
+	style: string
+	visualPreset?: string
+	cardCount: number
+	outline: string
+}
+
+/**
+ * AI 一次性生成选题列表，并为每个选题同时生成详情配置（风格、大纲、卡片数等）。
+ */
+export async function generateTopicsWithDetails(
+	options: GenerateTopicsWithDetailsOptions,
+): Promise<GeneratedTopicWithDetails[]> {
+	const { global, count = 5, direction, referenceText, model, signal } = options
+	const locale = getContentLocale()
+	const styleValues = STYLE_PRESETS.filter((s) => s.value !== "custom")
+		.map((s) => `"${s.value}"`)
+		.join(", ")
+
+	const prompt =
+		locale === "en"
+			? `You are an expert social media content strategist who specializes in creating complete content plans.
+
+## Account Context
+- Account Name: ${global.author}
+${global.targetAudience ? `- Target Audience: ${global.targetAudience}` : ""}
+
+## Task
+${referenceText && !direction ? `Analyze the following reference material and derive ${count} content topics with full configuration. Topics should be directly inspired by the reference material's themes, viewpoints, or knowledge points.` : `Generate ${count} high-quality content topics with full configuration for each. Requirements:
+1. Suitable for social media content format and distribution
+2. Have viral potential and engagement appeal
+3. Titles should be attention-grabbing`}
+5. For each topic, provide platform, style, visual preset, card count, and outline
+${direction ? `\n## Creative Direction\n${direction}` : ""}
+${referenceText ? `\n## Reference Material (Primary Source)\n${direction ? "Use it as inspiration combined with the direction above." : "Extract topic ideas directly from this material — focus on its core themes, insights, and knowledge points rather than brand marketing angles."}\n${referenceText}` : ""}
+${!referenceText && global.brandPosition ? `\n## Brand Context (for tone reference only)\n- Brand Positioning: ${global.brandPosition}` : ""}
+
+## Output Format
+Output strictly in the following JSON array format with no other text:
+[
+  {
+    "title": "Topic title",
+    "description": "One-line content direction summary",
+    "platform": "rednote",
+    "style": one of [${styleValues}],
+    "visualPreset": one of ["neo-brutalism", "code-dispatch", "dark-tech", "ins-modern", "none"],
+    "cardCount": 6-9,
+    "outline": "- Point 1\\n  - Sub-point\\n- Point 2"
+  }
+]
+
+IMPORTANT: The number of top-level points in "outline" MUST equal "cardCount". Each top-level point corresponds to one card.
+Platform options: "rednote", "instagram", "wechat-official-accounts". Choose the most suitable for each topic.
+For "wechat-official-accounts", omit cardCount or set to 0.`
+			: `你是一位资深自媒体内容策划专家，擅长从素材中提炼完整的内容方案。
+
+## 账号信息
+- 账号名称：${global.author}
+${global.targetAudience ? `- 目标受众：${global.targetAudience}` : ""}
+
+## 任务
+${referenceText && !direction ? `请仔细分析以下参考资料，从中提炼出 ${count} 个内容选题，并为每个选题规划完整的内容配置。选题应直接来源于参考资料中的主题、观点或知识点。` : `请生成 ${count} 个优质内容选题，并为每个选题规划完整的内容配置。要求：
+1. 适合社交媒体的内容形式和传播特点
+2. 具有话题性和传播潜力
+3. 标题要有吸引力`}
+5. 为每个选题提供平台、风格、视觉模板、卡片数、大纲
+${direction ? `\n## 创作方向\n${direction}` : ""}
+${referenceText ? `\n## 参考资料（核心素材）\n${direction ? "请结合上方的创作方向，从参考资料中获取灵感。" : "请直接从资料中提取选题——聚焦其核心主题、观点洞察和知识要点，不要偏向品牌营销角度。"}\n${referenceText}` : ""}
+${!referenceText && global.brandPosition ? `\n## 品牌背景（仅供语气参考）\n- 品牌定位：${global.brandPosition}` : ""}
+
+## 输出格式
+请严格按照以下 JSON 数组格式输出，不要有任何其他文字：
+[
+  {
+    "title": "选题标题",
+    "description": "一句话内容方向",
+    "platform": "rednote",
+    "style": 从 [${styleValues}] 中选择,
+    "visualPreset": 从 ["neo-brutalism", "code-dispatch", "dark-tech", "ins-modern", "none"] 中选择,
+    "cardCount": 6-9之间的数字,
+    "outline": "- 要点1\\n  - 子要点\\n- 要点2"
+  }
+]
+
+重要：outline 中的顶级要点数量必须与 cardCount 一致，每个顶级要点对应一张卡片。
+平台选项："rednote"（小红书）、"instagram"、"wechat-official-accounts"（微信公众号）。请为每个选题选择最合适的平台。
+如果是 "wechat-official-accounts"，cardCount 填 0。`
+
+	const messages: LLMMessage[] = [{ role: "user", content: prompt }]
+	const systemPrompt =
+		locale === "en"
+			? "You are a professional social media content planning assistant. Output strictly in JSON format with no extra text."
+			: "你是一个专业的自媒体内容策划助手。请严格按照 JSON 格式输出，不要有多余的文字。"
+
+	const result = await aiLLMService.chat(messages, {
+		temperature: 0.8,
+		model,
+		signal,
+		systemPrompt,
+	})
+
+	try {
+		const cleaned = result.content
+			.replace(/```json?\s*\n?/g, "")
+			.replace(/```\s*$/g, "")
+			.trim()
+		const topics = JSON.parse(cleaned) as GeneratedTopicWithDetails[]
+		if (!Array.isArray(topics)) return []
+		// Reconcile cardCount with outline top-level points count
+		for (const topic of topics) {
+			if (topic.platform === "wechat-official-accounts") continue
+			if (topic.outline) {
+				const topLevelPoints = topic.outline
+					.split("\n")
+					.filter((l) => /^[-*•]\s/.test(l.trim())).length
+				if (topLevelPoints > 0 && topLevelPoints !== topic.cardCount) {
+					topic.cardCount = topLevelPoints
+				}
+			}
+		}
+		return topics.slice(0, count)
 	} catch {
 		return []
 	}
@@ -161,7 +299,7 @@ function serializeOutlineToText(nodes: OutlineNode[], depth = 0): string {
 		.join("\n")
 }
 
-function parseOutlineFromText(text: string): OutlineNode[] {
+export function parseOutlineFromText(text: string): OutlineNode[] {
 	const lines = text.split("\n").filter((l) => l.trim())
 	const root: OutlineNode[] = []
 	const stack: { nodes: OutlineNode[]; depth: number }[] = [{ nodes: root, depth: -1 }]
@@ -373,6 +511,218 @@ ${article.cardCount > 0 ? `5. 核心要点数量与卡片数(${article.cardCount
 	return parseOutlineFromText(result.content)
 }
 
+// ─── 卡片内容生成（小红书/Instagram） ────────────────────────────────────────────
+
+/**
+ * AI 生成卡片内容规划（每张卡片的内容描述），适用于小红书和 Instagram。
+ */
+export async function generateCardContent(options: GenerateOutlineOptions): Promise<OutlineNode[]> {
+	const { global, article, model, signal } = options
+	const platform = getPlatformLabel(article.platform)
+	const style = getStyleLabel(article.style) || (getContentLocale() === "en" ? "general" : "通用")
+	const locale = getContentLocale()
+	const cardCount = article.cardCount || 6
+
+	const prompt =
+		locale === "en"
+			? `You are a professional social media content planner specializing in card-based visual content for ${platform}.
+
+## Brand Information
+- Account: ${global.author}
+- Positioning: ${global.brandPosition}
+${global.targetAudience ? `- Target Audience: ${global.targetAudience}` : ""}
+
+## Article Information
+- Title: ${article.title}
+- Style: ${style}
+- Number of cards: ${cardCount}
+${article.description ? `- Description: ${article.description}` : ""}
+${article.notes ? `- Additional notes: ${article.notes}` : ""}
+
+## Task
+Plan the content for each of the ${cardCount} cards. Each card should have a clear, specific content description explaining what should appear on that card (text, visuals, layout suggestions).
+
+## Requirements
+1. First card should be an eye-catching cover/hook
+2. Content should flow logically from card to card
+3. Each card should be independently readable but connected to the narrative
+4. Last card should include a call-to-action or summary
+5. Suitable for ${platform} content format and user behavior
+6. Descriptions should be actionable and specific
+
+## Output Format
+Output exactly ${cardCount} lines, one per card. Each line starts with "- " followed by the card content description:
+- Card 1 content description
+- Card 2 content description
+...`
+			: `你是一位专业的社交媒体内容策划师，擅长为${platform}平台规划卡片式图文内容。
+
+## 品牌信息
+- 账号：${global.author}
+- 定位：${global.brandPosition}
+${global.targetAudience ? `- 目标受众：${global.targetAudience}` : ""}
+
+## 文章信息
+- 标题：${article.title}
+- 风格：${style}
+- 卡片数量：${cardCount} 张
+${article.description ? `- 内容描述：${article.description}` : ""}
+${article.notes ? `- 补充说明：${article.notes}` : ""}
+
+## 任务
+为这 ${cardCount} 张卡片规划每张的具体内容。每张卡片需要有明确的内容描述，说明该卡片应该呈现什么（文字内容、视觉元素、排版建议等）。
+
+## 要求
+1. 第一张卡片应该是吸引眼球的封面/钩子
+2. 卡片之间的内容要有逻辑递进关系
+3. 每张卡片独立可读，但又串联成完整叙事
+4. 最后一张卡片包含行动号召或总结
+5. 适合${platform}平台的浏览习惯和内容形式
+6. 内容描述要具体、可执行
+
+## 输出格式
+请输出恰好 ${cardCount} 行，每行以 "- " 开头，描述对应卡片的内容：
+- 第 1 张卡片内容描述
+- 第 2 张卡片内容描述
+...`
+
+	const messages: LLMMessage[] = [{ role: "user", content: prompt }]
+	const systemPrompt =
+		locale === "en"
+			? "You are a professional social media card content planner. Output the card list directly with no extra text."
+			: "你是一个专业的社交媒体卡片内容规划师。请直接输出卡片内容列表，不要有多余的开头和结尾。"
+
+	const result = await aiLLMService.chat(messages, {
+		temperature: 0.7,
+		model,
+		signal,
+		systemPrompt,
+	})
+
+	return parseCardContentFromText(result.content, cardCount)
+}
+
+export interface OptimizeCardContentOptions extends GenerateOutlineOptions {
+	instruction: string
+}
+
+/**
+ * AI 优化已有的卡片内容规划。
+ */
+export async function optimizeCardContent(options: OptimizeCardContentOptions): Promise<OutlineNode[]> {
+	const { global, article, model, signal, instruction } = options
+	const platform = getPlatformLabel(article.platform)
+	const style = getStyleLabel(article.style) || (getContentLocale() === "en" ? "general" : "通用")
+	const locale = getContentLocale()
+	const cardCount = article.cardCount || 6
+	const currentContent = article.outline
+		.map((node, i) => `- 第 ${i + 1} 张：${node.text}`)
+		.join("\n")
+	const userInstruction =
+		instruction.trim() ||
+		(locale === "en"
+			? "Optimize the card content while preserving the core intent."
+			: "在保留核心意图的前提下优化卡片内容。")
+
+	const prompt =
+		locale === "en"
+			? `You are a professional social media content planner. Modify the following card content plan according to the user's instructions.
+
+## Current Card Content
+${currentContent}
+
+## User Instructions
+${userInstruction}
+
+## Brand Information
+- Account: ${global.author}
+- Positioning: ${global.brandPosition}
+- Platform: ${platform}
+
+## Article Information
+- Title: ${article.title}
+- Style: ${style}
+- Number of cards: ${cardCount}
+${article.notes ? `- Additional notes: ${article.notes}` : ""}
+
+## Requirements
+1. Apply the user's modification requests precisely
+2. Maintain logical flow between cards
+3. Keep the same number of cards (${cardCount})
+4. Suitable for ${platform} content format
+
+## Output Format
+Output exactly ${cardCount} lines, one per card, starting with "- ":
+- Card 1 content
+- Card 2 content
+...`
+			: `你是一位专业的社交媒体内容策划师。请根据用户的修改意愿，调整以下卡片内容规划。
+
+## 当前卡片内容
+${currentContent}
+
+## 用户修改要求
+${userInstruction}
+
+## 品牌信息
+- 账号：${global.author}
+- 定位：${global.brandPosition}
+- 平台：${platform}
+
+## 文章信息
+- 标题：${article.title}
+- 风格：${style}
+- 卡片数量：${cardCount}
+${article.notes ? `- 补充说明：${article.notes}` : ""}
+
+## 要求
+1. 严格按照用户的修改意愿调整内容
+2. 保持卡片之间的逻辑连贯性
+3. 保持卡片数量不变（${cardCount} 张）
+4. 适合${platform}平台的内容展示形式
+
+## 输出格式
+请输出恰好 ${cardCount} 行，每行以 "- " 开头：
+- 第 1 张卡片内容
+- 第 2 张卡片内容
+...`
+
+	const messages: LLMMessage[] = [{ role: "user", content: prompt }]
+	const systemPrompt =
+		locale === "en"
+			? "You are a professional social media card content planner. Output the revised card list directly with no extra text."
+			: "你是一个专业的社交媒体卡片内容规划师。请直接输出修改后的卡片内容列表，不要有多余的开头和结尾。"
+
+	const result = await aiLLMService.chat(messages, {
+		temperature: 0.7,
+		model,
+		signal,
+		systemPrompt,
+	})
+
+	return parseCardContentFromText(result.content, cardCount)
+}
+
+/** Parse flat card content text into OutlineNode[] (no children) */
+function parseCardContentFromText(text: string, expectedCount: number): OutlineNode[] {
+	const lines = text.split("\n").filter((l) => l.trim())
+	const nodes: OutlineNode[] = []
+
+	for (const line of lines) {
+		const match = line.match(/^[-*•]?\s*(?:第?\s*\d+\s*[张.:、)]\s*)?(.+)/)
+		if (!match) continue
+		const content = match[1].trim()
+		if (!content) continue
+		nodes.push({ id: generateOutlineId(), text: content, children: [], materials: [] })
+	}
+
+	// Pad or trim to match expected count
+	while (nodes.length < expectedCount) {
+		nodes.push({ id: generateOutlineId(), text: "", children: [], materials: [] })
+	}
+	return nodes.slice(0, expectedCount)
+}
+
 // ─── 流式生成（用于实时展示） ─────────────────────────────────────────────────
 
 export interface StreamGenerateOptions {
@@ -482,6 +832,8 @@ Recommend the following configuration:
 ${isCardPlatform ? `3. **cardCount**: Recommended card count (integer between 6-9)` : ""}
 4. **outline**: Generate structured outline (use "- " list format, child levels indented by two spaces)
 5. **notes**: Additional creative notes (one sentence)
+${isCardPlatform ? `
+IMPORTANT: The number of top-level points in the outline MUST equal the cardCount value. Each top-level point corresponds to one card.` : ""}
 
 ## Output Format
 Output strictly in the following JSON format with no other text:
@@ -511,6 +863,8 @@ ${global.targetAudience ? `- 受众：${global.targetAudience}` : ""}
 ${isCardPlatform ? `3. **cardCount**：推荐卡片数量（6-9 之间的整数）` : ""}
 4. **outline**：生成结构化大纲（使用 "- " 列表格式，子层级两个空格缩进）
 5. **notes**：补充创作注意事项（一句话）
+${isCardPlatform ? `
+重要：大纲中的顶级要点数量必须与 cardCount 一致，每个顶级要点对应一张卡片。` : ""}
 
 ## 输出格式
 请严格按以下 JSON 输出，不要有其他文字：
@@ -545,12 +899,18 @@ ${isCardPlatform ? `3. **cardCount**：推荐卡片数量（6-9 之间的整数�
 		const outline =
 			typeof parsed.outline === "string" ? parseOutlineFromText(parsed.outline) : []
 
+		// Reconcile cardCount with outline top-level points count
+		let cardCount = isCardPlatform
+			? Math.max(1, Math.min(20, parsed.cardCount || 6))
+			: article.cardCount
+		if (isCardPlatform && outline.length > 0 && outline.length !== cardCount) {
+			cardCount = outline.length
+		}
+
 		return {
 			style: parsed.style || "professional",
 			visualPreset: parsed.visualPreset || "none",
-			cardCount: isCardPlatform
-				? Math.max(1, Math.min(20, parsed.cardCount || 6))
-				: article.cardCount,
+			cardCount,
 			outline,
 			notes: parsed.notes || "",
 		}

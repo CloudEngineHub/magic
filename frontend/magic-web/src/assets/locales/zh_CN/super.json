@@ -659,7 +659,8 @@
 					"pickProjectTitle": "选择项目文件",
 					"projectFile": "项目文件",
 					"readLocalError": "读取本地文件失败，请重试",
-					"readProjectError": "读取项目文件失败，请重试"
+					"readProjectError": "读取项目文件失败，请重试",
+					"uploadLabel": "上传参考资料"
 				},
 				"stepBrand": {
 					"accountName": "账号名称",
@@ -722,6 +723,12 @@
 					"aiAutoFillHint": "根据描述自动推荐风格、模板、大纲等",
 					"aiAutoFilling": "智能填充中…",
 					"articleFallback": "文章 {{index}}",
+					"cardContentEmpty": "请先设置卡片数量",
+					"cardContentGenerateBtn": "AI 生成卡片内容",
+					"cardContentLabel": "卡片内容规划",
+					"cardContentOptimizeBtn": "AI 优化",
+					"cardContentOptimizePlaceholder": "描述你想如何调整卡片内容，例如：封面更吸引人、增加互动引导…",
+					"cardContentPlaceholder": "第 {{index}} 张卡片的内容描述…",
 					"cardCountHint": "小红书/Instagram 建议 6-9 张",
 					"cardCountLabel": "卡片数量",
 					"currentArticle": "当前文章",
@@ -761,30 +768,33 @@
 					"visualCustomPlaceholder": "描述你想要的视觉风格（配色、字体、装饰、氛围）…",
 					"visualHint": "选择卡片的视觉风格预设，AI 将使用对应的 CSS/JS 模板生成内容",
 					"visualLabel": "视觉模板",
-					"visualReferenceLabel": "或上传参考文件（可多选）"
+					"visualReferenceLabel": "添加视觉参考"
 				},
 				"stepTopic": {
 					"addManual": "手动添加选题",
 					"aiAssistantTitle": "AI 选题助手",
 					"aiGenerateBtn": "AI 智能生成选题",
+					"collapseDetail": "收起详情",
 					"directionPlaceholder": "输入创作方向或关键词（选填），如：职场效率、AI工具测评...",
 					"errorEmpty": "生成失败，请重试或手动添加选题",
 					"errorNetwork": "网络异常，请稍后重试",
+					"expandDetail": "展开详情",
 					"folderPlaceholder": "文件夹名（选填，留空自动生成）",
 					"generateBtn": "生成选题",
 					"generateCount": "生成",
 					"generateCountUnit": "个选题",
+					"generateWithDetails": "同时生成内容规划",
 					"stopBtn": "停止",
-					"subtitle": "手动添加或使用 AI 智能生成选题，每篇文章将在下一步详细规划",
+					"subtitle": "使用 AI 智能生成选题和内容规划，或手动添加后展开配置详情",
 					"title": "选题策划",
 					"titlePlaceholder": "文章标题（必填）",
-					"totalTopics": "共 {{count}} 个选题 · 下一步可为每篇配置风格和大纲"
+					"totalTopics": "共 {{count}} 个选题"
 				},
 				"steps": {
-					"brand": "品牌信息",
+					"brand": "欢迎与定位",
 					"confirm": "确认生成",
 					"detail": "内容规划",
-					"topics": "选题策划"
+					"topics": "选题与内容规划"
 				},
 				"styles": {
 					"casual": "轻松活泼",

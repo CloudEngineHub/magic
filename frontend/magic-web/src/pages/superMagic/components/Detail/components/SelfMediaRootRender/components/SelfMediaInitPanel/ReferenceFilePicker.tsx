@@ -1,7 +1,14 @@
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useMemo } from "react"
 import { useTranslation } from "react-i18next"
+import { FileText, Upload, FolderOpen, X, Loader2, Plus } from "lucide-react"
+import {
+	DropdownMenu,
+	DropdownMenuTrigger,
+	DropdownMenuContent,
+} from "@/components/shadcn-ui/dropdown-menu"
 import projectFilesStore from "@/stores/projectFiles"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import ProjectFilePickerContent from "./ProjectFilePickerContent"
 import type { ReferenceFileValue } from "./types"
 
 export type { ReferenceFileValue }
@@ -13,6 +20,10 @@ interface ReferenceFilePickerProps {
 	maxFiles?: number
 	disabled?: boolean
 	onError?: (message: string) => void
+	/** Compact mode: render as a small icon button */
+	compact?: boolean
+	/** Custom label for the upload button (overrides default "上传参考资料") */
+	label?: string
 }
 
 const TEXT_EXTENSIONS = new Set([
@@ -92,11 +103,16 @@ export default function ReferenceFilePicker({
 	maxFiles,
 	disabled = false,
 	onError,
+	compact = false,
+	label,
 }: ReferenceFilePickerProps) {
 	const { t } = useTranslation("super")
 	const [showProjectPicker, setShowProjectPicker] = useState(false)
 	const [loadingProjectFile, setLoadingProjectFile] = useState(false)
+	const [searchQuery, setSearchQuery] = useState("")
 	const fileInputRef = useRef<HTMLInputElement | null>(null)
+	const dropZoneRef = useRef<HTMLDivElement | null>(null)
+	const [isDragging, setIsDragging] = useState(false)
 
 	const canAddMore = maxFiles == null || value.length < maxFiles
 	const allowMultiSelect = maxFiles == null || maxFiles > 1
@@ -128,12 +144,45 @@ export default function ReferenceFilePicker({
 		[appendFiles, onError, t],
 	)
 
+	const handleDrop = useCallback(
+		(e: React.DragEvent) => {
+			e.preventDefault()
+			setIsDragging(false)
+			if (disabled || !canAddMore) return
+
+			const fileList = e.dataTransfer.files
+			if (!fileList?.length) return
+
+			const readers = Array.from(fileList).map((file) => readLocalFile(file))
+			void Promise.all(readers)
+				.then(appendFiles)
+				.catch(() => {
+					onError?.(t("detail.selfMedia.initPanel.referenceFilePicker.readLocalError"))
+				})
+		},
+		[appendFiles, canAddMore, disabled, onError, t],
+	)
+
+	const handleDragOver = useCallback(
+		(e: React.DragEvent) => {
+			e.preventDefault()
+			if (!disabled && canAddMore) setIsDragging(true)
+		},
+		[canAddMore, disabled],
+	)
+
+	const handleDragLeave = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		setIsDragging(false)
+	}, [])
+
 	const handleProjectFileSelect = useCallback(
 		async (fileId: string, fileName: string, filePath?: string) => {
 			setLoadingProjectFile(true)
 			try {
 				appendFiles([await readProjectFile(fileId, fileName, filePath)])
 				setShowProjectPicker(false)
+				setSearchQuery("")
 			} catch {
 				onError?.(t("detail.selfMedia.initPanel.referenceFilePicker.readProjectError"))
 			} finally {
@@ -150,61 +199,71 @@ export default function ReferenceFilePicker({
 		[onChange, value],
 	)
 
+	const handleOpenChange = useCallback((open: boolean) => {
+		setShowProjectPicker(open)
+		if (!open) setSearchQuery("")
+	}, [])
+
+	const handleLocalUpload = useCallback(() => {
+		fileInputRef.current?.click()
+		setShowProjectPicker(false)
+		setSearchQuery("")
+	}, [])
+
 	const isDisabled = disabled || loadingProjectFile
 
 	const projectFiles = projectFilesStore.workspaceFilesList.filter((f) => !f.is_directory)
 
+	const filteredProjectFiles = useMemo(() => {
+		if (!searchQuery.trim()) return projectFiles
+		const query = searchQuery.toLowerCase()
+		return projectFiles.filter(
+			(f) =>
+				(f.display_filename || f.file_name || "").toLowerCase().includes(query) ||
+				(f.relative_file_path || "").toLowerCase().includes(query),
+		)
+	}, [projectFiles, searchQuery])
+
+	const selectedPaths = useMemo(
+		() =>
+			new Set(
+				value
+					.filter((v) => v.file_path)
+					.map((v) => v.file_path!)
+					.filter((p): p is string => !!p),
+			),
+		[value],
+	)
+
+	// Shared dropdown content for project file picker
+	const dropdownContent = canAddMore ? (
+		<DropdownMenuContent
+			align="start"
+			sideOffset={4}
+			className="flex max-h-56 w-64 flex-col overflow-hidden p-0"
+			onCloseAutoFocus={(e) => e.preventDefault()}
+		>
+			<ProjectFilePickerContent
+				files={filteredProjectFiles}
+				loading={loadingProjectFile}
+				searchQuery={searchQuery}
+				onSearchChange={setSearchQuery}
+				onSelect={handleProjectFileSelect}
+				selectedPaths={selectedPaths}
+				onLocalUpload={compact ? handleLocalUpload : undefined}
+				localUploadLabel={
+					compact
+						? t("detail.selfMedia.initPanel.referenceFilePicker.localUpload")
+						: undefined
+				}
+			/>
+		</DropdownMenuContent>
+	) : null
+
 	return (
 		<div className="relative">
-			{value.length > 0 && (
-				<div className="mb-2 flex flex-col gap-1.5">
-					{value.map((file, index) => (
-						<div
-							key={`${file.name}-${index}`}
-							className="flex items-center gap-2 rounded-lg border border-input bg-muted/50 px-3 py-2"
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								className="shrink-0 text-primary"
-							>
-								<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-								<polyline points="14 2 14 8 20 8" />
-							</svg>
-							<span className="flex-1 truncate text-xs text-foreground">
-								{file.name}
-							</span>
-							<button
-								type="button"
-								className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive"
-								onClick={() => handleRemove(index)}
-								disabled={disabled}
-							>
-								<svg
-									width="12"
-									height="12"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									strokeWidth="2"
-									strokeLinecap="round"
-									strokeLinejoin="round"
-								>
-									<path d="M18 6 6 18M6 6l12 12" />
-								</svg>
-							</button>
-						</div>
-					))}
-				</div>
-			)}
-
-			{canAddMore && (
+			{/* Compact mode: just an icon button */}
+			{compact ? (
 				<>
 					<input
 						ref={fileInputRef}
@@ -213,138 +272,150 @@ export default function ReferenceFilePicker({
 						className="hidden"
 						onChange={handleLocalFileSelect}
 					/>
-					<div className="flex w-full gap-2">
-						<button
-							type="button"
-							className="flex flex-1 items-center gap-2 rounded-lg border border-dashed border-input px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-							onClick={() => fileInputRef.current?.click()}
-							disabled={isDisabled}
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-								<polyline points="17 8 12 3 7 8" />
-								<line x1="12" y1="3" x2="12" y2="15" />
-							</svg>
-							{t("detail.selfMedia.initPanel.referenceFilePicker.localUpload")}
-						</button>
-						<button
-							type="button"
-							className="flex flex-1 items-center gap-2 rounded-lg border border-dashed border-input px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-							onClick={() => setShowProjectPicker(true)}
-							disabled={isDisabled}
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-							</svg>
-							{t("detail.selfMedia.initPanel.referenceFilePicker.projectFile")}
-						</button>
+					<div className="flex items-center gap-1.5">
+						{value.length > 0 && (
+							<div className="flex items-center gap-1.5">
+								{value.map((file, index) => (
+									<div
+										key={`${file.name}-${index}`}
+										className="group flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-zinc-50/50 px-2 py-1 text-zinc-600 dark:border-zinc-800/80 dark:bg-zinc-900/50 dark:text-zinc-300 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 transition-colors"
+									>
+										<FileText className="size-3 text-zinc-400" />
+										<span className="max-w-[70px] truncate text-[11px] font-semibold">
+											{file.name}
+										</span>
+										<button
+											type="button"
+											className="shrink-0 rounded-full p-0.5 text-zinc-400 hover:text-destructive dark:hover:text-destructive hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all"
+											onClick={() => handleRemove(index)}
+											disabled={disabled}
+										>
+											<X className="size-2.5" />
+										</button>
+									</div>
+								))}
+							</div>
+						)}
+						{canAddMore && (
+							<DropdownMenu open={showProjectPicker} onOpenChange={handleOpenChange}>
+								<DropdownMenuTrigger asChild>
+									<button
+										type="button"
+										className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-700 hover:bg-zinc-50/80 dark:text-zinc-500 dark:hover:text-zinc-300 dark:hover:bg-zinc-900/80 transition-all font-semibold"
+										disabled={disabled}
+									>
+										<Upload className="size-3.5" />
+										{value.length === 0 && (
+											<span>
+												{label ||
+													t(
+														"detail.selfMedia.initPanel.referenceFilePicker.uploadLabel",
+														"上传参考资料",
+													)}
+											</span>
+										)}
+									</button>
+								</DropdownMenuTrigger>
+								{dropdownContent}
+							</DropdownMenu>
+						)}
 					</div>
-					<p className="mt-1 text-[11px] text-muted-foreground/60">
-						{t("detail.selfMedia.initPanel.referenceFilePicker.hint")}
-					</p>
 				</>
-			)}
-
-			{showProjectPicker && canAddMore && (
-				<div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-background p-1 shadow-lg">
-					<div className="flex items-center justify-between border-b border-border/50 px-2 py-1.5">
-						<span className="text-[11px] font-medium text-muted-foreground">
-							{t("detail.selfMedia.initPanel.referenceFilePicker.pickProjectTitle")}
-						</span>
-						<button
-							type="button"
-							className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-							onClick={() => setShowProjectPicker(false)}
-						>
-							<svg
-								width="12"
-								height="12"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<path d="M18 6 6 18M6 6l12 12" />
-							</svg>
-						</button>
-					</div>
-					{projectFiles.map((f) => (
-						<button
-							key={f.file_id}
-							type="button"
-							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-muted"
-							onClick={() =>
-								handleProjectFileSelect(
-									f.file_id!,
-									f.display_filename || f.file_name || "未命名文件",
-									f.relative_file_path ?? undefined,
-								)
-							}
-							disabled={loadingProjectFile}
-						>
-							<svg
-								width="12"
-								height="12"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								className="shrink-0 text-muted-foreground"
-							>
-								<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-								<polyline points="14 2 14 8 20 8" />
-							</svg>
-							<span className="truncate">{f.display_filename || f.file_name}</span>
-							{f.relative_file_path && (
-								<span className="ml-auto truncate text-[10px] text-muted-foreground/60">
-									{f.relative_file_path}
-								</span>
-							)}
-						</button>
-					))}
-					{projectFiles.length === 0 && (
-						<p className="px-2 py-3 text-center text-[11px] text-muted-foreground">
-							{t("detail.selfMedia.initPanel.referenceFilePicker.noProjectFiles")}
-						</p>
-					)}
-					{loadingProjectFile && (
-						<div className="flex items-center justify-center py-2">
-							<svg
-								className="animate-spin"
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-							>
-								<path d="M21 12a9 9 0 1 1-6.219-8.56" />
-							</svg>
+			) : (
+				<>
+					{/* File chips */}
+					{value.length > 0 && (
+						<div className="mb-2 flex flex-wrap gap-1.5">
+							{value.map((file, index) => (
+								<div
+									key={`${file.name}-${index}`}
+									className="group flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 transition-colors hover:border-border hover:bg-muted/70"
+								>
+									<FileText className="size-3 shrink-0 text-primary/70" />
+									<span className="max-w-[140px] truncate text-xs text-foreground/90">
+										{file.name}
+									</span>
+									<button
+										type="button"
+										className="ml-0.5 shrink-0 rounded-full p-0.5 text-muted-foreground/60 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+										onClick={() => handleRemove(index)}
+										disabled={disabled}
+									>
+										<X className="size-3" />
+									</button>
+								</div>
+							))}
 						</div>
 					)}
-				</div>
+
+					{/* Drop zone & action buttons */}
+					{canAddMore && (
+						<>
+							<input
+								ref={fileInputRef}
+								type="file"
+								multiple={allowMultiSelect}
+								className="hidden"
+								onChange={handleLocalFileSelect}
+							/>
+							<div
+								ref={dropZoneRef}
+								className={`relative flex items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 transition-all ${
+									isDragging
+										? "border-primary bg-primary/5"
+										: "border-border/60 hover:border-border"
+								}`}
+								onDrop={handleDrop}
+								onDragOver={handleDragOver}
+								onDragLeave={handleDragLeave}
+							>
+								<div className="flex flex-1 items-center gap-3">
+									<button
+										type="button"
+										className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+										onClick={() => fileInputRef.current?.click()}
+										disabled={isDisabled}
+									>
+										<Upload className="size-3.5" />
+										{t(
+											"detail.selfMedia.initPanel.referenceFilePicker.localUpload",
+										)}
+									</button>
+									<DropdownMenu
+										open={showProjectPicker}
+										onOpenChange={handleOpenChange}
+									>
+										<DropdownMenuTrigger asChild>
+											<button
+												type="button"
+												className="flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/80 hover:text-foreground"
+												disabled={isDisabled}
+											>
+												<FolderOpen className="size-3.5" />
+												{t(
+													"detail.selfMedia.initPanel.referenceFilePicker.projectFile",
+												)}
+											</button>
+										</DropdownMenuTrigger>
+										{dropdownContent}
+									</DropdownMenu>
+								</div>
+								{isDragging && (
+									<span className="absolute inset-0 flex items-center justify-center rounded-lg bg-primary/5 text-xs font-medium text-primary">
+										<Plus className="mr-1 size-3.5" />
+										{t(
+											"detail.selfMedia.initPanel.referenceFilePicker.dropHere",
+											"拖放文件到这里",
+										)}
+									</span>
+								)}
+							</div>
+							<p className="mt-1 text-[11px] text-muted-foreground/50">
+								{t("detail.selfMedia.initPanel.referenceFilePicker.hint")}
+							</p>
+						</>
+					)}
+				</>
 			)}
 		</div>
 	)

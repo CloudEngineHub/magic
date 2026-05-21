@@ -51,6 +51,8 @@ export interface ArticleDetail {
 	cardCount: number
 	/** Attached materials with descriptions */
 	materials: MaterialItem[]
+	/** Reference files for content (uploaded or picked from project) */
+	referenceFiles?: ReferenceFileValue[]
 	/** Additional notes/instructions */
 	notes: string
 	/** Target platform for this article */
@@ -118,30 +120,30 @@ export const ALL_PLATFORMS: Array<{
 	labelKey: string
 	disabled: boolean
 }> = [
-	{ value: "rednote", labelKey: "detail.selfMedia.initPanel.platforms.rednote", disabled: false },
-	{
-		value: "instagram",
-		labelKey: "detail.selfMedia.initPanel.platforms.instagram",
-		disabled: false,
-	},
-	{
-		value: "wechat-official-accounts",
-		labelKey: "detail.selfMedia.initPanel.platforms.wechatOfficialAccounts",
-		disabled: false,
-	},
-	{ value: "tiktok", labelKey: "detail.selfMedia.initPanel.platforms.tiktok", disabled: true },
-	{ value: "x", labelKey: "detail.selfMedia.initPanel.platforms.x", disabled: true },
-	{
-		value: "facebook",
-		labelKey: "detail.selfMedia.initPanel.platforms.facebook",
-		disabled: true,
-	},
-	{
-		value: "wechat-channels",
-		labelKey: "detail.selfMedia.initPanel.platforms.wechatChannels",
-		disabled: true,
-	},
-]
+		{ value: "rednote", labelKey: "detail.selfMedia.initPanel.platforms.rednote", disabled: false },
+		{
+			value: "instagram",
+			labelKey: "detail.selfMedia.initPanel.platforms.instagram",
+			disabled: false,
+		},
+		{
+			value: "wechat-official-accounts",
+			labelKey: "detail.selfMedia.initPanel.platforms.wechatOfficialAccounts",
+			disabled: false,
+		},
+		{ value: "tiktok", labelKey: "detail.selfMedia.initPanel.platforms.tiktok", disabled: true },
+		{ value: "x", labelKey: "detail.selfMedia.initPanel.platforms.x", disabled: true },
+		{
+			value: "facebook",
+			labelKey: "detail.selfMedia.initPanel.platforms.facebook",
+			disabled: true,
+		},
+		{
+			value: "wechat-channels",
+			labelKey: "detail.selfMedia.initPanel.platforms.wechatChannels",
+			disabled: true,
+		},
+	]
 
 /** Visual presets organized by platform — maps to backend skill presets/ directory */
 export interface VisualPresetOption {
@@ -149,6 +151,10 @@ export interface VisualPresetOption {
 	labelKey: string
 	descriptionKey: string
 	platforms: SelfMediaPlatform[]
+	/** CSS gradient or color hint used as a mini-preview swatch */
+	swatch?: string
+	/** Emoji or short icon character for quick identification */
+	icon?: string
 }
 
 export const VISUAL_PRESETS: VisualPresetOption[] = [
@@ -157,36 +163,48 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		labelKey: "detail.selfMedia.initPanel.visuals.neoBrutalism.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.neoBrutalism.description",
 		platforms: ["rednote"],
+		swatch: "linear-gradient(135deg, #ff6b6b 0%, #feca57 50%, #48dbfb 100%)",
+		icon: "🟧",
 	},
 	{
 		value: "code-dispatch",
 		labelKey: "detail.selfMedia.initPanel.visuals.codeDispatch.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.codeDispatch.description",
 		platforms: ["rednote"],
+		swatch: "linear-gradient(135deg, #0f1923 0%, #1a3a4a 50%, #00d2d3 100%)",
+		icon: "💻",
 	},
 	{
 		value: "dark-tech",
 		labelKey: "detail.selfMedia.initPanel.visuals.darkTech.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.darkTech.description",
 		platforms: ["rednote"],
+		swatch: "linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #d4af37 100%)",
+		icon: "⚡",
 	},
 	{
 		value: "ins-modern",
 		labelKey: "detail.selfMedia.initPanel.visuals.insModern.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.insModern.description",
 		platforms: ["instagram"],
+		swatch: "linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #e9ecef 100%)",
+		icon: "✨",
 	},
 	{
 		value: "custom",
 		labelKey: "detail.selfMedia.initPanel.visuals.custom.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.custom.description",
 		platforms: ["rednote", "instagram", "wechat-official-accounts"],
+		swatch: "linear-gradient(135deg, #a29bfe 0%, #fd79a8 50%, #fdcb6e 100%)",
+		icon: "🎨",
 	},
 	{
 		value: "none",
 		labelKey: "detail.selfMedia.initPanel.visuals.none.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.none.description",
 		platforms: ["rednote", "instagram", "wechat-official-accounts"],
+		swatch: "linear-gradient(135deg, #dfe6e9 0%, #b2bec3 100%)",
+		icon: "○",
 	},
 ]
 

@@ -3,11 +3,13 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import type { MaterialItem, OutlineNode } from "./types"
 import MaterialAttachmentList from "./MaterialAttachmentList"
+import InlineVoiceButton from "./InlineVoiceButton"
 
 interface ArticleOutlineEditorProps {
 	outline: OutlineNode[]
 	onChange: (outline: OutlineNode[]) => void
 	onBlur?: () => void
+	uploadToProject?: (file: File, materialId: string) => void
 }
 
 let idCounter = 0
@@ -44,6 +46,7 @@ interface OutlineNodeItemProps {
 	onAddSibling: (id: string) => void
 	onMaterialsChange: (id: string, materials: MaterialItem[]) => void
 	onBlur?: () => void
+	uploadToProject?: (file: File, materialId: string) => void
 }
 
 function OutlineNodeItem({
@@ -57,6 +60,7 @@ function OutlineNodeItem({
 	onAddSibling,
 	onMaterialsChange,
 	onBlur,
+	uploadToProject,
 }: OutlineNodeItemProps) {
 	const { t } = useTranslation("super")
 	const materials = node.materials || []
@@ -71,23 +75,28 @@ function OutlineNodeItem({
 				<span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
 					{node.children && node.children.length > 0 ? "▸" : "•"}
 				</span>
-				<input
-					type="text"
-					className="flex-1 rounded border-0 bg-transparent px-1 py-0.5 text-sm focus:bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
-					placeholder={t("detail.selfMedia.initPanel.stepDetail.outlineNodePlaceholder")}
-					value={node.text}
-					onChange={(e) => onUpdate(node.id, e.target.value)}
-					onBlur={onBlur}
-					onKeyDown={(e) => {
-						if (e.key === "Enter" && !e.shiftKey) {
-							e.preventDefault()
-							onAddSibling(node.id)
-						} else if (e.key === "Tab") {
-							e.preventDefault()
-							onAddChild(node.id)
-						}
-					}}
-				/>
+				<div className="relative flex-1">
+					<input
+						type="text"
+						className="w-full rounded border-0 bg-transparent px-1 py-0.5 pr-6 text-sm focus:bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+						placeholder={t(
+							"detail.selfMedia.initPanel.stepDetail.outlineNodePlaceholder",
+						)}
+						value={node.text}
+						onChange={(e) => onUpdate(node.id, e.target.value)}
+						onBlur={onBlur}
+						onKeyDown={(e) => {
+							if (e.key === "Enter" && !e.shiftKey) {
+								e.preventDefault()
+								onAddSibling(node.id)
+							} else if (e.key === "Tab") {
+								e.preventDefault()
+								onAddChild(node.id)
+							}
+						}}
+					/>
+					<InlineVoiceButton onResult={(text) => onUpdate(node.id, node.text + text)} />
+				</div>
 				<div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
 					<button
 						type="button"
@@ -160,8 +169,10 @@ function OutlineNodeItem({
 				>
 					<MaterialAttachmentList
 						compact
+						enableProjectPicker
 						materials={materials}
 						onChange={(next) => onMaterialsChange(node.id, next)}
+						uploadToProject={uploadToProject}
 						addLabel={t("detail.selfMedia.initPanel.stepDetail.outlineAttachBtn")}
 						descriptionPlaceholder={t(
 							"detail.selfMedia.initPanel.stepDetail.outlineAttachPlaceholder",
@@ -183,6 +194,7 @@ function OutlineNodeItem({
 					onAddSibling={onAddSibling}
 					onMaterialsChange={onMaterialsChange}
 					onBlur={onBlur}
+					uploadToProject={uploadToProject}
 				/>
 			))}
 		</div>
@@ -193,6 +205,7 @@ export default function ArticleOutlineEditor({
 	outline,
 	onChange,
 	onBlur,
+	uploadToProject,
 }: ArticleOutlineEditorProps) {
 	const { t } = useTranslation("super")
 	const [expandedAttachmentIds, setExpandedAttachmentIds] = useState<Set<string>>(new Set())
@@ -301,6 +314,7 @@ export default function ArticleOutlineEditor({
 							onAddSibling={addSibling}
 							onMaterialsChange={updateMaterials}
 							onBlur={onBlur}
+							uploadToProject={uploadToProject}
 						/>
 					))}
 				</div>

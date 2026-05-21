@@ -187,7 +187,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		return (
 			<div className={cn("h-full min-h-0 w-full", className)} data-testid="self-media-root">
 				{platformSwitcherNode}
-				<div className="min-h-0" data-testid="self-media-init-panel">
+				<div className="min-h-0 h-full" data-testid="self-media-init-panel">
 					<SelfMediaInitPanel
 						selectedProject={selectedProject}
 						folderFileId={folderFileId}
