@@ -97,6 +97,7 @@ _SCORE_SKILLS_TOOL: dict = {
 
 def _candidate_line(c: SkillCandidate, index: int) -> str:
     desc = (c.description or "").strip()[:100]
+    # 兼容社区 skill 的中文名/中文描述字段
     name_cn = (c.extra or {}).get("name_cn", "")
     desc_cn = ((c.extra or {}).get("description_cn", "") or "")[:80]
     extra = ""

@@ -74,6 +74,7 @@ class SystemSkillsProvider(SkillProvider):
                     "local_path": entry,
                     "name": meta.name or entry.name,
                     "description": meta.description or raw.get("description-cn") or "",
+                    # 兼容社区 skill 仍在使用的中文字段
                     "name_cn": raw.get("name-cn") or "",
                     "description_cn": raw.get("description-cn") or "",
                 })
@@ -100,6 +101,7 @@ class SystemSkillsProvider(SkillProvider):
         kw = keyword.lower()
         return any(
             kw in str(skill.get(f, "")).lower()
+            # name_cn/description_cn: 兼容社区 skill 的中文字段搜索
             for f in ("name", "description", "name_cn", "description_cn", "dir_name")
         )
 
@@ -116,6 +118,7 @@ class SystemSkillsProvider(SkillProvider):
                 version=None,
                 extra={
                     "local_path": str(s["local_path"]),
+                    # 兼容社区 skill 的中文字段，供搜索和展示使用
                     "name_cn": s["name_cn"],
                     "description_cn": s["description_cn"],
                 },

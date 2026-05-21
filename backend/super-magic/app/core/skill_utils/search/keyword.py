@@ -50,6 +50,7 @@ def _score(candidate: SkillCandidate, keyword: str) -> float:
     if kw and kw in candidate.description.lower():
         raw += 1.0
 
+    # 兼容社区 skill 的 name-cn/description-cn 字段
     if candidate.extra:
         name_cn = candidate.extra.get("name_cn", "").lower()
         desc_cn = candidate.extra.get("description_cn", "").lower()
