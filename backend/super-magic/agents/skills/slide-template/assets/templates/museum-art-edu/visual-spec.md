@@ -256,7 +256,7 @@
 ```html
 <div class="top-bar">
   <span class="page-label">OVERVIEW</span>
-  <span class="page-title">课程概述</span>
+  <span class="page-title">Course Overview</span>
   <span class="page-num">02 / 10</span>
 </div>
 ```
@@ -297,8 +297,8 @@
 <div class="top-section">
   <div>
     <div class="page-tag">What is Appreciation?</div>
-    <div class="page-title serif">什么是"鉴赏"？</div>
-    <div class="page-subtitle">辅助说明文字</div>
+    <div class="page-title serif">What is "Appreciation"?</div>
+    <div class="page-subtitle">Supporting description</div>
   </div>
   <div class="page-num">03 / 10</div>
 </div>
@@ -411,7 +411,7 @@
 ### 4.10 Section Subtitle with Leading Short Line
 
 ```html
-<div class="scope-title">课程覆盖范围</div>
+<div class="scope-title">Course Coverage</div>
 ```
 
 ```css
@@ -438,7 +438,7 @@
 ```html
 <div class="activity-badge">
   <i class="fa-solid fa-flask"></i>
-  <span>课堂活动</span>
+  <span>Classroom Activities</span>
 </div>
 ```
 

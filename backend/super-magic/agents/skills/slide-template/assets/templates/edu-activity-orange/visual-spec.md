@@ -141,7 +141,7 @@ Spec: 20px, `#f97316`, font-weight:500–600, letter-spacing:0.08–0.1em, margi
 
 ### 4.5 Left orange-border card (principle card/main content card )
 ```html
-<div class="card">内容</div>           <!-- border-left:6px solid #f97316 -->
+<div class="card">Content</div>           <!-- border-left:6px solid #f97316 -->
 <div class="card-sm">small version</div>       <!-- border-left:4px solid #f97316 -->
 ```
 
@@ -149,14 +149,14 @@ Spec: 20px, `#f97316`, font-weight:500–600, letter-spacing:0.08–0.1em, margi
 ```html
 <div class="act-card">
   <!-- The top 5px orange bar is generated automatically by the ::before pseudo-element. -->
-  <div class="text-label">第 1 周</div>
-  <div class="act-num">活动一</div>
+  <div class="text-label">Week 1</div>
+  <div class="act-num">Activity 1</div>
   <i class="fa-solid fa-handshake act-icon"></i>
-  <div class="act-name">破冰</div>
-  <div class="act-theme">活动主题描述</div>
+  <div class="act-name">Icebreaker</div>
+  <div class="act-theme">Activity theme description</div>
   <div class="act-meta">
-    <div class="act-tag"><i class="fa-solid fa-clock"></i>20 分钟</div>
-    <div class="act-time"><i class="fa-solid fa-users"></i>5-6人小组</div>
+    <div class="act-tag"><i class="fa-solid fa-clock"></i>20 min</div>
+    <div class="act-time"><i class="fa-solid fa-users"></i>5-6 person group</div>
   </div>
 </div>
 ```
@@ -165,7 +165,7 @@ Spec: 20px, `#f97316`, font-weight:500–600, letter-spacing:0.08–0.1em, margi
 ```html
 <div class="card-dark" style="display:flex;align-items:flex-start;gap:14–16px;">
   <i class="fa-solid fa-bullseye" style="color:#f97316;font-size:26–28px;flex-shrink:0;margin-top:2px;"></i>
-  <div class="text-sm text-on-dark">目标Text, <strong style="color:#fb923c;">关键词</strong></div>
+  <div class="text-sm text-on-dark">Goal text, <strong style="color:#fb923c;">keyword</strong></div>
 </div>
 ```
 
@@ -173,7 +173,7 @@ Spec: 20px, `#f97316`, font-weight:500–600, letter-spacing:0.08–0.1em, margi
 ```html
 <div style="background:#f97316;border-radius:14px;padding:20px 28px;display:flex;align-items:flex-start;gap:14px;">
   <i class="fa-solid fa-bullseye" style="color:#fff;font-size:26px;flex-shrink:0;margin-top:2px;"></i>
-  <div style="font-size:22px;color:#fff;line-height:1.65;">目标Text, <strong>关键词</strong></div>
+  <div style="font-size:22px;color:#fff;line-height:1.65;">Goal text, <strong>keyword</strong></div>
 </div>
 ```
 
@@ -181,7 +181,7 @@ Spec: 20px, `#f97316`, font-weight:500–600, letter-spacing:0.08–0.1em, margi
 ```html
 <div class="debrief-box">
   <i class="fa-solid fa-comments" style="color:#f97316;font-size:22–24px;flex-shrink:0;margin-top:2–3px;"></i>
-  <div class="debrief-text">「引导问题Text？」</div>
+  <div class="debrief-text">"Guiding question text?"</div>
 </div>
 ```
 Spec: Background`#fff7ed`, border-left:4–5px solid #f97316, debrief text in purple italic `#7c3aed`
@@ -190,18 +190,18 @@ Spec: Background`#fff7ed`, border-left:4–5px solid #f97316, debrief text in pu
 ```html
 <div class="theory-box">
   <i class="fa-solid fa-book-open" style="color:#22c55e;font-size:22px;flex-shrink:0;margin-top:2px;"></i>
-  <div class="theory-text">理论名称与说明</div>
+  <div class="theory-text">Theory name and description</div>
 </div>
 ```
 Spec: Background`#f0fdf4`, border-left:4px solid #22c55e, TextColor`#166534`
 
 ### 4.11 Soft orange background hint/requirement item
 ```html
-<div class="card-soft">内容</div>
+<div class="card-soft">Content</div>
 <!-- or inline requirement item -->
 <div style="background:#fff7ed;border-radius:10px;padding:14px 18px;border-left:4px solid #f97316;">
   <i class="fa-solid fa-file-contract" style="color:#f97316;font-size:20px;flex-shrink:0;"></i>
-  <div style="font-size:21px;color:#92400e;"><strong style="color:#ea580c;">标题</strong>说明Text</div>
+  <div style="font-size:21px;color:#92400e;"><strong style="color:#ea580c;">Title</strong> Description text</div>
 </div>
 ```
 
@@ -214,20 +214,20 @@ Spec: Background`#f0fdf4`, border-left:4px solid #22c55e, TextColor`#166534`
 ### 4.13 Bottom info bar (Closing page )
 ```html
 <div class="bottom-bar">
-  <div class="bottom-item"><i class="fa-solid fa-building-columns"></i>课程名称</div>
+  <div class="bottom-item"><i class="fa-solid fa-building-columns"></i>Course Name</div>
   <div class="bottom-divider"></div>
-  <div class="bottom-item"><i class="fa-solid fa-book"></i>课程简称</div>
+  <div class="bottom-item"><i class="fa-solid fa-book"></i>Course Abbr.</div>
   <div class="bottom-divider"></div>
   <div class="bottom-item"><i class="fa-solid fa-calendar"></i>v1 · 2026</div>
   <div class="bottom-divider"></div>
-  <div class="bottom-item"><i class="fa-solid fa-lock"></i>仅供课堂教学使用</div>
+  <div class="bottom-item"><i class="fa-solid fa-lock"></i>For classroom use only</div>
 </div>
 ```
 
 ### 4.14 Metadata chip
 ```html
-<div class="chip"><i class="fa-solid fa-clock"></i>20 分钟</div>
-<div class="chip"><i class="fa-solid fa-users"></i>5-6 人随机小组</div>
+<div class="chip"><i class="fa-solid fa-clock"></i>20 min</div>
+<div class="chip"><i class="fa-solid fa-users"></i>5-6 person random groups</div>
 ```
 
 ---
@@ -329,10 +329,10 @@ Global Config:
     radius: ['45%', '78%'],
     center: ['50%', '50%'],
     data: [
-      { value: 30, name: '方案质量', itemStyle: { color: '#f97316' } },
-      { value: 30, name: '团队协作', itemStyle: { color: '#fb923c' } },
-      { value: 25, name: '路演表现', itemStyle: { color: '#fdba74' } },
-      { value: 15, name: '复盘报告', itemStyle: { color: '#fed7aa' } }
+      { value: 30, name: 'Solution Quality', itemStyle: { color: '#f97316' } },
+      { value: 30, name: 'Team Collaboration', itemStyle: { color: '#fb923c' } },
+      { value: 25, name: 'Pitch Performance', itemStyle: { color: '#fdba74' } },
+      { value: 15, name: 'Debrief Report', itemStyle: { color: '#fed7aa' } }
     ],
     label: { show: true, fontSize: 20, fontFamily: 'Noto Sans SC', color: '#334155', formatter: '{b}\n{d}%' },
     labelLine: { length: 12, length2: 10 }
@@ -343,7 +343,7 @@ Global Config:
 **Horizontal Progress Bar** (scoring dimension alternative ): 
 ```html
 <div class="score-row">
-  <div class="score-label"><i class="fa-solid fa-file-alt" style="color:#f97316;margin-right:8px;"></i>方案质量</div>
+  <div class="score-label"><i class="fa-solid fa-file-alt" style="color:#f97316;margin-right:8px;"></i>Solution Quality</div>
   <div class="score-bar-wrap"><div class="score-bar" style="width:90%;"></div></div>
   <div class="score-pct">30%</div>
 </div>

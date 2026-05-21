@@ -83,7 +83,7 @@ body {
 
 **B. Pathway Color Annotation Box:**
 ```html
-<div class="pathway-box pathway-1">主要通路</div>
+<div class="pathway-box pathway-1">Primary Pathway</div>
 ```
 ```css
 .pathway-box {
@@ -115,7 +115,7 @@ body {
 
 **D. Scientific Figure Divider with Label:**
 ```html
-<div class="sci-section-label">STEP 01 — 信号传导</div>
+<div class="sci-section-label">STEP 01 — Signal Transduction</div>
 ```
 ```css
 .sci-section-label {
@@ -254,5 +254,5 @@ series: [{ type: 'scatter', symbolSize: 10, data: [[2.3,4.5],[3.1,6.2],[4.8,5.9]
 
 **generate_images Example Prompt:**
 ```
-clean scientific illustration of [具体主题], textbook diagram style, white background, labeled components, precise line art, academic figure quality, teal and blue color scheme, arrows showing flow direction, educational infographic aesthetic, no gradients, vector style
+clean scientific illustration of [specific topic], textbook diagram style, white background, labeled components, precise line art, academic figure quality, teal and blue color scheme, arrows showing flow direction, educational infographic aesthetic, no gradients, vector style
 ```

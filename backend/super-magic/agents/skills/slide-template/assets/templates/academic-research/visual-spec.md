@@ -85,7 +85,7 @@ padding: 18px 24px; border-radius: 0 6px 6px 0;
 **D. Yellow highlight annotation**:
 ```html
 <mark style="background:var(--highlight-bg);
-  border-bottom:2px solid var(--highlight-yellow);padding:0 4px;">重点内容</mark>
+  border-bottom:2px solid var(--highlight-yellow);padding:0 4px;">highlighted content</mark>
 ```
 
 **E. Section number background decoration**:
@@ -208,7 +208,7 @@ option = {
     },
     yAxis: {
         type: 'value',
-        name: '数量（篇）',
+        name: 'Count',
         nameTextStyle: { color: '#718096', fontSize: 14 },
         axisLabel: { color: '#718096', fontSize: 15 },
         splitLine: { lineStyle: { color: '#EDF2F7' } },
@@ -258,14 +258,14 @@ option = {
     grid: { top: 80, bottom: 70, left: 80, right: 60, containLabel: true },
     xAxis: {
         type: 'value',
-        name: 'X 变量',
+        name: 'X Variable',
         nameTextStyle: { color: '#718096', fontSize: 14 },
         axisLabel: { color: '#718096', fontSize: 15 },
         splitLine: { lineStyle: { color: '#EDF2F7' } }
     },
     yAxis: {
         type: 'value',
-        name: 'Y 变量',
+        name: 'Y Variable',
         nameTextStyle: { color: '#718096', fontSize: 14 },
         axisLabel: { color: '#718096', fontSize: 15 },
         splitLine: { lineStyle: { color: '#EDF2F7' } }
@@ -297,7 +297,7 @@ clear and informative, no decorative elements
 | Cover/background | `university campus aerial view`, `research laboratory professional`, `academic library books` |
 | Research scenes | `scientist laboratory experiment`, `researcher data analysis computer`, `academic conference presentation` |
 | Data/charts | `scientific data visualization`, `research methodology diagram`, `statistical analysis chart` |
-| Discipline topics | `[具体学科] research concept`, `[领域] academic illustration`, `[主题] scientific diagram` |
+| Discipline topics | `[specific discipline] research concept`, `[field] academic illustration`, `[topic] scientific diagram` |
 
 ### Image Generation Prompt Examples
 
@@ -308,12 +308,12 @@ clean academic background, subtle navy blue geometric pattern on white, professi
 
 **Research Flowchart (Concept Illustration)**
 ```
-scientific diagram of [具体研究主题], clean infographic style, navy blue and teal color scheme, white background, professional academic illustration, labeled components
+scientific diagram of [specific research topic], clean infographic style, navy blue and teal color scheme, white background, professional academic illustration, labeled components
 ```
 
 **Discipline Concept Diagram**
 ```
-academic concept illustration of [主题], clean minimal style, blue and teal palette, white background, suitable for research presentation
+academic concept illustration of [topic], clean minimal style, blue and teal palette, white background, suitable for research presentation
 ```
 
 ### Notes

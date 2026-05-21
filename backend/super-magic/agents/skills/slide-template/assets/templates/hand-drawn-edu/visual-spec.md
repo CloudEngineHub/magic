@@ -80,7 +80,7 @@
 **A. Macaron color-block card (macaron-card)**:
 ```html
 <div class="macaron-card blue">
- <div class="macaron-title">认知区标题</div>
+ <div class="macaron-title">Section Title</div>
  <div class="macaron-body">Content text</div>
 </div>
 ```
@@ -122,7 +122,7 @@
 
 **C. Highlighted background text (highlight-text)**:
 ```html
-<span class="hl-yellow">关键词</span>
+<span class="hl-yellow">Keyword</span>
 <span class="hl-coral">Highlight</span>
 ```
 ```css
@@ -132,7 +132,7 @@
 
 **D. Secondary dashed-border block (dashed-box)**:
 ```html
-<div class="dashed-box">次要信息</div>
+<div class="dashed-box">Secondary Info</div>
 ```
 ```css
 .dashed-box {
@@ -180,7 +180,7 @@
 
 **G. Bottom quote bar (quote-bar)**:
 ```html
-<div class="quote-bar">💡 核心结论：一句话总结要点</div>
+<div class="quote-bar">💡 Key Takeaway: One-line summary</div>
 ```
 ```css
 .quote-bar {
@@ -398,12 +398,12 @@ cute and friendly, knowledge infographic style, no photorealism, flat 2D
 
 **Cover illustration**
 ```
-hand-drawn educational illustration of [具体主题], macaron pastel colors (sky blue, mint green, lavender, peach), warm cream background #F5F0E8, cute simple cartoon style, slight wobble line quality like marker pen, friendly and approachable, flat 2D, no text, knowledge infographic aesthetic
+hand-drawn educational illustration of [specific topic], macaron pastel colors (sky blue, mint green, lavender, peach), warm cream background #F5F0E8, cute simple cartoon style, slight wobble line quality like marker pen, friendly and approachable, flat 2D, no text, knowledge infographic aesthetic
 ```
 
 **Concept/process illustration**
 ```
-cute hand-drawn diagram showing [流程/概念], pastel color blocks (blue #A8D8EA, mint #B5E5CF, lavender #D5C6E0, peach #FFD5C2), black outline 2px, warm cream paper background, simple cartoon characters, doodle arrows connecting elements, educational infographic style
+cute hand-drawn diagram showing [process/concept], pastel color blocks (blue #A8D8EA, mint #B5E5CF, lavender #D5C6E0, peach #FFD5C2), black outline 2px, warm cream paper background, simple cartoon characters, doodle arrows connecting elements, educational infographic style
 ```
 
 ### Notes

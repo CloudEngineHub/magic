@@ -284,12 +284,12 @@ bold flat design background, large geometric shapes, vibrant orange #FF5C35 and 
 
 **Illustration (flat people/scene)**
 ```
-flat vector illustration of [具体场景], bold colors orange and purple palette, no shadows, geometric simplified style, white background, modern graphic design
+flat vector illustration of [specific scene], bold colors orange and purple palette, no shadows, geometric simplified style, white background, modern graphic design
 ```
 
 **Icon/decorative elements**
 ```
-flat icon [具体图标主题], bold orange and purple, minimal geometric shape, white background, vector style, no gradients
+flat icon [specific icon topic], bold orange and purple, minimal geometric shape, white background, vector style, no gradients
 ```
 
 ### Notes

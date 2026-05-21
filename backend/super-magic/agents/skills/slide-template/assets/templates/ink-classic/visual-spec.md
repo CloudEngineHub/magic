@@ -76,7 +76,7 @@ border-bottom: 1px solid rgba(var(--ink-rgb), 0.12);
 **B. Ghost oversized text decoration (ghost)**:
 
 ```html
-<div class="ghost" style="right:-5vw;bottom:-8vh">绿</div>
+<div class="ghost" style="right:-5vw;bottom:-8vh">G</div>
 ```
 
 ```css
@@ -345,7 +345,7 @@ forest green and warm paper tones when needed
 | Cover/Background  | `dense forest aerial view`, `ancient forest mist`, `nature research field`               |
 | Research scenes   | `scientific fieldwork forest`, `researcher collecting data nature`, `laboratory ecology` |
 | Data/charts       | `scientific data visualization minimal`, `ecology diagram infographic`                   |
-| Discipline topics | `[主题] ecosystem illustration`, `[主题] scientific concept art`                         |
+| Discipline topics | `[topic] ecosystem illustration`, `[topic] scientific concept art`                         |
 
 ### Image Generation Prompt Examples
 
@@ -358,7 +358,7 @@ dense forest canopy aerial view, morning mist, cinematic lighting, muted earth t
 **Concept Illustration**
 
 ```
-scientific diagram of [具体主题], minimal ink drawing style, clean lines, warm paper background, academic illustration
+scientific diagram of [specific topic], minimal ink drawing style, clean lines, warm paper background, academic illustration
 ```
 
 ### Notes

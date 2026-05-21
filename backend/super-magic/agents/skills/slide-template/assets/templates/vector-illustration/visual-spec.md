@@ -106,7 +106,7 @@
 
 **B. Vector-style card (vector-card)**:
 ```html
-<div class="vector-card">内容</div>
+<div class="vector-card">Content</div>
 ```
 ```css
 .vector-card {
@@ -148,7 +148,7 @@
 ```html
 <div class="stat-block">
   <div class="stat-num">2,400</div>
-  <div class="stat-label">活跃用户</div>
+  <div class="stat-label">Active Users</div>
 </div>
 ```
 ```css
@@ -176,8 +176,8 @@
 ```html
 <div class="icon-card">
   <div class="icon-box coral">🌿</div>
-  <div class="icon-title">可持续发展</div>
-  <div class="icon-desc">说明文字</div>
+  <div class="icon-title">Sustainability</div>
+  <div class="icon-desc">Description</div>
 </div>
 ```
 ```css
@@ -218,7 +218,7 @@
 ```html
 <div class="progress-item">
   <div class="progress-label">
-    <span>绿色出行覆盖率</span><span>74%</span>
+    <span>Green Travel Coverage</span><span>74%</span>
   </div>
   <div class="progress-track">
     <div class="progress-fill coral" style="width:74%"></div>
@@ -245,8 +245,8 @@
   <div class="step-item">
     <div class="step-num coral">1</div>
     <div class="step-content">
-      <div class="step-title">审视出行</div>
-      <div class="step-desc">记录本周通勤方式</div>
+      <div class="step-title">Review Travel</div>
+      <div class="step-desc">Record weekly commute</div>
     </div>
   </div>
   <!-- More nodes... -->
@@ -278,8 +278,8 @@
 <div class="action-card">
   <div class="action-num" style="background:#F2B5A0;">1</div>
   <div class="action-content">
-    <div class="action-title">绿色通勤挑战</div>
-    <div class="action-desc">连续21天骑行或步行上班，养成零碳通勤习惯。</div>
+    <div class="action-title">Green Commute Challenge</div>
+    <div class="action-desc">Ride or walk to work for 21 days to build a zero-carbon commute habit.</div>
   </div>
 </div>
 ```
@@ -489,12 +489,12 @@ panoramic horizontal composition, layered depth
 
 **Cover panoramic illustration**
 ```
-flat vector illustration of [具体场景], retro vintage style, uniform black outline 2.5px on all elements, soft color palette: coral #E07A5F, mint green #81B29A, mustard yellow #F2CC8F, slate blue #577590, cream background #F5F0E6, geometric simplified shapes, coloring book aesthetic, panoramic horizontal composition with foreground/midground/background layers, no gradients, no text
+flat vector illustration of [specific scene], retro vintage style, uniform black outline 2.5px on all elements, soft color palette: coral #E07A5F, mint green #81B29A, mustard yellow #F2CC8F, slate blue #577590, cream background #F5F0E6, geometric simplified shapes, coloring book aesthetic, panoramic horizontal composition with foreground/midground/background layers, no gradients, no text
 ```
 
 **Feature icon illustration**
 ```
-flat vector icon illustration of [主题], retro style, black outline 2px, coral and mint color palette, cream background, geometric simplified, toy model aesthetic, single centered subject, no text, square format
+flat vector icon illustration of [topic], retro style, black outline 2px, coral and mint color palette, cream background, geometric simplified, toy model aesthetic, single centered subject, no text, square format
 ```
 
 ### Notes

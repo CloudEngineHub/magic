@@ -87,7 +87,7 @@ body {
 
 **B. Chalk underline:**
 ```html
-<div class="chalk-underline">重要概念</div>
+<div class="chalk-underline">Key Concept</div>
 ```
 ```css
 .chalk-underline {
@@ -100,7 +100,7 @@ body {
 
 **C. Hand-drawn circle annotation:**
 ```html
-<span class="chalk-circle">核心</span>
+<span class="chalk-circle">Core</span>
 ```
 ```css
 .chalk-circle {
@@ -238,10 +238,10 @@ series: [{ type: 'pie', radius: ['35%','65%'], center: ['50%','55%'],
   itemStyle: { borderColor: '#1A1A1A', borderWidth: 2 },
   label: { color: '#F5F5F5', fontSize: 13 },
   data: [
-    { value: 35, name: '模块A', itemStyle: { color: '#FFE566' } },
-    { value: 28, name: '模块B', itemStyle: { color: '#66B3FF' } },
-    { value: 22, name: '模块C', itemStyle: { color: '#90EE90' } },
-    { value: 15, name: '模块D', itemStyle: { color: '#FF9999' } }
+    { value: 35, name: 'Module A', itemStyle: { color: '#FFE566' } },
+    { value: 28, name: 'Module B', itemStyle: { color: '#66B3FF' } },
+    { value: 22, name: 'Module C', itemStyle: { color: '#90EE90' } },
+    { value: 15, name: 'Module D', itemStyle: { color: '#FF9999' } }
   ] }]
 ```
 
@@ -259,5 +259,5 @@ series: [{ type: 'pie', radius: ['35%','65%'], center: ['50%','55%'],
 
 **generate_images example prompt**：
 ```
-chalk drawing illustration of [具体主题] on dark blackboard background, white and yellow chalk lines, hand-drawn sketch style, rough imperfect strokes, educational doodle aesthetic, visible chalk texture, no gradients, flat chalk art
+chalk drawing illustration of [specific topic] on dark blackboard background, white and yellow chalk lines, hand-drawn sketch style, rough imperfect strokes, educational doodle aesthetic, visible chalk texture, no gradients, flat chalk art
 ```

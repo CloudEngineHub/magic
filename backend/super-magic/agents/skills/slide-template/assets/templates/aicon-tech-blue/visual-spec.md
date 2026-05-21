@@ -261,7 +261,7 @@ AI technology visualization, minimalist corporate, sharp details, 16:9 ratio
 
 **Content Illustration**
 ```
-[主题描述], professional tech conference style, clean white background with subtle blue gradient, modern minimalist, blue #2F80ED accent, high contrast, 16:9
+[topic description], professional tech conference style, clean white background with subtle blue gradient, modern minimalist, blue #2F80ED accent, high contrast, 16:9
 ```
 
 ### Notes

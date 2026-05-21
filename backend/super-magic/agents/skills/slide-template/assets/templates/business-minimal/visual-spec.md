@@ -263,7 +263,7 @@ minimalist corporate background, clean white and light gray gradient, subtle geo
 
 **Illustration (Content Page Accent)**
 ```
-flat design business icon illustration, minimal line art style, deep blue on white background, professional corporate theme, [具体主题], clean and simple
+flat design business icon illustration, minimal line art style, deep blue on white background, professional corporate theme, [specific topic], clean and simple
 ```
 
 ### Notes

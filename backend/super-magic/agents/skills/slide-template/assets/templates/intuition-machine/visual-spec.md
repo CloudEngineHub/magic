@@ -92,7 +92,7 @@
 ```html
 <div class="bilingual-label">
  <span class="label-en">CONTEXT WINDOW</span>
- <span class="label-zh">上下文窗口</span>
+ <span class="label-zh">Context Window</span>
 </div>
 ```
 ```css
@@ -110,7 +110,7 @@
 ```html
 <div class="key-quote-box">
  <span class="key-quote-label">KEY QUOTE</span>
- <p class="key-quote-text">核心观点引用文字</p>
+ <p class="key-quote-text">Key quote text</p>
 </div>
 ```
 ```css
@@ -331,8 +331,8 @@ JS:`function toggleAccordion(id){ document.getElementById(id).classList.toggle('
  <div class="im-tab active" data-tab="panel-a">TAB A</div>
  <div class="im-tab" data-tab="panel-b">TAB B</div>
 </div>
-<div class="im-tab-panel active" id="panel-a">内容A</div>
-<div class="im-tab-panel" id="panel-b">内容B</div>
+<div class="im-tab-panel active" id="panel-a">Content A</div>
+<div class="im-tab-panel" id="panel-b">Content B</div>
 ```
 
 ### H. Connector flow `.im-connector`
@@ -349,7 +349,7 @@ JS:`function toggleAccordion(id){ document.getElementById(id).classList.toggle('
 ### I. Tooltip `.im-tooltip-wrap`
 ```html
 <span class="im-tooltip-wrap">
- <span style="border-bottom:1.5px dashed var(--teal);cursor:help">术语</span>
+ <span style="border-bottom:1.5px dashed var(--teal);cursor:help">Term</span>
  <span class="im-tooltip">Explanation text</span>
 </span>
 ```
@@ -381,5 +381,5 @@ JS:`function toggleAccordion(id){ document.getElementById(id).classList.toggle('
 
 **generate_images Example Prompt**:
 ```
-clean 2D technical infographic illustration of [具体主题], isometric or flat style, teal #2F7373 and warm brown palette, aged cream paper background #F5F0E6, dark outline on all elements, bilingual label style, retro technical print aesthetic, no gradients, precise line art, educational diagram quality
+clean 2D technical infographic illustration of [specific topic], isometric or flat style, teal #2F7373 and warm brown palette, aged cream paper background #F5F0E6, dark outline on all elements, bilingual label style, retro technical print aesthetic, no gradients, precise line art, educational diagram quality
 ```

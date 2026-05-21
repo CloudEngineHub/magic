@@ -223,7 +223,7 @@ const chartDefaults = {
 ```js
 option = {
   ...chartDefaults,
-  xAxis: { type: 'category', data: ['春','夏','秋','冬','魔法季'],
+  xAxis: { type: 'category', data: ['Spring','Summer','Autumn','Winter','Magic'],
     axisLine: { lineStyle: { color: 'rgba(45,90,61,0.3)' } },
     axisLabel: { color: '#5D4E37' } },
   yAxis: { type: 'value',
@@ -243,10 +243,10 @@ series: [{ type: 'pie', radius: ['35%','65%'], center: ['50%','55%'],
   itemStyle: { borderColor: '#E8F4FC', borderWidth: 3 },
   label: { color: '#5D4E37', fontSize: 13, fontFamily: 'Lora, serif' },
   data: [
-    { value: 35, name: '魔法', itemStyle: { color: '#F4D03F' } },
-    { value: 28, name: '自然', itemStyle: { color: '#87A96B' } },
-    { value: 22, name: '梦境', itemStyle: { color: '#7EC8E3' } },
-    { value: 15, name: '爱', itemStyle: { color: '#E8A0BF' } }
+    { value: 35, name: 'Magic', itemStyle: { color: '#F4D03F' } },
+    { value: 28, name: 'Nature', itemStyle: { color: '#87A96B' } },
+    { value: 22, name: 'Dreams', itemStyle: { color: '#7EC8E3' } },
+    { value: 15, name: 'Love', itemStyle: { color: '#E8A0BF' } }
   ] }]
 ```
 
@@ -264,5 +264,5 @@ series: [{ type: 'pie', radius: ['35%','65%'], center: ['50%','55%'],
 
 **generate_images Example Prompt**: 
 ```
-whimsical hand-drawn animation style illustration of [具体主题], Studio Ghibli inspired aesthetic, soft watercolor texture, warm pastel colors (sky blue #E8F4FC, warm cream #FFF8E7, forest green #2D5A3D, gold #F4D03F), charming friendly characters, magical sparkles and stars, storybook composition, gentle shadows, no sharp edges, cozy and enchanting atmosphere
+whimsical hand-drawn animation style illustration of [specific topic], Studio Ghibli inspired aesthetic, soft watercolor texture, warm pastel colors (sky blue #E8F4FC, warm cream #FFF8E7, forest green #2D5A3D, gold #F4D03F), charming friendly characters, magical sparkles and stars, storybook composition, gentle shadows, no sharp edges, cozy and enchanting atmosphere
 ```

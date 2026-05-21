@@ -424,7 +424,7 @@ dark tech background, deep navy blue and black gradient, subtle glowing circuit 
 **AI/technology themed illustration**
 
 ```
-futuristic [具体主题] concept art, dark background, neon blue and cyan glowing elements, digital particles, abstract technology visualization, cinematic lighting, ultra detailed
+futuristic [specific topic] concept art, dark background, neon blue and cyan glowing elements, digital particles, abstract technology visualization, cinematic lighting, ultra detailed
 ```
 
 **Data visualization background**

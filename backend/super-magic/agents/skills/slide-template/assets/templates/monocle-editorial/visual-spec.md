@@ -402,7 +402,7 @@ sophisticated minimalism, global affairs visual language
 | --- | --- |
 | Cover/Background | `editorial photography minimal`, `architectural detail monochrome`, `city street journalism` |
 | Portraits/interviews | `portrait editorial black white`, `business leader interview photo` |
-| Cities/regions | `[城市名] architecture aerial`, `urban design street level`, `city lifestyle editorial` |
+| Cities/regions | `[city name] architecture aerial`, `urban design street level`, `city lifestyle editorial` |
 | Design/culture | `design object minimal photography`, `craft detail close-up editorial` |
 | Data/business | `business data visualization clean`, `economic report infographic minimal` |
 
@@ -411,13 +411,13 @@ sophisticated minimalism, global affairs visual language
 **Cover Background**
 
 ```
-editorial photography, [具体场景], high contrast black and white, architectural precision, journalistic composition, Monocle magazine style, no text, 16:9 wide format, sophisticated minimalism
+editorial photography, [specific scene], high contrast black and white, architectural precision, journalistic composition, Monocle magazine style, no text, 16:9 wide format, sophisticated minimalism
 ```
 
 **City feature image**
 
 ```
-street level photography of [城市名], editorial style, muted tones, architectural detail, people in motion, journalistic documentary feel, no text
+street level photography of [city name], editorial style, muted tones, architectural detail, people in motion, journalistic documentary feel, no text
 ```
 
 ### Notes

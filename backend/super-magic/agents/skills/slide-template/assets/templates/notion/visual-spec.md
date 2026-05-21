@@ -89,7 +89,7 @@
 **A. Content Card (notion-card):**
 
 ```html
-<div class="notion-card">内容</div>
+<div class="notion-card">Content</div>
 ```
 
 ```css
@@ -105,10 +105,10 @@
 **B. Status Tag (status-tag):**
 
 ```html
-<span class="status-tag status-blue">进行中</span>
-<span class="status-tag status-green">已完成</span>
-<span class="status-tag status-red">阻塞</span>
-<span class="status-tag status-yellow">待评审</span>
+<span class="status-tag status-blue">In Progress</span>
+<span class="status-tag status-green">Completed</span>
+<span class="status-tag status-red">Blocked</span>
+<span class="status-tag status-yellow">Pending Review</span>
 ```
 
 ```css
@@ -143,8 +143,8 @@
 
 ```html
 <div class="property-row">
-  <span class="prop-key">负责人</span>
-  <span class="prop-value">张三</span>
+  <span class="prop-key">Owner</span>
+  <span class="prop-value">John Doe</span>
 </div>
 ```
 
@@ -173,7 +173,7 @@
 ```html
 <div class="kpi-card">
   <div class="kpi-value">2,847</div>
-  <div class="kpi-label">月活用户</div>
+  <div class="kpi-label">Monthly Active Users</div>
   <div class="kpi-delta up">↑ 12.4%</div>
 </div>
 ```
@@ -301,12 +301,12 @@
 ```html
 <div class="feat-card blue">
   <div class="feat-icon" style="background:var(--bg-blue-soft);">🤖</div>
-  <div class="feat-title">多 Agent 协作</div>
+  <div class="feat-title">Multi-Agent Collaboration</div>
   <div class="feat-desc">
-    主理人 Agent 调度多个专家 Agent 并行工作，分工精细、效率翻倍。
+    Lead Agent dispatches multiple expert Agents in parallel, with fine-grained division of labor and doubled efficiency.
   </div>
   <div class="feat-meta">
-    <span class="status-tag status-blue">已上线</span>
+    <span class="status-tag status-blue">Launched</span>
   </div>
 </div>
 ```
@@ -317,8 +317,8 @@ The 3px color bar at the top distinguishes feature categories (blue/green/purple
 
 ```html
 <div class="quote-block">
-  用 AI 替代市场、运营、法务等岗位，零人力成本 7×24 小时产出。
-  <div class="quote-author">— 超级麦吉用户案例</div>
+  AI replaces marketing, operations, legal and other roles, producing output 7×24 with zero headcount cost.
+  <div class="quote-author">— Super Magic User Case</div>
 </div>
 ```
 
@@ -328,7 +328,7 @@ The 3px color bar at the top distinguishes feature categories (blue/green/purple
 <div class="callout blue">
   <span class="callout-icon">💡</span>
   <span class="callout-text"
-    >企业级开源 AI Agent 平台，Apache 2.0 协议，数据完全自主。</span
+    >Enterprise open-source AI Agent platform, Apache 2.0 license, full data sovereignty.</span
   >
 </div>
 ```
@@ -347,9 +347,9 @@ Supports four semantic colors: blue, green, yellow, and red.
 
 ```html
 <div class="highlight-card">
-  <div class="hc-value">10亿+</div>
-  <div class="hc-label">日均 Token 处理量</div>
-  <div class="hc-delta">↑ 持续增长</div>
+  <div class="hc-value">1B+</div>
+  <div class="hc-label">Daily Token Throughput</div>
+  <div class="hc-delta">↑ Growing</div>
 </div>
 ```
 
@@ -359,10 +359,10 @@ Blue gradient background with a decorative circle in the upper-right, suitable f
 
 ```html
 <div class="tag-group">
-  <span class="tag-pill blue">开源</span>
-  <span class="tag-pill green">企业级</span>
-  <span class="tag-pill purple">多 Agent</span>
-  <span class="tag-pill orange">沙盒隔离</span>
+  <span class="tag-pill blue">Open Source</span>
+  <span class="tag-pill green">Enterprise</span>
+  <span class="tag-pill purple">Multi-Agent</span>
+  <span class="tag-pill orange">Sandbox Isolation</span>
 </div>
 ```
 
@@ -372,13 +372,13 @@ Blue gradient background with a decorative circle in the upper-right, suitable f
 <div class="testimonial-card">
   <div class="testimonial-stars">★★★★★</div>
   <div class="testimonial-text">
-    8 人团队用超级麦吉，完成了 80 人团队的工作量。
+    An 8-person team using Super Magic accomplished the workload of an 80-person team.
   </div>
   <div class="testimonial-author">
-    <div class="author-avatar">张</div>
+    <div class="author-avatar">Z</div>
     <div>
-      <div class="author-name">张明远</div>
-      <div class="author-role">跨境电商 · CEO</div>
+      <div class="author-name">Alex Zhang</div>
+      <div class="author-role">Cross-border E-commerce · CEO</div>
     </div>
   </div>
 </div>
@@ -390,11 +390,11 @@ Blue gradient background with a decorative circle in the upper-right, suitable f
 <div class="matrix-card">
   <div class="matrix-icon" style="background:var(--bg-blue-soft);">⚡</div>
   <div>
-    <div class="matrix-title">超级麦吉 Super Magic</div>
+    <div class="matrix-title">Super Magic</div>
     <div class="matrix-desc">
-      通用型 AI Agent，专为复杂任务场景设计，支持多 Agent 协作。
+      General-purpose AI Agent designed for complex task scenarios, supporting multi-Agent collaboration.
     </div>
-    <span class="matrix-badge">已开源</span>
+    <span class="matrix-badge">Open Sourced</span>
   </div>
 </div>
 ```
@@ -405,8 +405,8 @@ Blue gradient background with a decorative circle in the upper-right, suitable f
 <div class="shield-badge">
   <div class="shield-icon">🔒</div>
   <div>
-    <div class="shield-title">沙盒安全隔离</div>
-    <div class="shield-desc">自研沙盒容器 + VPC 隔离，高危动作人工审批</div>
+    <div class="shield-title">Sandbox Security Isolation</div>
+    <div class="shield-desc">Proprietary sandbox containers + VPC isolation, high-risk actions require human approval</div>
   </div>
 </div>
 ```
@@ -417,14 +417,14 @@ Blue gradient background with a decorative circle in the upper-right, suitable f
 <table class="compare-table">
   <thead>
     <tr>
-      <th>功能</th>
-      <th>传统工具</th>
-      <th class="highlight">超级麦吉</th>
+      <th>Feature</th>
+      <th>Traditional Tools</th>
+      <th class="highlight">Super Magic</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td>多 Agent 协作</td>
+      <td>Multi-Agent Collaboration</td>
       <td><span class="cross">—</span></td>
       <td class="highlight"><span class="check">✓</span></td>
     </tr>
@@ -439,9 +439,9 @@ Blue gradient background with a decorative circle in the upper-right, suitable f
   <div class="timeline-item">
     <div class="timeline-dot done">✓</div>
     <div class="timeline-content">
-      <div class="timeline-title">超级麦吉 1.0 发布</div>
-      <div class="timeline-desc">首个开源一站式 AI 生产力平台上线</div>
-      <div class="timeline-date">2025年Q3</div>
+      <div class="timeline-title">Super Magic 1.0 Launch</div>
+      <div class="timeline-desc">First open-source all-in-one AI productivity platform goes live</div>
+      <div class="timeline-date">2025 Q3</div>
     </div>
   </div>
 </div>
@@ -451,7 +451,7 @@ Blue gradient background with a decorative circle in the upper-right, suitable f
 
 ```html
 <div class="metric-row">
-  <span class="metric-label">任务完成率</span>
+  <span class="metric-label">Task Completion Rate</span>
   <span class="metric-value green">96.8%</span>
 </div>
 ```
@@ -461,10 +461,10 @@ Blue gradient background with a decorative circle in the upper-right, suitable f
 ```html
 <div class="page-header">
   <div>
-    <div class="page-title">产品矩阵全景</div>
-    <div class="page-subtitle">四大产品模块，覆盖企业 AI 全场景</div>
+    <div class="page-title">Product Matrix Overview</div>
+    <div class="page-subtitle">Four product modules covering all enterprise AI scenarios</div>
   </div>
-  <span class="status-tag status-green">全部已开源</span>
+  <span class="status-tag status-green">All Open Sourced</span>
 </div>
 ```
 
@@ -473,8 +473,8 @@ Blue gradient background with a decorative circle in the upper-right, suitable f
 ```html
 <div class="premium-panel">
   <div class="panel-kicker">Agent Status</div>
-  <div class="panel-title">多 Agent 状态列表</div>
-  <div class="panel-desc">展示角色、队列、状态和任务进展。</div>
+  <div class="panel-title">Multi-Agent Status List</div>
+  <div class="panel-desc">Displays roles, queues, status, and task progress.</div>
 </div>
 ```
 
@@ -517,7 +517,7 @@ Use for AI Agent products and task orchestration pages. Status colors follow the
 <div class="insight-card">
   <div>
     <div class="insight-value">10x</div>
-    <div class="insight-label">团队执行杠杆提升</div>
+    <div class="insight-label">Team Execution Leverage</div>
   </div>
   <span class="status-tag status-blue">Proof point</span>
 </div>
@@ -797,13 +797,13 @@ professional product illustration, no decorative elements, screen mockup style
 **Cover product screenshot**
 
 ```
-clean SaaS product dashboard UI mockup, light gray background #F7F7F5, white card components with subtle shadows, blue accent #2383E2, Inter font style, modern minimal design, showing [具体功能], no decorative elements, professional product screenshot style
+clean SaaS product dashboard UI mockup, light gray background #F7F7F5, white card components with subtle shadows, blue accent #2383E2, Inter font style, modern minimal design, showing [specific feature], no decorative elements, professional product screenshot style
 ```
 
 **Feature icon illustration**
 
 ```
-flat minimal icon illustration of [功能主题], clean line style, blue #2383E2 on white background, simple geometric shapes, SaaS product icon style, no gradients
+flat minimal icon illustration of [feature topic], clean line style, blue #2383E2 on white background, simple geometric shapes, SaaS product icon style, no gradients
 ```
 
 ### Notes

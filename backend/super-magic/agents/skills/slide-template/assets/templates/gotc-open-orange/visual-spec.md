@@ -107,7 +107,7 @@ A fine orange grid adds a technical feel to presentation pages.
 ### E. Conference Logos (Fixed Positions)
 ```html
 <img src="images/GOTC-LOGO.png"          class="conf-logo-top-right"/>
-<img src="images/全球开源技术峰会LOGO.png" class="conf-logo-bottom-left"/>
+<img src="images/global-open-source-summit-logo.png" class="conf-logo-bottom-left"/>
 ```
 
 ### F. Timeline Components (Horizontal / Vertical)

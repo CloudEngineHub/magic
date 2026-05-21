@@ -104,7 +104,7 @@
 
 **C. Watercolor tag**:
 ```html
-<span class="wc-tag coral">生活美学</span>
+<span class="wc-tag coral">Lifestyle Aesthetic</span>
 ```
 ```css
 .wc-tag {
@@ -208,7 +208,7 @@ const chartDefaults = {
 ```js
 option = {
   ...chartDefaults,
-  xAxis: { type: 'category', data: ['一月','二月','三月','四月','五月'],
+  xAxis: { type: 'category', data: ['Jan','Feb','Mar','Apr','May'],
     axisLine: { lineStyle: { color: 'rgba(61,61,61,0.15)' } },
     axisLabel: { color: '#6B6B6B' } },
   yAxis: { type: 'value',
@@ -237,10 +237,10 @@ series: [{ type: 'pie', radius: ['35%','65%'], center: ['50%','55%'],
   itemStyle: { borderColor: '#FAF8F0', borderWidth: 3 },
   label: { color: '#3D3D3D', fontSize: 13, fontFamily: 'Nunito, sans-serif' },
   data: [
-    { value: 35, name: '健康', itemStyle: { color: '#87A96B' } },
-    { value: 28, name: '旅行', itemStyle: { color: '#7EC8E3' } },
-    { value: 22, name: '美食', itemStyle: { color: '#F4A261' } },
-    { value: 15, name: '创作', itemStyle: { color: '#C5B4E3' } }
+    { value: 35, name: 'Health', itemStyle: { color: '#87A96B' } },
+    { value: 28, name: 'Travel', itemStyle: { color: '#7EC8E3' } },
+    { value: 22, name: 'Food', itemStyle: { color: '#F4A261' } },
+    { value: 15, name: 'Create', itemStyle: { color: '#C5B4E3' } }
   ] }]
 ```
 
@@ -258,5 +258,5 @@ series: [{ type: 'pie', radius: ['35%','65%'], center: ['50%','55%'],
 
 **generate_images example prompt**:
 ```
-soft watercolor illustration of [具体主题], warm pastel colors, visible brush strokes, organic flowing shapes, botanical leaf accents, cozy lifestyle aesthetic, coral and sage green palette, gentle color bleeding at edges, hand-painted texture, white paper background, no sharp edges
+soft watercolor illustration of [specific topic], warm pastel colors, visible brush strokes, organic flowing shapes, botanical leaf accents, cozy lifestyle aesthetic, coral and sage green palette, gentle color bleeding at edges, hand-painted texture, white paper background, no sharp edges
 ```

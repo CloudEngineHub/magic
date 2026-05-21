@@ -90,7 +90,7 @@ body, .slide-bg {
 **B. Technical annotation line (dimension-line)**:
 ```html
 <div class="dimension-line">
-  <span class="dl-label">系统边界</span>
+  <span class="dl-label">System Boundary</span>
 </div>
 ```
 ```css
@@ -112,7 +112,7 @@ body, .slide-bg {
 
 **C. Blue left-rule title (section-header)**:
 ```html
-<div class="section-header">模块名称</div>
+<div class="section-header">Module Name</div>
 ```
 ```css
 .section-header {
@@ -127,7 +127,7 @@ body, .slide-bg {
 
 **D. Technical card (tech-card)**:
 ```html
-<div class="tech-card">内容</div>
+<div class="tech-card">Content</div>
 ```
 ```css
 .tech-card {
@@ -162,7 +162,7 @@ body, .slide-bg {
 
 **F. Warning/key annotation box (alert-box)**:
 ```html
-<div class="alert-box">⚠ 关键约束条件</div>
+<div class="alert-box">⚠ Key Constraints</div>
 ```
 ```css
 .alert-box {
@@ -417,7 +417,7 @@ technical blueprint style background, subtle grid pattern on off-white paper, en
 
 **Architecture/Process Concept Diagram**
 ```
-clean technical diagram of [具体主题], blueprint engineering style, navy blue and white, precise line work, labeled components with arrows, flat 2D isometric view, professional documentation quality, white background
+clean technical diagram of [specific topic], blueprint engineering style, navy blue and white, precise line work, labeled components with arrows, flat 2D isometric view, professional documentation quality, white background
 ```
 
 ### Notes

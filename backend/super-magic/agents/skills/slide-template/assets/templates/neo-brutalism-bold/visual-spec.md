@@ -76,7 +76,7 @@ Font stack: `'Noto Sans SC', sans-serif`
 
 ### Black Section Tag (section-tag)
 ```html
-<div class="section-tag">章节名称</div>
+<div class="section-tag">Section Name</div>
 ```
 ```css
 .section-tag {
@@ -93,7 +93,7 @@ Font stack: `'Noto Sans SC', sans-serif`
 
 ### Yellow Highlight Text (highlight-text)
 ```html
-<span class="highlight-text">关键词</span>
+<span class="highlight-text">Keyword</span>
 ```
 ```css
 .highlight-text {
@@ -105,7 +105,7 @@ Font stack: `'Noto Sans SC', sans-serif`
 
 ### Subtitle with Red Left Border (subtitle-bar)
 ```html
-<div class="subtitle-bar">副标题文字</div>
+<div class="subtitle-bar">Subtitle Text</div>
 ```
 ```css
 .subtitle-bar {
@@ -120,7 +120,7 @@ Font stack: `'Noto Sans SC', sans-serif`
 
 ### Offset Solid Shadow Card (neo-card)
 ```html
-<div class="neo-card">内容</div>
+<div class="neo-card">Content</div>
 ```
 ```css
 .neo-card {
@@ -135,7 +135,7 @@ Font stack: `'Noto Sans SC', sans-serif`
 ```html
 <div class="data-item">
   <div class="data-value">99%</div>
-  <div class="data-label">指标说明</div>
+  <div class="data-label">Metric Label</div>
 </div>
 ```
 ```css
@@ -309,5 +309,5 @@ series: [{
 Neo-brutalism style flat illustration, bold black 4px outline on all elements, 
 offset drop shadow in solid black, primary colors (red #D92D20, yellow #FFD700, black, white), 
 no gradients, no rounded corners, editorial magazine poster aesthetic, 
-subject: [具体主题], white background, high contrast
+subject: [specific topic], white background, high contrast
 ```
