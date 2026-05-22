@@ -61,6 +61,22 @@ function createRoot() {
 	return root
 }
 
+function createModel() {
+	return {
+		model_id: "model-a",
+		model_name: "Model A",
+		image_size_config: {
+			default_scale: "1K",
+			sizes: [
+				{ label: "1:1", value: "1024x1024", scale: "1K" },
+				{ label: "1:1", value: "2048x2048", scale: "2K" },
+				{ label: "3:4", value: "1152x1536", scale: "1K" },
+				{ label: "3:4", value: "2304x3072", scale: "2K" },
+			],
+		},
+	}
+}
+
 describe("magic-plugin-kit", () => {
 	beforeEach(() => {
 		document.body.innerHTML = ""
@@ -213,5 +229,133 @@ describe("magic-plugin-kit", () => {
 		expect(defaultTooltip).toBeNull()
 		expect(hoverButton?.title).toBe("")
 		expect(hoverTooltip?.textContent).toBe("Shown on hover")
+	})
+
+	it("keeps textarea typing local while clamping text by maxLength", () => {
+		vi.useFakeTimers()
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				backgroundPrompt: "",
+				genCount: 1,
+			},
+			sections: [
+				{
+					id: "backgroundPrompt",
+					kind: "textarea",
+					stateKey: "backgroundPrompt",
+					title: "Prompt",
+					maxLength: 5,
+				},
+				{
+					id: "count",
+					kind: "option-group",
+					stateKey: "genCount",
+					title: "Count",
+					options: [{ value: 1, label: "1" }],
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const slots = root.querySelectorAll(".mpk-content > .mpk-slot")
+		const promptSlot = slots[0]
+		const countSlot = slots[1]
+		const initialPromptSection = promptSlot.firstElementChild
+		const initialCountSection = countSlot.firstElementChild
+		const textarea = promptSlot.querySelector<HTMLTextAreaElement>(".mpk-textarea")
+		textarea!.value = "1234567"
+		textarea!.dispatchEvent(new Event("input", { bubbles: true }))
+
+		expect(promptSlot.firstElementChild).toBe(initialPromptSection)
+		expect(countSlot.firstElementChild).toBe(initialCountSection)
+		expect(textarea?.value).toBe("12345")
+		expect(promptSlot.querySelector(".mpk-textarea-count")?.textContent).toBe("5/5")
+
+		vi.advanceTimersByTime(120)
+
+		expect(promptSlot.firstElementChild).toBe(initialPromptSection)
+		expect(countSlot.firstElementChild).toBe(initialCountSection)
+
+		vi.useRealTimers()
+	})
+
+	it("renders card-style option-group with inline descriptions", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				backgroundMode: "image",
+			},
+			sections: [
+				{
+					id: "backgroundMode",
+					kind: "option-group",
+					stateKey: "backgroundMode",
+					title: "Background",
+					variant: "card",
+					descriptionMode: "inline",
+					options: [
+						{ value: "image", label: "Image", description: "Pick a background" },
+						{ value: "prompt", label: "Prompt", description: "Generate with text" },
+					],
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const buttons = root.querySelectorAll<HTMLButtonElement>(".mpk-card-tab")
+		const descriptions = root.querySelectorAll(".mpk-card-tab-description")
+		expect(buttons[0].classList.contains("is-active")).toBe(true)
+		expect(buttons[1].classList.contains("is-active")).toBe(false)
+		expect(descriptions).toHaveLength(2)
+		expect(descriptions[0]?.textContent).toBe("Pick a background")
+		expect(descriptions[1]?.textContent).toBe("Generate with text")
+		buttons[1].click()
+		const nextButtons = root.querySelectorAll<HTMLButtonElement>(".mpk-card-tab")
+		expect(nextButtons[0].classList.contains("is-active")).toBe(false)
+		expect(nextButtons[1].classList.contains("is-active")).toBe(true)
+	})
+
+	it("switches size-control ratio options from model sizes", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		const model = createModel()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				modelOptions: [model],
+				modelId: model.model_id,
+				canvasRatioKey: "1:1",
+			},
+			modelConfig: {
+				autoLoad: false,
+			},
+			sections: [
+				{
+					id: "canvasSize",
+					kind: "size-control",
+					title: "Canvas size",
+					ratioStateKey: "canvasRatioKey",
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const ratioButtons = root.querySelectorAll<HTMLButtonElement>(".mpk-size-control-ratios .mpk-option")
+		expect(ratioButtons[0].classList.contains("is-active")).toBe(true)
+		expect(root.querySelectorAll(".mpk-size-input")).toHaveLength(0)
+
+		ratioButtons[1].click()
+
+		const nextButtons = root.querySelectorAll<HTMLButtonElement>(".mpk-size-control-ratios .mpk-option")
+		expect(nextButtons[0].classList.contains("is-active")).toBe(false)
+		expect(nextButtons[1].classList.contains("is-active")).toBe(true)
 	})
 })

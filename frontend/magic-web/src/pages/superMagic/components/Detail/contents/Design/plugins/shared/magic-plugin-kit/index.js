@@ -2,6 +2,7 @@
 	if (global.MagicPluginKit) return
 
 	const IMAGE_GENERATION_CONFIG_PREFIX = "image_generation_config."
+	const DEFAULT_SIZE_CONTROL_RATIO_OPTIONS = ["1:1", "3:4", "4:5", "9:16", "16:9"]
 
 	function createElement(tagName, className, textContent) {
 		const element = document.createElement(tagName)
@@ -63,6 +64,31 @@
 		return typeof value === "function" ? value(context) : value
 	}
 
+	function parseSizeValue(sizeValue) {
+		const [width, height] = String(sizeValue ?? "")
+			.split("x")
+			.map(Number)
+		if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+			return null
+		}
+		return { width, height }
+	}
+
+	function normalizeRatioOption(option) {
+		if (typeof option === "string") {
+			return {
+				value: option,
+				label: option,
+			}
+		}
+
+		return {
+			...option,
+			value: option?.value ?? option?.label ?? "",
+			label: option?.label ?? String(option?.value ?? ""),
+		}
+	}
+
 	function normalizeImageSettings(model) {
 		return (model?.image_size_config?.image_settings ?? [])
 			.map((setting) => {
@@ -112,12 +138,27 @@
 			/** 区块视图映射 */
 			sectionViews: {},
 		}
+		let helpers = null
 
 		/** 更新高度 */
 		function updateHeight() {
 			requestAnimationFrame(() => {
 				ctx.ui?.setHeight?.(root.scrollHeight)
 			})
+		}
+
+		function getCallbackContext(currentState = state) {
+			return { state: currentState, helpers, t }
+		}
+
+		function normalizeTextareaValue(value, maxLength, hasMaxLength) {
+			const nextValue = String(value ?? "")
+			return hasMaxLength ? nextValue.slice(0, maxLength) : nextValue
+		}
+
+		function setTextareaCountText(counter, value, maxLength, hasMaxLength) {
+			if (!counter || !hasMaxLength) return
+			counter.textContent = `${value.length}/${maxLength}`
 		}
 
 		function getSelectedModel(currentState = state) {
@@ -128,6 +169,7 @@
 			return getSelectedModel(currentState)?.image_size_config?.sizes ?? []
 		}
 
+		/** 构建默认图片生成配置 */
 		function buildDefaultImageGenerationConfig(model) {
 			return normalizeImageSettings(model).reduce((configMap, setting) => {
 				const defaultOption =
@@ -172,12 +214,24 @@
 			const selectedRatio =
 				sizes.find((item) => item.label === currentState.ratioKey) ?? sizes[0]
 			if (!selectedRatio?.value) return null
-			const [genW, genH] = selectedRatio.value.split("x").map(Number)
+			const parsedSize = parseSizeValue(selectedRatio.value)
+			if (!parsedSize) return null
 			return {
 				...selectedRatio,
-				genW: Number.isFinite(genW) ? genW : 0,
-				genH: Number.isFinite(genH) ? genH : 0,
+				genW: parsedSize.width,
+				genH: parsedSize.height,
 			}
+		}
+
+		function getSectionOptions(section, currentState = state) {
+			const options = resolveValue(section.options ?? [], getCallbackContext(currentState))
+			return Array.isArray(options) ? options : []
+		}
+
+		function getValidatedOptionValue(section, options, currentState = state) {
+			const value = section.stateKey ? currentState[section.stateKey] : undefined
+			if (options.some((option) => option.value === value)) return value
+			return options[0]?.value
 		}
 
 		/** 应用模型默认值 */
@@ -188,10 +242,74 @@
 				? sizes.filter((size) => size.scale === targetResolution)
 				: sizes
 			const targetSize = sizesForResolution[0] ?? sizes[0]
-			return {
+			const defaults = {
 				ratioKey: targetSize?.label ?? "",
 				scale: targetResolution,
 				imageGenerationConfig: buildDefaultImageGenerationConfig(model),
+			}
+			return config.modelConfig?.mapModelDefaults?.(model, defaults, state) ?? defaults
+		}
+
+		/** 获取尺寸控制比例选项 */
+		function getSizeControlRatioOptions(section, currentState = state) {
+			const explicitOptions = resolveValue(
+				section.ratioOptions,
+				getCallbackContext(currentState),
+			)
+			let options = []
+
+			if (Array.isArray(explicitOptions) && explicitOptions.length) {
+				options = explicitOptions.map(normalizeRatioOption).filter((option) => option.value)
+			} else {
+				const seenRatios = new Set()
+				options = getModelSizes(currentState)
+					.map((size) => {
+						if (!size.label || seenRatios.has(size.label)) return null
+						seenRatios.add(size.label)
+						const parsedSize = parseSizeValue(size.value)
+						return {
+							value: size.label,
+							label: size.label,
+							width: parsedSize?.width,
+							height: parsedSize?.height,
+						}
+					})
+					.filter(Boolean)
+
+				if (!options.length) {
+					options = DEFAULT_SIZE_CONTROL_RATIO_OPTIONS.map((ratio) => ({
+						value: ratio,
+						label: ratio,
+					}))
+				}
+			}
+
+			return options
+		}
+
+		/** 获取尺寸控制状态 */
+		function getSizeControlState(section, currentState = state) {
+			const ratioStateKey = section.ratioStateKey
+			const ratioOptions = getSizeControlRatioOptions(section, currentState)
+			const rawRatioValue = currentState[ratioStateKey]
+			const ratioValue = ratioOptions.some((option) => option.value === rawRatioValue)
+				? rawRatioValue
+				: (ratioOptions[0]?.value ?? "")
+
+			return {
+				ratioOptions,
+				ratioValue,
+			}
+		}
+
+		/** 构建尺寸控制补丁 */
+		function buildSizeControlPatch(section, partialPatch, currentState = state) {
+			const ratioStateKey = section.ratioStateKey
+			const current = getSizeControlState(section, currentState)
+			const nextRatioValue = partialPatch[ratioStateKey] ?? current.ratioValue
+
+			return {
+				[ratioStateKey]: nextRatioValue,
 			}
 		}
 
@@ -331,6 +449,12 @@
 				deps.add("modelOptions")
 				deps.add("modelId")
 				deps.add("scale")
+			}
+
+			if (section.kind === "size-control") {
+				deps.add("modelOptions")
+				deps.add("modelId")
+				deps.add(section.ratioStateKey)
 			}
 
 			return deps
@@ -543,33 +667,131 @@
 			return sectionNode
 		}
 
-		/** 渲染选项组 */
-		function renderOptionGroup(section) {
+		function renderTextarea(section) {
+			const value = typeof state[section.stateKey] === "string" ? state[section.stateKey] : ""
+			const maxLength = Number(section.maxLength)
+			const hasMaxLength = Number.isFinite(maxLength) && maxLength > 0
 			const sectionNode = createSection(section.title, section.suffix)
-			const list = createElement(
-				"div",
-				`mpk-option-group ${section.groupClassName ?? ""}`.trim(),
-			)
-			const value = state[section.stateKey]
-			section.options.forEach((option) => {
-				const optionNode = createElement(
-					"div",
-					`mpk-option-item${section.showDescriptionOnHover && option.description ? " has-tooltip" : ""}`,
+			const textarea = createElement("textarea", "mpk-textarea")
+			const count = hasMaxLength
+				? createElement("span", "mpk-textarea-count", `${value.length}/${maxLength}`)
+				: null
+			textarea.rows = Number(section.rows) > 0 ? Number(section.rows) : 5
+			textarea.placeholder = section.placeholder ?? ""
+			textarea.value = value
+			if (hasMaxLength) {
+				textarea.maxLength = maxLength
+			}
+			textarea.addEventListener("input", (event) => {
+				const nextValue = normalizeTextareaValue(
+					event.target.value,
+					maxLength,
+					hasMaxLength,
 				)
+				if (event.target.value !== nextValue) {
+					event.target.value = nextValue
+				}
+				state[section.stateKey] = nextValue
+				setTextareaCountText(count, nextValue, maxLength, hasMaxLength)
+				updateHeight()
+			})
+			sectionNode.append(textarea)
+
+			if (section.help || hasMaxLength) {
+				const meta = createElement("div", "mpk-textarea-meta")
+				if (section.help) {
+					meta.append(createElement("p", "mpk-help", section.help))
+				}
+				if (hasMaxLength) {
+					meta.append(count)
+				}
+				sectionNode.append(meta)
+			}
+
+			return sectionNode
+		}
+
+		/** 渲染尺寸控制 */
+		function renderSizeControl(section) {
+			const current = getSizeControlState(section)
+			const sectionNode = createSection(section.title, section.suffix)
+			const body = createElement("div", "mpk-size-control")
+			const ratioList = createElement("div", "mpk-option-group mpk-size-control-ratios")
+
+			current.ratioOptions.forEach((option) => {
 				const button = createElement(
 					"button",
-					`mpk-option${value === option.value ? " is-active" : ""}`,
+					`mpk-option${current.ratioValue === option.value ? " is-active" : ""}`,
 					option.label,
 				)
 				button.type = "button"
-				button.title = option.description ?? ""
 				button.disabled = Boolean(option.disabled)
 				button.addEventListener("click", () => {
-					if (value === option.value) return
+					if (option.disabled || current.ratioValue === option.value) return
+					setState(
+						buildSizeControlPatch(section, {
+							[section.ratioStateKey]: option.value,
+						}),
+					)
+				})
+				ratioList.append(button)
+			})
+
+			body.append(ratioList)
+
+			sectionNode.append(body)
+			if (section.help) {
+				sectionNode.append(createElement("p", "mpk-help", section.help))
+			}
+			return sectionNode
+		}
+
+		/** 渲染选项组 */
+		function renderOptionGroup(section) {
+			const options = getSectionOptions(section)
+			if (!options.length) return document.createDocumentFragment()
+			const isCardVariant = section.variant === "card"
+			const descriptionMode =
+				section.descriptionMode ?? (section.showDescriptionOnHover ? "tooltip" : "title")
+			const sectionNode = createSection(section.title, section.suffix)
+			const list = createElement(
+				"div",
+				`mpk-option-group${isCardVariant ? " is-card" : ""} ${section.groupClassName ?? ""}`.trim(),
+			)
+			const activeValue = getValidatedOptionValue(section, options)
+			options.forEach((option) => {
+				const hasTooltip = Boolean(descriptionMode === "tooltip" && option.description)
+				const showsInlineDescription = Boolean(
+					isCardVariant && descriptionMode === "inline" && option.description,
+				)
+				const optionNode = createElement(
+					"div",
+					`mpk-option-item${hasTooltip ? " has-tooltip" : ""}`,
+				)
+				const button = createElement(
+					"button",
+					`${isCardVariant ? "mpk-card-tab" : "mpk-option"}${activeValue === option.value ? " is-active" : ""}`,
+				)
+				button.type = "button"
+				button.title =
+					hasTooltip || showsInlineDescription ? "" : (option.description ?? "")
+				button.disabled = Boolean(option.disabled)
+				if (isCardVariant) {
+					button.append(createElement("span", "mpk-card-tab-title", option.label))
+					if (showsInlineDescription) {
+						button.append(
+							createElement("span", "mpk-card-tab-description", option.description),
+						)
+					}
+				} else {
+					button.textContent = option.label
+				}
+				button.addEventListener("click", () => {
+					if (option.disabled || activeValue === option.value) return
 					setState({ [section.stateKey]: option.value })
 				})
 				optionNode.append(button)
-				if (section.showDescriptionOnHover && option.description) {
+				if (hasTooltip) {
 					const tooltip = createElement("div", "mpk-option-tooltip", option.description)
 					tooltip.setAttribute("role", "tooltip")
 					optionNode.append(tooltip)
@@ -643,6 +865,8 @@
 			}
 			if (section.kind === "image-grid") return renderImageGrid(section)
 			if (section.kind === "image-slot") return renderImageSlot(section)
+			if (section.kind === "textarea") return renderTextarea(section)
+			if (section.kind === "size-control") return renderSizeControl(section)
 			if (section.kind === "option-group") return renderOptionGroup(section)
 			if (section.kind === "model-select") return renderModelSelect(section)
 			if (section.kind === "resolution-select") return renderResolutionSelect(section)
@@ -739,11 +963,12 @@
 			updateView(patch)
 		}
 
-		const helpers = {
+		helpers = {
 			t,
 			setState,
 			getSelectedModel,
 			getModelSizes,
+			getVisibleSizes,
 			getResolutionOptions,
 			getSelectedSize,
 			getImageReferenceId,

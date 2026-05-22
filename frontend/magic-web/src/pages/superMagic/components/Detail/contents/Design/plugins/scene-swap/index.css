@@ -1,0 +1,13 @@
+.scene-swap .mpk-image-grid {
+	grid-template-columns: repeat(4, 1fr);
+}
+
+.scene-swap .mpk-card-tab {
+	min-height: 96px;
+	max-height: 120px;
+	height: 100%;
+}
+
+.scene-swap .mpk-image-slot-upload {
+	min-height: 88px;
+}

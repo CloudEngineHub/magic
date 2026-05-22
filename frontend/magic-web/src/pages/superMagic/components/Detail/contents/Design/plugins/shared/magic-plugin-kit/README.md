@@ -219,6 +219,8 @@ kit 会按顺序渲染这些 section。
 
 - `image-grid`
 - `image-slot`
+- `textarea`
+- `size-control`
 - `option-group`
 - `model-select`
 - `resolution-select`
@@ -238,6 +240,7 @@ kit 会按顺序渲染这些 section。
 - `pickErrorMessage`: 选图失败兜底文案
 - `maxCount`: 最大图片数，支持数字或函数
 - `beforePick`: 选图前校验，返回字符串表示中断
+- `deps`: 额外依赖的 state key，例如 `maxCount` 依赖模型配置时需要声明
 - `when`: 条件渲染，返回 `false` 时不显示
 
 示例：
@@ -263,15 +266,16 @@ kit 会按顺序渲染这些 section。
 
 常用字段：
 
-- `stateKey`
-- `title`
-- `suffix`
-- `uploadLabel`
-- `alt`
-- `help`
-- `pickErrorMessage`
-- `beforePick`
-- `when`
+- `stateKey`: 对应单图 state 字段
+- `title`: 区块标题
+- `suffix`: 标题右侧补充文案，例如“可选”
+- `uploadLabel`: 未上传时的按钮文案
+- `alt`: 预览图的 alt 文案
+- `help`: 区块底部说明文案
+- `pickErrorMessage`: 选图失败兜底文案
+- `beforePick`: 选图前校验，返回字符串表示中断
+- `deps`: 额外依赖的 state key，例如 `when` 依赖其他字段时需要声明
+- `when`: 条件渲染，返回 `false` 时不显示
 
 示例：
 
@@ -286,6 +290,47 @@ kit 会按顺序渲染这些 section。
 }
 ```
 
+### `textarea`
+
+用于长文本输入，比如文生背景描述。
+
+常用字段：
+
+- `stateKey`: 对应文本 state 字段
+- `title`: 区块标题
+- `suffix`: 标题右侧补充文案
+- `placeholder`: 输入框占位文案
+- `rows`: 文本框默认行数
+- `maxLength`: 最大输入长度
+- `help`: 区块底部说明文案
+- `deps`: 额外依赖的 state key，例如 `when` 依赖其他字段时需要声明
+- `when`: 条件渲染，返回 `false` 时不显示
+
+说明：
+
+- 输入时直接写入对应 state，并重绘字数统计；不会每敲一个字就整段重渲染
+- 配置了 `maxLength` 后会自动截断，并显示 `当前字数/上限`
+
+### `size-control`
+
+用于选择画布比例。
+
+常用字段：
+
+- `title`: 区块标题
+- `suffix`: 标题右侧补充文案
+- `help`: 区块底部说明文案
+- `ratioStateKey`: 比例选项对应的 state 字段
+- `ratioOptions`: 自定义比例选项，未传时优先从模型尺寸推导
+- `deps`: 额外依赖的 state key，例如比例选项依赖当前模型时需要声明
+- `when`: 条件渲染，返回 `false` 时不显示
+
+说明：
+
+- 默认优先从当前模型的 `image_size_config.sizes` 推导比例 options
+- 如果没传 `ratioOptions` 且模型没声明尺寸，会退回到内置的常见比例
+- 当前版本仅支持比例切换，不支持手动输入宽高
+
 ### `option-group`
 
 用于标签按钮组选项。
@@ -296,21 +341,26 @@ kit 会按顺序渲染这些 section。
 
 常用字段：
 
-- `stateKey`
-- `title`
-- `suffix`
-- `help`
-- `groupClassName`
-- `showDescriptionOnHover`: 是否改为使用 tooltip DOM 展示 option 的 `description`；
-- `when`
-- `options`
+- `stateKey`: 对应选项值的 state 字段
+- `title`: 区块标题
+- `suffix`: 标题右侧补充文案
+- `help`: 区块底部说明文案
+- `groupClassName`: 额外挂到选项组容器上的 class
+- `showDescriptionOnHover`: 是否改为使用 tooltip DOM 展示 option 的 `description`
+- `variant`: 可选，传 `"card"` 时改为卡片式单选布局
+- `descriptionMode`: 描述展示方式，支持 `"title"`、`"tooltip"`、`"inline"`
+- `deps`: 额外依赖的 state key，例如 `options` 为函数且依赖模型时需要声明
+- `when`: 条件渲染，返回 `false` 时不显示
+- `options`: 支持数组，或返回数组的函数
 
 `options` 结构：
 
-- `value`
-- `label`
-- `description` 可选
-- `disabled` 可选
+每个 option 对象支持：
+
+- `value`: 选中后写入 `stateKey` 的值
+- `label`: 按钮或卡片上显示的主文案
+- `description`: 可选，补充说明；展示方式由 `descriptionMode` / `showDescriptionOnHover` 决定
+- `disabled`: 可选，为 `true` 时选项不可点击
 
 示例：
 
@@ -331,7 +381,9 @@ kit 会按顺序渲染这些 section。
 说明：
 
 - 默认情况下，`description` 会写入按钮的 `title` 属性
-- 当 `showDescriptionOnHover: true` 时，kit 会渲染自定义 tooltip DOM
+- 当 `showDescriptionOnHover: true` 或 `descriptionMode: "tooltip"` 时，kit 会渲染自定义 tooltip DOM
+- 当 `variant: "card"` 且 `descriptionMode: "inline"` 时，会渲染卡片式单选，并将 `description` 常驻显示在副文案区域
+- `options` 传函数时，kit 会在渲染阶段以 `({ state, helpers, t })` 调用它
 
 ### `model-select`
 
@@ -339,8 +391,8 @@ kit 会按顺序渲染这些 section。
 
 常用字段：
 
-- `title`
-- `when`
+- `title`: 区块标题
+- `when`: 条件渲染，返回 `false` 时不显示
 
 说明：
 
@@ -354,9 +406,9 @@ kit 会按顺序渲染这些 section。
 
 常用字段：
 
-- `title`
+- `title`: 区块标题
 - `hideWhenSingle`: 只有一个分辨率时是否隐藏，默认隐藏
-- `when`
+- `when`: 条件渲染，返回 `false` 时不显示
 
 说明：
 
@@ -371,6 +423,7 @@ kit 会按顺序渲染这些 section。
 - `maxCount`
 - `beforePick`
 - `when`
+- `options`
 - `isDisabled`
 - `getIdleHint`
 - `validate`

@@ -3,6 +3,22 @@ import type { CanvasDesignPlugin } from "../types"
 export const DEFAULT_PLUGIN_LOCALE = "zh-CN"
 
 const MEDIA_ICON_PATTERN = /\.(png|jpe?g|webp|gif|svg)$/i
+const VARIATION_SELECTOR_16 = 0xfe0f
+
+
+function countGraphemes(value: string) {
+	if (typeof Intl !== "undefined" && Intl.Segmenter) {
+		const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+		return [...segmenter.segment(value)].length
+	}
+
+	const codePoints = [...value]
+	if (codePoints.length === 2 && codePoints[1]?.codePointAt(0) === VARIATION_SELECTOR_16) {
+		return 1
+	}
+
+	return codePoints.length
+}
 
 export type ResolvedPluginIcon =
 	| {
@@ -42,7 +58,7 @@ export function resolvePluginText(plugin: CanvasDesignPlugin, value: string, loc
 export function resolvePluginIcon(plugin: CanvasDesignPlugin): ResolvedPluginIcon | null {
 	if (!plugin.icon) return null
 	const icon = plugin.icon.trim()
-	if (Array.from(icon).length === 1) {
+	if (countGraphemes(icon) === 1) {
 		return {
 			type: "emoji",
 			value: icon,

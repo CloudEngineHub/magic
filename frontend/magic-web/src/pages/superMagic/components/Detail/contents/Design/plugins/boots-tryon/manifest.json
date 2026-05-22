@@ -50,7 +50,7 @@
 			"generationMode.pro.desc": "版型、材质还原效果更好。",
 			"generationMode.standard": "标准模式",
 			"generationMode.standard.desc": "适合分辨率高于 2K 的全身图或高于 1K 的局部图。",
-			"label": "鞋履试穿",
+			"label": "鞋靴试穿",
 			"optional": "可选",
 			"section.count": "生成数量",
 			"section.generationMode": "生成模式",
