@@ -28,12 +28,15 @@ function PostSelector({ posts, activeIndex, onChange, className }: PostSelectorP
 			className={cn("flex min-w-0 items-center gap-2", className)}
 			data-testid="self-media-post-selector"
 		>
-			<span className="text-xs text-muted-foreground">
+			<span className="bg-primary/20 px-2 py-0.5 text-[10px] font-black text-zinc-950">
 				{t("detail.selfMedia.postSelector.label")}
 			</span>
 			<div className="min-w-0 max-w-full flex-1">
 				<Select value={String(activeIndex)} onValueChange={(v) => onChange(Number(v))}>
-					<SelectTrigger size="sm" className="h-8 w-fit min-w-0 max-w-full text-xs">
+					<SelectTrigger
+						size="sm"
+						className="h-8 w-fit min-w-0 max-w-full border-0 border-b border-zinc-200 bg-zinc-50/40 text-xs shadow-none focus:border-zinc-950 focus:bg-primary/[0.03]"
+					>
 						<span
 							className="min-w-0 max-w-full flex-1 truncate text-left"
 							data-testid="self-media-post-selector-value"

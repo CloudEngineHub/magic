@@ -1,25 +1,29 @@
-import { useCallback, useRef, useMemo } from "react"
+import { useCallback, useRef, useMemo, type CSSProperties } from "react"
+import { useTranslation } from "react-i18next"
+import { Loader2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { userStore } from "@/models/user"
 import { SelfMediaBrandRecordService } from "@/services/selfMedia"
 import { SelfMediaFileStorageService } from "../../services/SelfMediaFileStorageService"
-import StepBrandInfo from "./StepBrandInfo"
-import type { StepBrandInfoRef } from "./StepBrandInfo"
-import StepTopicAndDetail from "./StepTopicAndDetail"
-import StepConfirm from "./StepConfirm"
-import StepIndicator from "./StepIndicator"
-import StepNavigation from "./StepNavigation"
-import TemplateSelector from "./TemplateSelector"
+import StepBrandInfo from "./steps/StepBrandInfo"
+import type { StepBrandInfoRef } from "./steps/StepBrandInfo"
+import StepTopicAndDetail from "./steps/StepTopicAndDetail"
+import StepConfirm from "./steps/StepConfirm"
+import StepIndicator from "./steps/StepIndicator"
+import StepNavigation from "./steps/StepNavigation"
+import TemplateSelector from "./steps/TemplateSelector"
 import { useDraftManager } from "./hooks/useDraftManager"
 import { STEPS } from "./constants"
 import type { ArticleDetail, BrandImageItem } from "./types"
 import type { AttachmentNode } from "../../services"
+import DraftRestoreDialog from "./components/ui/DraftRestoreDialog"
 
 interface SelfMediaInitPanelProps {
-	selectedProject?: any
+	selectedProject?: { id: string } | null
 	folderFileId?: string
 	folderPath?: string
 	attachmentList?: AttachmentNode[]
+	onBackHome?: () => void
 }
 
 function SelfMediaInitPanel({
@@ -27,7 +31,9 @@ function SelfMediaInitPanel({
 	folderFileId,
 	folderPath,
 	attachmentList,
+	onBackHome,
 }: SelfMediaInitPanelProps) {
+	const { t } = useTranslation("super")
 	const userId = userStore.user.userInfo?.user_id || ""
 	const organizationCode = userStore.user.organizationCode || ""
 	const projectId = selectedProject?.id || ""
@@ -52,7 +58,9 @@ function SelfMediaInitPanel({
 		currentStep,
 		setCurrentStep,
 		showTemplateSelector,
+		pendingDraft,
 		templates,
+		isDraftLoading,
 		platformFetchInProgress,
 		brandImagesUploading,
 		setBrandImagesUploading,
@@ -60,6 +68,8 @@ function SelfMediaInitPanel({
 		handlePlatformFetchEnd,
 		handleLoadTemplate,
 		handleStartBlank,
+		handleRestoreDraft,
+		handleDiscardDraft,
 		hasDraftContent,
 		saveDraftIfNeeded,
 		saveDraftInBackground,
@@ -110,11 +120,11 @@ function SelfMediaInitPanel({
 	)
 
 	const navigateToStep = useCallback(
-		async (step: number) => {
-			await saveDraftIfNeeded(currentStep)
+		(step: number) => {
 			setCurrentStep(step)
+			saveDraftInBackground(step)
 		},
-		[saveDraftIfNeeded, currentStep, setCurrentStep],
+		[saveDraftInBackground, setCurrentStep],
 	)
 
 	const handleNext = useCallback(() => {
@@ -128,11 +138,11 @@ function SelfMediaInitPanel({
 		saveDraftInBackground(nextStep)
 	}, [currentStep, saveDraftInBackground, setCurrentStep])
 
-	const handlePrev = useCallback(async () => {
+	const handlePrev = useCallback(() => {
 		const prevStep = Math.max(currentStep - 1, 0)
-		await saveDraftIfNeeded(currentStep)
 		setCurrentStep(prevStep)
-	}, [currentStep, saveDraftIfNeeded, setCurrentStep])
+		saveDraftInBackground(prevStep)
+	}, [currentStep, saveDraftInBackground, setCurrentStep])
 
 	const hasPendingBrandImageUploads = data.global.brandImages.some(
 		(img) => img.file.size > 0 && !img.uploadedPath,
@@ -142,12 +152,7 @@ function SelfMediaInitPanel({
 	const canProceed = (): boolean => {
 		switch (currentStep) {
 			case 0:
-				return (
-					data.global.author.trim() !== "" &&
-					data.global.brandPosition.trim() !== "" &&
-					!brandImagesUploading &&
-					!hasPendingBrandImageUploads
-				)
+				return !brandImagesUploading && !hasPendingBrandImageUploads
 			case 1:
 				return (
 					data.articles.length > 0 &&
@@ -160,112 +165,145 @@ function SelfMediaInitPanel({
 
 	return (
 		<div
-			className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-background via-background to-primary/[0.02]"
+			className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background"
+			style={SELF_MEDIA_SKETCH_THEME}
 			data-testid="self-media-init-panel-root"
 		>
-			<StepIndicator currentStep={currentStep} onNavigate={navigateToStep} />
+			<DraftRestoreDialog
+				open={Boolean(pendingDraft)}
+				onRestore={handleRestoreDraft}
+				onDiscard={() => void handleDiscardDraft()}
+				onBackHome={onBackHome}
+			/>
+			{isDraftLoading ? (
+				<div
+					className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-white"
+					data-testid="self-media-init-panel-draft-loading"
+				>
+					<Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
+					<p className="text-sm font-medium text-muted-foreground">
+						{t("detail.selfMedia.initPanel.draft.loading")}
+					</p>
+				</div>
+			) : (
+				<>
+					<StepIndicator currentStep={currentStep} onNavigate={navigateToStep} />
 
-			{/* Step content */}
-			<div
-				className="min-h-0 flex-1 overflow-y-auto px-6 py-8"
-				data-testid="self-media-init-panel-content"
-			>
-				{showTemplateSelector && (
-					<TemplateSelector
-						templates={templates}
-						onLoadTemplate={handleLoadTemplate}
-						onStartBlank={handleStartBlank}
-					/>
-				)}
-
-				{!showTemplateSelector && (
-					<>
-						{currentStep === 0 && (
-							<StepBrandInfo
-								ref={brandInfoRef}
-								author={data.global.author}
-								brandPosition={data.global.brandPosition}
-								targetAudience={data.global.targetAudience}
-								brandImages={data.global.brandImages}
-								onChange={handleBrandChange}
-								onBrandImagesChange={handleBrandImagesChange}
-								fileStorageService={fileStorageService}
-								brandService={brandService}
-								attachmentList={attachmentList}
-								projectId={projectId}
-								folderPath={folderPath}
-								isPlatformFetching={platformFetchInProgress}
-								onPlatformFetchStart={handlePlatformFetchStart}
-								onPlatformFetchEnd={handlePlatformFetchEnd}
-								onBrandImagesUploadingChange={setBrandImagesUploading}
-								onConfirmNext={handleNext}
+					{/* Step content */}
+					<div
+						className="relative min-h-0 flex-1 overflow-y-auto bg-white px-6"
+						data-testid="self-media-init-panel-content"
+					>
+						{showTemplateSelector && (
+							<TemplateSelector
+								templates={templates}
+								onLoadTemplate={handleLoadTemplate}
+								onStartBlank={handleStartBlank}
 							/>
 						)}
-						{currentStep === 1 && (
-							<StepTopicAndDetail
-								articles={data.articles}
-								onChange={handleArticlesChange}
-								onArticleUpdate={handleArticleUpdate}
-								globalSettings={data.global}
-								onPersistDraft={() => void saveDraftIfNeeded()}
-								fileStorageService={fileStorageService}
-							/>
-						)}
-						{currentStep === 2 && (
-							<StepConfirm
-								data={data}
-								selectedProject={selectedProject}
-								folderFileId={folderFileId}
-								folderPath={folderPath}
-								onSaveTemplate={
-									fileStorageService
-										? async (name: string) => {
-												await fileStorageService.saveTemplate(data, name)
-											}
-										: undefined
-								}
-								onArchiveDraft={
-									fileStorageService
-										? async () => {
-												skipDraftPersistenceRef.current = true
-												try {
-													const archiveId =
-														await fileStorageService.archiveDraft(
-															dataRef.current,
-															currentStepRef.current,
-														)
-													if (!archiveId) {
-														throw new Error(
-															"Failed to archive draft before generation",
+
+						{!showTemplateSelector && (
+							<>
+								{currentStep === 0 && (
+									<StepBrandInfo
+										ref={brandInfoRef}
+										author={data.global.author}
+										brandPosition={data.global.brandPosition}
+										targetAudience={data.global.targetAudience}
+										brandImages={data.global.brandImages}
+										onChange={handleBrandChange}
+										onBrandImagesChange={handleBrandImagesChange}
+										fileStorageService={fileStorageService}
+										brandService={brandService}
+										attachmentList={attachmentList}
+										projectId={projectId}
+										folderPath={folderPath}
+										isPlatformFetching={platformFetchInProgress}
+										onPlatformFetchStart={handlePlatformFetchStart}
+										onPlatformFetchEnd={handlePlatformFetchEnd}
+										onBrandImagesUploadingChange={setBrandImagesUploading}
+										onConfirmNext={handleNext}
+									/>
+								)}
+								{currentStep === 1 && (
+									<StepTopicAndDetail
+										articles={data.articles}
+										onChange={handleArticlesChange}
+										onArticleUpdate={handleArticleUpdate}
+										globalSettings={data.global}
+										onPersistDraft={() => void saveDraftIfNeeded()}
+										fileStorageService={fileStorageService}
+									/>
+								)}
+								{currentStep === 2 && (
+									<StepConfirm
+										data={data}
+										selectedProject={selectedProject}
+										folderFileId={folderFileId}
+										folderPath={folderPath}
+										attachmentList={attachmentList}
+										onSaveTemplate={
+											fileStorageService
+												? async (name: string) => {
+														await fileStorageService.saveTemplate(
+															data,
+															name,
 														)
 													}
-												} catch (error) {
-													skipDraftPersistenceRef.current = false
-													throw error
-												}
-											}
-										: undefined
-								}
-								onGenerateFailed={() => {
-									skipDraftPersistenceRef.current = false
-								}}
-							/>
+												: undefined
+										}
+										onArchiveDraft={
+											fileStorageService
+												? async () => {
+														skipDraftPersistenceRef.current = true
+														try {
+															const archiveId =
+																await fileStorageService.archiveDraft(
+																	dataRef.current,
+																	currentStepRef.current,
+																)
+															if (!archiveId) {
+																throw new Error(
+																	"Failed to archive draft before generation",
+																)
+															}
+														} catch (error) {
+															skipDraftPersistenceRef.current = false
+															throw error
+														}
+													}
+												: undefined
+										}
+										onGenerateFailed={() => {
+											skipDraftPersistenceRef.current = false
+										}}
+										onBackHome={onBackHome}
+									/>
+								)}
+							</>
 						)}
-					</>
-				)}
-			</div>
+					</div>
 
-			<StepNavigation
-				currentStep={currentStep}
-				canProceed={canProceed()}
-				hasAnyInitData={hasAnyInitData}
-				onNext={handleNext}
-				onPrev={handlePrev}
-				onClear={() => void handleClearData()}
-				onNavigate={navigateToStep}
-			/>
+					<StepNavigation
+						currentStep={currentStep}
+						canProceed={canProceed()}
+						hasAnyInitData={hasAnyInitData}
+						onNext={handleNext}
+						onPrev={handlePrev}
+						onClear={() => void handleClearData()}
+						onNavigate={navigateToStep}
+						onBackHome={onBackHome}
+					/>
+				</>
+			)}
 		</div>
 	)
 }
 
 export default observer(SelfMediaInitPanel)
+
+const SELF_MEDIA_SKETCH_THEME = {
+	"--primary-rgb": "245 158 11",
+	"--primary-foreground-rgb": "23 23 23",
+	"--ring-rgb": "245 158 11",
+} as CSSProperties

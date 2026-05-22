@@ -129,6 +129,8 @@ export interface PlatformComponentProps {
 	) => Promise<void>
 	/** Currently selected project */
 	selectedProject?: any
+	/** Navigate back to the article home page. */
+	onBackHome?: () => void
 }
 
 /** Component contract every platform implementation must follow */

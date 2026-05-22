@@ -1,21 +1,18 @@
-import { Suspense, useCallback, useMemo, useState } from "react"
-import { createPortal } from "react-dom"
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { observer } from "mobx-react-lite"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Flex } from "antd"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
 import type { SelfMediaPlatform } from "../../types"
-import {
-	SelfMediaPlatformChromeProvider,
-	useSelfMediaPlatformChrome,
-} from "./context/PlatformChromeContext"
-import PlatformSwitcher from "./components/PlatformSwitcher"
 import UnsupportedPlatform from "./components/UnsupportedPlatform"
 import { getPlatformComponent } from "./platforms"
 import { SelfMediaStoreProvider, useSelfMediaStore } from "./stores"
 import SelfMediaInitPanel from "./components/SelfMediaInitPanel"
+import SelfMediaHomePage from "./components/SelfMediaHomePage"
 import type { SelfMediaRootRenderProps } from "./types"
+
+type SelfMediaRootMode = "home" | "create" | "platform"
 
 /**
  * SelfMediaRootRender
@@ -25,9 +22,7 @@ import type { SelfMediaRootRenderProps } from "./types"
  * loading / active post + card / current view) lives in the store and is
  * driven by the upstream attachment tree via the store's `sync` lifecycle.
  *
- * The inner `observer` renders loading / unsupported; when a platform
- * shell mounts, the multi-platform switcher is portaled into the shell
- * header host via `SelfMediaPlatformChromeProvider`. Each platform
+ * The inner `observer` renders loading / unsupported. Each platform
  * component consumes the store through `useSelfMediaStore()`.
  */
 function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
@@ -56,17 +51,15 @@ function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
 			attachmentList={attachmentList}
 			initialNavigation={data?.initialNavigation}
 		>
-			<SelfMediaPlatformChromeProvider>
-				<SelfMediaRootRenderInner
-					attachmentList={attachmentList || attachments}
-					className={className}
-					allowEdit={allowEdit}
-					saveEditContent={saveEditContent}
-					selectedProject={selectedProject}
-					folderFileId={folderFileId}
-					folderPath={folderPath}
-				/>
-			</SelfMediaPlatformChromeProvider>
+			<SelfMediaRootRenderInner
+				attachmentList={attachmentList || attachments}
+				className={className}
+				allowEdit={allowEdit}
+				saveEditContent={saveEditContent}
+				selectedProject={selectedProject}
+				folderFileId={folderFileId}
+				folderPath={folderPath}
+			/>
 		</SelfMediaStoreProvider>
 	)
 }
@@ -92,13 +85,18 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 }: SelfMediaRootRenderInnerProps) {
 	const { t } = useTranslation("super")
 	const store = useSelfMediaStore()
-	const { hostElement } = useSelfMediaPlatformChrome()
-	const [isCreatingArticle, setIsCreatingArticle] = useState(false)
+	const [rootMode, setRootMode] = useState<SelfMediaRootMode | null>(null)
 
 	const { platforms, resolvedPlatform: platform, rootLoading } = store
 
 	// Detect empty project: no platforms configured and not loading
 	const isEmptyProject = !rootLoading && platforms.length === 0
+	const activeRootMode = rootMode ?? (isEmptyProject ? "create" : "home")
+
+	useEffect(() => {
+		if (rootLoading || rootMode !== null) return
+		setRootMode(isEmptyProject ? "create" : "home")
+	}, [isEmptyProject, rootLoading, rootMode])
 
 	const handleChangePlatform = useCallback(
 		(next: SelfMediaPlatform) => {
@@ -107,10 +105,21 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		[store],
 	)
 	const handleStartCreateArticle = useCallback(() => {
-		setIsCreatingArticle(true)
+		setRootMode("create")
 	}, [])
-	const handleBackToContent = useCallback(() => {
-		setIsCreatingArticle(false)
+	const handleBackHome = useCallback(() => {
+		store.goHomeList()
+		setRootMode("home")
+	}, [store])
+	const handleOpenPost = useCallback(
+		(index: number) => {
+			store.openPostDetail(index)
+			setRootMode("platform")
+		},
+		[store],
+	)
+	const handleShowPlatform = useCallback(() => {
+		setRootMode("platform")
 	}, [])
 
 	const PlatformComponent = useMemo(() => getPlatformComponent(platform), [platform])
@@ -128,7 +137,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		)
 	}
 
-	if (isEmptyProject) {
+	if (activeRootMode === "create" && isEmptyProject) {
 		return (
 			<div
 				className={cn("h-full min-h-0 w-full", className)}
@@ -139,60 +148,37 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					folderFileId={folderFileId}
 					folderPath={folderPath}
 					attachmentList={attachmentList}
+					onBackHome={handleBackHome}
 				/>
 			</div>
 		)
 	}
 
-	const platformSwitcherNode =
-		hostElement &&
-		createPortal(
-			<div className="flex items-center gap-2">
-				{isCreatingArticle ? (
-					<button
-						type="button"
-						className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-						onClick={handleBackToContent}
-						data-testid="self-media-back-to-content"
-					>
-						{t("detail.selfMedia.platform.actions.back")}
-					</button>
-				) : (
-					<>
-						{platforms.length > 1 && (
-							<span className="text-xs text-muted-foreground">
-								{t("detail.selfMedia.platform.switcher.label")}
-							</span>
-						)}
-						<PlatformSwitcher
-							platforms={platforms}
-							activePlatform={platform}
-							onChange={handleChangePlatform}
-						/>
-						<button
-							type="button"
-							className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-							onClick={handleStartCreateArticle}
-							data-testid="self-media-create-article"
-						>
-							{t("detail.selfMedia.platform.actions.create")}
-						</button>
-					</>
-				)}
-			</div>,
-			hostElement,
-		)
-
-	if (isCreatingArticle) {
+	if (activeRootMode === "home") {
 		return (
 			<div className={cn("h-full min-h-0 w-full", className)} data-testid="self-media-root">
-				{platformSwitcherNode}
-				<div className="min-h-0 h-full" data-testid="self-media-init-panel">
+				<SelfMediaHomePage
+					posts={store.posts}
+					platforms={platforms}
+					activePlatform={platform}
+					onCreateArticle={handleStartCreateArticle}
+					onOpenPost={handleOpenPost}
+					onChangePlatform={handleChangePlatform}
+				/>
+			</div>
+		)
+	}
+
+	if (activeRootMode === "create") {
+		return (
+			<div className={cn("h-full min-h-0 w-full", className)} data-testid="self-media-root">
+				<div className="h-full min-h-0" data-testid="self-media-init-panel">
 					<SelfMediaInitPanel
 						selectedProject={selectedProject}
 						folderFileId={folderFileId}
 						folderPath={folderPath}
 						attachmentList={attachmentList}
+						onBackHome={handleBackHome}
 					/>
 				</div>
 			</div>
@@ -203,13 +189,15 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		return (
 			<div className={cn("h-full w-full", className)}>
 				<UnsupportedPlatform platform={platform} />
+				<button type="button" className="sr-only" onClick={handleShowPlatform}>
+					{t("detail.selfMedia.home.openPlatform")}
+				</button>
 			</div>
 		)
 	}
 
 	return (
 		<div className={cn("h-full w-full", className)} data-testid="self-media-root">
-			{platformSwitcherNode}
 			<Suspense
 				fallback={
 					<Flex justify="center" align="center" className="h-full w-full">
@@ -223,6 +211,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					allowEdit={allowEdit}
 					saveEditContent={saveEditContent}
 					selectedProject={selectedProject}
+					onBackHome={handleBackHome}
 				/>
 			</Suspense>
 		</div>

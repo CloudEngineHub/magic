@@ -16,10 +16,13 @@ Preset not yet chosen for this post? (mandatory for ALL platforms)
          to shared/presets/<preset>/<preset>.{css,js} via read_files + write_file.
 
 About to create a card-based post (rednote / instagram)?
-└─ create_self_media_post (pass meta and planned cards[]; register_in_project=true)
+└─ create_self_media_post (pass meta and planned cards[]; register_in_project=false
+   if the frontend prompt says the post is already pre-registered; otherwise true)
 
 About to create a wechat-official-accounts post?
-└─ create_self_media_post (pass meta, article, hero_cover, thumbnail_cover; register_in_project=true)
+└─ create_self_media_post (pass meta, article, hero_cover, thumbnail_cover;
+   register_in_project=false if the frontend prompt says the post is already
+   pre-registered; otherwise true)
 
 Need images for the cards?
 ├─ Preset not yet chosen -> STOP. Run Step 4.1 first.
@@ -41,4 +44,6 @@ Need to tweak post meta or card order?
 Need to rename/reorder the project-level posts index?
 └─ edit_file on magic.project.js, keep the JSONP wrapper intact. Posts live under
    self-media.<platform>.posts.
+   Do not edit magic.project.js when the frontend prompt says the batch already
+   pre-registered its posts.
 ```

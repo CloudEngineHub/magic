@@ -230,7 +230,7 @@ Creates a single post directory (`posts/<post_id>/`) with `post.json` and an emp
 | `article` | No | **wechat-official-accounts only.** Relative path to the single HTML article file, for example `"my-article.html"`. When provided, the post is treated as a WeChat article post; `cards` is ignored. |
 | `hero_cover` | No | **wechat-official-accounts only.** Relative path to the hero cover image (16:9), for example `"assets/cover-hero.jpg"`. Written as `heroCover` in `post.json`. |
 | `thumbnail_cover` | No | **wechat-official-accounts only.** Relative path to the square thumbnail cover image, for example `"assets/cover-square.jpg"`. Written as `thumbnailCover` in `post.json`. |
-| `register_in_project` | No | Default `true`. Append/update the entry in the root `magic.project.js` posts array. |
+| `register_in_project` | No | Default `true`. Append/update the entry in the root `magic.project.js` posts array. If the frontend prompt says the post is already pre-registered, explicitly pass `false` and do not edit the root index. |
 
 Idempotence: if `posts/<post_id>/` already exists, the tool merges `meta` (shallow merge, new keys win), keeps existing `cards` / `article` / `heroCover` / `thumbnailCover` untouched unless the caller passes new values, and preserves the root posts entry order.
 
@@ -375,9 +375,9 @@ Rules:
 
 **4.2 Create the post folder**
 
-**For `rednote` / `instagram`:** call `create_self_media_post` with `post_id`, `post_name`, `meta`, and the planned `cards` list. This yields `posts/<id>/post.json`, `cards/`, and `assets/`.
+**For `rednote` / `instagram`:** call `create_self_media_post` with `post_id`, `post_name`, `meta`, and the planned `cards` list. This yields `posts/<id>/post.json`, `cards/`, and `assets/`. If the frontend prompt states that the post was pre-registered in `magic.project.js`, pass `register_in_project=false`.
 
-**For `wechat-official-accounts`:** call `create_self_media_post` with `post_id`, `post_name`, `meta`, `article` (the filename), `hero_cover` (e.g. `"assets/cover-hero.jpg"`), and `thumbnail_cover` (e.g. `"assets/cover-square.jpg"`). This yields `posts/<id>/post.json` and `assets/`. No `cards/` folder is created.
+**For `wechat-official-accounts`:** call `create_self_media_post` with `post_id`, `post_name`, `meta`, `article` (the filename), `hero_cover` (e.g. `"assets/cover-hero.jpg"`), and `thumbnail_cover` (e.g. `"assets/cover-square.jpg"`). This yields `posts/<id>/post.json` and `assets/`. No `cards/` folder is created. If the frontend prompt states that the post was pre-registered in `magic.project.js`, pass `register_in_project=false`.
 
 **4.3 Collect or generate images (after the style is fixed)**
 
@@ -397,6 +397,46 @@ Before generating any images, check if the user provided brand image / IP assets
 4. If no brand images exist, proceed normally without this constraint.
 
 > This step ensures all generated visuals feel cohesive with the user's established brand identity.
+
+**4.3.1 Check outline image materials for reference-based recreation (automatic)**
+
+When `articles[].outline[].materials` or `articles[].materials` includes screenshots, charts, UI captures, product images, diagrams, or other content-relevant images, do not treat them as passive attachments.
+
+For each image material:
+
+1. Use `visual_understanding` to identify what the image shows, what information matters, and which outline node or card it should support.
+2. If the image is useful for the final content, prefer a new generated asset instead of placing the raw screenshot directly into a card.
+3. Call `generate_images` with the source image in `reference_images`. The prompt should preserve the source image's important information while adapting it to the resolved preset/style.
+4. Add visual emphasis where it helps comprehension: highlighted key areas, zoom callouts, arrows, labels, comparison boxes, focus rings, cropped detail panels, or before/after framing.
+5. Save the generated result under `posts/<post_id>/assets/` and use that generated asset in the card or article HTML.
+6. Keep node scope: an image attached to one outline node should primarily influence that node/card. Expand it to other cards only when the image clearly supports the broader narrative.
+
+Raw image materials may still be used as factual references, but card-facing visuals should be recreated or annotated when that makes the message clearer.
+
+**4.3.2 Handle missing images with generation or placeholders (automatic)**
+
+When a card or article section needs an image but the user did not provide one, first decide whether image generation is appropriate.
+
+Generate an image when the needed visual is:
+
+- a conceptual cover, atmosphere image, section opener, trend, emotion, vision, or abstract topic visual
+- a diagram-like illustration, analogy, workflow, comparison, pain-point scene, before/after change, or methodology explanation
+- a brand/IP extension based on provided brand assets or style requirements
+- a card-level visual enhancement that improves attention, hierarchy, or memorability
+- not dependent on exact real people, exact real events, strict evidence, or precise source data
+
+Do not generate an image when the needed visual must be strictly factual or would be misleading if invented:
+
+- data charts, financial reports, product dashboards, experiment results, legal/medical/financial evidence
+- exact real people, real brand/product UI details, news scenes, accident scenes, user reviews, chat logs
+- local explanations that require an original screenshot or source image that the user did not provide
+- article transitions where a styled placeholder or information layout communicates better than an illustration
+
+If generation is appropriate, call `generate_images` after style is resolved and save the result under `posts/<post_id>/assets/`. If generation is not appropriate, create a styled placeholder instead:
+
+- Card placeholders should match the preset: dashed frame, icon block, muted panel, label chip, decorative grid, or "pending screenshot/data chart" module.
+- WeChat article placeholders should use a clear placeholder line such as `【Image placeholder: purpose or scene description】`.
+- For missing screenshots or data charts, label them as pending replacement assets. Do not fabricate evidence-like visuals.
 
 For every image the cards need:
 
@@ -429,7 +469,7 @@ Reference only local image files saved in 4.3. Load [Card HTML Constraints](./re
 
 ### Step 5 - maintain the posts index
 
-- Adding a post: rely on `create_self_media_post` with `register_in_project=true`.
+- Adding a post: rely on `create_self_media_post` with `register_in_project=true`, unless the frontend prompt says the post is already pre-registered. In pre-registered batch flows, use `register_in_project=false` and never edit the root `magic.project.js` posts index.
 - Reordering or renaming posts: use `edit_file` on the root `magic.project.js`, keeping `window.magicProjectConfigure(window.magicProjectConfig);` untouched at the bottom.
 - Removing a post: use `delete_files` on `posts/<id>/`, then `edit_file` on `magic.project.js` to drop the matching entry under the platform's `posts` array.
 

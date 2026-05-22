@@ -12,9 +12,12 @@ import type {
 	MaterialItem,
 	ReferenceFileValue,
 } from "../components/SelfMediaInitPanel/types"
-import { ALL_PLATFORMS, VISUAL_PRESETS } from "../components/SelfMediaInitPanel/types"
-import { STYLE_PRESETS } from "../components/SelfMediaInitPanel/types"
-import { collectArticleMaterials } from "../components/SelfMediaInitPanel/types"
+import {
+	ALL_PLATFORMS,
+	STYLE_PRESETS,
+	VISUAL_PRESETS,
+	collectArticleMaterials,
+} from "../components/SelfMediaInitPanel/types"
 
 function getPlatformLabel(value: string): string {
 	const info = ALL_PLATFORMS.find((p) => p.value === value)
@@ -34,6 +37,17 @@ function getVisualPresetDescription(value: string): string {
 function fileExtensionFromName(name: string): string {
 	const dot = name.lastIndexOf(".")
 	return dot !== -1 ? name.slice(dot + 1) : ""
+}
+
+function isImageLikeMaterial(material: MaterialItem): boolean {
+	const fileType = material.file?.type || ""
+	const extension = fileExtensionFromName(material.file?.name || "").toLowerCase()
+	return (
+		fileType.startsWith("image/") ||
+		["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "avif", "heic", "heif"].includes(
+			extension,
+		)
+	)
 }
 
 function stripVisualDescriptionTags(text: string): string {
@@ -83,7 +97,7 @@ function spacer(): JSONContent {
 function pushSection(docContent: JSONContent[], title: string, paragraphs: JSONContent[]): void {
 	if (paragraphs.length === 0) return
 	if (docContent.length > 0) docContent.push(spacer())
-	docContent.push(para(title), ...paragraphs)
+	docContent.push(para(`【${title}】`), ...paragraphs)
 }
 
 // ─── Mention builders ─────────────────────────────────────────────────────────
@@ -367,6 +381,12 @@ export function buildArticlePromptContent(
 		])
 	}
 
+	pushSection(docContent, "项目索引规则", [
+		para(
+			"项目入口列表已经准备好，本次只补齐这篇内容自己的文件。不要重复维护项目入口列表，避免影响同批次的其他文章。",
+		),
+	])
+
 	pushSection(docContent, "品牌信息", [
 		para(
 			`账号名称：${global.author}\n品牌定位：${global.brandPosition}${global.targetAudience ? `\n目标受众：${global.targetAudience}` : ""}\n目标平台：${platform}`,
@@ -379,15 +399,23 @@ export function buildArticlePromptContent(
 		),
 	])
 
-	pushSection(docContent, "图片占位说明", [
-		para(
-			"请在适合插图、封面图、示意图、流程图或数据图的位置主动补充图片占位符，方便后续人工替换图片。",
-		),
-		para(
-			"图片占位符请使用统一格式：\n【图片占位符 1：图片用途或画面描述】\n【图片占位符 2：图片用途或画面描述】",
-		),
-		para("如果是多卡片内容，请尽量让每张卡片在需要配图的位置都保留清晰的图片占位符。"),
+	pushSection(docContent, "图片处理", [
+		para("图片处理请遵循项目自媒体创作规范；没有明确素材时，优先保证内容真实可信。"),
 	])
+
+	if (allMaterials.some(isImageLikeMaterial)) {
+		pushSection(docContent, "图片附件处理规则", [
+			para(
+				"如果文章或大纲节点的附件是截图、图表、产品图、界面图或其他与内容相关的图片，请先使用 visual_understanding 理解图片内容，并判断它最适合服务哪个大纲节点。",
+			),
+			para(
+				"不要直接把截图原图当作最终卡片图。需要进入卡片展示时，请基于该附件使用 generate_images 的 reference_images 进行二次创作，保留原图关键信息，同时补充重点区域高亮、放大框、箭头、标注、对比框或局部强调等效果。",
+			),
+			para(
+				"大纲节点上的图片附件优先服务该节点；只有当图片信息明显适用于全文时，才扩展到其他卡片或文章区域。",
+			),
+		])
+	}
 
 	if (article.visualPreset && article.visualPreset !== "none") {
 		if (article.visualPreset === "custom") {
@@ -408,7 +436,7 @@ export function buildArticlePromptContent(
 		} else {
 			pushSection(docContent, "视觉要求", [
 				para(
-					`预设标识：${article.visualPreset}\n适用平台：${platform}\n预设说明：${getVisualPresetDescription(article.visualPreset)}\n请使用 shared/presets/${article.visualPreset}/${article.visualPreset}.css 和 .js 作为卡片视觉基础。`,
+					`预设标识：${article.visualPreset}\n适用平台：${platform}\n预设说明：${getVisualPresetDescription(article.visualPreset)}\n请以该视觉预设作为卡片视觉基础。`,
 				),
 			])
 		}

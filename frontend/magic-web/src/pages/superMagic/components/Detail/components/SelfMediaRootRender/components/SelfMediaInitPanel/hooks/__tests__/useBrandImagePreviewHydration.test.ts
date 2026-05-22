@@ -2,6 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { BrandImageItem } from "../../types"
 import { useBrandImagePreviewHydration } from "../useBrandImagePreviewHydration"
+import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../../../../constants/imageProcess"
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
 	getFileContentById: vi.fn(),
@@ -67,7 +68,10 @@ describe("useBrandImagePreviewHydration", () => {
 		)
 
 		await waitFor(() => {
-			expect(getFileContentById).toHaveBeenCalledWith("file-1", { responseType: "blob" })
+			expect(getFileContentById).toHaveBeenCalledWith("file-1", {
+				responseType: "blob",
+				xMagicImageProcess: CARD_THUMBNAIL_IMAGE_PROCESS,
+			})
 			expect(onBrandImagesChange).toHaveBeenCalledWith([
 				expect.objectContaining({
 					id: "brand-image-1",
@@ -100,7 +104,10 @@ describe("useBrandImagePreviewHydration", () => {
 		)
 
 		await waitFor(() => {
-			expect(getFileContentById).toHaveBeenCalledWith("file-2", { responseType: "blob" })
+			expect(getFileContentById).toHaveBeenCalledWith("file-2", {
+				responseType: "blob",
+				xMagicImageProcess: CARD_THUMBNAIL_IMAGE_PROCESS,
+			})
 			expect(onBrandImagesChange).toHaveBeenCalled()
 		})
 	})

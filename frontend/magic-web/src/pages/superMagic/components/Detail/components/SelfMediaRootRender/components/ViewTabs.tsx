@@ -27,10 +27,7 @@ function ViewTabs({ value, onChange, labels, order, className }: ViewTabsProps) 
 
 	return (
 		<div
-			className={cn(
-				"inline-flex items-center gap-1 rounded-full border border-border bg-background p-1 text-xs",
-				className,
-			)}
+			className={cn("inline-flex items-center gap-1 bg-zinc-50/60 p-1 text-xs", className)}
 			data-testid="self-media-view-tabs"
 		>
 			{visibleOrder.map((view) => {
@@ -42,10 +39,10 @@ function ViewTabs({ value, onChange, labels, order, className }: ViewTabsProps) 
 						onClick={() => onChange(view)}
 						data-testid={`self-media-view-${view}`}
 						className={cn(
-							"min-w-[72px] rounded-full px-3 py-1 transition",
+							"min-w-[72px] px-3 py-1 font-bold transition active:scale-[0.98]",
 							active
-								? "bg-foreground text-background"
-								: "text-muted-foreground hover:text-foreground",
+								? "bg-zinc-950 text-white"
+								: "text-muted-foreground hover:bg-primary/[0.06] hover:text-zinc-950",
 						)}
 					>
 						{labels?.[view] || defaultLabels[view]}

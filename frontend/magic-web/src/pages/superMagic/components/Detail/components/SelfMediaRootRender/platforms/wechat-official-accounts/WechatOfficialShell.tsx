@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { RefreshCw } from "lucide-react"
-import { Button } from "@/components/shadcn-ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
-import PostSelector from "../../components/PostSelector"
-import ViewTabs from "../../components/ViewTabs"
-import { useSelfMediaPlatformChrome } from "../../context/PlatformChromeContext"
+import SelfMediaShellHeader from "../../components/SelfMediaShellHeader"
 import { useSelfMediaStore } from "../../stores"
 import type { PlatformComponentProps, SelfMediaView } from "../../types"
 import WechatArticleView from "./article"
@@ -20,8 +15,8 @@ const TAB_ORDER: SelfMediaView[] = ["feed", "detail", "edit", "code"]
 
 function WechatOfficialShell(props: PlatformComponentProps) {
 	const { t } = useTranslation("super")
-	const { attachmentList, allowEdit, saveEditContent, selectedProject } = props
-	const { setHostElement } = useSelfMediaPlatformChrome()
+	const { platform, attachmentList, allowEdit, saveEditContent, selectedProject, onBackHome } =
+		props
 	const store = useSelfMediaStore()
 	const { posts, loading, error, activePostIndex, view, rootLoading } = store
 
@@ -32,7 +27,6 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 		[store],
 	)
 	const onEnsurePostLoaded = useCallback((idx: number) => store.ensurePostLoaded(idx), [store])
-	const isEditView = view === "edit"
 
 	// Hide edit/code tabs when editing is not allowed (read-only / share mode)
 	const visibleTabs = useMemo(
@@ -68,11 +62,9 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 
 	const [isArticleEditing, setIsArticleEditing] = useState(false)
 	const editViewChangeHandlerRef = useRef<((nextView: SelfMediaView) => void) | null>(null)
-	const editPostChangeHandlerRef = useRef<((nextPostIndex: number) => void) | null>(null)
 
 	const [isCodeEditing, setIsCodeEditing] = useState(false)
 	const codeViewChangeHandlerRef = useRef<((nextView: SelfMediaView) => void) | null>(null)
-	const codePostChangeHandlerRef = useRef<((nextPostIndex: number) => void) | null>(null)
 
 	const [mountedViews, setMountedViews] = useState(() => ({
 		feed: view === "feed",
@@ -124,23 +116,9 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 		[],
 	)
 
-	const handleRequestPostChangeReady = useCallback(
-		(handler: ((nextPostIndex: number) => void) | null) => {
-			editPostChangeHandlerRef.current = handler
-		},
-		[],
-	)
-
 	const handleCodeRequestViewChangeReady = useCallback(
 		(handler: ((nextView: SelfMediaView) => void) | null) => {
 			codeViewChangeHandlerRef.current = handler
-		},
-		[],
-	)
-
-	const handleCodeRequestPostChangeReady = useCallback(
-		(handler: ((nextPostIndex: number) => void) | null) => {
-			codePostChangeHandlerRef.current = handler
 		},
 		[],
 	)
@@ -160,23 +138,6 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 		[view, isArticleEditing, isCodeEditing, onChangeView],
 	)
 
-	const handleSelectPostKeepingView = useCallback(
-		(nextPostIndex: number) => {
-			if (view === "edit" && isArticleEditing) {
-				editPostChangeHandlerRef.current?.(nextPostIndex)
-				return
-			}
-			if (view === "code" && isCodeEditing) {
-				codePostChangeHandlerRef.current?.(nextPostIndex)
-				return
-			}
-			onChangePost(nextPostIndex)
-			onChangeView(view)
-			void store.ensurePostLoaded(nextPostIndex)
-		},
-		[view, isArticleEditing, isCodeEditing, onChangePost, onChangeView, store],
-	)
-
 	const handleFeedSelectPost = useCallback(
 		(idx: number) => {
 			onChangePost(idx)
@@ -185,49 +146,30 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 		[onChangePost, onChangeView],
 	)
 
+	const handleRefresh = useCallback(() => {
+		void store.init()
+	}, [store])
+
 	return (
 		<div
 			className="flex h-full w-full flex-col"
 			style={{ background: wechatOfficialTokens.background }}
 			data-testid="wechat-official-shell"
 		>
-			<div className="flex flex-wrap items-center gap-3 border-b border-border bg-background px-4 py-2">
-				<div
-					ref={setHostElement}
-					className="flex min-w-0 shrink-0 items-center gap-2 [&:empty]:hidden"
-					data-testid="self-media-platform-switcher-host"
-				/>
-				<PostSelector
-					posts={posts}
-					activeIndex={activePostIndex}
-					onChange={handleSelectPostKeepingView}
-					className="flex-1"
-				/>
-				{isEditView ? (
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="outline"
-								size="icon"
-								disabled={rootLoading}
-								onClick={() => void store.init()}
-								data-testid="wechat-shell-refresh-post-button"
-								aria-label={t("detail.selfMedia.refreshAllData")}
-							>
-								<RefreshCw className="h-4 w-4" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent>{t("detail.selfMedia.refreshAllData")}</TooltipContent>
-					</Tooltip>
-				) : null}
-				<ViewTabs
-					value={view}
-					onChange={handleGuardedViewChange}
-					labels={tabLabels}
-					order={visibleTabs}
-				/>
-			</div>
+			<SelfMediaShellHeader
+				platform={platform}
+				posts={posts}
+				activePostIndex={activePostIndex}
+				view={view}
+				tabLabels={tabLabels}
+				visibleTabs={visibleTabs}
+				onChangeView={handleGuardedViewChange}
+				onRefresh={handleRefresh}
+				onBackHome={onBackHome}
+				refreshLabel={t("detail.selfMedia.refreshAllData")}
+				refreshDisabled={rootLoading}
+				refreshTestId="wechat-shell-refresh-post-button"
+			/>
 
 			<div className="relative flex-1 overflow-hidden">
 				{shouldRenderFeed ? (
@@ -287,7 +229,6 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 									onChangeView={onChangeView}
 									onEditingStateChange={handleEditingStateChange}
 									onRequestViewChangeReady={handleRequestViewChangeReady}
-									onRequestPostChangeReady={handleRequestPostChangeReady}
 								/>
 							) : null}
 						</WechatOfficialContentGate>
@@ -315,7 +256,6 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 									onChangeView={onChangeView}
 									onEditingStateChange={handleCodeEditingStateChange}
 									onRequestViewChangeReady={handleCodeRequestViewChangeReady}
-									onRequestPostChangeReady={handleCodeRequestPostChangeReady}
 								/>
 							) : null}
 						</WechatOfficialContentGate>

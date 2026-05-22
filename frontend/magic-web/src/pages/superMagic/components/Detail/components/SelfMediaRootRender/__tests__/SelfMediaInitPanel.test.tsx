@@ -69,19 +69,19 @@ vi.mock("../services/SelfMediaFileStorageService", () => ({
 	})),
 }))
 
-vi.mock("../components/SelfMediaInitPanel/StepTopicAndDetail", () => ({
+vi.mock("../components/SelfMediaInitPanel/steps/StepTopicAndDetail", () => ({
 	default: function MockStepTopicAndDetail() {
 		return <div>topics-step</div>
 	},
 }))
 
-vi.mock("../components/SelfMediaInitPanel/StepConfirm", () => ({
+vi.mock("../components/SelfMediaInitPanel/steps/StepConfirm", () => ({
 	default: function MockStepConfirm() {
 		return <div>confirm-step</div>
 	},
 }))
 
-vi.mock("../components/SelfMediaInitPanel/StepBrandInfo", () => ({
+vi.mock("../components/SelfMediaInitPanel/steps/StepBrandInfo", () => ({
 	default: forwardRef(function MockStepBrandInfo(props: any, ref) {
 		useImperativeHandle(ref, () => ({
 			checkBeforeNext: () => true,
@@ -135,6 +135,122 @@ describe("SelfMediaInitPanel", () => {
 		vi.clearAllMocks()
 	})
 
+	it("asks before restoring a detected draft", async () => {
+		const deferred = createDeferred<{
+			currentStep: number
+			data: {
+				global: {
+					author: string
+					brandPosition: string
+					targetAudience: string
+					brandImages: []
+				}
+				articles: Array<{ title: string; platform: string }>
+			}
+		}>()
+		mockLoadDraft.mockReturnValueOnce(deferred.promise)
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+			/>,
+		)
+
+		expect(screen.getByTestId("self-media-init-panel-draft-loading")).toBeInTheDocument()
+		expect(screen.getByText("detail.selfMedia.initPanel.draft.loading")).toBeInTheDocument()
+		expect(screen.queryByText("brand-step")).not.toBeInTheDocument()
+		expect(screen.queryByText("topics-step")).not.toBeInTheDocument()
+
+		deferred.resolve({
+			currentStep: 1,
+			data: {
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+					targetAudience: "",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "Draft article",
+						platform: "rednote",
+					},
+				],
+			},
+		})
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
+		})
+
+		expect(screen.queryByTestId("self-media-init-panel-draft-loading")).not.toBeInTheDocument()
+		expect(screen.getByText("brand-step")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("self-media-draft-restore-load-button"))
+
+		await waitFor(() => {
+			expect(screen.getByText("topics-step")).toBeInTheDocument()
+		})
+	})
+
+	it("navigates to the previous step before draft save resolves", async () => {
+		mockLoadDraft.mockResolvedValue({
+			currentStep: 1,
+			data: {
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+					targetAudience: "",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "Draft article",
+						platform: "rednote",
+					},
+				],
+			},
+		})
+
+		const deferred = createDeferred<void>()
+		mockSaveDraft.mockReturnValueOnce(deferred.promise)
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-draft-restore-load-button"))
+
+		await waitFor(() => {
+			expect(screen.getByText("topics-step")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-init-panel-prev-button"))
+
+		expect(screen.getByText("brand-step")).toBeInTheDocument()
+		expect(mockSaveDraft).toHaveBeenCalledTimes(1)
+		expect(mockSaveDraft).toHaveBeenCalledWith(
+			expect.objectContaining({
+				global: expect.objectContaining({ author: "Magic Lab" }),
+			}),
+			0,
+		)
+
+		deferred.resolve()
+	})
+
 	it("navigates to the next step before draft save resolves", async () => {
 		const deferred = createDeferred<void>()
 		mockSaveDraft.mockReturnValueOnce(deferred.promise)
@@ -160,7 +276,7 @@ describe("SelfMediaInitPanel", () => {
 		deferred.resolve()
 	})
 
-	it("applies detected draft immediately without showing restore prompt", async () => {
+	it("shows a restore prompt when a draft exists", async () => {
 		mockLoadDraft.mockResolvedValue({
 			currentStep: 1,
 			data: {
@@ -197,15 +313,117 @@ describe("SelfMediaInitPanel", () => {
 		)
 
 		await waitFor(() => {
-			expect(screen.getByText("topics-step")).toBeInTheDocument()
+			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
 		})
 
-		expect(
-			screen.queryByText("detail.selfMedia.initPanel.draft.detected"),
-		).not.toBeInTheDocument()
+		expect(screen.getByText("detail.selfMedia.initPanel.draft.detected")).toBeInTheDocument()
+		expect(screen.getByText("brand-step")).toBeInTheDocument()
+		expect(screen.queryByText("topics-step")).not.toBeInTheDocument()
 		expect(
 			screen.queryByText("detail.selfMedia.initPanel.template.selectTitle"),
 		).not.toBeInTheDocument()
+	})
+
+	it("clears a detected draft from the restore prompt", async () => {
+		mockLoadDraft.mockResolvedValue({
+			currentStep: 1,
+			data: {
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+					targetAudience: "",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "Draft article",
+						platform: "rednote",
+					},
+				],
+			},
+		})
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-draft-restore-clear-button"))
+
+		await waitFor(() => {
+			expect(mockClearDraft).toHaveBeenCalledTimes(1)
+			expect(screen.queryByTestId("self-media-draft-restore-dialog")).not.toBeInTheDocument()
+		})
+		expect(screen.getByText("brand-step")).toBeInTheDocument()
+	})
+
+	it("returns home from the restore prompt", async () => {
+		const onBackHome = vi.fn()
+		mockLoadDraft.mockResolvedValue({
+			currentStep: 1,
+			data: {
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+					targetAudience: "",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "Draft article",
+						platform: "rednote",
+					},
+				],
+			},
+		})
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+				onBackHome={onBackHome}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-draft-restore-back-button"))
+
+		expect(onBackHome).toHaveBeenCalledTimes(1)
+	})
+
+	it("returns home from the footer action", async () => {
+		const onBackHome = vi.fn()
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+				onBackHome={onBackHome}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByText("brand-step")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-init-panel-back-home-button"))
+
+		expect(onBackHome).toHaveBeenCalledTimes(1)
 	})
 
 	it("clears all data, deletes draft, and returns to the first step", async () => {
@@ -235,6 +453,12 @@ describe("SelfMediaInitPanel", () => {
 				attachmentList={[]}
 			/>,
 		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-draft-restore-load-button"))
 
 		await waitFor(() => {
 			expect(screen.getByText("topics-step")).toBeInTheDocument()

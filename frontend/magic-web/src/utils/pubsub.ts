@@ -139,6 +139,8 @@ export const PubSubEvents = {
 	Open_File_Tab_By_Path: "super_magic_open_file_tab_by_path",
 	/** 超级麦吉 - 打开演示模式tab */
 	Open_Playback_Tab: "super_magic_open_playback_tab",
+	/** 超级麦吉 - 展开话题对话面板 */
+	Expand_Topic_Conversation_Panel: "super_magic_expand_topic_conversation_panel",
 	/** 订阅超麦消息队列更新 */
 	SuperMagicMessageQueueConsumed: "PubSub_Super_Magic_Message_Queue",
 	/** 超级麦吉 - WebSocket Intermediate 工程文件变更（订阅方自行处理） */

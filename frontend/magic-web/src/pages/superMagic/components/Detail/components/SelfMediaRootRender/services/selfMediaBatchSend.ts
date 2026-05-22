@@ -5,6 +5,7 @@ import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { userStore } from "@/models/user"
 import { projectStore, topicStore } from "@/pages/superMagic/stores/core"
 import routeManageService from "@/pages/superMagic/services/routeManageService"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type {
 	ArticleDetail,
 	SelfMediaInitGlobalSettings,
@@ -43,6 +44,7 @@ export function navigateToBatchTopic(
 	projectId: string,
 	topic: { id: string } & Record<string, unknown>,
 ): void {
+	pubsub.publish(PubSubEvents.Expand_Topic_Conversation_Panel)
 	topicStore.setSelectedTopic(topic as never)
 	routeManageService.navigateToState({
 		projectId: projectStore.selectedProject?.id || projectId,
@@ -134,7 +136,10 @@ export interface SendArticleBatchParams {
 	videoModelId?: string
 	/** Called after each topic is created and its first message is sent */
 	onTopicCreated?: (item: ArticleBatchTopicItem) => void
+	onProgress?: (phase: ArticleBatchProgressPhase, articleIndex: number) => void
 }
+
+export type ArticleBatchProgressPhase = "creating-topic" | "uploading-materials" | "sending-message"
 
 /**
  * For each article, create a new topic and send the prompt via ip-manager.
@@ -148,6 +153,7 @@ export async function sendArticleBatch({
 	imageModelId,
 	videoModelId,
 	onTopicCreated,
+	onProgress,
 }: SendArticleBatchParams): Promise<ArticleBatchTopicItem[]> {
 	if (!selectedProject?.id) {
 		throw new Error("No project selected")
@@ -166,6 +172,7 @@ export async function sendArticleBatch({
 		const materialDir = `${postFolderPath}/materials`
 		const topicName = `[自媒体] ${article.title}`
 
+		onProgress?.("creating-topic", i)
 		const newTopic = await SuperMagicApi.createTopic({
 			project_id: projectId,
 			topic_name: topicName,
@@ -180,6 +187,7 @@ export async function sendArticleBatch({
 
 		const allMaterials = collectArticleMaterials(article)
 		if (allMaterials.length > 0) {
+			onProgress?.("uploading-materials", i)
 			await uploadMaterials(allMaterials, projectId, postFolderPath)
 		}
 
@@ -215,6 +223,7 @@ export async function sendArticleBatch({
 		}
 		mentions.push(...buildMentionsFromMaterialFiles(fileMentions))
 
+		onProgress?.("sending-message", i)
 		await ChatApi.chat(EventType.Chat, {
 			message: {
 				type: ConversationMessageType.RichText,

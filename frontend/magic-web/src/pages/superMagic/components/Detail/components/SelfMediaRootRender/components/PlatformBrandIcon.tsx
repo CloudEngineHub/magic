@@ -19,8 +19,8 @@ function PlatformBrandIcon({ platform, className }: PlatformBrandIconProps) {
 		>
 			<svg
 				role="img"
-				width={14}
-				height={14}
+				width="100%"
+				height="100%"
 				viewBox="0 0 24 24"
 				className="shrink-0"
 				aria-hidden

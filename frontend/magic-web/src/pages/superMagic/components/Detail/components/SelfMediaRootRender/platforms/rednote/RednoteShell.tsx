@@ -1,21 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { RefreshCw } from "lucide-react"
-import { Button } from "@/components/shadcn-ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import type { CardFrameRef } from "../../components/CardFrame"
-import ExportPanel from "../../components/ExportPanel"
 import ExportPreviewDialog from "../../components/ExportPreviewDialog"
 import type { ExportPreviewConfirmArgs } from "../../components/ExportPreviewDialog"
-import PostSelector from "../../components/PostSelector"
-import ViewTabs from "../../components/ViewTabs"
+import SelfMediaShellHeader from "../../components/SelfMediaShellHeader"
 import { useExportZip } from "../../hooks/useExportZip"
 import { useExportProgressToast } from "../../hooks/useExportProgressToast"
 import { usePhoneScaling } from "../../hooks/usePhoneScaling"
 import { useShellFileHandlers } from "../../hooks/useShellFileHandlers"
 import { useShellMountedViews } from "../../hooks/useShellMountedViews"
-import { useSelfMediaPlatformChrome } from "../../context/PlatformChromeContext"
 import { useSelfMediaStore } from "../../stores"
 import type { PlatformComponentProps, SelfMediaPost, SelfMediaView } from "../../types"
 import { REDNOTE_PHONE_HEIGHT, REDNOTE_PHONE_WIDTH } from "./rednoteShellConstants"
@@ -25,8 +19,8 @@ import { RednoteShellScrollViewPanel } from "./RednoteShellScrollViewPanel"
 
 function RednoteShell(props: PlatformComponentProps) {
 	const { t } = useTranslation("super")
-	const { attachmentList, allowEdit, saveEditContent, selectedProject } = props
-	const { setHostElement } = useSelfMediaPlatformChrome()
+	const { platform, attachmentList, allowEdit, saveEditContent, selectedProject, onBackHome } =
+		props
 	const store = useSelfMediaStore()
 	const { posts, activePostIndex, view, rootLoading } = store
 
@@ -225,46 +219,23 @@ function RednoteShell(props: PlatformComponentProps) {
 
 	return (
 		<div className="flex h-full w-full flex-col bg-[#f1f3f5]">
-			<div className="flex flex-wrap items-center gap-3 border-b border-border bg-background px-4 py-2">
-				<div
-					ref={setHostElement}
-					className="flex min-w-0 shrink-0 items-center gap-2 [&:empty]:hidden"
-					data-testid="self-media-platform-switcher-host"
-				/>
-				<PostSelector
-					posts={posts}
-					activeIndex={activePostIndex}
-					onChange={handleSelectPostKeepingView}
-					className="flex-1"
-				/>
-				<ViewTabs
-					value={view}
-					onChange={handleGuardedViewChange}
-					labels={headerLabels}
-					order={visibleTabs}
-				/>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon"
-							disabled={rootLoading}
-							onClick={handleClickToolbarRefresh}
-							data-testid="rednote-shell-refresh-post-button"
-							aria-label={t("detail.selfMedia.refreshAllData")}
-						>
-							<RefreshCw className="h-4 w-4" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent>{t("detail.selfMedia.refreshAllData")}</TooltipContent>
-				</Tooltip>
-				<ExportPanel
-					onOpen={handleOpenExportDialog}
-					label={t("detail.selfMedia.export.action")}
-					disabled={isExporting || posts.length === 0}
-				/>
-			</div>
+			<SelfMediaShellHeader
+				platform={platform}
+				posts={posts}
+				activePostIndex={activePostIndex}
+				view={view}
+				tabLabels={headerLabels}
+				visibleTabs={visibleTabs}
+				onChangeView={handleGuardedViewChange}
+				onRefresh={handleClickToolbarRefresh}
+				onBackHome={onBackHome}
+				refreshLabel={t("detail.selfMedia.refreshAllData")}
+				refreshDisabled={rootLoading}
+				refreshTestId="rednote-shell-refresh-post-button"
+				onOpenExport={handleOpenExportDialog}
+				exportLabel={t("detail.selfMedia.export.action")}
+				exportDisabled={isExporting || posts.length === 0}
+			/>
 			<ExportPreviewDialog
 				open={exportDialogOpen}
 				onOpenChange={setExportDialogOpen}

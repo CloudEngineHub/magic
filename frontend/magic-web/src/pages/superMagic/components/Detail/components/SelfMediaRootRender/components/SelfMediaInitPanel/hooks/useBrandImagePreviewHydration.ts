@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import type { BrandImageItem } from "../types"
 import type { AttachmentNode } from "../../../services"
+import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../../../constants/imageProcess"
 
 interface UseBrandImagePreviewHydrationParams {
 	attachmentList?: AttachmentNode[]
@@ -53,6 +54,7 @@ async function loadPreviewUrl(
 	try {
 		const blob = (await getFileContentById(fileId, {
 			responseType: "blob",
+			xMagicImageProcess: CARD_THUMBNAIL_IMAGE_PROCESS,
 		})) as Blob
 
 		return {
@@ -74,11 +76,11 @@ export function useBrandImagePreviewHydration({
 	const [hydratingImageIds, setHydratingImageIds] = useState<Set<string>>(new Set())
 
 	useEffect(() => {
-		for (const [id, previewUrl] of previewUrlsRef.current) {
-			if (brandImages.some((item) => item.id === id)) continue
+		previewUrlsRef.current.forEach((previewUrl, id) => {
+			if (brandImages.some((item) => item.id === id)) return
 			URL.revokeObjectURL(previewUrl)
 			previewUrlsRef.current.delete(id)
-		}
+		})
 	}, [brandImages])
 
 	useEffect(() => {
@@ -141,9 +143,9 @@ export function useBrandImagePreviewHydration({
 
 	useEffect(() => {
 		return () => {
-			for (const previewUrl of previewUrlsRef.current.values()) {
+			previewUrlsRef.current.forEach((previewUrl) => {
 				URL.revokeObjectURL(previewUrl)
-			}
+			})
 			previewUrlsRef.current.clear()
 		}
 	}, [])

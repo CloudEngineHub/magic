@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import type { ImageProcessOptions } from "@/utils/image-processing"
@@ -39,17 +39,16 @@ interface WechatCoverCardProps {
 	scrollRootRef: React.RefObject<HTMLDivElement | null>
 }
 
-function WechatCoverPostSkeleton({ postId }: { postId: string }) {
+function WechatCoverPostLoading({ postId }: { postId: string }) {
 	return (
-		<div data-testid={`wechat-cover-post-loading-${postId}`}>
-			<div className="aspect-[16/9] w-full animate-pulse bg-gradient-to-b from-[#2a2a2a] to-[#1a1a1a]" />
-			<div className="flex items-stretch gap-3 px-3 py-3">
-				<div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
-					<div className="h-4 w-full animate-pulse rounded bg-[#f1f2f4]" />
-					<div className="h-4 w-3/4 animate-pulse rounded bg-[#f1f2f4]" />
-				</div>
-				<div className="h-[72px] w-[72px] flex-shrink-0 animate-pulse rounded-sm bg-[#f1f2f4]" />
-			</div>
+		<div
+			className="flex min-h-[180px] items-center justify-center"
+			data-testid={`wechat-cover-post-loading-${postId}`}
+		>
+			<div
+				className="h-5 w-5 animate-spin rounded-full border-2 border-[#d8dde5] border-t-[#7f8792]"
+				aria-hidden
+			/>
 		</div>
 	)
 }
@@ -268,7 +267,7 @@ function WechatCoverCard({
 			<AccountHeader post={post} />
 
 			{isPostLoading ? (
-				<WechatCoverPostSkeleton postId={post.meta.id} />
+				<WechatCoverPostLoading postId={post.meta.id} />
 			) : (
 				<>
 					<button

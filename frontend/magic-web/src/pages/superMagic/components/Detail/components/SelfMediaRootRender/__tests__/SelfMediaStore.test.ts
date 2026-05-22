@@ -360,6 +360,33 @@ describe("SelfMediaStore", () => {
 			expect(store.activeCardIndex).toBe(0)
 			expect(store.view).toBe("detail")
 		})
+
+		it("openPostDetail selects a post and enters detail view", () => {
+			runInAction(() => {
+				store.activeCardIndex = 3
+				store.view = "feed"
+			})
+
+			store.openPostDetail(2)
+
+			expect(store.activePostIndex).toBe(2)
+			expect(store.activeCardIndex).toBe(0)
+			expect(store.view).toBe("detail")
+		})
+
+		it("goHomeList returns to feed view without changing the active post", () => {
+			runInAction(() => {
+				store.activePostIndex = 2
+				store.activeCardIndex = 1
+				store.view = "edit"
+			})
+
+			store.goHomeList()
+
+			expect(store.activePostIndex).toBe(2)
+			expect(store.activeCardIndex).toBe(1)
+			expect(store.view).toBe("feed")
+		})
 	})
 
 	describe("active post loading reaction", () => {

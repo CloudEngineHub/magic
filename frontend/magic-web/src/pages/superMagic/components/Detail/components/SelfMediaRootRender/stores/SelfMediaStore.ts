@@ -191,6 +191,17 @@ export class SelfMediaStore {
 		this.activeCardIndex = next
 	}
 
+	openPostDetail(index: number): void {
+		this.activePostIndex = index
+		this.activeCardIndex = 0
+		this.view = "detail"
+		void this.ensurePostLoaded(index)
+	}
+
+	goHomeList(): void {
+		this.view = "feed"
+	}
+
 	/** Switch platform; mirrors the reset previously done in index.tsx */
 	handleChangePlatform(next: SelfMediaPlatform): void {
 		this.activePlatform = next

@@ -181,7 +181,7 @@ function getBaseViteConfig(): UserConfig {
 				}) as PluginOption),
 			codeInspectorPlugin({
 				bundler: "vite", // Automatically detect development or production environment
-				editor: "code",
+				editor: "cursor",
 			}),
 			react(),
 			babel({

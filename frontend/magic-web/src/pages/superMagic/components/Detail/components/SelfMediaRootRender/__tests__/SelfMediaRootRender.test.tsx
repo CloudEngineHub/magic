@@ -5,7 +5,20 @@ const mockStore = vi.hoisted(() => ({
 	platforms: ["rednote"],
 	resolvedPlatform: "rednote",
 	rootLoading: false,
+	posts: [
+		{
+			meta: {
+				id: "post-1",
+				title: "Post One",
+				feedTitle: "Post One Feed",
+				author: "Magic Lab",
+			},
+			cards: [],
+		},
+	],
 	handleChangePlatform: vi.fn(),
+	openPostDetail: vi.fn(),
+	goHomeList: vi.fn(),
 }))
 
 vi.mock("react-dom", async () => {
@@ -24,6 +37,12 @@ vi.mock("react-i18next", () => ({
 					"detail.selfMedia.platform.switcher.label": "Platform",
 					"detail.selfMedia.platform.actions.create": "New article",
 					"detail.selfMedia.platform.actions.back": "Back to content",
+					"detail.selfMedia.home.title": "Article home",
+					"detail.selfMedia.home.subtitle": "Manage articles",
+					"detail.selfMedia.home.create": "New article",
+					"detail.selfMedia.home.emptyTitle": "No articles yet",
+					"detail.selfMedia.home.emptyDesc": "Create your first article",
+					"detail.selfMedia.home.articleCount": "1 article",
 				}) as Record<string, string>
 			)[key] ?? key,
 	}),
@@ -58,8 +77,15 @@ vi.mock("../components/UnsupportedPlatform", () => ({
 }))
 
 vi.mock("../components/SelfMediaInitPanel", () => ({
-	default: function MockSelfMediaInitPanel() {
-		return <div data-testid="mock-self-media-init-panel">init-panel</div>
+	default: function MockSelfMediaInitPanel({ onBackHome }: { onBackHome?: () => void }) {
+		return (
+			<div data-testid="mock-self-media-init-panel">
+				init-panel
+				<button type="button" onClick={onBackHome}>
+					Back to content
+				</button>
+			</div>
+		)
 	},
 }))
 
@@ -95,35 +121,131 @@ vi.mock("../context/PlatformChromeContext", () => ({
 }))
 
 import SelfMediaRootRender from "../index"
+import type { SelfMediaRootRenderProps } from "../types"
+
+const ROOT_DATA = {
+	file_id: "folder-1",
+	file_name: "self-media",
+} as SelfMediaRootRenderProps["data"]
+
+const GENERATED_ATTACHMENT_LIST = [
+	{
+		file_id: "file-1",
+	},
+] as NonNullable<SelfMediaRootRenderProps["attachmentList"]>
 
 describe("SelfMediaRootRender", () => {
 	beforeEach(() => {
 		mockStore.platforms = ["rednote"]
 		mockStore.resolvedPlatform = "rednote"
 		mockStore.rootLoading = false
+		mockStore.posts = [
+			{
+				meta: {
+					id: "post-1",
+					title: "Post One",
+					feedTitle: "Post One Feed",
+					author: "Magic Lab",
+				},
+				cards: [],
+			},
+		]
 		mockStore.handleChangePlatform.mockReset()
+		mockStore.openPostDetail.mockReset()
+		mockStore.goHomeList.mockReset()
 	})
 
-	it("opens the init panel from the top create entry and can go back", () => {
+	it("shows the article home before opening platform detail", () => {
 		render(
 			<SelfMediaRootRender
-				data={{ file_id: "folder-1", file_name: "self-media" } as any}
+				data={ROOT_DATA}
 				attachments={[]}
 				attachmentList={[]}
 				selectedProject={{ id: "project-1" }}
 			/>,
 		)
 
-		expect(screen.getByTestId("mock-platform-component")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-page")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-platform-component")).not.toBeInTheDocument()
 
-		fireEvent.click(screen.getByRole("button", { name: "New article" }))
+		fireEvent.click(screen.getByTestId("self-media-home-post-open-post-1"))
+
+		expect(mockStore.openPostDetail).toHaveBeenCalledWith(0)
+		expect(screen.getByTestId("mock-platform-component")).toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-home-page")).not.toBeInTheDocument()
+	})
+
+	it("does not render the create article action in the platform header", () => {
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={[]}
+				attachmentList={[]}
+				selectedProject={{ id: "project-1" }}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-open-post-1"))
+
+		expect(screen.queryByTestId("self-media-create-article")).not.toBeInTheDocument()
+	})
+
+	it("opens the init panel from the article home and can go back", () => {
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={[]}
+				attachmentList={[]}
+				selectedProject={{ id: "project-1" }}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-create-button"))
 
 		expect(screen.getByTestId("mock-self-media-init-panel")).toBeInTheDocument()
-		expect(screen.queryByTestId("mock-platform-component")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-home-page")).not.toBeInTheDocument()
 
 		fireEvent.click(screen.getByRole("button", { name: "Back to content" }))
 
-		expect(screen.getByTestId("mock-platform-component")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-page")).toBeInTheDocument()
 		expect(screen.queryByTestId("mock-self-media-init-panel")).not.toBeInTheDocument()
+	})
+
+	it("keeps the init panel mounted when generated posts arrive", () => {
+		mockStore.platforms = []
+		mockStore.resolvedPlatform = null
+		mockStore.posts = []
+
+		const { rerender } = render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={[]}
+				attachmentList={[]}
+				selectedProject={{ id: "project-1" }}
+			/>,
+		)
+
+		expect(screen.getByTestId("mock-self-media-init-panel")).toBeInTheDocument()
+
+		mockStore.platforms = ["rednote"]
+		mockStore.resolvedPlatform = "rednote"
+		mockStore.posts = [
+			{
+				meta: { id: "post-1", title: "Post One", feedTitle: "Post One Feed" },
+				cards: [],
+			},
+		]
+
+		rerender(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={[]}
+				attachmentList={GENERATED_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+			/>,
+		)
+
+		expect(screen.getByTestId("mock-self-media-init-panel")).toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-home-page")).not.toBeInTheDocument()
 	})
 })
