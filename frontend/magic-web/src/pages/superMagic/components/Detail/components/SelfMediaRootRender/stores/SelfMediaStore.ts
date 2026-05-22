@@ -15,6 +15,13 @@ import { invalidateCardFrameSourceCache } from "../components/CardFrame"
 
 const log = rootLogger.createLogger("SelfMediaStore")
 
+export interface SelfMediaPlatformPostItem {
+	platform: SelfMediaPlatform
+	index: number
+	entry: SelfMediaPostEntry
+	post: SelfMediaPost
+}
+
 /** Payload used to drive the store's sync lifecycle */
 export interface SelfMediaSyncArgs {
 	folderFileId?: string
@@ -156,6 +163,19 @@ export class SelfMediaStore {
 			if (!platform) return buildPlaceholderPost(entry)
 			return this.loadedPosts[cacheKey(platform, entry.id)] || buildPlaceholderPost(entry)
 		})
+	}
+
+	get allPosts(): SelfMediaPlatformPostItem[] {
+		return this.slices.flatMap((slice) =>
+			slice.postEntries.map((entry, index) => ({
+				platform: slice.platform,
+				index,
+				entry,
+				post:
+					this.loadedPosts[cacheKey(slice.platform, entry.id)] ||
+					buildPlaceholderPost(entry),
+			})),
+		)
 	}
 
 	get activePost(): SelfMediaPost | null {

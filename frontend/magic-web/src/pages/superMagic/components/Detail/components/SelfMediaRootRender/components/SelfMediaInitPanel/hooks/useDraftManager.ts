@@ -186,8 +186,7 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 		return () => {
 			const latestData = dataRef.current
 			const latestStep = currentStepRef.current
-			const hasContent =
-				latestData.global.author.trim() !== "" || latestData.articles.length > 0
+			const hasContent = latestData.articles.length > 0
 			if (fileStorageService && hasContent && !skipDraftPersistenceRef.current) {
 				selfSaveTimestamp.current = Date.now()
 				pendingSelfSaveCount.current += 1
@@ -202,7 +201,7 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 	}, [fileStorageService])
 
 	// ─── Draft persistence helpers ──────────────────────────────────────
-	const hasDraftContent = data.global.author.trim() !== "" || data.articles.length > 0
+	const hasDraftContent = data.articles.length > 0
 
 	const saveDraftIfNeeded = useCallback(
 		async (step = currentStep) => {

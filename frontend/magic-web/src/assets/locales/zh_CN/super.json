@@ -633,12 +633,22 @@
 				"articleCount": "{{count}} 篇文章",
 				"backHome": "返回首页",
 				"badge": "Self Media",
+				"brandConfig": "品牌配置",
 				"create": "新增文章",
 				"emptyDesc": "点击新增文章，进入初始化向导开始规划内容。",
 				"emptyTitle": "暂无文章",
 				"openPlatform": "打开平台内容",
 				"subtitle": "从文章列表进入详情，数据更新时会保留当前页面。",
 				"title": "文章首页"
+			},
+			"brandConfig": {
+				"cancel": "取消",
+				"description": "配置当前项目共用的账号、品牌定位和品牌形象素材。",
+				"loading": "读取品牌配置中...",
+				"save": "保存配置",
+				"saveError": "品牌配置保存失败，请稍后重试",
+				"saving": "保存中...",
+				"title": "品牌配置"
 			},
 			"initPanel": {
 				"draft": {

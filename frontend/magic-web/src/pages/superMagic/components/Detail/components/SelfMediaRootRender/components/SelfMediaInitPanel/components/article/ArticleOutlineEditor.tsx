@@ -95,7 +95,10 @@ function OutlineNodeItem({
 							}
 						}}
 					/>
-					<InlineVoiceButton onResult={(text) => onUpdate(node.id, node.text + text)} />
+					<InlineVoiceButton
+						value={node.text}
+						onResult={(text) => onUpdate(node.id, text)}
+					/>
 				</div>
 				<div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
 					<button

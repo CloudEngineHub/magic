@@ -10,6 +10,8 @@ import { getPlatformComponent } from "./platforms"
 import { SelfMediaStoreProvider, useSelfMediaStore } from "./stores"
 import SelfMediaInitPanel from "./components/SelfMediaInitPanel"
 import SelfMediaHomePage from "./components/SelfMediaHomePage"
+import BrandConfigDialog from "./components/BrandConfigDialog"
+import { SelfMediaFileStorageService } from "./services/SelfMediaFileStorageService"
 import type { SelfMediaRootRenderProps } from "./types"
 
 type SelfMediaRootMode = "home" | "create" | "platform"
@@ -86,8 +88,15 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	const { t } = useTranslation("super")
 	const store = useSelfMediaStore()
 	const [rootMode, setRootMode] = useState<SelfMediaRootMode | null>(null)
+	const [brandConfigOpen, setBrandConfigOpen] = useState(false)
 
 	const { platforms, resolvedPlatform: platform, rootLoading } = store
+	const projectId = selectedProject?.id || ""
+	const fileStorageService = useMemo(
+		() =>
+			projectId ? new SelfMediaFileStorageService(projectId, folderFileId, folderPath) : null,
+		[projectId, folderFileId, folderPath],
+	)
 
 	// Detect empty project: no platforms configured and not loading
 	const isEmptyProject = !rootLoading && platforms.length === 0
@@ -98,21 +107,19 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		setRootMode(isEmptyProject ? "create" : "home")
 	}, [isEmptyProject, rootLoading, rootMode])
 
-	const handleChangePlatform = useCallback(
-		(next: SelfMediaPlatform) => {
-			store.handleChangePlatform(next)
-		},
-		[store],
-	)
 	const handleStartCreateArticle = useCallback(() => {
 		setRootMode("create")
+	}, [])
+	const handleOpenBrandConfig = useCallback(() => {
+		setBrandConfigOpen(true)
 	}, [])
 	const handleBackHome = useCallback(() => {
 		store.goHomeList()
 		setRootMode("home")
 	}, [store])
 	const handleOpenPost = useCallback(
-		(index: number) => {
+		({ platform: nextPlatform, index }: { platform: SelfMediaPlatform; index: number }) => {
+			store.handleChangePlatform(nextPlatform)
 			store.openPostDetail(index)
 			setRootMode("platform")
 		},
@@ -158,12 +165,18 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		return (
 			<div className={cn("h-full min-h-0 w-full", className)} data-testid="self-media-root">
 				<SelfMediaHomePage
-					posts={store.posts}
-					platforms={platforms}
-					activePlatform={platform}
+					posts={store.allPosts}
 					onCreateArticle={handleStartCreateArticle}
 					onOpenPost={handleOpenPost}
-					onChangePlatform={handleChangePlatform}
+					onOpenBrandConfig={handleOpenBrandConfig}
+				/>
+				<BrandConfigDialog
+					open={brandConfigOpen}
+					onOpenChange={setBrandConfigOpen}
+					fileStorageService={fileStorageService}
+					attachmentList={attachmentList}
+					projectId={projectId}
+					folderPath={folderPath}
 				/>
 			</div>
 		)

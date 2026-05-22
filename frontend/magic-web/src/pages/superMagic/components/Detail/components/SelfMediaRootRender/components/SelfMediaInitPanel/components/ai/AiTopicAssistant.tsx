@@ -593,7 +593,8 @@ export default observer(function AiTopicAssistant({
 									}}
 								/>
 								<InlineVoiceButton
-									onResult={(text) => setAiDirection((prev) => prev + text)}
+									value={aiDirection}
+									onResult={setAiDirection}
 									variant="textarea"
 									className="text-zinc-400 hover:text-zinc-900"
 								/>

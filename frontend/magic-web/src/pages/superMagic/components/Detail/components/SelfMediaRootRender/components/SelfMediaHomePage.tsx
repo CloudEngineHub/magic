@@ -1,33 +1,79 @@
-import { FileText, Layers, Plus, Sparkles } from "lucide-react"
+import { FileText, Layers, Plus, Settings } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import { cn } from "@/lib/utils"
 import type { SelfMediaPlatform } from "../../../types"
-import type { SelfMediaPost } from "../types"
-import PlatformSwitcher from "./PlatformSwitcher"
+import { ALL_PLATFORMS } from "./SelfMediaInitPanel/types"
+import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 import PlatformBrandIcon from "./PlatformBrandIcon"
 
 interface SelfMediaHomePageProps {
-	posts: SelfMediaPost[]
-	platforms: SelfMediaPlatform[]
-	activePlatform: SelfMediaPlatform | null
+	posts: SelfMediaPlatformPostItem[]
 	onCreateArticle: () => void
-	onOpenPost: (index: number) => void
-	onChangePlatform: (platform: SelfMediaPlatform) => void
+	onOpenPost: (target: { platform: SelfMediaPlatform; index: number }) => void
+	onOpenBrandConfig?: () => void
 	className?: string
 }
 
 function SelfMediaHomePage({
 	posts,
-	platforms,
-	activePlatform,
 	onCreateArticle,
 	onOpenPost,
-	onChangePlatform,
+	onOpenBrandConfig,
 	className,
 }: SelfMediaHomePageProps) {
 	const { t } = useTranslation("super")
 	const hasPosts = posts.length > 0
+	const postGroups = posts.reduce<
+		Array<{ platform: SelfMediaPlatform; posts: SelfMediaPlatformPostItem[] }>
+	>((groups, item) => {
+		const group = groups.find((candidate) => candidate.platform === item.platform)
+		if (group) {
+			group.posts.push(item)
+		} else {
+			groups.push({ platform: item.platform, posts: [item] })
+		}
+		return groups
+	}, [])
+
+	const getPlatformLabel = (platform: SelfMediaPlatform) => {
+		const platformConfig = ALL_PLATFORMS.find((item) => item.value === platform)
+		return platformConfig ? t(platformConfig.labelKey) : platform
+	}
+
+	const renderArticlePreview = ({ platform, post }: SelfMediaPlatformPostItem) => {
+		const postId = post.meta.id || `${platform}-preview`
+		const coverUrl =
+			platform === "wechat-official-accounts"
+				? post.thumbnailCover?.url || post.heroCover?.url
+				: ""
+		const cardUrl = platform !== "wechat-official-accounts" ? post.cards[0]?.url : ""
+
+		if (coverUrl) {
+			return (
+				<img
+					src={coverUrl}
+					alt=""
+					className="h-full w-full object-cover"
+					data-testid={`self-media-home-cover-preview-${postId}`}
+				/>
+			)
+		}
+
+		if (cardUrl) {
+			return (
+				<iframe
+					src={cardUrl}
+					title={post.meta.title || post.meta.feedTitle || postId}
+					tabIndex={-1}
+					className="pointer-events-none h-[360px] w-[240px] origin-top-left scale-[0.17] border-0 bg-white"
+					data-testid={`self-media-home-card-preview-${postId}`}
+				/>
+			)
+		}
+
+		return <FileText size={17} data-testid={`self-media-home-icon-fallback-${postId}`} />
+	}
 
 	return (
 		<div
@@ -45,12 +91,16 @@ function SelfMediaHomePage({
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
-						{platforms.length > 1 && activePlatform ? (
-							<PlatformSwitcher
-								platforms={platforms}
-								activePlatform={activePlatform}
-								onChange={onChangePlatform}
-							/>
+						{onOpenBrandConfig ? (
+							<button
+								type="button"
+								className="inline-flex cursor-pointer items-center justify-center gap-2 bg-zinc-100 px-4 py-2.5 text-xs font-black text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98]"
+								onClick={onOpenBrandConfig}
+								data-testid="self-media-home-brand-config-button"
+							>
+								<Settings size={14} />
+								<span>{t("detail.selfMedia.home.brandConfig")}</span>
+							</button>
 						) : null}
 						<button
 							type="button"
@@ -79,51 +129,73 @@ function SelfMediaHomePage({
 									</span>
 								</div>
 							</div>
-							<div className="grid gap-3 md:grid-cols-2">
-								{posts.map((post, index) => {
-									const postId = post.meta.id || `post-${index}`
-									const title =
-										post.meta.feedTitle ||
-										post.meta.title ||
-										t("detail.selfMedia.common.postFallbackTitle", {
-											index: index + 1,
-										})
-									const subtitle = post.meta.subtitle || post.meta.author || ""
+							<div className="space-y-6">
+								{postGroups.map(({ platform, posts: platformPosts }) => (
+									<section
+										key={platform}
+										className="space-y-3"
+										data-testid={`self-media-home-platform-group-${platform}`}
+									>
+										<div className="flex items-center gap-2">
+											<PlatformBrandIcon
+												platform={platform}
+												className="size-4 shrink-0"
+											/>
+											<h3 className="text-sm font-black text-zinc-950">
+												{getPlatformLabel(platform)}
+											</h3>
+										</div>
+										<div className="grid gap-3 md:grid-cols-2">
+											{platformPosts.map((item) => {
+												const { post, index } = item
+												const postId =
+													post.meta.id || `${platform}-post-${index}`
+												const title =
+													post.meta.feedTitle ||
+													post.meta.title ||
+													t("detail.selfMedia.common.postFallbackTitle", {
+														index: index + 1,
+													})
+												const subtitle =
+													post.meta.subtitle || post.meta.author || ""
 
-									return (
-										<button
-											key={postId}
-											type="button"
-											className="group flex min-h-28 cursor-pointer flex-col gap-3 border-l-2 border-transparent bg-white p-4 text-left transition-all hover:border-zinc-950 hover:bg-zinc-50/70 active:scale-[0.99]"
-											onClick={() => onOpenPost(index)}
-											data-testid={`self-media-home-post-open-${postId}`}
-										>
-											<div className="flex items-start gap-3">
-												<div className="flex h-10 w-10 shrink-0 items-center justify-center bg-primary/20 text-zinc-950">
-													<FileText size={17} />
-												</div>
-												<div className="min-w-0 flex-1 space-y-1">
-													<div className="flex items-center gap-2">
-														{activePlatform ? (
-															<PlatformBrandIcon
-																platform={activePlatform}
-																className="size-3.5 shrink-0"
-															/>
-														) : null}
-														<h3 className="truncate text-sm font-black text-zinc-950 group-hover:text-primary">
-															{title}
-														</h3>
-													</div>
-													{subtitle ? (
-														<p className="line-clamp-2 text-xs font-medium leading-relaxed text-muted-foreground">
-															{subtitle}
-														</p>
-													) : null}
-												</div>
-											</div>
-										</button>
-									)
-								})}
+												return (
+													<button
+														key={`${platform}-${postId}`}
+														type="button"
+														className="group flex min-h-28 cursor-pointer flex-col gap-3 border-l-2 border-transparent bg-white p-4 text-left transition-all hover:border-zinc-950 hover:bg-zinc-50/70 active:scale-[0.99]"
+														onClick={() =>
+															onOpenPost({ platform, index })
+														}
+														data-testid={`self-media-home-post-open-${postId}`}
+													>
+														<div className="flex items-start gap-3">
+															<div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden bg-primary/20 text-zinc-950">
+																{renderArticlePreview(item)}
+															</div>
+															<div className="min-w-0 flex-1 space-y-1">
+																<div className="flex items-center gap-2">
+																	{/* <PlatformBrandIcon
+																		platform={platform}
+																		className="size-3.5 shrink-0"
+																	/> */}
+																	<h3 className="truncate text-sm font-black text-zinc-950 group-hover:text-primary">
+																		{title}
+																	</h3>
+																</div>
+																{subtitle ? (
+																	<p className="line-clamp-2 text-xs font-medium leading-relaxed text-muted-foreground">
+																		{subtitle}
+																	</p>
+																) : null}
+															</div>
+														</div>
+													</button>
+												)
+											})}
+										</div>
+									</section>
+								))}
 							</div>
 						</section>
 					) : (

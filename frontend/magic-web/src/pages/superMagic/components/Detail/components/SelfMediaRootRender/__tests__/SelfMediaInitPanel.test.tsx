@@ -1,20 +1,24 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { forwardRef, useEffect, useImperativeHandle } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const {
 	mockSaveDraft,
 	mockLoadDraft,
+	mockLoadBrandConfig,
 	mockListTemplates,
 	mockClearDraft,
+	mockSaveBrandConfig,
 	mockLoadTemplate,
 	mockDispose,
 	mockMessageError,
 } = vi.hoisted(() => ({
 	mockSaveDraft: vi.fn(),
 	mockLoadDraft: vi.fn(),
+	mockLoadBrandConfig: vi.fn(),
 	mockListTemplates: vi.fn(),
 	mockClearDraft: vi.fn(),
+	mockSaveBrandConfig: vi.fn(),
 	mockLoadTemplate: vi.fn(),
 	mockDispose: vi.fn(),
 	mockMessageError: vi.fn(),
@@ -62,6 +66,8 @@ vi.mock("../services/SelfMediaFileStorageService", () => ({
 	SelfMediaFileStorageService: vi.fn().mockImplementation(() => ({
 		saveDraft: mockSaveDraft,
 		loadDraft: mockLoadDraft,
+		loadBrandConfig: mockLoadBrandConfig,
+		saveBrandConfig: mockSaveBrandConfig,
 		listTemplates: mockListTemplates,
 		clearDraft: mockClearDraft,
 		loadTemplate: mockLoadTemplate,
@@ -120,15 +126,19 @@ describe("SelfMediaInitPanel", () => {
 	beforeEach(() => {
 		mockSaveDraft.mockReset()
 		mockLoadDraft.mockReset()
+		mockLoadBrandConfig.mockReset()
 		mockListTemplates.mockReset()
 		mockClearDraft.mockReset()
+		mockSaveBrandConfig.mockReset()
 		mockLoadTemplate.mockReset()
 		mockDispose.mockReset()
 		mockMessageError.mockReset()
 
 		mockLoadDraft.mockResolvedValue(null)
+		mockLoadBrandConfig.mockResolvedValue(null)
 		mockListTemplates.mockResolvedValue([])
 		mockSaveDraft.mockResolvedValue(undefined)
+		mockSaveBrandConfig.mockResolvedValue(undefined)
 	})
 
 	afterEach(() => {
@@ -196,6 +206,67 @@ describe("SelfMediaInitPanel", () => {
 		})
 	})
 
+	it("restores draft articles without overriding project brand config", async () => {
+		mockLoadBrandConfig.mockResolvedValue({
+			author: "Project Brand",
+			brandPosition: "Project positioning",
+			targetAudience: "Project audience",
+			brandImages: [],
+		})
+		mockLoadDraft.mockResolvedValue({
+			currentStep: 1,
+			data: {
+				global: {
+					author: "Draft Brand",
+					brandPosition: "Draft positioning",
+					targetAudience: "",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "Draft article",
+						platform: "rednote",
+					},
+				],
+			},
+		})
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-draft-restore-load-button"))
+
+		await waitFor(() => {
+			expect(screen.getByText("topics-step")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-init-panel-prev-button"))
+
+		await waitFor(() => {
+			expect(mockSaveBrandConfig).toHaveBeenCalledWith(
+				expect.objectContaining({
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+				}),
+			)
+		})
+		expect(mockSaveBrandConfig).not.toHaveBeenCalledWith(
+			expect.objectContaining({
+				author: "Draft Brand",
+			}),
+		)
+	})
+
 	it("navigates to the previous step before draft save resolves", async () => {
 		mockLoadDraft.mockResolvedValue({
 			currentStep: 1,
@@ -248,13 +319,13 @@ describe("SelfMediaInitPanel", () => {
 			0,
 		)
 
-		deferred.resolve()
+		await act(async () => {
+			deferred.resolve()
+			await deferred.promise
+		})
 	})
 
 	it("navigates to the next step before draft save resolves", async () => {
-		const deferred = createDeferred<void>()
-		mockSaveDraft.mockReturnValueOnce(deferred.promise)
-
 		render(
 			<SelfMediaInitPanel
 				selectedProject={{ id: "project-1" }}
@@ -271,9 +342,7 @@ describe("SelfMediaInitPanel", () => {
 		fireEvent.click(screen.getByText("detail.selfMedia.initPanel.nav.next"))
 
 		expect(screen.getByText("topics-step")).toBeInTheDocument()
-		expect(mockSaveDraft).toHaveBeenCalledTimes(1)
-
-		deferred.resolve()
+		expect(mockSaveDraft).not.toHaveBeenCalled()
 	})
 
 	it("shows a restore prompt when a draft exists", async () => {
@@ -502,6 +571,23 @@ describe("SelfMediaInitPanel", () => {
 	})
 
 	it("shows an error toast when background draft save fails", async () => {
+		mockLoadDraft.mockResolvedValue({
+			currentStep: 1,
+			data: {
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+					targetAudience: "",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "Draft article",
+						platform: "rednote",
+					},
+				],
+			},
+		})
 		mockSaveDraft.mockRejectedValueOnce(new Error("save failed"))
 		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
 
@@ -515,13 +601,17 @@ describe("SelfMediaInitPanel", () => {
 		)
 
 		await waitFor(() => {
-			expect(screen.getByText("detail.selfMedia.initPanel.nav.next")).not.toBeDisabled()
+			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
 		})
 
-		fireEvent.click(screen.getByText("detail.selfMedia.initPanel.nav.next"))
-
+		fireEvent.click(screen.getByTestId("self-media-draft-restore-load-button"))
 		await waitFor(() => {
 			expect(screen.getByText("topics-step")).toBeInTheDocument()
+		})
+		fireEvent.click(screen.getByTestId("self-media-init-panel-prev-button"))
+
+		await waitFor(() => {
+			expect(screen.getByText("brand-step")).toBeInTheDocument()
 			expect(mockMessageError).toHaveBeenCalledWith(
 				"detail.selfMedia.initPanel.draft.saveError",
 			)

@@ -47,6 +47,18 @@ function buildSnapshot(
 	}
 }
 
+function buildMultiPlatformSnapshot(
+	slices: PlatformSlice[],
+	cached: Record<string, SelfMediaPost> = {},
+): SelfMediaSnapshot {
+	return {
+		slices,
+		loadedPosts: cached,
+		error: null,
+		folderRelativePath: "/root/",
+	}
+}
+
 function createFakeService(): FakeService {
 	return {
 		initialize: vi.fn(),
@@ -77,6 +89,47 @@ describe("SelfMediaStore", () => {
 	})
 
 	describe("sync lifecycle", () => {
+		it("derives all posts across platforms with platform-local indexes", async () => {
+			const rednoteEntry = makeEntry("rednote-1")
+			const instagramEntry = makeEntry("instagram-1")
+			const rednotePost = makePost("rednote-1", {
+				meta: { id: "rednote-1", title: "Rednote article" },
+			})
+			const instagramPost = makePost("instagram-1", {
+				meta: { id: "instagram-1", title: "Instagram article" },
+			})
+			service.initialize.mockResolvedValueOnce(
+				buildMultiPlatformSnapshot(
+					[
+						makeSlice("rednote", [rednoteEntry]),
+						makeSlice("instagram", [instagramEntry]),
+					],
+					{
+						[cacheKey("rednote", "rednote-1")]: rednotePost,
+						[cacheKey("instagram", "instagram-1")]: instagramPost,
+					},
+				),
+			)
+			service.ensurePostLoaded.mockResolvedValue(rednotePost)
+
+			await store.sync({ folderFileId: "folder-1", attachmentList: STUB_TREE })
+
+			expect(store.allPosts).toEqual([
+				{
+					platform: "rednote",
+					index: 0,
+					entry: rednoteEntry,
+					post: rednotePost,
+				},
+				{
+					platform: "instagram",
+					index: 0,
+					entry: instagramEntry,
+					post: instagramPost,
+				},
+			])
+		})
+
 		it("disposes and resets state when folderFileId is empty", async () => {
 			await store.sync({ folderFileId: undefined, attachmentList: STUB_TREE })
 

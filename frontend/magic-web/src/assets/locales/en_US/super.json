@@ -632,12 +632,22 @@
 				"articleCount": "{{count}} article(s)",
 				"backHome": "Back home",
 				"badge": "Self Media",
+				"brandConfig": "Brand config",
 				"create": "New article",
 				"emptyDesc": "Create a new article to open the setup wizard.",
 				"emptyTitle": "No articles yet",
 				"openPlatform": "Open platform content",
 				"subtitle": "Open details from the list. Data updates keep you on the current page.",
 				"title": "Article home"
+			},
+			"brandConfig": {
+				"cancel": "Cancel",
+				"description": "Configure the shared account, brand positioning, and brand assets for this project.",
+				"loading": "Loading brand config...",
+				"save": "Save config",
+				"saveError": "Failed to save brand config. Please try again later.",
+				"saving": "Saving...",
+				"title": "Brand config"
 			},
 			"initPanel": {
 				"draft": {

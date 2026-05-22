@@ -5,6 +5,7 @@ import { useVoiceInput } from "@/components/business/VoiceInput/hooks"
 import { useMicrophonePermission } from "@/hooks/useMicrophonePermission"
 
 interface InlineVoiceButtonProps {
+	value?: string
 	onResult: (text: string) => void
 	onError?: (error: Error) => void
 	/** Position variant: 'input' for single-line inputs, 'textarea' for multi-line textareas */
@@ -17,6 +18,7 @@ interface InlineVoiceButtonProps {
  * Shows a small mic icon on hover/focus, animates when recording.
  */
 export default function InlineVoiceButton({
+	value = "",
 	onResult,
 	onError,
 	variant = "input",
@@ -24,17 +26,29 @@ export default function InlineVoiceButton({
 }: InlineVoiceButtonProps) {
 	const resultRef = useRef(onResult)
 	resultRef.current = onResult
+	const valueRef = useRef(value)
+	valueRef.current = value
 	const onErrorRef = useRef(onError)
 	onErrorRef.current = onError
+	const baseTextRef = useRef(value)
+	const committedTextRef = useRef("")
+	const currentSegmentRef = useRef("")
 
 	const { handlePermissionError } = useMicrophonePermission()
 
-	const { status, isRecording, toggleRecording, disconnect } = useVoiceInput({
+	const { status, toggleRecording, disconnect } = useVoiceInput({
 		onResult: (text) => {
 			if (text.startsWith('sult":{"additions":{"log_id":')) {
 				return
 			}
-			resultRef.current(text)
+
+			const nextText = mergeVoiceTranscription(text, {
+				committedText: committedTextRef.current,
+				currentSegment: currentSegmentRef.current,
+			})
+			committedTextRef.current = nextText.committedText
+			currentSegmentRef.current = nextText.currentSegment
+			resultRef.current(`${baseTextRef.current}${nextText.transcription}`)
 		},
 		onError: (error) => {
 			try {
@@ -50,6 +64,12 @@ export default function InlineVoiceButton({
 	const handleToggle = useCallback(
 		async (e: React.MouseEvent) => {
 			e.stopPropagation()
+			if (!isActive) {
+				baseTextRef.current = valueRef.current
+				committedTextRef.current = ""
+				currentSegmentRef.current = ""
+			}
+
 			try {
 				await toggleRecording()
 			} catch (error) {
@@ -60,7 +80,7 @@ export default function InlineVoiceButton({
 				}
 			}
 		},
-		[toggleRecording, handlePermissionError],
+		[toggleRecording, handlePermissionError, isActive],
 	)
 
 	// 组件卸载时断开连接，释放资源
@@ -95,4 +115,50 @@ export default function InlineVoiceButton({
 			)}
 		</button>
 	)
+}
+
+interface VoiceTranscriptionState {
+	committedText: string
+	currentSegment: string
+}
+
+function mergeVoiceTranscription(text: string, state: VoiceTranscriptionState) {
+	let { committedText, currentSegment } = state
+
+	if (!text) {
+		committedText += currentSegment
+		currentSegment = ""
+		return {
+			committedText,
+			currentSegment,
+			transcription: committedText,
+		}
+	}
+
+	if (committedText && text.startsWith(committedText)) {
+		currentSegment = text.slice(committedText.length)
+		return {
+			committedText,
+			currentSegment,
+			transcription: text,
+		}
+	}
+
+	if (!currentSegment || text.startsWith(currentSegment) || currentSegment.startsWith(text)) {
+		currentSegment = text
+		return {
+			committedText,
+			currentSegment,
+			transcription: `${committedText}${currentSegment}`,
+		}
+	}
+
+	committedText += currentSegment
+	currentSegment = text
+
+	return {
+		committedText,
+		currentSegment,
+		transcription: `${committedText}${currentSegment}`,
+	}
 }

@@ -14,6 +14,9 @@ import type {
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const DRAFTS_DIR = "__drafts"
+const BRAND_CONFIG_DIR = "__brand"
+const BRAND_CONFIG_JSON = "brand-config.json"
+const BRAND_CONFIG_IMAGES_DIR = "brand-images"
 const DRAFT_JSON = "draft.json"
 const DRAFT_MD = "draft.md"
 const REFERENCE_INDEX_JSON = "reference-index.json"
@@ -31,8 +34,14 @@ export interface DraftPayload {
 	currentStep: number
 	createdAt: string
 	updatedAt: string
-	global: SerializedGlobalSettings
+	global?: SerializedGlobalSettings
 	articles: SerializedArticle[]
+}
+
+export interface BrandConfigPayload extends SerializedGlobalSettings {
+	version: number
+	createdAt: string
+	updatedAt: string
 }
 
 export interface TemplatePayload {
@@ -169,6 +178,39 @@ export class SelfMediaFileStorageService {
 
 	// ─── Draft Operations ────────────────────────────────────────────────────
 
+	async saveBrandConfig(global: SelfMediaInitGlobalSettings): Promise<void> {
+		try {
+			const now = new Date().toISOString()
+			await this.ensureBrandImagesUploaded(global.brandImages, "brand")
+			const payload = await this.buildBrandConfigPayload(global, now)
+			const brandConfigDir = await this.ensureDirectory(BRAND_CONFIG_DIR)
+			await this.createAndWriteFile(
+				brandConfigDir,
+				BRAND_CONFIG_JSON,
+				JSON.stringify(payload, null, 2),
+			)
+		} catch {
+			// Silent failure - callers keep local state and surface errors if needed.
+		}
+	}
+
+	async loadBrandConfig(): Promise<SelfMediaInitGlobalSettings | null> {
+		try {
+			const files = await this.getProjectFileList()
+			const file = this.findBrandConfigFile(files)
+			if (!file?.file_id) return null
+
+			const content = (await getFileContentById(file.file_id, {
+				responseType: "text",
+			})) as string
+			const payload: BrandConfigPayload = JSON.parse(content)
+
+			return this.deserializeGlobal(payload)
+		} catch {
+			return null
+		}
+	}
+
 	/** Persist draft to project files */
 	async saveDraft(data: SelfMediaInitData, currentStep: number): Promise<void> {
 		await this.persistDraft(data, currentStep)
@@ -290,7 +332,7 @@ export class SelfMediaFileStorageService {
 			})
 			for (const f of draftFiles) {
 				if (f.file_id) {
-					await SuperMagicApi.deleteFile(f.file_id).catch(() => { })
+					await SuperMagicApi.deleteFile(f.file_id).catch(() => {})
 				}
 			}
 
@@ -298,8 +340,8 @@ export class SelfMediaFileStorageService {
 
 			const materialsDirPath = this.folderRelativePath
 				? this.normalizeRelativePath(
-					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-				)
+						`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+					)
 				: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 			const materialsDir = files.find(
 				(f) =>
@@ -308,7 +350,7 @@ export class SelfMediaFileStorageService {
 					this.normalizeRelativePath(f.relative_file_path) === materialsDirPath,
 			)
 			if (materialsDir?.file_id) {
-				await SuperMagicApi.deleteFile(materialsDir.file_id).catch(() => { })
+				await SuperMagicApi.deleteFile(materialsDir.file_id).catch(() => {})
 			}
 		} catch {
 			// silent
@@ -441,7 +483,7 @@ export class SelfMediaFileStorageService {
 			)
 			for (const f of toDelete) {
 				if (f.file_id) {
-					await SuperMagicApi.deleteFile(f.file_id).catch(() => { })
+					await SuperMagicApi.deleteFile(f.file_id).catch(() => {})
 				}
 			}
 
@@ -450,10 +492,10 @@ export class SelfMediaFileStorageService {
 				(f) =>
 					f.is_directory &&
 					f.relative_file_path ===
-					`${this.getBasePath()}/${TEMPLATES_MATERIALS_DIR}/${templateId}`,
+						`${this.getBasePath()}/${TEMPLATES_MATERIALS_DIR}/${templateId}`,
 			)
 			if (matDir?.file_id) {
-				await SuperMagicApi.deleteFile(matDir.file_id).catch(() => { })
+				await SuperMagicApi.deleteFile(matDir.file_id).catch(() => {})
 			}
 		} catch {
 			// silent
@@ -524,6 +566,63 @@ export class SelfMediaFileStorageService {
 		}
 	}
 
+	async uploadBrandImageToBrandConfig(
+		file: File,
+		onProgress?: (percent: number) => void,
+	): Promise<string | null> {
+		try {
+			const brandDir = `${BRAND_CONFIG_DIR}/${BRAND_CONFIG_IMAGES_DIR}`
+			const parentDirId = await this.ensureDirectory(brandDir)
+			if (!parentDirId) return null
+
+			const credentials = await superMagicUploadTokenService.getUploadToken(this.projectId)
+			if (!credentials) return null
+
+			const uploader = new Upload()
+			onProgress?.(0)
+
+			const fileKey = await new Promise<string>((resolve, reject) => {
+				const { success, fail, progress } = uploader.upload({
+					file,
+					fileName: file.name,
+					customCredentials: superMagicUploadTokenService.changeDir(
+						credentials,
+						brandDir,
+					),
+					body: JSON.stringify({
+						storage: "private",
+						sts: true,
+						content_type: file.type || "application/octet-stream",
+					}),
+				})
+
+				progress?.((percent?: number) => {
+					if (typeof percent === "number") onProgress?.(percent)
+				})
+				success?.((res: any) => resolve(res?.data?.path || res?.key || res?.file_key || ""))
+				fail?.((err: any) => reject(err))
+			})
+
+			if (!fileKey) return null
+
+			const relativePath = this.toProjectRelativePath(`${brandDir}/${file.name}`)
+			await superMagicUploadTokenService.saveFileToProject({
+				project_id: this.projectId,
+				parent_id: parentDirId,
+				file_key: fileKey,
+				file_name: file.name,
+				file_size: file.size,
+				file_type: "user_upload",
+				storage_type: "workspace",
+				source: "home" as any,
+				relative_file_path: relativePath,
+			})
+			return relativePath
+		} catch {
+			return null
+		}
+	}
+
 	/**
 	 * Upload a material file to draft-materials/{articleIndex}/
 	 * Returns the relative path for reference.
@@ -581,7 +680,7 @@ export class SelfMediaFileStorageService {
 
 	// ─── Cleanup ─────────────────────────────────────────────────────────────
 
-	dispose(): void { }
+	dispose(): void {}
 
 	// ─── Private Helpers ─────────────────────────────────────────────────────
 
@@ -644,6 +743,15 @@ export class SelfMediaFileStorageService {
 		return this.normalizeRelativePath(`${DRAFTS_DIR}/${REFERENCE_INDEX_JSON}`)
 	}
 
+	private getBrandConfigRelativePath(): string {
+		if (this.folderRelativePath) {
+			return this.normalizeRelativePath(
+				`${this.folderRelativePath}/${BRAND_CONFIG_DIR}/${BRAND_CONFIG_JSON}`,
+			)
+		}
+		return this.normalizeRelativePath(`${BRAND_CONFIG_DIR}/${BRAND_CONFIG_JSON}`)
+	}
+
 	private findDraftFile(files: FileNode[]): FileNode | undefined {
 		const target = this.getDraftJsonRelativePath()
 		const exact = files.find(
@@ -666,6 +774,16 @@ export class SelfMediaFileStorageService {
 			candidates.find((f) =>
 				this.normalizeRelativePath(f.relative_file_path!).startsWith(`${folderPrefix}/`),
 			) ?? candidates[0]
+		)
+	}
+
+	private findBrandConfigFile(files: FileNode[]): FileNode | undefined {
+		const target = this.getBrandConfigRelativePath()
+		return files.find(
+			(f) =>
+				!f.is_directory &&
+				f.relative_file_path &&
+				this.normalizeRelativePath(f.relative_file_path) === target,
 		)
 	}
 
@@ -895,8 +1013,8 @@ export class SelfMediaFileStorageService {
 		const files = await this.getProjectFileList()
 		const materialsDirPath = this.folderRelativePath
 			? this.normalizeRelativePath(
-				`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-			)
+					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+				)
 			: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 		const materialsDir = files.find(
 			(item) =>
@@ -946,8 +1064,34 @@ export class SelfMediaFileStorageService {
 			currentStep,
 			createdAt,
 			updatedAt: now,
-			global: await this.buildDraftGlobalSettings(data.global),
 			articles: this.serializeArticles(data.articles),
+		}
+	}
+
+	private async buildBrandConfigPayload(
+		global: SelfMediaInitGlobalSettings,
+		now: string,
+	): Promise<BrandConfigPayload> {
+		let createdAt = now
+		try {
+			const files = await this.getProjectFileList()
+			const existingFile = this.findBrandConfigFile(files)
+			if (existingFile?.file_id) {
+				const content = (await getFileContentById(existingFile.file_id, {
+					responseType: "text",
+				})) as string
+				const prev: BrandConfigPayload = JSON.parse(content)
+				createdAt = prev.createdAt || now
+			}
+		} catch {
+			// use now
+		}
+
+		return {
+			version: 1,
+			createdAt,
+			updatedAt: now,
+			...this.serializeGlobal(global),
 		}
 	}
 
@@ -956,17 +1100,6 @@ export class SelfMediaFileStorageService {
 		now: string,
 	): ReferenceIndexPayload {
 		const items: ReferenceIndexItem[] = []
-
-		data.global.brandImages.forEach((item) => {
-			items.push({
-				id: item.id,
-				role: "brand",
-				name: item.file?.name || "unknown",
-				description: item.description,
-				relativePath: item.uploadedPath,
-				kind: "file",
-			})
-		})
 
 		data.articles.forEach((article, articleIndex) => {
 			article.materials.forEach((material) => {
@@ -1066,22 +1199,24 @@ export class SelfMediaFileStorageService {
 	): string | undefined {
 		if (!path) return path
 		const normalized = this.normalizeRelativePath(path)
-		const draftMaterialsPrefix = `${this.folderRelativePath
-			? this.normalizeRelativePath(
-				`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-			)
-			: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
-			}/`
+		const draftMaterialsPrefix = `${
+			this.folderRelativePath
+				? this.normalizeRelativePath(
+						`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+					)
+				: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
+		}/`
 		if (!normalized.startsWith(draftMaterialsPrefix)) return path
 		const suffix = normalized.slice(draftMaterialsPrefix.length)
-		const archivePrefix = `${this.folderRelativePath
-			? this.normalizeRelativePath(
-				`${this.folderRelativePath}/${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
-			)
-			: this.normalizeRelativePath(
-				`${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
-			)
-			}/`
+		const archivePrefix = `${
+			this.folderRelativePath
+				? this.normalizeRelativePath(
+						`${this.folderRelativePath}/${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
+					)
+				: this.normalizeRelativePath(
+						`${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
+					)
+		}/`
 		return `${archivePrefix}${suffix}`
 	}
 
@@ -1203,10 +1338,16 @@ export class SelfMediaFileStorageService {
 		return /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)$/i.test(fileName)
 	}
 
-	private async ensureBrandImagesUploaded(brandImages: BrandImageItem[]): Promise<void> {
+	private async ensureBrandImagesUploaded(
+		brandImages: BrandImageItem[],
+		target: "draft" | "brand" = "draft",
+	): Promise<void> {
 		for (const item of brandImages) {
 			if (item.uploadedPath || !item.file?.size) continue
-			const path = await this.uploadBrandImageToDraft(item.file)
+			const path =
+				target === "brand"
+					? await this.uploadBrandImageToBrandConfig(item.file)
+					: await this.uploadBrandImageToDraft(item.file)
 			if (path) item.uploadedPath = path
 		}
 	}
@@ -1225,12 +1366,7 @@ export class SelfMediaFileStorageService {
 
 	private deserializePayload(payload: DraftPayload | TemplatePayload): SelfMediaInitData {
 		return {
-			global: {
-				author: payload.global.author,
-				brandPosition: payload.global.brandPosition,
-				targetAudience: payload.global.targetAudience,
-				brandImages: this.deserializeBrandImages(payload.global.brandImages),
-			},
+			global: this.deserializeGlobal(payload.global),
 			articles: payload.articles.map((a) => ({
 				title: a.title,
 				folderName: a.folderName,
@@ -1240,26 +1376,37 @@ export class SelfMediaFileStorageService {
 				outline: this.normalizeOutline(a.outline),
 				materials: Array.isArray(a.materials)
 					? a.materials.map((m) => ({
-						id: m.id || `material_${Date.now()}`,
-						file: new File([], m.name || "file"),
-						previewUrl: "",
-						description: m.description || "",
-						uploadedPath: m.relativePath,
-					}))
+							id: m.id || `material_${Date.now()}`,
+							file: new File([], m.name || "file"),
+							previewUrl: "",
+							description: m.description || "",
+							uploadedPath: m.relativePath,
+						}))
 					: [],
 				notes: a.notes,
 				platform: a.platform as any,
 				description: a.description,
 				visualReferenceFiles: Array.isArray(a.visualReferenceFiles)
 					? a.visualReferenceFiles.map((f) => ({
-						name: f.name || "file",
-						content: f.content || "",
-						kind: f.kind,
-						file_id: f.file_id,
-						file_path: f.file_path,
-					}))
+							name: f.name || "file",
+							content: f.content || "",
+							kind: f.kind,
+							file_id: f.file_id,
+							file_path: f.file_path,
+						}))
 					: [],
 			})),
+		}
+	}
+
+	private deserializeGlobal(
+		global: SerializedGlobalSettings | BrandConfigPayload | undefined,
+	): SelfMediaInitGlobalSettings {
+		return {
+			author: global?.author || "",
+			brandPosition: global?.brandPosition || "",
+			targetAudience: global?.targetAudience || "",
+			brandImages: this.deserializeBrandImages(global?.brandImages),
 		}
 	}
 
@@ -1292,12 +1439,12 @@ export class SelfMediaFileStorageService {
 					children: Array.isArray(node.children) ? normalize(node.children) : [],
 					materials: Array.isArray(node.materials)
 						? node.materials.map((m, idx) => ({
-							id: m.id || `outline_mat_${idx}`,
-							file: new File([], m.name || "file"),
-							previewUrl: "",
-							description: m.description || "",
-							uploadedPath: m.relativePath || m.uploadedPath,
-						}))
+								id: m.id || `outline_mat_${idx}`,
+								file: new File([], m.name || "file"),
+								previewUrl: "",
+								description: m.description || "",
+								uploadedPath: m.relativePath || m.uploadedPath,
+							}))
 						: [],
 				}
 			})

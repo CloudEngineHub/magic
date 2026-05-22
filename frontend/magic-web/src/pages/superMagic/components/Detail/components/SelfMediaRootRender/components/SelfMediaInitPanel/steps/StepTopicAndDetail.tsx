@@ -740,11 +740,11 @@ export default function StepTopicAndDetail({
 										}
 									/>
 									<InlineVoiceButton
+										value={articles[safeActiveIndex]?.title || ""}
 										onResult={(text) =>
 											onArticleUpdate(safeActiveIndex, {
 												...articles[safeActiveIndex],
-												title:
-													(articles[safeActiveIndex]?.title || "") + text,
+												title: text,
 											})
 										}
 									/>

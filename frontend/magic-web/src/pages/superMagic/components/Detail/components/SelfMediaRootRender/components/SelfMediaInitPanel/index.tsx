@@ -1,4 +1,4 @@
-import { useCallback, useRef, useMemo, type CSSProperties } from "react"
+import { useCallback, useEffect, useRef, useMemo, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
@@ -13,6 +13,7 @@ import StepIndicator from "./steps/StepIndicator"
 import StepNavigation from "./steps/StepNavigation"
 import TemplateSelector from "./steps/TemplateSelector"
 import { useDraftManager } from "./hooks/useDraftManager"
+import { useSelfMediaBrandConfig } from "../../hooks/useSelfMediaBrandConfig"
 import { STEPS } from "./constants"
 import type { ArticleDetail, BrandImageItem } from "./types"
 import type { AttachmentNode } from "../../services"
@@ -53,6 +54,13 @@ function SelfMediaInitPanel({
 	)
 
 	const {
+		settings: brandSettings,
+		setSettings: setBrandSettings,
+		saveSettings: saveBrandSettings,
+		isLoading: isBrandConfigLoading,
+	} = useSelfMediaBrandConfig({ fileStorageService })
+
+	const {
 		data,
 		setData,
 		currentStep,
@@ -81,24 +89,39 @@ function SelfMediaInitPanel({
 
 	const brandInfoRef = useRef<StepBrandInfoRef>(null)
 
+	useEffect(() => {
+		setData((prev) => ({
+			...prev,
+			global: brandSettings,
+		}))
+	}, [brandSettings, setData])
+
 	const handleBrandChange = useCallback(
 		(field: "author" | "brandPosition" | "targetAudience", value: string) => {
+			const nextGlobal = { ...dataRef.current.global, [field]: value }
+			dataRef.current = { ...dataRef.current, global: nextGlobal }
 			setData((prev) => ({
 				...prev,
-				global: { ...prev.global, [field]: value },
+				global: nextGlobal,
 			}))
+			setBrandSettings(nextGlobal)
+			void saveBrandSettings(nextGlobal)
 		},
-		[setData],
+		[dataRef, saveBrandSettings, setBrandSettings, setData],
 	)
 
 	const handleBrandImagesChange = useCallback(
 		(brandImages: BrandImageItem[]) => {
+			const nextGlobal = { ...dataRef.current.global, brandImages }
+			dataRef.current = { ...dataRef.current, global: nextGlobal }
 			setData((prev) => ({
 				...prev,
-				global: { ...prev.global, brandImages },
+				global: nextGlobal,
 			}))
+			setBrandSettings(nextGlobal)
+			void saveBrandSettings(nextGlobal)
 		},
-		[setData],
+		[dataRef, saveBrandSettings, setBrandSettings, setData],
 	)
 
 	const handleArticlesChange = useCallback(
@@ -175,7 +198,7 @@ function SelfMediaInitPanel({
 				onDiscard={() => void handleDiscardDraft()}
 				onBackHome={onBackHome}
 			/>
-			{isDraftLoading ? (
+			{isDraftLoading || isBrandConfigLoading ? (
 				<div
 					className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-white"
 					data-testid="self-media-init-panel-draft-loading"
@@ -223,6 +246,7 @@ function SelfMediaInitPanel({
 										onPlatformFetchEnd={handlePlatformFetchEnd}
 										onBrandImagesUploadingChange={setBrandImagesUploading}
 										onConfirmNext={handleNext}
+										brandImageUploadTarget="brand"
 									/>
 								)}
 								{currentStep === 1 && (

@@ -635,7 +635,8 @@ function MaterialAttachmentRow({
 						onChange={(e) => onDescriptionChange(item.id, e.target.value)}
 					/>
 					<InlineVoiceButton
-						onResult={(text) => onDescriptionChange(item.id, item.description + text)}
+						value={item.description}
+						onResult={(text) => onDescriptionChange(item.id, text)}
 					/>
 				</div>
 			</div>

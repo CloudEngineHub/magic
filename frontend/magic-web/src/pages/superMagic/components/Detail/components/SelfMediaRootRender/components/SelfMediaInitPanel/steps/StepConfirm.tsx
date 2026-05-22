@@ -617,9 +617,8 @@ export default function StepConfirm({
 											autoFocus
 										/>
 										<InlineVoiceButton
-											onResult={(text) =>
-												setTemplateName((prev) => prev + text)
-											}
+											value={templateName}
+											onResult={setTemplateName}
 										/>
 									</div>
 									<div className="flex shrink-0 gap-2">

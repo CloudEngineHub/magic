@@ -209,10 +209,6 @@ describe("SelfMediaFileStorageService", () => {
 		expect(referenceIndexContent.items).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
-					role: "brand",
-					relativePath: "self-media/__drafts/brand-images/brand.png",
-				}),
-				expect.objectContaining({
 					role: "article-material",
 					relativePath: "self-media/__drafts/draft-materials/0/article.png",
 				}),
@@ -231,6 +227,73 @@ describe("SelfMediaFileStorageService", () => {
 				}),
 			]),
 		)
+	})
+
+	it("saves and loads project-level brand config outside draft data", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.saveBrandConfig(data.global)
+
+		const brandConfigFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/__brand/brand-config.json",
+		)
+		expect(brandConfigFile?.file_id).toBeTruthy()
+
+		const savedContent = JSON.parse(contentByFileId.get(brandConfigFile!.file_id) || "{}")
+		expect(savedContent).toEqual(
+			expect.objectContaining({
+				version: 1,
+				author: "Magic Lab",
+				brandPosition: "AI productivity",
+				targetAudience: "Creators",
+				brandImages: [
+					expect.objectContaining({
+						id: "brand-1",
+						name: "brand.png",
+						description: "brand mascot",
+						relativePath: "self-media/__drafts/brand-images/brand.png",
+						isImage: true,
+					}),
+				],
+			}),
+		)
+
+		await expect(service.loadBrandConfig()).resolves.toEqual(
+			expect.objectContaining({
+				author: "Magic Lab",
+				brandPosition: "AI productivity",
+				targetAudience: "Creators",
+				brandImages: [
+					expect.objectContaining({
+						id: "brand-1",
+						description: "brand mascot",
+						uploadedPath: "self-media/__drafts/brand-images/brand.png",
+					}),
+				],
+			}),
+		)
+	})
+
+	it("does not persist brand config in new draft payloads", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.saveDraft(data, 3)
+
+		const draftFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/__drafts/draft.json",
+		)
+		const draftContent = JSON.parse(contentByFileId.get(draftFile!.file_id) || "{}")
+
+		expect(draftContent.global).toBeUndefined()
+		expect(draftContent.articles).toHaveLength(1)
 	})
 
 	it("archives the active draft and clears only the active slot", async () => {
@@ -424,7 +487,7 @@ describe("SelfMediaFileStorageService", () => {
 		).toBe(true)
 	})
 
-	it("backfills brand images into draft json when memory data is empty", async () => {
+	it("does not backfill brand images into draft json when memory data is empty", async () => {
 		seedNode({
 			file_id: "brand-images-dir",
 			file_name: "brand-images",
@@ -469,23 +532,10 @@ describe("SelfMediaFileStorageService", () => {
 		)
 		const draftContent = JSON.parse(contentByFileId.get(draftFile!.file_id) || "{}")
 
-		expect(draftContent.global.brandImages).toEqual([
-			expect.objectContaining({
-				name: "logo.png",
-				description: "",
-				relativePath: "self-media/__drafts/brand-images/logo.png",
-				isImage: true,
-			}),
-			expect.objectContaining({
-				name: "manual.pdf",
-				description: "",
-				relativePath: "self-media/__drafts/brand-images/manual.pdf",
-				isImage: false,
-			}),
-		])
+		expect(draftContent.global).toBeUndefined()
 	})
 
-	it("keeps in-memory brand images when saving draft", async () => {
+	it("keeps brand images out of draft json when memory data has brand images", async () => {
 		seedNode({
 			file_id: "brand-images-dir",
 			file_name: "brand-images",
@@ -514,15 +564,7 @@ describe("SelfMediaFileStorageService", () => {
 		)
 		const draftContent = JSON.parse(contentByFileId.get(draftFile!.file_id) || "{}")
 
-		expect(draftContent.global.brandImages).toEqual([
-			expect.objectContaining({
-				id: "brand-1",
-				name: "brand.png",
-				description: "brand mascot",
-				relativePath: "self-media/__drafts/brand-images/brand.png",
-				isImage: true,
-			}),
-		])
+		expect(draftContent.global).toBeUndefined()
 	})
 
 	it("does not backfill brand images when saving template", async () => {

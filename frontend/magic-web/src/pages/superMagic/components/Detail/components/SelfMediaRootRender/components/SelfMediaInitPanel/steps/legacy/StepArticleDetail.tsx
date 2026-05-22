@@ -358,13 +358,14 @@ export default function StepArticleDetail({
 										}
 									/>
 									<InlineVoiceButton
+										value={
+											typeof currentArticle.style === "string" &&
+											currentArticle.style !== "custom"
+												? currentArticle.style
+												: ""
+										}
 										onResult={(text) => {
-											const current =
-												typeof currentArticle.style === "string" &&
-												currentArticle.style !== "custom"
-													? currentArticle.style
-													: ""
-											handleFieldChange("style", current + text || "custom")
+											handleFieldChange("style", text || "custom")
 										}}
 									/>
 								</div>
@@ -493,11 +494,8 @@ export default function StepArticleDetail({
 														/>
 														<InlineVoiceButton
 															variant="textarea"
-															onResult={(text) =>
-																setOptimizeInstruction(
-																	(prev) => prev + text,
-																)
-															}
+															value={optimizeInstruction}
+															onResult={setOptimizeInstruction}
 														/>
 													</div>
 													<div className="mt-2 flex justify-end">

@@ -138,7 +138,8 @@ function CardItem({
 						<div className="mt-0.5 flex shrink-0 flex-col items-center gap-0.5">
 							<InlineVoiceButton
 								variant="textarea"
-								onResult={(text) => onTextChange(card.text + text)}
+								value={card.text}
+								onResult={onTextChange}
 								className="relative right-auto top-auto translate-y-0 opacity-0 group-hover/card:opacity-100"
 							/>
 							{onRemove &&

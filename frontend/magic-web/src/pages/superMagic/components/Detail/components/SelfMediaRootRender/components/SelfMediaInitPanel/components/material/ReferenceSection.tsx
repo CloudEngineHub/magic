@@ -46,10 +46,7 @@ export default function ReferenceSection({
 						onChange={(e) => onTextChange(e.target.value)}
 						onBlur={onBlur}
 					/>
-					<InlineVoiceButton
-						variant="textarea"
-						onResult={(t) => onTextChange(text + t)}
-					/>
+					<InlineVoiceButton variant="textarea" value={text} onResult={onTextChange} />
 				</div>
 
 				<MaterialAttachmentList

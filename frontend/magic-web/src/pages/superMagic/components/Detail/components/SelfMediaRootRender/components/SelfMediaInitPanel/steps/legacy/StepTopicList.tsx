@@ -227,9 +227,7 @@ export default function StepTopicList({
 									}}
 									disabled={aiGenerating}
 								/>
-								<InlineVoiceButton
-									onResult={(text) => setAiDirection((prev) => prev + text)}
-								/>
+								<InlineVoiceButton value={aiDirection} onResult={setAiDirection} />
 							</div>
 						</div>
 
@@ -342,9 +340,8 @@ export default function StepTopicList({
 									onChange={(e) => handleTitleChange(index, e.target.value)}
 								/>
 								<InlineVoiceButton
-									onResult={(text) =>
-										handleTitleChange(index, article.title + text)
-									}
+									value={article.title}
+									onResult={(text) => handleTitleChange(index, text)}
 								/>
 							</div>
 							<div className="group relative">
@@ -358,9 +355,8 @@ export default function StepTopicList({
 									onChange={(e) => handleFolderNameChange(index, e.target.value)}
 								/>
 								<InlineVoiceButton
-									onResult={(text) =>
-										handleFolderNameChange(index, article.folderName + text)
-									}
+									value={article.folderName}
+									onResult={(text) => handleFolderNameChange(index, text)}
 								/>
 							</div>
 							{article.notes && (
