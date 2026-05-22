@@ -95,6 +95,17 @@ registerMagicCanvasPlugin({
 
 这个插件会在插件面板中渲染一个标题和按钮，点击按钮后调用 MagicCanvas 的 toast 能力。
 
+### 2.3 内置插件共享 kit（可选）
+
+如果是仓库内置插件，而不是给第三方单独分发的纯插件包，可以在 `plugins/shared/` 下维护一层共享的 `magic-plugin-kit`，把重复的 DOM 工具、图片上传区块、标签按钮组选项、模型参数区块等能力收口到一个可复用库里。
+
+约束：
+
+- `magic-plugin-kit` 只是一层 **mount 内部实现复用**，不改变插件协议；
+- 每个插件仍然必须以 `registerMagicCanvasPlugin({ mount(ctx, root) { ... } })` 作为入口；
+- 每个插件仍然在自己的 iframe 中独立渲染、独立持有 state 和 cleanup；
+- kit 应优先提供通用能力（如 `optionGroup`、`fileGrid`），不要把业务语义写死进共享层。
+
 ## 3. 插件包结构
 
 推荐结构：

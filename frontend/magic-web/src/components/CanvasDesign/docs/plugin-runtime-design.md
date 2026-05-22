@@ -739,3 +739,5 @@ manifest 静态解析 + iframe 沙箱运行 + postMessage/MessageChannel RPC + c
 - 后续可自然扩展到用户插件和插件市场。
 
 第一版不要追求插件框架功能过多，先把 `manifest`、`iframe runtime`、`mount(ctx, root)`、`ctx.ai.generateAndPlace` 这条链路打通，就能支撑“万物上身”这类真实业务插件。
+
+对于仓库内置插件，可以在插件源码侧引入一个轻量的共享 `magic-plugin-kit`，复用 DOM section、标签组选项、图片上传槽位、模型参数区块等实现细节；但这个 kit 不应改变 runtime 协议本身。runtime 仍然只识别 `registerMagicCanvasPlugin({ mount(ctx, root) })`，每个插件仍在自己的 iframe 中独立挂载和清理。
