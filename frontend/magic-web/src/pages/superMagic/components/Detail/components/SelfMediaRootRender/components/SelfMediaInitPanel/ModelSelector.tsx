@@ -93,6 +93,9 @@ export default observer(function ModelSelector({
 					)}
 					title="切换模型"
 				>
+					{label && (
+						<span className="text-muted-foreground/70 shrink-0">{label}</span>
+					)}
 					{selected?.model_icon && (
 						<img
 							src={selected.model_icon}

@@ -550,18 +550,39 @@ export default function StepConfirm({
 
 					{/* Model selector + Start AI creation button */}
 					<div className="mt-6 flex flex-col gap-3">
-						<div className="flex items-center gap-2 flex-wrap">
-							<ModelSelector value={selectedModelId} onChange={setSelectedModelId} />
+					<div className="flex items-stretch rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 divide-x divide-zinc-200 dark:divide-zinc-800 shadow-sm overflow-hidden w-full">
+						<div className="flex flex-col gap-1 px-3 py-2 flex-1 min-w-0">
+							<span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wide">
+								{t("detail.selfMedia.initPanel.stepConfirm.textModel", "文本模型")}
+							</span>
+							<ModelSelector
+								value={selectedModelId}
+								onChange={setSelectedModelId}
+								className="border-none bg-transparent p-0 hover:bg-transparent rounded-none shadow-none"
+							/>
+						</div>
+						<div className="flex flex-col gap-1 px-3 py-2 flex-1 min-w-0">
+							<span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wide">
+								{t("detail.selfMedia.initPanel.stepConfirm.imageModel", "图像模型")}
+							</span>
 							<ModelSelector
 								value={selectedImageModelId}
 								onChange={setSelectedImageModelId}
 								modelType="image"
+								className="border-none bg-transparent p-0 hover:bg-transparent rounded-none shadow-none"
 							/>
+						</div>
+						<div className="flex flex-col gap-1 px-3 py-2 flex-1 min-w-0">
+							<span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wide">
+								{t("detail.selfMedia.initPanel.stepConfirm.videoModel", "视频模型")}
+							</span>
 							<ModelSelector
 								value={selectedVideoModelId}
 								onChange={setSelectedVideoModelId}
 								modelType="video"
+								className="border-none bg-transparent p-0 hover:bg-transparent rounded-none shadow-none"
 							/>
+						</div>
 						</div>
 						<button
 							type="button"
