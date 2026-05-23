@@ -1,501 +1,190 @@
 ---
 name: using-mcp
-description: Query MCP servers, list available MCP tools, get tool schemas, and call MCP tools programmatically. CRITICAL - When user message contains [@mcp:...] mention, you MUST load this skill first to properly use MCP tools.
-
+description: Discover, connect to, and invoke tools on MCP (Model Context Protocol) servers. CRITICAL - When the user message contains [@mcp:...] mention, you MUST load this skill first to use MCP tools correctly.
 ---
 
 # MCP Tools Calling Skill
 
-Query MCP server information, tool lists, and schemas through scripts, and call MCP tools via SDK.
+Use this skill whenever you need to talk to an MCP server: list servers, connect to one, inspect a tool's schema, or invoke a tool.
 
-## Core Capabilities
+## How it works
 
-- Query MCP server list and status
-- List all available MCP tools
-- Get JSON Schema definitions of tools
-- Call MCP tools and get results
-- Dynamically add new MCP servers (effective at runtime, optionally persisted)
-
-## Important Rules
-
-### 1. DO NOT imagine tool names and parameters
-
-Before calling `mcp.call()`, you **MUST** first query and confirm through scripts:
-1. Whether the tool exists on that server (via `get_tools.py`) - **REQUIRED**
-2. The tool's parameter definition (via `get_tool_schema.py`) - **REQUIRED**
-3. Server list (via `get_servers.py`) - Optional, usually provided in user prompts
-
-**STRICTLY FORBIDDEN** to call MCP tools based on imagination or experience without querying first. Even if you think a tool "should" exist, you must query to confirm it first.
-
-### 2. mcp.call() is NOT a tool name
-
-**STRICTLY FORBIDDEN** to call the following as tool names:
-- `from sdk.mcp import mcp`
-- `mcp.call`
-- `mcp.call()`
-
-`mcp.call()` is a Python SDK method that must be executed within Python code using the `run_sdk_snippet` tool.
-
-**Wrong Example**:
-```python
-# Wrong! Do NOT do this
-tool_call(name="from sdk.mcp import mcp", arguments={})
-tool_call(name="mcp.call", arguments={...})
-```
-
-**Correct Example**:
-```python
-# Correct! Use run_sdk_snippet tool
-run_sdk_snippet(
-    python_code="""
-from sdk.mcp import mcp
-result = mcp.call(...)
-"""
-)
-```
-
-## Key Principles
-
-### Script Execution
-
-Scripts use standard command-line arguments, for example:
-- `python scripts/get_servers.py`
-- `python scripts/get_tools.py --server-name <server-name>`
-
-In Agent environment, use `shell_exec` tool to execute scripts:
+The six MCP capabilities are exposed as Code Mode tools (`mcp_*`). They are NOT directly callable as standalone tool calls. You must invoke them through `run_sdk_snippet` and `sdk.tool.call`:
 
 ```python
-# Get server list
-shell_exec(
-    command="python scripts/get_servers.py"
-)
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
 
-# Get tool list for a specific server
-shell_exec(
-    command="python scripts/get_tools.py --server-name <server-name>"
-)
-
-# Get tool schema
-shell_exec(
-    command="python scripts/get_tool_schema.py --server-name <server-name> --tool-name <tool-name>"
-)
+result = tool.call('mcp_list_servers', {})
+print(result.content)
+""")
 ```
 
-### MCP Tool Calling
+`tool.call(name, params)` returns a `Result` with:
+- `result.ok` — boolean, check this first
+- `result.content` — complete information for reasoning and next-step decisions
 
-**Important Note**: `mcp.call()` is NOT a standalone tool, but an SDK method called within Python code.
+## Available MCP tools
 
-In Agent environment, use `run_sdk_snippet` tool to execute Python code containing `mcp.call()` (**MUST** first query and confirm server and tool existence via scripts):
+| Tool name | Purpose |
+|-----------|---------|
+| `mcp_list_servers` | List all MCP servers in the current chat with their connection status. Always start here. |
+| `mcp_connect_server` | Connect a server whose status is `disconnected`. Returns the real tool list. |
+| `mcp_list_tools` | List tools across connected servers, optionally filtered by `server_name`. |
+| `mcp_get_tool_schema` | Fetch the JSON input schema of one or more tools before calling them. |
+| `mcp_call_tool` | Invoke a specific tool on a server. The actual remote call. |
+| `mcp_add_server` | Register a new MCP server config (stdio or http). Does NOT connect immediately. |
+| `mcp_remove_server` | Remove an MCP server: disconnect, unregister tools, and delete persisted config. |
+
+## Standard workflow
+
+Follow this order. Skipping steps will cause failures because tool names and parameters cannot be guessed.
+
+```
+1. mcp_list_servers          → pick the server, read its `status`
+   ├── status == 'connected'    → go to step 3
+   └── status == 'disconnected' → go to step 2
+2. mcp_connect_server        → connect; receive the real tool list
+3. mcp_get_tool_schema       → fetch input schema(s)
+4. mcp_call_tool             → invoke with parameters that match the schema
+```
+
+When the user wants to register a brand-new MCP server, run `mcp_add_server` first, then proceed from step 1.
+
+## Rules
+
+1. NEVER fabricate server names, tool names, or parameter names. Always derive them from the previous step's `result.content`.
+2. ALWAYS call `mcp_get_tool_schema` before `mcp_call_tool` unless you already saw the schema in this conversation.
+3. NEVER call `mcp_*` tools as standalone tool calls. They only work inside `run_sdk_snippet` via `sdk.tool.call`.
+4. ALWAYS check `result.ok` before proceeding. Errors should be surfaced to the user, not silently retried.
+
+## End-to-end example
+
+User asks to call a tool on some MCP server. The flow below uses angle-
+bracket placeholders (`<server_name>`, `<tool_name>`, `<workspace_dir>`,
+etc.); replace every `<...>` with the real value from your context or from
+the previous step before running the snippet.
 
 ```python
-# Use run_sdk_snippet tool to execute the following Python code
-run_sdk_snippet(
-    python_code="""
-from sdk.mcp import mcp
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
 
-result = mcp.call(
-    server_name="<server-name>",  # Must be a real server name from get_servers.py
-    tool_name="<tool-name>",      # Must be a real tool name from get_tools.py
-    tool_params={"param": "value"}  # Must conform to schema from get_tool_schema.py
-)
+# 1. Discover servers
+servers = tool.call('mcp_list_servers', {})
+print(servers.content)
+# Parse the server name from content, e.g. "<server_name> (status=connected, N tool(s))"
 
-if result.ok:
-    print(result.content)
-else:
-    print(f"Call failed: {result.content}")
-"""
-)
+# 2. Connect if needed
+connect = tool.call('mcp_connect_server', {'server_name': '<server_name>'})
+if not connect.ok:
+    raise SystemExit(f'Connect failed: {connect.content}')
+print(connect.content)
+
+# 3. Inspect schema
+schema = tool.call('mcp_get_tool_schema', {
+    'server_name': '<server_name>',
+    'tool_name': '<tool_name>',
+})
+print(schema.content)
+
+# 4. Call the tool (tool_params is a JSON string matching the schema)
+result = tool.call('mcp_call_tool', {
+    'server_name': '<server_name>',
+    'tool_name': '<tool_name>',
+    'tool_params': '{"key": "value"}',
+})
+print(result.content)
+""")
 ```
 
-## Quick Start
+## Saving the call result to a file (`output_file_path`)
 
-### Step 0: Query Server List (Optional)
+`mcp_call_tool` accepts an optional `output_file_path` to persist the result
+as a JSON file in the workspace, instead of consuming it only in your
+reasoning context.
 
-If unsure which MCP servers are available, run the script to query:
+When to set it:
 
-```bash
-python scripts/get_servers.py
-```
+- The result is likely to be large (for example a SQL query without WHERE or
+  LIMIT that may return thousands of rows, fetching a full article body, or
+  exporting a long list).
+- The user expects a concrete file deliverable (a report, dataset dump,
+  attachment-like artifact).
+- A downstream step needs a stable on-disk path to open later.
 
-### Step 1: Query Tool List (Required)
+When to leave it empty:
 
-**MUST** query the available tool list for the specified server:
+- You only need the data for your own reasoning. Small results are returned
+  inline; oversized results are auto-persisted in the background to avoid
+  flooding the context, so you do not need to manage that yourself.
 
-```bash
-python scripts/get_tools.py --server-name <server-name>
-```
+Rules:
 
-### Step 2: Get Tool Schema (Required)
+1. The path MUST be absolute. Relative paths are rejected and the call
+   silently falls back to the runtime directory.
+2. Prefer a location inside the current workspace so the file is easy for
+   the user to inspect and accept as a deliverable. The workspace path is
+   already available in your context — just prepend it directly, e.g.
+   `<workspace_dir>/data/<server>/<tool>.json`. Do not rebuild it from
+   `os.getcwd()` or hard-code a path from another machine.
+3. The file MUST be JSON. Pick a meaningful filename and a tidy directory
+   layout, for example `reports/<topic>/<name>.json` or
+   `data/<server>/<tool>.json`.
 
-**MUST** get the tool's parameter definition:
-
-```bash
-python scripts/get_tool_schema.py --server-name <server-name> --tool-name <tool-name>
-```
-
-### Step 3: Call MCP Tool (Required)
-
-After confirming tool and parameters, use `run_sdk_snippet` tool to execute code containing `mcp.call()`:
+Example — deliver the call result as a workspace file. Replace every
+`<...>` with real values: `<workspace_dir>` is the workspace path already
+visible in your context, and `<server_name>` / `<tool_name>` come from the
+previous discovery steps:
 
 ```python
-# Use run_sdk_snippet tool
-run_sdk_snippet(
-    python_code="""
-from sdk.mcp import mcp
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
 
-result = mcp.call(
-    server_name="<server-name>",  # From user prompt or Step 0
-    tool_name="<tool-name>",      # From Step 1 query results
-    tool_params={"param": "value"}  # Constructed per Step 2 schema
-)
-
-if result.ok:
-    print(result.content)
-else:
-    print(f"Call failed: {result.content}")
-"""
-)
+result = tool.call('mcp_call_tool', {
+    'server_name': '<server_name>',
+    'tool_name': '<tool_name>',
+    'tool_params': '{"key": "value"}',
+    'output_file_path': '<workspace_dir>/data/<server_name>/<tool_name>.json',
+})
+print(result.content)
+""")
 ```
 
-## Workflow
-
-**MUST follow** this workflow:
-
-```
-[If you need to add a new server first]
-A. Add MCP server (add_server.py) - Optional
-   ↓ Server is immediately available after success; output includes tool list,
-     so you can skip steps 0 and 1
-
-[To call tools on an existing server]
-0. [Optional] Get server list (get_servers.py)
-   ↓ Query if unsure which servers are available
-1. View tool list (get_tools.py) - REQUIRED
-   ↓ Confirm tool exists on that server
-2. Get tool schema (get_tool_schema.py) - REQUIRED
-   ↓ Understand required parameters and types
-3. Validate parameters - REQUIRED
-   ↓ Ensure all required parameters are provided with correct types
-4. Call tool (mcp.call) - REQUIRED
-```
-
-**WARNING**: Skipping tool list and schema query steps and calling tools directly will fail due to non-existent tools or incorrect parameters.
-
-## Available Scripts
-
-### add_server.py - Add MCP Server Dynamically
-
-Dynamically add a new MCP server to the running system, effective immediately. Only valid for the current runtime session.
-
-**SYNOPSIS**
-```bash
-python scripts/add_server.py --name <name> --type stdio|http [OPTIONS]
-```
-
-**DESCRIPTION**
-
-Supports both stdio (command-line process) and http (URL) MCP server types.
-An existing server with the same name will be disconnected and replaced.
-Added servers only exist for the current runtime session and do not survive restarts.
-
-**OPTIONS**
-
-| Option | Type | Required | Description |
-|------|------|------|------|
-| `--name <name>` | string | Yes | Server name |
-| `--type <type>` | string | Yes | Connection type: `stdio` or `http` |
-| `--command <cmd>` | string | stdio only | Launch command (e.g. `npx`, `uvx`) |
-| `--args <json>` | string | No | Command arguments as a **JSON array string**, e.g. `'["-y","@pkg"]'`; do NOT pass raw space-separated args like `-y @pkg` |
-| `--url <url>` | string | http only | Server URL |
-| `--env KEY=VALUE [...]` | string | No | Environment variables, supports multiple |
-| `--label <name>` | string | No | Server display name |
-
-**OUTPUT**
-
-Returns a JSON object containing:
-
-| Field | Type | Description |
-|------|------|------|
-| `ok` | boolean | Whether succeeded |
-| `name` | string | Server name |
-| `tool_count` | number | Number of registered tools |
-| `tools` | array | Tool name list |
-| `error` | string | Error message on failure |
-
-**EXAMPLES**
-
-Add a stdio server (npx-based MCP).
-CRITICAL: `--args` MUST be a JSON array string. Use single quotes around the whole value.
-[correct] `--args '["-y","@modelcontextprotocol/server-sequential-thinking"]'`
-[wrong]   `--args -y @modelcontextprotocol/server-sequential-thinking`
-[wrong]   `--args "-y @modelcontextprotocol/server-sequential-thinking"`
-```bash
-python scripts/add_server.py \
-    --name my-fs-server \
-    --type stdio \
-    --command npx \
-    --args '["-y","@modelcontextprotocol/server-filesystem","/tmp"]' \
-    --label "Filesystem"
-```
-
-Add an http server:
-```bash
-python scripts/add_server.py \
-    --name my-api-server \
-    --type http \
-    --url http://localhost:3000/mcp \
-    --label "Custom API"
-```
-
-Add with environment variables:
-```bash
-python scripts/add_server.py \
-    --name my-server \
-    --type stdio \
-    --command npx \
-    --args '["-y","some-mcp-server"]' \
-    --env API_KEY=your_key BASE_URL=https://example.com
-```
-
----
-
-### get_servers.py - Get MCP Server List
-
-Get the list and status of all MCP servers.
-
-**SYNOPSIS**
-```bash
-python scripts/get_servers.py
-```
-
-**DESCRIPTION**
-
-Query all registered MCP servers and return server name, status, tool count, and other information.
-
-**OPTIONS**
-
-No parameters.
-
-**OUTPUT**
-
-Returns a JSON array, each element contains:
-
-| Field | Type | Description |
-|------|------|------|
-| `name` | string | Server internal name |
-| `label_name` | string | Server display name |
-| `status` | string | Status: `success`, `failed`, `timeout` |
-| `tool_count` | number | Tool count |
-| `tools` | array | Tool name list |
-
-**EXAMPLES**
-
-Run the script:
-```bash
-python scripts/get_servers.py
-```
-
-Returns a JSON array, each element contains fields like `label_name`, `tool_count`, etc.
-
----
-
-### get_tools.py - Get MCP Tool List
-
-Get MCP tool list with optional server filtering.
-
-**SYNOPSIS**
-```bash
-python scripts/get_tools.py [OPTIONS]
-```
-
-**DESCRIPTION**
-
-Query all available MCP tools or tools from a specific server. Returns tool name, description, and other basic information.
-
-**OPTIONS**
-
-| Option | Type | Required | Description |
-|------|------|------|------|
-| `--server-name <name>` | string | No | Server name, returns all tools if omitted |
-
-**OUTPUT**
-
-Returns a JSON array, each element contains:
-
-| Field | Type | Description |
-|------|------|------|
-| `name` | string | Tool name |
-| `server_name` | string | Server name |
-| `description` | string | Tool function description |
-
-**EXAMPLES**
-
-Get all tools:
-```bash
-python scripts/get_tools.py
-```
-
-Get tools from a specific server:
-```bash
-python scripts/get_tools.py --server-name amap
-```
-
-Returns a JSON array, each element contains fields like `name`, `server_name`, `description`, etc.
-
----
-
-### get_tool_schema.py - Get Tool Schema
-
-Get the JSON Schema definition of specific tool(s), supports batch retrieval.
-
-**SYNOPSIS**
-```bash
-python scripts/get_tool_schema.py --server-name <server> --tool-name <tool1> [tool2] [tool3] ...
-```
-
-**DESCRIPTION**
-
-Query the JSON Schema definition of specific MCP tool(s), including parameter descriptions, type definitions, and required fields. Supports retrieving multiple tools at once.
-
-**OPTIONS**
-
-| Option | Type | Required | Description |
-|------|------|------|------|
-| `--server-name <name>` | string | Yes | Server name |
-| `--tool-name <name> [name2...]` | string | Yes | Tool name(s), supports multiple |
-
-**OUTPUT**
-
-Returns a JSON array, each element contains:
-
-| Field | Type | Description |
-|------|------|------|
-| `tool_name` | string | Tool name |
-| `server_name` | string | Server name |
-| `schema` | object | Schema object (with `type`, `properties`, `required`) |
-| `error` | string | Error message (only appears when tool not found) |
-
-**EXAMPLES**
-
-Get schema for a single tool:
-```bash
-python scripts/get_tool_schema.py --server-name amap --tool-name maps_text_search
-```
-
-Get schemas for multiple tools:
-```bash
-python scripts/get_tool_schema.py --server-name amap --tool-name maps_text_search maps_weather maps_geo
-```
-
-Returns a JSON array regardless of single or multiple tools, each element containing `tool_name`, `server_name`, and `schema` fields.
-
-## mcp.call Method
-
-**Important**: `mcp.call()` is an SDK method, NOT a standalone tool. It must be called within Python code executed by the `run_sdk_snippet` tool.
-
-Call MCP tools via `mcp.call()` and get execution results.
-
-### Parameters
-
-| Parameter | Required | Type | Description |
-|------|------|------|------|
-| `server_name` | Yes | string | MCP server name |
-| `tool_name` | Yes | string | Tool name |
-| `tool_params` | Yes | dict | Tool parameter dict, passed according to tool Schema definition |
-
-### Return Value
-
-Returns a `Result` object containing the following fields:
-
-| Field | Type | Description |
-|------|------|------|
-| `ok` | boolean | Whether execution succeeded |
-| `content` | string | Result content on success, error message on failure |
-| `execution_time` | float | Execution time (seconds) |
-| `tool_call_id` | string | Tool call ID |
-| `name` | string | Full tool name |
-
-### Usage Examples
-
-**Basic Call:**
+## Adding a new server
 
 ```python
-# Note: Server and tool names MUST be real values confirmed via scripts, never guessed!
-# Use run_sdk_snippet tool to execute the following code
-run_sdk_snippet(
-    python_code="""
-from sdk.mcp import mcp
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
 
-# Call MCP tool
-result = mcp.call(
-    server_name="<server-name>",  # Must be from get_servers.py query results
-    tool_name="<tool-name>",      # Must be from get_tools.py query results
-    tool_params={"param_name": "param_value"}  # Must conform to get_tool_schema.py schema
-)
+# stdio server (npx-based MCP).
+# `args` MUST be a real list, not a space-separated string.
+add = tool.call('mcp_add_server', {
+    'name': 'my-fs-server',
+    'server_type': 'stdio',
+    'command': 'npx',
+    'args': ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+    'label_name': 'Filesystem',
+})
+print(add.content)
 
-# Check result
-if result.ok:
-    print(f"Call succeeded: {result.content}")
-    print(f"Execution time: {result.execution_time}s")
-else:
-    print(f"Call failed: {result.content}")
-"""
-)
+# http server example
+add = tool.call('mcp_add_server', {
+    'name': 'my-api-server',
+    'server_type': 'http',
+    'url': 'http://localhost:3000/mcp',
+    'label_name': 'Custom API',
+})
+print(add.content)
+""")
 ```
 
-**Complete Workflow:**
+After `mcp_add_server`, the server status is `disconnected`. Run `mcp_connect_server` (or just call any tool on it — connection happens on demand) before invoking its tools.
 
-```python
-# Step 0: [Optional] Get server list (via shell_exec)
-# If unsure which servers exist, run:
-shell_exec(
-    command="python scripts/get_servers.py"
-)
-# Pick a server with status "success" from the output
+## Common pitfalls
 
-# Step 1: [Required] Get tool list (via shell_exec)
-shell_exec(
-    command="python scripts/get_tools.py --server-name <server-name>"
-)
-# Pick the desired tool from the output
-
-# Step 2: [Required] Get tool schema (via shell_exec)
-shell_exec(
-    command="python scripts/get_tool_schema.py --server-name <server-name> --tool-name <tool-name>"
-)
-# Review required parameters and types
-
-# Step 3: [Required] Call tool (via run_sdk_snippet)
-run_sdk_snippet(
-    python_code="""
-from sdk.mcp import mcp
-
-# Construct params per schema
-tool_params = {
-    "param1": "value1",
-    "param2": "value2"
-}
-
-# Call the tool
-result = mcp.call(
-    server_name="<server-name>",  # From user prompt or Step 0
-    tool_name="<tool-name>",      # From Step 1 query results
-    tool_params=tool_params    # Constructed per Step 2 schema
-)
-
-# Handle result
-if result.ok:
-    print(f"Call succeeded: {result.content}")
-else:
-    print(f"Call failed: {result.content}")
-"""
-)
-```
-
-## Notes
-
-1. **Server Confirmation**: If unsure whether server is available, run `get_servers.py` to check server status first
-2. **Tool Confirmation**: **MUST** run `get_tools.py` to confirm tool exists on that server before calling
-3. **Schema Validation**: **MUST** run `get_tool_schema.py` to get Schema and validate required parameters before calling tools
-4. **Parameter Format**: Ensure `tool_params` conforms to the tool's JSON Schema definition
-5. **No Imagination**: **STRICTLY FORBIDDEN** to imagine or guess tool names or parameter names; must follow query results
+- Passing `tool_params` to `mcp_call_tool` as a Python dict. It MUST be a JSON object string (e.g. `'{"key": "value"}'`); pass `'{}'` when no parameters are needed.
+- Calling `mcp_call_tool` without first checking `mcp_get_tool_schema` and supplying random parameter names. Always look at the schema first.
+- Passing `args` to `mcp_add_server` as a single string like `'-y @pkg /tmp'`. It MUST be a list of strings.
+- Treating `mcp_list_tools` without `server_name` as a way to "discover" tools on disconnected servers. It only returns tools from already-connected servers; use `mcp_list_servers` + `mcp_connect_server` to see disconnected ones.
+- Trying to call `mcp_call_tool` directly as a tool call (without `run_sdk_snippet`). It will be rejected because these tools are Code Mode only.
+- Passing `output_file_path` as a relative path like `'reports/data.json'`. It is rejected and the call silently falls back to the runtime directory, so the user never sees the file. Always build an absolute path, and prefer placing it under the current workspace.
