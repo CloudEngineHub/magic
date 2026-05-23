@@ -411,7 +411,6 @@
 	opacity: 0.55;
 }
 
-
 .mpk-textarea {
 	width: 100%;
 	min-height: 96px;
@@ -443,6 +442,56 @@
 	font-size: 10px;
 	line-height: 1.5;
 	white-space: nowrap;
+}
+
+.mpk-toggle-row {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+}
+
+.mpk-toggle {
+	position: relative;
+	width: 40px;
+	height: 24px;
+	padding: 0;
+	background: #e5e7eb;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	cursor: pointer;
+	transition:
+		background 0.2s,
+		border-color 0.2s,
+		box-shadow 0.2s;
+}
+
+.mpk-toggle:hover {
+	border-color: #c7d2fe;
+}
+
+.mpk-toggle:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 3px rgb(129 140 248 / 18%);
+}
+
+.mpk-toggle.is-active {
+	background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+}
+
+.mpk-toggle-thumb {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 18px;
+	height: 18px;
+	background: #fff;
+	border-radius: 999px;
+	box-shadow: 0 1px 2px rgb(15 23 42 / 18%);
+	transition: transform 0.2s ease;
+}
+
+.mpk-toggle.is-active .mpk-toggle-thumb {
+	transform: translateX(16px);
 }
 
 .mpk-card-tabs,

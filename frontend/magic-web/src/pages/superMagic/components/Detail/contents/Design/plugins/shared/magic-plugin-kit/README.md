@@ -220,6 +220,7 @@ kit 会按顺序渲染这些 section。
 - `image-grid`
 - `image-slot`
 - `textarea`
+- `toggle`
 - `size-control`
 - `option-group`
 - `model-select`
@@ -310,6 +311,40 @@ kit 会按顺序渲染这些 section。
 
 - 输入时直接写入对应 state，并重绘字数统计；不会每敲一个字就整段重渲染
 - 配置了 `maxLength` 后会自动截断，并显示 `当前字数/上限`
+
+### `toggle`
+
+用于布尔开关，比如“同版替换”“保留原场景”这类 true/false 业务状态。
+
+常用字段：
+
+- `stateKey`: 对应布尔 state 字段
+- `title`: 区块标题
+- `suffix`: 标题右侧补充文案
+- `help`: 区块底部说明文案
+- `deps`: 额外依赖的 state key，例如 `when` 依赖其他字段时需要声明
+- `when`: 条件渲染，返回 `false` 时不显示
+
+说明：
+
+- 直接读写 `state[stateKey]`
+- 点击后会在 `true / false` 间切换
+- 适合只有两种状态、且需要常驻说明文案的场景
+
+示例：
+
+```js
+{
+	id: "samePatternReplace",
+	kind: "toggle",
+	stateKey: "samePatternReplace",
+	title: t("section.samePatternReplace", "同版替换"),
+	help: t(
+		"samePatternReplace.help",
+		"服饰图与模特图的服饰为同版型时，试衣效果会更好哦！",
+	),
+}
+```
 
 ### `size-control`
 

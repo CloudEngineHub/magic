@@ -1,20 +1,23 @@
 import type { CanvasDesignPlugin } from "@/components/CanvasDesign/canvas/types"
-
-import bootsTryonStyles from "./boots-tryon/index.css?raw"
+import magicPluginKitStyles from "./shared/magic-plugin-kit/styles.css?raw"
+import magicPluginKitRuntimeCode from "./shared/magic-plugin-kit/index.js?raw"
 // eslint-disable-next-line import/extensions
+import bootsTryonStyles from "./boots-tryon/index.css?raw"
 import bootsTryonRuntimeCode from "./boots-tryon/index.js?raw"
 import bootsTryonManifest from "./boots-tryon/manifest.json"
+
+
 import sceneSwapStyles from "./scene-swap/index.css?raw"
-// eslint-disable-next-line import/extensions
 import sceneSwapRuntimeCode from "./scene-swap/index.js?raw"
 import sceneSwapManifest from "./scene-swap/manifest.json"
-import magicPluginKitStyles from "./shared/magic-plugin-kit/styles.css?raw"
-// eslint-disable-next-line import/extensions
-import magicPluginKitRuntimeCode from "./shared/magic-plugin-kit/index.js?raw"
+
 import virtualTryonStyles from "./virtual-tryon/index.css?raw"
-// eslint-disable-next-line import/extensions
 import virtualTryonRuntimeCode from "./virtual-tryon/index.js?raw"
 import virtualTryonManifest from "./virtual-tryon/manifest.json"
+
+import realModelTryonStyles from "./real-model-tryon/index.css?raw"
+import realModelTryonRuntimeCode from "./real-model-tryon/index.js?raw"
+import realModelTryonManifest from "./real-model-tryon/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -22,6 +25,8 @@ const bootsTryonEntryUrl = new URL("./boots-tryon/index.js", import.meta.url).hr
 const bootsTryonResourceBaseUrl = new URL("./boots-tryon/", import.meta.url).href
 const sceneSwapEntryUrl = new URL("./scene-swap/index.js", import.meta.url).href
 const sceneSwapResourceBaseUrl = new URL("./scene-swap/", import.meta.url).href
+const realModelTryonEntryUrl = new URL("./real-model-tryon/index.js", import.meta.url).href
+const realModelTryonResourceBaseUrl = new URL("./real-model-tryon/", import.meta.url).href
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -32,6 +37,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: virtualTryonRuntimeCode,
 		styleCode: [virtualTryonStyles],
 		resolveResourceUrl: (path) => new URL(path, virtualTryonResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...realModelTryonManifest,
+		entry: `./real-model-tryon/${realModelTryonManifest.entry}`,
+		runtimeUrl: realModelTryonEntryUrl,
+		resourceBaseUrl: realModelTryonResourceBaseUrl,
+		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${realModelTryonRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, realModelTryonStyles],
+		resolveResourceUrl: (path) => new URL(path, realModelTryonResourceBaseUrl).href,
 		source: "builtin",
 	},
 	{
@@ -54,4 +69,5 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		resolveResourceUrl: (path) => new URL(path, sceneSwapResourceBaseUrl).href,
 		source: "builtin",
 	},
+	
 ]

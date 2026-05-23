@@ -711,6 +711,32 @@
 			return sectionNode
 		}
 
+		/** 渲染开关 */
+		function renderToggle(section) {
+			const isChecked = Boolean(state[section.stateKey])
+			const sectionNode = createSection(section.title, section.suffix)
+			const body = createElement("div", "mpk-toggle-row")
+			const button = createElement(
+				"button",
+				`mpk-toggle${isChecked ? " is-active" : ""}`,
+			)
+			button.type = "button"
+			button.setAttribute("role", "switch")
+			button.setAttribute("aria-checked", String(isChecked))
+			button.setAttribute("aria-pressed", String(isChecked))
+			button.setAttribute("aria-label", section.title ?? section.stateKey)
+			button.append(createElement("span", "mpk-toggle-thumb"))
+			button.addEventListener("click", () => {
+				setState({ [section.stateKey]: !isChecked })
+			})
+			body.append(button)
+			sectionNode.append(body)
+			if (section.help) {
+				sectionNode.append(createElement("p", "mpk-help", section.help))
+			}
+			return sectionNode
+		}
+
 		/** 渲染尺寸控制 */
 		function renderSizeControl(section) {
 			const current = getSizeControlState(section)
@@ -866,6 +892,7 @@
 			if (section.kind === "image-grid") return renderImageGrid(section)
 			if (section.kind === "image-slot") return renderImageSlot(section)
 			if (section.kind === "textarea") return renderTextarea(section)
+			if (section.kind === "toggle") return renderToggle(section)
 			if (section.kind === "size-control") return renderSizeControl(section)
 			if (section.kind === "option-group") return renderOptionGroup(section)
 			if (section.kind === "model-select") return renderModelSelect(section)

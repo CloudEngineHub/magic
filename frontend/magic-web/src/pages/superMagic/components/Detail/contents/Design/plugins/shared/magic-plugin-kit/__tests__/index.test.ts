@@ -322,6 +322,40 @@ describe("magic-plugin-kit", () => {
 		expect(nextButtons[1].classList.contains("is-active")).toBe(true)
 	})
 
+	it("toggles boolean state with help text", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				samePatternReplace: false,
+			},
+			sections: [
+				{
+					id: "samePatternReplace",
+					kind: "toggle",
+					stateKey: "samePatternReplace",
+					title: "Same-pattern replace",
+					help: "Works better when both garments share the same silhouette.",
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const toggle = root.querySelector<HTMLButtonElement>(".mpk-toggle")
+		expect(toggle).not.toBeNull()
+		expect(toggle?.getAttribute("aria-pressed")).toBe("false")
+		expect(root.textContent).toContain(
+			"Works better when both garments share the same silhouette.",
+		)
+
+		toggle?.click()
+
+		const nextToggle = root.querySelector<HTMLButtonElement>(".mpk-toggle")
+		expect(nextToggle?.getAttribute("aria-pressed")).toBe("true")
+	})
+
 	it("switches size-control ratio options from model sizes", () => {
 		const kit = loadMagicPluginKit()
 		const root = createRoot()
