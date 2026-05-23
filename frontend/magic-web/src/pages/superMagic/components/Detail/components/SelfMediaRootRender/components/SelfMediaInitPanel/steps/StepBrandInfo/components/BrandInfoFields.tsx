@@ -205,6 +205,16 @@ export function BrandInfoFields({
 		[brandImages, onBrandImagesChange],
 	)
 
+	const handleAutoResize = useCallback((el: HTMLTextAreaElement) => {
+		el.style.height = "auto"
+		el.style.height = `${el.scrollHeight}px`
+	}, [])
+
+	const handleTextareaBlur = useCallback((el: HTMLTextAreaElement) => {
+		el.style.height = ""
+		setActiveBrandField(null)
+	}, [])
+
 	const isFetching = isPlatformFetching
 	const canFetchFromPlatform = Boolean(author.trim()) && Boolean(projectId)
 	const getFieldLabelClass = (field: BrandInfoField) =>
@@ -218,7 +228,7 @@ export function BrandInfoFields({
 		compact ? "px-3 py-2.5 text-xs" : "px-4 py-3 text-sm",
 	)
 	const textareaClassName = cn(
-		"scrollbar-thin max-h-56 w-full resize-y border-0 border-b border-zinc-200 bg-zinc-50/40 pr-10 text-xs leading-relaxed outline-none transition-all duration-300 placeholder:text-muted-foreground/40 focus:border-zinc-950 focus:bg-primary/[0.03] sm:text-sm",
+		"scrollbar-thin w-full resize-none border-0 border-b border-zinc-200 bg-zinc-50/40 pr-10 text-xs leading-relaxed outline-none transition-[border-color,background-color] duration-300 placeholder:text-muted-foreground/40 focus:border-zinc-950 focus:bg-primary/[0.03] sm:text-sm",
 		compact ? "min-h-[84px] px-3 py-2.5" : "min-h-[110px] px-4 py-3.5",
 	)
 
@@ -343,9 +353,15 @@ export function BrandInfoFields({
 									"一句话描述你的定位，如：分享 AI 工具",
 								)}
 								value={brandPosition}
-								onChange={(e) => onChange("brandPosition", e.target.value)}
-								onFocus={() => setActiveBrandField("brandPosition")}
-								onBlur={() => setActiveBrandField(null)}
+								onChange={(e) => {
+									onChange("brandPosition", e.target.value)
+									handleAutoResize(e.currentTarget)
+								}}
+								onFocus={(e) => {
+									setActiveBrandField("brandPosition")
+									handleAutoResize(e.currentTarget)
+								}}
+								onBlur={(e) => handleTextareaBlur(e.currentTarget)}
 								disabled={isFetching}
 							/>
 							<InlineVoiceButton
@@ -401,9 +417,15 @@ export function BrandInfoFields({
 								"如：25-35 岁职场人、大学生、宝妈",
 							)}
 							value={targetAudience}
-							onChange={(e) => onChange("targetAudience", e.target.value)}
-							onFocus={() => setActiveBrandField("targetAudience")}
-							onBlur={() => setActiveBrandField(null)}
+							onChange={(e) => {
+								onChange("targetAudience", e.target.value)
+								handleAutoResize(e.currentTarget)
+							}}
+							onFocus={(e) => {
+								setActiveBrandField("targetAudience")
+								handleAutoResize(e.currentTarget)
+							}}
+							onBlur={(e) => handleTextareaBlur(e.currentTarget)}
 							disabled={isFetching}
 						/>
 						<InlineVoiceButton
