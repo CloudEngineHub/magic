@@ -86,9 +86,9 @@ import { detectContentTypeRender } from "../Detail/components/FilesViewer/utils/
 import type { FileItem } from "../Detail/components/FilesViewer/types"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
 import { DetailType } from "../Detail/types"
-import type { AttachmentNode } from "../Detail/components/SelfMediaRootRender/services/selfMediaHelpers"
-import { createSelfMediaTreeNavigationIndex } from "../Detail/components/SelfMediaRootRender/utils/selfMediaTreeNavigation"
 import SelfMediaPostRowPlatformIcon from "../Detail/components/SelfMediaRootRender/components/SelfMediaPostRowPlatformIcon"
+import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
+import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
 import { isMagicSystemFolder } from "./utils/magic-system-folder"
 
 interface TopicFilesCoreProps {
@@ -804,60 +804,19 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		return node?.item
 	})
 
-	const selfMediaNavigation = useMemo(
-		() => createSelfMediaTreeNavigationIndex(attachments as unknown as AttachmentNode[]),
-		[attachments],
-	)
+	const selfMediaNavigation = useSelfMediaTreeNavigation({
+		attachments,
+		findFileInTree,
+		onFileClick,
+		setUserSelectDetail,
+	})
+	const { tryOpenSelfMediaFromPostRootFolder } = selfMediaNavigation
 
-	/** Open self-media root when clicking the exact `posts/<id>` folder row. */
-	const tryOpenSelfMediaFromPostRootFolder = useMemoizedFn((item: AttachmentItem): boolean => {
-		if (!attachments?.length) return false
-		const resolution = selfMediaNavigation.resolvePostRootFolderClick({
-			...item,
-			display_config: item.display_config,
-		})
-		const nav = resolution?.navigationTarget
-		if (!nav) return false
-		const root = findFileInTree(nav.rootFolderFileId)
-		if (!root?.file_id) return false
-		const fileItem: FileItem = {
-			file_id: root.file_id,
-			file_name: root.file_name || root.name || "",
-			display_filename: root.name || root.file_name,
-			is_directory: root.is_directory,
-			children: root.children as FileItem[] | undefined,
-			display_config: root.display_config,
-			file_extension: root.file_extension,
-			file_size: root.file_size,
-		}
-		const contentTypeConfig = detectContentTypeRender(fileItem)
-		if (!contentTypeConfig || contentTypeConfig.detailType !== DetailType.SelfMedia) {
-			return false
-		}
-		const transformedData = contentTypeConfig.dataTransformer
-			? contentTypeConfig.dataTransformer(fileItem)
-			: fileItem
-		const platformGuess = resolution.targetPlatform
-		const rootDetailData = {
-			...root,
-			...transformedData,
-			file_id: root.file_id,
-			file_name: root.name || root.file_name,
-			display_config: root.display_config,
-			initialNavigation: {
-				activePostId: nav.activePostId,
-				initialView: "detail" as const,
-				...(platformGuess ? { activePlatform: platformGuess } : {}),
-			},
-		}
-		if (onFileClick && root.file_id) onFileClick(rootDetailData)
-		setUserSelectDetail?.({
-			type: contentTypeConfig.detailType,
-			data: rootDetailData,
-			currentFileId: root.file_id,
-			attachments,
-		})
-		return true
+	const { tryOpenAICardFromSubFolder } = useAICardTreeNavigation({
+		attachments,
+		findFileInTree,
+		onFileClick,
+		setUserSelectDetail,
 	})
 
 	// 检查文件是否在文件夹的直接子项中（只检查一级，不递归）
@@ -1130,10 +1089,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				isFolderDownloading(item)
 
 			const { folderIconPlatform: selfMediaRowPlatform } = attachments?.length
-				? selfMediaNavigation.resolveNode({
-						...item,
-						display_config: item.display_config,
-					})
+				? { folderIconPlatform: selfMediaNavigation.resolveNodeFolderIconPlatform(item) }
 				: { folderIconPlatform: null }
 
 			// 使用 createFileDragHandlers 获取拖拽事件处理器
@@ -1170,6 +1126,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						}
 
 						if (tryOpenSelfMediaFromPostRootFolder(item)) return
+						if (tryOpenAICardFromSubFolder(item)) return
 
 						if (isEmpty(item.display_config)) {
 							// 普通文件夹，没有 display_config，直接展开/折叠
@@ -1417,6 +1374,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					}
 
 					if (tryOpenSelfMediaFromPostRootFolder(item)) return
+					if (tryOpenAICardFromSubFolder(item)) return
 
 					if (renamingItemId !== itemId) {
 						// 检查是否是内容类型渲染（不依赖文件内容，有自己的 detail render content）

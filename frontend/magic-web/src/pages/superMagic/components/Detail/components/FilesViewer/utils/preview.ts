@@ -1,5 +1,5 @@
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
-import { DetailType, type SelfMediaInitialNavigation } from "../../../types"
+import { DetailType, type SelfMediaInitialNavigation, type AICardInitialNavigation } from "../../../types"
 import type { FileItem } from "../types"
 import { isMagicProjectConfigFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 
@@ -119,6 +119,22 @@ function selfMediaDataTransformer(item: FileItem) {
 }
 
 /**
+ * AI Card folder transformer.
+ */
+function aiCardDataTransformer(item: FileItem) {
+	const fileName = item.display_filename || item.file_name || item.filename
+	const extra = item as FileItem & { initialNavigation?: AICardInitialNavigation }
+	return {
+		file_name: fileName,
+		name: fileName,
+		is_directory: item.is_directory,
+		children: item.children,
+		display_config: item.display_config,
+		...(extra.initialNavigation ? { initialNavigation: extra.initialNavigation } : {}),
+	}
+}
+
+/**
  * 内容类型渲染配置列表
  * 这些内容类型不依赖文件内容，有自己的 detail render content
  */
@@ -135,13 +151,12 @@ const contentTypeRenderConfigs: ContentTypeRenderConfig[] = [
 		dataTransformer: selfMediaDataTransformer,
 		priority: 10,
 	},
-	// 未来可以扩展其他内容类型，例如：
-	// {
-	//   metadataType: "canvas",
-	//   detailType: DetailType.Canvas,
-	//   dataTransformer: canvasDataTransformer,
-	//   priority: 10,
-	// },
+	{
+		displayConfigType: "ai-card",
+		detailType: DetailType.AICard,
+		dataTransformer: aiCardDataTransformer,
+		priority: 10,
+	},
 ]
 
 /**

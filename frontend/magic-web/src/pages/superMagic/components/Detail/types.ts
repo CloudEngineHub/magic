@@ -21,6 +21,7 @@ export enum DetailType {
 	Audio = "audio",
 	Design = "design",
 	SelfMedia = "self-media",
+	AICard = "ai-card",
 }
 
 /** Self-media platform values supported by the dispatcher */
@@ -39,6 +40,12 @@ export interface SelfMediaInitialNavigation {
 	initialView: "detail"
 	/** If omitted, the store picks the first slice that declares the post */
 	activePlatform?: SelfMediaPlatform
+}
+
+/** In-memory one-shot target when opening ai-card from the file tree */
+export interface AICardInitialNavigation {
+	activeCardId?: string
+	initialView?: "detail" | "dashboard"
 }
 
 /** Self-media folder detail payload */

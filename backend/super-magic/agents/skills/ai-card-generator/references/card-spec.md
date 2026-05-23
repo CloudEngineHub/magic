@@ -1,0 +1,137 @@
+# AI Card HTML Specification
+
+## File Requirements
+
+1. **Self-contained**: All CSS and JavaScript must be inline. No external stylesheets or scripts.
+2. **Encoding**: Must include `<meta charset="utf-8">`.
+3. **Viewport**: Must include `<meta name="viewport" content="width=device-width, initial-scale=1.0">`.
+4. **No External Resources**: Do not reference any external CDN, fonts, or APIs. The card renders inside a sandboxed iframe.
+5. **Responsive**: Use CSS Grid or Flexbox for layout. Card should render well at various widths (300px–1200px).
+
+## Dark Mode Support
+
+Use CSS `prefers-color-scheme` media query:
+
+```css
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e;
+    --text: #e0e0e0;
+    --card-bg: #16213e;
+  }
+}
+```
+
+## Data Section Marking
+
+Mark dynamic data sections with HTML comments so the agent can locate and replace them:
+
+```html
+<!-- DATA_SECTION_START -->
+<div class="content">
+  <!-- Dynamic content goes here -->
+</div>
+<!-- DATA_SECTION_END -->
+```
+
+For multiple data zones, use named markers:
+
+```html
+<!-- DATA:metrics_START -->
+<div class="metrics">...</div>
+<!-- DATA:metrics_END -->
+
+<!-- DATA:list_START -->
+<ul class="items">
+  ...
+</ul>
+<!-- DATA:list_END -->
+```
+
+## Template Variables
+
+Templates may use placeholder patterns that the agent replaces during generation:
+
+| Placeholder            | Description                                      |
+| ---------------------- | ------------------------------------------------ |
+| `{{CARD_TITLE}}`       | Card display name                                |
+| `{{GENERATED_AT}}`     | Generation timestamp (ISO 8601 or locale string) |
+| `{{UPDATE_COUNT}}`     | Total generation count                           |
+| `{{CARD_DESCRIPTION}}` | Card description text                            |
+
+## Recommended Structure
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{CARD_TITLE}}</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --text: #1a1a1a;
+        --card-bg: #f8f9fa;
+        --accent: #3b82f6;
+        --border: #e5e7eb;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f172a;
+          --text: #e2e8f0;
+          --card-bg: #1e293b;
+          --accent: #60a5fa;
+          --border: #334155;
+        }
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        padding: 24px;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>{{CARD_TITLE}}</h1>
+      <p class="subtitle">{{CARD_DESCRIPTION}}</p>
+      <time datetime="{{GENERATED_AT}}">Updated: {{GENERATED_AT}}</time>
+    </header>
+
+    <!-- DATA_SECTION_START -->
+    <main>
+      <!-- Agent fills content here -->
+    </main>
+    <!-- DATA_SECTION_END -->
+
+    <footer>
+      <p>Auto-generated · Update #{{UPDATE_COUNT}}</p>
+    </footer>
+  </body>
+</html>
+```
+
+## History Snapshot Naming
+
+When archiving the current `latest.html` to `history/`, use the format:
+
+```
+history/YYYY-MM-DD_HH-mm.html
+```
+
+Example: `history/2026-05-23_09-00.html`
+
+## Performance Guidelines
+
+- Keep total HTML file size under 500KB
+- Minimize inline JavaScript; use it only for essential interactivity
+- Prefer CSS animations over JavaScript animations
+- Use semantic HTML for accessibility

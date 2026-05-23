@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{CARD_TITLE}}</title>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --text: #1a1a1a;
+            --card-bg: #f8f9fa;
+            --accent: #6366f1;
+            --accent-light: #eef2ff;
+            --border: #e5e7eb;
+            --muted: #6b7280;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0f172a;
+                --text: #e2e8f0;
+                --card-bg: #1e293b;
+                --accent: #818cf8;
+                --accent-light: #1e1b4b;
+                --border: #334155;
+                --muted: #94a3b8;
+                --success: #34d399;
+                --danger: #f87171;
+            }
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 24px;
+            line-height: 1.6;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .header .badge {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: var(--accent-light);
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .kpi-value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--accent);
+            line-height: 1.2;
+        }
+
+        .kpi-label {
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        .kpi-trend {
+            font-size: 0.7rem;
+            margin-top: 6px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+
+        .kpi-trend.up {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .kpi-trend.down {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+
+        .chart-section {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .chart-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bar-label {
+            width: 60px;
+            font-size: 0.75rem;
+            color: var(--muted);
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .bar-track {
+            flex: 1;
+            height: 20px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 4px;
+            transition: width 0.6s ease;
+        }
+
+        .bar-value {
+            width: 40px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-align: left;
+            flex-shrink: 0;
+        }
+
+        .footer {
+            margin-top: 24px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--muted);
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>{{CARD_TITLE}}</h1>
+        <span class="badge">{{GENERATED_AT}}</span>
+    </div>
+
+    <!-- DATA:kpi_START -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-value">24.8K</div>
+            <div class="kpi-label">总访问量</div>
+            <span class="kpi-trend up">↑ 15.3%</span>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">1,247</div>
+            <div class="kpi-label">新增用户</div>
+            <span class="kpi-trend up">↑ 8.7%</span>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">3.2%</div>
+            <div class="kpi-label">转化率</div>
+            <span class="kpi-trend down">↓ 0.5%</span>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">¥58.9K</div>
+            <div class="kpi-label">收入</div>
+            <span class="kpi-trend up">↑ 22.1%</span>
+        </div>
+    </div>
+    <!-- DATA:kpi_END -->
+
+    <!-- DATA:chart_START -->
+    <div class="chart-section">
+        <h3 class="chart-title">📊 7日趋势</h3>
+        <div class="bar-chart">
+            <div class="bar-row">
+                <span class="bar-label">周一</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 65%"></div>
+                </div>
+                <span class="bar-value">3.2K</span>
+            </div>
+            <div class="bar-row">
+                <span class="bar-label">周二</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 78%"></div>
+                </div>
+                <span class="bar-value">3.9K</span>
+            </div>
+            <div class="bar-row">
+                <span class="bar-label">周三</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 72%"></div>
+                </div>
+                <span class="bar-value">3.6K</span>
+            </div>
+            <div class="bar-row">
+                <span class="bar-label">周四</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 85%"></div>
+                </div>
+                <span class="bar-value">4.2K</span>
+            </div>
+            <div class="bar-row">
+                <span class="bar-label">周五</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 92%"></div>
+                </div>
+                <span class="bar-value">4.6K</span>
+            </div>
+            <div class="bar-row">
+                <span class="bar-label">周六</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 55%"></div>
+                </div>
+                <span class="bar-value">2.7K</span>
+            </div>
+            <div class="bar-row">
+                <span class="bar-label">周日</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 48%"></div>
+                </div>
+                <span class="bar-value">2.4K</span>
+            </div>
+        </div>
+    </div>
+    <!-- DATA:chart_END -->
+
+    <div class="footer">
+        Auto-generated · Update #{{UPDATE_COUNT}}
+    </div>
+</body>
+
+</html>

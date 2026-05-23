@@ -1,4 +1,4 @@
-import { FileText, Layers, Plus, Settings } from "lucide-react"
+import { FileText, Layers, Plus, Settings, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import { cn } from "@/lib/utils"
@@ -12,6 +12,7 @@ interface SelfMediaHomePageProps {
 	onCreateArticle: () => void
 	onOpenPost: (target: { platform: SelfMediaPlatform; index: number }) => void
 	onOpenBrandConfig?: () => void
+	onCreateAICard?: () => void
 	className?: string
 }
 
@@ -20,6 +21,7 @@ function SelfMediaHomePage({
 	onCreateArticle,
 	onOpenPost,
 	onOpenBrandConfig,
+	onCreateAICard,
 	className,
 }: SelfMediaHomePageProps) {
 	const { t } = useTranslation("super")
@@ -100,6 +102,17 @@ function SelfMediaHomePage({
 							>
 								<Settings size={14} />
 								<span>{t("detail.selfMedia.home.brandConfig")}</span>
+							</button>
+						) : null}
+						{onCreateAICard ? (
+							<button
+								type="button"
+								className="inline-flex cursor-pointer items-center justify-center gap-2 bg-violet-50 px-4 py-2.5 text-xs font-black text-violet-700 transition-all hover:bg-violet-100 active:scale-[0.98]"
+								onClick={onCreateAICard}
+								data-testid="self-media-home-ai-card-button"
+							>
+								<Sparkles size={14} />
+								<span>{t("detail.selfMedia.home.aiCard")}</span>
 							</button>
 						) : null}
 						<button

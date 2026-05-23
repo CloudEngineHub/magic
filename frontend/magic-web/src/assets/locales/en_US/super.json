@@ -638,7 +638,8 @@
 				"emptyTitle": "No articles yet",
 				"openPlatform": "Open platform content",
 				"subtitle": "Open details from the list. Data updates keep you on the current page.",
-				"title": "Article home"
+				"title": "Article home",
+				"aiCard": "AI Card"
 			},
 			"brandConfig": {
 				"cancel": "Cancel",
@@ -971,7 +972,49 @@
 				"scroll": "Long Scroll"
 			}
 		},
-		"unsavedChangesWarning": "You have unsaved changes. Are you sure you want to leave?"
+		"unsavedChangesWarning": "You have unsaved changes. Are you sure you want to leave?",
+		"aiCard": {
+			"createDialog": {
+				"title": "Create AI Card",
+				"description": "AI will automatically create a visual card and set up a scheduled task to fetch and update latest data periodically.",
+				"cardName": "Card Name",
+				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
+				"template": "Card Template",
+				"prompt": "Analysis Instructions",
+				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends and present with list + trend markers.",
+				"promptHint": "AI will periodically fetch latest data based on this instruction, analyze it, and generate an updated visual card.",
+				"cancel": "Cancel",
+				"confirm": "Create Card",
+				"creating": "Creating..."
+			},
+			"form": {
+				"cardName": "Card Name",
+				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
+				"template": "Card Template",
+				"templateHint": "Choose a visual template, or select \"Custom\" to edit manually",
+				"prompt": "Analysis Instructions",
+				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends.",
+				"promptHint": "AI will periodically fetch latest data, analyze it, and update the visual card.",
+				"advancedSettings": "Advanced Settings"
+			},
+			"config": {
+				"editTitle": "Edit Configuration",
+				"createTitle": "Configure AI Card",
+				"schedule": "Schedule",
+				"modelSection": "Model Configuration",
+				"languageModel": "Language Model",
+				"imageModel": "Image Model",
+				"videoModel": "Video Model",
+				"defaultModel": "Default model",
+				"defaultImageModel": "Default image model",
+				"defaultVideoModel": "Default video model",
+				"enableSchedule": "Enable Scheduled Execution",
+				"enableScheduleHint": "Card will auto-update at the set frequency",
+				"cancel": "Cancel",
+				"saving": "Saving...",
+				"save": "Save Configuration"
+			}
+		}
 	},
 	"draftBox": {
 		"deleteConfirm": {
@@ -3020,7 +3063,10 @@
 		],
 		"actionTitle": "If you want to actively intervene",
 		"mainText": "Task execution is taking too long, which may be due to the following reasons:",
-		"reasonList": ["AI is processing complex tasks", "Network connection is unstable"],
+		"reasonList": [
+			"AI is processing complex tasks",
+			"Network connection is unstable"
+		],
 		"statusText": "If you don't take any action, AI will continue trying"
 	},
 	"tool": {

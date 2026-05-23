@@ -639,7 +639,8 @@
 				"emptyTitle": "暂无文章",
 				"openPlatform": "打开平台内容",
 				"subtitle": "从文章列表进入详情，数据更新时会保留当前页面。",
-				"title": "文章首页"
+				"title": "文章首页",
+				"aiCard": "AI 卡片"
 			},
 			"brandConfig": {
 				"cancel": "取消",
@@ -972,7 +973,49 @@
 				"scroll": "长图"
 			}
 		},
-		"unsavedChangesWarning": "您有未保存的更改，确定要离开吗？"
+		"unsavedChangesWarning": "您有未保存的更改，确定要离开吗？",
+		"aiCard": {
+			"createDialog": {
+				"title": "创建 AI 卡片",
+				"description": "AI 将自动创建可视化卡片，并设置定时任务定期获取最新数据更新。",
+				"cardName": "卡片名称",
+				"cardNamePlaceholder": "例如：抖音热点追踪、每日行业摘要",
+				"template": "卡片模板",
+				"prompt": "分析指令",
+				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
+				"promptHint": "AI 将根据此指令定时获取最新数据，分析后生成可视化卡片并自动更新。",
+				"cancel": "取消",
+				"confirm": "创建卡片",
+				"creating": "创建中..."
+			},
+			"form": {
+				"cardName": "卡片名称",
+				"cardNamePlaceholder": "例如：抖音热点追踪、每日行业摘要",
+				"template": "卡片模板",
+				"templateHint": "选择卡片的视觉样式模板，也可选\"自定义\"后手动编辑模板",
+				"prompt": "分析指令",
+				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
+				"promptHint": "AI 将根据此指令定时获取最新数据，分析后生成可视化卡片并自动更新。",
+				"advancedSettings": "高级设置"
+			},
+			"config": {
+				"editTitle": "编辑配置",
+				"createTitle": "配置 AI 卡片",
+				"schedule": "执行频率",
+				"modelSection": "模型配置",
+				"languageModel": "语言模型",
+				"imageModel": "生图模型",
+				"videoModel": "视频模型",
+				"defaultModel": "默认模型",
+				"defaultImageModel": "默认生图模型",
+				"defaultVideoModel": "默认视频模型",
+				"enableSchedule": "启用定时执行",
+				"enableScheduleHint": "开启后将按设定频率自动更新卡片",
+				"cancel": "取消",
+				"saving": "保存中...",
+				"save": "保存配置"
+			}
+		}
 	},
 	"draftBox": {
 		"deleteConfirm": {
@@ -3023,7 +3066,10 @@
 		],
 		"actionTitle": "若您希望主动干预",
 		"mainText": "任务执行时间过长，可能是如下原因导致：",
-		"reasonList": ["AI 处理复杂任务中", "网络连接不稳定"],
+		"reasonList": [
+			"AI 处理复杂任务中",
+			"网络连接不稳定"
+		],
 		"statusText": "若您暂不操作，AI 会继续尝试"
 	},
 	"tool": {

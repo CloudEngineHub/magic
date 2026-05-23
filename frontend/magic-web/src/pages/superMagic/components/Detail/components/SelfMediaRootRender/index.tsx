@@ -11,6 +11,7 @@ import { SelfMediaStoreProvider, useSelfMediaStore } from "./stores"
 import SelfMediaInitPanel from "./components/SelfMediaInitPanel"
 import SelfMediaHomePage from "./components/SelfMediaHomePage"
 import BrandConfigDialog from "./components/BrandConfigDialog"
+import AICardCreateDialog from "./components/AICardCreateDialog"
 import { SelfMediaFileStorageService } from "./services/SelfMediaFileStorageService"
 import type { SelfMediaRootRenderProps } from "./types"
 
@@ -88,6 +89,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	const { t } = useTranslation("super")
 	const store = useSelfMediaStore()
 	const [rootMode, setRootMode] = useState<SelfMediaRootMode | null>(null)
+	const [aiCardDialogOpen, setAiCardDialogOpen] = useState(false)
 	const [brandConfigOpen, setBrandConfigOpen] = useState(false)
 
 	const { platforms, resolvedPlatform: platform, rootLoading } = store
@@ -112,6 +114,9 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	}, [])
 	const handleOpenBrandConfig = useCallback(() => {
 		setBrandConfigOpen(true)
+	}, [])
+	const handleOpenAICardCreate = useCallback(() => {
+		setAiCardDialogOpen(true)
 	}, [])
 	const handleBackHome = useCallback(() => {
 		store.goHomeList()
@@ -169,12 +174,19 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					onCreateArticle={handleStartCreateArticle}
 					onOpenPost={handleOpenPost}
 					onOpenBrandConfig={handleOpenBrandConfig}
+					onCreateAICard={handleOpenAICardCreate}
 				/>
 				<BrandConfigDialog
 					open={brandConfigOpen}
 					onOpenChange={setBrandConfigOpen}
 					fileStorageService={fileStorageService}
 					attachmentList={attachmentList}
+					projectId={projectId}
+					folderPath={folderPath}
+				/>
+				<AICardCreateDialog
+					open={aiCardDialogOpen}
+					onOpenChange={setAiCardDialogOpen}
 					projectId={projectId}
 					folderPath={folderPath}
 				/>
