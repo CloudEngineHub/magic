@@ -6,7 +6,6 @@ import bootsTryonStyles from "./boots-tryon/index.css?raw"
 import bootsTryonRuntimeCode from "./boots-tryon/index.js?raw"
 import bootsTryonManifest from "./boots-tryon/manifest.json"
 
-
 import sceneSwapStyles from "./scene-swap/index.css?raw"
 import sceneSwapRuntimeCode from "./scene-swap/index.js?raw"
 import sceneSwapManifest from "./scene-swap/manifest.json"
@@ -18,6 +17,9 @@ import virtualTryonManifest from "./virtual-tryon/manifest.json"
 import realModelTryonStyles from "./real-model-tryon/index.css?raw"
 import realModelTryonRuntimeCode from "./real-model-tryon/index.js?raw"
 import realModelTryonManifest from "./real-model-tryon/manifest.json"
+import dressUpTryonStyles from "./dress-up-tryon/index.css?raw"
+import dressUpTryonRuntimeCode from "./dress-up-tryon/index.js?raw"
+import dressUpTryonManifest from "./dress-up-tryon/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -27,6 +29,8 @@ const sceneSwapEntryUrl = new URL("./scene-swap/index.js", import.meta.url).href
 const sceneSwapResourceBaseUrl = new URL("./scene-swap/", import.meta.url).href
 const realModelTryonEntryUrl = new URL("./real-model-tryon/index.js", import.meta.url).href
 const realModelTryonResourceBaseUrl = new URL("./real-model-tryon/", import.meta.url).href
+const dressUpTryonEntryUrl = new URL("./dress-up-tryon/index.js", import.meta.url).href
+const dressUpTryonResourceBaseUrl = new URL("./dress-up-tryon/", import.meta.url).href
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -37,6 +41,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: virtualTryonRuntimeCode,
 		styleCode: [virtualTryonStyles],
 		resolveResourceUrl: (path) => new URL(path, virtualTryonResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...dressUpTryonManifest,
+		entry: `./dress-up-tryon/${dressUpTryonManifest.entry}`,
+		runtimeUrl: dressUpTryonEntryUrl,
+		resourceBaseUrl: dressUpTryonResourceBaseUrl,
+		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${dressUpTryonRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, dressUpTryonStyles],
+		resolveResourceUrl: (path) => new URL(path, dressUpTryonResourceBaseUrl).href,
 		source: "builtin",
 	},
 	{
@@ -69,5 +83,4 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		resolveResourceUrl: (path) => new URL(path, sceneSwapResourceBaseUrl).href,
 		source: "builtin",
 	},
-	
 ]

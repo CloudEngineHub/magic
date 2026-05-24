@@ -716,10 +716,7 @@
 			const isChecked = Boolean(state[section.stateKey])
 			const sectionNode = createSection(section.title, section.suffix)
 			const body = createElement("div", "mpk-toggle-row")
-			const button = createElement(
-				"button",
-				`mpk-toggle${isChecked ? " is-active" : ""}`,
-			)
+			const button = createElement("button", `mpk-toggle${isChecked ? " is-active" : ""}`)
 			button.type = "button"
 			button.setAttribute("role", "switch")
 			button.setAttribute("aria-checked", String(isChecked))
@@ -858,6 +855,7 @@
 		/** 渲染分辨率选择 */
 		function renderResolutionSelect(section) {
 			const resolutionOptions = getResolutionOptions()
+			console.log(resolutionOptions)
 			if (resolutionOptions.length <= 1 && section.hideWhenSingle !== false) {
 				return document.createDocumentFragment()
 			}

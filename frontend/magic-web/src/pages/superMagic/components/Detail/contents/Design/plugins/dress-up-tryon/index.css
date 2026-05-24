@@ -1,0 +1,7 @@
+.dress-up-tryon-garment-mode.mpk-option-group.is-card {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dress-up-tryon .mpk-image-slot-preview {
+	max-height: 240px;
+}
