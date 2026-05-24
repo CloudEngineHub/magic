@@ -5,18 +5,18 @@ import magicPluginKitRuntimeCode from "./shared/magic-plugin-kit/index.js?raw"
 import bootsTryonStyles from "./boots-tryon/index.css?raw"
 import bootsTryonRuntimeCode from "./boots-tryon/index.js?raw"
 import bootsTryonManifest from "./boots-tryon/manifest.json"
-
 import sceneSwapStyles from "./scene-swap/index.css?raw"
 import sceneSwapRuntimeCode from "./scene-swap/index.js?raw"
 import sceneSwapManifest from "./scene-swap/manifest.json"
-
 import virtualTryonStyles from "./virtual-tryon/index.css?raw"
 import virtualTryonRuntimeCode from "./virtual-tryon/index.js?raw"
 import virtualTryonManifest from "./virtual-tryon/manifest.json"
-
 import realModelTryonStyles from "./real-model-tryon/index.css?raw"
 import realModelTryonRuntimeCode from "./real-model-tryon/index.js?raw"
 import realModelTryonManifest from "./real-model-tryon/manifest.json"
+import modelSwapStyles from "./model-swap/index.css?raw"
+import modelSwapRuntimeCode from "./model-swap/index.js?raw"
+import modelSwapManifest from "./model-swap/manifest.json"
 import dressUpTryonStyles from "./dress-up-tryon/index.css?raw"
 import dressUpTryonRuntimeCode from "./dress-up-tryon/index.js?raw"
 import dressUpTryonManifest from "./dress-up-tryon/manifest.json"
@@ -32,6 +32,8 @@ const sceneSwapEntryUrl = new URL("./scene-swap/index.js", import.meta.url).href
 const sceneSwapResourceBaseUrl = new URL("./scene-swap/", import.meta.url).href
 const realModelTryonEntryUrl = new URL("./real-model-tryon/index.js", import.meta.url).href
 const realModelTryonResourceBaseUrl = new URL("./real-model-tryon/", import.meta.url).href
+const modelSwapEntryUrl = new URL("./model-swap/index.js", import.meta.url).href
+const modelSwapResourceBaseUrl = new URL("./model-swap/", import.meta.url).href
 const dressUpTryonEntryUrl = new URL("./dress-up-tryon/index.js", import.meta.url).href
 const dressUpTryonResourceBaseUrl = new URL("./dress-up-tryon/", import.meta.url).href
 const accessoryTryonEntryUrl = new URL("./accessory-tryon/index.js", import.meta.url).href
@@ -66,6 +68,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${accessoryTryonRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, accessoryTryonStyles],
 		resolveResourceUrl: (path) => new URL(path, accessoryTryonResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...modelSwapManifest,
+		entry: `./model-swap/${modelSwapManifest.entry}`,
+		runtimeUrl: modelSwapEntryUrl,
+		resourceBaseUrl: modelSwapResourceBaseUrl,
+		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${modelSwapRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, modelSwapStyles],
+		resolveResourceUrl: (path) => new URL(path, modelSwapResourceBaseUrl).href,
 		source: "builtin",
 	},
 	{

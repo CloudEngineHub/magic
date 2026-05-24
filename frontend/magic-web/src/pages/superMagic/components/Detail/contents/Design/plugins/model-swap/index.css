@@ -1,0 +1,4 @@
+.model-swap .mpk-image-card-image,
+.model-swap .mpk-image-slot-preview {
+	max-height: 240px;
+}
