@@ -208,11 +208,21 @@ When a scheduled task triggers, execute the following:
 创建卡片后如需定时更新，使用 using-cron 创建定时任务：
 -->
 
-After creating a card, if scheduled updates are needed, use using-cron to create a scheduled task:
+After creating a card, if scheduled updates are needed, use using-cron to create a scheduled task.
+Use `shell_exec` from `agents/skills/using-cron`; do not use `run_sdk_snippet`.
+For long update instructions, write the message to a temporary file and pass `--message-content-file`
+to avoid shell parsing issues with punctuation, quotes, or brackets.
 
 ```python
 shell_exec(
-    command='python scripts/create.py --task-name "AI卡片: {card_name}" --message-content "请更新 AI 卡片 [{card_name}]，读取 {card_directory}/magic.project.js 获取配置和提示词，读取 template.html 模板，获取最新数据并生成更新版本到 latest.html" --type daily_repeat --time "9:00" --topic-pattern ip-manager'
+    command='''cat > /tmp/ai-card-cron-message.txt <<'EOF'
+Update the AI card {card_name}. Read {card_directory}/magic.project.js for
+configuration and prompts, read template.html, fetch fresh data, generate the
+new version to latest.html, archive the previous latest.html, and update
+last_generated and generation_count in magic.project.js.
+EOF
+cd /app/agents/skills/using-cron &&
+python scripts/create.py --task-name "AI Card: {card_name}" --message-content-file /tmp/ai-card-cron-message.txt --type daily_repeat --time "9:00" --topic-pattern ip-manager'''
 )
 ```
 

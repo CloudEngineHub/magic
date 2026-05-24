@@ -94,7 +94,7 @@ Create a new scheduled message task.
 **SYNOPSIS**
 
 ```bash
-python scripts/create.py --task-name <name> --message-content <content> --type <type> --time <HH:MM> [OPTIONS]
+python scripts/create.py --task-name <name> (--message-content <content> | --message-content-file <path>) --type <type> --time <HH:MM> [OPTIONS]
 ```
 
 **DESCRIPTION**
@@ -115,27 +115,29 @@ Create a scheduled message task, supporting one-time execution and daily/weekly/
 |选项|类型|必填|说明|
 |---|---|---|---|
 |`--task-name <name>`|string|是|任务名称|
-|`--message-content <content>`|string|是|消息内容（与详情 message_content/task_describe 对应）|
+|`--message-content <content>`|string|条件必填|消息内容（与详情 message_content/task_describe 对应）。与 `--message-content-file` 二选一|
+|`--message-content-file <path>`|string|条件必填|从文件读取消息内容。长文本、中文标点、引号、括号较多时优先使用此方式|
 |`--type <type>`|string|是|调度类型，见下表|
 |`--time <HH:MM>`|string|是|执行时间|
 |`--day <value>`|string|条件必填|依调度类型而定，见下表|
 |`--deadline <YYYY-MM-DD HH:MM:SS>`|string|否|重复任务截止日期，格式 YYYY-MM-DD HH:MM:SS；若只填日期或格式不明确，需要自行理解并补全（如补为当日 23:59:59）|
 |`--specify-topic <0\|1>`|integer|否|是否指定话题，0=否，1=是；默认 0。仅当识别到用户要创建**周期性**定时任务且**后续执行时间依赖前一次执行结果**时传 1，否则采用默认值 0|
-|`--topic-pattern <mode>`|string|否|员工模式，例如 `ip-manager`；不传时服务端默认 `general`|
-|`--agent-code <code>`|string|否|自定义员工 code；当 `--topic-pattern custom_agent` 时传入|
+|`--topic-pattern <mode>`|string|否|员工模式。内置员工传具体模式，例如 `ip-manager`；自定义员工传 `custom_agent`；不传时服务端默认 `general`|
+|`--agent-code <code>`|string|条件必填|自定义员工 code；当 `--topic-pattern custom_agent` 时必须传入|
 -->
 
 | Option | Type | Required | Description |
 | --- | --- | --- | --- |
 | `--task-name <name>` | string | Yes | Task name |
-| `--message-content <content>` | string | Yes | Message content (same as detail message_content/task_describe) |
+| `--message-content <content>` | string | Conditional | Message content (same as detail message_content/task_describe). Mutually exclusive with `--message-content-file` |
+| `--message-content-file <path>` | string | Conditional | Read message content from a file. Prefer this for long text or content with Chinese punctuation, quotes, or brackets |
 | `--type <type>` | string | Yes | Schedule type, see table below |
 | `--time <HH:MM>` | string | Yes | Execution time |
 | `--day <value>` | string | Conditional | Depends on schedule type, see table below |
 | `--deadline <YYYY-MM-DD HH:MM:SS>` | string | No | Expiry datetime; format YYYY-MM-DD HH:MM:SS. If only date or unclear format is given, the system will interpret and complete (e.g. to 00:00:00 that day) |
 | `--specify-topic <0\|1>` | integer | No | Whether to specify topic; 0=no, 1=yes; default 0. Pass 1 only when the user intent is a **recurring** task whose **next run depends on the previous run's result**; otherwise use default 0 |
-| `--topic-pattern <mode>` | string | No | Agent mode for the scheduled run, for example `ip-manager`; defaults to `general` when omitted |
-| `--agent-code <code>` | string | No | Custom agent code. Pass it when `--topic-pattern custom_agent` |
+| `--topic-pattern <mode>` | string | No | Agent mode for the scheduled run. For built-in agents, pass the mode such as `ip-manager`; for custom agents, pass `custom_agent`; defaults to `general` when omitted |
+| `--agent-code <code>` | string | Conditional | Custom agent code. Required when `--topic-pattern custom_agent` |
 
 <!--zh
 **调度类型 `--type` 与 `--day` 对应关系：**
@@ -185,6 +187,12 @@ python scripts/create.py \
   --topic-pattern custom_agent \
   --agent-code "SMA-custom-agent"
 ```
+
+For custom agents, keep this parameter contract:
+
+- `--topic-pattern custom_agent` tells the scheduler to run in custom-agent mode.
+- `--agent-code <code>` selects the compiled employee agent, such as `SMA-custom-agent`.
+- The script reads `model_id` from `.chat_history/<agent-code><main>.session.json` first, then falls back to `.chat_history/custom_agent<main>.session.json` and `.chat_history/magic<main>.session.json`.
 
 ---
 
@@ -459,9 +467,22 @@ python scripts/delete.py --id "<schedule_id>"
 In Agent environment, use `shell_exec` tool to execute scripts:
 
 ```python
+# Always run these scripts with shell_exec in the project Python environment.
+# Do not call them through run_sdk_snippet because they import the app package.
+
 # 创建任务
 shell_exec(
     command='python scripts/create.py --task-name "每日早报" --message-content "请生成今日早报" --type daily_repeat --time "9:00" --topic-pattern general'
+)
+
+# 创建包含长消息或特殊字符的任务
+shell_exec(
+    command='''cat > /tmp/cron-message.txt <<'EOF'
+Update the AI card. Read magic.project.js, template.html, fetch fresh data,
+generate latest.html, archive the previous version, and update metadata.
+EOF
+cd /app/agents/skills/using-cron &&
+python scripts/create.py --task-name "AI Card" --message-content-file /tmp/cron-message.txt --type daily_repeat --time "9:00" --topic-pattern ip-manager'''
 )
 
 # 查询任务列表

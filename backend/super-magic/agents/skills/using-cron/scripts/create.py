@@ -4,7 +4,8 @@
 
 参数：
     --task-name     任务名称，如 "每日早报"（必填）
-    --message-content   消息内容（任务指令）（必填）
+    --message-content   消息内容（任务指令）
+    --message-content-file 从文件读取消息内容。用于长文本或含特殊字符的内容
     --type          调度类型（必填）：
                       no_repeat      不重复，需要 --day YYYY-MM-DD
                       daily_repeat   每天重复
@@ -25,6 +26,7 @@ import json
 import re
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import argparse
@@ -38,7 +40,9 @@ from app.infrastructure.sdk.magic_service.parameter.message_schedule_parameter i
 
 parser = argparse.ArgumentParser(description="创建定时消息任务")
 parser.add_argument("--task-name", required=True, help="任务名称")
-parser.add_argument("--message-content", dest="message_content", required=True, help="消息内容（任务指令），与详情 message_content/task_describe 对应")
+message_group = parser.add_mutually_exclusive_group(required=True)
+message_group.add_argument("--message-content", dest="message_content", help="消息内容（任务指令），与详情 message_content/task_describe 对应")
+message_group.add_argument("--message-content-file", dest="message_content_file", help="从文件读取消息内容，适合长文本或含特殊字符的内容")
 parser.add_argument(
     "--type",
     required=True,
@@ -104,8 +108,20 @@ def normalize_deadline(value: Optional[str]) -> Optional[str]:
     return None
 
 
+def resolve_message_content(message_content: Optional[str], message_content_file: Optional[str]) -> str:
+    """读取最终任务指令内容。"""
+    if message_content is not None:
+        return message_content
+    if not message_content_file:
+        raise ValueError("message content is required")
+    return Path(message_content_file).read_text(encoding="utf-8").strip()
+
+
 try:
-    topic_id, model_id = get_context()
+    topic_id, model_id = get_context(
+        topic_pattern=args.topic_pattern,
+        agent_code=args.agent_code,
+    )
 
     if not topic_id:
         print(json.dumps({"error": "无法从当前会话获取 topic_id"}, ensure_ascii=False))
@@ -114,6 +130,7 @@ try:
         print(json.dumps({"error": "无法从当前会话获取 model_id"}, ensure_ascii=False))
         sys.exit(1)
 
+    message_content = resolve_message_content(args.message_content, args.message_content_file)
     sdk = create_magic_service_sdk_with_defaults()
 
     normalized_deadline = normalize_deadline(args.deadline)
@@ -124,7 +141,7 @@ try:
     )
     parameter = MessageScheduleParameter(
         task_name=args.task_name,
-        message_content=args.message_content,
+        message_content=message_content,
         time_config=time_config,
         topic_id=topic_id,
         model_id=model_id,
