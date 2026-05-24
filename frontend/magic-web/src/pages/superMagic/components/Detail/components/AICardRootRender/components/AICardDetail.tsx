@@ -1,5 +1,6 @@
 import { memo } from "react"
 import { motion } from "framer-motion"
+import { useTranslation } from "react-i18next"
 import AICardIframe from "./AICardIframe"
 import type { AICardEntry } from "../types"
 
@@ -12,6 +13,7 @@ interface AICardDetailProps {
 }
 
 function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetailProps) {
+	const { t } = useTranslation("super")
 	const fileId = htmlFileId || card.latestHtmlFileId
 
 	return (
@@ -50,7 +52,7 @@ function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetail
 								strokeLinejoin="round"
 							/>
 						</svg>
-						返回
+						{t("detail.aiCard.detail.back")}
 					</button>
 					<div className="h-4 w-px bg-border" />
 					<h2 className="text-sm font-semibold text-foreground">{card.name}</h2>
@@ -58,7 +60,7 @@ function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetail
 				<div className="flex items-center gap-2">
 					{card.lastUpdated && (
 						<span className="text-xs text-muted-foreground">
-							{new Date(card.lastUpdated).toLocaleString("zh-CN", {
+							{new Date(card.lastUpdated).toLocaleString(undefined, {
 								month: "short",
 								day: "numeric",
 								hour: "2-digit",
@@ -81,7 +83,7 @@ function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetail
 					/>
 				) : (
 					<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-						暂无卡片内容，等待下次定时任务生成
+						{t("detail.aiCard.detail.noContent")}
 					</div>
 				)}
 			</motion.div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
+import { useTranslation } from "react-i18next"
 import { AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -11,6 +12,10 @@ import AICardDashboard from "./components/AICardDashboard"
 import AICardDetail from "./components/AICardDetail"
 import { AICardStore } from "./stores/AICardStore"
 import type { AICardHistoryEntry, AICardRootRenderProps } from "./types"
+import {
+	extractChatTopicIdFromExecuteResult,
+	switchToTopicByChatTopicId,
+} from "./utils/aiCardRunNow"
 
 /**
  * AICardRootRender
@@ -24,6 +29,7 @@ import type { AICardHistoryEntry, AICardRootRenderProps } from "./types"
  */
 function AICardRootRender(props: AICardRootRenderProps) {
 	const { data, attachments, attachmentList, className } = props
+	const { t } = useTranslation("super")
 
 	const folderFileId = data?.file_id
 	const initialNavigation = data?.initialNavigation
@@ -33,6 +39,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 
 	// Create store instance per mount
 	const [store] = useState(() => new AICardStore())
+	const [isRunNowLoading, setIsRunNowLoading] = useState(false)
 
 	// Track whether initialNavigation has been applied
 	const appliedNavigationRef = useRef(false)
@@ -75,14 +82,32 @@ function AICardRootRender(props: AICardRootRenderProps) {
 
 	const handleRunNow = useCallback(async () => {
 		const scheduleId = store.projectConfig?.schedule_id
-		if (!scheduleId) return
+		if (!scheduleId || isRunNowLoading) return
+
+		setIsRunNowLoading(true)
 		try {
-			await ScheduledTaskApi.executeScheduledTask(scheduleId)
-			message.success("任务已触发运行")
+			const response = await ScheduledTaskApi.executeScheduledTask(scheduleId)
+			if (!response?.success) {
+				message.error(response?.error_message || t("detail.aiCard.runNow.error"))
+				return
+			}
+
+			const chatTopicId = extractChatTopicIdFromExecuteResult(response)
+			if (chatTopicId) {
+				const switched = await switchToTopicByChatTopicId(chatTopicId)
+				if (switched) {
+					message.success(t("detail.aiCard.runNow.successSwitched"))
+					return
+				}
+			}
+
+			message.success(t("detail.aiCard.runNow.success"))
 		} catch {
-			message.error("运行失败，请稍后重试")
+			message.error(t("detail.aiCard.runNow.error"))
+		} finally {
+			setIsRunNowLoading(false)
 		}
-	}, [store])
+	}, [store, isRunNowLoading])
 
 	const handleOpenHistoryEntry = useCallback(
 		(entry: AICardHistoryEntry) => {
@@ -125,6 +150,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 						onOpenCard={handleOpenCard}
 						onOpenConfig={handleOpenConfig}
 						onRunNow={store.projectConfig?.schedule_id ? handleRunNow : undefined}
+						isRunNowLoading={isRunNowLoading}
 						onOpenHistoryEntry={handleOpenHistoryEntry}
 					/>
 				)}

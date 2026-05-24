@@ -60,6 +60,44 @@ function SelfMediaInitPanel({
 		isLoading: isBrandConfigLoading,
 	} = useSelfMediaBrandConfig({ fileStorageService })
 
+	const brandDirtyRef = useRef(false)
+	const brandIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const latestBrandRef = useRef(brandSettings)
+
+	const flushBrandSave = useCallback(() => {
+		if (brandIdleTimerRef.current) {
+			clearTimeout(brandIdleTimerRef.current)
+			brandIdleTimerRef.current = null
+		}
+		if (!brandDirtyRef.current) return
+		brandDirtyRef.current = false
+		void saveBrandSettings(latestBrandRef.current)
+	}, [saveBrandSettings])
+
+	const markBrandDirty = useCallback(() => {
+		brandDirtyRef.current = true
+		if (brandIdleTimerRef.current) {
+			clearTimeout(brandIdleTimerRef.current)
+		}
+		brandIdleTimerRef.current = setTimeout(() => {
+			brandIdleTimerRef.current = null
+			flushBrandSave()
+		}, 5000)
+	}, [flushBrandSave])
+
+	useEffect(() => {
+		return () => {
+			if (brandIdleTimerRef.current) {
+				clearTimeout(brandIdleTimerRef.current)
+			}
+			// Flush on unmount if dirty
+			if (brandDirtyRef.current) {
+				brandDirtyRef.current = false
+				void saveBrandSettings(latestBrandRef.current)
+			}
+		}
+	}, [saveBrandSettings])
+
 	const {
 		data,
 		setData,
@@ -100,28 +138,30 @@ function SelfMediaInitPanel({
 		(field: "author" | "brandPosition" | "targetAudience", value: string) => {
 			const nextGlobal = { ...dataRef.current.global, [field]: value }
 			dataRef.current = { ...dataRef.current, global: nextGlobal }
+			latestBrandRef.current = nextGlobal
 			setData((prev) => ({
 				...prev,
 				global: nextGlobal,
 			}))
 			setBrandSettings(nextGlobal)
-			void saveBrandSettings(nextGlobal)
+			markBrandDirty()
 		},
-		[dataRef, saveBrandSettings, setBrandSettings, setData],
+		[dataRef, markBrandDirty, setBrandSettings, setData],
 	)
 
 	const handleBrandImagesChange = useCallback(
 		(brandImages: BrandImageItem[]) => {
 			const nextGlobal = { ...dataRef.current.global, brandImages }
 			dataRef.current = { ...dataRef.current, global: nextGlobal }
+			latestBrandRef.current = nextGlobal
 			setData((prev) => ({
 				...prev,
 				global: nextGlobal,
 			}))
 			setBrandSettings(nextGlobal)
-			void saveBrandSettings(nextGlobal)
+			markBrandDirty()
 		},
-		[dataRef, saveBrandSettings, setBrandSettings, setData],
+		[dataRef, markBrandDirty, setBrandSettings, setData],
 	)
 
 	const handleArticlesChange = useCallback(
@@ -144,10 +184,11 @@ function SelfMediaInitPanel({
 
 	const navigateToStep = useCallback(
 		(step: number) => {
+			flushBrandSave()
 			setCurrentStep(step)
 			saveDraftInBackground(step)
 		},
-		[saveDraftInBackground, setCurrentStep],
+		[flushBrandSave, saveDraftInBackground, setCurrentStep],
 	)
 
 	const handleNext = useCallback(() => {
@@ -156,21 +197,28 @@ function SelfMediaInitPanel({
 			if (!canProceedNow) return
 		}
 
+		flushBrandSave()
 		const nextStep = Math.min(currentStep + 1, STEPS.length - 1)
 		setCurrentStep(nextStep)
 		saveDraftInBackground(nextStep)
-	}, [currentStep, saveDraftInBackground, setCurrentStep])
+	}, [currentStep, flushBrandSave, saveDraftInBackground, setCurrentStep])
 
 	const handlePrev = useCallback(() => {
+		flushBrandSave()
 		const prevStep = Math.max(currentStep - 1, 0)
 		setCurrentStep(prevStep)
 		saveDraftInBackground(prevStep)
-	}, [currentStep, saveDraftInBackground, setCurrentStep])
+	}, [currentStep, flushBrandSave, saveDraftInBackground, setCurrentStep])
 
 	const hasPendingBrandImageUploads = data.global.brandImages.some(
 		(img) => img.file.size > 0 && !img.uploadedPath,
 	)
 	const hasAnyInitData = showTemplateSelector || currentStep > 0 || hasDraftContent
+
+	const handleBackHome = useCallback(() => {
+		flushBrandSave()
+		onBackHome?.()
+	}, [flushBrandSave, onBackHome])
 
 	const canProceed = (): boolean => {
 		switch (currentStep) {
@@ -196,7 +244,7 @@ function SelfMediaInitPanel({
 				open={Boolean(pendingDraft)}
 				onRestore={handleRestoreDraft}
 				onDiscard={() => void handleDiscardDraft()}
-				onBackHome={onBackHome}
+				onBackHome={handleBackHome}
 			/>
 			{isDraftLoading || isBrandConfigLoading ? (
 				<div
@@ -301,7 +349,7 @@ function SelfMediaInitPanel({
 										onGenerateFailed={() => {
 											skipDraftPersistenceRef.current = false
 										}}
-										onBackHome={onBackHome}
+										onBackHome={handleBackHome}
 									/>
 								)}
 							</>
@@ -316,7 +364,7 @@ function SelfMediaInitPanel({
 						onPrev={handlePrev}
 						onClear={() => void handleClearData()}
 						onNavigate={navigateToStep}
-						onBackHome={onBackHome}
+						onBackHome={handleBackHome}
 					/>
 				</>
 			)}

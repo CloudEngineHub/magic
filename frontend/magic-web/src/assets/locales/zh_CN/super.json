@@ -735,10 +735,10 @@
 					"cardCount": "{{count}} 张卡片",
 					"cardOutlineLabel": "卡片大纲",
 					"creatingTopic": "正在创建话题…",
-					"doneDesc": "已为 {{count}} 篇文章创建独立话题，由 IP 操盘手继续创作",
+					"doneDesc": "已为 {{count}} 篇文章创建独立话题，由 AI 创作助手继续创作",
 					"doneTitle": "创作已启动",
 					"generatingBtn": "AI 创作中…",
-					"generatingDesc": "正在创建话题并交由 IP 操盘手处理（{{done}}/{{total}}）",
+					"generatingDesc": "正在创建话题并交由 AI 创作助手处理（{{done}}/{{total}}）",
 					"generatingTitle": "正在启动创作",
 					"globalSummary": "全局设置",
 					"imageModel": "图像",
@@ -759,12 +759,12 @@
 					"saveAsTemplate": "保存为模板",
 					"saveTemplate": "保存",
 					"startBtn": "开始 AI 创作（共 {{count}} 篇）",
-					"subtitle": "确认信息无误后开始，每篇文章将创建独立话题并由 IP 操盘手执行",
+					"subtitle": "确认信息无误后开始，每篇文章将创建独立话题并由 AI 创作助手执行",
 					"templateNamePlaceholder": "输入模板名称",
 					"templateSaved": "模板已保存",
 					"textModel": "文本",
 					"title": "确认并生成",
-					"topicListHint": "点击切换到对应话题，查看 IP 操盘手的创作进度",
+					"topicListHint": "点击切换到对应话题，查看 AI 创作助手的创作进度",
 					"videoModel": "视频",
 					"viewing": "查看中"
 				},
@@ -996,7 +996,13 @@
 				"prompt": "分析指令",
 				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
 				"promptHint": "AI 将根据此指令定时获取最新数据，分析后生成可视化卡片并自动更新。",
-				"advancedSettings": "高级设置"
+				"advancedSettings": "高级设置",
+				"templateOptions": {
+					"hotspotTracker": "热点追踪",
+					"dailyDigest": "每日摘要",
+					"analyticsPanel": "数据面板",
+					"custom": "自定义"
+				}
 			},
 			"config": {
 				"editTitle": "编辑配置",
@@ -1014,6 +1020,38 @@
 				"cancel": "取消",
 				"saving": "保存中...",
 				"save": "保存配置"
+			},
+			"dashboard": {
+				"loading": "AI 卡片加载中...",
+				"loadingDescription": "正在解析卡片数据",
+				"runNow": "立即运行",
+				"running": "运行中...",
+				"configure": "配置",
+				"empty": "暂无卡片内容，等待定时任务生成",
+				"latestVersion": "✨ 最新版本",
+				"historyVersion": "🕰 历史版本",
+				"current": "当前",
+				"archived": "归档",
+				"updatedAt": "更新于 {{time}}"
+			},
+			"detail": {
+				"back": "返回",
+				"noContent": "暂无卡片内容，等待下次定时任务生成"
+			},
+			"history": {
+				"back": "返回",
+				"title": "历史版本",
+				"empty": "暂无历史记录",
+				"selectHint": "← 选择一个历史版本查看"
+			},
+			"tile": {
+				"viewDetail": "查看详情",
+				"history": "历史"
+			},
+			"runNow": {
+				"success": "任务已触发运行",
+				"successSwitched": "任务已触发运行，已切换到对应话题",
+				"error": "运行失败，请稍后重试"
 			}
 		}
 	},

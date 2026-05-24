@@ -135,7 +135,7 @@ function AICardFormFields({
 					className="w-full"
 					disabled={disabled}
 					options={CARD_TEMPLATES.map((opt) => ({
-						label: opt.label,
+						label: t(opt.labelKey),
 						value: opt.value,
 					}))}
 				/>

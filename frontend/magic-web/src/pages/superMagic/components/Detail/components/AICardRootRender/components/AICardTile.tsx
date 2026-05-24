@@ -76,7 +76,7 @@ function AICardTile({ card, attachmentList, onOpen, onOpenHistory }: AICardTileP
 					className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]"
 				>
 					<span className="rounded-full bg-white/90 px-4 py-2 text-sm font-medium text-gray-800 shadow-sm">
-						查看详情
+						{t("detail.aiCard.tile.viewDetail")}
 					</span>
 				</motion.div>
 			</div>
@@ -100,7 +100,7 @@ function AICardTile({ card, attachmentList, onOpen, onOpenHistory }: AICardTileP
 				<div className="mt-3 flex items-center justify-between">
 					<span className="text-xs text-muted-foreground">
 						{card.lastUpdated
-							? new Date(card.lastUpdated).toLocaleString("zh-CN", {
+							? new Date(card.lastUpdated).toLocaleString(undefined, {
 									month: "short",
 									day: "numeric",
 									hour: "2-digit",
@@ -113,7 +113,7 @@ function AICardTile({ card, attachmentList, onOpen, onOpenHistory }: AICardTileP
 						onClick={handleHistoryClick}
 						className="rounded px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 					>
-						历史
+						{t("detail.aiCard.tile.history")}
 					</button>
 				</div>
 			</div>

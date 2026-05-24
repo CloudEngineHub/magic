@@ -734,10 +734,10 @@
 					"cardCount": "{{count}} cards",
 					"cardOutlineLabel": "Card outline",
 					"creatingTopic": "Creating topic…",
-					"doneDesc": "{{count}} topics created. IP Manager is working on each article.",
+					"doneDesc": "{{count}} topics created. AI Creative Assistant is working on each article.",
 					"doneTitle": "Generation started",
 					"generatingBtn": "Generating…",
-					"generatingDesc": "Creating topics via IP Manager ({{done}}/{{total}})",
+					"generatingDesc": "Creating topics via AI Creative Assistant ({{done}}/{{total}})",
 					"generatingTitle": "Starting generation",
 					"globalSummary": "Global settings",
 					"imageModel": "Image",
@@ -758,12 +758,12 @@
 					"saveAsTemplate": "Save as template",
 					"saveTemplate": "Save",
 					"startBtn": "Start AI creation ({{count}} articles)",
-					"subtitle": "Each article gets its own topic handled by IP Manager",
+					"subtitle": "Each article gets its own topic handled by AI Creative Assistant",
 					"templateNamePlaceholder": "Template name",
 					"templateSaved": "Template saved",
 					"textModel": "Text",
 					"title": "Confirm & generate",
-					"topicListHint": "Click a topic to switch and view IP Manager progress",
+					"topicListHint": "Click a topic to switch and view AI Creative Assistant progress",
 					"videoModel": "Video",
 					"viewing": "Viewing"
 				},
@@ -995,7 +995,13 @@
 				"prompt": "Analysis Instructions",
 				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends.",
 				"promptHint": "AI will periodically fetch latest data, analyze it, and update the visual card.",
-				"advancedSettings": "Advanced Settings"
+				"advancedSettings": "Advanced Settings",
+				"templateOptions": {
+					"hotspotTracker": "Hotspot Tracker",
+					"dailyDigest": "Daily Digest",
+					"analyticsPanel": "Analytics Panel",
+					"custom": "Custom"
+				}
 			},
 			"config": {
 				"editTitle": "Edit Configuration",
@@ -1013,6 +1019,38 @@
 				"cancel": "Cancel",
 				"saving": "Saving...",
 				"save": "Save Configuration"
+			},
+			"dashboard": {
+				"loading": "Loading AI Cards...",
+				"loadingDescription": "Parsing card data",
+				"runNow": "Run Now",
+				"running": "Running...",
+				"configure": "Configure",
+				"empty": "No card content yet, waiting for scheduled task to generate",
+				"latestVersion": "✨ Latest",
+				"historyVersion": "🕰 History",
+				"current": "Current",
+				"archived": "Archived",
+				"updatedAt": "Updated {{time}}"
+			},
+			"detail": {
+				"back": "Back",
+				"noContent": "No card content yet, waiting for next scheduled task"
+			},
+			"history": {
+				"back": "Back",
+				"title": "History",
+				"empty": "No history records",
+				"selectHint": "← Select a history version to view"
+			},
+			"tile": {
+				"viewDetail": "View Detail",
+				"history": "History"
+			},
+			"runNow": {
+				"success": "Task triggered successfully",
+				"successSwitched": "Task triggered, switched to the corresponding topic",
+				"error": "Failed to run, please try again later"
 			}
 		}
 	},

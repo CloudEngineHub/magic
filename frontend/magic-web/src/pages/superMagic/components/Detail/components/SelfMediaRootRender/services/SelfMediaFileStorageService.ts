@@ -167,6 +167,9 @@ export class SelfMediaFileStorageService {
 	private parentFileId: string | undefined
 	private folderRelativePath: string | undefined
 	private dirCache = new Map<string, string>() // path -> file_id
+	private dirInflight = new Map<string, Promise<string>>() // path -> in-flight promise
+	private fileInflight = new Map<string, Promise<string | null>>() // parentId:fileName -> in-flight promise
+	private brandConfigSaving: Promise<void> | null = null
 
 	constructor(projectId: string, parentFileId?: string, folderRelativePath?: string) {
 		this.projectId = projectId
@@ -179,19 +182,28 @@ export class SelfMediaFileStorageService {
 	// ─── Draft Operations ────────────────────────────────────────────────────
 
 	async saveBrandConfig(global: SelfMediaInitGlobalSettings): Promise<void> {
-		try {
-			const now = new Date().toISOString()
-			await this.ensureBrandImagesUploaded(global.brandImages, "brand")
-			const payload = await this.buildBrandConfigPayload(global, now)
-			const brandConfigDir = await this.ensureDirectory(BRAND_CONFIG_DIR)
-			await this.createAndWriteFile(
-				brandConfigDir,
-				BRAND_CONFIG_JSON,
-				JSON.stringify(payload, null, 2),
-			)
-		} catch {
-			// Silent failure - callers keep local state and surface errors if needed.
+		// Serialize concurrent saves to avoid duplicate file/folder creation
+		if (this.brandConfigSaving) {
+			await this.brandConfigSaving.catch(() => { })
 		}
+		const doSave = async () => {
+			try {
+				const now = new Date().toISOString()
+				await this.ensureBrandImagesUploaded(global.brandImages, "brand")
+				const payload = await this.buildBrandConfigPayload(global, now)
+				const brandConfigDir = await this.ensureDirectory(BRAND_CONFIG_DIR)
+				await this.createAndWriteFile(
+					brandConfigDir,
+					BRAND_CONFIG_JSON,
+					JSON.stringify(payload, null, 2),
+				)
+			} catch {
+				// Silent failure - callers keep local state and surface errors if needed.
+			}
+		}
+		this.brandConfigSaving = doSave()
+		await this.brandConfigSaving
+		this.brandConfigSaving = null
 	}
 
 	async loadBrandConfig(): Promise<SelfMediaInitGlobalSettings | null> {
@@ -332,7 +344,7 @@ export class SelfMediaFileStorageService {
 			})
 			for (const f of draftFiles) {
 				if (f.file_id) {
-					await SuperMagicApi.deleteFile(f.file_id).catch(() => {})
+					await SuperMagicApi.deleteFile(f.file_id).catch(() => { })
 				}
 			}
 
@@ -340,8 +352,8 @@ export class SelfMediaFileStorageService {
 
 			const materialsDirPath = this.folderRelativePath
 				? this.normalizeRelativePath(
-						`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-					)
+					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+				)
 				: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 			const materialsDir = files.find(
 				(f) =>
@@ -350,7 +362,7 @@ export class SelfMediaFileStorageService {
 					this.normalizeRelativePath(f.relative_file_path) === materialsDirPath,
 			)
 			if (materialsDir?.file_id) {
-				await SuperMagicApi.deleteFile(materialsDir.file_id).catch(() => {})
+				await SuperMagicApi.deleteFile(materialsDir.file_id).catch(() => { })
 			}
 		} catch {
 			// silent
@@ -483,7 +495,7 @@ export class SelfMediaFileStorageService {
 			)
 			for (const f of toDelete) {
 				if (f.file_id) {
-					await SuperMagicApi.deleteFile(f.file_id).catch(() => {})
+					await SuperMagicApi.deleteFile(f.file_id).catch(() => { })
 				}
 			}
 
@@ -492,10 +504,10 @@ export class SelfMediaFileStorageService {
 				(f) =>
 					f.is_directory &&
 					f.relative_file_path ===
-						`${this.getBasePath()}/${TEMPLATES_MATERIALS_DIR}/${templateId}`,
+					`${this.getBasePath()}/${TEMPLATES_MATERIALS_DIR}/${templateId}`,
 			)
 			if (matDir?.file_id) {
-				await SuperMagicApi.deleteFile(matDir.file_id).catch(() => {})
+				await SuperMagicApi.deleteFile(matDir.file_id).catch(() => { })
 			}
 		} catch {
 			// silent
@@ -680,7 +692,7 @@ export class SelfMediaFileStorageService {
 
 	// ─── Cleanup ─────────────────────────────────────────────────────────────
 
-	dispose(): void {}
+	dispose(): void { }
 
 	// ─── Private Helpers ─────────────────────────────────────────────────────
 
@@ -827,43 +839,66 @@ export class SelfMediaFileStorageService {
 		const cached = this.dirCache.get(path)
 		if (cached) return cached
 
-		// Split path and create each level
-		const parts = path.split("/").filter(Boolean)
-		let currentParentId = this.parentFileId
-		let currentPath = ""
+		// Deduplicate concurrent calls for the same path
+		const inflight = this.dirInflight.get(path)
+		if (inflight) return inflight
 
-		for (const part of parts) {
-			currentPath = currentPath ? `${currentPath}/${part}` : part
-			const cachedPart = this.dirCache.get(currentPath)
-			if (cachedPart) {
-				currentParentId = cachedPart
-				continue
-			}
+		const doCreate = async (): Promise<string> => {
+			// Split path and create each level
+			const parts = path.split("/").filter(Boolean)
+			let currentParentId = this.parentFileId
+			let currentPath = ""
 
-			const response = await SuperMagicApi.createFile({
-				project_id: this.projectId,
-				parent_id: currentParentId,
-				file_name: part,
-				is_directory: true,
-				ignore_duplicate: true,
-			})
+			for (const part of parts) {
+				currentPath = currentPath ? `${currentPath}/${part}` : part
+				const cachedPart = this.dirCache.get(currentPath)
+				if (cachedPart) {
+					currentParentId = cachedPart
+					continue
+				}
 
-			const fileId = (response as any)?.file_id
-			if (fileId) {
-				this.dirCache.set(currentPath, fileId)
-				currentParentId = fileId
-			} else {
-				// Directory might already exist — try to find it in file list
-				const files = await this.getProjectFileList()
-				const existing = this.findDirectoryInProjectFiles(files, currentPath)
-				if (existing?.file_id) {
-					this.dirCache.set(currentPath, existing.file_id)
-					currentParentId = existing.file_id
+				// Check if another (different) path's inflight covers this sub-path
+				if (currentPath !== path) {
+					const partInflight = this.dirInflight.get(currentPath)
+					if (partInflight) {
+						currentParentId = await partInflight
+						continue
+					}
+				}
+
+				const response = await SuperMagicApi.createFile({
+					project_id: this.projectId,
+					parent_id: currentParentId,
+					file_name: part,
+					is_directory: true,
+					ignore_duplicate: true,
+				})
+
+				const fileId = (response as any)?.file_id
+				if (fileId) {
+					this.dirCache.set(currentPath, fileId)
+					currentParentId = fileId
+				} else {
+					// Directory might already exist — try to find it in file list
+					const files = await this.getProjectFileList()
+					const existing = this.findDirectoryInProjectFiles(files, currentPath)
+					if (existing?.file_id) {
+						this.dirCache.set(currentPath, existing.file_id)
+						currentParentId = existing.file_id
+					}
 				}
 			}
+
+			return currentParentId || ""
 		}
 
-		return currentParentId || ""
+		const promise = doCreate()
+		this.dirInflight.set(path, promise)
+		try {
+			return await promise
+		} finally {
+			this.dirInflight.delete(path)
+		}
 	}
 
 	private async createAndWriteFile(
@@ -871,48 +906,68 @@ export class SelfMediaFileStorageService {
 		fileName: string,
 		content: string,
 	): Promise<string | null> {
+		// Deduplicate concurrent writes to the same file
+		const inflightKey = `${parentDirId}:${fileName}`
+		const inflight = this.fileInflight.get(inflightKey)
+		if (inflight) {
+			// Wait for the previous write, then write again with new content
+			await inflight.catch(() => { })
+		}
+
+		const doWrite = async (): Promise<string | null> => {
+			try {
+				// Try to find existing file first
+				const files = await this.getProjectFileList()
+				const basePath = this.getBasePath()
+
+				// Determine the full path based on parentDirId
+				let fullPath = ""
+				if (parentDirId) {
+					const parentDir = files.find(
+						(f) => f.is_directory && f.file_id === parentDirId,
+					)
+					fullPath = parentDir?.relative_file_path
+						? `${parentDir.relative_file_path}/${fileName}`
+						: `${basePath}/${fileName}`
+				}
+
+				// Check if file already exists
+				let fileId: string | undefined
+				if (fullPath) {
+					const existing = files.find(
+						(f) => !f.is_directory && f.relative_file_path === fullPath,
+					)
+					fileId = existing?.file_id
+				}
+
+				// Create file if not exists
+				if (!fileId) {
+					const response = await SuperMagicApi.createFile({
+						project_id: this.projectId,
+						parent_id: parentDirId,
+						file_name: fileName,
+						is_directory: false,
+						ignore_duplicate: true,
+					})
+					fileId = (response as any)?.file_id
+				}
+
+				if (!fileId) return null
+
+				// Write content
+				await SuperMagicApi.saveFileContent([{ file_id: fileId, content }])
+				return fileId
+			} catch {
+				return null
+			}
+		}
+
+		const promise = doWrite()
+		this.fileInflight.set(inflightKey, promise)
 		try {
-			// Try to find existing file first
-			const files = await this.getProjectFileList()
-			const basePath = this.getBasePath()
-
-			// Determine the full path based on parentDirId
-			let fullPath = ""
-			if (parentDirId) {
-				const parentDir = files.find((f) => f.is_directory && f.file_id === parentDirId)
-				fullPath = parentDir?.relative_file_path
-					? `${parentDir.relative_file_path}/${fileName}`
-					: `${basePath}/${fileName}`
-			}
-
-			// Check if file already exists
-			let fileId: string | undefined
-			if (fullPath) {
-				const existing = files.find(
-					(f) => !f.is_directory && f.relative_file_path === fullPath,
-				)
-				fileId = existing?.file_id
-			}
-
-			// Create file if not exists
-			if (!fileId) {
-				const response = await SuperMagicApi.createFile({
-					project_id: this.projectId,
-					parent_id: parentDirId,
-					file_name: fileName,
-					is_directory: false,
-					ignore_duplicate: true,
-				})
-				fileId = (response as any)?.file_id
-			}
-
-			if (!fileId) return null
-
-			// Write content
-			await SuperMagicApi.saveFileContent([{ file_id: fileId, content }])
-			return fileId
-		} catch {
-			return null
+			return await promise
+		} finally {
+			this.fileInflight.delete(inflightKey)
 		}
 	}
 
@@ -1013,8 +1068,8 @@ export class SelfMediaFileStorageService {
 		const files = await this.getProjectFileList()
 		const materialsDirPath = this.folderRelativePath
 			? this.normalizeRelativePath(
-					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-				)
+				`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+			)
 			: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 		const materialsDir = files.find(
 			(item) =>
@@ -1199,24 +1254,22 @@ export class SelfMediaFileStorageService {
 	): string | undefined {
 		if (!path) return path
 		const normalized = this.normalizeRelativePath(path)
-		const draftMaterialsPrefix = `${
-			this.folderRelativePath
+		const draftMaterialsPrefix = `${this.folderRelativePath
 				? this.normalizeRelativePath(
-						`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-					)
+					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+				)
 				: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
-		}/`
+			}/`
 		if (!normalized.startsWith(draftMaterialsPrefix)) return path
 		const suffix = normalized.slice(draftMaterialsPrefix.length)
-		const archivePrefix = `${
-			this.folderRelativePath
+		const archivePrefix = `${this.folderRelativePath
 				? this.normalizeRelativePath(
-						`${this.folderRelativePath}/${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
-					)
+					`${this.folderRelativePath}/${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
+				)
 				: this.normalizeRelativePath(
-						`${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
-					)
-		}/`
+					`${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
+				)
+			}/`
 		return `${archivePrefix}${suffix}`
 	}
 
@@ -1376,24 +1429,24 @@ export class SelfMediaFileStorageService {
 				outline: this.normalizeOutline(a.outline),
 				materials: Array.isArray(a.materials)
 					? a.materials.map((m) => ({
-							id: m.id || `material_${Date.now()}`,
-							file: new File([], m.name || "file"),
-							previewUrl: "",
-							description: m.description || "",
-							uploadedPath: m.relativePath,
-						}))
+						id: m.id || `material_${Date.now()}`,
+						file: new File([], m.name || "file"),
+						previewUrl: "",
+						description: m.description || "",
+						uploadedPath: m.relativePath,
+					}))
 					: [],
 				notes: a.notes,
 				platform: a.platform as any,
 				description: a.description,
 				visualReferenceFiles: Array.isArray(a.visualReferenceFiles)
 					? a.visualReferenceFiles.map((f) => ({
-							name: f.name || "file",
-							content: f.content || "",
-							kind: f.kind,
-							file_id: f.file_id,
-							file_path: f.file_path,
-						}))
+						name: f.name || "file",
+						content: f.content || "",
+						kind: f.kind,
+						file_id: f.file_id,
+						file_path: f.file_path,
+					}))
 					: [],
 			})),
 		}
@@ -1439,12 +1492,12 @@ export class SelfMediaFileStorageService {
 					children: Array.isArray(node.children) ? normalize(node.children) : [],
 					materials: Array.isArray(node.materials)
 						? node.materials.map((m, idx) => ({
-								id: m.id || `outline_mat_${idx}`,
-								file: new File([], m.name || "file"),
-								previewUrl: "",
-								description: m.description || "",
-								uploadedPath: m.relativePath || m.uploadedPath,
-							}))
+							id: m.id || `outline_mat_${idx}`,
+							file: new File([], m.name || "file"),
+							previewUrl: "",
+							description: m.description || "",
+							uploadedPath: m.relativePath || m.uploadedPath,
+						}))
 						: [],
 				}
 			})

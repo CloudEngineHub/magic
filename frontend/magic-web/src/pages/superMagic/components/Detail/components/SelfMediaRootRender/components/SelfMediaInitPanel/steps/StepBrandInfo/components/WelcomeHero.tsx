@@ -20,7 +20,7 @@ export function WelcomeHero() {
 				<div className="space-y-5">
 					<div className="inline-flex items-center gap-1.5 bg-primary/20 px-3 py-1.5 text-xs font-black text-zinc-950">
 						<Sparkles size={12} className="animate-pulse text-zinc-950" />
-						<span>{t("detail.selfMedia.initPanel.welcome.tag", "AI 智能操盘手")}</span>
+						<span>{t("detail.selfMedia.initPanel.welcome.tag", "AI 创作助手")}</span>
 					</div>
 					<div className="max-w-2xl space-y-3">
 						<h1 className="text-2xl font-black tracking-tight text-zinc-950 sm:text-3xl">
@@ -32,7 +32,7 @@ export function WelcomeHero() {
 						<p className="text-sm font-bold leading-relaxed text-muted-foreground">
 							{t(
 								"detail.selfMedia.initPanel.welcome.subtitle",
-								"超级麦吉自媒体助手能为你配置独立的 AI 操盘手，从定位、选题到成文，打造一站式爆款孵化舱。",
+								"超级麦吉自媒体助手帮你配置专属 AI 创作助手，从定位、选题到成文，打造一站式爆款内容工坊。",
 							)}
 						</p>
 					</div>
@@ -77,6 +77,6 @@ const featureDefinitions = [
 		titleKey: "detail.selfMedia.initPanel.welcome.feature3.title",
 		titleFallback: "矩阵生成",
 		descKey: "detail.selfMedia.initPanel.welcome.feature3.desc",
-		descFallback: "批量卡片式大纲定制，多话题交由 AI 操盘手自动产出",
+		descFallback: "批量卡片式大纲定制，多话题交由 AI 创作助手自动产出",
 	},
 ]

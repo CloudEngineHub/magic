@@ -1,9 +1,16 @@
 import type { ReactNode } from "react"
+import type { LucideIcon } from "lucide-react"
+import { AtSign, Crosshair, Images, UsersRound } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-	SketchFieldIllustration,
-	type BrandFieldIllustrationVariant,
-} from "../../../components/ui/SketchFieldIllustration"
+
+export type BrandFieldIllustrationVariant = "author" | "position" | "audience" | "assets"
+
+const FIELD_ICON: Record<BrandFieldIllustrationVariant, LucideIcon> = {
+	author: AtSign,
+	position: Crosshair,
+	audience: UsersRound,
+	assets: Images,
+}
 
 interface BrandFieldRowProps {
 	illustration: BrandFieldIllustrationVariant
@@ -22,35 +29,38 @@ export function BrandFieldRow({
 	"data-testid": dataTestId,
 	isActive = false,
 }: BrandFieldRowProps) {
+	const Icon = FIELD_ICON[illustration]
+
 	return (
 		<div
 			className={cn(
-				"group grid grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2.5 border-b border-dashed border-zinc-950/10 pb-6 pt-4 transition-colors duration-300 last:border-b-0 last:pb-0 first:pt-0 sm:grid-cols-[2.75rem_minmax(0,1fr)] sm:gap-x-3.5",
-				isActive && "bg-gradient-to-r from-primary/[0.02] via-transparent to-transparent",
+				"group relative overflow-hidden px-5 py-4 transition-all duration-200",
+				isActive ? "" : "hover:border-zinc-300 hover:shadow-sm",
 				className,
 			)}
 			data-testid={dataTestId}
 		>
-			<div
-				className={cn(
-					"flex h-10 w-10 items-center justify-center self-center transition-transform duration-300 sm:h-11 sm:w-11",
-					isActive && "scale-105",
-				)}
-			>
-				<SketchFieldIllustration
-					variant={illustration}
-					className={cn(
-						"h-full w-full transition-opacity duration-300",
-						isActive ? "opacity-100" : "opacity-45 group-hover:opacity-70",
-					)}
-					imageClassName="object-contain"
-					data-testid={dataTestId ? `${dataTestId}-illustration` : undefined}
-				/>
+			<div className="relative flex flex-col gap-2">
+				<div className={cn("flex min-h-8 min-w-0 items-center")}>
+					<Icon
+						size={16}
+						strokeWidth={2}
+						className={cn(
+							"shrink-0 transition-colors duration-300",
+							isActive ? "text-amber-500" : "text-zinc-400 group-hover:text-zinc-500",
+						)}
+					/>
+					<div
+						className={cn(
+							"transition-all duration-300",
+							isActive ? "translate-x-2" : "",
+						)}
+					>
+						{header}
+					</div>
+				</div>
+				<div className="min-w-0">{children}</div>
 			</div>
-
-			<div className="flex min-h-10 min-w-0 items-center">{header}</div>
-
-			<div className="col-start-2 min-w-0">{children}</div>
 		</div>
 	)
 }

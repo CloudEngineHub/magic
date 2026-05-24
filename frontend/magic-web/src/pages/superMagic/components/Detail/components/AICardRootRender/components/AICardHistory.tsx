@@ -1,5 +1,6 @@
 import { memo, useCallback, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import AICardIframe from "./AICardIframe"
 import type { AICardHistoryEntry } from "../types"
@@ -12,6 +13,7 @@ interface AICardHistoryProps {
 }
 
 function AICardHistory({ entries, cardName, attachmentList, onBack }: AICardHistoryProps) {
+	const { t } = useTranslation("super")
 	const [selectedEntry, setSelectedEntry] = useState<AICardHistoryEntry | null>(null)
 
 	return (
@@ -58,7 +60,7 @@ function AICardHistory({ entries, cardName, attachmentList, onBack }: AICardHist
 				<div className="w-64 flex-shrink-0 overflow-y-auto border-r border-border p-3">
 					{entries.length === 0 ? (
 						<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-							暂无历史记录
+							{t("detail.aiCard.history.empty")}
 						</div>
 					) : (
 						<div className="space-y-1">
@@ -127,7 +129,7 @@ function AICardHistory({ entries, cardName, attachmentList, onBack }: AICardHist
 								animate={{ opacity: 1 }}
 								className="flex h-full items-center justify-center text-sm text-muted-foreground"
 							>
-								← 选择一个历史版本查看
+								{t("detail.aiCard.history.selectHint")}
 							</motion.div>
 						)}
 					</AnimatePresence>

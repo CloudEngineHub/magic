@@ -65,7 +65,13 @@ function AICardIframe({
 		return slashIndex >= 0 ? path.slice(0, slashIndex + 1) : "/"
 	}, [currentFile])
 
+	// Keep a ref to the latest attachmentList for use inside the effect
+	// without adding it as a dependency (we only re-fetch when the file itself changes)
+	const attachmentListRef = useRef(attachmentList)
+	attachmentListRef.current = attachmentList
+
 	// Load and process HTML content
+	// Only re-runs when fileId or currentFile metadata changes — not when unrelated files are added
 	useEffect(() => {
 		if (!fileId) {
 			setSrcDoc(null)
@@ -90,11 +96,12 @@ function AICardIframe({
 				if (cancelled) return
 
 				let processedContent = html
-				if (attachmentList?.length) {
+				const currentAttachmentList = attachmentListRef.current
+				if (currentAttachmentList?.length) {
 					const result = await processHtmlContent({
 						content: html,
-						attachments: attachmentList,
-						attachmentList,
+						attachments: currentAttachmentList,
+						attachmentList: currentAttachmentList,
 						fileId,
 						fileName: currentFile?.file_name,
 						html_relative_path: relativeFolderPath,
@@ -115,7 +122,7 @@ function AICardIframe({
 		return () => {
 			cancelled = true
 		}
-	}, [fileId, attachmentList, currentFile?.file_name, relativeFolderPath])
+	}, [fileId, currentFile?.file_name, relativeFolderPath])
 
 	// Measure container width
 	useEffect(() => {

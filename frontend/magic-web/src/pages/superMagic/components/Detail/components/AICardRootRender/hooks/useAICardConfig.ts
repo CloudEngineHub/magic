@@ -13,10 +13,10 @@ const AI_CARD_TOPIC_PATTERN = "ip-manager"
 
 /** Card templates available from the ai-card-generator skill */
 export const CARD_TEMPLATES = [
-    { value: "hotspot-tracker", label: "热点追踪" },
-    { value: "daily-digest", label: "每日摘要" },
-    { value: "analytics-panel", label: "数据面板" },
-    { value: "custom", label: "自定义" },
+    { value: "hotspot-tracker", labelKey: "detail.aiCard.form.templateOptions.hotspotTracker" },
+    { value: "daily-digest", labelKey: "detail.aiCard.form.templateOptions.dailyDigest" },
+    { value: "analytics-panel", labelKey: "detail.aiCard.form.templateOptions.analyticsPanel" },
+    { value: "custom", labelKey: "detail.aiCard.form.templateOptions.custom" },
 ] as const
 
 export type CardTemplateType = (typeof CARD_TEMPLATES)[number]["value"]

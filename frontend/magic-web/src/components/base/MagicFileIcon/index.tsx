@@ -89,6 +89,7 @@ const iconNameMap: Record<string, string> = {
 	custom: "custom",
 	customFile: "custom",
 	"self-media": "self-media",
+	"ai-card": "ai-sparkle",
 }
 
 function normalizeExtension(fileExtension?: string): string | null {

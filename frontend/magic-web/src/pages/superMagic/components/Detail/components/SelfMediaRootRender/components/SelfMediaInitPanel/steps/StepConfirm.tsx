@@ -487,7 +487,7 @@ export default function StepConfirm({
 							<p className="max-w-lg text-xs font-medium leading-relaxed text-muted-foreground sm:text-sm">
 								{t(
 									"detail.selfMedia.initPanel.stepConfirm.subtitle",
-									"请仔细核对您的品牌定位与选题规划，确认后 AI 操盘手将自动并行创作。",
+									"请仔细核对您的品牌定位与选题规划，确认后 AI 创作助手将自动并行创作。",
 								)}
 							</p>
 						</div>

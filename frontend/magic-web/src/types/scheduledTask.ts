@@ -97,6 +97,21 @@ export namespace ScheduledTask {
 		Running = 3,
 	}
 
+	/** 立即执行定时任务响应 */
+	export interface ExecuteResult {
+		success: boolean
+		error_message?: string | null
+		result?: {
+			type?: string
+			seq?: {
+				conversation_id?: string
+				message?: {
+					topic_id?: string
+				}
+			}
+		}
+	}
+
 	/** 定时任务运行记录 */
 	export interface RunningRecord {
 		executed_at: string
