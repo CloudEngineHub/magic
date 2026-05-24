@@ -404,6 +404,18 @@ export class SelfMediaStore {
 		return this.loadPostFor(platform, entry)
 	}
 
+	/** Ensure a post from any platform is loaded without changing navigation. */
+	async ensurePlatformPostLoaded(
+		platform: SelfMediaPlatform,
+		index: number,
+	): Promise<SelfMediaPost | null> {
+		const entry = this.slices.find((slice) => slice.platform === platform)?.postEntries[index]
+		if (!entry) return null
+		const key = cacheKey(platform, entry.id)
+		if (this.loadedPosts[key]) return this.loadedPosts[key]
+		return this.loadPostFor(platform, entry)
+	}
+
 	/** Preload every post for the active platform (export flow) */
 	async ensureAllPostsLoaded(): Promise<SelfMediaPost[]> {
 		const platform = this.resolvedPlatform

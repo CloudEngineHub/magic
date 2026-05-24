@@ -1,15 +1,3 @@
-/** AI Card metadata from card.meta.json */
-export interface AICardMeta {
-    name: string
-    description: string
-    prompt: string
-    template_file: string
-    schedule_id: string
-    last_generated: string
-    generation_count: number
-    status: "active" | "paused" | "error"
-}
-
 /** AI Card project config from magic.project.js */
 export interface AICardProjectConfig {
     type: "ai-card"
@@ -21,6 +9,9 @@ export interface AICardProjectConfig {
     prompt?: string
     enabled?: number
     data_source?: string
+    last_generated?: string
+    generation_count?: number
+    status?: "active" | "paused" | "error"
 }
 
 /** Single card entry for display */
@@ -31,7 +22,6 @@ export interface AICardEntry {
     fileId?: string
     templateFileId?: string
     latestHtmlFileId?: string
-    meta?: AICardMeta
     lastUpdated?: string
     status: "active" | "paused" | "error" | "loading"
 }
@@ -62,4 +52,4 @@ export interface AICardRootRenderProps {
     selectedProject?: { id: string; name?: string }
 }
 
-export type AICardViewMode = "dashboard" | "detail" | "history" | "config"
+export type AICardViewMode = "dashboard" | "detail" | "config"

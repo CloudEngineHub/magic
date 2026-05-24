@@ -3,7 +3,6 @@ import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import type {
     AICardEntry,
     AICardHistoryEntry,
-    AICardMeta,
     AICardProjectConfig,
     AICardViewMode,
 } from "../types"
@@ -63,6 +62,8 @@ export class AICardStore {
     cards: AICardEntry[] = []
     viewMode: AICardViewMode = "dashboard"
     activeCardId: string | null = null
+    /** When viewing a history entry, this holds the history file id */
+    activeHistoryFileId: string | null = null
     historyEntries: AICardHistoryEntry[] = []
     loading = true
     error: string | null = null
@@ -80,8 +81,13 @@ export class AICardStore {
         return this.cards.find((c) => c.id === this.activeCardId) || null
     }
 
+    /** The file ID to render in the detail iframe */
+    get detailFileId(): string | undefined {
+        return this.activeHistoryFileId || this.activeCard?.latestHtmlFileId
+    }
+
     get hasConfig(): boolean {
-        return !!(this.projectConfig?.prompt && this.projectConfig?.schedule_id)
+        return !!(this.projectConfig?.schedule_id)
     }
 
     setViewMode(mode: AICardViewMode) {
@@ -90,19 +96,23 @@ export class AICardStore {
 
     openCardDetail(cardId: string) {
         this.activeCardId = cardId
+        this.activeHistoryFileId = null
         this.viewMode = "detail"
     }
 
-    openHistory(cardId: string) {
-        this.activeCardId = cardId
-        this.viewMode = "history"
-        this.loadHistory(cardId)
+    openHistoryDetail(historyFileId: string) {
+        // Use the main card as context, but show history file
+        if (this.cards.length > 0) {
+            this.activeCardId = this.cards[0].id
+        }
+        this.activeHistoryFileId = historyFileId
+        this.viewMode = "detail"
     }
 
     goBack() {
         this.viewMode = "dashboard"
         this.activeCardId = null
-        this.historyEntries = []
+        this.activeHistoryFileId = null
     }
 
     async sync(folderFileId?: string, attachmentList?: any[]) {
@@ -141,15 +151,6 @@ export class AICardStore {
                 this.projectConfig = projectConfig
             })
 
-            // Find card.meta.json
-            const metaFile = children.find(
-                (f: any) => f.file_name === "card.meta.json" && !f.is_directory,
-            )
-            let meta: AICardMeta | null = null
-            if (metaFile?.file_id) {
-                meta = await this.fetchMeta(metaFile.file_id)
-            }
-
             // Find latest.html
             const latestFile = children.find(
                 (f: any) => f.file_name === "latest.html" && !f.is_directory,
@@ -165,18 +166,18 @@ export class AICardStore {
             // Build card entry
             const card: AICardEntry = {
                 id: this.folderFileId || "default",
-                name: projectConfig?.name || meta?.name || "AI Card",
-                description: projectConfig?.description || meta?.description || "",
+                name: projectConfig?.name || "AI Card",
+                description: projectConfig?.description || "",
                 fileId: this.folderFileId,
                 latestHtmlFileId: latestFile?.file_id,
                 templateFileId: templateFile?.file_id,
-                meta: meta || undefined,
-                lastUpdated: meta?.last_generated || latestFile?.updated_at,
-                status: meta?.status || "active",
+                lastUpdated: projectConfig?.last_generated || latestFile?.updated_at,
+                status: projectConfig?.status || "active",
             }
 
             runInAction(() => {
                 this.cards = [card]
+                this.historyEntries = this.buildHistoryEntries(children)
                 this.loading = false
             })
         } catch (err) {
@@ -187,19 +188,15 @@ export class AICardStore {
         }
     }
 
-    private async loadHistory(cardId: string) {
-        const children = this.findChildren()
+    private buildHistoryEntries(children: any[]): AICardHistoryEntry[] {
         const historyDir = children.find(
             (f: any) => f.file_name === "history" && f.is_directory,
         )
         if (!historyDir?.children?.length) {
-            runInAction(() => {
-                this.historyEntries = []
-            })
-            return
+            return []
         }
 
-        const entries: AICardHistoryEntry[] = historyDir.children
+        return historyDir.children
             .filter((f: any) => f.file_name?.endsWith(".html"))
             .map((f: any) => {
                 const name = f.file_name || ""
@@ -217,10 +214,6 @@ export class AICardStore {
                 (a: AICardHistoryEntry, b: AICardHistoryEntry) =>
                     b.timestamp.localeCompare(a.timestamp),
             )
-
-        runInAction(() => {
-            this.historyEntries = entries
-        })
     }
 
     private findChildren(): any[] {
@@ -245,19 +238,6 @@ export class AICardStore {
             if (!resp.ok) return null
             const text = await resp.text()
             return parseMagicProjectConfig(text)
-        } catch {
-            return null
-        }
-    }
-
-    private async fetchMeta(fileId: string): Promise<AICardMeta | null> {
-        try {
-            const urls = await getTemporaryDownloadUrl({ file_ids: [fileId] })
-            const url = urls?.[0]?.url
-            if (!url) return null
-            const resp = await fetch(url, { credentials: "omit" })
-            if (!resp.ok) return null
-            return await resp.json()
         } catch {
             return null
         }

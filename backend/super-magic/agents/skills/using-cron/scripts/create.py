@@ -14,6 +14,8 @@
     --day           日期/星期/日号，含义随 --type 不同（见上）
     --deadline      截止日期，格式 YYYY-MM-DD HH:MM:SS；若只填日期或格式不明确将自动补全（如当日 23:59:59）（可选，重复任务到期后停止）
     --specify-topic 是否指定话题，0=否 1=是，默认 0；仅当意图为「周期性且后续执行依赖前次结果」时由调用方传 1
+    --topic-pattern 员工模式，默认由服务端使用 general；例如 ip-manager
+    --agent-code    自定义员工 code；当 --topic-pattern custom_agent 时传入
 
 topic_id 和 model_id 自动从当前会话读取，无需传入。
 
@@ -56,6 +58,16 @@ parser.add_argument(
     default=0,
     choices=[0, 1],
     help="是否指定话题，0=否 1=是，默认 0；仅当周期性且后续执行依赖前次结果时传 1",
+)
+parser.add_argument(
+    "--topic-pattern",
+    default=None,
+    help="员工模式，例如 ip-manager；不传时服务端默认 general",
+)
+parser.add_argument(
+    "--agent-code",
+    default=None,
+    help="自定义员工 code；当 --topic-pattern custom_agent 时传入",
 )
 args = parser.parse_args()
 
@@ -118,6 +130,8 @@ try:
         model_id=model_id,
         deadline=normalized_deadline,
         specify_topic=args.specify_topic,
+        topic_pattern=args.topic_pattern,
+        agent_code=args.agent_code,
     )
 
     result = sdk.message_schedule.create_message_schedule(parameter)

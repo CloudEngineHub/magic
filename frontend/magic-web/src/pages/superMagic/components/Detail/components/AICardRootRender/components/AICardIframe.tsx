@@ -180,7 +180,7 @@ function AICardIframe({
 					ref={iframeRef}
 					title="AI Card"
 					srcDoc={srcDoc}
-					className="block border-0 bg-white dark:bg-slate-900"
+					className="block border-0 bg-white dark:bg-slate-900 max-h-full"
 					style={{
 						width: contentSize.width > 0 ? `${contentSize.width}px` : "100%",
 						height: contentSize.height > 0 ? `${contentSize.height}px` : "100%",

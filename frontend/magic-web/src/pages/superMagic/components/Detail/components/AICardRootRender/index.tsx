@@ -4,18 +4,19 @@ import { AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Flex } from "antd"
+import { message } from "antd"
+import { ScheduledTaskApi } from "@/apis"
 import AICardConfigPanel from "./components/AICardConfigPanel"
 import AICardDashboard from "./components/AICardDashboard"
 import AICardDetail from "./components/AICardDetail"
-import AICardHistory from "./components/AICardHistory"
 import { AICardStore } from "./stores/AICardStore"
-import type { AICardRootRenderProps } from "./types"
+import type { AICardHistoryEntry, AICardRootRenderProps } from "./types"
 
 /**
  * AICardRootRender
  *
  * Entry component for AI Card display. Manages a local AICardStore that
- * parses the card directory structure (magic.project.js + card.meta.json)
+ * parses the card directory structure (magic.project.js)
  * and renders either a dashboard grid, a card detail view, or history view.
  *
  * Animations are powered by framer-motion with layoutId transitions
@@ -68,22 +69,27 @@ function AICardRootRender(props: AICardRootRenderProps) {
 		[store],
 	)
 
-	const handleOpenHistory = useCallback(
-		(cardId: string) => {
-			store.openHistory(cardId)
-		},
-		[store],
-	)
-
 	const handleBack = useCallback(() => {
 		store.goBack()
 	}, [store])
 
-	const handleOpenHistoryFromDetail = useCallback(() => {
-		if (store.activeCardId) {
-			store.openHistory(store.activeCardId)
+	const handleRunNow = useCallback(async () => {
+		const scheduleId = store.projectConfig?.schedule_id
+		if (!scheduleId) return
+		try {
+			await ScheduledTaskApi.executeScheduledTask(scheduleId)
+			message.success("任务已触发运行")
+		} catch {
+			message.error("运行失败，请稍后重试")
 		}
 	}, [store])
+
+	const handleOpenHistoryEntry = useCallback(
+		(entry: AICardHistoryEntry) => {
+			store.openHistoryDetail(entry.fileId)
+		},
+		[store],
+	)
 
 	if (store.loading) {
 		return (
@@ -114,26 +120,19 @@ function AICardRootRender(props: AICardRootRenderProps) {
 					<AICardDashboard
 						key="dashboard"
 						cards={store.cards}
+						historyEntries={store.historyEntries}
 						attachmentList={stableAttachmentList}
 						onOpenCard={handleOpenCard}
-						onOpenHistory={handleOpenHistory}
 						onOpenConfig={handleOpenConfig}
+						onRunNow={store.projectConfig?.schedule_id ? handleRunNow : undefined}
+						onOpenHistoryEntry={handleOpenHistoryEntry}
 					/>
 				)}
 				{store.viewMode === "detail" && store.activeCard && (
 					<AICardDetail
 						key="detail"
 						card={store.activeCard}
-						attachmentList={stableAttachmentList}
-						onBack={handleBack}
-						onOpenHistory={handleOpenHistoryFromDetail}
-					/>
-				)}
-				{store.viewMode === "history" && (
-					<AICardHistory
-						key="history"
-						entries={store.historyEntries}
-						cardName={store.activeCard?.name || "AI Card"}
+						htmlFileId={store.detailFileId}
 						attachmentList={stableAttachmentList}
 						onBack={handleBack}
 					/>

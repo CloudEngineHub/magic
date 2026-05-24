@@ -8,7 +8,6 @@
  *   ai-cards/                  ← root (display_config.type = "ai-card")
  *     ├── magic.project.js
  *     ├── card-1/             ← card sub-folder
- *     │   ├── card.meta.json
  *     │   └── latest.html
  *     └── card-2/             ← another card sub-folder
  */

@@ -130,6 +130,12 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		},
 		[store],
 	)
+	const handleEnsureHomePostLoaded = useCallback(
+		({ platform: nextPlatform, index }: { platform: SelfMediaPlatform; index: number }) => {
+			void store.ensurePlatformPostLoaded(nextPlatform, index)
+		},
+		[store],
+	)
 	const handleShowPlatform = useCallback(() => {
 		setRootMode("platform")
 	}, [])
@@ -171,6 +177,8 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 			<div className={cn("h-full min-h-0 w-full", className)} data-testid="self-media-root">
 				<SelfMediaHomePage
 					posts={store.allPosts}
+					attachmentList={attachmentList}
+					onEnsurePostLoaded={handleEnsureHomePostLoaded}
 					onCreateArticle={handleStartCreateArticle}
 					onOpenPost={handleOpenPost}
 					onOpenBrandConfig={handleOpenBrandConfig}

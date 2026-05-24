@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { FileText, Layers, Plus, Settings, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
@@ -6,9 +7,15 @@ import type { SelfMediaPlatform } from "../../../types"
 import { ALL_PLATFORMS } from "./SelfMediaInitPanel/types"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 import PlatformBrandIcon from "./PlatformBrandIcon"
+import CardFrame from "./CardFrame"
+import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../constants/imageProcess"
+import { useCoverImageUrl } from "../platforms/wechat-official-accounts/useCoverImageUrl"
+import type { SelfMediaAttachmentNode, SelfMediaCard } from "../types"
 
 interface SelfMediaHomePageProps {
 	posts: SelfMediaPlatformPostItem[]
+	attachmentList?: SelfMediaAttachmentNode[]
+	onEnsurePostLoaded?: (target: { platform: SelfMediaPlatform; index: number }) => void
 	onCreateArticle: () => void
 	onOpenPost: (target: { platform: SelfMediaPlatform; index: number }) => void
 	onOpenBrandConfig?: () => void
@@ -18,6 +25,8 @@ interface SelfMediaHomePageProps {
 
 function SelfMediaHomePage({
 	posts,
+	attachmentList,
+	onEnsurePostLoaded,
 	onCreateArticle,
 	onOpenPost,
 	onOpenBrandConfig,
@@ -25,6 +34,7 @@ function SelfMediaHomePage({
 	className,
 }: SelfMediaHomePageProps) {
 	const { t } = useTranslation("super")
+	const requestedPreviewPostKeysRef = useRef(new Set<string>())
 	const hasPosts = posts.length > 0
 	const postGroups = posts.reduce<
 		Array<{ platform: SelfMediaPlatform; posts: SelfMediaPlatformPostItem[] }>
@@ -43,36 +53,46 @@ function SelfMediaHomePage({
 		return platformConfig ? t(platformConfig.labelKey) : platform
 	}
 
+	useEffect(() => {
+		if (!onEnsurePostLoaded) return
+
+		posts.forEach((item) => {
+			if (hasHomePreviewAsset(item)) return
+			const requestKey = `${item.platform}:${item.entry.id}:${item.index}`
+			if (requestedPreviewPostKeysRef.current.has(requestKey)) return
+
+			requestedPreviewPostKeysRef.current.add(requestKey)
+			onEnsurePostLoaded({ platform: item.platform, index: item.index })
+		})
+	}, [onEnsurePostLoaded, posts])
+
 	const renderArticlePreview = ({ platform, post }: SelfMediaPlatformPostItem) => {
 		const postId = post.meta.id || `${platform}-preview`
-		const coverUrl =
+		const cover =
 			platform === "wechat-official-accounts"
-				? post.thumbnailCover?.url || post.heroCover?.url
-				: ""
-		const cardUrl = platform !== "wechat-official-accounts" ? post.cards[0]?.url : ""
+				? post.thumbnailCover || post.heroCover
+				: undefined
+		const card = platform !== "wechat-official-accounts" ? post.cards[0] : undefined
 
-		if (coverUrl) {
-			return (
-				<img
-					src={coverUrl}
-					alt=""
-					className="h-full w-full object-cover"
-					data-testid={`self-media-home-cover-preview-${postId}`}
-				/>
-			)
-		}
+		if (cover?.fileId || cover?.url) return <HomeCoverPreview cover={cover} postId={postId} />
 
-		if (cardUrl) {
+		if (card?.fileId)
 			return (
-				<iframe
-					src={cardUrl}
-					title={post.meta.title || post.meta.feedTitle || postId}
-					tabIndex={-1}
-					className="pointer-events-none h-[360px] w-[240px] origin-top-left scale-[0.17] border-0 bg-white"
+				<div
+					className="pointer-events-none h-full w-full bg-white"
 					data-testid={`self-media-home-card-preview-${postId}`}
-				/>
+				>
+					<CardFrame
+						cardId={`home-${postId}-${card.version ?? ""}`}
+						fileId={card.fileId}
+						version={card.version}
+						attachmentList={attachmentList}
+						imageProcessOptions={CARD_THUMBNAIL_IMAGE_PROCESS}
+						className="h-full w-full"
+						title={post.meta.title || post.meta.feedTitle || postId}
+					/>
+				</div>
 			)
-		}
 
 		return <FileText size={17} data-testid={`self-media-home-icon-fallback-${postId}`} />
 	}
@@ -241,6 +261,36 @@ function SelfMediaHomePage({
 				</div>
 			</main>
 		</div>
+	)
+}
+
+function hasHomePreviewAsset({ platform, post }: SelfMediaPlatformPostItem) {
+	if (platform === "wechat-official-accounts") {
+		const cover = post.thumbnailCover || post.heroCover
+		return Boolean(cover?.fileId || cover?.url)
+	}
+	const card = post.cards[0]
+	return Boolean(card?.fileId || card?.url)
+}
+
+function HomeCoverPreview({ cover, postId }: { cover: SelfMediaCard; postId: string }) {
+	const { url } = useCoverImageUrl(
+		cover.url ? undefined : cover.fileId,
+		Boolean(cover.fileId && !cover.url),
+		CARD_THUMBNAIL_IMAGE_PROCESS,
+	)
+	const coverUrl = cover.url || url
+
+	if (!coverUrl)
+		return <FileText size={17} data-testid={`self-media-home-icon-fallback-${postId}`} />
+
+	return (
+		<img
+			src={coverUrl}
+			alt=""
+			className="h-full w-full object-cover"
+			data-testid={`self-media-home-cover-preview-${postId}`}
+		/>
 	)
 }
 

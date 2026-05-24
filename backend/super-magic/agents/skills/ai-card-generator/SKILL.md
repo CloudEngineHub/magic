@@ -62,10 +62,9 @@ Card directory name is user-defined, no fixed path required. The core requiremen
 ├── magic.project.js           # REQUIRED — type="ai-card", triggers frontend rendering
 ├── template.html              # User-editable template skeleton
 ├── latest.html                # Latest generated card (overwritten each time)
-├── history/                   # Historical snapshots
-│   ├── 2026-05-23_09-00.html
-│   └── 2026-05-22_09-00.html
-└── card.meta.json             # Card metadata
+└── history/                   # Historical snapshots
+    ├── 2026-05-23_09-00.html
+    └── 2026-05-22_09-00.html
 ```
 
 <!--zh
@@ -86,11 +85,10 @@ Based on user requirements, create directory and write all required files:
 
 ```
 1. 创建目录（名称由用户指定或根据内容推断）
-2. 写入 magic.project.js（触发前端渲染识别）
+2. 写入 magic.project.js（触发前端渲染识别，包含所有卡片配置和元数据）
 3. 生成 template.html（基于用户需求选择或创建模板）
 4. 首次获取数据并生成 latest.html
-5. 写入 card.meta.json
-6. 如需定时更新，使用 using-cron 创建定时任务
+5. 如需定时更新，使用 using-cron 创建定时任务
 ```
 
 <!--zh
@@ -108,38 +106,23 @@ window.magicProjectConfig = {
   type: "ai-card",
   name: "卡片名称",
   description: "卡片描述",
+  prompt: "用户提示词全文",
   cards: [{ file: "latest.html", label: "最新" }],
   template: "template.html",
   schedule_id: "", // Will be filled after cron task creation
+  last_generated: "", // ISO 8601 timestamp, updated each generation
+  generation_count: 0, // Incremented each generation
+  status: "active", // active | paused | error
 };
 ```
 
 <!--zh
-### 步骤 3：card.meta.json 格式
--->
-
-### Step 3: card.meta.json Format
-
-```json
-{
-  "name": "卡片名称",
-  "description": "卡片描述",
-  "prompt": "用户提示词全文",
-  "template_file": "template.html",
-  "schedule_id": "",
-  "last_generated": "2026-05-23T09:00:00Z",
-  "generation_count": 0,
-  "status": "active"
-}
-```
-
-<!--zh
-### 步骤 4：template.html 规范
+### 步骤 3：template.html 规范
 
 模板是卡片的"骨架"，定义布局和样式。Agent 每次执行时读取模板理解结构，用新数据填充生成 latest.html。
 -->
 
-### Step 4: template.html Specification
+### Step 3: template.html Specification
 
 The template is the card's "skeleton", defining layout and styling. The agent reads the template each execution to understand the structure, then fills in new data to generate latest.html.
 
@@ -205,14 +188,14 @@ The template is the card's "skeleton", defining layout and styling. The agent re
 When a scheduled task triggers, execute the following:
 
 ```
-1. 读取 template.html 理解布局结构和数据区域标记
-2. 读取 card.meta.json 获取提示词和上下文
+1. 读取 magic.project.js 获取提示词和上下文配置
+2. 读取 template.html 理解布局结构和数据区域标记
 3. 通过 web_search / read_webpages_as_markdown 获取最新数据
 4. 根据提示词分析和组织数据
 5. 基于模板结构 + 新数据生成完整 HTML
 6. 将当前 latest.html 移入 history/（命名为 YYYY-MM-DD_HH-mm.html）
 7. 写入新的 latest.html
-8. 更新 card.meta.json 的 last_generated 和 generation_count
+8. 更新 magic.project.js 的 last_generated 和 generation_count
 ```
 
 <!--zh
@@ -229,15 +212,15 @@ After creating a card, if scheduled updates are needed, use using-cron to create
 
 ```python
 shell_exec(
-    command='python scripts/create.py --task-name "AI卡片: {card_name}" --message-content "请更新 AI 卡片 [{card_name}]，读取 {card_directory}/template.html 模板和 card.meta.json 中的提示词，获取最新数据并生成更新版本到 latest.html" --type daily_repeat --time "9:00"'
+    command='python scripts/create.py --task-name "AI卡片: {card_name}" --message-content "请更新 AI 卡片 [{card_name}]，读取 {card_directory}/magic.project.js 获取配置和提示词，读取 template.html 模板，获取最新数据并生成更新版本到 latest.html" --type daily_repeat --time "9:00" --topic-pattern ip-manager'
 )
 ```
 
 <!--zh
-创建成功后，将返回的 schedule_id 写入 magic.project.js 和 card.meta.json。
+创建成功后，将返回的 schedule_id 写入 magic.project.js。
 -->
 
-After successful creation, write the returned schedule_id into magic.project.js and card.meta.json.
+After successful creation, write the returned schedule_id into magic.project.js.
 
 <!--zh
 ## 用户修改模板

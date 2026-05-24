@@ -62,6 +62,8 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
         model_id: str,
         deadline: Optional[str] = None,
         specify_topic: int = 0,
+        topic_pattern: Optional[str] = None,
+        agent_code: Optional[str] = None,
     ):
         """
         初始化定时任务参数
@@ -74,6 +76,8 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
             model_id: 模型 ID
             deadline: 截止日期，格式 'YYYY-MM-DD HH:MM:SS'，重复任务可选，到期后停止执行
             specify_topic: 是否指定话题，0=否，1=是，默认 0
+            topic_pattern: Agent mode used by the scheduled run, for example 'ip-manager'
+            agent_code: Custom agent code used when topic_pattern is 'custom_agent'
         """
         super().__init__()
         self.task_name = task_name
@@ -83,6 +87,8 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
         self.model_id = model_id
         self.deadline = deadline
         self.specify_topic = specify_topic
+        self.topic_pattern = topic_pattern
+        self.agent_code = agent_code
 
     def get_task_name(self) -> str:
         """获取任务名称"""
@@ -125,6 +131,10 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
         }
         if self.deadline is not None:
             body['deadline'] = self.deadline
+        if self.topic_pattern is not None:
+            body['topic_pattern'] = self.topic_pattern
+        if self.agent_code is not None:
+            body['agent_code'] = self.agent_code
         return body
 
     def to_query_params(self) -> Dict[str, Any]:
@@ -185,6 +195,12 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
 
         if self.specify_topic not in (0, 1):
             raise ValueError("specify_topic must be 0 or 1")
+
+        if self.topic_pattern is not None and not isinstance(self.topic_pattern, str):
+            raise ValueError("topic_pattern must be a string")
+
+        if self.agent_code is not None and not isinstance(self.agent_code, str):
+            raise ValueError("agent_code must be a string")
 
 
 class QueryMessageSchedulesParameter(MagicServiceAbstractParameter):

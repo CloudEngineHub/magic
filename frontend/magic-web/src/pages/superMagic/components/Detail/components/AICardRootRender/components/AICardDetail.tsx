@@ -1,17 +1,19 @@
-import { memo, useCallback } from "react"
+import { memo } from "react"
 import { motion } from "framer-motion"
-import { cn } from "@/lib/utils"
 import AICardIframe from "./AICardIframe"
 import type { AICardEntry } from "../types"
 
 interface AICardDetailProps {
 	card: AICardEntry
+	/** Override file to display (e.g. history entry). Falls back to card.latestHtmlFileId */
+	htmlFileId?: string
 	attachmentList?: any[]
 	onBack: () => void
-	onOpenHistory: () => void
 }
 
-function AICardDetail({ card, attachmentList, onBack, onOpenHistory }: AICardDetailProps) {
+function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetailProps) {
+	const fileId = htmlFileId || card.latestHtmlFileId
+
 	return (
 		<motion.div
 			initial={{ opacity: 0 }}
@@ -64,21 +66,14 @@ function AICardDetail({ card, attachmentList, onBack, onOpenHistory }: AICardDet
 							})}
 						</span>
 					)}
-					<button
-						type="button"
-						onClick={onOpenHistory}
-						className="rounded-md border border-border px-3 py-1 text-xs font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-muted hover:text-foreground"
-					>
-						历史版本
-					</button>
 				</div>
 			</motion.div>
 
 			{/* Card content */}
 			<motion.div layoutId={`ai-card-tile-${card.id}`} className="flex-1 overflow-auto">
-				{card.latestHtmlFileId ? (
+				{fileId ? (
 					<AICardIframe
-						fileId={card.latestHtmlFileId}
+						fileId={fileId}
 						attachmentList={attachmentList}
 						className="h-full w-full"
 						scaleToFit={false}

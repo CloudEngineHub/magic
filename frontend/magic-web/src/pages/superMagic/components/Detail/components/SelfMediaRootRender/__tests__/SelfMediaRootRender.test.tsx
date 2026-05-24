@@ -34,6 +34,7 @@ const mockStore = vi.hoisted(() => ({
 	],
 	handleChangePlatform: vi.fn(),
 	openPostDetail: vi.fn(),
+	ensurePlatformPostLoaded: vi.fn(),
 	goHomeList: vi.fn(),
 }))
 
@@ -99,6 +100,12 @@ vi.mock("../components/UnsupportedPlatform", () => ({
 	},
 }))
 
+vi.mock("../components/CardFrame", () => ({
+	default: function MockCardFrame({ fileId, version }: { fileId?: string; version?: string }) {
+		return <div data-file-id={fileId} data-version={version} data-testid="mock-card-frame" />
+	},
+}))
+
 vi.mock("../components/SelfMediaInitPanel", () => ({
 	default: function MockSelfMediaInitPanel({ onBackHome }: { onBackHome?: () => void }) {
 		return (
@@ -123,11 +130,27 @@ vi.mock("../components/BrandConfigDialog", () => ({
 	},
 }))
 
+vi.mock("../components/AICardCreateDialog", () => ({
+	default: function MockAICardCreateDialog({ open }: { open: boolean }) {
+		return open ? (
+			<div data-testid="self-media-ai-card-create-dialog">ai-card-create</div>
+		) : null
+	},
+}))
+
 vi.mock("../platforms", () => ({
 	getPlatformComponent: () =>
 		function MockPlatformComponent() {
 			return <div data-testid="mock-platform-component">platform-content</div>
 		},
+}))
+
+vi.mock("../platforms/wechat-official-accounts/useCoverImageUrl", () => ({
+	useCoverImageUrl: (fileId?: string) => ({
+		url: fileId ? `https://example.test/${fileId}.png` : null,
+		loading: false,
+		error: null,
+	}),
 }))
 
 vi.mock("../stores", () => ({
@@ -202,6 +225,7 @@ describe("SelfMediaRootRender", () => {
 		]
 		mockStore.handleChangePlatform.mockReset()
 		mockStore.openPostDetail.mockReset()
+		mockStore.ensurePlatformPostLoaded.mockReset()
 		mockStore.goHomeList.mockReset()
 	})
 
@@ -296,7 +320,7 @@ describe("SelfMediaRootRender", () => {
 					cards: [],
 					thumbnailCover: {
 						path: "covers/wechat-thumb.png",
-						url: "https://example.test/wechat-thumb.png",
+						fileId: "wechat-thumb-file",
 					},
 				},
 			},
@@ -309,7 +333,8 @@ describe("SelfMediaRootRender", () => {
 					cards: [
 						{
 							path: "cards/card-1.html",
-							url: "https://example.test/card-1.html",
+							fileId: "rednote-card-file",
+							version: "v1",
 						},
 					],
 				},
@@ -327,18 +352,62 @@ describe("SelfMediaRootRender", () => {
 
 		expect(screen.getByTestId("self-media-home-cover-preview-wechat-1")).toHaveAttribute(
 			"src",
-			"https://example.test/wechat-thumb.png",
+			"https://example.test/wechat-thumb-file.png",
 		)
-		expect(screen.getByTestId("self-media-home-card-preview-rednote-1")).toHaveAttribute(
-			"src",
-			"https://example.test/card-1.html",
+		expect(screen.getByTestId("self-media-home-card-preview-rednote-1")).toContainElement(
+			screen.getByTestId("mock-card-frame"),
 		)
+		expect(screen.getByTestId("mock-card-frame")).toHaveAttribute(
+			"data-file-id",
+			"rednote-card-file",
+		)
+		expect(screen.getByTestId("mock-card-frame")).toHaveAttribute("data-version", "v1")
 		expect(
 			screen.queryByTestId("self-media-home-icon-fallback-wechat-1"),
 		).not.toBeInTheDocument()
 		expect(
 			screen.queryByTestId("self-media-home-icon-fallback-rednote-1"),
 		).not.toBeInTheDocument()
+	})
+
+	it("loads platform posts on the article home before preview assets are available", () => {
+		mockStore.platforms = ["wechat-official-accounts", "rednote"]
+		mockStore.resolvedPlatform = "rednote"
+		mockStore.allPosts = [
+			{
+				platform: "wechat-official-accounts",
+				index: 0,
+				entry: { id: "wechat-1", name: "Wechat One", entry: "posts/wechat-1/post.json" },
+				post: {
+					meta: { id: "wechat-1", title: "Wechat One", feedTitle: "Wechat One" },
+					cards: [],
+				},
+			},
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "rednote-1", name: "Rednote One", entry: "posts/rednote-1/post.json" },
+				post: {
+					meta: { id: "rednote-1", title: "Rednote One", feedTitle: "Rednote One" },
+					cards: [],
+				},
+			},
+		]
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={[]}
+				attachmentList={[]}
+				selectedProject={{ id: "project-1" }}
+			/>,
+		)
+
+		expect(mockStore.ensurePlatformPostLoaded).toHaveBeenCalledWith(
+			"wechat-official-accounts",
+			0,
+		)
+		expect(mockStore.ensurePlatformPostLoaded).toHaveBeenCalledWith("rednote", 0)
 	})
 
 	it("opens brand config from the article home", () => {
