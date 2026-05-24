@@ -20,6 +20,9 @@ import realModelTryonManifest from "./real-model-tryon/manifest.json"
 import dressUpTryonStyles from "./dress-up-tryon/index.css?raw"
 import dressUpTryonRuntimeCode from "./dress-up-tryon/index.js?raw"
 import dressUpTryonManifest from "./dress-up-tryon/manifest.json"
+import accessoryTryonStyles from "./accessory-tryon/index.css?raw"
+import accessoryTryonRuntimeCode from "./accessory-tryon/index.js?raw"
+import accessoryTryonManifest from "./accessory-tryon/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -31,6 +34,8 @@ const realModelTryonEntryUrl = new URL("./real-model-tryon/index.js", import.met
 const realModelTryonResourceBaseUrl = new URL("./real-model-tryon/", import.meta.url).href
 const dressUpTryonEntryUrl = new URL("./dress-up-tryon/index.js", import.meta.url).href
 const dressUpTryonResourceBaseUrl = new URL("./dress-up-tryon/", import.meta.url).href
+const accessoryTryonEntryUrl = new URL("./accessory-tryon/index.js", import.meta.url).href
+const accessoryTryonResourceBaseUrl = new URL("./accessory-tryon/", import.meta.url).href
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -51,6 +56,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${dressUpTryonRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, dressUpTryonStyles],
 		resolveResourceUrl: (path) => new URL(path, dressUpTryonResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...accessoryTryonManifest,
+		entry: `./accessory-tryon/${accessoryTryonManifest.entry}`,
+		runtimeUrl: accessoryTryonEntryUrl,
+		resourceBaseUrl: accessoryTryonResourceBaseUrl,
+		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${accessoryTryonRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, accessoryTryonStyles],
+		resolveResourceUrl: (path) => new URL(path, accessoryTryonResourceBaseUrl).href,
 		source: "builtin",
 	},
 	{

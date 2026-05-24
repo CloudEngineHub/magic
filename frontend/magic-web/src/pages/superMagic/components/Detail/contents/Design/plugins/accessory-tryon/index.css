@@ -1,0 +1,7 @@
+.accessory-tryon-category.mpk-option-group.is-card {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.accessory-tryon .mpk-image-slot-preview {
+	max-height: 240px;
+}
