@@ -728,7 +728,7 @@ class AgentDomainService
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param string $sandboxId 沙箱ID
-     * @param string $name 工具名称（如 ask_user）
+     * @param string $name 工具名称（如 ask_user、plan）
      * @param string $toolCallId 工具调用ID
      * @param array $detail 工具特定的回复数据，结构由各工具自行约定
      */

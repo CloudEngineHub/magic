@@ -16,6 +16,7 @@ from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
 from agentlang.utils.syntax_checker import SyntaxChecker
 from app.utils.async_file_utils import async_exists
+from app.service.html_app_memory_service import is_html_app_memory_path
 
 logger = get_logger(__name__)
 
@@ -107,6 +108,8 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
         try:
             # 使用父类方法获取安全的文件路径
             file_path = self.resolve_path(params.file_path)
+            if is_html_app_memory_path(file_path):
+                return ToolResult.error("HTML-APP.md is managed by update_html_app_memory. Use that tool instead of write_file so MagicBase data model records are not overwritten.")
             # 创建目录（如果需要）
             await self._create_directories(file_path)
 

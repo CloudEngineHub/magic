@@ -6,6 +6,7 @@
 # 导出工具类
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
+from app.tools.plan import PlanTool
 from app.tools.web_search import WebSearch
 from app.tools.call_subagent import CallSubagent
 from app.tools.wait_for_subagents import WaitForSubagents
@@ -50,6 +51,7 @@ from app.tools.todo_read import TodoRead
 from app.tools.todo_create import TodoCreate
 from app.tools.todo_update import TodoUpdate
 from app.tools.update_memory import UpdateMemory
+from app.tools.update_html_app_memory import UpdateHtmlAppMemory
 from app.tools.upgrade_sandbox import UpgradeSandbox
 from app.tools.use_browser import UseBrowser
 from app.tools.write_file import WriteFile
@@ -125,6 +127,7 @@ import app.tools.design
 __all__ = [
     "DummyTool",
     "AskUserTool",
+    "PlanTool",
 
     # 核心组件
     "BaseTool",
@@ -193,6 +196,7 @@ __all__ = [
     "TodoCreate",
     "TodoUpdate",
     "UpdateMemory",
+    "UpdateHtmlAppMemory",
     "UseBrowser",
     "VisualUnderstanding",
     "VisualUnderstandingWebpage",

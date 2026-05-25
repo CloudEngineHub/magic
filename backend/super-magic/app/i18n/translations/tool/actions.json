@@ -399,6 +399,10 @@
         "zh_CN": "向用户提问",
         "en_US": "Ask user"
     },
+    "plan": {
+        "zh_CN": "确认开发计划",
+        "en_US": "Review implementation plan"
+    },
     "search_knowledge": {
         "zh_CN": "知识检索",
         "en_US": "Search knowledge"

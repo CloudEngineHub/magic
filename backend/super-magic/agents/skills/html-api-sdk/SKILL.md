@@ -18,6 +18,25 @@ description-cn: "SuperMagic HTML 微应用 window.Magic API 使用指南，涵�
 4. 文件写入后，若需要让 Agent 感知到数据变化，调用 `window.Magic.setInputMessage()` 通知 Agent。
 5. **禁止使用内联事件**（`onclick` 等属性），所有事件绑定必须在 JS 中用 `addEventListener` 完成。
 
+## Micro-app runtime conventions
+
+- HTML micro-apps may use Tailwind CDN (`https://cdn.tailwindcss.com`) for layout, spacing, colors, responsiveness, and basic visual polish.
+- Do not introduce Tailwind build steps, npm dependencies, frontend frameworks, or third-party component libraries from this skill.
+- Keep business logic in native JavaScript. Tailwind classes should improve presentation, not hide state, data access, or event logic.
+- Simple pages may keep CSS and JavaScript in the page. Multi-page apps or apps with shared logic may use shared CSS/JS files.
+- One real page should map to one `.html` file. Reusable component `.html` files are appropriate only when they are truly reused by multiple pages.
+- A micro-app should be lightweight, but it should still feel like a complete small product. For short requests, use the approved plan's product expansion instead of building a minimal demo. Only build the smallest possible version when the user explicitly asks for a minimal or simplest app.
+
+## Project memory: `HTML-APP.md`
+
+- A workspace contains one HTML micro-app. The workspace-root `HTML-APP.md` is the project memory document for future iterations.
+- Before creating or modifying a micro-app, read `HTML-APP.md` if it exists. If it does not exist, treat the task as a new micro-app.
+- HTML pages must not read `HTML-APP.md`; it is for the agent's development workflow only.
+- Ordinary project-memory sections such as App Overview, Entry and Files, Features, Runtime Notes, 铁律, and Iteration History should be updated once before the development task ends by calling `update_html_app_memory`, based only on what was truly completed.
+- Do not use file-editing tools to modify `HTML-APP.md` directly. The dedicated memory tool preserves the latest MagicBase data model and prevents accidental overwrites.
+- MagicBase schema changes are different: `create_magicbase_table` and `create_magicbase_column` automatically maintain migration history in `.magicbase/migrations.json`. On successful schema changes, they refresh the latest MagicBase data model in `HTML-APP.md`.
+- If tools report a `Pending` MagicBase migration at the start of a later task, query MagicBase first. Query tools will try to repair confirmable Pending records automatically; if a record cannot be confirmed, keep it visible in the plan before doing more schema work.
+
 ---
 
 ## 一、文件系统 API（`window.Magic.fs`）
@@ -241,16 +260,74 @@ window.Magic.addFilesToMessage(files); // 返回 void
 
 ---
 
-## 四、数据库 API（`window.Magic.db`）
+## 四、运行时与当前用户（`window.Magic.getRuntime`）
+
+Use `window.Magic.getRuntime()` whenever a micro-app needs current-user display, creators, owners, assignees, collaborators, "my data versus all data", or edit/delete permission checks.
+
+`getRuntime()` is hosted by the parent application. It uses the current login state to query magic-service user information and returns a normalized current-user profile. HTML business code should not call `/api/v1/contact/users/queries` directly for the current user, should not hard-code tokens, and should not read `.credentials` files.
+
+```javascript
+const runtime = await window.Magic.getRuntime();
+// runtime: {
+//   userId: "usi_xxx",
+//   userName: "Alice",
+//   user: { user_id, real_name, nickname, avatar_url, phone, email, ... },
+//   organizationCode: "org_xxx",
+//   language: "zh-CN"
+// }
+```
+
+For data apps with ownership or collaboration:
+
+- Call `window.Magic.getRuntime()` during initialization before user-dependent reads or writes.
+- Store stable identity fields in MagicBase, such as `creator_user_id`, `creator_name`, `owner_user_id`, `owner_name`, and `updated_by_user_id`, choosing only fields the app actually needs.
+- When creating a row, write `creator_user_id: runtime.userId` and `creator_name: runtime.userName` or the scenario's equivalent owner fields.
+- When rendering edit/delete/archive/transfer buttons, compare `runtime.userId` with the row's stable identity field. Display names are not permission keys.
+- If `getRuntime()` fails, disable user-dependent create, edit, delete, ownership, and transfer operations and show an understandable error. Never write fake identities such as `unknown`, `guest`, `visitor`, `访客`, or `未命名用户` into MagicBase.
+
+Recommended pattern:
+
+```javascript
+let runtime = null;
+
+async function initRuntime() {
+  runtime = await window.Magic.getRuntime();
+  if (!runtime?.userId || !runtime?.userName) {
+    throw new Error("Current user information is unavailable");
+  }
+}
+
+async function createTask(data) {
+  if (!runtime) {
+    throw new Error("Current user information is not initialized");
+  }
+
+  return window.Magic.db.createRow(TASK_TABLE_ID, {
+    ...data,
+    creator_user_id: runtime.userId,
+    creator_name: runtime.userName,
+  });
+}
+
+function canEdit(row) {
+  return Boolean(runtime?.userId && row.creator_user_id === runtime.userId);
+}
+```
+
+---
+
+## 五、数据库 API（`window.Magic.db`）
 
 The HTML runtime database API only supports row-level operations on existing MagicBase tables. It does not create tables, create columns, or manage schema.
 
-When the user asks for persistence, database storage, CRUD, or form submission saving, the agent must prepare the table schema before generating HTML:
+For data-oriented micro-apps, treat MagicBase persistence as the default. Surveys, forms, todos, CRUD apps, small admin panels, dashboards, trackers, and any app with user-submitted, editable, collected, analytical, searchable, exportable, or reusable data should prepare a MagicBase table before generating HTML. Skip persistence only for pure showcase/static pages, pure calculators, apps with no user data, or when the user explicitly says not to save data.
+
+The data model must serve the full approved product loop, not the smallest possible CRUD shell. Derive fields from the planned object, attributes, lifecycle state, timestamps, category/grouping needs, notes/details, ordering, archive/deletion behavior, statistics, and filters. UI-only state should stay in JavaScript; anything needed for persistence, search, filtering, sorting, or later reuse belongs in MagicBase.
 
 1. Call `query_magicbase_tables` to check whether the required table already exists.
-2. If the table is missing, call `create_magicbase_table`.
-3. If columns are missing, call `create_magicbase_column`.
-4. Generate HTML only after you have a real `table.id` from MagicBase tools.
+2. If the table is missing, call `create_magicbase_table`; the tool automatically records migration history in `.magicbase/migrations.json` and refreshes the latest MagicBase data model in `HTML-APP.md`.
+3. If columns are missing, call `create_magicbase_column`; the tool automatically records migration history in `.magicbase/migrations.json` and refreshes the latest MagicBase data model in `HTML-APP.md`.
+4. Generate HTML only after you have a real `table.id` from MagicBase tools or from a successful reconciliation against MagicBase.
 
 Never pass `table_key` or `table_name` as `tableId` to `window.Magic.db`. The HTML code must use the real table id returned by MagicBase tools.
 
@@ -313,6 +390,22 @@ const rows = result.list;
 - **返回**：`Promise<{ list: Array<object>; total: number; page: number; page_size: number }>` — 分页结果。行数组字段是 `list`，不要使用 `rows`
 - **超时**：30 秒（其他操作为 15 秒）
 
+Use this defensive read pattern when handling existing or uncertain runtime responses:
+
+```javascript
+const result = await window.Magic.db.queryRows(TABLE_ID_FROM_MAGICBASE_TOOL, {
+  page: 1,
+  page_size: 100,
+});
+const rows = Array.isArray(result?.list)
+  ? result.list
+  : Array.isArray(result?.data?.list)
+    ? result.data.list
+    : [];
+```
+
+Prefer `result.list` in new code. The `result.data?.list` fallback is only a compatibility guard for uncertain host responses. Do not use `result.rows`.
+
 ### 获取单行 `getRow(tableId, recordId, select?)`
 
 ```javascript
@@ -367,7 +460,7 @@ try {
 
 ---
 
-## 五、错误处理最佳实践
+## 六、错误处理最佳实践
 
 ```javascript
 // fs 错误处理
@@ -400,7 +493,7 @@ window.Magic.llm.stream(messages, (delta, done) => {
 
 ---
 
-## 六、完整示例模板
+## 七、完整示例模板
 
 ### 示例 A：读数据 → LLM 分析 → 写回结果 → 通知 Agent
 
@@ -562,7 +655,7 @@ window.Magic.llm.stream(messages, (delta, done) => {
 
 ---
 
-## 七、API 速查表
+## 八、API 速查表
 
 | API                                             | 说明               | 返回                     |
 | ----------------------------------------------- | ------------------ | ------------------------ |
@@ -578,6 +671,7 @@ window.Magic.llm.stream(messages, (delta, done) => {
 | `window.Magic.uploadFiles(files)`               | 上传文件到工作区   | `Promise<unknown>`       |
 | `window.Magic.downloadFiles(paths)`             | 下载工作区文件     | `Promise<unknown>`       |
 | `window.Magic.addFilesToMessage(files)`         | 将文件附加到输入框 | `void`                   |
+| `window.Magic.getRuntime()`                     | 获取当前用户上下文 | `Promise<object>`        |
 | `window.Magic.db.getTables()`                   | 获取所有表         | `Promise<Array>`         |
 | `window.Magic.db.getTable(tableId)`             | 获取表详情         | `Promise<object>`        |
 | `window.Magic.db.createRow(tableId, data)`      | 新增行             | `Promise<object>`        |
