@@ -26,6 +26,12 @@ import accessoryTryonManifest from "./accessory-tryon/manifest.json"
 import poseSwapStyles from "./pose-swap/index.css?raw"
 import poseSwapRuntimeCode from "./pose-swap/index.js?raw"
 import poseSwapManifest from "./pose-swap/manifest.json"
+import faceSwapStyles from "./face-swap/index.css?raw"
+import faceSwapRuntimeCode from "./face-swap/index.js?raw"
+import faceSwapManifest from "./face-swap/manifest.json"
+// import clothingColorChangeStyles from "./clothing-color-change/index.css?raw"
+// import clothingColorChangeRuntimeCode from "./clothing-color-change/index.js?raw"
+// import clothingColorChangeManifest from "./clothing-color-change/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -41,6 +47,12 @@ const dressUpTryonEntryUrl = new URL("./dress-up-tryon/index.js", import.meta.ur
 const dressUpTryonResourceBaseUrl = new URL("./dress-up-tryon/", import.meta.url).href
 const accessoryTryonEntryUrl = new URL("./accessory-tryon/index.js", import.meta.url).href
 const accessoryTryonResourceBaseUrl = new URL("./accessory-tryon/", import.meta.url).href
+const poseSwapEntryUrl = new URL("./pose-swap/index.js", import.meta.url).href
+const poseSwapResourceBaseUrl = new URL("./pose-swap/", import.meta.url).href
+const faceSwapEntryUrl = new URL("./face-swap/index.js", import.meta.url).href
+const faceSwapResourceBaseUrl = new URL("./face-swap/", import.meta.url).href
+// const clothingColorChangeEntryUrl = new URL("./clothing-color-change/index.js", import.meta.url).href
+// const clothingColorChangeResourceBaseUrl = new URL("./clothing-color-change/", import.meta.url).href
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -61,36 +73,6 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${dressUpTryonRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, dressUpTryonStyles],
 		resolveResourceUrl: (path) => new URL(path, dressUpTryonResourceBaseUrl).href,
-		source: "builtin",
-	},
-	{
-		...accessoryTryonManifest,
-		entry: `./accessory-tryon/${accessoryTryonManifest.entry}`,
-		runtimeUrl: accessoryTryonEntryUrl,
-		resourceBaseUrl: accessoryTryonResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${accessoryTryonRuntimeCode}`,
-		styleCode: [magicPluginKitStyles, accessoryTryonStyles],
-		resolveResourceUrl: (path) => new URL(path, accessoryTryonResourceBaseUrl).href,
-		source: "builtin",
-	},
-	{
-		...modelSwapManifest,
-		entry: `./model-swap/${modelSwapManifest.entry}`,
-		runtimeUrl: modelSwapEntryUrl,
-		resourceBaseUrl: modelSwapResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${modelSwapRuntimeCode}`,
-		styleCode: [magicPluginKitStyles, modelSwapStyles],
-		resolveResourceUrl: (path) => new URL(path, modelSwapResourceBaseUrl).href,
-		source: "builtin",
-	},
-	{
-		...poseSwapManifest,
-		entry: `./pose-swap/${poseSwapManifest.entry}`,
-		runtimeUrl: poseSwapEntryUrl,
-		resourceBaseUrl: poseSwapResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${poseSwapRuntimeCode}`,
-		styleCode: [magicPluginKitStyles, poseSwapStyles],
-		resolveResourceUrl: (path) => new URL(path, poseSwapResourceBaseUrl).href,
 		source: "builtin",
 	},
 	{
@@ -123,4 +105,54 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		resolveResourceUrl: (path) => new URL(path, sceneSwapResourceBaseUrl).href,
 		source: "builtin",
 	},
+	{
+		...accessoryTryonManifest,
+		entry: `./accessory-tryon/${accessoryTryonManifest.entry}`,
+		runtimeUrl: accessoryTryonEntryUrl,
+		resourceBaseUrl: accessoryTryonResourceBaseUrl,
+		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${accessoryTryonRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, accessoryTryonStyles],
+		resolveResourceUrl: (path) => new URL(path, accessoryTryonResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...faceSwapManifest,
+		entry: `./face-swap/${faceSwapManifest.entry}`,
+		runtimeUrl: faceSwapEntryUrl,
+		resourceBaseUrl: faceSwapResourceBaseUrl,
+		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${faceSwapRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, faceSwapStyles],
+		resolveResourceUrl: (path) => new URL(path, faceSwapResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...modelSwapManifest,
+		entry: `./model-swap/${modelSwapManifest.entry}`,
+		runtimeUrl: modelSwapEntryUrl,
+		resourceBaseUrl: modelSwapResourceBaseUrl,
+		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${modelSwapRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, modelSwapStyles],
+		resolveResourceUrl: (path) => new URL(path, modelSwapResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...poseSwapManifest,
+		entry: `./pose-swap/${poseSwapManifest.entry}`,
+		runtimeUrl: poseSwapEntryUrl,
+		resourceBaseUrl: poseSwapResourceBaseUrl,
+		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${poseSwapRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, poseSwapStyles],
+		resolveResourceUrl: (path) => new URL(path, poseSwapResourceBaseUrl).href,
+		source: "builtin",
+	},
+	// {
+	// 	...clothingColorChangeManifest,
+	// 	entry: `./clothing-color-change/${clothingColorChangeManifest.entry}`,
+	// 	runtimeUrl: clothingColorChangeEntryUrl,
+	// 	resourceBaseUrl: clothingColorChangeResourceBaseUrl,
+	// 	runtimeCode: `${magicPluginKitRuntimeCode}\n\n${clothingColorChangeRuntimeCode}`,
+	// 	styleCode: [magicPluginKitStyles, clothingColorChangeStyles],
+	// 	resolveResourceUrl: (path) => new URL(path, clothingColorChangeResourceBaseUrl).href,
+	// 	source: "builtin",
+	// },
 ]

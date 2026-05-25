@@ -1,0 +1,52 @@
+{
+	"description": "{{description}}",
+	"entry": "index.js",
+	"icon": "🫦",
+	"label": "{{label}}",
+	"locales": {
+		"en-US": {
+			"button.generate": "Generate AI Face Swap",
+			"button.generating": "Generating…",
+			"description": "Upload original model images and a target face image to replace the model's facial features with one click. To also replace skin tone and hairstyle, use AI Model Swap instead.",
+			"empty.baseModelImages": "Upload at least 1 original model image first",
+			"empty.targetFaceImage": "Upload a target face image first",
+			"error.noModels": "No AI model is currently available",
+			"error.noSize": "The current model does not provide a usable size preset",
+			"error.referenceLimit": "The reference image limit for the current model has been reached",
+			"error.references": "The uploaded images do not contain usable reference identifiers",
+			"label": "AI Face Swap",
+			"section.baseModelImages": "Original model images",
+			"section.count": "Count",
+			"section.modelSelect": "AI Model",
+			"section.targetFaceImage": "Target face",
+			"toast.success": "AI face swap image generated successfully!",
+			"upload.baseModelImages.help": "Upload up to 10 original model images. Only facial features will be replaced — skin tone, hairstyle, outfit, and scene are preserved.",
+			"upload.targetFaceImage": "Upload the target face image",
+			"upload.targetFaceImage.help": "Use a clear frontal or three-quarter face photo. Only facial features will be extracted. Skin tone, hairstyle, clothing, and background will not be copied."
+		},
+		"zh-CN": {
+			"button.generate": "生成 AI 换脸图",
+			"button.generating": "生成中…",
+			"description": "上传模特图和目标人脸图，一键 AI 换脸，替换模特面部特征。如需替换肤色和发型，请使用 AI 换模特。",
+			"empty.baseModelImages": "请先上传至少 1 张原模特图",
+			"empty.targetFaceImage": "请先上传目标人脸图",
+			"error.noModels": "暂无可用 AI 模型",
+			"error.noSize": "当前模型缺少可用尺寸配置",
+			"error.referenceLimit": "参考图数量已达当前模型上限",
+			"error.references": "图片缺少可用于生成的资源标识",
+			"label": "AI换脸",
+			"section.baseModelImages": "原模特图",
+			"section.count": "生成张数",
+			"section.modelSelect": "AI 模型",
+			"section.targetFaceImage": "目标人脸",
+			"toast.success": "AI 换脸图生成成功！",
+			"upload.baseModelImages.help": "支持上传多张原模特图（最多 10 张），仅替换面部特征，保留肤色、发型、服饰与场景。",
+			"upload.targetFaceImage": "点击上传目标人脸图",
+			"upload.targetFaceImage.help": "上传清晰的正脸或半侧脸照片，AI 仅复用其面部五官特征，不会复制肤色、发型、服饰或背景。"
+		}
+	},
+	"name": "face-swap",
+	"styles": "index.css",
+	"tags": ["AI", "电商", "换脸"],
+	"version": "1.0.0"
+}
