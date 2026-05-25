@@ -1018,7 +1018,8 @@
 				"enableScheduleHint": "Card will auto-update at the set frequency",
 				"cancel": "Cancel",
 				"saving": "Saving...",
-				"save": "Save Configuration"
+				"save": "Save Configuration",
+				"generate": "Generate Card"
 			},
 			"dashboard": {
 				"loading": "Loading AI Cards...",

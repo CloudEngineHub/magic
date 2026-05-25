@@ -3,6 +3,7 @@ import { useMemoizedFn } from "ahooks"
 import { ScheduledTaskApi } from "@/apis"
 import { ScheduledTask } from "@/types/scheduledTask"
 import { workspaceStore, projectStore } from "@/pages/superMagic/stores/core"
+import { createAICardViaTopic } from "../../SelfMediaRootRender/services/aiCardCreate"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { superMagicTopicModelCacheService } from "@/services/superMagic/topicModel"
 import topicModelStore from "@/stores/superMagic/topicModelStore"
@@ -166,6 +167,8 @@ export function useAICardConfig(store: AICardStore) {
         setFormValues(values)
     }, [store.projectConfig])
 
+    const hasScheduleId = !!store.projectConfig?.schedule_id
+
     const saveConfig = useMemoizedFn(async (values: AICardConfigFormValues) => {
         if (!values.timeConfig) return
         setSaving(true)
@@ -236,6 +239,27 @@ export function useAICardConfig(store: AICardStore) {
         }
     })
 
+    /** Create card via topic (used when no schedule_id exists) */
+    const createCard = useMemoizedFn(async (values: AICardConfigFormValues) => {
+        setSaving(true)
+        try {
+            const selectedProject = projectStore.selectedProject
+            await createAICardViaTopic({
+                prompt: values.prompt.trim(),
+                cardName: values.taskName.trim(),
+                template: values.template,
+                projectId: selectedProject?.id || "",
+                timeConfig: values.timeConfig,
+                enabled: values.enabled,
+                model: values.model,
+                imageModel: values.imageModel,
+                videoModel: values.videoModel,
+            })
+        } finally {
+            setSaving(false)
+        }
+    })
+
     const updateFormValues = useMemoizedFn((updates: Partial<AICardConfigFormValues>) => {
         setFormValues((prev) => ({ ...prev, ...updates }))
     })
@@ -245,8 +269,10 @@ export function useAICardConfig(store: AICardStore) {
         updateFormValues,
         loadConfig,
         saveConfig,
+        createCard,
         saving,
         loadingDetail,
+        hasScheduleId,
         modelList,
         imageModelList,
         videoModelList,

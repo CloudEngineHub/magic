@@ -33,6 +33,8 @@ interface AICardFormFieldsProps {
 	videoModelList?: ModelItem[]
 	/** Whether to show schedule/model/enabled as expanded by default */
 	advancedExpanded?: boolean
+	/** Hide template selection (e.g. when a template file already exists) */
+	hideTemplate?: boolean
 }
 
 function AICardFormFields({
@@ -43,6 +45,7 @@ function AICardFormFields({
 	imageModelList,
 	videoModelList,
 	advancedExpanded = false,
+	hideTemplate = false,
 }: AICardFormFieldsProps) {
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useState(advancedExpanded)
@@ -125,24 +128,26 @@ function AICardFormFields({
 			</div>
 
 			{/* Template */}
-			<div className="space-y-2">
-				<label className="text-sm font-medium text-foreground">
-					{t("detail.aiCard.form.template")}
-				</label>
-				<MagicSelect
-					value={values.template}
-					onChange={(val: CardTemplateType) => onChange({ template: val })}
-					className="w-full"
-					disabled={disabled}
-					options={CARD_TEMPLATES.map((opt) => ({
-						label: t(opt.labelKey),
-						value: opt.value,
-					}))}
-				/>
-				<p className="text-xs text-muted-foreground">
-					{t("detail.aiCard.form.templateHint")}
-				</p>
-			</div>
+			{!hideTemplate && (
+				<div className="space-y-2">
+					<label className="text-sm font-medium text-foreground">
+						{t("detail.aiCard.form.template")}
+					</label>
+					<MagicSelect
+						value={values.template}
+						onChange={(val: CardTemplateType) => onChange({ template: val })}
+						className="w-full"
+						disabled={disabled}
+						options={CARD_TEMPLATES.map((opt) => ({
+							label: t(opt.labelKey),
+							value: opt.value,
+						}))}
+					/>
+					<p className="text-xs text-muted-foreground">
+						{t("detail.aiCard.form.templateHint")}
+					</p>
+				</div>
+			)}
 
 			{/* Prompt */}
 			<div className="space-y-2">

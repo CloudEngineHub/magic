@@ -1019,7 +1019,8 @@
 				"enableScheduleHint": "开启后将按设定频率自动更新卡片",
 				"cancel": "取消",
 				"saving": "保存中...",
-				"save": "保存配置"
+				"save": "保存配置",
+				"generate": "生成卡片"
 			},
 			"dashboard": {
 				"loading": "AI 卡片加载中...",

@@ -2,11 +2,11 @@
 name: self-media-composer
 description: >
   Self-media post creation and management skill. Use when the user wants to build, extend, or edit card-style social posts for Rednote (Xiaohongshu), Instagram, WeChat Official Accounts, or similar platforms. Handles project scaffolding, post authoring, card HTML / article HTML production, built-in preset selection, and posts-index maintenance.
-  
+
   CRITICAL — Load this skill immediately (before any other action) when the user message matches ANY of the following patterns:
-  
+
   English triggers: - Contains [@self_media_project:...] - "create a post", "add a post", "make cards", "write a WeChat article" - "make a Rednote / Xiaohongshu post", "make an Instagram post" - "build a self-media project", "start a social media project" - "generate card images", "design social cards", "create slide cards" - "create content for Rednote / Instagram / WeChat"
-  
+
   中文触发词（出现以下任意表达时立即加载本技能）： - 包含 [@self_media_project:...] 引用 - 帮我做小红书 / 做小红书图文 / 做小红书帖子 / 小红书推文 / 发小红书 - 做公众号文章 / 写公众号推文 / 制作公众号内容 / 微信公众号推文 - 做 Instagram 帖子 / ins 图文 / ins 卡片 - 帮我做卡片 / 制作卡片图文 / 生成社媒卡片 - 新建自媒体项目 / 创建内容项目 / 做一套图文 - 做一篇（小红书 | 公众号 | ins）内容 - 给我写一篇推文 / 帮我排版一篇文章（配合平台名称出现时）
 ---
 
@@ -22,15 +22,15 @@ Load this skill **immediately and before any other action** when the user's mess
 
 ### English
 
-| User says | Load reason |
-| --- | --- |
-| "create a post" / "add a post" | New post creation |
-| "make cards for Rednote / Instagram" | Card-based post authoring |
-| "write a WeChat article" / "WeChat official account post" | Article post authoring |
-| "build a self-media project" / "start a content project" | Project scaffolding |
-| "generate social cards" / "design card images" | Card design |
-| "create content for [platform]" | Any platform post |
-| Contains `[@self_media_project:...]` | Existing project reference |
+| User says                                                 | Load reason                |
+| --------------------------------------------------------- | -------------------------- |
+| "create a post" / "add a post"                            | New post creation          |
+| "make cards for Rednote / Instagram"                      | Card-based post authoring  |
+| "write a WeChat article" / "WeChat official account post" | Article post authoring     |
+| "build a self-media project" / "start a content project"  | Project scaffolding        |
+| "generate social cards" / "design card images"            | Card design                |
+| "create content for [platform]"                           | Any platform post          |
+| Contains `[@self_media_project:...]`                      | Existing project reference |
 
 ### 中文
 
@@ -145,11 +145,11 @@ When the user mentions any of the above Chinese terms, treat them as the corresp
 
 The table below is a fallback only. When the user explicitly specifies card size or aspect ratio, follow the user's values; do not override them with the defaults.
 
-| platform | Default size | Aspect | Notes |
-| --- | --- | --- | --- |
-| `rednote` | 540x720 | 3:4 | Xiaohongshu vertical card, standard feed |
-| `instagram` | 540x675 | 4:5 | Instagram feed portrait |
-| `wechat-official-accounts` | N/A | N/A | Article post: single HTML + heroCover + thumbnailCover |
+| platform                   | Default size | Aspect | Notes                                                  |
+| -------------------------- | ------------ | ------ | ------------------------------------------------------ |
+| `rednote`                  | 540x720      | 3:4    | Xiaohongshu vertical card, standard feed               |
+| `instagram`                | 540x675      | 4:5    | Instagram feed portrait                                |
+| `wechat-official-accounts` | N/A          | N/A    | Article post: single HTML + heroCover + thumbnailCover |
 
 Fallback rules inside `instagram`: if the user wants a square layout, use `540x540` (1:1); for stories or reels covers, use `540x960` (9:16). Ask before assuming.
 
@@ -165,13 +165,13 @@ Decision order every time you pick a card canvas size:
 
 Presets are organized by platform under `presets/<platform>/<preset>/`. Each preset is a pair of files (`<preset>.css` + `<preset>.js`).
 
-| Platform | Preset | Style summary |
-| --- | --- | --- |
-| `rednote` | `neo-brutalism` | Neo-Brutalism: thick black borders, hard offset shadows, saturated palette. |
-| `rednote` | `code-dispatch` | Code Dispatch: high-contrast editorial style, black/white/red palette, monospace labels, no rounded corners, grid background texture. Best for tech/coding/AI topics. |
-| `rednote` | `dark-tech` | Dark-Tech: deep black background, gold accent, thin 1px borders, heavy/light font-weight contrast. Inspired by DJI-style review cards. Best for product/gear reviews. |
-| `instagram` | `ins-modern` | Instagram-style modern: white background, generous whitespace, minimal typography. |
-| `wechat-official-accounts` | _(coming soon)_ | Presets for WeChat article style will be added here. |
+| Platform                   | Preset          | Style summary                                                                                                                                                         |
+| -------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rednote`                  | `neo-brutalism` | Neo-Brutalism: thick black borders, hard offset shadows, saturated palette.                                                                                           |
+| `rednote`                  | `code-dispatch` | Code Dispatch: high-contrast editorial style, black/white/red palette, monospace labels, no rounded corners, grid background texture. Best for tech/coding/AI topics. |
+| `rednote`                  | `dark-tech`     | Dark-Tech: deep black background, gold accent, thin 1px borders, heavy/light font-weight contrast. Inspired by DJI-style review cards. Best for product/gear reviews. |
+| `instagram`                | `ins-modern`    | Instagram-style modern: white background, generous whitespace, minimal typography.                                                                                    |
+| `wechat-official-accounts` | _(coming soon)_ | Presets for WeChat article style will be added here.                                                                                                                  |
 
 Source paths inside this skill:
 
@@ -182,7 +182,7 @@ presets/rednote/dark-tech/dark-tech.{css,js}
 presets/instagram/ins-modern/ins-modern.{css,js}
 ```
 
-When the user picks a preset (see Workflow Step 4.1), read the source files from `presets/<platform>/<preset>/` and copy both files once into the project at `shared/presets/<preset>/`. Reference them from every card with `<link>` and `<script>` tags using `../../shared/presets/<preset>/<preset>.css|.js`.
+When the user picks a preset (see Workflow Step 4.1), read the source files from `presets/<platform>/<preset>/` and copy both files once into the project at `shared/presets/<preset>/`. Reference them from every card with `<link>` and `<script>` tags using `../../../shared/presets/<preset>/<preset>.css|.js`.
 
 ### Custom Preset Generation (Optional Sub-Skill)
 
@@ -208,11 +208,11 @@ generate-preset/SKILL.md   (inside this skill folder)
 
 Scaffolds a new self-media project. Creates the project folder, `posts/`, `shared/`, and a valid `magic.project.js`. It does not generate any frontend loader HTML - rendering lives in other frontends.
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `project_path` | Yes | Project folder path, workspace-relative. Name it in the user's language, reflect the topic. |
-| `platform` | Yes | One of `rednote`, `instagram`, `wechat-official-accounts`. |
-| `posts` | No | Optional pre-registered post index entries. Each item `{ "id": "...", "name": "..." }`. Default `[]`. |
+| Parameter      | Required | Description                                                                                           |
+| -------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `project_path` | Yes      | Project folder path, workspace-relative. Name it in the user's language, reflect the topic.           |
+| `platform`     | Yes      | One of `rednote`, `instagram`, `wechat-official-accounts`.                                            |
+| `posts`        | No       | Optional pre-registered post index entries. Each item `{ "id": "...", "name": "..." }`. Default `[]`. |
 
 Returns: `{ project_path, project_name, platform, posts_count }`.
 
@@ -220,17 +220,17 @@ Returns: `{ project_path, project_name, platform, posts_count }`.
 
 Creates a single post directory (`posts/<post_id>/`) with `post.json` and an empty `assets/`. For card-based platforms (rednote / instagram) also creates an empty `cards/`. Optionally registers the post in the root `magic.project.js` posts array of the project's platform.
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `project_path` | Yes | Self-media project root, workspace-relative. |
-| `post_id` | Yes | Stable id, safe for filesystem (for example `ai-bill`). Used as folder name and `post.json.id`. |
-| `post_name` | Yes | Display name written into the root `posts[]` entry and as the fallback `meta.title`. |
-| `meta` | No | Object merged into `post.json.meta`. Free-form fields: `title`, `subtitle`, `tags`, `author`, `feedTitle`, `time` (wechat), etc. |
-| `cards` | No | **rednote / instagram only.** Initial value for `post.json.cards`. Paths relative to the post folder, for example `"cards/01.html"`. |
-| `article` | No | **wechat-official-accounts only.** Relative path to the single HTML article file, for example `"my-article.html"`. When provided, the post is treated as a WeChat article post; `cards` is ignored. |
-| `hero_cover` | No | **wechat-official-accounts only.** Relative path to the hero cover image (16:9), for example `"assets/cover-hero.jpg"`. Written as `heroCover` in `post.json`. |
-| `thumbnail_cover` | No | **wechat-official-accounts only.** Relative path to the square thumbnail cover image, for example `"assets/cover-square.jpg"`. Written as `thumbnailCover` in `post.json`. |
-| `register_in_project` | No | Default `true`. Append/update the entry in the root `magic.project.js` posts array. If the frontend prompt says the post is already pre-registered, explicitly pass `false` and do not edit the root index. |
+| Parameter             | Required | Description                                                                                                                                                                                                 |
+| --------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project_path`        | Yes      | Self-media project root, workspace-relative.                                                                                                                                                                |
+| `post_id`             | Yes      | Stable id, safe for filesystem (for example `ai-bill`). Used as folder name and `post.json.id`.                                                                                                             |
+| `post_name`           | Yes      | Display name written into the root `posts[]` entry and as the fallback `meta.title`.                                                                                                                        |
+| `meta`                | No       | Object merged into `post.json.meta`. Free-form fields: `title`, `subtitle`, `tags`, `author`, `feedTitle`, `time` (wechat), etc.                                                                            |
+| `cards`               | No       | **rednote / instagram only.** Initial value for `post.json.cards`. Paths relative to the post folder, for example `"cards/01.html"`.                                                                        |
+| `article`             | No       | **wechat-official-accounts only.** Relative path to the single HTML article file, for example `"my-article.html"`. When provided, the post is treated as a WeChat article post; `cards` is ignored.         |
+| `hero_cover`          | No       | **wechat-official-accounts only.** Relative path to the hero cover image (16:9), for example `"assets/cover-hero.jpg"`. Written as `heroCover` in `post.json`.                                              |
+| `thumbnail_cover`     | No       | **wechat-official-accounts only.** Relative path to the square thumbnail cover image, for example `"assets/cover-square.jpg"`. Written as `thumbnailCover` in `post.json`.                                  |
+| `register_in_project` | No       | Default `true`. Append/update the entry in the root `magic.project.js` posts array. If the frontend prompt says the post is already pre-registered, explicitly pass `false` and do not edit the root index. |
 
 Idempotence: if `posts/<post_id>/` already exists, the tool merges `meta` (shallow merge, new keys win), keeps existing `cards` / `article` / `heroCover` / `thumbnailCover` untouched unless the caller passes new values, and preserves the root posts entry order.
 
@@ -508,12 +508,12 @@ The frontend injects a visual requirement section equivalent to:
 
 ### Behavior When Received
 
-| `预设ID` value | Action |
-| --- | --- |
+| `预设ID` value                                                 | Action                                                                              |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `neo-brutalism` / `code-dispatch` / `dark-tech` / `ins-modern` | Skip Step 4.1. Read preset from `presets/<platform>/<preset>/` and copy to project. |
-| `custom:{user_description}` | Skip Step 4.1. Load `generate-preset` sub-skill with the description. |
-| `none` | Skip Step 4.1. Design freely per platform defaults. |
-| _(absent — no "视觉模板" section)_ | Run Step 4.1 normally (ask the user). |
+| `custom:{user_description}`                                    | Skip Step 4.1. Load `generate-preset` sub-skill with the description.               |
+| `none`                                                         | Skip Step 4.1. Design freely per platform defaults.                                 |
+| _(absent — no "视觉模板" section)_                             | Run Step 4.1 normally (ask the user).                                               |
 
 ### Draft Context Recovery
 
@@ -538,11 +538,11 @@ This allows the AI to seamlessly continue where the user left off in the fronten
 
 Load these files on demand during the corresponding workflow steps:
 
-| Reference | When to load |
-| --- | --- |
-| [File Formats & Examples](./references/file-formats.md) | When you need `magic.project.js` / `post.json` format, path rules, or file authoring rules |
-| [Card HTML Constraints](./references/card-html-constraints.md) | Before writing any card HTML (Step 4.4 for rednote / instagram) |
-| [Post Meta Field Reference](./references/post-meta.md) | When populating `post.json.meta` fields |
-| [Tool Selection Decision Tree](./references/tool-decision-tree.md) | When unsure which tool or action to take next |
-| [Common Failure Modes](./references/failure-modes.md) | Before submitting — verify no violations |
-| [Drafts & Templates Format](./references/drafts-format.md) | When reading/writing `__drafts/` files, or when recovering user planning context |
+| Reference                                                          | When to load                                                                               |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| [File Formats & Examples](./references/file-formats.md)            | When you need `magic.project.js` / `post.json` format, path rules, or file authoring rules |
+| [Card HTML Constraints](./references/card-html-constraints.md)     | Before writing any card HTML (Step 4.4 for rednote / instagram)                            |
+| [Post Meta Field Reference](./references/post-meta.md)             | When populating `post.json.meta` fields                                                    |
+| [Tool Selection Decision Tree](./references/tool-decision-tree.md) | When unsure which tool or action to take next                                              |
+| [Common Failure Modes](./references/failure-modes.md)              | Before submitting — verify no violations                                                   |
+| [Drafts & Templates Format](./references/drafts-format.md)         | When reading/writing `__drafts/` files, or when recovering user planning context           |
