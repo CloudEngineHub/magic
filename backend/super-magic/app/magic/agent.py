@@ -931,11 +931,11 @@ class Agent(BaseAgent):
             SessionPrepResult: 会话准备结果
         """
         # 检测用户命令（/compact、/new 等），命令处理后 query 替换为命令执行结果
-        original_command = Commands.get(query)
-        is_continue_request = original_command and original_command.name == "continue"
-        is_resume_request = original_command and original_command.name == "resume"
+        command_match = Commands.get(query)
+        is_continue_request = command_match and command_match.command.name == "continue"
+        is_resume_request = command_match and command_match.command.name == "resume"
 
-        if original_command:
+        if command_match:
             query = await Commands.process(query, self)
 
         # 如果没有聊天历史，直接添加用户消息
@@ -1235,8 +1235,8 @@ class Agent(BaseAgent):
             last_user_query_content = last_message.content
 
             # 检查是否是"继续"指令
-            last_command = Commands.get(last_user_query_content)
-            is_continue_request = last_command and last_command.name == "continue"
+            last_command_match = Commands.get(last_user_query_content)
+            is_continue_request = last_command_match and last_command_match.command.name == "continue"
 
             # 情况1：倒数第二条是带工具调用的assistant消息（传统模式）
             if second_last_message and second_last_message.role == "assistant" and \
@@ -1747,8 +1747,11 @@ Since your subsequent output will be merged with pre-interruption content, maint
             self.agent_context.clear_dynamic_model_id()
             logger.info(f"{reason}，已清除 compact 专属模型，恢复主 Agent 默认模型")
 
-    def _build_compact_request(self) -> str:
+    def _build_compact_request(self, user_instruction: str = "") -> str:
         """构建压缩请求内容，同时切换到 compact 专属模型（如果配置了的话）
+
+        Args:
+            user_instruction: 用户在 /compact 命令后附带的额外要求（可选）
 
         切换后的模型将在 _execute_history_compact 的 finally 块中统一还原，
         无论压缩成功还是失败都能正确恢复。
@@ -1756,7 +1759,12 @@ Since your subsequent output will be merged with pre-interruption content, maint
         self._activate_compact_model()
 
         # 被动触发：直接注入 SKILL.md 内容，无需 Agent 额外调用 read_skills
-        return f"The conversation is too long and must be compacted now. You must call the `compact_chat_history` tool immediately.\n\n{self._compact_skill_content}"
+        prompt = f"The conversation is too long and must be compacted now. You must call the `compact_chat_history` tool immediately.\n\n{self._compact_skill_content}"
+
+        if user_instruction:
+            prompt += f"\n\n## Additional User Instruction for This Compaction\n\n{user_instruction}"
+
+        return prompt
 
     # 供应商限流/过载的状态码
     _PROVIDER_RATE_LIMIT_STATUS_CODES = {429, 529}
