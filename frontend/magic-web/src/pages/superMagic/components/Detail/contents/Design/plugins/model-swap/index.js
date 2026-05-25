@@ -208,28 +208,62 @@ registerMagicCanvasPlugin({
 					}
 					return null
 				},
-				buildRequest: ({ state, helpers }) => {
+				execute: async ({ state, helpers, generateAndPlace }) => {
 					const selectedSize = helpers.getSelectedSize(state)
-					const referenceImages = helpers.collectReferenceIds(getReferenceImages(state))
 					const width = selectedSize.genW
 					const height = selectedSize.genH
 
-					return {
-						model_id: state.modelId,
-						prompt: buildModelSwapPrompt({
-							baseImageCount: state.baseModelImages.length,
-							hasTargetModelImage: Boolean(state.targetModelImage),
-							presetTargetModel: state.presetTargetModel,
-							handFootRepair: state.handFootRepair,
-						}),
-						reference_images: referenceImages,
-						size: `${width}x${height}`,
-						resolution: state.scale || undefined,
-						width,
-						height,
-						count: state.genCount,
-						select: false,
+					if (state.baseModelImages.length <= 1) {
+						const baseImage = state.baseModelImages[0]
+						const referenceImages = helpers.collectReferenceIds([
+							baseImage,
+							...(state.targetModelImage ? [state.targetModelImage] : []),
+						])
+						return generateAndPlace({
+							model_id: state.modelId,
+							prompt: buildModelSwapPrompt({
+								baseImageCount: 1,
+								hasTargetModelImage: Boolean(state.targetModelImage),
+								presetTargetModel: state.presetTargetModel,
+								handFootRepair: state.handFootRepair,
+							}),
+							reference_images: referenceImages,
+							size: `${width}x${height}`,
+							resolution: state.scale || undefined,
+							width,
+							height,
+							count: state.genCount,
+							select: false,
+						})
 					}
+
+					const results = []
+					for (let index = 0; index < state.genCount; index += 1) {
+						const baseImage = state.baseModelImages[index % state.baseModelImages.length]
+						const referenceImages = helpers.collectReferenceIds([
+							baseImage,
+							...(state.targetModelImage ? [state.targetModelImage] : []),
+						])
+						results.push(
+							await generateAndPlace({
+								model_id: state.modelId,
+								prompt: buildModelSwapPrompt({
+									baseImageCount: 1,
+									hasTargetModelImage: Boolean(state.targetModelImage),
+									presetTargetModel: state.presetTargetModel,
+									handFootRepair: state.handFootRepair,
+								}),
+								reference_images: referenceImages,
+								size: `${width}x${height}`,
+								resolution: state.scale || undefined,
+								width,
+								height,
+								count: 1,
+								select: false,
+							}),
+						)
+					}
+					return results
 				},
 				onSuccess: ({ ctx }) => {
 					ctx.ui.toast(t("toast.success", "AI 换模特图生成成功！"), "success")
