@@ -83,6 +83,7 @@ import { saveIframeFileContent, createIframeFile } from "./iframe-api/iframeApi"
 
 import { env } from "@/utils/env"
 import { userStore } from "@/models/user"
+import { ContactApi } from "@/apis"
 
 interface IsolatedHTMLRendererProps {
 	content: string
@@ -136,6 +137,32 @@ interface MagicI18nLangSubscribeRequest {
 	requestId?: string
 }
 
+interface MagicRuntimeGetRequest {
+	type: "MAGIC_RUNTIME_GET_REQUEST"
+	requestId?: string
+}
+
+interface MagicRuntimeUser {
+	user_id: string
+	magic_id?: string
+	organization_code?: string
+	nickname?: string
+	real_name?: string
+	avatar_url?: string
+	phone?: string
+	email?: string | null
+	job_title?: string
+	path_nodes?: unknown[]
+}
+
+interface MagicRuntimePayload {
+	userId: string
+	userName: string
+	user: MagicRuntimeUser
+	organizationCode: string
+	language: string
+}
+
 interface LegacyImageUploadRequestData {
 	targetSelector: string
 }
@@ -179,6 +206,25 @@ const useStyles = createStyles(({ css }) => {
 })
 
 const logger = Logger.createLogger("IsolatedHTMLRenderer")
+
+function normalizeRuntimeUser(profile: any, fallback: any, userId: string, organizationCode: string): MagicRuntimeUser {
+	return {
+		user_id: profile?.user_id || fallback?.user_id || userId,
+		magic_id: profile?.magic_id || fallback?.magic_id,
+		organization_code: profile?.organization_code || fallback?.organization_code || organizationCode,
+		nickname: profile?.nickname || fallback?.nickname,
+		real_name: profile?.real_name || fallback?.real_name,
+		avatar_url: profile?.avatar_url || fallback?.avatar,
+		phone: profile?.phone || fallback?.phone,
+		email: profile?.email || fallback?.email,
+		job_title: profile?.job_title,
+		path_nodes: profile?.path_nodes,
+	}
+}
+
+function getRuntimeUserName(user: MagicRuntimeUser): string {
+	return (user.real_name || user.nickname || "").trim()
+}
 
 // Internal component that uses the StylePanelStore context
 const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHTMLRendererProps>(
@@ -359,6 +405,89 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		})
 
 		const { t, i18n } = useTranslation("super")
+		const runtimeCacheRef = useRef<{
+			key: string
+			value?: MagicRuntimePayload
+			promise?: Promise<MagicRuntimePayload>
+		} | null>(null)
+
+		const buildRuntimePayload = useMemoizedFn(async (): Promise<MagicRuntimePayload> => {
+			const fallbackUser = userStore.user.userInfo
+			const userId = fallbackUser?.user_id || ""
+			const organizationCode = userStore.user.organizationCode?.trim() || ""
+			const language = i18n.resolvedLanguage || i18n.language || "zh-CN"
+
+			if (!userId) {
+				throw new Error("Current user is not available")
+			}
+			if (!organizationCode) {
+				throw new Error("Current organization is not available")
+			}
+
+			const cacheKey = `${organizationCode}:${userId}:${language}`
+			const cached = runtimeCacheRef.current
+			if (cached?.key === cacheKey && cached.value) return cached.value
+			if (cached?.key === cacheKey && cached.promise) return cached.promise
+
+			const promise = ContactApi.getUsersInfo({
+				user_ids: [userId],
+				query_type: 2,
+				page_token: "",
+			}).then((response) => {
+				const profile = response?.items?.[0]
+				if (!profile) {
+					throw new Error("Current user profile is not available")
+				}
+
+				const user = normalizeRuntimeUser(profile, fallbackUser, userId, organizationCode)
+				const userName = getRuntimeUserName(user)
+				if (!userName) {
+					throw new Error("Current user display name is not available")
+				}
+
+				const runtime = {
+					userId,
+					userName,
+					user,
+					organizationCode,
+					language,
+				}
+				runtimeCacheRef.current = { key: cacheKey, value: runtime }
+				return runtime
+			})
+
+			runtimeCacheRef.current = { key: cacheKey, promise }
+			return promise
+		})
+
+		const handleRuntimeMessage = useMemoizedFn(async (payload: MagicRuntimeGetRequest) => {
+			const { requestId } = payload
+			if (!requestId) return
+
+			try {
+				const runtime = await buildRuntimePayload()
+				iframeRef.current?.contentWindow?.postMessage(
+					{
+						type: "MAGIC_RUNTIME_GET_RESPONSE",
+						requestId,
+						success: true,
+						content: runtime,
+					},
+					"*",
+				)
+			} catch (error) {
+				logger.error("获取 HTML runtime 上下文失败", error)
+				iframeRef.current?.contentWindow?.postMessage(
+					{
+						type: "MAGIC_RUNTIME_GET_RESPONSE",
+						requestId,
+						success: false,
+						error: error instanceof Error ? error.message : "Failed to get runtime",
+					},
+					"*",
+				)
+			}
+		})
 
 		// DevTools console — resolve the full file path (with filename) for the current HTML file
 		const devConsoleFilePath = useMemo(
@@ -1294,6 +1423,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				} else if (event.data?.type?.startsWith("MAGIC_DB_")) {
 					// 处理 window.Magic.db.* 请求
 					await handleDatabaseMessage(event.data.type, event.data)
+				} else if (event.data && event.data.type === "MAGIC_RUNTIME_GET_REQUEST") {
+					// 处理 window.Magic.getRuntime() 请求
+					await handleRuntimeMessage(event.data)
 				} else if (
 					event.data?.type?.startsWith("MAGIC_GET_AGENTS_") ||
 					event.data?.type?.startsWith("MAGIC_CREATE_TOPIC_AND_SEND_") ||

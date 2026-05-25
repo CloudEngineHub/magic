@@ -145,7 +145,7 @@ class InitAgentProjectFilesCommandTest extends TestCase
         $rootDirEntity = $this->makeDirectoryEntity(1, 'workspace-root/', null, '');
         $magicDirEntity = $this->makeDirectoryEntity(2, 'workspace-root/.magic/', 1, '.magic');
         $sourceSkillsDir = $this->makeDirectoryEntity(3, 'workspace-root/skills/', 1, 'skills');
-        $sourceReadme = $this->makeFileEntity(4, 'workspace-root/skills/readme.md', 3, 'readme.md');
+        $sourceReadme = $this->makeFileEntity(4, 'workspace-root/skills/README.md', 3, 'README.md');
         $conflictingTargetFile = $this->makeFileEntity(5, 'workspace-root/.magic/skills', 2, 'skills');
 
         $index = $this->command->buildProjectFileIndexProxy([
@@ -183,7 +183,7 @@ class InitAgentProjectFilesCommandTest extends TestCase
                 $sourceReadme,
                 $projectEntity,
                 $projectEntity,
-                'workspace-root/.magic/skills/readme.md',
+                'workspace-root/.magic/skills/README.md',
                 3
             );
 
@@ -200,9 +200,9 @@ class InitAgentProjectFilesCommandTest extends TestCase
         $this->assertSame(0, $stats['created_dirs']);
         $this->assertSame(1, $stats['moved_files']);
         $this->assertSame($sourceSkillsDir, $index['byFileKey']['workspace-root/.magic/skills/']);
-        $this->assertSame($sourceReadme, $index['byFileKey']['workspace-root/.magic/skills/readme.md']);
+        $this->assertSame($sourceReadme, $index['byFileKey']['workspace-root/.magic/skills/README.md']);
         $this->assertArrayNotHasKey('workspace-root/skills/', $index['byFileKey']);
-        $this->assertArrayNotHasKey('workspace-root/skills/readme.md', $index['byFileKey']);
+        $this->assertArrayNotHasKey('workspace-root/skills/README.md', $index['byFileKey']);
     }
 
     private function makeProjectEntity(): ProjectEntity

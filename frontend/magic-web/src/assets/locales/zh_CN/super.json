@@ -219,6 +219,42 @@
 			"unlimited": "不限"
 		}
 	},
+	"plan": {
+		"actions": {
+			"approve": "确认并开始开发",
+			"back": "返回",
+			"cancel": "取消",
+			"collapse": "折叠计划卡片",
+			"expand": "展开计划卡片",
+			"requestRevision": "提出修改",
+			"submitRevision": "提交修改意见"
+		},
+		"fields": {
+			"unnamedTable": "未命名数据表"
+		},
+		"revisionPlaceholder": "告诉 Agent 你希望怎么调整这个计划",
+		"sections": {
+			"acceptanceCriteria": "验收标准",
+			"assumptions": "默认假设",
+			"dataModel": "数据模型",
+			"files": "文件结构",
+			"implementationSteps": "实现步骤",
+			"requirements": "核心需求",
+			"userFeedback": "你的反馈"
+		},
+		"status": {
+			"approved": "已确认",
+			"cancelled": "已取消",
+			"pending": "待确认",
+			"revisionRequested": "需修改",
+			"submitFailed": "提交失败，请稍后重试",
+			"timeout": "已超时"
+		},
+		"title": "开发计划",
+		"validation": {
+			"revisionRequired": "请先填写修改意见"
+		}
+	},
 	"assistant": {
 		"agentChatPlaceholder": "您可输入您与\"{{agentName}}\"对话的内容",
 		"aiChat": "AI 聊天",

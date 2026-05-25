@@ -485,6 +485,24 @@ declare global {
 				) => Promise<void>
 			}
 			// ─── 向后兼容（deprecated）────────────────────────────────────
+			getRuntime?: () => Promise<{
+				userId: string
+				userName: string
+				user: {
+					user_id: string
+					magic_id?: string
+					organization_code?: string
+					nickname?: string
+					real_name?: string
+					avatar_url?: string
+					phone?: string
+					email?: string | null
+					job_title?: string
+					path_nodes?: unknown[]
+				}
+				organizationCode: string
+				language: string
+			}>
 			reload?: () => void
 			setInputMessage?: (message: string) => void
 			/** @deprecated 使用 window.Magic.project.uploadFiles */

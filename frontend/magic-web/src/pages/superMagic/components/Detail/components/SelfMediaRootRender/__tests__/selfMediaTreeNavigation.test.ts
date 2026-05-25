@@ -51,7 +51,7 @@ describe("resolveSelfMediaTreeNavigationTarget", () => {
 			children: [
 				{
 					file_id: "f",
-					relative_file_path: "my-project/readme.md",
+					relative_file_path: "my-project/README.md",
 					is_directory: false,
 				} as AttachmentNode,
 			],
@@ -59,7 +59,7 @@ describe("resolveSelfMediaTreeNavigationTarget", () => {
 		expect(
 			resolveSelfMediaTreeNavigationTarget([root], {
 				file_id: "f",
-				relative_file_path: "my-project/readme.md",
+				relative_file_path: "my-project/README.md",
 				is_directory: false,
 			}),
 		).toBeNull()
