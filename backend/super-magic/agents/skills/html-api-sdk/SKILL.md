@@ -33,9 +33,7 @@ description-cn: "SuperMagic HTML 微应用 window.Magic API 使用指南，涵�
 - Before creating or modifying a micro-app, read `HTML-APP.md` if it exists. If it does not exist, treat the task as a new micro-app.
 - HTML pages must not read `HTML-APP.md`; it is for the agent's development workflow only.
 - Ordinary project-memory sections such as App Overview, Entry and Files, Features, Runtime Notes, 铁律, and Iteration History should be updated once before the development task ends by calling `update_html_app_memory`, based only on what was truly completed.
-- Do not use file-editing tools to modify `HTML-APP.md` directly. The dedicated memory tool preserves the latest MagicBase data model and prevents accidental overwrites.
-- MagicBase schema changes are different: `create_magicbase_table` and `create_magicbase_column` automatically maintain migration history in `.magicbase/migrations.json`. On successful schema changes, they refresh the latest MagicBase data model in `HTML-APP.md`.
-- If tools report a `Pending` MagicBase migration at the start of a later task, query MagicBase first. Query tools will try to repair confirmable Pending records automatically; if a record cannot be confirmed, keep it visible in the plan before doing more schema work.
+- Do not use file-editing tools to modify `HTML-APP.md` directly. Use the dedicated memory tool so project memory is updated consistently.
 
 ---
 
@@ -260,11 +258,7 @@ window.Magic.addFilesToMessage(files); // 返回 void
 
 ---
 
-## 四、MagicBase 与当前用户上下文
-
-MagicBase persistence, `window.Magic.db`, and current-user context through `window.Magic.getContext()` are maintained in the dedicated `magicbase` skill. Load and follow `magicbase` whenever the micro-app needs saved data, CRUD, forms, surveys, dashboards, ownership, creators, assignees, permissions, or current-user information.
-
-## 五、错误处理最佳实践
+## 四、错误处理最佳实践
 
 ```javascript
 // fs 错误处理
@@ -297,7 +291,7 @@ window.Magic.llm.stream(messages, (delta, done) => {
 
 ---
 
-## 六、完整示例模板
+## 五、完整示例模板
 
 ### 示例 A：读数据 → LLM 分析 → 写回结果 → 通知 Agent
 
@@ -459,7 +453,7 @@ window.Magic.llm.stream(messages, (delta, done) => {
 
 ---
 
-## 七、API 速查表
+## 六、API 速查表
 
 | API                                             | 说明               | 返回                     |
 | ----------------------------------------------- | ------------------ | ------------------------ |

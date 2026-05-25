@@ -14,6 +14,8 @@ MagicBase has two layers:
 
 Do not expose schema creation inside HTML pages. HTML code should only read and write rows on tables that already exist.
 
+Project memory uses `HTML-APP.md` for the latest human-readable data model. Do not edit it directly with file-editing tools. MagicBase schema tools maintain `.magicbase/migrations.json`; after successful table or column changes, they refresh the latest MagicBase data model in `HTML-APP.md`. If tools report a `Pending` migration at the start of a later task, query MagicBase first so confirmable records can be repaired before more schema work.
+
 ## Current User Context (`window.Magic.getContext`)
 
 Use `window.Magic.getContext()` whenever a micro-app needs current-user display, creators, owners, assignees, collaborators, "my data versus all data", or edit/delete permission checks.
