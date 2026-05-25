@@ -207,11 +207,17 @@ const useStyles = createStyles(({ css }) => {
 
 const logger = Logger.createLogger("IsolatedHTMLRenderer")
 
-function normalizeContextUser(profile: any, fallback: any, userId: string, organizationCode: string): MagicContextUser {
+function normalizeContextUser(
+	profile: any,
+	fallback: any,
+	userId: string,
+	organizationCode: string,
+): MagicContextUser {
 	return {
 		user_id: profile?.user_id || fallback?.user_id || userId,
 		magic_id: profile?.magic_id || fallback?.magic_id,
-		organization_code: profile?.organization_code || fallback?.organization_code || organizationCode,
+		organization_code:
+			profile?.organization_code || fallback?.organization_code || organizationCode,
 		nickname: profile?.nickname || fallback?.nickname,
 		real_name: profile?.real_name || fallback?.real_name,
 		avatar_url: profile?.avatar_url || fallback?.avatar,
@@ -671,6 +677,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			getAgentList,
 			createTopicAndSend,
 			sendMessage,
+			enableWriteOperations: true,
 		})
 
 		const isDynamicInterceptionEnabled = !disableDynamicResourceInterception
