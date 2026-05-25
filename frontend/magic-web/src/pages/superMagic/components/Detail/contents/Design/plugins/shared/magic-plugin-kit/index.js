@@ -904,6 +904,7 @@
 			if (section.kind === "option-group") return renderOptionGroup(section)
 			if (section.kind === "model-select") return renderModelSelect(section)
 			if (section.kind === "resolution-select") return renderResolutionSelect(section)
+			if (section.kind === "custom") return section.render({ state, setState, helpers, t })
 			return document.createDocumentFragment()
 		}
 

@@ -559,3 +559,20 @@
 		transform: rotate(360deg);
 	}
 }
+
+/* ── Color Drawer (用于 clothing-color-change 等使用 kind:"custom" 的插件) ── */
+.mpk-color-drawer {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	background: #fff;
+	transform: translateX(100%);
+	transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+	z-index: 10;
+	overflow: hidden;
+}
+
+.mpk-color-drawer.is-open {
+	transform: translateX(0);
+}

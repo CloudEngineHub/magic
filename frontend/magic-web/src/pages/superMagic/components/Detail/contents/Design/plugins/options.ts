@@ -29,9 +29,9 @@ import poseSwapManifest from "./pose-swap/manifest.json"
 import faceSwapStyles from "./face-swap/index.css?raw"
 import faceSwapRuntimeCode from "./face-swap/index.js?raw"
 import faceSwapManifest from "./face-swap/manifest.json"
-// import clothingColorChangeStyles from "./clothing-color-change/index.css?raw"
-// import clothingColorChangeRuntimeCode from "./clothing-color-change/index.js?raw"
-// import clothingColorChangeManifest from "./clothing-color-change/manifest.json"
+import clothingColorChangeStyles from "./clothing-color-change/index.css?raw"
+import clothingColorChangeRuntimeCode from "./clothing-color-change/index.js?raw"
+import clothingColorChangeManifest from "./clothing-color-change/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -51,8 +51,8 @@ const poseSwapEntryUrl = new URL("./pose-swap/index.js", import.meta.url).href
 const poseSwapResourceBaseUrl = new URL("./pose-swap/", import.meta.url).href
 const faceSwapEntryUrl = new URL("./face-swap/index.js", import.meta.url).href
 const faceSwapResourceBaseUrl = new URL("./face-swap/", import.meta.url).href
-// const clothingColorChangeEntryUrl = new URL("./clothing-color-change/index.js", import.meta.url).href
-// const clothingColorChangeResourceBaseUrl = new URL("./clothing-color-change/", import.meta.url).href
+const clothingColorChangeEntryUrl = new URL("./clothing-color-change/index.js", import.meta.url).href
+const clothingColorChangeResourceBaseUrl = new URL("./clothing-color-change/", import.meta.url).href
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -145,14 +145,14 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		resolveResourceUrl: (path) => new URL(path, poseSwapResourceBaseUrl).href,
 		source: "builtin",
 	},
-	// {
-	// 	...clothingColorChangeManifest,
-	// 	entry: `./clothing-color-change/${clothingColorChangeManifest.entry}`,
-	// 	runtimeUrl: clothingColorChangeEntryUrl,
-	// 	resourceBaseUrl: clothingColorChangeResourceBaseUrl,
-	// 	runtimeCode: `${magicPluginKitRuntimeCode}\n\n${clothingColorChangeRuntimeCode}`,
-	// 	styleCode: [magicPluginKitStyles, clothingColorChangeStyles],
-	// 	resolveResourceUrl: (path) => new URL(path, clothingColorChangeResourceBaseUrl).href,
-	// 	source: "builtin",
-	// },
+	{
+		...clothingColorChangeManifest,
+		entry: `./clothing-color-change/${clothingColorChangeManifest.entry}`,
+		runtimeUrl: clothingColorChangeEntryUrl,
+		resourceBaseUrl: clothingColorChangeResourceBaseUrl,
+		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${clothingColorChangeRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, clothingColorChangeStyles],
+		resolveResourceUrl: (path) => new URL(path, clothingColorChangeResourceBaseUrl).href,
+		source: "builtin",
+	},
 ]

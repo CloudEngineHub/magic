@@ -1,0 +1,407 @@
+/* ── 颜色区块主体 ── */
+.clothing-color-change .ccс-color-section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.clothing-color-change .ccс-color-section-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.clothing-color-change .ccс-color-title {
+	font-size: 12px;
+	font-weight: 500;
+	color: #374151;
+}
+
+/* 未选状态：添加按钮 */
+.clothing-color-change .ccc-color-add-btn {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	padding: 8px 12px;
+	background: #f9fafb;
+	border: 1px dashed #d1d5db;
+	border-radius: 8px;
+	color: #6b7280;
+	font-size: 13px;
+	cursor: pointer;
+	transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.clothing-color-change .ccc-color-add-btn:hover {
+	border-color: #818cf8;
+	color: #4f46e5;
+	background: #eef2ff;
+}
+
+.clothing-color-change .ccc-color-add-btn-icon {
+	font-size: 16px;
+	line-height: 1;
+	color: #9ca3af;
+}
+
+/* 已选状态：颜色标签 */
+.clothing-color-change .ccc-color-tag {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 7px 10px;
+	background: #f9fafb;
+	border: 1px solid #e5e7eb;
+	border-radius: 8px;
+}
+
+.clothing-color-change .ccc-color-preview {
+	display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.clothing-color-change .ccc-color-swatch {
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	border: 1px solid rgb(0 0 0 / 12%);
+	flex-shrink: 0;
+}
+
+.clothing-color-change .ccc-color-hex {
+	font-size: 13px;
+	font-family: ui-monospace, "SFMono-Regular", monospace;
+	color: #374151;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.clothing-color-change .ccc-color-name {
+	font-size: 12px;
+	color: #6b7280;
+	margin-right: 2px;
+}
+
+.clothing-color-change .ccc-color-clear-btn,
+.clothing-color-change .ccc-color-edit-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: 4px;
+	color: #9ca3af;
+	font-size: 14px;
+	cursor: pointer;
+	flex-shrink: 0;
+	transition: color 0.15s, background 0.15s;
+}
+
+.clothing-color-change .ccc-color-clear-btn:hover {
+	color: #ef4444;
+	background: #fef2f2;
+}
+
+.clothing-color-change .ccc-color-edit-btn:hover {
+	color: #4f46e5;
+	background: #eef2ff;
+}
+
+/* 部位快捷标签 */
+.clothing-color-change .ccc-body-part-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 6px;
+}
+
+.clothing-color-change .ccc-body-part-tag {
+	padding: 3px 10px;
+	background: #f3f4f6;
+	border: 1px solid #e5e7eb;
+	border-radius: 20px;
+	font-size: 12px;
+	color: #4b5563;
+	cursor: pointer;
+	transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.clothing-color-change .ccc-body-part-tag:hover {
+	border-color: #818cf8;
+	color: #4f46e5;
+	background: #eef2ff;
+}
+
+/* ── 颜色侧拉框 ── */
+.clothing-color-change .mpk-panel {
+	position: relative;
+}
+
+.clothing-color-change .ccc-drawer {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	background: #fff;
+	transform: translateX(100%);
+	transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+	z-index: 10;
+	overflow: hidden;
+}
+
+.clothing-color-change .ccc-drawer.is-open {
+	transform: translateX(0);
+}
+
+/* 抽屉顶部标题栏 */
+.clothing-color-change .ccc-drawer-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 14px 10px;
+	border-bottom: 1px solid #f3f4f6;
+	flex-shrink: 0;
+}
+
+.clothing-color-change .ccc-drawer-back-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	background: transparent;
+	border: none;
+	border-radius: 6px;
+	color: #6b7280;
+	font-size: 16px;
+	cursor: pointer;
+	transition: color 0.15s, background 0.15s;
+}
+
+.clothing-color-change .ccc-drawer-back-btn:hover {
+	color: #111827;
+	background: #f3f4f6;
+}
+
+.clothing-color-change .ccc-drawer-title {
+	font-size: 14px;
+	font-weight: 600;
+	color: #111827;
+}
+
+/* 抽屉主体：左列 + 右列 */
+.clothing-color-change .ccc-drawer-body {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* 左列：分类过滤 */
+.clothing-color-change .ccc-drawer-sidebar {
+	width: 80px;
+	flex-shrink: 0;
+	border-right: 1px solid #f3f4f6;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	padding: 6px 0;
+}
+
+.clothing-color-change .ccc-filter-btn {
+	display: block;
+	width: 100%;
+	padding: 8px 10px;
+	background: transparent;
+	border: none;
+	font-size: 12px;
+	color: #4b5563;
+	text-align: left;
+	cursor: pointer;
+	transition: color 0.12s, background 0.12s;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.clothing-color-change .ccc-filter-btn:hover {
+	background: #f9fafb;
+	color: #111827;
+}
+
+.clothing-color-change .ccc-filter-btn.is-active {
+	background: #eef2ff;
+	color: #4f46e5;
+	font-weight: 500;
+}
+
+/* 右列：搜索 + 颜色网格 + 自定义 */
+.clothing-color-change .ccc-drawer-main {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.clothing-color-change .ccc-search-bar {
+	padding: 8px 10px 6px;
+	border-bottom: 1px solid #f3f4f6;
+	flex-shrink: 0;
+}
+
+.clothing-color-change .ccc-search-input {
+	width: 100%;
+	padding: 5px 10px;
+	background: #f9fafb;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	font-size: 12px;
+	color: #111827;
+	outline: none;
+	box-sizing: border-box;
+	transition: border-color 0.15s;
+}
+
+.clothing-color-change .ccc-search-input::placeholder {
+	color: #9ca3af;
+}
+
+.clothing-color-change .ccc-search-input:focus {
+	border-color: #818cf8;
+}
+
+/* 颜色列表区（可滚动） */
+.clothing-color-change .ccc-color-list {
+	flex: 1;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	padding: 8px 10px;
+}
+
+.clothing-color-change .ccc-color-group-title {
+	font-size: 11px;
+	font-weight: 500;
+	color: #9ca3af;
+	margin: 6px 0 6px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.clothing-color-change .ccc-color-group-title:first-child {
+	margin-top: 0;
+}
+
+.clothing-color-change .ccc-color-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, 40px);
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+.clothing-color-change .ccc-color-dot-wrapper {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	cursor: pointer;
+}
+
+.clothing-color-change .ccc-color-dot {
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	border: 2px solid transparent;
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 10%);
+	transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+	flex-shrink: 0;
+}
+
+.clothing-color-change .ccc-color-dot-wrapper:hover .ccc-color-dot {
+	transform: scale(1.12);
+	box-shadow: 0 0 0 2px rgb(0 0 0 / 16%);
+}
+
+.clothing-color-change .ccc-color-dot-wrapper.is-selected .ccc-color-dot {
+	border-color: rgb(83 91 112);
+	transform: scale(1.08);
+}
+
+.clothing-color-change .ccc-color-dot-label {
+	font-size: 10px;
+	color: #6b7280;
+	text-align: center;
+	line-height: 1.2;
+	max-width: 40px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 空搜索结果 */
+.clothing-color-change .ccc-color-empty {
+	padding: 24px 10px;
+	text-align: center;
+	font-size: 12px;
+	color: #9ca3af;
+}
+
+/* 自定义色卡区 */
+.clothing-color-change .ccc-custom-color {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 10px 12px;
+	border-top: 1px solid #f3f4f6;
+	flex-shrink: 0;
+}
+
+.clothing-color-change .ccc-custom-label {
+	font-size: 12px;
+	color: #374151;
+	flex-shrink: 0;
+}
+
+.clothing-color-change .ccc-custom-swatch-btn {
+	position: relative;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	border: 2px solid #e5e7eb;
+	cursor: pointer;
+	transition: border-color 0.15s, transform 0.12s;
+	overflow: hidden;
+	flex-shrink: 0;
+}
+
+.clothing-color-change .ccc-custom-swatch-btn:hover {
+	border-color: #818cf8;
+	transform: scale(1.08);
+}
+
+.clothing-color-change .ccc-custom-swatch-btn.is-selected {
+	border-color: #4f46e5;
+	box-shadow: 0 0 0 2px #4f46e5;
+}
+
+.clothing-color-change .ccc-custom-color-input {
+	position: absolute;
+	inset: 0;
+	opacity: 0;
+	cursor: pointer;
+	width: 100%;
+	height: 100%;
+}
+
+.clothing-color-change .ccc-custom-hex {
+	font-size: 12px;
+	font-family: ui-monospace, "SFMono-Regular", monospace;
+	color: #6b7280;
+}
