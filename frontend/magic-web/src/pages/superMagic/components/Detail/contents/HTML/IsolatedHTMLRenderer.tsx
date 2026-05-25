@@ -137,12 +137,12 @@ interface MagicI18nLangSubscribeRequest {
 	requestId?: string
 }
 
-interface MagicRuntimeGetRequest {
-	type: "MAGIC_RUNTIME_GET_REQUEST"
+interface MagicContextGetRequest {
+	type: "MAGIC_CONTEXT_GET_REQUEST"
 	requestId?: string
 }
 
-interface MagicRuntimeUser {
+interface MagicContextUser {
 	user_id: string
 	magic_id?: string
 	organization_code?: string
@@ -155,10 +155,10 @@ interface MagicRuntimeUser {
 	path_nodes?: unknown[]
 }
 
-interface MagicRuntimePayload {
+interface MagicContextPayload {
 	userId: string
 	userName: string
-	user: MagicRuntimeUser
+	user: MagicContextUser
 	organizationCode: string
 	language: string
 }
@@ -207,7 +207,7 @@ const useStyles = createStyles(({ css }) => {
 
 const logger = Logger.createLogger("IsolatedHTMLRenderer")
 
-function normalizeRuntimeUser(profile: any, fallback: any, userId: string, organizationCode: string): MagicRuntimeUser {
+function normalizeContextUser(profile: any, fallback: any, userId: string, organizationCode: string): MagicContextUser {
 	return {
 		user_id: profile?.user_id || fallback?.user_id || userId,
 		magic_id: profile?.magic_id || fallback?.magic_id,
@@ -222,7 +222,7 @@ function normalizeRuntimeUser(profile: any, fallback: any, userId: string, organ
 	}
 }
 
-function getRuntimeUserName(user: MagicRuntimeUser): string {
+function getContextUserName(user: MagicContextUser): string {
 	return (user.real_name || user.nickname || "").trim()
 }
 
@@ -405,13 +405,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		})
 
 		const { t, i18n } = useTranslation("super")
-		const runtimeCacheRef = useRef<{
+		const contextCacheRef = useRef<{
 			key: string
-			value?: MagicRuntimePayload
-			promise?: Promise<MagicRuntimePayload>
+			value?: MagicContextPayload
+			promise?: Promise<MagicContextPayload>
 		} | null>(null)
 
-		const buildRuntimePayload = useMemoizedFn(async (): Promise<MagicRuntimePayload> => {
+		const buildContextPayload = useMemoizedFn(async (): Promise<MagicContextPayload> => {
 			const fallbackUser = userStore.user.userInfo
 			const userId = fallbackUser?.user_id || ""
 			const organizationCode = userStore.user.organizationCode?.trim() || ""
@@ -425,7 +425,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			}
 
 			const cacheKey = `${organizationCode}:${userId}:${language}`
-			const cached = runtimeCacheRef.current
+			const cached = contextCacheRef.current
 			if (cached?.key === cacheKey && cached.value) return cached.value
 			if (cached?.key === cacheKey && cached.promise) return cached.promise
 
@@ -439,8 +439,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					throw new Error("Current user profile is not available")
 				}
 
-				const user = normalizeRuntimeUser(profile, fallbackUser, userId, organizationCode)
-				const userName = getRuntimeUserName(user)
+				const user = normalizeContextUser(profile, fallbackUser, userId, organizationCode)
+				const userName = getContextUserName(user)
 				if (!userName) {
 					throw new Error("Current user display name is not available")
 				}
@@ -452,37 +452,37 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					organizationCode,
 					language,
 				}
-				runtimeCacheRef.current = { key: cacheKey, value: runtime }
+				contextCacheRef.current = { key: cacheKey, value: runtime }
 				return runtime
 			})
 
-			runtimeCacheRef.current = { key: cacheKey, promise }
+			contextCacheRef.current = { key: cacheKey, promise }
 			return promise
 		})
 
-		const handleRuntimeMessage = useMemoizedFn(async (payload: MagicRuntimeGetRequest) => {
+		const handleContextMessage = useMemoizedFn(async (payload: MagicContextGetRequest) => {
 			const { requestId } = payload
 			if (!requestId) return
 
 			try {
-				const runtime = await buildRuntimePayload()
+				const context = await buildContextPayload()
 				iframeRef.current?.contentWindow?.postMessage(
 					{
-						type: "MAGIC_RUNTIME_GET_RESPONSE",
+						type: "MAGIC_CONTEXT_GET_RESPONSE",
 						requestId,
 						success: true,
-						content: runtime,
+						content: context,
 					},
 					"*",
 				)
 			} catch (error) {
-				logger.error("获取 HTML runtime 上下文失败", error)
+				logger.error("获取 HTML context 失败", error)
 				iframeRef.current?.contentWindow?.postMessage(
 					{
-						type: "MAGIC_RUNTIME_GET_RESPONSE",
+						type: "MAGIC_CONTEXT_GET_RESPONSE",
 						requestId,
 						success: false,
-						error: error instanceof Error ? error.message : "Failed to get runtime",
+						error: error instanceof Error ? error.message : "Failed to get context",
 					},
 					"*",
 				)
@@ -1423,9 +1423,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				} else if (event.data?.type?.startsWith("MAGIC_DB_")) {
 					// 处理 window.Magic.db.* 请求
 					await handleDatabaseMessage(event.data.type, event.data)
-				} else if (event.data && event.data.type === "MAGIC_RUNTIME_GET_REQUEST") {
-					// 处理 window.Magic.getRuntime() 请求
-					await handleRuntimeMessage(event.data)
+				} else if (event.data && event.data.type === "MAGIC_CONTEXT_GET_REQUEST") {
+					// 处理 window.Magic.getContext() 请求
+					await handleContextMessage(event.data)
 				} else if (
 					event.data?.type?.startsWith("MAGIC_GET_AGENTS_") ||
 					event.data?.type?.startsWith("MAGIC_CREATE_TOPIC_AND_SEND_") ||

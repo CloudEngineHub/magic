@@ -81,8 +81,8 @@ Use a JSON array for files that will be created or changed. Each item should hav
     )
     data_model: Union[List[PlanDataModelItem], str] = Field(
         default_factory=list,
-        description="""<!--zh: MagicBase 数据表计划。字段必须由计划中的完整功能反推，不能只建最小表；涉及当前用户、创建人、负责人或权限时，必须包含稳定 user_id 字段，并说明用户展示名来自 window.Magic.getRuntime()；只有纯展示、纯静态、纯计算器、没有用户数据或用户明确不要保存数据时才为空。-->
-Use a JSON array for the MagicBase data model plan. Derive fields from the full planned feature loop, not from the smallest possible CRUD table. Include stable user_id fields when the app involves current users, creators, owners, assignees, or permissions, and state that user display names come from window.Magic.getRuntime(). Leave it empty only for pure showcase/static/calculator apps, apps with no user data, or when the user explicitly says not to persist data.""",
+        description="""<!--zh: MagicBase 数据表计划。字段必须由计划中的完整功能反推，不能只建最小表；涉及当前用户、创建人、负责人或权限时，必须包含稳定 user_id 字段，并说明用户展示名来自 window.Magic.getContext()；只有纯展示、纯静态、纯计算器、没有用户数据或用户明确不要保存数据时才为空。-->
+Use a JSON array for the MagicBase data model plan. Derive fields from the full planned feature loop, not from the smallest possible CRUD table. Include stable user_id fields when the app involves current users, creators, owners, assignees, or permissions, and state that user display names come from window.Magic.getContext(). Leave it empty only for pure showcase/static/calculator apps, apps with no user data, or when the user explicitly says not to persist data.""",
     )
     acceptance_criteria: Union[List[str], str] = Field(
         default_factory=list,
@@ -135,13 +135,13 @@ Plan content must be concrete enough for the user to approve:
   - Data: what object is managed, which attributes are needed, and whether status, time, category, notes, order, or archive fields are needed.
   - Operations: whether users need create, view, edit, delete, search, filter, sort, batch actions, or export.
   - State: whether records need active, completed, overdue, draft, archived, error, or similar lifecycle states.
-  - Identity and permissions: whether records need creator, owner, assignee, collaborator, "my data versus all data", or per-user edit/delete visibility. Use `window.Magic.getRuntime()` to get the real current user profile before user-dependent operations. Use real `user_id` fields for permission checks; display names are not permission keys.
+  - Identity and permissions: whether records need creator, owner, assignee, collaborator, "my data versus all data", or per-user edit/delete visibility. Use `window.Magic.getContext()` to get the real current user profile before user-dependent operations. Use real `user_id` fields for permission checks; display names are not permission keys.
   - Feedback: which loading, empty, error, success, disabled, active, confirmation, and undo-like feedback states are needed.
   - Analysis: whether counts, progress, summaries, distributions, recent activity, or lightweight trends make the app more useful.
   - Experience: whether quick entry, inline editing, modal/drawer details, mobile alternatives, or keyboard actions are useful.
   - Persistence: which fields must be stored in MagicBase and which are only temporary UI state.
 - Put the expanded, real feature scope into `requirements`, the derived persistent fields into `data_model`, and the expanded verifiable outcomes into `acceptance_criteria`.
-- If the plan includes teamwork, ownership, creator/assignee fields, edit/delete permissions, or "my records" filtering, explicitly state that the HTML app must call `window.Magic.getRuntime()` first, which MagicBase fields store stable identity, which display fields come from runtime user information, and which operations are limited to the current user. Acceptance criteria must verify that non-owners do not see or cannot use edit/delete actions and that the app never writes fake users such as unknown, guest, visitor, or unnamed users.
+- If the plan includes teamwork, ownership, creator/assignee fields, edit/delete permissions, or "my records" filtering, explicitly state that the HTML app must call `window.Magic.getContext()` first, which MagicBase fields store stable identity, which display fields come from context user information, and which operations are limited to the current user. Acceptance criteria must verify that non-owners do not see or cannot use edit/delete actions and that the app never writes fake users such as unknown, guest, visitor, or unnamed users.
 - `assumptions` must name the concrete defaults used for product expansion. Do not use vague statements such as "simple and easy to use".
 - State what will be built, the real files to create or change, and the useful data model needed by the approved product loop when persistence is needed.
 - 数据型微应用默认优先使用 MagicBase：问卷、表单、待办、CRUD、小后台、dashboard、tracker 或任何用户提交/编辑/统计/查询/导出的数据，都应在 plan 中包含 data_model；只有纯展示、纯静态、纯计算器、没有用户数据或用户明确不要保存数据时才为空。
@@ -169,13 +169,13 @@ Plan content must be concrete enough for user approval:
   - Data: what object is managed, which attributes are needed, and whether status, time, category, notes, order, or archive fields are needed.
   - Operations: whether users need create, view, edit, delete, search, filter, sort, batch actions, or export.
   - State: whether records need active, completed, overdue, draft, archived, error, or similar lifecycle states.
-  - Identity and permissions: whether records need creator, owner, assignee, collaborator, "my data versus all data", or per-user edit/delete visibility. Use `window.Magic.getRuntime()` to get the real current user profile before user-dependent operations. Use real `user_id` fields for permission checks; display names are not permission keys.
+  - Identity and permissions: whether records need creator, owner, assignee, collaborator, "my data versus all data", or per-user edit/delete visibility. Use `window.Magic.getContext()` to get the real current user profile before user-dependent operations. Use real `user_id` fields for permission checks; display names are not permission keys.
   - Feedback: which loading, empty, error, success, disabled, active, confirmation, and undo-like feedback states are needed.
   - Analysis: whether counts, progress, summaries, distributions, recent activity, or lightweight trends make the app more useful.
   - Experience: whether quick entry, inline editing, modal/drawer details, mobile alternatives, or keyboard actions are useful.
   - Persistence: which fields must be stored in MagicBase and which are only temporary UI state.
 - Put the expanded, real feature scope into `requirements`, the derived persistent fields into `data_model`, and the expanded verifiable outcomes into `acceptance_criteria`.
-- If the plan includes teamwork, ownership, creator/assignee fields, edit/delete permissions, or "my records" filtering, explicitly state that the HTML app must call `window.Magic.getRuntime()` first, which MagicBase fields store stable identity, which display fields come from runtime user information, and which operations are limited to the current user. Acceptance criteria must verify that non-owners do not see or cannot use edit/delete actions and that the app never writes fake users such as unknown, guest, visitor, or unnamed users.
+- If the plan includes teamwork, ownership, creator/assignee fields, edit/delete permissions, or "my records" filtering, explicitly state that the HTML app must call `window.Magic.getContext()` first, which MagicBase fields store stable identity, which display fields come from context user information, and which operations are limited to the current user. Acceptance criteria must verify that non-owners do not see or cannot use edit/delete actions and that the app never writes fake users such as unknown, guest, visitor, or unnamed users.
 - `assumptions` must name the concrete defaults used for product expansion. Do not use vague statements such as "simple and easy to use".
 - State what will be built, the real files to create or change, and the useful data model needed by the approved product loop when persistence is needed.
 - Data-oriented micro-apps should use MagicBase by default. Surveys, forms, todos, CRUD apps, admin panels, dashboards, trackers, and any user-submitted/editable/analytical/searchable/exportable data should include data_model in the plan. Leave it empty only for pure showcase/static/calculator apps, apps with no user data, or explicit no-persistence requests.

@@ -1,0 +1,46 @@
+/**
+ * MagicContextApi
+ *
+ * Exposes host-provided context to HTML micro-apps. Sensitive credentials stay
+ * in the parent window; the iframe receives only normalized context data.
+ */
+
+import { MagicBaseApi } from "./MagicBaseApi"
+
+export interface MagicContextUser {
+	user_id: string
+	magic_id?: string
+	organization_code?: string
+	nickname?: string
+	real_name?: string
+	avatar_url?: string
+	phone?: string
+	email?: string | null
+	job_title?: string
+	path_nodes?: unknown[]
+}
+
+export interface MagicContext {
+	userId: string
+	userName: string
+	user: MagicContextUser
+	organizationCode: string
+	language: string
+}
+
+export class MagicContextApi extends MagicBaseApi {
+	install(): void {
+		if (!window.Magic) window.Magic = {}
+		if (window.Magic.getContext) return
+
+		window.Magic.getContext = (): Promise<MagicContext> => {
+			return this.request<MagicContext>("MAGIC_CONTEXT_GET_REQUEST", {}, 15000, (data) => {
+				const content = data["content"]
+				if (!content || typeof content !== "object") {
+					throw new Error("getContext: invalid context response")
+				}
+				return content as MagicContext
+			})
+		}
+	}
+}

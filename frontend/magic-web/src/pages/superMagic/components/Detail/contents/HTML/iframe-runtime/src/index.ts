@@ -485,7 +485,7 @@ declare global {
 				) => Promise<void>
 			}
 			// ─── 向后兼容（deprecated）────────────────────────────────────
-			getRuntime?: () => Promise<{
+			getContext?: () => Promise<{
 				userId: string
 				userName: string
 				user: {

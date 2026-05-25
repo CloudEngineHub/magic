@@ -1,7 +1,7 @@
 ---
 name: html-api-sdk
-description: "Guide for using window.Magic.* APIs in SuperMagic HTML micro-apps, covering file system (fs), LLM calls (llm), database (db), and Agent interaction. Use when user wants to create an HTML micro-app that reads/writes workspace files, calls LLM models, streams AI responses, listens for file changes, queries/creates/updates database rows, or communicates with the Agent. Also use when user says 'create an HTML app', 'read workspace files in HTML', 'call LLM from HTML', 'stream AI output in HTML', 'notify Agent from HTML', 'build a dashboard micro-app', 'query database in HTML', or 'CRUD data in HTML'."
-description-cn: "SuperMagic HTML 微应用 window.Magic API 使用指南，涵盖文件系统读写、大模型调用（单次/流式）、数据库 CRUD（db）、Agent 交互等能力。当用户需要在 HTML 中读写工作区文件、调用 LLM、操作数据库、与 Agent 通信时加载本 skill。"
+description: "Guide for using window.Magic.* APIs in SuperMagic HTML micro-apps, covering file system (fs), LLM calls (llm), and Agent interaction. Use when user wants to create an HTML micro-app that reads/writes workspace files, calls LLM models, streams AI responses, listens for file changes, or communicates with the Agent. Also use when user says 'create an HTML app', 'read workspace files in HTML', 'call LLM from HTML', 'stream AI output in HTML', 'notify Agent from HTML', 'build a dashboard micro-app', or needs general HTML runtime APIs."
+description-cn: "SuperMagic HTML 微应用 window.Magic API 使用指南，涵盖文件系统读写、大模型调用（单次/流式）、Agent 交互等能力。当用户需要在 HTML 中读写工作区文件、调用 LLM、与 Agent 通信时加载本 skill。"
 ---
 
 # window.Magic API — HTML 微应用开发指南
@@ -260,207 +260,11 @@ window.Magic.addFilesToMessage(files); // 返回 void
 
 ---
 
-## 四、运行时与当前用户（`window.Magic.getRuntime`）
+## 四、MagicBase 与当前用户上下文
 
-Use `window.Magic.getRuntime()` whenever a micro-app needs current-user display, creators, owners, assignees, collaborators, "my data versus all data", or edit/delete permission checks.
+MagicBase persistence, `window.Magic.db`, and current-user context through `window.Magic.getContext()` are maintained in the dedicated `magicbase` skill. Load and follow `magicbase` whenever the micro-app needs saved data, CRUD, forms, surveys, dashboards, ownership, creators, assignees, permissions, or current-user information.
 
-`getRuntime()` is hosted by the parent application. It uses the current login state to query magic-service user information and returns a normalized current-user profile. HTML business code should not call `/api/v1/contact/users/queries` directly for the current user, should not hard-code tokens, and should not read `.credentials` files.
-
-```javascript
-const runtime = await window.Magic.getRuntime();
-// runtime: {
-//   userId: "usi_xxx",
-//   userName: "Alice",
-//   user: { user_id, real_name, nickname, avatar_url, phone, email, ... },
-//   organizationCode: "org_xxx",
-//   language: "zh-CN"
-// }
-```
-
-For data apps with ownership or collaboration:
-
-- Call `window.Magic.getRuntime()` during initialization before user-dependent reads or writes.
-- Store stable identity fields in MagicBase, such as `creator_user_id`, `creator_name`, `owner_user_id`, `owner_name`, and `updated_by_user_id`, choosing only fields the app actually needs.
-- When creating a row, write `creator_user_id: runtime.userId` and `creator_name: runtime.userName` or the scenario's equivalent owner fields.
-- When rendering edit/delete/archive/transfer buttons, compare `runtime.userId` with the row's stable identity field. Display names are not permission keys.
-- If `getRuntime()` fails, disable user-dependent create, edit, delete, ownership, and transfer operations and show an understandable error. Never write fake identities such as `unknown`, `guest`, `visitor`, `访客`, or `未命名用户` into MagicBase.
-
-Recommended pattern:
-
-```javascript
-let runtime = null;
-
-async function initRuntime() {
-  runtime = await window.Magic.getRuntime();
-  if (!runtime?.userId || !runtime?.userName) {
-    throw new Error("Current user information is unavailable");
-  }
-}
-
-async function createTask(data) {
-  if (!runtime) {
-    throw new Error("Current user information is not initialized");
-  }
-
-  return window.Magic.db.createRow(TASK_TABLE_ID, {
-    ...data,
-    creator_user_id: runtime.userId,
-    creator_name: runtime.userName,
-  });
-}
-
-function canEdit(row) {
-  return Boolean(runtime?.userId && row.creator_user_id === runtime.userId);
-}
-```
-
----
-
-## 五、数据库 API（`window.Magic.db`）
-
-The HTML runtime database API only supports row-level operations on existing MagicBase tables. It does not create tables, create columns, or manage schema.
-
-For data-oriented micro-apps, treat MagicBase persistence as the default. Surveys, forms, todos, CRUD apps, small admin panels, dashboards, trackers, and any app with user-submitted, editable, collected, analytical, searchable, exportable, or reusable data should prepare a MagicBase table before generating HTML. Skip persistence only for pure showcase/static pages, pure calculators, apps with no user data, or when the user explicitly says not to save data.
-
-The data model must serve the full approved product loop, not the smallest possible CRUD shell. Derive fields from the planned object, attributes, lifecycle state, timestamps, category/grouping needs, notes/details, ordering, archive/deletion behavior, statistics, and filters. UI-only state should stay in JavaScript; anything needed for persistence, search, filtering, sorting, or later reuse belongs in MagicBase.
-
-1. Call `query_magicbase_tables` to check whether the required table already exists.
-2. If the table is missing, call `create_magicbase_table`; the tool automatically records migration history in `.magicbase/migrations.json` and refreshes the latest MagicBase data model in `HTML-APP.md`.
-3. If columns are missing, call `create_magicbase_column`; the tool automatically records migration history in `.magicbase/migrations.json` and refreshes the latest MagicBase data model in `HTML-APP.md`.
-4. Generate HTML only after you have a real `table.id` from MagicBase tools or from a successful reconciliation against MagicBase.
-
-Never pass `table_key` or `table_name` as `tableId` to `window.Magic.db`. The HTML code must use the real table id returned by MagicBase tools.
-
-Database API calls are automatically associated with the current project inside the iframe, so HTML code does not pass `projectId`.
-
-### 获取所有表 `getTables()`
-
-```javascript
-const tables = await window.Magic.db.getTables();
-// tables: [{ id: "1234567890", name: "users", ... }, ...]
-```
-
-- **返回**：`Promise<Array<{ id: string; name: string; ... }>>` — 表摘要列表
-
-### 获取单表详情 `getTable(tableId)`
-
-```javascript
-const table = await window.Magic.db.getTable(TABLE_ID_FROM_MAGICBASE_TOOL);
-// table: { id: "1234567890", name: "users", fields: [...], ... }
-```
-
-- **参数**：`tableId: string` — 表 ID
-- **返回**：`Promise<object>` — 表详情（含字段定义）
-
-### 新增行 `createRow(tableId, data, select?)`
-
-```javascript
-const newRow = await window.Magic.db.createRow(TABLE_ID_FROM_MAGICBASE_TOOL, {
-  name: "Alice",
-  age: 30,
-  email: "alice@example.com",
-});
-// newRow: { id: "rec_yyy", name: "Alice", age: 30, ... }
-```
-
-- **参数**：`tableId: string`、`data: Record<string, unknown>`、`select?: string[]`（可选，指定返回字段）
-- **返回**：`Promise<object>` — 新创建的行数据
-
-### 查询行 `queryRows(tableId, query)`
-
-```javascript
-const result = await window.Magic.db.queryRows(TABLE_ID_FROM_MAGICBASE_TOOL, {
-  filter: { name: { $contains: "Ali" } },
-  sort: [{ field: "created_at", direction: "desc" }],
-  select: ["name", "email"],
-  page: 1,
-  page_size: 20,
-});
-// result: { list: [...], total: 42, page: 1, page_size: 20 }
-const rows = result.list;
-```
-
-- **参数**：`tableId: string`、`query: object`
-  - `filter?` — 过滤条件
-  - `sort?` — 排序规则
-  - `select?: string[]` — 返回字段列表
-  - `page?: number` — 页码（默认 1）
-  - `page_size?: number` — 每页行数（默认 20）
-  - `with?` — 关联查询配置
-- **返回**：`Promise<{ list: Array<object>; total: number; page: number; page_size: number }>` — 分页结果。行数组字段是 `list`，不要使用 `rows`
-- **超时**：30 秒（其他操作为 15 秒）
-
-Use this defensive read pattern when handling existing or uncertain runtime responses:
-
-```javascript
-const result = await window.Magic.db.queryRows(TABLE_ID_FROM_MAGICBASE_TOOL, {
-  page: 1,
-  page_size: 100,
-});
-const rows = Array.isArray(result?.list)
-  ? result.list
-  : Array.isArray(result?.data?.list)
-    ? result.data.list
-    : [];
-```
-
-Prefer `result.list` in new code. The `result.data?.list` fallback is only a compatibility guard for uncertain host responses. Do not use `result.rows`.
-
-### 获取单行 `getRow(tableId, recordId, select?)`
-
-```javascript
-const row = await window.Magic.db.getRow(TABLE_ID_FROM_MAGICBASE_TOOL, "rec_yyy");
-```
-
-- **参数**：`tableId: string`、`recordId: string`、`select?: string[]`
-- **返回**：`Promise<object>` — 行数据
-
-### 更新行 `updateRow(tableId, recordId, data, select?)`
-
-```javascript
-const updated = await window.Magic.db.updateRow(TABLE_ID_FROM_MAGICBASE_TOOL, "rec_yyy", {
-  name: "Bob",
-  age: 25,
-});
-```
-
-- **参数**：`tableId: string`、`recordId: string`、`data: Record<string, unknown>`、`select?: string[]`
-- **返回**：`Promise<object>` — 更新后的行数据
-
-### 删除行 `deleteRow(tableId, recordId)`
-
-```javascript
-await window.Magic.db.deleteRow(TABLE_ID_FROM_MAGICBASE_TOOL, "rec_yyy");
-```
-
-- **参数**：`tableId: string`、`recordId: string`
-- **返回**：`Promise<void>`
-
-### 获取关系列表 `getRelations()`
-
-```javascript
-const relations = await window.Magic.db.getRelations();
-```
-
-- **返回**：`Promise<Array<object>>` — 当前项目的表关系列表
-
-### 数据库错误处理
-
-```javascript
-try {
-  const row = await window.Magic.db.getRow(TABLE_ID_FROM_MAGICBASE_TOOL, "rec_notfound");
-} catch (err) {
-  console.error("数据库操作失败：", err.message);
-  // 可能的错误：
-  // - "No project selected" — 未选中项目
-  // - "getRow: tableId must be a non-empty string" — 参数校验失败
-  // - HTTP 错误信息（404, 500 等）
-}
-```
-
----
-
-## 六、错误处理最佳实践
+## 五、错误处理最佳实践
 
 ```javascript
 // fs 错误处理
@@ -493,7 +297,7 @@ window.Magic.llm.stream(messages, (delta, done) => {
 
 ---
 
-## 七、完整示例模板
+## 六、完整示例模板
 
 ### 示例 A：读数据 → LLM 分析 → 写回结果 → 通知 Agent
 
@@ -655,7 +459,7 @@ window.Magic.llm.stream(messages, (delta, done) => {
 
 ---
 
-## 八、API 速查表
+## 七、API 速查表
 
 | API                                             | 说明               | 返回                     |
 | ----------------------------------------------- | ------------------ | ------------------------ |
@@ -671,12 +475,3 @@ window.Magic.llm.stream(messages, (delta, done) => {
 | `window.Magic.uploadFiles(files)`               | 上传文件到工作区   | `Promise<unknown>`       |
 | `window.Magic.downloadFiles(paths)`             | 下载工作区文件     | `Promise<unknown>`       |
 | `window.Magic.addFilesToMessage(files)`         | 将文件附加到输入框 | `void`                   |
-| `window.Magic.getRuntime()`                     | 获取当前用户上下文 | `Promise<object>`        |
-| `window.Magic.db.getTables()`                   | 获取所有表         | `Promise<Array>`         |
-| `window.Magic.db.getTable(tableId)`             | 获取表详情         | `Promise<object>`        |
-| `window.Magic.db.createRow(tableId, data)`      | 新增行             | `Promise<object>`        |
-| `window.Magic.db.queryRows(tableId, query)`     | 查询行（分页）     | `Promise<object>`        |
-| `window.Magic.db.getRow(tableId, recordId)`     | 获取单行           | `Promise<object>`        |
-| `window.Magic.db.updateRow(tableId, id, data)`  | 更新行             | `Promise<object>`        |
-| `window.Magic.db.deleteRow(tableId, recordId)`  | 删除行             | `Promise<void>`          |
-| `window.Magic.db.getRelations()`                | 获取关系列表       | `Promise<Array>`         |

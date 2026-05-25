@@ -287,14 +287,14 @@ Hook 会自动为每个文件设置正确的 `webkitRelativePath` 属性：
 //   │   ├── photo1.jpg
 //   │   └── photo2.png
 //   └── docs/
-//       └── readme.md
+//       └── README.md
 
 // 处理后的文件对象:
 [
   { name: 'file1.txt', webkitRelativePath: 'my-folder/file1.txt' },
   { name: 'photo1.jpg', webkitRelativePath: 'my-folder/images/photo1.jpg' },
   { name: 'photo2.png', webkitRelativePath: 'my-folder/images/photo2.png' },
-  { name: 'readme.md', webkitRelativePath: 'my-folder/docs/readme.md' }
+  { name: 'readme.md', webkitRelativePath: 'my-folder/docs/README.md' }
 ]
 ```
 
