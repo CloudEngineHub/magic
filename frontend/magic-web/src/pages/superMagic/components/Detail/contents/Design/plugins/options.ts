@@ -23,6 +23,9 @@ import dressUpTryonManifest from "./dress-up-tryon/manifest.json"
 import accessoryTryonStyles from "./accessory-tryon/index.css?raw"
 import accessoryTryonRuntimeCode from "./accessory-tryon/index.js?raw"
 import accessoryTryonManifest from "./accessory-tryon/manifest.json"
+import poseSwapStyles from "./pose-swap/index.css?raw"
+import poseSwapRuntimeCode from "./pose-swap/index.js?raw"
+import poseSwapManifest from "./pose-swap/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -78,6 +81,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${modelSwapRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, modelSwapStyles],
 		resolveResourceUrl: (path) => new URL(path, modelSwapResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...poseSwapManifest,
+		entry: `./pose-swap/${poseSwapManifest.entry}`,
+		runtimeUrl: poseSwapEntryUrl,
+		resourceBaseUrl: poseSwapResourceBaseUrl,
+		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${poseSwapRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, poseSwapStyles],
+		resolveResourceUrl: (path) => new URL(path, poseSwapResourceBaseUrl).href,
 		source: "builtin",
 	},
 	{

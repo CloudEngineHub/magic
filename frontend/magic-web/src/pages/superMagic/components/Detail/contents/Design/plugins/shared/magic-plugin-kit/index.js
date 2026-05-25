@@ -336,8 +336,17 @@
 				if (!ctx.ai?.generateAndPlace) {
 					throw new Error("ctx.ai.generateAndPlace is not connected yet.")
 				}
-				const request = await config.generate.buildRequest({ state, helpers, t })
-				const result = await ctx.ai.generateAndPlace(request)
+				const result = config.generate.execute
+					? await config.generate.execute({
+							ctx,
+							state,
+							helpers,
+							t,
+							generateAndPlace: (request) => ctx.ai.generateAndPlace(request),
+						})
+					: await ctx.ai.generateAndPlace(
+							await config.generate.buildRequest({ state, helpers, t }),
+						)
 				if (config.generate.onSuccess) {
 					config.generate.onSuccess({ ctx, state, result, helpers, t })
 				} else {

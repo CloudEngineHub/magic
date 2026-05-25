@@ -195,10 +195,9 @@ kit 会按顺序渲染这些 section。
 
 1. 调用 `validate`
 2. 校验通过后进入 loading
-3. 调用 `buildRequest`
-4. 内部执行 `ctx.ai.generateAndPlace(request)`
-5. 成功时调用 `onSuccess`
-6. 失败时自动写入 `state.error` 并 toast
+3. 若配置了 `execute`，则调用 `execute`；否则调用 `buildRequest` 后执行 `ctx.ai.generateAndPlace(request)`
+4. 成功时调用 `onSuccess`
+5. 失败时自动写入 `state.error` 并 toast
 
 常用字段：
 
@@ -208,6 +207,7 @@ kit 会按顺序渲染这些 section。
 - `isDisabled`: 是否禁用生成按钮
 - `validate`: 生成前校验，返回字符串表示失败
 - `buildRequest`: 组装最终请求
+- `execute`: 可选，自定义完整生成流程；签名 `({ ctx, state, helpers, t, generateAndPlace }) => Promise<unknown>`
 - `onSuccess`: 成功后的自定义行为
 - `successMessage`: 未自定义 `onSuccess` 时的成功文案
 - `errorMessage`: 失败兜底文案

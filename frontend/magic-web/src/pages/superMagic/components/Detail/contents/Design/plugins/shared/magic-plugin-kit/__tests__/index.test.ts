@@ -392,4 +392,42 @@ describe("magic-plugin-kit", () => {
 		expect(nextButtons[0].classList.contains("is-active")).toBe(false)
 		expect(nextButtons[1].classList.contains("is-active")).toBe(true)
 	})
+
+	it("prefers generate.execute over buildRequest and allows multiple generate calls", async () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		const buildRequest = vi.fn(() => ({ prompt: "single-request" }))
+		const execute = vi.fn(async ({ generateAndPlace }) => {
+			await generateAndPlace({ prompt: "first-request" })
+			return generateAndPlace({ prompt: "second-request" })
+		})
+		ctx.ai = {
+			generateAndPlace: vi
+				.fn()
+				.mockResolvedValueOnce({ elementIds: ["first"] })
+				.mockResolvedValueOnce({ elementIds: ["second"] }),
+		}
+
+		kit.mount(ctx, root, {
+			initialState: {},
+			sections: [],
+			generate: {
+				...createGenerateConfig(),
+				buildRequest,
+				execute,
+			},
+		})
+
+		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+		await vi.waitFor(() => {
+			expect(execute).toHaveBeenCalledTimes(1)
+		})
+		expect(buildRequest).not.toHaveBeenCalled()
+		const generateAndPlace = (ctx as any).ai.generateAndPlace as ReturnType<typeof vi.fn>
+		expect(generateAndPlace).toHaveBeenCalledTimes(2)
+		expect(generateAndPlace).toHaveBeenNthCalledWith(1, { prompt: "first-request" })
+		expect(generateAndPlace).toHaveBeenNthCalledWith(2, { prompt: "second-request" })
+	})
 })
