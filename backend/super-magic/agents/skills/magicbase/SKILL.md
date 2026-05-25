@@ -78,7 +78,9 @@ The HTML runtime database API only supports row-level operations on existing Mag
 
 For data-oriented micro-apps, treat MagicBase persistence as the default. Surveys, forms, todos, CRUD apps, small admin panels, dashboards, trackers, and any app with user-submitted, editable, collected, analytical, searchable, exportable, or reusable data should prepare a MagicBase table before generating HTML. Skip persistence only for pure showcase/static pages, pure calculators, apps with no user data, or when the user explicitly says not to save data.
 
-The data model must serve the full approved product loop, not the smallest possible CRUD shell. Derive fields from the planned object, attributes, lifecycle state, timestamps, category/grouping needs, notes/details, ordering, archive/deletion behavior, statistics, and filters. UI-only state should stay in JavaScript; anything needed for persistence, search, filtering, sorting, or later reuse belongs in MagicBase.
+The data model must serve the full approved product loop, not the smallest possible CRUD shell. Derive fields from the planned object, attributes, lifecycle state, category/grouping needs, notes/details, ordering, archive/deletion behavior, statistics, and filters. UI-only state should stay in JavaScript; anything needed for persistence, search, filtering, sorting, or later reuse belongs in MagicBase.
+
+System fields are not dynamic business columns. MagicBase automatically maintains fields such as `id`, `record_id`, `created_at`, `updated_at`, `created_by`, `project_id`, `table_id`, and `organization_code`. HTML code may read, display, select, filter, or sort by supported system fields, but must not put system fields into the `data` object passed to `createRow` or `updateRow`. Only dynamic business fields that appear in the table's `columns` list as `column_key` may be written in `data`.
 
 1. Call `query_magicbase_tables` to check whether the required table already exists.
 2. If the table is missing, call `create_magicbase_table`; the tool automatically records migration history in `.magicbase/migrations.json` and refreshes the latest MagicBase data model in `HTML-APP.md`.
@@ -115,12 +117,13 @@ const newRow = await window.Magic.db.createRow(TABLE_ID_FROM_MAGICBASE_TOOL, {
   name: "Alice",
   age: 30,
   email: "alice@example.com",
-});
+}, ["id", "name", "email", "created_at", "updated_at"]);
 // newRow: { id: "rec_yyy", name: "Alice", age: 30, ... }
 ```
 
 - Parameters: `tableId: string`、`data: Record<string, unknown>`、`select?: string[]`（可选，指定返回字段）
 - Return: `Promise<object>` — the created row
+- The `data` object must contain only dynamic column keys from the actual table schema. Do not write `created_at`, `updated_at`, `id`, `record_id`, `created_by`, `project_id`, `table_id`, or `organization_code` into `data`; request them through `select` if you need them in the response.
 
 ### Query rows `queryRows(tableId, query)`
 
@@ -177,11 +180,12 @@ const row = await window.Magic.db.getRow(TABLE_ID_FROM_MAGICBASE_TOOL, "rec_yyy"
 const updated = await window.Magic.db.updateRow(TABLE_ID_FROM_MAGICBASE_TOOL, "rec_yyy", {
   name: "Bob",
   age: 25,
-});
+}, ["id", "name", "age", "updated_at"]);
 ```
 
 - Parameters: `tableId: string`、`recordId: string`、`data: Record<string, unknown>`、`select?: string[]`
 - Return: `Promise<object>` — the updated row
+- The `data` object must contain only dynamic column keys from the actual table schema. Do not write system fields such as `updated_at`; MagicBase updates them automatically and they can be returned through `select`.
 
 ### Delete a row `deleteRow(tableId, recordId)`
 
