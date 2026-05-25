@@ -13,13 +13,16 @@ Top beats bottom:
 ## Technical Constraints
 
 - **Fixed canvas**: set both `<html>` and `<body>` to the chosen `width` and `height`. No media queries, no responsive tricks. The card must render identically at any viewport.
-- **Tech stack**: TailwindCSS CDN + FontAwesome; inline custom CSS in `<head>`; inline JS at the bottom of `<body>` only when strictly needed. Do not load external data.
+- **Tech stack**: 优先使用预设模板 CSS（通过 `<link>` 引用），模板未覆盖的样式使用内联 `<style>` 标签编写原生 CSS。非必要不使用 TailwindCSS。inline JS at the bottom of `<body>` only when strictly needed. Do not load external data.
+- **CSS 策略**:
+  1. 首选：直接使用预设 CSS 中已定义的 class（如 `.cd-header`, `.cd-body`, `.bg-dark` 等）
+  2. 次选：在 `<head>` 中用 `<style>` 标签编写原生 CSS 补充模板缺少的样式
+  3. 避免：不要引入 TailwindCSS CDN，除非项目明确要求
 - **Images**: only reference local files. `assets/<name>` for post-local assets, `../../shared/<name>` for shared assets. Never hotlink remote images in the final card.
 - **Fonts and icons** — use the same CDN set as other Magic projects to keep caching consistent:
-  - TailwindCSS: `https://cdn.tailwindcss.com/3.4.17` (via `<script>` tag)
   - FontAwesome: `https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css`
   - Google Fonts: `https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap`
-- **Root scale**: leave `<html>` at the browser default root (16px). Do NOT set `font-size` on `<html>` — Tailwind's rem-based utilities are calibrated against the default 16px baseline.
+- **Root scale**: leave `<html>` at the browser default root (16px). Do NOT set `font-size` on `<html>`.
 - **No dynamic effects**: no keyframe animations, no timed transitions, no fetches. Static visuals only.
 
 ## Content Density Rules
@@ -32,23 +35,32 @@ Top beats bottom:
 
 ```html
 <!doctype html>
-<html lang="zh" style="width:540px;height:720px">
+<html lang="zh">
   <head>
     <meta charset="utf-8" />
     <title>Card 01</title>
-    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <!-- 预设模板 CSS (必选) -->
+    <link
+      rel="stylesheet"
+      href="../../shared/presets/code-dispatch/code-dispatch.css"
+    />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
     />
-    <!-- Optional preset (rednote: neo-brutalism) -->
-    <!-- <link rel="stylesheet" href="../../shared/presets/neo-brutalism/neo-brutalism.css" /> -->
+    <!-- 模板未覆盖的补充样式 -->
+    <style>
+      /* 仅放置模板 CSS 中没有的自定义样式 */
+    </style>
   </head>
-  <body class="w-[540px] h-[720px] bg-white overflow-hidden">
-    <!-- layout -->
-    <!-- <script src="../../shared/presets/neo-brutalism/neo-brutalism.js"></script> -->
+  <body class="bg-light">
+    <!-- 直接使用模板 class 构建布局 -->
+    <div class="cd-header">...</div>
+    <div class="cd-body is-content">...</div>
+    <div class="cd-footer">...</div>
+    <!-- <script src="../../shared/presets/code-dispatch/code-dispatch.js"></script> -->
   </body>
 </html>
 ```
 
-Swap the inline dimensions when the platform or user-specified size differs. `overflow-hidden` on `<body>` keeps accidental overflow from leaking into the screenshot.
+Swap the preset path when using a different template. The preset CSS already handles `html/body` dimensions (540×720) and `overflow: hidden`.
