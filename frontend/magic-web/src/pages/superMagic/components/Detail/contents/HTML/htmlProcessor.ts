@@ -173,12 +173,14 @@ function processHtmlDocForFileIds(
 	urlMap: Map<string, any>
 	filePathMap: Map<string, string>
 	slidesMap: Map<string, string>
+	imageFileIds: Set<string>
 } {
 	const fileIdsToFetch: string[] = []
 	const urlsToReplace: string[] = []
 	const urlMap = new Map<string, any>()
 	const filePathMap = new Map<string, string>()
 	const slidesMap = new Map<string, string>()
+	const imageFileIds = new Set<string>()
 
 	// Process all elements with src/href attributes
 	processElementsWithAttribute({
@@ -323,7 +325,15 @@ function processHtmlDocForFileIds(
 		})
 	}
 
-	return { fileIdsToFetch, urlMap, filePathMap, slidesMap }
+	// Determine which collected resources are images.
+	// Only these should receive image processing params (xMagicImageProcess).
+	urlMap.forEach((info, id) => {
+		if (info.tag === "img" || info.attr === "css-url" || info.attr === "inline-style") {
+			imageFileIds.add(id)
+		}
+	})
+
+	return { fileIdsToFetch, urlMap, filePathMap, slidesMap, imageFileIds }
 }
 
 /**
@@ -491,6 +501,7 @@ export async function processHtmlContent(
 		urlMap,
 		filePathMap,
 		slidesMap,
+		imageFileIds,
 	} = processHtmlDocForFileIds(newHtmlDoc, allFiles, relativeFolderPath, processingMetadata)
 
 	let fileIdsToFetch = collectedFileIds
@@ -527,13 +538,31 @@ export async function processHtmlContent(
 					let unversionedUrls = [...cached]
 					if (missing.length === 0) return unversionedUrls
 
-					const response = await getTemporaryDownloadUrl({
-						file_ids: missing,
-						...(input.xMagicImageProcess && {
-							options: { xMagicImageProcess: input.xMagicImageProcess },
-						}),
-					})
-					const fetchedUrls = response || []
+					// Split missing IDs into image vs non-image to avoid applying
+					// image processing params to non-image resources (CSS/JS/fonts etc.)
+					const missingImageIds = missing.filter((id) => imageFileIds.has(id))
+					const missingOtherIds = missing.filter((id) => !imageFileIds.has(id))
+
+					const requests: Promise<GetTemporaryDownloadUrlItem[]>[] = []
+					if (missingImageIds.length > 0) {
+						requests.push(
+							getTemporaryDownloadUrl({
+								file_ids: missingImageIds,
+								...(input.xMagicImageProcess && {
+									options: { xMagicImageProcess: input.xMagicImageProcess },
+								}),
+							}).then((r) => r || []),
+						)
+					}
+					if (missingOtherIds.length > 0) {
+						requests.push(
+							getTemporaryDownloadUrl({
+								file_ids: missingOtherIds,
+							}).then((r) => r || []),
+						)
+					}
+					const results = await Promise.all(requests)
+					const fetchedUrls = results.flat()
 					urlCacheManager.updateUrlCache(fetchedUrls, fileUpdatedAtMap)
 					unversionedUrls = [...unversionedUrls, ...fetchedUrls]
 					return unversionedUrls
@@ -569,7 +598,7 @@ export async function processHtmlContent(
 								if (!magicProjectJSConfig.geo) {
 									magicProjectJSConfig.geo = []
 								}
-								;(magicProjectJSConfig as any).geo.push({
+								; (magicProjectJSConfig as any).geo.push({
 									name: resourceInfo.fileName.split(".")[0],
 									url: item.url,
 								})
@@ -578,7 +607,7 @@ export async function processHtmlContent(
 								if (!magicProjectJSConfig.dataSources) {
 									magicProjectJSConfig.dataSources = []
 								}
-								;(magicProjectJSConfig as any).dataSources.push({
+								; (magicProjectJSConfig as any).dataSources.push({
 									name: resourceInfo.fileName.split(".")[0],
 									url: item.url,
 								})
