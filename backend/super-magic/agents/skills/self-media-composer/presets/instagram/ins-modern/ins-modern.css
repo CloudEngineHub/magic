@@ -1,4 +1,15 @@
 /* ins-modern.css - Instagram Modern card preset for 1080x1350 */
+
+/* Base reset — no dependency on TailwindCSS */
+html,
+body {
+  width: 1080px;
+  height: 1350px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
 .ins-card {
   --ins-white: #fff;
   --ins-paper: #fafafa;
@@ -399,4 +410,111 @@
 }
 .ins-bar-fill.ins-red {
   background: var(--ins-pink);
+}
+
+/* Additional utilities */
+.ins-quote-block {
+  background: var(--ins-soft-pink);
+  border-left: 8px solid var(--ins-pink);
+  padding: var(--ins-gap-lg) var(--ins-gap-xl);
+  border-radius: 0 var(--ins-radius-lg) var(--ins-radius-lg) 0;
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ins-ink);
+}
+.ins-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ins-gap-lg);
+  padding: var(--ins-gap-lg) 0;
+  border-bottom: 2px solid var(--ins-line);
+  font-size: 36px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.ins-list-item:last-child {
+  border-bottom: none;
+}
+.ins-list-icon {
+  width: 48px;
+  height: 48px;
+  background: var(--ins-ink);
+  color: var(--ins-white);
+  border-radius: var(--ins-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+.ins-list-text {
+  flex: 1;
+  padding-top: 8px;
+}
+.ins-list-label {
+  font-weight: 800;
+  color: var(--ins-pink);
+}
+.ins-divider {
+  height: 4px;
+  background: var(--ins-line);
+  border-radius: 2px;
+  margin: var(--ins-gap-sm) 0;
+}
+.ins-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ins-gap-sm);
+}
+.ins-meta-item {
+  display: flex;
+  align-items: center;
+  gap: var(--ins-gap-xs);
+  font-size: 26px;
+  color: var(--ins-muted);
+  font-weight: 600;
+}
+.ins-emoji-icon {
+  font-size: 36px;
+}
+.ins-step-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ins-gap-md);
+}
+.ins-step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ins-gap-lg);
+}
+.ins-step-num {
+  width: 56px;
+  height: 56px;
+  background: var(--ins-pink);
+  color: var(--ins-white);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+.ins-step-body {
+  flex: 1;
+  padding-top: 8px;
+}
+.ins-step-title {
+  font-size: 36px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.ins-step-desc {
+  font-size: 28px;
+  color: var(--ins-muted);
+  font-weight: 500;
 }
