@@ -12,6 +12,7 @@ import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { MCPTool } from "./tools/MCPTool"
 
 const AskUserToolCall = lazy(() => import("./tools/askUser"))
+const PlanToolCall = lazy(() => import("./tools/plan"))
 
 interface ToolCallItem {
 	id: string
@@ -159,6 +160,20 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 	if (toolCall?.function?.name === "ask_user") {
 		return (
 			<AskUserToolCall
+				toolData={toolData}
+				loading={!toolResponse}
+				classNames={classNames}
+				selectedTopic={selectedTopic}
+				isShare={isShare}
+				onSelectDetail={onSelectDetail}
+				onMouseEnter={onMouseEnter}
+				onMouseLeave={onMouseLeave}
+			/>
+		)
+	}
+	if (toolCall?.function?.name === "plan") {
+		return (
+			<PlanToolCall
 				toolData={toolData}
 				loading={!toolResponse}
 				classNames={classNames}
