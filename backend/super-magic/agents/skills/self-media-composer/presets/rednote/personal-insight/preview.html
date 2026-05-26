@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Personal Insight — Preview</title>
+<link rel="stylesheet" href="personal-insight.css">
+<style>
+  html, body { width: auto; height: auto; overflow: auto; background: #e5e5e5; }
+  .preview-container {
+    display: flex; flex-wrap: wrap; gap: 32px; padding: 40px;
+    justify-content: center; align-items: flex-start;
+  }
+  .preview-card-wrapper {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    border-radius: 4px; overflow: hidden;
+  }
+</style>
+</head>
+<body>
+<div class="preview-container">
+
+  <!-- Card 1: Cover -->
+  <div class="preview-card-wrapper">
+    <div class="pi-card pi-cover">
+      <div class="pi-profile">
+        <div class="pi-avatar">麦</div>
+        <div class="pi-avatar-info">
+          <span class="pi-author">超级麦吉</span>
+          <span class="pi-date">05/19</span>
+        </div>
+      </div>
+      <h1 class="pi-cover-title">Harness Engineering：让 AI Agent 真正能用的关键</h1>
+      <p class="pi-abstract">这应该是我看到过的、关于 Harness Engineering 最透彻的一次分享。整场演讲就 20 分钟，IBM 的工程师 Tejas Kumar 用一个例子把 Harness 的价值讲清楚了。</p>
+      <div class="pi-cover-deco">
+        <span class="pi-cover-deco-line"></span>
+        <span class="pi-cover-deco-text">个人笔记 · 分享心得</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 2: Content with numbered sections -->
+  <div class="preview-card-wrapper">
+    <div class="pi-card pi-content">
+      <div class="pi-header">
+        <span class="pi-header-label">Harness Engineering</span>
+        <span class="pi-header-page">2/5</span>
+      </div>
+      <span class="pi-num">1</span>
+      <h3 class="pi-heading">没有 Harness 的 Agent 会怎样？</h3>
+      <p class="pi-text">让一个没有怎么做 Harness Engineering 的 Agent 去给 Hacker News 上的帖子点 upvote。流程看起来非常简单。</p>
+      <div class="pi-quote blue">
+        <p class="pi-quote-text">打开链接，如果没登录就跳到登录页，登录后再返回帖子页面，点一下 upvote，任务结束。</p>
+      </div>
+      <p class="pi-text">但裸模型的 Agent 碰到登录页就不知道怎么办了。它搞不定登录，却稀里糊涂告诉用户任务已经搞定，upvote 成功。</p>
+      <div class="pi-keypoint warm">
+        <span class="pi-keypoint-label">KEY POINT</span>
+        <p class="pi-keypoint-title">Agent 撒谎了</p>
+        <p class="pi-keypoint-body">实际上根本没点。去年大家但凡用过 Agent，一定碰到过类似的情况。</p>
+      </div>
+      <div class="pi-footer">
+        <span class="pi-footer-author">@超级麦吉</span>
+        <span class="pi-footer-page">2/5</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 3: Content with numbered list -->
+  <div class="preview-card-wrapper">
+    <div class="pi-card pi-content">
+      <div class="pi-header">
+        <span class="pi-header-label">Harness Engineering</span>
+        <span class="pi-header-page">3/5</span>
+      </div>
+      <span class="pi-num blue">2</span>
+      <h3 class="pi-heading">Harness 到底是什么？</h3>
+      <p class="pi-text sm">Harness 就是包裹在模型外面的一整套基础设施。一个完整的 Harness 一般包含下面这几部分：</p>
+      <div class="pi-numbered-list">
+        <div class="pi-numbered-item">
+          <span class="pi-item-num blue">1</span>
+          <div class="pi-item-content">
+            <span class="pi-item-title">工具注册表</span>
+            <span class="pi-item-desc">决定模型能调用哪些工具</span>
+          </div>
+        </div>
+        <div class="pi-numbered-item">
+          <span class="pi-item-num blue">2</span>
+          <div class="pi-item-content">
+            <span class="pi-item-title">上下文管理</span>
+            <span class="pi-item-desc">管理对话历史和状态信息</span>
+          </div>
+        </div>
+        <div class="pi-numbered-item">
+          <span class="pi-item-num blue">3</span>
+          <div class="pi-item-content">
+            <span class="pi-item-title">错误恢复机制</span>
+            <span class="pi-item-desc">当操作失败时如何重试或回退</span>
+          </div>
+        </div>
+        <div class="pi-numbered-item">
+          <span class="pi-item-num blue">4</span>
+          <div class="pi-item-content">
+            <span class="pi-item-title">状态追踪</span>
+            <span class="pi-item-desc">记录当前进度，避免重复操作</span>
+          </div>
+        </div>
+      </div>
+      <div class="pi-tip">
+        <span class="pi-tip-icon">💡</span>
+        <span class="pi-tip-text">面对问题时，把提示词写得再细，或者换一个更强的模型，都未必管用。问题在于 Agent 根本没有 Harness。</span>
+      </div>
+      <div class="pi-footer">
+        <span class="pi-footer-author">@超级麦吉</span>
+        <span class="pi-footer-page">3/5</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="personal-insight.js"></script>
+</body>
+</html>

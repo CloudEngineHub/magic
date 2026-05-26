@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Ins Minimal — Preview</title>
+    <link rel="stylesheet" href="ins-minimal.css">
+    <style>
+        html,
+        body {
+            width: auto;
+            height: auto;
+            overflow: auto;
+            background: #e8e8e8;
+        }
+
+        .preview-container {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+            padding: 40px;
+            align-items: center;
+        }
+
+        .preview-card-wrapper {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border-radius: 4px;
+            overflow: hidden;
+            transform: scale(0.35);
+            transform-origin: top center;
+            width: 1080px;
+            height: 1350px;
+            margin-bottom: calc(-1350px * 0.65);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="preview-container">
+
+        <!-- Card 1: Cover -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card im-cover">
+                <p class="im-cover-eyebrow">Weekly Digest</p>
+                <h1 class="im-cover-title">Less noise,<br>more signal.</h1>
+                <div class="im-cover-line"></div>
+            </div>
+        </div>
+
+        <!-- Card 2: Stats -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card im-content">
+                <div class="im-header">
+                    <span class="im-tag">Performance</span>
+                    <h2 class="im-title">Q2 Results</h2>
+                </div>
+                <div class="im-body">
+                    <div class="im-stat">
+                        <span class="im-stat-label">Revenue Growth</span>
+                        <span class="im-stat-value im-accent">+34%</span>
+                    </div>
+                    <div class="im-stat">
+                        <span class="im-stat-label">Customer Retention</span>
+                        <span class="im-stat-value im-sage">92%</span>
+                    </div>
+                    <div class="im-stat">
+                        <span class="im-stat-label">Churn Rate</span>
+                        <span class="im-stat-value im-warm">-8%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 3: List -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card im-content">
+                <div class="im-header">
+                    <span class="im-tag">Resources</span>
+                    <h2 class="im-title">Must-Read Books</h2>
+                </div>
+                <div class="im-body">
+                    <div class="im-list-item">
+                        <span class="im-list-num">01</span>
+                        <span class="im-list-text">Atomic Habits</span>
+                        <span class="im-list-meta">James Clear</span>
+                    </div>
+                    <div class="im-list-item">
+                        <span class="im-list-num">02</span>
+                        <span class="im-list-text">Deep Work</span>
+                        <span class="im-list-meta">Cal Newport</span>
+                    </div>
+                    <div class="im-list-item">
+                        <span class="im-list-num">03</span>
+                        <span class="im-list-text">Show Your Work</span>
+                        <span class="im-list-meta">Austin Kleon</span>
+                    </div>
+                    <div class="im-list-item">
+                        <span class="im-list-num">04</span>
+                        <span class="im-list-text">The War of Art</span>
+                        <span class="im-list-meta">S. Pressfield</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 4: Quote -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card im-quote">
+                <div class="im-quote-line"></div>
+                <div class="im-quote-text">Simplicity is the ultimate sophistication.</div>
+                <div class="im-quote-author">— Leonardo da Vinci</div>
+            </div>
+        </div>
+
+        <!-- Card 5: Tip -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card im-content">
+                <div class="im-header">
+                    <span class="im-tag">Productivity</span>
+                    <h2 class="im-title">Daily Framework</h2>
+                </div>
+                <div class="im-body">
+                    <div class="im-tip-box">
+                        <p class="im-tip-label">Pro Tip</p>
+                        <p class="im-tip-text">Block the first 2 hours of your morning for deep, creative work. No
+                            meetings, no emails.</p>
+                    </div>
+                    <div class="im-tip-box">
+                        <p class="im-tip-label">Key Insight</p>
+                        <p class="im-tip-text">Context switching costs you 23 minutes per interruption on average.</p>
+                    </div>
+                </div>
+                <div class="im-footer">
+                    <span>Save this for later →</span>
+                    <span>@minimalist</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <script src="ins-minimal.js"></script>
+</body>
+
+</html>

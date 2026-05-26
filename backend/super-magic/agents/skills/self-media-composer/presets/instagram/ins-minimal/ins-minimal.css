@@ -1,0 +1,226 @@
+/* ins-minimal.css - Instagram Minimal Clean card preset for 1080x1350 */
+
+html,
+body {
+  width: 1080px;
+  height: 1350px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+.ins-card {
+  --im-white: #ffffff;
+  --im-bg: #f8f7f4;
+  --im-ink: #1d1d1f;
+  --im-muted: #6e6e73;
+  --im-subtle: #aeaeb2;
+  --im-line: #e5e5e7;
+  --im-accent: #0071e3;
+  --im-warm: #bf5f3f;
+  --im-sage: #4a7c59;
+  --im-radius-sm: 8px;
+  --im-radius-md: 16px;
+  --im-radius-lg: 24px;
+  --im-radius-pill: 100px;
+  --im-gap-xs: 8px;
+  --im-gap-sm: 12px;
+  --im-gap-md: 20px;
+  --im-gap-lg: 32px;
+  --im-gap-xl: 48px;
+  --im-card-width: 1080px;
+  --im-card-height: 1350px;
+
+  font-family:
+    "SF Pro Display",
+    "Inter",
+    -apple-system,
+    sans-serif;
+  width: var(--im-card-width);
+  height: var(--im-card-height);
+  background: var(--im-bg);
+  padding: 100px 80px;
+  display: flex;
+  flex-direction: column;
+  color: var(--im-ink);
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* Cover */
+.ins-card.im-cover {
+  justify-content: flex-end;
+  padding-bottom: 140px;
+}
+.im-cover-eyebrow {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--im-muted);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  margin-bottom: var(--im-gap-lg);
+}
+.im-cover-title {
+  font-size: 96px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -4px;
+  color: var(--im-ink);
+}
+.im-cover-line {
+  width: 80px;
+  height: 4px;
+  background: var(--im-ink);
+  margin-top: var(--im-gap-xl);
+}
+
+/* Content */
+.ins-card.im-content {
+  background: var(--im-white);
+}
+.im-header {
+  margin-bottom: var(--im-gap-xl);
+  padding-bottom: var(--im-gap-lg);
+  border-bottom: 1px solid var(--im-line);
+}
+.im-tag {
+  display: inline-block;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--im-muted);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: var(--im-gap-md);
+}
+.im-title {
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -2px;
+}
+.im-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--im-gap-lg);
+}
+
+/* Stat block */
+.im-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--im-gap-xs);
+  padding: var(--im-gap-lg) 0;
+  border-bottom: 1px solid var(--im-line);
+}
+.im-stat:last-child {
+  border-bottom: none;
+}
+.im-stat-label {
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--im-muted);
+}
+.im-stat-value {
+  font-size: 72px;
+  font-weight: 700;
+  letter-spacing: -3px;
+  line-height: 1;
+}
+.im-stat-value.im-accent {
+  color: var(--im-accent);
+}
+.im-stat-value.im-warm {
+  color: var(--im-warm);
+}
+.im-stat-value.im-sage {
+  color: var(--im-sage);
+}
+
+/* Simple list */
+.im-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--im-gap-md);
+  padding: var(--im-gap-lg) 0;
+  border-bottom: 1px solid var(--im-line);
+}
+.im-list-item:last-child {
+  border-bottom: none;
+}
+.im-list-num {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--im-subtle);
+  width: 48px;
+}
+.im-list-text {
+  flex: 1;
+  font-size: 42px;
+  font-weight: 600;
+  letter-spacing: -1px;
+}
+.im-list-meta {
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--im-muted);
+}
+
+/* Quote */
+.ins-card.im-quote {
+  background: var(--im-white);
+  justify-content: center;
+}
+.im-quote-text {
+  font-size: 60px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -2px;
+  color: var(--im-ink);
+}
+.im-quote-author {
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--im-muted);
+  margin-top: var(--im-gap-xl);
+}
+.im-quote-line {
+  width: 48px;
+  height: 3px;
+  background: var(--im-ink);
+  margin-bottom: var(--im-gap-lg);
+}
+
+/* Tip card */
+.im-tip-box {
+  background: var(--im-bg);
+  border-radius: var(--im-radius-lg);
+  padding: 44px;
+  border: 1px solid var(--im-line);
+}
+.im-tip-label {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--im-accent);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: var(--im-gap-md);
+}
+.im-tip-text {
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--im-ink);
+}
+
+/* Footer */
+.im-footer {
+  margin-top: auto;
+  padding-top: var(--im-gap-lg);
+  border-top: 1px solid var(--im-line);
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--im-subtle);
+  display: flex;
+  justify-content: space-between;
+}

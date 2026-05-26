@@ -90,6 +90,49 @@ function PresetThumbnail({ value }: { value: string }) {
 				</div>
 			)
 
+		case "gradient-editorial":
+			// Hero image cover with gradient overlay, white content pages
+			return (
+				<div className="relative h-full w-full overflow-hidden rounded-md bg-[#2a1a4e]">
+					{/* Simulated hero image area */}
+					<div className="absolute inset-0 bg-gradient-to-br from-[#4a3f8f] via-[#6c63ff] to-[#a78bfa] opacity-70" />
+					{/* Bottom gradient overlay */}
+					<div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/70" />
+					{/* Content at bottom */}
+					<div className="absolute bottom-1 left-1.5 right-1.5 z-[1] flex flex-col gap-[2px]">
+						<div className="h-[2.5px] w-[55%] rounded-full bg-white/90" />
+						<div className="h-[2px] w-[40%] rounded-full bg-white/50" />
+					</div>
+					{/* Brand at top */}
+					<div className="absolute left-1.5 top-1 z-[1] h-[2px] w-[25%] rounded-full bg-white/50" />
+				</div>
+			)
+
+		case "personal-insight":
+			// Clean white, personal avatar style, numbered sections
+			return (
+				<div className="relative h-full w-full overflow-hidden rounded-md bg-white">
+					{/* Content */}
+					<div className="relative z-[1] flex flex-col gap-[3px] px-1.5 pt-2">
+						{/* Avatar + name row */}
+						<div className="flex items-center gap-1">
+							<div className="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-[#667eea] to-[#764ba2]" />
+							<div className="h-[2px] w-[35%] rounded-full bg-black/70" />
+						</div>
+						{/* Title */}
+						<div className="mt-1 h-[3px] w-[65%] rounded-full bg-black/80" />
+						<div className="h-[2px] w-[50%] rounded-full bg-black/40" />
+						{/* Number marker */}
+						<div className="mt-1 flex items-center gap-1">
+							<div className="flex h-2.5 w-2.5 items-center justify-center rounded-full bg-[#1a73e8] text-[5px] font-bold text-white">
+								1
+							</div>
+							<div className="h-[2px] w-[40%] rounded-full bg-black/30" />
+						</div>
+					</div>
+				</div>
+			)
+
 		case "ins-modern":
 			// Clean white + bold border frame + large rounded corners, hard shadow
 			return (

@@ -112,7 +112,10 @@ presets/
 ├── rednote/
 │   ├── neo-brutalism/
 │   ├── code-dispatch/
-│   └── dark-tech/
+│   ├── dark-tech/
+│   ├── gradient-editorial/
+│   ├── personal-insight/
+│   └── film-vintage/
 ├── instagram/
 │   └── ins-modern/
 └── wechat-official-accounts/
@@ -165,13 +168,16 @@ Decision order every time you pick a card canvas size:
 
 Presets are organized by platform under `presets/<platform>/<preset>/`. Each preset is a pair of files (`<preset>.css` + `<preset>.js`).
 
-| Platform                   | Preset          | Style summary                                                                                                                                                         |
-| -------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rednote`                  | `neo-brutalism` | Neo-Brutalism: thick black borders, hard offset shadows, saturated palette.                                                                                           |
-| `rednote`                  | `code-dispatch` | Code Dispatch: high-contrast editorial style, black/white/red palette, monospace labels, no rounded corners, grid background texture. Best for tech/coding/AI topics. |
-| `rednote`                  | `dark-tech`     | Dark-Tech: deep black background, gold accent, thin 1px borders, heavy/light font-weight contrast. Inspired by DJI-style review cards. Best for product/gear reviews. |
-| `instagram`                | `ins-modern`    | Instagram-style modern: white background, generous whitespace, minimal typography.                                                                                    |
-| `wechat-official-accounts` | _(coming soon)_ | Presets for WeChat article style will be added here.                                                                                                                  |
+| Platform                   | Preset               | Style summary                                                                                                                                                                            |
+| -------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rednote`                  | `neo-brutalism`      | Neo-Brutalism: thick black borders, hard offset shadows, saturated palette.                                                                                                              |
+| `rednote`                  | `code-dispatch`      | Code Dispatch: high-contrast editorial style, black/white/red palette, monospace labels, no rounded corners, grid background texture. Best for tech/coding/AI topics.                    |
+| `rednote`                  | `dark-tech`          | Dark-Tech: deep black background, gold accent, thin 1px borders, heavy/light font-weight contrast. Inspired by DJI-style review cards. Best for product/gear reviews.                    |
+| `rednote`                  | `gradient-editorial` | Image Editorial: cover uses hero/theme image with gradient overlay for text readability, clean white content pages, rounded cards. Best for AI/tech insight articles.                    |
+| `rednote`                  | `personal-insight`   | Personal Insight: clean white background, profile avatar, numbered sections, reading-note style. Best for personal reflections and knowledge sharing.                                    |
+| `rednote`                  | `film-vintage`       | Film Vintage: dark cinematic cover, polaroid-style photo frames, mono grain texture, red accent, serif+mono typography. Best for film photography, gear reviews, and city walk journals. |
+| `instagram`                | `ins-modern`         | Instagram-style modern: white background, generous whitespace, minimal typography.                                                                                                       |
+| `wechat-official-accounts` | _(coming soon)_      | Presets for WeChat article style will be added here.                                                                                                                                     |
 
 Source paths inside this skill:
 
@@ -179,6 +185,9 @@ Source paths inside this skill:
 presets/rednote/neo-brutalism/neo-brutalism.{css,js}
 presets/rednote/code-dispatch/code-dispatch.{css,js}
 presets/rednote/dark-tech/dark-tech.{css,js}
+presets/rednote/gradient-editorial/gradient-editorial.{css,js}
+presets/rednote/personal-insight/personal-insight.{css,js}
+presets/rednote/film-vintage/film-vintage.{css,js}
 presets/instagram/ins-modern/ins-modern.{css,js}
 ```
 

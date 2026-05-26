@@ -880,6 +880,14 @@
 						"description": "Dark background, gold accents, thin borders, strong font-weight contrast. Great for product/gear reviews",
 						"label": "Dark Tech"
 					},
+					"gradientEditorial": {
+						"description": "Cover uses hero/theme image with gradient overlay, clean white content pages, rounded cards, modern tech article style",
+						"label": "Image Editorial"
+					},
+					"personalInsight": {
+						"description": "Clean white background, profile avatar, numbered sections, reading-note style for personal insights",
+						"label": "Personal Insight"
+					},
 					"insModern": {
 						"description": "White background, generous whitespace, minimal typography",
 						"label": "Modern Minimal"

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useMemo, type CSSProperties } from "rea
 import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { userStore } from "@/models/user"
 import { SelfMediaBrandRecordService } from "@/services/selfMedia"
 import { SelfMediaFileStorageService } from "../../services/SelfMediaFileStorageService"
@@ -259,97 +260,99 @@ function SelfMediaInitPanel({
 					<StepIndicator currentStep={currentStep} onNavigate={navigateToStep} />
 
 					{/* Step content */}
-					<div
-						className="relative min-h-0 flex-1 overflow-y-auto bg-white px-6"
+					<ScrollArea
+						className="relative min-h-0 flex-1 bg-white"
 						data-testid="self-media-init-panel-content"
 					>
-						{showTemplateSelector && (
-							<TemplateSelector
-								templates={templates}
-								onLoadTemplate={handleLoadTemplate}
-								onStartBlank={handleStartBlank}
-							/>
-						)}
+						<div className="px-6">
+							{showTemplateSelector && (
+								<TemplateSelector
+									templates={templates}
+									onLoadTemplate={handleLoadTemplate}
+									onStartBlank={handleStartBlank}
+								/>
+							)}
 
-						{!showTemplateSelector && (
-							<>
-								{currentStep === 0 && (
-									<StepBrandInfo
-										ref={brandInfoRef}
-										author={data.global.author}
-										brandPosition={data.global.brandPosition}
-										targetAudience={data.global.targetAudience}
-										brandImages={data.global.brandImages}
-										onChange={handleBrandChange}
-										onBrandImagesChange={handleBrandImagesChange}
-										fileStorageService={fileStorageService}
-										brandService={brandService}
-										attachmentList={attachmentList}
-										projectId={projectId}
-										folderPath={folderPath}
-										onBrandImagesUploadingChange={setBrandImagesUploading}
-										onConfirmNext={handleNext}
-										brandImageUploadTarget="brand"
-									/>
-								)}
-								{currentStep === 1 && (
-									<StepTopicAndDetail
-										articles={data.articles}
-										onChange={handleArticlesChange}
-										onArticleUpdate={handleArticleUpdate}
-										globalSettings={data.global}
-										onPersistDraft={debouncedSaveDraft}
-										fileStorageService={fileStorageService}
-									/>
-								)}
-								{currentStep === 2 && (
-									<StepConfirm
-										data={data}
-										selectedProject={selectedProject}
-										folderFileId={folderFileId}
-										folderPath={folderPath}
-										attachmentList={attachmentList}
-										onSaveTemplate={
-											fileStorageService
-												? async (name: string) => {
-														await fileStorageService.saveTemplate(
-															data,
-															name,
-														)
-													}
-												: undefined
-										}
-										onArchiveDraft={
-											fileStorageService
-												? async () => {
-														skipDraftPersistenceRef.current = true
-														try {
-															const archiveId =
-																await fileStorageService.archiveDraft(
-																	dataRef.current,
-																	currentStepRef.current,
-																)
-															if (!archiveId) {
-																throw new Error(
-																	"Failed to archive draft before generation",
-																)
-															}
-														} catch (error) {
-															skipDraftPersistenceRef.current = false
-															throw error
+							{!showTemplateSelector && (
+								<>
+									{currentStep === 0 && (
+										<StepBrandInfo
+											ref={brandInfoRef}
+											author={data.global.author}
+											brandPosition={data.global.brandPosition}
+											targetAudience={data.global.targetAudience}
+											brandImages={data.global.brandImages}
+											onChange={handleBrandChange}
+											onBrandImagesChange={handleBrandImagesChange}
+											fileStorageService={fileStorageService}
+											brandService={brandService}
+											attachmentList={attachmentList}
+											projectId={projectId}
+											folderPath={folderPath}
+											onBrandImagesUploadingChange={setBrandImagesUploading}
+											onConfirmNext={handleNext}
+											brandImageUploadTarget="brand"
+										/>
+									)}
+									{currentStep === 1 && (
+										<StepTopicAndDetail
+											articles={data.articles}
+											onChange={handleArticlesChange}
+											onArticleUpdate={handleArticleUpdate}
+											globalSettings={data.global}
+											onPersistDraft={debouncedSaveDraft}
+											fileStorageService={fileStorageService}
+										/>
+									)}
+									{currentStep === 2 && (
+										<StepConfirm
+											data={data}
+											selectedProject={selectedProject}
+											folderFileId={folderFileId}
+											folderPath={folderPath}
+											attachmentList={attachmentList}
+											onSaveTemplate={
+												fileStorageService
+													? async (name: string) => {
+															await fileStorageService.saveTemplate(
+																data,
+																name,
+															)
 														}
-													}
-												: undefined
-										}
-										onGenerateFailed={() => {
-											skipDraftPersistenceRef.current = false
-										}}
-										onBackHome={handleBackHome}
-									/>
-								)}
-							</>
-						)}
-					</div>
+													: undefined
+											}
+											onArchiveDraft={
+												fileStorageService
+													? async () => {
+															skipDraftPersistenceRef.current = true
+															try {
+																const archiveId =
+																	await fileStorageService.archiveDraft(
+																		dataRef.current,
+																		currentStepRef.current,
+																	)
+																if (!archiveId) {
+																	throw new Error(
+																		"Failed to archive draft before generation",
+																	)
+																}
+															} catch (error) {
+																skipDraftPersistenceRef.current = false
+																throw error
+															}
+														}
+													: undefined
+											}
+											onGenerateFailed={() => {
+												skipDraftPersistenceRef.current = false
+											}}
+											onBackHome={handleBackHome}
+										/>
+									)}
+								</>
+							)}
+						</div>
+					</ScrollArea>
 
 					<StepNavigation
 						currentStep={currentStep}

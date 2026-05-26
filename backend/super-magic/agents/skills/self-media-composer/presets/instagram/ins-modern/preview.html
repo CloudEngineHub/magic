@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Ins Modern — Preview</title>
+    <link rel="stylesheet" href="ins-modern.css">
+    <style>
+        html,
+        body {
+            width: auto;
+            height: auto;
+            overflow: auto;
+            background: #e5e5e5;
+        }
+
+        .preview-container {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+            padding: 40px;
+            align-items: center;
+        }
+
+        .preview-card-wrapper {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            border-radius: 4px;
+            overflow: hidden;
+            transform: scale(0.35);
+            transform-origin: top center;
+            width: 1080px;
+            height: 1350px;
+            margin-bottom: calc(-1350px * 0.65);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="preview-container">
+
+        <!-- Card 1: Cover -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card ins-cover">
+                <h1 class="ins-cover-title">Top 5<br><span class="ins-hl-pink">AI Tools</span><br>in 2024</h1>
+                <p class="ins-cover-subtitle">A curated guide for <span class="ins-hl-yellow">creators</span></p>
+            </div>
+        </div>
+
+        <!-- Card 2: Content with data cards -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card ins-content">
+                <div class="ins-header-area">
+                    <span class="ins-page-tag">INSIGHTS</span>
+                    <h2 class="ins-main-title">AI Productivity <span class="ins-hl-pink">Stats</span></h2>
+                </div>
+                <div class="ins-body-area">
+                    <div class="ins-data-card">
+                        <p class="ins-dc-title">Average Time Saved</p>
+                        <p class="ins-dc-value">3.2<span style="font-size:48px;color:var(--ins-muted);">hrs/day</span>
+                        </p>
+                    </div>
+                    <div class="ins-data-card">
+                        <p class="ins-dc-title">Error Reduction</p>
+                        <p class="ins-dc-value ins-red">47%</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 3: Content with ranking -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card ins-content">
+                <div class="ins-header-area">
+                    <span class="ins-page-tag">RANKING</span>
+                    <h2 class="ins-main-title">Most Popular Tools</h2>
+                </div>
+                <div class="ins-body-area">
+                    <div class="ins-rank-row ins-top1">
+                        <span class="ins-rank-num">01</span>
+                        <span class="ins-rank-name">Cursor</span>
+                        <span class="ins-rank-val">9.2</span>
+                    </div>
+                    <div class="ins-rank-row">
+                        <span class="ins-rank-num">02</span>
+                        <span class="ins-rank-name">Copilot</span>
+                        <span class="ins-rank-val">8.8</span>
+                    </div>
+                    <div class="ins-rank-row">
+                        <span class="ins-rank-num">03</span>
+                        <span class="ins-rank-name">Claude</span>
+                        <span class="ins-rank-val">8.5</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 4: Quote Card -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card ins-quote">
+                <div class="ins-quote-mark">"</div>
+                <div class="ins-quote-text">The main part of intellectual work isn’t coding, but <span
+                        class="ins-hl-pink">thinking</span>. AI helps you code so you can think more.</div>
+                <div class="ins-quote-author">Tech Visionary</div>
+            </div>
+        </div>
+
+        <!-- Card 5: Steps / List Card -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card ins-steps">
+                <div class="ins-header-area">
+                    <span class="ins-page-tag">TUTORIAL</span>
+                    <h2 class="ins-main-title">How to start with AI</h2>
+                </div>
+                <div class="ins-body-area">
+                    <div class="ins-step-item">
+                        <div class="ins-step-num" style="background: var(--ins-blue);">1</div>
+                        <div class="ins-step-content">
+                            <div class="ins-step-title">Define your problem</div>
+                            <div class="ins-step-desc">Figure out what repetitive tasks take up most of your time.</div>
+                        </div>
+                    </div>
+                    <div class="ins-step-item">
+                        <div class="ins-step-num" style="background: var(--ins-purple);">2</div>
+                        <div class="ins-step-content">
+                            <div class="ins-step-title">Choose your tool</div>
+                            <div class="ins-step-desc">Try out different models like GPT-4 or Claude.</div>
+                        </div>
+                    </div>
+                    <div class="ins-step-item">
+                        <div class="ins-step-num" style="background: var(--ins-pink);">3</div>
+                        <div class="ins-step-content">
+                            <div class="ins-step-title">Automate & Scale</div>
+                            <div class="ins-step-desc">Build automated pipelines with the API.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 6: CTA Card -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card ins-cta">
+                <div class="ins-cta-title">Was this post<br><span>Helpful?</span></div>
+                <div class="ins-cta-icons">
+                    <div class="ins-cta-icon-box">❤️</div>
+                    <div class="ins-cta-icon-box">💬</div>
+                    <div class="ins-cta-icon-box">✈️</div>
+                    <div class="ins-cta-icon-box">📌</div>
+                </div>
+                <div class="ins-cta-btn">Follow for more</div>
+            </div>
+        </div>
+
+        <!-- Card 7: Comparison / VS -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card ins-vs">
+                <div class="ins-header-area">
+                    <span class="ins-page-tag">COMPARE</span>
+                    <h2 class="ins-main-title">React <span class="ins-hl-pink">vs</span> Vue</h2>
+                </div>
+                <div class="ins-vs-cols">
+                    <div class="ins-vs-col ins-vs-left">
+                        <div class="ins-vs-col-title">React</div>
+                        <div class="ins-vs-item">JSX Syntax</div>
+                        <div class="ins-vs-item">Huge Ecosystem</div>
+                        <div class="ins-vs-item">Meta Backed</div>
+                        <div class="ins-vs-item">Steep Learning Curve</div>
+                    </div>
+                    <div class="ins-vs-col ins-vs-right">
+                        <div class="ins-vs-col-title">Vue</div>
+                        <div class="ins-vs-item">Template Syntax</div>
+                        <div class="ins-vs-item">Easy to Learn</div>
+                        <div class="ins-vs-item">Community Driven</div>
+                        <div class="ins-vs-item">Gentle Learning Curve</div>
+                    </div>
+                </div>
+                <div class="ins-swipe-footer">
+                    <span class="ins-swipe-dot"></span>
+                    <span class="ins-swipe-dot"></span>
+                    <span class="ins-swipe-dot ins-active"></span>
+                    <span class="ins-swipe-dot"></span>
+                    <span class="ins-swipe-dot"></span>
+                    <span class="ins-swipe-text">Swipe →</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 8: Timeline -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card ins-content">
+                <div class="ins-header-area">
+                    <span class="ins-page-tag">JOURNEY</span>
+                    <h2 class="ins-main-title">My <span class="ins-hl-pink">2024</span> Timeline</h2>
+                </div>
+                <div class="ins-body-area">
+                    <div class="ins-timeline">
+                        <div class="ins-tl-item">
+                            <div class="ins-tl-date">Jan 2024</div>
+                            <div class="ins-tl-title">Started Learning AI</div>
+                            <div class="ins-tl-desc">Enrolled in my first ML course online</div>
+                        </div>
+                        <div class="ins-tl-item">
+                            <div class="ins-tl-date">Mar 2024</div>
+                            <div class="ins-tl-title">Built First Project</div>
+                            <div class="ins-tl-desc">Shipped a chatbot using GPT-4 API</div>
+                        </div>
+                        <div class="ins-tl-item ins-tl-active">
+                            <div class="ins-tl-date">Jun 2024</div>
+                            <div class="ins-tl-title">10K Followers 🎉</div>
+                            <div class="ins-tl-desc">Grew my tech content community</div>
+                        </div>
+                        <div class="ins-tl-item">
+                            <div class="ins-tl-date">Sep 2024</div>
+                            <div class="ins-tl-title">Launched SaaS Product</div>
+                            <div class="ins-tl-desc">From side project to $5K MRR</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 9: Checklist -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card ins-content">
+                <div class="ins-header-area">
+                    <span class="ins-page-tag">CHECKLIST</span>
+                    <h2 class="ins-main-title">Launch Day ✅</h2>
+                </div>
+                <div class="ins-body-area">
+                    <div class="ins-checklist">
+                        <div class="ins-check-item ins-checked">
+                            <div class="ins-check-box">✓</div>
+                            <span class="ins-check-text">Write landing page copy</span>
+                        </div>
+                        <div class="ins-check-item ins-checked">
+                            <div class="ins-check-box">✓</div>
+                            <span class="ins-check-text">Set up analytics tracking</span>
+                        </div>
+                        <div class="ins-check-item ins-checked">
+                            <div class="ins-check-box">✓</div>
+                            <span class="ins-check-text">Configure payment gateway</span>
+                        </div>
+                        <div class="ins-check-item">
+                            <div class="ins-check-box"></div>
+                            <span class="ins-check-text">Submit to Product Hunt</span>
+                        </div>
+                        <div class="ins-check-item">
+                            <div class="ins-check-box"></div>
+                            <span class="ins-check-text">Send launch email blast</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 10: Dashboard -->
+        <div class="preview-card-wrapper">
+            <div class="ins-card ins-content">
+                <div class="ins-header-area">
+                    <span class="ins-page-tag">DASHBOARD</span>
+                    <h2 class="ins-main-title">Weekly Report</h2>
+                </div>
+                <div class="ins-body-area">
+                    <div class="ins-dashboard">
+                        <div class="ins-dash-cell">
+                            <span class="ins-dash-label">Revenue</span>
+                            <span class="ins-dash-value">$12.4K</span>
+                            <span class="ins-dash-change ins-up">↑ 23%</span>
+                        </div>
+                        <div class="ins-dash-cell">
+                            <span class="ins-dash-label">Users</span>
+                            <span class="ins-dash-value">3,842</span>
+                            <span class="ins-dash-change ins-up">↑ 12%</span>
+                        </div>
+                        <div class="ins-dash-cell">
+                            <span class="ins-dash-label">Bounce</span>
+                            <span class="ins-dash-value">34%</span>
+                            <span class="ins-dash-change">↓ 5%</span>
+                        </div>
+                        <div class="ins-dash-cell">
+                            <span class="ins-dash-label">Conv. Rate</span>
+                            <span class="ins-dash-value">8.7%</span>
+                            <span class="ins-dash-change ins-up">↑ 1.2%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <script src="ins-modern.js"></script>
+</body>
+
+</html>

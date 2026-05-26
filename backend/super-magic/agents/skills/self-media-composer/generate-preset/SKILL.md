@@ -28,11 +28,13 @@ Generates a ready-to-use CSS + JS preset bundle for self-media cards, derived fr
 Load this skill immediately when **any** of the following is true:
 
 **English triggers:**
+
 - The user selects "Custom style — describe the visual language you want" in the Step 4.1 preset picker.
 - The user says phrases like "make a new preset", "create a style for me", "I want a custom template", "design a theme that looks like…".
 - The user provides a reference image, Figma frame, or screenshot and asks to "generate a matching preset".
 
 **中文触发词（出现以下任意表达时立即加载本技能）：**
+
 - 用户在 Step 4.1 中选择了"自定义样式"选项
 - 自定义样式 / 帮我设计一套风格 / 我想要一个自定义模板
 - 新建预设 / 创建新的视觉模板 / 帮我设计一个主题
@@ -49,13 +51,13 @@ Do **not** load this skill for small card-level tweaks (e.g. "change this card's
 
 Interview the user (or infer from context) to resolve these five axes. Use `ask_user` if any axis is missing and cannot be safely inferred.
 
-| Axis | Key questions | Examples |
-|---|---|---|
-| **Mood / Aesthetic** | How should a viewer *feel*? | Energetic, calm, authoritative, playful, minimalist, luxurious, retro, futuristic |
-| **Color Palette** | Primary bg, accent, text, border colors | Light or dark bg? Warm or cool tones? Saturated or muted? |
-| **Typography** | Font personality | Serif, sans-serif, monospace? Heavy weight contrast or uniform? |
-| **Decoration** | Visual texture and ornamentation | Grid lines, ruled paper, noise texture, clean flat, geometric shapes, gradient overlays |
-| **Content Domain** | What topics will the cards cover? | Tech/coding, lifestyle, beauty, finance, travel, food, product reviews |
+| Axis                 | Key questions                           | Examples                                                                                |
+| -------------------- | --------------------------------------- | --------------------------------------------------------------------------------------- |
+| **Mood / Aesthetic** | How should a viewer _feel_?             | Energetic, calm, authoritative, playful, minimalist, luxurious, retro, futuristic       |
+| **Color Palette**    | Primary bg, accent, text, border colors | Light or dark bg? Warm or cool tones? Saturated or muted?                               |
+| **Typography**       | Font personality                        | Serif, sans-serif, monospace? Heavy weight contrast or uniform?                         |
+| **Decoration**       | Visual texture and ornamentation        | Grid lines, ruled paper, noise texture, clean flat, geometric shapes, gradient overlays |
+| **Content Domain**   | What topics will the cards cover?       | Tech/coding, lifestyle, beauty, finance, travel, food, product reviews                  |
 
 If the user provides a reference image, use `visual_understanding` to extract the palette, dominant textures, typography weight, and layout language before proceeding.
 
@@ -119,25 +121,49 @@ Write `<preset-name>.js` as a self-executing IIFE that exposes a global registry
 - Expose only one global: `window.<PascalCase>Presets`.
 - Include the full CSS class quick-reference as a JSDoc comment block.
 
-### Step G5 — Save the Files
+### Step G5 — Author the Preview File
 
-Write both files directly into the project's `shared/presets/<preset-name>/` folder:
+Write `<preset-name>/preview.html` — a standalone gallery page that showcases all major CSS components and at least one chart rendered by the JS preset. Load [references/preview-skeleton.md](./references/preview-skeleton.md) for the full platform-specific template.
+
+**Key rules:**
+
+- Override `html, body { width: auto; height: auto; overflow: auto; }` so the page scrolls.
+- Include **at least 4 cards**: cover, content/stats, content/chart, content/list.
+- Exercise every §2 component class and every §3 utility group at least once across all cards.
+- Load ECharts from CDN (`https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js`) and render at least one chart using the JS preset's `.get()` method.
+- Fill cards with representative placeholder content matching the content domain from Step G1 — never leave cards empty or use generic "Lorem ipsum".
+- Use the same class prefix and naming as the authored CSS; do not introduce ad-hoc styles that bypass the preset.
+
+**Preview layout by platform:**
+
+| Platform    | Container layout         | Card wrapper size         | Notes                                                  |
+| ----------- | ------------------------ | ------------------------- | ------------------------------------------------------ |
+| `rednote`   | `flex-wrap: wrap`        | `540×720`                 | Cards at native size, side-by-side                     |
+| `instagram` | `flex-direction: column` | `1080×1350` scaled to 50% | Use `transform: scale(0.5)` + negative `margin-bottom` |
+
+### Step G6 — Save the Files
+
+Write all three files directly into the project's `shared/presets/<preset-name>/` folder:
 
 ```
 <project-root>/shared/presets/<preset-name>/<preset-name>.css
 <project-root>/shared/presets/<preset-name>/<preset-name>.js
+<project-root>/shared/presets/<preset-name>/preview.html
 ```
 
-Use `write_file` for both. If the destination already exists, ask the user before overwriting.
+Use `write_file` for all three. If the destination already exists, ask the user before overwriting.
 
-### Step G6 — Register the Preset
+### Step G7 — Register the Preset
 
 After writing the files, do **not** modify the master `self-media-composer/SKILL.md`. The generated preset lives only in the project's `shared/presets/` folder. It is a **project-local** preset, not a built-in one.
 
 The self-media-composer workflow (Step 4.4) will reference it exactly like a built-in preset:
 
 ```html
-<link rel="stylesheet" href="../../shared/presets/<preset-name>/<preset-name>.css">
+<link
+  rel="stylesheet"
+  href="../../shared/presets/<preset-name>/<preset-name>.css"
+/>
 <script src="../../shared/presets/<preset-name>/<preset-name>.js"></script>
 ```
 
@@ -148,6 +174,7 @@ The self-media-composer workflow (Step 4.4) will reference it exactly like a bui
 Before handing off the generated files, verify every item:
 
 **CSS**
+
 - [ ] `html, body { width:540px; height:720px; overflow:hidden; }` present and exact
 - [ ] No `font-size` set on `html`
 - [ ] `:root` block lists all tokens from Step G2
@@ -157,15 +184,28 @@ Before handing off the generated files, verify every item:
 - [ ] Class names all share the same prefix and do not collide with Tailwind (`tw-` is safe; avoid single-word names like `.card`, `.header`)
 
 **JS**
+
 - [ ] Token object `T` matches CSS `:root` hex values exactly
 - [ ] At least 3 chart presets implemented
 - [ ] Wrapped in IIFE, exposes only one global
 - [ ] CSS quick-reference included as JSDoc comment
 - [ ] No external fetches or dynamic DOM manipulation
 
+**Preview**
+
+- [ ] `preview.html` present in the same directory as CSS/JS
+- [ ] `html, body` override removes fixed canvas (width/height: auto, overflow: auto)
+- [ ] At least 4 cards shown (cover + 3 content variants)
+- [ ] Every §2 component class appears at least once
+- [ ] Every §3 utility group demonstrated at least once
+- [ ] ECharts loaded from CDN and at least one chart rendered via the JS preset
+- [ ] Card content is domain-relevant (not generic placeholders)
+- [ ] No broken layout — cards do not overflow or overlap
+
 **Files**
-- [ ] Both files saved at `shared/presets/<preset-name>/`
-- [ ] File names match the preset slug exactly (e.g. `soft-pastel.css`, `soft-pastel.js`)
+
+- [ ] All three files saved at `shared/presets/<preset-name>/`
+- [ ] File names match the preset slug exactly (e.g. `soft-pastel.css`, `soft-pastel.js`, `preview.html`)
 
 ---
 
@@ -173,10 +213,11 @@ Before handing off the generated files, verify every item:
 
 Load these files during the corresponding steps:
 
-| Reference | When to load |
-|---|---|
-| [CSS File Anatomy](./references/css-anatomy.md) | During Step G3 — full §0–§4 structure, component list, utility groups |
-| [JS File Skeleton](./references/js-skeleton.md) | During Step G4 — complete IIFE skeleton to fill in |
+| Reference                                                 | When to load                                                                 |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [CSS File Anatomy](./references/css-anatomy.md)           | During Step G3 — full §0–§4 structure, component list, utility groups        |
+| [JS File Skeleton](./references/js-skeleton.md)           | During Step G4 — complete IIFE skeleton to fill in                           |
+| [Preview HTML Skeleton](./references/preview-skeleton.md) | During Step G5 — platform-specific gallery template, card content guidelines |
 
 ---
 

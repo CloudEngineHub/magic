@@ -188,6 +188,23 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		icon: "⚡",
 	},
 	{
+		value: "gradient-editorial",
+		labelKey: "detail.selfMedia.initPanel.visuals.gradientEditorial.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.gradientEditorial.description",
+		platforms: ["rednote"],
+		swatch: "linear-gradient(135deg, #667eea 0%, #764ba2 50%, #a78bfa 100%)",
+		icon: "🟣",
+	},
+	{
+		value: "personal-insight",
+		labelKey: "detail.selfMedia.initPanel.visuals.personalInsight.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.personalInsight.description",
+		platforms: ["rednote"],
+		swatch: "linear-gradient(135deg, #ffffff 0%, #f0f7ff 50%, #1a73e8 100%)",
+		icon: "📝",
+	},
+
+	{
 		value: "ins-modern",
 		labelKey: "detail.selfMedia.initPanel.visuals.insModern.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.insModern.description",

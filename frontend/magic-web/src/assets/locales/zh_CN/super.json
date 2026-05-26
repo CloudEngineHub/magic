@@ -881,6 +881,14 @@
 						"description": "深黑背景、金色强调、细边框、字重对比强烈，适合产品/装备测评",
 						"label": "暗黑科技"
 					},
+					"gradientEditorial": {
+						"description": "封面使用主题图+渐变遮罩，白色内容页、圆角卡片、清新现代，适合AI/科技资讯分享",
+						"label": "图文编辑"
+					},
+					"personalInsight": {
+						"description": "简约白底、头像署名、编号段落、读书笔记风，适合个人观点/知识分享",
+						"label": "个人洞察"
+					},
 					"insModern": {
 						"description": "白色背景、充裕留白、极简排版",
 						"label": "现代简约"

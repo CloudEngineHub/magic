@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Gradient Editorial — Preview</title>
+<link rel="stylesheet" href="gradient-editorial.css">
+<style>
+  html, body { width: auto; height: auto; overflow: auto; background: #e5e5e5; }
+  .preview-container {
+    display: flex; flex-wrap: wrap; gap: 32px; padding: 40px;
+    justify-content: center; align-items: flex-start;
+  }
+  .preview-card-wrapper {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    border-radius: 4px; overflow: hidden;
+  }
+</style>
+</head>
+<body>
+<div class="preview-container">
+
+  <!-- Card 1: Cover with hero image -->
+  <div class="preview-card-wrapper">
+    <div class="ge-card ge-cover" style="background-image: url('https://images.unsplash.com/photo-1676299081847-824916de030a?w=600&q=80');">
+      <span class="ge-brand">Codex</span>
+      <h1 class="ge-cover-title">一段提示词自动蒸馏你自己<br>让日常重复工作全自动化</h1>
+      <p class="ge-cover-quote">Codex 提供自动化重复工作流的技巧，通过回顾历史会话识别并优化日常任务。</p>
+      <div class="ge-cover-tags">
+        <span class="ge-cover-tag">AI 自动化</span>
+        <span class="ge-cover-tag">Codex</span>
+        <span class="ge-cover-tag">工作流</span>
+      </div>
+      <span class="ge-cover-meta">@超级麦吉 · 2024.05</span>
+    </div>
+  </div>
+
+  <!-- Card 2: Content Page -->
+  <div class="preview-card-wrapper">
+    <div class="ge-card ge-content">
+      <div class="ge-header">
+        <span class="ge-page-num">02 / 05</span>
+        <span class="ge-header-title">核心方法</span>
+      </div>
+      <h2 class="ge-section accented">如何让 Codex 自动蒸馏工作流？</h2>
+      <p class="ge-para">总体思想是让 Codex 回顾你的会话、Memories 和 Chronicle，识别其中的模式，复用已有内容，并且只创建最小但有用的技能、子代理或自动化。</p>
+      <div class="ge-quote">
+        <p class="ge-quote-text">只有当候选项满足以下条件时才采取行动：至少发生过两次，或明显很可能再次发生且重复成本较高。</p>
+      </div>
+      <div class="ge-list">
+        <div class="ge-list-item">输入稳定、流程可重复，并且有明确产出或停止条件</div>
+        <div class="ge-list-item">能明显提升速度、质量、一致性或可靠性</div>
+        <div class="ge-list-item">尚未被现有内容充分覆盖</div>
+      </div>
+      <div class="ge-footer">
+        <span class="ge-footer-left">@超级麦吉</span>
+        <span class="ge-footer-right">收藏 + 关注</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 3: Content with steps -->
+  <div class="preview-card-wrapper">
+    <div class="ge-card ge-content gray-bg">
+      <div class="ge-header">
+        <span class="ge-page-num">03 / 05</span>
+        <span class="ge-header-title">操作步骤</span>
+      </div>
+      <h2 class="ge-section">按优先顺序使用可用证据</h2>
+      <div class="ge-step">
+        <span class="ge-step-num">1</span>
+        <div class="ge-step-content">
+          <h4 class="ge-step-title">回顾 Codex 会话和任务摘要</h4>
+          <p class="ge-step-desc">找到最近 30 天内重复出现的任务模式</p>
+        </div>
+      </div>
+      <div class="ge-step">
+        <span class="ge-step-num">2</span>
+        <div class="ge-step-content">
+          <h4 class="ge-step-title">分析 Memories 和 Rollout 摘要</h4>
+          <p class="ge-step-desc">发现跨会话重复出现的模式</p>
+        </div>
+      </div>
+      <div class="ge-step">
+        <span class="ge-step-num">3</span>
+        <div class="ge-step-content">
+          <h4 class="ge-step-title">选择最小且合适的形式</h4>
+          <p class="ge-step-desc">Skill 用于可复用流程，Subagent 用于需要独立推理的任务</p>
+        </div>
+      </div>
+      <div class="ge-divider gradient"></div>
+      <div class="ge-highlight-card gradient">
+        <h4 class="ge-highlight-card-title">💡 关键原则</h4>
+        <p class="ge-highlight-card-body">优先复用或扩展已有内容，避免重复创建。Chronicle 仅用于发现，重要细节尽可能回到相关源系统中确认。</p>
+      </div>
+      <div class="ge-footer">
+        <span class="ge-footer-left">@超级麦吉</span>
+        <span class="ge-footer-right">下一页 →</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="gradient-editorial.js"></script>
+</body>
+</html>
