@@ -90,6 +90,7 @@ function AICardCreateDialog({
 				prompt: formValues.prompt.trim(),
 				cardName: formValues.taskName.trim(),
 				template: formValues.template,
+				customTemplatePrompt: formValues.customTemplatePrompt?.trim(),
 				projectId,
 				folderPath,
 				timeConfig: formValues.timeConfig,

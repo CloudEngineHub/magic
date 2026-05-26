@@ -37,6 +37,7 @@ function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
 		saveEditContent,
 		selectedProject,
 		allowEdit = false,
+		openFileTab,
 	} = props
 	const folderFileId = data?.file_id
 	const folderPath = data?.file_name || ""
@@ -62,6 +63,7 @@ function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
 				selectedProject={selectedProject}
 				folderFileId={folderFileId}
 				folderPath={folderPath}
+				openFileTab={openFileTab}
 			/>
 		</SelfMediaStoreProvider>
 	)
@@ -75,6 +77,7 @@ interface SelfMediaRootRenderInnerProps {
 	selectedProject?: SelfMediaRootRenderProps["selectedProject"]
 	folderFileId?: string
 	folderPath?: string
+	openFileTab?: (fileItem: any) => void
 }
 
 const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
@@ -85,6 +88,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	selectedProject,
 	folderFileId,
 	folderPath,
+	openFileTab,
 }: SelfMediaRootRenderInnerProps) {
 	const { t } = useTranslation("super")
 	const store = useSelfMediaStore()
@@ -106,8 +110,8 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 
 	useEffect(() => {
 		if (rootLoading || rootMode !== null) return
-		setRootMode(isEmptyProject ? "create" : "home")
-	}, [isEmptyProject, rootLoading, rootMode])
+		setRootMode(isEmptyProject && allowEdit ? "create" : "home")
+	}, [isEmptyProject, rootLoading, rootMode, allowEdit])
 
 	const handleStartCreateArticle = useCallback(() => {
 		setRootMode("create")
@@ -139,6 +143,18 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	const handleShowPlatform = useCallback(() => {
 		setRootMode("platform")
 	}, [])
+	const handleOpenAICardFolder = useCallback(
+		(folder: {
+			file_id: string
+			file_name?: string
+			is_directory?: boolean
+			children?: any[]
+			display_config?: any
+		}) => {
+			openFileTab?.(folder)
+		},
+		[openFileTab],
+	)
 
 	const PlatformComponent = useMemo(() => getPlatformComponent(platform), [platform])
 
@@ -156,6 +172,19 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	}
 
 	if (activeRootMode === "create" && isEmptyProject) {
+		if (!allowEdit) {
+			return (
+				<Flex
+					justify="center"
+					align="center"
+					className={cn("h-full w-full bg-background", className)}
+				>
+					<p className="text-sm text-muted-foreground">
+						{t("detail.selfMedia.home.subtitle")}
+					</p>
+				</Flex>
+			)
+		}
 		return (
 			<div
 				className={cn("h-full min-h-0 w-full", className)}
@@ -179,10 +208,12 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					posts={store.allPosts}
 					attachmentList={attachmentList}
 					onEnsurePostLoaded={handleEnsureHomePostLoaded}
-					onCreateArticle={handleStartCreateArticle}
+					onCreateArticle={allowEdit ? handleStartCreateArticle : undefined}
 					onOpenPost={handleOpenPost}
-					onOpenBrandConfig={handleOpenBrandConfig}
-					onCreateAICard={handleOpenAICardCreate}
+					onOpenBrandConfig={allowEdit ? handleOpenBrandConfig : undefined}
+					onCreateAICard={allowEdit ? handleOpenAICardCreate : undefined}
+					onOpenAICardFolder={openFileTab ? handleOpenAICardFolder : undefined}
+					folderFileId={folderFileId}
 				/>
 				<BrandConfigDialog
 					open={brandConfigOpen}

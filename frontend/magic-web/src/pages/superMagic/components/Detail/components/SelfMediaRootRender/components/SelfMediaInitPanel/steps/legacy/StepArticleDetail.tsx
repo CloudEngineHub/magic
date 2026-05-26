@@ -401,6 +401,10 @@ export default function StepArticleDetail({
 										: base
 									handleFieldChange("notes", newNotes)
 								}}
+								customDescriptionJson={currentArticle.visualDescriptionJson}
+								onCustomDescriptionJsonChange={(json) =>
+									handleFieldChange("visualDescriptionJson", json)
+								}
 								visualReferenceFiles={currentArticle.visualReferenceFiles || []}
 								onVisualReferenceFilesChange={(files) =>
 									handleFieldChange("visualReferenceFiles", files)

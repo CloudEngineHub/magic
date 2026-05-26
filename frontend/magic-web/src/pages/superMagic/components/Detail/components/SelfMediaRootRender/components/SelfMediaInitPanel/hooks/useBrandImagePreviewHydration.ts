@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { getFileContentById } from "@/pages/superMagic/utils/api"
+import { getTemporaryDownloadUrl, downloadFileContent } from "@/pages/superMagic/utils/api"
 import type { BrandImageItem } from "../types"
 import type { AttachmentNode } from "../../../services"
 import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../../../constants/imageProcess"
@@ -42,29 +42,40 @@ function findFileIdByRelativePath(
 	return null
 }
 
-async function loadPreviewUrl(
-	item: BrandImageItem,
-	attachmentList: AttachmentNode[] | undefined,
-): Promise<PreviewResult | null> {
-	if (!item.isImage || item.previewUrl || !item.uploadedPath) return null
+/**
+ * Batch-load preview URLs: single get-file-url call for all pending images,
+ * then parallel blob downloads.
+ */
+async function batchLoadPreviewUrls(
+	items: Array<{ id: string; fileId: string }>,
+): Promise<PreviewResult[]> {
+	if (!items.length) return []
 
-	const fileId = findFileIdByRelativePath(attachmentList, item.uploadedPath)
-	if (!fileId) return null
+	const fileIds = items.map((i) => i.fileId)
 
-	try {
-		const blob = (await getFileContentById(fileId, {
-			responseType: "blob",
-			xMagicImageProcess: CARD_THUMBNAIL_IMAGE_PROCESS,
-		})) as Blob
+	// Single batched get-file-url request
+	const downloadUrls = await getTemporaryDownloadUrl({
+		file_ids: fileIds,
+		options: { xMagicImageProcess: CARD_THUMBNAIL_IMAGE_PROCESS },
+	})
 
-		return {
-			id: item.id,
-			previewUrl: URL.createObjectURL(blob),
-		}
-	} catch (error) {
-		console.warn("[useBrandImagePreviewHydration] failed to load preview", error)
-		return null
-	}
+	if (!downloadUrls || !Array.isArray(downloadUrls)) return []
+
+	const urlMap = new Map(downloadUrls.map((item) => [item.file_id, item.url]))
+
+	// Download blobs in parallel
+	const results = await Promise.allSettled(
+		items.map(async ({ id, fileId }) => {
+			const url = urlMap.get(fileId)
+			if (!url) return null
+			const blob = (await downloadFileContent(url, { responseType: "blob" })) as Blob
+			return { id, previewUrl: URL.createObjectURL(blob) }
+		}),
+	)
+
+	return results
+		.map((r) => (r.status === "fulfilled" ? r.value : null))
+		.filter((r): r is PreviewResult => Boolean(r?.previewUrl))
 }
 
 export function useBrandImagePreviewHydration({
@@ -74,34 +85,52 @@ export function useBrandImagePreviewHydration({
 }: UseBrandImagePreviewHydrationParams) {
 	const previewUrlsRef = useRef(new Map<string, string>())
 	const [hydratingImageIds, setHydratingImageIds] = useState<Set<string>>(new Set())
+	// Track which image IDs have been hydrated or are in-flight to prevent re-triggering
+	const hydratedOrInflightRef = useRef(new Set<string>())
 
 	useEffect(() => {
 		previewUrlsRef.current.forEach((previewUrl, id) => {
 			if (brandImages.some((item) => item.id === id)) return
 			URL.revokeObjectURL(previewUrl)
 			previewUrlsRef.current.delete(id)
+			hydratedOrInflightRef.current.delete(id)
 		})
 	}, [brandImages])
 
 	useEffect(() => {
 		const pendingItems = brandImages.filter(
-			(item) => item.isImage && item.uploadedPath && !item.previewUrl,
+			(item) =>
+				item.isImage &&
+				item.uploadedPath &&
+				!item.previewUrl &&
+				!hydratedOrInflightRef.current.has(item.id),
 		)
 		if (!pendingItems.length || !attachmentList?.length) return
 
+		// Resolve file IDs from attachmentList
+		const itemsWithFileId: Array<{ id: string; fileId: string }> = []
+		for (const item of pendingItems) {
+			const fileId = findFileIdByRelativePath(attachmentList, item.uploadedPath!)
+			if (fileId) {
+				itemsWithFileId.push({ id: item.id, fileId })
+			}
+		}
+		if (!itemsWithFileId.length) return
+
 		let cancelled = false
-		const pendingIds = new Set(pendingItems.map((item) => item.id))
+		const pendingIds = new Set(itemsWithFileId.map((item) => item.id))
+
+		// Mark as in-flight to prevent duplicate requests
+		pendingIds.forEach((id) => hydratedOrInflightRef.current.add(id))
+
 		setHydratingImageIds((prev) => {
 			const next = new Set(prev)
 			pendingIds.forEach((id) => next.add(id))
 			return next
 		})
 
-		void Promise.all(pendingItems.map((item) => loadPreviewUrl(item, attachmentList)))
-			.then((results) => {
-				const hydratedItems = results.filter((result): result is PreviewResult =>
-					Boolean(result?.previewUrl),
-				)
+		void batchLoadPreviewUrls(itemsWithFileId)
+			.then((hydratedItems) => {
 				if (!hydratedItems.length) return
 
 				if (cancelled) {

@@ -1,6 +1,11 @@
+import { useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
+import type { JSONContent } from "@tiptap/react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
+import { MagicPromptEditor } from "@/components/base/MagicPromptEditor"
+import type { MagicPromptEditorRef } from "@/components/base/MagicPromptEditor/types"
+import { buildFileReferenceMention } from "../../../../services/selfMediaPromptBuilder"
 import type { ReferenceFileValue, VisualPresetOption } from "../../types"
 import ReferenceFilePicker from "./ReferenceFilePicker"
 
@@ -136,9 +141,14 @@ interface VisualPresetPickerProps {
 	/** Custom description text for "custom" mode */
 	customDescription?: string
 	onCustomDescriptionChange?: (value: string) => void
+	/** Rich JSON content for custom visual description */
+	customDescriptionJson?: JSONContent
+	onCustomDescriptionJsonChange?: (json: JSONContent) => void
 	/** Visual reference files for "custom" mode */
 	visualReferenceFiles?: ReferenceFileValue[]
 	onVisualReferenceFilesChange?: (files: ReferenceFileValue[]) => void
+	/** Called when editor loses focus */
+	onBlur?: () => void
 	/** Size variant */
 	size?: "sm" | "md"
 }
@@ -149,13 +159,54 @@ export default function VisualPresetPicker({
 	onChange,
 	customDescription,
 	onCustomDescriptionChange,
+	customDescriptionJson,
+	onCustomDescriptionJsonChange,
 	visualReferenceFiles,
 	onVisualReferenceFilesChange,
+	onBlur,
 	size = "sm",
 }: VisualPresetPickerProps) {
 	const { t } = useTranslation("super")
 	const selected = value || "none"
 	const isMd = size === "md"
+	const editorRef = useRef<MagicPromptEditorRef>(null)
+
+	/** When reference files are selected, insert them as @mention nodes into the editor */
+	const handleVisualReferenceFilesChange = useCallback(
+		(files: ReferenceFileValue[]) => {
+			// Still store them for data persistence
+			onVisualReferenceFilesChange?.(files)
+
+			// Insert new files as @mention nodes into the editor
+			const editor = editorRef.current?.getEditor()
+			if (!editor) return
+
+			// Find files that are newly added (not already in current value)
+			const currentFiles = visualReferenceFiles || []
+			const currentPaths = new Set(currentFiles.map((f) => f.file_path))
+			const newFiles = files.filter((f) => f.file_path && !currentPaths.has(f.file_path))
+
+			if (newFiles.length === 0) return
+
+			// Move cursor to end and insert mention nodes
+			editor.commands.focus("end")
+			for (const file of newFiles) {
+				if (!file.file_path) continue
+				const ext =
+					file.name.lastIndexOf(".") !== -1
+						? file.name.slice(file.name.lastIndexOf(".") + 1)
+						: ""
+				const mentionNode = buildFileReferenceMention({
+					file_id: file.file_id || "",
+					file_name: file.name,
+					file_path: file.file_path,
+					file_extension: ext,
+				})
+				editor.commands.insertContent([{ type: "text", text: " " }, mentionNode])
+			}
+		},
+		[onVisualReferenceFilesChange, visualReferenceFiles],
+	)
 
 	return (
 		<div>
@@ -223,37 +274,39 @@ export default function VisualPresetPicker({
 			{/* Custom mode inputs */}
 			{selected === "custom" && onCustomDescriptionChange && (
 				<div className={cn(isMd ? "mt-3" : "mt-2")}>
-					<div
+					<MagicPromptEditor
+						ref={editorRef}
+						value={customDescriptionJson}
+						textValue={customDescription ?? ""}
+						onChange={(json: JSONContent) => onCustomDescriptionJsonChange?.(json)}
+						onTextChange={(text: string) => onCustomDescriptionChange(text)}
+						onBlur={onBlur}
+						placeholder={t(
+							"detail.selfMedia.initPanel.stepDetail.visualCustomPlaceholder",
+						)}
+						enableMention
+						enableVoice={false}
+						enableAIPolish={false}
+						rows={2}
 						className={cn(
-							"flex w-full items-center gap-2 border-b border-zinc-200 bg-zinc-50/40 transition-all focus-within:border-zinc-950 focus-within:bg-primary/[0.03]",
-							isMd ? "py-2 pl-4 pr-2" : "py-1.5 pl-3 pr-1.5",
+							"border-0 border-b border-zinc-200 bg-zinc-50/40 ring-0 ring-offset-0 focus-within:border-zinc-950 focus-within:bg-primary/[0.03] focus-within:ring-0 focus-within:ring-offset-0",
+							isMd ? "text-sm" : "text-xs",
 						)}
-					>
-						<input
-							type="text"
-							className={cn(
-								"min-w-0 flex-1 bg-transparent placeholder:text-muted-foreground/60 focus:outline-none",
-								isMd ? "text-sm" : "text-xs",
-							)}
-							placeholder={t(
-								"detail.selfMedia.initPanel.stepDetail.visualCustomPlaceholder",
-							)}
-							value={customDescription ?? ""}
-							onChange={(e) => onCustomDescriptionChange(e.target.value)}
-						/>
-						{onVisualReferenceFilesChange && (
-							<div className="shrink-0">
-								<ReferenceFilePicker
-									compact
-									label={t(
-										"detail.selfMedia.initPanel.stepDetail.visualReferenceLabel",
-									)}
-									value={visualReferenceFiles || []}
-									onChange={onVisualReferenceFilesChange}
-								/>
-							</div>
-						)}
-					</div>
+						bottomToolbar={
+							onVisualReferenceFilesChange ? (
+								<div className="flex items-center bg-white/70 px-3 py-1">
+									<ReferenceFilePicker
+										compact
+										label={t(
+											"detail.selfMedia.initPanel.stepDetail.visualReferenceLabel",
+										)}
+										value={visualReferenceFiles || []}
+										onChange={handleVisualReferenceFilesChange}
+									/>
+								</div>
+							) : undefined
+						}
+					/>
 				</div>
 			)}
 		</div>

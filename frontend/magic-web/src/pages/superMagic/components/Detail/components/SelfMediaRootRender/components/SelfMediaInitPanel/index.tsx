@@ -107,17 +107,15 @@ function SelfMediaInitPanel({
 		pendingDraft,
 		templates,
 		isDraftLoading,
-		platformFetchInProgress,
 		brandImagesUploading,
 		setBrandImagesUploading,
-		handlePlatformFetchStart,
-		handlePlatformFetchEnd,
 		handleLoadTemplate,
 		handleStartBlank,
 		handleRestoreDraft,
 		handleDiscardDraft,
 		hasDraftContent,
 		saveDraftIfNeeded,
+		debouncedSaveDraft,
 		saveDraftInBackground,
 		handleClearData,
 		skipDraftPersistenceRef,
@@ -289,9 +287,6 @@ function SelfMediaInitPanel({
 										attachmentList={attachmentList}
 										projectId={projectId}
 										folderPath={folderPath}
-										isPlatformFetching={platformFetchInProgress}
-										onPlatformFetchStart={handlePlatformFetchStart}
-										onPlatformFetchEnd={handlePlatformFetchEnd}
 										onBrandImagesUploadingChange={setBrandImagesUploading}
 										onConfirmNext={handleNext}
 										brandImageUploadTarget="brand"
@@ -303,7 +298,7 @@ function SelfMediaInitPanel({
 										onChange={handleArticlesChange}
 										onArticleUpdate={handleArticleUpdate}
 										globalSettings={data.global}
-										onPersistDraft={() => void saveDraftIfNeeded()}
+										onPersistDraft={debouncedSaveDraft}
 										fileStorageService={fileStorageService}
 									/>
 								)}

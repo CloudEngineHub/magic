@@ -4,16 +4,21 @@ import routeManageService from "@/pages/superMagic/services/routeManageService"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { buildPlainTextJSONContent } from "../../../../MessageEditor/utils"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
+import type { JSONContent } from "@tiptap/react"
 import type { ScheduledTask } from "@/types/scheduledTask"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 
 export interface AICardCreateParams {
-    /** User's analysis prompt (what data to track/analyze) */
+    /** User's analysis prompt (plain text, used for template text) */
     prompt: string
+    /** User's prompt as JSONContent (preserves @mention nodes) */
+    promptJSONContent?: JSONContent
     /** Card name (e.g. "抖音热点追踪") */
     cardName: string
     /** Template choice */
     template: "hotspot-tracker" | "daily-digest" | "analytics-panel" | "custom"
+    /** Custom template requirements (when template is "custom") */
+    customTemplatePrompt?: string
     /** Project ID */
     projectId: string
     /** Folder path of the self-media project (optional) */
@@ -53,15 +58,16 @@ function formatScheduleDescription(timeConfig: ScheduledTask.TimeConfig): string
 
 /**
  * Build the prompt message that triggers the ai-card-generator skill.
- * The agent will create the card directory, template, first latest.html,
- * card.meta.json, and a scheduled task for recurring updates.
+ * Returns the prefix lines (everything before the user's prompt).
  */
-function buildAICardCreatePrompt(params: AICardCreateParams): string {
-    const { prompt, cardName, template, folderPath, timeConfig, enabled } = params
+function buildAICardCreatePrefixLines(params: AICardCreateParams): string[] {
+    const { prompt, cardName, template, customTemplatePrompt, folderPath, timeConfig, enabled } = params
 
     const templateInstruction =
         template === "custom"
-            ? `根据分析指令的内容自行设计模板布局。`
+            ? customTemplatePrompt
+                ? `根据以下自定义需求设计模板布局: ${customTemplatePrompt}`
+                : `根据分析指令的内容自行设计模板布局。`
             : `参考预设模板 ${template} 的结构和样式来设计卡片。`
 
     // Determine where the card directory should be created
@@ -80,7 +86,7 @@ function buildAICardCreatePrompt(params: AICardCreateParams): string {
         scheduleInstruction = `创建完成后请设置每日定时任务，每天自动获取最新数据并更新卡片。`
     }
 
-    const lines = [
+    return [
         `请创建一个 AI 卡片「${cardName}」。`,
         ``,
         `━━━ 创建位置 ━━━`,
@@ -94,9 +100,37 @@ function buildAICardCreatePrompt(params: AICardCreateParams): string {
         scheduleInstruction,
         ``,
         `━━━ 分析指令 ━━━`,
-        prompt,
     ]
+}
+
+function buildAICardCreatePrompt(params: AICardCreateParams): string {
+    const lines = buildAICardCreatePrefixLines(params)
+    lines.push(params.prompt)
     return lines.join("\n")
+}
+
+/**
+ * Build the final JSONContent for the message, preserving @mention nodes
+ * from the user's prompt while prepending instruction text.
+ */
+function buildAICardCreateJSONContent(params: AICardCreateParams): JSONContent {
+    const prefixLines = buildAICardCreatePrefixLines(params)
+    const prefixContent = buildPlainTextJSONContent(prefixLines.join("\n"))
+
+    if (params.promptJSONContent?.content) {
+        // Merge prefix paragraphs + user's original prompt paragraphs (with mentions)
+        return {
+            type: "doc",
+            content: [...(prefixContent.content || []), ...params.promptJSONContent.content],
+        }
+    }
+
+    // Fallback: append plain text prompt
+    const promptParagraph = { type: "paragraph", content: [{ type: "text", text: params.prompt }] }
+    return {
+        type: "doc",
+        content: [...(prefixContent.content || []), promptParagraph],
+    }
 }
 
 /**
@@ -163,9 +197,9 @@ export async function createAICardViaTopic(
     }
 
     // Build and send message after a short delay (allow topic switch to settle)
-    const messageContent = buildAICardCreatePrompt(params)
+    const jsonContent = buildAICardCreateJSONContent(params)
     const payload = {
-        jsonContent: buildPlainTextJSONContent(messageContent),
+        jsonContent,
         extra: {
             super_agent: superAgent,
         },

@@ -171,6 +171,12 @@ export class SelfMediaFileStorageService {
 	private fileInflight = new Map<string, Promise<string | null>>() // parentId:fileName -> in-flight promise
 	private brandConfigSaving: Promise<void> | null = null
 
+	// ─── Project file list cache (dedup concurrent calls) ────────────────
+	private fileListCache: FileNode[] | null = null
+	private fileListCacheTime = 0
+	private fileListInflight: Promise<FileNode[]> | null = null
+	private static FILE_LIST_CACHE_TTL = 3000 // 3s TTL
+
 	constructor(projectId: string, parentFileId?: string, folderRelativePath?: string) {
 		this.projectId = projectId
 		this.parentFileId = parentFileId
@@ -950,6 +956,7 @@ export class SelfMediaFileStorageService {
 						ignore_duplicate: true,
 					})
 					fileId = (response as any)?.file_id
+					this.invalidateFileListCache()
 				}
 
 				if (!fileId) return null
@@ -972,15 +979,38 @@ export class SelfMediaFileStorageService {
 	}
 
 	private async getProjectFileList(): Promise<FileNode[]> {
-		try {
-			const response = await SuperMagicApi.getAttachmentsByProjectId({
-				projectId: this.projectId,
-				temporaryToken: "",
-			})
-			return ((response as any)?.list || []) as FileNode[]
-		} catch {
-			return []
+		const now = Date.now()
+		// Return cached result if still fresh
+		if (this.fileListCache && now - this.fileListCacheTime < SelfMediaFileStorageService.FILE_LIST_CACHE_TTL) {
+			return this.fileListCache
 		}
+		// Dedup concurrent in-flight requests
+		if (this.fileListInflight) {
+			return this.fileListInflight
+		}
+		this.fileListInflight = (async () => {
+			try {
+				const response = await SuperMagicApi.getAttachmentsByProjectId({
+					projectId: this.projectId,
+					temporaryToken: "",
+				})
+				const list = ((response as any)?.list || []) as FileNode[]
+				this.fileListCache = list
+				this.fileListCacheTime = Date.now()
+				return list
+			} catch {
+				return []
+			} finally {
+				this.fileListInflight = null
+			}
+		})()
+		return this.fileListInflight
+	}
+
+	/** Invalidate the file list cache (e.g. after writes) */
+	invalidateFileListCache(): void {
+		this.fileListCache = null
+		this.fileListCacheTime = 0
 	}
 
 	private async uploadTemplateMaterials(
@@ -1255,20 +1285,20 @@ export class SelfMediaFileStorageService {
 		if (!path) return path
 		const normalized = this.normalizeRelativePath(path)
 		const draftMaterialsPrefix = `${this.folderRelativePath
-				? this.normalizeRelativePath(
-					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-				)
-				: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
+			? this.normalizeRelativePath(
+				`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+			)
+			: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 			}/`
 		if (!normalized.startsWith(draftMaterialsPrefix)) return path
 		const suffix = normalized.slice(draftMaterialsPrefix.length)
 		const archivePrefix = `${this.folderRelativePath
-				? this.normalizeRelativePath(
-					`${this.folderRelativePath}/${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
-				)
-				: this.normalizeRelativePath(
-					`${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
-				)
+			? this.normalizeRelativePath(
+				`${this.folderRelativePath}/${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
+			)
+			: this.normalizeRelativePath(
+				`${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
+			)
 			}/`
 		return `${archivePrefix}${suffix}`
 	}

@@ -38,9 +38,6 @@ interface StepBrandInfoProps {
 	attachmentList?: AttachmentNode[]
 	projectId?: string
 	folderPath?: string
-	isPlatformFetching?: boolean
-	onPlatformFetchStart?: () => void
-	onPlatformFetchEnd?: () => void
 	onConfirmNext?: () => void
 	onBrandImagesUploadingChange?: (uploading: boolean) => void
 	brandImageUploadTarget?: "draft" | "brand"
@@ -59,9 +56,6 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 		attachmentList,
 		projectId,
 		folderPath,
-		isPlatformFetching = false,
-		onPlatformFetchStart,
-		onPlatformFetchEnd,
 		onConfirmNext,
 		onBrandImagesUploadingChange,
 		brandImageUploadTarget = "draft",
@@ -188,31 +182,8 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 		[brandService],
 	)
 
-	const isFetching = isPlatformFetching
-
 	return (
-		<div
-			className={cn("mx-auto max-w-5xl space-y-6 py-4", isFetching && "pointer-events-none")}
-		>
-			{isFetching && (
-				<div className="mb-6 flex animate-pulse items-center gap-2.5 border-l-2 border-primary bg-primary/5 px-4 py-3">
-					<svg
-						className="animate-spin text-primary"
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="2.5"
-					>
-						<path d="M21 12a9 9 0 1 1-6.219-8.56" />
-					</svg>
-					<span className="text-xs font-semibold text-primary">
-						{t("detail.selfMedia.initPanel.stepBrand.platformFetchLoading")}
-					</span>
-				</div>
-			)}
-
+		<div className="mx-auto max-w-5xl space-y-6 py-4">
 			<WelcomeHero />
 
 			<div className="bg-white">
@@ -294,9 +265,6 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 							attachmentList={attachmentList}
 							projectId={projectId}
 							folderPath={folderPath}
-							isPlatformFetching={isPlatformFetching}
-							onPlatformFetchStart={onPlatformFetchStart}
-							onPlatformFetchEnd={onPlatformFetchEnd}
 							onBrandImagesUploadingChange={onBrandImagesUploadingChange}
 							brandImageUploadTarget={brandImageUploadTarget}
 						/>

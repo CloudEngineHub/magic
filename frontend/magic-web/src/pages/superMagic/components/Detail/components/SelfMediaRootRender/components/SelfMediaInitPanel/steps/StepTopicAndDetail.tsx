@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import type { ArticleDetail, SelfMediaInitGlobalSettings } from "../types"
 import {
@@ -71,33 +71,6 @@ function createArticleFromTopic(topic: GeneratedTopic): ArticleDetail {
 	}
 }
 
-// Helper to check if click/touch is on interactive elements
-function isInteractiveElement(target: HTMLElement | null): boolean {
-	if (!target) return false
-	let el: HTMLElement | null = target
-	while (el) {
-		const tagName = el.tagName.toLowerCase()
-		if (
-			tagName === "input" ||
-			tagName === "textarea" ||
-			tagName === "button" ||
-			tagName === "select" ||
-			tagName === "a" ||
-			el.getAttribute("role") === "button" ||
-			el.classList.contains("cursor-pointer") ||
-			el.classList.contains("no-swipe") ||
-			el.hasAttribute("contenteditable") ||
-			// Avoid swiping when editing material list or outline lists
-			el.closest(".outline-node-item") ||
-			el.closest(".editor-card")
-		) {
-			return true
-		}
-		el = el.parentElement
-	}
-	return false
-}
-
 export default function StepTopicAndDetail({
 	articles,
 	onChange,
@@ -148,222 +121,6 @@ export default function StepTopicAndDetail({
 			setActiveIndex(safeActiveIndex + 1)
 		}
 	}, [safeActiveIndex, articles.length])
-
-	// 1. Swipe and Drag States
-	const [dragOffset, setDragOffset] = useState(0)
-	const [isDragging, setIsDragging] = useState(false)
-	const startXRef = useRef(0)
-	const startYRef = useRef(0)
-	const isDragEligibleRef = useRef(false)
-	const isDraggingRef = useRef(false)
-	const dragOffsetRef = useRef(0)
-
-	// Keep references of crucial changing values to prevent closure staleness in window listeners
-	const activeIndexRef = useRef(safeActiveIndex)
-	const articlesCountRef = useRef(articles.length)
-
-	useEffect(() => {
-		activeIndexRef.current = safeActiveIndex
-		articlesCountRef.current = articles.length
-	}, [safeActiveIndex, articles.length])
-
-	// Event: mousedown/touchstart
-	const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-		if (e.button !== 0) return // Only left-clicks
-		if (isInteractiveElement(e.target as HTMLElement)) return
-
-		startXRef.current = e.clientX
-		startYRef.current = e.clientY
-		isDragEligibleRef.current = true
-		isDraggingRef.current = false
-		dragOffsetRef.current = 0
-	}, [])
-
-	const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-		if (isInteractiveElement(e.target as HTMLElement)) return
-
-		const touch = e.touches[0]
-		startXRef.current = touch.clientX
-		startYRef.current = touch.clientY
-		isDragEligibleRef.current = true
-		isDraggingRef.current = false
-		dragOffsetRef.current = 0
-	}, [])
-
-	// Setup window drag-and-swipe event listeners
-	useEffect(() => {
-		const handleMove = (clientX: number, clientY: number) => {
-			if (!isDragEligibleRef.current) return
-
-			const diffX = clientX - startXRef.current
-			const diffY = clientY - startYRef.current
-
-			if (!isDraggingRef.current) {
-				// We need a minimum drag threshold to initiate a drag sequence (prevent click-triggering)
-				if (Math.abs(diffX) > 10) {
-					// Check if drag is primarily vertical. If so, let normal vertical scrolling happen.
-					if (Math.abs(diffY) > Math.abs(diffX)) {
-						isDragEligibleRef.current = false
-						return
-					}
-					// Check horizontal swipe gesture threshold
-					if (Math.abs(diffX) > Math.abs(diffY) * 1.5) {
-						isDraggingRef.current = true
-						setIsDragging(true)
-					}
-				}
-			}
-
-			if (isDraggingRef.current) {
-				let offset = diffX
-				const activeIdx = activeIndexRef.current
-				const totalCount = articlesCountRef.current
-
-				// Elastic boundary resistance when there is no prev/next article
-				if (offset > 0 && activeIdx === 0) {
-					offset = Math.pow(offset, 0.85) // apply rubberband compression
-				} else if (offset < 0 && activeIdx === totalCount - 1) {
-					offset = -Math.pow(-offset, 0.85)
-				}
-
-				dragOffsetRef.current = offset
-				setDragOffset(offset)
-			}
-		}
-
-		const handleEnd = () => {
-			if (!isDragEligibleRef.current) return
-
-			if (isDraggingRef.current) {
-				const finalOffset = dragOffsetRef.current
-				const activeIdx = activeIndexRef.current
-				const totalCount = articlesCountRef.current
-				const swipeThreshold = 80 // px threshold to trigger page transition
-
-				if (finalOffset > swipeThreshold && activeIdx > 0) {
-					handlePrevArticle()
-				} else if (finalOffset < -swipeThreshold && activeIdx < totalCount - 1) {
-					handleNextArticle()
-				}
-			}
-
-			isDragEligibleRef.current = false
-			isDraggingRef.current = false
-			dragOffsetRef.current = 0
-			setIsDragging(false)
-			setDragOffset(0)
-		}
-
-		const handleMouseMove = (e: MouseEvent) => {
-			handleMove(e.clientX, e.clientY)
-		}
-
-		const handleTouchMove = (e: TouchEvent) => {
-			// Prevent native scroll/overscroll effects when actively swiping horizontally
-			if (isDraggingRef.current) {
-				if (e.cancelable) {
-					e.preventDefault()
-				}
-			}
-			const touch = e.touches[0]
-			handleMove(touch.clientX, touch.clientY)
-		}
-
-		window.addEventListener("mousemove", handleMouseMove)
-		window.addEventListener("mouseup", handleEnd)
-		window.addEventListener("touchmove", handleTouchMove, { passive: false })
-		window.addEventListener("touchend", handleEnd)
-
-		return () => {
-			window.removeEventListener("mousemove", handleMouseMove)
-			window.removeEventListener("mouseup", handleEnd)
-			window.removeEventListener("touchmove", handleTouchMove)
-			window.removeEventListener("touchend", handleEnd)
-		}
-	}, [handlePrevArticle, handleNextArticle])
-
-	// 2. Trackpad / Scroll Wheel Horizontal Swipe Gesture Support
-	const rightColRef = useRef<HTMLDivElement | null>(null)
-	const wheelAccumulatorRef = useRef(0)
-	const isWheelLockedRef = useRef(false)
-	const wheelTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-	useEffect(() => {
-		const rightCol = rightColRef.current
-		if (!rightCol) return
-
-		const handleWheelEvent = (e: WheelEvent) => {
-			// Only horizontal wheel movements
-			if (Math.abs(e.deltaX) < 4) return
-
-			// Clear any existing reset timer
-			if (wheelTimeoutRef.current) {
-				clearTimeout(wheelTimeoutRef.current)
-			}
-
-			// Set a timer to unlock horizontal scrolling after user stops swiping for 350ms
-			wheelTimeoutRef.current = setTimeout(() => {
-				isWheelLockedRef.current = false
-				wheelAccumulatorRef.current = 0
-			}, 350)
-
-			// If currently locked, ignore this event completely (prevents multiple switches during 1 swipe)
-			if (isWheelLockedRef.current) {
-				e.preventDefault()
-				return
-			}
-
-			wheelAccumulatorRef.current += e.deltaX
-			const wheelThreshold = 80 // accumulation threshold
-			const activeIdx = activeIndexRef.current
-			const totalCount = articlesCountRef.current
-
-			if (wheelAccumulatorRef.current > wheelThreshold) {
-				// Swipe Leftward -> Next Article
-				if (activeIdx < totalCount - 1) {
-					e.preventDefault()
-					isWheelLockedRef.current = true // lock further swipes immediately!
-					handleNextArticle()
-					wheelAccumulatorRef.current = 0
-				}
-			} else if (wheelAccumulatorRef.current < -wheelThreshold) {
-				// Swipe Rightward -> Prev Article
-				if (activeIdx > 0) {
-					e.preventDefault()
-					isWheelLockedRef.current = true // lock further swipes immediately!
-					handlePrevArticle()
-					wheelAccumulatorRef.current = 0
-				}
-			}
-		}
-
-		// Attach manual non-passive listener to allow calling e.preventDefault()
-		rightCol.addEventListener("wheel", handleWheelEvent, { passive: false })
-
-		return () => {
-			rightCol.removeEventListener("wheel", handleWheelEvent)
-			if (wheelTimeoutRef.current) {
-				clearTimeout(wheelTimeoutRef.current)
-			}
-		}
-	}, [handleNextArticle, handlePrevArticle])
-
-	// Keyboard arrow navigation
-	useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			// Only navigate if not typing in inputs/textareas
-			const activeTag = document.activeElement?.tagName.toLowerCase()
-			if (activeTag === "input" || activeTag === "textarea") return
-
-			if (e.key === "ArrowLeft") {
-				handlePrevArticle()
-			} else if (e.key === "ArrowRight") {
-				handleNextArticle()
-			}
-		}
-		window.addEventListener("keydown", handleKeyDown)
-		return () => window.removeEventListener("keydown", handleKeyDown)
-	}, [handlePrevArticle, handleNextArticle])
 
 	const handleAiGenerate = useCallback(
 		async (params: {
@@ -438,20 +195,6 @@ export default function StepTopicAndDetail({
 		},
 		[globalSettings, articles, onChange],
 	)
-
-	// Custom inline styles for dragging the detail page dynamically
-	const workspaceWrapperStyle = isDragging
-		? {
-				transform: `translateX(${dragOffset}px)`,
-				opacity: Math.max(0.65, 1 - Math.abs(dragOffset) / 550),
-				transition: "none",
-				userSelect: "none" as const,
-			}
-		: {
-				transform: "translateX(0px)",
-				opacity: 1,
-				transition: "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease",
-			}
 
 	return (
 		<div className="mx-auto max-w-5xl space-y-10 py-8">
@@ -706,13 +449,10 @@ export default function StepTopicAndDetail({
 
 					{/* Right column (Detail Workspace Editor) - col-span-8 */}
 					<div
-						ref={rightColRef}
 						className={cn(
 							"relative flex select-text flex-col space-y-6",
 							isLeftCollapsed ? "lg:col-span-11" : "lg:col-span-8",
 						)}
-						onMouseDown={handleMouseDown}
-						onTouchStart={handleTouchStart}
 					>
 						{/* Detail Workspace Header - Inline editable Title */}
 						<div className="sticky top-0 z-20 flex shrink-0 select-none items-center justify-between gap-4 border-b border-border/15 bg-white pb-4 pt-4 shadow-[0_4px_12px_-6px_rgba(0,0,0,0.08)]">
@@ -771,9 +511,7 @@ export default function StepTopicAndDetail({
 											</button>
 										</TooltipTrigger>
 										<TooltipContent>
-											<p className="text-xs font-normal">
-												上一篇 (键盘 ⬅ 键 / 左右拖拽)
-											</p>
+											<p className="text-xs font-normal">上一篇</p>
 										</TooltipContent>
 									</Tooltip>
 
@@ -794,27 +532,23 @@ export default function StepTopicAndDetail({
 											</button>
 										</TooltipTrigger>
 										<TooltipContent>
-											<p className="text-xs font-normal">
-												下一篇 (键盘 ➡ 键 / 左右拖拽)
-											</p>
+											<p className="text-xs font-normal">下一篇</p>
 										</TooltipContent>
 									</Tooltip>
 								</div>
 							</TooltipProvider>
 						</div>
 
-						{/* Detail editor with sliding animation and drag position effect */}
+						{/* Detail editor with sliding animation */}
 						<div className="w-full flex-1 overflow-hidden">
 							<div
 								key={safeActiveIndex}
 								className={cn(
 									"w-full",
-									!isDragging &&
-										(slideDirection === "left"
-											? "duration-300 animate-in fade-in slide-in-from-right-4"
-											: "duration-300 animate-in fade-in slide-in-from-left-4"),
+									slideDirection === "left"
+										? "duration-300 animate-in fade-in slide-in-from-right-4"
+										: "duration-300 animate-in fade-in slide-in-from-left-4",
 								)}
-								style={workspaceWrapperStyle}
 							>
 								<ArticleCard
 									index={safeActiveIndex}

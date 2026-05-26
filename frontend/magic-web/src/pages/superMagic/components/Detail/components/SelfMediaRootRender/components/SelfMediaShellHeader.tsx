@@ -1,7 +1,6 @@
 import { memo, type ReactNode } from "react"
 import { ChevronLeft, RefreshCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import ExportPanel from "./ExportPanel"
 import PlatformBrandIcon from "./PlatformBrandIcon"
@@ -62,7 +61,7 @@ function SelfMediaShellHeader({
 				{onBackHome ? (
 					<button
 						type="button"
-						className="flex h-8 shrink-0 cursor-pointer items-center gap-1.5 bg-zinc-100 px-3 text-xs font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98]"
+						className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 bg-zinc-100 px-4 py-2.5 text-xs font-black text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98]"
 						onClick={onBackHome}
 						data-testid="self-media-shell-back-home-button"
 					>
@@ -93,18 +92,16 @@ function SelfMediaShellHeader({
 				<div className="flex shrink-0 items-center gap-2 border-l border-dashed border-zinc-950/10 pl-3">
 					<Tooltip>
 						<TooltipTrigger asChild>
-							<Button
+							<button
 								type="button"
-								variant="ghost"
-								size="icon"
 								disabled={refreshDisabled}
 								onClick={onRefresh}
 								data-testid={refreshTestId}
 								aria-label={refreshLabel}
-								className="h-8 w-8 bg-zinc-100 text-zinc-950 hover:bg-zinc-200 active:scale-[0.98]"
+								className="inline-flex cursor-pointer items-center justify-center bg-zinc-100 p-2.5 text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
 							>
-								<RefreshCw className="h-4 w-4" />
-							</Button>
+								<RefreshCw className="h-3.5 w-3.5" />
+							</button>
 						</TooltipTrigger>
 						<TooltipContent>{refreshLabel}</TooltipContent>
 					</Tooltip>

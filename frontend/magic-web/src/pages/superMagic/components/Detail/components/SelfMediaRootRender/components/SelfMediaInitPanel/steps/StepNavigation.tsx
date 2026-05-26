@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import { MagicTooltip } from "@/components/base"
 import { STEPS } from "../constants"
 import { ChevronLeft, ChevronRight, Home, RefreshCw } from "lucide-react"
 
@@ -35,43 +36,45 @@ export default function StepNavigation({
 				{/* Left side actions */}
 				<div className="flex items-center gap-2">
 					{onBackHome ? (
-						<button
-							type="button"
-							className="flex cursor-pointer items-center gap-1.5 bg-zinc-100 px-4 py-2 text-xs font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98]"
-							onClick={onBackHome}
-							data-testid="self-media-init-panel-back-home-button"
-						>
-							<Home size={13} />
-							<span>{t("detail.selfMedia.initPanel.nav.backHome")}</span>
-						</button>
+						<MagicTooltip title={t("detail.selfMedia.initPanel.nav.backHome")}>
+							<button
+								type="button"
+								className="flex cursor-pointer items-center justify-center rounded-none bg-zinc-100 p-2 text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98]"
+								onClick={onBackHome}
+								data-testid="self-media-init-panel-back-home-button"
+							>
+								<Home size={15} />
+							</button>
+						</MagicTooltip>
 					) : null}
 
-					<button
-						type="button"
-						className={cn(
-							"flex cursor-pointer items-center gap-1.5 px-4 py-2 text-xs font-bold transition-all active:scale-[0.98]",
-							hasAnyInitData
-								? "bg-red-50 text-destructive hover:bg-red-100"
-								: "cursor-not-allowed bg-white text-muted-foreground/45 opacity-50",
-						)}
-						onClick={onClear}
-						disabled={!hasAnyInitData}
-						data-testid="self-media-init-panel-clear-button"
-					>
-						<RefreshCw
-							size={13}
+					<MagicTooltip title={t("detail.selfMedia.initPanel.nav.clear")}>
+						<button
+							type="button"
 							className={cn(
-								hasAnyInitData &&
-									"transition-transform duration-500 hover:rotate-180",
+								"flex cursor-pointer items-center justify-center rounded-none p-2 transition-all active:scale-[0.98]",
+								hasAnyInitData
+									? "bg-red-50 text-destructive hover:bg-red-100"
+									: "cursor-not-allowed bg-white text-muted-foreground/45 opacity-50",
 							)}
-						/>
-						<span>{t("detail.selfMedia.initPanel.nav.clear")}</span>
-					</button>
+							onClick={onClear}
+							disabled={!hasAnyInitData}
+							data-testid="self-media-init-panel-clear-button"
+						>
+							<RefreshCw
+								size={15}
+								className={cn(
+									hasAnyInitData &&
+										"transition-transform duration-500 hover:rotate-180",
+								)}
+							/>
+						</button>
+					</MagicTooltip>
 
 					{currentStep > 0 && (
 						<button
 							type="button"
-							className="group/prev flex cursor-pointer items-center gap-1.5 bg-zinc-100 px-4 py-2 text-xs font-bold transition-all hover:bg-zinc-200 active:scale-[0.98]"
+							className="group/prev flex cursor-pointer items-center gap-1.5 rounded-none bg-zinc-100 px-4 py-2 text-xs font-bold transition-all hover:bg-zinc-200 active:scale-[0.98]"
 							onClick={onPrev}
 							data-testid="self-media-init-panel-prev-button"
 						>
@@ -91,12 +94,12 @@ export default function StepNavigation({
 							key={index}
 							type="button"
 							className={cn(
-								"h-2.5 cursor-pointer rounded-full border border-zinc-950 outline-none transition-all duration-300",
+								"h-2.5 cursor-pointer rounded-none outline-none transition-all duration-300",
 								index === currentStep
 									? "w-8 bg-primary"
 									: index < currentStep
 										? "w-2.5 bg-primary/60"
-										: "w-2.5 bg-white",
+										: "w-2.5 bg-white border border-zinc-950",
 							)}
 							onClick={() => onNavigate(index)}
 							aria-label={t("detail.selfMedia.initPanel.nav.jumpTo", {
@@ -111,7 +114,7 @@ export default function StepNavigation({
 					<button
 						type="button"
 						className={cn(
-							"group/next flex items-center gap-1.5 px-5 py-2 text-xs font-black tracking-wide outline-none transition-all duration-300",
+							"group/next flex items-center gap-1.5 rounded-none px-5 py-2 text-xs font-black tracking-wide outline-none transition-all duration-300",
 							canProceed
 								? "cursor-pointer bg-zinc-950 text-white hover:bg-zinc-900 active:scale-[0.98]"
 								: "cursor-not-allowed bg-muted text-muted-foreground/50",

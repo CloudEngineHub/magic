@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import type { JSONContent } from "@tiptap/react"
 import type {
 	ArticleDetail,
 	SelfMediaInitGlobalSettings,
@@ -16,11 +17,15 @@ import CardContentEditor from "./CardContentEditor"
 import AiInputBox from "../ai/AiInputBox"
 import AiActionButton from "../ai/AiActionButton"
 import VisualPresetPicker from "../picker/VisualPresetPicker"
+import ModelSelector from "../picker/ModelSelector"
+import ReferenceFilePicker from "../picker/ReferenceFilePicker"
+import { MagicPromptEditor } from "@/components/base/MagicPromptEditor"
 import {
 	generateOutline,
 	generateCardContent,
 	optimizeOutline,
 	optimizeCardContent,
+	polishText,
 } from "../../../../services/selfMediaAiGenerate"
 import { Trash2, ChevronDown, Folder } from "lucide-react"
 import PlatformBrandIcon from "../../../PlatformBrandIcon"
@@ -493,31 +498,66 @@ export default function ArticleCard({
 									: base
 								handleFieldChange("notes", newNotes)
 							}}
+							customDescriptionJson={article.visualDescriptionJson}
+							onCustomDescriptionJsonChange={(json) =>
+								handleFieldChange("visualDescriptionJson", json)
+							}
 							visualReferenceFiles={article.visualReferenceFiles || []}
 							onVisualReferenceFilesChange={(files) =>
 								handleFieldChange("visualReferenceFiles", files)
 							}
+							onBlur={onPersistDraft}
 						/>
 					</div>
 
 					{/* 4. Content description (with attachments) */}
-					<AiInputBox
-						label={t(
-							"detail.selfMedia.initPanel.stepDetail.descriptionLabel",
-							"内容描述与核心观点",
-						)}
-						value={article.description ?? ""}
-						onChange={(v) => handleFieldChange("description", v)}
-						onBlur={onPersistDraft}
-						polishContext={`Article title: ${article.title}, Platform: ${article.platform || ""}`}
-						placeholder={t(
-							"detail.selfMedia.initPanel.stepDetail.descriptionPlaceholder",
-						)}
-						model={sharedModel}
-						onModelChange={setSharedModel}
-						referenceFiles={article.referenceFiles || []}
-						onReferenceFilesChange={handleReferenceFilesChange}
-					/>
+					<div className="space-y-1.5">
+						<label className="mb-1 block text-xs font-semibold">
+							{t(
+								"detail.selfMedia.initPanel.stepDetail.descriptionLabel",
+								"内容描述与核心观点",
+							)}
+						</label>
+						<MagicPromptEditor
+							value={article.descriptionJson}
+							textValue={article.description ?? ""}
+							onChange={(json) => handleFieldChange("descriptionJson", json)}
+							onTextChange={(text) => handleFieldChange("description", text)}
+							onBlur={onPersistDraft}
+							placeholder={t(
+								"detail.selfMedia.initPanel.stepDetail.descriptionPlaceholder",
+							)}
+							enableAIPolish
+							onAIPolish={async (text) => {
+								const result = await polishText({
+									text,
+									context: `Article title: ${article.title}, Platform: ${article.platform || ""}`,
+									model: sharedModel || undefined,
+								})
+								return result || text
+							}}
+							enableVoice
+							enableMention
+							rows={3}
+							className="border-0 border-b border-zinc-200 bg-zinc-50/40 ring-0 ring-offset-0 focus-within:border-zinc-950 focus-within:bg-primary/[0.03] focus-within:ring-0 focus-within:ring-offset-0"
+							bottomToolbar={
+								<div className="flex items-center bg-white/70 px-3 py-1.5">
+									<ReferenceFilePicker
+										value={article.referenceFiles || []}
+										onChange={handleReferenceFilesChange}
+										compact
+									/>
+									<span className="flex-1" />
+									<ModelSelector
+										value={sharedModel}
+										onChange={setSharedModel}
+										mode="icon"
+										className="flex h-6 items-center justify-center px-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-950"
+									/>
+								</div>
+							}
+						/>
+					</div>
 
 					{/* 5. Outline / Card Content Workspace */}
 					<div className="space-y-3">

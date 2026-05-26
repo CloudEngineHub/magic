@@ -5,7 +5,7 @@ import { SelfMediaFileStorageService } from "../../../services/SelfMediaFileStor
 import type { TemplateMeta } from "../../../services/SelfMediaFileStorageService"
 import type { SelfMediaInitData } from "../types"
 import type { AttachmentNode } from "../../../services"
-import { createEmptyInitData, PLATFORM_FETCH_TIMEOUT_MS } from "../constants"
+import { createEmptyInitData } from "../constants"
 
 interface UseDraftManagerOptions {
 	fileStorageService: SelfMediaFileStorageService | null
@@ -25,7 +25,6 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 	const [templates, setTemplates] = useState<TemplateMeta[]>([])
 	const [draftLoaded, setDraftLoaded] = useState(false)
 	const [pendingDraft, setPendingDraft] = useState<DraftState | null>(null)
-	const [platformFetchInProgress, setPlatformFetchInProgress] = useState(false)
 	const [brandImagesUploading, setBrandImagesUploading] = useState(false)
 
 	// 标记自身保存操作，用于区分 updated_at 变化是自己写入还是外部写入
@@ -37,48 +36,34 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 	dataRef.current = data
 	currentStepRef.current = currentStep
 
-	// ─── Platform fetch timeout ─────────────────────────────────────────
-	const handlePlatformFetchStart = useCallback(() => {
-		setPlatformFetchInProgress(true)
-	}, [])
-
-	const handlePlatformFetchEnd = useCallback(() => {
-		setPlatformFetchInProgress(false)
-	}, [])
-
-	useEffect(() => {
-		if (!platformFetchInProgress) return
-		const timer = window.setTimeout(() => {
-			setPlatformFetchInProgress(false)
-			message.warning(t("detail.selfMedia.initPanel.stepBrand.platformFetchTimeout"))
-		}, PLATFORM_FETCH_TIMEOUT_MS)
-		return () => window.clearTimeout(timer)
-	}, [platformFetchInProgress, t])
+	// Debounce timer for blur-triggered saves
+	const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const draftSavingRef = useRef(false)
 
 	// ─── Init: load draft & template list ───────────────────────────────
 	useEffect(() => {
 		if (!fileStorageService || draftLoaded) return
 		let cancelled = false
 
-		;(async () => {
-			const [draft, templateList] = await Promise.all([
-				fileStorageService.loadDraft(),
-				fileStorageService.listTemplates(),
-			])
-			if (cancelled) return
+			; (async () => {
+				const [draft, templateList] = await Promise.all([
+					fileStorageService.loadDraft(),
+					fileStorageService.listTemplates(),
+				])
+				if (cancelled) return
 
-			setTemplates(templateList)
+				setTemplates(templateList)
 
-			if (draft) {
-				setPendingDraft({
-					data: draft.data,
-					currentStep: draft.currentStep ?? 0,
-				})
-			} else if (templateList.length > 0) {
-				setShowTemplateSelector(true)
-			}
-			setDraftLoaded(true)
-		})()
+				if (draft) {
+					setPendingDraft({
+						data: draft.data,
+						currentStep: draft.currentStep ?? 0,
+					})
+				} else if (templateList.length > 0) {
+					setShowTemplateSelector(true)
+				}
+				setDraftLoaded(true)
+			})()
 
 		return () => {
 			cancelled = true
@@ -125,7 +110,6 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 			setCurrentStep(0)
 			setPendingDraft(null)
 			setShowTemplateSelector(false)
-			setPlatformFetchInProgress(false)
 			setBrandImagesUploading(false)
 		} catch (error) {
 			console.error("Failed to discard self-media draft:", error)
@@ -166,24 +150,29 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 		lastDraftUpdatedAt.current = draftUpdatedAt
 
 		if (pendingSelfSaveCount.current > 0) return
-		if (!platformFetchInProgress && timeSinceLastSave < 15000) return
-		;(async () => {
-			try {
-				const draft = await fileStorageService.loadDraft()
-				if (draft) {
-					setData(draft.data)
-					if (draft.currentStep !== undefined) setCurrentStep(draft.currentStep)
-					setPlatformFetchInProgress(false)
+		if (timeSinceLastSave < 15000) return
+			; (async () => {
+				try {
+					const draft = await fileStorageService.loadDraft()
+					if (draft) {
+						setData(draft.data)
+						if (draft.currentStep !== undefined) setCurrentStep(draft.currentStep)
+					}
+				} catch {
+					// ignore
 				}
-			} catch {
-				setPlatformFetchInProgress(false)
-			}
-		})()
-	}, [draftUpdatedAt, fileStorageService, draftLoaded, platformFetchInProgress])
+			})()
+	}, [draftUpdatedAt, fileStorageService, draftLoaded])
 
 	// ─── Unmount: save draft & cleanup ──────────────────────────────────
 	useEffect(() => {
 		return () => {
+			// Cancel any pending debounced save
+			if (draftSaveTimerRef.current) {
+				clearTimeout(draftSaveTimerRef.current)
+				draftSaveTimerRef.current = null
+			}
+
 			const latestData = dataRef.current
 			const latestStep = currentStepRef.current
 			const hasContent = latestData.articles.length > 0
@@ -209,17 +198,21 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 				!fileStorageService ||
 				!draftLoaded ||
 				!hasDraftContent ||
-				platformFetchInProgress ||
 				showTemplateSelector
 			) {
 				return
 			}
 
+			// If a save is already in progress, skip to avoid concurrent saves
+			if (draftSavingRef.current) return
+
+			draftSavingRef.current = true
 			pendingSelfSaveCount.current += 1
 			selfSaveTimestamp.current = Date.now()
 			try {
-				await fileStorageService.saveDraft(data, step)
+				await fileStorageService.saveDraft(dataRef.current, step)
 			} finally {
+				draftSavingRef.current = false
 				window.setTimeout(() => {
 					pendingSelfSaveCount.current = Math.max(0, pendingSelfSaveCount.current - 1)
 				}, 3000)
@@ -229,12 +222,27 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 			fileStorageService,
 			draftLoaded,
 			hasDraftContent,
-			platformFetchInProgress,
 			showTemplateSelector,
-			data,
 			currentStep,
 		],
 	)
+
+	/**
+	 * Debounced version of saveDraftIfNeeded for blur-triggered saves.
+	 * Multiple rapid blur events (e.g., focus moving between fields) will
+	 * only trigger a single save after a short delay.
+	 */
+	const debouncedSaveDraft = useCallback(() => {
+		if (draftSaveTimerRef.current) {
+			clearTimeout(draftSaveTimerRef.current)
+		}
+		draftSaveTimerRef.current = setTimeout(() => {
+			draftSaveTimerRef.current = null
+			void saveDraftIfNeeded().catch((error) => {
+				console.error("Failed to save draft on blur:", error)
+			})
+		}, 600)
+	}, [saveDraftIfNeeded])
 
 	const saveDraftInBackground = useCallback(
 		(step = currentStep) => {
@@ -260,7 +268,6 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 			setData(emptyData)
 			setCurrentStep(0)
 			setShowTemplateSelector(false)
-			setPlatformFetchInProgress(false)
 			setBrandImagesUploading(false)
 		} catch (error) {
 			console.error("Failed to clear self-media draft:", error)
@@ -278,17 +285,15 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 		templates,
 		draftLoaded,
 		isDraftLoading: Boolean(fileStorageService) && !draftLoaded,
-		platformFetchInProgress,
 		brandImagesUploading,
 		setBrandImagesUploading,
-		handlePlatformFetchStart,
-		handlePlatformFetchEnd,
 		handleLoadTemplate,
 		handleStartBlank,
 		handleRestoreDraft,
 		handleDiscardDraft,
 		hasDraftContent,
 		saveDraftIfNeeded,
+		debouncedSaveDraft,
 		saveDraftInBackground,
 		handleClearData,
 		skipDraftPersistenceRef,

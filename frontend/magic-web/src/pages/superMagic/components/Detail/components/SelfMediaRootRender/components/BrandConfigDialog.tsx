@@ -105,7 +105,6 @@ function BrandConfigDialog({
 							onBrandImagesUploadingChange={setBrandImagesUploading}
 							brandImageUploadTarget="brand"
 							compact
-							showPlatformImport={false}
 						/>
 					)}
 				</div>

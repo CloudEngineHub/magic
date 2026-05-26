@@ -1,26 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { message } from "antd"
-import { ChevronRight, Globe } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 import InlineVoiceButton from "../../../components/ui/InlineVoiceButton"
-import { fetchAccountInfoViaTopic } from "../../../../../services/selfMediaAccountFetch"
 import { useBrandImagePreviewHydration } from "../../../hooks/useBrandImagePreviewHydration"
 import type { AttachmentNode } from "../../../../../services"
 import type { SelfMediaFileStorageService } from "../../../../../services/SelfMediaFileStorageService"
 import type { BrandImageItem } from "../../../types"
 import { BrandAssetUpload } from "./BrandAssetUpload"
 import { BrandFieldRow } from "./BrandFieldRow"
-
-const PLATFORM_OPTIONS = [
-	{ key: "xiaohongshu", label: "从小红书获取账号信息" },
-	{ key: "douyin", label: "从抖音获取账号信息" },
-	{ key: "weixin-mp", label: "从微信公众号获取账号信息" },
-	{ key: "bilibili", label: "从B站获取账号信息" },
-	{ key: "instagram", label: "从 Instagram 获取账号信息" },
-	{ key: "tiktok", label: "从 TikTok 获取账号信息" },
-] as const
 
 const QUICK_TAGS = ["AI分享", "科技数码", "职场成长", "好物测评", "萌宠日常", "美食探店"]
 
@@ -37,13 +26,9 @@ interface BrandInfoFieldsProps {
 	attachmentList?: AttachmentNode[]
 	projectId?: string
 	folderPath?: string
-	isPlatformFetching?: boolean
-	onPlatformFetchStart?: () => void
-	onPlatformFetchEnd?: () => void
 	onBrandImagesUploadingChange?: (uploading: boolean) => void
 	brandImageUploadTarget?: "draft" | "brand"
 	compact?: boolean
-	showPlatformImport?: boolean
 }
 
 export function BrandInfoFields({
@@ -57,18 +42,12 @@ export function BrandInfoFields({
 	attachmentList,
 	projectId,
 	folderPath,
-	isPlatformFetching = false,
-	onPlatformFetchStart,
-	onPlatformFetchEnd,
 	onBrandImagesUploadingChange,
 	brandImageUploadTarget = "draft",
 	compact = false,
-	showPlatformImport = true,
 }: BrandInfoFieldsProps) {
 	const { t } = useTranslation("super")
-	const [showPlatformFetch, setShowPlatformFetch] = useState(false)
 	const [activeBrandField, setActiveBrandField] = useState<BrandInfoField | null>(null)
-	const platformDropdownRef = useRef<HTMLDivElement>(null)
 	const [brandImageUploadProgress, setBrandImageUploadProgress] = useState<
 		Record<string, number>
 	>({})
@@ -82,53 +61,6 @@ export function BrandInfoFields({
 	useEffect(() => {
 		onBrandImagesUploadingChange?.(Object.keys(brandImageUploadProgress).length > 0)
 	}, [brandImageUploadProgress, onBrandImagesUploadingChange])
-
-	useEffect(() => {
-		if (!showPlatformFetch) return
-		const handleClickOutside = (e: MouseEvent) => {
-			if (
-				platformDropdownRef.current &&
-				!platformDropdownRef.current.contains(e.target as Node)
-			) {
-				setShowPlatformFetch(false)
-			}
-		}
-		document.addEventListener("mousedown", handleClickOutside)
-		return () => document.removeEventListener("mousedown", handleClickOutside)
-	}, [showPlatformFetch])
-
-	useEffect(() => {
-		if (!author.trim()) setShowPlatformFetch(false)
-	}, [author])
-
-	const handleFetchFromPlatform = useCallback(
-		async (platform: string, platformLabel: string) => {
-			if (!projectId || !author.trim() || isPlatformFetching) return
-			setShowPlatformFetch(false)
-			onPlatformFetchStart?.()
-			try {
-				const result = await fetchAccountInfoViaTopic({
-					platform,
-					platformLabel,
-					projectId,
-					folderPath,
-					accountName: author.trim(),
-				})
-				if (!result) onPlatformFetchEnd?.()
-			} catch (err) {
-				console.error("Failed to fetch account info:", err)
-				onPlatformFetchEnd?.()
-			}
-		},
-		[
-			projectId,
-			author,
-			isPlatformFetching,
-			onPlatformFetchStart,
-			onPlatformFetchEnd,
-			folderPath,
-		],
-	)
 
 	const handleFilesSelect = useCallback(
 		async (files: FileList, uploadedPaths?: (string | undefined)[]) => {
@@ -215,8 +147,6 @@ export function BrandInfoFields({
 		setActiveBrandField(null)
 	}, [])
 
-	const isFetching = isPlatformFetching
-	const canFetchFromPlatform = Boolean(author.trim()) && Boolean(projectId)
 	const getFieldLabelClass = (field: BrandInfoField) =>
 		cn(
 			"inline-flex px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors",
@@ -259,73 +189,12 @@ export function BrandInfoFields({
 								onChange={(e) => onChange("author", e.target.value)}
 								onFocus={() => setActiveBrandField("author")}
 								onBlur={() => setActiveBrandField(null)}
-								disabled={isFetching}
 							/>
 							<InlineVoiceButton
 								value={author}
 								onResult={(text) => onChange("author", text)}
 							/>
 						</div>
-
-						{showPlatformImport ? (
-							<div className="relative shrink-0" ref={platformDropdownRef}>
-								<button
-									type="button"
-									className={cn(
-										"flex w-full items-center justify-center gap-1.5 text-xs font-bold transition-all duration-300 sm:w-auto",
-										compact ? "h-10 px-3" : "h-11 px-4",
-										isPlatformFetching
-											? "cursor-wait bg-primary/10 text-primary"
-											: !canFetchFromPlatform
-												? "cursor-not-allowed bg-zinc-50 text-muted-foreground/35"
-												: "cursor-pointer bg-zinc-100 text-zinc-900 hover:bg-zinc-200 active:scale-[0.98]",
-									)}
-									onClick={() => {
-										if (!canFetchFromPlatform || isPlatformFetching) return
-										setShowPlatformFetch(!showPlatformFetch)
-									}}
-									disabled={isPlatformFetching || !canFetchFromPlatform}
-								>
-									<Globe size={13} />
-									<span>
-										{isPlatformFetching
-											? t(
-													"detail.selfMedia.initPanel.stepBrand.platformFetching",
-													"获取中…",
-												)
-											: "平台导入"}
-									</span>
-								</button>
-
-								{showPlatformFetch && canFetchFromPlatform && (
-									<div className="absolute right-0 top-full z-50 mt-1.5 w-56 overflow-hidden border border-zinc-950/10 bg-white shadow-md duration-150 animate-in fade-in slide-in-from-top-2">
-										<div className="border-b border-zinc-950/10 bg-zinc-50 px-4 py-2">
-											<span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-												选择目标平台以拉取
-											</span>
-										</div>
-										<div className="py-1">
-											{PLATFORM_OPTIONS.map((opt) => (
-												<button
-													key={opt.key}
-													type="button"
-													className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-sm text-foreground transition-colors hover:bg-primary/5"
-													onClick={() =>
-														handleFetchFromPlatform(opt.key, opt.label)
-													}
-												>
-													<ChevronRight
-														size={12}
-														className="text-muted-foreground/50"
-													/>
-													<span>{opt.label}</span>
-												</button>
-											))}
-										</div>
-									</div>
-								)}
-							</div>
-						) : null}
 					</div>
 				</BrandFieldRow>
 
@@ -362,7 +231,6 @@ export function BrandInfoFields({
 									handleAutoResize(e.currentTarget)
 								}}
 								onBlur={(e) => handleTextareaBlur(e.currentTarget)}
-								disabled={isFetching}
 							/>
 							<InlineVoiceButton
 								variant="textarea"
@@ -426,7 +294,6 @@ export function BrandInfoFields({
 								handleAutoResize(e.currentTarget)
 							}}
 							onBlur={(e) => handleTextareaBlur(e.currentTarget)}
-							disabled={isFetching}
 						/>
 						<InlineVoiceButton
 							variant="textarea"
@@ -476,7 +343,7 @@ export function BrandInfoFields({
 							brandImages={brandImages}
 							brandImageUploadProgress={brandImageUploadProgress}
 							hydratingImageIds={hydratingImageIds}
-							isFetching={isFetching}
+							isFetching={false}
 							onFilesSelect={handleFilesSelect}
 							onRemoveBrandImage={handleRemoveBrandImage}
 							onBrandImageDescChange={handleBrandImageDescChange}

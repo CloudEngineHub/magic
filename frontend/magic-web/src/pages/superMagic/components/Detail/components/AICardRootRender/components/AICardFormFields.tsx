@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -9,6 +9,9 @@ import { ScheduledItem } from "@/components/business/AccountSetting/pages/Schedu
 import type { ScheduledTask } from "@/types/scheduledTask"
 import ModelIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/components/ModelIcon"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
+import { MagicPromptEditor } from "@/components/base/MagicPromptEditor"
+import { useAIPolish } from "@/components/base/MagicPromptEditor/useAIPolish"
+import type { JSONContent } from "@tiptap/react"
 import { CARD_TEMPLATES } from "../hooks/useAICardConfig"
 import type { CardTemplateType } from "../hooks/useAICardConfig"
 
@@ -16,6 +19,7 @@ export interface AICardFormFieldsValues {
 	taskName: string
 	prompt: string
 	template: CardTemplateType
+	customTemplatePrompt?: string
 	timeConfig?: ScheduledTask.TimeConfig | null
 	enabled?: boolean
 	model?: ModelItem | null
@@ -49,6 +53,21 @@ function AICardFormFields({
 }: AICardFormFieldsProps) {
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useState(advancedExpanded)
+	const { polishText } = useAIPolish()
+
+	/** Parse the stored prompt JSON string back to JSONContent for the editor */
+	const promptJSON = useMemo((): JSONContent | undefined => {
+		if (!values.prompt) return undefined
+		try {
+			return JSON.parse(values.prompt) as JSONContent
+		} catch {
+			// Fallback: if the stored value is plain text (legacy), wrap it as a paragraph
+			return {
+				type: "doc",
+				content: [{ type: "paragraph", content: [{ type: "text", text: values.prompt }] }],
+			}
+		}
+	}, [values.prompt])
 
 	const handleTimeConfigChange = useCallback(
 		(config: ScheduledTask.TimeConfig) => {
@@ -100,9 +119,9 @@ function AICardFormFields({
 			const model = models.find((m) => m.model_id === String(option.value))
 			if (!model) return option.label
 			return (
-				<span className="flex items-center gap-2">
+				<span className="flex min-w-0 items-center gap-2">
 					<ModelIcon model={model} size={14} className="shrink-0 rounded-sm" />
-					<span className="truncate">{model.model_name}</span>
+					<span className="min-w-0 truncate">{model.model_name}</span>
 				</span>
 			)
 		},
@@ -143,6 +162,22 @@ function AICardFormFields({
 							value: opt.value,
 						}))}
 					/>
+					{values.template === "custom" && (
+						<textarea
+							value={values.customTemplatePrompt || ""}
+							onChange={(e) => onChange({ customTemplatePrompt: e.target.value })}
+							placeholder={t("detail.aiCard.form.customTemplatePlaceholder")}
+							disabled={disabled}
+							rows={3}
+							className={cn(
+								"flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
+								"ring-offset-background placeholder:text-muted-foreground",
+								"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+								"disabled:cursor-not-allowed disabled:opacity-50",
+								"resize-y",
+							)}
+						/>
+					)}
 					<p className="text-xs text-muted-foreground">
 						{t("detail.aiCard.form.templateHint")}
 					</p>
@@ -154,19 +189,16 @@ function AICardFormFields({
 				<label className="text-sm font-medium text-foreground">
 					{t("detail.aiCard.form.prompt")} <span className="text-destructive">*</span>
 				</label>
-				<textarea
-					value={values.prompt}
-					onChange={(e) => onChange({ prompt: e.target.value })}
+				<MagicPromptEditor
+					value={promptJSON}
+					onChange={(json: JSONContent) => onChange({ prompt: JSON.stringify(json) })}
 					placeholder={t("detail.aiCard.form.promptPlaceholder")}
 					disabled={disabled}
 					rows={4}
-					className={cn(
-						"flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
-						"ring-offset-background placeholder:text-muted-foreground",
-						"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-						"disabled:cursor-not-allowed disabled:opacity-50",
-						"resize-y",
-					)}
+					enableMention
+					enableAIPolish
+					onAIPolish={polishText}
+					enableVoice
 				/>
 				<p className="text-xs text-muted-foreground">
 					{t("detail.aiCard.form.promptHint")}

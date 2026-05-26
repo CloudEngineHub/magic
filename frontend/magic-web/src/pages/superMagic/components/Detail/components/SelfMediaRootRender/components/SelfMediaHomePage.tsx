@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { FileText, Layers, Plus, Settings, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import { cn } from "@/lib/utils"
+import { MagicTooltip } from "@/components/base"
 import type { SelfMediaPlatform } from "../../../types"
 import { ALL_PLATFORMS } from "./SelfMediaInitPanel/types"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
@@ -10,16 +11,27 @@ import PlatformBrandIcon from "./PlatformBrandIcon"
 import CardFrame from "./CardFrame"
 import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../constants/imageProcess"
 import { useCoverImageUrl } from "../platforms/wechat-official-accounts/useCoverImageUrl"
+import { isCardPlatform } from "../services/selfMediaAiNormalize"
 import type { SelfMediaAttachmentNode, SelfMediaCard } from "../types"
+
+interface AICardFolderItem {
+	file_id: string
+	file_name?: string
+	is_directory?: boolean
+	children?: any[]
+	display_config?: any
+}
 
 interface SelfMediaHomePageProps {
 	posts: SelfMediaPlatformPostItem[]
 	attachmentList?: SelfMediaAttachmentNode[]
 	onEnsurePostLoaded?: (target: { platform: SelfMediaPlatform; index: number }) => void
-	onCreateArticle: () => void
+	onCreateArticle?: () => void
 	onOpenPost: (target: { platform: SelfMediaPlatform; index: number }) => void
 	onOpenBrandConfig?: () => void
 	onCreateAICard?: () => void
+	onOpenAICardFolder?: (folder: AICardFolderItem) => void
+	folderFileId?: string
 	className?: string
 }
 
@@ -31,6 +43,8 @@ function SelfMediaHomePage({
 	onOpenPost,
 	onOpenBrandConfig,
 	onCreateAICard,
+	onOpenAICardFolder,
+	folderFileId,
 	className,
 }: SelfMediaHomePageProps) {
 	const { t } = useTranslation("super")
@@ -52,6 +66,31 @@ function SelfMediaHomePage({
 		const platformConfig = ALL_PLATFORMS.find((item) => item.value === platform)
 		return platformConfig ? t(platformConfig.labelKey) : platform
 	}
+
+	// Find sibling AI card folders from the attachment tree
+	const aiCardFolders = useMemo(() => {
+		if (!attachmentList?.length || !folderFileId) return []
+		// Find the parent that contains our self-media folder
+		const findParentChildren = (
+			nodes: SelfMediaAttachmentNode[],
+		): SelfMediaAttachmentNode[] | null => {
+			for (const node of nodes) {
+				if (node.file_id === folderFileId) return nodes
+				if (node.is_directory && node.children?.length) {
+					const result = findParentChildren(node.children as SelfMediaAttachmentNode[])
+					if (result) return result
+				}
+			}
+			return null
+		}
+		const siblings = findParentChildren(attachmentList) || attachmentList
+		return siblings.filter(
+			(node) =>
+				node.is_directory &&
+				node.file_id !== folderFileId &&
+				(node as any).display_config?.type === "ai-card",
+		) as unknown as AICardFolderItem[]
+	}, [attachmentList, folderFileId])
 
 	useEffect(() => {
 		if (!onEnsurePostLoaded) return
@@ -103,7 +142,7 @@ function SelfMediaHomePage({
 			data-testid="self-media-home-page"
 		>
 			<header className="shrink-0 border-b border-border/60 bg-white px-6 py-5">
-				<div className="mx-auto flex max-w-5xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<div className="mx-auto flex max-w-5xl [container-type:inline-size] flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 					<div className="space-y-1">
 						<h2 className="text-2xl font-black tracking-tight text-foreground">
 							{t("detail.selfMedia.home.title")}
@@ -112,44 +151,125 @@ function SelfMediaHomePage({
 							{t("detail.selfMedia.home.subtitle")}
 						</p>
 					</div>
-					<div className="flex flex-wrap items-center gap-2">
+					<div className="flex flex-nowrap items-center gap-2">
 						{onOpenBrandConfig ? (
-							<button
-								type="button"
-								className="inline-flex cursor-pointer items-center justify-center gap-2 bg-zinc-100 px-4 py-2.5 text-xs font-black text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98]"
-								onClick={onOpenBrandConfig}
-								data-testid="self-media-home-brand-config-button"
-							>
-								<Settings size={14} />
-								<span>{t("detail.selfMedia.home.brandConfig")}</span>
-							</button>
+							<MagicTooltip title={t("detail.selfMedia.home.brandConfig")}>
+								<button
+									type="button"
+									className="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap bg-zinc-100 px-2.5 py-2.5 text-xs font-black text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98] [@container(min-width:600px)]:px-4"
+									onClick={onOpenBrandConfig}
+									data-testid="self-media-home-brand-config-button"
+								>
+									<Settings size={14} className="shrink-0" />
+									<span className="hidden [@container(min-width:600px)]:inline">
+										{t("detail.selfMedia.home.brandConfig")}
+									</span>
+								</button>
+							</MagicTooltip>
 						) : null}
 						{onCreateAICard ? (
-							<button
-								type="button"
-								className="inline-flex cursor-pointer items-center justify-center gap-2 bg-violet-50 px-4 py-2.5 text-xs font-black text-violet-700 transition-all hover:bg-violet-100 active:scale-[0.98]"
-								onClick={onCreateAICard}
-								data-testid="self-media-home-ai-card-button"
-							>
-								<Sparkles size={14} />
-								<span>{t("detail.selfMedia.home.aiCard")}</span>
-							</button>
+							<MagicTooltip title={t("detail.selfMedia.home.aiCard")}>
+								<button
+									type="button"
+									className="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap bg-violet-50 px-2.5 py-2.5 text-xs font-black text-violet-700 transition-all hover:bg-violet-100 active:scale-[0.98] [@container(min-width:600px)]:px-4"
+									onClick={onCreateAICard}
+									data-testid="self-media-home-ai-card-button"
+								>
+									<Sparkles size={14} className="shrink-0" />
+									<span className="hidden [@container(min-width:600px)]:inline">
+										{t("detail.selfMedia.home.aiCard")}
+									</span>
+								</button>
+							</MagicTooltip>
 						) : null}
-						<button
-							type="button"
-							className="inline-flex cursor-pointer items-center justify-center gap-2 bg-zinc-950 px-4 py-2.5 text-xs font-black text-white transition-all hover:bg-zinc-900 active:scale-[0.98]"
-							onClick={onCreateArticle}
-							data-testid="self-media-home-create-button"
-						>
-							<Plus size={14} />
-							<span>{t("detail.selfMedia.home.create")}</span>
-						</button>
+						{onCreateArticle ? (
+							<MagicTooltip title={t("detail.selfMedia.home.create")}>
+								<button
+									type="button"
+									className="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap bg-zinc-950 px-2.5 py-2.5 text-xs font-black text-white transition-all hover:bg-zinc-900 active:scale-[0.98] [@container(min-width:600px)]:px-4"
+									onClick={onCreateArticle}
+									data-testid="self-media-home-create-button"
+								>
+									<Plus size={14} className="shrink-0" />
+									<span className="hidden [@container(min-width:600px)]:inline">
+										{t("detail.selfMedia.home.create")}
+									</span>
+								</button>
+							</MagicTooltip>
+						) : null}
 					</div>
 				</div>
 			</header>
 
 			<main className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
 				<div className="mx-auto max-w-5xl">
+					{aiCardFolders.length > 0 && onOpenAICardFolder ? (
+						<section
+							className="mb-6 space-y-4"
+							data-testid="self-media-home-ai-card-list"
+						>
+							<div className="flex items-center justify-between border-b border-dashed border-zinc-950/10 pb-3">
+								<div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-zinc-950">
+									<Sparkles size={14} />
+									<span>
+										{t("detail.selfMedia.home.aiCardCount", {
+											count: aiCardFolders.length,
+										})}
+									</span>
+								</div>
+							</div>
+							<div className="grid gap-3 md:grid-cols-2">
+								{aiCardFolders.map((folder) => {
+									const name =
+										folder.file_name || t("detail.selfMedia.home.aiCard")
+									const latestHtml = folder.children?.find(
+										(child: any) =>
+											child.file_name === "latest.html" &&
+											!child.is_directory,
+									)
+									return (
+										<button
+											key={folder.file_id}
+											type="button"
+											className="group flex min-h-28 cursor-pointer flex-col gap-3 border-l-2 border-transparent bg-white p-4 text-left transition-all hover:border-violet-600 hover:bg-violet-50/50 active:scale-[0.99]"
+											onClick={() => onOpenAICardFolder(folder)}
+											data-testid={`self-media-home-ai-card-open-${folder.file_id}`}
+										>
+											<div className="flex items-start gap-3">
+												<div className="flex h-[4.5rem] w-[3.375rem] shrink-0 items-center justify-center overflow-hidden bg-violet-100 text-violet-700">
+													{latestHtml?.file_id ? (
+														<div className="pointer-events-none h-full w-full bg-white">
+															<CardFrame
+																cardId={`home-aicard-${folder.file_id}`}
+																fileId={latestHtml.file_id}
+																version={latestHtml.updated_at}
+																attachmentList={attachmentList}
+																imageProcessOptions={
+																	CARD_THUMBNAIL_IMAGE_PROCESS
+																}
+																className="h-full w-full"
+																title={name}
+															/>
+														</div>
+													) : (
+														<Sparkles size={17} />
+													)}
+												</div>
+												<div className="min-w-0 flex-1 space-y-1">
+													<h3 className="truncate text-sm font-black text-zinc-950 group-hover:text-violet-700">
+														{name}
+													</h3>
+													<p className="text-xs font-medium text-muted-foreground">
+														{t("detail.selfMedia.home.aiCard")}
+													</p>
+												</div>
+											</div>
+										</button>
+									)
+								})}
+							</div>
+						</section>
+					) : null}
 					{hasPosts ? (
 						<section className="space-y-4" data-testid="self-media-home-post-list">
 							<div className="flex items-center justify-between border-b border-dashed border-zinc-950/10 pb-3">
@@ -203,7 +323,14 @@ function SelfMediaHomePage({
 														data-testid={`self-media-home-post-open-${postId}`}
 													>
 														<div className="flex items-start gap-3">
-															<div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden bg-primary/20 text-zinc-950">
+															<div
+																className={cn(
+																	"flex shrink-0 items-center justify-center overflow-hidden bg-primary/20 text-zinc-950",
+																	isCardPlatform(platform)
+																		? "h-[4.5rem] w-[3.375rem]"
+																		: "h-14 w-14",
+																)}
+															>
 																{renderArticlePreview(item)}
 															</div>
 															<div className="min-w-0 flex-1 space-y-1">

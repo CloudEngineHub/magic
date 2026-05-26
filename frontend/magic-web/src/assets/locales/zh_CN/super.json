@@ -640,7 +640,8 @@
 				"openPlatform": "打开平台内容",
 				"subtitle": "从文章列表进入详情，数据更新时会保留当前页面。",
 				"title": "文章首页",
-				"aiCard": "AI 卡片"
+				"aiCard": "AI 卡片",
+				"aiCardCount": "{{count}} 个 AI 卡片"
 			},
 			"brandConfig": {
 				"cancel": "取消",
@@ -992,7 +993,8 @@
 				"cardName": "卡片名称",
 				"cardNamePlaceholder": "例如：抖音热点追踪、每日行业摘要",
 				"template": "卡片模板",
-				"templateHint": "选择卡片的视觉样式模板，也可选\"自定义\"后手动编辑模板",
+				"templateHint": "选择卡片的视觉样式模板，也可选\"自定义\"后输入模板需求",
+				"customTemplatePlaceholder": "描述你想要的卡片样式和布局。\n例如：左侧展示趋势折线图，右侧以卡片列表形式展示 Top 10 热点，整体采用深色风格。",
 				"prompt": "分析指令",
 				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
 				"promptHint": "AI 将根据此指令定时获取最新数据，分析后生成可视化卡片并自动更新。",
@@ -1020,7 +1022,8 @@
 				"cancel": "取消",
 				"saving": "保存中...",
 				"save": "保存配置",
-				"generate": "生成卡片"
+				"generate": "生成卡片",
+				"saveDraft": "暂存内容"
 			},
 			"dashboard": {
 				"loading": "AI 卡片加载中...",

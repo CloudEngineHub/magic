@@ -6,8 +6,6 @@ export const STEPS = [
 	{ key: "confirm", titleKey: "detail.selfMedia.initPanel.steps.confirm" },
 ]
 
-export const PLATFORM_FETCH_TIMEOUT_MS = 3 * 60 * 1000
-
 export function createEmptyInitData(): SelfMediaInitData {
 	return {
 		global: {

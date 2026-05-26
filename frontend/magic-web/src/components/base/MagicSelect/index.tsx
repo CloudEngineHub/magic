@@ -250,7 +250,11 @@ const MagicSelect = memo(
 					{...restProps}
 				>
 					<SelectTrigger
-						className={cn("w-fit", className, triggerClassName)}
+						className={cn(
+							"w-fit [&_[data-slot='select-value']]:overflow-auto",
+							className,
+							triggerClassName,
+						)}
 						size={size}
 						onClick={onClick}
 						data-testid={dataTestId}

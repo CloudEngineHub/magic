@@ -639,7 +639,8 @@
 				"openPlatform": "Open platform content",
 				"subtitle": "Open details from the list. Data updates keep you on the current page.",
 				"title": "Article home",
-				"aiCard": "AI Card"
+				"aiCard": "AI Card",
+				"aiCardCount": "{{count}} AI card(s)"
 			},
 			"brandConfig": {
 				"cancel": "Cancel",
@@ -991,7 +992,8 @@
 				"cardName": "Card Name",
 				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
 				"template": "Card Template",
-				"templateHint": "Choose a visual template, or select \"Custom\" to edit manually",
+				"templateHint": "Choose a visual template, or select \"Custom\" and describe your requirements",
+				"customTemplatePlaceholder": "Describe the card style and layout you want.\ne.g., Show a trend line chart on the left, a top-10 list on the right, with a dark theme.",
 				"prompt": "Analysis Instructions",
 				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends.",
 				"promptHint": "AI will periodically fetch latest data, analyze it, and update the visual card.",
@@ -1019,7 +1021,8 @@
 				"cancel": "Cancel",
 				"saving": "Saving...",
 				"save": "Save Configuration",
-				"generate": "Generate Card"
+				"generate": "Generate Card",
+				"saveDraft": "Save Draft"
 			},
 			"dashboard": {
 				"loading": "Loading AI Cards...",

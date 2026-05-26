@@ -117,6 +117,36 @@ def resolve_message_content(message_content: Optional[str], message_content_file
     return Path(message_content_file).read_text(encoding="utf-8").strip()
 
 
+def text_to_json_content(text: str) -> dict:
+    """将纯文本转换为 Tiptap JSONContent 格式（rich_text）。"""
+    paragraphs = []
+    for line in text.split("\n"):
+        if line:
+            paragraphs.append({
+                "type": "paragraph",
+                "content": [{"type": "text", "text": line}],
+            })
+        else:
+            paragraphs.append({"type": "paragraph"})
+    return {"type": "doc", "content": paragraphs}
+
+
+def parse_message_content(raw: str):
+    """
+    解析消息内容：
+    - 如果是合法的 JSONContent dict（含 type 字段），直接使用
+    - 否则视为纯文本，转换为 JSONContent
+    返回 (content, message_type)
+    """
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict) and parsed.get("type"):
+            return parsed, "rich_text"
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return text_to_json_content(raw), "rich_text"
+
+
 try:
     topic_id, model_id = get_context(
         topic_pattern=args.topic_pattern,
@@ -130,7 +160,8 @@ try:
         print(json.dumps({"error": "无法从当前会话获取 model_id"}, ensure_ascii=False))
         sys.exit(1)
 
-    message_content = resolve_message_content(args.message_content, args.message_content_file)
+    raw_content = resolve_message_content(args.message_content, args.message_content_file)
+    message_content, message_type = parse_message_content(raw_content)
     sdk = create_magic_service_sdk_with_defaults()
 
     normalized_deadline = normalize_deadline(args.deadline)
@@ -149,6 +180,7 @@ try:
         specify_topic=args.specify_topic,
         topic_pattern=args.topic_pattern,
         agent_code=args.agent_code,
+        message_type=message_type,
     )
 
     result = sdk.message_schedule.create_message_schedule(parameter)

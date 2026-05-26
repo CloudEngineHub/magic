@@ -1,4 +1,5 @@
 import type { SelfMediaPlatform } from "../../../../types"
+import type { JSONContent } from "@tiptap/react"
 
 /** An outline node in the tree structure */
 export interface OutlineNode {
@@ -59,8 +60,12 @@ export interface ArticleDetail {
 	platform: SelfMediaPlatform
 	/** User's casual description (voice/text input) */
 	description?: string
+	/** Rich JSON content for the description (used by MagicPromptEditor) */
+	descriptionJson?: JSONContent
 	/** Reference files for custom visual style */
 	visualReferenceFiles?: ReferenceFileValue[]
+	/** Rich JSON content for visual description (used by MagicPromptEditor in custom mode) */
+	visualDescriptionJson?: JSONContent
 }
 
 /** A brand image/asset uploaded by the user */

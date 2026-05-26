@@ -84,7 +84,7 @@ export default observer(function ModelSelector({
 					type="button"
 					className={cn(
 						mode === "icon"
-							? "flex items-center gap-1 rounded-l-full px-2.5 py-1.5 transition-all hover:opacity-80"
+							? "flex items-center gap-1 px-2.5 py-1.5 transition-all hover:opacity-80"
 							: "flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white/80 px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-primary/50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-zinc-300 dark:hover:text-zinc-100",
 						className,
 					)}

@@ -281,10 +281,33 @@ function buildOutlineParagraphs(
 
 // ─── Unique mention collection ────────────────────────────────────────────────
 
+/** Extract project_file mentions from a JSONContent document */
+function extractMentionsFromJson(json?: JSONContent): ProjectFileMentionData[] {
+	if (!json) return []
+	const mentions: ProjectFileMentionData[] = []
+	const walk = (node: JSONContent) => {
+		if (node.type === "mention" && node.attrs?.type === "project_file" && node.attrs?.data) {
+			const d = node.attrs.data
+			if (d.file_path) {
+				mentions.push({
+					file_id: d.file_id || "",
+					file_name: d.file_name || "",
+					file_path: d.file_path,
+					file_extension: d.file_extension || "",
+				})
+			}
+		}
+		if (node.content) node.content.forEach(walk)
+	}
+	walk(json)
+	return mentions
+}
+
 function collectUniqueFileMentions(
 	materials: MaterialItem[],
 	visualRefFiles: ReferenceFileValue[],
 	materialDir?: string,
+	visualDescriptionJson?: JSONContent,
 ): ProjectFileMentionData[] {
 	const seen = new Set<string>()
 	const mentions: ProjectFileMentionData[] = []
@@ -297,6 +320,7 @@ function collectUniqueFileMentions(
 
 	for (const mat of materials) push(materialToMentionData(mat, materialDir))
 	for (const ref of visualRefFiles) push(referenceFileToMentionData(ref))
+	for (const m of extractMentionsFromJson(visualDescriptionJson)) push(m)
 
 	return mentions
 }
@@ -362,7 +386,7 @@ export function buildArticlePromptContent(
 	const allMaterials = collectArticleMaterials(article)
 	const visualRefFiles = article.visualReferenceFiles || []
 	const notesWithoutVisualDescription = stripVisualDescriptionTags(article.notes)
-	const fileMentions = collectUniqueFileMentions(allMaterials, visualRefFiles, materialDir)
+	const fileMentions = collectUniqueFileMentions(allMaterials, visualRefFiles, materialDir, article.visualDescriptionJson)
 	const targetDirectoryMention = buildTargetDirectoryMention(targetDirectory)
 
 	const docContent: JSONContent[] = []
@@ -419,20 +443,30 @@ export function buildArticlePromptContent(
 
 	if (article.visualPreset && article.visualPreset !== "none") {
 		if (article.visualPreset === "custom") {
-			const customMatch = article.notes.match(/\[视觉描述\](.*?)\[\/视觉描述\]/)
-			const customDesc = customMatch?.[1] || "用户自定义风格"
-			const visualParagraphs: JSONContent[] = [
-				para(
-					`预设标识：custom:${customDesc}\n适用平台：${platform}\n请根据以上描述生成自定义视觉预设（CSS + JS），并用于卡片制作。`,
-				),
-			]
-			if (visualRefFiles.length > 0) {
-				visualParagraphs.push(
-					para("请结合以下视觉参考文件理解风格要求："),
-					...visualRefFileParagraphs(visualRefFiles),
-				)
+			// Prefer rich JSON content (which may contain @mention file references)
+			if (article.visualDescriptionJson?.content?.length) {
+				const visualParagraphs: JSONContent[] = [
+					para(`预设标识：custom\n适用平台：${platform}\n请根据以下视觉描述生成自定义视觉预设（CSS + JS），并用于卡片制作。`),
+					...article.visualDescriptionJson.content,
+				]
+				pushSection(docContent, "视觉要求", visualParagraphs)
+			} else {
+				// Fallback: extract from [视觉描述] tags in notes
+				const customMatch = article.notes.match(/\[视觉描述\](.*?)\[\/视觉描述\]/)
+				const customDesc = customMatch?.[1] || "用户自定义风格"
+				const visualParagraphs: JSONContent[] = [
+					para(
+						`预设标识：custom:${customDesc}\n适用平台：${platform}\n请根据以上描述生成自定义视觉预设（CSS + JS），并用于卡片制作。`,
+					),
+				]
+				if (visualRefFiles.length > 0) {
+					visualParagraphs.push(
+						para("请结合以下视觉参考文件理解风格要求："),
+						...visualRefFileParagraphs(visualRefFiles),
+					)
+				}
+				pushSection(docContent, "视觉要求", visualParagraphs)
 			}
-			pushSection(docContent, "视觉要求", visualParagraphs)
 		} else {
 			pushSection(docContent, "视觉要求", [
 				para(

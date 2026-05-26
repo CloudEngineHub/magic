@@ -5,8 +5,10 @@ import { AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Flex } from "antd"
-import { message } from "antd"
 import { ScheduledTaskApi } from "@/apis"
+import magicToast from "@/components/base/MagicToaster/utils"
+import { projectStore } from "@/pages/superMagic/stores/core"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import AICardConfigPanel from "./components/AICardConfigPanel"
 import AICardDashboard from "./components/AICardDashboard"
 import AICardDetail from "./components/AICardDetail"
@@ -41,6 +43,9 @@ function AICardRootRender(props: AICardRootRenderProps) {
 	const [store] = useState(() => new AICardStore())
 	const [isRunNowLoading, setIsRunNowLoading] = useState(false)
 
+	// Permission check: only users with edit access can configure / run
+	const canEdit = !isReadOnlyProject(projectStore.selectedProject?.user_role)
+
 	// Track whether initialNavigation has been applied
 	const appliedNavigationRef = useRef(false)
 
@@ -54,8 +59,8 @@ function AICardRootRender(props: AICardRootRenderProps) {
 		if (store.loading || appliedNavigationRef.current) return
 		appliedNavigationRef.current = true
 
-		// If no config exists, force config panel
-		if (!store.hasConfig) {
+		// If no config exists, force config panel (only for editors)
+		if (!store.hasConfig && canEdit) {
 			store.setViewMode("config")
 			return
 		}
@@ -88,7 +93,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 		try {
 			const response = await ScheduledTaskApi.executeScheduledTask(scheduleId)
 			if (!response?.success) {
-				message.error(response?.error_message || t("detail.aiCard.runNow.error"))
+				magicToast.error(response?.error_message || t("detail.aiCard.runNow.error"))
 				return
 			}
 
@@ -96,14 +101,14 @@ function AICardRootRender(props: AICardRootRenderProps) {
 			if (chatTopicId) {
 				const switched = await switchToTopicByChatTopicId(chatTopicId)
 				if (switched) {
-					message.success(t("detail.aiCard.runNow.successSwitched"))
+					magicToast.success(t("detail.aiCard.runNow.successSwitched"))
 					return
 				}
 			}
 
-			message.success(t("detail.aiCard.runNow.success"))
+			magicToast.success(t("detail.aiCard.runNow.success"))
 		} catch {
-			message.error(t("detail.aiCard.runNow.error"))
+			magicToast.error(t("detail.aiCard.runNow.error"))
 		} finally {
 			setIsRunNowLoading(false)
 		}
@@ -134,7 +139,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 			data-testid="ai-card-root"
 		>
 			<AnimatePresence mode="wait">
-				{store.viewMode === "config" && (
+				{store.viewMode === "config" && canEdit && (
 					<AICardConfigPanel
 						key="config"
 						store={store}
@@ -148,8 +153,10 @@ function AICardRootRender(props: AICardRootRenderProps) {
 						historyEntries={store.historyEntries}
 						attachmentList={stableAttachmentList}
 						onOpenCard={handleOpenCard}
-						onOpenConfig={handleOpenConfig}
-						onRunNow={store.projectConfig?.schedule_id ? handleRunNow : undefined}
+						onOpenConfig={canEdit ? handleOpenConfig : undefined}
+						onRunNow={
+							canEdit && store.projectConfig?.schedule_id ? handleRunNow : undefined
+						}
 						isRunNowLoading={isRunNowLoading}
 						onOpenHistoryEntry={handleOpenHistoryEntry}
 					/>
