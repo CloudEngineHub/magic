@@ -46,6 +46,19 @@ const GENERATION_MODE_DEFINITIONS = [
 	},
 ]
 
+function getReferenceImages(state) {
+	// Match UI upload order: product image first, then model images.
+	return [state.productImage, ...state.modelImages].filter(Boolean)
+}
+
+function countReferenceImages(state) {
+	return getReferenceImages(state).length
+}
+
+function getMaxReferenceImages(state, helpers) {
+	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 2
+}
+
 registerMagicCanvasPlugin({
 	mount(ctx, root) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
@@ -58,8 +71,8 @@ registerMagicCanvasPlugin({
 		return MagicPluginKit.mount(ctx, root, {
 			panelClassName: "boots-tryon",
 			initialState: {
-				productImages: [],
-				modelImage: null,
+				productImage: null,
+				modelImages: [],
 				generationMode: "standard",
 				genCount: 1,
 			},
@@ -70,46 +83,41 @@ registerMagicCanvasPlugin({
 			},
 			sections: [
 				{
-					id: "productImages",
-					kind: "image-grid",
-					stateKey: "productImages",
+					id: "productImage",
+					kind: "image-slot",
+					stateKey: "productImage",
 					title: t("section.products", "鞋履商品图"),
+					uploadLabel: t("upload.product", "点击上传鞋履商品图"),
 					help: t(
 						"upload.productTip",
-						"支持运动鞋、靴子、高跟鞋、平底鞋、凉鞋等，建议上传 1-2 张鞋履参考图。",
+						"支持运动鞋、靴子、高跟鞋、平底鞋、凉鞋等，建议上传 1 张鞋履商品图。",
 					),
-					deps: ["modelImage", "modelId", "modelOptions"],
-					addLabel: "+",
 					alt: t("section.products", "鞋履商品图"),
-					maxCount: ({ state, helpers }) => {
-						const maxReferenceImages =
-							helpers.getSelectedModel(state)?.image_size_config
-								?.max_reference_images ?? 2
-						return Math.max(
-							1,
-							Math.min(14, maxReferenceImages - (state.modelImage ? 1 : 0)),
-						)
+					beforePick: ({ state, helpers }) => {
+						if (state.productImage) return null
+						const maxReferenceImages = getMaxReferenceImages(state, helpers)
+						if (!state.productImage && state.modelImages.length + 1 > maxReferenceImages) {
+							return t("error.referenceLimit", "参考图数量已达当前模型上限")
+						}
+						return null
 					},
 				},
 				{
-					id: "modelImage",
-					kind: "image-slot",
-					stateKey: "modelImage",
+					id: "modelImages",
+					kind: "image-grid",
+					stateKey: "modelImages",
 					title: t("section.model", "模特底图"),
 					suffix: t("optional", "可选"),
 					uploadLabel: t("upload.model", "点击上传带脚部/小腿的模特图"),
 					alt: t("section.model", "模特底图"),
-					beforePick: ({ state, helpers }) => {
-						const maxReferenceImages =
-							helpers.getSelectedModel(state)?.image_size_config
-								?.max_reference_images ?? 2
-						if (
-							state.productImages.length + (state.modelImage ? 1 : 0) >=
-							maxReferenceImages
-						) {
-							return t("error.referenceLimit", "参考图数量已达当前模型上限")
-						}
-						return null
+					help: t(
+						"upload.model.help",
+						"支持上传多张带脚部或小腿的模特图，便于按不同姿态分别生成鞋履试穿结果。",
+					),
+					maxCount: ({ state, helpers }) => {
+						const maxReferenceImages = getMaxReferenceImages(state, helpers)
+						const productCount = state.productImage ? 1 : 0
+						return Math.max(1, Math.min(10, maxReferenceImages - productCount))
 					},
 				},
 				{
@@ -142,20 +150,32 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成鞋履试穿图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.productImages.length) {
-						return t("empty.products", "请先上传至少 1 张鞋履商品图")
+					if (!state.productImage) {
+						return t("empty.products", "请先上传鞋履商品图")
+					}
+					if (!state.modelImages.length) {
+						return t("empty.models", "请先上传模特底图")
 					}
 					return ""
 				},
-				isDisabled: ({ state }) => !state.productImages.length,
+				isDisabled: ({ state }) => !state.productImage || !state.modelImages.length,
 				validate: ({ state, helpers }) => {
-					if (!state.productImages.length) {
-						return t("empty.products", "请先上传至少 1 张鞋履商品图")
+					if (!state.productImage) {
+						return t("empty.products", "请先上传鞋履商品图")
 					}
+
+					if (!state.modelImages.length) {
+						return t("empty.models", "请先上传模特底图")
+					}
+
 					if (!state.modelId) {
 						return t("error.noModels", "暂无可用 AI 模型")
 					}
-					if (!helpers.collectReferenceIds(getReferenceImages(state)).length) {
+					const referenceImages = getReferenceImages(state)
+					if (
+						helpers.collectReferenceIds(referenceImages).length !==
+						referenceImages.length
+					) {
 						return t("error.references", "图片缺少可用于生成的资源标识")
 					}
 					const selectedSize = helpers.getSelectedSize(state)
@@ -164,27 +184,41 @@ registerMagicCanvasPlugin({
 					}
 					return null
 				},
-				buildRequest: ({ state, helpers }) => {
+				execute: async ({ state, helpers, generateAndPlace }) => {
 					const selectedSize = helpers.getSelectedSize(state)
-					const referenceImages = helpers.collectReferenceIds(getReferenceImages(state))
 					const width = selectedSize.genW
 					const height = selectedSize.genH
 
-					return {
-						model_id: state.modelId,
-						prompt: buildBootsPrompt({
-							generationMode: state.generationMode,
-							productImages: state.productImages,
-							hasModelImage: Boolean(state.modelImage),
-						}),
-						size: `${width}x${height}`,
-						resolution: state.scale || undefined,
-						reference_images: referenceImages,
-						width,
-						height,
-						count: state.genCount,
-						select: false,
+					if (state.modelImages.length <= 1) {
+						return generateAndPlace(
+							buildBootsRequest({
+								state,
+								helpers,
+								modelImage: state.modelImages[0] ?? null,
+								width,
+								height,
+								count: state.genCount,
+							}),
+						)
 					}
+
+					const results = []
+					for (let index = 0; index < state.genCount; index += 1) {
+						const modelImage = state.modelImages[index % state.modelImages.length]
+						results.push(
+							await generateAndPlace(
+								buildBootsRequest({
+									state,
+									helpers,
+									modelImage,
+									width,
+									height,
+									count: 1,
+								}),
+							),
+						)
+					}
+					return results
 				},
 				onSuccess: ({ ctx }) => {
 					ctx.ui.toast(t("toast.success", "鞋履试穿图生成成功！"), "success")
@@ -195,28 +229,41 @@ registerMagicCanvasPlugin({
 	},
 })
 
-function getReferenceImages(state) {
-	return [...state.productImages, ...(state.modelImage ? [state.modelImage] : [])]
+function getReferenceImagesForRequest(productImage, modelImage) {
+	return [productImage, modelImage].filter(Boolean)
 }
 
-function buildBootsPrompt({ generationMode, productImages, hasModelImage }) {
-	const referenceCount = productImages.length
-	const references = Array.from(
-		{ length: referenceCount },
-		(_, index) => `reference image ${index + 1}`,
-	).join(", ")
+function buildBootsRequest({ state, helpers, modelImage, width, height, count }) {
+	const referenceImages = helpers.collectReferenceIds(
+		getReferenceImagesForRequest(state.productImage, modelImage),
+	)
+
+	return {
+		model_id: state.modelId,
+		prompt: buildBootsPrompt({
+			generationMode: state.generationMode,
+		}),
+		size: `${width}x${height}`,
+		resolution: state.scale || undefined,
+		reference_images: referenceImages,
+		width,
+		height,
+		count,
+		select: false,
+	}
+}
+
+function buildBootsPrompt({ generationMode }) {
+	const references = "reference image 1, reference image 2"
 	const modeDefinition =
 		GENERATION_MODE_DEFINITIONS.find((item) => item.value === generationMode) ??
 		GENERATION_MODE_DEFINITIONS[1]
-	const modelGuidance = hasModelImage
-		? "Match the pose, camera angle, leg position, scene, and lighting of the optional model reference image while keeping the focus on the shoes."
-		: "Generate a clean commercial footwear try-on composition with natural foot posture, realistic stance, and clean framing."
 
 	return (
-		`Create a footwear try-on image using ${referenceCount} shoe reference image${referenceCount > 1 ? "s" : ""}: ${references}. ` +
-		"Every visible shoe must match the reference product exactly in silhouette, color, material, texture, stitching, sole design, logo placement, and key hardware details. " +
+		`Create a footwear try-on image using ${references}. Use reference image 1 as the only shoe product reference. ` +
+		"Every visible shoe must match reference image 1 exactly in silhouette, color, material, texture, stitching, sole design, logo placement, and key hardware details. " +
 		"The shoes must be worn naturally on the feet with convincing perspective, grounding shadow, contact with the surface, and anatomically correct foot placement. " +
-		`${modelGuidance} ` +
+		"Use reference image 2 as the model pose reference. Match its camera angle, leg position, scene, and lighting while keeping the focus on the shoes from reference image 1." +
 		"Keep the image commercially usable, realistic, and focused on the footwear result. " +
 		modeDefinition.promptSuffix
 	)

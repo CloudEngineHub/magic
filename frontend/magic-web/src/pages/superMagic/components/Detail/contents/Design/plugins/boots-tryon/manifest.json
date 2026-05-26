@@ -30,6 +30,7 @@
 			"section.products": "Shoe images",
 			"section.resolution": "Resolution",
 			"toast.success": "Boots try-on image generated successfully!",
+			"upload.product": "Upload a shoe product image",
 			"upload.model": "Upload a model image with visible feet and legs",
 			"upload.productTip": "Supports sneakers, boots, heels, flats, and sandals. Upload 1-2 reference images for better shoe matching."
 		},
@@ -37,7 +38,7 @@
 			"button.generate": "生成鞋履试穿图",
 			"button.generating": "生成中…",
 			"description": "上传鞋履商品图和可选模特图，一键生成鞋履试穿效果图。",
-			"empty.products": "请先上传至少 1 张鞋履商品图",
+			"empty.products": "请先上传鞋履商品图",
 			"error.noModels": "暂无可用 AI 模型",
 			"error.noSize": "当前模型缺少可用尺寸配置",
 			"error.referenceLimit": "参考图数量已达当前模型上限",
@@ -59,6 +60,7 @@
 			"section.products": "鞋履商品图",
 			"section.resolution": "分辨率",
 			"toast.success": "鞋履试穿图生成成功！",
+			"upload.product": "点击上传鞋履商品图",
 			"upload.model": "点击上传带脚部/小腿的模特图",
 			"upload.productTip": "支持运动鞋、靴子、高跟鞋、平底鞋、凉鞋等，建议上传 1-2 张鞋履参考图。"
 		}
