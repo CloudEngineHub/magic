@@ -179,6 +179,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Super_Magic_Detail_Refresh]: []
 	/** 追加建议文本到输入框末尾：传入建议文本。 */
 	[PubSubEvents.Append_Suggestion_To_Editor]: [text: string]
+	/** 追加 JSONContent 到输入框末尾（不覆盖已有内容）：传入 JSONContent。 */
+	[PubSubEvents.Append_Content_To_Editor]: [content: import("@tiptap/react").JSONContent]
 	/** 幻灯片添加后设置编辑器内容。 */
 	[PubSubEvents.Set_Content_When_Slide_Added]: SuperMagicSetContentWhenSlideAddedArgs
 	/** 设置 demo 文本到输入框：传入字符串文本。 */

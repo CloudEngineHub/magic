@@ -571,6 +571,7 @@
 			},
 			"common": {
 				"clockTime": "9:41",
+				"inspectElement": "Inspect Element",
 				"loading": "Loading...",
 				"noPosts": "No posts",
 				"postFallbackTitle": "Post {{index}}",

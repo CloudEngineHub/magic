@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import { ElementInspectorOverlay } from "@/components/business/ElementInspector"
+import { flattenAttachments } from "../../../../contents/HTML/utils"
 import SelfMediaShellHeader from "../../components/SelfMediaShellHeader"
+import { useSelfMediaInspector } from "../../hooks/useSelfMediaInspector"
 import { useSelfMediaStore } from "../../stores"
 import type { PlatformComponentProps, SelfMediaView } from "../../types"
-import WechatArticleView from "./article"
+import WechatArticleView, { type WechatArticleViewRef } from "./article"
 import WechatCodeView from "./code"
 import { WechatCoverPhonePanel } from "./WechatCoverPhonePanel"
 import WechatEditView from "./edit"
@@ -91,6 +94,46 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 	const shouldRenderEdit = mountedViews.edit || view === "edit"
 	const shouldRenderCode = mountedViews.code || view === "code"
 
+	const articleViewRef = useRef<WechatArticleViewRef>(null)
+
+	const inspectorGetIframes = useCallback(() => {
+		const el = articleViewRef.current?.getIframeElement()
+		return el ? [el] : []
+	}, [])
+
+	const inspectorGetFileInfo = useCallback(
+		(_iframe: HTMLIFrameElement) => {
+			// Wechat has a single article iframe per post
+			const post = store.activePost
+			const card = post?.article
+			if (!card?.fileId) return undefined
+			const file = flattenAttachments(attachmentList ?? []).find(
+				(f) => f?.file_id === card.fileId,
+			)
+			if (!file) return undefined
+			return {
+				fileId: file.file_id,
+				fileName: file.file_name,
+				filePath: file.relative_file_path,
+			}
+		},
+		[store, attachmentList],
+	)
+
+	const inspector = useSelfMediaInspector({
+		getIframeElements: inspectorGetIframes,
+		skipInjection: true,
+		getFileInfoForIframe: inspectorGetFileInfo,
+	})
+
+	const inspectorDisabled = view !== "detail" || rootLoading
+
+	// Auto-stop inspector when view changes
+	useEffect(() => {
+		if (inspector.active) inspector.stop()
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [view])
+
 	const tabLabels = useMemo(
 		() => ({
 			feed: t("detail.selfMedia.platform.wechat-official-accounts.tabs.cover"),
@@ -169,6 +212,9 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 				refreshLabel={t("detail.selfMedia.refreshAllData")}
 				refreshDisabled={rootLoading}
 				refreshTestId="wechat-shell-refresh-post-button"
+				onStartInspector={inspector.start}
+				inspectorActive={inspector.active}
+				inspectorDisabled={inspectorDisabled}
 			/>
 
 			<div className="relative flex-1 overflow-hidden">
@@ -198,6 +244,7 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 						>
 							{activePost ? (
 								<WechatArticleView
+									ref={articleViewRef}
 									post={activePost}
 									attachmentList={attachmentList}
 									selectedProject={selectedProject}
@@ -261,6 +308,14 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 						</WechatOfficialContentGate>
 					</div>
 				) : null}
+				<ElementInspectorOverlay
+					active={inspector.active}
+					iframeRef={inspector.activeIframeRef}
+					hoveredElement={inspector.hoveredElement}
+					selectedElement={inspector.selectedElement}
+					onClearSelection={() => {}}
+					hideInfoCard
+				/>
 			</div>
 		</div>
 	)

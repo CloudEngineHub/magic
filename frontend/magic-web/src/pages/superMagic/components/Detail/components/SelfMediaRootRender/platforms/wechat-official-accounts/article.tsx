@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react"
+import {
+	forwardRef,
+	memo,
+	useCallback,
+	useEffect,
+	useImperativeHandle,
+	useRef,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import IsolatedHTMLRenderer, {
@@ -15,6 +23,10 @@ interface WechatArticleViewProps {
 	selectedProject?: unknown
 }
 
+export interface WechatArticleViewRef {
+	getIframeElement: () => HTMLIFrameElement | null
+}
+
 function getFileFolderPath(
 	file: Pick<FileItem, "file_name" | "relative_file_path"> | null,
 ): string {
@@ -27,7 +39,10 @@ function getFileFolderPath(
 	return slashIndex >= 0 ? path.slice(0, slashIndex + 1) : "/"
 }
 
-function WechatArticleView({ post, attachmentList, selectedProject }: WechatArticleViewProps) {
+function WechatArticleViewInner(
+	{ post, attachmentList, selectedProject }: WechatArticleViewProps,
+	ref: React.ForwardedRef<WechatArticleViewRef>,
+) {
 	const { t } = useTranslation("super")
 	const article = post.article
 	const fileId = article?.fileId
@@ -36,6 +51,11 @@ function WechatArticleView({ post, attachmentList, selectedProject }: WechatArti
 	const [error, setError] = useState<string | null>(null)
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
 	const rendererRef = useRef<IsolatedHTMLRendererRef>(null)
+
+	useImperativeHandle(ref, () => ({
+		getIframeElement: () => rendererRef.current?.getIframeElement() ?? null,
+	}))
+
 	// Keep a ref so the effect can read the latest attachmentList without
 	// treating reference changes as a reason to re-fetch the HTML content.
 	const attachmentListRef = useRef(attachmentList)
@@ -163,4 +183,7 @@ function WechatArticleView({ post, attachmentList, selectedProject }: WechatArti
 	)
 }
 
-export default memo(WechatArticleView)
+const WechatArticleView = memo(
+	forwardRef<WechatArticleViewRef, WechatArticleViewProps>(WechatArticleViewInner),
+)
+export default WechatArticleView

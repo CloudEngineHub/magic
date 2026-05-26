@@ -1,6 +1,7 @@
 import { memo, type ReactNode } from "react"
-import { ChevronLeft, RefreshCw } from "lucide-react"
+import { ChevronLeft, Crosshair, RefreshCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import ExportPanel from "./ExportPanel"
 import PlatformBrandIcon from "./PlatformBrandIcon"
@@ -25,6 +26,9 @@ interface SelfMediaShellHeaderProps {
 	exportLabel?: string
 	exportDisabled?: boolean
 	onOpenExport?: () => void
+	onStartInspector?: () => void
+	inspectorActive?: boolean
+	inspectorDisabled?: boolean
 }
 
 function SelfMediaShellHeader({
@@ -44,6 +48,9 @@ function SelfMediaShellHeader({
 	exportLabel,
 	exportDisabled,
 	onOpenExport,
+	onStartInspector,
+	inspectorActive,
+	inspectorDisabled,
 }: SelfMediaShellHeaderProps) {
 	const { t } = useTranslation("super")
 	const activePost = posts[activePostIndex]
@@ -90,6 +97,29 @@ function SelfMediaShellHeader({
 					order={visibleTabs}
 				/>
 				<div className="flex shrink-0 items-center gap-2 border-l border-dashed border-zinc-950/10 pl-3">
+					{onStartInspector && !inspectorDisabled ? (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									onClick={onStartInspector}
+									data-testid="self-media-shell-inspector-button"
+									aria-label={t("detail.selfMedia.common.inspectElement")}
+									className={cn(
+										"inline-flex cursor-pointer items-center justify-center p-2.5 transition-all active:scale-[0.98]",
+										inspectorActive
+											? "bg-zinc-950 text-white"
+											: "bg-zinc-100 text-zinc-950 hover:bg-zinc-200",
+									)}
+								>
+									<Crosshair className="h-3.5 w-3.5" />
+								</button>
+							</TooltipTrigger>
+							<TooltipContent>
+								{t("detail.selfMedia.common.inspectElement")}
+							</TooltipContent>
+						</Tooltip>
+					) : null}
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<button

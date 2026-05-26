@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import { ElementInspectorOverlay } from "@/components/business/ElementInspector"
+import { flattenAttachments } from "../../../../contents/HTML/utils"
 import type { CardFrameRef } from "../../components/CardFrame"
 import ExportPreviewDialog from "../../components/ExportPreviewDialog"
 import type { ExportPreviewConfirmArgs } from "../../components/ExportPreviewDialog"
@@ -8,6 +10,7 @@ import SelfMediaShellHeader from "../../components/SelfMediaShellHeader"
 import { useExportZip } from "../../hooks/useExportZip"
 import { useExportProgressToast } from "../../hooks/useExportProgressToast"
 import { usePhoneScaling } from "../../hooks/usePhoneScaling"
+import { useSelfMediaInspector } from "../../hooks/useSelfMediaInspector"
 import { useShellFileHandlers } from "../../hooks/useShellFileHandlers"
 import { useShellMountedViews } from "../../hooks/useShellMountedViews"
 import { useSelfMediaStore } from "../../stores"
@@ -50,6 +53,63 @@ function InstagramShell(props: PlatformComponentProps) {
 		useShellFileHandlers({ attachmentList, activePost })
 
 	useExportProgressToast(progress, "instagram-shell-export")
+
+	const inspectorGetIframes = useCallback(() => {
+		const iframes: HTMLIFrameElement[] = []
+		const postIndex = store.activePostIndex
+		const refs = cardRefs.current[postIndex]
+		if (!refs) return iframes
+		if (view === "detail") {
+			const activeCard = refs[store.activeCardIndex]
+			const el = activeCard?.getIframeElement()
+			if (el) iframes.push(el)
+		} else {
+			for (const ref of refs) {
+				const el = ref?.getIframeElement()
+				if (el) iframes.push(el)
+			}
+		}
+		return iframes
+	}, [view, store])
+
+	const inspectorGetFileInfo = useCallback(
+		(iframe: HTMLIFrameElement) => {
+			for (let pIdx = 0; pIdx < cardRefs.current.length; pIdx++) {
+				const postRefs = cardRefs.current[pIdx]
+				if (!postRefs) continue
+				for (let cIdx = 0; cIdx < postRefs.length; cIdx++) {
+					if (postRefs[cIdx]?.getIframeElement() === iframe) {
+						const card = posts[pIdx]?.cards[cIdx]
+						if (!card?.fileId) return undefined
+						const file = flattenAttachments(attachmentList ?? []).find(
+							(f) => f?.file_id === card.fileId,
+						)
+						if (!file) return undefined
+						return {
+							fileId: file.file_id,
+							fileName: file.file_name,
+							filePath: file.relative_file_path,
+						}
+					}
+				}
+			}
+			return undefined
+		},
+		[posts, attachmentList],
+	)
+
+	const inspector = useSelfMediaInspector({
+		getIframeElements: inspectorGetIframes,
+		getFileInfoForIframe: inspectorGetFileInfo,
+	})
+
+	const inspectorDisabled = view === "edit" || rootLoading
+
+	// Auto-stop inspector when view changes
+	useEffect(() => {
+		if (inspector.active) inspector.stop()
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [view])
 
 	useEffect(() => {
 		if (view !== "edit") setIsCardEditing(false)
@@ -256,6 +316,9 @@ function InstagramShell(props: PlatformComponentProps) {
 				onOpenExport={handleOpenExportDialog}
 				exportLabel={t("detail.selfMedia.export.action")}
 				exportDisabled={isExporting || posts.length === 0}
+				onStartInspector={inspector.start}
+				inspectorActive={inspector.active}
+				inspectorDisabled={inspectorDisabled}
 			/>
 			<ExportPreviewDialog
 				open={exportDialogOpen}
@@ -314,6 +377,14 @@ function InstagramShell(props: PlatformComponentProps) {
 						handleAddActivePostDirectoryToCurrentChat
 					}
 					onGoToEdit={handleGoToDetailEdit}
+				/>
+				<ElementInspectorOverlay
+					active={inspector.active}
+					iframeRef={inspector.activeIframeRef}
+					hoveredElement={inspector.hoveredElement}
+					selectedElement={inspector.selectedElement}
+					onClearSelection={() => {}}
+					hideInfoCard
 				/>
 			</div>
 		</div>

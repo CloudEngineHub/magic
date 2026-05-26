@@ -77,7 +77,7 @@ export function ElementInspectorOverlay({
 	const overlayRef = useRef<HTMLDivElement>(null)
 	const [iframeRect, setIframeRect] = useState<DOMRect | null>(null)
 
-	// Track iframe position for coordinate conversion
+	// Track iframe position for coordinate conversion (ResizeObserver for selected-element case)
 	useEffect(() => {
 		const iframe = iframeRef.current
 		if (!iframe) return
@@ -108,30 +108,57 @@ export function ElementInspectorOverlay({
 			ro.disconnect()
 			window.removeEventListener("scroll", updateRect, true)
 		}
-	}, [iframeRef, active])
+	}, [iframeRef, active, hoveredElement])
 
-	/** Convert an iframe-viewport-relative rect to overlay-relative coordinates */
+	/**
+	 * Convert an iframe-viewport-relative rect to overlay-relative coordinates.
+	 * Uses live DOM measurements to handle:
+	 * - Dynamic iframe ref changes (multi-iframe inspectors)
+	 * - CSS transforms / scaling on the iframe
+	 */
 	const toOverlayRect = useCallback(
 		(rect: InspectedElementRect) => {
-			if (!iframeRect) return null
+			const iframe = iframeRef.current
+			const parent = overlayRef.current?.parentElement
+			if (!iframe || !parent) return null
+			const parentRect = parent.getBoundingClientRect()
+			const ifRect = iframe.getBoundingClientRect()
+			// Auto-detect effective scale from visual vs layout dimensions
+			const effectiveScale =
+				scaleRatio !== 1
+					? scaleRatio
+					: iframe.clientWidth > 0
+						? ifRect.width / iframe.clientWidth
+						: 1
 			return {
-				left: iframeRect.left + rect.left * scaleRatio,
-				top: iframeRect.top + rect.top * scaleRatio,
-				width: rect.width * scaleRatio,
-				height: rect.height * scaleRatio,
+				left: ifRect.left - parentRect.left + rect.left * effectiveScale,
+				top: ifRect.top - parentRect.top + rect.top * effectiveScale,
+				width: rect.width * effectiveScale,
+				height: rect.height * effectiveScale,
 			}
 		},
-		[iframeRect, scaleRatio],
+		[iframeRef, scaleRatio],
 	)
+
+	/** Get the current effective scale ratio (auto-detected or from prop) */
+	const getEffectiveScale = useCallback(() => {
+		const iframe = iframeRef.current
+		if (!iframe) return scaleRatio
+		const ifRect = iframe.getBoundingClientRect()
+		if (scaleRatio !== 1) return scaleRatio
+		return iframe.clientWidth > 0 ? ifRect.width / iframe.clientWidth : 1
+	}, [iframeRef, scaleRatio])
 
 	const hoverBox = useMemo(
 		() => (hoveredElement ? toOverlayRect(hoveredElement.rect) : null),
-		[hoveredElement, toOverlayRect],
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[hoveredElement, toOverlayRect, iframeRect],
 	)
 
 	const selectBox = useMemo(
 		() => (selectedElement ? toOverlayRect(selectedElement.rect) : null),
-		[selectedElement, toOverlayRect],
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[selectedElement, toOverlayRect, iframeRect],
 	)
 
 	// Don't render anything if not active and no selection
@@ -172,16 +199,19 @@ export function ElementInspectorOverlay({
 						<div
 							className="pointer-events-none absolute"
 							style={{
-								left: hoverBox.left - hoveredElement.padding.left * scaleRatio,
-								top: hoverBox.top - hoveredElement.padding.top * scaleRatio,
+								left:
+									hoverBox.left -
+									hoveredElement.padding.left * getEffectiveScale(),
+								top:
+									hoverBox.top - hoveredElement.padding.top * getEffectiveScale(),
 								width:
 									hoverBox.width +
 									(hoveredElement.padding.left + hoveredElement.padding.right) *
-										scaleRatio,
+										getEffectiveScale(),
 								height:
 									hoverBox.height +
 									(hoveredElement.padding.top + hoveredElement.padding.bottom) *
-										scaleRatio,
+										getEffectiveScale(),
 								backgroundColor: "rgba(147, 196, 125, 0.3)",
 								transition: "all 50ms ease-out",
 								zIndex: -1,

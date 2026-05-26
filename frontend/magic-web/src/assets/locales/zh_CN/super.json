@@ -572,6 +572,7 @@
 			},
 			"common": {
 				"clockTime": "9:41",
+				"inspectElement": "选取元素",
 				"loading": "加载中...",
 				"noPosts": "暂无帖子",
 				"postFallbackTitle": "帖子 {{index}}",
