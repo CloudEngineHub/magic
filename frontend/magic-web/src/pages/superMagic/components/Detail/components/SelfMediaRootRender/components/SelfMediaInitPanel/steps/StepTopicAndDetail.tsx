@@ -19,7 +19,6 @@ import {
 	Trash2,
 	Inbox,
 	FileDown,
-	Folder,
 	Check,
 	X,
 } from "lucide-react"
@@ -482,62 +481,37 @@ export default function StepTopicAndDetail({
 					>
 						{/* Detail Workspace Header - Inline editable title and folder */}
 						<div className="sticky top-0 z-20 flex shrink-0 select-none items-center justify-between gap-4 border-b border-border/15 bg-white pb-4 pt-4 shadow-[0_4px_12px_-6px_rgba(0,0,0,0.08)]">
-							<div className="grid min-w-0 flex-1 grid-cols-1 gap-2.5 md:grid-cols-[minmax(0,1fr)_13rem]">
+							<div className="flex min-w-0 flex-1 items-center gap-2.5">
 								{/* Article Index Badge */}
-								<div className="flex min-w-0 items-center gap-2.5">
-									<span className="flex h-7 shrink-0 items-center justify-center bg-primary/20 px-2.5 text-xs font-black text-zinc-950">
-										第 {safeActiveIndex + 1} / {articles.length} 篇
-									</span>
+								<span className="flex h-7 shrink-0 items-center justify-center bg-primary/20 px-2.5 text-xs font-black text-zinc-950">
+									第 {safeActiveIndex + 1} / {articles.length} 篇
+								</span>
 
-									{/* Editable Title Input */}
-									<div className="group relative min-w-0 flex-1">
-										<input
-											type="text"
-											className="w-full border-0 border-b border-transparent bg-white px-2.5 py-1 pr-7 text-base font-bold text-foreground outline-none transition-all duration-300 placeholder:text-muted-foreground/30 hover:bg-muted/10 focus:border-zinc-950 focus:bg-primary/[0.03]"
-											placeholder={t(
-												"detail.selfMedia.initPanel.stepTopic.titlePlaceholder",
-												"点击输入选题标题...",
-											)}
-											value={articles[safeActiveIndex]?.title || ""}
-											onChange={(e) =>
-												onArticleUpdate(safeActiveIndex, {
-													...articles[safeActiveIndex],
-													title: e.target.value,
-												})
-											}
-										/>
-										<InlineVoiceButton
-											value={articles[safeActiveIndex]?.title || ""}
-											onResult={(text) =>
-												onArticleUpdate(safeActiveIndex, {
-													...articles[safeActiveIndex],
-													title: text,
-												})
-											}
-										/>
-									</div>
-								</div>
-
-								<div className="relative min-w-0">
-									<Folder
-										className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/45"
-										size={12}
-									/>
+								{/* Editable Title Input */}
+								<div className="group relative min-w-0 flex-1">
 									<input
 										type="text"
-										className="w-full border-0 border-b border-transparent bg-white py-1 pl-7 pr-2 text-xs font-bold text-zinc-950/70 outline-none transition-all placeholder:text-muted-foreground/30 hover:bg-muted/10 focus:border-zinc-950 focus:bg-primary/[0.03]"
+										className="w-full border-0 border-b border-transparent bg-white px-2.5 py-1 pr-7 text-base font-bold text-foreground outline-none transition-all duration-300 placeholder:text-muted-foreground/30 hover:bg-muted/10 focus:border-zinc-950 focus:bg-primary/[0.03]"
 										placeholder={t(
-											"detail.selfMedia.initPanel.stepTopic.folderPlaceholder",
-											"文件夹名（选填，留空自动生成）",
+											"detail.selfMedia.initPanel.stepTopic.titlePlaceholder",
+											"点击输入选题标题...",
 										)}
-										value={articles[safeActiveIndex]?.folderName || ""}
+										value={articles[safeActiveIndex]?.title || ""}
 										onChange={(e) =>
 											onArticleUpdate(safeActiveIndex, {
 												...articles[safeActiveIndex],
-												folderName: e.target.value,
+												title: e.target.value,
 											})
 										}
-										data-testid="self-media-step-topic-folder-name-input"
+									/>
+									<InlineVoiceButton
+										value={articles[safeActiveIndex]?.title || ""}
+										onResult={(text) =>
+											onArticleUpdate(safeActiveIndex, {
+												...articles[safeActiveIndex],
+												title: text,
+											})
+										}
 									/>
 								</div>
 							</div>

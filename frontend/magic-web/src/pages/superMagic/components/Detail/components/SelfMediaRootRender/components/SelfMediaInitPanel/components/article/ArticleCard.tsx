@@ -382,6 +382,34 @@ export default function ArticleCard({
 							: "mt-4 space-y-5 border-t border-border/10 pt-5 duration-200 animate-in fade-in slide-in-from-top-3",
 					)}
 				>
+					{/* Folder name - only shown in hideHeader mode (header row already contains it otherwise) */}
+					{hideHeader && (
+						<div className="space-y-1.5">
+							<label className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+								{t(
+									"detail.selfMedia.initPanel.stepDetail.folderLabel",
+									"归档文件夹",
+								)}
+							</label>
+							<div className="flex items-center gap-1.5 border-b border-zinc-100 pb-1 transition-colors focus-within:border-zinc-950">
+								<Folder className="shrink-0 text-muted-foreground/45" size={12} />
+								<input
+									type="text"
+									className="min-w-0 flex-1 border-0 bg-transparent py-0.5 text-xs font-bold text-zinc-950/70 outline-none placeholder:text-muted-foreground/30"
+									placeholder={t(
+										"detail.selfMedia.initPanel.stepTopic.folderPlaceholder",
+										"文件夹名（选填，留空自动生成）",
+									)}
+									value={article.folderName || ""}
+									onChange={(e) =>
+										handleFieldChange("folderName", e.target.value)
+									}
+									data-testid="self-media-step-topic-folder-name-input"
+								/>
+							</div>
+						</div>
+					)}
+
 					{/* 1. Platform selection + Card count */}
 					<div className="grid grid-cols-1 gap-5 md:grid-cols-12">
 						<div className="space-y-2 md:col-span-8">

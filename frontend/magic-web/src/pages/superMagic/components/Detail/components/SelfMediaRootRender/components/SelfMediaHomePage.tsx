@@ -68,28 +68,24 @@ function SelfMediaHomePage({
 		return platformConfig ? t(platformConfig.labelKey) : platform
 	}
 
-	// Find sibling AI card folders from the attachment tree
+	// Find AI card folders that are children of the self-media folder
 	const aiCardFolders = useMemo(() => {
 		if (!attachmentList?.length || !folderFileId) return []
-		// Find the parent that contains our self-media folder
-		const findParentChildren = (
-			nodes: SelfMediaAttachmentNode[],
-		): SelfMediaAttachmentNode[] | null => {
+		// Find the self-media folder node and look at its children
+		const findNode = (nodes: SelfMediaAttachmentNode[]): SelfMediaAttachmentNode | null => {
 			for (const node of nodes) {
-				if (node.file_id === folderFileId) return nodes
+				if (node.file_id === folderFileId) return node
 				if (node.is_directory && node.children?.length) {
-					const result = findParentChildren(node.children as SelfMediaAttachmentNode[])
+					const result = findNode(node.children as SelfMediaAttachmentNode[])
 					if (result) return result
 				}
 			}
 			return null
 		}
-		const siblings = findParentChildren(attachmentList) || attachmentList
-		return siblings.filter(
-			(node) =>
-				node.is_directory &&
-				node.file_id !== folderFileId &&
-				(node as any).display_config?.type === "ai-card",
+		const selfMediaFolder = findNode(attachmentList)
+		const children = (selfMediaFolder?.children || []) as SelfMediaAttachmentNode[]
+		return children.filter(
+			(node) => node.is_directory && (node as any).display_config?.type === "ai-card",
 		) as unknown as AICardFolderItem[]
 	}, [attachmentList, folderFileId])
 
