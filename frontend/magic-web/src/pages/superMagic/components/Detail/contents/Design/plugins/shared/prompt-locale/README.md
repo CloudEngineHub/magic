@@ -117,4 +117,4 @@ function buildPrompt({ locale, generationMode }) {
 - 不要让 helper 依赖 `MagicPluginKit`
 - 不要把每个插件的业务参数结构泛化成一个“大一统” prompt builder
 
-共享层应保持足够薄，便于 `virtual-tryon` 这类非 kit 插件未来也能复用同样的 locale 能力。
+共享层应保持足够薄，便于不同 Design 插件在不共享业务 prompt 模板的前提下复用同样的 locale 能力。

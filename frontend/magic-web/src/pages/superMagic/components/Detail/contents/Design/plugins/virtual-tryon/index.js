@@ -1,807 +1,292 @@
+/* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
+
 const MAX_GARMENTS = 5
+const GENERATION_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
+const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => ({
+	value: count,
+	label: String(count),
+}))
 
 const STYLE_OPTIONS = [
-	{ value: "realistic", label: "写实", desc: "自然真实的穿搭效果" },
-	{ value: "fashion", label: "时尚大片", desc: "杂志级别的时尚感" },
-	{ value: "ecommerce", label: "电商白底", desc: "纯白背景，适合上架" },
-	{ value: "preserve", label: "保留原图", desc: "保持模特底图的场景与风格" },
+	{
+		value: "realistic",
+		labelKey: "style.realistic",
+		labelFallback: "写实",
+		descriptionKey: "style.realistic.desc",
+		descriptionFallback: "自然真实的穿搭效果",
+		promptSuffix: {
+			zh: "自然真实的商业摄影效果，光线可信，成片质感高级。",
+			en:
+				"realistic fashion photography, natural lighting, believable styling, premium commercial finish",
+		},
+	},
+	{
+		value: "fashion",
+		labelKey: "style.fashion",
+		labelFallback: "时尚大片",
+		descriptionKey: "style.fashion.desc",
+		descriptionFallback: "杂志级别的时尚感",
+		promptSuffix: {
+			zh: "时尚大片风格，具备更强的编辑感、造型感和商业视觉张力。",
+			en:
+				"fashion magazine editorial style, stronger visual impact, elevated styling, high-end campaign photography",
+		},
+	},
+	{
+		value: "ecommerce",
+		labelKey: "style.ecommerce",
+		labelFallback: "电商白底",
+		descriptionKey: "style.ecommerce.desc",
+		descriptionFallback: "纯白背景，适合上架",
+		promptSuffix: {
+			zh: "纯白背景与干净棚拍光线，适合电商陈列与商品展示。",
+			en:
+				"pure white background, clean studio lighting, e-commerce ready product presentation",
+		},
+	},
+	{
+		value: "preserve",
+		labelKey: "style.preserve",
+		labelFallback: "保留原图",
+		descriptionKey: "style.preserve.desc",
+		descriptionFallback: "保持模特底图的场景与风格",
+		promptSuffix: {
+			zh: "完整保留模特底图的场景、背景、光线、色调和拍摄风格，只自然替换上身商品。",
+			en:
+				"preserve the exact scene, background, lighting, color grading, and photographic style of the reference model image, changing only the worn products naturally",
+		},
+	},
 ]
-
-const STYLE_SUFFIX = {
-	realistic: "realistic photo, natural lighting, full body shot, high quality photography",
-	fashion:
-		"fashion magazine editorial style, professional photography, dramatic lighting, high quality",
-	ecommerce:
-		"pure white background, clean studio lighting, e-commerce product photo, full body, high quality",
-	preserve:
-		"preserve the exact scene, background, lighting, color grading and photographic style of the reference model image, seamlessly blend the clothing onto the model without altering any other aspect of the original photo",
-}
-
-const IMAGE_GENERATION_CONFIG_PREFIX = "image_generation_config."
-const GENERATION_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8]
 
 registerMagicCanvasPlugin({
 	mount(ctx, root) {
-		const state = {
-			garments: [],
-			modelImage: null,
-			modelOptions: [],
-			modelId: "",
-			modelMenuOpen: false,
-			ratioKey: "",
-			scale: "",
-			genCount: 1,
-			imageGenerationConfig: {},
-			style: "realistic",
-			extra: "",
-			loading: false,
-			error: "",
-		}
-
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
-		const view = {
-			panel: null,
-			content: null,
-			footer: null,
-			garments: null,
-			model: null,
-			slots: {},
-		}
+		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
+		const styleOptions = STYLE_OPTIONS.map((item) => ({
+			value: item.value,
+			label: t(item.labelKey, item.labelFallback),
+			description: t(item.descriptionKey, item.descriptionFallback),
+		}))
 
-		const setState = (patch) => {
-			const hasChanged = Object.keys(patch).some((key) => state[key] !== patch[key])
-			if (!hasChanged) return
-			Object.assign(state, patch)
-			updateView(patch)
-		}
-
-		const updateHeight = () => {
-			requestAnimationFrame(() => {
-				ctx.ui.setHeight(root.scrollHeight)
-			})
-		}
-
-		const getSelectedModel = () => {
-			return state.modelOptions.find((item) => item.model_id === state.modelId)
-		}
-
-		const getModelSizes = () => {
-			return getSelectedModel()?.image_size_config?.sizes ?? []
-		}
-
-		const getImageSettings = () => {
-			return (getSelectedModel()?.image_size_config?.image_settings ?? [])
-				.map((setting) => {
-					const requestKey = setting.key?.startsWith(IMAGE_GENERATION_CONFIG_PREFIX)
-						? setting.key.slice(IMAGE_GENERATION_CONFIG_PREFIX.length)
-						: setting.key
-					return {
-						...setting,
-						requestKey,
-						options: setting.options?.filter((option) => option.value) ?? [],
-					}
-				})
-				.filter((setting) => setting.requestKey && setting.options.length > 0)
-		}
-
-		const buildDefaultImageGenerationConfig = (model) => {
-			return (model?.image_size_config?.image_settings ?? []).reduce((config, setting) => {
-				const requestKey = setting.key?.startsWith(IMAGE_GENERATION_CONFIG_PREFIX)
-					? setting.key.slice(IMAGE_GENERATION_CONFIG_PREFIX.length)
-					: setting.key
-				const options = setting.options?.filter((option) => option.value) ?? []
-				const defaultOption = options.find((option) => option.value === setting.default)
-				if (requestKey && options.length) {
-					config[requestKey] = defaultOption?.value ?? options[0].value
-				}
-				return config
-			}, {})
-		}
-
-		const getResolutionOptions = () => {
-			return Array.from(
-				new Set(
-					getModelSizes()
-						.map((size) => size.scale)
-						.filter(Boolean),
-				),
-			)
-		}
-
-		const getDefaultResolution = (model) => {
-			const sizes = model?.image_size_config?.sizes ?? []
-			const options = Array.from(new Set(sizes.map((size) => size.scale).filter(Boolean)))
-			if (!options.length) return ""
-			const defaultScale = model?.image_size_config?.default_scale
-			return defaultScale && options.includes(defaultScale) ? defaultScale : options[0]
-		}
-
-		const getVisibleSizes = () => {
-			const sizes = getModelSizes()
-			if (!state.scale) return sizes
-			const matched = sizes.filter((size) => size.scale === state.scale)
-			return matched.length ? matched : sizes
-		}
-
-		const getSelectedRatio = () => {
-			const sizes = getVisibleSizes()
-			return sizes.find((item) => item.label === state.ratioKey) ?? sizes[0]
-		}
-
-		const getSelectedSize = () => {
-			const selectedRatio = getSelectedRatio()
-			if (!selectedRatio?.value) return null
-			const [genW, genH] = selectedRatio.value.split("x").map(Number)
-			return {
-				...selectedRatio,
-				genW: Number.isFinite(genW) ? genW : 0,
-				genH: Number.isFinite(genH) ? genH : 0,
-			}
-		}
-
-		const getMaxReferenceImages = () => {
-			return getSelectedModel()?.image_size_config?.max_reference_images ?? MAX_GARMENTS
-		}
-
-		const applyModelDefaults = (model) => {
-			const targetResolution = getDefaultResolution(model)
-			const sizes = model?.image_size_config?.sizes ?? []
-			const sizesForResolution = targetResolution
-				? sizes.filter((size) => size.scale === targetResolution)
-				: sizes
-			const targetSize = sizesForResolution[0] ?? sizes[0]
-			return {
-				ratioKey: targetSize?.label ?? "",
-				scale: targetResolution,
-				imageGenerationConfig: buildDefaultImageGenerationConfig(model),
-			}
-		}
-
-		const pickImageFiles = async (options) => {
-			if (ctx.assets?.pickFiles) {
-				return ctx.assets.pickFiles({ ...options, type: "image" })
-			}
-			throw new Error("ctx.assets.pickFiles is not connected yet.")
-		}
-
-		const generateAndPlace = async (payload) => {
-			if (ctx.ai?.generateAndPlace) return ctx.ai.generateAndPlace(payload)
-			throw new Error("ctx.ai.generateAndPlace is not connected yet.")
-		}
-
-		const loadImageModels = async () => {
-			if (!ctx.ai?.getImageModels) return
-			try {
-				const models = await ctx.ai.getImageModels()
-				if (!models?.length) {
-					setState({ error: "暂无可用 AI 模型" })
-					return
-				}
-				const firstModel = models[0]
-				const nextModelId = state.modelId || firstModel.model_id
-				const selectedModel =
-					models.find((model) => model.model_id === nextModelId) ?? firstModel
-				setState({
-					modelOptions: models,
-					modelId: nextModelId,
-					...applyModelDefaults(selectedModel),
-				})
-			} catch {
-				// Model selection is optional for the plugin UI.
-			}
-		}
-
-		const handlePickGarments = async () => {
-			const remaining =
-				getMaxReferenceImages() - state.garments.length - (state.modelImage ? 1 : 0)
-			if (remaining <= 0) return
-			setState({ error: "" })
-			try {
-				const images = await pickImageFiles({ multiple: true, maxCount: remaining })
-				if (!images?.length) return
-				setState({
-					garments: [...state.garments, ...images].slice(0, MAX_GARMENTS),
-					error: "",
-				})
-			} catch (error) {
-				setState({ error: getErrorMessage(error) || "商品图上传失败，请重试" })
-			}
-		}
-
-		const handlePickModel = async () => {
-			if (state.garments.length + (state.modelImage ? 1 : 0) >= getMaxReferenceImages()) {
-				setState({ error: "参考图数量已达当前模型上限" })
-				return
-			}
-			setState({ error: "" })
-			try {
-				const images = await pickImageFiles({ multiple: false, maxCount: 1 })
-				if (!images?.length) return
-				setState({ modelImage: images[0], error: "" })
-			} catch (error) {
-				setState({ error: getErrorMessage(error) || "模特图上传失败，请重试" })
-			}
-		}
-
-		const handleGenerate = async () => {
-			if (!state.garments.length || state.loading) return
-
-			const refImages = [...state.garments, ...(state.modelImage ? [state.modelImage] : [])]
-			const referenceImages = refImages.map(getImageReferenceId).filter(Boolean)
-
-			if (!referenceImages.length) {
-				setState({ error: "图片缺少可用于生成的资源标识" })
-				return
-			}
-			if (!state.modelId) {
-				setState({ error: "请选择 AI 模型" })
-				return
-			}
-
-			const selectedSize = getSelectedSize()
-			if (!selectedSize?.genW || !selectedSize?.genH) {
-				setState({ error: "当前模型缺少可用尺寸配置" })
-				return
-			}
-			const width = selectedSize.genW
-			const height = selectedSize.genH
-
-			setState({ loading: true, error: "" })
-
-			try {
-				await generateAndPlace({
-					model_id: state.modelId,
-					prompt: buildPrompt(state.garments.length, state.style, state.extra),
-					size: `${width}x${height}`,
-					resolution: state.scale || undefined,
-					reference_images: referenceImages,
-					image_generation_config: Object.keys(state.imageGenerationConfig).length
-						? state.imageGenerationConfig
-						: undefined,
-					width,
-					height,
-					count: state.genCount,
-					select: false,
-				})
-				ctx.ui.toast(t("toast.success", "穿搭图生成成功！"), "success")
-				ctx.ui.close?.()
-			} catch (error) {
-				const message = getErrorMessage(error) || "生成失败，请重试"
-				setState({ error: message })
-				ctx.ui.toast(message, "error")
-			} finally {
-				setState({ loading: false })
-			}
-		}
-
-		const createLayout = () => {
-			view.panel = createElement("div", "mc-tryon")
-			view.content = createElement("div", "mc-tryon-content")
-			view.footer = createElement("div", "mc-tryon-footer")
-			view.slots = {
-				garments: createElement("div", "mc-tryon-slot"),
-				model: createElement("div", "mc-tryon-slot"),
-				extra: createElement("div", "mc-tryon-slot"),
-				style: createElement("div", "mc-tryon-slot"),
-				modelSelect: createElement("div", "mc-tryon-slot"),
-				ratio: createElement("div", "mc-tryon-slot"),
-				scale: createElement("div", "mc-tryon-slot"),
-				count: createElement("div", "mc-tryon-slot"),
-				imageSettings: createElement("div", "mc-tryon-slot"),
-				error: createElement("div", "mc-tryon-slot"),
-				footer: createElement("div", "mc-tryon-slot"),
-			}
-			view.content.append(
-				view.slots.garments,
-				view.slots.model,
-				view.slots.extra,
-				view.slots.style,
-				view.slots.modelSelect,
-				view.slots.ratio,
-				view.slots.scale,
-				view.slots.imageSettings,
-				view.slots.count,
-				view.slots.error,
-			)
-			view.footer.append(view.slots.footer)
-			view.panel.append(view.content, view.footer)
-			root.replaceChildren(view.panel)
-		}
-
-		const updateSlot = (name, node) => {
-			view.slots[name].replaceChildren(node)
-		}
-
-		const updateFooter = () => {
-			const generateButton = createElement(
-				"button",
-				"mc-tryon-generate",
-				state.loading
-					? t("button.generating", "生成中…")
-					: `✨ ${t("button.generate", "一键生成穿搭图")}`,
-			)
-			generateButton.type = "button"
-			generateButton.disabled = state.loading || !state.garments.length
-			generateButton.addEventListener("click", () => {
-				void handleGenerate()
-			})
-			const fragment = document.createDocumentFragment()
-			if (!state.loading && !state.garments.length) {
-				fragment.append(
-					createElement(
-						"p",
-						"mc-tryon-empty",
-						t("empty.garments", "请先上传至少 1 张商品图"),
+		return MagicPluginKit.mount(ctx, root, {
+			panelClassName: "virtual-tryon",
+			initialState: {
+				garments: [],
+				modelImage: null,
+				extra: "",
+				style: "realistic",
+				genCount: 1,
+			},
+			modelConfig: {
+				autoLoad: true,
+				showLoadErrors: true,
+				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
+			},
+			sections: [
+				{
+					id: "garments",
+					kind: "image-grid",
+					stateKey: "garments",
+					title: t("section.garments", "商品图"),
+					alt: t("section.garments", "商品图"),
+					addLabel: "+",
+					help: t(
+						"upload.garmentTip",
+						"支持上衣、外套、裤子、裙子、鞋靴、帽子、包包等，AI 会自动识别并正确叠穿。",
 					),
-				)
-			}
-			fragment.append(generateButton)
-			view.slots.footer.replaceChildren(fragment)
-		}
+					maxCount: ({ state, helpers }) => {
+						const modelCount = state.modelImage ? 1 : 0
+						return Math.max(0, Math.min(MAX_GARMENTS, getMaxReferenceImages(state, helpers) - modelCount))
+					},
+				},
+				{
+					id: "modelImage",
+					kind: "image-slot",
+					stateKey: "modelImage",
+					title: t("section.model", "模特底图"),
+					suffix: t("optional", "可选"),
+					uploadLabel: t("upload.model", "点击上传（不上传则 AI 自动生成模特）"),
+					alt: t("section.model", "模特底图"),
+					beforePick: ({ state, helpers }) => {
+						if (state.modelImage) return null
+						if (state.garments.length + 1 > getMaxReferenceImages(state, helpers)) {
+							return t("error.referenceLimit", "参考图数量已达当前模型上限")
+						}
+						return null
+					},
+				},
+				{
+					id: "extra",
+					kind: "textarea",
+					stateKey: "extra",
+					title: t("section.extra", "额外描述"),
+					suffix: t("optional", "可选"),
+					placeholder: t(
+						"extra.placeholder",
+						"指定模特特征、场景、色调、风格等，例如：亚洲女性模特，25岁，身材高挑，站在时尚街头，暖色调，胶片感",
+					),
+					rows: 3,
+					maxLength: 2000,
+				},
+				{
+					id: "style",
+					kind: "option-group",
+					stateKey: "style",
+					title: t("section.style", "风格"),
+					showDescriptionOnHover: true,
+					groupClassName: "virtual-tryon-style-grid",
+					options: styleOptions,
+				},
+				{
+					id: "modelSelect",
+					kind: "model-select",
+					title: t("section.modelSelect", "AI 模型"),
+				},
+				{
+					id: "canvasSize",
+					kind: "size-control",
+					title: t("section.canvasSize", "画布尺寸"),
+					ratioStateKey: "ratioKey",
+					deps: ["modelId", "modelOptions", "scale"],
+				},
+				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "分辨率"),
+					deps: ["modelId", "modelOptions"],
+				},
+				{
+					id: "count",
+					kind: "option-group",
+					stateKey: "genCount",
+					title: t("section.count", "生成数量"),
+					options: GENERATION_COUNT_GROUP_OPTIONS,
+				},
+			],
+			generate: {
+				buttonLabel: `✨ ${t("button.generate", "一键生成穿搭图")}`,
+				loadingLabel: t("button.generating", "生成中…"),
+				getIdleHint: ({ state }) => {
+					if (!state.garments.length) {
+						return t("empty.garments", "请先上传至少 1 张商品图")
+					}
+					return ""
+				},
+				isDisabled: ({ state }) => !state.garments.length,
+				validate: ({ state, helpers }) => {
+					if (!state.garments.length) {
+						return t("empty.garments", "请先上传至少 1 张商品图")
+					}
+					if (!state.modelId) {
+						return t("error.noModels", "暂无可用 AI 模型")
+					}
+					const referenceImages = getReferenceImages(state)
+					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
+						return t("error.referenceLimit", "参考图数量已达当前模型上限")
+					}
+					if (
+						helpers.collectReferenceIds(referenceImages).length !== referenceImages.length
+					) {
+						return t("error.references", "图片缺少可用于生成的资源标识")
+					}
+					const selectedSize = helpers.getSelectedSize(state)
+					if (!selectedSize?.genW || !selectedSize?.genH) {
+						return t("error.noSize", "当前模型缺少可用尺寸配置")
+					}
+					return null
+				},
+				buildRequest: ({ state, helpers }) => {
+					const selectedSize = helpers.getSelectedSize(state)
+					const width = selectedSize.genW
+					const height = selectedSize.genH
+					const referenceImages = helpers.collectReferenceIds(getReferenceImages(state))
 
-		const updateError = () => {
-			if (state.error) {
-				view.slots.error.replaceChildren(
-					createElement("div", "mc-tryon-error", state.error),
-				)
-				return
-			}
-			view.slots.error.replaceChildren()
-		}
-
-		const updateView = (patch = null) => {
-			if (!view.panel) return
-			const keys = patch ? new Set(Object.keys(patch)) : null
-			const shouldUpdate = (...deps) => !keys || deps.some((key) => keys.has(key))
-
-			if (!keys) {
-				updateGarmentsSection()
-			} else {
-				if (keys.has("garments")) {
-					updateGarmentItems()
-				}
-				if (shouldUpdate("garments", "modelImage", "modelId", "modelOptions")) {
-					updateGarmentsMeta()
-				}
-			}
-			if (shouldUpdate("modelImage")) {
-				updateModelSection()
-			}
-			if (!keys) {
-				updateSlot("extra", createExtraSection())
-			}
-			if (shouldUpdate("style")) {
-				updateSlot("style", createStyleSection())
-			}
-			if (shouldUpdate("modelOptions", "modelId")) {
-				updateSlot("modelSelect", createModelSelectSection())
-			}
-			if (shouldUpdate("modelOptions", "modelId", "ratioKey", "scale")) {
-				updateSlot("ratio", createRatioSection())
-			}
-			if (shouldUpdate("modelOptions", "modelId", "scale")) {
-				updateSlot("scale", createScaleSection())
-			}
-			if (shouldUpdate("genCount")) {
-				updateSlot("count", createCountSection())
-			}
-			if (shouldUpdate("modelOptions", "modelId", "imageGenerationConfig")) {
-				updateSlot("imageSettings", createImageSettingsSection())
-			}
-			if (shouldUpdate("error")) {
-				updateError()
-			}
-			if (shouldUpdate("loading", "garments")) {
-				updateFooter()
-			}
-			updateHeight()
-		}
-
-		const ensureGarmentsView = () => {
-			if (view.garments) return view.garments
-			const section = createElement("section", "mc-tryon-section")
-			const header = createElement("div", "mc-tryon-section-header")
-			const suffix = createElement("span", "mc-tryon-section-suffix")
-			header.append(
-				createElement("label", "mc-tryon-section-title", t("section.garments", "商品图")),
-			)
-			header.append(suffix)
-
-			const grid = createElement("div", "mc-tryon-garment-grid")
-			const help = createElement("p", "mc-tryon-help", t("upload.garmentTip", ""))
-			section.append(header, grid, help)
-			view.slots.garments.replaceChildren(section)
-			view.garments = {
-				section,
-				suffix,
-				grid,
-				items: new Map(),
-				addButton: null,
-			}
-			return view.garments
-		}
-
-		const createGarmentItem = (garment) => {
-			const item = createElement("div", "mc-tryon-garment")
-			const image = createElement("img", "mc-tryon-garment-image")
-			image.alt = t("section.garments", "商品图")
-			item.append(createLoadingPlaceholder(), image)
-			bindPreviewImage(item, image, getImageUrl(garment))
-
-			const removeButton = createElement("button", "mc-tryon-remove", "×")
-			removeButton.type = "button"
-			removeButton.addEventListener("click", () => {
-				setState({
-					garments: state.garments.filter((item) => item !== garment),
-				})
-			})
-
-			item.append(removeButton)
-			return item
-		}
-
-		const updateGarmentsSection = () => {
-			updateGarmentItems()
-			updateGarmentsMeta()
-		}
-
-		const updateGarmentItems = () => {
-			const garmentsView = ensureGarmentsView()
-			const activeGarments = new Set(state.garments)
-			for (const [garment, item] of garmentsView.items) {
-				if (!activeGarments.has(garment)) {
-					item.remove()
-					garmentsView.items.delete(garment)
-				}
-			}
-
-			let referenceNode = garmentsView.grid.firstChild
-			state.garments.forEach((garment) => {
-				let item = garmentsView.items.get(garment)
-				if (!item) {
-					item = createGarmentItem(garment)
-					garmentsView.items.set(garment, item)
-				}
-				if (item !== referenceNode) {
-					garmentsView.grid.insertBefore(item, referenceNode)
-				}
-				referenceNode = item.nextSibling
-			})
-		}
-
-		const updateGarmentsMeta = () => {
-			const garmentsView = ensureGarmentsView()
-			const maxGarments = Math.max(0, getMaxReferenceImages() - (state.modelImage ? 1 : 0))
-			garmentsView.suffix.textContent = `${state.garments.length}/${Math.max(1, maxGarments)}`
-			const canAdd = state.garments.length < maxGarments
-			if (canAdd && !garmentsView.addButton) {
-				garmentsView.addButton = createElement("button", "mc-tryon-add", "+")
-				garmentsView.addButton.type = "button"
-				garmentsView.addButton.addEventListener("click", () => {
-					void handlePickGarments()
-				})
-			}
-			if (canAdd && garmentsView.addButton.parentNode !== garmentsView.grid) {
-				garmentsView.grid.append(garmentsView.addButton)
-			} else if (!canAdd && garmentsView.addButton) {
-				garmentsView.addButton.remove()
-			}
-		}
-
-		const ensureModelView = () => {
-			if (view.model) return view.model
-			const section = createSection(t("section.model", "模特底图"), t("optional", "可选"))
-			const body = createElement("div", "mc-tryon-model-body")
-			section.append(body)
-			view.slots.model.replaceChildren(section)
-			view.model = {
-				body,
-				currentImage: null,
-				preview: null,
-				image: null,
-				uploadButton: null,
-			}
-			return view.model
-		}
-
-		const createModelPreview = () => {
-			const preview = createElement("div", "mc-tryon-model-preview")
-			const image = createElement("img", "mc-tryon-model-image")
-			image.alt = t("section.model", "模特底图")
-			preview.append(createLoadingPlaceholder(), image)
-			const removeButton = createElement(
-				"button",
-				"mc-tryon-remove mc-tryon-model-remove",
-				"×",
-			)
-			removeButton.type = "button"
-			removeButton.addEventListener("click", () => {
-				setState({ modelImage: null })
-			})
-			preview.append(removeButton)
-			return { preview, image }
-		}
-
-		const createModelUploadButton = () => {
-			const uploadButton = createElement(
-				"button",
-				"mc-tryon-model-upload",
-				`📤 ${t("upload.model", "点击上传（不上传则 AI 自动生成模特）")}`,
-			)
-			uploadButton.type = "button"
-			uploadButton.addEventListener("click", () => {
-				void handlePickModel()
-			})
-			return uploadButton
-		}
-
-		const updateModelSection = () => {
-			const modelView = ensureModelView()
-			if (!state.modelImage) {
-				modelView.currentImage = null
-				if (!modelView.uploadButton) {
-					modelView.uploadButton = createModelUploadButton()
-				}
-				if (modelView.uploadButton.parentNode !== modelView.body) {
-					modelView.body.replaceChildren(modelView.uploadButton)
-				}
-				return
-			}
-
-			if (!modelView.preview || !modelView.image) {
-				const preview = createModelPreview()
-				modelView.preview = preview.preview
-				modelView.image = preview.image
-			}
-			if (modelView.currentImage !== state.modelImage) {
-				bindPreviewImage(modelView.preview, modelView.image, getImageUrl(state.modelImage))
-				modelView.currentImage = state.modelImage
-			}
-			if (modelView.preview.parentNode !== modelView.body) {
-				modelView.body.replaceChildren(modelView.preview)
-			}
-		}
-
-		const createExtraSection = () => {
-			const section = createSection(t("section.extra", "额外描述"), t("optional", "可选"))
-			const textarea = createElement("textarea", "mc-tryon-textarea")
-			textarea.rows = 3
-			textarea.value = state.extra
-			textarea.placeholder = t("extra.placeholder", "")
-			textarea.addEventListener("input", (event) => {
-				state.extra = event.target.value
-				updateHeight()
-			})
-			section.append(textarea)
-			return section
-		}
-
-		const createStyleSection = () => {
-			const section = createSection(t("section.style", "风格"))
-			const grid = createElement("div", "mc-tryon-style-grid")
-			STYLE_OPTIONS.forEach((styleOption) => {
-				const button = createElement(
-					"button",
-					`mc-tryon-option${state.style === styleOption.value ? " is-active" : ""}`,
-					styleOption.label,
-				)
-				button.type = "button"
-				button.title = styleOption.desc
-				button.addEventListener("click", () => {
-					setState({ style: styleOption.value })
-				})
-				grid.append(button)
-			})
-			section.append(grid)
-			return section
-		}
-
-		const createModelSelectSection = () => {
-			if (!state.modelOptions.length) return document.createDocumentFragment()
-			const section = createSection(t("section.modelSelect", "AI 模型"))
-			const select = createElement("select", "mc-tryon-select")
-			state.modelOptions.forEach((model) => {
-				const option = createElement("option")
-				option.value = model.model_id
-				option.textContent = model.model_name ?? model.model_id
-				option.selected = model.model_id === state.modelId
-				select.append(option)
-			})
-			select.addEventListener("change", (event) => {
-				const modelId = event.target.value
-				const model = state.modelOptions.find((item) => item.model_id === modelId)
-				setState({
-					modelId,
-					...applyModelDefaults(model),
-				})
-			})
-			section.append(select)
-			return section
-		}
-
-		const createRatioSection = () => {
-			if (!getVisibleSizes().length) return document.createDocumentFragment()
-			const section = createSection(
-				t("section.ratio", "宽高比"),
-				getSelectedSize()?.value ?? "",
-			)
-			const list = createElement("div", "mc-tryon-wrap")
-			getVisibleSizes().forEach((ratio) => {
-				const button = createElement(
-					"button",
-					`mc-tryon-option${state.ratioKey === ratio.label ? " is-active" : ""}`,
-					ratio.label,
-				)
-				button.type = "button"
-				button.title = ratio.value
-				button.addEventListener("click", () => {
-					setState({ ratioKey: ratio.label })
-				})
-				list.append(button)
-			})
-			section.append(list)
-			return section
-		}
-
-		const createScaleSection = () => {
-			const resolutionOptions = getResolutionOptions()
-			if (resolutionOptions.length <= 1) return document.createDocumentFragment()
-			const section = createSection(t("section.resolution", "分辨率"))
-			const list = createElement("div", "mc-tryon-wrap")
-			resolutionOptions.forEach((scale) => {
-				const button = createElement(
-					"button",
-					`mc-tryon-option${state.scale === scale ? " is-active" : ""}`,
-					scale,
-				)
-				button.type = "button"
-				button.addEventListener("click", () => {
-					const sizes = getModelSizes().filter((size) => size.scale === scale)
-					setState({ scale, ratioKey: sizes[0]?.label ?? state.ratioKey })
-				})
-				list.append(button)
-			})
-			section.append(list)
-			return section
-		}
-
-		const createCountSection = () => {
-			const section = createSection(t("section.count", "生成数量"))
-			const list = createElement("div", "mc-tryon-wrap")
-			GENERATION_COUNTS.forEach((count) => {
-				const button = createElement(
-					"button",
-					`mc-tryon-option${state.genCount === count ? " is-active" : ""}`,
-					String(count),
-				)
-				button.type = "button"
-				button.addEventListener("click", () => {
-					setState({ genCount: count })
-				})
-				list.append(button)
-			})
-			section.append(list)
-			return section
-		}
-
-		const createImageSettingsSection = () => {
-			const settings = getImageSettings()
-			if (!settings.length) return document.createDocumentFragment()
-			const fragment = document.createDocumentFragment()
-			settings.forEach((setting) => {
-				const section = createSection(setting.label)
-				if (setting.description) {
-					section
-						.querySelector(".mc-tryon-section-header")
-						?.append(
-							createElement("span", "mc-tryon-section-suffix", setting.description),
-						)
-				}
-				const list = createElement("div", "mc-tryon-wrap")
-				setting.options.forEach((option) => {
-					const button = createElement(
-						"button",
-						`mc-tryon-option${
-							state.imageGenerationConfig[setting.requestKey] === option.value
-								? " is-active"
-								: ""
-						}`,
-						option.label,
-					)
-					button.type = "button"
-					button.addEventListener("click", () => {
-						setState({
-							imageGenerationConfig: {
-								...state.imageGenerationConfig,
-								[setting.requestKey]: option.value,
-							},
-						})
-					})
-					list.append(button)
-				})
-				section.append(list)
-				fragment.append(section)
-			})
-			return fragment
-		}
-
-		createLayout()
-		updateView()
-		void loadImageModels()
-
-		return function cleanup() {
-			root.replaceChildren()
-		}
+					return {
+						model_id: state.modelId,
+						prompt: buildPrompt({
+							garmentCount: state.garments.length,
+							hasModelImage: Boolean(state.modelImage),
+							style: state.style,
+							extra: state.extra,
+							locale: promptLocale,
+						}),
+						reference_images: referenceImages,
+						size: `${width}x${height}`,
+						resolution: state.scale || undefined,
+						width,
+						height,
+						count: state.genCount,
+						select: false,
+					}
+				},
+				onSuccess: ({ ctx }) => {
+					ctx.ui.toast(t("toast.success", "穿搭图生成成功！"), "success")
+					ctx.ui.close?.()
+				},
+			},
+		})
 	},
 })
 
-function buildPrompt(count, style, extra) {
-	const refs = Array.from({ length: count }, (_, index) => `reference image ${index + 1}`).join(
-		", ",
-	)
-	const extraClause = extra?.trim() ? ` ${extra.trim()}.` : ""
+function getReferenceImages(state) {
+	return [...state.garments, state.modelImage].filter(Boolean)
+}
+
+function getMaxReferenceImages(state, helpers) {
+	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? MAX_GARMENTS
+}
+
+function buildPrompt({ garmentCount, hasModelImage, style, extra, locale }) {
+	const isChinese = MagicPromptLocale.isChinese(locale)
+	const productReferences = MagicPromptLocale.joinReferenceLabels(garmentCount, locale)
+	const modelReference = hasModelImage
+		? MagicPromptLocale.getReferenceLabel(garmentCount + 1, locale)
+		: null
+	const styleDefinition =
+		STYLE_OPTIONS.find((item) => item.value === style) ?? STYLE_OPTIONS[0]
+	const styleSuffix =
+		styleDefinition.value === "preserve" && !hasModelImage
+			? MagicPromptLocale.pickText(STYLE_OPTIONS[0].promptSuffix, locale)
+			: MagicPromptLocale.pickText(styleDefinition.promptSuffix, locale)
+	const normalizedExtra = extra?.trim()
+
+	if (isChinese) {
+		const extraClause = normalizedExtra ? `额外要求：${normalizedExtra}。` : ""
+		const basePrompt =
+			`使用${productReferences}中的全部商品图生成同一张商业模特穿搭图。` +
+			`所有${garmentCount}件商品都必须同时完整出现在结果里，不能遗漏、替换、合并，或只保留局部。` +
+			"根据商品类型做自然穿搭：外套应穿在内搭外层，帽子应佩戴在头部，鞋履应穿在脚上，包袋应以手提、肩背或自然摆放方式合理呈现。" +
+			`每件商品都必须严格匹配其参考图中的颜色、图案、材质、纹理、廓形与关键设计细节。`
+
+		const modelClause = modelReference
+			? `${modelReference}是模特底图。保留它的人物身份、体型、发型、场景、背景、光线、镜头视角与整体摄影风格，只自然替换穿搭商品。`
+			: "如果没有模特底图，请生成一位适合商业服饰展示的单人模特，并确保所有商品都清晰可见。"
+
+		return (
+			basePrompt +
+			modelClause +
+			"输出必须是单人全身或足够展示全部商品的构图，保持真实比例、自然穿着关系和商业可用完成度。" +
+			extraClause +
+			styleSuffix
+		)
+	}
+
+	const extraClause = normalizedExtra ? `Additional requirements: ${normalizedExtra}. ` : ""
+	const basePrompt =
+		`Create one commercial fashion try-on image using ALL product references from ${productReferences}. ` +
+		`All ${garmentCount} item${garmentCount > 1 ? "s" : ""} must appear together in the same final image with no omission, substitution, merging, or partial-only rendering. ` +
+		"Dress the items naturally according to category: outerwear should layer over inner garments, hats should be worn on the head, shoes on the feet, and bags carried or placed in a believable way. " +
+		"Each item must match its reference exactly in color, pattern, material, texture, silhouette, and key design details. "
+
+	const modelClause = modelReference
+		? `Use ${modelReference} as the optional model base image. Preserve that person's identity, body type, hairstyle, scene, background, lighting, camera angle, and overall photographic style while replacing only the worn products naturally. `
+		: "If no model base image is provided, generate a single fashion model suitable for commercial apparel display and make every product clearly visible. "
 
 	return (
-		`A fashion model wearing ALL ${count} clothing/accessory item${count > 1 ? "s" : ""} simultaneously: ${refs}. ` +
-		`CRITICAL: Every single one of the ${count} reference item${count > 1 ? "s" : ""} must be clearly visible on the model -- do not omit, merge or substitute any item. ` +
-		"Layer garments naturally: if any item is a jacket, coat or outer layer it must be worn visibly on top of inner clothing; if any item is a hat or cap it must be worn on the head; if any item is footwear it must be on the feet; if any item is a bag it must be carried by hand or on the shoulder. " +
-		`Each item must exactly match its reference image in color, pattern, texture and design. Full body view showing all items clearly.${extraClause} ${STYLE_SUFFIX[style]}`
+		basePrompt +
+		modelClause +
+		"The output must remain a single-person composition with believable proportions, natural wear relationships, and commercially usable polish. " +
+		extraClause +
+		styleSuffix
 	)
-}
-
-function createSection(title, suffix) {
-	const section = createElement("section", "mc-tryon-section")
-	const header = createElement("div", "mc-tryon-section-header")
-	header.append(createElement("label", "mc-tryon-section-title", title))
-	if (suffix) header.append(createElement("span", "mc-tryon-section-suffix", suffix))
-	section.append(header)
-	return section
-}
-
-function createElement(tagName, className, textContent) {
-	const element = document.createElement(tagName)
-	if (className) element.className = className
-	if (textContent !== undefined) element.textContent = textContent
-	return element
-}
-
-function createLoadingPlaceholder() {
-	const loading = createElement("div", "mc-tryon-loading")
-	loading.setAttribute("aria-hidden", "true")
-	loading.append(createElement("span", "mc-tryon-loading-spinner"))
-	return loading
-}
-
-function bindPreviewImage(container, image, url) {
-	const nextUrl = url || ""
-	if (!nextUrl) {
-		container.classList.remove("is-loading")
-		image.removeAttribute("src")
-		return
-	}
-
-	container.classList.add("is-loading")
-	image.onload = () => {
-		container.classList.remove("is-loading")
-	}
-	image.onerror = () => {
-		container.classList.remove("is-loading")
-	}
-	image.src = nextUrl
-	if (image.complete) {
-		container.classList.remove("is-loading")
-	}
-}
-
-function getImageReferenceId(image) {
-	return image.path ?? image.uploadId ?? image.id ?? image.fileId ?? image.resourceId ?? image.url
-}
-
-function getImageUrl(image) {
-	return image.url ?? image.src ?? image.previewUrl ?? ""
-}
-
-function getErrorMessage(error) {
-	if (error instanceof Error) return error.message
-	return String(error ?? "")
 }
