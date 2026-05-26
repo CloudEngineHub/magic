@@ -399,6 +399,12 @@
 		"hand": "抓手工具",
 		"imageGenerator": "图像生成",
 		"marker": "标记",
+		"pluginCategories": {
+			"model": "模特图",
+			"other": "其他",
+			"product": "商品图"
+		},
+		"pluginCategoryEmpty": "该分类下暂无插件",
 		"plugins": "插件",
 		"selection": "选择工具",
 		"space": "空格",

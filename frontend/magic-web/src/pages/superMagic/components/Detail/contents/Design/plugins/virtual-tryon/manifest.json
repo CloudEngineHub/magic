@@ -49,6 +49,9 @@
 			"upload.model": "点击上传（不上传则 AI 自动生成模特）"
 		}
 	},
+	"category": {
+		"key": "model"
+	},
 	"name": "virtual-tryon",
 	"styles": "index.css",
 	"tags": ["AI", "电商", "穿搭"],

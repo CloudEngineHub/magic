@@ -1,12 +1,13 @@
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Puzzle } from "lucide-react"
-import { useMemo, useState, useSyncExternalStore } from "react"
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 
 import {
 	normalizePluginLocale,
 	resolvePluginIcon,
 	resolvePluginText,
 } from "../../canvas/plugins/resolve"
+import type { CanvasDesignPluginCategory } from "../../canvas/types"
 import { useCanvas } from "../../context/CanvasContext"
 import { useCanvasDesignI18n } from "../../context/I18nContext"
 import { useHostUiLocale } from "../../context/HostUiLocaleContext"
@@ -17,6 +18,40 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import styles from "./index.module.css"
 
 const noop = () => undefined
+const STATIC_PLUGIN_CATEGORIES = [
+	{
+		key: "model",
+		order: 10,
+		labelKey: "tools.pluginCategories.model",
+		fallbackLabel: "模特图",
+	},
+	{
+		key: "product",
+		order: 20,
+		labelKey: "tools.pluginCategories.product",
+		fallbackLabel: "商品图",
+	},
+	{
+		key: "other",
+		order: 999,
+		labelKey: "tools.pluginCategories.other",
+		fallbackLabel: "其他",
+	},
+] as const
+
+interface PluginToolViewItem {
+	name: string
+	resolvedLabel: string
+	resolvedDescription: string
+	resolvedIcon: ReturnType<typeof resolvePluginIcon>
+	category?: CanvasDesignPluginCategory
+}
+
+interface PluginCategoryView {
+	key: string
+	label: string
+	plugins: PluginToolViewItem[]
+}
 
 export default function PluginTool() {
 	const { t } = useCanvasDesignI18n()
@@ -24,6 +59,7 @@ export default function PluginTool() {
 	const hostUiLocale = useHostUiLocale()
 	const portalContainer = usePortalContainer()
 	const [open, setOpen] = useState(false)
+	const [activeCategoryKey, setActiveCategoryKey] = useState<string | null>(null)
 	const pluginSnapshot = useSyncExternalStore(
 		(listener) => canvas?.pluginManager.subscribe(listener) ?? noop,
 		() => canvas?.pluginManager.getSnapshot(),
@@ -31,7 +67,7 @@ export default function PluginTool() {
 	)
 
 	const locale = normalizePluginLocale(hostUiLocale)
-	const plugins = useMemo(() => {
+	const plugins = useMemo<PluginToolViewItem[]>(() => {
 		return (pluginSnapshot?.plugins ?? []).map((plugin) => {
 			return {
 				...plugin,
@@ -42,7 +78,47 @@ export default function PluginTool() {
 		})
 	}, [locale, pluginSnapshot?.plugins])
 
+	const categories = useMemo<PluginCategoryView[]>(() => {
+		const staticCategoryMap = new Map<string, PluginCategoryView>(
+			STATIC_PLUGIN_CATEGORIES.map((category) => [
+				category.key,
+				{
+					key: category.key,
+					label: t(category.labelKey, category.fallbackLabel),
+					order: category.order,
+					plugins: [],
+				},
+			]),
+		)
+
+		for (const plugin of plugins) {
+			const categoryKey = plugin.category?.key || "other"
+			const existingCategory = staticCategoryMap.get(categoryKey)
+			if (existingCategory) {
+				existingCategory.plugins.push(plugin)
+				continue
+			}
+
+			staticCategoryMap.set(categoryKey, {
+				key: categoryKey,
+				label: plugin.category?.label || categoryKey,
+				plugins: [plugin],
+			})
+		}
+
+		return Array.from(staticCategoryMap.values())
+	}, [plugins, t])
+
+	const activeCategory = useMemo(() => {
+		return (
+			categories.find((category) => category.key === activeCategoryKey) ??
+			categories[0] ??
+			null
+		)
+	}, [activeCategoryKey, categories])
+
 	const label = t("tools.plugins", "插件")
+	const emptyCategoryLabel = t("tools.pluginCategoryEmpty", "该分类下暂无插件")
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
@@ -70,49 +146,78 @@ export default function PluginTool() {
 				align="start"
 				side="right"
 				sideOffset={8}
-				className="border-base-border w-80 bg-white p-0"
+				className="border-base-border w-[30rem] bg-white p-0"
 			>
 				<div className={styles.pluginPanel}>
 					<div className={styles.pluginPanelHeader}>
 						<div className={styles.pluginPanelTitle}>{label}</div>
 					</div>
 
-					<div className={styles.pluginList}>
-						{plugins.map((plugin) => {
-							return (
-								<button
-									key={plugin.name}
-									type="button"
-									className={styles.pluginItem}
-									onClick={() => {
-										canvas?.pluginManager.open(plugin.name)
-										setOpen(false)
-									}}
-								>
-									<div className={styles.pluginIcon}>
-										{plugin.resolvedIcon?.type === "emoji" ? (
-											plugin.resolvedIcon.value
-										) : plugin.resolvedIcon?.type === "image" ? (
-											<img
-												src={plugin.resolvedIcon.value}
-												alt=""
-												className={styles.pluginIconImage}
-											/>
-										) : (
-											<Puzzle size={18} />
-										)}
-									</div>
-									<div className={styles.pluginInfo}>
-										<div className={styles.pluginName}>
-											{plugin.resolvedLabel}
-										</div>
-										<div className={styles.pluginDescription}>
-											{plugin.resolvedDescription}
-										</div>
-									</div>
-								</button>
-							)
-						})}
+					<div className={styles.pluginPanelBody}>
+						<div className={styles.pluginCategoryNav}>
+							{categories.map((category) => {
+								const selected = category.key === activeCategory?.key
+								return (
+									<button
+										key={category.key}
+										type="button"
+										className={`${styles.pluginCategoryTab} ${selected ? styles.pluginCategoryTabSelected : ""}`.trim()}
+										onClick={() => setActiveCategoryKey(category.key)}
+									>
+										<span className={styles.pluginCategoryLabel}>
+											{category.label}
+										</span>
+										<span className={styles.pluginCategoryCount}>
+											{category.plugins.length}
+										</span>
+									</button>
+								)
+							})}
+						</div>
+
+						<div className={styles.pluginListPane}>
+							{activeCategory?.plugins.length ? (
+								<div className={styles.pluginList}>
+									{activeCategory.plugins.map((plugin) => {
+										return (
+											<button
+												key={plugin.name}
+												type="button"
+												className={styles.pluginItem}
+												onClick={() => {
+													canvas?.pluginManager.open(plugin.name)
+													setOpen(false)
+												}}
+											>
+												<div className={styles.pluginIcon}>
+													{plugin.resolvedIcon?.type === "emoji" ? (
+														plugin.resolvedIcon.value
+													) : plugin.resolvedIcon?.type === "image" ? (
+														<img
+															src={plugin.resolvedIcon.value}
+															alt=""
+															className={styles.pluginIconImage}
+														/>
+													) : (
+														<Puzzle size={18} />
+													)}
+												</div>
+												<div className={styles.pluginInfo}>
+													<div className={styles.pluginName}>
+														{plugin.resolvedLabel}
+													</div>
+													<div className={styles.pluginDescription}>
+														{plugin.resolvedDescription}
+													</div>
+												</div>
+											</button>
+										)
+									})}
+								</div>
+							) : (
+								<div className={styles.pluginListEmpty}>{emptyCategoryLabel}</div>
+							)}
+						</div>
 					</div>
 				</div>
 			</PopoverContent>

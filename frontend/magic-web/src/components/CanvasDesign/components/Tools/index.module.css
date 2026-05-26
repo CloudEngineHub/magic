@@ -79,6 +79,11 @@
 	overflow: hidden;
 }
 
+.plugin-panel-body {
+	display: flex;
+	min-height: 320px;
+}
+
 .plugin-panel-header {
 	padding: 12px 14px;
 	border-bottom: 1px solid var(--base-border, #e5e5e5);
@@ -91,13 +96,94 @@
 	line-height: 20px;
 }
 
+.plugin-category-nav {
+	display: flex;
+	flex: 0 0 120px;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 8px;
+	background: #fafafa;
+	border-right: 1px solid var(--base-border, #e5e5e5);
+}
+
+.plugin-category-tab {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 4px 8px;
+	align-items: center;
+	width: 100%;
+	padding: 10px 10px 9px;
+	color: var(--base-muted-foreground, #737373);
+	text-align: left;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	cursor: pointer;
+	transition:
+		background-color 120ms ease,
+		border-color 120ms ease,
+		color 120ms ease;
+}
+
+.plugin-category-tab:hover {
+	background: #fff;
+	border-color: var(--base-border, #e5e5e5);
+	color: var(--base-foreground, #0a0a0a);
+}
+
+.plugin-category-tab-selected {
+	background: #fff;
+	border-color: var(--base-border, #e5e5e5);
+	box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+	color: var(--base-foreground, #0a0a0a);
+}
+
+.plugin-category-label {
+	min-width: 0;
+	font-weight: 500;
+	font-size: 13px;
+	line-height: 18px;
+	word-break: break-word;
+}
+
+.plugin-category-count {
+	justify-self: end;
+	padding: 0 6px;
+	color: inherit;
+	font-weight: 600;
+	font-size: 12px;
+	line-height: 18px;
+	background: rgb(0 0 0 / 5%);
+	border-radius: 999px;
+}
+
+.plugin-list-pane {
+	display: flex;
+	flex: 1 1 auto;
+	min-width: 0;
+	background: var(--base-background, #fff);
+}
+
 .plugin-list {
 	display: flex;
+	flex: 1 1 auto;
 	flex-direction: column;
 	gap: 4px;
 	max-height: 320px;
 	padding: 8px;
 	overflow-y: auto;
+}
+
+.plugin-list-empty {
+	display: flex;
+	flex: 1 1 auto;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	color: var(--base-muted-foreground, #737373);
+	font-size: 13px;
+	line-height: 20px;
+	text-align: center;
 }
 
 .plugin-item {

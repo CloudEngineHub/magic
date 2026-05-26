@@ -81,6 +81,9 @@
 			"upload.targetModelImage.help": "可选。用于提供新的模特脸部、肤色、发型和身份特征，不会复制该图里的服饰与场景。"
 		}
 	},
+	"category": {
+		"key": "model"
+	},
 	"name": "model-swap",
 	"styles": "index.css",
 	"tags": ["AI", "电商", "换模特"],

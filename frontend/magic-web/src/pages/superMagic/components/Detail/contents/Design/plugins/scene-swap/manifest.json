@@ -77,6 +77,9 @@
 			"upload.modelImageTip": "支持上传模特图，建议主体清晰、姿态稳定，便于换景生成。"
 		}
 	},
+	"category": {
+		"key": "model"
+	},
 	"name": "scene-swap",
 	"styles": "index.css",
 	"tags": ["AI", "电商", "换景"],

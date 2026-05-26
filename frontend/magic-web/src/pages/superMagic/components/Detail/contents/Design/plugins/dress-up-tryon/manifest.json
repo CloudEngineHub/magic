@@ -91,6 +91,9 @@
 			"upload.topGarmentImage.help": "建议上传边界清晰、无遮挡、上装轮廓完整可见的平铺或人台服饰图。"
 		}
 	},
+	"category": {
+		"key": "model"
+	},
 	"name": "dress-up-tryon",
 	"styles": "index.css",
 	"tags": ["AI", "电商", "试衣"],

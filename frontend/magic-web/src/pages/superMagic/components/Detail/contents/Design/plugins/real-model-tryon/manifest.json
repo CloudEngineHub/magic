@@ -63,6 +63,9 @@
 			"upload.targetModelImage.help": "建议目标模特姿态清晰，待替换区域完整可见，避免大面积遮挡。"
 		}
 	},
+	"category": {
+		"key": "model"
+	},
 	"name": "real-model-tryon",
 	"styles": "index.css",
 	"tags": ["AI", "电商", "试衣"],

@@ -45,6 +45,9 @@
 			"upload.targetFaceImage.help": "上传清晰的正脸或半侧脸照片，AI 仅复用其面部五官特征，不会复制肤色、发型、服饰或背景。"
 		}
 	},
+	"category": {
+		"key": "model"
+	},
 	"name": "face-swap",
 	"styles": "index.css",
 	"tags": ["AI", "电商", "换脸"],

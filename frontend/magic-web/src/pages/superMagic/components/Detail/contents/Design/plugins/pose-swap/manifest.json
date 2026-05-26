@@ -79,6 +79,9 @@
 			"upload.poseReferenceImages.help": "支持上传多张姿势参考图，只会复用姿态，不会复制脸、衣服或背景。多图生成时会按顺序为每张结果分配 1 张姿势参考图；当生成张数多于参考图数量时，会循环复用姿势参考图。"
 		}
 	},
+	"category": {
+		"key": "model"
+	},
 	"name": "pose-swap",
 	"styles": "index.css",
 	"tags": ["AI", "电商", "换姿势"],

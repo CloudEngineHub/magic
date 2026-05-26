@@ -91,6 +91,9 @@
 			"category.ring.desc": "戒指及其他手指配饰。"
 		}
 	},
+	"category": {
+		"key": "model"
+	},
 	"name": "accessory-tryon",
 	"styles": "index.css",
 	"tags": ["AI", "电商", "配饰"],

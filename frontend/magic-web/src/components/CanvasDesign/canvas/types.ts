@@ -467,11 +467,17 @@ export type CanvasDesignPluginLocaleMessages = Record<string, string>
 
 export type CanvasDesignPluginLocales = Record<string, CanvasDesignPluginLocaleMessages>
 
+export interface CanvasDesignPluginCategory {
+	key: string
+	label?: string
+}
+
 export interface CanvasDesignPluginConfig {
 	name: string
 	version?: string
 	/** Single-character emoji or a relative path to a media asset inside the plugin package. */
 	icon?: string
+	category?: CanvasDesignPluginCategory
 	tags?: string[]
 	label: string
 	description: string
