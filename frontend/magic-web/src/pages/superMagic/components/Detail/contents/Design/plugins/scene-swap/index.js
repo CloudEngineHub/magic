@@ -72,7 +72,7 @@ registerMagicCanvasPlugin({
 					maxCount: ({ state, helpers }) => {
 						const maxReferenceImages = getMaxReferenceImages(state, helpers)
 						const extraCount = getBackgroundReferenceCount(state)
-						return Math.max(1, Math.min(1, maxReferenceImages - extraCount))
+						return Math.max(1, Math.min(10, maxReferenceImages - extraCount))
 					},
 				},
 				{
@@ -215,32 +215,36 @@ registerMagicCanvasPlugin({
 					}
 					return null
 				},
-				buildRequest: ({ state, helpers }) => {
+				execute: async ({ state, helpers, generateAndPlace }) => {
 					const selectedSize = resolveOutputSize(state, helpers)
-					const referenceAssets = getReferenceAssetsForMode(state)
-					const referenceImages = helpers.collectReferenceIds(referenceAssets)
-					const imageGenerationConfig = state.qualityMode
-						? { ...state.imageGenerationConfig, quality: state.qualityMode }
-						: state.imageGenerationConfig
-
-					return {
-						model_id: state.modelId,
-						prompt: buildSceneSwapPrompt({
-							backgroundMode: state.backgroundMode,
-							backgroundPrompt: state.backgroundPrompt,
-							modelImageCount: state.modelImages.length,
-						}),
-						reference_images: referenceImages,
-						size: `${selectedSize.width}x${selectedSize.height}`,
-						resolution: selectedSize.scale || undefined,
-						image_generation_config: Object.keys(imageGenerationConfig ?? {}).length
-							? imageGenerationConfig
-							: undefined,
-						width: selectedSize.width,
-						height: selectedSize.height,
-						count: state.genCount,
-						select: false,
+					if (state.modelImages.length <= 1) {
+						return generateAndPlace(
+							buildSceneSwapRequest({
+								state,
+								helpers,
+								baseImage: state.modelImages[0],
+								selectedSize,
+								count: state.genCount,
+							}),
+						)
 					}
+
+					const results = []
+					for (let index = 0; index < state.genCount; index += 1) {
+						const baseImage = state.modelImages[index % state.modelImages.length]
+						results.push(
+							await generateAndPlace(
+								buildSceneSwapRequest({
+									state,
+									helpers,
+									baseImage,
+									selectedSize,
+									count: 1,
+								}),
+							),
+						)
+					}
+					return results
 				},
 				onSuccess: ({ ctx }) => {
 					ctx.ui.toast(t("toast.success", "模拍换景图生成成功！"), "success")
@@ -292,6 +296,17 @@ function getBackgroundReferenceCount(state) {
 
 function getReferenceAssetsForMode(state) {
 	const assets = [...state.modelImages]
+	if (state.backgroundMode === "image" && state.backgroundImage) {
+		assets.push(state.backgroundImage)
+	}
+	if (state.backgroundMode === "copy" && state.copyBackgroundImage) {
+		assets.push(state.copyBackgroundImage)
+	}
+	return assets
+}
+
+function getReferenceAssetsForBaseImage(state, baseImage) {
+	const assets = [baseImage]
 	if (state.backgroundMode === "image" && state.backgroundImage) {
 		assets.push(state.backgroundImage)
 	}
@@ -377,6 +392,33 @@ function resolveSelectedQualityValue(state, helpers) {
 	return options.some((option) => option.value === state.qualityMode)
 		? state.qualityMode
 		: options[0].value
+}
+
+function buildSceneSwapRequest({ state, helpers, baseImage, selectedSize, count }) {
+	const referenceAssets = getReferenceAssetsForBaseImage(state, baseImage)
+	const referenceImages = helpers.collectReferenceIds(referenceAssets)
+	const imageGenerationConfig = state.qualityMode
+		? { ...state.imageGenerationConfig, quality: state.qualityMode }
+		: state.imageGenerationConfig
+
+	return {
+		model_id: state.modelId,
+		prompt: buildSceneSwapPrompt({
+			backgroundMode: state.backgroundMode,
+			backgroundPrompt: state.backgroundPrompt,
+			modelImageCount: 1,
+		}),
+		reference_images: referenceImages,
+		size: `${selectedSize.width}x${selectedSize.height}`,
+		resolution: selectedSize.scale || undefined,
+		image_generation_config: Object.keys(imageGenerationConfig ?? {}).length
+			? imageGenerationConfig
+			: undefined,
+		width: selectedSize.width,
+		height: selectedSize.height,
+		count,
+		select: false,
+	}
 }
 
 function buildReferenceLabelList(count) {
