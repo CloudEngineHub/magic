@@ -16,7 +16,6 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Crosshair, X, Copy, MousePointer, Send } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import { SUPER_PLACEHOLDER_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/super-placeholder/const"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { InspectedElementInfo, InspectedElementRect } from "./types"
@@ -320,13 +319,6 @@ export function buildAgentPromptContent(
 		content,
 	})
 	const emptyPara = (): JSONContent => ({ type: "paragraph" })
-	const placeholder = (placeholderText: string): JSONContent => ({
-		type: SUPER_PLACEHOLDER_TYPE,
-		attrs: {
-			type: "input",
-			props: { placeholder: placeholderText },
-		},
-	})
 
 	const paragraphs: JSONContent[] = []
 
@@ -417,14 +409,9 @@ export function buildAgentPromptContent(
 		},
 	})
 
-	// User-fillable placeholder
+	// User-fillable area (no placeholder)
 	paragraphs.push(emptyPara())
-	paragraphs.push(
-		para(
-			text(`${t("stylePanel.inspector.agentPromptSuffix")}`),
-			placeholder(t("stylePanel.inspector.agentPromptPlaceholder")),
-		),
-	)
+	paragraphs.push(para(text(`${t("stylePanel.inspector.agentPromptSuffix")}`)))
 
 	return { type: "doc", content: paragraphs }
 }

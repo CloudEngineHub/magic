@@ -3014,8 +3014,8 @@
 		"insertImage": "Insert Image",
 		"inspector": {
 			"agentPromptPlaceholder": "Describe the problem here",
-			"agentPromptSuffix": "Please describe the problem you encountered:",
-			"agentPromptTitle": "[HTML Element Inspection] I selected an element on the page. Here are its details:",
+			"agentPromptSuffix": "Please modify the selected element above:",
+			"agentPromptTitle": "I selected an element on the page. Here are its details:",
 			"computedStyles": "Computed Styles",
 			"copySelector": "Copy Selector",
 			"insertToConsole": "Query in Console",
@@ -3269,7 +3269,10 @@
 			"createFolderSuccess": "Folder created successfully",
 			"createSelfMediaFailed": "Failed to create self-media project",
 			"createSelfMediaSuccess": "Self-media project created successfully",
+			"createAICardFailed": "Failed to create AI card project",
+			"createAICardSuccess": "AI card project created successfully",
 			"createSubMenu": {
+				"aiCardFile": "AI Card",
 				"customFile": "Custom Format",
 				"designFile": "Design",
 				"goFile": "Golang",
@@ -3330,6 +3333,9 @@
 			},
 			"newSelfMedia": {
 				"defaultName": "New Self-Media Project"
+			},
+			"newAICard": {
+				"defaultName": "New AI Card"
 			},
 			"noEditPermission": "No edit permission",
 			"noFilesSelected": "No files selected",

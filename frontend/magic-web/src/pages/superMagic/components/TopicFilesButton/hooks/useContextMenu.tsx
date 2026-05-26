@@ -67,6 +67,7 @@ interface UseContextMenuOptions {
 	createVirtualFolder: (key?: string, parentPath?: string) => void
 	createVirtualDesignProject?: (key?: string, parentPath?: string) => void
 	createVirtualSelfMediaProject?: (key?: string, parentPath?: string) => void
+	createVirtualAICardProject?: (key?: string, parentPath?: string) => void
 	isMoving?: boolean
 	// 新增：多文件选择相关
 	selectedItems?: Set<string>
@@ -241,6 +242,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		createVirtualFolder,
 		createVirtualDesignProject,
 		createVirtualSelfMediaProject,
+		createVirtualAICardProject,
 		isMoving = false,
 		selectedItems,
 		handleAddMultipleFilesToCurrentChat,
@@ -288,6 +290,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					// 只在根目录显示新建画布选项
 					onAddDesign: createVirtualDesignProject,
 					onAddSelfMedia: createVirtualSelfMediaProject,
+					onAddAICard: createVirtualAICardProject,
 				}),
 			},
 			{
@@ -354,6 +357,10 @@ export function useContextMenu(options: UseContextMenuOptions) {
 						onAddSelfMedia:
 							createVirtualSelfMediaProject && canCreateDesignProject
 								? () => createVirtualSelfMediaProject(key, parentPath)
+								: undefined,
+						onAddAICard:
+							createVirtualAICardProject && canCreateDesignProject
+								? () => createVirtualAICardProject(key, parentPath)
 								: undefined,
 					}),
 				},

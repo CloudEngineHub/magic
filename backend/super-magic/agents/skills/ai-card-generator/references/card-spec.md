@@ -2,10 +2,10 @@
 
 ## File Requirements
 
-1. **Self-contained**: All CSS and JavaScript must be inline. No external stylesheets or scripts.
+1. **Single-file first**: Keep the card organized as a single HTML file. Inline CSS and JavaScript are preferred for portability.
 2. **Encoding**: Must include `<meta charset="utf-8">`.
 3. **Viewport**: Must include `<meta name="viewport" content="width=device-width, initial-scale=1.0">`.
-4. **No External Resources**: Do not reference any external CDN, fonts, or APIs. The card renders inside a sandboxed iframe.
+4. **External Resources Policy**: Default to no external resources, but allow a small whitelist of trusted CDN dependencies when they unlock major value. ECharts CDN is explicitly allowed for chart-driven cards.
 5. **Responsive**: Use CSS Grid or Flexbox for layout. Card should render well at various widths (300px–1200px).
 
 ## Dark Mode Support
@@ -129,9 +129,23 @@ history/YYYY-MM-DD_HH-mm.html
 
 Example: `history/2026-05-23_09-00.html`
 
+## Whitelisted External Resources
+
+- `https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js`
+- `https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js`
+
+Use only one ECharts source per card. Additional external libraries should stay default-deny unless explicitly approved by scenario requirements.
+
 ## Performance Guidelines
 
-- Keep total HTML file size under 500KB
+- Keep total HTML file size practical for iframe rendering. The previous 500KB target is still recommended, but may be exceeded when chart runtime is loaded from a trusted CDN.
 - Minimize inline JavaScript; use it only for essential interactivity
 - Prefer CSS animations over JavaScript animations
 - Use semantic HTML for accessibility
+
+## ECharts Implementation Notes
+
+- Prefer direct ECharts rendering for trend charts, funnels, bars, pies, and sparklines.
+- Initialize charts after DOM creation and call `resize()` on window resize.
+- Read colors from CSS variables so chart theme follows light/dark mode changes.
+- If CDN loading fails in a restricted environment, the card should still preserve readable narrative sections.

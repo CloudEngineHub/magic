@@ -709,6 +709,80 @@ window.magicProjectConfigure(window.magicProjectConfig)`
 		}
 	}
 
+	const createAICardProject = async (folderName: string, parentPath?: string) => {
+		if (!projectId) {
+			throw new Error("项目ID不能为空")
+		}
+
+		const projectKey = `${Date.now()}-${Math.random()}`
+		setCreatingFiles((prev) => new Set(prev).add(projectKey))
+
+		try {
+			// 获取父文件夹ID
+			const parent_id = getParentIdFromPath(parentPath)
+
+			// 直接调用 API 创建文件夹（不触发刷新）
+			const folderResponse = await SuperMagicApi.createFile({
+				project_id: projectId,
+				parent_id,
+				file_name: folderName,
+				is_directory: true,
+			})
+
+			if (!folderResponse?.file_id) {
+				throw new Error("文件夹创建失败")
+			}
+
+			// 在文件夹中创建 magic.project.js 文件
+			const fileContent = `window.magicProjectConfig = {
+	"version": "1.0.0",
+	"type": "ai-card",
+	"name": "${folderName}",
+	"ai-card": {}
+}
+
+window.magicProjectConfigure(window.magicProjectConfig)`
+			const fileName = "magic.project.js"
+
+			// 直接使用文件夹的 file_id 作为 parent_id 创建文件
+			const fileResponse = await SuperMagicApi.createFile({
+				project_id: projectId,
+				parent_id: folderResponse.file_id,
+				file_name: fileName,
+				is_directory: false,
+			})
+
+			if (!fileResponse?.file_id) {
+				throw new Error("文件创建失败")
+			}
+
+			// 保存文件内容
+			await SuperMagicApi.saveFileContent([
+				{
+					file_id: fileResponse.file_id,
+					content: fileContent,
+				},
+			])
+
+			// 所有操作完成后，统一触发文件列表更新（只刷新一次）
+			pubsub.publish(PubSubEvents.Update_Attachments)
+			onUpdateAttachments?.()
+
+			magicToast.success(t("topicFiles.contextMenu.createAICardSuccess"))
+
+			return folderResponse
+		} catch (error) {
+			magicToast.error(t("topicFiles.contextMenu.createAICardFailed"))
+			throw error
+		} finally {
+			setCreatingFiles((prev) => {
+				const newSet = new Set(prev)
+				newSet.delete(projectKey)
+				return newSet
+			})
+		}
+	}
+
 	const handleUploadFile = (item?: AttachmentItem) => {
 		// 获取上传目标文件夹路径
 		const targetPath = item?.is_directory ? item.relative_file_path || item.name : undefined
@@ -1655,6 +1729,8 @@ window.magicProjectConfigure(window.magicProjectConfig)`
 		createDesignProject,
 		// 新增：自媒体项目创建回调
 		createSelfMediaProject,
+		// 新增：AI 卡片项目创建回调
+		createAICardProject,
 		// 新增：文件创建loading状态
 		creatingFiles,
 		// 新增：文件列表更新回调

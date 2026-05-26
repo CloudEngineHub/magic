@@ -3017,8 +3017,8 @@
 		"insertImage": "新增图片",
 		"inspector": {
 			"agentPromptPlaceholder": "在此描述你遇到的问题",
-			"agentPromptSuffix": "请描述你遇到的问题：",
-			"agentPromptTitle": "[HTML 元素检查] 我选中了页面中的一个元素，其详细信息如下：",
+			"agentPromptSuffix": "请针对上面选中的元素进行修改：",
+			"agentPromptTitle": "我选中了页面中的一个元素，其详细信息如下：",
 			"computedStyles": "计算样式",
 			"copySelector": "复制选择器",
 			"insertToConsole": "在控制台查询",
@@ -3282,7 +3282,10 @@
 			"createFolderSuccess": "创建文件夹成功",
 			"createSelfMediaFailed": "创建自媒体项目失败",
 			"createSelfMediaSuccess": "创建自媒体项目成功",
+			"createAICardFailed": "创建 AI 卡片项目失败",
+			"createAICardSuccess": "创建 AI 卡片项目成功",
 			"createSubMenu": {
+				"aiCardFile": "AI 卡片",
 				"customFile": "自定义格式",
 				"designFile": "画布",
 				"goFile": "Golang",
@@ -3343,6 +3346,9 @@
 			},
 			"newSelfMedia": {
 				"defaultName": "新建自媒体项目"
+			},
+			"newAICard": {
+				"defaultName": "新建 AI 卡片"
 			},
 			"noEditPermission": "没有编辑权限",
 			"noFilesSelected": "未选择任何文件",

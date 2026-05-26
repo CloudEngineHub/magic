@@ -22,6 +22,11 @@ interface CreateFileMenuItemsParams {
 	 * If provided, self-media project option will be included
 	 */
 	onAddSelfMedia?: () => void
+	/**
+	 * Optional callback for creating AI card project
+	 * If provided, AI card project option will be included
+	 */
+	onAddAICard?: () => void
 }
 
 /**
@@ -33,6 +38,7 @@ export function createFileMenuItems({
 	onAddFile,
 	onAddDesign,
 	onAddSelfMedia,
+	onAddAICard,
 }: CreateFileMenuItemsParams): MenuProps["items"] {
 	return [
 		{
@@ -93,7 +99,17 @@ export function createFileMenuItems({
 					},
 				]
 			: []),
-		...(onAddDesign || onAddSelfMedia ? [{ type: "divider" as const }] : []),
+		...(onAddAICard
+			? [
+					{
+						key: "createAICard",
+						label: t("topicFiles.contextMenu.createSubMenu.aiCardFile"),
+						onClick: () => onAddAICard(),
+						icon: <MagicFileIcon type="ai-card" size={18} />,
+					},
+				]
+			: []),
+		...(onAddDesign || onAddSelfMedia || onAddAICard ? [{ type: "divider" as const }] : []),
 		{
 			key: "createCustom",
 			label: t("topicFiles.contextMenu.createSubMenu.customFile"),
@@ -119,6 +135,11 @@ interface UseFileMenuItemsParams {
 	 * If provided, self-media project option will be included
 	 */
 	onAddSelfMedia?: () => void
+	/**
+	 * Optional callback for creating AI card project
+	 * If provided, AI card project option will be included
+	 */
+	onAddAICard?: () => void
 }
 
 /**
@@ -129,13 +150,14 @@ function useFileMenuItems({
 	onAddFile,
 	onAddDesign,
 	onAddSelfMedia,
+	onAddAICard,
 }: UseFileMenuItemsParams): MenuProps["items"] {
 	const { t } = useTranslation("super")
 
 	// File operation menu items
 	const fileMenuItems: MenuProps["items"] = useMemo(
-		() => createFileMenuItems({ t, onAddFile, onAddDesign, onAddSelfMedia }),
-		[t, onAddFile, onAddDesign, onAddSelfMedia],
+		() => createFileMenuItems({ t, onAddFile, onAddDesign, onAddSelfMedia, onAddAICard }),
+		[t, onAddFile, onAddDesign, onAddSelfMedia, onAddAICard],
 	)
 
 	return fileMenuItems

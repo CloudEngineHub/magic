@@ -27,6 +27,7 @@ interface SelfMediaShellHeaderProps {
 	exportDisabled?: boolean
 	onOpenExport?: () => void
 	onStartInspector?: () => void
+	onStopInspector?: () => void
 	inspectorActive?: boolean
 	inspectorDisabled?: boolean
 }
@@ -49,6 +50,7 @@ function SelfMediaShellHeader({
 	exportDisabled,
 	onOpenExport,
 	onStartInspector,
+	onStopInspector,
 	inspectorActive,
 	inspectorDisabled,
 }: SelfMediaShellHeaderProps) {
@@ -102,7 +104,7 @@ function SelfMediaShellHeader({
 							<TooltipTrigger asChild>
 								<button
 									type="button"
-									onClick={onStartInspector}
+									onClick={inspectorActive ? onStopInspector : onStartInspector}
 									data-testid="self-media-shell-inspector-button"
 									aria-label={t("detail.selfMedia.common.inspectElement")}
 									className={cn(

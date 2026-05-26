@@ -213,6 +213,7 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 				refreshDisabled={rootLoading}
 				refreshTestId="wechat-shell-refresh-post-button"
 				onStartInspector={inspector.start}
+				onStopInspector={inspector.stop}
 				inspectorActive={inspector.active}
 				inspectorDisabled={inspectorDisabled}
 			/>

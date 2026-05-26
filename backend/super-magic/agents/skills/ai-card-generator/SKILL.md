@@ -139,10 +139,10 @@ The template is the card's "skeleton", defining layout and styling. The agent re
 4. 使用 HTML 注释标记数据区域，便于识别替换位置：
 -->
 
-1. Must be a self-contained single HTML file (all CSS/JS inline)
+1. Prefer a single HTML file; inline CSS/JS are still the default, but trusted external resources can be used when they provide clear value (for example ECharts)
 2. Include `<meta charset="utf-8">` and viewport meta
 3. Support dark mode (`prefers-color-scheme`)
-4. Use HTML comments to mark data sections for easy replacement:
+4. External resources are default-deny, but ECharts CDN is allowed for chart-driven cards
 5. Use HTML comments to mark data sections for easy replacement:
 
 ```html

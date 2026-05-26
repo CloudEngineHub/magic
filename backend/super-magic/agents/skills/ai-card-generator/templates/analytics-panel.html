@@ -5,273 +5,571 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{CARD_TITLE}}</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
     <style>
         :root {
-            --bg: #ffffff;
-            --text: #1a1a1a;
-            --card-bg: #f8f9fa;
-            --accent: #6366f1;
-            --accent-light: #eef2ff;
-            --border: #e5e7eb;
-            --muted: #6b7280;
-            --success: #10b981;
-            --danger: #ef4444;
+            --bg: #eef2ff;
+            --panel: rgba(255, 255, 255, 0.86);
+            --panel-strong: #ffffff;
+            --text: #1f2440;
+            --muted: #65708f;
+            --accent: #5b5bd6;
+            --accent-soft: rgba(99, 102, 241, 0.12);
+            --success: #0f9f6e;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --border: rgba(99, 102, 241, 0.16);
+            --grid: rgba(99, 102, 241, 0.08);
+            --shadow: 0 20px 50px rgba(79, 70, 229, 0.15);
         }
 
         @media (prefers-color-scheme: dark) {
             :root {
-                --bg: #0f172a;
-                --text: #e2e8f0;
-                --card-bg: #1e293b;
-                --accent: #818cf8;
-                --accent-light: #1e1b4b;
-                --border: #334155;
-                --muted: #94a3b8;
+                --bg: #09111f;
+                --panel: rgba(10, 19, 39, 0.88);
+                --panel-strong: #0f1b33;
+                --text: #edf2ff;
+                --muted: #96a2c7;
+                --accent: #8b93ff;
+                --accent-soft: rgba(129, 140, 248, 0.16);
                 --success: #34d399;
+                --warning: #f59e0b;
                 --danger: #f87171;
+                --border: rgba(129, 140, 248, 0.25);
+                --grid: rgba(148, 163, 184, 0.12);
+                --shadow: 0 20px 50px rgba(2, 8, 23, 0.45);
             }
         }
 
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
-            background: var(--bg);
+            font-family: "Segoe UI", "PingFang SC", sans-serif;
+            background: radial-gradient(circle at 0% 0%, rgba(129, 140, 248, 0.2), transparent 26%), var(--bg);
             color: var(--text);
+            min-height: 100vh;
             padding: 24px;
-            line-height: 1.6;
+            line-height: 1.5;
         }
 
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 24px;
+        .shell {
+            max-width: 1220px;
+            margin: 0 auto;
+            display: grid;
+            gap: 16px;
         }
 
-        .header h1 {
-            font-size: 1.5rem;
-            font-weight: 700;
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            box-shadow: var(--shadow);
         }
 
-        .header .badge {
-            font-size: 0.75rem;
-            padding: 4px 10px;
-            border-radius: 12px;
-            background: var(--accent-light);
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+            gap: 16px;
+        }
+
+        .hero-main,
+        .hero-side,
+        .section {
+            padding: 22px;
+        }
+
+        .eyebrow {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: var(--accent-soft);
             color: var(--accent);
-            font-weight: 500;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            font-size: clamp(28px, 4vw, 38px);
+            margin-bottom: 10px;
+            line-height: 1.1;
+        }
+
+        .copy,
+        .muted {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .chips {
+            margin-top: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .chip {
+            padding: 7px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, .56);
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .health-score {
+            font-size: 42px;
+            font-weight: 800;
+            letter-spacing: -.04em;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(15, 159, 110, .12);
+            color: var(--success);
+            font-weight: 700;
+            font-size: 12px;
+            margin-bottom: 8px;
         }
 
         .kpi-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 12px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
         }
 
         .kpi-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
             padding: 16px;
-            text-align: center;
+        }
+
+        .kpi-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .kpi-name {
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .kpi-badge {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-weight: 700;
         }
 
         .kpi-value {
-            font-size: 2rem;
+            font-size: 32px;
             font-weight: 800;
-            color: var(--accent);
-            line-height: 1.2;
+            letter-spacing: -.04em;
+            margin-top: 8px;
         }
 
-        .kpi-label {
-            font-size: 0.75rem;
-            color: var(--muted);
-            margin-top: 4px;
-        }
-
-        .kpi-trend {
-            font-size: 0.7rem;
+        .kpi-meta {
             margin-top: 6px;
-            padding: 2px 8px;
-            border-radius: 10px;
-            display: inline-block;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 13px;
         }
 
-        .kpi-trend.up {
-            background: rgba(16, 185, 129, 0.1);
+        .good {
             color: var(--success);
         }
 
-        .kpi-trend.down {
-            background: rgba(239, 68, 68, 0.1);
+        .warn {
+            color: var(--warning);
+        }
+
+        .bad {
             color: var(--danger);
         }
 
-        .chart-section {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 24px;
+        .sparkline {
+            height: 50px;
+            margin-top: 10px;
         }
 
-        .chart-title {
-            font-size: 0.875rem;
-            font-weight: 600;
-            margin-bottom: 16px;
+        .two-col {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr);
+            gap: 16px;
         }
 
-        .bar-chart {
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .section-copy {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        .section-head {
             display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .bar-row {
-            display: flex;
+            justify-content: space-between;
             align-items: center;
             gap: 10px;
         }
 
-        .bar-label {
-            width: 60px;
-            font-size: 0.75rem;
+        .chart {
+            height: 320px;
+            margin-top: 14px;
+        }
+
+        .chart.tall {
+            height: 350px;
+        }
+
+        .tabs {
+            display: inline-flex;
+            background: rgba(148, 163, 184, .14);
+            border-radius: 999px;
+            padding: 4px;
+            gap: 6px;
+        }
+
+        .tab {
+            border: 0;
+            background: transparent;
             color: var(--muted);
-            text-align: right;
-            flex-shrink: 0;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 7px 10px;
+            border-radius: 999px;
+            cursor: pointer;
         }
 
-        .bar-track {
-            flex: 1;
-            height: 20px;
-            background: var(--border);
-            border-radius: 4px;
-            overflow: hidden;
+        .tab.is-active {
+            background: var(--panel-strong);
+            color: var(--accent);
         }
 
-        .bar-fill {
-            height: 100%;
-            background: var(--accent);
-            border-radius: 4px;
-            transition: width 0.6s ease;
+        .list {
+            display: grid;
+            gap: 10px;
+            margin-top: 12px;
         }
 
-        .bar-value {
-            width: 40px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-align: left;
-            flex-shrink: 0;
+        .item {
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, .52);
+            border-radius: 14px;
+            padding: 12px;
+        }
+
+        .item strong {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .item p {
+            color: var(--muted);
+            font-size: 13px;
         }
 
         .footer {
-            margin-top: 24px;
-            padding-top: 12px;
-            border-top: 1px solid var(--border);
-            font-size: 0.75rem;
+            font-size: 12px;
             color: var(--muted);
-            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        @media (max-width: 960px) {
+
+            .hero,
+            .kpi-grid,
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+
+            body {
+                padding: 16px;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div class="header">
-        <h1>{{CARD_TITLE}}</h1>
-        <span class="badge">{{GENERATED_AT}}</span>
+    <div class="shell">
+        <section class="hero">
+            <div class="panel hero-main">
+                <span class="eyebrow">Growth cockpit</span>
+                <h1>{{CARD_TITLE}}</h1>
+                <p class="copy">{{CARD_DESCRIPTION}} 围绕增长规模、转化效率、渠道质量和风险告警进行全景分析，支持日常经营会议快速决策。</p>
+                <div class="chips">
+                    <span class="chip">生成时间 {{GENERATED_AT}}</span>
+                    <span class="chip">更新次数 #{{UPDATE_COUNT}}</span>
+                    <span class="chip">周期 最近 30 天</span>
+                </div>
+            </div>
+
+            <!-- DATA:summary_START -->
+            <aside class="panel hero-side">
+                <span class="pill">健康状态 正常</span>
+                <div class="health-score">87</div>
+                <p class="muted">流量和收入维持增长，主要压力在“注册到激活”环节。建议优先优化新手流程和首日触达。</p>
+                <div class="list">
+                    <div class="item"><strong>摘要</strong>
+                        <p>本周流量环比 +18.6%，但激活率下降 2.4 个点。</p>
+                    </div>
+                    <div class="item"><strong>目标</strong>
+                        <p>收入目标完成 74%，预计提前 4 天达成。</p>
+                    </div>
+                    <div class="item"><strong>行动</strong>
+                        <p>加强高意向线索召回，修复注册后引导链路。</p>
+                    </div>
+                </div>
+            </aside>
+            <!-- DATA:summary_END -->
+        </section>
+
+        <!-- DATA:kpi_START -->
+        <section class="kpi-grid">
+            <article class="panel kpi-card">
+                <div class="kpi-top"><span class="kpi-name">总访问量</span><span class="kpi-badge">超目标</span></div>
+                <div class="kpi-value">428K</div>
+                <div class="kpi-meta"><span class="good">环比 +18.6%</span><span class="good">同比 +31.2%</span></div>
+                <div class="sparkline" data-series="112,126,134,142,155,166,174"></div>
+            </article>
+            <article class="panel kpi-card">
+                <div class="kpi-top"><span class="kpi-name">新增用户</span><span class="kpi-badge">提速</span></div>
+                <div class="kpi-value">18,420</div>
+                <div class="kpi-meta"><span class="good">环比 +14.3%</span><span class="good">同比 +22.9%</span></div>
+                <div class="sparkline" data-series="9,10,11,12,14,15,16"></div>
+            </article>
+            <article class="panel kpi-card">
+                <div class="kpi-top"><span class="kpi-name">7日留存</span><span class="kpi-badge">关注</span></div>
+                <div class="kpi-value">38.7%</div>
+                <div class="kpi-meta"><span class="warn">环比 -1.9%</span><span class="good">同比 +3.1%</span></div>
+                <div class="sparkline" data-series="42,41,41,40,39,39,38.7"></div>
+            </article>
+            <article class="panel kpi-card">
+                <div class="kpi-top"><span class="kpi-name">激活率</span><span class="kpi-badge">修复中</span></div>
+                <div class="kpi-value">63.4%</div>
+                <div class="kpi-meta"><span class="warn">环比 -2.4%</span><span class="bad">同比 -0.8%</span></div>
+                <div class="sparkline" data-series="69,68,68,67,66,65,63"></div>
+            </article>
+            <article class="panel kpi-card">
+                <div class="kpi-top"><span class="kpi-name">付费转化率</span><span class="kpi-badge">恢复</span></div>
+                <div class="kpi-value">4.9%</div>
+                <div class="kpi-meta"><span class="good">环比 +0.6%</span><span class="good">同比 +0.8%</span></div>
+                <div class="sparkline" data-series="3.8,4.1,4.0,4.3,4.5,4.7,4.9"></div>
+            </article>
+            <article class="panel kpi-card">
+                <div class="kpi-top"><span class="kpi-name">月累计收入</span><span class="kpi-badge">冲刺</span></div>
+                <div class="kpi-value">¥1.38M</div>
+                <div class="kpi-meta"><span class="good">环比 +21.4%</span><span class="good">同比 +36.8%</span></div>
+                <div class="sparkline" data-series="0.72,0.84,0.93,1.02,1.11,1.24,1.38"></div>
+            </article>
+        </section>
+        <!-- DATA:kpi_END -->
+
+        <section class="two-col">
+            <!-- DATA:funnel_START -->
+            <article class="panel section">
+                <div class="section-head">
+                    <div>
+                        <h2 class="section-title">转化漏斗</h2>
+                        <p class="section-copy">访问到复购的逐层转化与流失分析。</p>
+                    </div><span class="chip">瓶颈 注册→激活</span>
+                </div>
+                <div class="chart" id="funnel-chart"></div>
+            </article>
+            <!-- DATA:funnel_END -->
+
+            <aside class="panel section">
+                <h2 class="section-title">漏斗解读</h2>
+                <div class="list">
+                    <div class="item"><strong>访问→注册 12.8%</strong>
+                        <p>高于上期 1.6 个点，落地页匹配度改善明显。</p>
+                    </div>
+                    <div class="item"><strong>注册→激活 63.4%</strong>
+                        <p>新手任务完成率下降，影响最大。</p>
+                    </div>
+                    <div class="item"><strong>激活→付费 7.7%</strong>
+                        <p>高意向人群召回策略有效。</p>
+                    </div>
+                    <div class="item"><strong>付费→复购 41.5%</strong>
+                        <p>复购稳定，但客单提升偏活动驱动。</p>
+                    </div>
+                </div>
+            </aside>
+        </section>
+
+        <section class="two-col">
+            <!-- DATA:channels_START -->
+            <article class="panel section">
+                <h2 class="section-title">渠道拆解</h2>
+                <p class="section-copy">比较流量占比、收入贡献与成本压力。</p>
+                <div class="chart tall" id="channel-chart"></div>
+            </article>
+            <!-- DATA:channels_END -->
+
+            <aside class="panel section">
+                <h2 class="section-title">渠道观察</h2>
+                <div class="list">
+                    <div class="item"><strong>私域回流</strong>
+                        <p>流量占比 18%，收入贡献 29%，当前性价比最佳。</p>
+                    </div>
+                    <div class="item"><strong>内容种草</strong>
+                        <p>新增高，但后续承接偏弱，需强化转场。</p>
+                    </div>
+                    <div class="item"><strong>付费广告</strong>
+                        <p>带量稳定，CPA 连续上涨 9%。</p>
+                    </div>
+                    <div class="item"><strong>自然搜索</strong>
+                        <p>高意图词转化持续高位。</p>
+                    </div>
+                </div>
+            </aside>
+        </section>
+
+        <!-- DATA:trend_START -->
+        <section class="panel section">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">增长趋势</h2>
+                    <p class="section-copy">流量、收入与转化率的联动变化。</p>
+                </div>
+                <div class="tabs" id="trend-tabs"><button class="tab is-active" data-range="7d"
+                        type="button">7D</button><button class="tab" data-range="14d" type="button">14D</button><button
+                        class="tab" data-range="30d" type="button">30D</button></div>
+            </div>
+            <div class="chart tall" id="trend-chart"></div>
+        </section>
+        <!-- DATA:trend_END -->
+
+        <!-- DATA:alerts_START -->
+        <section class="panel section">
+            <h2 class="section-title">告警与建议</h2>
+            <div class="list">
+                <div class="item"><strong class="bad">P1 新手激活率低于阈值 6.3%</strong>
+                    <p>建议优化首日引导流程并降低表单复杂度。</p>
+                </div>
+                <div class="item"><strong class="warn">P2 付费广告 CPA 连续 4 天上升</strong>
+                    <p>建议暂停低 CTR 素材并切换创意组合。</p>
+                </div>
+                <div class="item"><strong>P3 留存修复尚未形成收入传导</strong>
+                    <p>建议补充老客转化激励与内容复触达机制。</p>
+                </div>
+            </div>
+        </section>
+        <!-- DATA:alerts_END -->
+
+        <footer class="footer"><span>Auto-generated analytics card powered by
+                ECharts</span><span>{{GENERATED_AT}}</span></footer>
     </div>
 
-    <!-- DATA:kpi_START -->
-    <div class="kpi-grid">
-        <div class="kpi-card">
-            <div class="kpi-value">24.8K</div>
-            <div class="kpi-label">总访问量</div>
-            <span class="kpi-trend up">↑ 15.3%</span>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-value">1,247</div>
-            <div class="kpi-label">新增用户</div>
-            <span class="kpi-trend up">↑ 8.7%</span>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-value">3.2%</div>
-            <div class="kpi-label">转化率</div>
-            <span class="kpi-trend down">↓ 0.5%</span>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-value">¥58.9K</div>
-            <div class="kpi-label">收入</div>
-            <span class="kpi-trend up">↑ 22.1%</span>
-        </div>
-    </div>
-    <!-- DATA:kpi_END -->
+    <script>
+        (function () {
+            var charts = [];
+            var trendChart = null;
+            var trendData = {
+                "7d": { l: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"], v: [52, 58, 61, 67, 72, 64, 70], r: [138, 142, 151, 166, 181, 162, 176], c: [4.2, 4.4, 4.1, 4.8, 5.0, 4.5, 4.9] },
+                "14d": { l: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"], v: [42, 43, 45, 47, 48, 50, 52, 53, 58, 61, 63, 67, 70, 74], r: [98, 102, 107, 113, 116, 121, 128, 132, 138, 145, 151, 160, 169, 178], c: [3.8, 3.9, 4.0, 3.9, 4.1, 4.2, 4.3, 4.3, 4.4, 4.5, 4.6, 4.8, 4.8, 4.9] },
+                "30d": { l: ["1", "3", "5", "7", "9", "11", "13", "15", "17", "19", "21", "23", "25", "27", "29"], v: [28, 30, 31, 33, 35, 38, 39, 42, 45, 47, 51, 54, 58, 61, 65], r: [64, 66, 69, 71, 75, 82, 85, 92, 97, 104, 112, 118, 129, 138, 146], c: [3.2, 3.3, 3.4, 3.4, 3.6, 3.8, 3.9, 4.0, 4.1, 4.2, 4.2, 4.3, 4.5, 4.6, 4.8] }
+            };
 
-    <!-- DATA:chart_START -->
-    <div class="chart-section">
-        <h3 class="chart-title">📊 7日趋势</h3>
-        <div class="bar-chart">
-            <div class="bar-row">
-                <span class="bar-label">周一</span>
-                <div class="bar-track">
-                    <div class="bar-fill" style="width: 65%"></div>
-                </div>
-                <span class="bar-value">3.2K</span>
-            </div>
-            <div class="bar-row">
-                <span class="bar-label">周二</span>
-                <div class="bar-track">
-                    <div class="bar-fill" style="width: 78%"></div>
-                </div>
-                <span class="bar-value">3.9K</span>
-            </div>
-            <div class="bar-row">
-                <span class="bar-label">周三</span>
-                <div class="bar-track">
-                    <div class="bar-fill" style="width: 72%"></div>
-                </div>
-                <span class="bar-value">3.6K</span>
-            </div>
-            <div class="bar-row">
-                <span class="bar-label">周四</span>
-                <div class="bar-track">
-                    <div class="bar-fill" style="width: 85%"></div>
-                </div>
-                <span class="bar-value">4.2K</span>
-            </div>
-            <div class="bar-row">
-                <span class="bar-label">周五</span>
-                <div class="bar-track">
-                    <div class="bar-fill" style="width: 92%"></div>
-                </div>
-                <span class="bar-value">4.6K</span>
-            </div>
-            <div class="bar-row">
-                <span class="bar-label">周六</span>
-                <div class="bar-track">
-                    <div class="bar-fill" style="width: 55%"></div>
-                </div>
-                <span class="bar-value">2.7K</span>
-            </div>
-            <div class="bar-row">
-                <span class="bar-label">周日</span>
-                <div class="bar-track">
-                    <div class="bar-fill" style="width: 48%"></div>
-                </div>
-                <span class="bar-value">2.4K</span>
-            </div>
-        </div>
-    </div>
-    <!-- DATA:chart_END -->
+            function theme() {
+                var s = getComputedStyle(document.documentElement);
+                return { text: s.getPropertyValue("--text").trim(), muted: s.getPropertyValue("--muted").trim(), accent: s.getPropertyValue("--accent").trim(), success: s.getPropertyValue("--success").trim(), grid: s.getPropertyValue("--grid").trim(), strong: s.getPropertyValue("--panel-strong").trim() };
+            }
 
-    <div class="footer">
-        Auto-generated · Update #{{UPDATE_COUNT}}
-    </div>
+            function init(node) { var c = echarts.init(node, null, { renderer: "svg" }); charts.push(c); return c; }
+
+            function renderSparklines() {
+                var t = theme();
+                document.querySelectorAll(".sparkline").forEach(function (node) {
+                    var d = (node.dataset.series || "").split(",").map(function (x) { return Number(x.trim()); });
+                    var c = init(node);
+                    c.setOption({ animation: false, grid: { left: 3, right: 3, top: 3, bottom: 3 }, xAxis: { show: false, type: "category", data: d.map(function (_, i) { return i + 1; }) }, yAxis: { show: false, type: "value" }, series: [{ type: "line", smooth: true, symbol: "none", data: d, lineStyle: { width: 2.4, color: t.accent }, areaStyle: { color: "rgba(99,102,241,.2)" } }] });
+                });
+            }
+
+            function renderFunnel() {
+                var t = theme();
+                init(document.getElementById("funnel-chart")).setOption({ tooltip: { trigger: "item" }, series: [{ type: "funnel", left: "8%", width: "84%", gap: 6, label: { color: t.text }, itemStyle: { borderColor: t.strong, borderWidth: 2 }, data: [{ value: 428000, name: "访问" }, { value: 54800, name: "注册" }, { value: 34720, name: "激活" }, { value: 2670, name: "付费" }, { value: 1108, name: "复购" }], color: ["#8b5cf6", "#6366f1", "#3b82f6", "#22c55e", "#f59e0b"] }] });
+            }
+
+            function renderChannels() {
+                var t = theme();
+                init(document.getElementById("channel-chart")).setOption({
+                    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+                    legend: { top: 0, textStyle: { color: t.muted } },
+                    grid: { top: 40, right: 8, bottom: 10, left: 72, containLabel: true },
+                    xAxis: { type: "value", axisLabel: { color: t.muted }, splitLine: { lineStyle: { color: t.grid } } },
+                    yAxis: { type: "category", axisLabel: { color: t.text }, data: ["自然搜索", "内容种草", "私域回流", "付费广告", "渠道推荐"] },
+                    series: [
+                        { name: "流量占比", type: "bar", stack: "s", data: [24, 31, 18, 17, 10], itemStyle: { color: "#6366f1" } },
+                        { name: "收入贡献", type: "bar", stack: "s", data: [22, 19, 29, 15, 15], itemStyle: { color: "#22c55e" } },
+                        { name: "成本压力", type: "bar", stack: "s", data: [8, 12, 4, 16, 6], itemStyle: { color: "#f59e0b" } }
+                    ]
+                });
+            }
+
+            function renderTrend(range) {
+                var t = theme();
+                var d = trendData[range];
+                if (!trendChart) trendChart = init(document.getElementById("trend-chart"));
+                trendChart.setOption({
+                    tooltip: { trigger: "axis" },
+                    legend: { top: 0, textStyle: { color: t.muted } },
+                    grid: { top: 42, right: 14, bottom: 14, left: 46, containLabel: true },
+                    xAxis: { type: "category", data: d.l, axisLabel: { color: t.muted }, axisLine: { lineStyle: { color: t.grid } } },
+                    yAxis: [{ type: "value", axisLabel: { color: t.muted }, splitLine: { lineStyle: { color: t.grid } } }, { type: "value", axisLabel: { color: t.muted, formatter: "{value}%" }, splitLine: { show: false } }],
+                    series: [
+                        { name: "访问量", type: "line", smooth: true, symbolSize: 7, data: d.v, lineStyle: { color: t.accent, width: 3 }, itemStyle: { color: t.accent } },
+                        { name: "收入(千元)", type: "bar", data: d.r, itemStyle: { color: "rgba(59,130,246,.72)", borderRadius: [6, 6, 0, 0] } },
+                        { name: "转化率", type: "line", yAxisIndex: 1, smooth: true, data: d.c, lineStyle: { color: t.success, width: 3, type: "dashed" }, itemStyle: { color: t.success } }
+                    ]
+                }, true);
+            }
+
+            function bindTabs() {
+                document.querySelectorAll("#trend-tabs .tab").forEach(function (btn) {
+                    btn.addEventListener("click", function () {
+                        document.querySelectorAll("#trend-tabs .tab").forEach(function (n) { n.classList.remove("is-active"); });
+                        btn.classList.add("is-active");
+                        renderTrend(btn.dataset.range);
+                    });
+                });
+            }
+
+            function rebuild() {
+                charts.forEach(function (c) { c.dispose(); });
+                charts = [];
+                trendChart = null;
+                renderSparklines();
+                renderFunnel();
+                renderChannels();
+                renderTrend("7d");
+            }
+
+            bindTabs();
+            rebuild();
+            window.addEventListener("resize", function () { charts.forEach(function (c) { c.resize(); }); });
+            var mq = window.matchMedia("(prefers-color-scheme: dark)");
+            if (typeof mq.addEventListener === "function") mq.addEventListener("change", rebuild);
+        })();
+    </script>
 </body>
 
 </html>

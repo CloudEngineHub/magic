@@ -317,6 +317,7 @@ function InstagramShell(props: PlatformComponentProps) {
 				exportLabel={t("detail.selfMedia.export.action")}
 				exportDisabled={isExporting || posts.length === 0}
 				onStartInspector={inspector.start}
+				onStopInspector={inspector.stop}
 				inspectorActive={inspector.active}
 				inspectorDisabled={inspectorDisabled}
 			/>

@@ -5,201 +5,529 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{CARD_TITLE}}</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
     <style>
         :root {
-            --bg: #ffffff;
-            --text: #1a1a1a;
-            --card-bg: #f8f9fa;
-            --accent: #3b82f6;
-            --border: #e5e7eb;
-            --muted: #6b7280;
-            --success: #10b981;
-            --warning: #f59e0b;
+            --bg: #f4f8ff;
+            --panel: rgba(255, 255, 255, 0.86);
+            --text: #13213d;
+            --muted: #60708e;
+            --accent: #2563eb;
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --border: rgba(59, 130, 246, 0.16);
+            --grid: rgba(96, 112, 142, 0.12);
+            --shadow: 0 20px 50px rgba(37, 99, 235, 0.12);
         }
 
         @media (prefers-color-scheme: dark) {
             :root {
-                --bg: #0f172a;
-                --text: #e2e8f0;
-                --card-bg: #1e293b;
+                --bg: #071321;
+                --panel: rgba(8, 23, 43, 0.88);
+                --text: #ecf4ff;
+                --muted: #91a4c6;
                 --accent: #60a5fa;
-                --border: #334155;
-                --muted: #94a3b8;
                 --success: #34d399;
                 --warning: #fbbf24;
+                --danger: #f87171;
+                --border: rgba(96, 165, 250, 0.2);
+                --grid: rgba(148, 163, 184, 0.14);
+                --shadow: 0 20px 50px rgba(2, 8, 23, 0.45);
             }
         }
 
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
-            background: var(--bg);
+            font-family: "Segoe UI", "PingFang SC", sans-serif;
+            background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.14), transparent 25%), var(--bg);
             color: var(--text);
+            min-height: 100vh;
             padding: 24px;
-            line-height: 1.6;
+            line-height: 1.5;
         }
 
-        .header {
-            margin-bottom: 24px;
+        .shell {
+            max-width: 1220px;
+            margin: 0 auto;
+            display: grid;
+            gap: 16px;
         }
 
-        .header h1 {
-            font-size: 1.5rem;
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            box-shadow: var(--shadow);
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr);
+            gap: 16px;
+        }
+
+        .hero-main,
+        .hero-side,
+        .section {
+            padding: 22px;
+        }
+
+        .eyebrow {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(37, 99, 235, .12);
+            color: var(--accent);
+            font-size: 12px;
             font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            font-size: clamp(28px, 4vw, 38px);
+            margin-bottom: 10px;
+            line-height: 1.1;
+        }
+
+        .copy,
+        .muted,
+        .section-copy {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .chips {
+            margin-top: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .chip {
+            padding: 7px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, .56);
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .score {
+            font-size: 42px;
+            font-weight: 800;
+            letter-spacing: -.04em;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(5, 150, 105, .12);
+            color: var(--success);
+            font-weight: 700;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .list {
+            display: grid;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .item {
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, .52);
+            border-radius: 14px;
+            padding: 12px;
+        }
+
+        .item strong {
+            display: block;
+            font-size: 14px;
             margin-bottom: 4px;
         }
 
-        .header .subtitle {
-            font-size: 0.875rem;
+        .item p {
             color: var(--muted);
+            font-size: 13px;
         }
 
-        .grid {
+        .metrics {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
         }
 
-        .metric-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
+        .metric {
             padding: 16px;
         }
 
-        .metric-label {
-            font-size: 0.75rem;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 4px;
+        .metric-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
         }
 
-        .metric-value {
-            font-size: 1.75rem;
+        .group {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--accent);
             font-weight: 700;
         }
 
-        .metric-change {
-            font-size: 0.75rem;
-            margin-top: 4px;
+        .state {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-weight: 700;
         }
 
-        .metric-change.positive {
+        .state.good {
+            background: rgba(5, 150, 105, .12);
             color: var(--success);
         }
 
-        .metric-change.negative {
+        .state.warn {
+            background: rgba(217, 119, 6, .12);
             color: var(--warning);
         }
 
-        .section {
-            margin-bottom: 24px;
+        .state.bad {
+            background: rgba(220, 38, 38, .12);
+            color: var(--danger);
+        }
+
+        .name {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 8px;
+        }
+
+        .value {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: -.04em;
+            margin-top: 8px;
+        }
+
+        .meta {
+            margin-top: 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 13px;
+        }
+
+        .good {
+            color: var(--success);
+        }
+
+        .warn {
+            color: var(--warning);
+        }
+
+        .bad {
+            color: var(--danger);
+        }
+
+        .sparkline {
+            height: 52px;
+            margin-top: 10px;
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
         }
 
         .section-title {
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 12px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
+            font-size: 18px;
+            font-weight: 700;
         }
 
-        .news-list {
-            list-style: none;
+        .section-head {
             display: flex;
-            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
             gap: 10px;
         }
 
-        .news-item {
+        .badge-row {
             display: flex;
-            gap: 12px;
-            padding: 10px 12px;
-            background: var(--card-bg);
-            border-radius: 8px;
-            border: 1px solid var(--border);
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 8px;
         }
 
-        .news-time {
-            font-size: 0.75rem;
+        .badge {
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .badge.red {
+            background: rgba(220, 38, 38, .12);
+            color: var(--danger);
+        }
+
+        .badge.yellow {
+            background: rgba(217, 119, 6, .12);
+            color: var(--warning);
+        }
+
+        .badge.blue {
+            background: rgba(59, 130, 246, .12);
+            color: var(--accent);
+        }
+
+        .badge.gray {
+            background: rgba(148, 163, 184, .16);
             color: var(--muted);
-            white-space: nowrap;
-            flex-shrink: 0;
-            padding-top: 2px;
         }
 
-        .news-content {
-            font-size: 0.875rem;
-            flex: 1;
+        .sources {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 12px;
         }
 
         .footer {
-            margin-top: 24px;
-            padding-top: 12px;
-            border-top: 1px solid var(--border);
-            font-size: 0.75rem;
+            font-size: 12px;
             color: var(--muted);
-            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        @media (max-width: 960px) {
+
+            .hero,
+            .metrics,
+            .two-col,
+            .sources {
+                grid-template-columns: 1fr;
+            }
+
+            body {
+                padding: 16px;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div class="header">
-        <h1>{{CARD_TITLE}}</h1>
-        <p class="subtitle">{{CARD_DESCRIPTION}} · {{GENERATED_AT}}</p>
+    <div class="shell">
+        <section class="hero">
+            <div class="panel hero-main">
+                <span class="eyebrow">Daily command brief</span>
+                <h1>{{CARD_TITLE}}</h1>
+                <p class="copy">{{CARD_DESCRIPTION}} 将关键指标、要闻分类、洞察建议和次日动作集中在同一页，支持晨会快速定优先级。</p>
+                <div class="chips"><span class="chip">生成时间 {{GENERATED_AT}}</span><span class="chip">日报
+                        #{{UPDATE_COUNT}}</span><span class="chip">窗口 昨日 00:00-23:59</span></div>
+            </div>
+
+            <!-- DATA:executive_summary_START -->
+            <aside class="panel hero-side">
+                <span class="pill">整体态势 乐观</span>
+                <div class="score">76</div>
+                <p class="muted">收入与新增好于预期，但内容转化效率波动明显，且竞品在高价带动作密集，需要快速应对。</p>
+                <div class="list">
+                    <div class="item"><strong>重点 1</strong>
+                        <p>私域活动带动复购收入增长 19%，新客首单转化未同步提升。</p>
+                    </div>
+                    <div class="item"><strong>重点 2</strong>
+                        <p>两家竞品同步限时优惠，对高意向用户形成拦截。</p>
+                    </div>
+                    <div class="item"><strong>重点 3</strong>
+                        <p>内容互动创新高，承接链路需增强成交推进。</p>
+                    </div>
+                </div>
+            </aside>
+            <!-- DATA:executive_summary_END -->
+        </section>
+
+        <!-- DATA:metrics_START -->
+        <section class="metrics">
+            <article class="panel metric">
+                <div class="metric-head"><span class="group">Business</span><span class="state good">高于目标</span></div>
+                <div class="name">GMV</div>
+                <div class="value">¥428K</div>
+                <div class="meta"><span class="good">日环比 +12.4%</span><span class="good">周同比 +18.1%</span></div>
+                <div class="sparkline" data-series="320,334,345,362,380,396,428"></div>
+            </article>
+            <article class="panel metric">
+                <div class="metric-head"><span class="group">Business</span><span class="state warn">需关注</span></div>
+                <div class="name">订单数</div>
+                <div class="value">3,842</div>
+                <div class="meta"><span class="good">日环比 +7.3%</span><span class="warn">周同比 +1.1%</span></div>
+                <div class="sparkline" data-series="2920,3012,3088,3150,3296,3410,3842"></div>
+            </article>
+            <article class="panel metric">
+                <div class="metric-head"><span class="group">Users</span><span class="state good">持续抬升</span></div>
+                <div class="name">新增用户</div>
+                <div class="value">2,318</div>
+                <div class="meta"><span class="good">日环比 +15.8%</span><span class="good">周同比 +20.6%</span></div>
+                <div class="sparkline" data-series="1450,1510,1630,1722,1844,2010,2318"></div>
+            </article>
+            <article class="panel metric">
+                <div class="metric-head"><span class="group">Users</span><span class="state bad">异常波动</span></div>
+                <div class="name">次日留存</div>
+                <div class="value">31.4%</div>
+                <div class="meta"><span class="bad">日环比 -2.1%</span><span class="warn">周同比 -0.6%</span></div>
+                <div class="sparkline" data-series="35,34.8,34.2,33.7,33.2,32.8,31.4"></div>
+            </article>
+            <article class="panel metric">
+                <div class="metric-head"><span class="group">Content</span><span class="state good">爆发</span></div>
+                <div class="name">内容互动量</div>
+                <div class="value">96.2K</div>
+                <div class="meta"><span class="good">日环比 +24.7%</span><span class="good">周同比 +41.2%</span></div>
+                <div class="sparkline" data-series="51,56,60,65,71,80,96"></div>
+            </article>
+            <article class="panel metric">
+                <div class="metric-head"><span class="group">Content</span><span class="state warn">承接偏弱</span></div>
+                <div class="name">内容转化率</div>
+                <div class="value">2.8%</div>
+                <div class="meta"><span class="warn">日环比 -0.3%</span><span class="good">周同比 +0.2%</span></div>
+                <div class="sparkline" data-series="2.4,2.6,2.7,2.9,3.0,2.9,2.8"></div>
+            </article>
+        </section>
+        <!-- DATA:metrics_END -->
+
+        <section class="two-col">
+            <!-- DATA:highlights_START -->
+            <section class="panel section">
+                <div class="section-head">
+                    <div>
+                        <h2 class="section-title">今日要事</h2>
+                        <p class="section-copy">按紧急度与相关性组织，便于会议按优先级推进。</p>
+                    </div>
+                </div>
+                <div class="list">
+                    <article class="item">
+                        <div class="badge-row"><span class="badge red">重大事件</span><span
+                                class="badge blue">价格带竞争</span><span class="muted">09:10</span></div><strong>竞品 A 发布 48
+                            小时限时折扣</strong>
+                        <p>预计影响中高意向用户转化，建议当天调整对比型素材。</p>
+                    </article>
+                    <article class="item">
+                        <div class="badge-row"><span class="badge yellow">行业动态</span><span
+                                class="badge blue">平台机制</span><span class="muted">10:25</span></div>
+                        <strong>平台流量向长停留内容倾斜</strong>
+                        <p>深度测评与案例型内容将获得更长曝光周期。</p>
+                    </article>
+                    <article class="item">
+                        <div class="badge-row"><span class="badge blue">竞品动向</span><span
+                                class="badge blue">私域转化</span><span class="muted">13:40</span></div><strong>竞品 B
+                            启用私域首单返券策略</strong>
+                        <p>建议同步测试轻激励方案，避免首单意向被拦截。</p>
+                    </article>
+                    <article class="item">
+                        <div class="badge-row"><span class="badge gray">一般资讯</span><span
+                                class="badge blue">用户声音</span><span class="muted">16:20</span></div>
+                        <strong>客服反馈集中在配送时效与售后入口</strong>
+                        <p>建议更新详情页 FAQ 与订单页提示文案。</p>
+                    </article>
+                </div>
+            </section>
+            <!-- DATA:highlights_END -->
+
+            <!-- DATA:insights_START -->
+            <section class="panel section">
+                <div class="section-head">
+                    <div>
+                        <h2 class="section-title">洞察与建议</h2>
+                        <p class="section-copy">将数据波动和事件变化串联成可执行动作。</p>
+                    </div>
+                </div>
+                <div class="list">
+                    <div class="item"><strong>洞察 1｜互动暴涨但转化跟不上</strong>
+                        <p>说明内容命中注意力，但转场链路缺乏成交推动，建议增加对比与限时行动点。</p>
+                    </div>
+                    <div class="item"><strong>洞察 2｜高客单价竞争加剧</strong>
+                        <p>短期会影响犹豫期用户，建议销售与投放同步强化服务保障卖点。</p>
+                    </div>
+                    <div class="item"><strong>洞察 3｜留存下滑暴露承接断点</strong>
+                        <p>优先复盘注册后 24 小时消息链路和新手任务完成流程。</p>
+                    </div>
+                </div>
+            </section>
+            <!-- DATA:insights_END -->
+        </section>
+
+        <section class="two-col">
+            <!-- DATA:upcoming_START -->
+            <section class="panel section">
+                <h2 class="section-title">明日预告</h2>
+                <div class="list">
+                    <div class="item"><strong>09:30 投放创意复盘会</strong>
+                        <p>确认高 CPA 素材替换方案与新版创意上线节奏。</p>
+                    </div>
+                    <div class="item"><strong>12:00 私域活动二次触达</strong>
+                        <p>触达未下单高点击用户，目标提升午间转化。</p>
+                    </div>
+                    <div class="item"><strong>18:00 竞品价格监控</strong>
+                        <p>观察优惠是否延长，预备跟价或错位沟通策略。</p>
+                    </div>
+                </div>
+            </section>
+            <!-- DATA:upcoming_END -->
+
+            <!-- DATA:sources_START -->
+            <section class="panel section">
+                <h2 class="section-title">来源与完整度</h2>
+                <div class="sources">
+                    <div class="item"><strong>业务数据</strong>
+                        <p>更新时间 07:40，完整度 99.2%</p>
+                    </div>
+                    <div class="item"><strong>内容数据</strong>
+                        <p>更新时间 07:55，完整度 97.8%</p>
+                    </div>
+                    <div class="item"><strong>情报数据</strong>
+                        <p>更新时间 08:10，完整度 94.6%</p>
+                    </div>
+                </div>
+            </section>
+            <!-- DATA:sources_END -->
+        </section>
+
+        <footer class="footer"><span>Auto-generated digest card powered by ECharts</span><span>{{GENERATED_AT}}</span>
+        </footer>
     </div>
 
-    <!-- DATA:metrics_START -->
-    <div class="grid">
-        <div class="metric-card">
-            <div class="metric-label">关键指标 A</div>
-            <div class="metric-value">12.5K</div>
-            <div class="metric-change positive">↑ 8.2% vs 昨日</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">关键指标 B</div>
-            <div class="metric-value">3,847</div>
-            <div class="metric-change positive">↑ 12.1% vs 昨日</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">关键指标 C</div>
-            <div class="metric-value">92.3%</div>
-            <div class="metric-change negative">↓ 1.5% vs 昨日</div>
-        </div>
-    </div>
-    <!-- DATA:metrics_END -->
-
-    <!-- DATA:news_START -->
-    <div class="section">
-        <h2 class="section-title">📰 今日要闻</h2>
-        <ul class="news-list">
-            <li class="news-item">
-                <span class="news-time">09:30</span>
-                <span class="news-content">示例新闻条目 #1 — 这里是新闻摘要内容</span>
-            </li>
-            <li class="news-item">
-                <span class="news-time">08:15</span>
-                <span class="news-content">示例新闻条目 #2 — 这里是新闻摘要内容</span>
-            </li>
-            <li class="news-item">
-                <span class="news-time">07:00</span>
-                <span class="news-content">示例新闻条目 #3 — 这里是新闻摘要内容</span>
-            </li>
-        </ul>
-    </div>
-    <!-- DATA:news_END -->
-
-    <div class="footer">
-        Auto-generated · Update #{{UPDATE_COUNT}}
-    </div>
+    <script>
+        (function () {
+            var charts = [];
+            function init(node) { var c = echarts.init(node, null, { renderer: "svg" }); charts.push(c); return c; }
+            function theme() { var s = getComputedStyle(document.documentElement); return { accent: s.getPropertyValue("--accent").trim() }; }
+            function rebuild() {
+                charts.forEach(function (c) { c.dispose(); });
+                charts = [];
+                var t = theme();
+                document.querySelectorAll(".sparkline").forEach(function (node) {
+                    var d = (node.dataset.series || "").split(",").map(function (x) { return Number(x.trim()); });
+                    init(node).setOption({ animation: false, grid: { left: 3, right: 3, top: 3, bottom: 3 }, xAxis: { show: false, type: "category", data: d.map(function (_, i) { return i + 1; }) }, yAxis: { show: false, type: "value" }, series: [{ type: "line", smooth: true, symbol: "none", data: d, lineStyle: { width: 2.4, color: t.accent }, areaStyle: { color: "rgba(37,99,235,.2)" } }] });
+                });
+            }
+            rebuild();
+            window.addEventListener("resize", function () { charts.forEach(function (c) { c.resize(); }); });
+            var mq = window.matchMedia("(prefers-color-scheme: dark)");
+            if (typeof mq.addEventListener === "function") mq.addEventListener("change", rebuild);
+        })();
+    </script>
 </body>
 
 </html>
