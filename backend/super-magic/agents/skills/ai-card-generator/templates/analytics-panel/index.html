@@ -164,12 +164,18 @@
                     <button class="ask-send" id="askSend" type="button">→</button>
                 </div>
                 <div class="config-row">
-                    <select class="select" id="agentSelect">
-                        <option value="">加载员工中…</option>
-                    </select>
-                    <select class="select" id="modelSelect">
-                        <option value="auto">自动选择</option>
-                    </select>
+                    <div class="select-group">
+                        <label class="select-label" for="agentSelect">AI 员工</label>
+                        <select class="select" id="agentSelect">
+                            <option value="">加载员工中…</option>
+                        </select>
+                    </div>
+                    <div class="select-group">
+                        <label class="select-label" for="modelSelect">模型</label>
+                        <select class="select" id="modelSelect">
+                            <option value="auto">自动选择</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="insight-status" id="insightStatus"></div>
             </section>

@@ -240,7 +240,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					<SelfMediaInitPanel
 						selectedProject={selectedProject}
 						folderFileId={folderFileId}
-						folderPath={folderPath}
+						folderPath={`${folderPath}/analysis`}
 						attachmentList={attachmentList}
 						onBackHome={handleBackHome}
 					/>

@@ -91,6 +91,7 @@ import SelfMediaPostRowPlatformIcon from "../Detail/components/SelfMediaRootRend
 import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
 import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
 import { isMagicSystemFolder } from "./utils/magic-system-folder"
+import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
 
 interface TopicFilesCoreProps {
 	className?: string
@@ -197,6 +198,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
 	const hasLogin = userStore.user?.userInfo?.user_id
+
+	// AI 卡片创建弹窗 hook
+	const { open: openAICardDialog, dialogElement: aiCardDialogElement } = useAICardCreateDialog({
+		projectId,
+	})
 
 	const workspaceId = selectedProject?.workspace_id
 
@@ -762,7 +768,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		createVirtualFolder,
 		createVirtualDesignProject,
 		createVirtualSelfMediaProject,
-		createVirtualAICardProject,
+		createVirtualAICardProject: (_key?: string, parentPath?: string) => {
+			openAICardDialog(parentPath)
+		},
 		isMoving,
 		selectedItems,
 		handleAddMultipleFilesToCurrentChat,
@@ -2044,6 +2052,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			)}
 			{/* 下载无水印图片协议弹窗 */}
 			{agreementModal}
+			{/* AI 卡片创建弹窗 */}
+			{aiCardDialogElement}
 		</div>
 	)
 })

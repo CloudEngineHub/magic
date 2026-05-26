@@ -59,7 +59,7 @@ function AICardTile({ card, attachmentList, onOpen, onOpenHistory }: AICardTileP
 						fileId={card.latestHtmlFileId}
 						attachmentList={attachmentList}
 						className="h-full w-full"
-						scaleToFit
+						hideVerticalScroll
 						showSkeleton
 					/>
 				) : (

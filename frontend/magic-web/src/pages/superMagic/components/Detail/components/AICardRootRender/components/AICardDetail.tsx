@@ -78,7 +78,6 @@ function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetail
 						fileId={fileId}
 						attachmentList={attachmentList}
 						className="h-full w-full"
-						scaleToFit={false}
 						style={{ height: "100%" }}
 					/>
 				) : (

@@ -161,3 +161,32 @@ function AICardCreateDialog({
 }
 
 export default AICardCreateDialog
+
+/**
+ * Hook：提供函数式调用打开 AI 卡片创建弹窗的能力
+ * 返回 { open, dialogElement }，将 dialogElement 渲染到组件树中即可
+ */
+export interface UseAICardCreateDialogOptions {
+	projectId?: string
+}
+
+export function useAICardCreateDialog({ projectId = "" }: UseAICardCreateDialogOptions) {
+	const [visible, setVisible] = useState(false)
+	const [folderPath, setFolderPath] = useState<string | undefined>(undefined)
+
+	const open = useCallback((path?: string) => {
+		setFolderPath(path)
+		setVisible(true)
+	}, [])
+
+	const dialogElement = (
+		<AICardCreateDialog
+			open={visible}
+			onOpenChange={setVisible}
+			projectId={projectId}
+			folderPath={folderPath}
+		/>
+	)
+
+	return { open, dialogElement }
+}

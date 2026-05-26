@@ -3,41 +3,43 @@ import { cn } from "@/lib/utils"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { processHtmlContent } from "../../../contents/HTML/htmlProcessor"
 import { flattenAttachments } from "../../../contents/HTML/utils"
+import { injectFetchInterceptorScript } from "../../../contents/HTML/utils/fetchInterceptor"
 import type { FileItem } from "../../../contents/HTML/utils/fetchInterceptor"
+import IsolatedHTMLRenderer from "../../../contents/HTML/IsolatedHTMLRenderer"
 
 interface AICardIframeProps {
 	fileId?: string
 	attachmentList?: any[]
 	className?: string
 	style?: React.CSSProperties
-	/** When true, iframe scales to fit container width */
-	scaleToFit?: boolean
 	/** When true, the component shows a skeleton loader */
 	showSkeleton?: boolean
+	/** When true, hides vertical scroll (useful for thumbnail previews) */
+	hideVerticalScroll?: boolean
 	onLoad?: () => void
 }
 
+const EMPTY_FILE_PATH_MAPPING = new Map<string, string>()
+const NOOP_OPEN_NEW_TAB = () => {}
+
 /**
  * Lightweight iframe renderer for AI Cards.
- * Uses srcDoc for rendering — no editing, no DevConsole, no dynamic interception.
- * Inspired by CardFrame.tsx but stripped to essentials.
+ * Delegates to IsolatedHTMLRenderer — no editing, no DevConsole.
  */
 function AICardIframe({
 	fileId,
 	attachmentList,
 	className,
 	style,
-	scaleToFit = true,
 	showSkeleton = true,
+	hideVerticalScroll = false,
 	onLoad,
 }: AICardIframeProps) {
-	const frameRef = useRef<HTMLDivElement>(null)
-	const iframeRef = useRef<HTMLIFrameElement>(null)
-	const [srcDoc, setSrcDoc] = useState<string | null>(null)
+	const [processedContent, setProcessedContent] = useState<string | null>(null)
+	const [filePathMapping, setFilePathMapping] =
+		useState<Map<string, string>>(EMPTY_FILE_PATH_MAPPING)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
-	const [containerWidth, setContainerWidth] = useState(0)
-	const [contentSize, setContentSize] = useState({ width: 0, height: 0 })
 
 	const flattenedFiles = useMemo(
 		() =>
@@ -65,16 +67,14 @@ function AICardIframe({
 		return slashIndex >= 0 ? path.slice(0, slashIndex + 1) : "/"
 	}, [currentFile])
 
-	// Keep a ref to the latest attachmentList for use inside the effect
-	// without adding it as a dependency (we only re-fetch when the file itself changes)
 	const attachmentListRef = useRef(attachmentList)
 	attachmentListRef.current = attachmentList
 
 	// Load and process HTML content
-	// Only re-runs when fileId or currentFile metadata changes — not when unrelated files are added
 	useEffect(() => {
 		if (!fileId) {
-			setSrcDoc(null)
+			setProcessedContent(null)
+			setFilePathMapping(EMPTY_FILE_PATH_MAPPING)
 			setLoading(false)
 			return
 		}
@@ -82,7 +82,8 @@ function AICardIframe({
 		let cancelled = false
 		setLoading(true)
 		setError(null)
-		setSrcDoc(null)
+		setProcessedContent(null)
+		setFilePathMapping(EMPTY_FILE_PATH_MAPPING)
 		;(async () => {
 			try {
 				const urls = await getTemporaryDownloadUrl({ file_ids: [fileId] })
@@ -95,7 +96,8 @@ function AICardIframe({
 				const html = await resp.text()
 				if (cancelled) return
 
-				let processedContent = html
+				let finalContent = html
+				let mapping = EMPTY_FILE_PATH_MAPPING
 				const currentAttachmentList = attachmentListRef.current
 				if (currentAttachmentList?.length) {
 					const result = await processHtmlContent({
@@ -106,11 +108,15 @@ function AICardIframe({
 						fileName: currentFile?.file_name,
 						html_relative_path: relativeFolderPath,
 					})
-					processedContent = result.processedContent || html
+					finalContent = result.processedContent || html
+					mapping = result.filePathMapping
 				}
-				if (cancelled) return
 
-				setSrcDoc(processedContent)
+				finalContent = injectFetchInterceptorScript(finalContent, { fileId })
+
+				if (cancelled) return
+				setProcessedContent(finalContent)
+				setFilePathMapping(mapping)
 				setLoading(false)
 			} catch (err) {
 				if (cancelled) return
@@ -124,40 +130,9 @@ function AICardIframe({
 		}
 	}, [fileId, currentFile?.file_name, relativeFolderPath])
 
-	// Measure container width
-	useEffect(() => {
-		const node = frameRef.current
-		if (!node || typeof ResizeObserver === "undefined") return
-		const observer = new ResizeObserver(() => {
-			const w = node.clientWidth || node.getBoundingClientRect().width || 0
-			setContainerWidth(w)
-		})
-		observer.observe(node)
-		setContainerWidth(node.clientWidth || node.getBoundingClientRect().width || 0)
-		return () => observer.disconnect()
-	}, [])
-
-	// Measure iframe content on load
-	const handleIframeLoad = useCallback(() => {
-		const iframe = iframeRef.current
-		if (!iframe?.contentDocument) return
-		const doc = iframe.contentDocument
-		const body = doc.body
-		const docEl = doc.documentElement
-		const w = Math.max(body?.scrollWidth || 0, docEl?.scrollWidth || 0)
-		const h = Math.max(body?.scrollHeight || 0, docEl?.scrollHeight || 0)
-		if (w > 0 && h > 0) {
-			setContentSize({ width: w, height: h })
-		}
+	const handleRenderReady = useCallback(() => {
 		onLoad?.()
 	}, [onLoad])
-
-	const scale =
-		scaleToFit && contentSize.width > 0 && containerWidth > 0
-			? Math.min(containerWidth / contentSize.width, 1)
-			: 1
-
-	const scaledHeight = contentSize.height > 0 ? contentSize.height * scale : undefined
 
 	if (error) {
 		return (
@@ -174,29 +149,24 @@ function AICardIframe({
 	}
 
 	return (
-		<div
-			ref={frameRef}
-			className={cn("relative w-full overflow-hidden", className)}
-			style={{ ...style, height: style?.height ?? scaledHeight }}
-		>
+		<div className={cn("relative h-full w-full overflow-hidden", className)} style={style}>
 			{loading && showSkeleton && (
 				<div className="absolute inset-0 z-10 animate-pulse rounded-lg bg-muted/40" />
 			)}
-			{srcDoc && (
-				<iframe
-					ref={iframeRef}
-					title="AI Card"
-					srcDoc={srcDoc}
-					className="block border-0 bg-white dark:bg-slate-900 max-h-full"
-					style={{
-						width: contentSize.width > 0 ? `${contentSize.width}px` : "100%",
-						height: contentSize.height > 0 ? `${contentSize.height}px` : "100%",
-						transform: `scale(${scale})`,
-						transformOrigin: "top left",
-						visibility: contentSize.width > 0 ? "visible" : "hidden",
-					}}
-					onLoad={handleIframeLoad}
-					sandbox="allow-scripts allow-same-origin"
+			{processedContent && (
+				<IsolatedHTMLRenderer
+					content={processedContent}
+					fileId={fileId}
+					filePathMapping={filePathMapping}
+					openNewTab={NOOP_OPEN_NEW_TAB}
+					attachmentList={attachmentList}
+					relative_file_path={relativeFolderPath}
+					isVisible
+					containIframeOverscroll
+					hideVerticalScroll={hideVerticalScroll}
+					disableIframeDocumentClickBridge
+					disableDynamicResourceInterception
+					onRenderReady={handleRenderReady}
 				/>
 			)}
 		</div>

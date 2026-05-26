@@ -285,7 +285,7 @@ const DashboardCard = memo(function DashboardCard({
 					fileId={item.fileId}
 					attachmentList={attachmentList}
 					className="pointer-events-none h-full w-full"
-					scaleToFit
+					hideVerticalScroll
 					showSkeleton
 				/>
 			</div>

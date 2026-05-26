@@ -309,29 +309,49 @@ h2 {
 }
 .config-row {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
 }
-.select {
+.select-group {
   flex: 1;
-  min-width: 100px;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.select-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sub);
+  letter-spacing: 0.02em;
+  padding-left: 2px;
+}
+.select {
+  width: 100%;
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 11px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
   font-family: inherit;
   appearance: none;
   cursor: pointer;
   outline: none;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235b7396'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 26px;
+  background-position: right 12px center;
+  padding-right: 28px;
+}
+.select:hover {
+  border-color: var(--accent);
 }
 .select:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 .insight-status {
   font-size: 11px;
@@ -346,5 +366,61 @@ h2 {
   .row-2,
   .kpi-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    padding: 8px;
+  }
+  .shell {
+    gap: 10px;
+  }
+  .card {
+    border-radius: 12px;
+    padding: 12px;
+  }
+  .card-soft {
+    border-radius: 10px;
+    padding: 10px;
+  }
+  h1 {
+    font-size: 18px;
+  }
+  h2 {
+    font-size: 15px;
+  }
+  .kpi .value {
+    font-size: 22px;
+  }
+  .kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .chart {
+    height: 200px;
+  }
+  .chart.tall {
+    height: 220px;
+  }
+  .suggestion-chips {
+    gap: 5px;
+  }
+  .chip {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+  .ask-row {
+    flex-direction: row;
+  }
+  .config-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .select-group {
+    min-width: unset;
+  }
+  .select {
+    padding: 10px 12px;
+    font-size: 13px;
   }
 }

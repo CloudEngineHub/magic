@@ -119,7 +119,6 @@ function AICardHistory({ entries, cardName, attachmentList, onBack }: AICardHist
 									fileId={selectedEntry.fileId}
 									attachmentList={attachmentList}
 									className="h-full w-full"
-									scaleToFit={false}
 									style={{ height: "100%" }}
 								/>
 							</motion.div>

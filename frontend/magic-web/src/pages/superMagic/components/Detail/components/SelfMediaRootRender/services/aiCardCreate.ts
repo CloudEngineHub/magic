@@ -71,7 +71,7 @@ function buildAICardCreatePrefixLines(params: AICardCreateParams): string[] {
             : `参考预设模板 ${template} 的结构和样式来设计卡片。`
 
     // Determine where the card directory should be created
-    const cardDir = folderPath ? `${folderPath}/analysis/${cardName}` : `analysis/${cardName}`
+    const cardDir = folderPath ? `${folderPath}/${cardName}` : `${cardName}`
     const locationInstruction = folderPath
         ? `在项目目录 ${folderPath}/ 下创建卡片目录「${cardName}」`
         : `在项目根目录下创建卡片目录「${cardName}」`
