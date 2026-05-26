@@ -1,7 +1,7 @@
 ---
 name: ai-card-generator
 description: |
-  Generate AI Cards — self-contained HTML visual pages for scheduled automated reports.
+  Generate AI Cards — HTML visual pages (single-file or folder-based multi-file) for scheduled automated reports.
   Use when: user wants to create a recurring visual card, hotspot tracker, daily digest,
   analytics panel, inspiration page, or any HTML-based automated visualization that updates on schedule.
   Trigger signals: AI卡片, 灵感卡片, 生成卡片, 可视化报告, 热点跟踪, 每日摘要, dashboard card, 定时可视化.
@@ -23,7 +23,7 @@ description-cn: |
 通过定时任务自动生成和更新自包含的 HTML 可视化卡片。每张卡片基于用户提示词 + 模板，定时获取最新数据并更新。
 -->
 
-Automatically generate and update self-contained HTML visual cards via scheduled tasks. Each card is based on user prompts + templates, fetching latest data on schedule.
+Automatically generate and update HTML visual cards via scheduled tasks. Cards can be single-file or folder-based multi-file, and are generated from user prompts + templates with fresh data.
 
 <!--zh
 ## 核心能力
@@ -57,14 +57,35 @@ Automatically generate and update self-contained HTML visual cards via scheduled
 
 Card directory name is user-defined, no fixed path required. The core requirement is the directory must contain `magic.project.js` with type set to `ai-card`.
 
+Preferred mode is folder-based multi-file for maintainability. Single-file mode is still supported for backward compatibility.
+
 ```
-{card-directory}/              # User-named, e.g. "抖音热点追踪"
-├── magic.project.js           # REQUIRED — type="ai-card", triggers frontend rendering
-├── template.html              # User-editable template skeleton
-├── latest.html                # Latest generated card (overwritten each time)
-└── history/                   # Historical snapshots
-    ├── 2026-05-23_09-00.html
-    └── 2026-05-22_09-00.html
+{card-directory}/
+├── magic.project.js                  # REQUIRED — type="ai-card"
+├── template/                         # Preferred template folder
+│   ├── index.html
+│   ├── styles.css                    # Optional
+│   ├── scripts.js                    # Optional
+│   └── prompts/                      # Optional analysis prompt snippets
+│       └── deep-analysis.txt
+├── latest/                           # Preferred output folder
+│   ├── index.html
+│   ├── styles.css                    # Optional
+│   └── scripts.js                    # Optional
+└── history/
+  ├── 2026-05-23_09-00/
+  │   └── index.html
+  └── 2026-05-22_09-00/
+    └── index.html
+
+Backward compatible (legacy):
+
+{card-directory}/
+├── magic.project.js
+├── template.html
+├── latest.html
+└── history/
+  └── YYYY-MM-DD_HH-mm.html
 ```
 
 <!--zh
@@ -86,8 +107,8 @@ Based on user requirements, create directory and write all required files:
 ```
 1. 创建目录（名称由用户指定或根据内容推断）
 2. 写入 magic.project.js（触发前端渲染识别，包含所有卡片配置和元数据）
-3. 生成 template.html（基于用户需求选择或创建模板）
-4. 首次获取数据并生成 latest.html
+3. 生成模板（推荐 `template/index.html`，兼容 `template.html`）
+4. 首次获取数据并生成最新卡片（推荐 `latest/index.html`，兼容 `latest.html`）
 5. 如需定时更新，使用 using-cron 创建定时任务
 ```
 
@@ -107,24 +128,28 @@ window.magicProjectConfig = {
   name: "卡片名称",
   description: "卡片描述",
   prompt: "用户提示词全文",
-  cards: [{ file: "latest.html", label: "最新" }],
-  template: "template.html",
+  cards: [{ file: "latest/index.html", label: "最新" }],
+  template: "template/index.html",
   schedule_id: "", // Will be filled after cron task creation
   last_generated: "", // ISO 8601 timestamp, updated each generation
   generation_count: 0, // Incremented each generation
   status: "active", // active | paused | error
 };
+
+// Legacy compatible example:
+// cards: [{ file: "latest.html", label: "最新" }],
+// template: "template.html",
 ```
 
 <!--zh
-### 步骤 3：template.html 规范
+### 步骤 3：Template 规范（`template/index.html` 或 `template.html`）
 
-模板是卡片的"骨架"，定义布局和样式。Agent 每次执行时读取模板理解结构，用新数据填充生成 latest.html。
+模板是卡片的"骨架"，定义布局和样式。Agent 每次执行时读取模板理解结构，用新数据填充生成最新版本（推荐 `latest/index.html`）。
 -->
 
-### Step 3: template.html Specification
+### Step 3: Template Specification (`template/index.html` or `template.html`)
 
-The template is the card's "skeleton", defining layout and styling. The agent reads the template each execution to understand the structure, then fills in new data to generate latest.html.
+The template is the card's "skeleton", defining layout and styling. The agent reads the template each execution to understand the structure, then fills in new data to generate the latest card output (recommended `latest/index.html`).
 
 <!--zh
 **模板规则：**
@@ -189,12 +214,12 @@ When a scheduled task triggers, execute the following:
 
 ```
 1. 读取 magic.project.js 获取提示词和上下文配置
-2. 读取 template.html 理解布局结构和数据区域标记
+2. 读取模板（优先 `template/index.html`，兼容 `template.html`）理解布局结构和数据区域标记
 3. 通过 web_search / read_webpages_as_markdown 获取最新数据
 4. 根据提示词分析和组织数据
 5. 基于模板结构 + 新数据生成完整 HTML
-6. 将当前 latest.html 移入 history/（命名为 YYYY-MM-DD_HH-mm.html）
-7. 写入新的 latest.html
+6. 归档当前最新版本到 history/（推荐目录归档：`YYYY-MM-DD_HH-mm/`）
+7. 写入新的 latest（推荐 `latest/index.html`，兼容 `latest.html`）
 8. 更新 magic.project.js 的 last_generated 和 generation_count
 ```
 
@@ -217,9 +242,10 @@ to avoid shell parsing issues with punctuation, quotes, or brackets.
 shell_exec(
     command='''cat > /tmp/ai-card-cron-message.txt <<'EOF'
 Update the AI card {card_name}. Read {card_directory}/magic.project.js for
-configuration and prompts, read template.html, fetch fresh data, generate the
-new version to latest.html, archive the previous latest.html, and update
-last_generated and generation_count in magic.project.js.
+configuration and prompts, read template/index.html (fallback template.html),
+fetch fresh data, generate the new version to latest/index.html (fallback latest.html),
+archive the previous latest version into history/, and update last_generated
+and generation_count in magic.project.js.
 EOF
 cd /app/agents/skills/using-cron &&
 python scripts/create.py --task-name "AI Card: {card_name}" --message-content-file /tmp/ai-card-cron-message.txt --type daily_repeat --time "9:00" --topic-pattern ip-manager'''
@@ -244,30 +270,46 @@ After successful creation, write the returned schedule_id into magic.project.js.
 
 ## User Template Modification
 
-Users can modify template.html anytime to change card layout and styling. Methods:
+Users can modify template/index.html (or template.html in legacy mode) anytime to change card layout and styling. Methods:
 
-1. Edit template.html directly in the frontend (using existing HTML editing capability)
+1. Edit template/index.html directly in the frontend (using existing HTML editing capability)
 2. Tell the agent via conversation (e.g. "change the template to a three-column layout")
 
 After modification, the next scheduled execution will automatically use the new template.
 
+## html-api-sdk Integration (Optional but Recommended)
+
+For interactive cards, you can use `window.Magic.*` APIs in HTML:
+
+1. Use `window.Magic.setInputMessage(message)` to send a prefilled deep-analysis request to Agent.
+2. Optionally use `window.Magic.fs.readFile` / `writeFile` for local card context and generated notes within the card app root.
+3. Bind actions via `addEventListener` only (no inline onclick).
+
+Example pattern in card UI:
+
+1. "Generate analysis request" button: extract key text from card sections.
+2. "Send to Agent" button: call `window.Magic.setInputMessage(...)`.
+3. Show status text if Magic API is unavailable in current runtime.
+
 <!--zh
 ## 预设模板
 
-Skill 提供以下预设模板供参考，位于 templates/ 目录：
-- `hotspot-tracker.html` — 热点追踪（热搜列表 + 趋势标记 + 时间戳）
-- `daily-digest.html` — 每日摘要（分栏布局 + 关键指标 + 行业动态）
-- `analytics-panel.html` — 数据面板（KPI 数字 + 对比变化 + 趋势图）
+Skill 提供以下预设模板供参考，位于 templates/ 目录（folder-based 结构）：
+- `hotspot-tracker/` — 热点追踪（热搜列表 + 趋势标记 + 时间戳）
+- `daily-digest/` — 每日摘要（分栏布局 + 关键指标 + 行业动态）
+- `analytics-panel/` — 数据面板（KPI 数字 + 对比变化 + 趋势图）
 
+每个模板目录包含：`index.html`、`styles.css`、`scripts.js`、`prompts/`（可选分析提示词）。
 创建卡片时可参考这些模板的结构和样式，也可完全自定义。
 -->
 
 ## Preset Templates
 
-This skill provides the following preset templates for reference, located in the templates/ directory:
+This skill provides the following preset templates for reference, located in the templates/ directory (folder-based structure):
 
-- `hotspot-tracker.html` — Hotspot tracker (trending list + trend markers + timestamps)
-- `daily-digest.html` — Daily digest (column layout + key metrics + industry updates)
-- `analytics-panel.html` — Analytics panel (KPI numbers + comparisons + trend charts)
+- `hotspot-tracker/` — Hotspot tracker (trending list + trend markers + timestamps)
+- `daily-digest/` — Daily digest (column layout + key metrics + industry updates)
+- `analytics-panel/` — Analytics panel (KPI numbers + comparisons + trend charts)
 
+Each template folder contains: `index.html`, `styles.css`, `scripts.js`, and `prompts/` (optional analysis prompt snippets).
 When creating cards, you can reference these templates' structure and style, or create fully custom ones.

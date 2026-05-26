@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{CARD_TITLE}}</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="shell">
+        <aside class="sidebar">
+            <section class="card analysis-source">
+                <span class="eyebrow">Operations Cockpit</span>
+                <h1>{{CARD_TITLE}}</h1>
+                <p class="sub">{{CARD_DESCRIPTION}}</p>
+                <p class="meta">{{GENERATED_AT}} · 更新 #{{UPDATE_COUNT}}</p>
+            </section>
+
+            <!-- DATA:summary_START -->
+            <section class="card analysis-source">
+                <span class="pill">健康</span>
+                <div class="score">87</div>
+                <p class="sub">流量和收入保持增速，注册到激活仍是主要流失段。</p>
+            </section>
+            <!-- DATA:summary_END -->
+
+            <section class="card-soft analysis-source">
+                <p class="sub">建议优先修复新手引导，预计可提升激活 5-8%。</p>
+            </section>
+            <section class="card-soft analysis-source">
+                <p class="sub">私域回流 ROI 最高，付费广告成本持续上行。</p>
+            </section>
+        </aside>
+
+        <main class="main">
+            <!-- DATA:kpi_START -->
+            <section class="card analysis-source">
+                <div class="head">
+                    <div>
+                        <h2>KPI 总览</h2>
+                        <p>核心指标与趋势</p>
+                    </div>
+                </div>
+                <div class="kpi-grid">
+                    <article class="card-soft kpi">
+                        <div class="name">总访问量</div>
+                        <div class="value">428K</div>
+                        <div class="delta up">+18.6%</div>
+                        <div class="spark" data-series="112,126,134,142,155,166,174"></div>
+                    </article>
+                    <article class="card-soft kpi">
+                        <div class="name">新增用户</div>
+                        <div class="value">18,420</div>
+                        <div class="delta up">+14.3%</div>
+                        <div class="spark" data-series="9,10,11,12,14,15,16"></div>
+                    </article>
+                    <article class="card-soft kpi">
+                        <div class="name">7日留存</div>
+                        <div class="value">38.7%</div>
+                        <div class="delta flat">-1.9%</div>
+                        <div class="spark" data-series="42,41,41,40,39,39,38.7"></div>
+                    </article>
+                    <article class="card-soft kpi">
+                        <div class="name">激活率</div>
+                        <div class="value">63.4%</div>
+                        <div class="delta down">-2.4%</div>
+                        <div class="spark" data-series="69,68,68,67,66,65,63"></div>
+                    </article>
+                    <article class="card-soft kpi">
+                        <div class="name">付费转化</div>
+                        <div class="value">4.9%</div>
+                        <div class="delta up">+0.6%</div>
+                        <div class="spark" data-series="3.8,4.1,4.0,4.3,4.5,4.7,4.9"></div>
+                    </article>
+                    <article class="card-soft kpi">
+                        <div class="name">月收入</div>
+                        <div class="value">¥1.38M</div>
+                        <div class="delta up">+21.4%</div>
+                        <div class="spark" data-series="0.72,0.84,0.93,1.02,1.11,1.24,1.38"></div>
+                    </article>
+                </div>
+            </section>
+            <!-- DATA:kpi_END -->
+
+            <div class="row-2">
+                <!-- DATA:funnel_START -->
+                <section class="card analysis-source">
+                    <div class="head">
+                        <div>
+                            <h2>转化漏斗</h2>
+                            <p>访问→复购效率</p>
+                        </div>
+                    </div>
+                    <div class="chart" id="funnelChart"></div>
+                </section>
+                <!-- DATA:funnel_END -->
+
+                <section class="card analysis-source">
+                    <h2>漏斗解读</h2>
+                    <div class="list">
+                        <div class="item"><strong>访问→注册 12.8%</strong><span>落地页匹配改善。</span></div>
+                        <div class="item"><strong>注册→激活 63.4%</strong><span>首日任务完成率下滑。</span></div>
+                        <div class="item"><strong>激活→付费 7.7%</strong><span>高意向召回有效。</span></div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="row-2">
+                <!-- DATA:channels_START -->
+                <section class="card analysis-source">
+                    <div class="head">
+                        <div>
+                            <h2>渠道拆解</h2>
+                            <p>规模 / 收入 / 成本对比</p>
+                        </div>
+                    </div>
+                    <div class="chart tall" id="channelChart"></div>
+                </section>
+                <!-- DATA:channels_END -->
+
+                <!-- DATA:alerts_START -->
+                <section class="card analysis-source">
+                    <h2>告警与行动</h2>
+                    <div class="list">
+                        <div class="item"><strong class="down">P1 激活率低于阈值</strong><span>回滚复杂表单，增加默认模板。</span></div>
+                        <div class="item"><strong class="flat">P2 CPA 连续上涨</strong><span>暂停低 CTR 创意素材。</span></div>
+                        <div class="item"><strong>P3 留存未传导收入</strong><span>补充老客转化激励。</span></div>
+                    </div>
+                </section>
+                <!-- DATA:alerts_END -->
+            </div>
+
+            <!-- DATA:trend_START -->
+            <section class="card analysis-source">
+                <div class="head">
+                    <div>
+                        <h2>增长趋势</h2>
+                        <p>流量 / 收入 / 转化率联动</p>
+                    </div>
+                    <div class="tabs" id="trendTabs">
+                        <button class="tab active" data-range="7d" type="button">7D</button>
+                        <button class="tab" data-range="14d" type="button">14D</button>
+                        <button class="tab" data-range="30d" type="button">30D</button>
+                    </div>
+                </div>
+                <div class="chart tall" id="trendChart"></div>
+            </section>
+            <!-- DATA:trend_END -->
+
+            <section class="ai-insight">
+                <div class="insight-header"><span class="insight-icon">✦</span><span>AI 洞察</span></div>
+                <p class="insight-text">激活率连续 3 日走低且首日任务完成率同步下滑，可能与注册流程改版相关；建议优先回滚并做 A/B 验证。</p>
+                <div class="suggestion-chips">
+                    <button class="chip" type="button" data-prompt="为什么激活率在下滑？请结合漏斗各环节和最近产品改动给出原因分析。">为什么激活下滑？</button>
+                    <button class="chip" type="button" data-prompt="请给出优化转化漏斗的三步可执行方案，含预期收益区间。">如何优化漏斗？</button>
+                    <button class="chip" type="button" data-prompt="分析竞品近期主要动作，判断对我方核心指标的潜在影响。">竞品在做什么？</button>
+                    <button class="chip" type="button" data-prompt="基于当前数据，写一份包含优先级、负责人建议和时间节点的行动计划。">写一份行动计划</button>
+                </div>
+                <div class="ask-row">
+                    <input class="ask-input" id="askInput" type="text" placeholder="还想问点别的...">
+                    <button class="ask-send" id="askSend" type="button">→</button>
+                </div>
+                <div class="config-row">
+                    <select class="select" id="agentSelect">
+                        <option value="">加载员工中…</option>
+                    </select>
+                    <select class="select" id="modelSelect">
+                        <option value="auto">自动选择</option>
+                    </select>
+                </div>
+                <div class="insight-status" id="insightStatus"></div>
+            </section>
+        </main>
+    </div>
+    <script src="scripts.js"></script>
+</body>
+
+</html>

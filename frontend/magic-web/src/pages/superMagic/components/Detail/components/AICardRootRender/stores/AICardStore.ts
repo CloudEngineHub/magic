@@ -160,17 +160,12 @@ export class AICardStore {
 				this.projectConfig = projectConfig
 			})
 
-			// Find latest.html
-			const latestFile = children.find(
-				(f: any) => f.file_name === "latest.html" && !f.is_directory,
-			)
+			// Find latest: prefer folder-based (latest/index.html), fallback to legacy (latest.html)
+			const latestFile = this.resolveEntryFile(children, "latest")
 
-			// Find template.html
-			const templateFile = children.find(
-				(f: any) =>
-					f.file_name === (projectConfig?.template || "template.html") &&
-					!f.is_directory,
-			)
+			// Find template: prefer folder-based (template/index.html), fallback to legacy (template.html)
+			const templateName = projectConfig?.template || "template"
+			const templateFile = this.resolveEntryFile(children, templateName)
 
 			// Build card entry
 			const card: AICardEntry = {
@@ -205,24 +200,67 @@ export class AICardStore {
 			return []
 		}
 
-		return historyDir.children
-			.filter((f: any) => f.file_name?.endsWith(".html"))
-			.map((f: any) => {
-				const name = f.file_name || ""
-				// Parse YYYY-MM-DD_HH-mm.html
+		const entries: AICardHistoryEntry[] = []
+
+		for (const f of historyDir.children) {
+			const name = f.file_name || ""
+
+			if (!f.is_directory && name.endsWith(".html")) {
+				// Legacy: history/YYYY-MM-DD_HH-mm.html
 				const match = name.match(/(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})\.html$/)
 				const timestamp = match ? `${match[1]}T${match[2]}:${match[3]}:00` : ""
-				return {
+				entries.push({
 					fileId: f.file_id,
 					fileName: name,
 					timestamp,
 					displayTime: match ? `${match[1]} ${match[2]}:${match[3]}` : name,
+				})
+			} else if (f.is_directory && f.children?.length) {
+				// Folder-based: history/YYYY-MM-DD_HH-mm/index.html
+				const indexFile = f.children.find(
+					(c: any) => c.file_name === "index.html" && !c.is_directory,
+				)
+				if (indexFile) {
+					const match = name.match(/(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})$/)
+					const timestamp = match ? `${match[1]}T${match[2]}:${match[3]}:00` : ""
+					entries.push({
+						fileId: indexFile.file_id,
+						fileName: `${name}/index.html`,
+						timestamp,
+						displayTime: match ? `${match[1]} ${match[2]}:${match[3]}` : name,
+					})
 				}
-			})
-			.sort(
-				(a: AICardHistoryEntry, b: AICardHistoryEntry) =>
-					b.timestamp.localeCompare(a.timestamp),
+			}
+		}
+
+		return entries.sort(
+			(a, b) => b.timestamp.localeCompare(a.timestamp),
+		)
+	}
+
+	/**
+	 * Resolve an entry file supporting both folder-based and legacy single-file structures.
+	 * For a given name (e.g. "latest"):
+	 *   - Folder-based: looks for directory "latest" containing "index.html"
+	 *   - Legacy single-file: looks for "latest.html"
+	 */
+	private resolveEntryFile(children: any[], name: string): any | undefined {
+		// Folder-based: name/ directory with index.html
+		const folder = children.find(
+			(f: any) => f.file_name === name && f.is_directory,
+		)
+		if (folder?.children?.length) {
+			const indexFile = folder.children.find(
+				(c: any) => c.file_name === "index.html" && !c.is_directory,
 			)
+			if (indexFile) return indexFile
+		}
+
+		// Legacy: name.html single file
+		const htmlName = name.endsWith(".html") ? name : `${name}.html`
+		return children.find(
+			(f: any) => f.file_name === htmlName && !f.is_directory,
+		)
 	}
 
 	private findChildren(): any[] {

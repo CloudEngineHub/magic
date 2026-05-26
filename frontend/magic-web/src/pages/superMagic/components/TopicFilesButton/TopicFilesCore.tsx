@@ -1743,12 +1743,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			<div
 				className={cx(styles.batchDownloadLayer, {
 					[styles.hidden]:
-						(!isMobile && (!isSelectMode || !showBatchDownload)) ||
-						(isMobile && attachments.length <= 0),
+						(!isMobile && !showBatchDownload) || (isMobile && attachments.length <= 0),
 					[styles.pcBatchDownloadLayer]: !isMobile,
 				})}
 			>
-				{!isMobile && isSelectMode && showBatchDownload && (
+				{!isMobile && showBatchDownload && (
 					<Flex className={styles.batchOperations}>
 						<MagicDropdown
 							menu={{ items: batchMenuItems, style: { width: "100%" } }}

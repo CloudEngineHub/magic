@@ -190,7 +190,7 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 	)
 
 	const handleRefresh = useCallback(() => {
-		void store.init()
+		void store.init({ preserveNavigation: true })
 	}, [store])
 
 	return (

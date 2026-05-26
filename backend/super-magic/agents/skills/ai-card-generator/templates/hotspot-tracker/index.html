@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{CARD_TITLE}}</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="frame">
+        <!-- DATA:ticker_START -->
+        <nav class="ticker analysis-source">
+            <span class="brand">Hotspot Radar</span>
+            <span class="item hot">AI Agent 开发 ↑86%</span>
+            <span class="item">边缘计算 ↑73%</span>
+            <span class="item">具身智能 ↑64%</span>
+            <span class="item">量子纠错 ↑52%</span>
+            <span class="item">合成生物 ↑41%</span>
+            <span class="meta">{{GENERATED_AT}}</span>
+        </nav>
+        <!-- DATA:ticker_END -->
+
+        <div class="grid">
+            <main>
+                <!-- DATA:overview_START -->
+                <section class="card analysis-source">
+                    <div
+                        style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                        <div>
+                            <span class="eyebrow">{{CARD_TITLE}}</span>
+                            <h1>热度指数</h1>
+                            <div class="heat-score">92.4</div>
+                            <div class="heat-sub"><span class="level">极热</span><span class="meta">过去 24h 内 +14.6%</span>
+                            </div>
+                        </div>
+                        <div style="flex:0 0 180px;">
+                            <div class="chart" id="pieChart" style="height:160px;"></div>
+                        </div>
+                    </div>
+                    <div class="overview-row">
+                        <div class="card-soft">
+                            <h2 style="font-size:14px;">上升最快</h2>
+                            <div class="chart" id="risingChart"></div>
+                        </div>
+                        <div class="card-soft">
+                            <h2 style="font-size:14px;">综合雷达</h2>
+                            <div class="chart" id="radarChart"></div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:overview_END -->
+
+                <!-- DATA:hot_list_START -->
+                <section class="card analysis-source">
+                    <h2>热点榜单</h2>
+                    <div class="hot-list">
+                        <div class="hot-item">
+                            <div class="rank top">1</div>
+                            <div>
+                                <div class="title">AI Agent 开发框架爆发</div>
+                                <div class="desc">多款 Agent 框架 star 数日增过千，开发者社区热议。</div>
+                                <div class="tag-row"><span class="tag t-rising">急升</span><span
+                                        class="tag t-platform">GitHub</span><span class="tag t-platform">X</span></div>
+                            </div>
+                            <div class="spark" data-series="12,18,24,35,52,68,86"></div>
+                        </div>
+                        <div class="hot-item">
+                            <div class="rank top">2</div>
+                            <div>
+                                <div class="title">边缘计算下沉市场</div>
+                                <div class="desc">运营商 + 终端厂联合发布 MEC 2.0 白皮书。</div>
+                                <div class="tag-row"><span class="tag t-rising">急升</span><span
+                                        class="tag t-platform">微信</span></div>
+                            </div>
+                            <div class="spark" data-series="8,14,19,28,40,56,73"></div>
+                        </div>
+                        <div class="hot-item">
+                            <div class="rank mid">3</div>
+                            <div>
+                                <div class="title">具身智能 Demo 刷屏</div>
+                                <div class="desc">国内两家机器人公司发布灵巧手操作视频。</div>
+                                <div class="tag-row"><span class="tag t-stable">持续</span><span
+                                        class="tag t-platform">B站</span><span class="tag t-platform">抖音</span></div>
+                            </div>
+                            <div class="spark" data-series="20,25,30,36,42,52,64"></div>
+                        </div>
+                        <div class="hot-item">
+                            <div class="rank mid">4</div>
+                            <div>
+                                <div class="title">量子纠错里程碑</div>
+                                <div class="desc">Google 宣布新型量子纠错阈值突破。</div>
+                                <div class="tag-row"><span class="tag t-stable">持续</span><span
+                                        class="tag t-platform">X</span></div>
+                            </div>
+                            <div class="spark" data-series="10,14,18,28,34,44,52"></div>
+                        </div>
+                        <div class="hot-item">
+                            <div class="rank low">5</div>
+                            <div>
+                                <div class="title">合成生物政策利好</div>
+                                <div class="desc">多部委联合出台合成生物制造支持政策。</div>
+                                <div class="tag-row"><span class="tag t-stable">持续</span><span
+                                        class="tag t-platform">微博</span></div>
+                            </div>
+                            <div class="spark" data-series="6,9,14,20,26,34,41"></div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:hot_list_END -->
+            </main>
+
+            <aside class="side-col">
+                <!-- DATA:keywords_START -->
+                <section class="card analysis-source">
+                    <h2>关键词云</h2>
+                    <div class="keyword-cloud">
+                        <span class="kw hot">Agent</span><span class="kw hot">MCP</span>
+                        <span class="kw">大模型</span><span class="kw">边缘</span><span class="kw">机器人</span>
+                        <span class="kw">量子</span><span class="kw hot">RAG</span><span class="kw">合成生物</span>
+                        <span class="kw">开源</span><span class="kw">推理</span><span class="kw">多模态</span>
+                    </div>
+                </section>
+                <!-- DATA:keywords_END -->
+
+                <!-- DATA:platforms_START -->
+                <section class="card analysis-source">
+                    <h2>平台热度明细</h2>
+                    <div class="plat-list">
+                        <div class="plat"><span class="dot"
+                                style="background:var(--coral)"></span><strong>微博</strong><span class="meta">38% · 话题阅读
+                                4.2 亿</span></div>
+                        <div class="plat"><span class="dot"
+                                style="background:var(--mint)"></span><strong>抖音</strong><span class="meta">25% · 播放量
+                                2.8 亿</span></div>
+                        <div class="plat"><span class="dot"
+                                style="background:var(--violet)"></span><strong>微信</strong><span class="meta">18% · 10w+
+                                文章 12 篇</span></div>
+                        <div class="plat"><span class="dot"
+                                style="background:var(--warn)"></span><strong>小红书</strong><span class="meta">12% · 笔记
+                                6800</span></div>
+                        <div class="plat"><span class="dot"
+                                style="background:var(--sub)"></span><strong>其他</strong><span class="meta">7% ·
+                                论坛+Twitter</span></div>
+                    </div>
+                </section>
+                <!-- DATA:platforms_END -->
+
+                <section class="ai-insight">
+                    <div class="insight-header"><span class="insight-icon">✦</span><span>AI 洞察</span></div>
+                    <p class="insight-text">AI Agent 开发热度处于爆发期，讨论量和增速双指标领先；预计窗口期 48-72h，建议尽快产出关联内容。</p>
+                    <div class="suggestion-chips">
+                        <button class="chip" type="button" data-prompt="判断当前热点 #1 的生命周期阶段和衰减拐点预测。">热点还能持续多久？</button>
+                        <button class="chip" type="button" data-prompt="分析热点引爆因子，给出后续可能的演化路径。">引爆因子是什么？</button>
+                        <button class="chip" type="button" data-prompt="给出品牌借势最佳窗口和风险红线，含内容方向建议。">如何借势？</button>
+                        <button class="chip" type="button" data-prompt="对比竞品在该热点中的动作，给出我方差异化策略。">竞品做了什么？</button>
+                    </div>
+                    <div class="ask-row">
+                        <input class="ask-input" id="askInput" type="text" placeholder="还想问点别的...">
+                        <button class="ask-send" id="askSend" type="button">→</button>
+                    </div>
+                    <div class="config-row">
+                        <select class="select" id="agentSelect">
+                            <option value="">加载员工中…</option>
+                        </select>
+                        <select class="select" id="modelSelect">
+                            <option value="auto">自动选择</option>
+                        </select>
+                    </div>
+                    <div class="insight-status" id="insightStatus"></div>
+                </section>
+            </aside>
+        </div>
+    </div>
+    <script src="scripts.js"></script>
+</body>
+
+</html>

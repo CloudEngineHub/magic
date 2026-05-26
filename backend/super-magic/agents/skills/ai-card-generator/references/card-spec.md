@@ -2,11 +2,37 @@
 
 ## File Requirements
 
-1. **Single-file first**: Keep the card organized as a single HTML file. Inline CSS and JavaScript are preferred for portability.
+1. **Folder-based preferred**: Use a folder-based multi-file structure for maintainability (`index.html` + optional `styles.css` + optional `scripts.js`). Single-file is still supported for legacy and lightweight scenarios.
 2. **Encoding**: Must include `<meta charset="utf-8">`.
 3. **Viewport**: Must include `<meta name="viewport" content="width=device-width, initial-scale=1.0">`.
 4. **External Resources Policy**: Default to no external resources, but allow a small whitelist of trusted CDN dependencies when they unlock major value. ECharts CDN is explicitly allowed for chart-driven cards.
 5. **Responsive**: Use CSS Grid or Flexbox for layout. Card should render well at various widths (300px–1200px).
+
+## Recommended Project Layout
+
+Preferred (multi-file):
+
+```text
+{card-directory}/
+├── template/
+│   ├── index.html
+│   ├── styles.css        # optional
+│   └── scripts.js        # optional
+├── latest/
+│   ├── index.html
+│   ├── styles.css        # optional
+│   └── scripts.js        # optional
+└── history/
+  └── YYYY-MM-DD_HH-mm/
+    └── index.html
+```
+
+Legacy (single-file):
+
+```text
+{card-directory}/template.html
+{card-directory}/latest.html
+```
 
 ## Dark Mode Support
 
@@ -58,6 +84,24 @@ Templates may use placeholder patterns that the agent replaces during generation
 | `{{GENERATED_AT}}`     | Generation timestamp (ISO 8601 or locale string) |
 | `{{UPDATE_COUNT}}`     | Total generation count                           |
 | `{{CARD_DESCRIPTION}}` | Card description text                            |
+
+## html-api-sdk Interaction (Optional)
+
+Cards can include optional UI actions that cooperate with Agent analysis:
+
+1. Build a "Generate Deep Analysis Prompt" action based on rendered card content.
+2. Send that prompt to Agent with `window.Magic.setInputMessage(prompt)`.
+3. If `window.Magic` is unavailable, show a readable fallback status message instead of failing silently.
+
+Recommended runtime guard:
+
+```javascript
+if (window.Magic && typeof window.Magic.setInputMessage === "function") {
+  window.Magic.setInputMessage(prompt);
+} else {
+  statusEl.textContent = "Magic API unavailable in current environment";
+}
+```
 
 ## Recommended Structure
 
@@ -121,7 +165,13 @@ Templates may use placeholder patterns that the agent replaces during generation
 
 ## History Snapshot Naming
 
-When archiving the current `latest.html` to `history/`, use the format:
+When archiving the current latest output to `history/`, prefer folder snapshots:
+
+```
+history/YYYY-MM-DD_HH-mm/index.html
+```
+
+Legacy single-file naming is still acceptable:
 
 ```
 history/YYYY-MM-DD_HH-mm.html

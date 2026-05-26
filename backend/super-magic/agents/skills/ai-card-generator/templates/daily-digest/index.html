@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{CARD_TITLE}}</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <article class="paper">
+        <header class="masthead analysis-source">
+            <h1>{{CARD_TITLE}}</h1>
+            <p class="sub">{{CARD_DESCRIPTION}}</p>
+            <div class="meta-row">
+                <span>{{GENERATED_AT}}</span>
+                <span>更新 #{{UPDATE_COUNT}}</span>
+                <span>窗口 昨日 00:00–23:59</span>
+            </div>
+        </header>
+
+        <div class="layout">
+            <section class="col">
+                <!-- DATA:executive_summary_START -->
+                <section class="block analysis-source">
+                    <h2>执行摘要</h2>
+                    <p class="lead">整体偏积极：收入与新增好于预期，但内容转化率和次日留存存在结构性压力。</p>
+                    <div class="bullet-list" style="margin-top:10px;">
+                        <div class="bullet-item"><span class="sub">1) 私域活动带动复购收入增长 19%，但新客首单承接不足。</span></div>
+                        <div class="bullet-item"><span class="sub">2) 竞品高价带优惠动作密集，短期存在拦截风险。</span></div>
+                        <div class="bullet-item"><span class="sub">3) 互动创新高，选题命中率好，但链路转化尚未同步。</span></div>
+                    </div>
+                </section>
+                <!-- DATA:executive_summary_END -->
+
+                <!-- DATA:metrics_START -->
+                <section class="block analysis-source">
+                    <h2>关键指标</h2>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <div class="group">Business</div>
+                            <div class="name">GMV</div>
+                            <div class="value">¥428K</div>
+                            <div class="delta up">日+12.4% / 周+18.1%</div>
+                            <div class="spark" data-series="320,334,345,362,380,396,428"></div>
+                        </div>
+                        <div class="metric">
+                            <div class="group">Business</div>
+                            <div class="name">订单数</div>
+                            <div class="value">3,842</div>
+                            <div class="delta warn">日+7.3% / 周+1.1%</div>
+                            <div class="spark" data-series="2920,3012,3088,3150,3296,3410,3842"></div>
+                        </div>
+                        <div class="metric">
+                            <div class="group">Users</div>
+                            <div class="name">新增用户</div>
+                            <div class="value">2,318</div>
+                            <div class="delta up">日+15.8% / 周+20.6%</div>
+                            <div class="spark" data-series="1450,1510,1630,1722,1844,2010,2318"></div>
+                        </div>
+                        <div class="metric">
+                            <div class="group">Users</div>
+                            <div class="name">次日留存</div>
+                            <div class="value">31.4%</div>
+                            <div class="delta down">日-2.1% / 周-0.6%</div>
+                            <div class="spark" data-series="35,34.8,34.2,33.7,33.2,32.8,31.4"></div>
+                        </div>
+                        <div class="metric">
+                            <div class="group">Content</div>
+                            <div class="name">互动量</div>
+                            <div class="value">96.2K</div>
+                            <div class="delta up">日+24.7% / 周+41.2%</div>
+                            <div class="spark" data-series="51,56,60,65,71,80,96"></div>
+                        </div>
+                        <div class="metric">
+                            <div class="group">Content</div>
+                            <div class="name">内容转化</div>
+                            <div class="value">2.8%</div>
+                            <div class="delta warn">日-0.3% / 周+0.2%</div>
+                            <div class="spark" data-series="2.4,2.6,2.7,2.9,3.0,2.9,2.8"></div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:metrics_END -->
+
+                <!-- DATA:highlights_START -->
+                <section class="block analysis-source">
+                    <h2>今日要事</h2>
+                    <div class="bullet-list">
+                        <div class="bullet-item"><span class="badge b-red">重大</span><strong>竞品 A 48h 限时折扣</strong>
+                            <div class="sub">建议当天调整对比型素材。</div>
+                        </div>
+                        <div class="bullet-item"><span class="badge b-yel">行业</span><strong>平台流量向长停留内容倾斜</strong>
+                            <div class="sub">深度测评和案例更易获曝光。</div>
+                        </div>
+                        <div class="bullet-item"><span class="badge b-green">竞品</span><strong>竞品 B 启用首单返券</strong>
+                            <div class="sub">建议同步测试轻激励。</div>
+                        </div>
+                        <div class="bullet-item"><span class="badge b-gray">一般</span><strong>客服反馈聚焦配送与售后入口</strong>
+                            <div class="sub">优化详情页 FAQ。</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:highlights_END -->
+            </section>
+
+            <aside class="col">
+                <!-- DATA:insights_START -->
+                <section class="block analysis-source">
+                    <h2>洞察与建议</h2>
+                    <div class="bullet-list">
+                        <div class="bullet-item"><strong>洞察 1</strong>
+                            <div class="sub">互动大幅提升但转化未跟进，建议增强内容到成交桥接。</div>
+                        </div>
+                        <div class="bullet-item"><strong>洞察 2</strong>
+                            <div class="sub">高客单竞争升温，建议服务与保障卖点前置。</div>
+                        </div>
+                        <div class="bullet-item"><strong>洞察 3</strong>
+                            <div class="sub">留存波动暴露承接断点，修复注册后 24h 链路。</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:insights_END -->
+
+                <!-- DATA:upcoming_START -->
+                <section class="block analysis-source">
+                    <h2>明日预告</h2>
+                    <div class="timeline">
+                        <div class="time-item"><strong>09:30 投放复盘会</strong>
+                            <div class="sub">确认高 CPA 素材替换方案。</div>
+                        </div>
+                        <div class="time-item"><strong>12:00 私域二次触达</strong>
+                            <div class="sub">高点击未下单用户激励提醒。</div>
+                        </div>
+                        <div class="time-item"><strong>18:00 竞品价格监控</strong>
+                            <div class="sub">预备跟价或错位策略。</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:upcoming_END -->
+
+                <!-- DATA:sources_START -->
+                <section class="block analysis-source">
+                    <h2>数据来源</h2>
+                    <div class="source-grid">
+                        <div class="source"><strong>业务</strong>
+                            <div class="sub">07:40 · 99.2%</div>
+                        </div>
+                        <div class="source"><strong>内容</strong>
+                            <div class="sub">07:55 · 97.8%</div>
+                        </div>
+                        <div class="source"><strong>情报</strong>
+                            <div class="sub">08:10 · 94.6%</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:sources_END -->
+
+                <section class="ai-insight">
+                    <div class="insight-header"><span class="insight-icon">✦</span><span>AI 洞察</span></div>
+                    <p class="insight-text">互动创新高但转化未跟进，说明内容共鸣强但成交桥接断裂；建议在爆款笔记评论区追加购买引导。</p>
+                    <div class="suggestion-chips">
+                        <button class="chip" type="button"
+                            data-prompt="分析互动高涨但转化不及预期的根因，给出内容→成交的优化链路。">互动高但转化低？</button>
+                        <button class="chip" type="button" data-prompt="竞品近期主要动作汇总，评估对我方用户和收入的短期影响。">竞品威胁评估</button>
+                        <button class="chip" type="button"
+                            data-prompt="基于今日数据，输出明日晨会可执行行动清单（含负责人和时间节点）。">生成晨会清单</button>
+                        <button class="chip" type="button"
+                            data-prompt="留存波动的结构性原因是什么？给出修复新手 24h 链路的具体方案。">留存为何波动？</button>
+                    </div>
+                    <div class="ask-row">
+                        <input class="ask-input" id="askInput" type="text" placeholder="还想问点别的...">
+                        <button class="ask-send" id="askSend" type="button">→</button>
+                    </div>
+                    <div class="config-row">
+                        <select class="select" id="agentSelect">
+                            <option value="">加载员工中…</option>
+                        </select>
+                        <select class="select" id="modelSelect">
+                            <option value="auto">自动选择</option>
+                        </select>
+                    </div>
+                    <div class="insight-status" id="insightStatus"></div>
+                </section>
+            </aside>
+        </div>
+    </article>
+    <script src="scripts.js"></script>
+</body>
+
+</html>
