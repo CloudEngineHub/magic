@@ -1,4 +1,9 @@
-import { GripHorizontal, Puzzle, X } from "lucide-react"
+import {
+	GripHorizontal,
+	Puzzle,
+	X,
+	CircleQuestionMark,
+} from "lucide-react"
 import {
 	forwardRef,
 	memo,
@@ -38,6 +43,7 @@ import {
 } from "../MessageEditor/reference-assets/reference-resource.types"
 import type { ReferenceResourcePanelItem, ReferenceResourcePanelSelectContext } from "../../types"
 import styles from "./index.module.css"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 
 const noop = () => undefined
 const PLUGIN_WINDOW_WIDTH = 420
@@ -745,6 +751,7 @@ const PluginWindow = memo(function PluginWindow({
 			<PluginWindowHeader
 				icon={pluginView.icon}
 				label={pluginView.label}
+				description={pluginView.description}
 				onClose={handleClose}
 				onPointerDown={handleHeaderPointerDown}
 				onPointerMove={handleHeaderPointerMove}
@@ -830,6 +837,7 @@ const PluginFilePicker = memo(function PluginFilePicker({
 const PluginWindowHeader = memo(function PluginWindowHeader({
 	icon,
 	label,
+	description,
 	onClose,
 	onPointerDown,
 	onPointerMove,
@@ -837,6 +845,7 @@ const PluginWindowHeader = memo(function PluginWindowHeader({
 }: {
 	icon: PluginView["icon"]
 	label: string
+	description: string
 	onClose: () => void
 	onPointerDown: PointerEventHandler<HTMLDivElement>
 	onPointerMove: PointerEventHandler<HTMLDivElement>
@@ -849,18 +858,31 @@ const PluginWindowHeader = memo(function PluginWindowHeader({
 			onPointerMove={onPointerMove}
 			onPointerUp={onPointerUp}
 		>
-			<GripHorizontal size={14} />
-			<div className={styles.pluginTitleIcon}>
-				{icon?.type === "emoji" ? (
-					icon.value
-				) : icon?.type === "image" ? (
-					<img className={styles.pluginTitleIconImage} src={icon.value} alt="" />
-				) : (
-					<Puzzle size={15} />
-				)}
-			</div>
-			<div className={styles.pluginWindowTitle} title={label}>
-				{label}
+			<div className={styles.pluginWindowHeaderContent}>
+				<GripHorizontal size={14} />
+				<div className={styles.pluginTitleIcon}>
+					{icon?.type === "emoji" ? (
+						icon.value
+					) : icon?.type === "image" ? (
+						<img className={styles.pluginTitleIconImage} src={icon.value} alt="" />
+					) : (
+						<Puzzle size={15} />
+					)}
+				</div>
+				<span className={styles.pluginWindowTitle} title={label}>
+					{label}
+				</span>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<button
+							type="button"
+							aria-label="Help"
+						>
+							<CircleQuestionMark size={16} />
+						</button>
+					</TooltipTrigger>
+					<TooltipContent>{description}</TooltipContent>
+				</Tooltip>
 			</div>
 			<button
 				type="button"
