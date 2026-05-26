@@ -1,4 +1,4 @@
-/* global MagicPluginKit, registerMagicCanvasPlugin */
+/* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
 const GENERATION_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
 const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => ({
@@ -30,7 +30,10 @@ const GENERATION_MODE_DEFINITIONS = [
 		labelFallback: "标准模式",
 		descriptionKey: "generationMode.standard.desc",
 		descriptionFallback: "适合常规商拍试衣样本，平衡效果稳定性与生成效率。",
-		promptSuffix: "Keep the apparel transfer natural, stable, and commercially polished.",
+		promptSuffix: {
+			zh: "保持服饰迁移自然、稳定，并达到商业可用的完成度。",
+			en: "Keep the apparel transfer natural, stable, and commercially polished.",
+		},
 	},
 	{
 		value: "advanced",
@@ -38,14 +41,18 @@ const GENERATION_MODE_DEFINITIONS = [
 		labelFallback: "高级模式",
 		descriptionKey: "generationMode.advanced.desc",
 		descriptionFallback: "增强面料纹理、针织结构、缝线、拉链、纽扣、边缘和褶皱等细节还原。",
-		promptSuffix:
-			"Apply realistic garment physics: natural folds, drape, tension, and contact around the bust, waist, hips, and side seams. Make fabric-aware dressing decisions: tuck, blouse, or leave loose based on garment type and waistband. For strappy or sleeveless garments, render realistic strap placement and hide incompatible undergarment traces. Preserve construction details: collar, neckline, ribbing, seams, buttons, zippers, pleats, and hems.",
+		promptSuffix: {
+			zh: "应用更真实的服装物理表现，包括胸部、腰部、臀部和侧缝周围的自然褶皱、垂坠、拉力与贴合。根据服装类型和腰线关系做出合理穿着判断，例如塞进下装、自然鼓出或自然垂落。对于吊带或无袖服饰，呈现真实的肩带位置，并避免不兼容的内搭痕迹。保留领口、领型、罗纹、缝线、纽扣、拉链、压褶和下摆等结构细节。",
+			en:
+				"Apply realistic garment physics: natural folds, drape, tension, and contact around the bust, waist, hips, and side seams. Make fabric-aware dressing decisions: tuck, blouse, or leave loose based on garment type and waistband. For strappy or sleeveless garments, render realistic strap placement and hide incompatible undergarment traces. Preserve construction details: collar, neckline, ribbing, seams, buttons, zippers, pleats, and hems.",
+		},
 	},
 ]
 
 registerMagicCanvasPlugin({
 	mount(ctx, root) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
+		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 		const garmentModes = GARMENT_MODE_OPTIONS.map((item) => ({
 			value: item.value,
 			label: t(item.labelKey, item.labelFallback),
@@ -239,6 +246,7 @@ registerMagicCanvasPlugin({
 							generationMode: state.generationMode,
 							hasTopGarment: Boolean(state.topGarmentImage),
 							hasBottomGarment: Boolean(state.bottomGarmentImage),
+							locale: promptLocale,
 						}),
 						reference_images: referenceImages,
 						size: `${width}x${height}`,
@@ -284,10 +292,52 @@ function getMaxReferenceImages(state, helpers) {
 	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 3
 }
 
-function buildDressUpTryOnPrompt({ garmentMode, generationMode, hasTopGarment, hasBottomGarment }) {
+function buildDressUpTryOnPrompt({ garmentMode, generationMode, hasTopGarment, hasBottomGarment, locale }) {
+	const isChinese = MagicPromptLocale.isChinese(locale)
 	const modeDefinition =
 		GENERATION_MODE_DEFINITIONS.find((item) => item.value === generationMode) ??
 		GENERATION_MODE_DEFINITIONS[1]
+	const modePromptSuffix = MagicPromptLocale.pickText(modeDefinition.promptSuffix, locale)
+
+	if (isChinese) {
+		if (garmentMode === "onePiece") {
+			return (
+				"虚拟试衣：让参考图 2 中的人物穿上参考图 1 的服饰。" +
+				"参考图 2 是底图，只编辑服装，其他内容包括裁切、姿势、构图、背景和光线都必须保持一致。" +
+				"最终仅输出参考图 2 中原本可见的身体部分，不要扩图或补全画面。" +
+				"服饰必须与参考图 1 在颜色、图案、面料、版型和结构细节上严格一致，不要复制参考图 1 中的人物。" +
+				modePromptSuffix
+			)
+		}
+
+		if (hasTopGarment && hasBottomGarment) {
+			return (
+				"虚拟试衣：让参考图 3 中的人物穿上参考图 1 的上装和参考图 2 的下装。" +
+				"参考图 3 是底图，只编辑服装，其他内容包括裁切、姿势、构图、背景和光线都必须保持一致。" +
+				"最终仅输出参考图 3 中原本可见的身体部分，不要扩图或补全画面。" +
+				"只替换参考图 3 中可见的服装区域。参考图 1 和参考图 2 的服饰必须在颜色、图案、面料、版型和结构细节上被准确还原，不要复制参考图 1 或参考图 2 中的人物。" +
+				modePromptSuffix
+			)
+		}
+
+		if (hasTopGarment) {
+			return (
+				"虚拟试衣：将参考图 2 中人物的上半身服装替换为参考图 1 的上装。" +
+				"参考图 2 是底图，只编辑上半身服装，其他内容包括裁切、姿势、构图、背景和光线都必须保持一致。" +
+				"最终仅输出参考图 2 中原本可见的身体部分，不要扩图或补全画面，并保持下半身服装不变。" +
+				"上装必须与参考图 1 在颜色、图案、面料、版型和结构细节上严格一致，不要复制参考图 1 中的人物。" +
+				modePromptSuffix
+			)
+		}
+
+		return (
+			"虚拟试衣：将参考图 2 中人物的下半身服装替换为参考图 1 的下装。" +
+			"参考图 2 是底图，只编辑下半身服装，其他内容包括裁切、姿势、构图、背景和光线都必须保持一致。" +
+			"最终仅输出参考图 2 中原本可见的身体部分，不要扩图或补全画面，并保持上半身服装不变。" +
+			"下装必须与参考图 1 在颜色、图案、面料、版型和结构细节上严格一致，不要复制参考图 1 中的人物。" +
+			modePromptSuffix
+		)
+	}
 
 	if (garmentMode === "onePiece") {
 		return (
@@ -295,7 +345,7 @@ function buildDressUpTryOnPrompt({ garmentMode, generationMode, hasTopGarment, h
 			"Reference image 2 is the base photo. Edit only the clothing; everything else — crop, pose, framing, background, lighting — must stay identical. " +
 			"Output only the body parts visible in reference image 2. Do not uncrop or expand the frame. " +
 			"Match the garment from reference image 1 exactly in color, pattern, fabric, silhouette, and construction. Do not copy the person from reference image 1. " +
-			modeDefinition.promptSuffix
+			modePromptSuffix
 		)
 	}
 
@@ -305,7 +355,7 @@ function buildDressUpTryOnPrompt({ garmentMode, generationMode, hasTopGarment, h
 			"Reference image 3 is the base photo. Edit only the clothing; everything else — crop, pose, framing, background, lighting — must stay identical. " +
 			"Output only the body parts visible in reference image 3. Do not uncrop or expand the frame. " +
 			"Replace only the garment regions visible in reference image 3. Match reference image 1 and reference image 2 exactly in color, pattern, fabric, silhouette, and construction. Do not copy the person from reference image 1 or reference image 2. " +
-			modeDefinition.promptSuffix
+			modePromptSuffix
 		)
 	}
 
@@ -315,7 +365,7 @@ function buildDressUpTryOnPrompt({ garmentMode, generationMode, hasTopGarment, h
 			"Reference image 2 is the base photo. Edit only the upper-body clothing; everything else — crop, pose, framing, background, lighting — must stay identical. " +
 			"Output only the body parts visible in reference image 2. Do not uncrop or expand the frame. Keep lower-body clothing unchanged. " +
 			"Match the top garment from reference image 1 exactly in color, pattern, fabric, silhouette, and construction. Do not copy the person from reference image 1. " +
-			modeDefinition.promptSuffix
+			modePromptSuffix
 		)
 	}
 
@@ -324,6 +374,6 @@ function buildDressUpTryOnPrompt({ garmentMode, generationMode, hasTopGarment, h
 		"Reference image 2 is the base photo. Edit only the lower-body clothing; everything else — crop, pose, framing, background, lighting — must stay identical. " +
 		"Output only the body parts visible in reference image 2. Do not uncrop or expand the frame. Keep upper-body clothing unchanged. " +
 		"Match the bottom garment from reference image 1 exactly in color, pattern, fabric, silhouette, and construction. Do not copy the person from reference image 1. " +
-		modeDefinition.promptSuffix
+		modePromptSuffix
 	)
 }

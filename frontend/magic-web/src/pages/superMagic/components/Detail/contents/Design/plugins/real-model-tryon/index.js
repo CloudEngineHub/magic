@@ -1,4 +1,4 @@
-/* global MagicPluginKit, registerMagicCanvasPlugin */
+/* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
 const GENERATION_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
 const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => ({
@@ -13,8 +13,11 @@ const GENERATION_MODE_DEFINITIONS = [
 		labelFallback: "标准模式",
 		descriptionKey: "generationMode.standard.desc",
 		descriptionFallback: "适合常规商拍试衣样本，平衡效果稳定性与生成效率。",
-		promptSuffix:
-			"Keep the apparel transfer natural, stable, and commercially polished for standard apparel try-on production usage.",
+		promptSuffix: {
+			zh: "保持服饰迁移自然、稳定，并达到常规商业试衣可用的完成度。",
+			en:
+				"Keep the apparel transfer natural, stable, and commercially polished for standard apparel try-on production usage.",
+		},
 	},
 	{
 		value: "advanced",
@@ -23,14 +26,18 @@ const GENERATION_MODE_DEFINITIONS = [
 		descriptionKey: "generationMode.advanced.desc",
 		descriptionFallback:
 			"增强单件上衣、下装、连衣裙的材质、针织、纹理、纽扣、拉链、缝线等细节还原。",
-		promptSuffix:
-			"Preserve fine garment details with higher fidelity, especially fabric texture, knit structure, seams, buttons, zippers, plackets, trim, folds, and edge transitions, while keeping the target model unchanged.",
+		promptSuffix: {
+			zh: "在保持目标模特不变的前提下，更高保真地保留服饰细节，尤其是面料纹理、针织结构、缝线、纽扣、拉链、门襟、装饰边、褶皱和边缘过渡。",
+			en:
+				"Preserve fine garment details with higher fidelity, especially fabric texture, knit structure, seams, buttons, zippers, plackets, trim, folds, and edge transitions, while keeping the target model unchanged.",
+		},
 	},
 ]
 
 registerMagicCanvasPlugin({
 	mount(ctx, root) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
+		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 		const generationModes = GENERATION_MODE_DEFINITIONS.map((item) => ({
 			value: item.value,
 			label: t(item.labelKey, item.labelFallback),
@@ -171,6 +178,7 @@ registerMagicCanvasPlugin({
 						prompt: buildRealModelTryOnPrompt({
 							generationMode: state.generationMode,
 							samePatternReplace: state.samePatternReplace,
+							locale: promptLocale,
 						}),
 						reference_images: referenceImages,
 						size: `${width}x${height}`,
@@ -203,15 +211,35 @@ function getMaxReferenceImages(state, helpers) {
 	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 2
 }
 
-function buildRealModelTryOnPrompt({ generationMode, samePatternReplace }) {
+function buildRealModelTryOnPrompt({ generationMode, samePatternReplace, locale }) {
+	const isChinese = MagicPromptLocale.isChinese(locale)
 	const modeDefinition =
 		GENERATION_MODE_DEFINITIONS.find((item) => item.value === generationMode) ??
 		GENERATION_MODE_DEFINITIONS[0]
-	const garmentReference = "reference image 1"
-	const modelReference = "reference image 2"
+	const garmentReference = MagicPromptLocale.getReferenceLabel(1, locale)
+	const modelReference = MagicPromptLocale.getReferenceLabel(2, locale)
 	const samePatternGuidance = samePatternReplace
-		? `If the garments in ${garmentReference} and ${modelReference} already share a similar pattern and silhouette, perform same-pattern clothing replacement on ${modelReference} and preserve fit alignment, folds, occlusion, and lighting continuity.`
-		: `Transfer the outfit from ${garmentReference} onto ${modelReference} naturally, adapting fit and drape to the body and pose of ${modelReference}.`
+		? isChinese
+			? `如果 ${garmentReference} 和 ${modelReference} 中的服装本身已经具有相近的版型与轮廓，请在 ${modelReference} 上执行同版替换，并保留版型贴合、褶皱、遮挡关系和光线连续性。`
+			: `If the garments in ${garmentReference} and ${modelReference} already share a similar pattern and silhouette, perform same-pattern clothing replacement on ${modelReference} and preserve fit alignment, folds, occlusion, and lighting continuity.`
+		: isChinese
+			? `将 ${garmentReference} 中的服饰自然迁移到 ${modelReference} 上，并根据 ${modelReference} 的身体和姿势调整贴合关系与垂坠效果。`
+			: `Transfer the outfit from ${garmentReference} onto ${modelReference} naturally, adapting fit and drape to the body and pose of ${modelReference}.`
+	const modePromptSuffix = MagicPromptLocale.pickText(modeDefinition.promptSuffix, locale)
+
+	if (isChinese) {
+		return (
+			`生成商业真人图试衣结果。仅将 ${garmentReference} 作为服装参考，仅将 ${modelReference} 作为人物和构图参考。` +
+			`保持 ${modelReference} 中的人物身份、脸部、发型、身体比例、姿势、机位构图、场景和光线不变。` +
+			`保持 ${modelReference} 中可见的画面范围、裁切边界和身体覆盖范围完全不变；如果 ${modelReference} 是半身、侧身或局部裁切，也必须保持相同的可见区域和透视关系。` +
+			`不要生成 ${modelReference} 中本来不可见的身体部位。` +
+			`将 ${garmentReference} 中完整可见的服装替换到 ${modelReference} 的人物身上，包括可见的上装、下装、连衣裙和外层服饰。` +
+			`服装必须与 ${garmentReference} 在颜色、印花、图案、面料、材质、版型、logo 位置、装饰边和结构细节上保持一致。` +
+			`不要复制 ${garmentReference} 中的人物、脸部、身体、姿势或场景；最终结果必须是 ${modelReference} 中的人穿上 ${garmentReference} 中的服装。` +
+			`${samePatternGuidance} ` +
+			modePromptSuffix
+		)
+	}
 
 	return (
 		`Create a commercial apparel virtual try-on image. Use ${garmentReference} only as the clothing reference. Use ${modelReference} only as the person and composition reference. ` +
@@ -222,6 +250,6 @@ function buildRealModelTryOnPrompt({ generationMode, samePatternReplace }) {
 		`Match the clothing from ${garmentReference} in color, print, pattern, fabric, material, silhouette, logo placement, trim, and construction details. ` +
 		`Do not copy the person, face, body, pose, or scene from ${garmentReference}. The final image must show the person from ${modelReference} wearing the clothing from ${garmentReference}. ` +
 		`${samePatternGuidance} ` +
-		modeDefinition.promptSuffix
+		modePromptSuffix
 	)
 }

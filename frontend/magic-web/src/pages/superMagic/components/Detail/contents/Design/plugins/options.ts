@@ -1,6 +1,7 @@
 import type { CanvasDesignPlugin } from "@/components/CanvasDesign/canvas/types"
 import magicPluginKitStyles from "./shared/magic-plugin-kit/styles.css?raw"
 import magicPluginKitRuntimeCode from "./shared/magic-plugin-kit/index.js?raw"
+import magicPromptLocaleRuntimeCode from "./shared/prompt-locale/index.js?raw"
 // eslint-disable-next-line import/extensions
 import bootsTryonStyles from "./boots-tryon/index.css?raw"
 import bootsTryonRuntimeCode from "./boots-tryon/index.js?raw"
@@ -53,6 +54,7 @@ const faceSwapEntryUrl = new URL("./face-swap/index.js", import.meta.url).href
 const faceSwapResourceBaseUrl = new URL("./face-swap/", import.meta.url).href
 const clothingColorChangeEntryUrl = new URL("./clothing-color-change/index.js", import.meta.url).href
 const clothingColorChangeResourceBaseUrl = new URL("./clothing-color-change/", import.meta.url).href
+const sharedPluginRuntimeCode = `${magicPluginKitRuntimeCode}\n\n${magicPromptLocaleRuntimeCode}`
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -70,7 +72,7 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		entry: `./dress-up-tryon/${dressUpTryonManifest.entry}`,
 		runtimeUrl: dressUpTryonEntryUrl,
 		resourceBaseUrl: dressUpTryonResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${dressUpTryonRuntimeCode}`,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${dressUpTryonRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, dressUpTryonStyles],
 		resolveResourceUrl: (path) => new URL(path, dressUpTryonResourceBaseUrl).href,
 		source: "builtin",
@@ -80,7 +82,7 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		entry: `./real-model-tryon/${realModelTryonManifest.entry}`,
 		runtimeUrl: realModelTryonEntryUrl,
 		resourceBaseUrl: realModelTryonResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${realModelTryonRuntimeCode}`,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${realModelTryonRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, realModelTryonStyles],
 		resolveResourceUrl: (path) => new URL(path, realModelTryonResourceBaseUrl).href,
 		source: "builtin",
@@ -90,7 +92,7 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		entry: `./boots-tryon/${bootsTryonManifest.entry}`,
 		runtimeUrl: bootsTryonEntryUrl,
 		resourceBaseUrl: bootsTryonResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${bootsTryonRuntimeCode}`,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${bootsTryonRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, bootsTryonStyles],
 		resolveResourceUrl: (path) => new URL(path, bootsTryonResourceBaseUrl).href,
 		source: "builtin",
@@ -100,7 +102,7 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		entry: `./scene-swap/${sceneSwapManifest.entry}`,
 		runtimeUrl: sceneSwapEntryUrl,
 		resourceBaseUrl: sceneSwapResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${sceneSwapRuntimeCode}`,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${sceneSwapRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, sceneSwapStyles],
 		resolveResourceUrl: (path) => new URL(path, sceneSwapResourceBaseUrl).href,
 		source: "builtin",
@@ -110,7 +112,7 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		entry: `./accessory-tryon/${accessoryTryonManifest.entry}`,
 		runtimeUrl: accessoryTryonEntryUrl,
 		resourceBaseUrl: accessoryTryonResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${accessoryTryonRuntimeCode}`,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${accessoryTryonRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, accessoryTryonStyles],
 		resolveResourceUrl: (path) => new URL(path, accessoryTryonResourceBaseUrl).href,
 		source: "builtin",
@@ -120,7 +122,7 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		entry: `./face-swap/${faceSwapManifest.entry}`,
 		runtimeUrl: faceSwapEntryUrl,
 		resourceBaseUrl: faceSwapResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${faceSwapRuntimeCode}`,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${faceSwapRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, faceSwapStyles],
 		resolveResourceUrl: (path) => new URL(path, faceSwapResourceBaseUrl).href,
 		source: "builtin",
@@ -130,7 +132,7 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		entry: `./model-swap/${modelSwapManifest.entry}`,
 		runtimeUrl: modelSwapEntryUrl,
 		resourceBaseUrl: modelSwapResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${modelSwapRuntimeCode}`,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${modelSwapRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, modelSwapStyles],
 		resolveResourceUrl: (path) => new URL(path, modelSwapResourceBaseUrl).href,
 		source: "builtin",
@@ -140,7 +142,7 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		entry: `./pose-swap/${poseSwapManifest.entry}`,
 		runtimeUrl: poseSwapEntryUrl,
 		resourceBaseUrl: poseSwapResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${poseSwapRuntimeCode}`,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${poseSwapRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, poseSwapStyles],
 		resolveResourceUrl: (path) => new URL(path, poseSwapResourceBaseUrl).href,
 		source: "builtin",
@@ -150,7 +152,7 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		entry: `./clothing-color-change/${clothingColorChangeManifest.entry}`,
 		runtimeUrl: clothingColorChangeEntryUrl,
 		resourceBaseUrl: clothingColorChangeResourceBaseUrl,
-		runtimeCode: `${magicPluginKitRuntimeCode}\n\n${clothingColorChangeRuntimeCode}`,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${clothingColorChangeRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, clothingColorChangeStyles],
 		resolveResourceUrl: (path) => new URL(path, clothingColorChangeResourceBaseUrl).href,
 		source: "builtin",

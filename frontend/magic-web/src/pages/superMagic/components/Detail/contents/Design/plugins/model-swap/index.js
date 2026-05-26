@@ -1,4 +1,4 @@
-/* global MagicPluginKit, registerMagicCanvasPlugin */
+/* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
 const GENERATION_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
 const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => ({
@@ -21,8 +21,11 @@ const PRESET_TARGET_MODEL_OPTIONS = [
 		labelFallback: "亚洲年轻女性",
 		descriptionKey: "preset.asianYoungFemale.desc",
 		descriptionFallback: "偏年轻的亚洲女性模特，肤色偏浅，适合干净明亮的商业人像。",
-		promptFragment:
-			"a young Asian female model with light skin tone, refined facial features, and a clean commercial beauty look",
+		promptFragment: {
+			zh: "年轻亚洲女性模特，浅肤色，五官精致，具备干净明亮的商业感",
+			en:
+				"a young Asian female model with light skin tone, refined facial features, and a clean commercial beauty look",
+		},
 	},
 	{
 		value: "blackYoungFemale",
@@ -30,8 +33,11 @@ const PRESET_TARGET_MODEL_OPTIONS = [
 		labelFallback: "黑人年轻女性",
 		descriptionKey: "preset.blackYoungFemale.desc",
 		descriptionFallback: "偏年轻的黑人女性模特，肤色较深，适合高级感编辑风格。",
-		promptFragment:
-			"a young Black female model with dark skin tone, confident facial features, and premium editorial presence",
+		promptFragment: {
+			zh: "年轻黑人女性模特，深肤色，五官鲜明，具备高级编辑感",
+			en:
+				"a young Black female model with dark skin tone, confident facial features, and premium editorial presence",
+		},
 	},
 	{
 		value: "whiteMatureFemale",
@@ -39,8 +45,11 @@ const PRESET_TARGET_MODEL_OPTIONS = [
 		labelFallback: "白人成熟女性",
 		descriptionKey: "preset.whiteMatureFemale.desc",
 		descriptionFallback: "成熟女性白人模特，气质优雅，适合高端商业形象。",
-		promptFragment:
-			"a mature white female model with elegant facial features, balanced skin tone, and high-end commercial styling",
+		promptFragment: {
+			zh: "成熟女性白人模特，五官优雅，肤色自然平衡，适合高端商业形象",
+			en:
+				"a mature white female model with elegant facial features, balanced skin tone, and high-end commercial styling",
+		},
 	},
 	{
 		value: "asianMatureMale",
@@ -48,8 +57,11 @@ const PRESET_TARGET_MODEL_OPTIONS = [
 		labelFallback: "亚洲成熟男性",
 		descriptionKey: "preset.asianMatureMale.desc",
 		descriptionFallback: "成熟亚洲男性模特，适合稳重高级的商业拍摄风格。",
-		promptFragment:
-			"a mature Asian male model with polished facial structure, natural skin tone, and luxury campaign presence",
+		promptFragment: {
+			zh: "成熟亚洲男性模特，面部轮廓利落，肤色自然，具备高级商业气质",
+			en:
+				"a mature Asian male model with polished facial structure, natural skin tone, and luxury campaign presence",
+		},
 	},
 	{
 		value: "blackMatureMale",
@@ -57,8 +69,11 @@ const PRESET_TARGET_MODEL_OPTIONS = [
 		labelFallback: "黑人成熟男性",
 		descriptionKey: "preset.blackMatureMale.desc",
 		descriptionFallback: "成熟黑人男性模特，面部结构鲜明，适合高级时尚视觉。",
-		promptFragment:
-			"a mature Black male model with strong facial structure, deep skin tone, and premium fashion presence",
+		promptFragment: {
+			zh: "成熟黑人男性模特，面部结构立体，深肤色，具备高端时尚表现力",
+			en:
+				"a mature Black male model with strong facial structure, deep skin tone, and premium fashion presence",
+		},
 	},
 	{
 		value: "whiteYoungMale",
@@ -66,8 +81,11 @@ const PRESET_TARGET_MODEL_OPTIONS = [
 		labelFallback: "白人年轻男性",
 		descriptionKey: "preset.whiteYoungMale.desc",
 		descriptionFallback: "偏年轻的白人男性模特，适合现代感商业服饰展示。",
-		promptFragment:
-			"a young white male model with bright skin tone, contemporary facial styling, and modern fashion presence",
+		promptFragment: {
+			zh: "年轻白人男性模特，肤色明亮，五官现代，具备当代时尚表现力",
+			en:
+				"a young white male model with bright skin tone, contemporary facial styling, and modern fashion presence",
+		},
 	},
 ]
 
@@ -82,6 +100,7 @@ registerMagicCanvasPlugin({
 			label: t(item.labelKey, item.labelFallback),
 			description: t(item.descriptionKey, item.descriptionFallback),
 		}))
+		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 
 		return MagicPluginKit.mount(ctx, root, {
 			panelClassName: "model-swap",
@@ -226,6 +245,7 @@ registerMagicCanvasPlugin({
 								hasTargetModelImage: Boolean(state.targetModelImage),
 								presetTargetModel: state.presetTargetModel,
 								handFootRepair: state.handFootRepair,
+								locale: promptLocale,
 							}),
 							reference_images: referenceImages,
 							size: `${width}x${height}`,
@@ -252,6 +272,7 @@ registerMagicCanvasPlugin({
 									hasTargetModelImage: Boolean(state.targetModelImage),
 									presetTargetModel: state.presetTargetModel,
 									handFootRepair: state.handFootRepair,
+									locale: promptLocale,
 								}),
 								reference_images: referenceImages,
 								size: `${width}x${height}`,
@@ -286,15 +307,15 @@ function getMaxReferenceImages(state, helpers) {
 	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 2
 }
 
-function buildReferenceLabelList(count) {
-	return Array.from({ length: count }, (_, index) => `reference image ${index + 1}`).join(", ")
+function buildReferenceLabelList(count, locale) {
+	return MagicPromptLocale.joinReferenceLabels(count, locale)
 }
 
-function getPresetTargetModelPrompt(presetTargetModel) {
-	return (
-		PRESET_TARGET_MODEL_OPTIONS.find((item) => item.value === presetTargetModel)?.promptFragment ??
-		""
-	)
+function getPresetTargetModelPrompt(presetTargetModel, locale) {
+	const promptFragment = PRESET_TARGET_MODEL_OPTIONS.find(
+		(item) => item.value === presetTargetModel,
+	)?.promptFragment
+	return MagicPromptLocale.pickText(promptFragment, locale)
 }
 
 function buildModelSwapPrompt({
@@ -302,19 +323,47 @@ function buildModelSwapPrompt({
 	hasTargetModelImage,
 	presetTargetModel,
 	handFootRepair,
+	locale,
 }) {
-	const baseReferences = buildReferenceLabelList(baseImageCount)
-	const targetModelReference = `reference image ${baseImageCount + 1}`
-	const presetPrompt = getPresetTargetModelPrompt(presetTargetModel)
+	const isChinese = MagicPromptLocale.isChinese(locale)
+	const baseReferences = buildReferenceLabelList(baseImageCount, locale)
+	const targetModelReference = MagicPromptLocale.getReferenceLabel(baseImageCount + 1, locale)
+	const presetPrompt = getPresetTargetModelPrompt(presetTargetModel, locale)
 	const identitySourcePrompt = hasTargetModelImage
-		? `Use ${targetModelReference} only as the identity reference for the new model's face, skin tone, apparent age, hairstyle, and overall human identity. Do not copy clothing, pose, background, or scene from ${targetModelReference}. `
+		? isChinese
+			? `仅将 ${targetModelReference} 作为新模特的人物身份参考，用于脸部特征、肤色、视觉年龄、发型和整体身份特征。不要复制 ${targetModelReference} 中的服装、姿势、背景或场景。 `
+			: `Use ${targetModelReference} only as the identity reference for the new model's face, skin tone, apparent age, hairstyle, and overall human identity. Do not copy clothing, pose, background, or scene from ${targetModelReference}. `
 		: ""
 	const presetSupplementPrompt = presetPrompt
 		? hasTargetModelImage
-			? `Use this preset only as supplementary guidance when it does not conflict with ${targetModelReference}: ${presetPrompt}. `
-			: `Create the new model with these target identity traits: ${presetPrompt}. `
+			? isChinese
+				? `仅在不与 ${targetModelReference} 冲突时，将该预设作为补充人物引导：${presetPrompt}。 `
+				: `Use this preset only as supplementary guidance when it does not conflict with ${targetModelReference}: ${presetPrompt}. `
+			: isChinese
+				? `请按照以下目标身份特征生成新模特：${presetPrompt}。 `
+				: `Create the new model with these target identity traits: ${presetPrompt}. `
 		: ""
-	const handFootRepairPrompt = handFootRepair ? HAND_FOOT_REPAIR_PROMPT : ""
+	const handFootRepairPrompt = handFootRepair
+		? isChinese
+			? "仔细修复手部和脚部，使最终人物具有自然的手指结构、连贯的手势、干净的手腕和脚踝过渡、正确的肢体对齐，并避免扭曲、重复或关节错位。 "
+			: HAND_FOOT_REPAIR_PROMPT
+		: ""
+
+	if (isChinese) {
+		return (
+			`使用 ${baseImageCount} 张原模特参考图生成商业换模特结果：${baseReferences}。` +
+			`将 ${baseReferences} 作为服饰、商品造型、姿势、身体位置、裁切、机位构图、场景、背景、光线和时尚商拍真实感的唯一来源。` +
+			"将原人物替换为新的目标模特，同时保持原参考图中的服装、商品展示、场景氛围和构图一致。" +
+			"保持可见身体范围、裁切边界、取景、拍摄距离和透视关系不变。不要扩图、补画，或生成原图里不可见的身体部位。" +
+			"保留原参考图中的服饰穿着方式、可见配饰、面料垂坠、手部与商品的相对位置，以及所有非人物场景元素。" +
+			identitySourcePrompt +
+			presetSupplementPrompt +
+			"如果提供了多张原模特图，请融合成一张风格统一、细节一致、具备同一系列感的结果。" +
+			"最终只生成一个人物，不要出现多人、重复脸部或身体拼接。" +
+			"除非为了让换模特结果更自然可信，否则不要改变服装设计、商品轮廓、镜头角度、场景类型或裁切方式。" +
+			handFootRepairPrompt
+		)
+	}
 
 	return (
 		`Create a commercial model-swap image using ${baseImageCount} original model reference image${baseImageCount > 1 ? "s" : ""}: ${baseReferences}. ` +

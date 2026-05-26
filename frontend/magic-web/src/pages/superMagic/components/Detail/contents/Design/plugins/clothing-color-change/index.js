@@ -526,6 +526,7 @@ function createBodyPartTagsSection({ state, setState, t }) {
 registerMagicCanvasPlugin({
 	mount(ctx, root) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
+		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 
 		// 获取面板根节点（kit 挂载后写入）
 		let panelEl = null
@@ -661,6 +662,7 @@ registerMagicCanvasPlugin({
 								count: state.genCount,
 								bodyPart: state.bodyPart.trim(),
 								color: state.color,
+								locale: promptLocale,
 							}),
 						)
 					}
@@ -680,6 +682,7 @@ registerMagicCanvasPlugin({
 									count: 1,
 									bodyPart: state.bodyPart.trim(),
 									color: state.color,
+									locale: promptLocale,
 								}),
 							),
 						)
@@ -704,11 +707,11 @@ registerMagicCanvasPlugin({
 
 // ── 请求构建 ──────────────────────────────────────────────────────────────────
 
-function buildColorChangeRequest({ modelId, baseImage, helpers, width, height, resolution, count, bodyPart, color }) {
+function buildColorChangeRequest({ modelId, baseImage, helpers, width, height, resolution, count, bodyPart, color, locale }) {
 	const referenceImages = helpers.collectReferenceIds([baseImage])
 	return {
 		model_id: modelId,
-		prompt: buildColorChangePrompt(bodyPart, color),
+		prompt: buildColorChangePrompt(bodyPart, color, locale),
 		reference_images: referenceImages,
 		size: `${width}x${height}`,
 		resolution,
@@ -719,8 +722,17 @@ function buildColorChangeRequest({ modelId, baseImage, helpers, width, height, r
 	}
 }
 
-function buildColorChangePrompt(bodyPart, color) {
+function buildColorChangePrompt(bodyPart, color, locale) {
 	const colorDesc = color.name ? `${color.name} (${color.hex})` : color.hex
+	if (MagicPromptLocale.isChinese(locale)) {
+		return (
+			`将模特身上${bodyPart}的颜色改为 ${colorDesc}。` +
+			"严格保留服装轮廓、面料纹理、模特姿势、肤色、发型、脸部特征、背景场景，以及目标服装部位以外的所有区域。" +
+			"最终画面必须只出现一个人物，不要生成拼贴、对比排版或多人构图。" +
+			"最终结果应自然、真实，并具备专业商业棚拍质感。"
+		)
+	}
+
 	return (
 		`Change the color of the ${bodyPart} on the model to ${colorDesc}. ` +
 		"Strictly preserve the garment silhouette, fabric texture, model pose, skin tone, hairstyle, facial features, background scene, and every area outside the target garment part. " +

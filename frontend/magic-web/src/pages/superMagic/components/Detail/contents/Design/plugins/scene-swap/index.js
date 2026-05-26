@@ -1,4 +1,4 @@
-/* global MagicPluginKit, registerMagicCanvasPlugin */
+/* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
 const GENERATION_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
 const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => ({
@@ -9,6 +9,7 @@ const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => (
 registerMagicCanvasPlugin({
 	mount(ctx, root) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
+		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 
 		return MagicPluginKit.mount(ctx, root, {
 			panelClassName: "scene-swap",
@@ -223,6 +224,7 @@ registerMagicCanvasPlugin({
 								state,
 								helpers,
 								baseImage: state.modelImages[0],
+								locale: promptLocale,
 								selectedSize,
 								count: state.genCount,
 							}),
@@ -238,6 +240,7 @@ registerMagicCanvasPlugin({
 									state,
 									helpers,
 									baseImage,
+									locale: promptLocale,
 									selectedSize,
 									count: 1,
 								}),
@@ -394,7 +397,7 @@ function resolveSelectedQualityValue(state, helpers) {
 		: options[0].value
 }
 
-function buildSceneSwapRequest({ state, helpers, baseImage, selectedSize, count }) {
+function buildSceneSwapRequest({ state, helpers, baseImage, locale, selectedSize, count }) {
 	const referenceAssets = getReferenceAssetsForBaseImage(state, baseImage)
 	const referenceImages = helpers.collectReferenceIds(referenceAssets)
 	const imageGenerationConfig = state.qualityMode
@@ -406,6 +409,7 @@ function buildSceneSwapRequest({ state, helpers, baseImage, selectedSize, count 
 		prompt: buildSceneSwapPrompt({
 			backgroundMode: state.backgroundMode,
 			backgroundPrompt: state.backgroundPrompt,
+			locale,
 			modelImageCount: 1,
 		}),
 		reference_images: referenceImages,
@@ -421,13 +425,36 @@ function buildSceneSwapRequest({ state, helpers, baseImage, selectedSize, count 
 	}
 }
 
-function buildReferenceLabelList(count) {
-	return Array.from({ length: count }, (_, index) => `reference image ${index + 1}`).join(", ")
-}
+function buildSceneSwapPrompt({ backgroundMode, backgroundPrompt, locale, modelImageCount }) {
+	const isChinese = MagicPromptLocale.isChinese(locale)
+	const modelReferences = MagicPromptLocale.joinReferenceLabels(modelImageCount, locale)
+	const backgroundReference = MagicPromptLocale.getReferenceLabel(modelImageCount + 1, locale)
 
-function buildSceneSwapPrompt({ backgroundMode, backgroundPrompt, modelImageCount }) {
-	const modelReferences = buildReferenceLabelList(modelImageCount)
-	const backgroundReference = `reference image ${modelImageCount + 1}`
+	if (isChinese) {
+		if (backgroundMode === "image") {
+			return (
+				`使用 ${modelImageCount} 张模特参考图生成商业模拍换景结果：${modelReferences}。` +
+				"保留模特身份、服饰、姿态、身体比例以及整体商拍真实感。" +
+				`将环境替换为遵循 ${backgroundReference} 的场景，复用其空间结构、景深、布光氛围、色彩基调和主要背景元素，同时保持主体干净自然。`
+			)
+		}
+
+		if (backgroundMode === "prompt") {
+			return (
+				`使用 ${modelImageCount} 张模特参考图生成商业模拍换景结果：${modelReferences}。` +
+				"保留模特身份、服饰、姿态、身体比例以及时尚摄影真实感。" +
+				`根据以下描述生成全新背景：${backgroundPrompt.trim()}。` +
+				"保证最终画面的透视、光线、阴影和氛围一致，同时让人物保持主体地位。"
+			)
+		}
+
+		return (
+			`生成商业模拍换景图。使用 ${modelImageCount} 张模特参考图（${modelReferences}）作为人物唯一来源，保留其身份、服饰、姿态、身体比例和商拍真实感。` +
+			`${backgroundReference} 仅作为背景提取参考图，复用其环境、场景布局、背景物体、空间深度、透视关系、光线方向、色彩风格、阴影表现和整体氛围。` +
+			`不要复制 ${backgroundReference} 中的人物、脸部、身体、姿势、服装或身份，也不要把其中任何主体合并或重复到最终结果里。` +
+			`请将 ${modelReferences} 中的模特自然融合进一个受 ${backgroundReference} 启发的新背景中，保证光影一致、接触阴影自然、边缘过渡干净。`
+		)
+	}
 
 	if (backgroundMode === "image") {
 		return (
