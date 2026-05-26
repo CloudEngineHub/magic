@@ -32,6 +32,11 @@ final class MagicBaseExceptionBuilder
         ExceptionBuilder::throw(MagicBaseErrorCode::AccessDenied, 'magicbase.access_denied', ['message' => $message]);
     }
 
+    public static function storageUnavailable(string $message): void
+    {
+        ExceptionBuilder::throw(MagicBaseErrorCode::StorageUnavailable, 'magicbase.storage_unavailable', ['message' => $message]);
+    }
+
     public static function relationInvalid(string $label): void
     {
         ExceptionBuilder::throw(MagicBaseErrorCode::RelationInvalid, 'common.invalid', ['label' => $label]);

@@ -34,6 +34,7 @@ readonly class MagicBaseRowQueryCriteriaDomainService
     ): MagicBaseRowQuery {
         return new MagicBaseRowQuery(
             $organizationCode,
+            (int) $table->getProjectId(),
             (int) $table->getId(),
             $filters,
             $sorts,

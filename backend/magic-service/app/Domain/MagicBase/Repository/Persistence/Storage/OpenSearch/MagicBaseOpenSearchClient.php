@@ -100,7 +100,7 @@ class MagicBaseOpenSearchClient
     /**
      * @return list<array<string, mixed>>
      */
-    public function searchRows(string $index, string $organizationCode, int $tableId, bool $includeDeleted): array
+    public function searchRows(string $index, string $organizationCode, int $projectId, int $tableId, bool $includeDeleted): array
     {
         if (! $this->indexExists($index)) {
             return [];
@@ -108,6 +108,7 @@ class MagicBaseOpenSearchClient
 
         $filters = [
             ['term' => ['organization_code' => $organizationCode]],
+            ['term' => ['project_id' => $projectId]],
             ['term' => ['table_id' => $tableId]],
         ];
         if (! $includeDeleted) {
@@ -230,6 +231,7 @@ class MagicBaseOpenSearchClient
     {
         $filters = [
             ['term' => ['organization_code' => $query->getOrganizationCode()]],
+            ['term' => ['project_id' => $query->getProjectId()]],
             ['term' => ['table_id' => $query->getTableId()]],
         ];
         if (! $query->includeDeleted()) {

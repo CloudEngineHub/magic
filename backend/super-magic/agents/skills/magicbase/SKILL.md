@@ -72,6 +72,98 @@ function canEdit(row) {
 
 ---
 
+## MagicBase Dynamic Permissions
+
+MagicBase `dynamic_permissions` are the backend security boundary. Frontend filters, hidden buttons, and `canEdit()` checks are only product experience safeguards. They must not be treated as the only permission control when the user asks for private or owner-only data.
+
+When the user says that each person can only see their own data, only edit their own data, "my data", personal private data, creator-only access, owner-only access, or similar requirements, `create_magicbase_table` must include row-level `private_user` dynamic permissions:
+
+Pass `dynamic_permissions` as a nested object in the tool arguments, not as a JSON string. Do not stringify it or wrap the object in quotes. If the tool rejects `dynamic_permissions` with "expected object", retry with the same permission intent as an object; do not remove the permission field or fall back to a public table.
+
+```json
+{
+  "dynamic_permissions": {
+    "table": {
+      "read_scope": "public",
+      "insert_scope": "public"
+    },
+    "row": {
+      "read_scope": "private_user",
+      "edit_scope": "private_user",
+      "delete_scope": "private_user"
+    },
+    "columns": {}
+  }
+}
+```
+
+Still store stable business identity fields such as `creator_user_id`, `creator_name`, `owner_user_id`, and `owner_name` when the app needs display, filtering, or UI permission checks. HTML should still query with filters such as `creator_user_id: context.userId` for better user experience, but that filter is not the security boundary. The backend boundary is MagicBase `dynamic_permissions`.
+
+Scope selection:
+
+- `public`: public collaborative data that every permitted project user may access.
+- `private_user`: only the row creator may read, edit, or delete. Use this for personal todos, personal records, my applications, my drafts, and owner-only data.
+- `private_department`: users may access rows created by people in overlapping departments. Use only when the user explicitly asks for department-level isolation.
+- `private_org`: users in the same organization may access the data. Use for organization-shared data.
+- `disabled`: dynamic permissions do not grant access; use only when the app intentionally relies on static permissions or administrators.
+
+Correct `create_magicbase_table` pattern for personal todos:
+
+```json
+{
+  "table_key": "tasks",
+  "table_name": "Tasks",
+  "description": "Personal todo tasks",
+  "columns": [
+    {
+      "column_key": "title",
+      "column_name": "Title",
+      "data_type": "text",
+      "is_required": true
+    },
+    {
+      "column_key": "status",
+      "column_name": "Status",
+      "data_type": "single_select",
+      "is_required": true,
+      "default_value": "pending",
+      "options": [
+        { "label": "Pending", "value": "pending", "color": "blue" },
+        { "label": "Completed", "value": "completed", "color": "green" }
+      ]
+    },
+    {
+      "column_key": "creator_user_id",
+      "column_name": "Creator User ID",
+      "data_type": "text",
+      "is_required": true
+    },
+    {
+      "column_key": "creator_name",
+      "column_name": "Creator Name",
+      "data_type": "text",
+      "is_required": true
+    }
+  ],
+  "dynamic_permissions": {
+    "table": {
+      "read_scope": "public",
+      "insert_scope": "public"
+    },
+    "row": {
+      "read_scope": "private_user",
+      "edit_scope": "private_user",
+      "delete_scope": "private_user"
+    },
+    "columns": {}
+  }
+}
+```
+
+If `query_magicbase_tables` or `get_magicbase_table` finds an existing table whose row permissions are `public`, do not claim that backend private permissions are already enforced. If there is no tool available to update table dynamic permissions, explain that the current implementation can only add frontend filtering and UI checks for the existing table, and recommend adding a MagicBase permission-update tool before claiming full backend enforcement.
+
+---
+
 ## MagicBase Runtime Database API (`window.Magic.db`)
 
 The HTML runtime database API only supports row-level operations on existing MagicBase tables. It does not create tables, create columns, or manage schema.

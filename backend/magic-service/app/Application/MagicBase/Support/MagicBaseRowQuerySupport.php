@@ -143,7 +143,7 @@ readonly class MagicBaseRowQuerySupport
      * @param array<string, array<string, mixed>> $filters
      * @return array<string, array<string, mixed>>
      */
-    public function resolveFiltersForOpenSearch(
+    public function resolveFiltersForRowStorage(
         MagicUserAuthorization $authorization,
         int $projectId,
         MagicBaseTableEntity $table,
@@ -176,7 +176,7 @@ readonly class MagicBaseRowQuerySupport
     /**
      * @param list<array{field?: string, order?: 'asc'|'desc'|string}> $sorts
      */
-    public function assertSortableByOpenSearch(array $sorts): void
+    public function assertSortableByRowStorage(array $sorts): void
     {
         foreach ($sorts as $sort) {
             $field = (string) ($sort['field'] ?? '');
@@ -185,7 +185,7 @@ readonly class MagicBaseRowQuerySupport
             }
             $suggestion = 'denormalize relation field into source table, for example customer_name, then sort by customer_name';
             $message = sprintf(
-                '暂不支持关联字段排序: %s。原因: 当前 OpenSearch 查询只在主表索引执行，无法直接按关联表字段排序。建议: 在主表冗余 customer_name 字段，并改用 customer_name 排序。',
+                '暂不支持关联字段排序: %s。原因: 当前行存储查询只在主表执行，无法直接按关联表字段排序。建议: 在主表冗余 customer_name 字段，并改用 customer_name 排序。',
                 $field
             );
             throw new MagicBaseUnsupportedQueryException($message, [
@@ -207,9 +207,9 @@ readonly class MagicBaseRowQuerySupport
         };
     }
 
-    public function getRowOrFail(MagicUserAuthorization $authorization, int $tableId, int $recordId): MagicBaseRowEntity
+    public function getRowOrFail(MagicUserAuthorization $authorization, int $projectId, int $tableId, int $recordId): MagicBaseRowEntity
     {
-        $row = $this->rowStorageResolver->getRow($authorization->getOrganizationCode(), $tableId, $recordId);
+        $row = $this->rowStorageResolver->getRow($authorization->getOrganizationCode(), $projectId, $tableId, $recordId);
         if ($row === null || $row->getDeleted()) {
             $this->notFound('记录');
         }
@@ -254,7 +254,7 @@ readonly class MagicBaseRowQuerySupport
             [$relation->getTargetColumnKey() => ['in' => $sourceValues]],
             [],
             1,
-            max(1, (int) config('magicbase.opensearch.search_size', 10000)),
+            max(1, (int) config('magicbase.row_storage.search_size', 10000)),
             false,
             $this->accessControl->getStaticReadableRecordIds($targetContext),
         );
@@ -314,7 +314,7 @@ readonly class MagicBaseRowQuerySupport
             [$relation->getTargetColumnKey() => ['eq' => $sourceValue]],
             [],
             1,
-            max(1, (int) config('magicbase.opensearch.search_size', 10000)),
+            max(1, (int) config('magicbase.row_storage.search_size', 10000)),
             false,
             $this->accessControl->getStaticReadableRecordIds($targetContext),
         );
@@ -364,7 +364,7 @@ readonly class MagicBaseRowQuerySupport
             [$relationField => ['eq' => $condition['eq']]],
             [],
             1,
-            max(1, (int) config('magicbase.opensearch.search_size', 10000)),
+            max(1, (int) config('magicbase.row_storage.search_size', 10000)),
             false,
             $this->accessControl->getStaticReadableRecordIds($targetContext),
         );

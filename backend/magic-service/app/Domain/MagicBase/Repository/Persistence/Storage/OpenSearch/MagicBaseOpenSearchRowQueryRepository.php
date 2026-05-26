@@ -20,8 +20,9 @@ readonly class MagicBaseOpenSearchRowQueryRepository implements MagicBaseRowQuer
     ) {
     }
 
-    public function getRow(string $organizationCode, int $tableId, int $recordId): ?MagicBaseRowEntity
+    public function getRow(string $organizationCode, int $projectId, int $tableId, int $recordId): ?MagicBaseRowEntity
     {
+        unset($projectId);
         $index = $this->client->indexName($organizationCode, $tableId);
         $source = $this->client->getRow($index, (string) $recordId);
 
@@ -41,10 +42,11 @@ readonly class MagicBaseOpenSearchRowQueryRepository implements MagicBaseRowQuer
     }
 
     /** @return MagicBaseEntityCollection<MagicBaseRowEntity> */
-    public function listRows(string $organizationCode, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection
+    public function listRows(string $organizationCode, int $projectId, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection
     {
+        unset($projectId);
         $index = $this->client->indexName($organizationCode, $tableId);
-        $rows = $this->client->searchRows($index, $organizationCode, $tableId, $includeDeleted);
+        $rows = $this->client->searchRows($index, $organizationCode, $projectId, $tableId, $includeDeleted);
         $entities = [];
         foreach ($rows as $row) {
             $entities[] = new MagicBaseRowEntity($row);

@@ -14,10 +14,10 @@ use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQueryResult;
 
 interface MagicBaseRowQueryRepositoryInterface
 {
-    public function getRow(string $organizationCode, int $tableId, int $recordId): ?MagicBaseRowEntity;
+    public function getRow(string $organizationCode, int $projectId, int $tableId, int $recordId): ?MagicBaseRowEntity;
 
     public function queryRows(MagicBaseRowQuery $query): MagicBaseRowQueryResult;
 
     /** @return MagicBaseEntityCollection<MagicBaseRowEntity> */
-    public function listRows(string $organizationCode, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection;
+    public function listRows(string $organizationCode, int $projectId, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection;
 }
