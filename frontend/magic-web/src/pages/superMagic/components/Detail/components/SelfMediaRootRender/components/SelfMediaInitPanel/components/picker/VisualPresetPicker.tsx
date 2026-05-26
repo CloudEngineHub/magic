@@ -148,6 +148,25 @@ function PresetThumbnail({ value }: { value: string }) {
 				</div>
 			)
 
+		case "product-launch-preset":
+			// White background, 6px red top bar, black text + red accent
+			return (
+				<div className="relative h-full w-full overflow-hidden rounded-md bg-white">
+					{/* Top red accent bar */}
+					<div className="absolute left-0 right-0 top-0 h-[3px] bg-[#E63946]" />
+					{/* Content */}
+					<div className="relative z-[1] flex flex-col gap-[3px] px-1.5 pt-2.5">
+						{/* Badge */}
+						<div className="h-[4px] w-[25%] rounded-[1px] bg-[#111]" />
+						{/* Title */}
+						<div className="mt-0.5 h-[3px] w-[60%] rounded-full bg-[#111]" />
+						<div className="h-[2px] w-[35%] rounded-full bg-[#E63946]" />
+						{/* Image container */}
+						<div className="mt-1 h-4 w-full rounded-[3px] border border-[#EBEBEB] bg-[#F5F5F7]" />
+					</div>
+				</div>
+			)
+
 		case "custom":
 			return (
 				<div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-md bg-white">

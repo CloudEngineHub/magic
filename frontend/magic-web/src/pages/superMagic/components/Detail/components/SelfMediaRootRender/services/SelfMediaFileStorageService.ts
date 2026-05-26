@@ -18,7 +18,6 @@ const BRAND_CONFIG_DIR = "__brand"
 const BRAND_CONFIG_JSON = "brand-config.json"
 const BRAND_CONFIG_IMAGES_DIR = "brand-images"
 const DRAFT_JSON = "draft.json"
-const DRAFT_MD = "draft.md"
 const REFERENCE_INDEX_JSON = "reference-index.json"
 const DRAFT_MATERIALS_DIR = "draft-materials"
 const BRAND_IMAGES_DIR = "brand-images"
@@ -91,7 +90,9 @@ interface SerializedArticle {
 	notes: string
 	platform?: string
 	description?: string
+	descriptionJson?: Record<string, unknown>
 	visualReferenceFiles?: SerializedReferenceFile[]
+	visualDescriptionJson?: Record<string, unknown>
 }
 
 interface SerializedOutlineNode {
@@ -272,15 +273,6 @@ export class SelfMediaFileStorageService {
 				DRAFT_JSON,
 				JSON.stringify(payload, null, 2),
 			)
-			const archiveMarkdownFileId = await this.createAndWriteFile(
-				archiveDir,
-				DRAFT_MD,
-				this.buildMarkdown(archiveSnapshot, {
-					currentStep,
-					createdAt: payload.createdAt,
-					updatedAt: now,
-				}),
-			)
 			const archiveReferenceIndexFileId = await this.createAndWriteFile(
 				archiveDir,
 				REFERENCE_INDEX_JSON,
@@ -289,7 +281,6 @@ export class SelfMediaFileStorageService {
 			if (
 				!manifestFileId ||
 				!archiveDraftFileId ||
-				!archiveMarkdownFileId ||
 				!archiveReferenceIndexFileId
 			) {
 				return null
@@ -337,14 +328,12 @@ export class SelfMediaFileStorageService {
 		try {
 			const files = await this.getProjectFileList()
 			const draftJsonPath = this.getDraftJsonRelativePath()
-			const draftMdPath = this.getDraftMdRelativePath()
 			const referenceIndexPath = this.getReferenceIndexRelativePath()
 			const draftFiles = files.filter((f) => {
 				if (f.is_directory || !f.relative_file_path) return false
 				const normalized = this.normalizeRelativePath(f.relative_file_path)
 				return (
 					normalized === draftJsonPath ||
-					normalized === draftMdPath ||
 					normalized === referenceIndexPath
 				)
 			})
@@ -404,15 +393,6 @@ export class SelfMediaFileStorageService {
 			`${id}.json`,
 			JSON.stringify(payload, null, 2),
 		)
-
-		// Write MD (human-readable)
-		if (jsonFileId) {
-			await this.createAndWriteFile(
-				templatesDir,
-				`${id}.md`,
-				this.buildMarkdown(data, { name, createdAt: now, updatedAt: now }),
-			)
-		}
 
 		// Upload materials for template
 		await this.uploadTemplateMaterials(data.articles, id)
@@ -743,15 +723,6 @@ export class SelfMediaFileStorageService {
 		return this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_JSON}`)
 	}
 
-	private getDraftMdRelativePath(): string {
-		if (this.folderRelativePath) {
-			return this.normalizeRelativePath(
-				`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MD}`,
-			)
-		}
-		return this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MD}`)
-	}
-
 	private getReferenceIndexRelativePath(): string {
 		if (this.folderRelativePath) {
 			return this.normalizeRelativePath(
@@ -806,38 +777,24 @@ export class SelfMediaFileStorageService {
 	}
 
 	private async persistDraft(data: SelfMediaInitData, currentStep: number): Promise<void> {
-		try {
-			const now = new Date().toISOString()
+		const now = new Date().toISOString()
 
-			await this.ensureBrandImagesUploaded(data.global.brandImages)
-			await this.ensureDraftMaterialsUploaded(data.articles)
+		await this.ensureBrandImagesUploaded(data.global.brandImages)
+		await this.ensureDraftMaterialsUploaded(data.articles)
 
-			const payload = await this.buildDraftPayload(data, currentStep, now)
-			const referenceIndex = this.buildReferenceIndexPayload(data, now)
+		const payload = await this.buildDraftPayload(data, currentStep, now)
+		const referenceIndex = this.buildReferenceIndexPayload(data, now)
 
-			const draftsDir = await this.ensureDirectory(this.getBasePath())
+		const draftsDir = await this.ensureDirectory(this.getBasePath())
 
-			// Write draft.json
-			await this.createAndWriteFile(draftsDir, DRAFT_JSON, JSON.stringify(payload, null, 2))
+		// Write draft.json
+		await this.createAndWriteFile(draftsDir, DRAFT_JSON, JSON.stringify(payload, null, 2))
 
-			// Write draft.md (human-readable)
-			await this.createAndWriteFile(
-				draftsDir,
-				DRAFT_MD,
-				this.buildMarkdown(data, {
-					currentStep,
-					createdAt: payload.createdAt,
-					updatedAt: now,
-				}),
-			)
-			await this.createAndWriteFile(
-				draftsDir,
-				REFERENCE_INDEX_JSON,
-				JSON.stringify(referenceIndex, null, 2),
-			)
-		} catch {
-			// Silent failure - don't block the user
-		}
+		await this.createAndWriteFile(
+			draftsDir,
+			REFERENCE_INDEX_JSON,
+			JSON.stringify(referenceIndex, null, 2),
+		)
 	}
 
 	private async ensureDirectory(path: string): Promise<string> {
@@ -891,11 +848,16 @@ export class SelfMediaFileStorageService {
 					if (existing?.file_id) {
 						this.dirCache.set(currentPath, existing.file_id)
 						currentParentId = existing.file_id
+					} else {
+						throw new Error(`Failed to resolve directory: ${currentPath}`)
 					}
 				}
 			}
 
-			return currentParentId || ""
+			if (!currentParentId) {
+				throw new Error(`Failed to resolve directory: ${path}`)
+			}
+			return currentParentId
 		}
 
 		const promise = doCreate()
@@ -1324,6 +1286,7 @@ export class SelfMediaFileStorageService {
 			notes: article.notes,
 			platform: article.platform,
 			description: article.description,
+			descriptionJson: article.descriptionJson as Record<string, unknown> | undefined,
 			visualReferenceFiles: (article.visualReferenceFiles || []).map((f) => ({
 				name: f.name,
 				content: f.content,
@@ -1331,6 +1294,7 @@ export class SelfMediaFileStorageService {
 				file_id: f.file_id,
 				file_path: f.file_path,
 			})),
+			visualDescriptionJson: article.visualDescriptionJson as Record<string, unknown> | undefined,
 		}))
 	}
 
@@ -1469,6 +1433,8 @@ export class SelfMediaFileStorageService {
 				notes: a.notes,
 				platform: a.platform as any,
 				description: a.description,
+				descriptionJson: a.descriptionJson,
+				visualDescriptionJson: a.visualDescriptionJson,
 				visualReferenceFiles: Array.isArray(a.visualReferenceFiles)
 					? a.visualReferenceFiles.map((f) => ({
 						name: f.name || "file",
@@ -1533,92 +1499,5 @@ export class SelfMediaFileStorageService {
 			})
 
 		return normalize(nodes)
-	}
-
-	// ─── Markdown Builder ────────────────────────────────────────────────────
-
-	private buildMarkdown(
-		data: SelfMediaInitData,
-		meta: { name?: string; currentStep?: number; createdAt: string; updatedAt: string },
-	): string {
-		const lines: string[] = []
-
-		// Frontmatter
-		lines.push("---")
-		lines.push("version: 1")
-		if (meta.name) lines.push(`name: "${meta.name}"`)
-		lines.push(`created_at: ${meta.createdAt}`)
-		lines.push(`updated_at: ${meta.updatedAt}`)
-		if (meta.currentStep !== undefined) lines.push(`current_step: ${meta.currentStep}`)
-		lines.push(`author: "${data.global.author}"`)
-		lines.push(`brand_position: "${data.global.brandPosition}"`)
-		if (data.global.targetAudience) {
-			lines.push(`target_audience: "${data.global.targetAudience}"`)
-		}
-		lines.push("---")
-		lines.push("")
-		lines.push("# 自媒体内容方案")
-		lines.push("")
-
-		// Articles
-		data.articles.forEach((article, idx) => {
-			lines.push(`## 文章 ${idx + 1}: ${article.title}`)
-			lines.push("")
-			if (article.style) lines.push(`- **风格**: ${article.style}`)
-			if (article.visualPreset) lines.push(`- **视觉预设**: ${article.visualPreset}`)
-			if (article.cardCount > 0) lines.push(`- **卡片数**: ${article.cardCount}`)
-			if (article.folderName) lines.push(`- **文件夹**: ${article.folderName}`)
-			if (article.platform) lines.push(`- **平台**: ${article.platform}`)
-			if (article.description) {
-				lines.push("")
-				lines.push(`> ${article.description}`)
-			}
-			lines.push("")
-
-			// Outline
-			if (article.outline.length > 0) {
-				lines.push("### 大纲")
-				lines.push("")
-				this.renderOutline(lines, article.outline, 0)
-				lines.push("")
-			}
-
-			// Materials
-			if (article.materials.length > 0) {
-				lines.push("### 素材")
-				lines.push("")
-				article.materials.forEach((m) => {
-					const path =
-						m.uploadedPath || `draft-materials/${idx}/${m.file?.name || "file"}`
-					lines.push(`- \`${path}\` — ${m.description || m.file?.name || ""}`)
-				})
-				lines.push("")
-			}
-
-			// Notes
-			if (article.notes) {
-				lines.push("### 补充说明")
-				lines.push("")
-				lines.push(article.notes)
-				lines.push("")
-			}
-
-			lines.push("---")
-			lines.push("")
-		})
-
-		return lines.join("\n")
-	}
-
-	private renderOutline(lines: string[], nodes: OutlineNode[], depth: number): void {
-		const indent = "  ".repeat(depth)
-		for (const node of nodes) {
-			lines.push(
-				`${indent}${depth === 0 ? (lines.length > 0 ? "" : "") + "1." : "-"} ${node.text}`,
-			)
-			if (node.children && node.children.length > 0) {
-				this.renderOutline(lines, node.children, depth + 1)
-			}
-		}
 	}
 }

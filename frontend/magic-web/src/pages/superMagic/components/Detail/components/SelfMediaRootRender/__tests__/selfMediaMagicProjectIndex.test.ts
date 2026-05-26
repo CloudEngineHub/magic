@@ -68,6 +68,25 @@ describe("selfMediaMagicProjectIndex", () => {
 		])
 	})
 
+	it("uses the resolved post folder for magic.project.js entries without changing the manifest path", () => {
+		const entries = buildSelfMediaPostIndexEntries([
+			makeArticle({
+				title: "中文标题",
+				folderName: "",
+				platform: "rednote",
+			}),
+		])
+
+		expect(entries).toEqual([
+			{
+				platform: "rednote",
+				id: "01-post",
+				name: "中文标题",
+				entry: "posts/01-post/post.json",
+			},
+		])
+	})
+
 	it("upserts entries by platform while preserving existing order", () => {
 		const current = `window.magicProjectConfig = {
   "version": "1.0.0",

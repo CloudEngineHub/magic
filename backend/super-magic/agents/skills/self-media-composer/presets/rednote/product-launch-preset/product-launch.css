@@ -1,0 +1,459 @@
+/*
+ * product-launch.css
+ * Product Launch — 产品功能发布型小红书卡片预设
+ *
+ * Design principles:
+ *   · 白底极简，用顶部 6px 红线锚定品牌感
+ *   · 黑色主文字 + 红色强调，双色系高对比
+ *   · Badge 圆角 2px，刻意锐利，强调感强
+ *   · 图片容器圆角 10px，自带边框，截图放入即好看
+ *   · 无阴影、无渐变，适合截图导出与二次传播
+ *
+ * Color palette:
+ *   --pl-bg           #FFFFFF   主背景
+ *   --pl-surface      #F5F5F7   次级面板/图片容器背景
+ *   --pl-surface2     #EBEBEB   分割线/边框
+ *   --pl-accent       #E63946   强调红（顶线、badge、标题高亮）
+ *   --pl-accent-light #FF6B74   浅红（hover态、高亮标记）
+ *   --pl-text         #111111   主文字
+ *   --pl-text-muted   #666666   辅助文字
+ *   --pl-text-faint   #999999   弱化文字（来源、版权）
+ *   --pl-border       #EBEBEB   默认边框
+ *   --pl-positive     #2DC653   正向指标绿
+ *   --pl-negative     #E63946   负向指标红（与 accent 复用）
+ *   --pl-font-display 'Noto Sans SC', sans-serif
+ *   --pl-font-body    'Noto Sans SC', sans-serif
+ *
+ * ─────────────────────────────────────────────────────────────
+ * Table of Contents
+ *
+ * §0  CSS Variables & Base Reset
+ * §1  Card Shell (.pl-card)
+ *     §1.1  Cover type (.pl-cover)
+ *     §1.2  Content type (.pl-content)
+ * §2  Content Components
+ *     §2.1  Top accent bar (.pl-topbar)
+ *     §2.2  Page header (.pl-header)
+ *     §2.3  Section label / badge (.pl-badge, .pl-badge-red)
+ *     §2.4  Data cards (.pl-data-card)
+ *     §2.5  Stats row (.pl-stats-row)
+ *     §2.6  Image box (.pl-img-box)
+ *     §2.7  List / feature rows (.pl-list-row)
+ *     §2.8  CTA box (.pl-cta-box)
+ *     §2.9  Divider (.pl-divider)
+ *     §2.10 Footer / note (.pl-note)
+ * §3  Utility Classes (pl-*)
+ *     §3.1  Tags & badges
+ *     §3.2  Text colors
+ *     §3.3  Background fills
+ *     §3.4  Inline highlights
+ * §4  Layout Helpers
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   §0  CSS Variables & Base Reset
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --pl-bg:           #FFFFFF;
+  --pl-surface:      #F5F5F7;
+  --pl-surface2:     #EBEBEB;
+  --pl-accent:       #E63946;
+  --pl-accent-light: #FF6B74;
+  --pl-text:         #111111;
+  --pl-text-muted:   #666666;
+  --pl-text-faint:   #999999;
+  --pl-border:       #EBEBEB;
+  --pl-positive:     #2DC653;
+  --pl-negative:     #E63946;
+  --pl-font-display: 'Noto Sans SC', sans-serif;
+  --pl-font-body:    'Noto Sans SC', sans-serif;
+  --pl-badge-radius: 2px;
+  --pl-img-radius:   10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+html, body {
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--pl-font-body);
+  background: var(--pl-bg);
+  color: var(--pl-text);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §1  Card Shell
+   ═══════════════════════════════════════════════════════════ */
+
+/* §1 Base shell — 所有卡片共用 */
+.pl-card {
+  width: 540px;
+  height: 720px;
+  position: relative;
+  overflow: hidden;
+  background: var(--pl-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* §1.1 Cover — 封面卡，顶部留更多呼吸感 */
+.pl-cover {
+  background: var(--pl-bg);
+}
+
+/* §1.2 Content — 内容卡，标准内边距 */
+.pl-content {
+  background: var(--pl-bg);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §2  Content Components
+   ═══════════════════════════════════════════════════════════ */
+
+/* §2.1 Top accent bar — 顶部 6px 品牌红线，每张卡必有 */
+.pl-topbar {
+  width: 100%;
+  height: 6px;
+  background: var(--pl-accent);
+  flex-shrink: 0;
+}
+
+/* §2.2 Page header — 卡片主内容区容器 */
+.pl-header {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 36px 48px 28px;
+}
+
+/* 封面专用内边距（更大顶部留白，配合装饰图） */
+.pl-cover .pl-header {
+  padding: 100px 48px 80px;
+  justify-content: space-between;
+}
+
+/* §2.3 Section label / badge */
+
+/* 黑底白字 badge — 步骤说明、序号、普通标签 */
+.pl-badge {
+  display: inline-block;
+  background: var(--pl-text);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 6px 14px;
+  border-radius: var(--pl-badge-radius);
+  align-self: flex-start;
+  margin-bottom: 20px;
+  line-height: 1.4;
+}
+
+/* 红底白字 badge — 核心能力、彩蛋、强调 */
+.pl-badge-red {
+  background: var(--pl-accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 6px 14px;
+  border-radius: var(--pl-badge-radius);
+  align-self: flex-start;
+  margin-bottom: 20px;
+  line-height: 1.4;
+  display: inline-block;
+}
+
+/* 卡片主标题 */
+.pl-title {
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1.2;
+  color: var(--pl-text);
+  margin-bottom: 4px;
+}
+
+/* 封面大标题 */
+.pl-title-xl {
+  font-size: 46px;
+  font-weight: 900;
+  line-height: 1.15;
+  color: var(--pl-text);
+  margin-bottom: 24px;
+}
+
+/* 红色强调文字（用于标题内 span） */
+.pl-title .pl-accent,
+.pl-title-xl .pl-accent {
+  color: var(--pl-accent);
+}
+
+/* 副标题 / 说明文字 */
+.pl-lead {
+  font-size: 16px;
+  color: var(--pl-text-muted);
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+
+/* 封面副标题 */
+.pl-lead-sm {
+  font-size: 15px;
+  color: var(--pl-text-muted);
+  line-height: 1.7;
+}
+
+/* §2.4 Data card — 单个指标块 */
+.pl-data-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px 8px;
+}
+
+.pl-data-card .pl-data-num {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--pl-accent);
+  line-height: 1.2;
+}
+
+.pl-data-card .pl-data-label {
+  font-size: 12px;
+  color: var(--pl-text-faint);
+  margin-top: 2px;
+}
+
+/* §2.5 Stats row — 三列指标横排 */
+.pl-stats-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.pl-stats-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--pl-border);
+  flex-shrink: 0;
+}
+
+/* §2.6 Image box — 截图/配图容器 */
+.pl-img-box {
+  border-radius: var(--pl-img-radius);
+  overflow: hidden;
+  border: 1px solid var(--pl-border);
+  background: var(--pl-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 自动撑满剩余高度 */
+.pl-img-box.is-flex {
+  flex: 1;
+}
+
+/* 固定高度变体 */
+.pl-img-box.is-fixed {
+  height: 340px;
+}
+
+.pl-img-box img {
+  width: 100%;
+  object-fit: contain;
+}
+
+/* §2.7 List / feature row — 功能列表行 */
+.pl-list-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--pl-border);
+}
+
+.pl-list-row:last-child {
+  border-bottom: none;
+}
+
+.pl-list-row .pl-list-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--pl-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.pl-list-row .pl-list-body {
+  flex: 1;
+}
+
+.pl-list-row .pl-list-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pl-text);
+  line-height: 1.4;
+}
+
+.pl-list-row .pl-list-desc {
+  font-size: 13px;
+  color: var(--pl-text-muted);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+/* 高亮行（顶部功能/核心卖点） */
+.pl-list-row.is-highlight .pl-list-icon {
+  background: var(--pl-accent);
+  color: #fff;
+}
+
+.pl-list-row.is-highlight .pl-list-title {
+  color: var(--pl-accent);
+}
+
+/* §2.8 CTA box — 结尾互动引导区 */
+.pl-cta-box {
+  background: var(--pl-surface);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 16px;
+}
+
+.pl-cta-box .pl-cta-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pl-text);
+  margin-bottom: 4px;
+}
+
+.pl-cta-box .pl-cta-sub {
+  font-size: 13px;
+  color: var(--pl-text-muted);
+}
+
+/* §2.9 Divider */
+.pl-divider {
+  width: 100%;
+  height: 1px;
+  background: var(--pl-border);
+  margin: 12px 0;
+}
+
+/* §2.10 Footer / note — 底部品牌栏 */
+.pl-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--pl-border);
+  padding-top: 16px;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.pl-note.no-border {
+  border-top: none;
+  padding-top: 12px;
+}
+
+.pl-note .pl-note-domain {
+  font-size: 12px;
+  color: var(--pl-text-faint);
+}
+
+.pl-note .pl-note-logo {
+  height: 24px;
+  width: auto;
+}
+
+/* 封面底部品牌栏（稍大 logo） */
+.pl-cover .pl-note .pl-note-logo {
+  height: 28px;
+}
+
+/* 装饰图（封面右上角吉祥物/产品图） */
+.pl-mascot {
+  position: absolute;
+  top: 106px;
+  left: 201px;
+  width: 264px;
+  height: 242px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  transform: rotate(-28deg);
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §3  Utility Classes
+   ═══════════════════════════════════════════════════════════ */
+
+/* §3.1 Tags & badges */
+.pl-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--pl-surface);
+  color: var(--pl-text-muted);
+  border: 1px solid var(--pl-border);
+}
+
+.pl-tag-accent {
+  background: var(--pl-accent);
+  color: #fff;
+  border-color: var(--pl-accent);
+}
+
+/* §3.2 Text colors */
+.pl-text-accent   { color: var(--pl-accent); }
+.pl-text-muted    { color: var(--pl-text-muted); }
+.pl-text-faint    { color: var(--pl-text-faint); }
+.pl-text-positive { color: var(--pl-positive); }
+.pl-text-negative { color: var(--pl-negative); }
+.pl-text-bold     { font-weight: 900; }
+
+/* §3.3 Background fills */
+.pl-bg-accent   { background: var(--pl-accent); color: #fff; }
+.pl-bg-surface  { background: var(--pl-surface); }
+.pl-bg-surface2 { background: var(--pl-surface2); }
+
+/* §3.4 Inline highlights */
+.pl-hl {
+  background: linear-gradient(180deg, transparent 55%, rgba(230, 57, 70, 0.18) 55%);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §4  Layout Helpers
+   ═══════════════════════════════════════════════════════════ */
+
+.pl-row    { display: flex; align-items: center; }
+.pl-col    { display: flex; flex-direction: column; }
+.pl-spacer { flex: 1; }
+.pl-center { display: flex; align-items: center; justify-content: center; }
+
+.pl-gap-xs { gap: 6px; }
+.pl-gap-sm { gap: 12px; }
+.pl-gap-md { gap: 20px; }
+.pl-gap-lg { gap: 32px; }
+
+.pl-px-card  { padding-left: 48px; padding-right: 48px; }
+.pl-pt-card  { padding-top: 36px; }
+.pl-pb-card  { padding-bottom: 28px; }
+.pl-p-card   { padding: 36px 48px 28px; }

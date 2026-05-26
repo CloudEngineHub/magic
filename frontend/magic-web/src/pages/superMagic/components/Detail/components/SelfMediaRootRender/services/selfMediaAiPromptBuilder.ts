@@ -242,7 +242,7 @@ Output strictly in the following JSON array format with no other text:
     "description": "Content description (2-4 sentences: core viewpoint, reader value, content angle)",
     "platform": "rednote",
     "style": one of [${styleValues}],
-    "visualPreset": one of ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "ins-modern", "none"],
+    "visualPreset": one of ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "product-launch-preset", "ins-modern", "none"],
     "cardCount": 6-9,
     "outline": "- Point 1\\n  - Sub-point\\n- Point 2"
   }
@@ -283,7 +283,7 @@ ${!referenceText && global.brandPosition ? `\n## 品牌背景（仅供语气参�
     "description": "内容描述（2-4 句话：核心观点、读者价值、内容角度）",
     "platform": "rednote",
     "style": 从 [${styleValues}] 中选择,
-    "visualPreset": 从 ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "ins-modern", "none"] 中选择,
+    "visualPreset": 从 ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "product-launch-preset", "ins-modern", "none"] 中选择,
     "cardCount": 6-9之间的数字,
     "outline": "- 要点1\\n  - 子要点\\n- 要点2"
   }
@@ -656,7 +656,7 @@ ${global.targetAudience ? `- Audience: ${global.targetAudience}` : ""}
 ## Task
 Recommend the following configuration:
 1. **style**: Choose from [${styleValues}]
-2. **visualPreset**: Choose from ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "ins-modern", "none"] (considering platform: ${article.platform})
+2. **visualPreset**: Choose from ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "product-launch-preset", "ins-modern", "none"] (considering platform: ${article.platform})
 ${isCardPlatform ? `3. **cardCount**: Recommended card count (integer between 6-9)` : ""}
 4. **outline**: Generate structured outline (use "- " list format, child levels indented by two spaces)
 5. **notes**: Additional creative notes (one sentence)
@@ -687,7 +687,7 @@ ${global.targetAudience ? `- 受众：${global.targetAudience}` : ""}
 ## 任务
 根据上述信息，推荐以下配置：
 1. **style**：从 [${styleValues}] 中选择最合适的内容风格
-2. **visualPreset**：从 ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "ins-modern", "none"] 中选择最合适的视觉模板（考虑平台：${article.platform}）
+2. **visualPreset**：从 ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "product-launch-preset", "ins-modern", "none"] 中选择最合适的视觉模板（考虑平台：${article.platform}）
 ${isCardPlatform ? `3. **cardCount**：推荐卡片数量（6-9 之间的整数）` : ""}
 4. **outline**：生成结构化大纲（使用 "- " 列表格式，子层级两个空格缩进）
 5. **notes**：补充创作注意事项（一句话）

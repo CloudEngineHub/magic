@@ -888,6 +888,10 @@
 						"description": "Clean white background, profile avatar, numbered sections, reading-note style for personal insights",
 						"label": "Personal Insight"
 					},
+					"productLaunch": {
+						"description": "White background, red top accent bar, sharp badges, minimal dual-color. Great for product feature announcements and release notes",
+						"label": "Product Launch"
+					},
 					"insModern": {
 						"description": "White background, generous whitespace, minimal typography",
 						"label": "Modern Minimal"

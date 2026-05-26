@@ -12,6 +12,7 @@ import {
 	type ArticleBatchTopicItem,
 } from "../../../services/selfMediaBatchSend"
 import { prefillSelfMediaMagicProjectIndex, type AttachmentNode } from "../../../services"
+import { ensureArticlePostAssetDirectories } from "../../../services/selfMediaPostPaths"
 import ModelSelector from "../components/picker/ModelSelector"
 import { SketchTitleIllustration } from "../components/ui/SketchTitleIllustration"
 import {
@@ -301,11 +302,26 @@ export default function StepConfirm({
 		let isFirstTopic = true
 
 		try {
+			const selfMediaProjectDirectory = folderPath
+				? {
+						directoryId: folderFileId,
+						directoryPath: folderPath,
+						directoryName: folderPath.split("/").filter(Boolean).pop(),
+					}
+				: undefined
 			await onArchiveDraft?.()
+			const postTargets = await ensureArticlePostAssetDirectories({
+				projectId,
+				rootDirectoryId: folderFileId,
+				rootPath: folderPath,
+				articles: data.articles,
+				existingNodes: attachmentList,
+			})
 			await prefillSelfMediaMagicProjectIndex({
 				articles: data.articles,
 				attachmentList,
 				folderFileId,
+				postTargets,
 			})
 			setGenerationPhase("creating-topic")
 			const created = await sendArticleBatch({
@@ -315,13 +331,8 @@ export default function StepConfirm({
 				modelId: selectedModelId || undefined,
 				imageModelId: selectedImageModelId || undefined,
 				videoModelId: selectedVideoModelId || undefined,
-				selfMediaProjectDirectory: folderPath
-					? {
-							directoryId: folderFileId,
-							directoryPath: folderPath,
-							directoryName: folderPath.split("/").filter(Boolean).pop(),
-						}
-					: undefined,
+				selfMediaProjectDirectory,
+				postTargets,
 				onTopicCreated: (item) => {
 					setBatchTopics((prev) => [...prev, item])
 					if (isFirstTopic) {

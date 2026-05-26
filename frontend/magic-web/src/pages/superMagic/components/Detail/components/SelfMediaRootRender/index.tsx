@@ -13,6 +13,7 @@ import SelfMediaHomePage from "./components/SelfMediaHomePage"
 import BrandConfigDialog from "./components/BrandConfigDialog"
 import AICardCreateDialog from "./components/AICardCreateDialog"
 import { SelfMediaFileStorageService } from "./services/SelfMediaFileStorageService"
+import { resolveSelfMediaRootPath } from "./services/selfMediaPostPaths"
 import type { SelfMediaRootRenderProps } from "./types"
 
 type SelfMediaRootMode = "home" | "create" | "platform"
@@ -40,7 +41,7 @@ function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
 		openFileTab,
 	} = props
 	const folderFileId = data?.file_id
-	const folderPath = data?.file_name || ""
+	const folderPath = resolveSelfMediaRootPath(data)
 
 	// Access array lengths so that this observer component re-renders when items
 	// are added to / removed from MobX observable arrays. Without this, mutations
@@ -240,7 +241,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					<SelfMediaInitPanel
 						selectedProject={selectedProject}
 						folderFileId={folderFileId}
-						folderPath={`${folderPath}/analysis`}
+						folderPath={folderPath}
 						attachmentList={attachmentList}
 						onBackHome={handleBackHome}
 					/>

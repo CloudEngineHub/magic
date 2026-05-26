@@ -12,13 +12,10 @@ import type {
 	MaterialItem,
 } from "../components/SelfMediaInitPanel/types"
 import { collectArticleMaterials } from "../components/SelfMediaInitPanel/types"
-import {
-	buildArticlePromptContent,
-	buildMentionsFromMaterialFiles,
-	resolveArticleFolderName,
-} from "./selfMediaPromptBuilder"
+import { buildArticlePromptContent, buildMentionsFromMaterialFiles } from "./selfMediaPromptBuilder"
 import { superMagicUploadTokenService } from "../../../../MessageEditor/services/UploadTokenService"
 import { Upload } from "@dtyq/upload-sdk"
+import { buildArticlePostTargets, type ArticlePostTarget } from "./selfMediaPostPaths"
 
 /** Agent pattern for self-media content generation */
 export const SELF_MEDIA_TOPIC_PATTERN = "ip-manager" as const
@@ -59,7 +56,8 @@ export function navigateToBatchTopic(
 async function uploadMaterials(
 	materials: MaterialItem[],
 	projectId: string,
-	folderPath: string,
+	assetsPath: string,
+	assetsDirId?: string,
 ): Promise<void> {
 	if (materials.length === 0) return
 
@@ -68,8 +66,6 @@ async function uploadMaterials(
 		console.error("Failed to get upload token for materials")
 		return
 	}
-
-	const materialDir = `${folderPath}/materials`
 
 	for (const item of materials) {
 		// Skip items already at the target location (e.g., picked from project files)
@@ -87,7 +83,7 @@ async function uploadMaterials(
 					fileName: item.file.name,
 					customCredentials: superMagicUploadTokenService.changeDir(
 						credentials,
-						materialDir,
+						assetsPath,
 					),
 					body: JSON.stringify({
 						storage: "private",
@@ -101,16 +97,17 @@ async function uploadMaterials(
 			})
 
 			if (result) {
-				item.uploadedPath = `${materialDir}/${item.file.name}`
+				item.uploadedPath = `${assetsPath}/${item.file.name}`
 				await superMagicUploadTokenService.saveFileToProject({
 					project_id: projectId,
+					parent_id: assetsDirId,
 					file_key: result,
 					file_name: item.file.name,
 					file_size: item.file.size,
 					file_type: "user_upload",
 					storage_type: "workspace",
 					source: "home" as any,
-					relative_file_path: `${materialDir}/${item.file.name}`,
+					relative_file_path: `${assetsPath}/${item.file.name}`,
 				})
 			}
 		} catch (err) {
@@ -137,6 +134,7 @@ export interface SendArticleBatchParams {
 	/** Called after each topic is created and its first message is sent */
 	onTopicCreated?: (item: ArticleBatchTopicItem) => void
 	onProgress?: (phase: ArticleBatchProgressPhase, articleIndex: number) => void
+	postTargets?: ArticlePostTarget[]
 }
 
 export type ArticleBatchProgressPhase = "creating-topic" | "uploading-materials" | "sending-message"
@@ -154,6 +152,7 @@ export async function sendArticleBatch({
 	videoModelId,
 	onTopicCreated,
 	onProgress,
+	postTargets,
 }: SendArticleBatchParams): Promise<ArticleBatchTopicItem[]> {
 	if (!selectedProject?.id) {
 		throw new Error("No project selected")
@@ -162,14 +161,13 @@ export async function sendArticleBatch({
 	const projectId = selectedProject.id
 	const created: ArticleBatchTopicItem[] = []
 	const projectRootPath = selfMediaProjectDirectory?.directoryPath?.replace(/\/+$/, "") || ""
+	const defaultPostTargets = buildArticlePostTargets({ articles, rootPath: projectRootPath })
 
 	for (let i = 0; i < articles.length; i++) {
 		const article = articles[i]
-		const folderName = resolveArticleFolderName(article, i)
-		const postFolderPath = projectRootPath
-			? `${projectRootPath}/posts/${folderName}`
-			: `posts/${folderName}`
-		const materialDir = `${postFolderPath}/materials`
+		const postTarget =
+			postTargets?.find((target) => target.articleIndex === i) || defaultPostTargets[i]
+		const materialDir = postTarget.assetsPath
 		const topicName = `[自媒体] ${article.title}`
 
 		onProgress?.("creating-topic", i)
@@ -188,7 +186,12 @@ export async function sendArticleBatch({
 		const allMaterials = collectArticleMaterials(article)
 		if (allMaterials.length > 0) {
 			onProgress?.("uploading-materials", i)
-			await uploadMaterials(allMaterials, projectId, postFolderPath)
+			await uploadMaterials(
+				allMaterials,
+				projectId,
+				postTarget.assetsPath,
+				postTarget.assetsDirId,
+			)
 		}
 
 		const {

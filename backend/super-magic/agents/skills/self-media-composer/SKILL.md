@@ -115,7 +115,8 @@ presets/
 │   ├── dark-tech/
 │   ├── gradient-editorial/
 │   ├── personal-insight/
-│   └── film-vintage/
+│   ├── film-vintage/
+│   └── product-launch-preset/
 ├── instagram/
 │   └── ins-modern/
 └── wechat-official-accounts/
@@ -168,16 +169,17 @@ Decision order every time you pick a card canvas size:
 
 Presets are organized by platform under `presets/<platform>/<preset>/`. Each preset is a pair of files (`<preset>.css` + `<preset>.js`).
 
-| Platform                   | Preset               | Style summary                                                                                                                                                                            |
-| -------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rednote`                  | `neo-brutalism`      | Neo-Brutalism: thick black borders, hard offset shadows, saturated palette.                                                                                                              |
-| `rednote`                  | `code-dispatch`      | Code Dispatch: high-contrast editorial style, black/white/red palette, monospace labels, no rounded corners, grid background texture. Best for tech/coding/AI topics.                    |
-| `rednote`                  | `dark-tech`          | Dark-Tech: deep black background, gold accent, thin 1px borders, heavy/light font-weight contrast. Inspired by DJI-style review cards. Best for product/gear reviews.                    |
-| `rednote`                  | `gradient-editorial` | Image Editorial: cover uses hero/theme image with gradient overlay for text readability, clean white content pages, rounded cards. Best for AI/tech insight articles.                    |
-| `rednote`                  | `personal-insight`   | Personal Insight: clean white background, profile avatar, numbered sections, reading-note style. Best for personal reflections and knowledge sharing.                                    |
-| `rednote`                  | `film-vintage`       | Film Vintage: dark cinematic cover, polaroid-style photo frames, mono grain texture, red accent, serif+mono typography. Best for film photography, gear reviews, and city walk journals. |
-| `instagram`                | `ins-modern`         | Instagram-style modern: white background, generous whitespace, minimal typography.                                                                                                       |
-| `wechat-official-accounts` | _(coming soon)_      | Presets for WeChat article style will be added here.                                                                                                                                     |
+| Platform                   | Preset                  | Style summary                                                                                                                                                                                          |
+| -------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `rednote`                  | `neo-brutalism`         | Neo-Brutalism: thick black borders, hard offset shadows, saturated palette.                                                                                                                            |
+| `rednote`                  | `code-dispatch`         | Code Dispatch: high-contrast editorial style, black/white/red palette, monospace labels, no rounded corners, grid background texture. Best for tech/coding/AI topics.                                  |
+| `rednote`                  | `dark-tech`             | Dark-Tech: deep black background, gold accent, thin 1px borders, heavy/light font-weight contrast. Inspired by DJI-style review cards. Best for product/gear reviews.                                  |
+| `rednote`                  | `gradient-editorial`    | Image Editorial: cover uses hero/theme image with gradient overlay for text readability, clean white content pages, rounded cards. Best for AI/tech insight articles.                                  |
+| `rednote`                  | `personal-insight`      | Personal Insight: clean white background, profile avatar, numbered sections, reading-note style. Best for personal reflections and knowledge sharing.                                                  |
+| `rednote`                  | `film-vintage`          | Film Vintage: dark cinematic cover, polaroid-style photo frames, mono grain texture, red accent, serif+mono typography. Best for film photography, gear reviews, and city walk journals.               |
+| `rednote`                  | `product-launch-preset` | Product Launch: white background, 6px red top accent bar, black text + red highlights only, sharp 2px badges, 10px rounded image containers. Best for product feature announcements and release notes. |
+| `instagram`                | `ins-modern`            | Instagram-style modern: white background, generous whitespace, minimal typography.                                                                                                                     |
+| `wechat-official-accounts` | _(coming soon)_         | Presets for WeChat article style will be added here.                                                                                                                                                   |
 
 Source paths inside this skill:
 
@@ -188,6 +190,7 @@ presets/rednote/dark-tech/dark-tech.{css,js}
 presets/rednote/gradient-editorial/gradient-editorial.{css,js}
 presets/rednote/personal-insight/personal-insight.{css,js}
 presets/rednote/film-vintage/film-vintage.{css,js}
+presets/rednote/product-launch-preset/product-launch.{css,js}
 presets/instagram/ins-modern/ins-modern.{css,js}
 ```
 
@@ -339,6 +342,7 @@ Please choose a visual template for the cards:
 <option>neo-brutalism — thick black borders, hard offset shadows, saturated palette</option>
 <option>code-dispatch — high-contrast editorial, black/white/red, monospace labels, grid texture; ideal for tech/coding/AI topics</option>
 <option>dark-tech — deep black background, gold accent, thin borders, DJI-style; ideal for product/gear reviews</option>
+<option>product-launch-preset — white background, red top accent bar, sharp badges, minimal dual-color; ideal for product feature announcements and release notes</option>
 <option>Custom style — describe the visual language you want and a preset will be generated for you</option>
 <option>No template — design freely following the platform baseline</option>
 </question>
@@ -462,13 +466,32 @@ For every image the cards need:
 
 **For `rednote` / `instagram`:** use `write_file` to author each card HTML at the exact path declared in `cards`. Match the resolved style:
 
-- Preset chosen → link the copied CSS/JS from `../../shared/presets/<preset>/`, follow its class naming conventions, reuse its tokens.
+- Preset chosen → link the copied CSS/JS from `../../../shared/presets/<preset>/`, follow its class naming conventions, reuse its tokens.
 - User artifact → reproduce layout, colors, typography, and component treatments faithfully.
 - No preset and no artifact → follow the Platform Defaults and the constraints in [references/card-html-constraints.md](./references/card-html-constraints.md).
 
 Reference only local image files saved in 4.3. Load [Card HTML Constraints](./references/card-html-constraints.md) for the full technical rules, content density requirements, and minimal HTML skeleton before writing any card.
 
 **For `wechat-official-accounts`:** use `write_file` to author the article HTML at the path declared in `post.json.article` (e.g. `posts/<id>/my-article.html`). The article is a full-width scrollable HTML document — no fixed canvas, no Tailwind card skeleton. Use `write_file` to also place `assets/cover-hero.jpg` and `assets/cover-square.jpg` (or generate them via `generate_image`). If brand image assets are available, evaluate whether the covers should include brand elements; include them only when they support the article topic and cover communication, not as a mandatory overlay.
+
+**4.4.1 Final post folder-name check**
+
+After the post content is complete, check whether the current post folder name is semantic enough for the final article. The goal is user-facing clarity in the file tree: users should be able to distinguish posts by folder name without opening each `post.json`.
+
+Rename `posts/<post_id>/` when a clearer, topic-specific folder name would help users identify the article, especially when the current name is generic, placeholder-like, stale, misleading, or no longer aligned with the final title/topic. Do not rename a deliberate user-provided folder name merely for stylistic preference.
+
+If a rename is needed:
+
+1. Choose one safe, stable filesystem id in the user's language context when possible. Use lowercase ASCII slug when appropriate, and avoid `/`, `\`, `..`, spaces-only names, query characters, or punctuation that can break paths.
+2. Rename the folder from `posts/<old_id>/` to `posts/<new_id>/`.
+3. Update `posts/<new_id>/post.json` so its top-level `id` equals `<new_id>`.
+4. Update the root `magic.project.js` platform post entry so:
+   - `id` equals `<new_id>`
+   - `name` matches the final display title
+   - `entry` equals `posts/<new_id>/post.json`
+5. Keep all paths inside `post.json` relative to the post folder. Do not rewrite card paths or asset paths unless they incorrectly include the old folder name.
+
+If the frontend prompt says the post was pre-registered in `magic.project.js`, still update the root index when and only when you rename the folder; otherwise the pre-registered `entry` will point to the wrong `post.json`.
 
 **4.5 Adjust later (optional)**
 
@@ -479,7 +502,7 @@ Reference only local image files saved in 4.3. Load [Card HTML Constraints](./re
 ### Step 5 - maintain the posts index
 
 - Adding a post: rely on `create_self_media_post` with `register_in_project=true`, unless the frontend prompt says the post is already pre-registered. In pre-registered batch flows, use `register_in_project=false` and never edit the root `magic.project.js` posts index.
-- Reordering or renaming posts: use `edit_file` on the root `magic.project.js`, keeping `window.magicProjectConfigure(window.magicProjectConfig);` untouched at the bottom.
+- Reordering or renaming posts: use `edit_file` on the root `magic.project.js`, keeping `window.magicProjectConfigure(window.magicProjectConfig);` untouched at the bottom. When a post folder is renamed after creation, update the matching `id` and `entry` immediately so `entry` remains `posts/<post-id>/post.json`.
 - Removing a post: use `delete_files` on `posts/<id>/`, then `edit_file` on `magic.project.js` to drop the matching entry under the platform's `posts` array.
 
 ---

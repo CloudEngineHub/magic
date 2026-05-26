@@ -349,13 +349,16 @@ function buildTargetDirectoryMention(
 function generateSlug(title: string): string {
 	const ascii = title.replace(/[^a-zA-Z0-9\s-]/g, "").trim()
 	if (ascii.length > 3) return ascii.toLowerCase().replace(/\s+/g, "-").slice(0, 40)
-	return `post-${Date.now().toString(36)}`
+	return "post"
+}
+
+export function buildDefaultArticleFolderName(title: string, index: number): string {
+	return `${String(index + 1).padStart(2, "0")}-${generateSlug(title)}`
 }
 
 export function resolveArticleFolderName(article: ArticleDetail, index: number): string {
 	if (article.folderName.trim()) return article.folderName.trim()
-	const slug = generateSlug(article.title)
-	return `${String(index + 1).padStart(2, "0")}-${slug}`
+	return buildDefaultArticleFolderName(article.title, index)
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -386,7 +389,12 @@ export function buildArticlePromptContent(
 	const allMaterials = collectArticleMaterials(article)
 	const visualRefFiles = article.visualReferenceFiles || []
 	const notesWithoutVisualDescription = stripVisualDescriptionTags(article.notes)
-	const fileMentions = collectUniqueFileMentions(allMaterials, visualRefFiles, materialDir, article.visualDescriptionJson)
+	const fileMentions = collectUniqueFileMentions(
+		allMaterials,
+		visualRefFiles,
+		materialDir,
+		article.visualDescriptionJson,
+	)
 	const targetDirectoryMention = buildTargetDirectoryMention(targetDirectory)
 
 	const docContent: JSONContent[] = []
@@ -446,7 +454,9 @@ export function buildArticlePromptContent(
 			// Prefer rich JSON content (which may contain @mention file references)
 			if (article.visualDescriptionJson?.content?.length) {
 				const visualParagraphs: JSONContent[] = [
-					para(`预设标识：custom\n适用平台：${platform}\n请根据以下视觉描述生成自定义视觉预设（CSS + JS），并用于卡片制作。`),
+					para(
+						`预设标识：custom\n适用平台：${platform}\n请根据以下视觉描述生成自定义视觉预设（CSS + JS），并用于卡片制作。`,
+					),
 					...article.visualDescriptionJson.content,
 				]
 				pushSection(docContent, "视觉要求", visualParagraphs)

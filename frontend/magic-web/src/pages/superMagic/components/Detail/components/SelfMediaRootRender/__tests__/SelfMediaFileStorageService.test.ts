@@ -305,13 +305,6 @@ describe("SelfMediaFileStorageService", () => {
 			relative_file_path: "self-media/__drafts/draft.json",
 		})
 		seedNode({
-			file_id: "draft-md",
-			file_name: "draft.md",
-			is_directory: false,
-			parent_id: "file-1",
-			relative_file_path: "self-media/__drafts/draft.md",
-		})
-		seedNode({
 			file_id: "reference-index",
 			file_name: "reference-index.json",
 			is_directory: false,
@@ -348,7 +341,6 @@ describe("SelfMediaFileStorageService", () => {
 		expect(archiveManifest?.file_id).toBeTruthy()
 		expect(archiveDraft?.file_id).toBeTruthy()
 		expect(mockDeleteFile).toHaveBeenCalledWith("draft-json")
-		expect(mockDeleteFile).toHaveBeenCalledWith("draft-md")
 		expect(mockDeleteFile).toHaveBeenCalledWith("reference-index")
 		expect(mockMoveFile).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -404,7 +396,7 @@ describe("SelfMediaFileStorageService", () => {
 		mockSaveFileContent.mockImplementation(
 			async (entries: Array<{ file_id: string; content: string }>) => {
 				writeCount += 1
-				if (writeCount === 4) {
+				if (writeCount === 3) {
 					throw new Error("reference index write failed")
 				}
 				entries.forEach((entry) => contentByFileId.set(entry.file_id, entry.content))
@@ -442,7 +434,7 @@ describe("SelfMediaFileStorageService", () => {
 		expect(mockDeleteFile).not.toHaveBeenCalled()
 	})
 
-	it("keeps draft files under __drafts when directory lookup is stale", async () => {
+	it("throws when directory lookup is stale and cannot resolve __drafts", async () => {
 		seedNode({
 			file_id: "drafts-dir",
 			file_name: "__drafts",
@@ -475,8 +467,9 @@ describe("SelfMediaFileStorageService", () => {
 			"self-media",
 		)
 
-		await service.saveDraft(data, 1)
-
+		await expect(service.saveDraft(data, 1)).rejects.toThrow(
+			"Failed to resolve directory: __drafts",
+		)
 		expect(
 			attachments.some((item) => item.relative_file_path === "self-media/draft.json"),
 		).toBe(false)
@@ -484,7 +477,7 @@ describe("SelfMediaFileStorageService", () => {
 			attachments.some(
 				(item) => item.relative_file_path === "self-media/__drafts/draft.json",
 			),
-		).toBe(true)
+		).toBe(false)
 	})
 
 	it("does not backfill brand images into draft json when memory data is empty", async () => {

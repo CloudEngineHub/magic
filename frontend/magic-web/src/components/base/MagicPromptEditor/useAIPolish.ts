@@ -1,12 +1,11 @@
 import { useCallback } from "react"
-import { ChatApi } from "@/apis"
+import { aiLLMService } from "@/services/ai/AiLLMService"
+import type { LLMMessage } from "@/services/ai/AiLLMService"
 import type { MentionNodeInfo } from "./types"
 
 interface UseAIPolishOptions {
-    /** Conversation ID for context (optional — if not provided, uses empty string) */
-    conversationId?: string
-    /** Topic ID for context (optional) */
-    topicId?: string
+    /** Model ID to use for polishing (optional — uses service default if not provided) */
+    model?: string
 }
 
 /**
@@ -14,17 +13,17 @@ interface UseAIPolishOptions {
  *
  * The polish function:
  * 1. Receives text with mention placeholders (e.g. {{MENTION_0}})
- * 2. Sends to AI with instructions to preserve those placeholders
+ * 2. Sends to AI via AiLLMService chat with instructions to preserve those placeholders
  * 3. Returns polished text with placeholders intact
  *
  * Usage:
  * ```tsx
- * const { polishText } = useAIPolish({ conversationId, topicId })
+ * const { polishText } = useAIPolish({ model: selectedModelId })
  * <MagicPromptEditor enableAIPolish onAIPolish={polishText} />
  * ```
  */
 export function useAIPolish(options: UseAIPolishOptions = {}) {
-    const { conversationId = "", topicId = "" } = options
+    const { model } = options
 
     const polishText = useCallback(
         async (text: string, mentions: MentionNodeInfo[]): Promise<string> => {
@@ -39,13 +38,14 @@ export function useAIPolish(options: UseAIPolishOptions = {}) {
             const polishPrompt = `请对以下文本进行润色优化，使其更加流畅、专业、清晰。保持原意不变，不要添加新内容。${mentionInstructions}\n\n原文：\n${text}`
 
             try {
-                const res = await ChatApi.getAiAutoCompletion({
-                    conversation_id: conversationId,
-                    topic_id: topicId,
-                    message: polishPrompt,
+                const messages: LLMMessage[] = [{ role: "user", content: polishPrompt }]
+                const result = await aiLLMService.chat(messages, {
+                    model,
+                    temperature: 0.5,
+                    systemPrompt: "你是一个文案润色助手。直接输出润色后的文字，不要有任何前缀说明。",
                 })
 
-                const polished = res.choices?.[0]?.message?.content
+                const polished = result.content.trim()
                 if (!polished) return text
 
                 // Validate that all mention placeholders are preserved
@@ -64,7 +64,7 @@ export function useAIPolish(options: UseAIPolishOptions = {}) {
                 return text
             }
         },
-        [conversationId, topicId],
+        [model],
     )
 
     return { polishText }

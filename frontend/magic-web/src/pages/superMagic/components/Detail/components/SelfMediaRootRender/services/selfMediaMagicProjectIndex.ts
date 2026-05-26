@@ -8,6 +8,7 @@ import {
 	findNodeById,
 	type AttachmentNode,
 } from "./selfMediaHelpers"
+import { buildArticlePostTargets, type ArticlePostTarget } from "./selfMediaPostPaths"
 
 export interface SelfMediaPostIndexEntry {
 	platform: SelfMediaPlatform
@@ -20,6 +21,7 @@ export interface PrefillSelfMediaMagicProjectIndexParams {
 	articles: ArticleDetail[]
 	attachmentList?: AttachmentNode[]
 	folderFileId?: string
+	postTargets?: ArticlePostTarget[]
 }
 
 interface SplitMagicProjectJsResult {
@@ -53,14 +55,18 @@ const CONFIG_ASSIGN_PATTERN = /window\.magicProjectConfig\s*=\s*/
 
 export function buildSelfMediaPostIndexEntries(
 	articles: ArticleDetail[],
+	postTargets?: ArticlePostTarget[],
 ): SelfMediaPostIndexEntry[] {
 	return articles.map((article, index) => {
-		const folderName = resolveArticleFolderName(article, index)
+		const target =
+			postTargets?.find((item) => item.articleIndex === index) ||
+			buildArticlePostTargets({ articles })[index]
+		const folderName = target?.folderName || resolveArticleFolderName(article, index)
 		return {
 			platform: article.platform,
 			id: folderName,
 			name: article.title,
-			entry: `posts/${folderName}/post.json`,
+			entry: target?.postEntry || `posts/${folderName}/post.json`,
 		}
 	})
 }
@@ -101,6 +107,7 @@ export async function prefillSelfMediaMagicProjectIndex({
 	articles,
 	attachmentList,
 	folderFileId,
+	postTargets,
 }: PrefillSelfMediaMagicProjectIndexParams): Promise<void> {
 	if (!articles.length) return
 
@@ -112,7 +119,7 @@ export async function prefillSelfMediaMagicProjectIndex({
 	const content = (await getFileContentById(magicProjectFileId, {
 		responseType: "text",
 	})) as string
-	const entries = buildSelfMediaPostIndexEntries(articles)
+	const entries = buildSelfMediaPostIndexEntries(articles, postTargets)
 	const updatedContent = upsertSelfMediaPostsIndex(content, entries)
 
 	await SuperMagicApi.saveFileContent([

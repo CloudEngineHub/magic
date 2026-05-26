@@ -46,6 +46,7 @@ export interface MagicPromptEditorProps {
     /** Enable AI polish feature (button in top-right) */
     enableAIPolish?: boolean
     /** Custom AI polish function — receives text content, returns polished text.
+     *  If not provided, built-in AiLLMService will be used with an internal model selector.
      *  Must preserve @mention markers (e.g. text between special tokens). */
     onAIPolish?: (text: string, mentionNodes: MentionNodeInfo[]) => Promise<string>
     /** Enable inline voice input button */

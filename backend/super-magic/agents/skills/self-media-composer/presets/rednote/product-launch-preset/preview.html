@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Product Launch Preset — Preview</title>
+  <link rel="stylesheet" href="product-launch.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&display=swap"/>
+  <style>
+    html, body {
+      width: auto; height: auto; overflow: auto;
+      background: #D8D8D8;
+      font-family: 'Noto Sans SC', sans-serif;
+    }
+    .preview-title {
+      text-align: center;
+      padding: 40px 0 8px;
+      font-size: 22px; font-weight: 900; color: #111;
+      letter-spacing: 1px;
+    }
+    .preview-subtitle {
+      text-align: center;
+      font-size: 13px; color: #888;
+      margin-bottom: 36px;
+    }
+    .preview-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px;
+      padding: 0 40px 60px;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .preview-card-wrapper {
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      border-radius: 4px;
+      overflow: hidden;
+      width: 540px;
+      height: 720px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .card-label {
+      text-align: center;
+      font-size: 12px; color: #888;
+      margin-top: 10px; margin-bottom: 4px;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+
+<p class="preview-title">Product Launch Preset</p>
+<p class="preview-subtitle">产品功能发布型小红书卡片预设 · 6 种卡片变体 · 白底红线极简风</p>
+
+<div class="preview-container">
+
+  <!-- ───────────────────────────────────────
+       Card 1: 封面卡 (pl-cover)
+       展示: pl-topbar, pl-badge, pl-title-xl, pl-accent, pl-lead-sm, pl-note, pl-mascot
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-00 · 封面卡</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-cover">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <!-- badge -->
+          <span class="pl-badge" style="position:relative;top:-27px;">重磅更新</span>
+          <!-- 主标题区 -->
+          <div style="position:relative;top:-16px;">
+            <h1 class="pl-title-xl" style="position:relative;top:61px;">
+              把任何<br>
+              网页 / HTML<br>
+              变成可编辑的 PPT<br>
+              <span class="pl-accent">超级麦吉做到了</span>
+            </h1>
+            <p class="pl-lead-sm" style="position:relative;top:75px;">
+              文字、色块、图片——每个元素<br>
+              都是独立 PPT 元素，指哪改哪
+            </p>
+          </div>
+          <!-- 底部品牌 -->
+          <div class="pl-note" style="position:relative;top:50px;">
+            <span class="pl-note-domain">letsmagic</span>
+            <img class="pl-note-logo"
+                 src="https://cdn.letsmagic.cn/static/img/super-magic-logo-with-white-background.png"
+                 alt="超级麦吉">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────
+       Card 2: 操作说明卡
+       展示: pl-badge, pl-title, pl-lead, pl-img-box, pl-stats-row, pl-data-card
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-01 · 操作说明卡</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-content">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <span class="pl-badge">一步操作，搞定导出</span>
+          <h2 class="pl-title">
+            选择下载格式<br>
+            <span class="pl-text-accent">「PPT 格式（可编辑）」</span>
+          </h2>
+          <p class="pl-lead">勾选需要的页面，一键下载</p>
+          <!-- 图片占位区 -->
+          <div class="pl-img-box is-flex" style="margin-bottom:20px;">
+            <div class="pl-center pl-col pl-gap-sm" style="height:100%;color:#bbb;">
+              <i class="fa-regular fa-image" style="font-size:36px;"></i>
+              <span style="font-size:13px;">操作面板截图</span>
+            </div>
+          </div>
+          <!-- 三列指标 -->
+          <div class="pl-stats-row">
+            <div class="pl-data-card">
+              <div class="pl-data-num">元素级</div>
+              <div class="pl-data-label">独立可编辑</div>
+            </div>
+            <div class="pl-stats-divider"></div>
+            <div class="pl-data-card">
+              <div class="pl-data-num">高保真</div>
+              <div class="pl-data-label">样式精准还原</div>
+            </div>
+            <div class="pl-stats-divider"></div>
+            <div class="pl-data-card">
+              <div class="pl-data-num">标准格式</div>
+              <div class="pl-data-label">通用 .pptx</div>
+            </div>
+          </div>
+          <div class="pl-note no-border">
+            <span class="pl-note-domain">letsmagic</span>
+            <img class="pl-note-logo"
+                 src="https://cdn.letsmagic.cn/static/img/super-magic-logo-with-white-background.png"
+                 alt="超级麦吉">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────
+       Card 3: 核心能力卡
+       展示: pl-badge-red, pl-title, pl-img-box.is-flex
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-02 · 核心能力卡</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-content">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <span class="pl-badge-red">核心能力，不是「凑合能用」</span>
+          <h2 class="pl-title">
+            元素级还原<br>
+            <span class="pl-text-accent">不是截图打包</span>
+          </h2>
+          <p class="pl-lead">文字、色块、图片——都还原成独立对象</p>
+          <div class="pl-img-box is-flex">
+            <div class="pl-center pl-col pl-gap-sm" style="height:100%;color:#bbb;">
+              <i class="fa-regular fa-image" style="font-size:36px;"></i>
+              <span style="font-size:13px;">核心能力效果截图</span>
+            </div>
+          </div>
+          <div class="pl-note no-border">
+            <span class="pl-note-domain">letsmagic</span>
+            <img class="pl-note-logo"
+                 src="https://cdn.letsmagic.cn/static/img/super-magic-logo-with-white-background.png"
+                 alt="超级麦吉">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────
+       Card 4: 功能列表卡（含图表）
+       展示: pl-list-row, pl-list-row.is-highlight, pl-divider, pl-tag, pl-badge
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-03 · 功能列表卡</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-content">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <span class="pl-badge">三大核心能力</span>
+          <h2 class="pl-title" style="margin-bottom:16px;">
+            为什么选择<br>
+            <span class="pl-text-accent">超级麦吉导出</span>
+          </h2>
+          <!-- 功能列表 -->
+          <div class="pl-list-row is-highlight">
+            <div class="pl-list-icon"><i class="fa-solid fa-layer-group"></i></div>
+            <div class="pl-list-body">
+              <div class="pl-list-title">元素级可编辑</div>
+              <div class="pl-list-desc">每个文字、色块、图片都是独立 PPT 对象</div>
+            </div>
+          </div>
+          <div class="pl-list-row">
+            <div class="pl-list-icon"><i class="fa-solid fa-wand-magic-sparkles" style="color:#E63946;"></i></div>
+            <div class="pl-list-body">
+              <div class="pl-list-title">高保真样式还原</div>
+              <div class="pl-list-desc">颜色、字体、布局精准映射，不失真</div>
+            </div>
+          </div>
+          <div class="pl-list-row">
+            <div class="pl-list-icon"><i class="fa-solid fa-file-powerpoint" style="color:#E63946;"></i></div>
+            <div class="pl-list-body">
+              <div class="pl-list-title">标准 .pptx 格式</div>
+              <div class="pl-list-desc">任意版本 PowerPoint / WPS 均可打开编辑</div>
+            </div>
+          </div>
+          <div class="pl-list-row">
+            <div class="pl-list-icon"><i class="fa-solid fa-globe" style="color:#E63946;"></i></div>
+            <div class="pl-list-body">
+              <div class="pl-list-title">任意 HTML 皆可导出</div>
+              <div class="pl-list-desc">不限于超级麦吉，微信文章也能一键转 PPT</div>
+            </div>
+          </div>
+          <div class="pl-divider"></div>
+          <!-- 标签行 -->
+          <div class="pl-row pl-gap-sm" style="flex-wrap:wrap;">
+            <span class="pl-tag pl-tag-accent">效率工具</span>
+            <span class="pl-tag">AI 生成</span>
+            <span class="pl-tag">职场必备</span>
+            <span class="pl-tag">幻灯片</span>
+          </div>
+          <div class="pl-note">
+            <span class="pl-note-domain">letsmagic</span>
+            <img class="pl-note-logo"
+                 src="https://cdn.letsmagic.cn/static/img/super-magic-logo-with-white-background.png"
+                 alt="超级麦吉">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────
+       Card 5: 数据图表卡
+       展示: ECharts product-launch-bar + product-launch-donut, pl-hl
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-04 · 数据图表卡</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-content">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <span class="pl-badge">数据说话</span>
+          <h2 class="pl-title" style="margin-bottom:4px;">
+            用户增长<span class="pl-hl">超预期</span><br>
+            <span class="pl-text-accent">三个月翻了 4 倍</span>
+          </h2>
+          <p class="pl-lead">功能上线以来，每月活跃用户持续攀升</p>
+          <!-- 柱状图 -->
+          <div id="preview-bar" style="width:100%;height:200px;flex-shrink:0;"></div>
+          <div class="pl-divider"></div>
+          <!-- 环形图 + 说明 -->
+          <div class="pl-row pl-gap-md" style="flex:1;align-items:center;">
+            <div id="preview-donut" style="width:140px;height:140px;flex-shrink:0;"></div>
+            <div class="pl-col pl-gap-xs">
+              <div style="font-size:13px;font-weight:700;color:#111;">用户满意度</div>
+              <div style="font-size:12px;color:#666;">「导出后直接可用」评价占比</div>
+              <div class="pl-row pl-gap-xs" style="margin-top:4px;">
+                <span class="pl-tag pl-tag-accent">高保真</span>
+                <span class="pl-tag">省时</span>
+              </div>
+            </div>
+          </div>
+          <div class="pl-note">
+            <span class="pl-note-domain">letsmagic</span>
+            <img class="pl-note-logo"
+                 src="https://cdn.letsmagic.cn/static/img/super-magic-logo-with-white-background.png"
+                 alt="超级麦吉">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────
+       Card 6: CTA 结尾卡
+       展示: pl-badge-red, pl-img-box.is-fixed, pl-cta-box, pl-text-positive/negative
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-05 · CTA 结尾卡</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-content">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <span class="pl-badge-red">彩蛋</span>
+          <h2 class="pl-title">
+            微信文章也能<br>
+            <span class="pl-text-accent">一键导出 PPT</span>
+          </h2>
+          <p class="pl-lead">任意 HTML 皆可——不只是超级麦吉的幻灯片</p>
+          <!-- 配图区 -->
+          <div class="pl-img-box is-fixed">
+            <div class="pl-center pl-col pl-gap-sm" style="height:100%;color:#bbb;">
+              <i class="fa-regular fa-image" style="font-size:36px;"></i>
+              <span style="font-size:13px;">彩蛋效果截图</span>
+            </div>
+          </div>
+          <!-- 互动引导 -->
+          <div class="pl-cta-box">
+            <p class="pl-cta-title">手里有 HTML？来试试 👇</p>
+            <p class="pl-cta-sub">搜索「超级麦吉」，免费注册即可体验</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /preview-container -->
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script src="product-launch.js"></script>
+<script>
+  window.addEventListener('load', function () {
+    if (typeof echarts === 'undefined' || !window.ProductLaunchPresets) return;
+
+    /* 柱状图 */
+    var barEl = document.getElementById('preview-bar');
+    if (barEl) {
+      var barChart = echarts.init(barEl);
+      barChart.setOption(ProductLaunchPresets.get('product-launch-bar', {
+        categories: ['1月', '2月', '3月', '4月'],
+        values: [1200, 2400, 3800, 4900],
+        highlightIndex: 3,
+        unit: ''
+      }));
+    }
+
+    /* 环形图 */
+    var donutEl = document.getElementById('preview-donut');
+    if (donutEl) {
+      var donutChart = echarts.init(donutEl);
+      donutChart.setOption(ProductLaunchPresets.get('product-launch-donut', {
+        value: 92,
+        total: 100,
+        unit: '%',
+        label: '满意度'
+      }));
+    }
+  });
+</script>
+</body>
+</html>

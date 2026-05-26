@@ -7,6 +7,12 @@ export {
 	upsertSelfMediaPostsIndex,
 } from "./selfMediaMagicProjectIndex"
 export type { SelfMediaPostIndexEntry } from "./selfMediaMagicProjectIndex"
+export {
+	buildArticlePostTargets,
+	ensureArticlePostAssetDirectories,
+	resolveSelfMediaRootPath,
+} from "./selfMediaPostPaths"
+export type { ArticlePostTarget } from "./selfMediaPostPaths"
 export type {
 	AttachmentNode,
 	AttachmentDiff,

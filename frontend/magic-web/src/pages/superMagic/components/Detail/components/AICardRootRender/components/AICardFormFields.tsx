@@ -10,7 +10,6 @@ import type { ScheduledTask } from "@/types/scheduledTask"
 import ModelIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/components/ModelIcon"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import { MagicPromptEditor } from "@/components/base/MagicPromptEditor"
-import { useAIPolish } from "@/components/base/MagicPromptEditor/useAIPolish"
 import type { JSONContent } from "@tiptap/react"
 import { CARD_TEMPLATES } from "../hooks/useAICardConfig"
 import type { CardTemplateType } from "../hooks/useAICardConfig"
@@ -53,7 +52,6 @@ function AICardFormFields({
 }: AICardFormFieldsProps) {
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useState(advancedExpanded)
-	const { polishText } = useAIPolish()
 
 	/** Parse the stored prompt JSON string back to JSONContent for the editor */
 	const promptJSON = useMemo((): JSONContent | undefined => {
@@ -197,7 +195,6 @@ function AICardFormFields({
 					rows={4}
 					enableMention
 					enableAIPolish
-					onAIPolish={polishText}
 					enableVoice
 				/>
 				<p className="text-xs text-muted-foreground">

@@ -203,6 +203,14 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		swatch: "linear-gradient(135deg, #ffffff 0%, #f0f7ff 50%, #1a73e8 100%)",
 		icon: "📝",
 	},
+	{
+		value: "product-launch-preset",
+		labelKey: "detail.selfMedia.initPanel.visuals.productLaunch.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.productLaunch.description",
+		platforms: ["rednote"],
+		swatch: "linear-gradient(135deg, #FFFFFF 0%, #FFF5F5 50%, #E63946 100%)",
+		icon: "🚀",
+	},
 
 	{
 		value: "ins-modern",

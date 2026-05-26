@@ -7,6 +7,7 @@ import {
 	parseOutlineFromText,
 	reconcileCardCountWithOutline,
 } from "../../../services/selfMediaAiGenerate"
+import { buildDefaultArticleFolderName } from "../../../services/selfMediaPromptBuilder"
 import type { GeneratedTopic } from "../../../services/selfMediaAiGenerate"
 import type { SelfMediaPlatform } from "../../../../../types"
 import type { SelfMediaFileStorageService } from "../../../services/SelfMediaFileStorageService"
@@ -44,10 +45,10 @@ interface StepTopicAndDetailProps {
 	fileStorageService?: SelfMediaFileStorageService | null
 }
 
-function createEmptyArticle(): ArticleDetail {
+function createEmptyArticle(index: number): ArticleDetail {
 	return {
 		title: "",
-		folderName: "",
+		folderName: buildDefaultArticleFolderName("", index),
 		style: "professional",
 		outline: [],
 		cardCount: 6,
@@ -57,10 +58,10 @@ function createEmptyArticle(): ArticleDetail {
 	}
 }
 
-function createArticleFromTopic(topic: GeneratedTopic): ArticleDetail {
+function createArticleFromTopic(topic: GeneratedTopic, index: number): ArticleDetail {
 	return {
 		title: topic.title,
-		folderName: "",
+		folderName: buildDefaultArticleFolderName(topic.title, index),
 		style: "professional",
 		outline: [],
 		cardCount: 6,
@@ -89,7 +90,7 @@ export default function StepTopicAndDetail({
 	const safeActiveIndex = Math.min(Math.max(0, activeIndex), Math.max(0, articles.length - 1))
 
 	const handleAdd = useCallback(() => {
-		const newArticle = createEmptyArticle()
+		const newArticle = createEmptyArticle(articles.length)
 		onChange([...articles, newArticle])
 		setActiveIndex(articles.length) // Focus on the newly added article
 		setSlideDirection("left")
@@ -148,12 +149,13 @@ export default function StepTopicAndDetail({
 				})
 
 				if (topics.length > 0) {
-					const newArticles: ArticleDetail[] = topics.map((topic) => {
+					const newArticles: ArticleDetail[] = topics.map((topic, offset) => {
 						const outline = topic.outline ? parseOutlineFromText(topic.outline) : []
 						const platform = (topic.platform as SelfMediaPlatform) || "rednote"
+						const articleIndex = articles.length + offset
 						return {
 							title: topic.title,
-							folderName: "",
+							folderName: buildDefaultArticleFolderName(topic.title, articleIndex),
 							style: topic.style || "professional",
 							visualPreset: topic.visualPreset || "none",
 							outline,
@@ -185,7 +187,9 @@ export default function StepTopicAndDetail({
 				})
 
 				if (topics.length > 0) {
-					const newArticles = topics.map(createArticleFromTopic)
+					const newArticles = topics.map((topic, offset) =>
+						createArticleFromTopic(topic, articles.length + offset),
+					)
 					onChange([...articles, ...newArticles])
 					setActiveIndex(articles.length) // focus on first newly generated topic
 					return true
@@ -298,32 +302,54 @@ export default function StepTopicAndDetail({
 						{/* Navigator Header */}
 						<div
 							className={cn(
-								"flex items-center justify-between border-b border-zinc-950/10 pb-3",
+								"flex items-center justify-between border-b border-zinc-950/10 pb-3 [container-type:inline-size]",
 								isLeftCollapsed && "hidden",
 							)}
 						>
 							<span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-zinc-950">
 								<Layers size={13} className="text-primary" />
-								<span>选题看板 ({articles.length})</span>
+								<span className="hidden [@container(min-width:160px)]:inline">
+									选题看板 ({articles.length})
+								</span>
+								<span className="[@container(min-width:160px)]:hidden">
+									({articles.length})
+								</span>
 							</span>
-							<div className="flex items-center gap-1.5">
-								<button
-									type="button"
-									title="收起看板"
-									className="flex h-6 w-6 cursor-pointer items-center justify-center bg-zinc-100 text-zinc-950 transition-all hover:bg-zinc-200"
-									onClick={() => setIsLeftCollapsed(true)}
-								>
-									<ChevronLeft size={12} />
-								</button>
-								<button
-									type="button"
-									className="flex h-6 cursor-pointer items-center gap-1 bg-zinc-950 px-3 text-[10px] font-bold text-white transition-all hover:bg-zinc-900 active:scale-[0.98]"
-									onClick={handleAdd}
-								>
-									<Plus size={10} />
-									<span>添加选题</span>
-								</button>
-							</div>
+							<TooltipProvider>
+								<div className="flex items-center gap-1.5">
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												className="flex h-6 w-6 cursor-pointer items-center justify-center bg-zinc-100 text-zinc-950 transition-all hover:bg-zinc-200"
+												onClick={() => setIsLeftCollapsed(true)}
+											>
+												<ChevronLeft size={12} />
+											</button>
+										</TooltipTrigger>
+										<TooltipContent>
+											<p className="text-xs font-normal">收起看板</p>
+										</TooltipContent>
+									</Tooltip>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												className="flex h-6 cursor-pointer items-center gap-1 bg-zinc-950 px-2 text-[10px] font-bold text-white transition-all hover:bg-zinc-900 active:scale-[0.98] [@container(min-width:460px)]:px-3"
+												onClick={handleAdd}
+											>
+												<Plus size={10} />
+												<span className="hidden [@container(min-width:260px)]:inline">
+													添加选题
+												</span>
+											</button>
+										</TooltipTrigger>
+										<TooltipContent>
+											<p className="text-xs font-normal">添加选题</p>
+										</TooltipContent>
+									</Tooltip>
+								</div>
+							</TooltipProvider>
 						</div>
 
 						{/* Scrollable list of items */}
@@ -454,39 +480,64 @@ export default function StepTopicAndDetail({
 							isLeftCollapsed ? "lg:col-span-11" : "lg:col-span-8",
 						)}
 					>
-						{/* Detail Workspace Header - Inline editable Title */}
+						{/* Detail Workspace Header - Inline editable title and folder */}
 						<div className="sticky top-0 z-20 flex shrink-0 select-none items-center justify-between gap-4 border-b border-border/15 bg-white pb-4 pt-4 shadow-[0_4px_12px_-6px_rgba(0,0,0,0.08)]">
-							<div className="flex min-w-0 flex-1 items-center gap-2.5">
+							<div className="grid min-w-0 flex-1 grid-cols-1 gap-2.5 md:grid-cols-[minmax(0,1fr)_13rem]">
 								{/* Article Index Badge */}
-								<span className="flex h-7 shrink-0 items-center justify-center bg-primary/20 px-2.5 text-xs font-black text-zinc-950">
-									第 {safeActiveIndex + 1} / {articles.length} 篇
-								</span>
+								<div className="flex min-w-0 items-center gap-2.5">
+									<span className="flex h-7 shrink-0 items-center justify-center bg-primary/20 px-2.5 text-xs font-black text-zinc-950">
+										第 {safeActiveIndex + 1} / {articles.length} 篇
+									</span>
 
-								{/* Editable Title Input */}
-								<div className="group relative min-w-0 flex-1">
+									{/* Editable Title Input */}
+									<div className="group relative min-w-0 flex-1">
+										<input
+											type="text"
+											className="w-full border-0 border-b border-transparent bg-white px-2.5 py-1 pr-7 text-base font-bold text-foreground outline-none transition-all duration-300 placeholder:text-muted-foreground/30 hover:bg-muted/10 focus:border-zinc-950 focus:bg-primary/[0.03]"
+											placeholder={t(
+												"detail.selfMedia.initPanel.stepTopic.titlePlaceholder",
+												"点击输入选题标题...",
+											)}
+											value={articles[safeActiveIndex]?.title || ""}
+											onChange={(e) =>
+												onArticleUpdate(safeActiveIndex, {
+													...articles[safeActiveIndex],
+													title: e.target.value,
+												})
+											}
+										/>
+										<InlineVoiceButton
+											value={articles[safeActiveIndex]?.title || ""}
+											onResult={(text) =>
+												onArticleUpdate(safeActiveIndex, {
+													...articles[safeActiveIndex],
+													title: text,
+												})
+											}
+										/>
+									</div>
+								</div>
+
+								<div className="relative min-w-0">
+									<Folder
+										className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/45"
+										size={12}
+									/>
 									<input
 										type="text"
-										className="w-full border-0 border-b border-transparent bg-white px-2.5 py-1 pr-7 text-base font-bold text-foreground outline-none transition-all duration-300 placeholder:text-muted-foreground/30 hover:bg-muted/10 focus:border-zinc-950 focus:bg-primary/[0.03]"
+										className="w-full border-0 border-b border-transparent bg-white py-1 pl-7 pr-2 text-xs font-bold text-zinc-950/70 outline-none transition-all placeholder:text-muted-foreground/30 hover:bg-muted/10 focus:border-zinc-950 focus:bg-primary/[0.03]"
 										placeholder={t(
-											"detail.selfMedia.initPanel.stepTopic.titlePlaceholder",
-											"点击输入选题标题...",
+											"detail.selfMedia.initPanel.stepTopic.folderPlaceholder",
+											"文件夹名（选填，留空自动生成）",
 										)}
-										value={articles[safeActiveIndex]?.title || ""}
+										value={articles[safeActiveIndex]?.folderName || ""}
 										onChange={(e) =>
 											onArticleUpdate(safeActiveIndex, {
 												...articles[safeActiveIndex],
-												title: e.target.value,
+												folderName: e.target.value,
 											})
 										}
-									/>
-									<InlineVoiceButton
-										value={articles[safeActiveIndex]?.title || ""}
-										onResult={(text) =>
-											onArticleUpdate(safeActiveIndex, {
-												...articles[safeActiveIndex],
-												title: text,
-											})
-										}
+										data-testid="self-media-step-topic-folder-name-input"
 									/>
 								</div>
 							</div>

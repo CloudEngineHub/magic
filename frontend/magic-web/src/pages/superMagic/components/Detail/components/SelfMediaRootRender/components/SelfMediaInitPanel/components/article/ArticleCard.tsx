@@ -17,7 +17,6 @@ import CardContentEditor from "./CardContentEditor"
 import AiInputBox from "../ai/AiInputBox"
 import AiActionButton from "../ai/AiActionButton"
 import VisualPresetPicker from "../picker/VisualPresetPicker"
-import ModelSelector from "../picker/ModelSelector"
 import ReferenceFilePicker from "../picker/ReferenceFilePicker"
 import { MagicPromptEditor } from "@/components/base/MagicPromptEditor"
 import {
@@ -25,7 +24,6 @@ import {
 	generateCardContent,
 	optimizeOutline,
 	optimizeCardContent,
-	polishText,
 } from "../../../../services/selfMediaAiGenerate"
 import { Trash2, ChevronDown, Folder } from "lucide-react"
 import PlatformBrandIcon from "../../../PlatformBrandIcon"
@@ -57,7 +55,6 @@ export default function ArticleCard({
 	const [expanded, setExpanded] = useState(false)
 	const [generatingOutline, setGeneratingOutline] = useState(false)
 	const [outlineModel, setOutlineModel] = useState("")
-	const [sharedModel, setSharedModel] = useState("")
 	const [optimizePopoverOpen, setOptimizePopoverOpen] = useState(false)
 	const [optimizeInstruction, setOptimizeInstruction] = useState("")
 	const abortRef = useRef<AbortController | null>(null)
@@ -528,14 +525,6 @@ export default function ArticleCard({
 								"detail.selfMedia.initPanel.stepDetail.descriptionPlaceholder",
 							)}
 							enableAIPolish
-							onAIPolish={async (text) => {
-								const result = await polishText({
-									text,
-									context: `Article title: ${article.title}, Platform: ${article.platform || ""}`,
-									model: sharedModel || undefined,
-								})
-								return result || text
-							}}
 							enableVoice
 							enableMention
 							rows={3}
@@ -548,12 +537,6 @@ export default function ArticleCard({
 										compact
 									/>
 									<span className="flex-1" />
-									<ModelSelector
-										value={sharedModel}
-										onChange={setSharedModel}
-										mode="icon"
-										className="flex h-6 items-center justify-center px-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-950"
-									/>
 								</div>
 							}
 						/>

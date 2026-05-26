@@ -61,9 +61,9 @@ The frontend self-media planning panel stores work-in-progress files inside the 
         "name": "mascot.png",
         "description": "Brand mascot reference",
         "relativePath": "self-media/__drafts/brand-images/mascot.png",
-        "isImage": true
-      }
-    ]
+        "isImage": true,
+      },
+    ],
   },
   "articles": [
     {
@@ -81,19 +81,19 @@ The frontend self-media planning panel stores work-in-progress files inside the 
               "id": "outline-mat-1",
               "name": "outline-proof.pdf",
               "description": "Source for the intro node",
-              "relativePath": "self-media/__drafts/draft-materials/0/outline-proof.pdf"
-            }
+              "relativePath": "self-media/__drafts/draft-materials/0/outline-proof.pdf",
+            },
           ],
-          "children": []
-        }
+          "children": [],
+        },
       ],
       "materials": [
         {
           "id": "article-mat-1",
           "name": "article-chart.png",
           "description": "Main comparison chart",
-          "relativePath": "self-media/__drafts/draft-materials/0/article-chart.png"
-        }
+          "relativePath": "self-media/__drafts/draft-materials/0/article-chart.png",
+        },
       ],
       "notes": "Close with a follow CTA",
       "platform": "rednote",
@@ -104,11 +104,11 @@ The frontend self-media planning panel stores work-in-progress files inside the 
           "content": "optional inline fallback content",
           "kind": "text",
           "file_id": "file-123",
-          "file_path": "shared/visual-guide.pdf"
-        }
-      ]
-    }
-  ]
+          "file_path": "shared/visual-guide.pdf",
+        },
+      ],
+    },
+  ],
 }
 ```
 
@@ -140,7 +140,7 @@ The frontend self-media planning panel stores work-in-progress files inside the 
       "name": "mascot.png",
       "description": "Brand mascot reference",
       "relativePath": "self-media/__drafts/brand-images/mascot.png",
-      "kind": "file"
+      "kind": "file",
     },
     {
       "id": "article-mat-1",
@@ -149,7 +149,7 @@ The frontend self-media planning panel stores work-in-progress files inside the 
       "name": "article-chart.png",
       "description": "Main comparison chart",
       "relativePath": "self-media/__drafts/draft-materials/0/article-chart.png",
-      "kind": "file"
+      "kind": "file",
     },
     {
       "id": "outline-mat-1",
@@ -159,7 +159,7 @@ The frontend self-media planning panel stores work-in-progress files inside the 
       "name": "outline-proof.pdf",
       "description": "Source for the intro node",
       "relativePath": "self-media/__drafts/draft-materials/0/outline-proof.pdf",
-      "kind": "file"
+      "kind": "file",
     },
     {
       "id": "visual-0-0",
@@ -169,9 +169,9 @@ The frontend self-media planning panel stores work-in-progress files inside the 
       "kind": "text",
       "file_id": "file-123",
       "file_path": "shared/visual-guide.pdf",
-      "content": "optional inline fallback content"
-    }
-  ]
+      "content": "optional inline fallback content",
+    },
+  ],
 }
 ```
 
@@ -196,7 +196,7 @@ Never silently skip a reference because the preferred source is unavailable. If 
   "createdAt": "2026-05-19T11:20:00Z",
   "currentStep": 3,
   "articleCount": 2,
-  "titles": ["Post A", "Post B"]
+  "titles": ["Post A", "Post B"],
 }
 ```
 
@@ -215,18 +215,14 @@ Same as `draft.json`, but uses `id` and `name` instead of `currentStep`:
   "name": "Tech review template",
   "createdAt": "2026-05-18T09:00:00Z",
   "updatedAt": "2026-05-18T09:00:00Z",
-  "global": { /* same structure as draft */ },
-  "articles": [ /* same structure as draft */ ]
+  "global": {
+    /* same structure as draft */
+  },
+  "articles": [
+    /* same structure as draft */
+  ],
 }
 ```
-
----
-
-## `draft.md`
-
-`draft.md` is a human-readable mirror. It is helpful for quick scanning, but `draft.json` and `reference-index.json` are the source of truth.
-
-Do not rely on `draft.md` alone for detailed reference resolution.
 
 ---
 
@@ -234,28 +230,32 @@ Do not rely on `draft.md` alone for detailed reference resolution.
 
 The `visualPreset` field maps directly to the presets in this skill's `presets/` directory:
 
-| Value | Platform | Meaning |
-| --- | --- | --- |
-| `neo-brutalism` | rednote | Built-in preset |
-| `code-dispatch` | rednote | Built-in preset |
-| `dark-tech` | rednote | Built-in preset |
-| `ins-modern` | instagram | Built-in preset |
-| `custom:{description}` | any | Triggers the `generate-preset` sub-skill |
-| `none` | any | No preset; design freely |
-| empty / undefined | any | Frontend has not resolved the preset yet |
+| Value                   | Platform  | Meaning                                  |
+| ----------------------- | --------- | ---------------------------------------- |
+| `neo-brutalism`         | rednote   | Built-in preset                          |
+| `code-dispatch`         | rednote   | Built-in preset                          |
+| `dark-tech`             | rednote   | Built-in preset                          |
+| `gradient-editorial`    | rednote   | Built-in preset                          |
+| `personal-insight`      | rednote   | Built-in preset                          |
+| `film-vintage`          | rednote   | Built-in preset                          |
+| `product-launch-preset` | rednote   | Built-in preset                          |
+| `ins-modern`            | instagram | Built-in preset                          |
+| `custom:{description}`  | any       | Triggers the `generate-preset` sub-skill |
+| `none`                  | any       | No preset; design freely                 |
+| empty / undefined       | any       | Frontend has not resolved the preset yet |
 
 ---
 
 ## Content Style Values
 
-| Value | Meaning |
-| --- | --- |
+| Value          | Meaning                    |
+| -------------- | -------------------------- |
 | `professional` | Authoritative, data-driven |
-| `casual` | Conversational, friendly |
-| `storytelling` | Narrative-driven |
-| `tutorial` | Step-by-step instructional |
-| `emotional` | Emotion-first, relatable |
-| `custom` | User-provided free text |
+| `casual`       | Conversational, friendly   |
+| `storytelling` | Narrative-driven           |
+| `tutorial`     | Step-by-step instructional |
+| `emotional`    | Emotion-first, relatable   |
+| `custom`       | User-provided free text    |
 
 ---
 

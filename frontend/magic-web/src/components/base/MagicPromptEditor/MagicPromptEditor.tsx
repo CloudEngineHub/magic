@@ -13,7 +13,9 @@ import { useTranslation } from "react-i18next"
 import type { Language } from "@/components/business/MentionPanel/i18n/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import SuperMagicVoiceInput from "@/pages/superMagic/components/MessageEditor/components/VoiceInput"
+import ModelSelector from "@/pages/superMagic/components/Detail/components/SelfMediaRootRender/components/SelfMediaInitPanel/components/picker/ModelSelector"
 import type { MagicPromptEditorProps, MagicPromptEditorRef, MentionNodeInfo } from "./types"
+import { useAIPolish } from "./useAIPolish"
 import AIPolishButton from "./AIPolishButton"
 import "./MagicPromptEditor.css"
 
@@ -50,7 +52,11 @@ const MagicPromptEditor = forwardRef<MagicPromptEditorRef, MagicPromptEditorProp
 	) => {
 		const { i18n, t } = useTranslation("super")
 		const [isPolishing, setIsPolishing] = useState(false)
+		const [polishModelId, setPolishModelId] = useState("")
 		const contentRef = useRef<string>(JSON.stringify(value ?? null))
+
+		// Built-in polish via AiLLMService
+		const { polishText: builtinPolish } = useAIPolish({ model: polishModelId || undefined })
 
 		const computedMinHeight = rows ? rows * 24 + 16 : minHeight
 
@@ -259,14 +265,16 @@ const MagicPromptEditor = forwardRef<MagicPromptEditorRef, MagicPromptEditorProp
 
 		/** Handle AI polish action */
 		const handleAIPolish = useCallback(async () => {
-			if (!onAIPolish || !editor || isPolishing) return
+			if (!editor || isPolishing) return
+			const polishFn = onAIPolish || builtinPolish
+			if (!polishFn) return
 
 			setIsPolishing(true)
 			try {
 				const { text, mentions } = getTextWithPlaceholders()
 				if (!text.trim()) return
 
-				const polished = await onAIPolish(text, mentions)
+				const polished = await polishFn(text, mentions)
 				if (polished && polished !== text) {
 					rebuildContentFromPolishedText(polished, mentions)
 				}
@@ -275,6 +283,7 @@ const MagicPromptEditor = forwardRef<MagicPromptEditorRef, MagicPromptEditorProp
 			}
 		}, [
 			onAIPolish,
+			builtinPolish,
 			editor,
 			isPolishing,
 			getTextWithPlaceholders,
@@ -297,7 +306,7 @@ const MagicPromptEditor = forwardRef<MagicPromptEditorRef, MagicPromptEditorProp
 			focus: () => editor?.commands.focus(),
 		}))
 
-		const hasToolbar = (enableAIPolish && onAIPolish) || enableVoice
+		const hasToolbar = enableAIPolish || enableVoice
 
 		/** Called by SuperMagicVoiceInput after each voice update */
 		const handleVoiceUpdateValue = useCallback(
@@ -336,7 +345,7 @@ const MagicPromptEditor = forwardRef<MagicPromptEditorRef, MagicPromptEditorProp
 					{/* Right-side toolbar */}
 					{hasToolbar && (
 						<div className="flex flex-col items-center gap-1 border-l border-input px-1 py-1.5">
-							{enableAIPolish && onAIPolish && (
+							{enableAIPolish && (
 								<AIPolishButton
 									onClick={handleAIPolish}
 									loading={isPolishing}
@@ -356,6 +365,19 @@ const MagicPromptEditor = forwardRef<MagicPromptEditorRef, MagicPromptEditorProp
 						</div>
 					)}
 				</div>
+
+				{/* Polish model selector */}
+				{enableAIPolish && !onAIPolish && (
+					<div className="flex items-center border-t border-input px-2 py-1">
+						<ModelSelector
+							value={polishModelId}
+							onChange={setPolishModelId}
+							mode="full"
+							label={t("detail.aiCard.form.polishModel", "润色模型")}
+							className="!h-5 !min-h-0 !gap-1 !rounded-sm !border-0 !bg-transparent !px-1 !py-0 !text-[11px] !text-muted-foreground/70 hover:!text-foreground hover:!bg-muted/50"
+						/>
+					</div>
+				)}
 
 				{/* Bottom toolbar slot */}
 				{bottomToolbar && <div className="border-t border-input">{bottomToolbar}</div>}

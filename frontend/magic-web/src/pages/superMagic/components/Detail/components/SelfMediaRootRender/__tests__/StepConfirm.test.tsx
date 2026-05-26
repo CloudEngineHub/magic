@@ -7,11 +7,13 @@ const {
 	mockNavigateToBatchTopic,
 	mockFetchTopics,
 	mockPrefillSelfMediaMagicProjectIndex,
+	mockEnsureArticlePostAssetDirectories,
 } = vi.hoisted(() => ({
 	mockSendArticleBatch: vi.fn(),
 	mockNavigateToBatchTopic: vi.fn(),
 	mockFetchTopics: vi.fn(),
 	mockPrefillSelfMediaMagicProjectIndex: vi.fn(),
+	mockEnsureArticlePostAssetDirectories: vi.fn(),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -31,6 +33,10 @@ vi.mock("../services/selfMediaBatchSend", () => ({
 
 vi.mock("../services/selfMediaMagicProjectIndex", () => ({
 	prefillSelfMediaMagicProjectIndex: mockPrefillSelfMediaMagicProjectIndex,
+}))
+
+vi.mock("../services/selfMediaPostPaths", () => ({
+	ensureArticlePostAssetDirectories: mockEnsureArticlePostAssetDirectories,
 }))
 
 vi.mock("@/pages/superMagic/services", () => ({
@@ -86,6 +92,17 @@ describe("StepConfirm", () => {
 		mockFetchTopics.mockReset()
 		mockPrefillSelfMediaMagicProjectIndex.mockReset()
 		mockPrefillSelfMediaMagicProjectIndex.mockResolvedValue(undefined)
+		mockEnsureArticlePostAssetDirectories.mockReset()
+		mockEnsureArticlePostAssetDirectories.mockResolvedValue([
+			{
+				articleIndex: 0,
+				folderName: "post-a",
+				postPath: "Self Media/posts/post-a",
+				assetsPath: "Self Media/posts/post-a/assets",
+				postEntry: "posts/post-a/post.json",
+				assetsDirId: "assets-dir",
+			},
+		])
 		consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
 	})
 
@@ -159,10 +176,23 @@ describe("StepConfirm", () => {
 		})
 	})
 
-	it("prefills the root post index after archiving and before sending topics", async () => {
+	it("creates post asset directories after archiving and before prefilling the root post index", async () => {
 		const order: string[] = []
 		const onArchiveDraft = vi.fn().mockImplementation(async () => {
 			order.push("archive")
+		})
+		mockEnsureArticlePostAssetDirectories.mockImplementation(async () => {
+			order.push("ensure-dirs")
+			return [
+				{
+					articleIndex: 0,
+					folderName: "post-a",
+					postPath: "Self Media/posts/post-a",
+					assetsPath: "Self Media/posts/post-a/assets",
+					postEntry: "posts/post-a/post.json",
+					assetsDirId: "assets-dir",
+				},
+			]
 		})
 		mockPrefillSelfMediaMagicProjectIndex.mockImplementation(async () => {
 			order.push("prefill")
@@ -177,6 +207,7 @@ describe("StepConfirm", () => {
 				data={data}
 				selectedProject={{ id: "project-1" }}
 				folderFileId="folder-1"
+				folderPath="Self Media"
 				attachmentList={[
 					{
 						file_id: "folder-1",
@@ -195,11 +226,62 @@ describe("StepConfirm", () => {
 		await waitFor(() => {
 			expect(mockSendArticleBatch).toHaveBeenCalledTimes(1)
 		})
-		expect(order).toEqual(["archive", "prefill", "send"])
+		expect(order).toEqual(["archive", "ensure-dirs", "prefill", "send"])
+		expect(mockEnsureArticlePostAssetDirectories).toHaveBeenCalledWith({
+			projectId: "project-1",
+			rootDirectoryId: "folder-1",
+			rootPath: "Self Media",
+			articles: data.articles,
+			existingNodes: expect.any(Array),
+		})
 		expect(mockPrefillSelfMediaMagicProjectIndex).toHaveBeenCalledWith({
 			articles: data.articles,
 			attachmentList: expect.any(Array),
 			folderFileId: "folder-1",
+			postTargets: [
+				expect.objectContaining({
+					folderName: "post-a",
+					postEntry: "posts/post-a/post.json",
+				}),
+			],
+		})
+		expect(mockSendArticleBatch).toHaveBeenCalledWith(
+			expect.objectContaining({
+				postTargets: [
+					expect.objectContaining({
+						assetsDirId: "assets-dir",
+						assetsPath: "Self Media/posts/post-a/assets",
+					}),
+				],
+			}),
+		)
+	})
+
+	it("stops generation when post asset directory creation fails", async () => {
+		const onArchiveDraft = vi.fn().mockResolvedValue(undefined)
+		const onGenerateFailed = vi.fn()
+		mockEnsureArticlePostAssetDirectories.mockRejectedValue(new Error("mkdir failed"))
+		mockSendArticleBatch.mockResolvedValue([])
+
+		render(
+			<StepConfirm
+				data={data}
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="Self Media"
+				onArchiveDraft={onArchiveDraft}
+				onGenerateFailed={onGenerateFailed}
+			/>,
+		)
+
+		fireEvent.click(screen.getByText("detail.selfMedia.initPanel.stepConfirm.startBtn"))
+
+		await waitFor(() => {
+			expect(onArchiveDraft).toHaveBeenCalledTimes(1)
+			expect(mockEnsureArticlePostAssetDirectories).toHaveBeenCalledTimes(1)
+			expect(mockPrefillSelfMediaMagicProjectIndex).not.toHaveBeenCalled()
+			expect(mockSendArticleBatch).not.toHaveBeenCalled()
+			expect(onGenerateFailed).toHaveBeenCalledTimes(1)
 		})
 	})
 
