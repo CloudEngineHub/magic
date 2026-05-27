@@ -8,6 +8,9 @@ import {
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
+import { Edit, MessageSquarePlus, RefreshCcw } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererRef,
@@ -21,6 +24,14 @@ interface WechatArticleViewProps {
 	post: SelfMediaPost
 	attachmentList?: PlatformComponentProps["attachmentList"]
 	selectedProject?: unknown
+	/** Add article file to the current chat input */
+	onAddToCurrentChat?: () => void
+	/** Navigate to the edit view */
+	onGoToEdit?: () => void
+	/** Refresh the article content */
+	onRefresh?: () => void
+	/** Whether the user has permission to edit */
+	allowEdit?: boolean
 }
 
 export interface WechatArticleViewRef {
@@ -40,7 +51,15 @@ function getFileFolderPath(
 }
 
 function WechatArticleViewInner(
-	{ post, attachmentList, selectedProject }: WechatArticleViewProps,
+	{
+		post,
+		attachmentList,
+		selectedProject,
+		onAddToCurrentChat,
+		onGoToEdit,
+		onRefresh,
+		allowEdit,
+	}: WechatArticleViewProps,
 	ref: React.ForwardedRef<WechatArticleViewRef>,
 ) {
 	const { t } = useTranslation("super")
@@ -165,8 +184,11 @@ function WechatArticleViewInner(
 	}
 	if (!content) return null
 
+	const readOnly = allowEdit === false
+	const hasActions = (!readOnly && onAddToCurrentChat) || (!readOnly && onGoToEdit) || onRefresh
+
 	return (
-		<div className="h-full w-full bg-white" data-testid="wechat-article-view">
+		<div className="relative h-full w-full bg-white" data-testid="wechat-article-view">
 			<IsolatedHTMLRenderer
 				ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
 				content={content}
@@ -179,6 +201,66 @@ function WechatArticleViewInner(
 				isVisible
 				className="h-full w-full"
 			/>
+			{hasActions && (
+				<div
+					className={cn(
+						"absolute right-10 top-6 z-10 flex flex-col gap-1 rounded-md bg-background/80 p-1 shadow-md backdrop-blur-sm",
+					)}
+					data-testid="wechat-article-floating-actions"
+				>
+					{!readOnly && onAddToCurrentChat && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									onClick={onAddToCurrentChat}
+									data-testid="wechat-article-action-add-file"
+									className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+								>
+									<MessageSquarePlus className="h-4 w-4" />
+								</button>
+							</TooltipTrigger>
+							<TooltipContent side="left">
+								{t("detail.selfMedia.edit.addArticleFileToChat")}
+							</TooltipContent>
+						</Tooltip>
+					)}
+					{!readOnly && onGoToEdit && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									onClick={onGoToEdit}
+									data-testid="wechat-article-action-edit"
+									className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+								>
+									<Edit className="h-4 w-4" />
+								</button>
+							</TooltipTrigger>
+							<TooltipContent side="left">
+								{t("detail.selfMedia.edit.goToArticleEdit")}
+							</TooltipContent>
+						</Tooltip>
+					)}
+					{onRefresh && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									onClick={onRefresh}
+									data-testid="wechat-article-action-refresh"
+									className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+								>
+									<RefreshCcw className="h-4 w-4" />
+								</button>
+							</TooltipTrigger>
+							<TooltipContent side="left">
+								{t("detail.selfMedia.edit.refreshArticle")}
+							</TooltipContent>
+						</Tooltip>
+					)}
+				</div>
+			)}
 		</div>
 	)
 }

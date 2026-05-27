@@ -5,6 +5,7 @@ import { ElementInspectorOverlay } from "@/components/business/ElementInspector"
 import { flattenAttachments } from "../../../../contents/HTML/utils"
 import SelfMediaShellHeader from "../../components/SelfMediaShellHeader"
 import { useSelfMediaInspector } from "../../hooks/useSelfMediaInspector"
+import { useShellFileHandlers } from "../../hooks/useShellFileHandlers"
 import { useSelfMediaStore } from "../../stores"
 import type { PlatformComponentProps, SelfMediaView } from "../../types"
 import WechatArticleView, { type WechatArticleViewRef } from "./article"
@@ -30,6 +31,16 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 		[store],
 	)
 	const onEnsurePostLoaded = useCallback((idx: number) => store.ensurePostLoaded(idx), [store])
+
+	const { handleAddFileToCurrentChat } = useShellFileHandlers({ attachmentList, activePost })
+
+	const handleAddArticleToCurrentChat = useCallback(() => {
+		handleAddFileToCurrentChat(activePost?.article?.fileId)
+	}, [activePost, handleAddFileToCurrentChat])
+
+	const handleGoToEdit = useCallback(() => {
+		onChangeView("edit")
+	}, [onChangeView])
 
 	// Hide edit/code tabs when editing is not allowed (read-only / share mode)
 	const visibleTabs = useMemo(
@@ -249,6 +260,10 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 									post={activePost}
 									attachmentList={attachmentList}
 									selectedProject={selectedProject}
+									onAddToCurrentChat={handleAddArticleToCurrentChat}
+									onGoToEdit={handleGoToEdit}
+									onRefresh={handleRefresh}
+									allowEdit={allowEdit}
 								/>
 							) : null}
 						</WechatOfficialContentGate>

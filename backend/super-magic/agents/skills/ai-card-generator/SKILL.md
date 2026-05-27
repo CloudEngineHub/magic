@@ -74,9 +74,13 @@ Preferred mode is folder-based multi-file for maintainability. Single-file mode 
 │   └── scripts.js                    # Optional
 └── history/
   ├── 2026-05-23_09-00/
-  │   └── index.html
+  │   ├── index.html
+  │   ├── styles.css                # Optional
+  │   └── scripts.js               # Optional
   └── 2026-05-22_09-00/
-    └── index.html
+    ├── index.html
+    ├── styles.css                  # Optional
+    └── scripts.js                  # Optional
 
 Backward compatible (legacy):
 
@@ -214,12 +218,12 @@ When a scheduled task triggers, execute the following:
 
 ```
 1. 读取 magic.project.js 获取提示词和上下文配置
-2. 读取模板（优先 `template/index.html`，兼容 `template.html`）理解布局结构和数据区域标记
+2. 读取模板目录（优先 `template/`，兼容 `template.html`）理解布局结构和数据区域标记
 3. 通过 web_search / read_webpages_as_markdown 获取最新数据
 4. 根据提示词分析和组织数据
-5. 基于模板结构 + 新数据生成完整 HTML
-6. 归档当前最新版本到 history/（推荐目录归档：`YYYY-MM-DD_HH-mm/`）
-7. 写入新的 latest（推荐 `latest/index.html`，兼容 `latest.html`）
+5. 归档：将当前 `latest/` 下所有文件复制到 `history/YYYY-MM-DD_HH-mm/`（兼容模式：重命名 `latest.html`）
+6. 复制模板：将 `template/` 下所有文件复制到 `latest/`（覆盖），作为本次生成的基础
+7. 修改数据区：仅修改 `latest/index.html` 中 `<!-- DATA_SECTION_START -->` 到 `<!-- DATA_SECTION_END -->` 之间的内容，填入最新数据；不改动 styles.css / scripts.js
 8. 更新 magic.project.js 的 last_generated 和 generation_count
 ```
 
@@ -242,10 +246,13 @@ to avoid shell parsing issues with punctuation, quotes, or brackets.
 shell_exec(
     command='''cat > /tmp/ai-card-cron-message.txt <<'EOF'
 Update the AI card {card_name}. Read {card_directory}/magic.project.js for
-configuration and prompts, read template/index.html (fallback template.html),
-fetch fresh data, generate the new version to latest/index.html (fallback latest.html),
-archive the previous latest version into history/, and update last_generated
-and generation_count in magic.project.js.
+configuration and prompts. Steps:
+1. Archive: copy ALL files in latest/ to history/YYYY-MM-DD_HH-mm/
+2. Copy template: copy ALL files from template/ to latest/ (overwrite)
+3. Fetch fresh data based on the prompt in magic.project.js
+4. Modify only the DATA_SECTION in latest/index.html with the new data
+5. Update last_generated and generation_count in magic.project.js
+Fallback for legacy single-file mode: use template.html → latest.html.
 EOF
 cd /app/agents/skills/using-cron &&
 python scripts/create.py --task-name "AI Card: {card_name}" --message-content-file /tmp/ai-card-cron-message.txt --type daily_repeat --time "9:00" --topic-pattern ip-manager'''
