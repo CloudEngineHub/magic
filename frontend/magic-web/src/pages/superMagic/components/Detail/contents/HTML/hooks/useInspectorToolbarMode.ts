@@ -3,9 +3,6 @@ import type { TFunction } from "i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { buildAgentPromptContent } from "@/components/business/ElementInspector"
 import type { useElementInspector } from "@/components/business/ElementInspector"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
-import { roleStore } from "@/pages/superMagic/stores"
 
 type ElementInspector = ReturnType<typeof useElementInspector>
 
@@ -21,9 +18,8 @@ export interface InspectorFileInfo {
  *
  * When activated via `startInToolbarMode()`:
  *  - The inspector runs but the info card is hidden.
- *  - On element selection: creates a new topic then — once navigation is
- *    complete — inserts a pre-filled prompt with a super-placeholder into
- *    the new topic's chat editor.
+ *  - On element selection: appends a pre-filled prompt with a super-placeholder
+ *    into the current topic's chat editor without overwriting existing content.
  */
 export function useInspectorToolbarMode(
 	elementInspector: ElementInspector,
@@ -41,28 +37,8 @@ export function useInspectorToolbarMode(
 		elementInspector.stop()
 		inspectorModeRef.current = "devConsole"
 
-		// In crew/skill/MagiClaw scenarios there's no Create_New_Topic listener;
-		// fall back to setting the input message directly in the current editor.
-		if (!pubsub.hasListeners(PubSubEvents.Create_New_Topic)) {
-			pubsub.publish(PubSubEvents.Set_Input_Message, content)
-			return
-		}
-
-		// Only specify General mode if it's available in the current project
-		const topicMode = superMagicModeService.isModeValid(TopicMode.General)
-			? TopicMode.General
-			: undefined
-
-		// Sync the role store so tabPattern is consistent with the new topic's mode
-		if (topicMode) {
-			roleStore.setCurrentRole(topicMode)
-		}
-
-		// Pass content via afterCreate so it is inserted AFTER navigation completes
-		pubsub.publish(PubSubEvents.Create_New_Topic, {
-			topicMode,
-			afterCreate: { content, extraData: { hasInput: true } },
-		})
+		// Append to current editor without replacing existing content
+		pubsub.publish(PubSubEvents.Append_Content_To_Editor, content)
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [elementInspector.selectedElement])
 
