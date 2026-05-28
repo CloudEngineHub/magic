@@ -5,7 +5,6 @@ import {
 	Eye,
 	EyeClosed,
 	Folder,
-	Image,
 	LockKeyhole,
 	LockOpen,
 	Minimize2 as MinimizeIcon,
@@ -35,7 +34,6 @@ import { useLayersUI } from "../../../../context/LayersUIContext"
 import { useElementMenu } from "../../../ElementMenu/ElementMenuContext"
 import { useMagic } from "../../../../context/MagicContext"
 import type { CanvasDesignStorageData } from "../../../../types.magic"
-import { useImageUrls } from "../../../../hooks/useImageUrls"
 import { useCanvasEvent } from "../../../../hooks/useCanvasEvent"
 import { RectangleThumbnail } from "./thumbnails/RectangleThumbnail"
 import { EllipseThumbnail } from "./thumbnails/EllipseThumbnail"
@@ -81,9 +79,6 @@ export default function LayersDrawer() {
 
 	// 获取元素菜单方法
 	const { openMenu } = useElementMenu()
-
-	// 获取图片 URL 映射（仅在图层展开时获取）
-	const imageUrls = useImageUrls(!collapsed)
 
 	// 从 Context 获取画布 UI 状态
 	const { layerRenamingElementId, setLayerRenamingElementId, selectedElementIds, readonly } =
@@ -160,18 +155,9 @@ export default function LayersDrawer() {
 					iconContent = <Type size={16} className={styles.layerNodeTextIcon} />
 					break
 				case ElementTypeEnum.Image:
-					const imageUrl = imageUrls.get(node.id)
-					if (imageUrl) {
-						iconContent = (
-							<LayerImageThumbnail
-								element={node.data as ImageElement}
-								src={imageUrl}
-								alt={node.label}
-							/>
-						)
-					} else {
-						iconContent = <Image size={16} className={styles.layerNodeImageIcon} />
-					}
+					iconContent = (
+						<LayerImageThumbnail element={node.data as ImageElement} alt={node.label} />
+					)
 					break
 				case ElementTypeEnum.Rectangle:
 					iconContent = (
@@ -305,7 +291,6 @@ export default function LayersDrawer() {
 			readonly,
 			canvas,
 			setLayerRenamingElementId,
-			imageUrls,
 		],
 	)
 
@@ -342,13 +327,10 @@ export default function LayersDrawer() {
 		[canvas?.hoverManager],
 	)
 
-	const handleMouseLeave = useCallback(
-		(event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
-			// 清除画布上的 hover 效果
-			canvas?.hoverManager.manualSetHover(null)
-		},
-		[canvas?.hoverManager],
-	)
+	const handleMouseLeave = useCallback(() => {
+		// 清除画布上的 hover 效果
+		canvas?.hoverManager.manualSetHover(null)
+	}, [canvas?.hoverManager])
 
 	// 监听画框创建事件，自动展开新创建的画框
 	useCanvasEvent("frame:created", (event) => {

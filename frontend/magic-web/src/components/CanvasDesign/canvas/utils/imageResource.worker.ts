@@ -29,7 +29,7 @@ export interface ImageResourceWorkerResponse {
 		filename: string
 	}
 	/** 缩略图 */
-	thumbnails: {
+	thumbnails?: {
 		small: string
 	}
 	/** 错误信息 */
@@ -146,6 +146,127 @@ function isImageBitmapSupported(): boolean {
 	return typeof createImageBitmap === "function"
 }
 
+async function getImageMetadata(options: {
+	blob: Blob
+	ossSrc: string
+	passedFilename?: string
+	supportsImageBitmap: boolean
+}): Promise<{
+	imageInfo: NonNullable<ImageResourceWorkerResponse["imageInfo"]>
+	maxDim: number
+}> {
+	const { blob, ossSrc, passedFilename, supportsImageBitmap } = options
+	const contentType = blob.type || "image/jpeg"
+	const fileSize = blob.size
+	const extractedFilename = extractFilenameFromUrl(ossSrc)
+	const filename =
+		passedFilename || extractedFilename || `image.${getFileExtensionFromMimeType(contentType)}`
+
+	let naturalWidth: number
+	let naturalHeight: number
+	let maxDim: number
+
+	if (supportsImageBitmap) {
+		// 支持 ImageBitmap：创建用于获取尺寸信息的 bitmap（稍后关闭）
+		const sizeBitmap = await createImageBitmap(blob)
+		naturalWidth = sizeBitmap.width
+		naturalHeight = sizeBitmap.height
+		maxDim = Math.max(naturalWidth, naturalHeight)
+		sizeBitmap.close()
+	} else {
+		// 不支持 ImageBitmap：使用 HTMLImageElement 获取尺寸（降级方案）
+		const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+			const image = new Image()
+			image.onload = () => resolve(image)
+			image.onerror = reject
+			image.src = URL.createObjectURL(blob)
+		})
+		naturalWidth = img.naturalWidth
+		naturalHeight = img.naturalHeight
+		maxDim = Math.max(naturalWidth, naturalHeight)
+		URL.revokeObjectURL(img.src)
+	}
+
+	return {
+		imageInfo: {
+			naturalWidth,
+			naturalHeight,
+			fileSize,
+			mimeType: contentType,
+			filename,
+		},
+		maxDim,
+	}
+}
+
+async function createSmallThumbnail(options: {
+	blob: Blob
+	maxDim: number
+	supportsImageBitmap: boolean
+}): Promise<{ small: string }> {
+	const { blob, maxDim, supportsImageBitmap } = options
+	const thumbnails: { small: string } = {} as { small: string }
+
+	// Small: decide based on size
+	if (maxDim <= SMALL_THUMBNAIL_MAX_SIZE) {
+		const direct = await blobToDataUrl(blob)
+		thumbnails.small = direct
+	} else {
+		if (supportsImageBitmap) {
+			const smallBitmap = await createImageBitmap(blob, {
+				resizeWidth: SMALL_THUMBNAIL_MAX_SIZE,
+				resizeQuality: "high",
+			})
+			thumbnails.small = await bitmapToDataUrl(smallBitmap, 1)
+		} else {
+			// 降级：使用 canvas 缩放
+			const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+				const image = new Image()
+				image.onload = () => resolve(image)
+				image.onerror = reject
+				image.src = URL.createObjectURL(blob)
+			})
+			const canvas = new OffscreenCanvas(
+				SMALL_THUMBNAIL_MAX_SIZE,
+				(SMALL_THUMBNAIL_MAX_SIZE * img.naturalHeight) / img.naturalWidth,
+			)
+			const ctx = canvas.getContext("2d")
+			if (ctx) {
+				ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+				thumbnails.small = await blobToDataUrl(
+					await canvas.convertToBlob({ type: "image/jpeg", quality: 1 }),
+				)
+			} else {
+				thumbnails.small = await blobToDataUrl(blob)
+			}
+			URL.revokeObjectURL(img.src)
+		}
+		// tooltip场景直接用ossSrc渲染，不再生成tooltip缩略图
+		// } else if (maxDim <= TOOLTIP_THUMBNAIL_MIN_SIZE) {
+		// 	thumbnails.small = await blobToDataUrl(blob)
+		// 	const tooltipBitmap = await createImageBitmap(blob, {
+		// 		resizeWidth: TOOLTIP_THUMBNAIL_MIN_SIZE,
+		// 		resizeQuality: "high",
+		// 	})
+		// 	thumbnails.tooltip = await bitmapToDataUrl(tooltipBitmap, 0.95)
+		// } else {
+		// 	const [smallBitmap, tooltipBitmap] = await Promise.all([
+		// 		createImageBitmap(blob, {
+		// 			resizeWidth: SMALL_THUMBNAIL_MAX_SIZE,
+		// 			resizeQuality: "high",
+		// 		}),
+		// 		createImageBitmap(blob, {
+		// 			resizeWidth: TOOLTIP_THUMBNAIL_MIN_SIZE,
+		// 			resizeQuality: "high",
+		// 		}),
+		// 	])
+		// 	thumbnails.small = await bitmapToDataUrl(smallBitmap, 0.9)
+		// 	thumbnails.tooltip = await bitmapToDataUrl(tooltipBitmap, 0.95)
+	}
+
+	return thumbnails
+}
+
 async function processRequest(
 	request: ImageResourceWorkerRequest,
 ): Promise<ImageResourceWorkerResponse> {
@@ -159,106 +280,23 @@ async function processRequest(
 				requestId,
 				error: `Fetch failed: ${response.status}`,
 				statusCode: response.status,
-				thumbnails: { small: "" }, // 错误情况下返回空 thumbnails（不会被使用）
 				...(needsReExchange && { needsReExchange: true }),
 			}
 		}
 
 		const blob = await response.blob()
-		const contentType = blob.type || "image/jpeg"
-		const fileSize = blob.size
-		const extractedFilename = extractFilenameFromUrl(ossSrc)
-		const filename =
-			passedFilename ||
-			extractedFilename ||
-			`image.${getFileExtensionFromMimeType(contentType)}`
-
-		// 检测是否支持 ImageBitmap
 		const supportsImageBitmap = isImageBitmapSupported()
-
-		let naturalWidth: number
-		let naturalHeight: number
-		let maxDim: number
-
-		if (supportsImageBitmap) {
-			// 支持 ImageBitmap：创建用于获取尺寸信息的 bitmap（稍后关闭）
-			const sizeBitmap = await createImageBitmap(blob)
-			naturalWidth = sizeBitmap.width
-			naturalHeight = sizeBitmap.height
-			maxDim = Math.max(naturalWidth, naturalHeight)
-			sizeBitmap.close()
-		} else {
-			// 不支持 ImageBitmap：使用 HTMLImageElement 获取尺寸（降级方案）
-			const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-				const image = new Image()
-				image.onload = () => resolve(image)
-				image.onerror = reject
-				image.src = URL.createObjectURL(blob)
-			})
-			naturalWidth = img.naturalWidth
-			naturalHeight = img.naturalHeight
-			maxDim = Math.max(naturalWidth, naturalHeight)
-			URL.revokeObjectURL(img.src)
-		}
-
-		const thumbnails: { small: string } = {} as {
-			small: string
-		}
-
-		// Small: decide based on size
-		if (maxDim <= SMALL_THUMBNAIL_MAX_SIZE) {
-			const direct = await blobToDataUrl(blob)
-			thumbnails.small = direct
-		} else {
-			if (supportsImageBitmap) {
-				const smallBitmap = await createImageBitmap(blob, {
-					resizeWidth: SMALL_THUMBNAIL_MAX_SIZE,
-					resizeQuality: "high",
-				})
-				thumbnails.small = await bitmapToDataUrl(smallBitmap, 1)
-			} else {
-				// 降级：使用 canvas 缩放
-				const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-					const image = new Image()
-					image.onload = () => resolve(image)
-					image.onerror = reject
-					image.src = URL.createObjectURL(blob)
-				})
-				const canvas = new OffscreenCanvas(
-					SMALL_THUMBNAIL_MAX_SIZE,
-					(SMALL_THUMBNAIL_MAX_SIZE * img.naturalHeight) / img.naturalWidth,
-				)
-				const ctx = canvas.getContext("2d")
-				if (ctx) {
-					ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-					thumbnails.small = await blobToDataUrl(
-						await canvas.convertToBlob({ type: "image/jpeg", quality: 1 }),
-					)
-				}
-				URL.revokeObjectURL(img.src)
-			}
-			// tooltip场景直接用ossSrc渲染，不再生成tooltip缩略图
-			// } else if (maxDim <= TOOLTIP_THUMBNAIL_MIN_SIZE) {
-			// 	thumbnails.small = await blobToDataUrl(blob)
-			// 	const tooltipBitmap = await createImageBitmap(blob, {
-			// 		resizeWidth: TOOLTIP_THUMBNAIL_MIN_SIZE,
-			// 		resizeQuality: "high",
-			// 	})
-			// 	thumbnails.tooltip = await bitmapToDataUrl(tooltipBitmap, 0.95)
-			// } else {
-			// 	const [smallBitmap, tooltipBitmap] = await Promise.all([
-			// 		createImageBitmap(blob, {
-			// 			resizeWidth: SMALL_THUMBNAIL_MAX_SIZE,
-			// 			resizeQuality: "high",
-			// 		}),
-			// 		createImageBitmap(blob, {
-			// 			resizeWidth: TOOLTIP_THUMBNAIL_MIN_SIZE,
-			// 			resizeQuality: "high",
-			// 		}),
-			// 	])
-			// 	thumbnails.small = await bitmapToDataUrl(smallBitmap, 0.9)
-			// 	thumbnails.tooltip = await bitmapToDataUrl(tooltipBitmap, 0.95)
-		}
+		const { imageInfo, maxDim } = await getImageMetadata({
+			blob,
+			ossSrc,
+			passedFilename,
+			supportsImageBitmap,
+		})
+		const thumbnails = await createSmallThumbnail({
+			blob,
+			maxDim,
+			supportsImageBitmap,
+		})
 
 		// Compressed: full size, dynamic quality
 		// const pixelCount = naturalWidth * naturalHeight
@@ -270,14 +308,6 @@ async function processRequest(
 		// )
 		// const compressedBitmap = await createImageBitmap(blob)
 		// thumbnails.compressed = await bitmapToDataUrl(compressedBitmap, quality)
-
-		const imageInfo = {
-			naturalWidth,
-			naturalHeight,
-			fileSize,
-			mimeType: contentType,
-			filename,
-		}
 
 		// 根据是否支持 ImageBitmap 决定返回类型
 		if (supportsImageBitmap) {
@@ -302,7 +332,6 @@ async function processRequest(
 		return {
 			requestId,
 			error: err instanceof Error ? err.message : String(err),
-			thumbnails: { small: "" }, // 错误情况下返回空 thumbnails（不会被使用）
 		}
 	}
 }

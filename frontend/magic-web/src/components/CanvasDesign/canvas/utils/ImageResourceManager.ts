@@ -52,6 +52,19 @@ export interface LoadedResource {
 	thumbnail: ThumbnailData
 }
 
+export interface LoadedThumbnailResource {
+	/** OSS 地址；缩略图命中内存但 URL 已过期时可能为空 */
+	ossSrc: string | null
+	/** 图片元信息，用于图层缩略图裁剪计算 */
+	imageInfo: ImageInfo
+	/** 缩略图数据 */
+	thumbnail: ThumbnailData
+}
+
+export interface ImageResourceLoadOptions {
+	refreshCached?: boolean
+}
+
 export interface ResolvedImageOssInfo {
 	ossSrc: string
 	expiresAt: number | null
@@ -239,7 +252,10 @@ export class ImageResourceManager {
 	 * @param path 路径（path）
 	 * @returns Promise<LoadedResource | null>
 	 */
-	private async loadImageInternal(path: string): Promise<LoadedResource | null> {
+	private async loadImageInternal(
+		path: string,
+		options?: ImageResourceLoadOptions,
+	): Promise<LoadedResource | null> {
 		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
 
 		const normalizedSrc = this.canonicalResourcePath(path)
@@ -257,7 +273,9 @@ export class ImageResourceManager {
 
 		const cachedResource = await this.loadCachedImageResource(path, normalizedSrc, entry)
 		if (cachedResource) {
-			this.triggerBackgroundRefresh(path, normalizedSrc, entry)
+			if (options?.refreshCached !== false) {
+				this.triggerBackgroundRefresh(path, normalizedSrc, entry)
+			}
 			return cachedResource
 		}
 
@@ -326,8 +344,8 @@ export class ImageResourceManager {
 	 * 触发资源加载（不等待，通过 resource:image:loaded 事件获取完成通知）
 	 * @param path 路径（path）
 	 */
-	public loadResource(path: string): void {
-		this.loadImageInternal(path).catch(() => {
+	public loadResource(path: string, options?: ImageResourceLoadOptions): void {
+		this.loadImageInternal(path, options).catch(() => {
 			// 静默吞掉错误，调用方通过事件或 getResource 感知失败
 		})
 	}
@@ -337,8 +355,45 @@ export class ImageResourceManager {
 	 * @param path 路径（path）
 	 * @returns Promise<LoadedResource | null>
 	 */
-	public async getResource(path: string): Promise<LoadedResource | null> {
-		return this.loadImageInternal(path)
+	public async getResource(
+		path: string,
+		options?: ImageResourceLoadOptions,
+	): Promise<LoadedResource | null> {
+		return this.loadImageInternal(path, options)
+	}
+
+	/**
+	 * 获取图片缩略图；缩略图与主图资源共用同一次加载链路。
+	 * @param path 路径（path）
+	 */
+	public async getThumbnail(path: string): Promise<LoadedThumbnailResource | null> {
+		const normalizedSrc = this.canonicalResourcePath(path)
+		const entry = this.entries.get(normalizedSrc)
+		if (entry?.resource) {
+			this.setFailureReason(entry, null)
+			return {
+				ossSrc: entry.ossSrc,
+				imageInfo: entry.resource.imageInfo,
+				thumbnail: entry.resource.thumbnailData,
+			}
+		}
+		if (entry?.loadingPromise) {
+			const resource = await entry.loadingPromise
+			if (!resource) return null
+			return {
+				ossSrc: resource.ossSrc,
+				imageInfo: resource.imageInfo,
+				thumbnail: resource.thumbnail,
+			}
+		}
+
+		const resource = await this.loadImageInternal(path, { refreshCached: false })
+		if (!resource) return null
+		return {
+			ossSrc: resource.ossSrc,
+			imageInfo: resource.imageInfo,
+			thumbnail: resource.thumbnail,
+		}
 	}
 
 	/**

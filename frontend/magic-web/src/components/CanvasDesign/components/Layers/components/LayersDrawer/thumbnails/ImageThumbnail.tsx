@@ -1,5 +1,6 @@
-import { useMemo, useState, useCallback, useEffect } from "react"
+import { useMemo, useState, useCallback, useEffect, useRef } from "react"
 import styles from "../index.module.css"
+import { Image as ImageIcon } from "lucide-react"
 import { type ImageElement } from "../../../../../canvas/types"
 import { getPersistedSourceCrop } from "../../../../../canvas/utils/imageCropUtils"
 import { useCanvas } from "../../../../../context/CanvasContext"
@@ -7,26 +8,54 @@ import { ImageElement as ImageElementClass } from "../../../../../canvas/element
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Tooltip, TooltipTrigger, TooltipContent } from "../../../../ui/tooltip"
 import { usePortalContainer } from "../../../../ui/custom/PortalContainerContext"
+import { useImageThumbnailUrl } from "../../../../../hooks/useImageUrls"
 
 const LAYER_IMAGE_THUMBNAIL_SIZE = 16
 const TOOLTIP_PREVIEW_MAX_SIZE = 160
 
-export default function LayerImageThumbnail(props: {
-	element: ImageElement
-	src: string
-	alt: string
-}) {
-	const { element, src, alt } = props
+export default function LayerImageThumbnail(props: { element: ImageElement; alt: string }) {
+	const { element, alt } = props
 	const { canvas } = useCanvas()
 	const portalContainer = usePortalContainer()
+	const thumbnailRootRef = useRef<HTMLDivElement>(null)
+	const [shouldLoadThumbnail, setShouldLoadThumbnail] = useState(false)
+	const { thumbnailUrl, imageInfo: thumbnailImageInfo } = useImageThumbnailUrl({
+		elementId: element.id,
+		src: element.src,
+		enabled: shouldLoadThumbnail,
+	})
 	const elementInstance = canvas?.elementManager.getElementInstance(element.id)
 	const imageInfo =
-		elementInstance instanceof ImageElementClass ? elementInstance.getImageInfo() : undefined
+		(elementInstance instanceof ImageElementClass
+			? elementInstance.getImageInfo()
+			: undefined) ??
+		thumbnailImageInfo ??
+		undefined
 
 	const [tooltipOpen, setTooltipOpen] = useState(false)
 	const [tooltipImageUrl, setTooltipImageUrl] = useState<string | null>(null)
 	const [isTooltipLoading, setIsTooltipLoading] = useState(false)
 	const [hasTooltipError, setHasTooltipError] = useState(false)
+
+	useEffect(() => {
+		const node = thumbnailRootRef.current
+		if (!node || shouldLoadThumbnail) return
+		if (typeof IntersectionObserver === "undefined") {
+			setShouldLoadThumbnail(true)
+			return
+		}
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (!entries.some((entry) => entry.isIntersecting)) return
+				setShouldLoadThumbnail(true)
+				observer.disconnect()
+			},
+			{ rootMargin: "120px" },
+		)
+		observer.observe(node)
+		return () => observer.disconnect()
+	}, [shouldLoadThumbnail])
 
 	useEffect(() => {
 		setTooltipImageUrl(null)
@@ -38,11 +67,19 @@ export default function LayerImageThumbnail(props: {
 		if (!canvas || !element.src) return
 		setIsTooltipLoading(true)
 		setHasTooltipError(false)
-		canvas.imageResourceManager.getResource(element.src).then((resource) => {
-			setTooltipImageUrl(resource?.ossSrc ?? null)
-			setHasTooltipError(!resource?.ossSrc)
-			setIsTooltipLoading(false)
-		})
+		canvas.imageResourceManager
+			.ensureFreshOssSrc(element.src)
+			.then((ossSrc) => {
+				setTooltipImageUrl(ossSrc)
+				setHasTooltipError(!ossSrc)
+			})
+			.catch(() => {
+				setTooltipImageUrl(null)
+				setHasTooltipError(true)
+			})
+			.finally(() => {
+				setIsTooltipLoading(false)
+			})
 	}, [canvas, element.src])
 
 	const handleTooltipOpenChange = useCallback(
@@ -61,7 +98,7 @@ export default function LayerImageThumbnail(props: {
 			top: "0px",
 		}
 		const baseContentStyle = {
-			backgroundImage: `url("${src}")`,
+			backgroundImage: thumbnailUrl ? `url("${thumbnailUrl}")` : undefined,
 			backgroundPosition: "center",
 			backgroundSize: "contain",
 		}
@@ -143,23 +180,32 @@ export default function LayerImageThumbnail(props: {
 				},
 			},
 		}
-	}, [element.crop, imageInfo, src])
+	}, [element.crop, imageInfo, thumbnailUrl])
 
 	return (
 		<Tooltip open={tooltipOpen} onOpenChange={handleTooltipOpenChange}>
 			<TooltipTrigger asChild>
-				<div className={styles.layerNodeElementIcon}>
-					<div className={styles.layerNodeImageThumbnail} role="img" aria-label={alt}>
-						<div
-							className={styles.layerNodeImageThumbnailViewport}
-							style={viewportStyle}
-						>
+				<div
+					ref={thumbnailRootRef}
+					className={styles.layerNodeElementIcon}
+					role="img"
+					aria-label={alt}
+				>
+					{thumbnailUrl ? (
+						<div className={styles.layerNodeImageThumbnail}>
 							<div
-								className={styles.layerNodeImageThumbnailContent}
-								style={contentStyle}
-							/>
+								className={styles.layerNodeImageThumbnailViewport}
+								style={viewportStyle}
+							>
+								<div
+									className={styles.layerNodeImageThumbnailContent}
+									style={contentStyle}
+								/>
+							</div>
 						</div>
-					</div>
+					) : (
+						<ImageIcon size={16} className={styles.layerNodeImageIcon} />
+					)}
 				</div>
 			</TooltipTrigger>
 			<TooltipPrimitive.Portal container={portalContainer || undefined}>
@@ -172,7 +218,7 @@ export default function LayerImageThumbnail(props: {
 						<div className={styles.layerNodeImageThumbnailTooltipLoading} />
 					) : hasTooltipError ? (
 						<div className={styles.layerNodeImageThumbnailTooltipLoading} />
-					) : tooltipPreview ? (
+					) : tooltipPreview && tooltipImageUrl ? (
 						<div
 							className={styles.layerNodeImageThumbnailTooltipViewport}
 							style={tooltipPreview.viewportStyle}

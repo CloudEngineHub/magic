@@ -131,13 +131,13 @@ export function useReferenceImageUrls(
 		[loadTooltip],
 	)
 
-	// 更新路径的 URL（只加载 small）
+	// 更新路径的缩略图 URL（缩略图统一通过 ImageResourceManager 入口加载）
 	const updatePathUrl = useCallback(async () => {
 		if (!canvas) return
 
-		const resource = await canvas.imageResourceManager.getResource(path)
-		const smallUrl = resource?.thumbnail?.small
-		const imageInfo = resource?.imageInfo
+		const thumbnail = await canvas.imageResourceManager.getThumbnail(path)
+		const smallUrl = thumbnail?.thumbnail?.small
+		const imageInfo = thumbnail?.imageInfo
 		const failureReason = canvas.imageResourceManager.getFailureReason(path)
 
 		setUrlInfo((prev) => {
@@ -162,7 +162,7 @@ export function useReferenceImageUrls(
 		})
 	}, [canvas, path, loadTooltip])
 
-	// 初始化 URL（只加载 small）
+	// 初始化缩略图 URL
 	useEffect(() => {
 		if (!canvas) {
 			setUrlInfo({
@@ -248,7 +248,7 @@ export function useReferenceImageUrls(
 		),
 	)
 
-	// 监听资源加载完成事件（当图片资源加载完成时，触发缩略图生成）
+	// 监听资源加载完成事件，刷新缩略图 URL
 	useCanvasEvent(
 		"resource:image:loaded",
 		useCallback(
