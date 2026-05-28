@@ -100,6 +100,11 @@ readonly class MagicClawDomainService
         });
     }
 
+    public function getByProjectId(int $projectId): ?MagicClawEntity
+    {
+        return $this->magicClawRepository->getByProjectId($projectId);
+    }
+
     private function getByCodeOrFail(string $code, string $userId, string $organizationCode): MagicClawEntity
     {
         $entity = $this->magicClawRepository->findByCode($code, $userId, $organizationCode);
