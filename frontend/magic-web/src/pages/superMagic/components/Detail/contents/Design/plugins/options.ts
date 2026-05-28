@@ -33,6 +33,9 @@ import faceSwapManifest from "./face-swap/manifest.json"
 import clothingColorChangeStyles from "./clothing-color-change/index.css?raw"
 import clothingColorChangeRuntimeCode from "./clothing-color-change/index.js?raw"
 import clothingColorChangeManifest from "./clothing-color-change/manifest.json"
+import productImageSetStyles from "./product-image-set/index.css?raw"
+import productImageSetRuntimeCode from "./product-image-set/index.js?raw"
+import productImageSetManifest from "./product-image-set/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -54,6 +57,8 @@ const faceSwapEntryUrl = new URL("./face-swap/index.js", import.meta.url).href
 const faceSwapResourceBaseUrl = new URL("./face-swap/", import.meta.url).href
 const clothingColorChangeEntryUrl = new URL("./clothing-color-change/index.js", import.meta.url).href
 const clothingColorChangeResourceBaseUrl = new URL("./clothing-color-change/", import.meta.url).href
+const productImageSetEntryUrl = new URL("./product-image-set/index.js", import.meta.url).href
+const productImageSetResourceBaseUrl = new URL("./product-image-set/", import.meta.url).href
 const sharedPluginRuntimeCode = `${magicPluginKitRuntimeCode}\n\n${magicPromptLocaleRuntimeCode}`
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
@@ -155,6 +160,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${sharedPluginRuntimeCode}\n\n${clothingColorChangeRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, clothingColorChangeStyles],
 		resolveResourceUrl: (path) => new URL(path, clothingColorChangeResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...productImageSetManifest,
+		entry: `./product-image-set/${productImageSetManifest.entry}`,
+		runtimeUrl: productImageSetEntryUrl,
+		resourceBaseUrl: productImageSetResourceBaseUrl,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${productImageSetRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, productImageSetStyles],
+		resolveResourceUrl: (path) => new URL(path, productImageSetResourceBaseUrl).href,
 		source: "builtin",
 	},
 ]

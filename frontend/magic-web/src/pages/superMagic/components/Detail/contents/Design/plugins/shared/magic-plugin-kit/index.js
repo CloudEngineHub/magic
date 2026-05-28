@@ -1009,6 +1009,7 @@
 			getImageReferenceId,
 			getImageUrl,
 			getErrorMessage,
+			parseSizeValue,
 			collectReferenceIds(items) {
 				return items.map(getImageReferenceId).filter(Boolean)
 			},

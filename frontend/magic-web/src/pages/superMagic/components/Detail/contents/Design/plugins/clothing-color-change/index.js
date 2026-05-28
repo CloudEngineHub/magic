@@ -263,6 +263,7 @@ function createColorDrawer(panelEl, t, onSelect) {
 	let searchQuery = ""
 	let selectedHex = null // 当前选中的 hex（预置或自定义）
 	let customColorActive = false
+	let presetSwatches = []
 
 	// ── 渲染侧边分类按钮 ──
 	function renderSidebar() {
@@ -288,6 +289,12 @@ function createColorDrawer(panelEl, t, onSelect) {
 				renderAll()
 			})
 			sidebar.append(btn)
+		})
+	}
+
+	const syncThemeColorSelection = (nextColor) => {
+		presetSwatches.forEach(({ color, element }) => {
+			element.classList.toggle("is-selected", color === nextColor)
 		})
 	}
 
@@ -321,6 +328,7 @@ function createColorDrawer(panelEl, t, onSelect) {
 				const dot = document.createElement("span")
 				dot.className = "ccc-color-dot"
 				dot.style.background = color.hex
+				presetSwatches.push({ color: color.hex, element: wrapper })
 
 				const label = document.createElement("span")
 				label.className = "ccc-color-dot-label"
@@ -332,7 +340,7 @@ function createColorDrawer(panelEl, t, onSelect) {
 					customColorActive = false
 					swatchBtn.classList.remove("is-selected")
 					onSelect({ name: color.name, hex: color.hex })
-					// close()
+					syncThemeColorSelection(color.hex)
 				})
 				grid.append(wrapper)
 			})
