@@ -36,6 +36,9 @@ import clothingColorChangeManifest from "./clothing-color-change/manifest.json"
 import productImageSetStyles from "./product-image-set/index.css?raw"
 import productImageSetRuntimeCode from "./product-image-set/index.js?raw"
 import productImageSetManifest from "./product-image-set/manifest.json"
+import oneClickProductStyles from "./one-click-product/index.css?raw"
+import oneClickProductRuntimeCode from "./one-click-product/index.js?raw"
+import oneClickProductManifest from "./one-click-product/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -59,6 +62,8 @@ const clothingColorChangeEntryUrl = new URL("./clothing-color-change/index.js", 
 const clothingColorChangeResourceBaseUrl = new URL("./clothing-color-change/", import.meta.url).href
 const productImageSetEntryUrl = new URL("./product-image-set/index.js", import.meta.url).href
 const productImageSetResourceBaseUrl = new URL("./product-image-set/", import.meta.url).href
+const oneClickProductEntryUrl = new URL("./one-click-product/index.js", import.meta.url).href
+const oneClickProductResourceBaseUrl = new URL("./one-click-product/", import.meta.url).href
 const sharedPluginRuntimeCode = `${magicPluginKitRuntimeCode}\n\n${magicPromptLocaleRuntimeCode}`
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
@@ -170,6 +175,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${sharedPluginRuntimeCode}\n\n${productImageSetRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, productImageSetStyles],
 		resolveResourceUrl: (path) => new URL(path, productImageSetResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...oneClickProductManifest,
+		entry: `./one-click-product/${oneClickProductManifest.entry}`,
+		runtimeUrl: oneClickProductEntryUrl,
+		resourceBaseUrl: oneClickProductResourceBaseUrl,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${oneClickProductRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, oneClickProductStyles],
+		resolveResourceUrl: (path) => new URL(path, oneClickProductResourceBaseUrl).href,
 		source: "builtin",
 	},
 ]
