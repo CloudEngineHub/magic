@@ -91,10 +91,10 @@ export default function LayersDrawer() {
 
 	// 将画布数据转换为树形结构，先按 zIndex 降序排序（zIndex 大的在上面）
 	const treeData = useMemo(() => {
-		if (!elements) return []
+		if (collapsed || !elements) return []
 		const sortedFrames = [...elements].sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0))
 		return sortedFrames.map((frame) => convertLayerToTreeNode(frame, canvas))
-	}, [elements, canvas])
+	}, [collapsed, elements, canvas])
 
 	// 获取选中的元素 ID（只读下与画布选区一致，便于高亮与定位）
 	const selectedIds = useMemo(() => selectedElementIds, [selectedElementIds])
@@ -400,40 +400,41 @@ export default function LayersDrawer() {
 		>
 			<div className={styles.layersDrawerHeader}>{t("layers.title", "图层")}</div>
 			<div className={styles.layersDrawerBody}>
-				{elements?.length ? (
-					<Tree
-						data={treeData}
-						selectedIds={selectedIds}
-						hoveredIds={hoveredIds}
-						treeNodeContentClassName={
-							readonly ? styles.treeNodeContentReadonly : undefined
-						}
-						onSelect={(_nodes, ids) => {
-							// 智能判断：只有当选中状态发生变化时才自动聚焦
-							// 比较新旧选中的元素ID，判断是否有变化
-							const hasSelectionChanged =
-								ids.length !== selectedElementIds.length ||
-								ids.some((id) => !selectedElementIds.includes(id)) ||
-								selectedElementIds.some((id) => !ids.includes(id))
-							canvas?.selectionManager.replaceSelection(ids, hasSelectionChanged)
-							// 定位到选中的元素
-							if (ids.length > 0) {
-								canvas?.userActionRegistry.execute("view.focus-element", {
-									elementIds: ids,
-								})
+				{!collapsed &&
+					(elements?.length ? (
+						<Tree
+							data={treeData}
+							selectedIds={selectedIds}
+							hoveredIds={hoveredIds}
+							treeNodeContentClassName={
+								readonly ? styles.treeNodeContentReadonly : undefined
 							}
-						}}
-						expandedIds={expandedElementIds}
-						onToggle={toggleExpandedElement}
-						renderNode={renderLayerNode}
-						onContextMenu={handleContextMenu}
-						onDoubleClick={handleDoubleClick}
-						onMouseEnter={handleMouseEnter}
-						onMouseLeave={handleMouseLeave}
-					/>
-				) : (
-					<LayersEmpty />
-				)}
+							onSelect={(_nodes, ids) => {
+								// 智能判断：只有当选中状态发生变化时才自动聚焦
+								// 比较新旧选中的元素ID，判断是否有变化
+								const hasSelectionChanged =
+									ids.length !== selectedElementIds.length ||
+									ids.some((id) => !selectedElementIds.includes(id)) ||
+									selectedElementIds.some((id) => !ids.includes(id))
+								canvas?.selectionManager.replaceSelection(ids, hasSelectionChanged)
+								// 定位到选中的元素
+								if (ids.length > 0) {
+									canvas?.userActionRegistry.execute("view.focus-element", {
+										elementIds: ids,
+									})
+								}
+							}}
+							expandedIds={expandedElementIds}
+							onToggle={toggleExpandedElement}
+							renderNode={renderLayerNode}
+							onContextMenu={handleContextMenu}
+							onDoubleClick={handleDoubleClick}
+							onMouseEnter={handleMouseEnter}
+							onMouseLeave={handleMouseLeave}
+						/>
+					) : (
+						<LayersEmpty />
+					))}
 			</div>
 			<div className={styles.layersDrawerFooter}>
 				<Tooltip>
