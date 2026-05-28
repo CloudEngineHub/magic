@@ -19,7 +19,6 @@ registerMagicCanvasPlugin({
 				backgroundImage: null,
 				backgroundPrompt: "",
 				copyBackgroundImage: null,
-				canvasRatioKey: "",
 				qualityMode: "",
 				genCount: 1,
 			},
@@ -36,17 +35,9 @@ registerMagicCanvasPlugin({
 							? configuredQuality
 							: (qualityOptions[0]?.value ?? "")
 
-					const seenRatios = new Set()
-					const firstRatio = (model?.image_size_config?.sizes ?? []).find((size) => {
-						if (!size.label || seenRatios.has(size.label)) return false
-						seenRatios.add(size.label)
-						return true
-					})
-
 					return {
 						...defaults,
 						qualityMode,
-						canvasRatioKey: firstRatio?.label ?? "",
 						imageGenerationConfig: qualityMode
 							? { ...defaults.imageGenerationConfig, quality: qualityMode }
 							: defaults.imageGenerationConfig,
@@ -139,9 +130,8 @@ registerMagicCanvasPlugin({
 					id: "canvasSize",
 					kind: "size-control",
 					title: t("section.canvasSize", "画布尺寸"),
-					ratioStateKey: "canvasRatioKey",
-					deps: ["backgroundMode", "modelId", "modelOptions"],
-					when: ({ state }) => state.backgroundMode === "copy",
+					ratioStateKey: "ratioKey",
+					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "quality",
@@ -159,6 +149,12 @@ registerMagicCanvasPlugin({
 					id: "modelSelect",
 					kind: "model-select",
 					title: t("section.modelSelect", "AI 模型"),
+				},
+				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "分辨率"),
+					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "count",
@@ -199,8 +195,8 @@ registerMagicCanvasPlugin({
 					if (state.backgroundMode === "copy" && !state.copyBackgroundImage) {
 						return t("error.copyBackgroundRequired", "请选择复制背景参考图")
 					}
-					const selectedSize = resolveOutputSize(state, helpers)
-					if (!selectedSize?.width || !selectedSize?.height) {
+					const selectedSize = helpers.getSelectedSize(state)
+					if (!selectedSize?.genW || !selectedSize?.genH) {
 						return t("error.noSize", "当前模型缺少可用尺寸配置")
 					}
 					const referenceAssets = getReferenceAssetsForMode(state)
@@ -217,7 +213,7 @@ registerMagicCanvasPlugin({
 					return null
 				},
 				execute: async ({ state, helpers, generateAndPlace }) => {
-					const selectedSize = resolveOutputSize(state, helpers)
+					const selectedSize = helpers.getSelectedSize(state)
 					if (state.modelImages.length <= 1) {
 						return generateAndPlace(
 							buildSceneSwapRequest({
@@ -319,51 +315,6 @@ function getReferenceAssetsForBaseImage(state, baseImage) {
 	return assets
 }
 
-function parseSizeValue(sizeValue) {
-	const [width, height] = String(sizeValue ?? "")
-		.split("x")
-		.map(Number)
-	if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-		return null
-	}
-	return { width, height }
-}
-
-function resolveOutputSize(state, helpers) {
-	const sizes = helpers
-		.getModelSizes(state)
-		.map((size) => {
-			const parsedSize = parseSizeValue(size.value)
-			if (!parsedSize) return null
-			return {
-				label: size.label,
-				scale: size.scale,
-				width: parsedSize.width,
-				height: parsedSize.height,
-			}
-		})
-		.filter(Boolean)
-
-	if (!sizes.length) return null
-
-	if (state.backgroundMode !== "copy") {
-		const selectedSize = helpers.getSelectedSize(state)
-		if (selectedSize?.genW && selectedSize?.genH) {
-			return {
-				label: selectedSize.label,
-				scale: selectedSize.scale,
-				width: selectedSize.genW,
-				height: selectedSize.genH,
-			}
-		}
-		return sizes[0]
-	}
-
-	const ratioKey = state.canvasRatioKey || null
-	const matchedSizes = ratioKey ? sizes.filter((size) => size.label === ratioKey) : sizes
-	return matchedSizes[0] ?? sizes[0]
-}
-
 function getQualitySetting(model) {
 	return (model?.image_size_config?.image_settings ?? []).find((setting) => {
 		const key = setting?.key ?? ""
@@ -403,6 +354,8 @@ function buildSceneSwapRequest({ state, helpers, baseImage, locale, selectedSize
 	const imageGenerationConfig = state.qualityMode
 		? { ...state.imageGenerationConfig, quality: state.qualityMode }
 		: state.imageGenerationConfig
+	const width = selectedSize.genW
+	const height = selectedSize.genH
 
 	return {
 		model_id: state.modelId,
@@ -413,13 +366,13 @@ function buildSceneSwapRequest({ state, helpers, baseImage, locale, selectedSize
 			modelImageCount: 1,
 		}),
 		reference_images: referenceImages,
-		size: `${selectedSize.width}x${selectedSize.height}`,
-		resolution: selectedSize.scale || undefined,
+		size: `${width}x${height}`,
+		resolution: state.scale || undefined,
 		image_generation_config: Object.keys(imageGenerationConfig ?? {}).length
 			? imageGenerationConfig
 			: undefined,
-		width: selectedSize.width,
-		height: selectedSize.height,
+		width,
+		height,
 		count,
 		select: false,
 	}

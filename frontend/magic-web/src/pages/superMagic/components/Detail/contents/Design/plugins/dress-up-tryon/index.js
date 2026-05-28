@@ -158,15 +158,17 @@ registerMagicCanvasPlugin({
 					options: generationModes,
 				},
 				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "分辨率"),
+					deps: ["modelId", "modelOptions"],
+				},
+				{
 					id: "modelSelect",
 					kind: "model-select",
 					title: t("section.modelSelect", "AI 模型"),
 				},
-				{
-					id: "resolution",
-					kind: "resolution-select",
-					title: t("section.resolution", "分辨率"),
-				},
+				
 				{
 					id: "count",
 					kind: "option-group",

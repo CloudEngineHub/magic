@@ -126,6 +126,7 @@ registerMagicCanvasPlugin({
 					id: "resolution",
 					kind: "resolution-select",
 					title: t("section.resolution", "分辨率"),
+					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "count",

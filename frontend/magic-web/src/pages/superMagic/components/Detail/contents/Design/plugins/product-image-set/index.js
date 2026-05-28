@@ -1405,7 +1405,7 @@ registerMagicCanvasPlugin({
 					showDescriptionOnHover: true,
 					options: generationModes,
 				},
-				{
+                 {
 					id: "modelSelect",
 					kind: "model-select",
 					title: t("section.modelSelect", "AI 模型"),
