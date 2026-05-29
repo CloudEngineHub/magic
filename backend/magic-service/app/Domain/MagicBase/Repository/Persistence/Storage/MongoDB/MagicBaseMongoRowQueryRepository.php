@@ -90,7 +90,7 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
         try {
             $cursor = $this->client->collection($route->getMongoCollection())->find($filter, [
                 'sort' => ['record_id' => 1],
-                'limit' => max(1, (int) config('magicbase.row_storage.search_size', 10000)),
+                'limit' => MagicBaseConst::ROW_STORAGE_SEARCH_SIZE,
                 'maxTimeMS' => $this->client->queryTimeoutMs(),
             ]);
         } catch (Throwable) {

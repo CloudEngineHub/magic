@@ -12,6 +12,12 @@ use MongoDB\Collection;
 
 class MagicBaseMongoClient
 {
+    private const CONNECT_TIMEOUT_MS = 3000;
+
+    private const SERVER_SELECTION_TIMEOUT_MS = 3000;
+
+    private const QUERY_TIMEOUT_MS = 10000;
+
     private ?Client $client = null;
 
     /**
@@ -26,8 +32,8 @@ class MagicBaseMongoClient
         }
 
         $options = [
-            'connectTimeoutMS' => max(1, (int) config('magicbase.mongodb.connect_timeout_ms', 3000)),
-            'serverSelectionTimeoutMS' => max(1, (int) config('magicbase.mongodb.server_selection_timeout_ms', 3000)),
+            'connectTimeoutMS' => self::CONNECT_TIMEOUT_MS,
+            'serverSelectionTimeoutMS' => self::SERVER_SELECTION_TIMEOUT_MS,
         ];
 
         return $this->client = new Client((string) config('magicbase.mongodb.uri', 'mongodb://127.0.0.1:27017'), $options);
@@ -47,7 +53,7 @@ class MagicBaseMongoClient
 
     public function queryTimeoutMs(): int
     {
-        return max(1, (int) config('magicbase.mongodb.query_timeout_ms', 10000));
+        return self::QUERY_TIMEOUT_MS;
     }
 
     private function ensureIndexes(string $collectionName): void

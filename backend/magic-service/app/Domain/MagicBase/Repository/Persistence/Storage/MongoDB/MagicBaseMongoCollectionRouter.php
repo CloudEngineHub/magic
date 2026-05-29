@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\MagicBase\Repository\Persistence\Storage\MongoDB;
 
 use App\Domain\MagicBase\Entity\MagicBaseProjectStorageRouteEntity;
+use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseProjectStorageRouteRepositoryInterface;
 use DateTime;
@@ -15,8 +16,6 @@ use LogicException;
 
 readonly class MagicBaseMongoCollectionRouter
 {
-    private const STORAGE_DRIVER = 'mongodb';
-
     private const ROUTE_STATUS_ACTIVE = 'active';
 
     public function __construct(
@@ -39,14 +38,14 @@ readonly class MagicBaseMongoCollectionRouter
         }
 
         $database = $this->mongoClient->databaseName();
-        $counts = $this->routeRepository->getProjectCountsByCollections(self::STORAGE_DRIVER, $database, $collections);
+        $counts = $this->routeRepository->getProjectCountsByCollections(MagicBaseConst::ROW_STORAGE_DRIVER_MONGODB, $database, $collections);
         $selected = $this->selectLeastUsedCollection($collections, $counts);
         $now = new DateTime();
 
         return $this->routeRepository->createRoute(new MagicBaseProjectStorageRouteEntity([
             'organization_code' => $organizationCode,
             'project_id' => $projectId,
-            'storage_driver' => self::STORAGE_DRIVER,
+            'storage_driver' => MagicBaseConst::ROW_STORAGE_DRIVER_MONGODB,
             'mongo_database' => $database,
             'mongo_collection' => $selected,
             'shard_id' => $this->extractShardId($selected),
@@ -61,13 +60,11 @@ readonly class MagicBaseMongoCollectionRouter
      */
     private function collectionPool(): array
     {
-        $prefix = trim((string) config('magicbase.mongodb.collection_prefix', 'magicbase_rows'), '_');
-        $prefix = $prefix === '' ? 'magicbase_rows' : $prefix;
         $count = max(1, (int) config('magicbase.mongodb.collection_count', 256));
 
         $collections = [];
         for ($index = 0; $index < $count; ++$index) {
-            $collections[] = sprintf('%s_%03d', $prefix, $index);
+            $collections[] = sprintf('%s_%03d', MagicBaseConst::MONGODB_COLLECTION_PREFIX, $index);
         }
 
         return $collections;

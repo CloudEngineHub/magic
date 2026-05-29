@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\MagicBase\Service;
 
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
+use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQuery;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQueryResult;
@@ -15,23 +16,18 @@ use App\Domain\MagicBase\Repository\Facade\MagicBaseRowQueryRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowStoreRepositoryInterface;
 use App\Domain\MagicBase\Repository\Persistence\Storage\MongoDB\MagicBaseMongoRowQueryRepository;
 use App\Domain\MagicBase\Repository\Persistence\Storage\MongoDB\MagicBaseMongoRowStoreRepository;
-use App\Domain\MagicBase\Repository\Persistence\Storage\OpenSearch\MagicBaseOpenSearchRowQueryRepository;
-use App\Domain\MagicBase\Repository\Persistence\Storage\OpenSearch\MagicBaseOpenSearchRowStoreRepository;
 
 readonly class MagicBaseRowStorageResolverDomainService implements MagicBaseRowStoreRepositoryInterface, MagicBaseRowQueryRepositoryInterface
 {
     public function __construct(
         private MagicBaseMongoRowStoreRepository $mongoRowStoreRepository,
         private MagicBaseMongoRowQueryRepository $mongoRowQueryRepository,
-        private MagicBaseOpenSearchRowStoreRepository $openSearchRowStoreRepository,
-        private MagicBaseOpenSearchRowQueryRepository $openSearchRowQueryRepository,
     ) {
     }
 
     public function getStorageDriver(): string
     {
-        $driver = strtolower((string) config('magicbase.row_storage.driver', 'mongodb'));
-        return in_array($driver, ['mongodb', 'opensearch'], true) ? $driver : 'mongodb';
+        return MagicBaseConst::ROW_STORAGE_DRIVER_MONGODB;
     }
 
     public function getRow(string $organizationCode, int $projectId, int $tableId, int $recordId): ?MagicBaseRowEntity
@@ -57,15 +53,11 @@ readonly class MagicBaseRowStorageResolverDomainService implements MagicBaseRowS
 
     private function storeRepository(): MagicBaseRowStoreRepositoryInterface
     {
-        return $this->getStorageDriver() === 'opensearch'
-            ? $this->openSearchRowStoreRepository
-            : $this->mongoRowStoreRepository;
+        return $this->mongoRowStoreRepository;
     }
 
     private function queryRepository(): MagicBaseRowQueryRepositoryInterface
     {
-        return $this->getStorageDriver() === 'opensearch'
-            ? $this->openSearchRowQueryRepository
-            : $this->mongoRowQueryRepository;
+        return $this->mongoRowQueryRepository;
     }
 }

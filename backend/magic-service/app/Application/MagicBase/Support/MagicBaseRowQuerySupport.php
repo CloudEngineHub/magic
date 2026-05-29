@@ -254,7 +254,7 @@ readonly class MagicBaseRowQuerySupport
             [$relation->getTargetColumnKey() => ['in' => $sourceValues]],
             [],
             1,
-            max(1, (int) config('magicbase.row_storage.search_size', 10000)),
+            MagicBaseConst::ROW_STORAGE_SEARCH_SIZE,
             false,
             $this->accessControl->getStaticReadableRecordIds($targetContext),
         );
@@ -314,7 +314,7 @@ readonly class MagicBaseRowQuerySupport
             [$relation->getTargetColumnKey() => ['eq' => $sourceValue]],
             [],
             1,
-            max(1, (int) config('magicbase.row_storage.search_size', 10000)),
+            MagicBaseConst::ROW_STORAGE_SEARCH_SIZE,
             false,
             $this->accessControl->getStaticReadableRecordIds($targetContext),
         );
@@ -364,7 +364,7 @@ readonly class MagicBaseRowQuerySupport
             [$relationField => ['eq' => $condition['eq']]],
             [],
             1,
-            max(1, (int) config('magicbase.row_storage.search_size', 10000)),
+            MagicBaseConst::ROW_STORAGE_SEARCH_SIZE,
             false,
             $this->accessControl->getStaticReadableRecordIds($targetContext),
         );
