@@ -226,6 +226,7 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "genCount",
 					title: t("section.count", "生成张数"),
+					suffix: t("section.count.suffix", "每种样式生成数"),
 					options: GENERATION_COUNT_GROUP_OPTIONS,
 				},
 			],
@@ -371,14 +372,14 @@ function buildReferenceStyleRequests({ state, helpers, locale, selectedSize }) {
 	const garmentReferenceId = helpers.collectReferenceIds([state.garmentImage])[0]
 	const styleReferenceIds = helpers.collectReferenceIds(state.styleReferenceImages)
 
-	return Array.from({ length: state.genCount }, (_, index) =>
+	return styleReferenceIds.map((_, index) =>
 		buildClothingVariationRequest({
 			state,
 			helpers,
 			locale,
 			selectedSize,
-			count: 1,
-			referenceImages: [garmentReferenceId, styleReferenceIds[index % styleReferenceIds.length]],
+			count: state.genCount,
+			referenceImages: [garmentReferenceId, styleReferenceIds[index]],
 			styleReferenceCount: 1,
 		}),
 	)

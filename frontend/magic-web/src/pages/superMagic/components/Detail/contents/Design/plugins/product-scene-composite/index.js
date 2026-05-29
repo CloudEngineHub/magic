@@ -105,6 +105,7 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "genCount",
 					title: t("section.count", "生成张数"),
+					suffix: t("section.count.suffix", "每种场景生成数"),
 					options: GENERATION_COUNT_GROUP_OPTIONS,
 				},
 			],
@@ -208,16 +209,16 @@ function buildSceneCompositeRequests({ state, helpers, locale }) {
 	const productReferenceId = helpers.collectReferenceIds([state.productImage])[0]
 	const sceneReferenceIds = helpers.collectReferenceIds(state.sceneImages)
 
-	return Array.from({ length: state.genCount }, (_, index) => {
-		const sceneImage = state.sceneImages[index % state.sceneImages.length]
+	return sceneReferenceIds.map((_, index) => {
+		const sceneImage = state.sceneImages[index]
 		const selectedSize = resolveSceneRequestSize(sceneImage, state, helpers)
 		return buildProductSceneCompositeRequest({
 			state,
 			helpers,
 			locale,
 			selectedSize,
-			referenceImages: [productReferenceId, sceneReferenceIds[index % sceneReferenceIds.length]],
-			count: 1,
+			referenceImages: [productReferenceId, sceneReferenceIds[index]],
+			count: state.genCount,
 		})
 	})
 }
