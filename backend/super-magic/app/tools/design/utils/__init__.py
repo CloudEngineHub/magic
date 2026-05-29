@@ -31,8 +31,26 @@ from .magic_project_design_parser import (
     # Functions
     read_magic_project_js,
     write_magic_project_js,
+    write_magic_project_js_v2,
     validate_project_config,
     get_project_file_path,
+)
+from .magic_project_compression import (
+    MAGIC_PROJECT_DESIGN_DATA_PREFIX,
+    compress_canvas_data,
+    decompress_canvas_data,
+    is_compressed_canvas,
+)
+from .element_details_store import (
+    ELEMENT_DETAILS_FILENAME,
+    ELEMENT_DETAILS_VERSION,
+    HEAVY_FIELDS,
+    read_element_details,
+    write_element_details,
+    extract_element_details,
+    strip_heavy_fields,
+    merge_element_details,
+    prune_orphan_details,
 )
 
 __all__ = [
@@ -64,6 +82,22 @@ __all__ = [
     # Functions
     "read_magic_project_js",
     "write_magic_project_js",
+    "write_magic_project_js_v2",
     "validate_project_config",
     "get_project_file_path",
+    # Compression
+    "MAGIC_PROJECT_DESIGN_DATA_PREFIX",
+    "compress_canvas_data",
+    "decompress_canvas_data",
+    "is_compressed_canvas",
+    # Element details store
+    "ELEMENT_DETAILS_FILENAME",
+    "ELEMENT_DETAILS_VERSION",
+    "HEAVY_FIELDS",
+    "read_element_details",
+    "write_element_details",
+    "extract_element_details",
+    "strip_heavy_fields",
+    "merge_element_details",
+    "prune_orphan_details",
 ]

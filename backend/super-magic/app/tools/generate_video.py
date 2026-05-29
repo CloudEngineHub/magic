@@ -1687,11 +1687,11 @@ class QueryVideoGeneration(AbstractFileTool[QueryVideoGenerationParams], Workspa
             if not properties:
                 return result
 
-            from app.tools.design.manager.canvas_manager import CanvasManager
+            from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 
             resolved_path = self.resolve_path(project_path)
             config_file = str(resolved_path / "magic.project.js")
-            manager = CanvasManager(str(resolved_path))
+            manager = await get_canvas_manager(str(resolved_path))
 
             success = await manager.run_write_transaction(
                 lambda config: manager.update_element(element_id, properties, config),
@@ -1783,18 +1783,25 @@ class QueryVideoGeneration(AbstractFileTool[QueryVideoGenerationParams], Workspa
         return properties
 
     async def _load_existing_generate_request(self, project_path: str, element_id: str) -> Dict[str, Any]:
-        from app.tools.design.manager.canvas_manager import CanvasManager
+        from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 
-        manager = CanvasManager(str(self.resolve_path(project_path)))
+        manager = await get_canvas_manager(str(self.resolve_path(project_path)))
         element = await manager.read_current_element_by_id(element_id)
         if element is None:
             raise ValueError(f"未找到需要回填的视频元素: {element_id}")
 
+        # v1：重字段内联在元素上；v2：已拆到 element-details.json
         generate_request = getattr(element, "generateVideoRequest", None)
         if isinstance(generate_request, dict):
             return dict(generate_request)
         if _is_dataclass_instance(generate_request):
             return dataclasses.asdict(generate_request)
+
+        details = await manager.read_element_details()
+        entry = details.get("elements", {}).get(element_id, {})
+        sidecar_request = entry.get("generateVideoRequest")
+        if isinstance(sidecar_request, dict):
+            return dict(sidecar_request)
         return {}
 
     @staticmethod

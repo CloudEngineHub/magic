@@ -7856,12 +7856,36 @@ function isMagicProjectJs(filePath) {
     return getWorkspaceFileBaseName(filePath) === 'magic.project.js';
 }
 
-function parseMagicProjectConfig(text) {
+// v2 画布压缩协议：canvas 字段被压成 MAGICPROJECTDESIGNDATA:// 字符串
+const MAGIC_PROJECT_DESIGN_DATA_PREFIX = 'MAGICPROJECTDESIGNDATA://';
+
+function isCompressedCanvas(value) {
+    return typeof value === 'string' && value.startsWith(MAGIC_PROJECT_DESIGN_DATA_PREFIX);
+}
+
+// 解压 canvas 压缩串：base64 -> gzip 解压 -> JSON。使用浏览器内置 DecompressionStream，无需额外依赖。
+async function decompressCanvasData(encoded) {
+    const b64 = encoded.slice(MAGIC_PROJECT_DESIGN_DATA_PREFIX.length);
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    const buf = await new Response(stream).arrayBuffer();
+    return JSON.parse(new TextDecoder('utf-8').decode(buf));
+}
+
+// 解析 magic.project.js：兼容 v1（canvas 为对象）与 v2（canvas 为压缩字符串）
+async function parseMagicProjectConfig(text) {
     try {
         const m = text.match(/window\.magicProjectConfig\s*=\s*(\{[\s\S]*\})/);
         if (!m) return null;
-        return JSON.parse(m[1]);
-    } catch {
+        const config = JSON.parse(m[1]);
+        if (config && isCompressedCanvas(config.canvas)) {
+            config.canvas = await decompressCanvasData(config.canvas);
+        }
+        return config;
+    } catch (e) {
+        console.error('解析 magic.project.js 失败', e);
         return null;
     }
 }
@@ -8345,9 +8369,9 @@ async function previewFile(fileHandle, filePath) {
                 filePreviewBody.appendChild(pre);
             }
 
-            // magic.project.js：解析画布配置后在右侧自动展开画布面板
+            // magic.project.js：解析画布配置后在右侧自动展开画布面板（兼容 v1/v2）
             if (isMagicProjectJs(filePath)) {
-                const config = parseMagicProjectConfig(text);
+                const config = await parseMagicProjectConfig(text);
                 if (config?.canvas) {
                     addCanvasRightPanel(config, filePath);
                 }
