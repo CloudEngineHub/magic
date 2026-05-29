@@ -31,12 +31,6 @@ const STATIC_PLUGIN_CATEGORIES = [
 		labelKey: "tools.pluginCategories.product",
 		fallbackLabel: "商品图",
 	},
-	{
-		key: "other",
-		order: 999,
-		labelKey: "tools.pluginCategories.other",
-		fallbackLabel: "其他",
-	},
 ] as const
 
 interface PluginToolViewItem {

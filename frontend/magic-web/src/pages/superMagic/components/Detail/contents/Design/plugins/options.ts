@@ -43,6 +43,9 @@ import oneClickProductManifest from "./one-click-product/manifest.json"
 import productBackgroundSwapStyles from "./product-background-swap/index.css?raw"
 import productBackgroundSwapRuntimeCode from "./product-background-swap/index.js?raw"
 import productBackgroundSwapManifest from "./product-background-swap/manifest.json"
+import clothingVariationShotsStyles from "./clothing-variation-shots/index.css?raw"
+import clothingVariationShotsRuntimeCode from "./clothing-variation-shots/index.js?raw"
+import clothingVariationShotsManifest from "./clothing-variation-shots/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -70,6 +73,8 @@ const oneClickProductEntryUrl = new URL("./one-click-product/index.js", import.m
 const oneClickProductResourceBaseUrl = new URL("./one-click-product/", import.meta.url).href
 const productBackgroundSwapEntryUrl = new URL("./product-background-swap/index.js", import.meta.url).href
 const productBackgroundSwapResourceBaseUrl = new URL("./product-background-swap/", import.meta.url).href
+const clothingVariationShotsEntryUrl = new URL("./clothing-variation-shots/index.js", import.meta.url).href
+const clothingVariationShotsResourceBaseUrl = new URL("./clothing-variation-shots/", import.meta.url).href
 const sharedPluginRuntimeCode = `${magicPluginKitRuntimeCode}\n\n${magicPromptLocaleRuntimeCode}`
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
@@ -201,6 +206,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${sharedPluginRuntimeCode}\n\n${productBackgroundSwapRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, productBackgroundSwapStyles],
 		resolveResourceUrl: (path) => new URL(path, productBackgroundSwapResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...clothingVariationShotsManifest,
+		entry: `./clothing-variation-shots/${clothingVariationShotsManifest.entry}`,
+		runtimeUrl: clothingVariationShotsEntryUrl,
+		resourceBaseUrl: clothingVariationShotsResourceBaseUrl,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${clothingVariationShotsRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, clothingVariationShotsStyles],
+		resolveResourceUrl: (path) => new URL(path, clothingVariationShotsResourceBaseUrl).href,
 		source: "builtin",
 	},
 ]
