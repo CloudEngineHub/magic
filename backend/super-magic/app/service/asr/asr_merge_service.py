@@ -81,21 +81,17 @@ class AsrMergeService(AsrServiceBase):
         # 获取任务管理器单例
         task_manager = AsrMergeTaskManager.instance()
 
-        # TEMP: Fetch context needed for scan-wav API call once before the loop
-        # to avoid repeated reads on every iteration. Remove when MagicFS handles
-        # metadata refresh automatically.
-        _scan_wav_project_id, _scan_wav_relative_path = await self._load_scan_wav_context(task)
+        # TEMP(disabled): scan-wav workaround is currently turned off.
+        # Keep the code path for quick rollback if needed.
+        # _scan_wav_project_id, _scan_wav_relative_path = await self._load_scan_wav_context(task)
 
         try:
             while True:
                 # 0. 更新活跃时间，防止沙箱因超时被杀 (agent_idle_timeout default 20min)
                 self.merge_operations.update_agent_activity(f"ASR轮询: {task.task_key}")
 
-                # TEMP: Notify Magic Service backend to scan object storage so that
-                # MagicFS can expose newly uploaded shards on the local filesystem
-                # before we scan the local directory. Silently skipped on failure to
-                # avoid breaking the polling loop. Remove when MagicFS auto-refreshes.
-                await self._trigger_scan_wav(_scan_wav_project_id, _scan_wav_relative_path, task.task_key)
+                # TEMP(disabled): scan-wav workaround is currently turned off.
+                # await self._trigger_scan_wav(_scan_wav_project_id, _scan_wav_relative_path, task.task_key)
 
                 # 1. 扫描所有 WAV 文件
                 all_files = await asyncio.to_thread(
