@@ -33,12 +33,16 @@ import faceSwapManifest from "./face-swap/manifest.json"
 import clothingColorChangeStyles from "./clothing-color-change/index.css?raw"
 import clothingColorChangeRuntimeCode from "./clothing-color-change/index.js?raw"
 import clothingColorChangeManifest from "./clothing-color-change/manifest.json"
+
 import productImageSetStyles from "./product-image-set/index.css?raw"
 import productImageSetRuntimeCode from "./product-image-set/index.js?raw"
 import productImageSetManifest from "./product-image-set/manifest.json"
 import oneClickProductStyles from "./one-click-product/index.css?raw"
 import oneClickProductRuntimeCode from "./one-click-product/index.js?raw"
 import oneClickProductManifest from "./one-click-product/manifest.json"
+import productBackgroundSwapStyles from "./product-background-swap/index.css?raw"
+import productBackgroundSwapRuntimeCode from "./product-background-swap/index.js?raw"
+import productBackgroundSwapManifest from "./product-background-swap/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -64,6 +68,8 @@ const productImageSetEntryUrl = new URL("./product-image-set/index.js", import.m
 const productImageSetResourceBaseUrl = new URL("./product-image-set/", import.meta.url).href
 const oneClickProductEntryUrl = new URL("./one-click-product/index.js", import.meta.url).href
 const oneClickProductResourceBaseUrl = new URL("./one-click-product/", import.meta.url).href
+const productBackgroundSwapEntryUrl = new URL("./product-background-swap/index.js", import.meta.url).href
+const productBackgroundSwapResourceBaseUrl = new URL("./product-background-swap/", import.meta.url).href
 const sharedPluginRuntimeCode = `${magicPluginKitRuntimeCode}\n\n${magicPromptLocaleRuntimeCode}`
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
@@ -185,6 +191,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${sharedPluginRuntimeCode}\n\n${oneClickProductRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, oneClickProductStyles],
 		resolveResourceUrl: (path) => new URL(path, oneClickProductResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...productBackgroundSwapManifest,
+		entry: `./product-background-swap/${productBackgroundSwapManifest.entry}`,
+		runtimeUrl: productBackgroundSwapEntryUrl,
+		resourceBaseUrl: productBackgroundSwapResourceBaseUrl,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${productBackgroundSwapRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, productBackgroundSwapStyles],
+		resolveResourceUrl: (path) => new URL(path, productBackgroundSwapResourceBaseUrl).href,
 		source: "builtin",
 	},
 ]

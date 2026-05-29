@@ -1,0 +1,12 @@
+.product-background-swap .mpk-image-grid {
+	grid-template-columns: repeat(4, 1fr);
+}
+
+.product-background-swap .mpk-card-tab {
+	min-height: 104px;
+	height: 100%;
+}
+
+.product-background-swap .mpk-image-slot-upload {
+	min-height: 88px;
+}
