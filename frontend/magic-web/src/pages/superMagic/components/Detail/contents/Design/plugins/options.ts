@@ -51,6 +51,9 @@ import clothingVariationShotsManifest from "./clothing-variation-shots/manifest.
 import productSceneCompositeStyles from "./product-scene-composite/index.css?raw"
 import productSceneCompositeRuntimeCode from "./product-scene-composite/index.js?raw"
 import productSceneCompositeManifest from "./product-scene-composite/manifest.json"
+import imageTranslationStyles from "./image-translation/index.css?raw"
+import imageTranslationRuntimeCode from "./image-translation/index.js?raw"
+import imageTranslationManifest from "./image-translation/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -82,6 +85,8 @@ const clothingVariationShotsEntryUrl = new URL("./clothing-variation-shots/index
 const clothingVariationShotsResourceBaseUrl = new URL("./clothing-variation-shots/", import.meta.url).href
 const productSceneCompositeEntryUrl = new URL("./product-scene-composite/index.js", import.meta.url).href
 const productSceneCompositeResourceBaseUrl = new URL("./product-scene-composite/", import.meta.url).href
+const imageTranslationEntryUrl = new URL("./image-translation/index.js", import.meta.url).href
+const imageTranslationResourceBaseUrl = new URL("./image-translation/", import.meta.url).href
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -232,6 +237,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${sharedPluginRuntimeCode}\n\n${productSceneCompositeRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, productSceneCompositeStyles],
 		resolveResourceUrl: (path) => new URL(path, productSceneCompositeResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...imageTranslationManifest,
+		entry: `./image-translation/${imageTranslationManifest.entry}`,
+		runtimeUrl: imageTranslationEntryUrl,
+		resourceBaseUrl: imageTranslationResourceBaseUrl,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${imageTranslationRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, imageTranslationStyles],
+		resolveResourceUrl: (path) => new URL(path, imageTranslationResourceBaseUrl).href,
 		source: "builtin",
 	},
 ]

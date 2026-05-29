@@ -1,0 +1,224 @@
+.image-translation .it-language-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.image-translation .it-quick-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.image-translation .it-quick-language,
+.image-translation .pis-pill {
+	height: 34px;
+	padding: 0 12px;
+	border-radius: 10px;
+	border: 1px solid #d1d5db;
+	background: #f9fafb;
+	font-size: 12px;
+	color: #111827;
+	text-align: center;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.image-translation .it-quick-language.is-active,
+.image-translation .pis-pill.is-active {
+	border-color: #6366f1;
+	background: #eef2ff;
+	color: #4f46e5;
+	font-weight: 600;
+}
+
+.image-translation .it-quick-language-more {
+	font-weight: 600;
+	background: #fff;
+}
+
+.image-translation .pis-drawer {
+	position: absolute;
+	inset: 0;
+	background: #fff;
+	transform: translateX(100%);
+	transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+	z-index: 12;
+	display: flex;
+	flex-direction: column;
+}
+
+.image-translation .pis-drawer.is-open {
+	transform: translateX(0);
+}
+
+.image-translation .pis-drawer-header,
+.image-translation .pis-drawer-footer {
+	display: flex;
+	align-items: center;
+	padding: 12px 14px;
+	flex-shrink: 0;
+	background: #fff;
+}
+
+.image-translation .pis-drawer-header {
+	gap: 10px;
+	border-bottom: 1px solid #f3f4f6;
+}
+
+.image-translation .pis-drawer-footer {
+	justify-content: flex-end;
+	border-top: 1px solid #f3f4f6;
+	background: linear-gradient(180deg, rgb(255 255 255 / 82%) 0%, #fff 24px);
+}
+
+.image-translation .pis-drawer-back {
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: #6b7280;
+	font-size: 16px;
+	cursor: pointer;
+	transition: color 0.15s, background 0.15s;
+}
+
+.image-translation .pis-drawer-back:hover {
+	color: #111827;
+	background: #f3f4f6;
+}
+
+.image-translation .pis-drawer-title {
+	font-size: 14px;
+	font-weight: 600;
+	color: #111827;
+}
+
+.image-translation .pis-primary-btn {
+	height: 34px;
+	padding: 0 16px;
+	border: none;
+	border-radius: 10px;
+	background: #111827;
+	color: #fff;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.image-translation .it-drawer-body {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.image-translation .it-drawer-sidebar {
+	width: 84px;
+	flex-shrink: 0;
+	border-right: 1px solid #f3f4f6;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	padding: 6px 0;
+}
+
+.image-translation .it-filter-btn {
+	display: block;
+	width: 100%;
+	padding: 8px 10px;
+	background: transparent;
+	border: none;
+	font-size: 12px;
+	color: #4b5563;
+	text-align: left;
+	cursor: pointer;
+	transition: color 0.12s, background 0.12s;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.image-translation .it-filter-btn:hover {
+	background: #f9fafb;
+	color: #111827;
+}
+
+.image-translation .it-filter-btn.is-active {
+	background: #eef2ff;
+	color: #4f46e5;
+	font-weight: 500;
+}
+
+.image-translation .it-drawer-main {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.image-translation .it-search-bar {
+	padding: 8px 10px 6px;
+	border-bottom: 1px solid #f3f4f6;
+	flex-shrink: 0;
+}
+
+.image-translation .it-search-input {
+	width: 100%;
+	padding: 5px 10px;
+	background: #f9fafb;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	font-size: 12px;
+	color: #111827;
+	outline: none;
+	box-sizing: border-box;
+	transition: border-color 0.15s;
+}
+
+.image-translation .it-search-input::placeholder {
+	color: #9ca3af;
+}
+
+.image-translation .it-search-input:focus {
+	border-color: #818cf8;
+	box-shadow: 0 0 0 1px rgb(99 102 241 / 20%);
+}
+
+.image-translation .it-language-list {
+	flex: 1;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	padding: 8px 10px 12px;
+}
+
+.image-translation .it-language-group-title {
+	font-size: 11px;
+	font-weight: 500;
+	color: #9ca3af;
+	margin: 6px 0 6px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.image-translation .it-language-group-title:first-child {
+	margin-top: 0;
+}
+
+.image-translation .it-language-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	margin-bottom: 10px;
+}
+
+.image-translation .it-language-empty {
+	padding: 24px 10px;
+	text-align: center;
+	font-size: 12px;
+	color: #9ca3af;
+}
