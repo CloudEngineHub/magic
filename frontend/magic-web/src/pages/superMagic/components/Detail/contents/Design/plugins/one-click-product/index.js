@@ -38,7 +38,7 @@ registerMagicCanvasPlugin({
 		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 
 		return MagicPluginKit.mount(ctx, root, {
-			panelClassName: "inspiration-image",
+			panelClassName: "one-click-product",
 			initialState: {
 				productImages: [],
 				creationMode: "smart",

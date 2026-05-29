@@ -1,0 +1,13 @@
+.product-scene-composite .mpk-image-grid {
+	grid-template-columns: repeat(4, 1fr);
+}
+
+.product-scene-composite .mpk-image-slot-upload {
+	min-height: 88px;
+}
+
+@media (max-width: 480px) {
+	.product-scene-composite .mpk-image-grid {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}

@@ -2,6 +2,8 @@ import type { CanvasDesignPlugin } from "@/components/CanvasDesign/canvas/types"
 import magicPluginKitStyles from "./shared/magic-plugin-kit/styles.css?raw"
 import magicPluginKitRuntimeCode from "./shared/magic-plugin-kit/index.js?raw"
 import magicPromptLocaleRuntimeCode from "./shared/prompt-locale/index.js?raw"
+const sharedPluginRuntimeCode = `${magicPluginKitRuntimeCode}\n\n${magicPromptLocaleRuntimeCode}`
+
 // eslint-disable-next-line import/extensions
 import bootsTryonStyles from "./boots-tryon/index.css?raw"
 import bootsTryonRuntimeCode from "./boots-tryon/index.js?raw"
@@ -46,6 +48,9 @@ import productBackgroundSwapManifest from "./product-background-swap/manifest.js
 import clothingVariationShotsStyles from "./clothing-variation-shots/index.css?raw"
 import clothingVariationShotsRuntimeCode from "./clothing-variation-shots/index.js?raw"
 import clothingVariationShotsManifest from "./clothing-variation-shots/manifest.json"
+import productSceneCompositeStyles from "./product-scene-composite/index.css?raw"
+import productSceneCompositeRuntimeCode from "./product-scene-composite/index.js?raw"
+import productSceneCompositeManifest from "./product-scene-composite/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -75,7 +80,8 @@ const productBackgroundSwapEntryUrl = new URL("./product-background-swap/index.j
 const productBackgroundSwapResourceBaseUrl = new URL("./product-background-swap/", import.meta.url).href
 const clothingVariationShotsEntryUrl = new URL("./clothing-variation-shots/index.js", import.meta.url).href
 const clothingVariationShotsResourceBaseUrl = new URL("./clothing-variation-shots/", import.meta.url).href
-const sharedPluginRuntimeCode = `${magicPluginKitRuntimeCode}\n\n${magicPromptLocaleRuntimeCode}`
+const productSceneCompositeEntryUrl = new URL("./product-scene-composite/index.js", import.meta.url).href
+const productSceneCompositeResourceBaseUrl = new URL("./product-scene-composite/", import.meta.url).href
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -207,7 +213,7 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		styleCode: [magicPluginKitStyles, productBackgroundSwapStyles],
 		resolveResourceUrl: (path) => new URL(path, productBackgroundSwapResourceBaseUrl).href,
 		source: "builtin",
-	},
+	},	
 	{
 		...clothingVariationShotsManifest,
 		entry: `./clothing-variation-shots/${clothingVariationShotsManifest.entry}`,
@@ -216,6 +222,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${sharedPluginRuntimeCode}\n\n${clothingVariationShotsRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, clothingVariationShotsStyles],
 		resolveResourceUrl: (path) => new URL(path, clothingVariationShotsResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...productSceneCompositeManifest,
+		entry: `./product-scene-composite/${productSceneCompositeManifest.entry}`,
+		runtimeUrl: productSceneCompositeEntryUrl,
+		resourceBaseUrl: productSceneCompositeResourceBaseUrl,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${productSceneCompositeRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, productSceneCompositeStyles],
+		resolveResourceUrl: (path) => new URL(path, productSceneCompositeResourceBaseUrl).href,
 		source: "builtin",
 	},
 ]
