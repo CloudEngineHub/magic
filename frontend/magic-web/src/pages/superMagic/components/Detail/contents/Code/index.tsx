@@ -1,7 +1,7 @@
 import CommonHeaderV2 from "@/pages/superMagic/components/Detail/components/CommonHeaderV2"
 import { useStyles } from "./style"
-import { Flex, Modal } from "antd"
-import { useMemo, useState, useEffect, useCallback, useRef } from "react"
+import { Flex } from "antd"
+import { useMemo, useState, useEffect, useRef, type RefObject, type ReactNode } from "react"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import CodeEditor from "@/components/base/CodeEditor"
 import { shadow } from "@/utils/shadow"
@@ -18,16 +18,15 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import useExportMenuItems from "../HTML/useExportMenuItems"
 import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
 import { textToHtml } from "../../../../utils/textToHtml"
-import {
-	decompressCanvasData,
-	isCompressedCanvas,
-} from "../Design/utils/magicProjectCompression"
 
-function formatBytes(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-	return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+export interface CodeViewerExtensionContext {
+	fileName: string
+	content: string
+	displayContent: string
+	scopeRef: RefObject<HTMLElement>
 }
+
+export type CodeViewerExtensionRenderer = (context: CodeViewerExtensionContext) => ReactNode
 
 export default function CodeViewer(props: any) {
 	const {
@@ -61,13 +60,14 @@ export default function CodeViewer(props: any) {
 		allowDownload,
 		exportFile,
 		isExporting,
+		renderExtensions,
 	} = props
 
 	const { styles, cx } = useStyles()
 	const responsive = useResponsive()
 	const isMobile = responsive.md === false
 	const { t } = useTranslation("super")
-	const codeContainerRef = useRef<HTMLDivElement>(null)
+	const extensionScopeRef = useRef<HTMLDivElement>(null)
 
 	const { content: displayContent, file_id } = data
 
@@ -166,73 +166,6 @@ export default function CodeViewer(props: any) {
 	}, [viewMode])
 
 	const [isExportingImage, setIsExportingImage] = useState(false)
-	const [decompressedModalOpen, setDecompressedModalOpen] = useState(false)
-	const [decompressedContent, setDecompressedContent] = useState<string>("")
-	const [compressSizeInfo, setCompressSizeInfo] = useState<{ before: number; after: number; elementCount: number } | null>(null)
-
-	const isMagicProjectFile = data?.file_name === "magic.project.js"
-
-	// 快捷键仅对 v2（压缩格式）的 magic.project.js 生效
-	const isV2MagicProjectFile = useMemo(() => {
-		if (!isMagicProjectFile) return false
-		const currentContent = content || displayContent || ""
-		return currentContent.includes("MAGICPROJECTDESIGNDATA://")
-	}, [isMagicProjectFile, content, displayContent])
-
-	const handleDecompressCanvas = useCallback(() => {
-		try {
-			const currentContent = content || displayContent || ""
-			// 尝试解析 JS 内容，提取 JSON 对象
-			let jsonStr = currentContent.trim()
-			// magic.project.js 通常是 `window.__MAGIC_PROJECT__ = {...}` 或纯 JSON
-			const assignMatch = jsonStr.match(/=\s*([\s\S]+?)\s*;?\s*$/)
-			if (assignMatch) {
-				jsonStr = assignMatch[1]
-			}
-			const parsed = JSON.parse(jsonStr)
-
-			// 查找并解压 canvas 字段
-			if (parsed.canvas && isCompressedCanvas(parsed.canvas)) {
-				const compressedSize = new TextEncoder().encode(parsed.canvas).length
-				const decompressed = decompressCanvasData(parsed.canvas) as { elements?: unknown[] }
-				const elementCount = Array.isArray(decompressed?.elements) ? decompressed.elements.length : 0
-				const result = { ...parsed, canvas: decompressed }
-				const decompressedStr = JSON.stringify(result, null, 2)
-				const decompressedSize = new TextEncoder().encode(JSON.stringify(decompressed)).length
-				setDecompressedContent(decompressedStr)
-				setCompressSizeInfo({ before: compressedSize, after: decompressedSize, elementCount })
-			} else {
-				// canvas 不是压缩格式，直接格式化展示
-				const canvasObj = parsed.canvas as { elements?: unknown[] } | undefined
-				const elementCount = Array.isArray(canvasObj?.elements) ? canvasObj.elements.length : 0
-				const formatted = JSON.stringify(parsed, null, 2)
-				setDecompressedContent(formatted)
-				setCompressSizeInfo(elementCount > 0 ? { before: 0, after: 0, elementCount } : null)
-			}
-			setDecompressedModalOpen(true)
-		} catch (error) {
-			console.error("[CodeViewer] Decompress canvas failed:", error)
-			magicToast.error("解压失败: " + (error instanceof Error ? error.message : "未知错误"))
-		}
-	}, [content, displayContent])
-
-	// 快捷键 Cmd+Shift+D (Mac) / Ctrl+Shift+D (Win) 触发解压 Canvas
-	// 仅对当前聚焦面板内的 v2 格式 magic.project.js 生效（避免多面板同时打开时重复触发）
-	useEffect(() => {
-		if (!isV2MagicProjectFile) return
-		const handler = (e: KeyboardEvent) => {
-			if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "d") {
-				// 检查当前焦点是否在本组件容器内
-				const container = codeContainerRef.current
-				if (!container) return
-				if (!container.contains(document.activeElement) && document.activeElement !== document.body) return
-				e.preventDefault()
-				handleDecompressCanvas()
-			}
-		}
-		window.addEventListener("keydown", handler)
-		return () => window.removeEventListener("keydown", handler)
-	}, [isV2MagicProjectFile, handleDecompressCanvas])
 
 	const handleExportSource = useMemoizedFn(() => {
 		exportFile?.(file_id, fileVersion)
@@ -407,7 +340,12 @@ export default function CodeViewer(props: any) {
 	)
 
 	return (
-		<Flex ref={codeContainerRef} vertical className={cx(styles.container, className)} tabIndex={-1}>
+		<Flex
+			ref={extensionScopeRef}
+			vertical
+			className={cx(styles.container, className)}
+			tabIndex={-1}
+		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
 			{isEditMode ? (
 				<CodeEditor
@@ -443,34 +381,12 @@ export default function CodeViewer(props: any) {
 					isEditMode={isEditMode}
 				/>
 			)}
-			<Modal
-				title="Decompressed Canvas Data"
-				open={decompressedModalOpen}
-				onCancel={() => setDecompressedModalOpen(false)}
-				footer={null}
-				width="80vw"
-				styles={{ body: { maxHeight: "70vh", overflow: "auto", padding: 0 } }}
-			>
-				{compressSizeInfo && (
-					<div style={{ padding: "8px 16px", fontSize: 13, color: "#666", borderBottom: "1px solid #f0f0f0", display: "flex", gap: 16, flexWrap: "wrap" }}>
-						<span>元素数量: <strong>{compressSizeInfo.elementCount}</strong></span>
-						{compressSizeInfo.before > 0 && compressSizeInfo.after > 0 && (
-							<>
-								<span>压缩前 (canvas): <strong>{formatBytes(compressSizeInfo.after)}</strong></span>
-								<span>压缩后 (canvas): <strong>{formatBytes(compressSizeInfo.before)}</strong></span>
-								<span>压缩率: <strong>{((1 - compressSizeInfo.before / compressSizeInfo.after) * 100).toFixed(1)}%</strong></span>
-							</>
-						)}
-					</div>
-				)}
-				<CodeEditor
-					content={decompressedContent}
-					fileName="canvas.json"
-					isEditMode={false}
-					theme="light"
-					height="70vh"
-				/>
-			</Modal>
+			{renderExtensions?.({
+				fileName: file_name || data?.file_name || "file",
+				content,
+				displayContent: displayContent || "",
+				scopeRef: extensionScopeRef,
+			})}
 		</Flex>
 	)
 }

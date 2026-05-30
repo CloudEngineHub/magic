@@ -2,11 +2,16 @@ import { lazy } from "react"
 import type { DetailHTMLData, DetailTerminalData, DetailUniverData } from "../../types"
 import { DetailType } from "../../types"
 import { hasPPTMetadata, isFileInPPTMode } from "../../utils/file"
+import type { CodeViewerExtensionContext } from "../../contents/Code"
+import { isDesignMagicProjectFile } from "../../contents/Design/utils/isDesignMagicProjectFile"
 
 // Lazy load all content components
 const Empty = lazy(() => import("../DetailEmpty"))
 const Browser = lazy(() => import("../../contents/Browser"))
 const CodeViewer = lazy(() => import("../../contents/Code"))
+const MagicProjectCodeInspector = lazy(
+	() => import("../../contents/Design/components/MagicProjectCodeInspector"),
+)
 const HTML = lazy(() => import("../../contents/HTML"))
 const TextEditor = lazy(() => import("../../contents/Md"))
 const PDFViewer = lazy(() => import("../../contents/Pdf"))
@@ -76,10 +81,28 @@ function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
 		case DetailType.Pdf:
 			return <PDFViewer data={data} {...commonProps} />
 		case DetailType.Code:
+			const renderExtensions = (options: CodeViewerExtensionContext) => {
+				const { fileName, content, displayContent, scopeRef } = options
+				const isDesignMagicProjectFileResult = isDesignMagicProjectFile({
+					file: data,
+					fileName,
+					attachments: commonProps.attachments,
+					flatAttachments: commonProps.attachmentList,
+				})
+				return isDesignMagicProjectFileResult ? (
+					<MagicProjectCodeInspector
+						fileName={fileName}
+						content={content}
+						fallbackContent={displayContent}
+						scopeRef={scopeRef}
+					/>
+				) : null
+			}
 			return (
 				<CodeViewer
 					data={data}
 					file_name={data?.file_name || "代码片段"}
+					renderExtensions={renderExtensions}
 					{...commonProps}
 				/>
 			)
