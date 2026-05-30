@@ -5,7 +5,10 @@
 """
 
 import asyncio
+import hashlib
+import json
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
@@ -26,16 +29,27 @@ class BackgroundCompactState:
     """后台压缩状态机
 
     生命周期: idle → running → completed/failed → applied → idle
-    forked subagent 的 final_response 就是压缩摘要。
+    forked subagent 调用 compact_chat_history 的 summary 参数就是压缩摘要。
     """
     # 后台任务引用（asyncio.Task 包装了 run_isolated_agent 调用）
     _task: Optional[asyncio.Task] = field(default=None, repr=False)
 
+    # 本次后台压缩的唯一 generation，用于区分不同快照
+    generation: str = ""
+
     # 快照时的消息数量（用于确定哪些是压缩后新增的消息）
     snapshot_message_count: int = 0
 
+    # 快照前缀的语义指纹，用于应用前确认父历史未被其他流程改写
+    snapshot_digest: str = ""
+
     # 任务启动时间
     started_at: float = 0.0
+
+    # 最近一次失败的快照，用于避免历史未变化时反复重试同一份后台压缩
+    last_failure_generation: str = ""
+    last_failure_snapshot_message_count: int = 0
+    last_failure_snapshot_digest: str = ""
 
     @property
     def is_idle(self) -> bool:
@@ -58,15 +72,15 @@ class BackgroundCompactState:
     def get_summary(self) -> Optional[str]:
         """获取压缩结果（仅在 is_completed 时有效）
 
-        返回 forked subagent 的 final_response（即压缩摘要文本），
+        返回 forked subagent 调用 compact_chat_history 时提交的 summary 参数，
         失败或取消时返回 None。
         """
         if not self.is_completed:
             return None
         try:
             result = self._task.result()
-            if not result or len(result.strip()) < 100:
-                logger.warning(f"后台压缩结果过短: {len(result or '')} chars")
+            if not isinstance(result, str) or not result.strip():
+                logger.warning("后台压缩没有捕获到 compact_chat_history summary")
                 return None
             return result
         except (asyncio.CancelledError, Exception) as e:
@@ -81,8 +95,52 @@ class BackgroundCompactState:
     def reset(self) -> None:
         self.cancel()
         self._task = None
+        self.generation = ""
         self.snapshot_message_count = 0
+        self.snapshot_digest = ""
         self.started_at = 0.0
+
+    def mark_failed(self) -> None:
+        self.last_failure_generation = self.generation
+        self.last_failure_snapshot_message_count = self.snapshot_message_count
+        self.last_failure_snapshot_digest = self.snapshot_digest
+
+    def is_failed_snapshot(self, snapshot_message_count: int, snapshot_digest: str) -> bool:
+        return (
+            snapshot_message_count == self.last_failure_snapshot_message_count
+            and snapshot_digest == self.last_failure_snapshot_digest
+        )
+
+
+def build_messages_digest(messages: list[object]) -> str:
+    semantic_messages = [_message_digest_payload(message) for message in messages]
+    payload = json.dumps(semantic_messages, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _message_digest_payload(message: object) -> dict[str, object]:
+    payload = {
+        "role": getattr(message, "role", ""),
+        "content": getattr(message, "content", ""),
+        "show_in_ui": getattr(message, "show_in_ui", True),
+    }
+    if hasattr(message, "source") and getattr(message, "source") is not None:
+        payload["source"] = getattr(message, "source")
+    if hasattr(message, "system") and getattr(message, "system") is not None:
+        payload["system"] = getattr(message, "system")
+    if hasattr(message, "tool_call_id") and getattr(message, "tool_call_id") is not None:
+        payload["tool_call_id"] = getattr(message, "tool_call_id")
+    tool_calls = getattr(message, "tool_calls", None)
+    if tool_calls:
+        payload["tool_calls"] = [
+            {
+                "id": getattr(tool_call, "id", None),
+                "name": getattr(getattr(tool_call, "function", None), "name", None),
+                "arguments": getattr(getattr(tool_call, "function", None), "arguments", None),
+            }
+            for tool_call in tool_calls
+        ]
+    return payload
 
 
 async def start_background_compact(
@@ -96,27 +154,35 @@ async def start_background_compact(
     """通过 fork 子 Agent 启动后台压缩。
 
     fork 出一个同类型子 Agent（继承完整对话历史），
-    让它生成上下文摘要作为 final_response 返回。
+    让它调用 compact_chat_history，并捕获 summary 参数作为压缩结果。
     """
     if state.is_running:
         logger.warning("后台压缩任务已在运行中，跳过重复启动")
         return
 
     state.reset()
-    state.snapshot_message_count = len(chat_history.messages)
+    snapshot_message_count = len(chat_history.messages)
+    snapshot_digest = build_messages_digest(chat_history.messages[:snapshot_message_count])
+    if state.is_failed_snapshot(snapshot_message_count, snapshot_digest):
+        logger.info("后台压缩快照与上次失败快照相同，跳过重复启动")
+        return
+
+    generation = uuid.uuid4().hex
+    state.generation = generation
+    state.snapshot_message_count = snapshot_message_count
+    state.snapshot_digest = snapshot_digest
     state.started_at = time.time()
 
     compact_prompt = (
         "The conversation context is too long and must be compacted now.\n"
-        "Generate a comprehensive summary following the guidelines below.\n"
-        "Return the summary directly as your final response text.\n"
-        "Do NOT call any tools. Do NOT ask clarifying questions.\n\n"
+        "Call the `compact_chat_history` tool immediately with the complete summary.\n"
+        "Do not call any other tool. Do not ask clarifying questions.\n"
+        "The summary must cover the conversation before this compaction request.\n\n"
         f"{compact_instruction}"
     )
 
-    from datetime import datetime
-
-    agent_id = f"bg-compact-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    parent_context_id = getattr(agent_context, "context_id", "") or "unknown-parent"
+    agent_id = f"bg-compact-{parent_context_id}-{generation[:12]}"
 
     from app.service.agent_runner import run_isolated_agent
 
@@ -129,7 +195,29 @@ async def start_background_compact(
             model_id=model_id,
             fork_source_chat_history=chat_history,
             disable_compaction=True,
+            capture_compact_history_result=True,
         )
+    )
+
+    async def _cancel_background_compact() -> None:
+        task = state._task
+        state.cancel()
+        if task is None:
+            return
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=10.0)
+        except asyncio.TimeoutError:
+            logger.warning("Timed out waiting for background compact task cancellation")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(f"Background compact task ended during cleanup: {exc}")
+        finally:
+            state.reset()
+
+    agent_context.register_run_cleanup(
+        f"background_compact:{agent_id}",
+        _cancel_background_compact,
     )
 
     logger.info(

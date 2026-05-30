@@ -53,6 +53,7 @@ async def _run_subagent_task(
     agent: "Agent",
     prompt: str,
     handle,
+    capture_compact_history_result: bool = False,
 ) -> SubagentSessionState:
     """
     运行 sub-agent 并管理状态持久化。
@@ -69,9 +70,20 @@ async def _run_subagent_task(
 
     try:
         result = await agent.run(prompt)
-        state.status = SubagentStatus.DONE
-        state.last_result = result or ""
-        state.last_error = None
+        if capture_compact_history_result:
+            captured_summary = agent.get_captured_compact_summary()
+            if captured_summary:
+                state.status = SubagentStatus.DONE
+                state.last_result = captured_summary
+                state.last_error = None
+            else:
+                state.status = SubagentStatus.ERROR
+                state.last_result = ""
+                state.last_error = "compact_chat_history was not called with a valid summary"
+        else:
+            state.status = SubagentStatus.DONE
+            state.last_result = result or ""
+            state.last_error = None
         state.finished_at = utc_now()
         state.active_tool_call_id = None
         async with handle.state_lock:
@@ -121,6 +133,7 @@ async def run_isolated_agent(
     image_model_id: Optional[str] = None,
     fork_source_chat_history: Optional["ChatHistory"] = None,
     disable_compaction: bool = False,
+    capture_compact_history_result: bool = False,
 ) -> Optional[str]:
     """
     运行一个隔离 sub-agent，等待完成并返回结果。
@@ -130,9 +143,10 @@ async def run_isolated_agent(
     内部创建独立的 root context，从全局配置读取必要参数，
     不继承任何运行时父 context。
 
-    fork_source_chat_history: 从指定 ChatHistory 分叉（浅拷贝消息列表），
+    fork_source_chat_history: 从指定 ChatHistory 分叉（复制消息值），
         子 Agent 继承完整对话上下文。用于后台压缩等需要上下文连贯的场景。
     disable_compaction: 禁用子 Agent 的上下文压缩，防止 fork 出的 Agent 自触发压缩。
+    capture_compact_history_result: 捕获子 Agent 调用 compact_chat_history 的 summary 参数。
     """
     from app.core.context.agent_context import AgentContext
     from app.magic.agent import Agent
@@ -156,6 +170,8 @@ async def run_isolated_agent(
     task: Optional[asyncio.Task] = None
     try:
         agent = Agent(agent_name, agent_id=agent_id, agent_context=new_context)
+        if capture_compact_history_result:
+            agent.enable_compact_history_capture()
 
         # Fork: 从源 ChatHistory 分叉，子 Agent 继承父 Agent 的完整对话上下文
         if fork_source_chat_history is not None:
@@ -169,7 +185,12 @@ async def run_isolated_agent(
 
         async with handle.lock:
             task = asyncio.create_task(
-                _run_subagent_task(agent=agent, prompt=prompt, handle=handle)
+                _run_subagent_task(
+                    agent=agent,
+                    prompt=prompt,
+                    handle=handle,
+                    capture_compact_history_result=capture_compact_history_result,
+                )
             )
             handle.task = task
             handle.agent_context = new_context

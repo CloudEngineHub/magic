@@ -524,14 +524,32 @@ class ChatHistory:
         await self.load()
 
     async def fork_from(self, source: "ChatHistory") -> None:
-        """从另一个 ChatHistory 分叉，复制其消息列表。
-
-        用于 subagent fork 场景：子 Agent 继承父 Agent 的完整对话上下文。
-        浅拷贝 messages 列表安全——ChatMessage 是 dataclass，不会被原地修改。
-        """
-        self.messages = list(source.messages)
+        """从另一个 ChatHistory 分叉，复制消息值，不共享消息对象。"""
+        self.messages = [self._clone_message(message) for message in source.messages]
         self._loaded = True
         await self.save()
+
+    def _clone_message(self, message: ChatMessage) -> ChatMessage:
+        """复制消息值，避免 fork 后父子 Agent 共享可变 dataclass 实例。"""
+        if hasattr(message, "to_dict") and callable(message.to_dict):
+            data = message.to_dict()
+        else:
+            data = asdict(message)
+
+        data.pop("id", None)
+        role = data.get("role")
+        if role == "system":
+            cloned = SystemMessage.from_dict(data)
+        elif role == "user":
+            cloned = UserMessage.from_dict(data)
+        elif role == "assistant":
+            cloned = AssistantMessage.from_dict(data)
+        elif role == "tool":
+            cloned = ToolMessage.from_dict(data)
+        else:
+            raise ValueError(f"Unsupported message role for clone: {role}")
+
+        return self._validate_and_standardize(cloned)
 
     async def load(self) -> None:
         """
@@ -1204,6 +1222,18 @@ class ChatHistory:
             logger.error(f"异步添加消息时发生意外错误: {e}", exc_info=True)
             # 根据策略决定是否抛出异常
             return False
+
+    async def replace_messages(self, messages: List[ChatMessage]) -> None:
+        """一次性替换聊天历史并保存，避免 clear + 多次 append 暴露中间状态。"""
+        validated_messages = [
+            self._validate_and_standardize(message)
+            for message in messages
+        ]
+        self.messages = validated_messages
+        fixes = self._sanitize_message_sequences()
+        if fixes:
+            logger.info(f"批量替换消息后修复消息序列: fixes={fixes}")
+        await self.save()
 
     def _is_tool_call_sequence_complete(self) -> bool:
         """

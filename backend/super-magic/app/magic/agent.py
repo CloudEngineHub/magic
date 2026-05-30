@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from agentlang.agent.base import BaseAgent
 from agentlang.agent.loader import AgentLoader
 from agentlang.agent.state import AgentState
-from agentlang.chat_history import AssistantMessage, CompactionConfig, ToolCall
+from agentlang.chat_history import AssistantMessage, CompactionConfig, SystemMessage, ToolCall
 from agentlang.chat_history.chat_history import ChatHistory
 from agentlang.chat_history.chat_history_models import UserMessage
 from agentlang.context.tool_context import ToolContext
@@ -53,6 +53,7 @@ from app.magic.background_compact import (
     BackgroundCompactState,
     start_background_compact,
     BACKGROUND_COMPACT_WAIT_TIMEOUT,
+    build_messages_digest,
 )
 from app.core.entity.final_task_state import (
     FinalTaskState,
@@ -270,6 +271,8 @@ class Agent(BaseAgent):
 
         # 后台压缩状态（双阈值机制：early_compact_threshold 触发后台，token_threshold 硬限制）
         self._bg_compact_state = BackgroundCompactState()
+        self.capture_compact_history_result: bool = False
+        self.captured_compact_summary: Optional[str] = None
 
         # 初始化 ChatHistory 实例
         self.chat_history = ChatHistory(
@@ -298,6 +301,14 @@ class Agent(BaseAgent):
         AgentContextRegistry.get_instance().register(self.agent_context)
         self._context_registered = True
         logger.info(f"Agent context 已注册: {self.agent_context.get_agent_session_label()}")
+
+    def enable_compact_history_capture(self) -> None:
+        """让当前 Agent 只捕获 compact_chat_history 的 summary 参数，不重写自身历史。"""
+        self.capture_compact_history_result = True
+        self.captured_compact_summary = None
+
+    def get_captured_compact_summary(self) -> Optional[str]:
+        return self.captured_compact_summary
 
     def print_token_usage(self) -> None:
         """
@@ -329,6 +340,7 @@ class Agent(BaseAgent):
         if self._closed:
             return
         self._closed = True
+        self._bg_compact_state.reset()
 
         if self._context_registered:
             from app.core.context.agent_context_registry import AgentContextRegistry
@@ -1506,6 +1518,7 @@ class Agent(BaseAgent):
         token_threshold = self.compaction_config.token_threshold
         early_threshold = self.compaction_config.early_compact_threshold
         message_threshold = self.compaction_config.max_conversation_rounds
+        background_failed_this_snapshot = False
 
         # ── 阶段 1：后台压缩已完成，立即应用 ──
         if self._bg_compact_state.is_completed:
@@ -1514,11 +1527,14 @@ class Agent(BaseAgent):
                 logger.info(
                     f"后台压缩已完成 (耗时 {self._bg_compact_state.elapsed_seconds:.1f}s)，应用结果"
                 )
-                await self._apply_background_compact(summary)
-                return True
+                if await self._apply_background_compact(summary):
+                    return True
+                logger.warning("后台压缩结果未应用，继续执行阈值判断")
             else:
                 logger.warning("后台压缩结果为空或异常，重置状态")
+                self._bg_compact_state.mark_failed()
                 self._bg_compact_state.reset()
+                background_failed_this_snapshot = True
 
         # ── 阶段 2：到达硬阈值 ──
         if token_count > token_threshold or message_count > message_threshold:
@@ -1529,16 +1545,26 @@ class Agent(BaseAgent):
                 )
                 summary = await self._wait_for_background_compact()
                 if summary:
-                    await self._apply_background_compact(summary)
-                    return True
-                logger.warning("后台压缩等待超时/失败，回退到前台压缩")
+                    if await self._apply_background_compact(summary):
+                        return True
+                    logger.warning("后台压缩结果未应用，回退到前台压缩")
+                else:
+                    logger.warning("后台压缩等待超时/失败，回退到前台压缩")
                 self._bg_compact_state.reset()
 
             # 前台阻塞压缩（现有逻辑提取）
             return await self._trigger_foreground_compact(token_count, token_threshold, message_count)
 
         # ── 阶段 3：到达预压缩阈值，fork 后台压缩 ──
-        if token_count > early_threshold and self._bg_compact_state.is_idle:
+        if (
+            token_count > early_threshold
+            and self._bg_compact_state.is_idle
+            and not background_failed_this_snapshot
+            and not self._bg_compact_state.is_failed_snapshot(
+                len(self.chat_history.messages),
+                build_messages_digest(self.chat_history.messages),
+            )
+        ):
             logger.info(
                 f"到达预压缩阈值 (tokens={token_count}/{early_threshold})，启动后台压缩"
             )
@@ -1580,8 +1606,11 @@ class Agent(BaseAgent):
         if self._bg_compact_state.is_completed:
             summary = self._bg_compact_state.get_summary()
             if summary:
-                await self._apply_background_compact(summary)
-                return True
+                if await self._apply_background_compact(summary):
+                    return True
+                logger.warning("Force compact: 后台压缩结果未应用，回退到前台注入")
+            else:
+                self._bg_compact_state.mark_failed()
             self._bg_compact_state.reset()
 
         # 后台压缩运行中 → 等待完成（后台进度不应浪费）
@@ -1592,8 +1621,9 @@ class Agent(BaseAgent):
             )
             summary = await self._wait_for_background_compact()
             if summary:
-                await self._apply_background_compact(summary)
-                return True
+                if await self._apply_background_compact(summary):
+                    return True
+                logger.warning("Force compact: 后台压缩结果未应用，回退到前台注入")
             # 超时仍未完成 → 取消后台，走前台注入
             self._bg_compact_state.reset()
 
@@ -1648,60 +1678,74 @@ class Agent(BaseAgent):
             logger.warning(f"后台压缩等待异常: {e}")
             return None
 
-    async def _apply_background_compact(self, summary: str) -> None:
-        """应用后台压缩结果，保留快照后新增的消息"""
-        try:
-            snapshot_count = self._bg_compact_state.snapshot_message_count
-            current_messages = self.chat_history.messages
-            original_count = len(current_messages)
-            original_tokens = await self.chat_history.tokens_count()
-
-            # 提取快照后新增的消息
-            new_messages = list(current_messages[snapshot_count:]) if snapshot_count < original_count else []
-
-            # 备份 + 清空 + 重建
-            await self._backup_before_compact()
-            current_messages.clear()
-            await self.chat_history.append_system_message(self.system_prompt)
-
-            # 添加压缩摘要（与现有 _execute_history_compact 格式一致）
-            compressed_content = f"""\
+    def _build_compacted_summary_message(self, summary: str) -> str:
+        return f"""\
 <summary>
 {summary}
 </summary>
 
 ---
 You were interrupted by context compaction. The above contains a summary of your previous thinking and work. Resume in this order:
-1. If the summary lists skills needed to resume, call `read_skills()` to reload them first
-2. Read the files listed in the key files section as needed for the next action
-3. Review external references and reference files as needed
-4. Follow the task status and next action in the summary: continue only if the task is incomplete; if it is complete, do not invent follow-up work.
-Since your subsequent output will be merged with pre-interruption content, maintain conversational continuity."""
+1. If the summary lists skills needed to resume, call `read_skills()` to reload them first — they provide the methodology and workflow constraints for your task
+2. Read the files listed in the key files section as needed for the next action — do not reread every file by default
+3. Review external references and reference files as needed for background context
+4. Follow the task status and next action in the summary: continue only if the task is incomplete; if it is complete, do not invent follow-up work
+Since your subsequent output will be merged with pre-interruption content and displayed together in the frontend, maintain conversational continuity."""
 
-            await self.chat_history.append_user_message(
-                content=compressed_content,
-                show_in_ui=True,
-            )
+    async def _apply_background_compact(self, summary: str) -> bool:
+        """应用后台压缩结果，保留快照后新增的消息"""
+        blocker_acquired = False
+        applied = False
+        try:
+            snapshot_count = self._bg_compact_state.snapshot_message_count
+            snapshot_digest = self._bg_compact_state.snapshot_digest
+            current_messages = self.chat_history.messages
+            original_count = len(current_messages)
+            original_tokens = await self.chat_history.tokens_count()
 
-            # 追赶：重新追加快照后新增的消息
-            for msg in new_messages:
-                self.chat_history.messages.append(msg)
+            if snapshot_count <= 0 or snapshot_count > original_count:
+                logger.warning("后台压缩快照数量无效，丢弃结果")
+                return False
+
+            current_digest = build_messages_digest(current_messages[:snapshot_count])
+            if current_digest != snapshot_digest:
+                logger.warning("后台压缩快照前缀已变化，丢弃结果")
+                return False
+
+            new_messages = list(current_messages[snapshot_count:])
+            compressed_content = self._build_compacted_summary_message(summary)
+            replacement_messages = [
+                SystemMessage(content=self.system_prompt, show_in_ui=False),
+                UserMessage(content=compressed_content, show_in_ui=True),
+                *new_messages,
+            ]
+
+            self.agent_context.increment_cancel_blocker()
+            blocker_acquired = True
+            await self._backup_before_compact()
+            await self.chat_history.replace_messages(replacement_messages)
+            applied = True
 
             compacted_tokens = await self.chat_history.tokens_count()
             logger.info(
                 f"后台压缩结果已应用: "
                 f"{original_count} msgs/{original_tokens} tokens → "
-                f"{len(current_messages)} msgs/{compacted_tokens} tokens, "
+                f"{len(self.chat_history.messages)} msgs/{compacted_tokens} tokens, "
                 f"catch_up={len(new_messages)} msgs"
             )
 
-            # 重置 horizon 和媒体模型
             await self.agent_context.horizon.on_context_reset()
             await self._rehydrate_media_models_after_context_reset()
+            return True
 
         except Exception as e:
             logger.error(f"应用后台压缩结果失败: {e}", exc_info=True)
+            if not applied:
+                self._bg_compact_state.mark_failed()
+            return applied
         finally:
+            if blocker_acquired:
+                self.agent_context.decrement_cancel_blocker()
             self._bg_compact_state.reset()
 
     def _activate_compact_model(self) -> None:
@@ -2345,10 +2389,27 @@ Since your subsequent output will be merged with pre-interruption content, maint
 
                 # 检查其他特殊工具调用
                 if result.system == "COMPACT_HISTORY":
-                    logger.info("检测到 COMPACT_HISTORY 工具调用，执行聊天历史压缩")
-                    # Get summary from extra_info
-                    if result.extra_info and 'summary' in result.extra_info:
-                        await self._execute_history_compact(result.extra_info['summary'])
+                    logger.info("检测到 COMPACT_HISTORY 工具调用")
+                    summary = None
+                    if result.extra_info and "summary" in result.extra_info:
+                        summary = result.extra_info["summary"]
+
+                    if self.capture_compact_history_result:
+                        if isinstance(summary, str) and summary.strip():
+                            self.captured_compact_summary = summary
+                            should_exit = True
+                            final_response = None
+                            inject_horizon_after_tools = False
+                            logger.info("已捕获 compact_chat_history summary，结束压缩子 Agent")
+                        else:
+                            logger.error("compact capture 模式下缺少有效 summary")
+                            should_exit = True
+                            final_response = None
+                            inject_horizon_after_tools = False
+                        break
+
+                    if summary:
+                        await self._execute_history_compact(summary)
                     else:
                         logger.error("COMPACT_HISTORY tool result missing summary in extra_info")
                     # Continue the agent loop after compact
@@ -2426,56 +2487,31 @@ Since your subsequent output will be merged with pre-interruption content, maint
         # 前台压缩已就绪（summary 已生成），取消正在进行的后台压缩以避免冲突
         self._bg_compact_state.reset()
 
+        blocker_acquired = False
         try:
-            # 1. Capture statistics before compaction
+            self.agent_context.increment_cancel_blocker()
+            blocker_acquired = True
             original_message_count = len(self.chat_history.messages)
             original_tokens = await self.chat_history.tokens_count()
-
-            # 2. Backup current chat history before compaction
             await self._backup_before_compact()
 
-            # 3. Clear chat history to start fresh
-            self.chat_history.messages.clear()
-
-            # 4. Re-add system prompt (always first) - static content, no need to regenerate
-            await self.chat_history.append_system_message(self.system_prompt)
-
-            # 5. Add compressed summary as user message (horizon will inject initial_context on next LLM call)
-            compressed_content = f"""\
-<summary>
-{summary}
-</summary>
-
----
-You were interrupted by context compaction. The above contains a summary of your previous thinking and work. Resume in this order:
-1. If the summary lists skills needed to resume, call `read_skills()` to reload them first — they provide the methodology and workflow constraints for your task
-2. Read the files listed in the key files section as needed for the next action — do not reread every file by default
-3. Review external references and reference files as needed for background context
-4. Follow the task status and next action in the summary: continue only if the task is incomplete; if it is complete, do not invent follow-up work
-Since your subsequent output will be merged with pre-interruption content and displayed together in the frontend, maintain conversational continuity."""
-
-            # Calculate compact tokens for logging
+            compressed_content = self._build_compacted_summary_message(summary)
             compacted_tokens = num_tokens_from_string(compressed_content)
-
-            # Create and add user message
-            await self.chat_history.append_user_message(
-                content=compressed_content,
-                show_in_ui=True
-            )
-
-            # 7. Log compaction results
-            compressed_message_count = len(self.chat_history.messages)
+            replacement_messages = [
+                SystemMessage(content=self.system_prompt, show_in_ui=False),
+                UserMessage(content=compressed_content, show_in_ui=True),
+            ]
+            await self.chat_history.replace_messages(replacement_messages)
 
             logger.info(
                 f"Chat history compressed successfully: "
                 f"original_messages={original_message_count}, "
-                f"compressed_messages={compressed_message_count}, "
+                f"compressed_messages={len(self.chat_history.messages)}, "
                 f"original_tokens={original_tokens}, "
                 f"compacted_tokens={compacted_tokens}, "
                 f"compact_ratio={(original_tokens-compacted_tokens)/original_tokens:.1%}"
             )
 
-            # 8. 重置 AgentHorizon 上下文相关状态
             await self.agent_context.horizon.on_context_reset()
             await self._rehydrate_media_models_after_context_reset()
 
@@ -2484,6 +2520,8 @@ Since your subsequent output will be merged with pre-interruption content and di
             # Don't raise - allow agent to continue even if compaction fails
 
         finally:
+            if blocker_acquired:
+                self.agent_context.decrement_cancel_blocker()
             # 压缩完成后还原 dynamic_model_id（无论成功或失败都执行）
             self._restore_pre_compact_model(reason="压缩完成")
 
