@@ -1,13 +1,13 @@
 """Canvas Manager Factory - 版本路由工厂
 
-根据 magic.project.js 的 canvas 形态返回对应版本的画布管理器：
+根据 magic.project.js 信封 version 字段返回对应版本的画布管理器：
 
-    文件不存在（新建场景）              → CanvasManagerV2
-    canvas 是 MAGICPROJECTDESIGNDATA:// → CanvasManagerV2（v2）
-    canvas 是对象 / 其它               → CanvasManager（v1）
+    文件不存在（新建场景）   → CanvasManagerV2
+    version == 2.0.0        → CanvasManagerV2（v2）
+    其它（含 1.0.0 / 缺失）  → CanvasManager（v1）
 
 返回类型统一为基类 CanvasManager，工具层无需关心具体版本（V2 是其子类）。
-判定只读取信封并看 canvas 字段类型，不解压 elements。
+判定只解析信封读取 version，不解压 canvas。
 """
 
 from agentlang.logger import get_logger

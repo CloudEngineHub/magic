@@ -17,6 +17,7 @@ from app.core.entity.message.server_message import ToolDetail, DisplayType, File
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.tools.base_design_tool import BaseDesignTool
 from app.tools.design.utils.magic_project_design_parser import (
+    MAGIC_PROJECT_VERSION_V2,
     CanvasConfig,
     MagicProjectConfig,
     write_magic_project_js_v2,
@@ -126,9 +127,9 @@ class CreateCanvas(BaseDesignTool[CreateCanvasParams]):
             if config_file_exists:
                 logger.info(f"Project config file already exists, skipping write: {project_js_path}")
             else:
-                # 新建画布使用 v2 格式（信封明文 + canvas 压缩），空 elements
+                # 新建画布使用 v2 格式（信封 version=2.0.0 + canvas 压缩），空 elements
                 initial_config = MagicProjectConfig(
-                    version="1.0.0",
+                    version=MAGIC_PROJECT_VERSION_V2,
                     type="design",
                     name=project_name,
                     canvas=CanvasConfig(elements=[]),

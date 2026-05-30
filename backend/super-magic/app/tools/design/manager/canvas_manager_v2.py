@@ -20,6 +20,7 @@ from app.tools.design.utils.element_details_store import (
     write_element_details,
 )
 from app.tools.design.utils.magic_project_design_parser import (
+    MAGIC_PROJECT_VERSION_V2,
     MagicProjectConfig,
     write_magic_project_js_v2,
 )
@@ -49,7 +50,10 @@ class CanvasManagerV2(CanvasManager):
         # 2. 从内存 config 上移除重字段，主文件只保留轻字段
         strip_heavy_fields(config)
 
-        # 3. 先写 sidecar（孤儿安全），再写压缩主文件 + 写后重读校验
+        # 3. 固定信封 version 为 2.0.0，确保 v2 文件的格式契约一致
+        config.version = MAGIC_PROJECT_VERSION_V2
+
+        # 4. 先写 sidecar（孤儿安全），再写压缩主文件 + 写后重读校验
         if merged != existing:
             await write_element_details(self.project_path, merged)
         await write_magic_project_js_v2(
