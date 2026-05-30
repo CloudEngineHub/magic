@@ -43,6 +43,9 @@ import { useCanvasResourceRefresh } from "./hooks/useCanvasResourceRefresh"
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useNetwork } from "ahooks"
 import { CloudOff } from "lucide-react"
+import { needsUpgrade, upgradeCanvasToV2, type UpgradeProgress } from "./utils/canvasVersionUpgrade"
+import { CanvasUpgradeBanner, CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
+import { toast } from "sonner"
 
 // 懒加载协议弹窗
 const loadWaterMarkFreeModal = async () => {
@@ -334,6 +337,85 @@ function DesignViewer(props: DesignViewerProps) {
 	} = designProjectManager
 
 	const { isProcessingRevoke, revokeType } = designProjectManager
+
+	// v1 → v2 升级相关状态
+	const [showUpgradeBanner, setShowUpgradeBanner] = useState(false)
+	const [isUpgrading, setIsUpgrading] = useState(false)
+	const [upgradeProgress, setUpgradeProgress] = useState<UpgradeProgress>({
+		step: "backup",
+		percent: 0,
+	})
+
+	// 检测到 v1 版本时显示升级提示（仅在可编辑且非历史版本时）
+	useEffect(() => {
+		if (
+			!isInitialLoading &&
+			allowEdit &&
+			!isPlaybackMode &&
+			!isShareRoute &&
+			isNewestVersion &&
+			needsUpgrade(designData)
+		) {
+			setShowUpgradeBanner(true)
+		} else {
+			setShowUpgradeBanner(false)
+		}
+	}, [isInitialLoading, allowEdit, isPlaybackMode, isShareRoute, isNewestVersion, designData])
+
+	const getUpgradeStepText = useCallback(
+		(step: UpgradeProgress["step"]) => {
+			const map: Record<UpgradeProgress["step"], string> = {
+				backup: t("design.upgrade.step_backup"),
+				convert: t("design.upgrade.step_convert"),
+				"save-main": t("design.upgrade.step_save_main"),
+				"save-details": t("design.upgrade.step_save_details"),
+				done: t("design.upgrade.step_done"),
+			}
+			return map[step] || ""
+		},
+		[t],
+	)
+
+	const handleUpgrade = useCallback(async () => {
+		if (!magicProjectJsFileId || !projectId) return
+		setIsUpgrading(true)
+		setShowUpgradeBanner(false)
+		try {
+			const upgradedData = await upgradeCanvasToV2(
+				designData,
+				{
+					magicProjectJsFileId,
+					projectId,
+					attachments,
+					flatAttachments,
+					designProjectBasePath,
+				},
+				(progress) => setUpgradeProgress(progress),
+			)
+			// 更新内存中的 designData 为 v2
+			updateDesignDataAndScheduleSave((draft) => {
+				draft.version = upgradedData.version
+				draft.canvas = upgradedData.canvas
+			})
+			toast.success(t("design.upgrade.success"))
+		} catch (error) {
+			console.error("[Design] upgrade failed:", error)
+			toast.error(t("design.upgrade.failed"))
+			// 升级失败恢复 banner
+			setShowUpgradeBanner(true)
+		} finally {
+			setIsUpgrading(false)
+		}
+	}, [
+		magicProjectJsFileId,
+		projectId,
+		designData,
+		attachments,
+		flatAttachments,
+		designProjectBasePath,
+		updateDesignDataAndScheduleSave,
+		t,
+	])
 
 	// 当 designProjectBasePath 变化（目录改名）时，重新从远端加载 DSL（修复旧路径引用），再重挂载画布
 	useEffect(() => {
@@ -775,6 +857,18 @@ function DesignViewer(props: DesignViewerProps) {
 										</div>
 									</div>
 								</div>
+							)}
+							{showUpgradeBanner && !isOffline && (
+								<CanvasUpgradeBanner
+									onUpgrade={handleUpgrade}
+									onDismiss={() => setShowUpgradeBanner(false)}
+								/>
+							)}
+							{isUpgrading && (
+								<CanvasUpgradeOverlay
+									percent={upgradeProgress.percent}
+									stepText={getUpgradeStepText(upgradeProgress.step)}
+								/>
 							)}
 							<CanvasDesign
 								key={`${designProjectId}:${canvasDesignKey}:${designProjectBasePath}`}

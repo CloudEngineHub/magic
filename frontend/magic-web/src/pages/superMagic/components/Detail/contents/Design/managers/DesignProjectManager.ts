@@ -1,5 +1,6 @@
 import { cloneDeep } from "lodash-es"
 import type { DesignData } from "../types"
+import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
 import type { DesignProjectStateBag, DesignProjectManagerOptions } from "./types"
 import { DesignRemoteListener } from "./DesignRemoteListener"
 import type {
@@ -112,7 +113,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.designData = {
 			type: "design",
 			name: "",
-			version: "1.0.0",
+			version: MAGIC_PROJECT_VERSION_V2,
 			canvas: { elements: [] },
 		}
 		this.updateDesignData = noopDesignDataUpdater

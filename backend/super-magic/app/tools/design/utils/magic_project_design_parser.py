@@ -41,6 +41,13 @@ ALLOWED_ELEMENT_TYPES = {
 # 项目配置必需字段
 REQUIRED_PROJECT_FIELDS = {"version", "type", "name"}
 
+# magic.project.js 格式版本（信封 version 字段，作为格式契约）
+# v1：canvas 明文对象、重字段内联
+# v2：canvas 为 MAGICPROJECTDESIGNDATA:// 压缩串、重字段拆到 element-details sidecar
+# 注意：物理解压由 canvas 字段类型驱动（读取层自描述、稳健）；version 用于决定写哪种格式、路由哪个 manager
+MAGIC_PROJECT_VERSION_V1 = "1.0.0"
+MAGIC_PROJECT_VERSION_V2 = "2.0.0"
+
 # 画布元素必需字段
 # 注意：name 字段是可选的，如果缺失会在解析时自动生成默认名称
 REQUIRED_ELEMENT_FIELDS = {"id", "type"}
@@ -1096,10 +1103,10 @@ _MAGIC_PROJECT_PATTERNS = [
 
 
 def is_v2_project_content(content: str) -> bool:
-    """判断 magic.project.js 文本是否为 v2 格式（canvas 为压缩字符串）。
+    """判断 magic.project.js 文本是否为 v2 格式（信封 version == 2.0.0）。
 
-    通过解析信封并检查 canvas 字段是否为 MAGICPROJECTDESIGNDATA:// 字符串判定，
-    解析失败时保守返回 False（按 v1 处理）。
+    格式契约以信封 version 字段为准：version 为 2.0.0 即 v2，否则按 v1 处理。
+    仅解析信封读取 version，不解压 canvas；解析失败时保守返回 False。
     """
     for pattern in _MAGIC_PROJECT_PATTERNS:
         match = re.search(pattern, content)
@@ -1109,7 +1116,7 @@ def is_v2_project_content(content: str) -> bool:
             data = json.loads(match.group(1))
         except json.JSONDecodeError:
             return False
-        return is_compressed_canvas(data.get("canvas")) if isinstance(data, dict) else False
+        return isinstance(data, dict) and data.get("version") == MAGIC_PROJECT_VERSION_V2
     return False
 
 

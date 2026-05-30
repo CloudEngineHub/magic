@@ -827,6 +827,65 @@ export function calculateHorizontalImageLayout(
 }
 
 /**
+ * 网格布局：与后端 canvas_layout_utils.py 保持一致的布局逻辑。
+ * 每行最多 maxPerRow 个元素，元素间距 spacing，行内顶部对齐，超出换行。
+ * @param imageDimensions 图片尺寸数组
+ * @param anchorPosition 锚点位置（整体布局的起始参考点，第一个元素中心对齐此位置）
+ * @param spacing 元素之间的间距（默认 200，与后端 DEFAULT_ELEMENT_SPACING 一致）
+ * @param maxPerRow 每行最大元素数量（默认 4，与后端 max_elements_per_row 一致）
+ * @returns 每个图片的中心位置数组
+ */
+export function calculateGridImageLayout(
+	imageDimensions: Array<{ width: number; height: number }>,
+	anchorPosition: { x: number; y: number },
+	spacing: number = 200,
+	maxPerRow: number = 4,
+): Array<{ x: number; y: number }> {
+	if (imageDimensions.length === 0) {
+		return []
+	}
+
+	const positions: Array<{ x: number; y: number }> = []
+
+	// 将元素分成多行
+	const rows: Array<Array<{ width: number; height: number; originalIndex: number }>> = []
+	for (let i = 0; i < imageDimensions.length; i++) {
+		const rowIndex = Math.floor(i / maxPerRow)
+		if (!rows[rowIndex]) {
+			rows[rowIndex] = []
+		}
+		rows[rowIndex].push({ ...imageDimensions[i], originalIndex: i })
+	}
+
+	// 第一个元素的中心对齐 anchorPosition，计算左上角起始点
+	const firstWidth = imageDimensions[0].width
+	const firstHeight = imageDimensions[0].height
+	const startX = anchorPosition.x - firstWidth / 2
+	const startY = anchorPosition.y - firstHeight / 2
+
+	let currentY = startY
+
+	for (const row of rows) {
+		let currentX = startX
+		let rowMaxHeight = 0
+
+		for (const item of row) {
+			// 中心位置
+			const centerX = currentX + item.width / 2
+			const centerY = currentY + item.height / 2
+			positions[item.originalIndex] = { x: centerX, y: centerY }
+
+			currentX += item.width + spacing
+			rowMaxHeight = Math.max(rowMaxHeight, item.height)
+		}
+
+		currentY += rowMaxHeight + spacing
+	}
+
+	return positions
+}
+
+/**
  * 类型守卫：检查元素是否为 ImageElement 实例（具有 preloadImage 方法）
  */
 export function isImageElementInstance(element: unknown): element is ImageElement & {

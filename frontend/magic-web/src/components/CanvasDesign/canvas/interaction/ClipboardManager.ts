@@ -5,7 +5,7 @@ import { GenerationStatus, type UploadFileResponse } from "../../types.magic"
 import { toast } from "sonner"
 import {
 	getMediaDimensions,
-	calculateHorizontalImageLayout,
+	calculateGridImageLayout,
 	calculateElementsRect,
 	calculateNodesRect,
 	isVideoFile,
@@ -1550,7 +1550,18 @@ export class ClipboardManager {
 		}
 
 		const targetPosition = this.getTargetPosition(position)
-		await this.pasteMultipleCanvasFiles(files, targetPosition)
+		const total = files.length
+		const dropOverlay = this.canvas.dropOverlayManager
+		dropOverlay.showProgressOverlay(0, total)
+		try {
+			await this.pasteMultipleCanvasFiles(files, targetPosition, {
+				onProgress: (current) => {
+					dropOverlay.updateProgressOverlay(current, total)
+				},
+			})
+		} finally {
+			dropOverlay.hideProgressOverlay()
+		}
 	}
 
 	/**
@@ -1563,7 +1574,7 @@ export class ClipboardManager {
 	public async pasteMultipleCanvasFiles(
 		files: File[],
 		anchorPosition: { x: number; y: number },
-		options?: { skipFocus?: boolean },
+		options?: { skipFocus?: boolean; onProgress?: (current: number) => void },
 	): Promise<string[]> {
 		logCanvasElementClipboard("paste-multiple-files:start", {
 			fileCount: files.length,
@@ -1583,16 +1594,21 @@ export class ClipboardManager {
 					const mediaDimensions = await Promise.all(
 						files.map((file) => getMediaDimensions(file)),
 					)
-					const positions = calculateHorizontalImageLayout(
+					const positions = calculateGridImageLayout(
 						mediaDimensions,
 						anchorPosition,
-						0,
 					)
 
 					const createdElementIds: string[] = []
 					for (let i = 0; i < files.length; i++) {
 						const file = files[i]
 						const position = positions[i]
+
+						if (options?.onProgress) {
+							options.onProgress(i + 1)
+							// 让出一帧让浏览器渲染进度更新
+							await new Promise((r) => requestAnimationFrame(r))
+						}
 
 						logCanvasElementClipboard("paste-multiple-files:upload-start", {
 							index: i,

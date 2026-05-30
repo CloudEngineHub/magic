@@ -11,6 +11,7 @@
 	},
 	"dropOverlay": {
 		"loading": "加载中",
+		"processing": "正在处理 {{current}}/{{total}}",
 		"referenceImageLimitReached": "参考图数量已达上限",
 		"referenceImageUnavailable": "当前不支持添加参考图",
 		"releaseToAddAttachment": "松开以添加附件",

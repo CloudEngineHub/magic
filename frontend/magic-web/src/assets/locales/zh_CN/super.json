@@ -585,6 +585,19 @@
 			"description": "网络恢复后可继续编辑并保存画布内容",
 			"title": "网络已断开，画布已切换为只读"
 		},
+		"upgrade": {
+			"title": "画布可升级至 v2 格式",
+			"description": "升级后文件体积更小、加载更快，升级前会自动备份原文件",
+			"button": "立即升级",
+			"upgrading": "升级中...",
+			"step_backup": "正在备份原始文件...",
+			"step_convert": "正在转换数据格式...",
+			"step_save_main": "正在保存主文件...",
+			"step_save_details": "正在保存元素详情...",
+			"step_done": "升级完成",
+			"success": "画布已成功升级至 v2 格式",
+			"failed": "升级失败，请稍后重试"
+		},
 		"saved": "保存成功",
 		"saving": "正在保存"
 	},

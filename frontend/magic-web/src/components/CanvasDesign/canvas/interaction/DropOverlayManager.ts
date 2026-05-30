@@ -11,7 +11,7 @@ import {
 	validateFile,
 	generateElementId,
 	generateUniqueElementName,
-	calculateHorizontalImageLayout,
+	calculateGridImageLayout,
 	validateCanvasFilePath,
 	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../utils/utils"
@@ -32,6 +32,9 @@ export class DropOverlayManager {
 	private canvas: Canvas
 	private overlayElement?: HTMLDivElement
 	private dragCounter: number = 0 // 用于跟踪 dragenter/dragleave 的嵌套
+
+	// 进度遮罩相关
+	private progressOverlayElement?: HTMLDivElement
 
 	// 拖放事件处理函数引用（用于移除事件监听）
 	private handleDragEnterBound: ((e: DragEvent) => void) | null = null
@@ -314,14 +317,9 @@ export class DropOverlayManager {
 					getMediaResourcePathKind(filePath) !== "audio",
 			)
 			if (validFilePaths.length > 0) {
-				// 显示加载状态遮罩层
-				this.showLoadingOverlay()
-				try {
-					await this.handleCustomDragData(validFilePaths, canvasPos)
-				} finally {
-					// 加载完成后隐藏遮罩层
-					this.hideOverlay()
-				}
+				// 隐藏拖拽遮罩，进度遮罩由 handleCustomDragData 内部管理
+				this.hideOverlay()
+				await this.handleCustomDragData(validFilePaths, canvasPos)
 				return
 			}
 		}
@@ -498,6 +496,171 @@ export class DropOverlayManager {
 		}
 	}
 
+	// ─── 进度遮罩 ─────────────────────────────────────────────
+
+	/**
+	 * 显示批量处理进度遮罩
+	 */
+	public showProgressOverlay(current: number, total: number): void {
+		const container = this.canvas.container
+
+		if (!this.progressOverlayElement) {
+			this.progressOverlayElement = this.createProgressOverlayElement(current, total)
+
+			const containerPosition = window.getComputedStyle(container).position
+			if (containerPosition === "static") {
+				container.style.position = "relative"
+			}
+			container.appendChild(this.progressOverlayElement)
+		} else {
+			this.updateProgressOverlay(current, total)
+		}
+	}
+
+	/**
+	 * 更新进度遮罩的进度
+	 */
+	public updateProgressOverlay(current: number, total: number): void {
+		if (!this.progressOverlayElement) return
+
+		const textEl = this.progressOverlayElement.querySelector(
+			"[data-progress-text]",
+		) as HTMLElement
+		if (textEl) {
+			textEl.textContent = this.getProgressText(current, total)
+		}
+
+		const barEl = this.progressOverlayElement.querySelector(
+			"[data-progress-bar]",
+		) as HTMLElement
+		if (barEl) {
+			const percent = Math.round((current / total) * 100)
+			barEl.style.width = `${percent}%`
+		}
+
+		const countEl = this.progressOverlayElement.querySelector(
+			"[data-progress-count]",
+		) as HTMLElement
+		if (countEl) {
+			countEl.textContent = `${current}/${total}`
+		}
+	}
+
+	/**
+	 * 隐藏进度遮罩
+	 */
+	public hideProgressOverlay(): void {
+		if (this.progressOverlayElement) {
+			this.progressOverlayElement.remove()
+			this.progressOverlayElement = undefined
+		}
+	}
+
+	/**
+	 * 获取进度文本
+	 */
+	private getProgressText(current: number, total: number): string {
+		const t = this.canvas.t
+		const fallback = `正在处理 ${current}/${total}`
+		if (t) {
+			const template = t("dropOverlay.processing", fallback)
+			return template
+				.replace("{{current}}", String(current))
+				.replace("{{total}}", String(total))
+		}
+		return fallback
+	}
+
+	/**
+	 * 创建进度遮罩 DOM 元素
+	 */
+	private createProgressOverlayElement(current: number, total: number): HTMLDivElement {
+		const overlay = document.createElement("div")
+		overlay.setAttribute("data-progress-overlay", "")
+
+		// 全屏遮罩样式
+		Object.assign(overlay.style, {
+			position: "absolute",
+			top: "0",
+			left: "0",
+			width: "100%",
+			height: "100%",
+			backgroundColor: "rgba(255, 255, 255, 0.75)",
+			zIndex: "9999",
+			display: "flex",
+			alignItems: "center",
+			justifyContent: "center",
+			transition: "all 0.3s ease",
+		})
+
+		// 内容卡片
+		const card = document.createElement("div")
+		card.setAttribute("data-progress-card", "")
+		Object.assign(card.style, {
+			backgroundColor: "#fff",
+			borderRadius: "12px",
+			padding: "24px 32px",
+			boxShadow: "0 4px 24px rgba(0, 0, 0, 0.12)",
+			display: "flex",
+			flexDirection: "column",
+			alignItems: "center",
+			gap: "16px",
+			minWidth: "280px",
+			transition: "all 0.3s ease",
+		})
+
+		// 进度文字
+		const textEl = document.createElement("div")
+		textEl.setAttribute("data-progress-text", "")
+		textEl.textContent = this.getProgressText(current, total)
+		Object.assign(textEl.style, {
+			fontSize: "15px",
+			fontWeight: "500",
+			color: "#1a1a1a",
+			fontFamily: "Arial, sans-serif",
+		})
+
+		// 进度条容器
+		const barContainer = document.createElement("div")
+		Object.assign(barContainer.style, {
+			width: "100%",
+			height: "6px",
+			backgroundColor: "#f0f0f0",
+			borderRadius: "3px",
+			overflow: "hidden",
+		})
+
+		// 进度条填充
+		const bar = document.createElement("div")
+		bar.setAttribute("data-progress-bar", "")
+		const percent = total > 0 ? Math.round((current / total) * 100) : 0
+		Object.assign(bar.style, {
+			width: `${percent}%`,
+			height: "100%",
+			backgroundColor: "#315CEC",
+			borderRadius: "3px",
+			transition: "width 0.3s ease",
+		})
+		barContainer.appendChild(bar)
+
+		// 计数文字
+		const countEl = document.createElement("div")
+		countEl.setAttribute("data-progress-count", "")
+		countEl.textContent = `${current}/${total}`
+		Object.assign(countEl.style, {
+			fontSize: "12px",
+			color: "#999",
+			fontFamily: "Arial, sans-serif",
+		})
+
+		card.appendChild(textEl)
+		card.appendChild(barContainer)
+		card.appendChild(countEl)
+		overlay.appendChild(card)
+
+		return overlay
+	}
+
 	/**
 	 * 从拖拽事件获取画布坐标
 	 * @param e 拖拽事件
@@ -568,10 +731,29 @@ export class DropOverlayManager {
 		const audioFiles = validFiles.filter((file) => isAudioFile(file))
 
 		if (canvasElementFiles.length > 0) {
-			await this.canvas.clipboardManager.pasteMultipleCanvasFiles(
-				canvasElementFiles,
-				canvasPos,
-			)
+			const total = canvasElementFiles.length
+			// 多文件时显示进度遮罩
+			if (total > 1) {
+				this.showProgressOverlay(0, total)
+				try {
+					await this.canvas.clipboardManager.pasteMultipleCanvasFiles(
+						canvasElementFiles,
+						canvasPos,
+						{
+							onProgress: (current) => {
+								this.updateProgressOverlay(current, total)
+							},
+						},
+					)
+				} finally {
+					this.hideProgressOverlay()
+				}
+			} else {
+				await this.canvas.clipboardManager.pasteMultipleCanvasFiles(
+					canvasElementFiles,
+					canvasPos,
+				)
+			}
 		}
 
 		if (audioFiles.length === 0) {
@@ -638,7 +820,10 @@ export class DropOverlayManager {
 	 * @param filePaths 文件路径数组
 	 * @returns 有效的文件信息列表
 	 */
-	private async getFileInfos(filePaths: string[]): Promise<
+	private async getFileInfos(
+		filePaths: string[],
+		onProgress?: (current: number) => void,
+	): Promise<
 		Array<{
 			filePath: string
 			fileInfo: { src: string; fileName: string; expires_at?: string }
@@ -649,7 +834,8 @@ export class DropOverlayManager {
 			return []
 		}
 
-		// 获取所有文件信息
+		// 全部并发发起请求——底层 designFileInfoCache 会自动合并为单次批量 API 调用
+		let completed = 0
 		const fileInfos = await Promise.all(
 			filePaths.map(async (filePath) => {
 				try {
@@ -660,6 +846,11 @@ export class DropOverlayManager {
 				} catch (error) {
 					console.warn(`[DropOverlayManager] 获取文件信息失败: ${filePath}`, error)
 					return null
+				} finally {
+					completed++
+					if (onProgress) {
+						onProgress(completed)
+					}
 				}
 			}),
 		)
@@ -803,9 +994,17 @@ export class DropOverlayManager {
 		// 禁用历史记录
 		this.canvas.historyManager.disable()
 
+		const total = filePaths.length
+		const showProgress = total > 1
+		if (showProgress) {
+			this.showProgressOverlay(0, total)
+		}
+
 		try {
-			// 获取所有文件信息
-			const validFileInfos = await this.getFileInfos(filePaths)
+			// 获取所有文件信息（逐个获取，实时更新进度）
+			const validFileInfos = await this.getFileInfos(filePaths, showProgress ? (current) => {
+				this.updateProgressOverlay(current, total)
+			} : undefined)
 			if (validFileInfos.length === 0) {
 				return
 			}
@@ -817,7 +1016,7 @@ export class DropOverlayManager {
 				height,
 			}))
 
-			const positions = calculateHorizontalImageLayout(mediaDimensions, anchorPosition, 0)
+			const positions = calculateGridImageLayout(mediaDimensions, anchorPosition)
 
 			// 生成唯一的名称
 			const existingNames = getAllExistingNames(this.canvas.elementManager)
@@ -876,6 +1075,10 @@ export class DropOverlayManager {
 			// 确保异常情况下也能重新启用历史记录
 			this.canvas.historyManager.enable()
 			console.error("[DropOverlayManager] 处理自定义拖拽数据失败:", error)
+		} finally {
+			if (showProgress) {
+				this.hideProgressOverlay()
+			}
 		}
 	}
 
@@ -905,6 +1108,7 @@ export class DropOverlayManager {
 
 		// 清理遮罩层
 		this.hideOverlay()
+		this.hideProgressOverlay()
 
 		// 重置计数器
 		this.dragCounter = 0

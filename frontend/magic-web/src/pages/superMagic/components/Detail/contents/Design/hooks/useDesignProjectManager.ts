@@ -9,6 +9,7 @@ import {
 	type DesignProjectManagerOptions,
 	type DesignProjectStateBag,
 } from "../managers"
+import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
 
 export type UseDesignProjectManagerOptions = DesignProjectManagerOptions
 
@@ -60,7 +61,7 @@ export interface UseDesignProjectManagerReturn {
 const INITIAL_DESIGN_DATA: DesignData = {
 	type: "design",
 	name: "",
-	version: "1.0.0",
+	version: MAGIC_PROJECT_VERSION_V2,
 	canvas: { elements: [] },
 }
 

@@ -674,7 +674,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 			// 在文件夹中创建 magic.project.js 文件
 			const fileContent = `window.magicProjectConfig = {
-	"version": "1.0.0",
+	"version": "2.0.0",
 	"type": "design",
 	"name": "${folderName}"
 }`

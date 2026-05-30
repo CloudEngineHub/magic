@@ -35,6 +35,7 @@ import {
 	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
+import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
 import { designDebugLog } from "../utils/designDebugLog"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
@@ -589,6 +590,12 @@ export class DesignRemoteListener {
 
 		if (!parsed) return null
 		if (dslBase) normalizeDesignDataPathsAfterLoad(parsed, dslBase)
+		await hydrateDesignDataDetails(parsed, {
+			attachments: this.options.attachments,
+			flatAttachments: this.options.flatAttachments,
+			mainFileId: fid,
+			projectId: this.options.projectId,
+		})
 
 		const storeFiles = [
 			...(this.options.flatAttachments ?? []),
@@ -609,7 +616,15 @@ export class DesignRemoteListener {
 		try {
 			const content = await loadMagicProjectJsContent(fid)
 			const again = parseMagicProjectJsContent(content)
-			if (again && dslBase) normalizeDesignDataPathsAfterLoad(again, dslBase)
+			if (again) {
+				if (dslBase) normalizeDesignDataPathsAfterLoad(again, dslBase)
+				await hydrateDesignDataDetails(again, {
+					attachments: this.options.attachments,
+					flatAttachments: this.options.flatAttachments,
+					mainFileId: fid,
+					projectId: this.options.projectId,
+				})
+			}
 			return again
 		} catch (e) {
 			designDebugLog("remote:reload-after-wait", e)

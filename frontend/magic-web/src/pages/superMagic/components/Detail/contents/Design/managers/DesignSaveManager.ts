@@ -5,6 +5,8 @@ import {
 	resolveDesignProjectBasePathFromAttachments,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
+import { writeUserElementDetails } from "../utils/elementDetailsIo"
+import { isV2Version } from "../utils/magicProjectCompression"
 import { SuperMagicApi } from "@/apis"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./types"
@@ -159,6 +161,16 @@ export class DesignSaveManager {
 			])
 			didSave = true
 			savedUpdatedAt = saveResponse?.success_files?.[0]?.data?.updated_at ?? null
+
+			// v2：主文件保存成功后写用户 sidecar（仅写 element-details-user.json）
+			if (isV2Version(designDataToSave.version)) {
+				await writeUserElementDetails(designDataToSave, {
+					attachments: this.options.attachments,
+					flatAttachments: this.options.flatAttachments,
+					mainFileId: magicProjectJsFileId,
+					projectId: this.options.projectId,
+				})
+			}
 			if (designDataToSave !== currentDesignData) {
 				this.stateBag.setters.setDesignData(designDataToSave)
 			}
