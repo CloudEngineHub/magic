@@ -1671,11 +1671,11 @@ class Agent(BaseAgent):
 </summary>
 
 ---
-You were interrupted. The above contains a summary of your previous thinking and work. Resume in this order:
+You were interrupted by context compaction. The above contains a summary of your previous thinking and work. Resume in this order:
 1. If the summary lists skills needed to resume, call `read_skills()` to reload them first
-2. Read all files listed in the key files section
-3. Review reference files as needed
-4. Continue the interrupted task
+2. Read the files listed in the key files section as needed for the next action
+3. Review external references and reference files as needed
+4. Follow the task status and next action in the summary: continue only if the task is incomplete; if it is complete, do not invent follow-up work.
 Since your subsequent output will be merged with pre-interruption content, maintain conversational continuity."""
 
             await self.chat_history.append_user_message(
@@ -2447,15 +2447,12 @@ Since your subsequent output will be merged with pre-interruption content, maint
 </summary>
 
 ---
-You were interrupted. The above contains a summary of your previous thinking and work. Resume in this order:
+You were interrupted by context compaction. The above contains a summary of your previous thinking and work. Resume in this order:
 1. If the summary lists skills needed to resume, call `read_skills()` to reload them first — they provide the methodology and workflow constraints for your task
-2. Read all files listed in the key files section — these are essential to restoring your work state
-3. Review reference files as needed for background context
-4. Once you understand the current project state, continue the interrupted task
-Since your subsequent output will be merged with pre-interruption content and displayed together in the frontend, conversational continuity is critical. Please assume:
-1. You were not interrupted
-2. You are simply reviewing prior work details after a brief pause
-3. Naturally continue the interrupted task after reviewing"""
+2. Read the files listed in the key files section as needed for the next action — do not reread every file by default
+3. Review external references and reference files as needed for background context
+4. Follow the task status and next action in the summary: continue only if the task is incomplete; if it is complete, do not invent follow-up work
+Since your subsequent output will be merged with pre-interruption content and displayed together in the frontend, maintain conversational continuity."""
 
             # Calculate compact tokens for logging
             compacted_tokens = num_tokens_from_string(compressed_content)
