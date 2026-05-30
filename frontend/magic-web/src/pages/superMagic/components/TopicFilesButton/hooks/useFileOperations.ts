@@ -35,6 +35,7 @@ import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/ut
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import { hasPPTMetadata } from "@/pages/superMagic/components/Detail/utils/file"
 import { getAppEntryFile } from "../../MessageList/components/MessageAttachment/utils"
+import { createDesignProjectFiles } from "../../Detail/contents/Design/utils/designProjectCreation"
 
 // 工具函数：从attachments中递归删除指定ID的文件/文件夹
 const removeItemFromAttachments = (
@@ -647,7 +648,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		}
 	}
 
-	// 创建画布项目 - 创建文件夹并在其中创建 magic.project.js 文件
 	const createDesignProject = async (folderName: string, parentPath?: string) => {
 		if (!projectId) {
 			throw new Error("项目ID不能为空")
@@ -660,45 +660,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			// 获取父文件夹ID
 			const parent_id = getParentIdFromPath(parentPath)
 
-			// 直接调用 API 创建文件夹（不触发刷新）
-			const folderResponse = await SuperMagicApi.createFile({
-				project_id: projectId,
-				parent_id,
-				file_name: folderName,
-				is_directory: true,
+			const { folder } = await createDesignProjectFiles({
+				projectId,
+				parentId: parent_id,
+				folderName,
 			})
-
-			if (!folderResponse?.file_id) {
-				throw new Error("文件夹创建失败")
-			}
-
-			// 在文件夹中创建 magic.project.js 文件
-			const fileContent = `window.magicProjectConfig = {
-	"version": "2.0.0",
-	"type": "design",
-	"name": "${folderName}"
-}`
-			const fileName = "magic.project.js"
-
-			// 直接使用文件夹的 file_id 作为 parent_id 创建文件
-			const fileResponse = await SuperMagicApi.createFile({
-				project_id: projectId,
-				parent_id: folderResponse.file_id,
-				file_name: fileName,
-				is_directory: false,
-			})
-
-			if (!fileResponse?.file_id) {
-				throw new Error("文件创建失败")
-			}
-
-			// 保存文件内容
-			await SuperMagicApi.saveFileContent([
-				{
-					file_id: fileResponse.file_id,
-					content: fileContent,
-				},
-			])
 
 			// 所有操作完成后，统一触发文件列表更新（只刷新一次）
 			pubsub.publish(PubSubEvents.Update_Attachments)
@@ -706,7 +672,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 			magicToast.success(t("topicFiles.contextMenu.createDesignSuccess"))
 
-			return folderResponse
+			return folder
 		} catch (error) {
 			magicToast.error(t("topicFiles.contextMenu.createDesignFailed"))
 			throw error

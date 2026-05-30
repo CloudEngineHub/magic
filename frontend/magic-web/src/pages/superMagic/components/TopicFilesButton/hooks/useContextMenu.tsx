@@ -39,6 +39,7 @@ import { normalizeMenuItems, type TopicFilesMenuItem } from "../utils/menu-items
 import { isMagicSystemFolder } from "../utils/magic-system-folder"
 import type { TreeNodeData } from "../utils/treeDataConverter"
 import { findNodePath } from "../utils/path-helper"
+import { canCreateDesignProjectInMenuTarget } from "../../Detail/contents/Design/utils/designProjectMenuPolicy"
 import { getAttachmentKey } from "../utils/getAttachmentKey"
 import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
 
@@ -241,61 +242,6 @@ export function flattenMenuItems(items: MenuItem[]): MenuItem[] {
 }
 
 /**
- * 检查父级或更父级是否有 display_config
- * @param item - 当前文件/文件夹项
- * @param treeData - 完整的树形数据
- * @returns 如果父级链中有任何节点带 display_config，返回 true
- */
-function hasDisplayConfigInAncestors(item: AttachmentItem, treeData?: TreeNodeData[]): boolean {
-	if (!treeData || !item.relative_file_path) return false
-
-	const currentPath = item.relative_file_path
-	// 如果是根目录，没有父级
-	if (currentPath === "/" || !currentPath.includes("/")) return false
-
-	// 规范化路径：去掉尾部的 /
-	const normalizePath = (path: string) => path.replace(/\/+$/, "")
-
-	// 递归查找指定路径的节点
-	const findNodeByPath = (nodes: TreeNodeData[], targetPath: string): AttachmentItem | null => {
-		const normalizedTargetPath = normalizePath(targetPath)
-		for (const node of nodes) {
-			const nodePath = node.item.relative_file_path
-			if (nodePath && normalizePath(nodePath) === normalizedTargetPath) {
-				return node.item
-			}
-			if (node.children) {
-				const found = findNodeByPath(node.children, targetPath)
-				if (found) return found
-			}
-		}
-		return null
-	}
-
-	// 获取所有父级路径
-	const pathParts = currentPath.split("/").filter(Boolean)
-
-	// 逐级向上检查每个父级路径
-	for (let i = pathParts.length - 1; i > 0; i--) {
-		const parentPath = "/" + pathParts.slice(0, i).join("/")
-		const parentNode = findNodeByPath(treeData, parentPath)
-
-		// 如果找到父级节点且有 display_config，返回 true
-		if (parentNode?.display_config) {
-			return true
-		}
-	}
-
-	// 检查根目录
-	const rootNode = findNodeByPath(treeData, "/")
-	if (rootNode?.display_config) {
-		return true
-	}
-
-	return false
-}
-
-/**
  * useContextMenu - 处理右键菜单配置
  */
 export function useContextMenu(options: UseContextMenuOptions) {
@@ -372,7 +318,6 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				children: createFileMenuItems({
 					t,
 					onAddFile: (type) => createVirtualFile(type),
-					// 只在根目录显示新建画布选项
 					onAddDesign: createVirtualDesignProject,
 				}),
 			},
@@ -435,9 +380,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		if (item.is_directory && "children" in item) {
 			const parentPath = getFolderPath(item)
 			const key = item.file_id
-			// 判断是否允许创建画布：当前项或父级/更父级没有携带 display_config 时才允许
-			const canCreateDesignProject =
-				!item.display_config && !hasDisplayConfigInAncestors(item, treeData)
+			const canCreateDesignProject = canCreateDesignProjectInMenuTarget(item, treeData)
 
 			menuItems.push(
 				{
@@ -447,7 +390,6 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					children: createFileMenuItems({
 						t,
 						onAddFile: (type) => createVirtualFile(type, key, parentPath),
-						// 只在当前项和父级或更父级都没有 display_config 时显示新建画布选项
 						onAddDesign:
 							createVirtualDesignProject && canCreateDesignProject
 								? () => createVirtualDesignProject(key, parentPath)
