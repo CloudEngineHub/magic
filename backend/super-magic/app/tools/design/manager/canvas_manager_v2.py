@@ -16,6 +16,7 @@ from app.tools.design.utils.element_details_store import (
     merge_element_details,
     prune_orphan_details,
     read_element_details,
+    read_readable_element_details,
     strip_heavy_fields,
     write_element_details,
 )
@@ -63,5 +64,5 @@ class CanvasManagerV2(CanvasManager):
         )
 
     async def read_element_details(self) -> Dict:
-        """读取当前项目的 element-details（供详情/再生成读取重字段）。"""
-        return await read_element_details(self.project_path)
+        """读取当前项目的可消费 element-details（含前端 user sidecar 退避）。"""
+        return await read_readable_element_details(self.project_path)

@@ -34,17 +34,21 @@ from app.utils.async_file_utils import (
 logger = get_logger(__name__)
 
 ELEMENT_DETAILS_FILENAME = "element-details.json"
+ELEMENT_DETAILS_USER_FILENAME = "element-details-user.json"
 ELEMENT_DETAILS_VERSION = "1.0.0"
+ELEMENT_DETAIL_SOURCE_USER = "user"
 
 # 需要从主文件拆出的重字段（与方案 2.4 表一致）
 HEAVY_FIELDS = ("generateImageRequest", "generateVideoRequest", "visualUnderstanding")
 
 
-def _get_element_details_path(project_path: str) -> str:
-    """获取 element-details.json 的绝对路径。"""
+def _get_element_details_path(
+    project_path: str, filename: str = ELEMENT_DETAILS_FILENAME
+) -> str:
+    """获取 element-details sidecar 的绝对路径。"""
     workspace_dir = PathManager.get_workspace_dir()
     base_path = workspace_dir / project_path
-    return str(base_path / ELEMENT_DETAILS_FILENAME)
+    return str(base_path / filename)
 
 
 def _empty_document() -> Dict[str, Any]:
@@ -119,9 +123,9 @@ def prune_orphan_details(
     return {"version": ELEMENT_DETAILS_VERSION, "elements": pruned}
 
 
-async def read_element_details(project_path: str) -> Dict[str, Any]:
-    """读取 element-details.json，不存在或损坏时返回空文档。"""
-    file_path = _get_element_details_path(project_path)
+async def _read_element_details_file(project_path: str, filename: str) -> Dict[str, Any]:
+    """读取指定 element-details sidecar，不存在或损坏时返回空文档。"""
+    file_path = _get_element_details_path(project_path, filename)
     data = await async_try_read_json(file_path)
 
     if not isinstance(data, dict) or not isinstance(data.get("elements"), dict):
@@ -132,6 +136,59 @@ async def read_element_details(project_path: str) -> Dict[str, Any]:
         "elements": data["elements"],
     }
 
+
+async def read_element_details(project_path: str) -> Dict[str, Any]:
+    """读取后端维护的 element-details.json，不存在或损坏时返回空文档。"""
+    return await _read_element_details_file(project_path, ELEMENT_DETAILS_FILENAME)
+
+
+async def read_user_element_details(project_path: str) -> Dict[str, Any]:
+    """读取前端维护的 element-details-user.json，不存在或损坏时返回空文档。"""
+    return await _read_element_details_file(project_path, ELEMENT_DETAILS_USER_FILENAME)
+
+
+def merge_readable_element_details(
+    agent_details: Dict[str, Any], user_details: Dict[str, Any]
+) -> Dict[str, Any]:
+    """合并消费侧可读详情。
+
+    与前端回填优先级保持一致：
+    source=user 的用户条目 > 后端 baseline 条目 > 无 source 的用户条目。
+    该合并只用于读取，不用于后端写入，避免污染后端 baseline。
+    """
+    agent_elements = agent_details.get("elements", {})
+    user_elements = user_details.get("elements", {})
+    merged_elements: Dict[str, Any] = {}
+
+    for element_id in set(agent_elements) | set(user_elements):
+        user_entry = user_elements.get(element_id)
+        agent_entry = agent_elements.get(element_id)
+
+        if (
+            isinstance(user_entry, dict)
+            and user_entry.get("source") == ELEMENT_DETAIL_SOURCE_USER
+        ):
+            winner = user_entry
+        elif agent_entry is not None:
+            winner = agent_entry
+        else:
+            winner = user_entry
+
+        if isinstance(winner, dict):
+            merged_elements[element_id] = {
+                key: value
+                for key, value in winner.items()
+                if key in HEAVY_FIELDS and value is not None
+            }
+
+    return {"version": ELEMENT_DETAILS_VERSION, "elements": merged_elements}
+
+
+async def read_readable_element_details(project_path: str) -> Dict[str, Any]:
+    """读取后端 baseline，并退避合并前端 user sidecar 供消费链路使用。"""
+    agent_details = await read_element_details(project_path)
+    user_details = await read_user_element_details(project_path)
+    return merge_readable_element_details(agent_details, user_details)
 
 async def write_element_details(project_path: str, details: Dict[str, Any]) -> None:
     """写入 element-details.json（异步 + 写后校验，适应 TOS 同步延迟）。"""

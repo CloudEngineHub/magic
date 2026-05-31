@@ -43,13 +43,17 @@ from .magic_project_compression import (
 )
 from .element_details_store import (
     ELEMENT_DETAILS_FILENAME,
+    ELEMENT_DETAILS_USER_FILENAME,
     ELEMENT_DETAILS_VERSION,
     HEAVY_FIELDS,
     read_element_details,
+    read_readable_element_details,
+    read_user_element_details,
     write_element_details,
     extract_element_details,
     strip_heavy_fields,
     merge_element_details,
+    merge_readable_element_details,
     prune_orphan_details,
 )
 
@@ -92,12 +96,16 @@ __all__ = [
     "is_compressed_canvas",
     # Element details store
     "ELEMENT_DETAILS_FILENAME",
+    "ELEMENT_DETAILS_USER_FILENAME",
     "ELEMENT_DETAILS_VERSION",
     "HEAVY_FIELDS",
     "read_element_details",
+    "read_readable_element_details",
+    "read_user_element_details",
     "write_element_details",
     "extract_element_details",
     "strip_heavy_fields",
     "merge_element_details",
+    "merge_readable_element_details",
     "prune_orphan_details",
 ]
