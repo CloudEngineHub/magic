@@ -978,6 +978,7 @@ const StyleEditorUI = (() => {
 				subjectLabel.textContent = t("styleEditor.subjectConsistency", "主体一致性")
 				const subjectToggle = document.createElement("input")
 				subjectToggle.type = "checkbox"
+				subjectToggle.className = "pis-toggle"
 				subjectToggle.checked = draft.subjectConsistency
 				subjectToggle.addEventListener("change", () => {
 					draft = { ...draft, subjectConsistency: subjectToggle.checked }
@@ -989,6 +990,7 @@ const StyleEditorUI = (() => {
 				copyLabel.textContent = t("styleEditor.smartCopy", "智能文案")
 				const copyToggle = document.createElement("input")
 				copyToggle.type = "checkbox"
+				copyToggle.className = "pis-toggle"
 				copyToggle.checked = draft.smartCopy
 				copyToggle.addEventListener("change", () => {
 					draft = { ...draft, smartCopy: copyToggle.checked }

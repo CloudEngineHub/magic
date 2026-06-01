@@ -81,7 +81,7 @@
 
 .plugin-panel-body {
 	display: flex;
-	min-height: 320px;
+	min-height: 400px;
 }
 
 .plugin-panel-header {
@@ -91,6 +91,25 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
+}
+
+.plugin-panel-close {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	color: var(--base-muted-foreground, #737373);
+	background: transparent;
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+.plugin-panel-close:hover {
+	color: var(--base-foreground, #0a0a0a);
+	background: var(--base-muted, #f5f5f5);
 }
 
 .plugin-panel-title {
@@ -173,7 +192,7 @@
 	flex: 1 1 auto;
 	flex-direction: column;
 	gap: 4px;
-	max-height: 320px;
+	max-height: 400px;
 	padding: 8px;
 	overflow-y: auto;
 }

@@ -343,17 +343,17 @@ describe("magic-plugin-kit", () => {
 			generate: createGenerateConfig(),
 		})
 
-		const toggle = root.querySelector<HTMLButtonElement>(".mpk-toggle")
+		const toggle = root.querySelector<HTMLInputElement>(".mpk-toggle")
 		expect(toggle).not.toBeNull()
-		expect(toggle?.getAttribute("aria-pressed")).toBe("false")
+		expect(toggle?.checked).toBe(false)
 		expect(root.textContent).toContain(
 			"Works better when both garments share the same silhouette.",
 		)
 
 		toggle?.click()
 
-		const nextToggle = root.querySelector<HTMLButtonElement>(".mpk-toggle")
-		expect(nextToggle?.getAttribute("aria-pressed")).toBe("true")
+		const nextToggle = root.querySelector<HTMLInputElement>(".mpk-toggle")
+		expect(nextToggle?.checked).toBe(true)
 	})
 
 	it("switches size-control ratio options from model sizes", () => {

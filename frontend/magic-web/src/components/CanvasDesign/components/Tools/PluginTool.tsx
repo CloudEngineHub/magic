@@ -142,7 +142,7 @@ export default function PluginTool() {
 			</Tooltip>
 
 			<PopoverContent
-				align="end"
+				align="center"
 				side="right"
 				sideOffset={8}
 				className="border-base-border w-[30rem] bg-white p-0"
@@ -150,12 +150,14 @@ export default function PluginTool() {
 				<div className={styles.pluginPanel}>
 					<div className={styles.pluginPanelHeader}>
 						<div className={styles.pluginPanelTitle}>{label}</div>
-						<IconButton
+						<button							
+							type="button"
+							className={styles.pluginPanelClose}
 							onClick={() => setOpen(false)}
 							aria-label="close plugin panel"
 						>
 							<X size={16} />
-						</IconButton>
+						</button>
 					</div>
 
 					<div className={styles.pluginPanelBody}>

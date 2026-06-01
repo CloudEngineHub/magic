@@ -725,22 +725,30 @@
 			const isChecked = Boolean(state[section.stateKey])
 			const sectionNode = createSection(section.title, section.suffix)
 			const body = createElement("div", "mpk-toggle-row")
-			const button = createElement("button", `mpk-toggle${isChecked ? " is-active" : ""}`)
-			button.type = "button"
-			button.setAttribute("role", "switch")
-			button.setAttribute("aria-checked", String(isChecked))
-			button.setAttribute("aria-pressed", String(isChecked))
-			button.setAttribute("aria-label", section.title ?? section.stateKey)
-			button.append(createElement("span", "mpk-toggle-thumb"))
-			button.addEventListener("click", () => {
-				setState({ [section.stateKey]: !isChecked })
+			const checkbox = createElement("input", "mpk-toggle")
+			checkbox.type = "checkbox"
+			checkbox.checked = isChecked
+			checkbox.setAttribute("aria-label", section.title ?? section.stateKey)
+			checkbox.addEventListener("change", () => {
+				setState({ [section.stateKey]: checkbox.checked })
 			})
-			body.append(button)
+			body.append(checkbox)
 			sectionNode.append(body)
 			if (section.help) {
 				sectionNode.append(createElement("p", "mpk-help", section.help))
 			}
+			view.sectionViews[section.id] = { checkbox }
 			return sectionNode
+		}
+
+		/** 更新开关（原地更新，保留 CSS 过渡） */
+		function updateToggleSection(section) {
+			const sectionView = view.sectionViews[section.id]
+			if (!sectionView) {
+				view.slots[section.id].replaceChildren(renderToggle(section))
+				return
+			}
+			sectionView.checkbox.checked = Boolean(state[section.stateKey])
 		}
 
 		/** 渲染尺寸控制 */
@@ -918,6 +926,11 @@
 
 			if (section.kind === "image-grid") {
 				updateImageGridSection(section)
+				return
+			}
+
+			if (section.kind === "toggle") {
+				updateToggleSection(section)
 				return
 			}
 
