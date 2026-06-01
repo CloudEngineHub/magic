@@ -31,6 +31,12 @@ const STATIC_PLUGIN_CATEGORIES = [
 		labelKey: "tools.pluginCategories.product",
 		fallbackLabel: "商品图",
 	},
+	{
+		key: "ai-toolbox",
+		order: 5,
+		labelKey: "tools.pluginCategories.aiToolbox",
+		fallbackLabel: "AI工具箱",
+	},
 ] as const
 
 interface PluginToolViewItem {

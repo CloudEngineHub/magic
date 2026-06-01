@@ -54,6 +54,9 @@ import productSceneCompositeManifest from "./product-scene-composite/manifest.js
 import imageTranslationStyles from "./image-translation/index.css?raw"
 import imageTranslationRuntimeCode from "./image-translation/index.js?raw"
 import imageTranslationManifest from "./image-translation/manifest.json"
+import clothingRepairStyles from "./clothing-repair/index.css?raw"
+import clothingRepairRuntimeCode from "./clothing-repair/index.js?raw"
+import clothingRepairManifest from "./clothing-repair/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -87,6 +90,8 @@ const productSceneCompositeEntryUrl = new URL("./product-scene-composite/index.j
 const productSceneCompositeResourceBaseUrl = new URL("./product-scene-composite/", import.meta.url).href
 const imageTranslationEntryUrl = new URL("./image-translation/index.js", import.meta.url).href
 const imageTranslationResourceBaseUrl = new URL("./image-translation/", import.meta.url).href
+const clothingRepairEntryUrl = new URL("./clothing-repair/index.js", import.meta.url).href
+const clothingRepairResourceBaseUrl = new URL("./clothing-repair/", import.meta.url).href
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -247,6 +252,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${sharedPluginRuntimeCode}\n\n${imageTranslationRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, imageTranslationStyles],
 		resolveResourceUrl: (path) => new URL(path, imageTranslationResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...clothingRepairManifest,
+		entry: `./clothing-repair/${clothingRepairManifest.entry}`,
+		runtimeUrl: clothingRepairEntryUrl,
+		resourceBaseUrl: clothingRepairResourceBaseUrl,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${clothingRepairRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, clothingRepairStyles],
+		resolveResourceUrl: (path) => new URL(path, clothingRepairResourceBaseUrl).href,
 		source: "builtin",
 	},
 ]

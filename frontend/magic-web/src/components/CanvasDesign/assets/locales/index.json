@@ -400,6 +400,7 @@
 		"imageGenerator": "图像生成",
 		"marker": "标记",
 		"pluginCategories": {
+			"aiToolbox": "AI工具箱",
 			"model": "模特图",
 			"other": "其他",
 			"product": "商品图"
