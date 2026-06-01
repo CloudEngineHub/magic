@@ -162,8 +162,6 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "accessoryCategory",
 					title: t("section.accessoryCategory", "商品品类"),
-					descriptionMode: "tooltip",
-					groupClassName: "accessory-tryon-category",
 					options: accessoryCategories,
 				},
 				{
@@ -198,6 +196,7 @@ registerMagicCanvasPlugin({
 					stateKey: "generationMode",
 					title: t("section.generationMode", "生成模式"),
 					showDescriptionOnHover: true,
+					groupClassName: "generation-mode-group",
 					options: generationModes,
 				},
 				{

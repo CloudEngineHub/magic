@@ -87,6 +87,10 @@
 .plugin-panel-header {
 	padding: 12px 14px;
 	border-bottom: 1px solid var(--base-border, #e5e5e5);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
 }
 
 .plugin-panel-title {
@@ -100,7 +104,7 @@
 	display: flex;
 	flex: 0 0 120px;
 	flex-direction: column;
-	gap: 6px;
+	gap: 6px;	
 	padding: 10px 8px;
 	background: #fafafa;
 	border-right: 1px solid var(--base-border, #e5e5e5);

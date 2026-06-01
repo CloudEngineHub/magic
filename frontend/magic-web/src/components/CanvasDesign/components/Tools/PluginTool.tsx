@@ -1,7 +1,6 @@
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
-import { Puzzle } from "lucide-react"
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
-
+import { Puzzle, X } from "lucide-react"
+import { useMemo, useState, useSyncExternalStore } from "react"
 import {
 	normalizePluginLocale,
 	resolvePluginIcon,
@@ -151,6 +150,12 @@ export default function PluginTool() {
 				<div className={styles.pluginPanel}>
 					<div className={styles.pluginPanelHeader}>
 						<div className={styles.pluginPanelTitle}>{label}</div>
+						<IconButton
+							onClick={() => setOpen(false)}
+							aria-label="close plugin panel"
+						>
+							<X size={16} />
+						</IconButton>
 					</div>
 
 					<div className={styles.pluginPanelBody}>
@@ -186,7 +191,6 @@ export default function PluginTool() {
 												className={styles.pluginItem}
 												onClick={() => {
 													canvas?.pluginManager.open(plugin.name)
-													setOpen(false)
 												}}
 											>
 												<div className={styles.pluginIcon}>

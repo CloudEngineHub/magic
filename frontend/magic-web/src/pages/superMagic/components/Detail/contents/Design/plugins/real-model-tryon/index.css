@@ -1,3 +1,13 @@
 .real-model-tryon .mpk-image-slot-image {
 	max-height: 320px;
 }
+
+.real-model-tryon .generation-mode-group {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.real-model-tryon .generation-mode-group .mpk-option-item,
+.real-model-tryon .generation-mode-group .mpk-option {
+	width: 100%;
+}

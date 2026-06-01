@@ -66,7 +66,7 @@ const GENERATION_MODE_DEFINITIONS = [
 	{
 		value: "standard",
 		labelKey: "generationMode.standard",
-		labelFallback: "标准",
+		labelFallback: "标准模式",
 		descriptionKey: "generationMode.standard.desc",
 		descriptionFallback: "平衡生成效率与营销展示完成度。",
 		promptSuffix: {
@@ -77,7 +77,7 @@ const GENERATION_MODE_DEFINITIONS = [
 	{
 		value: "advanced",
 		labelKey: "generationMode.advanced",
-		labelFallback: "高级",
+		labelFallback: "高级模式",
 		descriptionKey: "generationMode.advanced.desc",
 		descriptionFallback: "增强面料纹理、结构细节与营销成片质感。",
 		promptSuffix: {
@@ -200,6 +200,7 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "generationMode",
 					title: t("section.generationMode", "生成模式"),
+					groupClassName: "clothing-variation-mode-grid",
 					showDescriptionOnHover: true,
 					options: generationModeOptions,
 				},

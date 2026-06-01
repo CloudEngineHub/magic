@@ -161,7 +161,6 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "presetTargetModel",
 					title: t("section.presetTargetModel", "预设 AI 模特"),
-					showDescriptionOnHover: true,
 					options: presetTargetModels,
 				},
 				{

@@ -1345,6 +1345,7 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "creationMode",
 					title: t("section.creationMode", "创作模式"),
+					groupClassName: "pis-creation-mode-group",
 					showDescriptionOnHover: true,
 					options: creationModes,
 				},

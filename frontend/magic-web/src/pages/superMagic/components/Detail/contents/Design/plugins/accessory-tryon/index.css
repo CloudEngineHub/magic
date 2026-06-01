@@ -5,3 +5,13 @@
 .accessory-tryon .mpk-image-slot-preview {
 	max-height: 240px;
 }
+
+.accessory-tryon .generation-mode-group {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.accessory-tryon .generation-mode-group .mpk-option-item,
+.accessory-tryon .generation-mode-group .mpk-option {
+	width: 100%;
+}

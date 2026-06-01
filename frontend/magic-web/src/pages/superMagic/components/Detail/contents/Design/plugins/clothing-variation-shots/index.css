@@ -12,15 +12,15 @@
 	min-height: 88px;
 }
 
-.clothing-variation-shots .clothing-variation-style-grid {
+.clothing-variation-shots .clothing-variation-style-grid,
+.clothing-variation-shots .clothing-variation-mode-grid  {
+	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-@media (max-width: 480px) {
-	.clothing-variation-shots .clothing-variation-style-grid {
-		grid-template-columns: 1fr;
-	}
-	.clothing-variation-shots .mpk-image-grid {
-		grid-template-columns: repeat(3, 1fr);
-	}
+.clothing-variation-shots .clothing-variation-style-grid .mpk-option-item,
+.clothing-variation-shots .clothing-variation-style-grid .mpk-option,
+.clothing-variation-shots .clothing-variation-mode-grid .mpk-option-item,
+.clothing-variation-shots .clothing-variation-mode-grid .mpk-option {
+	width: 100%;
 }
