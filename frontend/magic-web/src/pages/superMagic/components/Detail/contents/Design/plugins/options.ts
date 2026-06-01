@@ -60,6 +60,9 @@ import clothingRepairManifest from "./clothing-repair/manifest.json"
 import handFootRepairStyles from "./hand-foot-repair/index.css?raw"
 import handFootRepairRuntimeCode from "./hand-foot-repair/index.js?raw"
 import handFootRepairManifest from "./hand-foot-repair/manifest.json"
+import footwearRepairStyles from "./footwear-repair/index.css?raw"
+import footwearRepairRuntimeCode from "./footwear-repair/index.js?raw"
+import footwearRepairManifest from "./footwear-repair/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -97,6 +100,8 @@ const clothingRepairEntryUrl = new URL("./clothing-repair/index.js", import.meta
 const clothingRepairResourceBaseUrl = new URL("./clothing-repair/", import.meta.url).href
 const handFootRepairEntryUrl = new URL("./hand-foot-repair/index.js", import.meta.url).href
 const handFootRepairResourceBaseUrl = new URL("./hand-foot-repair/", import.meta.url).href
+const footwearRepairEntryUrl = new URL("./footwear-repair/index.js", import.meta.url).href
+const footwearRepairResourceBaseUrl = new URL("./footwear-repair/", import.meta.url).href
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -260,6 +265,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		source: "builtin",
 	},
 	{
+		...handFootRepairManifest,
+		entry: `./hand-foot-repair/${handFootRepairManifest.entry}`,
+		runtimeUrl: handFootRepairEntryUrl,
+		resourceBaseUrl: handFootRepairResourceBaseUrl,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${handFootRepairRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, handFootRepairStyles],
+		resolveResourceUrl: (path) => new URL(path, handFootRepairResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
 		...clothingRepairManifest,
 		entry: `./clothing-repair/${clothingRepairManifest.entry}`,
 		runtimeUrl: clothingRepairEntryUrl,
@@ -270,13 +285,13 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		source: "builtin",
 	},
 	{
-		...handFootRepairManifest,
-		entry: `./hand-foot-repair/${handFootRepairManifest.entry}`,
-		runtimeUrl: handFootRepairEntryUrl,
-		resourceBaseUrl: handFootRepairResourceBaseUrl,
-		runtimeCode: `${sharedPluginRuntimeCode}\n\n${handFootRepairRuntimeCode}`,
-		styleCode: [magicPluginKitStyles, handFootRepairStyles],
-		resolveResourceUrl: (path) => new URL(path, handFootRepairResourceBaseUrl).href,
+		...footwearRepairManifest,
+		entry: `./footwear-repair/${footwearRepairManifest.entry}`,
+		runtimeUrl: footwearRepairEntryUrl,
+		resourceBaseUrl: footwearRepairResourceBaseUrl,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${footwearRepairRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, footwearRepairStyles],
+		resolveResourceUrl: (path) => new URL(path, footwearRepairResourceBaseUrl).href,
 		source: "builtin",
-	},
+	}
 ]

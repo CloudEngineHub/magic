@@ -1,0 +1,57 @@
+{
+    "description": "{{description}}",
+    "entry": "index.js",
+    "icon": "👟",
+    "label": "{{label}}",
+    "locales": {
+        "en-US": {
+            "button.generate": "Generate Footwear Repair",
+            "button.generating": "Generating…",
+            "description": "Upload an image to repair and a reference shoe/boot product image to adjust or repair footwear details worn by the model with one click.",
+            "empty.referenceProductImage": "Upload 1 reference product image first",
+            "empty.sourceImage": "Upload 1 image to repair first",
+            "error.noModels": "No AI model is currently available",
+            "error.noSize": "The current model does not provide a usable size preset",
+            "error.references": "The uploaded images do not contain usable reference identifiers",
+            "label": "Footwear Repair",
+            "section.count": "Count",
+            "section.modelSelect": "AI Model",
+            "section.referenceProductImage": "Reference product image",
+            "section.resolution": "Resolution",
+            "section.sourceImage": "Image to Repair",
+            "toast.success": "Footwear repair image generated successfully!",
+            "upload.referenceProductImage": "Upload reference shoe/boot image",
+            "upload.referenceProductImage.help": "Upload a flat-lay, stand-alone, or model product image of the footwear as the repair reference.",
+            "upload.sourceImage": "Upload image to repair",
+            "upload.sourceImage.help": "Upload the model image whose footwear needs repair. AI will preserve the person and scene while repairing the shoe or boot details."
+        },
+        "zh-CN": {
+            "button.generate": "生成鞋靴修复图",
+            "button.generating": "生成中…",
+            "description": "上传待修复图和参考商品图，一键调整、修复模特穿着鞋靴的细节。",
+            "empty.referenceProductImage": "请先上传 1 张参考商品图",
+            "empty.sourceImage": "请先上传 1 张待修复图",
+            "error.noModels": "暂无可用 AI 模型",
+            "error.noSize": "当前模型缺少可用尺寸配置",
+            "error.references": "图片缺少可用于生成的资源标识",
+            "label": "鞋靴修复",
+            "section.count": "生成张数",
+            "section.modelSelect": "AI 模型",
+            "section.referenceProductImage": "参考商品图",
+            "section.resolution": "分辨率",
+            "section.sourceImage": "待修复图",
+            "toast.success": "鞋靴修复图生成成功！",
+            "upload.referenceProductImage": "点击上传参考商品图",
+            "upload.referenceProductImage.help": "支持上传单张平铺图、独立展示图或模特穿着图，作为鞋靴款式或细节修复参考。",
+            "upload.sourceImage": "点击上传待修复图",
+            "upload.sourceImage.help": "上传需要修复鞋靴的模特图，AI 会在保留人物与场景的前提下修正鞋靴细节。"
+        }
+    },
+    "category": {
+        "key": "ai-toolbox"
+    },
+    "name": "footwear-repair",
+    "styles": "index.css",
+    "tags": ["AI", "修复", "鞋靴"],
+    "version": "1.0.0"
+}
