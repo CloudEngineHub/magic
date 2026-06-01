@@ -92,10 +92,13 @@ function RednoteDetailHeader({
 function RednoteDetailContent({ post }: { post: SelfMediaPost }) {
 	const title = post.meta.title || post.meta.feedTitle
 	const subtitle = post.meta.subtitle
-	const tags = post.meta.tags
+	const tagsRaw = post.meta.tags
+	const tags = (Array.isArray(tagsRaw) ? tagsRaw : String(tagsRaw ?? "").split(/[\s,，、#]+/))
+		.map((tag) => String(tag).trim().replace(/^#+/, ""))
+		.filter(Boolean)
 	const metaLine = [post.meta.time, post.meta.location].filter(Boolean).join(" ")
 
-	if (!title && !subtitle && !tags && !metaLine) {
+	if (!title && !subtitle && !tags.length && !metaLine) {
 		return null
 	}
 
@@ -107,8 +110,12 @@ function RednoteDetailContent({ post }: { post: SelfMediaPost }) {
 			{subtitle ? (
 				<div className="mt-2 text-[14px] leading-6 text-black/80">{subtitle}</div>
 			) : null}
-			{tags ? (
-				<div className="mt-2 text-[15px] font-medium leading-6 text-[#1f6fff]">{tags}</div>
+			{tags.length ? (
+				<div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[15px] font-medium leading-6 text-[#1f6fff]">
+					{tags.map((tag, idx) => (
+						<span key={`${tag}-${idx}`}>#{tag}</span>
+					))}
+				</div>
 			) : null}
 			{metaLine ? (
 				<div className="mt-3 text-[12px] leading-5 text-[#86909c]">{metaLine}</div>
