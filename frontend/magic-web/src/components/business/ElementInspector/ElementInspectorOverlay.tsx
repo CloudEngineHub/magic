@@ -411,7 +411,12 @@ export function buildAgentPromptContent(
 
 	// User-fillable area (no placeholder)
 	paragraphs.push(emptyPara())
-	paragraphs.push(para(text(`${t("stylePanel.inspector.agentPromptSuffix")}`)))
+	paragraphs.push(
+		para(
+			text(`${t("stylePanel.inspector.agentPromptSuffix")}`),
+			// placeholder(t("stylePanel.inspector.agentPromptPlaceholder")),
+		),
+	)
 
 	return { type: "doc", content: paragraphs }
 }

@@ -9,7 +9,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
+import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import magicToast from "@/components/base/MagicToaster/utils"
 import {
     DRAG_TYPE,
     PROJECT_ATTACHMENT_DRAG_MIME,
@@ -80,6 +82,8 @@ interface UseImageDropOptions {
         parentId?: string
     }) => Promise<{ storedRelativeFilePath: string }>
     onUploadSuccess?: () => void
+    /** Target origin for postMessage to iframe. Use specific origin for cross-origin sandbox, "*" for same-origin. */
+    targetOrigin?: string
 }
 
 interface UseImageDropReturn {
@@ -103,8 +107,10 @@ export function useImageDrop(options: UseImageDropOptions): UseImageDropReturn {
         filePathMapping,
         uploadImageFileToProject,
         onUploadSuccess,
+        targetOrigin = "*",
     } = options
 
+    const { t } = useTranslation("super")
     const [isDragOver, setIsDragOver] = useState(false)
     const dragEnterCounter = useRef(0)
     const projectFilePreviewUrlCache = useRef<Map<string, string>>(new Map())
@@ -266,7 +272,7 @@ export function useImageDrop(options: UseImageDropOptions): UseImageDropReturn {
                 type: "DRAG_OVER_IMAGE",
                 data: { x, y },
             },
-            "*",
+            targetOrigin,
         )
     })
 
@@ -282,7 +288,7 @@ export function useImageDrop(options: UseImageDropOptions): UseImageDropReturn {
                 type: "DRAG_LEAVE_IMAGE",
                 data: {},
             },
-            "*",
+            targetOrigin,
         )
     })
 
@@ -389,7 +395,7 @@ export function useImageDrop(options: UseImageDropOptions): UseImageDropReturn {
                         y,
                     },
                 },
-                "*",
+                targetOrigin,
             )
 
             sendDragLeaveToIframe()
@@ -406,6 +412,11 @@ export function useImageDrop(options: UseImageDropOptions): UseImageDropReturn {
             }
 
             try {
+                magicToast.loading({
+                    content: t("topicFiles.fileUploading"),
+                    duration: 0,
+                })
+
                 // Convert to base64 for immediate preview
                 const previewUrl = await fileToBase64(file)
 
@@ -427,12 +438,16 @@ export function useImageDrop(options: UseImageDropOptions): UseImageDropReturn {
                             y,
                         },
                     },
-                    "*",
+                    targetOrigin,
                 )
 
+                magicToast.destroy()
+                magicToast.success(t("topicFiles.fileUploadSuccess"))
                 onUploadSuccess?.()
             } catch (error) {
                 console.error("Failed to upload dropped image:", error)
+                magicToast.destroy()
+                magicToast.error(t("topicFiles.fileUploadError", "文件上传失败"))
             }
 
             sendDragLeaveToIframe()
@@ -480,7 +495,12 @@ function hasExternalImageFileData(dataTransfer: DataTransfer | null): boolean {
 
     const items = Array.from(dataTransfer.items ?? [])
     if (items.length > 0) {
-        return items.some((item) => item.kind === "file" && item.type.startsWith("image/"))
+        // During dragenter/dragover, some browsers hide item.type for security.
+        // If there are file items with empty type, assume they could be images
+        // (actual type check happens at drop time).
+        return items.some(
+            (item) => item.kind === "file" && (item.type === "" || item.type.startsWith("image/")),
+        )
     }
 
     const files = Array.from(dataTransfer.files ?? [])
