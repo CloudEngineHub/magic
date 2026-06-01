@@ -3,6 +3,9 @@ import type { TFunction } from "i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { buildAgentPromptContent } from "@/components/business/ElementInspector"
 import type { useElementInspector } from "@/components/business/ElementInspector"
+import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { roleStore } from "@/pages/superMagic/stores"
 
 type ElementInspector = ReturnType<typeof useElementInspector>
 
