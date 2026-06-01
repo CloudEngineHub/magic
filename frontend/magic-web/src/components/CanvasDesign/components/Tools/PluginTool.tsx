@@ -142,7 +142,7 @@ export default function PluginTool() {
 			</Tooltip>
 
 			<PopoverContent
-				align="start"
+				align="end"
 				side="right"
 				sideOffset={8}
 				className="border-base-border w-[30rem] bg-white p-0"

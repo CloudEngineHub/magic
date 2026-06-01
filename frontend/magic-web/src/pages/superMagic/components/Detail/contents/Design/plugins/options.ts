@@ -57,6 +57,9 @@ import imageTranslationManifest from "./image-translation/manifest.json"
 import clothingRepairStyles from "./clothing-repair/index.css?raw"
 import clothingRepairRuntimeCode from "./clothing-repair/index.js?raw"
 import clothingRepairManifest from "./clothing-repair/manifest.json"
+import handFootRepairStyles from "./hand-foot-repair/index.css?raw"
+import handFootRepairRuntimeCode from "./hand-foot-repair/index.js?raw"
+import handFootRepairManifest from "./hand-foot-repair/manifest.json"
 
 const virtualTryonEntryUrl = new URL("./virtual-tryon/index.js", import.meta.url).href
 const virtualTryonResourceBaseUrl = new URL("./virtual-tryon/", import.meta.url).href
@@ -92,6 +95,8 @@ const imageTranslationEntryUrl = new URL("./image-translation/index.js", import.
 const imageTranslationResourceBaseUrl = new URL("./image-translation/", import.meta.url).href
 const clothingRepairEntryUrl = new URL("./clothing-repair/index.js", import.meta.url).href
 const clothingRepairResourceBaseUrl = new URL("./clothing-repair/", import.meta.url).href
+const handFootRepairEntryUrl = new URL("./hand-foot-repair/index.js", import.meta.url).href
+const handFootRepairResourceBaseUrl = new URL("./hand-foot-repair/", import.meta.url).href
 
 export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 	{
@@ -262,6 +267,16 @@ export const designBuiltinPlugins: CanvasDesignPlugin[] = [
 		runtimeCode: `${sharedPluginRuntimeCode}\n\n${clothingRepairRuntimeCode}`,
 		styleCode: [magicPluginKitStyles, clothingRepairStyles],
 		resolveResourceUrl: (path) => new URL(path, clothingRepairResourceBaseUrl).href,
+		source: "builtin",
+	},
+	{
+		...handFootRepairManifest,
+		entry: `./hand-foot-repair/${handFootRepairManifest.entry}`,
+		runtimeUrl: handFootRepairEntryUrl,
+		resourceBaseUrl: handFootRepairResourceBaseUrl,
+		runtimeCode: `${sharedPluginRuntimeCode}\n\n${handFootRepairRuntimeCode}`,
+		styleCode: [magicPluginKitStyles, handFootRepairStyles],
+		resolveResourceUrl: (path) => new URL(path, handFootRepairResourceBaseUrl).href,
 		source: "builtin",
 	},
 ]
