@@ -151,11 +151,6 @@ function isHtmlImagesUploadPath(path: string): boolean {
 	return normalized === "images" || normalized.startsWith("images/")
 }
 
-function isHtmlImagesUploadPath(path: string): boolean {
-	const normalized = normalizeProjectPath(path.trim().replace(/^\.\//, ""))
-	return normalized === "images" || normalized.startsWith("images/")
-}
-
 interface MagicI18nLangSubscribeRequest {
 	type: "MAGIC_I18N_LANG_SUBSCRIBE"
 	requestId?: string
