@@ -104,6 +104,24 @@
 			.filter((setting) => setting.requestKey && setting.options.length > 0)
 	}
 
+	// 计算遮罩的边界框
+	function getMaskBoundingBox(canvas) {
+		const { width, height } = canvas
+		const data = canvas.getContext("2d").getImageData(0, 0, width, height).data
+		let minX = width, minY = height, maxX = -1, maxY = -1
+		for (let y = 0; y < height; y++) {
+			for (let x = 0; x < width; x++) {
+				if (data[(y * width + x) * 4] > 128) {
+					if (x < minX) minX = x
+					if (x > maxX) maxX = x
+					if (y < minY) minY = y
+					if (y > maxY) maxY = y
+				}
+			}
+		}
+		return maxX >= 0 ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } : null
+	}
+
 	/** 挂载插件 */
 	function mount(ctx, root, config) {
 		const t = (key, fallback) => ctx.i18n?.t?.(key, fallback) ?? fallback ?? key
@@ -676,6 +694,256 @@
 			return sectionNode
 		}
 
+		/** 渲染遮罩涂抹区块 */
+		function renderMaskPainter(section) {
+			const sourceAsset = state[section.sourceStateKey]
+			const sectionNode = createSection(section.title, section.suffix)
+
+			if (!sourceAsset) {
+				sectionNode.append(
+					createElement(
+						"p",
+						"mpk-help",
+						section.noSourceHint || t("maskPainter.noSource", "请先上传待修复图"),
+					),
+				)
+				view.sectionViews[section.id] = null
+				return sectionNode
+			}
+
+			const sourceUrl = getImageUrl(sourceAsset)
+			// maskCanvas 用于记录涂抹结果，displayCanvas 用于显示合成后的预览，二者尺寸与源图一致
+			const maskCanvas = document.createElement("canvas")
+			const displayCanvas = document.createElement("canvas")
+			displayCanvas.className = "mpk-mask-canvas"
+			let painting = false
+			let uploadTimer = null
+			let imgLoaded = false
+			let cursorX = -1
+			let cursorY = -1
+			// 笔刷大小
+			const brushSize = section.brushSize ?? 28
+
+			const img = new Image()
+			// cropImg 通过 host 代理 fetch 得到 blob URL，避免 null-origin iframe tainted canvas 问题
+			const cropImg = new Image()
+			let cropImgObjUrl = null
+			let cropImgLoaded = false
+			if (ctx.assets?.fetchBlob && sourceUrl) {
+				ctx.assets.fetchBlob(sourceUrl)
+					.then((blob) => {
+						cropImgObjUrl = URL.createObjectURL(blob)
+						cropImg.onload = () => { cropImgLoaded = true; URL.revokeObjectURL(cropImgObjUrl) }
+						cropImg.onerror = () => { URL.revokeObjectURL(cropImgObjUrl) }
+						cropImg.src = cropImgObjUrl
+					})
+					.catch(() => {}) // CORS/network fail, crop will be skipped
+			}
+
+			// 刷新显示（先显示原图，再叠加红色半透明的遮罩，最后绘制笔刷预览）
+			function redrawDisplay() {
+				if (!imgLoaded) return
+				// 画源图
+				const dc = displayCanvas.getContext("2d")
+				dc.clearRect(0, 0, displayCanvas.width, displayCanvas.height)
+				dc.drawImage(img, 0, 0)
+
+				// 把 maskCanvas 的白色区域转成红色半透明叠加
+				const mc = maskCanvas.getContext("2d")
+				const md = mc.getImageData(0, 0, maskCanvas.width, maskCanvas.height)
+				const ov = document.createElement("canvas")
+				ov.width = maskCanvas.width
+				ov.height = maskCanvas.height
+				const oc = ov.getContext("2d")
+				const od = oc.createImageData(maskCanvas.width, maskCanvas.height)
+				for (let i = 0; i < md.data.length; i += 4) {
+					if (md.data[i] > 128) {
+						od.data[i] = 239
+						od.data[i + 1] = 68
+						od.data[i + 2] = 68
+						od.data[i + 3] = 155
+					}
+				}
+				oc.putImageData(od, 0, 0)
+				// 叠加到 displayCanvas 上
+				dc.drawImage(ov, 0, 0)
+				// 绘制笔刷预览圆圈
+				if (cursorX >= 0) {
+					dc.save()
+					dc.beginPath()
+					dc.arc(cursorX, cursorY, brushSize / 2, 0, Math.PI * 2)
+					dc.strokeStyle = "rgba(0,0,0,0.6)"
+					dc.lineWidth = 3
+					dc.stroke()
+					dc.beginPath()
+					dc.arc(cursorX, cursorY, brushSize / 2, 0, Math.PI * 2)
+					dc.strokeStyle = "rgba(255,255,255,0.9)"
+					dc.lineWidth = 1.5
+					dc.stroke()
+					dc.restore()
+				}
+			}
+
+			img.onload = () => {
+				imgLoaded = true
+				displayCanvas.width = img.naturalWidth
+				displayCanvas.height = img.naturalHeight
+				maskCanvas.width = img.naturalWidth
+				maskCanvas.height = img.naturalHeight
+				const mc = maskCanvas.getContext("2d")
+				mc.fillStyle = "#000000"
+				mc.fillRect(0, 0, maskCanvas.width, maskCanvas.height)
+				redrawDisplay()
+			}
+			img.onerror = () => {
+				imgLoaded = false
+			}
+			img.src = sourceUrl
+
+			// 把鼠标/触摸事件的屏幕坐标转换成 canvas 的像素坐标
+			function getCoords(e) {
+				const rect = displayCanvas.getBoundingClientRect()
+				// 缩放比
+				const sx = displayCanvas.width / rect.width
+				const sy = displayCanvas.height / rect.height
+				const src = e.touches ? e.touches[0] : e
+				return {
+					x: (src.clientX - rect.left) * sx,
+					y: (src.clientY - rect.top) * sy,
+				}
+			}
+
+			// 在 maskCanvas 上绘制涂抹结果，并刷新显示
+			function doPaint(e) {
+				if (!painting || !imgLoaded) return
+				const { x, y } = getCoords(e)
+				const mc = maskCanvas.getContext("2d")
+				mc.fillStyle = "#ffffff"
+				mc.beginPath()
+				mc.arc(x, y, brushSize / 2, 0, Math.PI * 2)
+				mc.fill()
+				redrawDisplay()
+			}
+
+
+			function scheduleUpload() {
+				clearTimeout(uploadTimer)
+				uploadTimer = setTimeout(() => {
+					if (cropImgLoaded) {
+						const srcForCrop = cropImg
+						const bbox = getMaskBoundingBox(maskCanvas)
+						if (bbox) {
+							const pad = section.cropPadding ?? 40
+							const cx = Math.max(0, bbox.x - pad)
+							const cy = Math.max(0, bbox.y - pad)
+							const cw = Math.min(maskCanvas.width - cx, bbox.w + pad * 2)
+							const ch = Math.min(maskCanvas.height - cy, bbox.h + pad * 2)
+							const cropCanvas = document.createElement("canvas")
+							cropCanvas.width = cw
+							cropCanvas.height = ch
+							cropCanvas.getContext("2d").drawImage(srcForCrop, cx, cy, cw, ch, 0, 0, cw, ch)
+							cropCanvas.toBlob(
+								(cropBlob) => {
+									if (!cropBlob || !ctx.assets?.uploadBlob) return
+									ctx.assets
+										.uploadBlob(cropBlob, "crop.png", "image/png")
+										.then((asset) => {
+											setState({ [section.stateKey]: asset })
+										})
+										.catch(() => {})
+								},
+								"image/png",
+							)
+						} else {
+							setState({ [section.stateKey]: null })
+						}
+					} else {
+						setState({ [section.stateKey]: null })
+					}
+				}, 600)
+			}
+
+			displayCanvas.style.cursor = "none"
+			displayCanvas.addEventListener("mousedown", (e) => {
+				painting = true
+				doPaint(e)
+			})
+			displayCanvas.addEventListener("mousemove", (e) => {
+				const { x, y } = getCoords(e)
+				cursorX = x
+				cursorY = y
+				doPaint(e)
+				if (!painting) redrawDisplay()
+			})
+			displayCanvas.addEventListener("mouseup", () => {
+				if (!painting) return
+				painting = false
+				scheduleUpload()
+			})
+			displayCanvas.addEventListener("mouseleave", () => {
+				cursorX = -1
+				cursorY = -1
+				redrawDisplay()
+				if (!painting) return
+				painting = false
+				scheduleUpload()
+			})
+			displayCanvas.addEventListener("touchstart", (e) => { e.preventDefault(); painting = true; doPaint(e) }, { passive: false })
+			displayCanvas.addEventListener("touchmove", (e) => { e.preventDefault(); doPaint(e) }, { passive: false })
+			displayCanvas.addEventListener("touchend", () => { painting = false; scheduleUpload() })
+
+			const wrap = createElement("div", "mpk-mask-painter")
+			wrap.append(displayCanvas)
+
+			const controls = createElement("div", "mpk-mask-controls")
+			const clearBtn = createElement(
+				"button",
+				"mpk-mask-clear-btn",
+				section.clearLabel || t("maskPainter.clear", "清除标记"),
+			)
+			clearBtn.type = "button"
+			clearBtn.addEventListener("click", () => {
+				const mc = maskCanvas.getContext("2d")
+				mc.fillStyle = "#000000"
+				mc.fillRect(0, 0, maskCanvas.width, maskCanvas.height)
+				redrawDisplay()
+				clearTimeout(uploadTimer)
+				const clearPatch = { [section.stateKey]: null }
+				setState(clearPatch)
+			})
+			controls.append(clearBtn)
+			sectionNode.append(wrap, controls)
+
+			if (section.help) {
+				sectionNode.append(createElement("p", "mpk-help", section.help))
+			}
+
+			
+			view.sectionViews[section.id] = {
+				sectionNode,
+				maskCanvas,
+				displayCanvas,
+				lastSourceUrl: sourceUrl,
+				cancelUpload: () => clearTimeout(uploadTimer),
+			}
+			return sectionNode
+		}
+
+		function updateMaskPainterSection(section) {
+			const sourceAsset = state[section.sourceStateKey]
+			const sourceUrl = sourceAsset ? getImageUrl(sourceAsset) : null
+			const existing = view.sectionViews[section.id]
+			if (existing?.lastSourceUrl !== sourceUrl) {
+				if (sourceUrl !== existing?.lastSourceUrl && existing) {
+					// source changed, clear pending upload and derived state
+					existing.cancelUpload?.()
+					const resetPatch = { [section.stateKey]: null }
+					setState(resetPatch)
+				}
+				view.slots[section.id].replaceChildren(renderMaskPainter(section))
+			}
+		}
+
 		function renderTextarea(section) {
 			const value = typeof state[section.stateKey] === "string" ? state[section.stateKey] : ""
 			const maxLength = Number(section.maxLength)
@@ -906,6 +1174,7 @@
 			}
 			if (section.kind === "image-grid") return renderImageGrid(section)
 			if (section.kind === "image-slot") return renderImageSlot(section)
+			if (section.kind === "mask-painter") return renderMaskPainter(section)
 			if (section.kind === "textarea") return renderTextarea(section)
 			if (section.kind === "toggle") return renderToggle(section)
 			if (section.kind === "size-control") return renderSizeControl(section)
@@ -931,6 +1200,11 @@
 
 			if (section.kind === "toggle") {
 				updateToggleSection(section)
+				return
+			}
+
+			if (section.kind === "mask-painter") {
+				updateMaskPainterSection(section)
 				return
 			}
 

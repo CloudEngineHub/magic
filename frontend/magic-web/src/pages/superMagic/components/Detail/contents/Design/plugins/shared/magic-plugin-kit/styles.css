@@ -592,3 +592,46 @@
 .mpk-color-drawer.is-open {
 	transform: translateX(0);
 }
+
+/* ── Mask Painter ── */
+.mpk-mask-painter {
+	position: relative;
+	width: 100%;
+	overflow: hidden;
+	border-radius: 12px;
+	border: 1px solid var(--mpk-border);
+	background: var(--mpk-muted);
+	cursor: crosshair;
+}
+
+.mpk-mask-canvas {
+	display: block;
+	width: 100%;
+	height: auto;
+	max-height: 280px;
+	object-fit: contain;
+	touch-action: none;
+}
+
+.mpk-mask-controls {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 6px;
+}
+
+.mpk-mask-clear-btn {
+	height: 28px;
+	padding: 0 12px;
+	color: var(--mpk-muted-foreground);
+	font-size: 11px;
+	background: var(--mpk-background);
+	border: 1px solid var(--mpk-input);
+	border-radius: 8px;
+	cursor: pointer;
+	transition: color 0.15s, border-color 0.15s;
+}
+
+.mpk-mask-clear-btn:hover {
+	color: var(--mpk-destructive);
+	border-color: var(--mpk-destructive);
+}

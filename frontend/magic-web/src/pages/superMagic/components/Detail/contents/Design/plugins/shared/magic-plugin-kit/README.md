@@ -219,6 +219,7 @@ kit 会按顺序渲染这些 section。
 
 - `image-grid`
 - `image-slot`
+- `mask-painter`
 - `textarea`
 - `toggle`
 - `size-control`
@@ -288,6 +289,57 @@ kit 会按顺序渲染这些 section。
 	title: t("section.model", "模特底图"),
 	suffix: t("optional", "可选"),
 	uploadLabel: t("upload.model", "点击上传模特图"),
+}
+```
+
+### `mask-painter`
+
+用于在已上传图片上直接涂抹重点区域。
+
+适合场景：
+
+- 局部修复
+- 指定参考细节迁移范围
+- 让模型聚焦某个局部区域
+
+常用字段：
+
+- `stateKey`: 涂抹完成后写入的 state 字段
+- `sourceStateKey`: 被涂抹的源图片 state 字段
+- `title`: 区块标题
+- `suffix`: 标题右侧补充文案
+- `noSourceHint`: 没有源图时展示的提示文案
+- `clearLabel`: 清除标记按钮文案
+- `help`: 区块底部说明文案
+- `brushSize`: 画笔大小，默认 `28`
+- `cropPadding`: 根据涂抹区域裁剪局部图时额外扩出的边距，默认 `40`
+- `deps`: 额外依赖的 state key，通常至少要包含 `sourceStateKey`
+- `when`: 条件渲染，返回 `false` 时不显示
+
+说明：
+
+- 只有在 `sourceStateKey` 对应图片存在时才会显示画布
+- 用户在图上涂抹后，kit 会根据涂抹范围计算 bounding box，并从源图裁剪出局部图
+- 裁剪结果会自动上传，并把上传后的 asset 写入 `state[stateKey]`
+- 没有涂抹内容、清空标记、或源图变化时，`state[stateKey]` 会被自动重置为 `null`
+- 当前对外暴露的是“裁剪后的局部参考图”，不是原始 mask 二值图
+
+示例：
+
+```js
+{
+	id: "maskPainter",
+	kind: "mask-painter",
+	stateKey: "cropImage",
+	sourceStateKey: "sourceImage",
+	title: t("section.maskPainter", "标记修复区域（可选）"),
+	noSourceHint: t("maskPainter.noSource", "请先上传待修复图"),
+	clearLabel: t("maskPainter.clear", "清除标记"),
+	deps: ["sourceImage"],
+	help: t(
+		"maskPainter.help",
+		"在图上涂抹需要重点修复的区域，AI 将优先处理标记部分。不标记时 AI 自动识别。",
+	),
 }
 ```
 
@@ -550,13 +602,20 @@ buildRequest: ({ state, helpers }) => {
 当前可以直接参考：
 
 - `plugins/boots-tryon/index.js`
+- `plugins/footwear-repair/index.js`
 
-它覆盖了这套配置的大部分常见能力：
+`boots-tryon` 覆盖了这套配置的大部分常见能力：
 
 - 多图上传
 - 单图上传
 - 标签组选项
 - 分辨率选择
 - 生成数量
+
+`footwear-repair` 额外覆盖了 `mask-painter` 的典型用法：
+
+- 在源图上标记待修复区域
+- 在参考图上标记待提取细节区域
+- 将标记结果裁剪后作为额外参考图参与最终请求
 - 生成前校验
 - 请求拼装

@@ -143,6 +143,18 @@ type PluginRuntimeMessage =
 			requestId: string
 			params: PluginGenerateAndPlaceParams
 	  }
+	| {
+			type: "magic-canvas-plugin:upload-blob"
+			requestId: string
+			arrayBuffer: ArrayBuffer
+			fileName: string
+			mimeType: string
+	  }
+	| {
+			type: "magic-canvas-plugin:fetch-blob"
+			requestId: string
+			url: string
+	  }
 function createPluginSrcDoc(plugin: CanvasDesignPlugin, locale: string) {
 	const runtimeCode = plugin.runtimeCode
 	const runtimeUrl = plugin.runtimeUrl
@@ -270,6 +282,22 @@ function createPluginSrcDoc(plugin: CanvasDesignPlugin, locale: string) {
 						{ type: "magic-canvas-plugin:pick-files", options: normalizedOptions, triggerPoint },
 						"magic-canvas-plugin:pick-files-result"
 					).then((data) => data.files || []);
+				},
+				uploadBlob(blob, fileName, mimeType) {
+					const requestId = Math.random().toString(36).slice(2);
+					return blob.arrayBuffer().then((arrayBuffer) => {
+						return requestHost(
+							{ type: "magic-canvas-plugin:upload-blob", requestId, arrayBuffer, fileName: fileName || "mask.png", mimeType: mimeType || "image/png" },
+							"magic-canvas-plugin:upload-blob-result",
+							[arrayBuffer]
+						).then((data) => data.file);
+					});
+				},
+				fetchBlob(url) {
+					return requestHost(
+						{ type: "magic-canvas-plugin:fetch-blob", url },
+						"magic-canvas-plugin:fetch-blob-result"
+					).then((data) => new Blob([data.arrayBuffer]));
 				},
 			},
 			ai: {
@@ -551,6 +579,60 @@ const PluginWindow = memo(function PluginWindow({
 						)
 					},
 				)
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:upload-blob") {
+				const file = new File([data.arrayBuffer], data.fileName, { type: data.mimeType })
+				void pickPluginFiles(canvas, [file], { type: "image" }).then(
+					(files) => {
+						iframeRef.current?.contentWindow?.postMessage(
+							{
+								type: "magic-canvas-plugin:upload-blob-result",
+								requestId: data.requestId,
+								file: files[0] ?? null,
+							},
+							"*",
+						)
+					},
+					(error) => {
+						iframeRef.current?.contentWindow?.postMessage(
+							{
+								type: "magic-canvas-plugin:upload-blob-result",
+								requestId: data.requestId,
+								error: getErrorMessage(error),
+							},
+							"*",
+						)
+					},
+				)
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:fetch-blob") {
+				void fetch(data.url)
+					.then((r) => r.arrayBuffer())
+					.then((arrayBuffer) => {
+						iframeRef.current?.contentWindow?.postMessage(
+							{
+								type: "magic-canvas-plugin:fetch-blob-result",
+								requestId: data.requestId,
+								arrayBuffer,
+							},
+							"*",
+							[arrayBuffer],
+						)
+					})
+					.catch((error) => {
+						iframeRef.current?.contentWindow?.postMessage(
+							{
+								type: "magic-canvas-plugin:fetch-blob-result",
+								requestId: data.requestId,
+								error: getErrorMessage(error),
+							},
+							"*",
+						)
+					})
 				return
 			}
 
@@ -1335,6 +1417,32 @@ function parsePluginRuntimeMessage(data: unknown): PluginRuntimeMessage | null {
 			type: "magic-canvas-plugin:generate-and-place",
 			requestId: record.requestId,
 			params: record.params as PluginGenerateAndPlaceParams,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:upload-blob" &&
+		typeof record.requestId === "string" &&
+		record.arrayBuffer instanceof ArrayBuffer &&
+		typeof record.fileName === "string" &&
+		typeof record.mimeType === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:upload-blob",
+			requestId: record.requestId,
+			arrayBuffer: record.arrayBuffer,
+			fileName: record.fileName,
+			mimeType: record.mimeType,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:fetch-blob" &&
+		typeof record.requestId === "string" &&
+		typeof record.url === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:fetch-blob",
+			requestId: record.requestId,
+			url: record.url,
 		}
 	}
 	if (record.type === "magic-canvas-plugin:error" && typeof record.message === "string") {
