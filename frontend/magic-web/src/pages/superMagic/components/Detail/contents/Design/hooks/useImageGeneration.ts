@@ -24,6 +24,7 @@ import {
 	resolveDesignDslPathToWorkspaceAbsoluteByCandidates,
 } from "../utils/designDslPathUtils"
 import { syncFileInfoAfterGenerationComplete } from "../utils/syncFileInfoAfterGenerationComplete"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 const IMAGE_MODEL_LIST_TTL_MS = 60_000
 const imageModelListCacheByKey = new Map<string, { models: ImageModelItem[]; fetchedAt: number }>()
@@ -87,7 +88,7 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 		}
 
 		await superMagicModeService.fetchDefaultModeModelList({ force: false })
-		const officialGroups = superMagicModeService.getImageModelGroupsByMode("general") || []
+		const officialGroups = superMagicModeService.getImageModelGroupsByMode(TopicMode.Design) || []
 		const officialModels: ImageModelItem[] = officialGroups.flatMap(
 			(groupItem: {
 				group: { id: string; name: string; icon: string; sort: number }
