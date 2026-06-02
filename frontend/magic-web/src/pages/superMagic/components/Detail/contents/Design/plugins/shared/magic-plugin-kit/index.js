@@ -721,6 +721,7 @@
 			let imgLoaded = false
 			let cursorX = -1
 			let cursorY = -1
+			let hasPendingMaskChange = false
 			// 笔刷大小
 			const brushSize = section.brushSize ?? 28
 
@@ -822,11 +823,15 @@
 				mc.beginPath()
 				mc.arc(x, y, brushSize / 2, 0, Math.PI * 2)
 				mc.fill()
+				hasPendingMaskChange = true
+				confirmBtn.disabled = false
 				redrawDisplay()
 			}
 
 
 			function scheduleUpload() {
+				hasPendingMaskChange = false
+				confirmBtn.disabled = true
 				clearTimeout(uploadTimer)
 				uploadTimer = setTimeout(() => {
 					if (cropImgLoaded) {
@@ -878,7 +883,6 @@
 			displayCanvas.addEventListener("mouseup", () => {
 				if (!painting) return
 				painting = false
-				scheduleUpload()
 			})
 			displayCanvas.addEventListener("mouseleave", () => {
 				cursorX = -1
@@ -886,16 +890,26 @@
 				redrawDisplay()
 				if (!painting) return
 				painting = false
-				scheduleUpload()
 			})
 			displayCanvas.addEventListener("touchstart", (e) => { e.preventDefault(); painting = true; doPaint(e) }, { passive: false })
 			displayCanvas.addEventListener("touchmove", (e) => { e.preventDefault(); doPaint(e) }, { passive: false })
-			displayCanvas.addEventListener("touchend", () => { painting = false; scheduleUpload() })
+			displayCanvas.addEventListener("touchend", () => { painting = false })
 
 			const wrap = createElement("div", "mpk-mask-painter")
 			wrap.append(displayCanvas)
 
 			const controls = createElement("div", "mpk-mask-controls")
+			const confirmBtn = createElement(
+				"button",
+				"mpk-mask-confirm-btn",
+				section.confirmLabel || t("maskPainter.confirm", "确认标记"),
+			)
+			confirmBtn.type = "button"
+			confirmBtn.disabled = true
+			confirmBtn.addEventListener("click", () => {
+				if (!hasPendingMaskChange) return
+				scheduleUpload()
+			})
 			const clearBtn = createElement(
 				"button",
 				"mpk-mask-clear-btn",
@@ -907,11 +921,13 @@
 				mc.fillStyle = "#000000"
 				mc.fillRect(0, 0, maskCanvas.width, maskCanvas.height)
 				redrawDisplay()
+				hasPendingMaskChange = false
+				confirmBtn.disabled = true
 				clearTimeout(uploadTimer)
 				const clearPatch = { [section.stateKey]: null }
 				setState(clearPatch)
 			})
-			controls.append(clearBtn)
+			controls.append(confirmBtn, clearBtn)
 			sectionNode.append(wrap, controls)
 
 			if (section.help) {

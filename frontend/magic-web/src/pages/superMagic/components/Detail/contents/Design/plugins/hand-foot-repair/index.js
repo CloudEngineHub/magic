@@ -44,7 +44,7 @@ registerMagicCanvasPlugin({
 					title: t("section.maskPainter", "标记修复区域（可选）"),
 					noSourceHint: t("maskPainter.noSource", "请先上传待修复图"),
 					clearLabel: t("maskPainter.clear", "清除标记"),
-					brushSize: 40,
+					brushSize: 30,
 					deps: ["sourceImage"],
 					help: t(
 						"maskPainter.help",

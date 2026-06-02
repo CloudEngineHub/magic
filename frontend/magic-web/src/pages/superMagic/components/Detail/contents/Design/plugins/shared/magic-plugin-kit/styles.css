@@ -616,22 +616,53 @@
 .mpk-mask-controls {
 	display: flex;
 	justify-content: flex-end;
+	gap: 8px;
 	margin-top: 6px;
 }
 
+.mpk-mask-confirm-btn,
 .mpk-mask-clear-btn {
-	height: 28px;
-	padding: 0 12px;
-	color: var(--mpk-muted-foreground);
-	font-size: 11px;
-	background: var(--mpk-background);
-	border: 1px solid var(--mpk-input);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: 32px;
+	padding: 0 14px;
+	font-size: 12px;
+	line-height: 1;
 	border-radius: 8px;
+	border: 1px solid var(--mpk-input);
+	box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
 	cursor: pointer;
-	transition: color 0.15s, border-color 0.15s;
+	transition: color 0.15s, background-color 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+
+.mpk-mask-confirm-btn {
+	color: #fff;
+	background: #0f172a;
+	border-color: #0f172a;
+}
+
+.mpk-mask-confirm-btn:hover:not(:disabled) {
+	background: #020617;
+	border-color: #020617;
+	box-shadow: 0 2px 6px rgb(15 23 42 / 0.18);
+}
+
+.mpk-mask-confirm-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	box-shadow: none;
+}
+
+.mpk-mask-clear-btn {
+	color: var(--mpk-foreground);
+	background: var(--mpk-background);
+	border-color: var(--mpk-input);
 }
 
 .mpk-mask-clear-btn:hover {
 	color: var(--mpk-destructive);
+	background: color-mix(in srgb, var(--mpk-destructive) 6%, var(--mpk-background));
 	border-color: var(--mpk-destructive);
+	box-shadow: 0 2px 6px rgb(220 38 38 / 0.12);
 }
