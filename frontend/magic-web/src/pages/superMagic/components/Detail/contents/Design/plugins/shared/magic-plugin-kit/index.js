@@ -412,15 +412,15 @@
 
 		async function uploadDroppedFiles(files) {
 			if (!files.length) return []
-			if (!ctx.assets?.uploadBlob) {
-				throw new Error("ctx.assets.uploadBlob is not connected yet.")
+			if (!ctx.assets?.uploadFile) {
+				throw new Error("ctx.assets.uploadFile is not connected yet.")
 			}
 			const uploaded = []
 			for (const file of files) {
 				if (!isImageFile(file)) {
 					throw new Error(t("error.pickFiles", "图片上传失败，请重试"))
 				}
-				const asset = await ctx.assets.uploadBlob(
+				const asset = await ctx.assets.uploadFile(
 					file,
 					file.name || "image.png",
 					file.type || inferImageMimeType(file.name),
@@ -1073,9 +1073,9 @@
 							cropCanvas.getContext("2d").drawImage(srcForCrop, cx, cy, cw, ch, 0, 0, cw, ch)
 							cropCanvas.toBlob(
 								(cropBlob) => {
-									if (!cropBlob || !ctx.assets?.uploadBlob) return
+									if (!cropBlob || !ctx.assets?.uploadFile) return
 									ctx.assets
-										.uploadBlob(cropBlob, "crop.png", "image/png")
+										.uploadFile(cropBlob, "crop.png", "image/png")
 										.then((asset) => {
 											setState({ [section.stateKey]: asset })
 										})

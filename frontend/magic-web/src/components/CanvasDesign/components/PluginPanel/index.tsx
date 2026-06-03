@@ -144,7 +144,7 @@ type PluginRuntimeMessage =
 			params: PluginGenerateAndPlaceParams
 	  }
 	| {
-			type: "magic-canvas-plugin:upload-blob"
+			type: "magic-canvas-plugin:upload-file"
 			requestId: string
 			arrayBuffer: ArrayBuffer
 			fileName: string
@@ -283,12 +283,12 @@ function createPluginSrcDoc(plugin: CanvasDesignPlugin, locale: string) {
 						"magic-canvas-plugin:pick-files-result"
 					).then((data) => data.files || []);
 				},
-				uploadBlob(blob, fileName, mimeType) {
+				uploadFile(file, fileName, mimeType) {
 					const requestId = Math.random().toString(36).slice(2);
-					return blob.arrayBuffer().then((arrayBuffer) => {
+					return file.arrayBuffer().then((arrayBuffer) => {
 						return requestHost(
-							{ type: "magic-canvas-plugin:upload-blob", requestId, arrayBuffer, fileName: fileName || "mask.png", mimeType: mimeType || "image/png" },
-							"magic-canvas-plugin:upload-blob-result",
+							{ type: "magic-canvas-plugin:upload-file", requestId, arrayBuffer, fileName: fileName || "mask.png", mimeType: mimeType || "image/png" },
+							"magic-canvas-plugin:upload-file-result",
 							[arrayBuffer]
 						).then((data) => data.file);
 					});
@@ -582,13 +582,13 @@ const PluginWindow = memo(function PluginWindow({
 				return
 			}
 
-			if (data.type === "magic-canvas-plugin:upload-blob") {
+			if (data.type === "magic-canvas-plugin:upload-file") {
 				const file = new File([data.arrayBuffer], data.fileName, { type: data.mimeType })
 				void pickPluginFiles(canvas, [file], { type: "image" }).then(
 					(files) => {
 						iframeRef.current?.contentWindow?.postMessage(
 							{
-								type: "magic-canvas-plugin:upload-blob-result",
+								type: "magic-canvas-plugin:upload-file-result",
 								requestId: data.requestId,
 								file: files[0] ?? null,
 							},
@@ -598,7 +598,7 @@ const PluginWindow = memo(function PluginWindow({
 					(error) => {
 						iframeRef.current?.contentWindow?.postMessage(
 							{
-								type: "magic-canvas-plugin:upload-blob-result",
+								type: "magic-canvas-plugin:upload-file-result",
 								requestId: data.requestId,
 								error: getErrorMessage(error),
 							},
@@ -1420,14 +1420,14 @@ function parsePluginRuntimeMessage(data: unknown): PluginRuntimeMessage | null {
 		}
 	}
 	if (
-		record.type === "magic-canvas-plugin:upload-blob" &&
+		record.type === "magic-canvas-plugin:upload-file" &&
 		typeof record.requestId === "string" &&
 		record.arrayBuffer instanceof ArrayBuffer &&
 		typeof record.fileName === "string" &&
 		typeof record.mimeType === "string"
 	) {
 		return {
-			type: "magic-canvas-plugin:upload-blob",
+			type: "magic-canvas-plugin:upload-file",
 			requestId: record.requestId,
 			arrayBuffer: record.arrayBuffer,
 			fileName: record.fileName,

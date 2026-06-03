@@ -331,7 +331,7 @@ kit 会按顺序渲染这些 section。
 
 - 只有在 `sourceStateKey` 对应图片存在时才会显示画布
 - 用户在图上涂抹后，kit 会根据涂抹范围计算 bounding box，并从源图裁剪出局部图
-- 裁剪结果会自动上传，并把上传后的 asset 写入 `state[stateKey]`
+- 裁剪结果会通过 `ctx.assets.uploadFile` 自动上传，并把上传后的 asset 写入 `state[stateKey]`
 - 没有涂抹内容、清空标记、或源图变化时，`state[stateKey]` 会被自动重置为 `null`
 - 当前对外暴露的是“裁剪后的局部参考图”，不是原始 mask 二值图
 

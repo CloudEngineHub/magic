@@ -279,6 +279,12 @@ const modelImages = await ctx.assets.pickFiles({
 const modelImage = modelImages[0] || null
 ```
 
+如果插件已经通过拖拽、粘贴、裁剪等方式拿到 `File` 或 `Blob`，可以直接调用：
+
+```js
+const asset = await ctx.assets.uploadFile(file, file.name, file.type)
+```
+
 参数：
 
 | 字段       | 类型                                      | 说明                                            |
@@ -322,11 +328,12 @@ Promise<MagicCanvasFileAsset[]>
 | `width`    | `number`                                  | 图片宽度，仅图片尽量返回                  |
 | `height`   | `number`                                  | 图片高度，仅图片尽量返回                  |
 
-为什么不先设计 `uploadFiles`？
+为什么先提供 `uploadFile`，而不是 `uploadFiles`？
 
 - “万物上身”不需要插件自己管理文件 input；
 - `pickFiles` 同时完成“选择 + 上传 + 返回预览信息”，对纯 JS 插件最简单；
-- 如果后续插件需要拖拽、自定义文件输入，再补 `uploadFiles`。
+- 当插件已经拿到单个 `File` 或 `Blob` 时，可以直接用 `uploadFile`；
+- 如果后续插件需要更完整的批量上传协议，再补 `uploadFiles`。
 
 ## 6. `ctx.ai`
 

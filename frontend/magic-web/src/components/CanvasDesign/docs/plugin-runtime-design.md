@@ -449,9 +449,16 @@ ctx.ui.setHeight(height)
 
 ```js
 ctx.assets.pickFiles(options)
+ctx.assets.uploadFile(file, fileName?, mimeType?)
 ```
 
 `pickFiles` 由宿主打开文件选择能力，入口可以包含“从本地上传”和“从项目选择”，并返回文件引用。iframe 内不直接接触宿主素材系统，也不直接创建系统文件选择框。这里的 `ctx.assets` 指用户素材/上传能力，不表示插件包内必须有 `assets/` 目录。图片场景传 `type: "image"`，后续可扩展到 `video`、`audio`、`file`。宿主 runtime 会自动使用最近一次用户点击位置显示下拉菜单，插件不需要传入鼠标事件。
+
+`uploadFile` 用于插件已经拿到 `File` 或 `Blob` 对象时，委托宿主完成上传并返回文件资源信息。适合拖拽上传、粘贴上传、局部裁剪后上传等场景。
+
+```js
+const asset = await ctx.assets.uploadFile(file, file.name, file.type)
+```
 
 ### 9.5 `ctx.resources`
 
@@ -681,6 +688,7 @@ my-plugin.zip
     - `ctx.ui.setHeight`
     - `ctx.resources.resolve`
     - `ctx.assets.pickFiles`
+	- `ctx.assets.uploadFile`
     - `ctx.ai.getImageModels`
     - `ctx.ai.generateAndPlace`
 7. 插件卸载支持 cleanup。
@@ -714,6 +722,7 @@ registerMagicCanvasPlugin({
 
 ```text
 assets.pickFiles
+assets.uploadFile
 ai.getImageModels
 ai.generateAndPlace
 ui.toast
