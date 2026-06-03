@@ -254,14 +254,18 @@
 
 		/** 应用模型默认值 */
 		function applyModelDefaults(model) {
-			const targetResolution = getDefaultResolution(model)
+			const currentRatioKey = state.ratioKey
 			const sizes = model?.image_size_config?.sizes ?? []
+			const matchedSize = currentRatioKey
+				? sizes.find((size) => size.label === currentRatioKey)
+				: null
+			const targetResolution = matchedSize?.scale ?? getDefaultResolution(model)
 			const sizesForResolution = targetResolution
 				? sizes.filter((size) => size.scale === targetResolution)
 				: sizes
 			const targetSize = sizesForResolution[0] ?? sizes[0]
 			const defaults = {
-				ratioKey: targetSize?.label ?? "",
+				ratioKey: matchedSize?.label ?? targetSize?.label ?? "",
 				scale: targetResolution,
 				imageGenerationConfig: buildDefaultImageGenerationConfig(model),
 			}
