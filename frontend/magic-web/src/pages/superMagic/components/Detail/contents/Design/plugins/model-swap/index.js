@@ -179,6 +179,18 @@ registerMagicCanvasPlugin({
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "分辨率"),
+					deps: ["modelId", "modelOptions"],
+				},	
+				{
+					id: "canvasSize",
+					kind: "size-control",
+					title: t("section.canvasSize", "画布比例"),
+					deps: ["modelId", "modelOptions", "scale"],
+				},
+				{
 					id: "count",
 					kind: "option-group",
 					stateKey: "genCount",

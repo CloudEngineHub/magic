@@ -176,7 +176,7 @@
 			modelOptions: [],
 			/** 模型 id */
 			modelId: "",
-			/** 比例 key */
+			/** 画布尺寸/比例 key */
 			ratioKey: "",
 			/** 分辨率 */
 			scale: "",
@@ -277,6 +277,7 @@
 			const sizes = getVisibleSizes(currentState)
 			const selectedRatio =
 				sizes.find((item) => item.label === currentState.ratioKey) ?? sizes[0]
+			
 			if (!selectedRatio?.value) return null
 			const parsedSize = parseSizeValue(selectedRatio.value)
 			if (!parsedSize) return null
@@ -357,9 +358,8 @@
 
 		/** 获取尺寸控制状态 */
 		function getSizeControlState(section, currentState = state) {
-			const ratioStateKey = section.ratioStateKey
 			const ratioOptions = getSizeControlRatioOptions(section, currentState)
-			const rawRatioValue = currentState[ratioStateKey]
+			const rawRatioValue = currentState.ratioKey
 			const ratioValue = ratioOptions.some((option) => option.value === rawRatioValue)
 				? rawRatioValue
 				: (ratioOptions[0]?.value ?? "")
@@ -367,17 +367,6 @@
 			return {
 				ratioOptions,
 				ratioValue,
-			}
-		}
-
-		/** 构建尺寸控制补丁 */
-		function buildSizeControlPatch(section, partialPatch, currentState = state) {
-			const ratioStateKey = section.ratioStateKey
-			const current = getSizeControlState(section, currentState)
-			const nextRatioValue = partialPatch[ratioStateKey] ?? current.ratioValue
-
-			return {
-				[ratioStateKey]: nextRatioValue,
 			}
 		}
 
@@ -682,13 +671,12 @@
 			if (section.kind === "resolution-select") {
 				deps.add("modelOptions")
 				deps.add("modelId")
-				deps.add("scale")
 			}
 
 			if (section.kind === "size-control") {
 				deps.add("modelOptions")
 				deps.add("modelId")
-				deps.add(section.ratioStateKey)
+				deps.add("scale")
 			}
 
 			return deps
@@ -1277,9 +1265,9 @@
 				button.addEventListener("click", () => {
 					if (option.disabled || current.ratioValue === option.value) return
 					setState(
-						buildSizeControlPatch(section, {
-							[section.ratioStateKey]: option.value,
-						}),
+						{
+							ratioKey: option.value
+						}
 					)
 				})
 				ratioList.append(button)
@@ -1395,9 +1383,10 @@
 				button.type = "button"
 				button.addEventListener("click", () => {
 					const sizes = getModelSizes().filter((size) => size.scale === scale)
+					const ratioKey = sizes[0]?.label ?? state.ratioKey
 					setState({
 						scale,
-						ratioKey: sizes[0]?.label ?? state.ratioKey,
+						ratioKey,
 					})
 				})
 				list.append(button)

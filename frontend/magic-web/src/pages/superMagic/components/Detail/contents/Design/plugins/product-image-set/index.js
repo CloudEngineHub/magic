@@ -1423,7 +1423,6 @@ registerMagicCanvasPlugin({
 					id: "canvasSize",
 					kind: "size-control",
 					title: t("section.canvasSize", "画布尺寸"),
-					ratioStateKey: "ratioKey",
 					deps: ["modelId", "modelOptions", "creationMode"],
                     when: ({ state }) => state.creationMode === "smart",
 				},

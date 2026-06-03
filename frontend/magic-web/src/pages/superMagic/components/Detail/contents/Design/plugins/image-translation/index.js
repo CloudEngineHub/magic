@@ -342,6 +342,35 @@ function createTargetLanguageSection({ state, setState, t, locale, getDrawer }) 
 	return section
 }
 
+function resolveSceneRequestSize(sceneImage, state, helpers) {
+	const fallbackSize = helpers.getSelectedSize(state)
+	if (!sceneImage?.width || !sceneImage?.height) {
+		return fallbackSize
+	}
+
+	const targetRatio = sceneImage.width / sceneImage.height
+	const candidateSizes = helpers.getVisibleSizes(state)
+	let bestMatch = null
+
+	for (const size of candidateSizes) {
+		const parsedSize = helpers.parseSizeValue(size.value)
+		if (!parsedSize?.width || !parsedSize?.height) continue
+		const candidateRatio = parsedSize.width / parsedSize.height
+		const score = Math.abs(candidateRatio - targetRatio)
+
+		if (!bestMatch || score < bestMatch.score) {
+			bestMatch = {
+				...size,
+				genW: parsedSize.width,
+				genH: parsedSize.height,
+				score,
+			}
+		}
+	}
+
+	return bestMatch || fallbackSize
+}
+
 registerMagicCanvasPlugin({
 	mount(ctx, root) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
@@ -421,7 +450,7 @@ registerMagicCanvasPlugin({
 					kind: "resolution-select",
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
-				},
+				},		
 				{
 					id: "count",
 					kind: "option-group",
@@ -457,14 +486,14 @@ registerMagicCanvasPlugin({
 					if (helpers.collectReferenceIds([state.sourceImage]).length !== 1) {
 						return t("error.references", "图片缺少可用于生成的资源标识")
 					}
-					const selectedSize = helpers.getSelectedSize(state)
+					const selectedSize = resolveSceneRequestSize(state.sourceImage, state, helpers)
 					if (!selectedSize?.genW || !selectedSize?.genH) {
 						return t("error.noSize", "当前模型缺少可用尺寸配置")
 					}
 					return null
 				},
 				execute: async ({ state, helpers, generateAndPlace }) => {
-					const selectedSize = helpers.getSelectedSize(state)
+					const selectedSize = resolveSceneRequestSize(state.sourceImage, state, helpers)
 					const requests = buildImageTranslationRequests({
 						state,
 						helpers,

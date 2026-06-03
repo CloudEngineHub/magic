@@ -418,7 +418,6 @@ kit 会按顺序渲染这些 section。
 - `title`: 区块标题
 - `suffix`: 标题右侧补充文案
 - `help`: 区块底部说明文案
-- `ratioStateKey`: 比例选项对应的 state 字段
 - `ratioOptions`: 自定义比例选项，未传时优先从模型尺寸推导
 - `deps`: 额外依赖的 state key，例如比例选项依赖当前模型时需要声明
 - `when`: 条件渲染，返回 `false` 时不显示
@@ -564,6 +563,7 @@ kit 会按顺序渲染这些 section。
 
 - 读取当前模型配置
 - 从尺寸配置里得到最终宽高
+- `getSelectedSize` 会读取当前 `size-control` 区块配置的 `stateKey`
 - 从上传文件对象里提取 `reference_images`
 
 ## 请求拼装建议
