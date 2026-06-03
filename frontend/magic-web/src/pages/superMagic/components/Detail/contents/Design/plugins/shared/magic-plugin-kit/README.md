@@ -242,8 +242,14 @@ kit 会按顺序渲染这些 section。
 - `pickErrorMessage`: 选图失败兜底文案
 - `maxCount`: 最大图片数，支持数字或函数
 - `beforePick`: 选图前校验，返回字符串表示中断
+- `dropHint`: 拖拽悬停时的提示文案，可选
 - `deps`: 额外依赖的 state key，例如 `maxCount` 依赖模型配置时需要声明
 - `when`: 条件渲染，返回 `false` 时不显示
+
+行为说明：
+
+- 支持点击上传、拖拽导入、容器聚焦时粘贴图片；
+- 拖拽本地图片时会走上传链路；
 
 示例：
 
@@ -276,8 +282,13 @@ kit 会按顺序渲染这些 section。
 - `help`: 区块底部说明文案
 - `pickErrorMessage`: 选图失败兜底文案
 - `beforePick`: 选图前校验，返回字符串表示中断
+- `dropHint`: 拖拽悬停时的提示文案，可选
 - `deps`: 额外依赖的 state key，例如 `when` 依赖其他字段时需要声明
 - `when`: 条件渲染，返回 `false` 时不显示
+
+行为说明：
+
+- 支持点击上传、拖拽替换、容器聚焦时粘贴替换；
 
 示例：
 

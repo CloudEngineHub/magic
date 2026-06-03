@@ -55,6 +55,52 @@
 		return image?.url ?? image?.src ?? image?.previewUrl ?? ""
 	}
 
+	function inferImageMimeType(fileName) {
+		const extension = String(fileName ?? "")
+			.split(".")
+			.pop()
+			?.toLowerCase()
+		if (extension === "png") return "image/png"
+		if (extension === "jpg" || extension === "jpeg") return "image/jpeg"
+		if (extension === "webp") return "image/webp"
+		if (extension === "gif") return "image/gif"
+		if (extension === "bmp") return "image/bmp"
+		if (extension === "svg") return "image/svg+xml"
+		return "image/*"
+	}
+
+	function isImageFile(file) {
+		if (!file) return false
+		const mimeType = String(file.type ?? "").toLowerCase()
+		if (mimeType.startsWith("image/")) return true
+		return /^.+\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(String(file.name ?? ""))
+	}
+
+	function getLocalFilesFromDataTransfer(dataTransfer) {
+		if (!dataTransfer) return []
+		const directFiles = Array.from(dataTransfer.files || []).filter(Boolean)
+		if (directFiles.length) return directFiles
+		return Array.from(dataTransfer.items || [])
+			.filter((item) => item.kind === "file")
+			.map((item) => item.getAsFile())
+			.filter(Boolean)
+	}
+
+	function hasImageFilesInDataTransfer(dataTransfer) {
+		if (!dataTransfer) return false
+		if (Array.from(dataTransfer.files || []).some(isImageFile)) return true
+		if (
+			Array.from(dataTransfer.items || []).some(
+				(item) =>
+					item?.kind === "file" &&
+					(typeof item.type !== "string" || !item.type || item.type.startsWith("image/")),
+			)
+		) {
+			return true
+		}
+		return Array.from(dataTransfer.types || []).includes("Files")
+	}
+
 	function getErrorMessage(error) {
 		if (error instanceof Error) return error.message
 		return String(error ?? "")
@@ -343,6 +389,59 @@
 			throw new Error("ctx.assets.pickFiles is not connected yet.")
 		}
 
+		function getSectionImportLimit(section, currentCount) {
+			const maxCount = Math.max(
+				1,
+				resolveValue(section.maxCount ?? 1, { state, helpers, t }) ?? 1,
+			)
+			return {
+				maxCount,
+				remaining: Math.max(maxCount - Math.max(0, currentCount || 0), 0),
+			}
+		}
+
+		function validateSectionAcquire(section) {
+			const beforePickError = section.beforePick?.({ state, helpers, t })
+			if (beforePickError) {
+				setState({ error: beforePickError })
+				return beforePickError
+			}
+			setState({ error: "" })
+			return ""
+		}
+
+		async function uploadDroppedFiles(files) {
+			if (!files.length) return []
+			if (!ctx.assets?.uploadBlob) {
+				throw new Error("ctx.assets.uploadBlob is not connected yet.")
+			}
+			const uploaded = []
+			for (const file of files) {
+				if (!isImageFile(file)) {
+					throw new Error(t("error.pickFiles", "图片上传失败，请重试"))
+				}
+				const asset = await ctx.assets.uploadBlob(
+					file,
+					file.name || "image.png",
+					file.type || inferImageMimeType(file.name),
+				)
+				if (asset) uploaded.push(asset)
+			}
+			return uploaded
+		}
+
+		async function importSectionImages(section, payload) {
+			const validationError = validateSectionAcquire(section)
+			if (validationError) return []
+			if (payload.kind === "picker") {
+				return pickImageFiles({ multiple: payload.maxCount > 1, maxCount: payload.maxCount })
+			}
+			if (payload.kind === "local") {
+				return uploadDroppedFiles(payload.files.slice(0, payload.maxCount))
+			}
+			return []
+		}
+
 		/** 生成 */
 		async function handleGenerate() {
 			if (state.loading) return
@@ -455,14 +554,118 @@
 
 		/** 选择图片 */
 		async function pickForSection(section, options) {
-			const beforePickError = section.beforePick?.({ state, helpers, t })
-			if (beforePickError) {
-				setState({ error: beforePickError })
+			const validationError = validateSectionAcquire(section)
+			if (validationError) {
 				return []
 			}
-
-			setState({ error: "" })
 			return pickImageFiles(options)
+		}
+
+		/** 绑定图片插槽事件 */
+		function bindImageImportTarget(target, section, options) {
+			if (!target) return
+			
+			const mode = options.mode
+			let dragDepth = 0
+
+			const setDragState = (isActive) => {
+				target.classList.toggle("is-drag-over", Boolean(isActive))
+			}
+
+			const getLocalImageFiles = (dataTransfer) => {
+				return getLocalFilesFromDataTransfer(dataTransfer).filter(isImageFile)
+			}
+
+			const handleImportError = (error) => {
+				setState({
+					error:
+						getErrorMessage(error) ||
+						section.pickErrorMessage ||
+						t("error.pickFiles", "图片上传失败，请重试"),
+				})
+			}
+
+			const importLocalFiles = async (files) => {
+				const currentAssets = Array.isArray(state[section.stateKey])
+					? state[section.stateKey]
+					: []
+				const importLimit =
+					mode === "grid"
+						? getSectionImportLimit(section, currentAssets.length)
+						: { maxCount: 1, remaining: 1 }
+				const maxCount = mode === "grid" ? importLimit.remaining : 1
+				if (maxCount <= 0) return
+
+				const images = await importSectionImages(section, {
+					kind: "local",
+					files,
+					maxCount,
+				})
+				if (!images?.length) return
+				if (mode === "grid") {
+					setState({
+						[section.stateKey]: [...currentAssets, ...images].slice(0, importLimit.maxCount),
+						error: "",
+					})
+					return
+				}
+				setState({ [section.stateKey]: images[0] ?? null, error: "" })
+			}
+
+			target.addEventListener("dragenter", (event) => {
+				if (!hasImageFilesInDataTransfer(event.dataTransfer)) return
+				event.preventDefault()
+				dragDepth += 1
+				setDragState(true)
+			})
+
+			target.addEventListener("dragover", (event) => {
+				if (!hasImageFilesInDataTransfer(event.dataTransfer)) {
+					dragDepth = 0
+					setDragState(false)
+					return
+				}
+				event.preventDefault()
+				if (event.dataTransfer) {
+					event.dataTransfer.dropEffect = "copy"
+				}
+				setDragState(true)
+			})
+
+			target.addEventListener("dragleave", (event) => {
+				event.preventDefault()
+				dragDepth = Math.max(0, dragDepth - 1)
+				if (dragDepth === 0) {
+					setDragState(false)
+				}
+			})
+
+			target.addEventListener("drop", async (event) => {
+				event.preventDefault()
+				dragDepth = 0
+				setDragState(false)
+				const dataTransfer = event.dataTransfer
+				if (!dataTransfer) return
+				const localFiles = getLocalImageFiles(dataTransfer)
+				if (!localFiles.length) return
+
+				try {
+					await importLocalFiles(localFiles)
+				} catch (error) {
+					handleImportError(error)
+				}
+			})
+
+			target.addEventListener("paste", async (event) => {
+				const files = Array.from(event.clipboardData?.files || []).filter(isImageFile)
+				if (!files.length) return
+				event.preventDefault()
+				try {
+					await importLocalFiles(files)
+				} catch (error) {
+					handleImportError(error)
+				}
+			})
 		}
 
 		/** 解析区块依赖 */
@@ -513,6 +716,11 @@
 				"div",
 				`mpk-image-grid ${section.gridClassName ?? ""}`.trim(),
 			)
+			grid.tabIndex = 0
+			grid.setAttribute(
+				"data-drop-hint",
+				section.dropHint ?? t("imageGrid.dropHint", "拖拽或粘贴图片到这里"),
+			)
 			const help = section.help ? createElement("p", "mpk-help", section.help) : null
 
 			header.append(title, suffix)
@@ -531,6 +739,7 @@
 				items: new Map(),
 				addButton: null,
 			}
+			bindImageImportTarget(grid, section, { mode: "grid" })
 			view.sectionViews[section.id] = nextView
 			return nextView
 		}
@@ -651,6 +860,10 @@
 					section.uploadLabel,
 				)
 				uploadButton.type = "button"
+				uploadButton.setAttribute(
+					"data-drop-hint",
+					section.dropHint ?? t("imageSlot.dropHint", "拖拽或粘贴图片到这里"),
+				)
 				uploadButton.addEventListener("click", async () => {
 					try {
 						const images = await pickForSection(section, {
@@ -671,9 +884,15 @@
 						})
 					}
 				})
+				bindImageImportTarget(uploadButton, section, { mode: "slot" })
 				body.append(uploadButton)
 			} else {
 				const preview = createElement("div", "mpk-image-slot-preview")
+				preview.tabIndex = 0
+				preview.setAttribute(
+					"data-drop-hint",
+					section.dropHint ?? t("imageSlot.dropHint", "拖拽或粘贴图片到这里"),
+				)
 				const image = createElement("img", "mpk-image-slot-image")
 				image.alt = section.alt ?? section.title
 				preview.append(createLoadingPlaceholder(), image)
@@ -688,6 +907,7 @@
 					setState({ [section.stateKey]: null })
 				})
 				preview.append(removeButton)
+				bindImageImportTarget(preview, section, { mode: "slot" })
 				body.append(preview)
 			}
 
@@ -1149,6 +1369,7 @@
 				const modelId = event.target.value
 				const model = state.modelOptions.find((item) => item.model_id === modelId)
 				setState({
+					error: "",
 					modelId,
 					...applyModelDefaults(model),
 				})
@@ -1160,7 +1381,6 @@
 		/** 渲染分辨率选择 */
 		function renderResolutionSelect(section) {
 			const resolutionOptions = getResolutionOptions()
-			console.log(resolutionOptions)
 			if (resolutionOptions.length <= 1 && section.hideWhenSingle !== false) {
 				return document.createDocumentFragment()
 			}

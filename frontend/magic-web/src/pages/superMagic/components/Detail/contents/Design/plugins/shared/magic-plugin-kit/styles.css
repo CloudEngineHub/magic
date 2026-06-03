@@ -89,9 +89,55 @@
 }
 
 .mpk-image-grid {
+	position: relative;
 	display: grid;
 	grid-template-columns: repeat(5, 1fr);
 	gap: 8px;
+	padding: 4px;
+	border: 1px dashed transparent;
+	border-radius: 14px;
+	outline: none;
+	transition:
+		border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+		background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+		box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mpk-image-grid:focus-visible,
+.mpk-image-slot-upload:focus-visible,
+.mpk-image-slot-preview:focus-visible {
+	border-color: var(--mpk-ring);
+	box-shadow: 0 0 0 3px var(--mpk-ring-soft);
+}
+
+.mpk-image-grid.is-drag-over,
+.mpk-image-slot-upload.is-drag-over,
+.mpk-image-slot-preview.is-drag-over {
+	border: 1px dashed var(--mpk-ring);
+	background: linear-gradient(180deg, rgb(var(--accent-rgb, 245 245 245) / 0.88), rgb(var(--background-rgb, 255 255 255) / 0.94));
+	/* box-shadow: 0 0 0 3px var(--mpk-ring-soft); */
+}
+
+.mpk-image-grid.is-drag-over::after,
+.mpk-image-slot-upload.is-drag-over::after,
+.mpk-image-slot-preview.is-drag-over::after {
+	content: attr(data-drop-hint);
+	position: absolute;
+	inset: 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 8px 12px;
+	color: var(--mpk-foreground);
+	font-weight: 600;
+	font-size: 12px;
+	line-height: 1.5;
+	text-align: center;
+	/* background: rgb(var(--background-rgb, 255 255 255) / 0.82); */
+	/* border: 1px dashed var(--mpk-ring); */
+	border-radius: 12px;
+	pointer-events: none;
+	backdrop-filter: blur(2px);
 }
 
 .mpk-image-card,
@@ -197,6 +243,11 @@
 	background: var(--mpk-muted);
 	border: 1px solid var(--mpk-border);
 	border-radius: 12px;
+	outline: none;
+	transition:
+		border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+		background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+		box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .mpk-image-slot-image {
@@ -215,6 +266,7 @@
 }
 
 .mpk-image-slot-upload {
+	position: relative;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -228,11 +280,13 @@
 	background: var(--mpk-muted);
 	border: 1px dashed var(--mpk-input);
 	border-radius: 12px;
+	outline: none;
 	cursor: pointer;
 	transition:
 		color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
 		background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-		border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+		border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+		box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .mpk-image-slot-upload:hover {
