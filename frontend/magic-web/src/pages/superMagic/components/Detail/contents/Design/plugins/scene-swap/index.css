@@ -3,9 +3,9 @@
 }
 
 .scene-swap .mpk-card-tab {
+	height: 100%;
 	min-height: 96px;
 	max-height: 120px;
-	height: 100%;
 }
 
 .scene-swap .mpk-image-slot-upload {

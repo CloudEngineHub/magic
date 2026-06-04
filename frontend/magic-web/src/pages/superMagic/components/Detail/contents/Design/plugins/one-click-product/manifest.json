@@ -80,6 +80,20 @@
 	},
 	"name": "one-click-product",
 	"styles": "index.css",
-	"tags": ["AI", "电商", "种草图"],
-	"version": "1.0.0"
+	"tags": [
+		"AI",
+		"电商",
+		"种草图"
+	],
+	"capabilities": [
+		"ui.toast",
+		"ui.close",
+		"ui.setHeight",
+		"assets.pickFiles",
+		"assets.uploadFile",
+		"assets.fetchBlob",
+		"ai.getImageModels",
+		"ai.generateAndPlace"
+	],
+	"version": 1
 }

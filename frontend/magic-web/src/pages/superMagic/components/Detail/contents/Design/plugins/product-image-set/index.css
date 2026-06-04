@@ -14,42 +14,42 @@
 }
 
 .product-image-set .pis-drawer-back {
-    display: flex;
+	display: flex;
 	align-items: center;
 	justify-content: center;
 	width: 28px;
 	height: 28px;
+	color: var(--mpk-muted-foreground);
+	font-size: 16px;
 	background: transparent;
 	border: none;
 	border-radius: 6px;
-	color: var(--mpk-muted-foreground);
-	font-size: 16px;
 	cursor: pointer;
 	transition: color 0.15s, background 0.15s;
 }
 
 .product-image-set .pis-drawer-back:hover {
-    color: var(--mpk-foreground);
-    background: var(--mpk-accent);
+	color: var(--mpk-foreground);
+	background: var(--mpk-accent);
 }
 
 .product-image-set .pis-drawer-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--mpk-foreground);
+	color: var(--mpk-foreground);
+	font-weight: 600;
+	font-size: 14px;
 }
 
 .product-image-set .pis-summary-btn {
-	width: 100%;
 	display: flex;
+	gap: 12px;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
+	width: 100%;
 	padding: 12px;
+	text-align: left;
+	background: var(--mpk-background);
 	border: 1px solid var(--mpk-border);
 	border-radius: 12px;
-	background: var(--mpk-background);
-	text-align: left;
 }
 
 .product-image-set .pis-summary-content {
@@ -60,9 +60,9 @@
 }
 
 .product-image-set .pis-summary-title {
-	font-size: 12px;
-	font-weight: 600;
 	color: var(--mpk-foreground);
+	font-weight: 600;
+	font-size: 12px;
 }
 
 .product-image-set .pis-summary-text,
@@ -73,18 +73,18 @@
 .product-image-set .pis-mode-block-title,
 .product-image-set .pis-style-editor-label,
 .product-image-set .pis-drawer-section-title {
-	font-size: 12px;
 	color: var(--mpk-muted-foreground);
+	font-size: 12px;
 }
 
 .product-image-set .pis-drawer-section-title {
-    margin: 8px 0;
+	margin: 8px 0;
 }
 
 .product-image-set .pis-summary-arrow {
-	font-size: 18px;
-	color: var(--mpk-muted-foreground);
 	flex-shrink: 0;
+	color: var(--mpk-muted-foreground);
+	font-size: 18px;
 }
 
 .product-image-set .pis-mode-config,
@@ -99,7 +99,7 @@
 .product-image-set .pis-drawer-section {
 	display: flex;
 	flex-direction: column;
-    gap: 8px;
+	gap: 8px;
 }
 
 .product-image-set .pis-pill-grid {
@@ -125,18 +125,18 @@
 .product-image-set .pis-pill {
 	height: 30px;
 	padding: 0 12px;
-	border-radius: 10px;
-	border: 1px solid var(--mpk-input);
-	background: var(--mpk-background);
-	font-size: 12px;
 	color: var(--mpk-foreground);
+	font-size: 12px;
+	background: var(--mpk-background);
+	border: 1px solid var(--mpk-input);
+	border-radius: 10px;
 }
 
 .product-image-set .pis-pill.is-active {
-	background: var(--mpk-accent);
-	border-color: var(--mpk-ring);
 	color: var(--mpk-accent-foreground);
 	font-weight: 600;
+	background: var(--mpk-accent);
+	border-color: var(--mpk-ring);
 	box-shadow: inset 0 0 0 1px var(--mpk-ring-soft);
 }
 
@@ -165,16 +165,16 @@
 
 .product-image-set .pis-textarea,
 .product-image-set .pis-input {
-	width: 100%;
 	box-sizing: border-box;
+	width: 100%;
 	padding: 10px 12px;
-	border-radius: 12px;
-	border: 1px solid var(--mpk-input);
-	background: var(--mpk-muted);
-	font-size: 12px;
 	color: var(--mpk-foreground);
-	resize: none;
+	font-size: 12px;
+	background: var(--mpk-muted);
+	border: 1px solid var(--mpk-input);
+	border-radius: 12px;
 	outline: none;
+	resize: none;
 }
 
 .product-image-set .pis-textarea:focus,
@@ -199,25 +199,27 @@
 .product-image-set .pis-counter-btn {
 	height: 36px;
 	padding: 0 12px;
-	border-radius: 10px;
-	border: 1px solid var(--mpk-input);
-	background: var(--mpk-background);
-	font-size: 12px;
 	color: var(--mpk-foreground);
+	font-size: 12px;
+	background: var(--mpk-background);
+	border: 1px solid var(--mpk-input);
+	border-radius: 10px;
 }
+
 .product-image-set .pis-counter-btn {
-    height: 30px;
-    padding: 0 10px;
+	height: 30px;
+	padding: 0 10px;
 }
 
 .product-image-set .pis-icon-btn {
-    height: 30px;
+	height: 30px;
 }
+
 .product-image-set .pis-primary-btn {
 	min-width: 96px;
-	border-color: var(--mpk-primary);
-	background: var(--mpk-primary);
 	color: var(--mpk-primary-foreground);
+	background: var(--mpk-primary);
+	border-color: var(--mpk-primary);
 }
 
 .product-image-set .pis-style-card-list,
@@ -234,19 +236,19 @@
 	gap: 12px;
 	align-items: stretch;
 	padding: 12px;
-	border-radius: 14px;
-	border: 1px solid var(--mpk-border);
 	background: var(--mpk-background);
+	border: 1px solid var(--mpk-border);
+	border-radius: 14px;
 }
 
 .product-image-set .pis-style-card-media {
-	width: 84px;
 	flex-shrink: 0;
+	width: 84px;
 }
 
 .product-image-set .pis-style-card-content {
-	flex: 1;
 	display: flex;
+	flex: 1;
 	flex-direction: column;
 	gap: 8px;
 	min-width: 0;
@@ -255,9 +257,9 @@
 .product-image-set .pis-style-card-title,
 .product-image-set .pis-style-editor-title {
 	margin: 0;
-	font-size: 14px;
-	font-weight: 600;
 	color: var(--mpk-foreground);
+	font-weight: 600;
+	font-size: 14px;
 }
 
 .product-image-set .pis-style-card-meta,
@@ -272,22 +274,22 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	box-sizing: border-box;
 	min-height: 84px;
-	border-radius: 12px;
-	border: 1px dashed var(--mpk-input);
-	background: var(--mpk-muted);
+	padding: 12px;
 	color: var(--mpk-muted-foreground);
 	font-size: 12px;
 	text-align: center;
-	padding: 12px;
-	box-sizing: border-box;
+	background: var(--mpk-muted);
+	border: 1px dashed var(--mpk-input);
+	border-radius: 12px;
 }
 
 .product-image-set .pis-ref-bucket {
-	align-items: stretch;
-	justify-content: flex-start;
 	flex-direction: column;
 	gap: 8px;
+	align-items: stretch;
+	justify-content: flex-start;
 }
 
 .product-image-set .pis-image-badge,
@@ -295,17 +297,17 @@
 	position: relative;
 	width: 72px;
 	height: 72px;
-	border-radius: 10px;
 	overflow: hidden;
 	background: var(--mpk-muted);
 	border: 1px solid var(--mpk-border);
+	border-radius: 10px;
 }
 
 .product-image-set .pis-image-badge-thumb {
+	display: block;
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
-	display: block;
 }
 
 .product-image-set .pis-ref-grid {
@@ -318,10 +320,10 @@
 	right: 4px;
 	width: 20px;
 	height: 20px;
+	color: var(--mpk-primary-foreground);
+	background: rgb(var(--foreground-rgb, 10 10 10) / 72%);
 	border: none;
 	border-radius: 999px;
-	background: rgb(var(--foreground-rgb, 10 10 10) / 72%);
-	color: var(--mpk-primary-foreground);
 	cursor: pointer;
 }
 
@@ -331,39 +333,39 @@
 
 .product-image-set .pis-counter-value {
 	min-width: 28px;
-	text-align: center;
-	font-size: 14px;
-	font-weight: 600;
 	color: var(--mpk-foreground);
+	font-weight: 600;
+	font-size: 14px;
+	text-align: center;
 }
 
 .product-image-set .pis-counter-btn:disabled {
-	opacity: 0.45;
 	cursor: not-allowed;
+	opacity: 0.45;
 }
 
 .product-image-set .pis-toggle-card {
+	flex: 1;
 	justify-content: space-between;
 	padding: 10px;
-	border-radius: 12px;
+	font-size: 14px;
 	background: var(--mpk-muted);
 	border: 1px solid var(--mpk-border);
-	flex: 1;
-    font-size: 14px;
+	border-radius: 12px;
 }
 
 .product-image-set .pis-toggle-card .pis-toggle {
-	appearance: none;
-	-webkit-appearance: none;
 	position: relative;
+	flex-shrink: 0;
 	width: 36px;
 	height: 20px;
-	flex-shrink: 0;
-	border-radius: 999px;
 	background: var(--mpk-input);
 	border: 1px solid transparent;
+	border-radius: 999px;
 	cursor: pointer;
-	transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+	transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+		border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+	appearance: none;
 }
 
 .product-image-set .pis-toggle-card .pis-toggle:hover {
@@ -380,16 +382,16 @@
 }
 
 .product-image-set .pis-toggle-card .pis-toggle::before {
-	content: "";
 	position: absolute;
 	top: 2px;
 	left: 2px;
 	width: 14px;
 	height: 14px;
-	border-radius: 999px;
 	background: #fff;
+	border-radius: 999px;
 	box-shadow: 0 1px 2px rgb(15 23 42 / 18%);
 	transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+	content: "";
 }
 
 .product-image-set .pis-toggle-card .pis-toggle:checked::before {
@@ -401,9 +403,9 @@
 	width: 28px;
 	height: 28px;
 	padding: 0;
-	border-radius: 999px;
-	border: 2px solid transparent;
 	overflow: hidden;
+	border: 2px solid transparent;
+	border-radius: 999px;
 }
 
 .product-image-set .pis-color-swatch.is-active {
@@ -412,26 +414,26 @@
 
 .product-image-set .pis-color-input {
 	position: absolute;
-	inset: 0;
 	width: 100%;
 	height: 100%;
 	padding: 0;
-	border: none;
 	background: transparent;
-	opacity: 0;
+	border: none;
 	cursor: pointer;
+	opacity: 0;
+	inset: 0;
 }
 
 .product-image-set .pis-drawer,
 .product-image-set .pis-style-editor {
 	position: absolute;
-	inset: 0;
-	background: var(--mpk-background);
-	transform: translateX(100%);
-	transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 	z-index: 12;
 	display: flex;
 	flex-direction: column;
+	background: var(--mpk-background);
+	transform: translateX(100%);
+	transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+	inset: 0;
 }
 
 .product-image-set .pis-drawer.is-open,
@@ -443,28 +445,32 @@
 .product-image-set .pis-drawer-footer,
 .product-image-set .pis-style-editor-header,
 .product-image-set .pis-style-editor-footer {
+	flex-shrink: 0;
 	padding: 12px 14px;
 	border-bottom: 1px solid var(--mpk-border);
-	flex-shrink: 0;
 }
 
 .product-image-set .pis-drawer-footer,
 .product-image-set .pis-style-editor-footer {
-	border-bottom: none;
-	border-top: 1px solid var(--mpk-border);
 	justify-content: flex-end;
-	background: linear-gradient(180deg, rgb(var(--background-rgb, 255 255 255) / 82%) 0%, var(--mpk-background) 24px);
+	background: linear-gradient(
+		180deg,
+		rgb(var(--background-rgb, 255 255 255) / 82%) 0%,
+		var(--mpk-background) 24px
+	);
+	border-top: 1px solid var(--mpk-border);
+	border-bottom: none;
 }
 
 .product-image-set .pis-drawer-body,
 .product-image-set .pis-style-editor-body {
-	flex: 1;
-	overflow: auto;
-	padding: 14px;
 	display: flex;
+	flex: 1;
 	flex-direction: column;
 	gap: 14px;
 	min-height: 0;
+	padding: 14px;
+	overflow: auto;
 	background: var(--mpk-background);
 	scrollbar-width: thin;
 }

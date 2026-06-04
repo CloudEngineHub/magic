@@ -168,7 +168,9 @@ function searchColors(query, filterGroup) {
 	return COLOR_CATALOG.flatMap((group) => {
 		if (filterGroup && filterGroup !== "__all__" && group.group !== filterGroup) return []
 		const colors = q
-			? group.colors.filter((c) => c.name.toLowerCase().includes(q) || c.hex.toLowerCase().includes(q))
+			? group.colors.filter(
+					(c) => c.name.toLowerCase().includes(q) || c.hex.toLowerCase().includes(q),
+				)
 			: group.colors
 		if (!colors.length) return []
 		return [{ group: group.group, colors }]
@@ -489,8 +491,7 @@ function createColorSection({ state, setState, t, getDrawer }) {
 			editBtn.addEventListener("click", () => getDrawer().open(color))
 
 			colorPreview.append(swatch)
-			
-			
+
 			if (nameEl) colorPreview.append(nameEl)
 			colorPreview.append(hexEl, clearBtn)
 			tag.append(colorPreview, editBtn)
@@ -531,8 +532,69 @@ function createBodyPartTagsSection({ state, setState, t }) {
 
 // ── 插件注册 ──────────────────────────────────────────────────────────────────
 
+function createInitialState() {
+	return {
+		modelImages: [],
+		bodyPart: "",
+		color: null,
+		genCount: 1,
+	}
+}
+
+// ── 请求构建 ──────────────────────────────────────────────────────────────────
+
+function buildColorChangeRequest({
+	modelId,
+	baseImage,
+	helpers,
+	width,
+	height,
+	resolution,
+	count,
+	bodyPart,
+	color,
+	locale,
+}) {
+	const referenceImages = helpers.collectReferenceIds([baseImage])
+	return {
+		model_id: modelId,
+		prompt: buildColorChangePrompt(bodyPart, color, locale),
+		reference_images: referenceImages,
+		size: `${width}x${height}`,
+		resolution,
+		width,
+		height,
+		count,
+		select: false,
+	}
+}
+
+function buildColorChangePrompt(bodyPart, color, locale) {
+	const colorDesc = color.name ? `${color.name} (${color.hex})` : color.hex
+	if (MagicPromptLocale.isChinese(locale)) {
+		return (
+			`将模特身上${bodyPart}的颜色改为 ${colorDesc}。` +
+			"严格保留服装轮廓、面料纹理、模特姿势、肤色、发型、脸部特征、背景场景，以及目标服装部位以外的所有区域。" +
+			"最终画面必须只出现一个人物，不要生成拼贴、对比排版或多人构图。" +
+			"最终结果应自然、真实，并具备专业商业棚拍质感。"
+		)
+	}
+
+	return (
+		`Change the color of the ${bodyPart} on the model to ${colorDesc}. ` +
+		"Strictly preserve the garment silhouette, fabric texture, model pose, skin tone, hairstyle, facial features, background scene, and every area outside the target garment part. " +
+		"Only one person should appear in the final image. Do not generate collages, comparison layouts, or multi-person compositions. " +
+		"The final result should look natural, realistic, and like a professional commercial studio photo."
+	)
+}
+
 registerMagicCanvasPlugin({
-	mount(ctx, root) {
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+	render(ctx, instance, root, scope) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
 		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 
@@ -540,7 +602,7 @@ registerMagicCanvasPlugin({
 		let panelEl = null
 		let colorDrawer = null
 		let setColorState = null
-		const getPanelEl = () => panelEl || root.querySelector(".mpk-panel") || root
+		const getPanelEl = () => panelEl || root
 		const getColorDrawer = () => {
 			if (!colorDrawer) {
 				colorDrawer = createColorDrawer(getPanelEl(), t, (color) => {
@@ -550,14 +612,9 @@ registerMagicCanvasPlugin({
 			return colorDrawer
 		}
 
-		const cleanup = MagicPluginKit.mount(ctx, root, {
+		const view = ctx.panel.render(root, {
 			panelClassName: "clothing-color-change",
-			initialState: {
-				modelImages: [],
-				bodyPart: "",
-				color: null,
-				genCount: 1,
-			},
+			state: instance.state,
 			modelConfig: {
 				autoLoad: true,
 				defaultModelId: "gemini-3-pro-image-preview",
@@ -583,7 +640,7 @@ registerMagicCanvasPlugin({
 					kind: "textarea",
 					stateKey: "bodyPart",
 					title: t("section.bodyPart", "换色部位"),
-					placeholder: t("bodyPart.placeholder", "如\"上衣\"、\"裤装\"、\"外套\"、\"连衣裙\"…"),
+					placeholder: t("bodyPart.placeholder", '如"上衣"、"裤装"、"外套"、"连衣裙"…'),
 					rows: 2,
 					maxLength: 50,
 				},
@@ -592,9 +649,9 @@ registerMagicCanvasPlugin({
 					kind: "custom",
 					stateKey: "color",
 					deps: ["color"],
-					render: ({ state, setState }) => {
-						// 延迟获取 panelEl，此时 DOM 已存在
-						if (!panelEl) panelEl = getPanelEl()
+					render: ({ state, setState, elements }) => {
+						// 记录 kit 暴露的稳定 panel DOM，供 drawer 挂载使用
+						panelEl = elements.panel || panelEl || root
 						setColorState = setState
 						return createColorSection({ state, setState, t, getDrawer: getColorDrawer })
 					},
@@ -628,16 +685,20 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成换色图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.modelImages.length) return t("empty.modelImages", "请先上传至少 1 张模特图")
-					if (!state.bodyPart.trim()) return t("empty.bodyPart", "请描述需要换色的服饰部位")
+					if (!state.modelImages.length)
+						return t("empty.modelImages", "请先上传至少 1 张模特图")
+					if (!state.bodyPart.trim())
+						return t("empty.bodyPart", "请描述需要换色的服饰部位")
 					if (!state.color) return t("empty.color", "请先选择替换颜色")
 					return ""
 				},
 				isDisabled: ({ state }) =>
 					!state.modelImages.length || !state.bodyPart.trim() || !state.color,
 				validate: ({ state, helpers }) => {
-					if (!state.modelImages.length) return t("empty.modelImages", "请先上传至少 1 张模特图")
-					if (!state.bodyPart.trim()) return t("empty.bodyPart", "请描述需要换色的服饰部位")
+					if (!state.modelImages.length)
+						return t("empty.modelImages", "请先上传至少 1 张模特图")
+					if (!state.bodyPart.trim())
+						return t("empty.bodyPart", "请描述需要换色的服饰部位")
 					if (!state.color) return t("empty.color", "请先选择替换颜色")
 					if (!state.modelId) return t("error.noModels", "暂无可用 AI 模型")
 					if (
@@ -703,47 +764,22 @@ registerMagicCanvasPlugin({
 			},
 		})
 
-		return () => {
-			colorDrawer?.destroy()
-			colorDrawer = null
-			setColorState = null
-			cleanup?.()
+		return {
+			update(change) {
+				return view?.update?.(change)
+			},
+			activate(nextScope) {
+				return view?.activate?.(nextScope)
+			},
+			deactivate(nextScope) {
+				return view?.deactivate?.(nextScope)
+			},
+			dispose(reason) {
+				colorDrawer?.destroy()
+				colorDrawer = null
+				setColorState = null
+				view?.dispose?.(reason)
+			},
 		}
 	},
 })
-
-// ── 请求构建 ──────────────────────────────────────────────────────────────────
-
-function buildColorChangeRequest({ modelId, baseImage, helpers, width, height, resolution, count, bodyPart, color, locale }) {
-	const referenceImages = helpers.collectReferenceIds([baseImage])
-	return {
-		model_id: modelId,
-		prompt: buildColorChangePrompt(bodyPart, color, locale),
-		reference_images: referenceImages,
-		size: `${width}x${height}`,
-		resolution,
-		width,
-		height,
-		count,
-		select: false,
-	}
-}
-
-function buildColorChangePrompt(bodyPart, color, locale) {
-	const colorDesc = color.name ? `${color.name} (${color.hex})` : color.hex
-	if (MagicPromptLocale.isChinese(locale)) {
-		return (
-			`将模特身上${bodyPart}的颜色改为 ${colorDesc}。` +
-			"严格保留服装轮廓、面料纹理、模特姿势、肤色、发型、脸部特征、背景场景，以及目标服装部位以外的所有区域。" +
-			"最终画面必须只出现一个人物，不要生成拼贴、对比排版或多人构图。" +
-			"最终结果应自然、真实，并具备专业商业棚拍质感。"
-		)
-	}
-
-	return (
-		`Change the color of the ${bodyPart} on the model to ${colorDesc}. ` +
-		"Strictly preserve the garment silhouette, fabric texture, model pose, skin tone, hairstyle, facial features, background scene, and every area outside the target garment part. " +
-		"Only one person should appear in the final image. Do not generate collages, comparison layouts, or multi-person compositions. " +
-		"The final result should look natural, realistic, and like a professional commercial studio photo."
-	)
-}

@@ -472,9 +472,23 @@ export interface CanvasDesignPluginCategory {
 	label?: string
 }
 
+export type CanvasDesignPluginCapability =
+	| "ui.toast"
+	| "ui.close"
+	| "ui.setHeight"
+	| "resources.resolve"
+	| "assets.pickFiles"
+	| "assets.uploadFile"
+	| "assets.fetchBlob"
+	| "ai.getImageModels"
+	| "ai.generateAndPlace"
+
+export type CanvasDesignPluginRuntimeVersion = number
+
 export interface CanvasDesignPluginConfig {
 	name: string
-	version?: string
+	/** Runtime processor version. It selects CanvasDesign's versioned plugin handler, e.g. runtime/v1. */
+	version: CanvasDesignPluginRuntimeVersion
 	/** Single-character emoji or a relative path to a media asset inside the plugin package. */
 	icon?: string
 	category?: CanvasDesignPluginCategory
@@ -485,6 +499,8 @@ export interface CanvasDesignPluginConfig {
 	entry: string
 	/** Relative stylesheet path or paths inside the plugin package. */
 	styles?: string | string[]
+	/** Host capabilities the plugin is allowed to call through the runtime bridge. */
+	capabilities?: string[]
 	/** Browser-resolved runtime URL for built-in plugin iframe loading. */
 	runtimeUrl?: string
 	/** Browser-resolved base URL for resolving resources inside the plugin package. */

@@ -164,7 +164,7 @@ const CUSTOM_STYLE_TYPE_OPTIONS = [
 	{ value: "main", labelKey: "customStyleType.main", labelFallback: "主图/辅图" },
 	{ value: "detail", labelKey: "customStyleType.detail", labelFallback: "详情页图" },
 	{ value: "selling", labelKey: "customStyleType.selling", labelFallback: "卖点图" },
-    { value: "other", labelKey: "customStyleType.other", labelFallback: "其他" },
+	{ value: "other", labelKey: "customStyleType.other", labelFallback: "其他" },
 ]
 
 function createId(prefix) {
@@ -262,10 +262,7 @@ function getSmartCompositionCounts(state) {
 
 function getSmartShotCount(state) {
 	const composition = getSmartCompositionCounts(state)
-	return SMART_SHOT_TYPE_OPTIONS.reduce(
-		(total, option) => total + composition[option.value],
-		0,
-	)
+	return SMART_SHOT_TYPE_OPTIONS.reduce((total, option) => total + composition[option.value], 0)
 }
 
 function buildSmartShotPlan(state) {
@@ -284,7 +281,10 @@ function buildSmartShotPlan(state) {
 }
 
 function getSmartShotDefinition(shotType) {
-	return SMART_SHOT_TYPE_OPTIONS.find((option) => option.value === shotType) ?? SMART_SHOT_TYPE_OPTIONS[0]
+	return (
+		SMART_SHOT_TYPE_OPTIONS.find((option) => option.value === shotType) ??
+		SMART_SHOT_TYPE_OPTIONS[0]
+	)
 }
 
 function parseRatioLabel(ratioLabel) {
@@ -309,10 +309,10 @@ function normalizeResolvedSize(sizeItem, helpers) {
 
 /**
  * 每张样式卡按自己的比例去当前模型里找尺寸；如果模型不支持，就自动降级到最接近的可用比例
- * @param {*} state 
- * @param {*} styleItem 
- * @param {*} helpers 
- * @returns 
+ * @param {*} state
+ * @param {*} styleItem
+ * @param {*} helpers
+ * @returns
  */
 function resolveCustomStyleSize(state, styleItem, helpers) {
 	const fallbackSize = helpers.getSelectedSize(state)
@@ -329,7 +329,7 @@ function resolveCustomStyleSize(state, styleItem, helpers) {
 		return normalizeResolvedSize(visibleSizes[0], helpers) ?? fallbackSize
 	}
 
-    // 
+	//
 	let closestSize = null
 	let closestDistance = Infinity
 	visibleSizes.forEach((item) => {
@@ -707,7 +707,8 @@ const MoreSettingsUI = (() => {
 		const summary = document.createElement("span")
 		summary.className = "pis-summary-text"
 		summary.textContent =
-			summarizeMoreSettings(state.moreSettings, t) || t("moreSettings.empty", "点击设置业务参数")
+			summarizeMoreSettings(state.moreSettings, t) ||
+			t("moreSettings.empty", "点击设置业务参数")
 		content.append(title, summary)
 		const arrow = document.createElement("span")
 		arrow.className = "pis-summary-arrow"
@@ -732,19 +733,23 @@ const StyleEditorUI = (() => {
 			media.append(
 				createImageBadge(styleItem.coverImage, helpers, getStyleItemTitle(styleItem, t)),
 			)
-		} else if(styleItem.faceRefs?.length || styleItem.otherRefs?.length) {
+		} else if (styleItem.faceRefs?.length || styleItem.otherRefs?.length) {
 			media.append(
-				createImageBadge(styleItem.faceRefs?.length ? styleItem.faceRefs[0] : styleItem.otherRefs[0], helpers, getStyleItemTitle(styleItem, t)),
+				createImageBadge(
+					styleItem.faceRefs?.length ? styleItem.faceRefs[0] : styleItem.otherRefs[0],
+					helpers,
+					getStyleItemTitle(styleItem, t),
+				),
 			)
 		} else {
-            const placeholder = document.createElement("div")
+			const placeholder = document.createElement("div")
 			placeholder.className = "pis-style-placeholder"
 			placeholder.textContent =
 				styleItem.kind === "uploaded-style"
 					? t("style.uploaded.defaultName", "上传样式")
 					: t("style.custom.defaultName", "自定义样式")
 			media.append(placeholder)
-        }
+		}
 		const content = document.createElement("div")
 		content.className = "pis-style-card-content"
 		const title = document.createElement("h4")
@@ -772,12 +777,16 @@ const StyleEditorUI = (() => {
 		const actions = document.createElement("div")
 		actions.className = "pis-style-card-actions"
 		actions.append(
-			createIconButton(t("common.edit", "编辑"), () => getStyleEditor().open(styleItem, "edit")),
+			createIconButton(t("common.edit", "编辑"), () =>
+				getStyleEditor().open(styleItem, "edit"),
+			),
 			createIconButton(t("common.duplicate", "复制"), () => {
 				setState({ styleItems: [...state.styleItems, cloneStyleItem(styleItem)] })
 			}),
 			createIconButton(t("common.delete", "删除"), () => {
-				setState({ styleItems: state.styleItems.filter((item) => item.id !== styleItem.id) })
+				setState({
+					styleItems: state.styleItems.filter((item) => item.id !== styleItem.id),
+				})
 			}),
 		)
 		content.append(actions)
@@ -928,7 +937,10 @@ const StyleEditorUI = (() => {
 				descInput.className = "pis-textarea"
 				descInput.rows = 3
 				descInput.maxLength = 600
-				descInput.placeholder = t("styleEditor.typeDescription.placeholder", "请输入类型描述")
+				descInput.placeholder = t(
+					"styleEditor.typeDescription.placeholder",
+					"请输入类型描述",
+				)
 				descInput.value = draft.typeDescription
 				descInput.addEventListener("input", () => {
 					draft = { ...draft, typeDescription: descInput.value.slice(0, 600) }
@@ -1004,7 +1016,10 @@ const StyleEditorUI = (() => {
 						t("styleEditor.faceRefs", "人脸/模特参考图（非必填）"),
 						"faceRefs",
 					),
-					renderImageBucket(t("styleEditor.otherRefs", "其它参考图（非必填）"), "otherRefs"),
+					renderImageBucket(
+						t("styleEditor.otherRefs", "其它参考图（非必填）"),
+						"otherRefs",
+					),
 				)
 			} else {
 				const noteField = document.createElement("div")
@@ -1016,7 +1031,10 @@ const StyleEditorUI = (() => {
 				noteInput.className = "pis-textarea"
 				noteInput.rows = 3
 				noteInput.maxLength = 600
-				noteInput.placeholder = t("styleEditor.notes.placeholder", "描述该上传样式要如何被复用")
+				noteInput.placeholder = t(
+					"styleEditor.notes.placeholder",
+					"描述该上传样式要如何被复用",
+				)
 				noteInput.value = draft.notes || ""
 				noteInput.addEventListener("input", () => {
 					draft = { ...draft, notes: noteInput.value.slice(0, 600) }
@@ -1167,8 +1185,8 @@ function createSmartCompositionSection({ state, setState, t }) {
 			createCounterControl(composition[option.value], (value) => {
 				setState({
 					smartComposition: normalizeSmartComposition({
-					...composition,
-					[option.value]: value,
+						...composition,
+						[option.value]: value,
 					}),
 				})
 			}),
@@ -1189,389 +1207,19 @@ function createSmartCountReadonlySection({ state, t }) {
 	return section
 }
 
-
-registerMagicCanvasPlugin({
-	mount(ctx, root) {
-		const t = (key, fallback) => ctx.i18n.t(key, fallback)
-		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
-		const creationModes = CREATION_MODE_OPTIONS.map((item) => ({
-			value: item.value,
-			label: t(item.labelKey, item.labelFallback),
-			description: t(item.descriptionKey, item.descriptionFallback),
-		}))
-		const generationModes = GENERATION_MODE_DEFINITIONS.map((item) => ({
-			value: item.value,
-			label: t(item.labelKey, item.labelFallback),
-			description: t(item.descriptionKey, item.descriptionFallback),
-		}))
-
-		let panelEl = null
-		let setPluginState = null
-		let moreSettingsDrawer = null
-		let styleEditor = null
-
-		const getPanelEl = () => panelEl || root.querySelector(".mpk-panel") || root
-
-		const pickImageFiles = async (options) => {
-			if (ctx.assets?.pickFiles) {
-				return ctx.assets.pickFiles({ ...options, type: "image" })
-			}
-			throw new Error("ctx.assets.pickFiles is not connected yet.")
-		}
-
-		const getMoreSettingsDrawer = () => {
-			if (!moreSettingsDrawer) {
-				moreSettingsDrawer = MoreSettingsUI.createDrawer(getPanelEl(), t, (value) => {
-					setPluginState?.({ moreSettings: value })
-				})
-			}
-			return moreSettingsDrawer
-		}
-
-		const getStyleEditor = () => {
-			if (!styleEditor) {
-				styleEditor = StyleEditorUI.createEditor(getPanelEl(), t, {
-					pickImageFiles,
-					helpers: {
-						getImageUrl(image) {
-							return image?.url ?? image?.src ?? image?.previewUrl ?? ""
-						},
-					},
-					getRatioOptions: () => {
-						const sizes = setPluginState
-							? (currentHelpers?.getVisibleSizes(currentStateRef) ?? [])
-							: []
-						if (sizes.length) {
-							return sizes.map((item) => ({ label: item.label, value: item.value }))
-						}
-						return [
-							{ label: "1:1", value: "1:1" },
-							{ label: "3:4", value: "3:4" },
-							{ label: "4:5", value: "4:5" },
-							{ label: "9:16", value: "9:16" },
-						]
-					},
-					onSave: (draftStyle) => {
-						const nextStyle =
-							draftStyle.kind === "custom-style"
-								? {
-										...draftStyle,
-										name:
-											draftStyle.name?.trim() ||
-											t("style.custom.defaultName", "自定义样式"),
-									}
-								: {
-										...draftStyle,
-										label:
-											draftStyle.label?.trim() ||
-											t("style.uploaded.defaultName", "上传样式"),
-									}
-						setPluginState?.({
-							styleItems: currentStateRef.styleItems.some(
-								(item) => item.id === nextStyle.id,
-							)
-								? currentStateRef.styleItems.map((item) =>
-										item.id === nextStyle.id ? nextStyle : item,
-									)
-								: [...currentStateRef.styleItems, nextStyle],
-						})
-					},
-				})
-			}
-			return styleEditor
-		}
-
-		let currentHelpers = null
-		let currentStateRef = null
-
-		const cleanup = MagicPluginKit.mount(ctx, root, {
-			panelClassName: "product-image-set",
-			initialState: {
-				productImages: [],
-				productInfo: "",
-				moreSettings: createDefaultMoreSettings(),
-				creationMode: "smart",
-				smartComposition: createDefaultSmartComposition(),
-				smartCopyEnabled: true,
-				smartExtraPrompt: "",
-				styleItems: [],
-				generationMode: "standard",
-			},
-			modelConfig: {
-				autoLoad: true,
-				showLoadErrors: true,
-				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
-			},
-			sections: [
-				{
-					id: "productImages",
-					kind: "image-grid",
-					stateKey: "productImages",
-					title: t("section.productImages", "商品图"),
-					alt: t("section.productImages", "商品图"),
-					addLabel: "+",
-					help: t(
-						"section.productImages.help",
-						"支持上传多张商品图，建议包含正面、侧面、细节与材质信息。",
-					),
-					maxCount: MAX_PRODUCT_IMAGES,
-				},
-				{
-					id: "productInfo",
-					kind: "textarea",
-					stateKey: "productInfo",
-					title: t("section.productInfo", "商品信息"),
-					placeholder: t(
-						"section.productInfo.placeholder",
-						"请输入商品卖点、材质、规格、目标人群等信息",
-					),
-					rows: 4,
-					maxLength: 2000,
-				},
-				{
-					id: "moreSettings",
-					kind: "custom",
-					deps: ["moreSettings"],
-					render: ({ state, setState }) => {
-						if (!panelEl) panelEl = getPanelEl()
-						setPluginState = setState
-						return MoreSettingsUI.createSection({
-							state,
-							t,
-							getDrawer: getMoreSettingsDrawer,
-						})
-					},
-				},
-				{
-					id: "creationMode",
-					kind: "option-group",
-					stateKey: "creationMode",
-					title: t("section.creationMode", "创作模式"),
-					groupClassName: "pis-creation-mode-group",
-					showDescriptionOnHover: true,
-					options: creationModes,
-				},
-				{
-					id: "smartComposition",
-					kind: "custom",
-					deps: ["creationMode", "smartComposition"],
-					when: ({ state }) => state.creationMode === "smart",
-					render: ({ state, setState }) => createSmartCompositionSection({ state, setState, t }),
-				},
-				{
-					id: "smartCopyEnabled",
-					kind: "toggle",
-					stateKey: "smartCopyEnabled",
-					title: t("smart.section.smartCopy", "智能文案"),
-					deps: ["creationMode"],
-					when: ({ state }) => state.creationMode === "smart",
-				},
-				{
-					id: "smartExtraPrompt",
-					kind: "textarea",
-					stateKey: "smartExtraPrompt",
-					title: t("smart.section.extraPrompt", "额外描述"),
-					deps: ["creationMode"],
-					placeholder: t(
-						"smart.extraPrompt.placeholder",
-						"您可以在此处输入其它需求，例如：生成的套图中需要有3张模特图、1张卖点图，模特图要拼贴式的lookbook风格，模特图不要带文案",
-					),
-					rows: 4,
-					maxLength: 2000,
-					when: ({ state }) => state.creationMode === "smart",
-				},
-				{
-					id: "creationConfig",
-					kind: "custom",
-					deps: ["creationMode", "styleItems", "ratioKey", "scale"],
-					when: ({ state }) => state.creationMode === "custom",
-					render: ({ state, setState, helpers }) => {
-						currentHelpers = helpers
-						currentStateRef = state
-						setPluginState = setState
-						if (!panelEl) panelEl = getPanelEl()
-						return StyleEditorUI.createConfigSection({
-							state,
-							setState,
-							t,
-							helpers,
-							pickImageFiles,
-							getStyleEditor,
-						})
-					},
-				},
-				{
-					id: "generationMode",
-					kind: "option-group",
-					stateKey: "generationMode",
-					title: t("section.generationMode", "生成模式"),
-					showDescriptionOnHover: true,
-					options: generationModes,
-				},
-                 {
-					id: "modelSelect",
-					kind: "model-select",
-					title: t("section.modelSelect", "AI 模型"),
-				},
-				{
-					id: "resolution",
-					kind: "resolution-select",
-					title: t("section.resolution", "分辨率"),
-					deps: ["modelId", "modelOptions"],
-				},
-				{
-					id: "canvasSize",
-					kind: "size-control",
-					title: t("section.canvasSize", "画布尺寸"),
-					deps: ["modelId", "modelOptions", "creationMode"],
-                    when: ({ state }) => state.creationMode === "smart",
-				},
-				{
-					id: "count",
-					kind: "custom",
-					deps: ["creationMode", "smartComposition"],
-					when: ({ state }) => state.creationMode === "smart",
-					render: ({ state }) => createSmartCountReadonlySection({ state, t }),
-				},
-			],
-			generate: {
-				buttonLabel: `✨ ${t("button.generate", "生成商品套图")}`,
-				loadingLabel: t("button.generating", "生成中…"),
-				getIdleHint: ({ state }) => {
-					if (!state.productImages.length) {
-						return t("empty.productImages", "请先上传至少 1 张商品图")
-					}
-					if (state.creationMode === "smart" && !getSmartShotCount(state)) {
-						return t("empty.smartComposition", "请至少配置 1 张套图")
-					}
-					if (state.creationMode === "smart" && getSmartShotCount(state) > MAX_SMART_SHOTS) {
-						return t("error.smartCompositionLimit", `智能套图最多支持 ${MAX_SMART_SHOTS} 张`)
-					}
-					if (state.creationMode === "custom" && !state.styleItems.length) {
-						return t("empty.styleItems", "请先添加样式卡片")
-					}
-					return ""
-				},
-				isDisabled: ({ state }) =>
-					!state.productImages.length ||
-					(state.creationMode === "smart" && (!getSmartShotCount(state) || getSmartShotCount(state) > MAX_SMART_SHOTS)) ||
-					(state.creationMode === "custom" && !state.styleItems.length),
-				validate: ({ state, helpers }) => {
-					if (!state.productImages.length) {
-						return t("empty.productImages", "请先上传至少 1 张商品图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
-					if (
-						helpers.collectReferenceIds(state.productImages).length !==
-						state.productImages.length
-					) {
-						return t("error.references", "图片缺少可用于生成的资源标识")
-					}
-					if (state.creationMode === "smart") {
-						const selectedSize = helpers.getSelectedSize(state)
-						if (!selectedSize?.genW || !selectedSize?.genH) {
-							return t("error.noSize", "当前模型缺少可用尺寸配置")
-						}
-						if (!getSmartShotCount(state)) {
-							return t("empty.smartComposition", "请至少配置 1 张套图")
-						}
-						if (getSmartShotCount(state) > MAX_SMART_SHOTS) {
-							return t("error.smartCompositionLimit", `智能套图最多支持 ${MAX_SMART_SHOTS} 张`)
-						}
-						if (state.productImages.length > getMaxReferenceImages(state, helpers)) {
-							return t("error.referenceLimit", "参考图数量已达当前模型上限")
-						}
-						return null
-					}
-					if (!state.styleItems.length) {
-						return t("empty.styleItems", "请先添加样式卡片")
-					}
-					for (const styleItem of state.styleItems) {
-						const resolvedSize = resolveCustomStyleSize(state, styleItem, helpers)
-						if (!resolvedSize?.genW || !resolvedSize?.genH) {
-							return t("error.noSize", "当前模型缺少可用尺寸配置")
-						}
-						const refs = getStyleItemReferenceImages(styleItem)
-						if (helpers.collectReferenceIds(refs).length !== refs.length) {
-							return t("error.styleReferences", "样式卡片中存在缺少资源标识的参考图")
-						}
-						if (
-							state.productImages.length + refs.length >
-							getMaxReferenceImages(state, helpers)
-						) {
-							return t("error.referenceLimit", "参考图数量已达当前模型上限")
-						}
-					}
-					return null
-				},
-				execute: async ({ state, helpers, generateAndPlace }) => {
-					if (state.creationMode === "smart") {
-						const selectedSize = helpers.getSelectedSize(state)
-						const width = selectedSize.genW
-						const height = selectedSize.genH
-						const results = []
-                        const shotPlan = buildSmartShotPlan(state)
-						for (const shotPlanItem of shotPlan) {
-							results.push(
-								await generateAndPlace(
-									buildSmartModeRequest({
-										state,
-										shotPlanItem,
-										helpers,
-										locale: promptLocale,
-										width,
-										height,
-										t,
-									}),
-								),
-							)
-						}
-						return results
-					}
-					const results = []
-					for (const styleItem of state.styleItems) {
-						const resolvedSize = resolveCustomStyleSize(state, styleItem, helpers)
-						if (!resolvedSize?.genW || !resolvedSize?.genH) {
-							throw new Error(t("error.noSize", "当前模型缺少可用尺寸配置"))
-						}
-						results.push(
-							await generateAndPlace(
-								buildCustomStyleRequest({
-									state,
-									styleItem,
-									helpers,
-									locale: promptLocale,
-									width: resolvedSize.genW,
-									height: resolvedSize.genH,
-									t,
-									resolution: resolvedSize.scale,
-								}),
-							),
-						)
-					}
-					return results
-				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "商品套图生成成功！"), "success")
-					ctx.ui.close?.()
-				},
-			},
-		})
-
-		return () => {
-			moreSettingsDrawer?.destroy()
-			moreSettingsDrawer = null
-			styleEditor?.destroy()
-			styleEditor = null
-			setPluginState = null
-			currentHelpers = null
-			currentStateRef = null
-			cleanup?.()
-		}
-	},
-})
+function createInitialState() {
+	return {
+		productImages: [],
+		productInfo: "",
+		moreSettings: createDefaultMoreSettings(),
+		creationMode: "smart",
+		smartComposition: createDefaultSmartComposition(),
+		smartCopyEnabled: true,
+		smartExtraPrompt: "",
+		styleItems: [],
+		generationMode: "standard",
+	}
+}
 
 function buildBusinessSettingPrompt(settings, locale, t) {
 	const isChinese = MagicPromptLocale.isChinese(locale)
@@ -1790,7 +1438,16 @@ function buildSmartModeRequest({ state, shotPlanItem, helpers, locale, width, he
 	}
 }
 
-function buildCustomStyleRequest({ state, styleItem, helpers, locale, width, height, t, resolution }) {
+function buildCustomStyleRequest({
+	state,
+	styleItem,
+	helpers,
+	locale,
+	width,
+	height,
+	t,
+	resolution,
+}) {
 	return {
 		model_id: state.modelId,
 		prompt: buildCustomStylePrompt({
@@ -1811,3 +1468,404 @@ function buildCustomStyleRequest({ state, styleItem, helpers, locale, width, hei
 		select: false,
 	}
 }
+
+registerMagicCanvasPlugin({
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+	render(ctx, instance, root, scope) {
+		const t = (key, fallback) => ctx.i18n.t(key, fallback)
+		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
+		const creationModes = CREATION_MODE_OPTIONS.map((item) => ({
+			value: item.value,
+			label: t(item.labelKey, item.labelFallback),
+			description: t(item.descriptionKey, item.descriptionFallback),
+		}))
+		const generationModes = GENERATION_MODE_DEFINITIONS.map((item) => ({
+			value: item.value,
+			label: t(item.labelKey, item.labelFallback),
+			description: t(item.descriptionKey, item.descriptionFallback),
+		}))
+
+		let panelEl = null
+		let setPluginState = null
+		let moreSettingsDrawer = null
+		let styleEditor = null
+
+		const getPanelEl = () => panelEl || root
+
+		const pickImageFiles = async (options) => {
+			if (ctx.assets?.pickFiles) {
+				return ctx.assets.pickFiles({ ...options, type: "image" })
+			}
+			throw new Error("ctx.assets.pickFiles is not connected yet.")
+		}
+
+		const getMoreSettingsDrawer = () => {
+			if (!moreSettingsDrawer) {
+				moreSettingsDrawer = MoreSettingsUI.createDrawer(getPanelEl(), t, (value) => {
+					setPluginState?.({ moreSettings: value })
+				})
+			}
+			return moreSettingsDrawer
+		}
+
+		const getStyleEditor = () => {
+			if (!styleEditor) {
+				styleEditor = StyleEditorUI.createEditor(getPanelEl(), t, {
+					pickImageFiles,
+					helpers: {
+						getImageUrl(image) {
+							return image?.url ?? image?.src ?? image?.previewUrl ?? ""
+						},
+					},
+					getRatioOptions: () => {
+						const sizes = setPluginState
+							? (currentHelpers?.getVisibleSizes(currentStateRef) ?? [])
+							: []
+						if (sizes.length) {
+							return sizes.map((item) => ({ label: item.label, value: item.value }))
+						}
+						return [
+							{ label: "1:1", value: "1:1" },
+							{ label: "3:4", value: "3:4" },
+							{ label: "4:5", value: "4:5" },
+							{ label: "9:16", value: "9:16" },
+						]
+					},
+					onSave: (draftStyle) => {
+						const nextStyle =
+							draftStyle.kind === "custom-style"
+								? {
+										...draftStyle,
+										name:
+											draftStyle.name?.trim() ||
+											t("style.custom.defaultName", "自定义样式"),
+									}
+								: {
+										...draftStyle,
+										label:
+											draftStyle.label?.trim() ||
+											t("style.uploaded.defaultName", "上传样式"),
+									}
+						setPluginState?.({
+							styleItems: currentStateRef.styleItems.some(
+								(item) => item.id === nextStyle.id,
+							)
+								? currentStateRef.styleItems.map((item) =>
+										item.id === nextStyle.id ? nextStyle : item,
+									)
+								: [...currentStateRef.styleItems, nextStyle],
+						})
+					},
+				})
+			}
+			return styleEditor
+		}
+
+		let currentHelpers = null
+		let currentStateRef = null
+
+		const view = ctx.panel.render(root, {
+			panelClassName: "product-image-set",
+			state: instance.state,
+			modelConfig: {
+				autoLoad: true,
+				showLoadErrors: true,
+				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
+			},
+			sections: [
+				{
+					id: "productImages",
+					kind: "image-grid",
+					stateKey: "productImages",
+					title: t("section.productImages", "商品图"),
+					alt: t("section.productImages", "商品图"),
+					addLabel: "+",
+					help: t(
+						"section.productImages.help",
+						"支持上传多张商品图，建议包含正面、侧面、细节与材质信息。",
+					),
+					maxCount: MAX_PRODUCT_IMAGES,
+				},
+				{
+					id: "productInfo",
+					kind: "textarea",
+					stateKey: "productInfo",
+					title: t("section.productInfo", "商品信息"),
+					placeholder: t(
+						"section.productInfo.placeholder",
+						"请输入商品卖点、材质、规格、目标人群等信息",
+					),
+					rows: 4,
+					maxLength: 2000,
+				},
+				{
+					id: "moreSettings",
+					kind: "custom",
+					deps: ["moreSettings"],
+					render: ({ state, setState, elements }) => {
+						panelEl = elements.panel || panelEl || root
+						setPluginState = setState
+						return MoreSettingsUI.createSection({
+							state,
+							t,
+							getDrawer: getMoreSettingsDrawer,
+						})
+					},
+				},
+				{
+					id: "creationMode",
+					kind: "option-group",
+					stateKey: "creationMode",
+					title: t("section.creationMode", "创作模式"),
+					groupClassName: "pis-creation-mode-group",
+					showDescriptionOnHover: true,
+					options: creationModes,
+				},
+				{
+					id: "smartComposition",
+					kind: "custom",
+					deps: ["creationMode", "smartComposition"],
+					when: ({ state }) => state.creationMode === "smart",
+					render: ({ state, setState }) =>
+						createSmartCompositionSection({ state, setState, t }),
+				},
+				{
+					id: "smartCopyEnabled",
+					kind: "toggle",
+					stateKey: "smartCopyEnabled",
+					title: t("smart.section.smartCopy", "智能文案"),
+					deps: ["creationMode"],
+					when: ({ state }) => state.creationMode === "smart",
+				},
+				{
+					id: "smartExtraPrompt",
+					kind: "textarea",
+					stateKey: "smartExtraPrompt",
+					title: t("smart.section.extraPrompt", "额外描述"),
+					deps: ["creationMode"],
+					placeholder: t(
+						"smart.extraPrompt.placeholder",
+						"您可以在此处输入其它需求，例如：生成的套图中需要有3张模特图、1张卖点图，模特图要拼贴式的lookbook风格，模特图不要带文案",
+					),
+					rows: 4,
+					maxLength: 2000,
+					when: ({ state }) => state.creationMode === "smart",
+				},
+				{
+					id: "creationConfig",
+					kind: "custom",
+					deps: ["creationMode", "styleItems", "ratioKey", "scale"],
+					when: ({ state }) => state.creationMode === "custom",
+					render: ({ state, setState, helpers, elements }) => {
+						currentHelpers = helpers
+						currentStateRef = state
+						setPluginState = setState
+						panelEl = elements.panel || panelEl || root
+						return StyleEditorUI.createConfigSection({
+							state,
+							setState,
+							t,
+							helpers,
+							pickImageFiles,
+							getStyleEditor,
+						})
+					},
+				},
+				{
+					id: "generationMode",
+					kind: "option-group",
+					stateKey: "generationMode",
+					title: t("section.generationMode", "生成模式"),
+					showDescriptionOnHover: true,
+					options: generationModes,
+				},
+				{
+					id: "modelSelect",
+					kind: "model-select",
+					title: t("section.modelSelect", "AI 模型"),
+				},
+				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "分辨率"),
+					deps: ["modelId", "modelOptions"],
+				},
+				{
+					id: "canvasSize",
+					kind: "size-control",
+					title: t("section.canvasSize", "画布尺寸"),
+					deps: ["modelId", "modelOptions", "creationMode"],
+					when: ({ state }) => state.creationMode === "smart",
+				},
+				{
+					id: "count",
+					kind: "custom",
+					deps: ["creationMode", "smartComposition"],
+					when: ({ state }) => state.creationMode === "smart",
+					render: ({ state }) => createSmartCountReadonlySection({ state, t }),
+				},
+			],
+			generate: {
+				buttonLabel: `✨ ${t("button.generate", "生成商品套图")}`,
+				loadingLabel: t("button.generating", "生成中…"),
+				getIdleHint: ({ state }) => {
+					if (!state.productImages.length) {
+						return t("empty.productImages", "请先上传至少 1 张商品图")
+					}
+					if (state.creationMode === "smart" && !getSmartShotCount(state)) {
+						return t("empty.smartComposition", "请至少配置 1 张套图")
+					}
+					if (
+						state.creationMode === "smart" &&
+						getSmartShotCount(state) > MAX_SMART_SHOTS
+					) {
+						return t(
+							"error.smartCompositionLimit",
+							`智能套图最多支持 ${MAX_SMART_SHOTS} 张`,
+						)
+					}
+					if (state.creationMode === "custom" && !state.styleItems.length) {
+						return t("empty.styleItems", "请先添加样式卡片")
+					}
+					return ""
+				},
+				isDisabled: ({ state }) =>
+					!state.productImages.length ||
+					(state.creationMode === "smart" &&
+						(!getSmartShotCount(state) ||
+							getSmartShotCount(state) > MAX_SMART_SHOTS)) ||
+					(state.creationMode === "custom" && !state.styleItems.length),
+				validate: ({ state, helpers }) => {
+					if (!state.productImages.length) {
+						return t("empty.productImages", "请先上传至少 1 张商品图")
+					}
+					if (!state.modelId) {
+						return t("error.noModels", "暂无可用 AI 模型")
+					}
+					if (
+						helpers.collectReferenceIds(state.productImages).length !==
+						state.productImages.length
+					) {
+						return t("error.references", "图片缺少可用于生成的资源标识")
+					}
+					if (state.creationMode === "smart") {
+						const selectedSize = helpers.getSelectedSize(state)
+						if (!selectedSize?.genW || !selectedSize?.genH) {
+							return t("error.noSize", "当前模型缺少可用尺寸配置")
+						}
+						if (!getSmartShotCount(state)) {
+							return t("empty.smartComposition", "请至少配置 1 张套图")
+						}
+						if (getSmartShotCount(state) > MAX_SMART_SHOTS) {
+							return t(
+								"error.smartCompositionLimit",
+								`智能套图最多支持 ${MAX_SMART_SHOTS} 张`,
+							)
+						}
+						if (state.productImages.length > getMaxReferenceImages(state, helpers)) {
+							return t("error.referenceLimit", "参考图数量已达当前模型上限")
+						}
+						return null
+					}
+					if (!state.styleItems.length) {
+						return t("empty.styleItems", "请先添加样式卡片")
+					}
+					for (const styleItem of state.styleItems) {
+						const resolvedSize = resolveCustomStyleSize(state, styleItem, helpers)
+						if (!resolvedSize?.genW || !resolvedSize?.genH) {
+							return t("error.noSize", "当前模型缺少可用尺寸配置")
+						}
+						const refs = getStyleItemReferenceImages(styleItem)
+						if (helpers.collectReferenceIds(refs).length !== refs.length) {
+							return t("error.styleReferences", "样式卡片中存在缺少资源标识的参考图")
+						}
+						if (
+							state.productImages.length + refs.length >
+							getMaxReferenceImages(state, helpers)
+						) {
+							return t("error.referenceLimit", "参考图数量已达当前模型上限")
+						}
+					}
+					return null
+				},
+				execute: async ({ state, helpers, generateAndPlace }) => {
+					if (state.creationMode === "smart") {
+						const selectedSize = helpers.getSelectedSize(state)
+						const width = selectedSize.genW
+						const height = selectedSize.genH
+						const results = []
+						const shotPlan = buildSmartShotPlan(state)
+						for (const shotPlanItem of shotPlan) {
+							results.push(
+								await generateAndPlace(
+									buildSmartModeRequest({
+										state,
+										shotPlanItem,
+										helpers,
+										locale: promptLocale,
+										width,
+										height,
+										t,
+									}),
+								),
+							)
+						}
+						return results
+					}
+					const results = []
+					for (const styleItem of state.styleItems) {
+						const resolvedSize = resolveCustomStyleSize(state, styleItem, helpers)
+						if (!resolvedSize?.genW || !resolvedSize?.genH) {
+							throw new Error(t("error.noSize", "当前模型缺少可用尺寸配置"))
+						}
+						results.push(
+							await generateAndPlace(
+								buildCustomStyleRequest({
+									state,
+									styleItem,
+									helpers,
+									locale: promptLocale,
+									width: resolvedSize.genW,
+									height: resolvedSize.genH,
+									t,
+									resolution: resolvedSize.scale,
+								}),
+							),
+						)
+					}
+					return results
+				},
+				onSuccess: ({ ctx }) => {
+					ctx.ui.toast(t("toast.success", "商品套图生成成功！"), "success")
+					ctx.ui.close?.()
+				},
+			},
+		})
+
+		return {
+			update(change) {
+				return view?.update?.(change)
+			},
+			activate(nextScope) {
+				return view?.activate?.(nextScope)
+			},
+			deactivate(nextScope) {
+				return view?.deactivate?.(nextScope)
+			},
+			dispose(reason) {
+				moreSettingsDrawer?.destroy()
+				moreSettingsDrawer = null
+				styleEditor?.destroy()
+				styleEditor = null
+				setPluginState = null
+				currentHelpers = null
+				currentStateRef = null
+				view?.dispose?.(reason)
+			},
+		}
+	},
+})

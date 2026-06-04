@@ -32,180 +32,16 @@ const SHOWCASE_TYPE_DEFINITIONS = [
 	},
 ]
 
-registerMagicCanvasPlugin({
-	mount(ctx, root) {
-		const t = (key, fallback) => ctx.i18n.t(key, fallback)
-		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
-
-		return MagicPluginKit.mount(ctx, root, {
-			panelClassName: "one-click-product",
-			initialState: {
-				productImages: [],
-				creationMode: "smart",
-				showcaseType: "model",
-				extraPrompt: "",
-				inspirationImage: null,
-				genCount: 1,
-			},
-			modelConfig: {
-				autoLoad: true,
-				showLoadErrors: true,
-				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
-			},
-			sections: [
-				{
-					id: "productImages",
-					kind: "image-grid",
-					stateKey: "productImages",
-					title: t("section.productImages", "商品图"),
-					alt: t("section.productImages", "商品图"),
-					addLabel: "+",
-					help: t(
-						"section.productImages.help",
-						"支持上传多张商品图，AI 会先解析商品主体、材质与细节，再用于生成吸睛的种草图。",
-					),
-					maxCount: MAX_PRODUCT_IMAGES,
-					deps: ["creationMode", "inspirationImage", "modelId", "modelOptions"],
-					beforePick: ({ state, helpers }) => {
-						if (countReferenceImages(state) >= getMaxReferenceImages(state, helpers)) {
-							return t("error.referenceLimit", "参考图数量已达当前模型上限")
-						}
-						return null
-					},
-				},
-				{
-					id: "creationMode",
-					kind: "option-group",
-					stateKey: "creationMode",
-					title: t("section.creationMode", "创作模式"),
-					groupClassName: "ocp-dual-option-group",
-					showDescriptionOnHover: true,
-					options: buildCreationModeOptions(t),
-				},
-				{
-					id: "showcaseType",
-					kind: "option-group",
-					stateKey: "showcaseType",
-					deps: ["creationMode"],
-					title: t("section.showcaseType", "展示图选择"),
-					groupClassName: "ocp-dual-option-group",
-					showDescriptionOnHover: true,
-					options: buildShowcaseTypeOptions(t),
-					when: ({ state }) => state.creationMode === "smart",
-				},
-				{
-					id: "extraPrompt",
-					kind: "textarea",
-					stateKey: "extraPrompt",
-					deps: ["creationMode"],
-					title: t("section.extraPrompt", "额外描述"),
-					placeholder: t(
-						"placeholder.extraPrompt",
-						"模特： 年轻女性，长发，自然站姿\n场景： 城市街头，晴天\n风格： 休闲通勤，简约时尚\n色调： 美拉德色系",
-					),
-					rows: 4,
-					maxLength: 2000,
-					when: ({ state }) => state.creationMode === "smart",
-				},
-				{
-					id: "inspirationImage",
-					kind: "image-slot",
-					stateKey: "inspirationImage",
-					deps: ["creationMode", "productImages", "modelId", "modelOptions"],
-					title: t("section.inspirationImage", "参考种草图"),
-					uploadLabel: t("upload.inspirationImage", "点击上传参考种草图"),
-					alt: t("section.inspirationImage", "参考种草图"),
-					help: t(
-						"upload.inspirationImage.help",
-						"上传 1 张你喜欢的种草图作为灵感参考，AI 会借鉴其氛围、构图与镜头表达，但不会直接照搬其中的商品主体。",
-					),
-					when: ({ state }) => state.creationMode === "inspiration",
-					beforePick: ({ state, helpers }) => {
-						if (countReferenceImages(state) >= getMaxReferenceImages(state, helpers)) {
-							return t("error.referenceLimit", "参考图数量已达当前模型上限")
-						}
-						return null
-					},
-				},
-				{
-					id: "modelSelect",
-					kind: "model-select",
-					title: t("section.modelSelect", "AI 模型"),
-				},
-				{
-					id: "resolution",
-					kind: "resolution-select",
-					title: t("section.resolution", "分辨率"),
-					deps: ["modelId", "modelOptions"],
-				},	
-				{
-					id: "canvasSize",
-					kind: "size-control",
-					title: t("section.canvasSize", "画布比例"),
-					deps: ["modelId", "modelOptions", "scale"],
-				},
-				{
-					id: "count",
-					kind: "option-group",
-					stateKey: "genCount",
-					title: t("section.count", "生成张数"),
-					options: GENERATION_COUNT_GROUP_OPTIONS,
-				},
-			],
-			generate: {
-				buttonLabel: `✨ ${t("button.generate", "生成一键种草图")}`,
-				loadingLabel: t("button.generating", "生成中…"),
-				getIdleHint: ({ state }) => {
-					if (!state.productImages.length) {
-						return t("empty.productImages", "请先上传商品图")
-					}
-					if (state.creationMode === "inspiration" && !state.inspirationImage) {
-						return t("error.inspirationRequired", "请上传参考种草图")
-					}
-					return ""
-				},
-				isDisabled: ({ state }) =>
-					!state.productImages.length ||
-					(state.creationMode === "inspiration" && !state.inspirationImage),
-				validate: ({ state, helpers }) => {
-					if (!state.productImages.length) {
-						return t("empty.productImages", "请先上传商品图")
-					}
-					if (state.productImages.length > MAX_PRODUCT_IMAGES) {
-						return t("error.productLimit", "商品图最多上传 5 张")
-					}
-					if (state.creationMode === "inspiration" && !state.inspirationImage) {
-						return t("error.inspirationRequired", "请上传参考种草图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
-					const referenceImages = getReferenceImages(state)
-					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
-						return t("error.referenceLimit", "参考图数量已达当前模型上限")
-					}
-					if (
-						helpers.collectReferenceIds(referenceImages).length !==
-						referenceImages.length
-					) {
-						return t("error.references", "图片缺少可用于生成的资源标识")
-					}
-					const selectedSize = helpers.getSelectedSize(state)
-					if (!selectedSize?.genW || !selectedSize?.genH) {
-						return t("error.noSize", "当前模型缺少可用尺寸配置")
-					}
-					return null
-				},
-				execute: async ({ state, helpers, generateAndPlace }) =>
-					generateAndPlace(buildInspirationImageRequest({ state, helpers, locale: promptLocale })),
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "一键种草图生成成功！"), "success")
-					ctx.ui.close?.()
-				},
-			},
-		})
-	},
-})
+function createInitialState() {
+	return {
+		productImages: [],
+		creationMode: "smart",
+		showcaseType: "model",
+		extraPrompt: "",
+		inspirationImage: null,
+		genCount: 1,
+	}
+}
 
 function buildCreationModeOptions(t) {
 	return [
@@ -300,8 +136,7 @@ function buildSmartInspirationPrompt({ state, locale }) {
 			"商品必须保持外观准确，不能擅自改动颜色、材质、轮廓、结构比例或核心功能特征。" +
 			(state.showcaseType === "model"
 				? "允许通过人物姿态、目光、动作和镜头语言增强代入感，但不要让人物喧宾夺主。"
-				: "不要出现真人模特或显著人物主体，重点通过场景陈列、道具搭配、光影和镜头氛围突出商品。"
-			) +
+				: "不要出现真人模特或显著人物主体，重点通过场景陈列、道具搭配、光影和镜头氛围突出商品。") +
 			(extraPrompt ? `额外要求：${extraPrompt}。` : "") +
 			(state.genCount > 1
 				? "多张生成时请保持同一商品设定一致，同时在构图、景别或氛围细节上做自然变化。"
@@ -360,3 +195,178 @@ function buildReferenceInspirationPrompt({ state, locale }) {
 			: "")
 	)
 }
+
+registerMagicCanvasPlugin({
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+	render(ctx, instance, root, scope) {
+		const t = (key, fallback) => ctx.i18n.t(key, fallback)
+		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
+
+		return ctx.panel.render(root, {
+			panelClassName: "one-click-product",
+			state: instance.state,
+			modelConfig: {
+				autoLoad: true,
+				showLoadErrors: true,
+				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
+			},
+			sections: [
+				{
+					id: "productImages",
+					kind: "image-grid",
+					stateKey: "productImages",
+					title: t("section.productImages", "商品图"),
+					alt: t("section.productImages", "商品图"),
+					addLabel: "+",
+					help: t(
+						"section.productImages.help",
+						"支持上传多张商品图，AI 会先解析商品主体、材质与细节，再用于生成吸睛的种草图。",
+					),
+					maxCount: MAX_PRODUCT_IMAGES,
+					deps: ["creationMode", "inspirationImage", "modelId", "modelOptions"],
+					beforePick: ({ state, helpers }) => {
+						if (countReferenceImages(state) >= getMaxReferenceImages(state, helpers)) {
+							return t("error.referenceLimit", "参考图数量已达当前模型上限")
+						}
+						return null
+					},
+				},
+				{
+					id: "creationMode",
+					kind: "option-group",
+					stateKey: "creationMode",
+					title: t("section.creationMode", "创作模式"),
+					groupClassName: "ocp-dual-option-group",
+					showDescriptionOnHover: true,
+					options: buildCreationModeOptions(t),
+				},
+				{
+					id: "showcaseType",
+					kind: "option-group",
+					stateKey: "showcaseType",
+					deps: ["creationMode"],
+					title: t("section.showcaseType", "展示图选择"),
+					groupClassName: "ocp-dual-option-group",
+					showDescriptionOnHover: true,
+					options: buildShowcaseTypeOptions(t),
+					when: ({ state }) => state.creationMode === "smart",
+				},
+				{
+					id: "extraPrompt",
+					kind: "textarea",
+					stateKey: "extraPrompt",
+					deps: ["creationMode"],
+					title: t("section.extraPrompt", "额外描述"),
+					placeholder: t(
+						"placeholder.extraPrompt",
+						"模特： 年轻女性，长发，自然站姿\n场景： 城市街头，晴天\n风格： 休闲通勤，简约时尚\n色调： 美拉德色系",
+					),
+					rows: 4,
+					maxLength: 2000,
+					when: ({ state }) => state.creationMode === "smart",
+				},
+				{
+					id: "inspirationImage",
+					kind: "image-slot",
+					stateKey: "inspirationImage",
+					deps: ["creationMode", "productImages", "modelId", "modelOptions"],
+					title: t("section.inspirationImage", "参考种草图"),
+					uploadLabel: t("upload.inspirationImage", "点击上传参考种草图"),
+					alt: t("section.inspirationImage", "参考种草图"),
+					help: t(
+						"upload.inspirationImage.help",
+						"上传 1 张你喜欢的种草图作为灵感参考，AI 会借鉴其氛围、构图与镜头表达，但不会直接照搬其中的商品主体。",
+					),
+					when: ({ state }) => state.creationMode === "inspiration",
+					beforePick: ({ state, helpers }) => {
+						if (countReferenceImages(state) >= getMaxReferenceImages(state, helpers)) {
+							return t("error.referenceLimit", "参考图数量已达当前模型上限")
+						}
+						return null
+					},
+				},
+				{
+					id: "modelSelect",
+					kind: "model-select",
+					title: t("section.modelSelect", "AI 模型"),
+				},
+				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "分辨率"),
+					deps: ["modelId", "modelOptions"],
+				},
+				{
+					id: "canvasSize",
+					kind: "size-control",
+					title: t("section.canvasSize", "画布比例"),
+					deps: ["modelId", "modelOptions", "scale"],
+				},
+				{
+					id: "count",
+					kind: "option-group",
+					stateKey: "genCount",
+					title: t("section.count", "生成张数"),
+					options: GENERATION_COUNT_GROUP_OPTIONS,
+				},
+			],
+			generate: {
+				buttonLabel: `✨ ${t("button.generate", "生成一键种草图")}`,
+				loadingLabel: t("button.generating", "生成中…"),
+				getIdleHint: ({ state }) => {
+					if (!state.productImages.length) {
+						return t("empty.productImages", "请先上传商品图")
+					}
+					if (state.creationMode === "inspiration" && !state.inspirationImage) {
+						return t("error.inspirationRequired", "请上传参考种草图")
+					}
+					return ""
+				},
+				isDisabled: ({ state }) =>
+					!state.productImages.length ||
+					(state.creationMode === "inspiration" && !state.inspirationImage),
+				validate: ({ state, helpers }) => {
+					if (!state.productImages.length) {
+						return t("empty.productImages", "请先上传商品图")
+					}
+					if (state.productImages.length > MAX_PRODUCT_IMAGES) {
+						return t("error.productLimit", "商品图最多上传 5 张")
+					}
+					if (state.creationMode === "inspiration" && !state.inspirationImage) {
+						return t("error.inspirationRequired", "请上传参考种草图")
+					}
+					if (!state.modelId) {
+						return t("error.noModels", "暂无可用 AI 模型")
+					}
+					const referenceImages = getReferenceImages(state)
+					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
+						return t("error.referenceLimit", "参考图数量已达当前模型上限")
+					}
+					if (
+						helpers.collectReferenceIds(referenceImages).length !==
+						referenceImages.length
+					) {
+						return t("error.references", "图片缺少可用于生成的资源标识")
+					}
+					const selectedSize = helpers.getSelectedSize(state)
+					if (!selectedSize?.genW || !selectedSize?.genH) {
+						return t("error.noSize", "当前模型缺少可用尺寸配置")
+					}
+					return null
+				},
+				execute: async ({ state, helpers, generateAndPlace }) =>
+					generateAndPlace(
+						buildInspirationImageRequest({ state, helpers, locale: promptLocale }),
+					),
+				onSuccess: ({ ctx }) => {
+					ctx.ui.toast(t("toast.success", "一键种草图生成成功！"), "success")
+					ctx.ui.close?.()
+				},
+			},
+		})
+	},
+})

@@ -51,7 +51,8 @@ const GENERATION_STYLE_DEFINITIONS = [
 		labelKey: "generationMode.reference",
 		labelFallback: "推荐样式",
 		descriptionKey: "generationMode.reference.desc",
-		descriptionFallback: "支持上传多张样式参考图，生成时会参考其平铺陈列方式、细节展示重点与画面表达，但不会改变主服饰款式。",
+		descriptionFallback:
+			"支持上传多张样式参考图，生成时会参考其平铺陈列方式、细节展示重点与画面表达，但不会改变主服饰款式。",
 	},
 	{
 		value: "custom",
@@ -82,239 +83,28 @@ const GENERATION_MODE_DEFINITIONS = [
 		descriptionFallback: "增强面料纹理、结构细节与营销成片质感。",
 		promptSuffix: {
 			zh: "增强面料纹理、织物组织、走线、纽扣、拉链、边缘、褶皱和垂坠细节，使结果更具营销成片质感与展示层次。",
-			en:
-				"Enhance fabric texture, weave structure, stitching, buttons, zippers, edges, folds, and drape so the result feels richer, more premium, and more marketing-ready.",
+			en: "Enhance fabric texture, weave structure, stitching, buttons, zippers, edges, folds, and drape so the result feels richer, more premium, and more marketing-ready.",
 		},
 	},
 ]
 
-registerMagicCanvasPlugin({
-	mount(ctx, root) {
-		const t = (key, fallback) => ctx.i18n.t(key, fallback)
-		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
-		const garmentTypeOptions = GARMENT_TYPE_DEFINITIONS.map((item) => ({
-			value: item.value,
-			label: t(item.labelKey, item.labelFallback),
-		}))
-		const generationStyleOptions = GENERATION_STYLE_DEFINITIONS.map((item) => ({
-			value: item.value,
-			label: t(item.labelKey, item.labelFallback),
-			description: t(item.descriptionKey, item.descriptionFallback),
-		}))
-		const generationModeOptions = GENERATION_MODE_DEFINITIONS.map((item) => ({
-			value: item.value,
-			label: t(item.labelKey, item.labelFallback),
-			description: t(item.descriptionKey, item.descriptionFallback),
-		}))
-
-		return MagicPluginKit.mount(ctx, root, {
-			panelClassName: "clothing-variation-shots",
-			initialState: {
-				garmentImage: null,
-				garmentType: "top",
-				generationStyle: "reference",
-				styleReferenceImages: [],
-				customStylePrompt: "",
-				generationMode: "standard",
-				genCount: 1,
-			},
-			modelConfig: {
-				autoLoad: true,
-				showLoadErrors: true,
-				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
-			},
-			sections: [
-				{
-					id: "garmentImage",
-					kind: "image-slot",
-					stateKey: "garmentImage",
-					title: t("section.garmentImage", "服饰图"),
-					uploadLabel: t("upload.garmentImage", "点击上传服饰图"),
-					alt: t("section.garmentImage", "服饰图"),
-					help: t(
-						"upload.garmentImage.help",
-						"支持上传单张平铺图、人台图或模特图。AI 会保留服饰本身，只调整营销化展示方式。",
-					),
-					beforePick: ({ state, helpers }) => {
-						const maxReferenceImages = getMaxReferenceImages(state, helpers)
-						const currentCount = countReferenceImages(state)
-						if (!state.garmentImage && currentCount >= maxReferenceImages) {
-							return t("error.referenceLimit", "参考图数量已达当前模型上限")
-						}
-						return null
-					},
-				},
-				{
-					id: "garmentType",
-					kind: "option-group",
-					stateKey: "garmentType",
-					title: t("section.garmentType", "服饰类型"),
-					options: garmentTypeOptions,
-				},
-				{
-					id: "generationStyle",
-					kind: "option-group",
-					stateKey: "generationStyle",
-					title: t("section.generationStyle", "生成样式"),
-					showDescriptionOnHover: true,
-					groupClassName: "clothing-variation-style-grid",
-					options: generationStyleOptions,
-				},
-				{
-					id: "styleReferenceImages",
-					kind: "image-grid",
-					stateKey: "styleReferenceImages",
-					title: t("section.styleReferenceImages", "样式参考图"),
-					alt: t("section.styleReferenceImages", "样式参考图"),
-					addLabel: "+",
-					deps: ["generationStyle", "garmentImage", "modelId", "modelOptions"],
-					when: ({ state }) => state.generationStyle === "reference",
-					help: t(
-						"upload.styleReferenceImages.help",
-						"支持上传多张样式参考图，生成时会逐张参考其平铺陈列方式、细节展示重点与画面表达，但不会改变主服饰款式。",
-					),
-					maxCount: ({ state, helpers }) => {
-						const garmentCount = state.garmentImage ? 1 : 0
-						return Math.max(
-							0,
-							getMaxReferenceImages(state, helpers) - garmentCount,
-						)
-					},
-				},
-				{
-					id: "customStylePrompt",
-					kind: "textarea",
-					stateKey: "customStylePrompt",
-					title: t("section.customStylePrompt", "样式描述"),
-					deps: ["generationStyle"],
-					when: ({ state }) => state.generationStyle === "custom",
-					placeholder: t(
-						"placeholder.customStylePrompt",
-						"输入样式描述内容，如：提取图中下装服饰，生成标准摆放的平铺图。背景为带褶皱的白布，并补充具有营销感的展示细节。",
-					),
-					rows: 4,
-					maxLength: 2000,
-				},
-				{
-					id: "generationMode",
-					kind: "option-group",
-					stateKey: "generationMode",
-					title: t("section.generationMode", "生成模式"),
-					groupClassName: "clothing-variation-mode-grid",
-					showDescriptionOnHover: true,
-					options: generationModeOptions,
-				},
-				{
-					id: "modelSelect",
-					kind: "model-select",
-					title: t("section.modelSelect", "AI 模型"),
-				},
-				{
-					id: "resolution",
-					kind: "resolution-select",
-					title: t("section.resolution", "分辨率"),
-					deps: ["modelId", "modelOptions"],
-				},
-				{
-					id: "canvasSize",
-					kind: "size-control",
-					title: t("section.canvasSize", "画布尺寸"),
-					deps: ["modelId", "modelOptions", "scale"],
-				},
-				{
-					id: "count",
-					kind: "option-group",
-					stateKey: "genCount",
-					title: t("section.count", "生成张数"),
-					suffix: t("section.count.suffix", "每种样式生成数"),
-					options: GENERATION_COUNT_GROUP_OPTIONS,
-				},
-			],
-			generate: {
-				buttonLabel: `✨ ${t("button.generate", "生成百变服饰图")}`,
-				loadingLabel: t("button.generating", "生成中…"),
-				getIdleHint: ({ state }) => {
-					if (!state.garmentImage) {
-						return t("empty.garmentImage", "请先上传 1 张服饰图")
-					}
-					if (state.generationStyle === "reference" && !state.styleReferenceImages.length) {
-						return t("empty.styleReferenceImages", "请先上传至少 1 张样式参考图")
-					}
-					if (state.generationStyle === "custom" && !state.customStylePrompt.trim()) {
-						return t("empty.customStylePrompt", "请先输入样式描述")
-					}
-					return ""
-				},
-				isDisabled: ({ state }) =>
-					!state.garmentImage ||
-					(state.generationStyle === "reference" && !state.styleReferenceImages.length) ||
-					(state.generationStyle === "custom" && !state.customStylePrompt.trim()),
-				validate: ({ state, helpers }) => {
-					if (!state.garmentImage) {
-						return t("empty.garmentImage", "请先上传 1 张服饰图")
-					}
-					if (state.generationStyle === "reference" && !state.styleReferenceImages.length) {
-						return t("empty.styleReferenceImages", "请先上传至少 1 张样式参考图")
-					}
-					if (state.generationStyle === "custom" && !state.customStylePrompt.trim()) {
-						return t("empty.customStylePrompt", "请先输入样式描述")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
-					const referenceImages = getReferenceImages(state)
-					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
-						return t("error.referenceLimit", "参考图数量已达当前模型上限")
-					}
-					if (
-						helpers.collectReferenceIds(referenceImages).length !==
-						referenceImages.length
-					) {
-						return t("error.references", "图片缺少可用于生成的资源标识")
-					}
-					const selectedSize = helpers.getSelectedSize(state)
-					if (!selectedSize?.genW || !selectedSize?.genH) {
-						return t("error.noSize", "当前模型缺少可用尺寸配置")
-					}
-					return null
-				},
-				execute: async ({ state, helpers, generateAndPlace }) => {
-					const selectedSize = helpers.getSelectedSize(state)
-					if (state.generationStyle !== "reference") {
-						return generateAndPlace(
-							buildClothingVariationRequest({
-								state,
-								helpers,
-								locale: promptLocale,
-								selectedSize,
-								count: state.genCount,
-							}),
-						)
-					}
-
-					const requests = buildReferenceStyleRequests({
-						state,
-						helpers,
-						locale: promptLocale,
-						selectedSize,
-					})
-					const results = []
-					for (const request of requests) {
-						results.push(await generateAndPlace(request))
-					}
-					return results
-				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "百变服饰图生成成功！"), "success")
-					ctx.ui.close?.()
-				},
-			},
-		})
-	},
-})
+function createInitialState() {
+	return {
+		garmentImage: null,
+		garmentType: "top",
+		generationStyle: "reference",
+		styleReferenceImages: [],
+		customStylePrompt: "",
+		generationMode: "standard",
+		genCount: 1,
+	}
+}
 
 function getReferenceImages(state) {
-	return [state.garmentImage, ...(state.generationStyle === "reference" ? state.styleReferenceImages : [])].filter(Boolean)
+	return [
+		state.garmentImage,
+		...(state.generationStyle === "reference" ? state.styleReferenceImages : []),
+	].filter(Boolean)
 }
 
 function countReferenceImages(state) {
@@ -423,7 +213,7 @@ function buildClothingVariationPrompt({
 					? "对于上装+下装，最终结果中必须让上装和下装同时完整出现，并作为一整套服饰按照参考图 2 的展示方式共同输出。"
 					: "") +
 				"不要复制或继承参考图 2 中的服饰主体、其他商品、人物、文字、水印、品牌元素或无关道具；只学习展示方法，不继承其中的商品内容。" +
-                modeSuffix
+				modeSuffix
 			)
 		}
 
@@ -467,3 +257,228 @@ function buildClothingVariationPrompt({
 		modeSuffix
 	)
 }
+
+registerMagicCanvasPlugin({
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+	render(ctx, instance, root, scope) {
+		const t = (key, fallback) => ctx.i18n.t(key, fallback)
+		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
+		const garmentTypeOptions = GARMENT_TYPE_DEFINITIONS.map((item) => ({
+			value: item.value,
+			label: t(item.labelKey, item.labelFallback),
+		}))
+		const generationStyleOptions = GENERATION_STYLE_DEFINITIONS.map((item) => ({
+			value: item.value,
+			label: t(item.labelKey, item.labelFallback),
+			description: t(item.descriptionKey, item.descriptionFallback),
+		}))
+		const generationModeOptions = GENERATION_MODE_DEFINITIONS.map((item) => ({
+			value: item.value,
+			label: t(item.labelKey, item.labelFallback),
+			description: t(item.descriptionKey, item.descriptionFallback),
+		}))
+
+		return ctx.panel.render(root, {
+			panelClassName: "clothing-variation-shots",
+			state: instance.state,
+			modelConfig: {
+				autoLoad: true,
+				showLoadErrors: true,
+				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
+			},
+			sections: [
+				{
+					id: "garmentImage",
+					kind: "image-slot",
+					stateKey: "garmentImage",
+					title: t("section.garmentImage", "服饰图"),
+					uploadLabel: t("upload.garmentImage", "点击上传服饰图"),
+					alt: t("section.garmentImage", "服饰图"),
+					help: t(
+						"upload.garmentImage.help",
+						"支持上传单张平铺图、人台图或模特图。AI 会保留服饰本身，只调整营销化展示方式。",
+					),
+					beforePick: ({ state, helpers }) => {
+						const maxReferenceImages = getMaxReferenceImages(state, helpers)
+						const currentCount = countReferenceImages(state)
+						if (!state.garmentImage && currentCount >= maxReferenceImages) {
+							return t("error.referenceLimit", "参考图数量已达当前模型上限")
+						}
+						return null
+					},
+				},
+				{
+					id: "garmentType",
+					kind: "option-group",
+					stateKey: "garmentType",
+					title: t("section.garmentType", "服饰类型"),
+					options: garmentTypeOptions,
+				},
+				{
+					id: "generationStyle",
+					kind: "option-group",
+					stateKey: "generationStyle",
+					title: t("section.generationStyle", "生成样式"),
+					showDescriptionOnHover: true,
+					groupClassName: "clothing-variation-style-grid",
+					options: generationStyleOptions,
+				},
+				{
+					id: "styleReferenceImages",
+					kind: "image-grid",
+					stateKey: "styleReferenceImages",
+					title: t("section.styleReferenceImages", "样式参考图"),
+					alt: t("section.styleReferenceImages", "样式参考图"),
+					addLabel: "+",
+					deps: ["generationStyle", "garmentImage", "modelId", "modelOptions"],
+					when: ({ state }) => state.generationStyle === "reference",
+					help: t(
+						"upload.styleReferenceImages.help",
+						"支持上传多张样式参考图，生成时会逐张参考其平铺陈列方式、细节展示重点与画面表达，但不会改变主服饰款式。",
+					),
+					maxCount: ({ state, helpers }) => {
+						const garmentCount = state.garmentImage ? 1 : 0
+						return Math.max(0, getMaxReferenceImages(state, helpers) - garmentCount)
+					},
+				},
+				{
+					id: "customStylePrompt",
+					kind: "textarea",
+					stateKey: "customStylePrompt",
+					title: t("section.customStylePrompt", "样式描述"),
+					deps: ["generationStyle"],
+					when: ({ state }) => state.generationStyle === "custom",
+					placeholder: t(
+						"placeholder.customStylePrompt",
+						"输入样式描述内容，如：提取图中下装服饰，生成标准摆放的平铺图。背景为带褶皱的白布，并补充具有营销感的展示细节。",
+					),
+					rows: 4,
+					maxLength: 2000,
+				},
+				{
+					id: "generationMode",
+					kind: "option-group",
+					stateKey: "generationMode",
+					title: t("section.generationMode", "生成模式"),
+					groupClassName: "clothing-variation-mode-grid",
+					showDescriptionOnHover: true,
+					options: generationModeOptions,
+				},
+				{
+					id: "modelSelect",
+					kind: "model-select",
+					title: t("section.modelSelect", "AI 模型"),
+				},
+				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "分辨率"),
+					deps: ["modelId", "modelOptions"],
+				},
+				{
+					id: "canvasSize",
+					kind: "size-control",
+					title: t("section.canvasSize", "画布尺寸"),
+					deps: ["modelId", "modelOptions", "scale"],
+				},
+				{
+					id: "count",
+					kind: "option-group",
+					stateKey: "genCount",
+					title: t("section.count", "生成张数"),
+					suffix: t("section.count.suffix", "每种样式生成数"),
+					options: GENERATION_COUNT_GROUP_OPTIONS,
+				},
+			],
+			generate: {
+				buttonLabel: `✨ ${t("button.generate", "生成百变服饰图")}`,
+				loadingLabel: t("button.generating", "生成中…"),
+				getIdleHint: ({ state }) => {
+					if (!state.garmentImage) {
+						return t("empty.garmentImage", "请先上传 1 张服饰图")
+					}
+					if (
+						state.generationStyle === "reference" &&
+						!state.styleReferenceImages.length
+					) {
+						return t("empty.styleReferenceImages", "请先上传至少 1 张样式参考图")
+					}
+					if (state.generationStyle === "custom" && !state.customStylePrompt.trim()) {
+						return t("empty.customStylePrompt", "请先输入样式描述")
+					}
+					return ""
+				},
+				isDisabled: ({ state }) =>
+					!state.garmentImage ||
+					(state.generationStyle === "reference" && !state.styleReferenceImages.length) ||
+					(state.generationStyle === "custom" && !state.customStylePrompt.trim()),
+				validate: ({ state, helpers }) => {
+					if (!state.garmentImage) {
+						return t("empty.garmentImage", "请先上传 1 张服饰图")
+					}
+					if (
+						state.generationStyle === "reference" &&
+						!state.styleReferenceImages.length
+					) {
+						return t("empty.styleReferenceImages", "请先上传至少 1 张样式参考图")
+					}
+					if (state.generationStyle === "custom" && !state.customStylePrompt.trim()) {
+						return t("empty.customStylePrompt", "请先输入样式描述")
+					}
+					if (!state.modelId) {
+						return t("error.noModels", "暂无可用 AI 模型")
+					}
+					const referenceImages = getReferenceImages(state)
+					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
+						return t("error.referenceLimit", "参考图数量已达当前模型上限")
+					}
+					if (
+						helpers.collectReferenceIds(referenceImages).length !==
+						referenceImages.length
+					) {
+						return t("error.references", "图片缺少可用于生成的资源标识")
+					}
+					const selectedSize = helpers.getSelectedSize(state)
+					if (!selectedSize?.genW || !selectedSize?.genH) {
+						return t("error.noSize", "当前模型缺少可用尺寸配置")
+					}
+					return null
+				},
+				execute: async ({ state, helpers, generateAndPlace }) => {
+					const selectedSize = helpers.getSelectedSize(state)
+					if (state.generationStyle !== "reference") {
+						return generateAndPlace(
+							buildClothingVariationRequest({
+								state,
+								helpers,
+								locale: promptLocale,
+								selectedSize,
+								count: state.genCount,
+							}),
+						)
+					}
+
+					const requests = buildReferenceStyleRequests({
+						state,
+						helpers,
+						locale: promptLocale,
+						selectedSize,
+					})
+					const results = []
+					for (const request of requests) {
+						results.push(await generateAndPlace(request))
+					}
+					return results
+				},
+				onSuccess: ({ ctx }) => {
+					ctx.ui.toast(t("toast.success", "百变服饰图生成成功！"), "success")
+					ctx.ui.close?.()
+				},
+			},
+		})
+	},
+})

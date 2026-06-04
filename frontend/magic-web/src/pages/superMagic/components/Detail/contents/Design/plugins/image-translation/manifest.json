@@ -66,6 +66,20 @@
 	},
 	"name": "image-translation",
 	"styles": "index.css",
-	"tags": ["AI", "本地化", "翻译"],
-	"version": "1.0.0"
+	"tags": [
+		"AI",
+		"本地化",
+		"翻译"
+	],
+	"capabilities": [
+		"ui.toast",
+		"ui.close",
+		"ui.setHeight",
+		"assets.pickFiles",
+		"assets.uploadFile",
+		"assets.fetchBlob",
+		"ai.getImageModels",
+		"ai.generateAndPlace"
+	],
+	"version": 1
 }

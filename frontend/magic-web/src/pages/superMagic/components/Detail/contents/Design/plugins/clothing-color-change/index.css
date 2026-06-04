@@ -12,38 +12,38 @@
 }
 
 .clothing-color-change .ccс-color-title {
-	font-size: 12px;
-	font-weight: 500;
 	color: var(--mpk-foreground);
+	font-weight: 500;
+	font-size: 12px;
 }
 
 /* 未选状态：添加按钮 */
 .clothing-color-change .ccc-color-add-btn {
 	display: flex;
-	justify-content: space-between;
-	align-items: center;
 	gap: 6px;
+	align-items: center;
+	justify-content: space-between;
 	width: 100%;
 	padding: 8px 12px;
+	color: var(--mpk-muted-foreground);
+	font-size: 13px;
 	background: var(--mpk-muted);
 	border: 1px dashed var(--mpk-input);
 	border-radius: 8px;
-	color: var(--mpk-muted-foreground);
-	font-size: 13px;
 	cursor: pointer;
 	transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
 .clothing-color-change .ccc-color-add-btn:hover {
-	border-color: var(--mpk-ring);
 	color: var(--mpk-primary);
 	background: var(--mpk-accent);
+	border-color: var(--mpk-ring);
 }
 
 .clothing-color-change .ccc-color-add-btn-icon {
+	color: var(--mpk-muted-foreground);
 	font-size: 16px;
 	line-height: 1;
-	color: var(--mpk-muted-foreground);
 }
 
 /* 已选状态：颜色标签 */
@@ -59,55 +59,55 @@
 
 .clothing-color-change .ccc-color-preview {
 	display: flex;
-    align-items: center;
-    gap: 8px;
+	gap: 8px;
+	align-items: center;
 }
 
 .clothing-color-change .ccc-color-swatch {
+	flex-shrink: 0;
 	width: 20px;
 	height: 20px;
-	border-radius: 50%;
 	border: 1px solid rgb(0 0 0 / 12%);
-	flex-shrink: 0;
+	border-radius: 50%;
 }
 
 .clothing-color-change .ccc-color-hex {
-	font-size: 13px;
-	font-family: ui-monospace, "SFMono-Regular", monospace;
-	color: var(--mpk-foreground);
 	min-width: 0;
 	overflow: hidden;
-	text-overflow: ellipsis;
+	color: var(--mpk-foreground);
+	font-size: 13px;
+	font-family: ui-monospace, SFMono-Regular, monospace;
 	white-space: nowrap;
+	text-overflow: ellipsis;
 }
 
 .clothing-color-change .ccc-color-name {
-	font-size: 12px;
-	color: var(--mpk-muted-foreground);
 	margin-right: 2px;
+	color: var(--mpk-muted-foreground);
+	font-size: 12px;
 }
 
 .clothing-color-change .ccc-color-clear-btn,
 .clothing-color-change .ccc-color-edit-btn {
 	display: flex;
+	flex-shrink: 0;
 	align-items: center;
 	justify-content: center;
 	width: 22px;
 	height: 22px;
 	padding: 0;
+	color: var(--mpk-muted-foreground);
+	font-size: 14px;
 	background: transparent;
 	border: none;
 	border-radius: 4px;
-	color: var(--mpk-muted-foreground);
-	font-size: 14px;
 	cursor: pointer;
-	flex-shrink: 0;
 	transition: color 0.15s, background 0.15s;
 }
 
 .clothing-color-change .ccc-color-clear-btn:hover {
 	color: var(--mpk-destructive);
-	background: rgb(var(--destructive-rgb, 228 0 22) / 0.08);
+	background: rgb(var(--destructive-rgb, 228 0 22) / 8%);
 }
 
 .clothing-color-change .ccc-color-edit-btn:hover {
@@ -125,19 +125,19 @@
 
 .clothing-color-change .ccc-body-part-tag {
 	padding: 3px 10px;
+	color: var(--mpk-muted-foreground);
+	font-size: 12px;
 	background: var(--mpk-accent);
 	border: 1px solid var(--mpk-border);
 	border-radius: 20px;
-	font-size: 12px;
-	color: var(--mpk-muted-foreground);
 	cursor: pointer;
 	transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
 .clothing-color-change .ccc-body-part-tag:hover {
-	border-color: var(--mpk-ring);
 	color: var(--mpk-primary);
 	background: var(--mpk-accent);
+	border-color: var(--mpk-ring);
 }
 
 /* ── 颜色侧拉框 ── */
@@ -147,14 +147,14 @@
 
 .clothing-color-change .ccc-drawer {
 	position: absolute;
-	inset: 0;
+	z-index: 10;
 	display: flex;
 	flex-direction: column;
+	overflow: hidden;
 	background: var(--mpk-background);
 	transform: translateX(100%);
 	transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-	z-index: 10;
-	overflow: hidden;
+	inset: 0;
 }
 
 .clothing-color-change .ccc-drawer.is-open {
@@ -164,11 +164,11 @@
 /* 抽屉顶部标题栏 */
 .clothing-color-change .ccc-drawer-header {
 	display: flex;
-	align-items: center;
+	flex-shrink: 0;
 	gap: 8px;
+	align-items: center;
 	padding: 12px 14px 10px;
 	border-bottom: 1px solid var(--mpk-border);
-	flex-shrink: 0;
 }
 
 .clothing-color-change .ccc-drawer-back-btn {
@@ -177,11 +177,11 @@
 	justify-content: center;
 	width: 28px;
 	height: 28px;
+	color: var(--mpk-muted-foreground);
+	font-size: 16px;
 	background: transparent;
 	border: none;
 	border-radius: 6px;
-	color: var(--mpk-muted-foreground);
-	font-size: 16px;
 	cursor: pointer;
 	transition: color 0.15s, background 0.15s;
 }
@@ -192,9 +192,9 @@
 }
 
 .clothing-color-change .ccc-drawer-title {
-	font-size: 14px;
-	font-weight: 600;
 	color: var(--mpk-foreground);
+	font-weight: 600;
+	font-size: 14px;
 }
 
 /* 抽屉主体：左列 + 右列 */
@@ -207,66 +207,66 @@
 
 /* 左列：分类过滤 */
 .clothing-color-change .ccc-drawer-sidebar {
-	width: 80px;
 	flex-shrink: 0;
-	border-right: 1px solid var(--mpk-border);
-	overflow-y: auto;
-	scrollbar-width: thin;
+	width: 80px;
 	padding: 6px 0;
+	overflow-y: auto;
+	border-right: 1px solid var(--mpk-border);
+	scrollbar-width: thin;
 }
 
 .clothing-color-change .ccc-filter-btn {
 	display: block;
 	width: 100%;
 	padding: 8px 10px;
+	overflow: hidden;
+	color: var(--mpk-muted-foreground);
+	font-size: 12px;
+	white-space: nowrap;
+	text-align: left;
+	text-overflow: ellipsis;
 	background: transparent;
 	border: none;
-	font-size: 12px;
-	color: var(--mpk-muted-foreground);
-	text-align: left;
 	cursor: pointer;
 	transition: color 0.12s, background 0.12s;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
 }
 
 .clothing-color-change .ccc-filter-btn:hover {
-	background: var(--mpk-muted);
 	color: var(--mpk-foreground);
+	background: var(--mpk-muted);
 }
 
 .clothing-color-change .ccc-filter-btn.is-active {
-	background: var(--mpk-accent);
 	color: var(--mpk-accent-foreground);
 	font-weight: 500;
+	background: var(--mpk-accent);
 }
 
 /* 右列：搜索 + 颜色网格 + 自定义 */
 .clothing-color-change .ccc-drawer-main {
-	flex: 1;
 	display: flex;
+	flex: 1;
 	flex-direction: column;
 	min-width: 0;
 	overflow: hidden;
 }
 
 .clothing-color-change .ccc-search-bar {
+	flex-shrink: 0;
 	padding: 8px 10px 6px;
 	border-bottom: 1px solid var(--mpk-border);
-	flex-shrink: 0;
 }
 
 .clothing-color-change .ccc-search-input {
+	box-sizing: border-box;
 	width: 100%;
 	padding: 5px 10px;
+	color: var(--mpk-foreground);
+	font-size: 12px;
 	background: var(--mpk-muted);
 	border: 1px solid var(--mpk-border);
 	border-radius: 6px;
-	font-size: 12px;
-	color: var(--mpk-foreground);
 	outline: none;
-	box-sizing: border-box;
 	transition: border-color 0.15s;
 }
 
@@ -281,18 +281,18 @@
 /* 颜色列表区（可滚动） */
 .clothing-color-change .ccc-color-list {
 	flex: 1;
+	padding: 8px 10px;
 	overflow-y: auto;
 	scrollbar-width: thin;
-	padding: 8px 10px;
 }
 
 .clothing-color-change .ccc-color-group-title {
-	font-size: 11px;
-	font-weight: 500;
+	margin: 6px 0;
 	color: var(--mpk-muted-foreground);
-	margin: 6px 0 6px;
-	text-transform: uppercase;
+	font-weight: 500;
+	font-size: 11px;
 	letter-spacing: 0.04em;
+	text-transform: uppercase;
 }
 
 .clothing-color-change .ccc-color-group-title:first-child {
@@ -309,24 +309,24 @@
 .clothing-color-change .ccc-color-dot-wrapper {
 	display: flex;
 	flex-direction: column;
-	align-items: center;
 	gap: 3px;
+	align-items: center;
 	cursor: pointer;
 }
 
 .clothing-color-change .ccc-color-dot {
+	flex-shrink: 0;
 	width: 32px;
 	height: 32px;
-	border-radius: 50%;
 	border: 2px solid transparent;
+	border-radius: 50%;
 	box-shadow: 0 0 0 1px rgb(0 0 0 / 10%);
 	transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
-	flex-shrink: 0;
 }
 
 .clothing-color-change .ccc-color-dot-wrapper:hover .ccc-color-dot {
-	transform: scale(1.12);
 	box-shadow: 0 0 0 2px rgb(0 0 0 / 16%);
+	transform: scale(1.12);
 }
 
 .clothing-color-change .ccc-color-dot-wrapper.is-selected .ccc-color-dot {
@@ -335,50 +335,50 @@
 }
 
 .clothing-color-change .ccc-color-dot-label {
-	font-size: 10px;
-	color: var(--mpk-muted-foreground);
-	text-align: center;
-	line-height: 1.2;
 	max-width: 40px;
 	overflow: hidden;
-	text-overflow: ellipsis;
+	color: var(--mpk-muted-foreground);
+	font-size: 10px;
+	line-height: 1.2;
 	white-space: nowrap;
+	text-align: center;
+	text-overflow: ellipsis;
 }
 
 /* 空搜索结果 */
 .clothing-color-change .ccc-color-empty {
 	padding: 24px 10px;
-	text-align: center;
-	font-size: 12px;
 	color: var(--mpk-muted-foreground);
+	font-size: 12px;
+	text-align: center;
 }
 
 /* 自定义色卡区 */
 .clothing-color-change .ccc-custom-color {
 	display: flex;
-	align-items: center;
+	flex-shrink: 0;
 	gap: 10px;
+	align-items: center;
 	padding: 10px 10px 12px;
 	border-top: 1px solid var(--mpk-border);
-	flex-shrink: 0;
 }
 
 .clothing-color-change .ccc-custom-label {
-	font-size: 12px;
-	color: var(--mpk-foreground);
 	flex-shrink: 0;
+	color: var(--mpk-foreground);
+	font-size: 12px;
 }
 
 .clothing-color-change .ccc-custom-swatch-btn {
 	position: relative;
+	flex-shrink: 0;
 	width: 32px;
 	height: 32px;
-	border-radius: 50%;
+	overflow: hidden;
 	border: 2px solid var(--mpk-border);
+	border-radius: 50%;
 	cursor: pointer;
 	transition: border-color 0.15s, transform 0.12s;
-	overflow: hidden;
-	flex-shrink: 0;
 }
 
 .clothing-color-change .ccc-custom-swatch-btn:hover {
@@ -393,15 +393,15 @@
 
 .clothing-color-change .ccc-custom-color-input {
 	position: absolute;
-	inset: 0;
-	opacity: 0;
-	cursor: pointer;
 	width: 100%;
 	height: 100%;
+	cursor: pointer;
+	opacity: 0;
+	inset: 0;
 }
 
 .clothing-color-change .ccc-custom-hex {
-	font-size: 12px;
-	font-family: ui-monospace, "SFMono-Regular", monospace;
 	color: var(--mpk-muted-foreground);
+	font-size: 12px;
+	font-family: ui-monospace, SFMono-Regular, monospace;
 }

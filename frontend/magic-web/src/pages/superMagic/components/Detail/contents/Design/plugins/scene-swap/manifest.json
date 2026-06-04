@@ -82,6 +82,20 @@
 	},
 	"name": "scene-swap",
 	"styles": "index.css",
-	"tags": ["AI", "电商", "换景"],
-	"version": "1.0.0"
+	"tags": [
+		"AI",
+		"电商",
+		"换景"
+	],
+	"capabilities": [
+		"ui.toast",
+		"ui.close",
+		"ui.setHeight",
+		"assets.pickFiles",
+		"assets.uploadFile",
+		"assets.fetchBlob",
+		"ai.getImageModels",
+		"ai.generateAndPlace"
+	],
+	"version": 1
 }

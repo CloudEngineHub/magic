@@ -78,6 +78,20 @@
 	},
 	"name": "clothing-repair",
 	"styles": "index.css",
-	"tags": ["AI", "修复", "服饰"],
-	"version": "1.0.0"
+	"tags": [
+		"AI",
+		"修复",
+		"服饰"
+	],
+	"capabilities": [
+		"ui.toast",
+		"ui.close",
+		"ui.setHeight",
+		"assets.pickFiles",
+		"assets.uploadFile",
+		"assets.fetchBlob",
+		"ai.getImageModels",
+		"ai.generateAndPlace"
+	],
+	"version": 1
 }

@@ -65,11 +65,25 @@
 			"upload.productTip": "支持运动鞋、靴子、高跟鞋、平底鞋、凉鞋等，建议上传 1-2 张鞋履参考图。"
 		}
 	},
-		"category": {
-			"key": "model"
-		},
+	"category": {
+		"key": "model"
+	},
 	"name": "boots-tryon",
 	"styles": "index.css",
-	"tags": ["AI", "电商", "鞋履"],
-	"version": "1.0.0"
+	"tags": [
+		"AI",
+		"电商",
+		"鞋履"
+	],
+	"capabilities": [
+		"ui.toast",
+		"ui.close",
+		"ui.setHeight",
+		"assets.pickFiles",
+		"assets.uploadFile",
+		"assets.fetchBlob",
+		"ai.getImageModels",
+		"ai.generateAndPlace"
+	],
+	"version": 1
 }

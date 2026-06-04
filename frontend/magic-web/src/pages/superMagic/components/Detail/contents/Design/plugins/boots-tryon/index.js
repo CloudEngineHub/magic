@@ -15,8 +15,7 @@ const GENERATION_MODE_DEFINITIONS = [
 		descriptionFallback: "适合分辨率低于 2K 的全身图或低于 1K 的局部图，简单姿势。",
 		promptSuffix: {
 			zh: "优先生成适合简单姿势和较低分辨率参考图的快速、干净的鞋履试穿结果，同时保留鞋型轮廓和关键细节。",
-			en:
-				"Prioritize a fast, clean footwear try-on result for simple poses and lower-resolution references while preserving the shoe silhouette and key details.",
+			en: "Prioritize a fast, clean footwear try-on result for simple poses and lower-resolution references while preserving the shoe silhouette and key details.",
 		},
 	},
 	{
@@ -27,8 +26,7 @@ const GENERATION_MODE_DEFINITIONS = [
 		descriptionFallback: "适合分辨率高于 2K 的全身图或高于 1K 的局部图。",
 		promptSuffix: {
 			zh: "生成适合常规商业用途的平衡型鞋履试穿结果，保证真实感稳定、鞋履贴合自然。",
-			en:
-				"Generate a balanced footwear try-on result for standard production usage with stable realism and clean shoe fitting.",
+			en: "Generate a balanced footwear try-on result for standard production usage with stable realism and clean shoe fitting.",
 		},
 	},
 	{
@@ -40,8 +38,7 @@ const GENERATION_MODE_DEFINITIONS = [
 			"适合分辨率高于 2K 的全身图或高于 1K 的局部图，且包含细密纹理复杂材质与复杂的姿势。",
 		promptSuffix: {
 			zh: "针对高细节鞋履试穿进行优化，增强细密纹理、复杂材质、微妙高光、阴影以及更有挑战性的脚部或腿部姿势表现。",
-			en:
-				"Optimize for high-detail footwear try-on with dense textures, complex materials, subtle highlights, shadows, and challenging foot or leg poses.",
+			en: "Optimize for high-detail footwear try-on with dense textures, complex materials, subtle highlights, shadows, and challenging foot or leg poses.",
 		},
 	},
 	{
@@ -52,8 +49,7 @@ const GENERATION_MODE_DEFINITIONS = [
 		descriptionFallback: "版型、材质还原效果更好。",
 		promptSuffix: {
 			zh: "优先保证高品质鞋履还原度，尽可能保留鞋型、楦型比例、材质质感、制作细节以及整体商品准确性。",
-			en:
-				"Prioritize premium footwear fidelity, preserving the shoe shape, last proportions, material finish, construction details, and overall product accuracy as much as possible.",
+			en: "Prioritize premium footwear fidelity, preserving the shoe shape, last proportions, material finish, construction details, and overall product accuracy as much as possible.",
 		},
 	},
 ]
@@ -71,8 +67,77 @@ function getMaxReferenceImages(state, helpers) {
 	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 2
 }
 
+function createInitialState() {
+	return {
+		productImage: null,
+		modelImages: [],
+		generationMode: "standard",
+		genCount: 1,
+	}
+}
+
+function getReferenceImagesForRequest(productImage, modelImage) {
+	return [productImage, modelImage].filter(Boolean)
+}
+
+function buildBootsRequest({ state, helpers, modelImage, locale, width, height, count }) {
+	const referenceImages = helpers.collectReferenceIds(
+		getReferenceImagesForRequest(state.productImage, modelImage),
+	)
+
+	return {
+		model_id: state.modelId,
+		prompt: buildBootsPrompt({
+			generationMode: state.generationMode,
+			locale,
+		}),
+		size: `${width}x${height}`,
+		resolution: state.scale || undefined,
+		reference_images: referenceImages,
+		width,
+		height,
+		count,
+		select: false,
+	}
+}
+
+function buildBootsPrompt({ generationMode, locale }) {
+	const isChinese = MagicPromptLocale.isChinese(locale)
+	const modeDefinition =
+		GENERATION_MODE_DEFINITIONS.find((item) => item.value === generationMode) ??
+		GENERATION_MODE_DEFINITIONS[1]
+	const modePromptSuffix = MagicPromptLocale.pickText(modeDefinition.promptSuffix, locale)
+	const productReference = MagicPromptLocale.getReferenceLabel(1, locale)
+	const modelReference = MagicPromptLocale.getReferenceLabel(2, locale)
+
+	if (isChinese) {
+		return (
+			`使用${productReference}和${modelReference}生成鞋履试穿图。${productReference}是唯一的鞋履商品参考图。` +
+			`画面中所有可见鞋履都必须与${productReference}在鞋型轮廓、颜色、材质、纹理、缝线、鞋底设计、logo 位置和关键五金细节上严格一致。` +
+			"鞋履必须自然穿着在脚上，具备可信的透视关系、落地阴影、与地面的接触感，以及符合人体结构的脚部摆放。" +
+			`${modelReference}作为模特姿态参考，请匹配其中的机位角度、腿部位置、场景和光线，同时始终保持鞋履商品为画面重点。` +
+			"最终结果应具备商业可用性、真实感，并聚焦于鞋履试穿效果。" +
+			modePromptSuffix
+		)
+	}
+
+	return (
+		`Create a footwear try-on image using ${productReference} and ${modelReference}. Use ${productReference} as the only shoe product reference. ` +
+		`Every visible shoe must match ${productReference} exactly in silhouette, color, material, texture, stitching, sole design, logo placement, and key hardware details. ` +
+		`The shoes must be worn naturally on the feet with convincing perspective, grounding shadow, contact with the surface, and anatomically correct foot placement. ` +
+		`Use ${modelReference} as the model pose reference. Match its camera angle, leg position, scene, and lighting while keeping the focus on the shoes from ${productReference}. ` +
+		"Keep the image commercially usable, realistic, and focused on the footwear result. " +
+		modePromptSuffix
+	)
+}
+
 registerMagicCanvasPlugin({
-	mount(ctx, root) {
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+	render(ctx, instance, root, scope) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
 		const generationModes = GENERATION_MODE_DEFINITIONS.map((item) => ({
 			value: item.value,
@@ -81,14 +146,9 @@ registerMagicCanvasPlugin({
 		}))
 		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 
-		return MagicPluginKit.mount(ctx, root, {
+		return ctx.panel.render(root, {
 			panelClassName: "boots-tryon",
-			initialState: {
-				productImage: null,
-				modelImages: [],
-				generationMode: "standard",
-				genCount: 1,
-			},
+			state: instance.state,
 			modelConfig: {
 				autoLoad: true,
 				showLoadErrors: true,
@@ -109,7 +169,10 @@ registerMagicCanvasPlugin({
 					beforePick: ({ state, helpers }) => {
 						if (state.productImage) return null
 						const maxReferenceImages = getMaxReferenceImages(state, helpers)
-						if (!state.productImage && state.modelImages.length + 1 > maxReferenceImages) {
+						if (
+							!state.productImage &&
+							state.modelImages.length + 1 > maxReferenceImages
+						) {
 							return t("error.referenceLimit", "参考图数量已达当前模型上限")
 						}
 						return null
@@ -151,7 +214,7 @@ registerMagicCanvasPlugin({
 					kind: "resolution-select",
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
-				},	
+				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
@@ -250,58 +313,3 @@ registerMagicCanvasPlugin({
 		})
 	},
 })
-
-function getReferenceImagesForRequest(productImage, modelImage) {
-	return [productImage, modelImage].filter(Boolean)
-}
-
-function buildBootsRequest({ state, helpers, modelImage, locale, width, height, count }) {
-	const referenceImages = helpers.collectReferenceIds(
-		getReferenceImagesForRequest(state.productImage, modelImage),
-	)
-
-	return {
-		model_id: state.modelId,
-		prompt: buildBootsPrompt({
-			generationMode: state.generationMode,
-			locale,
-		}),
-		size: `${width}x${height}`,
-		resolution: state.scale || undefined,
-		reference_images: referenceImages,
-		width,
-		height,
-		count,
-		select: false,
-	}
-}
-
-function buildBootsPrompt({ generationMode, locale }) {
-	const isChinese = MagicPromptLocale.isChinese(locale)
-	const modeDefinition =
-		GENERATION_MODE_DEFINITIONS.find((item) => item.value === generationMode) ??
-		GENERATION_MODE_DEFINITIONS[1]
-	const modePromptSuffix = MagicPromptLocale.pickText(modeDefinition.promptSuffix, locale)
-	const productReference = MagicPromptLocale.getReferenceLabel(1, locale)
-	const modelReference = MagicPromptLocale.getReferenceLabel(2, locale)
-
-	if (isChinese) {
-		return (
-			`使用${productReference}和${modelReference}生成鞋履试穿图。${productReference}是唯一的鞋履商品参考图。` +
-			`画面中所有可见鞋履都必须与${productReference}在鞋型轮廓、颜色、材质、纹理、缝线、鞋底设计、logo 位置和关键五金细节上严格一致。` +
-			"鞋履必须自然穿着在脚上，具备可信的透视关系、落地阴影、与地面的接触感，以及符合人体结构的脚部摆放。" +
-			`${modelReference}作为模特姿态参考，请匹配其中的机位角度、腿部位置、场景和光线，同时始终保持鞋履商品为画面重点。` +
-			"最终结果应具备商业可用性、真实感，并聚焦于鞋履试穿效果。" +
-			modePromptSuffix
-		)
-	}
-
-	return (
-		`Create a footwear try-on image using ${productReference} and ${modelReference}. Use ${productReference} as the only shoe product reference. ` +
-		`Every visible shoe must match ${productReference} exactly in silhouette, color, material, texture, stitching, sole design, logo placement, and key hardware details. ` +
-		`The shoes must be worn naturally on the feet with convincing perspective, grounding shadow, contact with the surface, and anatomically correct foot placement. ` +
-		`Use ${modelReference} as the model pose reference. Match its camera angle, leg position, scene, and lighting while keeping the focus on the shoes from ${productReference}. ` +
-		"Keep the image commercially usable, realistic, and focused on the footwear result. " +
-		modePromptSuffix
-	)
-}

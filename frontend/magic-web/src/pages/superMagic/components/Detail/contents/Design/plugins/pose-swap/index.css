@@ -7,9 +7,9 @@
 }
 
 .pose-swap .mpk-card-tab {
+	height: 100%;
 	min-height: 96px;
 	max-height: 120px;
-	height: 100%;
 }
 
 .pose-swap .mpk-image-slot-preview {
@@ -23,5 +23,5 @@
 
 .pose-swap .generation-mode-group .mpk-option-item,
 .pose-swap .generation-mode-group .mpk-option {
-	width: 100%;	
+	width: 100%;
 }

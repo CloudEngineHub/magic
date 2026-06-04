@@ -26,152 +26,19 @@ const GENERATION_MODE_DEFINITIONS = [
 		descriptionFallback: "增强材质细节、边缘融合、空间真实感与商业成片质感。",
 		promptSuffix: {
 			zh: "增强商品材质纹理、边缘融合、接触阴影、反射、高光、空间透视与环境光一致性，使结果更具真实商拍质感与营销成片表现。",
-			en:
-				"Enhance material texture, edge blending, contact shadows, reflections, highlights, spatial perspective, and environmental lighting consistency so the result feels more premium, realistic, and campaign-ready.",
+			en: "Enhance material texture, edge blending, contact shadows, reflections, highlights, spatial perspective, and environmental lighting consistency so the result feels more premium, realistic, and campaign-ready.",
 		},
 	},
 ]
 
-registerMagicCanvasPlugin({
-	mount(ctx, root) {
-		const t = (key, fallback) => ctx.i18n.t(key, fallback)
-		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
-		const generationModeOptions = GENERATION_MODE_DEFINITIONS.map((item) => ({
-			value: item.value,
-			label: t(item.labelKey, item.labelFallback),
-			description: t(item.descriptionKey, item.descriptionFallback),
-		}))
-
-		return MagicPluginKit.mount(ctx, root, {
-			panelClassName: "product-scene-composite",
-			initialState: {
-				productImage: null,
-				sceneImages: [],
-				generationMode: "standard",
-				genCount: 1,
-			},
-			modelConfig: {
-				autoLoad: true,
-				showLoadErrors: true,
-				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
-			},
-			sections: [
-				{
-					id: "productImage",
-					kind: "image-slot",
-					stateKey: "productImage",
-					title: t("section.productImage", "商品图"),
-					uploadLabel: t("upload.productImage", "点击上传商品图"),
-					alt: t("section.productImage", "商品图"),
-					help: t(
-						"upload.productImage.help",
-						"支持上传单张商品图，建议主体清晰、角度稳定、背景干净，便于准确识别商品主体。",
-					),
-				},
-				{
-					id: "sceneImages",
-					kind: "image-grid",
-					stateKey: "sceneImages",
-					title: t("section.sceneImages", "生成场景"),
-					alt: t("section.sceneImages", "生成场景"),
-					addLabel: "+",
-					help: t(
-						"upload.sceneImages.help",
-						"支持上传多张真实场景图，生成时会逐张参考并分别输出。每次生成固定使用 1 张商品图 + 1 张场景图。",
-					),
-					maxCount: 10,
-				},
-				{
-					id: "generationMode",
-					kind: "option-group",
-					stateKey: "generationMode",
-					title: t("section.generationMode", "生成模式"),
-					groupClassName: "psc-generation-mode-group",
-					showDescriptionOnHover: true,
-					options: generationModeOptions,
-				},
-				{
-					id: "modelSelect",
-					kind: "model-select",
-					title: t("section.modelSelect", "AI 模型"),
-				},
-				{
-					id: "resolution",
-					kind: "resolution-select",
-					title: t("section.resolution", "分辨率"),
-					deps: ["modelId", "modelOptions"],
-				},
-				{
-					id: "count",
-					kind: "option-group",
-					stateKey: "genCount",
-					title: t("section.count", "生成张数"),
-					suffix: t("section.count.suffix", "每种场景生成数"),
-					options: GENERATION_COUNT_GROUP_OPTIONS,
-				},
-			],
-			generate: {
-				buttonLabel: `✨ ${t("button.generate", "生成商品图合成")}`,
-				loadingLabel: t("button.generating", "生成中…"),
-				getIdleHint: ({ state }) => {
-					if (!state.productImage) {
-						return t("empty.productImage", "请先上传 1 张商品图")
-					}
-					if (!state.sceneImages.length) {
-						return t("empty.sceneImages", "请先上传至少 1 张场景图")
-					}
-					return ""
-				},
-				isDisabled: ({ state }) => !state.productImage || !state.sceneImages.length,
-				validate: ({ state, helpers }) => {
-					if (!state.productImage) {
-						return t("empty.productImage", "请先上传 1 张商品图")
-					}
-					if (!state.sceneImages.length) {
-						return t("empty.sceneImages", "请先上传至少 1 张场景图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
-					if (getMaxReferenceImages(state, helpers) < 2) {
-						return t(
-							"error.referenceLimitTooLow",
-							"当前模型不支持同时使用商品图和场景图作为参考图",
-						)
-					}
-					const referenceIds = helpers.collectReferenceIds([
-						state.productImage,
-						...state.sceneImages,
-					])
-					if (referenceIds.length !== state.sceneImages.length + 1) {
-						return t("error.references", "图片缺少可用于生成的资源标识")
-					}
-					const selectedSize = resolveSceneRequestSize(state.sceneImages[0], state, helpers)
-					if (!selectedSize?.genW || !selectedSize?.genH) {
-						return t("error.noSize", "当前模型缺少可用尺寸配置")
-					}
-					return null
-				},
-				execute: async ({ state, helpers, generateAndPlace }) => {
-					const requests = buildSceneCompositeRequests({
-						state,
-						helpers,
-						locale: promptLocale,
-					})
-					const results = []
-					for (const request of requests) {
-						results.push(await generateAndPlace(request))
-					}
-					return results
-				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "商品图合成生成成功！"), "success")
-					ctx.ui.close?.()
-				},
-			},
-		})
-	},
-})
+function createInitialState() {
+	return {
+		productImage: null,
+		sceneImages: [],
+		generationMode: "standard",
+		genCount: 1,
+	}
+}
 
 function getMaxReferenceImages(state, helpers) {
 	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 6
@@ -277,3 +144,148 @@ function buildProductSceneCompositePrompt({ generationMode, locale }) {
 		modeSuffix
 	)
 }
+
+registerMagicCanvasPlugin({
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+	render(ctx, instance, root, scope) {
+		const t = (key, fallback) => ctx.i18n.t(key, fallback)
+		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
+		const generationModeOptions = GENERATION_MODE_DEFINITIONS.map((item) => ({
+			value: item.value,
+			label: t(item.labelKey, item.labelFallback),
+			description: t(item.descriptionKey, item.descriptionFallback),
+		}))
+
+		return ctx.panel.render(root, {
+			panelClassName: "product-scene-composite",
+			state: instance.state,
+			modelConfig: {
+				autoLoad: true,
+				showLoadErrors: true,
+				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
+			},
+			sections: [
+				{
+					id: "productImage",
+					kind: "image-slot",
+					stateKey: "productImage",
+					title: t("section.productImage", "商品图"),
+					uploadLabel: t("upload.productImage", "点击上传商品图"),
+					alt: t("section.productImage", "商品图"),
+					help: t(
+						"upload.productImage.help",
+						"支持上传单张商品图，建议主体清晰、角度稳定、背景干净，便于准确识别商品主体。",
+					),
+				},
+				{
+					id: "sceneImages",
+					kind: "image-grid",
+					stateKey: "sceneImages",
+					title: t("section.sceneImages", "生成场景"),
+					alt: t("section.sceneImages", "生成场景"),
+					addLabel: "+",
+					help: t(
+						"upload.sceneImages.help",
+						"支持上传多张真实场景图，生成时会逐张参考并分别输出。每次生成固定使用 1 张商品图 + 1 张场景图。",
+					),
+					maxCount: 10,
+				},
+				{
+					id: "generationMode",
+					kind: "option-group",
+					stateKey: "generationMode",
+					title: t("section.generationMode", "生成模式"),
+					groupClassName: "psc-generation-mode-group",
+					showDescriptionOnHover: true,
+					options: generationModeOptions,
+				},
+				{
+					id: "modelSelect",
+					kind: "model-select",
+					title: t("section.modelSelect", "AI 模型"),
+				},
+				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "分辨率"),
+					deps: ["modelId", "modelOptions"],
+				},
+				{
+					id: "count",
+					kind: "option-group",
+					stateKey: "genCount",
+					title: t("section.count", "生成张数"),
+					suffix: t("section.count.suffix", "每种场景生成数"),
+					options: GENERATION_COUNT_GROUP_OPTIONS,
+				},
+			],
+			generate: {
+				buttonLabel: `✨ ${t("button.generate", "生成商品图合成")}`,
+				loadingLabel: t("button.generating", "生成中…"),
+				getIdleHint: ({ state }) => {
+					if (!state.productImage) {
+						return t("empty.productImage", "请先上传 1 张商品图")
+					}
+					if (!state.sceneImages.length) {
+						return t("empty.sceneImages", "请先上传至少 1 张场景图")
+					}
+					return ""
+				},
+				isDisabled: ({ state }) => !state.productImage || !state.sceneImages.length,
+				validate: ({ state, helpers }) => {
+					if (!state.productImage) {
+						return t("empty.productImage", "请先上传 1 张商品图")
+					}
+					if (!state.sceneImages.length) {
+						return t("empty.sceneImages", "请先上传至少 1 张场景图")
+					}
+					if (!state.modelId) {
+						return t("error.noModels", "暂无可用 AI 模型")
+					}
+					if (getMaxReferenceImages(state, helpers) < 2) {
+						return t(
+							"error.referenceLimitTooLow",
+							"当前模型不支持同时使用商品图和场景图作为参考图",
+						)
+					}
+					const referenceIds = helpers.collectReferenceIds([
+						state.productImage,
+						...state.sceneImages,
+					])
+					if (referenceIds.length !== state.sceneImages.length + 1) {
+						return t("error.references", "图片缺少可用于生成的资源标识")
+					}
+					const selectedSize = resolveSceneRequestSize(
+						state.sceneImages[0],
+						state,
+						helpers,
+					)
+					if (!selectedSize?.genW || !selectedSize?.genH) {
+						return t("error.noSize", "当前模型缺少可用尺寸配置")
+					}
+					return null
+				},
+				execute: async ({ state, helpers, generateAndPlace }) => {
+					const requests = buildSceneCompositeRequests({
+						state,
+						helpers,
+						locale: promptLocale,
+					})
+					const results = []
+					for (const request of requests) {
+						results.push(await generateAndPlace(request))
+					}
+					return results
+				},
+				onSuccess: ({ ctx }) => {
+					ctx.ui.toast(t("toast.success", "商品图合成生成成功！"), "success")
+					ctx.ui.close?.()
+				},
+			},
+		})
+	},
+})

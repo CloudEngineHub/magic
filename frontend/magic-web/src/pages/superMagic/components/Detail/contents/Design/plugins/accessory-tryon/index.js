@@ -74,8 +74,7 @@ const GENERATION_MODE_DEFINITIONS = [
 		descriptionFallback: "强调稳定、准确的配饰试戴结果，适合常规商拍生成。",
 		promptSuffix: {
 			zh: "保持试戴结果稳定、准确，具备商业可用的完成度，并在当前模特场景中呈现自然佩戴关系。",
-			en:
-				"Keep the try-on stable, accurate, and commercially polished while preserving natural placement in the model's current scene.",
+			en: "Keep the try-on stable, accurate, and commercially polished while preserving natural placement in the model's current scene.",
 		},
 	},
 	{
@@ -86,8 +85,7 @@ const GENERATION_MODE_DEFINITIONS = [
 		descriptionFallback: "增强材质反射、遮挡、贴合与环境氛围适配，适合更高级的商拍试戴效果。",
 		promptSuffix: {
 			zh: "增强材质反馈、真实反射、接触阴影、细微遮挡和场景适配，使配饰在当前画面的光线、氛围和动态中更像真实佩戴。",
-			en:
-				"Add richer material response, realistic reflections, contact shadows, subtle occlusion, and scene-aware styling so the accessory feels naturally worn in the lighting, mood, and motion of the current image.",
+			en: "Add richer material response, realistic reflections, contact shadows, subtle occlusion, and scene-aware styling so the accessory feels naturally worn in the lighting, mood, and motion of the current image.",
 		},
 	},
 ]
@@ -103,18 +101,15 @@ const ACCESSORY_CATEGORY_PROMPTS = {
 	},
 	necklace: {
 		zh: "将项链自然放置在参考图 2 的颈部和锁骨区域，处理好领口形状、头发遮挡、吊坠下垂、金属接触和胸口裁切关系。",
-		en:
-			"Place the necklace naturally around the neck and collarbone area of reference image 2. Respect neckline shape, hair overlap, pendant drop, metal contact, and chest crop.",
+		en: "Place the necklace naturally around the neck and collarbone area of reference image 2. Respect neckline shape, hair overlap, pendant drop, metal contact, and chest crop.",
 	},
 	glasses: {
 		zh: "让眼镜自然贴合在参考图 2 的脸上，保证鼻托位置、镜腿落点、镜片角度正确，并呈现场景光线一致的真实反射。",
-		en:
-			"Fit the glasses naturally on the face of reference image 2 with correct bridge position, temple placement, lens angle, and realistic reflections that match the scene lighting.",
+		en: "Fit the glasses naturally on the face of reference image 2 with correct bridge position, temple placement, lens angle, and realistic reflections that match the scene lighting.",
 	},
 	wristwear: {
 		zh: "将手链或手表自然放置在参考图 2 可见的手腕上，匹配手腕角度、表带或链条弧度、袖口遮挡、金属高光和皮肤接触压力。",
-		en:
-			"Place the bracelet or watch naturally on the visible wrist of reference image 2. Match wrist angle, strap curvature, sleeve overlap, metal highlights, and skin contact pressure.",
+		en: "Place the bracelet or watch naturally on the visible wrist of reference image 2. Match wrist angle, strap curvature, sleeve overlap, metal highlights, and skin contact pressure.",
 	},
 	hat: {
 		zh: "让帽子自然贴合在参考图 2 的头部，尊重头部角度、发丝压缩、帽檐阴影以及场景中暗示的动作或风向。",
@@ -126,8 +121,87 @@ const ACCESSORY_CATEGORY_PROMPTS = {
 	},
 }
 
+function createInitialState() {
+	return {
+		accessoryCategory: "bag",
+		productImage: null,
+		modelImage: null,
+		generationMode: "standard",
+		genCount: 1,
+	}
+}
+
+function createBeforePickHandler(stateKey, t) {
+	return ({ state, helpers }) => {
+		const maxReferenceImages = getMaxReferenceImages(state, helpers)
+		const currentCount = countReferenceImages(state)
+		if (!state[stateKey] && currentCount >= maxReferenceImages) {
+			return t("error.referenceLimit", "参考图数量已达当前模型上限")
+		}
+		return null
+	}
+}
+
+function getReferenceImages(state) {
+	return [state.productImage, state.modelImage].filter(Boolean)
+}
+
+function countReferenceImages(state) {
+	return getReferenceImages(state).length
+}
+
+function getMaxReferenceImages(state, helpers) {
+	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 2
+}
+
+function buildAccessoryTryOnPrompt({ accessoryCategory, generationMode, locale }) {
+	const isChinese = MagicPromptLocale.isChinese(locale)
+	const modeDefinition =
+		GENERATION_MODE_DEFINITIONS.find((item) => item.value === generationMode) ??
+		GENERATION_MODE_DEFINITIONS[0]
+	const categoryDefinition = ACCESSORY_CATEGORY_OPTIONS.find(
+		(item) => item.value === accessoryCategory,
+	)
+	const categoryLabel = isChinese
+		? (categoryDefinition?.labelFallback ?? accessoryCategory)
+		: (categoryDefinition?.promptName ?? accessoryCategory)
+	const categoryPrompt =
+		MagicPromptLocale.pickText(ACCESSORY_CATEGORY_PROMPTS[accessoryCategory], locale) ||
+		(isChinese
+			? "将所选配饰自然放置在正确且可见的人体区域。"
+			: "Place the selected accessory naturally on the correct visible body region.")
+	const modePromptSuffix = MagicPromptLocale.pickText(modeDefinition.promptSuffix, locale)
+
+	if (isChinese) {
+		return (
+			`虚拟配饰试戴：将参考图 1 中的${categoryLabel}应用到参考图 2 的人物上。` +
+			"参考图 2 是底图，只编辑所选配饰品类；其余内容包括裁切、姿势、构图、身体、服装、背景和光线都必须保持一致。" +
+			"最终仅输出参考图 2 中原本可见的身体部分，不要扩图或补全画面范围。" +
+			"参考图 1 可以是纯商品图，也可以是模特图，但只提取所选品类对应的配饰，不要复制其中其他人物、服装、身体部位或背景。" +
+			"配饰必须像在当前场景中真实佩戴一样自然，匹配参考图 2 的透视、比例、阴影、色彩反馈、反射和整体氛围。" +
+			`${categoryPrompt} ` +
+			modePromptSuffix
+		)
+	}
+
+	return (
+		`Virtual accessory try-on: apply the selected ${categoryLabel} from reference image 1 to the person in reference image 2. ` +
+		"Reference image 2 is the base photo. Edit only the selected accessory category; everything else — crop, pose, framing, body, clothing, background, lighting — must stay identical. " +
+		"Output only the body parts visible in reference image 2. Do not uncrop or expand the frame. " +
+		"Reference image 1 may be a product-only image or a model image. Extract only the selected accessory category from reference image 1; do not copy any other person, garment, body part, or background. " +
+		"The accessory must look naturally worn in the current scene, matching perspective, scale, shadow behavior, color response, reflections, and atmosphere of reference image 2. " +
+		`${categoryPrompt} ` +
+		modePromptSuffix
+	)
+}
+
 registerMagicCanvasPlugin({
-	mount(ctx, root) {
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+	render(ctx, instance, root, scope) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
 		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 		const accessoryCategories = ACCESSORY_CATEGORY_OPTIONS.map((item) => ({
@@ -141,15 +215,9 @@ registerMagicCanvasPlugin({
 			description: t(item.descriptionKey, item.descriptionFallback),
 		}))
 
-		return MagicPluginKit.mount(ctx, root, {
+		return ctx.panel.render(root, {
 			panelClassName: "accessory-tryon",
-			initialState: {
-				accessoryCategory: "bag",
-				productImage: null,
-				modelImage: null,
-				generationMode: "standard",
-				genCount: 1,
-			},
+			state: instance.state,
 			modelConfig: {
 				autoLoad: true,
 				defaultModelId: "gemini-3-pro-image-preview",
@@ -290,67 +358,3 @@ registerMagicCanvasPlugin({
 		})
 	},
 })
-
-function createBeforePickHandler(stateKey, t) {
-	return ({ state, helpers }) => {
-		const maxReferenceImages = getMaxReferenceImages(state, helpers)
-		const currentCount = countReferenceImages(state)
-		if (!state[stateKey] && currentCount >= maxReferenceImages) {
-			return t("error.referenceLimit", "参考图数量已达当前模型上限")
-		}
-		return null
-	}
-}
-
-function getReferenceImages(state) {
-	return [state.productImage, state.modelImage].filter(Boolean)
-}
-
-function countReferenceImages(state) {
-	return getReferenceImages(state).length
-}
-
-function getMaxReferenceImages(state, helpers) {
-	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 2
-}
-
-function buildAccessoryTryOnPrompt({ accessoryCategory, generationMode, locale }) {
-	const isChinese = MagicPromptLocale.isChinese(locale)
-	const modeDefinition =
-		GENERATION_MODE_DEFINITIONS.find((item) => item.value === generationMode) ??
-		GENERATION_MODE_DEFINITIONS[0]
-	const categoryDefinition = ACCESSORY_CATEGORY_OPTIONS.find(
-		(item) => item.value === accessoryCategory,
-	)
-	const categoryLabel = isChinese
-		? categoryDefinition?.labelFallback ?? accessoryCategory
-		: categoryDefinition?.promptName ?? accessoryCategory
-	const categoryPrompt =
-		MagicPromptLocale.pickText(ACCESSORY_CATEGORY_PROMPTS[accessoryCategory], locale) ||
-		(isChinese
-			? "将所选配饰自然放置在正确且可见的人体区域。"
-			: "Place the selected accessory naturally on the correct visible body region.")
-	const modePromptSuffix = MagicPromptLocale.pickText(modeDefinition.promptSuffix, locale)
-
-	if (isChinese) {
-		return (
-			`虚拟配饰试戴：将参考图 1 中的${categoryLabel}应用到参考图 2 的人物上。` +
-			"参考图 2 是底图，只编辑所选配饰品类；其余内容包括裁切、姿势、构图、身体、服装、背景和光线都必须保持一致。" +
-			"最终仅输出参考图 2 中原本可见的身体部分，不要扩图或补全画面范围。" +
-			"参考图 1 可以是纯商品图，也可以是模特图，但只提取所选品类对应的配饰，不要复制其中其他人物、服装、身体部位或背景。" +
-			"配饰必须像在当前场景中真实佩戴一样自然，匹配参考图 2 的透视、比例、阴影、色彩反馈、反射和整体氛围。" +
-			`${categoryPrompt} ` +
-			modePromptSuffix
-		)
-	}
-
-	return (
-		`Virtual accessory try-on: apply the selected ${categoryLabel} from reference image 1 to the person in reference image 2. ` +
-		"Reference image 2 is the base photo. Edit only the selected accessory category; everything else — crop, pose, framing, body, clothing, background, lighting — must stay identical. " +
-		"Output only the body parts visible in reference image 2. Do not uncrop or expand the frame. " +
-		"Reference image 1 may be a product-only image or a model image. Extract only the selected accessory category from reference image 1; do not copy any other person, garment, body part, or background. " +
-		"The accessory must look naturally worn in the current scene, matching perspective, scale, shadow behavior, color response, reflections, and atmosphere of reference image 2. " +
-		`${categoryPrompt} ` +
-		modePromptSuffix
-	)
-}

@@ -9,6 +9,25 @@ const runtimePath = resolve(
 const runtimeCode = readFileSync(runtimePath, "utf8")
 type MagicPluginKitWindow = Window & {
 	MagicPluginKit?: {
+		createPanelState: (
+			ctx: unknown,
+			initialState?: Record<string, unknown>,
+		) => Record<string, unknown>
+		render: (
+			ctx: unknown,
+			root: HTMLElement,
+			config: Record<string, unknown>,
+		) => {
+			elements?: {
+				root?: HTMLElement
+				panel?: HTMLElement | null
+				content?: HTMLElement | null
+				footer?: HTMLElement | null
+				slots?: Record<string, HTMLElement>
+			}
+			update?: (change: { keys?: Set<string> }) => void
+			dispose?: () => void
+		}
 		mount: (
 			ctx: unknown,
 			root: HTMLElement,
@@ -42,6 +61,20 @@ function createCtx(pickFiles = vi.fn().mockResolvedValue([])) {
 			pickFiles,
 		},
 		ai: {},
+	}
+}
+
+function createCtxWithExternalState() {
+	const ctx = createCtx()
+	return {
+		...ctx,
+		state: {
+			create: vi.fn((initialState = {}) => ({ ...initialState })),
+			patch: vi.fn((state: Record<string, unknown>, patch: Record<string, unknown>) => {
+				Object.assign(state, patch)
+				return state
+			}),
+		},
 	}
 }
 
@@ -80,6 +113,105 @@ function createModel() {
 describe("magic-plugin-kit", () => {
 	beforeEach(() => {
 		document.body.innerHTML = ""
+	})
+
+	it("returns a view controller from render and cleans up through dispose", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		const view = kit.render(ctx, root, {
+			sections: [],
+			generate: createGenerateConfig(),
+		})
+
+		expect(root.querySelector(".mpk-panel")).toBeTruthy()
+		view.dispose?.()
+		expect(root.children).toHaveLength(0)
+	})
+
+	it("can render externally owned ctx.state and update through the view controller", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtxWithExternalState()
+		const state = kit.createPanelState(ctx, {
+			mode: "fast",
+		})
+
+		const view = kit.render(ctx, root, {
+			state,
+			sections: [
+				{
+					id: "mode",
+					kind: "option-group",
+					stateKey: "mode",
+					title: "Mode",
+					options: [
+						{ value: "fast", label: "Fast" },
+						{ value: "pro", label: "Pro" },
+					],
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const initialButtons = root.querySelectorAll<HTMLButtonElement>(".mpk-option")
+		expect(ctx.state.create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				mode: "fast",
+			}),
+		)
+		expect(initialButtons[0]?.classList.contains("is-active")).toBe(true)
+		expect(initialButtons[1]?.classList.contains("is-active")).toBe(false)
+
+		ctx.state.patch(state, { mode: "pro" })
+		view.update?.({ keys: new Set(["mode"]) })
+
+		const nextButtons = root.querySelectorAll<HTMLButtonElement>(".mpk-option")
+		expect(nextButtons[0]?.classList.contains("is-active")).toBe(false)
+		expect(nextButtons[1]?.classList.contains("is-active")).toBe(true)
+	})
+
+	it("passes stable DOM elements to custom section render callbacks", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		const seenPanels: unknown[] = []
+
+		const view = kit.render(ctx, root, {
+			sections: [
+				{
+					id: "custom",
+					kind: "custom",
+					render: ({ elements }: { elements: { panel: HTMLElement | null } }) => {
+						seenPanels.push(elements.panel)
+						const node = document.createElement("div")
+						node.className = "custom-node"
+						return node
+					},
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		expect(seenPanels).toEqual([root.querySelector(".mpk-panel")])
+		expect(view.elements?.panel).toBe(root.querySelector(".mpk-panel"))
+		expect(view.elements?.root).toBe(root)
+	})
+
+	it("keeps mount as a cleanup-function compatibility wrapper", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		const cleanup = kit.mount(ctx, root, {
+			sections: [],
+			generate: createGenerateConfig(),
+		})
+
+		expect(root.querySelector(".mpk-panel")).toBeTruthy()
+		cleanup?.()
+		expect(root.children).toHaveLength(0)
 	})
 
 	it("re-renders only sections affected by the patch", () => {
@@ -179,7 +311,8 @@ describe("magic-plugin-kit", () => {
 		let cards = imageSlot.querySelectorAll(".mpk-image-card")
 		expect(cards[0]).toBe(initialFirstCard)
 
-		const secondCardRemoveButton = cards[1].querySelector<HTMLButtonElement>(".mpk-remove-button")
+		const secondCardRemoveButton =
+			cards[1].querySelector<HTMLButtonElement>(".mpk-remove-button")
 		secondCardRemoveButton?.click()
 		await vi.waitFor(() => {
 			expect(imageSlot.querySelectorAll(".mpk-image-card")).toHaveLength(1)
@@ -205,7 +338,9 @@ describe("magic-plugin-kit", () => {
 					kind: "option-group",
 					stateKey: "defaultMode",
 					title: "Default mode",
-					options: [{ value: "fast", label: "Fast", description: "Default hidden description" }],
+					options: [
+						{ value: "fast", label: "Fast", description: "Default hidden description" },
+					],
 				},
 				{
 					id: "hoverMode",
@@ -382,13 +517,17 @@ describe("magic-plugin-kit", () => {
 			generate: createGenerateConfig(),
 		})
 
-		const ratioButtons = root.querySelectorAll<HTMLButtonElement>(".mpk-size-control-ratios .mpk-option")
+		const ratioButtons = root.querySelectorAll<HTMLButtonElement>(
+			".mpk-size-control-ratios .mpk-option",
+		)
 		expect(ratioButtons[0].classList.contains("is-active")).toBe(true)
 		expect(root.querySelectorAll(".mpk-size-input")).toHaveLength(0)
 
 		ratioButtons[1].click()
 
-		const nextButtons = root.querySelectorAll<HTMLButtonElement>(".mpk-size-control-ratios .mpk-option")
+		const nextButtons = root.querySelectorAll<HTMLButtonElement>(
+			".mpk-size-control-ratios .mpk-option",
+		)
 		expect(nextButtons[0].classList.contains("is-active")).toBe(false)
 		expect(nextButtons[1].classList.contains("is-active")).toBe(true)
 	})

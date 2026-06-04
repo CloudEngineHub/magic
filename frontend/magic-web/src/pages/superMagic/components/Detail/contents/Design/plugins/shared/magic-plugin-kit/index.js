@@ -150,28 +150,8 @@
 			.filter((setting) => setting.requestKey && setting.options.length > 0)
 	}
 
-	// 计算遮罩的边界框
-	function getMaskBoundingBox(canvas) {
-		const { width, height } = canvas
-		const data = canvas.getContext("2d").getImageData(0, 0, width, height).data
-		let minX = width, minY = height, maxX = -1, maxY = -1
-		for (let y = 0; y < height; y++) {
-			for (let x = 0; x < width; x++) {
-				if (data[(y * width + x) * 4] > 128) {
-					if (x < minX) minX = x
-					if (x > maxX) maxX = x
-					if (y < minY) minY = y
-					if (y > maxY) maxY = y
-				}
-			}
-		}
-		return maxX >= 0 ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } : null
-	}
-
-	/** 挂载插件 */
-	function mount(ctx, root, config) {
-		const t = (key, fallback) => ctx.i18n?.t?.(key, fallback) ?? fallback ?? key
-		const state = {
+	function createPanelStateSeed(initialState = {}) {
+		return {
 			/** 模型列表 */
 			modelOptions: [],
 			/** 模型 id */
@@ -187,8 +167,50 @@
 			/** 错误信息 */
 			error: "",
 			/** 业务状态 */
-			...(config.initialState ?? {}),
+			...(initialState ?? {}),
 		}
+	}
+
+	function createPanelState(ctx, initialState = {}) {
+		const stateSeed = createPanelStateSeed(initialState)
+		return ctx?.state?.create ? ctx.state.create(stateSeed) : stateSeed
+	}
+
+	function ensurePanelStateDefaults(state, initialState = {}) {
+		const stateSeed = createPanelStateSeed(initialState)
+		Object.keys(stateSeed).forEach((key) => {
+			if (!(key in state)) state[key] = stateSeed[key]
+		})
+		return state
+	}
+
+	// 计算遮罩的边界框
+	function getMaskBoundingBox(canvas) {
+		const { width, height } = canvas
+		const data = canvas.getContext("2d").getImageData(0, 0, width, height).data
+		let minX = width,
+			minY = height,
+			maxX = -1,
+			maxY = -1
+		for (let y = 0; y < height; y++) {
+			for (let x = 0; x < width; x++) {
+				if (data[(y * width + x) * 4] > 128) {
+					if (x < minX) minX = x
+					if (x > maxX) maxX = x
+					if (y < minY) minY = y
+					if (y > maxY) maxY = y
+				}
+			}
+		}
+		return maxX >= 0 ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } : null
+	}
+
+	/** 渲染插件面板并返回 view controller */
+	function render(ctx, root, config) {
+		const t = (key, fallback) => ctx.i18n?.t?.(key, fallback) ?? fallback ?? key
+		const state = config.state
+			? ensurePanelStateDefaults(config.state, config.initialState)
+			: createPanelState(ctx, config.initialState)
 		/** 视图相关 */
 		const view = {
 			/** 面板 */
@@ -204,6 +226,16 @@
 		}
 		let helpers = null
 
+		function getElements() {
+			return {
+				root,
+				panel: view.panel,
+				content: view.content,
+				footer: view.footer,
+				slots: view.slots,
+			}
+		}
+
 		/** 更新高度 */
 		function updateHeight() {
 			requestAnimationFrame(() => {
@@ -212,7 +244,7 @@
 		}
 
 		function getCallbackContext(currentState = state) {
-			return { state: currentState, helpers, t }
+			return { state: currentState, setState, helpers, t, elements: getElements() }
 		}
 
 		function normalizeTextareaValue(value, maxLength, hasMaxLength) {
@@ -277,7 +309,7 @@
 			const sizes = getVisibleSizes(currentState)
 			const selectedRatio =
 				sizes.find((item) => item.label === currentState.ratioKey) ?? sizes[0]
-			
+
 			if (!selectedRatio?.value) return null
 			const parsedSize = parseSizeValue(selectedRatio.value)
 			if (!parsedSize) return null
@@ -310,10 +342,10 @@
 				: false
 			const matchedSize = currentRatioKey
 				? sizes.find(
-					(size) =>
-						size.label === currentRatioKey &&
-						(!currentScale || size.scale === currentScale),
-				)
+						(size) =>
+							size.label === currentRatioKey &&
+							(!currentScale || size.scale === currentScale),
+					)
 				: null
 			const canKeepCurrentSelection = Boolean(
 				currentRatioKey && currentScale && hasCurrentResolution && matchedSize,
@@ -442,7 +474,10 @@
 			const validationError = validateSectionAcquire(section)
 			if (validationError) return []
 			if (payload.kind === "picker") {
-				return pickImageFiles({ multiple: payload.maxCount > 1, maxCount: payload.maxCount })
+				return pickImageFiles({
+					multiple: payload.maxCount > 1,
+					maxCount: payload.maxCount,
+				})
 			}
 			if (payload.kind === "local") {
 				return uploadDroppedFiles(payload.files.slice(0, payload.maxCount))
@@ -572,7 +607,7 @@
 		/** 绑定图片插槽事件 */
 		function bindImageImportTarget(target, section, options) {
 			if (!target) return
-			
+
 			const mode = options.mode
 			let dragDepth = 0
 
@@ -612,7 +647,10 @@
 				if (!images?.length) return
 				if (mode === "grid") {
 					setState({
-						[section.stateKey]: [...currentAssets, ...images].slice(0, importLimit.maxCount),
+						[section.stateKey]: [...currentAssets, ...images].slice(
+							0,
+							importLimit.maxCount,
+						),
 						error: "",
 					})
 					return
@@ -963,11 +1001,17 @@
 			let cropImgObjUrl = null
 			let cropImgLoaded = false
 			if (ctx.assets?.fetchBlob && sourceUrl) {
-				ctx.assets.fetchBlob(sourceUrl)
+				ctx.assets
+					.fetchBlob(sourceUrl)
 					.then((blob) => {
 						cropImgObjUrl = URL.createObjectURL(blob)
-						cropImg.onload = () => { cropImgLoaded = true; URL.revokeObjectURL(cropImgObjUrl) }
-						cropImg.onerror = () => { URL.revokeObjectURL(cropImgObjUrl) }
+						cropImg.onload = () => {
+							cropImgLoaded = true
+							URL.revokeObjectURL(cropImgObjUrl)
+						}
+						cropImg.onerror = () => {
+							URL.revokeObjectURL(cropImgObjUrl)
+						}
 						cropImg.src = cropImgObjUrl
 					})
 					.catch(() => {}) // CORS/network fail, crop will be skipped
@@ -1060,7 +1104,6 @@
 				redrawDisplay()
 			}
 
-
 			function scheduleUpload() {
 				hasPendingMaskChange = false
 				confirmBtn.disabled = true
@@ -1078,19 +1121,18 @@
 							const cropCanvas = document.createElement("canvas")
 							cropCanvas.width = cw
 							cropCanvas.height = ch
-							cropCanvas.getContext("2d").drawImage(srcForCrop, cx, cy, cw, ch, 0, 0, cw, ch)
-							cropCanvas.toBlob(
-								(cropBlob) => {
-									if (!cropBlob || !ctx.assets?.uploadFile) return
-									ctx.assets
-										.uploadFile(cropBlob, "crop.png", "image/png")
-										.then((asset) => {
-											setState({ [section.stateKey]: asset })
-										})
-										.catch(() => {})
-								},
-								"image/png",
-							)
+							cropCanvas
+								.getContext("2d")
+								.drawImage(srcForCrop, cx, cy, cw, ch, 0, 0, cw, ch)
+							cropCanvas.toBlob((cropBlob) => {
+								if (!cropBlob || !ctx.assets?.uploadFile) return
+								ctx.assets
+									.uploadFile(cropBlob, "crop.png", "image/png")
+									.then((asset) => {
+										setState({ [section.stateKey]: asset })
+									})
+									.catch(() => {})
+							}, "image/png")
 						} else {
 							setState({ [section.stateKey]: null })
 						}
@@ -1123,9 +1165,26 @@
 				if (!painting) return
 				painting = false
 			})
-			displayCanvas.addEventListener("touchstart", (e) => { e.preventDefault(); painting = true; doPaint(e) }, { passive: false })
-			displayCanvas.addEventListener("touchmove", (e) => { e.preventDefault(); doPaint(e) }, { passive: false })
-			displayCanvas.addEventListener("touchend", () => { painting = false })
+			displayCanvas.addEventListener(
+				"touchstart",
+				(e) => {
+					e.preventDefault()
+					painting = true
+					doPaint(e)
+				},
+				{ passive: false },
+			)
+			displayCanvas.addEventListener(
+				"touchmove",
+				(e) => {
+					e.preventDefault()
+					doPaint(e)
+				},
+				{ passive: false },
+			)
+			displayCanvas.addEventListener("touchend", () => {
+				painting = false
+			})
 
 			const wrap = createElement("div", "mpk-mask-painter")
 			wrap.append(displayCanvas)
@@ -1166,7 +1225,6 @@
 				sectionNode.append(createElement("p", "mpk-help", section.help))
 			}
 
-			
 			view.sectionViews[section.id] = {
 				sectionNode,
 				maskCanvas,
@@ -1284,11 +1342,9 @@
 				button.disabled = Boolean(option.disabled)
 				button.addEventListener("click", () => {
 					if (option.disabled || current.ratioValue === option.value) return
-					setState(
-						{
-							ratioKey: option.value
-						}
-					)
+					setState({
+						ratioKey: option.value,
+					})
 				})
 				ratioList.append(button)
 			})
@@ -1415,7 +1471,7 @@
 
 		/** 渲染区块 */
 		function renderSection(section) {
-			if (section.when && !section.when({ state, helpers, t })) {
+			if (section.when && !section.when(getCallbackContext())) {
 				delete view.sectionViews[section.id]
 				return document.createDocumentFragment()
 			}
@@ -1428,13 +1484,13 @@
 			if (section.kind === "option-group") return renderOptionGroup(section)
 			if (section.kind === "model-select") return renderModelSelect(section)
 			if (section.kind === "resolution-select") return renderResolutionSelect(section)
-			if (section.kind === "custom") return section.render({ state, setState, helpers, t })
+			if (section.kind === "custom") return section.render(getCallbackContext())
 			return document.createDocumentFragment()
 		}
 
 		/** 更新区块 */
 		function updateSection(section) {
-			if (section.when && !section.when({ state, helpers, t })) {
+			if (section.when && !section.when(getCallbackContext())) {
 				view.slots[section.id].replaceChildren()
 				delete view.sectionViews[section.id]
 				return
@@ -1528,6 +1584,10 @@
 		function setState(patch) {
 			const hasChanged = Object.keys(patch).some((key) => state[key] !== patch[key])
 			if (!hasChanged) return
+			if (ctx.state?.patch) {
+				ctx.state.patch(state, patch)
+				return
+			}
 			Object.assign(state, patch)
 			updateView(patch)
 		}
@@ -1553,12 +1613,36 @@
 		updateView()
 		void loadImageModels()
 
+		return {
+			elements: getElements(),
+			update(change) {
+				if (!change?.keys) {
+					updateView()
+					return
+				}
+				const patch = {}
+				change.keys.forEach((key) => {
+					patch[key] = state[key]
+				})
+				updateView(patch)
+			},
+			dispose() {
+				root.replaceChildren()
+			},
+		}
+	}
+
+	/** 旧插件协议兼容入口 */
+	function mount(ctx, root, config) {
+		const view = render(ctx, root, config)
 		return function cleanup() {
-			root.replaceChildren()
+			view?.dispose?.()
 		}
 	}
 
 	global.MagicPluginKit = {
+		createPanelState,
+		render,
 		mount,
 	}
 })(window)

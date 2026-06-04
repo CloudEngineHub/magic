@@ -14,49 +14,149 @@ const LANGUAGE_CATALOG = [
 		key: "europe",
 		label: { zh: "欧洲", en: "Europe" },
 		languages: [
-			{ code: "en", label: { zh: "英语", en: "English" }, promptText: { zh: "英语", en: "English" } },
-			{ code: "fr", label: { zh: "法语", en: "French" }, promptText: { zh: "法语", en: "French" } },
-			{ code: "de", label: { zh: "德语", en: "German" }, promptText: { zh: "德语", en: "German" } },
-			{ code: "es", label: { zh: "西班牙语", en: "Spanish" }, promptText: { zh: "西班牙语", en: "Spanish" } },
-			{ code: "it", label: { zh: "意大利语", en: "Italian" }, promptText: { zh: "意大利语", en: "Italian" } },
-			{ code: "pt", label: { zh: "葡萄牙语", en: "Portuguese" }, promptText: { zh: "葡萄牙语", en: "Portuguese" } },
-			{ code: "nl", label: { zh: "荷兰语", en: "Dutch" }, promptText: { zh: "荷兰语", en: "Dutch" } },
-			{ code: "pl", label: { zh: "波兰语", en: "Polish" }, promptText: { zh: "波兰语", en: "Polish" } },
-			{ code: "sv", label: { zh: "瑞典语", en: "Swedish" }, promptText: { zh: "瑞典语", en: "Swedish" } },
+			{
+				code: "en",
+				label: { zh: "英语", en: "English" },
+				promptText: { zh: "英语", en: "English" },
+			},
+			{
+				code: "fr",
+				label: { zh: "法语", en: "French" },
+				promptText: { zh: "法语", en: "French" },
+			},
+			{
+				code: "de",
+				label: { zh: "德语", en: "German" },
+				promptText: { zh: "德语", en: "German" },
+			},
+			{
+				code: "es",
+				label: { zh: "西班牙语", en: "Spanish" },
+				promptText: { zh: "西班牙语", en: "Spanish" },
+			},
+			{
+				code: "it",
+				label: { zh: "意大利语", en: "Italian" },
+				promptText: { zh: "意大利语", en: "Italian" },
+			},
+			{
+				code: "pt",
+				label: { zh: "葡萄牙语", en: "Portuguese" },
+				promptText: { zh: "葡萄牙语", en: "Portuguese" },
+			},
+			{
+				code: "nl",
+				label: { zh: "荷兰语", en: "Dutch" },
+				promptText: { zh: "荷兰语", en: "Dutch" },
+			},
+			{
+				code: "pl",
+				label: { zh: "波兰语", en: "Polish" },
+				promptText: { zh: "波兰语", en: "Polish" },
+			},
+			{
+				code: "sv",
+				label: { zh: "瑞典语", en: "Swedish" },
+				promptText: { zh: "瑞典语", en: "Swedish" },
+			},
 		],
 	},
 	{
 		key: "asia",
 		label: { zh: "亚洲", en: "Asia" },
 		languages: [
-			{ code: "zh", label: { zh: "中文", en: "Chinese" }, promptText: { zh: "中文", en: "Chinese" } },
-			{ code: "ja", label: { zh: "日语", en: "Japanese" }, promptText: { zh: "日语", en: "Japanese" } },
-			{ code: "ko", label: { zh: "韩语", en: "Korean" }, promptText: { zh: "韩语", en: "Korean" } },
-			{ code: "th", label: { zh: "泰语", en: "Thai" }, promptText: { zh: "泰语", en: "Thai" } },
-			{ code: "vi", label: { zh: "越南语", en: "Vietnamese" }, promptText: { zh: "越南语", en: "Vietnamese" } },
-			{ code: "id", label: { zh: "印尼语", en: "Indonesian" }, promptText: { zh: "印尼语", en: "Indonesian" } },
-			{ code: "ms", label: { zh: "马来语", en: "Malay" }, promptText: { zh: "马来语", en: "Malay" } },
-			{ code: "hi", label: { zh: "印地语", en: "Hindi" }, promptText: { zh: "印地语", en: "Hindi" } },
+			{
+				code: "zh",
+				label: { zh: "中文", en: "Chinese" },
+				promptText: { zh: "中文", en: "Chinese" },
+			},
+			{
+				code: "ja",
+				label: { zh: "日语", en: "Japanese" },
+				promptText: { zh: "日语", en: "Japanese" },
+			},
+			{
+				code: "ko",
+				label: { zh: "韩语", en: "Korean" },
+				promptText: { zh: "韩语", en: "Korean" },
+			},
+			{
+				code: "th",
+				label: { zh: "泰语", en: "Thai" },
+				promptText: { zh: "泰语", en: "Thai" },
+			},
+			{
+				code: "vi",
+				label: { zh: "越南语", en: "Vietnamese" },
+				promptText: { zh: "越南语", en: "Vietnamese" },
+			},
+			{
+				code: "id",
+				label: { zh: "印尼语", en: "Indonesian" },
+				promptText: { zh: "印尼语", en: "Indonesian" },
+			},
+			{
+				code: "ms",
+				label: { zh: "马来语", en: "Malay" },
+				promptText: { zh: "马来语", en: "Malay" },
+			},
+			{
+				code: "hi",
+				label: { zh: "印地语", en: "Hindi" },
+				promptText: { zh: "印地语", en: "Hindi" },
+			},
 		],
 	},
 	{
 		key: "africa",
 		label: { zh: "非洲", en: "Africa" },
 		languages: [
-			{ code: "ar", label: { zh: "阿拉伯语", en: "Arabic" }, promptText: { zh: "阿拉伯语", en: "Arabic" } },
-			{ code: "sw", label: { zh: "斯瓦希里语", en: "Swahili" }, promptText: { zh: "斯瓦希里语", en: "Swahili" } },
-			{ code: "am", label: { zh: "阿姆哈拉语", en: "Amharic" }, promptText: { zh: "阿姆哈拉语", en: "Amharic" } },
-			{ code: "ha", label: { zh: "豪萨语", en: "Hausa" }, promptText: { zh: "豪萨语", en: "Hausa" } },
+			{
+				code: "ar",
+				label: { zh: "阿拉伯语", en: "Arabic" },
+				promptText: { zh: "阿拉伯语", en: "Arabic" },
+			},
+			{
+				code: "sw",
+				label: { zh: "斯瓦希里语", en: "Swahili" },
+				promptText: { zh: "斯瓦希里语", en: "Swahili" },
+			},
+			{
+				code: "am",
+				label: { zh: "阿姆哈拉语", en: "Amharic" },
+				promptText: { zh: "阿姆哈拉语", en: "Amharic" },
+			},
+			{
+				code: "ha",
+				label: { zh: "豪萨语", en: "Hausa" },
+				promptText: { zh: "豪萨语", en: "Hausa" },
+			},
 		],
 	},
 	{
 		key: "other",
 		label: { zh: "其他", en: "Other" },
 		languages: [
-			{ code: "ru", label: { zh: "俄语", en: "Russian" }, promptText: { zh: "俄语", en: "Russian" } },
-			{ code: "tr", label: { zh: "土耳其语", en: "Turkish" }, promptText: { zh: "土耳其语", en: "Turkish" } },
-			{ code: "he", label: { zh: "希伯来语", en: "Hebrew" }, promptText: { zh: "希伯来语", en: "Hebrew" } },
-			{ code: "fa", label: { zh: "波斯语", en: "Persian" }, promptText: { zh: "波斯语", en: "Persian" } },
+			{
+				code: "ru",
+				label: { zh: "俄语", en: "Russian" },
+				promptText: { zh: "俄语", en: "Russian" },
+			},
+			{
+				code: "tr",
+				label: { zh: "土耳其语", en: "Turkish" },
+				promptText: { zh: "土耳其语", en: "Turkish" },
+			},
+			{
+				code: "he",
+				label: { zh: "希伯来语", en: "Hebrew" },
+				promptText: { zh: "希伯来语", en: "Hebrew" },
+			},
+			{
+				code: "fa",
+				label: { zh: "波斯语", en: "Persian" },
+				promptText: { zh: "波斯语", en: "Persian" },
+			},
 		],
 	},
 ]
@@ -83,17 +183,17 @@ function searchLanguages(query, filterGroup) {
 		if (filterGroup && filterGroup !== "__all__" && group.key !== filterGroup) return []
 		const languages = normalizedQuery
 			? group.languages.filter((item) => {
-				const keywords = [
-					item.code,
-					item.label.zh,
-					item.label.en,
-					item.promptText.zh,
-					item.promptText.en,
-				]
-					.filter(Boolean)
-					.map((value) => String(value).toLowerCase())
-				return keywords.some((value) => value.includes(normalizedQuery))
-			})
+					const keywords = [
+						item.code,
+						item.label.zh,
+						item.label.en,
+						item.promptText.zh,
+						item.promptText.en,
+					]
+						.filter(Boolean)
+						.map((value) => String(value).toLowerCase())
+					return keywords.some((value) => value.includes(normalizedQuery))
+				})
 			: group.languages
 		if (!languages.length) return []
 		return [{ ...group, languages }]
@@ -242,7 +342,10 @@ function createLanguageDrawer(panelEl, t, locale, onConfirm, onLimitReached) {
 						getLanguageLabel(language, locale),
 						draftLanguages.includes(language.code),
 						() => {
-							const nextLanguages = toggleLanguageSelection(draftLanguages, language.code)
+							const nextLanguages = toggleLanguageSelection(
+								draftLanguages,
+								language.code,
+							)
 							if (!nextLanguages) {
 								onLimitReached()
 								return
@@ -371,14 +474,80 @@ function resolveSceneRequestSize(sceneImage, state, helpers) {
 	return bestMatch || fallbackSize
 }
 
+function createInitialState() {
+	return {
+		sourceImage: null,
+		targetLanguages: [],
+		genCount: 1,
+	}
+}
+
+function buildImageTranslationRequests({ state, helpers, locale, selectedSize }) {
+	return state.targetLanguages.map((targetLanguage) =>
+		buildImageTranslationRequest({
+			state,
+			helpers,
+			locale,
+			selectedSize,
+			targetLanguage,
+		}),
+	)
+}
+
+function buildImageTranslationRequest({ state, helpers, locale, selectedSize, targetLanguage }) {
+	const width = selectedSize.genW
+	const height = selectedSize.genH
+	const referenceImages = helpers.collectReferenceIds([state.sourceImage])
+
+	return {
+		model_id: state.modelId,
+		prompt: buildImageTranslationPrompt({ targetLanguage, locale }),
+		reference_images: referenceImages,
+		size: `${width}x${height}`,
+		resolution: state.scale || undefined,
+		width,
+		height,
+		count: state.genCount,
+		select: false,
+	}
+}
+
+function buildImageTranslationPrompt({ targetLanguage, locale }) {
+	const language = getLanguageItem(targetLanguage)
+	const targetLanguageText = MagicPromptLocale.pickText(language?.promptText, locale)
+
+	if (MagicPromptLocale.isChinese(locale)) {
+		return (
+			`先读取参考图 1，识别图片中所有可见文字内容，并将其准确翻译为${targetLanguageText}。` +
+			"必须尽量保持原有内容结构、标题与正文层级、段落关系、对齐方式、换行逻辑、版面布局、视觉节奏和主要设计风格不变。" +
+			"图片中的非文字主体内容，包括商品、人物、背景、图形、图标、装饰元素、材质、光影和构图都必须严格保留，不得改写或替换。" +
+			"如果目标语言字数发生变化，只允许做保证可读性的最小排版调整，不得重做整张图片版式，不得新增无关文字，不得漏翻、错翻、重复翻译，也不要输出双语对照。" +
+			"最终结果应是一张已经完成本地化翻译、可直接用于跨境场景的完整图片。"
+		)
+	}
+
+	return (
+		`First read reference image 1, identify all visible text in the image, and translate it accurately into ${targetLanguageText}. ` +
+		"You must preserve the original content structure, title-to-body hierarchy, paragraph relationships, alignment, line breaks, layout composition, visual rhythm, and overall design style as much as possible. " +
+		"All non-text visual content, including products, people, backgrounds, graphics, icons, decorative elements, materials, lighting, and composition, must remain unchanged and must not be rewritten or replaced. " +
+		"If the target language becomes longer or shorter, make only the minimum layout adjustments needed for readability. Do not redesign the whole image, do not add unrelated text, do not miss, mistranslate, or duplicate translations, and do not output bilingual comparisons. " +
+		"The final result should be a fully localized image that can be used directly in cross-border scenarios."
+	)
+}
+
 registerMagicCanvasPlugin({
-	mount(ctx, root) {
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+	render(ctx, instance, root, scope) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
 		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 		let panelEl = null
 		let languageDrawer = null
 		let setTranslationState = null
-		const getPanelEl = () => panelEl || root.querySelector(".mpk-panel") || root
+		const getPanelEl = () => panelEl || root
 		const getLanguageDrawer = () => {
 			if (!languageDrawer) {
 				languageDrawer = createLanguageDrawer(
@@ -398,13 +567,9 @@ registerMagicCanvasPlugin({
 			return languageDrawer
 		}
 
-		const cleanup = MagicPluginKit.mount(ctx, root, {
+		const view = ctx.panel.render(root, {
 			panelClassName: "image-translation",
-			initialState: {
-				sourceImage: null,
-				targetLanguages: [],
-				genCount: 1,
-			},
+			state: instance.state,
 			modelConfig: {
 				autoLoad: true,
 				showLoadErrors: true,
@@ -428,8 +593,8 @@ registerMagicCanvasPlugin({
 					kind: "custom",
 					stateKey: "targetLanguages",
 					deps: ["targetLanguages"],
-					render: ({ state, setState }) => {
-						if (!panelEl) panelEl = getPanelEl()
+					render: ({ state, setState, elements }) => {
+						panelEl = elements.panel || panelEl || root
 						setTranslationState = setState
 						return createTargetLanguageSection({
 							state,
@@ -450,7 +615,7 @@ registerMagicCanvasPlugin({
 					kind: "resolution-select",
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
-				},		
+				},
 				{
 					id: "count",
 					kind: "option-group",
@@ -513,65 +678,22 @@ registerMagicCanvasPlugin({
 			},
 		})
 
-		return () => {
-			languageDrawer?.destroy()
-			languageDrawer = null
-			setTranslationState = null
-			cleanup?.()
+		return {
+			update(change) {
+				return view?.update?.(change)
+			},
+			activate(nextScope) {
+				return view?.activate?.(nextScope)
+			},
+			deactivate(nextScope) {
+				return view?.deactivate?.(nextScope)
+			},
+			dispose(reason) {
+				languageDrawer?.destroy()
+				languageDrawer = null
+				setTranslationState = null
+				view?.dispose?.(reason)
+			},
 		}
 	},
 })
-
-function buildImageTranslationRequests({ state, helpers, locale, selectedSize }) {
-	return state.targetLanguages.map((targetLanguage) =>
-		buildImageTranslationRequest({
-                    state,
-                    helpers,
-                    locale,
-                    selectedSize,
-                    targetLanguage,
-
-			})
-	)
-}
-
-function buildImageTranslationRequest({ state, helpers, locale, selectedSize, targetLanguage }) {
-	const width = selectedSize.genW
-	const height = selectedSize.genH
-	const referenceImages = helpers.collectReferenceIds([state.sourceImage])
-
-	return {
-		model_id: state.modelId,
-		prompt: buildImageTranslationPrompt({ targetLanguage, locale }),
-		reference_images: referenceImages,
-		size: `${width}x${height}`,
-		resolution: state.scale || undefined,
-		width,
-		height,
-		count: state.genCount,
-		select: false,
-	}
-}
-
-function buildImageTranslationPrompt({ targetLanguage, locale }) {
-	const language = getLanguageItem(targetLanguage)
-	const targetLanguageText = MagicPromptLocale.pickText(language?.promptText, locale)
-
-	if (MagicPromptLocale.isChinese(locale)) {
-		return (
-			`先读取参考图 1，识别图片中所有可见文字内容，并将其准确翻译为${targetLanguageText}。` +
-			"必须尽量保持原有内容结构、标题与正文层级、段落关系、对齐方式、换行逻辑、版面布局、视觉节奏和主要设计风格不变。" +
-			"图片中的非文字主体内容，包括商品、人物、背景、图形、图标、装饰元素、材质、光影和构图都必须严格保留，不得改写或替换。" +
-			"如果目标语言字数发生变化，只允许做保证可读性的最小排版调整，不得重做整张图片版式，不得新增无关文字，不得漏翻、错翻、重复翻译，也不要输出双语对照。" +
-			"最终结果应是一张已经完成本地化翻译、可直接用于跨境场景的完整图片。"
-		)
-	}
-
-	return (
-		`First read reference image 1, identify all visible text in the image, and translate it accurately into ${targetLanguageText}. ` +
-		"You must preserve the original content structure, title-to-body hierarchy, paragraph relationships, alignment, line breaks, layout composition, visual rhythm, and overall design style as much as possible. " +
-		"All non-text visual content, including products, people, backgrounds, graphics, icons, decorative elements, materials, lighting, and composition, must remain unchanged and must not be rewritten or replaced. " +
-		"If the target language becomes longer or shorter, make only the minimum layout adjustments needed for readability. Do not redesign the whole image, do not add unrelated text, do not miss, mistranslate, or duplicate translations, and do not output bilingual comparisons. " +
-		"The final result should be a fully localized image that can be used directly in cross-border scenarios."
-	)
-}

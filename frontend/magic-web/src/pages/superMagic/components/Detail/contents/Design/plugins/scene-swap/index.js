@@ -6,22 +6,211 @@ const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => (
 	label: String(count),
 }))
 
+function createInitialState() {
+	return {
+		modelImages: [],
+		backgroundMode: "image",
+		backgroundImage: null,
+		backgroundPrompt: "",
+		copyBackgroundImage: null,
+		qualityMode: "",
+		genCount: 1,
+	}
+}
+
+function buildBackgroundModeOptions(t) {
+	return [
+		{
+			value: "image",
+			label: t("backgroundMode.image", "选择背景图"),
+			description: t(
+				"backgroundMode.image.desc",
+				"上传单张背景图，直接参考其环境、布光和场景布局。",
+			),
+		},
+		{
+			value: "copy",
+			label: t("backgroundMode.copy", "复制背景"),
+			description: t(
+				"backgroundMode.copy.desc",
+				"上传参考图复制其背景语言，并选择画布比例。",
+			),
+		},
+		{
+			value: "prompt",
+			label: t("backgroundMode.prompt", "文生背景"),
+			description: t(
+				"backgroundMode.prompt.desc",
+				"用文字描述生成新的背景场景，适合快速试不同氛围。",
+			),
+		},
+	]
+}
+
+function getMaxReferenceImages(state, helpers) {
+	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 6
+}
+
+function getBackgroundReferenceCount(state) {
+	if (state.backgroundMode === "image" && state.backgroundImage) return 1
+	if (state.backgroundMode === "copy" && state.copyBackgroundImage) return 1
+	return 0
+}
+
+function getReferenceAssetsForMode(state) {
+	const assets = [...state.modelImages]
+	if (state.backgroundMode === "image" && state.backgroundImage) {
+		assets.push(state.backgroundImage)
+	}
+	if (state.backgroundMode === "copy" && state.copyBackgroundImage) {
+		assets.push(state.copyBackgroundImage)
+	}
+	return assets
+}
+
+function getReferenceAssetsForBaseImage(state, baseImage) {
+	const assets = [baseImage]
+	if (state.backgroundMode === "image" && state.backgroundImage) {
+		assets.push(state.backgroundImage)
+	}
+	if (state.backgroundMode === "copy" && state.copyBackgroundImage) {
+		assets.push(state.copyBackgroundImage)
+	}
+	return assets
+}
+
+function getQualitySetting(model) {
+	return (model?.image_size_config?.image_settings ?? []).find((setting) => {
+		const key = setting?.key ?? ""
+		return (
+			key === "quality" ||
+			key === "image_generation_config.quality" ||
+			key.endsWith(".quality")
+		)
+	})
+}
+
+function getQualityOptionsForModel(model) {
+	const qualitySetting = getQualitySetting(model)
+	return (qualitySetting?.options ?? [])
+		.filter((option) => option?.value)
+		.map((option) => ({
+			value: option.value,
+			label: option.label || option.value,
+		}))
+}
+
+function getQualityOptions(state, helpers) {
+	return getQualityOptionsForModel(helpers.getSelectedModel(state))
+}
+
+function resolveSelectedQualityValue(state, helpers) {
+	const options = getQualityOptions(state, helpers)
+	if (!options.length) return undefined
+	return options.some((option) => option.value === state.qualityMode)
+		? state.qualityMode
+		: options[0].value
+}
+
+function buildSceneSwapRequest({ state, helpers, baseImage, locale, selectedSize, count }) {
+	const referenceAssets = getReferenceAssetsForBaseImage(state, baseImage)
+	const referenceImages = helpers.collectReferenceIds(referenceAssets)
+	const imageGenerationConfig = state.qualityMode
+		? { ...state.imageGenerationConfig, quality: state.qualityMode }
+		: state.imageGenerationConfig
+	const width = selectedSize.genW
+	const height = selectedSize.genH
+
+	return {
+		model_id: state.modelId,
+		prompt: buildSceneSwapPrompt({
+			backgroundMode: state.backgroundMode,
+			backgroundPrompt: state.backgroundPrompt,
+			locale,
+			modelImageCount: 1,
+		}),
+		reference_images: referenceImages,
+		size: `${width}x${height}`,
+		resolution: state.scale || undefined,
+		image_generation_config: Object.keys(imageGenerationConfig ?? {}).length
+			? imageGenerationConfig
+			: undefined,
+		width,
+		height,
+		count,
+		select: false,
+	}
+}
+
+function buildSceneSwapPrompt({ backgroundMode, backgroundPrompt, locale, modelImageCount }) {
+	const isChinese = MagicPromptLocale.isChinese(locale)
+	const modelReferences = MagicPromptLocale.joinReferenceLabels(modelImageCount, locale)
+	const backgroundReference = MagicPromptLocale.getReferenceLabel(modelImageCount + 1, locale)
+
+	if (isChinese) {
+		if (backgroundMode === "image") {
+			return (
+				`使用 ${modelImageCount} 张模特参考图生成商业模拍换景结果：${modelReferences}。` +
+				"保留模特身份、服饰、姿态、身体比例以及整体商拍真实感。" +
+				`将环境替换为遵循 ${backgroundReference} 的场景，复用其空间结构、景深、布光氛围、色彩基调和主要背景元素，同时保持主体干净自然。`
+			)
+		}
+
+		if (backgroundMode === "prompt") {
+			return (
+				`使用 ${modelImageCount} 张模特参考图生成商业模拍换景结果：${modelReferences}。` +
+				"保留模特身份、服饰、姿态、身体比例以及时尚摄影真实感。" +
+				`根据以下描述生成全新背景：${backgroundPrompt.trim()}。` +
+				"保证最终画面的透视、光线、阴影和氛围一致，同时让人物保持主体地位。"
+			)
+		}
+
+		return (
+			`生成商业模拍换景图。使用 ${modelImageCount} 张模特参考图（${modelReferences}）作为人物唯一来源，保留其身份、服饰、姿态、身体比例和商拍真实感。` +
+			`${backgroundReference} 仅作为背景提取参考图，复用其环境、场景布局、背景物体、空间深度、透视关系、光线方向、色彩风格、阴影表现和整体氛围。` +
+			`不要复制 ${backgroundReference} 中的人物、脸部、身体、姿势、服装或身份，也不要把其中任何主体合并或重复到最终结果里。` +
+			`请将 ${modelReferences} 中的模特自然融合进一个受 ${backgroundReference} 启发的新背景中，保证光影一致、接触阴影自然、边缘过渡干净。`
+		)
+	}
+
+	if (backgroundMode === "image") {
+		return (
+			`Create a commercial fashion scene swap result using ${modelImageCount} model reference image${modelImageCount > 1 ? "s" : ""}: ${modelReferences}. ` +
+			"Preserve the person identity, outfit, pose, proportions, and overall fashion-shoot realism from the model references. " +
+			`Replace the environment so it follows ${backgroundReference}, reusing its scene structure, depth, lighting mood, color palette, and major background elements while keeping the subject clean and realistic.`
+		)
+	}
+
+	if (backgroundMode === "prompt") {
+		return (
+			`Create a commercial fashion scene swap result using ${modelImageCount} model reference image${modelImageCount > 1 ? "s" : ""}: ${modelReferences}. ` +
+			"Preserve the person identity, outfit, pose, proportions, and fashion photography realism from the model references. " +
+			`Generate a brand-new background based on this direction: ${backgroundPrompt.trim()}. ` +
+			"Make the final scene coherent in perspective, lighting, shadow, and atmosphere while keeping the person prominent."
+		)
+	}
+
+	return (
+		`Create a commercial fashion scene swap result. Use ${modelImageCount} model reference image${modelImageCount > 1 ? "s" : ""} (${modelReferences}) as the ONLY source for the person: preserve identity, outfit, pose, body proportions, and fashion-shoot realism from those images. ` +
+		`${backgroundReference} is a full-scene style reference used ONLY for background extraction. Extract and reuse its environment, scene layout, background objects, depth, perspective, lighting direction, color grading, shadow behavior, and overall atmosphere. ` +
+		`Do NOT copy the person, face, body, pose, clothing, or identity from ${backgroundReference}. Do NOT merge or duplicate any subject from ${backgroundReference} into the final image. ` +
+		`Composite the model from ${modelReferences} naturally into a new background inspired by ${backgroundReference}, with coherent lighting, contact shadows, and clean edge blending.`
+	)
+}
+
 registerMagicCanvasPlugin({
-	mount(ctx, root) {
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+	render(ctx, instance, root, scope) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
 		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 
-		return MagicPluginKit.mount(ctx, root, {
+		return ctx.panel.render(root, {
 			panelClassName: "scene-swap",
-			initialState: {
-				modelImages: [],
-				backgroundMode: "image",
-				backgroundImage: null,
-				backgroundPrompt: "",
-				copyBackgroundImage: null,
-				qualityMode: "",
-				genCount: 1,
-			},
+			state: instance.state,
 			modelConfig: {
 				autoLoad: true,
 				showLoadErrors: true,
@@ -252,183 +441,3 @@ registerMagicCanvasPlugin({
 		})
 	},
 })
-
-function buildBackgroundModeOptions(t) {
-	return [
-		{
-			value: "image",
-			label: t("backgroundMode.image", "选择背景图"),
-			description: t(
-				"backgroundMode.image.desc",
-				"上传单张背景图，直接参考其环境、布光和场景布局。",
-			),
-		},
-		{
-			value: "copy",
-			label: t("backgroundMode.copy", "复制背景"),
-			description: t(
-				"backgroundMode.copy.desc",
-				"上传参考图复制其背景语言，并选择画布比例。",
-			),
-		},
-		{
-			value: "prompt",
-			label: t("backgroundMode.prompt", "文生背景"),
-			description: t(
-				"backgroundMode.prompt.desc",
-				"用文字描述生成新的背景场景，适合快速试不同氛围。",
-			),
-		},
-	]
-}
-
-function getMaxReferenceImages(state, helpers) {
-	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 6
-}
-
-function getBackgroundReferenceCount(state) {
-	if (state.backgroundMode === "image" && state.backgroundImage) return 1
-	if (state.backgroundMode === "copy" && state.copyBackgroundImage) return 1
-	return 0
-}
-
-function getReferenceAssetsForMode(state) {
-	const assets = [...state.modelImages]
-	if (state.backgroundMode === "image" && state.backgroundImage) {
-		assets.push(state.backgroundImage)
-	}
-	if (state.backgroundMode === "copy" && state.copyBackgroundImage) {
-		assets.push(state.copyBackgroundImage)
-	}
-	return assets
-}
-
-function getReferenceAssetsForBaseImage(state, baseImage) {
-	const assets = [baseImage]
-	if (state.backgroundMode === "image" && state.backgroundImage) {
-		assets.push(state.backgroundImage)
-	}
-	if (state.backgroundMode === "copy" && state.copyBackgroundImage) {
-		assets.push(state.copyBackgroundImage)
-	}
-	return assets
-}
-
-function getQualitySetting(model) {
-	return (model?.image_size_config?.image_settings ?? []).find((setting) => {
-		const key = setting?.key ?? ""
-		return (
-			key === "quality" ||
-			key === "image_generation_config.quality" ||
-			key.endsWith(".quality")
-		)
-	})
-}
-
-function getQualityOptionsForModel(model) {
-	const qualitySetting = getQualitySetting(model)
-	return (qualitySetting?.options ?? [])
-		.filter((option) => option?.value)
-		.map((option) => ({
-			value: option.value,
-			label: option.label || option.value,
-		}))
-}
-
-function getQualityOptions(state, helpers) {
-	return getQualityOptionsForModel(helpers.getSelectedModel(state))
-}
-
-function resolveSelectedQualityValue(state, helpers) {
-	const options = getQualityOptions(state, helpers)
-	if (!options.length) return undefined
-	return options.some((option) => option.value === state.qualityMode)
-		? state.qualityMode
-		: options[0].value
-}
-
-function buildSceneSwapRequest({ state, helpers, baseImage, locale, selectedSize, count }) {
-	const referenceAssets = getReferenceAssetsForBaseImage(state, baseImage)
-	const referenceImages = helpers.collectReferenceIds(referenceAssets)
-	const imageGenerationConfig = state.qualityMode
-		? { ...state.imageGenerationConfig, quality: state.qualityMode }
-		: state.imageGenerationConfig
-	const width = selectedSize.genW
-	const height = selectedSize.genH
-
-	return {
-		model_id: state.modelId,
-		prompt: buildSceneSwapPrompt({
-			backgroundMode: state.backgroundMode,
-			backgroundPrompt: state.backgroundPrompt,
-			locale,
-			modelImageCount: 1,
-		}),
-		reference_images: referenceImages,
-		size: `${width}x${height}`,
-		resolution: state.scale || undefined,
-		image_generation_config: Object.keys(imageGenerationConfig ?? {}).length
-			? imageGenerationConfig
-			: undefined,
-		width,
-		height,
-		count,
-		select: false,
-	}
-}
-
-function buildSceneSwapPrompt({ backgroundMode, backgroundPrompt, locale, modelImageCount }) {
-	const isChinese = MagicPromptLocale.isChinese(locale)
-	const modelReferences = MagicPromptLocale.joinReferenceLabels(modelImageCount, locale)
-	const backgroundReference = MagicPromptLocale.getReferenceLabel(modelImageCount + 1, locale)
-
-	if (isChinese) {
-		if (backgroundMode === "image") {
-			return (
-				`使用 ${modelImageCount} 张模特参考图生成商业模拍换景结果：${modelReferences}。` +
-				"保留模特身份、服饰、姿态、身体比例以及整体商拍真实感。" +
-				`将环境替换为遵循 ${backgroundReference} 的场景，复用其空间结构、景深、布光氛围、色彩基调和主要背景元素，同时保持主体干净自然。`
-			)
-		}
-
-		if (backgroundMode === "prompt") {
-			return (
-				`使用 ${modelImageCount} 张模特参考图生成商业模拍换景结果：${modelReferences}。` +
-				"保留模特身份、服饰、姿态、身体比例以及时尚摄影真实感。" +
-				`根据以下描述生成全新背景：${backgroundPrompt.trim()}。` +
-				"保证最终画面的透视、光线、阴影和氛围一致，同时让人物保持主体地位。"
-			)
-		}
-
-		return (
-			`生成商业模拍换景图。使用 ${modelImageCount} 张模特参考图（${modelReferences}）作为人物唯一来源，保留其身份、服饰、姿态、身体比例和商拍真实感。` +
-			`${backgroundReference} 仅作为背景提取参考图，复用其环境、场景布局、背景物体、空间深度、透视关系、光线方向、色彩风格、阴影表现和整体氛围。` +
-			`不要复制 ${backgroundReference} 中的人物、脸部、身体、姿势、服装或身份，也不要把其中任何主体合并或重复到最终结果里。` +
-			`请将 ${modelReferences} 中的模特自然融合进一个受 ${backgroundReference} 启发的新背景中，保证光影一致、接触阴影自然、边缘过渡干净。`
-		)
-	}
-
-	if (backgroundMode === "image") {
-		return (
-			`Create a commercial fashion scene swap result using ${modelImageCount} model reference image${modelImageCount > 1 ? "s" : ""}: ${modelReferences}. ` +
-			"Preserve the person identity, outfit, pose, proportions, and overall fashion-shoot realism from the model references. " +
-			`Replace the environment so it follows ${backgroundReference}, reusing its scene structure, depth, lighting mood, color palette, and major background elements while keeping the subject clean and realistic.`
-		)
-	}
-
-	if (backgroundMode === "prompt") {
-		return (
-			`Create a commercial fashion scene swap result using ${modelImageCount} model reference image${modelImageCount > 1 ? "s" : ""}: ${modelReferences}. ` +
-			"Preserve the person identity, outfit, pose, proportions, and fashion photography realism from the model references. " +
-			`Generate a brand-new background based on this direction: ${backgroundPrompt.trim()}. ` +
-			"Make the final scene coherent in perspective, lighting, shadow, and atmosphere while keeping the person prominent."
-		)
-	}
-
-	return (
-		`Create a commercial fashion scene swap result. Use ${modelImageCount} model reference image${modelImageCount > 1 ? "s" : ""} (${modelReferences}) as the ONLY source for the person: preserve identity, outfit, pose, body proportions, and fashion-shoot realism from those images. ` +
-		`${backgroundReference} is a full-scene style reference used ONLY for background extraction. Extract and reuse its environment, scene layout, background objects, depth, perspective, lighting direction, color grading, shadow behavior, and overall atmosphere. ` +
-		`Do NOT copy the person, face, body, pose, clothing, or identity from ${backgroundReference}. Do NOT merge or duplicate any subject from ${backgroundReference} into the final image. ` +
-		`Composite the model from ${modelReferences} naturally into a new background inspired by ${backgroundReference}, with coherent lighting, contact shadows, and clean edge blending.`
-	)
-}

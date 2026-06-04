@@ -9,16 +9,17 @@
 - 生成前怎么校验
 - 最终怎么拼 `ctx.ai.generateAndPlace()` 请求
 
-插件 runtime 协议仍然保持不变：
+插件 runtime 入口使用 CanvasDesign 新生命周期：
 
-- 入口仍然是 `registerMagicCanvasPlugin({ mount(ctx, root) { ... } })`
+- 入口是 `registerMagicCanvasPlugin({ create(ctx) { ... }, render(ctx, instance, root, scope) { ... } })`
 - 每个插件仍然在自己的 iframe 中独立运行
 - 每个插件仍然独立管理自己的业务 state
+- 旧兼容包装仅供历史插件迁移，不作为新插件开发入口
 
 ## 入口
 
 ```js
-MagicPluginKit.mount(ctx, root, config)
+MagicPluginKit.render(ctx, root, config)
 ```
 
 参数：
@@ -30,16 +31,25 @@ MagicPluginKit.mount(ctx, root, config)
 最小示例：
 
 ```js
+function createInitialState() {
+	return {
+		productImages: [],
+		genCount: 1,
+	}
+}
+
 registerMagicCanvasPlugin({
-	mount(ctx, root) {
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+	render(ctx, instance, root, scope) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
 
-		return MagicPluginKit.mount(ctx, root, {
+		return ctx.panel.render(root, {
 			panelClassName: "demo-plugin",
-			initialState: {
-				productImages: [],
-				genCount: 1,
-			},
+			state: instance.state,
 			sections: [
 				{
 					id: "productImages",
@@ -104,11 +114,38 @@ registerMagicCanvasPlugin({
 panelClassName: "boots-tryon"
 ```
 
-### `initialState`
+### `state`
 
-定义插件自己的业务初始状态。
+传入插件自己的运行期 state。新范式下，内置插件应在 `create(ctx)` 阶段创建 state，再在 `render` 阶段交给 kit 消费：
 
-kit 会先注入一组公共状态，再和 `initialState` 合并。
+```js
+function createInitialState() {
+	return {
+		productImages: [],
+		modelImage: null,
+		generationMode: "standard",
+		genCount: 1,
+	}
+}
+
+registerMagicCanvasPlugin({
+	create(ctx) {
+		return {
+			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
+		}
+	},
+
+	render(ctx, instance, root, scope) {
+		return ctx.panel.render(root, {
+			state: instance.state,
+			sections,
+			generate,
+		})
+	},
+})
+```
+
+kit 会在 `MagicPluginKit.createPanelState(ctx, initialState)` 中先注入一组公共状态，再和插件业务初始状态合并。
 
 当前公共状态包括：
 
@@ -120,16 +157,7 @@ kit 会先注入一组公共状态，再和 `initialState` 合并。
 - `loading`
 - `error`
 
-因此业务插件只需要补自己的状态，例如：
-
-```js
-initialState: {
-	productImages: [],
-	modelImage: null,
-	generationMode: "standard",
-	genCount: 1,
-}
-```
+`MagicPluginKit.render(ctx, root, config)` 仍兼容 `config.initialState`，用于旧插件或极简示例；当前项目内置插件不要再使用它。
 
 ### `modelConfig`
 
