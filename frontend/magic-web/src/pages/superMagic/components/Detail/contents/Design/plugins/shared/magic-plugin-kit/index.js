@@ -302,17 +302,36 @@
 		/** 应用模型默认值 */
 		function applyModelDefaults(model) {
 			const currentRatioKey = state.ratioKey
+			const currentScale = state.scale
+
 			const sizes = model?.image_size_config?.sizes ?? []
+			const hasCurrentResolution = currentScale
+				? sizes.some((size) => size.scale === currentScale)
+				: false
 			const matchedSize = currentRatioKey
+				? sizes.find(
+					(size) =>
+						size.label === currentRatioKey &&
+						(!currentScale || size.scale === currentScale),
+				)
+				: null
+			const canKeepCurrentSelection = Boolean(
+				currentRatioKey && currentScale && hasCurrentResolution && matchedSize,
+			)
+			const fallbackMatchedSize = currentRatioKey
 				? sizes.find((size) => size.label === currentRatioKey)
 				: null
-			const targetResolution = matchedSize?.scale ?? getDefaultResolution(model)
+			const targetResolution = canKeepCurrentSelection
+				? currentScale
+				: (fallbackMatchedSize?.scale ?? getDefaultResolution(model))
 			const sizesForResolution = targetResolution
 				? sizes.filter((size) => size.scale === targetResolution)
 				: sizes
 			const targetSize = sizesForResolution[0] ?? sizes[0]
 			const defaults = {
-				ratioKey: matchedSize?.label ?? targetSize?.label ?? "",
+				ratioKey: canKeepCurrentSelection
+					? currentRatioKey
+					: (fallbackMatchedSize?.label ?? targetSize?.label ?? ""),
 				scale: targetResolution,
 				imageGenerationConfig: buildDefaultImageGenerationConfig(model),
 			}
@@ -671,12 +690,13 @@
 			if (section.kind === "resolution-select") {
 				deps.add("modelOptions")
 				deps.add("modelId")
+				deps.add("scale")
 			}
 
 			if (section.kind === "size-control") {
 				deps.add("modelOptions")
 				deps.add("modelId")
-				deps.add("scale")
+				deps.add("ratioKey")
 			}
 
 			return deps
@@ -1383,10 +1403,8 @@
 				button.type = "button"
 				button.addEventListener("click", () => {
 					const sizes = getModelSizes().filter((size) => size.scale === scale)
-					const ratioKey = sizes[0]?.label ?? state.ratioKey
 					setState({
 						scale,
-						ratioKey,
 					})
 				})
 				list.append(button)

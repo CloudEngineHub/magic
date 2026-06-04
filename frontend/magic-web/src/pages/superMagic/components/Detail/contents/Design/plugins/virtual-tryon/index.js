@@ -146,13 +146,11 @@ registerMagicCanvasPlugin({
 					id: "resolution",
 					kind: "resolution-select",
 					title: t("section.resolution", "分辨率"),
-					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
 					title: t("section.canvasSize", "画布尺寸"),
-					deps: ["modelId", "modelOptions", "scale"],
 				},
 				{
 					id: "count",
