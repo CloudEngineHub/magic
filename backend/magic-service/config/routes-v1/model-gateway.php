@@ -36,6 +36,10 @@ Router::addGroup('/v2', function () {
     Router::post('/images/convert-high', [ImageProxyApi::class, 'imageConvertHigh']);
     // Image remove-background endpoint - removes backgrounds from input images
     Router::post('/images/remove-background', [ImageProxyApi::class, 'imageRemoveBackground']);
+    // Image eraser endpoint - removes masked regions from input images
+    Router::post('/images/eraser', [ImageProxyApi::class, 'imageEraser']);
+    // Image expand endpoint - expands input images according to mask and config
+    Router::post('/images/expand', [ImageProxyApi::class, 'imageExpand']);
     // Unified search endpoint - supports multiple search engines (bing, google, tavily, duckduckgo, jina)
     Router::get('/search', [OpenAIProxyApi::class, 'unifiedSearch']);
     // Image search endpoint - supports multiple providers (bing, google via serpapi)

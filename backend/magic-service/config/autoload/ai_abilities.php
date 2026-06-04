@@ -407,6 +407,24 @@ return [
             'config' => [
                 'model_id' => env('AI_ABILITY_IMAGE_ERASER_MODEL_ID', null),
                 'prompt' => env('AI_ABILITY_IMAGE_ERASER_PROMPT', ''),
+                'providers' => [
+                    [
+                        'name' => '官方代理服务',
+                        'enable' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_ENABLE', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_ENABLE', true)),
+                        'provider' => 'official_proxy',
+                        'url' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_URL', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_URL', '')),
+                        'api_key' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_API_KEY', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_API_KEY', '')),
+                        'timeout' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_TIMEOUT', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_TIMEOUT', 300)),
+                    ],
+                    [
+                        'name' => '火山引擎',
+                        'enable' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_ENABLE', false),
+                        'provider' => 'volcengine',
+                        'ak' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_AK', ''),
+                        'sk' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_SK', ''),
+                        'timeout' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_TIMEOUT', 300),
+                    ],
+                ],
             ],
         ],
 
@@ -427,6 +445,24 @@ return [
             'config' => [
                 'model_id' => env('AI_ABILITY_IMAGE_EXPAND_MODEL_ID', null),
                 'prompt' => env('AI_ABILITY_IMAGE_EXPAND_PROMPT', ''),
+                'providers' => [
+                    [
+                        'name' => '官方代理服务',
+                        'enable' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_ENABLE', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_ENABLE', true)),
+                        'provider' => 'official_proxy',
+                        'url' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_URL', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_URL', '')),
+                        'api_key' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_API_KEY', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_API_KEY', '')),
+                        'timeout' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_TIMEOUT', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_TIMEOUT', 300)),
+                    ],
+                    [
+                        'name' => '火山引擎',
+                        'enable' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_ENABLE', false),
+                        'provider' => 'volcengine',
+                        'ak' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_AK', ''),
+                        'sk' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_SK', ''),
+                        'timeout' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_TIMEOUT', 300),
+                    ],
+                ],
             ],
         ],
 

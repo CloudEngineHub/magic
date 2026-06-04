@@ -1,0 +1,167 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+
+namespace App\Application\ModelGateway\Service;
+
+use App\Domain\ModelGateway\Entity\Dto\ImageEraserRequestDTO;
+use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
+use App\ErrorCode\MagicApiErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\ExternalAPI\ImageEraser\DTO\ImageEraserDriverRequest;
+use App\Infrastructure\ExternalAPI\ImageEraser\Exception\ImageEraserDriverException;
+use App\Infrastructure\ExternalAPI\ImageEraser\ImageEraserDriverFactory;
+use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
+use App\Infrastructure\Util\File\TemporaryFileManager;
+use App\Infrastructure\Util\SSRF\Exception\SSRFException;
+use App\Infrastructure\Util\SSRF\SSRFUtil;
+use Dtyq\CloudFile\Kernel\Struct\UploadFile;
+use Dtyq\CloudFile\Kernel\Utils\MimeTypes;
+use Hyperf\Di\Annotation\Inject;
+use InvalidArgumentException;
+use Throwable;
+
+use function Hyperf\Support\make;
+
+class ImageEraserAppService extends ImageLLMAppService
+{
+    private const PROVIDER_NOT_CONFIGURED = 'image_generate.image_eraser_provider_not_configured';
+
+    #[Inject]
+    protected ImageEraserDriverFactory $driverFactory;
+
+    public function erase(ImageEraserRequestDTO $dto): OpenAIFormatResponse
+    {
+        $dataIsolation = $this->createModelGatewayDataIsolationByAccessToken($dto->getAccessToken(), $dto->getBusinessParams());
+        $providerConfig = $this->resolveEnabledProviderConfig();
+        $providerCode = (string) ($providerConfig['provider'] ?? '');
+
+        $temporaryFileManager = make(TemporaryFileManager::class);
+
+        try {
+            $safeImageUrl = SSRFUtil::getSafeUrl($dto->getImageUrl(), replaceIp: false);
+            $safeMaskUrl = SSRFUtil::getSafeUrl($dto->getMaskUrl(), replaceIp: false);
+            $driver = $this->driverFactory->create($providerCode, $providerConfig);
+
+            $driverResponse = $driver->erase(new ImageEraserDriverRequest(
+                $safeImageUrl,
+                $safeMaskUrl,
+                $dto->getSteps(),
+                $dto->getStrength(),
+                $dto->getSeed(),
+                $dto->getDilateSize(),
+                $dto->getQuality(),
+            ));
+
+            $temporaryFileManager->add($driverResponse->getResultFilePath());
+
+            return $this->uploadResultFile($dataIsolation, $driverResponse->getResultFilePath(), $driverResponse->getMimeType(), $providerCode);
+        } catch (ImageEraserDriverException $exception) {
+            return new OpenAIFormatResponse([
+                'created' => time(),
+                'data' => [],
+                'usage' => null,
+                'provider_error_message' => $exception->getMessage(),
+                'provider_error_code' => $exception->getProviderErrorCode(),
+                'provider' => $exception->getProvider(),
+            ]);
+        } catch (SSRFException $exception) {
+            $this->logger->warning('ImageEraserUnsafeInputUrl', [
+                'provider' => $providerCode,
+                'error' => $exception->getMessage(),
+            ]);
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, $exception->getMessage());
+        } catch (InvalidArgumentException $exception) {
+            $this->logger->warning('ImageEraserInvalidInput', [
+                'provider' => $providerCode,
+                'error' => $exception->getMessage(),
+            ]);
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, $exception->getMessage());
+        } catch (Throwable $throwable) {
+            $this->logger->error('ImageEraserException', [
+                'error' => $throwable->getMessage(),
+                'provider' => $providerCode,
+            ]);
+            throw $throwable;
+        } finally {
+            $temporaryFileManager->cleanup();
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolveEnabledProviderConfig(): array
+    {
+        $config = $this->aiAbilityDomainService->getProviderConfig(AiAbilityCode::ImageEraser);
+        $providers = $config['providers'] ?? [];
+        if (! is_array($providers)) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, self::PROVIDER_NOT_CONFIGURED);
+        }
+
+        foreach ($providers as $provider) {
+            if (is_array($provider) && ($provider['enable'] ?? false) === true) {
+                return $provider;
+            }
+        }
+
+        ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, self::PROVIDER_NOT_CONFIGURED);
+    }
+
+    private function uploadResultFile(
+        ModelGatewayDataIsolation $dataIsolation,
+        string $resultFilePath,
+        string $mimeType,
+        string $providerCode = ''
+    ): OpenAIFormatResponse {
+        $uploadFile = new UploadFile(
+            $resultFilePath,
+            'open/image-eraser',
+            $this->buildUploadFileName($mimeType, $resultFilePath)
+        );
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+
+        $this->fileDomainService->uploadByCredential(
+            $organizationCode,
+            $uploadFile,
+            StorageBucketType::Public,
+            true,
+            $mimeType
+        );
+
+        $fileLink = $this->fileDomainService->getLink($organizationCode, $uploadFile->getKey(), StorageBucketType::Public);
+        if ($fileLink === null || $fileLink->getUrl() === '') {
+            ExceptionBuilder::throw(MagicApiErrorCode::MODEL_RESPONSE_FAIL, 'image_generate.file_upload_failed', ['error' => 'result_url_missing']);
+        }
+
+        return new OpenAIFormatResponse([
+            'created' => time(),
+            'data' => [
+                [
+                    'url' => $fileLink->getUrl(),
+                    'mime_type' => $mimeType,
+                ],
+            ],
+            'usage' => null,
+            'provider' => $providerCode,
+        ]);
+    }
+
+    private function buildUploadFileName(string $mimeType, string $resultFilePath): string
+    {
+        $extension = MimeTypes::getExtension($mimeType);
+        if ($extension === '') {
+            $extension = pathinfo($resultFilePath, PATHINFO_EXTENSION);
+        }
+        if ($extension === '') {
+            $extension = 'png';
+        }
+
+        return sprintf('image_eraser_%s.%s', uniqid(), $extension);
+    }
+}
