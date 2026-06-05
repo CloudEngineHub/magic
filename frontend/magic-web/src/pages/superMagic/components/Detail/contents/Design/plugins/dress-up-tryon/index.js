@@ -280,6 +280,7 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "generationMode",
 					title: t("section.generationMode", "生成模式"),
+					groupClassName: "generation-mode-group",
 					showDescriptionOnHover: true,
 					options: generationModes,
 				},

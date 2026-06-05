@@ -5,3 +5,13 @@
 .dress-up-tryon .mpk-image-slot-preview {
 	max-height: 240px;
 }
+
+.dress-up-tryon .generation-mode-group {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dress-up-tryon .generation-mode-group .mpk-option-item,
+.dress-up-tryon .generation-mode-group .mpk-option {
+	width: 100%;
+}
