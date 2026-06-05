@@ -488,6 +488,11 @@
 		/** 生成 */
 		async function handleGenerate() {
 			if (state.loading) return
+			const requiredError = validateRequiredSections()
+			if (requiredError) {
+				setState({ error: requiredError })
+				return
+			}
 			const validationError = config.generate?.validate?.({ state, helpers, t })
 			if (validationError) {
 				setState({ error: validationError })
@@ -570,14 +575,149 @@
 			}
 		}
 
-		/** 创建区块 */
-		function createSection(title, suffix) {
-			const section = createElement("section", "mpk-section")
+		function normalizeRequiredConfig(section) {
+			const required = section.required
+			if (!required) return null
+			if (required === true) {
+				return { message: null, when: null, validate: null }
+			}
+			if (typeof required === "object") {
+				return {
+					message: required.message ?? null,
+					when: required.when ?? null,
+					validate: required.validate ?? null,
+				}
+			}
+			return null
+		}
+
+		function isSectionVisible(section) {
+			return !section.when || section.when(getCallbackContext())
+		}
+
+		function isSectionRendered(section) {
+			if (!isSectionVisible(section)) return false
+			if (section.kind === "model-select" && !state.modelOptions.length) return false
+			if (section.kind === "resolution-select") {
+				const resolutionOptions = getResolutionOptions()
+				if (resolutionOptions.length <= 1 && section.hideWhenSingle !== false) return false
+			}
+			if (section.kind === "option-group" && !getSectionOptions(section).length) {
+				return false
+			}
+			return true
+		}
+
+		function isSectionCurrentlyRequired(section) {
+			const requiredConfig = normalizeRequiredConfig(section)
+			if (!requiredConfig) return false
+			if (!isSectionRendered(section)) return false
+			if (requiredConfig.when && !requiredConfig.when(getCallbackContext())) return false
+			return true
+		}
+
+		function getRequiredErrorMessage(section, requiredConfig) {
+			if (requiredConfig.message) return requiredConfig.message
+			const title = section.title ?? ""
+			return title
+				? t("error.requiredField", `请完善「${title}」`)
+				: t("error.requiredFieldGeneric", "请完善必填项")
+		}
+
+		function getSectionValueForRequired(section) {
+			if (section.kind === "model-select") return state.modelId
+			if (section.kind === "resolution-select") return state.scale
+			if (section.kind === "size-control") return state.ratioKey
+			if (section.stateKey) return state[section.stateKey]
+			return undefined
+		}
+
+		function getDefaultRequiredValidator(section) {
+			if (section.kind === "toggle" || section.kind === "custom") return null
+
+			return ({ value, state: currentState, section: currentSection, helpers, t }) => {
+				switch (currentSection.kind) {
+					case "image-slot":
+					case "mask-painter":
+						return Boolean(value)
+					case "image-grid":
+						return Array.isArray(value) && value.length > 0
+					case "textarea":
+						return String(value ?? "").trim().length > 0
+					case "option-group": {
+						const options = getSectionOptions(currentSection, currentState)
+						return options.some((option) => option.value === value)
+					}
+					case "model-select":
+						return currentState.modelOptions.some((model) => model.model_id === value)
+					case "resolution-select":
+						return getResolutionOptions(currentState).includes(value)
+					case "size-control":
+						return (
+							Boolean(value) &&
+							getSizeControlRatioOptions(currentSection, currentState).some(
+								(option) => option.value === value,
+							)
+						)
+					default:
+						return Boolean(value)
+				}
+			}
+		}
+
+		function validateRequiredSection(section) {
+			const requiredConfig = normalizeRequiredConfig(section)
+			if (!requiredConfig || !isSectionCurrentlyRequired(section)) return null
+
+			const value = getSectionValueForRequired(section)
+			const validator =
+				requiredConfig.validate ?? getDefaultRequiredValidator(section)
+			if (!validator) return null
+
+			const isValid = validator({
+				value,
+				state,
+				section,
+				helpers,
+				t,
+			})
+			if (isValid) return null
+			return getRequiredErrorMessage(section, requiredConfig)
+		}
+
+		function validateRequiredSections() {
+			for (const section of config.sections ?? []) {
+				const error = validateRequiredSection(section)
+				if (error) return error
+			}
+			return null
+		}
+
+		function appendSectionTitle(titleLabel, section) {
+			titleLabel.replaceChildren()
+			titleLabel.append(document.createTextNode(section.title ?? ""))
+			if (isSectionCurrentlyRequired(section)) {
+				titleLabel.append(createElement("span", "mpk-section-required", "*"))
+			}
+		}
+
+		function createSectionHeader(section) {
 			const header = createElement("div", "mpk-section-header")
-			header.append(createElement("label", "mpk-section-title", title))
-			if (suffix) header.append(createElement("span", "mpk-section-suffix", suffix))
-			section.append(header)
-			return section
+			const titleLabel = createElement("label", "mpk-section-title")
+			appendSectionTitle(titleLabel, section)
+			header.append(titleLabel)
+			const suffix = resolveValue(section.suffix, getCallbackContext())
+			if (suffix) {
+				header.append(createElement("span", "mpk-section-suffix", String(suffix)))
+			}
+			return header
+		}
+
+		/** 创建区块 */
+		function createSection(section) {
+			const sectionNode = createElement("section", "mpk-section")
+			sectionNode.append(createSectionHeader(section))
+			return sectionNode
 		}
 
 		/** 创建图片卡片 */
@@ -743,6 +883,7 @@
 		/** 判断是否需要更新区块 */
 		function shouldUpdateSection(section, changedKeys) {
 			if (!changedKeys) return true
+			if (normalizeRequiredConfig(section)?.when) return true
 			for (const key of resolveSectionDeps(section)) {
 				if (changedKeys.has(key)) return true
 			}
@@ -756,7 +897,8 @@
 
 			const sectionNode = createElement("section", "mpk-section")
 			const header = createElement("div", "mpk-section-header")
-			const title = createElement("label", "mpk-section-title", section.title)
+			const title = createElement("label", "mpk-section-title")
+			appendSectionTitle(title, section)
 			const suffix = createElement("span", "mpk-section-suffix")
 			const grid = createElement(
 				"div",
@@ -779,6 +921,7 @@
 
 			const nextView = {
 				sectionNode,
+				title,
 				suffix,
 				grid,
 				help,
@@ -838,6 +981,7 @@
 			const sectionView = ensureImageGridView(section)
 			const altText = section.alt ?? section.title
 
+			appendSectionTitle(sectionView.title, section)
 			sectionView.suffix.textContent = `${assets.length}/${maxCount}`
 			if (sectionView.help) {
 				sectionView.help.textContent = section.help ?? ""
@@ -896,7 +1040,7 @@
 		/** 渲染图片槽位 */
 		function renderImageSlot(section) {
 			const asset = state[section.stateKey]
-			const sectionNode = createSection(section.title, section.suffix)
+			const sectionNode = createSection(section)
 			const body = createElement("div", "mpk-image-slot-body")
 
 			if (!asset) {
@@ -967,7 +1111,7 @@
 		/** 渲染遮罩涂抹区块 */
 		function renderMaskPainter(section) {
 			const sourceAsset = state[section.sourceStateKey]
-			const sectionNode = createSection(section.title, section.suffix)
+			const sectionNode = createSection(section)
 
 			if (!sourceAsset) {
 				sectionNode.append(
@@ -1254,7 +1398,7 @@
 			const value = typeof state[section.stateKey] === "string" ? state[section.stateKey] : ""
 			const maxLength = Number(section.maxLength)
 			const hasMaxLength = Number.isFinite(maxLength) && maxLength > 0
-			const sectionNode = createSection(section.title, section.suffix)
+			const sectionNode = createSection(section)
 			const textarea = createElement("textarea", "mpk-textarea")
 			const count = hasMaxLength
 				? createElement("span", "mpk-textarea-count", `${value.length}/${maxLength}`)
@@ -1297,7 +1441,7 @@
 		/** 渲染开关 */
 		function renderToggle(section) {
 			const isChecked = Boolean(state[section.stateKey])
-			const sectionNode = createSection(section.title, section.suffix)
+			const sectionNode = createSection(section)
 			const body = createElement("div", "mpk-toggle-row")
 			const checkbox = createElement("input", "mpk-toggle")
 			checkbox.type = "checkbox"
@@ -1328,7 +1472,7 @@
 		/** 渲染尺寸控制 */
 		function renderSizeControl(section) {
 			const current = getSizeControlState(section)
-			const sectionNode = createSection(section.title, section.suffix)
+			const sectionNode = createSection(section)
 			const body = createElement("div", "mpk-size-control")
 			const ratioList = createElement("div", "mpk-option-group mpk-size-control-ratios")
 
@@ -1365,7 +1509,7 @@
 			const isCardVariant = section.variant === "card"
 			const descriptionMode =
 				section.descriptionMode ?? (section.showDescriptionOnHover ? "tooltip" : "title")
-			const sectionNode = createSection(section.title, section.suffix)
+			const sectionNode = createSection(section)
 			const list = createElement(
 				"div",
 				`mpk-option-group${isCardVariant ? " is-card" : ""} ${section.groupClassName ?? ""}`.trim(),
@@ -1420,7 +1564,7 @@
 		/** 渲染模型选择 */
 		function renderModelSelect(section) {
 			if (!state.modelOptions.length) return document.createDocumentFragment()
-			const sectionNode = createSection(section.title)
+			const sectionNode = createSection(section)
 			const select = createElement("select", "mpk-select")
 			state.modelOptions.forEach((model) => {
 				const option = createElement("option")
@@ -1448,7 +1592,7 @@
 			if (resolutionOptions.length <= 1 && section.hideWhenSingle !== false) {
 				return document.createDocumentFragment()
 			}
-			const sectionNode = createSection(section.title)
+			const sectionNode = createSection(section)
 			const list = createElement("div", "mpk-option-group")
 			resolutionOptions.forEach((scale) => {
 				const button = createElement(

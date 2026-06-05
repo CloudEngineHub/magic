@@ -569,4 +569,165 @@ describe("magic-plugin-kit", () => {
 		expect(generateAndPlace).toHaveBeenNthCalledWith(1, { prompt: "first-request" })
 		expect(generateAndPlace).toHaveBeenNthCalledWith(2, { prompt: "second-request" })
 	})
+
+	it("renders a required marker for standard sections", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				prompt: "",
+			},
+			sections: [
+				{
+					id: "prompt",
+					kind: "textarea",
+					stateKey: "prompt",
+					title: "Prompt",
+					required: true,
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const requiredMarker = root.querySelector(".mpk-section-required")
+		expect(requiredMarker?.textContent).toBe("*")
+		expect(root.querySelector(".mpk-section-title")?.textContent).toContain("Prompt")
+	})
+
+	it("renders a required marker for image-grid sections", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				productImages: [],
+			},
+			sections: [
+				{
+					id: "productImages",
+					kind: "image-grid",
+					stateKey: "productImages",
+					title: "Products",
+					required: true,
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		expect(root.querySelector(".mpk-section-required")?.textContent).toBe("*")
+	})
+
+	it("blocks generate on the first missing required section before plugin validate runs", async () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		const validate = vi.fn(() => null)
+		const buildRequest = vi.fn(() => ({}))
+		ctx.ai = {
+			generateAndPlace: vi.fn(),
+		}
+
+		kit.mount(ctx, root, {
+			initialState: {
+				productImage: null,
+			},
+			sections: [
+				{
+					id: "productImage",
+					kind: "image-slot",
+					stateKey: "productImage",
+					title: "Product image",
+					required: {
+						message: "Please upload a product image",
+					},
+				},
+			],
+			generate: {
+				...createGenerateConfig(),
+				validate,
+				buildRequest,
+			},
+		})
+
+		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+		await vi.waitFor(() => {
+			expect(root.querySelector(".mpk-error")?.textContent).toBe("Please upload a product image")
+		})
+		expect(validate).not.toHaveBeenCalled()
+		expect(buildRequest).not.toHaveBeenCalled()
+		expect((ctx as any).ai.generateAndPlace).not.toHaveBeenCalled()
+	})
+
+	it("skips required marker and validation when required.when returns false", async () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		const validate = vi.fn(() => "plugin validation")
+
+		kit.mount(ctx, root, {
+			initialState: {
+				productImage: null,
+			},
+			sections: [
+				{
+					id: "productImage",
+					kind: "image-slot",
+					stateKey: "productImage",
+					title: "Product image",
+					required: {
+						message: "Please upload a product image",
+						when: () => false,
+					},
+				},
+			],
+			generate: {
+				...createGenerateConfig(),
+				validate,
+			},
+		})
+
+		expect(root.querySelector(".mpk-section-required")).toBeNull()
+
+		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+		await vi.waitFor(() => {
+			expect(validate).toHaveBeenCalledTimes(1)
+		})
+		expect(root.querySelector(".mpk-error")?.textContent).toBe("plugin validation")
+	})
+
+	it("uses custom required validators for specialized emptiness rules", async () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				confirmSelection: false,
+			},
+			sections: [
+				{
+					id: "confirmSelection",
+					kind: "toggle",
+					stateKey: "confirmSelection",
+					title: "Confirm selection",
+					required: {
+						message: "Please confirm the selection",
+						validate: ({ value }: { value: boolean }) => value === true,
+					},
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+		await vi.waitFor(() => {
+			expect(root.querySelector(".mpk-error")?.textContent).toBe("Please confirm the selection")
+		})
+	})
 })

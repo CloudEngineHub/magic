@@ -222,6 +222,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "topGarmentImage",
 					title: t("section.topGarmentImage", "上装图"),
+					required: true,
 					uploadLabel: t("upload.topGarmentImage", "点击上传上装图"),
 					alt: t("section.topGarmentImage", "上装图"),
 					deps: ["garmentMode"],
@@ -237,6 +238,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "bottomGarmentImage",
 					title: t("section.bottomGarmentImage", "下装图"),
+					required: true,
 					uploadLabel: t("upload.bottomGarmentImage", "点击上传下装图"),
 					alt: t("section.bottomGarmentImage", "下装图"),
 					deps: ["garmentMode"],
@@ -252,6 +254,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "onePieceGarmentImage",
 					title: t("section.onePieceGarmentImage", "连体装图"),
+					required: true,
 					uploadLabel: t("upload.onePieceGarmentImage", "点击上传连体装图"),
 					alt: t("section.onePieceGarmentImage", "连体装图"),
 					deps: ["garmentMode"],
@@ -267,6 +270,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "targetModelImage",
 					title: t("section.modelImage", "模特图"),
+					required: true,
 					uploadLabel: t("upload.modelImage", "点击上传模特图"),
 					alt: t("section.modelImage", "模特图"),
 					help: t(
@@ -287,17 +291,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布比例"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -320,12 +327,6 @@ registerMagicCanvasPlugin({
 					) {
 						return t("empty.separatesGarmentImage", "请至少上传上装图或下装图")
 					}
-					if (state.garmentMode === "onePiece" && !state.onePieceGarmentImage) {
-						return t("empty.onePieceGarmentImage", "请先上传连体装图")
-					}
-					if (!state.targetModelImage) {
-						return t("empty.modelImage", "请先上传模特图")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) => {
@@ -338,22 +339,6 @@ registerMagicCanvasPlugin({
 					return !state.onePieceGarmentImage || !state.targetModelImage
 				},
 				validate: ({ state, helpers }) => {
-					if (
-						state.garmentMode === "separates" &&
-						!state.topGarmentImage &&
-						!state.bottomGarmentImage
-					) {
-						return t("empty.separatesGarmentImage", "请至少上传上装图或下装图")
-					}
-					if (state.garmentMode === "onePiece" && !state.onePieceGarmentImage) {
-						return t("empty.onePieceGarmentImage", "请先上传连体装图")
-					}
-					if (!state.targetModelImage) {
-						return t("empty.modelImage", "请先上传模特图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					const referenceImages = getReferenceImages(state)
 					if (
 						helpers.collectReferenceIds(referenceImages).length !==

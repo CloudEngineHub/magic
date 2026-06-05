@@ -96,6 +96,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "sourceImage",
 					title: t("section.sourceImage", "待修复图"),
+					required: true,
 					uploadLabel: t("upload.sourceImage", "点击上传待修复图"),
 					alt: t("section.sourceImage", "待修复图"),
 					help: t(
@@ -122,6 +123,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "referenceProductImage",
 					title: t("section.referenceProductImage", "参考商品图"),
+					required: true,
 					uploadLabel: t("upload.referenceProductImage", "点击上传参考商品图"),
 					alt: t("section.referenceProductImage", "参考商品图"),
 					help: t(
@@ -147,17 +149,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布比例"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -173,25 +178,10 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成鞋靴修复图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.sourceImage) {
-						return t("empty.sourceImage", "请先上传 1 张待修复图")
-					}
-					if (!state.referenceProductImage) {
-						return t("empty.referenceProductImage", "请先上传 1 张参考商品图")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.sourceImage || !state.referenceProductImage,
 				validate: ({ state, helpers }) => {
-					if (!state.sourceImage) {
-						return t("empty.sourceImage", "请先上传 1 张待修复图")
-					}
-					if (!state.referenceProductImage) {
-						return t("empty.referenceProductImage", "请先上传 1 张参考商品图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					if (
 						helpers.collectReferenceIds([
 							state.sourceImage,

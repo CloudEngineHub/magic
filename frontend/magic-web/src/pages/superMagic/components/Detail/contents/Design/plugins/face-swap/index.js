@@ -112,6 +112,7 @@ registerMagicCanvasPlugin({
 					kind: "image-grid",
 					stateKey: "baseModelImages",
 					title: t("section.baseModelImages", "原模特图"),
+					required: true,
 					help: t(
 						"upload.baseModelImages.help",
 						"支持上传多张原模特图（最多 10 张），仅替换面部特征，保留肤色、发型、服饰与场景。",
@@ -129,6 +130,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "targetFaceImage",
 					title: t("section.targetFaceImage", "目标人脸"),
+					required: true,
 					uploadLabel: t("upload.targetFaceImage", "点击上传目标人脸图"),
 					alt: t("section.targetFaceImage", "目标人脸"),
 					help: t(
@@ -149,6 +151,7 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
@@ -163,25 +166,10 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成 AI 换脸图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.baseModelImages.length) {
-						return t("empty.baseModelImages", "请先上传至少 1 张原模特图")
-					}
-					if (!state.targetFaceImage) {
-						return t("empty.targetFaceImage", "请先上传目标人脸图")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.baseModelImages.length || !state.targetFaceImage,
 				validate: ({ state, helpers }) => {
-					if (!state.baseModelImages.length) {
-						return t("empty.baseModelImages", "请先上传至少 1 张原模特图")
-					}
-					if (!state.targetFaceImage) {
-						return t("empty.targetFaceImage", "请先上传目标人脸图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					const referenceImages = getReferenceImages(state)
 					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
 						return t("error.referenceLimit", "参考图数量已达当前模型上限")

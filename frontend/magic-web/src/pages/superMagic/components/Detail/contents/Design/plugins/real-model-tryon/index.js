@@ -127,6 +127,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "realPersonImage",
 					title: t("section.realPersonImage", "真人图"),
+					required: true,
 					uploadLabel: t("upload.realPersonImage", "点击上传真人图"),
 					alt: t("section.realPersonImage", "真人图"),
 					help: t(
@@ -147,6 +148,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "targetModelImage",
 					title: t("section.targetModelImage", "模特图"),
+					required: true,
 					uploadLabel: t("upload.targetModelImage", "点击上传模特图"),
 					alt: t("section.targetModelImage", "模特图"),
 					help: t(
@@ -184,17 +186,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布尺寸"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -202,6 +207,7 @@ registerMagicCanvasPlugin({
 					id: "count",
 					kind: "option-group",
 					stateKey: "genCount",
+					required: true,
 					title: t("section.count", "生成张数"),
 					options: GENERATION_COUNT_GROUP_OPTIONS,
 				},
@@ -220,15 +226,6 @@ registerMagicCanvasPlugin({
 				},
 				isDisabled: ({ state }) => !state.realPersonImage || !state.targetModelImage,
 				validate: ({ state, helpers }) => {
-					if (!state.realPersonImage) {
-						return t("empty.realPersonImage", "请先上传真人图")
-					}
-					if (!state.targetModelImage) {
-						return t("empty.targetModelImage", "请先上传模特图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					if (helpers.collectReferenceIds(getReferenceImages(state)).length !== 2) {
 						return t("error.references", "图片缺少可用于生成的资源标识")
 					}

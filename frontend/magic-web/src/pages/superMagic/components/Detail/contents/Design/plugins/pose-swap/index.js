@@ -275,6 +275,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "modelImage",
 					title: t("section.modelImage", "模特图"),
+					required: true,
 					uploadLabel: t("upload.modelImage", "点击上传模特图"),
 					alt: t("section.modelImage", "模特图"),
 					help: t(
@@ -306,6 +307,7 @@ registerMagicCanvasPlugin({
 					stateKey: "posePrompt",
 					deps: ["poseMode"],
 					title: t("section.posePrompt", "姿势描述"),
+					required: true,
 					placeholder: t(
 						"placeholder.posePrompt",
 						"将图中模特调整为一个更具创意和时尚感的姿势。",
@@ -320,6 +322,7 @@ registerMagicCanvasPlugin({
 					stateKey: "poseReferenceImages",
 					deps: ["poseMode", "modelImage", "modelId", "modelOptions"],
 					title: t("section.poseReferenceImages", "姿势参考图"),
+					required: true,
 					help: t(
 						"upload.poseReferenceImages.help",
 						"支持上传多张姿势参考图，只会复用姿态，不会复制脸、衣服或背景。多图生成时会按顺序为每张结果分配 1 张姿势参考图；当生成张数多于参考图数量时，会循环复用姿势参考图。",
@@ -345,17 +348,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布比例"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -371,15 +377,6 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成模特换姿势图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.modelImage) {
-						return t("empty.modelImage", "请先上传模特图")
-					}
-					if (state.poseMode === "text" && !state.posePrompt.trim()) {
-						return t("error.posePromptRequired", "请输入姿势描述")
-					}
-					if (state.poseMode === "image" && !state.poseReferenceImages.length) {
-						return t("error.poseReferenceRequired", "请上传至少 1 张姿势参考图")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) =>
@@ -387,18 +384,6 @@ registerMagicCanvasPlugin({
 					(state.poseMode === "text" && !state.posePrompt.trim()) ||
 					(state.poseMode === "image" && !state.poseReferenceImages.length),
 				validate: ({ state, helpers }) => {
-					if (!state.modelImage) {
-						return t("empty.modelImage", "请先上传模特图")
-					}
-					if (state.poseMode === "text" && !state.posePrompt.trim()) {
-						return t("error.posePromptRequired", "请输入姿势描述")
-					}
-					if (state.poseMode === "image" && !state.poseReferenceImages.length) {
-						return t("error.poseReferenceRequired", "请上传至少 1 张姿势参考图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					const referenceImages = getReferenceImages(state)
 					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
 						return t("error.referenceLimit", "参考图数量已达当前模型上限")

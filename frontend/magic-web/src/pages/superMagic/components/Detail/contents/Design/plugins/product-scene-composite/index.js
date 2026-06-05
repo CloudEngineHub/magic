@@ -174,6 +174,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "productImage",
 					title: t("section.productImage", "商品图"),
+					required: true,
 					uploadLabel: t("upload.productImage", "点击上传商品图"),
 					alt: t("section.productImage", "商品图"),
 					help: t(
@@ -186,6 +187,7 @@ registerMagicCanvasPlugin({
 					kind: "image-grid",
 					stateKey: "sceneImages",
 					title: t("section.sceneImages", "生成场景"),
+					required: true,
 					alt: t("section.sceneImages", "生成场景"),
 					addLabel: "+",
 					help: t(
@@ -206,11 +208,13 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
@@ -227,25 +231,10 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成商品图合成")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.productImage) {
-						return t("empty.productImage", "请先上传 1 张商品图")
-					}
-					if (!state.sceneImages.length) {
-						return t("empty.sceneImages", "请先上传至少 1 张场景图")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.productImage || !state.sceneImages.length,
 				validate: ({ state, helpers }) => {
-					if (!state.productImage) {
-						return t("empty.productImage", "请先上传 1 张商品图")
-					}
-					if (!state.sceneImages.length) {
-						return t("empty.sceneImages", "请先上传至少 1 张场景图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					if (getMaxReferenceImages(state, helpers) < 2) {
 						return t(
 							"error.referenceLimitTooLow",

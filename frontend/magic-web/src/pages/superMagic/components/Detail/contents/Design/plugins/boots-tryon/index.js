@@ -160,6 +160,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "productImage",
 					title: t("section.products", "鞋履商品图"),
+					required: true,
 					uploadLabel: t("upload.product", "点击上传鞋履商品图"),
 					help: t(
 						"upload.productTip",
@@ -183,7 +184,7 @@ registerMagicCanvasPlugin({
 					kind: "image-grid",
 					stateKey: "modelImages",
 					title: t("section.model", "模特底图"),
-					suffix: t("optional", "可选"),
+					required: true,
 					uploadLabel: t("upload.model", "点击上传带脚部/小腿的模特图"),
 					alt: t("section.model", "模特底图"),
 					help: t(
@@ -207,17 +208,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布比例"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -243,17 +247,6 @@ registerMagicCanvasPlugin({
 				},
 				isDisabled: ({ state }) => !state.productImage || !state.modelImages.length,
 				validate: ({ state, helpers }) => {
-					if (!state.productImage) {
-						return t("empty.products", "请先上传鞋履商品图")
-					}
-
-					if (!state.modelImages.length) {
-						return t("empty.models", "请先上传模特底图")
-					}
-
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					const referenceImages = getReferenceImages(state)
 					if (
 						helpers.collectReferenceIds(referenceImages).length !==

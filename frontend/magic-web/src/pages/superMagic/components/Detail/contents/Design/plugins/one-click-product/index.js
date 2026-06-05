@@ -220,6 +220,7 @@ registerMagicCanvasPlugin({
 					kind: "image-grid",
 					stateKey: "productImages",
 					title: t("section.productImages", "商品图"),
+					required: true,
 					alt: t("section.productImages", "商品图"),
 					addLabel: "+",
 					help: t(
@@ -275,6 +276,7 @@ registerMagicCanvasPlugin({
 					stateKey: "inspirationImage",
 					deps: ["creationMode", "productImages", "modelId", "modelOptions"],
 					title: t("section.inspirationImage", "参考种草图"),
+					required: true,
 					uploadLabel: t("upload.inspirationImage", "点击上传参考种草图"),
 					alt: t("section.inspirationImage", "参考种草图"),
 					help: t(
@@ -292,17 +294,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布比例"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -318,30 +323,12 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成一键种草图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.productImages.length) {
-						return t("empty.productImages", "请先上传商品图")
-					}
-					if (state.creationMode === "inspiration" && !state.inspirationImage) {
-						return t("error.inspirationRequired", "请上传参考种草图")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) =>
 					!state.productImages.length ||
 					(state.creationMode === "inspiration" && !state.inspirationImage),
 				validate: ({ state, helpers }) => {
-					if (!state.productImages.length) {
-						return t("empty.productImages", "请先上传商品图")
-					}
-					if (state.productImages.length > MAX_PRODUCT_IMAGES) {
-						return t("error.productLimit", "商品图最多上传 5 张")
-					}
-					if (state.creationMode === "inspiration" && !state.inspirationImage) {
-						return t("error.inspirationRequired", "请上传参考种草图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					const referenceImages = getReferenceImages(state)
 					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
 						return t("error.referenceLimit", "参考图数量已达当前模型上限")

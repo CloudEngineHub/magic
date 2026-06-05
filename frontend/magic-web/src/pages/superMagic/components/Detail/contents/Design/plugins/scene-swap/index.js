@@ -239,6 +239,7 @@ registerMagicCanvasPlugin({
 					kind: "image-grid",
 					stateKey: "modelImages",
 					title: t("section.modelImages", "模特图"),
+					required: true,
 					help: t(
 						"upload.modelImageTip",
 						"支持上传多张模特图，建议主体清晰、姿态稳定，便于换景生成。",
@@ -271,6 +272,7 @@ registerMagicCanvasPlugin({
 					stateKey: "backgroundImage",
 					deps: ["backgroundMode"],
 					title: t("section.backgroundImage", "背景图"),
+					required: true,
 					uploadLabel: t("upload.backgroundImage", "点击上传单张背景图"),
 					alt: t("section.backgroundImage", "背景图"),
 					when: ({ state }) => state.backgroundMode === "image",
@@ -289,6 +291,7 @@ registerMagicCanvasPlugin({
 					stateKey: "backgroundPrompt",
 					deps: ["backgroundMode"],
 					title: t("section.backgroundPrompt", "背景描述"),
+					required: true,
 					placeholder: t(
 						"placeholder.backgroundPrompt",
 						"描述你想要生成的背景场景，例如：高级服装广告棚景，暖色调橱窗光，城市街道夜景。",
@@ -303,6 +306,7 @@ registerMagicCanvasPlugin({
 					stateKey: "copyBackgroundImage",
 					deps: ["backgroundMode"],
 					title: t("section.copyBackgroundImage", "复制背景参考图"),
+					required: true,
 					uploadLabel: t("upload.copyBackgroundImage", "点击上传要复制背景的参考图"),
 					alt: t("section.copyBackgroundImage", "复制背景参考图"),
 					when: ({ state }) => state.backgroundMode === "copy",
@@ -330,17 +334,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布尺寸"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -356,9 +363,6 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成模拍换景图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.modelImages.length) {
-						return t("empty.modelImages", "请先上传至少 1 张模特图")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) =>
@@ -368,21 +372,6 @@ registerMagicCanvasPlugin({
 					(state.backgroundMode === "copy" && !state.copyBackgroundImage) ||
 					(state.backgroundMode === "prompt" && !state.backgroundPrompt.trim()),
 				validate: ({ state, helpers }) => {
-					if (!state.modelImages.length) {
-						return t("empty.modelImages", "请先上传至少 1 张模特图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
-					if (state.backgroundMode === "image" && !state.backgroundImage) {
-						return t("error.backgroundImageRequired", "请选择背景图")
-					}
-					if (state.backgroundMode === "prompt" && !state.backgroundPrompt.trim()) {
-						return t("error.backgroundPromptRequired", "请输入背景描述")
-					}
-					if (state.backgroundMode === "copy" && !state.copyBackgroundImage) {
-						return t("error.copyBackgroundRequired", "请选择复制背景参考图")
-					}
 					const selectedSize = helpers.getSelectedSize(state)
 					if (!selectedSize?.genW || !selectedSize?.genH) {
 						return t("error.noSize", "当前模型缺少可用尺寸配置")

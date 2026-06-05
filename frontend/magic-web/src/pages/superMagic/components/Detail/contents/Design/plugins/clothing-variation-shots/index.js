@@ -296,6 +296,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "garmentImage",
 					title: t("section.garmentImage", "服饰图"),
+					required: true,
 					uploadLabel: t("upload.garmentImage", "点击上传服饰图"),
 					alt: t("section.garmentImage", "服饰图"),
 					help: t(
@@ -315,6 +316,7 @@ registerMagicCanvasPlugin({
 					id: "garmentType",
 					kind: "option-group",
 					stateKey: "garmentType",
+					required: true,
 					title: t("section.garmentType", "服饰类型"),
 					options: garmentTypeOptions,
 				},
@@ -332,6 +334,7 @@ registerMagicCanvasPlugin({
 					kind: "image-grid",
 					stateKey: "styleReferenceImages",
 					title: t("section.styleReferenceImages", "样式参考图"),
+					required: true,
 					alt: t("section.styleReferenceImages", "样式参考图"),
 					addLabel: "+",
 					deps: ["generationStyle", "garmentImage", "modelId", "modelOptions"],
@@ -350,6 +353,7 @@ registerMagicCanvasPlugin({
 					kind: "textarea",
 					stateKey: "customStylePrompt",
 					title: t("section.customStylePrompt", "样式描述"),
+					required: true,
 					deps: ["generationStyle"],
 					when: ({ state }) => state.generationStyle === "custom",
 					placeholder: t(
@@ -371,17 +375,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布尺寸"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -398,18 +405,6 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成百变服饰图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.garmentImage) {
-						return t("empty.garmentImage", "请先上传 1 张服饰图")
-					}
-					if (
-						state.generationStyle === "reference" &&
-						!state.styleReferenceImages.length
-					) {
-						return t("empty.styleReferenceImages", "请先上传至少 1 张样式参考图")
-					}
-					if (state.generationStyle === "custom" && !state.customStylePrompt.trim()) {
-						return t("empty.customStylePrompt", "请先输入样式描述")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) =>
@@ -417,21 +412,6 @@ registerMagicCanvasPlugin({
 					(state.generationStyle === "reference" && !state.styleReferenceImages.length) ||
 					(state.generationStyle === "custom" && !state.customStylePrompt.trim()),
 				validate: ({ state, helpers }) => {
-					if (!state.garmentImage) {
-						return t("empty.garmentImage", "请先上传 1 张服饰图")
-					}
-					if (
-						state.generationStyle === "reference" &&
-						!state.styleReferenceImages.length
-					) {
-						return t("empty.styleReferenceImages", "请先上传至少 1 张样式参考图")
-					}
-					if (state.generationStyle === "custom" && !state.customStylePrompt.trim()) {
-						return t("empty.customStylePrompt", "请先输入样式描述")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					const referenceImages = getReferenceImages(state)
 					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
 						return t("error.referenceLimit", "参考图数量已达当前模型上限")

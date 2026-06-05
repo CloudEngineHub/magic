@@ -627,6 +627,7 @@ registerMagicCanvasPlugin({
 					kind: "image-grid",
 					stateKey: "modelImages",
 					title: t("section.modelImages", "模特图"),
+					required: true,
 					help: t(
 						"upload.modelImages.help",
 						"支持上传多张模特图（最多 10 张），仅替换指定服饰部位颜色，保留模特姿态、场景与其他区域。",
@@ -640,6 +641,7 @@ registerMagicCanvasPlugin({
 					kind: "textarea",
 					stateKey: "bodyPart",
 					title: t("section.bodyPart", "换色部位"),
+					required: true,
 					placeholder: t("bodyPart.placeholder", '如"上衣"、"裤装"、"外套"、"连衣裙"…'),
 					rows: 2,
 					maxLength: 50,
@@ -648,6 +650,9 @@ registerMagicCanvasPlugin({
 					id: "color",
 					kind: "custom",
 					stateKey: "color",
+					required: {
+						validate: ({ value }) => Boolean(value),
+					},
 					deps: ["color"],
 					render: ({ state, setState, elements }) => {
 						// 记录 kit 暴露的稳定 panel DOM，供 drawer 挂载使用
@@ -659,17 +664,21 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
+
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布尺寸"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -685,22 +694,11 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成换色图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.modelImages.length)
-						return t("empty.modelImages", "请先上传至少 1 张模特图")
-					if (!state.bodyPart.trim())
-						return t("empty.bodyPart", "请描述需要换色的服饰部位")
-					if (!state.color) return t("empty.color", "请先选择替换颜色")
 					return ""
 				},
 				isDisabled: ({ state }) =>
 					!state.modelImages.length || !state.bodyPart.trim() || !state.color,
 				validate: ({ state, helpers }) => {
-					if (!state.modelImages.length)
-						return t("empty.modelImages", "请先上传至少 1 张模特图")
-					if (!state.bodyPart.trim())
-						return t("empty.bodyPart", "请描述需要换色的服饰部位")
-					if (!state.color) return t("empty.color", "请先选择替换颜色")
-					if (!state.modelId) return t("error.noModels", "暂无可用 AI 模型")
 					if (
 						helpers.collectReferenceIds(state.modelImages).length !==
 						state.modelImages.length

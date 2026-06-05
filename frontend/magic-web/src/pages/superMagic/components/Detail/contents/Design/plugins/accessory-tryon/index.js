@@ -237,6 +237,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "productImage",
 					title: t("section.productImage", "商品图"),
+					required: true,
 					uploadLabel: t("upload.productImage", "点击上传配饰商品图"),
 					alt: t("section.productImage", "商品图"),
 					help: t(
@@ -250,6 +251,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "modelImage",
 					title: t("section.modelImage", "模特图"),
+					required: true,
 					uploadLabel: t("upload.modelImage", "点击上传模特图"),
 					alt: t("section.modelImage", "模特图"),
 					help: t(
@@ -270,17 +272,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布尺寸"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -306,15 +311,6 @@ registerMagicCanvasPlugin({
 				},
 				isDisabled: ({ state }) => !state.productImage || !state.modelImage,
 				validate: ({ state, helpers }) => {
-					if (!state.productImage) {
-						return t("empty.productImage", "请先上传配饰商品图")
-					}
-					if (!state.modelImage) {
-						return t("empty.modelImage", "请先上传模特图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					const referenceImages = getReferenceImages(state)
 					if (
 						helpers.collectReferenceIds(referenceImages).length !==

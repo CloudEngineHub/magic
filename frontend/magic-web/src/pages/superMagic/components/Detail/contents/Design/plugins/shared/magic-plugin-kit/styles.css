@@ -81,6 +81,12 @@
 	font-size: 12px;
 }
 
+.mpk-section-required {
+	margin-left: 2px;
+	color: var(--mpk-destructive);
+	font-weight: 700;
+}
+
 .mpk-section-suffix {
 	color: var(--mpk-muted-foreground);
 	font-size: 10px;

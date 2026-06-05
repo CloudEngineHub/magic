@@ -155,6 +155,7 @@ registerMagicCanvasPlugin({
 					kind: "image-grid",
 					stateKey: "garments",
 					title: t("section.garments", "商品图"),
+					required: true,
 					alt: t("section.garments", "商品图"),
 					addLabel: "+",
 					help: t(
@@ -177,7 +178,6 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "modelImage",
 					title: t("section.model", "模特底图"),
-					suffix: t("optional", "可选"),
 					uploadLabel: t("upload.model", "点击上传（不上传则 AI 自动生成模特）"),
 					alt: t("section.model", "模特底图"),
 					beforePick: ({ state, helpers }) => {
@@ -193,7 +193,6 @@ registerMagicCanvasPlugin({
 					kind: "textarea",
 					stateKey: "extra",
 					title: t("section.extra", "额外描述"),
-					suffix: t("optional", "可选"),
 					placeholder: t(
 						"extra.placeholder",
 						"指定模特特征、场景、色调、风格等，例如：亚洲女性模特，25岁，身材高挑，站在时尚街头，暖色调，胶片感",
@@ -213,16 +212,19 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布尺寸"),
 				},
 				{
@@ -237,19 +239,10 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "一键生成穿搭图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.garments.length) {
-						return t("empty.garments", "请先上传至少 1 张商品图")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.garments.length,
 				validate: ({ state, helpers }) => {
-					if (!state.garments.length) {
-						return t("empty.garments", "请先上传至少 1 张商品图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					const referenceImages = getReferenceImages(state)
 					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
 						return t("error.referenceLimit", "参考图数量已达当前模型上限")

@@ -362,14 +362,20 @@ function summarizeMoreSettings(settings, t) {
 		.join(" · ")
 }
 
-function createSectionNode(title, suffix) {
+function createSectionNode(title, suffix, required = false) {
 	const section = document.createElement("section")
 	section.className = "mpk-section"
 	const header = document.createElement("div")
 	header.className = "mpk-section-header"
 	const titleEl = document.createElement("label")
 	titleEl.className = "mpk-section-title"
-	titleEl.textContent = title
+	titleEl.append(document.createTextNode(title))
+	if (required) {
+		const requiredEl = document.createElement("span")
+		requiredEl.className = "mpk-section-required"
+		requiredEl.textContent = "*"
+		titleEl.append(requiredEl)
+	}
 	header.append(titleEl)
 	if (suffix) {
 		const suffixEl = document.createElement("span")
@@ -695,7 +701,7 @@ const MoreSettingsUI = (() => {
 	}
 
 	function createSection({ state, t, getDrawer }) {
-		const section = createSectionNode(t("section.moreSettings", "更多设置"))
+		const section = createSectionNode(t("section.moreSettings", "更多设置"), undefined, true)
 		const button = document.createElement("button")
 		button.type = "button"
 		button.className = "pis-summary-btn"
@@ -1102,6 +1108,7 @@ const StyleEditorUI = (() => {
 		const section = createSectionNode(
 			t("section.creationConfig", "套图配置"),
 			t("custom.mode.countHint", "按每张样式卡的数量执行"),
+			true,
 		)
 		const wrap = document.createElement("div")
 		wrap.className = "pis-custom-mode"
@@ -1170,7 +1177,7 @@ const StyleEditorUI = (() => {
 })()
 
 function createSmartCompositionSection({ state, setState, t }) {
-	const section = createSectionNode(t("section.creationConfig", "套图配置"))
+	const section = createSectionNode(t("section.creationConfig", "套图配置"), undefined, true)
 	const composition = getSmartCompositionCounts(state)
 	const wrap = document.createElement("div")
 	wrap.className = "pis-mode-config"
@@ -1582,6 +1589,7 @@ registerMagicCanvasPlugin({
 					kind: "image-grid",
 					stateKey: "productImages",
 					title: t("section.productImages", "商品图"),
+					required: true,
 					alt: t("section.productImages", "商品图"),
 					addLabel: "+",
 					help: t(
@@ -1606,6 +1614,7 @@ registerMagicCanvasPlugin({
 					id: "moreSettings",
 					kind: "custom",
 					deps: ["moreSettings"],
+					required: true,
 					render: ({ state, setState, elements }) => {
 						panelEl = elements.panel || panelEl || root
 						setPluginState = setState
@@ -1620,6 +1629,7 @@ registerMagicCanvasPlugin({
 					id: "creationMode",
 					kind: "option-group",
 					stateKey: "creationMode",
+					required: true,
 					title: t("section.creationMode", "创作模式"),
 					groupClassName: "pis-creation-mode-group",
 					showDescriptionOnHover: true,
@@ -1628,6 +1638,7 @@ registerMagicCanvasPlugin({
 				{
 					id: "smartComposition",
 					kind: "custom",
+					stateKey: "smartComposition",
 					deps: ["creationMode", "smartComposition"],
 					when: ({ state }) => state.creationMode === "smart",
 					render: ({ state, setState }) =>
@@ -1658,6 +1669,7 @@ registerMagicCanvasPlugin({
 				{
 					id: "creationConfig",
 					kind: "custom",
+					stateKey: "styleItems",
 					deps: ["creationMode", "styleItems", "ratioKey", "scale"],
 					when: ({ state }) => state.creationMode === "custom",
 					render: ({ state, setState, helpers, elements }) => {
@@ -1686,17 +1698,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布尺寸"),
 					deps: ["modelId", "modelOptions", "creationMode"],
 					when: ({ state }) => state.creationMode === "smart",
@@ -1713,9 +1728,6 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成商品套图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.productImages.length) {
-						return t("empty.productImages", "请先上传至少 1 张商品图")
-					}
 					if (state.creationMode === "smart" && !getSmartShotCount(state)) {
 						return t("empty.smartComposition", "请至少配置 1 张套图")
 					}
@@ -1740,12 +1752,6 @@ registerMagicCanvasPlugin({
 							getSmartShotCount(state) > MAX_SMART_SHOTS)) ||
 					(state.creationMode === "custom" && !state.styleItems.length),
 				validate: ({ state, helpers }) => {
-					if (!state.productImages.length) {
-						return t("empty.productImages", "请先上传至少 1 张商品图")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					if (
 						helpers.collectReferenceIds(state.productImages).length !==
 						state.productImages.length

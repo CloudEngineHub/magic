@@ -211,6 +211,7 @@ registerMagicCanvasPlugin({
 					kind: "image-grid",
 					stateKey: "baseModelImages",
 					title: t("section.baseModelImages", "原模特图"),
+					required: true,
 					help: t(
 						"upload.baseModelImages.help",
 						"仅支持单人模特图，不支持多人图、明显面部遮挡、明显低头/抬头或身体大面积被遮挡的图片。",
@@ -229,7 +230,6 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "targetModelImage",
 					title: t("section.targetModelImage", "目标模特"),
-					suffix: t("optional", "可选"),
 					uploadLabel: t("upload.targetModelImage", "点击上传目标模特图"),
 					alt: t("section.targetModelImage", "目标模特"),
 					help: t(
@@ -251,6 +251,9 @@ registerMagicCanvasPlugin({
 					id: "presetTargetModel",
 					kind: "option-group",
 					stateKey: "presetTargetModel",
+					required: {
+						validate: ({ state }) => Boolean(state.targetModelImage) || state.presetTargetModel !== "none",
+					},
 					title: t("section.presetTargetModel", "预设 AI 模特"),
 					options: presetTargetModels,
 				},
@@ -267,17 +270,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
+					required: true,
 					title: t("section.canvasSize", "画布比例"),
 					deps: ["modelId", "modelOptions", "scale"],
 				},
@@ -293,26 +299,11 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成 AI 换模特图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.baseModelImages.length) {
-						return t("empty.baseModelImages", "请先上传至少 1 张原模特图")
-					}
-					if (!hasTargetModelInput(state)) {
-						return t("empty.targetModel", "请先上传目标模特图或选择一个预设 AI 模特")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) =>
 					!state.baseModelImages.length || !hasTargetModelInput(state),
 				validate: ({ state, helpers }) => {
-					if (!state.baseModelImages.length) {
-						return t("empty.baseModelImages", "请先上传至少 1 张原模特图")
-					}
-					if (!hasTargetModelInput(state)) {
-						return t("empty.targetModel", "请先上传目标模特图或选择一个预设 AI 模特")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					const referenceImages = getReferenceImages(state)
 					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
 						return t("error.referenceLimit", "参考图数量已达当前模型上限")

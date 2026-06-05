@@ -581,6 +581,7 @@ registerMagicCanvasPlugin({
 					kind: "image-slot",
 					stateKey: "sourceImage",
 					title: t("section.sourceImage", "待翻译图"),
+					required: true,
 					uploadLabel: t("upload.sourceImage", "点击上传待翻译图"),
 					alt: t("section.sourceImage", "待翻译图"),
 					help: t(
@@ -592,6 +593,9 @@ registerMagicCanvasPlugin({
 					id: "targetLanguages",
 					kind: "custom",
 					stateKey: "targetLanguages",
+					required: {
+						validate: ({ value }) => Array.isArray(value) && value.length > 0,
+					},
 					deps: ["targetLanguages"],
 					render: ({ state, setState, elements }) => {
 						panelEl = elements.panel || panelEl || root
@@ -608,11 +612,13 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
+					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
+					required: true,
 					title: t("section.resolution", "分辨率"),
 					deps: ["modelId", "modelOptions"],
 				},
@@ -629,25 +635,10 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成图片翻译")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (!state.sourceImage) {
-						return t("empty.sourceImage", "请先上传 1 张待翻译图")
-					}
-					if (!state.targetLanguages.length) {
-						return t("empty.targetLanguages", "请先选择至少 1 个目标语言")
-					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.sourceImage || !state.targetLanguages.length,
 				validate: ({ state, helpers }) => {
-					if (!state.sourceImage) {
-						return t("empty.sourceImage", "请先上传 1 张待翻译图")
-					}
-					if (!state.targetLanguages.length) {
-						return t("empty.targetLanguages", "请先选择至少 1 个目标语言")
-					}
-					if (!state.modelId) {
-						return t("error.noModels", "暂无可用 AI 模型")
-					}
 					if (helpers.collectReferenceIds([state.sourceImage]).length !== 1) {
 						return t("error.references", "图片缺少可用于生成的资源标识")
 					}
