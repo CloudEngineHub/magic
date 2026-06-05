@@ -1,5 +1,10 @@
 import { resolveCanonicalResourcePath, normalizePathLocal } from "./pathUtils"
-import { createImageSourceFromBlob, closeImageSource, type ImageSource } from "./imageSourceUtils"
+import {
+	createImageSourceFromBlob,
+	closeImageSource,
+	getImageSourceDimensions,
+	type ImageSource,
+} from "./imageSourceUtils"
 import { parseExpiresAt, isOssExpired } from "./ossExpiryUtils"
 import type { Canvas } from "../Canvas"
 import { ImageElement } from "../element/elements/ImageElement"
@@ -80,6 +85,16 @@ interface ImageResource {
 	imageInfo: ImageInfo
 	/** 缩略图（由 Worker 与主图一并返回） */
 	thumbnailData: ThumbnailData
+}
+
+export interface ImageResourceDebugSnapshot {
+	entries: number
+	loaded: number
+	loading: number
+	exchanging: number
+	failed: number
+	estimatedDecodedBytes: number
+	estimatedNativeBytes: number
 }
 
 /**
@@ -412,6 +427,35 @@ export class ImageResourceManager {
 			this.entries.get(weak)?.lastFailureReason ??
 			null
 		)
+	}
+
+	public getDebugSnapshot(): ImageResourceDebugSnapshot {
+		let loaded = 0
+		let loading = 0
+		let exchanging = 0
+		let failed = 0
+		let estimatedDecodedBytes = 0
+
+		this.entries.forEach((entry) => {
+			if (entry.resource) {
+				loaded += 1
+				const { width, height } = getImageSourceDimensions(entry.resource.image)
+				estimatedDecodedBytes += Math.max(1, width) * Math.max(1, height) * 4
+			}
+			if (entry.loadingPromise) loading += 1
+			if (entry.exchangePromise) exchanging += 1
+			if (entry.lastFailureReason) failed += 1
+		})
+
+		return {
+			entries: this.entries.size,
+			loaded,
+			loading,
+			exchanging,
+			failed,
+			estimatedDecodedBytes,
+			estimatedNativeBytes: Math.round(estimatedDecodedBytes * 2.15),
+		}
 	}
 
 	public async ensureFreshOssInfo(

@@ -28,6 +28,9 @@ import ImageCropPanel from "./components/ImageCropPanel"
 import ImageExtendPanel from "./components/ImageExtendPanel"
 import ImageEraserPanel from "./components/ImageEraserPanel"
 import ElementRenameOverlay from "./components/ElementRenameOverlay"
+import CanvasPerformanceMonitor, {
+	ENABLE_CANVAS_PERFORMANCE_MONITOR,
+} from "./components/PerformanceMonitor"
 
 import styles from "./index.module.css"
 
@@ -201,16 +204,15 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			{!readonly && <Tools />}
 			{!readonly && <CanvasTips />}
 			<Zoom shareHostBottomChrome={shareHostBottomChrome} />
+			{ENABLE_CANVAS_PERFORMANCE_MONITOR && <CanvasPerformanceMonitor />}
 		</FloatingUIProvider>
 	)
 })
 
-CanvasDesignContent.displayName = "CanvasDesignContent"
-
 const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref) => {
 	const { getIsMobile } = props
 
-	const appContainerRef = useRef<HTMLDivElement>(null)
+	const appContainerRef = useRef<HTMLDivElement | null>(null)
 
 	const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
 
@@ -260,7 +262,5 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 		</MagicProvider>
 	)
 })
-
-CanvasDesign.displayName = "CanvasDesign"
 
 export default CanvasDesign
