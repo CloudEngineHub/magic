@@ -1196,6 +1196,16 @@ class SizeManagerTest extends TestCase
         });
     }
 
+    public function testQwenMaxOutputImagesFollowOfficialLimits(): void
+    {
+        $this->assertSame(1, SizeManager::getMaxOutputImages('qwen-image', null));
+        $this->assertSame(1, SizeManager::getMaxOutputImages('qwen-image-plus', null));
+        $this->assertSame(6, SizeManager::getMaxOutputImages('qwen-image-edit-plus', null));
+        $this->assertSame(6, SizeManager::getMaxOutputImages('qwen-image-edit-max', null));
+        $this->assertSame(6, SizeManager::getMaxOutputImages('qwen-image-2.0', null));
+        $this->assertSame(6, SizeManager::getMaxOutputImages('qwen-image-2.0-pro', null));
+    }
+
     public function testImageModelConfigExposesMaxOutputImages(): void
     {
         $config = ImageModelConfig::fromConfig([

@@ -1267,6 +1267,38 @@ class ImageGenerateFactoryTest extends TestCase
         );
     }
 
+    public function testCreateQwenImageEditPlusAllowsSixOutputs(): void
+    {
+        $data = $this->getCommonData();
+        $data['generate_num'] = 6;
+
+        $request = ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::QwenImage,
+            'qwen-image-edit-plus',
+            null,
+            $data
+        );
+
+        $this->assertInstanceOf(QwenImageModelRequest::class, $request);
+        $this->assertSame(6, $request->getGenerateNum());
+    }
+
+    public function testCreateQwenImageEditMaxRejectsAboveSixOutputs(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('当前模型最多支持一次生成 6 张图片，请调整 n 参数。');
+
+        $data = $this->getCommonData();
+        $data['generate_num'] = 7;
+
+        ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::QwenImage,
+            'qwen-image-edit-max',
+            null,
+            $data
+        );
+    }
+
     public function testCreateRequestDefaultsOutputImageLimitToOne(): void
     {
         $this->expectException(BusinessException::class);

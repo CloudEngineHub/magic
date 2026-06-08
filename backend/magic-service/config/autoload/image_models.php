@@ -290,11 +290,45 @@ return [
         ],
 
         // ==========================================================
-        // Qwen Image Edit Plus (不支持放大倍数)
+        // Qwen Image Plus (不支持放大倍数，n 固定为 1)
         // ==========================================================
         [
             'match' => [
                 ['field' => 'model_version', 'value' => 'qwen-image-plus'],
+            ],
+            'config' => [
+                'sizes' => [
+                    // 1:1
+                    ['label' => '1:1', 'value' => '1536x1536', 'scale' => null],
+                    // 2:3
+                    ['label' => '2:3', 'value' => '1024x1536', 'scale' => null],
+                    // 3:2
+                    ['label' => '3:2', 'value' => '1536x1024', 'scale' => null],
+                    // 3:4
+                    ['label' => '3:4', 'value' => '1080x1440', 'scale' => null],
+                    // 4:3
+                    ['label' => '4:3', 'value' => '1440x1080', 'scale' => null],
+                    // 9:16
+                    ['label' => '9:16', 'value' => '1080x1920', 'scale' => null],
+                    // 16:9
+                    ['label' => '16:9', 'value' => '1920x1080', 'scale' => null],
+                    // 21:9
+                    ['label' => '21:9', 'value' => '2048x872', 'scale' => null],
+                ],
+                'total_pixels_range' => [
+                    'min' => 262144,
+                    'max' => 4194304,
+                ],
+                'max_reference_images' => 3,
+                'max_output_images' => 1,
+            ],
+        ],
+
+        // ==========================================================
+        // Qwen Image Edit Plus / Max (支持 n 参数批量出图)
+        // ==========================================================
+        [
+            'match' => [
                 ['field' => 'model_version', 'value' => 'qwen-image-edit-plus'],
                 ['field' => 'model_version', 'value' => 'qwen-image-edit-max'],
             ],
@@ -322,7 +356,7 @@ return [
                     'max' => 4194304,
                 ],
                 'max_reference_images' => 3,
-                'max_output_images' => 1,
+                'max_output_images' => 6,
             ],
         ],
 
