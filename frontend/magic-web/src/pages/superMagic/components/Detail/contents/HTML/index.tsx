@@ -35,6 +35,7 @@ import { inlineDashboardDataJs } from "./dashboard/resourceVersioning"
 import { useDashboardVersioning } from "./dashboard/useDashboardVersioning"
 import AIEditButton from "@/pages/superMagic/components/Detail/components/EditToolbar/AIEditButton"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
+import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
 import { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -48,8 +49,9 @@ import CodeVersionCompareDialog from "../../components/versioning/CodeVersionCom
 import VersionCompareDialog from "../../components/versioning/VersionCompareDialog"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, Terminal } from "lucide-react"
+import { AlertTriangle, Crosshair, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
+import { cn } from "@/lib/utils"
 import { env } from "@/utils/env"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { exportHtmlToPdf, exportHtmlToImage } from "../../../../../../../packages/pdf-export/src"
@@ -339,7 +341,8 @@ export default memo(function HTML(props: HTMLProps) {
 	 * 代码模式、编辑、回放、PPT 仍用用户仓库 HTML + OSS。
 	 */
 	const htmlPreviewBundledTemplate = useMemo((): HtmlPreviewBundledTemplateKind | undefined => {
-		if (isEditMode || viewMode === "code" || isPlaybackMode || isInPPTMode) return undefined
+		if (viewMode === "code" || isPlaybackMode || isInPPTMode) return undefined
+		if (isEditMode && !isDataAnalysis) return undefined
 		return resolveHtmlPreviewBundledTemplate({
 			fileName: currentAttachmentItem?.file_name || data?.file_name,
 			relativeFilePath: currentAttachmentItem?.relative_file_path,
@@ -349,6 +352,7 @@ export default memo(function HTML(props: HTMLProps) {
 		currentAttachmentItem?.file_name,
 		currentAttachmentItem?.relative_file_path,
 		displayConfig?.type,
+		isDataAnalysis,
 		isEditMode,
 		viewMode,
 		isPlaybackMode,
@@ -391,6 +395,7 @@ export default memo(function HTML(props: HTMLProps) {
 	// IsolatedHTMLRenderer 的 ref，用于获取拦截回调函数
 	const htmlRendererRef = useRef<IsolatedHTMLRendererRef>(null)
 	const fileId = displayData?.file_id as string | undefined
+	const [isAppendPicking, setIsAppendPicking] = useState(false)
 	// 从模块级 Map 恢复上次的调试面板状态（组件重挂载后仍能保持开启）
 	const [devConsoleEnabled, setDevConsoleEnabled] = useState(() =>
 		fileId ? (devConsoleStateMap.get(fileId) ?? false) : false,
@@ -643,8 +648,9 @@ export default memo(function HTML(props: HTMLProps) {
 				postMessageTargetStrategy,
 			})
 
-			// 在编辑模式下注入键盘快捷键拦截器
-			if (isEditMode) {
+			// dashboard 通过 postMessage 驱动编辑态，不需要额外注入键盘拦截器；
+			// 否则会导致内容指纹变化并触发 iframe 二次重写。
+			if (isEditMode && !isDataAnalysis) {
 				finalProcessedContent = injectKeyboardInterceptorScript(finalProcessedContent)
 			}
 
@@ -656,6 +662,8 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 	})
 
+	const shouldReprocessOnEditMode = !isDataAnalysis && Boolean(isEditMode)
+
 	useDeepCompareEffect(() => {
 		if (!data?.content) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
@@ -663,7 +671,7 @@ export default memo(function HTML(props: HTMLProps) {
 	}, [
 		data,
 		displayConfig,
-		isEditMode,
+		shouldReprocessOnEditMode,
 		htmlPreviewBundledTemplate,
 		resourceFileVersions,
 		dashboardDataJsContent,
@@ -1150,6 +1158,29 @@ export default memo(function HTML(props: HTMLProps) {
 									onCancel={handleCancel}
 								/>
 							)}
+							{showFileEditButton && !isEditMode && (
+								<ActionButton
+									icon={
+										<Crosshair
+											size={16}
+											className={cn(isAppendPicking && "animate-pulse")}
+										/>
+									}
+									onClick={() => {
+										htmlRendererRef.current?.startInspectorAppend()
+									}}
+									title={t(
+										"topicFiles.aiPickTooltip",
+										"点击后选取页面元素，让 AI 对其进行修改",
+									)}
+									text={t("topicFiles.aiPick", "AI 选取")}
+									showText
+									className={cn(
+										isAppendPicking &&
+											"bg-primary/10 text-primary ring-1 ring-primary/30",
+									)}
+								/>
+							)}
 						</div>
 					),
 				},
@@ -1196,6 +1227,7 @@ export default memo(function HTML(props: HTMLProps) {
 			showAIOptimizationButton,
 			showExportButton,
 			showFileEditButton,
+			isAppendPicking,
 			t,
 		],
 	)
@@ -1330,6 +1362,7 @@ export default memo(function HTML(props: HTMLProps) {
 								attachmentList={attachmentList}
 								isPlaybackMode={isPlaybackMode}
 								onDevConsoleClose={() => setDevConsoleEnabled(false)}
+								onAppendPickingChange={setIsAppendPicking}
 							/>
 						)}
 					</div>

@@ -579,12 +579,15 @@
 				"untitledPost": "Untitled post"
 			},
 			"edit": {
+				"addArticleFileToChat": "Add article file to input",
 				"addCurrentPageToChat": "Add this card to chat",
 				"addPostFolderToCurrentChat": "Add this post to chat",
 				"cancel": "Cancel",
 				"discard": "Discard",
+				"goToArticleEdit": "Edit article",
 				"goToEdit": "Edit this card",
 				"noCards": "No cards in current post",
+				"refreshArticle": "Refresh article",
 				"refreshCard": "Refresh card",
 				"refreshConfirmDescription": "The current editor has unsaved changes. Save now or discard changes before refreshing.",
 				"refreshConfirmTitle": "Handle unsaved changes first",
@@ -772,6 +775,11 @@
 		"uploadFailed": "Upload failed",
 		"uploadFailedPrefix": "Upload failed: ",
 		"uploadedAttachments": "Uploaded Attachments ({{count}})"
+	},
+	"htmlEditor": {
+		"dropOverlay": {
+			"hint": "Release to insert image"
+		}
 	},
 	"fileViewer": {
 		"addNewSlide": "New Slide",
@@ -1792,16 +1800,31 @@
 		},
 		"message": {
 			"completing": "Completing summary...",
+			"continueSummary": "Continue summary",
+			"continuingSummaryAfterAudioCheck": "Continuing the summary...",
 			"generatingSummary": "Generating summary...",
 			"migratingImages": "Migrating images...",
 			"missingRequiredParams": "Missing required parameters, please reselect project and model",
+			"placeholderUploadCancel": "Cancel",
+			"placeholderUploadCancelled": "Audio preparation was cancelled",
+			"placeholderUploadProgress": "Preparing audio: {{percent}}% ready, {{remaining}} remaining",
+			"placeholderUploadProgressTitle": "Preparing audio",
+			"placeholderUploadTimeout": "Audio preparation is taking longer than expected. Please try again later",
+			"placeholderUploadTooManyFailed": "{{count}} audio segments need preparation. Please choose “Try again” first to keep the recording as complete as possible.",
 			"processingProject": "Processing project info...",
+			"retryUploadChunks": "Try again",
+			"retryingAudioChunks": "Preparing the audio again, please wait...",
 			"starting": "Starting summary...",
 			"stoppingRecording": "Stopping recording...",
 			"summaryComplete": "Summary complete",
 			"summaryFailed": "Summary failed, please retry",
 			"summaryGenerationFailed": "Failed to generate summary, please try again later",
-			"uploadChunksFailed": "Failed to upload audio chunks, please check network and retry",
+			"uploadChunksCompletingError": "Audio preparation ran into a problem. Please try again later",
+			"uploadChunksPreparingError": "The audio is not fully ready yet. Please try again shortly",
+			"uploadFailureDecisionContent": "{{failed}}/{{total}} audio segments are not fully ready yet. We recommend trying again first to keep the recording as complete as possible. You can also continue the summary now; the result will be generated from the audio that is already ready, and unfinished time ranges may not be included.",
+			"uploadFailureDecisionTitle": "A little audio still needs confirmation",
+			"uploadProgress": "Preparing audio: {{percent}}% ready, {{pending}} remaining",
+			"uploadProgressNeedsDecision": "Preparing audio: {{percent}}% ready",
 			"uploadingChunks": "Uploading audio chunks..."
 		},
 		"messageListFallback": {
@@ -1820,6 +1843,9 @@
 				"takeNotes": "Take Notes"
 			},
 			"title": "Recording"
+		},
+		"chunkProduction": {
+			"failed": "Recording error: No audio data detected"
 		},
 		"network": {
 			"max_retries_reached": "Some audio chunks failed to upload. Please check your network connection and retry",
@@ -2660,7 +2686,7 @@
 		"insertImage": "Insert Image",
 		"inspector": {
 			"agentPromptPlaceholder": "Describe the problem here",
-			"agentPromptSuffix": "Please describe the problem you encountered:",
+			"agentPromptSuffix": "Please handle the selected element:",
 			"agentPromptTitle": "[HTML Element Inspection] I selected an element on the page. Here are its details:",
 			"computedStyles": "Computed Styles",
 			"copySelector": "Copy Selector",
@@ -2865,6 +2891,8 @@
 	},
 	"topicFiles": {
 		"AIOptimization": "AI Edit",
+		"aiPick": "AI Pick",
+		"aiPickTooltip": "Click to select a page element and let AI modify it",
 		"addFile": "Add File",
 		"addFolder": "Add Folder",
 		"batchExportingPdf": "Batch Exporting PDF...",
