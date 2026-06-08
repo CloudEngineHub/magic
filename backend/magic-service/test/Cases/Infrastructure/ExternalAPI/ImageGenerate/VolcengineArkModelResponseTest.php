@@ -59,10 +59,55 @@ class VolcengineArkModelResponseTest extends TestCase
             'thoughts_tokens' => 0,
         ], $response->getUsage()->toArray());
     }
+
+    public function testOpenAIFormatUsesSingleVendorRequestForMultipleImages(): void
+    {
+        $model = new TestableVolcengineArkModel([
+            [
+                'data' => [
+                    [
+                        'url' => 'https://example.com/generated-1.png',
+                        'size' => '2048x2048',
+                    ],
+                    [
+                        'url' => 'https://example.com/generated-2.png',
+                        'size' => '2048x2048',
+                    ],
+                    [
+                        'url' => 'https://example.com/generated-3.png',
+                        'size' => '2048x2048',
+                    ],
+                ],
+                'usage' => [
+                    'input_tokens' => 10,
+                    'output_tokens' => 300,
+                    'total_tokens' => 310,
+                    'generated_images' => 3,
+                ],
+            ],
+        ]);
+
+        $request = new VolcengineArkRequest('2048', '2048', '小猫吃鱼', '', 'doubao-seedream');
+        $request->setGenerateNum(3);
+        $request->setSequentialImageGeneration('auto');
+        $request->setSequentialImageGenerationOptions(['max_images' => 3]);
+
+        $response = $model->generateImageOpenAIFormat($request);
+
+        $this->assertSame(1, $model->getRequestCallCount());
+        $this->assertSame([
+            ['url' => 'https://example.com/generated-1.png', 'size' => '2048x2048'],
+            ['url' => 'https://example.com/generated-2.png', 'size' => '2048x2048'],
+            ['url' => 'https://example.com/generated-3.png', 'size' => '2048x2048'],
+        ], $response->getData());
+        $this->assertSame(3, $response->getUsage()?->getGeneratedImages());
+    }
 }
 
 final class TestableVolcengineArkModel extends VolcengineArkModel
 {
+    private int $requestCallCount = 0;
+
     public function __construct(private array $queuedResults)
     {
         $this->logger = new NullLogger();
@@ -74,8 +119,14 @@ final class TestableVolcengineArkModel extends VolcengineArkModel
         };
     }
 
+    public function getRequestCallCount(): int
+    {
+        return $this->requestCallCount;
+    }
+
     protected function requestImageGenerationV2(VolcengineArkRequest $imageGenerateRequest): array
     {
+        ++$this->requestCallCount;
         return array_shift($this->queuedResults);
     }
 

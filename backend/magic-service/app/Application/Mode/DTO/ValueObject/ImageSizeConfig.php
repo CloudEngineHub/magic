@@ -25,6 +25,11 @@ class ImageSizeConfig extends AbstractValueObject
     protected int $maxReferenceImages = 0;
 
     /**
+     * @var int 单次请求最大输出图片数量
+     */
+    protected int $maxOutputImages = 1;
+
+    /**
      * @var string 默认显示的分辨率档位
      */
     protected string $defaultScale = '';
@@ -39,6 +44,7 @@ class ImageSizeConfig extends AbstractValueObject
         if ($data !== null) {
             $this->sizes = $data['sizes'] ?? [];
             $this->maxReferenceImages = $data['max_reference_images'] ?? 0;
+            $this->maxOutputImages = $data['max_output_images'] ?? 1;
             $this->defaultScale = is_string($data['default_scale'] ?? null) ? $data['default_scale'] : '';
             $this->imageSettings = is_array($data['image_settings'] ?? null) ? $data['image_settings'] : [];
         }
@@ -58,6 +64,7 @@ class ImageSizeConfig extends AbstractValueObject
         return new self([
             'sizes' => $config['sizes'] ?? [],
             'max_reference_images' => $config['max_reference_images'] ?? 0,
+            'max_output_images' => $config['max_output_images'] ?? 1,
             'default_scale' => $config['default_scale'] ?? '',
             'image_settings' => $config['image_settings'] ?? [],
         ]);
@@ -81,6 +88,16 @@ class ImageSizeConfig extends AbstractValueObject
     public function setMaxReferenceImages(int $maxReferenceImages): void
     {
         $this->maxReferenceImages = $maxReferenceImages;
+    }
+
+    public function getMaxOutputImages(): int
+    {
+        return $this->maxOutputImages;
+    }
+
+    public function setMaxOutputImages(int $maxOutputImages): void
+    {
+        $this->maxOutputImages = $maxOutputImages;
     }
 
     public function getDefaultScale(): string
@@ -125,6 +142,7 @@ class ImageSizeConfig extends AbstractValueObject
         return [
             'sizes' => $this->sizes,
             'max_reference_images' => $this->maxReferenceImages,
+            'max_output_images' => $this->maxOutputImages,
             'default_scale' => $this->defaultScale,
             'image_settings' => $this->imageSettings,
         ];

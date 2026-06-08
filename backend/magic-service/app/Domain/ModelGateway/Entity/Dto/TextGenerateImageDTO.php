@@ -70,8 +70,8 @@ class TextGenerateImageDTO extends AbstractRequestDTO
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'common.empty', ['label' => 'model_field']);
         }
 
-        if ($this->n < 1 || $this->n > 4) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'common.invalid_range', ['label' => 'Number of images', 'min' => 1, 'max' => 4]);
+        if ($this->n < 1) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'Number of images must be greater than or equal to 1');
         }
 
         if ($this->prompt === '') {

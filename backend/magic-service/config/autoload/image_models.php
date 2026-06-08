@@ -62,6 +62,7 @@ return [
                     ['label' => '21:9', 'value' => '6336x2688', 'scale' => '4K'],
                 ],
                 'max_reference_images' => 14,
+                'max_output_images' => 1,
             ],
         ],
         [
@@ -113,6 +114,7 @@ return [
                     ['label' => '21:9', 'value' => '6336x2688', 'scale' => '4K'],
                 ],
                 'max_reference_images' => 14,
+                'max_output_images' => 1,
             ],
         ],
 
@@ -137,6 +139,7 @@ return [
                     ['label' => '21:9', 'value' => '2389x1024', 'scale' => null],
                 ],
                 'max_reference_images' => 14,
+                'max_output_images' => 1,
             ],
         ],
 
@@ -163,6 +166,7 @@ return [
                     'max' => 16777216,
                 ],
                 'max_reference_images' => 14,
+                'max_output_images' => 8,
             ],
         ],
 
@@ -205,6 +209,7 @@ return [
                     'max' => 16777216,
                 ],
                 'max_reference_images' => 14,
+                'max_output_images' => 8,
             ],
         ],
 
@@ -247,6 +252,7 @@ return [
                     'max' => 10404496,
                 ],
                 'max_reference_images' => 10,
+                'max_output_images' => 8,
             ],
         ],
 
@@ -265,6 +271,7 @@ return [
                     ['label' => '9:16', 'value' => '928x1664', 'scale' => null],
                     ['label' => '16:9', 'value' => '1664x928', 'scale' => null],
                 ],
+                'max_output_images' => 1,
             ],
         ],
 
@@ -278,6 +285,7 @@ return [
             'config' => [
                 'sizes' => [],
                 'max_reference_images' => 3,
+                'max_output_images' => 1,
             ],
         ],
 
@@ -289,6 +297,40 @@ return [
                 ['field' => 'model_version', 'value' => 'qwen-image-plus'],
                 ['field' => 'model_version', 'value' => 'qwen-image-edit-plus'],
                 ['field' => 'model_version', 'value' => 'qwen-image-edit-max'],
+            ],
+            'config' => [
+                'sizes' => [
+                    // 1:1
+                    ['label' => '1:1', 'value' => '1536x1536', 'scale' => null],
+                    // 2:3
+                    ['label' => '2:3', 'value' => '1024x1536', 'scale' => null],
+                    // 3:2
+                    ['label' => '3:2', 'value' => '1536x1024', 'scale' => null],
+                    // 3:4
+                    ['label' => '3:4', 'value' => '1080x1440', 'scale' => null],
+                    // 4:3
+                    ['label' => '4:3', 'value' => '1440x1080', 'scale' => null],
+                    // 9:16
+                    ['label' => '9:16', 'value' => '1080x1920', 'scale' => null],
+                    // 16:9
+                    ['label' => '16:9', 'value' => '1920x1080', 'scale' => null],
+                    // 21:9
+                    ['label' => '21:9', 'value' => '2048x872', 'scale' => null],
+                ],
+                'total_pixels_range' => [
+                    'min' => 262144,
+                    'max' => 4194304,
+                ],
+                'max_reference_images' => 3,
+                'max_output_images' => 1,
+            ],
+        ],
+
+        // ==========================================================
+        // Qwen Image 2.0 / 2.0 Pro (支持 n 参数批量出图)
+        // ==========================================================
+        [
+            'match' => [
                 ['field' => 'model_version', 'value' => 'qwen-image-2.0'],
                 ['field' => 'model_version', 'value' => 'qwen-image-2.0-pro'],
             ],
@@ -316,6 +358,7 @@ return [
                     'max' => 4194304,
                 ],
                 'max_reference_images' => 3,
+                'max_output_images' => 6,
             ],
         ],
 
@@ -333,6 +376,7 @@ return [
                     ['label' => '3:2', 'value' => '1536x1024', 'scale' => null],
                 ],
                 'max_reference_images' => 14,
+                'max_output_images' => 1,
             ],
         ],
 
@@ -350,6 +394,7 @@ return [
                     ['label' => '3:2', 'value' => '1536x1024', 'scale' => null],
                 ],
                 'max_reference_images' => 14,
+                'max_output_images' => 1,
             ],
         ],
 
@@ -402,6 +447,7 @@ return [
                     'max' => 8294400,
                 ],
                 'max_reference_images' => 14,
+                'max_output_images' => 10,
                 'image_settings' => [
                     [
                         // 特殊项：质量

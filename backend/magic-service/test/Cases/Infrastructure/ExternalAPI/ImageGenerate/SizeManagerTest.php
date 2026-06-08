@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\ImageGenerate;
 
+use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageModelConfig;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\SizeManager;
 use Hyperf\Contract\ConfigInterface;
 use InvalidArgumentException;
@@ -1176,6 +1177,34 @@ class SizeManagerTest extends TestCase
             $config = SizeManager::matchConfig('totally-different-model', null);
             $this->assertNull($config);
         });
+    }
+
+    public function testGetMaxOutputImagesUsesModelConfigAndDefaultsToOne(): void
+    {
+        $this->withTemporaryImageModelConfigs([
+            [
+                'match' => [
+                    ['field' => 'model_version', 'value' => 'multi-image-model'],
+                ],
+                'config' => [
+                    'max_output_images' => 8,
+                ],
+            ],
+        ], function (): void {
+            $this->assertSame(8, SizeManager::getMaxOutputImages('multi-image-model', null));
+            $this->assertSame(1, SizeManager::getMaxOutputImages('unknown-model', null));
+        });
+    }
+
+    public function testImageModelConfigExposesMaxOutputImages(): void
+    {
+        $config = ImageModelConfig::fromConfig([
+            'sizes' => [],
+            'max_reference_images' => 3,
+            'max_output_images' => 8,
+        ]);
+
+        $this->assertSame(8, $config?->toArray()['max_output_images'] ?? null);
     }
 
     /**

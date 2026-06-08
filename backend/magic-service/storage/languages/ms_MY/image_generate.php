@@ -41,6 +41,7 @@ return [
     'prompt_required' => 'Kata prompt penjanaan imej tidak boleh kosong',
     'reference_images_required' => 'Penyuntingan imej memerlukan imej rujukan',
     'invalid_image_count' => 'Bilangan penjanaan imej mesti antara 1-10',
+    'output_image_count_exceeds_limit' => 'Model semasa menyokong maksimum :limit imej bagi setiap permintaan. Sila laraskan parameter n.',
     'invalid_image_url' => 'Format URL imej rujukan tidak sah',
     'invalid_mask_url' => 'Format URL imej topeng tidak sah',
     'no_image_generated' => 'Tiada imej dijana',
