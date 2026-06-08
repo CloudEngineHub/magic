@@ -1,0 +1,27 @@
+.garment-style-design .gsd-category-group {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.garment-style-design .gsd-category-more-group {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.garment-style-design .gsd-category-group .mpk-option,
+.garment-style-design .gsd-category-more-group .mpk-option,
+.garment-style-design .gsd-style-type-group .mpk-option {
+	width: 100%;
+}
+
+.garment-style-design .gsd-style-type-group {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.garment-style-design .mpk-image-slot-preview {
+	max-height: 240px;
+}

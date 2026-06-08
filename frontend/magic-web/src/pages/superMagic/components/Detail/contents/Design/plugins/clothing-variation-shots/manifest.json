@@ -7,7 +7,7 @@
 		"en-US": {
 			"button.generate": "Generate Clothing Variations",
 			"button.generating": "Generating…",
-			"description": "Upload one garment image, choose a style input mode, and generate marketing-oriented clothing visuals with one click.",
+			"description": "Input a garment flat-lay, mannequin image, or model image, and generate marketing flat-lay, garment detail, or hanging photos with one click.",
 			"empty.customStylePrompt": "Please enter a style prompt first",
 			"empty.garmentImage": "Upload 1 garment image first",
 			"empty.styleReferenceImages": "Upload at least 1 style reference image first",
@@ -48,7 +48,7 @@
 		"zh-CN": {
 			"button.generate": "生成百变服饰图",
 			"button.generating": "生成中…",
-			"description": "上传 1 张服饰图，选择样式输入方式，一键生成营销化服饰展示图。",
+			"description": "输入服饰平铺图、人台图或模特图，一键生成营销平铺图、服饰细节图、挂拍图。",
 			"empty.customStylePrompt": "请先输入样式描述",
 			"empty.garmentImage": "请先上传 1 张服饰图",
 			"empty.styleReferenceImages": "请先上传至少 1 张样式参考图",

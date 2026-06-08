@@ -1546,7 +1546,14 @@
 				}
 				button.addEventListener("click", () => {
 					if (option.disabled || activeValue === option.value) return
-					setState({ [section.stateKey]: option.value })
+					const patch = { [section.stateKey]: option.value }
+					if (typeof section.patchOnSelect === "function") {
+						Object.assign(
+							patch,
+							section.patchOnSelect(option.value, getCallbackContext()) || {},
+						)
+					}
+					setState(patch)
 				})
 				optionNode.append(button)
 				if (hasTooltip) {
