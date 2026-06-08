@@ -1,6 +1,6 @@
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Puzzle, X } from "lucide-react"
-import { useMemo, useState, useSyncExternalStore } from "react"
+import { Fragment, useMemo, useState, useSyncExternalStore } from "react"
 import {
 	normalizePluginLocale,
 	resolvePluginIcon,
@@ -150,7 +150,7 @@ export default function PluginTool() {
 				<div className={styles.pluginPanel}>
 					<div className={styles.pluginPanelHeader}>
 						<div className={styles.pluginPanelTitle}>{label}</div>
-						<button							
+						<button
 							type="button"
 							className={styles.pluginPanelClose}
 							onClick={() => setOpen(false)}
@@ -186,9 +186,8 @@ export default function PluginTool() {
 							{activeCategory?.plugins.length ? (
 								<div className={styles.pluginList}>
 									{activeCategory.plugins.map((plugin) => {
-										return (
+										const pluginButton = (
 											<button
-												key={plugin.name}
 												type="button"
 												className={styles.pluginItem}
 												onClick={() => {
@@ -217,6 +216,33 @@ export default function PluginTool() {
 													</div>
 												</div>
 											</button>
+										)
+
+										if (!plugin.resolvedDescription) {
+											return (
+												<Fragment key={plugin.name}>
+													{pluginButton}
+												</Fragment>
+											)
+										}
+
+										return (
+											<Tooltip key={plugin.name}>
+												<TooltipTrigger asChild>
+													{pluginButton}
+												</TooltipTrigger>
+												<TooltipPrimitive.Portal
+													container={portalContainer || undefined}
+												>
+													<TooltipContent
+														side="top"
+														sideOffset={8}
+														className="max-w-xs"
+													>
+														{plugin.resolvedDescription}
+													</TooltipContent>
+												</TooltipPrimitive.Portal>
+											</Tooltip>
 										)
 									})}
 								</div>
