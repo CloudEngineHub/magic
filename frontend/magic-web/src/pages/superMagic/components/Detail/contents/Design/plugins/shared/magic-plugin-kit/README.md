@@ -286,12 +286,14 @@ required: {
 
 字段说明：
 
-| 字段       | 说明                                                                         |
-| ---------- | ---------------------------------------------------------------------------- |
+
+| 字段         | 说明                                                |
+| ---------- | ------------------------------------------------- |
 | `true`     | 启用必填；错误文案默认取 `请完善「{title}」`，无 `title` 时为 `请完善必填项` |
-| `message`  | 自定义错误文案，优先级高于默认文案                                           |
-| `when`     | 必填生效条件；返回 `false` 时不展示 `*`，生成时也不校验                      |
-| `validate` | 自定义校验函数；返回 `true` 表示通过                                         |
+| `message`  | 自定义错误文案，优先级高于默认文案                                 |
+| `when`     | 必填生效条件；返回 `false` 时不展示 `*`，生成时也不校验                |
+| `validate` | 自定义校验函数；返回 `true` 表示通过                            |
+
 
 `validate` 回调参数：
 
@@ -301,30 +303,34 @@ required: {
 
 `value` 由 kit 按 section 类型读取：
 
-| `kind`                                                                 | `value` 来源                                                                         |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `image-slot` / `mask-painter` / `textarea` / `toggle` / `option-group` | `state[section.stateKey]`                                                            |
-| `image-grid`                                                           | `state[section.stateKey]`（数组）                                                    |
-| `model-select`                                                         | `state.modelId`                                                                      |
-| `resolution-select`                                                    | `state.scale`                                                                        |
-| `size-control`                                                         | `state.ratioKey`                                                                     |
+
+| `kind`                                                                 | `value` 来源                                                                |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `image-slot` / `mask-painter` / `textarea` / `toggle` / `option-group` | `state[section.stateKey]`                                                 |
+| `image-grid`                                                           | `state[section.stateKey]`（数组）                                             |
+| `model-select`                                                         | `state.modelId`                                                           |
+| `resolution-select`                                                    | `state.scale`                                                             |
+| `size-control`                                                         | `state.ratioKey`                                                          |
 | `custom`                                                               | `state[section.stateKey]`（须配合 `required.validate`；`required: true` 无内置规则） |
+
 
 ### 默认校验规则
 
 当 `required: true` 且未传 `validate` 时，kit 按 `kind` 使用内置规则：
 
-| `kind`                        | 默认规则                                   |
-| ----------------------------- | ------------------------------------------ |
-| `image-slot` / `mask-painter` | `Boolean(value)`                           |
-| `image-grid`                  | 数组且 `length > 0`                        |
-| `textarea`                    | 去空白后非空                               |
-| `option-group`                | 当前 options 中存在与 `value` 匹配的项     |
-| `model-select`                | `modelId` 存在于 `modelOptions`            |
-| `resolution-select`           | `scale` 在当前模型可选分辨率列表中         |
-| `size-control`                | `ratioKey` 非空且在当前比例选项中          |
+
+| `kind`                        | 默认规则                              |
+| ----------------------------- | --------------------------------- |
+| `image-slot` / `mask-painter` | `Boolean(value)`                  |
+| `image-grid`                  | 数组且 `length > 0`                  |
+| `textarea`                    | 去空白后非空                            |
+| `option-group`                | 当前 options 中存在与 `value` 匹配的项      |
+| `model-select`                | `modelId` 存在于 `modelOptions`      |
+| `resolution-select`           | `scale` 在当前模型可选分辨率列表中             |
+| `size-control`                | `ratioKey` 非空且在当前比例选项中            |
 | `toggle`                      | **无默认规则**，必须传 `required.validate` |
 | `custom`                      | **无默认规则**，必须传 `required.validate` |
+
 
 常见约定：
 
@@ -347,13 +353,15 @@ required: {
 
 `kind: "custom"` 与其他内置 `kind` 的渲染路径不同：
 
-| 能力             | 内置 `kind`（如 `image-slot`） | `custom`                                                      |
-| ---------------- | ------------------------------ | ------------------------------------------------------------- |
-| 区块 UI          | kit 根据 `kind` 自动渲染       | **仅**通过 `render` 返回的 DOM                                |
-| `title`          | kit 渲染标题                   | **不渲染**；仅用于校验失败时的错误文案（`请完善「{title}」`） |
-| `stateKey`       | 绑定表单控件                   | **不渲染**；供 `required` 读取 `value`，以及 `deps` 触发重绘  |
-| `required: true` | 有内置默认校验器               | **无效**，必须写 `required.validate`                          |
-| 红色 `*`         | kit 自动画在标题旁             | **不会自动画**，需在 `render` 内自绘                          |
+
+| 能力               | 内置 `kind`（如 `image-slot`） | `custom`                                       |
+| ---------------- | ------------------------- | ---------------------------------------------- |
+| 区块 UI            | kit 根据 `kind` 自动渲染        | **仅**通过 `render` 返回的 DOM                       |
+| `title`          | kit 渲染标题                  | **不渲染**；仅用于校验失败时的错误文案（`请完善「{title}」`）          |
+| `stateKey`       | 绑定表单控件                    | **不渲染**；供 `required` 读取 `value`，以及 `deps` 触发重绘 |
+| `required: true` | 有内置默认校验器                  | **无效**，必须写 `required.validate`                 |
+| 红色 `*`           | kit 自动画在标题旁               | **不会自动画**，需在 `render` 内自绘                      |
+
 
 因此：**只填 `title` + `stateKey` 而没有 `render`，`custom` 区块不会显示任何内容。**
 
@@ -745,23 +753,27 @@ required: {
 
 #### 何时用 `custom`
 
-| 场景                                   | 建议                                            |
-| -------------------------------------- | ----------------------------------------------- |
-| 上传图、单选/多选、文本框、模型/分辨率 | 用对应内置 `kind`                               |
-| 复杂交互、浮层 drawer、自定义列表/卡片 | 用 `custom` + `render`                          |
-| 只是改样式                             | 优先 `panelClassName` + 插件 CSS，不必 `custom` |
+
+| 场景                      | 建议                                       |
+| ----------------------- | ---------------------------------------- |
+| 上传图、单选/多选、文本框、模型/分辨率    | 用对应内置 `kind`                             |
+| 复杂交互、浮层 drawer、自定义列表/卡片 | 用 `custom` + `render`                    |
+| 只是改样式                   | 优先 `panelClassName` + 插件 CSS，不必 `custom` |
+
 
 #### 字段说明
 
-| 字段       | 必填   | 作用                                                                   |
-| ---------- | ------ | ---------------------------------------------------------------------- |
-| `render`   | **是** | 返回要挂载的 `Node`；**唯一**负责区块 UI                               |
-| `id`       | 是     | slot 标识                                                              |
-| `stateKey` | 建议   | `required` 的 `value` 来源；写入 `deps` 以便 state 变化时重绘          |
-| `title`    | 可选   | **不渲染**；校验失败时用于 `请完善「{title}」`                         |
-| `deps`     | 建议   | 除 `stateKey` 外还影响 UI 的 state key；变化时 kit 会重新执行 `render` |
-| `when`     | 可选   | 返回 `false` 时清空 slot、不渲染                                       |
-| `required` | 可选   | 必须带 `validate`；`required: true` 对 `custom` 无默认校验             |
+
+| 字段         | 必填    | 作用                                                      |
+| ---------- | ----- | ------------------------------------------------------- |
+| `render`   | **是** | 返回要挂载的 `Node`；**唯一**负责区块 UI                             |
+| `id`       | 是     | slot 标识                                                 |
+| `stateKey` | 建议    | `required` 的 `value` 来源；写入 `deps` 以便 state 变化时重绘        |
+| `title`    | 可选    | **不渲染**；校验失败时用于 `请完善「{title}」`                          |
+| `deps`     | 建议    | 除 `stateKey` 外还影响 UI 的 state key；变化时 kit 会重新执行 `render` |
+| `when`     | 可选    | 返回 `false` 时清空 slot、不渲染                                 |
+| `required` | 可选    | 必须带 `validate`；`required: true` 对 `custom` 无默认校验        |
+
 
 `render` 回调参数：
 
@@ -782,13 +794,15 @@ required: {
 
 #### 常见错误
 
-| 现象                        | 原因                                            |
-| --------------------------- | ----------------------------------------------- |
-| 区块空白                    | 未提供 `render`，或 `render` 返回空节点         |
-| 填了 `title` 仍无标题       | `custom` 不自动画标题，需在 `render` 内自绘     |
+
+| 现象                     | 原因                                     |
+| ---------------------- | -------------------------------------- |
+| 区块空白                   | 未提供 `render`，或 `render` 返回空节点          |
+| 填了 `title` 仍无标题        | `custom` 不自动画标题，需在 `render` 内自绘        |
 | `required: true` 不拦截生成 | `custom` 无默认校验器，须写 `required.validate` |
-| 选了值 UI 不更新            | 未声明 `deps`，或改 state 时未走 `setState`     |
-| drawer 定位异常             | 应挂 `elements.panel`，不要操作宿主 DOM         |
+| 选了值 UI 不更新             | 未声明 `deps`，或改 state 时未走 `setState`     |
+| drawer 定位异常            | 应挂 `elements.panel`，不要操作宿主 DOM         |
+
 
 #### 示例
 
@@ -929,3 +943,4 @@ buildRequest: ({ state, helpers }) => {
 - 在源图上标记待修复区域
 - 在参考图上标记待提取细节区域
 - 将标记结果裁剪后作为额外参考图参与最终请求
+

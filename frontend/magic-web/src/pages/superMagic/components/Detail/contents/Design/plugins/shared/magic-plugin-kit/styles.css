@@ -58,7 +58,11 @@
 .mpk-footer {
 	flex-shrink: 0;
 	padding: 12px 16px 16px;
-	background: linear-gradient(180deg, rgb(var(--background-rgb, 255 255 255) / 78%) 0%, rgb(var(--background-rgb, 255 255 255)) 18px);
+	background: linear-gradient(
+		180deg,
+		rgb(var(--background-rgb, 255 255 255) / 78%) 0%,
+		rgb(var(--background-rgb, 255 255 255)) 18px
+	);
 	border-top: 1px solid var(--mpk-border);
 }
 
@@ -120,7 +124,11 @@
 .mpk-image-slot-upload.is-drag-over,
 .mpk-image-slot-preview.is-drag-over {
 	border: 1px dashed var(--mpk-ring);
-	background: linear-gradient(180deg, rgb(var(--accent-rgb, 245 245 245) / 0.88), rgb(var(--background-rgb, 255 255 255) / 0.94));
+	background: linear-gradient(
+		180deg,
+		rgb(var(--accent-rgb, 245 245 245) / 0.88),
+		rgb(var(--background-rgb, 255 255 255) / 0.94)
+	);
 	/* box-shadow: 0 0 0 3px var(--mpk-ring-soft); */
 }
 
@@ -487,7 +495,7 @@
 
 .mpk-textarea {
 	width: 100%;
-	min-height: 96px;
+	/* min-height: 96px; */
 	padding: 10px 12px;
 	color: var(--mpk-foreground);
 	font-size: 12px;
@@ -535,7 +543,10 @@
 	background: var(--mpk-muted);
 	border: 1px solid transparent;
 	cursor: pointer;
-	transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+	transition:
+		background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+		border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+		box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .mpk-toggle:hover {
@@ -693,7 +704,12 @@
 	border: 1px solid var(--mpk-input);
 	box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
 	cursor: pointer;
-	transition: color 0.15s, background-color 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+	transition:
+		color 0.15s,
+		background-color 0.15s,
+		border-color 0.15s,
+		box-shadow 0.15s,
+		opacity 0.15s;
 }
 
 .mpk-mask-confirm-btn {

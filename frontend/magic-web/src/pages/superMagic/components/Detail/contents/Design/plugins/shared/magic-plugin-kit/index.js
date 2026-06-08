@@ -670,8 +670,7 @@
 			if (!requiredConfig || !isSectionCurrentlyRequired(section)) return null
 
 			const value = getSectionValueForRequired(section)
-			const validator =
-				requiredConfig.validate ?? getDefaultRequiredValidator(section)
+			const validator = requiredConfig.validate ?? getDefaultRequiredValidator(section)
 			if (!validator) return null
 
 			const isValid = validator({
@@ -1420,6 +1419,9 @@
 				}
 				state[section.stateKey] = nextValue
 				setTextareaCountText(count, nextValue, maxLength, hasMaxLength)
+				if (isSectionCurrentlyRequired(section)) {
+					updateGenerateButtonState()
+				}
 				updateHeight()
 			})
 			sectionNode.append(textarea)
@@ -1686,6 +1688,21 @@
 			view.slots.error.replaceChildren()
 		}
 
+		/** 计算生成按钮是否应禁用 */
+		function getGenerateButtonDisabled() {
+			return Boolean(state.loading || config.generate?.isDisabled?.({ state, helpers, t }))
+		}
+
+		/** 仅同步已有生成按钮的 disabled，避免输入时整段 footer 重绘 */
+		function updateGenerateButtonState() {
+			const button = view.slots.footer.querySelector("button.mpk-generate")
+			if (!button) {
+				renderFooter()
+				return
+			}
+			button.disabled = getGenerateButtonDisabled()
+		}
+
 		/** 渲染底部 */
 		function renderFooter() {
 			const fragment = document.createDocumentFragment()
@@ -1697,9 +1714,7 @@
 			const label = state.loading ? config.generate.loadingLabel : config.generate.buttonLabel
 			const button = createElement("button", "mpk-generate", label)
 			button.type = "button"
-			button.disabled = Boolean(
-				state.loading || config.generate?.isDisabled?.({ state, helpers, t }),
-			)
+			button.disabled = getGenerateButtonDisabled()
 			button.addEventListener("click", () => {
 				void handleGenerate()
 			})

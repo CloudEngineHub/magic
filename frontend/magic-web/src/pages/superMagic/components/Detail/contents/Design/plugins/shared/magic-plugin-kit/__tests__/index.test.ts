@@ -366,6 +366,43 @@ describe("magic-plugin-kit", () => {
 		expect(hoverTooltip?.textContent).toBe("Shown on hover")
 	})
 
+	it("re-evaluates generate button disabled state when textarea input changes", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				brandName: "",
+			},
+			sections: [
+				{
+					id: "brandName",
+					kind: "textarea",
+					stateKey: "brandName",
+					title: "Brand name",
+					required: true,
+				},
+			],
+			generate: {
+				...createGenerateConfig(),
+				isDisabled: ({ state }: { state: Record<string, unknown> }) =>
+					!String(state.brandName ?? "").trim(),
+			},
+		})
+
+		const textarea = root.querySelector<HTMLTextAreaElement>(".mpk-textarea")
+		const generateButton = root.querySelector<HTMLButtonElement>(".mpk-generate")
+
+		expect(generateButton?.disabled).toBe(true)
+
+		textarea!.value = "Gucci"
+		textarea!.dispatchEvent(new Event("input", { bubbles: true }))
+
+		expect(root.querySelector<HTMLButtonElement>(".mpk-generate")).toBe(generateButton)
+		expect(generateButton?.disabled).toBe(false)
+	})
+
 	it("keeps textarea typing local while clamping text by maxLength", () => {
 		vi.useFakeTimers()
 		const kit = loadMagicPluginKit()
