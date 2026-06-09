@@ -17,6 +17,7 @@ return [
         'project_not_exists' => '项目不存在: :project_id',
         'feature_unavailable' => '当前功能不可用',
         'image_to_image_reference_required' => '图生图必须提供至少一张参考图',
+        'generate_num_exceeds_limit' => '当前模型最多支持生成 :limit 张图片，本次请求 :requested 张',
     ],
     'image_mark_identify' => [
         'project_not_exists' => '项目不存在: :project_id',
@@ -50,6 +51,7 @@ return [
         'model_id' => '模型ID',
         'prompt' => '提示词',
         'size' => '图片尺寸',
+        'generate_num' => '生成图片数量',
         'file_dir' => '文件目录',
         'file_name' => '文件名',
         'reference_images' => '参考图片',

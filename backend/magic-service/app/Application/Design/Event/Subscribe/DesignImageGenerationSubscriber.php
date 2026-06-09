@@ -93,6 +93,11 @@ class DesignImageGenerationSubscriber implements ListenerInterface
                 }
                 ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_generation.generate_image_failed_with_message', ['message' => $errorMessage]);
             }
+            if ($imageGenerationEntity->getGenerateNum() > 1) {
+                $this->completeMultiImageTask($dataIsolation, $imageGenerationEntity, $response);
+                return;
+            }
+
             $imageUrl = $this->parseResponseUrl($response);
             if (empty($imageUrl)) {
                 ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_generation.generate_image_failed');
@@ -138,6 +143,60 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         $taskFileEntity->setParentId($imageGenerationEntity->getFileDirId());
 
         $this->taskFileDomainService->saveProjectFile(dataIsolation: $contactDataIsolation, projectEntity: $project, taskFileEntity: $taskFileEntity, isUpdated: false);
+    }
+
+    private function completeMultiImageTask(
+        DesignDataIsolation $dataIsolation,
+        ImageGenerationEntity $imageGenerationEntity,
+        OpenAIFormatResponse $response
+    ): void {
+        $imageUrls = $this->parseResponseUrls($response);
+        if ($imageUrls === []) {
+            ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_generation.generate_image_failed');
+        }
+
+        $baseName = $this->generatedImageFileNameTool->resolveBaseNameWithoutExtension(
+            $dataIsolation,
+            $imageGenerationEntity,
+            $imageGenerationEntity->getPrompt(),
+        );
+
+        $fullPrefix = $this->fileDomainService->getFullPrefix($dataIsolation->getCurrentOrganizationCode());
+        $fullFileDir = $imageGenerationEntity->getFullFileDir($fullPrefix);
+        $uploadPath = substr($fullFileDir, strlen($fullPrefix));
+
+        $outputImages = [];
+        $uploadFiles = [];
+        foreach ($imageUrls as $index => $imageUrl) {
+            $fileName = $this->buildIndexedFileName($baseName, $imageUrl, $index + 1);
+            $imageGenerationEntity->setFileName($fileName);
+
+            $uploadFile = new UploadFile($imageUrl, $uploadPath, $fileName, false);
+            $uploadFiles[] = $uploadFile;
+            $outputImages[] = [
+                'index' => $index + 1,
+                'file_name' => $fileName,
+                'file_path' => $imageGenerationEntity->getFilePath(),
+            ];
+        }
+
+        $firstFileName = $outputImages[0]['file_name'];
+        $imageGenerationEntity->setFileName($firstFileName);
+
+        Db::transaction(function () use ($dataIsolation, $imageGenerationEntity, $outputImages, $uploadFiles, $firstFileName): void {
+            $this->imageGenerationDomainService->markAsCompletedWithImages(
+                $dataIsolation,
+                $imageGenerationEntity->getId(),
+                $firstFileName,
+                $outputImages
+            );
+
+            foreach ($uploadFiles as $index => $uploadFile) {
+                $imageGenerationEntity->setFileName($outputImages[$index]['file_name']);
+                $this->createProjectFile($dataIsolation, $imageGenerationEntity, $uploadFile);
+                $this->fileDomainService->uploadByCredential($dataIsolation->getCurrentOrganizationCode(), $uploadFile, StorageBucketType::SandBox, false);
+            }
+        });
     }
 
     /**
@@ -189,5 +248,28 @@ class DesignImageGenerationSubscriber implements ListenerInterface
             return $data[0]['url'];
         }
         return '';
+    }
+
+    private function parseResponseUrls(OpenAIFormatResponse $response): array
+    {
+        $urls = [];
+        foreach ($response->getData() as $item) {
+            $url = is_array($item) ? (string) ($item['url'] ?? '') : '';
+            if ($url !== '') {
+                $urls[] = $url;
+            }
+        }
+
+        return $urls;
+    }
+
+    private function buildIndexedFileName(string $baseName, string $imageUrl, int $index): string
+    {
+        $extension = pathinfo((string) parse_url($imageUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'png';
+        if ($index === 1) {
+            return $baseName . '.' . $extension;
+        }
+
+        return sprintf('%s_%d.%s', $baseName, $index, $extension);
     }
 }

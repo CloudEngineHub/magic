@@ -18,6 +18,7 @@ use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\ExternalAPI\ImageGenerateAPI\SizeManager;
 use Dtyq\SuperMagic\Application\Contract\UserAiWatermarkPolicyInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
@@ -97,6 +98,13 @@ class ImageGenerationAppService extends DesignAppService
         $this->domainService->createTask($dataIsolation, $entity);
 
         return $entity;
+    }
+
+    public function generateImages(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
+    {
+        $this->assertGenerateNumWithinLimit($entity);
+
+        return $this->generateImage($authenticatable, $entity);
     }
 
     public function generateHighImage(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
@@ -199,6 +207,67 @@ class ImageGenerationAppService extends DesignAppService
         return $entity;
     }
 
+    public function queryImageGenerationResults(Authenticatable $authenticatable, int $projectId, string $imageId): ImageGenerationEntity
+    {
+        $dataIsolation = $this->createDesignDataIsolation($authenticatable);
+
+        $project = $this->projectDomainService->getProjectNotUserId($projectId);
+        $this->validateRoleHigherOrEqual($dataIsolation, $project, MemberRole::VIEWER);
+
+        $entity = $this->domainService->queryByProjectAndImageId($dataIsolation, $projectId, $imageId);
+        if (! $entity) {
+            ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.not_found', ['label' => $imageId]);
+        }
+
+        if ($entity->getStatus() !== ImageGenerationStatus::COMPLETED) {
+            $entity->setImages([]);
+            return $entity;
+        }
+
+        $outputImages = $entity->getOutputImages() ?? [];
+        if ($outputImages === [] && $entity->getFileName() !== '') {
+            $outputImages[] = [
+                'index' => 1,
+                'file_name' => $entity->getFileName(),
+                'file_path' => $entity->getFilePath(),
+            ];
+        }
+
+        $addWatermark = $this->userAiWatermarkPolicy->shouldApplyVisibleAiWatermark($authenticatable);
+        $images = [];
+        foreach ($outputImages as $outputImage) {
+            $filePath = (string) ($outputImage['file_path'] ?? '');
+            $fileName = (string) ($outputImage['file_name'] ?? '');
+            if ($filePath === '' && $fileName !== '') {
+                $filePath = rtrim($entity->getFileDir(), '/') . '/' . $fileName;
+            }
+
+            $taskFile = $this->taskFileDomainService->findEntityByRelativePath($projectId, $filePath);
+            if (! $taskFile) {
+                $entity->setStatus(ImageGenerationStatus::FAILED);
+                $entity->setErrorMessage('Generated image file not found');
+                $entity->setImages([]);
+                return $entity;
+            }
+
+            $images[] = [
+                'index' => (int) ($outputImage['index'] ?? count($images) + 1),
+                'file_name' => $fileName,
+                'file_url' => $this->taskFileDomainService->getFileUrls(
+                    projectOrganizationCode: $project->getUserOrganizationCode(),
+                    projectId: $project->getId(),
+                    fileIds: [$taskFile->getFileId()],
+                    downloadMode: 'preview',
+                    addWatermark: $addWatermark
+                )[0]['url'] ?? '',
+            ];
+        }
+
+        $entity->setImages($images);
+
+        return $entity;
+    }
+
     /**
      * 从 AI 能力配置中解析 model_id 和 prompt（仅配置值，trim 后可能为空，由 Handler 决定是否使用内置默认提示词）.
      *
@@ -222,6 +291,24 @@ class ImageGenerationAppService extends DesignAppService
         $prompt = trim((string) ($config['prompt'] ?? ''));
 
         return [$modelId, $prompt];
+    }
+
+    private function assertGenerateNumWithinLimit(ImageGenerationEntity $entity): void
+    {
+        $generateNum = $entity->getGenerateNum();
+        $maxOutputImages = SizeManager::getMaxOutputImages($entity->getModelId(), $entity->getModelId());
+        if ($generateNum <= $maxOutputImages) {
+            return;
+        }
+
+        ExceptionBuilder::throw(
+            DesignErrorCode::InvalidArgument,
+            'design.image_generation.generate_num_exceeds_limit',
+            [
+                'limit' => $maxOutputImages,
+                'requested' => $generateNum,
+            ]
+        );
     }
 
     /**
