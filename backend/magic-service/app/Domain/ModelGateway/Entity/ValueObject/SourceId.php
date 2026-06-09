@@ -35,6 +35,8 @@ final class SourceId
 
     public const string IMAGE_GENERATE = 'image_generate';
 
+    public const string DESIGN_IMAGE_PROMPT_COMPLETION = 'design_image_prompt_completion';
+
     public const string CONNECTIVITY_TEST = 'connectivity_test';
 
     public const string AI_SEARCH = 'ai_search';
