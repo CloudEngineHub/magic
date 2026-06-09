@@ -2,11 +2,11 @@
 
 `magic-plugin-kit` 是给仓库内置设计插件用的轻量共享层。
 
-它的目标不是改变现有插件协议，而是把重复的 DOM、上传、选项组、必填校验、生成提交流程收口起来，让业务插件只描述：
+它的目标不是改变现有插件协议，而是把重复的 DOM、上传、选项组、必填标记、生成提交流程收口起来，让业务插件只描述：
 
 - 初始 state
-- 需要渲染哪些 section（含 `required` 必填声明）
-- 生成前剩余的业务校验（`generate.validate`）
+- 需要渲染哪些 section（含 `required` 必填标记）
+- 按钮禁用与业务校验（`generate.isDisabled`、`generate.validate`）
 - 最终怎么拼 `ctx.ai.generateAndPlace()` 请求
 
 插件 runtime 入口使用 CanvasDesign 新生命周期：
@@ -69,10 +69,6 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "genCount",
 					title: t("section.count", "生成数量"),
-					options: [1, 2, 3, 4].map((count) => ({
-						value: count,
-						label: String(count),
-					})),
 				},
 			],
 			generate: {
@@ -211,7 +207,7 @@ kit 会按顺序渲染这些 section。
 
 - `when`: 条件渲染，返回 `false` 时不显示该区块
 - `deps`: 额外依赖的 state key 列表，用于告诉 kit 该区块除了自己的 `stateKey` 外，还会受哪些状态变化影响
-- `required`: 声明该区块为必填，用于标题旁展示 `*`，并在点击生成时集中校验（见下文「Section Required」）
+- `required`: 声明该区块为必填，用于标题旁展示浅色「必填」文案（见下文「Section Required」）
 
 `deps` 什么时候需要传：
 
@@ -236,14 +232,13 @@ kit 会按顺序渲染这些 section。
 
 执行顺序：
 
-1. 调用 `validateRequiredSections()`，按 `sections` 顺序校验所有当前生效的 `required` 配置
-2. 调用 `generate.validate`
-3. 校验通过后进入 loading
-4. 若配置了 `execute`，则调用 `execute`；否则调用 `buildRequest` 后执行 `ctx.ai.generateAndPlace(request)`
-5. 成功时调用 `onSuccess`
-6. 失败时自动写入 `state.error` 并 toast
+1. 调用 `generate.validate`
+2. 校验通过后进入 loading
+3. 若配置了 `execute`，则调用 `execute`；否则调用 `buildRequest` 后执行 `ctx.ai.generateAndPlace(request)`
+4. 成功时调用 `onSuccess`
+5. 失败时自动写入 `state.error` 并 toast
 
-`required` 负责「字段有没有填」；`generate.validate` 负责 kit 默认规则覆盖不了的业务校验，例如参考图 ID 完整性、参考图数量上限、`getSelectedSize` 是否可用、跨字段 OR 逻辑、套图张数上限等。
+字段是否已填写由 `generate.isDisabled` 控制按钮可用性；`generate.validate` 负责业务校验，例如参考图 ID 完整性、参考图数量上限、`getSelectedSize` 是否可用、跨字段 OR 逻辑、套图张数上限等。
 
 常用字段：
 
@@ -251,7 +246,7 @@ kit 会按顺序渲染这些 section。
 - `loadingLabel`: 生成中文案
 - `getIdleHint`: 按钮上方的空状态提示
 - `isDisabled`: 是否禁用生成按钮
-- `validate`: 生成前校验，返回字符串表示失败
+- `validate`: 业务校验，返回字符串表示失败
 - `buildRequest`: 组装最终请求
 - `execute`: 可选，自定义完整生成流程；签名 `({ ctx, state, helpers, t, generateAndPlace }) => Promise<unknown>`
 - `onSuccess`: 成功后的自定义行为
@@ -261,106 +256,58 @@ kit 会按顺序渲染这些 section。
 
 ## Section Required（必填）
 
-section 可通过 `required` 声明必填。kit 会做两件事：
+section 可通过 `required` 声明必填。kit **仅用于 UI**：在内置 `kind` 的 `section.title` 旁渲染浅色「必填」文案（class 为 `mpk-section-required`）。
 
-1. **UI**：在内置 `kind` 的 `section.title` 旁渲染红色 `*`（class 为 `mpk-section-required`）
-2. **生成前校验**：在 `generate.validate` 之前执行，命中第一个错误即中断并写入 `state.error`
+生成拦截不在 kit 层做 `required` 校验，请用：
 
-> **注意**：`kind: "custom"` 不走 kit 的标准 section 壳，**不会**自动渲染标题或 `*`；校验仍会执行，但星号需在 `render` 内自绘（见下文「custom 与手写 DOM」）。
+- `generate.isDisabled`：按钮置灰（用户未填业务字段时）
+- `generate.validate`：业务规则（参考图 ID、尺寸可用性等）
+
+> **注意**：`kind: "custom"` 不走 kit 的标准 section 壳，**不会**自动渲染标题或「必填」；需在 `render` 内自绘（见下文「custom 与手写 DOM」）。
 
 ### 配置写法
 
-支持两种形式：
-
 ```js
-// 简写：使用内置默认校验器 + 默认错误文案
+// 展示「必填」标记
 required: true
-
-// 完整对象：自定义文案、条件、校验逻辑
-required: {
-	message: t("empty.productImage", "请先上传商品图"),
-	when: ({ state }) => state.mode === "image", // 可选，独立于 section.when
-	validate: ({ value, state, section, helpers, t }) => Boolean(value),
-}
 ```
 
 字段说明：
 
 
-| 字段         | 说明                                                |
-| ---------- | ------------------------------------------------- |
-| `true`     | 启用必填；错误文案默认取 `请完善「{title}」`，无 `title` 时为 `请完善必填项` |
-| `message`  | 自定义错误文案，优先级高于默认文案                                 |
-| `when`     | 必填生效条件；返回 `false` 时不展示 `*`，生成时也不校验                |
-| `validate` | 自定义校验函数；返回 `true` 表示通过                            |
-
-
-`validate` 回调参数：
-
-```js
-;({ value, state, section, helpers, t }) => boolean
-```
-
-`value` 由 kit 按 section 类型读取：
-
-
-| `kind`                                                                 | `value` 来源                                                                |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `image-slot` / `mask-painter` / `textarea` / `toggle` / `option-group` | `state[section.stateKey]`                                                 |
-| `image-grid`                                                           | `state[section.stateKey]`（数组）                                             |
-| `model-select`                                                         | `state.modelId`                                                           |
-| `resolution-select`                                                    | `state.scale`                                                             |
-| `size-control`                                                         | `state.ratioKey`                                                          |
-| `custom`                                                               | `state[section.stateKey]`（须配合 `required.validate`；`required: true` 无内置规则） |
-
-
-### 默认校验规则
-
-当 `required: true` 且未传 `validate` 时，kit 按 `kind` 使用内置规则：
-
-
-| `kind`                        | 默认规则                              |
-| ----------------------------- | --------------------------------- |
-| `image-slot` / `mask-painter` | `Boolean(value)`                  |
-| `image-grid`                  | 数组且 `length > 0`                  |
-| `textarea`                    | 去空白后非空                            |
-| `option-group`                | 当前 options 中存在与 `value` 匹配的项      |
-| `model-select`                | `modelId` 存在于 `modelOptions`      |
-| `resolution-select`           | `scale` 在当前模型可选分辨率列表中             |
-| `size-control`                | `ratioKey` 非空且在当前比例选项中            |
-| `toggle`                      | **无默认规则**，必须传 `required.validate` |
-| `custom`                      | **无默认规则**，必须传 `required.validate` |
+| 字段     | 说明                                      |
+| ------ | --------------------------------------- |
+| `true` | 展示「必填」标记                                |
 
 
 常见约定：
 
-- 业务图片、文本输入：`required: true`
-- AI 模型、分辨率、画布尺寸：`required: true`（无需在 `generate.validate` 里重复校验 `modelId`）
+- 业务图片、文本输入：`required: true`，同时在 `isDisabled` 中拦截未填写
+- AI 模型、分辨率、画布尺寸：`required: true` 仅作 UI 标记（kit 加载模型后会写入默认值）；可用性在 `generate.validate` 里用 `getSelectedSize` 检查
 - 可选字段：不要加 `required`，可用 `suffix: t("optional", "可选")` 标注
 
-### 何时算「当前必填」
+### 何时展示「必填」
 
-一个 section 只有在以下条件都满足时，才会**参与生成校验**；其中红色 `*` 仅对**内置 `kind`** 自动展示（`custom` 除外，见上文）：
+一个 section 只有在以下条件都满足时，才会展示「必填」标记（仅对**内置 `kind`** 自动处理，`custom` 除外）：
 
 1. 配置了 `required`
 2. `section.when` 为真（若存在）
-3. section 实际被渲染出来（例如 `model-select` 在 `modelOptions` 为空时不渲染；`resolution-select` 在仅 1 个选项且 `hideWhenSingle !== false` 时不渲染）
-4. `required.when` 为真（若存在）
+3. section 实际被渲染出来（例如 `model-select` 在 `modelOptions` 为空时不渲染）
 
-配置了 `required.when` 的内置 section，kit 会在 state patch 时刷新区块标题，以保证 `*` 显示正确。`custom` 区块若需动态 `*`，请在 `render` 内根据 `state` 自行更新。
+`custom` 区块若需动态「必填」，请在 `render` 内根据 `state` 自行更新。
 
 ### `custom` 与手写 DOM
 
 `kind: "custom"` 与其他内置 `kind` 的渲染路径不同：
 
 
-| 能力               | 内置 `kind`（如 `image-slot`） | `custom`                                       |
-| ---------------- | ------------------------- | ---------------------------------------------- |
-| 区块 UI            | kit 根据 `kind` 自动渲染        | **仅**通过 `render` 返回的 DOM                       |
-| `title`          | kit 渲染标题                  | **不渲染**；仅用于校验失败时的错误文案（`请完善「{title}」`）          |
-| `stateKey`       | 绑定表单控件                    | **不渲染**；供 `required` 读取 `value`，以及 `deps` 触发重绘 |
-| `required: true` | 有内置默认校验器                  | **无效**，必须写 `required.validate`                 |
-| 红色 `*`           | kit 自动画在标题旁               | **不会自动画**，需在 `render` 内自绘                      |
+| 能力               | 内置 `kind`（如 `image-slot`） | `custom`                              |
+| ---------------- | ------------------------- | ------------------------------------- |
+| 区块 UI            | kit 根据 `kind` 自动渲染        | **仅**通过 `render` 返回的 DOM              |
+| `title`          | kit 渲染标题                  | **不渲染**；可在 `render` 内自绘标题            |
+| `stateKey`       | 绑定表单控件                    | **不渲染**；供 `deps` 触发重绘、`isDisabled` 读取 |
+| `required: true` | kit 自动展示「必填」              | **不会自动画**，需在 `render` 内自绘              |
+| 「必填」标记           | kit 自动画在标题旁               | **不会自动画**，需在 `render` 内自绘              |
 
 
 因此：**只填 `title` + `stateKey` 而没有 `render`，`custom` 区块不会显示任何内容。**
@@ -373,20 +320,14 @@ required: {
 
 kit 会把返回值挂到对应 `mpk-slot`；内部交互、样式、标题栏都由插件自己负责。
 
-**必填校验**（与 UI 无关，生成前仍会执行）：
+**必填标记与拦截**：
 
-```js
-required: {
-	message: t("empty.targetLanguages", "请至少选择一种目标语言"), // 可选，覆盖默认文案
-	validate: ({ value, state }) => Array.isArray(value) && value.length > 0,
-}
-```
+- UI：`required: true` 仅对内置 `kind` 生效；`custom` 需在 `render` 内自绘「必填」
+- 拦截：在 `generate.isDisabled` 中判断字段是否已填；复杂规则放在 `generate.validate`
 
-建议同时声明 `stateKey`，让 `validate` 能通过 `value` 读到 `state[stateKey]`；跨字段规则可只用 `validate: ({ state }) => ...`。
+**标题与「必填」**（需要展示时）：
 
-**标题与 `*`**（需要展示时）：
-
-在 `render` 返回的 DOM 中复用 kit 的 section 结构，例如参考 `product-image-set` 的 `createSectionNode(title, suffix, required)`，必填星号使用 class `mpk-section-required`。
+在 `render` 返回的 DOM 中复用 kit 的 section 结构，例如参考 `product-image-set` 的 `createSectionNode(title, suffix, required)`，必填文案使用 class `mpk-section-required`。
 
 `custom` 完整示例：
 
@@ -395,12 +336,9 @@ required: {
 	id: "targetLanguages",
 	kind: "custom",
 	stateKey: "targetLanguages",
-	title: t("section.targetLanguages", "目标语言"), // 仅影响错误文案，不自动出 UI
+	title: t("section.targetLanguages", "目标语言"),
 	deps: ["targetLanguages"],
-	required: {
-		message: t("empty.targetLanguages", "请至少选择一种目标语言"),
-		validate: ({ value }) => Array.isArray(value) && value.length > 0,
-	},
+	required: true,
 	render: ({ state, setState, elements }) => {
 		// drawer 等浮层可挂到 elements.panel
 		return createTargetLanguageSection({ state, setState, t, panel: elements.panel })
@@ -410,33 +348,34 @@ required: {
 
 参考实现：`plugins/image-translation/index.js`（`targetLanguages`）、`plugins/clothing-color-change/index.js`（`color`）。
 
-跨字段 OR 逻辑示例（上下装至少一张）：
+跨字段 OR 逻辑示例（上下装至少一张）应在 `isDisabled` / `validate` 中处理：
 
 ```js
-{
-	id: "topGarmentImage",
-	kind: "image-slot",
-	stateKey: "topGarmentImage",
-	title: t("section.topGarmentImage", "上装图"),
-	when: ({ state }) => state.garmentMode === "separates",
-	required: {
-		message: t("empty.separatesGarmentImage", "请至少上传上装图或下装图"),
-		validate: ({ state }) =>
-			Boolean(state.topGarmentImage || state.bottomGarmentImage),
-	},
-}
+isDisabled: ({ state }) =>
+	state.garmentMode === "separates" &&
+	!state.topGarmentImage &&
+	!state.bottomGarmentImage,
+validate: ({ state, t }) => {
+	if (
+		state.garmentMode === "separates" &&
+		!state.topGarmentImage &&
+		!state.bottomGarmentImage
+	) {
+		return t("empty.separatesGarmentImage", "请至少上传上装图或下装图")
+	}
+},
 ```
 
 ### `generate.validate` 仍应保留什么
 
-迁移到 `required` 后，建议在 `generate.validate` 中只保留：
+建议在 `generate.validate` 中保留：
 
 - `helpers.collectReferenceIds(...)` 资源标识校验
 - 参考图数量上限
-- `helpers.getSelectedSize(state)` 的 `genW` / `genH` 可用性（`size-control` 的 `required` 只校验比例选项，不校验最终像素尺寸）
+- `helpers.getSelectedSize(state)` 的 `genW` / `genH` 可用性
 - 业务上限、跨 section 组合规则、复杂计数逻辑
 
-不要再在 `generate.validate` 重复写「图片是否上传」「模型是否选择」这类已被 `required` 覆盖的检查。
+用户必填字段的「未填写」优先用 `isDisabled` 置灰按钮；需要 toast / 错误区文案时再在 `validate` 中返回字符串。
 
 ## Section Types
 
@@ -449,6 +388,7 @@ required: {
 - `toggle`
 - `size-control`
 - `option-group`
+- `tabs`
 - `model-select`
 - `resolution-select`
 - `custom`
@@ -595,14 +535,34 @@ required: {
 - `rows`: 文本框默认行数
 - `maxLength`: 最大输入长度
 - `help`: 区块底部说明文案
+- `shellClassName`: 额外挂到输入壳容器上的 class
 - `deps`: 额外依赖的 state key，例如 `when` 依赖其他字段时需要声明
 - `when`: 条件渲染，返回 `false` 时不显示
 - `required`: 必填文本时传 `required: true`（按去空白后是否非空判断）
+- `aiGenerate`: 可选，启用左下角 AI 生成按钮
+
+`aiGenerate` 结构：
+
+```js
+aiGenerate: {
+	label: t("button.aiPlaceholder", "AI 生成"),
+	loadingLabel: t("button.generating", "生成中…"),
+	disabled: ({ state }) => !state.productImages?.length,
+	generate: async ({ state, helpers, t }) => {
+		// 由插件传入参数并调用自己的 AI 接口
+		return "生成的背景描述"
+	},
+}
+```
 
 说明：
 
 - 输入时直接写入对应 state，并重绘字数统计；不会每敲一个字就整段重渲染
-- 配置了 `maxLength` 后会自动截断，并显示 `当前字数/上限`
+- 所有 textarea 统一使用卡片输入壳，右下角显示清空按钮；配置了 `maxLength` 后还会显示字数统计
+- 配置了 `maxLength` 后会自动截断，并显示 `当前字数 / 上限`
+- 配置了 `aiGenerate` 后，额外在左下角渲染 AI 按钮
+- `generate` 返回非空字符串后会写回 `stateKey`；返回空字符串时不更新输入框
+- `generate` 抛错时，kit 会把错误展示在面板错误区
 
 ### `toggle`
 
@@ -616,7 +576,7 @@ required: {
 - `help`: 区块底部说明文案
 - `deps`: 额外依赖的 state key，例如 `when` 依赖其他字段时需要声明
 - `when`: 条件渲染，返回 `false` 时不显示
-- `required`: 无默认校验；需要“必须开启”时传 `required.validate`
+- `required`: 展示「必填」标记；是否允许生成由 `isDisabled` / `validate` 控制
 
 说明：
 
@@ -658,6 +618,53 @@ required: {
 - 默认优先从当前模型的 `image_size_config.sizes` 推导比例 options
 - 如果没传 `ratioOptions` 且模型没声明尺寸，会退回到内置的常见比例
 - 当前版本仅支持比例切换，不支持手动输入宽高
+
+### `tabs`
+
+用于分段切换的 Tab 区块。切换 Tab 后，仅渲染当前 Tab 对应的面板内容。
+
+约定：
+
+- 需要「切换 Tab 并展示不同内容」时，优先使用 `tabs`，不要用 `option-group` 搭配多个 `when`
+- Tab 面板内的 section 会嵌套在 Tab 容器下渲染，不再作为顶层 `sections` 平铺
+
+常用字段：
+
+- `stateKey`: 当前激活 Tab 写入的 state 字段
+- `title`: 区块标题
+- `help`: 区块底部说明文案
+- `tabsClassName`: 额外挂到 Tab 容器上的 class
+- `options`: Tab 列表，结构与 `option-group` 的 `options` 一致
+- `patchOnSelect`: 切换 Tab 时的额外 state patch, 局部更新同步
+- `panels`: 面板配置，按 `value` 与 `options` 对应
+
+`panels` 结构：
+
+```js
+panels: [
+	{
+		value: "image",
+		sections: [{ id: "backgroundImage", kind: "image-slot", stateKey: "backgroundImage" }],
+	},
+	{
+		value: "prompt",
+		sections: [
+			{
+				id: "backgroundPrompt",
+				kind: "custom",
+				render: ({ state, setState }) => renderPromptSection({ state, setState }),
+			},
+		],
+	},
+]
+```
+
+说明：
+
+- 面板内 section 的 `id` 仍需在插件内保持唯一
+- 面板内 section 支持 `required`、`when`、`deps` 等常规字段
+- 仅当前激活 Tab 对应的面板会参与渲染；非激活 Tab 内 section 的「必填」标记不展示
+- `options` 传函数时，kit 会在渲染阶段以 `({ state, helpers, t })` 调用它
 
 ### `option-group`
 
@@ -712,6 +719,7 @@ required: {
 - 当 `showDescriptionOnHover: true` 或 `descriptionMode: "tooltip"` 时，kit 会渲染自定义 tooltip DOM
 - 当 `variant: "card"` 且 `descriptionMode: "inline"` 时，会渲染卡片式单选，并将 `description` 常驻显示在副文案区域
 - `options` 传函数时，kit 会在渲染阶段以 `({ state, helpers, t })` 调用它
+- 当 `kind: "option-group"` 且 `stateKey: "genCount"` 时，如果未显式传 `options`，kit 会自动根据当前模型的 `image_size_config.max_output_images` 生成数量选项，并在模型切换时自动修正 `genCount`
 
 ### `model-select`
 
@@ -721,14 +729,14 @@ required: {
 
 - `title`: 区块标题
 - `when`: 条件渲染，返回 `false` 时不显示
-- `required`: 通常传 `required: true`；校验 `modelId` 是否在 `modelOptions` 中
+- `required`: 通常传 `required: true`（UI 标记）；kit 加载模型后会写入默认 `modelId`
 
 说明：
 
 - 不需要传 `stateKey`
 - 直接读写 `state.modelId`
 - 切换模型时会自动刷新 `ratioKey`、`scale`、`imageGenerationConfig`
-- 配置了 `required: true` 后，无需在 `generate.validate` 重复判断 `!state.modelId`
+- 模型可用性在 `generate.validate` 中通过 `getSelectedSize` 等业务规则检查，不必重复判断 `!state.modelId`
 
 ### `resolution-select`
 
@@ -768,11 +776,11 @@ required: {
 | ---------- | ----- | ------------------------------------------------------- |
 | `render`   | **是** | 返回要挂载的 `Node`；**唯一**负责区块 UI                             |
 | `id`       | 是     | slot 标识                                                 |
-| `stateKey` | 建议    | `required` 的 `value` 来源；写入 `deps` 以便 state 变化时重绘        |
-| `title`    | 可选    | **不渲染**；校验失败时用于 `请完善「{title}」`                          |
+| `stateKey` | 建议    | 供 `deps` 触发重绘、`isDisabled` 读取；写入 `deps` 以便 state 变化时重绘 |
+| `title`    | 可选    | **不渲染**；可在 `render` 内自绘标题                              |
 | `deps`     | 建议    | 除 `stateKey` 外还影响 UI 的 state key；变化时 kit 会重新执行 `render` |
 | `when`     | 可选    | 返回 `false` 时清空 slot、不渲染                                 |
-| `required` | 可选    | 必须带 `validate`；`required: true` 对 `custom` 无默认校验        |
+| `required` | 可选    | 对 `custom` 不自动展示「必填」，须在 `render` 内自绘                    |
 
 
 `render` 回调参数：
@@ -799,7 +807,7 @@ required: {
 | ---------------------- | -------------------------------------- |
 | 区块空白                   | 未提供 `render`，或 `render` 返回空节点          |
 | 填了 `title` 仍无标题        | `custom` 不自动画标题，需在 `render` 内自绘        |
-| `required: true` 不拦截生成 | `custom` 无默认校验器，须写 `required.validate` |
+| `required: true` 不拦截生成 | kit 不做 `required` 校验；须在 `isDisabled` / `validate` 中处理 |
 | 选了值 UI 不更新             | 未声明 `deps`，或改 state 时未走 `setState`     |
 | drawer 定位异常            | 应挂 `elements.panel`，不要操作宿主 DOM         |
 
@@ -813,10 +821,7 @@ required: {
 	stateKey: "styleItems",
 	deps: ["creationMode", "styleItems"],
 	when: ({ state }) => state.creationMode === "custom",
-	required: {
-		message: t("empty.styleItems", "请至少添加一个样式"),
-		validate: ({ state }) => state.styleItems.length > 0,
-	},
+	required: true,
 	render: ({ state, setState, helpers, elements }) =>
 		StyleEditorUI.createConfigSection({ state, setState, helpers, t, elements }),
 }
@@ -917,8 +922,8 @@ buildRequest: ({ state, helpers }) => {
 - kit 只提供通用 UI/流程能力，不塞业务语义
 - 业务插件自己定义 prompt、业务字段和文案
 - `sections` 里优先使用内置 `kind` 的声明式配置；仅当内置 `kind` 无法满足时再使用 `custom`，且必须通过 `render` 自绘 DOM（不能只写 `title` + `stateKey`）
-- 字段是否已填写优先用 `section.required` 表达；`generate.validate` 只保留资源 ID、数量上限、尺寸可用性等业务规则
-- AI 模型 / 分辨率 / 画布尺寸统一 `required: true`，不要在 `validate` 里重复校验 `modelId`
+- 字段「必填」标记用 `section.required`；是否允许生成用 `generate.isDisabled`；`generate.validate` 只保留资源 ID、数量上限、尺寸可用性等业务规则
+- AI 模型 / 分辨率 / 画布尺寸统一 `required: true`（UI 标记）；不要在 `validate` 里重复校验 `modelId`
 - 复杂业务逻辑拆成插件内私有函数，例如 `buildPrompt()`、`getReferenceImages()`
 
 ## 参考实现
@@ -926,17 +931,17 @@ buildRequest: ({ state, helpers }) => {
 当前可以直接参考：
 
 - `plugins/real-model-tryon/index.js`：`required: true` 迁移范式（图片 + 模型/分辨率/画布）
-- `plugins/accessory-tryon/index.js`：双图必填 + `validate` 只保留 references / noSize
+- `plugins/accessory-tryon/index.js`：双图 `required: true` + `isDisabled` / `validate` 只保留 references / noSize
 - `plugins/image-translation/index.js`：`custom` + `render`（目标语言多选）
 - `plugins/clothing-color-change/index.js`：`custom` + `render`（颜色选择器 + drawer）
-- `plugins/product-image-set/index.js`：多个 `custom` 区块 + `createSectionNode` 自绘标题与 `*`
+- `plugins/product-image-set/index.js`：多个 `custom` 区块 + `createSectionNode` 自绘标题与「必填」
 - `plugins/footwear-repair/index.js`：`mask-painter` 典型用法
 
 `real-model-tryon` 覆盖了 `required` 的常见写法：
 
-- 图片 slot：`required: true`
-- `model-select` / `resolution-select` / `size-control`：`required: true`
-- `generate.validate` 不再校验 `modelId` 或图片是否上传
+- 图片 slot：`required: true` + `isDisabled` 拦截未上传
+- `model-select` / `resolution-select` / `size-control`：`required: true`（UI 标记）
+- `generate.validate` 只保留 references、尺寸可用性等业务规则
 
 `footwear-repair` 额外覆盖：
 

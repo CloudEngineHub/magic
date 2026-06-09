@@ -251,9 +251,7 @@ registerMagicCanvasPlugin({
 					id: "presetTargetModel",
 					kind: "option-group",
 					stateKey: "presetTargetModel",
-					required: {
-						validate: ({ state }) => Boolean(state.targetModelImage) || state.presetTargetModel !== "none",
-					},
+					required: true,
 					title: t("section.presetTargetModel", "预设 AI 模特"),
 					options: presetTargetModels,
 				},

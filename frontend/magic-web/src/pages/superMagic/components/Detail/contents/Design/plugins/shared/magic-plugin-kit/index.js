@@ -3,6 +3,7 @@
 
 	const IMAGE_GENERATION_CONFIG_PREFIX = "image_generation_config."
 	const DEFAULT_SIZE_CONTROL_RATIO_OPTIONS = ["1:1", "3:4", "4:5", "9:16", "16:9"]
+	const DEFAULT_MAX_OUTPUT_IMAGES = 4
 
 	function createElement(tagName, className, textContent) {
 		const element = document.createElement(tagName)
@@ -150,6 +151,31 @@
 			.filter((setting) => setting.requestKey && setting.options.length > 0)
 	}
 
+	function getMaxOutputImages(model) {
+		const maxOutputImages = Number(model?.image_size_config?.max_output_images)
+		if (!Number.isFinite(maxOutputImages) || maxOutputImages <= 0) {
+			return DEFAULT_MAX_OUTPUT_IMAGES
+		}
+		return Math.max(1, Math.floor(maxOutputImages))
+	}
+
+	function clampGenerationCount(value, model) {
+		const parsedValue = Number(value)
+		const safeValue = Number.isFinite(parsedValue) ? Math.floor(parsedValue) : 1
+		return Math.max(1, Math.min(getMaxOutputImages(model), safeValue))
+	}
+
+	function buildGenerationCountOptions(model) {
+		console.log("buildGenerationCountOptions", model)
+		return Array.from({ length: getMaxOutputImages(model) }, (_, index) => {
+			const count = index + 1
+			return {
+				value: count,
+				label: String(count),
+			}
+		})
+	}
+
 	function createPanelStateSeed(initialState = {}) {
 		return {
 			/** 模型列表 */
@@ -160,6 +186,8 @@
 			ratioKey: "",
 			/** 分辨率 */
 			scale: "",
+			/** 生成张数 */
+			genCount: 1,
 			/** 图片生成配置 */
 			imageGenerationConfig: {},
 			/** 加载状态 */
@@ -254,7 +282,11 @@
 
 		function setTextareaCountText(counter, value, maxLength, hasMaxLength) {
 			if (!counter || !hasMaxLength) return
-			counter.textContent = `${value.length}/${maxLength}`
+			counter.textContent = `${value.length} / ${maxLength}`
+		}
+
+		function isTextareaAiGenerateEnabled(section) {
+			return Boolean(section.aiGenerate && typeof section.aiGenerate.generate === "function")
 		}
 
 		function getSelectedModel(currentState = state) {
@@ -321,6 +353,13 @@
 		}
 
 		function getSectionOptions(section, currentState = state) {
+			if (
+				section.kind === "option-group" &&
+				section.stateKey === "genCount" &&
+				section.options === undefined
+			) {
+				return buildGenerationCountOptions(getSelectedModel(currentState))
+			}
 			const options = resolveValue(section.options ?? [], getCallbackContext(currentState))
 			return Array.isArray(options) ? options : []
 		}
@@ -329,6 +368,11 @@
 			const value = section.stateKey ? currentState[section.stateKey] : undefined
 			if (options.some((option) => option.value === value)) return value
 			return options[0]?.value
+		}
+
+		function getActiveTabsValue(tabsSection, currentState = state) {
+			const options = getSectionOptions(tabsSection, currentState)
+			return getValidatedOptionValue(tabsSection, options, currentState)
 		}
 
 		/** 应用模型默认值 */
@@ -365,6 +409,7 @@
 					? currentRatioKey
 					: (fallbackMatchedSize?.label ?? targetSize?.label ?? ""),
 				scale: targetResolution,
+				genCount: clampGenerationCount(state.genCount, model),
 				imageGenerationConfig: buildDefaultImageGenerationConfig(model),
 			}
 			return config.modelConfig?.mapModelDefaults?.(model, defaults, state) ?? defaults
@@ -488,11 +533,6 @@
 		/** 生成 */
 		async function handleGenerate() {
 			if (state.loading) return
-			const requiredError = validateRequiredSections()
-			if (requiredError) {
-				setState({ error: requiredError })
-				return
-			}
 			const validationError = config.generate?.validate?.({ state, helpers, t })
 			if (validationError) {
 				setState({ error: validationError })
@@ -575,22 +615,6 @@
 			}
 		}
 
-		function normalizeRequiredConfig(section) {
-			const required = section.required
-			if (!required) return null
-			if (required === true) {
-				return { message: null, when: null, validate: null }
-			}
-			if (typeof required === "object") {
-				return {
-					message: required.message ?? null,
-					when: required.when ?? null,
-					validate: required.validate ?? null,
-				}
-			}
-			return null
-		}
-
 		function isSectionVisible(section) {
 			return !section.when || section.when(getCallbackContext())
 		}
@@ -602,101 +626,29 @@
 				const resolutionOptions = getResolutionOptions()
 				if (resolutionOptions.length <= 1 && section.hideWhenSingle !== false) return false
 			}
-			if (section.kind === "option-group" && !getSectionOptions(section).length) {
+			if (
+				(section.kind === "option-group" || section.kind === "tabs") &&
+				!getSectionOptions(section).length
+			) {
 				return false
 			}
 			return true
 		}
 
-		function isSectionCurrentlyRequired(section) {
-			const requiredConfig = normalizeRequiredConfig(section)
-			if (!requiredConfig) return false
+		function isSectionCurrentlyRequired(section, parentTabs = null, panelValue = null) {
+			if (section.required !== true) return false
+			if (parentTabs && panelValue !== getActiveTabsValue(parentTabs)) return false
 			if (!isSectionRendered(section)) return false
-			if (requiredConfig.when && !requiredConfig.when(getCallbackContext())) return false
 			return true
-		}
-
-		function getRequiredErrorMessage(section, requiredConfig) {
-			if (requiredConfig.message) return requiredConfig.message
-			const title = section.title ?? ""
-			return title
-				? t("error.requiredField", `请完善「${title}」`)
-				: t("error.requiredFieldGeneric", "请完善必填项")
-		}
-
-		function getSectionValueForRequired(section) {
-			if (section.kind === "model-select") return state.modelId
-			if (section.kind === "resolution-select") return state.scale
-			if (section.kind === "size-control") return state.ratioKey
-			if (section.stateKey) return state[section.stateKey]
-			return undefined
-		}
-
-		function getDefaultRequiredValidator(section) {
-			if (section.kind === "toggle" || section.kind === "custom") return null
-
-			return ({ value, state: currentState, section: currentSection, helpers, t }) => {
-				switch (currentSection.kind) {
-					case "image-slot":
-					case "mask-painter":
-						return Boolean(value)
-					case "image-grid":
-						return Array.isArray(value) && value.length > 0
-					case "textarea":
-						return String(value ?? "").trim().length > 0
-					case "option-group": {
-						const options = getSectionOptions(currentSection, currentState)
-						return options.some((option) => option.value === value)
-					}
-					case "model-select":
-						return currentState.modelOptions.some((model) => model.model_id === value)
-					case "resolution-select":
-						return getResolutionOptions(currentState).includes(value)
-					case "size-control":
-						return (
-							Boolean(value) &&
-							getSizeControlRatioOptions(currentSection, currentState).some(
-								(option) => option.value === value,
-							)
-						)
-					default:
-						return Boolean(value)
-				}
-			}
-		}
-
-		function validateRequiredSection(section) {
-			const requiredConfig = normalizeRequiredConfig(section)
-			if (!requiredConfig || !isSectionCurrentlyRequired(section)) return null
-
-			const value = getSectionValueForRequired(section)
-			const validator = requiredConfig.validate ?? getDefaultRequiredValidator(section)
-			if (!validator) return null
-
-			const isValid = validator({
-				value,
-				state,
-				section,
-				helpers,
-				t,
-			})
-			if (isValid) return null
-			return getRequiredErrorMessage(section, requiredConfig)
-		}
-
-		function validateRequiredSections() {
-			for (const section of config.sections ?? []) {
-				const error = validateRequiredSection(section)
-				if (error) return error
-			}
-			return null
 		}
 
 		function appendSectionTitle(titleLabel, section) {
 			titleLabel.replaceChildren()
 			titleLabel.append(document.createTextNode(section.title ?? ""))
 			if (isSectionCurrentlyRequired(section)) {
-				titleLabel.append(createElement("span", "mpk-section-required", "*"))
+				titleLabel.append(
+					createElement("span", "mpk-section-required", t("required", "必填")),
+				)
 			}
 		}
 
@@ -715,7 +667,9 @@
 		/** 创建区块 */
 		function createSection(section) {
 			const sectionNode = createElement("section", "mpk-section")
-			sectionNode.append(createSectionHeader(section))
+			if (section?.title || section?.suffix || section?.required) {
+				sectionNode.append(createSectionHeader(section))
+			}
 			return sectionNode
 		}
 
@@ -876,13 +830,22 @@
 				deps.add("ratioKey")
 			}
 
+			if (section.kind === "tabs") {
+				for (const panel of section.panels ?? []) {
+					for (const child of panel.sections ?? []) {
+						for (const dep of resolveSectionDeps(child)) {
+							deps.add(dep)
+						}
+					}
+				}
+			}
+
 			return deps
 		}
 
 		/** 判断是否需要更新区块 */
 		function shouldUpdateSection(section, changedKeys) {
 			if (!changedKeys) return true
-			if (normalizeRequiredConfig(section)?.when) return true
 			for (const key of resolveSectionDeps(section)) {
 				if (changedKeys.has(key)) return true
 			}
@@ -1393,14 +1356,17 @@
 			}
 		}
 
+		/* 渲染 textarea */
 		function renderTextarea(section) {
 			const value = typeof state[section.stateKey] === "string" ? state[section.stateKey] : ""
 			const maxLength = Number(section.maxLength)
 			const hasMaxLength = Number.isFinite(maxLength) && maxLength > 0
+			const hasAiGenerate = isTextareaAiGenerateEnabled(section)
+			const aiConfig = section.aiGenerate
 			const sectionNode = createSection(section)
-			const textarea = createElement("textarea", "mpk-textarea")
+			const textarea = createElement("textarea", "mpk-textarea mpk-textarea-ai-field")
 			const count = hasMaxLength
-				? createElement("span", "mpk-textarea-count", `${value.length}/${maxLength}`)
+				? createElement("span", "mpk-textarea-count", `${value.length} / ${maxLength}`)
 				: null
 			textarea.rows = Number(section.rows) > 0 ? Number(section.rows) : 5
 			textarea.placeholder = section.placeholder ?? ""
@@ -1408,6 +1374,34 @@
 			if (hasMaxLength) {
 				textarea.maxLength = maxLength
 			}
+
+			const wrap = createElement(
+				"div",
+				`mpk-textarea-ai-wrap ${section.shellClassName ?? ""}`.trim(),
+			)
+			const leftActions = createElement(
+				"div",
+				"mpk-textarea-ai-actions mpk-textarea-ai-actions-left",
+			)
+			const rightActions = createElement(
+				"div",
+				"mpk-textarea-ai-actions mpk-textarea-ai-actions-right",
+			)
+			const clearButton = createElement("button", "mpk-textarea-clear-button", "×")
+			clearButton.type = "button"
+			clearButton.setAttribute("aria-label", t("textarea.clear", "清空"))
+			clearButton.title = t("textarea.clear", "清空")
+			clearButton.hidden = value.length === 0
+
+			const sectionView = {
+				textarea,
+				count,
+				aiButton: null,
+				clearButton,
+				generating: false,
+			}
+			view.sectionViews[section.id] = sectionView
+
 			textarea.addEventListener("input", (event) => {
 				const nextValue = normalizeTextareaValue(
 					event.target.value,
@@ -1419,22 +1413,90 @@
 				}
 				state[section.stateKey] = nextValue
 				setTextareaCountText(count, nextValue, maxLength, hasMaxLength)
+				clearButton.hidden = nextValue.length === 0
 				if (isSectionCurrentlyRequired(section)) {
 					updateGenerateButtonState()
 				}
 				updateHeight()
 			})
-			sectionNode.append(textarea)
 
-			if (section.help || hasMaxLength) {
-				const meta = createElement("div", "mpk-textarea-meta")
-				if (section.help) {
-					meta.append(createElement("p", "mpk-help", section.help))
+			clearButton.addEventListener("click", () => {
+				textarea.value = ""
+				setTextareaCountText(count, "", maxLength, hasMaxLength)
+				clearButton.hidden = true
+				setState({ [section.stateKey]: "", error: "" })
+			})
+
+			if (hasAiGenerate) {
+				const aiButton = createElement("button", "mpk-textarea-ai-button")
+				aiButton.type = "button"
+				sectionView.aiButton = aiButton
+
+				const syncAiButton = () => {
+					const disabled = Boolean(resolveValue(aiConfig.disabled, getCallbackContext()))
+					aiButton.disabled = disabled || sectionView.generating
+					aiButton.replaceChildren()
+					if (sectionView.generating) {
+						aiButton.append(
+							createElement(
+								"span",
+								"mpk-textarea-ai-button-label",
+								resolveValue(aiConfig.loadingLabel, getCallbackContext()) ??
+									t("textarea.aiGenerating", "Generating…"),
+							),
+						)
+						return
+					}
+					aiButton.append(createElement("span", "mpk-textarea-ai-button-icon", "✦"))
+					aiButton.append(
+						createElement(
+							"span",
+							"mpk-textarea-ai-button-label",
+							resolveValue(aiConfig.label, getCallbackContext()) ??
+								t("textarea.aiGenerate", "AI"),
+						),
+					)
 				}
-				if (hasMaxLength) {
-					meta.append(count)
-				}
-				sectionNode.append(meta)
+
+				syncAiButton()
+				aiButton.addEventListener("click", async () => {
+					if (aiButton.disabled) return
+					sectionView.generating = true
+					syncAiButton()
+					try {
+						const result = await aiConfig.generate(getCallbackContext())
+						const nextValue = normalizeTextareaValue(result, maxLength, hasMaxLength)
+						if (!nextValue.trim()) return
+						textarea.value = nextValue
+						setTextareaCountText(count, nextValue, maxLength, hasMaxLength)
+						clearButton.hidden = false
+						setState({ [section.stateKey]: nextValue, error: "" })
+					} catch (error) {
+						setState({
+							error:
+								getErrorMessage(error) ||
+								t("error.aiGenerate", "AI 生成失败，请重试"),
+						})
+					} finally {
+						sectionView.generating = false
+						syncAiButton()
+					}
+				})
+				leftActions.append(aiButton)
+			}
+
+			if (hasMaxLength && count) {
+				rightActions.append(count)
+			}
+			rightActions.append(clearButton)
+			wrap.append(textarea)
+			if (hasAiGenerate) {
+				wrap.append(leftActions)
+			}
+			wrap.append(rightActions)
+			sectionNode.append(wrap)
+			if (section.help) {
+				sectionNode.append(createElement("p", "mpk-help", section.help))
 			}
 
 			return sectionNode
@@ -1504,6 +1566,86 @@
 			return sectionNode
 		}
 
+		/** 渲染 tabs 及其面板内容 */
+		function updateTabsSection(section) {
+			const options = getSectionOptions(section)
+			if (!options.length) {
+				delete view.sectionViews[section.id]
+				return
+			}
+
+			const activeValue = getValidatedOptionValue(section, options)
+			let sectionView = view.sectionViews[section.id]
+
+			if (!sectionView) {
+				const sectionNode = createSection(section)
+				const tabsRoot = createElement(
+					"div",
+					`mpk-tabs ${section.tabsClassName ?? ""}`.trim(),
+				)
+				const tabsList = createElement("div", "mpk-tabs-list")
+				const panelHost = createElement("div", "mpk-tabs-panel")
+				sectionNode.append(tabsRoot)
+				tabsRoot.append(tabsList, panelHost)
+				if (section.help) {
+					sectionNode.append(createElement("p", "mpk-help", section.help))
+				}
+
+				sectionView = {
+					sectionNode,
+					tabsList,
+					panelHost,
+					triggers: new Map(),
+				}
+				view.sectionViews[section.id] = sectionView
+
+				options.forEach((option) => {
+					const button = createElement("button", "mpk-tabs-trigger", option.label)
+					button.type = "button"
+					button.title = option.description ?? ""
+					button.disabled = Boolean(option.disabled)
+					button.addEventListener("click", () => {
+						const currentValue = state[section.stateKey]
+						if (option.disabled || currentValue === option.value) return
+						const patch = { [section.stateKey]: option.value }
+						if (typeof section.patchOnSelect === "function") {
+							Object.assign(
+								patch,
+								section.patchOnSelect(option.value, getCallbackContext()) || {},
+							)
+						}
+						setState(patch)
+					})
+					sectionView.triggers.set(String(option.value), button)
+					tabsList.append(button)
+				})
+			}
+
+			options.forEach((option) => {
+				const button = sectionView.triggers.get(String(option.value))
+				if (!button) return
+				button.classList.toggle("is-active", option.value === activeValue)
+				button.disabled = Boolean(option.disabled)
+				button.title = option.description ?? ""
+			})
+
+			sectionView.panelHost.replaceChildren()
+			const activePanel = (section.panels ?? []).find((panel) => panel.value === activeValue)
+			for (const childSection of activePanel?.sections ?? []) {
+				const childNode = renderSection(childSection)
+				if (childNode instanceof DocumentFragment) {
+					sectionView.panelHost.append(childNode)
+				} else if (childNode) {
+					sectionView.panelHost.append(childNode)
+				}
+			}
+		}
+
+		function renderTabs(section) {
+			updateTabsSection(section)
+			return view.sectionViews[section.id]?.sectionNode ?? document.createDocumentFragment()
+		}
+
 		/** 渲染选项组 */
 		function renderOptionGroup(section) {
 			const options = getSectionOptions(section)
@@ -1571,27 +1713,97 @@
 		}
 
 		/** 渲染模型选择 */
+		function closeModelSelectMenu(sectionView) {
+			if (!sectionView?.menuOpen) return
+			sectionView.menu.hidden = true
+			sectionView.trigger.classList.remove("is-open")
+			sectionView.menuOpen = false
+			if (sectionView.outsideHandler) {
+				document.removeEventListener("mousedown", sectionView.outsideHandler)
+				sectionView.outsideHandler = null
+			}
+		}
+
+		function disposeModelSelectView(sectionView) {
+			closeModelSelectMenu(sectionView)
+		}
+
+		function syncModelSelectView(sectionView) {
+			const selected = getSelectedModel()
+			sectionView.label.textContent =
+				selected?.model_name ?? selected?.model_id ?? state.modelId ?? ""
+			sectionView.menu.querySelectorAll(".mpk-model-select-option").forEach((button) => {
+				button.classList.toggle("is-active", button.dataset.modelId === state.modelId)
+			})
+		}
+
+		/* 渲染模型选择 */
 		function renderModelSelect(section) {
 			if (!state.modelOptions.length) return document.createDocumentFragment()
+			disposeModelSelectView(view.sectionViews[section.id])
+
 			const sectionNode = createSection(section)
-			const select = createElement("select", "mpk-select")
+			const wrap = createElement("div", "mpk-model-select")
+			const trigger = createElement("button", "mpk-model-select-trigger")
+			trigger.type = "button"
+			const label = createElement("span", "mpk-model-select-label")
+			const chevron = createElement("span", "mpk-model-select-chevron", "▾")
+			const menu = createElement("div", "mpk-model-select-menu")
+			menu.hidden = true
+
+			const sectionView = {
+				wrap,
+				trigger,
+				menu,
+				label,
+				menuOpen: false,
+				outsideHandler: null,
+			}
+
 			state.modelOptions.forEach((model) => {
-				const option = createElement("option")
-				option.value = model.model_id
-				option.textContent = model.model_name ?? model.model_id
-				option.selected = model.model_id === state.modelId
-				select.append(option)
-			})
-			select.addEventListener("change", (event) => {
-				const modelId = event.target.value
-				const model = state.modelOptions.find((item) => item.model_id === modelId)
-				setState({
-					error: "",
-					modelId,
-					...applyModelDefaults(model),
+				const option = createElement("button", "mpk-model-select-option")
+				option.type = "button"
+				option.dataset.modelId = model.model_id
+				option.append(
+					createElement(
+						"span",
+						"mpk-model-select-option-label",
+						model.model_name ?? model.model_id,
+					),
+				)
+				option.addEventListener("click", () => {
+					closeModelSelectMenu(sectionView)
+					if (model.model_id === state.modelId) return
+					setState({
+						error: "",
+						modelId: model.model_id,
+						...applyModelDefaults(model),
+					})
 				})
+				menu.append(option)
 			})
-			sectionNode.append(select)
+
+			trigger.append(label, chevron)
+			trigger.addEventListener("click", () => {
+				if (sectionView.menuOpen) {
+					closeModelSelectMenu(sectionView)
+					return
+				}
+				sectionView.menu.hidden = false
+				trigger.classList.add("is-open")
+				sectionView.menuOpen = true
+				sectionView.outsideHandler = (event) => {
+					if (!wrap.contains(event.target)) {
+						closeModelSelectMenu(sectionView)
+					}
+				}
+				document.addEventListener("mousedown", sectionView.outsideHandler)
+			})
+
+			wrap.append(trigger, menu)
+			sectionNode.append(wrap)
+			view.sectionViews[section.id] = sectionView
+			syncModelSelectView(sectionView)
 			return sectionNode
 		}
 
@@ -1634,6 +1846,7 @@
 			if (section.kind === "textarea") return renderTextarea(section)
 			if (section.kind === "toggle") return renderToggle(section)
 			if (section.kind === "size-control") return renderSizeControl(section)
+			if (section.kind === "tabs") return renderTabs(section)
 			if (section.kind === "option-group") return renderOptionGroup(section)
 			if (section.kind === "model-select") return renderModelSelect(section)
 			if (section.kind === "resolution-select") return renderResolutionSelect(section)
@@ -1661,6 +1874,14 @@
 
 			if (section.kind === "mask-painter") {
 				updateMaskPainterSection(section)
+				return
+			}
+
+			if (section.kind === "tabs") {
+				updateTabsSection(section)
+				view.slots[section.id].replaceChildren(
+					view.sectionViews[section.id]?.sectionNode ?? document.createDocumentFragment(),
+				)
 				return
 			}
 
@@ -1793,6 +2014,9 @@
 				updateView(patch)
 			},
 			dispose() {
+				Object.values(view.sectionViews).forEach((sectionView) => {
+					disposeModelSelectView(sectionView)
+				})
 				root.replaceChildren()
 			},
 		}

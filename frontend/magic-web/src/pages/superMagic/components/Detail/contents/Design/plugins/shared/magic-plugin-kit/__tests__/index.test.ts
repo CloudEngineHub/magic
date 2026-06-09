@@ -100,6 +100,7 @@ function createModel() {
 		model_name: "Model A",
 		image_size_config: {
 			default_scale: "1K",
+			max_output_images: 4,
 			sizes: [
 				{ label: "1:1", value: "1024x1024", scale: "1K" },
 				{ label: "1:1", value: "2048x2048", scale: "2K" },
@@ -445,7 +446,7 @@ describe("magic-plugin-kit", () => {
 		expect(promptSlot.firstElementChild).toBe(initialPromptSection)
 		expect(countSlot.firstElementChild).toBe(initialCountSection)
 		expect(textarea?.value).toBe("12345")
-		expect(promptSlot.querySelector(".mpk-textarea-count")?.textContent).toBe("5/5")
+		expect(promptSlot.querySelector(".mpk-textarea-count")?.textContent).toBe("5 / 5")
 
 		vi.advanceTimersByTime(120)
 
@@ -492,6 +493,155 @@ describe("magic-plugin-kit", () => {
 		const nextButtons = root.querySelectorAll<HTMLButtonElement>(".mpk-card-tab")
 		expect(nextButtons[0].classList.contains("is-active")).toBe(false)
 		expect(nextButtons[1].classList.contains("is-active")).toBe(true)
+	})
+
+	it("renders tabs panels and switches visible content", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				backgroundMode: "image",
+			},
+			sections: [
+				{
+					id: "backgroundMode",
+					kind: "tabs",
+					stateKey: "backgroundMode",
+					title: "Background",
+					options: [
+						{ value: "image", label: "Reference image" },
+						{ value: "prompt", label: "Text background" },
+					],
+					panels: [
+						{
+							value: "image",
+							sections: [
+								{
+									id: "backgroundImage",
+									kind: "image-slot",
+									stateKey: "backgroundImage",
+									title: "Background image",
+									uploadLabel: "Upload background",
+								},
+							],
+						},
+						{
+							value: "prompt",
+							sections: [
+								{
+									id: "backgroundPrompt",
+									kind: "textarea",
+									stateKey: "backgroundPrompt",
+									title: "Background prompt",
+								},
+							],
+						},
+					],
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const triggers = root.querySelectorAll<HTMLButtonElement>(".mpk-tabs-trigger")
+		expect(triggers).toHaveLength(2)
+		expect(triggers[0].classList.contains("is-active")).toBe(true)
+		expect(root.textContent).toContain("Upload background")
+		expect(root.textContent).not.toContain("Background prompt")
+
+		triggers[1].click()
+
+		const nextTriggers = root.querySelectorAll<HTMLButtonElement>(".mpk-tabs-trigger")
+		expect(nextTriggers[0].classList.contains("is-active")).toBe(false)
+		expect(nextTriggers[1].classList.contains("is-active")).toBe(true)
+		expect(root.textContent).toContain("Background prompt")
+		expect(root.textContent).not.toContain("Upload background")
+	})
+
+	it("renders textarea aiGenerate button and writes generated text", async () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		const generate = vi.fn().mockResolvedValue("Studio backdrop with soft light")
+
+		kit.mount(ctx, root, {
+			initialState: {
+				backgroundPrompt: "",
+				productImages: [{ id: "product-1" }],
+			},
+			sections: [
+				{
+					id: "backgroundPrompt",
+					kind: "textarea",
+					stateKey: "backgroundPrompt",
+					title: "Background prompt",
+					maxLength: 2000,
+					deps: ["productImages"],
+					aiGenerate: {
+						label: "AI generate",
+						loadingLabel: "Generating…",
+						disabled: ({ state }: { state: Record<string, unknown> }) =>
+							!Array.isArray(state.productImages) || state.productImages.length === 0,
+						generate,
+					},
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const aiButton = root.querySelector<HTMLButtonElement>(".mpk-textarea-ai-button")
+		const textarea = root.querySelector<HTMLTextAreaElement>(".mpk-textarea-ai-field")
+
+		expect(aiButton).not.toBeNull()
+		expect(aiButton?.disabled).toBe(false)
+		expect(root.querySelector(".mpk-textarea-ai-wrap")).not.toBeNull()
+
+		aiButton!.click()
+		expect(aiButton?.disabled).toBe(true)
+		expect(aiButton?.textContent).toBe("Generating…")
+
+		await vi.waitFor(() => {
+			expect(generate).toHaveBeenCalledTimes(1)
+			expect(textarea?.value).toBe("Studio backdrop with soft light")
+		})
+
+		expect(aiButton?.disabled).toBe(false)
+		expect(aiButton?.textContent).toContain("AI generate")
+		expect(root.textContent).toContain("31 / 2000")
+	})
+
+	it("disables textarea aiGenerate button when disabled callback is true", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				backgroundPrompt: "",
+				productImages: [],
+			},
+			sections: [
+				{
+					id: "backgroundPrompt",
+					kind: "textarea",
+					stateKey: "backgroundPrompt",
+					title: "Background prompt",
+					deps: ["productImages"],
+					aiGenerate: {
+						label: "AI generate",
+						disabled: ({ state }: { state: Record<string, unknown> }) =>
+							!Array.isArray(state.productImages) || state.productImages.length === 0,
+						generate: vi.fn(),
+					},
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		expect(root.querySelector<HTMLButtonElement>(".mpk-textarea-ai-button")?.disabled).toBe(
+			true,
+		)
 	})
 
 	it("toggles boolean state with help text", () => {
@@ -569,6 +719,70 @@ describe("magic-plugin-kit", () => {
 		expect(nextButtons[1].classList.contains("is-active")).toBe(true)
 	})
 
+	it("builds genCount options from model max_output_images and clamps invalid values", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		const modelA = createModel()
+		const modelB = {
+			...createModel(),
+			model_id: "model-b",
+			model_name: "Model B",
+			image_size_config: {
+				...createModel().image_size_config,
+				max_output_images: 2,
+			},
+		}
+
+		kit.mount(ctx, root, {
+			initialState: {
+				modelOptions: [modelA, modelB],
+				modelId: modelA.model_id,
+				genCount: 4,
+			},
+			modelConfig: {
+				autoLoad: false,
+			},
+			sections: [
+				{
+					id: "modelSelect",
+					kind: "model-select",
+					title: "Model",
+				},
+				{
+					id: "count",
+					kind: "option-group",
+					stateKey: "genCount",
+					title: "Count",
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		expect(root.querySelectorAll(".mpk-option-group .mpk-option")).toHaveLength(4)
+		const countButtons = root.querySelectorAll<HTMLButtonElement>(
+			".mpk-content > .mpk-slot:nth-child(2) .mpk-option",
+		)
+		expect(Array.from(countButtons).map((button) => button.textContent)).toEqual([
+			"1",
+			"2",
+			"3",
+			"4",
+		])
+		expect(countButtons[3]?.classList.contains("is-active")).toBe(true)
+
+		const modelOption = root.querySelector<HTMLButtonElement>(
+			'.mpk-model-select-option[data-model-id="model-b"]',
+		)
+		modelOption?.click()
+
+		const nextCountButtons = root.querySelectorAll<HTMLButtonElement>(
+			".mpk-content > .mpk-slot:nth-child(2) .mpk-option",
+		)
+		expect(Array.from(nextCountButtons).map((button) => button.textContent)).toEqual(["1", "2"])
+		expect(nextCountButtons[1]?.classList.contains("is-active")).toBe(true)
+	})
+
 	it("prefers generate.execute over buildRequest and allows multiple generate calls", async () => {
 		const kit = loadMagicPluginKit()
 		const root = createRoot()
@@ -629,7 +843,7 @@ describe("magic-plugin-kit", () => {
 		})
 
 		const requiredMarker = root.querySelector(".mpk-section-required")
-		expect(requiredMarker?.textContent).toBe("*")
+		expect(requiredMarker?.textContent).toBe("必填")
 		expect(root.querySelector(".mpk-section-title")?.textContent).toContain("Prompt")
 	})
 
@@ -654,117 +868,6 @@ describe("magic-plugin-kit", () => {
 			generate: createGenerateConfig(),
 		})
 
-		expect(root.querySelector(".mpk-section-required")?.textContent).toBe("*")
-	})
-
-	it("blocks generate on the first missing required section before plugin validate runs", async () => {
-		const kit = loadMagicPluginKit()
-		const root = createRoot()
-		const ctx = createCtx()
-		const validate = vi.fn(() => null)
-		const buildRequest = vi.fn(() => ({}))
-		ctx.ai = {
-			generateAndPlace: vi.fn(),
-		}
-
-		kit.mount(ctx, root, {
-			initialState: {
-				productImage: null,
-			},
-			sections: [
-				{
-					id: "productImage",
-					kind: "image-slot",
-					stateKey: "productImage",
-					title: "Product image",
-					required: {
-						message: "Please upload a product image",
-					},
-				},
-			],
-			generate: {
-				...createGenerateConfig(),
-				validate,
-				buildRequest,
-			},
-		})
-
-		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
-
-		await vi.waitFor(() => {
-			expect(root.querySelector(".mpk-error")?.textContent).toBe("Please upload a product image")
-		})
-		expect(validate).not.toHaveBeenCalled()
-		expect(buildRequest).not.toHaveBeenCalled()
-		expect((ctx as any).ai.generateAndPlace).not.toHaveBeenCalled()
-	})
-
-	it("skips required marker and validation when required.when returns false", async () => {
-		const kit = loadMagicPluginKit()
-		const root = createRoot()
-		const ctx = createCtx()
-		const validate = vi.fn(() => "plugin validation")
-
-		kit.mount(ctx, root, {
-			initialState: {
-				productImage: null,
-			},
-			sections: [
-				{
-					id: "productImage",
-					kind: "image-slot",
-					stateKey: "productImage",
-					title: "Product image",
-					required: {
-						message: "Please upload a product image",
-						when: () => false,
-					},
-				},
-			],
-			generate: {
-				...createGenerateConfig(),
-				validate,
-			},
-		})
-
-		expect(root.querySelector(".mpk-section-required")).toBeNull()
-
-		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
-
-		await vi.waitFor(() => {
-			expect(validate).toHaveBeenCalledTimes(1)
-		})
-		expect(root.querySelector(".mpk-error")?.textContent).toBe("plugin validation")
-	})
-
-	it("uses custom required validators for specialized emptiness rules", async () => {
-		const kit = loadMagicPluginKit()
-		const root = createRoot()
-		const ctx = createCtx()
-
-		kit.mount(ctx, root, {
-			initialState: {
-				confirmSelection: false,
-			},
-			sections: [
-				{
-					id: "confirmSelection",
-					kind: "toggle",
-					stateKey: "confirmSelection",
-					title: "Confirm selection",
-					required: {
-						message: "Please confirm the selection",
-						validate: ({ value }: { value: boolean }) => value === true,
-					},
-				},
-			],
-			generate: createGenerateConfig(),
-		})
-
-		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
-
-		await vi.waitFor(() => {
-			expect(root.querySelector(".mpk-error")?.textContent).toBe("Please confirm the selection")
-		})
+		expect(root.querySelector(".mpk-section-required")?.textContent).toBe("必填")
 	})
 })

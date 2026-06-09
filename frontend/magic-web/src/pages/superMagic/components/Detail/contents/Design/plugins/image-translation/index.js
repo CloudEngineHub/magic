@@ -593,9 +593,7 @@ registerMagicCanvasPlugin({
 					id: "targetLanguages",
 					kind: "custom",
 					stateKey: "targetLanguages",
-					required: {
-						validate: ({ value }) => Array.isArray(value) && value.length > 0,
-					},
+					required: true,
 					deps: ["targetLanguages"],
 					render: ({ state, setState, elements }) => {
 						panelEl = elements.panel || panelEl || root

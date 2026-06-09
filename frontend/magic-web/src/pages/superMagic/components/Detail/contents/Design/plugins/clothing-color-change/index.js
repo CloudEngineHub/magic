@@ -650,9 +650,7 @@ registerMagicCanvasPlugin({
 					id: "color",
 					kind: "custom",
 					stateKey: "color",
-					required: {
-						validate: ({ value }) => Boolean(value),
-					},
+					required: true,
 					deps: ["color"],
 					render: ({ state, setState, elements }) => {
 						// 记录 kit 暴露的稳定 panel DOM，供 drawer 挂载使用

@@ -1,50 +1,142 @@
 /* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
-const GENERATION_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
-const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => ({
-	value: count,
-	label: String(count),
-}))
+/* 参考图背景 */
+const BACKGROUND_MODE_IMAGE = "image"
+/* 文生背景 */
+const BACKGROUND_MODE_PROMPT = "prompt"
+/* 智能匹配 */
+const PLACEMENT_MODE_SMART = "smart"
+/* 同位替换 */
+const PLACEMENT_MODE_REPLACE = "replace"
+/* 硬质商品 */
+const PLACEMENT_MODE_NATURAL = "natural"
+/* 柔软衣物 */
+const PLACEMENT_MODE_SOFT = "soft"
+/* 仅换背景 */
+const PLACEMENT_MODE_BACKGROUND = "background"
+/* 背景描述最大长度 */
+const BACKGROUND_PROMPT_MAX_LENGTH = 2000
 
+/* 初始化状态 */
 function createInitialState() {
 	return {
 		productImages: [],
-		backgroundMode: "image",
+		backgroundMode: BACKGROUND_MODE_IMAGE,
 		backgroundImage: null,
 		backgroundPrompt: "",
-		copyBackgroundImage: null,
+		placementMode: PLACEMENT_MODE_SMART,
 		qualityMode: "",
-		genCount: 1,
 	}
 }
 
 function buildBackgroundModeOptions(t) {
 	return [
 		{
-			value: "image",
-			label: t("backgroundMode.image", "选择背景图"),
-			description: t(
-				"backgroundMode.image.desc",
-				"上传单张背景图，识别商品后复用其环境、布光和场景布局。",
-			),
+			value: BACKGROUND_MODE_IMAGE,
+			label: t("backgroundMode.image", "参考背景图"),
 		},
 		{
-			value: "copy",
-			label: t("backgroundMode.copy", "复制背景"),
-			description: t(
-				"backgroundMode.copy.desc",
-				"上传全场景参考图，识别商品后复用展示关系与背景语言，并替换其中原商品。",
-			),
-		},
-		{
-			value: "prompt",
+			value: BACKGROUND_MODE_PROMPT,
 			label: t("backgroundMode.prompt", "文生背景"),
-			description: t(
-				"backgroundMode.prompt.desc",
-				"先识别商品，再用文字描述生成新的背景场景。",
-			),
 		},
 	]
+}
+
+const PLACEMENT_MODE_DEFINITIONS = [
+	{
+		value: PLACEMENT_MODE_SMART,
+		labelKey: "placement.smart",
+		labelFallback: "智能匹配",
+		descriptionKey: "placement.smart.desc",
+		descriptionFallback: "自动判断同类替换、硬质摆拍或柔软衣物摆放",
+		promptSuffix: {
+			zh: "摆放方式：智能匹配。{{backgroundInstruction}}如果商品属于鞋、包、瓶罐、摆件等硬质商品，则自然摆放；如果属于裤子、上衣、裙子、围巾、布料等柔软衣物，则平铺、搭放、折叠或悬挂。当无法判断时，选择最符合商品类型、且物理上合理的商品摄影摆放方式。",
+			en: "PLACEMENT MODE: smart product matching. {{backgroundInstruction}}If the product is a hard or self-supporting object, place it naturally in the scene. If it is a soft garment or fabric item, it must lay flat, drape, fold, or hang naturally and must not stand upright unsupported. When uncertain, choose the physically plausible product-photo placement that best matches the product category. ",
+		},
+		promptSuffixBackgroundInstruction: {
+			zh: "优先检查 {{backgroundReference}} 中是否存在同类商品；如果存在，则执行同位替换并继承其位置、尺度、角度、透视、接触阴影和遮挡关系。",
+			en: "First check whether {{backgroundReference}} contains an object of the same product category. If it does, perform same-category in-place replacement and inherit its placement, position, scale, orientation, perspective, contact shadows, lighting, and occlusion. ",
+		},
+	},
+	{
+		value: PLACEMENT_MODE_REPLACE,
+		labelKey: "placement.replace",
+		labelFallback: "同位替换",
+		descriptionKey: "placement.replace.desc",
+		descriptionFallback: "参考图已有同类商品时，1:1 继承原商品摆放",
+		promptSuffix: {
+			zh: "摆放方式：同位替换。先识别 {{backgroundReference}} 中与当前商品同类的目标物体，再用当前商品进行 1:1 替换。继承原商品的位置、数量、尺度、角度、透视、接触阴影、遮挡关系与布光方向，并完全移除原商品。",
+			en: "PLACEMENT MODE: same-category in-place replacement. Identify the same product-category object in {{backgroundReference}}, then replace that object with the current product. Inherit the original placement, quantity, position, scale, orientation, perspective, contact shadows, lighting direction, and occlusion relationships. Remove the original product completely. ",
+		},
+	},
+	{
+		value: PLACEMENT_MODE_NATURAL,
+		labelKey: "placement.natural",
+		labelFallback: "硬质商品",
+		descriptionKey: "placement.natural.desc",
+		descriptionFallback: "鞋、包、瓶罐、摆件等硬质商品自然落入场景",
+		promptSuffix: {
+			zh: "摆放方式：硬质商品。将商品作为鞋、包、瓶罐、摆件、盒子等可独立支撑的硬质商品处理，自然落入场景。允许站立、倚靠、放置在桌面或地面，并与道具形成真实接触和阴影。",
+			en: "PLACEMENT MODE: natural hard-product styling. Treat the product as a self-supporting hard good such as shoes, bags, bottles, decor objects, or boxes. Let it stand, lean, or rest naturally in the scene with believable contact and shadow. ",
+		},
+	},
+	{
+		value: PLACEMENT_MODE_SOFT,
+		labelKey: "placement.soft",
+		labelFallback: "柔软衣物",
+		descriptionKey: "placement.soft.desc",
+		descriptionFallback: "裤子、上衣、裙子等平铺、搭放或挂放，不直立",
+		promptSuffix: {
+			zh: "摆放方式：柔软衣物。将商品作为裤子、上衣、裙子、围巾、布料等柔软物处理，可平铺、搭放、折叠或悬挂。不要让衣物像刚体一样直立，也不要生成人体、模特腿、假人或隐形身体来支撑衣物。",
+			en: "PLACEMENT MODE: soft-garment styling. Treat the product as a soft garment or fabric item such as pants, shirt, skirt, scarf, dress, or cloth. Lay it flat, drape it over props, fold it naturally, or hang it from plausible support. Never make it stand upright unsupported, and do not generate a person, mannequin, invisible body, or legs to hold it. ",
+		},
+	},
+	{
+		value: PLACEMENT_MODE_BACKGROUND,
+		labelKey: "placement.background",
+		labelFallback: "仅换背景",
+		descriptionKey: "placement.background.desc",
+		descriptionFallback: "商品角度和姿态尽量不变，只做背景与光影融合",
+		promptSuffix: {
+			zh: "摆放方式：仅换背景。尽量保持商品在原参考图中的角度、姿态、尺度、轮廓和陈列方式不变，只替换背景并做轻微光影融合，不要重新摆放、旋转、折叠或重塑商品。",
+			en: "PLACEMENT MODE: background-only replacement. Keep the product's original pose, angle, orientation, scale, outline, and display state from the product reference as much as possible. Only replace the background and lightly harmonize the lighting, shadow, and edges. ",
+		},
+	},
+]
+
+function getPlacementModeDefinition(placementMode) {
+	return (
+		PLACEMENT_MODE_DEFINITIONS.find((item) => item.value === placementMode) ??
+		PLACEMENT_MODE_DEFINITIONS[0]
+	)
+}
+
+function resolvePlacementPromptSuffix(definition, { backgroundMode, backgroundReference, locale }) {
+	const backgroundInstruction =
+		backgroundMode === BACKGROUND_MODE_IMAGE && definition.promptSuffixBackgroundInstruction
+			? (
+					MagicPromptLocale.pickText(
+						definition.promptSuffixBackgroundInstruction,
+						locale,
+					) ?? ""
+				).replace(/\{\{backgroundReference\}\}/g, backgroundReference)
+			: ""
+
+	return (MagicPromptLocale.pickText(definition.promptSuffix, locale) ?? "")
+		.replace(/\{\{backgroundReference\}\}/g, backgroundReference)
+		.replace(/\{\{backgroundInstruction\}\}/g, backgroundInstruction)
+}
+
+function buildPlacementOptions(t, backgroundMode) {
+	const options = PLACEMENT_MODE_DEFINITIONS.map((definition) => ({
+		value: definition.value,
+		label: t(definition.labelKey, definition.labelFallback),
+		description: t(definition.descriptionKey, definition.descriptionFallback),
+	}))
+	if (backgroundMode === BACKGROUND_MODE_PROMPT) {
+		return options.filter((option) => option.value !== PLACEMENT_MODE_REPLACE)
+	}
+	return options
 }
 
 function getMaxReferenceImages(state, helpers) {
@@ -52,29 +144,22 @@ function getMaxReferenceImages(state, helpers) {
 }
 
 function getBackgroundReferenceCount(state) {
-	if (state.backgroundMode === "image" && state.backgroundImage) return 1
-	if (state.backgroundMode === "copy" && state.copyBackgroundImage) return 1
+	if (state.backgroundMode === BACKGROUND_MODE_IMAGE && state.backgroundImage) return 1
 	return 0
 }
 
 function getReferenceAssetsForMode(state) {
 	const assets = [...state.productImages]
-	if (state.backgroundMode === "image" && state.backgroundImage) {
+	if (state.backgroundMode === BACKGROUND_MODE_IMAGE && state.backgroundImage) {
 		assets.push(state.backgroundImage)
-	}
-	if (state.backgroundMode === "copy" && state.copyBackgroundImage) {
-		assets.push(state.copyBackgroundImage)
 	}
 	return assets
 }
 
 function getReferenceAssetsForBaseImage(state, baseImage) {
 	const assets = [baseImage]
-	if (state.backgroundMode === "image" && state.backgroundImage) {
+	if (state.backgroundMode === BACKGROUND_MODE_IMAGE && state.backgroundImage) {
 		assets.push(state.backgroundImage)
-	}
-	if (state.backgroundMode === "copy" && state.copyBackgroundImage) {
-		assets.push(state.copyBackgroundImage)
 	}
 	return assets
 }
@@ -100,16 +185,95 @@ function getQualityOptionsForModel(model) {
 		}))
 }
 
-function getQualityOptions(state, helpers) {
-	return getQualityOptionsForModel(helpers.getSelectedModel(state))
+function buildProductIdentityInstruction({ locale, productReference }) {
+	if (MagicPromptLocale.isChinese(locale)) {
+		return (
+			`先读取商品参考图 ${productReference}，识别商品类型、结构组成、轮廓比例、材质、颜色、图案细节、拍摄角度与摆放方向。` +
+			`将 ${productReference} 作为最终结果中商品主体的唯一来源，保持商品外观、结构细节、材质质感、颜色和方向一致，不要改成其他商品。`
+		)
+	}
+
+	return (
+		`First read the product reference image ${productReference}, and identify the product category, construction, silhouette, material, color, pattern details, camera angle, and placement direction. ` +
+		`Use ${productReference} as the ONLY source of the product in the final image. Preserve the product appearance, structure, material feel, color, and orientation. Do not turn it into a different product. `
+	)
 }
 
-function resolveSelectedQualityValue(state, helpers) {
-	const options = getQualityOptions(state, helpers)
-	if (!options.length) return undefined
-	return options.some((option) => option.value === state.qualityMode)
-		? state.qualityMode
-		: options[0].value
+function buildSceneInstruction({ backgroundMode, backgroundPrompt, backgroundReference, locale }) {
+	if (MagicPromptLocale.isChinese(locale)) {
+		if (backgroundMode === BACKGROUND_MODE_IMAGE) {
+			return (
+				`${backgroundReference} 仅作为背景参考图，复用其环境、空间结构、景深层次、布光氛围、色彩基调和主要背景元素。` +
+				"只替换背景与环境，不改变商品本体。"
+			)
+		}
+
+		return (
+			`根据以下背景描述生成全新场景：${backgroundPrompt.trim()}。` +
+			"只生成新的背景环境，不改变商品本体。"
+		)
+	}
+
+	if (backgroundMode === BACKGROUND_MODE_IMAGE) {
+		return (
+			`${backgroundReference} is ONLY a background reference. Reuse its environment, spatial structure, depth layering, lighting mood, color palette, and major background elements. ` +
+			"Change only the background and environment while keeping the product itself unchanged. "
+		)
+	}
+
+	return (
+		`Generate a brand-new background based on this direction: ${backgroundPrompt.trim()}. ` +
+		"Generate only the background environment while keeping the product itself unchanged. "
+	)
+}
+
+function buildPlacementInstruction({ backgroundMode, placementMode, backgroundReference, locale }) {
+	const normalizedPlacementMode =
+		backgroundMode === BACKGROUND_MODE_PROMPT && placementMode === PLACEMENT_MODE_REPLACE
+			? PLACEMENT_MODE_SMART
+			: placementMode
+
+	return resolvePlacementPromptSuffix(getPlacementModeDefinition(normalizedPlacementMode), {
+		backgroundMode,
+		backgroundReference,
+		locale,
+	})
+}
+
+function buildProductBackgroundSwapPrompt({
+	backgroundMode,
+	backgroundPrompt,
+	locale,
+	placementMode,
+}) {
+	const productReference = MagicPromptLocale.getReferenceLabel(1, locale)
+	const backgroundReference = MagicPromptLocale.getReferenceLabel(2, locale)
+	const prompt =
+		buildProductIdentityInstruction({ locale, productReference }) +
+		buildSceneInstruction({
+			backgroundMode,
+			backgroundPrompt,
+			backgroundReference,
+			locale,
+		}) +
+		buildPlacementInstruction({
+			backgroundMode,
+			placementMode,
+			backgroundReference,
+			locale,
+		})
+
+	if (MagicPromptLocale.isChinese(locale)) {
+		return (
+			prompt +
+			"保证最终画面的透视、光线、阴影、反射和边缘融合自然一致，让结果看起来像一张完整且精修过的商业商品图。"
+		)
+	}
+
+	return (
+		prompt +
+		"Keep the final image coherent in perspective, lighting, shadows, reflections, and edge blending so it looks like a polished commercial product photo."
+	)
 }
 
 function buildProductBackgroundSwapRequest({
@@ -118,7 +282,8 @@ function buildProductBackgroundSwapRequest({
 	baseImage,
 	locale,
 	selectedSize,
-	count,
+	outputCount,
+	select,
 }) {
 	const referenceAssets = getReferenceAssetsForBaseImage(state, baseImage)
 	const referenceImages = helpers.collectReferenceIds(referenceAssets)
@@ -134,7 +299,7 @@ function buildProductBackgroundSwapRequest({
 			backgroundMode: state.backgroundMode,
 			backgroundPrompt: state.backgroundPrompt,
 			locale,
-			productImageCount: 1,
+			placementMode: state.placementMode,
 		}),
 		reference_images: referenceImages,
 		size: `${width}x${height}`,
@@ -144,76 +309,10 @@ function buildProductBackgroundSwapRequest({
 			: undefined,
 		width,
 		height,
-		count,
-		select: false,
+		count: 1,
+		n: outputCount,
+		select,
 	}
-}
-
-function buildProductBackgroundSwapPrompt({
-	backgroundMode,
-	backgroundPrompt,
-	locale,
-	productImageCount,
-}) {
-	const isChinese = MagicPromptLocale.isChinese(locale)
-	const productReferences = MagicPromptLocale.joinReferenceLabels(productImageCount, locale)
-	const backgroundReference = MagicPromptLocale.getReferenceLabel(productImageCount + 1, locale)
-
-	if (isChinese) {
-		const productIdentityInstruction =
-			`先读取 ${productImageCount} 张商品参考图：${productReferences}，识别商品类型、结构组成、轮廓比例、材质、颜色、图案细节、拍摄角度与摆放方向。` +
-			"将这些商品参考图作为最终结果中商品主体的唯一来源，保持商品外观、结构细节、材质质感、颜色和方向一致，不要改成其他商品。"
-
-		if (backgroundMode === "image") {
-			return (
-				`生成商品换背景图。${productIdentityInstruction}` +
-				`${backgroundReference} 仅作为背景参考图，复用其环境、空间结构、景深层次、布光氛围、色彩基调和主要背景元素。` +
-				"只替换背景与环境，不改变商品本体；保证商品与新背景的透视、接触阴影、反射关系和边缘融合自然一致。"
-			)
-		}
-
-		if (backgroundMode === "prompt") {
-			return (
-				`生成商品换背景图。${productIdentityInstruction}` +
-				`根据以下描述生成全新背景：${backgroundPrompt.trim()}。` +
-				"只生成新的背景环境，不改变商品本体；保证最终画面的透视、光线、阴影、反射和氛围一致，让商品自然融入场景。"
-			)
-		}
-
-		return (
-			`生成商品换背景图。${productIdentityInstruction}` +
-			`${backgroundReference} 是全场景复制参考图，可保留其中的人物主体、姿态、手持或穿着关系、构图、镜头视角、背景布局、空间深度、光线方向、色彩氛围和阴影表现。` +
-			`先识别 ${backgroundReference} 中被展示、被穿戴或被持有的目标商品位置，再把其中原有商品替换为 ${productReferences} 定义的当前商品。` +
-			"不要保留参考图里原商品或其它品牌商品的关键外观特征；最终画面中出现的商品只能来自当前商品图，并与人物或场景形成自然真实的融合。"
-		)
-	}
-
-	const productIdentityInstruction =
-		`First read ${productImageCount} product reference image${productImageCount > 1 ? "s" : ""}: ${productReferences}, and identify the product category, construction, silhouette, material, color, pattern details, camera angle, and placement direction. ` +
-		"Use those product references as the ONLY source of the product in the final image. Preserve the product appearance, structure, material feel, color, and orientation. Do not turn it into a different product. "
-
-	if (backgroundMode === "image") {
-		return (
-			`Create a product background swap image. ${productIdentityInstruction}` +
-			`${backgroundReference} is ONLY a background reference. Reuse its environment, spatial structure, depth layering, lighting mood, color palette, and major background elements. ` +
-			"Change only the background and environment while keeping the product itself unchanged. Ensure perspective, contact shadows, reflections, and edge blending stay coherent and natural."
-		)
-	}
-
-	if (backgroundMode === "prompt") {
-		return (
-			`Create a product background swap image. ${productIdentityInstruction}` +
-			`Generate a brand-new background based on this direction: ${backgroundPrompt.trim()}. ` +
-			"Generate only the background environment while keeping the product itself unchanged. Make the final image consistent in perspective, lighting, shadow, reflection, and atmosphere so the product blends naturally into the scene."
-		)
-	}
-
-	return (
-		`Create a product background swap image. ${productIdentityInstruction}` +
-		`${backgroundReference} is a full-scene copy reference. You may preserve the person, pose, hand-held or worn relationship, composition, camera view, background layout, spatial depth, lighting direction, color atmosphere, and shadow behavior from that reference. ` +
-		`First locate the product being displayed, worn, or held inside ${backgroundReference}, then replace that original product with the current product defined by ${productReferences}. ` +
-		"Do not keep the key appearance traits of the original product or any other brand product from the reference. The only product that may appear in the final image is the current product from the uploaded product image, integrated naturally with the subject and scene."
-	)
 }
 
 registerMagicCanvasPlugin({
@@ -222,7 +321,7 @@ registerMagicCanvasPlugin({
 			state: MagicPluginKit.createPanelState(ctx, createInitialState()),
 		}
 	},
-	render(ctx, instance, root, scope) {
+	render(ctx, instance, root) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
 		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
 
@@ -260,15 +359,9 @@ registerMagicCanvasPlugin({
 					required: true,
 					help: t(
 						"upload.productImageTip",
-						"支持上传多张商品图，建议主体清晰、角度稳定，便于识别商品后完成换背景。",
+						"支持多图（最多 10 张），请确保仅使用本人或已合法授权的商品图。",
 					),
-					deps: [
-						"backgroundMode",
-						"backgroundImage",
-						"copyBackgroundImage",
-						"modelId",
-						"modelOptions",
-					],
+					deps: ["backgroundMode", "backgroundImage", "modelId", "modelOptions"],
 					maxCount: ({ state, helpers }) => {
 						const maxReferenceImages = getMaxReferenceImages(state, helpers)
 						const extraCount = getBackgroundReferenceCount(state)
@@ -277,96 +370,119 @@ registerMagicCanvasPlugin({
 				},
 				{
 					id: "backgroundMode",
-					kind: "option-group",
+					kind: "tabs",
 					stateKey: "backgroundMode",
 					title: t("section.backgroundMode", "选择背景"),
+					options: buildBackgroundModeOptions(t),
+					patchOnSelect: (value, { state }) => {
+						if (
+							value === BACKGROUND_MODE_PROMPT &&
+							state.placementMode === PLACEMENT_MODE_REPLACE
+						) {
+							return { placementMode: PLACEMENT_MODE_SMART }
+						}
+						return null
+					},
+					panels: [
+						{
+							value: BACKGROUND_MODE_IMAGE,
+							sections: [
+								{
+									id: "backgroundImage",
+									kind: "image-slot",
+									stateKey: "backgroundImage",
+									title: t("section.backgroundImage", "背景参考图"),
+									required: true,
+									uploadLabel: t(
+										"upload.backgroundImage",
+										"上传 / 拖拽【参考图】",
+									),
+									alt: t("section.backgroundImage", "背景参考图"),
+									help: t(
+										"help.backgroundImage",
+										"建议使用与商品原图视角、构图相近的简单背景图。",
+									),
+									beforePick: ({ state, helpers }) => {
+										const maxReferenceImages = getMaxReferenceImages(
+											state,
+											helpers,
+										)
+										const currentCount = getReferenceAssetsForMode(state).length
+										if (
+											!state.backgroundImage &&
+											currentCount >= maxReferenceImages
+										) {
+											return t(
+												"error.referenceLimit",
+												"参考图数量已达当前模型上限",
+											)
+										}
+										return null
+									},
+								},
+							],
+						},
+						{
+							value: BACKGROUND_MODE_PROMPT,
+							sections: [
+								{
+									id: "backgroundPrompt",
+									kind: "textarea",
+									stateKey: "backgroundPrompt",
+									placeholder: t(
+										"placeholder.backgroundPrompt",
+										"输入背景描述内容，如：浅灰色摄影棚背景，柔和侧光，干净阴影...",
+									),
+									rows: 5,
+									maxLength: BACKGROUND_PROMPT_MAX_LENGTH,
+									help: t(
+										"help.backgroundPrompt",
+										"适合商品细节复杂、背景相对简单的场景；描述越具体，背景越稳定。",
+									),
+									deps: ["productImages", "placementMode"],
+									aiGenerate: {
+										label: t("button.aiPlaceholder", "AI 生成"),
+										loadingLabel: t("button.generating", "生成中…"),
+										disabled: ({ state }) => !state.productImages?.length,
+										generate: async () => {
+											ctx.ui?.toast?.(
+												t("toast.aiPromptSoon", "AI 生成功能即将上线"),
+												"info",
+											)
+											return ""
+										},
+									},
+								},
+							],
+						},
+					],
+				},
+				{
+					id: "placementMode",
+					kind: "option-group",
+					stateKey: "placementMode",
+					title: t("section.placementMode", "摆放方式"),
 					variant: "card",
 					descriptionMode: "inline",
-					options: buildBackgroundModeOptions(t),
-				},
-				{
-					id: "backgroundImage",
-					kind: "image-slot",
-					stateKey: "backgroundImage",
-					deps: ["backgroundMode"],
-					title: t("section.backgroundImage", "背景图"),
-					required: true,
-					uploadLabel: t("upload.backgroundImage", "点击上传单张背景图"),
-					alt: t("section.backgroundImage", "背景图"),
-					when: ({ state }) => state.backgroundMode === "image",
-					beforePick: ({ state, helpers }) => {
-						const maxReferenceImages = getMaxReferenceImages(state, helpers)
-						const currentCount = getReferenceAssetsForMode(state).length
-						if (!state.backgroundImage && currentCount >= maxReferenceImages) {
-							return t("error.referenceLimit", "参考图数量已达当前模型上限")
-						}
-						return null
-					},
-				},
-				{
-					id: "backgroundPrompt",
-					kind: "textarea",
-					stateKey: "backgroundPrompt",
-					deps: ["backgroundMode"],
-					title: t("section.backgroundPrompt", "背景描述"),
-					required: true,
-					placeholder: t(
-						"placeholder.backgroundPrompt",
-						"描述你想要生成的背景场景，例如：高级珠宝广告棚景、自然木质桌面布景、城市街头运动氛围。",
-					),
-					rows: 3,
-					maxLength: 2000,
-					when: ({ state }) => state.backgroundMode === "prompt",
-				},
-				{
-					id: "copyBackgroundImage",
-					kind: "image-slot",
-					stateKey: "copyBackgroundImage",
-					deps: ["backgroundMode"],
-					title: t("section.copyBackgroundImage", "复制背景参考图"),
-					required: true,
-					uploadLabel: t("upload.copyBackgroundImage", "点击上传要复制背景的参考图"),
-					alt: t("section.copyBackgroundImage", "复制背景参考图"),
-					when: ({ state }) => state.backgroundMode === "copy",
-					beforePick: ({ state, helpers }) => {
-						const maxReferenceImages = getMaxReferenceImages(state, helpers)
-						const currentCount = getReferenceAssetsForMode(state).length
-						if (!state.copyBackgroundImage && currentCount >= maxReferenceImages) {
-							return t("error.referenceLimit", "参考图数量已达当前模型上限")
-						}
-						return null
-					},
-				},
-				{
-					id: "quality",
-					kind: "option-group",
-					stateKey: "qualityMode",
-					title: t("section.quality", "生成配置"),
-					deps: ["modelId", "modelOptions", "qualityMode"],
-					when: ({ state, helpers }) =>
-						Boolean(
-							state.modelId && getQualitySetting(helpers.getSelectedModel(state)),
-						),
-					options: ({ state, helpers }) => getQualityOptions(state, helpers),
+					groupClassName: "pbs-placement-options",
+					deps: ["backgroundMode", "placementMode"],
+					options: ({ state }) => buildPlacementOptions(t, state.backgroundMode),
 				},
 				{
 					id: "modelSelect",
 					kind: "model-select",
-					required: true,
 					title: t("section.modelSelect", "AI 模型"),
-				},
-				{
-					id: "resolution",
-					kind: "resolution-select",
-					required: true,
-					title: t("section.resolution", "分辨率"),
-					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
-					required: true,
-					title: t("section.canvasSize", "画布尺寸"),
+					title: t("section.canvasSize", "宽高比"),
+					deps: ["modelId", "modelOptions"],
+				},
+				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "尺寸倍数"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
@@ -374,57 +490,37 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "genCount",
 					title: t("section.count", "生成数量"),
-					options: GENERATION_COUNT_GROUP_OPTIONS,
+					deps: ["modelId", "modelOptions"],
 				},
 			],
 			generate: {
-				buttonLabel: `✨ ${t("button.generate", "生成商品换背景图")}`,
+				buttonLabel: `✨ ${t("button.generate", "商品换背景")}`,
 				loadingLabel: t("button.generating", "生成中…"),
-				getIdleHint: ({ state }) => {
-					return ""
-				},
 				isDisabled: ({ state }) =>
 					!state.productImages.length ||
-					!state.backgroundMode ||
-					(state.backgroundMode === "image" && !state.backgroundImage) ||
-					(state.backgroundMode === "copy" && !state.copyBackgroundImage) ||
-					(state.backgroundMode === "prompt" && !state.backgroundPrompt.trim()),
+					(state.backgroundMode === BACKGROUND_MODE_IMAGE && !state.backgroundImage) ||
+					(state.backgroundMode === BACKGROUND_MODE_PROMPT &&
+						!state.backgroundPrompt.trim()),
 				validate: ({ state, helpers }) => {
 					const selectedSize = helpers.getSelectedSize(state)
 					if (!selectedSize?.genW || !selectedSize?.genH) {
 						return t("error.noSize", "当前模型缺少可用尺寸配置")
 					}
+
 					const referenceAssets = getReferenceAssetsForMode(state)
 					const referenceIds = helpers.collectReferenceIds(referenceAssets)
 					if (referenceIds.length !== referenceAssets.length) {
 						return t("error.references", "图片缺少可用于生成的资源标识")
 					}
-					if (
-						getQualityOptions(state, helpers).length &&
-						!resolveSelectedQualityValue(state, helpers)
-					) {
-						return t("error.qualityUnavailable", "当前模型缺少可用清晰度配置")
-					}
+
 					return null
 				},
 				execute: async ({ state, helpers, generateAndPlace }) => {
 					const selectedSize = helpers.getSelectedSize(state)
-					if (state.productImages.length <= 1) {
-						return generateAndPlace(
-							buildProductBackgroundSwapRequest({
-								state,
-								helpers,
-								baseImage: state.productImages[0],
-								locale: promptLocale,
-								selectedSize,
-								count: state.genCount,
-							}),
-						)
-					}
-
 					const results = []
-					for (let index = 0; index < state.genCount; index += 1) {
-						const baseImage = state.productImages[index % state.productImages.length]
+
+					for (let index = 0; index < state.productImages.length; index += 1) {
+						const baseImage = state.productImages[index]
 						results.push(
 							await generateAndPlace(
 								buildProductBackgroundSwapRequest({
@@ -433,12 +529,14 @@ registerMagicCanvasPlugin({
 									baseImage,
 									locale: promptLocale,
 									selectedSize,
-									count: 1,
+									outputCount: state.genCount,
+									select: index === state.productImages.length - 1,
 								}),
 							),
 						)
 					}
-					return results
+
+					return results.length === 1 ? results[0] : results
 				},
 				onSuccess: ({ ctx }) => {
 					ctx.ui.toast(t("toast.success", "商品换背景图生成成功！"), "success")
