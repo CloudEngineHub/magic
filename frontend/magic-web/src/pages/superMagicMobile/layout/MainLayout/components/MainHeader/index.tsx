@@ -75,18 +75,19 @@ function MainHeader({ showBackButton, onBackClick }: MainHeaderProps) {
 
 	if (isProjectDetailPage || isProjectTopicPage) {
 		const unnamedProject = t("project.unnamedProject")
-		// 项目话题子页的壳层头部应展示当前会话名；只有项目入口页才继续展示项目名和右侧动作组。
-		const projectHeaderTitle = isProjectTopicPage
-			? selectedTopic?.topic_name?.trim() ||
-				selectedProject?.project_name?.trim() ||
-				unnamedProject
-			: selectedProject?.project_name?.trim() || unnamedProject
+		const unnamedTopic = t("topic.unnamedTopic")
+		const projectName = selectedProject?.project_name?.trim() || unnamedProject
+		const topicName = selectedTopic?.topic_name?.trim() || unnamedTopic
+		// 项目话题子页固定双行：主标题为话题名，副标题为项目名；缺失时各自使用统一兜底文案。
+		const projectHeaderTitle = isProjectTopicPage ? topicName : projectName
+		const projectHeaderSubtitle = isProjectTopicPage ? projectName : undefined
 		// 项目话题子页只暴露一个“更多”槽位，协作管理仍只属于项目入口页。
 		const projectHeaderActionsLayout = isProjectTopicPage ? "project-topic" : "project-entry"
 
 		return (
 			<ProjectDetailHeader
 				title={projectHeaderTitle}
+				subtitle={projectHeaderSubtitle}
 				showActions
 				showActionCapsule={projectDetailHeaderActions?.showActionCapsule ?? true}
 				actionSlots={projectDetailHeaderActions?.actionSlots}
