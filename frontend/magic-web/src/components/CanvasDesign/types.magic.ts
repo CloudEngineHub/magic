@@ -124,6 +124,8 @@ export interface ImageModelItem {
 		}[]
 		/** 最大参考图数量 */
 		max_reference_images?: number
+		/** 最大生成数量 */
+		max_output_images?: number
 		/** 尺寸列表 */
 		sizes: {
 			label: string // "1:1"
@@ -463,6 +465,8 @@ export interface GenerateImageRequest {
 	reference_images?: string[]
 	/** 参考图参数 */
 	reference_image_options?: ReferenceImageOptions
+	/** 生成数量 */
+	n?: number
 	/** 图片生成配置 */
 	image_generation_config?: {
 		[key: string]: string

@@ -1,5 +1,5 @@
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
-import { Puzzle, X } from "lucide-react"
+import { ChevronRight, Puzzle, X } from "lucide-react"
 import { Fragment, useMemo, useState, useSyncExternalStore } from "react"
 import {
 	normalizePluginLocale,
@@ -215,6 +215,10 @@ export default function PluginTool() {
 														{plugin.resolvedDescription}
 													</div>
 												</div>
+												<ChevronRight
+													size={16}
+													className={styles.pluginItemArrow}
+												/>
 											</button>
 										)
 
