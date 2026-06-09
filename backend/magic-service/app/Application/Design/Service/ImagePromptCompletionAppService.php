@@ -45,7 +45,7 @@ class ImagePromptCompletionAppService extends DesignAppService
         private readonly MicroAgentFactory $microAgentFactory,
         LoggerFactory $loggerFactory,
     ) {
-        $this->logger = $loggerFactory->get(get_class($this));
+        $this->logger = $loggerFactory->get('ImagePromptCompletionAppService');
     }
 
     /**
@@ -116,6 +116,7 @@ class ImagePromptCompletionAppService extends DesignAppService
 
         try {
             $response = $this->requestPromptCompletion($basePromptCompleterAgent, $modelGatewayDataIsolation, $dataIsolation, $projectId, $userMessage);
+            return $this->extractPromptFromToolCall($response);
         } catch (Throwable $throwable) {
             $this->logger->error('ImagePromptCompletionFailed', [
                 'error' => $throwable->getMessage(),
@@ -125,8 +126,6 @@ class ImagePromptCompletionAppService extends DesignAppService
             ]);
             ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_prompt_completion.failed');
         }
-
-        return $this->extractPromptFromToolCall($response);
     }
 
     /**
@@ -252,10 +251,11 @@ class ImagePromptCompletionAppService extends DesignAppService
     {
         $assistantMessage = $response->getFirstChoice()?->getMessage();
         if (! $assistantMessage instanceof AssistantMessage || ! $assistantMessage->hasToolCalls()) {
-            $this->logger->warning('Image prompt completion response has no tool call');
+            $this->logger->warning('Image prompt completion response has no tool call', $assistantMessage->toArray());
             ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_prompt_completion.invalid_response');
         }
 
+        $this->logger->info('Response Tool Call', $assistantMessage->toArray());
         foreach ($assistantMessage->getToolCalls() as $toolCall) {
             if ($toolCall->getName() !== self::TOOL_NAME) {
                 continue;
