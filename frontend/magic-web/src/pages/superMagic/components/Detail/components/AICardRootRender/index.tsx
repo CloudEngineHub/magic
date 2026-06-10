@@ -151,6 +151,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 						key="dashboard"
 						cards={store.cards}
 						historyEntries={store.historyEntries}
+						projectConfig={store.projectConfig}
 						attachmentList={stableAttachmentList}
 						onOpenCard={handleOpenCard}
 						onOpenConfig={canEdit ? handleOpenConfig : undefined}

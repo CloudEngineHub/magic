@@ -148,6 +148,45 @@
                 </section>
                 <!-- DATA:platforms_END -->
 
+                <!-- DATA:sources_START -->
+                <section class="card source-panel analysis-source">
+                    <div class="source-head">
+                        <div>
+                            <h2>来源与原文</h2>
+                            <p class="meta">保留支撑热点判断的链接，可预览或新标签打开。</p>
+                        </div>
+                        <button class="source-close" id="sourceClose" type="button">收起</button>
+                    </div>
+                    <div class="source-list">
+                        <article class="source-card">
+                            <span class="tag t-platform">GitHub</span>
+                            <strong>Agent 框架 Star 增长榜</strong>
+                            <p class="desc">用于验证“开发者社区热议”和开源关注度。</p>
+                            <div class="source-actions">
+                                <button class="source-preview active" type="button"
+                                    data-preview-url="https://github.com/trending">预览</button>
+                                <a href="https://github.com/trending" target="_blank" rel="noopener noreferrer">打开</a>
+                            </div>
+                        </article>
+                        <article class="source-card">
+                            <span class="tag t-rising">媒体</span>
+                            <strong>MEC 2.0 白皮书摘要</strong>
+                            <p class="desc">用于验证“边缘计算下沉市场”政策和产业信号。</p>
+                            <div class="source-actions">
+                                <button class="source-preview" type="button"
+                                    data-preview-url="https://example.com/report">预览</button>
+                                <a href="https://example.com/report" target="_blank" rel="noopener noreferrer">打开</a>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="source-frame-wrap">
+                        <div class="source-frame-fallback" id="sourceFallback">如果网页禁止嵌入，请使用“打开”。</div>
+                        <iframe id="sourceFrame" title="热点来源预览" sandbox="allow-scripts allow-same-origin allow-popups"
+                            loading="lazy" referrerpolicy="no-referrer"></iframe>
+                    </div>
+                </section>
+                <!-- DATA:sources_END -->
+
                 <section class="ai-insight">
                     <div class="insight-header"><span class="insight-icon">✦</span><span>AI 洞察</span></div>
                     <p class="insight-text">AI Agent 开发热度处于爆发期，讨论量和增速双指标领先；预计窗口期 48-72h，建议尽快产出关联内容。</p>

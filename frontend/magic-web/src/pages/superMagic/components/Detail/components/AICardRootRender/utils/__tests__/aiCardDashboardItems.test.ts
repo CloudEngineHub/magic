@@ -3,7 +3,7 @@ import { buildAICardDashboardItems } from "../aiCardDashboardItems"
 import type { AICardEntry, AICardHistoryEntry } from "../../types"
 
 describe("buildAICardDashboardItems", () => {
-	it("sorts latest and history cards by file creation time", () => {
+	it("keeps the latest card before history cards", () => {
 		const cards: AICardEntry[] = [
 			{
 				id: "card-1",
@@ -49,8 +49,8 @@ describe("buildAICardDashboardItems", () => {
 		const items = buildAICardDashboardItems({ cards, historyEntries, attachmentList })
 
 		expect(items.map((item) => item.fileId)).toEqual([
-			"history-new",
 			"latest-file",
+			"history-new",
 			"history-old",
 		])
 	})

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react"
 import type { SelfMediaInitialNavigation } from "../../../types"
-import type { AttachmentNode } from "../services"
+import type { AttachmentNode } from "../services/selfMediaHelpers"
 import { SelfMediaStore } from "./SelfMediaStore"
 
 const SelfMediaStoreContext = createContext<SelfMediaStore | null>(null)

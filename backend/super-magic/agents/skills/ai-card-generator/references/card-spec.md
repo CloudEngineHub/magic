@@ -7,6 +7,9 @@
 3. **Viewport**: Must include `<meta name="viewport" content="width=device-width, initial-scale=1.0">`.
 4. **External Resources Policy**: Default to no external resources, but allow a small whitelist of trusted CDN dependencies when they unlock major value. ECharts CDN is explicitly allowed for chart-driven cards.
 5. **Responsive**: Use CSS Grid or Flexbox for layout. Card should render well at various widths (300px–1200px).
+6. **Source Preservation**: If generated content is based on web or file sources, keep source URLs in the rendered HTML and optionally in `data/sources.json`.
+7. **Interactive by Purpose**: Add interactions that help analysis or action (filters, tabs, source previews, AI follow-ups). Avoid purely decorative controls.
+8. **iframe View Modes**: The same HTML must support compact card iframes and full detail iframes through CSS breakpoints.
 
 ## Recommended Project Layout
 
@@ -17,14 +20,25 @@ Preferred (multi-file):
 ├── template/
 │   ├── index.html
 │   ├── styles.css        # optional
-│   └── scripts.js        # optional
+│   ├── scripts.js        # optional
+│   └── data/             # optional seed schemas
+│       ├── card-data.json
+│       └── sources.json
 ├── latest/
 │   ├── index.html
 │   ├── styles.css        # optional
-│   └── scripts.js        # optional
+│   ├── scripts.js        # optional
+│   └── data/             # optional generated data
+│       ├── card-data.json
+│       └── sources.json
 └── history/
   └── YYYY-MM-DD_HH-mm/
-    └── index.html
+    ├── index.html
+    ├── styles.css        # optional
+    ├── scripts.js        # optional
+    └── data/             # optional snapshot data
+        ├── card-data.json
+        └── sources.json
 ```
 
 Legacy (single-file):
@@ -47,6 +61,52 @@ Use CSS `prefers-color-scheme` media query:
   }
 }
 ```
+
+## Responsive iframe Modes
+
+Cards are displayed inside host iframes. CSS media queries observe the iframe width, so every template should define these modes:
+
+| Mode | Breakpoint | Layout Intent |
+| --- | --- | --- |
+| Compact card | `max-width: 420px` | Cover-like summary for grid thumbnails. Show title, timestamp, key metrics, and 1-3 bullets. Hide dense sections, long lists, source iframes, and secondary controls. |
+| Mobile detail | `421px-767px` | Single-column readable report. Keep all core content, stacked and scrollable. |
+| Desktop detail | `min-width: 768px` | Full dashboard/report layout with columns, charts, source previews, and richer interaction. |
+
+Compact card CSS pattern:
+
+```css
+@media (max-width: 420px) {
+  body {
+    min-height: 100vh;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  .page {
+    min-height: 100vh;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .details,
+  .source-frame-wrap,
+  .secondary-actions {
+    display: none;
+  }
+
+  .summary {
+    margin-top: auto;
+  }
+}
+```
+
+Rules:
+
+- Do not rely on the parent page to pass a mode flag; iframe width should be enough.
+- If the host later adds `?mode=card` or a body class, it may refine the layout, but CSS breakpoints must still work without it.
+- Compact mode should not simply scale down the desktop page. It should intentionally select the most useful summary content.
+- Avoid viewport-width font scaling. Use normal responsive layout, line clamping, and section hiding/reordering.
 
 ## Data Section Marking
 
@@ -85,18 +145,90 @@ Templates may use placeholder patterns that the agent replaces during generation
 | `{{UPDATE_COUNT}}`     | Total generation count                           |
 | `{{CARD_DESCRIPTION}}` | Card description text                            |
 
+## Scenario-Driven Template Modules
+
+Use the user's request to choose modules instead of blindly copying a preset:
+
+| Scenario | Useful Modules |
+| --- | --- |
+| Hotspot / public opinion | Ranking list, trend curve, platform mix, sentiment/risk badges, lifecycle estimate, source preview |
+| Daily / weekly digest | Executive summary, metric groups, timeline, action checklist, citation list, expandable details |
+| Analytics dashboard | KPI grid, funnel, cohort/channel breakdown, anomaly alerts, range tabs, drilldown prompts |
+| Research / intelligence | Claims, evidence matrix, source reliability, iframe preview, comparison table, contradiction notes |
+| Decision / planning | Option comparison, risk/reward matrix, milestone timeline, owners, next actions |
+
+## Source Links and iframe Preview
+
+Every fetched URL that materially supports a claim should be recorded. At minimum, render an accessible source list with title, site, retrieval time, short relevance note, and an open-in-new-tab link.
+
+Recommended `data/sources.json` shape:
+
+```json
+[
+  {
+    "id": "src-001",
+    "title": "Source title",
+    "url": "https://example.com/article",
+    "site": "Example",
+    "type": "article",
+    "publishedAt": "2026-06-10T08:00:00+08:00",
+    "retrievedAt": "2026-06-10T09:00:00+08:00",
+    "summary": "Why this source matters",
+    "linkedClaimIds": ["claim-01"],
+    "display": "iframe"
+  }
+]
+```
+
+Display rules:
+
+- `display: "iframe"` for public articles, docs, PDFs, maps, dashboards, generated local HTML, or pages whose original layout helps interpretation.
+- `display: "link"` for login-gated, payment, private, sensitive, or commonly frame-blocked pages.
+- Even when iframe preview is used, always include `<a target="_blank" rel="noopener noreferrer">`.
+- Use `sandbox`, `loading="lazy"`, and `referrerpolicy="no-referrer"` on iframes.
+- If preview fails, keep the card usable with a clear fallback and the external link.
+
+Example:
+
+```html
+<section class="sources" aria-label="Sources">
+  <article class="source-card">
+    <strong>Source title</strong>
+    <p>Why this source matters.</p>
+    <button type="button" class="source-preview" data-preview-url="https://example.com/article">
+      Preview
+    </button>
+    <a href="https://example.com/article" target="_blank" rel="noopener noreferrer">Open</a>
+  </article>
+  <iframe
+    class="source-frame"
+    title="Source preview"
+    sandbox="allow-scripts allow-same-origin allow-popups"
+    loading="lazy"
+    referrerpolicy="no-referrer"
+  ></iframe>
+</section>
+```
+
 ## html-api-sdk Interaction (Optional)
 
 Cards can include optional UI actions that cooperate with Agent analysis:
 
-1. Build a "Generate Deep Analysis Prompt" action based on rendered card content.
-2. Send that prompt to Agent with `window.Magic.setInputMessage(prompt)`.
-3. If `window.Magic` is unavailable, show a readable fallback status message instead of failing silently.
+1. Build a "Generate Deep Analysis Prompt" action based on rendered card content and source links.
+2. Prefer `window.Magic.project.createTopicAndSend(prompt, { model: "auto" })` for substantial follow-up work.
+3. Fall back to `window.Magic.setInputMessage(prompt)` when project APIs are unavailable.
+4. If `window.Magic` is unavailable, show a readable fallback status message instead of failing silently.
 
 Recommended runtime guard:
 
 ```javascript
-if (window.Magic && typeof window.Magic.setInputMessage === "function") {
+if (
+  window.Magic &&
+  window.Magic.project &&
+  typeof window.Magic.project.createTopicAndSend === "function"
+) {
+  window.Magic.project.createTopicAndSend(prompt, { model: "auto" });
+} else if (window.Magic && typeof window.Magic.setInputMessage === "function") {
   window.Magic.setInputMessage(prompt);
 } else {
   statusEl.textContent = "Magic API unavailable in current environment";
@@ -170,6 +302,10 @@ When archiving the current latest output to `history/`, prefer folder snapshots:
 ```
 history/YYYY-MM-DD_HH-mm/index.html
 ```
+
+Copy the entire `latest/` folder contents into the snapshot folder, including
+`styles.css`, `scripts.js`, images, and any other same-folder assets referenced
+by relative URLs.
 
 Legacy single-file naming is still acceptable:
 

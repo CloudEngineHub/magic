@@ -1,5 +1,7 @@
+import { forwardRef, useEffect, useImperativeHandle } from "react"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
+import type { CardFrameRef } from "../components/CardFrame"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -15,8 +17,21 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../components/CardFrame", () => ({
 	__esModule: true,
-	default: ({ cardId }: { cardId: string }) => (
-		<div data-testid="mock-card-frame" data-card-id={cardId} />
+	default: forwardRef<CardFrameRef, { cardId: string; onLoaded?: () => void }>(
+		function MockCardFrame({ cardId, onLoaded }, ref) {
+			useImperativeHandle(
+				ref,
+				() => ({
+					capture: vi.fn(),
+					getIframeElement: vi.fn(() => null),
+				}),
+				[],
+			)
+			useEffect(() => {
+				onLoaded?.()
+			}, [onLoaded])
+			return <div data-testid="mock-card-frame" data-card-id={cardId} />
+		},
 	),
 }))
 
@@ -41,6 +56,14 @@ const posts: SelfMediaPost[] = [
 	},
 ]
 
+const manyCardPost: SelfMediaPost = {
+	meta: { id: "post-many", title: "Many cards" },
+	cards: Array.from({ length: 10 }, (_, idx) => ({
+		path: `${String(idx + 1).padStart(2, "0")}.html`,
+		fileId: `file-many-${idx + 1}`,
+	})),
+}
+
 function renderDialog(overrides: Partial<React.ComponentProps<typeof ExportPreviewDialog>> = {}) {
 	const onOpenChange = vi.fn()
 	const onSyncActivePost = vi.fn()
@@ -53,8 +76,18 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof ExportPrevi
 		onSyncActivePost,
 		onConfirm,
 	}
-	render(<ExportPreviewDialog {...defaultProps} {...overrides} />)
-	return { onOpenChange, onSyncActivePost, onConfirm }
+	const view = render(<ExportPreviewDialog {...defaultProps} {...overrides} />)
+	return {
+		onOpenChange,
+		onSyncActivePost,
+		onConfirm,
+		rerenderDialog: (
+			nextOverrides: Partial<React.ComponentProps<typeof ExportPreviewDialog>>,
+		) =>
+			view.rerender(
+				<ExportPreviewDialog {...defaultProps} {...overrides} {...nextOverrides} />,
+			),
+	}
 }
 
 describe("ExportPreviewDialog", () => {
@@ -69,6 +102,23 @@ describe("ExportPreviewDialog", () => {
 		const summary = within(dialog).getByTestId("self-media-export-selected-summary")
 		expect(summary.textContent).toContain("count=2")
 		expect(summary.textContent).toContain("total=2")
+	})
+
+	it("shows a visible selected style on selected cards", () => {
+		renderDialog()
+
+		const selectedItem = screen.getByTestId("self-media-export-card-item-0")
+		expect(selectedItem).toHaveAttribute("aria-pressed", "true")
+		expect(selectedItem.className).toContain("ring-2")
+		expect(selectedItem.className).toContain("bg-primary/5")
+	})
+
+	it("does not override the selected checkbox background", () => {
+		renderDialog()
+
+		const selectedCheckbox = screen.getByTestId("self-media-export-card-checkbox-0")
+		expect(selectedCheckbox).toHaveAttribute("data-state", "checked")
+		expect(selectedCheckbox.className).not.toMatch(/(^|\s)bg-background(\s|$)/)
 	})
 
 	it("supports clearing and re-selecting all cards via the toggle button", () => {
@@ -104,6 +154,53 @@ describe("ExportPreviewDialog", () => {
 				pixelRatio: 2,
 			}),
 		)
+	})
+
+	it("passes the long-image export type when selected", async () => {
+		const { onConfirm } = renderDialog({ initialPostIndex: 0 })
+
+		fireEvent.click(screen.getByTestId("self-media-export-type-long-image"))
+		fireEvent.click(screen.getByTestId("self-media-export-confirm"))
+
+		expect(onConfirm).toHaveBeenCalledWith(
+			expect.objectContaining({
+				postIndex: 0,
+				cardIndexes: [0, 1, 2],
+				exportType: "longImage",
+			}),
+		)
+	})
+
+	it("keeps long-image export disabled until every selected preview card is ready", () => {
+		const { onConfirm } = renderDialog({ posts: [manyCardPost], initialPostIndex: 0 })
+
+		fireEvent.click(screen.getByTestId("self-media-export-type-long-image"))
+
+		const confirm = screen.getByTestId("self-media-export-confirm") as HTMLButtonElement
+		expect(confirm.disabled).toBe(true)
+
+		fireEvent.click(confirm)
+		expect(onConfirm).not.toHaveBeenCalled()
+	})
+
+	it("passes preview card refs so export can use the freshly mounted dialog cards", async () => {
+		const { onConfirm, rerenderDialog } = renderDialog({ initialPostIndex: 0 })
+
+		fireEvent.click(screen.getByTestId("self-media-export-confirm"))
+
+		const args = onConfirm.mock.calls[0]?.[0]
+		const firstPreviewRef = args.getCardRef(0)
+		expect(firstPreviewRef).toEqual(expect.objectContaining({ capture: expect.any(Function) }))
+
+		rerenderDialog({
+			posts: posts.map((post) => ({
+				...post,
+				cards: post.cards.map((card) => ({ ...card })),
+			})),
+		})
+
+		expect(args.getCardRef(0)).toBe(firstPreviewRef)
+		expect(args.getCardRef(99)).toBeNull()
 	})
 
 	it("disables confirm when nothing is selected", () => {

@@ -2,15 +2,14 @@ import { comparer, makeAutoObservable, reaction, runInAction, type IReactionDisp
 import { logger as rootLogger } from "@/utils/log"
 import type { SelfMediaInitialNavigation, SelfMediaPlatform } from "../../../types"
 import type { SelfMediaPost, SelfMediaPostEntry, SelfMediaView } from "../types"
+import { SelfMediaPostsService, type SelfMediaSnapshot } from "../services/SelfMediaPostsService"
 import {
 	buildPlaceholderPost,
 	cacheKey,
 	normalizeSelfMediaError,
-	SelfMediaPostsService,
 	type AttachmentNode,
 	type PlatformSlice,
-	type SelfMediaSnapshot,
-} from "../services"
+} from "../services/selfMediaHelpers"
 import { invalidateCardFrameSourceCache } from "../components/CardFrame"
 
 const log = rootLogger.createLogger("SelfMediaStore")
@@ -413,7 +412,18 @@ export class SelfMediaStore {
 		if (!entry) return null
 		const key = cacheKey(platform, entry.id)
 		if (this.loadedPosts[key]) return this.loadedPosts[key]
-		return this.loadPostFor(platform, entry)
+		try {
+			return await this.loadPostFor(platform, entry)
+		} catch (err) {
+			const code = normalizeSelfMediaError(err)
+			log.warn("⚠️ 首页文章预加载失败，已跳过", {
+				platform,
+				postId: entry.id,
+				code,
+				error: err,
+			})
+			return null
+		}
 	}
 
 	/** Preload every post for the active platform (export flow) */

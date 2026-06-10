@@ -544,6 +544,111 @@
 		"saving": "Saving"
 	},
 	"detail": {
+		"aiCard": {
+			"config": {
+				"cancel": "Cancel",
+				"createTitle": "Configure AI Card",
+				"defaultImageModel": "Default image model",
+				"defaultModel": "Default model",
+				"defaultVideoModel": "Default video model",
+				"editTitle": "Edit Configuration",
+				"enableSchedule": "Enable Scheduled Execution",
+				"enableScheduleHint": "Card will auto-update at the set frequency",
+				"generate": "Generate Card",
+				"imageModel": "Image Model",
+				"languageModel": "Language Model",
+				"modelSection": "Model Configuration",
+				"save": "Save Configuration",
+				"saveDraft": "Save Draft",
+				"saving": "Saving...",
+				"schedule": "Schedule",
+				"videoModel": "Video Model"
+			},
+			"createDialog": {
+				"cancel": "Cancel",
+				"cardName": "Card Name",
+				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
+				"confirm": "Create Card",
+				"creating": "Creating...",
+				"description": "AI will automatically create a visual card and set up a scheduled task to fetch and update latest data periodically.",
+				"prompt": "Analysis Instructions",
+				"promptHint": "AI will periodically fetch latest data based on this instruction, analyze it, and generate an updated visual card.",
+				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends and present with list + trend markers.",
+				"template": "Card Template",
+				"title": "Create AI Card"
+			},
+			"dashboard": {
+				"archived": "Archived",
+				"configure": "Configure",
+				"current": "Current",
+				"empty": "No card content yet, waiting for scheduled task to generate",
+				"historyCount": "{{count}} versions",
+				"historyEmpty": "No history versions yet. Future automated updates will appear here.",
+				"historySectionDescription": "Review archived versions by generation time.",
+				"historySectionTitle": "Version timeline",
+				"historyVersion": "🕰 History",
+				"latestSectionDescription": "The active card version. Open it to inspect the full result.",
+				"latestSectionTitle": "Latest version",
+				"latestVersion": "✨ Latest",
+				"loading": "Loading AI Cards...",
+				"loadingDescription": "Parsing card data",
+				"modelSummary": "Model {{model}}",
+				"runNow": "Run Now",
+				"running": "Running...",
+				"scheduleCustom": "{{time}}",
+				"scheduleDaily": "Daily {{time}}",
+				"scheduleMonthly": "Monthly on day {{day}} {{time}}",
+				"scheduleOnce": "{{date}} {{time}}",
+				"scheduleOnceTime": "Once at {{time}}",
+				"scheduleWeekly": "Every {{day}} {{time}}",
+				"updatedAt": "Updated {{time}}",
+				"weekdays": {
+					"friday": "Fri",
+					"monday": "Mon",
+					"saturday": "Sat",
+					"sunday": "Sun",
+					"thursday": "Thu",
+					"tuesday": "Tue",
+					"wednesday": "Wed"
+				}
+			},
+			"detail": {
+				"back": "Back",
+				"noContent": "No card content yet, waiting for next scheduled task"
+			},
+			"form": {
+				"advancedSettings": "Advanced Settings",
+				"cardName": "Card Name",
+				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
+				"customTemplatePlaceholder": "Describe the card style and layout you want.\ne.g., Show a trend line chart on the left, a top-10 list on the right, with a dark theme.",
+				"prompt": "Analysis Instructions",
+				"promptHint": "AI will periodically fetch latest data, analyze it, and update the visual card.",
+				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends.",
+				"template": "Card Template",
+				"templateHint": "Choose a visual template, or select \"Custom\" and describe your requirements",
+				"templateOptions": {
+					"analyticsPanel": "Analytics Panel",
+					"custom": "Custom",
+					"dailyDigest": "Daily Digest",
+					"hotspotTracker": "Hotspot Tracker"
+				}
+			},
+			"history": {
+				"back": "Back",
+				"empty": "No history records",
+				"selectHint": "← Select a history version to view",
+				"title": "History"
+			},
+			"runNow": {
+				"error": "Failed to run, please try again later",
+				"success": "Task triggered successfully",
+				"successSwitched": "Task triggered, switched to the corresponding topic"
+			},
+			"tile": {
+				"history": "History",
+				"viewDetail": "View Detail"
+			}
+		},
 		"backToLatest": "Back to Latest",
 		"clickToJumpPage": "Click to jump to page",
 		"closeEditingFileContent": "This file is currently being edited. Closing will exit edit mode. Continue?",
@@ -564,6 +669,15 @@
 		"refreshSlides": "Refresh",
 		"saveAndClose": "Save and Close",
 		"selfMedia": {
+			"brandConfig": {
+				"cancel": "Cancel",
+				"description": "Configure the shared account, brand positioning, and brand assets for this project.",
+				"loading": "Loading brand config...",
+				"save": "Save config",
+				"saveError": "Failed to save brand config. Please try again later.",
+				"saving": "Saving...",
+				"title": "Brand config"
+			},
 			"codeView": {
 				"htmlSource": "HTML Source",
 				"save": "Save",
@@ -629,9 +743,22 @@
 				"selectCards": "Cards",
 				"selectNone": "Clear",
 				"selectedSummary": "{{count}}/{{total}} selected",
-				"success": "Export complete"
+				"success": "Export complete",
+				"type": {
+					"cardsZip": {
+						"description": "Export selected cards as separate PNG files in a ZIP.",
+						"title": "Individual cards"
+					},
+					"longImage": {
+						"description": "Stitch selected cards vertically from top to bottom, then export one PNG.",
+						"title": "Long image"
+					}
+				},
+				"typeLabel": "Export item"
 			},
 			"home": {
+				"aiCard": "AI Card",
+				"aiCardCount": "{{count}} AI card(s)",
 				"article": "Article",
 				"articleCount": "{{count}} article(s)",
 				"backHome": "Back home",
@@ -642,18 +769,7 @@
 				"emptyTitle": "No articles yet",
 				"openPlatform": "Open platform content",
 				"subtitle": "Open details from the list. Data updates keep you on the current page.",
-				"title": "Article home",
-				"aiCard": "AI Card",
-				"aiCardCount": "{{count}} AI card(s)"
-			},
-			"brandConfig": {
-				"cancel": "Cancel",
-				"description": "Configure the shared account, brand positioning, and brand assets for this project.",
-				"loading": "Loading brand config...",
-				"save": "Save config",
-				"saveError": "Failed to save brand config. Please try again later.",
-				"saving": "Saving...",
-				"title": "Brand config"
+				"title": "Article home"
 			},
 			"initPanel": {
 				"draft": {
@@ -887,14 +1003,6 @@
 						"description": "Cover uses hero/theme image with gradient overlay, clean white content pages, rounded cards, modern tech article style",
 						"label": "Image Editorial"
 					},
-					"personalInsight": {
-						"description": "Clean white background, profile avatar, numbered sections, reading-note style for personal insights",
-						"label": "Personal Insight"
-					},
-					"productLaunch": {
-						"description": "White background, red top accent bar, sharp badges, minimal dual-color. Great for product feature announcements and release notes",
-						"label": "Product Launch"
-					},
 					"insModern": {
 						"description": "White background, generous whitespace, minimal typography",
 						"label": "Modern Minimal"
@@ -906,6 +1014,14 @@
 					"none": {
 						"description": "Design freely following platform defaults",
 						"label": "No Template"
+					},
+					"personalInsight": {
+						"description": "Clean white background, profile avatar, numbered sections, reading-note style for personal insights",
+						"label": "Personal Insight"
+					},
+					"productLaunch": {
+						"description": "White background, red top accent bar, sharp badges, minimal dual-color. Great for product feature announcements and release notes",
+						"label": "Product Launch"
 					}
 				}
 			},
@@ -989,90 +1105,7 @@
 				"scroll": "Long Scroll"
 			}
 		},
-		"unsavedChangesWarning": "You have unsaved changes. Are you sure you want to leave?",
-		"aiCard": {
-			"createDialog": {
-				"title": "Create AI Card",
-				"description": "AI will automatically create a visual card and set up a scheduled task to fetch and update latest data periodically.",
-				"cardName": "Card Name",
-				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
-				"template": "Card Template",
-				"prompt": "Analysis Instructions",
-				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends and present with list + trend markers.",
-				"promptHint": "AI will periodically fetch latest data based on this instruction, analyze it, and generate an updated visual card.",
-				"cancel": "Cancel",
-				"confirm": "Create Card",
-				"creating": "Creating..."
-			},
-			"form": {
-				"cardName": "Card Name",
-				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
-				"template": "Card Template",
-				"templateHint": "Choose a visual template, or select \"Custom\" and describe your requirements",
-				"customTemplatePlaceholder": "Describe the card style and layout you want.\ne.g., Show a trend line chart on the left, a top-10 list on the right, with a dark theme.",
-				"prompt": "Analysis Instructions",
-				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends.",
-				"promptHint": "AI will periodically fetch latest data, analyze it, and update the visual card.",
-				"advancedSettings": "Advanced Settings",
-				"templateOptions": {
-					"hotspotTracker": "Hotspot Tracker",
-					"dailyDigest": "Daily Digest",
-					"analyticsPanel": "Analytics Panel",
-					"custom": "Custom"
-				}
-			},
-			"config": {
-				"editTitle": "Edit Configuration",
-				"createTitle": "Configure AI Card",
-				"schedule": "Schedule",
-				"modelSection": "Model Configuration",
-				"languageModel": "Language Model",
-				"imageModel": "Image Model",
-				"videoModel": "Video Model",
-				"defaultModel": "Default model",
-				"defaultImageModel": "Default image model",
-				"defaultVideoModel": "Default video model",
-				"enableSchedule": "Enable Scheduled Execution",
-				"enableScheduleHint": "Card will auto-update at the set frequency",
-				"cancel": "Cancel",
-				"saving": "Saving...",
-				"save": "Save Configuration",
-				"generate": "Generate Card",
-				"saveDraft": "Save Draft"
-			},
-			"dashboard": {
-				"loading": "Loading AI Cards...",
-				"loadingDescription": "Parsing card data",
-				"runNow": "Run Now",
-				"running": "Running...",
-				"configure": "Configure",
-				"empty": "No card content yet, waiting for scheduled task to generate",
-				"latestVersion": "✨ Latest",
-				"historyVersion": "🕰 History",
-				"current": "Current",
-				"archived": "Archived",
-				"updatedAt": "Updated {{time}}"
-			},
-			"detail": {
-				"back": "Back",
-				"noContent": "No card content yet, waiting for next scheduled task"
-			},
-			"history": {
-				"back": "Back",
-				"title": "History",
-				"empty": "No history records",
-				"selectHint": "← Select a history version to view"
-			},
-			"tile": {
-				"viewDetail": "View Detail",
-				"history": "History"
-			},
-			"runNow": {
-				"success": "Task triggered successfully",
-				"successSwitched": "Task triggered, switched to the corresponding topic",
-				"error": "Failed to run, please try again later"
-			}
-		}
+		"unsavedChangesWarning": "You have unsaved changes. Are you sure you want to leave?"
 	},
 	"draftBox": {
 		"deleteConfirm": {
@@ -3144,10 +3177,7 @@
 		],
 		"actionTitle": "If you want to actively intervene",
 		"mainText": "Task execution is taking too long, which may be due to the following reasons:",
-		"reasonList": [
-			"AI is processing complex tasks",
-			"Network connection is unstable"
-		],
+		"reasonList": ["AI is processing complex tasks", "Network connection is unstable"],
 		"statusText": "If you don't take any action, AI will continue trying"
 	},
 	"tool": {
@@ -3301,6 +3331,8 @@
 			"confirmBatchDeleteWithFolders": "Selection includes folders, subfiles not selected will also be deleted",
 			"confirmBatchDeleteWithMagicSystemFolder": "Your selection includes the .magic system folder. After deletion, some capabilities may stop working and this cannot be undone. Proceed with caution.",
 			"copyTo": "Copy to",
+			"createAICardFailed": "Failed to create AI card project",
+			"createAICardSuccess": "AI card project created successfully",
 			"createDesignFailed": "Failed to create design project",
 			"createDesignSuccess": "Design project created successfully",
 			"createFile": "New File",
@@ -3309,8 +3341,6 @@
 			"createFolderSuccess": "Folder created successfully",
 			"createSelfMediaFailed": "Failed to create self-media project",
 			"createSelfMediaSuccess": "Self-media project created successfully",
-			"createAICardFailed": "Failed to create AI card project",
-			"createAICardSuccess": "AI card project created successfully",
 			"createSubMenu": {
 				"aiCardFile": "AI Card",
 				"customFile": "Custom Format",
@@ -3360,6 +3390,9 @@
 			"importFromOtherProject": "Import from other",
 			"move": "Move",
 			"moveTo": "Move to",
+			"newAICard": {
+				"defaultName": "New AI Card"
+			},
 			"newDesign": {
 				"defaultName": "New Design"
 			},
@@ -3373,9 +3406,6 @@
 			},
 			"newSelfMedia": {
 				"defaultName": "New Self-Media Project"
-			},
-			"newAICard": {
-				"defaultName": "New AI Card"
 			},
 			"noEditPermission": "No edit permission",
 			"noFilesSelected": "No files selected",

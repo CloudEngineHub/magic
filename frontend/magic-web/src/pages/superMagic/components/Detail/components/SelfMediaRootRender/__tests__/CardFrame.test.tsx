@@ -94,6 +94,13 @@ describe("CardFrame", () => {
 		expect(onLoaded).toHaveBeenCalled()
 
 		await waitFor(() => {
+			expect(fetch).toHaveBeenCalledWith(
+				"https://example.com/card.html",
+				expect.objectContaining({
+					cache: "no-store",
+					credentials: "omit",
+				}),
+			)
 			expect(mockProcessHtmlContent).toHaveBeenCalledWith(
 				expect.objectContaining({
 					content: "<html><body>raw card</body></html>",

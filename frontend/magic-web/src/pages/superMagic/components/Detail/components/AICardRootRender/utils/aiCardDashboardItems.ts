@@ -60,7 +60,10 @@ export function buildAICardDashboardItems({
 		historyEntry: entry,
 	}))
 
-	return [...latestItems, ...historyItems].sort(compareByCreatedAtDesc)
+	return [
+		...latestItems.sort(compareByCreatedAtDesc),
+		...historyItems.sort(compareByCreatedAtDesc),
+	]
 }
 
 function buildFileById(attachmentList?: AICardAttachmentNode[]) {

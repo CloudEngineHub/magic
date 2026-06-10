@@ -150,6 +150,47 @@
             </section>
             <!-- DATA:trend_END -->
 
+            <!-- DATA:sources_START -->
+            <section class="card source-panel analysis-source">
+                <div class="source-head">
+                    <div>
+                        <h2>证据链接</h2>
+                        <p>支撑指标判断、异常告警和行动建议的外部页面。</p>
+                    </div>
+                    <button class="source-close" id="sourceClose" type="button">收起预览</button>
+                </div>
+                <div class="source-grid">
+                    <article class="source-card">
+                        <span class="pill">数据</span>
+                        <strong>渠道投放日报</strong>
+                        <p class="sub">用于验证 CPA 上涨和素材 CTR 下滑。</p>
+                        <div class="source-actions">
+                            <button class="source-preview active" type="button"
+                                data-preview-url="https://example.com/channel-report">预览</button>
+                            <a href="https://example.com/channel-report" target="_blank"
+                                rel="noopener noreferrer">打开</a>
+                        </div>
+                    </article>
+                    <article class="source-card">
+                        <span class="pill">产品</span>
+                        <strong>注册流程改版记录</strong>
+                        <p class="sub">用于核对激活率下滑是否与近期改版相关。</p>
+                        <div class="source-actions">
+                            <button class="source-preview" type="button"
+                                data-preview-url="https://example.com/release-note">预览</button>
+                            <a href="https://example.com/release-note" target="_blank"
+                                rel="noopener noreferrer">打开</a>
+                        </div>
+                    </article>
+                </div>
+                <div class="source-frame-wrap">
+                    <div class="source-frame-fallback" id="sourceFallback">如果网页禁止嵌入，请使用“打开”。</div>
+                    <iframe id="sourceFrame" title="证据链接预览" sandbox="allow-scripts allow-same-origin allow-popups"
+                        loading="lazy" referrerpolicy="no-referrer"></iframe>
+                </div>
+            </section>
+            <!-- DATA:sources_END -->
+
             <section class="ai-insight">
                 <div class="insight-header"><span class="insight-icon">✦</span><span>AI 洞察</span></div>
                 <p class="insight-text">激活率连续 3 日走低且首日任务完成率同步下滑，可能与注册流程改版相关；建议优先回滚并做 A/B 验证。</p>

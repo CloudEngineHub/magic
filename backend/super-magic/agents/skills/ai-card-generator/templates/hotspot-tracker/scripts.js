@@ -73,6 +73,33 @@
     }).filter(Boolean).join("\n- ");
   }
 
+  function bindSourcePreview() {
+    var frame = document.getElementById("sourceFrame");
+    var close = document.getElementById("sourceClose");
+    var wrap = frame ? frame.closest(".source-frame-wrap") : null;
+    if (!frame || !wrap) return;
+
+    document.querySelectorAll(".source-preview").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll(".source-preview").forEach(function (n) { n.classList.remove("active"); });
+        btn.classList.add("active");
+        frame.src = btn.dataset.previewUrl;
+        wrap.classList.remove("collapsed");
+        if (close) close.textContent = "收起";
+      });
+    });
+
+    if (close) {
+      close.addEventListener("click", function () {
+        var collapsed = wrap.classList.toggle("collapsed");
+        close.textContent = collapsed ? "展开" : "收起";
+      });
+    }
+
+    var initial = document.querySelector(".source-preview.active") || document.querySelector(".source-preview");
+    if (initial) frame.src = initial.dataset.previewUrl;
+  }
+
   function sendToAgent(prompt) {
     var status = document.getElementById("insightStatus");
     var full = prompt + "\n\n卡片上下文摘要：\n- " + gatherContext();
@@ -165,6 +192,7 @@
     renderSparks();
   }
 
+  bindSourcePreview();
   setupInsight();
   rebuild();
   window.addEventListener("resize", function () { charts.forEach(function (c) { c.resize(); }); });

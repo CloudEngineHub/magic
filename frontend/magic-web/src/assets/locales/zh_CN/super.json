@@ -545,6 +545,111 @@
 		"saving": "正在保存"
 	},
 	"detail": {
+		"aiCard": {
+			"config": {
+				"cancel": "取消",
+				"createTitle": "配置 AI 卡片",
+				"defaultImageModel": "默认生图模型",
+				"defaultModel": "默认模型",
+				"defaultVideoModel": "默认视频模型",
+				"editTitle": "编辑配置",
+				"enableSchedule": "启用定时执行",
+				"enableScheduleHint": "开启后将按设定频率自动更新卡片",
+				"generate": "生成卡片",
+				"imageModel": "生图模型",
+				"languageModel": "语言模型",
+				"modelSection": "模型配置",
+				"save": "保存配置",
+				"saveDraft": "暂存内容",
+				"saving": "保存中...",
+				"schedule": "执行频率",
+				"videoModel": "视频模型"
+			},
+			"createDialog": {
+				"cancel": "取消",
+				"cardName": "卡片名称",
+				"cardNamePlaceholder": "例如：抖音热点追踪、每日行业摘要",
+				"confirm": "创建卡片",
+				"creating": "创建中...",
+				"description": "AI 将自动创建可视化卡片，并设置定时任务定期获取最新数据更新。",
+				"prompt": "分析指令",
+				"promptHint": "AI 将根据此指令定时获取最新数据，分析后生成可视化卡片并自动更新。",
+				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
+				"template": "卡片模板",
+				"title": "创建 AI 卡片"
+			},
+			"dashboard": {
+				"archived": "归档",
+				"configure": "配置",
+				"current": "当前",
+				"empty": "暂无卡片内容，等待定时任务生成",
+				"historyCount": "{{count}} 个版本",
+				"historyEmpty": "暂无历史版本，后续自动更新后会在这里沉淀记录",
+				"historySectionDescription": "按生成时间回看每一次归档版本",
+				"historySectionTitle": "历史版本时间线",
+				"historyVersion": "🕰 历史版本",
+				"latestSectionDescription": "当前生效的卡片版本，点击可查看完整内容",
+				"latestSectionTitle": "最新版本",
+				"latestVersion": "✨ 最新版本",
+				"loading": "AI 卡片加载中...",
+				"loadingDescription": "正在解析卡片数据",
+				"modelSummary": "模型 {{model}}",
+				"runNow": "立即运行",
+				"running": "运行中...",
+				"scheduleCustom": "{{time}} 执行",
+				"scheduleDaily": "每天 {{time}}",
+				"scheduleMonthly": "每月 {{day}} 日 {{time}}",
+				"scheduleOnce": "{{date}} {{time}}",
+				"scheduleOnceTime": "{{time}} 执行一次",
+				"scheduleWeekly": "每周{{day}} {{time}}",
+				"updatedAt": "更新于 {{time}}",
+				"weekdays": {
+					"friday": "五",
+					"monday": "一",
+					"saturday": "六",
+					"sunday": "日",
+					"thursday": "四",
+					"tuesday": "二",
+					"wednesday": "三"
+				}
+			},
+			"detail": {
+				"back": "返回",
+				"noContent": "暂无卡片内容，等待下次定时任务生成"
+			},
+			"form": {
+				"advancedSettings": "高级设置",
+				"cardName": "卡片名称",
+				"cardNamePlaceholder": "例如：抖音热点追踪、每日行业摘要",
+				"customTemplatePlaceholder": "描述你想要的卡片样式和布局。\n例如：左侧展示趋势折线图，右侧以卡片列表形式展示 Top 10 热点，整体采用深色风格。",
+				"prompt": "分析指令",
+				"promptHint": "AI 将根据此指令定时获取最新数据，分析后生成可视化卡片并自动更新。",
+				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
+				"template": "卡片模板",
+				"templateHint": "选择卡片的视觉样式模板，也可选\"自定义\"后输入模板需求",
+				"templateOptions": {
+					"analyticsPanel": "数据面板",
+					"custom": "自定义",
+					"dailyDigest": "每日摘要",
+					"hotspotTracker": "热点追踪"
+				}
+			},
+			"history": {
+				"back": "返回",
+				"empty": "暂无历史记录",
+				"selectHint": "← 选择一个历史版本查看",
+				"title": "历史版本"
+			},
+			"runNow": {
+				"error": "运行失败，请稍后重试",
+				"success": "任务已触发运行",
+				"successSwitched": "任务已触发运行，已切换到对应话题"
+			},
+			"tile": {
+				"history": "历史",
+				"viewDetail": "查看详情"
+			}
+		},
 		"backToLatest": "回到最新",
 		"clickToJumpPage": "点击跳转指定页数",
 		"closeEditingFileContent": "文件正在编辑中，关闭将退出编辑状态，是否继续？",
@@ -565,6 +670,15 @@
 		"refreshSlides": "重新加载",
 		"saveAndClose": "保存并关闭",
 		"selfMedia": {
+			"brandConfig": {
+				"cancel": "取消",
+				"description": "配置当前项目共用的账号、品牌定位和品牌形象素材。",
+				"loading": "读取品牌配置中...",
+				"save": "保存配置",
+				"saveError": "品牌配置保存失败，请稍后重试",
+				"saving": "保存中...",
+				"title": "品牌配置"
+			},
 			"codeView": {
 				"htmlSource": "HTML 源码",
 				"save": "保存",
@@ -630,9 +744,22 @@
 				"selectCards": "选择卡片",
 				"selectNone": "清空",
 				"selectedSummary": "已选 {{count}}/{{total}} 张",
-				"success": "导出成功"
+				"success": "导出成功",
+				"type": {
+					"cardsZip": {
+						"description": "将所选卡片分别导出为 PNG，并打包为 ZIP。",
+						"title": "逐张卡片"
+					},
+					"longImage": {
+						"description": "将所选卡片按顺序从上到下纵向拼接后导出为 PNG。",
+						"title": "长图"
+					}
+				},
+				"typeLabel": "导出项"
 			},
 			"home": {
+				"aiCard": "AI 卡片",
+				"aiCardCount": "{{count}} 个 AI 卡片",
 				"article": "文章",
 				"articleCount": "{{count}} 篇文章",
 				"backHome": "返回首页",
@@ -643,18 +770,7 @@
 				"emptyTitle": "暂无文章",
 				"openPlatform": "打开平台内容",
 				"subtitle": "从文章列表进入详情，数据更新时会保留当前页面。",
-				"title": "文章首页",
-				"aiCard": "AI 卡片",
-				"aiCardCount": "{{count}} 个 AI 卡片"
-			},
-			"brandConfig": {
-				"cancel": "取消",
-				"description": "配置当前项目共用的账号、品牌定位和品牌形象素材。",
-				"loading": "读取品牌配置中...",
-				"save": "保存配置",
-				"saveError": "品牌配置保存失败，请稍后重试",
-				"saving": "保存中...",
-				"title": "品牌配置"
+				"title": "文章首页"
 			},
 			"initPanel": {
 				"draft": {
@@ -888,14 +1004,6 @@
 						"description": "封面使用主题图+渐变遮罩，白色内容页、圆角卡片、清新现代，适合AI/科技资讯分享",
 						"label": "图文编辑"
 					},
-					"personalInsight": {
-						"description": "简约白底、头像署名、编号段落、读书笔记风，适合个人观点/知识分享",
-						"label": "个人洞察"
-					},
-					"productLaunch": {
-						"description": "白底极简、顶部红线、黑字红色强调、锐利徽章、截图容器，适合产品功能发布/更新公告",
-						"label": "产品发布"
-					},
 					"insModern": {
 						"description": "白色背景、充裕留白、极简排版",
 						"label": "现代简约"
@@ -907,6 +1015,14 @@
 					"none": {
 						"description": "按平台默认规范自由设计",
 						"label": "不使用模板"
+					},
+					"personalInsight": {
+						"description": "简约白底、头像署名、编号段落、读书笔记风，适合个人观点/知识分享",
+						"label": "个人洞察"
+					},
+					"productLaunch": {
+						"description": "白底极简、顶部红线、黑字红色强调、锐利徽章、截图容器，适合产品功能发布/更新公告",
+						"label": "产品发布"
 					}
 				}
 			},
@@ -990,90 +1106,7 @@
 				"scroll": "长图"
 			}
 		},
-		"unsavedChangesWarning": "您有未保存的更改，确定要离开吗？",
-		"aiCard": {
-			"createDialog": {
-				"title": "创建 AI 卡片",
-				"description": "AI 将自动创建可视化卡片，并设置定时任务定期获取最新数据更新。",
-				"cardName": "卡片名称",
-				"cardNamePlaceholder": "例如：抖音热点追踪、每日行业摘要",
-				"template": "卡片模板",
-				"prompt": "分析指令",
-				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
-				"promptHint": "AI 将根据此指令定时获取最新数据，分析后生成可视化卡片并自动更新。",
-				"cancel": "取消",
-				"confirm": "创建卡片",
-				"creating": "创建中..."
-			},
-			"form": {
-				"cardName": "卡片名称",
-				"cardNamePlaceholder": "例如：抖音热点追踪、每日行业摘要",
-				"template": "卡片模板",
-				"templateHint": "选择卡片的视觉样式模板，也可选\"自定义\"后输入模板需求",
-				"customTemplatePlaceholder": "描述你想要的卡片样式和布局。\n例如：左侧展示趋势折线图，右侧以卡片列表形式展示 Top 10 热点，整体采用深色风格。",
-				"prompt": "分析指令",
-				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
-				"promptHint": "AI 将根据此指令定时获取最新数据，分析后生成可视化卡片并自动更新。",
-				"advancedSettings": "高级设置",
-				"templateOptions": {
-					"hotspotTracker": "热点追踪",
-					"dailyDigest": "每日摘要",
-					"analyticsPanel": "数据面板",
-					"custom": "自定义"
-				}
-			},
-			"config": {
-				"editTitle": "编辑配置",
-				"createTitle": "配置 AI 卡片",
-				"schedule": "执行频率",
-				"modelSection": "模型配置",
-				"languageModel": "语言模型",
-				"imageModel": "生图模型",
-				"videoModel": "视频模型",
-				"defaultModel": "默认模型",
-				"defaultImageModel": "默认生图模型",
-				"defaultVideoModel": "默认视频模型",
-				"enableSchedule": "启用定时执行",
-				"enableScheduleHint": "开启后将按设定频率自动更新卡片",
-				"cancel": "取消",
-				"saving": "保存中...",
-				"save": "保存配置",
-				"generate": "生成卡片",
-				"saveDraft": "暂存内容"
-			},
-			"dashboard": {
-				"loading": "AI 卡片加载中...",
-				"loadingDescription": "正在解析卡片数据",
-				"runNow": "立即运行",
-				"running": "运行中...",
-				"configure": "配置",
-				"empty": "暂无卡片内容，等待定时任务生成",
-				"latestVersion": "✨ 最新版本",
-				"historyVersion": "🕰 历史版本",
-				"current": "当前",
-				"archived": "归档",
-				"updatedAt": "更新于 {{time}}"
-			},
-			"detail": {
-				"back": "返回",
-				"noContent": "暂无卡片内容，等待下次定时任务生成"
-			},
-			"history": {
-				"back": "返回",
-				"title": "历史版本",
-				"empty": "暂无历史记录",
-				"selectHint": "← 选择一个历史版本查看"
-			},
-			"tile": {
-				"viewDetail": "查看详情",
-				"history": "历史"
-			},
-			"runNow": {
-				"success": "任务已触发运行",
-				"successSwitched": "任务已触发运行，已切换到对应话题",
-				"error": "运行失败，请稍后重试"
-			}
-		}
+		"unsavedChangesWarning": "您有未保存的更改，确定要离开吗？"
 	},
 	"draftBox": {
 		"deleteConfirm": {
@@ -3147,10 +3180,7 @@
 		],
 		"actionTitle": "若您希望主动干预",
 		"mainText": "任务执行时间过长，可能是如下原因导致：",
-		"reasonList": [
-			"AI 处理复杂任务中",
-			"网络连接不稳定"
-		],
+		"reasonList": ["AI 处理复杂任务中", "网络连接不稳定"],
 		"statusText": "若您暂不操作，AI 会继续尝试"
 	},
 	"tool": {
@@ -3314,6 +3344,8 @@
 			"confirmBatchDeleteWithFolders": "选中项包含文件夹，子级未选中文件也将被删除",
 			"confirmBatchDeleteWithMagicSystemFolder": "你选择删除的文件中包含 .magic 系统文件夹。删除后，部分功能及能力可能无法正常使用，且此操作不可撤销，请谨慎操作。",
 			"copyTo": "复制至",
+			"createAICardFailed": "创建 AI 卡片项目失败",
+			"createAICardSuccess": "创建 AI 卡片项目成功",
 			"createDesignFailed": "创建画布项目失败",
 			"createDesignSuccess": "创建画布项目成功",
 			"createFile": "新建文件",
@@ -3322,8 +3354,6 @@
 			"createFolderSuccess": "创建文件夹成功",
 			"createSelfMediaFailed": "创建自媒体项目失败",
 			"createSelfMediaSuccess": "创建自媒体项目成功",
-			"createAICardFailed": "创建 AI 卡片项目失败",
-			"createAICardSuccess": "创建 AI 卡片项目成功",
 			"createSubMenu": {
 				"aiCardFile": "AI 卡片",
 				"customFile": "自定义格式",
@@ -3373,6 +3403,9 @@
 			"importFromOtherProject": "从其他项目导入",
 			"move": "移动",
 			"moveTo": "移动至",
+			"newAICard": {
+				"defaultName": "新建 AI 卡片"
+			},
 			"newDesign": {
 				"defaultName": "新建画布"
 			},
@@ -3386,9 +3419,6 @@
 			},
 			"newSelfMedia": {
 				"defaultName": "新建自媒体项目"
-			},
-			"newAICard": {
-				"defaultName": "新建 AI 卡片"
 			},
 			"noEditPermission": "没有编辑权限",
 			"noFilesSelected": "未选择任何文件",

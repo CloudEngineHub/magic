@@ -148,7 +148,7 @@ async function loadCardFrameSource({
 	const urls = await getTemporaryDownloadUrl({ file_ids: [fileId] })
 	const url = urls?.[0]?.url
 	if (!url) throw new Error("noCardUrl")
-	const resp = await fetch(url, { credentials: "omit" })
+	const resp = await fetch(url, { cache: "no-store", credentials: "omit" })
 	if (!resp.ok) throw new Error("loadCardError")
 	const html = await resp.text()
 

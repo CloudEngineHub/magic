@@ -4,10 +4,36 @@ import { runInAction } from "mobx"
 import { render, waitFor } from "@testing-library/react"
 import { SelfMediaStore } from "../stores/SelfMediaStore"
 import { SelfMediaStoreProvider } from "../stores"
-import type { PlatformSlice, SelfMediaPostsService, SelfMediaSnapshot } from "../services"
-import { cacheKey } from "../services"
+import type { SelfMediaPostsService, SelfMediaSnapshot } from "../services/SelfMediaPostsService"
+import { cacheKey, type PlatformSlice } from "../services/selfMediaHelpers"
 import type { SelfMediaPost, SelfMediaPostEntry } from "../types"
 import type { SelfMediaPlatform } from "../../../types"
+
+vi.mock("@/utils/log", () => {
+	const noop = () => undefined
+	return {
+		logger: {
+			createLogger: () => ({
+				log: noop,
+				info: noop,
+				warn: noop,
+				error: noop,
+				debug: noop,
+			}),
+		},
+	}
+})
+
+vi.mock("@/pages/superMagic/utils/api", () => ({
+	getFileContentById: vi.fn(),
+}))
+
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getLocaleModules: () => ({ zhCNModules: {}, enUSModules: {} }),
+	getAdminLocaleModules: () => ({ zhCNModules: {}, enUSModules: {} }),
+	loadFallbackLocale: vi.fn(),
+	loadMagicFlowLocale: vi.fn(),
+}))
 
 type FakeService = SelfMediaPostsService & {
 	initialize: ReturnType<typeof vi.fn>
@@ -535,6 +561,27 @@ describe("SelfMediaStore", () => {
 			)
 			expect(out).toEqual(fresh)
 			expect(store.loadedPosts[cacheKey("rednote", "p-new")]).toEqual(fresh)
+		})
+	})
+
+	describe("ensurePlatformPostLoaded", () => {
+		it("returns null when article-home preloading hits a missing post manifest", async () => {
+			const entry = makeEntry("missing-post")
+			const preloadError = new Error("postManifestMissing")
+			service.ensurePostLoaded.mockRejectedValue(preloadError)
+
+			runInAction(() => {
+				store.slices = [makeSlice("rednote", [entry])]
+				store.activePlatform = "rednote"
+			})
+			await Promise.resolve()
+			service.ensurePostLoaded.mockClear()
+
+			const out = await store.ensurePlatformPostLoaded("rednote", 0)
+
+			expect(out).toBeNull()
+			expect(service.ensurePostLoaded).toHaveBeenCalledTimes(1)
+			expect(store.loadedPosts[cacheKey("rednote", "missing-post")]).toBeUndefined()
 		})
 	})
 

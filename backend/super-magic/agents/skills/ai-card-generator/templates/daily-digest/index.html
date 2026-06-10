@@ -158,6 +158,46 @@
                 </section>
                 <!-- DATA:sources_END -->
 
+                <!-- DATA:source_preview_START -->
+                <section class="block source-panel analysis-source">
+                    <div class="source-head">
+                        <div>
+                            <h2>来源原文</h2>
+                            <p class="sub">关键外部信息保留链接，可直接预览或打开。</p>
+                        </div>
+                        <button class="source-close" id="sourceClose" type="button">收起</button>
+                    </div>
+                    <div class="source-list">
+                        <article class="source-card">
+                            <span class="badge b-red">竞品</span>
+                            <strong>竞品 A 限时折扣页</strong>
+                            <p class="sub">验证价格动作与活动截止时间。</p>
+                            <div class="source-actions">
+                                <button class="source-preview active" type="button"
+                                    data-preview-url="https://example.com/campaign">预览</button>
+                                <a href="https://example.com/campaign" target="_blank" rel="noopener noreferrer">打开</a>
+                            </div>
+                        </article>
+                        <article class="source-card">
+                            <span class="badge b-yel">平台</span>
+                            <strong>平台流量规则公告</strong>
+                            <p class="sub">支撑“长停留内容倾斜”的判断。</p>
+                            <div class="source-actions">
+                                <button class="source-preview" type="button"
+                                    data-preview-url="https://example.com/platform-update">预览</button>
+                                <a href="https://example.com/platform-update" target="_blank"
+                                    rel="noopener noreferrer">打开</a>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="source-frame-wrap">
+                        <div class="source-frame-fallback" id="sourceFallback">如果网页禁止嵌入，请使用“打开”。</div>
+                        <iframe id="sourceFrame" title="日报来源预览" sandbox="allow-scripts allow-same-origin allow-popups"
+                            loading="lazy" referrerpolicy="no-referrer"></iframe>
+                    </div>
+                </section>
+                <!-- DATA:source_preview_END -->
+
                 <section class="ai-insight">
                     <div class="insight-header"><span class="insight-icon">✦</span><span>AI 洞察</span></div>
                     <p class="insight-text">互动创新高但转化未跟进，说明内容共鸣强但成交桥接断裂；建议在爆款笔记评论区追加购买引导。</p>

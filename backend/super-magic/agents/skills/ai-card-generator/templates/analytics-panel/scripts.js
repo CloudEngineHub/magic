@@ -72,6 +72,33 @@
     });
   }
 
+  function bindSourcePreview() {
+    var frame = document.getElementById("sourceFrame");
+    var close = document.getElementById("sourceClose");
+    var wrap = frame ? frame.closest(".source-frame-wrap") : null;
+    if (!frame || !wrap) return;
+
+    document.querySelectorAll(".source-preview").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll(".source-preview").forEach(function (n) { n.classList.remove("active"); });
+        btn.classList.add("active");
+        frame.src = btn.dataset.previewUrl;
+        wrap.classList.remove("collapsed");
+        if (close) close.textContent = "收起预览";
+      });
+    });
+
+    if (close) {
+      close.addEventListener("click", function () {
+        var collapsed = wrap.classList.toggle("collapsed");
+        close.textContent = collapsed ? "展开预览" : "收起预览";
+      });
+    }
+
+    var initial = document.querySelector(".source-preview.active") || document.querySelector(".source-preview");
+    if (initial) frame.src = initial.dataset.previewUrl;
+  }
+
   function gatherContext() {
     return Array.from(document.querySelectorAll(".analysis-source")).slice(0, 8).map(function (n) {
       return n.innerText.replace(/\s+/g, " ").trim();
@@ -175,6 +202,7 @@
   }
 
   bindTabs();
+  bindSourcePreview();
   setupInsight();
   rebuild();
   window.addEventListener("resize", function () { charts.forEach(function (c) { c.resize(); }); });

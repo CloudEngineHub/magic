@@ -34,7 +34,7 @@ function InstagramShell(props: PlatformComponentProps) {
 		designWidth: INSTAGRAM_PHONE_WIDTH + 28,
 		designHeight: INSTAGRAM_PHONE_HEIGHT + 28,
 	})
-	const { progress, exportZip } = useExportZip()
+	const { progress, exportZip, exportLongImage } = useExportZip()
 	const [exportDialogOpen, setExportDialogOpen] = useState(false)
 	const [isExporting, setIsExporting] = useState(false)
 	const editViewChangeHandlerRef = useRef<((nextView: SelfMediaView) => void) | null>(null)
@@ -263,12 +263,13 @@ function InstagramShell(props: PlatformComponentProps) {
 		postIndex,
 		cardIndexes,
 		pixelRatio,
+		exportType,
+		getCardRef,
 	}: ExportPreviewConfirmArgs) => {
 		if (!cardIndexes.length) return
 		setIsExporting(true)
 		try {
-			const exportPosts = await store.ensureAllPostsLoaded()
-			const target = exportPosts[postIndex]
+			const target = await store.ensurePostLoaded(postIndex)
 			if (!target) return
 			const subsetCards = cardIndexes
 				.map((cardIndex) => target.cards[cardIndex])
@@ -278,15 +279,29 @@ function InstagramShell(props: PlatformComponentProps) {
 				meta: target.meta,
 				cards: subsetCards,
 			}
-			await exportZip({
-				posts: [subset],
-				zipName: target.meta.title || target.meta.id,
-				pixelRatio,
-				getCardRef: (_p, c) => {
-					const originalCardIndex = cardIndexes[c]
-					return cardRefs.current[postIndex]?.[originalCardIndex] || null
-				},
-			})
+			const getSubsetCardRef = (subsetCardIndex: number) => {
+				const originalCardIndex = cardIndexes[subsetCardIndex]
+				return (
+					getCardRef(originalCardIndex) ||
+					cardRefs.current[postIndex]?.[originalCardIndex] ||
+					null
+				)
+			}
+			if (exportType === "longImage") {
+				await exportLongImage({
+					post: subset,
+					fileName: target.meta.title || target.meta.id,
+					pixelRatio,
+					getCardRef: getSubsetCardRef,
+				})
+			} else {
+				await exportZip({
+					posts: [subset],
+					zipName: target.meta.title || target.meta.id,
+					pixelRatio,
+					getCardRef: (_p, c) => getSubsetCardRef(c),
+				})
+			}
 			setExportDialogOpen(false)
 		} finally {
 			setIsExporting(false)

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
@@ -21,12 +21,17 @@ import {
 } from "@/components/shadcn-ui/select"
 import { cn } from "@/lib/utils"
 import CardFrame from "./CardFrame"
+import type { CardFrameRef } from "./CardFrame"
 import type { SelfMediaAttachmentNode, SelfMediaPost } from "../types"
+
+export type SelfMediaExportType = "cardsZip" | "longImage"
 
 export interface ExportPreviewConfirmArgs {
 	postIndex: number
 	cardIndexes: number[]
 	pixelRatio: number
+	exportType: SelfMediaExportType
+	getCardRef: (cardIndex: number) => CardFrameRef | null
 }
 
 interface ExportPreviewDialogProps {
@@ -47,6 +52,7 @@ interface ExportPreviewDialogProps {
 }
 
 const PIXEL_RATIO_OPTIONS = [1, 2, 4] as const
+const EXPORT_TYPE_OPTIONS: SelfMediaExportType[] = ["cardsZip", "longImage"]
 const PREVIEW_INITIAL_BATCH = 8
 const PREVIEW_BATCH_SIZE = 8
 /** localStorage key for last chosen export scale (1/2/4). */
@@ -83,6 +89,10 @@ function persistPixelRatio(ratio: number): void {
 	}
 }
 
+function isExportTypeOption(value: string): value is SelfMediaExportType {
+	return (EXPORT_TYPE_OPTIONS as readonly string[]).includes(value)
+}
+
 function buildAllCardIndexes(post: SelfMediaPost | undefined): Set<number> {
 	if (!post) return new Set()
 	return new Set(post.cards.map((_, idx) => idx))
@@ -106,6 +116,10 @@ function ExportPreviewDialog({
 		buildAllCardIndexes(posts[initialPostIndex]),
 	)
 	const [pixelRatio, setPixelRatio] = useState<number>(() => readStoredPixelRatio())
+	const [exportType, setExportType] = useState<SelfMediaExportType>("cardsZip")
+	const [previewVersion, setPreviewVersion] = useState(0)
+	const [loadedPreviewCards, setLoadedPreviewCards] = useState<Set<number>>(() => new Set())
+	const previewCardRefs = useRef<Record<number, CardFrameRef | null>>({})
 
 	// Reset state each time the dialog opens; seed with current active post.
 	useEffect(() => {
@@ -114,6 +128,10 @@ function ExportPreviewDialog({
 		setSelectedPostIndex(safeIndex)
 		setSelectedCards(buildAllCardIndexes(posts[safeIndex]))
 		setPixelRatio(readStoredPixelRatio())
+		setExportType("cardsZip")
+		setPreviewVersion((prev) => prev + 1)
+		setLoadedPreviewCards(new Set())
+		previewCardRefs.current = {}
 	}, [open, initialPostIndex, posts])
 
 	const selectedPost = posts[selectedPostIndex]
@@ -128,10 +146,21 @@ function ExportPreviewDialog({
 			if (Number.isNaN(nextIndex)) return
 			setSelectedPostIndex(nextIndex)
 			setSelectedCards(buildAllCardIndexes(posts[nextIndex]))
+			setLoadedPreviewCards(new Set())
+			previewCardRefs.current = {}
 			onSyncActivePost?.(nextIndex)
 		},
 		[onSyncActivePost, posts],
 	)
+
+	const handlePreviewCardLoaded = useCallback((cardIndex: number) => {
+		setLoadedPreviewCards((prev) => {
+			if (prev.has(cardIndex)) return prev
+			const next = new Set(prev)
+			next.add(cardIndex)
+			return next
+		})
+	}, [])
 
 	const toggleCard = useCallback((cardIndex: number) => {
 		setSelectedCards((prev) => {
@@ -193,16 +222,27 @@ function ExportPreviewDialog({
 	const hintW = Math.max(0, Math.floor(exportSizeHintCss.width))
 	const hintH = Math.max(0, Math.floor(exportSizeHintCss.height))
 
-	const disableConfirm = isExporting || orderedCardIndexes.length === 0
+	const isLongImageReady =
+		exportType !== "longImage" ||
+		orderedCardIndexes.every(
+			(cardIndex) =>
+				Boolean(selectedPost?.cards[cardIndex]?.fileId) &&
+				cardIndex < visiblePreviewCount &&
+				loadedPreviewCards.has(cardIndex),
+		)
+	const disableConfirm = isExporting || orderedCardIndexes.length === 0 || !isLongImageReady
 
 	const handleConfirm = useCallback(async () => {
 		if (disableConfirm) return
+		const previewCardRefsSnapshot = { ...previewCardRefs.current }
 		await onConfirm({
 			postIndex: selectedPostIndex,
 			cardIndexes: orderedCardIndexes,
 			pixelRatio,
+			exportType,
+			getCardRef: (cardIndex) => previewCardRefsSnapshot[cardIndex] || null,
 		})
-	}, [disableConfirm, onConfirm, orderedCardIndexes, pixelRatio, selectedPostIndex])
+	}, [disableConfirm, exportType, onConfirm, orderedCardIndexes, pixelRatio, selectedPostIndex])
 
 	const handleCancel = useCallback(() => {
 		if (isExporting) return
@@ -318,10 +358,10 @@ function ExportPreviewDialog({
 									}}
 									data-testid={`self-media-export-card-item-${cardIdx}`}
 									className={cn(
-										"group relative flex flex-col overflow-hidden rounded-md border bg-background text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+										"group relative flex flex-col overflow-hidden rounded-md border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 										checked
-											? "border-primary shadow-sm"
-											: "border-border hover:border-primary/40",
+											? "border-primary bg-primary/5 ring-2 ring-primary/50 shadow-sm"
+											: "border-border bg-background hover:border-primary/40",
 										isExporting
 											? "cursor-not-allowed opacity-60"
 											: "cursor-pointer",
@@ -333,7 +373,7 @@ function ExportPreviewDialog({
 											onCheckedChange={() => toggleCard(cardIdx)}
 											onClick={(event) => event.stopPropagation()}
 											aria-label={cardLabel}
-											className="bg-background shadow-sm"
+											className="data-[state=unchecked]:bg-background shadow-sm"
 											data-testid={`self-media-export-card-checkbox-${cardIdx}`}
 										/>
 									</span>
@@ -342,8 +382,13 @@ function ExportPreviewDialog({
 											<CardFrame
 												cardId={`export-preview-${selectedPost.meta.id}-${cardIdx}`}
 												fileId={card.fileId}
+												version={`${card.version ?? ""}:export:${previewVersion}`}
 												attachmentList={attachmentList}
 												className="pointer-events-none h-full w-full"
+												onLoaded={() => handlePreviewCardLoaded(cardIdx)}
+												ref={(node) => {
+													previewCardRefs.current[cardIdx] = node
+												}}
 											/>
 										) : (
 											<div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
@@ -351,7 +396,14 @@ function ExportPreviewDialog({
 											</div>
 										)}
 									</div>
-									<div className="truncate px-2 py-1.5 text-xs">{cardLabel}</div>
+									<div
+										className={cn(
+											"truncate px-2 py-1.5 text-xs",
+											checked && "font-medium text-primary",
+										)}
+									>
+										{cardLabel}
+									</div>
 								</div>
 							)
 						})}
@@ -364,6 +416,57 @@ function ExportPreviewDialog({
 							{t("detail.selfMedia.common.loading")}
 						</div>
 					) : null}
+				</div>
+
+				<div className="flex flex-col gap-2" data-testid="self-media-export-type-section">
+					<Label className="text-xs font-medium text-muted-foreground">
+						{t("detail.selfMedia.export.typeLabel")}
+					</Label>
+					<RadioGroup
+						value={exportType}
+						onValueChange={(value) => {
+							if (isExportTypeOption(value)) setExportType(value)
+						}}
+						className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+						data-testid="self-media-export-type-group"
+					>
+						{EXPORT_TYPE_OPTIONS.map((type) => {
+							const id = `self-media-export-type-${type}`
+							const checked = exportType === type
+							return (
+								<Label
+									key={type}
+									htmlFor={id}
+									data-testid={
+										type === "longImage"
+											? "self-media-export-type-long-image"
+											: "self-media-export-type-cards-zip"
+									}
+									className={cn(
+										"flex cursor-pointer items-start gap-3 rounded-md border border-border bg-background p-3 text-sm transition-colors",
+										checked &&
+											"border-primary bg-primary/5 ring-1 ring-primary/40",
+										isExporting && "cursor-not-allowed opacity-60",
+									)}
+								>
+									<RadioGroupItem
+										id={id}
+										value={type}
+										disabled={isExporting}
+										className="mt-0.5"
+									/>
+									<span className="flex min-w-0 flex-col gap-1">
+										<span className="font-medium text-foreground">
+											{t(`detail.selfMedia.export.type.${type}.title`)}
+										</span>
+										<span className="text-xs leading-5 text-muted-foreground">
+											{t(`detail.selfMedia.export.type.${type}.description`)}
+										</span>
+									</span>
+								</Label>
+							)
+						})}
+					</RadioGroup>
 				</div>
 
 				<div

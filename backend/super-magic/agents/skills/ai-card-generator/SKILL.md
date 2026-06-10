@@ -44,6 +44,27 @@ Automatically generate and update HTML visual cards via scheduled tasks. Cards c
 - Each execution generates updated content based on template structure + latest data
 - Automatic history version snapshot management
 - Support multiple card types (hotspot tracker, daily digest, analytics panel, etc.)
+- Design scenario-specific interactive templates instead of only filling the preset skeletons
+- Preserve source links from fetched data and expose them through source lists, new-tab links, or safe iframe previews
+
+<!--zh
+## 关联技能使用
+
+当卡片包含交互、网页预览、文件读写、员工/模型选择、AI 深度分析入口时，必须先参考：
+- `micro-app-architect`：用于拆解用户需求、确定交互层/数据层/Agent 协作边界
+- `html-api-sdk`：用于确认 `window.Magic.*` API 的准确签名、消息格式、错误处理和降级方案
+
+不要把 AI Card 当成静态截图。它是一个可更新的 HTML 微页面：模板负责交互和视觉骨架，Agent 定时任务负责数据采集、证据记录和内容替换。
+-->
+
+## Related Skill Usage
+
+When a card needs interactivity, web-page previews, file I/O, agent/model selectors, or AI deep-analysis actions, read and apply these skills first:
+
+- `micro-app-architect`: decompose the user's request, decide interaction/data/Agent boundaries, and choose Simple/Medium/Complex architecture.
+- `html-api-sdk`: verify exact `window.Magic.*` API signatures, message formats, error handling, and fallback behavior.
+
+Do not treat an AI Card as a static screenshot. It is an updateable HTML micro-page: the template owns the interaction and visual structure, while the scheduled Agent workflow owns data fetching, source tracking, and content replacement.
 
 <!--zh
 ## 目录结构约定
@@ -66,17 +87,26 @@ Preferred mode is folder-based multi-file for maintainability. Single-file mode 
 │   ├── index.html
 │   ├── styles.css                    # Optional
 │   ├── scripts.js                    # Optional
+│   ├── data/                         # Optional seed schemas
+│   │   ├── card-data.json
+│   │   └── sources.json
 │   └── prompts/                      # Optional analysis prompt snippets
 │       └── deep-analysis.txt
 ├── latest/                           # Preferred output folder
 │   ├── index.html
 │   ├── styles.css                    # Optional
-│   └── scripts.js                    # Optional
+│   ├── scripts.js                    # Optional
+│   └── data/                         # Optional generated structured data
+│       ├── card-data.json
+│       └── sources.json
 └── history/
   ├── 2026-05-23_09-00/
   │   ├── index.html
   │   ├── styles.css                # Optional
-  │   └── scripts.js               # Optional
+  │   ├── scripts.js               # Optional
+  │   └── data/                    # Optional snapshot data
+  │       ├── card-data.json
+  │       └── sources.json
   └── 2026-05-22_09-00/
     ├── index.html
     ├── styles.css                  # Optional
@@ -97,6 +127,35 @@ Backward compatible (legacy):
 -->
 
 ## Creation Workflow
+
+<!--zh
+### 步骤 0：需求拆解与模板设计
+
+创建或改造卡片前，先把用户需求拆成：信息类型、数据来源、更新频率、需要的交互、证据链接展示方式、是否需要 Agent 深度分析。
+
+根据内容设计模板，不要只机械套用三个预设模板：
+- 热点/舆情：排行、趋势曲线、平台分布、情绪/风险、生命周期、来源预览
+- 日报/周报：执行摘要、指标组、事件时间线、行动清单、引用来源、可展开原文
+- 数据看板：KPI、漏斗、分群、异常告警、区间切换、可追问洞察
+- 研究/情报：论点卡片、证据矩阵、来源可信度、iframe 原文预览、比较视图
+- 决策/规划：选项对比、风险收益、里程碑、负责人、下一步动作
+
+优先加入有实际价值的交互：筛选、标签页、排序、展开/收起、图表 hover、时间范围切换、来源抽屉、iframe 预览、AI 追问按钮。交互必须围绕内容判断和后续行动，不要只做装饰。
+-->
+
+### Step 0: Requirement Decomposition and Template Design
+
+Before creating or modifying a card, decompose the user's request into: information type, data sources, update cadence, expected interactions, source-link display mode, and whether Agent deep analysis is needed.
+
+Design the template for the scenario instead of mechanically applying the three presets:
+
+- Hotspot / public-opinion cards: ranking, trend lines, platform distribution, sentiment/risk, lifecycle, source preview.
+- Daily / weekly digest cards: executive summary, metric groups, event timeline, action list, citations, expandable source text.
+- Analytics dashboards: KPIs, funnels, cohorts, anomaly alerts, range switching, follow-up insight prompts.
+- Research / intelligence cards: claim cards, evidence matrix, source reliability, iframe source preview, comparison view.
+- Decision / planning cards: option comparison, risk/reward, milestones, owners, next actions.
+
+Prefer interactions that help judgment and action: filters, tabs, sorting, expand/collapse, chart hover, time-range switches, source drawers, iframe previews, and AI follow-up buttons. Avoid decorative-only interactions.
 
 <!--zh
 ### 步骤 1：创建卡片目录结构
@@ -162,17 +221,20 @@ The template is the card's "skeleton", defining layout and styling. The agent re
 **Template Rules:**
 
 <!--zh
-1. 必须是自包含的单 HTML 文件（CSS/JS 全部 inline）
+1. 优先使用目录结构：`template/index.html` + 可选 `styles.css` / `scripts.js`，生成到 `latest/` 同结构
 2. 使用 `<meta charset="utf-8">` 和 viewport meta
 3. 支持暗色模式（`prefers-color-scheme`）
-4. 使用 HTML 注释标记数据区域，便于识别替换位置：
+4. 归档历史版本时必须复制 HTML、CSS、JS 等同目录资源，保持相对链接可用
+5. 使用 HTML 注释标记数据区域，便于识别替换位置：
 -->
 
-1. Prefer a single HTML file; inline CSS/JS are still the default, but trusted external resources can be used when they provide clear value (for example ECharts)
+1. Prefer folder-based templates: `template/index.html` plus optional `styles.css` / `scripts.js`, generated into the same structure under `latest/`
 2. Include `<meta charset="utf-8">` and viewport meta
 3. Support dark mode (`prefers-color-scheme`)
-4. External resources are default-deny, but ECharts CDN is allowed for chart-driven cards
-5. Use HTML comments to mark data sections for easy replacement:
+4. When archiving history snapshots, copy the HTML, CSS, JS, and other same-folder assets together so relative links keep working
+5. External resources are default-deny, but ECharts CDN is allowed for chart-driven cards
+6. Use iframe-width responsive design: narrow card iframes should render a compact cover/summary view, while wide iframes render the full report
+7. Use HTML comments to mark data sections for easy replacement:
 
 ```html
 <!DOCTYPE html>
@@ -181,9 +243,7 @@ The template is the card's "skeleton", defining layout and styling. The agent re
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{CARD_TITLE}}</title>
-    <style>
-      /* All styles inline */
-    </style>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header>
@@ -200,9 +260,28 @@ The template is the card's "skeleton", defining layout and styling. The agent re
     <footer>
       <p>Updated: {{GENERATED_AT}}</p>
     </footer>
+    <script src="scripts.js"></script>
   </body>
 </html>
 ```
+
+## Responsive iframe Display
+
+AI Cards are rendered inside iframes in both grid cards and detail pages. The template must adapt to the iframe viewport, not the parent page.
+
+Required display modes:
+
+- **Compact card mode (`<= 420px`)**: show a unified card-like cover with title, timestamp, 1-3 headline metrics or summary points, and status/source badges. Hide dense tables, long lists, iframe source previews, large charts, and secondary AI controls. Keep content visually complete within a portrait card frame.
+- **Mobile detail mode (`421px-767px`)**: single-column readable report. Preserve all core content, but stack charts/lists and reduce chart height.
+- **Desktop detail mode (`>= 768px`)**: full dashboard/report layout with multi-column sections and richer interaction.
+
+Implementation rules:
+
+- Use CSS media queries inside the card HTML (`@media (max-width: 420px)`, `@media (max-width: 767px)`, `@media (min-width: 768px)`). These queries naturally follow the iframe width.
+- Prefer semantic sections that can be hidden/reordered in compact mode: header/summary/metrics/detail/sources/actions.
+- In compact mode, avoid horizontal scroll and avoid text clipping. Use `line-clamp`, smaller fixed chart heights, or hide nonessential sections.
+- If a template supports iframe source preview, hide the preview frame in compact card mode but keep source count or source badge visible.
+- The card should still be usable if the host iframe height is clipped: important title/time/status content belongs near the top or bottom, not only after long scroll.
 
 <!--zh
 ## 定时执行流程
@@ -219,12 +298,57 @@ When a scheduled task triggers, execute the following:
 ```
 1. 读取 magic.project.js 获取提示词和上下文配置
 2. 读取模板目录（优先 `template/`，兼容 `template.html`）理解布局结构和数据区域标记
-3. 通过 web_search / read_webpages_as_markdown 获取最新数据
-4. 根据提示词分析和组织数据
+3. 通过 web_search / read_webpages_as_markdown 获取最新数据，并记录所有可用来源 URL
+4. 根据提示词分析和组织数据；把来源写入 HTML 引用区和可选 `latest/data/sources.json`
 5. 归档：将当前 `latest/` 下所有文件复制到 `history/YYYY-MM-DD_HH-mm/`（兼容模式：重命名 `latest.html`）
 6. 复制模板：将 `template/` 下所有文件复制到 `latest/`（覆盖），作为本次生成的基础
-7. 修改数据区：仅修改 `latest/index.html` 中 `<!-- DATA_SECTION_START -->` 到 `<!-- DATA_SECTION_END -->` 之间的内容，填入最新数据；不改动 styles.css / scripts.js
+7. 修改数据区：仅修改 `latest/index.html` 中 `<!-- DATA_SECTION_START -->` 到 `<!-- DATA_SECTION_END -->` 或命名 DATA 区之间的内容，填入最新数据；通常不改动 styles.css / scripts.js，除非模板结构需要升级
 8. 更新 magic.project.js 的 last_generated 和 generation_count
+```
+
+## Source Link and Web Preview Requirements
+
+When fetched data contains links, preserve them. Do not summarize away provenance.
+
+Recommended source record shape:
+
+```json
+{
+  "id": "src-001",
+  "title": "Source title",
+  "url": "https://example.com/article",
+  "site": "Example",
+  "type": "article",
+  "publishedAt": "2026-06-10T08:00:00+08:00",
+  "retrievedAt": "2026-06-10T09:00:00+08:00",
+  "summary": "One-line relevance note",
+  "linkedClaimIds": ["claim-01"],
+  "display": "iframe"
+}
+```
+
+Render sources according to content type and embed safety:
+
+- Use an `<iframe>` preview for public pages that are likely useful to inspect inline, such as articles, dashboards, docs, charts, maps, public reports, PDFs that the browser can render, or generated local HTML.
+- Always include an `<a href="..." target="_blank" rel="noopener noreferrer">` open-in-new-tab fallback next to iframe previews.
+- Use link-only display for pages likely to block embedding, require login, contain payment flows, or show sensitive/private data.
+- If an iframe fails to load or is blocked by the site, show a clear fallback message and keep the new-tab link.
+- Use `sandbox`, `loading="lazy"`, and `referrerpolicy="no-referrer"` on iframes unless the scenario explicitly needs more permissions.
+
+Recommended iframe pattern:
+
+```html
+<button type="button" class="source-preview" data-preview-url="https://example.com/article">
+  预览来源
+</button>
+<a href="https://example.com/article" target="_blank" rel="noopener noreferrer">新标签打开</a>
+<iframe
+  class="source-frame"
+  title="Source preview"
+  sandbox="allow-scripts allow-same-origin allow-popups"
+  loading="lazy"
+  referrerpolicy="no-referrer"
+></iframe>
 ```
 
 <!--zh
@@ -288,15 +412,20 @@ After modification, the next scheduled execution will automatically use the new 
 
 For interactive cards, you can use `window.Magic.*` APIs in HTML:
 
-1. Use `window.Magic.setInputMessage(message)` to send a prefilled deep-analysis request to Agent.
-2. Optionally use `window.Magic.fs.readFile` / `writeFile` for local card context and generated notes within the card app root.
-3. Bind actions via `addEventListener` only (no inline onclick).
+1. For substantial follow-up work, prefer `window.Magic.project.createTopicAndSend(message, { model })`; include agent/model selectors when users may want control.
+2. Use `window.Magic.setInputMessage(message)` only as a lightweight fallback for current-topic prefill.
+3. Optionally use `window.Magic.fs.readFile` / `writeFile` for local card context, generated notes, `data/card-data.json`, or `data/sources.json` within the card app root.
+4. Use `window.Magic.fs.watchFile` only when the card needs to react to data-file edits without a full refresh.
+5. Bind actions via `addEventListener` only (no inline onclick).
 
 Example pattern in card UI:
 
-1. "Generate analysis request" button: extract key text from card sections.
-2. "Send to Agent" button: call `window.Magic.setInputMessage(...)`.
-3. Show status text if Magic API is unavailable in current runtime.
+1. Source preview controls: open trusted source URLs in a sandboxed iframe and always keep a new-tab `<a>` fallback.
+2. "Generate analysis request" button: extract key text and source links from card sections.
+3. "Send to Agent" button: call `window.Magic.project.createTopicAndSend(...)` with `{ model: "auto" }`; fall back to `setInputMessage(...)` when project APIs are unavailable.
+4. Show status text if Magic API is unavailable in current runtime.
+
+When sending file paths, follow `html-api-sdk` and `micro-app-architect`: use tiptap JSON with `@file` mentions, call `getAppBasePath()` for app-relative data files, and keep `.magic/` skill paths workspace-root relative.
 
 <!--zh
 ## 预设模板
@@ -314,9 +443,9 @@ Skill 提供以下预设模板供参考，位于 templates/ 目录（folder-base
 
 This skill provides the following preset templates for reference, located in the templates/ directory (folder-based structure):
 
-- `hotspot-tracker/` — Hotspot tracker (trending list + trend markers + timestamps)
-- `daily-digest/` — Daily digest (column layout + key metrics + industry updates)
-- `analytics-panel/` — Analytics panel (KPI numbers + comparisons + trend charts)
+- `hotspot-tracker/` — Hotspot tracker (rankings, platform distribution, trend charts, AI follow-ups, source preview)
+- `daily-digest/` — Daily digest (summary, metric groups, timeline, action list, source cards, AI follow-ups)
+- `analytics-panel/` — Analytics panel (KPIs, funnels, channel breakdowns, range tabs, alerts, source preview, AI follow-ups)
 
 Each template folder contains: `index.html`, `styles.css`, `scripts.js`, and `prompts/` (optional analysis prompt snippets).
-When creating cards, you can reference these templates' structure and style, or create fully custom ones.
+When creating cards, use these as module examples, not as fixed limits. Compose or extend modules according to the user's domain, source types, and desired interactions.
