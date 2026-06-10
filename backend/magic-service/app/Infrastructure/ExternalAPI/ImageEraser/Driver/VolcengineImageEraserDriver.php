@@ -54,15 +54,7 @@ class VolcengineImageEraserDriver implements ImageEraserDriverInterface
             throw new InvalidArgumentException('image_generate.image_eraser_provider_not_configured');
         }
 
-        $body = array_filter([
-            'req_key' => 'i2i_inpainting',
-            'image_urls' => [$request->getImageUrl(), $request->getMaskUrl()],
-            'steps' => $request->getSteps(),
-            'strength' => $request->getStrength(),
-            'seed' => $request->getSeed(),
-            'dilate_size' => $request->getDilateSize(),
-            'quality' => $request->getQuality(),
-        ], static fn ($value) => $value !== null && $value !== '');
+        $body = $this->buildSubmitBody($request);
 
         try {
             $client = new VolcengineVisualAsyncClient($ak, $sk, $this->loggerFactory);
@@ -97,6 +89,33 @@ class VolcengineImageEraserDriver implements ImageEraserDriverInterface
             RequestOptions::TIMEOUT => (int) ($this->providerConfig['timeout'] ?? 300),
             'http_errors' => false,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildSubmitBody(ImageEraserDriverRequest $request): array
+    {
+        $imageInput = $request->getImageInput();
+        $maskInput = $request->getMaskInput();
+
+        if ($imageInput->isBase64() !== $maskInput->isBase64()) {
+            throw new InvalidArgumentException('image_generate.mixed_image_input_not_supported');
+        }
+
+        $imagePayload = $imageInput->isBase64()
+            ? ['binary_data_base64' => [$imageInput->getBase64Data(), $maskInput->getBase64Data()]]
+            : ['image_urls' => [$imageInput->getValue(), $maskInput->getValue()]];
+
+        return array_filter([
+            'req_key' => 'i2i_inpainting',
+            ...$imagePayload,
+            'steps' => $request->getSteps(),
+            'strength' => $request->getStrength(),
+            'seed' => $request->getSeed(),
+            'dilate_size' => $request->getDilateSize(),
+            'quality' => $request->getQuality(),
+        ], static fn ($value) => $value !== null && $value !== '');
     }
 
     private function downloadResultImage(string $resultUrl): ImageEraserDriverResponse

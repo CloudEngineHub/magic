@@ -7,11 +7,13 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\ImageExpand\DTO;
 
+use App\Domain\ModelGateway\Entity\ValueObject\ImageInput;
+
 class ImageExpandDriverRequest
 {
     public function __construct(
-        private readonly string $imageUrl,
-        private readonly string $maskUrl,
+        private readonly ImageInput $imageInput,
+        private readonly ImageInput $maskInput,
         private readonly ?string $customPrompt,
         private readonly ?int $steps,
         private readonly ?float $strength,
@@ -28,12 +30,22 @@ class ImageExpandDriverRequest
 
     public function getImageUrl(): string
     {
-        return $this->imageUrl;
+        return $this->imageInput->getValue();
     }
 
     public function getMaskUrl(): string
     {
-        return $this->maskUrl;
+        return $this->maskInput->getValue();
+    }
+
+    public function getImageInput(): ImageInput
+    {
+        return $this->imageInput;
+    }
+
+    public function getMaskInput(): ImageInput
+    {
+        return $this->maskInput;
     }
 
     public function getCustomPrompt(): ?string

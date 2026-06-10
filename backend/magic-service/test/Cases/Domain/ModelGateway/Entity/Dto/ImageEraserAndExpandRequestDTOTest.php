@@ -135,10 +135,10 @@ class ImageEraserAndExpandRequestDTOTest extends TestCase
         $dto = new ImageEraserRequestDTO([
             'image_url' => 'https://example.com/image.png',
             'mask_url' => 'https://example.com/mask.png',
-            'steps' => 30,
-            'strength' => 0.8,
-            'seed' => 1,
             'generate_config' => [
+                'steps' => 30,
+                'strength' => 0.8,
+                'seed' => 1,
                 'dilate_size' => 15,
                 'quality' => 'M',
             ],
@@ -155,6 +155,34 @@ class ImageEraserAndExpandRequestDTOTest extends TestCase
         $this->assertSame('M', $dto->getQuality());
     }
 
+    public function testImageEraserRequestAcceptsBase64DataUriInputs(): void
+    {
+        $image = 'data:image/png;base64,' . base64_encode('image-binary');
+        $mask = 'data:image/jpeg;base64,' . base64_encode('mask-binary');
+
+        $dto = new ImageEraserRequestDTO([
+            'image_url' => $image,
+            'mask_url' => $mask,
+        ]);
+
+        $dto->valid();
+
+        $this->assertSame($image, $dto->getImageUrl());
+        $this->assertSame($mask, $dto->getMaskUrl());
+    }
+
+    public function testImageEraserRequestRejectsInvalidBase64DataUri(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(MagicApiErrorCode::ValidateFailed->value);
+
+        $dto = new ImageEraserRequestDTO([
+            'image_url' => 'data:image/png;base64,invalid-base64',
+            'mask_url' => 'https://example.com/mask.png',
+        ]);
+        $dto->valid();
+    }
+
     public function testImageEraserRequestRejectsInvalidStrengthAndQuality(): void
     {
         $this->expectException(BusinessException::class);
@@ -163,8 +191,8 @@ class ImageEraserAndExpandRequestDTOTest extends TestCase
         $dto = new ImageEraserRequestDTO([
             'image_url' => 'https://example.com/image.png',
             'mask_url' => 'https://example.com/mask.png',
-            'strength' => 1.5,
             'generate_config' => [
+                'strength' => 1.5,
                 'quality' => 'X',
             ],
         ]);
@@ -239,11 +267,11 @@ class ImageEraserAndExpandRequestDTOTest extends TestCase
         $dto = new ImageExpandRequestDTO([
             'image_url' => 'https://example.com/image.png',
             'mask_url' => 'https://example.com/mask.png',
-            'custom_prompt' => 'expand the background naturally',
-            'steps' => 30,
-            'strength' => 0.8,
-            'seed' => -1,
+            'prompt' => 'expand the background naturally',
             'generate_config' => [
+                'steps' => 30,
+                'strength' => 0.8,
+                'seed' => -1,
                 'scale' => 7.0,
                 'top' => 0.1,
                 'bottom' => 0.1,
@@ -258,6 +286,7 @@ class ImageEraserAndExpandRequestDTOTest extends TestCase
 
         $this->assertSame('https://example.com/image.png', $dto->getImageUrl());
         $this->assertSame('https://example.com/mask.png', $dto->getMaskUrl());
+        $this->assertSame('expand the background naturally', $dto->getPrompt());
         $this->assertSame('expand the background naturally', $dto->getCustomPrompt());
         $this->assertSame(30, $dto->getSteps());
         $this->assertSame(0.8, $dto->getStrength());
@@ -269,6 +298,51 @@ class ImageEraserAndExpandRequestDTOTest extends TestCase
         $this->assertSame(0.2, $dto->getRight());
         $this->assertSame(1920, $dto->getMaxHeight());
         $this->assertSame(1920, $dto->getMaxWidth());
+    }
+
+    public function testImageExpandRequestKeepsCustomPromptCompatibility(): void
+    {
+        $dto = new ImageExpandRequestDTO([
+            'image_url' => 'https://example.com/image.png',
+            'mask_url' => 'https://example.com/mask.png',
+            'custom_prompt' => 'legacy prompt',
+        ]);
+
+        $dto->valid();
+
+        $this->assertSame('legacy prompt', $dto->getPrompt());
+        $this->assertSame('legacy prompt', $dto->getCustomPrompt());
+    }
+
+    public function testImageExpandRequestPrefersPromptOverCustomPrompt(): void
+    {
+        $dto = new ImageExpandRequestDTO([
+            'image_url' => 'https://example.com/image.png',
+            'mask_url' => 'https://example.com/mask.png',
+            'prompt' => 'new prompt',
+            'custom_prompt' => 'legacy prompt',
+        ]);
+
+        $dto->valid();
+
+        $this->assertSame('new prompt', $dto->getPrompt());
+        $this->assertSame('new prompt', $dto->getCustomPrompt());
+    }
+
+    public function testImageExpandRequestAcceptsBase64DataUriInputs(): void
+    {
+        $image = 'data:image/webp;base64,' . base64_encode('expand-image-binary');
+        $mask = 'data:image/png;base64,' . base64_encode('expand-mask-binary');
+
+        $dto = new ImageExpandRequestDTO([
+            'image_url' => $image,
+            'mask_url' => $mask,
+        ]);
+
+        $dto->valid();
+
+        $this->assertSame($image, $dto->getImageUrl());
+        $this->assertSame($mask, $dto->getMaskUrl());
     }
 
     public function testImageExpandRequestRejectsInvalidRangeValues(): void

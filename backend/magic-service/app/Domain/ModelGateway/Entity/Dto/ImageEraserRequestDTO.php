@@ -41,9 +41,9 @@ class ImageEraserRequestDTO extends AbstractImageOperationRequestDTO
 
         $this->imageUrl = (string) ($requestData['image_url'] ?? '');
         $this->maskUrl = (string) ($requestData['mask_url'] ?? '');
-        $this->steps = $this->nullableInt('steps');
-        $this->strength = $this->nullableFloat('strength');
-        $this->seed = $this->nullableInt('seed');
+        $this->steps = $this->nullableGenerateConfigOrFieldInt('steps');
+        $this->strength = $this->nullableGenerateConfigOrFieldFloat('strength');
+        $this->seed = $this->nullableGenerateConfigOrFieldInt('seed');
         $this->dilateSize = $this->nullableGenerateConfigInt('dilate_size');
         $this->quality = $this->hasGenerateConfigValue('quality') ? strtoupper(trim((string) $this->generateConfig['quality'])) : null;
     }
@@ -96,16 +96,12 @@ class ImageEraserRequestDTO extends AbstractImageOperationRequestDTO
         if ($this->maskUrl === '') {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'common.empty', ['label' => 'mask_url']);
         }
-        if (! filter_var($this->imageUrl, FILTER_VALIDATE_URL)) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'common.invalid_format', ['label' => 'image_url']);
-        }
-        if (! filter_var($this->maskUrl, FILTER_VALIDATE_URL)) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'common.invalid_format', ['label' => 'mask_url']);
-        }
-        $this->assertIntField('steps', 1);
-        $this->assertFloatField('strength', 0.1, 1.0);
-        $this->assertIntField('seed');
         $this->assertGenerateConfig();
+        $this->assertImageInputField('image_url', $this->imageUrl);
+        $this->assertImageInputField('mask_url', $this->maskUrl);
+        $this->assertGenerateConfigOrFieldIntField('steps', 1);
+        $this->assertGenerateConfigOrFieldFloatField('strength', 0.1, 1.0);
+        $this->assertGenerateConfigOrFieldIntField('seed');
         $this->assertProviderOptionsInGenerateConfig(['dilate_size', 'quality']);
         $this->assertGenerateConfigIntField('dilate_size', 0);
         if ($this->quality !== null && ! in_array($this->quality, ['H', 'M', 'L'], true)) {

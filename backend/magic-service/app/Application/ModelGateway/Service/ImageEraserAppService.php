@@ -19,7 +19,6 @@ use App\Infrastructure\ExternalAPI\ImageEraser\ImageEraserDriverFactory;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use App\Infrastructure\Util\File\TemporaryFileManager;
 use App\Infrastructure\Util\SSRF\Exception\SSRFException;
-use App\Infrastructure\Util\SSRF\SSRFUtil;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Dtyq\CloudFile\Kernel\Utils\MimeTypes;
 use Hyperf\Di\Annotation\Inject;
@@ -44,13 +43,14 @@ class ImageEraserAppService extends ImageLLMAppService
         $temporaryFileManager = make(TemporaryFileManager::class);
 
         try {
-            $safeImageUrl = SSRFUtil::getSafeUrl($dto->getImageUrl(), replaceIp: false);
-            $safeMaskUrl = SSRFUtil::getSafeUrl($dto->getMaskUrl(), replaceIp: false);
+            $imageInput = $this->createImageInput($dto->getImageUrl(), 'image_url');
+            $maskInput = $this->createImageInput($dto->getMaskUrl(), 'mask_url');
+            [$imageInput, $maskInput] = $this->normalizeMixedImageInputs($dataIsolation, $imageInput, $maskInput, 'open/image-eraser/input');
             $driver = $this->driverFactory->create($providerCode, $providerConfig);
 
             $driverResponse = $driver->erase(new ImageEraserDriverRequest(
-                $safeImageUrl,
-                $safeMaskUrl,
+                $imageInput,
+                $maskInput,
                 $dto->getSteps(),
                 $dto->getStrength(),
                 $dto->getSeed(),

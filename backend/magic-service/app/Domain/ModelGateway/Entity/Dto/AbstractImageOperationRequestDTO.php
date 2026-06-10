@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\ModelGateway\Entity\Dto;
 
+use App\Domain\ModelGateway\Entity\ValueObject\ImageInput;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 
@@ -18,6 +19,14 @@ abstract class AbstractImageOperationRequestDTO extends AbstractRequestDTO
      * @var array<string, mixed>
      */
     protected array $generateConfig = [];
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getGenerateConfig(): array
+    {
+        return $this->generateConfig;
+    }
 
     /**
      * @param list<string> $operationKeys
@@ -108,6 +117,24 @@ abstract class AbstractImageOperationRequestDTO extends AbstractRequestDTO
         return is_numeric($this->generateConfig[$key]) ? (float) $this->generateConfig[$key] : null;
     }
 
+    protected function nullableGenerateConfigOrFieldInt(string $key): ?int
+    {
+        if ($this->hasGenerateConfigValue($key)) {
+            return $this->nullableGenerateConfigInt($key);
+        }
+
+        return $this->nullableInt($key);
+    }
+
+    protected function nullableGenerateConfigOrFieldFloat(string $key): ?float
+    {
+        if ($this->hasGenerateConfigValue($key)) {
+            return $this->nullableGenerateConfigFloat($key);
+        }
+
+        return $this->nullableFloat($key);
+    }
+
     protected function assertGenerateConfig(): void
     {
         if (array_key_exists('generate_config', $this->requestData) && ! is_array($this->requestData['generate_config'])) {
@@ -152,6 +179,33 @@ abstract class AbstractImageOperationRequestDTO extends AbstractRequestDTO
         }
 
         $this->assertRange('generate_config.' . $key, (float) $this->generateConfig[$key], $min, $max);
+    }
+
+    protected function assertGenerateConfigOrFieldIntField(string $key, ?int $min = null, ?int $max = null): void
+    {
+        if ($this->hasGenerateConfigValue($key)) {
+            $this->assertGenerateConfigIntField($key, $min, $max);
+            return;
+        }
+
+        $this->assertIntField($key, $min, $max);
+    }
+
+    protected function assertGenerateConfigOrFieldFloatField(string $key, ?float $min = null, ?float $max = null): void
+    {
+        if ($this->hasGenerateConfigValue($key)) {
+            $this->assertGenerateConfigFloatField($key, $min, $max);
+            return;
+        }
+
+        $this->assertFloatField($key, $min, $max);
+    }
+
+    protected function assertImageInputField(string $key, string $value): void
+    {
+        if (! ImageInput::isSupported($value)) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'common.invalid_format', ['label' => $key]);
+        }
     }
 
     protected function hasGenerateConfigValue(string $key): bool

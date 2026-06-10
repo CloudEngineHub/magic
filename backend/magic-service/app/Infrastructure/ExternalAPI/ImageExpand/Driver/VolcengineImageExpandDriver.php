@@ -54,21 +54,7 @@ class VolcengineImageExpandDriver implements ImageExpandDriverInterface
             throw new InvalidArgumentException('image_generate.image_expand_provider_not_configured');
         }
 
-        $body = array_filter([
-            'req_key' => 'i2i_outpainting',
-            'image_urls' => [$request->getImageUrl(), $request->getMaskUrl()],
-            'custom_prompt' => $request->getCustomPrompt(),
-            'steps' => $request->getSteps(),
-            'strength' => $request->getStrength(),
-            'scale' => $request->getScale(),
-            'seed' => $request->getSeed(),
-            'top' => $request->getTop(),
-            'bottom' => $request->getBottom(),
-            'left' => $request->getLeft(),
-            'right' => $request->getRight(),
-            'max_height' => $request->getMaxHeight(),
-            'max_width' => $request->getMaxWidth(),
-        ], static fn ($value) => $value !== null && $value !== '');
+        $body = $this->buildSubmitBody($request);
 
         try {
             $client = new VolcengineVisualAsyncClient($ak, $sk, $this->loggerFactory);
@@ -103,6 +89,39 @@ class VolcengineImageExpandDriver implements ImageExpandDriverInterface
             RequestOptions::TIMEOUT => (int) ($this->providerConfig['timeout'] ?? 300),
             'http_errors' => false,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildSubmitBody(ImageExpandDriverRequest $request): array
+    {
+        $imageInput = $request->getImageInput();
+        $maskInput = $request->getMaskInput();
+
+        if ($imageInput->isBase64() !== $maskInput->isBase64()) {
+            throw new InvalidArgumentException('image_generate.mixed_image_input_not_supported');
+        }
+
+        $imagePayload = $imageInput->isBase64()
+            ? ['binary_data_base64' => [$imageInput->getBase64Data(), $maskInput->getBase64Data()]]
+            : ['image_urls' => [$imageInput->getValue(), $maskInput->getValue()]];
+
+        return array_filter([
+            'req_key' => 'i2i_outpainting',
+            ...$imagePayload,
+            'custom_prompt' => $request->getCustomPrompt(),
+            'steps' => $request->getSteps(),
+            'strength' => $request->getStrength(),
+            'scale' => $request->getScale(),
+            'seed' => $request->getSeed(),
+            'top' => $request->getTop(),
+            'bottom' => $request->getBottom(),
+            'left' => $request->getLeft(),
+            'right' => $request->getRight(),
+            'max_height' => $request->getMaxHeight(),
+            'max_width' => $request->getMaxWidth(),
+        ], static fn ($value) => $value !== null && $value !== '');
     }
 
     private function downloadResultImage(string $resultUrl): ImageExpandDriverResponse
