@@ -68,6 +68,7 @@ interface MobileProjectDetailFilesViewProps {
 	onBatchZipDownload?: () => void
 	batchDownloadLoading?: boolean
 	onBatchShare?: (selectedKeys: Set<string>) => void
+	onBatchCopy?: (selectedKeys: Set<string>) => void
 	onBatchMove?: (selectedKeys: Set<string>) => void
 	onBatchDelete?: (selectedKeys: Set<string>) => void
 }
@@ -300,6 +301,7 @@ function MobileProjectDetailFilesView({
 	onBatchZipDownload,
 	batchDownloadLoading = false,
 	onBatchShare,
+	onBatchCopy,
 	onBatchMove,
 	onBatchDelete,
 }: MobileProjectDetailFilesViewProps) {
@@ -1010,6 +1012,7 @@ function MobileProjectDetailFilesView({
 						onToggleAll={handleToggleAll}
 						onDownload={canSelectionDownload ? handleSelectionDownload : undefined}
 						onShare={() => onBatchShare?.(selectedIds)}
+						onCopy={() => onBatchCopy?.(selectedIds)}
 						onMove={() => onBatchMove?.(selectedIds)}
 						onDelete={() => onBatchDelete?.(selectedIds)}
 					/>

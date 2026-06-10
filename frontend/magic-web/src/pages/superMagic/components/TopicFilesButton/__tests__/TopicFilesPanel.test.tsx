@@ -4,6 +4,7 @@ import TopicFilesPanel from "../TopicFilesPanel"
 
 const selectDirectoryModalSpy = vi.fn()
 const executeMoveOperationSpy = vi.fn()
+const executeCopyOperationSpy = vi.fn()
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -109,6 +110,12 @@ vi.mock("../hooks/useProjectDetailFilesController", () => ({
 			onSubmit: vi.fn(),
 			pendingMoveFileIds: ["file-1", "file-2"],
 		},
+		copySelectorProps: {
+			open: false,
+			onClose: vi.fn(),
+			onSubmit: vi.fn(),
+			pendingCopyFileIds: ["file-copy-1", "file-copy-2"],
+		},
 		sharedDuplicateHandler: {
 			modalVisible: false,
 			currentFileName: "",
@@ -129,6 +136,7 @@ vi.mock("../hooks/useProjectDetailFilesController", () => ({
 		createFolder: vi.fn(),
 		batchShare: vi.fn(),
 		batchMove: vi.fn(),
+		batchCopy: vi.fn(),
 		batchDelete: vi.fn(),
 		resetMobileSelection: vi.fn(),
 	}),
@@ -137,6 +145,7 @@ vi.mock("../hooks/useProjectDetailFilesController", () => ({
 vi.mock("../hooks/useCrossProjectFileOperation", () => ({
 	useCrossProjectFileOperation: () => ({
 		executeMoveOperation: executeMoveOperationSpy,
+		executeCopyOperation: executeCopyOperationSpy,
 		duplicateModalVisible: false,
 		currentDuplicateFileName: "",
 		totalDuplicates: 0,
@@ -146,8 +155,13 @@ vi.mock("../hooks/useCrossProjectFileOperation", () => ({
 	}),
 }))
 
+const mobileProjectDetailFilesViewPropsSpy = vi.fn()
+
 vi.mock("../components/MobileProjectDetailFilesView", () => ({
-	default: () => <div data-testid="mobile-project-detail-files-view" />,
+	default: (props: Record<string, unknown>) => {
+		mobileProjectDetailFilesViewPropsSpy(props)
+		return <div data-testid="mobile-project-detail-files-view" />
+	},
 }))
 
 vi.mock("../components", () => ({
@@ -201,7 +215,7 @@ describe("TopicFilesPanel", () => {
 			/>,
 		)
 
-		const modalProps = selectDirectoryModalSpy.mock.calls.at(-1)?.[0] as {
+		const modalProps = selectDirectoryModalSpy.mock.calls[0]?.[0] as {
 			onSubmit?: (params: {
 				path: unknown[]
 				targetProjectId?: string
@@ -219,6 +233,49 @@ describe("TopicFilesPanel", () => {
 
 		expect(executeMoveOperationSpy).toHaveBeenCalledWith({
 			fileIds: ["file-1", "file-2"],
+			targetProjectId: "project-2",
+			targetPath: [],
+			targetAttachments: [],
+			sourceAttachments: [],
+		})
+	})
+
+	it("在项目详情移动端跨项目确认时带上待复制文件 ID 执行复制", async () => {
+		selectDirectoryModalSpy.mockClear()
+		executeCopyOperationSpy.mockClear()
+
+		render(
+			<TopicFilesPanel
+				attachments={[]}
+				projectId="project-1"
+				selectedProject={{
+					id: "project-1",
+					project_name: "测试项目",
+					workspace_id: "workspace-1",
+				}}
+				selectedWorkspace={{ id: "workspace-1", name: "测试工作区" }}
+				mobileViewVariant="project-detail"
+			/>,
+		)
+
+		const copyModalProps = selectDirectoryModalSpy.mock.calls[1]?.[0] as {
+			onSubmit?: (params: {
+				path: unknown[]
+				targetProjectId?: string
+				targetAttachments?: unknown[]
+				sourceAttachments?: unknown[]
+			}) => Promise<void>
+		}
+
+		await copyModalProps.onSubmit?.({
+			path: [],
+			targetProjectId: "project-2",
+			targetAttachments: [],
+			sourceAttachments: [],
+		})
+
+		expect(executeCopyOperationSpy).toHaveBeenCalledWith({
+			fileIds: ["file-copy-1", "file-copy-2"],
 			targetProjectId: "project-2",
 			targetPath: [],
 			targetAttachments: [],
@@ -288,6 +345,35 @@ describe("TopicFilesPanel", () => {
 				isChatProject: true,
 			},
 		})
+	})
+
+	it("只读场景下仍提供批量复制，但不提供移动和删除", () => {
+		mobileProjectDetailFilesViewPropsSpy.mockClear()
+
+		render(
+			<TopicFilesPanel
+				attachments={[]}
+				projectId="project-1"
+				allowEdit={false}
+				selectedProject={{
+					id: "project-1",
+					project_name: "测试项目",
+					workspace_id: "workspace-1",
+				}}
+				selectedWorkspace={{ id: "workspace-1", name: "测试工作区" }}
+				mobileViewVariant="project-detail"
+			/>,
+		)
+
+		const viewProps = mobileProjectDetailFilesViewPropsSpy.mock.calls.at(-1)?.[0] as {
+			onBatchCopy?: unknown
+			onBatchMove?: unknown
+			onBatchDelete?: unknown
+		}
+
+		expect(viewProps.onBatchCopy).toEqual(expect.any(Function))
+		expect(viewProps.onBatchMove).toBeUndefined()
+		expect(viewProps.onBatchDelete).toBeUndefined()
 	})
 
 	it("在项目详情移动端多选分享时使用新的文件分享 Sheet", () => {

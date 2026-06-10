@@ -13,6 +13,13 @@ vi.mock("react-i18next", () => ({
 	},
 }))
 
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getLocaleModules: () => ({}),
+	getAdminLocaleModules: () => ({}),
+	loadFallbackLocale: vi.fn(),
+	loadMagicFlowLocale: vi.fn(),
+}))
+
 vi.mock("mobx-react-lite", () => ({
 	observer: <T,>(component: T) => component,
 }))
@@ -66,6 +73,12 @@ vi.mock("@/pages/superMagicMobile/components/MobileBottomSearchBar", () => ({
 	default: () => <div />,
 }))
 
+vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
+	ScrollEdgeFadeContainer: ({ children }: { children?: React.ReactNode }) => (
+		<div>{children}</div>
+	),
+}))
+
 vi.mock("../MobileFilesSelectionBar", () => ({
 	default: () => <div />,
 }))
@@ -98,7 +111,7 @@ vi.mock("@/pages/superMagic/components/TopicFilesButton/utils/getAttachmentKey",
 
 vi.mock("@/pages/superMagic/components/TopicFilesButton/utils/mobileAttachmentTreeSelection", () => ({
 	collectAttachmentsBySelectedKeys: vi.fn(() => []),
-	collectCurrentViewSelectableKeys: vi.fn(() => []),
+	collectCurrentViewSelectableKeys: vi.fn(() => ["mock-file-id"]),
 	getAttachmentNodeSelectionState: vi.fn(() => "none"),
 	toggleAllInCurrentView: vi.fn((_: string[], selected: Set<string>) => selected),
 	toggleAttachmentSelection: vi.fn((_: string, selected: Set<string>) => selected),
