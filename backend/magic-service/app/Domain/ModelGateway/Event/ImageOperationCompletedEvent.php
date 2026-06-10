@@ -11,13 +11,23 @@ use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Infrastructure\Core\AbstractEvent;
 use DateTime;
 
-class ImageRemoveBackgroundCompletedEvent extends AbstractEvent
+class ImageOperationCompletedEvent extends AbstractEvent
 {
+    public const string OPERATION_REMOVE_BACKGROUND = 'image_remove_background';
+
+    public const string OPERATION_ERASER = 'image_eraser';
+
+    public const string OPERATION_EXPAND = 'image_expand';
+
     protected string $organizationCode;
 
     protected string $userId;
 
-    protected int $imageCount = 0;
+    protected string $operationType;
+
+    protected string $provider = '';
+
+    protected int $imageCount = 1;
 
     protected ?string $originalModelId = null;
 
@@ -39,6 +49,8 @@ class ImageRemoveBackgroundCompletedEvent extends AbstractEvent
 
     protected ImageGenerateSourceEnum $sourceType;
 
+    protected array $businessParams = [];
+
     public function getOrganizationCode(): string
     {
         return $this->organizationCode;
@@ -57,6 +69,26 @@ class ImageRemoveBackgroundCompletedEvent extends AbstractEvent
     public function setUserId(string $userId): void
     {
         $this->userId = $userId;
+    }
+
+    public function getOperationType(): string
+    {
+        return $this->operationType;
+    }
+
+    public function setOperationType(string $operationType): void
+    {
+        $this->operationType = $operationType;
+    }
+
+    public function getProvider(): string
+    {
+        return $this->provider;
+    }
+
+    public function setProvider(string $provider): void
+    {
+        $this->provider = $provider;
     }
 
     public function getImageCount(): int
@@ -167,5 +199,15 @@ class ImageRemoveBackgroundCompletedEvent extends AbstractEvent
     public function setSourceType(ImageGenerateSourceEnum $sourceType): void
     {
         $this->sourceType = $sourceType;
+    }
+
+    public function getBusinessParams(): array
+    {
+        return $this->businessParams;
+    }
+
+    public function setBusinessParams(array $businessParams): void
+    {
+        $this->businessParams = $businessParams;
     }
 }

@@ -9,6 +9,7 @@ namespace App\Application\ModelGateway\Service;
 
 use App\Domain\ModelGateway\Entity\Dto\ImageExpandRequestDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Event\ImageOperationCompletedEvent;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -39,6 +40,8 @@ class ImageExpandAppService extends ImageLLMAppService
         $dataIsolation = $this->createModelGatewayDataIsolationByAccessToken($dto->getAccessToken(), $dto->getBusinessParams());
         $providerConfig = $this->resolveEnabledProviderConfig();
         $providerCode = (string) ($providerConfig['provider'] ?? '');
+        $callTime = date('Y-m-d H:i:s');
+        $startTime = microtime(true);
 
         $temporaryFileManager = make(TemporaryFileManager::class);
 
@@ -66,7 +69,21 @@ class ImageExpandAppService extends ImageLLMAppService
 
             $temporaryFileManager->add($driverResponse->getResultFilePath());
 
-            return $this->uploadResultFile($dataIsolation, $driverResponse->getResultFilePath(), $driverResponse->getMimeType(), $providerCode);
+            $response = $this->uploadResultFile($dataIsolation, $driverResponse->getResultFilePath(), $driverResponse->getMimeType(), $providerCode);
+            $responseTime = (int) round((microtime(true) - $startTime) * 1000);
+            if ($response->isSuccess()) {
+                $this->dispatchImageOperationCompletedEvent(
+                    $dataIsolation,
+                    $dto,
+                    ImageOperationCompletedEvent::OPERATION_EXPAND,
+                    $providerCode,
+                    $callTime,
+                    $responseTime,
+                    (int) round($startTime * 1000)
+                );
+            }
+
+            return $response;
         } catch (ImageExpandDriverException $exception) {
             return new OpenAIFormatResponse([
                 'created' => time(),

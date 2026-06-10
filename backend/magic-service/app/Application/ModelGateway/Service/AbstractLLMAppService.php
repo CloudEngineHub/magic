@@ -16,8 +16,11 @@ use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\File\Service\FileCleanupDomainService;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ImageGenerate\Contract\WatermarkConfigInterface;
+use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
+use App\Domain\ModelGateway\Entity\Dto\AbstractRequestDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\AccessTokenType;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Event\ImageOperationCompletedEvent;
 use App\Domain\ModelGateway\Service\AccessTokenDomainService;
 use App\Domain\ModelGateway\Service\ApplicationDomainService;
 use App\Domain\ModelGateway\Service\ModelConfigDomainService;
@@ -30,6 +33,10 @@ use App\Domain\Provider\Service\ProviderModelDomainService;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\ImageGenerate\ImageWatermarkProcessor;
+use App\Infrastructure\Util\Context\CoContext;
+use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use DateTime;
+use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
@@ -123,6 +130,61 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
         return $dataIsolation;
     }
 
+    protected function dispatchImageOperationCompletedEvent(
+        ModelGatewayDataIsolation $dataIsolation,
+        AbstractRequestDTO $requestDTO,
+        string $operationType,
+        string $provider,
+        string $callTime,
+        int $responseTime,
+        int $operationTime,
+        int $imageCount = 1,
+        array $extraBusinessParams = [],
+    ): void {
+        $accessTokenEntity = $dataIsolation->getAccessToken();
+        $businessParams = array_merge(
+            $requestDTO->getBusinessParams(),
+            [
+                'operation_type' => $operationType,
+                'provider' => $provider,
+                'image_count' => $imageCount,
+                'response_duration' => $responseTime,
+                'operation_time' => $operationTime,
+                'original_model_id' => $requestDTO->getOriginalModelId(),
+                'organization_id' => $dataIsolation->getCurrentOrganizationCode(),
+                'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                'user_id' => $dataIsolation->getCurrentUserId(),
+                'source_id' => $dataIsolation->getSourceId(),
+                'request_id' => CoContext::getRequestId(),
+                'access_token_id' => $accessTokenEntity->getId(),
+                'access_token_name' => $accessTokenEntity->getName(),
+                'access_token_type' => $accessTokenEntity->getType()->value,
+                'event_id' => (string) IdGenerator::getSnowId(),
+            ],
+            $extraBusinessParams
+        );
+
+        $event = new ImageOperationCompletedEvent();
+        $event->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
+        $event->setUserId($dataIsolation->getCurrentUserId());
+        $event->setOperationType($operationType);
+        $event->setProvider($provider);
+        $event->setImageCount($imageCount);
+        $event->setOriginalModelId($requestDTO->getOriginalModelId());
+        $event->setCallTime($callTime);
+        $event->setResponseTime($responseTime);
+        $event->setTopicId($requestDTO->getTopicId());
+        $event->setTaskId($requestDTO->getTaskId());
+        $event->setAccessTokenId($accessTokenEntity->getId());
+        $event->setAccessTokenName($accessTokenEntity->getName());
+        $event->setSourceId($dataIsolation->getSourceId());
+        $event->setSourceType($this->resolveImageOperationSourceType($dataIsolation, $requestDTO));
+        $event->setCreatedAt(new DateTime());
+        $event->setBusinessParams($businessParams);
+
+        AsyncEventUtil::dispatch($event);
+    }
+
     private function getApplicationOrganizationCode(array $businessParams = []): string
     {
         $org = $this->getBusinessParam('organization_code', '', $businessParams);
@@ -178,5 +240,20 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
         } catch (Throwable) {
             return $default;
         }
+    }
+
+    private function resolveImageOperationSourceType(
+        ModelGatewayDataIsolation $dataIsolation,
+        AbstractRequestDTO $requestDTO,
+    ): ImageGenerateSourceEnum {
+        if ($dataIsolation->getAccessToken()->getType()->isUser()) {
+            return ImageGenerateSourceEnum::API_PLATFORM;
+        }
+
+        if (! empty($requestDTO->getTopicId())) {
+            return ImageGenerateSourceEnum::SUPER_MAGIC;
+        }
+
+        return ImageGenerateSourceEnum::API;
     }
 }
