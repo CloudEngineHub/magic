@@ -10,7 +10,7 @@ export const routeSketchMap: RouteSketchMap = {
 		),
 		mobile: lazy(
 			() =>
-				import("@/pages/superMagic/lazy/skeleton/WorkspacePageMobileSkeletonWithLayout"),
+				import("@/pages/superMagic/lazy/skeleton/MobileHomePageMobileSkeleton"),
 		),
 	},
 	[RouteName.MobileTabs]: {
@@ -40,7 +40,18 @@ export const routeSketchMap: RouteSketchMap = {
 			() => import("@/pages/superMagic/lazy/skeleton/TopicPageDesktopSkeleton"),
 		),
 		mobile: lazy(
-			() => import("@/pages/superMagic/lazy/skeleton/TopicPageMobileSkeleton"),
+			() =>
+				import("@/pages/superMagic/lazy/skeleton/TopicPageMobileSkeletonWithLayout"),
+		),
+	},
+	[RouteName.SuperChatProjectState]: {
+		mobile: lazy(
+			() => import("@/pages/superMagic/lazy/skeleton/ChatProjectPageMobileSkeleton"),
+		),
+	},
+	[RouteName.MobileHome]: {
+		mobile: lazy(
+			() => import("@/pages/superMagic/lazy/skeleton/MobileHomePageMobileSkeleton"),
 		),
 	},
 	[RouteName.Chat]: {

@@ -95,6 +95,8 @@
 		"contactsOrganization": "Contacts/Organization",
 		"crewEdit": "Edit Crew",
 		"crewMarket": "Digital Crew",
+		"audioRecordings": "Recordings & summaries",
+		"audioRecordingDetail": "Recording detail",
 		"default": "Super Magic - First Open-Source Enterprise AI Agent Platform",
 		"explore": "AI Assistant",
 		"global": "Super Magic",
@@ -114,6 +116,9 @@
 		"settings": "Settings",
 		"skillEdit": "Edit Skill",
 		"skillsLibrary": "Skills Library",
+		"super": "$t(common:routes.global)",
+		"superChats": "Chats",
+		"superWorkspaces": "Workspaces",
 		"superDashboard": "$t(common:platform.name) Dashboard",
 		"vectorKnowledgeCreate": "Vector Knowledge Base Creation",
 		"workspace": "Workspace"

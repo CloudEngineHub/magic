@@ -26,6 +26,8 @@ interface UseHTMLEditorV2Options {
 	contentInjected: boolean
 	/** 渲染站地址 */
 	renderSiteUrl?: string
+	/** 回发 iframe 的严格目标源 */
+	targetOrigin: string
 	/** 缩放比例 */
 	scaleRatio?: number
 	/** 保存编辑内容的回调 */
@@ -60,6 +62,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		iframeLoaded,
 		contentInjected,
 		renderSiteUrl,
+		targetOrigin,
 		scaleRatio,
 		saveEditContent,
 		fileId,
@@ -74,6 +77,9 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 	const [isRuntimeReady, setIsRuntimeReady] = useState(false)
 	const hasInjectedScriptRef = useRef(false)
 	const prevContentInjectedRef = useRef(false)
+	const contentInjectedRef = useRef(contentInjected)
+	// 记录早于 contentInjected 恢复到达的 EDITOR_READY
+	const hasPendingRuntimeReadyRef = useRef(false)
 	const prevIsEditModeRef = useRef(Boolean(isEditMode))
 	const desiredEditModeRef = useRef(Boolean(isEditMode))
 	const stylePanelStoreRef = useRef(stylePanelStore)
@@ -86,6 +92,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 	stylePanelStoreRef.current = stylePanelStore
 	onZoomRequestRef.current = onZoomRequest
 	desiredEditModeRef.current = Boolean(isEditMode)
+	contentInjectedRef.current = contentInjected
 
 	const getActiveBridge = useCallback(() => {
 		if (!messageBridgeRef.current?.isActive()) return null
@@ -163,12 +170,16 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		}
 
 		// 创建 MessageBridge 实例
-		const bridge = new MessageBridge(iframeRef.current)
+		const bridge = new MessageBridge(iframeRef.current, targetOrigin)
 		messageBridgeRef.current = bridge
 
 		// 监听 EDITOR_READY 事件
 		bridge.on("EDITOR_READY", () => {
 			console.log("[useHTMLEditorV2] iframe-runtime 已准备就绪")
+			// 跨域刷新时，ready 可能早于宿主状态恢复
+			if (!contentInjected || !contentInjectedRef.current) {
+				hasPendingRuntimeReadyRef.current = true
+			}
 			setIsRuntimeReady(true)
 		})
 
@@ -238,7 +249,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			setIsRuntimeReady(false)
 			editLifecycleRef.current = "idle"
 		}
-	}, [sandboxType, iframeLoaded, iframeRef])
+	}, [sandboxType, iframeLoaded, iframeRef, targetOrigin])
 
 	// 创建编辑器 ref 接口（实现 HTMLEditorV2Ref）
 	useImperativeHandle(
@@ -288,12 +299,13 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 
 					console.log("[useHTMLEditorV2] save result", result)
 
-					if (!result?.cleanHtml) {
-						console.error("[useHTMLEditorV2] save failed: no cleanHtml in result")
+					const htmlForClean = result?.html || result?.cleanHtml
+					if (!htmlForClean) {
+						console.error("[useHTMLEditorV2] save failed: no html in result")
 						return defaultResult
 					}
 
-					const cleanContent = filterInjectedTags(result.cleanHtml, filePathMapping)
+					const cleanContent = filterInjectedTags(htmlForClean, filePathMapping)
 					await saveEditContent(
 						cleanContent,
 						String(fileId),
@@ -304,7 +316,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 
 					return {
 						cleanContent,
-						rawContent: result.html || result.cleanHtml,
+						rawContent: htmlForClean,
 						fileId: fileId,
 						success: true,
 					}
@@ -640,7 +652,13 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		// 这允许在内容更新后重新注入脚本（因为 setContent 会清除所有脚本）
 		if (contentInjected && !prevContentInjectedRef.current) {
 			if (isCrossDomain) {
-				setIsRuntimeReady(false)
+				if (hasPendingRuntimeReadyRef.current) {
+					// runtime 已报告 ready 时，保留 ready 状态
+					hasPendingRuntimeReadyRef.current = false
+				} else {
+					// 跨域 runtime 可能先于 contentInjected 恢复发出 ready
+					setIsRuntimeReady(false)
+				}
 			} else if (hasInjectedScriptRef.current) {
 				hasInjectedScriptRef.current = false
 				setIsRuntimeReady(false)
@@ -651,8 +669,6 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 
 		// 退出编辑模式：发送退出请求并清理编辑态（但不销毁 bridge）
 		if (!nextIsEditMode) {
-			hasInjectedScriptRef.current = false
-			setIsRuntimeReady(false)
 			editLifecycleRef.current = "idle"
 
 			if (!wasEditMode) return
@@ -686,7 +702,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 								runtimeUrl,
 								scaleRatio: scaleRatio || 1,
 							},
-							"*",
+							targetOrigin,
 						)
 					} else {
 						// iframe-runtime.js 已经通过 getFullContent 内联在 HTML 中，
@@ -696,7 +712,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 								type: "activateEditorRuntime",
 								scaleRatio: scaleRatio || 1,
 							},
-							"*",
+							targetOrigin,
 						)
 					}
 					hasInjectedScriptRef.current = true
@@ -715,6 +731,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		iframeRef,
 		scaleRatio,
 		runExitEditFlow,
+		targetOrigin,
 	])
 
 	// 当 runtime 就绪且内容已注入后，再启用编辑模式和选择模式，避免「选择元素」在 iframe 未加载完时执行

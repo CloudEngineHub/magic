@@ -12,6 +12,15 @@ export const USER_MESSAGE_STICKY_OVERLAY_CLASS = cn(
 	"after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-4 after:bg-gradient-to-b after:from-[var(--sticky-message-mask-fade-from)] after:to-transparent after:content-['']",
 )
 
+/**
+ * Desktop-only sticky mask tweaks; mobile renders flat lists (no sticky) so this is unused on mobile.
+ */
+export const USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE = cn(
+	"before:bg-[rgb(var(--mobile-background-rgb))]",
+	"after:bg-none",
+	"!-top-[2px]",
+)
+
 export function getUserMessageStickyTopClass(isMobile: boolean): "top-[10px]" | "top-[40px]" {
 	return isMobile ? "top-[10px]" : "top-[40px]"
 }
@@ -68,7 +77,8 @@ function MessageTurnGroupListInner({
 	return (
 		<>
 			{groups.map((group) => {
-				if (!group.stickyItem) {
+				// Mobile: flat scroll list — sticky user turns waste viewport and block more assistant content.
+				if (!group.stickyItem || isMobile) {
 					return (
 						<div key={group.key} className="relative flex flex-col gap-2">
 							{group.items.map(({ node, index }) => row(node, index))}
@@ -87,6 +97,7 @@ function MessageTurnGroupListInner({
 							data-sticky-message-id={stickyNodeKey}
 							className={cn(
 								USER_MESSAGE_STICKY_OVERLAY_CLASS,
+								isMobile && USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
 								userMessageStickyTopClass,
 								stickyMessageClassName,
 								"mb-2",

@@ -7,6 +7,8 @@ import { IconType } from "../../components/AgentSelector/types"
 import type { SceneItem } from "../../types/skill"
 import { TopicMode } from "./TopicMode"
 
+export { TopicMode } from "./TopicMode"
+
 export interface WithPage<T> {
 	list: T[]
 	total: number
@@ -148,11 +150,15 @@ export interface Workspace {
 	id: string
 	name: string
 	is_archived: 0 | 1 // 0: 未归档，1: 已归档
+	is_pinned?: boolean
+	pinned_at?: string | null
 	current_topic_id: string
 	current_project_id: string | null
 	workspace_status: WorkspaceStatus
+	cooperate_project_count?: number
 	project_count: number
 	status?: "waiting" | "running" | "finished" | "error" // 其实没有这个字段，但是为了兼容旧数据，所以加了这个字段
+	workspace_type: "chat" | "default"
 }
 
 // 话题
@@ -280,6 +286,7 @@ export interface ProjectListItem {
 	updated_at: string
 	members?: Collaborator[] // 协作项目才有
 	member_count?: number // 协作项目才有
+	topic_count?: number // 协作项目才有
 	creator?: CollaborationProjectListItem["creator"] // 协作项目才有
 	tag: "collaboration" | "" // 用于标识是否是协作项目
 	is_pinned?: boolean // 协作项目才有
@@ -287,6 +294,10 @@ export interface ProjectListItem {
 	user_role?: CollaboratorPermission
 	is_bind_workspace?: boolean // 协作项目才有
 	bind_workspace_id?: string // 协作项目才有
+	/** 是否开启了协作功能（即他人可通过链接加入），接口按需返回 */
+	is_collaboration_enabled?: boolean
+	/** 默认加入权限，与 is_collaboration_enabled 配套 */
+	default_join_permission?: CollaboratorPermission
 }
 
 // 创建新项目的响应数据
@@ -334,6 +345,7 @@ export interface CollaborationProjectListItem {
 	creator: Omit<CollaborationProjectCreator, "id" | "name"> & { nickname: string }
 	members: Collaborator[]
 	member_count: number
+	topic_count?: number
 	tag: "collaboration"
 	is_pinned?: boolean
 	last_active_at?: string

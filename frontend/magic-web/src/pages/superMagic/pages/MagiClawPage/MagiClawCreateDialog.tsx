@@ -42,6 +42,9 @@ export interface MagiClawTemplateOption {
 
 const DEFAULT_TEMPLATE = MAGI_CLAW_TEMPLATE_OPTIONS[0]
 
+/**
+ * MagiClawCreateDialog renders the desktop centered modal create flow for MagiClaw.
+ */
 export function MagiClawCreateDialog({
 	open,
 	onOpenChange,
@@ -71,10 +74,12 @@ export function MagiClawCreateDialog({
 		[selectedTemplateCode],
 	)
 
+	/** Resolve the default display name for a template option. */
 	function getTemplateDefaultName(template: MagiClawTemplateOption) {
 		return t(template.defaultNameKey, clawBrandValues)
 	}
 
+	/** Trim input and emit the create payload to the parent handler. */
 	function handleCreate() {
 		const trimmedName = name.trim()
 		if (!trimmedName || isBusy) return
@@ -85,6 +90,7 @@ export function MagiClawCreateDialog({
 		})
 	}
 
+	/** Reset transient form state whenever the dialog closes. */
 	function handleOpenChange(nextOpen: boolean) {
 		onOpenChange(nextOpen)
 		if (!nextOpen) {
@@ -96,6 +102,7 @@ export function MagiClawCreateDialog({
 		}
 	}
 
+	/** Switch template and sync the default name unless the user customized it. */
 	function handleTemplateChange(templateCode: MagicClawTemplateCode) {
 		const nextTemplate =
 			MAGI_CLAW_TEMPLATE_OPTIONS.find((template) => template.templateCode === templateCode) ??
@@ -105,11 +112,13 @@ export function MagiClawCreateDialog({
 		if (!isNameCustomized) setName(getTemplateDefaultName(nextTemplate))
 	}
 
+	/** Open the hidden file input for avatar upload. */
 	function handleUploadAreaClick() {
 		if (isBusy) return
 		avatarInputRef.current?.click()
 	}
 
+	/** Upload avatar file and store the returned public URL locally. */
 	async function handleAvatarFileChange(event: ChangeEvent<HTMLInputElement>) {
 		const file = event.target.files?.[0]
 		event.target.value = ""

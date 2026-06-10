@@ -35,6 +35,7 @@ import type {
 import type { PlaybookItem } from "./crew"
 import { genRequestUrl } from "@/utils/http"
 import { generateRecordingSummaryApi } from "./superMagic/recordSummary"
+import { generateAudioProjectsApi } from "./superMagic/audioProjects"
 import { generateCollaborationApi } from "./superMagic/collaboration"
 import { buildImageProcessQuery } from "@/utils/image-processing"
 import type {
@@ -876,10 +877,18 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param id
 	 * @param workspace_name
 	 */
-	editWorkspace({ id, workspace_name }: { id: string; workspace_name: string }) {
+	editWorkspace({
+		id,
+		workspace_name,
+		is_pinned,
+	}: {
+		id: string
+		workspace_name: string
+		is_pinned?: boolean
+	}) {
 		return fetch.put(
 			`/api/v1/super-agent/workspaces/${id}`,
-			{ workspace_name },
+			{ workspace_name, is_pinned },
 			{
 				enableRequestUnion: true,
 			},
@@ -1555,11 +1564,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	getProjects({
 		workspace_id,
 		project_name,
+		order_by,
+		sort,
 		page,
 		page_size,
 	}: {
 		workspace_id?: string
 		project_name?: string
+		order_by?: string
+		sort?: string
 		page: number
 		page_size: number
 	}) {
@@ -1570,6 +1583,8 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				{
 					workspace_id,
 					project_name,
+					order_by,
+					sort,
 					page,
 					page_size,
 				},
@@ -1756,6 +1771,14 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 */
 	deleteProject({ id }: { id: string }) {
 		return fetch.delete(`/api/v1/super-agent/projects/${id}`)
+	},
+
+	/**
+	 * @description 批量删除项目（单条删除也可走此接口，project_ids 传 1 个元素）
+	 * @param data.project_ids 待删除的项目 ID 列表
+	 */
+	batchDeleteProjects(data: { project_ids: string[] }) {
+		return fetch.post(`/api/v1/super-agent/projects/batch-delete`, data)
 	},
 
 	/**
@@ -1961,6 +1984,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			`/api/v1/modes/default`,
 			{
 				enableRequestUnion: true,
+				swCacheOption: "no-cache",
 				headers: {
 					"X-Magic-Image-Process": buildImageProcessQuery({
 						resize: { h: 512, w: 512 },
@@ -1992,18 +2016,26 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * 移动项目到新的工作区
 	 * @param source_project_id 项目id
 	 * @param target_workspace_id 目标工作区id
+	 * @param target_workspace_name 目标工作区名称
+	 * @param target_project_name 目标项目名称（后端若支持则在移动时同步改名）
 	 * @returns 移动项目结果
 	 */
 	moveProjectToNewWorkspace({
 		source_project_id,
 		target_workspace_id,
+		target_workspace_name,
+		target_project_name,
 	}: {
 		source_project_id: string
 		target_workspace_id: string
+		target_workspace_name?: string
+		target_project_name?: string
 	}) {
 		return fetch.post("/api/v1/super-agent/projects/move", {
 			source_project_id,
 			target_workspace_id,
+			target_workspace_name,
+			target_project_name,
 		})
 	},
 
@@ -2404,6 +2436,9 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	// Recording Summary APIs
 	...generateRecordingSummaryApi(fetch),
 
+	// Audio project list (PC recordings page)
+	...generateAudioProjectsApi(fetch),
+
 	// Collaboration APIs
 	...generateCollaborationApi(fetch),
 
@@ -2432,5 +2467,13 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			signal: options?.signal,
 			enableRequestUnion: true,
 		})
+	},
+
+	/**
+	 * @description 获取对话的特殊 workspace
+	 * @returns 特殊 workspace
+	 */
+	getChatWorkspace() {
+		return fetch.get<Workspace>("/api/v1/super-agent/workspaces/app/chat")
 	},
 })

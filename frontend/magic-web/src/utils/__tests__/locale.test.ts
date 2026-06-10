@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import {
 	getAntdLocale,
+	getAntdMobileLocale,
+	getAntdMobileLocaleSyncFallback,
 	getCurrentLang,
 	getLocalePreferredKeys,
 	normalizeLocale,
@@ -355,6 +357,43 @@ describe("locale utilities", () => {
 		it("should handle unsupported locales gracefully", async () => {
 			// Act & Assert - should not throw
 			await expect(getAntdLocale("fr_FR")).resolves.toBeDefined()
+		})
+	})
+
+	describe("getAntdMobileLocaleSyncFallback", () => {
+		it("should always return locale with common.loading for supported languages", () => {
+			const zhLocale = getAntdMobileLocaleSyncFallback(SupportLocales.zhCN)
+			const enLocale = getAntdMobileLocaleSyncFallback(SupportLocales.enUS)
+
+			expect(zhLocale.common?.loading).toBeTruthy()
+			expect(enLocale.common?.loading).toBeTruthy()
+			expect(zhLocale.PullToRefresh?.pulling).toBeTruthy()
+			expect(enLocale.PullToRefresh?.pulling).toBeTruthy()
+		})
+
+		it("should fall back to default locale for unsupported languages", () => {
+			const locale = getAntdMobileLocaleSyncFallback("fr_FR")
+
+			expect(locale.common?.loading).toBeTruthy()
+		})
+	})
+
+	describe("getAntdMobileLocale", () => {
+		it("should handle supported locales without throwing", async () => {
+			await expect(getAntdMobileLocale(SupportLocales.zhCN)).resolves.toBeDefined()
+			await expect(getAntdMobileLocale(SupportLocales.enUS)).resolves.toBeDefined()
+		})
+
+		it("should expose InfiniteScroll.noMore for en_US", async () => {
+			const locale = (await getAntdMobileLocale(SupportLocales.enUS)) as {
+				InfiniteScroll?: { noMore?: string }
+			}
+
+			expect(locale?.InfiniteScroll?.noMore).toBe("No more")
+		})
+
+		it("should handle unsupported locales gracefully", async () => {
+			await expect(getAntdMobileLocale("fr_FR")).resolves.toBeDefined()
 		})
 	})
 })

@@ -1,22 +1,22 @@
-import { EditorContent } from "@tiptap/react"
-import { ArrowUp, Loader2, Plus, Square } from "lucide-react"
-import { useDebounceFn } from "ahooks"
-import { observer } from "mobx-react-lite"
-import { useMemo, useState } from "react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import type {
 	SceneEditorContext,
 	SceneEditorNodes,
 } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
-import { MessageEditorStoreProvider } from "@/pages/superMagic/components/MessageEditor/stores"
-import SuperMagicVoiceInput from "@/pages/superMagic/components/MessageEditor/components/VoiceInput"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import type { SceneItem } from "@/pages/superMagic/types/skill"
 import { useSceneSelection } from "@/pages/superMagic/components/MainInputContainer/hooks"
 import { useCurrentSceneConfig } from "@/pages/superMagic/components/MainInputContainer/hooks/useCurrentSceneConfig"
 import { sceneStateStore } from "@/pages/superMagic/components/MainInputContainer/stores"
+import SuperMagicVoiceInput from "@/pages/superMagic/components/MessageEditor/components/VoiceInput"
+import { MessageEditorStoreProvider } from "@/pages/superMagic/components/MessageEditor/stores"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import type { SceneItem } from "@/pages/superMagic/types/skill"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { EditorContent } from "@tiptap/react"
+import { useDebounceFn } from "ahooks"
+import { ArrowUp, Loader2, Plus, Square } from "lucide-react"
+import { observer } from "mobx-react-lite"
+import { useMemo, useState } from "react"
 import MobileComposerAddSheet from "./MobileComposerAddSheet"
 import MobileComposerAttachments from "./MobileComposerAttachments"
 import MobileComposerHeader from "./MobileComposerHeader"
@@ -31,7 +31,7 @@ interface MobileComposerProps {
 }
 
 const mobileComposerEditorClassName = cn(
-	"max-h-[100px] min-h-0 overflow-hidden text-sm text-foreground",
+	"text-foreground max-h-[100px] min-h-0 overflow-hidden text-sm",
 	"[&_.ProseMirror]:m-0 [&_.ProseMirror]:max-h-[100px] [&_.ProseMirror]:overflow-y-auto",
 	"[&_.ProseMirror]:break-words [&_.ProseMirror]:text-sm [&_.ProseMirror]:outline-none",
 	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:break-all [&_.ProseMirror_p]:p-0",
@@ -41,7 +41,7 @@ const mobileComposerEditorClassName = cn(
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:left-0",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:top-0",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:block",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:max-w-full",
+	"[&_.ProseMirror_.is-editor-empty:first-child::before]:max-w-[84%]",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:overflow-hidden",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:whitespace-nowrap",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:text-ellipsis",
@@ -128,7 +128,7 @@ function MobileComposerComponent({
 			<MobileComposerAttachments files={files} onRemove={logic.handleRemoveUploadedFile} />
 
 			<div
-				className="px-4 pb-2 pt-3"
+				className="px-4 pb-1.5 pt-3"
 				onPaste={logic.handlePaste}
 				onCompositionStart={logic.handleCompositionStart}
 				onCompositionEnd={logic.handleCompositionEnd}
@@ -142,7 +142,7 @@ function MobileComposerComponent({
 				</div>
 			</div>
 
-			<div className="flex items-center justify-between gap-2 px-1.5 py-1.5">
+			<div className="flex items-center justify-between gap-2 pl-1.5 pr-2 pb-2">
 				<div className="flex items-center">
 					<Button
 						type="button"
@@ -158,7 +158,7 @@ function MobileComposerComponent({
 					{logic.selectedPluginCount > 0 && (
 						<span
 							className={cn(
-								"flex h-6 shrink-0 items-center justify-center rounded-full bg-foreground px-2 text-sm font-semibold leading-none text-background",
+								"bg-foreground text-background flex h-6 shrink-0 items-center justify-center rounded-full px-2 text-sm font-semibold leading-none",
 								logic.selectedPluginCount < 10 && "w-6 px-0",
 							)}
 							data-testid="mobile-composer-open-sheet-plugin-count"
@@ -185,8 +185,8 @@ function MobileComposerComponent({
 						type="button"
 						size="icon"
 						className={cn(
-							"size-10 rounded-full bg-primary text-background shadow-none",
-							sendButtonDisabled && "opacity-60",
+							"bg-primary text-background size-10 rounded-full shadow-none",
+							sendButtonDisabled && "disabled:opacity-40",
 						)}
 						disabled={sendButtonDisabled}
 						onClick={handleActionClick}
@@ -228,7 +228,7 @@ function MobileComposerComponent({
 		</>
 	) : (
 		<div
-			className="flex w-full shrink-0 flex-col gap-2 px-2 pb-3 pt-2"
+			className="bg-mobile-background flex w-full shrink-0 flex-col gap-1.5 px-2 pb-3 pt-1.5"
 			data-testid="mobile-composer"
 		>
 			{taskAndQueueNodes}
@@ -241,18 +241,19 @@ function MobileComposerComponent({
 				agentCode={editorContext.agentCode ?? logic.selectedTopic?.agent_code}
 				selectorVariant={editorContext.mobileModeSelectorVariant}
 				messagesLength={editorContext.messagesLength}
+				useChatTerminology={editorContext.useChatTerminology}
 				sceneControlNode={headerScenePanelsNode}
 				onModeChange={editorContext.setTopicMode}
 			/>
 
 			<div
 				className={cn(
-					"overflow-hidden rounded-3xl bg-background shadow-[0px_8px_25px_0px_rgba(0,0,0,0.10)] transition-colors",
-					logic.isComposerFocused && "ring-1 ring-primary/20",
+					"bg-card shadow-mobile-dock-surface overflow-hidden rounded-3xl transition-colors",
+					logic.isComposerFocused && "ring-primary/20 ring-1",
 				)}
 				data-testid="mobile-composer-card"
 			>
-				<div className="border-b border-border px-3 pb-2 pt-2 [&:empty]:hidden">
+				<div className="border-border border-b px-3 pb-2 pt-2 [&:empty]:hidden">
 					{shouldRenderPanelsInHeader ? null : (
 						<MobileScenePanels editorContext={editorContext} />
 					)}

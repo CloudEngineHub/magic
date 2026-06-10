@@ -28,6 +28,7 @@ import { CodeEditor } from "@/components/base"
 import { shadow } from "@/utils/shadow"
 import { useMemoizedFn } from "ahooks"
 import { processHtmlContent, type ProcessHtmlContentInput } from "../../contents/HTML/htmlProcessor"
+import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 import { usePPTVersionManager } from "./hooks/usePPTVersionManager"
 import { cn } from "@/lib/utils"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
@@ -135,6 +136,7 @@ const PPTSlide = observer(function PPTSlide({
 	const [pendingDeactivate, setPendingDeactivate] = useState(false)
 	const [isSaving, setIsSaving] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
+	const [isAppendPicking, setIsAppendPicking] = useState(false)
 	// 保存 IsolatedHTMLRenderer 暴露的保存函数引用
 	const [triggerSaveRef, setTriggerSaveRef] = useState<
 		(() => Promise<SaveResult | undefined>) | null
@@ -165,6 +167,10 @@ const PPTSlide = observer(function PPTSlide({
 		content: content,
 		rawContent: rawContent,
 	})
+	const scaleContentDimensions = useMemo(
+		() => resolvePptScaleContentDimensions(displayContent.content, displayContent.rawContent),
+		[displayContent.content, displayContent.rawContent],
+	)
 
 	// 历史版本对比弹窗状态
 	const [showHistoryCompareDialog, setShowHistoryCompareDialog] = useState(false)
@@ -765,9 +771,11 @@ const PPTSlide = observer(function PPTSlide({
 		) : (
 			<IsolatedHTMLRenderer
 				ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
-				content={content}
+				content={displayContent.content}
+				rawSourceCode={displayContent.rawContent}
 				sandboxType="iframe"
 				isPptRender
+				scaleContentDimensions={scaleContentDimensions}
 				isFullscreen={isFullscreen}
 				isEditMode={isEditMode}
 				isVisible={isActive}
@@ -784,6 +792,7 @@ const PPTSlide = observer(function PPTSlide({
 				slideIndex={index}
 				isPlaybackMode={isPlaybackMode}
 				className="h-[100%-40px]"
+				onAppendPickingChange={setIsAppendPicking}
 			/>
 		)
 	}
@@ -798,6 +807,8 @@ const PPTSlide = observer(function PPTSlide({
 				{showEditToolbar && (
 					<EditToolbar
 						onStartInspector={() => rendererRef.current?.startInspector()}
+						onStartInspectorAppend={() => rendererRef.current?.startInspectorAppend()}
+						isAppendPicking={isAppendPicking}
 						showAIOptimization={allowEdit && !fileVersion}
 						showFileEdit={allowEdit && !fileVersion}
 						isEditMode={isEditMode}

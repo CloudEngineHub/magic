@@ -284,10 +284,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// 分享模态框状态
 	const [shareModalVisible, setShareModalVisible] = useState(false)
+	// 打开文件分享弹层时携带的上下文：预选文件、资源 id、以及树/列表中默认展开定位的文件 id
 	const [shareFileInfo, setShareFileInfo] = useState<{
 		projectName?: string
 		fileIds: string[]
 		resourceId?: string
+		/** 与 createShareHandler / useShareFile 对齐：弹层内默认展开或高亮的文件 id */
+		defaultOpenFileId?: string
 	} | null>(null)
 
 	// 文件导出loading状态
@@ -1439,6 +1442,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			downloadName?: string,
 		) => {
 			const fileIds = Array.isArray(file_id) ? file_id : [file_id]
+			const folderDownloadToastId = isFolder ? createRandomUuidV4() : undefined
 
 			if (fileIds.length === 0) return
 
@@ -1478,6 +1482,16 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			} else {
 				// 多个文件使用批量下载
 				return new Promise<void>((resolve, reject) => {
+					if (folderDownloadToastId) {
+						// Mobile folder downloads close the action sheet immediately, so the toast
+						// must be owned by the async download task rather than the transient sheet UI.
+						magicToast.loading({
+							key: folderDownloadToastId,
+							content: t("topicFiles.downloading"),
+							duration: 0,
+						})
+					}
+
 					SuperMagicApi.createBatchDownload({
 						project_id: projectId,
 						file_ids: fileIds,
@@ -1485,6 +1499,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						.then((data) => {
 							if (data.status === "ready" && data.download_url) {
 								downloadFileWithAnchor(data.download_url, downloadName)
+								if (folderDownloadToastId) {
+									magicToast.success({
+										key: folderDownloadToastId,
+										content: t("topicFiles.downloadSuccess"),
+										duration: 1000,
+									})
+								}
 								resolve()
 								return
 							}
@@ -1508,13 +1529,24 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 												checkData.download_url,
 												downloadName,
 											)
+											if (folderDownloadToastId) {
+												magicToast.success({
+													key: folderDownloadToastId,
+													content: t("topicFiles.downloadSuccess"),
+													duration: 1000,
+												})
+											}
 											resolve()
 										}
 										if (checkData?.status === "failed") {
 											clearInterval(timer)
-											magicToast.error(
-												checkData.message || t("interface:ErrorHappened"),
-											)
+											magicToast.error({
+												key: folderDownloadToastId,
+												content:
+													checkData.message ||
+													t("interface:ErrorHappened"),
+												duration: 1000,
+											})
 											reject(
 												new Error(checkData.message || "Download failed"),
 											)
@@ -1522,17 +1554,31 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 									} catch (error: any) {
 										clearInterval(timer)
 										console.error("Batch download check failed:", error)
-										magicToast.error(
-											error?.message || t("interface:ErrorHappened"),
-										)
+										magicToast.error({
+											key: folderDownloadToastId,
+											content: error?.message || t("interface:ErrorHappened"),
+											duration: 1000,
+										})
 										reject(error)
 									}
 								}, 2000)
+								return
 							}
+
+							magicToast.error({
+								key: folderDownloadToastId,
+								content: t("topicFiles.downloadFailed"),
+								duration: 1000,
+							})
+							reject(new Error("Download failed"))
 						})
 						.catch((error) => {
 							console.error("Batch download failed:", error)
-							magicToast.error(error?.message || t("interface:ErrorHappened"))
+							magicToast.error({
+								key: folderDownloadToastId,
+								content: error?.message || t("interface:ErrorHappened"),
+								duration: 1000,
+							})
 							reject(error)
 						})
 				})

@@ -15,10 +15,16 @@ import { RouteName } from "@/routes/constants"
 import { routesPathMatch } from "@/routes/history/helpers"
 import { observer } from "mobx-react-lite"
 import { MultiFolderUploadToast } from "@/components/global/MultiFolderUploadToast"
-import { useGlobalSafeArea } from "@/hooks/useGlobalSafeArea"
+import { GlobalSafeAreaSync } from "@/hooks/useGlobalSafeArea"
 import { interfaceStore } from "@/stores/interface"
 import NavigatePopup from "./components/NavigatePopup"
 import { shouldDisableGlobalSafeArea } from "./components/GlobalSafeArea/utils"
+import {
+	MobileDocumentThemeProvider,
+	MobileDocumentThemeSync,
+} from "@/pages/superMagicMobile/components/MobileDocumentTheme"
+import useMetaSet from "@/routes/hooks/useRoutesMetaSet"
+import { useAntdMobileLocale } from "@/hooks/useAntdMobileLocale"
 
 const MobileTabBar = lazy(() => import("./components/MobileTabBar"))
 
@@ -32,11 +38,12 @@ const BaseLayoutMobile = () => {
 	const navigate = useNavigate()
 	const location = useLocation()
 	const { styles, cx } = useStyles()
+	const antdMobileLocale = useAntdMobileLocale()
+
+	// Sync document.title from route meta, same as BaseLayoutPc (chat, contacts, Super Shell, etc.).
+	useMetaSet()
 
 	useNativeBack()
-
-	// 根据路由自动管理安全边距样式
-	useGlobalSafeArea()
 
 	const { Content } = useKeepAlive({
 		keepAliveRoutes: keepAliveRoutes,
@@ -59,10 +66,9 @@ const BaseLayoutMobile = () => {
 
 	// Check if current route should show tab bar
 	const shouldShowTabBar = useMemo(() => {
-		// 添加 MobileTabs 路由到 TabBar 显示列表
+		// 只在仍属于旧移动端 tab 信息架构的页面上显示底部 TabBar。
 		return [
 			RouteName.MobileTabs,
-			RouteName.MagiClaw,
 			RouteName.Super,
 			RouteName.SuperWorkspaceState,
 			RouteName.Chat,
@@ -79,35 +85,40 @@ const BaseLayoutMobile = () => {
 	const hasVisibleTabBar = shouldShowTabBar && interfaceStore.mobileTabBarVisible
 
 	return (
-		<ConfigProvider>
-			<div className={styles.root}>
-				<GlobalSafeArea direction="top" />
-				<div
-					className={cx(styles.container, {
-						[styles.view]: hasVisibleTabBar,
-						[styles.noGlobalSafeAreaWithoutTabBar]:
-							(!shouldShowTabBar || !interfaceStore.mobileTabBarVisible) &&
-							isNoGlobalSafeArea,
-						[styles.noGlobalSafeAreaWithTabBar]: hasVisibleTabBar && isNoGlobalSafeArea,
-					})}
-					onClick={handleClick}
-				>
-					{Content}
+		<ConfigProvider locale={antdMobileLocale}>
+			<MobileDocumentThemeProvider>
+				<GlobalSafeAreaSync />
+				<MobileDocumentThemeSync />
+				<div className={styles.root}>
+					<GlobalSafeArea direction="top" />
+					<div
+						className={cx(styles.container, {
+							[styles.view]: hasVisibleTabBar,
+							[styles.noGlobalSafeAreaWithoutTabBar]:
+								(!shouldShowTabBar || !interfaceStore.mobileTabBarVisible) &&
+								isNoGlobalSafeArea,
+							[styles.noGlobalSafeAreaWithTabBar]:
+								hasVisibleTabBar && isNoGlobalSafeArea,
+						})}
+						onClick={handleClick}
+					>
+						{Content}
+					</div>
+					{hasVisibleTabBar && (
+						<Suspense fallback={null}>
+							<MobileTabBar />
+						</Suspense>
+					)}
+					<GlobalSafeArea direction="bottom" />
 				</div>
-				{hasVisibleTabBar && (
-					<Suspense fallback={null}>
-						<MobileTabBar />
-					</Suspense>
-				)}
-				<GlobalSafeArea direction="bottom" />
-			</div>
-			{/* <ComponentRender componentName={DefaultComponents.GlobalMobileSidebar} /> */}
-			<OrganizationSwitchPanel />
-			{/* 全局文件夹上传进度组件 */}
-			<MultiFolderUploadToast />
-			{/* 导航菜单弹层 */}
-			<NavigatePopup />
-			<ShareManagementContainer />
+				{/* <ComponentRender componentName={DefaultComponents.GlobalMobileSidebar} /> */}
+				<OrganizationSwitchPanel />
+				{/* 全局文件夹上传进度组件 */}
+				<MultiFolderUploadToast />
+				{/* 导航菜单弹层 */}
+				<NavigatePopup />
+				<ShareManagementContainer />
+			</MobileDocumentThemeProvider>
 		</ConfigProvider>
 	)
 }
