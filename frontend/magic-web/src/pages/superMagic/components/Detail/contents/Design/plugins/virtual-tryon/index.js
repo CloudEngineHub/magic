@@ -1,12 +1,6 @@
 /* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
 const MAX_GARMENTS = 5
-const GENERATION_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
-const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => ({
-	value: count,
-	label: String(count),
-}))
-
 const STYLE_OPTIONS = [
 	{
 		value: "realistic",
@@ -70,6 +64,38 @@ function getReferenceImages(state) {
 
 function getMaxReferenceImages(state, helpers) {
 	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? MAX_GARMENTS
+}
+
+function buildCurrentTextBlock(currentText) {
+	const normalizedCurrentText = String(currentText ?? "").trim()
+	if (!normalizedCurrentText) {
+		return "用户当前未填写。"
+	}
+
+	return normalizedCurrentText
+}
+
+function getStyleLabel(style) {
+	return (
+		STYLE_OPTIONS.find((item) => item.value === style)?.labelFallback ??
+		STYLE_OPTIONS[0].labelFallback
+	)
+}
+
+function buildExtraPromptCompletionUserPrompt({
+	garmentCount,
+	hasModelImage,
+	style,
+	currentText,
+}) {
+	return [
+		"任务目标：为万物上身插件的“额外描述”输入框生成或补全一段提示词。",
+		`当前输入：${buildCurrentTextBlock(currentText)}`,
+		`参考图角色：共有 ${garmentCount} 张商品图，用于理解服装、鞋靴、帽子、包袋、配饰等商品的类型、颜色、材质、廓形和商业气质。${hasModelImage ? "另有 1 张模特底图，需要保留人物、姿态、场景和摄影风格。" : "当前没有模特底图，需要描述适合商品展示的模特与场景。"} `,
+		`当前风格：${getStyleLabel(style)}。`,
+		"补全方向：重点补充模特特征、姿态、拍摄场景、光线、色调、镜头距离、构图，以及商品穿戴和陈列关系。",
+		"业务限制：不要改变商品本身颜色、款式、logo、图案、材质和关键结构；不要描述商品之间遗漏、合并或替换；不要输出完整生成任务说明，只输出适合填入“额外描述”的短提示词。",
+	].join("\n")
 }
 
 function buildPrompt({ garmentCount, hasModelImage, style, extra, locale }) {
@@ -199,6 +225,26 @@ registerMagicCanvasPlugin({
 					),
 					rows: 3,
 					maxLength: 2000,
+					deps: ["garments", "modelImage", "style"],
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) => !state.garments?.length,
+						completeImagePrompt: {
+							referenceImages: ({ state }) => getReferenceImages(state),
+							userPrompt: ({ state }) =>
+								buildExtraPromptCompletionUserPrompt({
+									garmentCount: state.garments.length,
+									hasModelImage: Boolean(state.modelImage),
+									style: state.style,
+									currentText: state.extra,
+								}),
+							emptyMessage: t(
+								"error.aiPromptEmpty",
+								"AI 未生成有效额外描述，请重试",
+							),
+						},
+					},
 				},
 				{
 					id: "style",
@@ -212,27 +258,23 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
-					required: true,
 					title: t("section.modelSelect", "AI 模型"),
-				},
-				{
-					id: "resolution",
-					kind: "resolution-select",
-					required: true,
-					title: t("section.resolution", "分辨率"),
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
-					required: true,
-					title: t("section.canvasSize", "画布尺寸"),
+					title: t("section.canvasSize", "宽高比"),
+				},
+				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "尺寸倍数"),
 				},
 				{
 					id: "count",
 					kind: "option-group",
 					stateKey: "genCount",
 					title: t("section.count", "生成数量"),
-					options: GENERATION_COUNT_GROUP_OPTIONS,
 				},
 			],
 			generate: {

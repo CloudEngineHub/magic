@@ -286,7 +286,65 @@
 		}
 
 		function isTextareaAiGenerateEnabled(section) {
-			return Boolean(section.aiGenerate && typeof section.aiGenerate.generate === "function")
+			return Boolean(
+				section.aiGenerate &&
+				(typeof section.aiGenerate.generate === "function" ||
+					section.aiGenerate.completeImagePrompt),
+			)
+		}
+
+		/* 生成 AI 提示词 */
+		async function generateTextareaAiValue(aiConfig) {
+			const callbackContext = getCallbackContext()
+			if (typeof aiConfig.generate === "function") {
+				return aiConfig.generate(callbackContext)
+			}
+
+			const promptConfig = resolveValue(aiConfig.completeImagePrompt, callbackContext) ?? {}
+			if (!ctx.ai?.completeImagePrompt) {
+				throw new Error(
+					resolveValue(
+						promptConfig.unavailableMessage ?? aiConfig.unavailableMessage,
+						callbackContext,
+					) ?? t("error.aiPromptUnavailable", "AI 提示词补全能力暂不可用"),
+				)
+			}
+
+			const referenceAssets =
+				(await resolveValue(promptConfig.referenceImages, callbackContext)) ?? []
+			const referenceImages = helpers.collectReferenceIds(referenceAssets)
+			if (!referenceImages.length) {
+				throw new Error(
+					resolveValue(
+						promptConfig.referencesMessage ?? aiConfig.referencesMessage,
+						callbackContext,
+					) ?? t("error.references", "图片缺少可用于生成的资源标识"),
+				)
+			}
+
+			const userPrompt = await resolveValue(promptConfig.userPrompt, callbackContext)
+			if (!String(userPrompt ?? "").trim()) {
+				throw new Error(
+					resolveValue(
+						promptConfig.userPromptMessage ?? aiConfig.userPromptMessage,
+						callbackContext,
+					) ?? t("error.aiPromptInvalid", "AI 提示词参数无效"),
+				)
+			}
+			const request = {
+				...((await resolveValue(promptConfig.request, callbackContext)) ?? {}),
+				user_prompt: userPrompt,
+				reference_images: referenceImages,
+			}
+			const result = await ctx.ai.completeImagePrompt(request)
+			const prompt = String(result?.prompt ?? "").trim()
+			if (!prompt) {
+				throw new Error(
+					resolveValue(promptConfig.emptyMessage, callbackContext) ??
+						t("error.aiPromptEmpty", "AI 未生成有效提示词，请重试"),
+				)
+			}
+			return prompt
 		}
 
 		function getSelectedModel(currentState = state) {
@@ -1464,7 +1522,7 @@
 					sectionView.generating = true
 					syncAiButton()
 					try {
-						const result = await aiConfig.generate(getCallbackContext())
+						const result = await generateTextareaAiValue(aiConfig)
 						const nextValue = normalizeTextareaValue(result, maxLength, hasMaxLength)
 						if (!nextValue.trim()) return
 						textarea.value = nextValue

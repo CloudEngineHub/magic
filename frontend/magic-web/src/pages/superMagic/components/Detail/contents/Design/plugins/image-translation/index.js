@@ -1,12 +1,6 @@
 /* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
 const LANGUAGE_SELECTION_LIMIT = 20
-const GENERATION_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
-const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => ({
-	value: count,
-	label: String(count),
-}))
-
 const QUICK_LANGUAGE_CODES = ["en", "fr", "de", "es", "pt", "ja", "ko", "ar", "th", "vi", "zh"]
 
 const LANGUAGE_CATALOG = [
@@ -610,23 +604,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
-					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
-					required: true,
-					title: t("section.resolution", "分辨率"),
+					title: t("section.resolution", "尺寸倍数"),
 					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "count",
 					kind: "option-group",
 					stateKey: "genCount",
-					title: t("section.count", "生成张数"),
+					title: t("section.count", "生成数量"),
 					suffix: t("section.count.suffix", "每图每语言"),
-					options: GENERATION_COUNT_GROUP_OPTIONS,
 				},
 			],
 			generate: {

@@ -541,7 +541,55 @@ validate: ({ state, t }) => {
 - `required`: 必填文本时传 `required: true`（按去空白后是否非空判断）
 - `aiGenerate`: 可选，启用左下角 AI 生成按钮
 
-`aiGenerate` 结构：
+`aiGenerate` 推荐结构：
+
+```js
+aiGenerate: {
+	label: t("button.aiPlaceholder", "AI 生成"),
+	loadingLabel: t("button.generating", "生成中…"),
+	disabled: ({ state }) => !state.productImages?.length,
+	completeImagePrompt: {
+		referenceImages: ({ state }) => state.productImages,
+		userPrompt: ({ state }) =>
+			buildPromptCompletionUserPrompt({
+				imageCount: state.productImages.length,
+				currentText: state.backgroundPrompt,
+			}),
+		emptyMessage: t("error.aiPromptEmpty", "AI 未生成有效提示词，请重试"),
+	},
+}
+```
+
+`completeImagePrompt` 是对 `ctx.ai.completeImagePrompt` 的声明式封装。插件只负责构造业务参数，kit 负责公共流程：
+
+- 检查 `ctx.ai.completeImagePrompt` 是否可用
+- 调用 `helpers.collectReferenceIds()` 收集 `reference_images`
+- 校验参考图 ID 是否为空
+- 校验 `userPrompt` 是否为空
+- 调用 `ctx.ai.completeImagePrompt({ user_prompt, reference_images, ...request })`
+- 校验返回的 `result.prompt` 是否为空
+- 成功后把 prompt 写回 textarea 对应的 `stateKey`
+- 失败时把错误展示到面板错误区
+
+`completeImagePrompt` 字段：
+
+- `referenceImages`: 图片 asset 数组，支持函数。通常返回商品图、模特图、背景图等需要作为参考图的文件对象
+- `userPrompt`: 业务提示词，支持函数。这里只描述“要 AI 补全什么”，不要在插件里调用 AI 接口
+- `request`: 可选，额外透传给 `ctx.ai.completeImagePrompt` 的请求字段，支持函数
+- `emptyMessage`: 可选，AI 返回空 prompt 时的错误文案
+- `referencesMessage`: 可选，参考图缺少可用资源标识时的错误文案
+- `unavailableMessage`: 可选，宿主未提供 `completeImagePrompt` 能力时的错误文案
+- `userPromptMessage`: 可选，`userPrompt` 为空时的错误文案
+
+插件的 `manifest.json` 需要声明能力：
+
+```json
+"capabilities": [
+	"ai.completeImagePrompt"
+]
+```
+
+如果确实需要完全自定义 AI 流程，也可以继续使用高级逃生口：
 
 ```js
 aiGenerate: {
@@ -549,8 +597,7 @@ aiGenerate: {
 	loadingLabel: t("button.generating", "生成中…"),
 	disabled: ({ state }) => !state.productImages?.length,
 	generate: async ({ state, helpers, t }) => {
-		// 由插件传入参数并调用自己的 AI 接口
-		return "生成的背景描述"
+		return "自定义生成结果"
 	},
 }
 ```
@@ -561,8 +608,8 @@ aiGenerate: {
 - 所有 textarea 统一使用卡片输入壳，右下角显示清空按钮；配置了 `maxLength` 后还会显示字数统计
 - 配置了 `maxLength` 后会自动截断，并显示 `当前字数 / 上限`
 - 配置了 `aiGenerate` 后，额外在左下角渲染 AI 按钮
-- `generate` 返回非空字符串后会写回 `stateKey`；返回空字符串时不更新输入框
-- `generate` 抛错时，kit 会把错误展示在面板错误区
+- `completeImagePrompt` 或 `generate` 返回非空字符串后会写回 `stateKey`；返回空字符串时不更新输入框
+- `completeImagePrompt` 或 `generate` 抛错时，kit 会把错误展示在面板错误区
 
 ### `toggle`
 
@@ -948,4 +995,3 @@ buildRequest: ({ state, helpers }) => {
 - 在源图上标记待修复区域
 - 在参考图上标记待提取细节区域
 - 将标记结果裁剪后作为额外参考图参与最终请求
-

@@ -41,7 +41,7 @@
 			"section.modelSelect": "AI Model",
 			"section.placementMode": "Placement mode",
 			"section.productImages": "Product images",
-			"section.resolution": "Size multiplier",
+			"section.resolution": "Size scale",
 			"toast.aiPromptSoon": "AI prompt generation is coming soon",
 			"toast.success": "Product background swap image generated successfully!",
 			"upload.backgroundImage": "Upload / Drag [Reference]",

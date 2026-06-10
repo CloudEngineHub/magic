@@ -1,1 +1,10 @@
 /** */
+.virtual-tryon .virtual-tryon-style-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+}
+
+.virtual-tryon .virtual-tryon-style-grid .mpk-option-item,
+.virtual-tryon .virtual-tryon-style-grid .mpk-option {
+	width: 100%;
+}

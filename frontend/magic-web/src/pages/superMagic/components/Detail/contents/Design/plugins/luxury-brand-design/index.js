@@ -1,11 +1,6 @@
 /* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
 const MAX_STYLE_IMAGES = 8
-const GENERATION_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
-const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => ({
-	value: count,
-	label: String(count),
-}))
 const MODEL_COUNT_OPTIONS = [1, 2, 3].map((count) => ({
 	value: count,
 	label: String(count),
@@ -345,30 +340,26 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
-					required: true,
 					title: t("section.modelSelect", "AI 模型"),
-				},
-				{
-					id: "resolution",
-					kind: "resolution-select",
-					required: true,
-					title: t("section.resolution", "分辨率"),
-					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
-					required: true,
-					title: t("section.canvasSize", "画布尺寸"),
+					title: t("section.canvasSize", "宽高比"),
 					deps: ["modelId", "modelOptions", "scale"],
+				},
+				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "尺寸倍数"),
+					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "count",
 					kind: "option-group",
 					stateKey: "genCount",
 					required: true,
-					title: t("section.count", "生成张数"),
-					options: GENERATION_COUNT_GROUP_OPTIONS,
+					title: t("section.count", "生成数量"),
 				},
 			],
 			generate: {

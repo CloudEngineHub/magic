@@ -475,44 +475,18 @@ registerMagicCanvasPlugin({
 										label: t("button.aiPlaceholder", "AI 生成"),
 										loadingLabel: t("button.generating", "生成中…"),
 										disabled: ({ state }) => !state.productImages?.length,
-										generate: async ({ state, helpers, t }) => {
-											if (!ctx.ai?.completeImagePrompt) {
-												throw new Error(
-													t(
-														"error.aiPromptUnavailable",
-														"AI 提示词补全能力暂不可用",
-													),
-												)
-											}
-											const referenceImages = helpers.collectReferenceIds(
-												state.productImages,
-											)
-											if (!referenceImages.length) {
-												throw new Error(
-													t(
-														"error.references",
-														"图片缺少可用于生成的资源标识",
-													),
-												)
-											}
-											const result = await ctx.ai.completeImagePrompt({
-												user_prompt: buildPromptCompletionUserPrompt({
+										completeImagePrompt: {
+											referenceImages: ({ state }) => state.productImages,
+											userPrompt: ({ state }) =>
+												buildPromptCompletionUserPrompt({
 													imageCount: state.productImages.length,
 													placementMode: state.placementMode,
 													currentText: state.backgroundPrompt,
 												}),
-												reference_images: referenceImages,
-											})
-											const prompt = String(result?.prompt ?? "").trim()
-											if (!prompt) {
-												throw new Error(
-													t(
-														"error.aiPromptEmpty",
-														"AI 未生成有效背景提示词，请重试",
-													),
-												)
-											}
-											return prompt
+											emptyMessage: t(
+												"error.aiPromptEmpty",
+												"AI 未生成有效背景提示词，请重试",
+											),
 										},
 									},
 								},

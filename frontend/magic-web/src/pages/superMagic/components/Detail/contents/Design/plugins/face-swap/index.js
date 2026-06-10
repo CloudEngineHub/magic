@@ -1,11 +1,5 @@
 /* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
-const GENERATION_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
-const GENERATION_COUNT_GROUP_OPTIONS = GENERATION_COUNT_OPTIONS.map((count) => ({
-	value: count,
-	label: String(count),
-}))
-
 function createInitialState() {
 	return {
 		baseModelImages: [],
@@ -151,15 +145,13 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
-					required: true,
 					title: t("section.modelSelect", "AI 模型"),
 				},
 				{
 					id: "count",
 					kind: "option-group",
 					stateKey: "genCount",
-					title: t("section.count", "生成张数"),
-					options: GENERATION_COUNT_GROUP_OPTIONS,
+					title: t("section.count", "生成数量"),
 				},
 			],
 			generate: {

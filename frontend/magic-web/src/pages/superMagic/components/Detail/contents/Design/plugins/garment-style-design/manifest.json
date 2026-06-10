@@ -73,7 +73,7 @@
 			"styleType.pastoral": "Pastoral",
 			"styleType.streetHipHop": "hip-hop",
 			"styleType.versatileBasic": "Versatile basic",
-			"section.canvasSize": "Canvas size",
+			"section.canvasSize": "Aspect ratio",
 			"section.count": "Count",
 			"section.count.series": "Series count",
 			"section.designPointDescription": "Design point description",
@@ -83,7 +83,7 @@
 			"section.inspirationImage": "Inspiration image",
 			"section.modelSelect": "AI Model",
 			"section.prototypeImage": "Prototype image",
-			"section.resolution": "Resolution",
+			"section.resolution": "Size scale",
 			"section.seriesTheme": "Series theme",
 			"toast.success": "Style design images generated successfully!",
 			"upload.inspirationImage": "Upload inspiration image",
@@ -147,7 +147,7 @@
 			"styleType.pastoral": "田园风",
 			"styleType.streetHipHop": "嘻哈风",
 			"styleType.versatileBasic": "百搭基础风",
-			"section.canvasSize": "画布尺寸",
+			"section.canvasSize": "宽高比",
 			"section.count": "生成张数",
 			"section.count.series": "系列款数",
 			"section.designPointDescription": "设计点描述",
@@ -157,7 +157,7 @@
 			"section.inspirationImage": "灵感图",
 			"section.modelSelect": "AI 模型",
 			"section.prototypeImage": "原型图",
-			"section.resolution": "分辨率",
+			"section.resolution": "尺寸倍数",
 			"section.seriesTheme": "系列主题",
 			"toast.success": "款式设计生成成功！",
 			"upload.inspirationImage": "点击上传灵感图",
@@ -168,6 +168,11 @@
 	},
 	"name": "garment-style-design",
 	"styles": "index.css",
-	"tags": ["AI", "设计", "款式", "改款"],
+	"tags": [
+		"AI",
+		"设计",
+		"款式",
+		"改款"
+	],
 	"version": 1
 }

@@ -1698,23 +1698,20 @@ registerMagicCanvasPlugin({
 				{
 					id: "modelSelect",
 					kind: "model-select",
-					required: true,
 					title: t("section.modelSelect", "AI 模型"),
-				},
-				{
-					id: "resolution",
-					kind: "resolution-select",
-					required: true,
-					title: t("section.resolution", "分辨率"),
-					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "canvasSize",
 					kind: "size-control",
-					required: true,
-					title: t("section.canvasSize", "画布尺寸"),
+					title: t("section.canvasSize", "宽高比"),
 					deps: ["modelId", "modelOptions", "creationMode"],
 					when: ({ state }) => state.creationMode === "smart",
+				},
+				{
+					id: "resolution",
+					kind: "resolution-select",
+					title: t("section.resolution", "尺寸倍数"),
+					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "count",

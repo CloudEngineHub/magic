@@ -16,13 +16,13 @@
 			"extra.placeholder": "Describe model traits, scene, tone, or style, e.g. Asian female model, 25 years old, tall, fashion street, warm tone, film look",
 			"label": "Virtual Try-On",
 			"optional": "Optional",
-			"section.canvasSize": "Canvas size",
+			"section.canvasSize": "Aspect ratio",
 			"section.count": "Count",
 			"section.extra": "Extra prompt",
 			"section.garments": "Product images",
 			"section.model": "Model image",
 			"section.modelSelect": "AI Model",
-			"section.resolution": "Resolution",
+			"section.resolution": "Size scale",
 			"section.style": "Style",
 			"style.ecommerce": "E-commerce white background",
 			"style.ecommerce.desc": "Pure white background for catalog-ready output",
@@ -34,7 +34,10 @@
 			"style.realistic.desc": "Natural and believable commercial try-on result",
 			"toast.success": "Try-on image generated successfully!",
 			"upload.garmentTip": "Supports tops, coats, pants, skirts, shoes, hats, bags, and more. AI will identify and layer items naturally.",
-			"upload.model": "Upload a model image, or let AI create one"
+			"upload.model": "Upload a model image, or let AI create one",
+			"button.aiPlaceholder": "AI Generate",
+			"error.aiPromptEmpty": "AI did not return a valid extra description. Please try again.",
+			"error.aiPromptUnavailable": "AI prompt completion is temporarily unavailable"
 		},
 		"zh-CN": {
 			"button.generate": "一键生成穿搭图",
@@ -48,13 +51,13 @@
 			"extra.placeholder": "指定模特特征、场景、色调、风格等，例如：亚洲女性模特，25岁，身材高挑，站在时尚街头，暖色调，胶片感",
 			"label": "万物上身",
 			"optional": "可选",
-			"section.canvasSize": "画布尺寸",
+			"section.canvasSize": "宽高比",
 			"section.count": "生成数量",
 			"section.extra": "额外描述",
 			"section.garments": "商品图",
 			"section.model": "模特底图",
 			"section.modelSelect": "AI 模型",
-			"section.resolution": "分辨率",
+			"section.resolution": "尺寸倍数",
 			"section.style": "风格",
 			"style.ecommerce": "电商白底",
 			"style.ecommerce.desc": "纯白背景，适合上架展示",
@@ -66,7 +69,10 @@
 			"style.realistic.desc": "自然真实的商业穿搭效果",
 			"toast.success": "穿搭图生成成功！",
 			"upload.garmentTip": "支持上衣、外套、裤子、裙子、鞋靴、帽子、包包等，AI 会自动识别并正确叠穿。",
-			"upload.model": "点击上传（不上传则 AI 自动生成模特）"
+			"upload.model": "点击上传（不上传则 AI 自动生成模特）",
+			"button.aiPlaceholder": "AI 生成",
+			"error.aiPromptEmpty": "AI 未生成有效额外描述，请重试",
+			"error.aiPromptUnavailable": "AI 提示词补全能力暂不可用"
 		}
 	},
 	"category": {
@@ -87,7 +93,8 @@
 		"assets.uploadFile",
 		"assets.fetchBlob",
 		"ai.getImageModels",
-		"ai.generateAndPlace"
+		"ai.generateAndPlace",
+		"ai.completeImagePrompt"
 	],
 	"version": 1
 }
