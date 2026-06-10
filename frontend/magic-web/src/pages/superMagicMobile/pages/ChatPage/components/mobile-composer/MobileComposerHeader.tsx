@@ -18,6 +18,7 @@ interface MobileComposerHeaderProps {
 	agentCode?: string | null
 	selectorVariant?: "default" | "claw"
 	messagesLength?: number
+	useChatTerminology?: boolean
 	sceneControlNode?: ReactNode
 	onModeChange?: SceneEditorContext["setTopicMode"]
 }
@@ -30,6 +31,7 @@ function MobileComposerHeaderComponent({
 	agentCode,
 	selectorVariant = "default",
 	messagesLength,
+	useChatTerminology,
 	sceneControlNode,
 	onModeChange,
 }: MobileComposerHeaderProps) {
@@ -44,7 +46,7 @@ function MobileComposerHeaderComponent({
 		<div className="flex min-h-8 items-center gap-2" data-testid="mobile-composer-header">
 			{shouldShowSelector ? (
 				<MobileComposerModeSelector
-					className="pr-2"
+					className="pl-1 pr-2"
 					iconSize={28}
 					selectedTopic={selectedTopic}
 					selectedProject={selectedProject}
@@ -52,6 +54,7 @@ function MobileComposerHeaderComponent({
 					agentCode={agentCode}
 					selectorVariant={selectorVariant}
 					messagesLength={messagesLength}
+					useChatTerminology={useChatTerminology}
 					onModeChange={onModeChange}
 				/>
 			) : null}

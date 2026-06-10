@@ -8,6 +8,15 @@ import { CollaborationProjectType } from "../pages/Workspace/types"
 import { SHARE_WORKSPACE_ID, isOtherCollaborationProject } from "../constants"
 import { generateCollaborationProjectUrl } from "../utils/project"
 import { RequestConfig } from "@/apis/core/HttpClient"
+import {
+	shouldSyncChatConversationName,
+	syncChatConversationName,
+} from "./chatConversationNameSync"
+import {
+	ensureChatWorkspaceId,
+	getCachedChatWorkspaceId,
+} from "@/pages/superMagic/hooks/useChatWorkspace"
+import { topicStore, workspaceStore } from "../stores/core"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -37,6 +46,18 @@ export interface HandleCreateProjectParams {
 	isAutoSelect?: boolean
 	isEditProject?: boolean
 	workdir?: string
+	projectName?: string
+}
+
+/** Parameters for moving a project to another workspace (maps to projects/move API). */
+export interface MoveProjectParams {
+	projectId: string
+	targetWorkspaceId: string
+	sourceWorkspaceId: string
+	/** Optional; resolved from workspace list when omitted. */
+	targetWorkspaceName?: string
+	/** Optional; used by save-as-project flow as API `target_project_name`. */
+	targetProjectName?: string
 }
 
 // Request deduplication key generator
@@ -74,6 +95,20 @@ class ProjectService {
 
 		this.pendingRequests.set(key, promise)
 		return promise
+	}
+
+	/**
+	 * Resolves project metadata for rename: chat detail often only hydrates selectedProject, not flat projects[].
+	 */
+	private resolveProjectForRename(projectId: string): ProjectListItem | null {
+		const fromList = projectStore.projects.find((project) => project.id === projectId)
+		if (fromList) return fromList
+
+		if (projectStore.selectedProject?.id === projectId) {
+			return projectStore.selectedProject
+		}
+
+		return null
 	}
 
 	/**
@@ -125,7 +160,7 @@ class ProjectService {
 						? await SuperMagicApi.getCollaborationProjects(
 								{
 									page,
-									page_size: 99,
+									page_size: 100,
 									type: collaborationTabKey,
 								},
 								options,
@@ -134,7 +169,7 @@ class ProjectService {
 								{
 									workspace_id: workspaceId,
 									page,
-									page_size: 99,
+									page_size: 100,
 								},
 								options,
 							)
@@ -247,13 +282,18 @@ class ProjectService {
 		})
 	}
 
-	renameProject = async (id: string, name: string, workspaceId: string): Promise<void> => {
+	renameProject = async (
+		id: string,
+		name: string,
+		workspaceId: string,
+		options?: { topicId?: string },
+	): Promise<void> => {
 		const operationId = `rename_${id}_${Date.now()}`
 		const requestKey = this.getRequestKey("renameProject", { id, name, workspaceId })
 
 		// Optimistic update: update project name immediately
 		this.saveSnapshot(operationId)
-		const originalProject = projectStore.projects.find((p) => p.id === id)
+		const originalProject = this.resolveProjectForRename(id)
 		if (originalProject) {
 			runInAction(() => {
 				projectStore.updateProject({
@@ -261,29 +301,51 @@ class ProjectService {
 					project_name: name,
 				})
 			})
+			const topicIdForOptimistic =
+				options?.topicId ??
+				(topicStore.selectedTopic?.project_id === id
+					? topicStore.selectedTopic.id
+					: undefined)
+			if (topicIdForOptimistic) {
+				topicStore.updateTopicName(topicIdForOptimistic, name)
+			}
 		}
 
-		// Call API asynchronously (non-blocking)
-		this.getOrCreateRequest(requestKey, async () => {
+		// Await rename API so callers (e.g. chat list reload) do not race ahead of server state
+		return this.getOrCreateRequest(requestKey, async () => {
 			try {
-				await SuperMagicApi.editProject({
-					id,
-					project_name: name,
-					project_description: "",
-				})
-				// Refresh list asynchronously (non-blocking)
+				let chatWorkspaceId = getCachedChatWorkspaceId()
+				if (!chatWorkspaceId) {
+					chatWorkspaceId = await ensureChatWorkspaceId()
+				}
+				if (shouldSyncChatConversationName(originalProject, chatWorkspaceId)) {
+					const topicId =
+						options?.topicId ??
+						(topicStore.selectedTopic?.project_id === id
+							? topicStore.selectedTopic.id
+							: undefined)
+					await syncChatConversationName({
+						projectId: id,
+						topicId,
+						name,
+						workspaceId,
+					})
+				} else {
+					await SuperMagicApi.editProject({
+						id,
+						project_name: name,
+						project_description: "",
+					})
+				}
 				this.updateProjects({ workspaceId }).catch((error) => {
 					console.error("后台刷新项目列表失败，失败原因：", error)
 				})
 				this.clearSnapshot(operationId)
 			} catch (error) {
 				console.log("重命名项目失败，失败原因：", error)
-				// Rollback optimistic update
 				this.rollbackSnapshot(operationId)
 				throw error
 			}
-		}).catch(() => {
-			// Error already handled in the request function
 		})
 	}
 
@@ -297,8 +359,8 @@ class ProjectService {
 			projectStore.removeProject(id)
 		})
 
-		// Call API asynchronously (non-blocking)
-		this.getOrCreateRequest(requestKey, async () => {
+		// Await delete API so callers (e.g. list reload) do not race ahead of server state
+		return this.getOrCreateRequest(requestKey, async () => {
 			try {
 				await SuperMagicApi.deleteProject({ id })
 				this.clearSnapshot(operationId)
@@ -308,8 +370,6 @@ class ProjectService {
 				this.rollbackSnapshot(operationId)
 				throw error
 			}
-		}).catch(() => {
-			// Error already handled in the request function
 		})
 	}
 
@@ -332,21 +392,27 @@ class ProjectService {
 	}
 
 	/**
-	 * Move project to new workspace
-	 * @param projectId Project ID to move
-	 * @param targetWorkspaceId Target workspace ID
-	 * @param sourceWorkspaceId Source workspace ID (for refreshing project list)
-	 * @returns Success status
+	 * Move project to new workspace; optional targetProjectName is sent as `target_project_name`.
 	 */
-	moveProject = async (
-		projectId: string,
-		targetWorkspaceId: string,
-		sourceWorkspaceId: string,
-	): Promise<boolean> => {
+	moveProject = async ({
+		projectId,
+		targetWorkspaceId,
+		sourceWorkspaceId,
+		targetWorkspaceName,
+		targetProjectName,
+	}: MoveProjectParams): Promise<boolean> => {
 		const operationId = `move_${projectId}_${Date.now()}`
+		const resolvedTargetWorkspaceName =
+			targetWorkspaceName?.trim() ||
+			workspaceStore.workspaces
+				.find((workspace) => workspace.id === targetWorkspaceId)
+				?.name?.trim() ||
+			undefined
 		const requestKey = this.getRequestKey("moveProject", {
 			projectId,
 			targetWorkspaceId,
+			resolvedTargetWorkspaceName,
+			targetProjectName,
 		})
 
 		// Optimistic update: remove project from list immediately
@@ -355,16 +421,17 @@ class ProjectService {
 			projectStore.removeProject(projectId)
 		})
 
-		// Call API asynchronously (non-blocking)
-		this.getOrCreateRequest(requestKey, async () => {
+		// Await move API so callers (e.g. save-as-project + list reload) do not race ahead of server state
+		return this.getOrCreateRequest(requestKey, async () => {
 			try {
 				const res = await SuperMagicApi.moveProjectToNewWorkspace({
 					source_project_id: projectId,
 					target_workspace_id: targetWorkspaceId,
+					target_workspace_name: resolvedTargetWorkspaceName,
+					target_project_name: targetProjectName?.trim() || undefined,
 				})
 
 				if (res) {
-					// Refresh project list for source workspace asynchronously (non-blocking)
 					this.updateProjects({ workspaceId: sourceWorkspaceId }).catch((error) => {
 						console.error("后台刷新项目列表失败，失败原因：", error)
 					})
@@ -372,52 +439,33 @@ class ProjectService {
 					return true
 				}
 
-				// Rollback on failure
 				this.rollbackSnapshot(operationId)
-				return false
+				throw new Error("Move project failed")
 			} catch (error) {
 				console.error("移动项目失败，失败原因：", error)
-				// Rollback optimistic update
 				this.rollbackSnapshot(operationId)
 				throw error
 			}
-		}).catch(() => {
-			// Error already handled in the request function
 		})
-
-		// Return immediately after optimistic update
-		return true
 	}
 
 	/**
-	 * Move project to new workspace and refresh project list
-	 * @param projectId Project ID to move
-	 * @param targetWorkspaceId Target workspace ID
-	 * @param sourceWorkspaceId Source workspace ID (for refreshing project list)
-	 * @returns Promise that resolves when operation completes
+	 * Move project to new workspace and refresh source/target workspace project lists.
 	 */
-	moveProjectAndRefresh = async (
-		projectId: string,
-		targetWorkspaceId: string,
-		sourceWorkspaceId: string,
-	): Promise<void> => {
-		await this.moveProject(projectId, targetWorkspaceId, sourceWorkspaceId)
+	moveProjectAndRefresh = async (params: MoveProjectParams): Promise<void> => {
+		const { sourceWorkspaceId, targetWorkspaceId } = params
+		await this.moveProject(params)
 
-		// Refresh project list with specific options
-		this.fetchProjects({
-			workspaceId: sourceWorkspaceId,
-			clearWhenNoProjects: false,
-		}).catch((error) => {
-			console.error("后台刷新项目列表失败，失败原因：", error)
-		})
-
-		// Refresh project list for target workspace asynchronously (non-blocking)
-		this.fetchProjects({
-			workspaceId: targetWorkspaceId,
-			clearWhenNoProjects: false,
-		}).catch((error) => {
-			console.error("后台刷新项目列表失败，失败原因：", error)
-		})
+		await Promise.all([
+			this.fetchProjects({
+				workspaceId: sourceWorkspaceId,
+				clearWhenNoProjects: false,
+			}),
+			this.fetchProjects({
+				workspaceId: targetWorkspaceId,
+				clearWhenNoProjects: false,
+			}),
+		])
 	}
 
 	/**
@@ -438,15 +486,14 @@ class ProjectService {
 			projectStore.removeProject(projectId)
 		})
 
-		// Call API asynchronously (non-blocking)
-		this.getOrCreateRequest(requestKey, async () => {
+		// Await API so callers refreshing the list do not race ahead of server state
+		return this.getOrCreateRequest(requestKey, async () => {
 			try {
 				await SuperMagicApi.updateCollaborationProjectShortcutStatus(projectId, {
 					workspace_id: workspaceId,
 					is_bind_workspace: 0,
 				})
 
-				// Refresh project list asynchronously (non-blocking)
 				this.fetchProjects({
 					workspaceId,
 					clearWhenNoProjects: false,
@@ -456,12 +503,9 @@ class ProjectService {
 				this.clearSnapshot(operationId)
 			} catch (error) {
 				console.error("取消工作区快捷方式失败，失败原因：", error)
-				// Rollback optimistic update
 				this.rollbackSnapshot(operationId)
 				throw error
 			}
-		}).catch(() => {
-			// Error already handled in the request function
 		})
 	}
 

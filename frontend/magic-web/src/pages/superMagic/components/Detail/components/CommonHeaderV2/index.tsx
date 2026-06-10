@@ -525,6 +525,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 	if (renderMode === "actions") {
 		return (
 			<>
+				{/* Neutral wrapper: bar chrome belongs at call sites (e.g. mobile preview sheet), not here — Design floating pill nests this inline. */}
 				<div ref={headerContainerRef} className="w-full" data-testid="detail-header">
 					{actionsNode}
 				</div>

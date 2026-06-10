@@ -26,6 +26,7 @@ import { MOBILE_LAYOUT_CONFIG } from "../MainInputContainer/components/editors/c
 import { createMessageEditorDraftKey } from "../MessageEditor/utils/draftKey"
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
+import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 
 /**
  * 这个组件作为项目页的编辑器组件
@@ -57,6 +58,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	editorLayoutConfig,
 	showTopicModeExamplePortal = true,
 	enableReEditMessageFromPubSub = false,
+	onSendSuccess,
 	onSendComplete,
 }) => {
 	const isMobile = useIsMobile()
@@ -199,6 +201,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			stopEventLoading,
 			handleInterrupt,
 			isEmptyStatus: !!isEmptyStatus,
+			useChatTerminology: isCachedChatWorkspaceProject(selectedProject),
 			messagesLength: (messages ?? []).length,
 			enableMessageSendByContent,
 			modules: {
@@ -226,6 +229,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 				finishEditQueueItem: messageQueue.finishEditQueueItem,
 			},
 			showTopicExamplesPortal: showTopicModeExamplePortal,
+			onSendSuccess,
 		}
 	}, [
 		selectedTopic,
@@ -254,6 +258,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		messageQueue.addToQueue,
 		messageQueue.finishEditQueueItem,
 		showTopicModeExamplePortal,
+		onSendSuccess,
 		onEditorFocus,
 		onEditorBlur,
 		onSendComplete,

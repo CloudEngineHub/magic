@@ -1,14 +1,20 @@
 import { Outlet } from "react-router"
+import { useCallback } from "react"
 import SuperMagicMobileLayout from "../../components/Layout"
 import MainHeader from "./components/MainHeader"
-import { useCallback } from "react"
-import { workspaceStore } from "@/pages/superMagic/stores/core"
-import superMagicService from "@/pages/superMagic/services"
+import { useNavigate } from "@/routes/hooks/useNavigate"
 
-export default () => {
+/**
+ * Mobile SuperMagic layout: header + child routes.
+ * Default header back uses history.go(-1); child headers pass fallbackRoute via useNavigate when needed.
+ */
+export default function SuperMagicMobileMainLayout() {
+	const navigate = useNavigate()
+
+	/** Default back: history first; useNavigate falls back to MobileHome when length is insufficient. */
 	const onBackClick = useCallback(() => {
-		superMagicService.navigateToHome(workspaceStore.selectedWorkspace?.id)
-	}, [])
+		navigate({ delta: -1, viewTransition: false })
+	}, [navigate])
 
 	return (
 		<SuperMagicMobileLayout header={<MainHeader onBackClick={onBackClick} />}>

@@ -1,10 +1,19 @@
 import { useDeepCompareEffect, useMemoizedFn, useUpdateEffect } from "ahooks"
 import { throttle } from "lodash-es"
-import { useMemo, useRef, useState, useEffect, useCallback } from "react"
+import {
+	useMemo,
+	useRef,
+	useState,
+	useEffect,
+	useCallback,
+	useLayoutEffect,
+	type ReactNode,
+} from "react"
+import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
 import MessageList, { MessageListProvider } from "@/pages/superMagic/components/MessageList"
 import { useStyles } from "./styles"
-import { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { userStore } from "@/models/user"
 import { useMessageChanges } from "@/pages/superMagic/hooks/useMessageChanges"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
@@ -27,6 +36,7 @@ import { useNoPermissionCollaborationProject } from "@/pages/superMagic/hooks/us
 import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import ChatHeader from "./components/ChatHeader"
+import { TopicFilesPopup } from "./components/TopicFilesPopup"
 import { useTopicListActions } from "../ProjectPage/ProjectPageMain/hooks"
 import PreviewDetailPopup, {
 	PreviewDetail,
@@ -46,19 +56,84 @@ import ModeAvatar from "@/pages/superMagic/components/ModeAvatar"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
 import { useTopicConversationLoading } from "@/pages/superMagic/hooks/useTopicConversationLoading"
+import { RouteName } from "@/routes/constants"
+import { useLocation } from "react-router"
+import { routesMatch } from "@/routes/history/helpers"
+import {
+	getMobileTopicPageCapabilities,
+	MobileTopicPageKind,
+	resolveMobileTopicPageKind,
+} from "../shared/topicPageCapabilities"
+import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode/useCreateTopicListener"
+import { Ellipsis } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
+import { PORTAL_IDS } from "@/constants"
+import usePortalTarget from "@/hooks/usePortalTarget"
+import { useIsMobile } from "@/hooks/useIsMobile"
+import ConversationActionsPopup from "@/pages/superMagicMobile/components/ConversationActionsPopup"
+import { MobileSettingsFeedbackSheet } from "@/layouts/BaseLayoutMobile/components/MobileSettings/components/FeedbackSheet"
+import { useConversationFeedbackSheet } from "@/pages/superMagicMobile/hooks/useConversationFeedbackSheet"
+import { useMobileProjectTopicSwitch } from "@/pages/superMagicMobile/hooks/useMobileProjectTopicSwitch"
+import { useProjectTopicConversationActions } from "./hooks/useProjectTopicConversationActions"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
+import { resolveTopicPageMessageListFallback } from "./components/TopicPageMessageListFallback"
 
 interface TopicPageProps {
 	onHistoryClick?: () => void
 	className?: string
+	hideHeader?: boolean
+	hideChatActions?: boolean
+	hideTopicActions?: boolean
+	messageListFallbackRender?: ReactNode
+	messageListClassName?: string
+	bodyClassName?: string
+	footerClassName?: string
+	footerInnerClassName?: string
+	pageKind?: MobileTopicPageKind
+	onInitialMessagesLoadingChange?: (isLoading: boolean) => void
+	onInitialMessagesReadyChange?: (isReady: boolean) => void
 }
 
-function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
+function TopicPage({
+	onHistoryClick,
+	className,
+	hideHeader = false,
+	hideChatActions = true,
+	hideTopicActions = false,
+	messageListFallbackRender,
+	messageListClassName,
+	bodyClassName,
+	footerClassName,
+	footerInnerClassName,
+	pageKind,
+	onInitialMessagesLoadingChange,
+	onInitialMessagesReadyChange,
+}: TopicPageProps = {}) {
+	const { t } = useTranslation("super")
 	const { styles, cx } = useStyles()
+	const isMobile = useIsMobile()
+	const location = useLocation()
+	const routeName = routesMatch(location.pathname)?.route.name as RouteName | undefined
+	const resolvedPageKind = pageKind ?? resolveMobileTopicPageKind(routeName)
+	const capabilities = getMobileTopicPageCapabilities(resolvedPageKind)
+	const isStandaloneProjectTopicPage = routeName === RouteName.SuperWorkspaceProjectTopicState
+	// 独立项目话题子页由壳层头部承载返回与标题，避免与页内 ChatHeader 叠成双头部。
+	const shouldRenderInlineHeader = !hideHeader && !isStandaloneProjectTopicPage
+	const projectTopicMorePortalTarget = usePortalTarget({
+		portalId: PORTAL_IDS.SUPER_MAGIC_MOBILE_HEADER_RIGHT_MORE_BUTTON,
+		enabled: isMobile && isStandaloneProjectTopicPage,
+	})
+	useCreateTopicListener({
+		enabled: capabilities.canCreateSiblingTopic,
+	})
 
 	// Get state from stores
 	const selectedTopic = topicStore.selectedTopic
 	const selectedProject = projectStore.selectedProject
+	const { switchToProjectTopic } = useMobileProjectTopicSwitch({
+		projectId: selectedProject?.id,
+	})
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 
 	// Get task data
@@ -67,6 +142,31 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 	// Local state
 	const attachments = projectFilesStore.workspaceFileTree
 	const attachmentList = projectFilesStore.workspaceFilesList
+	const {
+		feedbackSheetOpen: projectTopicFeedbackSheetOpen,
+		feedbackPrefill: projectTopicFeedbackPrefill,
+		openConversationFeedback: openProjectTopicConversationFeedback,
+		closeConversationFeedback: closeProjectTopicConversationFeedback,
+	} = useConversationFeedbackSheet({
+		selectedProject,
+		selectedTopic,
+	})
+	const {
+		actionSheetVisible: projectTopicActionSheetVisible,
+		filesDrawerOpen: projectTopicFilesDrawerOpen,
+		setFilesDrawerOpen: setProjectTopicFilesDrawerOpen,
+		openConversationActionSheet: openProjectTopicActionSheet,
+		closeConversationActionSheet: closeProjectTopicActionSheet,
+		conversationActionGroups: projectTopicActionGroups,
+		conversationActionPopupTitle: projectTopicActionPopupTitle,
+		conversationActionPopupSubtitle: projectTopicActionPopupSubtitle,
+		topicActionComponents: projectTopicActionComponents,
+	} = useProjectTopicConversationActions({
+		selectedProject,
+		selectedTopic,
+		topics: topicStore.topics,
+		onOpenConversationFeedback: openProjectTopicConversationFeedback,
+	})
 
 	// Refs
 	const footerRef = useRef<HTMLDivElement>(null)
@@ -75,6 +175,7 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 	const scrollHeightRef = useRef<number>(0)
 	const scrollTopRef = useRef<number>(0)
 	const [isShowLoadingInit, setIsShowLoadingInit] = useState(false)
+	const [filesPopupOpen, setFilesPopupOpen] = useState(false)
 
 	// Hooks
 	const { userInfo } = userStore.user
@@ -125,9 +226,6 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 		},
 	})
 
-	// Calculate isEmptyStatus
-	const isEmptyStatus = messages.length === 0
-
 	// Attachment polling
 	const { checkNowDebounced } = useAttachmentsPolling({
 		projectId: selectedProject?.id,
@@ -157,6 +255,15 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 		isSelectedTopicMessagesReady,
 	})
 	handleTopicMessagesChangeRef.current = handleTopicMessagesChange
+
+	// 让外层壳层区分“真的空会话”和“历史消息首轮还在补齐”，避免欢迎态抢占首屏。
+	useLayoutEffect(() => {
+		onInitialMessagesLoadingChange?.(isMessagesInitialLoading)
+	}, [isMessagesInitialLoading, onInitialMessagesLoadingChange])
+
+	useLayoutEffect(() => {
+		onInitialMessagesReadyChange?.(isSelectedTopicMessagesReady)
+	}, [isSelectedTopicMessagesReady, onInitialMessagesReadyChange])
 
 	// Update attachments
 	const updateAttachments = useMemoizedFn((selectedProject: any, callback?: () => void) => {
@@ -222,6 +329,10 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 		}
 	}, [selectedProject?.id])
 
+	const refreshTopicFiles = useMemoizedFn(() => {
+		return updateAttachments(selectedProject)
+	})
+
 	// Callback functions
 	const onFileClick = useMemoizedFn((fileItem?: any) => {
 		const fileId = fileItem?.file_id
@@ -244,6 +355,10 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 	})
 
 	const onNewTopicClick = useMemoizedFn(() => {
+		if (!capabilities.canCreateSiblingTopic) {
+			return
+		}
+
 		return SuperMagicService.handleCreateTopic({
 			selectedProject,
 		})
@@ -276,6 +391,13 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 			})
 		},
 	)
+
+	/**
+	 * 话题页文件入口只负责切起独立查看弹层；文件树和预览逻辑继续复用项目详情链路。
+	 */
+	const handleOpenFilesPopup = useMemoizedFn(() => {
+		setFilesPopupOpen(true)
+	})
 
 	const { hasMemoryUpdateMessage } = useMessageChanges(messages)
 
@@ -421,15 +543,19 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 			selectedTopic?.agent_code,
 		)
 	}, [topicMode, selectedTopic?.agent_code])
+	const resolvedMessageListFallbackRender = useMemo(
+		() => resolveTopicPageMessageListFallback(messageListFallbackRender),
+		[messageListFallbackRender],
+	)
 	const value = useMemo<MessageListContextState>(() => {
 		return {
 			allowRevoke: true,
 			allowUserMessageCopy: true,
 			allowScheduleTaskCreate: true,
 			allowMessageTooltip: true,
-			allowConversationCopy: true,
-			onTopicSwitch: topicStore.setSelectedTopic,
-			projectFilesStore,
+			// single-topic Chat 不允许从消息卡片复制出兄弟话题，避免出现多话题能力穿透。
+			allowConversationCopy: capabilities.canCreateSiblingTopic,
+			onTopicSwitch: switchToProjectTopic,
 			renderAssistantAvatar: topicModeConfig?.mode
 				? ({ className } = {}) => (
 						<ModeAvatar
@@ -440,7 +566,7 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 					)
 				: undefined,
 		}
-	}, [topicModeConfig])
+	}, [capabilities.canCreateSiblingTopic, switchToProjectTopic, topicModeConfig])
 
 	const setUserSelectDetail = useMemoizedFn((detail: PreviewDetail | null) => {
 		if (!detail) return
@@ -461,37 +587,60 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 	})
 
 	return (
-		<div className={cn(styles.container, className)}>
-			<ChatHeader
-				selectedTopic={selectedTopic}
-				openActionsPopup={(topic: Topic) => {
-					openActionsPopup(topic, selectedProject)
-				}}
-				onNewTopicClick={onNewTopicClick}
-				onHistoryClick={onHistoryClick}
-				onShareClick={onShareClick}
-			/>
-			<div className={styles.body} ref={nodesPanelRef}>
+		<div className={cn(styles.container, className)} data-testid="topic-page-root">
+			{projectTopicMorePortalTarget &&
+				createPortal(
+					<Button
+						variant="ghost"
+						className="h-12 w-12 shrink-0 rounded-full p-0 text-foreground hover:bg-transparent active:opacity-70"
+						onClick={openProjectTopicActionSheet}
+						aria-label={t("topic.moreAria")}
+						data-testid="project-topic-header-more-button"
+					>
+						<Ellipsis className="h-[22px] w-[22px]" />
+					</Button>,
+					projectTopicMorePortalTarget,
+				)}
+			{shouldRenderInlineHeader && (
+				<ChatHeader
+					selectedTopic={selectedTopic}
+					openActionsPopup={(topic: Topic) => {
+						openActionsPopup(topic, selectedProject)
+					}}
+					onNewTopicClick={
+						capabilities.canCreateSiblingTopic ? onNewTopicClick : undefined
+					}
+					onHistoryClick={onHistoryClick}
+					onFilesClick={handleOpenFilesPopup}
+					onShareClick={onShareClick}
+				/>
+			)}
+			<div className={cn(styles.body, bodyClassName)}>
 				<MessageListProvider value={value}>
 					<MessageList
 						data={messages as any}
 						setSelectedDetail={setUserSelectDetail}
 						selectedTopic={selectedTopic}
-						className={cx(isEmptyStatus && styles.emptyMessageWelcome)}
+						className={cx(messageListClassName)}
+						viewportRef={nodesPanelRef}
 						handlePullMoreMessage={handlePullMoreMessage}
 						showLoading={showLoading}
 						onFileClick={onFileClick}
 						isMessagesLoading={isMessagesInitialLoading}
-						stickyMessageClassName="-top-[1px] pt-2 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+						fallbackRender={resolvedMessageListFallbackRender}
 					/>
 				</MessageListProvider>
 			</div>
-			<div ref={footerRef} className={styles.footer}>
-				<div className="flex flex-col">
-					<ChatActions
-						onNewTopicClick={onNewTopicClick}
-						onHistoryTopicsClick={onHistoryClick}
-					/>
+			<div ref={footerRef} className={cn(styles.footer, footerClassName)}>
+				<div className={cn("flex flex-col gap-2", footerInnerClassName)}>
+					{!hideChatActions && (
+						<ChatActions
+							onNewTopicClick={
+								capabilities.canCreateSiblingTopic ? onNewTopicClick : undefined
+							}
+							onHistoryTopicsClick={onHistoryClick}
+						/>
+					)}
 					<ProjectPageInputContainer
 						className="mx-auto max-w-3xl rounded-2xl"
 						classNames={{
@@ -515,7 +664,56 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 					/>
 				</div>
 			</div>
-			{topicActionComponents}
+			{!hideTopicActions &&
+				(isStandaloneProjectTopicPage
+					? projectTopicActionComponents
+					: topicActionComponents)}
+			{isStandaloneProjectTopicPage ? (
+				<ConversationActionsPopup
+					visible={projectTopicActionSheetVisible}
+					title={projectTopicActionPopupTitle}
+					subtitle={projectTopicActionPopupSubtitle}
+					actionGroups={projectTopicActionGroups}
+					onClose={closeProjectTopicActionSheet}
+				/>
+			) : null}
+			{isStandaloneProjectTopicPage ? (
+				<MobileSettingsFeedbackSheet
+					open={projectTopicFeedbackSheetOpen}
+					onClose={closeProjectTopicConversationFeedback}
+					prefill={projectTopicFeedbackPrefill}
+				/>
+			) : null}
+			{isStandaloneProjectTopicPage ? (
+				<TopicFilesPopup
+					open={projectTopicFilesDrawerOpen}
+					onOpenChange={setProjectTopicFilesDrawerOpen}
+					attachments={attachments}
+					attachmentList={attachmentList}
+					selectedProject={selectedProject}
+					selectedTopic={selectedTopic}
+					selectedWorkspace={selectedWorkspace}
+					projects={projectStore.projects}
+					workspaces={workspaceStore.workspaces}
+					projectId={selectedProject?.id}
+					refreshAttachments={refreshTopicFiles}
+				/>
+			) : null}
+			{!isStandaloneProjectTopicPage ? (
+				<TopicFilesPopup
+					open={filesPopupOpen}
+					onOpenChange={setFilesPopupOpen}
+					attachments={attachments}
+					attachmentList={attachmentList}
+					selectedProject={selectedProject}
+					selectedTopic={selectedTopic}
+					selectedWorkspace={selectedWorkspace}
+					projects={projectStore.projects}
+					workspaces={workspaceStore.workspaces}
+					projectId={selectedProject?.id}
+					refreshAttachments={refreshTopicFiles}
+				/>
+			) : null}
 			<PreviewDetailPopup
 				ref={previewDetailPopupRef}
 				setUserSelectDetail={setUserSelectDetail}

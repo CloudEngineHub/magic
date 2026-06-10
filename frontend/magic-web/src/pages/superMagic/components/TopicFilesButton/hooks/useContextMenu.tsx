@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import {
 	IconDownload,
@@ -17,24 +18,29 @@ import {
 } from "@tabler/icons-react"
 import IconOpenWindow from "@/enhance/tabler/icons-react/icons/IconOpenWindow"
 import MagicIcon from "@/components/base/MagicIcon"
-import { Flex, message } from "antd"
-import { AttachmentSource, type AttachmentItem } from "./types"
+import { Flex } from "antd"
+import type { AttachmentItem } from "./types"
 import { useStyles } from "../style"
 import { useIsMobile } from "@/hooks/useIsMobile"
 
 import MagicModal from "@/components/base/MagicModal"
 import { MagicSystemFolderIcon } from "../components/MagicSystemFolderIcon"
-import { getAppEntryFile } from "../../MessageList/components/MessageAttachment/utils"
 import VIPTag from "../../VIPTag"
-import { IMAGE_EXTENSIONS } from "../../Detail/hooks/useDetailActions"
 import { DownloadImageMode } from "../../../pages/Workspace/types"
+import {
+	buildSingleFileDownloadMenu,
+	DOWNLOAD_IMAGE_NO_WATERMARK_MENU_KEY,
+	type MobileDownloadMenuItem,
+	type SingleFileDownloadHandlers,
+} from "../utils/build-single-file-download-menu"
 import { createFileMenuItems } from "../components/hooks/useFileMenuItems"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { normalizeMenuItems, type TopicFilesMenuItem } from "../utils/menu-items"
 import { isMagicSystemFolder } from "../utils/magic-system-folder"
-import { isConvertibleFile } from "../../Detail/utils/file"
 import type { TreeNodeData } from "../utils/treeDataConverter"
 import { findNodePath } from "../utils/path-helper"
+import { getAttachmentKey } from "../utils/getAttachmentKey"
+import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
 
 type MenuItem = TopicFilesMenuItem
 
@@ -92,12 +98,93 @@ interface UseContextMenuOptions {
 	isSelectMode?: boolean
 	/* 树形数据，用于检查父级节点 */
 	treeData?: TreeNodeData[]
+	/** Full attachment tree for mobile hierarchy delete confirmation */
+	attachments?: AttachmentItem[]
 }
 
-function isImage(fileExtension?: string): boolean {
-	if (!fileExtension) return false
-	const ext = fileExtension.toLowerCase()
-	return IMAGE_EXTENSIONS.includes(ext)
+interface MapDownloadMenuToContextOptions {
+	isFreeTrialVersion?: boolean
+	preloadWaterMarkFreeModal?: () => void
+	t: (key: string) => string
+}
+
+/** Map shared download menu entries to Ant Design context menu items. */
+function mapDownloadMenuToContextItems(
+	entries: MobileDownloadMenuItem[],
+	options: MapDownloadMenuToContextOptions,
+): MenuItem[] {
+	return entries.map((entry) => ({
+		key: entry.key,
+		label:
+			entry.key === DOWNLOAD_IMAGE_NO_WATERMARK_MENU_KEY && options.isFreeTrialVersion ? (
+				<Flex align="center" gap={4}>
+					<span>{entry.label}</span>
+					<VIPTag />
+				</Flex>
+			) : (
+				entry.label
+			),
+		onClick: entry.onClick,
+		onMouseEnter:
+			entry.key === DOWNLOAD_IMAGE_NO_WATERMARK_MENU_KEY
+				? options.preloadWaterMarkFreeModal
+				: undefined,
+		children: entry.children?.length
+			? mapDownloadMenuToContextItems(entry.children, options)
+			: undefined,
+	}))
+}
+
+/** Append download entries from the shared builder onto a context menu list. */
+function appendDownloadContextMenuItems(
+	menuItems: MenuItem[],
+	item: AttachmentItem,
+	handlers: SingleFileDownloadHandlers,
+	t: (key: string) => string,
+	downloadIcon: ReactNode,
+	options: {
+		shouldUseSingleDownloadEntry?: boolean
+		isFreeTrialVersion?: boolean
+		preloadWaterMarkFreeModal?: () => void
+	},
+) {
+	const entries = buildSingleFileDownloadMenu({
+		item,
+		handlers,
+		t,
+		shouldUseSingleDownloadEntry: options.shouldUseSingleDownloadEntry,
+	})
+	if (entries.length === 0) return
+
+	if (item.is_directory && item.display_config?.type !== "slide") {
+		const entry = entries[0]
+		menuItems.push({
+			key: "downloadFolder",
+			label: entry.label,
+			icon: downloadIcon,
+			onClick: entry.onClick,
+		})
+		return
+	}
+
+	const hasSubMenu = entries.length > 1 || entries.some((entry) => entry.children?.length)
+	if (!hasSubMenu) {
+		const entry = entries[0]
+		menuItems.push({
+			key: "download",
+			label: t("topicFiles.contextMenu.download"),
+			icon: downloadIcon,
+			onClick: entry.onClick,
+		})
+		return
+	}
+
+	menuItems.push({
+		key: "download",
+		label: t("topicFiles.contextMenu.download"),
+		icon: downloadIcon,
+		children: mapDownloadMenuToContextItems(entries, { ...options, t }),
+	})
 }
 
 /**
@@ -217,6 +304,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 	const { t } = useTranslation("super")
 	const { styles } = useStyles()
 	const isMobile = useIsMobile()
+	const { deleteConfirmNode, openDeleteConfirm } = useMobileDeleteConfirmSheet()
 	const { hideCopyTo, hideCreateNewTopic, hideMoveTo, hideShareFile } = useFileActionVisibility()
 	const {
 		handleUploadFile,
@@ -255,6 +343,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		handleEnterMultiSelectMode,
 		isSelectMode = false,
 		treeData,
+		attachments = [],
 	} = options
 
 	// 获取文件夹路径 - 优先使用 relative_file_path,否则从树结构中计算
@@ -333,6 +422,21 @@ export function useContextMenu(options: UseContextMenuOptions) {
 	// 生成菜单项
 	const getMenuItems = (item: AttachmentItem): MenuItem[] => {
 		const menuItems: MenuItem[] = []
+		const downloadIcon = <MagicIcon component={IconDownload} stroke={2} size={18} />
+		const downloadHandlers: SingleFileDownloadHandlers = {
+			handleDownloadOriginal,
+			handleDownloadPdf,
+			handleDownloadPpt,
+			handleDownloadPptx,
+			handleDownloadImage,
+			handleDownloadNoWaterMark,
+			preloadWaterMarkFreeModal,
+		}
+		const downloadMenuOptions = {
+			shouldUseSingleDownloadEntry,
+			isFreeTrialVersion,
+			preloadWaterMarkFreeModal,
+		}
 
 		if (item.is_directory && "children" in item) {
 			const parentPath = getFolderPath(item)
@@ -525,70 +629,18 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							hideCreateNewTopic ? menuItem.key !== "addToNewChat" : true,
 						)),
 				{ type: "divider" as const },
-				// 文件夹下载菜单：根据display_config决定显示方式
-				...(item.display_config && item.display_config?.type === "slide"
-					? [
-							{
-								key: "download",
-								label: t("topicFiles.contextMenu.download"),
-								icon: <MagicIcon component={IconDownload} stroke={2} size={18} />,
-								children: [
-									{
-										key: "downloadOriginal",
-										label: t("topicFiles.contextMenu.downloadOriginal"),
-										onClick: () => handleDownloadOriginal(item),
-									},
-									{
-										key: "downloadPdf",
-										label: t("topicFiles.contextMenu.downloadPdf"),
-										onClick: () => {
-											handleDownloadPdf(item, item.children || [])
-										},
-									},
-									{
-										key: "downloadPpt",
-										label: t("topicFiles.contextMenu.downloadPpt"),
-										onClick: () => {
-											const appEntryFile = getAppEntryFile(
-												item.children || [],
-												item.display_config,
-											)
-											if (appEntryFile) handleDownloadPpt(appEntryFile)
-											else if (item.display_config?.type === "custom")
-												message.error(
-													t("topicFiles.customMainFileNotFound"),
-												)
-										},
-									},
-									{
-										key: "downloadPptx",
-										label: t("topicFiles.contextMenu.downloadPptx"),
-										onClick: () => {
-											const children = item.children || []
-											const appEntryFile = getAppEntryFile(
-												children,
-												item.display_config,
-											)
-											if (appEntryFile) {
-												console.log("children", children)
-												handleDownloadPptx(appEntryFile, children)
-											} else if (item.display_config?.type === "custom")
-												message.error(
-													t("topicFiles.customMainFileNotFound"),
-												)
-										},
-									},
-								],
-							},
-						]
-					: [
-							{
-								key: "downloadFolder",
-								label: t("topicFiles.contextMenu.downloadFolder"),
-								icon: <MagicIcon component={IconDownload} stroke={2} size={18} />,
-								onClick: () => handleDownloadOriginal(item),
-							},
-						]),
+				...(() => {
+					const downloadMenuItems: MenuItem[] = []
+					appendDownloadContextMenuItems(
+						downloadMenuItems,
+						item,
+						downloadHandlers,
+						t,
+						downloadIcon,
+						downloadMenuOptions,
+					)
+					return downloadMenuItems
+				})(),
 				{ type: "divider" as const },
 				...(!hideShareFile
 					? [
@@ -627,8 +679,17 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					),
 					disabled: isMoving,
 					onClick: () => {
-						const isFolder = item.is_directory
+						const isFolder = Boolean(item.is_directory)
 						const isMagicFolder = Boolean(isFolder && isMagicSystemFolder(item))
+						if (isMobile) {
+							openDeleteConfirm({
+								attachments,
+								selectedKeys: new Set([getAttachmentKey(item)]),
+								onConfirm: () => handleDeleteItem(item),
+								testIdPrefix: "topic-files-delete-confirm",
+							})
+							return
+						}
 						MagicModal.confirm({
 							title: isFolder
 								? t("topicFiles.contextMenu.deleteFolderTip")
@@ -658,10 +719,6 @@ export function useContextMenu(options: UseContextMenuOptions) {
 			return normalizeMenuItems(filterMenuItems?.(menuItems) || menuItems)
 		} else {
 			// 文件菜单
-			const canConvertToPdf = isConvertibleFile(item, ["html", "md"])
-			const canConvertToPPTX = isConvertibleFile(item, ["html"])
-			const canConvertToImage = isConvertibleFile(item, ["html"])
-
 			menuItems.push(
 				{
 					key: "openFile",
@@ -807,122 +864,14 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				{ type: "divider" as const },
 			)
 
-			// 根据文件类型决定下载菜单的展示方式
-			if (canConvertToPdf || canConvertToPPTX || canConvertToImage) {
-				// 支持转换的文件：显示下载子菜单
-				const downloadChildren: MenuItem[] = [
-					{
-						key: "downloadOriginal",
-						label: t("topicFiles.contextMenu.downloadOriginal"),
-						onClick: () => handleDownloadOriginal(item, DownloadImageMode.Download),
-					},
-				]
-
-				// 添加PDF转换选项
-				if (canConvertToPdf) {
-					downloadChildren.push({
-						key: "downloadPdf",
-						label: t("topicFiles.contextMenu.downloadPdf"),
-						children: [
-							{
-								key: "downloadPdfPaginated",
-								label: t("topicFiles.exportPdfPaginated"),
-								onClick: () => handleDownloadPdf(item, undefined, "slice"),
-							},
-							{
-								key: "downloadPdfFullPage",
-								label: t("topicFiles.exportPdfFullPage"),
-								onClick: () => handleDownloadPdf(item, undefined, "none"),
-							},
-						],
-					})
-				}
-
-				// 添加PPTX转换选项
-				if (canConvertToPPTX) {
-					console.log(item)
-					downloadChildren.push({
-						key: "downloadPpt",
-						label: t("topicFiles.contextMenu.downloadPpt"),
-						onClick: () => handleDownloadPpt(item),
-					})
-					downloadChildren.push({
-						key: "downloadPptx",
-						label: t("topicFiles.contextMenu.downloadPptx"),
-						onClick: () => handleDownloadPptx(item, item.children || []),
-					})
-				}
-
-				// 添加图片导出选项（仅 HTML）
-				if (canConvertToImage && handleDownloadImage) {
-					downloadChildren.push({
-						key: "downloadAsImage",
-						label: t("topicFiles.contextMenu.downloadAsImage"),
-						children: [
-							{
-								key: "downloadImagePng",
-								label: t("topicFiles.exportImagePng"),
-								onClick: () => handleDownloadImage(item, "png"),
-							},
-							{
-								key: "downloadImageJpeg",
-								label: t("topicFiles.exportImageJpeg"),
-								onClick: () => handleDownloadImage(item, "jpeg"),
-							},
-						],
-					})
-				}
-
-				menuItems.push({
-					key: "download",
-					label: t("topicFiles.contextMenu.download"),
-					icon: <MagicIcon component={IconDownload} stroke={2} size={18} />,
-					children: downloadChildren,
-				})
-			} else {
-				const isAIImageFile =
-					isImage(item.file_extension) && item.source === AttachmentSource.AI
-				// 其他文件：直接下载原始文件
-				menuItems.push({
-					key: "download",
-					label: t("topicFiles.contextMenu.download"),
-					icon: <MagicIcon component={IconDownload} stroke={2} size={18} />,
-					onClick: !isAIImageFile
-						? () => handleDownloadOriginal(item, DownloadImageMode.Download)
-						: shouldUseSingleDownloadEntry
-							? () => handleDownloadNoWaterMark?.(item)
-							: undefined,
-					children:
-						isAIImageFile && !shouldUseSingleDownloadEntry
-							? [
-									{
-										key: "downloadImage",
-										label: t("topicFiles.contextMenu.downloadImage"),
-										onClick: () =>
-											handleDownloadOriginal(
-												item,
-												DownloadImageMode.NormalDownload,
-											),
-									},
-									{
-										key: "downloadImageNoWaterMark",
-										label: (
-											<Flex align="center" gap={4}>
-												<span>
-													{t(
-														"topicFiles.contextMenu.downloadImageNoWaterMark",
-													)}
-												</span>
-												{isFreeTrialVersion && <VIPTag />}
-											</Flex>
-										),
-										onClick: () => handleDownloadNoWaterMark?.(item),
-										onMouseEnter: () => preloadWaterMarkFreeModal?.(),
-									},
-								]
-							: undefined,
-				})
-			}
+			appendDownloadContextMenuItems(
+				menuItems,
+				item,
+				downloadHandlers,
+				t,
+				downloadIcon,
+				downloadMenuOptions,
+			)
 
 			menuItems.push(
 				{ type: "divider" as const },
@@ -963,8 +912,17 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					),
 					disabled: isMoving,
 					onClick: () => {
-						const isFolder = item.is_directory
+						const isFolder = Boolean(item.is_directory)
 						const isMagicFolder = Boolean(isFolder && isMagicSystemFolder(item))
+						if (isMobile) {
+							openDeleteConfirm({
+								attachments,
+								selectedKeys: new Set([getAttachmentKey(item)]),
+								onConfirm: () => handleDeleteItem(item),
+								testIdPrefix: "topic-files-delete-confirm",
+							})
+							return
+						}
 						MagicModal.confirm({
 							title: isFolder
 								? t("topicFiles.contextMenu.deleteFolderTip")
@@ -998,5 +956,6 @@ export function useContextMenu(options: UseContextMenuOptions) {
 	return {
 		getMenuItems,
 		getBatchDownloadLayerMenuItems,
+		deleteConfirmNode,
 	}
 }
