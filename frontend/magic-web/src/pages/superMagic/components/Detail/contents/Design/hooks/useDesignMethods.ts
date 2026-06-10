@@ -15,6 +15,7 @@ import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { SuperMagicApi } from "@/apis"
 import { useGetOrCreateImagesDir } from "./useGetOrCreateImagesDir"
 import { useImageGeneration } from "./useImageGeneration"
+import { useImagePromptCompletion } from "./useImagePromptCompletion"
 import { useVideoGeneration } from "./useVideoGeneration"
 import { useFileUpload } from "./useFileUpload"
 import { useFileInfoProvider } from "./useFileInfoProvider"
@@ -135,6 +136,12 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		setFileInfoCache,
 		updateAttachments,
 		getOrCreateImagesDir,
+	})
+
+	const { completeImagePrompt } = useImagePromptCompletion({
+		projectId,
+		flatAttachments,
+		designProjectBasePath,
 	})
 
 	const { getVideoModelList, generateVideo, estimateVideoPoints, getVideoGenerationResult } =
@@ -587,6 +594,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	const methods = useMemo<CanvasDesignMethods>(() => {
 		return {
 			getImageModelList,
+			completeImagePrompt,
 			getVideoModelList,
 			generateVideo,
 			estimateVideoPoints,
@@ -625,6 +633,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		}
 	}, [
 		getImageModelList,
+		completeImagePrompt,
 		getVideoModelList,
 		generateVideo,
 		estimateVideoPoints,

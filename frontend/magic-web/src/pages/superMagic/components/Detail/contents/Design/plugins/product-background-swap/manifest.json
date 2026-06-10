@@ -13,6 +13,8 @@
 			"description": "Upload product images, choose a reference background or text background, and generate polished product background swaps.",
 			"error.backgroundImageRequired": "Please choose a reference background image",
 			"error.backgroundPromptRequired": "Please enter a background prompt",
+			"error.aiPromptEmpty": "AI did not return a valid background prompt. Please try again.",
+			"error.aiPromptUnavailable": "AI prompt completion is temporarily unavailable",
 			"error.noModels": "No AI model is currently available",
 			"error.noSize": "The current model does not provide a usable size preset",
 			"error.referenceLimit": "The reference image limit for the current model has been reached",
@@ -54,6 +56,8 @@
 			"description": "上传商品图，选择参考背景图或文生背景，快速生成商业级商品换背景效果图。",
 			"error.backgroundImageRequired": "请选择背景参考图",
 			"error.backgroundPromptRequired": "请输入背景描述",
+			"error.aiPromptEmpty": "AI 未生成有效背景提示词，请重试",
+			"error.aiPromptUnavailable": "AI 提示词补全能力暂不可用",
 			"error.noModels": "暂无可用 AI 模型",
 			"error.noSize": "当前模型缺少可用尺寸配置",
 			"error.referenceLimit": "参考图数量已达当前模型上限",
@@ -105,7 +109,8 @@
 		"assets.uploadFile",
 		"assets.fetchBlob",
 		"ai.getImageModels",
-		"ai.generateAndPlace"
+		"ai.generateAndPlace",
+		"ai.completeImagePrompt"
 	],
 	"version": 1
 }

@@ -1,4 +1,7 @@
-import type { GenerateImageRequest } from "../../../../types.magic"
+import type {
+	CompleteImagePromptRequest,
+	GenerateImageRequest,
+} from "../../../../types.magic"
 import type { CanvasDesignPlugin, CanvasDesignPluginCapability } from "../../../../canvas/types"
 
 export type PluginFilePickerType = "image" | "video" | "audio" | "file"
@@ -20,6 +23,11 @@ export interface PluginGenerateAndPlaceParams extends Partial<GenerateImageReque
 	height?: number
 	count?: number
 	select?: boolean
+}
+
+export interface PluginCompleteImagePromptParams
+	extends Omit<CompleteImagePromptRequest, "project_id"> {
+	user_prompt: string
 }
 
 export type PluginRuntimeMessage =
@@ -63,6 +71,11 @@ export type PluginRuntimeMessage =
 			params: PluginGenerateAndPlaceParams
 	  }
 	| {
+			type: "magic-canvas-plugin:complete-image-prompt"
+			requestId: string
+			params: PluginCompleteImagePromptParams
+	  }
+	| {
 			type: "magic-canvas-plugin:upload-file"
 			requestId: string
 			arrayBuffer: ArrayBuffer
@@ -80,6 +93,7 @@ export const PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE = {
 	"magic-canvas-plugin:pick-files": "magic-canvas-plugin:pick-files-result",
 	"magic-canvas-plugin:get-image-models": "magic-canvas-plugin:get-image-models-result",
 	"magic-canvas-plugin:generate-and-place": "magic-canvas-plugin:generate-and-place-result",
+	"magic-canvas-plugin:complete-image-prompt": "magic-canvas-plugin:complete-image-prompt-result",
 	"magic-canvas-plugin:upload-file": "magic-canvas-plugin:upload-file-result",
 	"magic-canvas-plugin:fetch-blob": "magic-canvas-plugin:fetch-blob-result",
 } as const
@@ -94,6 +108,7 @@ const PLUGIN_RUNTIME_CAPABILITY_BY_MESSAGE_TYPE: Partial<
 	"magic-canvas-plugin:pick-files": "assets.pickFiles",
 	"magic-canvas-plugin:get-image-models": "ai.getImageModels",
 	"magic-canvas-plugin:generate-and-place": "ai.generateAndPlace",
+	"magic-canvas-plugin:complete-image-prompt": "ai.completeImagePrompt",
 	"magic-canvas-plugin:upload-file": "assets.uploadFile",
 	"magic-canvas-plugin:fetch-blob": "assets.fetchBlob",
 }
@@ -185,6 +200,19 @@ export function parsePluginRuntimeMessage(
 			type: "magic-canvas-plugin:generate-and-place",
 			requestId: record.requestId,
 			params: record.params as PluginGenerateAndPlaceParams,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:complete-image-prompt" &&
+		typeof record.requestId === "string" &&
+		record.params &&
+		typeof record.params === "object" &&
+		typeof (record.params as Record<string, unknown>).user_prompt === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:complete-image-prompt",
+			requestId: record.requestId,
+			params: record.params as PluginCompleteImagePromptParams,
 		}
 	}
 	if (

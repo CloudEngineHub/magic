@@ -111,6 +111,39 @@ function getPlacementModeDefinition(placementMode) {
 	)
 }
 
+function buildCurrentTextBlock(currentText) {
+	const normalizedCurrentText = String(currentText ?? "").trim()
+	if (!normalizedCurrentText) {
+		return "用户当前未填写。"
+	}
+
+	return normalizedCurrentText
+}
+
+function getPlacementModeConstraint(placementMode) {
+	switch (placementMode) {
+		case PLACEMENT_MODE_NATURAL:
+			return "背景应适合硬质商品自然落地、桌面摆放、靠放或形成合理接触阴影。"
+		case PLACEMENT_MODE_SOFT:
+			return "背景应适合柔软衣物平铺、搭放、挂放或自然垂落，避免让衣物直立。"
+		case PLACEMENT_MODE_BACKGROUND:
+			return "背景应尽量简单干净，减少复杂透视、强遮挡和强道具，不要求重新摆放商品。"
+		case PLACEMENT_MODE_SMART:
+		default:
+			return "背景应适合自动摆放，并为不同商品提供自然、合理、商业摄影化的承托关系。"
+	}
+}
+
+function buildPromptCompletionUserPrompt({ imageCount, placementMode, currentText }) {
+	return [
+		"任务目标：为商品换背景的文生背景输入框生成或补全一段背景提示词。",
+		`当前输入：${buildCurrentTextBlock(currentText)}`,
+		`参考图角色：共有 ${imageCount} 张商品图，用于理解商品类别、材质、颜色、软硬属性和商业气质；这些商品会分别生成图片，不会放进同一张图。`,
+		`业务限制：背景摆放方式是“${getPlacementModeDefinition(placementMode).labelFallback}”，${getPlacementModeConstraint(placementMode)}不要描述商品之间的搭配、并排或同框关系；不要改变商品本身颜色、款式、logo、图案或材质。`,
+		"补全方向：重点补充背景场景本身，包括空间类型、背景材质、少量不抢主体的道具、光线方向与软硬、色彩氛围、构图留白，以及与商品匹配的物理承托关系。",
+	].join("\n")
+}
+
 function resolvePlacementPromptSuffix(definition, { backgroundMode, backgroundReference, locale }) {
 	const backgroundInstruction =
 		backgroundMode === BACKGROUND_MODE_IMAGE && definition.promptSuffixBackgroundInstruction
@@ -282,7 +315,6 @@ function buildProductBackgroundSwapRequest({
 	baseImage,
 	locale,
 	selectedSize,
-	outputCount,
 	select,
 }) {
 	const referenceAssets = getReferenceAssetsForBaseImage(state, baseImage)
@@ -309,8 +341,7 @@ function buildProductBackgroundSwapRequest({
 			: undefined,
 		width,
 		height,
-		count: 1,
-		n: outputCount,
+		count: state.genCount,
 		select,
 	}
 }
@@ -444,12 +475,44 @@ registerMagicCanvasPlugin({
 										label: t("button.aiPlaceholder", "AI 生成"),
 										loadingLabel: t("button.generating", "生成中…"),
 										disabled: ({ state }) => !state.productImages?.length,
-										generate: async () => {
-											ctx.ui?.toast?.(
-												t("toast.aiPromptSoon", "AI 生成功能即将上线"),
-												"info",
+										generate: async ({ state, helpers, t }) => {
+											if (!ctx.ai?.completeImagePrompt) {
+												throw new Error(
+													t(
+														"error.aiPromptUnavailable",
+														"AI 提示词补全能力暂不可用",
+													),
+												)
+											}
+											const referenceImages = helpers.collectReferenceIds(
+												state.productImages,
 											)
-											return ""
+											if (!referenceImages.length) {
+												throw new Error(
+													t(
+														"error.references",
+														"图片缺少可用于生成的资源标识",
+													),
+												)
+											}
+											const result = await ctx.ai.completeImagePrompt({
+												user_prompt: buildPromptCompletionUserPrompt({
+													imageCount: state.productImages.length,
+													placementMode: state.placementMode,
+													currentText: state.backgroundPrompt,
+												}),
+												reference_images: referenceImages,
+											})
+											const prompt = String(result?.prompt ?? "").trim()
+											if (!prompt) {
+												throw new Error(
+													t(
+														"error.aiPromptEmpty",
+														"AI 未生成有效背景提示词，请重试",
+													),
+												)
+											}
+											return prompt
 										},
 									},
 								},
@@ -529,7 +592,6 @@ registerMagicCanvasPlugin({
 									baseImage,
 									locale: promptLocale,
 									selectedSize,
-									outputCount: state.genCount,
 									select: index === state.productImages.length - 1,
 								}),
 							),

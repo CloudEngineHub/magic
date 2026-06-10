@@ -72,6 +72,7 @@ function sanitizePluginImageModel(model: ImageModelItem) {
 			? {
 					default_scale: model.image_size_config.default_scale,
 					max_reference_images: model.image_size_config.max_reference_images,
+					max_output_images: model.image_size_config.max_output_images,
 					sizes: (model.image_size_config.sizes ?? []).map((size) => ({
 						label: size.label,
 						value: size.value,

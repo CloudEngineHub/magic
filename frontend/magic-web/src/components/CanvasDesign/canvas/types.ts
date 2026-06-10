@@ -482,6 +482,7 @@ export type CanvasDesignPluginCapability =
 	| "assets.fetchBlob"
 	| "ai.getImageModels"
 	| "ai.generateAndPlace"
+	| "ai.completeImagePrompt"
 
 export type CanvasDesignPluginRuntimeVersion = number
 

@@ -88,6 +88,7 @@ my-plugin/
 		"assets.uploadFile",
 		"ai.getImageModels",
 		"ai.generateAndPlace",
+		"ai.completeImagePrompt",
 		"ui.toast",
 		"ui.close"
 	],
@@ -137,6 +138,7 @@ my-plugin/
 		"assets.uploadFile",
 		"ai.getImageModels",
 		"ai.generateAndPlace",
+		"ai.completeImagePrompt",
 		"ui.toast"
 	]
 }
@@ -229,7 +231,7 @@ module.dispose(ctx, instance, reason)
 `ctx` 是插件和宿主之间的能力边界。它包含两类内容：
 
 1. 状态属性，例如 `ctx.plugin`、`ctx.host.locale`、`ctx.host.readonly`。
-2. 能力方法，例如 `ctx.i18n.t`、`ctx.ui.toast`、`ctx.assets.pickFiles`、`ctx.ai.generateAndPlace`。
+2. 能力方法，例如 `ctx.i18n.t`、`ctx.ui.toast`、`ctx.assets.pickFiles`、`ctx.ai.generateAndPlace`、`ctx.ai.completeImagePrompt`。
 
 `ctx` 在一个插件实例生命周期内应保持引用稳定。宿主状态变化时，runtime 更新 `ctx.host` 的可读状态，并通过 `view.onHostStateChange(event)` 通知 view。
 
@@ -907,6 +909,7 @@ ctx.resources.resolve 插件包内资源解析
 ctx.assets.pickFiles  选择文件
 ctx.assets.uploadFile 上传文件
 ctx.ai.getImageModels 获取模型
+ctx.ai.completeImagePrompt AI 补全图片提示词
 ctx.ai.generateAndPlace 生成并放入画布
 ctx.task.*            长任务、取消、进度
 ctx.storage.*         插件会话态或本地偏好
@@ -930,7 +933,59 @@ ctx.ai
 2. UI 根据状态禁用入口。
 3. 方法被调用时返回结构化错误，例如 `READONLY`、`CAPABILITY_UNAVAILABLE`。
 
-这样插件作者可以把“状态响应”和“能力调用”分开处理，runtime 也不需要在运行中替换 `ctx.ai.generateAndPlace` 这类方法引用。
+这样插件作者可以把“状态响应”和“能力调用”分开处理，runtime 也不需要在运行中替换 `ctx.ai.generateAndPlace`、`ctx.ai.completeImagePrompt` 这类方法引用。
+
+### 10.2.1 `ctx.ai.completeImagePrompt`
+
+用于调用宿主侧的通用 AI 提示词补全接口，返回一段可直接写回输入框的 prompt 文本。该方法只补全文字，不直接触发生图。
+
+前置要求：
+
+1. `manifest.capabilities` 必须声明 `ai.completeImagePrompt`
+2. 调用方自行组装 `user_prompt`
+3. 如果插件场景需要参考图，传 `reference_images`
+
+参数结构：
+
+```ts
+ctx.ai.completeImagePrompt({
+	user_prompt: string,
+	model_id?: string,
+	reference_images?: string[],
+	reference_image_options?: Array<{
+		path: string
+		crop?: { x: number; y: number; width: number; height: number }
+	}>
+})
+```
+
+返回结构：
+
+```ts
+Promise<{
+	prompt: string
+}>
+```
+
+示例：
+
+```js
+const result = await ctx.ai.completeImagePrompt({
+	user_prompt:
+		"请根据上传的商品图生成一段适合每张图片分别套用的中文背景提示词，不要描述多商品同框关系。",
+	reference_images: helpers.collectReferenceIds(state.productImages),
+})
+
+ctx.state.patch(state, {
+	backgroundPrompt: result.prompt,
+})
+```
+
+约定：
+
+1. 插件可以不传 `model_id`，由后端默认模型处理。
+2. `reference_images` 走宿主资源路径，不直接传 base64。
+3. 返回值为空或异常时，应由插件自行决定错误提示与回填策略。
 
 ### 10.3 分层总览
 

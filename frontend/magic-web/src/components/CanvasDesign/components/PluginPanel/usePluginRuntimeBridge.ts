@@ -23,6 +23,7 @@ import { clampPluginPanelHeight } from "./position"
 import { resolvePluginResource, getErrorMessage } from "./resourceUtils"
 import { pickPluginFiles } from "./fileAssets"
 import { generatePluginImages, getPluginImageModels } from "./imageGeneration"
+import { completePluginImagePrompt } from "./imagePromptCompletion"
 
 interface UsePluginRuntimeBridgeParams {
 	awaitingLocalFileDialogRef: MutableRefObject<boolean>
@@ -182,6 +183,26 @@ export function usePluginRuntimeBridge({
 					(error) => {
 						postPluginMessage({
 							type: "magic-canvas-plugin:generate-and-place-result",
+							requestId: data.requestId,
+							error: getErrorMessage(error),
+						})
+					},
+				)
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:complete-image-prompt") {
+				void completePluginImagePrompt(canvas, data.params).then(
+					(result) => {
+						postPluginMessage({
+							type: "magic-canvas-plugin:complete-image-prompt-result",
+							requestId: data.requestId,
+							result,
+						})
+					},
+					(error) => {
+						postPluginMessage({
+							type: "magic-canvas-plugin:complete-image-prompt-result",
 							requestId: data.requestId,
 							error: getErrorMessage(error),
 						})

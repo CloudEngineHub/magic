@@ -336,6 +336,12 @@ export function createPluginSrcDocV1(
 						"magic-canvas-plugin:generate-and-place-result"
 					).then((data) => data.result);
 				},
+				completeImagePrompt(params) {
+					return requestHost(
+						{ type: "magic-canvas-plugin:complete-image-prompt", params },
+						"magic-canvas-plugin:complete-image-prompt-result"
+					).then((data) => data.result);
+				},
 			},
 		};
 

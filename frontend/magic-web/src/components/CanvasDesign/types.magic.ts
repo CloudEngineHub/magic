@@ -507,6 +507,46 @@ export interface GenerateImageResponse {
 	id: string
 }
 
+/**
+ * AI 补全图片提示词请求参数
+ */
+export interface CompleteImagePromptRequest {
+	/** 项目 id */
+	project_id?: string
+	/**
+	 * 当前场景拼装后的用户提示词。
+	 *
+	 * 推荐使用后端建议的 5 段结构：
+	 * 1. 任务目标：说明要生成、补全或优化哪类生图提示词
+	 * 2. 当前输入：用户输入框已有内容；为空时写“用户当前未填写”
+	 * 3. 参考图角色：说明参考图用于主体 / 风格 / 背景 / 构图 / 材质 / 分别套用等
+	 * 4. 业务限制：当前场景必须遵守的限制，保持简短
+	 * 5. 补全方向：希望补充的画面维度
+	 *
+	 * 示例：
+	 * 任务目标：为商品换背景的文生背景输入框生成或补全一段背景提示词。
+	 * 当前输入：用户当前未填写
+	 * 参考图角色：共有 1 张商品图，用于理解商品类别、材质、颜色、软硬属性和商业气质；这些商品会分别生成图片，不会放进同一张图。
+	 * 业务限制：背景应适合“自动摆放”；不要描述商品之间的搭配、并排或同框关系；不要改变商品本身颜色、款式、logo、图案或材质。
+	 * 补全方向：补充一个具体可拍摄的商业摄影背景，包括空间、材质、少量道具、光线、色彩氛围、构图留白和物理承托关系。
+	 */
+	user_prompt: string
+	/** 可选模型 id */
+	model_id?: string
+	/** 参考图 */
+	reference_images?: string[]
+	/** 参考图参数 */
+	reference_image_options?: ReferenceImageOptions
+}
+
+/**
+ * AI 补全图片提示词响应
+ */
+export interface CompleteImagePromptResponse {
+	/** 最终可直接写入输入框的提示词 */
+	prompt: string
+}
+
 /** 单条参考图参数 */
 export interface ReferenceImageOptionEntry {
 	path: string
@@ -1132,6 +1172,14 @@ export interface CanvasDesignMethods {
 	 * @returns Promise<视频模型列表>
 	 */
 	getVideoModelList?: () => Promise<VideoModelItem[]>
+	/**
+	 * AI 补全图片提示词
+	 * @param params 提示词补全请求参数
+	 * @returns Promise<提示词补全结果>
+	 */
+	completeImagePrompt?: (
+		params: CompleteImagePromptRequest,
+	) => Promise<CompleteImagePromptResponse>
 	/**
 	 * 发起图片生成
 	 * @param params 图片生成请求参数

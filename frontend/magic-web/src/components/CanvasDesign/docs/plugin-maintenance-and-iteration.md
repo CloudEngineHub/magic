@@ -38,7 +38,8 @@ frontend/magic-web/src/pages/superMagic/components/Detail/contents/Design/plugin
 		"assets.uploadFile",
 		"assets.fetchBlob",
 		"ai.getImageModels",
-		"ai.generateAndPlace"
+		"ai.generateAndPlace",
+		"ai.completeImagePrompt"
 	],
 	"locales": {}
 }
@@ -117,7 +118,7 @@ registerMagicCanvasPlugin({
 普通插件迭代：
 
 1. 修改插件目录下的 `manifest.json`、`index.js`、`index.css`。
-2. 如果新增宿主能力调用，先补 `manifest.capabilities`，再写调用代码。
+2. 如果新增宿主能力调用，先补 `manifest.capabilities`，再写调用代码，例如新增 `ctx.ai.completeImagePrompt()` 时必须同步声明 `ai.completeImagePrompt`。
 3. 如果调整插件入口协议，先判断是否真的需要 runtime version bump。
 4. 保持 `manifest.version` 为当前 runtime 处理器版本，普通业务迭代不修改它。
 5. 运行静态插件校验和相关 runtime 测试。

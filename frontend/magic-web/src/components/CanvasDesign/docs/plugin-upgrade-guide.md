@@ -107,7 +107,8 @@ return {
 	"capabilities": [
 		"ui.toast",
 		"assets.pickFiles",
-		"ai.generateAndPlace"
+		"ai.generateAndPlace",
+		"ai.completeImagePrompt"
 	]
 }
 ```
@@ -124,6 +125,7 @@ return {
 | `ctx.assets.uploadFile` | `assets.uploadFile` |
 | `ctx.assets.fetchBlob` | `assets.fetchBlob` |
 | `ctx.ai.getImageModels` | `ai.getImageModels` |
+| `ctx.ai.completeImagePrompt` | `ai.completeImagePrompt` |
 | `ctx.ai.generateAndPlace` | `ai.generateAndPlace` |
 
 未声明能力时，宿主会拒绝对应 bridge 请求。
