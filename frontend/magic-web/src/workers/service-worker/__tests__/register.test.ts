@@ -1,4 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+const devicesState = vi.hoisted(() => ({
+	isMobile: false,
+}))
+
+vi.mock("@/utils/devices", () => ({
+	get isMobile() {
+		return devicesState.isMobile
+	},
+}))
+
 import {
 	activateWaitingServiceWorkerAndReload,
 	isAppServiceWorkerFeatureEnabled,
@@ -10,6 +21,52 @@ async function flushMicrotasks(times = 4): Promise<void> {
 	for (let index = 0; index < times; index += 1) {
 		await Promise.resolve()
 	}
+}
+
+interface WarmUpTestEnv {
+	register: ReturnType<typeof vi.fn>
+	postMessage: ReturnType<typeof vi.fn>
+	fetchMock: ReturnType<typeof vi.fn>
+}
+
+/** Sets up SW registration with an active controller and immediate idle callback for warmup tests. */
+function setupWarmUpTestEnv(): WarmUpTestEnv {
+	const postMessage = vi.fn()
+	const worker = { postMessage } as unknown as ServiceWorker
+	const fetchMock = vi.fn().mockResolvedValue({
+		ok: true,
+		json: async () => ["/assets/sample-a1b2c3.js"],
+	})
+
+	vi.stubGlobal("fetch", fetchMock)
+
+	Object.defineProperty(window, "requestIdleCallback", {
+		configurable: true,
+		value: (callback: IdleRequestCallback) => {
+			callback({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline)
+			return 1
+		},
+	})
+
+	Object.defineProperty(document, "readyState", {
+		configurable: true,
+		value: "complete",
+	})
+
+	const register = vi.fn().mockResolvedValue({})
+
+	Object.defineProperty(navigator, "serviceWorker", {
+		configurable: true,
+		value: {
+			register,
+			controller: worker,
+			ready: Promise.resolve({ active: worker }),
+			addEventListener: vi.fn(),
+			removeEventListener: vi.fn(),
+		},
+	})
+
+	return { register, postMessage, fetchMock }
 }
 
 describe("service worker path guards", () => {
@@ -66,6 +123,7 @@ describe("activateWaitingServiceWorkerAndReload", () => {
 describe("registerAppServiceWorker", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks()
+		devicesState.isMobile = false
 		vi.stubEnv("MAGIC_MOCK", "true")
 		vi.stubEnv("MAGIC_SW_MODE", "on")
 	})
@@ -346,5 +404,34 @@ describe("registerAppServiceWorker", () => {
 		}
 
 		expect(postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" })
+	})
+
+	it("skips static asset warmup on mobile devices", async () => {
+		devicesState.isMobile = true
+		const { register, postMessage, fetchMock } = setupWarmUpTestEnv()
+
+		registerAppServiceWorker()
+		await flushMicrotasks(8)
+
+		expect(register).toHaveBeenCalledTimes(1)
+		expect(fetchMock).not.toHaveBeenCalled()
+		expect(postMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "START_WARMUP" }),
+		)
+	})
+
+	it("warms up static assets on desktop after idle", async () => {
+		devicesState.isMobile = false
+		const { register, postMessage, fetchMock } = setupWarmUpTestEnv()
+
+		registerAppServiceWorker()
+		await flushMicrotasks(8)
+
+		expect(register).toHaveBeenCalledTimes(1)
+		expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/warmup-assets.json"))
+		expect(postMessage).toHaveBeenCalledWith({
+			type: "START_WARMUP",
+			assets: ["/assets/sample-a1b2c3.js"],
+		})
 	})
 })

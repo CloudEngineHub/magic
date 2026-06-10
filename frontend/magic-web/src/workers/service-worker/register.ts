@@ -1,3 +1,4 @@
+import { isMobile } from "@/utils/devices"
 import { env } from "@/utils/env"
 import {
 	DEFAULT_VENDOR_CACHEABLE_HOSTS,
@@ -368,6 +369,13 @@ export async function activateWaitingServiceWorkerAndReload(
 	})
 }
 
+/**
+ * Mobile devices skip idle static-asset warmup to reduce bandwidth, main-thread, and storage pressure.
+ */
+function shouldWarmUpStaticAssets(): boolean {
+	return !isMobile
+}
+
 function scheduleWarmUpPostMessage(worker: ServiceWorker): void {
 	const postMsg = async () => {
 		try {
@@ -399,6 +407,7 @@ function scheduleWarmUpPostMessage(worker: ServiceWorker): void {
 }
 
 function triggerWarmUpWhenIdle(): void {
+	if (!shouldWarmUpStaticAssets()) return
 	if (typeof window === "undefined" || !("serviceWorker" in navigator)) return
 
 	if (!navigator.serviceWorker.controller) {
