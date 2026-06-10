@@ -74,7 +74,7 @@ class DesignApi extends AbstractApi
     {
         $request->validateResolved();
         $authenticatable = $this->getAuthorization();
-        $dto = new ImageGenerationDTO($request->validated());
+        $dto = new ImageGenerationDTO($this->normalizeImageOperationPayload($request->validated()));
         $DO = ImageGenerationAssembler::toDO($dto);
 
         $filePath = (string) $this->request->input('file_path');
@@ -162,7 +162,7 @@ class DesignApi extends AbstractApi
     {
         $request->validateResolved();
         $authenticatable = $this->getAuthorization();
-        $dto = new ImageGenerationDTO($request->validated());
+        $dto = new ImageGenerationDTO($this->normalizeImageOperationPayload($request->validated()));
         $DO = ImageGenerationAssembler::toDO($dto);
 
         $filePath = (string) $this->request->input('file_path');
@@ -187,7 +187,7 @@ class DesignApi extends AbstractApi
     {
         $request->validateResolved();
         $authenticatable = $this->getAuthorization();
-        $dto = new ImageGenerationDTO($request->validated());
+        $dto = new ImageGenerationDTO($this->normalizeImageOperationPayload($request->validated()));
         $DO = ImageGenerationAssembler::toDO($dto);
 
         $filePath = (string) $this->request->input('file_path');
@@ -280,5 +280,24 @@ class DesignApi extends AbstractApi
         $entity = $this->designVideoAppService->query($authenticatable, $projectId, $videoId);
 
         return DesignVideoAssembler::toDTO($entity)->toArray();
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function normalizeImageOperationPayload(array $payload): array
+    {
+        if (! isset($payload['image_generation_config']) && isset($payload['generate_config'])) {
+            $payload['image_generation_config'] = $payload['generate_config'];
+        }
+        unset($payload['generate_config']);
+
+        if (! isset($payload['prompt']) && isset($payload['custom_prompt'])) {
+            $payload['prompt'] = $payload['custom_prompt'];
+        }
+        unset($payload['custom_prompt']);
+
+        return $payload;
     }
 }

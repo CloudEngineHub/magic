@@ -153,27 +153,36 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         string $workspacePrefix,
     ): array {
         $urls = [];
-        $referenceImageOptions = $entity->getReferenceImageOptions() ?? [];
 
         foreach ($entity->getReferenceImages() ?? [] as $referenceImage) {
-            if (str_contains($referenceImage, 'design-mark/')) {
-                // 临时标记图走私有桶，不携带 options
-                $privateFileKey = ltrim($referenceImage, '/');
-                $url = $this->fileDomainService->getLink(
-                    $dataIsolation->getCurrentOrganizationCode(),
-                    $privateFileKey,
-                    StorageBucketType::Private
-                )?->getUrl();
-            } else {
-                $linkOptions = $this->buildLinkOptionsFromImageOptions($this->findImageOptions($referenceImageOptions, $referenceImage));
-                $url = $this->getWorkspaceSandboxImageUrl($dataIsolation, $entity->getProjectId(), $referenceImage, $linkOptions);
-            }
+            $url = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $referenceImage);
             if ($url !== null && $url !== '') {
                 $urls[] = $url;
             }
         }
 
         return $urls;
+    }
+
+    protected function resolveEraserExpandReferenceImageUrl(
+        DesignDataIsolation $dataIsolation,
+        ImageGenerationEntity $entity,
+        string $referenceImage,
+    ): ?string {
+        if (str_contains($referenceImage, 'design-mark/')) {
+            // 临时标记图走私有桶，不携带 options
+            $privateFileKey = ltrim($referenceImage, '/');
+            return $this->fileDomainService->getLink(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $privateFileKey,
+                StorageBucketType::Private
+            )?->getUrl();
+        }
+
+        $referenceImageOptions = $entity->getReferenceImageOptions() ?? [];
+        $linkOptions = $this->buildLinkOptionsFromImageOptions($this->findImageOptions($referenceImageOptions, $referenceImage));
+
+        return $this->getWorkspaceSandboxImageUrl($dataIsolation, $entity->getProjectId(), $referenceImage, $linkOptions);
     }
 
     /**

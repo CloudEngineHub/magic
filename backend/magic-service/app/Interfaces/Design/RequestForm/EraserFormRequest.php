@@ -31,6 +31,8 @@ class EraserFormRequest extends FormRequest
             'reference_image_options.*' => 'array',
             'reference_image_options.*.path' => 'nullable|string|max:512',
             'reference_image_options.*.crop' => 'nullable|array',
+            'image_generation_config' => 'nullable|array',
+            'generate_config' => 'nullable|array',
         ];
     }
 
@@ -43,6 +45,8 @@ class EraserFormRequest extends FormRequest
             'file_path' => trans('design.attributes.file_path'),
             'mark_path' => trans('design.attributes.mark_path'),
             'size' => trans('design.attributes.size'),
+            'image_generation_config' => trans('design.attributes.image_generation_config'),
+            'generate_config' => trans('design.attributes.image_generation_config'),
         ];
     }
 }

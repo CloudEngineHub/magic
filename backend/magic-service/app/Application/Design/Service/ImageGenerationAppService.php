@@ -116,10 +116,10 @@ class ImageGenerationAppService extends DesignAppService
     public function generateEraser(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
     {
         $entity->setType(ImageGenerationType::ERASER);
+        $this->assertImageAbilityProviderAvailable(AiAbilityCode::ImageEraser);
 
-        [$modelId, $prompt] = $this->resolveAbilityModelAndPrompt(AiAbilityCode::ImageEraser);
-        $entity->setModelId($modelId);
-        $entity->setPrompt($prompt);
+        $entity->setPrompt('');
+        $entity->setModelId('design_image_eraser');
 
         return $this->generateImage($authenticatable, $entity);
     }
@@ -130,10 +130,10 @@ class ImageGenerationAppService extends DesignAppService
     public function generateExpandImage(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
     {
         $entity->setType(ImageGenerationType::EXPAND);
+        $this->assertImageAbilityProviderAvailable(AiAbilityCode::ImageExpand);
 
-        [$modelId, $prompt] = $this->resolveAbilityModelAndPrompt(AiAbilityCode::ImageExpand);
-        $entity->setModelId($modelId);
-        $entity->setPrompt($prompt);
+        $entity->setPrompt(trim((string) ($entity->getPrompt() ?? '')));
+        $entity->setModelId('design_image_expand');
 
         return $this->generateImage($authenticatable, $entity);
     }
@@ -144,7 +144,7 @@ class ImageGenerationAppService extends DesignAppService
     public function generateRemoveBackground(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
     {
         $entity->setType(ImageGenerationType::REMOVE_BACKGROUND);
-        $this->assertRemoveBackgroundAbilityAvailable();
+        $this->assertImageAbilityProviderAvailable(AiAbilityCode::ImageRemoveBackground);
 
         $entity->setPrompt('');
         // 任务完成后由专用链路产出结果，此处仅占位
@@ -199,37 +199,9 @@ class ImageGenerationAppService extends DesignAppService
         return $entity;
     }
 
-    /**
-     * 从 AI 能力配置中解析 model_id 和 prompt（仅配置值，trim 后可能为空，由 Handler 决定是否使用内置默认提示词）.
-     *
-     * @return array{0: string, 1: string} [modelId, prompt]
-     */
-    private function resolveAbilityModelAndPrompt(AiAbilityCode $code): array
+    private function assertImageAbilityProviderAvailable(AiAbilityCode $code): void
     {
         $entity = $this->aiAbilityDomainService->getByCode(ProviderDataIsolation::create('')->disabled(), $code);
-
-        if ($entity === null || ! $entity->isEnabled()) {
-            ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'design.image_generation.feature_unavailable');
-        }
-
-        $config = $entity->getConfig();
-        $modelId = $config['model_id'] ?? null;
-
-        if (empty($modelId)) {
-            ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'design.image_generation.feature_unavailable');
-        }
-
-        $prompt = trim((string) ($config['prompt'] ?? ''));
-
-        return [$modelId, $prompt];
-    }
-
-    /**
-     * 校验去背景能力已启用且存在至少一个启用的 provider（与专用网关 /images/remove-background 一致）.
-     */
-    private function assertRemoveBackgroundAbilityAvailable(): void
-    {
-        $entity = $this->aiAbilityDomainService->getByCode(ProviderDataIsolation::create('')->disabled(), AiAbilityCode::ImageRemoveBackground);
 
         if ($entity === null || ! $entity->isEnabled()) {
             ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'design.image_generation.feature_unavailable');
