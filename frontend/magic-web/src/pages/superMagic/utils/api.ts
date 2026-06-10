@@ -177,6 +177,7 @@ export const getTemporaryDownloadUrl = async ({
 	file_versions,
 	download_mode,
 	options,
+	enableErrorMessagePrompt = true,
 }: {
 	file_ids: string[]
 	file_versions?: Record<string, number>
@@ -187,6 +188,7 @@ export const getTemporaryDownloadUrl = async ({
 	options?: {
 		xMagicImageProcess?: ImageProcessOptions
 	}
+	enableErrorMessagePrompt?: boolean
 }) => {
 	const isMagicShare = window?.location?.pathname?.includes("magic-share")
 
@@ -239,6 +241,7 @@ export const getTemporaryDownloadUrl = async ({
 				"X-Magic-Image-Process": buildImageProcessQuery(options?.xMagicImageProcess),
 			}),
 		},
+		enableErrorMessagePrompt,
 	})
 }
 

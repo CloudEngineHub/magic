@@ -543,6 +543,7 @@ async function requestTemporaryDownloadUrlsForChunk(
 		const downloadUrls = await getTemporaryDownloadUrl({
 			file_ids: fileIds,
 			...(options?.useImageProcess ? { options: IMAGE_PROCESS_OPTIONS } : {}),
+			enableErrorMessagePrompt: false,
 		})
 		processBatchRequestResults(items, downloadUrls)
 	} catch (error) {
@@ -991,6 +992,7 @@ export async function getFileInfoById(
 			const downloadUrls = await getTemporaryDownloadUrl({
 				file_ids: [fileId],
 				options: processOptions,
+				enableErrorMessagePrompt: false,
 			})
 
 			const urlItem = downloadUrls?.[0]

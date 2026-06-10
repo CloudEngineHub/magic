@@ -550,11 +550,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private isVideoGenerationPending(): boolean {
 		if (this.isGenerating) return true
 
-		const hasGenerateRequest = !!this.data.generateVideoRequest
+		const hasActiveGenerationTask = this.hasActiveVideoGenerationTask()
 		const hasSrc = !!this.data.src
 		const status = this.data.status
 
-		if (hasGenerateRequest && !hasSrc) return true
+		if (hasActiveGenerationTask && !hasSrc) return true
 		if (
 			hasSrc &&
 			(status === GenerationStatus.Pending || status === GenerationStatus.Processing)
@@ -887,11 +887,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			status === GenerationStatus.Processing ||
 			this.isVideoGenerationPending()
 		) {
-			const isGenerating =
-				!!this.data.generateVideoRequest ||
-				this.isGenerating ||
-				(status === GenerationStatus.Processing &&
-					!this.canvas.elementManager.isTemporary(this.data.id))
+			const isGenerating = this.isActiveGenerationPlaceholder()
 
 			return {
 				stage: isGenerating ? "generating" : "uploading",
@@ -907,6 +903,21 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			placeholderMode: "empty",
 			text: this.getText("video.empty", "请发送生成视频的指令"),
 		}
+	}
+
+	private hasActiveVideoGenerationTask(): boolean {
+		return !!this.data.generateVideoRequest?.video_id
+	}
+
+	private isActiveGenerationPlaceholder(): boolean {
+		if (this.hasActiveVideoGenerationTask() || this.isGenerating) {
+			return true
+		}
+
+		return (
+			this.data.status === GenerationStatus.Processing &&
+			!this.canvas.elementManager.isTemporary(this.data.id)
+		)
 	}
 
 	private syncInlinePlaybackStateSubscription(): void {

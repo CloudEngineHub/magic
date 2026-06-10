@@ -106,6 +106,17 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 	const pendingGetFileInfoRef = useRef<Map<string, Promise<GetFileInfoResponse>>>(new Map())
 
 	const getOrCreateImagesDir = getOrCreateImagesDirProp
+	const validateUploadDirectoryFileId = useCallback(async (fileId: string): Promise<boolean> => {
+		try {
+			await SuperMagicApi.getFileInfo(
+				{ file_id: fileId },
+				{ enableErrorMessagePrompt: false },
+			)
+			return true
+		} catch {
+			return false
+		}
+	}, [])
 
 	// 组件卸载时清理引用
 	useEffect(() => {
@@ -177,7 +188,10 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 					normalizePath(item.relative_file_path || "") === normalizedSuffixDir,
 			)
 			if (assetDirItem?.file_id) {
-				return { parentId: assetDirItem.file_id, suffixDir }
+				const isUsable = await validateUploadDirectoryFileId(assetDirItem.file_id)
+				if (isUsable) {
+					return { parentId: assetDirItem.file_id, suffixDir }
+				}
 			}
 
 			const basePath = getUploadDirectoryBase({ currentFile, flatAttachments })
@@ -215,14 +229,24 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 							normalizePath(item.relative_file_path || "") === normalizedSuffixDir,
 					)
 					if (assetDirItem?.file_id) {
-						return { parentId: assetDirItem.file_id, suffixDir }
+						const isUsable = await validateUploadDirectoryFileId(assetDirItem.file_id)
+						if (isUsable) {
+							return { parentId: assetDirItem.file_id, suffixDir }
+						}
 					}
 				}
 			}
 
 			return null
 		},
-		[projectId, currentFile, flatAttachments, getOrCreateImagesDir, updateAttachments],
+		[
+			projectId,
+			currentFile,
+			flatAttachments,
+			getOrCreateImagesDir,
+			updateAttachments,
+			validateUploadDirectoryFileId,
+		],
 	)
 
 	/**

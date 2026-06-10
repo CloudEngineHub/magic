@@ -2163,6 +2163,7 @@ export class ImageResourceManager {
 		const normalizedSrc = this.canonicalResourcePath(path)
 		const entry = this.getOrCreateEntry(normalizedSrc)
 		this.urlLifecycle.primeCache(path, entry, fileInfo)
+		this.setFailureReason(entry, null)
 	}
 
 	/**

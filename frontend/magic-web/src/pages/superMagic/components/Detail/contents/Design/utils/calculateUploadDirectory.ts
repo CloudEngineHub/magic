@@ -16,6 +16,7 @@ interface CalculateUploadDirectoryParams {
 interface GetOrCreateImagesDirFileIdParams extends CalculateUploadDirectoryParams {
 	projectId: string
 	updateAttachments: () => void
+	validateImagesDirFileId?: (fileId: string) => Promise<boolean>
 }
 
 export interface GetOrCreateImagesDirFileIdResult {
@@ -30,7 +31,8 @@ export interface GetOrCreateImagesDirFileIdResult {
 export async function getOrCreateImagesDirFileId(
 	params: GetOrCreateImagesDirFileIdParams,
 ): Promise<GetOrCreateImagesDirFileIdResult | null> {
-	const { currentFile, flatAttachments, projectId, updateAttachments } = params
+	const { currentFile, flatAttachments, projectId, updateAttachments, validateImagesDirFileId } =
+		params
 	const suffixDir = calculateUploadDirectory({ currentFile, flatAttachments })
 
 	if (!suffixDir || !projectId) {
@@ -41,7 +43,12 @@ export async function getOrCreateImagesDirFileId(
 	let imagesDirItem = findImagesDirItem(suffixDir, flatAttachments)
 
 	if (imagesDirItem?.file_id) {
-		return { imagesDirFileId: imagesDirItem.file_id, suffixDir }
+		const isUsable = validateImagesDirFileId
+			? await validateImagesDirFileId(imagesDirItem.file_id)
+			: true
+		if (isUsable) {
+			return { imagesDirFileId: imagesDirItem.file_id, suffixDir }
+		}
 	}
 
 	// images 目录不存在，需创建
@@ -74,7 +81,12 @@ export async function getOrCreateImagesDirFileId(
 			updateAttachments()
 			imagesDirItem = findImagesDirItem(suffixDir, flatAttachments)
 			if (imagesDirItem?.file_id) {
-				return { imagesDirFileId: imagesDirItem.file_id, suffixDir }
+				const isUsable = validateImagesDirFileId
+					? await validateImagesDirFileId(imagesDirItem.file_id)
+					: true
+				if (isUsable) {
+					return { imagesDirFileId: imagesDirItem.file_id, suffixDir }
+				}
 			}
 		}
 	}

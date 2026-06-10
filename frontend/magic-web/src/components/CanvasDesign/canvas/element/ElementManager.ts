@@ -122,8 +122,7 @@ export class ElementManager {
 			throw new Error(`Element ${elementData.id} already exists`)
 		}
 
-		// 标记为临时元素
-		this.temporaryElements.add(elementData.id)
+		this.markElementTemporary(elementData.id)
 
 		// 创建元素实例（与正式元素相同的渲染逻辑）
 		this.doCreate(elementData, { silent: false })
@@ -162,6 +161,14 @@ export class ElementManager {
 		}
 
 		return elementData.id
+	}
+
+	/**
+	 * 将已存在或即将创建的元素标记为临时元素。
+	 * 用于容器子元素先渲染上传态、后续上传完成再转正的场景。
+	 */
+	public markElementTemporary(elementId: string): void {
+		this.temporaryElements.add(elementId)
 	}
 
 	/**
@@ -1539,13 +1546,36 @@ export class ElementManager {
 		const allElements = this.getAllElements()
 
 		// 根据选项决定是否过滤临时元素
-		// 默认过滤（用于外部保存），但历史记录可以选择包含
+		// 默认递归过滤（用于外部保存），但历史记录可以选择包含
 		const elements = options?.includeTemporary
 			? allElements
-			: allElements.filter((element) => !this.temporaryElements.has(element.id))
+			: this.filterTemporaryElements(allElements)
 
 		// 在导出边界按声明白名单导出，既隔离内部引用，也避免透出运行时附加字段
 		return exportCanvasDocument(elements)
+	}
+
+	private filterTemporaryElements(elements: LayerElement[]): LayerElement[] {
+		const filterElement = (element: LayerElement): LayerElement | null => {
+			if (this.temporaryElements.has(element.id)) {
+				return null
+			}
+
+			if (!("children" in element) || !Array.isArray(element.children)) {
+				return element
+			}
+
+			return {
+				...element,
+				children: element.children
+					.map(filterElement)
+					.filter((child): child is LayerElement => child !== null),
+			} as LayerElement
+		}
+
+		return elements
+			.map(filterElement)
+			.filter((element): element is LayerElement => element !== null)
 	}
 
 	/**
@@ -1662,6 +1692,7 @@ export class ElementManager {
 					this.elements.set(childData.id, childElement)
 					this.markDocumentIndexDirty()
 					this.invalidateGeometryForElement(childData.id)
+					childElement.onMounted()
 
 					// 发出元素创建事件
 					this.canvas.eventEmitter.emit({

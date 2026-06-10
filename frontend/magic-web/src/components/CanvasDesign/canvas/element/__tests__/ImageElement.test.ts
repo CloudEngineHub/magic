@@ -1,6 +1,8 @@
 import Konva from "konva"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ImageElement } from "../elements/ImageElement"
+import { VideoElement } from "../elements/VideoElement"
+import { GenerationStatus } from "../../../types.magic"
 
 describe("ImageElement mounted image node sync", () => {
 	afterEach(() => {
@@ -49,6 +51,76 @@ describe("ImageElement mounted image node sync", () => {
 		expect(imageNode.width()).toBe(200)
 		expect(imageNode.height()).toBe(120)
 		expect(imageNode.crop()).toEqual({ x: 1, y: 2, width: 3, height: 4 })
+	})
+
+	it("labels temporary pasted image placeholders with retained info as uploading", () => {
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			data: {
+				id: string
+				name: string
+				status: GenerationStatus
+				generateImageRequest: { model_id: string; prompt: string }
+			}
+			canvas: { t: undefined; elementManager: { isTemporary: ReturnType<typeof vi.fn> } }
+			isGenerating: boolean
+			isErrorState: boolean
+		}
+		element.data = {
+			id: "pasted-image",
+			name: "Pasted image",
+			status: GenerationStatus.Processing,
+			generateImageRequest: {
+				model_id: "image-model",
+				prompt: "a friendly creature",
+			},
+		}
+		element.canvas = {
+			t: undefined,
+			elementManager: {
+				isTemporary: vi.fn(() => true),
+			},
+		}
+		element.isGenerating = false
+		element.isErrorState = false
+
+		expect(element.getNameLabelText()).toBe("Pasted image(上传中)")
+	})
+
+	it("treats pasted video placeholders with retained info as uploading", () => {
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: {
+				id: string
+				status: GenerationStatus
+				generateVideoRequest: { model_id: string; prompt: string }
+			}
+			canvas: {
+				t: undefined
+				elementManager: { isTemporary: ReturnType<typeof vi.fn> }
+			}
+			isGenerating: boolean
+			resolveRenderState: () => { stage: string; text?: string }
+		}
+		element.data = {
+			id: "pasted-video",
+			status: GenerationStatus.Processing,
+			generateVideoRequest: {
+				model_id: "video-model",
+				prompt: "a cinematic clip",
+			},
+		}
+		element.canvas = {
+			t: undefined,
+			elementManager: {
+				isTemporary: vi.fn(() => true),
+			},
+		}
+		element.isGenerating = false
+
+		expect(element.resolveRenderState()).toEqual({
+			stage: "uploading",
+			placeholderMode: "loading",
+			text: "正在上传中...",
+		})
 	})
 
 	it("resizes mounted image layout during node-only transform resize", () => {
@@ -203,5 +275,56 @@ describe("ImageElement mounted image node sync", () => {
 
 		expect(element.loadedImage).toBeUndefined()
 		expect(imageNode.getParent()).toBeNull()
+	})
+
+	it("clears stale not-found state when an uploaded oss src is applied", () => {
+		const loadResource = vi.fn()
+		const emit = vi.fn()
+		const rerenderWhenTransformIdle = vi.fn()
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			data: { id: string; src: string }
+			canvas: {
+				imageResourceManager: {
+					loadResource: ReturnType<typeof vi.fn>
+				}
+				eventEmitter: {
+					emit: ReturnType<typeof vi.fn>
+				}
+			}
+			storedOssSrc: string | null
+			imageLoadFailureReason: "not-found" | null
+			isErrorState: boolean
+			isResourceLoading: boolean
+			lastAppliedLoadFailureSignature: string | null
+			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
+		}
+		element.data = { id: "image-1", src: "./images/image.png" }
+		element.canvas = {
+			imageResourceManager: { loadResource },
+			eventEmitter: { emit },
+		}
+		element.storedOssSrc = null
+		element.imageLoadFailureReason = "not-found"
+		element.isErrorState = true
+		element.isResourceLoading = false
+		element.lastAppliedLoadFailureSignature = "./images/image.png:not-found"
+		element.rerenderWhenTransformIdle = rerenderWhenTransformIdle
+
+		element.setOssSrc("https://oss.example/image.png")
+
+		expect(element.storedOssSrc).toBe("https://oss.example/image.png")
+		expect(element.imageLoadFailureReason).toBeNull()
+		expect(element.isErrorState).toBe(false)
+		expect(element.isResourceLoading).toBe(true)
+		expect(element.lastAppliedLoadFailureSignature).toBeNull()
+		expect(loadResource).toHaveBeenCalledWith("./images/image.png", {
+			variant: "preview",
+			priority: "critical",
+		})
+		expect(emit).toHaveBeenCalledWith({
+			type: "element:image:ossSrcReady",
+			data: { elementId: "image-1" },
+		})
+		expect(rerenderWhenTransformIdle).toHaveBeenCalled()
 	})
 })

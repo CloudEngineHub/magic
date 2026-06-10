@@ -769,6 +769,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 会触发 ossSrcResolve 并启动预加载
 	 */
 	public setOssSrc(ossSrc: string): void {
+		this.storedOssSrc = ossSrc
+		this.imageLoadFailureReason = null
+		this.isErrorState = false
+		this.lastAppliedLoadFailureSignature = null
+
 		// resolve ossSrc Promise
 		if (this.ossSrcResolve) {
 			this.ossSrcResolve(ossSrc)
@@ -786,6 +791,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			type: "element:image:ossSrcReady",
 			data: { elementId: this.data.id },
 		})
+		this.rerenderWhenTransformIdle()
 	}
 
 	/**
@@ -1187,14 +1193,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			return true
 		}
 
-		// 有生成请求但还没有 src，说明正在生成中
-		const hasGenerateRequest =
-			!!this.data.generateImageRequest || !!this.getImageGenerationTaskMeta()
+		// 只有仍带任务 id 的请求才代表当前有生成轮询；无 id 的请求仅用于信息展示。
+		const hasActiveGenerationTask = this.hasActiveImageGenerationTask()
 		const hasSrc = !!this.data.src
 		const status = this.data.status
 
-		// 情况1: 有生成请求但还没有 src
-		if (hasGenerateRequest && !hasSrc) {
+		// 情况1: 有生成任务但还没有 src
+		if ((hasActiveGenerationTask || this.isActiveGenerationPlaceholder()) && !hasSrc) {
 			return true
 		}
 
@@ -1589,14 +1594,14 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 有结果且状态是 pending 或 processing
 		if (status === GenerationStatus.Pending || status === GenerationStatus.Processing) {
-			// 区分上传中和生成中
-			if (hasRequest) {
+			// 区分上传中和生成中：历史请求信息不等同于当前任务。
+			if (this.isActiveGenerationPlaceholder()) {
 				const suffix = this.getGeneratingNameSuffix()
 				return `${baseName}${suffix}`
-			} else {
-				const suffix = this.getText("image.nameSuffix.uploading", "(上传中)")
-				return `${baseName}${suffix}`
 			}
+
+			const suffix = this.getText("image.nameSuffix.uploading", "(上传中)")
+			return `${baseName}${suffix}`
 		}
 
 		// 检查是否正在加载图片（ossSrc 存在但图片还在异步加载）
@@ -1958,14 +1963,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		// 创建事件代理 hit 节点
 		RenderUtils.createHitNode(group, width, height)
 
-		// 区分上传中和不同任务类型的生成中
-		const hasRequest = !!this.data.generateImageRequest || !!this.getImageGenerationTaskMeta()
-		// 如果是 processing 状态且不是临时元素，视为生成中（即使没有生成请求信息）
-		const isGenerating =
-			hasRequest ||
-			this.isGenerating ||
-			(this.data.status === GenerationStatus.Processing &&
-				!this.canvas.elementManager.isTemporary(this.data.id))
+		// 区分上传中和不同任务类型的生成中：历史请求信息不等同于当前任务。
+		const isGenerating = this.isActiveGenerationPlaceholder()
 		const displayText = isGenerating
 			? this.getGeneratingPlaceholderText()
 			: this.getText("image.uploading", "正在上传中...")
@@ -1996,6 +1995,24 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.finalizeNode(group)
 		return group
+	}
+
+	private hasActiveImageGenerationTask(): boolean {
+		return (
+			!!this.data.generateImageRequest?.image_id ||
+			!!this.getImageGenerationTaskMeta()?.image_id
+		)
+	}
+
+	private isActiveGenerationPlaceholder(): boolean {
+		if (this.hasActiveImageGenerationTask() || this.isGenerating) {
+			return true
+		}
+
+		return (
+			this.data.status === GenerationStatus.Processing &&
+			!this.canvas.elementManager.isTemporary(this.data.id)
+		)
 	}
 
 	private getGeneratingPlaceholderText(): string {

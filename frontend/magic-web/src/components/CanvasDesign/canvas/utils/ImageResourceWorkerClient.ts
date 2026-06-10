@@ -131,7 +131,12 @@ class SharedImageResourceWorkerClient {
 
 		worker.onmessage = (event: MessageEvent<ImageResourceWorkerMessage>) => {
 			const message = event.data
-			if (isWorkerReadyMessage(message)) return
+			if (isWorkerReadyMessage(message)) {
+				// 根因备忘：刷新后首屏图片慢时，日志确认慢点可能发生在浏览器启动/加载 worker
+				// 脚本到 ready 消息之间，而不是 getFileInfo、service worker 或实际解码阶段。
+				// 这里不阻塞请求；后续若治理 cold start，应在首屏图片侧做超时降级或更早预热。
+				return
+			}
 
 			const { requestId } = message
 			const pending = this.pendingRequests.get(requestId)

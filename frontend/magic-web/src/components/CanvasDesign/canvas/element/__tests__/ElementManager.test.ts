@@ -4,20 +4,23 @@ import { ElementManager } from "../ElementManager"
 import type { LayerElement } from "../../types"
 import { CanvasDocumentIndex } from "../CanvasDocumentIndex"
 
+interface DragManagerHarness {
+	canvas: {
+		permissionManager: {
+			canTransform: ReturnType<typeof vi.fn>
+		}
+		selectionManager: {
+			getSelectionCount: () => number
+			isSelected: (elementId: string) => boolean
+		}
+		isKeepRatioModifierPressed: () => boolean
+	}
+	canDragElement: (element: LayerElement) => boolean
+}
+
 function createManager(options: { selectedIds?: string[]; canTransform?: boolean } = {}) {
 	const selectedIds = new Set(options.selectedIds ?? [])
-	const manager = Object.create(ElementManager.prototype) as ElementManager & {
-		canvas: {
-			permissionManager: {
-				canTransform: ReturnType<typeof vi.fn>
-			}
-			selectionManager: {
-				getSelectionCount: () => number
-				isSelected: (elementId: string) => boolean
-			}
-			isKeepRatioModifierPressed: () => boolean
-		}
-	}
+	const manager = Object.create(ElementManager.prototype) as DragManagerHarness
 	manager.canvas = {
 		permissionManager: {
 			canTransform: vi.fn(() => options.canTransform ?? true),
@@ -68,7 +71,7 @@ describe("ElementManager node-only resize sync", () => {
 		const node = new Konva.Group({ width: 100, height: 80 })
 		const onTransformResize = vi.fn()
 		const elementData = createElement("element-1")
-		const manager = Object.create(ElementManager.prototype) as ElementManager & {
+		const manager = Object.create(ElementManager.prototype) as {
 			elements: Map<
 				string,
 				{
@@ -78,6 +81,7 @@ describe("ElementManager node-only resize sync", () => {
 					onTransformResize?: (width: number, height: number) => void
 				}
 			>
+			update: ElementManager["update"]
 		}
 		manager.elements = new Map([
 			[
@@ -103,12 +107,76 @@ describe("ElementManager node-only resize sync", () => {
 	})
 })
 
+describe("ElementManager container child lifecycle", () => {
+	it("mounts newly rendered child elements inside containers", () => {
+		const childNode = new Konva.Group()
+		const childElement = {
+			render: vi.fn(() => childNode),
+			onMounted: vi.fn(),
+		}
+		const manager = Object.create(ElementManager.prototype) as {
+			elements: Map<string, typeof childElement>
+			canvas: {
+				eventEmitter: {
+					emit: ReturnType<typeof vi.fn>
+				}
+			}
+			createElementInstance: ReturnType<typeof vi.fn>
+			markDocumentIndexDirty: ReturnType<typeof vi.fn>
+			invalidateGeometryForElement: ReturnType<typeof vi.fn>
+			renderChildren: (
+				parentNode: Konva.Node,
+				parentElementData: LayerElement,
+				parentElement: unknown,
+			) => void
+		}
+		manager.elements = new Map()
+		manager.canvas = {
+			eventEmitter: {
+				emit: vi.fn(),
+			},
+		}
+		manager.createElementInstance = vi.fn(() => childElement)
+		manager.markDocumentIndexDirty = vi.fn()
+		manager.invalidateGeometryForElement = vi.fn()
+
+		const parentNode = new Konva.Group()
+		const child = {
+			id: "child-image",
+			type: "image",
+			x: 0,
+			y: 0,
+			width: 100,
+			height: 80,
+			src: "./images/child.png",
+		} as LayerElement
+		const frame = {
+			id: "frame-1",
+			type: "frame",
+			x: 0,
+			y: 0,
+			width: 300,
+			height: 200,
+			children: [child],
+		} as LayerElement
+
+		manager.renderChildren(parentNode, frame, {} as never)
+
+		expect(childElement.render).toHaveBeenCalled()
+		expect(childElement.onMounted).toHaveBeenCalledOnce()
+		expect(manager.elements.get("child-image")).toBe(childElement)
+		expect(childNode.getParent()).toBe(parentNode)
+	})
+})
+
 describe("ElementManager document patch export", () => {
 	function createPatchManager(elements: LayerElement[], temporaryElementIds: string[] = []) {
-		const manager = Object.create(ElementManager.prototype) as ElementManager & {
+		const manager = Object.create(ElementManager.prototype) as {
 			elements: Map<string, { getData: () => LayerElement }>
 			temporaryElements: Set<string>
 			documentIndex: CanvasDocumentIndex
+			exportDocumentPatch: ElementManager["exportDocumentPatch"]
+			exportDocument: ElementManager["exportDocument"]
 		}
 		manager.elements = new Map(
 			elements.map((element) => [element.id, { getData: () => element }]),
@@ -174,5 +242,63 @@ describe("ElementManager document patch export", () => {
 		expect(patch.upserts).toEqual([])
 		expect(patch.deletedElementIds).toEqual(["deleted-1"])
 		expect(patch.changedElementIds).toEqual(["deleted-1", "temp-1"])
+	})
+
+	it("recursively filters temporary children from exported documents", () => {
+		const tempChild = {
+			id: "temp-child",
+			type: "image",
+			x: 12,
+			y: 24,
+			width: 80,
+			height: 60,
+			src: undefined,
+		} as LayerElement
+		const child = {
+			id: "child-1",
+			type: "rectangle",
+			x: 20,
+			y: 32,
+			width: 40,
+			height: 30,
+		} as LayerElement
+		const frame = {
+			id: "frame-1",
+			type: "frame",
+			x: 0,
+			y: 0,
+			width: 300,
+			height: 200,
+			children: [tempChild, child],
+		} as LayerElement
+		const manager = createPatchManager([frame, tempChild, child], ["temp-child"])
+
+		expect(manager.exportDocument()).toEqual({
+			elements: [
+				expect.objectContaining({
+					id: "frame-1",
+					children: [
+						expect.objectContaining({
+							id: "child-1",
+						}),
+					],
+				}),
+			],
+		})
+		expect(manager.exportDocument({ includeTemporary: true })).toEqual({
+			elements: [
+				expect.objectContaining({
+					id: "frame-1",
+					children: [
+						expect.objectContaining({
+							id: "temp-child",
+						}),
+						expect.objectContaining({
+							id: "child-1",
+						}),
+					],
+				}),
+			],
+		})
 	})
 })

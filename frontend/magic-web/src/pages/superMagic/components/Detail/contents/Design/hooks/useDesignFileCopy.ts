@@ -110,6 +110,21 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 		[],
 	)
 
+	const validateDesignAssetDirectoryFileId = useCallback(
+		async (fileId: string): Promise<boolean> => {
+			try {
+				await SuperMagicApi.getFileInfo(
+					{ file_id: fileId },
+					{ enableErrorMessagePrompt: false },
+				)
+				return true
+			} catch {
+				return false
+			}
+		},
+		[],
+	)
+
 	const waitForBatchOperation = useCallback(
 		async (result: BatchOperationResult): Promise<void> => {
 			if (result.status === "failed") {
@@ -136,7 +151,7 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 
 			throw new Error("Project file copy timed out")
 		},
-		[projectId, sleep],
+		[sleep],
 	)
 
 	const waitForAttachmentVisible = useCallback(
@@ -242,7 +257,6 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 		},
 		[
 			projectId,
-			currentFile,
 			flatAttachments,
 			attachmentIndex,
 			designProjectBasePath,
@@ -356,6 +370,13 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 						normalizePath(item.relative_file_path || "") === normalizedAssetDirPath,
 				)
 
+				if (assetDirItem?.file_id) {
+					const isUsable = await validateDesignAssetDirectoryFileId(assetDirItem.file_id)
+					if (!isUsable) {
+						assetDirItem = undefined
+					}
+				}
+
 				if (!assetDirItem?.file_id) {
 					const parentDirPath = assetDirPath.includes("/")
 						? assetDirPath.substring(0, assetDirPath.lastIndexOf("/"))
@@ -403,6 +424,12 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 										normalizedAssetDirPath,
 							)
 							if (!assetDirItem?.file_id) {
+								return null
+							}
+							const isUsable = await validateDesignAssetDirectoryFileId(
+								assetDirItem.file_id,
+							)
+							if (!isUsable) {
 								return null
 							}
 						} else {
@@ -495,6 +522,7 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 			flatAttachments,
 			designProjectBasePath,
 			updateAttachments,
+			validateDesignAssetDirectoryFileId,
 			copyFileToDesignAssetDirectory,
 		],
 	)

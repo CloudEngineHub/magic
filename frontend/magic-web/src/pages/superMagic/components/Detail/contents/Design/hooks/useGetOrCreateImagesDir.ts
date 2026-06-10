@@ -1,9 +1,11 @@
 import { useCallback, useRef } from "react"
+import { SuperMagicApi } from "@/apis"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import {
 	getOrCreateImagesDirFileId,
 	type GetOrCreateImagesDirFileIdResult,
 } from "../utils/calculateUploadDirectory"
+import { buildImagesDirCacheKey } from "./imagesDirCacheKey"
 
 export type GetOrCreateImagesDirFn = () => Promise<GetOrCreateImagesDirFileIdResult | null>
 
@@ -23,14 +25,32 @@ export function useGetOrCreateImagesDir(
 	params: UseGetOrCreateImagesDirParams,
 ): GetOrCreateImagesDirFn {
 	const { currentFile, flatAttachments, projectId, updateAttachments } = params
-	const currentRelativePath =
-		flatAttachments?.find((item) => item.file_id === currentFile?.id)?.relative_file_path ?? ""
-	const cacheKey = `${projectId ?? ""}-${currentFile?.id ?? ""}-${currentRelativePath}`
+	const cacheKey = buildImagesDirCacheKey({ projectId, currentFile, flatAttachments })
 	const cacheRef = useRef<{
 		key: string
 		promise: Promise<GetOrCreateImagesDirFileIdResult | null>
 		result?: GetOrCreateImagesDirFileIdResult | null
 	} | null>(null)
+
+	const validateImagesDirFileId = useCallback(async (fileId: string): Promise<boolean> => {
+		try {
+			await SuperMagicApi.getFileInfo(
+				{ file_id: fileId },
+				{ enableErrorMessagePrompt: false },
+			)
+			return true
+		} catch {
+			return false
+		}
+	}, [])
+
+	const isCachedResultUsable = useCallback(
+		async (result: GetOrCreateImagesDirFileIdResult | null): Promise<boolean> => {
+			if (!result?.imagesDirFileId) return false
+			return validateImagesDirFileId(result.imagesDirFileId)
+		},
+		[validateImagesDirFileId],
+	)
 
 	const getOrCreateImagesDir =
 		useCallback(async (): Promise<GetOrCreateImagesDirFileIdResult | null> => {
@@ -39,9 +59,17 @@ export function useGetOrCreateImagesDir(
 			const cached = cacheRef.current
 			if (cached && cached.key === cacheKey) {
 				if (cached.result !== undefined) {
-					return cached.result
+					if (await isCachedResultUsable(cached.result)) {
+						return cached.result
+					}
+					cacheRef.current = null
+				} else {
+					const result = await cached.promise
+					if (await isCachedResultUsable(result)) {
+						return result
+					}
+					cacheRef.current = null
 				}
-				return cached.promise
 			}
 
 			const promise = getOrCreateImagesDirFileId({
@@ -49,6 +77,7 @@ export function useGetOrCreateImagesDir(
 				flatAttachments,
 				projectId,
 				updateAttachments,
+				validateImagesDirFileId,
 			})
 
 			cacheRef.current = { key: cacheKey, promise }
@@ -66,7 +95,15 @@ export function useGetOrCreateImagesDir(
 				})
 
 			return promise
-		}, [cacheKey, currentFile, flatAttachments, projectId, updateAttachments])
+		}, [
+			cacheKey,
+			currentFile,
+			flatAttachments,
+			projectId,
+			updateAttachments,
+			validateImagesDirFileId,
+			isCachedResultUsable,
+		])
 
 	return getOrCreateImagesDir
 }
