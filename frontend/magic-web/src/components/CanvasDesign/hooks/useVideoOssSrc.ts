@@ -25,7 +25,9 @@ export function useVideoOssSrc(videoElement: VideoElement | null) {
 		setIsLoading(true)
 		setHasError(false)
 		try {
-			const loaded = await canvas.videoResourceManager.ensureFreshOssInfo(path)
+			const loaded = await canvas.videoResourceManager.ensureFreshOssInfo(path, {
+				allowCachedFallback: true,
+			})
 			if (videoElement?.src === path) {
 				if (loaded) {
 					setOssSrc(loaded.ossSrc)

@@ -1,7 +1,13 @@
-import type { GetFileInfoResponse } from "@/components/CanvasDesign/types.magic"
+import type {
+	CanvasFileResourceMeta,
+	GetFileInfoResponse,
+} from "@/components/CanvasDesign/types.magic"
 import { parseExpiresAt, isOssExpired } from "@/components/CanvasDesign/canvas/utils/ossExpiryUtils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import {
+	getTemporaryDownloadUrl,
+	type GetTemporaryDownloadUrlItem,
+} from "@/pages/superMagic/utils/api"
 import projectFilesStore from "@/stores/projectFiles"
 import { normalizePath } from "./utils"
 import {
@@ -16,6 +22,15 @@ import {
 	buildAttachmentsSnapshotKeyFromFlatFiles,
 	type DesignAttachmentIndex,
 } from "./designAttachmentIndex"
+import {
+	clearDesignFileInfoIndexedDbCache,
+	deleteDesignFileInfoCacheEntries,
+	deleteDesignFileInfoCacheNamespace,
+	flushDesignFileInfoIndexedDbCacheWrites,
+	readDesignFileInfoCacheEntry,
+	writeDesignFileInfoCacheEntries,
+	type DesignFileInfoIndexedDbEntry,
+} from "./designFileInfoIndexedDbCache"
 
 const IMAGE_PROCESS_OPTIONS: { xMagicImageProcess?: ImageProcessOptions } = {
 	xMagicImageProcess: {
@@ -27,16 +42,18 @@ const IMAGE_PROCESS_OPTIONS: { xMagicImageProcess?: ImageProcessOptions } = {
 const IMAGE_PROCESS_SIZE_LIMIT = 50971420
 // 批量请求窗口时间 100ms
 const BATCH_REQUEST_WINDOW_MS = 100
+// get-file-url 单次请求上限，避免超大画布一次性提交过大的 file_ids payload
+const MAX_GET_FILE_URL_BATCH_SIZE = 100
 // 默认缓存时间 15 分钟
 const DEFAULT_TTL_MS = 15 * 60 * 1000
-// 缓存存储 key（v3：条目绑定附件快照，路径/更新时间变更导致 URL 失效时强制整批失效）
+// 旧 localStorage 存储 key：仅用于一次性迁移到 IndexedDB，后续不再写入这个大 JSON。
 const FILE_INFO_STORAGE_KEY = "MAGIC:supermagic-design:file-info-cache:v3"
 const LEGACY_FILE_INFO_STORAGE_KEY = "MAGIC:supermagic-design:file-info-cache"
 const FILE_INFO_CACHE_PAYLOAD_VERSION = 3 as const
 
-/** 是否启用换链结果缓存：为 false 时不读内存命中、不写内存/持久化（可由 setCacheEnabled 切换，用于调试或强制每次拉新 URL） */
+/** 是否启用换链结果缓存：为 false 时不读内存命中、不写内存/持久化，可用于强制每次拉新 URL */
 let cacheEnabled = true
-/** localStorage 冷启动数据是否已灌入内存：ensureStorageCacheLoaded 只执行一次，避免每次 getFileInfo 都解析持久化 JSON */
+/** 旧 localStorage 冷启动数据是否已尝试迁移：只执行一次，避免每次 getFileInfo 都解析持久化 JSON */
 let storageCacheLoaded = false
 
 interface CacheEntry {
@@ -63,6 +80,8 @@ interface BatchRequestItem {
 	fileId: string
 	fileName: string
 	fileSize?: number
+	updatedAt?: string
+	resourceVersion?: string | null
 	source?: FileItem["source"]
 	useImageProcess?: boolean
 	attachmentsSnapshotKey?: string
@@ -188,6 +207,9 @@ function deleteNamespaceMemoryCache(namespace: string): boolean {
 			fileInfoRequestCache.delete(cacheKey)
 		})
 		scopedCacheKeysByNamespace.delete(namespace)
+		if (removed) {
+			deleteDesignFileInfoCacheNamespace(namespace).catch(() => undefined)
+		}
 		return removed
 	}
 	const keysToDelete: string[] = []
@@ -201,6 +223,10 @@ function deleteNamespaceMemoryCache(namespace: string): boolean {
 		deleteMemoryCache(cacheKey)
 	})
 
+	if (keysToDelete.length > 0) {
+		deleteDesignFileInfoCacheNamespace(namespace).catch(() => undefined)
+	}
+
 	return keysToDelete.length > 0
 }
 
@@ -211,11 +237,8 @@ function syncNamespaceAttachmentsSnapshot(namespace: string, attachmentsSnapshot
 	namespaceAttachmentsSnapshotCache.set(namespace, attachmentsSnapshotKey)
 	if (previousSnapshotKey === undefined) return
 
-	const shouldPersistCache = deleteNamespaceMemoryCache(namespace)
+	deleteNamespaceMemoryCache(namespace)
 	deleteNamespaceRequestCache(namespace)
-	if (shouldPersistCache) {
-		persistCacheToStorage()
-	}
 }
 
 function isAttachmentsSnapshotStale(
@@ -250,32 +273,78 @@ function deleteMemoryCache(cacheKey: string): void {
 	untrackScopedCacheKey(cacheKey)
 	fileInfoCache.delete(cacheKey)
 	fileInfoRequestCache.delete(cacheKey)
+	deleteDesignFileInfoCacheEntries([cacheKey]).catch(() => undefined)
 }
 
-function persistCacheToStorage(): void {
-	const storage = getCacheStorage()
-	if (!storage) return
-
-	try {
-		const payload: PersistedFileInfoCachePayload = {
-			version: FILE_INFO_CACHE_PAYLOAD_VERSION,
-			entries: Object.fromEntries(fileInfoCache.entries()),
-		}
-		storage.setItem(FILE_INFO_STORAGE_KEY, JSON.stringify(payload))
-	} catch {
-		//
+function buildIndexedDbEntry(cacheKey: string, entry: CacheEntry): DesignFileInfoIndexedDbEntry {
+	const { namespace, normalizedPath } = parseScopedPathKey(cacheKey)
+	const now = Date.now()
+	return {
+		cacheKey,
+		namespace,
+		normalizedPath,
+		fileInfo: entry.fileInfo,
+		previewWatermarkSignature: entry.previewWatermarkSignature,
+		...(entry.attachmentsSnapshotKey
+			? { attachmentsSnapshotKey: entry.attachmentsSnapshotKey }
+			: {}),
+		...(entry.cachedAt !== undefined ? { cachedAt: entry.cachedAt } : {}),
+		...(entry.resolvedFileId ? { resolvedFileId: entry.resolvedFileId } : {}),
+		updatedAt: now,
+		lastAccessedAt: now,
 	}
 }
 
-function clearPersistedCache(): void {
+function toMemoryCacheEntry(entry: DesignFileInfoIndexedDbEntry): CacheEntry {
+	return {
+		fileInfo: entry.fileInfo,
+		previewWatermarkSignature: entry.previewWatermarkSignature,
+		...(entry.attachmentsSnapshotKey
+			? { attachmentsSnapshotKey: entry.attachmentsSnapshotKey }
+			: {}),
+		...(entry.cachedAt !== undefined ? { cachedAt: entry.cachedAt } : {}),
+		...(entry.resolvedFileId ? { resolvedFileId: entry.resolvedFileId } : {}),
+	}
+}
+
+function persistCacheEntriesToStorage(cacheKeys: string[]): void {
+	const seenCacheKeys = new Set<string>()
+	const uniqueCacheKeys: string[] = []
+	cacheKeys.forEach((cacheKey) => {
+		if (seenCacheKeys.has(cacheKey)) return
+		seenCacheKeys.add(cacheKey)
+		uniqueCacheKeys.push(cacheKey)
+	})
+	const entries = uniqueCacheKeys
+		.map((cacheKey) => {
+			const entry = fileInfoCache.get(cacheKey)
+			return entry ? buildIndexedDbEntry(cacheKey, entry) : null
+		})
+		.filter((entry): entry is DesignFileInfoIndexedDbEntry => Boolean(entry))
+	if (entries.length === 0) return
+
+	writeDesignFileInfoCacheEntries(entries)
+		.then(() => undefined)
+		.catch(() => undefined)
+}
+
+function clearLegacyPersistedCache(): void {
 	const storage = getCacheStorage()
 	if (!storage) return
 
 	try {
 		storage.removeItem(FILE_INFO_STORAGE_KEY)
+		storage.removeItem(LEGACY_FILE_INFO_STORAGE_KEY)
 	} catch {
-		//
+		// ignore storage cleanup failures
 	}
+}
+
+function clearPersistedCache(): void {
+	clearLegacyPersistedCache()
+	clearDesignFileInfoIndexedDbCache()
+		.then(() => undefined)
+		.catch(() => undefined)
 }
 
 function ensureStorageCacheLoaded(): void {
@@ -283,7 +352,9 @@ function ensureStorageCacheLoaded(): void {
 
 	storageCacheLoaded = true
 	const storage = getCacheStorage()
-	if (!storage) return
+	if (!storage) {
+		return
+	}
 
 	try {
 		try {
@@ -293,7 +364,9 @@ function ensureStorageCacheLoaded(): void {
 		}
 
 		const raw = storage.getItem(FILE_INFO_STORAGE_KEY)
-		if (!raw) return
+		if (!raw) {
+			return
+		}
 
 		const parsed = JSON.parse(raw) as Partial<PersistedFileInfoCachePayload> | null
 		if (!parsed || typeof parsed !== "object") {
@@ -307,6 +380,7 @@ function ensureStorageCacheLoaded(): void {
 		}
 
 		let shouldSyncStorage = false
+		const restoredCacheKeys: string[] = []
 		for (const [cacheKey, entry] of Object.entries(parsed.entries ?? {})) {
 			if (!entry?.fileInfo?.src) {
 				shouldSyncStorage = true
@@ -333,11 +407,16 @@ function ensureStorageCacheLoaded(): void {
 			if (isCachedFileInfoExpired(entry as CacheEntry)) {
 				deleteMemoryCache(cacheKey)
 				shouldSyncStorage = true
+			} else {
+				restoredCacheKeys.push(cacheKey)
 			}
 		}
 
-		if (shouldSyncStorage) {
-			persistCacheToStorage()
+		if (restoredCacheKeys.length > 0) {
+			persistCacheEntriesToStorage(restoredCacheKeys)
+		}
+		if (shouldSyncStorage || restoredCacheKeys.length > 0) {
+			clearLegacyPersistedCache()
 		}
 	} catch {
 		clearPersistedCache()
@@ -352,6 +431,50 @@ function findFileItemByFileId(fileId: string, filesList?: FileItem[]): FileItem 
 	return found ?? null
 }
 
+function buildResourceVersion(parts: {
+	resourceVersion?: string | null
+	fileId?: string
+	updatedAt?: string
+	fileSize?: number
+}): string {
+	const version = normalizeStrongResourceVersion(parts.resourceVersion)
+	if (version) return version
+	return [parts.fileId || "", parts.updatedAt || "", parts.fileSize ?? ""].join(":")
+}
+
+function normalizeStrongResourceVersion(version?: string | null): string | undefined {
+	if (typeof version !== "string") return undefined
+	const trimmed = version.trim()
+	return trimmed || undefined
+}
+
+function getFileItemStrongResourceVersion(fileItem: FileItem): string | undefined {
+	return (
+		normalizeStrongResourceVersion(fileItem.resource_version) ??
+		normalizeStrongResourceVersion(fileItem.version)
+	)
+}
+
+function buildFileResourceVersion(fileItem: FileItem): string {
+	return buildResourceVersion({
+		resourceVersion: getFileItemStrongResourceVersion(fileItem),
+		fileId: fileItem.file_id,
+		updatedAt: fileItem.updated_at,
+		fileSize: fileItem.file_size,
+	})
+}
+
+function buildFileResourceMeta(fileItem: FileItem): CanvasFileResourceMeta {
+	return {
+		status: "exists",
+		fileName: fileItem.file_name || fileItem.display_filename || fileItem.filename || "",
+		...(fileItem.source !== undefined ? { source: fileItem.source } : {}),
+		resourceVersion: buildFileResourceVersion(fileItem),
+		updatedAt: fileItem.updated_at ?? null,
+		contentLength: fileItem.file_size ?? null,
+	}
+}
+
 function mergeFileItemMetaIntoFileInfo(
 	base: GetFileInfoResponse,
 	fileItem: FileItem | null,
@@ -360,6 +483,9 @@ function mergeFileItemMetaIntoFileInfo(
 	return {
 		...base,
 		...(fileItem.source !== undefined ? { source: fileItem.source } : {}),
+		resource_version: buildFileResourceVersion(fileItem),
+		...(fileItem.updated_at !== undefined ? { updated_at: fileItem.updated_at } : {}),
+		...(fileItem.file_size !== undefined ? { content_length: fileItem.file_size } : {}),
 	}
 }
 
@@ -382,6 +508,60 @@ function shouldInvalidateCachedEntry(
 	return false
 }
 
+function getCachedEntryStaleReasons(
+	entry: CacheEntry,
+	fileItem: FileItem | null,
+	attachmentsSnapshotKey: string | undefined,
+	hasFilesContext: boolean,
+): string[] {
+	return [
+		isCachedFileInfoExpired(entry) ? "expired" : null,
+		isPreviewWatermarkSignatureStale(entry) ? "preview-watermark" : null,
+		isAttachmentsSnapshotStale(entry, attachmentsSnapshotKey, hasFilesContext)
+			? "attachments-snapshot"
+			: null,
+		shouldInvalidateCachedEntry(entry, fileItem, hasFilesContext)
+			? "attachment-mismatch"
+			: null,
+	].filter((reason): reason is string => Boolean(reason))
+}
+
+function chunkBatchRequestItems(items: BatchRequestItem[]): BatchRequestItem[][] {
+	const chunks: BatchRequestItem[][] = []
+	for (let i = 0; i < items.length; i += MAX_GET_FILE_URL_BATCH_SIZE) {
+		chunks.push(items.slice(i, i + MAX_GET_FILE_URL_BATCH_SIZE))
+	}
+	return chunks
+}
+
+async function requestTemporaryDownloadUrlsForChunk(
+	items: BatchRequestItem[],
+	options?: { useImageProcess?: boolean },
+): Promise<void> {
+	try {
+		const fileIds = items.map((item) => item.fileId)
+		const downloadUrls = await getTemporaryDownloadUrl({
+			file_ids: fileIds,
+			...(options?.useImageProcess ? { options: IMAGE_PROCESS_OPTIONS } : {}),
+		})
+		processBatchRequestResults(items, downloadUrls)
+	} catch (error) {
+		items.forEach((item) => {
+			item.reject(error as Error)
+			fileInfoRequestCache.delete(item.cacheKey)
+		})
+	}
+}
+
+async function requestTemporaryDownloadUrlsInChunks(
+	items: BatchRequestItem[],
+	options?: { useImageProcess?: boolean },
+): Promise<void> {
+	for (const chunk of chunkBatchRequestItems(items)) {
+		await requestTemporaryDownloadUrlsForChunk(chunk, options)
+	}
+}
+
 // 将短时间内的多个 path 请求合并成一轮 file_id 批量换链，减少接口压力。
 async function executeBatchRequest(): Promise<void> {
 	if (batchQueue.length === 0) return
@@ -402,40 +582,19 @@ async function executeBatchRequest(): Promise<void> {
 	}
 
 	if (withImageProcess.length > 0) {
-		try {
-			const fileIds = withImageProcess.map((item) => item.fileId)
-			const downloadUrls = await getTemporaryDownloadUrl({
-				file_ids: fileIds,
-				options: IMAGE_PROCESS_OPTIONS,
-			})
-			processBatchRequestResults(withImageProcess, downloadUrls)
-		} catch (error) {
-			withImageProcess.forEach((item) => {
-				item.reject(error as Error)
-				fileInfoRequestCache.delete(item.cacheKey)
-			})
-		}
+		await requestTemporaryDownloadUrlsInChunks(withImageProcess, {
+			useImageProcess: true,
+		})
 	}
 
 	if (withoutImageProcess.length > 0) {
-		try {
-			const fileIds = withoutImageProcess.map((item) => item.fileId)
-			const downloadUrls = await getTemporaryDownloadUrl({
-				file_ids: fileIds,
-			})
-			processBatchRequestResults(withoutImageProcess, downloadUrls)
-		} catch (error) {
-			withoutImageProcess.forEach((item) => {
-				item.reject(error as Error)
-				fileInfoRequestCache.delete(item.cacheKey)
-			})
-		}
+		await requestTemporaryDownloadUrlsInChunks(withoutImageProcess)
 	}
 }
 
 function processBatchRequestResults(
 	queue: BatchRequestItem[],
-	downloadUrls: Array<{ file_id?: string; url?: string; expires_at?: string }> | null | undefined,
+	downloadUrls: GetTemporaryDownloadUrlItem[] | null | undefined,
 ): void {
 	if (!downloadUrls?.length) {
 		queue.forEach((item) => {
@@ -445,17 +604,17 @@ function processBatchRequestResults(
 		return
 	}
 
-	const urlItemMap = new Map<string, { url: string; expires_at?: string }>()
+	const urlItemMap = new Map<string, GetTemporaryDownloadUrlItem & { url: string }>()
 	downloadUrls.forEach((urlItem) => {
 		if (urlItem.file_id && urlItem.url) {
 			urlItemMap.set(urlItem.file_id, {
+				...urlItem,
 				url: urlItem.url,
-				expires_at: urlItem.expires_at,
 			})
 		}
 	})
 
-	let shouldPersistCache = false
+	const cacheKeysToPersist: string[] = []
 	queue.forEach((item) => {
 		const urlItem = urlItemMap.get(item.fileId)
 		if (!urlItem?.url) {
@@ -469,6 +628,17 @@ function processBatchRequestResults(
 			fileName: item.fileName,
 			...(urlItem.expires_at ? { expires_at: urlItem.expires_at } : {}),
 			...(item.source !== undefined ? { source: item.source } : {}),
+			...(urlItem.version !== undefined ? { version: urlItem.version } : {}),
+			resource_version: buildResourceVersion({
+				resourceVersion: item.resourceVersion,
+				fileId: item.fileId,
+				updatedAt: item.updatedAt ?? urlItem.updated_at,
+				fileSize: item.fileSize,
+			}),
+			...(item.updatedAt !== undefined || urlItem.updated_at !== undefined
+				? { updated_at: item.updatedAt ?? urlItem.updated_at }
+				: {}),
+			...(item.fileSize !== undefined ? { content_length: item.fileSize } : {}),
 		}
 
 		if (cacheEnabled) {
@@ -480,14 +650,14 @@ function processBatchRequestResults(
 				getPreviewFileUrlWatermarkSignature(),
 				item.attachmentsSnapshotKey,
 			)
-			shouldPersistCache = true
+			cacheKeysToPersist.push(item.cacheKey)
 		}
 		fileInfoRequestCache.delete(item.cacheKey)
 		item.resolve(result)
 	})
 
-	if (shouldPersistCache) {
-		persistCacheToStorage()
+	if (cacheKeysToPersist.length > 0) {
+		persistCacheEntriesToStorage(cacheKeysToPersist)
 	}
 }
 
@@ -534,14 +704,14 @@ export async function getFileInfoByPath(
 				getStoreFiles(filesList),
 				options?.attachmentIndex,
 			)
-			if (
-				isCachedFileInfoExpired(cachedEntry) ||
-				isPreviewWatermarkSignatureStale(cachedEntry) ||
-				isAttachmentsSnapshotStale(cachedEntry, attachmentsSnapshotKey, hasFilesContext) ||
-				shouldInvalidateCachedEntry(cachedEntry, cachedFileItem, hasFilesContext)
-			) {
+			const staleReasons = getCachedEntryStaleReasons(
+				cachedEntry,
+				cachedFileItem,
+				attachmentsSnapshotKey,
+				hasFilesContext,
+			)
+			if (staleReasons.length > 0) {
 				deleteMemoryCache(cacheKey)
-				persistCacheToStorage()
 				continue
 			}
 
@@ -566,6 +736,41 @@ export async function getFileInfoByPath(
 					),
 				),
 			)
+		}
+	}
+
+	if (!shouldBypassCache && cacheEnabled) {
+		for (const candidate of candidates) {
+			const cacheKey = buildScopedPathKey(candidate.normalizedPath, options?.designProjectId)
+			let persistedEntry: DesignFileInfoIndexedDbEntry | null = null
+			try {
+				persistedEntry = await readDesignFileInfoCacheEntry(cacheKey)
+			} catch {
+				break
+			}
+			if (!persistedEntry) continue
+
+			const cachedEntry = toMemoryCacheEntry(persistedEntry)
+			fileInfoCache.set(cacheKey, cachedEntry)
+			trackScopedCacheKey(cacheKey)
+			const cachedFileItem = lookupAttachmentForSingleNormalizedPath(
+				candidate.normalizedPath,
+				filePath,
+				getStoreFiles(filesList),
+				options?.attachmentIndex,
+			)
+			const staleReasons = getCachedEntryStaleReasons(
+				cachedEntry,
+				cachedFileItem,
+				attachmentsSnapshotKey,
+				hasFilesContext,
+			)
+			if (staleReasons.length > 0) {
+				deleteMemoryCache(cacheKey)
+				continue
+			}
+
+			return mergeFileItemMetaIntoFileInfo(cachedEntry.fileInfo, cachedFileItem)
 		}
 	}
 
@@ -622,6 +827,8 @@ export async function getFileInfoByPath(
 			fileId: fileItem.file_id,
 			fileName: fileItem.file_name || fileItem.display_filename || fileItem.filename || "",
 			fileSize: fileItem.file_size,
+			updatedAt: fileItem.updated_at,
+			resourceVersion: getFileItemStrongResourceVersion(fileItem),
 			source: fileItem.source,
 			useImageProcess: options?.useImageProcess,
 			attachmentsSnapshotKey,
@@ -641,6 +848,46 @@ export async function getFileInfoByPath(
 		fileInfoRequestCache.set(cacheKey, requestPromise)
 	}
 	return requestPromise
+}
+
+export async function getFileResourceMetaByPath(
+	filePath: string,
+	filesList?: FileItem[],
+	options?: {
+		designProjectBasePath?: string
+		attachmentIndex?: DesignAttachmentIndex | null
+	},
+): Promise<CanvasFileResourceMeta> {
+	const candidates = getResolvedPathCandidates(filePath, options?.designProjectBasePath)
+	if (candidates.length === 0) return { status: "unknown" }
+
+	const storeFiles = getStoreFiles(filesList)
+	const hasFilesContext = storeFiles.length > 0
+	let lookupResult = lookupAttachmentAmongCandidates(
+		candidates,
+		filePath,
+		storeFiles,
+		options?.attachmentIndex,
+	)
+
+	if (!lookupResult && hasFilesContext) {
+		const latestStoreFiles = getStoreFiles(undefined)
+		const latestHasFilesContext = latestStoreFiles.length > 0
+		if (latestHasFilesContext && latestStoreFiles !== storeFiles) {
+			lookupResult = lookupAttachmentAmongCandidates(
+				candidates,
+				filePath,
+				latestStoreFiles,
+				options?.attachmentIndex,
+			)
+		}
+	}
+
+	if (!lookupResult) {
+		return hasFilesContext ? { status: "deleted" } : { status: "unknown" }
+	}
+
+	return buildFileResourceMeta(lookupResult.fileItem)
 }
 
 export function setFileInfoCache(
@@ -676,7 +923,7 @@ export function setFileInfoCache(
 		getPreviewFileUrlWatermarkSignature(),
 		attachmentsSnapshotKey,
 	)
-	persistCacheToStorage()
+	persistCacheEntriesToStorage([cacheKey])
 }
 
 export function getFileInfoCache(
@@ -695,7 +942,6 @@ export function getFileInfoCache(
 
 		if (isCachedFileInfoExpired(entry) || isPreviewWatermarkSignatureStale(entry)) {
 			deleteMemoryCache(cacheKey)
-			persistCacheToStorage()
 			continue
 		}
 
@@ -718,7 +964,6 @@ export function clearFileInfoCache(
 	candidates.forEach((candidate) => {
 		deleteMemoryCache(buildScopedPathKey(candidate.normalizedPath, designProjectId))
 	})
-	persistCacheToStorage()
 }
 
 export async function getFileInfoById(
@@ -748,31 +993,42 @@ export async function getFileInfoById(
 				options: processOptions,
 			})
 
-			if (!downloadUrls?.length || !downloadUrls[0]?.url) {
+			const urlItem = downloadUrls?.[0]
+			if (!urlItem?.url) {
 				throw new Error(`No URL in response for file_id: ${fileId}`)
 			}
 
 			const meta = findFileItemByFileId(fileId, options?.filesList)
 			const result: GetFileInfoResponse = mergeFileItemMetaIntoFileInfo(
 				{
-					src: downloadUrls[0].url,
+					src: urlItem.url,
 					fileName:
 						fileName ||
 						meta?.file_name ||
 						meta?.display_filename ||
 						meta?.filename ||
 						"",
-					...(downloadUrls[0].expires_at
-						? { expires_at: downloadUrls[0].expires_at }
-						: {}),
+					...(urlItem.expires_at ? { expires_at: urlItem.expires_at } : {}),
+					...(urlItem.version !== undefined ? { version: urlItem.version } : {}),
+					...(urlItem.updated_at ? { updated_at: urlItem.updated_at } : {}),
 				},
 				meta,
 			)
 
 			// 这里只给宿主内部链路使用，返回值保留 file_id，CanvasDesign 本身不消费它。
+			const contentLength = result.content_length ?? meta?.file_size ?? fileSize
+			const updatedAt = meta?.updated_at ?? result.updated_at ?? urlItem.updated_at
 			return {
 				...result,
 				file_id: fileId,
+				resource_version:
+					result.resource_version ??
+					buildResourceVersion({
+						fileId,
+						updatedAt,
+						fileSize: meta?.file_size ?? fileSize,
+					}),
+				...(contentLength !== undefined ? { content_length: contentLength } : {}),
 			}
 		} finally {
 			fileInfoByIdRequestCache.delete(fileId)
@@ -798,6 +1054,10 @@ export function clearAllFileInfoCache(): void {
 	clearPersistedCache()
 }
 
+export async function flushFileInfoCachePersistenceForTests(): Promise<void> {
+	await flushDesignFileInfoIndexedDbCacheWrites()
+}
+
 export function setCacheEnabled(enabled: boolean): void {
 	cacheEnabled = enabled
 }
@@ -809,14 +1069,19 @@ export function isCacheEnabled(): boolean {
 export function cleanupFileInfoCache(filesList?: FileItem[], designProjectId?: string): void {
 	ensureStorageCacheLoaded()
 
+	const storeFiles = getStoreFiles(filesList)
+	if (storeFiles.length === 0) {
+		return
+	}
+
 	const namespace = buildNamespaceKey(designProjectId)
-	const attachmentsSnapshotKey = buildAttachmentsSnapshotKey(filesList)
+	const attachmentsSnapshotKey = buildAttachmentsSnapshotKey(storeFiles)
 	syncNamespaceAttachmentsSnapshot(namespace, attachmentsSnapshotKey)
 
 	const currentFilePaths = new Set<string>()
 	const currentFileIds = new Set<string>()
 
-	getStoreFiles(filesList).forEach((item) => {
+	storeFiles.forEach((item) => {
 		if (!item.is_directory && item.relative_file_path) {
 			const normalizedPath = normalizePath(item.relative_file_path)
 			if (normalizedPath) {
@@ -854,8 +1119,4 @@ export function cleanupFileInfoCache(filesList?: FileItem[], designProjectId?: s
 	keysToDelete.forEach((cacheKey) => {
 		deleteMemoryCache(cacheKey)
 	})
-
-	if (keysToDelete.length > 0) {
-		persistCacheToStorage()
-	}
 }

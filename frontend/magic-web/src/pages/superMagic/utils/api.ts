@@ -155,6 +155,10 @@ export interface GetTemporaryDownloadUrlItem {
 	url: string
 	/** 过期时间，格式: 2026-03-03 11:14:03 */
 	expires_at?: string
+	/** 后端资源强版本；当前部分接口可能返回 null */
+	version?: string | null
+	/** 文件更新时间，格式: 2026-03-03 11:14:03 */
+	updated_at?: string
 }
 
 /**

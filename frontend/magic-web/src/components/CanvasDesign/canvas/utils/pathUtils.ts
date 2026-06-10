@@ -104,17 +104,45 @@ export function normalizePath(path: string): string {
 	return normalizePathLocal(path)
 }
 
+export interface CanonicalResourcePathInfo {
+	rawPath: string
+	weakPath: string
+	canonicalPath: string
+	resolvedPath?: string
+	resolveCandidate?: string
+	usedResolveAbsolutePath: boolean
+	canonicalChanged: boolean
+}
+
 /**
  * 将画布/协议层路径归一为可与宿主对齐的规范键：若注入 `resolveAbsolutePath`，则以其解析结果为准
  *（相对 `./…`、裸路径、前导 `/` 等不同写法在宿主侧合一后再做上传路径清洗）；否则退化为 {@link normalizePathLocal}。
  */
-export function resolveCanonicalResourcePath(
+export function getCanonicalResourcePathInfo(
 	path: string,
 	resolveAbsolutePath?: (path: string) => string,
-): string {
+): CanonicalResourcePathInfo {
+	const rawPath = path
 	const trimmed = path.trim()
-	if (!trimmed) return trimmed
-	if (isRemoteOrSpecialPath(trimmed)) return trimmed
+	if (!trimmed) {
+		return {
+			rawPath,
+			weakPath: trimmed,
+			canonicalPath: trimmed,
+			usedResolveAbsolutePath: false,
+			canonicalChanged: rawPath !== trimmed,
+		}
+	}
+	if (isRemoteOrSpecialPath(trimmed)) {
+		return {
+			rawPath,
+			weakPath: trimmed,
+			canonicalPath: trimmed,
+			usedResolveAbsolutePath: false,
+			canonicalChanged: rawPath !== trimmed,
+		}
+	}
+	const weakPath = normalizePathLocal(trimmed)
 	if (resolveAbsolutePath) {
 		const resolveCandidates = [trimmed]
 		const stripped = stripCurrentDirectoryPrefix(trimmed)
@@ -124,13 +152,35 @@ export function resolveCanonicalResourcePath(
 		for (const candidate of resolveCandidates) {
 			try {
 				const absolute = resolveAbsolutePath(candidate)
-				return normalizeUploadResultPath(absolute)
+				const canonicalPath = normalizeUploadResultPath(absolute)
+				return {
+					rawPath,
+					weakPath,
+					canonicalPath,
+					resolvedPath: normalizePathLocal(absolute),
+					resolveCandidate: candidate,
+					usedResolveAbsolutePath: true,
+					canonicalChanged: canonicalPath !== weakPath,
+				}
 			} catch {
 				// 继续尝试下一个候选，最终再退回工程内弱规范化
 			}
 		}
 	}
-	return normalizePathLocal(trimmed)
+	return {
+		rawPath,
+		weakPath,
+		canonicalPath: weakPath,
+		usedResolveAbsolutePath: false,
+		canonicalChanged: rawPath !== weakPath,
+	}
+}
+
+export function resolveCanonicalResourcePath(
+	path: string,
+	resolveAbsolutePath?: (path: string) => string,
+): string {
+	return getCanonicalResourcePathInfo(path, resolveAbsolutePath).canonicalPath
 }
 
 export function pathsReferToSameResource(

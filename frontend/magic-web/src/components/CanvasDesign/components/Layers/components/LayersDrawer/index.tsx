@@ -44,11 +44,21 @@ import type { LayerTreeData } from "../../types"
 import { convertLayerToTreeNode } from "../../../../lib"
 import LayerImageThumbnail from "./thumbnails/ImageThumbnail"
 
+const LAYER_TREE_VIRTUAL_THRESHOLD = 80
+const LAYER_TREE_ROW_HEIGHT = 34
+
 export default function LayersDrawer() {
 	const { t } = useCanvasDesignI18n()
 	const portalContainer = usePortalContainer()
 	// 从 Context 获取图层面板 UI 状态
-	const { collapsed, width, transitionAnimation, setCollapsed } = useLayersUI()
+	const {
+		collapsed,
+		width,
+		transitionAnimation,
+		setCollapsed,
+		getLayersScrollTop,
+		setLayersScrollTop,
+	} = useLayersUI()
 
 	// 从 Context 获取 methods
 	const { methods } = useMagic()
@@ -67,7 +77,6 @@ export default function LayersDrawer() {
 		}
 		return new Set<string>()
 	})
-
 	// 监听画布 hover 事件，同步到图层面板
 	const [hoveredElementId, setHoveredElementId] = useState<string | null>(null)
 
@@ -308,7 +317,7 @@ export default function LayersDrawer() {
 	)
 
 	const handleDoubleClick = useCallback(
-		(event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
+		(_event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
 			// readonly 状态下不允许编辑名称
 			if (readonly) {
 				return
@@ -320,7 +329,7 @@ export default function LayersDrawer() {
 	)
 
 	const handleMouseEnter = useCallback(
-		(event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
+		(_event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
 			// 在画布上显示 hover 效果
 			canvas?.hoverManager.manualSetHover(node.id)
 		},
@@ -331,6 +340,13 @@ export default function LayersDrawer() {
 		// 清除画布上的 hover 效果
 		canvas?.hoverManager.manualSetHover(null)
 	}, [canvas?.hoverManager])
+
+	const handleLayersScrollTopChange = useCallback(
+		(scrollTop: number) => {
+			setLayersScrollTop(scrollTop)
+		},
+		[setLayersScrollTop],
+	)
 
 	// 监听画框创建事件，自动展开新创建的画框
 	useCanvasEvent("frame:created", (event) => {
@@ -391,6 +407,11 @@ export default function LayersDrawer() {
 							treeNodeContentClassName={
 								readonly ? styles.treeNodeContentReadonly : undefined
 							}
+							virtualize
+							virtualThreshold={LAYER_TREE_VIRTUAL_THRESHOLD}
+							virtualRowHeight={LAYER_TREE_ROW_HEIGHT}
+							initialScrollTop={getLayersScrollTop()}
+							onScrollTopChange={handleLayersScrollTopChange}
 							onSelect={(_nodes, ids) => {
 								// 智能判断：只有当选中状态发生变化时才自动聚焦
 								// 比较新旧选中的元素ID，判断是否有变化

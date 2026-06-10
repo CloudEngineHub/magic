@@ -36,7 +36,6 @@ import {
 } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
-import { designDebugLog } from "../utils/designDebugLog"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
 	// "create_canvas_element",
@@ -583,8 +582,7 @@ export class DesignRemoteListener {
 		try {
 			const content = await loadMagicProjectJsContent(fid)
 			parsed = parseMagicProjectJsContent(content)
-		} catch (e) {
-			designDebugLog("remote:parse-magic-project", e)
+		} catch {
 			return null
 		}
 
@@ -609,8 +607,8 @@ export class DesignRemoteListener {
 
 		try {
 			await waitForNextAttachmentsRefreshForProject(projectId, { timeoutMs: 15_000 })
-		} catch (e) {
-			designDebugLog("remote:wait-attachments", e)
+		} catch {
+			return null
 		}
 
 		try {
@@ -626,8 +624,7 @@ export class DesignRemoteListener {
 				})
 			}
 			return again
-		} catch (e) {
-			designDebugLog("remote:reload-after-wait", e)
+		} catch {
 			return null
 		}
 	}
@@ -732,8 +729,6 @@ export class DesignRemoteListener {
 						if (applied) {
 							this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
 						}
-					} catch (e) {
-						designDebugLog("remote:file-change-apply", e)
 					} finally {
 						if (this.latestRemoteApplyToken === applyToken) {
 							this.remoteApplyFlightKey = null

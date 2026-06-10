@@ -326,41 +326,43 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 							sourceDimensions: workerResult.sourceDimensions,
 						}
 					: await (async () => {
-							let imageInfo = elementInstance.getImageInfo()
-							let imageSource = await elementInstance.getHTMLImageElement()
-							if (
-								!imageInfo?.naturalWidth ||
-								!imageInfo?.naturalHeight ||
-								!imageSource
-							) {
-								imageSource = await elementInstance.getHTMLImageElement()
-								imageInfo = elementInstance.getImageInfo()
-							}
-							if (
-								!imageInfo?.naturalWidth ||
-								!imageInfo?.naturalHeight ||
-								!imageSource
-							) {
-								throw new Error(
-									t("elementTools.imageExtend.submitFailed", "提交失败，请重试"),
-								)
-							}
-
-							const files = await createExtendImageFiles({
-								element: imageElement,
-								image: imageSource,
-								naturalWidth: imageInfo.naturalWidth,
-								naturalHeight: imageInfo.naturalHeight,
-								frame: currentSession.frame,
-								imageRect,
+							const scopedImage = await elementInstance.getScopedHTMLImageElement({
+								variant: "full",
 							})
+							try {
+								const imageInfo = elementInstance.getImageInfo()
+								const imageSource = scopedImage?.image ?? null
+								if (
+									!imageInfo?.naturalWidth ||
+									!imageInfo?.naturalHeight ||
+									!imageSource
+								) {
+									throw new Error(
+										t(
+											"elementTools.imageExtend.submitFailed",
+											"提交失败，请重试",
+										),
+									)
+								}
 
-							return {
-								...files,
-								sourceDimensions: {
-									width: imageInfo.naturalWidth,
-									height: imageInfo.naturalHeight,
-								},
+								const files = await createExtendImageFiles({
+									element: imageElement,
+									image: imageSource,
+									naturalWidth: imageInfo.naturalWidth,
+									naturalHeight: imageInfo.naturalHeight,
+									frame: currentSession.frame,
+									imageRect,
+								})
+
+								return {
+									...files,
+									sourceDimensions: {
+										width: imageInfo.naturalWidth,
+										height: imageInfo.naturalHeight,
+									},
+								}
+							} finally {
+								scopedImage?.release()
 							}
 						})()
 

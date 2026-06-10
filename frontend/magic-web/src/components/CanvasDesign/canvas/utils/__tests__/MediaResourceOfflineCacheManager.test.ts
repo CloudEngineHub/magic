@@ -117,6 +117,141 @@ describe("MediaResourceOfflineCacheManager", () => {
 		expect(postMessage).not.toHaveBeenCalled()
 	})
 
+	it("returns the source url on resolve and only registers offline metadata in background", async () => {
+		const postMessage = vi.fn()
+		const controller = {
+			scriptURL: `${window.location.origin}/sw.js`,
+			postMessage,
+		} as unknown as ServiceWorker
+		const registration = {
+			active: controller,
+			scope: "/",
+		} as unknown as ServiceWorkerRegistration
+
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: {
+				controller,
+				ready: Promise.resolve(registration),
+				register: vi.fn(),
+				getRegistrations: vi.fn().mockResolvedValue([registration]),
+				addEventListener: vi.fn(),
+				removeEventListener: vi.fn(),
+			},
+		})
+
+		const manager = new MediaResourceOfflineCacheManager({
+			getVirtualResourceScope: () => "workspace/project/design/demo",
+		})
+		;(manager as unknown as { saveEntry: (entry: unknown) => Promise<void> }).saveEntry = vi
+			.fn()
+			.mockResolvedValue(undefined)
+		;(
+			manager as unknown as {
+				getEntry: (path: string, mediaType: "image" | "video") => Promise<null>
+			}
+		).getEntry = vi.fn().mockResolvedValue(null)
+		const refreshCachedResource = vi.fn().mockResolvedValue(true)
+		;(
+			manager as unknown as {
+				refreshCachedResource: (
+					path: string,
+					mediaType: "image" | "video",
+				) => Promise<boolean>
+			}
+		).refreshCachedResource = refreshCachedResource
+
+		const sourceUrl = "https://oss.example.com/images/example.png"
+		const result = await manager.resolveResourceUrl({
+			path: "images/example.png",
+			url: sourceUrl,
+			mediaType: "image",
+		})
+
+		expect(result).toBe(sourceUrl)
+		await vi.waitFor(() => {
+			expect(manager.getSnapshot()).toEqual(
+				expect.objectContaining({
+					resolveDirectCount: 1,
+					backgroundRegisterQueuedCount: 1,
+					backgroundRegisterCompletedCount: 1,
+					backgroundWarmQueuedCount: 0,
+					backgroundWarmCompletedCount: 0,
+				}),
+			)
+		})
+		expect(postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "CANVAS_MEDIA_CACHE_REGISTER",
+			}),
+		)
+		expect(refreshCachedResource).not.toHaveBeenCalled()
+	})
+
+	it("keeps explicit cache warm as an opt-in path", async () => {
+		const postMessage = vi.fn()
+		const controller = {
+			scriptURL: `${window.location.origin}/sw.js`,
+			postMessage,
+		} as unknown as ServiceWorker
+		const registration = {
+			active: controller,
+			scope: "/",
+		} as unknown as ServiceWorkerRegistration
+
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: {
+				controller,
+				ready: Promise.resolve(registration),
+				register: vi.fn(),
+				getRegistrations: vi.fn().mockResolvedValue([registration]),
+				addEventListener: vi.fn(),
+				removeEventListener: vi.fn(),
+			},
+		})
+
+		const manager = new MediaResourceOfflineCacheManager({
+			getVirtualResourceScope: () => "workspace/project/design/demo",
+		})
+		;(manager as unknown as { saveEntry: (entry: unknown) => Promise<void> }).saveEntry = vi
+			.fn()
+			.mockResolvedValue(undefined)
+		;(
+			manager as unknown as {
+				getEntry: (path: string, mediaType: "image" | "video") => Promise<null>
+			}
+		).getEntry = vi.fn().mockResolvedValue(null)
+		;(
+			manager as unknown as {
+				refreshCachedResource: (
+					path: string,
+					mediaType: "image" | "video",
+				) => Promise<boolean>
+			}
+		).refreshCachedResource = vi.fn().mockResolvedValue(true)
+
+		manager.warmResolvedResourceBodyExplicitly({
+			path: "images/example.png",
+			url: "https://oss.example.com/images/example.png",
+			mediaType: "image",
+		})
+
+		await vi.waitFor(() => {
+			expect(manager.getSnapshot()).toEqual(
+				expect.objectContaining({
+					backgroundWarmQueuedCount: 1,
+					backgroundWarmCompletedCount: 1,
+				}),
+			)
+		})
+		expect(postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "CANVAS_MEDIA_CACHE_REGISTER",
+			}),
+		)
+	})
+
 	it("falls back to the source url when service worker ready does not settle", async () => {
 		vi.useFakeTimers()
 		const ready = new Promise<ServiceWorkerRegistration>(() => undefined)

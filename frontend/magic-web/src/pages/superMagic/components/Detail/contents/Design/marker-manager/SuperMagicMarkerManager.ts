@@ -96,6 +96,7 @@ export interface SuperMagicMarkerManagerDependencies {
 		}
 		ossUrl?: string
 		image?: HTMLImageElement | ImageBitmap
+		release?: () => void
 	} | null>
 	/** identifyImageMark API */
 	identifyImageMark?: (params: IdentifyImageMarkRequest) => Promise<IdentifyImageMarkResponse>
@@ -512,10 +513,6 @@ export class SuperMagicMarkerManager {
 		}
 		if (!element?.src) return
 
-		// 尝试从画布获取图片信息（画布打开时优先使用）
-		const canvasImageInfo = await getElementImageInfo?.(marker.elementId)
-		if (!this.isMarkerRequestCurrent(markerId, requestId)) return
-
 		// 计算 sequence：同元素下 markers 的序号（从 1 起）
 		const sameElementMarkers = this.getMarkers(designProjectId)
 			.filter((m) => m.elementId === marker.elementId)
@@ -532,6 +529,9 @@ export class SuperMagicMarkerManager {
 		const elementSrc = element.src
 		const invalidationKey = buildMarkerCompositeKey(elementSrc, marker)
 		const cachedComposite = this.getCompositePathCache(designProjectId)[markerId]
+		let canvasImageInfo: Awaited<
+			ReturnType<NonNullable<SuperMagicMarkerManagerDependencies["getElementImageInfo"]>>
+		> | null = null
 
 		try {
 			const methods: MarkerCompositorMethods = {
@@ -565,6 +565,10 @@ export class SuperMagicMarkerManager {
 					signal: controller.signal,
 				})
 			} else {
+				// 尝试从画布获取图片信息（画布打开时优先使用）
+				canvasImageInfo = (await getElementImageInfo?.(marker.elementId)) ?? null
+				if (!this.isMarkerRequestCurrent(markerId, requestId)) return
+
 				const compositeResult = await MarkerCompositorService.composite({
 					marker,
 					element,
@@ -616,6 +620,7 @@ export class SuperMagicMarkerManager {
 				error: errorMessage,
 			})
 		} finally {
+			canvasImageInfo?.release?.()
 			if (this.isMarkerRequestCurrent(markerId, requestId)) {
 				this.activeMarkerRequests.delete(markerId)
 				this.loadingMarkers.delete(markerId)

@@ -863,6 +863,27 @@ export interface GetFileInfoResponse {
 	 * 由路径解析到附件项时填充
 	 */
 	source?: AttachmentSourceEnum
+	/** get-file-url 原始版本字段；当前 superMagic 可能返回 null */
+	version?: string | null
+	/**
+	 * 稳定资源版本；由宿主根据强版本/hash 或附件元信息生成。
+	 * CanvasDesign 只把它当作不透明 token，不依赖宿主 file_id。
+	 */
+	resource_version?: string
+	/** 宿主附件更新时间；仅作为 resource_version 的来源之一，CanvasDesign 不直接依赖该字段 */
+	updated_at?: string
+	/** 压缩资源长度或附件大小；用于辅助版本判断 */
+	content_length?: number
+}
+
+export interface CanvasFileResourceMeta {
+	status: "exists" | "deleted" | "unknown"
+	fileName?: string
+	source?: AttachmentSourceEnum
+	/** 宿主生成的不透明版本 token；CanvasDesign 资源同一性仍以规范化 path 为准 */
+	resourceVersion?: string | null
+	updatedAt?: string | null
+	contentLength?: number | null
 }
 
 /** 上传子目录枚举值，内部用常量控制 images / videos / audios */
@@ -1224,6 +1245,15 @@ export interface CanvasDesignMethods {
 		path: string,
 		options?: { useImageProcess?: boolean; forceRefresh?: boolean },
 	) => Promise<GetFileInfoResponse>
+	/**
+	 * 获取资源轻量版本信息；用于 cache hit 后台校验，不应触发 OSS 换链或下载 body
+	 * @param path 文件路径
+	 * @param options.useImageProcess 是否按图片资源变体计算版本
+	 */
+	getFileResourceMeta?: (
+		path: string,
+		options?: { useImageProcess?: boolean },
+	) => Promise<CanvasFileResourceMeta>
 	/**
 	 * 将画布中记录的资源路径（如 ./xxx/xx）解析为宿主可识别的绝对路径（必选；画布资源同一性与此对齐）
 	 * @param path 原始资源路径（相对或绝对）

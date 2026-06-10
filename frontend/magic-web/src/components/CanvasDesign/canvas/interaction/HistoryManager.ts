@@ -11,6 +11,25 @@ interface HistoryItem {
 	timestamp: number
 }
 
+export interface HistoryManagerSnapshot {
+	historyStackSize: number
+	currentIndex: number
+	undoStackSize: number
+	redoStackSize: number
+	enabled: boolean
+	applyingHistory: boolean
+	pendingDebounce: boolean
+	recordCount: number
+	skippedRecordCount: number
+	lastRecordDurationMs: number
+	averageRecordDurationMs: number
+	lastSnapshotElementCount: number
+}
+
+function now(): number {
+	return typeof performance === "undefined" ? Date.now() : performance.now()
+}
+
 /**
  * 历史管理器 - 管理撤销/恢复功能
  * 职责：
@@ -43,6 +62,16 @@ export class HistoryManager {
 
 	/** 防抖延迟（毫秒） */
 	private debounceDelay = 300
+
+	private recordCount = 0
+
+	private skippedRecordCount = 0
+
+	private lastRecordDurationMs = 0
+
+	private totalRecordDurationMs = 0
+
+	private lastSnapshotElementCount = 0
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -106,6 +135,7 @@ export class HistoryManager {
 	 */
 	public recordHistoryDebounced(): void {
 		if (!this.isEnabled || this.isApplyingHistory) {
+			this.skippedRecordCount += 1
 			return
 		}
 
@@ -126,11 +156,18 @@ export class HistoryManager {
 	 */
 	private doRecordHistory(): void {
 		if (!this.isEnabled || this.isApplyingHistory) {
+			this.skippedRecordCount += 1
 			return
 		}
 
 		// 获取当前文档快照（包含临时元素，以便撤销时能正确恢复）
+		const startedAt = now()
 		const snapshot = this.canvas.elementManager.exportDocument({ includeTemporary: true })
+		const durationMs = now() - startedAt
+		this.recordCount += 1
+		this.lastRecordDurationMs = durationMs
+		this.totalRecordDurationMs += durationMs
+		this.lastSnapshotElementCount = snapshot.elements?.length ?? 0
 
 		// 创建历史记录项
 		const historyItem: HistoryItem = {
@@ -263,6 +300,24 @@ export class HistoryManager {
 	 */
 	public getRedoStackSize(): number {
 		return this.historyStack.length - 1 - this.currentIndex
+	}
+
+	public getSnapshot(): HistoryManagerSnapshot {
+		return {
+			historyStackSize: this.historyStack.length,
+			currentIndex: this.currentIndex,
+			undoStackSize: this.getUndoStackSize(),
+			redoStackSize: this.getRedoStackSize(),
+			enabled: this.isEnabled,
+			applyingHistory: this.isApplyingHistory,
+			pendingDebounce: this.debounceTimer !== null,
+			recordCount: this.recordCount,
+			skippedRecordCount: this.skippedRecordCount,
+			lastRecordDurationMs: this.lastRecordDurationMs,
+			averageRecordDurationMs:
+				this.recordCount > 0 ? this.totalRecordDurationMs / this.recordCount : 0,
+			lastSnapshotElementCount: this.lastSnapshotElementCount,
+		}
 	}
 
 	/**

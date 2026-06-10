@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef } from "react"
-import type { GetFileInfoResponse } from "@/components/CanvasDesign/types.magic"
+import type {
+	CanvasFileResourceMeta,
+	GetFileInfoResponse,
+} from "@/components/CanvasDesign/types.magic"
 import { GET_FILE_INFO_NOT_FOUND_ERROR_CODE } from "@/components/CanvasDesign/canvas/utils/resourceLoadFailure"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { useTranslation } from "react-i18next"
 import {
 	getFileInfoByPath,
+	getFileResourceMetaByPath,
 	getFileInfoById as getSharedFileInfoById,
 	setFileInfoCache as setSharedFileInfoCache,
 	cleanupFileInfoCache,
@@ -43,6 +47,10 @@ interface UseFileInfoProviderReturn {
 		path: string,
 		options?: { useImageProcess?: boolean; forceRefresh?: boolean },
 	) => Promise<GetFileInfoResponse>
+	getFileResourceMeta: (
+		path: string,
+		options?: { useImageProcess?: boolean },
+	) => Promise<CanvasFileResourceMeta>
 	getFileInfoById: (
 		fileId: string,
 		fileName?: string,
@@ -55,6 +63,12 @@ function createFileNotFoundByPathError(path: string, message: string): Error {
 	const error = new Error(message) as Error & { code?: string; path?: string }
 	error.code = GET_FILE_INFO_NOT_FOUND_ERROR_CODE
 	error.path = path
+	return error
+}
+
+function createFileInfoRequestCancelledError(): Error {
+	const error = new Error("File info request cancelled")
+	error.name = "AbortError"
 	return error
 }
 
@@ -82,8 +96,10 @@ export function useFileInfoProvider(
 	useEffect(() => {
 		const debounceMap = debounceMapRef.current
 		return () => {
+			const cancelledError = createFileInfoRequestCancelledError()
 			debounceMap.forEach((item) => {
 				clearTimeout(item.timer)
+				item.reject(cancelledError)
 			})
 			debounceMap.clear()
 		}
@@ -183,10 +199,21 @@ export function useFileInfoProvider(
 		[t, flatAttachments, designProjectBasePath, designProjectId, attachmentIndex],
 	)
 
+	const getFileResourceMeta = useCallback(
+		(path: string): Promise<CanvasFileResourceMeta> => {
+			return getFileResourceMetaByPath(path, flatAttachments, {
+				designProjectBasePath,
+				attachmentIndex,
+			})
+		},
+		[flatAttachments, designProjectBasePath, attachmentIndex],
+	)
+
 	/**
 	 * 通过 file_id 获取文件信息
 	 * 优势：不依赖 path 和 attachments，直接使用 file_id 获取下载 URL
 	 * 适用场景：上传完成后，API 已返回 file_id，但 attachments 可能还未更新
+	 * 注意：这是 superMagic 上传回填专用链路，不作为 CanvasDesign 资源同一性标识。
 	 */
 	const getFileInfoById = useCallback(
 		async (
@@ -228,6 +255,7 @@ export function useFileInfoProvider(
 
 	return {
 		getFileInfo,
+		getFileResourceMeta,
 		getFileInfoById,
 		setFileInfoCache,
 	}

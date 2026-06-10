@@ -49,6 +49,8 @@ export interface CachedMediaResource {
 	lastModified?: string | null
 	contentLength?: number | null
 	contentType?: string | null
+	resourceVersion?: string | null | undefined
+	sourceUpdatedAt?: string | null | undefined
 	lastAccessedAt: number
 	updatedAt: number
 }
@@ -71,11 +73,20 @@ interface RememberResourceParams {
 	url: string
 	mediaType: MediaResourceOfflineCacheMediaType
 	expiresAt?: number | null
+	resourceVersion?: string | null | undefined
+	sourceUpdatedAt?: string | null | undefined
+	contentLength?: number | null | undefined
 }
 
 interface ResolveResourceUrlOptions {
 	/** 绕过 SW 虚拟 URL，直接返回真实源地址，用于主线程 fallback */
 	bypassVirtualResource?: boolean
+	/** 显式使用虚拟 URL。默认首屏渲染走真实源地址。 */
+	preferVirtualResource?: boolean
+	/** 返回真实源地址时是否登记离线映射，默认 true；只登记 metadata，不下载 body。 */
+	registerOfflineResource?: boolean
+	/** @deprecated 兼容旧选项：false 时不登记离线映射；默认不再 warm body。 */
+	warmOfflineCache?: boolean
 }
 
 interface CacheResourceParams extends RememberResourceParams {
@@ -112,12 +123,12 @@ const CACHE_BASE_NAME = "canvas-media-resources"
 const CACHE_NAME = `${CACHE_BASE_NAME}-v${OFFLINE_CACHE_VERSION}`
 const HEALTH_STORAGE_KEY = `${CACHE_BASE_NAME}-health-v${OFFLINE_CACHE_VERSION}`
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024
-const DEFAULT_RESOURCE_NAMESPACE = "__global__"
 const VIRTUAL_RESOURCE_FAILURE_WINDOW_MS = 10_000
 const VIRTUAL_RESOURCE_FAILURE_THRESHOLD = 3
 const VIRTUAL_RESOURCE_FALLBACK_COOLDOWN_MS = 60_000
 const VIRTUAL_RESOURCE_REPAIR_THROTTLE_MS = 30_000
 const SERVICE_WORKER_READY_TIMEOUT_MS = 1500
+const BACKGROUND_CACHE_WARM_CONCURRENCY = 2
 
 function readServiceWorkerController(): ServiceWorker | null {
 	if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null
@@ -156,12 +167,6 @@ function buildResourceId(
 		mediaType,
 		normalizeResourcePathForLookup(resourcePath),
 	)
-}
-
-function getBaseUrl(): string {
-	const meta = import.meta as ImportMeta & { env?: { BASE_URL?: string } }
-	const base = meta.env?.BASE_URL || "/"
-	return base.endsWith("/") ? base : `${base}/`
 }
 
 function joinUrlPathSegments(...segments: string[]): string {
@@ -238,9 +243,24 @@ export class MediaResourceOfflineCacheManager {
 	private options: MediaResourceOfflineCacheOptions | null
 	private dbPromise?: Promise<IDBDatabase>
 	private cachePromises = new Map<string, Promise<void>>()
+	private backgroundCacheWarmQueue: Array<() => void> = []
+	private activeBackgroundCacheWarmCount = 0
 	private isActiveConsumer = false
 	private virtualResourceFailureTimestamps: number[] = []
 	private virtualResourceFallbackUntil = 0
+	private stats = {
+		resolveDirectCount: 0,
+		resolveVirtualCount: 0,
+		cacheHitCount: 0,
+		cacheMissCount: 0,
+		backgroundRegisterQueuedCount: 0,
+		backgroundRegisterCompletedCount: 0,
+		backgroundRegisterFailedCount: 0,
+		backgroundWarmQueuedCount: 0,
+		backgroundWarmCompletedCount: 0,
+		backgroundWarmFailedCount: 0,
+	}
+	private registerPromises = new Map<string, Promise<void>>()
 
 	private readonly getResolveAbsolutePath?: () => ((path: string) => string) | undefined
 	private readonly getVirtualResourceScope?: () => string | undefined
@@ -301,7 +321,10 @@ export class MediaResourceOfflineCacheManager {
 
 	public destroy(): void {
 		this.deactivateConsumer()
+		this.registerPromises.clear()
 		this.cachePromises.clear()
+		this.backgroundCacheWarmQueue = []
+		this.activeBackgroundCacheWarmCount = 0
 	}
 
 	public isEnabled(): boolean {
@@ -353,8 +376,10 @@ export class MediaResourceOfflineCacheManager {
 				size: existing?.size,
 				etag: existing?.etag,
 				lastModified: existing?.lastModified,
-				contentLength: existing?.contentLength,
+				contentLength: params.contentLength ?? existing?.contentLength,
 				contentType: existing?.contentType,
+				resourceVersion: params.resourceVersion ?? existing?.resourceVersion ?? null,
+				sourceUpdatedAt: params.sourceUpdatedAt ?? existing?.sourceUpdatedAt ?? null,
 				lastAccessedAt: now,
 				updatedAt: now,
 			}
@@ -380,9 +405,24 @@ export class MediaResourceOfflineCacheManager {
 			!this.isOfflineCacheFeatureOn() ||
 			this.shouldBypassVirtualResource()
 		) {
+			this.stats.resolveDirectCount += 1
 			return params.url
 		}
+
+		if (!options?.preferVirtualResource) {
+			this.stats.resolveDirectCount += 1
+			if (options?.registerOfflineResource !== false && options?.warmOfflineCache !== false) {
+				this.rememberResolvedResourceInBackground(params)
+			}
+			return params.url
+		}
+
 		const entry = await this.rememberResolvedResource(params)
+		if (entry?.url) {
+			this.stats.resolveVirtualCount += 1
+			return entry.url
+		}
+		this.stats.resolveDirectCount += 1
 		return entry?.url ?? params.url
 	}
 
@@ -467,7 +507,11 @@ export class MediaResourceOfflineCacheManager {
 
 		const cache = await caches.open(CACHE_NAME)
 		const response = await cache.match(this.getCacheKey(entry))
-		if (!response) return null
+		if (!response) {
+			this.stats.cacheMissCount += 1
+			return null
+		}
+		this.stats.cacheHitCount += 1
 
 		await this.touchEntry(entry)
 		await this.postMessageToServiceWorker({
@@ -481,7 +525,11 @@ export class MediaResourceOfflineCacheManager {
 		return entry
 	}
 
-	public cacheResolvedResource(params: CacheResourceParams): void {
+	/**
+	 * 显式预热离线缓存 body。默认资源链路不调用这里，避免首屏 direct fetch 之外再触发
+	 * SW 后台 body 下载；只有明确离线缓存需求时才使用。
+	 */
+	public warmResolvedResourceBodyExplicitly(params: CacheResourceParams): void {
 		if (!this.isOfflineCacheFeatureOn()) return
 		void (async () => {
 			const namespace = this.getResourceNamespace()
@@ -490,12 +538,58 @@ export class MediaResourceOfflineCacheManager {
 			if (!params.force && this.cachePromises.has(key)) return
 
 			const promise = this.rememberResolvedResource(params)
-				.then(() => undefined)
-				.catch(() => undefined)
+				.then((entry) => {
+					if (!entry) return undefined
+					return this.enqueueBackgroundCacheWarm(params)
+				})
+				.catch(() => {
+					this.stats.backgroundWarmFailedCount += 1
+				})
 				.finally(() => {
 					this.cachePromises.delete(key)
 				})
 			this.cachePromises.set(key, promise)
+		})()
+	}
+
+	/**
+	 * @deprecated 使用 `warmResolvedResourceBodyExplicitly()`。这个方法会触发后台 body warm，
+	 * 不应出现在默认首屏资源加载链路里。
+	 */
+	public cacheResolvedResource(params: CacheResourceParams): void {
+		this.warmResolvedResourceBodyExplicitly(params)
+	}
+
+	public getSnapshot() {
+		return {
+			...this.stats,
+			backgroundWarmActive: this.activeBackgroundCacheWarmCount,
+			backgroundWarmQueued: this.backgroundCacheWarmQueue.length,
+		}
+	}
+
+	private rememberResolvedResourceInBackground(params: RememberResourceParams): void {
+		if (!this.isOfflineCacheFeatureOn()) return
+		void (async () => {
+			const namespace = this.getResourceNamespace()
+			const resourcePath = this.resolveStoredResourcePath(params.path)
+			const key = buildResourceId(namespace, params.mediaType, resourcePath)
+			if (this.registerPromises.has(key)) return
+
+			this.stats.backgroundRegisterQueuedCount += 1
+			const promise = this.rememberResolvedResource(params)
+				.then((entry) => {
+					if (entry) {
+						this.stats.backgroundRegisterCompletedCount += 1
+					}
+				})
+				.catch(() => {
+					this.stats.backgroundRegisterFailedCount += 1
+				})
+				.finally(() => {
+					this.registerPromises.delete(key)
+				})
+			this.registerPromises.set(key, promise)
 		})()
 	}
 
@@ -566,6 +660,37 @@ export class MediaResourceOfflineCacheManager {
 			window.clearTimeout(timeoutId)
 		}
 		return registration
+	}
+
+	private enqueueBackgroundCacheWarm(params: CacheResourceParams): Promise<void> {
+		this.stats.backgroundWarmQueuedCount += 1
+		return new Promise((resolve) => {
+			const run = () => {
+				this.activeBackgroundCacheWarmCount += 1
+				void this.refreshCachedResource(params.path, params.mediaType)
+					.then(() => {
+						this.stats.backgroundWarmCompletedCount += 1
+					})
+					.catch(() => {
+						this.stats.backgroundWarmFailedCount += 1
+					})
+					.finally(() => {
+						this.activeBackgroundCacheWarmCount = Math.max(
+							0,
+							this.activeBackgroundCacheWarmCount - 1,
+						)
+						const next = this.backgroundCacheWarmQueue.shift()
+						if (next) next()
+						resolve()
+					})
+			}
+
+			if (this.activeBackgroundCacheWarmCount < BACKGROUND_CACHE_WARM_CONCURRENCY) {
+				run()
+				return
+			}
+			this.backgroundCacheWarmQueue.push(run)
+		})
 	}
 
 	private async postMessageToServiceWorker(message: unknown): Promise<void> {
@@ -656,8 +781,10 @@ export class MediaResourceOfflineCacheManager {
 			size: entry.size,
 			etag: entry.etag,
 			lastModified: entry.lastModified,
-			contentLength: entry.contentLength,
+			contentLength: entry.contentLength ?? null,
 			contentType: entry.contentType,
+			resourceVersion: entry.resourceVersion ?? null,
+			sourceUpdatedAt: entry.sourceUpdatedAt ?? null,
 			lastAccessedAt: entry.lastAccessedAt,
 			updatedAt: entry.updatedAt,
 			...(cacheKey !== derivedCacheKey ? { cacheKey } : {}),
@@ -699,8 +826,10 @@ export class MediaResourceOfflineCacheManager {
 			size: entry.size,
 			etag: entry.etag,
 			lastModified: entry.lastModified,
-			contentLength: entry.contentLength,
+			contentLength: entry.contentLength ?? null,
 			contentType: entry.contentType,
+			resourceVersion: entry.resourceVersion ?? null,
+			sourceUpdatedAt: entry.sourceUpdatedAt ?? null,
 			lastAccessedAt: entry.lastAccessedAt,
 			updatedAt: entry.updatedAt,
 		}

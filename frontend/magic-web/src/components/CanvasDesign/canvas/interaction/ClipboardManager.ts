@@ -1177,17 +1177,11 @@ export class ClipboardManager {
 		}
 
 		if (element.type === ElementTypeEnum.Image) {
-			this.canvas.imageResourceManager.primeCache(uploadResult.path, {
-				src: uploadResult.src,
-				expires_at: uploadResult.expires_at,
-			})
+			this.canvas.imageResourceManager.primeCache(uploadResult.path, uploadResult)
 			return
 		}
 
-		this.canvas.videoResourceManager.primeCache(uploadResult.path, {
-			src: uploadResult.src,
-			expires_at: uploadResult.expires_at,
-		})
+		this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
 	}
 
 	private async pasteCanvasElementsFromRichClipboard(
@@ -1594,10 +1588,7 @@ export class ClipboardManager {
 					const mediaDimensions = await Promise.all(
 						files.map((file) => getMediaDimensions(file)),
 					)
-					const positions = calculateGridImageLayout(
-						mediaDimensions,
-						anchorPosition,
-					)
+					const positions = calculateGridImageLayout(mediaDimensions, anchorPosition)
 
 					const createdElementIds: string[] = []
 					for (let i = 0; i < files.length; i++) {

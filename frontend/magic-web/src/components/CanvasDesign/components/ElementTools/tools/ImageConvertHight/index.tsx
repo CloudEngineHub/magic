@@ -111,7 +111,7 @@ export default function ImageConvertHight() {
 
 		let imageInfo = imageElementInstance.getImageInfo()
 		if (!imageInfo?.naturalWidth || !imageInfo?.naturalHeight) {
-			await imageElementInstance.getHTMLImageElement()
+			await imageElementInstance.getHTMLImageElement({ variant: "preview" })
 			imageInfo = imageElementInstance.getImageInfo()
 		}
 

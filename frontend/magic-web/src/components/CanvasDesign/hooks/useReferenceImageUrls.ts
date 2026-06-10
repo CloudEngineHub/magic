@@ -99,7 +99,7 @@ export function useReferenceImageUrls(
 	const loadTooltip = useCallback(async () => {
 		if (!canvas) return
 
-		const resource = await canvas.imageResourceManager.getResource(path)
+		const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(path)
 		const failureReason = canvas.imageResourceManager.getFailureReason(path)
 
 		setUrlInfo((prev) => {
@@ -109,8 +109,8 @@ export function useReferenceImageUrls(
 
 			return {
 				...prev,
-				fullUrl: resource?.ossSrc || undefined,
-				hasError: !resource?.ossSrc && !!failureReason,
+				fullUrl: ossInfo?.ossSrc || undefined,
+				hasError: !ossInfo?.ossSrc && !!failureReason,
 			}
 		})
 	}, [canvas, path])
@@ -184,13 +184,13 @@ export function useReferenceImageUrls(
 		if (!eagerFullUrl || !canvas) return
 		let cancelled = false
 		;(async () => {
-			const resource = await canvas.imageResourceManager.getResource(path)
+			const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(path)
 			const failureReason = canvas.imageResourceManager.getFailureReason(path)
 			if (cancelled) return
 			setUrlInfo((prev) => ({
 				...prev,
-				fullUrl: resource?.ossSrc || prev.fullUrl,
-				hasError: !resource?.ossSrc && !!failureReason,
+				fullUrl: ossInfo?.ossSrc || prev.fullUrl,
+				hasError: !ossInfo?.ossSrc && !!failureReason,
 			}))
 		})()
 		return () => {

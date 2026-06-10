@@ -1257,17 +1257,11 @@ export class CanvasFileUploadManager {
 		if (!uploadResult) return false
 
 		if (element instanceof ImageElementClass) {
-			this.canvas.imageResourceManager.primeCache(uploadResult.path, {
-				src: uploadResult.src,
-				expires_at: uploadResult.expires_at,
-			})
+			this.canvas.imageResourceManager.primeCache(uploadResult.path, uploadResult)
 		}
 
 		if (element instanceof VideoElementClass) {
-			this.canvas.videoResourceManager.primeCache(uploadResult.path, {
-				src: uploadResult.src,
-				expires_at: uploadResult.expires_at,
-			})
+			this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
 		}
 
 		this.canvas.elementManager.convertToPermament(

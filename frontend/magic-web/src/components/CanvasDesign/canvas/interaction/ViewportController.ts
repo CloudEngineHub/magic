@@ -30,6 +30,7 @@ import {
 import { createLeadingRafThrottle } from "../utils/leadingRafThrottle"
 import { normalizePosition } from "../utils/normalizeUtils"
 import { getNextZoomScale } from "./viewport-zoom"
+import type { ViewportChangePhase, ViewportChangeSource } from "../EventEmitter"
 
 type PanPending = { x: number; y: number }
 type ViewportBoundingRect = { x: number; y: number; width: number; height: number }
@@ -304,6 +305,8 @@ export class ViewportController {
 	// 缩放/平移节流（通用 leading + RAF）
 	private zoomThrottle: ReturnType<typeof createLeadingRafThrottle<ZoomPending>>
 	private panThrottle: ReturnType<typeof createLeadingRafThrottle<PanPending>>
+	private pendingZoomSource: ViewportChangeSource = "unknown"
+	private pendingPanSource: ViewportChangeSource = "unknown"
 
 	/**
 	 * 格式化缩放值（保留 4 位小数）
@@ -319,6 +322,48 @@ export class ViewportController {
 		return normalizePosition(position.x, position.y, { precision: 2 })
 	}
 
+	private requestStageDraw(reason: string): void {
+		this.canvas.runtimeScheduler.requestLayerDraw("stage", {
+			source: "ViewportController",
+			reason,
+			priority: "input",
+		})
+	}
+
+	private emitViewportChanged(options: {
+		source: ViewportChangeSource
+		phase?: ViewportChangePhase
+		emitScale?: boolean
+		emitPan?: boolean
+		scale?: number
+		position?: { x: number; y: number }
+	}): void {
+		const scale = this.roundScale(options.scale ?? this.scale)
+		const position = this.roundPosition(options.position ?? this.canvas.stage.position())
+
+		if (options.emitScale) {
+			this.canvas.eventEmitter.emit({
+				type: "viewport:scale",
+				data: { scale },
+			})
+		}
+		if (options.emitPan) {
+			this.canvas.eventEmitter.emit({
+				type: "viewport:pan",
+				data: position,
+			})
+		}
+		this.canvas.eventEmitter.emit({
+			type: "viewport:changed",
+			data: {
+				scale,
+				position,
+				source: options.source,
+				phase: options.phase ?? "move",
+			},
+		})
+	}
+
 	private getZoomViewportSnapshot(): ViewportSnapshot {
 		return getViewportSnapshot(this.canvas.stage, this.zoomThrottle.getPending())
 	}
@@ -328,15 +373,21 @@ export class ViewportController {
 		return { x: position.x, y: position.y }
 	}
 
-	private queuePanPosition(position: PanPending): void {
+	private queuePanPosition(position: PanPending, source: ViewportChangeSource): void {
+		this.pendingPanSource = source
 		this.panThrottle.processEvent(position)
 	}
 
-	private queueZoomUpdate(update: ZoomPending): void {
+	private queueZoomUpdate(update: ZoomPending, source: ViewportChangeSource): void {
+		this.pendingZoomSource = source
 		this.zoomThrottle.processEvent(update)
 	}
 
-	private zoomByFactorAt(anchor: ViewportPoint, scaleFactor: number): void {
+	private zoomByFactorAt(
+		anchor: ViewportPoint,
+		scaleFactor: number,
+		source: ViewportChangeSource,
+	): void {
 		this.queueZoomUpdate(
 			zoomByFactorAtAnchor(
 				this.getZoomViewportSnapshot(),
@@ -345,6 +396,7 @@ export class ViewportController {
 				this.getActiveMinScale(),
 				this.maxScale,
 			),
+			source,
 		)
 	}
 
@@ -357,6 +409,7 @@ export class ViewportController {
 				this.getActiveMinScale(),
 				this.maxScale,
 			),
+			"wheel",
 		)
 	}
 
@@ -378,7 +431,10 @@ export class ViewportController {
 			return
 		}
 
-		this.queuePanPosition(offsetPanPosition(this.getCurrentPanPosition(), e.deltaX, e.deltaY))
+		this.queuePanPosition(
+			offsetPanPosition(this.getCurrentPanPosition(), e.deltaX, e.deltaY),
+			"wheel",
+		)
 	}
 
 	/**
@@ -388,15 +444,14 @@ export class ViewportController {
 		this.scale = pending.scale
 		this.canvas.stage.scale({ x: pending.scale, y: pending.scale })
 		this.canvas.stage.position(pending.position)
-		this.canvas.stage.batchDraw()
+		this.requestStageDraw("zoom-update")
 
-		this.canvas.eventEmitter.emit({
-			type: "viewport:scale",
-			data: { scale: this.roundScale(this.scale) },
-		})
-		this.canvas.eventEmitter.emit({
-			type: "viewport:pan",
-			data: this.roundPosition(pending.position),
+		this.emitViewportChanged({
+			source: this.pendingZoomSource,
+			phase: "move",
+			emitScale: true,
+			emitPan: true,
+			position: pending.position,
 		})
 	}
 
@@ -405,11 +460,13 @@ export class ViewportController {
 	 */
 	private applyPanUpdate(pending: PanPending): void {
 		this.canvas.stage.position(pending)
-		this.canvas.stage.batchDraw()
+		this.requestStageDraw("pan-update")
 
-		this.canvas.eventEmitter.emit({
-			type: "viewport:pan",
-			data: this.roundPosition(pending),
+		this.emitViewportChanged({
+			source: this.pendingPanSource,
+			phase: "move",
+			emitPan: true,
+			position: pending,
 		})
 	}
 
@@ -571,13 +628,11 @@ export class ViewportController {
 					// 动画过程中更新内部状态
 					this.scale = this.canvas.stage.scaleX()
 					// 发送事件，让UI实时更新
-					this.canvas.eventEmitter.emit({
-						type: "viewport:scale",
-						data: { scale: this.roundScale(this.scale) },
-					})
-					this.canvas.eventEmitter.emit({
-						type: "viewport:pan",
-						data: this.roundPosition(this.canvas.stage.position()),
+					this.emitViewportChanged({
+						source: "programmatic",
+						phase: "move",
+						emitScale: true,
+						emitPan: true,
 					})
 				},
 				onFinish: () => {
@@ -585,16 +640,15 @@ export class ViewportController {
 					this.scale = finalScale
 					this.canvas.stage.scale({ x: finalScale, y: finalScale })
 					this.canvas.stage.position({ x: newX, y: newY })
-					this.canvas.stage.batchDraw()
+					this.requestStageDraw("viewport-transform-finish")
 
 					// 发送最终事件
-					this.canvas.eventEmitter.emit({
-						type: "viewport:scale",
-						data: { scale: this.roundScale(this.scale) },
-					})
-					this.canvas.eventEmitter.emit({
-						type: "viewport:pan",
-						data: this.roundPosition({ x: newX, y: newY }),
+					this.emitViewportChanged({
+						source: "programmatic",
+						phase: "end",
+						emitScale: true,
+						emitPan: true,
+						position: { x: newX, y: newY },
 					})
 
 					// 执行完成回调
@@ -613,17 +667,15 @@ export class ViewportController {
 			this.scale = finalScale
 			this.canvas.stage.scale({ x: finalScale, y: finalScale })
 			this.canvas.stage.position({ x: newX, y: newY })
-			this.canvas.stage.batchDraw()
+			this.requestStageDraw("viewport-transform")
 
 			// 发送缩放变化事件（格式化精度）
-			this.canvas.eventEmitter.emit({
-				type: "viewport:scale",
-				data: { scale: this.roundScale(this.scale) },
-			})
-			// 发送位置变化事件（格式化精度）
-			this.canvas.eventEmitter.emit({
-				type: "viewport:pan",
-				data: this.roundPosition({ x: newX, y: newY }),
+			this.emitViewportChanged({
+				source: "programmatic",
+				phase: "end",
+				emitScale: true,
+				emitPan: true,
+				position: { x: newX, y: newY },
 			})
 
 			// 执行完成回调
@@ -712,6 +764,7 @@ export class ViewportController {
 						this.getActiveMinScale(),
 						this.maxScale,
 					),
+					"gesture",
 				)
 				return
 			}
@@ -839,7 +892,7 @@ export class ViewportController {
 						x: this.stageStartPosition.x + deltaX,
 						y: this.stageStartPosition.y + deltaY,
 					}
-					this.queuePanPosition(newPos)
+					this.queuePanPosition(newPos, "gesture")
 				}
 			} else if (touches.length === 2 && this.isTouchPinching) {
 				// 双指移动：处理缩放
@@ -854,7 +907,7 @@ export class ViewportController {
 
 				if (this.lastTouchPinchDistance > 0) {
 					const scale = currentDistance / this.lastTouchPinchDistance
-					this.zoomByFactorAt(currentCenter, scale)
+					this.zoomByFactorAt(currentCenter, scale, "gesture")
 				}
 
 				this.lastTouchPinchDistance = currentDistance
@@ -962,7 +1015,12 @@ export class ViewportController {
 	public zoomToFit(): void {
 		this.setScale(1)
 		this.canvas.stage.position({ x: 0, y: 0 })
-		this.canvas.stage.batchDraw()
+		this.requestStageDraw("zoom-to-fit")
+		this.emitViewportChanged({
+			source: "programmatic",
+			phase: "end",
+			position: { x: 0, y: 0 },
+		})
 	}
 
 	/**
@@ -999,12 +1057,14 @@ export class ViewportController {
 		this.scale = clampedScale
 		this.canvas.stage.scale({ x: clampedScale, y: clampedScale })
 		this.canvas.stage.position(nextViewport.position)
-		this.canvas.stage.batchDraw()
+		this.requestStageDraw("set-scale")
 
 		// 发送缩放变化事件（格式化精度）
-		this.canvas.eventEmitter.emit({
-			type: "viewport:scale",
-			data: { scale: this.roundScale(this.scale) },
+		this.emitViewportChanged({
+			source: "programmatic",
+			phase: "end",
+			emitScale: true,
+			position: nextViewport.position,
 		})
 	}
 
@@ -1017,8 +1077,13 @@ export class ViewportController {
 		this.panThrottle.cancel()
 
 		this.canvas.stage.position(position)
-		this.canvas.stage.batchDraw()
-		this.canvas.eventEmitter.emit({ type: "viewport:pan", data: position })
+		this.requestStageDraw("set-position")
+		this.emitViewportChanged({
+			source: "programmatic",
+			phase: "end",
+			emitPan: true,
+			position,
+		})
 	}
 
 	/**
@@ -1041,19 +1106,17 @@ export class ViewportController {
 		this.scale = 1
 		this.canvas.stage.scale({ x: 1, y: 1 })
 		this.canvas.stage.position({ x: 0, y: 0 })
-		this.canvas.stage.batchDraw()
+		this.requestStageDraw("reset-view")
 
 		// 发送重置事件
 		this.canvas.eventEmitter.emit({ type: "viewport:reset", data: undefined })
 		// 发送缩放变化事件（格式化精度）
-		this.canvas.eventEmitter.emit({
-			type: "viewport:scale",
-			data: { scale: this.roundScale(this.scale) },
-		})
-		// 发送位置变化事件（格式化精度）
-		this.canvas.eventEmitter.emit({
-			type: "viewport:pan",
-			data: this.roundPosition({ x: 0, y: 0 }),
+		this.emitViewportChanged({
+			source: "restore",
+			phase: "end",
+			emitScale: true,
+			emitPan: true,
+			position: { x: 0, y: 0 },
 		})
 	}
 
@@ -1145,6 +1208,12 @@ export class ViewportController {
 		if (!boundingBox || boundingBox.width === 0 || boundingBox.height === 0) {
 			return
 		}
+
+		this.canvas.visibilityManager.requestImmediateMediaLoadForElements(elementIds, {
+			reason: "viewport:focus-elements",
+			priority: "critical",
+			includeDirectImages: true,
+		})
 
 		// 应用视口变换
 		this.applyViewportTransform(
@@ -1429,6 +1498,12 @@ export class ViewportController {
 			return
 		}
 
+		this.canvas.visibilityManager.requestImmediateMediaLoadForElements(elementIds, {
+			reason: "viewport:move-element-to-viewport",
+			priority: "critical",
+			includeDirectImages: true,
+		})
+
 		const currentScale = this.canvas.stage.scaleX()
 		const currentPosition = this.canvas.stage.position()
 
@@ -1526,20 +1601,23 @@ export class ViewportController {
 				easing,
 				onUpdate: () => {
 					// 发送位置变化事件
-					this.canvas.eventEmitter.emit({
-						type: "viewport:pan",
-						data: this.roundPosition(this.canvas.stage.position()),
+					this.emitViewportChanged({
+						source: "programmatic",
+						phase: "move",
+						emitPan: true,
 					})
 				},
 				onFinish: () => {
 					// 确保精确值
 					this.canvas.stage.position(newPosition)
-					this.canvas.stage.batchDraw()
+					this.requestStageDraw("ensure-visible-finish")
 
 					// 发送最终事件
-					this.canvas.eventEmitter.emit({
-						type: "viewport:pan",
-						data: this.roundPosition(newPosition),
+					this.emitViewportChanged({
+						source: "programmatic",
+						phase: "end",
+						emitPan: true,
+						position: newPosition,
 					})
 
 					// 清理动画引用
@@ -1551,12 +1629,14 @@ export class ViewportController {
 		} else {
 			// 无动画，直接设置
 			this.canvas.stage.position(newPosition)
-			this.canvas.stage.batchDraw()
+			this.requestStageDraw("ensure-visible")
 
 			// 发送位置变化事件
-			this.canvas.eventEmitter.emit({
-				type: "viewport:pan",
-				data: this.roundPosition(newPosition),
+			this.emitViewportChanged({
+				source: "programmatic",
+				phase: "end",
+				emitPan: true,
+				position: newPosition,
 			})
 		}
 	}

@@ -1,4 +1,4 @@
-import CanvasDesign from "@/components/CanvasDesign"
+import CanvasDesign, { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign"
 // import CanvasDesignHeader from "./components/CanvasDesignHeader"
 import { createStyles } from "antd-style"
 import { useState, useCallback, useRef, useEffect, lazy, Suspense, useMemo } from "react"
@@ -25,7 +25,11 @@ import {
 import { FlexBox } from "@/components/base"
 import { observer } from "mobx-react-lite"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
-import type { CanvasDesignRef } from "@/components/CanvasDesign/types"
+import type {
+	CanvasDesignDataChangeMeta,
+	CanvasDesignDataPatch,
+	CanvasDesignRef,
+} from "@/components/CanvasDesign/types"
 import { useDesignFocusElement } from "./hooks/useDesignFocusElement"
 import { useAttachments } from "./hooks/useAttachments"
 import { useCanvasImageFileRenameSync } from "./hooks/useCanvasImageFileRenameSync"
@@ -46,6 +50,7 @@ import { CloudOff } from "lucide-react"
 import { needsUpgrade, upgradeCanvasToV2, type UpgradeProgress } from "./utils/canvasVersionUpgrade"
 import { CanvasUpgradeBanner, CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
 import { toast } from "sonner"
+import { applyCanvasDesignDataPatch } from "./utils/canvasDesignDataPatch"
 
 // 懒加载协议弹窗
 const loadWaterMarkFreeModal = async () => {
@@ -58,6 +63,8 @@ const loadWaterMarkFreeModal = async () => {
 const WaterMarkFreeModal = lazy(() => loadWaterMarkFreeModal())
 
 const DESIGN_REMOTE_UPDATE_LISTENER_MODE: DesignRemoteUpdateListenerMode = "file-change" as const
+
+prewarmCanvasDesignImageWorker("super-magic-design-module")
 
 const useStyles = createStyles(({ token }) => ({
 	designViewerContainer: {
@@ -289,22 +296,6 @@ function DesignViewer(props: DesignViewerProps) {
 						isApplyingRemoteCanvasUpdateRef.current = false
 					}
 				}
-				// 暂时注释掉focus调试效果
-				// const diff =
-				// 	updateType === "message"
-				// 		? compareDesignData(oldDesignData, newDesignData)
-				// 		: null
-				// if (updateType === "message" && diff && diff.added.length > 0) {
-				// const firstAdded = diff.added[0]
-				// setTimeout(() => {
-				// 	canvasDesignRef.current?.focusElement([firstAdded.elementId], {
-				// 		animated: true,
-				// 		selectElement: false,
-				// 		panOnly: true,
-				// 		padding: { top: "25%", right: "25%", bottom: "25%", left: "25%" },
-				// 	})
-				// }, 300)
-				// }
 			},
 			[],
 		),
@@ -630,6 +621,18 @@ function DesignViewer(props: DesignViewerProps) {
 		[updateDesignDataAndScheduleSave],
 	)
 
+	const persistCanvasDataPatch = useCallback(
+		(patch: CanvasDesignDataPatch): CanvasDocument | undefined => {
+			let nextCanvasData: CanvasDocument | undefined
+			updateDesignDataAndScheduleSave((draft) => {
+				nextCanvasData = applyCanvasDesignDataPatch(draft.canvas, patch)
+				draft.canvas = nextCanvasData
+			})
+			return nextCanvasData
+		},
+		[updateDesignDataAndScheduleSave],
+	)
+
 	const { handleCanvasDesignDataChange: syncCanvasImageFileRename } =
 		useCanvasImageFileRenameSync({
 			canvasDesignRef,
@@ -644,14 +647,27 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 处理画布数据变化（用户编辑，触发自动保存）
 	const handleCanvasDesignDataChange = useCallback(
-		(canvasData: CanvasDocument) => {
+		(canvasData: CanvasDocument, meta?: CanvasDesignDataChangeMeta) => {
 			if (isApplyingRemoteCanvasUpdateRef.current) return
 			if (isOffline) return
 
 			persistCanvasData(canvasData)
-			syncCanvasImageFileRename(canvasData)
+			syncCanvasImageFileRename(canvasData, meta)
 		},
 		[isOffline, persistCanvasData, syncCanvasImageFileRename],
+	)
+
+	const handleCanvasDesignDataPatchChange = useCallback(
+		(patch: CanvasDesignDataPatch, meta?: CanvasDesignDataChangeMeta) => {
+			if (isApplyingRemoteCanvasUpdateRef.current) return
+			if (isOffline) return
+
+			const nextCanvasData = persistCanvasDataPatch(patch)
+			if (nextCanvasData) {
+				syncCanvasImageFileRename(nextCanvasData, meta)
+			}
+		},
+		[isOffline, persistCanvasDataPatch, syncCanvasImageFileRename],
 	)
 
 	useCanvasResourceRefresh({
@@ -886,6 +902,8 @@ function DesignViewer(props: DesignViewerProps) {
 								data={{
 									defaultData: designData.canvas,
 									onCanvasDesignDataChange: handleCanvasDesignDataChange,
+									onCanvasDesignDataPatchChange:
+										handleCanvasDesignDataPatchChange,
 									projectAttachmentMentionTree,
 									defaultProjectAttachmentFolderId,
 									defaultProjectAttachmentFolderName,

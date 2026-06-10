@@ -58,7 +58,7 @@ export default function ImageRemoveBackgroundButton() {
 
 		let imageInfo = imageElementInstance.getImageInfo()
 		if (!imageInfo?.naturalWidth || !imageInfo?.naturalHeight) {
-			await imageElementInstance.getHTMLImageElement()
+			await imageElementInstance.getHTMLImageElement({ variant: "preview" })
 			imageInfo = imageElementInstance.getImageInfo()
 		}
 

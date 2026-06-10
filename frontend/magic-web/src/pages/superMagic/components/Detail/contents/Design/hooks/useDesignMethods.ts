@@ -113,12 +113,13 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	)
 
 	// 使用各个功能 hook（只传递 flatAttachments）
-	const { getFileInfo, getFileInfoById, setFileInfoCache } = useFileInfoProvider({
-		flatAttachments,
-		designProjectBasePath,
-		designProjectId,
-		attachmentIndex,
-	})
+	const { getFileInfo, getFileResourceMeta, getFileInfoById, setFileInfoCache } =
+		useFileInfoProvider({
+			flatAttachments,
+			designProjectBasePath,
+			designProjectId,
+			attachmentIndex,
+		})
 
 	const getOrCreateImagesDir = useGetOrCreateImagesDir({
 		currentFile,
@@ -601,6 +602,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			locateProjectFile,
 			uploadFiles,
 			getFileInfo,
+			getFileResourceMeta,
 			resolveAbsolutePath,
 			getVirtualResourceScope,
 			addToConversation,
@@ -639,6 +641,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		locateProjectFile,
 		uploadFiles,
 		getFileInfo,
+		getFileResourceMeta,
 		resolveAbsolutePath,
 		getVirtualResourceScope,
 		addToConversation,

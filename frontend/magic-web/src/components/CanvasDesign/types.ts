@@ -2,7 +2,8 @@ import type { Node as TiptapNode } from "@tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "./canvas/interaction/shortcuts/types"
 import type { MagicConfig } from "./types.magic"
-import type { CanvasDocument, Marker, PaddingInsetConfig } from "./canvas/types"
+import type { CanvasDocument, LayerElement, Marker, PaddingInsetConfig } from "./canvas/types"
+import type { CanvasElementNameChange } from "./canvas/EventEmitter"
 import type { TFunction } from "./context/I18nContext"
 import type {
 	ReferenceAssetPerTypeLimits,
@@ -272,6 +273,7 @@ export interface CanvasDesignRef {
 		}
 		ossUrl?: string
 		image?: HTMLImageElement | ImageBitmap
+		release?: () => void
 	} | null>
 }
 
@@ -287,7 +289,15 @@ export interface CanvasDesignProps {
 		/** 默认画布数据，用于初始化画布 */
 		defaultData?: CanvasDocument
 		/** 画布数据变化回调 */
-		onCanvasDesignDataChange?: (canvasData: CanvasDocument) => void
+		onCanvasDesignDataChange?: (
+			canvasData: CanvasDocument,
+			meta?: CanvasDesignDataChangeMeta,
+		) => void
+		/** 画布数据增量变化回调；宿主接入后可避免普通元素提交时 full export */
+		onCanvasDesignDataPatchChange?: (
+			patch: CanvasDesignDataPatch,
+			meta?: CanvasDesignDataChangeMeta,
+		) => void
 		/** 项目附件树根节点列表，用于 @ / 参考资源面板（保留目录层级） */
 		projectAttachmentMentionTree?: ProjectAttachmentMentionNode[]
 		/** `@文件` 默认进入的项目目录 id，通常为当前设计项目目录 */
@@ -330,4 +340,22 @@ export interface CanvasDesignProps {
 	 * 缩放控件上移避免被遮挡；由宿主判断场景后传入，CanvasDesign 不依赖业务路由。
 	 */
 	shareHostBottomChrome?: boolean
+}
+
+export type CanvasDesignDataChangeSource =
+	| "element:change"
+	| "canvas:clear"
+	| "element:temporary:converted"
+
+export interface CanvasDesignDataChangeMeta {
+	source: CanvasDesignDataChangeSource
+	changedElementIds?: string[]
+	elementNameChanges?: CanvasElementNameChange[]
+}
+
+export interface CanvasDesignDataPatch {
+	upserts: Array<{ element: LayerElement; parentId: string | null }>
+	deletedElementIds: string[]
+	changedElementIds: string[]
+	elementNameChanges?: CanvasElementNameChange[]
 }

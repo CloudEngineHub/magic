@@ -1,10 +1,8 @@
-import Konva from "konva"
 import type { Box } from "konva/lib/shapes/Transformer"
 import type { Canvas } from "../Canvas"
 import type { Rect } from "../utils/utils"
 import type { LayerElement } from "../types"
-import { normalizeSize } from "../utils/normalizeUtils"
-import { constrainRectToAspectRatio, calculateSnapThreshold } from "./anchorUtils"
+import { calculateSnapThreshold } from "./anchorUtils"
 import type { AlignmentInfo, AlignmentType } from "./snapGuideTypes"
 import { SnapGuideRenderer } from "./SnapGuideRenderer"
 import { SnapResolver, type SnapResolverContext } from "./SnapResolver"
@@ -42,7 +40,11 @@ export class SnapGuideManager implements SnapResolverContext {
 
 	// 当前交互的目标集缓存，避免拖拽过程中每帧递归整棵元素树
 	private cachedInteractionTargets: LayerElement[] | null = null
+	private cachedInteractionTargetIds: string[] | null = null
+	private cachedInteractionTargetsById: Map<string, LayerElement> | null = null
+	private cachedInteractionTargetOrder: Map<string, number> | null = null
 	private cachedInteractionSelectionKey: string | null = null
+	private currentDragBoundsOverride: Rect | null = null
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -52,6 +54,30 @@ export class SnapGuideManager implements SnapResolverContext {
 		})
 		this.snapResolver = new SnapResolver(this)
 		this.setupEventListeners()
+	}
+
+	private requestOverlayDraw(reason: string): void {
+		this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
+			source: "SnapGuideManager",
+			reason,
+			priority: "input",
+		})
+	}
+
+	private emitSelectionPositionOverride(boundingRect: Rect): void {
+		this.canvas.eventEmitter.emit({
+			type: "selection:position",
+			data: {
+				boundingRect,
+			},
+		})
+	}
+
+	private syncSnappedProxyDragBounds(snappedDraggingRect: Rect): void {
+		if (this.activeAnchor || !this.currentDragBoundsOverride) return
+
+		this.currentDragBoundsOverride = snappedDraggingRect
+		this.emitSelectionPositionOverride(snappedDraggingRect)
 	}
 
 	ensureCache(): void {
@@ -68,13 +94,22 @@ export class SnapGuideManager implements SnapResolverContext {
 			this.isDragging = true
 			this.activeAnchor = null
 			this.lastSnappedAlignmentsKey = null
+			this.currentDragBoundsOverride = null
 			this.cacheVisualParams()
 			this.primeInteractionTargets(selectedIds)
 		})
 
 		// 监听拖拽移动
-		this.canvas.eventEmitter.on("elements:transform:dragmove", () => {
+		this.canvas.eventEmitter.on("elements:transform:dragmove", ({ data }) => {
 			if (!this.enabled || !this.isDragging) return
+			this.currentDragBoundsOverride = data.boundingRect
+				? {
+						x: data.boundingRect.x,
+						y: data.boundingRect.y,
+						width: data.boundingRect.width,
+						height: data.boundingRect.height,
+					}
+				: null
 			this.processSnap()
 		})
 
@@ -83,6 +118,7 @@ export class SnapGuideManager implements SnapResolverContext {
 			this.isDragging = false
 			this.activeAnchor = null
 			this.lastSnappedAlignmentsKey = null
+			this.currentDragBoundsOverride = null
 			this.clearInteractionTargets()
 			this.guideRenderer.clear()
 		})
@@ -92,6 +128,7 @@ export class SnapGuideManager implements SnapResolverContext {
 			this.isDragging = true
 			this.activeAnchor = data.activeAnchor
 			this.lastSnappedAlignmentsKey = null
+			this.currentDragBoundsOverride = null
 			this.cacheVisualParams()
 			this.primeInteractionTargets(data.elementIds)
 		})
@@ -107,6 +144,7 @@ export class SnapGuideManager implements SnapResolverContext {
 			this.isDragging = false
 			this.activeAnchor = null
 			this.lastSnappedAlignmentsKey = null
+			this.currentDragBoundsOverride = null
 			this.clearInteractionTargets()
 			this.guideRenderer.clear()
 		})
@@ -118,11 +156,20 @@ export class SnapGuideManager implements SnapResolverContext {
 
 	private primeInteractionTargets(selectedIds: string[]): void {
 		this.cachedInteractionSelectionKey = this.getSelectionKey(selectedIds)
-		this.cachedInteractionTargets = this.getAlignmentTargets(selectedIds)
+		const targets = this.getAlignmentTargets(selectedIds)
+		this.cachedInteractionTargets = targets
+		this.cachedInteractionTargetIds = targets.map((target) => target.id)
+		this.cachedInteractionTargetsById = new Map(targets.map((target) => [target.id, target]))
+		this.cachedInteractionTargetOrder = new Map(
+			targets.map((target, index) => [target.id, index]),
+		)
 	}
 
 	private clearInteractionTargets(): void {
 		this.cachedInteractionTargets = null
+		this.cachedInteractionTargetIds = null
+		this.cachedInteractionTargetsById = null
+		this.cachedInteractionTargetOrder = null
 		this.cachedInteractionSelectionKey = null
 	}
 
@@ -136,12 +183,28 @@ export class SnapGuideManager implements SnapResolverContext {
 			this.primeInteractionTargets(selectedIds)
 		}
 
-		const targets = this.cachedInteractionTargets ?? []
-		return this.canvas.geometryCacheManager.filterElementsByExpandedRect(
-			targets,
+		const targetIds = this.cachedInteractionTargetIds ?? []
+		const targetsById = this.cachedInteractionTargetsById
+		if (targetIds.length === 0 || !targetsById) return []
+
+		const candidateIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			draggingRect,
 			this.cachedGuideThreshold,
+			{ elementIds: targetIds },
 		)
+		const targetOrder = this.cachedInteractionTargetOrder
+		if (targetOrder) {
+			candidateIds.sort((a, b) => (targetOrder.get(a) ?? 0) - (targetOrder.get(b) ?? 0))
+		}
+
+		return candidateIds
+			.map((elementId) => targetsById.get(elementId))
+			.filter((target): target is LayerElement => target !== undefined)
+	}
+
+	/** @implements SnapResolverContext */
+	getActiveAlignmentTargets(selectedIds: string[], draggingRect: Rect): LayerElement[] {
+		return this.getActiveInteractionTargets(selectedIds, draggingRect)
 	}
 
 	/**
@@ -201,20 +264,21 @@ export class SnapGuideManager implements SnapResolverContext {
 		})
 
 		const snappedAlignments = result?.snappedAlignments ?? []
+		const snappedDraggingRect = result?.snappedRect ?? draggingRect
 
-		// 应用吸附：多选 anchor 由 boundBoxFunc 处理，此处只处理单选/拖拽
-		const isAnchorMultiSelect = this.activeAnchor && selectedIds.length > 1
+		// 缩放吸附由 TransformManager.boundBoxFunc 处理；这里仅处理平移吸附的位移应用。
 		if (
 			result &&
-			!isAnchorMultiSelect &&
+			!this.activeAnchor &&
 			(result.snapOffsetX !== 0 || result.snapOffsetY !== 0)
 		) {
 			this.applySnapOffset(selectedIds, result.snapOffsetX, result.snapOffsetY)
+			this.syncSnappedProxyDragBounds(snappedDraggingRect)
 		}
 
 		// 视觉：委托渲染器
 		const currentKey = this.getSnappedAlignmentsKey(snappedAlignments)
-		const getSnappedRect = () => this.getSnappedElementsRect()
+		const getSnappedRect = () => this.getSnappedElementsRect(snappedDraggingRect)
 		if (currentKey !== this.lastSnappedAlignmentsKey) {
 			this.guideRenderer.clear()
 			this.guideRenderer.render(snappedAlignments, getSnappedRect)
@@ -262,33 +326,7 @@ export class SnapGuideManager implements SnapResolverContext {
 		parentElement: LayerElement | null
 		siblings: LayerElement[]
 	} {
-		const allElements = this.canvas.elementManager.getAllElements()
-
-		// 递归查找函数
-		const findInTree = (
-			nodes: LayerElement[],
-			targetId: string,
-			parent: LayerElement | null = null,
-		): { parentElement: LayerElement | null; siblings: LayerElement[] } | null => {
-			// 检查当前层级
-			const index = nodes.findIndex((node) => node.id === targetId)
-			if (index !== -1) {
-				return { parentElement: parent, siblings: nodes }
-			}
-
-			// 递归检查子节点
-			for (const node of nodes) {
-				if ("children" in node && node.children && Array.isArray(node.children)) {
-					const result = findInTree(node.children, targetId, node)
-					if (result) return result
-				}
-			}
-
-			return null
-		}
-
-		const result = findInTree(allElements, elementId)
-		return result || { parentElement: null, siblings: [] }
+		return this.canvas.elementManager.getParentAndSiblings(elementId)
 	}
 
 	/** @implements SnapResolverContext */
@@ -300,6 +338,9 @@ export class SnapGuideManager implements SnapResolverContext {
 	 * 获取拖拽元素的边界矩形
 	 */
 	private getDraggingElementsRect(elementIds: string[]): Rect | null {
+		if (!this.activeAnchor && this.currentDragBoundsOverride) {
+			return { ...this.currentDragBoundsOverride }
+		}
 		return this.calculateElementsRect(elementIds)
 	}
 
@@ -482,7 +523,7 @@ export class SnapGuideManager implements SnapResolverContext {
 		const anchor = overrideAnchor ?? this.activeAnchor
 		// 如果没有激活的 anchor，说明是纯拖拽，允许所有对齐
 		if (!anchor) {
-			return new Set(["left", "center", "right", "top", "middle", "bottom"])
+			return new Set<AlignmentType>(["left", "center", "right", "top", "middle", "bottom"])
 		}
 
 		// 通过 TransformManager 检查是否按下了 Shift 或 Meta/Command 键
@@ -549,7 +590,13 @@ export class SnapGuideManager implements SnapResolverContext {
 	/**
 	 * 获取吸附后选中元素的边界（applySnapOffset 之后调用）
 	 */
-	private getSnappedElementsRect(): Rect | null {
+	private getSnappedElementsRect(fallbackRect?: Rect): Rect | null {
+		if (!this.activeAnchor && this.currentDragBoundsOverride) {
+			return { ...this.currentDragBoundsOverride }
+		}
+		if (fallbackRect) {
+			return { ...fallbackRect }
+		}
 		const selectedIds = this.canvas.selectionManager.getSelectedIds()
 		return this.calculateElementsRect(selectedIds)
 	}
@@ -636,18 +683,18 @@ export class SnapGuideManager implements SnapResolverContext {
 	}
 
 	/**
-	 * 多选 anchor 场景：返回 Konva boundBoxFunc 所需的吸附后 box
+	 * anchor 缩放场景：返回 Konva boundBoxFunc 所需的吸附后 box
 	 * 委托给 SnapResolver，内部完成 content ↔ konva 坐标转换
 	 */
 	public getSnappedBox(
 		oldBox: Box,
 		newBox: Box,
 		activeAnchor: string | null,
+		selectedIds: string[],
 		options?: { keepRatio: boolean; aspectRatio: number },
 	): Box {
 		if (!this.enabled || !activeAnchor) return newBox
 
-		const selectedIds = this.canvas.selectionManager.getSelectedIds()
 		return this.snapResolver.getSnappedBox(oldBox, newBox, activeAnchor, selectedIds, options)
 	}
 
@@ -689,197 +736,47 @@ export class SnapGuideManager implements SnapResolverContext {
 
 	/**
 	 * 应用吸附偏移到选中的元素
-	 * 如果是缩放操作，调整尺寸而非位置
 	 */
 	private applySnapOffset(selectedIds: string[], snapOffsetX: number, snapOffsetY: number): void {
-		// 获取选中的元素节点
-		const adapter = this.canvas.elementManager.getNodeAdapter()
-		const nodes = adapter.getNodesForTransform(selectedIds)
-
-		if (nodes.length === 0) return
-
 		// 临时标记正在吸附，避免触发过多的位置更新事件
 		this.canvas.eventEmitter.emit({ type: "snap:start", data: undefined })
 
-		// 如果有激活的 anchor，说明是缩放操作
-		if (this.activeAnchor) {
-			this.applySnapForScaling(nodes, snapOffsetX, snapOffsetY)
-		} else {
-			const appliedToProxy = this.canvas.transformManager.applySelectionProxyDragOffset(
-				snapOffsetX,
-				snapOffsetY,
-			)
-			if (!appliedToProxy) {
-				// 纯拖拽操作，直接调整位置
-				for (const node of nodes) {
-					const elementId = node.id()
-					const currentX = node.x()
-					const currentY = node.y()
-					const updates = {
-						x: currentX + snapOffsetX,
-						y: currentY + snapOffsetY,
-					}
+		const appliedToProxy = this.canvas.transformManager.applySelectionProxyDragOffset(
+			snapOffsetX,
+			snapOffsetY,
+		)
+		if (!appliedToProxy) {
+			// 获取选中的元素节点
+			const adapter = this.canvas.elementManager.getNodeAdapter()
+			const nodes = adapter.getNodesForTransform(selectedIds)
 
-					// 使用 ElementManager 的 update 接口（mode: 'node-only'）
-					this.canvas.elementManager.update(elementId, updates, {
-						mode: "node-only",
-						forceRerender: false,
-					})
-				}
-			}
-		}
-
-		this.canvas.overlayLayer.batchDraw()
-
-		// 吸附完成后再触发位置更新
-		this.canvas.eventEmitter.emit({ type: "snap:end", data: undefined })
-	}
-
-	/**
-	 * 处理缩放时的吸附
-	 * 通过调整尺寸来实现吸附，保持对角点不变
-	 */
-	private applySnapForScaling(
-		nodes: Konva.Node[],
-		snapOffsetX: number,
-		snapOffsetY: number,
-	): void {
-		if (!this.activeAnchor) return
-
-		for (const node of nodes) {
-			if (!(node instanceof Konva.Group)) continue
-
-			const elementId = node.id()
-			const element = this.canvas.elementManager.getElementInstance(elementId)
-			// 使用 TransformManager 的统一方法判断是否保持比例
-			const keepRatio = this.canvas.transformManager.shouldKeepRatioForElement(element)
-
-			const currentX = node.x()
-			const currentY = node.y()
-			const currentWidth = node.width()
-			const currentHeight = node.height()
-			const aspectRatio = currentWidth / currentHeight
-
-			let newX = currentX
-			let newY = currentY
-			let newWidth = currentWidth
-			let newHeight = currentHeight
-
-			const targetRect: Rect = {
-				x: currentX,
-				y: currentY,
-				width: currentWidth,
-				height: currentHeight,
-			}
-			switch (this.activeAnchor) {
-				case "top-left":
-					newX = currentX + snapOffsetX
-					newY = currentY + snapOffsetY
-					newWidth = currentWidth - snapOffsetX
-					newHeight = currentHeight - snapOffsetY
-					break
-				case "top-center":
-					if (snapOffsetX !== 0) {
-						newX = currentX + snapOffsetX
-						newWidth = currentWidth - snapOffsetX
-					}
-					newY = currentY + snapOffsetY
-					newHeight = currentHeight - snapOffsetY
-					break
-				case "top-right":
-					newY = currentY + snapOffsetY
-					newWidth = currentWidth + snapOffsetX
-					newHeight = currentHeight - snapOffsetY
-					break
-				case "middle-left":
-					newX = currentX + snapOffsetX
-					newWidth = currentWidth - snapOffsetX
-					if (snapOffsetY !== 0) {
-						newY = currentY + snapOffsetY
-						newHeight = currentHeight - snapOffsetY
-					}
-					break
-				case "middle-right":
-					newWidth = currentWidth + snapOffsetX
-					if (snapOffsetY !== 0) {
-						newHeight = currentHeight + snapOffsetY
-					}
-					break
-				case "bottom-left":
-					newX = currentX + snapOffsetX
-					newWidth = currentWidth - snapOffsetX
-					newHeight = currentHeight + snapOffsetY
-					break
-				case "bottom-center":
-					newHeight = currentHeight + snapOffsetY
-					if (snapOffsetX !== 0) {
-						newWidth = currentWidth + snapOffsetX
-					}
-					break
-				case "bottom-right":
-					newWidth = currentWidth + snapOffsetX
-					newHeight = currentHeight + snapOffsetY
-					break
+			if (nodes.length === 0) {
+				this.canvas.eventEmitter.emit({ type: "snap:end", data: undefined })
+				return
 			}
 
-			if (keepRatio) {
-				const snappedRect: Rect = { x: newX, y: newY, width: newWidth, height: newHeight }
-				const constrained = constrainRectToAspectRatio(
-					snappedRect,
-					targetRect,
-					this.activeAnchor,
-					aspectRatio,
-				)
-				newX = constrained.x
-				newY = constrained.y
-				newWidth = constrained.width
-				newHeight = constrained.height
-			}
-
-			// 确保尺寸不为负数
-			if (newWidth < 1) newWidth = 1
-			if (newHeight < 1) newHeight = 1
-
-			// 规范化尺寸（如果保持宽高比，确保规范化后仍然保持比例）
-			const normalizedSize = normalizeSize(newWidth, newHeight, {
-				precision: "integer",
-				keepAspectRatio: keepRatio,
-				aspectRatio: keepRatio ? aspectRatio : undefined,
-			})
-			const finalWidth = normalizedSize.width
-			const finalHeight = normalizedSize.height
-
-			// 如果规范化后尺寸发生变化，需要重新调整位置以保持固定点不变
-			// 这里简化处理：如果保持宽高比且尺寸变化，可能需要微调位置
-			// 但为了保持代码简洁，我们直接使用规范化后的尺寸
-			// 因为规范化通常只会产生很小的变化
-
-			// 应用新的位置和尺寸
-			// 使用 ElementManager 的 updateNode 接口，避免直接操作 node
-			if (element) {
+			// 纯拖拽操作，直接调整位置
+			for (const node of nodes) {
+				const elementId = node.id()
+				const currentX = node.x()
+				const currentY = node.y()
 				const updates = {
-					x: newX,
-					y: newY,
-					width: finalWidth,
-					height: finalHeight,
+					x: currentX + snapOffsetX,
+					y: currentY + snapOffsetY,
 				}
 
-				// 更新 node（视图层，使用 mode: 'node-only'）
+				// 使用 ElementManager 的 update 接口（mode: 'node-only'）
 				this.canvas.elementManager.update(elementId, updates, {
 					mode: "node-only",
 					forceRerender: false,
 				})
-
-				// 同步更新 data（数据层，使用 mode: 'data-only'）
-				this.canvas.elementManager.update(elementId, updates, {
-					mode: "data-only",
-					silent: true,
-				})
-
-				// 调用元素的 resize 钩子（用于更新内部节点）
-				element.onTransformResize?.(finalWidth, finalHeight)
 			}
 		}
+
+		this.requestOverlayDraw("snap-offset")
+
+		// 吸附完成后再触发位置更新
+		this.canvas.eventEmitter.emit({ type: "snap:end", data: undefined })
 	}
 
 	/**

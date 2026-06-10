@@ -28,11 +28,13 @@ import ImageCropPanel from "./components/ImageCropPanel"
 import ImageExtendPanel from "./components/ImageExtendPanel"
 import ImageEraserPanel from "./components/ImageEraserPanel"
 import ElementRenameOverlay from "./components/ElementRenameOverlay"
-import CanvasPerformanceMonitor, {
-	ENABLE_CANVAS_PERFORMANCE_MONITOR,
-} from "./components/PerformanceMonitor"
+import { prewarmImageResourceWorkerClient } from "./canvas/utils/ImageResourceWorkerClient"
 
 import styles from "./index.module.css"
+
+export function prewarmCanvasDesignImageWorker(reason = "canvas-design"): void {
+	void prewarmImageResourceWorkerClient(reason)
+}
 
 const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref) => {
 	const {
@@ -46,7 +48,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		shareHostBottomChrome = false,
 	} = props
 
-	const { defaultData, onCanvasDesignDataChange } = data
+	const { defaultData, onCanvasDesignDataChange, onCanvasDesignDataPatchChange } = data
 
 	const {
 		defaultMarkers,
@@ -83,6 +85,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		onMarkerDeleted,
 		onMarkerUpdated,
 		onCanvasDesignDataChange,
+		onCanvasDesignDataPatchChange,
 	})
 
 	// 更新视口偏移量
@@ -204,7 +207,6 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			{!readonly && <Tools />}
 			{!readonly && <CanvasTips />}
 			<Zoom shareHostBottomChrome={shareHostBottomChrome} />
-			{ENABLE_CANVAS_PERFORMANCE_MONITOR && <CanvasPerformanceMonitor />}
 		</FloatingUIProvider>
 	)
 })

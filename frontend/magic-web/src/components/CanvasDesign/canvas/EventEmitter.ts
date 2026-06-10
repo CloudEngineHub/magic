@@ -7,9 +7,40 @@ import type {
 	ExtendSession,
 } from "./types"
 import type { IdentifyImageMarkResponse } from "../types.magic"
-import type { LoadedResource } from "./utils/ImageResourceManager"
+import type {
+	ImageResourceVariant,
+	ImageSource,
+	LoadedResource,
+} from "./utils/ImageResourceManager"
 import type { LoadedVideoResource } from "./utils/VideoResourceManager"
 import type { ResourceLoadFailureReason } from "./utils/resourceLoadFailure"
+
+export type ViewportChangeSource =
+	| "wheel"
+	| "gesture"
+	| "programmatic"
+	| "resize"
+	| "restore"
+	| "unknown"
+
+export type ViewportChangePhase = "start" | "move" | "end"
+
+export type CanvasElementChangePhase = "transient" | "commit"
+
+export interface CanvasElementNameChange {
+	elementId: string
+	elementType: LayerElement["type"]
+	oldName?: string
+	newName?: string
+	oldSrc?: string
+	newSrc?: string
+}
+
+export interface CanvasElementChangePayload {
+	elementIds?: string[]
+	phase?: CanvasElementChangePhase
+	nameChanges?: CanvasElementNameChange[]
+}
 
 /**
  * 事件映射接口 - 定义所有可能的事件及其数据类型
@@ -18,6 +49,12 @@ export interface CanvasEventMap {
 	// 缩放相关事件
 	"viewport:scale": { scale: number }
 	"viewport:pan": { x: number; y: number }
+	"viewport:changed": {
+		scale: number
+		position: { x: number; y: number }
+		source: ViewportChangeSource
+		phase: ViewportChangePhase
+	}
 	"viewport:reset": void
 
 	// 元素相关事件
@@ -25,10 +62,15 @@ export interface CanvasEventMap {
 	"element:deselect": { elementIds?: string[] } | undefined
 	"element:hover": { elementId: string | null }
 	"element:created": { elementId: string }
-	"element:updated": { elementId: string; data: LayerElement }
+	"element:updated": {
+		elementId: string
+		data: LayerElement
+		previousData?: LayerElement
+		nameChange?: CanvasElementNameChange
+	}
 	"element:rerendered": { elementId: string; data: LayerElement } // 元素节点重新渲染（不记录历史）
 	"element:deleted": { elementId: string }
-	"element:change": { elementIds?: string[] } | undefined // 任何元素变化时触发，用于触发UI更新
+	"element:change": CanvasElementChangePayload | undefined // 任何元素变化时触发，用于触发UI更新
 	"element:batchupdated": void // 批量更新完成事件
 	"element:batchdeleted": { elementIds: string[] } // 批量删除完成事件
 	"referenceImages:changed": { elementId: string } // 图片元素参考图增删（触发资源回收）
@@ -68,11 +110,34 @@ export interface CanvasEventMap {
 
 	// 图片资源管理器事件
 	"resource:image:loaded": { path: string; resource: LoadedResource } // 图片资源加载完成事件
+	"resource:image:display-target": {
+		elementId: string
+		path: string
+		variant: ImageResourceVariant
+		reason: string
+	} // 可见性调度给单个图片元素下发当前视口目标显示等级
+	"resource:image:variant-load-failed": {
+		path: string
+		variant: ImageResourceVariant
+		reason?: ResourceLoadFailureReason
+	} // 单个图片 variant 加载失败事件；用于 overview -> preview 降级，不直接驱动元素错误态
 	"resource:image:load-failed": {
 		path: string
 		/** 与 ImageResourceManager 条目一致；便于 UI 区分文件缺失与通用加载失败 */
 		reason?: ResourceLoadFailureReason
 	} // 图片资源加载失败事件
+	"resource:image:will-close": {
+		path?: string
+		variant: ImageResourceVariant
+		image: ImageSource
+		reason: string
+	} // 图片 decoded/native 资源即将释放；元素必须同步断开 Konva.Image 持有的 image 引用
+	"resource:image:released": {
+		path: string
+		variant: "small" | "overview" | "preview"
+		reason: string
+		releasedBytes: number
+	} // 图片 decoded/native 资源释放事件（元素需清理 Konva.Image 持有的 image 引用）
 	"resource:video:refreshed": { path: string; resource: LoadedVideoResource } // 视频资源替换后刷新完成事件
 	"resource:video:load-failed": {
 		path: string
@@ -87,8 +152,12 @@ export interface CanvasEventMap {
 
 	// 元素变换相关事件（多元素 - 通过 Transformer）
 	"elements:transform:dragstart": { elementIds: string[] }
-	"elements:transform:dragmove": { elementIds: string[] }
+	"elements:transform:dragmove": {
+		elementIds: string[]
+		boundingRect?: { x: number; y: number; width: number; height: number } | null
+	}
 	"elements:transform:dragend": { elementIds: string[] }
+	"elements:transform:intentend": { elementIds: string[] }
 	"elements:transform:anchorDragStart": { elementIds: string[]; activeAnchor: string }
 	"elements:transform:anchorDragmove": { elementIds: string[]; activeAnchor: string }
 	"elements:transform:anchorDragend": { elementIds: string[]; activeAnchor: string }
@@ -259,7 +328,7 @@ export class EventEmitter<EventMap extends Record<keyof EventMap, unknown> = Can
 	private emittedEvents: Map<keyof EventMap, CanvasEvent> = new Map()
 
 	/** 需要记忆的事件列表（订阅时如果已触发则立即执行） */
-	private readonly memorizedEvents: Set<keyof CanvasEventMap> = new Set([
+	private readonly memorizedEvents: Set<keyof CanvasEventMap> = new Set<keyof CanvasEventMap>([
 		"canvas:ready",
 		"selection:position",
 		"extend:position",

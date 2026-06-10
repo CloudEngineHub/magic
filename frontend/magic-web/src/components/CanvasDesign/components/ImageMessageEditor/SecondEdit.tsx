@@ -163,7 +163,7 @@ export default function SecondEdit(props: SecondEditProps) {
 
 			let imageInfo = originalElementInstance.getImageInfo()
 			if (!imageInfo?.naturalWidth || !imageInfo?.naturalHeight) {
-				await originalElementInstance.getHTMLImageElement()
+				await originalElementInstance.getHTMLImageElement({ variant: "preview" })
 				imageInfo = originalElementInstance.getImageInfo()
 			}
 

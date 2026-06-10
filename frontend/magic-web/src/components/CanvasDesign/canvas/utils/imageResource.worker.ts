@@ -5,11 +5,35 @@ import {
 	// COMPRESSED_JPEG_QUALITY,
 	// getCompressedQuality,
 } from "./imageThumbnailConstants"
+import { parseImageDimensionsFromBlobHeader } from "./imageHeaderDimensions"
+
+export type ImageResourceDecodeVariant = "small" | "overview" | "preview" | "full"
+export type ImageResourceWorkerRequestType = "decode" | "warmup"
 
 export interface ImageResourceWorkerRequest {
-	ossSrc: string
+	type?: ImageResourceWorkerRequestType
+	ossSrc?: string
+	/** 已由主线程获取并缓存的压缩 body；存在时 worker 只负责解码，不再 fetch。 */
+	blob?: Blob
 	filename?: string
 	requestId: string
+	mainThreadSentAt?: number
+	variant?: ImageResourceDecodeVariant
+	maxEdge?: number
+	includeThumbnail?: boolean
+}
+
+export interface ImageResourceWorkerTimings {
+	workerQueueMs?: number
+	workerTotalMs: number
+	fetchMs?: number
+	metadataMs?: number
+	thumbnailMs?: number
+	imageDecodeMs?: number
+	blobBytes?: number
+	imageBitmapWidth?: number
+	imageBitmapHeight?: number
+	imageBitmapResized?: boolean
 }
 
 export interface ImageResourceWorkerResponse {
@@ -36,7 +60,23 @@ export interface ImageResourceWorkerResponse {
 	error?: string
 	/** 响应状态码（非 2xx 时返回） */
 	statusCode?: number
+	/** 本次解码变体 */
+	variant?: ImageResourceDecodeVariant
+	timings?: ImageResourceWorkerTimings
 }
+
+export interface ImageResourceWorkerReadyMessage {
+	type: "ready"
+	workerBootedAt: number
+	workerReadyPostedAt: number
+	workerTopLevelMs: number
+}
+
+export type ImageResourceWorkerMessage =
+	| ImageResourceWorkerResponse
+	| ImageResourceWorkerReadyMessage
+
+const IMAGE_RESOURCE_WORKER_BOOTED_AT = Date.now()
 
 function extractFilenameFromUrl(url: string): string | null {
 	try {
@@ -146,6 +186,29 @@ function isImageBitmapSupported(): boolean {
 	return typeof createImageBitmap === "function"
 }
 
+function getResizeDimensions(options: { width: number; height: number; maxEdge?: number }): {
+	width: number
+	height: number
+	resized: boolean
+} {
+	const { width, height, maxEdge } = options
+	if (!maxEdge || maxEdge <= 0) {
+		return { width, height, resized: false }
+	}
+
+	const largestEdge = Math.max(width, height)
+	if (largestEdge <= maxEdge) {
+		return { width, height, resized: false }
+	}
+
+	const scale = maxEdge / largestEdge
+	return {
+		width: Math.max(1, Math.round(width * scale)),
+		height: Math.max(1, Math.round(height * scale)),
+		resized: true,
+	}
+}
+
 async function getImageMetadata(options: {
 	blob: Blob
 	ossSrc: string
@@ -162,18 +225,17 @@ async function getImageMetadata(options: {
 	const filename =
 		passedFilename || extractedFilename || `image.${getFileExtensionFromMimeType(contentType)}`
 
-	let naturalWidth: number
-	let naturalHeight: number
-	let maxDim: number
+	let dimensions = await parseImageDimensionsFromBlobHeader(blob)
 
-	if (supportsImageBitmap) {
+	if (!dimensions && supportsImageBitmap) {
 		// 支持 ImageBitmap：创建用于获取尺寸信息的 bitmap（稍后关闭）
 		const sizeBitmap = await createImageBitmap(blob)
-		naturalWidth = sizeBitmap.width
-		naturalHeight = sizeBitmap.height
-		maxDim = Math.max(naturalWidth, naturalHeight)
+		dimensions = {
+			width: sizeBitmap.width,
+			height: sizeBitmap.height,
+		}
 		sizeBitmap.close()
-	} else {
+	} else if (!dimensions) {
 		// 不支持 ImageBitmap：使用 HTMLImageElement 获取尺寸（降级方案）
 		const img = await new Promise<HTMLImageElement>((resolve, reject) => {
 			const image = new Image()
@@ -181,12 +243,18 @@ async function getImageMetadata(options: {
 			image.onerror = reject
 			image.src = URL.createObjectURL(blob)
 		})
-		naturalWidth = img.naturalWidth
-		naturalHeight = img.naturalHeight
-		maxDim = Math.max(naturalWidth, naturalHeight)
+		dimensions = {
+			width: img.naturalWidth,
+			height: img.naturalHeight,
+		}
 		URL.revokeObjectURL(img.src)
 	}
+	if (!dimensions) {
+		throw new Error("Unable to read image dimensions")
+	}
 
+	const naturalWidth = dimensions.width
+	const naturalHeight = dimensions.height
 	return {
 		imageInfo: {
 			naturalWidth,
@@ -195,7 +263,7 @@ async function getImageMetadata(options: {
 			mimeType: contentType,
 			filename,
 		},
-		maxDim,
+		maxDim: Math.max(naturalWidth, naturalHeight),
 	}
 }
 
@@ -267,36 +335,131 @@ async function createSmallThumbnail(options: {
 	return thumbnails
 }
 
+async function createImageBitmapForVariant(options: {
+	blob: Blob
+	imageInfo: NonNullable<ImageResourceWorkerResponse["imageInfo"]>
+	variant: ImageResourceDecodeVariant
+	maxEdge?: number
+}): Promise<{
+	imageBitmap: ImageBitmap
+	resized: boolean
+	targetWidth: number
+	targetHeight: number
+}> {
+	const { blob, imageInfo, variant, maxEdge } = options
+	const resize = getResizeDimensions({
+		width: imageInfo.naturalWidth,
+		height: imageInfo.naturalHeight,
+		maxEdge: variant === "full" ? undefined : maxEdge,
+	})
+
+	if (!resize.resized) {
+		const imageBitmap = await createImageBitmap(blob)
+		return {
+			imageBitmap,
+			resized: false,
+			targetWidth: imageBitmap.width,
+			targetHeight: imageBitmap.height,
+		}
+	}
+
+	const imageBitmap = await createImageBitmap(blob, {
+		resizeWidth: resize.width,
+		resizeHeight: resize.height,
+		resizeQuality: "high",
+	})
+	return {
+		imageBitmap,
+		resized: true,
+		targetWidth: resize.width,
+		targetHeight: resize.height,
+	}
+}
+
 async function processRequest(
 	request: ImageResourceWorkerRequest,
 ): Promise<ImageResourceWorkerResponse> {
-	const { ossSrc, filename: passedFilename, requestId } = request
+	const {
+		ossSrc,
+		filename: passedFilename,
+		requestId,
+		mainThreadSentAt,
+		variant = "full",
+		maxEdge,
+		includeThumbnail = true,
+	} = request
+	const workerStartedAt = Date.now()
+	const timings: ImageResourceWorkerTimings = {
+		workerQueueMs:
+			typeof mainThreadSentAt === "number"
+				? Math.max(0, workerStartedAt - mainThreadSentAt)
+				: undefined,
+		workerTotalMs: 0,
+	}
+
+	const markTiming = <K extends keyof ImageResourceWorkerTimings>(
+		key: K,
+		startedAt: number,
+	): void => {
+		timings[key] = Math.max(0, Date.now() - startedAt) as ImageResourceWorkerTimings[K]
+	}
+
+	const completeTimings = (): ImageResourceWorkerTimings => {
+		timings.workerTotalMs = Math.max(0, Date.now() - workerStartedAt)
+		return timings
+	}
 
 	try {
-		const response = await fetch(ossSrc, { cache: "default" })
-		if (!response.ok) {
-			const needsReExchange = response.status === 401 || response.status === 403
+		if (request.type === "warmup") {
 			return {
 				requestId,
-				error: `Fetch failed: ${response.status}`,
-				statusCode: response.status,
-				...(needsReExchange && { needsReExchange: true }),
+				variant,
+				timings: completeTimings(),
 			}
 		}
 
-		const blob = await response.blob()
+		if (!ossSrc) {
+			throw new Error("Missing ossSrc")
+		}
+
+		const fetchStartedAt = Date.now()
+		const blob = request.blob
+			? request.blob
+			: await (async () => {
+					const response = await fetch(ossSrc, { cache: "default" })
+					if (!response.ok) {
+						const needsReExchange = response.status === 401 || response.status === 403
+						throw Object.assign(new Error(`Fetch failed: ${response.status}`), {
+							statusCode: response.status,
+							needsReExchange,
+						})
+					}
+					return response.blob()
+				})()
+		if (!request.blob) {
+			markTiming("fetchMs", fetchStartedAt)
+		}
+		timings.blobBytes = blob.size
 		const supportsImageBitmap = isImageBitmapSupported()
+		const metadataStartedAt = Date.now()
 		const { imageInfo, maxDim } = await getImageMetadata({
 			blob,
 			ossSrc,
 			passedFilename,
 			supportsImageBitmap,
 		})
-		const thumbnails = await createSmallThumbnail({
-			blob,
-			maxDim,
-			supportsImageBitmap,
-		})
+		markTiming("metadataMs", metadataStartedAt)
+		const thumbnailStartedAt = Date.now()
+		const thumbnails = includeThumbnail
+			? await createSmallThumbnail({
+					blob,
+					maxDim,
+					supportsImageBitmap,
+				})
+			: undefined
+		if (includeThumbnail) {
+			markTiming("thumbnailMs", thumbnailStartedAt)
+		}
 
 		// Compressed: full size, dynamic quality
 		// const pixelCount = naturalWidth * naturalHeight
@@ -311,13 +474,30 @@ async function processRequest(
 
 		// 根据是否支持 ImageBitmap 决定返回类型
 		if (supportsImageBitmap) {
-			// 创建用于传递的完整 ImageBitmap（将通过 transferable 传递，实现零拷贝）
-			const imageSource = await createImageBitmap(blob)
+			// 创建用于传递的 ImageBitmap（preview 会在 Worker 内缩放，full 保持原图）
+			const imageDecodeStartedAt = Date.now()
+			const {
+				imageBitmap: imageSource,
+				resized,
+				targetWidth,
+				targetHeight,
+			} = await createImageBitmapForVariant({
+				blob,
+				imageInfo,
+				variant,
+				maxEdge,
+			})
+			markTiming("imageDecodeMs", imageDecodeStartedAt)
+			timings.imageBitmapWidth = targetWidth
+			timings.imageBitmapHeight = targetHeight
+			timings.imageBitmapResized = resized
 			return {
 				requestId,
 				imageSource,
 				imageInfo,
 				thumbnails,
+				variant,
+				timings: completeTimings(),
 			}
 		} else {
 			// 降级：返回 blob，主线程将使用 createImageSourceFromBlob 创建 ImageSource（会降级到 HTMLImageElement）
@@ -326,12 +506,25 @@ async function processRequest(
 				blob,
 				imageInfo,
 				thumbnails,
+				variant,
+				timings: completeTimings(),
 			}
 		}
 	} catch (err) {
+		const statusCode =
+			err && typeof err === "object" && "statusCode" in err
+				? Number((err as { statusCode?: unknown }).statusCode)
+				: undefined
+		const needsReExchange =
+			err && typeof err === "object" && "needsReExchange" in err
+				? Boolean((err as { needsReExchange?: unknown }).needsReExchange)
+				: undefined
 		return {
 			requestId,
 			error: err instanceof Error ? err.message : String(err),
+			...(statusCode && { statusCode }),
+			...(needsReExchange && { needsReExchange }),
+			timings: completeTimings(),
 		}
 	}
 }
@@ -350,3 +543,14 @@ self.onmessage = (e: MessageEvent<ImageResourceWorkerRequest>) => {
 		}
 	})
 }
+
+const IMAGE_RESOURCE_WORKER_READY_POSTED_AT = Date.now()
+self.postMessage({
+	type: "ready",
+	workerBootedAt: IMAGE_RESOURCE_WORKER_BOOTED_AT,
+	workerReadyPostedAt: IMAGE_RESOURCE_WORKER_READY_POSTED_AT,
+	workerTopLevelMs: Math.max(
+		0,
+		IMAGE_RESOURCE_WORKER_READY_POSTED_AT - IMAGE_RESOURCE_WORKER_BOOTED_AT,
+	),
+} satisfies ImageResourceWorkerReadyMessage)

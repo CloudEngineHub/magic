@@ -1,5 +1,4 @@
 import type { Canvas } from "../Canvas"
-import { getImageSourceDimensions } from "../utils/imageSourceUtils"
 import { getMediaResourcePathKind } from "../utils/mediaResourcePathKind"
 import {
 	areAllFilesImages,
@@ -776,14 +775,19 @@ export class DropOverlayManager {
 	private async getImageDimensionsFromUrl(
 		path: string,
 	): Promise<{ width: number; height: number }> {
-		// 使用 ImageResourceManager 加载图片，会自动缓存
-		const resource = await this.canvas.imageResourceManager.getResource(path)
+		// 使用 preview 资源获取原图元信息，避免仅为尺寸触发 full decode
+		const resource = await this.canvas.imageResourceManager.getResource(path, {
+			variant: "preview",
+		})
 
-		if (!resource?.image) {
+		if (!resource?.imageInfo?.naturalWidth || !resource?.imageInfo?.naturalHeight) {
 			throw new Error("Failed to load image")
 		}
 
-		return getImageSourceDimensions(resource.image)
+		return {
+			width: resource.imageInfo.naturalWidth,
+			height: resource.imageInfo.naturalHeight,
+		}
 	}
 
 	/**
@@ -1002,9 +1006,14 @@ export class DropOverlayManager {
 
 		try {
 			// 获取所有文件信息（逐个获取，实时更新进度）
-			const validFileInfos = await this.getFileInfos(filePaths, showProgress ? (current) => {
-				this.updateProgressOverlay(current, total)
-			} : undefined)
+			const validFileInfos = await this.getFileInfos(
+				filePaths,
+				showProgress
+					? (current) => {
+							this.updateProgressOverlay(current, total)
+						}
+					: undefined,
+			)
 			if (validFileInfos.length === 0) {
 				return
 			}
@@ -1049,16 +1058,10 @@ export class DropOverlayManager {
 				createdElementIds.push(elementId)
 
 				if (this.isVideoFilePath(filePath)) {
-					this.canvas.videoResourceManager.primeCache(filePath, {
-						src: fileInfo.src,
-						expires_at: fileInfo.expires_at,
-					})
+					this.canvas.videoResourceManager.primeCache(filePath, fileInfo)
 					this.canvas.videoResourceManager.loadResource(filePath)
 				} else {
-					this.canvas.imageResourceManager.primeCache(filePath, {
-						src: fileInfo.src,
-						expires_at: fileInfo.expires_at,
-					})
+					this.canvas.imageResourceManager.primeCache(filePath, fileInfo)
 					this.canvas.imageResourceManager.loadResource(filePath)
 				}
 			}

@@ -4,8 +4,8 @@ import { BaseTool } from "./BaseTool"
 import type { LayerElement } from "../../types"
 import { CropRenderer } from "../CropRenderer"
 import { ExtendRenderer } from "../ExtendRenderer"
-import { isMultiSelectEvent } from "../shortcuts/modifierUtils"
 import { resolveManagedElementIdFromKonvaNode } from "../elementNodeUtils"
+import { isMultiSelectEvent } from "../shortcuts/modifierUtils"
 
 /**
  * 选择工具 - 提供框选功能
@@ -16,6 +16,12 @@ export class SelectionTool extends BaseTool {
 	private toolSelectionRect: Konva.Rect | null = null
 	private startPoint: { x: number; y: number } | null = null
 	private isMultiSelectMode = false // 记录是否是多选模式（按住 Cmd/Ctrl）
+	private pendingDirectDrag: {
+		mode: "single" | "multi-selection"
+		elementId: string
+		startClientX: number
+		startClientY: number
+	} | null = null
 	private readonly TOOL_SELECTION_FILL = "rgba(0, 112, 255, 0.05)"
 	private readonly TOOL_SELECTION_STROKE = "#3B82F6"
 	private readonly TOOL_SELECTION_STROKE_WIDTH = 1
@@ -35,6 +41,8 @@ export class SelectionTool extends BaseTool {
 		this.handleWindowMouseUp = this.handleWindowMouseUp.bind(this)
 		this.handleWindowMouseMove = this.handleWindowMouseMove.bind(this)
 		this.handleElementsDragStart = this.handleElementsDragStart.bind(this)
+		this.handlePendingDirectDragMove = this.handlePendingDirectDragMove.bind(this)
+		this.handlePendingDirectDragEnd = this.handlePendingDirectDragEnd.bind(this)
 	}
 
 	/**
@@ -59,6 +67,7 @@ export class SelectionTool extends BaseTool {
 		this.removeEventListeners()
 		this.clearToolSelectionRect()
 		this.stopEdgeScroll()
+		this.clearPendingDirectDrag()
 
 		// 注意：不恢复 draggable，因为可能由其他工具控制
 	}
@@ -85,6 +94,7 @@ export class SelectionTool extends BaseTool {
 		// 移除 window 的监听器（如果存在）
 		window.removeEventListener("mouseup", this.handleWindowMouseUp)
 		window.removeEventListener("mousemove", this.handleWindowMouseMove)
+		this.clearPendingDirectDrag()
 	}
 
 	/**
@@ -221,10 +231,12 @@ export class SelectionTool extends BaseTool {
 		const clickedNode = e.target
 
 		// 检查是否点击了装饰性元素（包括按钮本身或其父节点）
+		let decoratorNodeName: string | undefined
 		let currentNode: Konva.Node | null = clickedNode
 		while (currentNode) {
 			if (currentNode.name().startsWith("decorator-")) {
-				return
+				decoratorNodeName = currentNode.name()
+				break
 			}
 			currentNode = currentNode.getParent()
 		}
@@ -243,6 +255,16 @@ export class SelectionTool extends BaseTool {
 			this.canvas.selectionManager.isSelected(elementId) &&
 			!this.canvas.permissionManager.canSelect(elementData)
 
+		const isTransformerHit =
+			clickedNode.getClassName() === "Transformer" ||
+			clickedNode.getParent()?.getClassName() === "Transformer"
+		const isCropOverlayHit = CropRenderer.isCropOverlayNode(clickedNode)
+		const isExtendOverlayHit = ExtendRenderer.isExtendOverlayNode(clickedNode)
+
+		if (decoratorNodeName) {
+			return
+		}
+
 		if (isValidElement || allowModifierDeselect) {
 			if (elementId) {
 				if (isMultiSelect) {
@@ -251,8 +273,12 @@ export class SelectionTool extends BaseTool {
 				} else {
 					// 单选模式：如果点击的不是已选中的元素，选中它
 					// 如果点击的是已选中的元素，保持选中（允许拖拽）
-					if (!this.canvas.selectionManager.isSelected(elementId)) {
+					const wasSelected = this.canvas.selectionManager.isSelected(elementId)
+					if (!wasSelected) {
 						this.canvas.selectionManager.replaceSelection([elementId])
+						this.armPendingDirectDrag(e.evt, elementId)
+					} else if (this.canvas.selectionManager.getSelectionCount() > 1) {
+						this.armPendingMultiSelectionDrag(e.evt, elementId)
 					}
 				}
 			}
@@ -261,10 +287,7 @@ export class SelectionTool extends BaseTool {
 
 		// 检查是否点击了 Transformer 或其子元素（如 anchor）
 		// 如果是，则不做任何处理，让 Transformer 处理事件
-		if (
-			clickedNode.getClassName() === "Transformer" ||
-			clickedNode.getParent()?.getClassName() === "Transformer"
-		) {
+		if (isTransformerHit) {
 			return
 		}
 
@@ -282,11 +305,11 @@ export class SelectionTool extends BaseTool {
 		}
 
 		// 检查是否点击了裁剪 overlay，若是则不做任何处理，避免触发选中/取消选中导致退出裁剪模式
-		if (CropRenderer.isCropOverlayNode(clickedNode)) {
+		if (isCropOverlayHit) {
 			return
 		}
 
-		if (ExtendRenderer.isExtendOverlayNode(clickedNode)) {
+		if (isExtendOverlayHit) {
 			return
 		}
 
@@ -299,6 +322,7 @@ export class SelectionTool extends BaseTool {
 		if (!isMultiSelect) {
 			this.canvas.selectionManager.deselectAll()
 		}
+		this.clearPendingDirectDrag()
 
 		this.isSelecting = true
 		// 发出框选开始事件
@@ -384,7 +408,8 @@ export class SelectionTool extends BaseTool {
 	/**
 	 * 处理鼠标释放事件
 	 */
-	private handleMouseUp(e: Konva.KonvaEventObject<MouseEvent>): void {
+	private handleMouseUp(): void {
+		this.clearPendingDirectDrag()
 		// 移除 window 监听器
 		window.removeEventListener("mouseup", this.handleWindowMouseUp)
 		window.removeEventListener("mousemove", this.handleWindowMouseMove)
@@ -408,6 +433,107 @@ export class SelectionTool extends BaseTool {
 		this.isMultiSelectMode = false
 	}
 
+	private armPendingDirectDrag(event: MouseEvent, elementId: string): void {
+		this.clearPendingDirectDrag()
+
+		const node = this.canvas.elementManager.getElementInstance(elementId)?.getNode()
+		if (!node || !node.draggable() || node.isDragging()) {
+			return
+		}
+
+		this.pendingDirectDrag = {
+			mode: "single",
+			elementId,
+			startClientX: event.clientX,
+			startClientY: event.clientY,
+		}
+		window.addEventListener("mousemove", this.handlePendingDirectDragMove)
+		window.addEventListener("mouseup", this.handlePendingDirectDragEnd)
+	}
+
+	private armPendingMultiSelectionDrag(event: MouseEvent, elementId: string): void {
+		this.clearPendingDirectDrag()
+
+		const selectedIds = this.canvas.selectionManager.getSelectedIds()
+		if (selectedIds.length <= 1 || !selectedIds.includes(elementId)) {
+			return
+		}
+
+		this.canvas.transformManager.beginTransformInteractionIntent(selectedIds)
+		this.pendingDirectDrag = {
+			mode: "multi-selection",
+			elementId,
+			startClientX: event.clientX,
+			startClientY: event.clientY,
+		}
+		window.addEventListener("mousemove", this.handlePendingDirectDragMove)
+		window.addEventListener("mouseup", this.handlePendingDirectDragEnd)
+	}
+
+	private handlePendingDirectDragMove(event: MouseEvent): void {
+		const pending = this.pendingDirectDrag
+		if (!pending) return
+
+		if (event.buttons === 0) {
+			this.clearPendingDirectDrag()
+			return
+		}
+
+		const distance = Math.max(
+			Math.abs(event.clientX - pending.startClientX),
+			Math.abs(event.clientY - pending.startClientY),
+		)
+
+		if (pending.mode === "multi-selection") {
+			const dragDistance = this.canvas.transformManager.getMultiSelectionDragDistance()
+			if (distance < dragDistance) {
+				return
+			}
+
+			const started = this.canvas.transformManager.startMultiSelectionProxyDrag(event)
+			if (started) {
+				this.clearPendingDirectDrag({ keepTransformIntent: true })
+			} else {
+				this.clearPendingDirectDrag()
+			}
+			return
+		}
+
+		const node = this.canvas.elementManager.getElementInstance(pending.elementId)?.getNode()
+		if (!node || !node.draggable()) {
+			this.clearPendingDirectDrag()
+			return
+		}
+
+		if (node.isDragging()) {
+			this.clearPendingDirectDrag()
+			return
+		}
+
+		const dragDistance = node.dragDistance()
+		if (distance < dragDistance) {
+			return
+		}
+
+		node.startDrag({ evt: event })
+		this.clearPendingDirectDrag()
+	}
+
+	private handlePendingDirectDragEnd(): void {
+		this.clearPendingDirectDrag()
+	}
+
+	private clearPendingDirectDrag(options?: { keepTransformIntent?: boolean }): void {
+		if (!this.pendingDirectDrag) return
+		const pending = this.pendingDirectDrag
+		this.pendingDirectDrag = null
+		window.removeEventListener("mousemove", this.handlePendingDirectDragMove)
+		window.removeEventListener("mouseup", this.handlePendingDirectDragEnd)
+		if (pending.mode === "multi-selection" && !options?.keepTransformIntent) {
+			this.canvas.transformManager.clearTransformInteractionIntent()
+		}
+	}
+
 	/**
 	 * 查找框选范围内的元素
 	 * @param box 框选矩形
@@ -418,10 +544,19 @@ export class SelectionTool extends BaseTool {
 		width: number
 		height: number
 	}): string[] {
-		const elements = this.canvas.elementManager.getAllElements()
+		const candidateIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(box, 0)
 		const selectedIds: string[] = []
 
-		for (const element of elements) {
+		for (const elementId of candidateIds) {
+			if (this.canvas.elementManager.findParentIdForElement(elementId)) {
+				continue
+			}
+
+			const element = this.canvas.elementManager.getElementData(elementId)
+			if (!element) {
+				continue
+			}
+
 			if (this.isElementInBox(element, box)) {
 				selectedIds.push(element.id)
 			}

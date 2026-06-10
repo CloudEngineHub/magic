@@ -55,6 +55,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private modeInputDrafts?: StoredVideoModeDraftsMap
 	private referenceImageInfos: UploadFileResponse[] = []
 	private previewLoadToken = 0
+	private previewLoadInFlightPath?: string
 	private inlinePlaybackRequestToken = 0
 	private inlinePlaybackPromise?: Promise<boolean>
 	private inlinePlaybackStateUnsubscribe?: () => void
@@ -103,17 +104,17 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			}
 		}
 
-		if (this.data.src) {
-			this.loadPreviewFromPath(this.data.src)
-		} else if (this.data.generateVideoRequest?.video_id) {
+		if (!this.data.src && this.data.generateVideoRequest?.video_id) {
 			this.pollingManager.start()
 		}
 	}
 
 	override destroy(): void {
 		this.isDestroyed = true
+		this.canvas.visibilityManager.unregisterVideoElement(this.data.id)
 		this.cancelScheduledPreviewRefresh()
 		this.inlinePlaybackRequestToken += 1
+		this.previewLoadInFlightPath = undefined
 		this.inlinePlaybackPromise = undefined
 		this.isInlinePlaybackPending = false
 		this.isInlinePlaybackRefreshing = false
@@ -227,6 +228,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	private async loadPreviewFromPath(path: string): Promise<void> {
 		const loadToken = ++this.previewLoadToken
+		this.previewLoadInFlightPath = path
 		this.isLoadingState = true
 		this.isErrorState = false
 
@@ -258,12 +260,26 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.isLoadingState = false
 			this.isErrorState = true
 			this.schedulePreviewRefresh()
+		} finally {
+			if (this.previewLoadInFlightPath === path) {
+				this.previewLoadInFlightPath = undefined
+			}
 		}
+	}
+
+	public requestPreviewLoad(options?: { force?: boolean }): void {
+		const path = this.data.src
+		if (!path || this.isDestroyed) return
+		if (!options?.force) {
+			if (this.renderer.hasPreview()) return
+			if (this.previewLoadInFlightPath && this.previewLoadInFlightPath === path) return
+		}
+		void this.loadPreviewFromPath(path)
 	}
 
 	private handlePollingIssue(): void {
 		this.isErrorState = true
-		this.rerender()
+		this.rerenderWhenTransformIdle()
 	}
 
 	private schedulePreviewRefresh(): void {
@@ -291,7 +307,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			return
 		}
 
-		this.rerender()
+		this.rerenderWhenTransformIdle()
 	}
 
 	private cancelScheduledPreviewRefresh(): void {
@@ -331,7 +347,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.renderer.loadPoster(data.resource.poster, data.resource.metadata)
 			this.isLoadingState = false
 			this.isErrorState = false
-			this.rerender()
+			this.rerenderWhenTransformIdle()
 		}
 		this.canvas.eventEmitter.on("resource:video:refreshed", this.videoResourceRefreshedHandler)
 	}
@@ -406,7 +422,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		if (options?.rerender !== false) {
-			this.rerender()
+			this.rerenderWhenTransformIdle()
 		}
 	}
 
@@ -425,7 +441,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				})
 				if (!session) {
 					this.isErrorState = true
-					this.rerender()
+					this.rerenderWhenTransformIdle()
 					return false
 				}
 				this.syncPlaybackAttachment({ rerender: false })
@@ -440,7 +456,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		const requestToken = ++this.inlinePlaybackRequestToken
 		this.isErrorState = false
 		this.isInlinePlaybackPending = true
-		this.rerender()
+		this.rerenderWhenTransformIdle()
 
 		const playbackPromise = (async () => {
 			try {
@@ -457,13 +473,13 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				this.isInlinePlaybackPending = false
 				if (!session) {
 					this.isErrorState = true
-					this.rerender()
+					this.rerenderWhenTransformIdle()
 					return false
 				}
 
 				this.renderer.attachPlayback(session.video)
 				this.isErrorState = false
-				this.rerender()
+				this.rerenderWhenTransformIdle()
 				return true
 			} catch {
 				if (requestToken !== this.inlinePlaybackRequestToken || this.data.src !== path) {
@@ -471,7 +487,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				}
 				this.isInlinePlaybackPending = false
 				this.isErrorState = true
-				this.rerender()
+				this.rerenderWhenTransformIdle()
 				return false
 			}
 		})()
@@ -590,11 +606,15 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	override onMounted(): void {
+		super.onMounted()
 		if (!(this.node instanceof Konva.Group) || !this.data.width || !this.data.height) {
 			return
 		}
 
 		this.syncRenderLayout(this.data.width, this.data.height)
+		if (this.data.src) {
+			this.canvas.visibilityManager.registerVideoElement(this.data.id, this.data.src)
+		}
 	}
 
 	update(newData: VideoElementData): boolean {
@@ -610,6 +630,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		if (srcChanged) {
 			this.cancelScheduledPreviewRefresh()
 			this.previewLoadToken += 1
+			this.previewLoadInFlightPath = undefined
 			this.inlinePlaybackRequestToken += 1
 			this.inlinePlaybackPromise = undefined
 			this.isLoadingState = false
@@ -618,7 +639,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.releasePlaybackConsumers()
 			this.renderer.resetPreview()
 			if (newData.src) {
-				this.loadPreviewFromPath(newData.src)
+				this.canvas.visibilityManager.updateVideoElement(this.data.id, newData.src)
+			} else {
+				this.canvas.visibilityManager.unregisterVideoElement(this.data.id)
 			}
 		}
 
@@ -966,6 +989,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.borderDecorator?.updateSize(width, height)
 		this.infoButtonDecorator?.updateConfig({ width, height })
 		this.node.getLayer()?.batchDraw()
+	}
+
+	public override onTransformResize(width: number, height: number): void {
+		this.syncRenderLayout(width, height)
 	}
 
 	/** 新建元素时的默认宽高（可被工具传入的预览尺寸覆盖） */

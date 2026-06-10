@@ -38,6 +38,8 @@ export interface FileItem {
 	children?: FileItem[]
 	content?: string
 	updated_at?: string
+	resource_version?: string | null
+	version?: string | null
 	display_config?: {
 		type?: "slide" | "design" | "dashboard" | "audio" | "video" | string
 		name?: string

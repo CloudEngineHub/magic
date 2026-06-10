@@ -29,7 +29,7 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 		isFullUrlLoading,
 		open,
 		handleOpenChange,
-	} = useReferenceImageUrls(path, inlineOriginal ? { eagerFullUrl: true } : undefined)
+	} = useReferenceImageUrls(path, { eagerFullUrl: !!inlineOriginal })
 
 	const previewSize = useMemo(() => {
 		if (!imageInfo) {

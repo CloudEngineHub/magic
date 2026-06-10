@@ -15,6 +15,8 @@ import type { AlignmentInfo, AlignmentType } from "./snapGuideTypes"
 import { BoxMapper } from "../utils/BoxMapper"
 import { constrainRectToAspectRatio } from "./anchorUtils"
 
+const ALIGNMENT_EPSILON = 0.5
+
 export interface SnapResolverContext {
 	findAlignments(rect: Rect, targets: LayerElement[], anchor?: string | null): AlignmentInfo[]
 	calculateSnapResult(
@@ -22,6 +24,7 @@ export interface SnapResolverContext {
 		rect: Rect,
 	): { snappedAlignments: AlignmentInfo[]; snapOffsetX: number; snapOffsetY: number }
 	getAlignmentTargets(selectedIds: string[]): LayerElement[]
+	getActiveAlignmentTargets?(selectedIds: string[], draggingRect: Rect): LayerElement[]
 	calculateElementsRect(selectedIds: string[]): Rect | null
 	ensureCache(): void
 	getAllowedAlignments(overrideAnchor?: string | null): Set<AlignmentType>
@@ -97,17 +100,24 @@ export class SnapResolver {
 
 		let snappedRect: Rect = { x, y, width, height }
 		if (options?.keepRatio && options.aspectRatio > 0 && activeAnchor) {
-			snappedRect = constrainRectToAspectRatio(
+			snappedRect = this.constrainSnapRectToAspectRatio(
 				snappedRect,
 				draggingRect,
 				activeAnchor,
 				options.aspectRatio,
+				snappedAlignments,
 			)
 		}
 
+		const effectiveAlignments = this.filterAlignmentsBySnappedRect(
+			snappedAlignments,
+			snappedRect,
+		)
+		if (effectiveAlignments.length === 0) return null
+
 		return {
 			snappedRect,
-			snappedAlignments,
+			snappedAlignments: effectiveAlignments,
 			snapOffsetX,
 			snapOffsetY,
 			coordinateSpace: "content",
@@ -115,7 +125,7 @@ export class SnapResolver {
 	}
 
 	/**
-	 * 多选 anchor 场景：返回 Konva boundBoxFunc 所需的吸附后 box
+	 * anchor 缩放场景：返回 Konva boundBoxFunc 所需的吸附后 box
 	 * 内部完成 content ↔ konva 坐标转换
 	 */
 	getSnappedBox(
@@ -141,7 +151,9 @@ export class SnapResolver {
 			newBox.height - oldBox.height,
 		)
 
-		const targets = this.ctx.getAlignmentTargets(selectedIds)
+		const targets =
+			this.ctx.getActiveAlignmentTargets?.(selectedIds, targetRect) ??
+			this.ctx.getAlignmentTargets(selectedIds)
 		const result = this.resolveInContentSpace({
 			draggingRect: targetRect,
 			targets,
@@ -152,5 +164,157 @@ export class SnapResolver {
 		if (!result) return newBox
 
 		return { ...newBox, ...mapper.contentToKonva(result.snappedRect) }
+	}
+
+	private constrainSnapRectToAspectRatio(
+		snappedRect: Rect,
+		targetRect: Rect,
+		activeAnchor: string,
+		aspectRatio: number,
+		alignments: AlignmentInfo[],
+	): Rect {
+		const hasHorizontalSnap = alignments.some((alignment) =>
+			this.isHorizontalAlignment(alignment.type),
+		)
+		const hasVerticalSnap = alignments.some((alignment) =>
+			this.isVerticalAlignment(alignment.type),
+		)
+
+		if (activeAnchor === "top-center" || activeAnchor === "bottom-center") {
+			return hasHorizontalSnap && !hasVerticalSnap
+				? this.constrainHorizontalEdgeByWidth(snappedRect, activeAnchor, aspectRatio)
+				: this.constrainHorizontalEdgeByHeight(snappedRect, activeAnchor, aspectRatio)
+		}
+
+		if (activeAnchor === "middle-left" || activeAnchor === "middle-right") {
+			return hasVerticalSnap && !hasHorizontalSnap
+				? this.constrainVerticalEdgeByHeight(snappedRect, activeAnchor, aspectRatio)
+				: this.constrainVerticalEdgeByWidth(snappedRect, activeAnchor, aspectRatio)
+		}
+
+		if (hasHorizontalSnap !== hasVerticalSnap) {
+			return hasHorizontalSnap
+				? this.constrainCornerByWidth(snappedRect, activeAnchor, aspectRatio)
+				: this.constrainCornerByHeight(snappedRect, activeAnchor, aspectRatio)
+		}
+
+		return constrainRectToAspectRatio(snappedRect, targetRect, activeAnchor, aspectRatio)
+	}
+
+	private constrainHorizontalEdgeByHeight(
+		rect: Rect,
+		activeAnchor: string,
+		aspectRatio: number,
+	): Rect {
+		const height = rect.height
+		const width = height * aspectRatio
+		return {
+			x: activeAnchor === "top-center" ? rect.x + rect.width - width : rect.x,
+			y: rect.y,
+			width,
+			height,
+		}
+	}
+
+	private constrainHorizontalEdgeByWidth(
+		rect: Rect,
+		activeAnchor: string,
+		aspectRatio: number,
+	): Rect {
+		const width = rect.width
+		const height = width / aspectRatio
+		return {
+			x: rect.x,
+			y: activeAnchor === "top-center" ? rect.y + rect.height - height : rect.y,
+			width,
+			height,
+		}
+	}
+
+	private constrainVerticalEdgeByWidth(
+		rect: Rect,
+		activeAnchor: string,
+		aspectRatio: number,
+	): Rect {
+		const width = rect.width
+		const height = width / aspectRatio
+		return {
+			x: rect.x,
+			y: activeAnchor === "middle-left" ? rect.y + rect.height - height : rect.y,
+			width,
+			height,
+		}
+	}
+
+	private constrainVerticalEdgeByHeight(
+		rect: Rect,
+		activeAnchor: string,
+		aspectRatio: number,
+	): Rect {
+		const height = rect.height
+		const width = height * aspectRatio
+		return {
+			x: activeAnchor === "middle-left" ? rect.x + rect.width - width : rect.x,
+			y: rect.y,
+			width,
+			height,
+		}
+	}
+
+	private constrainCornerByWidth(rect: Rect, activeAnchor: string, aspectRatio: number): Rect {
+		const width = rect.width
+		const height = width / aspectRatio
+		return {
+			x: rect.x,
+			y: activeAnchor.includes("top") ? rect.y + rect.height - height : rect.y,
+			width,
+			height,
+		}
+	}
+
+	private constrainCornerByHeight(rect: Rect, activeAnchor: string, aspectRatio: number): Rect {
+		const height = rect.height
+		const width = height * aspectRatio
+		return {
+			x: activeAnchor.includes("left") ? rect.x + rect.width - width : rect.x,
+			y: rect.y,
+			width,
+			height,
+		}
+	}
+
+	private filterAlignmentsBySnappedRect(
+		alignments: AlignmentInfo[],
+		snappedRect: Rect,
+	): AlignmentInfo[] {
+		return alignments.filter((alignment) => {
+			const snappedPosition = this.getRectAlignmentPosition(snappedRect, alignment.type)
+			return Math.abs(snappedPosition - alignment.position) <= ALIGNMENT_EPSILON
+		})
+	}
+
+	private getRectAlignmentPosition(rect: Rect, type: AlignmentType): number {
+		switch (type) {
+			case "left":
+				return rect.x
+			case "center":
+				return rect.x + rect.width / 2
+			case "right":
+				return rect.x + rect.width
+			case "top":
+				return rect.y
+			case "middle":
+				return rect.y + rect.height / 2
+			case "bottom":
+				return rect.y + rect.height
+		}
+	}
+
+	private isHorizontalAlignment(type: AlignmentType): boolean {
+		return type === "left" || type === "center" || type === "right"
+	}
+
+	private isVerticalAlignment(type: AlignmentType): boolean {
+		return type === "top" || type === "middle" || type === "bottom"
 	}
 }

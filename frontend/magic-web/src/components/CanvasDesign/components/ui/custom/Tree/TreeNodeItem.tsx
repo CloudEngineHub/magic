@@ -15,6 +15,7 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 		hoveredIds,
 		expandedIds,
 		treeNodeContentClassName,
+		renderChildren = true,
 		onToggle,
 		onSelect,
 		renderNode,
@@ -173,7 +174,7 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 						: node.label}
 				</span>
 			</div>
-			{hasChildren && node.children && (
+			{renderChildren && hasChildren && node.children && (
 				<div
 					className={classNames(
 						styles.treeNodeChildren,
@@ -190,6 +191,7 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 								hoveredIds={hoveredIds}
 								expandedIds={expandedIds}
 								treeNodeContentClassName={treeNodeContentClassName}
+								renderChildren={renderChildren}
 								onToggle={onToggle}
 								onSelect={onSelect}
 								renderNode={renderNode}

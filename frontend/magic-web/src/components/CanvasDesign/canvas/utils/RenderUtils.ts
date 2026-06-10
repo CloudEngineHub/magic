@@ -126,6 +126,7 @@ export class RenderUtils {
 			y: 0,
 			width,
 			height,
+			name: "background",
 			crop: {
 				x: cropX,
 				y: cropY,
