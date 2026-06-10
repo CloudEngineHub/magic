@@ -289,6 +289,7 @@ export class CanvasVisibilityManager {
 	private drainTimerId: ReturnType<typeof setTimeout> | null = null
 	private farDisplayReleaseTimerId: ReturnType<typeof setTimeout> | null = null
 	private contentLayerHitGraphRestoreTimerId: ReturnType<typeof setTimeout> | null = null
+	private variantSwitchCooldownTimerId: ReturnType<typeof setTimeout> | null = null
 	private scheduledForce = false
 	private scheduledReason = "unknown"
 	private lastQueryCoverRect: Rect | null = null
@@ -646,6 +647,9 @@ export class CanvasVisibilityManager {
 		if (this.contentLayerHitGraphRestoreTimerId !== null) {
 			clearTimeout(this.contentLayerHitGraphRestoreTimerId)
 		}
+		if (this.variantSwitchCooldownTimerId !== null) {
+			clearTimeout(this.variantSwitchCooldownTimerId)
+		}
 		if (this.detailFullTimerId !== null) {
 			clearTimeout(this.detailFullTimerId)
 		}
@@ -653,6 +657,7 @@ export class CanvasVisibilityManager {
 		this.drainTimerId = null
 		this.farDisplayReleaseTimerId = null
 		this.contentLayerHitGraphRestoreTimerId = null
+		this.variantSwitchCooldownTimerId = null
 		this.detailFullTimerId = null
 		this.restoreContentLayerHitGraph()
 		this.releaseActiveDetailFull("destroy")
@@ -743,6 +748,18 @@ export class CanvasVisibilityManager {
 			() => {
 				this.detailFullTimerId = null
 				this.scheduleRefresh(`detail-full:${reason}`, true)
+			},
+			Math.max(0, delayMs),
+		)
+	}
+
+	private scheduleVariantSwitchCooldownRefresh(delayMs: number): void {
+		if (this.destroyed || this.variantSwitchCooldownTimerId !== null) return
+
+		this.variantSwitchCooldownTimerId = setTimeout(
+			() => {
+				this.variantSwitchCooldownTimerId = null
+				this.scheduleRefresh("visibility:variant-switch-cooldown", true)
 			},
 			Math.max(0, delayMs),
 		)
@@ -1525,10 +1542,16 @@ export class CanvasVisibilityManager {
 		if (!previousState) return true
 		const priorityImproved =
 			getPriorityRank(previousState.priority) > getPriorityRank(candidate.priority)
+		const elapsedSinceLastRequest = now() - previousState.requestedAt
 		if (
 			previousState.variant !== candidate.variant &&
-			now() - previousState.requestedAt < IMAGE_VARIANT_SWITCH_COOLDOWN_MS
+			elapsedSinceLastRequest < IMAGE_VARIANT_SWITCH_COOLDOWN_MS
 		) {
+			if (!(priorityImproved && candidate.priority === "critical")) {
+				this.scheduleVariantSwitchCooldownRefresh(
+					IMAGE_VARIANT_SWITCH_COOLDOWN_MS - elapsedSinceLastRequest,
+				)
+			}
 			return priorityImproved && candidate.priority === "critical"
 		}
 		return previousState.variant !== candidate.variant || priorityImproved

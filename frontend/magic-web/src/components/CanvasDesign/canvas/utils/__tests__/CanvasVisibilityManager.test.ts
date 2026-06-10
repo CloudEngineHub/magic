@@ -128,6 +128,7 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 }
 
 type RequestVideoLoad = (candidate: VideoCandidate, reason: string, force?: boolean) => void
+type ShouldRequestImageCandidate = (candidate: ImageCandidate) => boolean
 
 describe("CanvasVisibilityManager video load requests", () => {
 	it("dedupes repeated near video url prewarm candidates", () => {
@@ -204,6 +205,66 @@ describe("CanvasVisibilityManager video load requests", () => {
 		})
 
 		expect(manager.lastRequestedVideoLoadState.has("video-1")).toBe(false)
+	})
+})
+
+describe("CanvasVisibilityManager image variant switch cooldown", () => {
+	it("schedules a forced refresh when a fast cross-tier request is suppressed", () => {
+		vi.useFakeTimers()
+		try {
+			const manager = Object.create(
+				CanvasVisibilityManager.prototype,
+			) as CanvasVisibilityManager & {
+				destroyed: boolean
+				lastRequestedLoadState: Map<
+					string,
+					{
+						priority: ImageResourceLoadPriority
+						variant: ImageResourceVariant
+						requestedAt: number
+					}
+				>
+				variantSwitchCooldownTimerId: ReturnType<typeof setTimeout> | null
+				scheduleRefresh: ReturnType<typeof vi.fn>
+				shouldRequestImageCandidate: ShouldRequestImageCandidate
+			}
+			manager.destroyed = false
+			manager.variantSwitchCooldownTimerId = null
+			manager.scheduleRefresh = vi.fn()
+			manager.lastRequestedLoadState = new Map([
+				[
+					"image-1",
+					{
+						priority: "visible",
+						variant: "small",
+						requestedAt: performance.now(),
+					},
+				],
+			])
+
+			const shouldRequest = manager.shouldRequestImageCandidate({
+				elementId: "image-1",
+				path: "./images/a.png",
+				priority: "visible",
+				variant: "preview",
+				visibilityState: "visible",
+				screenArea: 1000,
+				screenLongEdge: 500,
+				distanceToViewportCenter: 0,
+			})
+
+			expect(shouldRequest).toBe(false)
+			vi.advanceTimersByTime(449)
+			expect(manager.scheduleRefresh).not.toHaveBeenCalled()
+			vi.advanceTimersByTime(1)
+			expect(manager.scheduleRefresh).toHaveBeenCalledWith(
+				"visibility:variant-switch-cooldown",
+				true,
+			)
+			expect(manager.variantSwitchCooldownTimerId).toBeNull()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })
 

@@ -140,6 +140,10 @@ interface ImageResource {
 	sourceHeight: number
 	/** 当前 image 是否等同原图像素尺寸 */
 	isFullSize: boolean
+	/** 当前仍被 Konva 显示节点持有的次数；从缓存槽摘除后也不能立即关闭 */
+	displayRetainCount?: number
+	/** ImageBitmap/HTMLImageElement 是否已经关闭，避免延迟释放路径重复 close */
+	closed?: boolean
 }
 
 interface ImageDisplayResourceSlot {
@@ -601,6 +605,8 @@ export class ImageResourceManager {
 		options?: { path?: string; reason?: string },
 	): void {
 		if (!resource) return
+		if (resource.closed) return
+		resource.closed = true
 		this.canvas.eventEmitter.emit({
 			type: "resource:image:will-close",
 			data: {
@@ -746,10 +752,31 @@ export class ImageResourceManager {
 	private isResourceStillReferenced(entry: ImageResourceEntry, resource: ImageResource): boolean {
 		const slots = entry.displaySlots
 		return (
+			(resource.displayRetainCount ?? 0) > 0 ||
 			slots.small.resource === resource ||
 			slots.overview.resource === resource ||
 			slots.preview.resource === resource ||
 			entry.fullResource === resource
+		)
+	}
+
+	private findResourceByLoadedResource(
+		entry: ImageResourceEntry,
+		loadedResource: Pick<LoadedResource, "image" | "variant">,
+	): ImageResource | null {
+		const resources = [
+			this.getDisplayResource(entry, "small"),
+			this.getDisplayResource(entry, "overview"),
+			this.getDisplayResource(entry, "preview"),
+			entry.fullResource,
+		]
+		return (
+			resources.find(
+				(resource): resource is ImageResource =>
+					!!resource &&
+					resource.image === loadedResource.image &&
+					resource.variant === loadedResource.variant,
+			) ?? null
 		)
 	}
 
@@ -1392,6 +1419,41 @@ export class ImageResourceManager {
 		return this.buildLoadedResource(entry, options?.variant ?? DEFAULT_IMAGE_RESOURCE_VARIANT)
 	}
 
+	public retainDisplayedResource(
+		path: string,
+		resource: Pick<LoadedResource, "image" | "variant">,
+	): () => void {
+		if (this.destroyed || resource.variant === "full") return () => undefined
+
+		const canonical = this.canonicalResourcePath(path)
+		const entry = this.entries.get(canonical)
+		const retainedResource = entry ? this.findResourceByLoadedResource(entry, resource) : null
+		if (!entry || !retainedResource || retainedResource.closed) return () => undefined
+
+		retainedResource.displayRetainCount = (retainedResource.displayRetainCount ?? 0) + 1
+		let released = false
+
+		return () => {
+			if (released) return
+			released = true
+			retainedResource.displayRetainCount = Math.max(
+				0,
+				(retainedResource.displayRetainCount ?? 0) - 1,
+			)
+			if (retainedResource.displayRetainCount > 0 || retainedResource.closed) return
+
+			const currentEntry = this.entries.get(canonical)
+			if (!currentEntry || this.isResourceStillReferenced(currentEntry, retainedResource)) {
+				return
+			}
+
+			this.closeResource(retainedResource, {
+				path: canonical,
+				reason: "display-retain-release",
+			})
+		}
+	}
+
 	public getFailureReason(path: string): ResourceLoadFailureReason | null {
 		const canonical = this.urlLifecycle.getCanonicalFromAlias(path)
 		return this.entries.get(canonical)?.lastFailureReason ?? null
@@ -2025,6 +2087,8 @@ export class ImageResourceManager {
 				sourceWidth,
 				sourceHeight,
 				isFullSize: this.isFullSizeResource(result.imageInfo, sourceWidth, sourceHeight),
+				displayRetainCount: 0,
+				closed: false,
 			}
 			let previousResourceToClose: ImageResource | null = null
 			if (variant === "full") {

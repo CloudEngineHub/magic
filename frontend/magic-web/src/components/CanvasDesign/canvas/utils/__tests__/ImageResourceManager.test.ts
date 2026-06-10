@@ -22,6 +22,8 @@ interface TestImageResource {
 	sourceWidth: number
 	sourceHeight: number
 	isFullSize: boolean
+	displayRetainCount?: number
+	closed?: boolean
 }
 
 function createImageResource(
@@ -49,6 +51,8 @@ function createImageResource(
 		sourceWidth: width,
 		sourceHeight: height,
 		isFullSize: true,
+		displayRetainCount: 0,
+		closed: false,
 	}
 }
 
@@ -271,6 +275,46 @@ describe("ImageResourceManager display resource release", () => {
 				overviewLoaded: 0,
 			}),
 		)
+	})
+
+	it("keeps a retained display resource open after its cache slot is released", () => {
+		const { manager } = createManager()
+		const close = vi.fn()
+		const previewResource = createImageResource("preview", {
+			width: 10,
+			height: 10,
+			close,
+		})
+		const entry = createEntry({
+			displaySlots: {
+				small: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
+				overview: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
+				preview: {
+					resource: previewResource,
+					loadingPromise: null,
+					version: null,
+					lastAccessAt: 1,
+				},
+			},
+		})
+		manager.entries.set("image/path.png", entry)
+		const releasePreviewResource = (
+			manager as unknown as { releasePreviewResource: ReleaseResource }
+		).releasePreviewResource.bind(manager)
+
+		const releaseDisplayedResource = manager.retainDisplayedResource("image/path.png", {
+			image: previewResource.image,
+			variant: "preview",
+		})
+		releasePreviewResource("image/path.png", entry, RELEASE_OPTIONS)
+
+		expect(entry.displaySlots.preview.resource).toBeNull()
+		expect(close).not.toHaveBeenCalled()
+
+		releaseDisplayedResource()
+
+		expect(close).toHaveBeenCalledTimes(1)
+		expect(previewResource.closed).toBe(true)
 	})
 
 	it("releases unprotected display resources without waiting for a decoded budget", () => {

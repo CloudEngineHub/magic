@@ -277,6 +277,51 @@ describe("ImageElement mounted image node sync", () => {
 		expect(imageNode.getParent()).toBeNull()
 	})
 
+	it("keeps the mounted image when a display resource is released without a fallback", () => {
+		const displayedImage = new Image()
+		const imageNode = new Konva.Image({
+			image: displayedImage,
+			name: "image-content",
+			width: 100,
+			height: 80,
+		})
+		const group = new Konva.Group({ width: 100, height: 80 })
+		group.add(imageNode)
+
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			node: Konva.Group
+			loadedImage?: HTMLImageElement
+			loadedImageVariant: "preview"
+			isResourceLoading: boolean
+			isErrorState: boolean
+			data: { id: string; src: string; width: number; height: number }
+			canvas: {
+				imageResourceManager: {
+					peekResource: ReturnType<typeof vi.fn>
+				}
+			}
+			handleDisplayResourceReleased: (variant: "preview", reason: string) => void
+		}
+		element.node = group
+		element.loadedImage = displayedImage
+		element.loadedImageVariant = "preview"
+		element.isResourceLoading = false
+		element.isErrorState = false
+		element.data = { id: "image-1", src: "/image.png", width: 100, height: 80 }
+		element.canvas = {
+			imageResourceManager: {
+				peekResource: vi.fn(() => null),
+			},
+		}
+
+		element.handleDisplayResourceReleased("preview", "visibility:test")
+
+		expect(element.loadedImage).toBe(displayedImage)
+		expect(imageNode.getParent()).toBe(group)
+		expect(element.isResourceLoading).toBe(true)
+		expect(element.isErrorState).toBe(false)
+	})
+
 	it("clears stale not-found state when an uploaded oss src is applied", () => {
 		const loadResource = vi.fn()
 		const emit = vi.fn()

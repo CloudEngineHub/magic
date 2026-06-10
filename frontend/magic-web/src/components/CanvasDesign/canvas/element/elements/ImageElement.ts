@@ -73,6 +73,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private loadedImageVariant?: ImageResourceVariant
 	private loadedImageSourceWidth?: number
 	private loadedImageSourceHeight?: number
+	private displayedImageResourceRelease?: () => void
+	private pendingDisplayedImageResourceReleases: Array<() => void> = []
 	/** 当前视口调度希望这个元素显示的资源等级；用于允许缩小时主动降级 */
 	private targetDisplayResourceVariant?: ImageResourceVariant
 	/** 从 resource:image:loaded 事件获取的 ossSrc */
@@ -232,10 +234,35 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private clearLoadedImageReference(): void {
+		this.releaseDisplayedImageResourceRetain()
 		this.loadedImage = undefined
 		this.loadedImageVariant = undefined
 		this.loadedImageSourceWidth = undefined
 		this.loadedImageSourceHeight = undefined
+	}
+
+	private retainDisplayedImageResource(resource: LoadedResource): (() => void) | undefined {
+		if (!this.data.src || resource.variant === "full") return undefined
+		return this.canvas.imageResourceManager.retainDisplayedResource?.(this.data.src, resource)
+	}
+
+	private queueDisplayedImageResourceRelease(release: (() => void) | undefined): void {
+		if (!release) return
+		this.pendingDisplayedImageResourceReleases ??= []
+		this.pendingDisplayedImageResourceReleases.push(release)
+	}
+
+	private flushPendingDisplayedImageResourceReleases(): void {
+		this.pendingDisplayedImageResourceReleases ??= []
+		const releases = this.pendingDisplayedImageResourceReleases.splice(0)
+		releases.forEach((release) => release())
+	}
+
+	private releaseDisplayedImageResourceRetain(): void {
+		const release = this.displayedImageResourceRelease
+		this.displayedImageResourceRelease = undefined
+		this.flushPendingDisplayedImageResourceReleases()
+		release?.()
 	}
 
 	private applyResourceMetadata(resource: LoadedResource): void {
@@ -245,6 +272,16 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private applyResourceToView(resource: LoadedResource): void {
+		const sameDisplayedResource =
+			this.loadedImage === resource.image && this.loadedImageVariant === resource.variant
+		if (!sameDisplayedResource) {
+			const previousRelease = this.displayedImageResourceRelease
+			this.displayedImageResourceRelease = this.retainDisplayedImageResource(resource)
+			this.queueDisplayedImageResourceRelease(previousRelease)
+		} else if (!this.displayedImageResourceRelease) {
+			this.displayedImageResourceRelease = this.retainDisplayedImageResource(resource)
+		}
+
 		this.loadedImage = resource.image
 		this.loadedImageVariant = resource.variant
 		this.loadedImageSourceWidth = resource.sourceWidth
@@ -288,6 +325,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				: this.getSourceCrop(this.loadedImage),
 		)
 		imageNode.getLayer()?.batchDraw()
+		this.flushPendingDisplayedImageResourceReleases()
 	}
 
 	private getVariantViewRank(variant: ImageResourceVariant | undefined): number {
@@ -854,7 +892,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.rerenderWhenTransformIdle()
 	}
 
-	private handleDisplayResourceReleased(variant: ImageResourceVariant): void {
+	private handleDisplayResourceReleased(variant: ImageResourceVariant, reason: string): void {
+		void reason
 		if (!this.loadedImage || this.loadedImageVariant !== variant) return
 		const src = this.data.src
 		if (!src) {
@@ -881,7 +920,20 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (fallbackResource) {
 			this.applyResourceToView(fallbackResource)
 		} else {
-			this.clearLoadedImageReference()
+			if (this.node?.isVisible() !== true) {
+				this.clearLoadedImageReference()
+				this.isResourceLoading = false
+				this.isErrorState = false
+				this.syncMountedImageContentNodeWithLoadedResource()
+				this.rerenderWhenTransformIdle()
+				return
+			}
+			// Keep the currently displayed resource sticky while the next viewport target is loading.
+			// The resource manager retain prevents the ImageBitmap from being closed after its cache
+			// slot is released, avoiding a visible fallback to the loading placeholder on fast zooms.
+			this.isResourceLoading = true
+			this.isErrorState = false
+			return
 		}
 		this.isResourceLoading = false
 		this.isErrorState = false
@@ -1004,7 +1056,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				resolveCanonicalResourcePath(data.path, resolveAbs) ===
 					resolveCanonicalResourcePath(path, resolveAbs)
 			) {
-				this.handleDisplayResourceReleased(data.variant)
+				this.handleDisplayResourceReleased(data.variant, data.reason)
 			}
 		}
 		this.canvas.eventEmitter.on("resource:image:loaded", this.resourceLoadedHandler)
