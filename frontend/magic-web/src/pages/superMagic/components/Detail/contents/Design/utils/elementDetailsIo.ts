@@ -1,5 +1,6 @@
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import { isEqual } from "lodash-es"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignData } from "../types"
 import { isV2Version } from "./magicProjectCompression"
@@ -42,7 +43,8 @@ function findSiblingFile(
 	}
 
 	const mainFile = all.find((item) => item.file_id === mainFileId)
-	const parentId = (mainFile as (FileItem & { parent_id?: string }) | undefined)?.parent_id ?? null
+	const parentId =
+		(mainFile as (FileItem & { parent_id?: string }) | undefined)?.parent_id ?? null
 
 	if (parentId) {
 		const sibling = all.find(
@@ -67,6 +69,21 @@ async function readElementDetailsByFile(fileItem: FileItem | null): Promise<Elem
 		return normalizeElementDetailsDoc(JSON.parse(content))
 	} catch {
 		return emptyElementDetailsDoc()
+	}
+}
+
+async function readComparableElementDetailsByFile(
+	fileItem: FileItem | null,
+): Promise<ElementDetailsDoc | null> {
+	if (!fileItem?.file_id) return emptyElementDetailsDoc()
+	try {
+		const content = (await getFileContentById(fileItem.file_id, {
+			responseType: "text",
+		})) as string | null
+		if (!content || !content.trim()) return emptyElementDetailsDoc()
+		return normalizeElementDetailsDoc(JSON.parse(content))
+	} catch {
+		return null
 	}
 }
 
@@ -143,6 +160,11 @@ export async function writeUserElementDetails(
 	// 用户文件不存在且当前没有任何用户重字段，无需创建空文件
 	if (!userFileId && !hasEntries) return
 
+	if (userFileId) {
+		const currentUserDoc = await readComparableElementDetailsByFile(userLookup.fileItem)
+		if (currentUserDoc && isEqual(currentUserDoc, userDoc)) return
+	}
+
 	if (!userFileId) {
 		const parentId = userLookup.parentId ?? agentLookup.parentId
 		if (!ctx.projectId || !parentId) return
@@ -164,9 +186,7 @@ export async function writeUserElementDetails(
 
 	const content = JSON.stringify(userDoc, null, 2)
 	try {
-		await SuperMagicApi.saveFileContent([
-			{ file_id: userFileId, content, enable_shadow: true },
-		])
+		await SuperMagicApi.saveFileContent([{ file_id: userFileId, content, enable_shadow: true }])
 	} catch {
 		// 用户 sidecar 写失败不影响主文件保存
 	}
