@@ -580,12 +580,9 @@ registerMagicCanvasPlugin({
 				},
 				execute: async ({ state, helpers, generateAndPlace }) => {
 					const selectedSize = helpers.getSelectedSize(state)
-					const results = []
-
-					for (let index = 0; index < state.productImages.length; index += 1) {
-						const baseImage = state.productImages[index]
-						results.push(
-							await generateAndPlace(
+					const results = await Promise.all(
+						state.productImages.map((baseImage, index) =>
+							generateAndPlace(
 								buildProductBackgroundSwapRequest({
 									state,
 									helpers,
@@ -595,8 +592,8 @@ registerMagicCanvasPlugin({
 									select: index === state.productImages.length - 1,
 								}),
 							),
-						)
-					}
+						),
+					)
 
 					return results.length === 1 ? results[0] : results
 				},

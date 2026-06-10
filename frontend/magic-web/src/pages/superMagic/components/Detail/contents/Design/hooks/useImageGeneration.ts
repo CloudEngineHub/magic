@@ -1,7 +1,10 @@
 import { useCallback } from "react"
 import { SuperMagicApi } from "@/apis"
 import type { ServiceProviderModel } from "@/apis/modules/org-ai-model-provider"
-import type { GetImageGenerationResultParams as ApiGetImageGenerationResultParams } from "@/apis/modules/superMagic"
+import type {
+	GetImageGenerationResultParams as ApiGetImageGenerationResultParams,
+	GetImageGenerationResultsParams as ApiGetImageGenerationResultsParams,
+} from "@/apis/modules/superMagic"
 import { MODEL_TYPE_IMAGE } from "@/apis/modules/org-ai-model-provider"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import superMagicCustomModelService from "@/services/superMagic/SuperMagicCustomModelService"
@@ -11,6 +14,11 @@ import type {
 	GenerateImageResponse,
 	GetImageGenerationResultParams,
 	ImageGenerationResultResponse,
+	ImageGenerationResultsResponse,
+} from "@/components/CanvasDesign/types.magic"
+import type {
+	GenerateImagesRequest,
+	GenerateImagesResponse,
 } from "@/components/CanvasDesign/types.magic"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import MyModelsIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/assets/my-models-icon.svg"
@@ -23,7 +31,10 @@ import {
 	createDesignWorkspacePathExists,
 	resolveDesignDslPathToWorkspaceAbsoluteByCandidates,
 } from "../utils/designDslPathUtils"
-import { syncFileInfoAfterGenerationComplete } from "../utils/syncFileInfoAfterGenerationComplete"
+import {
+	syncFileInfoAfterGenerationComplete,
+	syncFileInfosAfterGenerationComplete,
+} from "../utils/syncFileInfoAfterGenerationComplete"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 const IMAGE_MODEL_LIST_TTL_MS = 60_000
@@ -53,9 +64,13 @@ interface UseImageGenerationOptions {
 interface UseImageGenerationReturn {
 	getImageModelList: () => Promise<ImageModelItem[]>
 	generateImage: (params: GenerateImageRequest) => Promise<GenerateImageResponse>
+	generateImages: (params: GenerateImagesRequest) => Promise<GenerateImagesResponse>
 	getImageGenerationResult: (
 		params: GetImageGenerationResultParams,
 	) => Promise<ImageGenerationResultResponse>
+	getImageGenerationResults: (
+		params: ApiGetImageGenerationResultsParams,
+	) => Promise<ImageGenerationResultsResponse>
 }
 
 /**
@@ -88,7 +103,8 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 		}
 
 		await superMagicModeService.fetchDefaultModeModelList({ force: false })
-		const officialGroups = superMagicModeService.getImageModelGroupsByMode(TopicMode.Design) || []
+		const officialGroups =
+			superMagicModeService.getImageModelGroupsByMode(TopicMode.Design) || []
 		const officialModels: ImageModelItem[] = officialGroups.flatMap(
 			(groupItem: {
 				group: { id: string; name: string; icon: string; sort: number }
@@ -169,6 +185,49 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 	)
 
 	/**
+	 * 发起多图生成
+	 */
+	const generateImages = useCallback(
+		async (params: GenerateImagesRequest): Promise<GenerateImagesResponse> => {
+			if (!projectId) {
+				throw new Error(t("design.errors.projectIdNotExistsForGenerate"))
+			}
+			const fileDirWithSlash = await resolveDesignImagesFileDirWithSlash({
+				projectId,
+				currentFile,
+				flatAttachments,
+				updateAttachments,
+			})
+
+			const referenceImagesWithSlash = params.reference_images?.map((imagePath) =>
+				resolveReferenceImagePath({
+					imagePath,
+					designProjectBasePath,
+					flatAttachments,
+					getErrorMessage: () => t("design.errors.designResourcePathUnresolved"),
+				}),
+			)
+			const referenceImageOptionsWithSlash = resolveReferenceImageOptions({
+				referenceImageOptions: params.reference_image_options,
+				designProjectBasePath,
+				flatAttachments,
+				getErrorMessage: () => t("design.errors.designResourcePathUnresolved"),
+			})
+
+			const requestParams: GenerateImagesRequest = {
+				...params,
+				project_id: projectId,
+				file_dir: fileDirWithSlash,
+				reference_images: referenceImagesWithSlash,
+				reference_image_options: referenceImageOptionsWithSlash,
+			}
+
+			return SuperMagicApi.generateImages(requestParams)
+		},
+		[projectId, currentFile, flatAttachments, designProjectBasePath, t, updateAttachments],
+	)
+
+	/**
 	 * 查询图片生成结果
 	 */
 	const getImageGenerationResult = useCallback(
@@ -214,10 +273,55 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 		[projectId, setFileInfoCache, t],
 	)
 
+	/* 查询多图生成结果 */
+	const getImageGenerationResults = useCallback(
+		async (
+			params: ApiGetImageGenerationResultsParams,
+		): Promise<ImageGenerationResultsResponse> => {
+			if (!projectId) {
+				throw new Error(t("design.errors.projectIdNotExistsForGenerate"))
+			}
+
+			if (!params.image_id) {
+				throw new Error(t("design.errors.imageIdNotExists"))
+			}
+
+			const requestParams: ApiGetImageGenerationResultsParams = {
+				project_id: projectId,
+				image_id: params.image_id,
+			}
+
+			const result = await SuperMagicApi.getImageGenerationResults(requestParams)
+
+			if (result.status === "completed" && result.file_dir && result.images.length > 0) {
+				const files = result.images
+					.filter((image) => image.file_url && image.file_name)
+					.map((image) => ({
+						filePath: normalizePath(result.file_dir)
+							? `${normalizePath(result.file_dir)}/${image.file_name}`
+							: image.file_name,
+						fileUrl: image.file_url as string,
+						fileName: image.file_name,
+					}))
+
+				await syncFileInfosAfterGenerationComplete({
+					projectId,
+					files,
+					setFileInfoCache,
+				})
+			}
+
+			return result as ImageGenerationResultsResponse
+		},
+		[projectId, setFileInfoCache, t],
+	)
+
 	return {
 		getImageModelList,
 		generateImage,
+		generateImages,
 		getImageGenerationResult,
+		getImageGenerationResults,
 	}
 }
 

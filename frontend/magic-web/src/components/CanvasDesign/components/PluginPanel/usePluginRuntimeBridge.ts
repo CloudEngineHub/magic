@@ -6,7 +6,6 @@ import {
 	useEffect,
 } from "react"
 import { toast } from "sonner"
-
 import type { Canvas } from "../../canvas/Canvas"
 import type { CanvasDesignPlugin } from "../../canvas/types"
 import {

@@ -268,6 +268,59 @@ export interface GenerateImageResponse {
 	id: string
 }
 
+export interface GeneratedImageResultItem {
+	/** 结果序号，从 1 开始 */
+	index: number
+	/** 文件名 */
+	file_name: string
+	/** 文件 URL */
+	file_url: string | null
+}
+
+/**
+ * 发起多图生成请求参数
+ */
+export interface GenerateImagesRequest extends Omit<GenerateImageRequest, "image_id"> {
+	/** 图片任务 id（客户端生成 uuid） */
+	image_id?: string
+	/** 分辨率（对应 scale 值） */
+	resolution?: string
+	/** 本次请求生成图片数量 */
+	generate_num: number
+	/** 图片生成配置 */
+	image_generation_config?: {
+		[key: string]: string
+	}
+}
+
+/**
+ * 发起多图生成响应数据
+ */
+export interface GenerateImagesResponse {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+	/** 模型 id */
+	model_id: string
+	/** 提示词 */
+	prompt: string
+	/** 大小 */
+	size: string
+	/** 分辨率 */
+	resolution?: string
+	/** 文件目录 */
+	file_dir: string
+	/** 生成数量 */
+	generate_num: number
+	/** 状态 */
+	status: "pending" | "processing" | "completed" | "failed"
+	/** 错误信息 */
+	error_message: string | null
+	/** 已返回的图片列表 */
+	images: GeneratedImageResultItem[]
+}
+
 /**
  * AI 补全图片提示词请求参数
  */
@@ -350,6 +403,44 @@ export interface ImageGenerationResultResponse {
 	file_url: string
 	/** ID */
 	id: string
+}
+
+/**
+ * 查询多图生成结果请求参数
+ */
+export interface GetImageGenerationResultsParams {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+}
+
+/**
+ * 查询多图生成结果响应数据
+ */
+export interface ImageGenerationResultsResponse {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+	/** 模型 id */
+	model_id: string
+	/** 提示词 */
+	prompt: string
+	/** 大小 */
+	size: string
+	/** 分辨率 */
+	resolution?: string
+	/** 文件目录 */
+	file_dir: string
+	/** 生成数量 */
+	generate_num: number
+	/** 状态 */
+	status: "pending" | "processing" | "completed" | "failed"
+	/** 错误信息 */
+	error_message: string | null
+	/** 已返回的图片列表 */
+	images: GeneratedImageResultItem[]
 }
 
 /**
@@ -2312,6 +2403,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	},
 
 	/**
+	 * @description 发起多图生成
+	 * @param params 多图生成请求参数
+	 * @returns 多图生成响应数据
+	 */
+	generateImages(params: GenerateImagesRequest) {
+		return fetch.post<GenerateImagesResponse>("/api/v1/design/generate-images", params)
+	},
+
+	/**
 	 * @description AI 补全图片提示词
 	 * @param params 提示词补全请求参数
 	 * @returns 提示词补全响应数据
@@ -2359,6 +2459,24 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		return fetch.get<ImageGenerationResultResponse>(
 			genRequestUrl(
 				"/api/v1/design/image-generation-result",
+				{},
+				{
+					project_id: params.project_id,
+					image_id: params.image_id,
+				},
+			),
+		)
+	},
+
+	/**
+	 * @description 查询多图生成结果
+	 * @param params 查询参数
+	 * @returns 多图生成结果响应数据
+	 */
+	getImageGenerationResults(params: GetImageGenerationResultsParams) {
+		return fetch.get<ImageGenerationResultsResponse>(
+			genRequestUrl(
+				"/api/v1/design/image-generation-results",
 				{},
 				{
 					project_id: params.project_id,

@@ -465,8 +465,6 @@ export interface GenerateImageRequest {
 	reference_images?: string[]
 	/** 参考图参数 */
 	reference_image_options?: ReferenceImageOptions
-	/** 生成数量 */
-	n?: number
 	/** 图片生成配置 */
 	image_generation_config?: {
 		[key: string]: string
@@ -505,6 +503,52 @@ export interface GenerateImageResponse {
 	file_url: string | null
 	/** ID */
 	id: string
+}
+
+export interface GeneratedImageResultItem {
+	/** 结果序号，从 1 开始 */
+	index: number
+	/** 文件名 */
+	file_name: string
+	/** 文件 URL */
+	file_url: string | null
+}
+
+/**
+ * 发起多图生成请求参数
+ */
+export interface GenerateImagesRequest
+	extends GenerateImageRequest {
+	/** 本次请求生成图片数量 */
+	generate_num: number
+}
+
+/**
+ * 发起多图生成响应数据
+ */
+export interface GenerateImagesResponse {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+	/** 模型 id */
+	model_id: string
+	/** 提示词 */
+	prompt: string
+	/** 大小 */
+	size: string
+	/** 分辨率 */
+	resolution?: string
+	/** 文件目录 */
+	file_dir: string
+	/** 生成数量 */
+	generate_num: number
+	/** 状态 */
+	status: GenerationStatus
+	/** 错误信息 */
+	error_message: string | null
+	/** 已返回的图片列表 */
+	images: GeneratedImageResultItem[]
 }
 
 /**
@@ -838,6 +882,44 @@ export interface ImageGenerationResultResponse {
 	file_url: string
 	/** ID */
 	id: string
+}
+
+/**
+ * 查询多图生成结果请求参数
+ */
+export interface GetImageGenerationResultsParams {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+}
+
+/**
+ * 查询多图生成结果响应数据
+ */
+export interface ImageGenerationResultsResponse {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+	/** 模型 id */
+	model_id: string
+	/** 提示词 */
+	prompt: string
+	/** 大小 */
+	size: string
+	/** 分辨率 */
+	resolution?: string
+	/** 文件目录 */
+	file_dir: string
+	/** 生成数量 */
+	generate_num: number
+	/** 状态：pending 待处理，processing 处理中，completed 已完成，failed 失败 */
+	status: GenerationStatus
+	/** 错误信息 */
+	error_message: string | null
+	/** 已返回的图片列表 */
+	images: GeneratedImageResultItem[]
 }
 
 /**
@@ -1187,6 +1269,12 @@ export interface CanvasDesignMethods {
 	 */
 	generateImage: (params: GenerateImageRequest) => Promise<GenerateImageResponse>
 	/**
+	 * 发起多图生成
+	 * @param params 多图生成请求参数
+	 * @returns Promise<多图生成响应数据>
+	 */
+	generateImages?: (params: GenerateImagesRequest) => Promise<GenerateImagesResponse>
+	/**
 	 * 发起图片去背景
 	 * @param params 去背景请求参数
 	 * @returns Promise<任务创建结果，结构与发起生图响应一致，可配合 getImageGenerationResult 轮询>
@@ -1236,6 +1324,14 @@ export interface CanvasDesignMethods {
 	getImageGenerationResult: (
 		params: GetImageGenerationResultParams,
 	) => Promise<ImageGenerationResultResponse>
+	/**
+	 * 查询多图生成结果
+	 * @param params 查询参数
+	 * @returns Promise<多图生成结果响应数据>
+	 */
+	getImageGenerationResults?: (
+		params: GetImageGenerationResultsParams,
+	) => Promise<ImageGenerationResultsResponse>
 	/**
 	 * 查询视频生成结果
 	 * @param params 查询参数

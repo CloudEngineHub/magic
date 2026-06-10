@@ -31,6 +31,7 @@ import { BackgroundManager } from "./interaction/BackgroundManager"
 import { CanvasFileUploadManager } from "./utils/CanvasFileUploadManager"
 import { GeometryCacheManager } from "./utils/GeometryCacheManager"
 import { ImageResourceManager } from "./utils/ImageResourceManager"
+import { ImageBatchPollingRegistry } from "./utils/ImageBatchPollingRegistry"
 import { SubmitImageWorkerManager } from "./utils/SubmitImageWorkerManager"
 import { VideoPlaybackManager } from "./utils/VideoPlaybackManager"
 import { VideoResourceManager } from "./utils/VideoResourceManager"
@@ -101,6 +102,7 @@ export class Canvas {
 	public canvasFileUploadManager: CanvasFileUploadManager
 	public geometryCacheManager: GeometryCacheManager
 	public imageResourceManager: ImageResourceManager
+	public imageBatchPollingRegistry: ImageBatchPollingRegistry
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
 	public videoPlaybackManager: VideoPlaybackManager
@@ -209,6 +211,8 @@ export class Canvas {
 		this.imageResourceManager = new ImageResourceManager({
 			canvas: this,
 		})
+
+		this.imageBatchPollingRegistry = new ImageBatchPollingRegistry()
 
 		this.submitImageWorkerManager = new SubmitImageWorkerManager({
 			canvas: this,
@@ -1046,6 +1050,7 @@ export class Canvas {
 		this.dropOverlayManager.destroy()
 		this.cursorManager.destroy()
 		this.permissionManager.destroy()
+		this.imageBatchPollingRegistry.destroy()
 		this.elementManager.destroy()
 		this.geometryCacheManager.destroy()
 		this.viewportController.destroy()
