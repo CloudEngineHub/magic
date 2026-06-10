@@ -48,16 +48,16 @@ class VolcengineImageEraserDriver implements ImageEraserDriverInterface
 
     public function erase(ImageEraserDriverRequest $request): ImageEraserDriverResponse
     {
-        $ak = trim((string) ($this->providerConfig['ak'] ?? ''));
-        $sk = trim((string) ($this->providerConfig['sk'] ?? ''));
-        if ($ak === '' || $sk === '') {
+        $accessKey = trim((string) ($this->providerConfig['access_key'] ?? ($this->providerConfig['ak'] ?? '')));
+        $secretKey = trim((string) ($this->providerConfig['secret_key'] ?? ($this->providerConfig['sk'] ?? '')));
+        if ($accessKey === '' || $secretKey === '') {
             throw new InvalidArgumentException('image_generate.image_eraser_provider_not_configured');
         }
 
         $body = $this->buildSubmitBody($request);
 
         try {
-            $client = new VolcengineVisualAsyncClient($ak, $sk, $this->loggerFactory);
+            $client = new VolcengineVisualAsyncClient($accessKey, $secretKey, $this->loggerFactory);
             $submitResponse = $client->submitTask($body);
             $taskId = (string) ($submitResponse['data']['task_id'] ?? '');
             if ($taskId === '') {

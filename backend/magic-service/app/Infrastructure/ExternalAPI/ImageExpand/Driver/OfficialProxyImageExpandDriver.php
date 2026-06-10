@@ -46,7 +46,7 @@ class OfficialProxyImageExpandDriver implements ImageExpandDriverInterface
 
     public function expand(ImageExpandDriverRequest $request): ImageExpandDriverResponse
     {
-        $requestUrl = trim((string) ($this->providerConfig['url'] ?? ''));
+        $requestUrl = trim((string) ($this->providerConfig['request_url'] ?? ($this->providerConfig['url'] ?? '')));
         $apiKey = trim((string) ($this->providerConfig['api_key'] ?? ''));
         if ($requestUrl === '' || $apiKey === '') {
             throw new InvalidArgumentException('image_generate.image_expand_provider_not_configured');
