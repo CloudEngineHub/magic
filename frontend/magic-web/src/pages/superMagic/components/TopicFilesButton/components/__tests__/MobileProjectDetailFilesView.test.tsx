@@ -155,6 +155,9 @@ describe("MobileProjectDetailFilesView", () => {
 			<MobileProjectDetailFilesView attachments={attachments} mobileViewVariant="project-detail" />,
 		)
 
+		expect(screen.getByTestId("project-detail-mobile-back-button")).toBeInTheDocument()
+		expect(screen.getByTestId("project-detail-mobile-home-button")).toBeInTheDocument()
+
 		fireEvent.click(
 			screen.getAllByRole("button", { name: /测试特殊长目录名称第一层/ })[0],
 		)

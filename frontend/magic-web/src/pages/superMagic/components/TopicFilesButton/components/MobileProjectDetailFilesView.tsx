@@ -917,6 +917,8 @@ function MobileProjectDetailFilesView({
 					onGoHome={() => handleNavigateTo(-1)}
 					backLabel={t("back")}
 					homeLabel={t("home")}
+					backButtonTestId="project-detail-mobile-back-button"
+					homeButtonTestId="project-detail-mobile-home-button"
 					homeIconClassName="h-4.5 w-4.5"
 					separatorClassName="h-4 w-4 text-muted-foreground/60"
 					segmentButtonClassName="px-2 text-base leading-6"
