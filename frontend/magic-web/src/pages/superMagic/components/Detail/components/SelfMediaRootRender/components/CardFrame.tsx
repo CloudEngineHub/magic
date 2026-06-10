@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next"
 import { processHtmlContent } from "../../../contents/HTML/htmlProcessor"
 import { flattenAttachments } from "../../../contents/HTML/utils"
 import type { FileItem } from "../../../contents/HTML/utils/fetchInterceptor"
+import { stabilizeSingleLineTextForSnapdom } from "../../PPTRender/services/snapdomTextStabilizer"
 import type { SelfMediaAttachmentNode } from "../types"
 import { replaceFontAwesomeIconsWithSvg } from "../utils/fontAwesomeSvgFallback"
 
@@ -377,22 +378,27 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 
 			try {
 				await iframeDoc.fonts?.ready
+				const restoreTextStyles = stabilizeSingleLineTextForSnapdom(iframeBody)
 
-				const dataUrl = await Promise.race([
-					(async () => {
-						const result = await snapdom(iframeBody, {
-							width,
-							height,
-							scale: pixelRatio,
-							backgroundColor: "#ffffff",
-							embedFonts: false,
-						})
-						const blob = await result.toBlob({ type: "png" })
-						return blobToDataUrl(blob)
-					})(),
-					timeoutPromise,
-				])
-				return dataUrl
+				try {
+					const dataUrl = await Promise.race([
+						(async () => {
+							const result = await snapdom(iframeBody, {
+								width,
+								height,
+								scale: pixelRatio,
+								backgroundColor: "#ffffff",
+								embedFonts: false,
+							})
+							const blob = await result.toBlob({ type: "png" })
+							return blobToDataUrl(blob)
+						})(),
+						timeoutPromise,
+					])
+					return dataUrl
+				} finally {
+					restoreTextStyles()
+				}
 			} finally {
 				if (timeoutId !== null) window.clearTimeout(timeoutId)
 				svgFallback.restore()

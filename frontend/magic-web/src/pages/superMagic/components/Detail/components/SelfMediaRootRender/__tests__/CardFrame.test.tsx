@@ -1,9 +1,20 @@
+import { createRef } from "react"
 import { render, screen, waitFor, fireEvent } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { CardFrameRef } from "../components/CardFrame"
 
-const { mockGetTemporaryDownloadUrl, mockProcessHtmlContent } = vi.hoisted(() => ({
+const {
+	mockGetTemporaryDownloadUrl,
+	mockProcessHtmlContent,
+	mockSnapdom,
+	mockSnapdomToBlob,
+	mockStabilizeSingleLineTextForSnapdom,
+} = vi.hoisted(() => ({
 	mockGetTemporaryDownloadUrl: vi.fn(),
 	mockProcessHtmlContent: vi.fn(),
+	mockSnapdom: vi.fn(),
+	mockSnapdomToBlob: vi.fn(),
+	mockStabilizeSingleLineTextForSnapdom: vi.fn(),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -37,6 +48,14 @@ vi.mock("../../../contents/HTML/IsolatedHTMLRenderer", () => {
 	}
 })
 
+vi.mock("@zumer/snapdom", () => ({
+	snapdom: mockSnapdom,
+}))
+
+vi.mock("../../PPTRender/services/snapdomTextStabilizer", () => ({
+	stabilizeSingleLineTextForSnapdom: mockStabilizeSingleLineTextForSnapdom,
+}))
+
 import CardFrame from "../components/CardFrame"
 
 class MockResizeObserver {
@@ -46,9 +65,15 @@ class MockResizeObserver {
 
 describe("CardFrame", () => {
 	beforeEach(() => {
+		vi.restoreAllMocks()
 		mockGetTemporaryDownloadUrl.mockReset()
 		mockProcessHtmlContent.mockReset()
-		vi.restoreAllMocks()
+		mockSnapdom.mockReset()
+		mockSnapdomToBlob.mockReset()
+		mockStabilizeSingleLineTextForSnapdom.mockReset()
+		mockSnapdom.mockResolvedValue({ toBlob: mockSnapdomToBlob })
+		mockSnapdomToBlob.mockResolvedValue(new Blob(["png"], { type: "image/png" }))
+		mockStabilizeSingleLineTextForSnapdom.mockReturnValue(vi.fn())
 		vi.stubGlobal("ResizeObserver", MockResizeObserver)
 	})
 
@@ -210,6 +235,43 @@ describe("CardFrame", () => {
 			expect(iframe.style.transform).toBe("scale(0.5)")
 		})
 		expect(frame.style.height).toBe("100%")
+	})
+
+	it("stabilizes single-line text around iframe body capture", async () => {
+		mockGetTemporaryDownloadUrl.mockResolvedValue([{ url: "https://example.com/card.html" }])
+		mockProcessHtmlContent.mockResolvedValue({
+			processedContent: "<html><head></head><body>capture card</body></html>",
+			filePathMapping: new Map(),
+			hasSlides: false,
+			slidesMap: new Map(),
+			originalSlidesPaths: [],
+		})
+		vi.spyOn(globalThis, "fetch").mockResolvedValue({
+			ok: true,
+			text: async () => "<html><body>raw card</body></html>",
+		} as Response)
+		const restoreTextStyles = vi.fn()
+		mockStabilizeSingleLineTextForSnapdom.mockReturnValue(restoreTextStyles)
+		const ref = createRef<CardFrameRef>()
+
+		render(<CardFrame ref={ref} cardId="card-capture" fileId="file-capture" />)
+
+		const iframe = await screen.findByTitle("card-capture")
+		expect(ref.current).not.toBeNull()
+
+		await ref.current?.capture()
+
+		expect(mockStabilizeSingleLineTextForSnapdom).toHaveBeenCalledWith(
+			iframe.contentDocument?.body,
+		)
+		expect(mockSnapdom).toHaveBeenCalledWith(
+			iframe.contentDocument?.body,
+			expect.objectContaining({
+				backgroundColor: "#ffffff",
+				embedFonts: false,
+			}),
+		)
+		expect(restoreTextStyles).toHaveBeenCalledTimes(1)
 	})
 
 	it("reuses cached srcDoc for the same card after remount", async () => {
