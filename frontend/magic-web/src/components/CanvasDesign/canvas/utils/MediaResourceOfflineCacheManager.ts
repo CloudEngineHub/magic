@@ -331,6 +331,10 @@ export class MediaResourceOfflineCacheManager {
 		return this.isActiveConsumer && !!this.options && isBrowserOfflineCacheSupported()
 	}
 
+	private canUseServiceWorkerCache(): boolean {
+		return this.isEnabled() && this.isOfflineCacheFeatureOn()
+	}
+
 	/**
 	 * 是否具备离线缓存特性（配置 + 浏览器能力），不依赖当前 Canvas 是否仍为「活跃消费者」。
 	 * 换链/虚拟 URL 应使用本判断，避免 React Strict Mode 或路由切换销毁 Canvas 后，仍在飞行的
@@ -400,11 +404,9 @@ export class MediaResourceOfflineCacheManager {
 		params: RememberResourceParams,
 		options?: ResolveResourceUrlOptions,
 	): Promise<string> {
-		if (
-			options?.bypassVirtualResource ||
-			!this.isOfflineCacheFeatureOn() ||
-			this.shouldBypassVirtualResource()
-		) {
+		const featureOn = this.isOfflineCacheFeatureOn()
+		const bypass = this.shouldBypassVirtualResource()
+		if (options?.bypassVirtualResource || !featureOn || bypass) {
 			this.stats.resolveDirectCount += 1
 			return params.url
 		}
@@ -480,7 +482,7 @@ export class MediaResourceOfflineCacheManager {
 		path: string,
 		mediaType: MediaResourceOfflineCacheMediaType,
 	): Promise<boolean> {
-		if (!this.isEnabled()) return false
+		if (!this.canUseServiceWorkerCache()) return false
 
 		const entry = await this.getEntry(path, mediaType)
 		if (!entry?.sourceUrl) return false
@@ -501,7 +503,7 @@ export class MediaResourceOfflineCacheManager {
 		path: string,
 		mediaType: MediaResourceOfflineCacheMediaType,
 	): Promise<CachedMediaResource | null> {
-		if (!this.isEnabled()) return null
+		if (!this.canUseServiceWorkerCache()) return null
 		const entry = await this.getEntry(path, mediaType)
 		if (!entry) return null
 
@@ -694,13 +696,13 @@ export class MediaResourceOfflineCacheManager {
 	}
 
 	private async postMessageToServiceWorker(message: unknown): Promise<void> {
-		if (!this.isEnabled()) return
+		if (!this.canUseServiceWorkerCache()) return
 		const registration = await this.ensureServiceWorker()
 		this.getRegistrationWorker(registration)?.postMessage(message)
 	}
 
 	private async postMessageToServiceWorkerWithResponse<T>(message: unknown): Promise<T | null> {
-		if (!this.isEnabled()) return null
+		if (!this.canUseServiceWorkerCache()) return null
 		const registration = await this.ensureServiceWorker()
 		const worker = this.getRegistrationWorker(registration)
 		if (!worker) return null

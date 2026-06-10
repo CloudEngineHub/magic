@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import {
-	MediaResourceUrlLifecycle,
-	type MediaResourceUrlEntry,
-} from "../MediaResourceUrlLifecycle"
+import { MediaResourceUrlLifecycle, type MediaResourceUrlEntry } from "../MediaResourceUrlLifecycle"
 
 function createEntry(overrides: Partial<MediaResourceUrlEntry> = {}): MediaResourceUrlEntry {
 	return {
@@ -69,7 +66,14 @@ function createLifecycle(options?: {
 		refreshResource: vi.fn().mockResolvedValue(true),
 		incrementDiagnostic,
 	})
-	return { canvas, getFileInfo, getCachedResource, incrementDiagnostic, lifecycle, resolveResourceUrl }
+	return {
+		canvas,
+		getFileInfo,
+		getCachedResource,
+		incrementDiagnostic,
+		lifecycle,
+		resolveResourceUrl,
+	}
 }
 
 describe("MediaResourceUrlLifecycle", () => {
@@ -92,7 +96,7 @@ describe("MediaResourceUrlLifecycle", () => {
 				mediaType: "image",
 				resourceVersion: "v1",
 			}),
-			{ bypassVirtualResource: undefined },
+			{ bypassVirtualResource: undefined, preferVirtualResource: true },
 		)
 		expect(entry).toEqual(
 			expect.objectContaining({
@@ -105,6 +109,22 @@ describe("MediaResourceUrlLifecycle", () => {
 				contentLength: 123,
 				lastFailureReason: null,
 			}),
+		)
+	})
+
+	it("bypasses virtual resource URLs when requested for fallback exchange", async () => {
+		const { lifecycle, resolveResourceUrl } = createLifecycle()
+		const entry = createEntry()
+
+		await lifecycle.exchangeOssSrc("./images/a.png", entry, { bypassVirtualResource: true })
+
+		expect(resolveResourceUrl).toHaveBeenCalledWith(
+			expect.objectContaining({
+				path: "./images/a.png",
+				url: "https://oss.test/image.png",
+				mediaType: "image",
+			}),
+			{ bypassVirtualResource: true, preferVirtualResource: false },
 		)
 	})
 

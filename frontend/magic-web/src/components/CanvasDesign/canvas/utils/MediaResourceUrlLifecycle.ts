@@ -232,6 +232,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 							},
 							{
 								bypassVirtualResource: options?.bypassVirtualResource,
+								preferVirtualResource: !options?.bypassVirtualResource,
 							},
 						)
 					if (this.isDestroyed()) return null
@@ -373,7 +374,10 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		}
 	}
 
-	public async getCachedResource(path: string, entry: TEntry): Promise<CachedMediaResource | null> {
+	public async getCachedResource(
+		path: string,
+		entry: TEntry,
+	): Promise<CachedMediaResource | null> {
 		if (this.isDestroyed()) return null
 		try {
 			const offlineCache = this.options.canvas.mediaResourceOfflineCacheManager
@@ -447,15 +451,15 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			| "updated_at"
 			| "content_length"
 		>,
-		): void {
-			this.applyFileInfoMetadata(entry, {
-				...fileInfo,
-				fileName: fileInfo.fileName ?? "",
-			})
-			entry.ossSrc = fileInfo.src
-			entry.ossSrcFromCachedFallback = false
-			this.canonicalResourcePath(path)
-		}
+	): void {
+		this.applyFileInfoMetadata(entry, {
+			...fileInfo,
+			fileName: fileInfo.fileName ?? "",
+		})
+		entry.ossSrc = fileInfo.src
+		entry.ossSrcFromCachedFallback = false
+		this.canonicalResourcePath(path)
+	}
 
 	private getResolveAbsolutePath(): ((path: string) => string) | undefined {
 		return this.options.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath

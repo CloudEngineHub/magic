@@ -117,6 +117,49 @@ describe("MediaResourceOfflineCacheManager", () => {
 		expect(postMessage).not.toHaveBeenCalled()
 	})
 
+	it("does not reuse old virtual cache entries when app service worker mode is disabled", async () => {
+		vi.stubEnv("MAGIC_SW_MODE", "off")
+		const postMessage = vi.fn()
+		const controller = {
+			scriptURL: `${window.location.origin}/sw.js`,
+			postMessage,
+		} as unknown as ServiceWorker
+
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: {
+				controller,
+				ready: Promise.resolve({
+					active: controller,
+					scope: "/",
+				} as unknown as ServiceWorkerRegistration),
+				register: vi.fn(),
+				getRegistrations: vi.fn().mockResolvedValue([]),
+				addEventListener: vi.fn(),
+				removeEventListener: vi.fn(),
+			},
+		})
+
+		const openCache = vi.fn()
+		Object.defineProperty(globalThis, "caches", {
+			configurable: true,
+			value: {
+				delete: vi.fn().mockResolvedValue(true),
+				keys: vi.fn().mockResolvedValue([]),
+				open: openCache,
+			},
+		})
+
+		const manager = new MediaResourceOfflineCacheManager({
+			getVirtualResourceScope: () => "workspace/project/design/demo",
+		})
+		const result = await manager.getCachedResource("images/example.png", "image")
+
+		expect(result).toBeNull()
+		expect(openCache).not.toHaveBeenCalled()
+		expect(postMessage).not.toHaveBeenCalled()
+	})
+
 	it("returns the source url on resolve and only registers offline metadata in background", async () => {
 		const postMessage = vi.fn()
 		const controller = {
