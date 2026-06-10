@@ -392,11 +392,6 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
                     "视频轮询超时应用内部缓冲: "
                     f"requested={params.poll_timeout_seconds} effective={effective_poll_timeout_seconds}"
                 )
-            model_id = self._resolve_model(params.model_id, tool_context)
-            video_generation_config = self._resolve_video_generation_config(model_id, tool_context)
-            if video_generation_config is None:
-                logger.info(f"视频模型 {model_id} 缺少 featured 能力配置，继续按现有兜底逻辑执行")
-
             missing_size_error = self._get_missing_size_error(params)
             if missing_size_error:
                 return VideoToolResult(
@@ -409,6 +404,11 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
                         "error_type": "video.size_required",
                     },
                 )
+
+            model_id = self._resolve_model(params.model_id, tool_context)
+            video_generation_config = self._resolve_video_generation_config(model_id, tool_context)
+            if video_generation_config is None:
+                logger.info(f"视频模型 {model_id} 缺少 featured 能力配置，继续按现有兜底逻辑执行")
 
             request_id = str(uuid.uuid4())
             video_id = str(uuid.uuid4())

@@ -1,6 +1,6 @@
 """生成并写入画布元素的抽象基类
 
-提供「占位符准备 → 并发执行任务 → 更新占位符」三阶段通用流程（Template Method 模式）。
+提供「执行上下文准备 → 占位符准备 → 并发执行任务 → 更新占位符」通用流程（Template Method 模式）。
 子类只需实现 _get_task_placeholder_info 和 _execute_task_item 两个抽象方法。
 占位符的创建/更新直接通过 CanvasManager 完成，水平排列布局由 base 内部实现。
 """
@@ -237,6 +237,15 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
         """
         return {}
 
+    def _build_initial_placeholder_update(
+        self,
+        task: Any,
+        idx: int,
+        element_id: str,
+    ) -> Dict[str, Any]:
+        """生成占位符创建或复用时需要同步写入的初始字段。"""
+        return {}
+
     def _build_result_content(
         self,
         project_path: Path,
@@ -292,6 +301,7 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
 
         接受相对路径字符串（来自工具参数），内部统一转换为 Path 后使用。
 
+        Phase 0: 准备执行上下文
         Phase 1: 准备占位符（新建或复用）
         Phase 2: 并发执行任务，每个任务完成后立即更新其占位符
         Phase 3: 汇总结果，构建 ToolResult
@@ -309,6 +319,11 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
 
         logger.info(f"开始三阶段流程: task_count={len(tasks)}, project={project_path}")
 
+        # Phase 0: 准备执行上下文。必须先于占位符写入，避免 project_id、输出目录等前置条件失败后
+        # 画布残留永远无法完成的 processing 占位。
+        logger.info("Phase 0: 准备执行上下文")
+        extra_kwargs = await self._prepare_task_kwargs(tool_context, project_path)
+
         # Phase 1: 准备占位符
         logger.info("Phase 1: 准备占位符")
         all_placeholders, error_result = await self._prepare_placeholders(
@@ -319,7 +334,6 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
 
         # Phase 2: 并发执行任务
         logger.info("Phase 2: 并发执行任务并即时更新")
-        extra_kwargs = await self._prepare_task_kwargs(tool_context, project_path)
 
         task_results: List[TaskExecutionResult] = list(await asyncio.gather(*[
             self._execute_and_update_single(
@@ -469,8 +483,12 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
             existing_ids = [tasks[idx].element_id for idx in existing_task_indices]
 
             async def reset_to_processing(config: Any) -> None:
-                for element_id in existing_ids:
-                    await manager.update_element(element_id, {"status": "processing"}, config=config)
+                for idx, element_id in zip(existing_task_indices, existing_ids):
+                    update = {
+                        "status": "processing",
+                        **self._build_initial_placeholder_update(tasks[idx], idx, element_id),
+                    }
+                    await manager.update_element(element_id, update, config=config)
 
             await manager.run_write_transaction(
                 reset_to_processing,
@@ -499,7 +517,10 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
 
         # 新建占位符：水平排列，一次事务批量创建
         if new_task_indices:
-            infos = [self._get_task_placeholder_info(tasks[idx], idx) for idx in new_task_indices]
+            indexed_infos = [
+                (idx, self._get_task_placeholder_info(tasks[idx], idx))
+                for idx in new_task_indices
+            ]
 
             async def create_placeholders(config: Any) -> List[ElementDetail]:
                 all_elements = flatten_all_elements(config) if (
@@ -550,7 +571,7 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
                 row_y = start_y
                 row_height = init_row_height
                 col = col_start
-                for info in infos:
+                for task_idx, info in indexed_infos:
                     if col >= self._max_elements_per_row:
                         row_y += row_height + DEFAULT_ELEMENT_SPACING
                         x = 0.0  # 新行始终从 x=0 开始
@@ -558,6 +579,13 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
                         col = 0
                     element_id = manager.generate_element_id()
                     element = self._make_placeholder_element(element_id, info, x, row_y, base_z_index)
+                    for key, value in self._build_initial_placeholder_update(
+                        tasks[task_idx],
+                        task_idx,
+                        element_id,
+                    ).items():
+                        if hasattr(element, key):
+                            setattr(element, key, value)
                     await manager.add_element(element, config=config)
                     created.append(ElementDetail(
                         id=element_id,

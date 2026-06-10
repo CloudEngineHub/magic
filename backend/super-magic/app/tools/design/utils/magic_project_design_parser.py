@@ -127,12 +127,23 @@ class GenerateImageRequest:
 class GenerateVideoRequest:
     """视频生成请求信息
 
-    该结构对齐 generateImageRequest 的设计思路，但单独保留视频字段。
-    后续前端渲染视频元素时，应直接复用这里定义的字段名，而不是再发明一套协议。
+    字段名对齐前端 CanvasDesign.GenerateVideoRequest。
     """
-    model_id: str
-    prompt: str
-    operation_id: str
+    project_id: Optional[str] = None
+    video_id: Optional[str] = None
+    model_id: Optional[str] = None
+    prompt: Optional[str] = None
+    input_mode: Optional[str] = None
+    task: Optional[str] = None
+    file_dir: Optional[str] = None
+    file_name: Optional[str] = None
+    inputs: Dict[str, Any] = field(default_factory=dict)
+    generation: Dict[str, Any] = field(default_factory=dict)
+    callbacks: Dict[str, Any] = field(default_factory=dict)
+    execution: Dict[str, Any] = field(default_factory=dict)
+    extensions: Dict[str, Any] = field(default_factory=dict)
+    # 兼容旧版本 agent 写入的字段，读取后原样保留。
+    operation_id: Optional[str] = None
     aspect_ratio: Optional[str] = None
     duration_seconds: Optional[int] = None
     resolution: Optional[str] = None
@@ -141,7 +152,6 @@ class GenerateVideoRequest:
     watermark: Optional[bool] = None
     reference_images: List[str] = field(default_factory=list)
     frames: List[Dict[str, str]] = field(default_factory=list)
-    file_dir: Optional[str] = None
 
 
 @dataclass
