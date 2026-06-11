@@ -892,8 +892,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.rerenderWhenTransformIdle()
 	}
 
-	private handleDisplayResourceReleased(variant: ImageResourceVariant, reason: string): void {
-		void reason
+	private handleDisplayResourceReleased(variant: ImageResourceVariant): void {
 		if (!this.loadedImage || this.loadedImageVariant !== variant) return
 		const src = this.data.src
 		if (!src) {
@@ -1056,7 +1055,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				resolveCanonicalResourcePath(data.path, resolveAbs) ===
 					resolveCanonicalResourcePath(path, resolveAbs)
 			) {
-				this.handleDisplayResourceReleased(data.variant, data.reason)
+				this.handleDisplayResourceReleased(data.variant)
 			}
 		}
 		this.canvas.eventEmitter.on("resource:image:loaded", this.resourceLoadedHandler)
@@ -1823,12 +1822,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 从 ImageResourceManager 实时查询状态
 			const loadState = this.getImageLoadState()
 
-			// 主图已加载，直接渲染主图
-			if (loadState.imageLoaded && loadState.ossSrc && this.data.src) {
+			// 主图已加载，直接渲染主图。缩放切档期间旧图可能被 sticky retain 保留，
+			// 此时即使 oss 元数据暂时不在当前 slot 上，也不能回退到 loading 占位。
+			if (loadState.imageLoaded && this.data.src) {
 				return this.renderImage()
 			}
-
-			// 其他情况（ossSrc 未换取、图片加载中、缩略图可用但主图未加载）都显示加载中
 			return this.renderLoadingPlaceholder()
 		}
 

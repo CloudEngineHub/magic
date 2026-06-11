@@ -19,8 +19,11 @@ function createEntry(overrides: Partial<MediaResourceUrlEntry> = {}): MediaResou
 
 function createLifecycle(options?: {
 	getFileInfo?: ReturnType<typeof vi.fn>
+	getFileResourceMeta?: ReturnType<typeof vi.fn>
 	getCachedResource?: ReturnType<typeof vi.fn>
+	refreshResource?: ReturnType<typeof vi.fn>
 	resolveResourceUrl?: ReturnType<typeof vi.fn>
+	onResourceMetadataHydrated?: ReturnType<typeof vi.fn>
 }) {
 	const getFileInfo =
 		options?.getFileInfo ??
@@ -41,6 +44,7 @@ function createLifecycle(options?: {
 			config: {
 				methods: {
 					getFileInfo,
+					getFileResourceMeta: options?.getFileResourceMeta,
 					resolveAbsolutePath: (path: string) => `/workspace/${path}`,
 				},
 			},
@@ -63,7 +67,8 @@ function createLifecycle(options?: {
 			entry.lastFailureReason = reason
 		},
 		onResourceDeleted: vi.fn(),
-		refreshResource: vi.fn().mockResolvedValue(true),
+		refreshResource: options?.refreshResource ?? vi.fn().mockResolvedValue(true),
+		onResourceMetadataHydrated: options?.onResourceMetadataHydrated,
 		incrementDiagnostic,
 	})
 	return {
@@ -110,6 +115,26 @@ describe("MediaResourceUrlLifecycle", () => {
 				lastFailureReason: null,
 			}),
 		)
+	})
+
+	it("notifies when initial exchange hydrates missing resource metadata", async () => {
+		const onResourceMetadataHydrated = vi.fn()
+		const { lifecycle } = createLifecycle({ onResourceMetadataHydrated })
+		const entry = createEntry()
+
+		await lifecycle.exchangeOssSrc("./images/a.png", entry)
+
+		expect(onResourceMetadataHydrated).toHaveBeenCalledWith("workspace/./images/a.png", entry)
+	})
+
+	it("does not notify hydration during exchange when resource metadata was already known", async () => {
+		const onResourceMetadataHydrated = vi.fn()
+		const { lifecycle } = createLifecycle({ onResourceMetadataHydrated })
+		const entry = createEntry({ resourceVersion: "v1" })
+
+		await lifecycle.exchangeOssSrc("./images/a.png", entry)
+
+		expect(onResourceMetadataHydrated).not.toHaveBeenCalled()
 	})
 
 	it("bypasses virtual resource URLs when requested for fallback exchange", async () => {
@@ -161,5 +186,106 @@ describe("MediaResourceUrlLifecycle", () => {
 				lastFailureReason: null,
 			}),
 		)
+	})
+
+	it("does not downgrade known resource metadata when cached metadata is missing", async () => {
+		const getFileInfo = vi.fn().mockResolvedValue(null)
+		const getCachedResource = vi.fn().mockResolvedValue({
+			url: "/virtual/cached-image.png",
+			sourceUrl: null,
+			expiresAt: null,
+			resourceVersion: null,
+			sourceUpdatedAt: null,
+			contentLength: null,
+		})
+		const { lifecycle } = createLifecycle({ getFileInfo, getCachedResource })
+		const entry = createEntry({
+			sourceUrl: "https://oss.test/known-image.png",
+			resourceVersion: "known-v1",
+			sourceUpdatedAt: "2030-01-03T00:00:00Z",
+			contentLength: 789,
+		})
+
+		await expect(
+			lifecycle.ensureFreshOssInfo("./images/a.png", entry, {
+				allowCachedFallback: true,
+			}),
+		).resolves.toEqual({
+			ossSrc: "/virtual/cached-image.png",
+			expiresAt: null,
+		})
+
+		expect(entry).toEqual(
+			expect.objectContaining({
+				ossSrc: "/virtual/cached-image.png",
+				ossSrcFromCachedFallback: true,
+				sourceUrl: "https://oss.test/known-image.png",
+				resourceVersion: "known-v1",
+				sourceUpdatedAt: "2030-01-03T00:00:00Z",
+				contentLength: 789,
+			}),
+		)
+	})
+
+	it("hydrates missing cached metadata without refreshing the resource body", async () => {
+		const getFileResourceMeta = vi.fn().mockResolvedValue({
+			status: "exists",
+			source: "workspace",
+			fileName: "image.png",
+			resourceVersion: "v1",
+			updatedAt: "2030-01-01T00:00:00Z",
+			contentLength: 123,
+		})
+		const refreshResource = vi.fn().mockResolvedValue(true)
+		const onResourceMetadataHydrated = vi.fn()
+		const { lifecycle, incrementDiagnostic } = createLifecycle({
+			getFileResourceMeta,
+			refreshResource,
+			onResourceMetadataHydrated,
+		})
+		const entry = createEntry({
+			ossSrc: "/virtual/cached-image.png",
+			ossSrcFromCachedFallback: true,
+			contentLength: 45,
+		})
+
+		await lifecycle.refreshResourceMetadata("./images/a.png", "images/a.png", entry)
+
+		expect(refreshResource).not.toHaveBeenCalled()
+		expect(onResourceMetadataHydrated).toHaveBeenCalledWith("images/a.png", entry)
+		expect(incrementDiagnostic).toHaveBeenCalledWith("metadataUnchangedCount")
+		expect(entry).toEqual(
+			expect.objectContaining({
+				resourceVersion: "v1",
+				sourceUpdatedAt: "2030-01-01T00:00:00Z",
+				contentLength: 123,
+				lastFailureReason: null,
+			}),
+		)
+	})
+
+	it("refreshes when known resource metadata changes", async () => {
+		const getFileResourceMeta = vi.fn().mockResolvedValue({
+			status: "exists",
+			source: "workspace",
+			fileName: "image.png",
+			resourceVersion: "v2",
+			updatedAt: "2030-01-02T00:00:00Z",
+			contentLength: 456,
+		})
+		const refreshResource = vi.fn().mockResolvedValue(true)
+		const { lifecycle } = createLifecycle({
+			getFileResourceMeta,
+			refreshResource,
+		})
+		const entry = createEntry({
+			resourceVersion: "v1",
+			sourceUpdatedAt: "2030-01-01T00:00:00Z",
+			contentLength: 123,
+		})
+
+		await lifecycle.refreshResourceMetadata("./images/a.png", "images/a.png", entry)
+
+		expect(refreshResource).toHaveBeenCalledWith("./images/a.png")
 	})
 })

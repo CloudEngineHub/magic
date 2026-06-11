@@ -1,11 +1,11 @@
 import { useCallback, useRef } from "react"
-import { SuperMagicApi } from "@/apis"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import {
 	getOrCreateImagesDirFileId,
 	type GetOrCreateImagesDirFileIdResult,
-} from "../utils/calculateUploadDirectory"
-import { buildImagesDirCacheKey } from "./imagesDirCacheKey"
+	validateUploadDirectoryFileId,
+} from "../utils/designAssetDirectory"
+import { buildImagesDirCacheKey } from "./uploadSubDirCacheKey"
 
 export type GetOrCreateImagesDirFn = () => Promise<GetOrCreateImagesDirFileIdResult | null>
 
@@ -32,17 +32,7 @@ export function useGetOrCreateImagesDir(
 		result?: GetOrCreateImagesDirFileIdResult | null
 	} | null>(null)
 
-	const validateImagesDirFileId = useCallback(async (fileId: string): Promise<boolean> => {
-		try {
-			await SuperMagicApi.getFileInfo(
-				{ file_id: fileId },
-				{ enableErrorMessagePrompt: false },
-			)
-			return true
-		} catch {
-			return false
-		}
-	}, [])
+	const validateImagesDirFileId = useCallback(validateUploadDirectoryFileId, [])
 
 	const isCachedResultUsable = useCallback(
 		async (result: GetOrCreateImagesDirFileIdResult | null): Promise<boolean> => {

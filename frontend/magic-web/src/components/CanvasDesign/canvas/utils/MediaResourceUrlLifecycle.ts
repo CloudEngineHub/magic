@@ -44,6 +44,7 @@ export interface MediaResourceUrlLifecycleOptions<TEntry extends MediaResourceUr
 	setFailureReason: (entry: TEntry, reason: ResourceLoadFailureReason | null) => void
 	onResourceDeleted: (normalizedPath: string, entry: TEntry) => void
 	refreshResource: (path: string) => Promise<boolean>
+	onResourceMetadataHydrated?: (normalizedPath: string, entry: TEntry) => void
 	incrementDiagnostic: (
 		counter:
 			| "cachedResourceHitCount"
@@ -218,7 +219,14 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 				if (this.isDestroyed()) return null
 				if (fileInfo?.src) {
 					this.options.setFailureReason(entry, null)
+					const hadResourceVersion = !!entry.resourceVersion
 					this.applyFileInfoMetadata(entry, fileInfo)
+					if (!hadResourceVersion) {
+						this.options.onResourceMetadataHydrated?.(
+							this.canonicalResourcePath(path),
+							entry,
+						)
+					}
 					const resourceUrl =
 						await this.options.canvas.mediaResourceOfflineCacheManager.resolveResourceUrl(
 							{
@@ -314,11 +322,15 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 
 				if (
 					meta.status === "exists" &&
-					this.isSameResourceVersion(currentVersion, meta.resourceVersion)
+					(!currentVersion ||
+						this.isSameResourceVersion(currentVersion, meta.resourceVersion))
 				) {
 					this.options.incrementDiagnostic("metadataUnchangedCount")
 					this.options.setFailureReason(entry, null)
 					this.applyResourceMeta(entry, meta)
+					if (!currentVersion) {
+						this.options.onResourceMetadataHydrated?.(normalizedPath, entry)
+					}
 					return
 				}
 
@@ -343,9 +355,14 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			this.options.setFailureReason(entry, null)
 			if (
 				!fileInfo.resource_version ||
+				!entry.resourceVersion ||
 				this.isSameResourceVersion(entry.resourceVersion, fileInfo.resource_version)
 			) {
+				const hadResourceVersion = !!entry.resourceVersion
 				this.applyFileInfoMetadata(entry, fileInfo)
+				if (!hadResourceVersion) {
+					this.options.onResourceMetadataHydrated?.(normalizedPath, entry)
+				}
 
 				await this.options.canvas.mediaResourceOfflineCacheManager.resolveResourceUrl(
 					{
@@ -363,7 +380,6 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 				)
 				return
 			}
-
 			await this.options.refreshResource(path)
 		} catch (error) {
 			const reason = getFailureReasonFromGetFileInfoError(error)
@@ -404,11 +420,11 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 	public applyCachedResource(entry: TEntry, cached: CachedMediaResource): void {
 		entry.ossSrc = cached.url
 		entry.ossSrcFromCachedFallback = true
-		entry.sourceUrl = cached.sourceUrl ?? null
-		entry.expiresAt = cached.expiresAt ?? null
-		entry.resourceVersion = cached.resourceVersion ?? null
-		entry.sourceUpdatedAt = cached.sourceUpdatedAt ?? null
-		entry.contentLength = cached.contentLength ?? null
+		entry.sourceUrl = cached.sourceUrl ?? entry.sourceUrl
+		entry.expiresAt = cached.expiresAt ?? entry.expiresAt
+		entry.resourceVersion = cached.resourceVersion ?? entry.resourceVersion
+		entry.sourceUpdatedAt = cached.sourceUpdatedAt ?? entry.sourceUpdatedAt
+		entry.contentLength = cached.contentLength ?? entry.contentLength
 	}
 
 	public async resolveVirtualResourceFallbackOssSrc(

@@ -43,7 +43,7 @@ function now(): number {
  */
 export class HistoryManager {
 	private canvas: Canvas
-	private maxHistorySize: number = 50
+	private maxHistorySize: number = 30
 
 	/** 历史栈 - 存储所有历史状态 */
 	private historyStack: HistoryItem[] = []

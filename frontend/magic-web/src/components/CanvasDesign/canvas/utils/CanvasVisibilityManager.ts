@@ -368,7 +368,14 @@ export class CanvasVisibilityManager {
 		this.scheduleRefresh("document:loaded", true)
 	}
 
-	private readonly handleImageResourceReleased = (event: { data: { path: string } }): void => {
+	private readonly handleImageResourceReleased = (event: {
+		data: {
+			path: string
+			variant?: ImageResourceVariant
+			reason?: string
+			releasedBytes?: number
+		}
+	}): void => {
 		this.registeredImages.forEach((registered, elementId) => {
 			if (!this.isSameResourcePath(registered.path, event.data.path)) return
 			this.lastRequestedLoadState.delete(elementId)

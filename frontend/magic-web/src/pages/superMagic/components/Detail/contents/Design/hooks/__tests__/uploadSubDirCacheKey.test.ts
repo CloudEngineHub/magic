@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
-import { buildImagesDirCacheKey } from "../imagesDirCacheKey"
+import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
+import { buildImagesDirCacheKey, buildUploadSubDirCacheKey } from "../uploadSubDirCacheKey"
 
 function createDesignDirectory(children: FileItem[] = []): FileItem[] {
 	return [
@@ -41,5 +42,44 @@ describe("buildImagesDirCacheKey", () => {
 		expect(existingImagesKey).toBe("project-1:design-dir:新建画布:新建画布/images:images-old")
 		expect(removedImagesKey).toBe("project-1:design-dir:新建画布:新建画布/images:")
 		expect(removedImagesKey).not.toBe(existingImagesKey)
+	})
+})
+
+describe("buildUploadSubDirCacheKey", () => {
+	it("tracks video and audio directory ids independently", () => {
+		const currentFile = { id: "design-dir", name: "新建画布" }
+		const flatAttachments = createDesignDirectory([
+			{
+				file_id: "videos-existing",
+				file_name: "videos",
+				name: "videos",
+				relative_file_path: "新建画布/videos",
+				is_directory: true,
+			} as FileItem,
+			{
+				file_id: "audios-existing",
+				file_name: "audios",
+				name: "audios",
+				relative_file_path: "新建画布/audios",
+				is_directory: true,
+			} as FileItem,
+		])
+
+		expect(
+			buildUploadSubDirCacheKey({
+				projectId: "project-1",
+				currentFile,
+				flatAttachments,
+				subDir: UploadSubDir.Videos,
+			}),
+		).toBe("project-1:design-dir:新建画布:新建画布/videos:videos-existing")
+		expect(
+			buildUploadSubDirCacheKey({
+				projectId: "project-1",
+				currentFile,
+				flatAttachments,
+				subDir: UploadSubDir.Audios,
+			}),
+		).toBe("project-1:design-dir:新建画布:新建画布/audios:audios-existing")
 	})
 })

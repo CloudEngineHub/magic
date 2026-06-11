@@ -90,7 +90,7 @@ function createEntry(overrides: Record<string, unknown> = {}) {
 function createManager() {
 	const eventEmitter = { emit: vi.fn() }
 	const manager = Object.create(ImageResourceManager.prototype) as ImageResourceManager & {
-		canvas: { eventEmitter: typeof eventEmitter }
+		canvas: { id: string; eventEmitter: typeof eventEmitter }
 		managerInstanceId: number
 		destroyed: boolean
 		entries: Map<string, ReturnType<typeof createEntry>>
@@ -101,7 +101,7 @@ function createManager() {
 		diagnostics: ReturnType<typeof createImageResourceDiagnostics>
 		urlLifecycle: { canonicalResourcePath: (path: string) => string }
 	}
-	manager.canvas = { eventEmitter }
+	manager.canvas = { id: "test-canvas", eventEmitter }
 	manager.managerInstanceId = 1
 	manager.destroyed = false
 	manager.entries = new Map()
@@ -129,6 +129,80 @@ type ReleaseResource = (
 ) => number
 
 describe("ImageResourceManager display resource release", () => {
+	it("migrates cached body keys after missing metadata is hydrated", () => {
+		const { manager } = createManager()
+		const entry = createEntry({
+			bodyBlob: new Blob([new Uint8Array(10)]),
+			bodyOssSrc: "/virtual/image.png",
+			bodyCacheKey: "images/a.png::123",
+			bodyByteSize: 10,
+			bodyLastAccessAt: Date.now(),
+			resourceVersion: "v1",
+			sourceUpdatedAt: "2030-01-01T00:00:00Z",
+			contentLength: 123,
+		})
+		const migrateBodyCacheKeyAfterMetadataHydration = (
+			manager as unknown as {
+				migrateBodyCacheKeyAfterMetadataHydration: (
+					normalizedSrc: string,
+					targetEntry: typeof entry,
+				) => void
+			}
+		).migrateBodyCacheKeyAfterMetadataHydration.bind(manager)
+
+		migrateBodyCacheKeyAfterMetadataHydration("images/a.png", entry)
+
+		expect(entry.bodyCacheKey).toBe("images/a.png::v1")
+		expect(
+			manager.bodyCache.getReusableBody(entry, "/virtual/image.png", "images/a.png::v1"),
+		).toEqual(
+			expect.objectContaining({
+				blob: entry.bodyBlob,
+				cacheKey: "images/a.png::v1",
+				byteSize: 10,
+			}),
+		)
+	})
+
+	it("migrates cached body keys when hydrated content length differs from the fallback key", () => {
+		const { manager } = createManager()
+		const entry = createEntry({
+			bodyBlob: new Blob([new Uint8Array(10)]),
+			bodyOssSrc: "/virtual/image.png",
+			bodyCacheKey: "images/a.png::121964",
+			bodyByteSize: 10,
+			bodyLastAccessAt: Date.now(),
+			resourceVersion: "file-version:1551516",
+			sourceUpdatedAt: "2030-01-01T00:00:00Z",
+			contentLength: 1551516,
+		})
+		const migrateBodyCacheKeyAfterMetadataHydration = (
+			manager as unknown as {
+				migrateBodyCacheKeyAfterMetadataHydration: (
+					normalizedSrc: string,
+					targetEntry: typeof entry,
+				) => void
+			}
+		).migrateBodyCacheKeyAfterMetadataHydration.bind(manager)
+
+		migrateBodyCacheKeyAfterMetadataHydration("images/a.png", entry)
+
+		expect(entry.bodyCacheKey).toBe("images/a.png::file-version:1551516")
+		expect(
+			manager.bodyCache.getReusableBody(
+				entry,
+				"/virtual/image.png",
+				"images/a.png::file-version:1551516",
+			),
+		).toEqual(
+			expect.objectContaining({
+				blob: entry.bodyBlob,
+				cacheKey: "images/a.png::file-version:1551516",
+				byteSize: 10,
+			}),
+		)
+	})
+
 	it("closes small and overview decoded resources and reports release stats", () => {
 		const { manager, eventEmitter } = createManager()
 		const smallClose = vi.fn()
@@ -310,6 +384,51 @@ describe("ImageResourceManager display resource release", () => {
 
 		expect(entry.displaySlots.preview.resource).toBeNull()
 		expect(close).not.toHaveBeenCalled()
+
+		releaseDisplayedResource()
+
+		expect(close).toHaveBeenCalledTimes(1)
+		expect(previewResource.closed).toBe(true)
+	})
+
+	it("does not close a retained display resource during entry cleanup", () => {
+		const { manager, eventEmitter } = createManager()
+		const close = vi.fn()
+		const previewResource = createImageResource("preview", {
+			width: 10,
+			height: 10,
+			close,
+		})
+		const entry = createEntry({
+			displaySlots: {
+				small: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
+				overview: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
+				preview: {
+					resource: previewResource,
+					loadingPromise: null,
+					version: null,
+					lastAccessAt: 1,
+				},
+			},
+		})
+		manager.entries.set("image/path.png", entry)
+		const closeEntryResources = (
+			manager as unknown as {
+				closeEntryResources: (targetEntry: typeof entry) => void
+			}
+		).closeEntryResources.bind(manager)
+
+		const releaseDisplayedResource = manager.retainDisplayedResource("image/path.png", {
+			image: previewResource.image,
+			variant: "preview",
+		})
+		closeEntryResources(entry)
+
+		expect(close).not.toHaveBeenCalled()
+		expect(previewResource.closed).toBe(false)
+		expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "resource:image:will-close" }),
+		)
 
 		releaseDisplayedResource()
 

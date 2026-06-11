@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { CanvasFileUploadManager } from "../CanvasFileUploadManager"
-import type { UploadFileResponse } from "../../../types.magic"
+import { UploadSubDir, type UploadFileResponse, type UploadSubDirType } from "../../../types.magic"
 import type { CanvasElementClipboardFileMetadata } from "../CanvasElementClipboard"
 
 interface RemoteTransferHarness {
@@ -56,6 +56,24 @@ function createRemoteTransferManager(options: {
 	])
 	return manager
 }
+
+describe("CanvasFileUploadManager upload sub directories", () => {
+	it("routes video and audio files to their asset directories", () => {
+		const manager = Object.create(CanvasFileUploadManager.prototype) as {
+			getUploadSubDir: (file: File) => UploadSubDirType
+		}
+
+		expect(
+			manager.getUploadSubDir(new File(["video"], "clip.mp4", { type: "video/mp4" })),
+		).toBe(UploadSubDir.Videos)
+		expect(
+			manager.getUploadSubDir(new File(["audio"], "voice.mp3", { type: "audio/mpeg" })),
+		).toBe(UploadSubDir.Audios)
+		expect(
+			manager.getUploadSubDir(new File(["image"], "photo.png", { type: "image/png" })),
+		).toBe(UploadSubDir.Images)
+	})
+})
 
 describe("CanvasFileUploadManager remote resource transfer cache", () => {
 	it("drops stale completed transfers so paste can re-upload deleted target files", async () => {

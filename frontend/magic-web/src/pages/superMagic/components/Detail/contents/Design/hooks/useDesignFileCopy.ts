@@ -1,5 +1,4 @@
 import { useCallback } from "react"
-import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import {
@@ -9,7 +8,10 @@ import {
 	type MultipleFilesDragData,
 } from "@/pages/superMagic/components/MessageEditor/utils/drag"
 import { SuperMagicApi } from "@/apis"
-import { calculateUploadDirectory } from "../utils/calculateUploadDirectory"
+import {
+	getOrCreateUploadSubDirFileId,
+	validateUploadDirectoryFileId,
+} from "../utils/designAssetDirectory"
 import { normalizePath, findFileBySrc } from "../utils/utils"
 import type { GetOrCreateImagesDirFn } from "./useGetOrCreateImagesDir"
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
@@ -110,20 +112,7 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 		[],
 	)
 
-	const validateDesignAssetDirectoryFileId = useCallback(
-		async (fileId: string): Promise<boolean> => {
-			try {
-				await SuperMagicApi.getFileInfo(
-					{ file_id: fileId },
-					{ enableErrorMessagePrompt: false },
-				)
-				return true
-			} catch {
-				return false
-			}
-		},
-		[],
-	)
+	const validateDesignAssetDirectoryFileId = useCallback(validateUploadDirectoryFileId, [])
 
 	const waitForBatchOperation = useCallback(
 		async (result: BatchOperationResult): Promise<void> => {
@@ -355,88 +344,36 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 				normalizedAssetDirPath: string
 				assetDirItem: FileItem
 			} | null> => {
-				const assetDirPath = calculateUploadDirectory(
-					{ currentFile, flatAttachments },
+				const assetDirInfo = await getOrCreateUploadSubDirFileId({
+					currentFile,
+					flatAttachments,
+					projectId,
 					subDir,
-				)
-				if (!assetDirPath) {
+					updateAttachments,
+					validateDirFileId: validateDesignAssetDirectoryFileId,
+				})
+				if (!assetDirInfo) {
 					return null
 				}
 
+				const assetDirPath = assetDirInfo.suffixDir
 				const normalizedAssetDirPath = normalizePath(assetDirPath)
-				let assetDirItem = flatAttachments.find(
-					(item: FileItem) =>
-						item.is_directory &&
-						normalizePath(item.relative_file_path || "") === normalizedAssetDirPath,
-				)
-
-				if (assetDirItem?.file_id) {
-					const isUsable = await validateDesignAssetDirectoryFileId(assetDirItem.file_id)
-					if (!isUsable) {
-						assetDirItem = undefined
-					}
-				}
-
-				if (!assetDirItem?.file_id) {
-					const parentDirPath = assetDirPath.includes("/")
-						? assetDirPath.substring(0, assetDirPath.lastIndexOf("/"))
-						: ""
-					const normalizedParentDirPath = normalizePath(parentDirPath)
-					const parentDirItem = flatAttachments.find(
+				const assetDirItem =
+					flatAttachments.find(
+						(item: FileItem) =>
+							item.is_directory && item.file_id === assetDirInfo.assetDirFileId,
+					) ||
+					flatAttachments.find(
 						(item: FileItem) =>
 							item.is_directory &&
-							normalizePath(item.relative_file_path || "") ===
-								normalizedParentDirPath,
-					)
-					const parentDirId = parentDirItem?.file_id || currentFile?.id
-
-					if (!parentDirId) {
-						return null
-					}
-
-					try {
-						const createResponse = await SuperMagicApi.createFile({
-							project_id: projectId,
-							parent_id: parentDirId,
-							file_name: subDir,
-							is_directory: true,
-						})
-
-						if (createResponse?.file_id) {
-							assetDirItem = {
-								file_id: createResponse.file_id,
-								file_name: subDir,
-								relative_file_path: assetDirPath,
-								is_directory: true,
-							} as FileItem
-							updateAttachments()
-						} else {
-							return null
-						}
-					} catch (error: unknown) {
-						const errorObj = error as { code?: number; message?: string }
-						if (errorObj.code === SuperMagicApiErrorCode.DuplicateFile) {
-							updateAttachments()
-							assetDirItem = flatAttachments.find(
-								(item: FileItem) =>
-									item.is_directory &&
-									normalizePath(item.relative_file_path || "") ===
-										normalizedAssetDirPath,
-							)
-							if (!assetDirItem?.file_id) {
-								return null
-							}
-							const isUsable = await validateDesignAssetDirectoryFileId(
-								assetDirItem.file_id,
-							)
-							if (!isUsable) {
-								return null
-							}
-						} else {
-							return null
-						}
-					}
-				}
+							normalizePath(item.relative_file_path || "") === normalizedAssetDirPath,
+					) ||
+					({
+						file_id: assetDirInfo.assetDirFileId,
+						file_name: subDir,
+						relative_file_path: assetDirPath,
+						is_directory: true,
+					} as FileItem)
 
 				return { assetDirPath, normalizedAssetDirPath, assetDirItem }
 			}

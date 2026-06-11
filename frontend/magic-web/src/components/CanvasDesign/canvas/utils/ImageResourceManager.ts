@@ -310,19 +310,19 @@ export class ImageResourceManager {
 
 	// 事件监听器回调（保存引用以便销毁时移除）
 	private readonly handleElementDeleted = () => {
-		this.scheduleCleanup()
+		this.scheduleCleanup("element:deleted")
 	}
 
 	private readonly handleBatchDeleted = () => {
-		void this.checkAndCleanupResources()
+		void this.checkAndCleanupResources("element:batchdeleted")
 	}
 
 	private readonly handleCanvasClear = () => {
-		void this.checkAndCleanupResources()
+		void this.checkAndCleanupResources("canvas:clear")
 	}
 
 	private readonly handleReferenceImagesChanged = () => {
-		this.scheduleCleanup()
+		this.scheduleCleanup("referenceImages:changed")
 	}
 
 	constructor(options: { canvas: Canvas }) {
@@ -336,6 +336,8 @@ export class ImageResourceManager {
 			onResourceDeleted: (normalizedSrc, entry) =>
 				this.handleImageResourceDeleted(normalizedSrc, entry),
 			refreshResource: (path) => this.refreshResource(path),
+			onResourceMetadataHydrated: (normalizedSrc, entry) =>
+				this.migrateBodyCacheKeyAfterMetadataHydration(normalizedSrc, entry),
 			incrementDiagnostic: (counter) => this.diagnostics.increment(counter),
 		})
 		this.workerClient = acquireImageResourceWorkerClient({
@@ -637,10 +639,14 @@ export class ImageResourceManager {
 		})
 	}
 
-	private closeUniqueResources(resources: Array<ImageResource | null>): void {
+	private closeUniqueResources(
+		resources: Array<ImageResource | null>,
+		options?: { forceCloseRetained?: boolean },
+	): void {
 		const closed = new Set<ImageResource>()
 		resources.forEach((resource) => {
 			if (!resource || closed.has(resource)) return
+			if (!options?.forceCloseRetained && (resource.displayRetainCount ?? 0) > 0) return
 			closed.add(resource)
 			this.closeResource(resource)
 		})
@@ -814,16 +820,38 @@ export class ImageResourceManager {
 		return this.bodyCache.getReusableBody(entry, ossSrc, cacheKey)
 	}
 
+	private migrateBodyCacheKeyAfterMetadataHydration(
+		normalizedSrc: string,
+		entry: ImageResourceEntry,
+	): void {
+		if (!entry.bodyBlob || !entry.bodyCacheKey) return
+		const previousCacheKey = entry.bodyCacheKey
+		if (!previousCacheKey.startsWith(`${normalizedSrc}::`)) return
+
+		const ossSrc = entry.bodyOssSrc ?? entry.ossSrc ?? entry.sourceUrl ?? ""
+		const hydratedCacheKey = this.getBodyCacheKey(normalizedSrc, ossSrc, entry)
+		entry.bodyCacheKey = hydratedCacheKey
+		if (entry.bodyPromiseCacheKey === previousCacheKey) {
+			entry.bodyPromiseCacheKey = hydratedCacheKey
+		}
+	}
+
 	private evictBodyCacheBudget(exemptEntry?: ImageResourceEntry): void {
 		this.bodyCache.evictBudget(this.entries.values(), exemptEntry)
 	}
 
-	private closeEntryResources(entry: ImageResourceEntry): void {
+	private closeEntryResources(
+		entry: ImageResourceEntry,
+		options?: { forceCloseRetained?: boolean; reason?: string; path?: string },
+	): void {
 		const smallResource = this.getDisplayResource(entry, "small")
 		const overviewResource = this.getDisplayResource(entry, "overview")
 		const previewResource = this.getDisplayResource(entry, "preview")
 		const fullResource = entry.fullResource
-		this.closeUniqueResources([smallResource, overviewResource, previewResource, fullResource])
+		this.closeUniqueResources(
+			[smallResource, overviewResource, previewResource, fullResource],
+			options,
+		)
 		this.clearDisplayResources(entry)
 		entry.fullResource = null
 		entry.fullRetainCount = 0
@@ -1611,14 +1639,6 @@ export class ImageResourceManager {
 			entry.sourceUpdatedAt = null
 			entry.contentLength = null
 		}
-		entry.ossSrc = null
-		entry.ossSrcFromCachedFallback = false
-		entry.expiresAt = null
-		this.clearDisplayResources(entry)
-		entry.fullResource = null
-		entry.fullRetainCount = 0
-		this.clearEntryBody(entry)
-		this.clearEntryBodyPromise(entry)
 
 		this.canvas.mediaResourceOfflineCacheManager.removeCachedResource({
 			path: normalizedSrc,
@@ -1656,6 +1676,8 @@ export class ImageResourceManager {
 				this.clearDisplayResources(entry)
 				entry.fullResource = null
 				clearDeletedResourceMetadata()
+				this.clearEntryBody(entry)
+				this.clearEntryBodyPromise(entry)
 			} else {
 				restorePreviousResourceState()
 			}
@@ -1668,7 +1690,6 @@ export class ImageResourceManager {
 			})
 			return false
 		}
-
 		const loaded = await this.loadImageResource(
 			normalizedSrc,
 			ossSrc,
@@ -1676,6 +1697,19 @@ export class ImageResourceManager {
 			DEFAULT_IMAGE_RESOURCE_VARIANT,
 		)
 		if (loaded) {
+			if (this.getDisplayResource(entry, "small") === previousSmallResource) {
+				this.setDisplayResource(entry, "small", null, { closePrevious: false })
+			}
+			if (this.getDisplayResource(entry, "overview") === previousOverviewResource) {
+				this.setDisplayResource(entry, "overview", null, { closePrevious: false })
+			}
+			if (this.getDisplayResource(entry, "preview") === previousResource) {
+				this.setDisplayResource(entry, "preview", null, { closePrevious: false })
+			}
+			if (entry.fullResource === previousFullResource) {
+				entry.fullResource = null
+				entry.fullRetainCount = 0
+			}
 			this.closeResource(previousSmallResource, {
 				path: normalizedSrc,
 				reason: "refresh-replaced",
@@ -1725,7 +1759,7 @@ export class ImageResourceManager {
 			path: normalizedSrc,
 			mediaType: "image",
 		})
-		this.closeEntryResources(entry)
+		this.closeEntryResources(entry, { forceCloseRetained: true })
 		entry.ossSrc = null
 		entry.ossSrcFromCachedFallback = false
 		entry.sourceUrl = null
@@ -2234,7 +2268,7 @@ export class ImageResourceManager {
 	 * 调度资源清理（防抖版本）
 	 * 在短时间内多次调用时，只执行最后一次
 	 */
-	private scheduleCleanup(): void {
+	private scheduleCleanup(reason = "manual"): void {
 		// 清除之前的定时器
 		if (this.cleanupTimer) {
 			clearTimeout(this.cleanupTimer)
@@ -2242,7 +2276,7 @@ export class ImageResourceManager {
 
 		// 设置新的定时器
 		this.cleanupTimer = setTimeout(() => {
-			void this.checkAndCleanupResources()
+			void this.checkAndCleanupResources(reason)
 			this.cleanupTimer = null
 		}, this.CLEANUP_DEBOUNCE_DELAY)
 	}
@@ -2251,7 +2285,7 @@ export class ImageResourceManager {
 	 * 检查并清理未使用的资源
 	 * 遍历所有元素，收集所有使用的图片路径，然后检查资源是否仍在使用
 	 */
-	private async checkAndCleanupResources(): Promise<void> {
+	private async checkAndCleanupResources(reason = "manual"): Promise<void> {
 		// 清除防抖定时器（如果存在）
 		if (this.cleanupTimer) {
 			clearTimeout(this.cleanupTimer)
@@ -2296,7 +2330,10 @@ export class ImageResourceManager {
 				entry.fullResource ||
 				this.bodyCache.hasBody(entry)
 			) {
-				this.closeEntryResources(entry)
+				this.closeEntryResources(entry, {
+					path: src,
+					reason: `cleanup:${reason}`,
+				})
 				this.canvas.eventEmitter.emit({
 					type: "resource:released",
 					data: { path: src },
@@ -2344,8 +2381,12 @@ export class ImageResourceManager {
 		this.workerClient?.release(pendingError)
 		this.workerClient = null
 		// 释放所有 ImageBitmap 资源
-		this.entries.forEach((entry) => {
-			this.closeEntryResources(entry)
+		this.entries.forEach((entry, path) => {
+			this.closeEntryResources(entry, {
+				forceCloseRetained: true,
+				path,
+				reason: "manager-destroy",
+			})
 		})
 		this.entries.clear()
 		this.canvas.eventEmitter.off("element:deleted", this.handleElementDeleted)

@@ -584,19 +584,6 @@
 			"description": "You can continue editing and saving the canvas after the network reconnects.",
 			"title": "Network disconnected. Canvas is read-only"
 		},
-		"upgrade": {
-			"title": "Canvas can be upgraded to v2 format",
-			"description": "Smaller file size, faster loading. Original file will be backed up automatically.",
-			"button": "Upgrade Now",
-			"upgrading": "Upgrading...",
-			"step_backup": "Backing up original file...",
-			"step_convert": "Converting data format...",
-			"step_save_main": "Saving main file...",
-			"step_save_details": "Saving element details...",
-			"step_done": "Upgrade complete",
-			"success": "Canvas upgraded to v2 format successfully",
-			"failed": "Upgrade failed, please try again later"
-		},
 		"saved": "Saved",
 		"saving": "Saving"
 	},

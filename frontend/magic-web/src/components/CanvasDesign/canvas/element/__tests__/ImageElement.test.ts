@@ -53,6 +53,33 @@ describe("ImageElement mounted image node sync", () => {
 		expect(imageNode.crop()).toEqual({ x: 1, y: 2, width: 3, height: 4 })
 	})
 
+	it("renders the retained loaded image even when oss metadata is temporarily absent", () => {
+		const imageGroup = new Konva.Group()
+		const loadingGroup = new Konva.Group()
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			data: { id: string; src: string; status?: GenerationStatus }
+			isErrorState: boolean
+			storedOssSrc: string | null
+			storedImageInfo: undefined
+			loadedImage: HTMLImageElement
+			getImageGenerationTaskMeta: () => undefined
+			renderImage: ReturnType<typeof vi.fn>
+			renderLoadingPlaceholder: ReturnType<typeof vi.fn>
+		}
+		element.data = { id: "image-1", src: "/image.png" }
+		element.isErrorState = false
+		element.storedOssSrc = null
+		element.storedImageInfo = undefined
+		element.loadedImage = new Image()
+		element.getImageGenerationTaskMeta = vi.fn(() => undefined)
+		element.renderImage = vi.fn(() => imageGroup)
+		element.renderLoadingPlaceholder = vi.fn(() => loadingGroup)
+
+		expect(element.render()).toBe(imageGroup)
+		expect(element.renderImage).toHaveBeenCalledTimes(1)
+		expect(element.renderLoadingPlaceholder).not.toHaveBeenCalled()
+	})
+
 	it("labels temporary pasted image placeholders with retained info as uploading", () => {
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			data: {
