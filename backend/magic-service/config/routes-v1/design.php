@@ -12,6 +12,8 @@ Router::addGroup('/api/v1', static function () {
     Router::addGroup('/design', static function () {
         // 根据提示词生成图片
         Router::post('/generate-image', [DesignApi::class, 'generateImage']);
+        // 补全生图提示词
+        Router::post('/image-prompt/complete', [DesignApi::class, 'completeImagePrompt']);
         // 转高清
         Router::post('/generate-high-image', [DesignApi::class, 'generateHighImage']);
 

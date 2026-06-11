@@ -11,12 +11,14 @@ use App\Application\Design\Service\DesignVideoAppService;
 use App\Application\Design\Service\ImageConvertHighConfigAppService;
 use App\Application\Design\Service\ImageGenerationAppService;
 use App\Application\Design\Service\ImageMarkIdentifyAppService;
+use App\Application\Design\Service\ImagePromptCompletionAppService;
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
 use App\Domain\Design\Entity\ValueObject\ImageMarkIdentifyType;
 use App\Interfaces\Design\Assembler\DesignVideoAssembler;
 use App\Interfaces\Design\Assembler\ImageGenerationAssembler;
 use App\Interfaces\Design\DTO\ImageGenerationDTO;
+use App\Interfaces\Design\RequestForm\CompleteImagePromptFormRequest;
 use App\Interfaces\Design\RequestForm\ConvertHighImageFormRequest;
 use App\Interfaces\Design\RequestForm\EraserFormRequest;
 use App\Interfaces\Design\RequestForm\EstimateVideoPointsFormRequest;
@@ -38,6 +40,9 @@ class DesignApi extends AbstractApi
 
     #[Inject]
     protected ImageMarkIdentifyAppService $imageMarkIdentifyAppService;
+
+    #[Inject]
+    protected ImagePromptCompletionAppService $imagePromptCompletionAppService;
 
     #[Inject]
     protected ImageConvertHighConfigAppService $imageConvertHighConfigAppService;
@@ -153,6 +158,27 @@ class DesignApi extends AbstractApi
         }
 
         return $response;
+    }
+
+    /**
+     * 补全生图提示词.
+     */
+    public function completeImagePrompt(CompleteImagePromptFormRequest $request): array
+    {
+        $authenticatable = $this->getAuthorization();
+        $request->validateResolved();
+        $validated = $request->validated();
+
+        $prompt = $this->imagePromptCompletionAppService->complete(
+            $authenticatable,
+            (int) $validated['project_id'],
+            (string) $validated['user_prompt'],
+            isset($validated['model_id']) ? (string) $validated['model_id'] : null,
+            isset($validated['reference_images']) ? (array) $validated['reference_images'] : [],
+            isset($validated['reference_image_options']) ? (array) $validated['reference_image_options'] : [],
+        );
+
+        return ['prompt' => $prompt];
     }
 
     /**
