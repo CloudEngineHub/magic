@@ -196,6 +196,12 @@ describe("SelfMediaInitPanel", () => {
 			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
 		})
 
+		const dialogBackdrop = screen.getByTestId("self-media-draft-restore-dialog").parentElement
+		expect(screen.getByTestId("self-media-init-panel-root")).toHaveClass("relative")
+		expect(dialogBackdrop).toHaveClass("absolute")
+		expect(dialogBackdrop).not.toHaveClass("fixed")
+		expect(dialogBackdrop?.className).not.toMatch(/backdrop-blur/)
+
 		expect(screen.queryByTestId("self-media-init-panel-draft-loading")).not.toBeInTheDocument()
 		expect(screen.getByText("brand-step")).toBeInTheDocument()
 

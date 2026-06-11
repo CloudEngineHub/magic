@@ -19,7 +19,7 @@ export default function DraftRestoreDialog({
 	if (!open) return null
 
 	return (
-		<div className="fixed inset-0 z-modal flex items-center justify-center bg-black/10 px-4 backdrop-blur-sm">
+		<div className="absolute inset-0 z-30 flex items-center justify-center bg-background/70 px-4">
 			<div
 				role="dialog"
 				aria-modal="true"

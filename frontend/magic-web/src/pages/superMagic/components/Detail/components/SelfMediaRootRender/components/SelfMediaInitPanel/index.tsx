@@ -235,7 +235,7 @@ function SelfMediaInitPanel({
 
 	return (
 		<div
-			className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-mobile-background"
+			className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-mobile-background"
 			data-testid="self-media-init-panel-root"
 		>
 			<DraftRestoreDialog
