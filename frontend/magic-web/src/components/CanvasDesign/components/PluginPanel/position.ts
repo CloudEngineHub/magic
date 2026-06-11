@@ -7,17 +7,13 @@ import {
 } from "./constants"
 import type { PluginWindowPosition } from "./types"
 
-export function getInitialPosition(
-	container: HTMLElement,
-	pluginName: string | undefined,
-): PluginWindowPosition {
-	const rect = container.getBoundingClientRect()
-	const cachedPosition = pluginName ? readCachedPosition(pluginName) : null
+const PLUGIN_LIST_PANEL_SELECTOR = "[data-canvas-plugin-list-panel]"
+const SHARED_POSITION_CACHE_KEY = `${PLUGIN_PANEL_POSITION_CACHE_PREFIX}shared`
+
+export function getInitialPosition(container: HTMLElement): PluginWindowPosition {
+	const cachedPosition = readCachedPosition()
 	return clampPositionToContainer(
-		cachedPosition ?? {
-			x: rect.width - PLUGIN_WINDOW_WIDTH - PLUGIN_WINDOW_MARGIN,
-			y: PLUGIN_WINDOW_MARGIN,
-		},
+		cachedPosition ?? getPluginListAnchoredPosition(container),
 		container,
 	)
 }
@@ -26,10 +22,10 @@ export function clampPluginPanelHeight(height: number): number {
 	return Math.min(PLUGIN_WINDOW_MAX_HEIGHT, Math.max(PLUGIN_WINDOW_MIN_HEIGHT, height))
 }
 
-export function saveCachedPosition(pluginName: string, position: PluginWindowPosition): void {
+export function saveCachedPosition(position: PluginWindowPosition): void {
 	if (typeof window === "undefined") return
 	try {
-		window.localStorage.setItem(getPositionCacheKey(pluginName), JSON.stringify(position))
+		window.localStorage.setItem(SHARED_POSITION_CACHE_KEY, JSON.stringify(position))
 	} catch (error) {
 		console.warn("[PluginPanel] Failed to cache plugin panel position.", error)
 	}
@@ -59,16 +55,29 @@ export function clampPositionToContainer(
 	}
 }
 
-function getPositionCacheKey(pluginName: string): string {
-	return `${PLUGIN_PANEL_POSITION_CACHE_PREFIX}${pluginName}`
+/* 获取插件列表面板锚点位置 */
+function getPluginListAnchoredPosition(container: HTMLElement): PluginWindowPosition {
+	const containerRect = container.getBoundingClientRect()
+	const pluginListPanel = document.querySelector<HTMLElement>(PLUGIN_LIST_PANEL_SELECTOR)
+	const pluginListPanelRect = pluginListPanel?.getBoundingClientRect()
+	if (!pluginListPanelRect) {
+		return {
+			x: containerRect.width - PLUGIN_WINDOW_WIDTH - PLUGIN_WINDOW_MARGIN,
+			y: PLUGIN_WINDOW_MARGIN,
+		}
+	}
+
+	return {
+		x: pluginListPanelRect.right - containerRect.left + PLUGIN_WINDOW_MARGIN,
+		y: pluginListPanelRect.top - containerRect.top,
+	}
 }
 
-function readCachedPosition(pluginName: string): PluginWindowPosition | null {
+function readCachedPosition(): PluginWindowPosition | null {
 	if (typeof window === "undefined") return null
-	const cacheKey = getPositionCacheKey(pluginName)
 	let cachedValue: string | null
 	try {
-		cachedValue = window.localStorage.getItem(cacheKey)
+		cachedValue = window.localStorage.getItem(SHARED_POSITION_CACHE_KEY)
 	} catch (error) {
 		console.warn("[PluginPanel] Failed to read cached plugin panel position.", error)
 		return null
@@ -80,7 +89,7 @@ function readCachedPosition(pluginName: string): PluginWindowPosition | null {
 	} catch (error) {
 		console.warn("[PluginPanel] Failed to parse cached plugin panel position.", error)
 		try {
-			window.localStorage.removeItem(cacheKey)
+			window.localStorage.removeItem(SHARED_POSITION_CACHE_KEY)
 		} catch (removeError) {
 			console.warn(
 				"[PluginPanel] Failed to remove invalid plugin panel position cache.",

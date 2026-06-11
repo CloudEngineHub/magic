@@ -49,7 +49,7 @@ export const PluginWindow = memo(function PluginWindow({
 }) {
 	const channelToken = useMemo(() => createPluginChannelToken(), [plugin.name, sessionId])
 	const [position, setPosition] = useState<PluginWindowPosition>(() =>
-		getInitialPosition(canvas.container, plugin.name),
+		getInitialPosition(canvas.container),
 	)
 	const [frameHeight, setFrameHeight] = useState(PLUGIN_WINDOW_DEFAULT_HEIGHT)
 	const dragStartRef = useRef({ pointerX: 0, pointerY: 0, windowX: 0, windowY: 0 })
@@ -257,8 +257,8 @@ export const PluginWindow = memo(function PluginWindow({
 
 	const handleHeaderPointerUp = useCallback<PointerEventHandler<HTMLDivElement>>(() => {
 		draggingRef.current = false
-		saveCachedPosition(plugin.name, positionRef.current)
-	}, [plugin.name])
+		saveCachedPosition(positionRef.current)
+	}, [])
 
 	return (
 		<div
