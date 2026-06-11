@@ -8,9 +8,16 @@
 			"openMethod": "打开方式",
 			"path": "链接至",
 			"sortOrder": "排序",
+			"sourceType": "来源",
 			"status": "状态"
 		},
+		"displaySetting": "展示设置",
 		"editMenu": "编辑菜单",
+		"entryVisibility": "入口可见对象",
+		"entryVisibilityOptions": {
+			"allMembers": "组织内所有成员",
+			"specified": "指定成员/部门"
+		},
 		"icon": "图标",
 		"iconType": {
 			"icon": "选择图标",
@@ -25,17 +32,28 @@
 		"pathPlaceholder": "输入菜单打开的链接",
 		"pleaseInputEnglishName": "请填写英文名称",
 		"pleaseSelectIcon": "请选择一个图标",
+		"pleaseSelectVisibilityTarget": "请选择成员或部门",
 		"pleaseUploadImage": "请上传一张图片",
+		"searchName": "菜单",
 		"sortOrder": "展示优先级",
 		"sortOrderPlaceholder": "输入优先级的数值",
 		"sortOrderTip": "数值越大，排序越靠前",
+		"sourceType": {
+			"official": "官方",
+			"organization": "自建"
+		},
 		"status": "状态",
+		"statusOptions": {
+			"disabled": "禁用",
+			"enabled": "启用"
+		},
 		"visibilityOptions": {
 			"all": "所有可见",
 			"org": "仅企业/团队",
 			"personal": "仅个人"
 		},
-		"visibilityScope": "可见范围"
+		"visibilityScope": "可见范围",
+		"visibilityTarget": "成员/部门"
 	},
 	"button": {
 		"cancel": "取消",
@@ -92,10 +110,12 @@
 		"ai": "AI 管理",
 		"aiSubMenu": {
 			"aiControl": "AI 消耗管控",
+			"applicationMenu": "应用菜单",
 			"customModel": "自定义大模型",
 			"dataStatistics": "数据统计",
 			"employeePublishReview": "员工发布审核",
 			"internalEmployeeSkill": "内部员工及技能",
+			"manage": "应用配置",
 			"modelControl": "模型管控",
 			"modelLogMonitor": "大模型日志监控",
 			"modelManagement": "模型管理",

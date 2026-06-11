@@ -6,6 +6,7 @@ import {
 	PERMISSION_KEY_MAP,
 	AI_CUSTOM_MODEL,
 	AI_INTERNAL_EMPLOYEE_SKILL,
+	AI_APP_MENU,
 } from "@admin/const/common"
 import { useAdminStore } from "@admin/stores/admin"
 
@@ -21,6 +22,7 @@ const AIVideoPage = lazy(() => import("../PlatformPackage/VideoModel/index.page"
 const AIVideoDetailPage = lazy(() => import("../PlatformPackage/VedioModelDetail/index.page"))
 const EmployeeReviewPage = lazy(() => import("./EmployeeReview/index.page"))
 const SkillReviewPage = lazy(() => import("./SkillReview/index.page"))
+const AppMenuPage = lazy(() => import("./AppMenu/index.page"))
 
 const hasAdminAllPermissions = (permissions: string[]) =>
 	permissions.includes(PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS) ||
@@ -49,6 +51,9 @@ const canAccessAIInternalEmployeeSkill = (permissions: string[], isSuperAdmin?: 
 	isSuperAdmin ||
 	AI_INTERNAL_EMPLOYEE_SKILL.some((permission) => permissions.includes(permission))
 
+const canAccessAIAppMenu = (permissions: string[], isSuperAdmin?: boolean) =>
+	isSuperAdmin || AI_APP_MENU.some((permission) => permissions.includes(permission))
+
 // 首页重定向
 function AIIndexRedirect() {
 	const { isPermissionInitialized, isOfficialOrg, userPermissions } = useAdminStore()
@@ -62,6 +67,9 @@ function AIIndexRedirect() {
 			: null,
 		canAccessAIInternalEmployeeSkill(userPermissions, isSuperAdmin)
 			? RoutePath.AIEmployeeReview
+			: null,
+		!isOfficialOrg && canAccessAIAppMenu(userPermissions, isSuperAdmin)
+			? RoutePath.AIAppMenu
 			: null,
 	].find(Boolean)
 
@@ -155,6 +163,25 @@ export default {
 					element: <SkillReviewPage />,
 					title: "nav.aiSubMenu.skillPublishReview",
 					validate: canAccessAIInternalEmployeeSkill,
+				},
+			],
+		},
+		{
+			name: RouteName.AdminAIManage,
+			path: RoutePath.AIManage,
+			title: "nav.aiSubMenu.manage",
+			validate: canAccessAIAppMenu,
+			children: [
+				{
+					index: true,
+					element: <Navigate to={RoutePath.AIAppMenu} replace />,
+				},
+				{
+					name: RouteName.AdminAIAppMenu,
+					path: RoutePath.AIAppMenu,
+					element: <AppMenuPage />,
+					title: "nav.aiSubMenu.applicationMenu",
+					validate: canAccessAIAppMenu,
 				},
 			],
 		},
