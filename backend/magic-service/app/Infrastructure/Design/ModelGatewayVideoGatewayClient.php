@@ -80,6 +80,11 @@ readonly class ModelGatewayVideoGatewayClient implements VideoGatewayClientInter
         return $result;
     }
 
+    public function timeoutVideo(string $operationId, array $businessParams): void
+    {
+        $this->videoOperationAppService->timeoutOperationById($operationId, $businessParams);
+    }
+
     /**
      * 合并调用方透传和 Design 层补充的业务参数，供鉴权、日志和计费共用。
      *
