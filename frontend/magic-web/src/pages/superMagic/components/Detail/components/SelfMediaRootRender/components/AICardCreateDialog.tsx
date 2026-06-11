@@ -13,6 +13,7 @@ import {
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { superMagicTopicModelCacheService } from "@/services/superMagic/topicModel"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
+import { MagicSwitch } from "@/components/base/MagicSwitch"
 import AICardFormFields from "../../AICardRootRender/components/AICardFormFields"
 import type { AICardFormFieldsValues } from "../../AICardRootRender/components/AICardFormFields"
 import { createAICardViaTopic } from "../services/aiCardCreate"
@@ -128,18 +129,24 @@ function AICardCreateDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="!max-w-[750px]">
-				<DialogHeader>
-					<DialogTitle className="flex items-center gap-2">
+			<DialogContent
+				className="grid max-h-[88vh] !max-w-[820px] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
+				data-testid="ai-card-create-dialog-content"
+			>
+				<DialogHeader className="gap-1.5 border-b bg-card px-6 py-5">
+					<DialogTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight">
 						<Sparkles size={18} className="text-primary" />
 						{t("detail.aiCard.createDialog.title")}
 					</DialogTitle>
-					<DialogDescription>
+					<DialogDescription className="text-xs">
 						{t("detail.aiCard.createDialog.description")}
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="space-y-4 py-4">
+				<div
+					className="min-h-0 space-y-5 overflow-y-auto bg-muted/20 px-6 py-5"
+					data-testid="ai-card-create-dialog-body"
+				>
 					<AICardFormFields
 						values={formValues}
 						onChange={handleChange}
@@ -147,23 +154,45 @@ function AICardCreateDialog({
 						modelList={modelList}
 						imageModelList={imageModelList}
 						videoModelList={videoModelList}
+						hideEnabledToggle
+						promptMaxHeight={260}
 					/>
 				</div>
 
-				<DialogFooter>
-					<Button
-						variant="outline"
-						onClick={() => onOpenChange(false)}
-						disabled={submitting}
-					>
-						{t("detail.aiCard.createDialog.cancel")}
-					</Button>
-					<Button onClick={handleSubmit} disabled={!isValid || submitting}>
-						{submitting && <Loader2 size={14} className="mr-1.5 animate-spin" />}
-						{submitting
-							? t("detail.aiCard.createDialog.creating")
-							: t("detail.aiCard.createDialog.confirm")}
-					</Button>
+				<DialogFooter
+					className="flex-col gap-3 border-t bg-card px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
+					data-testid="ai-card-create-dialog-footer"
+				>
+					<div className="flex items-center gap-3">
+						<MagicSwitch
+							checked={formValues.enabled ?? true}
+							onChange={(checked) => handleChange({ enabled: checked })}
+							disabled={submitting}
+						/>
+						<div className="min-w-0">
+							<div className="text-sm font-medium text-foreground">
+								{t("detail.aiCard.config.enableSchedule")}
+							</div>
+							<div className="text-xs text-muted-foreground">
+								{t("detail.aiCard.config.enableScheduleHint")}
+							</div>
+						</div>
+					</div>
+					<div className="flex justify-end gap-3">
+						<Button
+							variant="outline"
+							onClick={() => onOpenChange(false)}
+							disabled={submitting}
+						>
+							{t("detail.aiCard.createDialog.cancel")}
+						</Button>
+						<Button onClick={handleSubmit} disabled={!isValid || submitting}>
+							{submitting && <Loader2 size={14} className="mr-1.5 animate-spin" />}
+							{submitting
+								? t("detail.aiCard.createDialog.creating")
+								: t("detail.aiCard.createDialog.confirm")}
+						</Button>
+					</div>
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>

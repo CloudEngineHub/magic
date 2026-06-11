@@ -1,6 +1,7 @@
 import { SuperMagicApi } from "@/apis"
-import { getFileContentById } from "@/pages/superMagic/utils/api"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
+import { getFileContentById } from "@/pages/superMagic/utils/api"
+import type { ScheduledTask } from "@/types/scheduledTask"
 import { Upload } from "@dtyq/upload-sdk"
 import type {
 	SelfMediaInitData,
@@ -69,6 +70,54 @@ export interface TemplateMeta {
 	author: string
 	articleCount: number
 	titles: string[]
+}
+
+export interface SelfMediaPostOpsMetricsPayload {
+	version: number
+	updatedAt: string
+	source: "real-platform" | "user" | "reference" | "generated" | "mixed"
+	metrics: Record<string, string>
+	notes?: string
+}
+
+export interface SelfMediaPostOpsSourcePayload {
+	version: number
+	updatedAt: string
+	platform: string
+	publishedUrl: string
+	fetchStatus?: "pending" | "fetched" | "failed"
+	lastFetchedAt?: string
+	failureReason?: string
+	notes?: string
+	autoSync?: {
+		enabled: boolean
+		taskId?: string
+		timeConfig?: ScheduledTask.TimeConfig
+		updatedAt?: string
+		lastError?: string
+	}
+}
+
+export interface SelfMediaPostOpsCommentItem {
+	id: string
+	author?: string
+	text: string
+	sentiment?: "positive" | "neutral" | "negative" | "question"
+	intent?: string
+	time?: string
+}
+
+export interface SelfMediaPostOpsCommentsPayload {
+	version: number
+	updatedAt: string
+	source: "real-platform" | "user" | "reference" | "generated" | "mixed"
+	summary?: string
+	comments: SelfMediaPostOpsCommentItem[]
+	insights?: string[]
+}
+
+export interface SelfMediaPostOpsReviewPayload {
+	content: string
 }
 
 interface SerializedReferenceFile {
@@ -191,7 +240,7 @@ export class SelfMediaFileStorageService {
 	async saveBrandConfig(global: SelfMediaInitGlobalSettings): Promise<void> {
 		// Serialize concurrent saves to avoid duplicate file/folder creation
 		if (this.brandConfigSaving) {
-			await this.brandConfigSaving.catch(() => { })
+			await this.brandConfigSaving.catch(() => {})
 		}
 		const doSave = async () => {
 			try {
@@ -225,6 +274,87 @@ export class SelfMediaFileStorageService {
 			const payload: BrandConfigPayload = JSON.parse(content)
 
 			return this.deserializeGlobal(payload)
+		} catch {
+			return null
+		}
+	}
+
+	async savePostOpsMetrics(
+		postEntryPath: string,
+		payload: SelfMediaPostOpsMetricsPayload,
+	): Promise<void> {
+		await this.savePostOpsJsonFile(postEntryPath, "metrics.json", payload)
+	}
+
+	async loadPostOpsMetrics(
+		postEntryPath: string,
+	): Promise<SelfMediaPostOpsMetricsPayload | null> {
+		try {
+			const files = await this.getProjectFileList()
+			const file = this.findFileByProjectRelativePath(
+				files,
+				`${this.getPostOpsPath(postEntryPath)}/metrics.json`,
+			)
+			if (!file?.file_id) return null
+
+			const content = (await getFileContentById(file.file_id, {
+				responseType: "text",
+			})) as string
+			return JSON.parse(content) as SelfMediaPostOpsMetricsPayload
+		} catch {
+			return null
+		}
+	}
+
+	async savePostOpsSource(
+		postEntryPath: string,
+		payload: SelfMediaPostOpsSourcePayload,
+	): Promise<void> {
+		await this.savePostOpsJsonFile(postEntryPath, "source.json", payload)
+	}
+
+	async loadPostOpsSource(postEntryPath: string): Promise<SelfMediaPostOpsSourcePayload | null> {
+		try {
+			const content = await this.loadPostOpsFileContent(postEntryPath, "source.json")
+			if (!content) return null
+			return JSON.parse(content) as SelfMediaPostOpsSourcePayload
+		} catch {
+			return null
+		}
+	}
+
+	async savePostOpsComments(
+		postEntryPath: string,
+		payload: SelfMediaPostOpsCommentsPayload,
+	): Promise<void> {
+		await this.savePostOpsJsonFile(postEntryPath, "comments.json", payload)
+	}
+
+	async loadPostOpsComments(
+		postEntryPath: string,
+	): Promise<SelfMediaPostOpsCommentsPayload | null> {
+		try {
+			const content = await this.loadPostOpsFileContent(postEntryPath, "comments.json")
+			if (!content) return null
+			return JSON.parse(content) as SelfMediaPostOpsCommentsPayload
+		} catch {
+			return null
+		}
+	}
+
+	async savePostOpsReview(
+		postEntryPath: string,
+		payload: SelfMediaPostOpsReviewPayload,
+	): Promise<void> {
+		const opsDir = await this.ensureDirectory(this.getPostOpsPath(postEntryPath))
+		await this.createAndWriteFile(opsDir, "review.md", payload.content)
+	}
+
+	async loadPostOpsReview(postEntryPath: string): Promise<SelfMediaPostOpsReviewPayload | null> {
+		try {
+			const content = await this.loadPostOpsFileContent(postEntryPath, "review.md")
+			if (content === null) return null
+			return { content }
 		} catch {
 			return null
 		}
@@ -278,11 +408,7 @@ export class SelfMediaFileStorageService {
 				REFERENCE_INDEX_JSON,
 				JSON.stringify(referenceIndex, null, 2),
 			)
-			if (
-				!manifestFileId ||
-				!archiveDraftFileId ||
-				!archiveReferenceIndexFileId
-			) {
+			if (!manifestFileId || !archiveDraftFileId || !archiveReferenceIndexFileId) {
 				return null
 			}
 
@@ -332,14 +458,11 @@ export class SelfMediaFileStorageService {
 			const draftFiles = files.filter((f) => {
 				if (f.is_directory || !f.relative_file_path) return false
 				const normalized = this.normalizeRelativePath(f.relative_file_path)
-				return (
-					normalized === draftJsonPath ||
-					normalized === referenceIndexPath
-				)
+				return normalized === draftJsonPath || normalized === referenceIndexPath
 			})
 			for (const f of draftFiles) {
 				if (f.file_id) {
-					await SuperMagicApi.deleteFile(f.file_id).catch(() => { })
+					await SuperMagicApi.deleteFile(f.file_id).catch(() => {})
 				}
 			}
 
@@ -347,8 +470,8 @@ export class SelfMediaFileStorageService {
 
 			const materialsDirPath = this.folderRelativePath
 				? this.normalizeRelativePath(
-					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-				)
+						`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+					)
 				: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 			const materialsDir = files.find(
 				(f) =>
@@ -357,7 +480,7 @@ export class SelfMediaFileStorageService {
 					this.normalizeRelativePath(f.relative_file_path) === materialsDirPath,
 			)
 			if (materialsDir?.file_id) {
-				await SuperMagicApi.deleteFile(materialsDir.file_id).catch(() => { })
+				await SuperMagicApi.deleteFile(materialsDir.file_id).catch(() => {})
 			}
 		} catch {
 			// silent
@@ -481,7 +604,7 @@ export class SelfMediaFileStorageService {
 			)
 			for (const f of toDelete) {
 				if (f.file_id) {
-					await SuperMagicApi.deleteFile(f.file_id).catch(() => { })
+					await SuperMagicApi.deleteFile(f.file_id).catch(() => {})
 				}
 			}
 
@@ -490,10 +613,10 @@ export class SelfMediaFileStorageService {
 				(f) =>
 					f.is_directory &&
 					f.relative_file_path ===
-					`${this.getBasePath()}/${TEMPLATES_MATERIALS_DIR}/${templateId}`,
+						`${this.getBasePath()}/${TEMPLATES_MATERIALS_DIR}/${templateId}`,
 			)
 			if (matDir?.file_id) {
-				await SuperMagicApi.deleteFile(matDir.file_id).catch(() => { })
+				await SuperMagicApi.deleteFile(matDir.file_id).catch(() => {})
 			}
 		} catch {
 			// silent
@@ -678,7 +801,7 @@ export class SelfMediaFileStorageService {
 
 	// ─── Cleanup ─────────────────────────────────────────────────────────────
 
-	dispose(): void { }
+	dispose(): void {}
 
 	// ─── Private Helpers ─────────────────────────────────────────────────────
 
@@ -706,6 +829,49 @@ export class SelfMediaFileStorageService {
 				f.relative_file_path &&
 				this.normalizeRelativePath(f.relative_file_path) === target,
 		)
+	}
+
+	private findFileByProjectRelativePath(
+		files: FileNode[],
+		pathFromSelfMediaFolder: string,
+	): FileNode | undefined {
+		const target = this.toProjectRelativePath(pathFromSelfMediaFolder)
+		return files.find(
+			(f) =>
+				!f.is_directory &&
+				f.relative_file_path &&
+				this.normalizeRelativePath(f.relative_file_path) === target,
+		)
+	}
+
+	private async savePostOpsJsonFile(
+		postEntryPath: string,
+		fileName: string,
+		payload: unknown,
+	): Promise<void> {
+		const opsDir = await this.ensureDirectory(this.getPostOpsPath(postEntryPath))
+		await this.createAndWriteFile(opsDir, fileName, JSON.stringify(payload, null, 2))
+	}
+
+	private async loadPostOpsFileContent(
+		postEntryPath: string,
+		fileName: string,
+	): Promise<string | null> {
+		const files = await this.getProjectFileList()
+		const file = this.findFileByProjectRelativePath(
+			files,
+			`${this.getPostOpsPath(postEntryPath)}/${fileName}`,
+		)
+		if (!file?.file_id) return null
+
+		return (await getFileContentById(file.file_id, {
+			responseType: "text",
+		})) as string
+	}
+
+	private getPostOpsPath(postEntryPath: string): string {
+		const normalized = this.normalizeRelativePath(postEntryPath)
+		return normalized.replace(/\/?post\.json$/, "/ops")
 	}
 
 	/** Path segment under parentFileId for ensureDirectory (not project-root relative). */
@@ -879,7 +1045,7 @@ export class SelfMediaFileStorageService {
 		const inflight = this.fileInflight.get(inflightKey)
 		if (inflight) {
 			// Wait for the previous write, then write again with new content
-			await inflight.catch(() => { })
+			await inflight.catch(() => {})
 		}
 
 		const doWrite = async (): Promise<string | null> => {
@@ -891,9 +1057,7 @@ export class SelfMediaFileStorageService {
 				// Determine the full path based on parentDirId
 				let fullPath = ""
 				if (parentDirId) {
-					const parentDir = files.find(
-						(f) => f.is_directory && f.file_id === parentDirId,
-					)
+					const parentDir = files.find((f) => f.is_directory && f.file_id === parentDirId)
 					fullPath = parentDir?.relative_file_path
 						? `${parentDir.relative_file_path}/${fileName}`
 						: `${basePath}/${fileName}`
@@ -943,7 +1107,10 @@ export class SelfMediaFileStorageService {
 	private async getProjectFileList(): Promise<FileNode[]> {
 		const now = Date.now()
 		// Return cached result if still fresh
-		if (this.fileListCache && now - this.fileListCacheTime < SelfMediaFileStorageService.FILE_LIST_CACHE_TTL) {
+		if (
+			this.fileListCache &&
+			now - this.fileListCacheTime < SelfMediaFileStorageService.FILE_LIST_CACHE_TTL
+		) {
 			return this.fileListCache
 		}
 		// Dedup concurrent in-flight requests
@@ -1060,8 +1227,8 @@ export class SelfMediaFileStorageService {
 		const files = await this.getProjectFileList()
 		const materialsDirPath = this.folderRelativePath
 			? this.normalizeRelativePath(
-				`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-			)
+					`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+				)
 			: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
 		const materialsDir = files.find(
 			(item) =>
@@ -1246,22 +1413,24 @@ export class SelfMediaFileStorageService {
 	): string | undefined {
 		if (!path) return path
 		const normalized = this.normalizeRelativePath(path)
-		const draftMaterialsPrefix = `${this.folderRelativePath
-			? this.normalizeRelativePath(
-				`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
-			)
-			: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
-			}/`
+		const draftMaterialsPrefix = `${
+			this.folderRelativePath
+				? this.normalizeRelativePath(
+						`${this.folderRelativePath}/${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`,
+					)
+				: this.normalizeRelativePath(`${DRAFTS_DIR}/${DRAFT_MATERIALS_DIR}`)
+		}/`
 		if (!normalized.startsWith(draftMaterialsPrefix)) return path
 		const suffix = normalized.slice(draftMaterialsPrefix.length)
-		const archivePrefix = `${this.folderRelativePath
-			? this.normalizeRelativePath(
-				`${this.folderRelativePath}/${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
-			)
-			: this.normalizeRelativePath(
-				`${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
-			)
-			}/`
+		const archivePrefix = `${
+			this.folderRelativePath
+				? this.normalizeRelativePath(
+						`${this.folderRelativePath}/${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
+					)
+				: this.normalizeRelativePath(
+						`${DRAFTS_DIR}/${ARCHIVE_DIR}/${archiveId}/${DRAFT_MATERIALS_DIR}`,
+					)
+		}/`
 		return `${archivePrefix}${suffix}`
 	}
 
@@ -1294,7 +1463,9 @@ export class SelfMediaFileStorageService {
 				file_id: f.file_id,
 				file_path: f.file_path,
 			})),
-			visualDescriptionJson: article.visualDescriptionJson as Record<string, unknown> | undefined,
+			visualDescriptionJson: article.visualDescriptionJson as
+				| Record<string, unknown>
+				| undefined,
 		}))
 	}
 
@@ -1423,12 +1594,12 @@ export class SelfMediaFileStorageService {
 				outline: this.normalizeOutline(a.outline),
 				materials: Array.isArray(a.materials)
 					? a.materials.map((m) => ({
-						id: m.id || `material_${Date.now()}`,
-						file: new File([], m.name || "file"),
-						previewUrl: "",
-						description: m.description || "",
-						uploadedPath: m.relativePath,
-					}))
+							id: m.id || `material_${Date.now()}`,
+							file: new File([], m.name || "file"),
+							previewUrl: "",
+							description: m.description || "",
+							uploadedPath: m.relativePath,
+						}))
 					: [],
 				notes: a.notes,
 				platform: a.platform as any,
@@ -1437,12 +1608,12 @@ export class SelfMediaFileStorageService {
 				visualDescriptionJson: a.visualDescriptionJson,
 				visualReferenceFiles: Array.isArray(a.visualReferenceFiles)
 					? a.visualReferenceFiles.map((f) => ({
-						name: f.name || "file",
-						content: f.content || "",
-						kind: f.kind,
-						file_id: f.file_id,
-						file_path: f.file_path,
-					}))
+							name: f.name || "file",
+							content: f.content || "",
+							kind: f.kind,
+							file_id: f.file_id,
+							file_path: f.file_path,
+						}))
 					: [],
 			})),
 		}
@@ -1488,12 +1659,12 @@ export class SelfMediaFileStorageService {
 					children: Array.isArray(node.children) ? normalize(node.children) : [],
 					materials: Array.isArray(node.materials)
 						? node.materials.map((m, idx) => ({
-							id: m.id || `outline_mat_${idx}`,
-							file: new File([], m.name || "file"),
-							previewUrl: "",
-							description: m.description || "",
-							uploadedPath: m.relativePath || m.uploadedPath,
-						}))
+								id: m.id || `outline_mat_${idx}`,
+								file: new File([], m.name || "file"),
+								previewUrl: "",
+								description: m.description || "",
+								uploadedPath: m.relativePath || m.uploadedPath,
+							}))
 						: [],
 				}
 			})

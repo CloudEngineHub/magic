@@ -126,18 +126,18 @@ Create a scheduled message task, supporting one-time execution and daily/weekly/
 |`--agent-code <code>`|string|条件必填|自定义员工 code；当 `--topic-pattern custom_agent` 时必须传入|
 -->
 
-| Option | Type | Required | Description |
-| --- | --- | --- | --- |
-| `--task-name <name>` | string | Yes | Task name |
-| `--message-content <content>` | string | Conditional | Message content (same as detail message_content/task_describe). Mutually exclusive with `--message-content-file` |
-| `--message-content-file <path>` | string | Conditional | Read message content from a file. Prefer this for long text or content with Chinese punctuation, quotes, or brackets |
-| `--type <type>` | string | Yes | Schedule type, see table below |
-| `--time <HH:MM>` | string | Yes | Execution time |
-| `--day <value>` | string | Conditional | Depends on schedule type, see table below |
-| `--deadline <YYYY-MM-DD HH:MM:SS>` | string | No | Expiry datetime; format YYYY-MM-DD HH:MM:SS. If only date or unclear format is given, the system will interpret and complete (e.g. to 00:00:00 that day) |
-| `--specify-topic <0\|1>` | integer | No | Whether to specify topic; 0=no, 1=yes; default 0. Pass 1 only when the user intent is a **recurring** task whose **next run depends on the previous run's result**; otherwise use default 0 |
-| `--topic-pattern <mode>` | string | No | Agent mode for the scheduled run. For built-in agents, pass the mode such as `ip-manager`; for custom agents, pass `custom_agent`; defaults to `general` when omitted |
-| `--agent-code <code>` | string | Conditional | Custom agent code. Required when `--topic-pattern custom_agent` |
+| Option                             | Type    | Required    | Description                                                                                                                                                                                 |
+| ---------------------------------- | ------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--task-name <name>`               | string  | Yes         | Task name                                                                                                                                                                                   |
+| `--message-content <content>`      | string  | Conditional | Message content (same as detail message_content/task_describe). Mutually exclusive with `--message-content-file`                                                                            |
+| `--message-content-file <path>`    | string  | Conditional | Read message content from a file. Prefer this for long text or content with Chinese punctuation, quotes, or brackets                                                                        |
+| `--type <type>`                    | string  | Yes         | Schedule type, see table below                                                                                                                                                              |
+| `--time <HH:MM>`                   | string  | Yes         | Execution time                                                                                                                                                                              |
+| `--day <value>`                    | string  | Conditional | Depends on schedule type, see table below                                                                                                                                                   |
+| `--deadline <YYYY-MM-DD HH:MM:SS>` | string  | No          | Expiry datetime; format YYYY-MM-DD HH:MM:SS. If only date or unclear format is given, the system will interpret and complete (e.g. to 00:00:00 that day)                                    |
+| `--specify-topic <0\|1>`           | integer | No          | Whether to specify topic; 0=no, 1=yes; default 0. Pass 1 only when the user intent is a **recurring** task whose **next run depends on the previous run's result**; otherwise use default 0 |
+| `--topic-pattern <mode>`           | string  | No          | Agent mode for the scheduled run. For built-in agents, pass the mode such as `ip-manager`; for custom agents, pass `custom_agent`; defaults to `general` when omitted                       |
+| `--agent-code <code>`              | string  | Conditional | Custom agent code. Required when `--topic-pattern custom_agent`                                                                                                                             |
 
 <!--zh
 **调度类型 `--type` 与 `--day` 对应关系：**
@@ -152,12 +152,12 @@ Create a scheduled message task, supporting one-time execution and daily/weekly/
 
 **Schedule type `--type` and `--day` mapping:**
 
-| `--type` | Description | `--day` |
-| --- | --- | --- |
-| `no_repeat` | No repeat, one-time execution | Execution date `YYYY-MM-DD` (required) |
-| `daily_repeat` | Repeat daily | Not needed |
-| `weekly_repeat` | Repeat weekly | Day of week `0`-`6`, `0`=Sunday (required) |
-| `monthly_repeat` | Repeat monthly | Day of month `1`-`31` (required) |
+| `--type`         | Description                   | `--day`                                    |
+| ---------------- | ----------------------------- | ------------------------------------------ |
+| `no_repeat`      | No repeat, one-time execution | Execution date `YYYY-MM-DD` (required)     |
+| `daily_repeat`   | Repeat daily                  | Not needed                                 |
+| `weekly_repeat`  | Repeat weekly                 | Day of week `0`-`6`, `0`=Sunday (required) |
+| `monthly_repeat` | Repeat monthly                | Day of month `1`-`31` (required)           |
 
 **OUTPUT**
 
@@ -357,16 +357,16 @@ Update scheduled task configuration. Only pass fields to be modified; unspecifie
 |`--enabled <0\|1>`|integer|否|`1`=启用 `0`=禁用|
 -->
 
-| Option | Type | Required | Description |
-| --- | --- | --- | --- |
-| `--id <schedule_id>` | string | Yes | Task ID |
-| `--task-name <name>` | string | No | New task name |
-| `--message-content <content>` | string | No | Message content (same as detail message_content/task_describe) |
-| `--type <type>` | string | No | Schedule type (must be provided with `--time`) |
-| `--time <HH:MM>` | string | No | Execution time (must be provided with `--type`) |
-| `--day <value>` | string | No | Date/weekday/day-of-month, depends on `--type` |
-| `--deadline <YYYY-MM-DD HH:MM:SS>` | string | No | Expiry datetime; format YYYY-MM-DD HH:MM:SS, auto-completed if only date or unclear |
-| `--enabled <0\|1>` | integer | No | `1`=enable `0`=disable |
+| Option                             | Type    | Required | Description                                                                         |
+| ---------------------------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
+| `--id <schedule_id>`               | string  | Yes      | Task ID                                                                             |
+| `--task-name <name>`               | string  | No       | New task name                                                                       |
+| `--message-content <content>`      | string  | No       | Message content (same as detail message_content/task_describe)                      |
+| `--type <type>`                    | string  | No       | Schedule type (must be provided with `--time`)                                      |
+| `--time <HH:MM>`                   | string  | No       | Execution time (must be provided with `--type`)                                     |
+| `--day <value>`                    | string  | No       | Date/weekday/day-of-month, depends on `--type`                                      |
+| `--deadline <YYYY-MM-DD HH:MM:SS>` | string  | No       | Expiry datetime; format YYYY-MM-DD HH:MM:SS, auto-completed if only date or unclear |
+| `--enabled <0\|1>`                 | integer | No       | `1`=enable `0`=disable                                                              |
 
 **OUTPUT**
 
@@ -483,6 +483,23 @@ generate latest.html, archive the previous version, and update metadata.
 EOF
 cd /app/agents/skills/using-cron &&
 python scripts/create.py --task-name "AI Card" --message-content-file /tmp/cron-message.txt --type daily_repeat --time "9:00" --topic-pattern ip-manager'''
+)
+
+# 自媒体文章数据自动同步
+# 固定周期同步不绑定具体文章话题：传 --specify-topic 0，让执行时新建话题。
+# 员工使用 ip-manager：只传 --topic-pattern ip-manager，不额外传 agent_code。
+# 前端/直接 payload 场景中，message_content.extra.super_agent.model 使用 ip-manager 员工可用语言模型列表的第一个正常模型；没有可用模型时省略该字段，让执行链路按现有默认策略处理。
+shell_exec(
+    command='''cat > /tmp/self-media-post-sync.txt <<'EOF'
+请读取当前文章目录下 ops/source.json，访问已绑定的 publishedUrl，只更新当前文章目录下的运营文件：
+- ops/metrics.json
+- ops/comments.json
+- ops/review.md
+- ops/source.json 的 fetchStatus、lastFetchedAt、failureReason
+不要生成 AI Card、不要写入 AI Card 分析产物。
+EOF
+cd /app/agents/skills/using-cron &&
+python scripts/create.py --task-name "[文章数据同步] 示例文章" --message-content-file /tmp/self-media-post-sync.txt --type daily_repeat --time "9:00" --specify-topic 0 --topic-pattern ip-manager'''
 )
 
 # 查询任务列表

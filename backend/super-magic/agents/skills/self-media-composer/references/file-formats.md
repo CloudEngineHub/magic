@@ -60,9 +60,18 @@ Plain JSON (not JSONP). Produced by `create_self_media_post`; edit with `edit_fi
     "feedLikes": "18k",
     "commentCount": "128",
     "comments": [
-      { "name": "Alice", "text": "The cost breakdown finally makes the trade-offs clear." },
-      { "name": "Ben", "text": "Saving this for our next AI tool budget review." },
-      { "name": "Cora", "text": "The optimization checklist is the part I needed most." }
+      {
+        "name": "Alice",
+        "text": "The cost breakdown finally makes the trade-offs clear."
+      },
+      {
+        "name": "Ben",
+        "text": "Saving this for our next AI tool budget review."
+      },
+      {
+        "name": "Cora",
+        "text": "The optimization checklist is the part I needed most."
+      }
     ],
     "interactionReference": {
       "level": "medium-high",
@@ -88,9 +97,18 @@ Plain JSON (not JSONP). Produced by `create_self_media_post`; edit with `edit_fi
     "feedLikes": "23.8w",
     "commentCount": "3.2k",
     "comments": [
-      { "name": "Mia", "text": "This would remove so much manual PPT cleanup work." },
-      { "name": "Noah", "text": "The editable elements angle is much stronger than a simple screenshot export." },
-      { "name": "Ivy", "text": "I want to try this on our next product report." }
+      {
+        "name": "Mia",
+        "text": "This would remove so much manual PPT cleanup work."
+      },
+      {
+        "name": "Noah",
+        "text": "The editable elements angle is much stronger than a simple screenshot export."
+      },
+      {
+        "name": "Ivy",
+        "text": "I want to try this on our next product report."
+      }
     ],
     "time": "4 minutes ago",
     "interactionReference": {
@@ -104,6 +122,64 @@ Plain JSON (not JSONP). Produced by `create_self_media_post`; edit with `edit_fi
   "thumbnailCover": "assets/cover-square.jpg"
 }
 ```
+
+---
+
+## Post-Publication Operations Files
+
+Each post may include an `ops/` directory for real post-publication data. These files belong to the current post folder and are updated by the self-media/IP-operations data-sync workflow, not by AI Card generation.
+
+```
+posts/<post-id>/
+├── ops/
+│   ├── source.json
+│   ├── metrics.json
+│   ├── comments.json
+│   └── review.md
+└── post.json
+```
+
+### `ops/source.json`
+
+Tracks the published article URL and sync status.
+
+```json
+{
+  "version": 1,
+  "updatedAt": "2026-06-11T09:00:00.000Z",
+  "platform": "wechat-official-accounts",
+  "publishedUrl": "https://example.com/post",
+  "fetchStatus": "pending",
+  "lastFetchedAt": null,
+  "failureReason": null,
+  "autoSync": {
+    "enabled": true,
+    "taskId": "scheduled-task-id",
+    "timeConfig": {
+      "type": "daily_repeat",
+      "time": "09:00"
+    },
+    "updatedAt": "2026-06-11T09:00:00.000Z",
+    "lastError": null
+  }
+}
+```
+
+`autoSync.enabled` records whether scheduled article data sync is active. `autoSync.taskId` is the existing scheduled-task id when a schedule has been created. `autoSync.timeConfig` stores the daily/weekly/monthly cadence used by the scheduler.
+
+### `ops/metrics.json`
+
+Stores real or user-entered operation metrics such as exposure/read, likes, saves, comments, shares, follows, conversions, and platform-specific KPI fields.
+
+### `ops/comments.json`
+
+Stores comment samples, audience feedback, objections, questions, buying/consulting signals, and reusable wording.
+
+### `ops/review.md`
+
+Stores the readable operational review: performance judgment, attribution, next article topics, title/cover tests, distribution actions, and comment-area actions.
+
+The post-publication data sync prompt should read `ops/source.json`, visit the bound `publishedUrl`, update `ops/metrics.json`, `ops/comments.json`, and `ops/review.md`, then update `ops/source.json` status fields. It must not generate AI Card artifacts.
 
 ---
 

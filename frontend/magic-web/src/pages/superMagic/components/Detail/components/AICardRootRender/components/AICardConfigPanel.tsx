@@ -123,7 +123,6 @@ function AICardConfigPanel({ store, onBack }: AICardConfigPanelProps) {
 						modelList={modelList}
 						imageModelList={imageModelList}
 						videoModelList={videoModelList}
-						advancedExpanded
 						hideTemplate={store.hasConfig}
 					/>
 				</div>

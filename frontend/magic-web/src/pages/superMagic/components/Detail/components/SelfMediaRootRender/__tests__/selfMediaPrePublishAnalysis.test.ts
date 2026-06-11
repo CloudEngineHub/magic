@@ -1,28 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { sendSelfMediaPrePublishAnalysis } from "../services/selfMediaPrePublishAnalysis"
 
-const { mockChat, mockCreateTopic, mockNavigateToBatchTopic, mockPublish, mockT } = vi.hoisted(() => ({
-	mockChat: vi.fn(),
-	mockCreateTopic: vi.fn(),
-	mockNavigateToBatchTopic: vi.fn(),
-	mockPublish: vi.fn(),
-	mockT: vi.fn((key: string, options?: Record<string, unknown>) => {
-		const translations: Record<string, string> = {
-			"detail.selfMedia.analysis.prompt.topicName": "[发布前诊断] {{title}}",
-			"detail.selfMedia.analysis.prompt.untitled": "自媒体文章",
-			"detail.selfMedia.analysis.prompt.missingValue": "未提供",
-			"detail.selfMedia.analysis.prompt.opening": "请对 {{mention}} 做发布前诊断。",
-			"detail.selfMedia.analysis.prompt.metadata":
-				"平台：{{platform}}\n目标：{{goal}}\n标题：{{title}}\n作者/IP：{{author}}\n标签：{{tags}}",
-			"detail.selfMedia.analysis.prompt.instruction":
-				"请联网对比同类内容，输出证据清单、评分、关键问题、同类内容差距、优先修改清单和改稿指令。外部资料只作为运营经验参考。",
-			"detail.selfMedia.analysis.goals.ipGrowth": "IP增长",
-			"detail.selfMedia.initPanel.platforms.rednote": "小红书",
-		}
-		const template = translations[key] || String(options?.defaultValue || key)
-		return template.replace(/\{\{(\w+)\}\}/g, (_, name) => String(options?.[name] ?? ""))
+const { mockChat, mockCreateTopic, mockNavigateToBatchTopic, mockPublish, mockT } = vi.hoisted(
+	() => ({
+		mockChat: vi.fn(),
+		mockCreateTopic: vi.fn(),
+		mockNavigateToBatchTopic: vi.fn(),
+		mockPublish: vi.fn(),
+		mockT: vi.fn((key: string, options?: Record<string, unknown>) => {
+			const translations: Record<string, string> = {
+				"detail.selfMedia.analysis.prompt.topicName": "[发布前诊断] {{title}}",
+				"detail.selfMedia.analysis.prompt.untitled": "自媒体文章",
+				"detail.selfMedia.analysis.prompt.missingValue": "未提供",
+				"detail.selfMedia.analysis.prompt.opening": "请对 {{mention}} 做发布前诊断。",
+				"detail.selfMedia.analysis.prompt.metadata":
+					"平台：{{platform}}\n目标：{{goal}}\n标题：{{title}}\n作者/IP：{{author}}\n标签：{{tags}}",
+				"detail.selfMedia.analysis.prompt.instruction":
+					"请联网对比同类内容，输出证据清单、评分、关键问题、同类内容差距、优先修改清单和改稿指令。外部资料只作为运营经验参考。",
+				"detail.selfMedia.analysis.goals.ipGrowth": "IP增长",
+				"detail.selfMedia.initPanel.platforms.rednote": "小红书",
+			}
+			const template = translations[key] || String(options?.defaultValue || key)
+			return template.replace(/\{\{(\w+)\}\}/g, (_, name) => String(options?.[name] ?? ""))
+		}),
 	}),
-}))
+)
 
 const selectedModel = {
 	id: "model-1",

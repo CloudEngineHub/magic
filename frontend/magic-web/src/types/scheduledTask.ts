@@ -32,7 +32,12 @@ export namespace ScheduledTask {
 				input_mode?: string
 				chat_mode?: string
 				topic_pattern?: string
+				agent_code?: string
+				enable_web_search?: boolean
+				dynamic_params?: Record<string, unknown>
 				model?: ModelItem | null
+				image_model?: { model_id: string } | null
+				video_model?: { model_id: string } | null
 			}
 		}
 	}

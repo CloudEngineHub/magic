@@ -1,4 +1,12 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react"
+import {
+	forwardRef,
+	useCallback,
+	useEffect,
+	useImperativeHandle,
+	useMemo,
+	useRef,
+	useState,
+} from "react"
 import type { ForwardRefExoticComponent, RefAttributes } from "react"
 import { EditorContent, useEditor, type JSONContent } from "@tiptap/react"
 import { Document } from "@tiptap/extension-document"
@@ -11,13 +19,23 @@ import MentionExtension from "@/components/business/MentionPanel/tiptap-plugin"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { useTranslation } from "react-i18next"
 import type { Language } from "@/components/business/MentionPanel/i18n/types"
-import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import SuperMagicVoiceInput from "@/pages/superMagic/components/MessageEditor/components/VoiceInput"
 import ModelSelector from "@/pages/superMagic/components/Detail/components/SelfMediaRootRender/components/SelfMediaInitPanel/components/picker/ModelSelector"
 import type { MagicPromptEditorProps, MagicPromptEditorRef, MentionNodeInfo } from "./types"
 import { useAIPolish } from "./useAIPolish"
 import AIPolishButton from "./AIPolishButton"
 import "./MagicPromptEditor.css"
+
+const EMPTY_DOC: JSONContent = { type: "doc", content: [] }
+
+function buildEditorContent(value?: JSONContent, textValue?: string): JSONContent | undefined {
+	if (value) return value
+	if (!textValue) return undefined
+	return {
+		type: "doc",
+		content: [{ type: "paragraph", content: [{ type: "text", text: textValue }] }],
+	}
+}
 
 /**
  * MagicPromptEditor — A reusable Tiptap-based prompt editor with @mention support
@@ -53,23 +71,16 @@ const MagicPromptEditor = forwardRef<MagicPromptEditorRef, MagicPromptEditorProp
 		const { i18n, t } = useTranslation("super")
 		const [isPolishing, setIsPolishing] = useState(false)
 		const [polishModelId, setPolishModelId] = useState("")
-		const contentRef = useRef<string>(JSON.stringify(value ?? null))
+		const initialContent = useMemo(
+			() => buildEditorContent(value, textValue),
+			[value, textValue],
+		)
+		const contentRef = useRef<string>(JSON.stringify(initialContent ?? null))
 
 		// Built-in polish via AiLLMService
 		const { polishText: builtinPolish } = useAIPolish({ model: polishModelId || undefined })
 
 		const computedMinHeight = rows ? rows * 24 + 16 : minHeight
-
-		const initialContent =
-			value ??
-			(textValue
-				? {
-						type: "doc",
-						content: [
-							{ type: "paragraph", content: [{ type: "text", text: textValue }] },
-						],
-					}
-				: undefined)
 
 		const editor = useEditor({
 			content: initialContent,
@@ -140,6 +151,14 @@ const MagicPromptEditor = forwardRef<MagicPromptEditorRef, MagicPromptEditorProp
 				},
 			},
 		})
+
+		useEffect(() => {
+			if (!editor) return
+			const snapshot = JSON.stringify(initialContent ?? null)
+			if (snapshot === contentRef.current) return
+			editor.commands.setContent(initialContent ?? EMPTY_DOC, false)
+			contentRef.current = snapshot
+		}, [editor, initialContent])
 
 		// Sync disabled state
 		useMemo(() => {

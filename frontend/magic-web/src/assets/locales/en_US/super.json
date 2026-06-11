@@ -662,9 +662,11 @@
 			},
 			"form": {
 				"advancedSettings": "Advanced Settings",
+				"aiPolish": "AI Polish",
 				"cardName": "Card Name",
 				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
 				"customTemplatePlaceholder": "Describe the card style and layout you want.\ne.g., Show a trend line chart on the left, a top-10 list on the right, with a dark theme.",
+				"polishModel": "Polish Model",
 				"prompt": "Analysis Instructions",
 				"promptHint": "AI will periodically fetch latest data, analyze it, and update the visual card.",
 				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends.",
@@ -675,7 +677,8 @@
 					"custom": "Custom",
 					"dailyDigest": "Daily Digest",
 					"hotspotTracker": "Hotspot Tracker"
-				}
+				},
+				"voiceInput": "Voice Input"
 			},
 			"history": {
 				"back": "Back",
@@ -714,7 +717,7 @@
 		"saveAndClose": "Save and Close",
 		"selfMedia": {
 			"analysis": {
-				"action": "Pre-publish Diagnosis",
+				"action": "AI diagnosis",
 				"cancel": "Cancel",
 				"confirm": "Start diagnosis",
 				"description": "Choose the diagnosis goal. The IP operations expert will compare similar content online, score this work, and suggest edits.",
@@ -833,13 +836,56 @@
 				"aiCardCount": "{{count}} AI card(s)",
 				"article": "Article",
 				"articleCount": "{{count}} article(s)",
+				"autoSync": "Auto sync",
+				"autoSyncDaily": "Daily",
+				"autoSyncDescription": "Keep this article's ops files fresh on a schedule.",
+				"autoSyncDisabled": "Off",
+				"autoSyncEnabled": "On",
+				"autoSyncMonthDayPlaceholder": "Day of month, e.g. 1",
+				"autoSyncMonthly": "Monthly",
+				"autoSyncSave": "Save auto sync",
+				"autoSyncStatus": "Status",
+				"autoSyncTurnOff": "Turn off auto sync",
+				"autoSyncWeekdayPlaceholder": "Weekday, e.g. 1",
+				"autoSyncWeekly": "Weekly",
 				"backHome": "Back home",
 				"badge": "Self Media",
+				"bindAndFetchPublishedData": "Save and fetch article data",
+				"bindPublishedLink": "Connect published link",
+				"bindPublishedLinkAction": "Save link",
 				"brandConfig": "Brand config",
 				"create": "New article",
+				"dataOverview": "Data overview",
+				"dataSyncNow": "Sync now",
+				"editPublishedLink": "Change published link",
 				"emptyDesc": "Create a new article to open the setup wizard.",
 				"emptyTitle": "No articles yet",
+				"loadingPublishedLink": "Loading link...",
 				"openPlatform": "Open platform content",
+				"opsArtifacts": {
+					"commentsMissing": "Feedback not organized",
+					"commentsReady": "Feedback ready",
+					"metricsMissing": "Data not fetched",
+					"metricsReady": "Metrics ready",
+					"reviewMissing": "Review not created",
+					"reviewReady": "Review ready",
+					"sourceMissing": "Link missing",
+					"sourceReady": "Link bound"
+				},
+				"opsData": "Data",
+				"opsOverview": {
+					"comments": "Feedback",
+					"content": "Content",
+					"metrics": "Metrics",
+					"progress": "{{done}}/{{total}}",
+					"review": "Review",
+					"source": "Published link",
+					"title": "Operations loop"
+				},
+				"postReviewCard": "Create review",
+				"postReviewCardName": "Review: {{title}}",
+				"publishedLinkInput": "Published content link",
+				"publishedLinkPlaceholder": "Paste the published content link",
 				"subtitle": "Open details from the list. Data updates keep you on the current page.",
 				"title": "Article home"
 			},
@@ -1096,6 +1142,67 @@
 						"label": "Product Launch"
 					}
 				}
+			},
+			"opsMetrics": {
+				"cancel": "Cancel",
+				"commentsRawPlaceholder": "One per line: author｜comment｜intent, e.g. Alice｜Need a real case｜Topic idea",
+				"commentsSummaryPlaceholder": "Summarize concerns, objections, consulting/buying signals, and reusable wording",
+				"description": "Bind the published URL for \"{{title}}\" and maintain post-publication metrics, feedback, and review files.",
+				"edit": "Edit",
+				"fetchPublishedData": "Fetch published data",
+				"fetchingPublishedData": "Fetching...",
+				"fields": {
+					"commentSamples": "Comment samples",
+					"comments": "Comments",
+					"conversions": "Conversions",
+					"feedbackSummary": "Feedback summary",
+					"follows": "Follows",
+					"likes": "Likes",
+					"notes": "Review notes",
+					"reads": "Exposure / reads",
+					"review": "Review",
+					"saves": "Saves",
+					"shares": "Shares",
+					"sourceUrl": "Article URL"
+				},
+				"loading": "Loading ops data...",
+				"metricPlaceholder": "Enter the real value or platform display value",
+				"notesPlaceholder": "Record data source, publish time, abnormal changes, comment observations...",
+				"optionalToggle": "Manual data (optional)",
+				"preview": {
+					"empty": "No data yet"
+				},
+				"reviewPlaceholder": "Write the performance judgment, causes, next post topics, title/cover A/B, distribution, and comment-area actions",
+				"save": "Save ops files",
+				"saving": "Saving...",
+				"sections": {
+					"feedback": "Audience feedback",
+					"metrics": "Core metrics",
+					"review": "Review actions",
+					"source": "Published link binding"
+				},
+				"sourceFailureReason": "Reason: {{reason}}",
+				"sourceLastFetched": "Last fetched {{time}}",
+				"sourceStatus": {
+					"failed": "Fetch failed",
+					"fetched": "Real data fetched",
+					"pending": "Pending real-data fetch",
+					"unknown": "Not fetched"
+				},
+				"sourceUrlPlaceholder": "Paste the published article URL for later real-data collection",
+				"summary": "{{count}} metric(s) filled. Saving writes ops/source.json, ops/metrics.json, ops/comments.json, and ops/review.md.",
+				"title": "Operations workspace"
+			},
+			"opsRefresh": {
+				"missingSourceUrl": "Bind the published article URL first.",
+				"prompt": {
+					"instruction": "Read ops/source.json in the current post folder first, and use the published URL in this message as the fallback target. Visit the real article URL and collect or organize real exposure, reads, likes, saves, comments, shares, follows, and conversion metrics. Write structured metrics back to ops/metrics.json in the current post folder, write comments/audience feedback to ops/comments.json, write the operations review, attribution, and next actions to ops/review.md, and update ops/source.json fetchStatus, lastFetchedAt, and any failure reason.",
+					"metadata": "Platform: {{platform}}\nTitle: {{title}}\nPublished URL: {{publishedUrl}}",
+					"opening": "Act as an IP operations specialist and fetch then write back post-publication real operations data for {{mention}}.",
+					"topicName": "[Real data refresh] {{title}}",
+					"untitled": "Self-media post"
+				},
+				"startFailed": "Failed to start publish ingest. Please try again later."
 			},
 			"platform": {
 				"actions": {

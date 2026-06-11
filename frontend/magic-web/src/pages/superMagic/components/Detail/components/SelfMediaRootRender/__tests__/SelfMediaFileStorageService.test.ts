@@ -278,6 +278,175 @@ describe("SelfMediaFileStorageService", () => {
 		)
 	})
 
+	it("saves and loads post ops metrics as a file-backed operations record", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.savePostOpsMetrics("posts/post-1/post.json", {
+			version: 1,
+			updatedAt: "2026-06-11T08:00:00.000Z",
+			source: "user",
+			metrics: {
+				likes: "1.2w",
+				comments: "128",
+				reads: "3.4w",
+			},
+			notes: "First real platform snapshot",
+		})
+
+		const metricsFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/posts/post-1/ops/metrics.json",
+		)
+		expect(metricsFile?.file_id).toBeTruthy()
+		if (!metricsFile?.file_id) throw new Error("metrics.json was not created")
+
+		expect(JSON.parse(contentByFileId.get(metricsFile.file_id) || "{}")).toEqual(
+			expect.objectContaining({
+				version: 1,
+				source: "user",
+				metrics: {
+					likes: "1.2w",
+					comments: "128",
+					reads: "3.4w",
+				},
+				notes: "First real platform snapshot",
+			}),
+		)
+
+		await expect(service.loadPostOpsMetrics("posts/post-1/post.json")).resolves.toEqual(
+			expect.objectContaining({
+				source: "user",
+				metrics: {
+					likes: "1.2w",
+					comments: "128",
+					reads: "3.4w",
+				},
+			}),
+		)
+	})
+
+	it("saves and loads a bound published article source link", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.savePostOpsSource("posts/post-1/post.json", {
+			version: 1,
+			updatedAt: "2026-06-11T08:05:00.000Z",
+			platform: "rednote",
+			publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+			fetchStatus: "failed",
+			lastFetchedAt: "2026-06-11T08:10:00.000Z",
+			failureReason: "Login required",
+		})
+
+		const sourceFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/posts/post-1/ops/source.json",
+		)
+		expect(sourceFile?.file_id).toBeTruthy()
+		if (!sourceFile?.file_id) throw new Error("source.json was not created")
+
+		expect(JSON.parse(contentByFileId.get(sourceFile.file_id) || "{}")).toEqual(
+			expect.objectContaining({
+				platform: "rednote",
+				publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+				fetchStatus: "failed",
+				lastFetchedAt: "2026-06-11T08:10:00.000Z",
+				failureReason: "Login required",
+			}),
+		)
+
+		await expect(service.loadPostOpsSource("posts/post-1/post.json")).resolves.toEqual(
+			expect.objectContaining({
+				publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+				fetchStatus: "failed",
+				lastFetchedAt: "2026-06-11T08:10:00.000Z",
+				failureReason: "Login required",
+			}),
+		)
+	})
+
+	it("saves and loads post ops comments and review notes as file-backed records", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.savePostOpsComments("posts/post-1/post.json", {
+			version: 1,
+			updatedAt: "2026-06-11T08:10:00.000Z",
+			source: "user",
+			summary: "读者主要追问是否支持团队协作。",
+			comments: [
+				{
+					id: "comment-1",
+					author: "Alice",
+					text: "这个流程能不能多人一起维护？",
+					sentiment: "positive",
+					intent: "购买咨询",
+				},
+			],
+			insights: ["团队协作是下篇内容的重点角度"],
+		})
+		await service.savePostOpsReview("posts/post-1/post.json", {
+			content: [
+				"# Post One 复盘",
+				"",
+				"- 结论：内容方向有效，但需要补充团队协作案例。",
+				"- 下一步：写一篇协作场景拆解。",
+			].join("\n"),
+		})
+
+		const commentsFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/posts/post-1/ops/comments.json",
+		)
+		const reviewFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/posts/post-1/ops/review.md",
+		)
+		expect(commentsFile?.file_id).toBeTruthy()
+		expect(reviewFile?.file_id).toBeTruthy()
+		if (!commentsFile?.file_id || !reviewFile?.file_id) {
+			throw new Error("ops comments/review files were not created")
+		}
+
+		expect(JSON.parse(contentByFileId.get(commentsFile.file_id) || "{}")).toEqual(
+			expect.objectContaining({
+				source: "user",
+				summary: "读者主要追问是否支持团队协作。",
+				comments: [
+					expect.objectContaining({
+						author: "Alice",
+						intent: "购买咨询",
+					}),
+				],
+				insights: ["团队协作是下篇内容的重点角度"],
+			}),
+		)
+		expect(contentByFileId.get(reviewFile.file_id)).toContain("内容方向有效")
+
+		await expect(service.loadPostOpsComments("posts/post-1/post.json")).resolves.toEqual(
+			expect.objectContaining({
+				source: "user",
+				comments: [
+					expect.objectContaining({
+						text: "这个流程能不能多人一起维护？",
+					}),
+				],
+			}),
+		)
+		await expect(service.loadPostOpsReview("posts/post-1/post.json")).resolves.toEqual(
+			expect.objectContaining({
+				content: expect.stringContaining("下一步：写一篇协作场景拆解"),
+			}),
+		)
+	})
+
 	it("does not persist brand config in new draft payloads", async () => {
 		const service = new SelfMediaFileStorageService(
 			"project-1",

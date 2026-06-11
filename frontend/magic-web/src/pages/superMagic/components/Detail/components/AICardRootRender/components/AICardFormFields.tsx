@@ -1,6 +1,5 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/shadcn-ui/input"
 import { MagicSelect } from "@/components/base"
@@ -34,10 +33,12 @@ interface AICardFormFieldsProps {
 	modelList?: ModelItem[]
 	imageModelList?: ModelItem[]
 	videoModelList?: ModelItem[]
-	/** Whether to show schedule/model/enabled as expanded by default */
-	advancedExpanded?: boolean
 	/** Hide template selection (e.g. when a template file already exists) */
 	hideTemplate?: boolean
+	/** Hide the enabled toggle when a parent layout renders it elsewhere */
+	hideEnabledToggle?: boolean
+	/** Maximum height for the prompt editor before it scrolls internally */
+	promptMaxHeight?: number
 }
 
 function AICardFormFields({
@@ -47,11 +48,11 @@ function AICardFormFields({
 	modelList,
 	imageModelList,
 	videoModelList,
-	advancedExpanded = false,
 	hideTemplate = false,
+	hideEnabledToggle = false,
+	promptMaxHeight,
 }: AICardFormFieldsProps) {
 	const { t } = useTranslation("super")
-	const [expanded, setExpanded] = useState(advancedExpanded)
 
 	/** Parse the stored prompt JSON string back to JSONContent for the editor */
 	const promptJSON = useMemo((): JSONContent | undefined => {
@@ -126,7 +127,10 @@ function AICardFormFields({
 		[],
 	)
 
-	const hasAdvanced = modelList || imageModelList || videoModelList
+	const hasModelOptions =
+		Boolean(modelList?.length) ||
+		Boolean(imageModelList?.length) ||
+		Boolean(videoModelList?.length)
 
 	return (
 		<>
@@ -193,6 +197,7 @@ function AICardFormFields({
 					placeholder={t("detail.aiCard.form.promptPlaceholder")}
 					disabled={disabled}
 					rows={4}
+					maxHeight={promptMaxHeight}
 					enableMention
 					enableAIPolish
 					enableVoice
@@ -202,126 +207,99 @@ function AICardFormFields({
 				</p>
 			</div>
 
-			{/* Advanced Section — collapsible */}
-			{hasAdvanced && (
-				<div className="space-y-4 overflow-hidden rounded-lg border border-border">
-					{/* Toggle header */}
-					<button
-						type="button"
-						onClick={() => setExpanded((v) => !v)}
-						className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 rounded-lg transition-colors"
-					>
-						<span>{t("detail.aiCard.form.advancedSettings")}</span>
-						<ChevronDown
-							size={16}
-							className={cn(
-								"text-muted-foreground transition-transform duration-200",
-								expanded && "rotate-180",
-							)}
-						/>
-					</button>
+			{/* Schedule */}
+			<div className="space-y-2">
+				<label className="text-sm font-medium text-foreground">
+					{t("detail.aiCard.config.schedule")}
+				</label>
+				<ScheduledItem
+					value={values.timeConfig || undefined}
+					onChange={handleTimeConfigChange}
+					disabled={disabled}
+				/>
+			</div>
 
-					{expanded && (
-						<div className="space-y-4 px-4 pb-4">
-							{/* Schedule */}
-							<div className="space-y-2">
-								<label className="text-sm font-medium text-foreground">
-									{t("detail.aiCard.config.schedule")}
+			{/* Model selections — 3 column grid */}
+			{hasModelOptions && (
+				<div className="space-y-3 rounded-lg border border-border px-4 py-3">
+					<div className="text-sm font-medium text-foreground">
+						{t("detail.aiCard.config.modelSection")}
+					</div>
+					<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+						{/* Language model */}
+						{modelList && modelList.length > 0 && (
+							<div className="min-w-0 space-y-1.5">
+								<label className="text-xs text-muted-foreground">
+									{t("detail.aiCard.config.languageModel")}
 								</label>
-								<ScheduledItem
-									value={values.timeConfig || undefined}
-									onChange={handleTimeConfigChange}
+								<MagicSelect
+									value={values.model?.model_id || undefined}
+									onChange={handleModelChange}
+									placeholder={t("detail.aiCard.config.defaultModel")}
+									className="w-full"
 									disabled={disabled}
+									options={modelList.map((m) => ({
+										label: m.model_name,
+										value: m.model_id,
+									}))}
+									optionRender={renderModelOption(modelList)}
+									labelRender={renderModelLabel(modelList)}
+									popupClassName="max-h-[280px] overflow-y-auto"
 								/>
 							</div>
+						)}
 
-							{/* Model selections — 3 column grid */}
-							{modelList && modelList.length > 0 && (
-								<div className="space-y-3">
-									<div className="text-sm font-medium text-foreground">
-										{t("detail.aiCard.config.modelSection")}
-									</div>
-									<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-										{/* Language model */}
-										<div className="min-w-0 space-y-1.5">
-											<label className="text-xs text-muted-foreground">
-												{t("detail.aiCard.config.languageModel")}
-											</label>
-											<MagicSelect
-												value={values.model?.model_id || undefined}
-												onChange={handleModelChange}
-												placeholder={t("detail.aiCard.config.defaultModel")}
-												className="w-full"
-												disabled={disabled}
-												options={modelList.map((m) => ({
-													label: m.model_name,
-													value: m.model_id,
-												}))}
-												optionRender={renderModelOption(modelList)}
-												labelRender={renderModelLabel(modelList)}
-												popupClassName="max-h-[280px] overflow-y-auto"
-											/>
-										</div>
+						{/* Image model */}
+						{imageModelList && imageModelList.length > 0 && (
+							<div className="min-w-0 space-y-1.5">
+								<label className="text-xs text-muted-foreground">
+									{t("detail.aiCard.config.imageModel")}
+								</label>
+								<MagicSelect
+									value={values.imageModel?.model_id || undefined}
+									onChange={handleImageModelChange}
+									placeholder={t("detail.aiCard.config.defaultImageModel")}
+									className="w-full"
+									disabled={disabled}
+									options={imageModelList.map((m) => ({
+										label: m.model_name,
+										value: m.model_id,
+									}))}
+									optionRender={renderModelOption(imageModelList)}
+									labelRender={renderModelLabel(imageModelList)}
+									popupClassName="max-h-[280px] overflow-y-auto"
+								/>
+							</div>
+						)}
 
-										{/* Image model */}
-										{imageModelList && imageModelList.length > 0 && (
-											<div className="min-w-0 space-y-1.5">
-												<label className="text-xs text-muted-foreground">
-													{t("detail.aiCard.config.imageModel")}
-												</label>
-												<MagicSelect
-													value={values.imageModel?.model_id || undefined}
-													onChange={handleImageModelChange}
-													placeholder={t(
-														"detail.aiCard.config.defaultImageModel",
-													)}
-													className="w-full"
-													disabled={disabled}
-													options={imageModelList.map((m) => ({
-														label: m.model_name,
-														value: m.model_id,
-													}))}
-													optionRender={renderModelOption(imageModelList)}
-													labelRender={renderModelLabel(imageModelList)}
-													popupClassName="max-h-[280px] overflow-y-auto"
-												/>
-											</div>
-										)}
-
-										{/* Video model */}
-										{videoModelList && videoModelList.length > 0 && (
-											<div className="min-w-0 space-y-1.5">
-												<label className="text-xs text-muted-foreground">
-													{t("detail.aiCard.config.videoModel")}
-												</label>
-												<MagicSelect
-													value={values.videoModel?.model_id || undefined}
-													onChange={handleVideoModelChange}
-													placeholder={t(
-														"detail.aiCard.config.defaultVideoModel",
-													)}
-													className="w-full"
-													disabled={disabled}
-													options={videoModelList.map((m) => ({
-														label: m.model_name,
-														value: m.model_id,
-													}))}
-													optionRender={renderModelOption(videoModelList)}
-													labelRender={renderModelLabel(videoModelList)}
-													popupClassName="max-h-[280px] overflow-y-auto"
-												/>
-											</div>
-										)}
-									</div>
-								</div>
-							)}
-						</div>
-					)}
+						{/* Video model */}
+						{videoModelList && videoModelList.length > 0 && (
+							<div className="min-w-0 space-y-1.5">
+								<label className="text-xs text-muted-foreground">
+									{t("detail.aiCard.config.videoModel")}
+								</label>
+								<MagicSelect
+									value={values.videoModel?.model_id || undefined}
+									onChange={handleVideoModelChange}
+									placeholder={t("detail.aiCard.config.defaultVideoModel")}
+									className="w-full"
+									disabled={disabled}
+									options={videoModelList.map((m) => ({
+										label: m.model_name,
+										value: m.model_id,
+									}))}
+									optionRender={renderModelOption(videoModelList)}
+									labelRender={renderModelLabel(videoModelList)}
+									popupClassName="max-h-[280px] overflow-y-auto"
+								/>
+							</div>
+						)}
+					</div>
 				</div>
 			)}
 
 			{/* Enabled toggle — outside collapsible section */}
-			{hasAdvanced && (
+			{!hideEnabledToggle && (
 				<div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
 					<div>
 						<div className="text-sm font-medium text-foreground">
