@@ -8,20 +8,18 @@ import {
 	ImageIcon,
 	MessageSquareText,
 	Search,
-	Users,
 	Video,
 	X,
 } from "lucide-react"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { Empty, EmptyMedia, EmptyTitle } from "@/components/shadcn-ui/empty"
 import { cn } from "@/lib/utils"
+import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
 import { Trans, useTranslation } from "react-i18next"
 import { useFeaturedModeListRefreshOnFirstOpen } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
 import ModeAvatar from "@/pages/superMagic/components/ModeAvatar"
 import ModelIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/components/ModelIcon"
 import { ModelListContent } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/components/ModelListContent"
 import { ModelTabSwitcher } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/components/ModelTabSwitcher"
-import { ModelEmptyState } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/components/ModelEmptyState"
 import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/useTopicModel"
 import { useOptionalMessageEditorStore } from "@/pages/superMagic/components/MessageEditor/stores"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
@@ -47,6 +45,8 @@ interface MobileComposerModeSelectorProps {
 	selectorVariant?: "default" | "claw"
 	topicModelStore?: ReturnType<typeof createSuperMagicTopicModelStore>
 	messagesLength?: number
+	/** When true, confirm popup copy uses chat (对话) instead of topic (话题). */
+	useChatTerminology?: boolean
 	onModeChange?: (mode: TopicMode) => void
 }
 
@@ -94,6 +94,7 @@ function MobileComposerModeSelectorComponent({
 	selectorVariant = "default",
 	topicModelStore,
 	messagesLength,
+	useChatTerminology,
 	onModeChange,
 }: MobileComposerModeSelectorProps) {
 	const { t: tMainInput } = useTranslation("super/mainInput")
@@ -217,7 +218,8 @@ function MobileComposerModeSelectorComponent({
 
 		setTimeout(() => {
 			document.body.style.removeProperty("pointer-events")
-			pubsub.publish(PubSubEvents.Create_New_Topic)
+			// 携带目标专家模式，对话页（单话题 Chat）会用它创建新对话而非兄弟话题
+			pubsub.publish(PubSubEvents.Create_New_Topic, { topicMode: targetMode })
 			onModeChange?.(targetMode)
 		}, 0)
 	})
@@ -345,18 +347,6 @@ function MobileComposerModeSelectorComponent({
 	const isCurrentTabEmpty =
 		(activeModelTab === "image" && !hasImageModels) ||
 		(activeModelTab === "video" && !hasVideoModels)
-	const currentEmptyState =
-		activeModelTab === "video"
-			? {
-					icon: Video,
-					title: tSuper("messageEditor.modelSwitch.noVideoModels"),
-					description: tSuper("messageEditor.modelSwitch.noVideoModelsDesc"),
-				}
-			: {
-					icon: ImageIcon,
-					title: tSuper("messageEditor.modelSwitch.noImageModels"),
-					description: tSuper("messageEditor.modelSwitch.noImageModelsDesc"),
-				}
 
 	const clawStackModels = useMemo(() => {
 		const candidates = [
@@ -418,7 +408,7 @@ function MobileComposerModeSelectorComponent({
 										className="shrink-0 rounded-full"
 									/>
 								</div>
-								<span className="max-w-[80px] truncate text-md text-foreground">
+								<span className="text-md max-w-[80px] truncate text-foreground">
 									{clawStackModels[0].model_name}
 								</span>
 							</>
@@ -470,19 +460,16 @@ function MobileComposerModeSelectorComponent({
 			<MagicPopup
 				visible={open}
 				onClose={closeAllPanels}
-				className={cn("rounded-t-[14px] border-0", activeModelRow ? "bg-card" : "bg-muted")}
-				bodyClassName={cn(
-					"overflow-hidden rounded-t-[14px] border-0 p-0",
-					activeModelRow ? "bg-card" : "bg-muted",
-				)}
+				className="rounded-t-[14px] border-0 bg-muted"
+				bodyClassName="overflow-hidden rounded-t-[14px] border-0 bg-muted p-0"
 				handlerClassName="bg-muted-foreground mb-1.5 h-1 w-20 rounded-full"
 			>
 				{activeModelRow ? (
 					<div
-						className="flex h-[min(640px,calc(100vh-var(--safe-area-inset-top)-var(--safe-area-inset-bottom)-44px))] min-h-0 w-full flex-col overflow-hidden bg-card"
+						className="flex h-[min(640px,calc(100dvh-var(--safe-area-inset-top)-var(--safe-area-inset-bottom)-44px))] min-h-0 w-full flex-col overflow-hidden bg-muted"
 						data-testid="mobile-composer-mode-selector-model-popup"
 					>
-						<div className="relative flex h-14 w-full shrink-0 items-center justify-center px-16 py-2">
+						<div className="mobile-popup-action-header relative flex h-14 w-full shrink-0 items-center justify-center px-16 py-2">
 							<button
 								type="button"
 								onClick={handleBackToModeList}
@@ -509,15 +496,14 @@ function MobileComposerModeSelectorComponent({
 
 						<div
 							ref={modelScrollContainerRef}
-							className="scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-lg p-3"
+							className="scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-lg py-3 px-6"
 							data-testid="mobile-composer-mode-selector-model-list"
 						>
 							{isCurrentTabEmpty ? (
-								<ModelEmptyState
-									icon={currentEmptyState.icon}
-									title={currentEmptyState.title}
-									description={currentEmptyState.description}
-									className="min-h-0 border-0 bg-transparent py-8"
+								<DataEmptyState
+									variant="model"
+									compact
+									className="min-h-0 py-8"
 									testId="mobile-composer-mode-selector-model-empty"
 								/>
 							) : (
@@ -558,7 +544,7 @@ function MobileComposerModeSelectorComponent({
 										type="button"
 										onClick={() => setModelSearchKeyword("")}
 										className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted-foreground text-background transition active:opacity-80"
-										aria-label={tSuper("common.auth.cancel")}
+										aria-label={tSuper("common.cancel")}
 										data-testid="mobile-composer-mode-selector-model-search-clear-button"
 									>
 										<X className="h-3 w-3" />
@@ -576,7 +562,7 @@ function MobileComposerModeSelectorComponent({
 								: "mobile-composer-mode-selector-popup"
 						}
 					>
-						<div className="relative flex h-14 items-center justify-center">
+						<div className="mobile-popup-action-header relative flex h-14 items-center justify-center">
 							<button
 								type="button"
 								onClick={closeAllPanels}
@@ -602,18 +588,15 @@ function MobileComposerModeSelectorComponent({
 							<>
 								<div
 									ref={scrollContainerRef}
-									className="no-scrollbar max-h-[300px] min-h-0 flex-1 overflow-y-auto px-3.5 py-2.5"
+									className="no-scrollbar max-h-[388px] min-h-0 flex-1 overflow-y-auto px-3.5 py-2.5"
 									data-testid="mobile-composer-mode-selector-list"
 								>
 									{modeList.length === 0 ? (
-										<Empty className="h-full gap-2 border-0 text-center">
-											<EmptyMedia variant="icon">
-												<Users />
-											</EmptyMedia>
-											<EmptyTitle className="text-sm text-muted-foreground">
-												{tMainInput("crewSelectModal.empty.all")}
-											</EmptyTitle>
-										</Empty>
+										<DataEmptyState
+											variant="crew"
+											compact
+											className="h-full py-8"
+										/>
 									) : (
 										<div className="flex flex-col gap-1.5">
 											{modeList.map((crew) => {
@@ -673,7 +656,7 @@ function MobileComposerModeSelectorComponent({
 
 						<div
 							className={cn(
-								"mx-auto flex w-full shrink-0 flex-col gap-0 px-3.5",
+								"mx-auto flex w-full shrink-0 flex-col gap-0 px-6",
 								isClawVariant
 									? "pb-[max(var(--safe-area-inset-bottom),10px)] pt-2"
 									: "pb-2.5",
@@ -738,16 +721,29 @@ function MobileComposerModeSelectorComponent({
 					data-testid="mobile-composer-mode-selector-create-topic-dialog"
 				>
 					<div className="text-sm leading-6 text-foreground">
-						<Trans
-							i18nKey="modeToggle.cannotSwitchModeMessage"
-							ns="super"
-							values={{
-								modeName: resolveModeText(showNewTopicModal.mode?.name),
-							}}
-							components={{
-								strong: <strong />,
-							}}
-						/>
+						{useChatTerminology ? (
+							<Trans
+								i18nKey="modeToggle.cannotSwitchModeMessageChat"
+								ns="super"
+								values={{
+									modeName: resolveModeText(showNewTopicModal.mode?.name),
+								}}
+								components={{
+									strong: <strong />,
+								}}
+							/>
+						) : (
+							<Trans
+								i18nKey="modeToggle.cannotSwitchModeMessage"
+								ns="super"
+								values={{
+									modeName: resolveModeText(showNewTopicModal.mode?.name),
+								}}
+								components={{
+									strong: <strong />,
+								}}
+							/>
+						)}
 					</div>
 					<Button
 						type="button"
@@ -755,7 +751,9 @@ function MobileComposerModeSelectorComponent({
 						className="h-10 w-full"
 						data-testid="mobile-composer-mode-selector-create-topic-button"
 					>
-						{tSuper("modeToggle.createNewTopic")}
+						{useChatTerminology
+							? tSuper("modeToggle.createNewChat")
+							: tSuper("modeToggle.createNewTopic")}
 					</Button>
 				</div>
 			</MagicPopup>

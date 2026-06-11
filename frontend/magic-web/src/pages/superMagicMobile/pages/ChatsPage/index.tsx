@@ -1,0 +1,305 @@
+import { observer } from "mobx-react-lite"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useBoolean, useMemoizedFn } from "ahooks"
+import { useTranslation } from "react-i18next"
+import {
+	SuperMobileShellRouteLayout,
+	useOptionalSuperMobileShellOutlet,
+} from "@/pages/superMagicMobile/components/MobileShell/SuperMobileShellRouteLayout"
+import { MobileOnlyRoute } from "@/routes/components/ViewportRouteGuard"
+import magicToast from "@/components/base/MagicToaster/utils"
+import SuperMagicService from "@/pages/superMagic/services"
+import { roleStore } from "@/pages/superMagic/stores"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { useChatWorkspace } from "@/pages/superMagic/hooks/useChatWorkspace"
+import { useProjectListActions } from "@/pages/superMagicMobile/components/ProjectList/hooks/useProjectActions"
+import ConversationActionsPopup from "@/pages/superMagicMobile/components/ConversationActionsPopup"
+import type { ActionGroup } from "@/pages/superMagicMobile/components/ActionSheet"
+import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import type { ChatConversationListItem } from "./hooks/useChatConversationList"
+import { useChatConversationList } from "./hooks/useChatConversationList"
+import { ChatConversationListView } from "./components/ChatConversationListView"
+import {
+	MOBILE_CHAT_DETAIL_ACTION_KEYS,
+	MOBILE_CHAT_PIN_ENABLED,
+} from "@/pages/superMagicMobile/utils/mobileProjectActionOrder"
+
+/**
+ * 路由页只负责装配 Shell 能力与对话列表状态，后续接真实导航时不需要改动展示层。
+ */
+const ChatsPagePanel = observer(function ChatsPagePanel() {
+	const { t } = useTranslation(["super", "common", "sidebar"])
+	const { createProjectInChatWorkspace } = useChatWorkspace()
+	const {
+		items,
+		isLoading,
+		searchValue,
+		setSearchValue,
+		isEmpty,
+		isSearchEmpty,
+		hasMore,
+		reload,
+		loadMore,
+		optimisticRemove,
+	} = useChatConversationList()
+	const currentRole = roleStore.currentRole
+	const [isCreatingChat, setIsCreatingChat] = useState(false)
+	// 同步门闩：避免按钮状态尚未刷新时发生连点重复创建。
+	const isCreatingChatRef = useRef(false)
+	// 创建成功后会跳转离开列表页，避免卸载后仍回写 loading 状态。
+	const isMountedRef = useRef(true)
+
+	useEffect(() => {
+		return () => {
+			isMountedRef.current = false
+		}
+	}, [])
+
+	/**
+	 * 与对话详情页使用完全相同的参数调用 useProjectListActions，确保操作项（label/行为）严格一致。
+	 * - visibleActionKeys 与详情页 MOBILE_CHAT_DETAIL_ACTION_KEYS 对齐，不展示「移动」「协作者」等列表页不相关的操作
+	 * - chatActionContext:"detail" 控制"另存为项目"按钮可见
+	 * - deleteSelectedProjectBehavior:"navigate-home" 删除后回到首页，而非切到下一个项目
+	 */
+	const {
+		projectActions,
+		projectActionComponents: chatProjectActionComponents,
+		updateCurrentActionItem,
+	} = useProjectListActions({
+		mode: "chat",
+		chatActionContext: "detail",
+		deleteSelectedProjectBehavior: "navigate-home",
+		visibleActionKeys: MOBILE_CHAT_DETAIL_ACTION_KEYS,
+		onProjectChanged: () => reload({ silent: true }),
+	})
+
+	/** 当前待操作的对话（点击更多时设置，面板关闭时清空） */
+	const [currentMoreProject, setCurrentMoreProject] = useState<ProjectListItem | null>(null)
+	const [morePopupVisible, { setTrue: openMorePopup, setFalse: closeMorePopup }] =
+		useBoolean(false)
+
+	/**
+	 * 从 projectActions 按 key 建立映射，与 useChatConversationActions 保持相同的构建方式。
+	 */
+	const projectActionMap = useMemo(
+		() => new Map(projectActions.map((action) => [action.key, action])),
+		[projectActions],
+	)
+
+	/**
+	 * 构建与对话详情页完全一致的操作分组（去掉"查看文件"和"分享话题"，因为列表页没有文件/话题上下文）。
+	 * 顺序和分组严格对齐 useChatConversationActions.conversationActionGroups。
+	 */
+	const conversationActionGroups = useMemo<ActionGroup[]>(
+		() => [
+			...(MOBILE_CHAT_PIN_ENABLED
+				? [
+						{
+							actions: [
+								{
+									key: "pin-chat",
+									label:
+										projectActionMap.get("pinProject")?.label ||
+										t("super:chat.pinChat"),
+									onClick: () => {
+										closeMorePopup()
+										projectActionMap.get("pinProject")?.onClick?.()
+									},
+								},
+							],
+						},
+					]
+				: []),
+			{
+				actions: [
+					{
+						key: "rename-chat",
+						label: projectActionMap.get("rename")?.label || t("super:chat.renameChat"),
+						onClick: () => {
+							closeMorePopup()
+							projectActionMap.get("rename")?.onClick?.()
+						},
+					},
+					{
+						key: "save-as-project",
+						label:
+							projectActionMap.get("saveAsProject")?.label ||
+							t("super:chat.saveAsProject"),
+						onClick: () => {
+							closeMorePopup()
+							projectActionMap.get("saveAsProject")?.onClick?.()
+						},
+					},
+				],
+			},
+			{
+				actions: [
+					{
+						key: "delete-chat",
+						label: projectActionMap.get("delete")?.label || t("super:chat.deleteChat"),
+						onClick: () => {
+							closeMorePopup()
+							projectActionMap.get("delete")?.onClick?.()
+						},
+						variant: "danger" as const,
+					},
+				],
+			},
+		],
+		[closeMorePopup, projectActionMap, t],
+	)
+
+	/** 更多面板标题：优先用对话名称，回退到通用文案 */
+	const morePopupTitle = useMemo(
+		() => currentMoreProject?.project_name?.trim() || t("super:chat.unnamedChat"),
+		[currentMoreProject, t],
+	)
+
+	/**
+	 * 对话列表项直接复用既有 chat 切换链路，保证一级列表与抽屉进入项目的行为一致。
+	 */
+	const handleOpenConversation = useMemoizedFn(async (item: ChatConversationListItem) => {
+		await SuperMagicService.switchChatProject(item.project)
+	})
+
+	/**
+	 * 新建对话统一走 chat workspace 创建链路，避免列表页和抽屉页出现两套创建口径。
+	 * loading 态与首页右上角新建对话对齐，创建完成前禁用按钮并展示旋转图标。
+	 */
+	const handleCreateChat = useMemoizedFn(async () => {
+		if (isCreatingChatRef.current) return
+
+		isCreatingChatRef.current = true
+		setIsCreatingChat(true)
+
+		try {
+			const createdProject = await createProjectInChatWorkspace({
+				projectMode: currentRole || TopicMode.General,
+			})
+
+			if (!createdProject?.project || !createdProject.topic) {
+				magicToast.error(t("super:hierarchicalWorkspacePopup.createProjectFailed"))
+				return
+			}
+
+			await reload()
+			await SuperMagicService.switchChatProject(createdProject.project, createdProject.topic)
+		} catch {
+			magicToast.error(t("super:hierarchicalWorkspacePopup.createProjectFailed"))
+		} finally {
+			isCreatingChatRef.current = false
+			if (isMountedRef.current) {
+				setIsCreatingChat(false)
+			}
+		}
+	})
+
+	/**
+	 * 左滑删除：先乐观移除（即时 UI 反馈），等待删除 API 完成后再刷新列表。
+	 * 若服务端删除失败，reload 会恢复列表并还原乐观删除。
+	 */
+	const handleDeleteConversation = useMemoizedFn(async (item: ChatConversationListItem) => {
+		try {
+			optimisticRemove(item.id)
+			await SuperMagicService.deleteProject(item.project, {
+				selectedProjectBehavior: "navigate-home",
+			})
+			await reload({ silent: true })
+		} catch {
+			await reload({ silent: true })
+			magicToast.error(t("super:chat.deleteChatDescription"))
+		}
+	})
+
+	/**
+	 * 左滑置顶/取消置顶：调用 pin 链路（pinProjectAndRefresh 内部已处理乐观更新与刷新）。
+	 * 刷新后通过 reload 同步本地列表状态。
+	 */
+	const handlePinConversation = useMemoizedFn(async (item: ChatConversationListItem) => {
+		try {
+			await SuperMagicService.project.pinProjectAndRefresh(
+				item.project,
+				!item.isPinned,
+				item.project.workspace_id,
+			)
+			await reload({ silent: true })
+		} catch {
+			magicToast.error(
+				item.isPinned ? t("super:chat.unpinChatFailed") : t("super:chat.pinChatFailed"),
+			)
+		}
+	})
+
+	/**
+	 * 左滑更多：与对话详情页的"更多"操作项严格对齐（置顶、重命名、另存为项目、删除）。
+	 * 先同步当前项目上下文到 useProjectListActions，再打开操作面板。
+	 */
+	const handleMoreConversation = useMemoizedFn((item: ChatConversationListItem) => {
+		setCurrentMoreProject(item.project)
+		updateCurrentActionItem(item.project)
+		openMorePopup()
+	})
+
+	return (
+		<>
+			<ChatConversationListView
+				items={items}
+				isLoading={isLoading}
+				searchValue={searchValue}
+				isEmpty={isEmpty}
+				isSearchEmpty={isSearchEmpty}
+				hasMore={hasMore}
+				onSearchValueChange={setSearchValue}
+				onCreateChat={handleCreateChat}
+				isCreateChatLoading={isCreatingChat}
+				onOpenConversation={handleOpenConversation}
+				onMore={handleMoreConversation}
+				onPin={MOBILE_CHAT_PIN_ENABLED ? handlePinConversation : undefined}
+				onDelete={handleDeleteConversation}
+				onRefresh={reload}
+				loadMore={loadMore}
+				title={t("super:chatList.title")}
+				searchPlaceholder={t("super:chatList.searchPlaceholder")}
+				clearSearchAriaLabel={t("super:common.cancel")}
+				newChatAriaLabel={t("super:chatList.newChat")}
+			/>
+			{/* 更多操作面板：操作项与对话详情页完全一致（置顶、重命名、另存为项目、删除） */}
+			<ConversationActionsPopup
+				visible={morePopupVisible}
+				title={morePopupTitle}
+				subtitle={t("super:chatList.title")}
+				actionGroups={conversationActionGroups}
+				onClose={closeMorePopup}
+			/>
+			{/* 各操作的二级弹层（重命名输入框、另存为确认等），由 useProjectListActions 管理 */}
+			{chatProjectActionComponents}
+		</>
+	)
+})
+
+function ChatsPage() {
+	const shellOutlet = useOptionalSuperMobileShellOutlet()
+	const { t } = useTranslation("super")
+
+	if (shellOutlet) {
+		return (
+			<MobileOnlyRoute>
+				<ChatsPagePanel />
+			</MobileOnlyRoute>
+		)
+	}
+
+	return (
+		<MobileOnlyRoute>
+			<SuperMobileShellRouteLayout
+				activeView="chats"
+				testIdPrefix="mobile-chats-page"
+				closeSidebarAriaLabel={t("mobile.shell.closeSidebar")}
+			>
+				<ChatsPagePanel />
+			</SuperMobileShellRouteLayout>
+		</MobileOnlyRoute>
+	)
+}
+
+export default ChatsPage

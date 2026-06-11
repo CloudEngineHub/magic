@@ -130,11 +130,26 @@
 		"usingDefault": "Using default"
 	},
 	"mobile": {
+		"clearSearch": "Clear search",
 		"runSearch": "Search",
 		"searchSheetTitle": "Search crew"
 	},
 	"myCrew": "My Crew",
 	"myCrewPage": {
+		"addSheet": {
+			"closeAria": "Close add crew options",
+			"custom": {
+				"action": "Use desktop",
+				"description": "Creating crew on mobile is not available yet. Please switch to the desktop app to create or edit crew.",
+				"title": "Build your own crew"
+			},
+			"market": {
+				"action": "Open crew market",
+				"description": "Pick and hire existing crew from the market, then manage them here later.",
+				"title": "Add from crew market"
+			},
+			"title": "Add Crew"
+		},
 		"badgeUpdated": "Updated",
 		"crewType": {
 			"ariaLabel": "Crew type",
@@ -148,6 +163,31 @@
 			"description": "Once a Digital Crew member is deleted, it cannot be recovered. Please proceed with caution.",
 			"title": "Delete \"{{name}}\""
 		},
+		"detailSheet": {
+			"about": "About",
+			"capabilities": "Capabilities",
+			"closeAria": "Close details",
+			"info": {
+				"addedAt": "Added",
+				"createdAt": "Created",
+				"createdBy": "Created by",
+				"label": "Info",
+				"publisher": "Publisher",
+				"sharedBy": "Shared by",
+				"sharedFrom": "Shared from",
+				"updatedAt": "Updated",
+				"you": "You"
+			},
+			"source": {
+				"custom": "My Creation",
+				"market": "Market",
+				"team": "Team"
+			},
+			"startChat": "Start chat",
+			"unpublishedAction": "Unpublished",
+			"unpublishedNotice": "This Crew is not published yet and is currently unavailable. Please publish it on web first.",
+			"title": "Crew Details"
+		},
 		"disable": "Disable",
 		"disableConfirm": {
 			"confirm": "Disable",
@@ -159,8 +199,32 @@
 			"description": "Are you sure you want to dismiss this Digital Crew member? You can rehire them later.",
 			"title": "Dismiss \"{{name}}\""
 		},
+		"dismissSheet": {
+			"cancelAria": "Cancel",
+			"confirmAria": "Confirm dismiss",
+			"crewLabel": "Crew",
+			"description": "You can re-hire {{name}} anytime in the Crew Market.",
+			"title": "Dismiss this employee"
+		},
 		"edit": "Edit",
 		"empty": "No crew yet. Create your first Crew now.",
+		"filterSheet": {
+			"closeAria": "Close filters",
+			"resetAria": "Reset filters",
+			"sort": {
+				"createdAt": "Created time",
+				"recentUsed": "Recently used",
+				"updatedAt": "Updated time"
+			},
+			"sortLabel": "Sort",
+			"title": "Filter",
+			"type": {
+				"created": "Created by Me",
+				"fromMarket": "From Marketplace",
+				"teamShared": "Shared by Team"
+			},
+			"typeLabel": "By Type"
+		},
 		"footerPoweredByBrand": "MagiCrew",
 		"footerPoweredByLead": "Powered by",
 		"footerPoweredByTail": "",
@@ -458,5 +522,6 @@
 			"updateFailed": "Failed to update skill. Please try again later."
 		},
 		"title": "Update Skill"
-	}
+	},
+	"chat": "Chat"
 }

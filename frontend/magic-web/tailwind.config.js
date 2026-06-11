@@ -61,6 +61,8 @@ const config = {
 				input: rgbColor("--input", "var(--input-alpha)"),
 				ring: rgbColor("--ring"),
 				background: rgbColor("--background"),
+				"mobile-background": rgbColor("--mobile-background"),
+				"mobile-shell-track": rgbColor("--mobile-shell-track"),
 				fill: rgbColor("--fill"),
 				"fill-secondary": rgbColor("--fill-secondary", "var(--fill-secondary-alpha)"),
 				foreground: {
@@ -87,6 +89,24 @@ const config = {
 					foreground: rgbColor("--muted-foreground"),
 				},
 				info: rgbColor("--info"),
+				"info-foreground": rgbColor("--info-foreground"),
+				warning: {
+					DEFAULT: rgbColor("--warning"),
+					foreground: rgbColor("--warning-foreground"),
+				},
+				success: {
+					DEFAULT: rgbColor("--success"),
+					foreground: rgbColor("--success-foreground"),
+				},
+				"icon-workspace": rgbColor("--icon-workspace"),
+				"icon-project": rgbColor("--icon-project"),
+				"icon-topic": rgbColor("--icon-topic"),
+				"icon-chat": rgbColor("--icon-chat"),
+				"icon-recording": rgbColor("--icon-recording"),
+				"icon-app-knowledge": rgbColor("--icon-app-knowledge"),
+				"icon-app-cloud": rgbColor("--icon-app-cloud"),
+				"icon-app-approval": rgbColor("--icon-app-approval"),
+				"icon-app-bookmarks": rgbColor("--icon-app-bookmarks"),
 				accent: {
 					DEFAULT: rgbColor("--accent"),
 					foreground: rgbColor("--accent-foreground"),
@@ -121,6 +141,10 @@ const config = {
 				// Tailwind v3 没有内置 shadow-xs，这里补充定义以对齐 v4 的语义
 				// 值与 shadow-sm 相同：0 1px 2px 0 rgb(0 0 0 / 0.05)
 				xs: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+				/** Mobile floating round buttons — see --magic-floating-action-shadow in index.css */
+				"magic-floating-action": "var(--magic-floating-action-shadow)",
+				/** Bottom-docked cards (composer) — upward-biased; see --magic-mobile-dock-surface-shadow */
+				"mobile-dock-surface": "var(--magic-mobile-dock-surface-shadow)",
 			},
 			borderRadius: {
 				lg: "var(--radius-lg)",
@@ -128,6 +152,12 @@ const config = {
 				sm: "var(--radius-sm)",
 				xl: "var(--radius-xl)",
 				xs: "var(--radius-xs, 0.125rem)", // 2px
+				// 4xl: prototype scale beyond Tailwind's built-in 3xl (1.5rem); 2xl/3xl left to Tailwind defaults to avoid overriding PC usage
+				"4xl": "var(--radius-4xl)",
+			},
+			// Prototype (Tailwind v4) uses bg-icon-*/8 for 8% tint; v3 default opacity scale has no "8".
+			opacity: {
+				8: "0.08",
 			},
 			keyframes: {
 				"slide-in-from-left": {
@@ -236,6 +266,7 @@ const config = {
 				blink: "blink 1s steps(1, end) infinite",
 				scan: "scan 2s linear infinite",
 				"gradient-flow": "gradient-flow 20s linear infinite",
+				"spin-slow": "spin 1.5s linear infinite",
 			},
 			fontFamily: {
 				poppins: ["Poppins", "sans-serif"],

@@ -1,5 +1,8 @@
 import { DEFAULT_LOCALE, SupportLocales, SUPPORT_LOCALES } from "@/constants/locale"
 import { languageHelper } from "@/models/config/utils"
+import type { Locale } from "antd-mobile/es/locales/base"
+import zhCNMobile from "antd-mobile/es/locales/zh-CN"
+import enUSMobile from "antd-mobile/es/locales/en-US"
 
 export const normalizeLocale = (locale?: string): string => {
 	if (!locale) return DEFAULT_LOCALE
@@ -66,6 +69,47 @@ export const getAntdLocale = async (lang: string) => {
 	}
 }
 
+/** Eager antd-mobile locale bundles used before async locale chunks finish loading. */
+const ANTD_MOBILE_SYNC_LOCALES: Record<string, Locale> = {
+	[SupportLocales.zhCN]: zhCNMobile,
+	[SupportLocales.enUS]: enUSMobile,
+}
+
+/**
+ * Returns a synchronous antd-mobile locale for ConfigProvider.
+ * Prevents passing `locale={undefined}` while async bundles load, which would
+ * overwrite adm defaults and break components that read `locale.common`.
+ */
+export function getAntdMobileLocaleSyncFallback(lang: string): Locale {
+	const normalLang = languageHelper.transform(lang)
+	const normalizedLang = normalizeLocale(normalLang)
+	return (
+		ANTD_MOBILE_SYNC_LOCALES[normalizedLang] ??
+		ANTD_MOBILE_SYNC_LOCALES[DEFAULT_LOCALE] ??
+		zhCNMobile
+	)
+}
+
+/**
+ * Loads antd-mobile locale bundles so ConfigProvider-driven components
+ * (e.g. InfiniteScroll) follow the active app language instead of zh-CN default.
+ */
+export const getAntdMobileLocale = async (lang: string): Promise<Locale | null> => {
+	const normalLang = languageHelper.transform(lang)
+	const normalizedLang = normalizeLocale(normalLang)
+	const localeLoader =
+		ANTD_MOBILE_LOCALE_LOADERS[normalizedLang] ?? ANTD_MOBILE_LOCALE_LOADERS[DEFAULT_LOCALE]
+	if (!localeLoader) return null
+
+	try {
+		const { default: locale } = await localeLoader()
+		return locale
+	} catch (error) {
+		console.error(`Failed to load antd-mobile locale for ${normalizedLang}:`, error)
+		return null
+	}
+}
+
 /**
  * Get current language based on input parameter, ensuring only supported languages are returned
  *
@@ -123,4 +167,9 @@ export const getCurrentLang = <T extends string>(lang: "auto" | T): T => {
 const ANTD_LOCALE_LOADERS: Record<string, () => Promise<{ default: unknown }>> = {
 	[SupportLocales.zhCN]: () => import("antd/locale/zh_CN"),
 	[SupportLocales.enUS]: () => import("antd/locale/en_US"),
+}
+
+const ANTD_MOBILE_LOCALE_LOADERS: Record<string, () => Promise<{ default: Locale }>> = {
+	[SupportLocales.zhCN]: () => import("antd-mobile/es/locales/zh-CN"),
+	[SupportLocales.enUS]: () => import("antd-mobile/es/locales/en-US"),
 }

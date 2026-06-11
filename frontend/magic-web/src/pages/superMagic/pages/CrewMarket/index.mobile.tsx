@@ -1,75 +1,46 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useDebounce } from "ahooks"
+import { InfiniteScroll } from "antd-mobile"
 import { reaction } from "mobx"
 import { configStore } from "@/models/config"
-import { Check, ChevronLeft, Loader2, Search, UserRoundCog } from "lucide-react"
+import { ChevronLeft, MessageCircle, Trash2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { useConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
-import { Button } from "@/components/shadcn-ui/button"
-import { Input } from "@/components/shadcn-ui/input"
-import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/shadcn-ui/sheet"
-import { Skeleton } from "@/components/shadcn-ui/skeleton"
+import MagicPullToRefresh from "@/components/base-mobile/MagicPullToRefresh"
+import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { userStore } from "@/models/user"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
-import { CrewDetailDialog } from "@/pages/superMagic/components/CrewDetailDialog"
+import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import {
 	UserWorkspaceMapCache,
 	WorkspaceStateCache,
 } from "@/pages/superMagic/utils/superMagicCache"
-import {
-	isEmployeeMarketPrimaryActionDisabled,
-	resolveEmployeeMarketPrimaryActionLabel,
-} from "./employee-market/components/employee-card-shared"
-import CategoryFilter from "./employee-market/components/CategoryFilter"
+import { isOfficialBuiltinPublisherType } from "./employee-market/components/employee-card-shared"
+import CategoryFilterMobile from "./components/CategoryFilterMobile"
 import EmployeeCardMobile from "./employee-market/components/EmployeeCardMobile"
 import { StoreCrewStore } from "./employee-market/stores/store-crew"
 import { crewService, type StoreAgentView } from "@/services/crew/CrewService"
+import CrewMarketMobileSkeleton from "./components/CrewMarketMobileSkeleton"
+import DismissCrewConfirmSheet from "@/pages/superMagic/pages/MyCrewPage/components/DismissCrewConfirmSheet"
+import MyCrewDetailSheet from "@/pages/superMagic/pages/MyCrewPage/components/MyCrewDetailSheet"
+import {
+	SuperMobileShellRouteLayout,
+	useOptionalSuperMobileShellOutlet,
+} from "@/pages/superMagicMobile/components/MobileShell/SuperMobileShellRouteLayout"
 
-const SKELETON_CARD_COUNT = 6
+const HEADER_SHADOW = "0px 8px 25px 0px rgba(0,0,0,0.10)"
 
-function CrewMarketMobileSkeleton() {
-	return (
-		<div className="flex flex-col gap-4" data-testid="crew-market-mobile-skeleton">
-			<div className="flex gap-2 overflow-hidden py-0.5">
-				{Array.from({ length: 5 }).map((_, i) => (
-					<Skeleton key={i} className="h-9 w-[88px] shrink-0 rounded-full" />
-				))}
-			</div>
-			<div className="grid grid-cols-2 gap-3">
-				{Array.from({ length: SKELETON_CARD_COUNT }).map((_, i) => (
-					<div
-						key={i}
-						className="flex flex-col gap-1.5 rounded-md border border-border bg-popover p-2 pt-10 shadow-xs"
-					>
-						<Skeleton className="mx-auto size-16 shrink-0 rounded-full" />
-						<Skeleton className="h-4 w-full" />
-						<Skeleton className="mx-auto h-5 w-3/4 max-w-[140px]" />
-						<Skeleton className="h-3 w-full" />
-						<Skeleton className="h-3 w-5/6" />
-						<Skeleton className="h-7 w-full rounded-md" />
-						<div className="mt-1 flex items-center justify-between gap-2 border-t border-border pt-2">
-							<Skeleton className="h-3 w-14" />
-							<Skeleton className="h-5 w-9 rounded-md" />
-						</div>
-					</div>
-				))}
-			</div>
-		</div>
-	)
-}
-
-function CrewMarketMobilePage() {
+function CrewMarketMobilePanelBase() {
 	const { t } = useTranslation("crew/market")
 	const navigate = useNavigate()
 	const storeRef = useRef(new StoreCrewStore())
 	const store = storeRef.current
-	const { confirm, dialog } = useConfirmDialog()
-
-	const [searchOpen, setSearchOpen] = useState(false)
-	const [queryDraft, setQueryDraft] = useState("")
+	const [searchKeyword, setSearchKeyword] = useState("")
+	const debouncedKeyword = useDebounce(searchKeyword, { wait: 400 })
 	const [selectedAgent, setSelectedAgent] = useState<StoreAgentView | null>(null)
+	// 解雇二次确认弹窗的目标 agent，非 null 时弹窗可见
+	const [dismissConfirmAgent, setDismissConfirmAgent] = useState<StoreAgentView | null>(null)
 
 	useEffect(() => {
 		store.fetchCategories()
@@ -86,15 +57,15 @@ function CrewMarketMobilePage() {
 		)
 	}, [store])
 
-	function handleSearchOpenChange(open: boolean) {
-		setSearchOpen(open)
-		if (open) setQueryDraft(store.keyword)
-	}
-
-	function handleApplySearch() {
-		void store.fetchAgents({ keyword: queryDraft.trim(), page: 1 })
-		setSearchOpen(false)
-	}
+	// Trigger search on debounced keyword changes, skip initial empty render
+	const isFirstRender = useRef(true)
+	useEffect(() => {
+		if (isFirstRender.current) {
+			isFirstRender.current = false
+			return
+		}
+		void store.fetchAgents({ keyword: debouncedKeyword.trim() || undefined, page: 1 })
+	}, [debouncedKeyword, store])
 
 	const handleHire = useCallback(
 		(id: string) => {
@@ -104,25 +75,15 @@ function CrewMarketMobilePage() {
 	)
 
 	const handleDismiss = useCallback(
-		(id: string) => {
-			const target = store.list.find((item) => item.id === id)
-			if (!target?.allowDelete) return
-			const displayName =
-				target.name?.trim() || t("crew/create:untitledCrew") || target.agentCode
-			confirm({
-				title: t("myCrewPage.dismissConfirm.title", { name: displayName }),
-				description: t("myCrewPage.dismissConfirm.description"),
-				confirmText: t("myCrewPage.dismissConfirm.confirm"),
-				variant: "destructive",
-				destructivePresentation: "soft",
-				dialogSize: "sm",
-				onConfirm: () => {
-					if (selectedAgent?.id === id) setSelectedAgent(null)
-					store.dismissAgent(id)
-				},
-			})
+		// 接受完整 agent 对象而非 id，避免点击时再次查询 store.list——
+		// detail sheet 打开后 store.list 可能因搜索/分类切换被重置，
+		// 导致 find 失败或拿到过期的 allowDelete=false，使按钮静默失效。
+		(agent: StoreAgentView) => {
+			if (!agent.allowDelete) return
+			// 打开 MagicPopup 二次确认弹窗，层级通过 overlayZIndex 自动高于底部 Sheet
+			setDismissConfirmAgent(agent)
 		},
-		[confirm, selectedAgent?.id, store, t],
+		[],
 	)
 
 	function resolveFallbackWorkspaceId() {
@@ -187,123 +148,129 @@ function CrewMarketMobilePage() {
 
 	return (
 		<>
-			<CrewDetailDialog
+			<MyCrewDetailSheet
 				open={selectedAgent != null}
 				onOpenChange={(open) => {
 					if (!open) setSelectedAgent(null)
 				}}
-				agentCode={selectedAgent?.agentCode ?? null}
-				detailSource="market"
-				versionCode={selectedAgent?.latestVersionCode}
-				avatarUrl={selectedAgent?.icon}
+				employee={selectedAgent}
+				// 市场来源固定为 "market"，绕过 resolveMyCrewPresentationSource 的字段推断
+				presentationSource="market"
+				onChat={(agentCode) => handleOpenConversation(agentCode)}
+				// 主操作：已雇用 → 开始聊天；未雇用且非 OFFICIAL_BUILTIN → 雇用；OFFICIAL_BUILTIN 未雇用 → 无操作
 				primaryAction={
-					selectedAgent
+					!selectedAgent
+						? undefined
+						: selectedAgent.isAdded
+							? {
+									label: t("chat"),
+									icon: <MessageCircle className="h-5 w-5 text-white" />,
+									testId: "crew-market-mobile-detail-chat-button",
+									// 先关闭 sheet，再导航；custom primaryAction 不会自动触发 onOpenChange(false)
+									onClick: () => {
+										setSelectedAgent(null)
+										handleOpenConversation(selectedAgent.agentCode)
+									},
+								}
+							: isOfficialBuiltinPublisherType(selectedAgent.publisherType)
+								? undefined
+								: {
+										label: t("hire"),
+										testId: "crew-market-mobile-detail-hire-button",
+										onClick: () => handleHire(selectedAgent.id),
+									}
+				}
+				// 次要操作：已雇用且可删除 → 解雇（显示在主操作左侧，窄宽度）
+				secondaryAction={
+					selectedAgent?.isAdded && selectedAgent?.allowDelete
 						? {
-								label: resolveEmployeeMarketPrimaryActionLabel(selectedAgent, t),
-								variant: selectedAgent.allowDelete ? "destructive" : "default",
-								disabled: isEmployeeMarketPrimaryActionDisabled(selectedAgent),
-								testId: "crew-market-mobile-detail-action-button",
-								onClick: () =>
-									selectedAgent.allowDelete
-										? handleDismiss(selectedAgent.id)
-										: store.hireAgent(selectedAgent.id),
+								label: t("dismiss"),
+								icon: <Trash2 className="h-4 w-4" />,
+								testId: "crew-market-mobile-detail-dismiss-button",
+								onClick: () => handleDismiss(selectedAgent),
 							}
 						: undefined
 				}
 			/>
-			{dialog}
+			<DismissCrewConfirmSheet
+				open={dismissConfirmAgent != null}
+				onOpenChange={(open) => {
+					if (!open) setDismissConfirmAgent(null)
+				}}
+				target={dismissConfirmAgent}
+				onConfirm={() => {
+					const agent = dismissConfirmAgent
+					if (!agent) return
+					setDismissConfirmAgent(null)
+					if (selectedAgent?.id === agent.id) setSelectedAgent(null)
+					store.dismissAgent(agent.id)
+				}}
+			/>
+
 			<div
-				className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border border-t-0 border-border bg-background shadow-xs"
+				className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-mobile-background"
 				data-testid="crew-market-page-mobile"
 			>
-				<header className="flex shrink-0 items-center gap-2 rounded-b-xl bg-background px-2.5 py-2 shadow-xs">
-					<Button
-						variant="ghost"
-						size="icon"
-						className="size-8 shrink-0 rounded-lg"
-						onClick={() =>
-							navigate({
-								delta: -1,
-								viewTransition: {
-									type: "slide",
-									direction: "right",
-									duration: 300,
-								},
-							})
-						}
+				{/* Header */}
+				<header
+					className="mobile-page-header relative z-10 flex h-14 shrink-0 items-center gap-2 px-[10px]"
+					data-testid="crew-market-mobile-header"
+				>
+					<button
+						type="button"
+						onClick={() => navigate({ name: RouteName.MyCrew })}
+						className="flex size-11 shrink-0 items-center justify-center rounded-full bg-card transition-transform active:scale-95"
+						style={{ boxShadow: HEADER_SHADOW }}
 						aria-label={t("back")}
-						data-testid="crew-market-mobile-back"
+						data-testid="crew-market-mobile-back-button"
 					>
-						<ChevronLeft className="size-6" aria-hidden />
-					</Button>
-					<h1 className="min-w-0 flex-1 truncate text-left text-base font-medium leading-6 text-foreground">
-						{t("title")}
-					</h1>
-					<div className="flex shrink-0 items-center gap-1">
-						<Button
-							variant="ghost"
-							size="icon"
-							className="size-8 rounded-md"
-							onClick={() => handleSearchOpenChange(true)}
-							aria-label={t("mobile.searchSheetTitle")}
-							data-testid="crew-market-mobile-search-open"
-						>
-							<Search className="size-4" aria-hidden />
-						</Button>
-						<Button
-							variant="ghost"
-							className="h-8 shrink-0 gap-1 rounded-md px-2 text-xs font-medium text-foreground"
-							onClick={() => navigate({ name: RouteName.MyCrew })}
-							data-testid="crew-market-mobile-my-crew"
-						>
-							<UserRoundCog className="size-4 shrink-0" aria-hidden />
-							{t("myCrew")}
-						</Button>
+						<ChevronLeft className="size-[22px] text-foreground" strokeWidth={2} />
+					</button>
+
+					<div
+						className="min-w-0 flex-1 px-2 text-center"
+						data-testid="crew-market-mobile-title"
+					>
+						<h1 className="truncate font-poppins text-[18px] font-medium text-foreground">
+							{t("title")}
+						</h1>
 					</div>
+
+					{/* Spacer — same width as back button for visual symmetry */}
+					<div className="size-11 shrink-0" aria-hidden />
 				</header>
 
-				<Sheet open={searchOpen} onOpenChange={handleSearchOpenChange}>
-					<SheetContent side="bottom" className="rounded-t-xl px-4 pb-6">
-						<SheetHeader className="text-left">
-							<SheetTitle>{t("mobile.searchSheetTitle")}</SheetTitle>
-						</SheetHeader>
-						<div className="flex flex-col gap-3">
-							<Input
-								value={queryDraft}
-								onChange={(e) => setQueryDraft(e.target.value)}
-								placeholder={t("aiSearchPlaceholder")}
-								onKeyDown={(e) => {
-									if (e.key !== "Enter" || e.nativeEvent.isComposing) return
-									handleApplySearch()
-								}}
-								data-testid="crew-market-mobile-search-input"
-							/>
-							<Button
-								className="w-full gap-2 shadow-xs"
-								onClick={handleApplySearch}
-								data-testid="crew-market-mobile-search-submit"
-							>
-								<Search className="size-4" />
-								{t("mobile.runSearch")}
-							</Button>
-						</div>
-					</SheetContent>
-				</Sheet>
+				{/* Hide filter when API returns no categories (only synthetic "all" would remain). */}
+				{store.shouldShowCategoryFilter ? (
+					<div className="shrink-0 px-3" data-testid="crew-market-mobile-filter">
+						<CategoryFilterMobile
+							categories={store.categories}
+							activeCategoryId={activeCategoryId}
+							onCategoryChange={handleCategoryChange}
+						/>
+					</div>
+				) : null}
 
-				<ScrollArea className="min-h-0 flex-1 [&_[data-slot='scroll-area-viewport']>div]:!block">
-					<div className="flex w-full min-w-0 flex-col gap-4 px-3 pb-6 pt-3">
-						<div className="flex min-w-0 flex-col gap-4">
-							{!store.loading ? (
-								<CategoryFilter
-									categories={store.categories}
-									activeCategoryId={activeCategoryId}
-									onCategoryChange={handleCategoryChange}
-								/>
-							) : null}
+				<ScrollEdgeFadeContainer
+					fadeColor="mobile-background"
+					className="min-h-0 flex-1"
+					contentDeps={[
+						store.list.length,
+						store.showInitialSkeleton,
+						store.isEmpty,
+						activeCategoryId,
+					]}
+				>
+					<MagicPullToRefresh
+						embedInParentScroll
+						onRefresh={() => store.fetchAgents({ page: 1 })}
+						showSuccessMessage={false}
+						containerClassName="relative min-h-0 flex-1"
+					>
+						<div className="flex w-full min-w-0 flex-col gap-4 px-3 pb-6 pt-3">
+							{store.showInitialSkeleton ? <CrewMarketMobileSkeleton /> : null}
 
-							{store.loading ? <CrewMarketMobileSkeleton /> : null}
-
-							{store.isEmpty ? (
+							{!store.showInitialSkeleton && store.isEmpty ? (
 								<div
 									className="flex flex-col items-center justify-center py-12 text-center"
 									data-testid="crew-market-empty"
@@ -314,17 +281,16 @@ function CrewMarketMobilePage() {
 								</div>
 							) : null}
 
-							{!store.loading && store.list.length > 0 ? (
+							{!store.showInitialSkeleton && store.list.length > 0 ? (
 								<div
-									className="grid grid-cols-2 gap-3 [&>*]:min-h-0"
-									data-testid="employee-card-grid"
+									className="flex flex-col gap-3"
+									data-testid="employee-card-list"
 								>
 									{store.list.map((employee) => (
 										<EmployeeCardMobile
 											key={employee.id}
 											employee={employee}
 											onHire={handleHire}
-											onDismiss={handleDismiss}
 											onDetails={handleDetails}
 											onOpenMarketDetail={handleOpenMarketDetail}
 										/>
@@ -332,38 +298,49 @@ function CrewMarketMobilePage() {
 								</div>
 							) : null}
 
-							{!store.loading && store.list.length > 0 ? (
-								<div className="flex items-center justify-center py-2">
-									{store.hasMore ? (
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => store.loadMore()}
-											disabled={store.loadingMore}
-											data-testid="crew-market-load-more"
-										>
-											{store.loadingMore ? (
-												<Loader2 className="mr-2 size-4 animate-spin" />
-											) : null}
-											{store.loadingMore ? t("loadingMore") : t("loadMore")}
-										</Button>
-									) : (
-										<div
-											className="flex items-center justify-center gap-1 opacity-30"
-											data-testid="crew-market-no-more"
-										>
-											<Check className="size-4" />
-											<span className="text-xs">{t("noMoreData")}</span>
-										</div>
-									)}
-								</div>
+							{/* InfiniteScroll 放在列表末尾，滚动到底部时自动加载下一页 */}
+							{!store.showInitialSkeleton && store.list.length > 0 ? (
+								<InfiniteScroll
+									hasMore={store.hasMore}
+									loadMore={() => store.loadMore()}
+								/>
 							) : null}
 						</div>
-					</div>
-				</ScrollArea>
+					</MagicPullToRefresh>
+				</ScrollEdgeFadeContainer>
+
+				{/* Bottom search bar */}
+				<MobileBottomSearchBar
+					value={searchKeyword}
+					placeholder={t("aiSearchPlaceholder")}
+					clearAriaLabel={t("mobile.clearSearch")}
+					onValueChange={setSearchKeyword}
+					testIdPrefix="crew-market-mobile-search"
+				/>
 			</div>
 		</>
 	)
 }
 
-export default observer(CrewMarketMobilePage)
+const CrewMarketMobilePanel = observer(CrewMarketMobilePanelBase)
+
+export default function CrewMarketMobilePage() {
+	const shellOutlet = useOptionalSuperMobileShellOutlet()
+	const { t } = useTranslation("super")
+	const content = <CrewMarketMobilePanel />
+
+	// Crew market can render under standalone routes; wrap with mobile shell there so swipe gestures stay available.
+	if (!shellOutlet) {
+		return (
+			<SuperMobileShellRouteLayout
+				activeView="myCrew"
+				testIdPrefix="my-crew-shell"
+				closeSidebarAriaLabel={t("mobile.shell.closeSidebar")}
+			>
+				{content}
+			</SuperMobileShellRouteLayout>
+		)
+	}
+
+	return content
+}

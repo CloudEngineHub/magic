@@ -45,6 +45,7 @@ import {
 	useElementInspector,
 	ElementInspectorOverlay,
 } from "@/components/business/ElementInspector"
+import type { CanonicalContentDimensions } from "./utils/slide-dimensions"
 export interface IsolatedHTMLRendererRef {
 	getIframeElement: () => HTMLIFrameElement | null
 	getEditorRef: () => React.RefObject<HTMLEditorV2Ref> | null
@@ -90,12 +91,24 @@ import { POST_MESSAGE_TARGET_STRATEGIES, type OnFetchIntercepted } from "./utils
 import { useIframeFS } from "./iframe-api/hooks/useIframeFS"
 import { useIframeLLM } from "./iframe-api/hooks/useIframeLLM"
 import { useIframeAgent } from "./iframe-api/hooks/useIframeAgent"
+import { useIframeUserInfo } from "./iframe-api/hooks/useIframeUserInfo"
 import { useMagicFiles } from "./iframe-api/hooks/useMagicFiles"
 import { useIframeAgentActions } from "./hooks/useIframeAgentActions"
-import { saveIframeFileContent, createIframeFile } from "./iframe-api/iframeApi"
+import {
+	saveIframeFileContent,
+	createIframeFile,
+	deleteIframeFile,
+	deleteIframeFiles,
+	moveIframeFile,
+	renameIframeFile,
+	getIframeDownloadUrl,
+	getIframeFileInfo,
+} from "./iframe-api/iframeApi"
+import type { HTMLAppConfig } from "./iframe-api/types"
 
 import { env } from "@/utils/env"
 import { userStore } from "@/models/user"
+import MagicModal from "@/components/base/MagicModal"
 
 interface IsolatedHTMLRendererProps {
 	content: string
@@ -133,6 +146,7 @@ interface IsolatedHTMLRendererProps {
 	containIframeOverscroll?: boolean //控制HTML预览增强组件内部是否启用
 	hideVerticalScroll?: boolean
 	enableScalingHeightCalculation?: boolean
+	scaleContentDimensions?: CanonicalContentDimensions | null
 	waitForSettledContentMetrics?: boolean
 	autoFitScalePaddingFactor?: number
 	disableDynamicResourceInterception?: boolean
@@ -228,6 +242,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			containIframeOverscroll = false,
 			hideVerticalScroll = false,
 			enableScalingHeightCalculation = false,
+			scaleContentDimensions,
 			waitForSettledContentMetrics = false,
 			autoFitScalePaddingFactor = 1,
 			disableDynamicResourceInterception = false,
@@ -247,6 +262,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				return ""
 			}
 		}, [renderSiteUrl])
+		const iframeTargetOrigin = useMemo(
+			() => renderSiteOrigin || window.location.origin,
+			[renderSiteOrigin],
+		)
 		const postMessageTargetStrategy = useMemo(
 			() =>
 				renderSiteUrl
@@ -292,6 +311,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			contentHeight: number
 			phase?: "initial" | "settled"
 		} | null>(null)
+		const shouldWaitForSettledContentMetrics =
+			waitForSettledContentMetrics && !scaleContentDimensions
 
 		// 使用缩放控制 hook 处理 PPT 渲染模式
 		const {
@@ -314,8 +335,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			isEditMode,
 			selectedElementRect,
 			enableHeightCalculation: enableScalingHeightCalculation,
+			scaleContentDimensions,
 			contentMetricsOverride: scalingContentMetrics,
-			waitForSettledContentMetrics,
+			waitForSettledContentMetrics: shouldWaitForSettledContentMetrics,
 			autoFitScalePaddingFactor,
 		})
 
@@ -359,6 +381,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			iframeLoaded,
 			contentInjected,
 			renderSiteUrl,
+			targetOrigin: iframeTargetOrigin,
 			scaleRatio,
 			saveEditContent,
 			fileId,
@@ -536,7 +559,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			attachmentList,
 			filePathMapping,
 			uploadImageFileToProject,
-			targetOrigin: renderSiteOrigin || "*",
+			targetOrigin: iframeTargetOrigin,
 			onUploadSuccess: () => {
 				pubsub.publish(PubSubEvents.Update_Attachments)
 			},
@@ -565,11 +588,65 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			return result
 		}, [attachmentList])
 
+		const [htmlAppConfig, setHtmlAppConfig] = useState<HTMLAppConfig | null>(null)
+
+		const htmlAppInstanceKey = useMemo(() => {
+			const cleanedEntryPath = (relative_file_path || "").replace(/^\/+/, "")
+			const lastSlash = cleanedEntryPath.lastIndexOf("/")
+			const appRootDir = lastSlash >= 0 ? cleanedEntryPath.slice(0, lastSlash + 1) : ""
+			return JSON.stringify({
+				projectId: selectedProject?.id || "",
+				appRootDir,
+				entryPath: cleanedEntryPath,
+			})
+		}, [relative_file_path, selectedProject?.id])
+
+		useEffect(() => {
+			let cancelled = false
+			const cleanedEntryPath = (relative_file_path || "").replace(/^\/+/, "")
+			const lastSlash = cleanedEntryPath.lastIndexOf("/")
+			const appRootDir = lastSlash >= 0 ? cleanedEntryPath.slice(0, lastSlash + 1) : ""
+			const appConfigPath = `${appRootDir}app.json`
+			const appConfigFile = flatFileList.find(
+				(file) => file.relative_file_path.replace(/^\/+/, "") === appConfigPath,
+			)
+
+			if (!appConfigFile) {
+				setHtmlAppConfig(null)
+				return
+			}
+
+			getIframeDownloadUrl([appConfigFile.file_id])
+				.then(async (urls) => {
+					const url = urls?.[0]?.url
+					if (!url) throw new Error("Failed to get app.json download URL")
+					const response = await fetch(url)
+					if (!response.ok) throw new Error(`HTTP ${response.status}`)
+					const config = (await response.json()) as HTMLAppConfig
+					if (!cancelled)
+						setHtmlAppConfig(config && typeof config === "object" ? config : null)
+				})
+				.catch((error) => {
+					if (cancelled) return
+					setHtmlAppConfig(null)
+					logger.warn("加载 HTML 微应用 app.json 失败", {
+						appConfigPath,
+						errorMessage: error instanceof Error ? error.message : String(error),
+					})
+				})
+
+			return () => {
+				cancelled = true
+			}
+		}, [flatFileList, relative_file_path])
+
 		const { handleFSMessage } = useIframeFS({
 			iframeRef,
+			targetOrigin: iframeTargetOrigin,
 			entryPath: relative_file_path || "",
 			fileList: flatFileList,
-			appConfig: null,
+			appConfig: htmlAppConfig,
+			projectId: selectedProject?.id,
 			uploadFn: uploadImageFileToProject,
 			saveContentFn: ({ file_id, content }) => saveIframeFileContent([{ file_id, content }]),
 			mkdirFn: useMemoizedFn(async ({ name, parentId }) => {
@@ -584,10 +661,63 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				if (!fileId) throw new Error(`Failed to create directory: ${name}`)
 				return { file_id: fileId }
 			}),
+			deleteFn: useMemoizedFn(async ({ file_id, project_id }) => {
+				await deleteIframeFile(file_id, project_id)
+			}),
+			deleteFilesFn: useMemoizedFn(async ({ file_ids, project_id }) => {
+				await deleteIframeFiles(file_ids, project_id)
+			}),
+			moveFileFn: useMemoizedFn(async ({ file_id, target_parent_id, project_id }) => {
+				await moveIframeFile({ file_id, target_parent_id, project_id })
+			}),
+			renameFileFn: useMemoizedFn(async ({ file_id, target_name }) => {
+				await renameIframeFile({ file_id, target_name })
+			}),
+			verifyFileFn: useMemoizedFn(async ({ file_id, project_id }) =>
+				getIframeFileInfo(file_id, project_id),
+			),
+			confirmProjectDeleteFn: useMemoizedFn(
+				({ path, isDirectory, appRootDir, operation }) =>
+					new Promise<boolean>((resolve) => {
+						const operationText = t(
+							`htmlEditor.projectFileOperationConfirm.operations.${operation || "delete"}`,
+						)
+						const targetTypeText = t(
+							`htmlEditor.projectFileOperationConfirm.targetTypes.${isDirectory ? "directory" : "file"}`,
+						)
+						const displayAppRootDir =
+							appRootDir || t("htmlEditor.projectFileOperationConfirm.projectRoot")
+						const modal = MagicModal.confirm({
+							title: t("htmlEditor.projectFileOperationConfirm.title", {
+								operation: operationText,
+							}),
+							content: t("htmlEditor.projectFileOperationConfirm.content", {
+								operation: operationText,
+								targetType: targetTypeText,
+								path,
+								appRootDir: displayAppRootDir,
+							}),
+							okText: operationText,
+							cancelText: t("htmlEditor.projectFileOperationConfirm.cancel"),
+							closable: false,
+							maskClosable: false,
+							centered: true,
+							onOk: () => {
+								modal.destroy()
+								resolve(true)
+							},
+							onCancel: () => {
+								modal.destroy()
+								resolve(false)
+							},
+						})
+					}),
+			),
 		})
 
 		const { handleLLMMessage } = useIframeLLM({
 			iframeRef,
+			targetOrigin: iframeTargetOrigin,
 			baseUrl: (env("MAGIC_SERVICE_BASE_URL") as string) || "",
 			getAuthorization: () => userStore.user.authorization?.trim() || "",
 			getOrganizationCode: () => userStore.user.organizationCode?.trim() || "",
@@ -597,10 +727,65 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		const { handleAgentMessage } = useIframeAgent({
 			iframeRef,
+			targetOrigin: iframeTargetOrigin,
 			getAgentList,
 			createTopicAndSend,
 			sendMessage,
 			enableWriteOperations: true,
+		})
+
+		const { handleUserInfoMessage } = useIframeUserInfo({
+			iframeRef,
+			targetOrigin: iframeTargetOrigin,
+			getUserInfo: useMemoizedFn(() => {
+				const info = userStore.user.userInfo
+				if (!info) return null
+				const realName = info.real_name || ""
+				const nickname = info.nickname || ""
+				return {
+					user_id: info.user_id || "",
+					magic_id: info.magic_id || "",
+					nickname,
+					real_name: realName,
+					name: realName || nickname,
+					avatar: info.avatar || "",
+					organization_code: info.organization_code || "",
+				}
+			}),
+			appConfig: htmlAppConfig,
+			appInstanceKey: htmlAppInstanceKey,
+			authorizeUserInfo: useMemoizedFn(
+				({ appName, fields, reason }) =>
+					new Promise<boolean>((resolve) => {
+						const fieldText = fields.join(
+							t("htmlEditor.userInfoAuthorizationConfirm.fieldSeparator"),
+						)
+						const contentKey = reason
+							? "htmlEditor.userInfoAuthorizationConfirm.content"
+							: "htmlEditor.userInfoAuthorizationConfirm.contentWithoutReason"
+						const modal = MagicModal.confirm({
+							title: t("htmlEditor.userInfoAuthorizationConfirm.title"),
+							content: t(contentKey, {
+								appName,
+								fields: fieldText,
+								reason,
+							}),
+							okText: t("htmlEditor.userInfoAuthorizationConfirm.allow"),
+							cancelText: t("htmlEditor.userInfoAuthorizationConfirm.deny"),
+							closable: false,
+							maskClosable: false,
+							centered: true,
+							onOk: () => {
+								modal.destroy()
+								resolve(true)
+							},
+							onCancel: () => {
+								modal.destroy()
+								resolve(false)
+							},
+						})
+					}),
+			),
 		})
 
 		const isDynamicInterceptionEnabled = !disableDynamicResourceInterception
@@ -615,6 +800,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const { handleMagicUploadFiles, handleMagicAddFilesToMessage, handleMagicDownloadFiles } =
 			useMagicFiles({
 				iframeRef,
+				targetOrigin: iframeTargetOrigin,
 				selectedProject,
 				attachmentList,
 				relative_file_path,
@@ -696,7 +882,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							source,
 						},
 					},
-					"*",
+					iframeTargetOrigin,
 				)
 			},
 		)
@@ -729,7 +915,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							type: "setContent",
 							content: fullContent,
 						},
-						"*",
+						iframeTargetOrigin,
 					)
 					setProcessedSourceCode(fullContent)
 				} else {
@@ -839,7 +1025,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									type: "setContent",
 									content: fullContent,
 								},
-								"*",
+								iframeTargetOrigin,
 							)
 
 							// Re-enter selection mode after iframe content is replaced
@@ -919,7 +1105,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						type: "IMAGE_UPLOAD_RESULT",
 						data: payload,
 					},
-					"*",
+					iframeTargetOrigin,
 				)
 			}
 
@@ -975,7 +1161,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 								dataSrc: uploadResult.storedRelativeFilePath,
 								targetSelector: data.targetSelector,
 							},
-							"*",
+							iframeTargetOrigin,
 						)
 					}
 
@@ -1004,7 +1190,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 								error: "图片转换失败",
 								targetSelector: data.targetSelector,
 							},
-							"*",
+							iframeTargetOrigin,
 						)
 					}
 					magicToast.destroy()
@@ -1195,7 +1381,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					// 页面完全加载完成（包括图片、样式表等）
 					notifyRenderReady()
 					// When sandbox doesn't support contentMetrics, unblock scaling after timeout
-					if (waitForSettledContentMetrics) {
+					if (shouldWaitForSettledContentMetrics) {
 						if (contentMetricsFallbackTimerRef.current) {
 							clearTimeout(contentMetricsFallbackTimerRef.current)
 						}
@@ -1237,17 +1423,19 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							),
 						}
 
-						setScalingContentMetrics((prev) => {
-							if (prev?.phase === "settled" && metricsPhase !== "settled") {
-								return prev
-							}
+						if (!scaleContentDimensions) {
+							setScalingContentMetrics((prev) => {
+								if (prev?.phase === "settled" && metricsPhase !== "settled") {
+									return prev
+								}
 
-							return {
-								contentWidth,
-								contentHeight,
-								phase: metricsPhase,
-							}
-						})
+								return {
+									contentWidth,
+									contentHeight,
+									phase: metricsPhase,
+								}
+							})
+						}
 						onContentMetrics?.({
 							contentWidth,
 							contentHeight,
@@ -1361,6 +1549,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				) {
 					// 处理 window.Magic.getAgents / createTopicAndSend / sendMessage 请求
 					await handleAgentMessage(event.data.type, event.data)
+				} else if (event.data?.type?.startsWith("MAGIC_GET_USER_INFO_")) {
+					// 处理 window.Magic.user.getInfo() 请求
+					await handleUserInfoMessage(event.data.type, event.data)
 				} else if (event.data && event.data.type === "MAGIC_RELOAD_REQUEST") {
 					// 处理 window.Magic.reload() 请求
 					reloadIframeContent()
@@ -1430,7 +1621,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					type: "setAnimationState",
 					paused: !isVisible,
 				},
-				"*",
+				iframeTargetOrigin,
 			)
 		}, [contentInjected, isPptRender, isVisible, sandboxType])
 

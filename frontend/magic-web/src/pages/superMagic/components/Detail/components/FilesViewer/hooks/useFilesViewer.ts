@@ -286,6 +286,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		onActiveFileChange,
 		activeFileId,
 		showFileFooter,
+		showFileHeader: showFileHeaderProp,
 		currentTopicStatus,
 		messages,
 		autoDetail,
@@ -307,6 +308,12 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	const { shareParams, isShareRoute } = useShareRoute()
 	const [searchParams] = useSearchParams()
+
+	// Prop takes precedence; URL ?showFileHeader=false remains as legacy fallback.
+	const resolvedShowFileHeader = useMemo(() => {
+		if (showFileHeaderProp !== undefined) return showFileHeaderProp
+		return searchParams.get("showFileHeader") !== "false"
+	}, [showFileHeaderProp, searchParams])
 
 	// Store checkBeforeClose functions for each file
 	const checkBeforeCloseMapRef = useRef<Map<string, () => Promise<boolean>>>(new Map())
@@ -912,6 +919,12 @@ export function useFilesViewer(props: FilesViewerProps) {
 			return
 		}
 
+		// 等待项目附件加载完成，避免将还在加载的文件错误地标记为「已删除」导致闪烁
+		// 或者过早触发 notifyFileTabsCacheLoaded 导致被其他组件提前打开的 tab 被覆盖
+		if (isAwaitingProjectAttachments) {
+			return
+		}
+
 		const loadCacheState = async () => {
 			try {
 				const cachedState = await projectStateRepository.getProjectState(
@@ -1005,6 +1018,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						} catch (cleanupError) {
 							console.error(cleanupError)
 						}
+						setCacheLoaded(true)
 						return
 					}
 
@@ -1086,9 +1100,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 				setCacheLoaded(true)
 			}
 		}
-		// 如果文件列表为空，不加载缓存（避免出现「文件已删除」类 UI），但仍需通知：否则依赖
-		// `onFileTabsCacheLoaded` 的逻辑（如历史话题面板延后自动展开）会永远等不到就绪信号
+		// 如果项目确实没有任何文件（附件已加载完成，但列表为空），不加载缓存（避免出现「文件已删除」类 UI）
+		// 但仍需通知就绪，并标记 cacheLoaded 为 true 以允许后续操作保存缓存
 		if (fileList.length === 0) {
+			setCacheLoaded(true)
 			notifyFileTabsCacheLoaded(selectedProject.id)
 			return
 		}
@@ -1105,6 +1120,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		projectStateRepository,
 		openPlaybackTab,
 		fileList,
+		isAwaitingProjectAttachments,
 	])
 
 	useEffect(() => {
@@ -1519,8 +1535,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 			// 类型已经在 getFileDetail 中处理，直接使用
 			const type = fileDetail.type
 
-			const showFileHeader = searchParams.get("showFileHeader") !== "false"
-
 			return {
 				type,
 				data: fileDetail.data,
@@ -1578,7 +1592,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				projectId,
 				detailMode: "files",
 				displayConfig: tab.display_config,
-				showFileHeader,
+				showFileHeader: resolvedShowFileHeader,
 				onRefreshFile: handleRefresh,
 				activeFileId,
 				showFooter: showFileFooter,
