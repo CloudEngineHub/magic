@@ -49,12 +49,26 @@ Plain JSON (not JSONP). Produced by `create_self_media_post`; edit with `edit_fi
   "meta": {
     "title": "AI Billing Breakdown",
     "subtitle": "Cost, structure, and optimization",
-    "tags": "#AI #Billing",
+    "tags": {
+      "core": ["AI"],
+      "mid": ["AI工具", "效率工具"],
+      "longtail": ["AI账单优化", "团队降本"],
+      "trend": []
+    },
     "author": "@magic",
     "feedTitle": "AI billing, explained in one post",
     "feedLikes": "18k",
     "commentCount": "128",
-    "comments": [{ "name": "Alice", "text": "Very clear structure" }]
+    "comments": [
+      { "name": "Alice", "text": "The cost breakdown finally makes the trade-offs clear." },
+      { "name": "Ben", "text": "Saving this for our next AI tool budget review." },
+      { "name": "Cora", "text": "The optimization checklist is the part I needed most." }
+    ],
+    "interactionReference": {
+      "level": "medium-high",
+      "basis": "practical AI cost topic with clear save/share value",
+      "disclaimer": "reference display data, not real platform analytics"
+    }
   },
   "cards": ["cards/01.html", "cards/02.html"]
 }
@@ -73,7 +87,17 @@ Plain JSON (not JSONP). Produced by `create_self_media_post`; edit with `edit_fi
     "feedTitle": "Turn any webpage into an editable PPT — element-level fidelity",
     "feedLikes": "23.8w",
     "commentCount": "3.2k",
-    "time": "4 minutes ago"
+    "comments": [
+      { "name": "Mia", "text": "This would remove so much manual PPT cleanup work." },
+      { "name": "Noah", "text": "The editable elements angle is much stronger than a simple screenshot export." },
+      { "name": "Ivy", "text": "I want to try this on our next product report." }
+    ],
+    "time": "4 minutes ago",
+    "interactionReference": {
+      "level": "high",
+      "basis": "product launch article with strong workplace productivity pain point",
+      "disclaimer": "reference display data, not real platform analytics"
+    }
   },
   "article": "feature-launch.html",
   "heroCover": "assets/cover-hero.jpg",
@@ -90,3 +114,18 @@ Plain JSON (not JSONP). Produced by `create_self_media_post`; edit with `edit_fi
 3. Cards reference their own assets via relative paths: `assets/<name>.png` for post-local, `../../shared/<name>.png` for project-shared.
 4. Card filenames must not carry a numeric prefix (for example, do not use `01_cover.html`). Ordering is controlled by `post.json.cards`, not by filename.
 5. For `wechat-official-accounts`: `article`, `heroCover`, `thumbnailCover` paths are all relative to the post folder. Do **not** fill both `cards` and `article` in the same `post.json`.
+
+## Rednote Tags
+
+New `rednote` posts should use structured `meta.tags`:
+
+```json
+{
+  "core": ["穿搭"],
+  "mid": ["通勤穿搭", "显瘦穿搭"],
+  "longtail": ["梨形身材显瘦", "155穿搭日记"],
+  "trend": ["多巴胺穿搭"]
+}
+```
+
+Legacy string or string-array tags remain readable, but do not use them for new Rednote posts.

@@ -1,6 +1,9 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/shadcn-ui/badge"
+import { Button } from "@/components/shadcn-ui/button"
+import { Input } from "@/components/shadcn-ui/input"
 import type { JSONContent } from "@tiptap/react"
 import type {
 	ArticleDetail,
@@ -285,23 +288,23 @@ export default function ArticleCard({
 			className={cn(
 				hideHeader
 					? "w-full space-y-6"
-					: "group border-l-2 border-primary/60 bg-white p-5 transition-all duration-300 hover:bg-zinc-50/40",
+					: "group rounded-lg border bg-card p-4 shadow-xs transition-all duration-300 hover:bg-accent/30 sm:p-5",
 			)}
 		>
 			{/* Accordion header row - visible only when not hideHeader */}
 			{!hideHeader && (
 				<div className="flex items-start gap-4">
 					{/* Step badge */}
-					<div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center bg-primary text-xs font-black text-zinc-950">
+					<Badge className="mt-1 h-6 w-6 shrink-0 rounded-md px-0 text-xs">
 						{index + 1}
-					</div>
+					</Badge>
 
 					{/* Inputs section */}
 					<div className="grid min-w-0 flex-1 grid-cols-1 gap-3 md:grid-cols-12">
 						<div className="space-y-1 md:col-span-8">
-							<input
+							<Input
 								type="text"
-								className="w-full border-0 border-b border-transparent px-2 py-1 text-sm font-extrabold text-zinc-950 outline-none transition-all placeholder:text-muted-foreground/30 focus:border-zinc-950 focus:bg-primary/[0.03]"
+								className="h-9 text-sm font-semibold"
 								placeholder={t(
 									"detail.selfMedia.initPanel.stepTopic.titlePlaceholder",
 								)}
@@ -318,12 +321,12 @@ export default function ArticleCard({
 						<div className="flex items-center md:col-span-4">
 							<div className="relative w-full">
 								<Folder
-									className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/45"
+									className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/45"
 									size={12}
 								/>
-								<input
+								<Input
 									type="text"
-									className="w-full border-0 border-b border-transparent py-1 pl-7 pr-2 text-xs font-bold text-zinc-950/70 outline-none transition-all placeholder:text-muted-foreground/30 focus:border-zinc-950 focus:bg-primary/[0.03]"
+									className="h-9 pl-7 text-xs"
 									placeholder={t(
 										"detail.selfMedia.initPanel.stepTopic.folderPlaceholder",
 										"归档目录",
@@ -339,13 +342,13 @@ export default function ArticleCard({
 
 					{/* Row control actions */}
 					<div className="flex shrink-0 items-center gap-1.5 pt-0.5">
-						<button
+						<Button
 							type="button"
+							variant="ghost"
+							size="icon-sm"
 							className={cn(
-								"cursor-pointer p-1.5 outline-none transition-all duration-300",
-								expanded
-									? "bg-primary/10 text-primary"
-									: "text-muted-foreground/40 hover:bg-muted hover:text-foreground",
+								"size-8",
+								expanded ? "text-primary" : "text-muted-foreground",
 							)}
 							onClick={() => setExpanded(!expanded)}
 							title={t(
@@ -361,14 +364,16 @@ export default function ArticleCard({
 									expanded && "rotate-180",
 								)}
 							/>
-						</button>
-						<button
+						</Button>
+						<Button
 							type="button"
-							className="cursor-pointer p-1.5 text-muted-foreground/35 transition-all duration-300 hover:bg-destructive/15 hover:text-destructive"
+							variant="ghost"
+							size="icon-sm"
+							className="size-8 text-muted-foreground hover:text-destructive"
 							onClick={onRemove}
 						>
 							<Trash2 size={14} />
-						</button>
+						</Button>
 					</div>
 				</div>
 			)}
@@ -385,17 +390,20 @@ export default function ArticleCard({
 					{/* Folder name - only shown in hideHeader mode (header row already contains it otherwise) */}
 					{hideHeader && (
 						<div className="space-y-1.5">
-							<label className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+							<label className="block text-xs font-medium text-muted-foreground">
 								{t(
 									"detail.selfMedia.initPanel.stepDetail.folderLabel",
 									"归档文件夹",
 								)}
 							</label>
-							<div className="flex items-center gap-1.5 border-b border-zinc-100 pb-1 transition-colors focus-within:border-zinc-950">
-								<Folder className="shrink-0 text-muted-foreground/45" size={12} />
-								<input
+							<div className="relative">
+								<Folder
+									className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/45"
+									size={12}
+								/>
+								<Input
 									type="text"
-									className="min-w-0 flex-1 border-0 bg-transparent py-0.5 text-xs font-bold text-zinc-950/70 outline-none placeholder:text-muted-foreground/30"
+									className="h-9 pl-7 text-xs"
 									placeholder={t(
 										"detail.selfMedia.initPanel.stepTopic.folderPlaceholder",
 										"文件夹名（选填，留空自动生成）",
@@ -413,7 +421,7 @@ export default function ArticleCard({
 					{/* 1. Platform selection + Card count */}
 					<div className="grid grid-cols-1 gap-5 md:grid-cols-12">
 						<div className="space-y-2 md:col-span-8">
-							<label className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+							<label className="block text-xs font-medium text-muted-foreground">
 								{t(
 									"detail.selfMedia.initPanel.stepDetail.platformLabel",
 									"目标自媒体平台",
@@ -425,10 +433,10 @@ export default function ArticleCard({
 										key={p.value}
 										type="button"
 										className={cn(
-											"flex cursor-pointer items-center gap-1.5 px-3.5 py-1 text-xs font-bold transition-all duration-300",
+											"flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-all duration-300",
 											article.platform === p.value
-												? "bg-primary/30 text-zinc-950"
-												: "bg-zinc-100 text-muted-foreground hover:bg-primary/20 hover:text-zinc-950",
+												? "border-primary bg-primary text-primary-foreground"
+												: "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground",
 										)}
 										onClick={() =>
 											handleFieldChange(
@@ -449,18 +457,18 @@ export default function ArticleCard({
 
 						{article.platform !== "wechat-official-accounts" && (
 							<div className="space-y-2 md:col-span-4">
-								<label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">
+								<label className="block text-xs font-medium text-muted-foreground">
 									{t(
 										"detail.selfMedia.initPanel.stepDetail.cardCountLabel",
 										"生成卡片数量",
 									)}
 								</label>
 								<div className="flex items-center gap-2">
-									<input
+									<Input
 										type="number"
 										min={1}
 										max={20}
-										className="w-16 border-0 border-b border-zinc-200 bg-zinc-50/40 px-3 py-2 text-center text-xs font-black outline-none transition-all duration-300 focus:border-zinc-950 focus:bg-primary/[0.03]"
+										className="h-9 w-16 text-center text-xs"
 										value={article.cardCount}
 										onChange={(e) =>
 											handleCardCountChange(parseInt(e.target.value) || 1)
@@ -476,7 +484,7 @@ export default function ArticleCard({
 
 					{/* 2. Content style */}
 					<div className="space-y-2">
-						<label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">
+						<label className="block text-xs font-medium text-muted-foreground">
 							{t("detail.selfMedia.initPanel.stepDetail.styleLabel", "文案口吻预设")}
 						</label>
 						<div className="flex flex-wrap gap-1.5">
@@ -485,10 +493,10 @@ export default function ArticleCard({
 									key={preset.value}
 									type="button"
 									className={cn(
-										"cursor-pointer px-3.5 py-1.5 text-xs font-bold transition-all duration-300",
+										"cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-all duration-300",
 										article.style === preset.value
-											? "bg-primary/30 text-zinc-950"
-											: "bg-zinc-100 text-muted-foreground hover:bg-primary/20 hover:text-zinc-950",
+											? "border-primary bg-primary text-primary-foreground"
+											: "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground",
 									)}
 									onClick={() => handleFieldChange("style", preset.value)}
 								>
@@ -500,7 +508,7 @@ export default function ArticleCard({
 
 					{/* 3. Visual preset */}
 					<div className="space-y-2">
-						<label className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+						<label className="block text-xs font-medium text-muted-foreground">
 							{t("detail.selfMedia.initPanel.stepDetail.visualLabel", "配图视觉基调")}
 						</label>
 						<VisualPresetPicker
@@ -556,9 +564,9 @@ export default function ArticleCard({
 							enableVoice
 							enableMention
 							rows={3}
-							className="border-0 border-b border-zinc-200 bg-zinc-50/40 ring-0 ring-offset-0 focus-within:border-zinc-950 focus-within:bg-primary/[0.03] focus-within:ring-0 focus-within:ring-offset-0"
+							className="rounded-lg border bg-card shadow-xs ring-0 ring-offset-0 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50"
 							bottomToolbar={
-								<div className="flex items-center bg-white/70 px-3 py-1.5">
+								<div className="flex items-center bg-muted/30 px-3 py-1.5">
 									<ReferenceFilePicker
 										value={article.referenceFiles || []}
 										onChange={handleReferenceFilesChange}
@@ -572,8 +580,8 @@ export default function ArticleCard({
 
 					{/* 5. Outline / Card Content Workspace */}
 					<div className="space-y-3">
-						<div className="flex items-center justify-between border-b border-border/10 pb-2">
-							<label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+						<div className="flex items-center justify-between border-b pb-2">
+							<label className="text-xs font-medium text-muted-foreground">
 								{t(
 									isCardPlatform
 										? "detail.selfMedia.initPanel.stepDetail.cardContentLabel"

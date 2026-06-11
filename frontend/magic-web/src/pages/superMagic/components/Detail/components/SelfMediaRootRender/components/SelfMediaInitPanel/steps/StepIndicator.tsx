@@ -14,28 +14,28 @@ export default function StepIndicator({ currentStep, onNavigate }: StepIndicator
 	const getStepIcon = (index: number, active: boolean, passed: boolean) => {
 		const iconSize = 14
 		if (passed) {
-			return <Check size={iconSize} strokeWidth={3} className="text-zinc-950" />
+			return <Check size={iconSize} strokeWidth={3} className="text-[#38426f]" />
 		}
 		switch (index) {
 			case 0:
 				return (
 					<Compass
 						size={iconSize}
-						className={cn(active ? "text-zinc-50" : "text-muted-foreground")}
+						className={cn(active ? "text-[#38426f]" : "text-muted-foreground")}
 					/>
 				)
 			case 1:
 				return (
 					<ListTodo
 						size={iconSize}
-						className={cn(active ? "text-zinc-50" : "text-muted-foreground")}
+						className={cn(active ? "text-[#38426f]" : "text-muted-foreground")}
 					/>
 				)
 			case 2:
 				return (
 					<Play
 						size={iconSize}
-						className={cn(active ? "text-zinc-50" : "text-muted-foreground")}
+						className={cn(active ? "text-[#38426f]" : "text-muted-foreground")}
 					/>
 				)
 			default:
@@ -45,18 +45,21 @@ export default function StepIndicator({ currentStep, onNavigate }: StepIndicator
 
 	return (
 		<div
-			className="relative shrink-0 border-b border-border/40 bg-white px-6 py-6"
+			className="relative shrink-0 bg-background/80 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/70 sm:px-6"
 			data-testid="self-media-init-panel-header"
 		>
 			{/* Progress timeline bar */}
-			<div className="absolute bottom-0 left-0 h-[3px] w-full bg-zinc-100">
+			<div
+				className="absolute bottom-0 left-0 h-[2px] w-full bg-[#434c81]/[0.08]"
+				data-testid="self-media-init-panel-progress-track"
+			>
 				<div
-					className="h-full border-r-2 border-zinc-950 bg-primary transition-all duration-700 ease-out"
+					className="h-full bg-[#434c81]/60 transition-all duration-700 ease-out"
 					style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
 				/>
 			</div>
 
-			<div className="mx-auto flex max-w-4xl items-center justify-between">
+			<div className="mx-auto flex max-w-5xl items-center justify-between gap-3 overflow-x-auto">
 				{STEPS.map((step, index) => {
 					const isActive = index === currentStep
 					const isPassed = index < currentStep
@@ -64,38 +67,37 @@ export default function StepIndicator({ currentStep, onNavigate }: StepIndicator
 					return (
 						<div
 							key={step.key}
-							className="group/step flex flex-1 items-center last:flex-initial"
+							className="group/step flex min-w-fit flex-1 items-center last:flex-initial"
 						>
 							<button
 								type="button"
-								className="flex cursor-pointer items-center gap-3 text-left outline-none transition-all duration-300"
+								className="flex cursor-pointer items-center gap-3 rounded-md text-left outline-none transition-colors duration-200 focus-visible:ring-[3px] focus-visible:ring-ring/50"
 								onClick={() => onNavigate(index)}
 							>
-								{/* Glowing dot with smooth scaling */}
 								<div
+									data-testid="self-media-init-panel-step-icon"
 									className={cn(
-										"flex h-9 w-9 items-center justify-center rounded-full transition-all duration-300",
+										"flex h-9 w-9 items-center justify-center rounded-md transition-transform duration-200 ease-out group-hover/step:-translate-y-0.5",
 										isActive
-											? "scale-105 border border-zinc-950 bg-zinc-950 text-white shadow-sm"
+											? "bg-[#434c81]/[0.13] text-[#38426f] shadow-[0_6px_18px_rgba(67,76,129,0.12)]"
 											: isPassed
-												? "border border-zinc-950/15 bg-primary/20 text-zinc-950 hover:bg-primary/30"
-												: "border border-zinc-200 bg-white text-muted-foreground hover:border-zinc-300",
+												? "bg-[#434c81]/[0.10] text-[#38426f] group-hover/step:bg-[#434c81]/[0.15]"
+												: "bg-muted/45 text-muted-foreground group-hover/step:bg-[#434c81]/[0.06]",
 									)}
 								>
 									{getStepIcon(index, isActive, isPassed)}
 								</div>
 
-								{/* Label text */}
 								<div className="hidden select-none flex-col md:flex">
-									<span className="text-[10px] font-black uppercase tracking-[0.15em] text-primary">
-										STAGE 0{index + 1}
+									<span className="text-[11px] font-medium text-muted-foreground">
+										{index + 1}/{STEPS.length}
 									</span>
 									<span
 										className={cn(
-											"text-xs tracking-wide transition-all duration-300",
+											"text-xs transition-colors duration-200",
 											isActive
-												? "font-black text-zinc-950"
-												: "font-bold text-muted-foreground group-hover/step:text-foreground",
+												? "font-semibold text-foreground"
+												: "font-medium text-muted-foreground group-hover/step:text-foreground",
 										)}
 									>
 										{t(step.titleKey)}
@@ -103,15 +105,12 @@ export default function StepIndicator({ currentStep, onNavigate }: StepIndicator
 								</div>
 							</button>
 
-							{/* High-end connecting line */}
 							{index < STEPS.length - 1 && (
 								<div className="relative mx-4 hidden h-[1px] flex-1 sm:block">
 									<div
 										className={cn(
-											"absolute inset-0 border-b transition-all duration-500",
-											isPassed
-												? "border-solid border-zinc-950/30"
-												: "border-dashed border-zinc-200",
+											"absolute inset-x-0 top-1/2 h-px -translate-y-1/2 transition-colors duration-300",
+											isPassed ? "bg-[#434c81]/25" : "bg-muted/55",
 										)}
 									/>
 								</div>

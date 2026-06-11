@@ -10,9 +10,12 @@
  */
 
 import { useState, useRef, useCallback } from "react"
+import { Mic, Sparkles, Square } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useVoiceInput } from "@/components/business/VoiceInput/hooks"
 import { useMicrophonePermission } from "@/hooks/useMicrophonePermission"
+import { Button } from "@/components/shadcn-ui/button"
+import { Textarea } from "@/components/shadcn-ui/textarea"
 import AiActionButton from "./AiActionButton"
 import ReferenceFilePicker from "../picker/ReferenceFilePicker"
 import { polishText } from "../../../../services/selfMediaAiGenerate"
@@ -126,11 +129,11 @@ export default function AiInputBox({
 		<div className={cn("space-y-1.5", className)}>
 			{label && <label className="mb-1 block text-xs font-semibold">{label}</label>}
 
-			{/* Unified paper field: textarea + toolbar */}
-			<div className="overflow-hidden border-b border-zinc-200 bg-zinc-50/40 transition-all focus-within:border-zinc-950 focus-within:bg-primary/[0.03]">
+			{/* Unified field: textarea + toolbar */}
+			<div className="overflow-hidden rounded-lg border bg-card shadow-xs transition-all focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
 				{/* Textarea area */}
-				<textarea
-					className="w-full resize-none border-none bg-transparent px-4 py-3 text-sm font-bold text-zinc-950 placeholder:text-muted-foreground/50 focus:outline-none"
+				<Textarea
+					className="min-h-0 resize-none border-0 bg-transparent px-4 py-3 text-sm shadow-none focus-visible:ring-0"
 					placeholder={placeholder}
 					rows={rows}
 					value={value}
@@ -139,7 +142,7 @@ export default function AiInputBox({
 				/>
 
 				{/* Bottom toolbar: reference files left, actions right */}
-				<div className="flex items-center border-t border-zinc-950/10 bg-white/70 px-3 py-1.5">
+				<div className="flex items-center border-t bg-muted/30 px-3 py-1.5">
 					{onReferenceFilesChange && (
 						<ReferenceFilePicker
 							value={referenceFiles || []}
@@ -149,25 +152,19 @@ export default function AiInputBox({
 					)}
 					<span className="flex-1" />
 					<div className="flex items-center gap-1">
-						<button
+						<Button
 							type="button"
+							variant="ghost"
+							size="icon-sm"
 							className={cn(
-								"cursor-pointer p-1 transition-all",
-								isListening
-									? "animate-pulse bg-red-50 text-red-500"
-									: "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950",
+								"size-7",
+								isListening && "animate-pulse text-destructive",
 							)}
 							onClick={handleToggleVoice}
 							title={isListening ? "停止录音" : "语音输入"}
 						>
-							<svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
-								{isListening ? (
-									<path d="M5 3h6v10H5V3z" />
-								) : (
-									<path d="M8 1a2 2 0 0 1 2 2v4a2 2 0 1 1-4 0V3a2 2 0 0 1 2-2zm0 10a4 4 0 0 0 4-4h1a5 5 0 0 1-4.5 4.975V14h2v1h-5v-1h2v-2.025A5 5 0 0 1 3 7h1a4 4 0 0 0 4 4z" />
-								)}
-							</svg>
-						</button>
+							{isListening ? <Square size={14} /> : <Mic size={14} />}
+						</Button>
 						<AiActionButton
 							modelValue={selectedModel}
 							onModelChange={setSelectedModel}
@@ -176,12 +173,7 @@ export default function AiInputBox({
 							onClick={handlePolish}
 							label={
 								<>
-									<svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
-										<path
-											d="M6 1L7.5 4.5L11 6L7.5 7.5L6 11L4.5 7.5L1 6L4.5 4.5L6 1Z"
-											fill="currentColor"
-										/>
-									</svg>
+									<Sparkles size={12} />
 									<span>润色</span>
 								</>
 							}

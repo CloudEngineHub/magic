@@ -1,0 +1,27 @@
+[
+  {
+    "id": 1,
+    "prompt": "帮我做一篇小红书图文：主题是 155 小个子通勤显高穿搭，目标是职场新人，想要 6 张卡片。",
+    "expected": "创建 rednote 卡片帖时生成结构化 meta.tags，包含 core/mid/longtail/trend，5-8 个相关标签，并在无用户标签时先确认。"
+  },
+  {
+    "id": 2,
+    "prompt": "基于这个自媒体项目再加一篇杭州 citywalk 一日路线小红书，风格要轻松，别太像攻略大全。",
+    "expected": "旅行类 rednote 标签包含具体地点或路线标签，避免纯泛词；卡片只在最后集中渲染完整标签。"
+  },
+  {
+    "id": 3,
+    "prompt": "把这篇 Instagram 帖子的互动数据和评论补完整，标签保持我原来的 #AI #Design。",
+    "expected": "Instagram 不强制 Rednote 四层标签；补齐 feedLikes/commentCount/comments/interactionReference，同时保留用户原始标签格式。"
+  },
+  {
+    "id": "rednote-human-voice",
+    "prompt": "帮我做一篇小红书图文，主题是 AI 会议纪要工具，目标读者是每天开很多会的项目经理。不要写得像 AI 通稿，要有一点真实使用场景。",
+    "expected": "写卡片前加载 human-writing-style；先建立作者声音、目标读者、读者动作和真实支撑；避免宏大背景、赋能式空话和机械三段式；首屏要出现具体会议场景、项目经理痛点和可保存的判断/清单。"
+  },
+  {
+    "id": "wechat-human-voice",
+    "prompt": "写一篇公众号文章，讲为什么自媒体创作工具不能只靠对话框，要更像一个工作台。文章要像产品负责人写的，不要像公关稿。",
+    "expected": "写文章前加载 human-writing-style；以产品负责人视角建立观点和边界；用工作流、失败场景或产品机制支撑判断；避免时代背景开头、三点价值堆叠、总结展望式结尾和没有证据的行业判断。"
+  }
+]

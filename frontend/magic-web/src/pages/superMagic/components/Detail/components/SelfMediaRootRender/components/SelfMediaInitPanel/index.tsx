@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useMemo, type CSSProperties } from "react"
+import { useCallback, useEffect, useRef, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
@@ -235,8 +235,7 @@ function SelfMediaInitPanel({
 
 	return (
 		<div
-			className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background"
-			style={SELF_MEDIA_SKETCH_THEME}
+			className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-mobile-background"
 			data-testid="self-media-init-panel-root"
 		>
 			<DraftRestoreDialog
@@ -247,7 +246,7 @@ function SelfMediaInitPanel({
 			/>
 			{isDraftLoading || isBrandConfigLoading ? (
 				<div
-					className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-white"
+					className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-background"
 					data-testid="self-media-init-panel-draft-loading"
 				>
 					<Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
@@ -261,7 +260,7 @@ function SelfMediaInitPanel({
 
 					{/* Step content */}
 					<ScrollArea
-						className="relative min-h-0 flex-1 bg-white"
+						className="relative min-h-0 flex-1 overflow-y-auto bg-background"
 						data-testid="self-media-init-panel-content"
 					>
 						<div className="px-6">
@@ -371,9 +370,3 @@ function SelfMediaInitPanel({
 }
 
 export default observer(SelfMediaInitPanel)
-
-const SELF_MEDIA_SKETCH_THEME = {
-	"--primary-rgb": "245 158 11",
-	"--primary-foreground-rgb": "23 23 23",
-	"--ring-rgb": "245 158 11",
-} as CSSProperties

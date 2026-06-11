@@ -1,18 +1,12 @@
 ---
 name: self-media-composer
 description: >
-  Self-media post creation and management skill. Use when the user wants to build, extend, or edit card-style social posts for Rednote (Xiaohongshu), Instagram, WeChat Official Accounts, or similar platforms. Handles project scaffolding, post authoring, card HTML / article HTML production, built-in preset selection, and posts-index maintenance.
-
-  CRITICAL — Load this skill immediately (before any other action) when the user message matches ANY of the following patterns:
-
-  English triggers: - Contains [@self_media_project:...] - "create a post", "add a post", "make cards", "write a WeChat article" - "make a Rednote / Xiaohongshu post", "make an Instagram post" - "build a self-media project", "start a social media project" - "generate card images", "design social cards", "create slide cards" - "create content for Rednote / Instagram / WeChat"
-
-  中文触发词（出现以下任意表达时立即加载本技能）： - 包含 [@self_media_project:...] 引用 - 帮我做小红书 / 做小红书图文 / 做小红书帖子 / 小红书推文 / 发小红书 - 做公众号文章 / 写公众号推文 / 制作公众号内容 / 微信公众号推文 - 做 Instagram 帖子 / ins 图文 / ins 卡片 - 帮我做卡片 / 制作卡片图文 / 生成社媒卡片 - 新建自媒体项目 / 创建内容项目 / 做一套图文 - 做一篇（小红书 | 公众号 | ins）内容 - 给我写一篇推文 / 帮我排版一篇文章（配合平台名称出现时）
+  Use when the user wants to create, extend, or edit self-media posts or card/article projects for Rednote/Xiaohongshu, Instagram, WeChat Official Accounts, or similar platforms. Trigger on [@self_media_project:...], create/add post, make cards, generate social cards, write WeChat article, 小红书图文, 小红书标签, 公众号文章, ins卡片, 自媒体项目, 社媒卡片.
 ---
 
 # Self-Media Composer Skill
 
-Complete capability for building and managing self-media projects. One project groups many posts; each post is an independent folder with its own meta and card sequence. This skill scaffolds that structure, authors the cards, and keeps the root index in sync.
+Complete capability for building and managing self-media projects. One project groups many posts; each post is an independent folder with its own meta and card sequence. This skill scaffolds that structure, authors the cards, generates reference engagement data, and keeps the root index in sync.
 
 ---
 
@@ -237,7 +231,7 @@ Creates a single post directory (`posts/<post_id>/`) with `post.json` and an emp
 | `project_path`        | Yes      | Self-media project root, workspace-relative.                                                                                                                                                                |
 | `post_id`             | Yes      | Stable id, safe for filesystem (for example `ai-bill`). Used as folder name and `post.json.id`.                                                                                                             |
 | `post_name`           | Yes      | Display name written into the root `posts[]` entry and as the fallback `meta.title`.                                                                                                                        |
-| `meta`                | No       | Object merged into `post.json.meta`. Free-form fields: `title`, `subtitle`, `tags`, `author`, `feedTitle`, `time` (wechat), etc.                                                                            |
+| `meta`                | No       | Object merged into `post.json.meta`. Free-form fields: `title`, `subtitle`, `tags`, `author`, `feedTitle`, `feedLikes`, `commentCount`, `comments`, `time` (wechat), `interactionReference`, etc. For `rednote`, `tags` should use the structured hashtag pyramid unless the user supplied a legacy string/array format. |
 | `cards`               | No       | **rednote / instagram only.** Initial value for `post.json.cards`. Paths relative to the post folder, for example `"cards/01.html"`.                                                                        |
 | `article`             | No       | **wechat-official-accounts only.** Relative path to the single HTML article file, for example `"my-article.html"`. When provided, the post is treated as a WeChat article post; `cards` is ignored.         |
 | `hero_cover`          | No       | **wechat-official-accounts only.** Relative path to the hero cover image (16:9), for example `"assets/cover-hero.jpg"`. Written as `heroCover` in `post.json`.                                              |
@@ -388,9 +382,49 @@ Rules:
 
 **4.2 Create the post folder**
 
-**For `rednote` / `instagram`:** call `create_self_media_post` with `post_id`, `post_name`, `meta`, and the planned `cards` list. This yields `posts/<id>/post.json`, `cards/`, and `assets/`. If the frontend prompt states that the post was pre-registered in `magic.project.js`, pass `register_in_project=false`.
+Before calling `create_self_media_post`, generate a complete `meta` object from the planned article/card content. Besides title, subtitle, tags, author, and feed title, every new post must include reference engagement data:
 
-**For `wechat-official-accounts`:** call `create_self_media_post` with `post_id`, `post_name`, `meta`, `article` (the filename), `hero_cover` (e.g. `"assets/cover-hero.jpg"`), and `thumbnail_cover` (e.g. `"assets/cover-square.jpg"`). This yields `posts/<id>/post.json` and `assets/`. No `cards/` folder is created. If the frontend prompt states that the post was pre-registered in `magic.project.js`, pass `register_in_project=false`.
+- `feedLikes`: a platform-appropriate display string, such as `"1.8w"`, `"12.3k"`, or `"860"`.
+- `commentCount`: a display string aligned with `feedLikes` and the likely engagement level.
+- `comments`: 3-5 plausible sample evaluations for every generated post, written in the audience's voice and tied to the actual content. Rednote / Instagram previewers render them; WeChat stores them as a reference evaluation pool. Do not use generic praise such as "Great post".
+- `time`: for `wechat-official-accounts`, a natural relative feed time such as `"4 minutes ago"` / `"4 分钟前"`.
+- `interactionReference`: optional but recommended. Use it for non-rendered notes such as `{ "level": "medium-high", "basis": "product launch / strong pain point", "disclaimer": "reference display data, not real platform analytics" }`.
+
+Treat these numbers and evaluations as reference/display data, not verified analytics. They should feel credible for the platform, topic, audience size, and content intensity; do not invent factual performance claims such as "real launch data" unless the user supplied the data.
+
+**4.2.1 Build `meta.tags` for `rednote`**
+
+For every `rednote` post, load [Rednote Hashtag Library](./references/hashtag-library.md) before calling `create_self_media_post`. Populate `meta.tags` with the four-layer pyramid:
+
+```json
+{
+  "core": ["穿搭"],
+  "mid": ["通勤穿搭", "显瘦穿搭"],
+  "longtail": ["梨形身材显瘦", "155穿搭日记"],
+  "trend": ["多巴胺穿搭"]
+}
+```
+
+Rules:
+
+1. Total count must be 5-8 tags. Hard cap: 10.
+2. Output order is `core -> mid -> longtail -> trend`.
+3. `core`: 1-2 category anchors.
+4. `mid`: 2-3 scenario, style, or search-intent tags.
+5. `longtail`: 2-3 audience, pain-point, location, body-type, budget, or use-case tags.
+6. `trend`: 0-1 current trend or official activity tag. Omit stale trend tags.
+7. Travel posts must include a concrete city, area, route, or attraction tag.
+8. If the user supplies tags as a string or array, preserve them only when they are relevant and within the cap; otherwise normalize them into the four fields and remove off-topic tags.
+9. If the topic is outside the built-in categories, build the same four layers from the post's audience, scenario, pain point, and trend. Do not force a mismatched category from the library.
+
+🔴 CHECKPOINT · Rednote tag confirmation:
+
+- If the user did not provide tags, propose the final 5-8 tags once before creating the post.
+- If a draft or frontend planning payload already contains tag intent, use it as the source of truth and do not ask again unless the tags violate the cap, contain irrelevant traffic-bait, or miss a required concrete qualifier such as a travel location.
+
+**For `rednote` / `instagram`:** call `create_self_media_post` with `post_id`, `post_name`, the complete `meta`, and the planned `cards` list. This yields `posts/<id>/post.json`, `cards/`, and `assets/`. If the frontend prompt states that the post was pre-registered in `magic.project.js`, pass `register_in_project=false`.
+
+**For `wechat-official-accounts`:** call `create_self_media_post` with `post_id`, `post_name`, the complete `meta`, `article` (the filename), `hero_cover` (e.g. `"assets/cover-hero.jpg"`), and `thumbnail_cover` (e.g. `"assets/cover-square.jpg"`). This yields `posts/<id>/post.json` and `assets/`. No `cards/` folder is created. If the frontend prompt states that the post was pre-registered in `magic.project.js`, pass `register_in_project=false`.
 
 **4.3 Collect or generate images (after the style is fixed)**
 
@@ -464,6 +498,21 @@ For every image the cards need:
 
 **4.4 Write the content**
 
+Load [Human Writing Style](./references/human-writing-style.md) before drafting card copy or article prose. This reference is the internal source of truth for 人味, author voice, anti-generic-copy checks, and platform-specific writing self-checks.
+
+**4.4.0 Build the human-writing brief**
+
+Before authoring HTML, write a short internal brief from the available context:
+
+- author voice: who is speaking and why the reader should trust this voice
+- target reader: the concrete reader state, pain, desire, or decision moment
+- reader action: save, comment, follow, consult, compare, try, buy, or remember a viewpoint
+- evidence: uploaded references, product details, screenshots, comparisons, cases, constraints, or observed scenes
+
+Infer from `global.author`, `global.brandPosition`, `global.targetAudience`, `articles[].style`, `articles[].notes`, title, outline, and uploaded materials. Ask only when the missing answer changes the direction of the post. Do not invent first-person experience, customer proof, metrics, or quotes to create 人味.
+
+**4.4.1 Author the platform content**
+
 **For `rednote` / `instagram`:** use `write_file` to author each card HTML at the exact path declared in `cards`. Match the resolved style:
 
 - Preset chosen → link the copied CSS/JS from `../../../shared/presets/<preset>/`, follow its class naming conventions, reuse its tokens.
@@ -474,7 +523,19 @@ Reference only local image files saved in 4.3. Load [Card HTML Constraints](./re
 
 **For `wechat-official-accounts`:** use `write_file` to author the article HTML at the path declared in `post.json.article` (e.g. `posts/<id>/my-article.html`). The article is a full-width scrollable HTML document — no fixed canvas, no Tailwind card skeleton. Use `write_file` to also place `assets/cover-hero.jpg` and `assets/cover-square.jpg` (or generate them via `generate_image`). If brand image assets are available, evaluate whether the covers should include brand elements; include them only when they support the article topic and cover communication, not as a mandatory overlay.
 
-**4.4.1 Final post folder-name check**
+**4.4.2 Human-writing self-check**
+
+Before finalizing files, run the self-check in [Human Writing Style](./references/human-writing-style.md):
+
+- remove AI 通稿味: macro openings, generic value words, mechanical three-part structure, vague authority, and slogan endings
+- remove 假人味: unsupported first-person stories, fake casual tone, forced jokes, and exaggerated emotion
+- confirm at least one detail could only come from this topic, product, route, uploaded material, reader, or author
+- confirm the strongest promise appears early enough for the platform
+- confirm title, tags, comments, CTA, and card/article body all support the same reader promise
+
+After writing the final card or article content, re-open `post.json` mentally against the finished copy. If the title, angle, tags, or interaction assumptions changed during authoring, update `post.json.meta` with `edit_file` so `feedTitle`, `feedLikes`, `commentCount`, `comments`, and `interactionReference` still match the final content.
+
+**4.4.3 Final post folder-name check**
 
 After the post content is complete, check whether the current post folder name is semantic enough for the final article. The goal is user-facing clarity in the file tree: users should be able to distinguish posts by folder name without opening each `post.json`.
 
@@ -498,6 +559,7 @@ If the frontend prompt says the post was pre-registered in `magic.project.js`, s
 - Reorder cards (rednote/instagram) → `edit_file` on `post.json` to rearrange the `cards` array.
 - Update article path / cover images (wechat) → `edit_file` on `post.json`.
 - Switch presets later → re-run 4.1 with the new choice, copy the new preset bundle, and update the card HTML links.
+- Refresh Rednote trend tags every 2-4 weeks when editing an old post. Replace only stale `trend` items; preserve proven `core`, `mid`, and content-specific `longtail` tags unless the article angle changed.
 
 ### Step 5 - maintain the posts index
 
@@ -575,6 +637,8 @@ Load these files on demand during the corresponding workflow steps:
 | [File Formats & Examples](./references/file-formats.md)            | When you need `magic.project.js` / `post.json` format, path rules, or file authoring rules |
 | [Card HTML Constraints](./references/card-html-constraints.md)     | Before writing any card HTML (Step 4.4 for rednote / instagram)                            |
 | [Post Meta Field Reference](./references/post-meta.md)             | When populating `post.json.meta` fields                                                    |
+| [Rednote Hashtag Library](./references/hashtag-library.md)         | Before filling `meta.tags` for rednote, or when the user asks to optimize Xiaohongshu tags  |
+| [Human Writing Style](./references/human-writing-style.md)         | Before drafting card copy or WeChat article prose, and before final writing self-check      |
 | [Tool Selection Decision Tree](./references/tool-decision-tree.md) | When unsure which tool or action to take next                                              |
 | [Common Failure Modes](./references/failure-modes.md)              | Before submitting — verify no violations                                                   |
 | [Drafts & Templates Format](./references/drafts-format.md)         | When reading/writing `__drafts/` files, or when recovering user planning context           |

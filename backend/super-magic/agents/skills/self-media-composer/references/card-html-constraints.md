@@ -64,3 +64,19 @@ Top beats bottom:
 ```
 
 Swap the preset path when using a different template. The preset CSS already handles `html/body` dimensions (540×720) and `overflow: hidden`.
+
+## Rednote Hashtag Rendering
+
+Use these rules when `post.json.meta.tags` exists for a `rednote` post:
+
+1. Render the full hashtag set only once, preferably on the final content card or in the final-card footer.
+2. Format each tag with `#`; separate tags with single spaces. Do not use commas, bullets, or one-tag-per-line blocks.
+3. Flatten structured tags in this order: `core -> mid -> longtail -> trend`.
+4. Tag text should be visually secondary: 1-2 steps smaller than body text, brand accent or muted gray, no oversized badges that compete with the card message.
+5. Inline 1-2 high-value tags only when the sentence remains natural, for example:
+
+```html
+<p>这套 <span class="tag-inline">#通勤穿搭</span> 的重点是腰线和外套长度。</p>
+```
+
+Do not repeat the same full hashtag block on every card. Do not place unrelated traffic tags in visible copy.

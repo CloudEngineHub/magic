@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { message } from "antd"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/shadcn-ui/badge"
+import { Button } from "@/components/shadcn-ui/button"
+import { Input } from "@/components/shadcn-ui/input"
+import { Textarea } from "@/components/shadcn-ui/textarea"
 
 import InlineVoiceButton from "../../../components/ui/InlineVoiceButton"
 import { useBrandImagePreviewHydration } from "../../../hooks/useBrandImagePreviewHydration"
@@ -29,6 +33,7 @@ interface BrandInfoFieldsProps {
 	onBrandImagesUploadingChange?: (uploading: boolean) => void
 	brandImageUploadTarget?: "draft" | "brand"
 	compact?: boolean
+	layout?: "wizard" | "settings"
 }
 
 export function BrandInfoFields({
@@ -45,6 +50,7 @@ export function BrandInfoFields({
 	onBrandImagesUploadingChange,
 	brandImageUploadTarget = "draft",
 	compact = false,
+	layout = "wizard",
 }: BrandInfoFieldsProps) {
 	const { t } = useTranslation("super")
 	const [activeBrandField, setActiveBrandField] = useState<BrandInfoField | null>(null)
@@ -149,165 +155,373 @@ export function BrandInfoFields({
 
 	const getFieldLabelClass = (field: BrandInfoField) =>
 		cn(
-			"inline-flex px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors",
-			activeBrandField === field ? "bg-primary/20 text-zinc-950" : "text-muted-foreground",
+			"inline-flex text-xs font-medium transition-colors",
+			activeBrandField === field ? "text-foreground" : "text-muted-foreground",
 		)
 	const rowClassName = compact ? "gap-y-1.5 pb-4 pt-3" : undefined
 	const inputClassName = cn(
-		"w-full border-0 border-b border-zinc-200 bg-zinc-50/40 pr-8 outline-none transition-all duration-300 placeholder:text-muted-foreground/40 focus:border-zinc-950 focus:bg-primary/[0.03]",
-		compact ? "px-3 py-2.5 text-xs" : "px-4 py-3 text-sm",
+		"pr-8 placeholder:text-muted-foreground/60",
+		compact ? "h-9 text-xs" : "h-10 text-sm",
 	)
 	const textareaClassName = cn(
-		"scrollbar-thin w-full resize-none border-0 border-b border-zinc-200 bg-zinc-50/40 pr-10 text-xs leading-relaxed outline-none transition-[border-color,background-color] duration-300 placeholder:text-muted-foreground/40 focus:border-zinc-950 focus:bg-primary/[0.03] sm:text-sm",
-		compact ? "min-h-[84px] px-3 py-2.5" : "min-h-[110px] px-4 py-3.5",
+		"scrollbar-thin resize-none pr-10 text-xs leading-relaxed placeholder:text-muted-foreground/60 sm:text-sm",
+		compact ? "min-h-[84px]" : "min-h-[110px]",
 	)
 
-	return (
-		<div className={cn("space-y-5", compact && "space-y-3")}>
-			<div className={cn("flex flex-col gap-6", compact && "gap-4")}>
-				<BrandFieldRow
-					illustration="author"
-					isActive={activeBrandField === "author"}
-					className={rowClassName}
-					data-testid="self-media-brand-field-author"
-					header={
-						<label className={getFieldLabelClass("author")}>
-							{t("detail.selfMedia.initPanel.stepBrand.accountName", "账号名称")}
-						</label>
-					}
+	if (layout === "settings") {
+		return (
+			<div
+				className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start"
+				data-testid="self-media-brand-config-settings-layout"
+			>
+				<section
+					className="rounded-lg border bg-card p-4 shadow-xs"
+					data-testid="self-media-brand-config-profile-card"
 				>
-					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-						<div className="group relative min-w-0 flex-1">
-							<input
-								type="text"
-								className={inputClassName}
-								placeholder={t(
-									"detail.selfMedia.initPanel.stepBrand.accountPlaceholder",
-									"如：@超级麦吉",
+					<div className="mb-4">
+						<h3 className="text-sm font-semibold text-foreground">
+							{t("detail.selfMedia.initPanel.stepBrand.profileSection", "账号档案")}
+						</h3>
+						<p className="mt-1 text-xs text-muted-foreground">
+							{t(
+								"detail.selfMedia.initPanel.stepBrand.profileSectionHint",
+								"配置 AI 生成内容时默认使用的身份、定位与受众。",
+							)}
+						</p>
+					</div>
+
+					<div className="space-y-4">
+						<div className="space-y-1.5">
+							<label className={getFieldLabelClass("author")}>
+								{t("detail.selfMedia.initPanel.stepBrand.accountName", "账号名称")}
+							</label>
+							<div className="group relative">
+								<Input
+									type="text"
+									className="h-9 pr-8 text-sm"
+									placeholder={t(
+										"detail.selfMedia.initPanel.stepBrand.accountPlaceholder",
+										"如：@超级麦吉",
+									)}
+									value={author}
+									onChange={(e) => onChange("author", e.target.value)}
+									onFocus={() => setActiveBrandField("author")}
+									onBlur={() => setActiveBrandField(null)}
+								/>
+								<InlineVoiceButton
+									value={author}
+									onResult={(text) => onChange("author", text)}
+								/>
+							</div>
+						</div>
+
+						<div className="space-y-1.5">
+							<label className={getFieldLabelClass("brandPosition")}>
+								{t(
+									"detail.selfMedia.initPanel.stepBrand.brandPosition",
+									"品牌/IP 定位",
 								)}
-								value={author}
-								onChange={(e) => onChange("author", e.target.value)}
-								onFocus={() => setActiveBrandField("author")}
-								onBlur={() => setActiveBrandField(null)}
-							/>
-							<InlineVoiceButton
-								value={author}
-								onResult={(text) => onChange("author", text)}
-							/>
+							</label>
+							<div className="group relative">
+								<Textarea
+									rows={3}
+									className="min-h-[92px] resize-none pr-10 text-sm"
+									placeholder={t(
+										"detail.selfMedia.initPanel.stepBrand.brandPositionPlaceholder",
+										"一句话描述你的定位，如：分享 AI 工具",
+									)}
+									value={brandPosition}
+									onChange={(e) => onChange("brandPosition", e.target.value)}
+									onFocus={() => setActiveBrandField("brandPosition")}
+									onBlur={() => setActiveBrandField(null)}
+								/>
+								<InlineVoiceButton
+									variant="textarea"
+									value={brandPosition}
+									onResult={(text) => onChange("brandPosition", text)}
+								/>
+							</div>
+
+							<div className="flex flex-wrap items-center gap-1.5 pt-1">
+								{QUICK_TAGS.map((tag) => (
+									<Button
+										key={tag}
+										type="button"
+										variant="secondary"
+										size="sm"
+										className="h-6 rounded-full px-2 text-[10px] font-medium"
+										onClick={() => onChange("brandPosition", tag)}
+									>
+										#{tag}
+									</Button>
+								))}
+							</div>
+						</div>
+
+						<div className="space-y-1.5">
+							<div className="flex items-center gap-1.5">
+								<label className={getFieldLabelClass("targetAudience")}>
+									{t(
+										"detail.selfMedia.initPanel.stepBrand.targetAudience",
+										"目标受众",
+									)}
+								</label>
+								<Badge
+									variant="outline"
+									className="rounded-md text-[10px] font-normal"
+								>
+									{t("detail.selfMedia.initPanel.stepBrand.optional", "选填")}
+								</Badge>
+							</div>
+							<div className="group relative">
+								<Textarea
+									rows={3}
+									className="min-h-[84px] resize-none pr-10 text-sm"
+									placeholder={t(
+										"detail.selfMedia.initPanel.stepBrand.targetAudiencePlaceholder",
+										"如：25-35 岁职场人、大学生、宝妈",
+									)}
+									value={targetAudience}
+									onChange={(e) => onChange("targetAudience", e.target.value)}
+									onFocus={() => setActiveBrandField("targetAudience")}
+									onBlur={() => setActiveBrandField(null)}
+								/>
+								<InlineVoiceButton
+									variant="textarea"
+									value={targetAudience}
+									onResult={(text) => onChange("targetAudience", text)}
+								/>
+							</div>
 						</div>
 					</div>
-				</BrandFieldRow>
+				</section>
 
-				<BrandFieldRow
-					illustration="position"
-					isActive={activeBrandField === "brandPosition"}
-					className={rowClassName}
-					data-testid="self-media-brand-field-position"
-					header={
-						<label className={getFieldLabelClass("brandPosition")}>
-							{t(
-								"detail.selfMedia.initPanel.stepBrand.brandPosition",
-								"品牌/IP 定位",
-							)}
-						</label>
-					}
+				<section
+					className="h-fit rounded-lg border bg-card p-4 shadow-xs"
+					data-testid="self-media-brand-config-assets-card"
 				>
-					<div className="space-y-2.5">
+					<div className="mb-4 flex items-start justify-between gap-3">
+						<div>
+							<h3 className="text-sm font-semibold text-foreground">
+								{t(
+									"detail.selfMedia.initPanel.stepBrand.brandImages",
+									"品牌形象素材",
+								)}
+							</h3>
+							<p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+								{t(
+									"detail.selfMedia.initPanel.stepBrand.brandImagesHint",
+									"上传 Logo、IP 形象或风格参考图。",
+								)}
+							</p>
+						</div>
+						<Badge variant="outline" className="rounded-md">
+							{brandImages.length}
+						</Badge>
+					</div>
+
+					<div
+						className="space-y-3"
+						onFocus={() => setActiveBrandField("brandAssets")}
+						onBlur={() => setActiveBrandField(null)}
+					>
+						<BrandAssetUpload
+							brandImages={brandImages}
+							brandImageUploadProgress={brandImageUploadProgress}
+							hydratingImageIds={hydratingImageIds}
+							isFetching={false}
+							onFilesSelect={handleFilesSelect}
+							onRemoveBrandImage={handleRemoveBrandImage}
+							onBrandImageDescChange={handleBrandImageDescChange}
+							layout="stacked"
+						/>
+					</div>
+				</section>
+			</div>
+		)
+	}
+
+	return (
+		<div
+			className={cn(
+				"rounded-lg bg-[#434c81]/[0.045] p-4 text-card-foreground sm:p-5",
+				compact && "p-3 sm:p-4",
+			)}
+			data-testid="self-media-brand-info-wizard-panel"
+		>
+			<div className="mb-4 flex flex-col gap-1">
+				<h3 className="text-sm font-semibold text-foreground">
+					{t("detail.selfMedia.initPanel.stepBrand.brandInfoSection", "账号与品牌信息")}
+				</h3>
+				<p className="text-xs text-muted-foreground">
+					{t(
+						"detail.selfMedia.initPanel.stepBrand.brandInfoSectionHint",
+						"填写默认账号、定位和素材，让后续选题与成文保持统一口吻。",
+					)}
+				</p>
+			</div>
+
+			<div
+				className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
+				data-testid="self-media-brand-info-wizard-grid"
+			>
+				<div className={cn("space-y-4", compact && "space-y-3")}>
+					<BrandFieldRow
+						illustration="author"
+						isActive={activeBrandField === "author"}
+						className={rowClassName}
+						data-testid="self-media-brand-field-author"
+						variant="embedded"
+						header={
+							<label className={getFieldLabelClass("author")}>
+								{t("detail.selfMedia.initPanel.stepBrand.accountName", "账号名称")}
+							</label>
+						}
+					>
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+							<div className="group relative min-w-0 flex-1">
+								<Input
+									type="text"
+									className={inputClassName}
+									placeholder={t(
+										"detail.selfMedia.initPanel.stepBrand.accountPlaceholder",
+										"如：@超级麦吉",
+									)}
+									value={author}
+									onChange={(e) => onChange("author", e.target.value)}
+									onFocus={() => setActiveBrandField("author")}
+									onBlur={() => setActiveBrandField(null)}
+								/>
+								<InlineVoiceButton
+									value={author}
+									onResult={(text) => onChange("author", text)}
+								/>
+							</div>
+						</div>
+					</BrandFieldRow>
+
+					<BrandFieldRow
+						illustration="position"
+						isActive={activeBrandField === "brandPosition"}
+						className={rowClassName}
+						data-testid="self-media-brand-field-position"
+						variant="embedded"
+						header={
+							<label className={getFieldLabelClass("brandPosition")}>
+								{t(
+									"detail.selfMedia.initPanel.stepBrand.brandPosition",
+									"品牌/IP 定位",
+								)}
+							</label>
+						}
+					>
+						<div className="space-y-2.5">
+							<div className="group relative">
+								<Textarea
+									rows={compact ? 3 : 4}
+									className={textareaClassName}
+									placeholder={t(
+										"detail.selfMedia.initPanel.stepBrand.brandPositionPlaceholder",
+										"一句话描述你的定位，如：分享 AI 工具",
+									)}
+									value={brandPosition}
+									onChange={(e) => {
+										onChange("brandPosition", e.target.value)
+										handleAutoResize(e.currentTarget)
+									}}
+									onFocus={(e) => {
+										setActiveBrandField("brandPosition")
+										handleAutoResize(e.currentTarget)
+									}}
+									onBlur={(e) => handleTextareaBlur(e.currentTarget)}
+								/>
+								<InlineVoiceButton
+									variant="textarea"
+									value={brandPosition}
+									onResult={(text) => onChange("brandPosition", text)}
+								/>
+							</div>
+
+							<div className="flex flex-wrap items-center gap-1.5 pb-1 pt-1.5">
+								<span className="mr-1 text-[10px] font-medium text-muted-foreground/70">
+									推荐定位
+								</span>
+								{QUICK_TAGS.map((tag) => (
+									<Button
+										key={tag}
+										type="button"
+										variant="secondary"
+										size="sm"
+										className="h-6 rounded-full px-2 text-[10px] font-medium"
+										onClick={() => onChange("brandPosition", tag)}
+									>
+										#{tag}
+									</Button>
+								))}
+							</div>
+						</div>
+					</BrandFieldRow>
+
+					<BrandFieldRow
+						illustration="audience"
+						isActive={activeBrandField === "targetAudience"}
+						className={rowClassName}
+						data-testid="self-media-brand-field-audience"
+						variant="embedded"
+						header={
+							<div className="flex items-center gap-1.5">
+								<label className={getFieldLabelClass("targetAudience")}>
+									{t(
+										"detail.selfMedia.initPanel.stepBrand.targetAudience",
+										"目标受众",
+									)}
+								</label>
+								<Badge
+									variant="outline"
+									className="rounded-md text-[10px] font-normal"
+								>
+									{t("detail.selfMedia.initPanel.stepBrand.optional", "选填")}
+								</Badge>
+							</div>
+						}
+					>
 						<div className="group relative">
-							<textarea
+							<Textarea
 								rows={compact ? 3 : 4}
 								className={textareaClassName}
 								placeholder={t(
-									"detail.selfMedia.initPanel.stepBrand.brandPositionPlaceholder",
-									"一句话描述你的定位，如：分享 AI 工具",
+									"detail.selfMedia.initPanel.stepBrand.targetAudiencePlaceholder",
+									"如：25-35 岁职场人、大学生、宝妈",
 								)}
-								value={brandPosition}
+								value={targetAudience}
 								onChange={(e) => {
-									onChange("brandPosition", e.target.value)
+									onChange("targetAudience", e.target.value)
 									handleAutoResize(e.currentTarget)
 								}}
 								onFocus={(e) => {
-									setActiveBrandField("brandPosition")
+									setActiveBrandField("targetAudience")
 									handleAutoResize(e.currentTarget)
 								}}
 								onBlur={(e) => handleTextareaBlur(e.currentTarget)}
 							/>
 							<InlineVoiceButton
 								variant="textarea"
-								value={brandPosition}
-								onResult={(text) => onChange("brandPosition", text)}
+								value={targetAudience}
+								onResult={(text) => onChange("targetAudience", text)}
 							/>
 						</div>
-
-						<div className="flex flex-wrap items-center gap-1.5 pb-1 pt-1.5">
-							<span className="mr-1 text-[10px] font-bold text-muted-foreground/50">
-								推荐定位:
-							</span>
-							{QUICK_TAGS.map((tag) => (
-								<button
-									key={tag}
-									type="button"
-									className="cursor-pointer rounded-sm bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-600 transition-all hover:bg-primary/20 hover:text-zinc-950"
-									onClick={() => onChange("brandPosition", tag)}
-								>
-									#{tag}
-								</button>
-							))}
-						</div>
-					</div>
-				</BrandFieldRow>
-
-				<BrandFieldRow
-					illustration="audience"
-					isActive={activeBrandField === "targetAudience"}
-					className={rowClassName}
-					data-testid="self-media-brand-field-audience"
-					header={
-						<div className="flex items-center gap-1.5">
-							<label className={getFieldLabelClass("targetAudience")}>
-								{t(
-									"detail.selfMedia.initPanel.stepBrand.targetAudience",
-									"目标受众",
-								)}
-							</label>
-							<span className="bg-muted px-1.5 py-0.5 text-[10px] font-normal lowercase text-muted-foreground">
-								{t("detail.selfMedia.initPanel.stepBrand.optional", "选填")}
-							</span>
-						</div>
-					}
-				>
-					<div className="group relative">
-						<textarea
-							rows={compact ? 3 : 4}
-							className={textareaClassName}
-							placeholder={t(
-								"detail.selfMedia.initPanel.stepBrand.targetAudiencePlaceholder",
-								"如：25-35 岁职场人、大学生、宝妈",
-							)}
-							value={targetAudience}
-							onChange={(e) => {
-								onChange("targetAudience", e.target.value)
-								handleAutoResize(e.currentTarget)
-							}}
-							onFocus={(e) => {
-								setActiveBrandField("targetAudience")
-								handleAutoResize(e.currentTarget)
-							}}
-							onBlur={(e) => handleTextareaBlur(e.currentTarget)}
-						/>
-						<InlineVoiceButton
-							variant="textarea"
-							value={targetAudience}
-							onResult={(text) => onChange("targetAudience", text)}
-						/>
-					</div>
-				</BrandFieldRow>
+					</BrandFieldRow>
+				</div>
 
 				<BrandFieldRow
 					illustration="assets"
 					isActive={activeBrandField === "brandAssets"}
-					className={rowClassName}
+					className={cn(
+						"h-fit bg-background/65 p-3 hover:bg-background/80 sm:p-4",
+						rowClassName,
+					)}
 					data-testid="self-media-brand-field-assets"
+					variant="embedded"
 					header={
 						<div className="flex items-center gap-1.5">
 							<label className={getFieldLabelClass("brandAssets")}>
@@ -316,9 +530,9 @@ export function BrandInfoFields({
 									"品牌形象素材",
 								)}
 							</label>
-							<span className="bg-muted px-1.5 py-0.5 text-[10px] font-normal lowercase text-muted-foreground">
+							<Badge variant="outline" className="rounded-md text-[10px] font-normal">
 								{t("detail.selfMedia.initPanel.stepBrand.optional", "选填")}
-							</span>
+							</Badge>
 						</div>
 					}
 				>
@@ -329,7 +543,7 @@ export function BrandInfoFields({
 					>
 						<p
 							className={cn(
-								"text-xs font-medium text-muted-foreground/85",
+								"text-xs leading-relaxed text-muted-foreground",
 								compact && "text-[11px]",
 							)}
 						>

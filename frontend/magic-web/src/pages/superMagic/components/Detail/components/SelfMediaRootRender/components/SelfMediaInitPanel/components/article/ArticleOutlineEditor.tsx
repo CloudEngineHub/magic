@@ -1,6 +1,10 @@
 import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Paperclip, Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/shadcn-ui/badge"
+import { Button } from "@/components/shadcn-ui/button"
+import { Input } from "@/components/shadcn-ui/input"
 import type { MaterialItem, OutlineNode } from "../../types"
 import MaterialAttachmentList from "../material/MaterialAttachmentList"
 import InlineVoiceButton from "../ui/InlineVoiceButton"
@@ -69,16 +73,16 @@ function OutlineNodeItem({
 	return (
 		<div>
 			<div
-				className="group flex items-center gap-1.5 border-l border-zinc-950/10 py-1 transition-colors hover:border-primary/60"
+				className="group flex items-center gap-1.5 rounded-lg border border-transparent py-1 transition-colors hover:border-border hover:bg-accent/40"
 				style={{ paddingLeft: `${depth * 20 + 8}px` }}
 			>
-				<span className="flex h-4 w-4 shrink-0 items-center justify-center text-[11px] font-black text-muted-foreground">
+				<span className="flex h-4 w-4 shrink-0 items-center justify-center text-[11px] font-medium text-muted-foreground">
 					{node.children && node.children.length > 0 ? "▸" : "•"}
 				</span>
 				<div className="relative flex-1">
-					<input
+					<Input
 						type="text"
-						className="w-full border-0 border-b border-transparent bg-transparent px-1 py-1 pr-6 text-sm outline-none transition-all placeholder:text-muted-foreground/40 focus:border-zinc-950 focus:bg-primary/[0.03]"
+						className="h-8 border-0 bg-transparent px-2 pr-7 text-sm shadow-none focus-visible:ring-0"
 						placeholder={t(
 							"detail.selfMedia.initPanel.stepDetail.outlineNodePlaceholder",
 						)}
@@ -101,73 +105,52 @@ function OutlineNodeItem({
 					/>
 				</div>
 				<div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
-					<button
+					<Button
 						type="button"
+						variant="ghost"
+						size="icon-sm"
 						className={cn(
-							"relative p-0.5 transition-colors",
+							"relative size-7",
 							materials.length > 0 || showAttachments
 								? "text-primary"
-								: "text-muted-foreground hover:text-foreground",
+								: "text-muted-foreground",
 						)}
 						title={t("detail.selfMedia.initPanel.stepDetail.outlineAttachBtn")}
 						onClick={() => onToggleAttachments(node.id)}
 					>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-						>
-							<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-						</svg>
+						<Paperclip size={14} />
 						{materials.length > 0 && (
-							<span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-medium text-primary-foreground">
+							<Badge className="absolute -right-1 -top-1 h-3.5 min-w-3.5 rounded-full px-0.5 text-[9px]">
 								{materials.length}
-							</span>
+							</Badge>
 						)}
-					</button>
-					<button
+					</Button>
+					<Button
 						type="button"
-						className="p-0.5 text-muted-foreground hover:text-foreground"
+						variant="ghost"
+						size="icon-sm"
+						className="size-7 text-muted-foreground"
 						title={t("detail.selfMedia.initPanel.stepDetail.outlineAddChildBtn")}
 						onClick={() => onAddChild(node.id)}
 					>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-						>
-							<path d="M12 5v14M5 12h14" />
-						</svg>
-					</button>
-					<button
+						<Plus size={14} />
+					</Button>
+					<Button
 						type="button"
-						className="p-0.5 text-muted-foreground hover:text-destructive"
+						variant="ghost"
+						size="icon-sm"
+						className="size-7 text-muted-foreground hover:text-destructive"
 						title={t("detail.selfMedia.initPanel.stepDetail.outlineRemoveBtn")}
 						onClick={() => onRemove(node.id)}
 					>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-						>
-							<path d="M18 6 6 18M6 6l12 12" />
-						</svg>
-					</button>
+						<X size={14} />
+					</Button>
 				</div>
 			</div>
 
 			{showAttachments && (
 				<div
-					className="mb-1 mt-1 border-l-2 border-primary/50 bg-primary/[0.03] p-2"
+					className="mb-1 mt-1 rounded-lg border bg-muted/20 p-2"
 					style={{ marginLeft: `${depth * 20 + 20}px` }}
 				>
 					<MaterialAttachmentList
@@ -297,9 +280,9 @@ export default function ArticleOutlineEditor({
 	}, [outline, onChange])
 
 	return (
-		<div className="border-t border-dashed border-zinc-950/10 pt-3">
+		<div className="pt-1">
 			{outline.length === 0 ? (
-				<p className="border-y border-dashed border-zinc-950/10 py-6 text-center text-sm text-muted-foreground">
+				<p className="rounded-lg border bg-card py-6 text-center text-sm text-muted-foreground">
 					{t("detail.selfMedia.initPanel.stepDetail.outlineEmpty")}
 				</p>
 			) : (
@@ -322,23 +305,10 @@ export default function ArticleOutlineEditor({
 					))}
 				</div>
 			)}
-			<button
-				type="button"
-				className="mt-3 flex w-full items-center justify-center gap-1 border-b border-dashed border-zinc-950/15 bg-zinc-50 py-2 text-xs font-bold text-muted-foreground transition-all hover:bg-primary/[0.06] hover:text-zinc-950"
-				onClick={handleAddRoot}
-			>
-				<svg
-					width="12"
-					height="12"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="2"
-				>
-					<path d="M12 5v14M5 12h14" />
-				</svg>
+			<Button type="button" variant="outline" className="mt-3 w-full" onClick={handleAddRoot}>
+				<Plus size={12} />
 				{t("detail.selfMedia.initPanel.stepDetail.outlineAddRootBtn")}
-			</button>
+			</Button>
 		</div>
 	)
 }

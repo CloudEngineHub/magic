@@ -69,22 +69,22 @@ function BrandConfigDialog({
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent
-				className="grid max-h-[92vh] !max-w-5xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
+				className="grid max-h-[88vh] !max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
 				data-testid="self-media-brand-config-dialog"
 			>
-				<DialogHeader className="gap-1.5 border-b border-border px-5 py-4">
-					<DialogTitle className="text-lg font-black">
+				<DialogHeader className="gap-1 border-b bg-card px-5 py-4">
+					<DialogTitle className="text-lg font-semibold tracking-tight">
 						{t("detail.selfMedia.brandConfig.title")}
 					</DialogTitle>
-					<DialogDescription>
+					<DialogDescription className="text-xs">
 						{t("detail.selfMedia.brandConfig.description")}
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="min-h-0 overflow-y-auto px-5 py-3">
+				<div className="min-h-0 overflow-y-auto bg-muted/20 px-4 py-4 sm:px-5">
 					{isLoading ? (
 						<div
-							className="flex min-h-64 items-center justify-center gap-2 text-sm font-medium text-muted-foreground"
+							className="flex min-h-64 items-center justify-center gap-2 rounded-lg border bg-card text-sm font-medium text-muted-foreground"
 							data-testid="self-media-brand-config-loading"
 						>
 							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -105,11 +105,12 @@ function BrandConfigDialog({
 							onBrandImagesUploadingChange={setBrandImagesUploading}
 							brandImageUploadTarget="brand"
 							compact
+							layout="settings"
 						/>
 					)}
 				</div>
 
-				<DialogFooter className="border-t border-border px-5 py-3">
+				<DialogFooter className="border-t bg-card px-5 py-3">
 					<Button
 						type="button"
 						variant="outline"

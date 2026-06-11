@@ -1,10 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi, beforeEach } from "vitest"
+
+const mockSendSelfMediaPrePublishAnalysis = vi.hoisted(() => vi.fn())
+const mockToastError = vi.hoisted(() => vi.fn())
 
 const mockStore = vi.hoisted(() => ({
 	platforms: ["rednote"],
 	resolvedPlatform: "rednote",
 	rootLoading: false,
+	activePostIndex: 0,
 	allPosts: [
 		{
 			platform: "rednote",
@@ -82,6 +86,12 @@ vi.mock("@/components/base/MagicSpin", () => ({
 	},
 }))
 
+vi.mock("@/components/base/MagicToaster/utils", () => ({
+	default: {
+		error: mockToastError,
+	},
+}))
+
 vi.mock("antd", () => ({
 	Flex: function MockFlex({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
 		return <div {...props}>{children}</div>
@@ -138,6 +148,30 @@ vi.mock("../components/AICardCreateDialog", () => ({
 	},
 }))
 
+vi.mock("../components/PrePublishAnalysisDialog", () => ({
+	default: function MockPrePublishAnalysisDialog({
+		open,
+		onOpenChange,
+		onConfirm,
+	}: {
+		open: boolean
+		onOpenChange: (open: boolean) => void
+		onConfirm: (goal: "ip-growth" | "conversion" | "viral-traffic") => void
+		loading?: boolean
+	}) {
+		return open ? (
+			<div data-testid="pre-publish-analysis-dialog">
+				<button type="button" onClick={() => onConfirm("conversion")}>
+					confirm-analysis
+				</button>
+				<button type="button" onClick={() => onOpenChange(false)}>
+					cancel-analysis
+				</button>
+			</div>
+		) : null
+	},
+}))
+
 vi.mock("../platforms", () => ({
 	getPlatformComponent: () =>
 		function MockPlatformComponent() {
@@ -162,6 +196,10 @@ vi.mock("../stores", () => ({
 		return <>{children}</>
 	},
 	useSelfMediaStore: () => mockStore,
+}))
+
+vi.mock("../services/selfMediaPrePublishAnalysis", () => ({
+	sendSelfMediaPrePublishAnalysis: mockSendSelfMediaPrePublishAnalysis,
 }))
 
 vi.mock("../context/PlatformChromeContext", () => ({
@@ -191,11 +229,41 @@ const GENERATED_ATTACHMENT_LIST = [
 	},
 ] as NonNullable<SelfMediaRootRenderProps["attachmentList"]>
 
+const POST_DIRECTORY_ATTACHMENT_LIST = [
+	{
+		file_id: "root",
+		file_name: "self-media",
+		relative_file_path: "",
+		is_directory: true,
+		children: [
+			{
+				file_id: "post-dir",
+				file_name: "post-1",
+				relative_file_path: "posts/post-1/",
+				is_directory: true,
+				children: [
+					{
+						file_id: "post-json",
+						file_name: "post.json",
+						relative_file_path: "posts/post-1/post.json",
+					},
+					{
+						file_id: "card-file",
+						file_name: "01.html",
+						relative_file_path: "posts/post-1/cards/01.html",
+					},
+				],
+			},
+		],
+	},
+] as NonNullable<SelfMediaRootRenderProps["attachmentList"]>
+
 describe("SelfMediaRootRender", () => {
 	beforeEach(() => {
 		mockStore.platforms = ["rednote"]
 		mockStore.resolvedPlatform = "rednote"
 		mockStore.rootLoading = false
+		mockStore.activePostIndex = 0
 		mockStore.allPosts = [
 			{
 				platform: "rednote",
@@ -227,6 +295,8 @@ describe("SelfMediaRootRender", () => {
 		mockStore.openPostDetail.mockReset()
 		mockStore.ensurePlatformPostLoaded.mockReset()
 		mockStore.goHomeList.mockReset()
+		mockSendSelfMediaPrePublishAnalysis.mockReset()
+		mockToastError.mockReset()
 	})
 
 	it("shows the article home before opening platform detail", () => {
@@ -236,6 +306,7 @@ describe("SelfMediaRootRender", () => {
 				attachments={[]}
 				attachmentList={[]}
 				selectedProject={{ id: "project-1" }}
+				allowEdit
 			/>,
 		)
 
@@ -289,6 +360,7 @@ describe("SelfMediaRootRender", () => {
 				attachments={[]}
 				attachmentList={[]}
 				selectedProject={{ id: "project-1" }}
+				allowEdit
 			/>,
 		)
 
@@ -347,6 +419,7 @@ describe("SelfMediaRootRender", () => {
 				attachments={[]}
 				attachmentList={[]}
 				selectedProject={{ id: "project-1" }}
+				allowEdit
 			/>,
 		)
 
@@ -400,6 +473,7 @@ describe("SelfMediaRootRender", () => {
 				attachments={[]}
 				attachmentList={[]}
 				selectedProject={{ id: "project-1" }}
+				allowEdit
 			/>,
 		)
 
@@ -410,6 +484,189 @@ describe("SelfMediaRootRender", () => {
 		expect(mockStore.ensurePlatformPostLoaded).toHaveBeenCalledWith("rednote", 0)
 	})
 
+	it("opens pre-publish analysis from the article home and sends with the selected goal", async () => {
+		const post = {
+			meta: {
+				id: "post-1",
+				title: "Post One",
+				feedTitle: "Post One Feed",
+				author: "Magic Lab",
+			},
+			cards: [{ path: "cards/01.html", fileId: "card-file" }],
+		}
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post,
+			},
+		]
+		mockStore.ensurePlatformPostLoaded.mockResolvedValue(post)
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-analysis-post-1"))
+
+		expect(screen.getByTestId("pre-publish-analysis-dialog")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByText("confirm-analysis"))
+
+		await waitFor(() => {
+			expect(mockSendSelfMediaPrePublishAnalysis).toHaveBeenCalledWith(
+				expect.objectContaining({
+					selectedProject: { id: "project-1" },
+					platform: "rednote",
+					analysisGoal: "conversion",
+					post,
+					postDirectoryItem: expect.objectContaining({
+						file_id: "post-dir",
+						relative_file_path: "posts/post-1/",
+						is_directory: true,
+					}),
+				}),
+			)
+		})
+		expect(mockToastError).not.toHaveBeenCalled()
+	})
+
+	it("opens pre-publish analysis from the platform floating action", async () => {
+		const post = {
+			meta: {
+				id: "post-1",
+				title: "Post One",
+				feedTitle: "Post One Feed",
+				author: "Magic Lab",
+			},
+			cards: [{ path: "cards/01.html", fileId: "card-file" }],
+		}
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post,
+			},
+		]
+		mockStore.ensurePlatformPostLoaded.mockResolvedValue(post)
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-open-post-1"))
+		fireEvent.click(screen.getByTestId("self-media-floating-pre-publish-analysis"))
+		fireEvent.click(screen.getByText("confirm-analysis"))
+
+		await waitFor(() => {
+			expect(mockSendSelfMediaPrePublishAnalysis).toHaveBeenCalledWith(
+				expect.objectContaining({
+					selectedProject: { id: "project-1" },
+					platform: "rednote",
+					analysisGoal: "conversion",
+					post,
+					postDirectoryItem: expect.objectContaining({
+						file_id: "post-dir",
+						relative_file_path: "posts/post-1/",
+						is_directory: true,
+					}),
+				}),
+			)
+		})
+	})
+
+	it("does not show the home pre-publish analysis entry in read-only mode", () => {
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post: {
+					meta: { id: "post-1", title: "Post One" },
+					cards: [{ path: "cards/01.html", fileId: "card-file" }],
+				},
+			},
+		]
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit={false}
+			/>,
+		)
+
+		expect(screen.queryByTestId("self-media-home-post-analysis-post-1")).not.toBeInTheDocument()
+	})
+
+	it("does not show the platform floating pre-publish analysis entry in read-only mode", () => {
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit={false}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-open-post-1"))
+
+		expect(
+			screen.queryByTestId("self-media-floating-pre-publish-analysis"),
+		).not.toBeInTheDocument()
+	})
+
+	it("shows a toast and does not send analysis when the post directory cannot be resolved", async () => {
+		const post = {
+			meta: { id: "post-1", title: "Post One" },
+			cards: [{ path: "cards/01.html", fileId: "missing-card-file" }],
+		}
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post,
+			},
+		]
+		mockStore.ensurePlatformPostLoaded.mockResolvedValue(post)
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-analysis-post-1"))
+		fireEvent.click(screen.getByText("confirm-analysis"))
+
+		await waitFor(() => {
+			expect(mockToastError).toHaveBeenCalledWith("detail.selfMedia.analysis.startFailed")
+		})
+		expect(mockSendSelfMediaPrePublishAnalysis).not.toHaveBeenCalled()
+	})
+
 	it("opens brand config from the article home", () => {
 		render(
 			<SelfMediaRootRender
@@ -417,6 +674,7 @@ describe("SelfMediaRootRender", () => {
 				attachments={[]}
 				attachmentList={[]}
 				selectedProject={{ id: "project-1" }}
+				allowEdit
 			/>,
 		)
 
@@ -432,6 +690,7 @@ describe("SelfMediaRootRender", () => {
 				attachments={[]}
 				attachmentList={[]}
 				selectedProject={{ id: "project-1" }}
+				allowEdit
 			/>,
 		)
 
@@ -447,6 +706,7 @@ describe("SelfMediaRootRender", () => {
 				attachments={[]}
 				attachmentList={[]}
 				selectedProject={{ id: "project-1" }}
+				allowEdit
 			/>,
 		)
 
@@ -472,6 +732,7 @@ describe("SelfMediaRootRender", () => {
 				attachments={[]}
 				attachmentList={[]}
 				selectedProject={{ id: "project-1" }}
+				allowEdit
 			/>,
 		)
 
@@ -492,6 +753,7 @@ describe("SelfMediaRootRender", () => {
 				attachments={[]}
 				attachmentList={GENERATED_ATTACHMENT_LIST}
 				selectedProject={{ id: "project-1" }}
+				allowEdit
 			/>,
 		)
 

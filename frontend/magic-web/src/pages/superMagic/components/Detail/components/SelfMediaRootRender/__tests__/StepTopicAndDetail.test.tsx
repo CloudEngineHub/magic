@@ -168,4 +168,44 @@ describe("StepTopicAndDetail", () => {
 			folderName: "custom-folder",
 		})
 	})
+
+	it("uses shadcn controls for the topic workspace actions", () => {
+		const { rerender } = render(
+			<StepTopicAndDetail
+				articles={[]}
+				onChange={vi.fn()}
+				onArticleUpdate={vi.fn()}
+				globalSettings={{
+					author: "",
+					brandPosition: "",
+					targetAudience: "",
+					brandImages: [],
+				}}
+			/>,
+		)
+
+		expect(screen.getByText("手动创建首个大纲").closest("button")).toHaveAttribute(
+			"data-slot",
+			"button",
+		)
+
+		rerender(
+			<StepTopicAndDetail
+				articles={[makeArticle({ title: "Post A" })]}
+				onChange={vi.fn()}
+				onArticleUpdate={vi.fn()}
+				globalSettings={{
+					author: "",
+					brandPosition: "",
+					targetAudience: "",
+					brandImages: [],
+				}}
+			/>,
+		)
+
+		expect(screen.getByPlaceholderText("点击输入选题标题...")).toHaveAttribute(
+			"data-slot",
+			"input",
+		)
+	})
 })

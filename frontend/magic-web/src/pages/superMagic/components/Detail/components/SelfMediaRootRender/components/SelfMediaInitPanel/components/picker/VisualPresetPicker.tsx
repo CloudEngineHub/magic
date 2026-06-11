@@ -2,6 +2,7 @@ import { useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import type { JSONContent } from "@tiptap/react"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/shadcn-ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { MagicPromptEditor } from "@/components/base/MagicPromptEditor"
 import type { MagicPromptEditorRef } from "@/components/base/MagicPromptEditor/types"
@@ -281,9 +282,9 @@ export default function VisualPresetPicker({
 								<button
 									type="button"
 									className={cn(
-										"group relative flex items-center gap-2 overflow-hidden bg-zinc-50/60 text-left transition-all duration-200 hover:bg-zinc-100",
+										"group relative flex items-center gap-2 overflow-hidden rounded-lg border bg-card text-left shadow-xs transition-all duration-200 hover:bg-accent/50",
 										isMd ? "py-2 pl-2 pr-2.5" : "py-1.5 pl-1.5 pr-2",
-										isSelected && "bg-primary/30",
+										isSelected && "border-primary bg-primary/5",
 									)}
 									onClick={() => onChange(preset.value)}
 								>
@@ -301,14 +302,16 @@ export default function VisualPresetPicker({
 										className={cn(
 											"min-w-0 flex-1 truncate font-bold leading-tight",
 											isMd ? "text-xs" : "text-[11px]",
-											isSelected ? "text-zinc-950" : "text-foreground",
+											isSelected
+												? "text-foreground"
+												: "text-muted-foreground",
 										)}
 									>
 										{t(preset.labelKey)}
 									</span>
 									{/* Selected indicator */}
 									{isSelected && (
-										<div className="h-4.5 w-4.5 absolute right-1 top-1 flex items-center justify-center bg-zinc-950 text-white">
+										<Badge className="absolute right-1 top-1 h-4 min-w-4 rounded-full px-0">
 											<svg
 												width="8"
 												height="8"
@@ -321,7 +324,7 @@ export default function VisualPresetPicker({
 											>
 												<polyline points="20 6 9 17 4 12" />
 											</svg>
-										</div>
+										</Badge>
 									)}
 								</button>
 							</TooltipTrigger>

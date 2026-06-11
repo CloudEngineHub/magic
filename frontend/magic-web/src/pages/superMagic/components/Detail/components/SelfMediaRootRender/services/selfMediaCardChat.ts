@@ -3,7 +3,7 @@ import {
 	AttachmentSource,
 	type AttachmentItem,
 } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import type { SelfMediaAttachmentNode } from "../types"
+import type { SelfMediaAttachmentNode, SelfMediaPost } from "../types"
 import { type AttachmentNode, findDirectoryByRelativePath, findNodeById } from "./selfMediaHelpers"
 
 function getFileExtension(fileName?: string): string | undefined {
@@ -94,4 +94,8 @@ export function resolveSelfMediaPostDirectoryAttachmentItem(
 		is_directory: true,
 		source: AttachmentSource.PROJECT_DIRECTORY,
 	} as AttachmentItem
+}
+
+export function resolveSelfMediaPostMentionFileId(post?: SelfMediaPost | null): string | undefined {
+	return post?.article?.fileId || post?.cards.find((card) => card.fileId)?.fileId
 }

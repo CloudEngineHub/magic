@@ -3,7 +3,6 @@
  *
  * 左侧显示模型图标（点击切换模型），右侧显示操作文字（点击执行 AI 操作）。
  * 生成中时隐藏左侧模型图标，仅显示操作区（停止/加载状态）。
- * Uses flat workbench-style buttons for the init panel.
  * 使用 MobX observer 确保模型切换和加载状态及时响应更新。
  */
 
@@ -27,7 +26,7 @@ interface AiActionButtonProps {
 	label: ReactNode
 	/** 加载中文字 */
 	loadingLabel?: ReactNode
-	/** 样式变体：primary = 填充暗色/黑背景；outline = 浅色块；accent = 橙黄高亮背景 */
+	/** 样式变体：primary = 主按钮；outline = 次级按钮；accent = 强调按钮 */
 	variant?: "primary" | "outline" | "accent"
 	/** 尺寸：sm = 紧凑(11px)；md = 常规(12px) */
 	size?: "sm" | "md"
@@ -55,19 +54,20 @@ export default observer(function AiActionButton({
 		<div
 			className={cn(
 				"relative flex items-center overflow-hidden font-semibold transition-all duration-200",
+				"rounded-md border shadow-xs",
 				isSm ? "h-7 text-[11px]" : "h-9 text-xs",
 				disabled && !loading && "pointer-events-none opacity-40",
 				isAccent
 					? loading
-						? "bg-zinc-800 text-zinc-500"
-						: "bg-primary text-zinc-950 hover:bg-primary/95 active:scale-[0.98]"
+						? "border-border bg-muted text-muted-foreground"
+						: "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 active:scale-[0.98]"
 					: isPrimary
 						? loading
-							? "bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-500"
-							: "bg-zinc-950 text-zinc-50 hover:bg-zinc-900 active:scale-[0.98] dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+							? "border-border bg-muted text-muted-foreground"
+							: "border-primary bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98]"
 						: loading
-							? "bg-zinc-50/50 text-zinc-400 dark:bg-zinc-900/50 dark:text-zinc-500"
-							: "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 active:scale-[0.98] dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100",
+							? "border-border bg-muted/50 text-muted-foreground"
+							: "border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground active:scale-[0.98]",
 				className,
 			)}
 		>
@@ -80,10 +80,10 @@ export default observer(function AiActionButton({
 					className={cn(
 						"flex h-full items-center justify-center border-r pl-3.5 pr-2 transition-colors",
 						isAccent
-							? "border-zinc-950/15 hover:bg-black/5"
+							? "border-primary/20 hover:bg-primary/10"
 							: isPrimary
-								? "border-white/10 hover:bg-white/5 dark:border-zinc-300 dark:hover:bg-black/5"
-								: "border-zinc-200 hover:bg-zinc-200 dark:border-zinc-800 dark:hover:bg-zinc-800/50",
+								? "border-primary-foreground/20 hover:bg-primary-foreground/10"
+								: "border-border hover:bg-accent",
 					)}
 				/>
 			)}

@@ -1,6 +1,9 @@
 import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/shadcn-ui/badge"
+import { Button } from "@/components/shadcn-ui/button"
+import { Textarea } from "@/components/shadcn-ui/textarea"
 import type { MaterialItem, OutlineNode } from "../../types"
 import MaterialAttachmentList from "../material/MaterialAttachmentList"
 import InlineVoiceButton from "../ui/InlineVoiceButton"
@@ -59,9 +62,9 @@ export default function CardContentEditor({
 	)
 
 	return (
-		<div className="border-t border-dashed border-zinc-950/10 pt-3">
+		<div className="pt-1">
 			{cardCount === 0 ? (
-				<p className="border-y border-dashed border-zinc-950/10 py-6 text-center text-sm text-muted-foreground">
+				<p className="rounded-lg border bg-card py-6 text-center text-sm text-muted-foreground">
 					{t("detail.selfMedia.initPanel.stepDetail.cardContentEmpty")}
 				</p>
 			) : (
@@ -110,22 +113,18 @@ function CardItem({
 	const materials = card.materials || []
 
 	return (
-		<div className="group/card border-l-2 border-zinc-950/10 bg-zinc-50/40 p-3 transition-all hover:border-primary/60 hover:bg-primary/[0.03]">
+		<div className="group/card rounded-lg border bg-card p-3 shadow-xs transition-all hover:border-primary/40 hover:bg-accent/30">
 			<div className="flex items-start gap-2">
-				<span
-					className={cn(
-						"mt-1 flex h-5 w-5 shrink-0 items-center justify-center text-[10px] font-black",
-						card.text
-							? "bg-primary/25 text-zinc-950"
-							: "bg-zinc-100 text-muted-foreground",
-					)}
+				<Badge
+					variant={card.text ? "default" : "secondary"}
+					className="mt-1 h-5 w-5 shrink-0 rounded-md px-0 text-[10px]"
 				>
 					{index + 1}
-				</span>
+				</Badge>
 				<div className="flex-1">
 					<div className="flex items-start gap-1">
-						<textarea
-							className="flex-1 resize-none border-0 border-b border-transparent bg-transparent px-1 py-1 text-sm outline-none transition-all placeholder:text-muted-foreground/50 focus:border-zinc-950 focus:bg-primary/[0.03]"
+						<Textarea
+							className="min-h-[64px] flex-1 resize-none text-sm shadow-none"
 							placeholder={t(
 								"detail.selfMedia.initPanel.stepDetail.cardContentPlaceholder",
 								{ index: index + 1 },
@@ -145,9 +144,11 @@ function CardItem({
 							{onRemove &&
 								(pendingRemove ? (
 									<div className="flex flex-col gap-0.5">
-										<button
+										<Button
 											type="button"
-											className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-black text-zinc-500 transition-all hover:bg-zinc-200/80 hover:text-zinc-950"
+											variant="ghost"
+											size="sm"
+											className="h-6 px-2 text-[10px]"
 											onClick={() => setPendingRemove(false)}
 										>
 											<X size={9} />
@@ -157,10 +158,12 @@ function CardItem({
 													"取消",
 												)}
 											</span>
-										</button>
-										<button
+										</Button>
+										<Button
 											type="button"
-											className="flex items-center gap-0.5 bg-destructive px-1.5 py-0.5 text-[9px] font-black text-white transition-all hover:bg-destructive/90 active:scale-[0.98]"
+											variant="destructive"
+											size="sm"
+											className="h-6 px-2 text-[10px]"
 											onClick={() => {
 												onRemove()
 												setPendingRemove(false)
@@ -173,12 +176,14 @@ function CardItem({
 													"删除",
 												)}
 											</span>
-										</button>
+										</Button>
 									</div>
 								) : (
-									<button
+									<Button
 										type="button"
-										className="cursor-pointer p-1 text-muted-foreground/30 opacity-0 transition-all hover:bg-destructive/15 hover:text-destructive group-hover/card:opacity-100"
+										variant="ghost"
+										size="icon-sm"
+										className="size-7 text-muted-foreground/50 opacity-0 hover:text-destructive group-hover/card:opacity-100"
 										onClick={() => setPendingRemove(true)}
 										title={t(
 											"detail.selfMedia.initPanel.stepDetail.cardRemoveBtn",
@@ -186,7 +191,7 @@ function CardItem({
 										)}
 									>
 										<Trash2 size={12} />
-									</button>
+									</Button>
 								))}
 						</div>
 					</div>

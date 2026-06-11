@@ -84,7 +84,7 @@ export function WechatCoverPhonePanel(props: WechatCoverPhonePanelProps) {
 			aria-hidden={!visible}
 			data-testid="wechat-cover-phone-panel"
 		>
-			<div className="flex h-full items-start justify-center py-4">
+			<div className="flex h-full items-center justify-center py-4">
 				<PhoneShell
 					scale={scale}
 					width={WECHAT_PHONE_WIDTH}

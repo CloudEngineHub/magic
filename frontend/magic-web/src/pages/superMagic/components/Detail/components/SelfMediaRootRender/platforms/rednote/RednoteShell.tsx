@@ -20,6 +20,9 @@ import { RednoteShellEditViewPanel } from "./RednoteShellEditViewPanel"
 import { RednoteShellPhoneViewPanel } from "./RednoteShellPhoneViewPanel"
 import { RednoteShellScrollViewPanel } from "./RednoteShellScrollViewPanel"
 
+const REDNOTE_DETAIL_ACTION_STRIP_WIDTH = 28
+const REDNOTE_DETAIL_ACTION_STRIP_GAP = 8
+
 function RednoteShell(props: PlatformComponentProps) {
 	const { t } = useTranslation("super")
 	const { platform, attachmentList, allowEdit, saveEditContent, selectedProject, onBackHome } =
@@ -31,6 +34,7 @@ function RednoteShell(props: PlatformComponentProps) {
 	const { containerRef, scale } = usePhoneScaling<HTMLDivElement>({
 		designWidth: REDNOTE_PHONE_WIDTH + 28,
 		designHeight: REDNOTE_PHONE_HEIGHT + 28,
+		fixedWidth: REDNOTE_DETAIL_ACTION_STRIP_WIDTH + REDNOTE_DETAIL_ACTION_STRIP_GAP,
 	})
 	const { progress, exportZip, exportLongImage } = useExportZip()
 	const [exportDialogOpen, setExportDialogOpen] = useState(false)

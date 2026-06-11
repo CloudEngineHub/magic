@@ -1,5 +1,6 @@
 import { FileClock } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
 
 interface DraftRestoreDialogProps {
 	open: boolean
@@ -38,31 +39,30 @@ export default function DraftRestoreDialog({
 				</div>
 				<div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
 					{onBackHome ? (
-						<button
+						<Button
 							type="button"
-							className="inline-flex cursor-pointer items-center justify-center rounded-md border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
+							variant="outline"
 							onClick={onBackHome}
 							data-testid="self-media-draft-restore-back-button"
 						>
 							{t("detail.selfMedia.initPanel.draft.backHome")}
-						</button>
+						</Button>
 					) : null}
-					<button
+					<Button
 						type="button"
-						className="inline-flex cursor-pointer items-center justify-center rounded-md border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
+						variant="outline"
 						onClick={onDiscard}
 						data-testid="self-media-draft-restore-clear-button"
 					>
 						{t("detail.selfMedia.initPanel.draft.clear")}
-					</button>
-					<button
+					</Button>
+					<Button
 						type="button"
-						className="inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
 						onClick={onRestore}
 						data-testid="self-media-draft-restore-load-button"
 					>
 						{t("detail.selfMedia.initPanel.draft.load")}
-					</button>
+					</Button>
 				</div>
 			</div>
 		</div>

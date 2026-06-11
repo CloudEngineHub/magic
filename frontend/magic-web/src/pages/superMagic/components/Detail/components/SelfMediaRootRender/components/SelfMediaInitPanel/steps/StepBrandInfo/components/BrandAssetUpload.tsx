@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
+import { Input } from "@/components/shadcn-ui/input"
 import { Progress } from "@/components/shadcn-ui/progress"
 import {
 	DropdownMenu,
@@ -30,6 +32,7 @@ interface BrandAssetUploadProps {
 	onRemoveBrandImage: (id: string) => void
 	onBrandImageDescChange: (id: string, description: string) => void
 	enableProjectPicker?: boolean
+	layout?: "default" | "stacked"
 }
 
 export function BrandAssetUpload({
@@ -41,6 +44,7 @@ export function BrandAssetUpload({
 	onRemoveBrandImage,
 	onBrandImageDescChange,
 	enableProjectPicker = true,
+	layout = "default",
 }: BrandAssetUploadProps) {
 	const { t } = useTranslation("super")
 	const fileInputRef = useRef<HTMLInputElement>(null)
@@ -52,6 +56,7 @@ export function BrandAssetUpload({
 	>(() => new Map())
 
 	const disabled = isFetching || loadingProjectFile
+	const isStacked = layout === "stacked"
 
 	const selectedPaths = useMemo(
 		() => new Set(brandImages.map((item) => item.uploadedPath).filter((p): p is string => !!p)),
@@ -286,14 +291,14 @@ export function BrandAssetUpload({
 		<div
 			className={cn(
 				"relative space-y-3 transition-colors",
-				isDragging && "bg-primary/[0.03] ring-1 ring-primary/30",
+				isDragging && "bg-[#434c81]/[0.035] ring-1 ring-[#434c81]/30",
 			)}
 			onPaste={handlePaste}
 			tabIndex={-1}
 			{...dropZoneProps}
 		>
 			{isDragging ? (
-				<div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center border border-dashed border-primary/40 bg-primary/5 text-[11px] font-semibold text-primary">
+				<div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center border border-dashed border-[#434c81]/40 bg-[#434c81]/[0.06] text-[11px] font-semibold text-[#38426f]">
 					{t("detail.selfMedia.initPanel.referenceFilePicker.dropHere", "拖放文件到这里")}
 				</div>
 			) : null}
@@ -308,7 +313,7 @@ export function BrandAssetUpload({
 				disabled={disabled}
 			/>
 
-			<div className="flex gap-2">
+			<div className={cn("flex gap-2", isStacked && "flex-col")}>
 				<div
 					role="button"
 					tabIndex={0}
@@ -320,27 +325,29 @@ export function BrandAssetUpload({
 						}
 					}}
 					className={cn(
-						"group relative flex flex-1 cursor-pointer items-center gap-3 border-b border-dashed border-zinc-950/20 bg-zinc-50/40 px-4 py-3 text-left transition-all",
+						"group relative flex flex-1 cursor-pointer items-center gap-3 overflow-hidden rounded-lg bg-[#434c81]/[0.095] px-4 py-3 text-left transition-transform duration-200 ease-out after:absolute after:inset-y-2 after:left-3 after:w-10 after:rounded-full after:bg-[#434c81]/[0.12] after:opacity-0 after:blur-xl after:transition-opacity after:duration-300 hover:-translate-y-0.5 hover:after:opacity-100",
+						isStacked && "min-h-[92px] items-start",
 						isDragging
-							? "border-solid border-zinc-950 bg-primary/[0.05]"
-							: "hover:border-zinc-950/40 hover:bg-zinc-50",
+							? "bg-[#434c81]/[0.12] ring-1 ring-[#434c81]/25"
+							: "hover:bg-[#434c81]/[0.12]",
 						disabled && "pointer-events-none cursor-not-allowed opacity-50",
 					)}
+					data-testid="self-media-brand-asset-upload-trigger"
 				>
 					<div
 						className={cn(
-							"flex h-9 w-9 shrink-0 items-center justify-center bg-white transition-all group-hover:scale-105",
-							isDragging && "scale-110 bg-primary",
+							"relative z-[1] flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-background/65 text-[#434c81] transition-all group-hover:-translate-y-0.5 group-hover:scale-105",
+							isDragging && "scale-110 bg-[#434c81]/[0.15] text-[#38426f]",
 						)}
 					>
 						{loadingProjectFile ? (
-							<Loader2 size={18} className="animate-spin text-zinc-950" />
+							<Loader2 size={18} className="animate-spin" />
 						) : (
-							<UploadCloud size={18} className="text-zinc-950 transition-colors" />
+							<UploadCloud size={18} className="transition-colors" />
 						)}
 					</div>
-					<div className="space-y-0.5">
-						<p className="text-xs font-bold text-zinc-950">
+					<div className="relative z-[1] space-y-0.5">
+						<p className="text-xs font-medium text-foreground">
 							{t(
 								"detail.selfMedia.initPanel.stepBrand.brandImagesUpload",
 								"点击上传图片或文件",
@@ -358,17 +365,21 @@ export function BrandAssetUpload({
 				{enableProjectPicker ? (
 					<DropdownMenu open={showProjectPicker} onOpenChange={handleOpenChange}>
 						<DropdownMenuTrigger asChild>
-							<button
+							<Button
 								type="button"
 								disabled={disabled}
-								className="flex shrink-0 items-center gap-1.5 border-b border-dashed border-zinc-950/20 bg-zinc-50/40 px-3 py-3 text-[11px] font-medium text-muted-foreground transition-all hover:border-zinc-950/40 hover:bg-zinc-50 hover:text-zinc-950 disabled:pointer-events-none disabled:opacity-50"
+								variant="secondary"
+								className={cn(
+									"h-auto shrink-0 px-3 py-3 text-[11px]",
+									isStacked && "w-full justify-start",
+								)}
 							>
 								<FolderOpen size={14} />
 								{t(
 									"detail.selfMedia.initPanel.stepBrand.brandImagesFromProject",
 									"项目文件",
 								)}
-							</button>
+							</Button>
 						</DropdownMenuTrigger>
 						{projectPickerDropdown}
 					</DropdownMenu>
@@ -376,7 +387,12 @@ export function BrandAssetUpload({
 			</div>
 
 			{brandImages.length > 0 && (
-				<div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+				<div
+					className={cn(
+						"grid grid-cols-2 gap-3 sm:grid-cols-3",
+						isStacked && "grid-cols-1 sm:grid-cols-1",
+					)}
+				>
 					{brandImages.map((item) => {
 						const uploadProgress = brandImageUploadProgress[item.id]
 						const isUploading = uploadProgress !== undefined
@@ -385,7 +401,7 @@ export function BrandAssetUpload({
 						return (
 							<div
 								key={item.id}
-								className="group/item relative overflow-hidden border-b border-zinc-950/10 bg-white transition-all hover:bg-zinc-50/40"
+								className="group/item relative overflow-hidden rounded-lg bg-background/60 transition-all hover:bg-background/80"
 							>
 								{item.isImage ? (
 									<div className="relative h-20 w-full overflow-hidden bg-muted/20">
@@ -399,7 +415,7 @@ export function BrandAssetUpload({
 											<div className="flex h-full w-full items-center justify-center bg-muted/40">
 												<Loader2
 													size={16}
-													className="animate-spin text-primary/70"
+													className="animate-spin text-[#434c81]/70"
 												/>
 											</div>
 										) : (
@@ -418,7 +434,7 @@ export function BrandAssetUpload({
 										)}
 
 										{item.uploadedPath && !isUploading && (
-											<div className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center bg-primary text-zinc-950 animate-in fade-in zoom-in">
+											<div className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#434c81] text-white animate-in fade-in zoom-in">
 												<CheckCircle2 size={10} strokeWidth={3} />
 											</div>
 										)}
@@ -438,17 +454,17 @@ export function BrandAssetUpload({
 											</div>
 										)}
 										{item.uploadedPath && !isUploading && (
-											<div className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center bg-primary text-zinc-950">
+											<div className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#434c81] text-white">
 												<CheckCircle2 size={10} strokeWidth={3} />
 											</div>
 										)}
 									</div>
 								)}
 
-								<div className="border-t border-zinc-950/10 bg-muted/5 p-1.5">
-									<input
+								<div className="border-t bg-muted/20 p-1.5">
+									<Input
 										type="text"
-										className="w-full border-0 border-b border-zinc-200 bg-white px-2 py-1 text-[10px] transition-colors placeholder:text-muted-foreground/50 focus:border-zinc-950 focus:outline-none"
+										className="h-7 text-[10px]"
 										placeholder={t(
 											"detail.selfMedia.initPanel.stepBrand.brandImagesDescPlaceholder",
 											"描述（如：品牌Logo）",
@@ -460,14 +476,16 @@ export function BrandAssetUpload({
 									/>
 								</div>
 
-								<button
+								<Button
 									type="button"
-									className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center bg-white text-muted-foreground/70 opacity-0 transition-all hover:bg-red-50 hover:text-destructive disabled:pointer-events-none group-hover/item:opacity-100"
+									variant="ghost"
+									size="icon-sm"
+									className="absolute right-1.5 top-1.5 size-6 bg-background/90 text-muted-foreground/70 opacity-0 hover:text-destructive disabled:pointer-events-none group-hover/item:opacity-100"
 									onClick={() => onRemoveBrandImage(item.id)}
 									disabled={isUploading}
 								>
 									<Trash2 size={10} />
-								</button>
+								</Button>
 							</div>
 						)
 					})}

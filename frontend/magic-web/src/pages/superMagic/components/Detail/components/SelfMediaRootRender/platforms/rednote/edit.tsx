@@ -29,6 +29,7 @@ import {
 import { RednoteEditRefreshConfirmDialog } from "./RednoteEditRefreshConfirmDialog"
 import { RednoteEditThumbnailSidebar } from "./RednoteEditThumbnailSidebar"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
+import { resolveSelfMediaCardScaleContentDimensions } from "../../utils/selfMediaCardDimensions"
 
 interface RednoteEditViewProps {
 	attachmentList?: PlatformComponentProps["attachmentList"]
@@ -98,6 +99,10 @@ const RednoteEditView = observer(function RednoteEditView({
 	const [cardContent, setCardContent] = useState<string | null>(null)
 	const [contentLoading, setContentLoading] = useState(false)
 	const [contentError, setContentError] = useState<string | null>(null)
+	const scaleContentDimensions = useMemo(
+		() => resolveSelfMediaCardScaleContentDimensions(store.resolvedPlatform, cardContent),
+		[cardContent, store.resolvedPlatform],
+	)
 	// Track loaded fileId to prevent server-side content refreshes from flickering
 	const loadedFileIdRef = useRef<string | null>(null)
 
@@ -575,6 +580,7 @@ const RednoteEditView = observer(function RednoteEditView({
 							content={cardContent}
 							sandboxType="iframe"
 							isPptRender
+							scaleContentDimensions={scaleContentDimensions}
 							enableScalingHeightCalculation
 							waitForSettledContentMetrics
 							autoFitScalePaddingFactor={0.75}

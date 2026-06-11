@@ -1,6 +1,9 @@
 import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/shadcn-ui/badge"
+import { Button } from "@/components/shadcn-ui/button"
+import { Input } from "@/components/shadcn-ui/input"
 import superMagicService from "@/pages/superMagic/services"
 import type { SelfMediaInitData, OutlineNode } from "../types"
 import { ALL_PLATFORMS, STYLE_PRESETS, collectArticleMaterials } from "../types"
@@ -14,11 +17,6 @@ import {
 import { prefillSelfMediaMagicProjectIndex, type AttachmentNode } from "../../../services"
 import { ensureArticlePostAssetDirectories } from "../../../services/selfMediaPostPaths"
 import ModelSelector from "../components/picker/ModelSelector"
-import { SketchTitleIllustration } from "../components/ui/SketchTitleIllustration"
-import {
-	SketchFieldIllustration,
-	type BrandFieldIllustrationVariant,
-} from "../components/ui/SketchFieldIllustration"
 import {
 	Sparkles,
 	CheckCircle,
@@ -27,6 +25,12 @@ import {
 	ChevronRight,
 	Briefcase,
 	Home,
+	Image as ImageIcon,
+	Loader2,
+	Target,
+	UserRound,
+	UsersRound,
+	type LucideIcon,
 } from "lucide-react"
 import InlineVoiceButton from "../components/ui/InlineVoiceButton"
 import PlatformBrandIcon from "../../PlatformBrandIcon"
@@ -67,27 +71,24 @@ function ConfirmOutlinePreview({ nodes, depth = 0 }: { nodes: OutlineNode[]; dep
 }
 
 function ConfirmBrandFieldRow({
-	illustration,
+	Icon,
 	label,
 	value,
 }: {
-	illustration: BrandFieldIllustrationVariant
+	Icon: LucideIcon
 	label: string
 	value: string
 }) {
 	if (!value.trim()) return null
 
 	return (
-		<div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-x-3 border-b border-dashed border-zinc-950/10 px-4 py-4 last:border-b-0 sm:grid-cols-[2.75rem_minmax(0,1fr)] sm:gap-x-3.5">
-			<SketchFieldIllustration
-				variant={illustration}
-				className="h-10 w-10 self-center opacity-75 sm:h-11 sm:w-11"
-			/>
+		<div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-x-3 border-b px-4 py-4 last:border-b-0 sm:grid-cols-[2.75rem_minmax(0,1fr)] sm:gap-x-3.5">
+			<div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-muted-foreground sm:h-11 sm:w-11">
+				<Icon size={18} />
+			</div>
 			<div className="min-w-0 space-y-1">
-				<span className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-					{label}
-				</span>
-				<p className="text-sm font-bold leading-relaxed text-foreground">{value}</p>
+				<span className="text-xs font-medium text-muted-foreground">{label}</span>
+				<p className="text-sm font-medium leading-relaxed text-foreground">{value}</p>
 			</div>
 		</div>
 	)
@@ -104,34 +105,34 @@ function ConfirmBrandSummary({
 
 	return (
 		<section className="space-y-3" data-testid="self-media-step-confirm-global-summary">
-			<div className="flex items-center gap-2 border-b border-zinc-950/10 pb-2">
-				<div className="flex h-7 w-7 items-center justify-center bg-primary/25 text-zinc-950">
+			<div className="flex items-center gap-2 border-b pb-2">
+				<div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
 					<Briefcase size={13} />
 				</div>
-				<h3 className="text-xs font-black uppercase tracking-wider text-zinc-950">
+				<h3 className="text-sm font-semibold text-foreground">
 					{t("detail.selfMedia.initPanel.stepConfirm.globalSummary", {
 						defaultValue: "全局品牌档案",
 					})}
 				</h3>
 			</div>
 
-			<div className="border-l-4 border-primary/60 bg-primary/[0.03]">
+			<div className="overflow-hidden rounded-lg border bg-card shadow-xs">
 				<ConfirmBrandFieldRow
-					illustration="author"
+					Icon={UserRound}
 					label={t("detail.selfMedia.initPanel.stepConfirm.accountLabel", {
 						defaultValue: "主创账号",
 					})}
 					value={global.author}
 				/>
 				<ConfirmBrandFieldRow
-					illustration="position"
+					Icon={Target}
 					label={t("detail.selfMedia.initPanel.stepConfirm.positionLabel", {
 						defaultValue: "品牌/IP 定位",
 					})}
 					value={global.brandPosition}
 				/>
 				<ConfirmBrandFieldRow
-					illustration="audience"
+					Icon={UsersRound}
 					label={t("detail.selfMedia.initPanel.stepConfirm.audienceLabel", {
 						defaultValue: "受众定位",
 					})}
@@ -139,7 +140,7 @@ function ConfirmBrandSummary({
 				/>
 				{brandImageCount > 0 ? (
 					<ConfirmBrandFieldRow
-						illustration="assets"
+						Icon={ImageIcon}
 						label={t("detail.selfMedia.initPanel.stepBrand.brandImages", {
 							defaultValue: "品牌形象素材",
 						})}
@@ -170,7 +171,7 @@ function TopicProgressList({
 }) {
 	return (
 		<div className="flex flex-col gap-3">
-			<p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+			<p className="text-xs font-medium text-muted-foreground">
 				{t("detail.selfMedia.initPanel.stepConfirm.topicListHint")}
 			</p>
 			<ul className="flex flex-col gap-2.5">
@@ -178,13 +179,14 @@ function TopicProgressList({
 					const isActive = activeTopicId === item.topicId
 					return (
 						<li key={item.topicId} className="duration-300 animate-in fade-in">
-							<button
+							<Button
 								type="button"
+								variant="outline"
 								className={cn(
-									"flex w-full cursor-pointer items-center gap-4 border-l-2 px-4 py-3.5 text-left transition-all duration-300",
+									"h-auto w-full justify-start gap-4 rounded-lg p-4 text-left shadow-xs",
 									isActive
-										? "border-primary bg-primary/[0.04]"
-										: "border-transparent bg-background hover:border-primary/40 hover:bg-muted/10",
+										? "border-primary bg-primary/5"
+										: "bg-card hover:bg-accent/50",
 								)}
 								onClick={() => onSelectTopic(item)}
 							>
@@ -207,11 +209,11 @@ function TopicProgressList({
 									</p>
 								</div>
 								{isActive && (
-									<span className="shrink-0 bg-primary/10 px-2.5 py-1 text-[10px] font-bold tracking-wide text-primary">
+									<Badge variant="secondary" className="shrink-0 rounded-md">
 										{t("detail.selfMedia.initPanel.stepConfirm.viewing")}
-									</span>
+									</Badge>
 								)}
-							</button>
+							</Button>
 						</li>
 					)
 				})}
@@ -219,7 +221,7 @@ function TopicProgressList({
 					Array.from({ length: Math.max(0, totalCount - topics.length) }).map((_, i) => (
 						<li
 							key={`pending-${i}`}
-							className="flex animate-pulse items-center gap-4 border-l-2 border-dashed border-border/60 bg-muted/5 px-4 py-3.5 opacity-60"
+							className="flex animate-pulse items-center gap-4 rounded-lg border bg-card px-4 py-3.5 opacity-60"
 						>
 							<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
 								{topics.length + i + 1}
@@ -229,17 +231,7 @@ function TopicProgressList({
 									{t("detail.selfMedia.initPanel.stepConfirm.creatingTopic")}
 								</span>
 							</div>
-							<svg
-								className="animate-spin text-muted-foreground/60"
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2.5"
-							>
-								<path d="M21 12a9 9 0 1 1-6.219-8.56" />
-							</svg>
+							<Loader2 size={14} className="animate-spin text-muted-foreground/60" />
 						</li>
 					))}
 			</ul>
@@ -402,7 +394,7 @@ export default function StepConfirm({
 
 		return (
 			<div
-				className="mx-auto flex max-w-xl flex-col space-y-6 py-6"
+				className="mx-auto flex max-w-xl flex-col space-y-6 px-3 py-6 sm:px-4"
 				data-testid={
 					isStartupLoading
 						? "self-media-step-confirm-startup-loading"
@@ -414,27 +406,16 @@ export default function StepConfirm({
 						{sending && (
 							<div className="absolute inset-0 animate-ping rounded-full bg-primary/10" />
 						)}
-						<div className="relative flex h-20 w-20 items-center justify-center bg-primary/15">
+						<div className="relative flex h-20 w-20 items-center justify-center rounded-lg bg-primary/10 text-primary">
 							{sending ? (
-								<div className="animate-spin text-primary">
-									<svg
-										width="30"
-										height="28"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										strokeWidth="2.5"
-									>
-										<path d="M21 12a9 9 0 1 1-6.219-8.56" />
-									</svg>
-								</div>
+								<Loader2 size={30} className="animate-spin" />
 							) : (
-								<Rocket size={32} className="animate-bounce text-primary" />
+								<Rocket size={32} className="animate-bounce" />
 							)}
 						</div>
 					</div>
 					<div className="space-y-1">
-						<h3 className="text-xl font-extrabold tracking-tight">
+						<h3 className="text-xl font-semibold tracking-tight">
 							{t(titleKey, { defaultValue: titleFallback })}
 						</h3>
 						<p className="text-sm leading-relaxed text-muted-foreground">{desc}</p>
@@ -444,13 +425,13 @@ export default function StepConfirm({
 				<div className="my-1 h-px bg-border/10" />
 
 				{isStartupLoading ? (
-					<div className="space-y-3 bg-primary/[0.03] p-4 text-left">
-						<p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+					<div className="space-y-3 rounded-lg border bg-card p-4 text-left shadow-xs">
+						<p className="text-xs font-medium text-muted-foreground">
 							{t("detail.selfMedia.initPanel.stepConfirm.preparingHint", {
 								defaultValue: "正在归档方案、准备素材，并创建第一个创作话题",
 							})}
 						</p>
-						<div className="h-1 overflow-hidden bg-primary/10">
+						<div className="h-1 overflow-hidden rounded-full bg-primary/10">
 							<div className="h-full w-1/3 animate-pulse bg-primary" />
 						</div>
 					</div>
@@ -465,31 +446,32 @@ export default function StepConfirm({
 					/>
 				)}
 				{onBackHome ? (
-					<button
+					<Button
 						type="button"
-						className="inline-flex w-full cursor-pointer items-center justify-center gap-2 border border-zinc-950/10 bg-white px-4 py-3 text-xs font-black text-zinc-950 transition-all hover:bg-zinc-50 active:scale-[0.98]"
+						variant="outline"
+						className="w-full"
 						onClick={onBackHome}
 						data-testid="self-media-step-confirm-progress-back-home-button"
 					>
 						<Home size={14} />
 						<span>{t("detail.selfMedia.initPanel.stepConfirm.backHome")}</span>
-					</button>
+					</Button>
 				) : null}
 			</div>
 		)
 	}
 
 	return (
-		<div className="mx-auto flex min-h-full max-w-3xl flex-col">
-			<div className="flex-1 space-y-8 py-8 pb-8">
+		<div className="mx-auto flex min-h-full max-w-3xl flex-col px-3 sm:px-4">
+			<div className="flex-1 space-y-6 py-6 pb-8 sm:py-8">
 				{/* Page header — stable text + illustration grid (no absolute overlap) */}
-				<div className="border-b border-dashed border-zinc-950/10 px-1 pb-6">
-					<div className="grid items-center gap-5 sm:grid-cols-[minmax(0,1fr)_9.5rem] sm:gap-6 md:grid-cols-[minmax(0,1fr)_11rem]">
+				<div className="rounded-lg border bg-card p-4 shadow-xs sm:p-5">
+					<div className="grid items-center gap-5 sm:grid-cols-[minmax(0,1fr)_11rem] sm:gap-6">
 						<div className="space-y-2 text-center sm:text-left">
-							<span className="inline-flex bg-primary/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.22em] text-zinc-950">
+							<Badge variant="secondary" className="rounded-md">
 								Compilation & Release
-							</span>
-							<h2 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+							</Badge>
+							<h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
 								{t(
 									"detail.selfMedia.initPanel.stepConfirm.title",
 									"核对并开始创作",
@@ -502,23 +484,30 @@ export default function StepConfirm({
 								)}
 							</p>
 						</div>
-						<SketchTitleIllustration
-							variant="confirm"
-							className="mx-auto h-[6.5rem] w-full max-w-[9.5rem] opacity-90 sm:mx-0 sm:h-[7.5rem] sm:max-w-none md:h-[8rem]"
+						<div
+							className="mx-auto hidden h-[7.5rem] w-full max-w-[11rem] rounded-lg border bg-muted/40 p-3 sm:block"
 							data-testid="self-media-step-confirm-title-illustration"
-						/>
+						>
+							<div className="flex h-full flex-col justify-between">
+								<div className="flex items-center justify-between">
+									<span className="h-8 w-8 rounded-md bg-background shadow-xs" />
+									<Rocket size={20} className="text-primary" />
+								</div>
+								<div className="space-y-2">
+									<span className="block h-2.5 w-24 rounded-full bg-muted-foreground/20" />
+									<span className="block h-2.5 w-16 rounded-full bg-muted-foreground/10" />
+								</div>
+							</div>
+						</div>
 					</div>
 				</div>
 
 				<ConfirmBrandSummary global={data.global} t={t} />
 
 				{/* Article list */}
-				<section
-					className="space-y-4 border-t border-dashed border-zinc-950/10 pt-6"
-					data-testid="self-media-step-confirm-article-list"
-				>
-					<div className="flex items-center justify-between border-b border-zinc-950/10 pb-2">
-						<span className="text-xs font-black uppercase tracking-wider text-zinc-950">
+				<section className="space-y-4" data-testid="self-media-step-confirm-article-list">
+					<div className="flex items-center justify-between border-b pb-2">
+						<span className="text-sm font-semibold text-foreground">
 							选题矩阵清单 ({data.articles.length} 篇)
 						</span>
 					</div>
@@ -531,12 +520,12 @@ export default function StepConfirm({
 							return (
 								<li
 									key={index}
-									className="group flex flex-col gap-3 border-l-2 border-transparent bg-white px-4 py-3.5 transition-all duration-300 animate-in fade-in hover:border-zinc-950 hover:bg-zinc-50/50"
+									className="group flex flex-col gap-3 rounded-lg border bg-card px-4 py-3.5 shadow-xs transition-all duration-300 animate-in fade-in hover:border-primary/40 hover:bg-accent/30"
 								>
 									<div className="flex items-start gap-3">
-										<span className="flex h-7 w-7 shrink-0 items-center justify-center bg-primary/20 text-[10px] font-black text-zinc-950">
+										<Badge className="h-7 w-7 shrink-0 rounded-md px-0 text-[10px]">
 											{String(index + 1).padStart(2, "0")}
-										</span>
+										</Badge>
 										<div className="min-w-0 flex-1 space-y-2">
 											<div className="flex items-start gap-2">
 												{article.platform ? (
@@ -545,44 +534,47 @@ export default function StepConfirm({
 														className="mt-0.5 size-3.5 shrink-0"
 													/>
 												) : null}
-												<h4 className="min-w-0 flex-1 text-sm font-extrabold leading-snug text-zinc-950 transition-colors duration-300 group-hover:text-primary">
+												<h4 className="min-w-0 flex-1 text-sm font-semibold leading-snug text-foreground transition-colors duration-300 group-hover:text-primary">
 													{article.title}
 												</h4>
 											</div>
 											<div className="flex flex-wrap gap-1.5">
 												{article.platform && (
-													<span className="bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">
+													<Badge variant="outline" className="rounded-md">
 														{getPlatformLabel(article.platform)}
-													</span>
+													</Badge>
 												)}
 												{article.style && (
-													<span className="bg-primary/20 px-2 py-0.5 text-[10px] font-black text-zinc-950">
+													<Badge
+														variant="secondary"
+														className="rounded-md"
+													>
 														{getStyleLabel(article.style)}
-													</span>
+													</Badge>
 												)}
 												{showCardCount && article.cardCount > 0 && (
-													<span className="bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-700">
+													<Badge variant="outline" className="rounded-md">
 														{t(
 															"detail.selfMedia.initPanel.stepConfirm.cardCount",
 															{ count: article.cardCount },
 														)}
-													</span>
+													</Badge>
 												)}
 												{materialCount > 0 && (
-													<span className="bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-700">
+													<Badge variant="outline" className="rounded-md">
 														{t(
 															"detail.selfMedia.initPanel.stepConfirm.refCount",
 															{
 																count: materialCount,
 															},
 														)}
-													</span>
+													</Badge>
 												)}
 											</div>
 
 											{article.outline.length > 0 ? (
-												<div className="space-y-1.5 border-l-2 border-primary/30 pl-3 pt-0.5">
-													<span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground/70">
+												<div className="space-y-1.5 rounded-md border bg-muted/20 p-3">
+													<span className="text-xs font-medium text-muted-foreground">
 														{t(
 															showCardCount
 																? "detail.selfMedia.initPanel.stepConfirm.cardOutlineLabel"
@@ -605,17 +597,17 @@ export default function StepConfirm({
 
 				{/* Save template — scrolls above sticky action bar */}
 				{onSaveTemplate && !templateSaved && (
-					<section className="border-t border-dashed border-zinc-950/10 pt-4 duration-200 animate-in fade-in">
+					<section className="duration-200 animate-in fade-in">
 						{showTemplateNameInput ? (
-							<div className="flex flex-col gap-3 border-l-2 border-primary/60 bg-primary/[0.04] p-4">
-								<span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+							<div className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-xs">
+								<span className="text-xs font-medium text-muted-foreground">
 									模板归档名称
 								</span>
 								<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
 									<div className="group relative flex-1">
-										<input
+										<Input
 											type="text"
-											className="w-full border-0 border-b border-zinc-200 bg-zinc-50/40 px-3 py-2 pr-7 text-xs outline-none transition-all duration-300 placeholder:text-muted-foreground/50 focus:border-zinc-950 focus:bg-primary/[0.03]"
+											className="h-9 pr-8 text-xs"
 											placeholder={t(
 												"detail.selfMedia.initPanel.stepConfirm.templateNamePlaceholder",
 												"输入模板名称",
@@ -633,9 +625,9 @@ export default function StepConfirm({
 										/>
 									</div>
 									<div className="flex shrink-0 gap-2">
-										<button
+										<Button
 											type="button"
-											className="cursor-pointer bg-zinc-950 px-4 py-2 text-xs font-bold text-white transition-all duration-300 hover:bg-zinc-900 disabled:opacity-40"
+											size="sm"
 											onClick={handleSaveTemplate}
 											disabled={!templateName.trim()}
 										>
@@ -643,21 +635,23 @@ export default function StepConfirm({
 												"detail.selfMedia.initPanel.stepConfirm.saveTemplate",
 												"保存",
 											)}
-										</button>
-										<button
+										</Button>
+										<Button
 											type="button"
-											className="cursor-pointer bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-500 transition-all duration-300 hover:bg-zinc-200 hover:text-zinc-950"
+											variant="outline"
+											size="sm"
 											onClick={() => setShowTemplateNameInput(false)}
 										>
 											{t("detail.selfMedia.initPanel.stepConfirm.cancel")}
-										</button>
+										</Button>
 									</div>
 								</div>
 							</div>
 						) : (
-							<button
+							<Button
 								type="button"
-								className="flex w-full cursor-pointer items-center justify-center gap-2 border-b border-dashed border-zinc-950/15 bg-zinc-50 px-4 py-4 text-xs font-bold text-zinc-500 transition-all duration-300 hover:bg-zinc-100/70 hover:text-zinc-950"
+								variant="outline"
+								className="h-12 w-full"
 								onClick={() => setShowTemplateNameInput(true)}
 							>
 								<Bookmark size={13} className="text-primary/70" />
@@ -667,13 +661,13 @@ export default function StepConfirm({
 										"保存当前设置为全新模板",
 									)}
 								</span>
-							</button>
+							</Button>
 						)}
 					</section>
 				)}
 
 				{templateSaved && (
-					<div className="flex items-center justify-center gap-2 border-l-2 border-green-500 bg-green-50 py-3.5 text-xs font-bold text-green-600 duration-300 animate-in fade-in dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-400">
+					<div className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 py-3.5 text-xs font-medium text-green-700 duration-300 animate-in fade-in dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-400">
 						<CheckCircle size={14} />
 						<span>
 							{t(
@@ -687,18 +681,18 @@ export default function StepConfirm({
 
 			{/* Model selectors + primary action — sticky bottom */}
 			<section
-				className="sticky bottom-0 z-20 -mx-6 space-y-3 border-t border-dashed border-zinc-950/10 bg-white/95 px-6 pb-4 pt-4 shadow-[0_-10px_28px_-12px_rgba(0,0,0,0.14)] backdrop-blur-sm supports-[backdrop-filter]:bg-white/90"
+				className="sticky bottom-0 z-20 -mx-3 space-y-3 border-t bg-card/95 px-3 pb-[max(var(--safe-area-inset-bottom),1rem)] pt-4 shadow-lg backdrop-blur-sm supports-[backdrop-filter]:bg-card/90 sm:-mx-4 sm:px-4"
 				data-testid="self-media-step-confirm-actions"
 			>
-				<span className="text-[10px] font-black uppercase tracking-wider text-zinc-950">
+				<span className="text-xs font-medium text-muted-foreground">
 					{t("detail.selfMedia.initPanel.stepConfirm.modelSettings", {
 						defaultValue: "模型配置",
 					})}
 				</span>
 
-				<div className="grid grid-cols-3 divide-x divide-zinc-200/60 overflow-hidden border border-zinc-950/10 bg-white">
+				<div className="grid grid-cols-1 gap-2 overflow-hidden rounded-lg border bg-background p-2 shadow-xs sm:grid-cols-3">
 					<div className="flex min-w-0 flex-col gap-1 px-2 py-2.5 sm:px-3">
-						<span className="truncate text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/70 sm:text-[10px]">
+						<span className="truncate text-xs font-medium text-muted-foreground">
 							{t("detail.selfMedia.initPanel.stepConfirm.textModel", {
 								defaultValue: "文本模型",
 							})}
@@ -706,11 +700,11 @@ export default function StepConfirm({
 						<ModelSelector
 							value={selectedModelId}
 							onChange={setSelectedModelId}
-							className="rounded-none border-none bg-transparent p-0 shadow-none hover:bg-transparent"
+							className="border-none bg-transparent p-0 shadow-none hover:bg-transparent"
 						/>
 					</div>
 					<div className="flex min-w-0 flex-col gap-1 px-2 py-2.5 sm:px-3">
-						<span className="truncate text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/70 sm:text-[10px]">
+						<span className="truncate text-xs font-medium text-muted-foreground">
 							{t("detail.selfMedia.initPanel.stepConfirm.imageModel", {
 								defaultValue: "图像模型",
 							})}
@@ -719,11 +713,11 @@ export default function StepConfirm({
 							value={selectedImageModelId}
 							onChange={setSelectedImageModelId}
 							modelType="image"
-							className="rounded-none border-none bg-transparent p-0 shadow-none hover:bg-transparent"
+							className="border-none bg-transparent p-0 shadow-none hover:bg-transparent"
 						/>
 					</div>
 					<div className="flex min-w-0 flex-col gap-1 px-2 py-2.5 sm:px-3">
-						<span className="truncate text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/70 sm:text-[10px]">
+						<span className="truncate text-xs font-medium text-muted-foreground">
 							{t("detail.selfMedia.initPanel.stepConfirm.videoModel", {
 								defaultValue: "视频模型",
 							})}
@@ -732,47 +726,33 @@ export default function StepConfirm({
 							value={selectedVideoModelId}
 							onChange={setSelectedVideoModelId}
 							modelType="video"
-							className="rounded-none border-none bg-transparent p-0 shadow-none hover:bg-transparent"
+							className="border-none bg-transparent p-0 shadow-none hover:bg-transparent"
 						/>
 					</div>
 				</div>
 
 				<div className="flex flex-col gap-2 sm:flex-row">
 					{onBackHome ? (
-						<button
+						<Button
 							type="button"
-							className="inline-flex cursor-pointer items-center justify-center gap-2 border border-zinc-950/10 bg-white px-4 py-4 text-xs font-black uppercase tracking-widest text-zinc-950 transition-all hover:bg-zinc-50 active:scale-[0.98] sm:w-44"
+							variant="outline"
+							className="h-11 sm:w-44"
 							onClick={onBackHome}
 							data-testid="self-media-step-confirm-back-home-button"
 						>
 							<Home size={14} />
 							<span>{t("detail.selfMedia.initPanel.stepConfirm.backHome")}</span>
-						</button>
+						</Button>
 					) : null}
-					<button
+					<Button
 						type="button"
-						className={cn(
-							"group/btn flex flex-1 cursor-pointer items-center justify-center gap-2.5 py-4 text-xs font-bold uppercase tracking-widest outline-none transition-all duration-300",
-							sending
-								? "cursor-not-allowed bg-zinc-100 text-muted-foreground/60"
-								: "bg-zinc-950 text-white hover:bg-zinc-900 active:scale-[0.98]",
-						)}
+						className={cn("group/btn h-11 flex-1", sending && "cursor-not-allowed")}
 						onClick={handleGenerate}
 						disabled={sending}
 					>
 						{sending ? (
 							<div className="flex items-center gap-2">
-								<svg
-									className="animate-spin text-white"
-									width="16"
-									height="16"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									strokeWidth="2.5"
-								>
-									<path d="M21 12a9 9 0 1 1-6.219-8.56" />
-								</svg>
+								<Loader2 size={16} className="animate-spin" />
 								<span>
 									{t(
 										"detail.selfMedia.initPanel.stepConfirm.generatingBtn",
@@ -794,7 +774,7 @@ export default function StepConfirm({
 								/>
 							</div>
 						)}
-					</button>
+					</Button>
 				</div>
 			</section>
 		</div>

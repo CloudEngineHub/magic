@@ -36,6 +36,7 @@ import MagicIcon from "@/components/base/MagicIcon"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import DetailEmpty from "../DetailEmpty"
 import { FileTabMagicIcon } from "./components/FileTabMagicIcon"
+import WebsitePresetMenu from "./components/WebsitePresetMenu"
 
 // 获取文件路径用作tooltip的工具函数
 const getFileTooltip = (tab: any, unknownFileText: string) => {
@@ -80,6 +81,7 @@ const FilesViewer = memo(
 				tabs,
 				activeTab,
 				openFileTab,
+				openWebsiteTab,
 				closeFileTab,
 				switchToTab,
 				clearAllTabs,
@@ -224,6 +226,7 @@ const FilesViewer = memo(
 				// Playback tab相关方法
 				openPlaybackTab,
 				closePlaybackTab,
+				openWebsiteTab,
 			}))
 
 			// Notify parent about fullscreen state changes via callback
@@ -450,6 +453,8 @@ const FilesViewer = memo(
 							>
 								{tabs.map((tab, index) => renderTabItem(tab, index))}
 							</HeadlessHorizontalScroll>
+
+							<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />
 
 							{/* 展开按钮 */}
 							<DropdownMenu

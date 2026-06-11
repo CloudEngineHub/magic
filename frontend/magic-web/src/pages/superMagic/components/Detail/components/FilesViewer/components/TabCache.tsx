@@ -4,13 +4,18 @@ import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
 import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabContent"
 import { PLAYBACK_TAB_ID } from "../hooks/usePlaybackTab"
+import WebsiteIframeTabContent from "./WebsiteIframeTabContent"
+import { getWebsiteTabData, isWebsiteTab } from "../utils/websiteTabs"
+import type { TabItem } from "../types"
+
+type CachedTab = Partial<TabItem> & {
+	id: string
+	refreshKey?: string
+	[key: string]: unknown
+}
 
 interface TabCacheProps {
-	tab: {
-		id: string
-		refreshKey?: string
-		[key: string]: unknown
-	}
+	tab: CachedTab
 	isActive: boolean
 	renderProps: Record<string, unknown>
 	onActiveFileChange?: (fileId: string | null) => void
@@ -34,6 +39,7 @@ const TabCache = memo(
 		playbackProps,
 	}: TabCacheProps) => {
 		const isPlaybackTab = tab.id === PLAYBACK_TAB_ID
+		const isWebsite = isWebsiteTab(tab)
 		const tabContentRef = useRef<HTMLDivElement>(null)
 		const isFullscreenMode = useFullscreenMode()
 
@@ -90,6 +96,8 @@ const TabCache = memo(
 			>
 				{isPlaybackTab && playbackProps ? (
 					<PlaybackTabContent {...playbackProps} />
+				) : isWebsite ? (
+					<WebsiteIframeTabContent {...getWebsiteTabData(tab)} isActive={isActive} />
 				) : (
 					<Render
 						key={tab.refreshKey || tab.id}

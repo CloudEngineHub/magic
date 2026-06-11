@@ -671,6 +671,7 @@ interface ScrollProps {
 	cardRefs: React.MutableRefObject<Array<Array<CardFrameRef | null>>>
 	postIndex: number
 	onAddCardToCurrentChat?: (cardIndex: number) => void
+	onAddActivePostDirectoryToCurrentChat?: () => void
 }
 
 function InstagramScrollView({
@@ -680,6 +681,7 @@ function InstagramScrollView({
 	cardRefs,
 	postIndex,
 	onAddCardToCurrentChat,
+	onAddActivePostDirectoryToCurrentChat,
 }: ScrollProps) {
 	const store = useSelfMediaStore()
 	const [cardRefreshVersions, setCardRefreshVersions] = useState<Record<number, number>>({})
@@ -715,6 +717,7 @@ function InstagramScrollView({
 							onAddToCurrentChat={
 								onAddCardToCurrentChat ? () => onAddCardToCurrentChat(c) : undefined
 							}
+							onAddPostFolderToCurrentChat={onAddActivePostDirectoryToCurrentChat}
 							onGoToEdit={() => {
 								store.setActiveCardIndex(c)
 								store.setView("edit")

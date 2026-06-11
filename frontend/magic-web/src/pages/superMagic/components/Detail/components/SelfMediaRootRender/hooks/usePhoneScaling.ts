@@ -7,6 +7,10 @@ interface UsePhoneScalingArgs {
 	designHeight: number
 	/** Reserved padding inside the container */
 	padding?: number
+	/** Non-scaled horizontal space that must remain visible beside the scaled shell */
+	fixedWidth?: number
+	/** Non-scaled vertical space that must remain visible beside the scaled shell */
+	fixedHeight?: number
 	/** Maximum scale */
 	maxScale?: number
 }
@@ -26,6 +30,8 @@ export function usePhoneScaling<E extends HTMLElement = HTMLDivElement>({
 	designWidth,
 	designHeight,
 	padding = 24,
+	fixedWidth = 0,
+	fixedHeight = 0,
 	maxScale = 1,
 }: UsePhoneScalingArgs): UsePhoneScalingResult<E> {
 	const containerRef = useRef<E>(null)
@@ -43,13 +49,15 @@ export function usePhoneScaling<E extends HTMLElement = HTMLDivElement>({
 					setScale(0)
 					continue
 				}
-				const next = Math.min(availableW / designWidth, availableH / designHeight, maxScale)
+				const scalableW = Math.max(0, availableW - fixedWidth)
+				const scalableH = Math.max(0, availableH - fixedHeight)
+				const next = Math.min(scalableW / designWidth, scalableH / designHeight, maxScale)
 				setScale(Number.isFinite(next) ? next : 1)
 			}
 		})
 		observer.observe(node)
 		return () => observer.disconnect()
-	}, [designHeight, designWidth, maxScale, padding])
+	}, [designHeight, designWidth, fixedHeight, fixedWidth, maxScale, padding])
 
 	return { containerRef, scale, width: designWidth, height: designHeight }
 }

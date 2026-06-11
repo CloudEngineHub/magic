@@ -24,6 +24,16 @@ export interface FilePreviewPolicy {
 	readonly?: boolean
 }
 
+export interface WebsitePreset {
+	id: string
+	title?: string
+	titleKey?: string
+	url: string
+	description?: string
+	descriptionKey?: string
+	icon?: "nano-banana-pro" | "gpt-image-2"
+}
+
 // File item interface
 export interface FileItem {
 	file_id: string
@@ -41,6 +51,7 @@ export interface FileItem {
 	display_config?: {
 		type?: "slide" | "design" | "dashboard" | "audio" | "video" | string
 		name?: string
+		description?: string
 		previewPolicy?: FilePreviewPolicy
 	}
 	file_size?: number
@@ -161,6 +172,7 @@ export interface FilesViewerRef {
 	// Playback tab相关方法
 	openPlaybackTab: (options?: { toolData?: any; forceActivate?: boolean }) => void
 	closePlaybackTab: () => void
+	openWebsiteTab: (preset: WebsitePreset) => void
 }
 
 // Tab component props

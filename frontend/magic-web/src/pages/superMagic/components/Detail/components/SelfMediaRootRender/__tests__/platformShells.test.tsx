@@ -4,14 +4,21 @@ import { describe, expect, it, vi } from "vitest"
 import type { ReactElement } from "react"
 import RednoteShell from "../platforms/rednote/RednoteShell"
 import InstagramShell from "../platforms/instagram/InstagramShell"
+import { WechatCoverPhonePanel } from "../platforms/wechat-official-accounts/WechatCoverPhonePanel"
 import type { SelfMediaPost, SelfMediaView } from "../types"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { createTestStore, wrapWithStore } from "./testStoreHelpers"
 import type { StoreSeed } from "./testStoreHelpers"
 import type { SelfMediaPlatform } from "../../../types"
 
-const { addFileToCurrentChat } = vi.hoisted(() => ({
+const { addFileToCurrentChat, usePhoneScalingMock } = vi.hoisted(() => ({
 	addFileToCurrentChat: vi.fn(),
+	usePhoneScalingMock: vi.fn(() => ({
+		containerRef: { current: null },
+		scale: 1,
+		width: 375,
+		height: 812,
+	})),
 }))
 
 vi.mock("@/pages/superMagic/utils/topics", () => ({
@@ -102,6 +109,10 @@ vi.mock("../components/ExportPreviewDialog", () => ({
 		open ? <div data-testid="self-media-export-dialog" /> : null,
 }))
 
+vi.mock("../components/CardVersionHistoryButton", () => ({
+	CardVersionHistoryButton: () => null,
+}))
+
 vi.mock("../components/PostSelector", () => ({
 	__esModule: true,
 	default: ({ onChange }: { onChange?: (index: number) => void }) => (
@@ -126,12 +137,7 @@ vi.mock("../hooks/useExportZip", () => ({
 }))
 
 vi.mock("../hooks/usePhoneScaling", () => ({
-	usePhoneScaling: () => ({
-		containerRef: { current: null },
-		scale: 1,
-		width: 375,
-		height: 812,
-	}),
+	usePhoneScaling: usePhoneScalingMock,
 }))
 
 const DEFAULT_POSTS: SelfMediaPost[] = [
@@ -256,6 +262,57 @@ describe("platform shells", () => {
 			isNewTopic: false,
 			autoFocus: true,
 		})
+	})
+
+	it("reserves width for the Rednote detail action strip when scaling the phone shell", () => {
+		usePhoneScalingMock.mockClear()
+
+		renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} allowEdit />, {
+			view: "detail",
+		})
+
+		expect(usePhoneScalingMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				designWidth: 421,
+				designHeight: 880,
+				fixedWidth: 36,
+			}),
+		)
+	})
+
+	it("aligns the Rednote detail action strip top with the scaled phone shell top", () => {
+		usePhoneScalingMock.mockReturnValueOnce({
+			containerRef: { current: null },
+			scale: 0.8,
+			width: 375,
+			height: 812,
+		})
+
+		renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} allowEdit />, {
+			view: "detail",
+		})
+
+		const actionStrip = screen
+			.getByTestId("red-detail-strip-go-to-edit")
+			.closest(".flex.flex-col")
+
+		expect(actionStrip).toHaveStyle({ marginTop: "88px" })
+	})
+
+	it("centers the WeChat cover phone panel in its available preview area", () => {
+		render(
+			<WechatCoverPhonePanel
+				visible
+				loading={false}
+				error={null}
+				posts={[]}
+				onSelectPost={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("wechat-cover-phone-panel").firstElementChild).toHaveClass(
+			"items-center",
+		)
 	})
 
 	it("adds a scroll card to the current chat from the action strip", () => {

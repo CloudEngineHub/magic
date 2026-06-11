@@ -1,6 +1,7 @@
 import { memo } from "react"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
+import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import type { SelfMediaView } from "../types"
 
 interface ViewTabsProps {
@@ -26,30 +27,27 @@ function ViewTabs({ value, onChange, labels, order, className }: ViewTabsProps) 
 	const visibleOrder = order && order.length > 0 ? order : DEFAULT_ORDER
 
 	return (
-		<div
-			className={cn("inline-flex items-center gap-1 bg-zinc-50/60 p-1 text-xs", className)}
+		<Tabs
+			value={value}
+			onValueChange={(nextView) => onChange(nextView as SelfMediaView)}
+			className={cn("min-w-0 flex-row gap-0", className)}
 			data-testid="self-media-view-tabs"
 		>
-			{visibleOrder.map((view) => {
-				const active = view === value
-				return (
-					<button
-						key={view}
-						type="button"
-						onClick={() => onChange(view)}
-						data-testid={`self-media-view-${view}`}
-						className={cn(
-							"min-w-[72px] px-3 py-1 font-bold transition active:scale-[0.98]",
-							active
-								? "bg-zinc-950 text-white"
-								: "text-muted-foreground hover:bg-primary/[0.06] hover:text-zinc-950",
-						)}
-					>
-						{labels?.[view] || defaultLabels[view]}
-					</button>
-				)
-			})}
-		</div>
+			<TabsList className="h-9 max-w-full justify-start overflow-x-auto rounded-lg bg-muted p-[3px]">
+				{visibleOrder.map((view) => {
+					return (
+						<TabsTrigger
+							key={view}
+							value={view}
+							data-testid={`self-media-view-${view}`}
+							className="min-w-[72px] shrink-0 px-3 text-xs font-medium"
+						>
+							{labels?.[view] || defaultLabels[view]}
+						</TabsTrigger>
+					)
+				})}
+			</TabsList>
+		</Tabs>
 	)
 }
 

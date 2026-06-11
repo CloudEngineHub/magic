@@ -16,11 +16,18 @@ Preset not yet chosen for this post? (mandatory for ALL platforms)
          to shared/presets/<preset>/<preset>.{css,js} via read_files + write_file.
 
 About to create a card-based post (rednote / instagram)?
-└─ create_self_media_post (pass meta and planned cards[]; register_in_project=false
-   if the frontend prompt says the post is already pre-registered; otherwise true)
+└─ Generate complete meta first, including feedLikes, commentCount, 3-5 comments,
+   and optional interactionReference. Then create_self_media_post (pass meta and
+   planned cards[]; register_in_project=false if the frontend prompt says the
+   post is already pre-registered; otherwise true)
+   └─ If platform is rednote: load references/hashtag-library.md first, fill
+      meta.tags as {core, mid, longtail, trend}, keep 5-8 total tags, hard cap
+      10, and confirm auto-generated tags once when the user supplied none.
 
 About to create a wechat-official-accounts post?
-└─ create_self_media_post (pass meta, article, hero_cover, thumbnail_cover;
+└─ Generate complete meta first, including feedLikes, commentCount, time, and
+   3-5 comments as a reference evaluation pool, plus optional interactionReference.
+   Then create_self_media_post (pass meta, article, hero_cover, thumbnail_cover;
    register_in_project=false if the frontend prompt says the post is already
    pre-registered; otherwise true)
 
@@ -31,6 +38,10 @@ Need images for the cards?
     ├─ Real-world photos   -> image_search (batch) + visual_understanding to verify fit
     └─ Save to posts/<post-id>/assets/ (card-local) or shared/ (cross-post)
 
+About to write card copy or WeChat article prose?
+└─ Load references/human-writing-style.md, build the human-writing brief
+   (author voice, target reader, reader action, evidence), then draft.
+
 Need to write card HTML?
 └─ write_file on posts/<post-id>/cards/<name>.html; link preset CSS/JS when applicable.
 
@@ -40,6 +51,12 @@ Need to write WeChat article HTML?
 Need to tweak post meta or card order?
 ├─ Yes -> edit_file on posts/<id>/post.json
 └─ No  -> continue
+
+Finished writing final cards/article?
+└─ Run the human-writing self-check from references/human-writing-style.md.
+   Remove AI 通稿味 or 假人味, then re-check post.json.meta. If the final
+   angle changed, update feedTitle, feedLikes, commentCount, comments,
+   tags, and interactionReference to match.
 
 Need to rename/reorder the project-level posts index?
 └─ edit_file on magic.project.js, keep the JSONP wrapper intact. Posts live under

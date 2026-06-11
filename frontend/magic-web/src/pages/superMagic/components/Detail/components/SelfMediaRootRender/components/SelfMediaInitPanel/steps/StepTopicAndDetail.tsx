@@ -29,6 +29,9 @@ import {
 	TooltipContent,
 	TooltipProvider,
 } from "@/components/shadcn-ui/tooltip"
+import { Badge } from "@/components/shadcn-ui/badge"
+import { Button } from "@/components/shadcn-ui/button"
+import { Input } from "@/components/shadcn-ui/input"
 import AiTopicAssistant from "../components/ai/AiTopicAssistant"
 import ArticleCard from "../components/article/ArticleCard"
 import InlineVoiceButton from "../components/ui/InlineVoiceButton"
@@ -200,18 +203,18 @@ export default function StepTopicAndDetail({
 	)
 
 	return (
-		<div className="mx-auto max-w-5xl space-y-10 py-8">
+		<div className="mx-auto max-w-5xl space-y-6 px-3 py-6 sm:px-4 sm:py-8">
 			{/* Page header: text + illustration in a stable two-column grid */}
-			<div className="border-b border-dashed border-zinc-950/10 px-1 pb-6">
+			<div className="rounded-lg border bg-card p-4 shadow-xs sm:p-5">
 				<div className="grid items-center gap-6 sm:grid-cols-[minmax(0,1fr)_11rem] sm:gap-8 md:grid-cols-[minmax(0,1fr)_13rem]">
 					<div className="space-y-2">
-						<span className="inline-flex bg-primary/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.22em] text-zinc-950">
+						<Badge variant="secondary" className="rounded-md">
 							Creative Brainstorming
-						</span>
-						<h2 className="text-2xl font-black tracking-tight text-foreground">
+						</Badge>
+						<h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
 							{t("detail.selfMedia.initPanel.stepTopic.title", "选题与内容大纲规划")}
 						</h2>
-						<p className="max-w-lg text-xs font-medium leading-relaxed text-muted-foreground">
+						<p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
 							{t(
 								"detail.selfMedia.initPanel.stepTopic.subtitle",
 								"由 AI 智能规划，或手动添加定制大纲工作流",
@@ -233,48 +236,45 @@ export default function StepTopicAndDetail({
 
 			{/* 2. BOTTOM SECTION: Elegant Left-Right split master-detail editor */}
 			{articles.length === 0 ? (
-				<div className="flex flex-col items-center justify-center space-y-5 border-y border-dashed border-zinc-950/15 bg-white px-4 py-24 text-center">
-					<div className="flex h-14 w-12 items-center justify-center bg-primary/20 text-zinc-950">
+				<div className="flex flex-col items-center justify-center space-y-5 rounded-lg border bg-card px-4 py-16 text-center shadow-xs sm:py-20">
+					<div className="flex h-12 w-12 items-center justify-center rounded-md bg-muted text-muted-foreground">
 						<Inbox size={22} />
 					</div>
 					<div className="space-y-1.5">
-						<h3 className="text-sm font-bold text-zinc-950">暂无选题内容</h3>
-						<p className="max-w-xs text-xs font-bold leading-relaxed text-muted-foreground">
-							推荐在上方使用 <strong className="text-black">【AI 选题助手】</strong>
+						<h3 className="text-sm font-semibold text-foreground">暂无选题内容</h3>
+						<p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
+							推荐在上方使用 <strong className="text-foreground">AI 选题助手</strong>
 							一键激发多维度的热点选题，或者点击下方一键手动创建。
 						</p>
 					</div>
-					<button
-						type="button"
-						className="flex cursor-pointer items-center gap-2 bg-zinc-950 px-5 py-2.5 text-xs font-black text-white transition-all hover:bg-zinc-900 active:scale-[0.98]"
-						onClick={handleAdd}
-					>
+					<Button type="button" onClick={handleAdd}>
 						<Plus size={14} />
 						<span>手动创建首个大纲</span>
-					</button>
+					</Button>
 				</div>
 			) : (
 				<div className="grid min-h-[550px] grid-cols-1 items-start gap-8 lg:grid-cols-12">
 					{/* Left column (Master Index List) - col-span-4 */}
 					<div
 						className={cn(
-							"flex h-fit flex-col border-r border-zinc-950/10 bg-white transition-all duration-300 lg:sticky lg:top-6",
+							"flex h-fit flex-col rounded-lg border bg-card shadow-xs transition-all duration-300 lg:sticky lg:top-6",
 							isLeftCollapsed
-								? "items-center space-y-3 p-3 pt-0 lg:col-span-1"
-								: "space-y-5 p-5 pt-0 lg:col-span-4",
+								? "items-center space-y-3 p-3 lg:col-span-1"
+								: "space-y-4 p-4 lg:col-span-4",
 						)}
 					>
 						{/* Collapsed: narrow strip with navigation dots */}
 						{isLeftCollapsed && (
 							<div className="flex flex-col items-center gap-3">
-								<button
+								<Button
 									type="button"
+									variant="ghost"
+									size="icon-sm"
 									title="展开选题看板"
-									className="flex h-7 w-7 cursor-pointer items-center justify-center bg-zinc-100 text-zinc-950 transition-all hover:bg-zinc-200"
 									onClick={() => setIsLeftCollapsed(false)}
 								>
 									<ChevronRight size={13} />
-								</button>
+								</Button>
 								<div className="mt-1 flex flex-col items-center gap-2">
 									{articles.map((article, idx) => (
 										<button
@@ -290,7 +290,7 @@ export default function StepTopicAndDetail({
 											className={cn(
 												"h-2 w-2 cursor-pointer rounded-full transition-all duration-300",
 												idx === safeActiveIndex
-													? "scale-125 bg-zinc-950"
+													? "scale-125 bg-primary"
 													: "bg-zinc-200 hover:bg-zinc-300",
 											)}
 										/>
@@ -301,11 +301,11 @@ export default function StepTopicAndDetail({
 						{/* Navigator Header */}
 						<div
 							className={cn(
-								"flex items-center justify-between border-b border-zinc-950/10 pb-3 [container-type:inline-size]",
+								"flex items-center justify-between border-b pb-3 [container-type:inline-size]",
 								isLeftCollapsed && "hidden",
 							)}
 						>
-							<span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-zinc-950">
+							<span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
 								<Layers size={13} className="text-primary" />
 								<span className="hidden [@container(min-width:160px)]:inline">
 									选题看板 ({articles.length})
@@ -318,13 +318,15 @@ export default function StepTopicAndDetail({
 								<div className="flex items-center gap-1.5">
 									<Tooltip>
 										<TooltipTrigger asChild>
-											<button
+											<Button
 												type="button"
-												className="flex h-6 w-6 cursor-pointer items-center justify-center bg-zinc-100 text-zinc-950 transition-all hover:bg-zinc-200"
+												variant="ghost"
+												size="icon-sm"
+												className="size-7"
 												onClick={() => setIsLeftCollapsed(true)}
 											>
 												<ChevronLeft size={12} />
-											</button>
+											</Button>
 										</TooltipTrigger>
 										<TooltipContent>
 											<p className="text-xs font-normal">收起看板</p>
@@ -332,16 +334,17 @@ export default function StepTopicAndDetail({
 									</Tooltip>
 									<Tooltip>
 										<TooltipTrigger asChild>
-											<button
+											<Button
 												type="button"
-												className="flex h-6 cursor-pointer items-center gap-1 bg-zinc-950 px-2 text-[10px] font-bold text-white transition-all hover:bg-zinc-900 active:scale-[0.98] [@container(min-width:460px)]:px-3"
+												size="sm"
+												className="h-7 px-2 text-xs [@container(min-width:460px)]:px-3"
 												onClick={handleAdd}
 											>
 												<Plus size={10} />
 												<span className="hidden [@container(min-width:260px)]:inline">
 													添加选题
 												</span>
-											</button>
+											</Button>
 										</TooltipTrigger>
 										<TooltipContent>
 											<p className="text-xs font-normal">添加选题</p>
@@ -364,10 +367,10 @@ export default function StepTopicAndDetail({
 									<div
 										key={idx}
 										className={cn(
-											"group relative cursor-pointer border-l-2 border-transparent px-4 py-3 pr-9 text-left transition-all duration-300",
+											"group relative cursor-pointer rounded-lg border px-4 py-3 pr-9 text-left transition-all duration-300",
 											isActive
-												? "border-zinc-950 bg-zinc-100"
-												: "bg-zinc-50/50 hover:bg-zinc-100/40",
+												? "border-primary bg-primary/5"
+												: "border-border bg-background hover:bg-accent/50",
 										)}
 										onClick={() => {
 											setPendingRemoveIndex(null)
@@ -381,10 +384,10 @@ export default function StepTopicAndDetail({
 											<div className="flex shrink-0 items-center gap-1.5 pt-0.5">
 												<span
 													className={cn(
-														"flex h-6 w-6 items-center justify-center text-xs font-black transition-all duration-300",
+														"flex h-6 w-6 items-center justify-center text-xs font-medium transition-all duration-300",
 														isActive
-															? "bg-zinc-950 text-white"
-															: "bg-white text-zinc-500",
+															? "rounded-md bg-primary text-primary-foreground"
+															: "rounded-md bg-muted text-muted-foreground",
 													)}
 												>
 													{idx + 1}
@@ -401,8 +404,8 @@ export default function StepTopicAndDetail({
 													className={cn(
 														"break-words text-sm leading-snug transition-colors",
 														isActive
-															? "font-extrabold text-zinc-950"
-															: "font-bold text-zinc-700 group-hover:text-zinc-950",
+															? "font-semibold text-foreground"
+															: "font-medium text-muted-foreground group-hover:text-foreground",
 													)}
 												>
 													{item.title || "未命名选题"}
@@ -429,7 +432,7 @@ export default function StepTopicAndDetail({
 											>
 												<button
 													type="button"
-													className="flex items-center gap-0.5 px-2 py-1 text-[10px] font-black text-zinc-500 transition-all hover:bg-zinc-200/80 hover:text-zinc-950"
+													className="flex items-center gap-0.5 rounded-md px-2 py-1 text-[10px] font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
 													onClick={() => setPendingRemoveIndex(null)}
 												>
 													<X size={10} />
@@ -442,7 +445,7 @@ export default function StepTopicAndDetail({
 												</button>
 												<button
 													type="button"
-													className="flex items-center gap-0.5 bg-destructive px-2 py-1 text-[10px] font-black text-white transition-all hover:bg-destructive/90 active:scale-[0.98]"
+													className="flex items-center gap-0.5 rounded-md bg-destructive px-2 py-1 text-[10px] font-medium text-destructive-foreground transition-all hover:bg-destructive/90 active:scale-[0.98]"
 													onClick={() => handleRemove(idx)}
 												>
 													<Check size={10} />
@@ -457,7 +460,7 @@ export default function StepTopicAndDetail({
 										) : (
 											<button
 												type="button"
-												className="absolute right-2 top-2 cursor-pointer p-1.5 text-muted-foreground/35 opacity-0 transition-all duration-200 hover:bg-red-50 hover:text-destructive group-hover:opacity-100"
+												className="absolute right-2 top-2 cursor-pointer rounded-md p-1.5 text-muted-foreground/35 opacity-0 transition-all duration-200 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
 												onClick={(e) => {
 													e.stopPropagation()
 													setPendingRemoveIndex(idx)
@@ -480,18 +483,18 @@ export default function StepTopicAndDetail({
 						)}
 					>
 						{/* Detail Workspace Header - Inline editable title and folder */}
-						<div className="sticky top-0 z-20 flex shrink-0 select-none items-center justify-between gap-4 border-b border-border/15 bg-white pb-4 pt-4 shadow-[0_4px_12px_-6px_rgba(0,0,0,0.08)]">
-							<div className="flex min-w-0 flex-1 items-center gap-2.5">
+						<div className="sticky top-0 z-20 flex shrink-0 select-none items-start justify-between gap-3 rounded-lg border bg-card/95 p-3 shadow-xs backdrop-blur-sm sm:gap-4 sm:p-4">
+							<div className="flex min-w-0 flex-1 items-start gap-2.5">
 								{/* Article Index Badge */}
-								<span className="flex h-7 shrink-0 items-center justify-center bg-primary/20 px-2.5 text-xs font-black text-zinc-950">
+								<Badge className="mt-1 shrink-0 rounded-md">
 									第 {safeActiveIndex + 1} / {articles.length} 篇
-								</span>
+								</Badge>
 
 								{/* Editable Title Input */}
-								<div className="group relative min-w-0 flex-1">
-									<input
+								<div className="group relative min-w-0 flex-1 space-y-2">
+									<Input
 										type="text"
-										className="w-full border-0 border-b border-transparent bg-white px-2.5 py-1 pr-7 text-base font-bold text-foreground outline-none transition-all duration-300 placeholder:text-muted-foreground/30 hover:bg-muted/10 focus:border-zinc-950 focus:bg-primary/[0.03]"
+										className="h-9 pr-8 text-sm font-semibold"
 										placeholder={t(
 											"detail.selfMedia.initPanel.stepTopic.titlePlaceholder",
 											"点击输入选题标题...",
@@ -513,6 +516,25 @@ export default function StepTopicAndDetail({
 											})
 										}
 									/>
+									<div className="flex items-center gap-2 text-xs text-muted-foreground">
+										<FileDown
+											size={13}
+											className="shrink-0 text-muted-foreground"
+										/>
+										<Input
+											type="text"
+											data-testid="self-media-step-topic-folder-name-input"
+											className="h-8 text-xs"
+											placeholder="post-folder"
+											value={articles[safeActiveIndex]?.folderName || ""}
+											onChange={(e) =>
+												onArticleUpdate(safeActiveIndex, {
+													...articles[safeActiveIndex],
+													folderName: e.target.value,
+												})
+											}
+										/>
+									</div>
 								</div>
 							</div>
 

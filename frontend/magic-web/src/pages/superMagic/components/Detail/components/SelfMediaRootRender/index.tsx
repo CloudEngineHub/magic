@@ -1,6 +1,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { observer } from "mobx-react-lite"
 import MagicSpin from "@/components/base/MagicSpin"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { Flex } from "antd"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
@@ -12,8 +13,18 @@ import SelfMediaInitPanel from "./components/SelfMediaInitPanel"
 import SelfMediaHomePage from "./components/SelfMediaHomePage"
 import BrandConfigDialog from "./components/BrandConfigDialog"
 import AICardCreateDialog from "./components/AICardCreateDialog"
+import PrePublishAnalysisDialog from "./components/PrePublishAnalysisDialog"
+import PrePublishAnalysisFloatingButton from "./components/PrePublishAnalysisFloatingButton"
 import { SelfMediaFileStorageService } from "./services/SelfMediaFileStorageService"
+import {
+	resolveSelfMediaPostDirectoryAttachmentItem,
+	resolveSelfMediaPostMentionFileId,
+} from "./services/selfMediaCardChat"
 import { resolveSelfMediaRootPath } from "./services/selfMediaPostPaths"
+import {
+	sendSelfMediaPrePublishAnalysis,
+	type SelfMediaPrePublishAnalysisGoal,
+} from "./services/selfMediaPrePublishAnalysis"
 import type { SelfMediaRootRenderProps } from "./types"
 
 type SelfMediaRootMode = "home" | "create" | "platform"
@@ -96,6 +107,11 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	const [rootMode, setRootMode] = useState<SelfMediaRootMode | null>(null)
 	const [aiCardDialogOpen, setAiCardDialogOpen] = useState(false)
 	const [brandConfigOpen, setBrandConfigOpen] = useState(false)
+	const [analysisTarget, setAnalysisTarget] = useState<{
+		platform: SelfMediaPlatform
+		index: number
+	} | null>(null)
+	const [analysisSubmitting, setAnalysisSubmitting] = useState(false)
 
 	const { platforms, resolvedPlatform: platform, rootLoading } = store
 	const projectId = selectedProject?.id || ""
@@ -156,6 +172,60 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		},
 		[openFileTab],
 	)
+	const handleRequestPrePublishAnalysis = useCallback(
+		(target: { platform: SelfMediaPlatform; index: number }) => {
+			setAnalysisTarget(target)
+		},
+		[],
+	)
+	const handleRequestActivePrePublishAnalysis = useCallback(() => {
+		if (!platform) return
+		handleRequestPrePublishAnalysis({
+			platform: platform as SelfMediaPlatform,
+			index: store.activePostIndex,
+		})
+	}, [handleRequestPrePublishAnalysis, platform, store.activePostIndex])
+	const handleConfirmPrePublishAnalysis = useCallback(
+		async (analysisGoal: SelfMediaPrePublishAnalysisGoal) => {
+			if (!analysisTarget) return
+			setAnalysisSubmitting(true)
+			try {
+				const post =
+					(await store.ensurePlatformPostLoaded(
+						analysisTarget.platform,
+						analysisTarget.index,
+					)) ||
+					store.allPosts.find(
+						(item) =>
+							item.platform === analysisTarget.platform &&
+							item.index === analysisTarget.index,
+					)?.post
+				const mentionFileId = resolveSelfMediaPostMentionFileId(post)
+				const postDirectoryItem = resolveSelfMediaPostDirectoryAttachmentItem(
+					attachmentList,
+					mentionFileId,
+				)
+				if (!post || !postDirectoryItem) {
+					magicToast.error(t("detail.selfMedia.analysis.startFailed"))
+					return
+				}
+				await sendSelfMediaPrePublishAnalysis({
+					selectedProject,
+					platform: analysisTarget.platform,
+					analysisGoal,
+					post,
+					postDirectoryItem,
+				})
+				setAnalysisTarget(null)
+			} catch (error) {
+				console.error("Self-media pre-publish analysis failed:", error)
+				magicToast.error(t("detail.selfMedia.analysis.startFailed"))
+			} finally {
+				setAnalysisSubmitting(false)
+			}
+		},
+		[analysisTarget, attachmentList, selectedProject, store, t],
+	)
 
 	const PlatformComponent = useMemo(() => getPlatformComponent(platform), [platform])
 
@@ -211,6 +281,9 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					onEnsurePostLoaded={handleEnsureHomePostLoaded}
 					onCreateArticle={allowEdit ? handleStartCreateArticle : undefined}
 					onOpenPost={handleOpenPost}
+					onRequestPrePublishAnalysis={
+						allowEdit ? handleRequestPrePublishAnalysis : undefined
+					}
 					onOpenBrandConfig={allowEdit ? handleOpenBrandConfig : undefined}
 					onCreateAICard={allowEdit ? handleOpenAICardCreate : undefined}
 					onOpenAICardFolder={openFileTab ? handleOpenAICardFolder : undefined}
@@ -229,6 +302,14 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					onOpenChange={setAiCardDialogOpen}
 					projectId={projectId}
 					folderPath={folderPath}
+				/>
+				<PrePublishAnalysisDialog
+					open={Boolean(analysisTarget)}
+					onOpenChange={(open) => {
+						if (!open) setAnalysisTarget(null)
+					}}
+					onConfirm={handleConfirmPrePublishAnalysis}
+					loading={analysisSubmitting}
 				/>
 			</div>
 		)
@@ -262,7 +343,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	}
 
 	return (
-		<div className={cn("h-full w-full", className)} data-testid="self-media-root">
+		<div className={cn("relative h-full w-full", className)} data-testid="self-media-root">
 			<Suspense
 				fallback={
 					<Flex justify="center" align="center" className="h-full w-full">
@@ -279,6 +360,17 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					onBackHome={handleBackHome}
 				/>
 			</Suspense>
+			{allowEdit && platform ? (
+				<PrePublishAnalysisFloatingButton onClick={handleRequestActivePrePublishAnalysis} />
+			) : null}
+			<PrePublishAnalysisDialog
+				open={Boolean(analysisTarget)}
+				onOpenChange={(open) => {
+					if (!open) setAnalysisTarget(null)
+				}}
+				onConfirm={handleConfirmPrePublishAnalysis}
+				loading={analysisSubmitting}
+			/>
 		</div>
 	)
 })

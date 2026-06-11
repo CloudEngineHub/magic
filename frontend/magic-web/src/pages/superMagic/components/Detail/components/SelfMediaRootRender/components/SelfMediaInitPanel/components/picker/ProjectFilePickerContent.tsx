@@ -234,7 +234,7 @@ export default function ProjectFilePickerContent({
 					</span>
 					<button
 						type="button"
-						className="w-full bg-primary px-2.5 py-1.5 text-[11px] font-black text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+						className="w-full rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
 						onClick={onConfirm}
 						disabled={loading || pendingCount === 0}
 					>

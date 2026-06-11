@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next"
 import { message } from "antd"
 import { ChevronDown, Eye, History } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/shadcn-ui/badge"
+import { Button } from "@/components/shadcn-ui/button"
 
 import type { SelfMediaBrandRecordService, StoredBrandRecord } from "@/services/selfMedia"
 import type { AttachmentNode } from "../../../../services"
@@ -68,6 +70,8 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 	const [showSaveConfirm, setShowSaveConfirm] = useState(false)
 	const [isBrandFormOpen, setIsBrandFormOpen] = useState(false)
 	const hasAutoFilled = useRef(false)
+	const hasUserEditedBrand = useRef(false)
+	const hasResolvedSavePrompt = useRef(false)
 	const initialized = useRef(false)
 
 	const isBrandAssetsReady = useCallback(() => {
@@ -79,7 +83,13 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 		() => ({
 			checkBeforeNext: () => {
 				if (!isBrandAssetsReady()) return false
-				if (records.length === 0 && author.trim() && brandPosition.trim()) {
+				if (
+					hasUserEditedBrand.current &&
+					!hasResolvedSavePrompt.current &&
+					records.length === 0 &&
+					author.trim() &&
+					brandPosition.trim()
+				) {
 					setShowSaveConfirm(true)
 					return false
 				}
@@ -88,6 +98,27 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 			isBrandAssetsReady,
 		}),
 		[records.length, author, brandPosition, isBrandAssetsReady],
+	)
+
+	const markBrandEdited = useCallback(() => {
+		hasUserEditedBrand.current = true
+		hasResolvedSavePrompt.current = false
+	}, [])
+
+	const handleBrandFieldChange = useCallback(
+		(field: "author" | "brandPosition" | "targetAudience", value: string) => {
+			markBrandEdited()
+			onChange(field, value)
+		},
+		[markBrandEdited, onChange],
+	)
+
+	const handleBrandImagesChange = useCallback(
+		(images: BrandImageItem[]) => {
+			markBrandEdited()
+			onBrandImagesChange(images)
+		},
+		[markBrandEdited, onBrandImagesChange],
 	)
 
 	useEffect(() => {
@@ -115,6 +146,8 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 	}, [brandService, author, brandPosition, onChange])
 
 	const handleConfirmSave = useCallback(() => {
+		hasResolvedSavePrompt.current = true
+		hasUserEditedBrand.current = false
 		if (author.trim() && brandPosition.trim() && brandService) {
 			;(async () => {
 				const saved = await brandService.saveRecord({
@@ -139,12 +172,16 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 	}, [author, brandPosition, targetAudience, brandService, onConfirmNext])
 
 	const handleSkipSave = useCallback(() => {
+		hasResolvedSavePrompt.current = true
+		hasUserEditedBrand.current = false
 		setShowSaveConfirm(false)
 		onConfirmNext?.()
 	}, [onConfirmNext])
 
 	const handleSaveRecord = useCallback(() => {
 		if (!author.trim() || !brandPosition.trim() || !brandService) return
+		hasResolvedSavePrompt.current = true
+		hasUserEditedBrand.current = false
 		;(async () => {
 			const saved = await brandService.saveRecord({
 				author: author.trim(),
@@ -165,6 +202,8 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 
 	const handleSelectRecord = useCallback(
 		(record: BrandRecord) => {
+			hasResolvedSavePrompt.current = true
+			hasUserEditedBrand.current = false
 			onChange("author", record.author)
 			onChange("brandPosition", record.brandPosition)
 			onChange("targetAudience", record.targetAudience)
@@ -186,26 +225,26 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 		<div className="mx-auto max-w-5xl space-y-6 py-4">
 			<WelcomeHero />
 
-			<div className="bg-white">
-				<div className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-950/10 px-1 py-4">
+			<div className="space-y-3">
+				<div className="flex flex-wrap items-start justify-between gap-3 rounded-lg bg-[#434c81]/[0.045] p-4 text-card-foreground">
 					<button
 						type="button"
-						className="flex min-w-0 flex-1 cursor-pointer items-start justify-between gap-4 text-left transition-colors hover:bg-zinc-50/50"
+						className="flex min-w-0 flex-1 cursor-pointer items-start justify-between gap-4 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
 						onClick={() => setIsBrandFormOpen((open) => !open)}
 					>
 						<div className="space-y-1">
 							<div className="space-y-1">
-								<span className="text-[10px] font-bold uppercase tracking-widest text-primary/80">
+								<span className="text-xs font-medium text-muted-foreground">
 									Optional Brand Profile
 								</span>
-								<h2 className="text-lg font-black tracking-tight text-foreground">
+								<h2 className="text-lg font-semibold tracking-tight text-foreground">
 									{t(
 										"detail.selfMedia.initPanel.stepBrand.title",
 										"账号与品牌定位",
 									)}
 								</h2>
 							</div>
-							<p className="text-xs font-medium text-muted-foreground">
+							<p className="text-xs text-muted-foreground">
 								品牌信息选填，用于让 AI 更懂你；也可以直接进入下一步。
 							</p>
 						</div>
@@ -219,14 +258,14 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 					</button>
 
 					{records.length > 0 && (
-						<button
+						<Button
 							type="button"
 							className={cn(
-								"flex items-center gap-1.5 bg-zinc-100 px-3 py-1.5 text-xs font-semibold transition-all duration-300",
-								showRecordPicker
-									? "bg-primary/15 text-zinc-950"
-									: "cursor-pointer text-muted-foreground hover:bg-zinc-200 hover:text-foreground active:scale-[0.98]",
+								"gap-1.5 text-xs",
+								showRecordPicker && "bg-accent text-accent-foreground",
 							)}
+							variant="outline"
+							size="sm"
 							onClick={() => setShowRecordPicker(!showRecordPicker)}
 						>
 							<History size={12} />
@@ -236,10 +275,10 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 									"历史记录",
 								)}
 							</span>
-							<span className="bg-white px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/80">
+							<Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[9px]">
 								{records.length}
-							</span>
-						</button>
+							</Badge>
+						</Button>
 					)}
 				</div>
 
@@ -253,14 +292,14 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 				)}
 
 				{isBrandFormOpen && (
-					<div className="space-y-6 px-1 py-5 animate-in fade-in slide-in-from-top-2">
+					<div className="space-y-6 animate-in fade-in slide-in-from-top-2">
 						<BrandInfoFields
 							author={author}
 							brandPosition={brandPosition}
 							targetAudience={targetAudience}
 							brandImages={brandImages}
-							onChange={onChange}
-							onBrandImagesChange={onBrandImagesChange}
+							onChange={handleBrandFieldChange}
+							onBrandImagesChange={handleBrandImagesChange}
 							fileStorageService={fileStorageService}
 							attachmentList={attachmentList}
 							projectId={projectId}
@@ -270,20 +309,22 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 						/>
 
 						{author.trim() && brandPosition.trim() && brandService && (
-							<div className="flex justify-end border-t border-zinc-100 pt-4 animate-in fade-in">
-								<button
+							<div className="flex justify-end pt-1 animate-in fade-in">
+								<Button
 									type="button"
-									className="flex cursor-pointer items-center gap-1.5 bg-zinc-100 px-4 py-1.5 text-xs font-bold text-zinc-800 transition-all hover:bg-zinc-200 active:scale-[0.98]"
+									variant="outline"
+									size="sm"
+									className="gap-1.5 text-xs"
 									onClick={handleSaveRecord}
 								>
-									<Eye size={12} className="text-zinc-950" />
+									<Eye size={12} />
 									<span>
 										{t(
 											"detail.selfMedia.initPanel.stepBrand.saveAsNew",
 											"保存到我的品牌库",
 										)}
 									</span>
-								</button>
+								</Button>
 							</div>
 						)}
 					</div>

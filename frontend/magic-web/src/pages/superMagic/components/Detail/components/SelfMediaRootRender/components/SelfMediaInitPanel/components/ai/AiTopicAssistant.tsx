@@ -1,12 +1,17 @@
 /**
- * AiTopicAssistant - AI 选题助手面板（高反差科技物理工作台风格）
+ * AiTopicAssistant - AI 选题助手面板
  */
 
 import { useState, useCallback, useRef, useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import { Compass, X, Check } from "lucide-react"
+import { Check, Compass, Loader2, X } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/shadcn-ui/badge"
+import { Button } from "@/components/shadcn-ui/button"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
+import { Input } from "@/components/shadcn-ui/input"
+import { Textarea } from "@/components/shadcn-ui/textarea"
 import AiActionButton from "./AiActionButton"
 import ReferenceFilePicker from "../picker/ReferenceFilePicker"
 import InlineVoiceButton from "../ui/InlineVoiceButton"
@@ -110,18 +115,16 @@ export default observer(function AiTopicAssistant({
 	return (
 		<div
 			className={cn(
-				"relative overflow-hidden border-2 border-zinc-950 bg-[#232321] p-6 text-white transition-all duration-500 ease-in-out",
-				aiGenerating
-					? "border-primary shadow-[0_0_32px_rgba(251,191,36,0.15),4px_4px_0px_0px_#fbbf24]"
-					: "shadow-[4px_4px_0px_0px_#fbbf24] hover:shadow-[6px_6px_0px_0px_#fbbf24]",
+				"relative overflow-hidden rounded-lg border bg-card p-4 shadow-xs transition-all duration-300 ease-in-out sm:p-5",
+				aiGenerating ? "border-primary/50" : "hover:bg-accent/20",
 			)}
 		>
 			{/* Blueprint Grid Texture - Neutralizes flat dead black and adds workdesk depth */}
-			<div className="pointer-events-none absolute inset-0 opacity-[0.03] bg-[linear-gradient(rgba(255,255,255,0.15)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[size:20px_20px]" />
+			<div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-border" />
 
 			{/* High-tech Loading Scanline Shimmer during generation */}
 			{aiGenerating && (
-				<div className="absolute left-0 top-0 h-[3px] w-full overflow-hidden bg-[#2e2e2b]">
+				<div className="absolute left-0 top-0 h-[3px] w-full overflow-hidden bg-primary/10">
 					<div
 						className="h-full bg-gradient-to-r from-transparent via-primary to-transparent animate-shimmer"
 						style={{
@@ -145,15 +148,10 @@ export default observer(function AiTopicAssistant({
 			)}
 
 			{/* Background Ambient Glow */}
-			<div
-				className={cn(
-					"pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl transition-opacity duration-1000",
-					aiGenerating ? "animate-pulse opacity-100" : "opacity-30",
-				)}
-			/>
+			<div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-primary/5 blur-3xl" />
 
 			{/* Large Background Compass Emblem on Top-Left */}
-			<div className="pointer-events-none absolute -left-6 -top-6 text-primary/[0.04] transition-all duration-1000">
+			<div className="pointer-events-none absolute -left-6 -top-6 text-muted-foreground/[0.04] transition-all duration-1000">
 				<Compass
 					className={cn("size-28 -rotate-12", aiGenerating && "animate-spin")}
 					style={{ animationDuration: "12s" }}
@@ -163,14 +161,14 @@ export default observer(function AiTopicAssistant({
 			{/* Header */}
 			<div className="relative mb-5 flex items-center justify-between">
 				<div className="flex items-center gap-2.5">
-					<span className="text-sm font-black uppercase tracking-[0.05em] text-white">
+					<span className="text-sm font-semibold text-foreground">
 						{t(
 							"detail.selfMedia.initPanel.stepTopic.aiAssistantTitle",
 							"让 AI 帮我策划选题与大纲",
 						)}
 					</span>
 					{aiGenerating ? (
-						<span className="inline-flex items-center gap-1.5 bg-primary/20 px-2.5 py-0.5 text-[10px] font-black text-primary">
+						<Badge variant="secondary" className="rounded-md">
 							<span className="relative flex h-1.5 w-1.5">
 								<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
 								<span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
@@ -178,19 +176,19 @@ export default observer(function AiTopicAssistant({
 							{t("detail.selfMedia.initPanel.stepTopic.generating", {
 								defaultValue: "AI 策划中",
 							})}
-						</span>
+						</Badge>
 					) : (
-						<span className="inline-flex items-center bg-[#2c2c29] px-2 py-0.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-							LAB READY
-						</span>
+						<Badge variant="outline" className="rounded-md">
+							Ready
+						</Badge>
 					)}
 				</div>
 			</div>
 
 			{aiGenerating ? (
-				<div className="relative flex w-full items-center justify-between py-4 pl-4 pr-12 min-h-[140px]">
+				<div className="relative grid min-h-[140px] w-full gap-4 py-4 md:grid-cols-[minmax(0,1fr)_9rem]">
 					{/* Left Side: Steps Tracker & Cancel */}
-					<div className="flex flex-col justify-center w-1/2">
+					<div className="flex flex-col justify-center">
 						<div className="flex flex-col gap-3">
 							{generatingTexts.map((text, idx) => {
 								const isActive = idx === generatingStep
@@ -201,10 +199,10 @@ export default observer(function AiTopicAssistant({
 										className={cn(
 											"flex items-center gap-3 transition-all duration-500",
 											isActive
-												? "text-primary translate-x-1"
+												? "translate-x-1 text-primary"
 												: isPast
 													? "text-primary/60"
-													: "text-zinc-600",
+													: "text-muted-foreground",
 										)}
 									>
 										<div className="flex h-5 w-5 items-center justify-center">
@@ -221,7 +219,7 @@ export default observer(function AiTopicAssistant({
 										</div>
 										<span
 											className={cn(
-												"text-sm tracking-wide",
+												"text-sm",
 												isActive ? "font-bold" : "font-medium",
 											)}
 										>
@@ -231,25 +229,25 @@ export default observer(function AiTopicAssistant({
 								)
 							})}
 						</div>
-						<button
+						<Button
 							onClick={handleAbort}
-							className="group mt-6 flex w-fit items-center gap-2 text-xs font-bold text-zinc-500 transition-colors hover:text-white"
+							variant="outline"
+							size="sm"
+							className="mt-6 w-fit"
 						>
-							<div className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-800 transition-colors group-hover:bg-red-500">
-								<X className="h-3.5 w-3.5 text-white" />
-							</div>
+							<X className="h-3.5 w-3.5" />
 							{t("detail.selfMedia.initPanel.stepTopic.stopBtn", "停止")}
-						</button>
+						</Button>
 					</div>
 
 					{/* Right Side: Document Animation */}
-					<div className="relative flex flex-col items-center justify-center pr-8">
+					<div className="relative hidden flex-col items-center justify-center md:flex">
 						{/* Background ambient light for the animation */}
-						<div className="absolute inset-0 bg-primary/5 blur-[40px] rounded-full" />
-						<div className="relative h-28 w-28 shrink-0">
+						<div className="absolute inset-0 rounded-full bg-primary/5 blur-[40px]" />
+						<div className="relative h-24 w-24 shrink-0">
 							<svg
 								viewBox="0 0 100 100"
-								className="h-full w-full text-primary drop-shadow-[0_0_15px_rgba(251,191,36,0.15)]"
+								className="h-full w-full text-primary"
 								style={{ overflow: "visible" }}
 							>
 								<style>
@@ -399,7 +397,7 @@ export default observer(function AiTopicAssistant({
 										width="50"
 										height="70"
 										rx="4"
-										fill="#232321"
+										fill="hsl(var(--card))"
 										stroke="currentColor"
 										strokeWidth="2"
 									/>
@@ -477,7 +475,7 @@ export default observer(function AiTopicAssistant({
 										width="50"
 										height="70"
 										rx="4"
-										fill="#232321"
+										fill="hsl(var(--card))"
 										stroke="currentColor"
 										strokeWidth="2"
 									/>
@@ -552,14 +550,13 @@ export default observer(function AiTopicAssistant({
 									/>
 									{/* Pen / Cursor moving over the front paper */}
 									<g style={{ animation: "pen-move 3s infinite" }}>
+										<circle cx="0" cy="0" r="3" fill="currentColor" />
 										<circle
 											cx="0"
 											cy="0"
-											r="3"
-											fill="currentColor"
-											className="drop-shadow-[0_0_6px_rgba(251,191,36,1)]"
+											r="1.5"
+											fill="hsl(var(--background))"
 										/>
-										<circle cx="0" cy="0" r="1.5" fill="#fff" />
 									</g>
 								</g>
 							</svg>
@@ -568,18 +565,12 @@ export default observer(function AiTopicAssistant({
 				</div>
 			) : (
 				<>
-					{/* Input Area: Crisp, high-contrast, paper-white bar to break the black slab */}
 					<div className="relative mb-5">
-						<div
-							className={cn(
-								"group flex w-full flex-col overflow-hidden border border-zinc-950 bg-white transition-all duration-300 shadow-[2px_2px_0px_0px_#fbbf24]",
-								"focus-within:border-zinc-950 focus-within:shadow-[4px_4px_0px_0px_#fbbf24]",
-							)}
-						>
+						<div className="group flex w-full flex-col overflow-hidden rounded-lg border bg-background shadow-xs transition-all duration-300 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
 							<div className="relative min-h-[80px] px-4 py-2.5">
-								<textarea
+								<Textarea
 									rows={3}
-									className="w-full bg-transparent pr-7 text-sm font-bold text-zinc-900 placeholder:text-zinc-400 focus:outline-none resize-none py-0.5"
+									className="min-h-[80px] resize-none border-0 bg-transparent p-0 pr-7 text-sm shadow-none focus-visible:ring-0"
 									placeholder={t(
 										"detail.selfMedia.initPanel.stepTopic.directionPlaceholder",
 									)}
@@ -600,7 +591,7 @@ export default observer(function AiTopicAssistant({
 								/>
 							</div>
 							{/* Bottom toolbar: reference files + upload trigger */}
-							<div className="flex w-full items-center border-t border-zinc-950/10 bg-white/70 px-3 py-1.5">
+							<div className="flex w-full items-center border-t bg-muted/30 px-3 py-1.5">
 								<ReferenceFilePicker
 									className="w-full"
 									value={referenceFiles}
@@ -614,27 +605,26 @@ export default observer(function AiTopicAssistant({
 
 					{/* Error Box */}
 					{aiError && (
-						<div className="mb-4 flex items-center gap-2 border-l-2 border-red-500 bg-red-950/20 px-3 py-2 text-xs font-bold text-red-400">
-							<div className="h-1.5 w-1.5 rounded-full bg-red-500" />
+						<div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
+							<div className="h-1.5 w-1.5 rounded-full bg-destructive" />
 							<p>{aiError}</p>
 						</div>
 					)}
 
-					{/* Dark subtle divider */}
-					<div className="mb-4 h-[1px] bg-[#2c2c29]" />
+					<div className="mb-4 h-px bg-border" />
 
 					{/* Bottom Toolbar */}
 					<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between transition-all duration-300">
 						<div className="flex items-center gap-2">
-							<p className="flex items-center gap-2 text-xs font-bold text-zinc-400">
+							<p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
 								<span>
 									{t("detail.selfMedia.initPanel.stepTopic.generateCount")}
 								</span>
-								<input
+								<Input
 									type="number"
 									min={1}
 									max={20}
-									className="h-8 w-12 border-0 border-b-2 border-[#2c2c29] bg-[#2c2c29]/60 px-2 text-center text-xs font-black text-primary outline-none transition-colors focus:border-primary"
+									className="h-8 w-14 text-center text-xs"
 									value={topicCount}
 									onChange={(e) =>
 										setTopicCount(
@@ -651,12 +641,12 @@ export default observer(function AiTopicAssistant({
 							</p>
 						</div>
 						<div className="flex flex-wrap items-center gap-4">
-							<label className="flex cursor-pointer select-none items-center gap-2 text-xs font-bold text-zinc-400 transition-colors hover:text-white">
-								<input
-									type="checkbox"
-									className="h-4 w-4 cursor-pointer border-2 border-[#2c2c29] bg-[#2c2c29] text-primary accent-primary transition-all focus:ring-primary"
+							<label className="flex cursor-pointer select-none items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+								<Checkbox
 									checked={generateWithDetails}
-									onChange={(e) => setGenerateWithDetails(e.target.checked)}
+									onCheckedChange={(checked) =>
+										setGenerateWithDetails(checked === true)
+									}
 								/>
 								<span>
 									{t("detail.selfMedia.initPanel.stepTopic.generateWithDetails")}

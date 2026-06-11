@@ -85,7 +85,7 @@ export default observer(function ModelSelector({
 					className={cn(
 						mode === "icon"
 							? "flex items-center gap-1 px-2.5 py-1.5 transition-all hover:opacity-80"
-							: "flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white/80 px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-primary/50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-zinc-300 dark:hover:text-zinc-100",
+							: "flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-xs text-muted-foreground shadow-xs transition-colors hover:border-primary/50 hover:text-foreground dark:bg-input/30",
 						className,
 					)}
 					title="切换模型"
@@ -126,7 +126,7 @@ export default observer(function ModelSelector({
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align="start"
-				className="max-h-[240px] min-w-[190px] overflow-y-auto rounded-xl border border-zinc-200/80 bg-white/95 p-1 shadow-lg backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/95"
+				className="max-h-[240px] min-w-[190px] overflow-y-auto rounded-md border bg-popover p-1 shadow-lg backdrop-blur-md"
 			>
 				{models.map((m) => (
 					<DropdownMenuItem
@@ -134,8 +134,8 @@ export default observer(function ModelSelector({
 						className={cn(
 							"flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors",
 							m.model_id === (selected?.model_id ?? "")
-								? "bg-primary/15 text-zinc-950 dark:text-primary"
-								: "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900",
+								? "bg-primary/10 text-primary"
+								: "text-popover-foreground hover:bg-accent hover:text-accent-foreground",
 						)}
 						onClick={() => {
 							onChange(m.model_id)

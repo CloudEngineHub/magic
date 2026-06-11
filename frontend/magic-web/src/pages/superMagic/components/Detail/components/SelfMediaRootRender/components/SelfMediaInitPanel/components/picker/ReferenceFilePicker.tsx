@@ -358,10 +358,10 @@ export default function ReferenceFilePicker({
 								{value.map((file, index) => (
 									<div
 										key={`${file.name}-${index}`}
-										className="group flex items-center gap-1.5 border-l-2 border-primary/60 bg-primary/10 px-2 py-1 text-zinc-700 transition-colors hover:bg-primary/15"
+										className="group flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-foreground transition-colors hover:bg-accent"
 									>
 										<FileText className="size-3 text-zinc-500" />
-										<span className="max-w-[70px] truncate text-[11px] font-black">
+										<span className="max-w-[70px] truncate text-[11px] font-medium">
 											{file.name}
 										</span>
 										<button

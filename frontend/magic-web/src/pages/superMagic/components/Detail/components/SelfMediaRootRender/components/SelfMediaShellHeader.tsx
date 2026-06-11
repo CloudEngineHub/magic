@@ -2,6 +2,7 @@ import { memo, type ReactNode } from "react"
 import { ChevronLeft, Crosshair, RefreshCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import ExportPanel from "./ExportPanel"
 import PlatformBrandIcon from "./PlatformBrandIcon"
@@ -63,59 +64,64 @@ function SelfMediaShellHeader({
 
 	return (
 		<header
-			className="grid grid-cols-[minmax(14rem,1fr)_auto] items-center gap-3 border-b border-zinc-950/10 bg-white px-4 py-3 max-lg:grid-cols-1 max-lg:items-stretch"
+			className="grid grid-cols-[minmax(14rem,1fr)_auto] items-center gap-3 border-b bg-card/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/90 max-lg:grid-cols-1 max-lg:items-stretch"
 			data-testid="self-media-shell-header"
 		>
 			<div className="flex min-w-0 items-center gap-3" data-testid="self-media-shell-title">
 				{onBackHome ? (
-					<button
+					<Button
 						type="button"
-						className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 bg-zinc-100 px-4 py-2.5 text-xs font-black text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98]"
+						variant="outline"
+						size="sm"
+						className="shrink-0 text-xs"
 						onClick={onBackHome}
 						data-testid="self-media-shell-back-home-button"
 					>
 						<ChevronLeft size={14} />
 						<span>{t("detail.selfMedia.home.backHome")}</span>
-					</button>
+					</Button>
 				) : null}
-				<PlatformBrandIcon platform={platform} className="size-5" />
-				<div className="min-w-0 border-l-2 border-zinc-950 pl-3">
-					<p className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+				<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+					<PlatformBrandIcon
+						platform={platform}
+						className="size-4"
+						testId="self-media-shell-platform-icon"
+					/>
+				</span>
+				<div className="min-w-0">
+					<p className="text-[11px] font-medium text-muted-foreground">
 						{t("detail.selfMedia.home.article")}
 					</p>
 					<h2
-						className="truncate text-sm font-black text-zinc-950"
+						className="truncate text-sm font-semibold text-foreground"
 						data-testid="self-media-shell-platform-title"
 					>
 						{articleTitle}
 					</h2>
 				</div>
 			</div>
-			<div className="flex min-w-0 shrink-0 items-center justify-end gap-3 max-lg:justify-between">
+			<div className="flex min-w-0 shrink-0 items-center justify-end gap-3 max-lg:justify-between max-sm:overflow-x-auto">
 				<ViewTabs
 					value={view}
 					onChange={onChangeView}
 					labels={tabLabels}
 					order={visibleTabs}
 				/>
-				<div className="flex shrink-0 items-center gap-2 border-l border-dashed border-zinc-950/10 pl-3">
+				<div className="flex shrink-0 items-center gap-2 border-l pl-3">
 					{onStartInspector && !inspectorDisabled ? (
 						<Tooltip>
 							<TooltipTrigger asChild>
-								<button
+								<Button
 									type="button"
 									onClick={inspectorActive ? onStopInspector : onStartInspector}
 									data-testid="self-media-shell-inspector-button"
 									aria-label={t("detail.selfMedia.common.inspectElement")}
-									className={cn(
-										"inline-flex cursor-pointer items-center justify-center p-2.5 transition-all active:scale-[0.98]",
-										inspectorActive
-											? "bg-zinc-950 text-white"
-											: "bg-zinc-100 text-zinc-950 hover:bg-zinc-200",
-									)}
+									variant={inspectorActive ? "default" : "outline"}
+									size="icon-sm"
+									className={cn(inspectorActive && "text-primary-foreground")}
 								>
 									<Crosshair className="h-3.5 w-3.5" />
-								</button>
+								</Button>
 							</TooltipTrigger>
 							<TooltipContent>
 								{t("detail.selfMedia.common.inspectElement")}
@@ -124,16 +130,17 @@ function SelfMediaShellHeader({
 					) : null}
 					<Tooltip>
 						<TooltipTrigger asChild>
-							<button
+							<Button
 								type="button"
 								disabled={refreshDisabled}
 								onClick={onRefresh}
 								data-testid={refreshTestId}
 								aria-label={refreshLabel}
-								className="inline-flex cursor-pointer items-center justify-center bg-zinc-100 p-2.5 text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+								variant="outline"
+								size="icon-sm"
 							>
 								<RefreshCw className="h-3.5 w-3.5" />
-							</button>
+							</Button>
 						</TooltipTrigger>
 						<TooltipContent>{refreshLabel}</TooltipContent>
 					</Tooltip>

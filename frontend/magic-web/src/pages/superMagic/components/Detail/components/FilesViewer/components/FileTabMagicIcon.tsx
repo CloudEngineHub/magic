@@ -7,6 +7,8 @@ import {
 } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { memo, useMemo } from "react"
 import type { FileItem, TabItem } from "../types"
+import { Globe2 } from "lucide-react"
+import { isWebsiteTab } from "../utils/websiteTabs"
 
 interface FileTabMagicIconProps {
 	tab: TabItem
@@ -46,6 +48,10 @@ export const FileTabMagicIcon = memo(function FileTabMagicIcon({
 
 	if (isPlayback) {
 		return <MagicFileIcon type="replay" size={size} className={className} />
+	}
+
+	if (isWebsiteTab(tab)) {
+		return <Globe2 size={size} className={className} />
 	}
 
 	if (fd.display_config?.type === "custom") {

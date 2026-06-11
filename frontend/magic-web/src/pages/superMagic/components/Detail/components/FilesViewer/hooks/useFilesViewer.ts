@@ -6,7 +6,7 @@ import { ProjectStateRepository } from "@/models/config/repositories/SuperProjec
 import { useOrganization } from "@/models/user/hooks/useOrganization"
 
 // Types
-import type { FilesViewerProps, TabItem, FileItem, TabAction } from "../types"
+import type { FilesViewerProps, TabItem, FileItem, TabAction, WebsitePreset } from "../types"
 import { TabActionType } from "../types"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
@@ -27,6 +27,7 @@ import {
 	shouldSyncWithAttachments,
 } from "./previewPolicy"
 import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+import { buildWebsiteTab, isWebsiteTab } from "../utils/websiteTabs"
 
 function normalizeFileId(value: unknown): string | undefined {
 	if (typeof value === "string" && value.trim()) return value.trim()
@@ -542,6 +543,17 @@ export function useFilesViewer(props: FilesViewerProps) {
 		dispatchTabs({ type: TabActionType.ADD_TAB, payload: { tab: newTab } })
 	})
 
+	const openWebsiteTab = useMemoizedFn((preset: WebsitePreset) => {
+		if (playbackTab?.active) {
+			updatePlaybackTab({ active: false })
+		}
+
+		dispatchTabs({
+			type: TabActionType.ADD_TAB,
+			payload: { tab: buildWebsiteTab(preset) },
+		})
+	})
+
 	const closeFileTab = useMemoizedFn((tabId: string) => {
 		// 如果是关闭playback tab
 		if (tabId === PLAYBACK_TAB_ID) {
@@ -950,7 +962,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 								if (!file && attachments) {
 									file = findItemInAttachments(attachments, tab.id)
 								}
-								const isDeleted = !file
+								const isCachedWebsiteTab = isWebsiteTab(tab)
+								const isDeleted = !file && !isCachedWebsiteTab
 
 								let displayConfig
 								// 这里需要兼容一下缓存的tab，用的是旧的 metadata 字段
@@ -1040,15 +1053,17 @@ export function useFilesViewer(props: FilesViewerProps) {
 									)
 								}
 
-								// 通过 PubSub 通知 Workspace 组件更新 activeFileId（activeFileId = activeTabId）
-								console.log(
-									"🟢 Restoring cached activeFileId (from activeTabId):",
-									cachedState.fileState.activeTabId,
-								)
-								pubsub.publish(
-									PubSubEvents.Update_Active_File_Id,
-									cachedState.fileState.activeTabId,
-								)
+								// 网页 tab 可恢复为 active，但不是项目文件，不向外层同步 activeFileId。
+								if (!isWebsiteTab(activeTab)) {
+									console.log(
+										"🟢 Restoring cached activeFileId (from activeTabId):",
+										cachedState.fileState.activeTabId,
+									)
+									pubsub.publish(
+										PubSubEvents.Update_Active_File_Id,
+										cachedState.fileState.activeTabId,
+									)
+								}
 							} else {
 								// 激活第一个tab
 								if (processedTabs[0]) {
@@ -1056,11 +1071,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 										type: TabActionType.SWITCH_TAB,
 										payload: { tabId: processedTabs[0].id },
 									})
-									// 通知 Workspace 更新 activeFileId
-									pubsub.publish(
-										PubSubEvents.Update_Active_File_Id,
-										processedTabs[0].id,
-									)
+									// 网页 tab 可恢复为 active，但不是项目文件，不向外层同步 activeFileId。
+									if (!isWebsiteTab(processedTabs[0])) {
+										pubsub.publish(
+											PubSubEvents.Update_Active_File_Id,
+											processedTabs[0].id,
+										)
+									}
 								}
 							}
 						} else {
@@ -1070,11 +1087,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 									type: TabActionType.SWITCH_TAB,
 									payload: { tabId: processedTabs[0].id },
 								})
-								// 通知 Workspace 更新 activeFileId
-								pubsub.publish(
-									PubSubEvents.Update_Active_File_Id,
-									processedTabs[0].id,
-								)
+								// 网页 tab 可恢复为 active，但不是项目文件，不向外层同步 activeFileId。
+								if (!isWebsiteTab(processedTabs[0])) {
+									pubsub.publish(
+										PubSubEvents.Update_Active_File_Id,
+										processedTabs[0].id,
+									)
+								}
 							}
 						}
 					}
@@ -1299,6 +1318,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						display_filename: tab.fileData.display_filename,
 						file_extension: tab.fileData.file_extension,
 						relative_file_path: tab.fileData.relative_file_path,
+						url: tab.fileData.url,
 						/** 刷新恢复后解析 custom icon、合并 metadata 等需要 */
 						parent_id: tab.fileData.parent_id,
 						is_directory: tab.fileData.is_directory,
@@ -1390,7 +1410,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
-	const activeTabFileId = activeTab?.fileData?.file_id || null
+	const activeTabFileId =
+		activeTab && !isWebsiteTab(activeTab) ? activeTab.fileData.file_id : null
 	const activeTabId = activeTab?.id
 
 	// Notify parent when active tab changes
@@ -1474,6 +1495,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 		// Tab operations
 		openFileTab,
+		openWebsiteTab,
 		closeFileTab,
 		switchToTab,
 		clearAllTabs,

@@ -571,13 +571,13 @@ function MaterialAttachmentRow({
 	return (
 		<div
 			className={cn(
-				"group flex gap-2 border-l-2 border-zinc-950/10 bg-background transition-all hover:border-primary/50 hover:bg-primary/[0.02]",
+				"group flex gap-2 rounded-lg border bg-background shadow-xs transition-all hover:border-primary/40 hover:bg-accent/30",
 				compact ? "p-2" : "gap-3 p-3",
 			)}
 		>
 			<div
 				className={cn(
-					"relative flex shrink-0 items-center justify-center overflow-hidden bg-muted/50",
+					"relative flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/50",
 					compact ? "h-10 w-10" : "h-16 w-16",
 				)}
 			>

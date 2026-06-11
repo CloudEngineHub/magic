@@ -62,7 +62,9 @@ export const RednoteShellPhoneViewPanel = observer(function RednoteShellPhoneVie
 	const { loading, error, view, activePost, activeCardIndex } = store
 	const [activeCardExternalRefreshVersion, setActiveCardExternalRefreshVersion] = useState(0)
 	const phoneShellLayoutWidth = REDNOTE_PHONE_WIDTH + 28
+	const phoneShellLayoutHeight = REDNOTE_PHONE_HEIGHT + 28
 	const actionStripMarginLeft = Math.round(8 + (phoneShellLayoutWidth * (scale - 1)) / 2)
+	const actionStripMarginTop = Math.round((phoneShellLayoutHeight * (1 - scale)) / 2)
 
 	return (
 		<div
@@ -135,8 +137,11 @@ export const RednoteShellPhoneViewPanel = observer(function RednoteShellPhoneVie
 					</PhoneShell>
 					{view === "detail" && activePost && (
 						<CardActionStrip
-							className="mt-6 shrink-0"
-							style={{ marginLeft: actionStripMarginLeft }}
+							className="shrink-0"
+							style={{
+								marginLeft: actionStripMarginLeft,
+								marginTop: actionStripMarginTop,
+							}}
 							allowEdit={allowEdit}
 							onAddToCurrentChat={
 								onAddDetailCardToCurrentChat
