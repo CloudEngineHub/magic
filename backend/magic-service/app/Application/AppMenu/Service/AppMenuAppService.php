@@ -161,7 +161,7 @@ class AppMenuAppService extends AbstractKernelAppService
      */
     private function attachVisibilityConfigs(MagicUserAuthorization $authorization, array $menus): void
     {
-        $dataIsolation = $this->createPermissionDataIsolationFromAuthorization($authorization);
+        $visibilityConfigs = $this->getVisibilityConfigs($authorization, $menus);
 
         foreach ($menus as $menu) {
             // 官方菜单没有成员/部门可见性配置；非官方组织对官方菜单的差异只来自 override 表。
@@ -170,11 +170,7 @@ class AppMenuAppService extends AbstractKernelAppService
                 continue;
             }
 
-            $menu->setVisibilityConfig($this->resourceVisibilityDomainService->getVisibilityConfig(
-                $dataIsolation,
-                ResourceType::APPLICATION_MENU,
-                (string) $menu->getId()
-            ));
+            $menu->setVisibilityConfig($visibilityConfigs[(string) $menu->getId()] ?? $this->createNoneVisibleConfig());
         }
     }
 
@@ -184,9 +180,8 @@ class AppMenuAppService extends AbstractKernelAppService
      */
     private function filterVisibleMenus(MagicUserAuthorization $authorization, array $menus): array
     {
-        $dataIsolation = $this->createPermissionDataIsolationFromAuthorization($authorization);
         $specificResourceIds = [];
-        $visibilityByMenuId = [];
+        $visibilityByMenuId = $this->getVisibilityConfigs($authorization, $menus);
 
         // 先收集需要精确匹配的自建菜单，避免对每个菜单逐条做用户命中查询。
         foreach ($menus as $menu) {
@@ -195,26 +190,22 @@ class AppMenuAppService extends AbstractKernelAppService
             }
 
             $resourceCode = (string) $menu->getId();
-            $visibilityConfig = $this->resourceVisibilityDomainService->getVisibilityConfig(
-                $dataIsolation,
-                ResourceType::APPLICATION_MENU,
-                $resourceCode
-            );
-            $visibilityByMenuId[$resourceCode] = $visibilityConfig;
+            $visibilityConfig = $visibilityByMenuId[$resourceCode] ?? $this->createNoneVisibleConfig();
 
             if ($visibilityConfig->getVisibilityType() === VisibilityType::SPECIFIC) {
                 $specificResourceIds[] = $resourceCode;
             }
         }
 
-        $accessibleSpecificResourceIds = $specificResourceIds === []
-            ? []
-            : $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
-                $dataIsolation,
+        $accessibleSpecificResourceIds = [];
+        if ($specificResourceIds !== []) {
+            $accessibleSpecificResourceIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
+                $this->createPermissionDataIsolationFromAuthorization($authorization),
                 $authorization->getId(),
                 ResourceType::APPLICATION_MENU,
                 $specificResourceIds
             );
+        }
 
         $accessibleSpecificResourceIds = array_flip($accessibleSpecificResourceIds);
 
@@ -254,6 +245,40 @@ class AppMenuAppService extends AbstractKernelAppService
         $visibilityConfig->setVisibilityType(VisibilityType::ALL);
 
         return $visibilityConfig;
+    }
+
+    private function createNoneVisibleConfig(): VisibilityConfig
+    {
+        $visibilityConfig = new VisibilityConfig();
+        $visibilityConfig->setVisibilityType(VisibilityType::NONE);
+
+        return $visibilityConfig;
+    }
+
+    /**
+     * @param array<AppMenuEntity> $menus
+     * @return array<string, VisibilityConfig>
+     */
+    private function getVisibilityConfigs(MagicUserAuthorization $authorization, array $menus): array
+    {
+        $resourceCodes = [];
+        foreach ($menus as $menu) {
+            if ($menu->isOfficial() || ! $menu->getId()) {
+                continue;
+            }
+
+            $resourceCodes[] = (string) $menu->getId();
+        }
+
+        if ($resourceCodes === []) {
+            return [];
+        }
+
+        return $this->resourceVisibilityDomainService->getVisibilityConfigs(
+            $this->createPermissionDataIsolationFromAuthorization($authorization),
+            ResourceType::APPLICATION_MENU,
+            $resourceCodes
+        );
     }
 
     private function createPermissionDataIsolationFromAuthorization(MagicUserAuthorization $authorization): PermissionDataIsolation

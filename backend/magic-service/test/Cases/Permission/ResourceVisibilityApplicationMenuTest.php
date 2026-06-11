@@ -83,6 +83,27 @@ class ResourceVisibilityApplicationMenuTest extends HttpTestCase
         $this->assertSame($this->principalId, $entities[0]->getPrincipalId());
     }
 
+    public function testListByResourcesReturnsMatchedResourceRecords(): void
+    {
+        $secondResourceCode = $this->resourceCode . '_second';
+        $this->insertVisibility($this->organizationCode);
+        $this->insertVisibility($this->organizationCode, $secondResourceCode);
+        $this->insertVisibility($this->anotherOrganizationCode, $secondResourceCode);
+
+        $entities = $this->repository->listByResources(
+            $this->createDataIsolation($this->organizationCode),
+            ResourceType::APPLICATION_MENU,
+            [$this->resourceCode, $secondResourceCode, 'missing_resource']
+        );
+        $resourceCodes = array_map(static fn (ResourceVisibilityEntity $entity): string => $entity->getResourceCode(), $entities);
+        sort($resourceCodes);
+
+        $expectedResourceCodes = [$secondResourceCode, $this->resourceCode];
+        sort($expectedResourceCodes);
+
+        $this->assertSame($expectedResourceCodes, $resourceCodes);
+    }
+
     public function testDeleteByResourceCodeOnlyDeletesCurrentOrganizationRecords(): void
     {
         $this->insertVisibility($this->organizationCode);
@@ -103,14 +124,14 @@ class ResourceVisibilityApplicationMenuTest extends HttpTestCase
         $this->assertSame($this->anotherOrganizationCode, $remaining[0]->organization_code);
     }
 
-    private function insertVisibility(string $organizationCode): void
+    private function insertVisibility(string $organizationCode, ?string $resourceCode = null): void
     {
         $entity = new ResourceVisibilityEntity();
         $entity->setOrganizationCode($organizationCode);
         $entity->setPrincipalType(PrincipalType::USER);
         $entity->setPrincipalId($this->principalId);
         $entity->setResourceType(ResourceType::APPLICATION_MENU);
-        $entity->setResourceCode($this->resourceCode);
+        $entity->setResourceCode($resourceCode ?? $this->resourceCode);
         $entity->setCreator('resource_visibility_test');
         $entity->setModifier('resource_visibility_test');
         $entity->prepareForCreation();
