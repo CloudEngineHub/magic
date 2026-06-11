@@ -8,6 +8,10 @@ const mockSaveSelfMediaPostAutoSyncTask = vi.hoisted(() => vi.fn())
 const mockDisableSelfMediaPostAutoSyncTask = vi.hoisted(() => vi.fn())
 const mockToastError = vi.hoisted(() => vi.fn())
 const mockLoadPostOpsSource = vi.hoisted(() => vi.fn())
+const mockLoadPostOpsMetrics = vi.hoisted(() => vi.fn())
+const mockLoadPostOpsComments = vi.hoisted(() => vi.fn())
+const mockLoadPostOpsReview = vi.hoisted(() => vi.fn())
+const mockLoadPostOpsReviewHtml = vi.hoisted(() => vi.fn())
 const mockSavePostOpsSource = vi.hoisted(() => vi.fn())
 const mockAICardCreateDialogRender = vi.hoisted(() => vi.fn())
 const mockLanguageModel = vi.hoisted(() => ({
@@ -68,6 +72,36 @@ vi.mock("react-dom", async () => {
 	}
 })
 
+vi.mock("@/components/tiptap-templates/simple/simple-editor", async () => {
+	const React = await vi.importActual<typeof import("react")>("react")
+	return {
+		SimpleEditor: ({ content }: { content?: string }) =>
+			React.createElement(
+				"div",
+				{ "data-testid": "simple-editor-markdown-preview" },
+				content,
+			),
+	}
+})
+
+vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer", async () => {
+	const React = await vi.importActual<typeof import("react")>("react")
+	return {
+		default: React.forwardRef(function MockIsolatedHTMLRenderer(
+			props: {
+				relative_file_path?: string
+			},
+			ref,
+		) {
+			void ref
+			return React.createElement("div", {
+				"data-testid": "self-media-ops-review-html-renderer",
+				"data-relative-file-path": props.relative_file_path,
+			})
+		}),
+	}
+})
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, options?: Record<string, unknown>) => {
@@ -84,7 +118,43 @@ vi.mock("react-i18next", () => ({
 						"detail.selfMedia.home.emptyDesc": "Create your first article",
 						"detail.selfMedia.home.articleCount": "1 article",
 						"detail.selfMedia.home.postReviewCard": "Create review",
+						"detail.selfMedia.home.openOpsReview": "View review",
 						"detail.selfMedia.home.postReviewCardName": "Review: {{title}}",
+						"detail.selfMedia.opsReview.title": "Operations review",
+						"detail.selfMedia.opsReview.close": "Close review",
+						"detail.selfMedia.opsReview.sync": "Sync data",
+						"detail.selfMedia.opsReview.edit": "Edit data",
+						"detail.selfMedia.opsReview.summaryTitle": "Performance brief",
+						"detail.selfMedia.opsReview.metricsTitle": "Core metrics",
+						"detail.selfMedia.opsReview.trendTitle": "Sync trend",
+						"detail.selfMedia.opsReview.impactTitle": "Impact map",
+						"detail.selfMedia.opsReview.qualityTitle": "Quality mix",
+						"detail.selfMedia.opsReview.funnelTitle": "Traffic efficiency",
+						"detail.selfMedia.opsReview.commentsTitle": "Audience feedback",
+						"detail.selfMedia.opsReview.actionsTitle": "Next actions",
+						"detail.selfMedia.opsReview.reviewTitle": "Review report",
+						"detail.selfMedia.opsReview.empty": "No data yet",
+						"detail.selfMedia.opsReview.engagementRate": "Engagement rate",
+						"detail.selfMedia.opsReview.conversionSignal": "Comment intent",
+						"detail.selfMedia.opsReview.kpiHints.reach": "Reach scale",
+						"detail.selfMedia.opsReview.kpiHints.preference": "Preference",
+						"detail.selfMedia.opsReview.kpiHints.spread": "Distribution",
+						"detail.selfMedia.opsReview.kpiHints.intent": "Intent",
+						"detail.selfMedia.opsReview.kpiHints.efficiency": "Efficiency",
+						"detail.selfMedia.opsReview.brief.reachTrend": "Reads change",
+						"detail.selfMedia.opsReview.brief.efficiency": "Efficiency",
+						"detail.selfMedia.opsReview.brief.intent": "Intent",
+						"detail.selfMedia.opsReview.brief.consulting":
+							"{{count}} consulting signal(s)",
+						"detail.selfMedia.opsReview.funnel.reach": "Reach",
+						"detail.selfMedia.opsReview.funnel.engagement": "Engagement",
+						"detail.selfMedia.opsReview.funnel.intent": "Intent",
+						"detail.selfMedia.opsReview.sourceStatus.fetched": "Fetched",
+						"detail.selfMedia.opsReview.sourceStatus.pending": "Pending",
+						"detail.selfMedia.opsReview.sourceStatus.failed": "Failed",
+						"detail.selfMedia.opsReview.sourceStatus.unknown": "Not fetched",
+						"detail.selfMedia.opsReview.deltaReads": "Reads change",
+						"detail.selfMedia.opsReview.reviewHtmlTitle": "HTML review report",
 						"detail.selfMedia.home.opsData": "Data",
 						"detail.selfMedia.home.dataSyncNow": "Sync now",
 						"detail.selfMedia.home.dataOverview": "Data overview",
@@ -113,7 +183,21 @@ vi.mock("react-i18next", () => ({
 						"detail.selfMedia.opsRefresh.missingSourceUrl":
 							"Please bind the published article URL first.",
 						"detail.selfMedia.opsRefresh.startFailed":
-							"Failed to start publish ingest. Please try again later.",
+							"Failed to start data sync. Please try again later.",
+						"detail.selfMedia.opsRefresh.startFailedWithReason":
+							"Failed to start data sync: {{reason}}",
+						"detail.selfMedia.analysis.startFailedWithReason":
+							"Failed to start pre-publish diagnosis: {{reason}}",
+						"detail.selfMedia.errors.noProjectSelected":
+							"Current project information is missing. Refresh the page and try again.",
+						"detail.selfMedia.errors.postDirectoryMissing":
+							"Could not find the current post folder. Refresh the file list and try again.",
+						"detail.selfMedia.errors.projectContextMissing":
+							"Project or workspace information is missing. Refresh the page and try again.",
+						"detail.selfMedia.errors.publishedUrlMissing":
+							"The published article URL is missing. Bind the link again first.",
+						"detail.selfMedia.errors.taskIdMissing":
+							"The scheduled task did not return a task ID.",
 						"detail.selfMedia.home.opsOverview.title": "Operations loop",
 						"detail.selfMedia.home.opsOverview.content": "Content",
 						"detail.selfMedia.home.opsOverview.source": "Published link",
@@ -145,6 +229,13 @@ vi.mock("react-i18next", () => ({
 		type: "3rdParty",
 		init: vi.fn(),
 	},
+}))
+
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getLocaleModules: () => ({ zhCNModules: {}, enUSModules: {} }),
+	getAdminLocaleModules: () => ({ zhCNModules: {}, enUSModules: {} }),
+	loadFallbackLocale: vi.fn(),
+	loadMagicFlowLocale: vi.fn(),
 }))
 
 vi.mock("mobx-react-lite", () => ({
@@ -385,6 +476,10 @@ vi.mock("../services/selfMediaPostAutoSync", () => ({
 vi.mock("../services/SelfMediaFileStorageService", () => ({
 	SelfMediaFileStorageService: class MockSelfMediaFileStorageService {
 		loadPostOpsSource = mockLoadPostOpsSource
+		loadPostOpsMetrics = mockLoadPostOpsMetrics
+		loadPostOpsComments = mockLoadPostOpsComments
+		loadPostOpsReview = mockLoadPostOpsReview
+		loadPostOpsReviewHtml = mockLoadPostOpsReviewHtml
 		savePostOpsSource = mockSavePostOpsSource
 	},
 }))
@@ -588,6 +683,10 @@ describe("SelfMediaRootRender", () => {
 		mockSaveSelfMediaPostAutoSyncTask.mockReset().mockResolvedValue("task-1")
 		mockDisableSelfMediaPostAutoSyncTask.mockReset().mockResolvedValue(undefined)
 		mockLoadPostOpsSource.mockReset().mockResolvedValue(null)
+		mockLoadPostOpsMetrics.mockReset().mockResolvedValue(null)
+		mockLoadPostOpsComments.mockReset().mockResolvedValue(null)
+		mockLoadPostOpsReview.mockReset().mockResolvedValue(null)
+		mockLoadPostOpsReviewHtml.mockReset().mockResolvedValue(null)
 		mockSavePostOpsSource.mockReset().mockResolvedValue(undefined)
 		mockToastError.mockReset()
 		mockAICardCreateDialogRender.mockReset()
@@ -930,7 +1029,7 @@ describe("SelfMediaRootRender", () => {
 		).not.toBeInTheDocument()
 	})
 
-	it("shows a toast and does not send analysis when the post directory cannot be resolved", async () => {
+	it("starts analysis from the post manifest entry when the content file id is missing", async () => {
 		const post = {
 			meta: { id: "post-1", title: "Post One" },
 			cards: [{ path: "cards/01.html", fileId: "missing-card-file" }],
@@ -959,9 +1058,52 @@ describe("SelfMediaRootRender", () => {
 		fireEvent.click(screen.getByText("confirm-analysis"))
 
 		await waitFor(() => {
-			expect(mockToastError).toHaveBeenCalledWith("detail.selfMedia.analysis.startFailed")
+			expect(mockSendSelfMediaPrePublishAnalysis).toHaveBeenCalledWith(
+				expect.objectContaining({
+					postDirectoryItem: expect.objectContaining({
+						file_id: "post-dir",
+						relative_file_path: "posts/post-1/",
+					}),
+				}),
+			)
 		})
-		expect(mockSendSelfMediaPrePublishAnalysis).not.toHaveBeenCalled()
+		expect(mockToastError).not.toHaveBeenCalled()
+	})
+
+	it("shows the concrete service failure reason when pre-publish analysis fails", async () => {
+		const post = {
+			meta: { id: "post-1", title: "Post One" },
+			cards: [{ path: "cards/01.html", fileId: "card-file" }],
+		}
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post,
+			},
+		]
+		mockStore.ensurePlatformPostLoaded.mockResolvedValue(post)
+		mockSendSelfMediaPrePublishAnalysis.mockRejectedValueOnce(new Error("No project selected"))
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-analysis-post-1"))
+		fireEvent.click(screen.getByText("confirm-analysis"))
+
+		await waitFor(() => {
+			expect(mockToastError).toHaveBeenCalledWith(
+				"Failed to start pre-publish diagnosis: Current project information is missing. Refresh the page and try again.",
+			)
+		})
 	})
 
 	it("opens brand config from the article home", () => {
@@ -1030,7 +1172,7 @@ describe("SelfMediaRootRender", () => {
 				screen.queryByTestId("self-media-home-post-publish-ingest-post-1"),
 			).not.toBeInTheDocument()
 			expect(screen.getByTestId("self-media-home-post-review-card-post-1")).toHaveTextContent(
-				"Create review",
+				"View review",
 			)
 		})
 	})
@@ -1343,9 +1485,7 @@ describe("SelfMediaRootRender", () => {
 		fireEvent.click(screen.getByTestId("self-media-home-post-bind-link-save-post-1"))
 
 		await waitFor(() => {
-			expect(mockToastError).toHaveBeenCalledWith(
-				"Failed to start publish ingest. Please try again later.",
-			)
+			expect(mockToastError).toHaveBeenCalledWith("Failed to start data sync: update failed")
 		})
 		expect(consoleError).toHaveBeenCalledWith(
 			"Self-media auto sync published URL update failed:",
@@ -1562,6 +1702,109 @@ describe("SelfMediaRootRender", () => {
 		expect(screen.queryByTestId("self-media-ops-metrics-dialog")).not.toBeInTheDocument()
 	})
 
+	it("starts publish ingest from the post manifest entry when the content file id is missing", async () => {
+		const post = {
+			meta: {
+				id: "post-1",
+				title: "Post One",
+				feedTitle: "Post One Feed",
+				author: "Magic Lab",
+			},
+			cards: [{ path: "cards/01.html", fileId: "missing-card-file" }],
+		}
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post,
+			},
+		]
+		mockStore.ensurePlatformPostLoaded.mockResolvedValue(post)
+		mockLoadPostOpsSource.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:05:00.000Z",
+			platform: "rednote",
+			publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+			fetchStatus: "pending",
+		})
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+		fireEvent.click(await screen.findByTestId("self-media-home-post-data-sync-now-post-1"))
+
+		await waitFor(() => {
+			expect(mockSendSelfMediaPostPublishDataRefresh).toHaveBeenCalledWith(
+				expect.objectContaining({
+					postDirectoryItem: expect.objectContaining({
+						file_id: "post-dir",
+						relative_file_path: "posts/post-1/",
+					}),
+				}),
+			)
+		})
+		expect(mockToastError).not.toHaveBeenCalled()
+	})
+
+	it("shows the concrete service failure reason when publish data sync fails", async () => {
+		const post = {
+			meta: {
+				id: "post-1",
+				title: "Post One",
+				feedTitle: "Post One Feed",
+				author: "Magic Lab",
+			},
+			cards: [{ path: "cards/01.html", fileId: "card-file" }],
+		}
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post,
+			},
+		]
+		mockStore.ensurePlatformPostLoaded.mockResolvedValue(post)
+		mockLoadPostOpsSource.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:05:00.000Z",
+			platform: "rednote",
+			publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+			fetchStatus: "pending",
+		})
+		mockSendSelfMediaPostPublishDataRefresh.mockRejectedValueOnce(
+			new Error("No project selected"),
+		)
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+		fireEvent.click(await screen.findByTestId("self-media-home-post-data-sync-now-post-1"))
+
+		await waitFor(() => {
+			expect(mockToastError).toHaveBeenCalledWith(
+				"Failed to start data sync: Current project information is missing. Refresh the page and try again.",
+			)
+		})
+	})
+
 	it("configures post auto sync from the data popover", async () => {
 		const post = {
 			meta: {
@@ -1763,7 +2006,7 @@ describe("SelfMediaRootRender", () => {
 
 		await waitFor(() => {
 			expect(mockToastError).toHaveBeenCalledWith(
-				"Failed to start publish ingest. Please try again later.",
+				"Failed to start data sync: Project or workspace information is missing. Refresh the page and try again.",
 			)
 		})
 		expect(mockDisableSelfMediaPostAutoSyncTask).not.toHaveBeenCalled()
@@ -2019,7 +2262,7 @@ describe("SelfMediaRootRender", () => {
 		expect(screen.queryByTestId("mock-self-media-init-panel")).not.toBeInTheDocument()
 	})
 
-	it("opens an AI card review draft from a published article", () => {
+	it("keeps the generic AI card creator in the article home toolbar", () => {
 		render(
 			<SelfMediaRootRender
 				data={ROOT_DATA}
@@ -2037,43 +2280,115 @@ describe("SelfMediaRootRender", () => {
 			"128",
 		)
 
-		fireEvent.click(screen.getByTestId("self-media-home-post-review-card-post-1"))
+		fireEvent.click(screen.getByTestId("self-media-home-ai-card-button"))
 
 		expect(screen.getByTestId("self-media-ai-card-create-dialog")).toBeInTheDocument()
-		expect(screen.getByTestId("self-media-ai-card-create-task-name")).toHaveTextContent(
-			"Review: Post One Feed",
+		expect(screen.getByTestId("self-media-ai-card-create-task-name")).toHaveTextContent("")
+		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent("")
+	})
+
+	it("expands a post card into an operations review dashboard backed by ops files", async () => {
+		mockLoadPostOpsSource.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:05:00.000Z",
+			platform: "rednote",
+			publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+			fetchStatus: "fetched",
+			lastFetchedAt: "2026-06-11T08:10:00.000Z",
+			history: [
+				{
+					fetchedAt: "2026-06-10T08:10:00.000Z",
+					fetchStatus: "fetched",
+					publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+				},
+				{
+					fetchedAt: "2026-06-11T08:10:00.000Z",
+					fetchStatus: "fetched",
+					publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+				},
+			],
+		})
+		mockLoadPostOpsMetrics.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:10:00.000Z",
+			source: "real-platform",
+			metrics: {
+				reads: "838",
+				likes: "41",
+				shares: "33",
+				saves: "2",
+				comments: "1",
+			},
+			derivedMetrics: {
+				engagementRate: "9.19%",
+				shareRate: "3.94%",
+			},
+			history: [
+				{
+					fetchedAt: "2026-06-10T08:10:00.000Z",
+					metrics: {
+						reads: "812",
+						shares: "30",
+					},
+				},
+				{
+					fetchedAt: "2026-06-11T08:10:00.000Z",
+					metrics: {
+						reads: "838",
+						shares: "33",
+					},
+				},
+			],
+		})
+		mockLoadPostOpsComments.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:10:00.000Z",
+			source: "real-platform",
+			summary: "读者主要关注编辑效率和可协作性。",
+			comments: [
+				{
+					id: "comment-1",
+					author: "Alice",
+					text: "这个交互很适合改局部细节。",
+					intent: "positive-feedback",
+				},
+			],
+		})
+		mockLoadPostOpsReviewHtml.mockResolvedValue({
+			content: "<!doctype html><html><body><h1>运营复盘报告</h1></body></html>",
+		})
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
 		)
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
-			"发布后表现复盘",
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-review-card-post-1"))
+
+		expect(await screen.findByTestId("self-media-ops-review-dashboard")).toHaveTextContent(
+			"Operations review",
 		)
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
-			"Post One Feed",
+		expect(screen.getByTestId("self-media-ops-review-kpis")).toHaveTextContent("838")
+		expect(screen.getByTestId("self-media-ops-review-kpis")).toHaveTextContent("9.19%")
+		expect(screen.getByTestId("self-media-ops-review-trend")).toHaveTextContent("26")
+		expect(screen.getByTestId("self-media-ops-review-comments")).toHaveTextContent(
+			"读者主要关注编辑效率和可协作性。",
 		)
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent("RedNote")
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
-			"Magic Lab",
+		expect(screen.getByTestId("self-media-ops-review-html-renderer")).toHaveAttribute(
+			"data-relative-file-path",
+			"posts/post-1/ops/review.html",
 		)
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent("1.2w")
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent("128")
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
-			"ops/metrics.json",
-		)
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
-			"review.md",
-		)
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
-			"真实平台数据、用户补充数据和参考展示数据",
-		)
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).not.toHaveTextContent(
-			"根据 post.json.meta 中的参考互动数据先生成首版",
-		)
-		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
-			"不要把参考展示数据写入 ops/metrics.json、ops/comments.json 或 ops/review.md",
-		)
-		expect(screen.getByTestId("self-media-ai-card-create-template")).toHaveTextContent(
-			"analytics-panel",
-		)
-		expect(screen.getByTestId("self-media-ai-card-create-enabled")).toHaveTextContent("false")
+
+		fireEvent.click(screen.getByTestId("self-media-ops-review-close"))
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("self-media-ops-review-dashboard")).not.toBeInTheDocument()
+		})
 	})
 
 	it("keeps the init panel mounted when generated posts arrive", () => {

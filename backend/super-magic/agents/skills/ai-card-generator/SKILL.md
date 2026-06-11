@@ -165,24 +165,26 @@ When the prompt is for a self-media article/post review, post-publication retros
 Read project-local operation files when paths are provided:
 
 - `ops/source.json`: published article URL, platform, binding time, fetch status, last real-data fetch timestamp, auto-sync configuration, and any fetch failure reason. Treat this as an external data-sync contract owned by self-media/IP-operations agents.
-- `ops/metrics.json`: exposure/read, likes, saves, comments, shares, follows, conversion, and platform-specific KPI fields.
-- `ops/comments.json`: comment samples, objections, buying/consulting signals, audience questions, and reusable wording.
-- `ops/review.md`: the human-readable conclusion, decisions, and next-round action list.
+- `ops/metrics.json`: exposure/read, likes, saves, comments, shares, follows, conversion, derived rates, platform-specific KPI fields, and `history` snapshots for trend rendering.
+- `ops/comments.json`: comment samples, objections, buying/consulting signals, audience questions, reusable wording, and `history` snapshots for feedback changes.
+- `ops/review.html`: the primary rich report preview. It should be a standalone styled HTML report with an executive brief, KPI interpretation, trend/efficiency charts, audience-signal analysis, attribution, and next-round action backlog. Use a restrained unified palette and compact dashboard-like layout rather than plain paragraphs.
 
 If `ops/source.json` contains a `publishedUrl`, surface it prominently and show whether real-data fetching is pending, fetched, or failed. AI Card is the data consumer and review-dashboard renderer; it should not perform the article data-sync workflow as part of card generation.
 
 When a user asks to fetch, refresh, ingest, or “发布入盘” a published self-media article, route or describe the work as a self-media/IP-operations data-sync task against the current post folder:
 
-1. The data-sync task reads `ops/source.json` and confirms `publishedUrl` is present.
+1. The data-sync task reads `ops/source.json`, `ops/metrics.json`, and `ops/comments.json`, then confirms `publishedUrl` is present.
 2. The data-sync task visits or otherwise inspects the published URL when tools allow it.
-3. The data-sync task writes structured metrics to `ops/metrics.json`, audience feedback to `ops/comments.json`, and operational review content to `ops/review.md`.
-4. The data-sync task updates `ops/source.json.fetchStatus`, `lastFetchedAt`, and any failure reason.
+3. The data-sync task writes the latest structured metrics to `ops/metrics.json` and appends or upserts the current sync in `metrics.json.history`.
+4. The data-sync task writes audience feedback to `ops/comments.json` and appends or upserts the current sync in `comments.json.history`.
+5. The data-sync task updates `ops/source.json.fetchStatus`, `lastFetchedAt`, any failure reason, and appends or upserts the current sync status in `source.json.history`.
+6. The data-sync task writes a polished operational report to `ops/review.html`: include structured sections for performance brief, KPI takeaways, trend explanation, traffic-efficiency funnel, quality/interaction mix, comment insights, and next actions. Prefer inline HTML/CSS/SVG or simple CSS chart blocks so the report previews well without external assets. Render next actions as clickable buttons; bind events with `addEventListener` (no inline `onclick`), call `window.Magic.project.sendMessage(message, { model: "auto" })` when available, and fall back to `window.Magic.setInputMessage(message)`.
 
 Do not turn that request into an AI Card analysis artifact. If a card already exists, it should simply read the updated `ops/*` files and refresh its displayed dashboard state.
 
 Do not pretend real-data fetching has happened when no published URL is bound. If `ops/source.json` is missing or has no `publishedUrl`, ask the user to bind the published article URL first; generated/reference values may be shown only as placeholders and must be labeled as such.
 
-Do not create, overwrite, or backfill `ops/metrics.json`, `ops/comments.json`, or `ops/review.md` from generated/reference values. `post.json.meta` fields such as `feedLikes`, `commentCount`, `comments`, `time`, and `interactionReference` are reference display data only. They can be shown in the card with clear provenance, but they must not make the card or article state look archived, fetched, or reviewed.
+Do not create, overwrite, or backfill `ops/metrics.json`, `ops/comments.json`, or `ops/review.html` from generated/reference values. `post.json.meta` fields such as `feedLikes`, `commentCount`, `comments`, `time`, and `interactionReference` are reference display data only. They can be shown in the card with clear provenance, but they must not make the card or article state look archived, fetched, or reviewed.
 
 If the operations files do not exist, show missing/archive-needed states in the card and provide actions or guidance to bind a URL, fetch real platform data, or let the user manually supply real numbers. Clearly label data provenance in the card: real platform data fetched from the bound URL, user-supplied data, reference display data, or missing data.
 

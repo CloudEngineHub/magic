@@ -146,6 +146,7 @@ describe("SelfMediaOpsMetricsDialog", () => {
 		const savePostOpsMetrics = vi.fn().mockResolvedValue(undefined)
 		const savePostOpsComments = vi.fn().mockResolvedValue(undefined)
 		const savePostOpsReview = vi.fn().mockResolvedValue(undefined)
+		const savePostOpsReviewHtml = vi.fn().mockResolvedValue(undefined)
 
 		render(
 			<SelfMediaOpsMetricsDialog
@@ -157,6 +158,7 @@ describe("SelfMediaOpsMetricsDialog", () => {
 					savePostOpsMetrics,
 					savePostOpsComments,
 					savePostOpsReview,
+					savePostOpsReviewHtml,
 				})}
 			/>,
 		)
@@ -173,22 +175,24 @@ describe("SelfMediaOpsMetricsDialog", () => {
 		expect(savePostOpsMetrics).not.toHaveBeenCalled()
 		expect(savePostOpsComments).not.toHaveBeenCalled()
 		expect(savePostOpsReview).not.toHaveBeenCalled()
+		expect(savePostOpsReviewHtml).not.toHaveBeenCalled()
 	})
 
 	it("persists metrics, feedback, and review files from the operations workspace", async () => {
 		const savePostOpsMetrics = vi.fn().mockResolvedValue(undefined)
 		const savePostOpsSource = vi.fn().mockResolvedValue(undefined)
 		const savePostOpsComments = vi.fn().mockResolvedValue(undefined)
-		const savePostOpsReview = vi.fn().mockResolvedValue(undefined)
+		const savePostOpsReviewHtml = vi.fn().mockResolvedValue(undefined)
 		const fileStorageService = {
 			loadPostOpsSource: vi.fn().mockResolvedValue(null),
 			loadPostOpsMetrics: vi.fn().mockResolvedValue(null),
 			loadPostOpsComments: vi.fn().mockResolvedValue(null),
+			loadPostOpsReviewHtml: vi.fn().mockResolvedValue(null),
 			loadPostOpsReview: vi.fn().mockResolvedValue(null),
 			savePostOpsSource,
 			savePostOpsMetrics,
 			savePostOpsComments,
-			savePostOpsReview,
+			savePostOpsReviewHtml,
 		} as unknown as SelfMediaFileStorageService
 
 		render(
@@ -266,12 +270,15 @@ describe("SelfMediaOpsMetricsDialog", () => {
 					],
 				}),
 			)
-			expect(savePostOpsReview).toHaveBeenCalledWith(
+			expect(savePostOpsReviewHtml).toHaveBeenCalledWith(
 				"posts/post-1/post.json",
 				expect.objectContaining({
 					content: expect.stringContaining("下一步：补一篇团队协作案例。"),
 				}),
 			)
+			const savedReviewHtml = savePostOpsReviewHtml.mock.calls[0]?.[1]?.content
+			expect(savedReviewHtml).toContain('class="ops-review-report"')
+			expect(savedReviewHtml).toContain("核心判断")
 		})
 	})
 
@@ -500,10 +507,12 @@ function buildFileStorageService(
 		loadPostOpsSource: vi.fn().mockResolvedValue(null),
 		loadPostOpsMetrics: vi.fn().mockResolvedValue(null),
 		loadPostOpsComments: vi.fn().mockResolvedValue(null),
+		loadPostOpsReviewHtml: vi.fn().mockResolvedValue(null),
 		loadPostOpsReview: vi.fn().mockResolvedValue(null),
 		savePostOpsSource: vi.fn().mockResolvedValue(undefined),
 		savePostOpsMetrics: vi.fn().mockResolvedValue(undefined),
 		savePostOpsComments: vi.fn().mockResolvedValue(undefined),
+		savePostOpsReviewHtml: vi.fn().mockResolvedValue(undefined),
 		savePostOpsReview: vi.fn().mockResolvedValue(undefined),
 		...overrides,
 	} as unknown as SelfMediaFileStorageService

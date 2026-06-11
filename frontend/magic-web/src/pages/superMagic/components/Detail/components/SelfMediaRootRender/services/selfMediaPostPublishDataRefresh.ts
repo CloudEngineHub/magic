@@ -142,7 +142,7 @@ export function buildSelfMediaPostPublishDataRefreshContent({
 			para(
 				t(
 					"detail.selfMedia.opsRefresh.prompt.instruction",
-					"Read ops/source.json in the current post folder first, and use the published URL in this message as the fallback target. Visit the real article URL and collect or organize real exposure, reads, likes, saves, comments, shares, follows, and conversion metrics. Write structured metrics back to ops/metrics.json in the current post folder, write comments/audience feedback to ops/comments.json, write the operations review, attribution, and next actions to ops/review.md, and update ops/source.json fetchStatus, lastFetchedAt, and any failure reason.",
+					'Read ops/source.json, ops/metrics.json, and ops/comments.json in the current post folder first, and use the published URL in this message as the fallback target. Visit the real article URL and collect or organize real exposure, reads, likes, saves, comments, shares, follows, and conversion metrics. Update the latest structured metrics in ops/metrics.json and append or upsert this sync as a history snapshot in metrics.json.history. Update comments/audience feedback in ops/comments.json and append or upsert this sync in comments.json.history. Update ops/source.json fetchStatus, lastFetchedAt, any failure reason, and append or upsert the source sync status in source.json.history. Write the human-readable operations review, attribution, trend interpretation, and next actions to ops/review.html. In ops/review.html, render next actions as clickable buttons; bind them with addEventListener, prefer window.Magic.project.sendMessage(message, { model: "auto" }) when available, and fall back to window.Magic.setInputMessage(message).',
 				),
 			),
 		],

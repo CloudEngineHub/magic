@@ -492,10 +492,10 @@ python scripts/create.py --task-name "AI Card" --message-content-file /tmp/cron-
 shell_exec(
     command='''cat > /tmp/self-media-post-sync.txt <<'EOF'
 请读取当前文章目录下 ops/source.json，访问已绑定的 publishedUrl，只更新当前文章目录下的运营文件：
-- ops/metrics.json
-- ops/comments.json
-- ops/review.md
-- ops/source.json 的 fetchStatus、lastFetchedAt、failureReason
+- ops/metrics.json 的最新指标与 history 快照
+- ops/comments.json 的最新反馈与 history 快照
+- ops/review.html：写成可直接预览的精美 HTML 运营报告，包含表现简报、KPI 解读、趋势/效率图表、互动构成、评论洞察和下一步动作；使用内联 CSS/SVG 或简单图表块，不依赖外部资源。下一步动作要做成按钮，用 addEventListener 绑定点击事件，点击时优先 window.Magic.project.sendMessage(message, { model: "auto" })，不可用时降级 window.Magic.setInputMessage(message)。
+- ops/source.json 的 fetchStatus、lastFetchedAt、failureReason 与 history 快照
 不要生成 AI Card、不要写入 AI Card 分析产物。
 EOF
 cd /app/agents/skills/using-cron &&

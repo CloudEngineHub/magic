@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
 	BarChart3,
 	CheckCircle2,
@@ -26,6 +26,9 @@ import type { AICardCreateInitialValues } from "./AICardCreateDialog"
 import type { SelfMediaAttachmentNode } from "../types"
 import SelfMediaPostCard, { type SelfMediaPostOpsArtifacts } from "./SelfMediaPostCard"
 import type { SelfMediaPostOpsSourcePayload } from "../services/SelfMediaFileStorageService"
+import SelfMediaOpsReviewDashboard, {
+	type SelfMediaOpsReviewData,
+} from "./SelfMediaOpsReviewDashboard"
 
 interface AICardFolderChild extends SelfMediaAttachmentNode {
 	display_config?: {
@@ -55,6 +58,7 @@ interface SelfMediaHomePageProps {
 		target: SelfMediaPlatformPostItem,
 		config: { enabled: boolean; timeConfig: ScheduledTask.TimeConfig },
 	) => Promise<boolean | void> | boolean | void
+	onLoadOpsReviewData?: (target: SelfMediaPlatformPostItem) => Promise<SelfMediaOpsReviewData>
 	onLoadPublishedUrl?: (
 		target: SelfMediaPlatformPostItem,
 	) => Promise<string | undefined> | string | undefined
@@ -82,6 +86,7 @@ function SelfMediaHomePage({
 	onOpenOpsMetrics,
 	onPostPublishRefresh,
 	onConfigureAutoSync,
+	onLoadOpsReviewData,
 	onLoadPublishedUrl,
 	onLoadOpsSource,
 	onBindPublishedUrl,
@@ -93,6 +98,8 @@ function SelfMediaHomePage({
 }: SelfMediaHomePageProps) {
 	const { t } = useTranslation("super")
 	const requestedPreviewPostKeysRef = useRef(new Set<string>())
+	const [activeOpsReviewTarget, setActiveOpsReviewTarget] =
+		useState<SelfMediaPlatformPostItem | null>(null)
 	const hasPosts = posts.length > 0
 	const postGroups = posts.reduce<
 		Array<{ platform: SelfMediaPlatform; posts: SelfMediaPlatformPostItem[] }>
@@ -195,79 +202,12 @@ function SelfMediaHomePage({
 		})
 	}, [onEnsurePostLoaded, posts])
 
-	const buildPostReviewInitialValues = (
-		item: SelfMediaPlatformPostItem,
-		title: string,
-	): AICardCreateInitialValues => {
-		const { platform, entry, post } = item
-		const platformLabel = getPlatformLabel(platform)
-		const author = post.meta.author || t("detail.selfMedia.common.unknownAuthor")
-		const opsBasePath = entry.entry.replace(/\/?post\.json$/, "/ops")
-		const comments = Array.isArray(post.meta.comments) ? post.meta.comments : []
-		const engagementLines = [
-			post.meta.feedLikes
-				? `- 点赞/喜欢: ${post.meta.feedLikes}`
-				: "- 点赞/喜欢: 暂无真实数据，先按参考数据或待填数据处理",
-			post.meta.commentCount
-				? `- 评论数: ${post.meta.commentCount}`
-				: "- 评论数: 暂无真实数据，先按参考数据或待填数据处理",
-			post.meta.time ? `- 发布时间/展示时间: ${post.meta.time}` : null,
-		].filter((line): line is string => Boolean(line))
-		const commentLines = comments.length
-			? comments
-					.slice(0, 5)
-					.map((comment) => `- ${comment.name || "用户"}: ${comment.text}`)
-					.join("\n")
-			: "- 暂无评论样本，请在卡片中保留可补充真实评论的位置"
-		const prompt = [
-			"请为这篇已发布/待复盘的自媒体内容创建一个「发布后表现复盘」AI 卡片看板。",
-			"",
-			"━━━ 文章信息 ━━━",
-			`平台: ${platformLabel}`,
-			`标题: ${title}`,
-			`作者/账号: ${author}`,
-			`文章文件: ${entry.entry}`,
-			"",
-			"━━━ 文件化运营数据 ━━━",
-			`请优先读取这些项目内文件来承载复盘数据:`,
-			`- ${opsBasePath}/source.json: 已发布文章链接、平台、抓取状态和最近一次抓取时间`,
-			`- ${opsBasePath}/metrics.json: 曝光、阅读、点赞、收藏、评论、转发、涨粉、转化等指标`,
-			`- ${opsBasePath}/comments.json: 评论样本、用户异议、咨询/购买信号`,
-			`- ${opsBasePath}/review.md: 本次复盘结论和下一轮行动清单`,
-			"如果 source.json 缺少真实链接，请提示用户先绑定发布后的文章链接。",
-			"如果 metrics.json、comments.json 或 review.md 不存在，请在看板中显示为待归档/待补充状态。",
-			"post.json.meta 中的点赞、评论和评论样本只能作为参考展示数据，不要把参考展示数据写入 ops/metrics.json、ops/comments.json 或 ops/review.md，也不要标记为已归档。",
-			"",
-			"━━━ 当前参考展示数据（非归档数据） ━━━",
-			...engagementLines,
-			"",
-			"━━━ 评论/反馈样本 ━━━",
-			commentLines,
-			"",
-			"━━━ 看板目标 ━━━",
-			"请把结果做成可交互的数据面板，而不是长篇文字报告。面板需要一屏看清「表现如何、为什么、下一步做什么」。",
-			"至少包含这些模块:",
-			"1. 核心 KPI: 曝光/阅读、点赞、收藏、评论、转发、涨粉、转化等指标位；真实数据缺失时标注为待补充或参考值。",
-			"2. 内容归因: 标题、封面/首图、开头 hook、结构节奏、选题匹配度分别打分并说明影响。",
-			"3. 评论洞察: 提炼用户关心点、异议、购买/咨询信号、可二创角度。",
-			"4. 下一轮动作: 给出下篇选题、标题 A/B、封面方向、发布时间、分发渠道和评论区运营动作。",
-			"5. 数据口径: 区分真实平台数据、用户补充数据和参考展示数据。",
-			"",
-			"优先使用 analytics-panel 模板，保留筛选、指标卡、趋势/漏斗、评论洞察和行动清单等面板化交互。",
-		].join("\n")
-
-		return {
-			taskName: t("detail.selfMedia.home.postReviewCardName", { title }),
-			prompt,
-			template: "analytics-panel",
-			enabled: false,
-			timeConfig: null,
-		}
-	}
-
 	return (
 		<div
-			className={cn("flex h-full min-h-0 w-full flex-col bg-mobile-background", className)}
+			className={cn(
+				"relative flex h-full min-h-0 w-full flex-col bg-mobile-background",
+				className,
+			)}
 			data-testid="self-media-home-page"
 		>
 			<header className="shrink-0 border-b bg-card/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:px-6">
@@ -521,13 +461,12 @@ function SelfMediaHomePage({
 															onConfigureAutoSync={
 																onConfigureAutoSync
 															}
+															onOpenOpsReview={
+																setActiveOpsReviewTarget
+															}
 															onLoadPublishedUrl={onLoadPublishedUrl}
 															onLoadOpsSource={onLoadOpsSource}
 															onBindPublishedUrl={onBindPublishedUrl}
-															onCreateAICard={onCreateAICard}
-															buildPostReviewInitialValues={
-																buildPostReviewInitialValues
-															}
 														/>
 													)
 												})}
@@ -567,6 +506,14 @@ function SelfMediaHomePage({
 					</div>
 				</ScrollArea>
 			</main>
+			<SelfMediaOpsReviewDashboard
+				open={Boolean(activeOpsReviewTarget)}
+				target={activeOpsReviewTarget}
+				onClose={() => setActiveOpsReviewTarget(null)}
+				onEditData={(target) => onOpenOpsMetrics?.(target)}
+				onSyncData={onPostPublishRefresh}
+				onLoadData={onLoadOpsReviewData}
+			/>
 		</div>
 	)
 }
@@ -611,7 +558,9 @@ function getPostOpsArtifacts(
 		source: hasArtifactPath(artifactPaths, `${opsPath}/source.json`),
 		metrics: hasArtifactPath(artifactPaths, `${opsPath}/metrics.json`),
 		comments: hasArtifactPath(artifactPaths, `${opsPath}/comments.json`),
-		review: hasArtifactPath(artifactPaths, `${opsPath}/review.md`),
+		review:
+			hasArtifactPath(artifactPaths, `${opsPath}/review.html`) ||
+			hasArtifactPath(artifactPaths, `${opsPath}/review.md`),
 	}
 }
 

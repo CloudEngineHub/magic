@@ -11,7 +11,7 @@ const { mockT } = vi.hoisted(() => ({
 			"detail.selfMedia.opsRefresh.prompt.metadata":
 				"Platform: {{platform}}\nTitle: {{title}}\nPublished URL: {{publishedUrl}}",
 			"detail.selfMedia.opsRefresh.prompt.instruction":
-				"Read ops/source.json in the current post folder first. Visit the real article URL and update ops/metrics.json, ops/comments.json, ops/review.md, and ops/source.json status fields.",
+				'Read ops/source.json in the current post folder first. Visit the real article URL and update ops/metrics.json, ops/comments.json, ops/review.html, and ops/source.json status fields. Render next actions as buttons with addEventListener; prefer window.Magic.project.sendMessage(message, { model: "auto" }) and fall back to window.Magic.setInputMessage(message).',
 			"detail.selfMedia.initPanel.platforms.rednote": "Rednote",
 		}
 		const template = translations[key] || String(options?.defaultValue || key)

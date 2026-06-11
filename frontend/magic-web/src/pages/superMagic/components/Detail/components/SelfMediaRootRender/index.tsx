@@ -17,6 +17,7 @@ import { getPlatformComponent } from "./platforms"
 import { SelfMediaStoreProvider, useSelfMediaStore } from "./stores"
 import SelfMediaInitPanel from "./components/SelfMediaInitPanel"
 import SelfMediaHomePage from "./components/SelfMediaHomePage"
+import type { SelfMediaOpsReviewData } from "./components/SelfMediaOpsReviewDashboard"
 import BrandConfigDialog from "./components/BrandConfigDialog"
 import AICardCreateDialog, { type AICardCreateInitialValues } from "./components/AICardCreateDialog"
 import SelfMediaOpsMetricsDialog from "./components/SelfMediaOpsMetricsDialog"
@@ -49,6 +50,35 @@ import type { SelfMediaAttachmentNode, SelfMediaRootRenderProps } from "./types"
 import type { SelfMediaPlatformPostItem } from "./stores/SelfMediaStore"
 
 type SelfMediaRootMode = "home" | "create" | "platform"
+type Translate = (key: string, options?: Record<string, unknown>) => string
+
+function getErrorMessage(error: unknown): string | null {
+	if (error instanceof Error && error.message) return error.message
+	if (typeof error === "string" && error.trim()) return error.trim()
+	return null
+}
+
+function resolveActionFailureReason(t: Translate, error: unknown): string | null {
+	const message = getErrorMessage(error)
+	if (!message) return null
+	if (message === "No project selected") {
+		return t("detail.selfMedia.errors.noProjectSelected")
+	}
+	if (message === "Scheduled task id is missing") {
+		return t("detail.selfMedia.errors.taskIdMissing")
+	}
+	return message
+}
+
+function showActionStartFailed(
+	t: Translate,
+	startFailedKey: string,
+	error?: unknown,
+	fallbackReasonKey?: string,
+) {
+	const reason = fallbackReasonKey ? t(fallbackReasonKey) : resolveActionFailureReason(t, error)
+	magicToast.error(reason ? t(`${startFailedKey}WithReason`, { reason }) : t(startFailedKey))
+}
 
 function resolveFirstAvailableSelfMediaDataSyncModel(): ModelItem | null {
 	return (
@@ -86,6 +116,7 @@ function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
 	} = props
 	const folderFileId = data?.file_id
 	const folderPath = resolveSelfMediaRootPath(data)
+	const innerAttachmentList = attachmentList || attachments
 
 	// Access array lengths so that this observer component re-renders when items
 	// are added to / removed from MobX observable arrays. Without this, mutations
@@ -101,7 +132,7 @@ function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
 			initialNavigation={data?.initialNavigation}
 		>
 			<SelfMediaRootRenderInner
-				attachmentList={attachmentList || attachments}
+				attachmentList={innerAttachmentList}
 				className={className}
 				allowEdit={allowEdit}
 				saveEditContent={saveEditContent}
@@ -238,9 +269,15 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				const postDirectoryItem = resolveSelfMediaPostDirectoryAttachmentItem(
 					attachmentList,
 					mentionFileId,
+					target.entry.entry,
 				)
 				if (!postDirectoryItem) {
-					magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+					showActionStartFailed(
+						t,
+						"detail.selfMedia.opsRefresh.startFailed",
+						undefined,
+						"detail.selfMedia.errors.postDirectoryMissing",
+					)
 					return
 				}
 				await sendSelfMediaPostPublishDataRefresh({
@@ -253,7 +290,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				})
 			} catch (error) {
 				console.error("Self-media post-publish data refresh failed:", error)
-				magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+				showActionStartFailed(t, "detail.selfMedia.opsRefresh.startFailed", error)
 			}
 		},
 		[attachmentList, dataSyncModel, fileStorageService, selectedProject, store, t],
@@ -271,6 +308,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 			const postDirectoryItem = resolveSelfMediaPostDirectoryAttachmentItem(
 				attachmentList,
 				mentionFileId,
+				target.entry.entry,
 			)
 			const routeState = getSuperIdState()
 			const workspaceId =
@@ -279,7 +317,12 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				""
 			const projectId = selectedProject?.id || routeState.projectId || ""
 			if (!workspaceId || !projectId || !postDirectoryItem) {
-				magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+				showActionStartFailed(
+					t,
+					"detail.selfMedia.opsRefresh.startFailed",
+					undefined,
+					"detail.selfMedia.errors.projectContextMissing",
+				)
 				return false
 			}
 			const taskData = buildSelfMediaPostAutoSyncTaskData({
@@ -298,7 +341,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				return true
 			} catch (error) {
 				console.error("Self-media auto sync published URL update failed:", error)
-				magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+				showActionStartFailed(t, "detail.selfMedia.opsRefresh.startFailed", error)
 				return false
 			}
 		},
@@ -324,7 +367,12 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					const existingTaskId = source?.autoSync?.taskId
 					if (existingTaskId) {
 						if (!publishedUrl) {
-							magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+							showActionStartFailed(
+								t,
+								"detail.selfMedia.opsRefresh.startFailed",
+								undefined,
+								"detail.selfMedia.errors.publishedUrlMissing",
+							)
 							return false
 						}
 						const post =
@@ -334,6 +382,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 						const postDirectoryItem = resolveSelfMediaPostDirectoryAttachmentItem(
 							attachmentList,
 							mentionFileId,
+							target.entry.entry,
 						)
 						const routeState = getSuperIdState()
 						const workspaceId =
@@ -343,7 +392,12 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 							""
 						const projectId = selectedProject?.id || routeState.projectId || ""
 						if (!workspaceId || !projectId || !postDirectoryItem) {
-							magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+							showActionStartFailed(
+								t,
+								"detail.selfMedia.opsRefresh.startFailed",
+								undefined,
+								"detail.selfMedia.errors.projectContextMissing",
+							)
 							return false
 						}
 						const taskData = buildSelfMediaPostAutoSyncTaskData({
@@ -386,6 +440,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				const postDirectoryItem = resolveSelfMediaPostDirectoryAttachmentItem(
 					attachmentList,
 					mentionFileId,
+					target.entry.entry,
 				)
 				const routeState = getSuperIdState()
 				const workspaceId =
@@ -395,7 +450,12 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					""
 				const projectId = selectedProject?.id || routeState.projectId || ""
 				if (!workspaceId || !projectId || !postDirectoryItem) {
-					magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+					showActionStartFailed(
+						t,
+						"detail.selfMedia.opsRefresh.startFailed",
+						undefined,
+						"detail.selfMedia.errors.projectContextMissing",
+					)
 					return false
 				}
 
@@ -436,7 +496,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				return true
 			} catch (error) {
 				console.error("Self-media auto sync configuration failed:", error)
-				magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+				showActionStartFailed(t, "detail.selfMedia.opsRefresh.startFailed", error)
 				return false
 			}
 		},
@@ -452,6 +512,28 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	const handleLoadPostOpsSource = useCallback(
 		async (target: SelfMediaPlatformPostItem) => {
 			return (await fileStorageService?.loadPostOpsSource(target.entry.entry)) ?? null
+		},
+		[fileStorageService],
+	)
+	const handleLoadPostOpsReviewData = useCallback(
+		async (target: SelfMediaPlatformPostItem): Promise<SelfMediaOpsReviewData> => {
+			if (!fileStorageService) {
+				return {
+					source: null,
+					metrics: null,
+					comments: null,
+					reviewHtml: null,
+					reviewMarkdown: null,
+				}
+			}
+			const [source, metrics, comments, reviewHtml, reviewMarkdown] = await Promise.all([
+				fileStorageService.loadPostOpsSource(target.entry.entry),
+				fileStorageService.loadPostOpsMetrics(target.entry.entry),
+				fileStorageService.loadPostOpsComments(target.entry.entry),
+				fileStorageService.loadPostOpsReviewHtml(target.entry.entry),
+				fileStorageService.loadPostOpsReview(target.entry.entry),
+			])
+			return { source, metrics, comments, reviewHtml, reviewMarkdown }
 		},
 		[fileStorageService],
 	)
@@ -489,7 +571,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				return true
 			} catch (error) {
 				console.error("Self-media published URL binding failed:", error)
-				magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+				showActionStartFailed(t, "detail.selfMedia.opsRefresh.startFailed", error)
 				return false
 			}
 		},
@@ -507,23 +589,29 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 			if (!analysisTarget) return
 			setAnalysisSubmitting(true)
 			try {
+				const targetItem = store.allPosts.find(
+					(item) =>
+						item.platform === analysisTarget.platform &&
+						item.index === analysisTarget.index,
+				)
 				const post =
 					(await store.ensurePlatformPostLoaded(
 						analysisTarget.platform,
 						analysisTarget.index,
-					)) ||
-					store.allPosts.find(
-						(item) =>
-							item.platform === analysisTarget.platform &&
-							item.index === analysisTarget.index,
-					)?.post
+					)) || targetItem?.post
 				const mentionFileId = resolveSelfMediaPostMentionFileId(post)
 				const postDirectoryItem = resolveSelfMediaPostDirectoryAttachmentItem(
 					attachmentList,
 					mentionFileId,
+					targetItem?.entry.entry,
 				)
 				if (!post || !postDirectoryItem) {
-					magicToast.error(t("detail.selfMedia.analysis.startFailed"))
+					showActionStartFailed(
+						t,
+						"detail.selfMedia.analysis.startFailed",
+						undefined,
+						"detail.selfMedia.errors.postDirectoryMissing",
+					)
 					return
 				}
 				await sendSelfMediaPrePublishAnalysis({
@@ -537,7 +625,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				setAnalysisTarget(null)
 			} catch (error) {
 				console.error("Self-media pre-publish analysis failed:", error)
-				magicToast.error(t("detail.selfMedia.analysis.startFailed"))
+				showActionStartFailed(t, "detail.selfMedia.analysis.startFailed", error)
 			} finally {
 				setAnalysisSubmitting(false)
 			}
@@ -605,6 +693,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					onOpenOpsMetrics={allowEdit ? handleOpenOpsMetrics : undefined}
 					onPostPublishRefresh={allowEdit ? handlePostPublishRefresh : undefined}
 					onConfigureAutoSync={allowEdit ? handleConfigurePostAutoSync : undefined}
+					onLoadOpsReviewData={handleLoadPostOpsReviewData}
 					onLoadPublishedUrl={allowEdit ? handleLoadPostPublishedUrl : undefined}
 					onLoadOpsSource={allowEdit ? handleLoadPostOpsSource : undefined}
 					onBindPublishedUrl={allowEdit ? handleBindPostPublishedUrl : undefined}

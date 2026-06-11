@@ -224,7 +224,6 @@ export async function sendSelfMediaPrePublishAnalysis({
 		postDirectoryItem,
 	})
 	const topicMode = SELF_MEDIA_TOPIC_PATTERN as unknown as TopicMode
-	const folderMention = buildFolderMention(postDirectoryItem)
 
 	pubsub.publish(PubSubEvents.Create_New_Topic, {
 		topicMode,
@@ -237,7 +236,6 @@ export async function sendSelfMediaPrePublishAnalysis({
 			mentionItems: [buildFolderMentionItem(postDirectoryItem)],
 			extra: {
 				super_agent: {
-					mentions: [folderMention],
 					topic_pattern: SELF_MEDIA_TOPIC_PATTERN,
 					chat_mode: "normal",
 					enable_web_search: true,

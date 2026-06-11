@@ -447,6 +447,65 @@ describe("SelfMediaFileStorageService", () => {
 		)
 	})
 
+	it("saves and loads post ops history and html review files", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.savePostOpsMetrics("posts/post-1/post.json", {
+			version: 1,
+			updatedAt: "2026-06-11T08:20:00.000Z",
+			source: "real-platform",
+			metrics: {
+				reads: "838",
+				shares: "33",
+			},
+			history: [
+				{
+					fetchedAt: "2026-06-10T08:20:00.000Z",
+					metrics: {
+						reads: "812",
+						shares: "30",
+					},
+				},
+				{
+					fetchedAt: "2026-06-11T08:20:00.000Z",
+					metrics: {
+						reads: "838",
+						shares: "33",
+					},
+				},
+			],
+		})
+		await service.savePostOpsReviewHtml("posts/post-1/post.json", {
+			content: "<!doctype html><html><body><h1>运营复盘</h1></body></html>",
+		})
+
+		const reviewFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/posts/post-1/ops/review.html",
+		)
+		expect(reviewFile?.file_id).toBeTruthy()
+		if (!reviewFile?.file_id) throw new Error("review.html was not created")
+
+		await expect(service.loadPostOpsMetrics("posts/post-1/post.json")).resolves.toEqual(
+			expect.objectContaining({
+				history: [
+					expect.objectContaining({
+						fetchedAt: "2026-06-10T08:20:00.000Z",
+					}),
+					expect.objectContaining({
+						metrics: expect.objectContaining({ reads: "838" }),
+					}),
+				],
+			}),
+		)
+		await expect(service.loadPostOpsReviewHtml("posts/post-1/post.json")).resolves.toEqual({
+			content: "<!doctype html><html><body><h1>运营复盘</h1></body></html>",
+		})
+	})
+
 	it("does not persist brand config in new draft payloads", async () => {
 		const service = new SelfMediaFileStorageService(
 			"project-1",

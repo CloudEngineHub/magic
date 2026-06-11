@@ -741,6 +741,7 @@
 					"untitled": "Self-media post"
 				},
 				"startFailed": "Failed to start pre-publish diagnosis. Please try again later.",
+				"startFailedWithReason": "Failed to start pre-publish diagnosis: {{reason}}",
 				"starting": "Creating diagnosis...",
 				"title": "Pre-publish Diagnosis"
 			},
@@ -795,9 +796,14 @@
 				"loadCardError": "Failed to load card",
 				"magicProjectNotFound": "magic.project.js not found",
 				"noCardUrl": "Card URL is unavailable",
+				"noProjectSelected": "Current project information is missing. Refresh the page and try again.",
 				"postManifestInvalid": "post.json is invalid",
 				"postManifestMissing": "post.json not found",
-				"selfMediaConfigMissing": "self-media config missing"
+				"postDirectoryMissing": "Could not find the current post folder. Refresh the file list and try again.",
+				"projectContextMissing": "Project or workspace information is missing. Refresh the page and try again.",
+				"publishedUrlMissing": "The published article URL is missing. Bind the link again first.",
+				"selfMediaConfigMissing": "self-media config missing",
+				"taskIdMissing": "The scheduled task did not return a task ID."
 			},
 			"export": {
 				"action": "Export",
@@ -861,6 +867,7 @@
 				"emptyDesc": "Create a new article to open the setup wizard.",
 				"emptyTitle": "No articles yet",
 				"loadingPublishedLink": "Loading link...",
+				"openOpsReview": "View review",
 				"openPlatform": "Open platform content",
 				"opsArtifacts": {
 					"commentsMissing": "Feedback not organized",
@@ -1190,19 +1197,65 @@
 					"unknown": "Not fetched"
 				},
 				"sourceUrlPlaceholder": "Paste the published article URL for later real-data collection",
-				"summary": "{{count}} metric(s) filled. Saving writes ops/source.json, ops/metrics.json, ops/comments.json, and ops/review.md.",
+				"summary": "{{count}} metric(s) filled. Saving writes ops/source.json, ops/metrics.json, ops/comments.json, and ops/review.html.",
 				"title": "Operations workspace"
 			},
 			"opsRefresh": {
 				"missingSourceUrl": "Bind the published article URL first.",
 				"prompt": {
-					"instruction": "Read ops/source.json in the current post folder first, and use the published URL in this message as the fallback target. Visit the real article URL and collect or organize real exposure, reads, likes, saves, comments, shares, follows, and conversion metrics. Write structured metrics back to ops/metrics.json in the current post folder, write comments/audience feedback to ops/comments.json, write the operations review, attribution, and next actions to ops/review.md, and update ops/source.json fetchStatus, lastFetchedAt, and any failure reason.",
+					"instruction": "Read ops/source.json, ops/metrics.json, and ops/comments.json in the current post folder first, and use the published URL in this message as the fallback target. Visit the real article URL and collect or organize real exposure, reads, likes, saves, comments, shares, follows, and conversion metrics. Update the latest structured metrics in ops/metrics.json and append or upsert this sync as a history snapshot in metrics.json.history. Update comments/audience feedback in ops/comments.json and append or upsert this sync in comments.json.history. Update ops/source.json fetchStatus, lastFetchedAt, any failure reason, and append or upsert the source sync status in source.json.history. Write ops/review.html as a polished standalone HTML report, not plain paragraphs: include at least a performance brief, KPI interpretation, trend explanation, traffic-efficiency funnel, interaction-quality mix, comment/buying signals, attribution, and next actions. Use compact content, a unified premium chart palette, and inline CSS/SVG or pure HTML/CSS only; do not depend on external resources. Render next actions as clickable buttons; bind events with addEventListener, do not use inline onclick; on click, prefer window.Magic.project.sendMessage(message, { model: \"auto\" }) and fall back to window.Magic.setInputMessage(message).",
 					"metadata": "Platform: {{platform}}\nTitle: {{title}}\nPublished URL: {{publishedUrl}}",
 					"opening": "Act as an IP operations specialist and fetch then write back post-publication real operations data for {{mention}}.",
 					"topicName": "[Real data refresh] {{title}}",
 					"untitled": "Self-media post"
 				},
-				"startFailed": "Failed to start publish ingest. Please try again later."
+				"startFailed": "Failed to start data sync. Please try again later.",
+				"startFailedWithReason": "Failed to start data sync: {{reason}}"
+			},
+			"opsReview": {
+				"actionsTitle": "Next actions",
+				"brief": {
+					"consulting": "{{count}} consulting signal(s)",
+					"efficiency": "Engagement efficiency",
+					"intent": "Conversion signal",
+					"reachTrend": "Reads change"
+				},
+				"close": "Close review",
+				"commentsTitle": "Audience feedback",
+				"conversionSignal": "Comment intent",
+				"deltaReads": "Reads change",
+				"edit": "Edit data",
+				"empty": "No data yet",
+				"engagementRate": "Engagement rate",
+				"funnel": {
+					"engagement": "Effective engagement",
+					"intent": "Saves / comments / shares",
+					"reach": "Reach / reads"
+				},
+				"funnelTitle": "Traffic efficiency",
+				"impactTitle": "Impact map",
+				"kpiHints": {
+					"efficiency": "Blended post-read response",
+					"intent": "Potential conversion intent",
+					"preference": "Audience preference signal",
+					"reach": "Content reach scale",
+					"spread": "Secondary distribution potential"
+				},
+				"markdownTitle": "Markdown review report",
+				"metricsTitle": "Core metrics",
+				"qualityTitle": "Quality mix",
+				"reviewHtmlTitle": "HTML review report",
+				"reviewTitle": "Review report",
+				"sourceStatus": {
+					"failed": "Fetch failed",
+					"fetched": "Real data fetched",
+					"pending": "Pending",
+					"unknown": "Not fetched"
+				},
+				"summaryTitle": "Performance brief",
+				"sync": "Sync data",
+				"title": "Operations review",
+				"trendTitle": "Sync trend"
 			},
 			"platform": {
 				"actions": {

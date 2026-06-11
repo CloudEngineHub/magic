@@ -742,6 +742,7 @@
 					"untitled": "自媒体文章"
 				},
 				"startFailed": "发布前诊断启动失败，请稍后重试",
+				"startFailedWithReason": "启动发布前诊断失败：{{reason}}",
 				"starting": "创建诊断中...",
 				"title": "发布前诊断"
 			},
@@ -796,9 +797,14 @@
 				"loadCardError": "卡片加载失败",
 				"magicProjectNotFound": "未找到 magic.project.js",
 				"noCardUrl": "卡片地址不可用",
+				"noProjectSelected": "当前项目信息缺失，请刷新页面后重试",
 				"postManifestInvalid": "post.json 内容无效",
 				"postManifestMissing": "未找到 post.json",
-				"selfMediaConfigMissing": "缺少 self-media 配置"
+				"postDirectoryMissing": "未找到当前文章目录，请刷新文件列表后重试",
+				"projectContextMissing": "缺少项目或工作区信息，请刷新页面后重试",
+				"publishedUrlMissing": "缺少发布后的文章链接，请先重新绑定链接",
+				"selfMediaConfigMissing": "缺少 self-media 配置",
+				"taskIdMissing": "定时任务创建后没有返回任务 ID"
 			},
 			"export": {
 				"action": "导出",
@@ -862,6 +868,7 @@
 				"emptyDesc": "点击新增文章，进入初始化向导开始规划内容。",
 				"emptyTitle": "暂无文章",
 				"loadingPublishedLink": "正在读取链接...",
+				"openOpsReview": "查看复盘",
 				"openPlatform": "打开平台内容",
 				"opsArtifacts": {
 					"commentsMissing": "反馈未整理",
@@ -1191,19 +1198,65 @@
 					"unknown": "尚未抓取"
 				},
 				"sourceUrlPlaceholder": "粘贴发布后的文章链接，用于后续抓取真实运营数据",
-				"summary": "已填写 {{count}} 个指标。保存后将写入 ops/source.json、ops/metrics.json、ops/comments.json 和 ops/review.md。",
+				"summary": "已填写 {{count}} 个指标。保存后将写入 ops/source.json、ops/metrics.json、ops/comments.json 和 ops/review.html。",
 				"title": "运营工作台"
 			},
 			"opsRefresh": {
 				"missingSourceUrl": "请先绑定发布后的文章链接",
 				"prompt": {
-					"instruction": "请优先读取当前文章目录下 ops/source.json 的 publishedUrl，并以本次消息里的真实文章链接作为兜底目标。访问真实文章链接，获取或整理真实曝光、阅读、点赞、收藏、评论、转发、涨粉、转化等数据；将结构化指标回写到当前文章目录下的 ops/metrics.json，将评论/用户反馈回写到 ops/comments.json，将运营复盘、原因归因和下一步动作回写到 ops/review.md，同时更新 ops/source.json 的 fetchStatus、lastFetchedAt 和必要的失败原因。",
+					"instruction": "请优先读取当前文章目录下 ops/source.json、ops/metrics.json、ops/comments.json，并以本次消息里的真实文章链接作为兜底目标。访问真实文章链接，获取或整理真实曝光、阅读、点赞、收藏、评论、转发、涨粉、转化等数据；更新 ops/metrics.json 的最新结构化指标，并将本次同步追加或合并到 metrics.json.history；更新 ops/comments.json 的评论/用户反馈，并将本次同步追加或合并到 comments.json.history；更新 ops/source.json 的 fetchStatus、lastFetchedAt、必要失败原因，并将本次同步状态追加或合并到 source.json.history；将运营复盘写入 ops/review.html，必须是可直接预览的精美 HTML 报告页，而不是普通段落：至少包含表现简报、KPI 解读、趋势解释、流量效率漏斗、互动质量构成、评论/购买信号、原因归因和下一步动作；图表或图表块使用统一高级配色，内容紧凑，使用内联 CSS/SVG 或纯 HTML/CSS，不依赖外部资源。下一步动作要渲染为可点击按钮；用 addEventListener 绑定事件，不要使用内联 onclick；点击时优先调用 window.Magic.project.sendMessage(message, { model: \"auto\" })，不可用时降级调用 window.Magic.setInputMessage(message)。",
 					"metadata": "平台：{{platform}}\n标题：{{title}}\n真实文章链接：{{publishedUrl}}",
 					"opening": "请作为 IP 运营专家，基于 {{mention}} 抓取并回写发布后的真实运营数据。",
 					"topicName": "[真实数据刷新] {{title}}",
 					"untitled": "自媒体文章"
 				},
-				"startFailed": "发布入盘任务启动失败，请稍后重试"
+				"startFailed": "真实数据同步启动失败，请稍后重试",
+				"startFailedWithReason": "启动真实数据同步失败：{{reason}}"
+			},
+			"opsReview": {
+				"actionsTitle": "下一步动作",
+				"brief": {
+					"consulting": "{{count}} 条咨询信号",
+					"efficiency": "互动效率",
+					"intent": "转化信号",
+					"reachTrend": "阅读变化"
+				},
+				"close": "关闭复盘",
+				"commentsTitle": "用户反馈",
+				"conversionSignal": "评论意图",
+				"deltaReads": "阅读变化",
+				"edit": "编辑数据",
+				"empty": "暂无数据",
+				"engagementRate": "互动率",
+				"funnel": {
+					"engagement": "有效互动",
+					"intent": "收藏/评论/转发",
+					"reach": "触达阅读"
+				},
+				"funnelTitle": "流量效率",
+				"impactTitle": "影响力地图",
+				"kpiHints": {
+					"efficiency": "阅读后的综合反馈",
+					"intent": "后续转化意图",
+					"preference": "内容偏好反馈",
+					"reach": "内容触达规模",
+					"spread": "二次传播潜力"
+				},
+				"markdownTitle": "Markdown 复盘报告",
+				"metricsTitle": "核心指标",
+				"qualityTitle": "质量构成",
+				"reviewHtmlTitle": "HTML 复盘报告",
+				"reviewTitle": "复盘报告",
+				"sourceStatus": {
+					"failed": "抓取失败",
+					"fetched": "已抓取真实数据",
+					"pending": "待抓取",
+					"unknown": "尚未抓取"
+				},
+				"summaryTitle": "表现简报",
+				"sync": "同步数据",
+				"title": "运营复盘",
+				"trendTitle": "同步趋势"
 			},
 			"platform": {
 				"actions": {

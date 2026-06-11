@@ -72,12 +72,50 @@ export interface TemplateMeta {
 	titles: string[]
 }
 
+export type SelfMediaPostOpsMetricValue =
+	| string
+	| number
+	| null
+	| {
+			value?: string | number | null
+			label?: string
+			source?: string | null
+			note?: string
+	  }
+
+export interface SelfMediaPostOpsMetricsHistoryItem {
+	fetchedAt: string
+	metrics: Record<string, SelfMediaPostOpsMetricValue>
+	derivedMetrics?: Record<string, SelfMediaPostOpsMetricValue>
+	source?: SelfMediaPostOpsMetricsPayload["source"]
+	note?: string
+}
+
+export interface SelfMediaPostOpsSourceHistoryItem {
+	fetchedAt: string
+	publishedUrl?: string
+	fetchStatus?: SelfMediaPostOpsSourcePayload["fetchStatus"]
+	lastFetchedAt?: string
+	failureReason?: string
+	note?: string
+}
+
+export interface SelfMediaPostOpsCommentsHistoryItem {
+	fetchedAt: string
+	summary?: string
+	comments?: SelfMediaPostOpsCommentItem[]
+	insights?: string[]
+	source?: SelfMediaPostOpsCommentsPayload["source"]
+}
+
 export interface SelfMediaPostOpsMetricsPayload {
 	version: number
 	updatedAt: string
 	source: "real-platform" | "user" | "reference" | "generated" | "mixed"
-	metrics: Record<string, string>
+	metrics: Record<string, SelfMediaPostOpsMetricValue>
+	derivedMetrics?: Record<string, SelfMediaPostOpsMetricValue>
 	notes?: string
+	history?: SelfMediaPostOpsMetricsHistoryItem[]
 }
 
 export interface SelfMediaPostOpsSourcePayload {
@@ -96,6 +134,7 @@ export interface SelfMediaPostOpsSourcePayload {
 		updatedAt?: string
 		lastError?: string
 	}
+	history?: SelfMediaPostOpsSourceHistoryItem[]
 }
 
 export interface SelfMediaPostOpsCommentItem {
@@ -114,6 +153,7 @@ export interface SelfMediaPostOpsCommentsPayload {
 	summary?: string
 	comments: SelfMediaPostOpsCommentItem[]
 	insights?: string[]
+	history?: SelfMediaPostOpsCommentsHistoryItem[]
 }
 
 export interface SelfMediaPostOpsReviewPayload {
@@ -283,7 +323,19 @@ export class SelfMediaFileStorageService {
 		postEntryPath: string,
 		payload: SelfMediaPostOpsMetricsPayload,
 	): Promise<void> {
-		await this.savePostOpsJsonFile(postEntryPath, "metrics.json", payload)
+		const existing = payload.history ? null : await this.loadPostOpsMetrics(postEntryPath)
+		await this.savePostOpsJsonFile(postEntryPath, "metrics.json", {
+			...payload,
+			history:
+				payload.history ??
+				appendPostOpsMetricsHistory(existing, {
+					fetchedAt: payload.updatedAt,
+					metrics: payload.metrics,
+					derivedMetrics: payload.derivedMetrics,
+					source: payload.source,
+					note: payload.notes,
+				}),
+		})
 	}
 
 	async loadPostOpsMetrics(
@@ -310,7 +362,20 @@ export class SelfMediaFileStorageService {
 		postEntryPath: string,
 		payload: SelfMediaPostOpsSourcePayload,
 	): Promise<void> {
-		await this.savePostOpsJsonFile(postEntryPath, "source.json", payload)
+		const existing = payload.history ? null : await this.loadPostOpsSource(postEntryPath)
+		await this.savePostOpsJsonFile(postEntryPath, "source.json", {
+			...payload,
+			history:
+				payload.history ??
+				appendPostOpsSourceHistory(existing, {
+					fetchedAt: payload.updatedAt,
+					publishedUrl: payload.publishedUrl,
+					fetchStatus: payload.fetchStatus,
+					lastFetchedAt: payload.lastFetchedAt,
+					failureReason: payload.failureReason,
+					note: payload.notes,
+				}),
+		})
 	}
 
 	async loadPostOpsSource(postEntryPath: string): Promise<SelfMediaPostOpsSourcePayload | null> {
@@ -327,7 +392,19 @@ export class SelfMediaFileStorageService {
 		postEntryPath: string,
 		payload: SelfMediaPostOpsCommentsPayload,
 	): Promise<void> {
-		await this.savePostOpsJsonFile(postEntryPath, "comments.json", payload)
+		const existing = payload.history ? null : await this.loadPostOpsComments(postEntryPath)
+		await this.savePostOpsJsonFile(postEntryPath, "comments.json", {
+			...payload,
+			history:
+				payload.history ??
+				appendPostOpsCommentsHistory(existing, {
+					fetchedAt: payload.updatedAt,
+					summary: payload.summary,
+					comments: payload.comments,
+					insights: payload.insights,
+					source: payload.source,
+				}),
+		})
 	}
 
 	async loadPostOpsComments(
@@ -353,6 +430,26 @@ export class SelfMediaFileStorageService {
 	async loadPostOpsReview(postEntryPath: string): Promise<SelfMediaPostOpsReviewPayload | null> {
 		try {
 			const content = await this.loadPostOpsFileContent(postEntryPath, "review.md")
+			if (content === null) return null
+			return { content }
+		} catch {
+			return null
+		}
+	}
+
+	async savePostOpsReviewHtml(
+		postEntryPath: string,
+		payload: SelfMediaPostOpsReviewPayload,
+	): Promise<void> {
+		const opsDir = await this.ensureDirectory(this.getPostOpsPath(postEntryPath))
+		await this.createAndWriteFile(opsDir, "review.html", payload.content)
+	}
+
+	async loadPostOpsReviewHtml(
+		postEntryPath: string,
+	): Promise<SelfMediaPostOpsReviewPayload | null> {
+		try {
+			const content = await this.loadPostOpsFileContent(postEntryPath, "review.html")
 			if (content === null) return null
 			return { content }
 		} catch {
@@ -1671,4 +1768,72 @@ export class SelfMediaFileStorageService {
 
 		return normalize(nodes)
 	}
+}
+
+function appendPostOpsMetricsHistory(
+	existing: SelfMediaPostOpsMetricsPayload | null,
+	next: SelfMediaPostOpsMetricsHistoryItem,
+): SelfMediaPostOpsMetricsHistoryItem[] {
+	const base = existing?.history?.length
+		? existing.history
+		: existing
+			? [
+					{
+						fetchedAt: existing.updatedAt,
+						metrics: existing.metrics,
+						derivedMetrics: existing.derivedMetrics,
+						source: existing.source,
+						note: existing.notes,
+					},
+				]
+			: []
+	return upsertPostOpsHistoryItem(base, next)
+}
+
+function appendPostOpsSourceHistory(
+	existing: SelfMediaPostOpsSourcePayload | null,
+	next: SelfMediaPostOpsSourceHistoryItem,
+): SelfMediaPostOpsSourceHistoryItem[] {
+	const base = existing?.history?.length
+		? existing.history
+		: existing
+			? [
+					{
+						fetchedAt: existing.updatedAt,
+						publishedUrl: existing.publishedUrl,
+						fetchStatus: existing.fetchStatus,
+						lastFetchedAt: existing.lastFetchedAt,
+						failureReason: existing.failureReason,
+						note: existing.notes,
+					},
+				]
+			: []
+	return upsertPostOpsHistoryItem(base, next)
+}
+
+function appendPostOpsCommentsHistory(
+	existing: SelfMediaPostOpsCommentsPayload | null,
+	next: SelfMediaPostOpsCommentsHistoryItem,
+): SelfMediaPostOpsCommentsHistoryItem[] {
+	const base = existing?.history?.length
+		? existing.history
+		: existing
+			? [
+					{
+						fetchedAt: existing.updatedAt,
+						summary: existing.summary,
+						comments: existing.comments,
+						insights: existing.insights,
+						source: existing.source,
+					},
+				]
+			: []
+	return upsertPostOpsHistoryItem(base, next)
+}
+
+function upsertPostOpsHistoryItem<T extends { fetchedAt: string }>(items: T[], next: T): T[] {
+	const withoutSameTime = items.filter((item) => item.fetchedAt !== next.fetchedAt)
+	return [...withoutSameTime, next].sort(
+		(left, right) => Date.parse(left.fetchedAt) - Date.parse(right.fetchedAt),
+	)
 }

@@ -135,7 +135,7 @@ posts/<post-id>/
 │   ├── source.json
 │   ├── metrics.json
 │   ├── comments.json
-│   └── review.md
+│   └── review.html
 └── post.json
 ```
 
@@ -152,6 +152,13 @@ Tracks the published article URL and sync status.
   "fetchStatus": "pending",
   "lastFetchedAt": null,
   "failureReason": null,
+  "history": [
+    {
+      "fetchedAt": "2026-06-11T09:00:00.000Z",
+      "fetchStatus": "pending",
+      "publishedUrl": "https://example.com/post"
+    }
+  ],
   "autoSync": {
     "enabled": true,
     "taskId": "scheduled-task-id",
@@ -169,17 +176,17 @@ Tracks the published article URL and sync status.
 
 ### `ops/metrics.json`
 
-Stores real or user-entered operation metrics such as exposure/read, likes, saves, comments, shares, follows, conversions, and platform-specific KPI fields.
+Stores real or user-entered operation metrics such as exposure/read, likes, saves, comments, shares, follows, conversions, derived rates, and platform-specific KPI fields. Keep the latest values at the top level and append/upsert each sync into `history` so the product UI can render trends without a separate file.
 
 ### `ops/comments.json`
 
-Stores comment samples, audience feedback, objections, questions, buying/consulting signals, and reusable wording.
+Stores comment samples, audience feedback, objections, questions, buying/consulting signals, and reusable wording. Keep the latest feedback at the top level and append/upsert each sync into `history`.
 
-### `ops/review.md`
+### `ops/review.html`
 
-Stores the readable operational review: performance judgment, attribution, next article topics, title/cover tests, distribution actions, and comment-area actions.
+Primary readable operational review. New syncs should write a polished standalone HTML report, not plain text in an HTML file. Include a compact executive brief, KPI interpretation, trend explanation, traffic-efficiency funnel, quality/interaction mix, audience-signal analysis, attribution, next article topics, title/cover tests, distribution actions, and comment-area actions. Use inline CSS and simple inline chart blocks/SVG so the product can preview it directly below the structured metrics dashboard without external assets. Render next actions as clickable buttons; bind events with `addEventListener` (no inline `onclick`), call `window.Magic.project.sendMessage(message, { model: "auto" })` when available, and fall back to `window.Magic.setInputMessage(message)`.
 
-The post-publication data sync prompt should read `ops/source.json`, visit the bound `publishedUrl`, update `ops/metrics.json`, `ops/comments.json`, and `ops/review.md`, then update `ops/source.json` status fields. It must not generate AI Card artifacts.
+The post-publication data sync prompt should read `ops/source.json`, `ops/metrics.json`, and `ops/comments.json`, visit the bound `publishedUrl`, update latest values plus `history` in the JSON files, write a rich `ops/review.html` report, then update `ops/source.json` status fields. It must not generate AI Card artifacts.
 
 ---
 

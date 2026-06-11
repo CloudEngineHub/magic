@@ -56,6 +56,7 @@ interface SelfMediaPostCardProps {
 		target: SelfMediaPlatformPostItem,
 		config: { enabled: boolean; timeConfig: ScheduledTask.TimeConfig },
 	) => Promise<boolean | void> | boolean | void
+	onOpenOpsReview?: (target: SelfMediaPlatformPostItem) => void
 	onCreateAICard?: (initialValues?: AICardCreateInitialValues) => void
 	onLoadPublishedUrl?: (
 		target: SelfMediaPlatformPostItem,
@@ -67,10 +68,6 @@ interface SelfMediaPostCardProps {
 		target: SelfMediaPlatformPostItem,
 		publishedUrl: string,
 	) => Promise<boolean | void> | boolean | void
-	buildPostReviewInitialValues: (
-		item: SelfMediaPlatformPostItem,
-		title: string,
-	) => AICardCreateInitialValues
 }
 
 function SelfMediaPostCard({
@@ -85,11 +82,10 @@ function SelfMediaPostCard({
 	onOpenOpsMetrics,
 	onPostPublishRefresh,
 	onConfigureAutoSync,
-	onCreateAICard,
+	onOpenOpsReview,
 	onLoadPublishedUrl,
 	onLoadOpsSource,
 	onBindPublishedUrl,
-	buildPostReviewInitialValues,
 }: SelfMediaPostCardProps) {
 	const { t } = useTranslation("super")
 	const { platform, index } = item
@@ -246,13 +242,13 @@ function SelfMediaPostCard({
 						onLoadOpsSource={onLoadOpsSource}
 					/>
 				) : null}
-				{sourceReady && onCreateAICard ? (
+				{sourceReady && onOpenOpsReview ? (
 					<PostActionButton
-						label={t("detail.selfMedia.home.postReviewCard")}
+						label={t("detail.selfMedia.home.openOpsReview")}
 						Icon={BarChart3}
 						showLabel={showActionLabels}
 						variant="primary"
-						onClick={() => onCreateAICard(buildPostReviewInitialValues(item, title))}
+						onClick={() => onOpenOpsReview(item)}
 						dataTestId={`self-media-home-post-review-card-${postId}`}
 					/>
 				) : null}
