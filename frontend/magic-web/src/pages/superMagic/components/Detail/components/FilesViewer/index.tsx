@@ -100,6 +100,9 @@ const FilesViewer = memo(
 				openPlaybackTab,
 				closePlaybackTab,
 				isPlaybackTab,
+				openKnowledgeBaseTab,
+				closeKnowledgeBaseTab,
+				isKnowledgeBaseTab,
 				handleFileFullscreen,
 				handleExitFullscreen,
 				getCheckBeforeClose,
@@ -226,6 +229,10 @@ const FilesViewer = memo(
 				// Playback tab相关方法
 				openPlaybackTab,
 				closePlaybackTab,
+				// Knowledge base tab相关方法
+				openKnowledgeBaseTab,
+				closeKnowledgeBaseTab,
+				// Website tab相关方法
 				openWebsiteTab,
 			}))
 
@@ -403,6 +410,10 @@ const FilesViewer = memo(
 							}
 						: undefined
 
+					// 判断是否是知识库tab
+					const isKbTab = isKnowledgeBaseTab(tab.id)
+					const knowledgeBaseData = isKbTab ? (tab as any).data : undefined
+
 					return (
 						<TabCache
 							key={tab.id}
@@ -414,6 +425,7 @@ const FilesViewer = memo(
 							openFileTab={openFileTab}
 							playbackProps={playbackProps}
 							hideTabBar={props.hideTabBar}
+							knowledgeBaseData={knowledgeBaseData}
 						/>
 					)
 				})

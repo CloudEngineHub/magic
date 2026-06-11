@@ -3,6 +3,7 @@ export enum DetailType {
 	Terminal = "terminal",
 	Browser = "browser",
 	Search = "search",
+	KnowledgeSearch = "knowledge_search",
 	Html = "html",
 	Text = "text",
 	Md = "md",
@@ -65,6 +66,7 @@ export interface DetailData {
 	[DetailType.Terminal]: DetailTerminalData
 	[DetailType.Browser]: DetailBrowserData
 	[DetailType.Search]: DetailSearchData
+	[DetailType.KnowledgeSearch]: any
 	[DetailType.Html]: DetailHTMLData
 	[DetailType.Text]: DetailTextData
 	[DetailType.Md]: DetailMDData
@@ -154,6 +156,7 @@ export interface DetailUniverData {
 	file_name: string
 	file_extension?: string
 	file_id?: string
+	file_url?: string
 }
 
 /** 文件树数据 */

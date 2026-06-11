@@ -6,6 +6,7 @@ import MagicInput from "../MagicInput"
 import MagicSelect from "../MagicSelect"
 import MagicTreeSelect from "../MagicTreeSelect"
 import { SearchItemType } from "./types"
+import TimeFilterPanel from "../TimeFilterPanel"
 
 // 搜索组件类型定义
 export interface SearchComponent {
@@ -22,6 +23,7 @@ const defaultComponents = new Map<string, SearchComponent>([
 	[SearchItemType.DATE, { component: MagicDatePicker }],
 	[SearchItemType.RADIO, { component: Radio }],
 	[SearchItemType.RADIO_GROUP, { component: Radio.Group }],
+	[SearchItemType.TIME_FILTER_PANEL, { component: TimeFilterPanel }],
 ])
 
 const SearchComponentContext = createContext<{

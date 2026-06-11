@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
 import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabContent"
+import KnowledgeBaseTabContent from "./KnowledgeBaseTabContent"
 import { PLAYBACK_TAB_ID } from "../hooks/usePlaybackTab"
 import WebsiteIframeTabContent from "./WebsiteIframeTabContent"
 import { getWebsiteTabData, isWebsiteTab } from "../utils/websiteTabs"
@@ -13,6 +14,10 @@ type CachedTab = Partial<TabItem> & {
 	refreshKey?: string
 	[key: string]: unknown
 }
+import {
+	KNOWLEDGE_BASE_TAB_ID_PREFIX,
+	type KnowledgeBaseTabData,
+} from "../hooks/useKnowledgeBaseTab"
 
 interface TabCacheProps {
 	tab: CachedTab
@@ -24,6 +29,7 @@ interface TabCacheProps {
 	playbackProps?: PlaybackTabContentProps
 	/** When true, content fills the viewer without reserving tab bar height */
 	hideTabBar?: boolean
+	knowledgeBaseData?: KnowledgeBaseTabData
 }
 
 /**
@@ -40,9 +46,11 @@ const TabCache = memo(
 		openFileTab,
 		playbackProps,
 		hideTabBar = false,
+		knowledgeBaseData,
 	}: TabCacheProps) => {
 		const isPlaybackTab = tab.id === PLAYBACK_TAB_ID
 		const isWebsite = isWebsiteTab(tab)
+		const isKnowledgeBaseTab = tab.id.startsWith(KNOWLEDGE_BASE_TAB_ID_PREFIX)
 		const tabContentRef = useRef<HTMLDivElement>(null)
 		const isFullscreenMode = useFullscreenMode()
 
@@ -97,13 +105,15 @@ const TabCache = memo(
 					isActive
 						? "pointer-events-auto visible opacity-100"
 						: "pointer-events-none invisible opacity-0",
-					isPlaybackTab && "bg-white dark:bg-background",
+					(isPlaybackTab || isKnowledgeBaseTab) && "bg-white dark:bg-background",
 				)}
 			>
 				{isPlaybackTab && playbackProps ? (
 					<PlaybackTabContent {...playbackProps} />
 				) : isWebsite ? (
 					<WebsiteIframeTabContent {...getWebsiteTabData(tab)} isActive={isActive} />
+				) : isKnowledgeBaseTab && knowledgeBaseData ? (
+					<KnowledgeBaseTabContent data={knowledgeBaseData} />
 				) : (
 					<Render
 						key={tab.refreshKey || tab.id}
