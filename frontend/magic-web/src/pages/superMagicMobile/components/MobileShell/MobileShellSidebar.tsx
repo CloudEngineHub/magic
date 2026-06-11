@@ -28,7 +28,7 @@ export interface MobileShellSidebarProps {
 	testIdPrefix?: string
 }
 
-const PRIMARY_NAV_KEYS = new Set(["chats", "workspaces", "recording"])
+const PRIMARY_NAV_KEYS = new Set(["home", "chats", "workspaces", "recording"])
 
 const ACCOUNT_PILL_BOX_SHADOW = "rgb(0 0 0 / 17%) 0px 10px 20px -12px"
 

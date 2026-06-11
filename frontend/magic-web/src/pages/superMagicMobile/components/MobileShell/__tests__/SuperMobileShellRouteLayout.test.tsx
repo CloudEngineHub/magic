@@ -68,6 +68,13 @@ vi.mock("../MobileShellAppLayout", () => ({
 			</button>
 			<button
 				type="button"
+				onClick={() => menuValue.onNavigate("home")}
+				data-testid="go-menu-home"
+			>
+				menu home
+			</button>
+			<button
+				type="button"
 				onClick={() => menuValue.onNavigate("workspaces")}
 				data-testid="go-workspaces"
 			>
@@ -180,6 +187,21 @@ describe("SuperMobileShellRouteLayout", () => {
 
 		expect(navigateMock).toHaveBeenCalledWith({
 			name: "SuperWorkspacesList",
+			viewTransition: false,
+		})
+	})
+
+	it("navigates the shell home menu item to mobile home without view transition", () => {
+		render(
+			<SuperMobileShellRouteLayout activeView="chats" closeSidebarAriaLabel="close">
+				<div />
+			</SuperMobileShellRouteLayout>,
+		)
+
+		fireEvent.click(screen.getByTestId("go-menu-home"))
+
+		expect(navigateMock).toHaveBeenCalledWith({
+			name: "MobileHome",
 			viewTransition: false,
 		})
 	})
