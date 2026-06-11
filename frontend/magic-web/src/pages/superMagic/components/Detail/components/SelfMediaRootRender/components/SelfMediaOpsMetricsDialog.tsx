@@ -26,6 +26,11 @@ interface SelfMediaOpsMetricsDialogProps {
 	onOpenChange: (open: boolean) => void
 	target: SelfMediaPlatformPostItem | null
 	fileStorageService: SelfMediaFileStorageService | null
+	onUpdateAutoSyncPublishedUrl?: (
+		target: SelfMediaPlatformPostItem,
+		publishedUrl: string,
+		autoSync: NonNullable<SelfMediaPostOpsSourcePayload["autoSync"]>,
+	) => Promise<boolean | void> | boolean | void
 	onFetchPublishedData?: (
 		target: SelfMediaPlatformPostItem,
 		publishedUrl: string,
@@ -72,11 +77,14 @@ function SelfMediaOpsMetricsDialog({
 	onOpenChange,
 	target,
 	fileStorageService,
+	onUpdateAutoSyncPublishedUrl,
 	onFetchPublishedData,
 }: SelfMediaOpsMetricsDialogProps) {
 	const { t } = useTranslation("super")
 	const [values, setValues] = useState<MetricsFormValues>(() => buildInitialValues())
 	const [loadedValues, setLoadedValues] = useState<MetricsFormValues>(() => buildInitialValues())
+	const [sourceAutoSync, setSourceAutoSync] =
+		useState<SelfMediaPostOpsSourcePayload["autoSync"]>()
 	const [mode, setMode] = useState<"preview" | "edit">("preview")
 	const [loading, setLoading] = useState(false)
 	const [saving, setSaving] = useState(false)
@@ -96,6 +104,7 @@ function SelfMediaOpsMetricsDialog({
 		const initialValues = buildInitialValues()
 		setValues(initialValues)
 		setLoadedValues(initialValues)
+		setSourceAutoSync(undefined)
 		setMode("preview")
 		setManualDataOpen(false)
 		if (!fileStorageService || !target) return
@@ -118,6 +127,7 @@ function SelfMediaOpsMetricsDialog({
 				})
 				setValues(nextValues)
 				setLoadedValues(nextValues)
+				setSourceAutoSync(sourcePayload?.autoSync)
 			})
 			.finally(() => {
 				if (!cancelled) setLoading(false)
@@ -138,14 +148,27 @@ function SelfMediaOpsMetricsDialog({
 
 	const savePostOpsSource = useCallback(
 		async (options?: { forcePending?: boolean }) => {
-			if (!fileStorageService || !target || !publishedUrl) return
+			if (!fileStorageService || !target || !publishedUrl) return false
 			const shouldKeepSourceStatus =
 				!options?.forcePending &&
 				publishedUrl === values.sourceOriginalUrl.trim() &&
 				values.sourceFetchStatus !== "unknown"
+			const sourceUrlChanged = publishedUrl !== values.sourceOriginalUrl.trim()
+			const updatedAt = new Date().toISOString()
+			let nextAutoSync = sourceAutoSync
+			if (sourceUrlChanged && sourceAutoSync?.enabled && sourceAutoSync.taskId) {
+				if (!onUpdateAutoSyncPublishedUrl) return false
+				const updated = await onUpdateAutoSyncPublishedUrl(
+					target,
+					publishedUrl,
+					sourceAutoSync,
+				)
+				if (updated === false) return false
+				nextAutoSync = { ...sourceAutoSync, updatedAt }
+			}
 			await fileStorageService.savePostOpsSource(target.entry.entry, {
 				version: 1,
-				updatedAt: new Date().toISOString(),
+				updatedAt,
 				platform: target.platform,
 				publishedUrl,
 				fetchStatus: shouldKeepSourceStatus ? values.sourceFetchStatus : "pending",
@@ -155,11 +178,15 @@ function SelfMediaOpsMetricsDialog({
 				failureReason: shouldKeepSourceStatus
 					? values.sourceFailureReason || undefined
 					: undefined,
+				...(nextAutoSync ? { autoSync: nextAutoSync } : {}),
 			})
+			return true
 		},
 		[
 			fileStorageService,
+			onUpdateAutoSyncPublishedUrl,
 			publishedUrl,
+			sourceAutoSync,
 			target,
 			values.sourceFailureReason,
 			values.sourceFetchStatus,
@@ -172,7 +199,8 @@ function SelfMediaOpsMetricsDialog({
 		if (!fileStorageService || !target || !publishedUrl) return
 		setSaving(true)
 		try {
-			await savePostOpsSource()
+			const sourceSaved = await savePostOpsSource()
+			if (!sourceSaved) return
 			const metrics = Object.fromEntries(
 				METRIC_FIELDS.map(({ key }) => [key, values[key].trim()]).filter(
 					([, value]) => value,
@@ -216,7 +244,8 @@ function SelfMediaOpsMetricsDialog({
 		if (!target || !publishedUrl || !onFetchPublishedData) return
 		setFetching(true)
 		try {
-			await savePostOpsSource({ forcePending: true })
+			const sourceSaved = await savePostOpsSource({ forcePending: true })
+			if (!sourceSaved) return
 			await onFetchPublishedData(target, publishedUrl)
 			onOpenChange(false)
 		} finally {

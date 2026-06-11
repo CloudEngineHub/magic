@@ -112,6 +112,8 @@ vi.mock("react-i18next", () => ({
 							"Save and fetch article data",
 						"detail.selfMedia.opsRefresh.missingSourceUrl":
 							"Please bind the published article URL first.",
+						"detail.selfMedia.opsRefresh.startFailed":
+							"Failed to start publish ingest. Please try again later.",
 						"detail.selfMedia.home.opsOverview.title": "Operations loop",
 						"detail.selfMedia.home.opsOverview.content": "Content",
 						"detail.selfMedia.home.opsOverview.source": "Published link",
@@ -213,10 +215,20 @@ vi.mock("../components/SelfMediaOpsMetricsDialog", () => ({
 	default: function MockSelfMediaOpsMetricsDialog({
 		open,
 		target,
+		onUpdateAutoSyncPublishedUrl,
 		onFetchPublishedData,
 	}: {
 		open: boolean
 		target?: { post?: { meta?: { title?: string; feedTitle?: string } } } | null
+		onUpdateAutoSyncPublishedUrl?: (
+			target: unknown,
+			publishedUrl: string,
+			autoSync: {
+				enabled: boolean
+				taskId?: string
+				timeConfig?: { type: string; time: string; day?: string }
+			},
+		) => void
 		onFetchPublishedData?: (target: unknown, publishedUrl: string) => void
 	}) {
 		return open ? (
@@ -234,6 +246,28 @@ vi.mock("../components/SelfMediaOpsMetricsDialog", () => ({
 					data-testid="self-media-ops-dialog-fetch"
 				>
 					fetch-dialog-data
+				</button>
+				<button
+					type="button"
+					onClick={() =>
+						target &&
+						onUpdateAutoSyncPublishedUrl?.(
+							target,
+							"https://www.xiaohongshu.com/explore/new-post-1",
+							{
+								enabled: true,
+								taskId: "task-1",
+								timeConfig: {
+									type: "weekly_repeat",
+									time: "10:30",
+									day: "2",
+								},
+							},
+						)
+					}
+					data-testid="self-media-ops-dialog-update-auto-sync-link"
+				>
+					update-auto-sync-link
 				</button>
 			</div>
 		) : null
@@ -1172,6 +1206,159 @@ describe("SelfMediaRootRender", () => {
 		).toBeInTheDocument()
 	})
 
+	it("updates the existing auto sync task when changing the published link", async () => {
+		const post = {
+			meta: {
+				id: "post-1",
+				title: "Post One",
+				feedTitle: "Post One Feed",
+				author: "Magic Lab",
+			},
+			cards: [{ path: "cards/01.html", fileId: "card-file" }],
+		}
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post,
+			},
+		]
+		mockStore.ensurePlatformPostLoaded.mockResolvedValue(post)
+		mockLoadPostOpsSource.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:05:00.000Z",
+			platform: "rednote",
+			publishedUrl: "https://www.xiaohongshu.com/explore/old-post-1",
+			fetchStatus: "pending",
+			autoSync: {
+				enabled: true,
+				taskId: "task-1",
+				timeConfig: {
+					type: "weekly_repeat",
+					time: "10:30",
+					day: "2",
+				},
+			},
+		})
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1", workspace_id: "workspace-1" } as never}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-ops-artifact-post-1-source"))
+		fireEvent.change(await screen.findByTestId("self-media-home-post-bind-link-input-post-1"), {
+			target: { value: "https://www.xiaohongshu.com/explore/new-post-1" },
+		})
+		fireEvent.click(screen.getByTestId("self-media-home-post-bind-link-save-post-1"))
+
+		await waitFor(() => {
+			expect(mockBuildSelfMediaPostAutoSyncTaskData).toHaveBeenCalledWith(
+				expect.objectContaining({
+					workspaceId: "workspace-1",
+					projectId: "project-1",
+					platform: "rednote",
+					publishedUrl: "https://www.xiaohongshu.com/explore/new-post-1",
+					post,
+					postDirectoryItem: expect.objectContaining({
+						file_id: "post-dir",
+						relative_file_path: "posts/post-1/",
+					}),
+					model: mockLanguageModel,
+					timeConfig: {
+						type: "weekly_repeat",
+						time: "10:30",
+						day: "2",
+					},
+					taskId: "task-1",
+				}),
+			)
+		})
+		expect(mockSaveSelfMediaPostAutoSyncTask).toHaveBeenCalledWith(
+			expect.objectContaining({
+				task_name: "[文章数据同步] Post One Feed",
+			}),
+			"task-1",
+		)
+	})
+
+	it("does not save the changed published link when updating the existing auto sync task fails", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const post = {
+			meta: {
+				id: "post-1",
+				title: "Post One",
+				feedTitle: "Post One Feed",
+				author: "Magic Lab",
+			},
+			cards: [{ path: "cards/01.html", fileId: "card-file" }],
+		}
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post,
+			},
+		]
+		mockStore.ensurePlatformPostLoaded.mockResolvedValue(post)
+		mockLoadPostOpsSource.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:05:00.000Z",
+			platform: "rednote",
+			publishedUrl: "https://www.xiaohongshu.com/explore/old-post-1",
+			fetchStatus: "pending",
+			autoSync: {
+				enabled: true,
+				taskId: "task-1",
+				timeConfig: {
+					type: "weekly_repeat",
+					time: "10:30",
+					day: "2",
+				},
+			},
+		})
+		mockSaveSelfMediaPostAutoSyncTask.mockRejectedValueOnce(new Error("update failed"))
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1", workspace_id: "workspace-1" } as never}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-ops-artifact-post-1-source"))
+		fireEvent.change(await screen.findByTestId("self-media-home-post-bind-link-input-post-1"), {
+			target: { value: "https://www.xiaohongshu.com/explore/new-post-1" },
+		})
+		fireEvent.click(screen.getByTestId("self-media-home-post-bind-link-save-post-1"))
+
+		await waitFor(() => {
+			expect(mockToastError).toHaveBeenCalledWith(
+				"Failed to start publish ingest. Please try again later.",
+			)
+		})
+		expect(consoleError).toHaveBeenCalledWith(
+			"Self-media auto sync published URL update failed:",
+			expect.any(Error),
+		)
+		expect(mockSavePostOpsSource).not.toHaveBeenCalled()
+		expect(
+			screen.getByTestId("self-media-home-post-bind-link-popover-post-1"),
+		).toBeInTheDocument()
+		expect(mockSendSelfMediaPostPublishDataRefresh).not.toHaveBeenCalled()
+		consoleError.mockRestore()
+	})
+
 	it("requires a non-empty published link before starting publish ingest", async () => {
 		mockLoadPostOpsSource.mockResolvedValue({
 			version: 1,
@@ -1469,6 +1656,128 @@ describe("SelfMediaRootRender", () => {
 		)
 	})
 
+	it("shows the existing auto sync configuration in the data popover", async () => {
+		mockLoadPostOpsSource.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:05:00.000Z",
+			platform: "rednote",
+			publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+			fetchStatus: "pending",
+			autoSync: {
+				enabled: false,
+				taskId: "task-1",
+				timeConfig: {
+					type: "monthly_repeat",
+					time: "10:30",
+					day: "15",
+				},
+			},
+		})
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1", workspace_id: "workspace-1" } as never}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+
+		expect(
+			await screen.findByTestId("self-media-home-post-auto-sync-enabled-post-1"),
+		).toHaveValue("0")
+		expect(screen.getByTestId("self-media-home-post-auto-sync-frequency-post-1")).toHaveValue(
+			"monthly_repeat",
+		)
+		expect(screen.getByTestId("self-media-home-post-auto-sync-time-post-1")).toHaveValue(
+			"10:30",
+		)
+		expect(await screen.findByTestId("self-media-home-post-auto-sync-day-post-1")).toHaveValue(
+			"15",
+		)
+	})
+
+	it("keeps auto sync save disabled while the existing configuration is loading", async () => {
+		mockLoadPostOpsSource.mockImplementation(() => new Promise(() => undefined))
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1", workspace_id: "workspace-1" } as never}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+
+		expect(
+			await screen.findByTestId("self-media-home-post-auto-sync-save-post-1"),
+		).toBeDisabled()
+	})
+
+	it("does not mark auto sync disabled locally when the scheduled task cannot be disabled", async () => {
+		const sourceOnlyAttachmentList = [
+			{
+				file_id: "source-json",
+				file_name: "source.json",
+				relative_file_path: "posts/post-1/ops/source.json",
+			},
+		] as NonNullable<SelfMediaRootRenderProps["attachmentList"]>
+		mockLoadPostOpsSource.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:05:00.000Z",
+			platform: "rednote",
+			publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+			fetchStatus: "pending",
+			autoSync: {
+				enabled: true,
+				taskId: "task-1",
+				timeConfig: {
+					type: "daily_repeat",
+					time: "09:00",
+				},
+			},
+		})
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={sourceOnlyAttachmentList}
+				attachmentList={sourceOnlyAttachmentList}
+				selectedProject={{ id: "project-1", workspace_id: "workspace-1" } as never}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+		fireEvent.change(
+			await screen.findByTestId("self-media-home-post-auto-sync-enabled-post-1"),
+			{ target: { value: "0" } },
+		)
+		fireEvent.click(screen.getByTestId("self-media-home-post-auto-sync-save-post-1"))
+
+		await waitFor(() => {
+			expect(mockToastError).toHaveBeenCalledWith(
+				"Failed to start publish ingest. Please try again later.",
+			)
+		})
+		expect(mockDisableSelfMediaPostAutoSyncTask).not.toHaveBeenCalled()
+		expect(mockSavePostOpsSource).not.toHaveBeenCalledWith(
+			"posts/post-1/post.json",
+			expect.objectContaining({
+				autoSync: expect.objectContaining({
+					enabled: false,
+				}),
+			}),
+		)
+		expect(screen.getByTestId("self-media-home-post-data-popover-post-1")).toBeInTheDocument()
+	})
+
 	it("starts publish ingest from the operations workspace fetch button", async () => {
 		const post = {
 			meta: {
@@ -1501,7 +1810,9 @@ describe("SelfMediaRootRender", () => {
 
 		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
 		fireEvent.click(await screen.findByTestId("self-media-home-post-data-overview-post-1"))
-		fireEvent.click(screen.getByTestId("self-media-ops-dialog-fetch"))
+		const fetchButton = await screen.findByTestId("self-media-ops-dialog-fetch")
+		mockLoadPostOpsSource.mockClear()
+		fireEvent.click(fetchButton)
 
 		await waitFor(() => {
 			expect(mockSendSelfMediaPostPublishDataRefresh).toHaveBeenCalledWith(
@@ -1515,6 +1826,86 @@ describe("SelfMediaRootRender", () => {
 			)
 		})
 		expect(mockLoadPostOpsSource).not.toHaveBeenCalled()
+	})
+
+	it("updates the existing auto sync task when changing the published link from the data overview", async () => {
+		const post = {
+			meta: {
+				id: "post-1",
+				title: "Post One",
+				feedTitle: "Post One Feed",
+				author: "Magic Lab",
+			},
+			cards: [{ path: "cards/01.html", fileId: "card-file" }],
+		}
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post,
+			},
+		]
+		mockStore.ensurePlatformPostLoaded.mockResolvedValue(post)
+		mockLoadPostOpsSource.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:05:00.000Z",
+			platform: "rednote",
+			publishedUrl: "https://www.xiaohongshu.com/explore/old-post-1",
+			fetchStatus: "pending",
+			autoSync: {
+				enabled: true,
+				taskId: "task-1",
+				timeConfig: {
+					type: "weekly_repeat",
+					time: "10:30",
+					day: "2",
+				},
+			},
+		})
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1", workspace_id: "workspace-1" } as never}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+		fireEvent.click(await screen.findByTestId("self-media-home-post-data-overview-post-1"))
+		fireEvent.click(await screen.findByTestId("self-media-ops-dialog-update-auto-sync-link"))
+
+		await waitFor(() => {
+			expect(mockBuildSelfMediaPostAutoSyncTaskData).toHaveBeenCalledWith(
+				expect.objectContaining({
+					workspaceId: "workspace-1",
+					projectId: "project-1",
+					platform: "rednote",
+					publishedUrl: "https://www.xiaohongshu.com/explore/new-post-1",
+					post,
+					postDirectoryItem: expect.objectContaining({
+						file_id: "post-dir",
+						relative_file_path: "posts/post-1/",
+					}),
+					model: mockLanguageModel,
+					timeConfig: {
+						type: "weekly_repeat",
+						time: "10:30",
+						day: "2",
+					},
+					taskId: "task-1",
+				}),
+			)
+		})
+		expect(mockSaveSelfMediaPostAutoSyncTask).toHaveBeenCalledWith(
+			expect.objectContaining({
+				task_name: "[文章数据同步] Post One Feed",
+			}),
+			"task-1",
+		)
 	})
 
 	it("shows file-backed operations loop status on the article home", () => {

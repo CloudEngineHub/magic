@@ -22,7 +22,10 @@ import AICardCreateDialog, { type AICardCreateInitialValues } from "./components
 import SelfMediaOpsMetricsDialog from "./components/SelfMediaOpsMetricsDialog"
 import PrePublishAnalysisDialog from "./components/PrePublishAnalysisDialog"
 import PrePublishAnalysisFloatingButton from "./components/PrePublishAnalysisFloatingButton"
-import { SelfMediaFileStorageService } from "./services/SelfMediaFileStorageService"
+import {
+	SelfMediaFileStorageService,
+	type SelfMediaPostOpsSourcePayload,
+} from "./services/SelfMediaFileStorageService"
 import {
 	resolveSelfMediaPostDirectoryAttachmentItem,
 	resolveSelfMediaPostMentionFileId,
@@ -255,24 +258,75 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		},
 		[attachmentList, dataSyncModel, fileStorageService, selectedProject, store, t],
 	)
+	const handleUpdateAutoSyncPublishedUrl = useCallback(
+		async (
+			target: SelfMediaPlatformPostItem,
+			publishedUrl: string,
+			autoSync: NonNullable<SelfMediaPostOpsSourcePayload["autoSync"]>,
+		) => {
+			if (!autoSync.enabled || !autoSync.taskId) return true
+			const post =
+				(await store.ensurePlatformPostLoaded(target.platform, target.index)) || target.post
+			const mentionFileId = resolveSelfMediaPostMentionFileId(post)
+			const postDirectoryItem = resolveSelfMediaPostDirectoryAttachmentItem(
+				attachmentList,
+				mentionFileId,
+			)
+			const routeState = getSuperIdState()
+			const workspaceId =
+				(selectedProject as { workspace_id?: string } | null | undefined)?.workspace_id ||
+				routeState.workspaceId ||
+				""
+			const projectId = selectedProject?.id || routeState.projectId || ""
+			if (!workspaceId || !projectId || !postDirectoryItem) {
+				magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+				return false
+			}
+			const taskData = buildSelfMediaPostAutoSyncTaskData({
+				workspaceId,
+				projectId,
+				platform: target.platform,
+				publishedUrl,
+				post,
+				postDirectoryItem,
+				timeConfig: autoSync.timeConfig,
+				model: dataSyncModel,
+				taskId: autoSync.taskId,
+			})
+			try {
+				await saveSelfMediaPostAutoSyncTask(taskData, autoSync.taskId)
+				return true
+			} catch (error) {
+				console.error("Self-media auto sync published URL update failed:", error)
+				magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+				return false
+			}
+		},
+		[attachmentList, dataSyncModel, selectedProject, store, t],
+	)
 	const handleConfigurePostAutoSync = useCallback(
 		async (
 			target: SelfMediaPlatformPostItem,
 			config: { enabled: boolean; timeConfig: ScheduledTask.TimeConfig },
 		) => {
 			try {
-				if (!fileStorageService) return
+				if (!fileStorageService) return false
 				const source = await fileStorageService.loadPostOpsSource(target.entry.entry)
 				const publishedUrl = source?.publishedUrl?.trim()
 				if (!publishedUrl && config.enabled) {
 					setOpsMetricsTarget(target)
 					magicToast.error(t("detail.selfMedia.opsRefresh.missingSourceUrl"))
-					return
+					return false
 				}
 				const updatedAt = new Date().toISOString()
 
 				if (!config.enabled) {
-					if (source?.autoSync?.taskId && publishedUrl) {
+					const existingTaskId = source?.autoSync?.taskId
+					if (existingTaskId) {
+						if (!publishedUrl) {
+							magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+							return false
+						}
 						const post =
 							(await store.ensurePlatformPostLoaded(target.platform, target.index)) ||
 							target.post
@@ -288,21 +342,23 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 							routeState.workspaceId ||
 							""
 						const projectId = selectedProject?.id || routeState.projectId || ""
-						if (workspaceId && projectId && postDirectoryItem) {
-							const taskData = buildSelfMediaPostAutoSyncTaskData({
-								workspaceId,
-								projectId,
-								platform: target.platform,
-								publishedUrl,
-								post,
-								postDirectoryItem,
-								timeConfig: config.timeConfig,
-								model: dataSyncModel,
-								enabled: 0,
-								taskId: source.autoSync.taskId,
-							})
-							await disableSelfMediaPostAutoSyncTask(source.autoSync.taskId, taskData)
+						if (!workspaceId || !projectId || !postDirectoryItem) {
+							magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+							return false
 						}
+						const taskData = buildSelfMediaPostAutoSyncTaskData({
+							workspaceId,
+							projectId,
+							platform: target.platform,
+							publishedUrl,
+							post,
+							postDirectoryItem,
+							timeConfig: config.timeConfig,
+							model: dataSyncModel,
+							enabled: 0,
+							taskId: existingTaskId,
+						})
+						await disableSelfMediaPostAutoSyncTask(existingTaskId, taskData)
 					}
 					await fileStorageService.savePostOpsSource(target.entry.entry, {
 						version: 1,
@@ -320,7 +376,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 							updatedAt,
 						},
 					})
-					return
+					return true
 				}
 
 				const post =
@@ -340,7 +396,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				const projectId = selectedProject?.id || routeState.projectId || ""
 				if (!workspaceId || !projectId || !postDirectoryItem) {
 					magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
-					return
+					return false
 				}
 
 				const taskData = buildSelfMediaPostAutoSyncTaskData({
@@ -377,9 +433,11 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 						updatedAt,
 					},
 				})
+				return true
 			} catch (error) {
 				console.error("Self-media auto sync configuration failed:", error)
 				magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+				return false
 			}
 		},
 		[attachmentList, dataSyncModel, fileStorageService, selectedProject, store, t],
@@ -391,18 +449,51 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		},
 		[fileStorageService],
 	)
-	const handleBindPostPublishedUrl = useCallback(
-		async (target: SelfMediaPlatformPostItem, publishedUrl: string) => {
-			if (!fileStorageService) return
-			await fileStorageService.savePostOpsSource(target.entry.entry, {
-				version: 1,
-				updatedAt: new Date().toISOString(),
-				platform: target.platform,
-				publishedUrl: publishedUrl.trim(),
-				fetchStatus: "pending",
-			})
+	const handleLoadPostOpsSource = useCallback(
+		async (target: SelfMediaPlatformPostItem) => {
+			return (await fileStorageService?.loadPostOpsSource(target.entry.entry)) ?? null
 		},
 		[fileStorageService],
+	)
+	const handleBindPostPublishedUrl = useCallback(
+		async (target: SelfMediaPlatformPostItem, publishedUrl: string) => {
+			try {
+				if (!fileStorageService) return false
+				const updatedAt = new Date().toISOString()
+				const nextPublishedUrl = publishedUrl.trim()
+				const source = await fileStorageService.loadPostOpsSource(target.entry.entry)
+				const sourcePublishedUrl = source?.publishedUrl?.trim() || ""
+				if (
+					source?.autoSync?.enabled &&
+					source.autoSync.taskId &&
+					sourcePublishedUrl !== nextPublishedUrl
+				) {
+					const updated = await handleUpdateAutoSyncPublishedUrl(
+						target,
+						nextPublishedUrl,
+						source.autoSync,
+					)
+					if (!updated) return false
+				}
+				await fileStorageService.savePostOpsSource(target.entry.entry, {
+					version: 1,
+					updatedAt,
+					platform: source?.platform || target.platform,
+					publishedUrl: nextPublishedUrl,
+					fetchStatus: "pending",
+					lastFetchedAt: source?.lastFetchedAt,
+					failureReason: source?.failureReason,
+					notes: source?.notes,
+					...(source?.autoSync ? { autoSync: { ...source.autoSync, updatedAt } } : {}),
+				})
+				return true
+			} catch (error) {
+				console.error("Self-media published URL binding failed:", error)
+				magicToast.error(t("detail.selfMedia.opsRefresh.startFailed"))
+				return false
+			}
+		},
+		[fileStorageService, handleUpdateAutoSyncPublishedUrl, t],
 	)
 	const handleRequestActivePrePublishAnalysis = useCallback(() => {
 		if (!platform) return
@@ -515,6 +606,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					onPostPublishRefresh={allowEdit ? handlePostPublishRefresh : undefined}
 					onConfigureAutoSync={allowEdit ? handleConfigurePostAutoSync : undefined}
 					onLoadPublishedUrl={allowEdit ? handleLoadPostPublishedUrl : undefined}
+					onLoadOpsSource={allowEdit ? handleLoadPostOpsSource : undefined}
 					onBindPublishedUrl={allowEdit ? handleBindPostPublishedUrl : undefined}
 					onOpenBrandConfig={allowEdit ? handleOpenBrandConfig : undefined}
 					onCreateAICard={allowEdit ? handleOpenAICardCreate : undefined}
@@ -546,6 +638,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					}}
 					target={opsMetricsTarget}
 					fileStorageService={fileStorageService}
+					onUpdateAutoSyncPublishedUrl={handleUpdateAutoSyncPublishedUrl}
 					onFetchPublishedData={handlePostPublishRefresh}
 				/>
 				<PrePublishAnalysisDialog

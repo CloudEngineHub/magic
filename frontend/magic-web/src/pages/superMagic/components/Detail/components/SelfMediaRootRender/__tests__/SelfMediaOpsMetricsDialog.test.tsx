@@ -321,6 +321,116 @@ describe("SelfMediaOpsMetricsDialog", () => {
 		expect(savePostOpsMetrics).toHaveBeenCalled()
 	})
 
+	it("preserves the existing auto sync configuration when saving source data", async () => {
+		const savePostOpsSource = vi.fn().mockResolvedValue(undefined)
+		const autoSync = {
+			enabled: true,
+			taskId: "task-1",
+			timeConfig: {
+				type: "weekly_repeat",
+				day: "2",
+				time: "10:30",
+			},
+			updatedAt: "2026-06-11T08:00:00.000Z",
+		}
+
+		render(
+			<SelfMediaOpsMetricsDialog
+				open
+				onOpenChange={vi.fn()}
+				target={buildTarget()}
+				fileStorageService={buildFileStorageService({
+					loadPostOpsSource: vi.fn().mockResolvedValue({
+						version: 1,
+						updatedAt: "2026-06-11T08:05:00.000Z",
+						platform: "rednote",
+						publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+						fetchStatus: "pending",
+						autoSync,
+					}),
+					savePostOpsSource,
+				})}
+			/>,
+		)
+
+		await screen.findByTestId("self-media-ops-preview")
+		fireEvent.click(screen.getByTestId("self-media-ops-edit"))
+		await screen.findByDisplayValue("https://www.xiaohongshu.com/explore/post-1")
+		fireEvent.click(screen.getByTestId("self-media-ops-metrics-save"))
+
+		await waitFor(() => {
+			expect(savePostOpsSource).toHaveBeenCalledWith(
+				"posts/post-1/post.json",
+				expect.objectContaining({
+					publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+					autoSync,
+				}),
+			)
+		})
+	})
+
+	it("updates auto sync before saving a changed source URL", async () => {
+		const savePostOpsSource = vi.fn().mockResolvedValue(undefined)
+		const onUpdateAutoSyncPublishedUrl = vi.fn().mockResolvedValue(true)
+		const autoSync = {
+			enabled: true,
+			taskId: "task-1",
+			timeConfig: {
+				type: "weekly_repeat",
+				day: "2",
+				time: "10:30",
+			},
+			updatedAt: "2026-06-11T08:00:00.000Z",
+		}
+
+		render(
+			<SelfMediaOpsMetricsDialog
+				open
+				onOpenChange={vi.fn()}
+				target={buildTarget()}
+				fileStorageService={buildFileStorageService({
+					loadPostOpsSource: vi.fn().mockResolvedValue({
+						version: 1,
+						updatedAt: "2026-06-11T08:05:00.000Z",
+						platform: "rednote",
+						publishedUrl: "https://www.xiaohongshu.com/explore/old-post-1",
+						fetchStatus: "pending",
+						autoSync,
+					}),
+					savePostOpsSource,
+				})}
+				onUpdateAutoSyncPublishedUrl={onUpdateAutoSyncPublishedUrl}
+			/>,
+		)
+
+		await screen.findByTestId("self-media-ops-preview")
+		fireEvent.click(screen.getByTestId("self-media-ops-edit"))
+		fireEvent.change(await screen.findByTestId("self-media-ops-source-url"), {
+			target: { value: "https://www.xiaohongshu.com/explore/new-post-1" },
+		})
+		fireEvent.click(screen.getByTestId("self-media-ops-metrics-save"))
+
+		await waitFor(() => {
+			expect(onUpdateAutoSyncPublishedUrl).toHaveBeenCalledWith(
+				buildTarget(),
+				"https://www.xiaohongshu.com/explore/new-post-1",
+				autoSync,
+			)
+		})
+		expect(savePostOpsSource).toHaveBeenCalledWith(
+			"posts/post-1/post.json",
+			expect.objectContaining({
+				publishedUrl: "https://www.xiaohongshu.com/explore/new-post-1",
+				autoSync: expect.objectContaining({
+					enabled: true,
+					taskId: "task-1",
+					timeConfig: autoSync.timeConfig,
+					updatedAt: expect.any(String),
+				}),
+			}),
+		)
+	})
+
 	it("requires the published URL before fetching published data", async () => {
 		const onFetchPublishedData = vi.fn()
 

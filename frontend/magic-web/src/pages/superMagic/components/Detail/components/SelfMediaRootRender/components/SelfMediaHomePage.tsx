@@ -25,6 +25,7 @@ import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../constants/imageProcess"
 import type { AICardCreateInitialValues } from "./AICardCreateDialog"
 import type { SelfMediaAttachmentNode } from "../types"
 import SelfMediaPostCard, { type SelfMediaPostOpsArtifacts } from "./SelfMediaPostCard"
+import type { SelfMediaPostOpsSourcePayload } from "../services/SelfMediaFileStorageService"
 
 interface AICardFolderChild extends SelfMediaAttachmentNode {
 	display_config?: {
@@ -53,14 +54,17 @@ interface SelfMediaHomePageProps {
 	onConfigureAutoSync?: (
 		target: SelfMediaPlatformPostItem,
 		config: { enabled: boolean; timeConfig: ScheduledTask.TimeConfig },
-	) => Promise<void> | void
+	) => Promise<boolean | void> | boolean | void
 	onLoadPublishedUrl?: (
 		target: SelfMediaPlatformPostItem,
 	) => Promise<string | undefined> | string | undefined
+	onLoadOpsSource?: (
+		target: SelfMediaPlatformPostItem,
+	) => Promise<SelfMediaPostOpsSourcePayload | null> | SelfMediaPostOpsSourcePayload | null
 	onBindPublishedUrl?: (
 		target: SelfMediaPlatformPostItem,
 		publishedUrl: string,
-	) => Promise<void> | void
+	) => Promise<boolean | void> | boolean | void
 	onOpenBrandConfig?: () => void
 	onCreateAICard?: (initialValues?: AICardCreateInitialValues) => void
 	onOpenAICardFolder?: (folder: AICardFolderItem) => void
@@ -79,6 +83,7 @@ function SelfMediaHomePage({
 	onPostPublishRefresh,
 	onConfigureAutoSync,
 	onLoadPublishedUrl,
+	onLoadOpsSource,
 	onBindPublishedUrl,
 	onOpenBrandConfig,
 	onCreateAICard,
@@ -517,6 +522,7 @@ function SelfMediaHomePage({
 																onConfigureAutoSync
 															}
 															onLoadPublishedUrl={onLoadPublishedUrl}
+															onLoadOpsSource={onLoadOpsSource}
 															onBindPublishedUrl={onBindPublishedUrl}
 															onCreateAICard={onCreateAICard}
 															buildPostReviewInitialValues={

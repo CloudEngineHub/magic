@@ -25,6 +25,7 @@ import CardFrame from "./CardFrame"
 import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../constants/imageProcess"
 import { useCoverImageUrl } from "../platforms/wechat-official-accounts/useCoverImageUrl"
 import { isCardPlatform } from "../services/selfMediaAiNormalize"
+import type { SelfMediaPostOpsSourcePayload } from "../services/SelfMediaFileStorageService"
 import type { AICardCreateInitialValues } from "./AICardCreateDialog"
 
 const COMPACT_ACTION_LABEL_MIN_WIDTH = 320
@@ -54,15 +55,18 @@ interface SelfMediaPostCardProps {
 	onConfigureAutoSync?: (
 		target: SelfMediaPlatformPostItem,
 		config: { enabled: boolean; timeConfig: ScheduledTask.TimeConfig },
-	) => Promise<void> | void
+	) => Promise<boolean | void> | boolean | void
 	onCreateAICard?: (initialValues?: AICardCreateInitialValues) => void
 	onLoadPublishedUrl?: (
 		target: SelfMediaPlatformPostItem,
 	) => Promise<string | undefined> | string | undefined
+	onLoadOpsSource?: (
+		target: SelfMediaPlatformPostItem,
+	) => Promise<SelfMediaPostOpsSourcePayload | null> | SelfMediaPostOpsSourcePayload | null
 	onBindPublishedUrl?: (
 		target: SelfMediaPlatformPostItem,
 		publishedUrl: string,
-	) => Promise<void> | void
+	) => Promise<boolean | void> | boolean | void
 	buildPostReviewInitialValues: (
 		item: SelfMediaPlatformPostItem,
 		title: string,
@@ -83,6 +87,7 @@ function SelfMediaPostCard({
 	onConfigureAutoSync,
 	onCreateAICard,
 	onLoadPublishedUrl,
+	onLoadOpsSource,
 	onBindPublishedUrl,
 	buildPostReviewInitialValues,
 }: SelfMediaPostCardProps) {
@@ -238,6 +243,7 @@ function SelfMediaPostCard({
 						onOpenOpsMetrics={onOpenOpsMetrics}
 						onPostPublishRefresh={onPostPublishRefresh}
 						onConfigureAutoSync={onConfigureAutoSync}
+						onLoadOpsSource={onLoadOpsSource}
 					/>
 				) : null}
 				{sourceReady && onCreateAICard ? (
@@ -263,6 +269,7 @@ function PostDataPopover({
 	onOpenOpsMetrics,
 	onPostPublishRefresh,
 	onConfigureAutoSync,
+	onLoadOpsSource,
 }: {
 	item: SelfMediaPlatformPostItem
 	postId: string
@@ -276,12 +283,16 @@ function PostDataPopover({
 	onConfigureAutoSync?: (
 		target: SelfMediaPlatformPostItem,
 		config: { enabled: boolean; timeConfig: ScheduledTask.TimeConfig },
-	) => Promise<void> | void
+	) => Promise<boolean | void> | boolean | void
+	onLoadOpsSource?: (
+		target: SelfMediaPlatformPostItem,
+	) => Promise<SelfMediaPostOpsSourcePayload | null> | SelfMediaPostOpsSourcePayload | null
 }) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
 	const [syncing, setSyncing] = useState(false)
 	const [savingAutoSync, setSavingAutoSync] = useState(false)
+	const [loadingAutoSync, setLoadingAutoSync] = useState(false)
 	const [frequency, setFrequency] = useState<ScheduledTask.ScheduleType>(
 		ScheduledTask.ScheduleType.Daily,
 	)
@@ -299,6 +310,40 @@ function PostDataPopover({
 		}),
 		[day, frequency, time],
 	)
+	const applyAutoSyncConfig = useCallback(
+		(autoSync?: SelfMediaPostOpsSourcePayload["autoSync"]) => {
+			const savedTimeConfig = autoSync?.timeConfig
+			setAutoSyncEnabled(autoSync?.enabled ?? true)
+			setFrequency(savedTimeConfig?.type ?? ScheduledTask.ScheduleType.Daily)
+			setTime(savedTimeConfig?.time || "09:00")
+			setDay(savedTimeConfig?.day || "1")
+		},
+		[],
+	)
+
+	useEffect(() => {
+		if (!open) return
+		applyAutoSyncConfig()
+		if (!onLoadOpsSource) {
+			setLoadingAutoSync(false)
+			return
+		}
+
+		let cancelled = false
+		setLoadingAutoSync(true)
+		void Promise.resolve(onLoadOpsSource(item))
+			.then((source) => {
+				if (cancelled) return
+				applyAutoSyncConfig(source?.autoSync)
+			})
+			.catch(() => undefined)
+			.finally(() => {
+				if (!cancelled) setLoadingAutoSync(false)
+			})
+		return () => {
+			cancelled = true
+		}
+	}, [applyAutoSyncConfig, item, onLoadOpsSource, open])
 
 	const handleSyncNow = useCallback(async () => {
 		if (!onPostPublishRefresh) return
@@ -315,15 +360,26 @@ function PostDataPopover({
 		if (!onConfigureAutoSync) return
 		setSavingAutoSync(true)
 		try {
-			await onConfigureAutoSync(item, { enabled: autoSyncEnabled, timeConfig })
-			setOpen(false)
+			const configured = await onConfigureAutoSync(item, {
+				enabled: autoSyncEnabled,
+				timeConfig,
+			})
+			if (configured !== false) setOpen(false)
 		} finally {
 			setSavingAutoSync(false)
 		}
 	}, [autoSyncEnabled, item, onConfigureAutoSync, timeConfig])
 
+	const handleOpenChange = useCallback(
+		(nextOpen: boolean) => {
+			setOpen(nextOpen)
+			if (nextOpen) setLoadingAutoSync(Boolean(onLoadOpsSource))
+		},
+		[onLoadOpsSource],
+	)
+
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
+		<Popover open={open} onOpenChange={handleOpenChange}>
 			<PopoverTrigger asChild>
 				<button
 					type="button"
@@ -393,6 +449,7 @@ function PostDataPopover({
 						</span>
 						<select
 							value={autoSyncEnabled ? "1" : "0"}
+							disabled={loadingAutoSync}
 							onChange={(event) => setAutoSyncEnabled(event.target.value === "1")}
 							className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
 							data-testid={`self-media-home-post-auto-sync-enabled-${postId}`}
@@ -404,7 +461,7 @@ function PostDataPopover({
 					<div className="grid grid-cols-[1fr_auto] gap-2">
 						<select
 							value={frequency}
-							disabled={!autoSyncEnabled}
+							disabled={loadingAutoSync || !autoSyncEnabled}
 							onChange={(event) =>
 								setFrequency(event.target.value as ScheduledTask.ScheduleType)
 							}
@@ -424,7 +481,7 @@ function PostDataPopover({
 						<Input
 							type="time"
 							value={time}
-							disabled={!autoSyncEnabled}
+							disabled={loadingAutoSync || !autoSyncEnabled}
 							onChange={(event) => setTime(event.target.value)}
 							className="h-8 w-24 text-xs"
 							data-testid={`self-media-home-post-auto-sync-time-${postId}`}
@@ -433,7 +490,7 @@ function PostDataPopover({
 					{frequency !== ScheduledTask.ScheduleType.Daily ? (
 						<Input
 							value={day}
-							disabled={!autoSyncEnabled}
+							disabled={loadingAutoSync || !autoSyncEnabled}
 							onChange={(event) => setDay(event.target.value)}
 							className="h-8 text-xs"
 							placeholder={
@@ -448,11 +505,11 @@ function PostDataPopover({
 						type="button"
 						size="sm"
 						className="w-full"
-						disabled={!onConfigureAutoSync || savingAutoSync}
+						disabled={!onConfigureAutoSync || loadingAutoSync || savingAutoSync}
 						onClick={() => void handleConfigureAutoSync()}
 						data-testid={`self-media-home-post-auto-sync-save-${postId}`}
 					>
-						{savingAutoSync ? (
+						{loadingAutoSync || savingAutoSync ? (
 							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
 						) : null}
 						{autoSyncEnabled
@@ -481,7 +538,7 @@ interface PublishedLinkPopoverProps {
 	onBindPublishedUrl?: (
 		target: SelfMediaPlatformPostItem,
 		publishedUrl: string,
-	) => Promise<void> | void
+	) => Promise<boolean | void> | boolean | void
 	onPostPublishRefresh?: (
 		target: SelfMediaPlatformPostItem,
 		publishedUrl?: string,
@@ -542,7 +599,8 @@ function PublishedLinkPopover({
 			if (!onBindPublishedUrl || !trimmedLink) return
 			setSubmitting(mode)
 			try {
-				await onBindPublishedUrl(item, trimmedLink)
+				const saved = await onBindPublishedUrl(item, trimmedLink)
+				if (saved === false) return
 				onLocalPublishedUrlChange(trimmedLink)
 				if (mode === "fetch") {
 					await onPostPublishRefresh?.(item, trimmedLink)
