@@ -166,7 +166,7 @@ class VolcengineArkModel extends AbstractImageGenerate
     )]
     protected function requestImageGeneration(VolcengineArkRequest $imageGenerateRequest): array
     {
-        $prompt = $imageGenerateRequest->getPrompt();
+        $prompt = $this->buildPromptForRequest($imageGenerateRequest);
         $referImages = $imageGenerateRequest->getReferImages();
 
         // 构建API payload
@@ -213,7 +213,7 @@ class VolcengineArkModel extends AbstractImageGenerate
      */
     protected function requestImageGenerationV2(VolcengineArkRequest $imageGenerateRequest): array
     {
-        $prompt = $imageGenerateRequest->getPrompt();
+        $prompt = $this->buildPromptForRequest($imageGenerateRequest);
         $referImages = $imageGenerateRequest->getReferImages();
 
         // 构建API payload
@@ -250,6 +250,22 @@ class VolcengineArkModel extends AbstractImageGenerate
 
         // 直接调用API，异常自然向上抛
         return $this->api->generateImage($payload);
+    }
+
+    private function buildPromptForRequest(VolcengineArkRequest $imageGenerateRequest): string
+    {
+        $prompt = trim($imageGenerateRequest->getPrompt());
+        $generateNum = $imageGenerateRequest->getGenerateNum();
+        if ($generateNum <= 1) {
+            return $prompt;
+        }
+
+        $countInstruction = sprintf('要求返回%d张图', $generateNum);
+        if ($prompt === '') {
+            return $countInstruction;
+        }
+
+        return $prompt . "\n" . $countInstruction;
     }
 
     /**
