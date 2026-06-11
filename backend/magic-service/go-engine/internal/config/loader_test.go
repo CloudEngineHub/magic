@@ -75,6 +75,77 @@ func TestNew_ConfigEnvSubstitution_DefaultFallback(t *testing.T) {
 	}
 }
 
+func TestNew_ConfigEnvSubstitution_MySQLPasswordWithLeadingBang(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := []byte(strings.Join([]string{
+		"mysql:",
+		"  host: ${DB_HOST:=mysql.example.com}",
+		"  port: ${DB_PORT:=3306}",
+		"  database: ${DB_DATABASE:=magic}",
+		"  username: ${DB_USERNAME:=magic}",
+		"  password: ${DB_PASSWORD:=}",
+		"",
+	}, "\n"))
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	t.Setenv("CONFIG_FILE", cfgPath)
+	t.Setenv("DB_HOST", "mysql.example.com")
+	t.Setenv("DB_PORT", "3306")
+	t.Setenv("DB_DATABASE", "magic")
+	t.Setenv("DB_USERNAME", "magic")
+	t.Setenv("DB_PASSWORD", "!click-secret")
+
+	cfg := config.New()
+	if cfg.MySQL.Host != "mysql.example.com" ||
+		cfg.MySQL.Port != 3306 ||
+		cfg.MySQL.Database != "magic" ||
+		cfg.MySQL.Username != "magic" ||
+		cfg.MySQL.AuthValue != "!click-secret" {
+		t.Fatalf("expected mysql config to survive leading bang password, got %#v", cfg.MySQL)
+	}
+}
+
+func TestNew_ConfigEnvSubstitution_MySQLPasswordWithQuoteAndBang(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := []byte("mysql:\n  password: ${DB_PASSWORD:=}\n")
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	t.Setenv("CONFIG_FILE", cfgPath)
+	t.Setenv("DB_PASSWORD", "click\"secret!tail")
+
+	cfg := config.New()
+	if cfg.MySQL.AuthValue != "click\"secret!tail" {
+		t.Fatalf("expected mysql password to keep quote and bang, got %q", cfg.MySQL.AuthValue)
+	}
+}
+
+func TestNew_ConfigEnvSubstitution_UnquotesStringDefaultsAfterYAMLParse(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := []byte("redis:\n  username: ${REDIS_USERNAME:=\"\"}\n  lockPrefix: ${REDIS_LOCK_PREFIX:-\"magic_lock:\"}\n")
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	t.Setenv("CONFIG_FILE", cfgPath)
+	t.Setenv("REDIS_USERNAME", "")
+	t.Setenv("REDIS_LOCK_PREFIX", "")
+
+	cfg := config.New()
+	if cfg.Redis.Username != "" {
+		t.Fatalf("expected empty redis username default, got %q", cfg.Redis.Username)
+	}
+	if cfg.Redis.LockPrefix != "magic_lock:" {
+		t.Fatalf("expected redis lock prefix default without YAML quotes, got %q", cfg.Redis.LockPrefix)
+	}
+}
+
 func TestNew_OCRConfigDoesNotExposeCredentials(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
