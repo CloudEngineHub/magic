@@ -21,6 +21,11 @@ enum ResourceType: int
     case SUPER_MAGIC_AGENT = 1;
 
     /**
+     * 应用菜单.
+     */
+    case APPLICATION_MENU = 3;
+
+    /**
      * Skill resource.
      */
     case SKILL = 2;

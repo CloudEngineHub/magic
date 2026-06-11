@@ -11,10 +11,14 @@ use App\Application\AppMenu\Service\AppMenuAppService;
 use App\Application\Kernel\Enum\MagicOperationEnum;
 use App\Application\Kernel\Enum\MagicResourceEnum;
 use App\Domain\AppMenu\Entity\AppMenuEntity;
+use App\Domain\AppMenu\Entity\ValueObject\AppMenuSourceType;
+use App\Domain\AppMenu\Entity\ValueObject\AppMenuStatus;
 use App\Domain\AppMenu\Entity\ValueObject\DisplayScope;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityConfig;
 use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\Admin\Assembler\AppMenu\AppMenuAssembler;
 use App\Interfaces\Admin\DTO\AppMenu\AppMenuDTO;
@@ -43,10 +47,28 @@ class AppMenuAdminApi extends AbstractApi
                 $displayScope = $scope->value;
             }
         }
+        $sourceType = null;
+        $sourceTypeRaw = $this->request->input('source_type');
+        if ($sourceTypeRaw !== null && $sourceTypeRaw !== '') {
+            $type = AppMenuSourceType::tryFrom((int) $sourceTypeRaw);
+            if ($type !== null) {
+                $sourceType = $type->value;
+            }
+        }
+        $status = null;
+        $statusRaw = $this->request->input('status');
+        if ($statusRaw !== null && $statusRaw !== '') {
+            $statusEnum = AppMenuStatus::tryFrom((int) $statusRaw);
+            if ($statusEnum !== null) {
+                $status = $statusEnum->value;
+            }
+        }
 
         $filters = [
             'name' => (string) $this->request->input('name', ''),
             'display_scope' => $displayScope,
+            'source_type' => $sourceType,
+            'status' => $status,
         ];
 
         $result = $this->appMenuAppService->queries($authorization, $filters, $page);
@@ -55,6 +77,7 @@ class AppMenuAdminApi extends AbstractApi
             total: $result['total'],
             list: $result['list'],
             page: $page,
+            isOfficialOrganization: $this->isOfficialOrganization($authorization),
         );
     }
 
@@ -81,10 +104,12 @@ class AppMenuAdminApi extends AbstractApi
                 unset($payload['id']);
             }
         }
+        $payload = $this->normalizeOverrideOnlyPayload($authorization, $payload);
 
         $dto = new AppMenuDTO($payload);
         $entity = AppMenuAssembler::createEntity($dto);
-        $savedEntity = $this->appMenuAppService->save($authorization, $entity);
+        $visibilityConfig = $this->createVisibilityConfig($payload['visibility_config'] ?? null);
+        $savedEntity = $this->appMenuAppService->save($authorization, $entity, $visibilityConfig);
 
         return $this->createResponseDTO($authorization, $savedEntity);
     }
@@ -119,7 +144,42 @@ class AppMenuAdminApi extends AbstractApi
         $organizationCode = $authorization->getOrganizationCode();
         $users = $this->appMenuAppService->getUsers($organizationCode, [$entity->getCreatorId()]);
 
-        return AppMenuAssembler::createDTO($entity, $users);
+        return AppMenuAssembler::createDTO($entity, $users, $this->isOfficialOrganization($authorization));
+    }
+
+    private function createVisibilityConfig(mixed $visibilityConfig): ?VisibilityConfig
+    {
+        if (! is_array($visibilityConfig) || ! array_key_exists('visibility_type', $visibilityConfig)) {
+            return null;
+        }
+
+        return new VisibilityConfig($visibilityConfig);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function normalizeOverrideOnlyPayload(MagicUserAuthorization $authorization, array $payload): array
+    {
+        if (! filter_var($payload['override_only'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return $payload;
+        }
+
+        $currentEntity = $this->appMenuAppService->show($authorization, self::parseId($payload['id'] ?? null));
+        if (! array_key_exists('sort_order', $payload)) {
+            $payload['sort_order'] = $currentEntity->getEffectiveSortOrder();
+        }
+        if (! array_key_exists('status', $payload)) {
+            $payload['status'] = $currentEntity->getEffectiveStatus();
+        }
+
+        return $payload;
+    }
+
+    private function isOfficialOrganization(MagicUserAuthorization $authorization): bool
+    {
+        return OfficialOrganizationUtil::isOfficialOrganization($authorization->getOrganizationCode());
     }
 
     private static function parseId(null|int|string $id): int

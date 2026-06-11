@@ -217,6 +217,14 @@ return [
             ],
             'tag' => '自定义大模型',
         ],
+        'admin.ai.application' => [
+            'path' => [
+                ['key' => 'ai_management', 'label' => 'AI管理'],
+                ['key' => 'application_config', 'label' => '应用配置'],
+                ['key' => 'application_menu', 'label' => '应用菜单'],
+            ],
+            'tag' => '应用菜单',
+        ],
         'workspace.model.text' => [
             'path' => [
                 ['key' => 'ai_management', 'label' => 'AI 管理'],

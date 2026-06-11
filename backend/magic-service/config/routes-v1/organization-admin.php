@@ -5,6 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 use App\Infrastructure\Util\Middleware\RequestContextMiddleware;
+use App\Interfaces\Admin\Facade\AppMenu\OrganizationAppMenuAdminApi;
 use App\Interfaces\Provider\Facade\OrganizationServiceProviderApi;
 use Hyperf\HttpServer\Router\Router;
 
@@ -42,5 +43,14 @@ Router::addGroup('/api/v1/organization/admin', static function () {
         Router::get('/available-llm', [OrganizationServiceProviderApi::class, 'getAllAvailableLlmProviders']);
         Router::get('/non-official-llm', [OrganizationServiceProviderApi::class, 'getNonOfficialLlmProviders']);
         Router::get('/non-official/queries', [OrganizationServiceProviderApi::class, 'queriesServiceProviderTemplates']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
+    // 非官方组织应用菜单管理
+    Router::addGroup('/applications', static function () {
+        Router::post('/queries', [OrganizationAppMenuAdminApi::class, 'queries']);
+        Router::post('/status', [OrganizationAppMenuAdminApi::class, 'status']);
+        Router::get('/{id:\d+}', [OrganizationAppMenuAdminApi::class, 'show']);
+        Router::post('/save', [OrganizationAppMenuAdminApi::class, 'save']);
+        Router::post('/delete', [OrganizationAppMenuAdminApi::class, 'delete']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 }, ['middleware' => [RequestContextMiddleware::class]]);

@@ -8,9 +8,11 @@ declare(strict_types=1);
 namespace App\Interfaces\Admin\DTO\AppMenu;
 
 use App\Domain\AppMenu\Entity\ValueObject\AppMenuIconType;
+use App\Domain\AppMenu\Entity\ValueObject\AppMenuSourceType;
 use App\Domain\AppMenu\Entity\ValueObject\AppMenuStatus;
 use App\Domain\AppMenu\Entity\ValueObject\DisplayScope;
 use App\Domain\AppMenu\Entity\ValueObject\OpenMethod;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityConfig;
 use App\Infrastructure\Core\AbstractDTO;
 use App\Interfaces\Kernel\DTO\Traits\StringIdDTOTrait;
 
@@ -22,6 +24,10 @@ class AppMenuListItemDTO extends AbstractDTO
     use StringIdDTOTrait;
 
     public array $nameI18n = [];
+
+    public string $organizationCode = '';
+
+    public int $sourceType = AppMenuSourceType::Official->value;
 
     public string $icon = '';
 
@@ -39,6 +45,14 @@ class AppMenuListItemDTO extends AbstractDTO
 
     public int $status = AppMenuStatus::Enabled->value;
 
+    public bool $editable = true;
+
+    public bool $canDelete = true;
+
+    public bool $canConfigVisibility = true;
+
+    public array $visibilityConfig = [];
+
     public string $creatorId = '';
 
     public string $createdAt = '';
@@ -48,6 +62,21 @@ class AppMenuListItemDTO extends AbstractDTO
     public function setNameI18n(?array $nameI18n): void
     {
         $this->nameI18n = $nameI18n ?? [];
+    }
+
+    public function setOrganizationCode(?string $organizationCode): void
+    {
+        $this->organizationCode = $organizationCode ?? '';
+    }
+
+    public function setSourceType(null|int|string $sourceType): void
+    {
+        if ($sourceType === null || $sourceType === '') {
+            $this->sourceType = AppMenuSourceType::Official->value;
+            return;
+        }
+
+        $this->sourceType = AppMenuSourceType::make((int) $sourceType)->value;
     }
 
     public function setIcon(?string $icon): void
@@ -99,6 +128,31 @@ class AppMenuListItemDTO extends AbstractDTO
     public function setCreatorId(?string $creatorId): void
     {
         $this->creatorId = $creatorId ?? '';
+    }
+
+    public function setEditable(bool $editable): void
+    {
+        $this->editable = $editable;
+    }
+
+    public function setCanDelete(bool $canDelete): void
+    {
+        $this->canDelete = $canDelete;
+    }
+
+    public function setCanConfigVisibility(bool $canConfigVisibility): void
+    {
+        $this->canConfigVisibility = $canConfigVisibility;
+    }
+
+    public function setVisibilityConfig(null|array|VisibilityConfig $visibilityConfig): void
+    {
+        if ($visibilityConfig instanceof VisibilityConfig) {
+            $this->visibilityConfig = $visibilityConfig->toArray();
+            return;
+        }
+
+        $this->visibilityConfig = $visibilityConfig ?? [];
     }
 
     public function setCreatedAt(mixed $createdAt): void

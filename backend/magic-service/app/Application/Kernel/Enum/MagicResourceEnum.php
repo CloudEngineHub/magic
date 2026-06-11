@@ -57,6 +57,7 @@ enum MagicResourceEnum: string
     case WORKSPACE_AI_MODEL_AUDIT_STATISTICS = 'workspace.ai.model_audit_statistics'; # 工作区-AI管理-模型调用统计
     case ADMIN_AI_MODE = 'platform.ai.mode_management'; # AI管理-模式管理管理
     case ADMIN_AI_ABILITY = 'platform.ai.ability'; # AI管理-能力管理
+    case ADMIN_AI_APPLICATION = 'admin.ai.application'; # AI管理-应用菜单
     case ADMIN_AI_MODEL_ACCESS_ROLE = 'admin.ai.model_access_role'; # AI管理-自定义大模型-模型访问权限
     case SAFE_ADMIN = 'admin.safe.admin';  # 安全管控-组织管理员
     case SAFE_SUB_ADMIN = 'admin.safe.sub_admin';  # 组织管理后台-安全管控-子管理员
@@ -107,6 +108,7 @@ enum MagicResourceEnum: string
             self::WORKSPACE_AI_MODEL_AUDIT_STATISTICS => 'permission.resource.workspace_ai_model_audit_statistics',
             self::ADMIN_AI_MODE => 'permission.resource.ai_mode',
             self::ADMIN_AI_ABILITY => 'permission.resource.ai_ability',
+            self::ADMIN_AI_APPLICATION => 'permission.resource.ai_application',
             self::WORKSPACE_ADMIN_AI_AGENT => 'permission.resource.admin_ai_agent',
             self::WORKSPACE_ADMIN_AI_SKILL => 'permission.resource.admin_ai_skill',
             self::ADMIN_AI_MODEL_ACCESS_ROLE => 'permission.resource.admin_ai_model_access_role',
@@ -173,6 +175,7 @@ enum MagicResourceEnum: string
             self::WORKSPACE_AI_MODEL_AUDIT_LOG,
             self::WORKSPACE_AI_MODEL_AUDIT_STATISTICS => self::WORKSPACE_AI,
             self::ADMIN_AI_ABILITY,
+            self::ADMIN_AI_APPLICATION,
             self::WORKSPACE_ADMIN_AI_AGENT,
             self::WORKSPACE_ADMIN_AI_SKILL,
             self::ADMIN_AI_MODEL_ACCESS_ROLE => self::ADMIN_AI,
