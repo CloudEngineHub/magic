@@ -238,7 +238,7 @@
 		"confirmSaveAsProject": "确认另存为项目",
 		"deleteChat": "删除",
 		"deleteChatConfirm": "确定要删除对话「{{name}}」吗？",
-		"deleteChatDescription": "将被永久删除，此操作无法撤销。",
+		"deleteChatDescription": "将移入回收站。你可以在回收站中恢复或彻底删除。",
 		"deleteChatSuccess": "删除成功",
 		"friend": "朋友",
 		"greet": "嗨, {{name}}",
@@ -1610,6 +1610,30 @@
 	"htmlEditor": {
 		"dropOverlay": {
 			"hint": "释放以插入图片"
+		},
+		"projectFileOperationConfirm": {
+			"cancel": "取消",
+			"content": "HTML 微应用请求{{operation}}应用目录外的{{targetType}}：{{path}}。应用目录：{{appRootDir}}。",
+			"operations": {
+				"delete": "删除",
+				"move": "移动",
+				"rename": "重命名",
+				"write": "修改"
+			},
+			"projectRoot": "项目根目录",
+			"targetTypes": {
+				"directory": "目录",
+				"file": "文件"
+			},
+			"title": "确认{{operation}}项目文件"
+		},
+		"userInfoAuthorizationConfirm": {
+			"allow": "允许",
+			"content": "「{{appName}}」请求读取：{{fields}}。用途：{{reason}}",
+			"contentWithoutReason": "「{{appName}}」请求读取：{{fields}}。该应用未提供用途说明。",
+			"deny": "拒绝",
+			"fieldSeparator": "、",
+			"title": "授权用户信息访问"
 		}
 	},
 	"messageEditor": {
@@ -4153,15 +4177,15 @@
 		"copyTopic": "从此处创建新话题",
 		"deleteProjectConfirm": "确定要删除项目: \"{{name}}\" 吗？",
 		"deleteProjectConfirmTitle": "删除项目?",
-		"deleteProjectDescription": "「{{name}}」将被永久删除，包含其中所有话题和文件，此操作无法撤销。",
-		"deleteProjectDescriptionWithoutName": "将被永久删除，包含其中所有话题和文件，此操作无法撤销。",
+		"deleteProjectDescription": "「{{name}}」将移入回收站，其中所有话题和文件也会一并移入。你可以在回收站中恢复或彻底删除。",
+		"deleteProjectDescriptionWithoutName": "将移入回收站，其中所有话题和文件也会一并移入。你可以在回收站中恢复或彻底删除。",
 		"deleteTopicConfirm": "确定要删除话题: \"{{name}}\" 吗？",
 		"deleteTopicConfirmTitle": "删除对话?",
-		"deleteTopicDescription": "「{{name}}」将被永久删除，此操作无法撤销。",
+		"deleteTopicDescription": "「{{name}}」将移入回收站。你可以在回收站中恢复或彻底删除。",
 		"deleteWorkspaceConfirm": "确定要删除工作区: \"{{name}}\" 吗？",
 		"deleteWorkspaceConfirmTitle": "删除工作区?",
-		"deleteWorkspaceDescription": "「{{name}}」将被永久删除，包含其中所有项目、话题和文件，此操作无法撤销。",
-		"deleteWorkspaceDescriptionWithoutName": "将被永久删除，包含其中所有项目、话题和文件，此操作无法撤销。",
+		"deleteWorkspaceDescription": "「{{name}}」将移入回收站，其中所有项目、话题和文件也会一并移入。你可以在回收站中恢复或彻底删除。",
+		"deleteWorkspaceDescriptionWithoutName": "将移入回收站，其中所有项目、话题和文件也会一并移入。你可以在回收站中恢复或彻底删除。",
 		"expandAllFiles": "展开全部文件",
 		"expandUserMessage": "展开",
 		"filePreviewNotSupported": "暂不支持预览该文件,请下载该文件",
@@ -4225,7 +4249,10 @@
 			"contextUsageDescription": "对话记忆用量。进度条满时，AI 可能会遗忘较早的内容。",
 			"highContextWarning": "较高的上下文长度可能会大幅增加每次响应的成本",
 			"tokenCount": "{{used}} / {{max}} Tokens"
-		}
+		},
+		"usedImageModel": "图像模型：",
+		"usedModel": "使用模型：",
+		"usedVideoModel": "视频模型："
 	},
 	"uploadModal": {
 		"addUploadFiles": "添加上传文件",

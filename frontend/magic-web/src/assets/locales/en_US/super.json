@@ -239,7 +239,7 @@
 		"confirmSaveAsProject": "Confirm Save as Project",
 		"deleteChat": "Delete",
 		"deleteChatConfirm": "Are you sure you want to delete the conversation \"{{name}}\"?",
-		"deleteChatDescription": "will be permanently deleted. This action cannot be undone.",
+		"deleteChatDescription": "will be moved to Trash. You can restore it or delete it permanently from Trash.",
 		"deleteChatSuccess": "Deleted successfully",
 		"friend": "My friend",
 		"greet": "Hi! {{name}}",
@@ -1609,6 +1609,30 @@
 	"htmlEditor": {
 		"dropOverlay": {
 			"hint": "Release to insert image"
+		},
+		"projectFileOperationConfirm": {
+			"cancel": "Cancel",
+			"content": "The HTML micro-app wants to {{operation}} a {{targetType}} outside the app directory: {{path}}. App directory: {{appRootDir}}.",
+			"operations": {
+				"delete": "Delete",
+				"move": "Move",
+				"rename": "Rename",
+				"write": "Modify"
+			},
+			"projectRoot": "project root",
+			"targetTypes": {
+				"directory": "directory",
+				"file": "file"
+			},
+			"title": "Confirm Project File {{operation}}"
+		},
+		"userInfoAuthorizationConfirm": {
+			"allow": "Allow",
+			"content": "\"{{appName}}\" requests access to: {{fields}}. Purpose: {{reason}}",
+			"contentWithoutReason": "\"{{appName}}\" requests access to: {{fields}}. This app did not provide a purpose.",
+			"deny": "Deny",
+			"fieldSeparator": ", ",
+			"title": "Authorize User Info Access"
 		}
 	},
 	"messageEditor": {
@@ -4141,15 +4165,15 @@
 		"copyTopic": "Create a new topic from here",
 		"deleteProjectConfirm": "Are you sure to delete project: \"{{name}}\"?",
 		"deleteProjectConfirmTitle": "Delete Project?",
-		"deleteProjectDescription": "\"{{name}}\" will be permanently deleted, including all topics and files. This action cannot be undone.",
-		"deleteProjectDescriptionWithoutName": "will be permanently deleted, including all topics and files. This action cannot be undone.",
+		"deleteProjectDescription": "\"{{name}}\" will be moved to Trash, along with all topics and files. You can restore it or delete it permanently from Trash.",
+		"deleteProjectDescriptionWithoutName": "will be moved to Trash, along with all topics and files. You can restore it or delete it permanently from Trash.",
 		"deleteTopicConfirm": "Are you sure to delete topic: \"{{name}}\"?",
 		"deleteTopicConfirmTitle": "Delete Conversation?",
-		"deleteTopicDescription": "\"{{name}}\" will be permanently deleted. This action cannot be undone.",
+		"deleteTopicDescription": "\"{{name}}\" will be moved to Trash. You can restore it or delete it permanently from Trash.",
 		"deleteWorkspaceConfirm": "Are you sure to delete workspace: \"{{name}}\"?",
 		"deleteWorkspaceConfirmTitle": "Delete Workspace?",
-		"deleteWorkspaceDescription": "\"{{name}}\" will be permanently deleted, including all projects, topics and files. This action cannot be undone.",
-		"deleteWorkspaceDescriptionWithoutName": "will be permanently deleted, including all projects, topics and files. This action cannot be undone.",
+		"deleteWorkspaceDescription": "\"{{name}}\" will be moved to Trash, along with all projects, topics, and files. You can restore it or delete it permanently from Trash.",
+		"deleteWorkspaceDescriptionWithoutName": "will be moved to Trash, along with all projects, topics, and files. You can restore it or delete it permanently from Trash.",
 		"expandAllFiles": "Expand All Files",
 		"expandUserMessage": "Expand",
 		"filePreviewNotSupported": "File preview not supported, please download the file",
@@ -4213,7 +4237,10 @@
 			"contextUsageDescription": "Conversation memory usage. When the progress bar is full, AI may forget earlier content.",
 			"highContextWarning": "High context length may significantly increase the cost per response",
 			"tokenCount": "{{used}} / {{max}} Tokens"
-		}
+		},
+		"usedImageModel": "Image Model: ",
+		"usedModel": "Model：",
+		"usedVideoModel": "Video Model: "
 	},
 	"uploadModal": {
 		"addUploadFiles": "Add Files",
