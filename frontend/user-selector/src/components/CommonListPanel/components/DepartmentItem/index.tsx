@@ -34,7 +34,7 @@ function DepartmentItem({
 			<div
 				className="flex h-full flex-1 cursor-pointer items-center justify-between gap-2.5 overflow-hidden"
 				onClick={() => onItemClick?.(data)}
-				data-testid={`user-selector-department-item-${data.id}`}
+				data-testid="user-selector-department-item"
 			>
 				<div className="flex min-w-0 flex-1 items-center gap-2">
 					{data.dataType === NodeType.UserGroup ? (
@@ -56,7 +56,7 @@ function DepartmentItem({
 										"text-sm font-medium leading-5 text-foreground truncate",
 										data.name.length > 10 && "cursor-help",
 									)}
-									data-testid={`user-selector-department-name-${data.id}`}
+									data-testid="user-selector-department-name"
 								>
 									{data.name}
 								</div>
@@ -92,7 +92,7 @@ function DepartmentItem({
 								size={16}
 								stroke={2}
 								className="text-current"
-								data-testid={`user-selector-department-arrow-${data.id}`}
+								data-testid="user-selector-department-arrow"
 							/>
 						</div>
 					) : (
@@ -101,7 +101,7 @@ function DepartmentItem({
 								size={16}
 								className="shrink-0 text-muted-foreground"
 								stroke={2}
-								data-testid={`user-selector-department-arrow-${data.id}`}
+								data-testid="user-selector-department-arrow"
 							/>
 						)
 					)}

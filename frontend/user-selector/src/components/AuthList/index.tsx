@@ -208,7 +208,7 @@ function AuthList(props: AuthListProps) {
 							<div className="flex items-center gap-2">
 								{checkbox && (
 									<Checkbox
-										data-testid={`user-selector-auth-checkbox-${item.id}`}
+										data-testid="user-selector-auth-checkbox"
 										checked={
 											isDisabled(item) ||
 											!!innerCheckedList.find((i) => i.id === item.id)
@@ -241,7 +241,7 @@ function AuthList(props: AuthListProps) {
 							</div>
 							<div className="flex items-center gap-1">
 								<SelectWrapper
-									data-testid={`user-selector-auth-operation-${item.id}`}
+									data-testid="user-selector-auth-operation"
 									style={{ width: 100 }}
 									value={operationValue}
 									onChange={(value) =>
@@ -258,7 +258,7 @@ function AuthList(props: AuthListProps) {
 									className="h-9 rounded-lg border-border bg-background px-3 text-foreground disabled:border-border disabled:bg-accent disabled:text-muted-foreground"
 									onClick={() => onRemove(item)}
 									disabled={isDisabled(item)}
-									data-testid={`user-selector-auth-remove-${item.id}`}
+									data-testid="user-selector-auth-remove"
 								>
 									<IconTrash size={16} />
 								</Button>

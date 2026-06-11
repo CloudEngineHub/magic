@@ -149,7 +149,7 @@ const CommonListPanel = <T extends TreeNode>({
 			>
 				{isMobile ? (
 					<MobileCheckbox
-						data-testid={`user-selector-list-item-checkbox-${item.id}`}
+						data-testid="user-selector-list-item-checkbox"
 						disabled={disabled}
 						checked={isChecked}
 						onCheckedChange={(checked) => handleCheck(checked === true, item)}
@@ -157,7 +157,7 @@ const CommonListPanel = <T extends TreeNode>({
 					/>
 				) : (
 					<Checkbox
-						data-testid={`user-selector-list-item-checkbox-${item.id}`}
+						data-testid="user-selector-list-item-checkbox"
 						disabled={disabled}
 						checked={isChecked}
 						onCheckedChange={(checked) => {
@@ -166,10 +166,7 @@ const CommonListPanel = <T extends TreeNode>({
 						className="shrink-0"
 					/>
 				)}
-				<div
-					className="h-full min-w-0 flex-1"
-					data-testid={`user-selector-list-item-content-${item.id}`}
-				>
+				<div className="h-full min-w-0 flex-1" data-testid="user-selector-list-item-content">
 					{isMember(item) ? (
 						<MemberItem
 							data={item}

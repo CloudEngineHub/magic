@@ -120,7 +120,7 @@ function SelectItemTag({
 							onClose?.(e)
 						}}
 						className="ml-1 flex items-center justify-center text-secondary-foreground/50 transition-colors hover:text-secondary-foreground"
-						data-testid={`user-selector-selected-tag-close-${data.id}`}
+						data-testid="user-selector-selected-tag-close"
 					>
 						<IconX size={12} stroke={2.5} />
 					</button>
