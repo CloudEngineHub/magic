@@ -33,7 +33,7 @@ describe("CanvasResourceDiagnostics", () => {
 			expect.objectContaining({
 				memoryHitCount: 0,
 				decodeAttemptCount: 0,
-				displayReleaseBytes: 0,
+				cachedResourceHitCount: 0,
 			}),
 		)
 		expect(createVideoResourceDiagnostics().snapshot()).toEqual(
@@ -53,15 +53,12 @@ describe("CanvasResourceDiagnostics", () => {
 				managerInstanceId: 1,
 				destroyed: false,
 				entries: 2,
-				smallLoaded: 1,
-				smallDecodedBytes: 4,
-				overviewLoaded: 0,
-				overviewDecodedBytes: 0,
+				lowLoaded: 1,
+				lowDecodedBytes: 4,
 				previewLoaded: 1,
 				previewDecodedBytes: 16,
 				fullLoaded: 0,
 				fullDecodedBytes: 0,
-				fullRetainCount: 0,
 				bodyCacheCount: 1,
 				bodyCacheBytes: 10,
 				bodyFetchInFlightCount: 0,

@@ -1,6 +1,6 @@
 import type { RectangleElement } from "../../../../../canvas/types"
 
-interface RectangleThumbnailProps {
+interface RectanglePreviewProps {
 	element: RectangleElement
 }
 
@@ -8,10 +8,7 @@ const SIZE = 16
 const PADDING = 2
 const CONTENT_SIZE = SIZE - PADDING * 2
 
-/**
- * 矩形缩略图组件
- */
-export function RectangleThumbnail({ element }: RectangleThumbnailProps) {
+export function RectanglePreview({ element }: RectanglePreviewProps) {
 	const fill = element.fill || "#969696"
 	const stroke = element.stroke || "transparent"
 	const strokeWidth = element.strokeWidth || 0
@@ -37,7 +34,7 @@ export function RectangleThumbnail({ element }: RectangleThumbnailProps) {
 	const offsetX = (CONTENT_SIZE - displayWidth) / 2 + PADDING
 	const offsetY = (CONTENT_SIZE - displayHeight) / 2 + PADDING
 
-	// 缩放圆角半径以适应缩略图
+	// 缩放圆角半径以适应图层预览
 	const scaledCornerRadius = Math.min(
 		cornerRadius *
 			(Math.min(displayWidth, displayHeight) / Math.max(elementWidth, elementHeight)),

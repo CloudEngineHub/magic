@@ -48,6 +48,10 @@ import {
 	type MediaResourceBody,
 	type MediaResourceBodyCacheEntry,
 } from "./MediaResourceBodyCache"
+import {
+	ImageDisplayVariantPersistentCache,
+	type PersistentImageDisplayVariant,
+} from "./ImageDisplayVariantPersistentCache"
 
 export type { ImageSource }
 export type ImageResourceVariant = ImageResourceDecodeVariant
@@ -64,15 +68,6 @@ export interface ImageInfo {
 	filename: string
 }
 
-/** 缩略图级别 */
-export type ThumbnailType = "small"
-
-/** 缩略图数据（异步按需生成，不占用主进程） */
-export interface ThumbnailData {
-	/** 小图 */
-	small: string
-}
-
 /**
  * 已加载的图片资源（getResource 的返回类型）
  */
@@ -83,8 +78,6 @@ export interface LoadedResource {
 	image: ImageSource
 	/** 图片元信息 */
 	imageInfo: ImageInfo
-	/** 缩略图（与主图一并加载） */
-	thumbnail: ThumbnailData
 	/** 解码变体：preview 用于画布显示，full 用于导出/编辑等高质量场景 */
 	variant: ImageResourceVariant
 	/** 当前 image 对象的实际像素宽度 */
@@ -95,17 +88,13 @@ export interface LoadedResource {
 	isFullSize: boolean
 }
 
-export interface AcquiredImageResource extends LoadedResource {
-	release: () => void
-}
-
-export interface LoadedThumbnailResource {
-	/** OSS 地址；缩略图命中内存但 URL 已过期时可能为空 */
-	ossSrc: string | null
-	/** 图片元信息，用于图层缩略图裁剪计算 */
+export interface LoadedLowImageUrl {
+	/** low 档位对应的可展示 URL；调用方释放后会被 revoke */
+	url: string
+	/** 图片元信息，用于图层预览裁剪计算 */
 	imageInfo: ImageInfo
-	/** 缩略图数据 */
-	thumbnail: ThumbnailData
+	/** 释放 object URL */
+	release: () => void
 }
 
 export interface ImageResourceLoadOptions {
@@ -130,8 +119,6 @@ interface ImageResource {
 	image: ImageSource
 	/** 图片信息 */
 	imageInfo: ImageInfo
-	/** 缩略图（由 Worker 与主图一并返回） */
-	thumbnailData: ThumbnailData
 	/** 解码变体 */
 	variant: ImageResourceVariant
 	/** 当前 image 对象的实际像素宽度 */
@@ -140,10 +127,10 @@ interface ImageResource {
 	sourceHeight: number
 	/** 当前 image 是否等同原图像素尺寸 */
 	isFullSize: boolean
-	/** 当前仍被 Konva 显示节点持有的次数；从缓存槽摘除后也不能立即关闭 */
-	displayRetainCount?: number
 	/** ImageBitmap/HTMLImageElement 是否已经关闭，避免延迟释放路径重复 close */
 	closed?: boolean
+	/** worker / persistent cache 已产出的显示档位 Blob，用于低成本生成 object URL */
+	displayBlob?: Blob
 }
 
 interface ImageDisplayResourceSlot {
@@ -187,12 +174,10 @@ export interface ImageResourceEntry extends MediaResourceUrlEntry, MediaResource
 	bodyPromiseCacheKey: string | null
 	/** 正在后台刷新的 Promise（避免重复刷新） */
 	backgroundRefreshPromise: Promise<void> | null
-	/** 画布显示资源槽，按查看等级承载 small / overview / preview */
+	/** 画布显示资源槽，按查看等级承载 low / preview */
 	displaySlots: ImageDisplayResourceSlots
 	/** 已加载的 full 资源（只在导出/编辑等场景按需加载） */
 	fullResource: ImageResource | null
-	/** full 资源作用域持有计数；为 0 时可释放 */
-	fullRetainCount: number
 	/** 已缓存的压缩 body；用于 preview/full 二次解码复用，不等同 decoded bitmap */
 	bodyBlob: Blob | null
 	/** 已缓存 body 对应的 OSS 地址 */
@@ -208,15 +193,10 @@ export interface ImageResourceEntry extends MediaResourceUrlEntry, MediaResource
 }
 
 const DEFAULT_IMAGE_RESOURCE_VARIANT: ImageResourceVariant = "preview"
-const EMPTY_THUMBNAIL_DATA: ThumbnailData = { small: "" }
 const COMPRESSED_BODY_CACHE_TTL_MS = 2 * 60 * 1000
 const COMPRESSED_BODY_CACHE_MAX_BYTES = 256 * 1024 * 1024
 const PREVIEW_LOAD_PIPELINE_CONCURRENCY = 8
-const PREVIEW_DECODED_RESOURCE_BUDGET_BYTES = 900 * 1024 * 1024
-const PREVIEW_DECODED_RESOURCE_RELEASE_CHECK_INTERVAL_MS = 1000
-
 export type ImageResourceLoadPriority = MediaDecodePriority
-type ProtectedImageResourcePaths = ReadonlySet<string> | readonly string[]
 
 interface PreviewLoadQueueItem {
 	key: string
@@ -251,6 +231,7 @@ export class ImageResourceManager {
 		ttlMs: COMPRESSED_BODY_CACHE_TTL_MS,
 		maxBytes: COMPRESSED_BODY_CACHE_MAX_BYTES,
 	})
+	private displayVariantPersistentCache = new ImageDisplayVariantPersistentCache()
 
 	private canonicalResourcePath(path: string): string {
 		return this.urlLifecycle.canonicalResourcePath(path)
@@ -299,8 +280,6 @@ export class ImageResourceManager {
 	private previewLoadQueueSequence = 0
 
 	private decodePixelBudgetGate = new MediaDecodePixelBudgetGate()
-
-	private previewReleaseLastCheckAt = 0
 
 	// 防抖定时器
 	private cleanupTimer: ReturnType<typeof setTimeout> | null = null
@@ -412,22 +391,11 @@ export class ImageResourceManager {
 			ossSrc: resource.ossSrc,
 			image: resource.image,
 			imageInfo: resource.imageInfo,
-			thumbnail: resource.thumbnailData,
 			variant: resource.variant,
 			sourceWidth: resource.sourceWidth,
 			sourceHeight: resource.sourceHeight,
 			isFullSize: resource.isFullSize,
 		}
-	}
-
-	private getFallbackThumbnailData(entry: ImageResourceEntry): ThumbnailData {
-		return (
-			this.getDisplayResource(entry, "preview")?.thumbnailData ??
-			entry.fullResource?.thumbnailData ??
-			this.getDisplayResource(entry, "overview")?.thumbnailData ??
-			this.getDisplayResource(entry, "small")?.thumbnailData ??
-			EMPTY_THUMBNAIL_DATA
-		)
 	}
 
 	private getResourceForVariant(
@@ -438,15 +406,8 @@ export class ImageResourceManager {
 			const previewResource = this.getDisplayResource(entry, "preview")
 			return entry.fullResource ?? (previewResource?.isFullSize ? previewResource : null)
 		}
-		if (variant === "small") {
-			return this.getDisplayResource(entry, "small")
-		}
-		if (variant === "overview") {
-			return (
-				this.getDisplayResource(entry, "overview") ??
-				this.getDisplayResource(entry, "preview") ??
-				entry.fullResource
-			)
+		if (variant === "low") {
+			return this.getDisplayResource(entry, "low")
 		}
 
 		return this.getDisplayResource(entry, "preview") ?? entry.fullResource
@@ -639,14 +600,10 @@ export class ImageResourceManager {
 		})
 	}
 
-	private closeUniqueResources(
-		resources: Array<ImageResource | null>,
-		options?: { forceCloseRetained?: boolean },
-	): void {
+	private closeUniqueResources(resources: Array<ImageResource | null>): void {
 		const closed = new Set<ImageResource>()
 		resources.forEach((resource) => {
 			if (!resource || closed.has(resource)) return
-			if (!options?.forceCloseRetained && (resource.displayRetainCount ?? 0) > 0) return
 			closed.add(resource)
 			this.closeResource(resource)
 		})
@@ -666,8 +623,7 @@ export class ImageResourceManager {
 
 	private createDisplayResourceSlots(): ImageDisplayResourceSlots {
 		return {
-			small: this.createDisplayResourceSlot(),
-			overview: this.createDisplayResourceSlot(),
+			low: this.createDisplayResourceSlot(),
 			preview: this.createDisplayResourceSlot(),
 		}
 	}
@@ -742,8 +698,7 @@ export class ImageResourceManager {
 	private cloneDisplayResourceSlots(entry: ImageResourceEntry): ImageDisplayResourceSlots {
 		const slots = entry.displaySlots
 		return {
-			small: this.createDisplayResourceSlot({ ...slots.small }),
-			overview: this.createDisplayResourceSlot({ ...slots.overview }),
+			low: this.createDisplayResourceSlot({ ...slots.low }),
 			preview: this.createDisplayResourceSlot({ ...slots.preview }),
 		}
 	}
@@ -758,9 +713,7 @@ export class ImageResourceManager {
 	private isResourceStillReferenced(entry: ImageResourceEntry, resource: ImageResource): boolean {
 		const slots = entry.displaySlots
 		return (
-			(resource.displayRetainCount ?? 0) > 0 ||
-			slots.small.resource === resource ||
-			slots.overview.resource === resource ||
+			slots.low.resource === resource ||
 			slots.preview.resource === resource ||
 			entry.fullResource === resource
 		)
@@ -771,8 +724,7 @@ export class ImageResourceManager {
 		loadedResource: Pick<LoadedResource, "image" | "variant">,
 	): ImageResource | null {
 		const resources = [
-			this.getDisplayResource(entry, "small"),
-			this.getDisplayResource(entry, "overview"),
+			this.getDisplayResource(entry, "low"),
 			this.getDisplayResource(entry, "preview"),
 			entry.fullResource,
 		]
@@ -786,18 +738,108 @@ export class ImageResourceManager {
 		)
 	}
 
-	private addCanonicalResourcePaths(
-		target: Set<string>,
-		paths: ProtectedImageResourcePaths | undefined,
-	): void {
-		if (!paths) return
-		paths.forEach((path) => {
-			target.add(this.canonicalResourcePath(path))
-		})
-	}
-
 	private getNow(): number {
 		return Date.now()
+	}
+
+	private isPersistentDisplayVariant(
+		variant: ImageResourceVariant,
+	): variant is PersistentImageDisplayVariant {
+		return variant === "low"
+	}
+
+	private async loadPersistentDisplayResource(
+		path: string,
+		normalizedSrc: string,
+		entry: ImageResourceEntry,
+		variant: ImageResourceVariant,
+		shouldRefreshCached: boolean,
+	): Promise<LoadedResource | null> {
+		if (this.destroyed || !this.isPersistentDisplayVariant(variant)) return null
+		if (this.getDisplayResource(entry, variant)) {
+			return this.buildLoadedResource(entry, variant)
+		}
+
+		const record = await this.displayVariantPersistentCache.getLatest({
+			path: normalizedSrc,
+			variant,
+		})
+		if (this.destroyed || !record) return null
+
+		const image = await createImageSourceFromBlob(record.blob)
+		if (this.destroyed) {
+			if (image) closeImageSource(image)
+			return null
+		}
+		if (!image) return null
+
+		entry.sourceUrl = record.sourceUrl ?? entry.sourceUrl
+		entry.resourceVersion = record.resourceVersion
+		entry.sourceUpdatedAt = record.sourceUpdatedAt
+		entry.contentLength = record.contentLength
+
+		const { width: sourceWidth, height: sourceHeight } = getImageSourceDimensions(image)
+		const resource: ImageResource = {
+			ossSrc: record.sourceUrl ?? entry.ossSrc ?? `persistent-cache:${path}`,
+			image,
+			imageInfo: record.imageInfo,
+			variant,
+			sourceWidth,
+			sourceHeight,
+			isFullSize: false,
+			closed: false,
+			displayBlob: record.blob,
+		}
+		const previousResourceToClose = this.setDisplayResource(entry, variant, resource, {
+			closePrevious: true,
+		})
+		if (
+			previousResourceToClose &&
+			previousResourceToClose !== resource &&
+			!this.isResourceStillReferenced(entry, previousResourceToClose)
+		) {
+			this.closeResource(previousResourceToClose, {
+				path: normalizedSrc,
+				reason: "persistent-display-cache-replaced",
+			})
+		}
+
+		const loadedResource = this.buildLoadedResource(entry, variant)
+		if (!loadedResource) return null
+		this.canvas.eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: normalizedSrc, resource: loadedResource },
+		})
+		if (shouldRefreshCached) {
+			this.triggerBackgroundMetadataRefresh(path, normalizedSrc, entry)
+		}
+		return loadedResource
+	}
+
+	private persistDisplayResourceFromWorkerResult(
+		path: string,
+		entry: ImageResourceEntry,
+		variant: ImageResourceVariant,
+		result: ImageResourceWorkerResponse,
+		imageInfo: ImageInfo,
+	): void {
+		if (!this.isPersistentDisplayVariant(variant)) return
+		const persistentDisplay = result.persistentDisplay
+		if (!persistentDisplay || !entry.resourceVersion) return
+
+		void this.displayVariantPersistentCache.put({
+			path,
+			variant,
+			blob: persistentDisplay.blob,
+			width: persistentDisplay.width,
+			height: persistentDisplay.height,
+			imageInfo,
+			resourceVersion: entry.resourceVersion,
+			sourceUpdatedAt: entry.sourceUpdatedAt,
+			contentLength: entry.contentLength,
+			sourceUrl: entry.sourceUrl ?? entry.ossSrc,
+			maxEdge: this.getMaxEdgeForVariant(variant),
+		})
 	}
 
 	private getBodyCacheKey(path: string, ossSrc: string, entry: ImageResourceEntry): string {
@@ -842,278 +884,29 @@ export class ImageResourceManager {
 
 	private closeEntryResources(
 		entry: ImageResourceEntry,
-		options?: { forceCloseRetained?: boolean; reason?: string; path?: string },
+		options?: { reason?: string; path?: string },
 	): void {
-		const smallResource = this.getDisplayResource(entry, "small")
-		const overviewResource = this.getDisplayResource(entry, "overview")
+		const lowResource = this.getDisplayResource(entry, "low")
 		const previewResource = this.getDisplayResource(entry, "preview")
 		const fullResource = entry.fullResource
-		this.closeUniqueResources(
-			[smallResource, overviewResource, previewResource, fullResource],
-			options,
-		)
+		this.closeUniqueResources([lowResource, previewResource, fullResource], options)
 		this.clearDisplayResources(entry)
 		entry.fullResource = null
-		entry.fullRetainCount = 0
 		this.clearEntryBody(entry)
 		this.clearEntryBodyPromise(entry)
 	}
 
-	private releaseDisplayResource(
-		path: string,
-		entry: ImageResourceEntry,
-		variant: "small" | "overview" | "preview",
-		resource: ImageResource | null,
-		options: {
-			reason: string
-			remainingDecodedBytes: number
-			decodedBudgetBytes: number
-		},
-	): number {
-		if (!resource) return 0
-
-		const releasedBytes = this.getDecodedBytes(resource)
-		this.setDisplayResource(entry, variant, null, { closePrevious: false })
-		this.diagnostics.increment("displayReleaseCount")
-		this.diagnostics.increment("displayReleaseBytes", releasedBytes)
-
-		this.canvas.eventEmitter.emit({
-			type: "resource:image:released",
-			data: {
-				path,
-				variant,
-				reason: options.reason,
-				releasedBytes,
-			},
-		})
-		if (!this.isResourceStillReferenced(entry, resource)) {
-			this.closeResource(resource, { path, reason: options.reason })
-		}
-		return releasedBytes
-	}
-
-	private releaseSmallResource(
-		path: string,
-		entry: ImageResourceEntry,
-		options: {
-			reason: string
-			remainingDecodedBytes: number
-			decodedBudgetBytes: number
-		},
-	): number {
-		return this.releaseDisplayResource(
-			path,
-			entry,
-			"small",
-			this.getDisplayResource(entry, "small"),
-			options,
+	private getVariantsToRefresh(entry: ImageResourceEntry): ImageResourceVariant[] {
+		const variantsToRefresh: ImageResourceVariant[] = MEDIA_DISPLAY_RESOURCE_VARIANTS.filter(
+			(variant) => this.getDisplayResource(entry, variant),
 		)
-	}
-
-	private releasePreviewResource(
-		path: string,
-		entry: ImageResourceEntry,
-		options: {
-			reason: string
-			remainingDecodedBytes: number
-			decodedBudgetBytes: number
-		},
-	): number {
-		return this.releaseDisplayResource(
-			path,
-			entry,
-			"preview",
-			this.getDisplayResource(entry, "preview"),
-			options,
-		)
-	}
-
-	private releaseOverviewResource(
-		path: string,
-		entry: ImageResourceEntry,
-		options: {
-			reason: string
-			remainingDecodedBytes: number
-			decodedBudgetBytes: number
-		},
-	): number {
-		return this.releaseDisplayResource(
-			path,
-			entry,
-			"overview",
-			this.getDisplayResource(entry, "overview"),
-			options,
-		)
-	}
-
-	public enforcePreviewDecodedBudget(options?: {
-		protectedPaths?: ProtectedImageResourcePaths
-		reason?: string
-		budgetBytes?: number
-		force?: boolean
-	}): void {
-		if (this.destroyed) return
-		const now = this.getNow()
-		if (
-			!options?.force &&
-			now - this.previewReleaseLastCheckAt <
-				PREVIEW_DECODED_RESOURCE_RELEASE_CHECK_INTERVAL_MS
-		) {
-			return
+		if (entry.fullResource) {
+			variantsToRefresh.push("full")
 		}
-		this.previewReleaseLastCheckAt = now
-
-		const budgetBytes = options?.budgetBytes ?? PREVIEW_DECODED_RESOURCE_BUDGET_BYTES
-		const reason = options?.reason ?? "decoded-budget"
-		const protectedPaths = new Set<string>()
-		this.addCanonicalResourcePaths(protectedPaths, options?.protectedPaths)
-
-		let totalPreviewDecodedBytes = 0
-		const candidates: Array<{
-			path: string
-			entry: ImageResourceEntry
-			decodedBytes: number
-			lastAccessAt: number
-		}> = []
-
-		this.entries.forEach((entry, path) => {
-			const previewResource = this.getDisplayResource(entry, "preview")
-			if (!previewResource) return
-			const decodedBytes = this.getDecodedBytes(previewResource)
-			totalPreviewDecodedBytes += decodedBytes
-			if (protectedPaths.has(path)) {
-				return
-			}
-			if (entry.fullRetainCount > 0 || entry.fullResource === previewResource) {
-				return
-			}
-			candidates.push({
-				path,
-				entry,
-				decodedBytes,
-				lastAccessAt: this.getDisplayResourceSlot(entry, "preview").lastAccessAt,
-			})
-		})
-
-		if (totalPreviewDecodedBytes <= budgetBytes) return
-
-		candidates.sort((a, b) => {
-			const lastAccessDiff = a.lastAccessAt - b.lastAccessAt
-			if (lastAccessDiff !== 0) return lastAccessDiff
-			return b.decodedBytes - a.decodedBytes
-		})
-
-		let remainingDecodedBytes = totalPreviewDecodedBytes
-		for (const candidate of candidates) {
-			if (remainingDecodedBytes <= budgetBytes) break
-			const bytes = this.releasePreviewResource(candidate.path, candidate.entry, {
-				reason,
-				remainingDecodedBytes: remainingDecodedBytes - candidate.decodedBytes,
-				decodedBudgetBytes: budgetBytes,
-			})
-			if (bytes <= 0) continue
-			remainingDecodedBytes -= bytes
+		if (variantsToRefresh.length === 0) {
+			variantsToRefresh.push(DEFAULT_IMAGE_RESOURCE_VARIANT)
 		}
-	}
-
-	public enforceDisplayDecodedBudget(options?: {
-		protectedSmallPaths?: ProtectedImageResourcePaths
-		protectedOverviewPaths?: ProtectedImageResourcePaths
-		protectedPreviewPaths?: ProtectedImageResourcePaths
-		reason?: string
-		force?: boolean
-	}): void {
-		if (this.destroyed) return
-		const now = this.getNow()
-		if (
-			!options?.force &&
-			now - this.previewReleaseLastCheckAt <
-				PREVIEW_DECODED_RESOURCE_RELEASE_CHECK_INTERVAL_MS
-		) {
-			return
-		}
-		this.previewReleaseLastCheckAt = now
-
-		const reason = options?.reason ?? "display-unprotected-release"
-		const protectedSmallPaths = new Set<string>()
-		const protectedOverviewPaths = new Set<string>()
-		const protectedPreviewPaths = new Set<string>()
-		this.addCanonicalResourcePaths(protectedSmallPaths, options?.protectedSmallPaths)
-		this.addCanonicalResourcePaths(protectedOverviewPaths, options?.protectedOverviewPaths)
-		this.addCanonicalResourcePaths(protectedPreviewPaths, options?.protectedPreviewPaths)
-
-		const candidates: Array<{
-			path: string
-			entry: ImageResourceEntry
-			variant: "small" | "overview" | "preview"
-			decodedBytes: number
-			lastAccessAt: number
-		}> = []
-
-		const protectedPathsByVariant: Record<ImageDisplayResourceVariant, Set<string>> = {
-			small: protectedSmallPaths,
-			overview: protectedOverviewPaths,
-			preview: protectedPreviewPaths,
-		}
-
-		this.entries.forEach((entry, path) => {
-			for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
-				const slot = this.getDisplayResourceSlot(entry, variant)
-				if (!slot.resource) continue
-				const decodedBytes = this.getDecodedBytes(slot.resource)
-				if (
-					!protectedPathsByVariant[variant].has(path) &&
-					entry.fullRetainCount <= 0 &&
-					entry.fullResource !== slot.resource
-				) {
-					candidates.push({
-						path,
-						entry,
-						variant,
-						decodedBytes,
-						lastAccessAt: slot.lastAccessAt,
-					})
-				}
-			}
-		})
-
-		if (candidates.length === 0) return
-
-		candidates.sort((a, b) => {
-			if (a.variant !== b.variant) {
-				const variantRank: Record<"small" | "overview" | "preview", number> = {
-					preview: 0,
-					overview: 1,
-					small: 2,
-				}
-				return variantRank[a.variant] - variantRank[b.variant]
-			}
-			const lastAccessDiff = a.lastAccessAt - b.lastAccessAt
-			if (lastAccessDiff !== 0) return lastAccessDiff
-			return b.decodedBytes - a.decodedBytes
-		})
-
-		for (const candidate of candidates) {
-			const bytes =
-				candidate.variant === "preview"
-					? this.releasePreviewResource(candidate.path, candidate.entry, {
-							reason,
-							remainingDecodedBytes: 0,
-							decodedBudgetBytes: 0,
-						})
-					: candidate.variant === "overview"
-						? this.releaseOverviewResource(candidate.path, candidate.entry, {
-								reason,
-								remainingDecodedBytes: 0,
-								decodedBudgetBytes: 0,
-							})
-						: this.releaseSmallResource(candidate.path, candidate.entry, {
-								reason,
-								remainingDecodedBytes: 0,
-								decodedBudgetBytes: 0,
-							})
-			void bytes
-		}
+		return variantsToRefresh
 	}
 
 	/**
@@ -1145,6 +938,17 @@ export class ImageResourceManager {
 			this.diagnostics.increment("memoryHitCount")
 			this.setFailureReason(entry, null)
 			return this.buildLoadedResource(entry, variant)
+		}
+
+		const persistentDisplayResource = await this.loadPersistentDisplayResource(
+			path,
+			normalizedSrc,
+			entry,
+			variant,
+			shouldRefreshCached,
+		)
+		if (persistentDisplayResource) {
+			return persistentDisplayResource
 		}
 
 		// 检查是否正在加载中，避免重复请求
@@ -1245,8 +1049,8 @@ export class ImageResourceManager {
 		variant: ImageResourceVariant,
 		priority?: ImageResourceLoadPriority,
 	): Promise<LoadedResource | null> {
-		if (variant === "overview") {
-			return this.loadOverviewResourcePipeline(path, normalizedSrc, entry, priority)
+		if (variant === "low") {
+			return this.loadLowResourcePipeline(path, normalizedSrc, entry, priority)
 		}
 
 		const cachedResource = await this.loadCachedImageResource(
@@ -1292,7 +1096,7 @@ export class ImageResourceManager {
 		return this.loadImageResource(normalizedSrc, ossSrc, entry, variant, priority)
 	}
 
-	private async loadOverviewResourcePipeline(
+	private async loadLowResourcePipeline(
 		path: string,
 		normalizedSrc: string,
 		entry: ImageResourceEntry,
@@ -1300,13 +1104,7 @@ export class ImageResourceManager {
 	): Promise<LoadedResource | null> {
 		const cachedBodyOssSrc = this.bodyCache.getCachedOssSrc(entry)
 		if (cachedBodyOssSrc) {
-			return this.loadImageResource(
-				normalizedSrc,
-				cachedBodyOssSrc,
-				entry,
-				"overview",
-				priority,
-			)
+			return this.loadImageResource(normalizedSrc, cachedBodyOssSrc, entry, "low", priority)
 		}
 
 		let ossSrc = entry.ossSrc
@@ -1318,7 +1116,7 @@ export class ImageResourceManager {
 			return null
 		}
 
-		return this.loadImageResource(normalizedSrc, ossSrc, entry, "overview", priority)
+		return this.loadImageResource(normalizedSrc, ossSrc, entry, "low", priority)
 	}
 
 	/**
@@ -1343,90 +1141,35 @@ export class ImageResourceManager {
 		return this.loadImageInternal(path, options)
 	}
 
-	public async acquireResource(
-		path: string,
-		options?: ImageResourceLoadOptions,
-	): Promise<AcquiredImageResource | null> {
-		const variant = options?.variant ?? DEFAULT_IMAGE_RESOURCE_VARIANT
-		const resource = await this.loadImageInternal(path, options)
-		if (!resource) return null
-
-		const normalizedSrc = this.canonicalResourcePath(path)
-		const entry = this.getOrCreateEntry(normalizedSrc)
-		let released = false
-
-		if (variant === "full" && entry.fullResource && resource.variant === "full") {
-			entry.fullRetainCount += 1
-			this.diagnostics.increment("fullAcquireCount")
-		}
-
-		return {
-			...resource,
-			release: () => {
-				if (released) return
-				released = true
-				this.releaseResource(path, { variant })
-			},
-		}
-	}
-
-	public releaseResource(path: string, options?: { variant?: ImageResourceVariant }): void {
-		const variant = options?.variant ?? DEFAULT_IMAGE_RESOURCE_VARIANT
-		if (variant !== "full") return
-
-		const normalizedSrc = this.canonicalResourcePath(path)
-		const entry = this.entries.get(normalizedSrc)
-		if (!entry?.fullResource) return
-
-		entry.fullRetainCount = Math.max(0, entry.fullRetainCount - 1)
-		this.diagnostics.increment("fullReleaseCount")
-		if (entry.fullRetainCount > 0 || entry.fullLoadingPromise) return
-
-		this.closeResource(entry.fullResource, { path: normalizedSrc, reason: "full-release" })
-		entry.fullResource = null
-		this.canvas.eventEmitter.emit({
-			type: "resource:released",
-			data: { path: normalizedSrc },
-		})
-	}
-
 	/**
-	 * 获取图片缩略图；缩略图与主图资源共用同一次加载链路。
+	 * 获取 low 档位的可展示 URL；用于图层、消息等低清展示场景。
 	 * @param path 路径（path）
 	 */
-	public async getThumbnail(path: string): Promise<LoadedThumbnailResource | null> {
+	public async getLowImageUrl(path: string): Promise<LoadedLowImageUrl | null> {
 		const normalizedSrc = this.canonicalResourcePath(path)
+		const resource = await this.loadImageInternal(path, {
+			refreshCached: false,
+			variant: "low",
+		})
+		if (!resource) return null
+
 		const entry = this.entries.get(normalizedSrc)
-		const previewResource = entry ? this.getDisplayResource(entry, "preview") : null
-		if (entry && previewResource) {
-			this.setFailureReason(entry, null)
+		const backingResource = entry ? this.findResourceByLoadedResource(entry, resource) : null
+		if (backingResource?.displayBlob) {
+			const url = URL.createObjectURL(backingResource.displayBlob)
+			let released = false
 			return {
-				ossSrc: previewResource.ossSrc,
-				imageInfo: previewResource.imageInfo,
-				thumbnail: previewResource.thumbnailData,
-			}
-		}
-		const previewLoadingPromise = entry ? this.getDisplayLoadingPromise(entry, "preview") : null
-		if (previewLoadingPromise) {
-			const resource = await previewLoadingPromise
-			if (!resource) return null
-			return {
-				ossSrc: resource.ossSrc,
+				url,
 				imageInfo: resource.imageInfo,
-				thumbnail: resource.thumbnail,
+				release: () => {
+					if (released) return
+					released = true
+					URL.revokeObjectURL(url)
+				},
 			}
 		}
 
-		const resource = await this.loadImageInternal(path, {
-			refreshCached: false,
-			variant: "preview",
-		})
-		if (!resource) return null
-		return {
-			ossSrc: resource.ossSrc,
-			imageInfo: resource.imageInfo,
-			thumbnail: resource.thumbnail,
-		}
+		return null
 	}
 
 	/**
@@ -1447,56 +1190,18 @@ export class ImageResourceManager {
 		return this.buildLoadedResource(entry, options?.variant ?? DEFAULT_IMAGE_RESOURCE_VARIANT)
 	}
 
-	public retainDisplayedResource(
-		path: string,
-		resource: Pick<LoadedResource, "image" | "variant">,
-	): () => void {
-		if (this.destroyed || resource.variant === "full") return () => undefined
-
-		const canonical = this.canonicalResourcePath(path)
-		const entry = this.entries.get(canonical)
-		const retainedResource = entry ? this.findResourceByLoadedResource(entry, resource) : null
-		if (!entry || !retainedResource || retainedResource.closed) return () => undefined
-
-		retainedResource.displayRetainCount = (retainedResource.displayRetainCount ?? 0) + 1
-		let released = false
-
-		return () => {
-			if (released) return
-			released = true
-			retainedResource.displayRetainCount = Math.max(
-				0,
-				(retainedResource.displayRetainCount ?? 0) - 1,
-			)
-			if (retainedResource.displayRetainCount > 0 || retainedResource.closed) return
-
-			const currentEntry = this.entries.get(canonical)
-			if (!currentEntry || this.isResourceStillReferenced(currentEntry, retainedResource)) {
-				return
-			}
-
-			this.closeResource(retainedResource, {
-				path: canonical,
-				reason: "display-retain-release",
-			})
-		}
-	}
-
 	public getFailureReason(path: string): ResourceLoadFailureReason | null {
 		const canonical = this.urlLifecycle.getCanonicalFromAlias(path)
 		return this.entries.get(canonical)?.lastFailureReason ?? null
 	}
 
 	public getSnapshot(): ImageResourceSnapshot {
-		let smallLoaded = 0
-		let smallDecodedBytes = 0
-		let overviewLoaded = 0
-		let overviewDecodedBytes = 0
+		let lowLoaded = 0
+		let lowDecodedBytes = 0
 		let previewLoaded = 0
 		let previewDecodedBytes = 0
 		let fullLoaded = 0
 		let fullDecodedBytes = 0
-		let fullRetainCount = 0
 		let loadingCount = 0
 		let exchangingCount = 0
 		let fullLoadingCount = 0
@@ -1507,13 +1212,9 @@ export class ImageResourceManager {
 				if (!resource) continue
 				const decodedBytes = this.getDecodedBytes(resource)
 				switch (variant) {
-					case "small":
-						smallLoaded += 1
-						smallDecodedBytes += decodedBytes
-						break
-					case "overview":
-						overviewLoaded += 1
-						overviewDecodedBytes += decodedBytes
+					case "low":
+						lowLoaded += 1
+						lowDecodedBytes += decodedBytes
 						break
 					case "preview":
 						previewLoaded += 1
@@ -1530,7 +1231,6 @@ export class ImageResourceManager {
 				if (this.getDisplayLoadingPromise(entry, variant)) loadingCount += 1
 			}
 			if (entry.fullLoadingPromise) fullLoadingCount += 1
-			fullRetainCount += entry.fullRetainCount
 		})
 		const bodyCacheSnapshot = this.bodyCache.getSnapshot(this.entries.values())
 
@@ -1538,15 +1238,12 @@ export class ImageResourceManager {
 			managerInstanceId: this.managerInstanceId,
 			destroyed: this.destroyed,
 			entries: this.entries.size,
-			smallLoaded,
-			smallDecodedBytes,
-			overviewLoaded,
-			overviewDecodedBytes,
+			lowLoaded,
+			lowDecodedBytes,
 			previewLoaded,
 			previewDecodedBytes,
 			fullLoaded,
 			fullDecodedBytes,
-			fullRetainCount,
 			...bodyCacheSnapshot,
 			activePreviewLoadPipelineCount: this.activePreviewLoadPipelineCount,
 			queuedPreviewLoadCount: this.previewLoadQueue.length,
@@ -1601,11 +1298,9 @@ export class ImageResourceManager {
 			await entry.fullLoadingPromise.catch(() => null)
 		}
 		const previousDisplaySlots = this.cloneDisplayResourceSlots(entry)
-		const previousSmallResource = previousDisplaySlots.small.resource
-		const previousOverviewResource = previousDisplaySlots.overview.resource
+		const previousLowResource = previousDisplaySlots.low.resource
 		const previousResource = previousDisplaySlots.preview.resource
 		const previousFullResource = entry.fullResource
-		const previousFullRetainCount = entry.fullRetainCount
 		const previousOssSrc = entry.ossSrc
 		const previousExpiresAt = entry.expiresAt
 		const previousBodyState = this.bodyCache.captureState(entry)
@@ -1628,7 +1323,6 @@ export class ImageResourceManager {
 			entry.contentLength = previousContentLength
 			this.restoreDisplayResourceSlots(entry, previousDisplaySlots)
 			entry.fullResource = previousFullResource
-			entry.fullRetainCount = previousFullRetainCount
 			this.bodyCache.restoreState(entry, previousBodyState)
 		}
 		const clearDeletedResourceMetadata = () => {
@@ -1651,11 +1345,8 @@ export class ImageResourceManager {
 			const reason = entry.lastFailureReason ?? "not-found"
 			// 附件已删除（同路径无文件）：禁止恢复旧位图，否则画布仍显示已删文件内容
 			if (reason === "not-found") {
-				this.closeResource(previousSmallResource, {
-					path: normalizedSrc,
-					reason: "refresh-deleted",
-				})
-				this.closeResource(previousOverviewResource, {
+				void this.displayVariantPersistentCache.removeByPath(normalizedSrc)
+				this.closeResource(previousLowResource, {
 					path: normalizedSrc,
 					reason: "refresh-deleted",
 				})
@@ -1665,8 +1356,7 @@ export class ImageResourceManager {
 				})
 				if (
 					previousFullResource !== previousResource &&
-					previousFullResource !== previousOverviewResource &&
-					previousFullResource !== previousSmallResource
+					previousFullResource !== previousLowResource
 				) {
 					this.closeResource(previousFullResource, {
 						path: normalizedSrc,
@@ -1690,31 +1380,24 @@ export class ImageResourceManager {
 			})
 			return false
 		}
-		const loaded = await this.loadImageResource(
-			normalizedSrc,
-			ossSrc,
-			entry,
-			DEFAULT_IMAGE_RESOURCE_VARIANT,
-		)
+		const variantsToRefresh = this.getVariantsToRefresh(entry)
+		let loaded = false
+		for (const variant of variantsToRefresh) {
+			const result = await this.loadImageResource(normalizedSrc, ossSrc, entry, variant)
+			if (this.destroyed) return false
+			loaded = loaded || !!result
+		}
 		if (loaded) {
-			if (this.getDisplayResource(entry, "small") === previousSmallResource) {
-				this.setDisplayResource(entry, "small", null, { closePrevious: false })
-			}
-			if (this.getDisplayResource(entry, "overview") === previousOverviewResource) {
-				this.setDisplayResource(entry, "overview", null, { closePrevious: false })
+			if (this.getDisplayResource(entry, "low") === previousLowResource) {
+				this.setDisplayResource(entry, "low", null, { closePrevious: false })
 			}
 			if (this.getDisplayResource(entry, "preview") === previousResource) {
 				this.setDisplayResource(entry, "preview", null, { closePrevious: false })
 			}
 			if (entry.fullResource === previousFullResource) {
 				entry.fullResource = null
-				entry.fullRetainCount = 0
 			}
-			this.closeResource(previousSmallResource, {
-				path: normalizedSrc,
-				reason: "refresh-replaced",
-			})
-			this.closeResource(previousOverviewResource, {
+			this.closeResource(previousLowResource, {
 				path: normalizedSrc,
 				reason: "refresh-replaced",
 			})
@@ -1724,8 +1407,7 @@ export class ImageResourceManager {
 			})
 			if (
 				previousFullResource !== previousResource &&
-				previousFullResource !== previousOverviewResource &&
-				previousFullResource !== previousSmallResource
+				previousFullResource !== previousLowResource
 			) {
 				this.closeResource(previousFullResource, {
 					path: normalizedSrc,
@@ -1759,7 +1441,8 @@ export class ImageResourceManager {
 			path: normalizedSrc,
 			mediaType: "image",
 		})
-		this.closeEntryResources(entry, { forceCloseRetained: true })
+		void this.displayVariantPersistentCache.removeByPath(normalizedSrc)
+		this.closeEntryResources(entry)
 		entry.ossSrc = null
 		entry.ossSrcFromCachedFallback = false
 		entry.sourceUrl = null
@@ -2059,7 +1742,6 @@ export class ImageResourceManager {
 						requestId,
 						variant,
 						maxEdge: this.getMaxEdgeForVariant(variant),
-						includeThumbnail: variant === "preview",
 					}),
 				{
 					source: "image-resource:decode",
@@ -2116,13 +1798,12 @@ export class ImageResourceManager {
 				ossSrc: body.ossSrc,
 				image,
 				imageInfo: result.imageInfo,
-				thumbnailData: result.thumbnails ?? this.getFallbackThumbnailData(entry),
 				variant: resourceVariant,
 				sourceWidth,
 				sourceHeight,
 				isFullSize: this.isFullSizeResource(result.imageInfo, sourceWidth, sourceHeight),
-				displayRetainCount: 0,
 				closed: false,
+				displayBlob: result.persistentDisplay?.blob,
 			}
 			let previousResourceToClose: ImageResource | null = null
 			if (variant === "full") {
@@ -2134,12 +1815,8 @@ export class ImageResourceManager {
 					!this.isResourceStillReferenced(entry, previousFullResource)
 						? previousFullResource
 						: null
-			} else if (variant === "small") {
-				previousResourceToClose = this.setDisplayResource(entry, "small", resource, {
-					closePrevious: false,
-				})
-			} else if (variant === "overview") {
-				previousResourceToClose = this.setDisplayResource(entry, "overview", resource, {
+			} else if (variant === "low") {
+				previousResourceToClose = this.setDisplayResource(entry, "low", resource, {
 					closePrevious: false,
 				})
 			} else {
@@ -2153,12 +1830,18 @@ export class ImageResourceManager {
 				ossSrc: body.ossSrc,
 				image,
 				imageInfo: result.imageInfo,
-				thumbnail: resource.thumbnailData,
 				variant: resource.variant,
 				sourceWidth,
 				sourceHeight,
 				isFullSize: resource.isFullSize,
 			}
+			this.persistDisplayResourceFromWorkerResult(
+				path,
+				entry,
+				resource.variant,
+				result,
+				result.imageInfo,
+			)
 
 			if (variant !== "full") {
 				this.canvas.eventEmitter.emit({
@@ -2221,7 +1904,6 @@ export class ImageResourceManager {
 			backgroundRefreshPromise: null,
 			displaySlots: this.createDisplayResourceSlots(),
 			fullResource: null,
-			fullRetainCount: 0,
 			bodyBlob: null,
 			bodyOssSrc: null,
 			bodyCacheKey: null,
@@ -2324,8 +2006,7 @@ export class ImageResourceManager {
 			if (usedPaths.has(src)) return
 
 			if (
-				this.getDisplayResource(entry, "small") ||
-				this.getDisplayResource(entry, "overview") ||
+				this.getDisplayResource(entry, "low") ||
 				this.getDisplayResource(entry, "preview") ||
 				entry.fullResource ||
 				this.bodyCache.hasBody(entry)
@@ -2350,8 +2031,7 @@ export class ImageResourceManager {
 			if (
 				!entry.exchangePromise &&
 				!this.getDisplayLoadingPromise(entry, "preview") &&
-				!this.getDisplayLoadingPromise(entry, "small") &&
-				!this.getDisplayLoadingPromise(entry, "overview") &&
+				!this.getDisplayLoadingPromise(entry, "low") &&
 				!entry.fullLoadingPromise
 			) {
 				this.entries.delete(src)
@@ -2383,7 +2063,6 @@ export class ImageResourceManager {
 		// 释放所有 ImageBitmap 资源
 		this.entries.forEach((entry, path) => {
 			this.closeEntryResources(entry, {
-				forceCloseRetained: true,
 				path,
 				reason: "manager-destroy",
 			})

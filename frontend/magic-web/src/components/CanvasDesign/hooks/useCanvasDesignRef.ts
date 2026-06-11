@@ -149,7 +149,7 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				const imageData = elementInstance.getData()
 				if (!imageData.src) return null
 
-				const resource = await canvas.imageResourceManager.acquireResource(imageData.src, {
+				const resource = await canvas.imageResourceManager.getResource(imageData.src, {
 					variant: "full",
 				})
 				if (!resource) return null
@@ -158,7 +158,7 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 					imageInfo: resource.imageInfo,
 					ossUrl: resource.ossSrc,
 					image: resource.image,
-					release: resource.release,
+					release: () => undefined,
 				}
 			},
 		}),

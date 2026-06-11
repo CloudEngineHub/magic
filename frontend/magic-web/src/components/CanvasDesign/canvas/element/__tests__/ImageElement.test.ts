@@ -53,7 +53,7 @@ describe("ImageElement mounted image node sync", () => {
 		expect(imageNode.crop()).toEqual({ x: 1, y: 2, width: 3, height: 4 })
 	})
 
-	it("renders the retained loaded image even when oss metadata is temporarily absent", () => {
+	it("renders the loaded image even when oss metadata is temporarily absent", () => {
 		const imageGroup = new Konva.Group()
 		const loadingGroup = new Konva.Group()
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
@@ -80,7 +80,7 @@ describe("ImageElement mounted image node sync", () => {
 		expect(element.renderLoadingPlaceholder).not.toHaveBeenCalled()
 	})
 
-	it("labels temporary pasted image placeholders with retained info as uploading", () => {
+	it("labels temporary pasted image placeholders with existing info as uploading", () => {
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			data: {
 				id: string
@@ -113,7 +113,7 @@ describe("ImageElement mounted image node sync", () => {
 		expect(element.getNameLabelText()).toBe("Pasted image(上传中)")
 	})
 
-	it("treats pasted video placeholders with retained info as uploading", () => {
+	it("treats pasted video placeholders with existing info as uploading", () => {
 		const element = Object.create(VideoElement.prototype) as VideoElement & {
 			data: {
 				id: string
@@ -225,7 +225,6 @@ describe("ImageElement mounted image node sync", () => {
 				mimeType: "image/png",
 				filename: "image.png",
 			},
-			thumbnail: { small: "" },
 			variant: "preview" as const,
 			sourceWidth: 100,
 			sourceHeight: 80,
@@ -302,51 +301,6 @@ describe("ImageElement mounted image node sync", () => {
 
 		expect(element.loadedImage).toBeUndefined()
 		expect(imageNode.getParent()).toBeNull()
-	})
-
-	it("keeps the mounted image when a display resource is released without a fallback", () => {
-		const displayedImage = new Image()
-		const imageNode = new Konva.Image({
-			image: displayedImage,
-			name: "image-content",
-			width: 100,
-			height: 80,
-		})
-		const group = new Konva.Group({ width: 100, height: 80 })
-		group.add(imageNode)
-
-		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			node: Konva.Group
-			loadedImage?: HTMLImageElement
-			loadedImageVariant: "preview"
-			isResourceLoading: boolean
-			isErrorState: boolean
-			data: { id: string; src: string; width: number; height: number }
-			canvas: {
-				imageResourceManager: {
-					peekResource: ReturnType<typeof vi.fn>
-				}
-			}
-			handleDisplayResourceReleased: (variant: "preview", reason: string) => void
-		}
-		element.node = group
-		element.loadedImage = displayedImage
-		element.loadedImageVariant = "preview"
-		element.isResourceLoading = false
-		element.isErrorState = false
-		element.data = { id: "image-1", src: "/image.png", width: 100, height: 80 }
-		element.canvas = {
-			imageResourceManager: {
-				peekResource: vi.fn(() => null),
-			},
-		}
-
-		element.handleDisplayResourceReleased("preview", "visibility:test")
-
-		expect(element.loadedImage).toBe(displayedImage)
-		expect(imageNode.getParent()).toBe(group)
-		expect(element.isResourceLoading).toBe(true)
-		expect(element.isErrorState).toBe(false)
 	})
 
 	it("clears stale not-found state when an uploaded oss src is applied", () => {

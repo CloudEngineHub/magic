@@ -326,12 +326,12 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 							sourceDimensions: workerResult.sourceDimensions,
 						}
 					: await (async () => {
-							const scopedImage = await elementInstance.getScopedHTMLImageElement({
+							const fullImage = await elementInstance.getFullHTMLImageElement({
 								variant: "full",
 							})
 							try {
 								const imageInfo = elementInstance.getImageInfo()
-								const imageSource = scopedImage?.image ?? null
+								const imageSource = fullImage?.image ?? null
 								if (
 									!imageInfo?.naturalWidth ||
 									!imageInfo?.naturalHeight ||
@@ -362,7 +362,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 									},
 								}
 							} finally {
-								scopedImage?.release()
+								fullImage?.release()
 							}
 						})()
 

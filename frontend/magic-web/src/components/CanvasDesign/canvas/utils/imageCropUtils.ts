@@ -154,7 +154,7 @@ export function getReferenceImageCrop(params: {
 	return referenceImageOptions.find((entry) => entry.path === filePath)?.crop
 }
 
-/** 缩略图 / popover 内将整图缩放平移，使源图坐标系中的 crop 矩形铺满目标 box（与画布 drawImage 可视一致） */
+/** 预览 / popover 内将整图缩放平移，使源图坐标系中的 crop 矩形铺满目标 box（与画布 drawImage 可视一致） */
 export interface ReferenceImageCroppedDisplayLayout {
 	position: "absolute"
 	left: number

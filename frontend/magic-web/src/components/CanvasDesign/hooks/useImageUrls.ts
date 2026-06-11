@@ -5,64 +5,75 @@ import { ElementTypeEnum } from "../canvas/types"
 import { resolveCanonicalResourcePath } from "../canvas/utils/pathUtils"
 import type { ImageInfo } from "../canvas/utils/ImageResourceManager"
 
-export interface UseImageThumbnailUrlOptions {
+export interface UseImageLowUrlOptions {
 	elementId: string
 	src?: string
 	enabled?: boolean
 }
 
-export interface UseImageThumbnailUrlResult {
-	thumbnailUrl: string | null
+export interface UseImageLowUrlResult {
+	lowUrl: string | null
 	imageInfo: ImageInfo | null
 	isLoading: boolean
 	hasError: boolean
 }
 
-export function useImageThumbnailUrl(
-	options: UseImageThumbnailUrlOptions,
-): UseImageThumbnailUrlResult {
+export function useImageLowUrl(options: UseImageLowUrlOptions): UseImageLowUrlResult {
 	const { elementId, src, enabled = true } = options
 	const { canvas } = useCanvas()
 	const requestIdRef = useRef(0)
-	const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
+	const lowImageReleaseRef = useRef<(() => void) | null>(null)
+	const [lowUrl, setLowUrl] = useState<string | null>(null)
 	const [imageInfo, setImageInfo] = useState<ImageInfo | null>(null)
 	const [isLoading, setIsLoading] = useState(false)
 	const [hasError, setHasError] = useState(false)
 
-	const resetThumbnail = useCallback(() => {
+	const releaseLowImageUrl = useCallback(() => {
+		lowImageReleaseRef.current?.()
+		lowImageReleaseRef.current = null
+	}, [])
+
+	const resetLowUrl = useCallback(() => {
 		requestIdRef.current += 1
-		setThumbnailUrl(null)
+		releaseLowImageUrl()
+		setLowUrl(null)
 		setImageInfo(null)
 		setIsLoading(false)
 		setHasError(false)
-	}, [])
+	}, [releaseLowImageUrl])
 
-	const syncLoadedThumbnail = useCallback(async () => {
+	const syncLoadedLowUrl = useCallback(async () => {
 		if (!canvas || !src || !enabled) return
 		const currentRequestId = requestIdRef.current + 1
 		requestIdRef.current = currentRequestId
-		setThumbnailUrl(null)
+		releaseLowImageUrl()
+		setLowUrl(null)
 		setImageInfo(null)
 		setIsLoading(true)
 		setHasError(false)
 
-		const loaded = await canvas.imageResourceManager.getThumbnail(src)
-		if (requestIdRef.current !== currentRequestId) return
+		const loaded = await canvas.imageResourceManager.getLowImageUrl(src)
+		if (requestIdRef.current !== currentRequestId) {
+			loaded?.release()
+			return
+		}
 
-		const smallUrl = loaded?.thumbnail.small ?? null
-		setThumbnailUrl(smallUrl)
+		lowImageReleaseRef.current = loaded?.release ?? null
+		setLowUrl(loaded?.url ?? null)
 		setImageInfo(loaded?.imageInfo ?? null)
 		setHasError(false)
 		setIsLoading(false)
-	}, [canvas, enabled, src])
+	}, [canvas, enabled, releaseLowImageUrl, src])
+
+	useEffect(() => releaseLowImageUrl, [releaseLowImageUrl])
 
 	useEffect(() => {
 		if (!enabled || !src) {
-			resetThumbnail()
+			resetLowUrl()
 			return
 		}
-		void syncLoadedThumbnail()
-	}, [enabled, resetThumbnail, src, syncLoadedThumbnail])
+		void syncLoadedLowUrl()
+	}, [enabled, resetLowUrl, src, syncLoadedLowUrl])
 
 	// 监听元素更新事件，当图片元素的 src 更新时更新 URL
 	useCanvasEvent(
@@ -72,9 +83,9 @@ export function useImageThumbnailUrl(
 				if (!enabled || data.elementId !== elementId) return
 				if (data.data?.type !== ElementTypeEnum.Image) return
 				if (data.data.src !== src) return
-				void syncLoadedThumbnail()
+				void syncLoadedLowUrl()
 			},
-			[elementId, enabled, src, syncLoadedThumbnail],
+			[elementId, enabled, src, syncLoadedLowUrl],
 		),
 	)
 
@@ -84,9 +95,9 @@ export function useImageThumbnailUrl(
 		useCallback(
 			({ data }) => {
 				if (!enabled || data.elementId !== elementId) return
-				void syncLoadedThumbnail()
+				void syncLoadedLowUrl()
 			},
-			[elementId, enabled, syncLoadedThumbnail],
+			[elementId, enabled, syncLoadedLowUrl],
 		),
 	)
 
@@ -95,9 +106,9 @@ export function useImageThumbnailUrl(
 		"element:deleted",
 		useCallback(
 			({ data }) => {
-				if (data.elementId === elementId) resetThumbnail()
+				if (data.elementId === elementId) resetLowUrl()
 			},
-			[elementId, resetThumbnail],
+			[elementId, resetLowUrl],
 		),
 	)
 
@@ -114,20 +125,25 @@ export function useImageThumbnailUrl(
 				const currentRequestId = requestIdRef.current + 1
 				requestIdRef.current = currentRequestId
 				void (async () => {
-					const loaded = await canvas.imageResourceManager.getThumbnail(src)
-					if (requestIdRef.current !== currentRequestId) return
-					setThumbnailUrl(loaded?.thumbnail.small ?? null)
+					const loaded = await canvas.imageResourceManager.getLowImageUrl(src)
+					if (requestIdRef.current !== currentRequestId) {
+						loaded?.release()
+						return
+					}
+					releaseLowImageUrl()
+					lowImageReleaseRef.current = loaded?.release ?? null
+					setLowUrl(loaded?.url ?? null)
 					setImageInfo(loaded?.imageInfo ?? null)
 					setIsLoading(false)
 					setHasError(false)
 				})()
 			},
-			[canvas, enabled, src],
+			[canvas, enabled, releaseLowImageUrl, src],
 		),
 	)
 
 	return {
-		thumbnailUrl,
+		lowUrl,
 		imageInfo,
 		isLoading,
 		hasError,

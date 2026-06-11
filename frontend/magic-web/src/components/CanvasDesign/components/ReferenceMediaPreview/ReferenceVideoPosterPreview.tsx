@@ -5,7 +5,7 @@ import { ReferenceSlotVideoIcon } from "../ui/icons"
 import styles from "../MessageEditor/index.module.css"
 import { useReferenceVideoPoster } from "./useReferenceVideoPoster"
 
-export interface ReferenceVideoPosterThumbnailProps {
+export interface ReferenceVideoPosterPreviewProps {
 	fileName: string
 	path: string
 	fillParent?: boolean
@@ -13,7 +13,7 @@ export interface ReferenceVideoPosterThumbnailProps {
 }
 
 /** 视频参考槽位：与画布同源，用 VideoResourceManager 解码首帧海报 */
-export function ReferenceVideoPosterThumbnail(props: ReferenceVideoPosterThumbnailProps) {
+export function ReferenceVideoPosterPreview(props: ReferenceVideoPosterPreviewProps) {
 	const { fileName, path, fillParent, objectFit = "cover" } = props
 	const { loadState, posterClone } = useReferenceVideoPoster(path)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -29,15 +29,15 @@ export function ReferenceVideoPosterThumbnail(props: ReferenceVideoPosterThumbna
 		ctx.drawImage(posterClone, 0, 0)
 	}, [posterClone, loadState])
 
-	const thumbWrapperClass = cn(
-		styles.referenceImageThumbnail,
-		fillParent && styles.referenceImageThumbnailFill,
-		fillParent && objectFit === "contain" && styles.referenceImageThumbnailFillContain,
+	const previewWrapperClass = cn(
+		styles.referenceImagePreview,
+		fillParent && styles.referenceImagePreviewFill,
+		fillParent && objectFit === "contain" && styles.referenceImagePreviewFillContain,
 	)
 
 	if (loadState === "loading") {
 		return (
-			<div className={thumbWrapperClass}>
+			<div className={previewWrapperClass}>
 				<div className={styles.referenceImageLoading}>
 					<LoaderCircle size={12} className={styles.loadingIcon} />
 				</div>
@@ -47,7 +47,7 @@ export function ReferenceVideoPosterThumbnail(props: ReferenceVideoPosterThumbna
 
 	if (loadState === "error" || !posterClone) {
 		return (
-			<div className={thumbWrapperClass}>
+			<div className={previewWrapperClass}>
 				<div className="flex h-full w-full items-center justify-center bg-muted/40">
 					<ReferenceSlotVideoIcon size={28} />
 				</div>
@@ -56,10 +56,10 @@ export function ReferenceVideoPosterThumbnail(props: ReferenceVideoPosterThumbna
 	}
 
 	return (
-		<div className={thumbWrapperClass}>
+		<div className={previewWrapperClass}>
 			<canvas
 				ref={canvasRef}
-				className={styles.referenceImageThumbnailImgCover}
+				className={styles.referenceImagePreviewImgCover}
 				role="img"
 				aria-label={fileName}
 			/>

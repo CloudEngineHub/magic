@@ -8,28 +8,28 @@ import { ImageElement as ImageElementClass } from "../../../../../canvas/element
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Tooltip, TooltipTrigger, TooltipContent } from "../../../../ui/tooltip"
 import { usePortalContainer } from "../../../../ui/custom/PortalContainerContext"
-import { useImageThumbnailUrl } from "../../../../../hooks/useImageUrls"
+import { useImageLowUrl } from "../../../../../hooks/useImageUrls"
 
-const LAYER_IMAGE_THUMBNAIL_SIZE = 16
+const LAYER_IMAGE_PREVIEW_SIZE = 16
 const TOOLTIP_PREVIEW_MAX_SIZE = 160
 
-export default function LayerImageThumbnail(props: { element: ImageElement; alt: string }) {
+export default function LayerImageLowPreview(props: { element: ImageElement; alt: string }) {
 	const { element, alt } = props
 	const { canvas } = useCanvas()
 	const portalContainer = usePortalContainer()
-	const thumbnailRootRef = useRef<HTMLDivElement>(null)
-	const [shouldLoadThumbnail, setShouldLoadThumbnail] = useState(false)
-	const { thumbnailUrl, imageInfo: thumbnailImageInfo } = useImageThumbnailUrl({
+	const previewRootRef = useRef<HTMLDivElement>(null)
+	const [shouldLoadLow, setShouldLoadLow] = useState(false)
+	const { lowUrl, imageInfo: lowImageInfo } = useImageLowUrl({
 		elementId: element.id,
 		src: element.src,
-		enabled: shouldLoadThumbnail,
+		enabled: shouldLoadLow,
 	})
 	const elementInstance = canvas?.elementManager.getElementInstance(element.id)
 	const imageInfo =
 		(elementInstance instanceof ImageElementClass
 			? elementInstance.getImageInfo()
 			: undefined) ??
-		thumbnailImageInfo ??
+		lowImageInfo ??
 		undefined
 
 	const [tooltipOpen, setTooltipOpen] = useState(false)
@@ -38,24 +38,24 @@ export default function LayerImageThumbnail(props: { element: ImageElement; alt:
 	const [hasTooltipError, setHasTooltipError] = useState(false)
 
 	useEffect(() => {
-		const node = thumbnailRootRef.current
-		if (!node || shouldLoadThumbnail) return
+		const node = previewRootRef.current
+		if (!node || shouldLoadLow) return
 		if (typeof IntersectionObserver === "undefined") {
-			setShouldLoadThumbnail(true)
+			setShouldLoadLow(true)
 			return
 		}
 
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (!entries.some((entry) => entry.isIntersecting)) return
-				setShouldLoadThumbnail(true)
+				setShouldLoadLow(true)
 				observer.disconnect()
 			},
 			{ rootMargin: "120px" },
 		)
 		observer.observe(node)
 		return () => observer.disconnect()
-	}, [shouldLoadThumbnail])
+	}, [shouldLoadLow])
 
 	useEffect(() => {
 		setTooltipImageUrl(null)
@@ -98,7 +98,7 @@ export default function LayerImageThumbnail(props: { element: ImageElement; alt:
 			top: "0px",
 		}
 		const baseContentStyle = {
-			backgroundImage: thumbnailUrl ? `url("${thumbnailUrl}")` : undefined,
+			backgroundImage: lowUrl ? `url("${lowUrl}")` : undefined,
 			backgroundPosition: "center",
 			backgroundSize: "contain",
 		}
@@ -135,13 +135,13 @@ export default function LayerImageThumbnail(props: { element: ImageElement; alt:
 		}
 
 		const scale = Math.min(
-			LAYER_IMAGE_THUMBNAIL_SIZE / sourceCrop.width,
-			LAYER_IMAGE_THUMBNAIL_SIZE / sourceCrop.height,
+			LAYER_IMAGE_PREVIEW_SIZE / sourceCrop.width,
+			LAYER_IMAGE_PREVIEW_SIZE / sourceCrop.height,
 		)
 		const viewportWidth = sourceCrop.width * scale
 		const viewportHeight = sourceCrop.height * scale
-		const viewportOffsetX = (LAYER_IMAGE_THUMBNAIL_SIZE - viewportWidth) / 2
-		const viewportOffsetY = (LAYER_IMAGE_THUMBNAIL_SIZE - viewportHeight) / 2
+		const viewportOffsetX = (LAYER_IMAGE_PREVIEW_SIZE - viewportWidth) / 2
+		const viewportOffsetY = (LAYER_IMAGE_PREVIEW_SIZE - viewportHeight) / 2
 
 		const tooltipScale = Math.min(
 			TOOLTIP_PREVIEW_MAX_SIZE / sourceCrop.width,
@@ -180,25 +180,25 @@ export default function LayerImageThumbnail(props: { element: ImageElement; alt:
 				},
 			},
 		}
-	}, [element.crop, imageInfo, thumbnailUrl])
+	}, [element.crop, imageInfo, lowUrl])
 
 	return (
 		<Tooltip open={tooltipOpen} onOpenChange={handleTooltipOpenChange}>
 			<TooltipTrigger asChild>
 				<div
-					ref={thumbnailRootRef}
+					ref={previewRootRef}
 					className={styles.layerNodeElementIcon}
 					role="img"
 					aria-label={alt}
 				>
-					{thumbnailUrl ? (
-						<div className={styles.layerNodeImageThumbnail}>
+					{lowUrl ? (
+						<div className={styles.layerNodeImagePreview}>
 							<div
-								className={styles.layerNodeImageThumbnailViewport}
+								className={styles.layerNodeImagePreviewViewport}
 								style={viewportStyle}
 							>
 								<div
-									className={styles.layerNodeImageThumbnailContent}
+									className={styles.layerNodeImagePreviewContent}
 									style={contentStyle}
 								/>
 							</div>
@@ -212,19 +212,19 @@ export default function LayerImageThumbnail(props: { element: ImageElement; alt:
 				<TooltipContent
 					side="right"
 					sideOffset={6}
-					className={styles.layerNodeImageThumbnailTooltip}
+					className={styles.layerNodeImagePreviewTooltip}
 				>
 					{isTooltipLoading ? (
-						<div className={styles.layerNodeImageThumbnailTooltipLoading} />
+						<div className={styles.layerNodeImagePreviewTooltipLoading} />
 					) : hasTooltipError ? (
-						<div className={styles.layerNodeImageThumbnailTooltipLoading} />
+						<div className={styles.layerNodeImagePreviewTooltipLoading} />
 					) : tooltipPreview && tooltipImageUrl ? (
 						<div
-							className={styles.layerNodeImageThumbnailTooltipViewport}
+							className={styles.layerNodeImagePreviewTooltipViewport}
 							style={tooltipPreview.viewportStyle}
 						>
 							<div
-								className={styles.layerNodeImageThumbnailContent}
+								className={styles.layerNodeImagePreviewContent}
 								style={{
 									...tooltipPreview.contentStyle,
 									backgroundImage: `url("${tooltipImageUrl}")`,
@@ -235,7 +235,7 @@ export default function LayerImageThumbnail(props: { element: ImageElement; alt:
 						<img
 							src={tooltipImageUrl ?? undefined}
 							alt={alt}
-							className={styles.layerNodeImageThumbnailTooltipImg}
+							className={styles.layerNodeImagePreviewTooltipImg}
 						/>
 					)}
 				</TooltipContent>

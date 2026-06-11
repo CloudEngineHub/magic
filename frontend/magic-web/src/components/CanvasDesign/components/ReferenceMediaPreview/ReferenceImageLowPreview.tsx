@@ -5,23 +5,23 @@ import { usePortalContainer } from "../ui/custom/PortalContainerContext"
 import { useReferenceImageUrls } from "../../hooks/useReferenceImageUrls"
 import { ImagePlus, LoaderCircle } from "lucide-react"
 import {
-	TOOLTIP_THUMBNAIL_MIN_SIZE,
+	TOOLTIP_PREVIEW_MIN_SIZE,
 	calculateTooltipBoundedPreviewSize,
-} from "../../canvas/utils/imageThumbnailUtils"
+} from "../../canvas/utils/imagePreviewUtils"
 import {
 	getPersistedSourceCrop,
 	computeReferenceImageCroppedDisplayLayout,
 } from "../../canvas/utils/imageCropUtils"
 import { cn } from "../../lib/utils"
 import styles from "../MessageEditor/index.module.css"
-import type { ReferenceImageThumbnailImageProps } from "./types"
+import type { ReferenceMediaPreviewProps } from "./types"
 import { useObserveBoxSize } from "./useObserveBoxSize"
 
-export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailImageProps) {
+export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 	const { fileName, path, fillParent, objectFit = "cover", inlineOriginal, sourceCrop } = props
 	const portalContainer = usePortalContainer()
 	const {
-		thumbnailUrl,
+		lowUrl,
 		fullUrl,
 		isLoading,
 		hasError,
@@ -54,9 +54,9 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 		Boolean(sourceCrop) && Boolean(imageInfo?.naturalWidth && imageInfo?.naturalHeight)
 
 	const {
-		ref: thumbBoxRef,
-		w: thumbBoxW,
-		h: thumbBoxH,
+		ref: previewBoxRef,
+		w: previewBoxW,
+		h: previewBoxH,
 	} = useObserveBoxSize(Boolean(canCropLayout && !inlineOriginal))
 	const {
 		ref: inlineBoxRef,
@@ -64,20 +64,20 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 		h: inlineBoxH,
 	} = useObserveBoxSize(Boolean(canCropLayout && inlineOriginal))
 
-	const displayUrl = inlineOriginal ? (fullUrl ?? thumbnailUrl) : thumbnailUrl
+	const displayUrl = inlineOriginal ? (fullUrl ?? lowUrl) : lowUrl
 
-	const thumbCroppedStyle = useMemo(() => {
+	const previewCroppedStyle = useMemo(() => {
 		if (!canCropLayout || !sourceCrop || !imageInfo || inlineOriginal) {
 			return undefined
 		}
 		return computeReferenceImageCroppedDisplayLayout(
-			thumbBoxW,
-			thumbBoxH,
+			previewBoxW,
+			previewBoxH,
 			imageInfo.naturalWidth,
 			imageInfo.naturalHeight,
 			sourceCrop,
 		)
-	}, [canCropLayout, sourceCrop, imageInfo, thumbBoxW, thumbBoxH, inlineOriginal])
+	}, [canCropLayout, sourceCrop, imageInfo, previewBoxW, previewBoxH, inlineOriginal])
 
 	const inlineCroppedStyle = useMemo(() => {
 		if (!canCropLayout || !sourceCrop || !imageInfo || !inlineOriginal) {
@@ -92,8 +92,8 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 		)
 	}, [canCropLayout, sourceCrop, imageInfo, inlineBoxW, inlineBoxH, inlineOriginal])
 
-	const tooltipW = previewSize.width || TOOLTIP_THUMBNAIL_MIN_SIZE
-	const tooltipH = previewSize.height || TOOLTIP_THUMBNAIL_MIN_SIZE
+	const tooltipW = previewSize.width || TOOLTIP_PREVIEW_MIN_SIZE
+	const tooltipH = previewSize.height || TOOLTIP_PREVIEW_MIN_SIZE
 	const tooltipCroppedStyle = useMemo(() => {
 		if (!canCropLayout || !sourceCrop || !imageInfo) {
 			return undefined
@@ -107,13 +107,13 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 		)
 	}, [canCropLayout, sourceCrop, imageInfo, tooltipW, tooltipH])
 
-	const thumbWrapperClass = cn(
-		styles.referenceImageThumbnail,
-		fillParent && styles.referenceImageThumbnailFill,
-		fillParent && objectFit === "contain" && styles.referenceImageThumbnailFillContain,
+	const previewWrapperClass = cn(
+		styles.referenceImagePreview,
+		fillParent && styles.referenceImagePreviewFill,
+		fillParent && objectFit === "contain" && styles.referenceImagePreviewFillContain,
 	)
 
-	const renderThumbInner = (croppedStyle: CSSProperties | null | undefined) => (
+	const renderPreviewInner = (croppedStyle: CSSProperties | null | undefined) => (
 		<>
 			{isLoading && (
 				<div className={styles.referenceImageLoading}>
@@ -132,7 +132,7 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 					<img
 						src={displayUrl}
 						alt={fileName}
-						className={styles.referenceImageThumbnailImgCover}
+						className={styles.referenceImagePreviewImgCover}
 					/>
 				))}
 		</>
@@ -140,8 +140,8 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 
 	if (inlineOriginal) {
 		return (
-			<div ref={inlineBoxRef} className={thumbWrapperClass}>
-				{renderThumbInner(inlineCroppedStyle)}
+			<div ref={inlineBoxRef} className={previewWrapperClass}>
+				{renderPreviewInner(inlineCroppedStyle)}
 			</div>
 		)
 	}
@@ -149,8 +149,8 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 	return (
 		<Tooltip open={open} onOpenChange={handleOpenChange}>
 			<TooltipTrigger asChild>
-				<div ref={thumbBoxRef} className={thumbWrapperClass}>
-					{renderThumbInner(thumbCroppedStyle)}
+				<div ref={previewBoxRef} className={previewWrapperClass}>
+					{renderPreviewInner(previewCroppedStyle)}
 				</div>
 			</TooltipTrigger>
 			<TooltipPrimitive.Portal container={portalContainer || undefined}>
@@ -160,8 +160,8 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 					className={styles.referenceImageTooltip}
 					style={{
 						...(previewSize.width ? { width: previewSize.width } : {}),
-						maxWidth: TOOLTIP_THUMBNAIL_MIN_SIZE,
-						maxHeight: TOOLTIP_THUMBNAIL_MIN_SIZE,
+						maxWidth: TOOLTIP_PREVIEW_MIN_SIZE,
+						maxHeight: TOOLTIP_PREVIEW_MIN_SIZE,
 					}}
 				>
 					{isFullUrlLoading ? (
@@ -170,8 +170,8 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 								display: "flex",
 								alignItems: "center",
 								justifyContent: "center",
-								width: previewSize.width || TOOLTIP_THUMBNAIL_MIN_SIZE,
-								height: previewSize.height || TOOLTIP_THUMBNAIL_MIN_SIZE,
+								width: previewSize.width || TOOLTIP_PREVIEW_MIN_SIZE,
+								height: previewSize.height || TOOLTIP_PREVIEW_MIN_SIZE,
 							}}
 						>
 							<LoaderCircle
@@ -194,7 +194,7 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 									<img
 										src={fullUrl}
 										alt={fileName}
-										className={styles.referenceImagePreview}
+										className={styles.referenceImageTooltipPreview}
 										style={{
 											...tooltipCroppedStyle,
 											maxWidth: "none",
@@ -205,11 +205,11 @@ export function ReferenceImageThumbnailForImage(props: ReferenceImageThumbnailIm
 									<img
 										src={fullUrl}
 										alt={fileName}
-										className={styles.referenceImagePreview}
+										className={styles.referenceImageTooltipPreview}
 										style={{
 											...(previewSize.width ? previewSize : {}),
-											maxWidth: TOOLTIP_THUMBNAIL_MIN_SIZE,
-											maxHeight: TOOLTIP_THUMBNAIL_MIN_SIZE,
+											maxWidth: TOOLTIP_PREVIEW_MIN_SIZE,
+											maxHeight: TOOLTIP_PREVIEW_MIN_SIZE,
 										}}
 									/>
 								)}

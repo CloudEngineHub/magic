@@ -1,13 +1,6 @@
-import {
-	SMALL_THUMBNAIL_MAX_SIZE,
-	// TOOLTIP_THUMBNAIL_MIN_SIZE, // 已废弃：tooltip场景直接用ossSrc渲染
-	// COMPRESSED_WEBP_QUALITY,
-	// COMPRESSED_JPEG_QUALITY,
-	// getCompressedQuality,
-} from "./imageThumbnailConstants"
 import { parseImageDimensionsFromBlobHeader } from "./imageHeaderDimensions"
 
-export type ImageResourceDecodeVariant = "small" | "overview" | "preview" | "full"
+export type ImageResourceDecodeVariant = "low" | "preview" | "full"
 export type ImageResourceWorkerRequestType = "decode" | "warmup"
 
 export interface ImageResourceWorkerRequest {
@@ -20,7 +13,6 @@ export interface ImageResourceWorkerRequest {
 	mainThreadSentAt?: number
 	variant?: ImageResourceDecodeVariant
 	maxEdge?: number
-	includeThumbnail?: boolean
 }
 
 export interface ImageResourceWorkerTimings {
@@ -28,8 +20,8 @@ export interface ImageResourceWorkerTimings {
 	workerTotalMs: number
 	fetchMs?: number
 	metadataMs?: number
-	thumbnailMs?: number
 	imageDecodeMs?: number
+	persistentDisplayMs?: number
 	blobBytes?: number
 	imageBitmapWidth?: number
 	imageBitmapHeight?: number
@@ -52,9 +44,12 @@ export interface ImageResourceWorkerResponse {
 		mimeType: string
 		filename: string
 	}
-	/** 缩略图 */
-	thumbnails?: {
-		small: string
+	/** 可持久化的低清显示资源，仅用于 low 首屏缓存 */
+	persistentDisplay?: {
+		blob: Blob
+		mimeType: string
+		width: number
+		height: number
 	}
 	/** 错误信息 */
 	error?: string
@@ -135,20 +130,6 @@ async function checkWebpSupportInWorker(): Promise<boolean> {
 	return webpSupported
 }
 
-async function canvasToDataUrlViaBlob(
-	canvas: OffscreenCanvas,
-	mimeType: "image/webp" | "image/jpeg",
-	quality: number,
-): Promise<string> {
-	const blob = await canvas.convertToBlob({ type: mimeType, quality })
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader()
-		reader.onload = () => resolve(reader.result as string)
-		reader.onerror = reject
-		reader.readAsDataURL(blob)
-	})
-}
-
 function blobToDataUrl(blob: Blob): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const reader = new FileReader()
@@ -156,27 +137,6 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 		reader.onerror = reject
 		reader.readAsDataURL(blob)
 	})
-}
-
-async function bitmapToDataUrl(bitmap: ImageBitmap, quality: number): Promise<string> {
-	const w = bitmap.width
-	const h = bitmap.height
-	const canvas = new OffscreenCanvas(w, h)
-	const ctx = canvas.getContext("2d")
-	if (!ctx) return ""
-	ctx.drawImage(bitmap, 0, 0)
-	bitmap.close()
-
-	const useWebp = await checkWebpSupportInWorker()
-	if (useWebp) {
-		try {
-			const dataUrl = await canvasToDataUrlViaBlob(canvas, "image/webp", quality)
-			if (dataUrl.startsWith("data:image/webp")) return dataUrl
-		} catch {
-			// fallback to jpeg
-		}
-	}
-	return canvasToDataUrlViaBlob(canvas, "image/jpeg", quality)
 }
 
 /**
@@ -267,74 +227,6 @@ async function getImageMetadata(options: {
 	}
 }
 
-async function createSmallThumbnail(options: {
-	blob: Blob
-	maxDim: number
-	supportsImageBitmap: boolean
-}): Promise<{ small: string }> {
-	const { blob, maxDim, supportsImageBitmap } = options
-	const thumbnails: { small: string } = {} as { small: string }
-
-	// Small: decide based on size
-	if (maxDim <= SMALL_THUMBNAIL_MAX_SIZE) {
-		const direct = await blobToDataUrl(blob)
-		thumbnails.small = direct
-	} else {
-		if (supportsImageBitmap) {
-			const smallBitmap = await createImageBitmap(blob, {
-				resizeWidth: SMALL_THUMBNAIL_MAX_SIZE,
-				resizeQuality: "high",
-			})
-			thumbnails.small = await bitmapToDataUrl(smallBitmap, 1)
-		} else {
-			// 降级：使用 canvas 缩放
-			const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-				const image = new Image()
-				image.onload = () => resolve(image)
-				image.onerror = reject
-				image.src = URL.createObjectURL(blob)
-			})
-			const canvas = new OffscreenCanvas(
-				SMALL_THUMBNAIL_MAX_SIZE,
-				(SMALL_THUMBNAIL_MAX_SIZE * img.naturalHeight) / img.naturalWidth,
-			)
-			const ctx = canvas.getContext("2d")
-			if (ctx) {
-				ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-				thumbnails.small = await blobToDataUrl(
-					await canvas.convertToBlob({ type: "image/jpeg", quality: 1 }),
-				)
-			} else {
-				thumbnails.small = await blobToDataUrl(blob)
-			}
-			URL.revokeObjectURL(img.src)
-		}
-		// tooltip场景直接用ossSrc渲染，不再生成tooltip缩略图
-		// } else if (maxDim <= TOOLTIP_THUMBNAIL_MIN_SIZE) {
-		// 	thumbnails.small = await blobToDataUrl(blob)
-		// 	const tooltipBitmap = await createImageBitmap(blob, {
-		// 		resizeWidth: TOOLTIP_THUMBNAIL_MIN_SIZE,
-		// 		resizeQuality: "high",
-		// 	})
-		// 	thumbnails.tooltip = await bitmapToDataUrl(tooltipBitmap, 0.95)
-		// } else {
-		// 	const [smallBitmap, tooltipBitmap] = await Promise.all([
-		// 		createImageBitmap(blob, {
-		// 			resizeWidth: SMALL_THUMBNAIL_MAX_SIZE,
-		// 			resizeQuality: "high",
-		// 		}),
-		// 		createImageBitmap(blob, {
-		// 			resizeWidth: TOOLTIP_THUMBNAIL_MIN_SIZE,
-		// 			resizeQuality: "high",
-		// 		}),
-		// 	])
-		// 	thumbnails.small = await bitmapToDataUrl(smallBitmap, 0.9)
-		// 	thumbnails.tooltip = await bitmapToDataUrl(tooltipBitmap, 0.95)
-	}
-
-	return thumbnails
-}
-
 async function createImageBitmapForVariant(options: {
 	blob: Blob
 	imageInfo: NonNullable<ImageResourceWorkerResponse["imageInfo"]>
@@ -376,6 +268,31 @@ async function createImageBitmapForVariant(options: {
 	}
 }
 
+async function createPersistentDisplayBlob(
+	imageBitmap: ImageBitmap,
+	variant: ImageResourceDecodeVariant,
+): Promise<ImageResourceWorkerResponse["persistentDisplay"] | undefined> {
+	if (variant !== "low") return undefined
+
+	const canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height)
+	const ctx = canvas.getContext("2d")
+	if (!ctx) return undefined
+	ctx.drawImage(imageBitmap, 0, 0)
+
+	const useWebp = await checkWebpSupportInWorker()
+	const mimeType = useWebp ? "image/webp" : "image/png"
+	const blob = await canvas.convertToBlob({
+		type: mimeType,
+		quality: 0.82,
+	})
+	return {
+		blob,
+		mimeType: blob.type || mimeType,
+		width: imageBitmap.width,
+		height: imageBitmap.height,
+	}
+}
+
 async function processRequest(
 	request: ImageResourceWorkerRequest,
 ): Promise<ImageResourceWorkerResponse> {
@@ -386,7 +303,6 @@ async function processRequest(
 		mainThreadSentAt,
 		variant = "full",
 		maxEdge,
-		includeThumbnail = true,
 	} = request
 	const workerStartedAt = Date.now()
 	const timings: ImageResourceWorkerTimings = {
@@ -442,35 +358,13 @@ async function processRequest(
 		timings.blobBytes = blob.size
 		const supportsImageBitmap = isImageBitmapSupported()
 		const metadataStartedAt = Date.now()
-		const { imageInfo, maxDim } = await getImageMetadata({
+		const { imageInfo } = await getImageMetadata({
 			blob,
 			ossSrc,
 			passedFilename,
 			supportsImageBitmap,
 		})
 		markTiming("metadataMs", metadataStartedAt)
-		const thumbnailStartedAt = Date.now()
-		const thumbnails = includeThumbnail
-			? await createSmallThumbnail({
-					blob,
-					maxDim,
-					supportsImageBitmap,
-				})
-			: undefined
-		if (includeThumbnail) {
-			markTiming("thumbnailMs", thumbnailStartedAt)
-		}
-
-		// Compressed: full size, dynamic quality
-		// const pixelCount = naturalWidth * naturalHeight
-		// const useWebp = await checkWebpSupportInWorker()
-		// const quality = getCompressedQuality(
-		// 	pixelCount,
-		// 	fileSize,
-		// 	useWebp ? COMPRESSED_WEBP_QUALITY : COMPRESSED_JPEG_QUALITY,
-		// )
-		// const compressedBitmap = await createImageBitmap(blob)
-		// thumbnails.compressed = await bitmapToDataUrl(compressedBitmap, quality)
 
 		// 根据是否支持 ImageBitmap 决定返回类型
 		if (supportsImageBitmap) {
@@ -488,6 +382,11 @@ async function processRequest(
 				maxEdge,
 			})
 			markTiming("imageDecodeMs", imageDecodeStartedAt)
+			const persistentDisplayStartedAt = Date.now()
+			const persistentDisplay = await createPersistentDisplayBlob(imageSource, variant)
+			if (persistentDisplay) {
+				markTiming("persistentDisplayMs", persistentDisplayStartedAt)
+			}
 			timings.imageBitmapWidth = targetWidth
 			timings.imageBitmapHeight = targetHeight
 			timings.imageBitmapResized = resized
@@ -495,7 +394,7 @@ async function processRequest(
 				requestId,
 				imageSource,
 				imageInfo,
-				thumbnails,
+				persistentDisplay,
 				variant,
 				timings: completeTimings(),
 			}
@@ -505,7 +404,6 @@ async function processRequest(
 				requestId,
 				blob,
 				imageInfo,
-				thumbnails,
 				variant,
 				timings: completeTimings(),
 			}

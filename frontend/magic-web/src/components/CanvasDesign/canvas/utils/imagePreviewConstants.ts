@@ -1,8 +1,8 @@
-/** 小图最大边长（像素）- 用于列表等小图场景 */
-export const SMALL_THUMBNAIL_MAX_SIZE = 72
+/** low 档位最大边长（像素）- 用于低清展示场景 */
+export const LOW_DISPLAY_MAX_SIZE = 384
 
-/** tooltip/popover 缩略图最小边长（像素）- 用于悬浮预览等场景 */
-export const TOOLTIP_THUMBNAIL_MIN_SIZE = 400
+/** tooltip/popover 预览图最小边长（像素）- 用于悬浮预览等场景 */
+export const TOOLTIP_PREVIEW_MIN_SIZE = 400
 
 /** 压缩图质量范围：WebP 0.75~0.9，JPEG 降级 0.7~0.85 */
 export const COMPRESSED_WEBP_QUALITY = { min: 0.75, max: 0.9 }

@@ -1,6 +1,6 @@
 import type { TriangleElement } from "../../../../../canvas/types"
 
-interface TriangleThumbnailProps {
+interface TrianglePreviewProps {
 	element: TriangleElement
 }
 
@@ -9,10 +9,7 @@ const PADDING = 2
 const CONTENT_SIZE = SIZE - PADDING * 2
 const CENTER_X = SIZE / 2
 
-/**
- * 三角形缩略图组件
- */
-export function TriangleThumbnail({ element }: TriangleThumbnailProps) {
+export function TrianglePreview({ element }: TrianglePreviewProps) {
 	const fill = element.fill || "#969696"
 	const stroke = element.stroke || "transparent"
 	const strokeWidth = element.strokeWidth || 0

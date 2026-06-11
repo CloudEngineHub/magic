@@ -1,21 +1,21 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useCanvas } from "../context/CanvasContext"
 import { useCanvasEvent } from "./useCanvasEvent"
 import { resolveCanonicalResourcePath } from "../canvas/utils/pathUtils"
 import type { ImageInfo } from "../canvas/utils/ImageResourceManager"
-import { TOOLTIP_THUMBNAIL_MIN_SIZE } from "../canvas/utils/imageThumbnailUtils"
+import { TOOLTIP_PREVIEW_MIN_SIZE } from "../canvas/utils/imagePreviewUtils"
 
 /** 参考图 URL 信息 */
 export interface ReferenceImageUrlInfo {
-	/** 缩略图 */
-	thumbnailUrl: string | undefined
+	/** low 档位展示 URL */
+	lowUrl: string | undefined
 	/** tooltip/popover 预览图 */
 	fullUrl: string | undefined
 	/** 图片信息 */
 	imageInfo: ImageInfo | undefined
-	/** 按需加载 tooltip 缩略图的方法 */
+	/** 按需加载 tooltip 预览图的方法 */
 	loadTooltip: () => Promise<void>
-	/** 是否正在加载缩略图 */
+	/** 是否正在加载 low 档位 */
 	isLoading: boolean
 	/** 是否已确认加载失败 */
 	hasError: boolean
@@ -31,7 +31,7 @@ export interface ReferenceImageUrlInfo {
 	handleOpenChange: (open: boolean) => void
 }
 
-// 计算预设尺寸，保持宽高比，最大不超过 tooltip 缩略图尺寸
+// 计算预设尺寸，保持宽高比，最大不超过 tooltip 预览尺寸
 function calculatePreviewSize(
 	imageInfo: { naturalWidth: number; naturalHeight: number } | undefined,
 ): { width?: number; height?: number } {
@@ -39,7 +39,7 @@ function calculatePreviewSize(
 		return {}
 	}
 
-	const maxSize = TOOLTIP_THUMBNAIL_MIN_SIZE
+	const maxSize = TOOLTIP_PREVIEW_MIN_SIZE
 	const { naturalWidth, naturalHeight } = imageInfo
 
 	if (naturalWidth <= maxSize && naturalHeight <= maxSize) {
@@ -70,32 +70,39 @@ export function useReferenceImageUrls(
 	const eagerFullUrl = options?.eagerFullUrl ?? false
 	const { canvas } = useCanvas()
 	const [open, setOpen] = useState(false)
+	const lowImageReleaseRef = useRef<(() => void) | null>(null)
+	const lowImageRequestIdRef = useRef(0)
 	const [urlInfo, setUrlInfo] = useState<{
-		thumbnailUrl: string | undefined
+		lowUrl: string | undefined
 		fullUrl: string | undefined
 		imageInfo: ImageInfo | undefined
 		hasError: boolean
 		loadTooltip: () => Promise<void>
 	}>({
-		thumbnailUrl: undefined,
+		lowUrl: undefined,
 		fullUrl: undefined,
 		imageInfo: undefined,
 		hasError: false,
 		loadTooltip: () => Promise.resolve(),
 	})
 
+	const releaseLowImageUrl = useCallback(() => {
+		lowImageReleaseRef.current?.()
+		lowImageReleaseRef.current = null
+	}, [])
+
 	// 计算预览尺寸
 	const previewSize = useMemo(() => calculatePreviewSize(urlInfo.imageInfo), [urlInfo.imageInfo])
 
-	// 是否正在加载：eager 时缩略图或原图任一可用即可结束 loading
+	// 是否正在加载：eager 时 low 档位或原图任一可用即可结束 loading
 	const isLoading = eagerFullUrl
-		? !urlInfo.hasError && !urlInfo.thumbnailUrl && !urlInfo.fullUrl
-		: !urlInfo.hasError && !urlInfo.thumbnailUrl
+		? !urlInfo.hasError && !urlInfo.lowUrl && !urlInfo.fullUrl
+		: !urlInfo.hasError && !urlInfo.lowUrl
 
 	// 是否正在加载大图（当弹窗打开且 fullUrl 未加载时）
 	const isFullUrlLoading = open && !urlInfo.hasError && !urlInfo.fullUrl
 
-	// 按需加载 tooltip 缩略图（直接使用 ossSrc）
+	// 按需加载 tooltip 预览图（直接使用 ossSrc）
 	const loadTooltip = useCallback(async () => {
 		if (!canvas) return
 
@@ -131,27 +138,37 @@ export function useReferenceImageUrls(
 		[loadTooltip],
 	)
 
-	// 更新路径的缩略图 URL（缩略图统一通过 ImageResourceManager 入口加载）
+	// 更新路径的展示 URL（明确请求 low 档位）
 	const updatePathUrl = useCallback(async () => {
 		if (!canvas) return
 
-		const thumbnail = await canvas.imageResourceManager.getThumbnail(path)
-		const smallUrl = thumbnail?.thumbnail?.small
-		const imageInfo = thumbnail?.imageInfo
+		const requestId = lowImageRequestIdRef.current + 1
+		lowImageRequestIdRef.current = requestId
+		const lowImage = await canvas.imageResourceManager.getLowImageUrl(path)
+		if (lowImageRequestIdRef.current !== requestId) {
+			lowImage?.release()
+			return
+		}
+
+		releaseLowImageUrl()
+		lowImageReleaseRef.current = lowImage?.release ?? null
+
+		const lowUrl = lowImage?.url
+		const imageInfo = lowImage?.imageInfo
 		const failureReason = canvas.imageResourceManager.getFailureReason(path)
 
 		setUrlInfo((prev) => {
 			const newInfo = {
-				thumbnailUrl: smallUrl || undefined,
+				lowUrl: lowUrl || undefined,
 				fullUrl: prev.fullUrl, // 保持已有的 tooltip URL
 				imageInfo: imageInfo || prev.imageInfo,
-				hasError: !smallUrl && !!failureReason,
+				hasError: !lowUrl && !!failureReason,
 				loadTooltip,
 			}
 
 			// 只有当 URL 或 imageInfo 实际变化时才更新
 			if (
-				prev.thumbnailUrl === newInfo.thumbnailUrl &&
+				prev.lowUrl === newInfo.lowUrl &&
 				prev.imageInfo === newInfo.imageInfo &&
 				prev.hasError === newInfo.hasError
 			) {
@@ -160,13 +177,15 @@ export function useReferenceImageUrls(
 
 			return newInfo
 		})
-	}, [canvas, path, loadTooltip])
+	}, [canvas, path, loadTooltip, releaseLowImageUrl])
 
-	// 初始化缩略图 URL
+	// 初始化 low 档位 URL
 	useEffect(() => {
 		if (!canvas) {
+			lowImageRequestIdRef.current += 1
+			releaseLowImageUrl()
 			setUrlInfo({
-				thumbnailUrl: undefined,
+				lowUrl: undefined,
 				fullUrl: undefined,
 				imageInfo: undefined,
 				hasError: false,
@@ -177,9 +196,11 @@ export function useReferenceImageUrls(
 
 		// 立即尝试更新一次 URL 映射（如果资源已缓存，可以立即显示）
 		updatePathUrl()
-	}, [canvas, path, updatePathUrl])
+	}, [canvas, path, releaseLowImageUrl, updatePathUrl])
 
-	// 槽位内直接展示原图：与缩略图并行拉取 ossSrc
+	useEffect(() => releaseLowImageUrl, [releaseLowImageUrl])
+
+	// 槽位内直接展示原图：与 low 档位并行拉取 ossSrc
 	useEffect(() => {
 		if (!eagerFullUrl || !canvas) return
 		let cancelled = false
@@ -234,7 +255,7 @@ export function useReferenceImageUrls(
 				}
 
 				setUrlInfo((prev) => {
-					if (prev.thumbnailUrl || prev.fullUrl) {
+					if (prev.lowUrl || prev.fullUrl) {
 						return prev
 					}
 
@@ -248,7 +269,7 @@ export function useReferenceImageUrls(
 		),
 	)
 
-	// 监听资源加载完成事件，刷新缩略图 URL
+	// 监听资源加载完成事件，刷新 low 档位 URL
 	useCanvasEvent(
 		"resource:image:loaded",
 		useCallback(

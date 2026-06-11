@@ -3,18 +3,18 @@ import { cn } from "../../lib/utils"
 import { CanvasFileIcon, ReferenceSlotAudioIcon } from "../ui/icons"
 import styles from "../MessageEditor/index.module.css"
 
-export interface ReferenceNonImageThumbnailProps {
+export interface ReferenceNonImagePreviewProps {
 	fileType: Exclude<MediaResourcePathKind, "image" | "video">
 	fillParent?: boolean
 	objectFit?: "cover" | "contain"
 }
 
-export function ReferenceNonImageThumbnail(props: ReferenceNonImageThumbnailProps) {
+export function ReferenceNonImagePreview(props: ReferenceNonImagePreviewProps) {
 	const { fileType, fillParent, objectFit = "cover" } = props
-	const thumbWrapperClass = cn(
-		styles.referenceImageThumbnail,
-		fillParent && styles.referenceImageThumbnailFill,
-		fillParent && objectFit === "contain" && styles.referenceImageThumbnailFillContain,
+	const previewWrapperClass = cn(
+		styles.referenceImagePreview,
+		fillParent && styles.referenceImagePreviewFill,
+		fillParent && objectFit === "contain" && styles.referenceImagePreviewFillContain,
 	)
 	const slotIcon =
 		fileType === "audio" ? (
@@ -23,7 +23,7 @@ export function ReferenceNonImageThumbnail(props: ReferenceNonImageThumbnailProp
 			<CanvasFileIcon size={28} className="text-muted-foreground" />
 		)
 	return (
-		<div className={thumbWrapperClass}>
+		<div className={previewWrapperClass}>
 			<div className="flex h-full w-full items-center justify-center bg-muted/40">
 				{slotIcon}
 			</div>

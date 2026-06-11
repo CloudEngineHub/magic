@@ -70,10 +70,10 @@ export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProp
 
 	const imgRef = useRef<HTMLImageElement | null>(null)
 
-	const { fullUrl, thumbnailUrl, isLoading } = useReferenceImageUrls(path, {
+	const { fullUrl, lowUrl, isLoading } = useReferenceImageUrls(path, {
 		eagerFullUrl: true,
 	})
-	const src = fullUrl ?? thumbnailUrl
+	const src = fullUrl ?? lowUrl
 
 	useEffect(() => {
 		setNaturalSize(null)

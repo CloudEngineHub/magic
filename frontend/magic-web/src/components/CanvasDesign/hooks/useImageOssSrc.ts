@@ -46,7 +46,7 @@ export function useImageOssSrc(imageElement: ImageElement | null) {
 		"resource:image:loaded",
 		({ data }) => {
 			if (!canvas || !path) return
-			if (data.resource.variant === "overview") return
+			if (data.resource.variant === "low") return
 			const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 			if (
 				resolveCanonicalResourcePath(data.path, resolveAbs) ===

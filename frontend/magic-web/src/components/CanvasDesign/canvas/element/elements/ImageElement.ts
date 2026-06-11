@@ -25,7 +25,6 @@ import type {
 	ImageSource,
 	ImageInfo,
 	LoadedResource,
-	AcquiredImageResource,
 	ImageResourceVariant,
 } from "../../utils/ImageResourceManager"
 import { getPersistedSourceCrop } from "../../utils/imageCropUtils"
@@ -73,8 +72,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private loadedImageVariant?: ImageResourceVariant
 	private loadedImageSourceWidth?: number
 	private loadedImageSourceHeight?: number
-	private displayedImageResourceRelease?: () => void
-	private pendingDisplayedImageResourceReleases: Array<() => void> = []
 	/** 当前视口调度希望这个元素显示的资源等级；用于允许缩小时主动降级 */
 	private targetDisplayResourceVariant?: ImageResourceVariant
 	/** 从 resource:image:loaded 事件获取的 ossSrc */
@@ -111,14 +108,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}) => void
 	private resourceLoadFailedHandler?: (event: {
 		data: { path: string; reason?: ResourceLoadFailureReason }
-	}) => void
-	private resourceReleasedHandler?: (event: {
-		data: {
-			path: string
-			variant: ImageResourceVariant
-			reason: string
-			releasedBytes: number
-		}
 	}) => void
 	/** 最后一次加载失败原因（与 resource:image:load-failed 同步） */
 	private imageLoadFailureReason: ResourceLoadFailureReason | null = null
@@ -234,35 +223,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private clearLoadedImageReference(): void {
-		this.releaseDisplayedImageResourceRetain()
 		this.loadedImage = undefined
 		this.loadedImageVariant = undefined
 		this.loadedImageSourceWidth = undefined
 		this.loadedImageSourceHeight = undefined
-	}
-
-	private retainDisplayedImageResource(resource: LoadedResource): (() => void) | undefined {
-		if (!this.data.src || resource.variant === "full") return undefined
-		return this.canvas.imageResourceManager.retainDisplayedResource?.(this.data.src, resource)
-	}
-
-	private queueDisplayedImageResourceRelease(release: (() => void) | undefined): void {
-		if (!release) return
-		this.pendingDisplayedImageResourceReleases ??= []
-		this.pendingDisplayedImageResourceReleases.push(release)
-	}
-
-	private flushPendingDisplayedImageResourceReleases(): void {
-		this.pendingDisplayedImageResourceReleases ??= []
-		const releases = this.pendingDisplayedImageResourceReleases.splice(0)
-		releases.forEach((release) => release())
-	}
-
-	private releaseDisplayedImageResourceRetain(): void {
-		const release = this.displayedImageResourceRelease
-		this.displayedImageResourceRelease = undefined
-		this.flushPendingDisplayedImageResourceReleases()
-		release?.()
 	}
 
 	private applyResourceMetadata(resource: LoadedResource): void {
@@ -272,16 +236,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private applyResourceToView(resource: LoadedResource): void {
-		const sameDisplayedResource =
-			this.loadedImage === resource.image && this.loadedImageVariant === resource.variant
-		if (!sameDisplayedResource) {
-			const previousRelease = this.displayedImageResourceRelease
-			this.displayedImageResourceRelease = this.retainDisplayedImageResource(resource)
-			this.queueDisplayedImageResourceRelease(previousRelease)
-		} else if (!this.displayedImageResourceRelease) {
-			this.displayedImageResourceRelease = this.retainDisplayedImageResource(resource)
-		}
-
 		this.loadedImage = resource.image
 		this.loadedImageVariant = resource.variant
 		this.loadedImageSourceWidth = resource.sourceWidth
@@ -325,14 +279,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				: this.getSourceCrop(this.loadedImage),
 		)
 		imageNode.getLayer()?.batchDraw()
-		this.flushPendingDisplayedImageResourceReleases()
 	}
 
 	private getVariantViewRank(variant: ImageResourceVariant | undefined): number {
-		if (variant === "full") return 3
-		if (variant === "preview") return 2
-		if (variant === "overview") return 1
-		if (variant === "small") return 0
+		if (variant === "full") return 2
+		if (variant === "preview") return 1
+		if (variant === "low") return 0
 		return 0
 	}
 
@@ -359,10 +311,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private getDisplayTargetFallbackVariants(
 		targetVariant: ImageResourceVariant,
 	): ImageResourceVariant[] {
-		if (targetVariant === "small") return ["small", "overview", "preview"]
-		if (targetVariant === "overview") return ["overview", "small", "preview"]
-		if (targetVariant === "preview") return ["preview", "overview", "small"]
-		return ["preview", "overview", "small"]
+		if (targetVariant === "low") return ["low", "preview"]
+		if (targetVariant === "preview") return ["preview", "low"]
+		return ["preview", "low"]
 	}
 
 	private peekExactResourceVariant(variant: ImageResourceVariant): LoadedResource | null {
@@ -383,44 +334,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		this.applyResourceToView(targetResource)
-		this.isResourceLoading = false
-		this.isErrorState = false
-		this.syncMountedImageContentNodeWithLoadedResource()
-		this.rerenderWhenTransformIdle()
-	}
-
-	public async applyDetailFullDisplayResource(): Promise<{ release: () => void } | null> {
-		if (this.loadedImageVariant === "full") return null
-		const scopedImage = await this.getScopedHTMLImageElement({
-			variant: "full",
-			applyToView: true,
-		})
-		if (!scopedImage) return null
-		this.isResourceLoading = false
-		this.isErrorState = false
-		this.syncMountedImageContentNodeWithLoadedResource()
-		this.rerenderWhenTransformIdle()
-		return { release: scopedImage.release }
-	}
-
-	public downgradeDetailFullDisplayResource(): void {
-		if (this.loadedImageVariant !== "full") return
-		const fallbackVariants = this.getDisplayTargetFallbackVariants(
-			this.targetDisplayResourceVariant ?? "preview",
-		)
-		const fallbackResource = this.data.src
-			? (fallbackVariants
-					.map((variant) => this.peekExactResourceVariant(variant))
-					.find((resource): resource is LoadedResource => !!resource) ??
-				this.canvas.imageResourceManager.peekResource(this.data.src, {
-					variant: "preview",
-				}))
-			: null
-		if (fallbackResource) {
-			this.applyResourceToView(fallbackResource)
-		} else {
-			this.clearLoadedImageReference()
-		}
 		this.isResourceLoading = false
 		this.isErrorState = false
 		this.syncMountedImageContentNodeWithLoadedResource()
@@ -892,54 +805,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.rerenderWhenTransformIdle()
 	}
 
-	private handleDisplayResourceReleased(variant: ImageResourceVariant): void {
-		if (!this.loadedImage || this.loadedImageVariant !== variant) return
-		const src = this.data.src
-		if (!src) {
-			this.clearLoadedImageReference()
-			this.isResourceLoading = false
-			this.isErrorState = false
-			this.syncMountedImageContentNodeWithLoadedResource()
-			this.rerenderWhenTransformIdle()
-			return
-		}
-
-		const fallbackVariants: ImageResourceVariant[] =
-			variant === "preview" ? ["overview", "small"] : variant === "overview" ? ["small"] : []
-		const fallbackResource =
-			fallbackVariants
-				.map((fallbackVariant) =>
-					this.canvas.imageResourceManager.peekResource(src, {
-						variant: fallbackVariant,
-					}),
-				)
-				.find((resource): resource is LoadedResource =>
-					resource ? fallbackVariants.includes(resource.variant) : false,
-				) ?? null
-		if (fallbackResource) {
-			this.applyResourceToView(fallbackResource)
-		} else {
-			if (this.node?.isVisible() !== true) {
-				this.clearLoadedImageReference()
-				this.isResourceLoading = false
-				this.isErrorState = false
-				this.syncMountedImageContentNodeWithLoadedResource()
-				this.rerenderWhenTransformIdle()
-				return
-			}
-			// Keep the currently displayed resource sticky while the next viewport target is loading.
-			// The resource manager retain prevents the ImageBitmap from being closed after its cache
-			// slot is released, avoiding a visible fallback to the loading placeholder on fast zooms.
-			this.isResourceLoading = true
-			this.isErrorState = false
-			return
-		}
-		this.isResourceLoading = false
-		this.isErrorState = false
-		this.syncMountedImageContentNodeWithLoadedResource()
-		this.rerenderWhenTransformIdle()
-	}
-
 	private getResourceReplacementBeforeClose(
 		closingImage: ImageSource,
 		closingVariant: ImageResourceVariant,
@@ -954,8 +819,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			closingVariant,
 			...this.getDisplayTargetFallbackVariants(targetVariant),
 			"preview",
-			"overview",
-			"small",
+			"low",
 		] satisfies ImageResourceVariant[]
 		const visited = new Set<ImageResourceVariant>()
 
@@ -1047,17 +911,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.resourceWillCloseHandler = ({ data }) => {
 			this.handleImageSourceWillClose(data.image, data.variant)
 		}
-		this.resourceReleasedHandler = ({ data }) => {
-			if (
-				(data.variant === "small" ||
-					data.variant === "preview" ||
-					data.variant === "overview") &&
-				resolveCanonicalResourcePath(data.path, resolveAbs) ===
-					resolveCanonicalResourcePath(path, resolveAbs)
-			) {
-				this.handleDisplayResourceReleased(data.variant)
-			}
-		}
 		this.canvas.eventEmitter.on("resource:image:loaded", this.resourceLoadedHandler)
 		this.canvas.eventEmitter.on(
 			"resource:image:display-target",
@@ -1065,7 +918,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		)
 		this.canvas.eventEmitter.on("resource:image:will-close", this.resourceWillCloseHandler)
 		this.canvas.eventEmitter.on("resource:image:load-failed", this.resourceLoadFailedHandler)
-		this.canvas.eventEmitter.on("resource:image:released", this.resourceReleasedHandler)
 
 		// 同步可能已缓存的资源；不要在监听阶段触发新加载，否则会绕过可见性调度。
 		const resource =
@@ -1073,10 +925,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				variant: "preview",
 			}) ??
 			this.canvas.imageResourceManager.peekResource(path, {
-				variant: "overview",
-			}) ??
-			this.canvas.imageResourceManager.peekResource(path, {
-				variant: "small",
+				variant: "low",
 			})
 		if (
 			resource &&
@@ -1113,10 +962,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (this.resourceWillCloseHandler) {
 			this.canvas.eventEmitter.off("resource:image:will-close", this.resourceWillCloseHandler)
 			this.resourceWillCloseHandler = undefined
-		}
-		if (this.resourceReleasedHandler) {
-			this.canvas.eventEmitter.off("resource:image:released", this.resourceReleasedHandler)
-			this.resourceReleasedHandler = undefined
 		}
 	}
 
@@ -1217,15 +1062,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	private canUseLoadedImageForVariant(variant: ImageResourceVariant): boolean {
 		if (!this.loadedImage) return false
-		if (variant === "small") return true
-		if (variant === "overview") {
-			return (
-				this.loadedImageVariant === "overview" ||
-				this.loadedImageVariant === "preview" ||
-				this.loadedImageVariant === "full" ||
-				this.isLoadedImageFullSize()
-			)
-		}
+		if (variant === "low") return true
 		if (variant === "preview") {
 			return (
 				this.loadedImageVariant === "preview" ||
@@ -1328,7 +1165,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 	}
 
-	public async getScopedHTMLImageElement(options?: {
+	public async getFullHTMLImageElement(options?: {
 		variant?: ImageResourceVariant
 		applyToView?: boolean
 	}): Promise<{ image: ImageSource; release: () => void } | null> {
@@ -1363,8 +1200,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (!src) return null
 
 		try {
-			const resource: AcquiredImageResource | null =
-				await this.canvas.imageResourceManager.acquireResource(src, { variant })
+			const resource = await this.canvas.imageResourceManager.getResource(src, { variant })
 			if (!resource) return null
 
 			if (applyToView) {
@@ -1375,7 +1211,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			return {
 				image: resource.image,
-				release: resource.release,
+				release: () => undefined,
 			}
 		} catch (error) {
 			return null
@@ -1479,11 +1315,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		offsetY: number,
 		options?: { shouldDrawBorder?: boolean; width?: number; height?: number },
 	): Promise<boolean> {
-		let scopedImage: { image: ImageSource; release: () => void } | null = null
+		let fullImage: { image: ImageSource; release: () => void } | null = null
 		try {
 			// 获取图片元素
-			scopedImage = await this.getScopedHTMLImageElement({ variant: "full" })
-			const img = scopedImage?.image
+			fullImage = await this.getFullHTMLImageElement({ variant: "full" })
+			const img = fullImage?.image
 			if (!img) {
 				return false
 			}
@@ -1536,7 +1372,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		} catch (error) {
 			return false
 		} finally {
-			scopedImage?.release()
+			fullImage?.release()
 		}
 	}
 
@@ -1786,14 +1622,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 */
 	private getImageLoadState(): {
 		ossSrc: string | null
-		thumbnailAvailable: boolean
 		imageLoaded: boolean
 		isLoading: boolean
 	} {
 		if (!this.data.src) {
 			return {
 				ossSrc: null,
-				thumbnailAvailable: false,
 				imageLoaded: false,
 				isLoading: false,
 			}
@@ -1801,7 +1635,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		return {
 			ossSrc: this.storedOssSrc,
-			thumbnailAvailable: !!this.storedImageInfo, // 主图加载后 thumbnail 一并返回
 			imageLoaded: !!this.loadedImage,
 			isLoading: this.isResourceLoading,
 		}
@@ -1822,7 +1655,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 从 ImageResourceManager 实时查询状态
 			const loadState = this.getImageLoadState()
 
-			// 主图已加载，直接渲染主图。缩放切档期间旧图可能被 sticky retain 保留，
+			// 主图已加载，直接渲染主图。缩放切档期间会继续显示已有图，
 			// 此时即使 oss 元数据暂时不在当前 slot 上，也不能回退到 loading 占位。
 			if (loadState.imageLoaded && this.data.src) {
 				return this.renderImage()
@@ -2518,7 +2351,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	/**
 	 * 保存参考图信息（单个）
-	 * 与 saveReferenceImageInfos 一致：对新项预加载资源，供 Popover 缩略图立即展示
+	 * 与 saveReferenceImageInfos 一致：对新项预加载资源，供 Popover 预览立即展示
 	 */
 	saveReferenceImageInfo(fileInfo: UploadFileResponse): void {
 		const exists = this.referenceImageInfos.some((info) => info.path === fileInfo.path)

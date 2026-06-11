@@ -1,6 +1,6 @@
 import type { EllipseElement } from "../../../../../canvas/types"
 
-interface EllipseThumbnailProps {
+interface EllipsePreviewProps {
 	element: EllipseElement
 }
 
@@ -10,10 +10,7 @@ const CONTENT_SIZE = SIZE - PADDING * 2
 const CENTER_X = SIZE / 2
 const CENTER_Y = SIZE / 2
 
-/**
- * 圆形缩略图组件
- */
-export function EllipseThumbnail({ element }: EllipseThumbnailProps) {
+export function EllipsePreview({ element }: EllipsePreviewProps) {
 	const fill = element.fill || "#969696"
 	const stroke = element.stroke || "transparent"
 	const strokeWidth = element.strokeWidth || 0

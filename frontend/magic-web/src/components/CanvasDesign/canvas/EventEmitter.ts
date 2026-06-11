@@ -73,7 +73,7 @@ export interface CanvasEventMap {
 	"element:change": CanvasElementChangePayload | undefined // 任何元素变化时触发，用于触发UI更新
 	"element:batchupdated": void // 批量更新完成事件
 	"element:batchdeleted": { elementIds: string[] } // 批量删除完成事件
-	"referenceImages:changed": { elementId: string } // 图片元素参考图增删（触发资源回收）
+	"referenceImages:changed": { elementId: string } // 图片元素参考图增删（触发未引用资源清理）
 
 	// 临时元素相关事件
 	"element:temporary:converted": { elementId: string } // 临时元素转为正式元素
@@ -120,7 +120,7 @@ export interface CanvasEventMap {
 		path: string
 		variant: ImageResourceVariant
 		reason?: ResourceLoadFailureReason
-	} // 单个图片 variant 加载失败事件；用于 overview -> preview 降级，不直接驱动元素错误态
+	} // 单个图片 variant 加载失败事件；用于 low -> preview 降级，不直接驱动元素错误态
 	"resource:image:load-failed": {
 		path: string
 		/** 与 ImageResourceManager 条目一致；便于 UI 区分文件缺失与通用加载失败 */
@@ -132,18 +132,12 @@ export interface CanvasEventMap {
 		image: ImageSource
 		reason: string
 	} // 图片 decoded/native 资源即将释放；元素必须同步断开 Konva.Image 持有的 image 引用
-	"resource:image:released": {
-		path: string
-		variant: "small" | "overview" | "preview"
-		reason: string
-		releasedBytes: number
-	} // 图片 decoded/native 资源释放事件（元素需清理 Konva.Image 持有的 image 引用）
 	"resource:video:refreshed": { path: string; resource: LoadedVideoResource } // 视频资源替换后刷新完成事件
 	"resource:video:load-failed": {
 		path: string
 		reason?: ResourceLoadFailureReason
 	} // 视频换链/刷新失败（如附件已删除）
-	"resource:released": { path: string } // 资源释放事件（供缩略图服务清理缓存）
+	"resource:released": { path: string } // 资源生命周期清理事件（供资源 URL 缓存同步）
 
 	// 元素拖拽相关事件（单元素）
 	"element:dragstart": { elementId: string }

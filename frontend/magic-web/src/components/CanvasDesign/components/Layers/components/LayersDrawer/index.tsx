@@ -35,14 +35,14 @@ import { useElementMenu } from "../../../ElementMenu/ElementMenuContext"
 import { useMagic } from "../../../../context/MagicContext"
 import type { CanvasDesignStorageData } from "../../../../types.magic"
 import { useCanvasEvent } from "../../../../hooks/useCanvasEvent"
-import { RectangleThumbnail } from "./thumbnails/RectangleThumbnail"
-import { EllipseThumbnail } from "./thumbnails/EllipseThumbnail"
-import { TriangleThumbnail } from "./thumbnails/TriangleThumbnail"
-import { StarThumbnail } from "./thumbnails/StarThumbnail"
+import { RectanglePreview } from "./previews/RectanglePreview"
+import { EllipsePreview } from "./previews/EllipsePreview"
+import { TrianglePreview } from "./previews/TrianglePreview"
+import { StarPreview } from "./previews/StarPreview"
 import { useCanvasDesignI18n } from "../../../../context/I18nContext"
 import type { LayerTreeData } from "../../types"
 import { convertLayerToTreeNode } from "../../../../lib"
-import LayerImageThumbnail from "./thumbnails/ImageThumbnail"
+import LayerImageLowPreview from "./previews/ImageLowPreview"
 
 const LAYER_TREE_VIRTUAL_THRESHOLD = 80
 const LAYER_TREE_ROW_HEIGHT = 34
@@ -165,34 +165,37 @@ export default function LayersDrawer() {
 					break
 				case ElementTypeEnum.Image:
 					iconContent = (
-						<LayerImageThumbnail element={node.data as ImageElement} alt={node.label} />
+						<LayerImageLowPreview
+							element={node.data as ImageElement}
+							alt={node.label}
+						/>
 					)
 					break
 				case ElementTypeEnum.Rectangle:
 					iconContent = (
 						<div className={styles.layerNodeElementIcon}>
-							<RectangleThumbnail element={node.data as RectangleElement} />
+							<RectanglePreview element={node.data as RectangleElement} />
 						</div>
 					)
 					break
 				case ElementTypeEnum.Ellipse:
 					iconContent = (
 						<div className={styles.layerNodeElementIcon}>
-							<EllipseThumbnail element={node.data as EllipseElement} />
+							<EllipsePreview element={node.data as EllipseElement} />
 						</div>
 					)
 					break
 				case ElementTypeEnum.Triangle:
 					iconContent = (
 						<div className={styles.layerNodeElementIcon}>
-							<TriangleThumbnail element={node.data as TriangleElement} />
+							<TrianglePreview element={node.data as TriangleElement} />
 						</div>
 					)
 					break
 				case ElementTypeEnum.Star:
 					iconContent = (
 						<div className={styles.layerNodeElementIcon}>
-							<StarThumbnail element={node.data as StarElement} />
+							<StarPreview element={node.data as StarElement} />
 						</div>
 					)
 					break

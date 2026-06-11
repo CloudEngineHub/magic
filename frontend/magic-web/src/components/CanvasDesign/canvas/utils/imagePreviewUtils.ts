@@ -1,12 +1,12 @@
 import {
-	SMALL_THUMBNAIL_MAX_SIZE,
-	TOOLTIP_THUMBNAIL_MIN_SIZE,
+	LOW_DISPLAY_MAX_SIZE,
+	TOOLTIP_PREVIEW_MIN_SIZE,
 	COMPRESSED_WEBP_QUALITY,
 	COMPRESSED_JPEG_QUALITY,
 	getCompressedQuality,
-} from "./imageThumbnailConstants"
+} from "./imagePreviewConstants"
 
-export { SMALL_THUMBNAIL_MAX_SIZE, TOOLTIP_THUMBNAIL_MIN_SIZE } from "./imageThumbnailConstants"
+export { LOW_DISPLAY_MAX_SIZE, TOOLTIP_PREVIEW_MIN_SIZE } from "./imagePreviewConstants"
 
 /**
  * 将图片自然尺寸按比例缩放到不超过 tooltip / popover 预览最大边长（与参考图预览一致）
@@ -18,7 +18,7 @@ export function calculateTooltipBoundedPreviewSize(
 		return {}
 	}
 
-	const maxSize = TOOLTIP_THUMBNAIL_MIN_SIZE
+	const maxSize = TOOLTIP_PREVIEW_MIN_SIZE
 	const { naturalWidth, naturalHeight } = imageInfo
 
 	if (naturalWidth <= maxSize && naturalHeight <= maxSize) {
@@ -130,12 +130,12 @@ export async function bitmapToDataUrl(bitmap: ImageBitmap, quality: number): Pro
 }
 
 /**
- * 从 blob 生成指定尺寸的 base64 小图（在空闲时执行）
+ * 从 blob 生成 low 档位 base64（在空闲时执行）
  */
-export async function generateSmallFromBlob(blob: Blob): Promise<string> {
+export async function generateLowDisplayFromBlob(blob: Blob): Promise<string> {
 	return scheduleIdleTask(async () => {
 		const bitmap = await createImageBitmap(blob, {
-			resizeWidth: SMALL_THUMBNAIL_MAX_SIZE,
+			resizeWidth: LOW_DISPLAY_MAX_SIZE,
 			resizeQuality: "high",
 		})
 		return await bitmapToDataUrl(bitmap, 0.9)
@@ -143,12 +143,12 @@ export async function generateSmallFromBlob(blob: Blob): Promise<string> {
 }
 
 /**
- * 从 blob 生成 tooltip/popover 缩略图（按宽度等比缩放，与 small 一致）
+ * 从 blob 生成 tooltip/popover 预览图（按宽度等比缩放，与 low 一致）
  */
-export async function generateTooltipFromBlob(blob: Blob): Promise<string> {
+export async function generateTooltipPreviewFromBlob(blob: Blob): Promise<string> {
 	return scheduleIdleTask(async () => {
 		const bitmap = await createImageBitmap(blob, {
-			resizeWidth: TOOLTIP_THUMBNAIL_MIN_SIZE,
+			resizeWidth: TOOLTIP_PREVIEW_MIN_SIZE,
 			resizeQuality: "high",
 		})
 		return await bitmapToDataUrl(bitmap, 0.95)

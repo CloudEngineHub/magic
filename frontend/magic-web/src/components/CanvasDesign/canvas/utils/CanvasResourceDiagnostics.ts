@@ -37,10 +37,6 @@ export const IMAGE_RESOURCE_DIAGNOSTIC_COUNTERS = [
 	"decodeAttemptCount",
 	"decodeSuccessCount",
 	"decodeFailedCount",
-	"displayReleaseCount",
-	"displayReleaseBytes",
-	"fullAcquireCount",
-	"fullReleaseCount",
 	"staleRequestDropCount",
 	"getFileInfoCount",
 	"getFileInfoForceRefreshCount",
@@ -62,15 +58,12 @@ export interface ImageResourceCurrentSnapshot {
 	managerInstanceId: number
 	destroyed: boolean
 	entries: number
-	smallLoaded: number
-	smallDecodedBytes: number
-	overviewLoaded: number
-	overviewDecodedBytes: number
+	lowLoaded: number
+	lowDecodedBytes: number
 	previewLoaded: number
 	previewDecodedBytes: number
 	fullLoaded: number
 	fullDecodedBytes: number
-	fullRetainCount: number
 	bodyCacheCount: number
 	bodyCacheBytes: number
 	bodyFetchInFlightCount: number

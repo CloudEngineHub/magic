@@ -2,7 +2,7 @@ import styles from "./index.module.css"
 import { ImagePlus, LoaderCircle } from "lucide-react"
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { useReferenceImageUrls } from "../../hooks/useReferenceImageUrls"
-import { useReferenceVideoPoster } from "../ReferenceImageThumbnailImage/useReferenceVideoPoster"
+import { useReferenceVideoPoster } from "../ReferenceMediaPreview/useReferenceVideoPoster"
 import { computeReferenceImageCroppedDisplayLayout } from "../../canvas/utils/imageCropUtils"
 import type { CropConfig } from "../../canvas/types"
 import { getMediaResourcePathKind } from "../../canvas/utils/mediaResourcePathKind"
@@ -117,25 +117,25 @@ export default function ReferenceImageItem({
 }: ReferenceImageItemProps) {
 	const fileType = useMemo(() => getMediaResourcePathKind(path), [path])
 	const isImageLike = fileType === "image"
-	const { thumbnailUrl, isLoading, hasError, imageInfo } = useReferenceImageUrls(path)
+	const { lowUrl, isLoading, hasError, imageInfo } = useReferenceImageUrls(path)
 
 	const canCropLayout =
 		Boolean(sourceCrop) && Boolean(imageInfo?.naturalWidth && imageInfo?.naturalHeight)
 
-	const { ref: thumbBoxRef, w: thumbBoxW, h: thumbBoxH } = useObserveBoxSize(canCropLayout)
+	const { ref: previewBoxRef, w: previewBoxW, h: previewBoxH } = useObserveBoxSize(canCropLayout)
 
-	const thumbCroppedStyle = useMemo(() => {
+	const previewCroppedStyle = useMemo(() => {
 		if (!canCropLayout || !sourceCrop || !imageInfo) {
 			return undefined
 		}
 		return computeReferenceImageCroppedDisplayLayout(
-			thumbBoxW,
-			thumbBoxH,
+			previewBoxW,
+			previewBoxH,
 			imageInfo.naturalWidth,
 			imageInfo.naturalHeight,
 			sourceCrop,
 		)
-	}, [canCropLayout, sourceCrop, imageInfo, thumbBoxW, thumbBoxH])
+	}, [canCropLayout, sourceCrop, imageInfo, previewBoxW, previewBoxH])
 
 	const previewItem = useMemo(() => buildPreviewMediaResourceItem(path), [path])
 
@@ -187,7 +187,7 @@ export default function ReferenceImageItem({
 
 	return (
 		<div
-			ref={thumbBoxRef}
+			ref={previewBoxRef}
 			className={styles.image}
 			role={interactive ? "button" : undefined}
 			tabIndex={interactive ? 0 : undefined}
@@ -205,11 +205,11 @@ export default function ReferenceImageItem({
 					<ImagePlus size={16} />
 				</div>
 			)}
-			{thumbnailUrl &&
-				(thumbCroppedStyle ? (
-					<img src={thumbnailUrl} alt="" style={thumbCroppedStyle} />
+			{lowUrl &&
+				(previewCroppedStyle ? (
+					<img src={lowUrl} alt="" style={previewCroppedStyle} />
 				) : (
-					<img src={thumbnailUrl} alt="" />
+					<img src={lowUrl} alt="" />
 				))}
 		</div>
 	)

@@ -17,18 +17,17 @@ interface TestImageResource {
 		mimeType: string
 		filename: string
 	}
-	thumbnailData: { small: string }
 	variant: ImageResourceVariant
 	sourceWidth: number
 	sourceHeight: number
 	isFullSize: boolean
-	displayRetainCount?: number
 	closed?: boolean
+	displayBlob?: Blob
 }
 
 function createImageResource(
 	variant: ImageResourceVariant,
-	options?: { width?: number; height?: number; close?: () => void },
+	options?: { width?: number; height?: number; close?: () => void; displayBlob?: Blob },
 ): TestImageResource {
 	const width = options?.width ?? 10
 	const height = options?.height ?? 10
@@ -46,13 +45,12 @@ function createImageResource(
 			mimeType: "image/png",
 			filename: `${variant}.png`,
 		},
-		thumbnailData: { small: "" },
 		variant,
 		sourceWidth: width,
 		sourceHeight: height,
 		isFullSize: true,
-		displayRetainCount: 0,
 		closed: false,
+		displayBlob: options?.displayBlob,
 	}
 }
 
@@ -71,12 +69,10 @@ function createEntry(overrides: Record<string, unknown> = {}) {
 		bodyPromiseCacheKey: null,
 		backgroundRefreshPromise: null,
 		displaySlots: {
-			small: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
-			overview: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
+			low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
 			preview: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
 		},
 		fullResource: null,
-		fullRetainCount: 0,
 		bodyBlob: null,
 		bodyOssSrc: null,
 		bodyCacheKey: null,
@@ -99,7 +95,11 @@ function createManager() {
 		decodePixelBudgetGate: MediaDecodePixelBudgetGate
 		bodyCache: MediaResourceBodyCache<ReturnType<typeof createEntry>>
 		diagnostics: ReturnType<typeof createImageResourceDiagnostics>
-		urlLifecycle: { canonicalResourcePath: (path: string) => string }
+		urlLifecycle: {
+			canonicalResourcePath: (path: string) => string
+			clearExpiredOssSrc: () => void
+			applyVirtualResourceBypass: () => void
+		}
 	}
 	manager.canvas = { id: "test-canvas", eventEmitter }
 	manager.managerInstanceId = 1
@@ -112,23 +112,15 @@ function createManager() {
 	)
 	manager.bodyCache = new MediaResourceBodyCache({ ttlMs: 120_000, maxBytes: 256 * 1024 * 1024 })
 	manager.diagnostics = createImageResourceDiagnostics()
-	manager.urlLifecycle = { canonicalResourcePath: (path: string) => path }
+	manager.urlLifecycle = {
+		canonicalResourcePath: (path: string) => path,
+		clearExpiredOssSrc: vi.fn(),
+		applyVirtualResourceBypass: vi.fn(),
+	}
 	return { manager, eventEmitter }
 }
 
-const RELEASE_OPTIONS = {
-	reason: "test",
-	remainingDecodedBytes: 0,
-	decodedBudgetBytes: 0,
-}
-
-type ReleaseResource = (
-	path: string,
-	entry: ReturnType<typeof createEntry>,
-	options: typeof RELEASE_OPTIONS,
-) => number
-
-describe("ImageResourceManager display resource release", () => {
+describe("ImageResourceManager image resources", () => {
 	it("migrates cached body keys after missing metadata is hydrated", () => {
 		const { manager } = createManager()
 		const entry = createEntry({
@@ -203,126 +195,14 @@ describe("ImageResourceManager display resource release", () => {
 		)
 	})
 
-	it("closes small and overview decoded resources and reports release stats", () => {
-		const { manager, eventEmitter } = createManager()
-		const smallClose = vi.fn()
-		const overviewClose = vi.fn()
-		const previewClose = vi.fn()
-		const smallResource = createImageResource("small", {
-			width: 10,
-			height: 10,
-			close: smallClose,
-		})
-		const overviewResource = createImageResource("overview", {
-			width: 20,
-			height: 10,
-			close: overviewClose,
-		})
-		const previewResource = createImageResource("preview", {
-			width: 5,
-			height: 5,
-			close: previewClose,
-		})
-		const entry = createEntry({
-			displaySlots: {
-				small: {
-					resource: smallResource,
-					loadingPromise: null,
-					version: null,
-					lastAccessAt: 1,
-				},
-				overview: {
-					resource: overviewResource,
-					loadingPromise: null,
-					version: null,
-					lastAccessAt: 1,
-				},
-				preview: {
-					resource: previewResource,
-					loadingPromise: null,
-					version: null,
-					lastAccessAt: 1,
-				},
-			},
-		})
-		manager.entries.set("image/path.png", entry)
-		const releaseSmallResource = (
-			manager as unknown as { releaseSmallResource: ReleaseResource }
-		).releaseSmallResource.bind(manager)
-		const releaseOverviewResource = (
-			manager as unknown as { releaseOverviewResource: ReleaseResource }
-		).releaseOverviewResource.bind(manager)
-
-		releaseSmallResource("image/path.png", entry, RELEASE_OPTIONS)
-		releaseOverviewResource("image/path.png", entry, RELEASE_OPTIONS)
-
-		expect(smallClose).toHaveBeenCalledTimes(1)
-		expect(overviewClose).toHaveBeenCalledTimes(1)
-		expect(previewClose).not.toHaveBeenCalled()
-		expect(
-			(entry as unknown as { displaySlots: Record<string, { resource: unknown }> })
-				.displaySlots.small.resource,
-		).toBeNull()
-		expect(
-			(entry as unknown as { displaySlots: Record<string, { resource: unknown }> })
-				.displaySlots.overview.resource,
-		).toBeNull()
-		expect(
-			(entry as unknown as { displaySlots: Record<string, { resource: unknown }> })
-				.displaySlots.preview.resource,
-		).toBe(previewResource)
-		expect(eventEmitter.emit).toHaveBeenCalledWith({
-			type: "resource:image:released",
-			data: {
-				path: "image/path.png",
-				variant: "small",
-				reason: "test",
-				releasedBytes: 400,
-			},
-		})
-		expect(eventEmitter.emit).toHaveBeenCalledWith({
-			type: "resource:image:released",
-			data: {
-				path: "image/path.png",
-				variant: "overview",
-				reason: "test",
-				releasedBytes: 800,
-			},
-		})
-		expect(manager.getSnapshot()).toEqual(
-			expect.objectContaining({
-				smallLoaded: 0,
-				overviewLoaded: 0,
-				previewLoaded: 1,
-				previewDecodedBytes: 100,
-				displayReleaseCount: 2,
-				displayReleaseBytes: 1200,
-				stats: expect.objectContaining({
-					displayReleaseCount: 2,
-					displayReleaseBytes: 1200,
-				}),
-			}),
-		)
-	})
-
-	it("does not close a decoded resource still referenced by another active slot", () => {
+	it("returns a releasable URL for the low display variant", async () => {
 		const { manager } = createManager()
-		const close = vi.fn()
-		const sharedResource = createImageResource("overview", {
-			width: 10,
-			height: 10,
-			close,
-		})
+		const displayBlob = new Blob(["low"], { type: "image/webp" })
+		const lowResource = createImageResource("low", { displayBlob })
 		const entry = createEntry({
 			displaySlots: {
-				small: {
-					resource: sharedResource,
-					loadingPromise: null,
-					version: null,
-					lastAccessAt: 1,
-				},
-				overview: {
-					resource: sharedResource,
+				low: {
+					resource: lowResource,
 					loadingPromise: null,
 					version: null,
 					lastAccessAt: 1,
@@ -331,165 +211,68 @@ describe("ImageResourceManager display resource release", () => {
 			},
 		})
 		manager.entries.set("image/path.png", entry)
-		const releaseSmallResource = (
-			manager as unknown as { releaseSmallResource: ReleaseResource }
-		).releaseSmallResource.bind(manager)
-		const releaseOverviewResource = (
-			manager as unknown as { releaseOverviewResource: ReleaseResource }
-		).releaseOverviewResource.bind(manager)
 
-		releaseSmallResource("image/path.png", entry, RELEASE_OPTIONS)
-		expect(close).not.toHaveBeenCalled()
+		const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:low")
+		const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
 
-		releaseOverviewResource("image/path.png", entry, RELEASE_OPTIONS)
-		expect(close).toHaveBeenCalledTimes(1)
-		expect(manager.getSnapshot()).toEqual(
-			expect.objectContaining({
-				smallLoaded: 0,
-				overviewLoaded: 0,
-			}),
-		)
+		try {
+			const loaded = await manager.getLowImageUrl("image/path.png")
+
+			expect(loaded).toEqual({
+				url: "blob:low",
+				imageInfo: lowResource.imageInfo,
+				release: expect.any(Function),
+			})
+			expect(createObjectURL).toHaveBeenCalledWith(displayBlob)
+
+			loaded?.release()
+			loaded?.release()
+			expect(revokeObjectURL).toHaveBeenCalledTimes(1)
+			expect(revokeObjectURL).toHaveBeenCalledWith("blob:low")
+		} finally {
+			createObjectURL.mockRestore()
+			revokeObjectURL.mockRestore()
+		}
 	})
 
-	it("keeps a retained display resource open after its cache slot is released", () => {
+	it("refreshes the full variant when full was already loaded", () => {
 		const { manager } = createManager()
-		const close = vi.fn()
-		const previewResource = createImageResource("preview", {
-			width: 10,
-			height: 10,
-			close,
-		})
 		const entry = createEntry({
 			displaySlots: {
-				small: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
-				overview: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
+				low: {
+					resource: createImageResource("low"),
+					loadingPromise: null,
+					version: null,
+					lastAccessAt: 1,
+				},
 				preview: {
-					resource: previewResource,
+					resource: createImageResource("preview"),
 					loadingPromise: null,
 					version: null,
 					lastAccessAt: 1,
 				},
 			},
+			fullResource: createImageResource("full"),
 		})
-		manager.entries.set("image/path.png", entry)
-		const releasePreviewResource = (
-			manager as unknown as { releasePreviewResource: ReleaseResource }
-		).releasePreviewResource.bind(manager)
-
-		const releaseDisplayedResource = manager.retainDisplayedResource("image/path.png", {
-			image: previewResource.image,
-			variant: "preview",
-		})
-		releasePreviewResource("image/path.png", entry, RELEASE_OPTIONS)
-
-		expect(entry.displaySlots.preview.resource).toBeNull()
-		expect(close).not.toHaveBeenCalled()
-
-		releaseDisplayedResource()
-
-		expect(close).toHaveBeenCalledTimes(1)
-		expect(previewResource.closed).toBe(true)
-	})
-
-	it("does not close a retained display resource during entry cleanup", () => {
-		const { manager, eventEmitter } = createManager()
-		const close = vi.fn()
-		const previewResource = createImageResource("preview", {
-			width: 10,
-			height: 10,
-			close,
-		})
-		const entry = createEntry({
-			displaySlots: {
-				small: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
-				overview: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
-				preview: {
-					resource: previewResource,
-					loadingPromise: null,
-					version: null,
-					lastAccessAt: 1,
-				},
-			},
-		})
-		manager.entries.set("image/path.png", entry)
-		const closeEntryResources = (
+		const getVariantsToRefresh = (
 			manager as unknown as {
-				closeEntryResources: (targetEntry: typeof entry) => void
+				getVariantsToRefresh: (targetEntry: typeof entry) => ImageResourceVariant[]
 			}
-		).closeEntryResources.bind(manager)
+		).getVariantsToRefresh.bind(manager)
 
-		const releaseDisplayedResource = manager.retainDisplayedResource("image/path.png", {
-			image: previewResource.image,
-			variant: "preview",
-		})
-		closeEntryResources(entry)
-
-		expect(close).not.toHaveBeenCalled()
-		expect(previewResource.closed).toBe(false)
-		expect(eventEmitter.emit).not.toHaveBeenCalledWith(
-			expect.objectContaining({ type: "resource:image:will-close" }),
-		)
-
-		releaseDisplayedResource()
-
-		expect(close).toHaveBeenCalledTimes(1)
-		expect(previewResource.closed).toBe(true)
+		expect(getVariantsToRefresh(entry)).toEqual(["low", "preview", "full"])
 	})
 
-	it("releases unprotected display resources without waiting for a decoded budget", () => {
-		const { manager, eventEmitter } = createManager()
-		const protectedSmall = createImageResource("small")
-		const unprotectedPreviewClose = vi.fn()
-		const unprotectedPreview = createImageResource("preview", {
-			width: 8,
-			height: 8,
-			close: unprotectedPreviewClose,
-		})
-		const protectedEntry = createEntry({
-			displaySlots: {
-				small: {
-					resource: protectedSmall,
-					loadingPromise: null,
-					version: null,
-					lastAccessAt: 1,
-				},
-				overview: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
-				preview: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
-			},
-		})
-		const unprotectedEntry = createEntry({
-			displaySlots: {
-				small: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
-				overview: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
-				preview: {
-					resource: unprotectedPreview,
-					loadingPromise: null,
-					version: null,
-					lastAccessAt: 1,
-				},
-			},
-		})
-		manager.entries.set("protected.png", protectedEntry)
-		manager.entries.set("far.png", unprotectedEntry)
+	it("falls back to preview refresh when no variant is loaded yet", () => {
+		const { manager } = createManager()
+		const entry = createEntry()
+		const getVariantsToRefresh = (
+			manager as unknown as {
+				getVariantsToRefresh: (targetEntry: typeof entry) => ImageResourceVariant[]
+			}
+		).getVariantsToRefresh.bind(manager)
 
-		manager.enforceDisplayDecodedBudget({
-			protectedSmallPaths: new Set(["protected.png"]),
-			reason: "visibility:test",
-			force: true,
-		})
-
-		expect(protectedEntry.displaySlots.small.resource).toBe(protectedSmall)
-		expect(unprotectedEntry.displaySlots.preview.resource).toBeNull()
-		expect(unprotectedPreviewClose).toHaveBeenCalledTimes(1)
-		expect(eventEmitter.emit).toHaveBeenCalledWith({
-			type: "resource:image:released",
-			data: {
-				path: "far.png",
-				variant: "preview",
-				reason: "visibility:test",
-				releasedBytes: 256,
-			},
-		})
+		expect(getVariantsToRefresh(entry)).toEqual(["preview"])
 	})
 })
 
@@ -505,9 +288,9 @@ describe("ImageResourceManager load priority defaults", () => {
 			getDecodePriorityForVariant: GetPriorityForVariant
 		}
 
-		expect(manager.getBodyFetchPriorityForVariant("overview", "critical")).toBe("critical")
+		expect(manager.getBodyFetchPriorityForVariant("low", "critical")).toBe("critical")
 		expect(manager.getBodyFetchPriorityForVariant("preview", "critical")).toBe("critical")
-		expect(manager.getDecodePriorityForVariant("overview", "critical")).toBe("critical")
+		expect(manager.getDecodePriorityForVariant("low", "critical")).toBe("critical")
 		expect(manager.getDecodePriorityForVariant("preview", "critical")).toBe("critical")
 	})
 
@@ -519,9 +302,9 @@ describe("ImageResourceManager load priority defaults", () => {
 
 		expect(manager.getBodyFetchPriorityForVariant("full")).toBe("critical")
 		expect(manager.getBodyFetchPriorityForVariant("preview")).toBe("visible")
-		expect(manager.getBodyFetchPriorityForVariant("overview")).toBe("near")
+		expect(manager.getBodyFetchPriorityForVariant("low")).toBe("near")
 		expect(manager.getDecodePriorityForVariant("full")).toBe("critical")
 		expect(manager.getDecodePriorityForVariant("preview")).toBe("visible")
-		expect(manager.getDecodePriorityForVariant("overview")).toBe("background")
+		expect(manager.getDecodePriorityForVariant("low")).toBe("background")
 	})
 })

@@ -1,6 +1,6 @@
 import type { StarElement } from "../../../../../canvas/types"
 
-interface StarThumbnailProps {
+interface StarPreviewProps {
 	element: StarElement
 }
 
@@ -10,10 +10,7 @@ const CONTENT_SIZE = SIZE - PADDING * 2
 const CENTER_X = SIZE / 2
 const CENTER_Y = SIZE / 2
 
-/**
- * 星形缩略图组件
- */
-export function StarThumbnail({ element }: StarThumbnailProps) {
+export function StarPreview({ element }: StarPreviewProps) {
 	const fill = element.fill || "#969696"
 	const stroke = element.stroke || "transparent"
 	const strokeWidth = element.strokeWidth || 0

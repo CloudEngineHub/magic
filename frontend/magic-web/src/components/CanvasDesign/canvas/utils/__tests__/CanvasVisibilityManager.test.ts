@@ -236,7 +236,7 @@ describe("CanvasVisibilityManager image variant switch cooldown", () => {
 					"image-1",
 					{
 						priority: "visible",
-						variant: "small",
+						variant: "low",
 						requestedAt: performance.now(),
 					},
 				],
@@ -774,7 +774,7 @@ describe("CanvasVisibilityManager image load priorities", () => {
 
 		manager.lastRequestedLoadState.set("image-1", {
 			priority: "visible",
-			variant: "overview",
+			variant: "low",
 			requestedAt,
 		})
 

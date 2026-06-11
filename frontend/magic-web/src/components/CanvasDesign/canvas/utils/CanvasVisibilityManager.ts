@@ -1,16 +1,9 @@
 import type { Canvas } from "../Canvas"
 import { ElementTypeEnum, type LayerElement } from "../types"
 import type { Rect } from "./utils"
-import type {
-	AcquiredImageResource,
-	ImageResourceLoadPriority,
-	ImageResourceVariant,
-	LoadedResource,
-} from "./ImageResourceManager"
+import type { ImageResourceLoadPriority, ImageResourceVariant } from "./ImageResourceManager"
 import {
-	computeElementViewportMetrics,
 	decideImageDisplayViewingLevel,
-	decideMediaDetailLevel,
 	type MediaDisplayResourceVariant,
 } from "./CanvasMediaViewingPolicy"
 import { getViewportCanvasRect } from "./elementUtils"
@@ -57,37 +50,12 @@ interface VideoLoadCandidate extends LoadCandidateBase {
 	frameVisibleBounds?: Rect
 }
 
-interface DetailFullCandidate extends ImageLoadCandidate {
-	screenLongEdge: number
-	previewLongEdge: number
-	detailZoomRatio: number
-	visibleAreaRatio: number
-	visibleElementAreaRatio: number
-	fullDecodedBytes: number
-	fullNativeBytes: number
-}
-
-interface ActiveDetailFullDisplay {
-	elementId: string
-	path: string
-	generation: number
-	status: "loading" | "applied"
-	release?: () => void
-}
-
-interface DetailFullImageElement {
-	getDisplayResourceVariant?: () => ImageResourceVariant | undefined
-	applyDetailFullDisplayResource?: () => Promise<Pick<AcquiredImageResource, "release"> | null>
-	downgradeDetailFullDisplayResource?: () => void
-}
-
 export interface CanvasVisibilitySnapshot {
 	registeredImageCount: number
 	registeredVideoCount: number
 	registerDedupedCount: number
 	videoRegisterDedupedCount: number
-	releaseClearedRequestCount: number
-	overviewFallbackPreviewCount: number
+	lowFallbackPreviewCount: number
 	visibleImageCount: number
 	nearImageCount: number
 	farImageCount: number
@@ -99,17 +67,10 @@ export interface CanvasVisibilitySnapshot {
 	lastRequestedNearCount: number
 	lastRequestedVisibleVideoCount: number
 	lastRequestedNearVideoCount: number
-	tinyVisibleVideoCount: number
-	pendingTinyVisibleVideoLoadCandidateCount: number
+	lowDetailVisibleVideoCount: number
+	pendingLowDetailVisibleVideoLoadCandidateCount: number
 	pendingImageLoadCandidateCount: number
 	pendingVideoLoadCandidateCount: number
-	detailFullActiveCount: number
-	detailFullCandidateCount: number
-	detailFullSkippedCount: number
-	detailFullScheduledCount: number
-	detailFullAppliedCount: number
-	detailFullReleasedCount: number
-	detailFullLastSkipReason: string | null
 	drainScheduledCount: number
 	drainRunCount: number
 	lastViewportScale: number
@@ -131,25 +92,15 @@ const LOW_DETAIL_VISIBLE_VIDEO_FALLBACK_LIMIT = 4
 const MAX_VISIBLE_VIDEO_LOAD_REQUESTS_PER_QUERY = 12
 const MAX_NEAR_VIDEO_LOAD_REQUESTS_PER_QUERY = 6
 const VISIBILITY_DRAIN_DELAY_MS = 80
-const DETAIL_FULL_STABLE_DELAY_MS = 200
-const DETAIL_FULL_MIN_ZOOM_RATIO = 0.15
-const DETAIL_FULL_EXIT_ZOOM_RATIO = 0.1
-const DETAIL_FULL_MAX_DECODED_BYTES = 256 * 1024 * 1024
-const DETAIL_FULL_MAX_NATIVE_BYTES = 512 * 1024 * 1024
-const DETAIL_FULL_NATIVE_ESTIMATE_FACTOR = 2.15
 const INITIAL_VISIBLE_CRITICAL_WINDOW_MS = 5000
 const MAX_INITIAL_VISIBLE_CONTAINER_IMAGE_REQUESTS = 48
 const VIEWPORT_MOVEMENT_SCALE_REFRESH_RATIO = 1.15
 const IMAGE_VARIANT_SWITCH_COOLDOWN_MS = 450
-const FAR_DISPLAY_RELEASE_GRACE_MS = 3000
+const FAR_VISIBILITY_DRAIN_GRACE_MS = 3000
 const CONTENT_LAYER_HIT_GRAPH_RESTORE_DELAY_MS = 160
 // Current default: Konva-only far culling. Far elements stop participating in drawing / hit
-// testing after the 3s drain, but their decoded image resources stay cached for fast return.
+// testing after the 3s drain, while image resources stay cached for fast return.
 const FAR_KONVA_RENDER_VISIBILITY_STRATEGY: CanvasRenderVisibilityStrategy = "hidden"
-// Resource reclaim is intentionally separate from Konva node culling. Keep disabled while tuning
-// smooth panning; set to "visibility-drain" only when we want far culling to also release decoded
-// small / overview / preview resources, which may cause reloads when panning back.
-const FAR_RESOURCE_RECLAIM_STRATEGY: "disabled" | "visibility-drain" = "disabled"
 
 interface RequestedImageLoadState {
 	priority: ImageResourceLoadPriority
@@ -284,10 +235,9 @@ export class CanvasVisibilityManager {
 	private readonly lastRequestedLoadState = new Map<string, RequestedImageLoadState>()
 	private readonly lastRequestedVideoLoadState = new Map<string, RequestedVideoLoadState>()
 	private readonly lastContainerDisplayVariant = new Map<string, MediaDisplayResourceVariant>()
-	private readonly displayProtectionUntil = new Map<string, number>()
 	private rafId: number | null = null
 	private drainTimerId: ReturnType<typeof setTimeout> | null = null
-	private farDisplayReleaseTimerId: ReturnType<typeof setTimeout> | null = null
+	private farVisibilityDrainTimerId: ReturnType<typeof setTimeout> | null = null
 	private contentLayerHitGraphRestoreTimerId: ReturnType<typeof setTimeout> | null = null
 	private variantSwitchCooldownTimerId: ReturnType<typeof setTimeout> | null = null
 	private scheduledForce = false
@@ -297,9 +247,6 @@ export class CanvasVisibilityManager {
 	private lastQueryViewportScale: number | null = null
 	private containerRootCache: ContainerRootCache | null = null
 	private destroyed = false
-	private detailFullTimerId: ReturnType<typeof setTimeout> | null = null
-	private activeDetailFull: ActiveDetailFullDisplay | null = null
-	private detailFullGeneration = 0
 	private lastViewportMovementAt = now()
 	private contentLayerHitGraphSuppressed = false
 	private contentLayerPreviousListening: boolean | null = null
@@ -310,8 +257,7 @@ export class CanvasVisibilityManager {
 		registeredVideoCount: 0,
 		registerDedupedCount: 0,
 		videoRegisterDedupedCount: 0,
-		releaseClearedRequestCount: 0,
-		overviewFallbackPreviewCount: 0,
+		lowFallbackPreviewCount: 0,
 		visibleImageCount: 0,
 		nearImageCount: 0,
 		farImageCount: 0,
@@ -323,17 +269,10 @@ export class CanvasVisibilityManager {
 		lastRequestedNearCount: 0,
 		lastRequestedVisibleVideoCount: 0,
 		lastRequestedNearVideoCount: 0,
-		tinyVisibleVideoCount: 0,
-		pendingTinyVisibleVideoLoadCandidateCount: 0,
+		lowDetailVisibleVideoCount: 0,
+		pendingLowDetailVisibleVideoLoadCandidateCount: 0,
 		pendingImageLoadCandidateCount: 0,
 		pendingVideoLoadCandidateCount: 0,
-		detailFullActiveCount: 0,
-		detailFullCandidateCount: 0,
-		detailFullSkippedCount: 0,
-		detailFullScheduledCount: 0,
-		detailFullAppliedCount: 0,
-		detailFullReleasedCount: 0,
-		detailFullLastSkipReason: null,
 		drainScheduledCount: 0,
 		drainRunCount: 0,
 		lastViewportScale: 1,
@@ -347,14 +286,12 @@ export class CanvasVisibilityManager {
 		this.lastViewportMovementAt = now()
 		this.suppressContentLayerHitGraphDuringViewportMovement()
 		this.scheduleRefresh("viewport:pan", false)
-		this.scheduleDetailFullRecheck("viewport:pan")
 	}
 
 	private readonly handleViewportScale = (): void => {
 		this.lastViewportMovementAt = now()
 		this.suppressContentLayerHitGraphDuringViewportMovement()
 		this.scheduleRefresh("viewport:scale", true)
-		this.scheduleDetailFullRecheck("viewport:scale")
 	}
 
 	private readonly handleElementChange = (): void => {
@@ -366,36 +303,6 @@ export class CanvasVisibilityManager {
 		this.invalidateContainerRootCache()
 		this.initialVisibleCriticalUntil = now() + INITIAL_VISIBLE_CRITICAL_WINDOW_MS
 		this.scheduleRefresh("document:loaded", true)
-	}
-
-	private readonly handleImageResourceReleased = (event: {
-		data: {
-			path: string
-			variant?: ImageResourceVariant
-			reason?: string
-			releasedBytes?: number
-		}
-	}): void => {
-		this.registeredImages.forEach((registered, elementId) => {
-			if (!this.isSameResourcePath(registered.path, event.data.path)) return
-			this.lastRequestedLoadState.delete(elementId)
-			this.statsSnapshot.releaseClearedRequestCount += 1
-		})
-	}
-
-	private readonly handleImageResourceLoaded = (event: {
-		data: { path: string; resource: LoadedResource }
-	}): void => {
-		if (event.data.resource.variant !== "preview") return
-		let shouldRecheckDetailFull = false
-		this.registeredImages.forEach((registered) => {
-			if (shouldRecheckDetailFull) return
-			if (!this.isSameResourcePath(registered.path, event.data.path)) return
-			shouldRecheckDetailFull = true
-		})
-		if (shouldRecheckDetailFull) {
-			this.scheduleDetailFullRecheck("preview-loaded")
-		}
 	}
 
 	private readonly handleVideoResourceLoadFailed = (event: { data: { path: string } }): void => {
@@ -412,18 +319,14 @@ export class CanvasVisibilityManager {
 			reason?: ResourceLoadFailureReason
 		}
 	}): void => {
-		if (
-			this.destroyed ||
-			(event.data.variant !== "small" && event.data.variant !== "overview")
-		) {
+		if (this.destroyed || event.data.variant !== "low") {
 			return
 		}
 
 		const viewportRect = getViewportCanvasRect(this.canvas)
 		const viewportScale = this.canvas.stage.scaleX() || 1
 		const viewportCenter = getRectCenter(viewportRect)
-		const fallbackVariant: ImageResourceVariant =
-			event.data.variant === "small" ? "overview" : "preview"
+		const fallbackVariant: ImageResourceVariant = "preview"
 
 		this.registeredImages.forEach((registered, elementId) => {
 			if (!this.isSameResourcePath(registered.path, event.data.path)) return
@@ -448,9 +351,7 @@ export class CanvasVisibilityManager {
 				distanceToViewportCenter: getDistance(getRectCenter(bounds), viewportCenter),
 			}
 
-			if (event.data.variant === "overview") {
-				this.statsSnapshot.overviewFallbackPreviewCount += 1
-			}
+			this.statsSnapshot.lowFallbackPreviewCount += 1
 			this.requestImageLoad(
 				candidate,
 				`${event.data.variant}-failed:${event.data.reason ?? "load-error"}`,
@@ -468,8 +369,6 @@ export class CanvasVisibilityManager {
 		this.canvas.eventEmitter.on("viewport:scale", this.handleViewportScale)
 		this.canvas.eventEmitter.on("element:change", this.handleElementChange)
 		this.canvas.eventEmitter.on("document:loaded", this.handleDocumentLoaded)
-		this.canvas.eventEmitter.on("resource:image:loaded", this.handleImageResourceLoaded)
-		this.canvas.eventEmitter.on("resource:image:released", this.handleImageResourceReleased)
 		this.canvas.eventEmitter.on(
 			"resource:video:load-failed",
 			this.handleVideoResourceLoadFailed,
@@ -487,9 +386,6 @@ export class CanvasVisibilityManager {
 			this.statsSnapshot.registerDedupedCount += 1
 			return
 		}
-		if (this.activeDetailFull?.elementId === elementId) {
-			this.releaseActiveDetailFull("image:path-changed")
-		}
 		this.registeredImages.set(elementId, { elementId, path })
 		this.lastVisibilityState.delete(elementId)
 		this.lastRequestedLoadState.delete(elementId)
@@ -499,9 +395,6 @@ export class CanvasVisibilityManager {
 	public unregisterImageElement(elementId: string): void {
 		const registered = this.registeredImages.get(elementId)
 		if (!registered) return
-		if (this.activeDetailFull?.elementId === elementId) {
-			this.releaseActiveDetailFull("image:unregister")
-		}
 		this.registeredImages.delete(elementId)
 		this.lastVisibilityState.delete(elementId)
 		this.lastRequestedLoadState.delete(elementId)
@@ -648,8 +541,8 @@ export class CanvasVisibilityManager {
 		if (this.drainTimerId !== null) {
 			clearTimeout(this.drainTimerId)
 		}
-		if (this.farDisplayReleaseTimerId !== null) {
-			clearTimeout(this.farDisplayReleaseTimerId)
+		if (this.farVisibilityDrainTimerId !== null) {
+			clearTimeout(this.farVisibilityDrainTimerId)
 		}
 		if (this.contentLayerHitGraphRestoreTimerId !== null) {
 			clearTimeout(this.contentLayerHitGraphRestoreTimerId)
@@ -657,17 +550,12 @@ export class CanvasVisibilityManager {
 		if (this.variantSwitchCooldownTimerId !== null) {
 			clearTimeout(this.variantSwitchCooldownTimerId)
 		}
-		if (this.detailFullTimerId !== null) {
-			clearTimeout(this.detailFullTimerId)
-		}
 		this.rafId = null
 		this.drainTimerId = null
-		this.farDisplayReleaseTimerId = null
+		this.farVisibilityDrainTimerId = null
 		this.contentLayerHitGraphRestoreTimerId = null
 		this.variantSwitchCooldownTimerId = null
-		this.detailFullTimerId = null
 		this.restoreContentLayerHitGraph()
-		this.releaseActiveDetailFull("destroy")
 		this.registeredImages.clear()
 		this.registeredVideos.clear()
 		this.lastVisibilityState.clear()
@@ -675,14 +563,11 @@ export class CanvasVisibilityManager {
 		this.lastRequestedLoadState.clear()
 		this.lastRequestedVideoLoadState.clear()
 		this.lastContainerDisplayVariant.clear()
-		this.displayProtectionUntil.clear()
 		this.renderVisibilityController.restoreAll()
 		this.canvas.eventEmitter.off("viewport:pan", this.handleViewportPan)
 		this.canvas.eventEmitter.off("viewport:scale", this.handleViewportScale)
 		this.canvas.eventEmitter.off("element:change", this.handleElementChange)
 		this.canvas.eventEmitter.off("document:loaded", this.handleDocumentLoaded)
-		this.canvas.eventEmitter.off("resource:image:loaded", this.handleImageResourceLoaded)
-		this.canvas.eventEmitter.off("resource:image:released", this.handleImageResourceReleased)
 		this.canvas.eventEmitter.off(
 			"resource:video:load-failed",
 			this.handleVideoResourceLoadFailed,
@@ -744,20 +629,6 @@ export class CanvasVisibilityManager {
 			this.scheduledForce = false
 			this.refreshVisibility(scheduledReason, shouldForce)
 		})
-	}
-
-	private scheduleDetailFullRecheck(reason: string, delayMs = DETAIL_FULL_STABLE_DELAY_MS): void {
-		if (this.destroyed) return
-		if (this.detailFullTimerId !== null) {
-			clearTimeout(this.detailFullTimerId)
-		}
-		this.detailFullTimerId = setTimeout(
-			() => {
-				this.detailFullTimerId = null
-				this.scheduleRefresh(`detail-full:${reason}`, true)
-			},
-			Math.max(0, delayMs),
-		)
 	}
 
 	private scheduleVariantSwitchCooldownRefresh(delayMs: number): void {
@@ -829,361 +700,13 @@ export class CanvasVisibilityManager {
 		return this.containerRootCache
 	}
 
-	private getPreviousImageDisplayVariant(
-		elementId: string,
-	): MediaDisplayResourceVariant | undefined {
+	private getPreviousImageDisplayVariant(elementId: string): ImageResourceVariant | undefined {
 		const previousVariant = this.lastRequestedLoadState.get(elementId)?.variant
-		return previousVariant === "small" ||
-			previousVariant === "overview" ||
-			previousVariant === "preview"
+		return previousVariant === "low" ||
+			previousVariant === "preview" ||
+			previousVariant === "full"
 			? previousVariant
 			: undefined
-	}
-
-	private releaseActiveDetailFull(reason: string): void {
-		void reason
-		const active = this.activeDetailFull
-		if (!active) return
-
-		this.detailFullGeneration += 1
-		this.activeDetailFull = null
-
-		const element = this.getDetailFullElement(active.elementId)
-		element?.downgradeDetailFullDisplayResource?.()
-		active.release?.()
-
-		this.statsSnapshot.detailFullReleasedCount += 1
-	}
-
-	private evaluateDetailFullDisplay(options: {
-		visibleCandidates: ImageLoadCandidate[]
-		viewportRect: Rect
-		viewportScale: number
-		reason: string
-	}): void {
-		const { visibleCandidates, viewportRect, viewportScale, reason } = options
-		const currentNow = now()
-		this.statsSnapshot.detailFullCandidateCount = 0
-
-		const viewportStableRemaining =
-			DETAIL_FULL_STABLE_DELAY_MS - (currentNow - this.lastViewportMovementAt)
-		if (viewportStableRemaining > 0) {
-			this.skipDetailFull("viewport-unstable", {
-				reason,
-				viewportScale,
-				viewportRect,
-			})
-			this.scheduleDetailFullRecheck("viewport-stable", viewportStableRemaining)
-			return
-		}
-
-		const detailCandidates: DetailFullCandidate[] = []
-		let lastSkipReason: string | null = null
-		const activeElementId = this.activeDetailFull?.elementId
-
-		visibleCandidates.forEach((candidate) => {
-			const detailCandidate = this.createDetailFullCandidate({
-				candidate,
-				viewportRect,
-				viewportScale,
-				minZoomRatio:
-					activeElementId === candidate.elementId
-						? DETAIL_FULL_EXIT_ZOOM_RATIO
-						: DETAIL_FULL_MIN_ZOOM_RATIO,
-			})
-			if (detailCandidate) {
-				detailCandidates.push(detailCandidate)
-			} else {
-				lastSkipReason = this.statsSnapshot.detailFullLastSkipReason
-			}
-		})
-
-		this.statsSnapshot.detailFullCandidateCount = detailCandidates.length
-		this.statsSnapshot.detailFullActiveCount = this.activeDetailFull ? 1 : 0
-
-		if (detailCandidates.length === 0) {
-			this.skipDetailFull(lastSkipReason ?? "no-eligible-candidate", {
-				reason,
-				viewportScale,
-				viewportRect,
-			})
-			this.releaseActiveDetailFull(lastSkipReason ?? "no-eligible-candidate")
-			return
-		}
-
-		detailCandidates.sort((a, b) => {
-			const visibleAreaDiff = b.visibleAreaRatio - a.visibleAreaRatio
-			if (visibleAreaDiff !== 0) return visibleAreaDiff
-			const zoomDiff = b.detailZoomRatio - a.detailZoomRatio
-			if (zoomDiff !== 0) return zoomDiff
-			return sortCandidates(a, b)
-		})
-
-		const candidate = detailCandidates[0]
-
-		if (this.activeDetailFull?.elementId === candidate.elementId) {
-			this.statsSnapshot.detailFullActiveCount = 1
-			return
-		}
-
-		if (this.activeDetailFull) {
-			this.releaseActiveDetailFull("candidate-changed")
-		}
-
-		this.scheduleDetailFullLoad(candidate, reason)
-	}
-
-	private createDetailFullCandidate(options: {
-		candidate: ImageLoadCandidate
-		viewportRect: Rect
-		viewportScale: number
-		minZoomRatio: number
-	}): DetailFullCandidate | null {
-		const { candidate, viewportRect, viewportScale, minZoomRatio } = options
-		const element = this.getDetailFullElement(candidate.elementId)
-		if (
-			!element?.applyDetailFullDisplayResource ||
-			!element?.downgradeDetailFullDisplayResource
-		) {
-			this.skipDetailFull("element-no-detail-full-api", {
-				candidate,
-				viewportScale,
-				viewportRect,
-			})
-			return null
-		}
-
-		const isActiveDetailFullElement = this.activeDetailFull?.elementId === candidate.elementId
-		if (!isActiveDetailFullElement && element.getDisplayResourceVariant?.() === "full") {
-			this.skipDetailFull("display-already-full", {
-				candidate,
-				viewportScale,
-				viewportRect,
-			})
-			return null
-		}
-
-		const bounds =
-			candidate.frameVisibleBounds ??
-			this.canvas.geometryCacheManager.getElementBounds(candidate.elementId)
-		if (!bounds) {
-			this.skipDetailFull("missing-bounds", {
-				candidate,
-				viewportScale,
-				viewportRect,
-			})
-			return null
-		}
-
-		const metrics = computeElementViewportMetrics({
-			bounds,
-			viewportRect,
-			viewportScale,
-		})
-		if (!metrics.isVisible) {
-			this.skipDetailFull("not-visible", {
-				candidate,
-				viewportScale,
-				viewportRect,
-				screenLongEdge: metrics.screenLongEdge,
-				visibleAreaRatio: metrics.visibleViewportAreaRatio,
-				visibleElementAreaRatio: metrics.visibleElementAreaRatio,
-			})
-			return null
-		}
-
-		const previewResource = this.canvas.imageResourceManager.peekResource(candidate.path, {
-			variant: "preview",
-		})
-		if (!previewResource) {
-			if (candidate.variant === "preview" || isActiveDetailFullElement) {
-				this.requestImageLoad(
-					{
-						...candidate,
-						priority: "visible",
-						variant: "preview",
-						visibilityState: "visible",
-					},
-					"detail-full:preview-not-ready",
-				)
-			}
-			this.skipDetailFull("preview-not-ready", {
-				candidate,
-				viewportScale,
-				viewportRect,
-				screenLongEdge: metrics.screenLongEdge,
-				visibleAreaRatio: metrics.visibleViewportAreaRatio,
-				visibleElementAreaRatio: metrics.visibleElementAreaRatio,
-			})
-			return null
-		}
-
-		if (previewResource.isFullSize) {
-			this.skipDetailFull("preview-is-full-size", {
-				candidate,
-				viewportScale,
-				viewportRect,
-				screenLongEdge: metrics.screenLongEdge,
-				visibleAreaRatio: metrics.visibleViewportAreaRatio,
-				visibleElementAreaRatio: metrics.visibleElementAreaRatio,
-			})
-			return null
-		}
-
-		const previewLongEdge = Math.max(
-			previewResource.sourceWidth || 0,
-			previewResource.sourceHeight || 0,
-		)
-		if (previewLongEdge <= 0) {
-			this.skipDetailFull("preview-size-missing", {
-				candidate,
-				viewportScale,
-				viewportRect,
-				screenLongEdge: metrics.screenLongEdge,
-				visibleAreaRatio: metrics.visibleViewportAreaRatio,
-				visibleElementAreaRatio: metrics.visibleElementAreaRatio,
-			})
-			return null
-		}
-
-		const fullNaturalWidth =
-			previewResource.imageInfo.naturalWidth || previewResource.sourceWidth || 0
-		const fullNaturalHeight =
-			previewResource.imageInfo.naturalHeight || previewResource.sourceHeight || 0
-		const fullDecodedBytes = fullNaturalWidth * fullNaturalHeight * 4
-		const fullNativeBytes = Math.round(fullDecodedBytes * DETAIL_FULL_NATIVE_ESTIMATE_FACTOR)
-
-		const detailDecision = decideMediaDetailLevel({
-			metrics,
-			previewLongEdge,
-			isActive: isActiveDetailFullElement,
-			fullDecodedBytes,
-			fullNativeBytes,
-			maxFullDecodedBytes: DETAIL_FULL_MAX_DECODED_BYTES,
-			maxFullNativeBytes: DETAIL_FULL_MAX_NATIVE_BYTES,
-			enterDisplayToPreviewRatio: minZoomRatio,
-			exitDisplayToPreviewRatio: DETAIL_FULL_EXIT_ZOOM_RATIO,
-		})
-		if (detailDecision.target !== "full") {
-			this.skipDetailFull(detailDecision.reason, {
-				candidate,
-				viewportScale,
-				viewportRect,
-				screenLongEdge: metrics.screenLongEdge,
-				previewLongEdge,
-				detailZoomRatio: detailDecision.displayToPreviewRatio,
-				visibleAreaRatio: metrics.visibleViewportAreaRatio,
-				visibleElementAreaRatio: metrics.visibleElementAreaRatio,
-				fullDecodedBytes,
-				fullNativeBytes,
-			})
-			return null
-		}
-
-		return {
-			...candidate,
-			screenLongEdge: metrics.screenLongEdge,
-			previewLongEdge,
-			detailZoomRatio: detailDecision.displayToPreviewRatio,
-			visibleAreaRatio: metrics.visibleViewportAreaRatio,
-			visibleElementAreaRatio: metrics.visibleElementAreaRatio,
-			fullDecodedBytes,
-			fullNativeBytes,
-		}
-	}
-
-	private scheduleDetailFullLoad(candidate: DetailFullCandidate, reason: string): void {
-		void reason
-		const element = this.getDetailFullElement(candidate.elementId)
-		if (!element?.applyDetailFullDisplayResource) {
-			this.skipDetailFull("element-no-detail-full-api", {
-				candidate,
-				viewportScale: this.canvas.stage.scaleX() || 1,
-				viewportRect: getViewportCanvasRect(this.canvas),
-			})
-			return
-		}
-
-		const generation = this.detailFullGeneration + 1
-		this.detailFullGeneration = generation
-		this.activeDetailFull = {
-			elementId: candidate.elementId,
-			path: candidate.path,
-			generation,
-			status: "loading",
-		}
-		this.statsSnapshot.detailFullScheduledCount += 1
-
-		void element
-			.applyDetailFullDisplayResource()
-			.then((scopedResource) => {
-				const active = this.activeDetailFull
-				if (
-					this.destroyed ||
-					!active ||
-					active.generation !== generation ||
-					active.elementId !== candidate.elementId
-				) {
-					scopedResource?.release()
-					return
-				}
-
-				if (!scopedResource) {
-					this.activeDetailFull = null
-					this.statsSnapshot.detailFullActiveCount = 0
-					this.skipDetailFull("full-load-failed", {
-						candidate,
-						viewportScale: this.canvas.stage.scaleX() || 1,
-						viewportRect: getViewportCanvasRect(this.canvas),
-					})
-					return
-				}
-
-				active.status = "applied"
-				active.release = scopedResource.release
-				this.statsSnapshot.detailFullAppliedCount += 1
-			})
-			.catch(() => {
-				const active = this.activeDetailFull
-				if (active?.generation === generation && active.elementId === candidate.elementId) {
-					this.activeDetailFull = null
-					this.statsSnapshot.detailFullActiveCount = 0
-				}
-				this.skipDetailFull("full-load-error", {
-					candidate,
-					viewportScale: this.canvas.stage.scaleX() || 1,
-					viewportRect: getViewportCanvasRect(this.canvas),
-				})
-			})
-	}
-
-	private skipDetailFull(
-		skipReason: string,
-		options: {
-			candidate?: ImageLoadCandidate | DetailFullCandidate
-			reason?: string
-			viewportScale: number
-			viewportRect: Rect
-			screenLongEdge?: number
-			previewLongEdge?: number
-			detailZoomRatio?: number
-			visibleAreaRatio?: number
-			visibleElementAreaRatio?: number
-			fullDecodedBytes?: number
-			fullNativeBytes?: number
-		},
-	): void {
-		void options
-		this.statsSnapshot.detailFullSkippedCount += 1
-		this.statsSnapshot.detailFullLastSkipReason = skipReason
-	}
-
-	private getDetailFullElement(elementId: string): DetailFullImageElement | null {
-		return (
-			(this.canvas.elementManager.getElementInstance(elementId) as
-				| DetailFullImageElement
-				| undefined) ?? null
-		)
 	}
 
 	private refreshVisibility(reason: string, force: boolean): void {
@@ -1203,7 +726,7 @@ export class CanvasVisibilityManager {
 		const queryCoverRect = expandRect(viewportRect, nearPadding)
 		const farDrainReady =
 			reason === "visibility:drain" &&
-			startedAt - this.lastViewportMovementAt >= FAR_DISPLAY_RELEASE_GRACE_MS
+			startedAt - this.lastViewportMovementAt >= FAR_VISIBILITY_DRAIN_GRACE_MS
 
 		if (
 			this.shouldSkipViewportMovementQuery({
@@ -1271,10 +794,10 @@ export class CanvasVisibilityManager {
 		const viewportCenter = getRectCenter(viewportRect)
 		const promoteInitialVisibleLoads = this.shouldPromoteInitialVisibleLoads(reason)
 		const visibleCandidates: ImageLoadCandidate[] = []
-		const tinyVisibleCandidates: ImageLoadCandidate[] = []
+		const lowDetailVisibleCandidates: ImageLoadCandidate[] = []
 		const nearCandidates: ImageLoadCandidate[] = []
 		const visibleVideoCandidates: VideoLoadCandidate[] = []
-		const tinyVisibleVideoCandidates: VideoLoadCandidate[] = []
+		const lowDetailVisibleVideoCandidates: VideoLoadCandidate[] = []
 		const nearVideoCandidates: VideoLoadCandidate[] = []
 
 		visibleIds.forEach((elementId) => {
@@ -1290,7 +813,7 @@ export class CanvasVisibilityManager {
 			if (candidate.screenLongEdge >= MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD) {
 				visibleCandidates.push(candidate)
 			} else {
-				tinyVisibleCandidates.push(candidate)
+				lowDetailVisibleCandidates.push(candidate)
 			}
 		})
 
@@ -1323,7 +846,7 @@ export class CanvasVisibilityManager {
 					),
 				)
 				removeCandidatesByIds(visibleCandidates, frameAdjustedImageIds)
-				removeCandidatesByIds(tinyVisibleCandidates, frameAdjustedImageIds)
+				removeCandidatesByIds(lowDetailVisibleCandidates, frameAdjustedImageIds)
 				removeCandidatesByIds(nearCandidates, frameAdjustedImageIds)
 				visibleCandidates.push(...visibleContainerMediaCandidates.imageCandidates)
 			}
@@ -1334,7 +857,7 @@ export class CanvasVisibilityManager {
 					),
 				)
 				removeCandidatesByIds(visibleVideoCandidates, frameAdjustedVideoIds)
-				removeCandidatesByIds(tinyVisibleVideoCandidates, frameAdjustedVideoIds)
+				removeCandidatesByIds(lowDetailVisibleVideoCandidates, frameAdjustedVideoIds)
 				removeCandidatesByIds(nearVideoCandidates, frameAdjustedVideoIds)
 				visibleVideoCandidates.push(...visibleContainerMediaCandidates.videoCandidates)
 			}
@@ -1352,7 +875,7 @@ export class CanvasVisibilityManager {
 			if (candidate.screenLongEdge >= MIN_VISIBLE_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD) {
 				visibleVideoCandidates.push(candidate)
 			} else {
-				tinyVisibleVideoCandidates.push(candidate)
+				lowDetailVisibleVideoCandidates.push(candidate)
 			}
 		})
 
@@ -1373,7 +896,7 @@ export class CanvasVisibilityManager {
 		const pendingVisibleCandidates = visibleCandidates.filter((candidate) =>
 			this.shouldRequestImageCandidate(candidate),
 		)
-		const pendingTinyVisibleCandidates = tinyVisibleCandidates.filter((candidate) =>
+		const pendingLowDetailVisibleCandidates = lowDetailVisibleCandidates.filter((candidate) =>
 			this.shouldRequestImageCandidate(candidate),
 		)
 		const pendingNearCandidates = nearCandidates.filter((candidate) =>
@@ -1382,8 +905,8 @@ export class CanvasVisibilityManager {
 		const pendingVisibleVideoCandidates = visibleVideoCandidates.filter((candidate) =>
 			this.shouldRequestVideoCandidate(candidate),
 		)
-		const pendingTinyVisibleVideoCandidates = tinyVisibleVideoCandidates.filter((candidate) =>
-			this.shouldRequestVideoCandidate(candidate),
+		const pendingLowDetailVisibleVideoCandidates = lowDetailVisibleVideoCandidates.filter(
+			(candidate) => this.shouldRequestVideoCandidate(candidate),
 		)
 		const pendingNearVideoCandidates = nearVideoCandidates.filter((candidate) =>
 			this.shouldRequestVideoCandidate(candidate),
@@ -1395,7 +918,7 @@ export class CanvasVisibilityManager {
 				? pendingVisibleCandidates
 						.sort(sortCandidates)
 						.slice(0, MAX_VISIBLE_LOAD_REQUESTS_PER_QUERY)
-				: pendingTinyVisibleCandidates
+				: pendingLowDetailVisibleCandidates
 						.sort(sortCandidates)
 						.slice(0, LOW_DETAIL_VISIBLE_FALLBACK_LIMIT)
 		const nearToLoad = shouldDeferNearLoads
@@ -1406,7 +929,7 @@ export class CanvasVisibilityManager {
 				? pendingVisibleVideoCandidates
 						.sort(sortCandidates)
 						.slice(0, MAX_VISIBLE_VIDEO_LOAD_REQUESTS_PER_QUERY)
-				: pendingTinyVisibleVideoCandidates
+				: pendingLowDetailVisibleVideoCandidates
 						.sort(sortCandidates)
 						.slice(0, LOW_DETAIL_VISIBLE_VIDEO_FALLBACK_LIMIT)
 		const nearVideosToLoad = shouldDeferNearLoads
@@ -1422,11 +945,11 @@ export class CanvasVisibilityManager {
 
 		const pendingImageLoadCandidateCount =
 			pendingVisibleCandidates.length +
-			pendingTinyVisibleCandidates.length +
+			pendingLowDetailVisibleCandidates.length +
 			pendingNearCandidates.length
 		const pendingVideoLoadCandidateCount =
 			pendingVisibleVideoCandidates.length +
-			pendingTinyVisibleVideoCandidates.length +
+			pendingLowDetailVisibleVideoCandidates.length +
 			pendingNearVideoCandidates.length
 		const requestedImageLoadCount = visibleToLoad.length + nearToLoad.length
 		const requestedVideoLoadCount = visibleVideosToLoad.length + nearVideosToLoad.length
@@ -1437,51 +960,14 @@ export class CanvasVisibilityManager {
 			requestedVideoLoadCount,
 		})
 
-		const smallProtectedPaths = new Set<string>()
-		const overviewProtectedPaths = new Set<string>()
-		const previewProtectedPaths = new Set<string>()
-		const protectDisplayCandidate = (candidate: ImageLoadCandidate): void => {
-			this.displayProtectionUntil.set(candidate.path, now() + FAR_DISPLAY_RELEASE_GRACE_MS)
-			smallProtectedPaths.add(candidate.path)
-			overviewProtectedPaths.add(candidate.path)
-			previewProtectedPaths.add(candidate.path)
-		}
-		visibleCandidates.forEach(protectDisplayCandidate)
-		tinyVisibleCandidates.forEach(protectDisplayCandidate)
-		nearCandidates.forEach(protectDisplayCandidate)
 		if (isViewportMovementReason(reason)) {
-			this.scheduleFarDisplayReleaseDrain()
+			this.scheduleFarVisibilityDrain()
 		}
 		this.renderVisibilityController.sync({
 			activeElementIds: renderActiveRootIds,
 			allElementIds: rootElementIds,
 			allowCullFar: farDrainReady,
 		})
-		if (farDrainReady && FAR_RESOURCE_RECLAIM_STRATEGY === "visibility-drain") {
-			const protectionNow = now()
-			this.displayProtectionUntil.forEach((expiresAt, path) => {
-				if (expiresAt <= protectionNow) {
-					this.displayProtectionUntil.delete(path)
-					return
-				}
-				smallProtectedPaths.add(path)
-				overviewProtectedPaths.add(path)
-				previewProtectedPaths.add(path)
-			})
-			this.canvas.imageResourceManager.enforceDisplayDecodedBudget({
-				protectedSmallPaths: smallProtectedPaths,
-				protectedOverviewPaths: overviewProtectedPaths,
-				protectedPreviewPaths: previewProtectedPaths,
-				reason: `visibility:${reason}`,
-			})
-		}
-		this.evaluateDetailFullDisplay({
-			visibleCandidates,
-			viewportRect,
-			viewportScale,
-			reason,
-		})
-
 		let farCount = 0
 		this.registeredImages.forEach((_, elementId) => {
 			const state: VisibilityState = visibleIds.has(elementId)
@@ -1510,8 +996,7 @@ export class CanvasVisibilityManager {
 			registeredVideoCount: this.registeredVideos.size,
 			registerDedupedCount: previousSnapshot.registerDedupedCount,
 			videoRegisterDedupedCount: previousSnapshot.videoRegisterDedupedCount,
-			releaseClearedRequestCount: previousSnapshot.releaseClearedRequestCount,
-			overviewFallbackPreviewCount: previousSnapshot.overviewFallbackPreviewCount,
+			lowFallbackPreviewCount: previousSnapshot.lowFallbackPreviewCount,
 			visibleImageCount: visibleIds.size,
 			nearImageCount: nearIds.size,
 			farImageCount: farCount,
@@ -1523,17 +1008,11 @@ export class CanvasVisibilityManager {
 			lastRequestedNearCount: nearToLoad.length,
 			lastRequestedVisibleVideoCount: visibleVideosToLoad.length,
 			lastRequestedNearVideoCount: nearVideosToLoad.length,
-			tinyVisibleVideoCount: tinyVisibleVideoCandidates.length,
-			pendingTinyVisibleVideoLoadCandidateCount: pendingTinyVisibleVideoCandidates.length,
+			lowDetailVisibleVideoCount: lowDetailVisibleVideoCandidates.length,
+			pendingLowDetailVisibleVideoLoadCandidateCount:
+				pendingLowDetailVisibleVideoCandidates.length,
 			pendingImageLoadCandidateCount,
 			pendingVideoLoadCandidateCount,
-			detailFullActiveCount: previousSnapshot.detailFullActiveCount,
-			detailFullCandidateCount: previousSnapshot.detailFullCandidateCount,
-			detailFullSkippedCount: previousSnapshot.detailFullSkippedCount,
-			detailFullScheduledCount: previousSnapshot.detailFullScheduledCount,
-			detailFullAppliedCount: previousSnapshot.detailFullAppliedCount,
-			detailFullReleasedCount: previousSnapshot.detailFullReleasedCount,
-			detailFullLastSkipReason: previousSnapshot.detailFullLastSkipReason,
 			drainScheduledCount: previousSnapshot.drainScheduledCount,
 			drainRunCount: previousSnapshot.drainRunCount,
 			lastViewportScale: viewportScale,
@@ -1594,15 +1073,15 @@ export class CanvasVisibilityManager {
 		}, VISIBILITY_DRAIN_DELAY_MS)
 	}
 
-	private scheduleFarDisplayReleaseDrain(): void {
+	private scheduleFarVisibilityDrain(): void {
 		if (this.destroyed) return
-		if (this.farDisplayReleaseTimerId !== null) {
-			clearTimeout(this.farDisplayReleaseTimerId)
+		if (this.farVisibilityDrainTimerId !== null) {
+			clearTimeout(this.farVisibilityDrainTimerId)
 		}
-		this.farDisplayReleaseTimerId = setTimeout(() => {
-			this.farDisplayReleaseTimerId = null
+		this.farVisibilityDrainTimerId = setTimeout(() => {
+			this.farVisibilityDrainTimerId = null
 			this.scheduleRefresh("visibility:drain", true)
-		}, FAR_DISPLAY_RELEASE_GRACE_MS)
+		}, FAR_VISIBILITY_DRAIN_GRACE_MS)
 	}
 
 	private suppressContentLayerHitGraphDuringViewportMovement(): void {
@@ -1679,7 +1158,7 @@ export class CanvasVisibilityManager {
 		const screenArea = screenWidth * screenHeight
 		const priority: ImageResourceLoadPriority =
 			priorityOverride ?? (visibilityState === "visible" ? "visible" : "near")
-		const frameScopedVariant =
+		const frameDisplayVariant =
 			visibilityState === "visible" && viewportRect
 				? this.getVisibleClippingContainerDisplayVariant({
 						elementId,
@@ -1693,7 +1172,7 @@ export class CanvasVisibilityManager {
 			screenLongEdge,
 			previousVariant: this.getPreviousImageDisplayVariant(elementId),
 		})
-		const variant = frameScopedVariant ?? viewingDecision.variant
+		const variant = frameDisplayVariant ?? viewingDecision.variant
 
 		return {
 			elementId,
@@ -1721,7 +1200,7 @@ export class CanvasVisibilityManager {
 			if (isClippingContainer(parentElement)) {
 				const parentBounds = this.canvas.geometryCacheManager.getElementBounds(parentId)
 				if (!parentBounds) return undefined
-				return this.resolveFrameScopedDisplayVariant({
+				return this.resolveFrameDisplayVariant({
 					containerId: parentId,
 					clipBounds: parentBounds,
 					viewportRect: options.viewportRect,
@@ -1735,7 +1214,7 @@ export class CanvasVisibilityManager {
 		return undefined
 	}
 
-	private resolveFrameScopedDisplayVariant(options: {
+	private resolveFrameDisplayVariant(options: {
 		containerId: string
 		clipBounds: Rect
 		viewportRect: Rect
@@ -1782,7 +1261,7 @@ export class CanvasVisibilityManager {
 				scaleX: number
 				scaleY: number
 				clipBounds: Rect
-				frameScopedVariant?: MediaDisplayResourceVariant
+				frameDisplayVariant?: MediaDisplayResourceVariant
 			},
 		): void => {
 			if (
@@ -1824,7 +1303,7 @@ export class CanvasVisibilityManager {
 					return
 				}
 				const variant =
-					parentTransform.frameScopedVariant ??
+					parentTransform.frameDisplayVariant ??
 					decideImageDisplayViewingLevel({
 						visibilityState: "visible",
 						screenArea,
@@ -1911,14 +1390,14 @@ export class CanvasVisibilityManager {
 							height: 0,
 						})
 					: parentTransform.clipBounds
-				const frameScopedVariant = isClippingContainer(element)
-					? this.resolveFrameScopedDisplayVariant({
+				const frameDisplayVariant = isClippingContainer(element)
+					? this.resolveFrameDisplayVariant({
 							containerId: element.id,
 							clipBounds,
 							viewportRect: options.viewportRect,
 							viewportScale: options.viewportScale,
 						})
-					: parentTransform.frameScopedVariant
+					: parentTransform.frameDisplayVariant
 				const scaleX = parentTransform.scaleX * (element.scaleX ?? 1)
 				const scaleY = parentTransform.scaleY * (element.scaleY ?? 1)
 				element.children.forEach((child) =>
@@ -1927,7 +1406,7 @@ export class CanvasVisibilityManager {
 						scaleX,
 						scaleY,
 						clipBounds,
-						frameScopedVariant,
+						frameDisplayVariant,
 					}),
 				)
 			}
@@ -1949,8 +1428,8 @@ export class CanvasVisibilityManager {
 			const clipBounds = isClippingContainer(container)
 				? containerBounds
 				: (getIntersectionRect(containerBounds, options.viewportRect) ?? containerBounds)
-			const frameScopedVariant = isClippingContainer(container)
-				? this.resolveFrameScopedDisplayVariant({
+			const frameDisplayVariant = isClippingContainer(container)
+				? this.resolveFrameDisplayVariant({
 						containerId: container.id,
 						clipBounds,
 						viewportRect: options.viewportRect,
@@ -1963,7 +1442,7 @@ export class CanvasVisibilityManager {
 					scaleX,
 					scaleY,
 					clipBounds,
-					frameScopedVariant,
+					frameDisplayVariant,
 				}),
 			)
 		})
