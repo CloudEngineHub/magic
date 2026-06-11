@@ -203,9 +203,13 @@ class AppMenuRepository implements AppMenuRepositoryInterface
             'app_menu_overrides.sort_order as organization_sort_order',
         ]);
 
-        // 非官方组织可见的数据集为：全部官方菜单 + 当前组织自建菜单。
+        // 非官方组织可见的数据集为：官方已启用菜单 + 当前组织自建菜单。
+        // 官方菜单本体状态是全局发布开关，组织覆盖只能在已发布菜单上调整本组织显示/隐藏。
         return $builder->where(function ($query) use ($organizationCode): void {
-            $query->where('magic_applications.source_type', AppMenuSourceType::Official->value)
+            $query->where(function ($officialQuery): void {
+                $officialQuery->where('magic_applications.source_type', AppMenuSourceType::Official->value)
+                    ->where('magic_applications.status', AppMenuStatus::Enabled->value);
+            })
                 ->orWhere(function ($subQuery) use ($organizationCode): void {
                     $subQuery->where('magic_applications.source_type', AppMenuSourceType::Organization->value)
                         ->where('magic_applications.organization_code', $organizationCode);

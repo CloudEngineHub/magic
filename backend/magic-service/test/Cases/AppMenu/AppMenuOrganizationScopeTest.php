@@ -113,6 +113,37 @@ class AppMenuOrganizationScopeTest extends HttpTestCase
         self::assertNotContains($this->anotherOrganizationMenuId, $ids);
     }
 
+    public function testDisabledOfficialMenuIsHiddenFromOrganizationEvenWithEnabledOverride(): void
+    {
+        AppMenuModel::query()
+            ->where('id', $this->officialMenuId)
+            ->update(['status' => AppMenuStatus::Disabled->value]);
+        AppMenuOrganizationOverrideModel::query()->create([
+            'app_menu_id' => $this->officialMenuId,
+            'organization_code' => $this->organizationCode,
+            'sort_order' => 1000,
+            'status' => AppMenuStatus::Enabled->value,
+            'creator_id' => 'app_menu_test',
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        $result = $this->domainService->queriesForOrganization(
+            $this->organizationCode,
+            false,
+            [],
+            Page::createNoPage()
+        );
+        $queryIds = array_map(static fn ($entity): int => (int) $entity->getId(), $result['list']);
+
+        $menus = $this->domainService->getAllEnabledForOrganization($this->organizationCode, [2]);
+        $enabledIds = array_map(static fn ($entity): int => (int) $entity->getId(), $menus);
+
+        self::assertNotContains($this->officialMenuId, $queryIds);
+        self::assertNotContains($this->officialMenuId, $enabledIds);
+        self::assertNull($this->domainService->getByIdForOrganization($this->officialMenuId, $this->organizationCode, false));
+    }
+
     public function testOrganizationQueriesCanSearchByPath(): void
     {
         $result = $this->domainService->queriesForOrganization(
