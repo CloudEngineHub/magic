@@ -94,6 +94,9 @@ export { default as IconSuperMagic } from "./IconSuperMagic"
 
 export { default as IconCircleQuestion } from "./IconCircleQuestion"
 
+export { default as UserSelect } from "./UserSelect"
+export type { UserSelectProps } from "./UserSelect"
+
 export { default as StatusTag } from "./StatusTag"
 export type { StatusTagProps } from "./StatusTag"
 
@@ -121,6 +124,9 @@ export {
 
 export { default as MultiLangSetting } from "./MultiLangSetting"
 export type { MultiLangSettingProps, Lang } from "./MultiLangSetting"
+
+export { default as MemberDepartmentSelector } from "./MemberDepartmentSelector"
+export type { MemberDepartmentSelectorProps } from "./MemberDepartmentSelector"
 
 export { default as ButtonGroup } from "./ButtonGroup"
 export type { ButtonGroupProps } from "./ButtonGroup"
