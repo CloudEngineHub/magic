@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
 	buildCustomWebsitePreset,
 	buildWebsiteTab,
+	isWebsiteTab,
 	WEBSITE_TAB_PREFIX,
 	WEBSITE_PRESETS,
 } from "../utils/websiteTabs"
@@ -103,6 +104,23 @@ describe("website tabs", () => {
 			syncWithAttachments: false,
 			restoreAsActive: true,
 		})
+	})
+
+	it("identifies website tabs only by the website tab id prefix", () => {
+		expect(
+			isWebsiteTab({
+				id: "file:website-preview",
+				fileData: {
+					file_id: "file:website-preview",
+					file_name: "Website Preview",
+					display_config: {
+						type: "website",
+					},
+				},
+			}),
+		).toBe(false)
+
+		expect(isWebsiteTab({ id: `${WEBSITE_TAB_PREFIX}example` })).toBe(true)
 	})
 
 	it("renders website tabs through an iframe with an external-open fallback", () => {
