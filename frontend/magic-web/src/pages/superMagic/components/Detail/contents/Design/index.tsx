@@ -1,4 +1,3 @@
-import CanvasDesign, { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign"
 // import CanvasDesignHeader from "./components/CanvasDesignHeader"
 import { createStyles } from "antd-style"
 import { useState, useCallback, useRef, useEffect, lazy, Suspense, useMemo } from "react"
@@ -51,6 +50,11 @@ import { needsUpgrade, upgradeCanvasToV2, type UpgradeProgress } from "./utils/c
 import { CanvasUpgradeBanner, CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
 import { toast } from "sonner"
 import { applyCanvasDesignDataPatch } from "./utils/canvasDesignDataPatch"
+import { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign/prewarm"
+
+prewarmCanvasDesignImageWorker("super-magic-design-module")
+
+const CanvasDesign = lazy(() => import("@/components/CanvasDesign"))
 
 // 懒加载协议弹窗
 const loadWaterMarkFreeModal = async () => {
@@ -63,8 +67,6 @@ const loadWaterMarkFreeModal = async () => {
 const WaterMarkFreeModal = lazy(() => loadWaterMarkFreeModal())
 
 const DESIGN_REMOTE_UPDATE_LISTENER_MODE: DesignRemoteUpdateListenerMode = "file-change" as const
-
-prewarmCanvasDesignImageWorker("super-magic-design-module")
 
 const useStyles = createStyles(({ token }) => ({
 	designViewerContainer: {
@@ -886,43 +888,45 @@ function DesignViewer(props: DesignViewerProps) {
 									stepText={getUpgradeStepText(upgradeProgress.step)}
 								/>
 							)}
-							<CanvasDesign
-								key={`${designProjectId}:${canvasDesignKey}:${designProjectBasePath}`}
-								id={designProjectId}
-								ref={canvasDesignRef}
-								readonly={isReadOnlyState}
-								magic={{
-									methods,
-									permissions: designCanvasMagicPermissions,
-									hostUiLocale,
-								}}
-								viewport={{
-									autoLoadCacheViewport: !isPlaybackMode && !isMobile,
-								}}
-								data={{
-									defaultData: designData.canvas,
-									onCanvasDesignDataChange: handleCanvasDesignDataChange,
-									onCanvasDesignDataPatchChange:
-										handleCanvasDesignDataPatchChange,
-									projectAttachmentMentionTree,
-									defaultProjectAttachmentFolderId,
-									defaultProjectAttachmentFolderName,
-									mentionDataServiceCtor: CanvasDesignMentionDataService,
-									mentionExtension: MentionExtension,
-									referenceResourcePanelRenderer:
-										CanvasDesignReferenceResourcePanel,
-								}}
-								marker={{
-									defaultMarkers: markersForCanvas,
-									onMarkerCreated: handleMarkerCreated,
-									onMarkerDeleted: handleMarkerDeleted,
-									onMarkerUpdated: handleMarkerUpdated,
-									onMarkerRestored: handleMarkerRestored,
-								}}
-								t={canvasDesignTAdapter}
-								getIsMobile={getIsMobile}
-								shareHostBottomChrome={isShareRoute}
-							/>
+							<Suspense fallback={null}>
+								<CanvasDesign
+									key={`${designProjectId}:${canvasDesignKey}:${designProjectBasePath}`}
+									id={designProjectId}
+									ref={canvasDesignRef}
+									readonly={isReadOnlyState}
+									magic={{
+										methods,
+										permissions: designCanvasMagicPermissions,
+										hostUiLocale,
+									}}
+									viewport={{
+										autoLoadCacheViewport: !isPlaybackMode && !isMobile,
+									}}
+									data={{
+										defaultData: designData.canvas,
+										onCanvasDesignDataChange: handleCanvasDesignDataChange,
+										onCanvasDesignDataPatchChange:
+											handleCanvasDesignDataPatchChange,
+										projectAttachmentMentionTree,
+										defaultProjectAttachmentFolderId,
+										defaultProjectAttachmentFolderName,
+										mentionDataServiceCtor: CanvasDesignMentionDataService,
+										mentionExtension: MentionExtension,
+										referenceResourcePanelRenderer:
+											CanvasDesignReferenceResourcePanel,
+									}}
+									marker={{
+										defaultMarkers: markersForCanvas,
+										onMarkerCreated: handleMarkerCreated,
+										onMarkerDeleted: handleMarkerDeleted,
+										onMarkerUpdated: handleMarkerUpdated,
+										onMarkerRestored: handleMarkerRestored,
+									}}
+									t={canvasDesignTAdapter}
+									getIsMobile={getIsMobile}
+									shareHostBottomChrome={isShareRoute}
+								/>
+							</Suspense>
 							{/* 撤回/恢复遮罩层 */}
 							{isProcessingRevoke && (
 								<div className={styles.revokeOverlay}>

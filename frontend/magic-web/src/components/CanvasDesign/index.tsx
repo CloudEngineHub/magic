@@ -28,13 +28,9 @@ import ImageCropPanel from "./components/ImageCropPanel"
 import ImageExtendPanel from "./components/ImageExtendPanel"
 import ImageEraserPanel from "./components/ImageEraserPanel"
 import ElementRenameOverlay from "./components/ElementRenameOverlay"
-import { prewarmImageResourceWorkerClient } from "./canvas/utils/ImageResourceWorkerClient"
+export { prewarmCanvasDesignImageWorker } from "./prewarm"
 
 import styles from "./index.module.css"
-
-export function prewarmCanvasDesignImageWorker(reason = "canvas-design"): void {
-	void prewarmImageResourceWorkerClient(reason)
-}
 
 const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref) => {
 	const {
