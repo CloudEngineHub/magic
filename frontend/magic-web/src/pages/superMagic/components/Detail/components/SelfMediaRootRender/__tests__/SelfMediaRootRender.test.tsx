@@ -3,6 +3,17 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 
 const mockSendSelfMediaPrePublishAnalysis = vi.hoisted(() => vi.fn())
 const mockToastError = vi.hoisted(() => vi.fn())
+const mockLanguageModel = vi.hoisted(() => ({
+	id: "model-1",
+	group_id: "group-1",
+	model_id: "gpt-5",
+	model_name: "GPT-5",
+	provider_model_id: "gpt-5",
+	model_description: "",
+	model_icon: "",
+	model_status: "normal",
+	sort: 1,
+}))
 
 const mockStore = vi.hoisted(() => ({
 	platforms: ["rednote"],
@@ -153,15 +164,23 @@ vi.mock("../components/PrePublishAnalysisDialog", () => ({
 		open,
 		onOpenChange,
 		onConfirm,
+		selectedModel,
 	}: {
 		open: boolean
 		onOpenChange: (open: boolean) => void
-		onConfirm: (goal: "ip-growth" | "conversion" | "viral-traffic") => void
+		onConfirm: (
+			goal: "ip-growth" | "conversion" | "viral-traffic",
+			model: typeof mockLanguageModel | null,
+		) => void
+		selectedModel?: typeof mockLanguageModel | null
 		loading?: boolean
 	}) {
 		return open ? (
 			<div data-testid="pre-publish-analysis-dialog">
-				<button type="button" onClick={() => onConfirm("conversion")}>
+				<div data-testid="pre-publish-analysis-selected-model">
+					{selectedModel?.model_name}
+				</div>
+				<button type="button" onClick={() => onConfirm("conversion", selectedModel ?? null)}>
 					confirm-analysis
 				</button>
 				<button type="button" onClick={() => onOpenChange(false)}>
@@ -199,7 +218,25 @@ vi.mock("../stores", () => ({
 }))
 
 vi.mock("../services/selfMediaPrePublishAnalysis", () => ({
+	SELF_MEDIA_PRE_PUBLISH_TOPIC_PATTERN: "ip-manager",
 	sendSelfMediaPrePublishAnalysis: mockSendSelfMediaPrePublishAnalysis,
+}))
+
+vi.mock("@/stores/superMagic", () => ({
+	topicModelStore: {
+		selectedLanguageModel: mockLanguageModel,
+	},
+}))
+
+vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
+	default: {
+		getModelGroupsByMode: () => [
+			{
+				group: { id: "group-1", name: "Models" },
+				models: [mockLanguageModel],
+			},
+		],
+	},
 }))
 
 vi.mock("../context/PlatformChromeContext", () => ({
@@ -517,6 +554,7 @@ describe("SelfMediaRootRender", () => {
 		fireEvent.click(screen.getByTestId("self-media-home-post-analysis-post-1"))
 
 		expect(screen.getByTestId("pre-publish-analysis-dialog")).toBeInTheDocument()
+		expect(screen.getByTestId("pre-publish-analysis-selected-model")).toHaveTextContent("GPT-5")
 
 		fireEvent.click(screen.getByText("confirm-analysis"))
 
@@ -526,6 +564,7 @@ describe("SelfMediaRootRender", () => {
 					selectedProject: { id: "project-1" },
 					platform: "rednote",
 					analysisGoal: "conversion",
+					selectedModel: mockLanguageModel,
 					post,
 					postDirectoryItem: expect.objectContaining({
 						file_id: "post-dir",
@@ -578,6 +617,7 @@ describe("SelfMediaRootRender", () => {
 					selectedProject: { id: "project-1" },
 					platform: "rednote",
 					analysisGoal: "conversion",
+					selectedModel: mockLanguageModel,
 					post,
 					postDirectoryItem: expect.objectContaining({
 						file_id: "post-dir",

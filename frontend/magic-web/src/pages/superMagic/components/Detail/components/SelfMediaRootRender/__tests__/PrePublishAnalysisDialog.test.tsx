@@ -3,6 +3,25 @@ import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { PrePublishAnalysisDialog } from "../components/PrePublishAnalysisDialog"
 
+const DEFAULT_MODEL = {
+	id: "model-1",
+	group_id: "group-1",
+	model_id: "gpt-5",
+	model_name: "GPT-5",
+	provider_model_id: "gpt-5",
+	model_description: "",
+	model_icon: "",
+	model_status: "normal",
+	sort: 1,
+}
+
+const ALT_MODEL = {
+	...DEFAULT_MODEL,
+	id: "model-2",
+	model_id: "claude-sonnet",
+	model_name: "Claude Sonnet",
+}
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
@@ -88,19 +107,51 @@ vi.mock("@/components/shadcn-ui/radio-group", async () => {
 	}
 })
 
+vi.mock("@/pages/superMagic/components/MessageEditor/components/ModelSwitch", () => ({
+	default: ({
+		selectedModel,
+		onModelChange,
+	}: {
+		selectedModel: typeof DEFAULT_MODEL | null
+		onModelChange: (model: typeof DEFAULT_MODEL | null) => void
+	}) => (
+		<div data-testid="pre-publish-analysis-model-switch">
+			<span>{selectedModel?.model_name}</span>
+			<button type="button" onClick={() => onModelChange(ALT_MODEL)}>
+				choose-alt-model
+			</button>
+		</div>
+	),
+}))
+
 describe("PrePublishAnalysisDialog", () => {
 	it("confirms only after a goal is selected and cancel does not confirm", () => {
 		const onOpenChange = vi.fn()
 		const onConfirm = vi.fn()
 
-		render(<PrePublishAnalysisDialog open onOpenChange={onOpenChange} onConfirm={onConfirm} />)
+		render(
+			<PrePublishAnalysisDialog
+				open
+				onOpenChange={onOpenChange}
+				onConfirm={onConfirm}
+				modelList={[
+					{
+						group: { id: "group-1", name: "Models" },
+						models: [DEFAULT_MODEL, ALT_MODEL],
+					},
+				]}
+				selectedModel={DEFAULT_MODEL}
+			/>,
+		)
 
 		fireEvent.click(screen.getByText("detail.selfMedia.analysis.cancel"))
 		expect(onOpenChange).toHaveBeenCalledWith(false)
 		expect(onConfirm).not.toHaveBeenCalled()
 
+		expect(screen.getByTestId("pre-publish-analysis-model-switch")).toHaveTextContent("GPT-5")
+		fireEvent.click(screen.getByText("choose-alt-model"))
 		fireEvent.click(screen.getByText("detail.selfMedia.analysis.goals.conversion"))
 		fireEvent.click(screen.getByTestId("pre-publish-analysis-confirm"))
-		expect(onConfirm).toHaveBeenCalledWith("conversion")
+		expect(onConfirm).toHaveBeenCalledWith("conversion", ALT_MODEL)
 	})
 })

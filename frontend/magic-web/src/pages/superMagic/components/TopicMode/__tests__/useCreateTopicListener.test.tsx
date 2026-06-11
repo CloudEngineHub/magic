@@ -1,12 +1,12 @@
-import { renderHook } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { renderHook, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Topic } from "../../../pages/Workspace/types"
 import { TopicMode } from "../../../pages/Workspace/TopicMode"
 import SuperMagicService from "../../../services"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useCreateTopicListener } from "../useCreateTopicListener"
 
-const { selectedTopic, latestTopic, topicStoreMock } = vi.hoisted(() => ({
+const { selectedTopic, latestTopic, topicStoreMock, mockTopicServiceCreateTopic } = vi.hoisted(() => ({
 	selectedTopic: {
 		id: "topic-1",
 		user_id: "user-1",
@@ -40,6 +40,7 @@ const { selectedTopic, latestTopic, topicStoreMock } = vi.hoisted(() => ({
 	topicStoreMock: {
 		selectedTopic: null as Topic | null,
 	},
+	mockTopicServiceCreateTopic: vi.fn(),
 }))
 
 vi.mock("@/utils/pubsub", () => ({
@@ -51,6 +52,7 @@ vi.mock("@/utils/pubsub", () => ({
 	PubSubEvents: {
 		Create_New_Topic: "Create_New_Topic",
 		Add_Content_To_Chat: "Add_Content_To_Chat",
+		Send_Message_by_Content: "Send_Message_by_Content",
 	},
 }))
 
@@ -76,7 +78,19 @@ vi.mock("../../../services", () => ({
 	},
 }))
 
+vi.mock("../../../services/topicService", () => ({
+	default: vi.fn().mockImplementation(() => ({
+		createTopic: mockTopicServiceCreateTopic,
+	})),
+}))
+
 describe("useCreateTopicListener", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		topicStoreMock.selectedTopic = null
+		mockTopicServiceCreateTopic.mockResolvedValue({ ...latestTopic, id: "topic-new" })
+	})
+
 	it("uses the current topic as the source for ordinary project topic creation", () => {
 		topicStoreMock.selectedTopic = selectedTopic
 		renderHook(() => useCreateTopicListener())
@@ -116,6 +130,85 @@ describe("useCreateTopicListener", () => {
 				agent_code: "SMA-employee-code-2",
 			},
 			onNavigated: undefined,
+		})
+	})
+
+	it("sends after-create content through the existing send-message pubsub event", () => {
+		topicStoreMock.selectedTopic = latestTopic
+		renderHook(() => useCreateTopicListener())
+
+		const handler = vi.mocked(pubsub.subscribe).mock.calls[0]?.[1] as
+			| ((payload?: {
+					topicMode?: TopicMode
+					afterCreate?: {
+						content: { type: string; content: any[] }
+						send?: boolean
+						mentionItems?: any[]
+						extra?: Record<string, unknown>
+					}
+			  }) => void)
+			| undefined
+		expect(handler).toBeTypeOf("function")
+
+		const content = { type: "doc", content: [] }
+		const mentionItems = [{ attrs: { type: "project_directory" } }]
+		const extra = { super_agent: { enable_web_search: true } }
+		handler?.({
+			topicMode: "ip-manager" as TopicMode,
+			afterCreate: {
+				content,
+				send: true,
+				mentionItems,
+				extra,
+			},
+		})
+
+		const createParams = vi.mocked(SuperMagicService.handleCreateTopic).mock.calls[0]?.[0]
+		expect(createParams).toEqual(
+			expect.objectContaining({
+				selectedProject: { id: "project-1" },
+				sourceTopic: expect.objectContaining({
+					project_id: "project-1",
+					topic_mode: "ip-manager",
+				}),
+			}),
+		)
+
+		createParams?.onNavigated?.({ ...latestTopic, id: "topic-new" })
+
+		expect(pubsub.publish).toHaveBeenCalledWith(PubSubEvents.Send_Message_by_Content, {
+			jsonContent: content,
+			mentionItems,
+			topicMode: "ip-manager",
+			extra,
+		})
+		expect(pubsub.publish).not.toHaveBeenCalledWith(
+			PubSubEvents.Add_Content_To_Chat,
+			expect.anything(),
+		)
+	})
+
+	it("applies requested mode when creating topics through a scoped topic store", async () => {
+		topicStoreMock.selectedTopic = latestTopic
+		renderHook(() => useCreateTopicListener({ topicStore: topicStoreMock as any }))
+
+		const handler = vi.mocked(pubsub.subscribe).mock.calls[0]?.[1] as
+			| ((payload?: { topicMode?: TopicMode }) => void)
+			| undefined
+		expect(handler).toBeTypeOf("function")
+
+		handler?.({ topicMode: "ip-manager" as TopicMode })
+
+		await waitFor(() => {
+			expect(mockTopicServiceCreateTopic).toHaveBeenCalledWith({
+				projectId: "project-1",
+				topicName: "",
+				sourceTopic: {
+					...latestTopic,
+					topic_mode: "ip-manager",
+					agent_code: undefined,
+				},
+			})
 		})
 	})
 })

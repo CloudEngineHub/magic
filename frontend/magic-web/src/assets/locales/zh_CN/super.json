@@ -729,6 +729,15 @@
 					"ipGrowth": "IP增长",
 					"viralTraffic": "爆文流量"
 				},
+				"modelLabel": "文本模型",
+				"prompt": {
+					"instruction": "请联网对比同类内容，输出证据清单、评分、关键问题、同类内容差距、优先修改清单和改稿指令。外部资料只作为运营经验参考。",
+					"metadata": "平台：{{platform}}\n目标：{{goal}}\n标题：{{title}}\n作者/IP：{{author}}\n标签：{{tags}}",
+					"missingValue": "未提供",
+					"opening": "请对 {{mention}} 做发布前诊断。",
+					"topicName": "[发布前诊断] {{title}}",
+					"untitled": "自媒体文章"
+				},
 				"startFailed": "发布前诊断启动失败，请稍后重试",
 				"starting": "创建诊断中...",
 				"title": "发布前诊断"

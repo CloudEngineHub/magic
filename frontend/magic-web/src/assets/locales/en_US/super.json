@@ -728,6 +728,15 @@
 					"ipGrowth": "IP Growth",
 					"viralTraffic": "Viral Traffic"
 				},
+				"modelLabel": "Text model",
+				"prompt": {
+					"instruction": "Search online for comparable content. Output evidence, score, key issues, comparison gaps, prioritized edits, and rewrite instructions. Treat external references as operational experience.",
+					"metadata": "Platform: {{platform}}\nGoal: {{goal}}\nTitle: {{title}}\nAuthor/IP: {{author}}\nTags: {{tags}}",
+					"missingValue": "Not provided",
+					"opening": "Diagnose {{mention}} before publishing.",
+					"topicName": "[Pre-publish diagnosis] {{title}}",
+					"untitled": "Self-media post"
+				},
 				"startFailed": "Failed to start pre-publish diagnosis. Please try again later.",
 				"starting": "Creating diagnosis...",
 				"title": "Pre-publish Diagnosis"

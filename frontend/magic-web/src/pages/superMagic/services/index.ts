@@ -1172,6 +1172,7 @@ class SuperMagicService {
 		onSuccess,
 		onNavigated,
 		sourceTopic,
+		topicName,
 	}: {
 		selectedProject: ProjectListItem | null | undefined
 		targetProject?: ProjectListItem
@@ -1181,6 +1182,7 @@ class SuperMagicService {
 		onNavigated?: (topic: Topic) => void
 		/** 新话题后端空创建；该字段只用于前端选中态继承员工/mode */
 		sourceTopic?: Pick<Topic, "project_id" | "topic_mode" | "agent_code"> | null
+		topicName?: string
 	}): Promise<Topic | null> {
 		const project = targetProject ?? selectedProject
 
@@ -1191,7 +1193,7 @@ class SuperMagicService {
 		try {
 			const newTopic = await this.topic.createTopic({
 				projectId: project.id,
-				topicName: "",
+				topicName: topicName || "",
 				sourceTopic,
 			})
 

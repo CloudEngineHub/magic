@@ -5,6 +5,10 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { Flex } from "antd"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
+import { topicModelStore } from "@/stores/superMagic"
+import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
+import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { SelfMediaPlatform } from "../../types"
 import UnsupportedPlatform from "./components/UnsupportedPlatform"
 import { getPlatformComponent } from "./platforms"
@@ -22,6 +26,7 @@ import {
 } from "./services/selfMediaCardChat"
 import { resolveSelfMediaRootPath } from "./services/selfMediaPostPaths"
 import {
+	SELF_MEDIA_PRE_PUBLISH_TOPIC_PATTERN,
 	sendSelfMediaPrePublishAnalysis,
 	type SelfMediaPrePublishAnalysisGoal,
 } from "./services/selfMediaPrePublishAnalysis"
@@ -112,6 +117,11 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		index: number
 	} | null>(null)
 	const [analysisSubmitting, setAnalysisSubmitting] = useState(false)
+	const analysisModelList =
+		superMagicModeService.getModelGroupsByMode(
+			SELF_MEDIA_PRE_PUBLISH_TOPIC_PATTERN as unknown as TopicMode,
+		) ?? []
+	const selectedAnalysisModel = topicModelStore.selectedLanguageModel
 
 	const { platforms, resolvedPlatform: platform, rootLoading } = store
 	const projectId = selectedProject?.id || ""
@@ -186,7 +196,10 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		})
 	}, [handleRequestPrePublishAnalysis, platform, store.activePostIndex])
 	const handleConfirmPrePublishAnalysis = useCallback(
-		async (analysisGoal: SelfMediaPrePublishAnalysisGoal) => {
+		async (
+			analysisGoal: SelfMediaPrePublishAnalysisGoal,
+			selectedModel: ModelItem | null,
+		) => {
 			if (!analysisTarget) return
 			setAnalysisSubmitting(true)
 			try {
@@ -213,6 +226,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					selectedProject,
 					platform: analysisTarget.platform,
 					analysisGoal,
+					selectedModel,
 					post,
 					postDirectoryItem,
 				})
@@ -310,6 +324,8 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					}}
 					onConfirm={handleConfirmPrePublishAnalysis}
 					loading={analysisSubmitting}
+					modelList={analysisModelList}
+					selectedModel={selectedAnalysisModel}
 				/>
 			</div>
 		)
@@ -370,6 +386,8 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				}}
 				onConfirm={handleConfirmPrePublishAnalysis}
 				loading={analysisSubmitting}
+				modelList={analysisModelList}
+				selectedModel={selectedAnalysisModel}
 			/>
 		</div>
 	)

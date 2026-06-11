@@ -21,12 +21,14 @@ function normalizeCreateTopicPayload(payload?: SuperMagicCreateNewTopicPayload) 
 		return {
 			afterCreate: undefined as SuperMagicCreateNewTopicPayload["afterCreate"],
 			topicMode: undefined as SuperMagicCreateNewTopicPayload["topicMode"],
+			topicName: undefined as SuperMagicCreateNewTopicPayload["topicName"],
 		}
 	}
 
 	return {
 		afterCreate: payload.afterCreate,
 		topicMode: payload.topicMode,
+		topicName: payload.topicName,
 	}
 }
 
@@ -75,14 +77,32 @@ export function useCreateTopicListener(options: UseCreateTopicListenerOptions = 
 		if (!enabled) return
 
 		const handleCreateTopic = (payload?: SuperMagicCreateNewTopicPayload) => {
-			const { afterCreate, topicMode } = normalizeCreateTopicPayload(payload)
+			const { afterCreate, topicMode, topicName } = normalizeCreateTopicPayload(payload)
 			const publishAfterCreate = () => {
 				if (!afterCreate?.content) return
+				if (afterCreate.send) {
+					pubsub.publish(PubSubEvents.Send_Message_by_Content, {
+						jsonContent: afterCreate.content,
+						mentionItems: afterCreate.mentionItems,
+						topicMode: afterCreate.topicMode ?? topicMode,
+						selectedModel: afterCreate.selectedModel,
+						selectedImageModel: afterCreate.selectedImageModel,
+						selectedVideoModel: afterCreate.selectedVideoModel,
+						shouldClearEditorAfterSend: afterCreate.shouldClearEditorAfterSend,
+						extra: afterCreate.extra,
+					})
+					return
+				}
 				pubsub.publish(PubSubEvents.Add_Content_To_Chat, {
 					content: afterCreate.content,
 					extraData: afterCreate.extraData,
 				})
 			}
+			const sourceTopic = resolveRequestedModeSourceTopic({
+				sourceTopic: topicStore?.selectedTopic ?? globalTopicStore.selectedTopic,
+				selectedProject,
+				topicMode,
+			})
 
 			if (topicStore) {
 				const projectId = selectedProject?.id
@@ -91,24 +111,17 @@ export function useCreateTopicListener(options: UseCreateTopicListenerOptions = 
 				new TopicService({ store: topicStore })
 					.createTopic({
 						projectId,
-						topicName: "",
-						sourceTopic: topicStore.selectedTopic,
+						topicName: topicName || "",
+						sourceTopic,
 					})
 					.then((newTopic) => {
 						if (!newTopic || !afterCreate) return
 						setTimeout(publishAfterCreate, 500)
 					})
 			} else {
-				// 普通项目新建话题不把员工/mode 写入创建接口；
-				// 触发当下读取当前话题，交给 TopicService 在前端选中态中继承员工。
-				const sourceTopic = resolveRequestedModeSourceTopic({
-					sourceTopic: globalTopicStore.selectedTopic,
-					selectedProject,
-					topicMode,
-				})
-
 				SuperMagicService.handleCreateTopic({
 					selectedProject,
+					...(topicName ? { topicName } : {}),
 					sourceTopic,
 					onNavigated: afterCreate ? publishAfterCreate : undefined,
 				})

@@ -1,10 +1,56 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { sendSelfMediaPrePublishAnalysis } from "../services/selfMediaPrePublishAnalysis"
 
-const { mockChat, mockCreateTopic, mockNavigateToBatchTopic } = vi.hoisted(() => ({
+const { mockChat, mockCreateTopic, mockNavigateToBatchTopic, mockPublish, mockT } = vi.hoisted(() => ({
 	mockChat: vi.fn(),
 	mockCreateTopic: vi.fn(),
 	mockNavigateToBatchTopic: vi.fn(),
+	mockPublish: vi.fn(),
+	mockT: vi.fn((key: string, options?: Record<string, unknown>) => {
+		const translations: Record<string, string> = {
+			"detail.selfMedia.analysis.prompt.topicName": "[发布前诊断] {{title}}",
+			"detail.selfMedia.analysis.prompt.untitled": "自媒体文章",
+			"detail.selfMedia.analysis.prompt.missingValue": "未提供",
+			"detail.selfMedia.analysis.prompt.opening": "请对 {{mention}} 做发布前诊断。",
+			"detail.selfMedia.analysis.prompt.metadata":
+				"平台：{{platform}}\n目标：{{goal}}\n标题：{{title}}\n作者/IP：{{author}}\n标签：{{tags}}",
+			"detail.selfMedia.analysis.prompt.instruction":
+				"请联网对比同类内容，输出证据清单、评分、关键问题、同类内容差距、优先修改清单和改稿指令。外部资料只作为运营经验参考。",
+			"detail.selfMedia.analysis.goals.ipGrowth": "IP增长",
+			"detail.selfMedia.initPanel.platforms.rednote": "小红书",
+		}
+		const template = translations[key] || String(options?.defaultValue || key)
+		return template.replace(/\{\{(\w+)\}\}/g, (_, name) => String(options?.[name] ?? ""))
+	}),
+}))
+
+const selectedModel = {
+	id: "model-1",
+	group_id: "group-1",
+	model_id: "gpt-5",
+	model_name: "GPT-5",
+	provider_model_id: "gpt-5",
+	model_description: "",
+	model_icon: "",
+	model_status: "normal",
+	sort: 1,
+}
+
+vi.mock("i18next", () => ({
+	default: {
+		t: mockT,
+	},
+	t: mockT,
+}))
+
+vi.mock("@/utils/pubsub", () => ({
+	default: {
+		publish: mockPublish,
+	},
+	PubSubEvents: {
+		Create_New_Topic: "Create_New_Topic",
+		Send_Message_by_Content: "Send_Message_by_Content",
+	},
 }))
 
 vi.mock("@/apis", () => ({
@@ -41,6 +87,7 @@ describe("selfMediaPrePublishAnalysis", () => {
 			chat_conversation_id: "conversation-1",
 		})
 		mockNavigateToBatchTopic.mockReset()
+		mockPublish.mockReset()
 	})
 
 	it("sends a web-search enabled ip-manager analysis request with goal and post folder mention", async () => {
@@ -48,6 +95,7 @@ describe("selfMediaPrePublishAnalysis", () => {
 			selectedProject: { id: "project-1" },
 			platform: "rednote",
 			analysisGoal: "ip-growth",
+			selectedModel,
 			post: {
 				meta: {
 					id: "post-1",
@@ -65,13 +113,46 @@ describe("selfMediaPrePublishAnalysis", () => {
 			} as never,
 		})
 
-		expect(mockCreateTopic).toHaveBeenCalledWith({
-			project_id: "project-1",
-			topic_name: "[发布前诊断] AI Tools",
-		})
-		expect(mockChat).toHaveBeenCalledTimes(1)
-		const payload = mockChat.mock.calls[0][1]
-		const richText = payload.message.rich_text
+		expect(mockCreateTopic).not.toHaveBeenCalled()
+		expect(mockChat).not.toHaveBeenCalled()
+		expect(mockNavigateToBatchTopic).not.toHaveBeenCalled()
+		expect(mockPublish).toHaveBeenCalledTimes(1)
+		expect(mockPublish.mock.calls[0]?.[0]).toBe("Create_New_Topic")
+		const createPayload = mockPublish.mock.calls[0]?.[1]
+		expect(createPayload).toEqual(
+			expect.objectContaining({
+				topicMode: "ip-manager",
+				topicName: "[发布前诊断] AI Tools",
+			}),
+		)
+		const sendPayload = createPayload.afterCreate
+		expect(sendPayload).toEqual(
+			expect.objectContaining({
+				send: true,
+				topicMode: "ip-manager",
+				selectedModel,
+			}),
+		)
+		const richText = {
+			content: JSON.stringify(sendPayload.content),
+			extra: sendPayload.extra,
+		}
+		expect(mockT).toHaveBeenCalledWith(
+			"detail.selfMedia.analysis.prompt.instruction",
+			expect.objectContaining({ ns: "super" }),
+		)
+		expect(mockT).toHaveBeenCalledWith(
+			"detail.selfMedia.analysis.prompt.opening",
+			expect.objectContaining({ ns: "super" }),
+		)
+		expect(mockT).not.toHaveBeenCalledWith(
+			"detail.selfMedia.analysis.prompt.openingPrefix",
+			expect.anything(),
+		)
+		expect(mockT).not.toHaveBeenCalledWith(
+			"detail.selfMedia.analysis.prompt.openingSuffix",
+			expect.anything(),
+		)
 		expect(richText.extra.super_agent).toEqual(
 			expect.objectContaining({
 				topic_pattern: "ip-manager",
@@ -89,10 +170,30 @@ describe("selfMediaPrePublishAnalysis", () => {
 				}),
 			},
 		])
-		expect(JSON.stringify(JSON.parse(richText.content))).toContain("IP增长")
-		expect(JSON.stringify(JSON.parse(richText.content))).toContain("二级分项评分")
-		expect(JSON.stringify(JSON.parse(richText.content))).toContain("按平台评分卡和目标场景")
-		expect(JSON.stringify(JSON.parse(richText.content))).toContain("证据清单")
-		expect(mockNavigateToBatchTopic).toHaveBeenCalledWith("project-1", expect.any(Object))
+		const content = JSON.parse(richText.content)
+		const contentText = JSON.stringify(content)
+		expect(contentText).toContain("IP增长")
+		expect(contentText).toContain("发布前诊断")
+		expect(contentText).toContain("证据清单")
+		expect(contentText).not.toContain("skill")
+		expect(contentText).not.toContain("self-media-pre-publish-analyzer")
+		expect(contentText).not.toContain("小红书图文基础维度")
+		expect(contentText).not.toContain("目标权重解释")
+		expect(content.content?.length).toBeLessThanOrEqual(3)
+		expect(content.content?.[0]?.content).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					type: "mention",
+					attrs: expect.objectContaining({
+						type: "project_directory",
+						data: expect.objectContaining({
+							directory_id: "post-dir",
+							directory_name: "post-1",
+							directory_path: "posts/post-1/",
+						}),
+					}),
+				}),
+			]),
+		)
 	})
 })
