@@ -3166,11 +3166,12 @@
 		"insertImage": "Insert Image",
 		"inspector": {
 			"agentPromptPlaceholder": "Describe the problem here",
-			"agentPromptSuffix": "Please handle the selected element:",
 			"agentPromptTitle": "[HTML Element Inspection] I selected an element on the page. Here are its details:",
 			"computedStyles": "Computed Styles",
 			"copySelector": "Copy Selector",
+			"file": "File",
 			"insertToConsole": "Query in Console",
+			"selectedElement": "Selected element",
 			"selector": "Selector",
 			"sendToAgent": "Send to Agent",
 			"size": "Size",

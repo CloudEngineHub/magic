@@ -1,3 +1,5 @@
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+
 export interface InspectorDetailAttrs {
 	/** Title paragraph content (context description shown above detail) */
 	title: string
@@ -13,6 +15,8 @@ export interface InspectorDetailAttrs {
 	styleCount: number
 	/** Truncated text content preview */
 	textContent: string
+	/** Optional source file mention for the inspected HTML file. */
+	fileMention?: TiptapMentionAttributes | null
 }
 
 export interface InspectorDetailOptions {}

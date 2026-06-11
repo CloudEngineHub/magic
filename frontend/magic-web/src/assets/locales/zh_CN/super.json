@@ -3169,11 +3169,12 @@
 		"insertImage": "新增图片",
 		"inspector": {
 			"agentPromptPlaceholder": "在此描述你遇到的问题",
-			"agentPromptSuffix": "请对选中元素进行处理：",
 			"agentPromptTitle": "[HTML 元素检查] 我选中了页面中的一个元素，其详细信息如下：",
 			"computedStyles": "计算样式",
 			"copySelector": "复制选择器",
+			"file": "文件",
 			"insertToConsole": "在控制台查询",
+			"selectedElement": "已选取的元素",
 			"selector": "选择器",
 			"sendToAgent": "发给 Agent 分析",
 			"size": "尺寸",

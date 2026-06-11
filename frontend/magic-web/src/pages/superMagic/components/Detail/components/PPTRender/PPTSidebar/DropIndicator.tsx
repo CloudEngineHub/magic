@@ -19,14 +19,14 @@ function DropIndicator({ position }: DropIndicatorProps) {
 		>
 			<div
 				className={cn(
-					"flex items-center justify-center rounded bg-primary/20",
+					"flex items-center justify-center rounded",
 					isVertical && "h-3 w-full px-2",
 					isHorizontal && "h-full w-3 py-2",
 				)}
 			>
 				<div
 					className={cn(
-						"rounded-full bg-primary opacity-30",
+						"rounded-full bg-primary opacity-70",
 						isVertical && "h-1 w-full",
 						isHorizontal && "h-full w-1",
 					)}

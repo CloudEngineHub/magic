@@ -13,10 +13,8 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from "react"
 import type { JSONContent } from "@tiptap/react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
 import { Crosshair, X, Copy, MousePointer, Send } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import { SUPER_PLACEHOLDER_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/super-placeholder/const"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { InspectedElementInfo, InspectedElementRect } from "./types"
@@ -284,45 +282,20 @@ export function buildAgentPromptContent(
 	t: (key: string) => string,
 	fileInfo?: { fileId: string; fileName: string; filePath: string },
 ): JSONContent {
-	const text = (s: string): JSONContent => ({ type: "text", text: s })
-	const para = (...content: JSONContent[]): JSONContent => ({
-		type: "paragraph",
-		content,
-	})
-	const emptyPara = (): JSONContent => ({ type: "paragraph" })
-	const placeholder = (placeholderText: string): JSONContent => ({
-		type: SUPER_PLACEHOLDER_TYPE,
-		attrs: {
-			type: "input",
-			props: { placeholder: placeholderText },
-		},
-	})
-
 	const paragraphs: JSONContent[] = []
-
-	// If we have a file, add an @mention of it at the top
-	if (fileInfo) {
-		const ext = fileInfo.fileName.includes(".")
-			? (fileInfo.fileName.split(".").pop() ?? "")
-			: ""
-		paragraphs.push({
-			type: "paragraph",
-			content: [
-				{
-					type: "mention",
-					attrs: {
-						type: MentionItemType.PROJECT_FILE,
-						data: {
-							file_id: fileInfo.fileId,
-							file_name: fileInfo.fileName,
-							file_path: fileInfo.filePath,
-							file_extension: ext,
-						},
-					},
+	const fileMention = fileInfo
+		? {
+				type: MentionItemType.PROJECT_FILE,
+				data: {
+					file_id: fileInfo.fileId,
+					file_name: fileInfo.fileName,
+					file_path: fileInfo.filePath,
+					file_extension: fileInfo.fileName.includes(".")
+						? (fileInfo.fileName.split(".").pop() ?? "")
+						: "",
 				},
-			],
-		})
-	}
+			}
+		: null
 
 	// Intro — insert an inspector-detail node that the editor will render as a collapsible panel
 	const KEY_STYLE_PROPS = [
@@ -375,26 +348,23 @@ export function buildAgentPromptContent(
 
 	// Inspector detail node (title is stored in attrs for serialization/rendering)
 	paragraphs.push({
-		type: INSPECTOR_DETAIL_TYPE,
-		attrs: {
-			title: t("stylePanel.inspector.agentPromptTitle"),
-			selector: info.selector,
-			tagName: info.tagName,
-			size: sizeStr,
-			computedStyles: JSON.stringify(computedStylesObj),
-			styleCount: styleLines.length,
-			textContent: textPreview,
-		},
+		type: "paragraph",
+		content: [
+			{
+				type: INSPECTOR_DETAIL_TYPE,
+				attrs: {
+					title: t("stylePanel.inspector.agentPromptTitle"),
+					selector: info.selector,
+					tagName: info.tagName,
+					size: sizeStr,
+					computedStyles: JSON.stringify(computedStylesObj),
+					styleCount: styleLines.length,
+					textContent: textPreview,
+					fileMention,
+				},
+			},
+		],
 	})
-
-	// User-fillable placeholder
-	paragraphs.push(emptyPara())
-	paragraphs.push(
-		para(
-			text(`${t("stylePanel.inspector.agentPromptSuffix")}`),
-			// placeholder(t("stylePanel.inspector.agentPromptPlaceholder")),
-		),
-	)
 
 	return { type: "doc", content: paragraphs }
 }
