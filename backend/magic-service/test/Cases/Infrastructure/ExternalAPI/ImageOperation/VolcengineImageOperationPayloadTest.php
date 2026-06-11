@@ -9,8 +9,10 @@ namespace HyperfTest\Cases\Infrastructure\ExternalAPI\ImageOperation;
 
 use App\Domain\ModelGateway\Entity\ValueObject\ImageInput;
 use App\Infrastructure\ExternalAPI\ImageEraser\Driver\VolcengineImageEraserDriver;
+use App\Infrastructure\ExternalAPI\ImageEraser\Driver\VolcengineJimengImageEraserDriver;
 use App\Infrastructure\ExternalAPI\ImageEraser\DTO\ImageEraserDriverRequest;
 use App\Infrastructure\ExternalAPI\ImageExpand\Driver\VolcengineImageExpandDriver;
+use App\Infrastructure\ExternalAPI\ImageExpand\Driver\VolcengineJimengImageExpandDriver;
 use App\Infrastructure\ExternalAPI\ImageExpand\DTO\ImageExpandDriverRequest;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -107,5 +109,122 @@ class VolcengineImageOperationPayloadTest extends TestCase
         $this->assertSame(0.2, $body['right']);
         $this->assertSame(1920, $body['max_height']);
         $this->assertSame(1920, $body['max_width']);
+    }
+
+    public function testJimengEraserBuildsOfficialInpaintingPayload(): void
+    {
+        $driver = (new ReflectionClass(VolcengineJimengImageEraserDriver::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod(VolcengineJimengImageEraserDriver::class, 'buildSubmitBody');
+
+        $body = $method->invoke($driver, new ImageEraserDriverRequest(
+            ImageInput::fromUrl('https://example.com/image.png'),
+            ImageInput::fromUrl('https://example.com/mask.png'),
+            null,
+            null,
+            123,
+            null,
+            null,
+        ), '删除', null);
+
+        $this->assertSame('jimeng_image2image_dream_inpaint', $body['req_key']);
+        $this->assertSame(['https://example.com/image.png', 'https://example.com/mask.png'], $body['image_urls']);
+        $this->assertArrayNotHasKey('binary_data_base64', $body);
+        $this->assertSame('删除', $body['prompt']);
+        $this->assertSame(123, $body['seed']);
+        $this->assertArrayNotHasKey('steps', $body);
+        $this->assertArrayNotHasKey('strength', $body);
+        $this->assertArrayNotHasKey('dilate_size', $body);
+        $this->assertArrayNotHasKey('quality', $body);
+    }
+
+    public function testJimengEraserBuildsBase64Payload(): void
+    {
+        $imageBase64 = base64_encode('jimeng-eraser-image');
+        $maskBase64 = base64_encode('jimeng-eraser-mask');
+
+        $driver = (new ReflectionClass(VolcengineJimengImageEraserDriver::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod(VolcengineJimengImageEraserDriver::class, 'buildSubmitBody');
+
+        $body = $method->invoke($driver, new ImageEraserDriverRequest(
+            ImageInput::fromDataUri('data:image/png;base64,' . $imageBase64),
+            ImageInput::fromDataUri('data:image/png;base64,' . $maskBase64),
+            null,
+            null,
+            null,
+            null,
+            null,
+        ), '删除', null);
+
+        $this->assertSame('jimeng_image2image_dream_inpaint', $body['req_key']);
+        $this->assertSame([$imageBase64, $maskBase64], $body['binary_data_base64']);
+        $this->assertArrayNotHasKey('image_urls', $body);
+        $this->assertSame('删除', $body['prompt']);
+        $this->assertArrayNotHasKey('seed', $body);
+    }
+
+    public function testJimengExpandBuildsOfficialCanvasOutpaintingPayload(): void
+    {
+        $driver = (new ReflectionClass(VolcengineJimengImageExpandDriver::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod(VolcengineJimengImageExpandDriver::class, 'buildSubmitBody');
+
+        $body = $method->invoke($driver, new ImageExpandDriverRequest(
+            ImageInput::fromUrl('https://example.com/canvas.png'),
+            ImageInput::fromUrl('https://example.com/mask.png'),
+            'extend naturally',
+            null,
+            null,
+            7.0,
+            -1,
+            0.1,
+            0.1,
+            0.2,
+            0.2,
+            1920,
+            1920,
+        ), null);
+
+        $this->assertSame('jimeng_img2img_seed3_painting_edit', $body['req_key']);
+        $this->assertSame(['https://example.com/canvas.png', 'https://example.com/mask.png'], $body['image_urls']);
+        $this->assertArrayNotHasKey('binary_data_base64', $body);
+        $this->assertSame('extend naturally', $body['prompt']);
+        $this->assertSame(-1, $body['seed']);
+        $this->assertArrayNotHasKey('top', $body);
+        $this->assertArrayNotHasKey('bottom', $body);
+        $this->assertArrayNotHasKey('left', $body);
+        $this->assertArrayNotHasKey('right', $body);
+        $this->assertArrayNotHasKey('scale', $body);
+        $this->assertArrayNotHasKey('max_height', $body);
+        $this->assertArrayNotHasKey('max_width', $body);
+    }
+
+    public function testJimengExpandBuildsBase64Payload(): void
+    {
+        $imageBase64 = base64_encode('jimeng-expand-canvas');
+        $maskBase64 = base64_encode('jimeng-expand-mask');
+
+        $driver = (new ReflectionClass(VolcengineJimengImageExpandDriver::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod(VolcengineJimengImageExpandDriver::class, 'buildSubmitBody');
+
+        $body = $method->invoke($driver, new ImageExpandDriverRequest(
+            ImageInput::fromDataUri('data:image/png;base64,' . $imageBase64),
+            ImageInput::fromDataUri('data:image/png;base64,' . $maskBase64),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+        ), 'configured prompt');
+
+        $this->assertSame('jimeng_img2img_seed3_painting_edit', $body['req_key']);
+        $this->assertSame([$imageBase64, $maskBase64], $body['binary_data_base64']);
+        $this->assertArrayNotHasKey('image_urls', $body);
+        $this->assertSame('configured prompt', $body['prompt']);
+        $this->assertArrayNotHasKey('seed', $body);
     }
 }
