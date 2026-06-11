@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 
 const mockSendSelfMediaPrePublishAnalysis = vi.hoisted(() => vi.fn())
 const mockToastError = vi.hoisted(() => vi.fn())
+const mockAICardCreateDialogRender = vi.hoisted(() => vi.fn())
 const mockLanguageModel = vi.hoisted(() => ({
 	id: "model-1",
 	group_id: "group-1",
@@ -75,6 +76,8 @@ vi.mock("react-i18next", () => ({
 					"detail.selfMedia.home.emptyTitle": "No articles yet",
 					"detail.selfMedia.home.emptyDesc": "Create your first article",
 					"detail.selfMedia.home.articleCount": "1 article",
+					"detail.selfMedia.home.postReviewCard": "Review card",
+					"detail.selfMedia.home.postReviewCardName": "Review: {{title}}",
 					"detail.selfMedia.home.brandConfig": "Brand config",
 					"detail.selfMedia.initPanel.platforms.rednote": "RedNote",
 					"detail.selfMedia.initPanel.platforms.instagram": "Instagram",
@@ -152,9 +155,32 @@ vi.mock("../components/BrandConfigDialog", () => ({
 }))
 
 vi.mock("../components/AICardCreateDialog", () => ({
-	default: function MockAICardCreateDialog({ open }: { open: boolean }) {
+	default: function MockAICardCreateDialog({
+		open,
+		initialValues,
+	}: {
+		open: boolean
+		initialValues?: {
+			taskName?: string
+			prompt?: string
+			template?: string
+			enabled?: boolean
+		}
+	}) {
+		mockAICardCreateDialogRender({ open, initialValues })
 		return open ? (
-			<div data-testid="self-media-ai-card-create-dialog">ai-card-create</div>
+			<div data-testid="self-media-ai-card-create-dialog">
+				<div data-testid="self-media-ai-card-create-task-name">
+					{initialValues?.taskName}
+				</div>
+				<div data-testid="self-media-ai-card-create-prompt">{initialValues?.prompt}</div>
+				<div data-testid="self-media-ai-card-create-template">
+					{initialValues?.template}
+				</div>
+				<div data-testid="self-media-ai-card-create-enabled">
+					{String(initialValues?.enabled)}
+				</div>
+			</div>
 		) : null
 	},
 }))
@@ -334,6 +360,7 @@ describe("SelfMediaRootRender", () => {
 		mockStore.goHomeList.mockReset()
 		mockSendSelfMediaPrePublishAnalysis.mockReset()
 		mockToastError.mockReset()
+		mockAICardCreateDialogRender.mockReset()
 	})
 
 	it("shows the article home before opening platform detail", () => {
@@ -759,6 +786,41 @@ describe("SelfMediaRootRender", () => {
 
 		expect(screen.getByTestId("self-media-home-page")).toBeInTheDocument()
 		expect(screen.queryByTestId("mock-self-media-init-panel")).not.toBeInTheDocument()
+	})
+
+	it("opens an AI card review draft from a published article", () => {
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={[]}
+				attachmentList={[]}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-review-card-post-1"))
+
+		expect(screen.getByTestId("self-media-ai-card-create-dialog")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-ai-card-create-task-name")).toHaveTextContent(
+			"Post One Feed",
+		)
+		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
+			"发布后表现复盘",
+		)
+		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
+			"Post One Feed",
+		)
+		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
+			"RedNote",
+		)
+		expect(screen.getByTestId("self-media-ai-card-create-prompt")).toHaveTextContent(
+			"Magic Lab",
+		)
+		expect(screen.getByTestId("self-media-ai-card-create-template")).toHaveTextContent(
+			"analytics-panel",
+		)
+		expect(screen.getByTestId("self-media-ai-card-create-enabled")).toHaveTextContent("false")
 	})
 
 	it("keeps the init panel mounted when generated posts arrive", () => {

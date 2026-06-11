@@ -19,11 +19,21 @@ import { createAICardViaTopic } from "../services/aiCardCreate"
 
 const AI_CARD_TOPIC_PATTERN = "ip-manager"
 
+const DEFAULT_AI_CARD_FORM_VALUES: AICardFormFieldsValues = {
+	taskName: "",
+	prompt: "",
+	template: "hotspot-tracker",
+	enabled: true,
+}
+
+export type AICardCreateInitialValues = Partial<AICardFormFieldsValues>
+
 interface AICardCreateDialogProps {
 	open: boolean
 	onOpenChange: (open: boolean) => void
 	projectId: string
 	folderPath?: string
+	initialValues?: AICardCreateInitialValues
 }
 
 function AICardCreateDialog({
@@ -31,14 +41,12 @@ function AICardCreateDialog({
 	onOpenChange,
 	projectId,
 	folderPath,
+	initialValues,
 }: AICardCreateDialogProps) {
 	const { t } = useTranslation("super")
-	const [formValues, setFormValues] = useState<AICardFormFieldsValues>({
-		taskName: "",
-		prompt: "",
-		template: "hotspot-tracker",
-		enabled: true,
-	})
+	const [formValues, setFormValues] = useState<AICardFormFieldsValues>(
+		DEFAULT_AI_CARD_FORM_VALUES,
+	)
 	const [submitting, setSubmitting] = useState(false)
 	const [modelList, setModelList] = useState<ModelItem[]>([])
 	const [imageModelList, setImageModelList] = useState<ModelItem[]>([])
@@ -46,6 +54,8 @@ function AICardCreateDialog({
 
 	useEffect(() => {
 		if (open) {
+			setFormValues({ ...DEFAULT_AI_CARD_FORM_VALUES, ...initialValues })
+
 			const langModels = superMagicModeService.getModelListByMode(AI_CARD_TOPIC_PATTERN)
 			const imgModels = superMagicModeService.getImageModelListByMode(AI_CARD_TOPIC_PATTERN)
 			const vidModels = superMagicModeService.getVideoModelListByMode(AI_CARD_TOPIC_PATTERN)
@@ -73,7 +83,7 @@ function AICardCreateDialog({
 				}))
 			})
 		}
-	}, [open, projectId])
+	}, [open, projectId, initialValues])
 
 	const isValid = formValues.taskName.trim() && formValues.prompt.trim()
 
@@ -102,7 +112,7 @@ function AICardCreateDialog({
 			// Close dialog after successful submission
 			onOpenChange(false)
 			// Reset form
-			setFormValues({ taskName: "", prompt: "", template: "hotspot-tracker", enabled: true })
+			setFormValues(DEFAULT_AI_CARD_FORM_VALUES)
 		} finally {
 			setSubmitting(false)
 		}
