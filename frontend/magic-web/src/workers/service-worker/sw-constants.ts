@@ -63,6 +63,42 @@ export const DEFAULT_WORKBOX_RUNTIME_URL =
 /** Max concurrent fetch+put operations during install precache. */
 export const PRECACHE_BATCH_CONCURRENCY = 20
 
+/** Warm-up batch size for low-tier hardware (hardwareConcurrency <= WARMUP_LOW_TIER_MAX_CORES). */
+export const WARMUP_LOW_BATCH_SIZE = 6
+
+/** Warm-up batch size for medium-tier hardware. */
+export const WARMUP_MEDIUM_BATCH_SIZE = 8
+
+/** Warm-up batch size for high-tier hardware. */
+export const WARMUP_HIGH_BATCH_SIZE = 10
+
+/** Warm-up interval (ms) for low-tier hardware (hardwareConcurrency <= WARMUP_LOW_TIER_MAX_CORES). */
+export const WARMUP_LOW_INTERVAL_MS = 5000
+
+/** Warm-up interval (ms) for medium-tier hardware. */
+export const WARMUP_MEDIUM_INTERVAL_MS = 3000
+
+/** Warm-up interval (ms) for high-tier hardware. */
+export const WARMUP_HIGH_INTERVAL_MS = 500
+
+/** Inclusive upper bound of logical CPU cores for the low warm-up tier. */
+export const WARMUP_LOW_TIER_MAX_CORES = 6
+
+/** Inclusive upper bound of logical CPU cores for the medium warm-up tier. */
+export const WARMUP_MEDIUM_TIER_MAX_CORES = 11
+
+/** Minimum allowed warm-up batch size (SW-side clamp). */
+export const WARMUP_MIN_BATCH_SIZE = 6
+
+/** Maximum allowed warm-up batch size (SW-side clamp). */
+export const WARMUP_MAX_BATCH_SIZE = 10
+
+/** Minimum allowed warm-up interval in milliseconds (SW-side clamp). */
+export const WARMUP_MIN_INTERVAL_MS = 200
+
+/** Maximum allowed warm-up interval in milliseconds (SW-side clamp). */
+export const WARMUP_MAX_INTERVAL_MS = 10000
+
 const SECONDS_PER_DAY = 60 * 60 * 24
  
 export const CACHE_TTL_3_DAYS = SECONDS_PER_DAY * 3
@@ -93,12 +129,12 @@ export const CACHEABLE_API_RULES: ReadonlyArray<string | RegExp> = [
 
 /**
  * Checks whether a given API request URL or pathname matches the cacheable API rules.
- * 
- * NOTE: 
- * 1. This function will automatically clean up the query parameters and hashes, 
- *    extracting the clean pathname to prevent false matching when a URL (e.g. callback URL) 
+ *
+ * NOTE:
+ * 1. This function will automatically clean up the query parameters and hashes,
+ *    extracting the clean pathname to prevent false matching when a URL (e.g. callback URL)
  *    is included as a query parameter of another non-cacheable API request.
- * 2. When writing RegExp rules in CACHEABLE_API_RULES, ALWAYS anchor them (e.g. starting with `/^` 
+ * 2. When writing RegExp rules in CACHEABLE_API_RULES, ALWAYS anchor them (e.g. starting with `/^`
  *    and ending with `$/`) or write strict patterns to prevent partial matching bugs.
  */
 export function isCacheableApiRequest(urlOrPath: string): boolean {

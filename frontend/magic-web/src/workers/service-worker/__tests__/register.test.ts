@@ -29,13 +29,24 @@ interface WarmUpTestEnv {
 	fetchMock: ReturnType<typeof vi.fn>
 }
 
+interface WarmUpTestEnvOptions {
+	hardwareConcurrency?: number
+	saveData?: boolean
+	assets?: string[]
+}
+
 /** Sets up SW registration with an active controller and immediate idle callback for warmup tests. */
-function setupWarmUpTestEnv(): WarmUpTestEnv {
+function setupWarmUpTestEnv(options: WarmUpTestEnvOptions = {}): WarmUpTestEnv {
+	const {
+		hardwareConcurrency = 8,
+		saveData = false,
+		assets = ["/assets/sample-a1b2c3.js"],
+	} = options
 	const postMessage = vi.fn()
 	const worker = { postMessage } as unknown as ServiceWorker
 	const fetchMock = vi.fn().mockResolvedValue({
 		ok: true,
-		json: async () => ["/assets/sample-a1b2c3.js"],
+		json: async () => assets,
 	})
 
 	vi.stubGlobal("fetch", fetchMock)
@@ -54,6 +65,16 @@ function setupWarmUpTestEnv(): WarmUpTestEnv {
 	})
 
 	const register = vi.fn().mockResolvedValue({})
+
+	Object.defineProperty(navigator, "hardwareConcurrency", {
+		configurable: true,
+		value: hardwareConcurrency,
+	})
+
+	Object.defineProperty(navigator, "connection", {
+		configurable: true,
+		value: { saveData },
+	})
 
 	Object.defineProperty(navigator, "serviceWorker", {
 		configurable: true,
@@ -420,6 +441,20 @@ describe("registerAppServiceWorker", () => {
 		)
 	})
 
+	it("skips static asset warmup when save-data mode is enabled", async () => {
+		devicesState.isMobile = false
+		const { register, postMessage, fetchMock } = setupWarmUpTestEnv({ saveData: true })
+
+		registerAppServiceWorker()
+		await flushMicrotasks(8)
+
+		expect(register).toHaveBeenCalledTimes(1)
+		expect(fetchMock).not.toHaveBeenCalled()
+		expect(postMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "START_WARMUP" }),
+		)
+	})
+
 	it("warms up static assets on desktop after idle", async () => {
 		devicesState.isMobile = false
 		const { register, postMessage, fetchMock } = setupWarmUpTestEnv()
@@ -432,6 +467,38 @@ describe("registerAppServiceWorker", () => {
 		expect(postMessage).toHaveBeenCalledWith({
 			type: "START_WARMUP",
 			assets: ["/assets/sample-a1b2c3.js"],
+			intervalMs: 3000,
+			batchSize: 8,
+		})
+	})
+
+	it("uses low-tier warm-up tuning when core count is at most 6", async () => {
+		devicesState.isMobile = false
+		const { postMessage } = setupWarmUpTestEnv({ hardwareConcurrency: 2 })
+
+		registerAppServiceWorker()
+		await flushMicrotasks(8)
+
+		expect(postMessage).toHaveBeenCalledWith({
+			type: "START_WARMUP",
+			assets: ["/assets/sample-a1b2c3.js"],
+			intervalMs: 5000,
+			batchSize: 6,
+		})
+	})
+
+	it("uses high-tier warm-up tuning when core count is above 11", async () => {
+		devicesState.isMobile = false
+		const { postMessage } = setupWarmUpTestEnv({ hardwareConcurrency: 16 })
+
+		registerAppServiceWorker()
+		await flushMicrotasks(8)
+
+		expect(postMessage).toHaveBeenCalledWith({
+			type: "START_WARMUP",
+			assets: ["/assets/sample-a1b2c3.js"],
+			intervalMs: 500,
+			batchSize: 10,
 		})
 	})
 })
