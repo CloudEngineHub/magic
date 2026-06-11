@@ -111,6 +111,33 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("should include flex item and parent flex context in computed styles", () => {
+			container.innerHTML = `
+				<div id="layout" style="display: flex; flex-direction: row; align-items: stretch;">
+					<main id="content" style="flex: 1 1 0%; min-width: 0;">Content</main>
+				</div>
+			`
+			const element = container.querySelector("#content") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					computedStyles: expect.objectContaining({
+						parentDisplay: "flex",
+						parentFlexDirection: "row",
+						parentAlignItems: "stretch",
+						flexGrow: "1",
+						flexShrink: "1",
+						flexBasis: "0%",
+						minWidth: expect.any(String),
+						alignSelf: expect.any(String),
+					}),
+				}),
+			)
+		})
+
 		it("should include element rect", () => {
 			container.innerHTML = "<div id='test'>Content</div>"
 			const element = container.querySelector("#test") as HTMLElement

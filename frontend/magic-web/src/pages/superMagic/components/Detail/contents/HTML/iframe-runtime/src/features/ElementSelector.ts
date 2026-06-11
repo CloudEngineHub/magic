@@ -179,6 +179,12 @@ export class ElementSelector {
 			"justifyContent",
 			"alignItems",
 			"flexWrap",
+			"flexGrow",
+			"flexShrink",
+			"flexBasis",
+			"minWidth",
+			"minHeight",
+			"alignSelf",
 			"gap",
 			"gridTemplateColumns",
 			"gridTemplateRows",
@@ -204,6 +210,14 @@ export class ElementSelector {
 				styles[prop] = value
 			}
 		})
+
+		const parent = element.parentElement
+		if (parent) {
+			const parentComputed = window.getComputedStyle(parent)
+			styles.parentDisplay = parentComputed.display
+			styles.parentFlexDirection = parentComputed.flexDirection
+			styles.parentAlignItems = parentComputed.alignItems
+		}
 
 		// For positioning properties (top, left, right, bottom), prefer inline styles
 		// because they reflect the actual values we set, not the computed values
