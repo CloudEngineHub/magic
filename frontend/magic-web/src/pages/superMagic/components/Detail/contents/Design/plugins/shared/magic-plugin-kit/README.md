@@ -532,8 +532,8 @@ validate: ({ state, t }) => {
 - `title`: 区块标题
 - `suffix`: 标题右侧补充文案
 - `placeholder`: 输入框占位文案
-- `rows`: 文本框默认行数
-- `maxLength`: 最大输入长度
+- `rows`: 文本框行数，默认 `3`
+- `maxLength`: 最大输入长度，默认 `2000`
 - `help`: 区块底部说明文案
 - `shellClassName`: 额外挂到输入壳容器上的 class
 - `deps`: 额外依赖的 state key，例如 `when` 依赖其他字段时需要声明
@@ -668,12 +668,13 @@ aiGenerate: {
 
 ### `tabs`
 
-用于分段切换的 Tab 区块。切换 Tab 后，仅渲染当前 Tab 对应的面板内容。
+用于分段切换的 Tab 区块。可以只做状态切换，也可以渲染当前 Tab 对应的面板内容。
 
 约定：
 
-- 需要「切换 Tab 并展示不同内容」时，优先使用 `tabs`，不要用 `option-group` 搭配多个 `when`
-- Tab 面板内的 section 会嵌套在 Tab 容器下渲染，不再作为顶层 `sections` 平铺
+- 需要「切换 Tab 并展示不同内容」时，优先使用 `tabs`
+- 如果内容适合顺延在顶层 `sections` 中渲染，可以不传 `panels`，后续 section 用 `when` 判断当前 `stateKey`
+- 如果内容需要嵌套在 Tab 容器内，则传 `panels`
 
 常用字段：
 
@@ -683,7 +684,27 @@ aiGenerate: {
 - `tabsClassName`: 额外挂到 Tab 容器上的 class
 - `options`: Tab 列表，结构与 `option-group` 的 `options` 一致
 - `patchOnSelect`: 切换 Tab 时的额外 state patch, 局部更新同步
-- `panels`: 面板配置，按 `value` 与 `options` 对应
+- `panels`: 可选，面板配置，按 `value` 与 `options` 对应
+
+无 `panels` 的纯切换写法：
+
+```js
+{
+	id: "displayStyle",
+	kind: "tabs",
+	stateKey: "displayStyle",
+	options: [
+		{ value: "flat", label: t("displayStyle.flat", "平铺图") },
+		{ value: "mannequin", label: t("displayStyle.mannequin", "人台图") },
+	],
+},
+{
+	id: "poseReferenceImage",
+	kind: "image-slot",
+	stateKey: "poseReferenceImage",
+	when: ({ state }) => state.displayStyle === "mannequin",
+}
+```
 
 `panels` 结构：
 

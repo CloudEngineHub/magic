@@ -1,30 +1,33 @@
 /* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
-/* 参考图背景 */
-const BACKGROUND_MODE_IMAGE = "image"
-/* 文生背景 */
-const BACKGROUND_MODE_PROMPT = "prompt"
-/* 智能匹配 */
-const PLACEMENT_MODE_SMART = "smart"
-/* 同位替换 */
-const PLACEMENT_MODE_REPLACE = "replace"
-/* 硬质商品 */
-const PLACEMENT_MODE_NATURAL = "natural"
-/* 柔软衣物 */
-const PLACEMENT_MODE_SOFT = "soft"
-/* 仅换背景 */
-const PLACEMENT_MODE_BACKGROUND = "background"
-/* 背景描述最大长度 */
-const BACKGROUND_PROMPT_MAX_LENGTH = 2000
+const BACKGROUND_MODE = {
+	/* 参考图背景 */
+	IMAGE: "image",
+	/* 文生背景 */
+	PROMPT: "prompt",
+}
+
+const PLACEMENT_MODE = {
+	/* 智能匹配 */
+	SMART: "smart",
+	/* 同位替换 */
+	REPLACE: "replace",
+	/* 硬质商品 */
+	NATURAL: "natural",
+	/* 柔软衣物 */
+	SOFT: "soft",
+	/* 仅换背景 */
+	BACKGROUND: "background",
+}
 
 /* 初始化状态 */
 function createInitialState() {
 	return {
 		productImages: [],
-		backgroundMode: BACKGROUND_MODE_IMAGE,
+		backgroundMode: BACKGROUND_MODE.IMAGE,
 		backgroundImage: null,
 		backgroundPrompt: "",
-		placementMode: PLACEMENT_MODE_SMART,
+		placementMode: PLACEMENT_MODE.SMART,
 		qualityMode: "",
 	}
 }
@@ -32,11 +35,11 @@ function createInitialState() {
 function buildBackgroundModeOptions(t) {
 	return [
 		{
-			value: BACKGROUND_MODE_IMAGE,
+			value: BACKGROUND_MODE.IMAGE,
 			label: t("backgroundMode.image", "参考背景图"),
 		},
 		{
-			value: BACKGROUND_MODE_PROMPT,
+			value: BACKGROUND_MODE.PROMPT,
 			label: t("backgroundMode.prompt", "文生背景"),
 		},
 	]
@@ -44,7 +47,7 @@ function buildBackgroundModeOptions(t) {
 
 const PLACEMENT_MODE_DEFINITIONS = [
 	{
-		value: PLACEMENT_MODE_SMART,
+		value: PLACEMENT_MODE.SMART,
 		labelKey: "placement.smart",
 		labelFallback: "智能匹配",
 		descriptionKey: "placement.smart.desc",
@@ -59,7 +62,7 @@ const PLACEMENT_MODE_DEFINITIONS = [
 		},
 	},
 	{
-		value: PLACEMENT_MODE_REPLACE,
+		value: PLACEMENT_MODE.REPLACE,
 		labelKey: "placement.replace",
 		labelFallback: "同位替换",
 		descriptionKey: "placement.replace.desc",
@@ -70,7 +73,7 @@ const PLACEMENT_MODE_DEFINITIONS = [
 		},
 	},
 	{
-		value: PLACEMENT_MODE_NATURAL,
+		value: PLACEMENT_MODE.NATURAL,
 		labelKey: "placement.natural",
 		labelFallback: "硬质商品",
 		descriptionKey: "placement.natural.desc",
@@ -81,7 +84,7 @@ const PLACEMENT_MODE_DEFINITIONS = [
 		},
 	},
 	{
-		value: PLACEMENT_MODE_SOFT,
+		value: PLACEMENT_MODE.SOFT,
 		labelKey: "placement.soft",
 		labelFallback: "柔软衣物",
 		descriptionKey: "placement.soft.desc",
@@ -92,7 +95,7 @@ const PLACEMENT_MODE_DEFINITIONS = [
 		},
 	},
 	{
-		value: PLACEMENT_MODE_BACKGROUND,
+		value: PLACEMENT_MODE.BACKGROUND,
 		labelKey: "placement.background",
 		labelFallback: "仅换背景",
 		descriptionKey: "placement.background.desc",
@@ -122,13 +125,13 @@ function buildCurrentTextBlock(currentText) {
 
 function getPlacementModeConstraint(placementMode) {
 	switch (placementMode) {
-		case PLACEMENT_MODE_NATURAL:
+		case PLACEMENT_MODE.NATURAL:
 			return "背景应适合硬质商品自然落地、桌面摆放、靠放或形成合理接触阴影。"
-		case PLACEMENT_MODE_SOFT:
+		case PLACEMENT_MODE.SOFT:
 			return "背景应适合柔软衣物平铺、搭放、挂放或自然垂落，避免让衣物直立。"
-		case PLACEMENT_MODE_BACKGROUND:
+		case PLACEMENT_MODE.BACKGROUND:
 			return "背景应尽量简单干净，减少复杂透视、强遮挡和强道具，不要求重新摆放商品。"
-		case PLACEMENT_MODE_SMART:
+		case PLACEMENT_MODE.SMART:
 		default:
 			return "背景应适合自动摆放，并为不同商品提供自然、合理、商业摄影化的承托关系。"
 	}
@@ -146,7 +149,7 @@ function buildPromptCompletionUserPrompt({ imageCount, placementMode, currentTex
 
 function resolvePlacementPromptSuffix(definition, { backgroundMode, backgroundReference, locale }) {
 	const backgroundInstruction =
-		backgroundMode === BACKGROUND_MODE_IMAGE && definition.promptSuffixBackgroundInstruction
+		backgroundMode === BACKGROUND_MODE.IMAGE && definition.promptSuffixBackgroundInstruction
 			? (
 					MagicPromptLocale.pickText(
 						definition.promptSuffixBackgroundInstruction,
@@ -166,8 +169,8 @@ function buildPlacementOptions(t, backgroundMode) {
 		label: t(definition.labelKey, definition.labelFallback),
 		description: t(definition.descriptionKey, definition.descriptionFallback),
 	}))
-	if (backgroundMode === BACKGROUND_MODE_PROMPT) {
-		return options.filter((option) => option.value !== PLACEMENT_MODE_REPLACE)
+	if (backgroundMode === BACKGROUND_MODE.PROMPT) {
+		return options.filter((option) => option.value !== PLACEMENT_MODE.REPLACE)
 	}
 	return options
 }
@@ -177,13 +180,13 @@ function getMaxReferenceImages(state, helpers) {
 }
 
 function getBackgroundReferenceCount(state) {
-	if (state.backgroundMode === BACKGROUND_MODE_IMAGE && state.backgroundImage) return 1
+	if (state.backgroundMode === BACKGROUND_MODE.IMAGE && state.backgroundImage) return 1
 	return 0
 }
 
 function getReferenceAssetsForMode(state) {
 	const assets = [...state.productImages]
-	if (state.backgroundMode === BACKGROUND_MODE_IMAGE && state.backgroundImage) {
+	if (state.backgroundMode === BACKGROUND_MODE.IMAGE && state.backgroundImage) {
 		assets.push(state.backgroundImage)
 	}
 	return assets
@@ -191,7 +194,7 @@ function getReferenceAssetsForMode(state) {
 
 function getReferenceAssetsForBaseImage(state, baseImage) {
 	const assets = [baseImage]
-	if (state.backgroundMode === BACKGROUND_MODE_IMAGE && state.backgroundImage) {
+	if (state.backgroundMode === BACKGROUND_MODE.IMAGE && state.backgroundImage) {
 		assets.push(state.backgroundImage)
 	}
 	return assets
@@ -234,7 +237,7 @@ function buildProductIdentityInstruction({ locale, productReference }) {
 
 function buildSceneInstruction({ backgroundMode, backgroundPrompt, backgroundReference, locale }) {
 	if (MagicPromptLocale.isChinese(locale)) {
-		if (backgroundMode === BACKGROUND_MODE_IMAGE) {
+		if (backgroundMode === BACKGROUND_MODE.IMAGE) {
 			return (
 				`${backgroundReference} 仅作为背景参考图，复用其环境、空间结构、景深层次、布光氛围、色彩基调和主要背景元素。` +
 				"只替换背景与环境，不改变商品本体。"
@@ -247,7 +250,7 @@ function buildSceneInstruction({ backgroundMode, backgroundPrompt, backgroundRef
 		)
 	}
 
-	if (backgroundMode === BACKGROUND_MODE_IMAGE) {
+	if (backgroundMode === BACKGROUND_MODE.IMAGE) {
 		return (
 			`${backgroundReference} is ONLY a background reference. Reuse its environment, spatial structure, depth layering, lighting mood, color palette, and major background elements. ` +
 			"Change only the background and environment while keeping the product itself unchanged. "
@@ -262,8 +265,8 @@ function buildSceneInstruction({ backgroundMode, backgroundPrompt, backgroundRef
 
 function buildPlacementInstruction({ backgroundMode, placementMode, backgroundReference, locale }) {
 	const normalizedPlacementMode =
-		backgroundMode === BACKGROUND_MODE_PROMPT && placementMode === PLACEMENT_MODE_REPLACE
-			? PLACEMENT_MODE_SMART
+		backgroundMode === BACKGROUND_MODE.PROMPT && placementMode === PLACEMENT_MODE.REPLACE
+			? PLACEMENT_MODE.SMART
 			: placementMode
 
 	return resolvePlacementPromptSuffix(getPlacementModeDefinition(normalizedPlacementMode), {
@@ -407,16 +410,16 @@ registerMagicCanvasPlugin({
 					options: buildBackgroundModeOptions(t),
 					patchOnSelect: (value, { state }) => {
 						if (
-							value === BACKGROUND_MODE_PROMPT &&
-							state.placementMode === PLACEMENT_MODE_REPLACE
+							value === BACKGROUND_MODE.PROMPT &&
+							state.placementMode === PLACEMENT_MODE.REPLACE
 						) {
-							return { placementMode: PLACEMENT_MODE_SMART }
+							return { placementMode: PLACEMENT_MODE.SMART }
 						}
 						return null
 					},
 					panels: [
 						{
-							value: BACKGROUND_MODE_IMAGE,
+							value: BACKGROUND_MODE.IMAGE,
 							sections: [
 								{
 									id: "backgroundImage",
@@ -454,7 +457,7 @@ registerMagicCanvasPlugin({
 							],
 						},
 						{
-							value: BACKGROUND_MODE_PROMPT,
+							value: BACKGROUND_MODE.PROMPT,
 							sections: [
 								{
 									id: "backgroundPrompt",
@@ -465,7 +468,6 @@ registerMagicCanvasPlugin({
 										"输入背景描述内容，如：浅灰色摄影棚背景，柔和侧光，干净阴影...",
 									),
 									rows: 5,
-									maxLength: BACKGROUND_PROMPT_MAX_LENGTH,
 									help: t(
 										"help.backgroundPrompt",
 										"适合商品细节复杂、背景相对简单的场景；描述越具体，背景越稳定。",
@@ -483,10 +485,6 @@ registerMagicCanvasPlugin({
 													placementMode: state.placementMode,
 													currentText: state.backgroundPrompt,
 												}),
-											emptyMessage: t(
-												"error.aiPromptEmpty",
-												"AI 未生成有效背景提示词，请重试",
-											),
 										},
 									},
 								},
@@ -535,8 +533,8 @@ registerMagicCanvasPlugin({
 				loadingLabel: t("button.generating", "生成中…"),
 				isDisabled: ({ state }) =>
 					!state.productImages.length ||
-					(state.backgroundMode === BACKGROUND_MODE_IMAGE && !state.backgroundImage) ||
-					(state.backgroundMode === BACKGROUND_MODE_PROMPT &&
+					(state.backgroundMode === BACKGROUND_MODE.IMAGE && !state.backgroundImage) ||
+					(state.backgroundMode === BACKGROUND_MODE.PROMPT &&
 						!state.backgroundPrompt.trim()),
 				validate: ({ state, helpers }) => {
 					const selectedSize = helpers.getSelectedSize(state)

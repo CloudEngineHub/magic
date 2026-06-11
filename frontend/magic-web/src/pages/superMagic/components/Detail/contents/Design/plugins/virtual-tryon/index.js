@@ -223,8 +223,6 @@ registerMagicCanvasPlugin({
 						"extra.placeholder",
 						"指定模特特征、场景、色调、风格等，例如：亚洲女性模特，25岁，身材高挑，站在时尚街头，暖色调，胶片感",
 					),
-					rows: 3,
-					maxLength: 2000,
 					deps: ["garments", "modelImage", "style"],
 					aiGenerate: {
 						label: t("button.aiPlaceholder", "AI 生成"),
@@ -239,10 +237,6 @@ registerMagicCanvasPlugin({
 									style: state.style,
 									currentText: state.extra,
 								}),
-							emptyMessage: t(
-								"error.aiPromptEmpty",
-								"AI 未生成有效额外描述，请重试",
-							),
 						},
 					},
 				},

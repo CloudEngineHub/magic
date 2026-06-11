@@ -1,6 +1,8 @@
 ;(function initMagicPluginKit(global) {
 	if (global.MagicPluginKit) return
 
+	const MAX_TEXT_LENGTH = 2000
+	const MAX_TEXT_AREA_ROWS = 3
 	const IMAGE_GENERATION_CONFIG_PREFIX = "image_generation_config."
 	const DEFAULT_SIZE_CONTROL_RATIO_OPTIONS = ["1:1", "3:4", "4:5", "9:16", "16:9"]
 	const DEFAULT_MAX_OUTPUT_IMAGES = 4
@@ -1417,7 +1419,7 @@
 		/* 渲染 textarea */
 		function renderTextarea(section) {
 			const value = typeof state[section.stateKey] === "string" ? state[section.stateKey] : ""
-			const maxLength = Number(section.maxLength)
+			const maxLength = section.maxLength ? Number(section.maxLength) : MAX_TEXT_LENGTH
 			const hasMaxLength = Number.isFinite(maxLength) && maxLength > 0
 			const hasAiGenerate = isTextareaAiGenerateEnabled(section)
 			const aiConfig = section.aiGenerate
@@ -1426,7 +1428,7 @@
 			const count = hasMaxLength
 				? createElement("span", "mpk-textarea-count", `${value.length} / ${maxLength}`)
 				: null
-			textarea.rows = Number(section.rows) > 0 ? Number(section.rows) : 5
+			textarea.rows = Number(section.rows) > 0 ? Number(section.rows) : MAX_TEXT_AREA_ROWS
 			textarea.placeholder = section.placeholder ?? ""
 			textarea.value = value
 			if (hasMaxLength) {
@@ -1637,14 +1639,16 @@
 
 			if (!sectionView) {
 				const sectionNode = createSection(section)
+				const hasPanels = Array.isArray(section.panels) && section.panels.length > 0
 				const tabsRoot = createElement(
 					"div",
 					`mpk-tabs ${section.tabsClassName ?? ""}`.trim(),
 				)
 				const tabsList = createElement("div", "mpk-tabs-list")
-				const panelHost = createElement("div", "mpk-tabs-panel")
+				const panelHost = hasPanels ? createElement("div", "mpk-tabs-panel") : null
 				sectionNode.append(tabsRoot)
-				tabsRoot.append(tabsList, panelHost)
+				tabsRoot.append(tabsList)
+				if (panelHost) tabsRoot.append(panelHost)
 				if (section.help) {
 					sectionNode.append(createElement("p", "mpk-help", section.help))
 				}
@@ -1687,6 +1691,7 @@
 				button.title = option.description ?? ""
 			})
 
+			if (!sectionView.panelHost) return
 			sectionView.panelHost.replaceChildren()
 			const activePanel = (section.panels ?? []).find((panel) => panel.value === activeValue)
 			for (const childSection of activePanel?.sections ?? []) {
