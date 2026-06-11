@@ -1168,17 +1168,17 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	public async getFullHTMLImageElement(options?: {
 		variant?: ImageResourceVariant
 		applyToView?: boolean
-	}): Promise<{ image: ImageSource; release: () => void } | null> {
+	}): Promise<{ image: ImageSource } | null> {
 		const variant = options?.variant ?? "full"
 		const applyToView = options?.applyToView ?? variant !== "full"
 
 		if (variant !== "full") {
 			const image = await this.getHTMLImageElement({ variant, applyToView })
-			return image ? { image, release: () => undefined } : null
+			return image ? { image } : null
 		}
 
 		if (this.canUseLoadedImageForVariant(variant) && this.loadedImage) {
-			return { image: this.loadedImage, release: () => undefined }
+			return { image: this.loadedImage }
 		}
 
 		if (this.isImageGenerationPending()) {
@@ -1189,7 +1189,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			try {
 				await this.ossSrcPromise
 				if (this.canUseLoadedImageForVariant(variant) && this.loadedImage) {
-					return { image: this.loadedImage, release: () => undefined }
+					return { image: this.loadedImage }
 				}
 			} catch (error) {
 				return null
@@ -1211,7 +1211,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			return {
 				image: resource.image,
-				release: () => undefined,
 			}
 		} catch (error) {
 			return null
@@ -1315,10 +1314,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		offsetY: number,
 		options?: { shouldDrawBorder?: boolean; width?: number; height?: number },
 	): Promise<boolean> {
-		let fullImage: { image: ImageSource; release: () => void } | null = null
 		try {
 			// 获取图片元素
-			fullImage = await this.getFullHTMLImageElement({ variant: "full" })
+			const fullImage = await this.getFullHTMLImageElement({ variant: "full" })
 			const img = fullImage?.image
 			if (!img) {
 				return false
@@ -1371,8 +1369,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			return true
 		} catch (error) {
 			return false
-		} finally {
-			fullImage?.release()
 		}
 	}
 

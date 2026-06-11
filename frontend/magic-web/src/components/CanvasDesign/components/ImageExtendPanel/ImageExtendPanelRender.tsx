@@ -329,40 +329,34 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 							const fullImage = await elementInstance.getFullHTMLImageElement({
 								variant: "full",
 							})
-							try {
-								const imageInfo = elementInstance.getImageInfo()
-								const imageSource = fullImage?.image ?? null
-								if (
-									!imageInfo?.naturalWidth ||
-									!imageInfo?.naturalHeight ||
-									!imageSource
-								) {
-									throw new Error(
-										t(
-											"elementTools.imageExtend.submitFailed",
-											"提交失败，请重试",
-										),
-									)
-								}
 
-								const files = await createExtendImageFiles({
-									element: imageElement,
-									image: imageSource,
-									naturalWidth: imageInfo.naturalWidth,
-									naturalHeight: imageInfo.naturalHeight,
-									frame: currentSession.frame,
-									imageRect,
-								})
+							const imageInfo = elementInstance.getImageInfo()
+							const imageSource = fullImage?.image ?? null
+							if (
+								!imageInfo?.naturalWidth ||
+								!imageInfo?.naturalHeight ||
+								!imageSource
+							) {
+								throw new Error(
+									t("elementTools.imageExtend.submitFailed", "提交失败，请重试"),
+								)
+							}
 
-								return {
-									...files,
-									sourceDimensions: {
-										width: imageInfo.naturalWidth,
-										height: imageInfo.naturalHeight,
-									},
-								}
-							} finally {
-								fullImage?.release()
+							const files = await createExtendImageFiles({
+								element: imageElement,
+								image: imageSource,
+								naturalWidth: imageInfo.naturalWidth,
+								naturalHeight: imageInfo.naturalHeight,
+								frame: currentSession.frame,
+								imageRect,
+							})
+
+							return {
+								...files,
+								sourceDimensions: {
+									width: imageInfo.naturalWidth,
+									height: imageInfo.naturalHeight,
+								},
 							}
 						})()
 

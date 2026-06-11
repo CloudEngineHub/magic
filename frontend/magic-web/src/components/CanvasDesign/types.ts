@@ -273,7 +273,6 @@ export interface CanvasDesignRef {
 		}
 		ossUrl?: string
 		image?: HTMLImageElement | ImageBitmap
-		release?: () => void
 	} | null>
 }
 

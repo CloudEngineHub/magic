@@ -158,7 +158,6 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 					imageInfo: resource.imageInfo,
 					ossUrl: resource.ossSrc,
 					image: resource.image,
-					release: () => undefined,
 				}
 			},
 		}),

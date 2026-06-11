@@ -96,7 +96,6 @@ export interface SuperMagicMarkerManagerDependencies {
 		}
 		ossUrl?: string
 		image?: HTMLImageElement | ImageBitmap
-		release?: () => void
 	} | null>
 	/** identifyImageMark API */
 	identifyImageMark?: (params: IdentifyImageMarkRequest) => Promise<IdentifyImageMarkResponse>
@@ -620,7 +619,6 @@ export class SuperMagicMarkerManager {
 				error: errorMessage,
 			})
 		} finally {
-			canvasImageInfo?.release?.()
 			if (this.isMarkerRequestCurrent(markerId, requestId)) {
 				this.activeMarkerRequests.delete(markerId)
 				this.loadingMarkers.delete(markerId)
