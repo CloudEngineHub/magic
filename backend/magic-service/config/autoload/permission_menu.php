@@ -217,7 +217,7 @@ return [
             ],
             'tag' => '自定义大模型',
         ],
-        'admin.ai.application' => [
+        'admin.ai.application.menu' => [
             'path' => [
                 ['key' => 'ai_management', 'label' => 'AI管理'],
                 ['key' => 'application_config', 'label' => '应用配置'],

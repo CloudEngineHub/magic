@@ -37,6 +37,35 @@ class AppMenuAdminApi extends AbstractApi
     #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_APPLICATION, MagicOperationEnum::QUERY)]
     public function queries()
     {
+        return $this->handleQueries();
+    }
+
+    #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_APPLICATION, MagicOperationEnum::QUERY)]
+    public function show(string $id)
+    {
+        return $this->handleShow($id);
+    }
+
+    #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_APPLICATION, MagicOperationEnum::EDIT)]
+    public function save(AppMenuSaveRequest $request)
+    {
+        return $this->handleSave($request);
+    }
+
+    #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_APPLICATION, MagicOperationEnum::EDIT)]
+    public function delete()
+    {
+        return $this->handleDelete();
+    }
+
+    #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_APPLICATION, MagicOperationEnum::EDIT)]
+    public function status(AppMenuStatusRequest $request)
+    {
+        return $this->handleStatus($request);
+    }
+
+    protected function handleQueries()
+    {
         $authorization = $this->getAuthorization();
         $page = $this->createPage();
         $displayScopeRaw = $this->request->input('display_scope');
@@ -81,8 +110,7 @@ class AppMenuAdminApi extends AbstractApi
         );
     }
 
-    #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_APPLICATION, MagicOperationEnum::QUERY)]
-    public function show(string $id)
+    protected function handleShow(string $id)
     {
         $authorization = $this->getAuthorization();
         $entity = $this->appMenuAppService->show($authorization, self::parseId($id));
@@ -90,8 +118,7 @@ class AppMenuAdminApi extends AbstractApi
         return $this->createResponseDTO($authorization, $entity);
     }
 
-    #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_APPLICATION, MagicOperationEnum::EDIT)]
-    public function save(AppMenuSaveRequest $request)
+    protected function handleSave(AppMenuSaveRequest $request)
     {
         $authorization = $this->getAuthorization();
         $payload = $request->validated();
@@ -114,8 +141,7 @@ class AppMenuAdminApi extends AbstractApi
         return $this->createResponseDTO($authorization, $savedEntity);
     }
 
-    #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_APPLICATION, MagicOperationEnum::EDIT)]
-    public function delete()
+    protected function handleDelete()
     {
         $authorization = $this->getAuthorization();
         $id = $this->request->input('id');
@@ -126,8 +152,7 @@ class AppMenuAdminApi extends AbstractApi
         );
     }
 
-    #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_APPLICATION, MagicOperationEnum::EDIT)]
-    public function status(AppMenuStatusRequest $request)
+    protected function handleStatus(AppMenuStatusRequest $request)
     {
         $authorization = $this->getAuthorization();
         $payload = $request->validated();

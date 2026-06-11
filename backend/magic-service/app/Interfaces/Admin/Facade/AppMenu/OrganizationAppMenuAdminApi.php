@@ -17,33 +17,33 @@ use Dtyq\ApiResponse\Annotation\ApiResponse;
 #[ApiResponse('low_code')]
 class OrganizationAppMenuAdminApi extends AppMenuAdminApi
 {
-    #[CheckPermission(MagicResourceEnum::ADMIN_AI_APPLICATION, MagicOperationEnum::QUERY)]
+    #[CheckPermission(MagicResourceEnum::ADMIN_AI_APPLICATION_MENU, MagicOperationEnum::QUERY)]
     public function queries()
     {
-        return parent::queries();
+        return $this->handleQueries();
     }
 
-    #[CheckPermission(MagicResourceEnum::ADMIN_AI_APPLICATION, MagicOperationEnum::QUERY)]
+    #[CheckPermission(MagicResourceEnum::ADMIN_AI_APPLICATION_MENU, MagicOperationEnum::QUERY)]
     public function show(string $id)
     {
-        return parent::show($id);
+        return $this->handleShow($id);
     }
 
-    #[CheckPermission(MagicResourceEnum::ADMIN_AI_APPLICATION, MagicOperationEnum::EDIT)]
+    #[CheckPermission(MagicResourceEnum::ADMIN_AI_APPLICATION_MENU, MagicOperationEnum::EDIT)]
     public function save(AppMenuSaveRequest $request)
     {
-        return parent::save($request);
+        return $this->handleSave($request);
     }
 
-    #[CheckPermission(MagicResourceEnum::ADMIN_AI_APPLICATION, MagicOperationEnum::EDIT)]
+    #[CheckPermission(MagicResourceEnum::ADMIN_AI_APPLICATION_MENU, MagicOperationEnum::EDIT)]
     public function delete()
     {
-        return parent::delete();
+        return $this->handleDelete();
     }
 
-    #[CheckPermission(MagicResourceEnum::ADMIN_AI_APPLICATION, MagicOperationEnum::EDIT)]
+    #[CheckPermission(MagicResourceEnum::ADMIN_AI_APPLICATION_MENU, MagicOperationEnum::EDIT)]
     public function status(AppMenuStatusRequest $request)
     {
-        return parent::status($request);
+        return $this->handleStatus($request);
     }
 }
