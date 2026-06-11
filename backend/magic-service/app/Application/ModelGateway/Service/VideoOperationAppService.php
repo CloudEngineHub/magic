@@ -190,6 +190,15 @@ readonly class VideoOperationAppService
 
         $operationUsageEventDispatched = false;
         try {
+            // 提交 provider 前先按套餐占用个人视频运行槽位
+            $this->videoQueueDomainService->claimUserActiveOperation(
+                $operation,
+                $personalVideoGenerationConcurrencyLimit,
+            );
+            $this->videoQueueDomainService->saveOperation($operation);
+
+            $config = $this->queueOperationExecutionDomainService->getConfig($operation);
+
             $this->dispatchOperationUsageWillStart(
                 $dataIsolation,
                 $operation,
@@ -205,13 +214,6 @@ readonly class VideoOperationAppService
             );
             $operationUsageEventDispatched = true;
 
-            // 提交 provider 前先按套餐占用个人视频运行槽位
-            $this->videoQueueDomainService->claimUserActiveOperation(
-                $operation,
-                $personalVideoGenerationConcurrencyLimit,
-            );
-
-            $config = $this->queueOperationExecutionDomainService->getConfig($operation);
             $providerTaskId = $this->queueOperationExecutionDomainService->submit($operation, $config);
         } catch (ProviderVideoException $throwable) {
             $this->videoQueueDomainService->finishExecutionFailure($operation, $throwable->getMessage());
