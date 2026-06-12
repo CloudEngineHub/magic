@@ -62,6 +62,8 @@ export abstract class BaseLabelManager {
 	// 追踪上一次 hover 的元素 ID
 	protected lastHoveredElementId: string | null = null
 	private visibleLabelSyncRafId: number | null = null
+	private labelCandidateElementIds = new Set<string>()
+	private labelCandidateElementIdsDirty = true
 
 	// 静态注册表，用于不同 LabelManager 之间的协调
 	protected static labelManagers: BaseLabelManager[] = []
@@ -112,6 +114,35 @@ export abstract class BaseLabelManager {
 		this.visibleLabelSyncRafId = null
 	}
 
+	private markLabelCandidatesDirty(): void {
+		this.labelCandidateElementIdsDirty = true
+	}
+
+	private syncLabelCandidateForElement(elementId: string): void {
+		if (this.labelCandidateElementIdsDirty) return
+		if (this.isLabelCandidateElement(elementId)) {
+			this.labelCandidateElementIds.add(elementId)
+			return
+		}
+		this.labelCandidateElementIds.delete(elementId)
+	}
+
+	private isLabelCandidateElement(elementId: string): boolean {
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		const elementType = element?.getData().type
+		return !!elementType && this.visibilityConfig.elementTypes.has(elementType)
+	}
+
+	private rebuildLabelCandidateElementIds(): void {
+		this.labelCandidateElementIds.clear()
+		for (const elementId of this.canvas.elementManager.getAllElementIds()) {
+			if (this.isLabelCandidateElement(elementId)) {
+				this.labelCandidateElementIds.add(elementId)
+			}
+		}
+		this.labelCandidateElementIdsDirty = false
+	}
+
 	/**
 	 * 获取标签文本（由子类实现）
 	 */
@@ -132,11 +163,13 @@ export abstract class BaseLabelManager {
 	private setupEventListeners(): void {
 		// 监听元素创建
 		this.canvas.eventEmitter.on("element:created", (event) => {
+			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
 		})
 
 		// 监听元素删除
 		this.canvas.eventEmitter.on("element:deleted", (event) => {
+			this.labelCandidateElementIds.delete(event.data.elementId)
 			this.removeLabel(event.data.elementId)
 		})
 
@@ -165,6 +198,7 @@ export abstract class BaseLabelManager {
 
 		// 监听元素数据更新（属性变化，如名称变化或 zIndex 变化）
 		this.canvas.eventEmitter.on("element:updated", (event) => {
+			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
 			// zIndex 可能已改变，需要重新排序所有标签
 			this.reorderAllLabels()
@@ -172,6 +206,7 @@ export abstract class BaseLabelManager {
 
 		// 监听元素重新渲染（位置、尺寸变化等）
 		this.canvas.eventEmitter.on("element:rerendered", (event) => {
+			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
 			// zIndex 可能已改变，需要重新排序所有标签
 			this.reorderAllLabels()
@@ -217,6 +252,7 @@ export abstract class BaseLabelManager {
 
 		// 监听文档恢复事件（撤销/恢复时触发）
 		this.canvas.eventEmitter.on("document:restored", () => {
+			this.markLabelCandidatesDirty()
 			this.pruneMissingLabels()
 			this.syncVisibleLabels("document-restored")
 		})
@@ -675,15 +711,10 @@ export abstract class BaseLabelManager {
 	}
 
 	private getLabelCandidateElementIds(): string[] {
-		const candidateIds: string[] = []
-		for (const elementId of this.canvas.elementManager.getAllElementIds()) {
-			const element = this.canvas.elementManager.getElementInstance(elementId)
-			const elementType = element?.getData().type
-			if (elementType && this.visibilityConfig.elementTypes.has(elementType)) {
-				candidateIds.push(elementId)
-			}
+		if (this.labelCandidateElementIdsDirty) {
+			this.rebuildLabelCandidateElementIds()
 		}
-		return candidateIds
+		return Array.from(this.labelCandidateElementIds)
 	}
 
 	private syncVisibleLabels(reason: string): void {
@@ -824,6 +855,8 @@ export abstract class BaseLabelManager {
 			labelGroup.destroy()
 		}
 		this.labelMap.clear()
+		this.labelCandidateElementIds.clear()
+		this.labelCandidateElementIdsDirty = true
 
 		// 清理追踪的 hover 元素
 		this.lastHoveredElementId = null
