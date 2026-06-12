@@ -33,12 +33,18 @@ function createHoverManager(
 	options: {
 		transformActive?: boolean | (() => boolean)
 		selected?: boolean
+		geometryHitIds?: string[]
+		viewportHitTarget?: Konva.Node | null
 	} = {},
 ) {
 	const stage = new Konva.Group()
+	const contentLayer = new Konva.Group()
 	const controlsLayer = new Konva.Group()
 	const requestLayerDraw = vi.fn()
 	const emit = vi.fn()
+	const getPointerPosition = vi.fn(() => ({ x: 30, y: 40 }))
+	const getIntersection = vi.fn(() => options.viewportHitTarget ?? null)
+	const eventHandlers = new Map<string, Array<(event: { data?: unknown }) => void>>()
 	const elementData: LayerElement = {
 		id: "element-1",
 		type: "rectangle",
@@ -49,10 +55,22 @@ function createHoverManager(
 	}
 	const canvas = {
 		stage,
+		contentLayer,
 		controlsLayer,
 		runtimeScheduler: { requestLayerDraw },
 		eventEmitter: {
-			on: vi.fn(),
+			on: vi.fn((eventType: string, handler: (event: { data?: unknown }) => void) => {
+				const handlers = eventHandlers.get(eventType) ?? []
+				handlers.push(handler)
+				eventHandlers.set(eventType, handlers)
+				return () => {
+					const currentHandlers = eventHandlers.get(eventType) ?? []
+					eventHandlers.set(
+						eventType,
+						currentHandlers.filter((currentHandler) => currentHandler !== handler),
+					)
+				}
+			}),
 			off: vi.fn(),
 			emit,
 		},
@@ -64,6 +82,9 @@ function createHoverManager(
 				getElementBounds: () => ({ x: 10, y: 20, width: 120, height: 80 }),
 				createHoverEffect: () => null,
 			}),
+		},
+		geometryCacheManager: {
+			queryElementIdsByExpandedRect: () => options.geometryHitIds ?? [],
 		},
 		permissionManager: {
 			canHover: () => true,
@@ -81,9 +102,20 @@ function createHoverManager(
 		},
 	}
 
+	stage.getPointerPosition = getPointerPosition as never
+	stage.getIntersection = getIntersection as never
+
 	const manager = new HoverManager({ canvas: canvas as never }) as unknown as HoverManagerPrivate
 	const target = new Konva.Rect({ id: "element-1" })
-	return { emit, manager, requestLayerDraw, target }
+	return {
+		emit,
+		eventHandlers,
+		getIntersection,
+		getPointerPosition,
+		manager,
+		requestLayerDraw,
+		target,
+	}
 }
 
 describe("HoverManager", () => {
@@ -155,5 +187,50 @@ describe("HoverManager", () => {
 		expect(active.requestLayerDraw).toHaveBeenCalledTimes(2)
 		manager.destroy()
 		active.manager.destroy()
+	})
+
+	it("refreshes hover hit testing when the viewport pans without mouse movement", () => {
+		const raf = installRafMock()
+		const { eventHandlers, manager, target } = createHoverManager()
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+		expect(manager.hoveredElementId).toBe("element-1")
+
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+
+		expect(manager.hoveredElementId).toBeNull()
+		manager.destroy()
+		expect(eventHandlers.get("viewport:pan")).toHaveLength(0)
+	})
+
+	it("clears stale hover when viewport hit testing still returns the previous element", () => {
+		const raf = installRafMock()
+		const { eventHandlers, getIntersection, getPointerPosition, manager, target } =
+			createHoverManager()
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+		expect(manager.hoveredElementId).toBe("element-1")
+
+		getPointerPosition.mockReturnValue({ x: 200, y: 200 })
+		getIntersection.mockReturnValue(target)
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+
+		expect(manager.hoveredElementId).toBeNull()
+		manager.destroy()
+	})
+
+	it("sets hover from geometry when viewport pans an element under a stationary pointer", () => {
+		const { eventHandlers, getIntersection, manager, requestLayerDraw } = createHoverManager({
+			geometryHitIds: ["element-1"],
+		})
+		getIntersection.mockReturnValue(null)
+
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
+		manager.destroy()
 	})
 })

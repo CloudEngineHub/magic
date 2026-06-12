@@ -205,10 +205,8 @@ export abstract class BaseLabelManager {
 		})
 
 		// 监听 viewport 缩放变化（pan 不需要：overlayLayer 随 stage 平移，标签相对关系不变）
-		// ViewportController 已做 RAF 节流，此处直接更新以减少一帧延迟
 		this.canvas.eventEmitter.on("viewport:scale", () => {
 			this.scheduleVisibleLabelSync("viewport-scale")
-			this.updateAllLabels()
 		})
 
 		this.canvas.eventEmitter.on("viewport:changed", ({ data }) => {
@@ -674,11 +672,20 @@ export abstract class BaseLabelManager {
 	private syncVisibleLabels(reason: string): void {
 		const candidateIds = this.getVisibleLabelCandidateIds()
 		let touched = false
+		const isViewportScale = reason === "viewport-scale"
 
 		for (const elementId of candidateIds) {
 			if (!this.shouldShowLabel(elementId)) continue
 			this.createOrUpdateLabel(elementId, { skipReorder: true, skipNotify: true })
 			touched = true
+		}
+
+		if (isViewportScale) {
+			if (touched) {
+				this.reorderAllLabels()
+				this.requestOverlayDraw(`visible-labels:${reason}`)
+			}
+			return
 		}
 
 		if (!touched) {
