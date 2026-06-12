@@ -153,6 +153,7 @@ class AgentDispatcher(Base):
         """
         if self.agent_context.get_init_client_message() is not None:
             logger.info("agent_context 已存在客户端初始化消息，跳过文件加载")
+            self._schedule_initial_cli_status_detection()
             return True
 
         try:
@@ -176,12 +177,7 @@ class AgentDispatcher(Base):
         logger.info("开始工作区初始化流程")
 
         await HomePersistenceService.initialize_from_environment()
-        try:
-            from app.service.cli_status import CliStatusFactory
-
-            CliStatusFactory.schedule_initial_detection(self.agent_context)
-        except Exception as e:
-            logger.warning(f"CLI 状态后台检测启动失败，继续初始化流程: {e}")
+        self._schedule_initial_cli_status_detection()
 
         # ========== 配置更新阶段 - 每次都执行 ==========
         # 保存初始化消息到文件
@@ -218,6 +214,7 @@ class AgentDispatcher(Base):
                 logger.info(f"从 metadata 设置组织编码: {init_message.metadata.organization_code}")
 
             logger.info(f"init_message.metadata.language: {init_message.metadata.language}")
+
             # 设置用户语言
             if init_message.metadata.language:
                 i18n.set_language(init_message.metadata.language)
@@ -283,6 +280,15 @@ class AgentDispatcher(Base):
                 logger.info("工作区初始化完成，标记 init 事件已发送（非预启动场景）")
             else:
                 logger.info("工作区初始化完成")
+
+    def _schedule_initial_cli_status_detection(self) -> None:
+        """调度 CLI 状态探测，失败不影响主流程。"""
+        try:
+            from app.service.cli_status import CliStatusFactory
+
+            CliStatusFactory.schedule_initial_detection(self.agent_context)
+        except Exception as e:
+            logger.warning(f"CLI 状态后台检测启动失败，继续初始化流程: {e}")
 
     async def switch_agent(self, agent_mode: Union[AgentMode, str], agent_code: str = None):
         """
