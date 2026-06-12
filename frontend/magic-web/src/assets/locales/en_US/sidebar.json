@@ -34,6 +34,12 @@
 	"home": {
 		"title": "Home"
 	},
+	"chats": {
+		"title": "Chats",
+		"newChat": "New chat",
+		"refresh": "Refresh conversations",
+		"empty": "No conversations"
+	},
 	"mobileShell": {
 		"themeToggle": {
 			"switchToDark": "Switch to dark mode",

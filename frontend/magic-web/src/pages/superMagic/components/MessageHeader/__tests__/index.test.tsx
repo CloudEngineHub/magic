@@ -3,7 +3,7 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import MessageHeader from "../index"
 
-const mockSmartRenameTopic = vi.fn()
+const mockSmartRenameTopic = vi.hoisted(() => vi.fn())
 
 const mockHistoryControl = vi.fn(
 	({
@@ -20,7 +20,7 @@ const mockHistoryControl = vi.fn(
 				type="button"
 				data-testid="message-header-history-button"
 				className={isHistoryButtonActive ? "bg-accent" : ""}
-				onClick={onToggleHistoryPanel}
+				onClick={historyTriggerMode === "layout" ? onToggleHistoryPanel : undefined}
 			>
 				history
 			</button>
@@ -33,7 +33,13 @@ const mockHistoryControl = vi.fn(
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string) => key,
+		t: (key: string) => {
+			const labels: Record<string, string> = {
+				"chat.unnamedChat": "未命名对话",
+				"messageHeader.untitledTopic": "未命名话题",
+			}
+			return labels[key] ?? key
+		},
 	}),
 	initReactI18next: {
 		type: "3rdParty",
@@ -46,11 +52,25 @@ vi.mock("ahooks", () => ({
 	useMount: (fn: () => void) => fn(),
 }))
 
+vi.mock("@/stores/app", () => ({
+	appStore: {
+		appInitPromise: null,
+		languageReadyPromise: null,
+	},
+}))
+
+vi.mock("@/utils/waitPublicConfigInit", () => ({
+	waitForLanguageReady: vi.fn().mockResolvedValue(undefined),
+	waitForPublicConfigReady: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock("mobx", () => ({
 	computed: (factory: () => unknown) => ({
 		get: factory,
 	}),
 	makeAutoObservable: vi.fn(),
+	action: <T,>(fn: T) => fn,
+	runInAction: (fn: () => void) => fn(),
 }))
 
 vi.mock("mobx-react-lite", () => ({
@@ -225,6 +245,43 @@ vi.mock("@/pages/superMagic/providers/file-action-visibility-provider", () => ({
 	}),
 }))
 
+const chatWorkspaceId = "chat-workspace-mock-1"
+
+vi.mock("@/pages/superMagic/utils/resolve-chat-conversation-display-name", () => ({
+	resolveMessageHeaderTitle: ({
+		topic,
+		project,
+		t,
+	}: {
+		topic?: { topic_name?: string } | null
+		project?: { workspace_id?: string; project_name?: string } | null
+		t: (key: string) => string
+	}) => {
+		if (project?.workspace_id === chatWorkspaceId) {
+			return (
+				topic?.topic_name?.trim() ||
+				project?.project_name?.trim() ||
+				t("chat.unnamedChat")
+			)
+		}
+
+		return topic?.topic_name?.trim() || t("messageHeader.untitledTopic")
+	},
+	resolveMessageHeaderEditableTitle: ({
+		topic,
+		project,
+	}: {
+		topic?: { topic_name?: string } | null
+		project?: { workspace_id?: string; project_name?: string } | null
+	}) => {
+		if (project?.workspace_id === chatWorkspaceId) {
+			return topic?.topic_name?.trim() || project?.project_name?.trim() || ""
+		}
+
+		return topic?.topic_name?.trim() || ""
+	},
+}))
+
 vi.mock("../../TopicSharePopover", () => ({
 	default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))
@@ -255,17 +312,22 @@ vi.mock("../components/MessageHeaderHistoryControl", () => ({
 	}) => mockHistoryControl(props),
 }))
 
-vi.mock("../../stores", () => ({
+vi.mock("@/pages/superMagic/stores", () => ({
 	superMagicStore: {
 		messages: new Map(),
 	},
 }))
 
-vi.mock("../../services/topicRename", () => ({
+vi.mock("@/pages/superMagic/services/topicRename", () => ({
 	smartRenameTopic: mockSmartRenameTopic,
 }))
 
-vi.mock("../../pages/Workspace/types", () => ({
+vi.mock("@/pages/superMagic/services/chatConversationNameSync", () => ({
+	shouldSyncChatConversationName: vi.fn(() => false),
+	syncChatProjectNameOnly: vi.fn(),
+}))
+
+vi.mock("@/pages/superMagic/pages/Workspace/types", () => ({
 	TaskStatus: {
 		FINISHED: "finished",
 	},
@@ -365,18 +427,57 @@ describe("MessageHeader", () => {
 		expect(handleToggleHistoryPanel).not.toHaveBeenCalled()
 	})
 
-	it("selectedProject 为空时仍会触发智能重命名", () => {
+	it("chat workspace projects show unnamed conversation fallback instead of untitled topic", () => {
+		renderComponent({
+			selectedProject: {
+				id: "project-chat-1",
+				workspace_id: chatWorkspaceId,
+				project_name: "",
+			},
+			topicStore: {
+				topics: [
+					{
+						id: "topic-chat-1",
+						user_id: "user-1",
+						chat_topic_id: "chat-topic-1",
+						chat_conversation_id: "chat-conversation-1",
+						topic_name: "",
+						task_status: "finished",
+						task_mode: "chat",
+						project_id: "project-chat-1",
+						topic_mode: "general",
+						updated_at: "2026-04-01T00:00:00Z",
+						workspace_id: chatWorkspaceId,
+						token_used: null,
+					},
+				],
+				selectedTopic: {
+					id: "topic-chat-1",
+					user_id: "user-1",
+					chat_topic_id: "chat-topic-1",
+					chat_conversation_id: "chat-conversation-1",
+					topic_name: "",
+					task_status: "finished",
+					task_mode: "chat",
+					project_id: "project-chat-1",
+					topic_mode: "general",
+					updated_at: "2026-04-01T00:00:00Z",
+					workspace_id: chatWorkspaceId,
+					token_used: null,
+				},
+			},
+		})
+
+		expect(screen.getByTestId("message-header-topic-name")).toHaveTextContent("未命名对话")
+	})
+
+	it("selectedProject 为空时不触发智能重命名", () => {
 		renderComponent({
 			selectedProject: null,
 		})
 
 		fireEvent.click(screen.getByText("messageHeader.aiRename"))
 
-		expect(mockSmartRenameTopic).toHaveBeenCalledTimes(1)
-		expect(mockSmartRenameTopic).toHaveBeenCalledWith({
-			topicId: "topic-1",
-			userQuestion: "Alpha Topic",
-			updateTopicName: expect.any(Function),
-		})
+		expect(mockSmartRenameTopic).not.toHaveBeenCalled()
 	})
 })

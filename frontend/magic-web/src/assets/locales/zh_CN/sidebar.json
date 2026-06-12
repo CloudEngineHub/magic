@@ -34,6 +34,12 @@
 	"home": {
 		"title": "首页"
 	},
+	"chats": {
+		"title": "对话",
+		"newChat": "新建对话",
+		"refresh": "刷新对话列表",
+		"empty": "暂无对话"
+	},
 	"mobileShell": {
 		"themeToggle": {
 			"switchToDark": "切换到深色模式",

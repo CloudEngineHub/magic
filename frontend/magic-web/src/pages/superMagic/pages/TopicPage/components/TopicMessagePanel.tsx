@@ -1,4 +1,4 @@
-import { lazy, memo, useMemo } from "react"
+import { lazy, memo, useMemo, type ReactNode } from "react"
 import { JSONContent } from "@tiptap/core"
 import MessageList, { MessageListProvider } from "../../../components/MessageList"
 import MessageHeader, { type MessageHeaderTopicActions } from "../../../components/MessageHeader"
@@ -13,6 +13,7 @@ import ModeAvatar from "@/pages/superMagic/components/ModeAvatar"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
 import projectFilesStore from "@/stores/projectFiles"
+import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 
 const ProjectPageInputContainer = lazy(
 	() => import("../../../components/ProjectPageInputContainer"),
@@ -46,6 +47,8 @@ interface TopicMessagePanelProps {
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
+	/** Injected by singleTopicChat variant for conversation-level overflow actions. */
+	trailingActions?: ReactNode
 }
 
 function TopicMessagePanel({
@@ -72,7 +75,12 @@ function TopicMessagePanel({
 	historyTriggerMode = "dropdown",
 	isHistoryPanelOpen = false,
 	onToggleHistoryPanel,
+	trailingActions,
 }: TopicMessagePanelProps) {
+	// Chat detail route hides branch-topic actions via FileActionVisibilityProvider.
+	const { hideCreateNewTopic } = useFileActionVisibility()
+	const allowTopicBranchActions = !hideCreateNewTopic
+
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换
 	 */
@@ -105,7 +113,9 @@ function TopicMessagePanel({
 			allowUserMessageCopy: true,
 			allowScheduleTaskCreate: true,
 			allowMessageTooltip: true,
-			allowConversationCopy: true,
+			// "从此处创建新话题" and timeout "新建话题" both respect chat visibility flags.
+			allowConversationCopy: allowTopicBranchActions,
+			allowCreateNewTopic: allowTopicBranchActions,
 			onTopicSwitch: setSelectedTopic,
 			projectFilesStore,
 			renderAssistantAvatar: topicModeConfig?.mode
@@ -118,7 +128,7 @@ function TopicMessagePanel({
 					)
 				: undefined,
 		}
-	}, [topicModeConfig, setSelectedTopic])
+	}, [allowTopicBranchActions, topicModeConfig, setSelectedTopic])
 
 	return (
 		<div
@@ -140,6 +150,7 @@ function TopicMessagePanel({
 				historyTriggerMode={historyTriggerMode}
 				isHistoryPanelOpen={isHistoryPanelOpen}
 				onToggleHistoryPanel={onToggleHistoryPanel}
+				trailingActions={trailingActions}
 			/>
 			{selectedTopic && (
 				<div

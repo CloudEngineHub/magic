@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useDebounce, useMemoizedFn } from "ahooks"
 import dayjs from "@/lib/dayjs"
 import { useTimezone } from "@/providers/TimezoneProvider/hooks"
@@ -29,6 +29,10 @@ export interface ReloadChatConversationListOptions {
 export interface UseChatConversationListResult {
 	items: ChatConversationListItem[]
 	isLoading: boolean
+	/** True only before the first successful list fetch while no cached rows exist (shows skeleton). */
+	isInitialChatListLoading: boolean
+	/** True while appending the next page without blocking the existing list. */
+	isLoadingMore: boolean
 	searchValue: string
 	setSearchValue: (value: string) => void
 	debouncedSearchValue: string
@@ -70,6 +74,28 @@ export function useChatConversationList(): UseChatConversationListResult {
 	 * reload 完成后此集合会被清空，以服务端真实数据为准。
 	 */
 	const [pendingRemoveIds, setPendingRemoveIds] = useState<Set<string>>(new Set())
+	const [isLoadingMore, setIsLoadingMore] = useState(false)
+	const isLoadingMoreRef = useRef(false)
+	/** Distinguishes the first fetch from later silent refreshes so reopening keeps stale rows visible. */
+	const hasEverLoadedRef = useRef(false)
+	const [hasEverLoaded, setHasEverLoaded] = useState(false)
+	const previousLoadingRef = useRef(isLoadingChatProjects)
+
+	const markChatListLoaded = useMemoizedFn(() => {
+		if (hasEverLoadedRef.current) return
+
+		hasEverLoadedRef.current = true
+		setHasEverLoaded(true)
+	})
+
+	useEffect(() => {
+		const wasLoading = previousLoadingRef.current
+		previousLoadingRef.current = isLoadingChatProjects
+
+		if (wasLoading && !isLoadingChatProjects) {
+			markChatListLoaded()
+		}
+	}, [isLoadingChatProjects, markChatListLoaded])
 
 	/**
 	 * 在 hook 内完成时区格式化，让视图只消费可展示的文案，后续接点击进入时也不需要改 View。
@@ -77,7 +103,7 @@ export function useChatConversationList(): UseChatConversationListResult {
 	 */
 	const items = useMemo<ChatConversationListItem[]>(() => {
 		return chatProjects
-			.filter((p) => !pendingRemoveIds.has(p.id))
+			.filter((project) => !pendingRemoveIds.has(project.id))
 			.map((project) => ({
 				id: project.id,
 				title: project.project_name || t("super:chat.unnamedChat"),
@@ -115,6 +141,7 @@ export function useChatConversationList(): UseChatConversationListResult {
 			}
 			return next
 		})
+		markChatListLoaded()
 	})
 
 	/**
@@ -130,17 +157,32 @@ export function useChatConversationList(): UseChatConversationListResult {
 	 * 搜索态下不调用（hasMore 为 false 时 InfiniteScroll 不会触发此函数）。
 	 */
 	const loadMore = useMemoizedFn(async () => {
-		const nextPage = currentPage + 1
-		await loadMoreChatProjects(nextPage, {
-			pageSize: CHAT_LIST_PAGE_SIZE,
-			keyword: debouncedSearchValue,
-		})
-		setCurrentPage(nextPage)
+		if (isLoadingMoreRef.current) return
+
+		isLoadingMoreRef.current = true
+		setIsLoadingMore(true)
+
+		try {
+			const nextPage = currentPage + 1
+			await loadMoreChatProjects(nextPage, {
+				pageSize: CHAT_LIST_PAGE_SIZE,
+				keyword: debouncedSearchValue,
+				silent: true,
+			})
+			setCurrentPage(nextPage)
+		} finally {
+			isLoadingMoreRef.current = false
+			setIsLoadingMore(false)
+		}
 	})
+
+	const isInitialChatListLoading = !hasEverLoaded && items.length === 0
 
 	return {
 		items,
 		isLoading: isLoadingChatProjects,
+		isInitialChatListLoading,
+		isLoadingMore,
 		searchValue,
 		setSearchValue,
 		debouncedSearchValue,

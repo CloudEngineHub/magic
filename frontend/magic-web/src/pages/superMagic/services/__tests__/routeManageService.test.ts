@@ -11,6 +11,8 @@ const mockState = vi.hoisted(() => ({
 	goMock: vi.fn(),
 	routesMatchMock: vi.fn(),
 	routesPathMatchMock: vi.fn(),
+	selectedProject: null as { id: string; workspace_id: string } | null,
+	selectedTopic: null as { id: string } | null,
 }))
 
 vi.mock("@/routes/history", () => ({
@@ -57,13 +59,17 @@ vi.mock("@/stores/interface", () => ({
 
 vi.mock("../../stores/core", () => ({
 	projectStore: {
-		selectedProject: null,
+		get selectedProject() {
+			return mockState.selectedProject
+		},
 	},
 	workspaceStore: {
 		selectedWorkspace: { id: "workspace-1" },
 	},
 	topicStore: {
-		selectedTopic: null,
+		get selectedTopic() {
+			return mockState.selectedTopic
+		},
 	},
 }))
 
@@ -172,6 +178,151 @@ describe("routeManageService.fixRouteParams", () => {
 		expect(navigateMock).not.toHaveBeenCalled()
 		expect(replaceMock).not.toHaveBeenCalled()
 		expect(pushMock).not.toHaveBeenCalled()
+	})
+})
+
+describe("routeManageService.shouldPreserveChatRoute", () => {
+	beforeEach(() => {
+		routesMatchMock.mockReset()
+	})
+
+	it("returns false when chat URL targets a different project than navigation state", () => {
+		routesMatchMock.mockReturnValue({
+			params: {
+				clusterCode: "global",
+				projectId: "chat-project-a",
+				topicId: "topic-a",
+			},
+			pathname: "/global/super/chat/chat-project-a/topic-a",
+			pathnameBase: "/global/super/chat/chat-project-a/topic-a",
+			route: { name: RouteName.SuperChatProjectState },
+		})
+
+		expect(routeManageService.shouldPreserveChatRoute("chat-project-b")).toBe(false)
+	})
+
+	it("returns true when navigation keeps the same chat project", () => {
+		routesMatchMock.mockReturnValue({
+			params: {
+				clusterCode: "global",
+				projectId: "chat-project-a",
+				topicId: "topic-a",
+			},
+			pathname: "/global/super/chat/chat-project-a/topic-a",
+			pathnameBase: "/global/super/chat/chat-project-a/topic-a",
+			route: { name: RouteName.SuperChatProjectState },
+		})
+
+		expect(routeManageService.shouldPreserveChatRoute("chat-project-a")).toBe(true)
+	})
+})
+
+describe("routeManageService.fixRouteParams desktop chat exit", () => {
+	beforeEach(() => {
+		mockState.isMobile = false
+		mockState.selectedProject = null
+		mockState.selectedTopic = null
+		navigateMock.mockReset()
+		routesMatchMock.mockReset()
+		routeManageService.setNavigate(navigateMock)
+	})
+
+	it("leaves stale chat URL to workspace when project context was cleared", () => {
+		routesMatchMock.mockReturnValue({
+			params: {
+				clusterCode: "global",
+				projectId: "chat-project-a",
+				topicId: "topic-a",
+			},
+			pathname: "/global/super/chat/chat-project-a/topic-a",
+			pathnameBase: "/global/super/chat/chat-project-a/topic-a",
+			route: { name: RouteName.SuperChatProjectState },
+		})
+
+		routeManageService.fixRouteParams()
+
+		expect(navigateMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				name: RouteName.SuperWorkspaceState,
+				params: { workspaceId: "workspace-1" },
+				replace: true,
+			}),
+		)
+	})
+})
+
+describe("routeManageService.navigateToTopic", () => {
+	beforeEach(() => {
+		mockState.isMobile = false
+		navigateMock.mockReset()
+		routesMatchMock.mockReset()
+		routeManageService.setNavigate(navigateMock)
+	})
+
+	it("uses workspace topic route when leaving chat URL for another project", () => {
+		routesMatchMock.mockReturnValue({
+			params: {
+				clusterCode: "global",
+				projectId: "chat-project-a",
+				topicId: "topic-a",
+			},
+			pathname: "/global/super/chat/chat-project-a/topic-a",
+			pathnameBase: "/global/super/chat/chat-project-a/topic-a",
+			route: { name: RouteName.SuperChatProjectState },
+		})
+
+		routeManageService.navigateToTopic({
+			workspaceId: "workspace-1",
+			projectId: "project-beta",
+			topicId: "topic-beta",
+		})
+
+		expect(navigateMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				name: RouteName.SuperWorkspaceProjectTopicState,
+				params: {
+					projectId: "project-beta",
+					topicId: "topic-beta",
+				},
+			}),
+		)
+	})
+})
+
+describe("routeManageService.navigateToChatProject", () => {
+	beforeEach(() => {
+		mockState.isMobile = false
+		navigateMock.mockReset()
+		routesMatchMock.mockReset()
+		routeManageService.setNavigate(navigateMock)
+	})
+
+	it("navigates desktop chat opens to SuperChatProjectState", () => {
+		routesMatchMock.mockReturnValue({
+			params: { clusterCode: "global" },
+			pathname: "/global/super",
+			pathnameBase: "/global/super",
+			route: { name: RouteName.Super },
+		})
+
+		routeManageService.navigateToChatProject(
+			{
+				id: "project-alpha",
+				workspace_id: "workspace-alpha",
+			} as never,
+			"topic-alpha",
+		)
+
+		expect(navigateMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				name: RouteName.SuperChatProjectState,
+				params: {
+					projectId: "project-alpha",
+					topicId: "topic-alpha",
+				},
+				viewTransition: false,
+			}),
+		)
 	})
 })
 
