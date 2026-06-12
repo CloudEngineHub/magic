@@ -60,6 +60,7 @@ function intersectsRect(a: Rect, b: Rect): boolean {
 }
 
 const DEFAULT_SPATIAL_CELL_SIZE = 2048
+const DIRECT_SCAN_CELL_TO_ALLOWED_RATIO = 8
 
 /**
  * 统一管理元素几何边界缓存。
@@ -143,10 +144,17 @@ export class GeometryCacheManager {
 	): string[] {
 		const queryRect = expandRect(rect, padding)
 		const allowedIds = options?.elementIds ? new Set(options.elementIds) : null
+		const estimatedCellCount = this.getCellCountForRect(queryRect)
+
+		if (this.shouldDirectScanAllowedIds(allowedIds, estimatedCellCount)) {
+			return this.queryAllowedIdsByRect(allowedIds, queryRect)
+		}
+
 		this.ensureSpatialIndex()
 
 		const candidateIds = new Set<string>()
-		for (const cellKey of this.getCellKeysForRect(queryRect)) {
+		const cellKeys = this.getCellKeysForRect(queryRect)
+		for (const cellKey of cellKeys) {
 			const cell = this.spatialIndex.get(cellKey)
 			if (!cell) continue
 			cell.forEach((elementId) => {
@@ -251,6 +259,35 @@ export class GeometryCacheManager {
 		}
 
 		this.spatialIndexDirty = false
+	}
+
+	private shouldDirectScanAllowedIds(
+		allowedIds: Set<string> | null,
+		cellCount: number,
+	): allowedIds is Set<string> {
+		if (!allowedIds) return false
+		if (allowedIds.size === 0) return true
+		return cellCount > allowedIds.size * DIRECT_SCAN_CELL_TO_ALLOWED_RATIO
+	}
+
+	private queryAllowedIdsByRect(allowedIds: Set<string>, queryRect: Rect): string[] {
+		const result: string[] = []
+		allowedIds.forEach((elementId) => {
+			if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return
+			const bounds = this.getElementBounds(elementId)
+			if (bounds && intersectsRect(bounds, queryRect)) {
+				result.push(elementId)
+			}
+		})
+		return result
+	}
+
+	private getCellCountForRect(rect: Rect): number {
+		const minCellX = Math.floor(rect.x / this.spatialCellSize)
+		const minCellY = Math.floor(rect.y / this.spatialCellSize)
+		const maxCellX = Math.floor((rect.x + rect.width) / this.spatialCellSize)
+		const maxCellY = Math.floor((rect.y + rect.height) / this.spatialCellSize)
+		return (maxCellX - minCellX + 1) * (maxCellY - minCellY + 1)
 	}
 
 	private getCellKeysForRect(rect: Rect): string[] {

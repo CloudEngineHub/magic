@@ -38,6 +38,34 @@ function createCandidate(priority: ImageResourceLoadPriority): VideoCandidate {
 	}
 }
 
+function createImageCandidate(
+	elementId: string,
+	priority: ImageResourceLoadPriority = "visible",
+): ImageCandidate {
+	return {
+		elementId,
+		path: `./images/${elementId}.png`,
+		priority,
+		variant: priority === "near" ? "low" : "preview",
+		visibilityState: priority === "near" ? "near" : "visible",
+		screenArea: 1000,
+		screenLongEdge: 100,
+		distanceToViewportCenter: Number(elementId.replace(/\D/g, "")) || 0,
+	}
+}
+
+type SelectImageCandidatesToLoad = (options: {
+	pendingVisibleCandidates: ImageCandidate[]
+	pendingLowDetailVisibleCandidates: ImageCandidate[]
+	pendingNearCandidates: ImageCandidate[]
+	reason: string
+	shouldDeferNearLoads: boolean
+}) => {
+	visibleToLoad: ImageCandidate[]
+	nearToLoad: ImageCandidate[]
+	imageLoadRequestBudget: number | null
+}
+
 function createManager(requestPreviewLoad = vi.fn()) {
 	const ensureFreshOssInfo = vi.fn()
 	const manager = Object.create(CanvasVisibilityManager.prototype) as CanvasVisibilityManager & {
@@ -272,6 +300,56 @@ describe("CanvasVisibilityManager image load requests", () => {
 			displayTargetElementId: "image-1",
 			displayTargetReason: "viewport:scale",
 		})
+	})
+
+	it("caps background image load requests and keeps visible candidates first", () => {
+		const manager = Object.create(CanvasVisibilityManager.prototype) as CanvasVisibilityManager
+		const selectImageCandidatesToLoad = (
+			manager as unknown as { selectImageCandidatesToLoad: SelectImageCandidatesToLoad }
+		).selectImageCandidatesToLoad
+		const visibleCandidates = Array.from({ length: 5 }, (_, index) =>
+			createImageCandidate(`visible-${index}`, "visible"),
+		)
+		const nearCandidates = Array.from({ length: 20 }, (_, index) =>
+			createImageCandidate(`near-${index}`, "near"),
+		)
+
+		const result = selectImageCandidatesToLoad.call(manager, {
+			pendingLowDetailVisibleCandidates: [],
+			pendingNearCandidates: nearCandidates,
+			pendingVisibleCandidates: visibleCandidates,
+			reason: "visibility:drain",
+			shouldDeferNearLoads: false,
+		})
+
+		expect(result.imageLoadRequestBudget).toBe(12)
+		expect(result.visibleToLoad).toHaveLength(5)
+		expect(result.nearToLoad).toHaveLength(7)
+	})
+
+	it("does not apply the background image load budget to normal refreshes", () => {
+		const manager = Object.create(CanvasVisibilityManager.prototype) as CanvasVisibilityManager
+		const selectImageCandidatesToLoad = (
+			manager as unknown as { selectImageCandidatesToLoad: SelectImageCandidatesToLoad }
+		).selectImageCandidatesToLoad
+		const visibleCandidates = Array.from({ length: 20 }, (_, index) =>
+			createImageCandidate(`visible-${index}`, "visible"),
+		)
+		const nearCandidates = Array.from({ length: 20 }, (_, index) =>
+			createImageCandidate(`near-${index}`, "near"),
+		)
+
+		const result = selectImageCandidatesToLoad.call(manager, {
+			pendingLowDetailVisibleCandidates: [],
+			pendingNearCandidates: nearCandidates,
+			pendingVisibleCandidates: visibleCandidates,
+			reason: "document:restored",
+			shouldDeferNearLoads: false,
+		})
+
+		expect(result.imageLoadRequestBudget).toBeNull()
+		expect(result.visibleToLoad).toHaveLength(20)
+		expect(result.nearToLoad).toHaveLength(20)
 	})
 })
 

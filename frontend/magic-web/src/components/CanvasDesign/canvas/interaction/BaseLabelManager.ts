@@ -666,7 +666,24 @@ export abstract class BaseLabelManager {
 	private getVisibleLabelCandidateIds(): string[] {
 		const viewportRect = getViewportCanvasRect(this.canvas)
 		const padding = Math.max(viewportRect.width, viewportRect.height) * 0.25
-		return this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, padding)
+		const elementIds = this.getLabelCandidateElementIds()
+		return this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+			viewportRect,
+			padding,
+			{ elementIds },
+		)
+	}
+
+	private getLabelCandidateElementIds(): string[] {
+		const candidateIds: string[] = []
+		for (const elementId of this.canvas.elementManager.getAllElementIds()) {
+			const element = this.canvas.elementManager.getElementInstance(elementId)
+			const elementType = element?.getData().type
+			if (elementType && this.visibilityConfig.elementTypes.has(elementType)) {
+				candidateIds.push(elementId)
+			}
+		}
+		return candidateIds
 	}
 
 	private syncVisibleLabels(reason: string): void {

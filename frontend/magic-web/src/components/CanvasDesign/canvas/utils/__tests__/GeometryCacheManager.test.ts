@@ -84,6 +84,65 @@ describe("GeometryCacheManager", () => {
 		expect(ids).toEqual(["allowed"])
 	})
 
+	it("directly scans candidate ids when a huge query would enumerate too many cells", () => {
+		const boundsById = new Map([
+			["allowed", { x: 0, y: 0, width: 100, height: 100 }],
+			["far", { x: 1_000_000, y: 1_000_000, width: 100, height: 100 }],
+		])
+		const elementIds = Array.from(boundsById.keys())
+		let getAllElementIdsCount = 0
+		const manager = new GeometryCacheManager({
+			canvas: {
+				elementManager: {
+					getAllElementIds: () => {
+						getAllElementIdsCount += 1
+						return elementIds
+					},
+					isElementVisibleInDataTree: (id: string) => boundsById.has(id),
+					getElementInstance: (id: string) => ({
+						getBoundingRect: () => boundsById.get(id) ?? null,
+					}),
+				},
+			} as never,
+		})
+
+		const ids = manager.queryElementIdsByExpandedRect(
+			{ x: -500_000, y: -500_000, width: 1_000_000, height: 1_000_000 },
+			0,
+			{ elementIds: ["allowed"] },
+		)
+
+		expect(ids).toEqual(["allowed"])
+		expect(getAllElementIdsCount).toBe(0)
+	})
+
+	it("keeps data-tree visibility filtering on the direct scan path", () => {
+		const boundsById = new Map([
+			["visible", { x: 0, y: 0, width: 100, height: 100 }],
+			["hidden", { x: 10, y: 10, width: 100, height: 100 }],
+		])
+		const visibleIds = new Set(["visible"])
+		const manager = new GeometryCacheManager({
+			canvas: {
+				elementManager: {
+					getAllElementIds: () => Array.from(boundsById.keys()),
+					isElementVisibleInDataTree: (id: string) => visibleIds.has(id),
+					getElementInstance: (id: string) => ({
+						getBoundingRect: () => boundsById.get(id) ?? null,
+					}),
+				},
+			} as never,
+		})
+
+		const ids = manager.queryElementIdsByExpandedRect(
+			{ x: -500_000, y: -500_000, width: 1_000_000, height: 1_000_000 },
+			0,
+			{ elementIds: ["visible", "hidden"] },
+		)
+
+		expect(ids).toEqual(["visible"])
+	})
+
 	it("updates indexed cells incrementally after an element moves", () => {
 		const boundsById = new Map([
 			["moving", { x: 0, y: 0, width: 100, height: 100 }],

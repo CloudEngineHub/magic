@@ -86,6 +86,7 @@ const MIN_NEAR_SCREEN_LONG_EDGE_FOR_LOAD = 96
 const LOW_DETAIL_VISIBLE_FALLBACK_LIMIT = 48
 const MAX_VISIBLE_LOAD_REQUESTS_PER_QUERY = 96
 const MAX_NEAR_LOAD_REQUESTS_PER_QUERY = 48
+const BACKGROUND_IMAGE_LOAD_REQUESTS_PER_REFRESH = 12
 const MIN_VISIBLE_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD = 96
 const MIN_NEAR_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD = 160
 const LOW_DETAIL_VISIBLE_VIDEO_FALLBACK_LIMIT = 4
@@ -211,6 +212,12 @@ function removeCandidatesByIds<T extends LoadCandidateBase>(
 			candidates.splice(index, 1)
 		}
 	}
+}
+
+function getBackgroundImageLoadRequestBudget(reason: string): number | null {
+	return reason === "visibility:drain" || reason === "visibility:variant-switch-cooldown"
+		? BACKGROUND_IMAGE_LOAD_REQUESTS_PER_REFRESH
+		: null
 }
 
 function getPriorityRank(priority: ImageResourceLoadPriority): number {
@@ -924,7 +931,6 @@ export class CanvasVisibilityManager {
 				nearVideoCandidates.push(candidate)
 			}
 		})
-
 		const pendingVisibleCandidates = visibleCandidates.filter((candidate) =>
 			this.shouldRequestImageCandidate(candidate),
 		)
@@ -945,17 +951,13 @@ export class CanvasVisibilityManager {
 		)
 		const shouldDeferNearLoads = isViewportMovementReason(reason)
 
-		const visibleToLoad =
-			pendingVisibleCandidates.length > 0
-				? pendingVisibleCandidates
-						.sort(sortCandidates)
-						.slice(0, MAX_VISIBLE_LOAD_REQUESTS_PER_QUERY)
-				: pendingLowDetailVisibleCandidates
-						.sort(sortCandidates)
-						.slice(0, LOW_DETAIL_VISIBLE_FALLBACK_LIMIT)
-		const nearToLoad = shouldDeferNearLoads
-			? []
-			: pendingNearCandidates.sort(sortCandidates).slice(0, MAX_NEAR_LOAD_REQUESTS_PER_QUERY)
+		const { nearToLoad, visibleToLoad } = this.selectImageCandidatesToLoad({
+			pendingLowDetailVisibleCandidates,
+			pendingNearCandidates,
+			pendingVisibleCandidates,
+			reason,
+			shouldDeferNearLoads,
+		})
 		const visibleVideosToLoad =
 			pendingVisibleVideoCandidates.length > 0
 				? pendingVisibleVideoCandidates
@@ -1127,7 +1129,6 @@ export class CanvasVisibilityManager {
 				lowDetailVisibleVideoCandidates.push(candidate)
 			}
 		})
-
 		const pendingVisibleCandidates = visibleCandidates.filter((candidate) =>
 			this.shouldRequestImageCandidate(candidate),
 		)
@@ -1225,6 +1226,54 @@ export class CanvasVisibilityManager {
 		if (tierImproved) return true
 		if (previousState.tier !== candidate.tier) return false
 		return getPriorityRank(previousState.priority) > getPriorityRank(candidate.priority)
+	}
+
+	private selectImageCandidatesToLoad(options: {
+		pendingVisibleCandidates: ImageLoadCandidate[]
+		pendingLowDetailVisibleCandidates: ImageLoadCandidate[]
+		pendingNearCandidates: ImageLoadCandidate[]
+		reason: string
+		shouldDeferNearLoads: boolean
+	}): {
+		visibleToLoad: ImageLoadCandidate[]
+		nearToLoad: ImageLoadCandidate[]
+		imageLoadRequestBudget: number | null
+	} {
+		const {
+			pendingLowDetailVisibleCandidates,
+			pendingNearCandidates,
+			pendingVisibleCandidates,
+			reason,
+			shouldDeferNearLoads,
+		} = options
+		const imageLoadRequestBudget = getBackgroundImageLoadRequestBudget(reason)
+		const visibleRequestLimit = imageLoadRequestBudget ?? MAX_VISIBLE_LOAD_REQUESTS_PER_QUERY
+		const visibleToLoad =
+			pendingVisibleCandidates.length > 0
+				? pendingVisibleCandidates
+						.sort(sortCandidates)
+						.slice(
+							0,
+							Math.min(MAX_VISIBLE_LOAD_REQUESTS_PER_QUERY, visibleRequestLimit),
+						)
+				: pendingLowDetailVisibleCandidates
+						.sort(sortCandidates)
+						.slice(0, Math.min(LOW_DETAIL_VISIBLE_FALLBACK_LIMIT, visibleRequestLimit))
+		const remainingImageRequestBudget =
+			imageLoadRequestBudget === null
+				? MAX_NEAR_LOAD_REQUESTS_PER_QUERY
+				: Math.max(0, imageLoadRequestBudget - visibleToLoad.length)
+		const nearToLoad =
+			shouldDeferNearLoads || remainingImageRequestBudget <= 0
+				? []
+				: pendingNearCandidates
+						.sort(sortCandidates)
+						.slice(
+							0,
+							Math.min(MAX_NEAR_LOAD_REQUESTS_PER_QUERY, remainingImageRequestBudget),
+						)
+
+		return { imageLoadRequestBudget, nearToLoad, visibleToLoad }
 	}
 
 	private scheduleDrainIfNeeded(options: {
