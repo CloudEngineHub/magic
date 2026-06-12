@@ -39,6 +39,26 @@ export enum PowerCode {
 	IMAGE_ERASER = "image_eraser",
 	/** 天气查询 */
 	WEATHER_FORECAST = "weather_forecast",
+	/** 知识库嵌入模型 */
+	KNOWLEDGE_BASE_EMBEDDING_MODEL = "knowledge_base_embedding_model",
+	/** 知识库视觉理解能力 */
+	KNOWLEDGE_BASE_VISUAL_UNDERSTANDING = "knowledge_base_visual_understanding",
+	/** 追加提问 */
+	FOLLOW_UP_QUESTIONS = "follow_up_questions",
+	/** 视频理解 */
+	VIDEO_UNDERSTANDING = "video_understanding",
+	/** 深度写作 (超级麦吉) */
+	SUPER_MAGIC_DEEP_WRITE = "super_magic_deep_write",
+	/** 内容净化 (超级麦吉) */
+	SUPER_MAGIC_PURIFY = "super_magic_purify",
+	/** 智能文件名 (超级麦吉) */
+	SUPER_MAGIC_SMART_FILENAME = "super_magic_smart_filename",
+	/** 上下文压缩 (超级麦吉) */
+	SUPER_MAGIC_COMPACT = "super_magic_compact",
+	/** 音频分析 (超级麦吉) */
+	SUPER_MAGIC_ANALYSIS_AUDIO = "super_magic_analysis_audio",
+	/** 生图提示词补全 */
+	IMAGE_PROMPT_COMPLETION = "image_prompt_completion",
 }
 
 /** 能力管理联通性测试 */
