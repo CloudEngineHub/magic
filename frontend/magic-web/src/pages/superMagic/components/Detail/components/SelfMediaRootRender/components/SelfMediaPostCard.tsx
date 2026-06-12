@@ -3,7 +3,7 @@ import {
 	BarChart3,
 	CalendarClock,
 	ClipboardCheck,
-	Database,
+	Eye,
 	FileText,
 	Link2,
 	Loader2,
@@ -25,18 +25,22 @@ import CardFrame from "./CardFrame"
 import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../constants/imageProcess"
 import { useCoverImageUrl } from "../platforms/wechat-official-accounts/useCoverImageUrl"
 import { isCardPlatform } from "../services/selfMediaAiNormalize"
-import type { SelfMediaPostOpsSourcePayload } from "../services/SelfMediaFileStorageService"
+import type {
+	SelfMediaPostOpsMetricsPayload,
+	SelfMediaPostOpsMetricValue,
+	SelfMediaPostOpsSourcePayload,
+} from "../services/SelfMediaFileStorageService"
+import type {
+	SelfMediaPostOpsArtifactAnimation,
+	SelfMediaPostOpsArtifactAnimations,
+	SelfMediaPostOpsArtifactKey,
+	SelfMediaPostOpsArtifacts,
+} from "../services/selfMediaOpsArtifactStates"
 import type { AICardCreateInitialValues } from "./AICardCreateDialog"
 
 const COMPACT_ACTION_LABEL_MIN_WIDTH = 320
 const FULL_ACTION_LABEL_MIN_WIDTH = 420
-
-export interface SelfMediaPostOpsArtifacts {
-	source: boolean
-	metrics: boolean
-	comments: boolean
-	review: boolean
-}
+const DATA_POPOVER_CLOSE_DELAY = 120
 
 interface SelfMediaPostCardProps {
 	item: SelfMediaPlatformPostItem
@@ -44,10 +48,11 @@ interface SelfMediaPostCardProps {
 	subtitle: string
 	postId: string
 	opsArtifacts: SelfMediaPostOpsArtifacts
+	opsArtifactAnimations?: SelfMediaPostOpsArtifactAnimations
+	opsMetrics?: SelfMediaPostOpsMetricsPayload | null
 	attachmentList?: SelfMediaAttachmentNode[]
 	onOpenPost: (target: { platform: SelfMediaPlatform; index: number }) => void
 	onRequestPrePublishAnalysis?: (target: { platform: SelfMediaPlatform; index: number }) => void
-	onOpenOpsMetrics?: (target: SelfMediaPlatformPostItem) => void
 	onPostPublishRefresh?: (
 		target: SelfMediaPlatformPostItem,
 		publishedUrl?: string,
@@ -76,10 +81,11 @@ function SelfMediaPostCard({
 	subtitle,
 	postId,
 	opsArtifacts,
+	opsArtifactAnimations,
+	opsMetrics,
 	attachmentList,
 	onOpenPost,
 	onRequestPrePublishAnalysis,
-	onOpenOpsMetrics,
 	onPostPublishRefresh,
 	onConfigureAutoSync,
 	onOpenOpsReview,
@@ -89,12 +95,15 @@ function SelfMediaPostCard({
 }: SelfMediaPostCardProps) {
 	const { t } = useTranslation("super")
 	const { platform, index } = item
-	const engagementItems = getEngagementItems(item)
+	const engagementItems = getEngagementItems(opsMetrics)
 	const cardRef = useRef<HTMLDivElement | null>(null)
 	const [localPublishedUrl, setLocalPublishedUrl] = useState("")
 	const [showActionLabels, setShowActionLabels] = useState(true)
 	const sourceReady = opsArtifacts.source || localPublishedUrl.trim().length > 0
 	const canManagePublishedUrl = Boolean(onBindPublishedUrl || onLoadPublishedUrl)
+	const canOpenDataPopover = Boolean(
+		onPostPublishRefresh || onConfigureAutoSync || onLoadOpsSource,
+	)
 	const actionLabelMinWidth = sourceReady
 		? FULL_ACTION_LABEL_MIN_WIDTH
 		: COMPACT_ACTION_LABEL_MIN_WIDTH
@@ -157,7 +166,9 @@ function SelfMediaPostCard({
 								className="inline-flex min-w-0 items-center gap-1"
 							>
 								<metric.Icon className="h-3.5 w-3.5 shrink-0" />
-								<span className="truncate">{metric.value}</span>
+								<span className="truncate">
+									{t(metric.labelKey)} {metric.value}
+								</span>
 							</span>
 						))}
 					</div>
@@ -177,6 +188,7 @@ function SelfMediaPostCard({
 							trigger="artifact"
 							artifactReady={artifact.ready}
 							artifactReadyClassName={artifact.readyClassName}
+							animation={opsArtifactAnimations?.[artifact.key]}
 							localPublishedUrl={localPublishedUrl}
 							onLocalPublishedUrlChange={setLocalPublishedUrl}
 							onLoadPublishedUrl={onLoadPublishedUrl}
@@ -187,15 +199,21 @@ function SelfMediaPostCard({
 						<MagicTooltip key={artifact.key} title={t(artifact.labelKey)}>
 							<span
 								className={cn(
-									"flex h-5 w-5 items-center justify-center rounded-full border transition",
+									"relative flex h-5 w-5 items-center justify-center rounded-full border transition",
 									artifact.ready
 										? artifact.readyClassName
 										: "border-border bg-muted/50 text-muted-foreground/60",
+									opsArtifactAnimations?.[artifact.key] === "updated" &&
+										"animate-bounce",
 								)}
 								aria-label={t(artifact.labelKey)}
+								data-animation={opsArtifactAnimations?.[artifact.key]}
 								data-ready={artifact.ready ? "true" : "false"}
 								data-testid={`self-media-home-post-ops-artifact-${postId}-${artifact.key}`}
 							>
+								{opsArtifactAnimations?.[artifact.key] === "created" ? (
+									<ArtifactConfetti postId={postId} artifactKey={artifact.key} />
+								) : null}
 								<artifact.Icon className="size-3" aria-hidden="true" />
 							</span>
 						</MagicTooltip>
@@ -230,13 +248,12 @@ function SelfMediaPostCard({
 						onPostPublishRefresh={onPostPublishRefresh}
 					/>
 				) : null}
-				{sourceReady && onOpenOpsMetrics ? (
+				{sourceReady && canOpenDataPopover ? (
 					<PostDataPopover
 						item={item}
 						postId={postId}
-						label={t("detail.selfMedia.home.opsData")}
+						label={t("detail.selfMedia.home.dataSyncNow")}
 						showLabel={showActionLabels}
-						onOpenOpsMetrics={onOpenOpsMetrics}
 						onPostPublishRefresh={onPostPublishRefresh}
 						onConfigureAutoSync={onConfigureAutoSync}
 						onLoadOpsSource={onLoadOpsSource}
@@ -262,7 +279,6 @@ function PostDataPopover({
 	postId,
 	label,
 	showLabel,
-	onOpenOpsMetrics,
 	onPostPublishRefresh,
 	onConfigureAutoSync,
 	onLoadOpsSource,
@@ -271,7 +287,6 @@ function PostDataPopover({
 	postId: string
 	label: string
 	showLabel: boolean
-	onOpenOpsMetrics?: (target: SelfMediaPlatformPostItem) => void
 	onPostPublishRefresh?: (
 		target: SelfMediaPlatformPostItem,
 		publishedUrl?: string,
@@ -289,6 +304,7 @@ function PostDataPopover({
 	const [syncing, setSyncing] = useState(false)
 	const [savingAutoSync, setSavingAutoSync] = useState(false)
 	const [loadingAutoSync, setLoadingAutoSync] = useState(false)
+	const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const [frequency, setFrequency] = useState<ScheduledTask.ScheduleType>(
 		ScheduledTask.ScheduleType.Daily,
 	)
@@ -316,6 +332,28 @@ function PostDataPopover({
 		},
 		[],
 	)
+
+	const clearCloseTimer = useCallback(() => {
+		if (!closeTimerRef.current) return
+		clearTimeout(closeTimerRef.current)
+		closeTimerRef.current = null
+	}, [])
+
+	const openAutoSyncPopover = useCallback(() => {
+		clearCloseTimer()
+		if (!open && onLoadOpsSource) setLoadingAutoSync(true)
+		setOpen(true)
+	}, [clearCloseTimer, onLoadOpsSource, open])
+
+	const scheduleCloseAutoSyncPopover = useCallback(() => {
+		clearCloseTimer()
+		closeTimerRef.current = setTimeout(() => {
+			setOpen(false)
+			closeTimerRef.current = null
+		}, DATA_POPOVER_CLOSE_DELAY)
+	}, [clearCloseTimer])
+
+	useEffect(() => clearCloseTimer, [clearCloseTimer])
 
 	useEffect(() => {
 		if (!open) return
@@ -386,9 +424,19 @@ function PostDataPopover({
 					)}
 					aria-label={label}
 					title={showLabel ? undefined : label}
+					onMouseEnter={openAutoSyncPopover}
+					onMouseLeave={scheduleCloseAutoSyncPopover}
+					onClick={(event) => {
+						event.preventDefault()
+						void handleSyncNow()
+					}}
 					data-testid={`self-media-home-post-ops-data-${postId}`}
 				>
-					<Database className="h-4 w-4 shrink-0" />
+					{syncing ? (
+						<Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+					) : (
+						<RefreshCw className="h-4 w-4 shrink-0" aria-hidden="true" />
+					)}
 					{showLabel ? <span className="whitespace-nowrap">{label}</span> : null}
 				</button>
 			</PopoverTrigger>
@@ -396,123 +444,105 @@ function PostDataPopover({
 				side="top"
 				align="end"
 				className="w-80 space-y-3 p-3"
+				onMouseEnter={openAutoSyncPopover}
+				onMouseLeave={scheduleCloseAutoSyncPopover}
 				data-testid={`self-media-home-post-data-popover-${postId}`}
 			>
-				<div className="grid gap-2">
-					<Button
-						type="button"
-						variant="outline"
-						className="justify-start"
-						disabled={!onPostPublishRefresh || syncing}
-						onClick={() => void handleSyncNow()}
-						data-testid={`self-media-home-post-data-sync-now-${postId}`}
-					>
-						{syncing ? (
-							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
-						) : (
-							<RefreshCw className="size-4" aria-hidden="true" />
-						)}
-						{t("detail.selfMedia.home.dataSyncNow")}
-					</Button>
-					<Button
-						type="button"
-						variant="outline"
-						className="justify-start"
-						onClick={() => {
-							onOpenOpsMetrics?.(item)
-							setOpen(false)
-						}}
-						data-testid={`self-media-home-post-data-overview-${postId}`}
-					>
-						<BarChart3 className="size-4" aria-hidden="true" />
-						{t("detail.selfMedia.home.dataOverview")}
-					</Button>
+				<div className="flex items-center gap-2 text-xs font-medium text-foreground">
+					<CalendarClock className="size-3.5 text-muted-foreground" aria-hidden="true" />
+					{t("detail.selfMedia.home.autoSync")}
 				</div>
-				<div className="space-y-2 rounded-md border bg-muted/20 p-3">
-					<div className="flex items-center gap-2 text-xs font-medium text-foreground">
-						<CalendarClock
-							className="size-3.5 text-muted-foreground"
-							aria-hidden="true"
-						/>
-						{t("detail.selfMedia.home.autoSync")}
-					</div>
-					<p className="text-xs text-muted-foreground">
-						{t("detail.selfMedia.home.autoSyncDescription")}
-					</p>
-					<div className="grid grid-cols-[auto_1fr] items-center gap-2 text-xs">
-						<span className="text-muted-foreground">
-							{t("detail.selfMedia.home.autoSyncStatus")}
-						</span>
-						<select
-							value={autoSyncEnabled ? "1" : "0"}
-							disabled={loadingAutoSync}
-							onChange={(event) => setAutoSyncEnabled(event.target.value === "1")}
-							className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
-							data-testid={`self-media-home-post-auto-sync-enabled-${postId}`}
-						>
-							<option value="1">{t("detail.selfMedia.home.autoSyncEnabled")}</option>
-							<option value="0">{t("detail.selfMedia.home.autoSyncDisabled")}</option>
-						</select>
-					</div>
-					<div className="grid grid-cols-[1fr_auto] gap-2">
-						<select
-							value={frequency}
-							disabled={loadingAutoSync || !autoSyncEnabled}
-							onChange={(event) =>
-								setFrequency(event.target.value as ScheduledTask.ScheduleType)
-							}
-							className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
-							data-testid={`self-media-home-post-auto-sync-frequency-${postId}`}
-						>
-							<option value={ScheduledTask.ScheduleType.Daily}>
-								{t("detail.selfMedia.home.autoSyncDaily")}
-							</option>
-							<option value={ScheduledTask.ScheduleType.Weekly}>
-								{t("detail.selfMedia.home.autoSyncWeekly")}
-							</option>
-							<option value={ScheduledTask.ScheduleType.Monthly}>
-								{t("detail.selfMedia.home.autoSyncMonthly")}
-							</option>
-						</select>
-						<Input
-							type="time"
-							value={time}
-							disabled={loadingAutoSync || !autoSyncEnabled}
-							onChange={(event) => setTime(event.target.value)}
-							className="h-8 w-24 text-xs"
-							data-testid={`self-media-home-post-auto-sync-time-${postId}`}
-						/>
-					</div>
-					{frequency !== ScheduledTask.ScheduleType.Daily ? (
-						<Input
-							value={day}
-							disabled={loadingAutoSync || !autoSyncEnabled}
-							onChange={(event) => setDay(event.target.value)}
-							className="h-8 text-xs"
-							placeholder={
-								frequency === ScheduledTask.ScheduleType.Weekly
-									? t("detail.selfMedia.home.autoSyncWeekdayPlaceholder")
-									: t("detail.selfMedia.home.autoSyncMonthDayPlaceholder")
-							}
-							data-testid={`self-media-home-post-auto-sync-day-${postId}`}
-						/>
-					) : null}
-					<Button
-						type="button"
-						size="sm"
-						className="w-full"
-						disabled={!onConfigureAutoSync || loadingAutoSync || savingAutoSync}
-						onClick={() => void handleConfigureAutoSync()}
-						data-testid={`self-media-home-post-auto-sync-save-${postId}`}
+				<p className="text-xs text-muted-foreground">
+					{t("detail.selfMedia.home.autoSyncDescription")}
+				</p>
+				{loadingAutoSync ? (
+					<div
+						className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-md border border-dashed bg-background/70 px-4 py-5 text-xs text-muted-foreground"
+						data-testid={`self-media-home-post-auto-sync-loading-${postId}`}
 					>
-						{loadingAutoSync || savingAutoSync ? (
-							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+						<Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+						<span>{t("detail.selfMedia.home.loadingAutoSync")}</span>
+					</div>
+				) : (
+					<>
+						<div className="grid grid-cols-[auto_1fr] items-center gap-2 text-xs">
+							<span className="text-muted-foreground">
+								{t("detail.selfMedia.home.autoSyncStatus")}
+							</span>
+							<select
+								value={autoSyncEnabled ? "1" : "0"}
+								onChange={(event) => setAutoSyncEnabled(event.target.value === "1")}
+								className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+								data-testid={`self-media-home-post-auto-sync-enabled-${postId}`}
+							>
+								<option value="1">
+									{t("detail.selfMedia.home.autoSyncEnabled")}
+								</option>
+								<option value="0">
+									{t("detail.selfMedia.home.autoSyncDisabled")}
+								</option>
+							</select>
+						</div>
+						<div className="grid grid-cols-[1fr_auto] gap-2">
+							<select
+								value={frequency}
+								disabled={!autoSyncEnabled}
+								onChange={(event) =>
+									setFrequency(event.target.value as ScheduledTask.ScheduleType)
+								}
+								className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+								data-testid={`self-media-home-post-auto-sync-frequency-${postId}`}
+							>
+								<option value={ScheduledTask.ScheduleType.Daily}>
+									{t("detail.selfMedia.home.autoSyncDaily")}
+								</option>
+								<option value={ScheduledTask.ScheduleType.Weekly}>
+									{t("detail.selfMedia.home.autoSyncWeekly")}
+								</option>
+								<option value={ScheduledTask.ScheduleType.Monthly}>
+									{t("detail.selfMedia.home.autoSyncMonthly")}
+								</option>
+							</select>
+							<Input
+								type="time"
+								value={time}
+								disabled={!autoSyncEnabled}
+								onChange={(event) => setTime(event.target.value)}
+								className="h-8 w-24 text-xs"
+								data-testid={`self-media-home-post-auto-sync-time-${postId}`}
+							/>
+						</div>
+						{frequency !== ScheduledTask.ScheduleType.Daily ? (
+							<Input
+								value={day}
+								disabled={!autoSyncEnabled}
+								onChange={(event) => setDay(event.target.value)}
+								className="h-8 text-xs"
+								placeholder={
+									frequency === ScheduledTask.ScheduleType.Weekly
+										? t("detail.selfMedia.home.autoSyncWeekdayPlaceholder")
+										: t("detail.selfMedia.home.autoSyncMonthDayPlaceholder")
+								}
+								data-testid={`self-media-home-post-auto-sync-day-${postId}`}
+							/>
 						) : null}
-						{autoSyncEnabled
-							? t("detail.selfMedia.home.autoSyncSave")
-							: t("detail.selfMedia.home.autoSyncTurnOff")}
-					</Button>
-				</div>
+						<Button
+							type="button"
+							size="sm"
+							className="w-full"
+							disabled={!onConfigureAutoSync || savingAutoSync}
+							onClick={() => void handleConfigureAutoSync()}
+							data-testid={`self-media-home-post-auto-sync-save-${postId}`}
+						>
+							{savingAutoSync ? (
+								<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+							) : null}
+							{autoSyncEnabled
+								? t("detail.selfMedia.home.autoSyncSave")
+								: t("detail.selfMedia.home.autoSyncTurnOff")}
+						</Button>
+					</>
+				)}
 			</PopoverContent>
 		</Popover>
 	)
@@ -526,6 +556,7 @@ interface PublishedLinkPopoverProps {
 	showLabel?: boolean
 	artifactReady?: boolean
 	artifactReadyClassName?: string
+	animation?: SelfMediaPostOpsArtifactAnimation
 	localPublishedUrl: string
 	onLocalPublishedUrlChange: (url: string) => void
 	onLoadPublishedUrl?: (
@@ -549,6 +580,7 @@ function PublishedLinkPopover({
 	showLabel,
 	artifactReady,
 	artifactReadyClassName,
+	animation,
 	localPublishedUrl,
 	onLocalPublishedUrlChange,
 	onLoadPublishedUrl,
@@ -572,7 +604,12 @@ function PublishedLinkPopover({
 	useEffect(() => {
 		if (!open) return
 		setLinkValue(localPublishedUrl)
-		if (!onLoadPublishedUrl) return
+		const shouldLoadPublishedUrl =
+			trigger === "artifact" || sourceReady || localPublishedUrl.trim().length > 0
+		if (!shouldLoadPublishedUrl || !onLoadPublishedUrl) {
+			setLoading(false)
+			return
+		}
 
 		let cancelled = false
 		setLoading(true)
@@ -588,7 +625,15 @@ function PublishedLinkPopover({
 		return () => {
 			cancelled = true
 		}
-	}, [item, localPublishedUrl, onLoadPublishedUrl, onLocalPublishedUrlChange, open])
+	}, [
+		item,
+		localPublishedUrl,
+		onLoadPublishedUrl,
+		onLocalPublishedUrlChange,
+		open,
+		sourceReady,
+		trigger,
+	])
 
 	const submit = useCallback(
 		async (mode: "save" | "fetch") => {
@@ -616,16 +661,21 @@ function PublishedLinkPopover({
 					<button
 						type="button"
 						className={cn(
-							"flex h-5 w-5 items-center justify-center rounded-full border transition hover:scale-105 hover:ring-2 hover:ring-ring/20 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+							"relative flex h-5 w-5 items-center justify-center rounded-full border transition hover:scale-105 hover:ring-2 hover:ring-ring/20 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
 							artifactReady
 								? artifactReadyClassName
 								: "border-border bg-muted/50 text-muted-foreground/60",
+							animation === "updated" && "animate-bounce",
 						)}
 						aria-label={label}
 						title={label}
+						data-animation={animation}
 						data-ready={artifactReady ? "true" : "false"}
 						data-testid={`self-media-home-post-ops-artifact-${postId}-source`}
 					>
+						{animation === "created" ? (
+							<ArtifactConfetti postId={postId} artifactKey="source" />
+						) : null}
 						<Link2 className="size-3" aria-hidden="true" />
 					</button>
 				) : (
@@ -715,6 +765,26 @@ function PublishedLinkPopover({
 	)
 }
 
+function ArtifactConfetti({
+	postId,
+	artifactKey,
+}: {
+	postId: string
+	artifactKey: SelfMediaPostOpsArtifactKey
+}) {
+	return (
+		<span
+			className="pointer-events-none absolute inset-0"
+			aria-hidden="true"
+			data-testid={`self-media-home-post-ops-artifact-confetti-${postId}-${artifactKey}`}
+		>
+			<span className="absolute -left-1 -top-1 size-1 animate-ping rounded-full bg-sky-400" />
+			<span className="absolute -right-1 -top-0.5 size-1 animate-ping rounded-full bg-amber-400 [animation-delay:120ms]" />
+			<span className="absolute -bottom-1 left-1/2 size-1 animate-ping rounded-full bg-emerald-400 [animation-delay:240ms]" />
+		</span>
+	)
+}
+
 function PostActionButton({
 	label,
 	Icon,
@@ -789,25 +859,85 @@ function ArticlePreview({
 	return <FileText size={17} data-testid={`self-media-home-icon-fallback-${postId}`} />
 }
 
-function getEngagementItems({ post }: SelfMediaPlatformPostItem) {
+function getEngagementItems(opsMetrics?: SelfMediaPostOpsMetricsPayload | null) {
 	const items: Array<{
 		key: string
+		labelKey: string
 		value: string
 		Icon: typeof ThumbsUp
 	}> = []
-	if (post.meta.feedLikes) {
-		items.push({ key: "likes", value: post.meta.feedLikes, Icon: ThumbsUp })
+	const reads = getOpsMetricDisplayValue(opsMetrics?.metrics, [
+		"reads",
+		"readCount",
+		"read_count",
+		"viewCount",
+		"views",
+		"view_count",
+	])
+	const likes = getOpsMetricDisplayValue(opsMetrics?.metrics, [
+		"likes",
+		"feedLikes",
+		"likeCount",
+		"like_count",
+	])
+	const comments = getOpsMetricDisplayValue(opsMetrics?.metrics, [
+		"comments",
+		"commentCount",
+		"commentsCount",
+		"comment_count",
+	])
+
+	if (reads) {
+		items.push({
+			key: "reads",
+			labelKey: "detail.selfMedia.home.engagement.reads",
+			value: reads,
+			Icon: Eye,
+		})
 	}
-	if (post.meta.commentCount) {
-		items.push({ key: "comments", value: post.meta.commentCount, Icon: MessageCircle })
-	} else if (Array.isArray(post.meta.comments) && post.meta.comments.length > 0) {
+	if (likes) {
+		items.push({
+			key: "likes",
+			labelKey: "detail.selfMedia.home.engagement.likes",
+			value: likes,
+			Icon: ThumbsUp,
+		})
+	}
+	if (comments) {
 		items.push({
 			key: "comments",
-			value: String(post.meta.comments.length),
+			labelKey: "detail.selfMedia.home.engagement.comments",
+			value: comments,
 			Icon: MessageCircle,
 		})
 	}
 	return items
+}
+
+function getOpsMetricDisplayValue(
+	metrics: Record<string, SelfMediaPostOpsMetricValue> | undefined,
+	keys: string[],
+) {
+	if (!metrics) return ""
+	for (const key of keys) {
+		const displayValue = normalizeMetricDisplayValue(metrics[key])
+		if (displayValue) return displayValue
+	}
+	return ""
+}
+
+function normalizeMetricDisplayValue(value: SelfMediaPostOpsMetricValue | undefined) {
+	if (typeof value === "string") {
+		const trimmed = value.trim()
+		if (trimmed) return trimmed
+	}
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return String(value)
+	}
+	if (value && typeof value === "object") {
+		return normalizeMetricDisplayValue(value.value)
+	}
+	return ""
 }
 
 function getOpsArtifactItems(artifacts: SelfMediaPostOpsArtifacts) {

@@ -3,6 +3,7 @@ import { superMagicUploadTokenService } from "@/pages/superMagic/components/Mess
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import type { ScheduledTask } from "@/types/scheduledTask"
 import { Upload } from "@dtyq/upload-sdk"
+import { hasMeaningfulSelfMediaDraftData } from "../components/SelfMediaInitPanel/types"
 import type {
 	SelfMediaInitData,
 	ArticleDetail,
@@ -459,6 +460,9 @@ export class SelfMediaFileStorageService {
 
 	/** Persist draft to project files */
 	async saveDraft(data: SelfMediaInitData, currentStep: number): Promise<void> {
+		if (!hasMeaningfulSelfMediaDraftData(data)) {
+			return
+		}
 		await this.persistDraft(data, currentStep)
 	}
 
@@ -524,7 +528,6 @@ export class SelfMediaFileStorageService {
 	async loadDraft(): Promise<{ data: SelfMediaInitData; currentStep: number } | null> {
 		try {
 			const files = await this.getProjectFileList()
-			const draftJsonPath = this.getDraftJsonRelativePath()
 			const draftFile = this.findDraftFile(files)
 			if (!draftFile?.file_id) {
 				return null
@@ -535,8 +538,12 @@ export class SelfMediaFileStorageService {
 			})) as string
 
 			const payload: DraftPayload = JSON.parse(content)
+			const data = this.deserializePayload(payload)
+			if (!hasMeaningfulSelfMediaDraftData(data)) {
+				return null
+			}
 			return {
-				data: this.deserializePayload(payload),
+				data,
 				currentStep: payload.currentStep,
 			}
 		} catch {

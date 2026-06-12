@@ -116,6 +116,9 @@ vi.mock("react-i18next", () => ({
 						"detail.selfMedia.home.create": "New article",
 						"detail.selfMedia.home.emptyTitle": "No articles yet",
 						"detail.selfMedia.home.emptyDesc": "Create your first article",
+						"detail.selfMedia.home.engagement.comments": "Comments",
+						"detail.selfMedia.home.engagement.likes": "Likes",
+						"detail.selfMedia.home.engagement.reads": "Reads",
 						"detail.selfMedia.home.articleCount": "1 article",
 						"detail.selfMedia.home.postReviewCard": "Create review",
 						"detail.selfMedia.home.openOpsReview": "View review",
@@ -170,6 +173,7 @@ vi.mock("react-i18next", () => ({
 						"detail.selfMedia.home.autoSyncMonthDayPlaceholder": "Day",
 						"detail.selfMedia.home.autoSyncSave": "Save auto sync",
 						"detail.selfMedia.home.autoSyncTurnOff": "Turn off auto sync",
+						"detail.selfMedia.home.loadingAutoSync": "Loading auto sync",
 						"detail.selfMedia.analysis.action": "AI diagnosis",
 						"detail.selfMedia.home.bindPublishedLink": "Connect published link",
 						"detail.selfMedia.home.editPublishedLink": "Change published link",
@@ -646,6 +650,7 @@ describe("SelfMediaRootRender", () => {
 						author: "Magic Lab",
 						feedLikes: "1.2w",
 						commentCount: "128",
+						readCount: "3.6w",
 						time: "2 hours ago",
 						comments: [{ name: "Alice", text: "This makes the workflow concrete." }],
 					},
@@ -662,6 +667,7 @@ describe("SelfMediaRootRender", () => {
 					author: "Magic Lab",
 					feedLikes: "1.2w",
 					commentCount: "128",
+					readCount: "3.6w",
 					time: "2 hours ago",
 					comments: [{ name: "Alice", text: "This makes the workflow concrete." }],
 				},
@@ -1122,7 +1128,7 @@ describe("SelfMediaRootRender", () => {
 		expect(screen.getByTestId("self-media-brand-config-dialog")).toBeInTheDocument()
 	})
 
-	it("opens the file-backed ops metrics dialog from an article card", async () => {
+	it("does not expose the data overview dialog from an article card", async () => {
 		render(
 			<SelfMediaRootRender
 				data={ROOT_DATA}
@@ -1133,12 +1139,102 @@ describe("SelfMediaRootRender", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
-		fireEvent.click(await screen.findByTestId("self-media-home-post-data-overview-post-1"))
+		fireEvent.mouseEnter(screen.getByTestId("self-media-home-post-ops-data-post-1"))
 
-		expect(screen.getByTestId("self-media-ops-metrics-dialog")).toHaveTextContent(
-			"Post One Feed",
+		expect(
+			await screen.findByTestId("self-media-home-post-data-popover-post-1"),
+		).toBeInTheDocument()
+		expect(
+			screen.queryByTestId("self-media-home-post-data-overview-post-1"),
+		).not.toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-ops-metrics-dialog")).not.toBeInTheDocument()
+	})
+
+	it("animates only the matching ops artifact icon when its target file appears or updates", async () => {
+		const withCardVersion = (version: string) => {
+			const next = JSON.parse(
+				JSON.stringify(POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST),
+			) as typeof POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST
+			const postDir = next[0].children?.[0]
+			const card = postDir?.children?.find((node) => node.file_id === "card-file")
+			if (card) card.updated_at = version
+			return next
+		}
+		const withMetricsVersion = (version: string) => {
+			const next = withCardVersion(`card-${version}`)
+			const postDir = next[0].children?.[0]
+			postDir?.children?.push({
+				file_id: "metrics-json",
+				file_name: "metrics.json",
+				relative_file_path: "posts/post-1/ops/metrics.json",
+				updated_at: version,
+			})
+			return next
+		}
+
+		const { rerender } = render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
 		)
+
+		rerender(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={withCardVersion("card-v2")}
+				attachmentList={withCardVersion("card-v2")}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("self-media-home-post-ops-artifact-post-1-metrics"),
+			).toHaveAttribute("data-ready", "false")
+		})
+		expect(
+			screen.getByTestId("self-media-home-post-ops-artifact-post-1-metrics"),
+		).not.toHaveAttribute("data-animation")
+
+		rerender(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={withMetricsVersion("metrics-v1")}
+				attachmentList={withMetricsVersion("metrics-v1")}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("self-media-home-post-ops-artifact-post-1-metrics"),
+			).toHaveAttribute("data-animation", "created")
+		})
+		expect(
+			screen.getByTestId("self-media-home-post-ops-artifact-confetti-post-1-metrics"),
+		).toBeInTheDocument()
+
+		rerender(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={withMetricsVersion("metrics-v2")}
+				attachmentList={withMetricsVersion("metrics-v2")}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		await waitFor(() => {
+			const metrics = screen.getByTestId("self-media-home-post-ops-artifact-post-1-metrics")
+			expect(metrics).toHaveAttribute("data-animation", "updated")
+			expect(metrics).toHaveClass("animate-bounce")
+		})
 	})
 
 	it("shows action button labels when the article card is wide enough", async () => {
@@ -1166,7 +1262,7 @@ describe("SelfMediaRootRender", () => {
 				screen.queryByTestId("self-media-home-post-bind-link-post-1"),
 			).not.toBeInTheDocument()
 			expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toHaveTextContent(
-				"Data",
+				"Sync now",
 			)
 			expect(
 				screen.queryByTestId("self-media-home-post-publish-ingest-post-1"),
@@ -1259,7 +1355,7 @@ describe("SelfMediaRootRender", () => {
 			expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toHaveTextContent("")
 			expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toHaveAttribute(
 				"aria-label",
-				"Data",
+				"Sync now",
 			)
 			expect(
 				screen.queryByTestId("self-media-home-post-publish-ingest-post-1"),
@@ -1542,16 +1638,12 @@ describe("SelfMediaRootRender", () => {
 		)
 
 		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
-		fireEvent.click(await screen.findByTestId("self-media-home-post-data-sync-now-post-1"))
 
 		await waitFor(() => {
 			expect(mockLoadPostOpsSource).toHaveBeenCalledWith("posts/post-1/post.json")
 		})
 		expect(mockSendSelfMediaPostPublishDataRefresh).not.toHaveBeenCalled()
 		expect(mockToastError).toHaveBeenCalledWith("Please bind the published article URL first.")
-		expect(screen.getByTestId("self-media-ops-metrics-dialog")).toHaveTextContent(
-			"Post One Feed",
-		)
 	})
 
 	it("binds the published link and starts publish ingest from the article card", async () => {
@@ -1683,7 +1775,6 @@ describe("SelfMediaRootRender", () => {
 		)
 
 		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
-		fireEvent.click(await screen.findByTestId("self-media-home-post-data-sync-now-post-1"))
 
 		await waitFor(() => {
 			expect(mockSendSelfMediaPostPublishDataRefresh).toHaveBeenCalledWith(
@@ -1740,7 +1831,6 @@ describe("SelfMediaRootRender", () => {
 		)
 
 		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
-		fireEvent.click(await screen.findByTestId("self-media-home-post-data-sync-now-post-1"))
 
 		await waitFor(() => {
 			expect(mockSendSelfMediaPostPublishDataRefresh).toHaveBeenCalledWith(
@@ -1796,7 +1886,6 @@ describe("SelfMediaRootRender", () => {
 		)
 
 		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
-		fireEvent.click(await screen.findByTestId("self-media-home-post-data-sync-now-post-1"))
 
 		await waitFor(() => {
 			expect(mockToastError).toHaveBeenCalledWith(
@@ -1842,7 +1931,7 @@ describe("SelfMediaRootRender", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+		fireEvent.mouseEnter(screen.getByTestId("self-media-home-post-ops-data-post-1"))
 		fireEvent.change(
 			await screen.findByTestId("self-media-home-post-auto-sync-frequency-post-1"),
 			{ target: { value: "weekly_repeat" } },
@@ -1927,7 +2016,7 @@ describe("SelfMediaRootRender", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+		fireEvent.mouseEnter(screen.getByTestId("self-media-home-post-ops-data-post-1"))
 
 		expect(
 			await screen.findByTestId("self-media-home-post-auto-sync-enabled-post-1"),
@@ -1956,11 +2045,14 @@ describe("SelfMediaRootRender", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+		fireEvent.mouseEnter(screen.getByTestId("self-media-home-post-ops-data-post-1"))
 
 		expect(
-			await screen.findByTestId("self-media-home-post-auto-sync-save-post-1"),
-		).toBeDisabled()
+			await screen.findByTestId("self-media-home-post-auto-sync-loading-post-1"),
+		).toHaveTextContent("Loading auto sync")
+		expect(
+			screen.queryByTestId("self-media-home-post-auto-sync-save-post-1"),
+		).not.toBeInTheDocument()
 	})
 
 	it("does not mark auto sync disabled locally when the scheduled task cannot be disabled", async () => {
@@ -1997,7 +2089,7 @@ describe("SelfMediaRootRender", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+		fireEvent.mouseEnter(screen.getByTestId("self-media-home-post-ops-data-post-1"))
 		fireEvent.change(
 			await screen.findByTestId("self-media-home-post-auto-sync-enabled-post-1"),
 			{ target: { value: "0" } },
@@ -2051,8 +2143,8 @@ describe("SelfMediaRootRender", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
-		fireEvent.click(await screen.findByTestId("self-media-home-post-data-overview-post-1"))
+		fireEvent.click(screen.getByTestId("self-media-home-post-review-card-post-1"))
+		fireEvent.click(await screen.findByTestId("self-media-ops-review-edit"))
 		const fetchButton = await screen.findByTestId("self-media-ops-dialog-fetch")
 		mockLoadPostOpsSource.mockClear()
 		fireEvent.click(fetchButton)
@@ -2071,7 +2163,7 @@ describe("SelfMediaRootRender", () => {
 		expect(mockLoadPostOpsSource).not.toHaveBeenCalled()
 	})
 
-	it("updates the existing auto sync task when changing the published link from the data overview", async () => {
+	it("updates the existing auto sync task when changing the published link from the ops review editor", async () => {
 		const post = {
 			meta: {
 				id: "post-1",
@@ -2117,8 +2209,8 @@ describe("SelfMediaRootRender", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("self-media-home-post-ops-data-post-1"))
-		fireEvent.click(await screen.findByTestId("self-media-home-post-data-overview-post-1"))
+		fireEvent.click(screen.getByTestId("self-media-home-post-review-card-post-1"))
+		fireEvent.click(await screen.findByTestId("self-media-ops-review-edit"))
 		fireEvent.click(await screen.findByTestId("self-media-ops-dialog-update-auto-sync-link"))
 
 		await waitFor(() => {
@@ -2151,7 +2243,7 @@ describe("SelfMediaRootRender", () => {
 		)
 	})
 
-	it("shows file-backed operations loop status on the article home", () => {
+	it("shows file-backed operations loop status on the article home", async () => {
 		const attachmentList = [
 			{
 				file_id: "root",
@@ -2222,6 +2314,141 @@ describe("SelfMediaRootRender", () => {
 		expect(
 			screen.getByTestId("self-media-home-post-ops-artifact-post-1-review"),
 		).toHaveAttribute("data-ready", "true")
+		await waitFor(() =>
+			expect(mockLoadPostOpsMetrics).toHaveBeenCalledWith("posts/post-1/post.json"),
+		)
+	})
+
+	it("shows file-backed post engagement metrics on the article home", async () => {
+		const attachmentList = [
+			{
+				file_id: "root",
+				file_name: "self-media",
+				relative_file_path: "",
+				is_directory: true,
+				children: [
+					{
+						file_id: "post-dir",
+						file_name: "post-1",
+						relative_file_path: "posts/post-1/",
+						is_directory: true,
+						children: [
+							{
+								file_id: "post-json",
+								file_name: "post.json",
+								relative_file_path: "posts/post-1/post.json",
+							},
+							{
+								file_id: "metrics-json",
+								file_name: "metrics.json",
+								relative_file_path: "posts/post-1/ops/metrics.json",
+							},
+						],
+					},
+				],
+			},
+		] as NonNullable<SelfMediaRootRenderProps["attachmentList"]>
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post: {
+					meta: {
+						id: "post-1",
+						title: "Post One",
+						feedTitle: "Post One Feed",
+						author: "Magic Lab",
+					},
+					cards: [],
+				},
+			},
+		]
+		mockStore.posts = [
+			{
+				meta: {
+					id: "post-1",
+					title: "Post One",
+					feedTitle: "Post One Feed",
+					author: "Magic Lab",
+				},
+				cards: [],
+			},
+		]
+		mockLoadPostOpsMetrics.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:10:00.000Z",
+			source: "real-platform",
+			metrics: {
+				reads: "838",
+				likes: "41",
+				comments: "1",
+			},
+		})
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={attachmentList}
+				attachmentList={attachmentList}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		const engagement = await screen.findByTestId("self-media-home-post-engagement-post-1")
+		expect(engagement).toHaveTextContent("Reads 838")
+		expect(engagement).toHaveTextContent("Likes 41")
+		expect(engagement).toHaveTextContent("Comments 1")
+		expect(mockLoadPostOpsMetrics).toHaveBeenCalledWith("posts/post-1/post.json")
+	})
+
+	it("shows file-backed engagement metrics when the attachment tree is stale", async () => {
+		mockLoadPostOpsMetrics.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-11T08:10:00.000Z",
+			source: "real-platform",
+			metrics: {
+				reads: "916",
+				likes: "52",
+				comments: "3",
+			},
+		})
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={[]}
+				attachmentList={[]}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		const engagement = await screen.findByTestId("self-media-home-post-engagement-post-1")
+		await waitFor(() => expect(engagement).toHaveTextContent("Reads 916"))
+		expect(engagement).toHaveTextContent("Likes 52")
+		expect(engagement).toHaveTextContent("Comments 3")
+		expect(mockLoadPostOpsMetrics).toHaveBeenCalledWith("posts/post-1/post.json")
+	})
+
+	it("does not fall back to post meta engagement when ops metrics are missing", async () => {
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={[]}
+				attachmentList={[]}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		await waitFor(() =>
+			expect(mockLoadPostOpsMetrics).toHaveBeenCalledWith("posts/post-1/post.json"),
+		)
+		expect(
+			screen.queryByTestId("self-media-home-post-engagement-post-1"),
+		).not.toBeInTheDocument()
 	})
 
 	it("does not render the create article action in the platform header", () => {
@@ -2273,12 +2500,9 @@ describe("SelfMediaRootRender", () => {
 			/>,
 		)
 
-		expect(screen.getByTestId("self-media-home-post-engagement-post-1")).toHaveTextContent(
-			"1.2w",
-		)
-		expect(screen.getByTestId("self-media-home-post-engagement-post-1")).toHaveTextContent(
-			"128",
-		)
+		expect(
+			screen.queryByTestId("self-media-home-post-engagement-post-1"),
+		).not.toBeInTheDocument()
 
 		fireEvent.click(screen.getByTestId("self-media-home-ai-card-button"))
 

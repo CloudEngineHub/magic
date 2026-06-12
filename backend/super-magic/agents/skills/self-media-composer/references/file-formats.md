@@ -139,9 +139,57 @@ posts/<post-id>/
 └── post.json
 ```
 
+### Fixed ops vocabulary
+
+All `ops/*.json` files use fixed keys. Do not invent new metric, derived metric, status, source, sentiment, or intent keys during generation or sync.
+
+Allowed data source values:
+
+- `real-platform`: fetched or copied from the bound published platform page.
+- `user`: entered or supplied by the user.
+- `reference`: reference/display values from planning or `post.json.meta`; never real fetched analytics.
+- `generated`: generated placeholder values; must be labeled as generated and must not imply fetch success.
+- `mixed`: a documented mix of the above sources.
+
+Allowed metric keys in `ops/metrics.json.metrics` for new writes:
+
+- `reads`: exposure, views, reads, impressions, or reach count.
+- `likes`: like count.
+- `saves`: save, favorite, or collect count.
+- `comments`: comment count.
+- `shares`: share, repost, or forward count.
+- `follows`: new follower count attributed to the post.
+- `conversions`: consultation, purchase, signup, trial, or other conversion count.
+
+Allowed derived metric keys in `ops/metrics.json.derivedMetrics`:
+
+- `engagementRate`
+- `saveRate`
+- `shareRate`
+- `commentRate`
+- `followRate`
+- `conversionRate`
+
+Metric values must be one of:
+
+```ts
+string | number | null | {
+  "value": string | number | null,
+  "label"?: string,
+  "source"?: "real-platform" | "user" | "reference" | "generated" | "mixed" | null,
+  "note"?: string
+}
+```
+
+Legacy compatibility: older files may contain `collects`. Treat it as a read-only alias of `saves` when reading historical data. New syncs and manual updates must write `saves`, not `collects`.
+
+Unknown platform-specific numbers must not be added as random keys under `metrics` or `derivedMetrics`. Put them in `notes`, explain them in `ops/review.html`, or extend this fixed contract first.
+
 ### `ops/source.json`
 
 Tracks the published article URL and sync status.
+
+Allowed `fetchStatus` values: `pending`, `fetched`, `failed`.
 
 ```json
 {
@@ -156,7 +204,10 @@ Tracks the published article URL and sync status.
     {
       "fetchedAt": "2026-06-11T09:00:00.000Z",
       "fetchStatus": "pending",
-      "publishedUrl": "https://example.com/post"
+      "publishedUrl": "https://example.com/post",
+      "lastFetchedAt": null,
+      "failureReason": null,
+      "note": "URL bound; data fetch has not run yet."
     }
   ],
   "autoSync": {
@@ -176,11 +227,130 @@ Tracks the published article URL and sync status.
 
 ### `ops/metrics.json`
 
-Stores real or user-entered operation metrics such as exposure/read, likes, saves, comments, shares, follows, conversions, derived rates, and platform-specific KPI fields. Keep the latest values at the top level and append/upsert each sync into `history` so the product UI can render trends without a separate file.
+Stores real or user-entered operation metrics using only the fixed metric and derived metric keys above. Keep the latest values at the top level and append/upsert each sync into `history` so the product UI can render trends without a separate file.
+
+```json
+{
+  "version": 1,
+  "updatedAt": "2026-06-11T09:10:00.000Z",
+  "source": "real-platform",
+  "metrics": {
+    "reads": 1280,
+    "likes": 96,
+    "saves": 42,
+    "comments": 18,
+    "shares": 22,
+    "follows": 6,
+    "conversions": {
+      "value": 3,
+      "label": "咨询线索",
+      "source": "real-platform",
+      "note": "Counted from public comment and private-message leads available to the operator."
+    }
+  },
+  "derivedMetrics": {
+    "engagementRate": "13.9%",
+    "saveRate": "3.3%",
+    "shareRate": "1.7%",
+    "commentRate": "1.4%",
+    "followRate": "0.5%",
+    "conversionRate": "0.2%"
+  },
+  "notes": "Only write the fixed metric keys. Extra platform counters belong here or in review.html.",
+  "history": [
+    {
+      "fetchedAt": "2026-06-11T09:10:00.000Z",
+      "metrics": {
+        "reads": 1280,
+        "likes": 96,
+        "saves": 42,
+        "comments": 18,
+        "shares": 22,
+        "follows": 6,
+        "conversions": 3
+      },
+      "derivedMetrics": {
+        "engagementRate": "13.9%",
+        "saveRate": "3.3%",
+        "shareRate": "1.7%",
+        "commentRate": "1.4%",
+        "followRate": "0.5%",
+        "conversionRate": "0.2%"
+      },
+      "source": "real-platform",
+      "note": "Fetched from the bound published URL."
+    }
+  ]
+}
+```
 
 ### `ops/comments.json`
 
 Stores comment samples, audience feedback, objections, questions, buying/consulting signals, and reusable wording. Keep the latest feedback at the top level and append/upsert each sync into `history`.
+
+Allowed `comments[].sentiment` values: `positive`, `neutral`, `negative`, `question`.
+
+Allowed `comments[].intent` values:
+
+- `consult`
+- `buy`
+- `question`
+- `objection`
+- `praise`
+- `topic-suggestion`
+- `case-request`
+- `share-intent`
+- `save-intent`
+- `other`
+
+```json
+{
+  "version": 1,
+  "updatedAt": "2026-06-11T09:10:00.000Z",
+  "source": "real-platform",
+  "summary": "Readers are asking how to apply the workflow to team operations and want concrete examples.",
+  "comments": [
+    {
+      "id": "comment-1",
+      "author": "Alice",
+      "text": "能不能团队一起维护？",
+      "sentiment": "question",
+      "intent": "consult",
+      "time": "2026-06-11T08:45:00.000Z"
+    },
+    {
+      "id": "comment-2",
+      "author": "Bob",
+      "text": "想看真实案例。",
+      "sentiment": "positive",
+      "intent": "case-request",
+      "time": "2026-06-11T08:52:00.000Z"
+    }
+  ],
+  "insights": [
+    "Turn team-collaboration questions into the next article hook.",
+    "Prepare one real example before the next distribution push."
+  ],
+  "history": [
+    {
+      "fetchedAt": "2026-06-11T09:10:00.000Z",
+      "summary": "Readers are asking how to apply the workflow to team operations and want concrete examples.",
+      "comments": [
+        {
+          "id": "comment-1",
+          "author": "Alice",
+          "text": "能不能团队一起维护？",
+          "sentiment": "question",
+          "intent": "consult",
+          "time": "2026-06-11T08:45:00.000Z"
+        }
+      ],
+      "insights": ["Turn team-collaboration questions into the next article hook."],
+      "source": "real-platform"
+    }
+  ]
+}
+```
 
 ### `ops/review.html`
 

@@ -138,7 +138,9 @@ export type MentionKeyDownHandler = (props: SuggestionKeyDownProps) => boolean
 // Utility functions for TiptapMentionAttributes
 
 // Get unique identifier for different mention types
-export function getMentionUniqueId(attrs: TiptapMentionAttributes): string {
+export function getMentionUniqueId(attrs: TiptapMentionAttributes | null | undefined): string {
+	if (!attrs) return ""
+
 	const data = attrs.data as MentionData
 
 	switch (attrs.type) {
@@ -182,7 +184,9 @@ export function getMentionUniqueId(attrs: TiptapMentionAttributes): string {
 
 // Get display name for mention
 export function getMentionDisplayName(attrs: TiptapMentionAttributes): string {
-	const data = attrs.data as Record<string, unknown>
+	const data = attrs?.data as Record<string, unknown>
+
+	if (!data) return ""
 
 	const t = i18n.t
 

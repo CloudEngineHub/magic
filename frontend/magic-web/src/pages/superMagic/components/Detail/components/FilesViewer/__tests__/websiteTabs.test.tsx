@@ -69,21 +69,56 @@ describe("website tabs", () => {
 		expect(preset?.url).toBe("https://example.com/prompts")
 	})
 
-	it("only keeps the two LetsMagic prompt website presets with translation keys and icon ids", () => {
-		expect(WEBSITE_PRESETS).toEqual([
-			expect.objectContaining({
-				id: "letsmagic-nano-banana-pro-prompts",
-				titleKey: "fileViewer.website.presets.nanoBananaPro.title",
-				icon: "nano-banana-pro",
-				url: "https://www.letsmagic.cn/nano-banana-pro-prompts",
-			}),
-			expect.objectContaining({
-				id: "letsmagic-gpt-image-2-prompts",
-				titleKey: "fileViewer.website.presets.gptImage2.title",
-				icon: "gpt-image-2",
-				url: "https://www.letsmagic.cn/gpt-image-2-prompts",
-			}),
-		])
+	it("includes curated prompt and material discovery website presets with translation keys", () => {
+		expect(WEBSITE_PRESETS).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "letsmagic-nano-banana-pro-prompts",
+					titleKey: "fileViewer.website.presets.nanoBananaPro.title",
+					icon: "nano-banana-pro",
+					url: "https://www.letsmagic.cn/nano-banana-pro-prompts",
+				}),
+				expect.objectContaining({
+					id: "letsmagic-gpt-image-2-prompts",
+					titleKey: "fileViewer.website.presets.gptImage2.title",
+					icon: "gpt-image-2",
+					url: "https://www.letsmagic.cn/gpt-image-2-prompts",
+				}),
+				expect.objectContaining({
+					id: "baidu-images",
+					titleKey: "fileViewer.website.presets.baiduImages.title",
+					descriptionKey: "fileViewer.website.presets.baiduImages.description",
+					iconSrc: expect.stringContaining("baidu-images.png"),
+					url: "https://image.baidu.com/",
+				}),
+				expect.objectContaining({
+					id: "xiaohongshu",
+					titleKey: "fileViewer.website.presets.xiaohongshu.title",
+					iconSrc: expect.stringContaining("xiaohongshu.png"),
+					url: "https://www.xiaohongshu.com/",
+				}),
+				expect.objectContaining({
+					id: "zcool",
+					titleKey: "fileViewer.website.presets.zcool.title",
+					iconSrc: expect.stringContaining("zcool.png"),
+					url: "https://www.zcool.com.cn/",
+				}),
+				expect.objectContaining({
+					id: "pexels",
+					titleKey: "fileViewer.website.presets.pexels.title",
+					iconSrc: expect.stringContaining("pexels.png"),
+					url: "https://www.pexels.com/",
+				}),
+			]),
+		)
+
+		const presetIds = WEBSITE_PRESETS.map((preset) => preset.id)
+		expect(presetIds).not.toContain("douyin")
+		expect(presetIds).not.toContain("pixabay")
+		expect(presetIds).not.toContain("google-images")
+		expect(presetIds).not.toContain("magnific")
+		expect(presetIds).not.toContain("unsplash")
+		expect(presetIds).not.toContain("freepik")
 	})
 
 	it("builds a stable persisted tab for a website preset", () => {
@@ -142,6 +177,9 @@ describe("website tabs", () => {
 		expect(
 			screen.getByRole("link", { name: /fileViewer.website.openExternal/ }),
 		).toHaveAttribute("href", "https://example.com/images")
+		expect(screen.getByRole("link", { name: /fileViewer.website.openExternal/ })).toHaveClass(
+			"hover:text-accent-foreground",
+		)
 	})
 
 	it("grants common website iframe capabilities including clipboard access", () => {
@@ -216,6 +254,58 @@ describe("website tabs", () => {
 		}
 	})
 
+	it("keeps the delayed website fallback from covering a partially visible iframe", () => {
+		vi.useFakeTimers()
+
+		try {
+			render(
+				<WebsiteIframeTabContent
+					title="Slow Site"
+					url="https://example.com/slow"
+					description="May paint before the iframe load event"
+				/>,
+			)
+
+			act(() => {
+				vi.advanceTimersByTime(8000)
+			})
+
+			const fallback = screen
+				.getByText("fileViewer.website.loadFallbackTitle")
+				.closest("[data-testid='website-load-fallback']")
+			expect(fallback).toHaveClass("bottom-4")
+			expect(fallback).not.toHaveClass("inset-0")
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("removes the delayed website fallback once the iframe finishes loading", () => {
+		vi.useFakeTimers()
+
+		try {
+			render(
+				<WebsiteIframeTabContent
+					title="Eventually Loaded Site"
+					url="https://example.com/eventually-loaded"
+					description="Loads after the fallback appears"
+				/>,
+			)
+
+			act(() => {
+				vi.advanceTimersByTime(8000)
+			})
+
+			expect(screen.getByTestId("website-load-fallback")).toBeInTheDocument()
+
+			fireEvent.load(screen.getByTitle("Eventually Loaded Site"))
+
+			expect(screen.queryByTestId("website-load-fallback")).not.toBeInTheDocument()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	it("opens the selected preset from the add menu", () => {
 		const onOpenWebsiteTab = vi.fn()
 		const { container } = render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
@@ -243,6 +333,28 @@ describe("website tabs", () => {
 
 		expect(screen.getByTestId("website-preset-icon-nano-banana-pro")).toBeInTheDocument()
 		expect(screen.getByTestId("website-preset-icon-gpt-image-2")).toBeInTheDocument()
+	})
+
+	it("renders downloaded website icons for material discovery presets", () => {
+		const onOpenWebsiteTab = vi.fn()
+		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
+
+		expect(screen.getByTestId("website-preset-icon-baidu-images")).toHaveAttribute(
+			"src",
+			expect.stringContaining("baidu-images.png"),
+		)
+		expect(screen.getByTestId("website-preset-icon-xiaohongshu")).toHaveAttribute(
+			"src",
+			expect.stringContaining("xiaohongshu.png"),
+		)
+		expect(screen.getByTestId("website-preset-icon-zcool")).toHaveAttribute(
+			"src",
+			expect.stringContaining("zcool.png"),
+		)
+		expect(screen.getByTestId("website-preset-icon-pexels")).toHaveAttribute(
+			"src",
+			expect.stringContaining("pexels.png"),
+		)
 	})
 
 	it("opens a custom website from the add menu", () => {

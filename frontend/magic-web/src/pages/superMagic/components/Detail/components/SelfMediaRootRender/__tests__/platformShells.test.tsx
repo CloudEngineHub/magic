@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { ReactElement } from "react"
 import RednoteShell from "../platforms/rednote/RednoteShell"
 import InstagramShell from "../platforms/instagram/InstagramShell"
+import WechatOfficialShell from "../platforms/wechat-official-accounts/WechatOfficialShell"
 import { WechatCoverPhonePanel } from "../platforms/wechat-official-accounts/WechatCoverPhonePanel"
 import type { SelfMediaPost, SelfMediaView } from "../types"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
@@ -35,6 +36,13 @@ vi.mock("@/pages/superMagic/stores/core", () => ({
 	},
 }))
 
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getAdminLocaleModules: () => ({}),
+	getLocaleModules: () => ({}),
+	loadFallbackLocale: () => Promise.resolve({ default: {} }),
+	loadMagicFlowLocale: () => Promise.resolve({ default: {} }),
+}))
+
 const translationMap: Record<string, string> = {
 	"detail.selfMedia.common.unknownAuthor": "Unknown author",
 	"detail.selfMedia.common.untitledPost": "Untitled post",
@@ -53,6 +61,21 @@ vi.mock("react-i18next", () => ({
 vi.mock("../platforms/rednote/edit", () => ({
 	__esModule: true,
 	default: () => <div data-testid="mock-red-edit" />,
+}))
+
+vi.mock("../platforms/wechat-official-accounts/article", () => ({
+	__esModule: true,
+	default: () => <div data-testid="mock-wechat-article" />,
+}))
+
+vi.mock("../platforms/wechat-official-accounts/edit", () => ({
+	__esModule: true,
+	default: () => <div data-testid="mock-wechat-edit" />,
+}))
+
+vi.mock("../platforms/wechat-official-accounts/code", () => ({
+	__esModule: true,
+	default: () => <div data-testid="mock-wechat-code" />,
 }))
 
 const cardFrameMountCounts = new Map<string, number>()
@@ -173,6 +196,18 @@ function renderWithStore(
 }
 
 describe("platform shells", () => {
+	it("does not throw when WechatOfficialShell mounts without the root provider", async () => {
+		render(
+			<WechatOfficialShell
+				platform="wechat-official-accounts"
+				attachmentList={[]}
+				allowEdit
+			/>,
+		)
+
+		expect(await screen.findByTestId("self-media-view-tabs")).toBeInTheDocument()
+	})
+
 	it("keeps RednoteShell detail cards mounted across view switches", () => {
 		cardFrameMountCounts.clear()
 		const { store } = renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} />)

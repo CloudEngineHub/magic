@@ -233,7 +233,6 @@ export async function sendSelfMediaPrePublishAnalysis({
 			send: true,
 			topicMode,
 			selectedModel,
-			mentionItems: [buildFolderMentionItem(postDirectoryItem)],
 			extra: {
 				super_agent: {
 					topic_pattern: SELF_MEDIA_TOPIC_PATTERN,

@@ -125,30 +125,30 @@ export const ALL_PLATFORMS: Array<{
 	labelKey: string
 	disabled: boolean
 }> = [
-		{ value: "rednote", labelKey: "detail.selfMedia.initPanel.platforms.rednote", disabled: false },
-		{
-			value: "instagram",
-			labelKey: "detail.selfMedia.initPanel.platforms.instagram",
-			disabled: false,
-		},
-		{
-			value: "wechat-official-accounts",
-			labelKey: "detail.selfMedia.initPanel.platforms.wechatOfficialAccounts",
-			disabled: false,
-		},
-		{ value: "tiktok", labelKey: "detail.selfMedia.initPanel.platforms.tiktok", disabled: true },
-		{ value: "x", labelKey: "detail.selfMedia.initPanel.platforms.x", disabled: true },
-		{
-			value: "facebook",
-			labelKey: "detail.selfMedia.initPanel.platforms.facebook",
-			disabled: true,
-		},
-		{
-			value: "wechat-channels",
-			labelKey: "detail.selfMedia.initPanel.platforms.wechatChannels",
-			disabled: true,
-		},
-	]
+	{ value: "rednote", labelKey: "detail.selfMedia.initPanel.platforms.rednote", disabled: false },
+	{
+		value: "instagram",
+		labelKey: "detail.selfMedia.initPanel.platforms.instagram",
+		disabled: false,
+	},
+	{
+		value: "wechat-official-accounts",
+		labelKey: "detail.selfMedia.initPanel.platforms.wechatOfficialAccounts",
+		disabled: false,
+	},
+	{ value: "tiktok", labelKey: "detail.selfMedia.initPanel.platforms.tiktok", disabled: true },
+	{ value: "x", labelKey: "detail.selfMedia.initPanel.platforms.x", disabled: true },
+	{
+		value: "facebook",
+		labelKey: "detail.selfMedia.initPanel.platforms.facebook",
+		disabled: true,
+	},
+	{
+		value: "wechat-channels",
+		labelKey: "detail.selfMedia.initPanel.platforms.wechatChannels",
+		disabled: true,
+	},
+]
 
 /** Visual presets organized by platform — maps to backend skill presets/ directory */
 export interface VisualPresetOption {
@@ -254,6 +254,68 @@ export function collectArticleMaterials(article: ArticleDetail): MaterialItem[] 
 	}
 	visit(article.outline || [])
 	return items
+}
+
+function hasMeaningfulText(value?: string): boolean {
+	return Boolean(value?.trim())
+}
+
+function hasMeaningfulRichText(value: unknown): boolean {
+	if (!value) return false
+	if (typeof value === "string") return hasMeaningfulText(value)
+	if (Array.isArray(value)) return value.some(hasMeaningfulRichText)
+	if (typeof value !== "object") return false
+
+	const record = value as Record<string, unknown>
+	if (typeof record.text === "string" && hasMeaningfulText(record.text)) return true
+	return Object.entries(record).some(
+		([key, child]) => key !== "type" && hasMeaningfulRichText(child),
+	)
+}
+
+function hasMeaningfulReferenceFile(file: ReferenceFileValue): boolean {
+	return Boolean(
+		hasMeaningfulText(file.name) ||
+		hasMeaningfulText(file.content) ||
+		hasMeaningfulText(file.file_id) ||
+		hasMeaningfulText(file.file_path),
+	)
+}
+
+function hasMeaningfulMaterial(material: MaterialItem): boolean {
+	return Boolean(
+		hasMeaningfulText(material.description) ||
+		hasMeaningfulText(material.uploadedPath) ||
+		material.file?.size > 0,
+	)
+}
+
+function hasMeaningfulOutline(nodes: OutlineNode[] | undefined): boolean {
+	if (!nodes?.length) return false
+	return nodes.some(
+		(node) =>
+			hasMeaningfulText(node.text) ||
+			node.materials?.some(hasMeaningfulMaterial) ||
+			hasMeaningfulOutline(node.children),
+	)
+}
+
+export function hasMeaningfulArticleDraftContent(article: ArticleDetail): boolean {
+	return Boolean(
+		hasMeaningfulText(article.title) ||
+		hasMeaningfulText(article.description) ||
+		hasMeaningfulText(article.notes) ||
+		hasMeaningfulRichText(article.descriptionJson) ||
+		hasMeaningfulOutline(article.outline) ||
+		article.materials?.some(hasMeaningfulMaterial) ||
+		article.referenceFiles?.some(hasMeaningfulReferenceFile) ||
+		article.visualReferenceFiles?.some(hasMeaningfulReferenceFile) ||
+		hasMeaningfulRichText(article.visualDescriptionJson),
+	)
+}
+
+export function hasMeaningfulSelfMediaDraftData(data: SelfMediaInitData): boolean {
+	return data.articles.some(hasMeaningfulArticleDraftContent)
 }
 
 /** Default card count by platform */

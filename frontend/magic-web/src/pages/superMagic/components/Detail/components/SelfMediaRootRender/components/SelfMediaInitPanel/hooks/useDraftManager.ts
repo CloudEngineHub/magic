@@ -3,7 +3,7 @@ import { message } from "antd"
 import { useTranslation } from "react-i18next"
 import { SelfMediaFileStorageService } from "../../../services/SelfMediaFileStorageService"
 import type { TemplateMeta } from "../../../services/SelfMediaFileStorageService"
-import type { SelfMediaInitData } from "../types"
+import { hasMeaningfulSelfMediaDraftData, type SelfMediaInitData } from "../types"
 import type { AttachmentNode } from "../../../services"
 import { createEmptyInitData } from "../constants"
 
@@ -45,25 +45,25 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 		if (!fileStorageService || draftLoaded) return
 		let cancelled = false
 
-			; (async () => {
-				const [draft, templateList] = await Promise.all([
-					fileStorageService.loadDraft(),
-					fileStorageService.listTemplates(),
-				])
-				if (cancelled) return
+		;(async () => {
+			const [draft, templateList] = await Promise.all([
+				fileStorageService.loadDraft(),
+				fileStorageService.listTemplates(),
+			])
+			if (cancelled) return
 
-				setTemplates(templateList)
+			setTemplates(templateList)
 
-				if (draft) {
-					setPendingDraft({
-						data: draft.data,
-						currentStep: draft.currentStep ?? 0,
-					})
-				} else if (templateList.length > 0) {
-					setShowTemplateSelector(true)
-				}
-				setDraftLoaded(true)
-			})()
+			if (draft && hasMeaningfulSelfMediaDraftData(draft.data)) {
+				setPendingDraft({
+					data: draft.data,
+					currentStep: draft.currentStep ?? 0,
+				})
+			} else if (templateList.length > 0) {
+				setShowTemplateSelector(true)
+			}
+			setDraftLoaded(true)
+		})()
 
 		return () => {
 			cancelled = true
@@ -151,17 +151,17 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 
 		if (pendingSelfSaveCount.current > 0) return
 		if (timeSinceLastSave < 15000) return
-			; (async () => {
-				try {
-					const draft = await fileStorageService.loadDraft()
-					if (draft) {
-						setData(draft.data)
-						if (draft.currentStep !== undefined) setCurrentStep(draft.currentStep)
-					}
-				} catch {
-					// ignore
+		;(async () => {
+			try {
+				const draft = await fileStorageService.loadDraft()
+				if (draft) {
+					setData(draft.data)
+					if (draft.currentStep !== undefined) setCurrentStep(draft.currentStep)
 				}
-			})()
+			} catch {
+				// ignore
+			}
+		})()
 	}, [draftUpdatedAt, fileStorageService, draftLoaded])
 
 	// ─── Unmount: save draft & cleanup ──────────────────────────────────
@@ -175,7 +175,7 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 
 			const latestData = dataRef.current
 			const latestStep = currentStepRef.current
-			const hasContent = latestData.articles.length > 0
+			const hasContent = hasMeaningfulSelfMediaDraftData(latestData)
 			if (fileStorageService && hasContent && !skipDraftPersistenceRef.current) {
 				selfSaveTimestamp.current = Date.now()
 				pendingSelfSaveCount.current += 1
@@ -190,21 +190,18 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 	}, [fileStorageService])
 
 	// ─── Draft persistence helpers ──────────────────────────────────────
-	const hasDraftContent = data.articles.length > 0
+	const hasDraftContent = hasMeaningfulSelfMediaDraftData(data)
 
 	const saveDraftIfNeeded = useCallback(
 		async (step = currentStep) => {
-			if (
-				!fileStorageService ||
-				!draftLoaded ||
-				!hasDraftContent ||
-				showTemplateSelector
-			) {
+			if (!fileStorageService || !draftLoaded || !hasDraftContent || showTemplateSelector) {
 				return
 			}
 
 			// If a save is already in progress, skip to avoid concurrent saves
-			if (draftSavingRef.current) return
+			if (draftSavingRef.current) {
+				return
+			}
 
 			draftSavingRef.current = true
 			pendingSelfSaveCount.current += 1
@@ -218,13 +215,7 @@ export function useDraftManager({ fileStorageService, attachmentList }: UseDraft
 				}, 3000)
 			}
 		},
-		[
-			fileStorageService,
-			draftLoaded,
-			hasDraftContent,
-			showTemplateSelector,
-			currentStep,
-		],
+		[fileStorageService, draftLoaded, hasDraftContent, showTemplateSelector, currentStep],
 	)
 
 	/**

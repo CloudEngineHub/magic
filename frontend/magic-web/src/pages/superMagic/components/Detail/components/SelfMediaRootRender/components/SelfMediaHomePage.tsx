@@ -24,8 +24,18 @@ import CardFrame from "./CardFrame"
 import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../constants/imageProcess"
 import type { AICardCreateInitialValues } from "./AICardCreateDialog"
 import type { SelfMediaAttachmentNode } from "../types"
-import SelfMediaPostCard, { type SelfMediaPostOpsArtifacts } from "./SelfMediaPostCard"
-import type { SelfMediaPostOpsSourcePayload } from "../services/SelfMediaFileStorageService"
+import SelfMediaPostCard from "./SelfMediaPostCard"
+import type {
+	SelfMediaPostOpsMetricsPayload,
+	SelfMediaPostOpsSourcePayload,
+} from "../services/SelfMediaFileStorageService"
+import {
+	buildPostOpsArtifactStates,
+	diffPostOpsArtifactAnimations,
+	getPostOpsArtifacts,
+	type SelfMediaPostOpsArtifacts,
+	type SelfMediaPostOpsArtifactStates,
+} from "../services/selfMediaOpsArtifactStates"
 import SelfMediaOpsReviewDashboard, {
 	type SelfMediaOpsReviewData,
 } from "./SelfMediaOpsReviewDashboard"
@@ -59,6 +69,9 @@ interface SelfMediaHomePageProps {
 		config: { enabled: boolean; timeConfig: ScheduledTask.TimeConfig },
 	) => Promise<boolean | void> | boolean | void
 	onLoadOpsReviewData?: (target: SelfMediaPlatformPostItem) => Promise<SelfMediaOpsReviewData>
+	onLoadOpsMetrics?: (
+		target: SelfMediaPlatformPostItem,
+	) => Promise<SelfMediaPostOpsMetricsPayload | null> | SelfMediaPostOpsMetricsPayload | null
 	onLoadPublishedUrl?: (
 		target: SelfMediaPlatformPostItem,
 	) => Promise<string | undefined> | string | undefined
@@ -87,6 +100,7 @@ function SelfMediaHomePage({
 	onPostPublishRefresh,
 	onConfigureAutoSync,
 	onLoadOpsReviewData,
+	onLoadOpsMetrics,
 	onLoadPublishedUrl,
 	onLoadOpsSource,
 	onBindPublishedUrl,
@@ -98,8 +112,17 @@ function SelfMediaHomePage({
 }: SelfMediaHomePageProps) {
 	const { t } = useTranslation("super")
 	const requestedPreviewPostKeysRef = useRef(new Set<string>())
+	const requestedOpsMetricsPostKeysRef = useRef(new Set<string>())
+	const currentOpsArtifactStatesRef = useRef(new Map<string, SelfMediaPostOpsArtifactStates>())
+	const previousOpsArtifactStatesRef = useRef(new Map<string, SelfMediaPostOpsArtifactStates>())
 	const [activeOpsReviewTarget, setActiveOpsReviewTarget] =
 		useState<SelfMediaPlatformPostItem | null>(null)
+	const [opsMetricsByPostKey, setOpsMetricsByPostKey] = useState(
+		() => new Map<string, SelfMediaPostOpsMetricsPayload | null>(),
+	)
+	const [opsArtifactAnimationsByPostKey, setOpsArtifactAnimationsByPostKey] = useState(
+		() => new Map<string, ReturnType<typeof diffPostOpsArtifactAnimations>>(),
+	)
 	const hasPosts = posts.length > 0
 	const postGroups = posts.reduce<
 		Array<{ platform: SelfMediaPlatform; posts: SelfMediaPlatformPostItem[] }>
@@ -112,18 +135,20 @@ function SelfMediaHomePage({
 		}
 		return groups
 	}, [])
-	const opsArtifactPathSet = useMemo(
-		() => buildAttachmentRelativePathSet(attachmentList),
-		[attachmentList],
-	)
-	const opsArtifactsByPostKey = useMemo(() => {
-		const next = new Map<string, SelfMediaPostOpsArtifacts>()
-		posts.forEach((item) => {
-			next.set(getPostKey(item), getPostOpsArtifacts(item, opsArtifactPathSet))
-		})
-		return next
-	}, [opsArtifactPathSet, posts])
-	const opsOverviewItems = useMemo(() => {
+	const opsArtifactStatesByPostKey = new Map<string, SelfMediaPostOpsArtifactStates>()
+	posts.forEach((item) => {
+		opsArtifactStatesByPostKey.set(
+			getPostKey(item),
+			buildPostOpsArtifactStates(item, attachmentList),
+		)
+	})
+	currentOpsArtifactStatesRef.current = opsArtifactStatesByPostKey
+	const opsArtifactStateSignature = buildOpsArtifactStateSignature(opsArtifactStatesByPostKey)
+	const opsArtifactsByPostKey = new Map<string, SelfMediaPostOpsArtifacts>()
+	opsArtifactStatesByPostKey.forEach((states, postKey) => {
+		opsArtifactsByPostKey.set(postKey, getPostOpsArtifacts(states))
+	})
+	const opsOverviewItems = (() => {
 		const total = posts.length
 		const countReady = (key: keyof SelfMediaPostOpsArtifacts) =>
 			posts.filter((item) => opsArtifactsByPostKey.get(getPostKey(item))?.[key]).length
@@ -159,7 +184,7 @@ function SelfMediaHomePage({
 				total,
 			},
 		]
-	}, [opsArtifactsByPostKey, posts, t])
+	})()
 
 	const getPlatformLabel = (platform: SelfMediaPlatform) => {
 		const platformConfig = ALL_PLATFORMS.find((item) => item.value === platform)
@@ -201,6 +226,62 @@ function SelfMediaHomePage({
 			onEnsurePostLoaded({ platform: item.platform, index: item.index })
 		})
 	}, [onEnsurePostLoaded, posts])
+
+	useEffect(() => {
+		const previous = previousOpsArtifactStatesRef.current
+		const currentStates = currentOpsArtifactStatesRef.current
+		const nextAnimations = new Map<string, ReturnType<typeof diffPostOpsArtifactAnimations>>()
+		currentStates.forEach((states, postKey) => {
+			const prevStates = previous.get(postKey)
+			if (!prevStates) return
+			const animations = diffPostOpsArtifactAnimations(prevStates, states)
+			if (Object.keys(animations).length > 0) nextAnimations.set(postKey, animations)
+		})
+		previousOpsArtifactStatesRef.current = new Map(currentStates)
+		setOpsArtifactAnimationsByPostKey((current) => {
+			if (nextAnimations.size === 0 && current.size === 0) return current
+			return nextAnimations
+		})
+		if (nextAnimations.size === 0) return undefined
+
+		const timer = window.setTimeout(() => {
+			setOpsArtifactAnimationsByPostKey(new Map())
+		}, 1400)
+		return () => window.clearTimeout(timer)
+	}, [opsArtifactStateSignature])
+
+	useEffect(() => {
+		if (!onLoadOpsMetrics) return
+
+		let cancelled = false
+		posts.forEach((item) => {
+			const postKey = getPostKey(item)
+			if (requestedOpsMetricsPostKeysRef.current.has(postKey)) return
+
+			requestedOpsMetricsPostKeysRef.current.add(postKey)
+			void Promise.resolve(onLoadOpsMetrics(item))
+				.then((metrics) => {
+					if (cancelled) return
+					setOpsMetricsByPostKey((current) => {
+						const next = new Map(current)
+						next.set(postKey, metrics)
+						return next
+					})
+				})
+				.catch(() => {
+					if (cancelled) return
+					setOpsMetricsByPostKey((current) => {
+						const next = new Map(current)
+						next.set(postKey, null)
+						return next
+					})
+				})
+		})
+
+		return () => {
+			cancelled = true
+		}
+	}, [onLoadOpsMetrics, posts])
 
 	return (
 		<div
@@ -440,6 +521,9 @@ function SelfMediaHomePage({
 														comments: false,
 														review: false,
 													}
+													const opsMetrics =
+														opsMetricsByPostKey.get(getPostKey(item)) ??
+														null
 
 													return (
 														<SelfMediaPostCard
@@ -449,12 +533,15 @@ function SelfMediaHomePage({
 															subtitle={subtitle}
 															postId={postId}
 															opsArtifacts={opsArtifacts}
+															opsArtifactAnimations={opsArtifactAnimationsByPostKey.get(
+																getPostKey(item),
+															)}
+															opsMetrics={opsMetrics}
 															attachmentList={attachmentList}
 															onOpenPost={onOpenPost}
 															onRequestPrePublishAnalysis={
 																onRequestPrePublishAnalysis
 															}
-															onOpenOpsMetrics={onOpenOpsMetrics}
 															onPostPublishRefresh={
 																onPostPublishRefresh
 															}
@@ -537,45 +624,21 @@ function getPostKey(item: SelfMediaPlatformPostItem) {
 	return `${item.platform}:${item.index}:${item.entry.entry}`
 }
 
-function buildAttachmentRelativePathSet(attachmentList?: SelfMediaAttachmentNode[]) {
-	const paths = new Set<string>()
-	const visit = (nodes?: SelfMediaAttachmentNode[]) => {
-		nodes?.forEach((node) => {
-			if (node.relative_file_path) paths.add(normalizeRelativePath(node.relative_file_path))
-			if (node.children?.length) visit(node.children as SelfMediaAttachmentNode[])
-		})
-	}
-	visit(attachmentList)
-	return paths
-}
-
-function getPostOpsArtifacts(
-	item: SelfMediaPlatformPostItem,
-	artifactPaths: Set<string>,
-): SelfMediaPostOpsArtifacts {
-	const opsPath = item.entry.entry.replace(/\/?post\.json$/, "/ops")
-	return {
-		source: hasArtifactPath(artifactPaths, `${opsPath}/source.json`),
-		metrics: hasArtifactPath(artifactPaths, `${opsPath}/metrics.json`),
-		comments: hasArtifactPath(artifactPaths, `${opsPath}/comments.json`),
-		review:
-			hasArtifactPath(artifactPaths, `${opsPath}/review.html`) ||
-			hasArtifactPath(artifactPaths, `${opsPath}/review.md`),
-	}
-}
-
-function hasArtifactPath(artifactPaths: Set<string>, targetPath: string) {
-	const normalizedTarget = normalizeRelativePath(targetPath)
-	if (artifactPaths.has(normalizedTarget)) return true
-	const suffix = `/${normalizedTarget}`
-	for (const path of artifactPaths) {
-		if (path.endsWith(suffix)) return true
-	}
-	return false
-}
-
-function normalizeRelativePath(path: string) {
-	return path.replace(/^\/+/, "").replace(/\/+/g, "/").replace(/\/+$/, "")
+function buildOpsArtifactStateSignature(
+	statesByPostKey: Map<string, SelfMediaPostOpsArtifactStates>,
+) {
+	const keys: Array<keyof SelfMediaPostOpsArtifacts> = ["source", "metrics", "comments", "review"]
+	return Array.from(statesByPostKey.entries())
+		.map(([postKey, states]) =>
+			[
+				postKey,
+				...keys.flatMap((key) => {
+					const state = states[key]
+					return [key, state.ready ? "1" : "0", state.fileId || "", state.version || ""]
+				}),
+			].join(":"),
+		)
+		.join("|")
 }
 
 export default observer(SelfMediaHomePage)

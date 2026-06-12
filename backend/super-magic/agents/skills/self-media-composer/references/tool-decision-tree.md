@@ -7,6 +7,27 @@ No magic.project.js in target folder?
 ├─ Yes -> create_self_media_project (choose platform first)
 └─ No  -> continue
 
+User asks for 发布入盘, post-publication review, article ops review, 复盘看板,
+published-data fetch, or `ops/*` update for an existing post?
+└─ Run the self-media/IP-operations data-sync workflow against the current
+   posts/<post-id>/ folder. Read references/file-formats.md first and write only
+   the fixed ops schema:
+   ├─ ops/source.json.fetchStatus must be pending / fetched / failed.
+   ├─ ops/metrics.json.metrics keys must be reads, likes, saves, comments,
+      shares, follows, conversions.
+   ├─ ops/metrics.json.derivedMetrics keys must be engagementRate, saveRate,
+      shareRate, commentRate, followRate, conversionRate.
+   ├─ ops/comments.json comments[].sentiment must be positive / neutral /
+      negative / question.
+   ├─ ops/comments.json comments[].intent must be consult / buy / question /
+      objection / praise / topic-suggestion / case-request / share-intent /
+      save-intent / other.
+   ├─ Never write new arbitrary metric keys; unknown platform-specific counters
+      go into notes or ops/review.html until the fixed schema is extended.
+   ├─ Use saves for new save/collect values. Treat legacy collects as read-only
+      historical input only.
+   └─ Do not create AI Card artifacts for this request.
+
 Preset not yet chosen for this post? (mandatory for ALL platforms)
 └─ ask_user with platform-specific options
    ├─ rednote:   neo-brutalism / code-dispatch / dark-tech / Custom style / No template

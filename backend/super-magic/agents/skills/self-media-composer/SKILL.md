@@ -2,6 +2,7 @@
 name: self-media-composer
 description: >
   Use when the user wants to create, extend, or edit self-media posts or card/article projects for Rednote/Xiaohongshu, Instagram, WeChat Official Accounts, or similar platforms. Trigger on [@self_media_project:...], create/add post, make cards, generate social cards, write WeChat article, 小红书图文, 小红书标签, 公众号文章, ins卡片, 自媒体项目, 社媒卡片.
+  Also use for self-media post-publication operations such as 发布入盘, 发布后数据同步, 复盘看板, 运营复盘, article ops review, and fixed `ops/*` data updates.
 ---
 
 # Self-Media Composer Skill
@@ -24,6 +25,8 @@ Load this skill **immediately and before any other action** when the user's mess
 | "build a self-media project" / "start a content project"  | Project scaffolding        |
 | "generate social cards" / "design card images"            | Card design                |
 | "create content for [platform]"                           | Any platform post          |
+| "post-publication review" / "article ops review"          | Operations data sync       |
+| "fetch published data" / "update ops files"               | Operations data sync       |
 | Contains `[@self_media_project:...]`                      | Existing project reference |
 
 ### 中文
@@ -38,6 +41,7 @@ Load this skill **immediately and before any other action** when the user's mess
 | 做卡片 / 制作图文卡片 / 生成社媒卡片                | 卡片图文设计           |
 | 新建自媒体项目 / 创建内容项目 / 做一套图文          | 项目脚手架搭建         |
 | 帮我排版一篇文章（配合平台名称）                    | 平台内容排版           |
+| 发布入盘 / 发布后数据同步 / 复盘看板 / 运营复盘     | 发布后运营数据同步     |
 | 包含 `[@self_media_project:...]`                    | 现有项目引用           |
 
 > **Note:** When Chinese platform aliases appear (小红书, 公众号, ins), treat them as the corresponding platform values. See Platform Aliases table in the Platform Defaults section.

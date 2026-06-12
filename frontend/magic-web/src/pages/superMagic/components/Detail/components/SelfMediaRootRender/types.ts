@@ -42,6 +42,8 @@ export interface SelfMediaPostMeta {
 	author?: string
 	feedTitle?: string
 	feedLikes?: string
+	readCount?: string
+	reads?: string
 	commentCount?: string
 	comments?: SelfMediaComment[]
 	[key: string]: any

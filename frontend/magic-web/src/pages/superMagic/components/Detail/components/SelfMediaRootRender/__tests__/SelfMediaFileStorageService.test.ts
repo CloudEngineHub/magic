@@ -155,6 +155,31 @@ describe("SelfMediaFileStorageService", () => {
 		],
 	}
 
+	const emptyShellDraftData: SelfMediaInitData = {
+		global: {
+			author: "Magic Lab",
+			brandPosition: "AI productivity",
+			targetAudience: "Creators",
+			brandImages: [],
+		},
+		articles: [
+			{
+				title: "",
+				folderName: "",
+				style: "professional",
+				cardCount: 6,
+				outline: Array.from({ length: 6 }).map((_, index) => ({
+					id: `empty-node-${index + 1}`,
+					text: "",
+					children: [],
+				})),
+				materials: [],
+				notes: "",
+				platform: "rednote",
+			},
+		],
+	}
+
 	beforeEach(() => {
 		attachments.length = 0
 		contentByFileId.clear()
@@ -522,6 +547,95 @@ describe("SelfMediaFileStorageService", () => {
 
 		expect(draftContent.global).toBeUndefined()
 		expect(draftContent.articles).toHaveLength(1)
+	})
+
+	it("ignores legacy draft files that only contain empty article shells", async () => {
+		seedNode({
+			file_id: "drafts-dir",
+			file_name: "__drafts",
+			is_directory: true,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/__drafts",
+		})
+		seedNode({
+			file_id: "empty-draft-json",
+			file_name: "draft.json",
+			is_directory: false,
+			parent_id: "drafts-dir",
+			relative_file_path: "self-media/__drafts/draft.json",
+		})
+		contentByFileId.set(
+			"empty-draft-json",
+			JSON.stringify({
+				version: 1,
+				currentStep: 0,
+				createdAt: "2026-05-21T05:10:33.604Z",
+				updatedAt: "2026-05-22T07:00:23.642Z",
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI productivity",
+					targetAudience: "Creators",
+					brandImages: [],
+				},
+				articles: emptyShellDraftData.articles,
+			}),
+		)
+
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await expect(service.loadDraft()).resolves.toBeNull()
+	})
+
+	it("does not save drafts that only contain empty article shells", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.saveDraft(emptyShellDraftData, 0)
+
+		expect(
+			attachments.some(
+				(item) => item.relative_file_path === "self-media/__drafts/draft.json",
+			),
+		).toBe(false)
+		expect(mockSaveFileContent).not.toHaveBeenCalled()
+	})
+
+	it("keeps drafts that only contain a selected reference file name", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+		const data: SelfMediaInitData = {
+			...emptyShellDraftData,
+			articles: [
+				{
+					...emptyShellDraftData.articles[0],
+					visualReferenceFiles: [
+						{
+							name: "style-reference.png",
+							content: "",
+						},
+					],
+				},
+			],
+		}
+
+		await service.saveDraft(data, 0)
+
+		expect(
+			attachments.some(
+				(item) => item.relative_file_path === "self-media/__drafts/draft.json",
+			),
+		).toBe(true)
+		expect(mockSaveFileContent).toHaveBeenCalled()
 	})
 
 	it("archives the active draft and clears only the active slot", async () => {

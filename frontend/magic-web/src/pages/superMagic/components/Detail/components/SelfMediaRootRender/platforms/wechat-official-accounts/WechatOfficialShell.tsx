@@ -6,7 +6,7 @@ import { flattenAttachments } from "../../../../contents/HTML/utils"
 import SelfMediaShellHeader from "../../components/SelfMediaShellHeader"
 import { useSelfMediaInspector } from "../../hooks/useSelfMediaInspector"
 import { useShellFileHandlers } from "../../hooks/useShellFileHandlers"
-import { useSelfMediaStore } from "../../stores"
+import { SelfMediaStoreProvider, useOptionalSelfMediaStore, useSelfMediaStore } from "../../stores"
 import type { PlatformComponentProps, SelfMediaView } from "../../types"
 import WechatArticleView, { type WechatArticleViewRef } from "./article"
 import WechatCodeView from "./code"
@@ -18,6 +18,19 @@ import { wechatOfficialTokens } from "./tokens"
 const TAB_ORDER: SelfMediaView[] = ["feed", "detail", "edit", "code"]
 
 function WechatOfficialShell(props: PlatformComponentProps) {
+	const store = useOptionalSelfMediaStore()
+	if (store) return <WechatOfficialShellContent {...props} />
+
+	return (
+		<SelfMediaStoreProvider attachments={props.attachmentList}>
+			<WechatOfficialShellContent {...props} />
+		</SelfMediaStoreProvider>
+	)
+}
+
+const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
+	props: PlatformComponentProps,
+) {
 	const { t } = useTranslation("super")
 	const { platform, attachmentList, allowEdit, saveEditContent, selectedProject, onBackHome } =
 		props
@@ -335,6 +348,6 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 			</div>
 		</div>
 	)
-}
+})
 
-export default observer(WechatOfficialShell)
+export default WechatOfficialShell

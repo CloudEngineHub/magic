@@ -399,6 +399,52 @@ describe("SelfMediaInitPanel", () => {
 		).not.toBeInTheDocument()
 	})
 
+	it("does not show a restore prompt for an empty article shell draft", async () => {
+		mockLoadDraft.mockResolvedValue({
+			currentStep: 0,
+			data: {
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+					targetAudience: "Creators",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "",
+						folderName: "",
+						style: "professional",
+						cardCount: 6,
+						outline: Array.from({ length: 6 }).map((_, index) => ({
+							id: `empty-node-${index + 1}`,
+							text: "",
+							children: [],
+						})),
+						materials: [],
+						notes: "",
+						platform: "rednote",
+					},
+				],
+			},
+		})
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByText("brand-step")).toBeInTheDocument()
+		})
+
+		expect(screen.queryByTestId("self-media-draft-restore-dialog")).not.toBeInTheDocument()
+		expect(mockClearDraft).not.toHaveBeenCalled()
+	})
+
 	it("clears a detected draft from the restore prompt", async () => {
 		mockLoadDraft.mockResolvedValue({
 			currentStep: 1,

@@ -69,7 +69,7 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 						target="_blank"
 						rel="noreferrer"
 						className={cn(
-							"inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+							"inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
 						)}
 					>
 						<ExternalLink size={14} />
@@ -94,8 +94,11 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 					className="absolute inset-0 h-full w-full border-0 bg-white"
 				/>
 				{showLoadFallback && !hasLoaded ? (
-					<div className="absolute inset-0 flex items-center justify-center bg-background/95 p-6 text-center">
-						<div className="max-w-[360px]">
+					<div
+						data-testid="website-load-fallback"
+						className="pointer-events-none absolute bottom-4 right-4 z-10 max-w-[360px] rounded-lg border border-border/70 bg-background/95 p-4 text-left shadow-lg"
+					>
+						<div>
 							<div className="text-sm font-medium text-foreground">
 								{t("fileViewer.website.loadFallbackTitle")}
 							</div>
@@ -106,7 +109,7 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 								href={url}
 								target="_blank"
 								rel="noreferrer"
-								className="mt-4 inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+								className="pointer-events-auto mt-4 inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
 							>
 								<ExternalLink size={14} />
 								{t("fileViewer.website.openExternal")}

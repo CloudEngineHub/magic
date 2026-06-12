@@ -1,10 +1,13 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import {
 	ArrowDownRight,
 	ArrowUpRight,
 	FileText,
 	Loader2,
+	Maximize2,
+	Minimize2,
 	RefreshCw,
 	Sparkles,
 	Target,
@@ -63,12 +66,14 @@ type Translate = (key: string, options?: Record<string, unknown>) => string
 
 const OPS_PALETTE = {
 	ink: "#111827",
-	muted: "#64748b",
-	teal: "#0f766e",
-	cyan: "#0284c7",
-	amber: "#b45309",
-	rose: "#be123c",
-	indigo: "#4338ca",
+	muted: "#6b7280",
+	teal: "#14b8a6",
+	cyan: "#0ea5e9",
+	amber: "#f59e0b",
+	rose: "#f43f5e",
+	indigo: "#8b5cf6",
+	blue: "#2563eb",
+	emerald: "#10b981",
 	surface: "#f8fafc",
 } as const
 
@@ -80,32 +85,34 @@ const REVIEW_DASHBOARD_STYLE = {
 	"--ops-amber": OPS_PALETTE.amber,
 	"--ops-rose": OPS_PALETTE.rose,
 	"--ops-indigo": OPS_PALETTE.indigo,
+	"--ops-blue": OPS_PALETTE.blue,
+	"--ops-emerald": OPS_PALETTE.emerald,
 	"--ops-surface": OPS_PALETTE.surface,
 } as CSSProperties
 
 const trendChartConfig = {
 	reads: {
 		label: "Reads",
-		color: OPS_PALETTE.teal,
+		color: OPS_PALETTE.blue,
 	},
 	shares: {
 		label: "Shares",
-		color: OPS_PALETTE.cyan,
+		color: OPS_PALETTE.indigo,
 	},
 	saves: {
 		label: "Saves",
-		color: OPS_PALETTE.indigo,
+		color: OPS_PALETTE.emerald,
 	},
 } satisfies ChartConfig
 
 const impactChartConfig = {
 	value: {
 		label: "Value",
-		color: OPS_PALETTE.teal,
+		color: OPS_PALETTE.blue,
 	},
 } satisfies ChartConfig
 
-const QUALITY_COLORS = [OPS_PALETTE.teal, OPS_PALETTE.indigo, OPS_PALETTE.cyan, OPS_PALETTE.amber]
+const QUALITY_COLORS = [OPS_PALETTE.blue, OPS_PALETTE.indigo, OPS_PALETTE.cyan, OPS_PALETTE.amber]
 const EMPTY_FILE_PATH_MAPPING = new Map<string, string>()
 const NOOP_OPEN_NEW_TAB = () => undefined
 
@@ -122,6 +129,7 @@ function SelfMediaOpsReviewDashboard({
 	const [data, setData] = useState<SelfMediaOpsReviewData | null>(null)
 	const [loading, setLoading] = useState(false)
 	const [syncing, setSyncing] = useState(false)
+	const [isReviewFullscreen, setIsReviewFullscreen] = useState(false)
 	const title =
 		target?.post.meta.feedTitle ||
 		target?.post.meta.title ||
@@ -143,6 +151,19 @@ function SelfMediaOpsReviewDashboard({
 		}
 	}, [onLoadData, open, target])
 
+	useEffect(() => {
+		if (!open) setIsReviewFullscreen(false)
+	}, [open])
+
+	useEffect(() => {
+		if (!isReviewFullscreen) return
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setIsReviewFullscreen(false)
+		}
+		document.addEventListener("keydown", handleKeyDown)
+		return () => document.removeEventListener("keydown", handleKeyDown)
+	}, [isReviewFullscreen])
+
 	const kpis = useMemo(() => buildKpis(data?.metrics, t), [data?.metrics, t])
 	const trendData = useMemo(() => buildTrendData(data?.metrics), [data?.metrics])
 	const impactData = useMemo(() => buildImpactData(data?.metrics, t), [data?.metrics, t])
@@ -157,6 +178,7 @@ function SelfMediaOpsReviewDashboard({
 	const sourceStatus = data?.source?.fetchStatus ?? "unknown"
 	const reviewHtml = data?.reviewHtml?.content?.trim()
 	const reviewMarkdown = data?.reviewMarkdown?.content?.trim()
+	const hasReviewContent = Boolean(reviewHtml || reviewMarkdown)
 	const reviewHtmlRelativePath = useMemo(
 		() => resolveReviewHtmlRelativePath(target?.entry.entry),
 		[target?.entry.entry],
@@ -172,465 +194,596 @@ function SelfMediaOpsReviewDashboard({
 		}
 	}
 
+	const renderReviewPreview = (isFullscreen = false) => {
+		if (reviewHtml) {
+			return (
+				<OpsReviewHtmlPreview
+					content={reviewHtml}
+					relativeFilePath={reviewHtmlRelativePath}
+					isFullscreen={isFullscreen}
+				/>
+			)
+		}
+		if (reviewMarkdown) {
+			return <OpsReviewMarkdownPreview content={reviewMarkdown} isFullscreen={isFullscreen} />
+		}
+		return (
+			<div className="p-4">
+				<EmptyBlock text={t("detail.selfMedia.opsReview.empty")} />
+			</div>
+		)
+	}
+
+	const fullscreenOverlay =
+		typeof document === "undefined"
+			? null
+			: createPortal(
+					<AnimatePresence>
+						{isReviewFullscreen && hasReviewContent ? (
+							<motion.div
+								initial={
+									reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }
+								}
+								animate={{ opacity: 1, scale: 1 }}
+								exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+								transition={{ duration: 0.16 }}
+								className="fixed inset-0 z-[1000] flex min-h-0 flex-col bg-background"
+								style={REVIEW_DASHBOARD_STYLE}
+								data-testid="self-media-ops-review-fullscreen-overlay"
+							>
+								<div className="flex shrink-0 items-center justify-between gap-3 border-b bg-white px-4 py-3">
+									<h3 className="min-w-0 truncate text-sm font-semibold text-[var(--ops-ink)]">
+										{t("detail.selfMedia.opsReview.reviewTitle")}
+									</h3>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onClick={() => setIsReviewFullscreen(false)}
+										aria-label={t("detail.selfMedia.opsReview.exitFullscreen")}
+										data-testid="self-media-ops-review-exit-fullscreen"
+									>
+										<Minimize2 className="size-4" aria-hidden="true" />
+										<span>
+											{t("detail.selfMedia.opsReview.exitFullscreen")}
+										</span>
+									</Button>
+								</div>
+								<div className="min-h-0 flex-1 overflow-hidden p-3 sm:p-4">
+									{renderReviewPreview(true)}
+								</div>
+							</motion.div>
+						) : null}
+					</AnimatePresence>,
+					document.body,
+				)
+
 	return (
-		<AnimatePresence>
-			{open && target ? (
-				<motion.section
-					layoutId={`self-media-ops-review-${target.platform}-${target.index}-${target.entry.entry}`}
-					initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
-					animate={{ opacity: 1, scale: 1 }}
-					exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
-					transition={{ type: "spring", stiffness: 320, damping: 34 }}
-					className="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-background shadow-2xl"
-					style={REVIEW_DASHBOARD_STYLE}
-					data-palette="executive"
-					data-testid="self-media-ops-review-dashboard"
-				>
-					<header className="flex shrink-0 items-center justify-between gap-3 border-b bg-[linear-gradient(90deg,#fff_0%,#f8fafc_58%,#eff6ff_100%)] px-4 py-3 sm:px-6">
-						<div className="min-w-0">
-							<div className="flex items-center gap-2 text-xs text-muted-foreground">
-								<span className="inline-flex items-center gap-1 font-medium text-[var(--ops-teal)]">
-									<Sparkles className="size-3.5" aria-hidden="true" />
-									{t("detail.selfMedia.opsReview.title")}
-								</span>
-								<span
-									className={cn(
-										"rounded border px-1.5 py-0.5 font-medium",
-										sourceStatus === "fetched"
-											? "border-teal-200 bg-teal-50 text-teal-700"
-											: sourceStatus === "failed"
-												? "border-destructive/20 bg-destructive/10 text-destructive"
-												: "border-border bg-muted/40",
+		<>
+			<AnimatePresence>
+				{open && target ? (
+					<motion.section
+						layoutId={`self-media-ops-review-${target.platform}-${target.index}-${target.entry.entry}`}
+						initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+						animate={{ opacity: 1, scale: 1 }}
+						exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+						transition={{ type: "spring", stiffness: 320, damping: 34 }}
+						className="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-background shadow-2xl"
+						style={REVIEW_DASHBOARD_STYLE}
+						data-palette="executive"
+						data-testid="self-media-ops-review-dashboard"
+					>
+						<header className="flex shrink-0 flex-col gap-2 border-b bg-[linear-gradient(90deg,#fff_0%,#f8fafc_58%,#eff6ff_100%)] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6 sm:py-3">
+							<div className="min-w-0 flex-1">
+								<div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+									<span className="inline-flex items-center gap-1 font-medium text-[var(--ops-teal)]">
+										<Sparkles className="size-3.5" aria-hidden="true" />
+										{t("detail.selfMedia.opsReview.title")}
+									</span>
+									<span
+										className={cn(
+											"rounded border px-1.5 py-0.5 font-medium",
+											sourceStatus === "fetched"
+												? "border-teal-200 bg-teal-50 text-teal-700"
+												: sourceStatus === "failed"
+													? "border-destructive/20 bg-destructive/10 text-destructive"
+													: "border-border bg-muted/40",
+										)}
+									>
+										{t(
+											`detail.selfMedia.opsReview.sourceStatus.${sourceStatus}`,
+										)}
+									</span>
+								</div>
+								<h2 className="truncate text-base font-semibold text-[var(--ops-ink)] sm:text-lg">
+									{title}
+								</h2>
+							</div>
+							<div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="px-2 sm:px-3"
+									onClick={handleSync}
+									disabled={!onSyncData || syncing}
+								>
+									{syncing ? (
+										<Loader2
+											className="size-4 animate-spin"
+											aria-hidden="true"
+										/>
+									) : (
+										<RefreshCw className="size-4" aria-hidden="true" />
 									)}
+									<span className="hidden sm:inline">
+										{t("detail.selfMedia.opsReview.sync")}
+									</span>
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="px-2 sm:px-3"
+									onClick={() => onEditData?.(target)}
+									disabled={!onEditData}
+									data-testid="self-media-ops-review-edit"
 								>
-									{t(`detail.selfMedia.opsReview.sourceStatus.${sourceStatus}`)}
-								</span>
+									<span className="max-[420px]:hidden">
+										{t("detail.selfMedia.opsReview.edit")}
+									</span>
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									onClick={onClose}
+									aria-label={t("detail.selfMedia.opsReview.close")}
+									data-testid="self-media-ops-review-close"
+								>
+									<X className="size-4" aria-hidden="true" />
+								</Button>
 							</div>
-							<h2 className="truncate text-base font-semibold text-[var(--ops-ink)] sm:text-lg">
-								{title}
-							</h2>
-						</div>
-						<div className="flex shrink-0 items-center gap-2">
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onClick={handleSync}
-								disabled={!onSyncData || syncing}
-							>
-								{syncing ? (
+						</header>
+
+						<div
+							className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f8fafc_0%,#f3f4f6_100%)] px-3 py-3 sm:px-6 sm:py-4"
+							data-testid="self-media-ops-review-content"
+						>
+							{loading ? (
+								<div className="flex min-h-64 items-center justify-center gap-2 rounded-lg border bg-card text-sm text-muted-foreground">
 									<Loader2 className="size-4 animate-spin" aria-hidden="true" />
-								) : (
-									<RefreshCw className="size-4" aria-hidden="true" />
-								)}
-								<span className="hidden sm:inline">
-									{t("detail.selfMedia.opsReview.sync")}
-								</span>
-							</Button>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onClick={() => onEditData?.(target)}
-								disabled={!onEditData}
-							>
-								<span>{t("detail.selfMedia.opsReview.edit")}</span>
-							</Button>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon"
-								onClick={onClose}
-								aria-label={t("detail.selfMedia.opsReview.close")}
-								data-testid="self-media-ops-review-close"
-							>
-								<X className="size-4" aria-hidden="true" />
-							</Button>
-						</div>
-					</header>
-
-					<div className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f8fafc_0%,#f3f4f6_100%)] px-4 py-4 sm:px-6">
-						{loading ? (
-							<div className="flex min-h-64 items-center justify-center gap-2 rounded-lg border bg-card text-sm text-muted-foreground">
-								<Loader2 className="size-4 animate-spin" aria-hidden="true" />
-								{t("detail.selfMedia.opsMetrics.loading")}
-							</div>
-						) : (
-							<div className="mx-auto flex max-w-7xl flex-col gap-3">
-								<section
-									className="grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]"
-									data-testid="self-media-ops-review-brief"
-								>
-									<div className="rounded-lg border bg-white p-4 shadow-xs">
-										<div className="mb-3 flex items-center justify-between gap-3">
-											<div>
-												<div className="text-xs font-medium uppercase text-[var(--ops-teal)]">
-													{t("detail.selfMedia.opsReview.summaryTitle")}
-												</div>
-												<h3 className="mt-1 text-lg font-semibold text-[var(--ops-ink)]">
-													{title}
-												</h3>
-											</div>
-											<DeltaBadge delta={readsDelta} />
-										</div>
-										<div className="grid gap-2 sm:grid-cols-3">
-											{briefItems.map((item) => (
-												<div
-													key={item.label}
-													className="rounded-md border bg-[var(--ops-surface)] px-3 py-2"
-												>
-													<div className="text-[11px] text-[var(--ops-muted)]">
-														{item.label}
-													</div>
-													<div className="mt-1 text-sm font-medium text-[var(--ops-ink)]">
-														{item.value}
-													</div>
-												</div>
-											))}
-										</div>
-									</div>
+									{t("detail.selfMedia.opsMetrics.loading")}
+								</div>
+							) : (
+								<div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-3">
 									<section
-										className="rounded-lg border bg-white p-4 shadow-xs"
-										data-testid="self-media-ops-review-actions"
+										className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.75fr)]"
+										data-testid="self-media-ops-review-brief"
 									>
-										<div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--ops-ink)]">
-											<Target className="size-4 text-[var(--ops-amber)]" />
-											{t("detail.selfMedia.opsReview.actionsTitle")}
-										</div>
-										<div className="space-y-2">
-											{actionItems.map((item, index) => (
-												<div
-													key={`${item}-${index}`}
-													className="flex gap-2 rounded-md border bg-[var(--ops-surface)] px-3 py-2 text-xs leading-relaxed text-[var(--ops-ink)]"
-												>
-													<span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-[var(--ops-ink)] text-[10px] text-white">
-														{index + 1}
-													</span>
-													<span>{item}</span>
+										<div className="min-w-0 rounded-lg border bg-white p-3 shadow-xs sm:p-4">
+											<div className="mb-3 flex min-w-0 items-start justify-between gap-3">
+												<div className="min-w-0">
+													<div className="text-xs font-medium uppercase text-[var(--ops-teal)]">
+														{t(
+															"detail.selfMedia.opsReview.summaryTitle",
+														)}
+													</div>
+													<h3 className="mt-1 truncate text-base font-semibold text-[var(--ops-ink)] sm:text-lg">
+														{title}
+													</h3>
 												</div>
-											))}
+												<DeltaBadge delta={readsDelta} />
+											</div>
+											<div className="grid gap-2 sm:grid-cols-3">
+												{briefItems.map((item) => (
+													<div
+														key={item.label}
+														className="rounded-md border bg-[var(--ops-surface)] px-3 py-2"
+													>
+														<div className="text-[11px] text-[var(--ops-muted)]">
+															{item.label}
+														</div>
+														<div className="mt-1 truncate text-sm font-medium text-[var(--ops-ink)]">
+															{item.value}
+														</div>
+													</div>
+												))}
+											</div>
 										</div>
-									</section>
-								</section>
-
-								<section
-									className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
-									data-testid="self-media-ops-review-kpis"
-								>
-									{kpis.map((item) => (
-										<div
-											key={item.key}
-											className="min-h-20 rounded-lg border bg-white p-3 shadow-xs"
+										<section
+											className="min-w-0 rounded-lg border bg-white p-3 shadow-xs sm:p-4"
+											data-testid="self-media-ops-review-actions"
 										>
-											<div className="text-xs text-muted-foreground">
-												{item.label}
+											<div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--ops-ink)]">
+												<Target className="size-4 text-[var(--ops-amber)]" />
+												{t("detail.selfMedia.opsReview.actionsTitle")}
 											</div>
-											<div className="mt-1 text-2xl font-semibold text-[var(--ops-ink)]">
-												{item.value}
+											<div className="space-y-2">
+												{actionItems.map((item, index) => (
+													<div
+														key={`${item}-${index}`}
+														className="flex gap-2 rounded-md border bg-[var(--ops-surface)] px-3 py-2 text-xs leading-relaxed text-[var(--ops-ink)]"
+													>
+														<span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-[var(--ops-ink)] text-[10px] text-white">
+															{index + 1}
+														</span>
+														<span>{item}</span>
+													</div>
+												))}
 											</div>
-											{item.hint ? (
-												<div className="mt-1 text-[11px] text-[var(--ops-muted)]">
-													{item.hint}
+										</section>
+									</section>
+
+									<section
+										className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
+										data-testid="self-media-ops-review-kpis"
+									>
+										{kpis.map((item) => (
+											<div
+												key={item.key}
+												className="min-h-20 min-w-0 rounded-lg border bg-white p-3 shadow-xs"
+											>
+												<div className="text-xs text-muted-foreground">
+													{item.label}
 												</div>
-											) : null}
-										</div>
-									))}
-								</section>
-
-								<div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(330px,0.8fr)_minmax(310px,0.72fr)]">
-									<section
-										className="rounded-lg border bg-white p-4 shadow-xs"
-										data-testid="self-media-ops-review-trend"
-									>
-										<div className="mb-3 flex items-center justify-between gap-3">
-											<h3 className="text-sm font-semibold text-[var(--ops-ink)]">
-												{t("detail.selfMedia.opsReview.trendTitle")}
-											</h3>
-											<DeltaBadge delta={readsDelta} />
-										</div>
-										{trendData.length > 0 ? (
-											<ChartContainer
-												config={trendChartConfig}
-												className="h-52 w-full"
-											>
-												<AreaChart data={trendData}>
-													<CartesianGrid vertical={false} />
-													<XAxis
-														dataKey="label"
-														tickLine={false}
-														axisLine={false}
-														tickMargin={8}
-													/>
-													<YAxis tickLine={false} axisLine={false} />
-													<ChartTooltip
-														content={<ChartTooltipContent />}
-													/>
-													<Area
-														dataKey="reads"
-														type="monotone"
-														fill="var(--color-reads)"
-														fillOpacity={0.16}
-														stroke="var(--color-reads)"
-														strokeWidth={2}
-													/>
-													<Area
-														dataKey="shares"
-														type="monotone"
-														fill="var(--color-shares)"
-														fillOpacity={0.1}
-														stroke="var(--color-shares)"
-														strokeWidth={2}
-													/>
-													<Area
-														dataKey="saves"
-														type="monotone"
-														fill="var(--color-saves)"
-														fillOpacity={0.08}
-														stroke="var(--color-saves)"
-														strokeWidth={2}
-													/>
-												</AreaChart>
-											</ChartContainer>
-										) : (
-											<EmptyBlock
-												text={t("detail.selfMedia.opsReview.empty")}
-											/>
-										)}
+												<div className="mt-1 text-2xl font-semibold text-[var(--ops-ink)]">
+													{item.value}
+												</div>
+												{item.hint ? (
+													<div className="mt-1 text-[11px] text-[var(--ops-muted)]">
+														{item.hint}
+													</div>
+												) : null}
+											</div>
+										))}
 									</section>
 
-									<section
-										className="rounded-lg border bg-white p-4 shadow-xs"
-										data-testid="self-media-ops-review-impact-map"
+									<div
+										className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)_minmax(260px,0.72fr)]"
+										data-testid="self-media-ops-review-chart-grid"
 									>
-										<h3 className="mb-3 text-sm font-semibold text-[var(--ops-ink)]">
-											{t("detail.selfMedia.opsReview.impactTitle")}
-										</h3>
-										{impactData.length ? (
-											<ChartContainer
-												config={impactChartConfig}
-												className="h-52 w-full"
-											>
-												<BarChart data={impactData} layout="vertical">
-													<CartesianGrid horizontal={false} />
-													<XAxis type="number" hide />
-													<YAxis
-														type="category"
-														dataKey="label"
-														tickLine={false}
-														axisLine={false}
-														width={68}
-													/>
-													<ChartTooltip
-														content={<ChartTooltipContent />}
-													/>
-													<Bar
-														dataKey="value"
-														fill="var(--color-value)"
-														radius={5}
-													/>
-												</BarChart>
-											</ChartContainer>
-										) : (
-											<EmptyBlock
-												text={t("detail.selfMedia.opsReview.empty")}
-											/>
-										)}
-									</section>
-
-									<section
-										className="rounded-lg border bg-white p-4 shadow-xs"
-										data-testid="self-media-ops-review-quality-mix"
-									>
-										<h3 className="mb-3 text-sm font-semibold text-[var(--ops-ink)]">
-											{t("detail.selfMedia.opsReview.qualityTitle")}
-										</h3>
-										{qualityData.length ? (
-											<div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-3">
+										<section
+											className="min-w-0 rounded-lg border bg-white p-3 shadow-xs sm:p-4"
+											data-testid="self-media-ops-review-trend"
+										>
+											<div className="mb-3 flex items-center justify-between gap-3">
+												<h3 className="text-sm font-semibold text-[var(--ops-ink)]">
+													{t("detail.selfMedia.opsReview.trendTitle")}
+												</h3>
+												<DeltaBadge delta={readsDelta} />
+											</div>
+											{trendData.length > 0 ? (
 												<ChartContainer
-													config={impactChartConfig}
-													className="h-32 w-32"
+													config={trendChartConfig}
+													className="h-52 min-w-0 w-full"
+													data-testid="self-media-ops-review-trend-chart"
 												>
-													<PieChart>
-														<Pie
-															data={qualityData}
-															dataKey="value"
-															nameKey="label"
-															innerRadius={34}
-															outerRadius={56}
-															paddingAngle={3}
-														>
-															{qualityData.map((entry, index) => (
-																<Cell
-																	key={entry.label}
-																	fill={
-																		QUALITY_COLORS[
-																			index %
-																				QUALITY_COLORS.length
-																		]
-																	}
+													<AreaChart
+														data={trendData}
+														margin={{
+															top: 12,
+															right: 12,
+															left: -12,
+															bottom: 0,
+														}}
+													>
+														<defs>
+															<linearGradient
+																id="self-media-ops-reads-gradient"
+																x1="0"
+																y1="0"
+																x2="0"
+																y2="1"
+															>
+																<stop
+																	offset="5%"
+																	stopColor="var(--color-reads)"
+																	stopOpacity={0.32}
 																/>
-															))}
-														</Pie>
+																<stop
+																	offset="95%"
+																	stopColor="var(--color-reads)"
+																	stopOpacity={0.04}
+																/>
+															</linearGradient>
+														</defs>
+														<CartesianGrid
+															vertical={false}
+															strokeDasharray="4 4"
+														/>
+														<XAxis
+															dataKey="label"
+															tickLine={false}
+															axisLine={false}
+															tickMargin={8}
+														/>
+														<YAxis
+															tickLine={false}
+															axisLine={false}
+															width={44}
+															domain={[
+																(dataMin: number) =>
+																	Math.max(
+																		0,
+																		Math.floor(dataMin * 0.92),
+																	),
+																(dataMax: number) =>
+																	Math.ceil(dataMax * 1.08),
+															]}
+														/>
 														<ChartTooltip
 															content={<ChartTooltipContent />}
 														/>
-													</PieChart>
+														<Area
+															dataKey="reads"
+															type="linear"
+															connectNulls
+															fill="url(#self-media-ops-reads-gradient)"
+															stroke="var(--color-reads)"
+															strokeWidth={3}
+															dot={{
+																r: 4,
+																fill: OPS_PALETTE.blue,
+																stroke: "#fff",
+																strokeWidth: 2,
+															}}
+															activeDot={{
+																r: 6,
+																fill: OPS_PALETTE.blue,
+																stroke: "#fff",
+																strokeWidth: 2,
+															}}
+														/>
+													</AreaChart>
 												</ChartContainer>
-												<div className="space-y-1.5">
-													{qualityData.map((item, index) => (
-														<div
-															key={item.label}
-															className="flex items-center justify-between gap-3 text-xs"
-														>
-															<span className="inline-flex min-w-0 items-center gap-1.5 text-[var(--ops-muted)]">
-																<span
-																	className="size-2 rounded-full"
-																	style={{
-																		background:
+											) : (
+												<EmptyBlock
+													text={t("detail.selfMedia.opsReview.empty")}
+												/>
+											)}
+										</section>
+
+										<section
+											className="min-w-0 rounded-lg border bg-white p-3 shadow-xs sm:p-4"
+											data-testid="self-media-ops-review-impact-map"
+										>
+											<h3 className="mb-3 text-sm font-semibold text-[var(--ops-ink)]">
+												{t("detail.selfMedia.opsReview.impactTitle")}
+											</h3>
+											{impactData.length ? (
+												<ChartContainer
+													config={impactChartConfig}
+													className="h-52 min-w-0 w-full"
+												>
+													<BarChart data={impactData} layout="vertical">
+														<CartesianGrid horizontal={false} />
+														<XAxis type="number" hide />
+														<YAxis
+															type="category"
+															dataKey="label"
+															tickLine={false}
+															axisLine={false}
+															width={68}
+														/>
+														<ChartTooltip
+															content={<ChartTooltipContent />}
+														/>
+														<Bar
+															dataKey="value"
+															fill="var(--color-value)"
+															radius={5}
+														/>
+													</BarChart>
+												</ChartContainer>
+											) : (
+												<EmptyBlock
+													text={t("detail.selfMedia.opsReview.empty")}
+												/>
+											)}
+										</section>
+
+										<section
+											className="min-w-0 rounded-lg border bg-white p-3 shadow-xs sm:p-4 xl:col-span-2 2xl:col-span-1"
+											data-testid="self-media-ops-review-quality-mix"
+										>
+											<h3 className="mb-3 text-sm font-semibold text-[var(--ops-ink)]">
+												{t("detail.selfMedia.opsReview.qualityTitle")}
+											</h3>
+											{qualityData.length ? (
+												<div className="grid min-w-0 grid-cols-1 items-center gap-3 min-[420px]:grid-cols-[120px_minmax(0,1fr)]">
+													<ChartContainer
+														config={impactChartConfig}
+														className="mx-auto h-32 w-32 min-w-0 min-[420px]:mx-0"
+													>
+														<PieChart>
+															<Pie
+																data={qualityData}
+																dataKey="value"
+																nameKey="label"
+																innerRadius={34}
+																outerRadius={56}
+																paddingAngle={3}
+															>
+																{qualityData.map((entry, index) => (
+																	<Cell
+																		key={entry.label}
+																		fill={
 																			QUALITY_COLORS[
 																				index %
 																					QUALITY_COLORS.length
-																			],
-																	}}
-																/>
-																<span className="truncate">
-																	{item.label}
+																			]
+																		}
+																	/>
+																))}
+															</Pie>
+															<ChartTooltip
+																content={<ChartTooltipContent />}
+															/>
+														</PieChart>
+													</ChartContainer>
+													<div className="min-w-0 space-y-1.5">
+														{qualityData.map((item, index) => (
+															<div
+																key={item.label}
+																className="flex items-center justify-between gap-3 text-xs"
+															>
+																<span className="inline-flex min-w-0 items-center gap-1.5 text-[var(--ops-muted)]">
+																	<span
+																		className="size-2 rounded-full"
+																		style={{
+																			background:
+																				QUALITY_COLORS[
+																					index %
+																						QUALITY_COLORS.length
+																				],
+																		}}
+																	/>
+																	<span className="truncate">
+																		{item.label}
+																	</span>
 																</span>
+																<span className="shrink-0 font-medium text-[var(--ops-ink)]">
+																	{item.value}
+																</span>
+															</div>
+														))}
+													</div>
+												</div>
+											) : (
+												<EmptyBlock
+													text={t("detail.selfMedia.opsReview.empty")}
+												/>
+											)}
+										</section>
+									</div>
+
+									<div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+										<section
+											className="min-w-0 rounded-lg border bg-white p-3 shadow-xs sm:p-4"
+											data-testid="self-media-ops-review-efficiency-funnel"
+										>
+											<h3 className="mb-3 text-sm font-semibold text-[var(--ops-ink)]">
+												{t("detail.selfMedia.opsReview.funnelTitle")}
+											</h3>
+											<div className="space-y-2.5">
+												{funnelItems.map((item) => (
+													<div key={item.key}>
+														<div className="mb-1 flex items-center justify-between text-xs">
+															<span className="text-[var(--ops-muted)]">
+																{item.label}
 															</span>
 															<span className="font-medium text-[var(--ops-ink)]">
 																{item.value}
 															</span>
 														</div>
-													))}
-												</div>
-											</div>
-										) : (
-											<EmptyBlock
-												text={t("detail.selfMedia.opsReview.empty")}
-											/>
-										)}
-									</section>
-								</div>
-
-								<div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-									<section
-										className="rounded-lg border bg-white p-4 shadow-xs"
-										data-testid="self-media-ops-review-efficiency-funnel"
-									>
-										<h3 className="mb-3 text-sm font-semibold text-[var(--ops-ink)]">
-											{t("detail.selfMedia.opsReview.funnelTitle")}
-										</h3>
-										<div className="space-y-2.5">
-											{funnelItems.map((item) => (
-												<div key={item.key}>
-													<div className="mb-1 flex items-center justify-between text-xs">
-														<span className="text-[var(--ops-muted)]">
-															{item.label}
-														</span>
-														<span className="font-medium text-[var(--ops-ink)]">
-															{item.value}
-														</span>
-													</div>
-													<div className="h-2 overflow-hidden rounded-full bg-slate-100">
-														<div
-															className="h-full rounded-full"
-															style={{
-																width: `${item.percent}%`,
-																background: item.color,
-															}}
-														/>
-													</div>
-												</div>
-											))}
-										</div>
-									</section>
-
-									<section
-										className="rounded-lg border bg-white p-4 shadow-xs"
-										data-testid="self-media-ops-review-comments"
-									>
-										<div className="flex items-center justify-between gap-3">
-											<h3 className="text-sm font-semibold text-[var(--ops-ink)]">
-												{t("detail.selfMedia.opsReview.commentsTitle")}
-											</h3>
-											<span className="text-xs text-[var(--ops-muted)]">
-												{t("detail.selfMedia.opsReview.conversionSignal")}
-											</span>
-										</div>
-										<p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-											{data?.comments?.summary ||
-												t("detail.selfMedia.opsReview.empty")}
-										</p>
-										<div className="mt-3 space-y-2">
-											{data?.comments?.comments
-												?.slice(0, 3)
-												.map((comment) => (
-													<div
-														key={comment.id}
-														className="rounded-md border bg-muted/20 px-3 py-2 text-xs"
-													>
-														<div className="font-medium text-foreground">
-															{comment.author || "User"}
-														</div>
-														<div className="mt-1 text-muted-foreground">
-															{comment.text}
+														<div className="h-2 overflow-hidden rounded-full bg-slate-100">
+															<div
+																className="h-full rounded-full"
+																style={{
+																	width: `${item.percent}%`,
+																	background: item.color,
+																}}
+															/>
 														</div>
 													</div>
 												))}
+											</div>
+										</section>
+
+										<section
+											className="min-w-0 rounded-lg border bg-white p-3 shadow-xs sm:p-4"
+											data-testid="self-media-ops-review-comments"
+										>
+											<div className="flex flex-wrap items-center justify-between gap-2">
+												<h3 className="text-sm font-semibold text-[var(--ops-ink)]">
+													{t("detail.selfMedia.opsReview.commentsTitle")}
+												</h3>
+												<span className="text-xs text-[var(--ops-muted)]">
+													{t(
+														"detail.selfMedia.opsReview.conversionSignal",
+													)}
+												</span>
+											</div>
+											<p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+												{data?.comments?.summary ||
+													t("detail.selfMedia.opsReview.empty")}
+											</p>
+											<div className="mt-3 space-y-2">
+												{data?.comments?.comments
+													?.slice(0, 3)
+													.map((comment) => (
+														<div
+															key={comment.id}
+															className="rounded-md border bg-muted/20 px-3 py-2 text-xs"
+														>
+															<div className="font-medium text-foreground">
+																{comment.author || "User"}
+															</div>
+															<div className="mt-1 text-muted-foreground">
+																{comment.text}
+															</div>
+														</div>
+													))}
+											</div>
+										</section>
+									</div>
+
+									<section className="min-w-0 rounded-lg border bg-white shadow-xs">
+										<div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+											<h3 className="text-sm font-semibold text-[var(--ops-ink)]">
+												{t("detail.selfMedia.opsReview.reviewTitle")}
+											</h3>
+											<Button
+												type="button"
+												variant="ghost"
+												size="sm"
+												className="h-8 px-2"
+												disabled={!hasReviewContent}
+												onClick={() => setIsReviewFullscreen(true)}
+												aria-label={t(
+													"detail.selfMedia.opsReview.fullscreen",
+												)}
+												data-testid="self-media-ops-review-fullscreen"
+											>
+												<Maximize2 className="size-4" aria-hidden="true" />
+												<span className="hidden sm:inline">
+													{t("detail.selfMedia.opsReview.fullscreen")}
+												</span>
+											</Button>
 										</div>
+										{renderReviewPreview()}
 									</section>
 								</div>
-
-								<section className="rounded-lg border bg-white shadow-xs">
-									<div className="border-b px-4 py-3">
-										<h3 className="text-sm font-semibold text-[var(--ops-ink)]">
-											{t("detail.selfMedia.opsReview.reviewTitle")}
-										</h3>
-									</div>
-									{reviewHtml ? (
-										<OpsReviewHtmlPreview
-											content={reviewHtml}
-											relativeFilePath={reviewHtmlRelativePath}
-										/>
-									) : reviewMarkdown ? (
-										<div
-											className="max-h-[560px] overflow-auto p-5 text-sm leading-relaxed text-[var(--ops-ink)] [&_a]:text-[var(--ops-cyan)] [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-semibold [&_li]:mb-1 [&_ol]:ml-5 [&_p]:mb-3 [&_strong]:font-semibold [&_ul]:ml-5 [&_ul]:list-disc"
-											data-testid="self-media-ops-review-markdown-preview"
-										>
-											<SimpleEditor
-												isEditable={false}
-												enableDragHandle={false}
-												enableSearchReplace={false}
-												className="!h-auto !overflow-visible [&_.simple-editor-content]:!h-auto [&_.simple-editor-content]:!overflow-visible [&_.simple-editor]:!p-0"
-												content={reviewMarkdown}
-											/>
-										</div>
-									) : (
-										<div className="p-4">
-											<EmptyBlock
-												text={t("detail.selfMedia.opsReview.empty")}
-											/>
-										</div>
-									)}
-								</section>
-							</div>
-						)}
-					</div>
-				</motion.section>
-			) : null}
-		</AnimatePresence>
+							)}
+						</div>
+					</motion.section>
+				) : null}
+			</AnimatePresence>
+			{fullscreenOverlay}
+		</>
 	)
 }
 
 function OpsReviewHtmlPreview({
 	content,
 	relativeFilePath,
+	isFullscreen = false,
 }: {
 	content: string
 	relativeFilePath: string
+	isFullscreen?: boolean
 }) {
 	return (
-		<div className="h-[560px] w-full overflow-hidden bg-white">
+		<div
+			className={cn(
+				"w-full overflow-hidden bg-white",
+				isFullscreen
+					? "h-full min-h-0 rounded-lg border"
+					: "h-[min(560px,calc(100vh-220px))] min-h-[320px]",
+			)}
+			data-testid="self-media-ops-review-html-preview"
+		>
 			<IsolatedHTMLRenderer
 				content={content}
 				rawSourceCode={content}
@@ -639,8 +792,35 @@ function OpsReviewHtmlPreview({
 				openNewTab={NOOP_OPEN_NEW_TAB}
 				relative_file_path={relativeFilePath}
 				isVisible
+				isFullscreen={isFullscreen}
 				containIframeOverscroll
 				disableDynamicResourceInterception
+			/>
+		</div>
+	)
+}
+
+function OpsReviewMarkdownPreview({
+	content,
+	isFullscreen = false,
+}: {
+	content: string
+	isFullscreen?: boolean
+}) {
+	return (
+		<div
+			className={cn(
+				"overflow-auto text-sm leading-relaxed text-[var(--ops-ink)] [&_a]:text-[var(--ops-cyan)] [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-semibold [&_li]:mb-1 [&_ol]:ml-5 [&_p]:mb-3 [&_strong]:font-semibold [&_ul]:ml-5 [&_ul]:list-disc",
+				isFullscreen ? "h-full rounded-lg border bg-white p-5" : "max-h-[560px] p-5",
+			)}
+			data-testid="self-media-ops-review-markdown-preview"
+		>
+			<SimpleEditor
+				isEditable={false}
+				enableDragHandle={false}
+				enableSearchReplace={false}
+				className="!h-auto !overflow-visible [&_.simple-editor-content]:!h-auto [&_.simple-editor-content]:!overflow-visible [&_.simple-editor]:!p-0"
+				content={content}
 			/>
 		</div>
 	)
@@ -722,10 +902,10 @@ function buildTrendData(payload: SelfMediaPostOpsMetricsPayload | null | undefin
 			? [{ fetchedAt: payload.updatedAt, metrics: payload.metrics }]
 			: []
 	return source.map((item, index) => ({
-		label: formatShortTime(item.fetchedAt, index),
-		reads: numberOf(item.metrics.reads),
-		shares: numberOf(item.metrics.shares),
-		saves: numberOf(item.metrics.saves ?? item.metrics.collects),
+		label: formatShortTime(item?.fetchedAt ?? "", index),
+		reads: numberOf(item.metrics?.reads),
+		shares: numberOf(item.metrics?.shares),
+		saves: numberOf(item.metrics?.saves ?? item.metrics?.collects),
 	}))
 }
 
@@ -852,8 +1032,8 @@ function computeLatestDelta(
 	if (!payload?.history || payload.history.length < 2) return null
 	const previous = payload.history[payload.history.length - 2]
 	const latest = payload.history[payload.history.length - 1]
-	const previousValue = numberOf(previous?.metrics[key])
-	const latestValue = numberOf(latest?.metrics[key])
+	const previousValue = numberOf(previous?.metrics?.[key])
+	const latestValue = numberOf(latest?.metrics?.[key])
 	if (previousValue === null || latestValue === null) return null
 	return latestValue - previousValue
 }

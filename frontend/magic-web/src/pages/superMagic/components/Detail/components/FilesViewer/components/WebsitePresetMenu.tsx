@@ -24,7 +24,15 @@ function getTranslatedPreset(preset: WebsitePreset, t: (key: string) => string):
 	}
 }
 
-function WebsitePresetIcon({ icon }: { icon?: WebsitePreset["icon"] }) {
+function WebsitePresetIcon({
+	icon,
+	iconSrc,
+	presetId,
+}: {
+	icon?: WebsitePreset["icon"]
+	iconSrc?: string
+	presetId: string
+}) {
 	if (icon === "nano-banana-pro") {
 		return (
 			<span
@@ -50,6 +58,18 @@ function WebsitePresetIcon({ icon }: { icon?: WebsitePreset["icon"] }) {
 			>
 				G
 			</span>
+		)
+	}
+
+	if (iconSrc) {
+		return (
+			<img
+				data-testid={`website-preset-icon-${presetId}`}
+				className="size-5 shrink-0 rounded-md object-cover"
+				src={iconSrc}
+				alt=""
+				aria-hidden="true"
+			/>
 		)
 	}
 
@@ -130,7 +150,11 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 							className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2"
 							onClick={() => onOpenWebsiteTab(getTranslatedPreset(preset, t))}
 						>
-							<WebsitePresetIcon icon={preset.icon} />
+							<WebsitePresetIcon
+								icon={preset.icon}
+								iconSrc={preset.iconSrc}
+								presetId={preset.id}
+							/>
 							<span className="min-w-0 flex-1 truncate text-sm leading-5 text-foreground">
 								{getTranslatedPreset(preset, t).title}
 							</span>

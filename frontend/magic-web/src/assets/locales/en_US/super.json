@@ -797,9 +797,9 @@
 				"magicProjectNotFound": "magic.project.js not found",
 				"noCardUrl": "Card URL is unavailable",
 				"noProjectSelected": "Current project information is missing. Refresh the page and try again.",
+				"postDirectoryMissing": "Could not find the current post folder. Refresh the file list and try again.",
 				"postManifestInvalid": "post.json is invalid",
 				"postManifestMissing": "post.json not found",
-				"postDirectoryMissing": "Could not find the current post folder. Refresh the file list and try again.",
 				"projectContextMissing": "Project or workspace information is missing. Refresh the page and try again.",
 				"publishedUrlMissing": "The published article URL is missing. Bind the link again first.",
 				"selfMediaConfigMissing": "self-media config missing",
@@ -866,6 +866,12 @@
 				"editPublishedLink": "Change published link",
 				"emptyDesc": "Create a new article to open the setup wizard.",
 				"emptyTitle": "No articles yet",
+				"engagement": {
+					"comments": "Comments",
+					"likes": "Likes",
+					"reads": "Reads"
+				},
+				"loadingAutoSync": "Loading auto sync settings...",
 				"loadingPublishedLink": "Loading link...",
 				"openOpsReview": "View review",
 				"openPlatform": "Open platform content",
@@ -1227,6 +1233,8 @@
 				"edit": "Edit data",
 				"empty": "No data yet",
 				"engagementRate": "Engagement rate",
+				"exitFullscreen": "Exit fullscreen",
+				"fullscreen": "Fullscreen",
 				"funnel": {
 					"engagement": "Effective engagement",
 					"intent": "Saves / comments / shares",
@@ -1247,6 +1255,7 @@
 				"reviewHtmlTitle": "HTML review report",
 				"reviewTitle": "Review report",
 				"sourceStatus": {
+					"completed": "Completed",
 					"failed": "Fetch failed",
 					"fetched": "Real data fetched",
 					"pending": "Pending",
@@ -1511,12 +1520,16 @@
 			"add": "Open website",
 			"customDescription": "Custom website",
 			"customPlaceholder": "Enter URL",
-			"loadFallbackDescription": "This site may block iframe embedding, or the current network may be temporarily unavailable.",
-			"loadFallbackTitle": "The page cannot be shown in the preview area",
+			"loadFallbackDescription": "If the page is not fully visible, the site may restrict iframe embedding or the network may be loading slowly.",
+			"loadFallbackTitle": "This page is taking longer to load",
 			"menuTitle": "Common websites",
 			"openCustom": "Open",
 			"openExternal": "Open externally",
 			"presets": {
+				"baiduImages": {
+					"description": "Image search and visual references",
+					"title": "Baidu Images"
+				},
 				"gptImage2": {
 					"description": "Prompt examples for GPT Image 2",
 					"title": "GPT Image 2 Prompts"
@@ -1524,6 +1537,18 @@
 				"nanoBananaPro": {
 					"description": "Prompt examples for Nano Banana Pro",
 					"title": "Nano Banana Pro Prompts"
+				},
+				"pexels": {
+					"description": "Free photos and video assets",
+					"title": "Pexels"
+				},
+				"xiaohongshu": {
+					"description": "Lifestyle content and post inspiration",
+					"title": "Xiaohongshu"
+				},
+				"zcool": {
+					"description": "Design work, creative inspiration, and asset community",
+					"title": "ZCOOL"
 				}
 			},
 			"refresh": "Refresh"
@@ -2396,6 +2421,35 @@
 		"submitSuccess": "Submit successfully",
 		"uploadImageCountLimit": "It supports adding up to 10 JPG or PNG images.",
 		"uploadImageSizeLimit": "The file size should be less than 2MB."
+	},
+	"personalPet": {
+		"collapse": "Collapse pet",
+		"contextMenu": {
+			"close": "Remove"
+		},
+		"createProjectFailed": "Could not create the pet project. Please try again later.",
+		"expand": "Expand pet",
+		"generate": "Generate my pet",
+		"generationFailed": "Could not start pet generation. Please try again later.",
+		"generationStarted": "Pet generation project created",
+		"invalidManifest": "Invalid pet manifest",
+		"noWorkspace": "Select a workspace first",
+		"projectName": "My Codex Pet",
+		"regenerate": "Regenerate pet",
+		"resize": "Resize pet",
+		"setCurrent": "Set as pet",
+		"setCurrentFailed": "Could not set the pet. Please try again later.",
+		"setCurrentSuccess": "Current pet updated",
+		"spritesheetMissing": "Pet spritesheet not found",
+		"topicRadar": {
+			"collapse": "Collapse topic updates",
+			"dismiss": "Dismiss topic update",
+			"expand": "Expand topic updates",
+			"latest": "Latest",
+			"untitledTopic": "New chat",
+			"waitingForUser": "Awaiting your reply",
+			"waitingForUserHint": "Awaiting reply"
+		}
 	},
 	"playbackControl": {
 		"alreadyAtLatest": "Already at Latest",

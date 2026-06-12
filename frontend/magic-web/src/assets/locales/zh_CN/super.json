@@ -798,9 +798,9 @@
 				"magicProjectNotFound": "未找到 magic.project.js",
 				"noCardUrl": "卡片地址不可用",
 				"noProjectSelected": "当前项目信息缺失，请刷新页面后重试",
+				"postDirectoryMissing": "未找到当前文章目录，请刷新文件列表后重试",
 				"postManifestInvalid": "post.json 内容无效",
 				"postManifestMissing": "未找到 post.json",
-				"postDirectoryMissing": "未找到当前文章目录，请刷新文件列表后重试",
 				"projectContextMissing": "缺少项目或工作区信息，请刷新页面后重试",
 				"publishedUrlMissing": "缺少发布后的文章链接，请先重新绑定链接",
 				"selfMediaConfigMissing": "缺少 self-media 配置",
@@ -867,6 +867,12 @@
 				"editPublishedLink": "修改发布链接",
 				"emptyDesc": "点击新增文章，进入初始化向导开始规划内容。",
 				"emptyTitle": "暂无文章",
+				"engagement": {
+					"comments": "评论",
+					"likes": "点赞",
+					"reads": "阅读"
+				},
+				"loadingAutoSync": "正在加载自动同步配置...",
 				"loadingPublishedLink": "正在读取链接...",
 				"openOpsReview": "查看复盘",
 				"openPlatform": "打开平台内容",
@@ -1228,6 +1234,8 @@
 				"edit": "编辑数据",
 				"empty": "暂无数据",
 				"engagementRate": "互动率",
+				"exitFullscreen": "退出全屏",
+				"fullscreen": "全屏预览",
 				"funnel": {
 					"engagement": "有效互动",
 					"intent": "收藏/评论/转发",
@@ -1248,6 +1256,7 @@
 				"reviewHtmlTitle": "HTML 复盘报告",
 				"reviewTitle": "复盘报告",
 				"sourceStatus": {
+					"completed": "已完成",
 					"failed": "抓取失败",
 					"fetched": "已抓取真实数据",
 					"pending": "待抓取",
@@ -1512,12 +1521,16 @@
 			"add": "打开网站",
 			"customDescription": "自定义网站",
 			"customPlaceholder": "输入网址",
-			"loadFallbackDescription": "该站点可能禁止在 iframe 中嵌入，或当前网络暂时无法连接。",
-			"loadFallbackTitle": "网页暂时无法在预览区显示",
+			"loadFallbackDescription": "如果页面未完整显示，可能是站点限制 iframe 嵌入，或当前网络加载较慢。",
+			"loadFallbackTitle": "网页加载时间较长",
 			"menuTitle": "常用网站",
 			"openCustom": "打开",
 			"openExternal": "新窗口打开",
 			"presets": {
+				"baiduImages": {
+					"description": "图片搜索与素材参考",
+					"title": "百度图片"
+				},
 				"gptImage2": {
 					"description": "GPT Image 2 提示词示例",
 					"title": "GPT Image 2 提示词"
@@ -1525,6 +1538,18 @@
 				"nanoBananaPro": {
 					"description": "Nano Banana Pro 提示词示例",
 					"title": "Nano Banana Pro 提示词"
+				},
+				"pexels": {
+					"description": "免费图片与视频素材",
+					"title": "Pexels"
+				},
+				"xiaohongshu": {
+					"description": "生活方式内容与图文灵感",
+					"title": "小红书"
+				},
+				"zcool": {
+					"description": "设计作品、创意灵感与素材社区",
+					"title": "站酷"
 				}
 			},
 			"refresh": "刷新"
@@ -2396,6 +2421,35 @@
 		"submitSuccess": "提交成功",
 		"uploadImageCountLimit": "最多支持添加 10 张图",
 		"uploadImageSizeLimit": "请上传大小小于 2MB 的 JPG 或 PNG"
+	},
+	"personalPet": {
+		"collapse": "收起宠物",
+		"contextMenu": {
+			"close": "移除"
+		},
+		"createProjectFailed": "宠物项目创建失败，请稍后重试",
+		"expand": "展开宠物",
+		"generate": "生成我的宠物",
+		"generationFailed": "宠物生成启动失败，请稍后重试",
+		"generationStarted": "已创建宠物生成项目",
+		"invalidManifest": "宠物配置文件无效",
+		"noWorkspace": "请先选择一个工作区",
+		"projectName": "我的 Codex 宠物",
+		"regenerate": "重新生成宠物",
+		"resize": "调整宠物大小",
+		"setCurrent": "设为宠物",
+		"setCurrentFailed": "设置宠物失败，请稍后重试",
+		"setCurrentSuccess": "已设置当前宠物",
+		"spritesheetMissing": "未找到宠物动画图",
+		"topicRadar": {
+			"collapse": "收起话题动态",
+			"dismiss": "关闭话题动态",
+			"expand": "展开话题动态",
+			"latest": "最新",
+			"untitledTopic": "新对话",
+			"waitingForUser": "等待用户回复",
+			"waitingForUserHint": "等待回复"
+		}
 	},
 	"playbackControl": {
 		"alreadyAtLatest": "已在最新",

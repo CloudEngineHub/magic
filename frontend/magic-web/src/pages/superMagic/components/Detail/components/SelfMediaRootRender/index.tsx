@@ -25,6 +25,7 @@ import PrePublishAnalysisDialog from "./components/PrePublishAnalysisDialog"
 import PrePublishAnalysisFloatingButton from "./components/PrePublishAnalysisFloatingButton"
 import {
 	SelfMediaFileStorageService,
+	type SelfMediaPostOpsMetricsPayload,
 	type SelfMediaPostOpsSourcePayload,
 } from "./services/SelfMediaFileStorageService"
 import {
@@ -515,6 +516,14 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		},
 		[fileStorageService],
 	)
+	const handleLoadPostOpsMetrics = useCallback(
+		async (
+			target: SelfMediaPlatformPostItem,
+		): Promise<SelfMediaPostOpsMetricsPayload | null> => {
+			return (await fileStorageService?.loadPostOpsMetrics(target.entry.entry)) ?? null
+		},
+		[fileStorageService],
+	)
 	const handleLoadPostOpsReviewData = useCallback(
 		async (target: SelfMediaPlatformPostItem): Promise<SelfMediaOpsReviewData> => {
 			if (!fileStorageService) {
@@ -694,6 +703,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					onPostPublishRefresh={allowEdit ? handlePostPublishRefresh : undefined}
 					onConfigureAutoSync={allowEdit ? handleConfigurePostAutoSync : undefined}
 					onLoadOpsReviewData={handleLoadPostOpsReviewData}
+					onLoadOpsMetrics={handleLoadPostOpsMetrics}
 					onLoadPublishedUrl={allowEdit ? handleLoadPostPublishedUrl : undefined}
 					onLoadOpsSource={allowEdit ? handleLoadPostOpsSource : undefined}
 					onBindPublishedUrl={allowEdit ? handleBindPostPublishedUrl : undefined}

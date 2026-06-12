@@ -176,7 +176,6 @@ export async function sendSelfMediaPostPublishDataRefresh({
 		},
 	)
 	const topicMode = SELF_MEDIA_POST_PUBLISH_DATA_TOPIC_PATTERN as unknown as TopicMode
-	const folderMention = buildFolderMention(postDirectoryItem)
 	const content = buildSelfMediaPostPublishDataRefreshContent({
 		platform,
 		publishedUrl,
@@ -192,10 +191,8 @@ export async function sendSelfMediaPostPublishDataRefresh({
 			send: true,
 			topicMode,
 			selectedModel: selectedModel ?? null,
-			mentionItems: [buildFolderMentionItem(postDirectoryItem)],
 			extra: {
 				super_agent: {
-					mentions: [folderMention],
 					topic_pattern: SELF_MEDIA_POST_PUBLISH_DATA_TOPIC_PATTERN,
 					chat_mode: "normal",
 					enable_web_search: true,

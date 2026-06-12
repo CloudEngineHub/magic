@@ -1,4 +1,8 @@
 import type { FileItem, TabItem, WebsitePreset } from "../types"
+import baiduImagesIcon from "../assets/website-presets/baidu-images.png"
+import pexelsIcon from "../assets/website-presets/pexels.png"
+import xiaohongshuIcon from "../assets/website-presets/xiaohongshu.png"
+import zcoolIcon from "../assets/website-presets/zcool.png"
 
 export const WEBSITE_TAB_PREFIX = "website:"
 
@@ -16,6 +20,34 @@ export const WEBSITE_PRESETS: WebsitePreset[] = [
 		descriptionKey: "fileViewer.website.presets.gptImage2.description",
 		icon: "gpt-image-2",
 		url: "https://www.letsmagic.cn/gpt-image-2-prompts",
+	},
+	{
+		id: "baidu-images",
+		titleKey: "fileViewer.website.presets.baiduImages.title",
+		descriptionKey: "fileViewer.website.presets.baiduImages.description",
+		iconSrc: baiduImagesIcon,
+		url: "https://image.baidu.com/",
+	},
+	{
+		id: "xiaohongshu",
+		titleKey: "fileViewer.website.presets.xiaohongshu.title",
+		descriptionKey: "fileViewer.website.presets.xiaohongshu.description",
+		iconSrc: xiaohongshuIcon,
+		url: "https://www.xiaohongshu.com/",
+	},
+	{
+		id: "zcool",
+		titleKey: "fileViewer.website.presets.zcool.title",
+		descriptionKey: "fileViewer.website.presets.zcool.description",
+		iconSrc: zcoolIcon,
+		url: "https://www.zcool.com.cn/",
+	},
+	{
+		id: "pexels",
+		titleKey: "fileViewer.website.presets.pexels.title",
+		descriptionKey: "fileViewer.website.presets.pexels.description",
+		iconSrc: pexelsIcon,
+		url: "https://www.pexels.com/",
 	},
 ]
 

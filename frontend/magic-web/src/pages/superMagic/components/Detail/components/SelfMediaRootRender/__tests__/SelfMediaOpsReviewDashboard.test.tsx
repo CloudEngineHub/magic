@@ -1,5 +1,13 @@
-import { render, screen, within } from "@testing-library/react"
+import {
+	fireEvent,
+	render,
+	screen,
+	waitForElementToBeRemoved,
+	within,
+} from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
+import enUS from "@/assets/locales/en_US/super.json"
+import zhCN from "@/assets/locales/zh_CN/super.json"
 import SelfMediaOpsReviewDashboard from "../components/SelfMediaOpsReviewDashboard"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 
@@ -77,7 +85,9 @@ vi.mock("react-i18next", () => ({
 					"detail.selfMedia.opsReview.edit": "Edit data",
 					"detail.selfMedia.opsReview.empty": "No data yet",
 					"detail.selfMedia.opsReview.engagementRate": "Engagement rate",
+					"detail.selfMedia.opsReview.exitFullscreen": "Exit fullscreen",
 					"detail.selfMedia.opsReview.funnelTitle": "Traffic efficiency",
+					"detail.selfMedia.opsReview.fullscreen": "Fullscreen",
 					"detail.selfMedia.opsReview.impactTitle": "Impact map",
 					"detail.selfMedia.opsReview.markdownTitle": "Markdown review report",
 					"detail.selfMedia.opsReview.qualityTitle": "Quality mix",
@@ -127,6 +137,8 @@ describe("SelfMediaOpsReviewDashboard", () => {
 		expect(screen.getByTestId("self-media-ops-review-actions")).toHaveTextContent(
 			"把教程场景拆成团队协作案例",
 		)
+		expect(screen.getByTestId("self-media-ops-review-trend")).toHaveTextContent("Sync trend")
+		expect(screen.getByTestId("self-media-ops-review-trend-chart")).toHaveClass("h-52")
 	})
 
 	it("renders review.html through the shared HTML preview runtime", async () => {
@@ -145,6 +157,13 @@ describe("SelfMediaOpsReviewDashboard", () => {
 			/>,
 		)
 
+		const reportSection = (
+			await screen.findByRole("heading", { name: "Review report" })
+		).closest("section")
+		expect(reportSection).toHaveClass("rounded-lg")
+		expect(reportSection).toHaveClass("border")
+		expect(reportSection).toHaveClass("shadow-xs")
+
 		const renderer = await screen.findByTestId("self-media-ops-review-html-renderer")
 		expect(renderer).toHaveAttribute("data-relative-file-path", "posts/post-1/ops/review.html")
 		expect(screen.queryByTestId("self-media-ops-review-html-frame")).not.toBeInTheDocument()
@@ -156,6 +175,99 @@ describe("SelfMediaOpsReviewDashboard", () => {
 				disableDynamicResourceInterception: true,
 				containIframeOverscroll: true,
 			}),
+		)
+	})
+
+	it("opens and exits fullscreen preview from the report card header", async () => {
+		render(
+			<SelfMediaOpsReviewDashboard
+				open
+				target={buildTarget()}
+				onClose={vi.fn()}
+				onLoadData={async () => ({
+					...buildOpsReviewData(),
+					reviewHtml: {
+						content: "<html><body><main>Fullscreen Review</main></body></html>",
+					},
+				})}
+			/>,
+		)
+
+		fireEvent.click(await screen.findByTestId("self-media-ops-review-fullscreen"))
+
+		const fullscreen = screen.getByTestId("self-media-ops-review-fullscreen-overlay")
+		expect(fullscreen.parentElement).toBe(document.body)
+		expect(fullscreen).toHaveTextContent("Review report")
+		expect(
+			within(fullscreen).getByTestId("self-media-ops-review-html-preview"),
+		).toBeInTheDocument()
+
+		fireEvent.click(within(fullscreen).getByTestId("self-media-ops-review-exit-fullscreen"))
+
+		await waitForElementToBeRemoved(() =>
+			screen.queryByTestId("self-media-ops-review-fullscreen-overlay"),
+		)
+	})
+
+	it("exits fullscreen preview when Escape is pressed", async () => {
+		render(
+			<SelfMediaOpsReviewDashboard
+				open
+				target={buildTarget()}
+				onClose={vi.fn()}
+				onLoadData={async () => ({
+					...buildOpsReviewData(),
+					reviewHtml: {
+						content: "<html><body><main>Keyboard Review</main></body></html>",
+					},
+				})}
+			/>,
+		)
+
+		fireEvent.click(await screen.findByTestId("self-media-ops-review-fullscreen"))
+
+		expect(screen.getByTestId("self-media-ops-review-fullscreen-overlay")).toBeInTheDocument()
+
+		fireEvent.keyDown(document, { key: "Escape" })
+
+		await waitForElementToBeRemoved(() =>
+			screen.queryByTestId("self-media-ops-review-fullscreen-overlay"),
+		)
+	})
+
+	it("uses flexible layout primitives when space is constrained", async () => {
+		render(
+			<SelfMediaOpsReviewDashboard
+				open
+				target={buildTarget()}
+				onClose={vi.fn()}
+				onLoadData={async () => ({
+					...buildOpsReviewData(),
+					reviewHtml: {
+						content: "<html><body><main>Review</main></body></html>",
+					},
+				})}
+			/>,
+		)
+
+		expect(await screen.findByTestId("self-media-ops-review-content")).toHaveClass(
+			"px-3",
+			"sm:px-6",
+		)
+		expect(screen.getByTestId("self-media-ops-review-brief")).toHaveClass(
+			"lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.75fr)]",
+		)
+		expect(screen.getByTestId("self-media-ops-review-chart-grid")).toHaveClass(
+			"xl:grid-cols-2",
+			"2xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)_minmax(260px,0.72fr)]",
+		)
+		expect(screen.getByTestId("self-media-ops-review-quality-mix")).toHaveClass(
+			"xl:col-span-2",
+			"2xl:col-span-1",
+		)
+		expect(screen.getByTestId("self-media-ops-review-html-preview")).toHaveClass(
+			"h-[min(560px,calc(100vh-220px))]",
+			"min-h-[320px]",
 		)
 	})
 
@@ -177,13 +289,37 @@ describe("SelfMediaOpsReviewDashboard", () => {
 		)
 
 		const preview = await screen.findByTestId("self-media-ops-review-markdown-preview")
+		expect(preview).toHaveClass("max-h-[560px]")
+		expect(preview).toHaveClass("overflow-auto")
 		expect(within(preview).getByTestId("simple-editor-markdown-preview")).toBeInTheDocument()
 		expect(within(preview).getByRole("heading", { name: "复盘结论" })).toBeInTheDocument()
 		expect(within(preview).getByText("第一条：标题钩子有效")).toBeInTheDocument()
 		expect(within(preview).getByText("下一步")).toBeInTheDocument()
 		expect(screen.queryByTestId("self-media-ops-review-markdown")).not.toBeInTheDocument()
 	})
+
+	it("defines localized copy for completed source status", () => {
+		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.sourceStatus.completed")).toBe(
+			"已完成",
+		)
+		expect(getLocaleValue(enUS, "detail.selfMedia.opsReview.sourceStatus.completed")).toBe(
+			"Completed",
+		)
+		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.fullscreen")).toBe("全屏预览")
+		expect(getLocaleValue(enUS, "detail.selfMedia.opsReview.fullscreen")).toBe("Fullscreen")
+		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.exitFullscreen")).toBe("退出全屏")
+		expect(getLocaleValue(enUS, "detail.selfMedia.opsReview.exitFullscreen")).toBe(
+			"Exit fullscreen",
+		)
+	})
 })
+
+function getLocaleValue(messages: unknown, key: string) {
+	return key.split(".").reduce<unknown>((current, segment) => {
+		if (!current || typeof current !== "object") return undefined
+		return (current as Record<string, unknown>)[segment]
+	}, messages)
+}
 
 function buildTarget(): SelfMediaPlatformPostItem {
 	return {
