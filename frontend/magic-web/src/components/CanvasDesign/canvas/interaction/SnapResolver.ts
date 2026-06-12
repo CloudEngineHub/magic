@@ -77,7 +77,10 @@ export class SnapResolver {
 		const xAlign = snappedAlignments.find((a) => ["left", "center", "right"].includes(a.type))
 		const yAlign = snappedAlignments.find((a) => ["top", "middle", "bottom"].includes(a.type))
 
-		if (xAlign) {
+		if (!activeAnchor) {
+			x = draggingRect.x + snapOffsetX
+			y = draggingRect.y + snapOffsetY
+		} else if (xAlign) {
 			if (xAlign.type === "left") {
 				x = draggingRect.x + snapOffsetX
 				width = draggingRect.width - snapOffsetX
@@ -87,7 +90,7 @@ export class SnapResolver {
 				x = draggingRect.x + snapOffsetX
 			}
 		}
-		if (yAlign) {
+		if (activeAnchor && yAlign) {
 			if (yAlign.type === "top") {
 				y = draggingRect.y + snapOffsetY
 				height = draggingRect.height - snapOffsetY

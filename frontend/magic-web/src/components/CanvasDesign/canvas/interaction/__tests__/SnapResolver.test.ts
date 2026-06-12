@@ -35,6 +35,29 @@ function createResolver(options: {
 }
 
 describe("SnapResolver keep-ratio snapping", () => {
+	it("preserves size when translation snapping aligns edges", () => {
+		const resolver = createResolver({
+			alignments: [createAlignment("left", 0), createAlignment("top", 10)],
+			snapOffsetX: -8,
+			snapOffsetY: 6,
+		})
+		const draggingRect: Rect = { x: 8, y: 4, width: 100, height: 50 }
+
+		const result = resolver.resolveInContentSpace({
+			draggingRect,
+			targets: [],
+			activeAnchor: null,
+		})
+
+		expect(result?.snappedRect).toEqual({
+			x: 0,
+			y: 10,
+			width: 100,
+			height: 50,
+		})
+		expect(result?.snappedAlignments.map((alignment) => alignment.type)).toEqual(["left", "top"])
+	})
+
 	it("uses horizontal snap as the size driver for a Shift-constrained edge anchor", () => {
 		const resolver = createResolver({
 			alignments: [createAlignment("left", 0)],
