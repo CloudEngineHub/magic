@@ -37,6 +37,7 @@ skills:
     - name: user-info
     - name: lark-cli
     - name: dingtalk-cli
+    - name: teamshare-cli
     - name: micro-app-architect
     - name: agent-info
     - name: document-converter

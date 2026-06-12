@@ -11,7 +11,7 @@ from typing import Callable, Optional, Sequence
 from agentlang.logger import get_logger
 from app.core.context.agent_context import AgentContext
 from app.service.cli_status.common import CliStatusProbe, CliStatusSnapshot
-from app.service.cli_status.providers import DwsCliStatusProbe, LarkCliStatusProbe
+from app.service.cli_status.providers import DwsCliStatusProbe, LarkCliStatusProbe, TeamshareCliStatusProbe
 
 logger = get_logger(__name__)
 
@@ -23,6 +23,7 @@ def _default_probe_factory() -> Sequence[CliStatusProbe]:
     return (
         DwsCliStatusProbe(),
         LarkCliStatusProbe(),
+        TeamshareCliStatusProbe(),
     )
 
 
