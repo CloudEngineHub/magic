@@ -208,6 +208,73 @@ describe("CanvasVisibilityManager video load requests", () => {
 	})
 })
 
+describe("CanvasVisibilityManager image load requests", () => {
+	it("passes display target metadata to image resource loads", () => {
+		const emit = vi.fn()
+		const loadResource = vi.fn()
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				eventEmitter: { emit: typeof emit }
+				imageResourceManager: { loadResource: typeof loadResource }
+			}
+			lastRequestedLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					variant: ImageResourceVariant
+					requestedAt: number
+				}
+			>
+		}
+		manager.canvas = {
+			eventEmitter: { emit },
+			imageResourceManager: { loadResource },
+		}
+		manager.lastRequestedLoadState = new Map()
+		const requestImageLoad = (
+			manager as unknown as {
+				requestImageLoad: (
+					candidate: ImageCandidate,
+					reason: string,
+					force?: boolean,
+				) => void
+			}
+		).requestImageLoad.bind(manager)
+
+		requestImageLoad(
+			{
+				elementId: "image-1",
+				path: "./images/a.png",
+				priority: "visible",
+				variant: "full",
+				visibilityState: "visible",
+				screenArea: 40000,
+				screenLongEdge: 200,
+				distanceToViewportCenter: 0,
+			},
+			"viewport:scale",
+		)
+
+		expect(emit).toHaveBeenCalledWith({
+			type: "resource:image:display-target",
+			data: {
+				elementId: "image-1",
+				path: "./images/a.png",
+				variant: "full",
+				reason: "viewport:scale",
+			},
+		})
+		expect(loadResource).toHaveBeenCalledWith("./images/a.png", {
+			variant: "full",
+			priority: "visible",
+			displayTargetElementId: "image-1",
+			displayTargetReason: "viewport:scale",
+		})
+	})
+})
+
 describe("CanvasVisibilityManager image variant switch cooldown", () => {
 	it("schedules a forced refresh when a fast cross-tier request is suppressed", () => {
 		vi.useFakeTimers()
@@ -306,6 +373,140 @@ describe("CanvasVisibilityManager content layer hit graph suppression", () => {
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+})
+
+describe("CanvasVisibilityManager skipped pan visible refresh", () => {
+	it("requests visible images without running the large near query when viewport movement is skipped", () => {
+		const requestImageLoad = vi.fn()
+		const scheduleDrainIfNeeded = vi.fn()
+		const scheduleFarVisibilityDrain = vi.fn()
+		const queryElementIdsByExpandedRect = vi.fn((_rect, padding, options) =>
+			padding === 0 && Array.from(options?.elementIds ?? []).includes("image-1")
+				? ["image-1"]
+				: [],
+		)
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				elementManager: {
+					findParentIdForElement: () => undefined
+					isElementVisibleInDataTree: () => boolean
+				}
+				geometryCacheManager: {
+					getElementBounds: () => { x: number; y: number; width: number; height: number }
+					queryElementIdsByExpandedRect: typeof queryElementIdsByExpandedRect
+				}
+			}
+			registeredImages: Map<string, { elementId: string; path: string }>
+			registeredVideos: Map<string, { elementId: string; path: string }>
+			lastRequestedLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					variant: ImageResourceVariant
+					requestedAt: number
+				}
+			>
+			lastRequestedVideoLoadState: Map<string, unknown>
+			lastVisibilityState: Map<string, string>
+			lastVideoVisibilityState: Map<string, string>
+			lastContainerDisplayVariant: Map<string, ImageResourceVariant>
+			initialVisibleCriticalUntil: number
+			statsSnapshot: Record<string, number>
+			shouldRequestImageCandidate: () => boolean
+			shouldRequestVideoCandidate: () => boolean
+			requestImageLoad: typeof requestImageLoad
+			scheduleDrainIfNeeded: typeof scheduleDrainIfNeeded
+			scheduleFarVisibilityDrain: typeof scheduleFarVisibilityDrain
+			refreshVisibleOnlyForSkippedViewportMovement: (options: {
+				reason: string
+				startedAt: number
+				viewportRect: { x: number; y: number; width: number; height: number }
+				viewportScale: number
+			}) => void
+		}
+
+		manager.canvas = {
+			elementManager: {
+				findParentIdForElement: () => undefined,
+				isElementVisibleInDataTree: () => true,
+			},
+			geometryCacheManager: {
+				getElementBounds: () => ({ x: 0, y: 0, width: 1000, height: 800 }),
+				queryElementIdsByExpandedRect,
+			},
+		}
+		manager.registeredImages = new Map([
+			["image-1", { elementId: "image-1", path: "./images/a.png" }],
+		])
+		manager.registeredVideos = new Map()
+		manager.lastRequestedLoadState = new Map()
+		manager.lastRequestedVideoLoadState = new Map()
+		manager.lastVisibilityState = new Map()
+		manager.lastVideoVisibilityState = new Map()
+		manager.lastContainerDisplayVariant = new Map()
+		manager.initialVisibleCriticalUntil = 0
+		manager.statsSnapshot = {
+			registeredImageCount: 0,
+			registeredVideoCount: 0,
+			registerDedupedCount: 0,
+			videoRegisterDedupedCount: 0,
+			lowFallbackPreviewCount: 0,
+			visibleImageCount: 0,
+			nearImageCount: 0,
+			farImageCount: 0,
+			visibleVideoCount: 0,
+			nearVideoCount: 0,
+			farVideoCount: 0,
+			lastQueryDurationMs: 0,
+			lastRequestedVisibleCount: 0,
+			lastRequestedNearCount: 0,
+			lastRequestedVisibleVideoCount: 0,
+			lastRequestedNearVideoCount: 0,
+			lowDetailVisibleVideoCount: 0,
+			pendingLowDetailVisibleVideoLoadCandidateCount: 0,
+			pendingImageLoadCandidateCount: 0,
+			pendingVideoLoadCandidateCount: 0,
+			drainScheduledCount: 0,
+			drainRunCount: 0,
+			lastViewportScale: 1,
+			lastViewportWidth: 0,
+			lastViewportHeight: 0,
+			skippedViewportQueryCount: 0,
+			queryCount: 0,
+		}
+		manager.shouldRequestImageCandidate = () => true
+		manager.shouldRequestVideoCandidate = () => true
+		manager.requestImageLoad = requestImageLoad
+		manager.scheduleDrainIfNeeded = scheduleDrainIfNeeded
+		manager.scheduleFarVisibilityDrain = scheduleFarVisibilityDrain
+
+		manager.refreshVisibleOnlyForSkippedViewportMovement({
+			reason: "viewport:pan",
+			startedAt: performance.now(),
+			viewportRect: { x: 100, y: 200, width: 800, height: 600 },
+			viewportScale: 0.2,
+		})
+
+		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(1)
+		expect(queryElementIdsByExpandedRect).toHaveBeenCalledWith(
+			{ x: 100, y: 200, width: 800, height: 600 },
+			0,
+			{ elementIds: ["image-1"] },
+		)
+		expect(requestImageLoad).toHaveBeenCalledTimes(1)
+		expect(requestImageLoad).toHaveBeenCalledWith(
+			expect.objectContaining({
+				elementId: "image-1",
+				path: "./images/a.png",
+				priority: "visible",
+				visibilityState: "visible",
+			}),
+			"viewport:pan",
+		)
+		expect(scheduleFarVisibilityDrain).toHaveBeenCalledTimes(1)
 	})
 })
 
@@ -587,7 +788,7 @@ describe("CanvasVisibilityManager image load priorities", () => {
 		expect(nearCandidate?.priority).toBe("near")
 	})
 
-	it("uses the visible frame display variant for ordinary child image candidates", () => {
+	it("uses the visible frame display variant as a lower bound for ordinary child image candidates", () => {
 		const manager = createImageCandidateManager({
 			image: {
 				x: 395,
@@ -624,6 +825,40 @@ describe("CanvasVisibilityManager image load priorities", () => {
 				elementId: "image-1",
 				variant: "preview",
 				screenLongEdge: 200,
+			}),
+		)
+	})
+
+	it("does not let the visible frame display variant suppress full ordinary child image candidates", () => {
+		const manager = createImageCandidateManager()
+		const createPrivateCandidate = (
+			manager as unknown as {
+				createCandidate: (
+					elementId: string,
+					visibilityState: "visible" | "near",
+					viewportScale: number,
+					viewportCenter: { x: number; y: number },
+					priorityOverride?: ImageResourceLoadPriority,
+					viewportRect?: { x: number; y: number; width: number; height: number },
+				) => ImageCandidate | null
+			}
+		).createCandidate
+
+		const candidate = createPrivateCandidate.call(
+			manager,
+			"image-1",
+			"visible",
+			8,
+			{ x: 250, y: 250 },
+			undefined,
+			{ x: 0, y: 0, width: 500, height: 500 },
+		)
+
+		expect(candidate).toEqual(
+			expect.objectContaining({
+				elementId: "image-1",
+				variant: "full",
+				screenLongEdge: 1600,
 			}),
 		)
 	})
@@ -708,7 +943,7 @@ describe("CanvasVisibilityManager image load priorities", () => {
 		])
 	})
 
-	it("uses the visible frame as the shared display variant for descendants", () => {
+	it("uses the visible frame display variant as a lower bound for descendants", () => {
 		const manager = createImageCandidateManager({
 			image: {
 				x: 395,
@@ -734,6 +969,28 @@ describe("CanvasVisibilityManager image load priorities", () => {
 				screenArea: 25,
 				screenLongEdge: 5,
 				frameVisibleBounds: { x: 395, y: 295, width: 5, height: 5 },
+			}),
+		])
+	})
+
+	it("does not let the visible frame display variant suppress full descendant image candidates", () => {
+		const manager = createImageCandidateManager()
+		const collectVisibleContainerImageCandidates =
+			getCollectVisibleContainerImageCandidates(manager)
+
+		const candidates = collectVisibleContainerImageCandidates.call(manager, {
+			reason: "viewport:pan",
+			viewportRect: { x: 0, y: 0, width: 500, height: 500 },
+			viewportScale: 8,
+			viewportCenter: { x: 250, y: 250 },
+		})
+
+		expect(candidates).toEqual([
+			expect.objectContaining({
+				elementId: "image-1",
+				variant: "full",
+				screenLongEdge: 1600,
+				frameVisibleBounds: { x: 0, y: 0, width: 200, height: 160 },
 			}),
 		])
 	})

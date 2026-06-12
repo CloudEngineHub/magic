@@ -116,6 +116,12 @@ export interface CanvasEventMap {
 		variant: ImageResourceVariant
 		reason: string
 	} // 可见性调度给单个图片元素下发当前视口目标显示等级
+	"resource:image:display-loaded": {
+		elementId: string
+		path: string
+		resource: LoadedResource
+		reason: string
+	} // 可见性调度触发的单个图片元素目标资源加载完成；用于 full 避免全局广播升级
 	"resource:image:variant-load-failed": {
 		path: string
 		variant: ImageResourceVariant

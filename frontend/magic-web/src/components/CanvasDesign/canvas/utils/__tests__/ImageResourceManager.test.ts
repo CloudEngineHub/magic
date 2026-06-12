@@ -121,6 +121,50 @@ function createManager() {
 }
 
 describe("ImageResourceManager image resources", () => {
+	it("emits targeted display-loaded only for display-driven full loads", async () => {
+		const { manager, eventEmitter } = createManager()
+		const fullResource = createImageResource("full")
+		const loadImageInternal = vi.fn(async () => fullResource)
+		;(manager as unknown as { loadImageInternal: typeof loadImageInternal }).loadImageInternal =
+			loadImageInternal
+
+		manager.loadResource("./images/full.png", {
+			variant: "full",
+			displayTargetElementId: "image-1",
+			displayTargetReason: "viewport:scale",
+		})
+
+		await vi.waitFor(() => {
+			expect(eventEmitter.emit).toHaveBeenCalledWith({
+				type: "resource:image:display-loaded",
+				data: {
+					elementId: "image-1",
+					path: "./images/full.png",
+					resource: fullResource,
+					reason: "viewport:scale",
+				},
+			})
+		})
+		expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "resource:image:loaded" }),
+		)
+	})
+
+	it("does not emit display-loaded for non-display full loads", async () => {
+		const { manager, eventEmitter } = createManager()
+		const fullResource = createImageResource("full")
+		const loadImageInternal = vi.fn(async () => fullResource)
+		;(manager as unknown as { loadImageInternal: typeof loadImageInternal }).loadImageInternal =
+			loadImageInternal
+
+		manager.loadResource("./images/full.png", { variant: "full" })
+
+		await vi.waitFor(() => {
+			expect(loadImageInternal).toHaveBeenCalled()
+		})
+		expect(eventEmitter.emit).not.toHaveBeenCalled()
+	})
+
 	it("migrates cached body keys after missing metadata is hydrated", () => {
 		const { manager } = createManager()
 		const entry = createEntry({

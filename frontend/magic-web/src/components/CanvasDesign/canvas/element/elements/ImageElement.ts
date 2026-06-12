@@ -98,6 +98,14 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			reason: string
 		}
 	}) => void
+	private resourceDisplayLoadedHandler?: (event: {
+		data: {
+			elementId: string
+			path: string
+			resource: LoadedResource
+			reason: string
+		}
+	}) => void
 	private resourceWillCloseHandler?: (event: {
 		data: {
 			path?: string
@@ -872,7 +880,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	/**
-	 * 监听 resource:image:loaded / resource:image:load-failed 事件
+	 * 监听 resource:image:loaded / resource:image:display-loaded / resource:image:load-failed 事件
 	 */
 	private setupResourceLoadedListener(): void {
 		this.removeResourceLoadedListener()
@@ -899,6 +907,16 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.applyDisplayTargetVariant(data.variant)
 			}
 		}
+		this.resourceDisplayLoadedHandler = ({ data }) => {
+			if (
+				data.elementId === this.data.id &&
+				resolveCanonicalResourcePath(data.path, resolveAbs) ===
+					resolveCanonicalResourcePath(path, resolveAbs)
+			) {
+				this.imageLoadFailureReason = null
+				this.applyResourceFromEvent(data.resource)
+			}
+		}
 		this.resourceLoadFailedHandler = ({ data }) => {
 			if (
 				resolveCanonicalResourcePath(data.path, resolveAbs) ===
@@ -915,6 +933,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.canvas.eventEmitter.on(
 			"resource:image:display-target",
 			this.resourceDisplayTargetHandler,
+		)
+		this.canvas.eventEmitter.on(
+			"resource:image:display-loaded",
+			this.resourceDisplayLoadedHandler,
 		)
 		this.canvas.eventEmitter.on("resource:image:will-close", this.resourceWillCloseHandler)
 		this.canvas.eventEmitter.on("resource:image:load-failed", this.resourceLoadFailedHandler)
@@ -938,7 +960,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	/**
-	 * 移除 resource:image:loaded / resource:image:load-failed 监听
+	 * 移除 resource:image:loaded / resource:image:display-loaded / resource:image:load-failed 监听
 	 */
 	private removeResourceLoadedListener(): void {
 		if (this.resourceLoadedHandler) {
@@ -951,6 +973,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.resourceDisplayTargetHandler,
 			)
 			this.resourceDisplayTargetHandler = undefined
+		}
+		if (this.resourceDisplayLoadedHandler) {
+			this.canvas.eventEmitter.off(
+				"resource:image:display-loaded",
+				this.resourceDisplayLoadedHandler,
+			)
+			this.resourceDisplayLoadedHandler = undefined
 		}
 		if (this.resourceLoadFailedHandler) {
 			this.canvas.eventEmitter.off(

@@ -102,6 +102,9 @@ export interface ImageResourceLoadOptions {
 	variant?: ImageResourceVariant
 	priority?: ImageResourceLoadPriority
 	bypassQueue?: boolean
+	/** 可见性调度发起的显示目标元素；仅用于 full 加载完成后定向唤醒该元素 */
+	displayTargetElementId?: string
+	displayTargetReason?: string
 }
 
 export interface ResolvedImageOssInfo {
@@ -1120,12 +1123,36 @@ export class ImageResourceManager {
 	}
 
 	/**
-	 * 触发资源加载（不等待，通过 resource:image:loaded 事件获取完成通知）
+	 * 触发资源加载（不等待；low/preview 通过 resource:image:loaded 通知，full 通过 displayTargetElementId 定向通知）
 	 * @param path 路径（path）
 	 */
 	public loadResource(path: string, options?: ImageResourceLoadOptions): void {
-		this.loadImageInternal(path, options).catch(() => {
-			// 静默吞掉错误，调用方通过事件或 getResource 感知失败
+		this.loadImageInternal(path, options)
+			.then((resource) => {
+				if (!resource) return
+				this.emitDisplayLoadedIfNeeded(path, resource, options)
+			})
+			.catch(() => {
+				// 静默吞掉错误，调用方通过事件或 getResource 感知失败
+			})
+	}
+
+	private emitDisplayLoadedIfNeeded(
+		path: string,
+		resource: LoadedResource,
+		options?: ImageResourceLoadOptions,
+	): void {
+		if (resource.variant !== "full") return
+		if (!options?.displayTargetElementId) return
+
+		this.canvas.eventEmitter.emit({
+			type: "resource:image:display-loaded",
+			data: {
+				elementId: options.displayTargetElementId,
+				path: this.canonicalResourcePath(path),
+				resource,
+				reason: options.displayTargetReason ?? "display-target",
+			},
 		})
 	}
 

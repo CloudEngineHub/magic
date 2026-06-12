@@ -353,4 +353,68 @@ describe("ImageElement mounted image node sync", () => {
 		})
 		expect(rerenderWhenTransformIdle).toHaveBeenCalled()
 	})
+
+	it("applies targeted display-loaded resources only to the matching element", () => {
+		const handlers = new Map<string, (event: unknown) => void>()
+		const on = vi.fn((type: string, handler: (event: unknown) => void) => {
+			handlers.set(type, handler)
+		})
+		const off = vi.fn()
+		const applyResourceFromEvent = vi.fn()
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			data: { id: string; src: string }
+			canvas: {
+				magicConfigManager: { config: { methods: Record<string, never> } }
+				eventEmitter: { on: typeof on; off: typeof off }
+				imageResourceManager: { peekResource: ReturnType<typeof vi.fn> }
+			}
+			applyResourceFromEvent: typeof applyResourceFromEvent
+			removeResourceLoadedListener: () => void
+			setupResourceLoadedListener: () => void
+		}
+		const resource = {
+			ossSrc: "https://example.test/full.png",
+			image: new Image(),
+			imageInfo: {
+				naturalWidth: 100,
+				naturalHeight: 100,
+				fileSize: 100,
+				mimeType: "image/png",
+				filename: "full.png",
+			},
+			variant: "full",
+			sourceWidth: 100,
+			sourceHeight: 100,
+			isFullSize: true,
+		}
+		element.data = { id: "image-1", src: "./images/a.png" }
+		element.canvas = {
+			magicConfigManager: { config: { methods: {} } },
+			eventEmitter: { on, off },
+			imageResourceManager: { peekResource: vi.fn(() => null) },
+		}
+		element.applyResourceFromEvent = applyResourceFromEvent
+
+		element.setupResourceLoadedListener()
+
+		handlers.get("resource:image:display-loaded")?.({
+			data: {
+				elementId: "image-2",
+				path: "./images/a.png",
+				resource,
+				reason: "viewport:scale",
+			},
+		})
+		handlers.get("resource:image:display-loaded")?.({
+			data: {
+				elementId: "image-1",
+				path: "./images/a.png",
+				resource,
+				reason: "viewport:scale",
+			},
+		})
+
+		expect(applyResourceFromEvent).toHaveBeenCalledTimes(1)
+		expect(applyResourceFromEvent).toHaveBeenCalledWith(resource)
+	})
 })

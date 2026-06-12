@@ -157,6 +157,30 @@ function getArea(rect: Rect): number {
 	return Math.max(0, rect.width) * Math.max(0, rect.height)
 }
 
+function getImageVariantRank(variant: ImageResourceVariant): number {
+	switch (variant) {
+		case "full":
+			return 2
+		case "preview":
+			return 1
+		case "low":
+		default:
+			return 0
+	}
+}
+
+function maxImageResourceVariant(
+	variant: ImageResourceVariant,
+	minVariant?: MediaDisplayResourceVariant,
+): ImageResourceVariant {
+	if (!minVariant) return variant
+	return getImageVariantRank(minVariant) > getImageVariantRank(variant) ? minVariant : variant
+}
+
+function toMediaDisplayResourceVariant(variant: ImageResourceVariant): MediaDisplayResourceVariant {
+	return variant === "low" ? "low" : "preview"
+}
+
 function getIntersectionRect(a: Rect, b: Rect): Rect | null {
 	const x1 = Math.max(a.x, b.x)
 	const y1 = Math.max(a.y, b.y)
@@ -661,7 +685,9 @@ export class CanvasVisibilityManager {
 		if (!this.canvas.geometryCacheManager.containsRect(this.lastQueryCoverRect, viewportRect)) {
 			return false
 		}
-		if (!force) return true
+		if (!force) {
+			return true
+		}
 		if (reason !== "viewport:pan" && reason !== "viewport:scale") return false
 		if (!this.lastQueryViewportScale || this.lastQueryViewportScale <= 0) return false
 
@@ -737,6 +763,12 @@ export class CanvasVisibilityManager {
 				scaleBand,
 			})
 		) {
+			this.refreshVisibleOnlyForSkippedViewportMovement({
+				reason,
+				startedAt,
+				viewportRect,
+				viewportScale,
+			})
 			this.statsSnapshot.skippedViewportQueryCount += 1
 			return
 		}
@@ -1023,6 +1055,148 @@ export class CanvasVisibilityManager {
 		}
 	}
 
+	private refreshVisibleOnlyForSkippedViewportMovement(options: {
+		reason: string
+		startedAt: number
+		viewportRect: Rect
+		viewportScale: number
+	}): void {
+		const { reason, startedAt, viewportRect, viewportScale } = options
+		if (!isViewportMovementReason(reason)) return
+
+		const registeredImageIds: string[] = []
+		this.registeredImages.forEach((_, elementId) => {
+			registeredImageIds.push(elementId)
+		})
+		const registeredVideoIds: string[] = []
+		this.registeredVideos.forEach((_, elementId) => {
+			registeredVideoIds.push(elementId)
+		})
+
+		const visibleIds = new Set(
+			registeredImageIds.length > 0
+				? this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
+						elementIds: registeredImageIds,
+					})
+				: [],
+		)
+		const visibleVideoIds = new Set(
+			registeredVideoIds.length > 0
+				? this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
+						elementIds: registeredVideoIds,
+					})
+				: [],
+		)
+
+		const viewportCenter = getRectCenter(viewportRect)
+		const promoteInitialVisibleLoads = this.shouldPromoteInitialVisibleLoads(reason)
+		const visibleCandidates: ImageLoadCandidate[] = []
+		const lowDetailVisibleCandidates: ImageLoadCandidate[] = []
+		const visibleVideoCandidates: VideoLoadCandidate[] = []
+		const lowDetailVisibleVideoCandidates: VideoLoadCandidate[] = []
+
+		visibleIds.forEach((elementId) => {
+			const candidate = this.createCandidate(
+				elementId,
+				"visible",
+				viewportScale,
+				viewportCenter,
+				promoteInitialVisibleLoads ? "critical" : undefined,
+				viewportRect,
+			)
+			if (!candidate) return
+			if (candidate.screenLongEdge >= MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD) {
+				visibleCandidates.push(candidate)
+			} else {
+				lowDetailVisibleCandidates.push(candidate)
+			}
+		})
+
+		visibleVideoIds.forEach((elementId) => {
+			const candidate = this.createVideoCandidate(
+				elementId,
+				"visible",
+				viewportScale,
+				viewportCenter,
+				"poster",
+			)
+			if (!candidate) return
+			if (candidate.screenLongEdge >= MIN_VISIBLE_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD) {
+				visibleVideoCandidates.push(candidate)
+			} else {
+				lowDetailVisibleVideoCandidates.push(candidate)
+			}
+		})
+
+		const pendingVisibleCandidates = visibleCandidates.filter((candidate) =>
+			this.shouldRequestImageCandidate(candidate),
+		)
+		const pendingLowDetailVisibleCandidates = lowDetailVisibleCandidates.filter((candidate) =>
+			this.shouldRequestImageCandidate(candidate),
+		)
+		const pendingVisibleVideoCandidates = visibleVideoCandidates.filter((candidate) =>
+			this.shouldRequestVideoCandidate(candidate),
+		)
+		const pendingLowDetailVisibleVideoCandidates = lowDetailVisibleVideoCandidates.filter(
+			(candidate) => this.shouldRequestVideoCandidate(candidate),
+		)
+
+		const visibleToLoad =
+			pendingVisibleCandidates.length > 0
+				? pendingVisibleCandidates
+						.sort(sortCandidates)
+						.slice(0, MAX_VISIBLE_LOAD_REQUESTS_PER_QUERY)
+				: pendingLowDetailVisibleCandidates
+						.sort(sortCandidates)
+						.slice(0, LOW_DETAIL_VISIBLE_FALLBACK_LIMIT)
+		const visibleVideosToLoad =
+			pendingVisibleVideoCandidates.length > 0
+				? pendingVisibleVideoCandidates
+						.sort(sortCandidates)
+						.slice(0, MAX_VISIBLE_VIDEO_LOAD_REQUESTS_PER_QUERY)
+				: pendingLowDetailVisibleVideoCandidates
+						.sort(sortCandidates)
+						.slice(0, LOW_DETAIL_VISIBLE_VIDEO_FALLBACK_LIMIT)
+
+		visibleToLoad.forEach((candidate) => this.requestImageLoad(candidate, reason))
+		visibleVideosToLoad.forEach((candidate) => this.requestVideoLoad(candidate, reason))
+
+		const pendingImageLoadCandidateCount =
+			pendingVisibleCandidates.length + pendingLowDetailVisibleCandidates.length
+		const pendingVideoLoadCandidateCount =
+			pendingVisibleVideoCandidates.length + pendingLowDetailVisibleVideoCandidates.length
+		const requestedImageLoadCount = visibleToLoad.length
+		const requestedVideoLoadCount = visibleVideosToLoad.length
+		this.scheduleDrainIfNeeded({
+			pendingImageLoadCandidateCount,
+			pendingVideoLoadCandidateCount,
+			requestedImageLoadCount,
+			requestedVideoLoadCount,
+		})
+		this.scheduleFarVisibilityDrain()
+
+		visibleIds.forEach((elementId) => {
+			this.lastVisibilityState.set(elementId, "visible")
+		})
+		visibleVideoIds.forEach((elementId) => {
+			this.lastVideoVisibilityState.set(elementId, "visible")
+		})
+
+		const durationMs = now() - startedAt
+		const previousSnapshot = this.statsSnapshot
+		this.statsSnapshot = {
+			...previousSnapshot,
+			visibleImageCount: visibleIds.size,
+			visibleVideoCount: visibleVideoIds.size,
+			lastQueryDurationMs: durationMs,
+			lastRequestedVisibleCount: visibleToLoad.length,
+			lastRequestedVisibleVideoCount: visibleVideosToLoad.length,
+			pendingImageLoadCandidateCount,
+			pendingVideoLoadCandidateCount,
+			queryCount: previousSnapshot.queryCount + 1,
+		}
+	}
+
 	private shouldRequestImageCandidate(candidate: ImageLoadCandidate): boolean {
 		const previousState = this.lastRequestedLoadState.get(candidate.elementId)
 		if (!previousState) return true
@@ -1172,7 +1346,7 @@ export class CanvasVisibilityManager {
 			screenLongEdge,
 			previousVariant: this.getPreviousImageDisplayVariant(elementId),
 		})
-		const variant = frameDisplayVariant ?? viewingDecision.variant
+		const variant = maxImageResourceVariant(viewingDecision.variant, frameDisplayVariant)
 
 		return {
 			elementId,
@@ -1302,14 +1476,16 @@ export class CanvasVisibilityManager {
 				if (screenArea <= 0) {
 					return
 				}
-				const variant =
-					parentTransform.frameDisplayVariant ??
-					decideImageDisplayViewingLevel({
-						visibilityState: "visible",
-						screenArea,
-						screenLongEdge,
-						previousVariant: this.getPreviousImageDisplayVariant(element.id),
-					}).variant
+				const viewingDecision = decideImageDisplayViewingLevel({
+					visibilityState: "visible",
+					screenArea,
+					screenLongEdge,
+					previousVariant: this.getPreviousImageDisplayVariant(element.id),
+				})
+				const variant = maxImageResourceVariant(
+					viewingDecision.variant,
+					parentTransform.frameDisplayVariant,
+				)
 				queuedMediaIds.add(element.id)
 				imageCandidates.push({
 					elementId: element.id,
@@ -1467,8 +1643,9 @@ export class CanvasVisibilityManager {
 			screenLongEdge,
 			previousVariant: this.lastContainerDisplayVariant.get(containerId),
 		})
-		this.lastContainerDisplayVariant.set(containerId, decision.variant)
-		return decision.variant
+		const displayVariant = toMediaDisplayResourceVariant(decision.variant)
+		this.lastContainerDisplayVariant.set(containerId, displayVariant)
+		return displayVariant
 	}
 
 	private getElementDataBoundsInCanvas(
@@ -1553,6 +1730,8 @@ export class CanvasVisibilityManager {
 		void this.canvas.imageResourceManager.loadResource(candidate.path, {
 			variant: candidate.variant,
 			priority: candidate.priority,
+			displayTargetElementId: candidate.elementId,
+			displayTargetReason: reason,
 		})
 	}
 
