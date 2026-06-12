@@ -5,6 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 use App\Application\Audit\Service\PermissionLabelService;
+use App\Application\Authentication\Service\NoopExternalSessionLogoutService;
 use App\Application\Chat\Service\MagicAgentEventAppService;
 use App\Application\Chat\Service\SessionAppService;
 use App\Application\Flow\ExecuteManager\NodeRunner\Cache\StringCache\MysqlStringCache;
@@ -230,6 +231,7 @@ use App\Infrastructure\Core\Contract\Authorization\BaseFlowOpenApiCheck;
 use App\Infrastructure\Core\Contract\Authorization\FlowOpenApiCheckInterface;
 use App\Infrastructure\Core\Contract\Flow\CodeExecutor\PHPExecutorInterface;
 use App\Infrastructure\Core\Contract\Flow\CodeExecutor\PythonExecutorInterface;
+use App\Infrastructure\Core\Contract\Session\ExternalSessionLogoutInterface;
 use App\Infrastructure\Core\Contract\Session\SessionInterface;
 use App\Infrastructure\Core\DataIsolation\BaseHandleDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
@@ -484,6 +486,7 @@ $dependencies = [
 
     // 登录校验
     SessionInterface::class => SessionAppService::class,
+    ExternalSessionLogoutInterface::class => NoopExternalSessionLogoutService::class,
 
     // ipc
     DataFormatterInterface::class => JsonDataFormatter::class,
