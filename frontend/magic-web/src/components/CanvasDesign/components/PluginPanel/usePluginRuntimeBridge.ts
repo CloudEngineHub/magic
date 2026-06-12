@@ -254,6 +254,57 @@ export function usePluginRuntimeBridge({
 				return
 			}
 
+			if (data.type === "magic-canvas-plugin:storage-get") {
+				try {
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-get-result",
+						requestId: data.requestId,
+						value: window.localStorage.getItem(data.key),
+					})
+				} catch (error) {
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-get-result",
+						requestId: data.requestId,
+						error: getErrorMessage(error),
+					})
+				}
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:storage-set") {
+				try {
+					window.localStorage.setItem(data.key, data.value)
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-set-result",
+						requestId: data.requestId,
+					})
+				} catch (error) {
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-set-result",
+						requestId: data.requestId,
+						error: getErrorMessage(error),
+					})
+				}
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:storage-remove") {
+				try {
+					window.localStorage.removeItem(data.key)
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-remove-result",
+						requestId: data.requestId,
+					})
+				} catch (error) {
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-remove-result",
+						requestId: data.requestId,
+						error: getErrorMessage(error),
+					})
+				}
+				return
+			}
+
 			if (data.type === "magic-canvas-plugin:error") {
 				toast.error(data.message)
 				return

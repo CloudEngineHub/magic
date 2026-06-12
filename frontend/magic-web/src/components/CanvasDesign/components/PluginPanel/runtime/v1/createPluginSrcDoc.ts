@@ -323,6 +323,30 @@ export function createPluginSrcDocV1(
 					).then((data) => new Blob([data.arrayBuffer]));
 				},
 			},
+			storage: {
+				getItem(key) {
+					return requestHost(
+						{ type: "magic-canvas-plugin:storage-get", key: String(key) },
+						"magic-canvas-plugin:storage-get-result"
+					).then((data) => data.value ?? null);
+				},
+				setItem(key, value) {
+					return requestHost(
+						{
+							type: "magic-canvas-plugin:storage-set",
+							key: String(key),
+							value: String(value ?? ""),
+						},
+						"magic-canvas-plugin:storage-set-result"
+					).then(() => undefined);
+				},
+				removeItem(key) {
+					return requestHost(
+						{ type: "magic-canvas-plugin:storage-remove", key: String(key) },
+						"magic-canvas-plugin:storage-remove-result"
+					).then(() => undefined);
+				},
+			},
 			ai: {
 				getImageModels() {
 					return requestHost(

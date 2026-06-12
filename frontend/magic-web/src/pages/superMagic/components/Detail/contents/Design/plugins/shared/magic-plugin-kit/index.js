@@ -6,6 +6,15 @@
 	const IMAGE_GENERATION_CONFIG_PREFIX = "image_generation_config."
 	const DEFAULT_SIZE_CONTROL_RATIO_OPTIONS = ["1:1", "3:4", "4:5", "9:16", "16:9"]
 	const DEFAULT_MAX_OUTPUT_IMAGES = 4
+	const SHARED_GENERATION_CONFIG_CACHE_KEY = "magic-canvas:design-plugin:shared-generation-config"
+	const SHARED_GENERATION_CONFIG_CACHE_VERSION = 1
+	const SHARED_GENERATION_CONFIG_KEYS = [
+		"modelId",
+		"ratioKey",
+		"scale",
+		"genCount",
+		"imageGenerationConfig",
+	]
 
 	function createElement(tagName, className, textContent) {
 		const element = document.createElement(tagName)
@@ -167,8 +176,74 @@
 		return Math.max(1, Math.min(getMaxOutputImages(model), safeValue))
 	}
 
+	function pickSharedGenerationConfig(source = {}) {
+		const config = {}
+		SHARED_GENERATION_CONFIG_KEYS.forEach((key) => {
+			if (key in source) config[key] = source[key]
+		})
+		return config
+	}
+
+	function hasSharedGenerationConfigKey(patch = {}) {
+		return SHARED_GENERATION_CONFIG_KEYS.some((key) => key in patch)
+	}
+
+	function parseSharedGenerationConfigCache(rawValue) {
+		if (!rawValue) return {}
+		const cache = JSON.parse(rawValue)
+		if (cache?.version !== SHARED_GENERATION_CONFIG_CACHE_VERSION) return {}
+		return pickSharedGenerationConfig(cache.data ?? {})
+	}
+
+	async function readSharedGenerationConfigCache(ctx) {
+		if (!ctx.storage?.getItem) return {}
+		let rawValue = null
+		try {
+			rawValue = await ctx.storage.getItem(SHARED_GENERATION_CONFIG_CACHE_KEY)
+		} catch (error) {
+			console.warn("[MagicPluginKit] Failed to read shared generation config cache.", error)
+			return {}
+		}
+		try {
+			return parseSharedGenerationConfigCache(rawValue)
+		} catch (error) {
+			console.warn("[MagicPluginKit] Failed to parse shared generation config cache.", error)
+			try {
+				await ctx.storage.removeItem?.(SHARED_GENERATION_CONFIG_CACHE_KEY)
+			} catch (removeError) {
+				console.warn(
+					"[MagicPluginKit] Failed to remove invalid shared generation config cache.",
+					removeError,
+				)
+			}
+			return {}
+		}
+	}
+
+	function writeSharedGenerationConfigCache(ctx, source = {}) {
+		if (!ctx.storage?.setItem) return
+		try {
+			void ctx.storage
+				.setItem(
+					SHARED_GENERATION_CONFIG_CACHE_KEY,
+					JSON.stringify({
+						version: SHARED_GENERATION_CONFIG_CACHE_VERSION,
+						updatedAt: Date.now(),
+						data: pickSharedGenerationConfig(source),
+					}),
+				)
+				.catch((error) => {
+					console.warn(
+						"[MagicPluginKit] Failed to write shared generation config cache.",
+						error,
+					)
+				})
+		} catch (error) {
+			console.warn("[MagicPluginKit] Failed to write shared generation config cache.", error)
+		}
+	}
+
 	function buildGenerationCountOptions(model) {
-		console.log("buildGenerationCountOptions", model)
 		return Array.from({ length: getMaxOutputImages(model) }, (_, index) => {
 			const count = index + 1
 			return {
@@ -370,6 +445,20 @@
 			}, {})
 		}
 
+		function normalizeImageGenerationConfigForModel(model, currentConfig = {}) {
+			const defaultConfig = buildDefaultImageGenerationConfig(model)
+			return normalizeImageSettings(model).reduce((configMap, setting) => {
+				const currentValue = currentConfig?.[setting.requestKey]
+				const hasCurrentValue = setting.options.some(
+					(option) => option.value === currentValue,
+				)
+				configMap[setting.requestKey] = hasCurrentValue
+					? currentValue
+					: defaultConfig[setting.requestKey]
+				return configMap
+			}, {})
+		}
+
 		/** 获取默认分辨率 */
 		function getDefaultResolution(model) {
 			const sizes = model?.image_size_config?.sizes ?? []
@@ -470,7 +559,10 @@
 					: (fallbackMatchedSize?.label ?? targetSize?.label ?? ""),
 				scale: targetResolution,
 				genCount: clampGenerationCount(state.genCount, model),
-				imageGenerationConfig: buildDefaultImageGenerationConfig(model),
+				imageGenerationConfig: normalizeImageGenerationConfigForModel(
+					model,
+					state.imageGenerationConfig,
+				),
 			}
 			return config.modelConfig?.mapModelDefaults?.(model, defaults, state) ?? defaults
 		}
@@ -639,6 +731,26 @@
 			}
 		}
 
+		let didHydrateSharedGenerationConfigCache = false
+
+		/* 合并共享配置缓存到状态 */
+		async function hydrateSharedGenerationConfigCache() {
+			if (didHydrateSharedGenerationConfigCache) return
+			didHydrateSharedGenerationConfigCache = true
+			const cachedConfig = await readSharedGenerationConfigCache(ctx)
+			const patch = {}
+			Object.keys(cachedConfig).forEach((key) => {
+				if (state[key] !== cachedConfig[key]) patch[key] = cachedConfig[key]
+			})
+			if (!Object.keys(patch).length) return
+			if (ctx.state?.patch) {
+				ctx.state.patch(state, patch)
+				return
+			}
+			Object.assign(state, patch)
+			updateView(patch)
+		}
+
 		/** 加载模型 */
 		async function loadImageModels() {
 			if (config.modelConfig?.autoLoad === false) return
@@ -654,13 +766,13 @@
 					return
 				}
 				const firstModel = models[0]
-				const nextModelId =
+				const preferredModelId =
 					state.modelId || config.modelConfig?.defaultModelId || firstModel.model_id
 				const selectedModel =
-					models.find((model) => model.model_id === nextModelId) ?? firstModel
+					models.find((model) => model.model_id === preferredModelId) ?? firstModel
 				setState({
 					modelOptions: models,
-					modelId: nextModelId,
+					modelId: selectedModel.model_id,
 					...applyModelDefaults(selectedModel),
 				})
 			} catch (error) {
@@ -888,6 +1000,11 @@
 				deps.add("modelOptions")
 				deps.add("modelId")
 				deps.add("ratioKey")
+			}
+
+			if (section.kind === "option-group" && section.stateKey === "genCount") {
+				deps.add("modelOptions")
+				deps.add("modelId")
 			}
 
 			if (section.kind === "tabs") {
@@ -2034,11 +2151,21 @@
 		function setState(patch) {
 			const hasChanged = Object.keys(patch).some((key) => state[key] !== patch[key])
 			if (!hasChanged) return
+			const shouldCacheSharedGenerationConfig = hasSharedGenerationConfigKey(patch)
+			const nextSharedGenerationConfig = shouldCacheSharedGenerationConfig
+				? pickSharedGenerationConfig({ ...state, ...patch })
+				: null
 			if (ctx.state?.patch) {
 				ctx.state.patch(state, patch)
+				if (shouldCacheSharedGenerationConfig) {
+					writeSharedGenerationConfigCache(ctx, nextSharedGenerationConfig)
+				}
 				return
 			}
 			Object.assign(state, patch)
+			if (shouldCacheSharedGenerationConfig) {
+				writeSharedGenerationConfigCache(ctx, nextSharedGenerationConfig)
+			}
 			updateView(patch)
 		}
 
@@ -2061,7 +2188,9 @@
 
 		createLayout()
 		updateView()
-		void loadImageModels()
+		void hydrateSharedGenerationConfigCache().finally(() => {
+			void loadImageModels()
+		})
 
 		return {
 			elements: getElements(),

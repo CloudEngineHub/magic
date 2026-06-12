@@ -163,9 +163,20 @@ kit 会在 `MagicPluginKit.createPanelState(ctx, initialState)` 中先注入一�
 - `modelId`
 - `ratioKey`
 - `scale`
+- `genCount`
 - `imageGenerationConfig`
 - `loading`
 - `error`
+
+其中公共生成配置会由 kit 自动缓存并在下次打开任意插件时恢复：
+
+- `modelId`
+- `ratioKey`
+- `scale`
+- `genCount`
+- `imageGenerationConfig`
+
+缓存 key 为 `magic-canvas:design-plugin:shared-generation-config`，由宿主侧 `ctx.storage` 读写，插件 iframe 内不要直接访问 `window.localStorage`。模型列表加载完成后，kit 会用当前模型能力校正缓存值：模型不存在时回退到可用模型；比例、尺寸倍数、生成数量或图片生成配置不被当前模型支持时回退到当前模型的合法默认值。插件业务字段不会写入这个共享缓存。
 
 `MagicPluginKit.render(ctx, root, config)` 仍兼容 `config.initialState`，用于旧插件或极简示例；当前项目内置插件不要再使用它。
 

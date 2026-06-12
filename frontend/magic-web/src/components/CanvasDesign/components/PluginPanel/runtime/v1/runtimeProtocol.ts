@@ -87,6 +87,22 @@ export type PluginRuntimeMessage =
 			requestId: string
 			url: string
 	  }
+	| {
+			type: "magic-canvas-plugin:storage-get"
+			requestId: string
+			key: string
+	  }
+	| {
+			type: "magic-canvas-plugin:storage-set"
+			requestId: string
+			key: string
+			value: string
+	  }
+	| {
+			type: "magic-canvas-plugin:storage-remove"
+			requestId: string
+			key: string
+	  }
 
 export const PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE = {
 	"magic-canvas-plugin:resolve-resource": "magic-canvas-plugin:resolve-resource-result",
@@ -96,6 +112,9 @@ export const PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE = {
 	"magic-canvas-plugin:complete-image-prompt": "magic-canvas-plugin:complete-image-prompt-result",
 	"magic-canvas-plugin:upload-file": "magic-canvas-plugin:upload-file-result",
 	"magic-canvas-plugin:fetch-blob": "magic-canvas-plugin:fetch-blob-result",
+	"magic-canvas-plugin:storage-get": "magic-canvas-plugin:storage-get-result",
+	"magic-canvas-plugin:storage-set": "magic-canvas-plugin:storage-set-result",
+	"magic-canvas-plugin:storage-remove": "magic-canvas-plugin:storage-remove-result",
 } as const
 
 const PLUGIN_RUNTIME_CAPABILITY_BY_MESSAGE_TYPE: Partial<
@@ -239,6 +258,41 @@ export function parsePluginRuntimeMessage(
 			type: "magic-canvas-plugin:fetch-blob",
 			requestId: record.requestId,
 			url: record.url,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:storage-get" &&
+		typeof record.requestId === "string" &&
+		typeof record.key === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:storage-get",
+			requestId: record.requestId,
+			key: record.key,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:storage-set" &&
+		typeof record.requestId === "string" &&
+		typeof record.key === "string" &&
+		typeof record.value === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:storage-set",
+			requestId: record.requestId,
+			key: record.key,
+			value: record.value,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:storage-remove" &&
+		typeof record.requestId === "string" &&
+		typeof record.key === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:storage-remove",
+			requestId: record.requestId,
+			key: record.key,
 		}
 	}
 	if (record.type === "magic-canvas-plugin:error" && typeof record.message === "string") {
