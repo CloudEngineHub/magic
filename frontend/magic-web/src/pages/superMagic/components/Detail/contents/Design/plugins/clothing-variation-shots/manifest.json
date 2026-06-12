@@ -5,6 +5,7 @@
 	"label": "{{label}}",
 	"locales": {
 		"en-US": {
+			"button.aiPlaceholder": "AI Generate",
 			"button.generate": "Generate Clothing Variations",
 			"button.generating": "Generating…",
 			"description": "Input a garment flat-lay, mannequin image, or model image, and generate marketing flat-lay, garment detail, or hanging photos with one click.",
@@ -13,6 +14,7 @@
 			"empty.styleReferenceImages": "Upload at least 1 style reference image first",
 			"error.noModels": "No AI model is currently available",
 			"error.noSize": "The current model does not provide a usable size preset",
+			"error.extraReferences": "Upload a garment image first",
 			"error.referenceLimit": "The reference image limit for the current model has been reached",
 			"error.references": "The uploaded images do not contain usable reference identifiers",
 			"generationMode.advanced": "Advanced mode",
@@ -46,6 +48,7 @@
 			"upload.styleReferenceImages.help": "Upload multiple style reference images. AI will reference their flat-lay presentation, garment detail emphasis, and visual expression one by one without changing the garment itself."
 		},
 		"zh-CN": {
+			"button.aiPlaceholder": "AI 生成",
 			"button.generate": "生成百变服饰图",
 			"button.generating": "生成中…",
 			"description": "输入服饰平铺图、人台图或模特图，一键生成营销平铺图、服饰细节图、挂拍图。",
@@ -54,6 +57,7 @@
 			"empty.styleReferenceImages": "请先上传至少 1 张样式参考图",
 			"error.noModels": "暂无可用 AI 模型",
 			"error.noSize": "当前模型缺少可用尺寸配置",
+			"error.extraReferences": "请先上传服饰图",
 			"error.referenceLimit": "参考图数量已达当前模型上限",
 			"error.references": "图片缺少可用于生成的资源标识",
 			"generationMode.advanced": "高级模式",
@@ -67,7 +71,7 @@
 			"label": "百变服饰图",
 			"placeholder.customStylePrompt": "输入样式描述内容，如：提取图中下装服饰，生成标准摆放的平铺图。背景为带褶皱的白布，并补充具有营销感的展示细节。",
 			"section.canvasSize": "宽高比",
-			"section.count": "生成张数",
+			"section.count": "生成数量",
 			"section.count.suffix": "每种样式生成数",
 			"section.customStylePrompt": "样式描述",
 			"section.garmentImage": "服饰图",
@@ -105,7 +109,8 @@
 		"assets.uploadFile",
 		"assets.fetchBlob",
 		"ai.getImageModels",
-		"ai.generateAndPlace"
+		"ai.generateAndPlace",
+		"ai.completeImagePrompt"
 	],
 	"version": 1
 }

@@ -1,8 +1,30 @@
 /* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
+const GARMENT_TYPE = {
+	/* 上装 */
+	TOP: "top",
+	/* 下装 */
+	BOTTOM: "bottom",
+	/* 连体衣 */
+	ONE_PIECE: "onePiece",
+	/* 上装+下装 */
+	OUTFIT: "outfit",
+}
+const GENERATION_STYLE = {
+	/* 推荐样式 */
+	REFERENCE: "reference",
+	/* 自定义样式 */
+	CUSTOM: "custom",
+}
+const GENERATION_MODE = {
+	/* 标准模式 */
+	STANDARD: "standard",
+	/* 高级模式 */
+	ADVANCED: "advanced",
+}
 const GARMENT_TYPE_DEFINITIONS = [
 	{
-		value: "top",
+		value: GARMENT_TYPE.TOP,
 		labelKey: "type.top",
 		labelFallback: "上装",
 		promptText: {
@@ -11,7 +33,7 @@ const GARMENT_TYPE_DEFINITIONS = [
 		},
 	},
 	{
-		value: "bottom",
+		value: GARMENT_TYPE.BOTTOM,
 		labelKey: "type.bottom",
 		labelFallback: "下装",
 		promptText: {
@@ -20,7 +42,7 @@ const GARMENT_TYPE_DEFINITIONS = [
 		},
 	},
 	{
-		value: "onePiece",
+		value: GARMENT_TYPE.ONE_PIECE,
 		labelKey: "type.onePiece",
 		labelFallback: "连体衣",
 		promptText: {
@@ -29,7 +51,7 @@ const GARMENT_TYPE_DEFINITIONS = [
 		},
 	},
 	{
-		value: "outfit",
+		value: GARMENT_TYPE.OUTFIT,
 		labelKey: "type.outfit",
 		labelFallback: "上装+下装",
 		promptText: {
@@ -41,7 +63,7 @@ const GARMENT_TYPE_DEFINITIONS = [
 
 const GENERATION_STYLE_DEFINITIONS = [
 	{
-		value: "reference",
+		value: GENERATION_STYLE.REFERENCE,
 		labelKey: "generationMode.reference",
 		labelFallback: "推荐样式",
 		descriptionKey: "generationMode.reference.desc",
@@ -49,7 +71,7 @@ const GENERATION_STYLE_DEFINITIONS = [
 			"支持上传多张样式参考图，生成时会参考其平铺陈列方式、细节展示重点与画面表达，但不会改变主服饰款式。",
 	},
 	{
-		value: "custom",
+		value: GENERATION_STYLE.CUSTOM,
 		labelKey: "generationMode.custom",
 		labelFallback: "自定义样式",
 		descriptionKey: "generationMode.custom.desc",
@@ -59,7 +81,7 @@ const GENERATION_STYLE_DEFINITIONS = [
 
 const GENERATION_MODE_DEFINITIONS = [
 	{
-		value: "standard",
+		value: GENERATION_MODE.STANDARD,
 		labelKey: "generationMode.standard",
 		labelFallback: "标准模式",
 		descriptionKey: "generationMode.standard.desc",
@@ -70,7 +92,7 @@ const GENERATION_MODE_DEFINITIONS = [
 		},
 	},
 	{
-		value: "advanced",
+		value: GENERATION_MODE.ADVANCED,
 		labelKey: "generationMode.advanced",
 		labelFallback: "高级模式",
 		descriptionKey: "generationMode.advanced.desc",
@@ -85,19 +107,18 @@ const GENERATION_MODE_DEFINITIONS = [
 function createInitialState() {
 	return {
 		garmentImage: null,
-		garmentType: "top",
-		generationStyle: "reference",
+		garmentType: GARMENT_TYPE.TOP,
+		generationStyle: GENERATION_STYLE.REFERENCE,
 		styleReferenceImages: [],
 		customStylePrompt: "",
-		generationMode: "standard",
-		genCount: 1,
+		generationMode: GENERATION_MODE.STANDARD,
 	}
 }
 
 function getReferenceImages(state) {
 	return [
 		state.garmentImage,
-		...(state.generationStyle === "reference" ? state.styleReferenceImages : []),
+		...(state.generationStyle === GENERATION_STYLE.REFERENCE ? state.styleReferenceImages : []),
 	].filter(Boolean)
 }
 
@@ -114,6 +135,30 @@ function buildReferenceLabelList(startIndex, count, locale) {
 		MagicPromptLocale.getReferenceLabel(startIndex + index, locale),
 	)
 	return MagicPromptLocale.isChinese(locale) ? labels.join("、") : labels.join(", ")
+}
+
+function buildCurrentTextBlock(currentText) {
+	const normalizedCurrentText = String(currentText ?? "").trim()
+	if (!normalizedCurrentText) return "用户当前未填写。"
+	return normalizedCurrentText
+}
+
+function getGarmentTypeLabel(garmentType) {
+	return (
+		GARMENT_TYPE_DEFINITIONS.find((item) => item.value === garmentType)?.labelFallback ??
+		GARMENT_TYPE_DEFINITIONS[0].labelFallback
+	)
+}
+
+function buildCustomStylePromptCompletionUserPrompt({ garmentType, currentText }) {
+	return [
+		"任务目标：为百变服饰图插件的“样式描述”输入框生成或补全一段提示词。",
+		`当前输入：${buildCurrentTextBlock(currentText)}`,
+		`当前服饰类型：${getGarmentTypeLabel(garmentType)}。`,
+		"参考图角色：参考图 1 是需要保留的服饰主体，用于理解服饰品类、颜色、材质、版型、结构、图案和关键细节。",
+		"补全方向：可补充平铺/挂拍/细节特写等展示方式、背景材质、陈列关系、光线、构图、营销氛围和细节重点。",
+		"业务限制：只能描述展示方式，不要改变服饰本身颜色、图案、材质、版型、轮廓、结构、长度、辅料和关键设计细节；只输出适合填入“样式描述”的短提示词。",
+	].join("\n")
 }
 
 function buildClothingVariationRequest({
@@ -178,7 +223,7 @@ function buildClothingVariationPrompt({
 	locale,
 }) {
 	const isChinese = MagicPromptLocale.isChinese(locale)
-	const isOutfit = garmentType === "outfit"
+	const isOutfit = garmentType === GARMENT_TYPE.OUTFIT
 	const garmentTypeText = MagicPromptLocale.pickText(
 		GARMENT_TYPE_DEFINITIONS.find((item) => item.value === garmentType)?.promptText ??
 			GARMENT_TYPE_DEFINITIONS[0].promptText,
@@ -198,7 +243,7 @@ function buildClothingVariationPrompt({
 				? "如果当前类型为上装+下装，必须同时完整保留上装和下装两件单品，缺一不可；不允许只展示其中一件，也不允许把两件拆成无关结果。"
 				: "")
 
-		if (generationStyle === "reference") {
+		if (generationStyle === GENERATION_STYLE.REFERENCE) {
 			return (
 				basePrompt +
 				"参考图 2 仅作为展示方式参考，不提供任何新的商品主体信息。参考图 2 只能定义目标服饰在结果中的展示方式，包括主展示形态、构图、裁切重点、陈列关系、背景材质、布光氛围和镜头语言，不能影响服饰主体本身的品类、款式、版型、轮廓、结构、长度、袖型、裤型、辅料、图案、面料、纹理和关键设计细节。" +
@@ -229,7 +274,7 @@ function buildClothingVariationPrompt({
 			? "If the current type is top and bottom garments, both the top and the bottom must be preserved completely. Do not keep only one piece or split them into unrelated results. "
 			: "")
 
-	if (generationStyle === "reference") {
+	if (generationStyle === GENERATION_STYLE.REFERENCE) {
 		return (
 			basePrompt +
 			"Reference image 2 is only a display-form reference and provides no new product-subject information. It may define only how the target garment is presented in the result, including the primary display form, composition, crop focus, arrangement, background material, lighting mood, and camera language. It must not affect the garment subject itself, including category, product type, silhouette, construction, length, sleeve shape, pant shape, trims, pattern, fabric, texture, or key design details. " +
@@ -310,17 +355,14 @@ registerMagicCanvasPlugin({
 					id: "garmentType",
 					kind: "option-group",
 					stateKey: "garmentType",
-					required: true,
 					title: t("section.garmentType", "服饰类型"),
 					options: garmentTypeOptions,
 				},
 				{
 					id: "generationStyle",
-					kind: "option-group",
+					kind: "tabs",
 					stateKey: "generationStyle",
 					title: t("section.generationStyle", "生成样式"),
-					showDescriptionOnHover: true,
-					groupClassName: "clothing-variation-style-grid",
 					options: generationStyleOptions,
 				},
 				{
@@ -332,7 +374,7 @@ registerMagicCanvasPlugin({
 					alt: t("section.styleReferenceImages", "样式参考图"),
 					addLabel: "+",
 					deps: ["generationStyle", "garmentImage", "modelId", "modelOptions"],
-					when: ({ state }) => state.generationStyle === "reference",
+					when: ({ state }) => state.generationStyle === GENERATION_STYLE.REFERENCE,
 					help: t(
 						"upload.styleReferenceImages.help",
 						"支持上传多张样式参考图，生成时会逐张参考其平铺陈列方式、细节展示重点与画面表达，但不会改变主服饰款式。",
@@ -349,13 +391,25 @@ registerMagicCanvasPlugin({
 					title: t("section.customStylePrompt", "样式描述"),
 					required: true,
 					deps: ["generationStyle"],
-					when: ({ state }) => state.generationStyle === "custom",
+					when: ({ state }) => state.generationStyle === GENERATION_STYLE.CUSTOM,
 					placeholder: t(
 						"placeholder.customStylePrompt",
 						"输入样式描述内容，如：提取图中下装服饰，生成标准摆放的平铺图。背景为带褶皱的白布，并补充具有营销感的展示细节。",
 					),
-					rows: 4,
-					maxLength: 2000,
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) => !state.garmentImage,
+						completeImagePrompt: {
+							referenceImages: ({ state }) => [state.garmentImage],
+							referencesMessage: t("error.extraReferences", "请先上传服饰图"),
+							userPrompt: ({ state }) =>
+								buildCustomStylePromptCompletionUserPrompt({
+									garmentType: state.garmentType,
+									currentText: state.customStylePrompt,
+								}),
+						},
+					},
 				},
 				{
 					id: "generationMode",
@@ -375,13 +429,11 @@ registerMagicCanvasPlugin({
 					id: "canvasSize",
 					kind: "size-control",
 					title: t("section.canvasSize", "宽高比"),
-					deps: ["modelId", "modelOptions", "scale"],
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
 					title: t("section.resolution", "尺寸倍数"),
-					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "count",
@@ -395,12 +447,28 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成百变服饰图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					return ""
+					if (!state.garmentImage) {
+						return t("empty.garmentImage", "请先上传 1 张服饰图")
+					}
+					if (
+						state.generationStyle === GENERATION_STYLE.REFERENCE &&
+						!state.styleReferenceImages.length
+					) {
+						return t("empty.styleReferenceImages", "请先上传至少 1 张样式参考图")
+					}
+					if (
+						state.generationStyle === GENERATION_STYLE.CUSTOM &&
+						!state.customStylePrompt.trim()
+					) {
+						return t("empty.customStylePrompt", "请先输入样式描述")
+					}
 				},
 				isDisabled: ({ state }) =>
 					!state.garmentImage ||
-					(state.generationStyle === "reference" && !state.styleReferenceImages.length) ||
-					(state.generationStyle === "custom" && !state.customStylePrompt.trim()),
+					(state.generationStyle === GENERATION_STYLE.REFERENCE &&
+						!state.styleReferenceImages.length) ||
+					(state.generationStyle === GENERATION_STYLE.CUSTOM &&
+						!state.customStylePrompt.trim()),
 				validate: ({ state, helpers }) => {
 					const referenceImages = getReferenceImages(state)
 					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
@@ -420,7 +488,7 @@ registerMagicCanvasPlugin({
 				},
 				execute: async ({ state, helpers, generateAndPlace }) => {
 					const selectedSize = helpers.getSelectedSize(state)
-					if (state.generationStyle !== "reference") {
+					if (state.generationStyle !== GENERATION_STYLE.REFERENCE) {
 						return generateAndPlace(
 							buildClothingVariationRequest({
 								state,
@@ -438,11 +506,7 @@ registerMagicCanvasPlugin({
 						locale: promptLocale,
 						selectedSize,
 					})
-					const results = []
-					for (const request of requests) {
-						results.push(await generateAndPlace(request))
-					}
-					return results
+					return Promise.all(requests.map((request) => generateAndPlace(request)))
 				},
 				onSuccess: ({ ctx }) => {
 					ctx.ui.toast(t("toast.success", "百变服饰图生成成功！"), "success")
