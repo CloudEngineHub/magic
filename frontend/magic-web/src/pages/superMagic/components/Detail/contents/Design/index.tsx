@@ -47,7 +47,7 @@ import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/serv
 import { useNetwork } from "ahooks"
 import { CloudOff } from "lucide-react"
 import { needsUpgrade, upgradeCanvasToV2, type UpgradeProgress } from "./utils/canvasVersionUpgrade"
-import { CanvasUpgradeBanner, CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
+import { CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
 import { toast } from "sonner"
 import { applyCanvasDesignDataPatch } from "./utils/canvasDesignDataPatch"
 import { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign/prewarm"
@@ -332,47 +332,50 @@ function DesignViewer(props: DesignViewerProps) {
 	const { isProcessingRevoke, revokeType } = designProjectManager
 
 	// v1 → v2 升级相关状态
-	const [showUpgradeBanner, setShowUpgradeBanner] = useState(false)
 	const [isUpgrading, setIsUpgrading] = useState(false)
+	const [autoUpgradeFailed, setAutoUpgradeFailed] = useState(false)
 	const [upgradeProgress, setUpgradeProgress] = useState<UpgradeProgress>({
 		step: "backup",
 		percent: 0,
 	})
+	const autoUpgradeTaskKeyRef = useRef<string | null>(null)
 
-	// 检测到 v1 版本时显示升级提示（仅在可编辑且非历史版本时）
-	useEffect(() => {
-		if (
+	const shouldAutoUpgrade = useMemo(
+		() =>
 			!isInitialLoading &&
 			allowEdit &&
 			!isPlaybackMode &&
 			!isShareRoute &&
 			isNewestVersion &&
-			needsUpgrade(designData)
-		) {
-			setShowUpgradeBanner(true)
-		} else {
-			setShowUpgradeBanner(false)
-		}
-	}, [isInitialLoading, allowEdit, isPlaybackMode, isShareRoute, isNewestVersion, designData])
-
-	const getUpgradeStepText = useCallback(
-		(step: UpgradeProgress["step"]) => {
-			const map: Record<UpgradeProgress["step"], string> = {
-				backup: t("design.upgrade.step_backup"),
-				convert: t("design.upgrade.step_convert"),
-				"save-main": t("design.upgrade.step_save_main"),
-				"save-details": t("design.upgrade.step_save_details"),
-				done: t("design.upgrade.step_done"),
-			}
-			return map[step] || ""
-		},
-		[t],
+			needsUpgrade(designData),
+		[allowEdit, designData, isInitialLoading, isNewestVersion, isPlaybackMode, isShareRoute],
 	)
+
+	const automaticUpgradeKey = useMemo(() => {
+		if (!shouldAutoUpgrade || !projectId || !magicProjectJsFileId) return null
+		return [
+			projectId,
+			magicProjectJsFileId,
+			designData.version,
+			designProjectBasePath ?? "",
+		].join(":")
+	}, [
+		designData.version,
+		designProjectBasePath,
+		magicProjectJsFileId,
+		projectId,
+		shouldAutoUpgrade,
+	])
+
+	useEffect(() => {
+		setAutoUpgradeFailed(false)
+	}, [automaticUpgradeKey])
 
 	const handleUpgrade = useCallback(async () => {
 		if (!magicProjectJsFileId || !projectId) return
 		setIsUpgrading(true)
-		setShowUpgradeBanner(false)
+		setAutoUpgradeFailed(false)
+		setUpgradeProgress({ step: "backup", percent: 0 })
 		try {
 			const upgradedData = await upgradeCanvasToV2(
 				designData,
@@ -390,12 +393,12 @@ function DesignViewer(props: DesignViewerProps) {
 				draft.version = upgradedData.version
 				draft.canvas = upgradedData.canvas
 			})
+			updateAttachments()
 			toast.success(t("design.upgrade.success"))
 		} catch (error) {
 			console.error("[Design] upgrade failed:", error)
 			toast.error(t("design.upgrade.failed"))
-			// 升级失败恢复 banner
-			setShowUpgradeBanner(true)
+			setAutoUpgradeFailed(true)
 		} finally {
 			setIsUpgrading(false)
 		}
@@ -407,8 +410,17 @@ function DesignViewer(props: DesignViewerProps) {
 		flatAttachments,
 		designProjectBasePath,
 		updateDesignDataAndScheduleSave,
+		updateAttachments,
 		t,
 	])
+
+	useEffect(() => {
+		if (!automaticUpgradeKey || isOffline || isUpgrading || autoUpgradeFailed) return
+		if (autoUpgradeTaskKeyRef.current === automaticUpgradeKey) return
+
+		autoUpgradeTaskKeyRef.current = automaticUpgradeKey
+		void handleUpgrade()
+	}, [autoUpgradeFailed, automaticUpgradeKey, handleUpgrade, isOffline, isUpgrading])
 
 	// 当 designProjectBasePath 变化（目录改名）时，重新从远端加载 DSL（修复旧路径引用），再重挂载画布
 	useEffect(() => {
@@ -876,16 +888,12 @@ function DesignViewer(props: DesignViewerProps) {
 									</div>
 								</div>
 							)}
-							{showUpgradeBanner && !isOffline && (
-								<CanvasUpgradeBanner
-									onUpgrade={handleUpgrade}
-									onDismiss={() => setShowUpgradeBanner(false)}
-								/>
-							)}
-							{isUpgrading && (
+							{(isUpgrading ||
+								(shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)) && (
 								<CanvasUpgradeOverlay
 									percent={upgradeProgress.percent}
-									stepText={getUpgradeStepText(upgradeProgress.step)}
+									title={t("design.upgrade.autoUpgradingTitle")}
+									subtitle={t("design.upgrade.autoUpgradingSubtitle")}
 								/>
 							)}
 							<Suspense fallback={null}>
@@ -893,7 +901,7 @@ function DesignViewer(props: DesignViewerProps) {
 									key={`${designProjectId}:${canvasDesignKey}:${designProjectBasePath}`}
 									id={designProjectId}
 									ref={canvasDesignRef}
-									readonly={isReadOnlyState}
+									readonly={isReadOnlyState || shouldAutoUpgrade}
 									magic={{
 										methods,
 										permissions: designCanvasMagicPermissions,

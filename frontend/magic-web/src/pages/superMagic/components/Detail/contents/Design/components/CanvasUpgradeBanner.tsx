@@ -123,7 +123,20 @@ const useStyles = createStyles(({ token }) => ({
 		transition: "width 0.4s ease",
 	},
 	progressText: {
+		display: "flex",
+		flexDirection: "column" as const,
+		alignItems: "center",
+		gap: "4px",
+	},
+	progressTitle: {
+		fontSize: "15px",
+		fontWeight: 600,
+		lineHeight: "22px",
+		color: token.colorText,
+	},
+	progressSubtitle: {
 		fontSize: "13px",
+		lineHeight: "18px",
 		color: token.colorTextSecondary,
 	},
 }))
@@ -174,20 +187,24 @@ export function CanvasUpgradeBanner({ onUpgrade, onDismiss }: CanvasUpgradeBanne
 
 interface CanvasUpgradeOverlayProps {
 	percent: number
-	stepText: string
+	title: string
+	subtitle: string
 }
 
-export function CanvasUpgradeOverlay({ percent, stepText }: CanvasUpgradeOverlayProps) {
+export function CanvasUpgradeOverlay({ percent, title, subtitle }: CanvasUpgradeOverlayProps) {
 	const { styles } = useStyles()
 
 	return (
 		<div className={styles.progressOverlay}>
 			<div className={styles.progressContent}>
 				<ArrowUpCircle size={32} style={{ color: "var(--ant-color-primary)" }} />
+				<div className={styles.progressText}>
+					<div className={styles.progressTitle}>{title}</div>
+					<div className={styles.progressSubtitle}>{subtitle}</div>
+				</div>
 				<div className={styles.progressBar}>
 					<div className={styles.progressFill} style={{ width: `${percent}%` }} />
 				</div>
-				<div className={styles.progressText}>{stepText}</div>
 			</div>
 		</div>
 	)

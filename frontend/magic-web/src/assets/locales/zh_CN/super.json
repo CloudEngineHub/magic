@@ -586,7 +586,23 @@
 			"title": "网络已断开，画布已切换为只读"
 		},
 		"saved": "保存成功",
-		"saving": "正在保存"
+		"saving": "正在保存",
+		"upgrade": {
+			"autoUpgrading": "正在升级画布v2.0，请勿关闭或刷新页面",
+			"autoUpgradingSubtitle": "请勿关闭或刷新页面",
+			"autoUpgradingTitle": "正在升级画布v2.0",
+			"button": "立即升级",
+			"description": "正在升级画布v2.0，请勿关闭或刷新页面",
+			"failed": "升级失败，请稍后重试",
+			"step_backup": "正在备份原始文件...",
+			"step_convert": "正在转换数据格式...",
+			"step_done": "升级完成",
+			"step_save_details": "正在保存元素详情...",
+			"step_save_main": "正在保存主文件...",
+			"success": "升级成功",
+			"title": "正在升级画布v2.0，请勿关闭或刷新页面",
+			"upgrading": "升级中..."
+		}
 	},
 	"detail": {
 		"backToLatest": "回到最新",
