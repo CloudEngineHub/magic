@@ -1,8 +1,60 @@
 /* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
+const DESIGN_TYPE = {
+	/* 灵感设计 */
+	INSPIRATION: "inspiration",
+	/* 爆款延伸 */
+	BESTSELLER: "bestseller",
+	/* 系列设计 */
+	SERIES: "series",
+}
+const GARMENT_CATEGORY = {
+	/* 羽绒服 */
+	DOWN_JACKET: "downJacket",
+	/* 连衣裙 */
+	DRESS: "dress",
+	/* 半裙 */
+	SKIRT: "skirt",
+	/* 西装 */
+	SUIT: "suit",
+	/* 皮衣 */
+	LEATHER_JACKET: "leatherJacket",
+	/* 皮毛一体 */
+	SHEARLING: "shearling",
+	/* 牛仔外套 */
+	DENIM_JACKET: "denimJacket",
+	/* 防晒服 */
+	SUN_PROTECTION: "sunProtection",
+	/* 工装 */
+	UTILITY_WEAR: "utilityWear",
+	/* 冲锋衣 */
+	HARD_SHELL: "hardshell",
+	/* 新中式 */
+	NEW_CHINESE: "newChinese",
+	/* 小香风 */
+	TWEED_STYLE: "tweedStyle",
+	/* 针织衫 */
+	KNITWEAR: "knitwear",
+	/* 衬衫 */
+	SHIRT: "shirt",
+	/* T恤/卫衣 */
+	SWEATSHIRT_TEE: "sweatshirtTee",
+	/* 裤子 */
+	PANTS: "pants",
+	/* 大衣 */
+	COAT: "coat",
+	/* 派克服 */
+	PARKA: "parka",
+	/* 皮草 */
+	FUR: "fur",
+	/* 风衣 */
+	TRENCH_COAT: "trenchCoat",
+	/* 更多 */
+	MORE: "more",
+}
 const DESIGN_TYPE_DEFINITIONS = [
 	{
-		value: "inspiration",
+		value: DESIGN_TYPE.INSPIRATION,
 		labelKey: "designType.inspiration",
 		labelFallback: "灵感设计",
 		descriptionKey: "designType.inspiration.desc",
@@ -10,7 +62,7 @@ const DESIGN_TYPE_DEFINITIONS = [
 			"上传参考廓形的原型图与灵感图，一键生成保留原型廓形、并应用灵感图设计细节的新款。",
 	},
 	{
-		value: "bestseller",
+		value: DESIGN_TYPE.BESTSELLER,
 		labelKey: "designType.bestseller",
 		labelFallback: "爆款延伸",
 		descriptionKey: "designType.bestseller.desc",
@@ -18,7 +70,7 @@ const DESIGN_TYPE_DEFINITIONS = [
 			"基于爆款快速扩展同品类新款，在不改变版型/面料的情况下改变设计点，无需手绘即可预览成衣效果。",
 	},
 	{
-		value: "series",
+		value: DESIGN_TYPE.SERIES,
 		labelKey: "designType.series",
 		labelFallback: "系列设计",
 		descriptionKey: "designType.series.desc",
@@ -29,37 +81,37 @@ const DESIGN_TYPE_DEFINITIONS = [
 
 const PRIMARY_CATEGORY_DEFINITIONS = [
 	{
-		value: "downJacket",
+		value: GARMENT_CATEGORY.DOWN_JACKET,
 		labelKey: "category.downJacket",
 		labelFallback: "羽绒服",
 		promptText: { zh: "羽绒服", en: "down jacket" },
 	},
 	{
-		value: "coat",
+		value: GARMENT_CATEGORY.COAT,
 		labelKey: "category.coat",
 		labelFallback: "大衣",
 		promptText: { zh: "大衣", en: "coat" },
 	},
 	{
-		value: "parka",
+		value: GARMENT_CATEGORY.PARKA,
 		labelKey: "category.parka",
 		labelFallback: "派克服",
 		promptText: { zh: "派克服", en: "parka" },
 	},
 	{
-		value: "fur",
+		value: GARMENT_CATEGORY.FUR,
 		labelKey: "category.fur",
 		labelFallback: "皮草",
 		promptText: { zh: "皮草", en: "fur coat" },
 	},
 	{
-		value: "trenchCoat",
+		value: GARMENT_CATEGORY.TRENCH_COAT,
 		labelKey: "category.trenchCoat",
 		labelFallback: "风衣",
 		promptText: { zh: "风衣", en: "trench coat" },
 	},
 	{
-		value: "more",
+		value: GARMENT_CATEGORY.MORE,
 		labelKey: "category.more",
 		labelFallback: "更多",
 		promptText: { zh: "服装", en: "garment" },
@@ -68,91 +120,91 @@ const PRIMARY_CATEGORY_DEFINITIONS = [
 
 const MORE_CATEGORY_DEFINITIONS = [
 	{
-		value: "dress",
+		value: GARMENT_CATEGORY.DRESS,
 		labelKey: "category.dress",
 		labelFallback: "连衣裙",
 		promptText: { zh: "连衣裙", en: "dress" },
 	},
 	{
-		value: "skirt",
+		value: GARMENT_CATEGORY.SKIRT,
 		labelKey: "category.skirt",
 		labelFallback: "半裙",
 		promptText: { zh: "半裙", en: "skirt" },
 	},
 	{
-		value: "suit",
+		value: GARMENT_CATEGORY.SUIT,
 		labelKey: "category.suit",
 		labelFallback: "西装",
 		promptText: { zh: "西装", en: "suit / blazer" },
 	},
 	{
-		value: "leatherJacket",
+		value: GARMENT_CATEGORY.LEATHER_JACKET,
 		labelKey: "category.leatherJacket",
 		labelFallback: "皮衣",
 		promptText: { zh: "皮衣", en: "leather jacket" },
 	},
 	{
-		value: "shearling",
+		value: GARMENT_CATEGORY.SHEARLING,
 		labelKey: "category.shearling",
 		labelFallback: "皮毛一体",
 		promptText: { zh: "皮毛一体", en: "shearling coat" },
 	},
 	{
-		value: "denimJacket",
+		value: GARMENT_CATEGORY.DENIM_JACKET,
 		labelKey: "category.denimJacket",
 		labelFallback: "牛仔外套",
 		promptText: { zh: "牛仔外套", en: "denim jacket" },
 	},
 	{
-		value: "sunProtection",
+		value: GARMENT_CATEGORY.SUN_PROTECTION,
 		labelKey: "category.sunProtection",
 		labelFallback: "防晒服",
 		promptText: { zh: "防晒服", en: "sun protection wear" },
 	},
 	{
-		value: "utilityWear",
+		value: GARMENT_CATEGORY.UTILITY_WEAR,
 		labelKey: "category.utilityWear",
 		labelFallback: "工装",
 		promptText: { zh: "工装", en: "utility wear" },
 	},
 	{
-		value: "hardshell",
+		value: GARMENT_CATEGORY.HARD_SHELL,
 		labelKey: "category.hardshell",
 		labelFallback: "冲锋衣",
 		promptText: { zh: "冲锋衣", en: "hardshell jacket" },
 	},
 	{
-		value: "newChinese",
+		value: GARMENT_CATEGORY.NEW_CHINESE,
 		labelKey: "category.newChinese",
 		labelFallback: "新中式",
 		promptText: { zh: "新中式", en: "new Chinese style" },
 	},
 	{
-		value: "tweedStyle",
+		value: GARMENT_CATEGORY.TWEED_STYLE,
 		labelKey: "category.tweedStyle",
 		labelFallback: "小香风",
 		promptText: { zh: "小香风", en: "tweed style" },
 	},
 	{
-		value: "knitwear",
+		value: GARMENT_CATEGORY.KNITWEAR,
 		labelKey: "category.knitwear",
 		labelFallback: "针织衫",
 		promptText: { zh: "针织衫", en: "knitwear" },
 	},
 	{
-		value: "shirt",
+		value: GARMENT_CATEGORY.SHIRT,
 		labelKey: "category.shirt",
 		labelFallback: "衬衫",
 		promptText: { zh: "衬衫", en: "shirt" },
 	},
 	{
-		value: "sweatshirtTee",
+		value: GARMENT_CATEGORY.SWEATSHIRT_TEE,
 		labelKey: "category.sweatshirtTee",
 		labelFallback: "T恤/卫衣",
 		promptText: { zh: "T恤/卫衣", en: "T-shirt / sweatshirt" },
 	},
 	{
-		value: "pants",
+		value: GARMENT_CATEGORY.PANTS,
 		labelKey: "category.pants",
 		labelFallback: "裤子",
 		promptText: { zh: "裤子", en: "pants" },
@@ -237,14 +289,13 @@ const STYLE_TYPE_DEFINITIONS = [
 function createInitialState() {
 	return {
 		prototypeImage: null,
-		designType: "inspiration",
+		designType: DESIGN_TYPE.INSPIRATION,
 		inspirationImage: null,
-		garmentCategory: "downJacket",
+		garmentCategory: GARMENT_CATEGORY.DOWN_JACKET,
 		garmentCategoryMore: "",
 		styleType: "",
 		designPointDescription: "",
 		seriesTheme: "",
-		genCount: 1,
 	}
 }
 
@@ -253,7 +304,7 @@ function getMaxReferenceImages(state, helpers) {
 }
 
 function getReferenceImages(state) {
-	if (state.designType === "inspiration") {
+	if (state.designType === DESIGN_TYPE.INSPIRATION) {
 		return [state.prototypeImage, state.inspirationImage].filter(Boolean)
 	}
 	return state.prototypeImage ? [state.prototypeImage] : []
@@ -292,14 +343,51 @@ function buildStyleTypeOptions(t) {
 	}))
 }
 
+function buildCurrentTextBlock(currentText) {
+	const normalizedCurrentText = String(currentText ?? "").trim()
+	if (!normalizedCurrentText) return "用户当前未填写。"
+	return normalizedCurrentText
+}
+
 function getStyleTypeDefinition(styleType) {
 	if (!styleType) return null
 	return STYLE_TYPE_DEFINITIONS.find((item) => item.value === styleType) ?? null
 }
 
+function getGarmentCategoryLabel(state) {
+	const categoryDefinition = getGarmentCategoryDefinition(state)
+	return categoryDefinition?.labelFallback ?? "未选择"
+}
+
+function getStyleTypeLabel(styleType) {
+	return getStyleTypeDefinition(styleType)?.labelFallback ?? "未选择"
+}
+
+function buildDesignPointCompletionUserPrompt({ state, currentText }) {
+	return [
+		"任务目标：为款式设计插件的“设计点描述”输入框生成或补全一段提示词。",
+		`当前输入：${buildCurrentTextBlock(currentText)}`,
+		`当前服装品类：${getGarmentCategoryLabel(state)}。`,
+		`当前风格类型：${getStyleTypeLabel(state.styleType)}。`,
+		"参考图角色：原型图用于理解当前爆款的版型、面料、结构、工艺和可改款部位。",
+		"补全方向：可补充领型、门襟、口袋、绗线、拼接、袖口、下摆、辅料、局部装饰等单一或少量明确设计点。",
+		"业务限制：不要改变整体廓形比例、核心版型结构和面料属性；不要输出完整生成任务说明，只输出适合填入“设计点描述”的短提示词。",
+	].join("\n")
+}
+
+function buildSeriesThemeCompletionUserPrompt({ currentText }) {
+	return [
+		"任务目标：为款式设计插件的“系列主题”输入框生成或补全一段提示词。",
+		`当前输入：${buildCurrentTextBlock(currentText)}`,
+		"参考图角色：原型图用于理解品牌感、核心设计 DNA、色彩体系、面料质感和工艺语言。",
+		"补全方向：可补充系列主题、目标场景、风格气质、色彩氛围、工艺语言和单品延展方向。",
+		"业务限制：主题要适合成衣系列开发，保持具体、可执行、便于生成多款同系列单品；只输出适合填入“系列主题”的短提示词。",
+	].join("\n")
+}
+
 function getGarmentCategoryDefinition(state) {
-	if (state.designType !== "bestseller") return null
-	if (state.garmentCategory === "more") {
+	if (state.designType !== DESIGN_TYPE.BESTSELLER) return null
+	if (state.garmentCategory === GARMENT_CATEGORY.MORE) {
 		return (
 			MORE_CATEGORY_DEFINITIONS.find((item) => item.value === state.garmentCategoryMore) ??
 			null
@@ -309,20 +397,20 @@ function getGarmentCategoryDefinition(state) {
 }
 
 function hasValidBestsellerCategory(state) {
-	if (state.designType !== "bestseller") return true
-	if (state.garmentCategory === "more") {
+	if (state.designType !== DESIGN_TYPE.BESTSELLER) return true
+	if (state.garmentCategory === GARMENT_CATEGORY.MORE) {
 		return MORE_CATEGORY_DEFINITIONS.some((item) => item.value === state.garmentCategoryMore)
 	}
 	return PRIMARY_CATEGORY_DEFINITIONS.some(
-		(item) => item.value === state.garmentCategory && item.value !== "more",
+		(item) => item.value === state.garmentCategory && item.value !== GARMENT_CATEGORY.MORE,
 	)
 }
 
 function isGenerateDisabled(state) {
 	if (!state.prototypeImage) return true
-	if (state.designType === "inspiration") return !state.inspirationImage
-	if (state.designType === "bestseller") return !hasValidBestsellerCategory(state)
-	if (state.designType === "series") return !state.seriesTheme.trim()
+	if (state.designType === DESIGN_TYPE.INSPIRATION) return !state.inspirationImage
+	if (state.designType === DESIGN_TYPE.BESTSELLER) return !hasValidBestsellerCategory(state)
+	if (state.designType === DESIGN_TYPE.SERIES) return !state.seriesTheme.trim()
 	return true
 }
 
@@ -435,10 +523,10 @@ function buildSeriesDesignPrompt({ state, locale }) {
 }
 
 function buildGarmentStyleDesignPrompt({ state, locale }) {
-	if (state.designType === "inspiration") {
+	if (state.designType === DESIGN_TYPE.INSPIRATION) {
 		return buildInspirationDesignPrompt({ state, locale })
 	}
-	if (state.designType === "bestseller") {
+	if (state.designType === DESIGN_TYPE.BESTSELLER) {
 		return buildBestsellerExtensionPrompt({ state, locale })
 	}
 	return buildSeriesDesignPrompt({ state, locale })
@@ -485,101 +573,145 @@ registerMagicCanvasPlugin({
 				},
 				{
 					id: "designType",
-					kind: "option-group",
+					kind: "tabs",
 					stateKey: "designType",
 					title: t("section.designType", "设计类型"),
 					required: true,
 					showDescriptionOnHover: true,
-					groupClassName: "gsd-design-type-group",
 					options: buildDesignTypeOptions(t),
-				},
-				{
-					id: "inspirationImage",
-					kind: "image-slot",
-					stateKey: "inspirationImage",
-					title: t("section.inspirationImage", "灵感图"),
-					required: true,
-					uploadLabel: t("upload.inspirationImage", "点击上传灵感图"),
-					alt: t("section.inspirationImage", "灵感图"),
-					help: t(
-						"upload.inspirationImage.help",
-						"上传 1 张灵感图，AI 将借鉴其配色、工艺、辅料与装饰语言，同时严格保持原型图的廓形。",
-					),
-					deps: ["designType", "prototypeImage", "modelId", "modelOptions"],
-					when: ({ state }) => state.designType === "inspiration",
-					beforePick: ({ state, helpers }) => {
-						if (countReferenceImages(state) >= getMaxReferenceImages(state, helpers)) {
-							return t("error.referenceLimit", "参考图数量已达当前模型上限")
-						}
-						return null
-					},
-				},
-				{
-					id: "garmentCategory",
-					kind: "option-group",
-					stateKey: "garmentCategory",
-					title: t("section.garmentCategory", "服装品类"),
-					required: true,
-					groupClassName: "gsd-category-group",
-					options: buildPrimaryCategoryOptions(t),
-					deps: ["designType"],
-					when: ({ state }) => state.designType === "bestseller",
-					patchOnSelect: (value) =>
-						value === "more"
-							? { garmentCategoryMore: MORE_CATEGORY_DEFINITIONS[0]?.value ?? "" }
-							: { garmentCategoryMore: "" },
-				},
-				{
-					id: "garmentCategoryMore",
-					kind: "option-group",
-					stateKey: "garmentCategoryMore",
-					title: t("section.garmentCategoryMore", "更多品类"),
-					required: true,
-					groupClassName: "gsd-category-more-group",
-					options: buildMoreCategoryOptions(t),
-					deps: ["designType", "garmentCategory"],
-					when: ({ state }) =>
-						state.designType === "bestseller" && state.garmentCategory === "more",
-				},
-				{
-					id: "styleType",
-					kind: "option-group",
-					stateKey: "styleType",
-					title: t("section.styleType", "风格类型"),
-					suffix: t("optional", "可选"),
-					groupClassName: "gsd-style-type-group",
-					options: buildStyleTypeOptions(t),
-					deps: ["designType"],
-					when: ({ state }) => state.designType === "bestseller",
-				},
-				{
-					id: "designPointDescription",
-					kind: "textarea",
-					stateKey: "designPointDescription",
-					title: t("section.designPointDescription", "设计点描述"),
-					placeholder: t(
-						"placeholder.designPointDescription",
-						"例如：门襟改双拉链、口袋改立体贴袋、领型改戗驳领",
-					),
-					rows: 2,
-					maxLength: 200,
-					deps: ["designType"],
-					when: ({ state }) => state.designType === "bestseller",
-				},
-				{
-					id: "seriesTheme",
-					kind: "textarea",
-					stateKey: "seriesTheme",
-					title: t("section.seriesTheme", "系列主题"),
-					required: true,
-					placeholder: t(
-						"placeholder.seriesTheme",
-						"请输入，例如：都市通勤、复古学院、轻户外",
-					),
-					rows: 2,
-					maxLength: 200,
-					deps: ["designType"],
-					when: ({ state }) => state.designType === "series",
+					panels: [
+						{
+							value: DESIGN_TYPE.INSPIRATION,
+							sections: [
+								{
+									id: "inspirationImage",
+									kind: "image-slot",
+									stateKey: "inspirationImage",
+									title: t("section.inspirationImage", "灵感图"),
+									required: true,
+									uploadLabel: t("upload.inspirationImage", "点击上传灵感图"),
+									alt: t("section.inspirationImage", "灵感图"),
+									help: t(
+										"upload.inspirationImage.help",
+										"上传 1 张灵感图，AI 将借鉴其配色、工艺、辅料与装饰语言，同时严格保持原型图的廓形。",
+									),
+									deps: ["prototypeImage", "modelId", "modelOptions"],
+									beforePick: ({ state, helpers }) => {
+										if (
+											countReferenceImages(state) >=
+											getMaxReferenceImages(state, helpers)
+										) {
+											return t(
+												"error.referenceLimit",
+												"参考图数量已达当前模型上限",
+											)
+										}
+										return null
+									},
+								},
+							],
+						},
+						{
+							value: DESIGN_TYPE.BESTSELLER,
+							sections: [
+								{
+									id: "garmentCategory",
+									kind: "option-group",
+									stateKey: "garmentCategory",
+									title: t("section.garmentCategory", "服装品类"),
+									required: true,
+									groupClassName: "gsd-category-group",
+									options: buildPrimaryCategoryOptions(t),
+									patchOnSelect: (value) =>
+										value === GARMENT_CATEGORY.MORE
+											? {
+													garmentCategoryMore:
+														MORE_CATEGORY_DEFINITIONS[0]?.value ?? "",
+												}
+											: { garmentCategoryMore: "" },
+								},
+								{
+									id: "garmentCategoryMore",
+									kind: "option-group",
+									stateKey: "garmentCategoryMore",
+									title: t("section.garmentCategoryMore", "更多品类"),
+									required: true,
+									groupClassName: "gsd-category-more-group",
+									options: buildMoreCategoryOptions(t),
+									deps: ["garmentCategory"],
+									when: ({ state }) =>
+										state.garmentCategory === GARMENT_CATEGORY.MORE,
+								},
+								{
+									id: "styleType",
+									kind: "option-group",
+									stateKey: "styleType",
+									title: t("section.styleType", "风格类型"),
+									groupClassName: "gsd-style-type-group",
+									options: buildStyleTypeOptions(t),
+								},
+								{
+									id: "designPointDescription",
+									kind: "textarea",
+									stateKey: "designPointDescription",
+									title: t("section.designPointDescription", "设计点描述"),
+									placeholder: t(
+										"placeholder.designPointDescription",
+										"例如：门襟改双拉链、口袋改立体贴袋、领型改戗驳领",
+									),
+									aiGenerate: {
+										label: t("button.aiPlaceholder", "AI 生成"),
+										loadingLabel: t("button.generating", "生成中…"),
+										disabled: ({ state }) => !state.prototypeImage,
+										completeImagePrompt: {
+											referenceImages: ({ state }) => [state.prototypeImage],
+											referencesMessage: t(
+												"error.extraReferences",
+												"请先上传原型图",
+											),
+											userPrompt: ({ state }) =>
+												buildDesignPointCompletionUserPrompt({
+													state,
+													currentText: state.designPointDescription,
+												}),
+										},
+									},
+								},
+							],
+						},
+						{
+							value: DESIGN_TYPE.SERIES,
+							sections: [
+								{
+									id: "seriesTheme",
+									kind: "textarea",
+									stateKey: "seriesTheme",
+									title: t("section.seriesTheme", "系列主题"),
+									required: true,
+									placeholder: t(
+										"placeholder.seriesTheme",
+										"请输入，例如：都市通勤、复古学院、轻户外",
+									),
+									aiGenerate: {
+										label: t("button.aiPlaceholder", "AI 生成"),
+										loadingLabel: t("button.generating", "生成中…"),
+										disabled: ({ state }) => !state.prototypeImage,
+										completeImagePrompt: {
+											referenceImages: ({ state }) => [state.prototypeImage],
+											referencesMessage: t(
+												"error.extraReferences",
+												"请先上传原型图",
+											),
+											userPrompt: ({ state }) =>
+												buildSeriesThemeCompletionUserPrompt({
+													currentText: state.seriesTheme,
+												}),
+										},
+									},
+								},
+							],
+						},
+					],
 				},
 				{
 					id: "modelSelect",
@@ -590,36 +722,54 @@ registerMagicCanvasPlugin({
 					id: "canvasSize",
 					kind: "size-control",
 					title: t("section.canvasSize", "宽高比"),
-					deps: ["modelId", "modelOptions", "scale"],
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
 					title: t("section.resolution", "尺寸倍数"),
-					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "count",
 					kind: "option-group",
 					stateKey: "genCount",
-					required: true,
 					title: t("section.count", "生成数量"),
 					deps: ["designType"],
-					when: ({ state }) => state.designType !== "series",
+					when: ({ state }) => state.designType !== DESIGN_TYPE.SERIES,
 				},
 				{
 					id: "countSeries",
 					kind: "option-group",
 					stateKey: "genCount",
-					required: true,
 					title: t("section.count.series", "系列款数"),
 					deps: ["designType"],
-					when: ({ state }) => state.designType === "series",
+					when: ({ state }) => state.designType === DESIGN_TYPE.SERIES,
 				},
 			],
 			generate: {
 				buttonLabel: `✨ ${t("button.generate", "生成款式设计")}`,
 				loadingLabel: t("button.generating", "生成中…"),
+				getIdleHint: ({ state }) => {
+					if (!state.prototypeImage) {
+						return t("empty.prototypeImage", "请先上传原型图")
+					}
+					if (state.designType === DESIGN_TYPE.INSPIRATION && !state.inspirationImage) {
+						return t("empty.inspirationImage", "请先上传灵感图")
+					}
+					if (state.designType === DESIGN_TYPE.BESTSELLER && !state.garmentCategory) {
+						return t("empty.garmentCategory", "请先选择服装品类")
+					}
+					if (
+						state.designType === DESIGN_TYPE.BESTSELLER &&
+						state.garmentCategory === GARMENT_CATEGORY.MORE &&
+						!state.garmentCategoryMore
+					) {
+						return t("empty.garmentCategoryMore", "请先选择更多品类")
+					}
+					if (state.designType === DESIGN_TYPE.SERIES && !state.seriesTheme) {
+						return t("empty.seriesTheme", "请先输入系列主题")
+					}
+					return ""
+				},
 				isDisabled: ({ state }) => isGenerateDisabled(state),
 				validate: ({ state, helpers }) => {
 					const referenceImages = getReferenceImages(state)

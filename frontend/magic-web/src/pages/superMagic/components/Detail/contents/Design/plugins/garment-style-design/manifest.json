@@ -7,7 +7,8 @@
 		"assets.uploadFile",
 		"assets.fetchBlob",
 		"ai.getImageModels",
-		"ai.generateAndPlace"
+		"ai.generateAndPlace",
+		"ai.completeImagePrompt"
 	],
 	"category": {
 		"key": "product"
@@ -18,6 +19,7 @@
 	"label": "{{label}}",
 	"locales": {
 		"en-US": {
+			"button.aiPlaceholder": "AI Generate",
 			"button.generate": "Generate Style Design",
 			"button.generating": "Generating…",
 			"category.coat": "Coat",
@@ -54,6 +56,7 @@
 			"empty.seriesTheme": "Please enter a series theme first",
 			"error.noModels": "No AI model is currently available",
 			"error.noSize": "The current model does not provide a usable size preset",
+			"error.extraReferences": "Upload a prototype image first",
 			"error.referenceLimit": "The reference image limit for the current model has been reached",
 			"error.references": "The uploaded images do not contain usable reference identifiers",
 			"label": "Style Design",
@@ -92,6 +95,7 @@
 			"upload.prototypeImage.help": "Upload the prototype silhouette image as the anchor for silhouette, proportion, and key structural lines."
 		},
 		"zh-CN": {
+			"button.aiPlaceholder": "AI 生成",
 			"button.generate": "生成款式设计",
 			"button.generating": "生成中…",
 			"category.coat": "大衣",
@@ -128,6 +132,7 @@
 			"empty.seriesTheme": "请先输入系列主题",
 			"error.noModels": "暂无可用 AI 模型",
 			"error.noSize": "当前模型缺少可用尺寸配置",
+			"error.extraReferences": "请先上传原型图",
 			"error.referenceLimit": "参考图数量已达当前模型上限",
 			"error.references": "图片缺少可用于生成的资源标识",
 			"label": "款式设计",
@@ -148,7 +153,7 @@
 			"styleType.streetHipHop": "嘻哈风",
 			"styleType.versatileBasic": "百搭基础风",
 			"section.canvasSize": "宽高比",
-			"section.count": "生成张数",
+			"section.count": "生成数量",
 			"section.count.series": "系列款数",
 			"section.designPointDescription": "设计点描述",
 			"section.designType": "设计类型",
