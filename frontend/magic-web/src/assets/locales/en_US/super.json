@@ -587,20 +587,13 @@
 		"saved": "Saved",
 		"saving": "Saving",
 		"upgrade": {
-			"autoUpgrading": "Upgrading Canvas v2.0. Do not close or refresh this page.",
 			"autoUpgradingSubtitle": "Do not close or refresh this page.",
 			"autoUpgradingTitle": "Upgrading Canvas v2.0",
-			"button": "Upgrade Now",
-			"description": "Upgrading Canvas v2.0. Do not close or refresh this page.",
 			"failed": "Upgrade failed, please try again later",
-			"step_backup": "Backing up original file...",
-			"step_convert": "Converting data format...",
-			"step_done": "Upgrade complete",
-			"step_save_details": "Saving element details...",
-			"step_save_main": "Saving main file...",
-			"success": "Upgrade successful",
-			"title": "Upgrading Canvas v2.0. Do not close or refresh this page.",
-			"upgrading": "Upgrading..."
+			"failedSubtitle": "Check your network and try again. Canvas editing is unavailable until the upgrade completes.",
+			"failedTitle": "Canvas upgrade failed",
+			"retry": "Retry Upgrade",
+			"success": "Upgrade successful"
 		}
 	},
 	"detail": {

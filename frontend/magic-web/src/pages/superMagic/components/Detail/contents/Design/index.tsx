@@ -422,6 +422,12 @@ function DesignViewer(props: DesignViewerProps) {
 		void handleUpgrade()
 	}, [autoUpgradeFailed, automaticUpgradeKey, handleUpgrade, isOffline, isUpgrading])
 
+	const isUpgradeBlockingCanvas = shouldAutoUpgrade && !isOffline
+	const shouldShowUpgradeProgress =
+		isUpgrading || (shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)
+	const shouldShowUpgradeFailed =
+		shouldAutoUpgrade && !isOffline && autoUpgradeFailed && !isUpgrading
+
 	// 当 designProjectBasePath 变化（目录改名）时，重新从远端加载 DSL（修复旧路径引用），再重挂载画布
 	useEffect(() => {
 		if (prevDesignProjectBasePathRef.current === undefined) {
@@ -888,12 +894,21 @@ function DesignViewer(props: DesignViewerProps) {
 									</div>
 								</div>
 							)}
-							{(isUpgrading ||
-								(shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)) && (
+							{shouldShowUpgradeProgress && (
 								<CanvasUpgradeOverlay
 									percent={upgradeProgress.percent}
 									title={t("design.upgrade.autoUpgradingTitle")}
 									subtitle={t("design.upgrade.autoUpgradingSubtitle")}
+								/>
+							)}
+							{shouldShowUpgradeFailed && (
+								<CanvasUpgradeOverlay
+									percent={0}
+									status="error"
+									title={t("design.upgrade.failedTitle")}
+									subtitle={t("design.upgrade.failedSubtitle")}
+									actionLabel={t("design.upgrade.retry")}
+									onAction={() => void handleUpgrade()}
 								/>
 							)}
 							<Suspense fallback={null}>
@@ -901,7 +916,7 @@ function DesignViewer(props: DesignViewerProps) {
 									key={`${designProjectId}:${canvasDesignKey}:${designProjectBasePath}`}
 									id={designProjectId}
 									ref={canvasDesignRef}
-									readonly={isReadOnlyState || shouldAutoUpgrade}
+									readonly={isReadOnlyState || isUpgradeBlockingCanvas}
 									magic={{
 										methods,
 										permissions: designCanvasMagicPermissions,

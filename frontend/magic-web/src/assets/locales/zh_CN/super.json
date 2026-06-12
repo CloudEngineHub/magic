@@ -588,20 +588,13 @@
 		"saved": "保存成功",
 		"saving": "正在保存",
 		"upgrade": {
-			"autoUpgrading": "正在升级画布v2.0，请勿关闭或刷新页面",
 			"autoUpgradingSubtitle": "请勿关闭或刷新页面",
 			"autoUpgradingTitle": "正在升级画布v2.0",
-			"button": "立即升级",
-			"description": "正在升级画布v2.0，请勿关闭或刷新页面",
 			"failed": "升级失败，请稍后重试",
-			"step_backup": "正在备份原始文件...",
-			"step_convert": "正在转换数据格式...",
-			"step_done": "升级完成",
-			"step_save_details": "正在保存元素详情...",
-			"step_save_main": "正在保存主文件...",
-			"success": "升级成功",
-			"title": "正在升级画布v2.0，请勿关闭或刷新页面",
-			"upgrading": "升级中..."
+			"failedSubtitle": "请检查网络状态后重试，升级完成前暂不可编辑画布",
+			"failedTitle": "画布升级失败",
+			"retry": "重试升级",
+			"success": "升级成功"
 		}
 	},
 	"detail": {
