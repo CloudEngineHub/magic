@@ -210,6 +210,50 @@ describe("useChatConversationList", () => {
 		expect(result.current.items.map((item) => item.id)).toEqual(["older", "newer"])
 	})
 
+	it("moves a newly pinned item to the front during optimistic updates", () => {
+		chatProjectsMock = [
+			createProject({ id: "project-a", project_name: "Alpha", is_pinned: false }),
+			createProject({ id: "project-b", project_name: "Beta", is_pinned: false }),
+		]
+
+		const { result } = renderHook(() => useChatConversationList())
+
+		act(() => {
+			result.current.optimisticUpdatePin("project-b", true)
+		})
+
+		expect(result.current.items.map((item) => [item.id, item.isPinned])).toEqual([
+			["project-b", true],
+			["project-a", false],
+		])
+	})
+
+	it("restores server order after reload completes", async () => {
+		chatProjectsMock = [
+			createProject({ id: "project-a", project_name: "Alpha", is_pinned: false }),
+			createProject({ id: "project-b", project_name: "Beta", is_pinned: false }),
+		]
+
+		const { result } = renderHook(() => useChatConversationList())
+
+		act(() => {
+			result.current.optimisticUpdatePin("project-b", true)
+		})
+
+		expect(result.current.items.map((item) => item.id)).toEqual(["project-b", "project-a"])
+
+		refreshChatProjectsMock.mockResolvedValueOnce([
+			createProject({ id: "project-a", project_name: "Alpha", is_pinned: false }),
+			createProject({ id: "project-b", project_name: "Beta", is_pinned: true }),
+		])
+
+		await act(async () => {
+			await result.current.reload({ silent: true })
+		})
+
+		expect(result.current.items.map((item) => item.id)).toEqual(["project-a", "project-b"])
+	})
+
 	it("requests the next page silently when loadMore is called", async () => {
 		chatProjectsMock = [createProject({ id: "project-page-1" })]
 		chatProjectsTotalMock = 2

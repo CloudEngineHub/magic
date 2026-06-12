@@ -13,6 +13,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("@/pages/superMagic/hooks/useDesktopChatProjectActions", () => ({
 	useDesktopChatProjectActions: () => ({
 		projectActions: [
+			{ key: "pinProject", label: "chat.pinChat", onClick: vi.fn() },
 			{ key: "rename", label: "chat.renameChat", onClick: vi.fn() },
 			{ key: "saveAsProject", label: "chat.saveAsProject", onClick: vi.fn() },
 			{ key: "delete", label: "chat.deleteChat", onClick: vi.fn(), variant: "danger" },
@@ -94,5 +95,24 @@ describe("useDesktopChatConversationActions", () => {
 
 		const shareAction = result.current.conversationActionGroups[0]?.actions[0]
 		expect(shareAction?.disabled).toBe(true)
+	})
+
+	it("includes the pin action ahead of rename/save-as/delete actions", () => {
+		messagesMap.clear()
+		messagesMap.set("chat-topic-1", [{ status: "finished" }])
+
+		const { result } = renderHook(() =>
+			useDesktopChatConversationActions({
+				selectedProject,
+				selectedTopic,
+			}),
+		)
+
+		const actionKeys = result.current.conversationActionGroups
+			.flatMap((group) => group.actions)
+			.map((action) => action.key)
+
+		expect(actionKeys).toContain("pinProject")
+		expect(actionKeys.indexOf("pinProject")).toBeLessThan(actionKeys.indexOf("rename"))
 	})
 })

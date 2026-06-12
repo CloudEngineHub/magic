@@ -17,11 +17,22 @@ vi.mock("react-i18next", () => ({
 vi.mock("@/components/base-mobile/SwipeActionRow", () => ({
 	SwipeActionRow: ({
 		children,
+		actions,
 		"data-testid": dataTestId,
 	}: {
 		children: React.ReactNode
+		actions?: Array<{ id: string; label: string }>
 		"data-testid"?: string
-	}) => <div data-testid={dataTestId}>{children}</div>,
+	}) => (
+		<div data-testid={dataTestId}>
+			<div data-testid={`${dataTestId}-actions`}>
+				{actions?.map((action) => (
+					<span key={action.id}>{action.label}</span>
+				))}
+			</div>
+			{children}
+		</div>
+	),
 }))
 
 function createProject(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
@@ -78,7 +89,7 @@ describe("ChatsPage ChatConversationListItem", () => {
 		).not.toBeInTheDocument()
 	})
 
-	it("hides pinned badge when mobile chat pin is disabled even if server marks pinned", () => {
+	it("shows pinned badge and unpin action when the conversation is pinned", () => {
 		render(
 			<ChatConversationListItem
 				item={createItem({ id: "pinned-chat", isPinned: true })}
@@ -87,14 +98,14 @@ describe("ChatsPage ChatConversationListItem", () => {
 				onClose={vi.fn()}
 				onClick={vi.fn()}
 				onMore={vi.fn()}
+				onPin={vi.fn()}
 				onDelete={vi.fn()}
 			/>,
 		)
 
 		const row = screen.getByTestId("mobile-chats-page-item-pinned-chat")
-		expect(
-			within(row).queryByTestId("mobile-chats-page-item-pinned-badge"),
-		).not.toBeInTheDocument()
+		expect(within(row).getByTestId("mobile-chats-page-item-pinned-badge")).toBeInTheDocument()
+		expect(within(row).getByText("chatList.swipeUnpin")).toBeInTheDocument()
 		expect(within(row).getByTestId("mobile-chats-page-item-default-icon")).toBeInTheDocument()
 		expect(within(row).queryByTestId("mobile-chats-page-item-loading")).not.toBeInTheDocument()
 	})

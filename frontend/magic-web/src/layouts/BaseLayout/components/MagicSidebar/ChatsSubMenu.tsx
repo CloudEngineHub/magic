@@ -74,6 +74,7 @@ function ChatsSubMenu({ children, visible = true }: ChatsSubMenuProps) {
 		hasMore,
 		loadMore,
 		reload,
+		optimisticUpdatePin,
 	} = useChatConversationList()
 
 	/** Highlight the open chat only on the chat detail route; avoid stale selection on other pages. */
@@ -115,6 +116,7 @@ function ChatsSubMenu({ children, visible = true }: ChatsSubMenuProps) {
 	const { projectActions, projectActionComponents, updateCurrentActionItem } =
 		useDesktopChatProjectActions({
 			actionContext: "list",
+			onProjectPinStateChanged: optimisticUpdatePin,
 			onProjectChanged: () => reload({ silent: true }),
 		})
 	const projectActionMap = useMemo(
@@ -171,9 +173,11 @@ function ChatsSubMenu({ children, visible = true }: ChatsSubMenuProps) {
 	})
 
 	/** Sync project context then run the mapped sidebar list action. */
-	const runProjectAction = useMemoizedFn((actionKey: "rename" | "saveAsProject" | "delete") => {
-		projectActionMap.get(actionKey)?.onClick?.()
-	})
+	const runProjectAction = useMemoizedFn(
+		(actionKey: "pinProject" | "rename" | "saveAsProject" | "delete") => {
+			projectActionMap.get(actionKey)?.onClick?.()
+		},
+	)
 
 	const handleRowMenuOpenChange = useMemoizedFn(
 		(nextOpen: boolean, item: ChatConversationListItem) => {
@@ -205,6 +209,7 @@ function ChatsSubMenu({ children, visible = true }: ChatsSubMenuProps) {
 					item={item}
 					isSelected={activeConversationProjectId === item.id}
 					moreAriaLabel={t("sidebar:appsMenu.more")}
+					pinLabel={projectActionMap.get("pinProject")?.label || t("super:chat.pinChat")}
 					renameLabel={
 						projectActionMap.get("rename")?.label || t("super:chat.renameChat")
 					}
@@ -217,6 +222,7 @@ function ChatsSubMenu({ children, visible = true }: ChatsSubMenuProps) {
 					}
 					onOpen={(targetItem) => void handleOpenConversation(targetItem)}
 					onMenuOpenChange={handleRowMenuOpenChange}
+					onPin={() => runProjectAction("pinProject")}
 					onRename={() => runProjectAction("rename")}
 					onSaveAsProject={() => runProjectAction("saveAsProject")}
 					onDelete={() => runProjectAction("delete")}

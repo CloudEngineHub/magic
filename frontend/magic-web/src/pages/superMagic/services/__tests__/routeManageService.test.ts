@@ -49,6 +49,39 @@ vi.mock("@/models/user", () => ({
 	},
 }))
 
+vi.mock("../../utils/superMagicCache", () => ({
+	WorkspaceStateCache: {
+		get: () => ({ workspaceId: null, projectId: null, topicId: null }),
+		set: vi.fn(),
+		clear: vi.fn(),
+	},
+	UserWorkspaceMapCache: {
+		get: () => null,
+		set: vi.fn(),
+		clear: vi.fn(),
+	},
+	ProjectTopicMapCache: {
+		get: () => null,
+		set: vi.fn(),
+		clear: vi.fn(),
+	},
+	ChatWorkspaceIdCache: {
+		/** Keep chat workspace checks deterministic in route tests. */
+		get: () => "chat-workspace",
+		set: vi.fn(),
+		clear: vi.fn(),
+	},
+}))
+
+vi.mock(
+	"@dtyq/magic-admin/locales",
+	() => ({
+		/** Route service tests do not rely on admin locale bundles. */
+		getAdminLocaleModules: () => ({}),
+	}),
+	{ virtual: true },
+)
+
 vi.mock("@/stores/interface", () => ({
 	interfaceStore: {
 		get isMobile() {
@@ -202,6 +235,10 @@ describe("routeManageService.shouldPreserveChatRoute", () => {
 	})
 
 	it("returns true when navigation keeps the same chat project", () => {
+		mockState.selectedProject = {
+			id: "chat-project-a",
+			workspace_id: "chat-workspace",
+		}
 		routesMatchMock.mockReturnValue({
 			params: {
 				clusterCode: "global",
@@ -214,6 +251,25 @@ describe("routeManageService.shouldPreserveChatRoute", () => {
 		})
 
 		expect(routeManageService.shouldPreserveChatRoute("chat-project-a")).toBe(true)
+	})
+
+	it("returns false when the selected project has already moved out of chat workspace", () => {
+		mockState.selectedProject = {
+			id: "chat-project-a",
+			workspace_id: "workspace-normal",
+		}
+		routesMatchMock.mockReturnValue({
+			params: {
+				clusterCode: "global",
+				projectId: "chat-project-a",
+				topicId: "topic-a",
+			},
+			pathname: "/global/super/chat/chat-project-a/topic-a",
+			pathnameBase: "/global/super/chat/chat-project-a/topic-a",
+			route: { name: RouteName.SuperChatProjectState },
+		})
+
+		expect(routeManageService.shouldPreserveChatRoute("chat-project-a")).toBe(false)
 	})
 })
 
@@ -260,6 +316,7 @@ describe("routeManageService.navigateToTopic", () => {
 	})
 
 	it("uses workspace topic route when leaving chat URL for another project", () => {
+		mockState.selectedProject = null
 		routesMatchMock.mockReturnValue({
 			params: {
 				clusterCode: "global",
@@ -273,6 +330,39 @@ describe("routeManageService.navigateToTopic", () => {
 
 		routeManageService.navigateToTopic({
 			workspaceId: "workspace-1",
+			projectId: "project-beta",
+			topicId: "topic-beta",
+		})
+
+		expect(navigateMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				name: RouteName.SuperWorkspaceProjectTopicState,
+				params: {
+					projectId: "project-beta",
+					topicId: "topic-beta",
+				},
+			}),
+		)
+	})
+
+	it("uses workspace topic route when the same project id already belongs to a normal workspace", () => {
+		mockState.selectedProject = {
+			id: "project-beta",
+			workspace_id: "workspace-normal",
+		}
+		routesMatchMock.mockReturnValue({
+			params: {
+				clusterCode: "global",
+				projectId: "project-beta",
+				topicId: "topic-a",
+			},
+			pathname: "/global/super/chat/project-beta/topic-a",
+			pathnameBase: "/global/super/chat/project-beta/topic-a",
+			route: { name: RouteName.SuperChatProjectState },
+		})
+
+		routeManageService.navigateToTopic({
+			workspaceId: "workspace-normal",
 			projectId: "project-beta",
 			topicId: "topic-beta",
 		})

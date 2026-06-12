@@ -130,6 +130,7 @@ vi.mock("@/pages/superMagic/hooks/useChatWorkspace", () => ({
 vi.mock("@/pages/superMagic/hooks/useDesktopChatProjectActions", () => ({
 	useDesktopChatProjectActions: () => ({
 		projectActions: [
+			{ key: "pinProject", label: "Pin", onClick: vi.fn() },
 			{ key: "rename", label: "Rename", onClick: vi.fn() },
 			{ key: "saveAsProject", label: "SaveAsProject", onClick: vi.fn() },
 			{ key: "delete", label: "Delete", onClick: vi.fn() },
@@ -178,6 +179,7 @@ vi.mock("@/pages/superMagicMobile/pages/ChatsPage/hooks/useChatConversationList"
 		hasMore: false,
 		loadMore: vi.fn(),
 		reload: reloadMock,
+		optimisticUpdatePin: vi.fn(),
 	}),
 }))
 

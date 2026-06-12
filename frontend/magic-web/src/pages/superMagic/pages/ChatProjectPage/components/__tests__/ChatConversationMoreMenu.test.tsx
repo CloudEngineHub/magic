@@ -36,4 +36,23 @@ describe("ChatConversationMoreMenu", () => {
 		expect(separator).toHaveClass("-mx-1", "my-1", "bg-border")
 		expect(screen.getByText("Delete")).toBeInTheDocument()
 	})
+
+	it("applies focus-reset classes to the detail more trigger", () => {
+		render(
+			<ChatConversationMoreMenu
+				actions={[{ key: "pinProject", label: "Pin", onClick: vi.fn() }]}
+			/>,
+		)
+
+		expect(screen.getByTestId("chat-conversation-more-button")).toHaveClass(
+			"focus:!border-transparent",
+			"focus:!bg-transparent",
+			"focus:!outline-none",
+			"focus:!ring-0",
+			"focus-visible:!border-transparent",
+			"focus-visible:!outline-none",
+			"focus-visible:!ring-0",
+			"active:!bg-transparent",
+		)
+	})
 })

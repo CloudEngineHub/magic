@@ -14,6 +14,7 @@ interface DesktopConversationAction {
 	label: string
 	onClick: () => void
 	disabled?: boolean
+	isPinned?: boolean
 	variant?: "default" | "danger"
 }
 
@@ -55,10 +56,12 @@ export function useDesktopChatConversationActions({
 		updateCurrentActionItem(selectedProject)
 	})
 
-	const runProjectAction = useMemoizedFn((actionKey: "rename" | "saveAsProject" | "delete") => {
-		syncProjectContext()
-		projectActionMap.get(actionKey)?.onClick?.()
-	})
+	const runProjectAction = useMemoizedFn(
+		(actionKey: "pinProject" | "rename" | "saveAsProject" | "delete") => {
+			syncProjectContext()
+			projectActionMap.get(actionKey)?.onClick?.()
+		},
+	)
 
 	const openTopicShare = useMemoizedFn(() => {
 		if (!selectedTopic || !selectedProject || !isAllowShare) return
@@ -82,6 +85,8 @@ export function useDesktopChatConversationActions({
 					key: action.key,
 					label: action.label,
 					onClick: () => runProjectAction(action.key),
+					isPinned:
+						action.key === "pinProject" ? Boolean(selectedProject?.is_pinned) : false,
 					variant: action.variant,
 				})),
 			},

@@ -45,6 +45,8 @@ export interface UseChatConversationListResult {
 	loadMore: () => Promise<void>
 	/** 立即从本地列表移除某项（乐观更新），下次 reload 后以服务端数据为准 */
 	optimisticRemove: (id: string) => void
+	/** 仅在置顶成功后的短窗口内调整当前列表顺序；后续 reload 仍以服务端返回为准。 */
+	optimisticUpdatePin: (id: string, isPinned: boolean) => void
 }
 
 /**
@@ -68,6 +70,7 @@ export function useChatConversationList(): UseChatConversationListResult {
 		projectPageSize: CHAT_LIST_PAGE_SIZE,
 		projectKeyword: debouncedSearchValue,
 	})
+	const [optimisticProjects, setOptimisticProjects] = useState<ProjectListItem[] | null>(null)
 
 	/**
 	 * 待删除项 ID 集合，用于在服务端响应前立即隐藏对应行（乐观更新）。
@@ -101,8 +104,10 @@ export function useChatConversationList(): UseChatConversationListResult {
 	 * 在 hook 内完成时区格式化，让视图只消费可展示的文案，后续接点击进入时也不需要改 View。
 	 * 过滤 pendingRemoveIds：删除/移出 chat 工作区后，在 reload 确认前列表先隐藏对应行。
 	 */
+	const visibleProjects = optimisticProjects ?? chatProjects
+
 	const items = useMemo<ChatConversationListItem[]>(() => {
-		return chatProjects
+		return visibleProjects
 			.filter((project) => !pendingRemoveIds.has(project.id))
 			.map((project) => ({
 				id: project.id,
@@ -120,7 +125,7 @@ export function useChatConversationList(): UseChatConversationListResult {
 					isRunningLikeStatus(project.project_status),
 				project,
 			}))
-	}, [chatProjects, pendingRemoveIds, i18n.language, t, timezone])
+	}, [visibleProjects, pendingRemoveIds, i18n.language, t, timezone])
 
 	/**
 	 * 显式重试复用当前关键字，保证列表与搜索态保持同一个后端查询结果。
@@ -128,6 +133,7 @@ export function useChatConversationList(): UseChatConversationListResult {
 	 */
 	const reload = useMemoizedFn(async (options?: ReloadChatConversationListOptions) => {
 		setCurrentPage(1)
+		setOptimisticProjects(null)
 		const latestProjects = await refreshChatProjects({
 			pageSize: CHAT_LIST_PAGE_SIZE,
 			keyword: debouncedSearchValue,
@@ -153,6 +159,43 @@ export function useChatConversationList(): UseChatConversationListResult {
 	})
 
 	/**
+	 * 仅在用户刚完成置顶操作时临时重排当前内存列表，给出即时反馈。
+	 * 后续任何 reload/loadMore 都会回到服务端返回顺序，不做常驻前端兜底排序。
+	 */
+	const optimisticUpdatePin = useMemoizedFn((id: string, isPinned: boolean) => {
+		setOptimisticProjects((prev) => {
+			const sourceProjects = prev ?? chatProjects
+			const nextProjects = sourceProjects.map((project) =>
+				project.id === id
+					? {
+							...project,
+							is_pinned: isPinned,
+						}
+					: project,
+			)
+			const targetIndex = nextProjects.findIndex((project) => project.id === id)
+			if (targetIndex < 0) return nextProjects
+
+			const [targetProject] = nextProjects.splice(targetIndex, 1)
+			if (!targetProject) return nextProjects
+
+			if (isPinned) {
+				nextProjects.unshift(targetProject)
+				return nextProjects
+			}
+
+			const firstUnpinnedIndex = nextProjects.findIndex((project) => !project.is_pinned)
+			if (firstUnpinnedIndex < 0) {
+				nextProjects.push(targetProject)
+				return nextProjects
+			}
+
+			nextProjects.splice(firstUnpinnedIndex, 0, targetProject)
+			return nextProjects
+		})
+	})
+
+	/**
 	 * 加载下一页数据追加到列表末尾。
 	 * 搜索态下不调用（hasMore 为 false 时 InfiniteScroll 不会触发此函数）。
 	 */
@@ -164,6 +207,7 @@ export function useChatConversationList(): UseChatConversationListResult {
 
 		try {
 			const nextPage = currentPage + 1
+			setOptimisticProjects(null)
 			await loadMoreChatProjects(nextPage, {
 				pageSize: CHAT_LIST_PAGE_SIZE,
 				keyword: debouncedSearchValue,
@@ -196,6 +240,7 @@ export function useChatConversationList(): UseChatConversationListResult {
 		reload,
 		loadMore,
 		optimisticRemove,
+		optimisticUpdatePin,
 	}
 }
 

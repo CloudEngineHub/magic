@@ -13,6 +13,7 @@ import {
 	WorkspaceStateCache,
 	UserWorkspaceMapCache,
 	ProjectTopicMapCache,
+	ChatWorkspaceIdCache,
 } from "../utils/superMagicCache"
 import { RoutePathMobile } from "@/constants/routes"
 import { configStore } from "@/models/config"
@@ -180,6 +181,27 @@ class RouteManageService {
 		return this.getCurrentMatchedRouteName() === RouteName.SuperChatProjectState
 	}
 
+	/** Read the persisted chat workspace id locally to avoid pulling service/hook dependencies into routing. */
+	private getCachedChatWorkspaceId(): string | null {
+		return ChatWorkspaceIdCache.get(userStore.user.userInfo)
+	}
+
+	/**
+	 * Save-as-project keeps the same project id after moving out of the hidden chat workspace.
+	 * We must confirm the current project still belongs to chat workspace before preserving `/super/chat`.
+	 */
+	private isChatWorkspaceProjectForRoute(projectId?: string | null): boolean {
+		if (!projectId) return false
+
+		const selectedProject = projectStore.selectedProject
+		if (selectedProject?.id === projectId) {
+			const chatWorkspaceId = this.getCachedChatWorkspaceId()
+			return Boolean(chatWorkspaceId && selectedProject.workspace_id === chatWorkspaceId)
+		}
+
+		return false
+	}
+
 	/**
 	 * Chat route should only be preserved when the URL and target project still refer to the same chat.
 	 * Using pathname alone caused leave-navigation races to snap back to the previous chat URL.
@@ -191,7 +213,7 @@ class RouteManageService {
 		if (!routeProjectId) return false
 		if (!projectId) return true
 
-		return projectId === routeProjectId
+		return projectId === routeProjectId && this.isChatWorkspaceProjectForRoute(projectId)
 	}
 
 	/** Detect async refreshState that started on one route but finished after the user already left. */

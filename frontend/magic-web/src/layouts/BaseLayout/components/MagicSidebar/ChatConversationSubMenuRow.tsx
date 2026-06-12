@@ -24,11 +24,13 @@ interface ChatConversationSubMenuRowProps {
 	item: ChatConversationListItem
 	isSelected?: boolean
 	moreAriaLabel: string
+	pinLabel: string
 	renameLabel: string
 	saveAsLabel: string
 	deleteLabel: string
 	onOpen: (item: ChatConversationListItem) => void
 	onMenuOpenChange: (open: boolean, item: ChatConversationListItem) => void
+	onPin: () => void
 	onRename: () => void
 	onSaveAsProject: () => void
 	onDelete: () => void
@@ -39,19 +41,21 @@ function ChatConversationSubMenuRow({
 	item,
 	isSelected = false,
 	moreAriaLabel,
+	pinLabel,
 	renameLabel,
 	saveAsLabel,
 	deleteLabel,
 	onOpen,
 	onMenuOpenChange,
+	onPin,
 	onRename,
 	onSaveAsProject,
 	onDelete,
 }: ChatConversationSubMenuRowProps) {
 	const { t } = useTranslation("interface")
-	const [isHovered, setIsHovered] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const suppressRowClickRef = useRef(false)
+	const moreButtonRef = useRef<HTMLButtonElement | null>(null)
 
 	/** Block row navigation briefly after opening the more menu, same as project rows. */
 	function blockRowClickTemporarily() {
@@ -70,14 +74,12 @@ function ChatConversationSubMenuRow({
 		<div className={cn("h-8 w-full rounded-md")}>
 			<div
 				className={cn(
-					"inline-flex h-full w-full items-center gap-2 rounded-md px-2",
+					"group inline-flex h-full w-full items-center gap-2 rounded-md px-2",
 					!isSelected && "hover:bg-sidebar-accent",
 					isSelected && "bg-sidebar-accent",
 				)}
 				data-selected={isSelected}
 				data-testid={`sidebar-chats-submenu-item-${item.id}`}
-				onMouseEnter={() => setIsHovered(true)}
-				onMouseLeave={() => setIsHovered(false)}
 			>
 				<button
 					type="button"
@@ -130,22 +132,28 @@ function ChatConversationSubMenuRow({
 					onOpenChange={(nextOpen) => {
 						setIsMenuOpen(nextOpen)
 						if (nextOpen) blockRowClickTemporarily()
+						// Blur the trigger after the menu closes so the ellipsis button does not keep a focused circle.
+						if (!nextOpen) {
+							moreButtonRef.current?.blur()
+						}
 						onMenuOpenChange(nextOpen, item)
 					}}
 				>
 					<DropdownMenuTrigger asChild>
 						<button
+							ref={moreButtonRef}
 							type="button"
 							aria-label={moreAriaLabel}
 							data-testid={`sidebar-chats-submenu-more-${item.id}`}
 							className={cn(
-								"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 transition-opacity hover:bg-sidebar-accent",
+								"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 outline-none ring-0 transition-opacity hover:bg-sidebar-accent focus:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:bg-transparent",
 								isSelected
 									? "text-sidebar-accent-foreground"
 									: "text-sidebar-foreground",
-								isHovered || isMenuOpen
+								// Use CSS hover instead of local state so optimistic reordering does not carry the visible menu trigger to the new row position.
+								isMenuOpen
 									? "opacity-100"
-									: "pointer-events-none opacity-0",
+									: "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
 							)}
 							onClick={(event) => {
 								blockRowClickTemporarily()
@@ -164,6 +172,17 @@ function ChatConversationSubMenuRow({
 						</button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="w-44">
+						<DropdownMenuItem
+							className={chatConversationActionMenuItemClassName}
+							onClick={onPin}
+							data-testid="sidebar-chats-submenu-action-pin"
+						>
+							<ChatConversationActionIcon
+								actionKey="pinProject"
+								isPinned={item.isPinned}
+							/>
+							{pinLabel}
+						</DropdownMenuItem>
 						<DropdownMenuItem
 							className={chatConversationActionMenuItemClassName}
 							onClick={onRename}

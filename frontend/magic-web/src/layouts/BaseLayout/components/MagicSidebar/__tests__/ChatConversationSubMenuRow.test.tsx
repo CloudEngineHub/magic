@@ -34,11 +34,13 @@ function createListItem(
 
 const defaultRowProps = {
 	moreAriaLabel: "More actions",
+	pinLabel: "Pin",
 	renameLabel: "Rename",
 	saveAsLabel: "Save as project",
 	deleteLabel: "Delete",
 	onOpen: vi.fn(),
 	onMenuOpenChange: vi.fn(),
+	onPin: vi.fn(),
 	onRename: vi.fn(),
 	onSaveAsProject: vi.fn(),
 	onDelete: vi.fn(),
@@ -69,6 +71,32 @@ describe("ChatConversationSubMenuRow", () => {
 		expect(row).toHaveClass("bg-sidebar-accent")
 		expect(screen.getByText("Mock conversation alpha")).toHaveClass(
 			"text-sidebar-accent-foreground",
+		)
+	})
+
+	it("renders pin action and pinned badge when the chat is pinned", () => {
+		render(
+			<ChatConversationSubMenuRow
+				item={createListItem({ isPinned: true })}
+				{...defaultRowProps}
+				pinLabel="Unpin"
+			/>,
+		)
+
+		expect(screen.getByText("Unpin")).toBeInTheDocument()
+		expect(screen.getByTestId("project-item-pinned-tag")).toBeInTheDocument()
+	})
+
+	it("clears focus styling hooks on the more trigger button", () => {
+		render(<ChatConversationSubMenuRow item={createListItem()} {...defaultRowProps} />)
+
+		expect(screen.getByTestId("sidebar-chats-submenu-more-chat-project-alpha")).toHaveClass(
+			"focus:bg-transparent",
+			"focus:outline-none",
+			"focus:ring-0",
+			"focus-visible:outline-none",
+			"focus-visible:ring-0",
+			"active:bg-transparent",
 		)
 	})
 })

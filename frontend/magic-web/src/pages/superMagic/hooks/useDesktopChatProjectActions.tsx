@@ -14,7 +14,7 @@ const ChatSaveAsProjectModal = lazy(
 	() => import("@/pages/superMagic/pages/ChatProjectPage/components/ChatSaveAsProjectModal"),
 )
 
-export type DesktopChatProjectActionKey = "rename" | "saveAsProject" | "delete"
+export type DesktopChatProjectActionKey = "pinProject" | "rename" | "saveAsProject" | "delete"
 
 interface DesktopChatProjectAction {
 	key: DesktopChatProjectActionKey
@@ -25,6 +25,8 @@ interface DesktopChatProjectAction {
 
 interface UseDesktopChatProjectActionsOptions {
 	onProjectChanged?: () => Promise<void> | void
+	/** Lets list-style callers mirror pin state locally before the server refresh result replaces the order. */
+	onProjectPinStateChanged?: (projectId: string, isPinned: boolean) => void
 	/** Detail header needs topic sync on rename and home navigation after destructive actions. */
 	actionContext?: "list" | "detail"
 	selectedTopic?: Topic | null
@@ -35,6 +37,7 @@ interface UseDesktopChatProjectActionsOptions {
  */
 export function useDesktopChatProjectActions({
 	onProjectChanged,
+	onProjectPinStateChanged,
 	actionContext = "list",
 	selectedTopic,
 }: UseDesktopChatProjectActionsOptions = {}) {
@@ -50,6 +53,18 @@ export function useDesktopChatProjectActions({
 		setCurrentActionItem(project)
 	})
 
+	/**
+	 * Detail actions should always reflect the globally selected project, while list actions
+	 * continue using the row-scoped project that opened the menu.
+	 */
+	const resolveTargetProject = useMemoizedFn(() => {
+		if (actionContext === "detail") {
+			return projectStore.selectedProject ?? currentActionItem ?? null
+		}
+
+		return currentActionItem ?? projectStore.selectedProject ?? null
+	})
+
 	const openRenameDialog = useMemoizedFn(() => {
 		setRenameDialogOpen(true)
 	})
@@ -62,11 +77,59 @@ export function useDesktopChatProjectActions({
 		setDeleteModalOpen(true)
 	})
 
+	/**
+	 * Refresh the target workspace cache after save-as so sidebar workspace lists stay in sync
+	 * even when the destination workspace is not the currently selected one.
+	 */
+	const refreshTargetWorkspaceProjects = useMemoizedFn(async (workspaceId: string) => {
+		if (!workspaceId || workspaceId === SHARE_WORKSPACE_ID) return
+
+		await projectStore.loadProjectsForWorkspace(workspaceId, true, true)
+	})
+
+	const handlePinProject = useMemoizedFn(async () => {
+		const targetProject = resolveTargetProject()
+		if (!targetProject?.id) return
+
+		const nextPinnedState = !targetProject.is_pinned
+
+		try {
+			await SuperMagicService.project.pinProject(targetProject, nextPinnedState)
+
+			if (projectStore.selectedProject?.id === targetProject.id) {
+				projectStore.updateProject({
+					...projectStore.selectedProject,
+					is_pinned: nextPinnedState,
+				})
+			}
+			// Keep the menu's own action context in sync so reopening the detail menu
+			// immediately after pin/unpin shows the next correct label.
+			setCurrentActionItem((previousProject) => {
+				if (!previousProject || previousProject.id !== targetProject.id) {
+					return previousProject
+				}
+
+				return {
+					...previousProject,
+					is_pinned: nextPinnedState,
+				}
+			})
+
+			onProjectPinStateChanged?.(targetProject.id, nextPinnedState)
+			await onProjectChanged?.()
+			magicToast.success(t(nextPinnedState ? "chat.pinChatSuccess" : "chat.unpinChatSuccess"))
+		} catch (error) {
+			console.log("Failed to pin chat project:", error)
+			magicToast.error(t(nextPinnedState ? "chat.pinChatFailed" : "chat.unpinChatFailed"))
+		}
+	})
+
 	/** Delete the targeted chat and return home when the active conversation was removed. */
 	const handleDeleteProject = useMemoizedFn(async () => {
-		if (!currentActionItem?.id) return
+		const targetProject = resolveTargetProject()
+		if (!targetProject?.id) return
 
-		const deletedProject = currentActionItem
+		const deletedProject = targetProject
 		const isDeletingSelectedProject = projectStore.selectedProject?.id === deletedProject.id
 		const fallbackWorkspaceId = workspaceStore.workspaces.find(
 			(workspace) =>
@@ -95,9 +158,10 @@ export function useDesktopChatProjectActions({
 	/** Move chat into a workspace as a standalone project, then leave detail when needed. */
 	const handleSaveAsProject = useMemoizedFn(
 		async ({ workspaceId, projectName }: { workspaceId: string; projectName: string }) => {
-			if (!currentActionItem?.id || isSaveAsSubmitting) return
+			const targetProject = resolveTargetProject()
+			if (!targetProject?.id || isSaveAsSubmitting) return
 
-			const movedProject = currentActionItem
+			const movedProject = targetProject
 			const sourceWorkspaceId = movedProject.workspace_id
 			if (!sourceWorkspaceId) return
 
@@ -119,6 +183,7 @@ export function useDesktopChatProjectActions({
 						: sourceWorkspaceId,
 					targetProjectName: projectName,
 				})
+				await refreshTargetWorkspaceProjects(workspaceId)
 
 				if (shouldLeaveChatDetail) {
 					const targetProject = await SuperMagicService.project
@@ -149,27 +214,34 @@ export function useDesktopChatProjectActions({
 		},
 	)
 
-	const projectActions = useMemo<DesktopChatProjectAction[]>(
-		() => [
-			{
-				key: "rename",
-				label: t("chat.renameChat"),
-				onClick: openRenameDialog,
+	// Detail entry can open before currentActionItem is populated, so the action label
+	// must always derive from the latest fallback target instead of a memoized snapshot.
+	const targetProject = resolveTargetProject()
+	const projectActions: DesktopChatProjectAction[] = [
+		{
+			key: "pinProject",
+			label: targetProject?.is_pinned ? t("chat.unpinChat") : t("chat.pinChat"),
+			onClick: () => {
+				void handlePinProject()
 			},
-			{
-				key: "saveAsProject",
-				label: t("chat.saveAsProject"),
-				onClick: openSaveAsModal,
-			},
-			{
-				key: "delete",
-				label: t("chat.deleteChat"),
-				onClick: openDeleteConfirm,
-				variant: "danger",
-			},
-		],
-		[openDeleteConfirm, openRenameDialog, openSaveAsModal, t],
-	)
+		},
+		{
+			key: "rename",
+			label: t("chat.renameChat"),
+			onClick: openRenameDialog,
+		},
+		{
+			key: "saveAsProject",
+			label: t("chat.saveAsProject"),
+			onClick: openSaveAsModal,
+		},
+		{
+			key: "delete",
+			label: t("chat.deleteChat"),
+			onClick: openDeleteConfirm,
+			variant: "danger",
+		},
+	]
 
 	const projectActionMap = useMemo(
 		() => new Map(projectActions.map((action) => [action.key, action])),
