@@ -1,5 +1,13 @@
 import type { CanvasDesignDataPatch } from "@/components/CanvasDesign/types"
-import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/canvas/types"
+import {
+	ElementTypeEnum,
+	type CanvasDocument,
+	type FrameElement,
+	type GroupElement,
+	type LayerElement,
+} from "@/components/CanvasDesign/canvas/types"
+
+type ContainerLayerElement = FrameElement | GroupElement
 
 function cloneElement(element: LayerElement): LayerElement {
 	return JSON.parse(JSON.stringify(element)) as LayerElement
@@ -9,10 +17,14 @@ function cloneElements(elements: LayerElement[] | undefined): LayerElement[] {
 	return (elements ?? []).map(cloneElement)
 }
 
-function hasChildren(
-	element: LayerElement,
-): element is LayerElement & { children: LayerElement[] } {
-	return "children" in element && Array.isArray(element.children)
+function isContainerElement(element: LayerElement): element is ContainerLayerElement {
+	return element.type === ElementTypeEnum.Frame || element.type === ElementTypeEnum.Group
+}
+
+function hasChildren(element: LayerElement): element is ContainerLayerElement & {
+	children: LayerElement[]
+} {
+	return isContainerElement(element) && Array.isArray(element.children)
 }
 
 function sortByZIndexStable(elements: LayerElement[]): LayerElement[] {
@@ -91,8 +103,11 @@ function upsertElementIntoParent(
 	let inserted = false
 	const nextElements = elements.map((candidate) => {
 		if (candidate.id === parentId) {
+			if (!isContainerElement(candidate)) {
+				return candidate
+			}
 			inserted = true
-			const children = hasChildren(candidate) ? candidate.children : []
+			const children = candidate.children ?? []
 			return {
 				...candidate,
 				children: insertIntoSiblings(children, element, preferredIndex),

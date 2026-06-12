@@ -603,12 +603,15 @@ export class ImageResourceManager {
 		})
 	}
 
-	private closeUniqueResources(resources: Array<ImageResource | null>): void {
+	private closeUniqueResources(
+		resources: Array<ImageResource | null>,
+		options?: { path?: string; reason?: string },
+	): void {
 		const closed = new Set<ImageResource>()
 		resources.forEach((resource) => {
 			if (!resource || closed.has(resource)) return
 			closed.add(resource)
-			this.closeResource(resource)
+			this.closeResource(resource, options)
 		})
 	}
 

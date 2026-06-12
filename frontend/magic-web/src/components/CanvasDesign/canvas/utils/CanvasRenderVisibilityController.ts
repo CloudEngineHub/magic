@@ -99,6 +99,7 @@ export class CanvasRenderVisibilityController {
 	private hideElement(elementId: string): boolean {
 		if (this.culledElements.has(elementId)) return false
 		const element = this.canvas.elementManager.getElementInstance(elementId)
+		if (!element) return false
 		const node = element?.getNode()
 		if (!node) return false
 		const strategy = this.getEffectiveStrategy(element, node)

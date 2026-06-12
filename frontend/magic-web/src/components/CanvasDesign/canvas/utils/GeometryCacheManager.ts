@@ -146,7 +146,7 @@ export class GeometryCacheManager {
 		const allowedIds = options?.elementIds ? new Set(options.elementIds) : null
 		const estimatedCellCount = this.getCellCountForRect(queryRect)
 
-		if (this.shouldDirectScanAllowedIds(allowedIds, estimatedCellCount)) {
+		if (allowedIds && this.shouldDirectScanAllowedIds(allowedIds, estimatedCellCount)) {
 			return this.queryAllowedIdsByRect(allowedIds, queryRect)
 		}
 
@@ -261,11 +261,7 @@ export class GeometryCacheManager {
 		this.spatialIndexDirty = false
 	}
 
-	private shouldDirectScanAllowedIds(
-		allowedIds: Set<string> | null,
-		cellCount: number,
-	): allowedIds is Set<string> {
-		if (!allowedIds) return false
+	private shouldDirectScanAllowedIds(allowedIds: Set<string>, cellCount: number): boolean {
 		if (allowedIds.size === 0) return true
 		return cellCount > allowedIds.size * DIRECT_SCAN_CELL_TO_ALLOWED_RATIO
 	}
