@@ -1,6 +1,13 @@
 /* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
 const MAX_PRODUCT_IMAGES = 5
+
+const CREATION_MODE = {
+	/* 智能生成 */
+	SMART: "smart",
+	/* 灵感参考 */
+	INSPIRATION: "inspiration",
+}
 const SHOWCASE_TYPE_DEFINITIONS = [
 	{
 		value: "model",
@@ -29,18 +36,17 @@ const SHOWCASE_TYPE_DEFINITIONS = [
 function createInitialState() {
 	return {
 		productImages: [],
-		creationMode: "smart",
+		creationMode: CREATION_MODE.SMART,
 		showcaseType: "model",
 		extraPrompt: "",
 		inspirationImage: null,
-		genCount: 1,
 	}
 }
 
 function buildCreationModeOptions(t) {
 	return [
 		{
-			value: "smart",
+			value: CREATION_MODE.SMART,
 			label: t("creationMode.smart", "智能生成"),
 			description: t(
 				"creationMode.smart.desc",
@@ -48,7 +54,7 @@ function buildCreationModeOptions(t) {
 			),
 		},
 		{
-			value: "inspiration",
+			value: CREATION_MODE.INSPIRATION,
 			label: t("creationMode.inspiration", "灵感参考"),
 			description: t(
 				"creationMode.inspiration.desc",
@@ -67,7 +73,7 @@ function buildShowcaseTypeOptions(t) {
 }
 
 function getReferenceImages(state) {
-	return state.creationMode === "inspiration"
+	return state.creationMode === CREATION_MODE.INSPIRATION
 		? [...state.productImages, state.inspirationImage].filter(Boolean)
 		: [...state.productImages]
 }
@@ -85,6 +91,24 @@ function getShowcaseTypeDefinition(showcaseType) {
 		SHOWCASE_TYPE_DEFINITIONS.find((item) => item.value === showcaseType) ??
 		SHOWCASE_TYPE_DEFINITIONS[0]
 	)
+}
+
+function buildCurrentTextBlock(currentText) {
+	const normalizedCurrentText = String(currentText ?? "").trim()
+	if (!normalizedCurrentText) return "用户当前未填写。"
+	return normalizedCurrentText
+}
+
+function buildExtraPromptCompletionUserPrompt({ imageCount, showcaseType, currentText }) {
+	const showcaseDefinition = getShowcaseTypeDefinition(showcaseType)
+	return [
+		"任务目标：为一键种草图插件的“额外描述”输入框生成或补全一段提示词。",
+		`当前输入：${buildCurrentTextBlock(currentText)}`,
+		`参考图角色：共有 ${imageCount} 张商品图，用于理解商品品类、材质、颜色、结构、细节和适用场景。`,
+		`当前展示类型：${showcaseDefinition.labelFallback}。`,
+		"补全方向：可补充模特特征、场景空间、光线、构图、镜头语言、风格调性、色彩氛围和社媒种草感。",
+		"业务限制：不要改变商品本身颜色、材质、结构、logo、图案、比例和核心功能；不要输出完整生成任务说明，只输出适合填入“额外描述”的短提示词。",
+	].join("\n")
 }
 
 function buildInspirationImageRequest({ state, helpers, locale }) {
@@ -106,7 +130,7 @@ function buildInspirationImageRequest({ state, helpers, locale }) {
 }
 
 function buildInspirationImagePrompt({ state, locale }) {
-	return state.creationMode === "inspiration"
+	return state.creationMode === CREATION_MODE.INSPIRATION
 		? buildReferenceInspirationPrompt({ state, locale })
 		: buildSmartInspirationPrompt({ state, locale })
 }
@@ -232,58 +256,86 @@ registerMagicCanvasPlugin({
 				},
 				{
 					id: "creationMode",
-					kind: "option-group",
+					kind: "tabs",
 					stateKey: "creationMode",
 					title: t("section.creationMode", "创作模式"),
-					groupClassName: "ocp-dual-option-group",
-					showDescriptionOnHover: true,
 					options: buildCreationModeOptions(t),
-				},
-				{
-					id: "showcaseType",
-					kind: "option-group",
-					stateKey: "showcaseType",
-					deps: ["creationMode"],
-					title: t("section.showcaseType", "展示图选择"),
-					groupClassName: "ocp-dual-option-group",
-					showDescriptionOnHover: true,
-					options: buildShowcaseTypeOptions(t),
-					when: ({ state }) => state.creationMode === "smart",
-				},
-				{
-					id: "extraPrompt",
-					kind: "textarea",
-					stateKey: "extraPrompt",
-					deps: ["creationMode"],
-					title: t("section.extraPrompt", "额外描述"),
-					placeholder: t(
-						"placeholder.extraPrompt",
-						"模特： 年轻女性，长发，自然站姿\n场景： 城市街头，晴天\n风格： 休闲通勤，简约时尚\n色调： 美拉德色系",
-					),
-					rows: 4,
-					maxLength: 2000,
-					when: ({ state }) => state.creationMode === "smart",
-				},
-				{
-					id: "inspirationImage",
-					kind: "image-slot",
-					stateKey: "inspirationImage",
-					deps: ["creationMode", "productImages", "modelId", "modelOptions"],
-					title: t("section.inspirationImage", "参考种草图"),
-					required: true,
-					uploadLabel: t("upload.inspirationImage", "点击上传参考种草图"),
-					alt: t("section.inspirationImage", "参考种草图"),
-					help: t(
-						"upload.inspirationImage.help",
-						"上传 1 张你喜欢的种草图作为灵感参考，AI 会借鉴其氛围、构图与镜头表达，但不会直接照搬其中的商品主体。",
-					),
-					when: ({ state }) => state.creationMode === "inspiration",
-					beforePick: ({ state, helpers }) => {
-						if (countReferenceImages(state) >= getMaxReferenceImages(state, helpers)) {
-							return t("error.referenceLimit", "参考图数量已达当前模型上限")
-						}
-						return null
-					},
+					panels: [
+						{
+							value: CREATION_MODE.SMART,
+							sections: [
+								{
+									id: "showcaseType",
+									kind: "option-group",
+									stateKey: "showcaseType",
+									title: t("section.showcaseType", "展示图选择"),
+									groupClassName: "ocp-dual-option-group",
+									showDescriptionOnHover: true,
+									options: buildShowcaseTypeOptions(t),
+								},
+								{
+									id: "extraPrompt",
+									kind: "textarea",
+									stateKey: "extraPrompt",
+									title: t("section.extraPrompt", "额外描述"),
+									placeholder: t(
+										"placeholder.extraPrompt",
+										"模特： 年轻女性，长发，自然站姿\n场景： 城市街头，晴天\n风格： 休闲通勤，简约时尚\n色调： 美拉德色系",
+									),
+									rows: 5,
+									aiGenerate: {
+										label: t("button.aiPlaceholder", "AI 生成"),
+										loadingLabel: t("button.generating", "生成中…"),
+										disabled: ({ state }) => !state.productImages?.length,
+										completeImagePrompt: {
+											referenceImages: ({ state }) => state.productImages,
+											referencesMessage: t(
+												"error.extraReferences",
+												"请先上传商品图",
+											),
+											userPrompt: ({ state }) =>
+												buildExtraPromptCompletionUserPrompt({
+													imageCount: state.productImages.length,
+													showcaseType: state.showcaseType,
+													currentText: state.extraPrompt,
+												}),
+										},
+									},
+								},
+							],
+						},
+						{
+							value: CREATION_MODE.INSPIRATION,
+							sections: [
+								{
+									id: "inspirationImage",
+									kind: "image-slot",
+									stateKey: "inspirationImage",
+									deps: ["productImages", "modelId", "modelOptions"],
+									title: t("section.inspirationImage", "参考种草图"),
+									required: true,
+									uploadLabel: t("upload.inspirationImage", "点击上传参考种草图"),
+									alt: t("section.inspirationImage", "参考种草图"),
+									help: t(
+										"upload.inspirationImage.help",
+										"上传 1 张你喜欢的种草图作为灵感参考，AI 会借鉴其氛围、构图与镜头表达，但不会直接照搬其中的商品主体。",
+									),
+									beforePick: ({ state, helpers }) => {
+										if (
+											countReferenceImages(state) >=
+											getMaxReferenceImages(state, helpers)
+										) {
+											return t(
+												"error.referenceLimit",
+												"参考图数量已达当前模型上限",
+											)
+										}
+										return null
+									},
+								},
+							],
+						},
+					],
 				},
 				{
 					id: "modelSelect",
@@ -294,13 +346,11 @@ registerMagicCanvasPlugin({
 					id: "canvasSize",
 					kind: "size-control",
 					title: t("section.canvasSize", "宽高比"),
-					deps: ["modelId", "modelOptions", "scale"],
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
 					title: t("section.resolution", "尺寸倍数"),
-					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "count",
@@ -313,11 +363,20 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成一键种草图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.productImages.length) {
+						return t("empty.productImages", "请先上传商品图")
+					}
+					if (
+						state.creationMode === CREATION_MODE.INSPIRATION &&
+						!state.inspirationImage
+					) {
+						return t("error.inspirationRequired", "请上传参考种草图")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) =>
 					!state.productImages.length ||
-					(state.creationMode === "inspiration" && !state.inspirationImage),
+					(state.creationMode === CREATION_MODE.INSPIRATION && !state.inspirationImage),
 				validate: ({ state, helpers }) => {
 					const referenceImages = getReferenceImages(state)
 					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
@@ -335,10 +394,8 @@ registerMagicCanvasPlugin({
 					}
 					return null
 				},
-				execute: async ({ state, helpers, generateAndPlace }) =>
-					generateAndPlace(
-						buildInspirationImageRequest({ state, helpers, locale: promptLocale }),
-					),
+				buildRequest: ({ state, helpers }) =>
+					buildInspirationImageRequest({ state, helpers, locale: promptLocale }),
 				onSuccess: ({ ctx }) => {
 					ctx.ui.toast(t("toast.success", "一键种草图生成成功！"), "success")
 					ctx.ui.close?.()
