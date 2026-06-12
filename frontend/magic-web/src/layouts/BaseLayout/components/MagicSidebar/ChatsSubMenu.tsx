@@ -5,7 +5,6 @@ import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { Loader2, MessageCirclePlus, RefreshCw, Search } from "lucide-react"
 import { MagicDropdown } from "@/components/base"
-import { sidebarStore } from "@/stores/layout"
 import SuperMagicService from "@/pages/superMagic/services"
 import { roleStore } from "@/pages/superMagic/stores"
 import projectStore from "@/pages/superMagic/stores/core/project"
@@ -130,7 +129,6 @@ function ChatsSubMenu({ children, visible = true }: ChatsSubMenuProps) {
 	/** Open a chat detail route using the shared chat project switcher. */
 	const handleOpenConversation = useMemoizedFn(async (item: ChatConversationListItem) => {
 		setOpen(false)
-		sidebarStore.collapseIfNarrow()
 		const resolvedChatWorkspace = chatWorkspace ?? (await ensureChatWorkspace())
 		await SuperMagicService.switchChatProject(item.project, null, {
 			chatWorkspace: resolvedChatWorkspace,
@@ -155,7 +153,6 @@ function ChatsSubMenu({ children, visible = true }: ChatsSubMenuProps) {
 			}
 
 			setOpen(false)
-			sidebarStore.collapseIfNarrow()
 			await reload({ silent: true })
 			const resolvedChatWorkspace = chatWorkspace ?? (await ensureChatWorkspace())
 			await SuperMagicService.switchChatProject(

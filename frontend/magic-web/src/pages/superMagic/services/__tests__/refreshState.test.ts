@@ -17,6 +17,7 @@ const {
 	workspaceServiceMock: {
 		getWorkspaceDetail: vi.fn(),
 		fetchWorkspaces: vi.fn(),
+		createWorkspace: vi.fn(),
 	},
 	topicServiceMock: {
 		fetchTopics: vi.fn(),
@@ -150,6 +151,10 @@ describe("SuperMagicService.refreshState", () => {
 			id: "workspace-alpha",
 			workspace_type: "default",
 		})
+		workspaceServiceMock.createWorkspace.mockResolvedValue({
+			id: "workspace-created",
+			workspace_type: "default",
+		})
 	})
 
 	it("continues restoring workspace state when route only provides workspaceId", async () => {
@@ -194,5 +199,29 @@ describe("SuperMagicService.refreshState", () => {
 			"workspace-home",
 			false,
 		)
+	})
+
+	it("falls back to the first normal workspace when lastUsedWorkspaceId is a chat workspace", async () => {
+		const homeWorkspace = {
+			id: "workspace-home",
+			workspace_type: "default",
+		} as Workspace
+		workspaceStoreMock.selectedWorkspace = {
+			id: "workspace-chat",
+			workspace_type: "chat",
+		} as Workspace
+		workspaceStoreMock.workspaces = [
+			homeWorkspace,
+			{ id: "workspace-chat", workspace_type: "chat" } as Workspace,
+		]
+
+		await SuperMagicService.navigateToHome("workspace-chat")
+
+		expect(workspaceStoreMock.setSelectedWorkspace).toHaveBeenCalledWith(homeWorkspace)
+		expect(routeManageServiceMock.navigateToWorkspace).toHaveBeenCalledWith(
+			"workspace-home",
+			false,
+		)
+		expect(workspaceServiceMock.createWorkspace).not.toHaveBeenCalled()
 	})
 })

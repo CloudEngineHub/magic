@@ -882,12 +882,14 @@ class SuperMagicService {
 					workspace.id !== SHARE_WORKSPACE_ID && workspace.workspace_type !== "chat",
 			)
 
-			// 如果传入了最后一个使用的工作区ID，则使用最后一个使用的工作区ID
-			const targetWorkspace =
-				// 如果传入了最后一个使用的工作区ID，且不是共享工作区，则使用最后一个使用的工作区ID
+			// Chat route writes the chat workspace id into the cache, so "last used"
+			// may not belong to the normal home workspace list. In that case we must
+			// fall back to the first normal workspace instead of creating a new one.
+			const lastUsedHomeWorkspace =
 				lastUsedWorkspaceId && lastUsedWorkspaceId !== SHARE_WORKSPACE_ID
 					? homeWorkspaces.find((ws) => ws.id === lastUsedWorkspaceId)
-					: homeWorkspaces?.[0]
+					: null
+			const targetWorkspace = lastUsedHomeWorkspace || homeWorkspaces?.[0]
 
 			if (targetWorkspace) {
 				workspaceId = targetWorkspace.id
