@@ -82,12 +82,7 @@ function getStyleLabel(style) {
 	)
 }
 
-function buildExtraPromptCompletionUserPrompt({
-	garmentCount,
-	hasModelImage,
-	style,
-	currentText,
-}) {
+function buildExtraPromptCompletionUserPrompt({ garmentCount, hasModelImage, style, currentText }) {
 	return [
 		"任务目标：为万物上身插件的“额外描述”输入框生成或补全一段提示词。",
 		`当前输入：${buildCurrentTextBlock(currentText)}`,
