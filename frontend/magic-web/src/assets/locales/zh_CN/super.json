@@ -2830,6 +2830,81 @@
 			"recentlyUsed": "最近使用",
 			"refreshRecentlyUsed": "刷新最近使用",
 			"upgrade": "升级"
+		},
+		"recordingEntry": {
+			"placeholder": "录音与纪要功能即将上线",
+			"fabComingSoon": "录音功能即将上线",
+			"fabAria": "开始录音",
+			"importComingSoon": "导入功能即将上线",
+			"filterSheet": {
+				"title": "筛选",
+				"closeAria": "关闭筛选",
+				"resetAria": "重置筛选",
+				"dateRange": {
+					"label": "时间范围",
+					"all": "全部时间",
+					"today": "今天",
+					"week": "近 7 天",
+					"month": "近 30 天"
+				}
+			},
+			"moreSheet": {
+				"untitled": "未命名录音",
+				"closeAria": "关闭",
+				"backAria": "返回",
+				"confirmAria": "确认",
+				"rename": "重命名",
+				"renameLabel": "录音名称",
+				"renamePlaceholder": "输入新名称",
+				"moveToGroup": "移动到分组",
+				"generateSummary": "生成总结",
+				"regenerateSummary": "重新生成总结",
+				"share": "分享",
+				"delete": "删除",
+				"deleteTitle": "删除录音",
+				"deleteConfirm": "确定删除「{{name}}」？此操作不可撤销。",
+				"comingSoon": "功能即将上线"
+			},
+			"summarySheet": {
+				"title": "总结状态",
+				"closeAria": "关闭"
+			},
+			"importSheet": {
+				"title": "导入音频",
+				"closeAria": "关闭",
+				"fromFiles": "从文件导入",
+				"fromFilesSub": "从本机文件中选择音频"
+			},
+			"toolbar": {
+				"uploadAria": "上传音频",
+				"filterAria": "筛选",
+				"searchAria": "搜索",
+				"clearSearchAria": "退出搜索"
+			},
+			"settings": {
+				"title": "录音设置",
+				"closeAria": "关闭",
+				"backAria": "返回",
+				"settingsAria": "录音设置",
+				"saveFailed": "保存设置失败，请稍后重试",
+				"sections": {
+					"transcription": "转写",
+					"summary": "总结"
+				},
+				"transcriptionEnabled": {
+					"label": "自动转写",
+					"description": "录制开始时自动启用转写"
+				},
+				"autoSummaryEnabled": {
+					"label": "自动总结",
+					"description": "转写完成后自动生成总结"
+				},
+				"model": {
+					"label": "AI 模型",
+					"description": "用于生成总结的 AI 模型",
+					"title": "AI 模型"
+				}
+			}
 		}
 	},
 	"modeToggle": {

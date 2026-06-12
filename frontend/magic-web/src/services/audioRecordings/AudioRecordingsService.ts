@@ -14,6 +14,8 @@ import { normalizeAudioProjectList } from "@/pages/superMagic/pages/AudioRecordi
 import { resolveAutoSummaryModelId } from "@/pages/superMagic/pages/AudioRecordings/utils/resolve-auto-summary-model-id"
 import { resolveSummaryModelId } from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
 
+const DEFAULT_AUDIO_SETTING_TOPIC_ID = "default_audio"
+
 export interface PagedAudioProjects {
 	list: AudioProjectListItem[]
 	page: number
@@ -68,9 +70,24 @@ export class AudioRecordingsService {
 		await SuperMagicApi.batchDeleteProjects({ project_ids: projectIds })
 	}
 
-	/** Resolves model_id from list item extra first, else auto model from summary mode API */
+	/** Reads App-compatible recording settings so H5 manual summary honors the recording setting page */
+	private async resolveRecordingSettingModelId(): Promise<string | undefined> {
+		try {
+			const setting = await SuperMagicApi.getSuperMagicTopicModel({
+				topic_id: DEFAULT_AUDIO_SETTING_TOPIC_ID,
+			})
+			return setting.extra?.model?.model_id || setting.model?.model_id || undefined
+		} catch {
+			return undefined
+		}
+	}
+
+	/** Resolves model_id from list item first, then default_audio settings, else auto model */
 	async resolveModelIdForSubmit(itemModelId?: string): Promise<string | undefined> {
 		if (itemModelId) return itemModelId
+
+		const recordingSettingModelId = await this.resolveRecordingSettingModelId()
+		if (recordingSettingModelId) return recordingSettingModelId
 
 		const autoModelId = await resolveAutoSummaryModelId()
 		return resolveSummaryModelId(undefined, autoModelId)

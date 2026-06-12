@@ -2060,9 +2060,14 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 */
 	getSuperMagicTopicModel({ topic_id }: { topic_id: string }) {
 		return fetch.get<{
-			model: Partial<ModelItem>
+			model?: Partial<ModelItem>
 			image_model?: Partial<ModelItem>
 			video_model?: Partial<ModelItem>
+			extra?: {
+				transcription_enabled?: boolean
+				auto_summary_enabled?: boolean
+				model?: Partial<ModelItem>
+			}
 		}>(`/api/v1/contact/users/setting/super-magic/topic-model/${topic_id}`, {
 			enableRequestUnion: true,
 		})
@@ -2079,11 +2084,17 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		model_id,
 		image_model_id,
 		video_model_id,
+		extra,
 	}: {
 		cache_id: string
 		model_id?: string
 		image_model_id?: string
 		video_model_id?: string
+		extra?: {
+			transcription_enabled?: boolean
+			auto_summary_enabled?: boolean
+			model?: Partial<ModelItem>
+		}
 	}) {
 		return fetch.put(
 			`/api/v1/contact/users/setting/super-magic/topic-model/${cache_id}`,
@@ -2103,6 +2114,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 						model_id: video_model_id,
 					},
 				}),
+				...(extra && { extra }),
 			},
 			{
 				enableRequestUnion: true,

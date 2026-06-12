@@ -14,6 +14,7 @@ vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		queryAudioProjects: vi.fn(),
 		getRecordingSummaryResult: vi.fn(),
+		getSuperMagicTopicModel: vi.fn(),
 		summarizeRecordedTask: vi.fn(),
 		batchTaskProgress: vi.fn(),
 		editProject: vi.fn(),
@@ -286,11 +287,11 @@ describe("AudioRecordingsStore", () => {
 		const store = new AudioRecordingsStore()
 		const item: AudioProjectListItem = {
 			id: "project-2",
-			project_name: "Recorded demo",
+			project_name: "Mock recorded entry",
 			created_at: 1780657155,
 			duration: 120,
 			tags: [],
-			device_id: "device",
+			device_id: "mock-device",
 			audio_source: "recorded",
 			current_phase: "merging",
 			phase_status: "completed",
@@ -301,6 +302,7 @@ describe("AudioRecordingsStore", () => {
 		}
 
 		store.list = [item]
+		vi.mocked(SuperMagicApi.getSuperMagicTopicModel).mockResolvedValue({})
 		vi.mocked(resolveAutoSummaryModelId).mockResolvedValue("auto-model-from-api")
 		vi.mocked(SuperMagicApi.summarizeRecordedTask).mockResolvedValue({
 			success: true,
@@ -314,6 +316,49 @@ describe("AudioRecordingsStore", () => {
 			task_key: "session-Android-2",
 			topic_id: "topic-2",
 			model_id: "auto-model-from-api",
+		})
+	})
+
+	it("uses default_audio recording setting model before API auto model", async () => {
+		const store = new AudioRecordingsStore()
+		const item: AudioProjectListItem = {
+			id: "mock-project-recording-setting",
+			project_name: "Mock recording setting entry",
+			created_at: 1780657155,
+			duration: 120,
+			tags: [],
+			device_id: "mock-device",
+			audio_source: "recorded",
+			current_phase: "merging",
+			phase_status: "completed",
+			card_status: "not_summarized",
+			is_summarized: false,
+			task_key: "mock-session-recording-setting",
+			topic_id: "mock-topic-recording-setting",
+		}
+
+		store.list = [item]
+		vi.mocked(SuperMagicApi.getSuperMagicTopicModel).mockResolvedValue({
+			model: { model_id: "mock-top-level-model" },
+			extra: {
+				model: { model_id: "mock-default-audio-model" },
+			},
+		})
+		vi.mocked(SuperMagicApi.summarizeRecordedTask).mockResolvedValue({
+			success: true,
+			task_key: "mock-session-recording-setting",
+		})
+
+		await store.submitSummary(item)
+
+		expect(SuperMagicApi.getSuperMagicTopicModel).toHaveBeenCalledWith({
+			topic_id: "default_audio",
+		})
+		expect(resolveAutoSummaryModelId).not.toHaveBeenCalled()
+		expect(SuperMagicApi.summarizeRecordedTask).toHaveBeenCalledWith({
+			task_key: "mock-session-recording-setting",
+			topic_id: "mock-topic-recording-setting",
+			model_id: "mock-default-audio-model",
 		})
 	})
 

@@ -244,14 +244,6 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 		splitPersistentMobileShellRoutes([
 			...superMagicCrewRoutes,
 			{
-				name: RouteName.AudioRecordings,
-				path: `/:clusterCode${RoutePath.AudioRecordings}`,
-				element: <AudioRecordingsPage />,
-				meta: {
-					title: "routes.audioRecordings",
-				},
-			},
-			{
 				name: RouteName.AudioRecordingDetail,
 				path: `/:clusterCode${RoutePath.AudioRecordingDetail}`,
 				element: <AudioRecordingDetailPage />,
@@ -404,6 +396,14 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						element: <ChatsPage />,
 						meta: {
 							title: "routes.superChats",
+						},
+					},
+					{
+						name: RouteName.AudioRecordings,
+						path: `/:clusterCode${RoutePath.AudioRecordings}`,
+						element: <AudioRecordingsPage />,
+						meta: {
+							title: "routes.audioRecordings",
 						},
 					},
 					{

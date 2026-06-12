@@ -2830,6 +2830,81 @@
 			"recentlyUsed": "Recently used",
 			"refreshRecentlyUsed": "Refresh recently used",
 			"upgrade": "Upgrade"
+		},
+		"recordingEntry": {
+			"placeholder": "Recordings & summaries coming soon",
+			"fabComingSoon": "Recording is coming soon",
+			"fabAria": "Start recording",
+			"importComingSoon": "Import is coming soon",
+			"filterSheet": {
+				"title": "Filter",
+				"closeAria": "Close filter",
+				"resetAria": "Reset filters",
+				"dateRange": {
+					"label": "Date range",
+					"all": "All time",
+					"today": "Today",
+					"week": "Last 7 days",
+					"month": "Last 30 days"
+				}
+			},
+			"moreSheet": {
+				"untitled": "Untitled recording",
+				"closeAria": "Close",
+				"backAria": "Back",
+				"confirmAria": "Confirm",
+				"rename": "Rename",
+				"renameLabel": "Recording name",
+				"renamePlaceholder": "Enter a new name",
+				"moveToGroup": "Move to group",
+				"generateSummary": "Generate summary",
+				"regenerateSummary": "Regenerate summary",
+				"share": "Share",
+				"delete": "Delete",
+				"deleteTitle": "Delete recording",
+				"deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
+				"comingSoon": "Coming soon"
+			},
+			"summarySheet": {
+				"title": "Summary status",
+				"closeAria": "Close"
+			},
+			"importSheet": {
+				"title": "Import Audio",
+				"closeAria": "Close",
+				"fromFiles": "Import from Files",
+				"fromFilesSub": "Choose an audio file from local storage"
+			},
+			"toolbar": {
+				"uploadAria": "Upload audio",
+				"filterAria": "Filter",
+				"searchAria": "Search",
+				"clearSearchAria": "Exit search"
+			},
+			"settings": {
+				"title": "Recording Settings",
+				"closeAria": "Close",
+				"backAria": "Back",
+				"settingsAria": "Recording settings",
+				"saveFailed": "Failed to save settings. Please try again.",
+				"sections": {
+					"transcription": "Transcription",
+					"summary": "Summary"
+				},
+				"transcriptionEnabled": {
+					"label": "Auto Transcribe",
+					"description": "Automatically start transcription when recording begins"
+				},
+				"autoSummaryEnabled": {
+					"label": "Auto Summarize",
+					"description": "Automatically generate a summary after transcription"
+				},
+				"model": {
+					"label": "AI Model",
+					"description": "AI model used to generate summaries",
+					"title": "AI Model"
+				}
+			}
 		}
 	},
 	"modeToggle": {
