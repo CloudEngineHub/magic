@@ -1591,9 +1591,7 @@
 				state[section.stateKey] = nextValue
 				setTextareaCountText(count, nextValue, maxLength, hasMaxLength)
 				clearButton.hidden = nextValue.length === 0
-				if (isSectionCurrentlyRequired(section)) {
-					updateGenerateButtonState()
-				}
+				updateGenerateButtonState()
 				updateHeight()
 			})
 
