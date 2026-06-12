@@ -38,7 +38,7 @@ describe("BaseLabelManager candidate cache", () => {
 		vi.restoreAllMocks()
 	})
 
-	it("reuses label candidate ids on viewport scale instead of scanning all elements again", () => {
+	it("shares label candidate ids across managers and reuses them on viewport scale", () => {
 		const requestAnimationFrameSpy = vi
 			.spyOn(globalThis, "requestAnimationFrame")
 			.mockImplementation((callback: FrameRequestCallback) => {
@@ -62,42 +62,58 @@ describe("BaseLabelManager candidate cache", () => {
 		])
 		const getAllElementIds = vi.fn(() => Array.from(elements.keys()))
 		const queryElementIdsByExpandedRect = vi.fn(() => [])
-		const manager = new TestLabelManager({
-			canvas: {
-				cropManager: { getCroppingElementId: () => null },
-				elementManager: {
-					getAllElementIds,
-					getElementInstance: (elementId: string) => elements.get(elementId),
-				},
-				eraserManager: { getErasingElementId: () => null },
-				eventEmitter,
-				extendManager: { getExtendingElementId: () => null },
-				geometryCacheManager: { queryElementIdsByExpandedRect },
-				hoverManager: { getHoveredElementId: () => null },
-				overlayLayer: { add: vi.fn(), destroy: vi.fn() },
-				runtimeScheduler: { requestLayerDraw: vi.fn() },
-				selectionManager: { isSelected: () => false },
-				stage: {
-					getAbsoluteTransform: () => ({
-						copy: () => ({
-							invert: () => ({
-								point: (point: { x: number; y: number }) => point,
-							}),
+		const canvas = {
+			cropManager: { getCroppingElementId: () => null },
+			elementManager: {
+				getAllElementIds,
+				getElementInstance: (elementId: string) => elements.get(elementId),
+			},
+			eraserManager: { getErasingElementId: () => null },
+			eventEmitter,
+			extendManager: { getExtendingElementId: () => null },
+			geometryCacheManager: { queryElementIdsByExpandedRect },
+			hoverManager: { getHoveredElementId: () => null },
+			overlayLayer: { add: vi.fn(), destroy: vi.fn() },
+			runtimeScheduler: { requestLayerDraw: vi.fn() },
+			selectionManager: { isSelected: () => false },
+			stage: {
+				getAbsoluteTransform: () => ({
+					copy: () => ({
+						invert: () => ({
+							point: (point: { x: number; y: number }) => point,
 						}),
 					}),
-					height: () => 600,
-					scaleX: () => 1,
-					width: () => 800,
-				},
-				viewportController: {
-					getResolvedDefaultViewportPadding: () => ({
-						bottom: 0,
-						left: 0,
-						right: 0,
-						top: 0,
-					}),
-				},
-			} as never,
+				}),
+				height: () => 600,
+				scaleX: () => 1,
+				width: () => 800,
+			},
+			viewportController: {
+				getResolvedDefaultViewportPadding: () => ({
+					bottom: 0,
+					left: 0,
+					right: 0,
+					top: 0,
+				}),
+			},
+		} as never
+		const firstManager = new TestLabelManager({
+			canvas,
+			labelConfig: {
+				fontFamily: "Arial",
+				fontSize: 12,
+				offsetLeft: 0,
+				offsetTop: 0,
+				textColor: "#000",
+			},
+			visibilityConfig: {
+				alwaysVisibleTypes: new Set([ElementTypeEnum.Frame]),
+				elementTypes: new Set([ElementTypeEnum.Frame]),
+				hoverOrSelectTypes: new Set(),
+			},
+		})
+		const secondManager = new TestLabelManager({
+			canvas,
 			labelConfig: {
 				fontFamily: "Arial",
 				fontSize: 12,
@@ -112,10 +128,11 @@ describe("BaseLabelManager candidate cache", () => {
 			},
 		})
 
-		manager.initializeAllLabels()
+		firstManager.initializeAllLabels()
+		secondManager.initializeAllLabels()
 		eventEmitter.emit("viewport:scale")
 
-		expect(requestAnimationFrameSpy).toHaveBeenCalledTimes(1)
+		expect(requestAnimationFrameSpy).toHaveBeenCalledTimes(2)
 		expect(getAllElementIds).toHaveBeenCalledTimes(1)
 		expect(queryElementIdsByExpandedRect).toHaveBeenLastCalledWith(
 			expect.any(Object),
@@ -123,6 +140,7 @@ describe("BaseLabelManager candidate cache", () => {
 			{ elementIds: ["frame-1"] },
 		)
 
-		manager.destroy()
+		firstManager.destroy()
+		secondManager.destroy()
 	})
 })

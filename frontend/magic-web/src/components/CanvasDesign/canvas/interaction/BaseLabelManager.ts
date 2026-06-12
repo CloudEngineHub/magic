@@ -43,6 +43,83 @@ export interface BaseLabelManagerConfig {
 	visibilityConfig: LabelVisibilityConfig
 }
 
+class LabelCandidateIndex {
+	private typeBuckets = new Map<string, Set<string>>()
+	private queryCache = new Map<string, string[]>()
+	private dirty = true
+
+	constructor(private readonly canvas: Canvas) {}
+
+	public markDirty(): void {
+		this.dirty = true
+		this.queryCache.clear()
+	}
+
+	public syncElement(elementId: string): void {
+		if (this.dirty) return
+		this.removeElement(elementId)
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		const elementType = element?.getData().type
+		if (!elementType) return
+		let bucket = this.typeBuckets.get(elementType)
+		if (!bucket) {
+			bucket = new Set()
+			this.typeBuckets.set(elementType, bucket)
+		}
+		bucket.add(elementId)
+		this.queryCache.clear()
+	}
+
+	public removeElement(elementId: string): void {
+		let removed = false
+		for (const bucket of this.typeBuckets.values()) {
+			removed = bucket.delete(elementId) || removed
+		}
+		if (removed) {
+			this.queryCache.clear()
+		}
+	}
+
+	public getCandidateIds(elementTypes: Set<string>): string[] {
+		this.rebuildIfNeeded()
+		const cacheKey = this.getElementTypesCacheKey(elementTypes)
+		const cached = this.queryCache.get(cacheKey)
+		if (cached) return cached
+
+		const result: string[] = []
+		for (const elementType of elementTypes) {
+			const bucket = this.typeBuckets.get(elementType)
+			if (bucket) {
+				result.push(...bucket)
+			}
+		}
+		this.queryCache.set(cacheKey, result)
+		return result
+	}
+
+	private rebuildIfNeeded(): void {
+		if (!this.dirty) return
+		this.typeBuckets.clear()
+		this.queryCache.clear()
+		for (const elementId of this.canvas.elementManager.getAllElementIds()) {
+			const element = this.canvas.elementManager.getElementInstance(elementId)
+			const elementType = element?.getData().type
+			if (!elementType) continue
+			let bucket = this.typeBuckets.get(elementType)
+			if (!bucket) {
+				bucket = new Set()
+				this.typeBuckets.set(elementType, bucket)
+			}
+			bucket.add(elementId)
+		}
+		this.dirty = false
+	}
+
+	private getElementTypesCacheKey(elementTypes: Set<string>): string {
+		return Array.from(elementTypes).sort().join("|")
+	}
+}
+
 /**
  * 基础标签管理器抽象类
  * 职责：
@@ -62,22 +139,32 @@ export abstract class BaseLabelManager {
 	// 追踪上一次 hover 的元素 ID
 	protected lastHoveredElementId: string | null = null
 	private visibleLabelSyncRafId: number | null = null
-	private labelCandidateElementIds = new Set<string>()
-	private labelCandidateElementIdsDirty = true
+	private labelCandidateIndex: LabelCandidateIndex
 
 	// 静态注册表，用于不同 LabelManager 之间的协调
 	protected static labelManagers: BaseLabelManager[] = []
+	private static candidateIndexes = new WeakMap<Canvas, LabelCandidateIndex>()
 
 	constructor(options: BaseLabelManagerConfig) {
 		const { canvas } = options
 		this.canvas = canvas
 		this.labelConfig = options.labelConfig
 		this.visibilityConfig = options.visibilityConfig
+		this.labelCandidateIndex = BaseLabelManager.getCandidateIndex(canvas)
 
 		// 注册到静态列表
 		BaseLabelManager.labelManagers.push(this)
 
 		this.setupEventListeners()
+	}
+
+	private static getCandidateIndex(canvas: Canvas): LabelCandidateIndex {
+		let index = BaseLabelManager.candidateIndexes.get(canvas)
+		if (!index) {
+			index = new LabelCandidateIndex(canvas)
+			BaseLabelManager.candidateIndexes.set(canvas, index)
+		}
+		return index
 	}
 
 	private requestOverlayDraw(reason: string): void {
@@ -115,32 +202,11 @@ export abstract class BaseLabelManager {
 	}
 
 	private markLabelCandidatesDirty(): void {
-		this.labelCandidateElementIdsDirty = true
+		this.labelCandidateIndex.markDirty()
 	}
 
 	private syncLabelCandidateForElement(elementId: string): void {
-		if (this.labelCandidateElementIdsDirty) return
-		if (this.isLabelCandidateElement(elementId)) {
-			this.labelCandidateElementIds.add(elementId)
-			return
-		}
-		this.labelCandidateElementIds.delete(elementId)
-	}
-
-	private isLabelCandidateElement(elementId: string): boolean {
-		const element = this.canvas.elementManager.getElementInstance(elementId)
-		const elementType = element?.getData().type
-		return !!elementType && this.visibilityConfig.elementTypes.has(elementType)
-	}
-
-	private rebuildLabelCandidateElementIds(): void {
-		this.labelCandidateElementIds.clear()
-		for (const elementId of this.canvas.elementManager.getAllElementIds()) {
-			if (this.isLabelCandidateElement(elementId)) {
-				this.labelCandidateElementIds.add(elementId)
-			}
-		}
-		this.labelCandidateElementIdsDirty = false
+		this.labelCandidateIndex.syncElement(elementId)
 	}
 
 	/**
@@ -169,7 +235,7 @@ export abstract class BaseLabelManager {
 
 		// 监听元素删除
 		this.canvas.eventEmitter.on("element:deleted", (event) => {
-			this.labelCandidateElementIds.delete(event.data.elementId)
+			this.labelCandidateIndex.removeElement(event.data.elementId)
 			this.removeLabel(event.data.elementId)
 		})
 
@@ -711,10 +777,7 @@ export abstract class BaseLabelManager {
 	}
 
 	private getLabelCandidateElementIds(): string[] {
-		if (this.labelCandidateElementIdsDirty) {
-			this.rebuildLabelCandidateElementIds()
-		}
-		return Array.from(this.labelCandidateElementIds)
+		return this.labelCandidateIndex.getCandidateIds(this.visibilityConfig.elementTypes)
 	}
 
 	private syncVisibleLabels(reason: string): void {
@@ -855,8 +918,6 @@ export abstract class BaseLabelManager {
 			labelGroup.destroy()
 		}
 		this.labelMap.clear()
-		this.labelCandidateElementIds.clear()
-		this.labelCandidateElementIdsDirty = true
 
 		// 清理追踪的 hover 元素
 		this.lastHoveredElementId = null
