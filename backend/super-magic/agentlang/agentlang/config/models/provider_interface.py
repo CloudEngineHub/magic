@@ -53,6 +53,9 @@ class ModelProvider(ABC):
         """从数据源加载模型配置列表
 
         Returns:
-            List[ModelConfig]: 该服务商提供的所有模型配置，加载失败时返回空列表
+            List[ModelConfig]: 该服务商提供的所有模型配置；加载成功但没有可用模型时返回空列表
+
+        Raises:
+            Exception: 数据源不可用或响应格式错误时抛出异常，由 ModelConfigManager 统一记录并跳过标记已加载
         """
         ...

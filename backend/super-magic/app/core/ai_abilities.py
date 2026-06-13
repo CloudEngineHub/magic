@@ -88,9 +88,8 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
 
     # Compact Ability (v1.2)
     # 上下文压缩专属模型，不配置（或配置为空）时使用主 Agent 模型
-    # 默认配置为 qwen3.5-plus；若模型配置不可用，运行时仍会回退到主 Agent 模型
     AIAbility.COMPACT: {
-        "model_id": "qwen3.5-plus",
+        "model_id": None,
         "enabled": True,
         # TODO: compact 当前未消费 enabled 开关，后续可接入统一的能力启停控制
     },
@@ -256,7 +255,7 @@ def get_compact_model_id() -> str | None:
         return None
 
     try:
-        LLMFactory.get(model_id)
+        LLMFactory.get_model_config(model_id, expected_type="llm", allow_fallback=False)
         return model_id
     except Exception as e:
         logger.warning(f"compact 专属模型 '{model_id}' 配置不可用，将使用主 Agent 默认模型: {e}")

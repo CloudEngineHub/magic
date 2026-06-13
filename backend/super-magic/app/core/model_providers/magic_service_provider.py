@@ -21,10 +21,15 @@ logger = get_logger(__name__)
 
 PROVIDER_TYPE = "magic-service"
 PROVIDER_PRIORITY = 3
+MAGIC_SERVICE_SUCCESS_CODE = 1000
 
 # 每 50 次使用或每小时，触发一次后台刷新
 _REFRESH_USE_COUNT = 50
 _REFRESH_INTERVAL_SECONDS = 3600
+
+
+class MagicServiceProviderError(RuntimeError):
+    """magic-service 模型列表加载失败。"""
 
 
 class MagicServiceProvider(ModelProvider):
@@ -49,12 +54,14 @@ class MagicServiceProvider(ModelProvider):
         """调用 magic service /v1/models 获取模型列表并解析为 ModelConfig
 
         Returns:
-            List[ModelConfig]: 解析成功的模型列表，失败时返回空列表
+            List[ModelConfig]: 解析成功的模型列表
+
+        Raises:
+            MagicServiceProviderError: magic-service 未就绪或返回业务错误
         """
         host, authorization = self._get_credentials()
         if not host:
-            logger.warning("MagicServiceProvider: magic_service_host not available, skipping")
-            return []
+            raise MagicServiceProviderError("magic_service_host not available")
 
         url = f"{host}/v1/models"
         params = {"with_info": "1", "with_dynamic_models": "1"}
@@ -69,20 +76,20 @@ class MagicServiceProvider(ModelProvider):
                 resp.raise_for_status()
                 payload = resp.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"MagicServiceProvider: HTTP error {e.response.status_code} from {url}")
-            return []
+            raise MagicServiceProviderError(f"HTTP error {e.response.status_code} from {url}") from e
         except httpx.RequestError as e:
-            logger.error(f"MagicServiceProvider: request error to {url}: {e}")
-            return []
+            raise MagicServiceProviderError(f"request error to {url}: {e}") from e
+        except ValueError as e:
+            raise MagicServiceProviderError(f"invalid JSON response from {url}") from e
         except Exception as e:
-            logger.error(f"MagicServiceProvider: unexpected error: {e}")
-            return []
+            raise MagicServiceProviderError(f"unexpected error from {url}: {e}") from e
 
         api_key = os.environ.get("MAGIC_API_KEY", "")
         api_base_url = os.environ.get("MAGIC_API_BASE_URL", "")
+        model_items = self._extract_model_items(payload, url)
 
         result: List[ModelConfig] = []
-        for model_data in payload.get("data", []):
+        for model_data in model_items:
             mc = self._parse_model(model_data, api_key=api_key, api_base_url=api_base_url)
             if mc:
                 result.append(mc)
@@ -93,6 +100,25 @@ class MagicServiceProvider(ModelProvider):
     # ------------------------------------------------------------------
     # 内部方法
     # ------------------------------------------------------------------
+
+    def _extract_model_items(self, payload: Any, url: str) -> List[Dict[str, Any]]:
+        """校验 magic-service 业务响应，避免业务失败被误判为空模型列表。"""
+        if not isinstance(payload, dict):
+            raise MagicServiceProviderError(f"invalid response format from {url}")
+
+        code = payload.get("code")
+        if code is not None and code != MAGIC_SERVICE_SUCCESS_CODE:
+            message = payload.get("message") or "unknown error"
+            raise MagicServiceProviderError(f"business error from {url}: code={code}, message={message}")
+
+        if "data" not in payload:
+            raise MagicServiceProviderError(f"missing data field from {url}")
+
+        data = payload["data"]
+        if not isinstance(data, list):
+            raise MagicServiceProviderError(f"invalid data field from {url}: expected list")
+
+        return [item for item in data if isinstance(item, dict)]
 
     def _get_credentials(self):
         """获取 magic service 主机地址和用户授权 token
