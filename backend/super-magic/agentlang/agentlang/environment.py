@@ -13,6 +13,7 @@ class Environment:
     
     DEFAULT_AGENT_IDLE_TIMEOUT = 3600  # 默认超时时间：1小时
     DEFAULT_IDLE_MONITOR_INTERVAL = 60  # 默认监控间隔：60秒
+    DEFAULT_AGENT_IDLE_MONITOR_ENABLED = True
     
     @staticmethod
     def get_env(key: str, default: Optional[Any] = None, value_type: Optional[Type[T]] = None) -> Union[Optional[str], T]:
@@ -97,6 +98,31 @@ class Environment:
             pass
             
         return Environment.DEFAULT_AGENT_IDLE_TIMEOUT
+
+    @staticmethod
+    def is_agent_idle_monitor_enabled() -> bool:
+        """是否启用代理空闲监控。"""
+        env_value = os.getenv("ENABLE_AGENT_IDLE_MONITOR")
+        if env_value is not None:
+            return Environment.get_bool_env(
+                "ENABLE_AGENT_IDLE_MONITOR",
+                Environment.DEFAULT_AGENT_IDLE_MONITOR_ENABLED,
+            )
+
+        try:
+            from agentlang.config.config import config
+            config_value = config.get(
+                "sandbox.idle_monitor_enabled",
+                Environment.DEFAULT_AGENT_IDLE_MONITOR_ENABLED,
+            )
+            if isinstance(config_value, bool):
+                return config_value
+            if isinstance(config_value, str):
+                return config_value.strip().lower() in ('true', '1', 'yes', 'y', 'on')
+        except (ImportError, AttributeError):
+            pass
+
+        return Environment.DEFAULT_AGENT_IDLE_MONITOR_ENABLED
         
     @staticmethod
     def get_idle_monitor_interval() -> int:
