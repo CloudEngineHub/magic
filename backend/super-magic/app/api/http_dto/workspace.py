@@ -128,3 +128,48 @@ class WorkspaceImportData(BaseModel):
 
     workspace_dir: str = Field(..., description="Workspace directory path")
     extracted_files: int = Field(..., description="Number of extracted files")
+
+
+class WorkspaceFileContentRequest(BaseModel):
+    """Read a text file from the workspace."""
+
+    path: str = Field(..., description="Relative path under workspace root")
+
+
+class WorkspaceFileWriteRequest(BaseModel):
+    """Write a text file into the workspace."""
+
+    path: str = Field(..., description="Relative path under workspace root")
+    content: str = Field("", description="Text content to write")
+    create_parent_dirs: bool = Field(True, description="Create missing parent directories")
+    overwrite: bool = Field(True, description="Overwrite existing file")
+
+
+class WorkspaceDirectoryCreateRequest(BaseModel):
+    """Create a directory under the workspace."""
+
+    path: str = Field(..., description="Relative directory path under workspace root")
+
+
+class WorkspaceFileDeleteRequest(BaseModel):
+    """Delete a file or directory under the workspace."""
+
+    path: str = Field(..., description="Relative path under workspace root")
+    recursive: bool = Field(False, description="Recursively delete directories")
+
+
+class WorkspaceFileMoveRequest(BaseModel):
+    """Move or rename a workspace file or directory."""
+
+    source_path: str = Field(..., description="Relative source path under workspace root")
+    target_path: str = Field(..., description="Relative target path under workspace root")
+    overwrite: bool = Field(False, description="Overwrite target if it exists")
+
+
+class WorkspaceFileUploadRequest(BaseModel):
+    """Upload a base64 encoded file into the workspace."""
+
+    target_dir: str = Field("", description="Relative target directory under workspace root")
+    filename: str = Field(..., description="Uploaded file name")
+    content_base64: str = Field(..., description="Base64 encoded file content")
+    overwrite: bool = Field(True, description="Overwrite existing file")

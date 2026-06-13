@@ -85,31 +85,24 @@
                 <div class="filetree-header">
                     <span class="filetree-title">工作区文件</span>
                     <div class="filetree-actions">
+                        <button id="uploadWorkspaceBtn" class="icon-btn" title="上传文件到 .workspace 根目录" aria-label="上传文件">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 16V5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                                <path d="m7.5 9.5 4.5-4.5 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                <path d="M5 18.5h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                            </svg>
+                        </button>
                         <button id="refreshTreeBtn" class="icon-btn" title="刷新" aria-label="刷新工作区文件">
                             <svg viewBox="0 0 24 24" aria-hidden="true">
                                 <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
                                 <path d="M20 4.5v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
                             </svg>
                         </button>
-                        <button id="selectWorkspaceBtn" class="icon-btn" title="选择项目根目录" aria-label="选择项目根目录">
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M3.5 7.5a2 2 0 0 1 2-2h4.2l1.7 2H18.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
-                                <path d="M4 10h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                            </svg>
-                        </button>
                     </div>
                 </div>
-                <div class="mount-dir-row">
-                    <span class="mount-dir-label">挂载目录:</span>
-                    <input type="text" id="mountDirInput" class="mount-dir-input" placeholder="留空为根目录">
-                    <button id="applyMountDirBtn" class="icon-btn" title="应用挂载目录" aria-label="应用挂载目录">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                        </svg>
-                    </button>
-                </div>
+                <input id="workspaceUploadInput" class="workspace-upload-input" type="file" multiple aria-hidden="true" tabindex="-1">
                 <div id="filetreeContainer" class="filetree-container">
-                    <div class="filetree-empty">点击上方按钮选择项目根目录</div>
+                    <div class="filetree-empty">正在加载 .workspace 文件树</div>
                 </div>
             </div>
         </div>
@@ -347,7 +340,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="js/client.js"></script>
+    <script src="js/micro_app_runtime.js?v=debug-workspace-files"></script>
+    <script src="js/client.js?v=debug-workspace-files"></script>
 </body>
 
 </html>
