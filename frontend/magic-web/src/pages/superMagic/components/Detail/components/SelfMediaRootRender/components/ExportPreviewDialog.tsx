@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils"
 import CardFrame from "./CardFrame"
 import type { CardFrameRef } from "./CardFrame"
+import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 import type { SelfMediaAttachmentNode, SelfMediaPost } from "../types"
 
 export type SelfMediaExportType = "cardsZip" | "longImage"
@@ -252,19 +253,22 @@ function ExportPreviewDialog({
 	return (
 		<Dialog open={open} onOpenChange={(next) => !isExporting && onOpenChange(next)}>
 			<DialogContent
-				className="flex max-h-[85vh] w-full !max-w-6xl flex-col gap-4"
+				className={`flex max-h-[85vh] w-full !max-w-6xl flex-col gap-0 ${selfMediaOverlayStyles.dialogSurface}`}
 				data-testid="self-media-export-dialog"
 			>
-				<DialogHeader>
-					<DialogTitle data-testid="self-media-export-dialog-title">
+				<DialogHeader className={selfMediaOverlayStyles.dialogHeader}>
+					<DialogTitle
+						className={selfMediaOverlayStyles.dialogTitle}
+						data-testid="self-media-export-dialog-title"
+					>
 						{t("detail.selfMedia.export.dialogTitle")}
 					</DialogTitle>
-					<DialogDescription>
+					<DialogDescription className={selfMediaOverlayStyles.dialogDescription}>
 						{t("detail.selfMedia.export.dialogDescription")}
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="flex flex-col gap-2">
+				<div className="flex flex-col gap-2 px-4 pt-4 sm:px-6">
 					<Label className="text-xs font-medium text-muted-foreground">
 						{t("detail.selfMedia.export.postSelectorLabel")}
 					</Label>
@@ -301,7 +305,7 @@ function ExportPreviewDialog({
 					</Select>
 				</div>
 
-				<div className="flex items-center justify-between">
+				<div className="flex items-center justify-between px-4 pt-4 sm:px-6">
 					<div className="flex items-center gap-2">
 						<Label className="text-xs font-medium text-muted-foreground">
 							{t("detail.selfMedia.export.selectCards")}
@@ -320,6 +324,7 @@ function ExportPreviewDialog({
 						type="button"
 						variant="outline"
 						size="sm"
+						className={selfMediaOverlayStyles.secondaryButton}
 						onClick={handleToggleAll}
 						disabled={isExporting || totalCards === 0}
 						data-testid="self-media-export-toggle-all"
@@ -331,7 +336,7 @@ function ExportPreviewDialog({
 				</div>
 
 				<div
-					className="min-h-[180px] flex-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3"
+					className="mx-4 mt-4 min-h-[180px] flex-1 overflow-y-auto rounded-[24px] bg-white/90 p-3 shadow-[inset_0_1px_rgba(255,255,255,0.82)] sm:mx-6"
 					data-testid="self-media-export-card-grid"
 				>
 					<div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
@@ -360,7 +365,7 @@ function ExportPreviewDialog({
 									className={cn(
 										"group relative flex flex-col overflow-hidden rounded-md border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 										checked
-											? "border-primary bg-primary/5 ring-2 ring-primary/50 shadow-sm"
+											? "border-primary bg-primary/5 shadow-sm ring-2 ring-primary/50"
 											: "border-border bg-background hover:border-primary/40",
 										isExporting
 											? "cursor-not-allowed opacity-60"
@@ -373,7 +378,7 @@ function ExportPreviewDialog({
 											onCheckedChange={() => toggleCard(cardIdx)}
 											onClick={(event) => event.stopPropagation()}
 											aria-label={cardLabel}
-											className="data-[state=unchecked]:bg-background shadow-sm"
+											className="shadow-sm data-[state=unchecked]:bg-background"
 											data-testid={`self-media-export-card-checkbox-${cardIdx}`}
 										/>
 									</span>
@@ -519,10 +524,11 @@ function ExportPreviewDialog({
 					</RadioGroup>
 				</div>
 
-				<DialogFooter>
+				<DialogFooter className={selfMediaOverlayStyles.dialogFooter}>
 					<Button
 						type="button"
 						variant="outline"
+						className={selfMediaOverlayStyles.secondaryButton}
 						onClick={handleCancel}
 						disabled={isExporting}
 						data-testid="self-media-export-cancel"
@@ -531,6 +537,7 @@ function ExportPreviewDialog({
 					</Button>
 					<Button
 						type="button"
+						className={selfMediaOverlayStyles.primaryButton}
 						onClick={handleConfirm}
 						disabled={disableConfirm}
 						data-testid="self-media-export-confirm"

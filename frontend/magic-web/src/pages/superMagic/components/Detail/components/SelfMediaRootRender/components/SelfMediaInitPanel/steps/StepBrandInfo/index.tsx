@@ -13,7 +13,8 @@ import type { BrandImageItem } from "../../types"
 import { BrandInfoFields } from "./components/BrandInfoFields"
 import { HistoryRecordPicker } from "./components/HistoryRecordPicker"
 import { SaveConfirmDialog } from "./components/SaveConfirmDialog"
-import { WelcomeHero } from "./components/WelcomeHero"
+
+export type BrandAutoSaveStatus = "idle" | "pending" | "saving" | "saved" | "failed"
 
 interface BrandRecord {
 	id: string
@@ -38,11 +39,40 @@ interface StepBrandInfoProps {
 	fileStorageService?: SelfMediaFileStorageService | null
 	brandService?: SelfMediaBrandRecordService | null
 	attachmentList?: AttachmentNode[]
-	projectId?: string
-	folderPath?: string
 	onConfirmNext?: () => void
 	onBrandImagesUploadingChange?: (uploading: boolean) => void
 	brandImageUploadTarget?: "draft" | "brand"
+	brandAutoSaveStatus?: BrandAutoSaveStatus
+}
+
+function getBrandAutoSaveMeta(
+	status: BrandAutoSaveStatus,
+	t: ReturnType<typeof useTranslation>["t"],
+) {
+	switch (status) {
+		case "pending":
+			return {
+				label: t("detail.selfMedia.initPanel.stepBrand.autoSavePending", "稍后自动保存"),
+				dotClassName: "bg-[#ffd637]",
+			}
+		case "saving":
+			return {
+				label: t("detail.selfMedia.initPanel.stepBrand.autoSaveSaving", "正在保存"),
+				dotClassName: "animate-pulse bg-[#18181b]",
+			}
+		case "saved":
+			return {
+				label: t("detail.selfMedia.initPanel.stepBrand.autoSaveSaved", "已自动保存"),
+				dotClassName: "bg-[#ffd637]",
+			}
+		case "failed":
+			return {
+				label: t("detail.selfMedia.initPanel.stepBrand.autoSaveFailed", "自动保存失败"),
+				dotClassName: "bg-[#ff776c]",
+			}
+		default:
+			return null
+	}
 }
 
 const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function StepBrandInfo(
@@ -56,11 +86,10 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 		fileStorageService,
 		brandService,
 		attachmentList,
-		projectId,
-		folderPath,
 		onConfirmNext,
 		onBrandImagesUploadingChange,
 		brandImageUploadTarget = "draft",
+		brandAutoSaveStatus = "idle",
 	},
 	ref,
 ) {
@@ -68,11 +97,26 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 	const [records, setRecords] = useState<BrandRecord[]>([])
 	const [showRecordPicker, setShowRecordPicker] = useState(false)
 	const [showSaveConfirm, setShowSaveConfirm] = useState(false)
+	const [isSaveConfirming, setIsSaveConfirming] = useState(false)
 	const [isBrandFormOpen, setIsBrandFormOpen] = useState(false)
 	const hasAutoFilled = useRef(false)
+	const hasAutoOpenedEmptyBrand = useRef(false)
 	const hasUserEditedBrand = useRef(false)
 	const hasResolvedSavePrompt = useRef(false)
+	const saveConfirmingRef = useRef(false)
 	const initialized = useRef(false)
+	const hasBrandSummary = Boolean(author.trim() && brandPosition.trim())
+	const brandHeaderStatus = hasBrandSummary
+		? t("detail.selfMedia.initPanel.stepBrand.readyStatus", "品牌信息已就绪")
+		: t("detail.selfMedia.initPanel.stepBrand.skippableStatus", "可跳过")
+	const brandHeaderDescription = hasBrandSummary
+		? t("detail.selfMedia.initPanel.stepBrand.readySummary", {
+				author: author.trim(),
+				brandPosition: brandPosition.trim(),
+				defaultValue: "{{author}} · {{brandPosition}}",
+			})
+		: t("detail.selfMedia.initPanel.stepBrand.skippableHint", "后续可在品牌设置里补充。")
+	const brandAutoSaveMeta = getBrandAutoSaveMeta(brandAutoSaveStatus, t)
 
 	const isBrandAssetsReady = useCallback(() => {
 		return !brandImages.some((img) => img.file.size > 0 && !img.uploadedPath)
@@ -121,11 +165,29 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 		[markBrandEdited, onBrandImagesChange],
 	)
 
+	const openEmptyBrandFormOnce = useCallback(() => {
+		if (hasAutoOpenedEmptyBrand.current || hasBrandSummary) return
+		hasAutoOpenedEmptyBrand.current = true
+		setIsBrandFormOpen(true)
+	}, [hasBrandSummary])
+
+	useEffect(() => {
+		if (brandService) return
+		openEmptyBrandFormOnce()
+	}, [brandService, openEmptyBrandFormOnce])
+
 	useEffect(() => {
 		if (initialized.current || !brandService) return
 		initialized.current = true
 		;(async () => {
-			const list = await brandService.listRecords()
+			let list: StoredBrandRecord[] = []
+			try {
+				list = await brandService.listRecords()
+			} catch (error) {
+				console.error("Failed to load self-media brand records:", error)
+				openEmptyBrandFormOnce()
+				return
+			}
 			const mapped: BrandRecord[] = list.map((r: StoredBrandRecord) => ({
 				id: r.id,
 				author: r.author,
@@ -141,37 +203,59 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 				onChange("author", latest.author)
 				onChange("brandPosition", latest.brandPosition)
 				onChange("targetAudience", latest.targetAudience)
+				setIsBrandFormOpen(false)
+				return
+			}
+
+			if (mapped.length === 0) {
+				openEmptyBrandFormOnce()
 			}
 		})()
-	}, [brandService, author, brandPosition, onChange])
+	}, [brandService, author, brandPosition, onChange, openEmptyBrandFormOnce])
 
-	const handleConfirmSave = useCallback(() => {
-		hasResolvedSavePrompt.current = true
-		hasUserEditedBrand.current = false
-		if (author.trim() && brandPosition.trim() && brandService) {
-			;(async () => {
-				const saved = await brandService.saveRecord({
-					author: author.trim(),
-					brandPosition: brandPosition.trim(),
-					targetAudience: targetAudience.trim(),
-				})
-				setRecords((prev) => [
-					{
-						id: saved.id,
-						author: saved.author,
-						brandPosition: saved.brandPosition,
-						targetAudience: saved.targetAudience,
-						createdAt: saved.createdAt,
-					},
-					...prev,
-				])
-			})()
+	const handleConfirmSave = useCallback(async () => {
+		if (saveConfirmingRef.current) return
+
+		if (!author.trim() || !brandPosition.trim() || !brandService) {
+			hasResolvedSavePrompt.current = true
+			hasUserEditedBrand.current = false
+			setShowSaveConfirm(false)
+			onConfirmNext?.()
+			return
 		}
-		setShowSaveConfirm(false)
-		onConfirmNext?.()
+
+		saveConfirmingRef.current = true
+		setIsSaveConfirming(true)
+		try {
+			const saved = await brandService.saveRecord({
+				author: author.trim(),
+				brandPosition: brandPosition.trim(),
+				targetAudience: targetAudience.trim(),
+			})
+			setRecords((prev) => [
+				{
+					id: saved.id,
+					author: saved.author,
+					brandPosition: saved.brandPosition,
+					targetAudience: saved.targetAudience,
+					createdAt: saved.createdAt,
+				},
+				...prev,
+			])
+			hasResolvedSavePrompt.current = true
+			hasUserEditedBrand.current = false
+			setShowSaveConfirm(false)
+			onConfirmNext?.()
+		} catch (error) {
+			console.error("Failed to save self-media brand record:", error)
+		} finally {
+			saveConfirmingRef.current = false
+			setIsSaveConfirming(false)
+		}
 	}, [author, brandPosition, targetAudience, brandService, onConfirmNext])
 
 	const handleSkipSave = useCallback(() => {
+		if (saveConfirmingRef.current) return
 		hasResolvedSavePrompt.current = true
 		hasUserEditedBrand.current = false
 		setShowSaveConfirm(false)
@@ -222,36 +306,63 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 	)
 
 	return (
-		<div className="mx-auto max-w-5xl space-y-6 py-4">
-			<WelcomeHero />
-
+		<div className="mx-auto max-w-5xl space-y-4 py-4">
 			<div className="space-y-3">
-				<div className="flex flex-wrap items-start justify-between gap-3 rounded-lg bg-[#434c81]/[0.045] p-4 text-card-foreground">
+				<div
+					className="flex w-full items-start gap-3 rounded-[24px] bg-white/90 p-4 text-[#18181b] shadow-[inset_0_1px_rgba(255,255,255,0.82)] lg:max-w-[calc(100%_-_20.5rem)]"
+					data-testid="self-media-brand-collapsed-header"
+				>
 					<button
 						type="button"
-						className="flex min-w-0 flex-1 cursor-pointer items-start justify-between gap-4 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+						className="min-w-0 flex-1 cursor-pointer rounded-[20px] px-1 py-1 text-left transition-colors hover:bg-[#f8f8f9] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15"
 						onClick={() => setIsBrandFormOpen((open) => !open)}
 					>
 						<div className="space-y-1">
 							<div className="space-y-1">
-								<span className="text-xs font-medium text-muted-foreground">
-									Optional Brand Profile
-								</span>
-								<h2 className="text-lg font-semibold tracking-tight text-foreground">
+								<div className="flex flex-wrap items-center gap-2">
+									<span className="text-xs font-medium text-[#71717a]">
+										{brandHeaderStatus}
+									</span>
+									{brandAutoSaveMeta ? (
+										<span
+											className="inline-flex items-center gap-1.5 rounded-full bg-[#f8f8f9] px-2 py-0.5 text-[11px] font-semibold text-[#71717a] shadow-[inset_0_0_0_1px_rgba(24,24,27,0.06)]"
+											aria-live="polite"
+											data-testid="self-media-brand-auto-save-status"
+										>
+											<span
+												className={cn(
+													"h-1.5 w-1.5 rounded-full",
+													brandAutoSaveMeta.dotClassName,
+												)}
+											/>
+											<span>{brandAutoSaveMeta.label}</span>
+										</span>
+									) : null}
+								</div>
+								<h2 className="text-lg font-[780] tracking-tight text-[#18181b]">
 									{t(
 										"detail.selfMedia.initPanel.stepBrand.title",
 										"账号与品牌定位",
 									)}
 								</h2>
 							</div>
-							<p className="text-xs text-muted-foreground">
-								品牌信息选填，用于让 AI 更懂你；也可以直接进入下一步。
-							</p>
+							<p className="text-xs text-[#71717a]">{brandHeaderDescription}</p>
 						</div>
+					</button>
+					<button
+						type="button"
+						className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#71717a] transition-colors hover:bg-[#f8f8f9] hover:text-[#18181b] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15"
+						aria-label={
+							isBrandFormOpen
+								? t("detail.selfMedia.initPanel.stepBrand.collapse", "收起品牌信息")
+								: t("detail.selfMedia.initPanel.stepBrand.expand", "展开品牌信息")
+						}
+						onClick={() => setIsBrandFormOpen((open) => !open)}
+					>
 						<ChevronDown
 							size={18}
 							className={cn(
-								"mt-1 shrink-0 text-muted-foreground transition-transform",
+								"shrink-0 transition-transform",
 								isBrandFormOpen && "rotate-180",
 							)}
 						/>
@@ -261,8 +372,8 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 						<Button
 							type="button"
 							className={cn(
-								"gap-1.5 text-xs",
-								showRecordPicker && "bg-accent text-accent-foreground",
+								"gap-1.5 rounded-full border-0 bg-[#f8f8f9] text-xs text-[#18181b] shadow-[inset_0_0_0_1px_rgba(24,24,27,0.06)] hover:bg-[#18181b] hover:text-[#ffd637]",
+								showRecordPicker && "bg-[#18181b] text-[#ffd637]",
 							)}
 							variant="outline"
 							size="sm"
@@ -272,10 +383,13 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 							<span>
 								{t(
 									"detail.selfMedia.initPanel.stepBrand.historyRecords",
-									"历史记录",
+									"一键回填",
 								)}
 							</span>
-							<Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[9px]">
+							<Badge
+								variant="secondary"
+								className="h-5 rounded-full bg-white px-1.5 text-[9px] text-[#18181b]"
+							>
 								{records.length}
 							</Badge>
 						</Button>
@@ -302,8 +416,6 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 							onBrandImagesChange={handleBrandImagesChange}
 							fileStorageService={fileStorageService}
 							attachmentList={attachmentList}
-							projectId={projectId}
-							folderPath={folderPath}
 							onBrandImagesUploadingChange={onBrandImagesUploadingChange}
 							brandImageUploadTarget={brandImageUploadTarget}
 						/>
@@ -314,7 +426,7 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 									type="button"
 									variant="outline"
 									size="sm"
-									className="gap-1.5 text-xs"
+									className="gap-1.5 rounded-full border-0 bg-white px-3 text-xs text-[#18181b] shadow-[inset_0_0_0_1px_rgba(24,24,27,0.08)] hover:bg-[#18181b] hover:text-[#ffd637]"
 									onClick={handleSaveRecord}
 								>
 									<Eye size={12} />
@@ -332,7 +444,11 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 			</div>
 
 			{showSaveConfirm && (
-				<SaveConfirmDialog onConfirm={handleConfirmSave} onCancel={handleSkipSave} />
+				<SaveConfirmDialog
+					isConfirming={isSaveConfirming}
+					onConfirm={handleConfirmSave}
+					onCancel={handleSkipSave}
+				/>
 			)}
 		</div>
 	)

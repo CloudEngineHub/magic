@@ -6,7 +6,7 @@ import { flattenAttachments } from "../../../../contents/HTML/utils"
 import type { CardFrameRef } from "../../components/CardFrame"
 import ExportPreviewDialog from "../../components/ExportPreviewDialog"
 import type { ExportPreviewConfirmArgs } from "../../components/ExportPreviewDialog"
-import SelfMediaShellHeader from "../../components/SelfMediaShellHeader"
+import SelfMediaShellHeader, { SelfMediaShellViewBar } from "../../components/SelfMediaShellHeader"
 import { useExportZip } from "../../hooks/useExportZip"
 import { useExportProgressToast } from "../../hooks/useExportProgressToast"
 import { usePhoneScaling } from "../../hooks/usePhoneScaling"
@@ -22,11 +22,20 @@ import { RednoteShellScrollViewPanel } from "./RednoteShellScrollViewPanel"
 
 const REDNOTE_DETAIL_ACTION_STRIP_WIDTH = 28
 const REDNOTE_DETAIL_ACTION_STRIP_GAP = 8
+const noop = () => undefined
 
 function RednoteShell(props: PlatformComponentProps) {
 	const { t } = useTranslation("super")
-	const { platform, attachmentList, allowEdit, saveEditContent, selectedProject, onBackHome } =
-		props
+	const {
+		platform,
+		attachmentList,
+		allowEdit,
+		saveEditContent,
+		selectedProject,
+		onBackHome,
+		onUpdatePostTitle,
+		onRequestPrePublishAnalysis,
+	} = props
 	const store = useSelfMediaStore()
 	const { posts, activePostIndex, view, rootLoading } = store
 
@@ -44,10 +53,12 @@ function RednoteShell(props: PlatformComponentProps) {
 	const shellDataReloadWithGuardRef = useRef<(() => void) | null>(null)
 
 	const activePost = store.activePost
+	const activePostEntry = store.activePostEntry
 	const isScrollView = view === "scroll"
 	const isEditView = view === "edit"
 	const shouldShowFooter = view !== "detail" && view !== "edit"
 	const [isCardEditing, setIsCardEditing] = useState(false)
+	const [phoneFocused, setPhoneFocused] = useState(false)
 
 	const { shouldRenderFeed, shouldRenderDetail, shouldRenderScroll, shouldRenderEdit } =
 		useShellMountedViews(view)
@@ -247,6 +258,28 @@ function RednoteShell(props: PlatformComponentProps) {
 		shellDataReloadWithGuardRef.current = handler
 	}, [])
 
+	const handleSaveTitle = useCallback(
+		async (nextTitle: string) => {
+			if (!activePostEntry || !onUpdatePostTitle) return false
+			const saved = await onUpdatePostTitle(
+				{ platform, index: activePostIndex, entry: activePostEntry },
+				nextTitle,
+			)
+			if (saved === false) return false
+			store.updatePostTitle(activePostIndex, nextTitle)
+			return true
+		},
+		[activePostEntry, activePostIndex, onUpdatePostTitle, platform, store],
+	)
+
+	const handleShellPointerDown = useCallback(() => {
+		setPhoneFocused(false)
+	}, [])
+
+	const handlePhoneFocus = useCallback(() => {
+		setPhoneFocused(true)
+	}, [])
+
 	const handleConfirmExport = async ({
 		postIndex,
 		cardIndexes,
@@ -298,8 +331,18 @@ function RednoteShell(props: PlatformComponentProps) {
 
 	const phoneShellVisible = !isScrollView && !isEditView
 
+	useEffect(() => {
+		if (!phoneShellVisible || view !== "detail") {
+			setPhoneFocused(false)
+		}
+	}, [phoneShellVisible, view])
+
 	return (
-		<div className="flex h-full w-full flex-col bg-[#f1f3f5]">
+		<div
+			className="relative flex h-full w-full flex-col bg-white"
+			onPointerDown={handleShellPointerDown}
+			data-testid="rednote-shell-workspace"
+		>
 			<SelfMediaShellHeader
 				platform={platform}
 				posts={posts}
@@ -320,6 +363,7 @@ function RednoteShell(props: PlatformComponentProps) {
 				onStopInspector={inspector.stop}
 				inspectorActive={inspector.active}
 				inspectorDisabled={inspectorDisabled}
+				onSaveTitle={allowEdit === false ? undefined : handleSaveTitle}
 			/>
 			<ExportPreviewDialog
 				open={exportDialogOpen}
@@ -331,7 +375,7 @@ function RednoteShell(props: PlatformComponentProps) {
 				onConfirm={handleConfirmExport}
 				isExporting={isExporting}
 			/>
-			<div ref={containerRef} className="relative flex-1 overflow-hidden">
+			<div ref={containerRef} className="relative min-h-0 flex-1 overflow-hidden">
 				<RednoteShellEditViewPanel
 					shouldRender={shouldRenderEdit}
 					isActive={isEditView}
@@ -374,16 +418,25 @@ function RednoteShell(props: PlatformComponentProps) {
 					onAddActivePostDirectoryToCurrentChat={
 						handleAddActivePostDirectoryToCurrentChat
 					}
+					phoneFocused={phoneFocused}
+					onPhoneFocus={handlePhoneFocus}
 				/>
 				<ElementInspectorOverlay
 					active={inspector.active}
 					iframeRef={inspector.activeIframeRef}
 					hoveredElement={inspector.hoveredElement}
 					selectedElement={inspector.selectedElement}
-					onClearSelection={() => {}}
+					onClearSelection={noop}
 					hideInfoCard
 				/>
 			</div>
+			<SelfMediaShellViewBar
+				view={view}
+				tabLabels={headerLabels}
+				visibleTabs={visibleTabs}
+				onChangeView={handleGuardedViewChange}
+				onRequestPrePublishAnalysis={allowEdit ? onRequestPrePublishAnalysis : undefined}
+			/>
 		</div>
 	)
 }

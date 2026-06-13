@@ -863,6 +863,13 @@
 				"create": "New article",
 				"dataOverview": "Data overview",
 				"dataSyncNow": "Sync now",
+				"deletePost": "Delete article",
+				"deletePostCancel": "Cancel",
+				"deletePostConfirm": "Delete permanently",
+				"deletePostDescription": "This article and its operations files will be permanently deleted. This cannot be undone.",
+				"deletePostFailed": "Failed to delete article. Please try again later.",
+				"deletePostSuccess": "Article deleted",
+				"deletePostTitle": "Delete this article?",
 				"editPublishedLink": "Change published link",
 				"emptyDesc": "Create a new article to open the setup wizard.",
 				"emptyTitle": "No articles yet",
@@ -870,6 +877,12 @@
 					"comments": "Comments",
 					"likes": "Likes",
 					"reads": "Reads"
+				},
+				"lifecycle": {
+					"draft": "To publish",
+					"published": "Published",
+					"reviewed": "Reviewed",
+					"synced": "Data synced"
 				},
 				"loadingAutoSync": "Loading auto sync settings...",
 				"loadingPublishedLink": "Loading link...",
@@ -899,14 +912,30 @@
 				"postReviewCardName": "Review: {{title}}",
 				"publishedLinkInput": "Published content link",
 				"publishedLinkPlaceholder": "Paste the published content link",
+				"renamePost": "Rename article",
+				"renamePostCancel": "Cancel",
+				"renamePostConfirm": "Save name",
+				"renamePostDescription": "Update the article name shown on the home page.",
+				"renamePostFailed": "Failed to rename article. Please try again later.",
+				"renamePostInput": "Article name",
+				"renamePostSuccess": "Article name updated",
+				"renamePostTitle": "Rename article",
 				"subtitle": "Open details from the list. Data updates keep you on the current page.",
 				"title": "Article home"
 			},
 			"initPanel": {
+				"clearConfirm": {
+					"cancel": "Keep editing",
+					"clearing": "Clearing...",
+					"confirm": "Clear anyway",
+					"description": "This clears the current brand, topics, article plan, and local draft.",
+					"title": "Clear current article setup?"
+				},
 				"draft": {
 					"backHome": "Back home",
 					"clear": "Clear draft",
 					"clearError": "Failed to clear draft. Please try again later.",
+					"clearing": "Clearing...",
 					"confirmDescription": "An unfinished creation draft was found. Continue editing, clear it and start over, or return to the article home first.",
 					"detected": "Unfinished edit detected",
 					"discard": "Discard",
@@ -916,12 +945,34 @@
 					"resumeHint": "You were on step {{step}} last time. Resume?",
 					"saveError": "Failed to save draft. Please try again later."
 				},
+				"materialAttachment": {
+					"addCompact": "Add attachment",
+					"addFull": "Upload, drag, or paste materials",
+					"descriptionPlaceholder": "Add a short note...",
+					"emptyHint": "Images, videos, PDFs, and documents are supported"
+				},
+				"modelSelector": {
+					"switchModel": "Switch model"
+				},
 				"nav": {
 					"backHome": "Back home",
 					"clear": "Clear data",
+					"hints": {
+						"articleReady": "Article structure is ready. Continue to review.",
+						"brandReady": "Brand info is ready. You can continue.",
+						"brandUploading": "Continue after brand assets finish uploading.",
+						"missingPlatform": "Choose a publishing platform to continue.",
+						"missingTitle": "Add a title to each article to continue.",
+						"noArticle": "Add an article, or let AI plan topics first."
+					},
 					"jumpTo": "Jump to {{title}}",
 					"next": "Next",
-					"prev": "Previous"
+					"nextWithHint": "Next: {{hint}}",
+					"prev": "Previous",
+					"stepCompleted": "Completed: {{title}}",
+					"stepCurrent": "Current step: {{title}}",
+					"stepPosition": "Step {{index}} of {{total}}",
+					"stepUpcoming": "Upcoming: {{title}}"
 				},
 				"platforms": {
 					"facebook": "Facebook",
@@ -933,20 +984,35 @@
 					"x": "X (Twitter)"
 				},
 				"referenceFilePicker": {
+					"addedCount": "{{count}} reference added",
+					"alreadySelected": "Selected",
+					"confirmAdd": "Add selected",
 					"confirmSelection": "Add selected ({{count}})",
 					"dropHere": "Drop files here",
+					"emptyProjectFiles": "No project files yet",
 					"hint": "Optional. All file formats supported",
 					"localUpload": "Upload local file",
+					"multiSelectHint": "Select multiple files to confirm, or drag to the target area.",
+					"noMatches": "No matching files",
 					"noProjectFiles": "No files in this project",
+					"pasteOrDrag": "or paste / drag",
+					"pendingSelection": "{{count}} selected",
 					"pickProjectTitle": "Select project file",
 					"projectFile": "Project file",
 					"readLocalError": "Failed to read local file. Please retry",
 					"readProjectError": "Failed to read project file. Please retry",
+					"removeFile": "Remove {{name}}",
+					"searchPlaceholder": "Search files...",
+					"unnamedFile": "Untitled file",
 					"uploadLabel": "Upload references"
 				},
 				"stepBrand": {
 					"accountName": "Account Name",
 					"accountPlaceholder": "e.g. @SuperMagic",
+					"autoSaveFailed": "Auto-save failed",
+					"autoSavePending": "Auto-saving soon",
+					"autoSaveSaved": "Auto-saved",
+					"autoSaveSaving": "Saving",
 					"brandImages": "Brand Image Assets",
 					"brandImagesDescPlaceholder": "Description (e.g. brand mascot)",
 					"brandImagesDropHint": "Drag, paste, or pick from project files",
@@ -958,42 +1024,60 @@
 					"brandPosition": "Brand / IP Positioning",
 					"brandPositionHint": "A clear positioning helps AI generate more accurate content strategies",
 					"brandPositionPlaceholder": "Describe your brand positioning in one sentence, e.g. AI productivity tools",
-					"historyRecords": "History",
+					"closeHistoryRecords": "Close brand records",
+					"deleteRecord": "Delete {{name}}",
+					"historyRecords": "One-click fill",
 					"optional": "Optional",
 					"platformFetchLoading": "Fetching account info from the platform. The form will auto-fill when ready…",
 					"platformFetchTimeout": "Account fetch timed out. Retry later or check the conversation for progress.",
 					"platformFetching": "Fetching…",
 					"quickFillHint": "Tip: The more detail you provide, the more accurate AI-generated topics will be",
+					"readyStatus": "Brand info ready",
+					"readySummary": "{{author}} · {{brandPosition}}",
 					"required": "Required",
+					"reusableRecordsTitle": "Reusable brand info",
 					"saveAsNew": "Save as new record",
-					"saveConfirmDesc": "Save this brand info as a history record for quick fill next time?",
-					"saveConfirmSave": "Save and continue",
-					"saveConfirmSkip": "Skip",
-					"saveConfirmTitle": "Save brand info?",
+					"saveConfirmDesc": "Save it once, then reuse it in new articles.",
+					"saveConfirmSave": "Save, continue",
+					"saveConfirmSkip": "Do not save, continue",
+					"saveConfirmTitle": "Reuse this brand info next time?",
 					"selectRecordHint": "Select a record to auto-fill",
+					"skippableHint": "You can fill this in later from brand settings.",
+					"skippableStatus": "Skippable",
 					"subtitle": "Set up your brand positioning so AI can understand your content direction and generate matching topics",
 					"targetAudience": "Target Audience",
 					"targetAudienceHint": "Helps AI adjust tone and topic direction",
 					"targetAudiencePlaceholder": "e.g. 25-35 year old professionals, students, new parents",
-					"title": "Account & Brand Info"
+					"title": "Account & Brand Info",
+					"useRecord": "Fill from {{name}}"
 				},
 				"stepConfirm": {
 					"accountLabel": "Account",
+					"articleListAutomationHint": "After you start, topics, materials, and the first article open automatically.",
+					"articleListAutomationHintWithoutMaterials": "After you start, topics and the first article open automatically.",
+					"articleListTitle": "Articles ready: {{count}}",
+					"articleReadyHint": "{{outlineCount}} outline point(s) and {{materialCount}} reference(s) organized",
+					"articleReadyHintMaterials": "{{materialCount}} reference(s) organized",
+					"articleReadyHintOutline": "{{outlineCount}} outline point(s) organized",
 					"audienceLabel": "Audience",
 					"backHome": "Back home",
 					"brandAssetCount": "{{count}} brand asset(s) uploaded",
 					"cancel": "Cancel",
 					"cardCount": "{{count}} cards",
 					"cardOutlineLabel": "Card outline",
+					"completeSummaryDesc": "The content creation Agent has taken over, and the current topic opens automatically.",
+					"completeSummaryTitle": "Creation topics ready: {{count}}",
+					"completeTopicListHint": "The first article is open. Click another title to switch.",
 					"creatingTopic": "Creating topic…",
-					"doneDesc": "{{count}} topics created. AI Creative Assistant is working on each article.",
+					"doneDesc": "{{count}} topics created. The content creation Agent is handling each article.",
 					"doneTitle": "Generation started",
 					"generatingBtn": "Generating…",
-					"generatingDesc": "Creating topics via AI Creative Assistant ({{done}}/{{total}})",
+					"generatingDesc": "Creating topics for the content creation Agent ({{done}}/{{total}})",
 					"generatingTitle": "Starting generation",
 					"globalSummary": "Global settings",
 					"imageModel": "Image",
 					"modelSettings": "Model settings",
+					"opened": "Opened",
 					"outlinePoints": "{{count}} outline points",
 					"phase": {
 						"archiving": "Archiving the current plan so the agent can read the full context.",
@@ -1002,20 +1086,31 @@
 						"sending-message": "Sending creation instructions and model settings.",
 						"uploading-materials": "Uploading reference materials and outline attachments."
 					},
+					"phaseLabels": {
+						"archiving": "Archiving plan",
+						"creating-topic": "Creating topic",
+						"idle": "Preparing task",
+						"sending-message": "Sending instructions",
+						"uploading-materials": "Uploading materials"
+					},
+					"phaseStatus": "Current phase: {{phase}}",
 					"positionLabel": "Positioning",
 					"preparingDesc": "Preparing the creation task. Please wait.",
 					"preparingHint": "Archiving the plan, preparing materials, and creating the first topic",
 					"preparingTitle": "Preparing creation task",
+					"projectPendingHint": "You can start once the project is ready.",
 					"refCount": "{{count}} references",
 					"saveAsTemplate": "Save as template",
 					"saveTemplate": "Save",
 					"startBtn": "Start AI creation ({{count}} articles)",
-					"subtitle": "Each article gets its own topic handled by AI Creative Assistant",
+					"statusReady": "Ready to generate",
+					"subtitle": "After you confirm, creation topics are created automatically and the first article opens.",
+					"templateNameLabel": "Template name",
 					"templateNamePlaceholder": "Template name",
 					"templateSaved": "Template saved",
 					"textModel": "Text",
 					"title": "Confirm & generate",
-					"topicListHint": "Click a topic to switch and view AI Creative Assistant progress",
+					"topicListHint": "Click a topic to switch and view content creation Agent progress",
 					"videoModel": "Video",
 					"viewing": "Viewing"
 				},
@@ -1024,14 +1119,19 @@
 					"aiAutoFillHint": "Auto-recommend style, template, outline based on description",
 					"aiAutoFilling": "Auto-filling...",
 					"articleFallback": "Article {{index}}",
+					"cardContentCanGenerateStatus": "Ready to generate cards",
 					"cardContentEmpty": "Please set the card count first",
 					"cardContentGenerateBtn": "AI Generate Cards",
 					"cardContentLabel": "Card Content Plan",
 					"cardContentOptimizeBtn": "AI Optimize",
 					"cardContentOptimizePlaceholder": "Describe how to adjust card content, e.g. make cover more engaging, add CTA...",
 					"cardContentPlaceholder": "Content for card {{index}}…",
+					"cardContentReadyStatus": "Cards ready: {{count}}",
+					"cardContentRequiresTitleHint": "Add a title first so AI can generate card content.",
+					"cardContentRequiresTitleStatus": "Title first",
 					"cardCountHint": "6-9 cards recommended for Rednote/Instagram",
 					"cardCountLabel": "Card Count",
+					"cardCountUnit": "cards",
 					"cardRemoveBtn": "Remove this card",
 					"currentArticle": "Current Article",
 					"descriptionLabel": "Content Description",
@@ -1044,6 +1144,7 @@
 					"outlineAddRootBtn": "Add point",
 					"outlineAttachBtn": "Attach file",
 					"outlineAttachPlaceholder": "Describe how this file relates to the point…",
+					"outlineCanGenerateStatus": "Ready to generate outline",
 					"outlineEmpty": "No outline yet. Add points below or use AI generate",
 					"outlineGenerateBtn": "AI Generate Outline",
 					"outlineGenerating": "Generating...",
@@ -1053,7 +1154,10 @@
 					"outlineOptimizePlaceholder": "Describe how to adjust the outline, e.g. add examples, shorten, reorder...",
 					"outlineOptimizeSubmit": "Generate",
 					"outlineOptimizing": "Optimizing...",
+					"outlineReadyStatus": "Outline ready: {{count}} points",
 					"outlineRemoveBtn": "Remove",
+					"outlineRequiresTitleHint": "Add a title first so AI can generate the outline.",
+					"outlineRequiresTitleStatus": "Title first",
 					"platformLabel": "Platform",
 					"platformRequired": "Please select a platform for this article",
 					"referencesFilePlaceholder": "Describe how to use this file…",
@@ -1075,26 +1179,56 @@
 					"visualReferenceLabel": "Add visual reference"
 				},
 				"stepTopic": {
+					"activeStatus": "Keep refining the current article",
+					"activeTopicStatus": "Editing",
 					"addManual": "Add topic manually",
+					"addTopic": "Add topic",
 					"aiAssistantTitle": "Let AI Plan My Topics & Outlines",
 					"aiGenerateBtn": "AI Generate Topics",
+					"articleCountLabel": "Articles: {{count}}",
+					"articleCountUnit": "articles",
+					"autoFolder": "Auto",
+					"autoFolderHint": "The title can auto-generate the archive folder. You can still edit it.",
 					"collapseDetail": "Collapse details",
+					"collapseNavigator": "Collapse board",
+					"createFirstTopic": "Add first topic",
 					"directionPlaceholder": "Enter direction or keywords (optional), e.g.: productivity, AI tool reviews...",
 					"errorEmpty": "Generation failed, please retry or add topics manually",
 					"errorNetwork": "Network error, please try again later",
 					"expandDetail": "Expand details",
+					"expandNavigator": "Expand topic board",
+					"folderInputAutoLabel": "Archive folder, currently auto-generated",
+					"folderInputLabel": "Archive folder",
+					"folderInputPlaceholder": "Archive folder",
 					"folderPlaceholder": "Folder name (optional, auto-generated if empty)",
+					"folderSynced": "Folder synced",
 					"generateBtn": "Generate",
 					"generateCount": "Generate",
+					"generateCountHint": "3-5 topics at a time is easier to review",
+					"generateCountInputLabel": "Generate count",
 					"generateCountUnit": "topics",
 					"generateWithDetails": "Also generate content plan",
+					"generatedStatus": "{{count}} topics generated",
+					"kicker": "New article",
+					"manualFolderHint": "Manual folders stay in place. Later title changes will not overwrite them.",
+					"navigatorTitle": "Topic board",
+					"nextArticle": "Next article",
+					"prevArticle": "Previous article",
 					"removeCancel": "Cancel",
 					"removeConfirm": "Delete",
+					"removeTopic": "Delete topic",
+					"removeTopicLabel": "Delete {{title}}",
+					"selectTopicLabel": "Select {{title}}",
 					"stopBtn": "Stop",
-					"subtitle": "Use AI to generate topics with content plans, or add manually and expand to configure",
-					"title": "Topic Planning",
+					"subtitle": "Generate candidate directions first, then add titles, materials, and outlines.",
+					"title": "Topics & outlines",
+					"titleInputHint": "After you enter a title, the archive folder syncs automatically.",
+					"titleInputLabel": "Topic title",
+					"titleInputManualFolderHint": "The folder was edited manually. Title changes will not overwrite it.",
 					"titlePlaceholder": "Article title (required)",
-					"totalTopics": "{{count}} topics"
+					"topicFallback": "Topic {{index}}",
+					"totalTopics": "{{count}} topics",
+					"untitledTopic": "Untitled topic"
 				},
 				"steps": {
 					"brand": "Welcome & Brand",
@@ -1119,8 +1253,8 @@
 				},
 				"visuals": {
 					"codeDispatch": {
-						"description": "High contrast editorial style, monochrome+red palette, monospace tags, grid texture. Great for tech/coding/AI topics",
-						"label": "Code Dispatch"
+						"description": "Monochrome technical layout with a status bar, monospace tags, and structured blocks for AI, coding, and tool explainers",
+						"label": "Tech Brief"
 					},
 					"custom": {
 						"description": "Describe your visual language, AI will generate a custom preset for you",
@@ -1128,32 +1262,69 @@
 					},
 					"darkTech": {
 						"description": "Dark background, gold accents, thin borders, strong font-weight contrast. Great for product/gear reviews",
-						"label": "Dark Tech"
+						"label": "Dark Review"
+					},
+					"filmVintage": {
+						"description": "Dark cinematic covers, polaroid frames, grain texture, and red accents. Great for photography, gear reviews, and city walks",
+						"label": "Film Story"
 					},
 					"gradientEditorial": {
-						"description": "Cover uses hero/theme image with gradient overlay, clean white content pages, rounded cards, modern tech article style",
-						"label": "Image Editorial"
+						"description": "Hero image covers, gradient overlays, clean content pages, and card hierarchy for news explainers, POV collections, and image-led posts",
+						"label": "Cover Story"
+					},
+					"insDark": {
+						"description": "Dark tech styling, neon accents, and high-contrast layouts for tools, productivity, and technical topics",
+						"label": "INS Dark Tech"
+					},
+					"insGradient": {
+						"description": "Saturated gradients, glow layers, and modern metric cards for trends, design, and growth insights",
+						"label": "INS Gradient Glow"
+					},
+					"insMinimal": {
+						"description": "Restrained whitespace, fine dividers, and minimal hierarchy for digests, summaries, and point-of-view posts",
+						"label": "INS Minimal"
 					},
 					"insModern": {
 						"description": "White background, generous whitespace, minimal typography",
 						"label": "Modern Minimal"
 					},
+					"insRetro": {
+						"description": "Retro headlines, warm paper tones, and ornamental marks for storytelling content and visual guides",
+						"label": "INS Retro Story"
+					},
 					"neoBrutalism": {
-						"description": "Bold borders, hard offset shadows, high saturation colors",
-						"label": "Neo Brutalism"
+						"description": "Ruled-paper background, heavy headlines, yellow/red tags, and hard-shadow data blocks for turning complex ideas into punchy cards",
+						"label": "Bold Cards"
 					},
 					"none": {
 						"description": "Design freely following platform defaults",
 						"label": "No Template"
 					},
+					"paperColumn": {
+						"description": "Paper texture, serif titles, marginal notes, pull quotes, and ledger rows for essays, knowledge columns, and field notes",
+						"label": "Longform Column"
+					},
 					"personalInsight": {
-						"description": "Clean white background, profile avatar, numbered sections, reading-note style for personal insights",
-						"label": "Personal Insight"
+						"description": "Clean white canvas, profile byline, numbered sections, and note cards for viewpoints, reading notes, and knowledge posts",
+						"label": "Opinion Notes"
 					},
 					"productLaunch": {
 						"description": "White background, red top accent bar, sharp badges, minimal dual-color. Great for product feature announcements and release notes",
-						"label": "Product Launch"
+						"label": "Launch Note"
+					},
+					"scrollHint": "Scroll preview",
+					"signalGrid": {
+						"description": "Strict grid rhythm, one accent color, KPI blocks, matrix rows, and ranking bars for product notes, comparisons, and decisions",
+						"label": "Data Checklist"
+					},
+					"warmJournal": {
+						"description": "Photo-led layouts, handwritten titles, warm journal paper, and scattered composition for lifestyle, product notes, and city records",
+						"label": "Life Journal"
 					}
+				},
+				"voiceInput": {
+					"start": "Voice input",
+					"stop": "Stop voice input"
 				}
 			},
 			"opsMetrics": {
@@ -1261,7 +1432,9 @@
 					"pending": "Pending",
 					"unknown": "Not fetched"
 				},
-				"summaryTitle": "Performance brief",
+				"summaryTitle": "Review summary",
+				"summaryTrendEmpty": "Sync data twice or more to build the reading trend.",
+				"summaryTrendTitle": "Reading trend",
 				"sync": "Sync data",
 				"title": "Operations review",
 				"trendTitle": "Sync trend"

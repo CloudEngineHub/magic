@@ -10,11 +10,12 @@ import {
 	DropdownMenuContent,
 } from "@/components/shadcn-ui/dropdown-menu"
 import ProjectFilePickerContent from "../picker/ProjectFilePickerContent"
-import InlineVoiceButton from "../ui/InlineVoiceButton"
+import { selfMediaOverlayStyles } from "../../../selfMediaOverlayStyles"
 import { useDropZone } from "../../lib/useDropZone"
-import type { DropPayload } from "../../lib/projectFileDrag"
-import type { SelfMediaProjectFileRef } from "../../lib/projectFileDrag"
+import type { DropPayload, SelfMediaProjectFileRef } from "../../lib/projectFileDrag"
 import type { MaterialItem } from "../../types"
+import MaterialAttachmentRow from "./MaterialAttachmentRow"
+import MaterialUploadTrigger from "./MaterialUploadTrigger"
 
 const ACCEPT_TYPES = "image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md"
 const MATERIAL_VIRTUAL_THRESHOLD = 8
@@ -23,12 +24,6 @@ const FULL_ROW_HEIGHT = 96
 
 function generateId(): string {
 	return `mat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-}
-
-function formatFileSize(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 interface MaterialAttachmentListProps {
@@ -339,11 +334,26 @@ export default function MaterialAttachmentList({
 		setSearchQuery("")
 	}, [])
 
+	const uploadLabel =
+		addLabel ||
+		t(
+			compact
+				? "detail.selfMedia.initPanel.materialAttachment.addCompact"
+				: "detail.selfMedia.initPanel.materialAttachment.addFull",
+			compact ? "添加附件" : "点击、拖拽或粘贴上传附件",
+		)
+	const resolvedDescriptionPlaceholder =
+		descriptionPlaceholder ||
+		t("detail.selfMedia.initPanel.materialAttachment.descriptionPlaceholder", "添加说明…")
+
 	const dropdownContent = enableProjectPicker ? (
 		<DropdownMenuContent
 			align="start"
 			sideOffset={4}
-			className="flex max-h-96 w-72 flex-col overflow-hidden p-0"
+			className={cn(
+				"flex max-h-96 w-72 flex-col overflow-hidden p-0",
+				selfMediaOverlayStyles.floatingPanel,
+			)}
 			onCloseAutoFocus={(e) => e.preventDefault()}
 		>
 			<ProjectFilePickerContent
@@ -384,7 +394,7 @@ export default function MaterialAttachmentList({
 			key={item.id}
 			item={item}
 			compact={compact}
-			descriptionPlaceholder={descriptionPlaceholder}
+			descriptionPlaceholder={resolvedDescriptionPlaceholder}
 			onRemove={handleRemove}
 			onDescriptionChange={handleDescriptionChange}
 		/>
@@ -410,102 +420,35 @@ export default function MaterialAttachmentList({
 				enableProjectPicker ? (
 					<DropdownMenu open={showProjectPicker} onOpenChange={handleOpenChange}>
 						<DropdownMenuTrigger asChild>
-							<button
-								type="button"
-								className="inline-flex items-center gap-1 border-b border-dashed border-border/70 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
-							>
-								<svg
-									width="12"
-									height="12"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									strokeWidth="2"
-								>
-									<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-								</svg>
-								{addLabel || "添加附件"}
-							</button>
+							<MaterialUploadTrigger compact label={uploadLabel} />
 						</DropdownMenuTrigger>
 						{dropdownContent}
 					</DropdownMenu>
 				) : (
-					<button
-						type="button"
-						className="inline-flex items-center gap-1 border-b border-dashed border-border/70 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+					<MaterialUploadTrigger
+						compact
+						label={uploadLabel}
 						onClick={() => inputRef.current?.click()}
-					>
-						<svg
-							width="12"
-							height="12"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-						>
-							<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-						</svg>
-						{addLabel || "添加附件"}
-					</button>
+					/>
 				)
 			) : enableProjectPicker ? (
 				<DropdownMenu open={showProjectPicker} onOpenChange={handleOpenChange}>
 					<DropdownMenuTrigger asChild>
-						<div className="flex cursor-pointer items-center justify-center border-b border-dashed border-zinc-950/15 bg-zinc-50/40 px-4 py-5 transition-colors hover:bg-primary/[0.03] focus:border-primary/40 focus:outline-none">
-							<div className="flex flex-col items-center gap-1.5 text-center">
-								<div className="flex h-9 w-9 items-center justify-center bg-primary/10">
-									<svg
-										width="18"
-										height="18"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										strokeWidth="1.5"
-										className="text-primary"
-									>
-										<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-										<polyline points="17 8 12 3 7 8" />
-										<line x1="12" y1="3" x2="12" y2="15" />
-									</svg>
-								</div>
-								<p className="text-sm font-medium text-foreground">
-									{addLabel || "点击、拖拽或粘贴上传附件"}
-								</p>
-								{emptyHint && (
-									<p className="text-xs text-muted-foreground">{emptyHint}</p>
-								)}
-							</div>
-						</div>
+						<MaterialUploadTrigger
+							compact={false}
+							label={uploadLabel}
+							hint={emptyHint}
+						/>
 					</DropdownMenuTrigger>
 					{dropdownContent}
 				</DropdownMenu>
 			) : (
-				<div
-					className="flex cursor-pointer items-center justify-center border-b border-dashed border-zinc-950/15 bg-zinc-50/40 px-4 py-5 transition-colors hover:bg-primary/[0.03] focus:border-primary/40 focus:outline-none"
+				<MaterialUploadTrigger
+					compact={false}
+					label={uploadLabel}
+					hint={emptyHint}
 					onClick={() => inputRef.current?.click()}
-				>
-					<div className="flex flex-col items-center gap-1.5 text-center">
-						<div className="flex h-9 w-9 items-center justify-center bg-primary/10">
-							<svg
-								width="18"
-								height="18"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="1.5"
-								className="text-primary"
-							>
-								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-								<polyline points="17 8 12 3 7 8" />
-								<line x1="12" y1="3" x2="12" y2="15" />
-							</svg>
-						</div>
-						<p className="text-sm font-medium text-foreground">
-							{addLabel || "点击、拖拽或粘贴上传附件"}
-						</p>
-						{emptyHint && <p className="text-xs text-muted-foreground">{emptyHint}</p>}
-					</div>
-				</div>
+				/>
 			)}
 
 			<input
@@ -549,97 +492,6 @@ export default function MaterialAttachmentList({
 					<div className="flex flex-col gap-2">{materials.map(renderMaterialRow)}</div>
 				)
 			) : null}
-		</div>
-	)
-}
-
-interface MaterialAttachmentRowProps {
-	item: MaterialItem
-	compact: boolean
-	descriptionPlaceholder?: string
-	onRemove: (id: string) => void
-	onDescriptionChange: (id: string, description: string) => void
-}
-
-function MaterialAttachmentRow({
-	item,
-	compact,
-	descriptionPlaceholder,
-	onRemove,
-	onDescriptionChange,
-}: MaterialAttachmentRowProps) {
-	return (
-		<div
-			className={cn(
-				"group flex gap-2 rounded-lg border bg-background shadow-xs transition-all hover:border-primary/40 hover:bg-accent/30",
-				compact ? "p-2" : "gap-3 p-3",
-			)}
-		>
-			<div
-				className={cn(
-					"relative flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/50",
-					compact ? "h-10 w-10" : "h-16 w-16",
-				)}
-			>
-				{item.previewUrl ? (
-					<img
-						src={item.previewUrl}
-						alt={item.file.name}
-						className="h-full w-full object-cover"
-					/>
-				) : (
-					<svg
-						width={compact ? 16 : 24}
-						height={compact ? 16 : 24}
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="1.5"
-						className="text-muted-foreground"
-					>
-						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-						<polyline points="14 2 14 8 20 8" />
-					</svg>
-				)}
-				<button
-					type="button"
-					className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
-					onClick={() => onRemove(item.id)}
-				>
-					<svg width="8" height="8" viewBox="0 0 12 12" fill="none">
-						<path
-							d="M9 3L3 9M3 3l6 6"
-							stroke="currentColor"
-							strokeWidth="1.5"
-							strokeLinecap="round"
-						/>
-					</svg>
-				</button>
-			</div>
-
-			<div className="flex min-w-0 flex-1 flex-col gap-1">
-				<div className="flex items-center gap-2">
-					<span className="truncate text-xs font-medium text-foreground">
-						{item.file.name}
-					</span>
-					<span className="shrink-0 text-[10px] text-muted-foreground">
-						{formatFileSize(item.file.size)}
-					</span>
-				</div>
-				<div className="group relative">
-					<input
-						type="text"
-						className="w-full border-0 border-b border-zinc-200 bg-zinc-50/40 px-2 py-1 pr-6 text-xs outline-none transition-all placeholder:text-muted-foreground/60 focus:border-zinc-950 focus:bg-primary/[0.03]"
-						placeholder={descriptionPlaceholder || "添加说明…"}
-						value={item.description}
-						onChange={(e) => onDescriptionChange(item.id, e.target.value)}
-					/>
-					<InlineVoiceButton
-						value={item.description}
-						onResult={(text) => onDescriptionChange(item.id, text)}
-					/>
-				</div>
-			</div>
 		</div>
 	)
 }

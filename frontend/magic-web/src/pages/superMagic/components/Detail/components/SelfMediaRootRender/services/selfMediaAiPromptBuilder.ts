@@ -3,7 +3,12 @@ import type {
 	ArticleDetail,
 	SelfMediaInitGlobalSettings,
 } from "../components/SelfMediaInitPanel/types"
-import { ALL_PLATFORMS, STYLE_PRESETS } from "../components/SelfMediaInitPanel/types"
+import {
+	ALL_PLATFORMS,
+	STYLE_PRESETS,
+	getAllVisualPresetValuesForPrompt,
+	getVisualPresetValuesForPrompt,
+} from "../components/SelfMediaInitPanel/types"
 import { isWechatOfficialAccount, serializeOutlineToText } from "./selfMediaAiNormalize"
 
 export type ContentLocale = "zh" | "en"
@@ -161,13 +166,14 @@ export function buildTopicsPrompt(
 ${global.targetAudience ? `- Target Audience: ${global.targetAudience}` : ""}
 
 ## Task
-${referenceText && !direction
-			? `Analyze the following reference material and extract ${count} content topic ideas from it. The topics should be directly inspired by and derived from the reference material's themes, viewpoints, or knowledge points. Adapt them into formats suitable for social media distribution.`
-			: `Generate ${count} high-quality content topics. Requirements:
+${
+	referenceText && !direction
+		? `Analyze the following reference material and extract ${count} content topic ideas from it. The topics should be directly inspired by and derived from the reference material's themes, viewpoints, or knowledge points. Adapt them into formats suitable for social media distribution.`
+		: `Generate ${count} high-quality content topics. Requirements:
 1. Suitable for social media content format and distribution
 2. Have viral potential and engagement appeal
 3. Titles should be attention-grabbing`
-		}
+}
 ${direction ? `\n## Creative Direction\n${direction}` : ""}
 ${referenceText ? `\n## Reference Material (Primary Source)\nThe following is user-provided reference material. ${direction ? "Use it as inspiration combined with the direction above." : "Extract topic ideas directly from this material — focus on its core themes, insights, and knowledge points rather than brand marketing angles."}\n${referenceText}` : ""}
 ${!referenceText && global.brandPosition ? `\n## Brand Context (for tone reference only)\n- Brand Positioning: ${global.brandPosition}` : ""}
@@ -186,13 +192,14 @@ ${getContentDescriptionFieldRules("en")}`
 ${global.targetAudience ? `- 目标受众：${global.targetAudience}` : ""}
 
 ## 任务
-${referenceText && !direction
-			? `请仔细分析以下参考资料，从中提炼出 ${count} 个内容选题。选题应直接来源于参考资料中的主题、观点或知识点，并将其转化为适合社交媒体传播的内容形式。`
-			: `请生成 ${count} 个优质内容选题。选题要求：
+${
+	referenceText && !direction
+		? `请仔细分析以下参考资料，从中提炼出 ${count} 个内容选题。选题应直接来源于参考资料中的主题、观点或知识点，并将其转化为适合社交媒体传播的内容形式。`
+		: `请生成 ${count} 个优质内容选题。选题要求：
 1. 适合社交媒体的内容形式和传播特点
 2. 具有话题性和传播潜力
 3. 标题要有吸引力，能引发用户点击`
-		}
+}
 ${direction ? `\n## 创作方向\n${direction}` : ""}
 ${referenceText ? `\n## 参考资料（核心素材）\n以下是用户提供的参考资料。${direction ? "请结合上方的创作方向，从参考资料中获取灵感。" : "请直接从资料中提取选题——聚焦其核心主题、观点洞察和知识要点，不要偏向品牌营销角度。"}\n${referenceText}` : ""}
 ${!referenceText && global.brandPosition ? `\n## 品牌背景（仅供语气参考）\n- 品牌定位：${global.brandPosition}` : ""}
@@ -214,6 +221,8 @@ export function buildTopicsWithDetailsPrompt(
 	styleValues: string,
 	locale: ContentLocale,
 ): string {
+	const visualPresetValues = JSON.stringify(getAllVisualPresetValuesForPrompt())
+
 	return locale === "en"
 		? `You are an expert social media content strategist who specializes in creating complete content plans.
 
@@ -222,14 +231,15 @@ export function buildTopicsWithDetailsPrompt(
 ${global.targetAudience ? `- Target Audience: ${global.targetAudience}` : ""}
 
 ## Task
-${referenceText && !direction
-			? `Analyze the following reference material and derive ${count} content topics with full configuration. Topics should be directly inspired by the reference material's themes, viewpoints, or knowledge points.`
-			: `Generate ${count} high-quality content topics with full configuration for each. Requirements:
+${
+	referenceText && !direction
+		? `Analyze the following reference material and derive ${count} content topics with full configuration. Topics should be directly inspired by the reference material's themes, viewpoints, or knowledge points.`
+		: `Generate ${count} high-quality content topics with full configuration for each. Requirements:
 1. Suitable for social media content format and distribution
 2. Have viral potential and engagement appeal
 3. Titles should be attention-grabbing
 4. For each topic, provide content description, platform, style, visual preset, card count, and outline`
-		}
+}
 ${direction ? `\n## Creative Direction\n${direction}` : ""}
 ${referenceText ? `\n## Reference Material (Primary Source)\n${direction ? "Use it as inspiration combined with the direction above." : "Extract topic ideas directly from this material — focus on its core themes, insights, and knowledge points rather than brand marketing angles."}\n${referenceText}` : ""}
 ${!referenceText && global.brandPosition ? `\n## Brand Context (for tone reference only)\n- Brand Positioning: ${global.brandPosition}` : ""}
@@ -242,7 +252,7 @@ Output strictly in the following JSON array format with no other text:
     "description": "Content description (2-4 sentences: core viewpoint, reader value, content angle)",
     "platform": "rednote",
     "style": one of [${styleValues}],
-    "visualPreset": one of ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "product-launch-preset", "ins-modern", "none"],
+    "visualPreset": one of ${visualPresetValues},
     "cardCount": 6-9,
     "outline": "- Point 1\\n  - Sub-point\\n- Point 2"
   }
@@ -263,14 +273,15 @@ ${getContentDescriptionFieldRules("en")}`
 ${global.targetAudience ? `- 目标受众：${global.targetAudience}` : ""}
 
 ## 任务
-${referenceText && !direction
-			? `请仔细分析以下参考资料，从中提炼出 ${count} 个内容选题，并为每个选题规划完整的内容配置。选题应直接来源于参考资料中的主题、观点或知识点。`
-			: `请生成 ${count} 个优质内容选题，并为每个选题规划完整的内容配置。要求：
+${
+	referenceText && !direction
+		? `请仔细分析以下参考资料，从中提炼出 ${count} 个内容选题，并为每个选题规划完整的内容配置。选题应直接来源于参考资料中的主题、观点或知识点。`
+		: `请生成 ${count} 个优质内容选题，并为每个选题规划完整的内容配置。要求：
 1. 适合社交媒体的内容形式和传播特点
 2. 具有话题性和传播潜力
 3. 标题要有吸引力
 4. 为每个选题提供内容描述、平台、风格、视觉模板、卡片数、大纲`
-		}
+}
 ${direction ? `\n## 创作方向\n${direction}` : ""}
 ${referenceText ? `\n## 参考资料（核心素材）\n${direction ? "请结合上方的创作方向，从参考资料中获取灵感。" : "请直接从资料中提取选题——聚焦其核心主题、观点洞察和知识要点，不要偏向品牌营销角度。"}\n${referenceText}` : ""}
 ${!referenceText && global.brandPosition ? `\n## 品牌背景（仅供语气参考）\n- 品牌定位：${global.brandPosition}` : ""}
@@ -283,7 +294,7 @@ ${!referenceText && global.brandPosition ? `\n## 品牌背景（仅供语气参�
     "description": "内容描述（2-4 句话：核心观点、读者价值、内容角度）",
     "platform": "rednote",
     "style": 从 [${styleValues}] 中选择,
-    "visualPreset": 从 ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "product-launch-preset", "ins-modern", "none"] 中选择,
+    "visualPreset": 从 ${visualPresetValues} 中选择,
     "cardCount": 6-9之间的数字,
     "outline": "- 要点1\\n  - 子要点\\n- 要点2"
   }
@@ -639,6 +650,7 @@ export function buildArticleDetailsPrompt(
 
 ${locale === "en" ? "Outline example:" : "大纲示例："}
 ${getWechatOutlineExample(locale)}`
+	const visualPresetValues = JSON.stringify(getVisualPresetValuesForPrompt(article.platform))
 
 	return locale === "en"
 		? `You are an expert social media content strategist. Based on the user's content description, recommend the best article configuration.
@@ -656,7 +668,7 @@ ${global.targetAudience ? `- Audience: ${global.targetAudience}` : ""}
 ## Task
 Recommend the following configuration:
 1. **style**: Choose from [${styleValues}]
-2. **visualPreset**: Choose from ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "product-launch-preset", "ins-modern", "none"] (considering platform: ${article.platform})
+2. **visualPreset**: Choose from ${visualPresetValues} (considering platform: ${article.platform})
 ${isCardPlatform ? `3. **cardCount**: Recommended card count (integer between 6-9)` : ""}
 4. **outline**: Generate structured outline (use "- " list format, child levels indented by two spaces)
 5. **notes**: Additional creative notes (one sentence)
@@ -687,7 +699,7 @@ ${global.targetAudience ? `- 受众：${global.targetAudience}` : ""}
 ## 任务
 根据上述信息，推荐以下配置：
 1. **style**：从 [${styleValues}] 中选择最合适的内容风格
-2. **visualPreset**：从 ["neo-brutalism", "code-dispatch", "dark-tech", "gradient-editorial", "personal-insight", "product-launch-preset", "ins-modern", "none"] 中选择最合适的视觉模板（考虑平台：${article.platform}）
+2. **visualPreset**：从 ${visualPresetValues} 中选择最合适的视觉模板（考虑平台：${article.platform}）
 ${isCardPlatform ? `3. **cardCount**：推荐卡片数量（6-9 之间的整数）` : ""}
 4. **outline**：生成结构化大纲（使用 "- " 列表格式，子层级两个空格缩进）
 5. **notes**：补充创作注意事项（一句话）

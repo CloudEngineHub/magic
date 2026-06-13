@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ArticleDetail } from "../components/SelfMediaInitPanel/types"
 
@@ -12,7 +13,15 @@ vi.mock("react-i18next", () => ({
 		init: vi.fn(),
 	},
 	useTranslation: () => ({
-		t: (_key: string, fallback?: string) => fallback || _key,
+		t: (key: string, fallback?: string | Record<string, string | number>) => {
+			if (typeof fallback === "string") return fallback
+			if (fallback?.defaultValue) {
+				return String(fallback.defaultValue).replace(/\{\{(\w+)\}\}/g, (_, token: string) =>
+					String(fallback[token] ?? ""),
+				)
+			}
+			return key
+		},
 	}),
 }))
 
@@ -104,7 +113,7 @@ describe("StepTopicAndDetail", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByText("手动创建首个大纲"))
+		fireEvent.click(screen.getByRole("button", { name: "添加第一个选题" }))
 
 		expect(onChange).toHaveBeenCalledWith([
 			expect.objectContaining({
@@ -139,6 +148,42 @@ describe("StepTopicAndDetail", () => {
 				expect.objectContaining({ folderName: "02-post" }),
 			])
 		})
+	})
+
+	it("moves focus to the generated topic title for immediate editing", async () => {
+		mockGenerateTopics.mockResolvedValue([{ title: "中文选题", description: "desc" }])
+
+		function ControlledTopicStep() {
+			const [articles, setArticles] = useState<ArticleDetail[]>([])
+			return (
+				<StepTopicAndDetail
+					articles={articles}
+					onChange={setArticles}
+					onArticleUpdate={(index, article) => {
+						setArticles((current) =>
+							current.map((item, itemIndex) =>
+								itemIndex === index ? article : item,
+							),
+						)
+					}}
+					globalSettings={{
+						author: "",
+						brandPosition: "",
+						targetAudience: "",
+						brandImages: [],
+					}}
+				/>
+			)
+		}
+
+		render(<ControlledTopicStep />)
+
+		fireEvent.click(screen.getByTestId("ai-topic-assistant-generate"))
+
+		await waitFor(() => {
+			expect(screen.getByLabelText("选题标题")).toHaveFocus()
+		})
+		expect(screen.getByDisplayValue("中文选题")).toBeInTheDocument()
 	})
 
 	it("shows an editable folder name input for the active article", () => {
@@ -184,7 +229,7 @@ describe("StepTopicAndDetail", () => {
 			/>,
 		)
 
-		expect(screen.getByText("手动创建首个大纲").closest("button")).toHaveAttribute(
+		expect(screen.getByText("添加第一个选题").closest("button")).toHaveAttribute(
 			"data-slot",
 			"button",
 		)

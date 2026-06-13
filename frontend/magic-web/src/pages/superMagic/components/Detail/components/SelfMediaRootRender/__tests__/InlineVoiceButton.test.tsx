@@ -17,6 +17,18 @@ vi.mock("@/hooks/useMicrophonePermission", () => ({
 	}),
 }))
 
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string, fallback?: string) => {
+			const messages: Record<string, string> = {
+				"detail.selfMedia.initPanel.voiceInput.start": "Voice input",
+				"detail.selfMedia.initPanel.voiceInput.stop": "Stop voice input",
+			}
+			return messages[key] || fallback || key
+		},
+	}),
+}))
+
 import InlineVoiceButton from "../components/SelfMediaInitPanel/components/ui/InlineVoiceButton"
 
 describe("InlineVoiceButton", () => {
@@ -85,5 +97,24 @@ describe("InlineVoiceButton", () => {
 		expect(onResult).toHaveBeenNthCalledWith(2, "Draft: First sentence.")
 		expect(onResult).toHaveBeenNthCalledWith(3, "Draft: First sentence.Second")
 		expect(onResult).toHaveBeenNthCalledWith(4, "Draft: First sentence.Second sentence.")
+	})
+
+	it("uses localized titles for idle and active states", () => {
+		const { rerender } = render(<InlineVoiceButton value="" onResult={vi.fn()} />)
+
+		expect(screen.getByRole("button")).toHaveAttribute("title", "Voice input")
+		expect(screen.queryByTitle("语音输入")).not.toBeInTheDocument()
+
+		mockUseVoiceInput.mockReturnValue({
+			status: "recording",
+			isRecording: true,
+			toggleRecording: vi.fn(),
+			disconnect: vi.fn(),
+		})
+
+		rerender(<InlineVoiceButton value="" onResult={vi.fn()} />)
+
+		expect(screen.getByRole("button")).toHaveAttribute("title", "Stop voice input")
+		expect(screen.queryByTitle("停止语音输入")).not.toBeInTheDocument()
 	})
 })

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import type { ArticleDetail } from "../components/SelfMediaInitPanel/types"
 import {
 	buildSelfMediaPostIndexEntries,
+	removeSelfMediaPostFromIndex,
+	renameSelfMediaPostInIndex,
 	upsertSelfMediaPostsIndex,
 } from "../services/selfMediaMagicProjectIndex"
 
@@ -149,5 +151,77 @@ window.magicProjectConfigure(window.magicProjectConfig);`
 				},
 			]),
 		).toThrow("Invalid magic.project.js")
+	})
+
+	it("removes a post entry from the matching platform without touching other posts", () => {
+		const current = `window.magicProjectConfig = {
+  "version": "1.0.0",
+  "type": "self-media",
+  "self-media": {
+    "rednote": {
+      "posts": [
+        { "id": "keep", "name": "Keep", "entry": "posts/keep/post.json" },
+        { "id": "delete-me", "name": "Delete Me", "entry": "posts/delete-me/post.json" }
+      ]
+    },
+    "instagram": {
+      "posts": [
+        { "id": "delete-me", "name": "Instagram Twin", "entry": "posts/delete-me/post.json" }
+      ]
+    }
+  }
+};
+window.magicProjectConfigure(window.magicProjectConfig);`
+
+		const updated = removeSelfMediaPostFromIndex(current, {
+			platform: "rednote",
+			id: "delete-me",
+			entry: "posts/delete-me/post.json",
+		})
+
+		const config = parseConfig(updated)
+		expect(config["self-media"].rednote.posts).toEqual([
+			{ id: "keep", name: "Keep", entry: "posts/keep/post.json" },
+		])
+		expect(config["self-media"].instagram.posts).toEqual([
+			{ id: "delete-me", name: "Instagram Twin", entry: "posts/delete-me/post.json" },
+		])
+		expect(updated).toContain("window.magicProjectConfigure(window.magicProjectConfig);")
+	})
+
+	it("renames a post entry in the matching platform index", () => {
+		const current = `window.magicProjectConfig = {
+  "version": "1.0.0",
+  "type": "self-media",
+  "self-media": {
+    "rednote": {
+      "posts": [
+        { "id": "post-1", "name": "Old Name", "entry": "posts/post-1/post.json" }
+      ]
+    },
+    "instagram": {
+      "posts": [
+        { "id": "post-1", "name": "Instagram Twin", "entry": "posts/post-1/post.json" }
+      ]
+    }
+  }
+};
+window.magicProjectConfigure(window.magicProjectConfig);`
+
+		const updated = renameSelfMediaPostInIndex(current, {
+			platform: "rednote",
+			id: "post-1",
+			entry: "posts/post-1/post.json",
+			name: "New Name",
+		})
+
+		const config = parseConfig(updated)
+		expect(config["self-media"].rednote.posts).toEqual([
+			{ id: "post-1", name: "New Name", entry: "posts/post-1/post.json" },
+		])
+		expect(config["self-media"].instagram.posts).toEqual([
+			{ id: "post-1", name: "Instagram Twin", entry: "posts/post-1/post.json" },
+		])
+		expect(updated).toContain("window.magicProjectConfigure(window.magicProjectConfig);")
 	})
 })

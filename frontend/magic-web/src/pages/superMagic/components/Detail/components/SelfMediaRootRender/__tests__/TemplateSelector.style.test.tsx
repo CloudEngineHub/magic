@@ -26,7 +26,7 @@ const templates: TemplateMeta[] = [
 ]
 
 describe("TemplateSelector style", () => {
-	it("uses shadcn button cards instead of left-border sketch blocks", () => {
+	it("uses the self-media home card language for template choices", () => {
 		render(
 			<TemplateSelector
 				templates={templates}
@@ -39,10 +39,10 @@ describe("TemplateSelector style", () => {
 		const templateButton = screen.getByRole("button", { name: /Launch Plan/ })
 
 		expect(blankButton).toHaveAttribute("data-slot", "button")
-		expect(blankButton).toHaveClass("rounded-lg")
+		expect(blankButton).toHaveClass("rounded-[24px]", "bg-white")
 		expect(blankButton).not.toHaveClass("border-l-2")
 		expect(templateButton).toHaveAttribute("data-slot", "button")
-		expect(templateButton).toHaveClass("rounded-lg")
+		expect(templateButton).toHaveClass("rounded-[24px]", "bg-white")
 		expect(templateButton).not.toHaveClass("border-l-2")
 	})
 })

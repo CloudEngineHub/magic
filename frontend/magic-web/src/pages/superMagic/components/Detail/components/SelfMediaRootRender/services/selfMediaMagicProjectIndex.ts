@@ -17,6 +17,19 @@ export interface SelfMediaPostIndexEntry {
 	entry: string
 }
 
+export interface RemoveSelfMediaPostIndexEntry {
+	platform: SelfMediaPlatform
+	id: string
+	entry: string
+}
+
+export interface RenameSelfMediaPostIndexEntry {
+	platform: SelfMediaPlatform
+	id: string
+	entry: string
+	name: string
+}
+
 export interface PrefillSelfMediaMagicProjectIndexParams {
 	articles: ArticleDetail[]
 	attachmentList?: AttachmentNode[]
@@ -99,6 +112,50 @@ export function upsertSelfMediaPostsIndex(
 
 		platformBlock.posts.push(postEntry)
 	}
+
+	return `${prefix}${JSON.stringify(config, null, 2)}${suffix}`
+}
+
+export function removeSelfMediaPostFromIndex(
+	content: string,
+	target: RemoveSelfMediaPostIndexEntry,
+): string {
+	const { config, prefix, suffix } = splitMagicProjectJs(content)
+	const selfMedia = ensureSelfMediaConfig(config)
+	const platformBlock = selfMedia[target.platform]
+	if (!isObjectRecord(platformBlock) || !Array.isArray(platformBlock.posts)) {
+		return content
+	}
+	const nextPosts = platformBlock.posts.filter(
+		(post) => post.id !== target.id && post.entry !== target.entry,
+	)
+	if (nextPosts.length === platformBlock.posts.length) return content
+	platformBlock.posts = nextPosts
+
+	return `${prefix}${JSON.stringify(config, null, 2)}${suffix}`
+}
+
+export function renameSelfMediaPostInIndex(
+	content: string,
+	target: RenameSelfMediaPostIndexEntry,
+): string {
+	const { config, prefix, suffix } = splitMagicProjectJs(content)
+	const selfMedia = ensureSelfMediaConfig(config)
+	const platformBlock = selfMedia[target.platform]
+	if (!isObjectRecord(platformBlock) || !Array.isArray(platformBlock.posts)) {
+		return content
+	}
+
+	let changed = false
+	platformBlock.posts = platformBlock.posts.map((post) => {
+		if (post.id !== target.id && post.entry !== target.entry) return post
+		changed = true
+		return {
+			...post,
+			name: target.name,
+		}
+	})
+	if (!changed) return content
 
 	return `${prefix}${JSON.stringify(config, null, 2)}${suffix}`
 }

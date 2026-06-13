@@ -26,13 +26,15 @@ vi.mock("../components/SelfMediaInitPanel/hooks/useBrandImagePreviewHydration", 
 }))
 
 vi.mock("../components/SelfMediaInitPanel/steps/StepBrandInfo/components/BrandAssetUpload", () => ({
-	BrandAssetUpload: () => <div data-testid="brand-asset-upload" />,
+	BrandAssetUpload: ({ layout }: { layout?: string }) => (
+		<div data-layout={layout} data-testid="brand-asset-upload" />
+	),
 }))
 
 import { BrandInfoFields } from "../components/SelfMediaInitPanel/steps/StepBrandInfo/components/BrandInfoFields"
 
 describe("BrandInfoFields wizard style", () => {
-	it("uses translucent nested surfaces with embedded rows in the first init step", () => {
+	it("reuses the shared brand form layout in the first init step", () => {
 		render(
 			<BrandInfoFields
 				author=""
@@ -46,23 +48,29 @@ describe("BrandInfoFields wizard style", () => {
 			/>,
 		)
 
-		const panel = screen.getByTestId("self-media-brand-info-wizard-panel")
+		const layout = screen.getByTestId("self-media-brand-config-settings-layout")
 
-		expect(panel).toHaveClass("rounded-lg")
-		expect(panel).not.toHaveClass("border")
-		expect(panel).toHaveClass("bg-[#434c81]/[0.045]")
-		expect(screen.getByTestId("self-media-brand-info-wizard-grid")).toHaveClass(
-			"lg:grid-cols-[minmax(0,1fr)_20rem]",
+		expect(layout).toBeInTheDocument()
+		expect(layout).toHaveAttribute("data-layout", "wizard")
+		expect(layout).toHaveClass("lg:grid-cols-[minmax(0,1fr)_19rem]")
+		expect(screen.queryByTestId("self-media-brand-info-wizard-panel")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-brand-field-author")).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-brand-config-profile-card")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-brand-config-assets-card")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-brand-config-profile-card").className).not.toContain(
+			"#434c81",
 		)
-		expect(screen.getByTestId("self-media-brand-field-author")).toHaveClass("border-0")
-		expect(screen.getByTestId("self-media-brand-field-author")).toHaveClass("shadow-none")
-		expect(screen.getByTestId("self-media-brand-field-author")).toHaveClass(
-			"hover:bg-background/45",
-		)
-		expect(screen.getByTestId("self-media-brand-field-assets")).toHaveClass("bg-background/65")
-		expect(screen.getByTestId("self-media-brand-field-assets")).toHaveClass(
-			"hover:bg-background/80",
-		)
-		expect(screen.getByTestId("brand-asset-upload")).toBeInTheDocument()
+		expect(screen.queryByText("账号档案")).not.toBeInTheDocument()
+		expect(
+			screen.queryByText("配置 AI 生成内容时默认使用的身份、定位与受众。"),
+		).not.toBeInTheDocument()
+		expect(screen.queryByText("#AI分享")).not.toBeInTheDocument()
+		expect(screen.queryByText("账号与品牌信息")).not.toBeInTheDocument()
+		expect(
+			screen.queryByText("填写默认账号、定位和素材，让后续选题与成文保持统一口吻。"),
+		).not.toBeInTheDocument()
+		expect(screen.queryByText("上传 Logo、IP 形象或风格参考图。")).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-brand-config-assets-card")).not.toHaveTextContent("0")
+		expect(screen.getByTestId("brand-asset-upload")).toHaveAttribute("data-layout", "stacked")
 	})
 })

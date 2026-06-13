@@ -7,6 +7,7 @@
  */
 
 import { useEffect } from "react"
+import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import { cn } from "@/lib/utils"
 import {
@@ -18,6 +19,7 @@ import {
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { platformKey } from "@/utils/storage"
+import { selfMediaOverlayStyles } from "../../../selfMediaOverlayStyles"
 
 const STORAGE_KEYS = {
 	text: platformKey("super_magic/self_media_model"),
@@ -42,6 +44,10 @@ export interface ModelSelectorProps {
 	modelType?: "text" | "image" | "video"
 	/** Optional label shown before the model name */
 	label?: string
+	/** Disable model switching while keeping the selected model visible */
+	disabled?: boolean
+	/** Hint shown when model switching is disabled */
+	disabledReason?: string
 }
 
 export default observer(function ModelSelector({
@@ -51,7 +57,10 @@ export default observer(function ModelSelector({
 	mode = "full",
 	modelType = "text",
 	label,
+	disabled = false,
+	disabledReason,
 }: ModelSelectorProps) {
+	const { t } = useTranslation("super")
 	// 响应式获取模型列表，避免因 useMemo(..., []) 导致异步数据不更新
 	const models = (
 		(modelType === "image"
@@ -88,7 +97,12 @@ export default observer(function ModelSelector({
 							: "flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-xs text-muted-foreground shadow-xs transition-colors hover:border-primary/50 hover:text-foreground dark:bg-input/30",
 						className,
 					)}
-					title="切换模型"
+					title={
+						disabled
+							? disabledReason
+							: t("detail.selfMedia.initPanel.modelSelector.switchModel", "切换模型")
+					}
+					disabled={disabled}
 				>
 					{label && <span className="shrink-0 text-muted-foreground/70">{label}</span>}
 					{selected?.model_icon && (
@@ -126,7 +140,10 @@ export default observer(function ModelSelector({
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align="start"
-				className="max-h-[240px] min-w-[190px] overflow-y-auto rounded-md border bg-popover p-1 shadow-lg backdrop-blur-md"
+				className={cn(
+					"max-h-[240px] min-w-[190px] overflow-y-auto p-1",
+					selfMediaOverlayStyles.floatingPanel,
+				)}
 			>
 				{models.map((m) => (
 					<DropdownMenuItem

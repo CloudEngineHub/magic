@@ -3,6 +3,7 @@ import { superMagicUploadTokenService } from "@/pages/superMagic/components/Mess
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import type { ScheduledTask } from "@/types/scheduledTask"
 import { Upload } from "@dtyq/upload-sdk"
+import type { SelfMediaPlatform } from "../../../types"
 import { hasMeaningfulSelfMediaDraftData } from "../components/SelfMediaInitPanel/types"
 import type {
 	SelfMediaInitData,
@@ -12,6 +13,10 @@ import type {
 	SelfMediaInitGlobalSettings,
 	MaterialItem,
 } from "../components/SelfMediaInitPanel/types"
+import {
+	removeSelfMediaPostFromIndex,
+	renameSelfMediaPostInIndex,
+} from "./selfMediaMagicProjectIndex"
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -161,6 +166,16 @@ export interface SelfMediaPostOpsReviewPayload {
 	content: string
 }
 
+export interface DeleteSelfMediaPostParams {
+	platform: SelfMediaPlatform
+	id: string
+	entry: string
+}
+
+export interface RenameSelfMediaPostParams extends DeleteSelfMediaPostParams {
+	name: string
+}
+
 interface SerializedReferenceFile {
 	name: string
 	content: string
@@ -281,26 +296,28 @@ export class SelfMediaFileStorageService {
 	async saveBrandConfig(global: SelfMediaInitGlobalSettings): Promise<void> {
 		// Serialize concurrent saves to avoid duplicate file/folder creation
 		if (this.brandConfigSaving) {
-			await this.brandConfigSaving.catch(() => {})
+			await this.brandConfigSaving.catch(() => undefined)
 		}
 		const doSave = async () => {
-			try {
-				const now = new Date().toISOString()
-				await this.ensureBrandImagesUploaded(global.brandImages, "brand")
-				const payload = await this.buildBrandConfigPayload(global, now)
-				const brandConfigDir = await this.ensureDirectory(BRAND_CONFIG_DIR)
-				await this.createAndWriteFile(
-					brandConfigDir,
-					BRAND_CONFIG_JSON,
-					JSON.stringify(payload, null, 2),
-				)
-			} catch {
-				// Silent failure - callers keep local state and surface errors if needed.
+			const now = new Date().toISOString()
+			await this.ensureBrandImagesUploaded(global.brandImages, "brand", true)
+			const payload = await this.buildBrandConfigPayload(global, now)
+			const brandConfigDir = await this.ensureDirectory(BRAND_CONFIG_DIR)
+			const brandConfigFileId = await this.createAndWriteFile(
+				brandConfigDir,
+				BRAND_CONFIG_JSON,
+				JSON.stringify(payload, null, 2),
+			)
+			if (!brandConfigFileId) {
+				throw new Error("Failed to save brand config")
 			}
 		}
 		this.brandConfigSaving = doSave()
-		await this.brandConfigSaving
-		this.brandConfigSaving = null
+		try {
+			await this.brandConfigSaving
+		} finally {
+			this.brandConfigSaving = null
+		}
 	}
 
 	async loadBrandConfig(): Promise<SelfMediaInitGlobalSettings | null> {
@@ -318,6 +335,101 @@ export class SelfMediaFileStorageService {
 		} catch {
 			return null
 		}
+	}
+
+	async updatePostTitle(postEntryPath: string, nextTitle: string): Promise<void> {
+		const title = nextTitle.trim()
+		if (!title) {
+			throw new Error("postTitleEmpty")
+		}
+		const files = await this.getProjectFileList()
+		const file = this.findFileByProjectRelativePath(files, postEntryPath)
+		if (!file?.file_id) {
+			throw new Error("postManifestMissing")
+		}
+
+		const content = (await getFileContentById(file.file_id, {
+			responseType: "text",
+		})) as string
+		await SuperMagicApi.saveFileContent([
+			{
+				file_id: file.file_id,
+				content: updatePostManifestTitleContent(content, title),
+			},
+		])
+		this.invalidateFileListCache()
+	}
+
+	async renamePost(target: RenameSelfMediaPostParams): Promise<void> {
+		const title = target.name.trim()
+		if (!title) {
+			throw new Error("postTitleEmpty")
+		}
+		const files = await this.getProjectFileList()
+		const postFile = this.findFileByProjectRelativePath(files, target.entry)
+		if (!postFile?.file_id) {
+			throw new Error("postManifestMissing")
+		}
+		const magicProjectFile = this.findFileByProjectRelativePath(files, "magic.project.js")
+		if (!magicProjectFile?.file_id) {
+			throw new Error("magicProjectNotFound")
+		}
+
+		const [postContent, magicProjectContent] = await Promise.all([
+			getFileContentById(postFile.file_id, { responseType: "text" }) as Promise<string>,
+			getFileContentById(magicProjectFile.file_id, {
+				responseType: "text",
+			}) as Promise<string>,
+		])
+		const updatedPostContent = updatePostManifestTitleContent(postContent, title)
+		const updatedIndexContent = renameSelfMediaPostInIndex(magicProjectContent, {
+			platform: target.platform,
+			id: target.id,
+			entry: target.entry,
+			name: title,
+		})
+
+		await SuperMagicApi.saveFileContent([
+			{
+				file_id: postFile.file_id,
+				content: updatedPostContent,
+			},
+			{
+				file_id: magicProjectFile.file_id,
+				content: updatedIndexContent,
+				enable_shadow: true,
+			},
+		])
+		this.invalidateFileListCache()
+	}
+
+	async deletePost(target: DeleteSelfMediaPostParams): Promise<void> {
+		const files = await this.getProjectFileList()
+		const magicProjectFile = this.findFileByProjectRelativePath(files, "magic.project.js")
+		if (!magicProjectFile?.file_id) {
+			throw new Error("magicProjectNotFound")
+		}
+
+		const postDirectoryPath = this.getPostDirectoryPath(target.entry)
+		const postDirectory = this.findDirectoryInProjectFiles(files, postDirectoryPath)
+		if (!postDirectory?.file_id) {
+			throw new Error("postDirectoryMissing")
+		}
+
+		const content = (await getFileContentById(magicProjectFile.file_id, {
+			responseType: "text",
+		})) as string
+		const updatedContent = removeSelfMediaPostFromIndex(content, target)
+
+		await SuperMagicApi.saveFileContent([
+			{
+				file_id: magicProjectFile.file_id,
+				content: updatedContent,
+				enable_shadow: true,
+			},
+		])
+		await SuperMagicApi.deleteFile(postDirectory.file_id)
+		this.invalidateFileListCache()
 	}
 
 	async savePostOpsMetrics(
@@ -922,16 +1034,22 @@ export class SelfMediaFileStorageService {
 		return normalized
 	}
 
+	private getProjectRelativePathCandidates(pathFromSelfMediaFolder: string): string[] {
+		const normalized = this.normalizeRelativePath(pathFromSelfMediaFolder)
+		const projected = this.toProjectRelativePath(normalized)
+		return Array.from(new Set([projected, normalized]))
+	}
+
 	private findDirectoryInProjectFiles(
 		files: FileNode[],
 		pathFromSelfMediaFolder: string,
 	): FileNode | undefined {
-		const target = this.toProjectRelativePath(pathFromSelfMediaFolder)
+		const targets = this.getProjectRelativePathCandidates(pathFromSelfMediaFolder)
 		return files.find(
 			(f) =>
 				f.is_directory &&
 				f.relative_file_path &&
-				this.normalizeRelativePath(f.relative_file_path) === target,
+				targets.includes(this.normalizeRelativePath(f.relative_file_path)),
 		)
 	}
 
@@ -939,12 +1057,12 @@ export class SelfMediaFileStorageService {
 		files: FileNode[],
 		pathFromSelfMediaFolder: string,
 	): FileNode | undefined {
-		const target = this.toProjectRelativePath(pathFromSelfMediaFolder)
+		const targets = this.getProjectRelativePathCandidates(pathFromSelfMediaFolder)
 		return files.find(
 			(f) =>
 				!f.is_directory &&
 				f.relative_file_path &&
-				this.normalizeRelativePath(f.relative_file_path) === target,
+				targets.includes(this.normalizeRelativePath(f.relative_file_path)),
 		)
 	}
 
@@ -976,6 +1094,11 @@ export class SelfMediaFileStorageService {
 	private getPostOpsPath(postEntryPath: string): string {
 		const normalized = this.normalizeRelativePath(postEntryPath)
 		return normalized.replace(/\/?post\.json$/, "/ops")
+	}
+
+	private getPostDirectoryPath(postEntryPath: string): string {
+		const normalized = this.normalizeRelativePath(postEntryPath)
+		return normalized.replace(/\/?post\.json$/, "")
 	}
 
 	/** Path segment under parentFileId for ensureDirectory (not project-root relative). */
@@ -1663,6 +1786,7 @@ export class SelfMediaFileStorageService {
 	private async ensureBrandImagesUploaded(
 		brandImages: BrandImageItem[],
 		target: "draft" | "brand" = "draft",
+		strict = false,
 	): Promise<void> {
 		for (const item of brandImages) {
 			if (item.uploadedPath || !item.file?.size) continue
@@ -1671,6 +1795,9 @@ export class SelfMediaFileStorageService {
 					? await this.uploadBrandImageToBrandConfig(item.file)
 					: await this.uploadBrandImageToDraft(item.file)
 			if (path) item.uploadedPath = path
+			if (!path && strict) {
+				throw new Error(`Failed to upload brand image: ${item.file.name}`)
+			}
 		}
 	}
 
@@ -1842,5 +1969,36 @@ function upsertPostOpsHistoryItem<T extends { fetchedAt: string }>(items: T[], n
 	const withoutSameTime = items.filter((item) => item.fetchedAt !== next.fetchedAt)
 	return [...withoutSameTime, next].sort(
 		(left, right) => Date.parse(left.fetchedAt) - Date.parse(right.fetchedAt),
+	)
+}
+
+function updatePostManifestTitleContent(content: string, title: string): string {
+	let manifest: Record<string, unknown>
+	try {
+		const parsed = JSON.parse(content) as Record<string, unknown>
+		if (!parsed || typeof parsed !== "object") {
+			throw new Error("postManifestInvalid")
+		}
+		manifest = parsed
+	} catch {
+		throw new Error("postManifestInvalid")
+	}
+
+	const rawMeta = manifest.meta
+	const meta =
+		rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta)
+			? (rawMeta as Record<string, unknown>)
+			: {}
+
+	return JSON.stringify(
+		{
+			...manifest,
+			meta: {
+				...meta,
+				title,
+			},
+		},
+		null,
+		2,
 	)
 }

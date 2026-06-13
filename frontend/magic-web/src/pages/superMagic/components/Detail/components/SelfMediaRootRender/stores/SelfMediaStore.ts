@@ -221,6 +221,67 @@ export class SelfMediaStore {
 		this.view = "feed"
 	}
 
+	updatePostTitle(index: number, nextTitle: string): void {
+		const platform = this.resolvedPlatform
+		const entry = this.postEntries[index]
+		if (!platform || !entry) return
+		this.updatePlatformPostTitle(platform, entry.id, nextTitle)
+	}
+
+	updatePlatformPostTitle(platform: SelfMediaPlatform, entryId: string, nextTitle: string): void {
+		const title = nextTitle.trim()
+		if (!title) return
+		const slice = this.slices.find((item) => item.platform === platform)
+		const entry = slice?.postEntries.find((item) => item.id === entryId)
+		if (!entry) return
+		const key = cacheKey(platform, entryId)
+		const currentPost = this.loadedPosts[key] || buildPlaceholderPost(entry)
+		const nextPost: SelfMediaPost = {
+			...currentPost,
+			meta: {
+				...currentPost.meta,
+				feedTitle: title,
+				title,
+			},
+		}
+		this.loadedPosts = { ...this.loadedPosts, [key]: nextPost }
+		this.slices = this.slices.map((slice) => {
+			if (slice.platform !== platform) return slice
+			return {
+				...slice,
+				postEntries: slice.postEntries.map((item) =>
+					item.id === entryId ? { ...item, name: title } : item,
+				),
+			}
+		})
+	}
+
+	removePlatformPost(platform: SelfMediaPlatform, entryId: string): void {
+		const key = cacheKey(platform, entryId)
+		const nextLoadedPosts = { ...this.loadedPosts }
+		delete nextLoadedPosts[key]
+
+		this.loadedPosts = nextLoadedPosts
+		this.slices = this.slices
+			.map((slice) =>
+				slice.platform === platform
+					? {
+							...slice,
+							postEntries: slice.postEntries.filter((entry) => entry.id !== entryId),
+						}
+					: slice,
+			)
+			.filter((slice) => slice.postEntries.length > 0)
+
+		if (this.activePlatform === platform && !this.postEntries.length) {
+			this.activePlatform = this.slices[0]?.platform
+		}
+		const count = this.postEntries.length
+		this.activePostIndex = count > 0 ? Math.min(this.activePostIndex, count - 1) : 0
+		this.activeCardIndex = 0
+		if (this.slices.length === 0) this.view = "feed"
+	}
+
 	/** Switch platform; mirrors the reset previously done in index.tsx */
 	handleChangePlatform(next: SelfMediaPlatform): void {
 		this.activePlatform = next

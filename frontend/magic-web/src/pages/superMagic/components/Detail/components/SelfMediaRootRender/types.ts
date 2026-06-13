@@ -133,6 +133,13 @@ export interface PlatformComponentProps {
 	selectedProject?: any
 	/** Navigate back to the article home page. */
 	onBackHome?: () => void
+	/** Persist a post title change back to its post.json manifest. */
+	onUpdatePostTitle?: (
+		target: { platform: SelfMediaPlatform; index: number; entry: SelfMediaPostEntry },
+		title: string,
+	) => Promise<boolean | void> | boolean | void
+	/** Open the pre-publish AI diagnosis flow for the active post. */
+	onRequestPrePublishAnalysis?: () => void
 }
 
 /** Component contract every platform implementation must follow */

@@ -156,10 +156,13 @@ export interface VisualPresetOption {
 	labelKey: string
 	descriptionKey: string
 	platforms: SelfMediaPlatform[]
-	/** CSS gradient or color hint used as a mini-preview swatch */
+	preview?: {
+		sourcePath: string
+		/** Static long image generated from preview.html, served from frontend public/. */
+		imageUrl?: string
+	}
+	/** CSS gradient or color hint used by the compact layout mark. */
 	swatch?: string
-	/** Emoji or short icon character for quick identification */
-	icon?: string
 }
 
 export const VISUAL_PRESETS: VisualPresetOption[] = [
@@ -168,48 +171,120 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		labelKey: "detail.selfMedia.initPanel.visuals.neoBrutalism.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.neoBrutalism.description",
 		platforms: ["rednote"],
-		swatch: "linear-gradient(135deg, #ff6b6b 0%, #feca57 50%, #48dbfb 100%)",
-		icon: "🟧",
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/neo-brutalism/preview.html",
+			imageUrl: "/self-media-preset-previews/rednote/neo-brutalism.png",
+		},
+		swatch: "linear-gradient(135deg, #fafaf8 0%, #ffe566 52%, #ff2442 100%)",
 	},
 	{
 		value: "code-dispatch",
 		labelKey: "detail.selfMedia.initPanel.visuals.codeDispatch.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.codeDispatch.description",
 		platforms: ["rednote"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/code-dispatch/preview.html",
+			imageUrl: "/self-media-preset-previews/rednote/code-dispatch.png",
+		},
 		swatch: "linear-gradient(135deg, #0f1923 0%, #1a3a4a 50%, #00d2d3 100%)",
-		icon: "💻",
 	},
 	{
 		value: "dark-tech",
 		labelKey: "detail.selfMedia.initPanel.visuals.darkTech.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.darkTech.description",
 		platforms: ["rednote"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/dark-tech/preview.html",
+			imageUrl: "/self-media-preset-previews/rednote/dark-tech.png",
+		},
 		swatch: "linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #d4af37 100%)",
-		icon: "⚡",
 	},
 	{
 		value: "gradient-editorial",
 		labelKey: "detail.selfMedia.initPanel.visuals.gradientEditorial.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.gradientEditorial.description",
 		platforms: ["rednote"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/gradient-editorial/preview.html",
+			imageUrl: "/self-media-preset-previews/rednote/gradient-editorial.png",
+		},
 		swatch: "linear-gradient(135deg, #667eea 0%, #764ba2 50%, #a78bfa 100%)",
-		icon: "🟣",
 	},
 	{
 		value: "personal-insight",
 		labelKey: "detail.selfMedia.initPanel.visuals.personalInsight.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.personalInsight.description",
 		platforms: ["rednote"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/personal-insight/preview.html",
+			imageUrl: "/self-media-preset-previews/rednote/personal-insight.png",
+		},
 		swatch: "linear-gradient(135deg, #ffffff 0%, #f0f7ff 50%, #1a73e8 100%)",
-		icon: "📝",
+	},
+	{
+		value: "film-vintage",
+		labelKey: "detail.selfMedia.initPanel.visuals.filmVintage.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.filmVintage.description",
+		platforms: ["rednote"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/film-vintage/preview.html",
+			imageUrl: "/self-media-preset-previews/rednote/film-vintage.png",
+		},
+		swatch: "linear-gradient(135deg, #0f0d0a 0%, #6f1d1b 50%, #f2dfb8 100%)",
+	},
+	{
+		value: "warm-journal",
+		labelKey: "detail.selfMedia.initPanel.visuals.warmJournal.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.warmJournal.description",
+		platforms: ["rednote"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/warm-journal/preview.html",
+			imageUrl: "/self-media-preset-previews/rednote/warm-journal.png",
+		},
+		swatch: "linear-gradient(135deg, #0a0a0a 0%, #c5bba5 52%, #f5f0e6 100%)",
+	},
+	{
+		value: "paper-column",
+		labelKey: "detail.selfMedia.initPanel.visuals.paperColumn.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.paperColumn.description",
+		platforms: ["rednote"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/paper-column/preview.html",
+			imageUrl: "/self-media-preset-previews/rednote/paper-column.png",
+		},
+		swatch: "linear-gradient(135deg, #f5f1ea 0%, #dbe7f0 54%, #567493 100%)",
+	},
+	{
+		value: "signal-grid",
+		labelKey: "detail.selfMedia.initPanel.visuals.signalGrid.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.signalGrid.description",
+		platforms: ["rednote"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/signal-grid/preview.html",
+			imageUrl: "/self-media-preset-previews/rednote/signal-grid.png",
+		},
+		swatch: "linear-gradient(135deg, #fbfbfa 0%, #111111 58%, #1f5fe8 100%)",
 	},
 	{
 		value: "product-launch-preset",
 		labelKey: "detail.selfMedia.initPanel.visuals.productLaunch.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.productLaunch.description",
 		platforms: ["rednote"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/product-launch-preset/preview.html",
+			imageUrl: "/self-media-preset-previews/rednote/product-launch-preset.png",
+		},
 		swatch: "linear-gradient(135deg, #FFFFFF 0%, #FFF5F5 50%, #E63946 100%)",
-		icon: "🚀",
 	},
 
 	{
@@ -217,8 +292,60 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		labelKey: "detail.selfMedia.initPanel.visuals.insModern.label",
 		descriptionKey: "detail.selfMedia.initPanel.visuals.insModern.description",
 		platforms: ["instagram"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-modern/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-modern.png",
+		},
 		swatch: "linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #e9ecef 100%)",
-		icon: "✨",
+	},
+	{
+		value: "ins-minimal",
+		labelKey: "detail.selfMedia.initPanel.visuals.insMinimal.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insMinimal.description",
+		platforms: ["instagram"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-minimal/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-minimal.png",
+		},
+		swatch: "linear-gradient(135deg, #ffffff 0%, #f7f2ea 50%, #151515 100%)",
+	},
+	{
+		value: "ins-dark",
+		labelKey: "detail.selfMedia.initPanel.visuals.insDark.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insDark.description",
+		platforms: ["instagram"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-dark/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-dark.png",
+		},
+		swatch: "linear-gradient(135deg, #080a12 0%, #6d28d9 52%, #14f1d9 100%)",
+	},
+	{
+		value: "ins-gradient",
+		labelKey: "detail.selfMedia.initPanel.visuals.insGradient.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insGradient.description",
+		platforms: ["instagram"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-gradient/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-gradient.png",
+		},
+		swatch: "linear-gradient(135deg, #ff7ab6 0%, #7c3aed 52%, #22d3ee 100%)",
+	},
+	{
+		value: "ins-retro",
+		labelKey: "detail.selfMedia.initPanel.visuals.insRetro.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insRetro.description",
+		platforms: ["instagram"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-retro/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-retro.png",
+		},
+		swatch: "linear-gradient(135deg, #2f1b12 0%, #c2410c 52%, #f7d08a 100%)",
 	},
 	{
 		value: "custom",
@@ -226,7 +353,6 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		descriptionKey: "detail.selfMedia.initPanel.visuals.custom.description",
 		platforms: ["rednote", "instagram", "wechat-official-accounts"],
 		swatch: "linear-gradient(135deg, #a29bfe 0%, #fd79a8 50%, #fdcb6e 100%)",
-		icon: "🎨",
 	},
 	{
 		value: "none",
@@ -234,13 +360,58 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		descriptionKey: "detail.selfMedia.initPanel.visuals.none.description",
 		platforms: ["rednote", "instagram", "wechat-official-accounts"],
 		swatch: "linear-gradient(135deg, #dfe6e9 0%, #b2bec3 100%)",
-		icon: "○",
 	},
 ]
 
+const VISUAL_PRESET_DISPLAY_ORDER: Partial<Record<SelfMediaPlatform, string[]>> = {
+	rednote: [
+		"personal-insight",
+		"code-dispatch",
+		"signal-grid",
+		"product-launch-preset",
+		"paper-column",
+		"gradient-editorial",
+		"neo-brutalism",
+		"dark-tech",
+		"warm-journal",
+		"film-vintage",
+		"custom",
+		"none",
+	],
+	instagram: [
+		"ins-modern",
+		"ins-minimal",
+		"ins-gradient",
+		"ins-dark",
+		"ins-retro",
+		"custom",
+		"none",
+	],
+}
+
 /** Get visual presets available for a given platform */
 export function getVisualPresetsForPlatform(platform: SelfMediaPlatform): VisualPresetOption[] {
-	return VISUAL_PRESETS.filter((p) => p.platforms.includes(platform))
+	const orderedValues = VISUAL_PRESET_DISPLAY_ORDER[platform]
+	const orderIndex = new Map(orderedValues?.map((value, index) => [value, index]) ?? [])
+
+	return VISUAL_PRESETS.filter((p) => p.platforms.includes(platform)).sort((a, b) => {
+		const aIndex = orderIndex.get(a.value) ?? Number.MAX_SAFE_INTEGER
+		const bIndex = orderIndex.get(b.value) ?? Number.MAX_SAFE_INTEGER
+
+		return aIndex - bIndex
+	})
+}
+
+export function getVisualPresetValuesForPrompt(platform: SelfMediaPlatform): string[] {
+	return getVisualPresetsForPlatform(platform)
+		.map((preset) => preset.value)
+		.filter((value) => value !== "custom")
+}
+
+export function getAllVisualPresetValuesForPrompt(): string[] {
+	return Array.from(
+		new Set(VISUAL_PRESETS.map((preset) => preset.value).filter((value) => value !== "custom")),
+	)
 }
 
 /** Collect article-level and outline-bound reference materials */

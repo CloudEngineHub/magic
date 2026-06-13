@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi, beforeEach } from "vitest"
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
 
 const mockSendSelfMediaPrePublishAnalysis = vi.hoisted(() => vi.fn())
 const mockSendSelfMediaPostPublishDataRefresh = vi.hoisted(() => vi.fn())
@@ -83,6 +83,14 @@ vi.mock("@/components/tiptap-templates/simple/simple-editor", async () => {
 			),
 	}
 })
+
+vi.mock("@/pages/superMagic/components/MessageEditor/types", () => ({
+	ModelStatusEnum: {
+		Disabled: "disabled",
+		Deleted: "deleted",
+	},
+	ModelTagEnum: {},
+}))
 
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer", async () => {
 	const React = await vi.importActual<typeof import("react")>("react")
@@ -242,6 +250,36 @@ vi.mock("@/assets/locales/locale-adapters", () => ({
 	loadMagicFlowLocale: vi.fn(),
 }))
 
+vi.mock("@/pages/superMagic/utils/query", () => ({
+	getSuperIdState: () => ({
+		projectId: "project-1",
+		topicId: "topic-1",
+		workspaceId: "workspace-1",
+	}),
+}))
+
+vi.mock("@/types/scheduledTask", () => ({
+	ScheduledTask: {
+		ScheduleType: {
+			Daily: "daily_repeat",
+			Weekly: "weekly_repeat",
+			Monthly: "monthly_repeat",
+		},
+	},
+}))
+
+vi.mock("@/routes/routes", () => ({
+	registerRoutes: [],
+}))
+
+vi.mock("@/routes/history/helpers", () => ({
+	getRoutePath: () => "",
+	fillRoute: (path: string) => path,
+	convertSearchParams: () => "",
+	routesMatch: () => false,
+	routesPathMatch: () => false,
+}))
+
 vi.mock("mobx-react-lite", () => ({
 	observer: (component: unknown) => component,
 }))
@@ -261,6 +299,10 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 vi.mock("antd", () => ({
 	Flex: function MockFlex({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
 		return <div {...props}>{children}</div>
+	},
+	message: {
+		config: vi.fn(),
+		error: vi.fn(),
 	},
 }))
 
@@ -437,8 +479,25 @@ vi.mock("../components/PrePublishAnalysisDialog", () => ({
 
 vi.mock("../platforms", () => ({
 	getPlatformComponent: () =>
-		function MockPlatformComponent() {
-			return <div data-testid="mock-platform-component">platform-content</div>
+		function MockPlatformComponent({
+			onRequestPrePublishAnalysis,
+		}: {
+			onRequestPrePublishAnalysis?: () => void
+		}) {
+			return (
+				<div data-testid="mock-platform-component">
+					platform-content
+					{onRequestPrePublishAnalysis ? (
+						<button
+							type="button"
+							data-testid="self-media-footer-pre-publish-analysis"
+							onClick={onRequestPrePublishAnalysis}
+						>
+							AI 诊断
+						</button>
+					) : null}
+				</div>
+			)
 		},
 }))
 
@@ -633,6 +692,7 @@ function withMockedCardWidth(width: number, run: () => void | Promise<void>) {
 
 describe("SelfMediaRootRender", () => {
 	beforeEach(() => {
+		localStorage.setItem("selfMediaSplashSeen", "true")
 		mockStore.platforms = ["rednote"]
 		mockStore.resolvedPlatform = "rednote"
 		mockStore.rootLoading = false
@@ -698,6 +758,30 @@ describe("SelfMediaRootRender", () => {
 		mockAICardCreateDialogRender.mockReset()
 	})
 
+	afterEach(() => {
+		vi.unstubAllEnvs()
+		localStorage.clear()
+	})
+
+	it("returns the splash screen before mounting the workspace on first visit", () => {
+		vi.stubEnv("NODE_ENV", "production")
+		localStorage.removeItem("selfMediaSplashSeen")
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		expect(screen.getByTestId("self-media-splash")).toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-home-page")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-root")).not.toBeInTheDocument()
+	})
+
 	it("shows the article home before opening platform detail", () => {
 		render(
 			<SelfMediaRootRender
@@ -718,6 +802,9 @@ describe("SelfMediaRootRender", () => {
 		expect(mockStore.handleChangePlatform).toHaveBeenCalledWith("rednote")
 		expect(mockStore.openPostDetail).toHaveBeenCalledWith(0)
 		expect(screen.getByTestId("mock-platform-component")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-platform-detail-stage")).toHaveClass(
+			"self-media-platform-detail-stage",
+		)
 		expect(screen.queryByTestId("self-media-home-page")).not.toBeInTheDocument()
 	})
 
@@ -939,7 +1026,7 @@ describe("SelfMediaRootRender", () => {
 		expect(mockToastError).not.toHaveBeenCalled()
 	})
 
-	it("opens pre-publish analysis from the platform floating action", async () => {
+	it("opens pre-publish analysis from the platform footer action", async () => {
 		const post = {
 			meta: {
 				id: "post-1",
@@ -970,7 +1057,7 @@ describe("SelfMediaRootRender", () => {
 		)
 
 		fireEvent.click(screen.getByTestId("self-media-home-post-open-post-1"))
-		fireEvent.click(screen.getByTestId("self-media-floating-pre-publish-analysis"))
+		fireEvent.click(screen.getByTestId("self-media-footer-pre-publish-analysis"))
 		fireEvent.click(screen.getByText("confirm-analysis"))
 
 		await waitFor(() => {
@@ -1017,7 +1104,7 @@ describe("SelfMediaRootRender", () => {
 		expect(screen.queryByTestId("self-media-home-post-analysis-post-1")).not.toBeInTheDocument()
 	})
 
-	it("does not show the platform floating pre-publish analysis entry in read-only mode", () => {
+	it("does not show the platform footer pre-publish analysis entry in read-only mode", () => {
 		render(
 			<SelfMediaRootRender
 				data={ROOT_DATA}
@@ -1031,7 +1118,7 @@ describe("SelfMediaRootRender", () => {
 		fireEvent.click(screen.getByTestId("self-media-home-post-open-post-1"))
 
 		expect(
-			screen.queryByTestId("self-media-floating-pre-publish-analysis"),
+			screen.queryByTestId("self-media-footer-pre-publish-analysis"),
 		).not.toBeInTheDocument()
 	})
 
@@ -2288,13 +2375,17 @@ describe("SelfMediaRootRender", () => {
 			/>,
 		)
 
-		expect(screen.getByTestId("self-media-home-ops-overview")).toHaveTextContent(
-			"Operations loop",
+		expect(screen.getByTestId("self-media-home-ops-overview")).toHaveTextContent("今日重点信号")
+		expect(screen.getByTestId("self-media-home-ops-health")).toHaveTextContent("75")
+		expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveTextContent("总阅读")
+		expect(screen.getByTestId("self-media-home-ops-total-engagement")).toHaveTextContent(
+			"总互动",
 		)
-		expect(screen.getByTestId("self-media-home-ops-overview-source")).toHaveTextContent("1/1")
-		expect(screen.getByTestId("self-media-home-ops-overview-metrics")).toHaveTextContent("1/1")
-		expect(screen.getByTestId("self-media-home-ops-overview-comments")).toHaveTextContent("0/1")
-		expect(screen.getByTestId("self-media-home-ops-overview-review")).toHaveTextContent("1/1")
+		expect(screen.getByTestId("self-media-home-ops-completion")).toHaveTextContent("已发布1/1")
+		expect(screen.getByTestId("self-media-home-ops-completion")).toHaveTextContent("已同步1/1")
+		expect(screen.getByTestId("self-media-home-ops-completion")).toHaveTextContent(
+			"复盘已完成1/1",
+		)
 		expect(
 			screen.getByTestId("self-media-home-post-ops-artifacts-post-1"),
 		).not.toHaveTextContent(/Link bound|Metrics ready|Feedback not organized|Review ready/)

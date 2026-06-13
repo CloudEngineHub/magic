@@ -1,32 +1,53 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import StepIndicator from "../components/SelfMediaInitPanel/steps/StepIndicator"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string) => key,
+		t: (key: string, options?: Record<string, string>) => {
+			const messages: Record<string, string> = {
+				"detail.selfMedia.initPanel.nav.stepCompleted": "已完成：{{title}}",
+				"detail.selfMedia.initPanel.nav.stepCurrent": "当前步骤：{{title}}",
+				"detail.selfMedia.initPanel.nav.stepPosition": "第 {{index}} 步，共 {{total}} 步",
+				"detail.selfMedia.initPanel.nav.stepUpcoming": "待完成：{{title}}",
+				"detail.selfMedia.initPanel.nav.stepShortBrand": "定位",
+				"detail.selfMedia.initPanel.nav.stepShortConfirm": "确认",
+				"detail.selfMedia.initPanel.nav.stepShortTopics": "选题",
+				"detail.selfMedia.initPanel.steps.brand": "欢迎与定位",
+				"detail.selfMedia.initPanel.steps.confirm": "确认生成",
+				"detail.selfMedia.initPanel.steps.topics": "选题与内容规划",
+			}
+			return (messages[key] || key).replace(/\{\{(\w+)\}\}/g, (_, token: string) =>
+				String(options?.[token] ?? ""),
+			)
+		},
 	}),
 }))
 
-describe("StepIndicator visual chrome", () => {
-	it("uses translucent state layers instead of hard dividers", () => {
-		render(<StepIndicator currentStep={0} onNavigate={vi.fn()} />)
+describe("StepIndicator guided navigation", () => {
+	it("keeps future steps disabled so users follow the guided flow", () => {
+		const onNavigate = vi.fn()
 
-		const header = screen.getByTestId("self-media-init-panel-header")
+		render(<StepIndicator currentStep={1} onNavigate={onNavigate} />)
 
-		expect(header).not.toHaveClass("border-b")
-		expect(header).toHaveClass("bg-background/80")
-		expect(screen.getByTestId("self-media-init-panel-progress-track")).toHaveClass(
-			"bg-[#434c81]/[0.08]",
+		expect(screen.getByRole("button", { name: "当前步骤：选题与内容规划" })).toHaveAttribute(
+			"aria-current",
+			"step",
 		)
+		expect(screen.getByRole("button", { name: "已完成：欢迎与定位" })).toBeEnabled()
+		expect(screen.getByRole("button", { name: "待完成：确认生成" })).toBeDisabled()
+		expect(screen.getByText("第 2 步，共 3 步")).toBeInTheDocument()
+		expect(screen.queryByText("步骤 2/3")).not.toBeInTheDocument()
+		expect(screen.queryByText("选题与内容规划")).not.toBeInTheDocument()
+		expect(screen.getByText("定位")).toBeInTheDocument()
+		expect(screen.getByText("选题")).toBeInTheDocument()
+		expect(screen.getByText("确认")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-step-track")).toHaveClass("static")
 
-		const [activeIcon, idleIcon] = screen.getAllByTestId("self-media-init-panel-step-icon")
+		fireEvent.click(screen.getByRole("button", { name: "待完成：确认生成" }))
+		fireEvent.click(screen.getByRole("button", { name: "已完成：欢迎与定位" }))
 
-		expect(activeIcon).not.toHaveClass("border")
-		expect(activeIcon).toHaveClass("bg-[#434c81]/[0.13]")
-		expect(activeIcon).toHaveClass("text-[#38426f]")
-		expect(activeIcon).toHaveClass("transition-transform")
-		expect(activeIcon).toHaveClass("group-hover/step:-translate-y-0.5")
-		expect(idleIcon).toHaveClass("bg-muted/45")
+		expect(onNavigate).toHaveBeenCalledTimes(1)
+		expect(onNavigate).toHaveBeenCalledWith(0)
 	})
 })

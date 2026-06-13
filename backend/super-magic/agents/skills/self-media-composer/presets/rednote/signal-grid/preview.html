@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Signal Grid — Preview</title>
+    <link rel="stylesheet" href="signal-grid.css" />
+    <style>
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e7e8e8;
+      }
+      .preview-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 32px;
+        padding: 40px;
+        justify-content: center;
+        align-items: flex-start;
+      }
+      .preview-card-wrapper {
+        width: 540px;
+        height: 720px;
+        overflow: hidden;
+        box-shadow: 0 18px 44px rgba(17, 24, 39, 0.14);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-card-wrapper">
+        <section class="sg-card has-dot-grid">
+          <div class="sg-topline"></div>
+          <div class="sg-content">
+            <div class="sg-row sg-between">
+              <span class="sg-kicker">Focus Lab</span>
+              <span class="sg-meta">01 / 05</span>
+            </div>
+            <h1 class="sg-title-xl sg-mt-lg">
+              7天<br /><span class="sg-accent">专注力</span><br />实验
+            </h1>
+            <p class="sg-lead sg-mt-md">
+              记录早晨 90 分钟深度工作的变量：睡眠、手机、噪音和任务切块。
+            </p>
+            <div class="sg-stat-grid sg-mt-lg">
+              <div class="sg-stat">
+                <span class="sg-stat-value">07</span
+                ><span class="sg-stat-label">Days</span>
+              </div>
+              <div class="sg-stat">
+                <span class="sg-stat-value">42%</span
+                ><span class="sg-stat-label">Lift</span>
+              </div>
+              <div class="sg-stat">
+                <span class="sg-stat-value">90</span
+                ><span class="sg-stat-label">Minutes</span>
+              </div>
+              <div class="sg-stat">
+                <span class="sg-stat-value">3x</span
+                ><span class="sg-stat-label">Blocks</span>
+              </div>
+            </div>
+          </div>
+          <footer class="sg-footer">
+            <span class="sg-meta">Personal experiment</span>
+            <span class="sg-accent-block">Day 7</span>
+          </footer>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="sg-card has-rail">
+          <div class="sg-topline"></div>
+          <div class="sg-index-rail">Focus variables</div>
+          <div class="sg-content">
+            <p class="sg-kicker">Page 02 / Matrix</p>
+            <h2 class="sg-title sg-mt-sm">影响专注的<br />三个变量</h2>
+            <div class="sg-matrix sg-mt-lg">
+              <div class="sg-matrix-row">
+                <div class="sg-matrix-key">Sleep</div>
+                <div class="sg-matrix-value">
+                  前一晚少于 6.5 小时，第二天前 20 分钟最容易分心。
+                </div>
+              </div>
+              <div class="sg-matrix-row">
+                <div class="sg-matrix-key">Phone</div>
+                <div class="sg-matrix-value">
+                  手机放到另一个房间，比单纯静音更有效。
+                </div>
+              </div>
+              <div class="sg-matrix-row">
+                <div class="sg-matrix-key">Task</div>
+                <div class="sg-matrix-value">
+                  任务切成 30 分钟块后，启动阻力明显降低。
+                </div>
+              </div>
+            </div>
+            <div
+              id="signal-grid-bars"
+              style="height: 190px; margin-top: 32px"
+            ></div>
+          </div>
+          <footer class="sg-footer">
+            <span class="sg-meta">Matrix / habit</span>
+            <span class="sg-meta">02 / 05</span>
+          </footer>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="sg-card">
+          <div class="sg-topline"></div>
+          <div class="sg-content">
+            <p class="sg-kicker">Page 03 / Checklist</p>
+            <h2 class="sg-title">开始前<br />先检查这三项</h2>
+            <div class="sg-decision-list sg-mt-lg">
+              <div class="sg-decision-item">
+                <span class="sg-decision-no">01</span>
+                <h3 class="sg-decision-title">手机是否离开桌面</h3>
+                <span class="sg-decision-state is-on"></span>
+              </div>
+              <div class="sg-decision-item">
+                <span class="sg-decision-no">02</span>
+                <h3 class="sg-decision-title">今天的第一个任务是否足够小</h3>
+                <span class="sg-decision-state is-on"></span>
+              </div>
+              <div class="sg-decision-item">
+                <span class="sg-decision-no">03</span>
+                <h3 class="sg-decision-title">桌面是否只保留当前材料</h3>
+                <span class="sg-decision-state"></span>
+              </div>
+            </div>
+            <div
+              id="signal-grid-radar"
+              style="height: 190px; margin-top: 30px"
+            ></div>
+          </div>
+          <footer class="sg-footer">
+            <span class="sg-meta">Before start</span>
+            <span class="sg-accent-block">03</span>
+          </footer>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="sg-card">
+          <div class="sg-topline"></div>
+          <div class="sg-content">
+            <p class="sg-kicker">Page 04 / Compare</p>
+            <h2 class="sg-title">两种工作方式<br />差距很明显</h2>
+            <div class="sg-compare-bars sg-mt-lg">
+              <div class="sg-compare-card">
+                <p class="sg-compare-label">Open day</p>
+                <p class="sg-compare-score">62</p>
+                <p class="sg-body">随时处理消息，上午结束后任务碎片多。</p>
+              </div>
+              <div class="sg-compare-card is-accent">
+                <p class="sg-compare-label">Block day</p>
+                <p class="sg-compare-score">88</p>
+                <p>先完成一个 90 分钟块，再处理外部输入。</p>
+              </div>
+            </div>
+            <div
+              id="signal-stack"
+              style="height: 190px; margin-top: 30px"
+            ></div>
+          </div>
+          <footer class="sg-footer">
+            <span class="sg-meta">Day mode</span>
+            <span class="sg-meta">04 / 05</span>
+          </footer>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="sg-card has-dot-grid">
+          <div class="sg-topline"></div>
+          <div class="sg-content">
+            <p class="sg-kicker">Page 05 / Tomorrow</p>
+            <h2 class="sg-title">明天早上<br />只做这三步</h2>
+            <div class="sg-kpi-tower sg-mt-lg">
+              <div class="sg-kpi-row">
+                <div class="sg-kpi-value">1</div>
+                <div class="sg-kpi-copy">
+                  <h3 class="sg-kpi-title">写下唯一任务</h3>
+                  <p class="sg-kpi-desc">
+                    只保留一个能在 90 分钟内推进的目标。
+                  </p>
+                </div>
+              </div>
+              <div class="sg-kpi-row">
+                <div class="sg-kpi-value">2</div>
+                <div class="sg-kpi-copy">
+                  <h3 class="sg-kpi-title">手机离桌 3 米</h3>
+                  <p class="sg-kpi-desc">靠距离制造一点点行动摩擦。</p>
+                </div>
+              </div>
+              <div class="sg-kpi-row">
+                <div class="sg-kpi-value">3</div>
+                <div class="sg-kpi-copy">
+                  <h3 class="sg-kpi-title">30 分钟记录一次</h3>
+                  <p class="sg-kpi-desc">只记录是否分心，不做复杂复盘。</p>
+                </div>
+              </div>
+            </div>
+            <div class="sg-tag-row sg-mt-lg">
+              <span class="sg-tag is-accent">Focus</span>
+              <span class="sg-tag">Morning</span>
+              <span class="sg-tag">Habit</span>
+            </div>
+          </div>
+          <footer class="sg-footer">
+            <span class="sg-meta">Tomorrow</span>
+            <span class="sg-accent-block">Start</span>
+          </footer>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="signal-grid.js"></script>
+    <script>
+      echarts
+        .init(document.getElementById("signal-grid-bars"))
+        .setOption(SignalGridPresets.get("grid-bars"));
+      echarts
+        .init(document.getElementById("signal-grid-radar"))
+        .setOption(SignalGridPresets.get("decision-radar"));
+      echarts
+        .init(document.getElementById("signal-stack"))
+        .setOption(SignalGridPresets.get("signal-stack"));
+    </script>
+  </body>
+</html>

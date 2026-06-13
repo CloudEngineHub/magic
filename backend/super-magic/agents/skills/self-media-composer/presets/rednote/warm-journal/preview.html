@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Warm Journal — Preview</title>
+  <link rel="stylesheet" href="warm-journal.css">
+  <style>
+    html,
+    body {
+      width: auto;
+      height: auto;
+      overflow: auto;
+      background: #e8e0d2;
+    }
+
+    .preview-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px;
+      padding: 40px;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .preview-card-wrapper {
+      overflow: hidden;
+      border-radius: 14px;
+      box-shadow: 0 18px 50px rgba(44, 36, 24, 0.18);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="preview-container">
+    <div class="preview-card-wrapper">
+      <div class="wj-card wj-cover">
+        <div class="wj-strip wj-strip-fixed" style="height: 260px;">
+          <img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=900&q=80" alt="City walk">
+        </div>
+        <div class="wj-strip">
+          <img src="https://images.unsplash.com/photo-1511081692775-05d0f180a065?w=900&q=80" alt="Warm desk">
+        </div>
+        <div class="wj-text-band">
+          <p class="wj-hand wj-hand-xl">周末慢慢走</p>
+          <p class="wj-sub">city walk / coffee / small things</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-card-wrapper">
+      <div class="wj-card wj-khaki-page">
+        <div class="wj-scatter-header">
+          <p class="wj-hand wj-hand-lg">今天的三个小发现</p>
+          <p class="wj-intro">把照片、短句和体验感放在同一张手账页里。</p>
+        </div>
+        <div class="wj-scatter-item" style="left: 36px; top: 190px; width: 210px;">
+          <span class="wj-num">1</span>
+          <p class="wj-body-text">先用一张有空气感的照片建立情绪。</p>
+        </div>
+        <div class="wj-scatter-item" style="right: 36px; top: 312px; width: 220px;">
+          <span class="wj-num">2</span>
+          <p class="wj-body-text">标题像手写便签，正文保持清楚可读。</p>
+        </div>
+        <div class="wj-scatter-item" style="left: 86px; bottom: 88px; width: 260px;">
+          <span class="wj-num">3</span>
+          <p class="wj-body-text">适合生活方式、摄影记录、好物分享。</p>
+        </div>
+        <p class="wj-page-num">02</p>
+      </div>
+    </div>
+
+    <div class="preview-card-wrapper">
+      <div class="wj-card wj-photo-page">
+        <div class="wj-frame wj-rotate-l">
+          <img src="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=900&q=80" alt="Coffee">
+        </div>
+        <div class="wj-product-info">
+          <p class="wj-product-title">午后咖啡馆记录</p>
+          <div id="warm-journal-rating"></div>
+          <p class="wj-product-exp">柔和米色、白框相片、轻微旋转，让卡片像一页真实手账。</p>
+        </div>
+        <p class="wj-frame-caption">warm journal / sample card</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="warm-journal.js"></script>
+  <script>
+    document.getElementById("warm-journal-rating").innerHTML =
+      WarmJournalKit.ratingRow("氛围", 4, 5);
+  </script>
+</body>
+
+</html>

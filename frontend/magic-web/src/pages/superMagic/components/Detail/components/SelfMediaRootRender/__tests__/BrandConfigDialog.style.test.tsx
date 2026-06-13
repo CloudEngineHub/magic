@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
-const { mockUseSelfMediaBrandConfig } = vi.hoisted(() => ({
+const { mockMessageError, mockUseSelfMediaBrandConfig } = vi.hoisted(() => ({
+	mockMessageError: vi.fn(),
 	mockUseSelfMediaBrandConfig: vi.fn(),
 }))
 
@@ -17,7 +18,7 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("antd", () => ({
 	message: {
-		error: vi.fn(),
+		error: mockMessageError,
 	},
 }))
 
@@ -42,7 +43,7 @@ vi.mock("../components/SelfMediaInitPanel/hooks/useBrandImagePreviewHydration", 
 import BrandConfigDialog from "../components/BrandConfigDialog"
 
 describe("BrandConfigDialog style", () => {
-	it("uses a compact settings layout instead of the wizard-style form", () => {
+	it("uses a quiet settings surface without copying the home hero card", () => {
 		mockUseSelfMediaBrandConfig.mockReturnValue({
 			settings: {
 				author: "Magic Lab",
@@ -59,19 +60,80 @@ describe("BrandConfigDialog style", () => {
 
 		const dialog = screen.getByTestId("self-media-brand-config-dialog")
 
-		expect(dialog).toHaveClass("!max-w-3xl")
-		expect(dialog).not.toHaveClass("!max-w-5xl")
+		expect(dialog).toHaveClass("!max-w-5xl")
+		expect(dialog).toHaveClass("bg-[#f8f8f9]")
+		expect(screen.getByTestId("self-media-brand-config-header")).toHaveClass("px-6")
+		expect(screen.getByText("detail.selfMedia.brandConfig.title")).toHaveClass(
+			"text-2xl",
+			"font-[780]",
+		)
 		expect(screen.getByTestId("self-media-brand-config-settings-layout")).toBeInTheDocument()
-		expect(screen.getByTestId("self-media-brand-config-settings-layout")).toHaveClass(
-			"lg:items-start",
+		expect(screen.getByTestId("self-media-brand-config-settings-layout")).toHaveAttribute(
+			"data-layout",
+			"settings",
+		)
+		expect(screen.getByTestId("self-media-brand-config-settings-layout")).not.toHaveClass(
+			"rounded-[24px]",
+		)
+		expect(screen.getByTestId("self-media-brand-config-settings-layout")).not.toHaveClass(
+			"bg-white/90",
 		)
 		expect(screen.getByTestId("self-media-brand-config-profile-card")).toBeInTheDocument()
-		expect(screen.getByTestId("self-media-brand-config-assets-card")).toBeInTheDocument()
-		expect(screen.getByTestId("self-media-brand-config-assets-card")).toHaveClass("h-fit")
-		expect(screen.getByTestId("brand-asset-upload")).toHaveAttribute("data-layout", "stacked")
-		expect(screen.getByTestId("self-media-brand-config-save-button")).toHaveAttribute(
-			"data-slot",
-			"button",
+		expect(screen.getByTestId("self-media-brand-config-profile-card")).toHaveClass(
+			"rounded-[20px]",
+			"border-[#18181b]/[0.06]",
+			"bg-white",
 		)
+		expect(screen.getByTestId("self-media-brand-config-profile-card").className).not.toContain(
+			"linear-gradient",
+		)
+		expect(screen.getByTestId("self-media-brand-config-assets-card")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-brand-config-assets-card")).toHaveClass(
+			"rounded-[20px]",
+			"border-[#18181b]/[0.06]",
+			"bg-white",
+		)
+		expect(screen.getByTestId("self-media-brand-config-assets-card")).not.toHaveClass(
+			"backdrop-blur",
+		)
+		expect(screen.getByText("账号档案")).toBeInTheDocument()
+		expect(
+			screen.getByText("配置 AI 生成内容时默认使用的身份、定位与受众。"),
+		).toBeInTheDocument()
+		expect(screen.getByText("#AI分享")).toBeInTheDocument()
+		expect(screen.getByText("上传 Logo、IP 形象或风格参考图。")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-brand-config-assets-card")).toHaveTextContent("0")
+		expect(screen.getByTestId("brand-asset-upload")).toHaveAttribute("data-layout", "stacked")
+		expect(screen.getByTestId("self-media-brand-config-save-button")).toHaveClass(
+			"rounded-[25px]",
+			"bg-[#18181b]",
+		)
+	})
+
+	it("keeps the dialog open and surfaces an error when saving brand config fails", async () => {
+		const saveSettings = vi.fn().mockRejectedValue(new Error("save failed"))
+		const onOpenChange = vi.fn()
+		mockMessageError.mockReset()
+		mockUseSelfMediaBrandConfig.mockReturnValue({
+			settings: {
+				author: "Magic Lab",
+				brandPosition: "AI tools",
+				targetAudience: "Creators",
+				brandImages: [],
+			},
+			saveSettings,
+			isLoading: false,
+			isSaving: false,
+		})
+
+		render(<BrandConfigDialog open onOpenChange={onOpenChange} fileStorageService={null} />)
+
+		fireEvent.click(screen.getByTestId("self-media-brand-config-save-button"))
+
+		await waitFor(() => {
+			expect(saveSettings).toHaveBeenCalled()
+		})
+		expect(onOpenChange).not.toHaveBeenCalledWith(false)
+		expect(mockMessageError).toHaveBeenCalledWith("detail.selfMedia.brandConfig.saveError")
 	})
 })

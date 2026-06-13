@@ -110,7 +110,8 @@ export function useBrandImagePreviewHydration({
 		// Resolve file IDs from attachmentList
 		const itemsWithFileId: Array<{ id: string; fileId: string }> = []
 		for (const item of pendingItems) {
-			const fileId = findFileIdByRelativePath(attachmentList, item.uploadedPath!)
+			if (!item.uploadedPath) continue
+			const fileId = findFileIdByRelativePath(attachmentList, item.uploadedPath)
 			if (fileId) {
 				itemsWithFileId.push({ id: item.id, fileId })
 			}
@@ -171,11 +172,12 @@ export function useBrandImagePreviewHydration({
 	}, [attachmentList, brandImages, onBrandImagesChange])
 
 	useEffect(() => {
+		const currentPreviewUrls = previewUrlsRef.current
 		return () => {
-			previewUrlsRef.current.forEach((previewUrl) => {
+			currentPreviewUrls.forEach((previewUrl) => {
 				URL.revokeObjectURL(previewUrl)
 			})
-			previewUrlsRef.current.clear()
+			currentPreviewUrls.clear()
 		}
 	}, [])
 

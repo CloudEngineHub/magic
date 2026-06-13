@@ -1,5 +1,5 @@
 import { forwardRef, useEffect } from "react"
-import { render, screen, fireEvent, within } from "@testing-library/react"
+import { act, render, screen, fireEvent, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { ReactElement } from "react"
 import RednoteShell from "../platforms/rednote/RednoteShell"
@@ -206,6 +206,7 @@ describe("platform shells", () => {
 		)
 
 		expect(await screen.findByTestId("self-media-view-tabs")).toBeInTheDocument()
+		expect(screen.getByTestId("wechat-official-shell")).toHaveClass("bg-white")
 	})
 
 	it("keeps RednoteShell detail cards mounted across view switches", () => {
@@ -363,6 +364,7 @@ describe("platform shells", () => {
 						relative_file_path: "posts/post-1/cards/01.html",
 					},
 				]}
+				allowEdit
 			/>,
 			{ view: "scroll", activeCardIndex: 0 },
 		)
@@ -381,8 +383,8 @@ describe("platform shells", () => {
 		})
 	})
 
-	it("keeps RednoteShell preview mode when the toolbar selector switches posts", () => {
-		renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} />, {
+	it("keeps RednoteShell preview mode when the active post changes", () => {
+		const { store } = renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} />, {
 			view: "scroll",
 			posts: [
 				{
@@ -410,7 +412,9 @@ describe("platform shells", () => {
 			"red-scroll-post-1-0-0",
 		)
 
-		fireEvent.click(screen.getByTestId("self-media-platform-selector"))
+		act(() => {
+			store.setActivePostIndex(1)
+		})
 
 		expect(screen.getByTestId("red-scroll-view")).toBeInTheDocument()
 		expect(screen.queryByTestId("red-detail-root")).not.toBeInTheDocument()
@@ -466,7 +470,9 @@ describe("platform shells", () => {
 		expect(detailRoot.className).toContain("overflow-y-auto")
 		expect(detailHeader).toBeInTheDocument()
 		expect(within(content).getByText("用 AI 写代码，你可能踩了这 5 个坑")).toBeInTheDocument()
-		expect(within(content).getByText("#AI编程 #Cursor #提效")).toBeInTheDocument()
+		expect(within(content).getByText("#AI编程")).toBeInTheDocument()
+		expect(within(content).getByText("#Cursor")).toBeInTheDocument()
+		expect(within(content).getByText("#提效")).toBeInTheDocument()
 		expect(within(content).getByText("今天 09:41 广东")).toBeInTheDocument()
 		expect(comments.className).not.toContain("overflow-y-auto")
 		expect(comments.className).not.toContain("max-h-44")

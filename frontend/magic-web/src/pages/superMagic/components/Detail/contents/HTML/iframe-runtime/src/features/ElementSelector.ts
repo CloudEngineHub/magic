@@ -501,13 +501,57 @@ export class ElementSelector {
 		return 0
 	}
 
+	private extractTransformScale(element: HTMLElement): { scaleX: number; scaleY: number } {
+		const styles = window.getComputedStyle(element)
+		const transform = styles.transform || styles.webkitTransform
+
+		if (!transform || transform === "none") {
+			return { scaleX: 1, scaleY: 1 }
+		}
+
+		if (transform.startsWith("matrix3d(")) {
+			const values = transform
+				.match(/matrix3d\(([^)]+)\)/)?.[1]
+				.split(",")
+				.map(parseFloat)
+
+			if (values && values.length >= 16) {
+				const scaleX = Math.hypot(values[0], values[1], values[2])
+				const scaleY = Math.hypot(values[4], values[5], values[6])
+				return {
+					scaleX: scaleX || 1,
+					scaleY: scaleY || 1,
+				}
+			}
+		}
+
+		if (transform.startsWith("matrix(")) {
+			const values = transform
+				.match(/matrix\(([^)]+)\)/)?.[1]
+				.split(",")
+				.map(parseFloat)
+
+			if (values && values.length >= 6) {
+				const [a, b, c, d] = values
+				const scaleX = Math.hypot(a, b)
+				const scaleY = Math.hypot(c, d)
+				return {
+					scaleX: scaleX || 1,
+					scaleY: scaleY || 1,
+				}
+			}
+		}
+
+		return { scaleX: 1, scaleY: 1 }
+	}
+
 	/**
 	 * Get element's original rect (unrotated) and rotation angle
 	 */
 	private getElementRectWithRotation(element: HTMLElement) {
-		// Get original dimensions (not affected by transform)
-		const width = element.offsetWidth
-		const height = element.offsetHeight
+		const { scaleX, scaleY } = this.extractTransformScale(element)
+		const width = element.offsetWidth * scaleX
+		const height = element.offsetHeight * scaleY
 
 		// Get bounding rect (includes rotation)
 		const boundingRect = element.getBoundingClientRect()

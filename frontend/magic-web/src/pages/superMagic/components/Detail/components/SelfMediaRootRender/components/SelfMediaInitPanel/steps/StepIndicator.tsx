@@ -1,123 +1,205 @@
+import { Fragment } from "react"
 import { useTranslation } from "react-i18next"
+import { Check } from "lucide-react"
+import { motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { STEPS } from "../constants"
-import { Check, Compass, ListTodo, Play } from "lucide-react"
+import StepHero from "./StepHero"
 
 interface StepIndicatorProps {
 	currentStep: number
 	onNavigate: (step: number) => void
+	compact?: boolean
 }
 
-export default function StepIndicator({ currentStep, onNavigate }: StepIndicatorProps) {
+export default function StepIndicator({
+	currentStep,
+	onNavigate,
+	compact = false,
+}: StepIndicatorProps) {
 	const { t } = useTranslation("super")
-
-	const getStepIcon = (index: number, active: boolean, passed: boolean) => {
-		const iconSize = 14
-		if (passed) {
-			return <Check size={iconSize} strokeWidth={3} className="text-[#38426f]" />
+	const reduceMotion = useReducedMotion()
+	const getShortStepLabel = (index: number) => {
+		const step = STEPS[index]
+		if (step.key === "brand") {
+			return t("detail.selfMedia.initPanel.nav.stepShortBrand", "定位")
 		}
-		switch (index) {
-			case 0:
-				return (
-					<Compass
-						size={iconSize}
-						className={cn(active ? "text-[#38426f]" : "text-muted-foreground")}
-					/>
-				)
-			case 1:
-				return (
-					<ListTodo
-						size={iconSize}
-						className={cn(active ? "text-[#38426f]" : "text-muted-foreground")}
-					/>
-				)
-			case 2:
-				return (
-					<Play
-						size={iconSize}
-						className={cn(active ? "text-[#38426f]" : "text-muted-foreground")}
-					/>
-				)
-			default:
-				return <span>{index + 1}</span>
+		if (step.key === "topics") {
+			return t("detail.selfMedia.initPanel.nav.stepShortTopics", "选题")
 		}
+		return t("detail.selfMedia.initPanel.nav.stepShortConfirm", "确认")
+	}
+	const getStepLabel = (index: number) => {
+		const title = t(STEPS[index].titleKey)
+		if (index === currentStep) {
+			return t("detail.selfMedia.initPanel.nav.stepCurrent", {
+				title,
+				defaultValue: "当前步骤：{{title}}",
+			})
+		}
+		if (index < currentStep) {
+			return t("detail.selfMedia.initPanel.nav.stepCompleted", {
+				title,
+				defaultValue: "已完成：{{title}}",
+			})
+		}
+		return t("detail.selfMedia.initPanel.nav.stepUpcoming", {
+			title,
+			defaultValue: "待完成：{{title}}",
+		})
+	}
+	const getGuideTitle = () => {
+		const stepKey = STEPS[currentStep]?.key ?? "brand"
+		const fallback = {
+			brand: "先定准人设，让内容一开口就像你",
+			topics: "把灵感打磨成值得点开的选题",
+			confirm: "确认节奏，让整套内容准备好出发",
+		}
+		return t(`detail.selfMedia.initPanel.stepHero.${stepKey}.title`, fallback[stepKey])
 	}
 
 	return (
 		<div
-			className="relative shrink-0 bg-background/80 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/70 sm:px-6"
+			className={cn(
+				"relative isolate shrink-0 overflow-visible border-b px-4 sm:px-6",
+				"transition-[border-color,padding,opacity] duration-300 ease-out",
+				compact
+					? "border-[#18181b]/[0.08] pb-1.5 pt-2.5"
+					: "border-transparent pb-16 pt-11 sm:pb-20 sm:pt-12",
+			)}
 			data-testid="self-media-init-panel-header"
+			data-compact={compact ? "true" : undefined}
+			data-self-media-motion="step-indicator"
 		>
-			{/* Progress timeline bar */}
+			<StepHero currentStep={currentStep} compact={compact} />
 			<div
-				className="absolute bottom-0 left-0 h-[2px] w-full bg-[#434c81]/[0.08]"
-				data-testid="self-media-init-panel-progress-track"
+				aria-hidden="true"
+				className={cn(
+					"pointer-events-none absolute inset-x-0 z-[1] bg-gradient-to-b from-[#f8f8f9]/0 via-[#f8f8f9]/80 to-[#f8f8f9] backdrop-blur-[1px] transition-[bottom,top,height,opacity] duration-300 ease-out",
+					compact ? "-bottom-5 h-7 opacity-70" : "top-[300px] h-28 opacity-100",
+				)}
+				data-testid="self-media-step-hero-transition"
+			/>
+
+			<div
+				className={cn(
+					"relative z-10 flex max-w-full flex-col transition-[gap] duration-300 ease-out",
+					compact
+						? "gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+						: "gap-4",
+				)}
 			>
+				<motion.h2
+					key={currentStep}
+					className={cn(
+						"tracking-normal transition-[font-size,line-height,max-width] duration-300 ease-out",
+						compact
+							? "min-w-0 max-w-[320px] truncate text-xs font-medium leading-5 text-zinc-500 sm:order-2 sm:max-w-[360px] sm:text-right sm:text-[13px]"
+							: "max-w-[760px] text-[28px] font-[820] leading-[1.1] text-[#09090b] sm:text-[40px]",
+					)}
+					data-testid="self-media-step-guide-title"
+					initial={reduceMotion ? false : { opacity: 0, y: compact ? 0 : 4 }}
+					animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+					transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeOut" }}
+				>
+					{getGuideTitle()}
+				</motion.h2>
 				<div
-					className="h-full bg-[#434c81]/60 transition-all duration-700 ease-out"
-					style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
-				/>
-			</div>
+					className={cn(
+						"static flex items-center gap-1.5",
+						compact && "sm:order-1 sm:shrink-0",
+					)}
+					data-testid="self-media-step-track"
+				>
+					<span className="mr-1 text-[10px] font-semibold text-[#71717a]">
+						{t("detail.selfMedia.initPanel.nav.stepPosition", {
+							index: currentStep + 1,
+							total: STEPS.length,
+							defaultValue: "第 {{index}} 步，共 {{total}} 步",
+						})}
+					</span>
+					{STEPS.map((step, index) => {
+						const isActive = index === currentStep
+						const isCompleted = index < currentStep
+						const isFutureStep = index > currentStep
 
-			<div className="mx-auto flex max-w-5xl items-center justify-between gap-3 overflow-x-auto">
-				{STEPS.map((step, index) => {
-					const isActive = index === currentStep
-					const isPassed = index < currentStep
-
-					return (
-						<div
-							key={step.key}
-							className="group/step flex min-w-fit flex-1 items-center last:flex-initial"
-						>
-							<button
-								type="button"
-								className="flex cursor-pointer items-center gap-3 rounded-md text-left outline-none transition-colors duration-200 focus-visible:ring-[3px] focus-visible:ring-ring/50"
-								onClick={() => onNavigate(index)}
-							>
-								<div
-									data-testid="self-media-init-panel-step-icon"
+						return (
+							<Fragment key={step.key}>
+								<motion.button
+									type="button"
+									aria-current={isActive ? "step" : undefined}
+									aria-label={getStepLabel(index)}
+									title={getStepLabel(index)}
+									disabled={isFutureStep}
+									data-self-media-motion="step-indicator-item"
+									data-self-media-active={isActive ? "true" : undefined}
 									className={cn(
-										"flex h-9 w-9 items-center justify-center rounded-md transition-transform duration-200 ease-out group-hover/step:-translate-y-0.5",
-										isActive
-											? "bg-[#434c81]/[0.13] text-[#38426f] shadow-[0_6px_18px_rgba(67,76,129,0.12)]"
-											: isPassed
-												? "bg-[#434c81]/[0.10] text-[#38426f] group-hover/step:bg-[#434c81]/[0.15]"
-												: "bg-muted/45 text-muted-foreground group-hover/step:bg-[#434c81]/[0.06]",
+										"group relative flex h-7 items-center gap-1.5 rounded-full bg-transparent px-0.5 text-left outline-none transition-colors duration-200 focus-visible:ring-[3px] focus-visible:ring-ring/50",
+										isFutureStep
+											? "cursor-not-allowed opacity-55"
+											: "cursor-pointer",
+										isActive ? "text-[#18181b]" : "text-[#71717a]",
 									)}
+									onClick={() => {
+										if (isFutureStep) return
+										onNavigate(index)
+									}}
+									whileHover={
+										reduceMotion || isFutureStep
+											? undefined
+											: { y: -1, scale: 1.03 }
+									}
+									whileTap={
+										reduceMotion || isFutureStep ? undefined : { scale: 0.985 }
+									}
+									transition={{ duration: 0.18, ease: "easeOut" }}
 								>
-									{getStepIcon(index, isActive, isPassed)}
-								</div>
-
-								<div className="hidden select-none flex-col md:flex">
-									<span className="text-[11px] font-medium text-muted-foreground">
-										{index + 1}/{STEPS.length}
+									<span
+										className={cn(
+											"relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-[780] transition-colors",
+											isActive
+												? "border-[#18181b] bg-[#18181b] text-white"
+												: isCompleted
+													? "border-[#18181b] bg-[#18181b] text-white"
+													: "border-[#18181b]/15 bg-[#f8f8f9] text-[#71717a]",
+										)}
+									>
+										{isCompleted ? (
+											<Check className="size-3" strokeWidth={2.6} />
+										) : (
+											index + 1
+										)}
 									</span>
 									<span
 										className={cn(
-											"text-xs transition-colors duration-200",
-											isActive
-												? "font-semibold text-foreground"
-												: "font-medium text-muted-foreground group-hover/step:text-foreground",
+											"hidden text-[11px] font-semibold sm:block",
+											isActive ? "text-[#18181b]" : "text-[#71717a]",
 										)}
 									>
-										{t(step.titleKey)}
+										{getShortStepLabel(index)}
 									</span>
-								</div>
-							</button>
-
-							{index < STEPS.length - 1 && (
-								<div className="relative mx-4 hidden h-[1px] flex-1 sm:block">
-									<div
+								</motion.button>
+								{index < STEPS.length - 1 && (
+									<motion.span
+										aria-hidden="true"
 										className={cn(
-											"absolute inset-x-0 top-1/2 h-px -translate-y-1/2 transition-colors duration-300",
-											isPassed ? "bg-[#434c81]/25" : "bg-muted/55",
+											"h-px w-5 origin-left rounded-full",
+											index < currentStep
+												? "bg-[#18181b]"
+												: "bg-[#18181b]/10",
 										)}
+										initial={false}
+										animate={{ scaleX: index < currentStep ? 1 : 0.72 }}
+										transition={{
+											duration: reduceMotion ? 0 : 0.24,
+											ease: "easeOut",
+										}}
 									/>
-								</div>
-							)}
-						</div>
-					)
-				})}
+								)}
+							</Fragment>
+						)
+					})}
+				</div>
 			</div>
 		</div>
 	)

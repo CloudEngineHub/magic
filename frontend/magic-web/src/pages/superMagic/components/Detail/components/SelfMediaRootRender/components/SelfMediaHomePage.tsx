@@ -1,30 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import {
-	BarChart3,
-	CheckCircle2,
-	CircleDashed,
-	FileText,
-	Layers,
-	Plus,
-	Settings,
-	Sparkles,
-} from "lucide-react"
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import { cn } from "@/lib/utils"
-import MagicTooltip from "@/components/base/MagicTooltip"
-import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { useUserInfo } from "@/models/user/hooks/useUserInfo"
 import type { ScheduledTask } from "@/types/scheduledTask"
 import type { SelfMediaPlatform } from "../../../types"
-import { ALL_PLATFORMS } from "./SelfMediaInitPanel/types"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
-import PlatformBrandIcon from "./PlatformBrandIcon"
-import CardFrame from "./CardFrame"
-import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../constants/imageProcess"
 import type { AICardCreateInitialValues } from "./AICardCreateDialog"
 import type { SelfMediaAttachmentNode } from "../types"
-import SelfMediaPostCard from "./SelfMediaPostCard"
+import type { SelfMediaPostOpenTransitionPayload } from "./SelfMediaPostCard"
 import type {
 	SelfMediaPostOpsMetricsPayload,
 	SelfMediaPostOpsSourcePayload,
@@ -39,18 +25,24 @@ import {
 import SelfMediaOpsReviewDashboard, {
 	type SelfMediaOpsReviewData,
 } from "./SelfMediaOpsReviewDashboard"
-
-interface AICardFolderChild extends SelfMediaAttachmentNode {
-	display_config?: {
-		type?: string
-		[key: string]: unknown
-	}
-}
-
-interface AICardFolderItem extends AICardFolderChild {
-	file_id: string
-	children?: AICardFolderChild[]
-}
+import SelfMediaOpsOverviewCard from "./SelfMediaOpsOverviewCard"
+import {
+	buildSelfMediaOpsOverview,
+	getSelfMediaPostKey,
+	type SelfMediaOpsOverviewAction,
+} from "../services/selfMediaOpsOverview"
+import SelfMediaHomeAICardList from "./SelfMediaHomeAICardList"
+import SelfMediaHomeAnimations, {
+	OPEN_POST_FALLBACK_TRANSITION_MS,
+} from "./SelfMediaHomeAnimations"
+import SelfMediaHomeEmptyState from "./SelfMediaHomeEmptyState"
+import SelfMediaHomeHeader from "./SelfMediaHomeHeader"
+import SelfMediaHomePostList from "./SelfMediaHomePostList"
+import type {
+	AICardFolderItem,
+	SelfMediaHomeOpeningPost,
+	SelfMediaHomePostGroup,
+} from "./SelfMediaHomeTypes"
 
 interface SelfMediaHomePageProps {
 	posts: SelfMediaPlatformPostItem[]
@@ -82,11 +74,44 @@ interface SelfMediaHomePageProps {
 		target: SelfMediaPlatformPostItem,
 		publishedUrl: string,
 	) => Promise<boolean | void> | boolean | void
+	onRenamePost?: (
+		target: SelfMediaPlatformPostItem,
+		nextTitle: string,
+	) => Promise<boolean | void> | boolean | void
+	onDeletePost?: (target: SelfMediaPlatformPostItem) => Promise<boolean | void> | boolean | void
 	onOpenBrandConfig?: () => void
 	onCreateAICard?: (initialValues?: AICardCreateInitialValues) => void
 	onOpenAICardFolder?: (folder: AICardFolderItem) => void
 	folderFileId?: string
 	className?: string
+}
+
+interface ViewTransitionDocument extends Document {
+	startViewTransition?: (callback: () => void) => {
+		finished?: Promise<void>
+		ready?: Promise<void>
+		updateCallbackDone?: Promise<void>
+	}
+}
+
+function prefersReducedMotion() {
+	return (
+		typeof window !== "undefined" &&
+		typeof window.matchMedia === "function" &&
+		window.matchMedia("(prefers-reduced-motion: reduce)").matches
+	)
+}
+
+function getViewTransitionDocument() {
+	if (typeof document === "undefined") return null
+	const candidate = document as ViewTransitionDocument
+	return typeof candidate.startViewTransition === "function" ? candidate : null
+}
+
+function getSelfMediaHomeDisplayName(
+	userInfo: { nickname?: string | null; real_name?: string | null } | null,
+) {
+	return (userInfo?.nickname || userInfo?.real_name || "").trim()
 }
 
 function SelfMediaHomePage({
@@ -104,6 +129,8 @@ function SelfMediaHomePage({
 	onLoadPublishedUrl,
 	onLoadOpsSource,
 	onBindPublishedUrl,
+	onRenamePost,
+	onDeletePost,
 	onOpenBrandConfig,
 	onCreateAICard,
 	onOpenAICardFolder,
@@ -111,12 +138,15 @@ function SelfMediaHomePage({
 	className,
 }: SelfMediaHomePageProps) {
 	const { t } = useTranslation("super")
+	const { userInfo } = useUserInfo()
 	const requestedPreviewPostKeysRef = useRef(new Set<string>())
 	const requestedOpsMetricsPostKeysRef = useRef(new Set<string>())
 	const currentOpsArtifactStatesRef = useRef(new Map<string, SelfMediaPostOpsArtifactStates>())
 	const previousOpsArtifactStatesRef = useRef(new Map<string, SelfMediaPostOpsArtifactStates>())
+	const openPostTransitionTimerRef = useRef<number | null>(null)
 	const [activeOpsReviewTarget, setActiveOpsReviewTarget] =
 		useState<SelfMediaPlatformPostItem | null>(null)
+	const [openingPost, setOpeningPost] = useState<SelfMediaHomeOpeningPost | null>(null)
 	const [opsMetricsByPostKey, setOpsMetricsByPostKey] = useState(
 		() => new Map<string, SelfMediaPostOpsMetricsPayload | null>(),
 	)
@@ -124,9 +154,7 @@ function SelfMediaHomePage({
 		() => new Map<string, ReturnType<typeof diffPostOpsArtifactAnimations>>(),
 	)
 	const hasPosts = posts.length > 0
-	const postGroups = posts.reduce<
-		Array<{ platform: SelfMediaPlatform; posts: SelfMediaPlatformPostItem[] }>
-	>((groups, item) => {
+	const postGroups = posts.reduce<SelfMediaHomePostGroup[]>((groups, item) => {
 		const group = groups.find((candidate) => candidate.platform === item.platform)
 		if (group) {
 			group.posts.push(item)
@@ -138,7 +166,7 @@ function SelfMediaHomePage({
 	const opsArtifactStatesByPostKey = new Map<string, SelfMediaPostOpsArtifactStates>()
 	posts.forEach((item) => {
 		opsArtifactStatesByPostKey.set(
-			getPostKey(item),
+			getSelfMediaPostKey(item),
 			buildPostOpsArtifactStates(item, attachmentList),
 		)
 	})
@@ -148,48 +176,91 @@ function SelfMediaHomePage({
 	opsArtifactStatesByPostKey.forEach((states, postKey) => {
 		opsArtifactsByPostKey.set(postKey, getPostOpsArtifacts(states))
 	})
-	const opsOverviewItems = (() => {
-		const total = posts.length
-		const countReady = (key: keyof SelfMediaPostOpsArtifacts) =>
-			posts.filter((item) => opsArtifactsByPostKey.get(getPostKey(item))?.[key]).length
-		return [
-			{
-				key: "content",
-				label: t("detail.selfMedia.home.opsOverview.content"),
-				done: total,
-				total,
-			},
-			{
-				key: "source",
-				label: t("detail.selfMedia.home.opsOverview.source"),
-				done: countReady("source"),
-				total,
-			},
-			{
-				key: "metrics",
-				label: t("detail.selfMedia.home.opsOverview.metrics"),
-				done: countReady("metrics"),
-				total,
-			},
-			{
-				key: "comments",
-				label: t("detail.selfMedia.home.opsOverview.comments"),
-				done: countReady("comments"),
-				total,
-			},
-			{
-				key: "review",
-				label: t("detail.selfMedia.home.opsOverview.review"),
-				done: countReady("review"),
-				total,
-			},
-		]
-	})()
+	const opsOverview = buildSelfMediaOpsOverview({
+		posts,
+		artifactsByPostKey: opsArtifactsByPostKey,
+		metricsByPostKey: opsMetricsByPostKey,
+	})
+	const postsByPostKey = useMemo(
+		() => new Map(posts.map((item) => [getSelfMediaPostKey(item), item])),
+		[posts],
+	)
+	const displayName = getSelfMediaHomeDisplayName(userInfo)
+	const greetingTitle = displayName
+		? `Hi，${displayName}，今天先看重点文章`
+		: "Hi，今天先看重点文章"
+	const greetingSubtitle = hasPosts
+		? "按优先级推进发布、数据和复盘，先把今日重点往前推。"
+		: t("detail.selfMedia.home.emptyDesc")
 
-	const getPlatformLabel = (platform: SelfMediaPlatform) => {
-		const platformConfig = ALL_PLATFORMS.find((item) => item.value === platform)
-		return platformConfig ? t(platformConfig.labelKey) : platform
-	}
+	const handleOpenPost = useCallback(
+		(
+			target: { platform: SelfMediaPlatform; index: number },
+			transition?: SelfMediaPostOpenTransitionPayload,
+		) => {
+			if (!transition || prefersReducedMotion()) {
+				onOpenPost(target)
+				return
+			}
+
+			if (openPostTransitionTimerRef.current) {
+				window.clearTimeout(openPostTransitionTimerRef.current)
+			}
+
+			const targetPost = posts.find(
+				(item) => item.platform === target.platform && item.index === target.index,
+			)
+			const postKey = targetPost
+				? getSelfMediaPostKey(targetPost)
+				: `${target.platform}:${target.index}:${transition.postId}`
+			const nextOpeningPost = {
+				postKey,
+				style: {
+					"--open-card-lift": "-4px",
+					"--open-card-scale": "0.996",
+				} as CSSProperties,
+			}
+			const viewTransitionDocument = getViewTransitionDocument()
+			if (viewTransitionDocument) {
+				flushSync(() => {
+					setOpeningPost(nextOpeningPost)
+				})
+				viewTransitionDocument.startViewTransition?.(() => {
+					flushSync(() => {
+						onOpenPost(target)
+					})
+				})
+				return
+			}
+
+			setOpeningPost(nextOpeningPost)
+			openPostTransitionTimerRef.current = window.setTimeout(() => {
+				onOpenPost(target)
+				setOpeningPost(null)
+				openPostTransitionTimerRef.current = null
+			}, OPEN_POST_FALLBACK_TRANSITION_MS)
+		},
+		[onOpenPost, posts],
+	)
+
+	const handleOpsOverviewAction = useCallback(
+		(action: SelfMediaOpsOverviewAction) => {
+			const target = postsByPostKey.get(action.postKey)
+			if (!target) return
+			if (action.key === "sync-metrics" || action.key === "collect-comments") {
+				if (onPostPublishRefresh) {
+					void Promise.resolve(onPostPublishRefresh(target))
+					return
+				}
+			}
+			if (action.key === "generate-review") {
+				setActiveOpsReviewTarget(target)
+				return
+			}
+			handleOpenPost({ platform: target.platform, index: target.index })
+		},
+		[handleOpenPost, onPostPublishRefresh, postsByPostKey],
+	)
 
 	// Find AI card folders that are children of the self-media folder
 	const aiCardFolders = useMemo(() => {
@@ -228,6 +299,14 @@ function SelfMediaHomePage({
 	}, [onEnsurePostLoaded, posts])
 
 	useEffect(() => {
+		return () => {
+			if (openPostTransitionTimerRef.current) {
+				window.clearTimeout(openPostTransitionTimerRef.current)
+			}
+		}
+	}, [])
+
+	useEffect(() => {
 		const previous = previousOpsArtifactStatesRef.current
 		const currentStates = currentOpsArtifactStatesRef.current
 		const nextAnimations = new Map<string, ReturnType<typeof diffPostOpsArtifactAnimations>>()
@@ -255,7 +334,7 @@ function SelfMediaHomePage({
 
 		let cancelled = false
 		posts.forEach((item) => {
-			const postKey = getPostKey(item)
+			const postKey = getSelfMediaPostKey(item)
 			if (requestedOpsMetricsPostKeysRef.current.has(postKey)) return
 
 			requestedOpsMetricsPostKeysRef.current.add(postKey)
@@ -286,310 +365,72 @@ function SelfMediaHomePage({
 	return (
 		<div
 			className={cn(
-				"relative flex h-full min-h-0 w-full flex-col bg-mobile-background",
+				"self-media-home-stage relative flex h-full min-h-0 w-full flex-col",
+				openingPost && "self-media-home-opening",
 				className,
 			)}
+			style={{
+				background:
+					"linear-gradient(145deg, rgba(255, 255, 255, 0.52), transparent 40%), #f8f8f9",
+			}}
 			data-testid="self-media-home-page"
 		>
-			<header className="shrink-0 border-b bg-card/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:px-6">
-				<div className="mx-auto flex max-w-5xl flex-col gap-4 [container-type:inline-size] sm:flex-row sm:items-center sm:justify-between">
-					<div className="space-y-1">
-						<h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-							{t("detail.selfMedia.home.title")}
-						</h2>
-						<p className="text-sm text-muted-foreground">
-							{t("detail.selfMedia.home.subtitle")}
-						</p>
-					</div>
-					<div className="flex flex-nowrap items-center gap-2">
-						{onOpenBrandConfig ? (
-							<MagicTooltip title={t("detail.selfMedia.home.brandConfig")}>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									className="text-xs [@container(max-width:599px)]:size-9 [@container(max-width:599px)]:px-0"
-									onClick={onOpenBrandConfig}
-									data-testid="self-media-home-brand-config-button"
-								>
-									<Settings size={14} className="shrink-0" />
-									<span className="hidden [@container(min-width:600px)]:inline">
-										{t("detail.selfMedia.home.brandConfig")}
-									</span>
-								</Button>
-							</MagicTooltip>
-						) : null}
-						{onCreateAICard ? (
-							<MagicTooltip title={t("detail.selfMedia.home.aiCard")}>
-								<Button
-									type="button"
-									variant="secondary"
-									size="sm"
-									className="text-xs [@container(max-width:599px)]:size-9 [@container(max-width:599px)]:px-0"
-									onClick={() => onCreateAICard()}
-									data-testid="self-media-home-ai-card-button"
-								>
-									<Sparkles size={14} className="shrink-0" />
-									<span className="hidden [@container(min-width:600px)]:inline">
-										{t("detail.selfMedia.home.aiCard")}
-									</span>
-								</Button>
-							</MagicTooltip>
-						) : null}
-						{onCreateArticle ? (
-							<MagicTooltip title={t("detail.selfMedia.home.create")}>
-								<Button
-									type="button"
-									size="sm"
-									className="text-xs [@container(max-width:599px)]:size-9 [@container(max-width:599px)]:px-0"
-									onClick={onCreateArticle}
-									data-testid="self-media-home-create-button"
-								>
-									<Plus size={14} className="shrink-0" />
-									<span className="hidden [@container(min-width:600px)]:inline">
-										{t("detail.selfMedia.home.create")}
-									</span>
-								</Button>
-							</MagicTooltip>
-						) : null}
-					</div>
-				</div>
-			</header>
-
-			<main className="min-h-0 flex-1">
+			<SelfMediaHomeAnimations />
+			<main className="min-h-0 flex-1" data-testid="self-media-home-main">
 				<ScrollArea className="h-full">
 					<div className="mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-6">
+						<SelfMediaHomeHeader
+							greetingTitle={greetingTitle}
+							greetingSubtitle={greetingSubtitle}
+							opening={Boolean(openingPost)}
+							onCreateArticle={onCreateArticle}
+							onOpenBrandConfig={onOpenBrandConfig}
+							onCreateAICard={onCreateAICard}
+							t={t}
+						/>
 						{hasPosts ? (
 							<section
-								className="mb-6 rounded-lg border bg-card p-4 shadow-xs"
-								data-testid="self-media-home-ops-overview"
+								className={cn(
+									"self-media-home-enter-item mb-8",
+									openingPost && "self-media-home-opening-dim",
+								)}
+								style={{ animationDelay: "100ms" }}
 							>
-								<div className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
-									<BarChart3 size={14} />
-									<span>{t("detail.selfMedia.home.opsOverview.title")}</span>
-								</div>
-								<div className="grid gap-2 sm:grid-cols-5">
-									{opsOverviewItems.map((item) => {
-										const complete = item.total > 0 && item.done === item.total
-										return (
-											<div
-												key={item.key}
-												className="flex min-h-16 flex-col justify-between rounded-md border bg-background px-3 py-2"
-												data-testid={`self-media-home-ops-overview-${item.key}`}
-											>
-												<div className="flex items-center justify-between gap-2">
-													<span className="truncate text-xs text-muted-foreground">
-														{item.label}
-													</span>
-													{complete ? (
-														<CheckCircle2 className="size-3.5 shrink-0 text-primary" />
-													) : (
-														<CircleDashed className="size-3.5 shrink-0 text-muted-foreground" />
-													)}
-												</div>
-												<span className="text-lg font-semibold leading-none text-foreground">
-													{t(
-														"detail.selfMedia.home.opsOverview.progress",
-														{
-															done: item.done,
-															total: item.total,
-														},
-													)}
-												</span>
-											</div>
-										)
-									})}
-								</div>
-							</section>
-						) : null}
-						{aiCardFolders.length > 0 && onOpenAICardFolder ? (
-							<section
-								className="mb-6 space-y-4"
-								data-testid="self-media-home-ai-card-list"
-							>
-								<div className="flex items-center justify-between">
-									<div className="flex items-center gap-2 text-sm font-medium text-foreground">
-										<Sparkles size={14} />
-										<span>
-											{t("detail.selfMedia.home.aiCardCount", {
-												count: aiCardFolders.length,
-											})}
-										</span>
-									</div>
-								</div>
-								<div className="grid gap-3 md:grid-cols-2">
-									{aiCardFolders.map((folder) => {
-										const name =
-											folder.file_name || t("detail.selfMedia.home.aiCard")
-										const latestHtml = folder.children?.find(
-											(child) =>
-												child.file_name === "latest.html" &&
-												!child.is_directory,
-										)
-										return (
-											<button
-												key={folder.file_id}
-												type="button"
-												className="group flex min-h-28 cursor-pointer flex-col gap-3 rounded-lg border bg-card p-4 text-left text-card-foreground shadow-xs transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.99]"
-												onClick={() => onOpenAICardFolder(folder)}
-												data-testid={`self-media-home-ai-card-open-${folder.file_id}`}
-											>
-												<div className="flex items-start gap-3">
-													<div className="flex h-[4.5rem] w-[3.375rem] shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-muted-foreground">
-														{latestHtml?.file_id ? (
-															<div className="pointer-events-none h-full w-full bg-white">
-																<CardFrame
-																	cardId={`home-aicard-${folder.file_id}`}
-																	fileId={latestHtml.file_id}
-																	version={latestHtml.updated_at}
-																	attachmentList={attachmentList}
-																	imageProcessOptions={
-																		CARD_THUMBNAIL_IMAGE_PROCESS
-																	}
-																	className="h-full w-full"
-																	title={name}
-																/>
-															</div>
-														) : (
-															<Sparkles size={17} />
-														)}
-													</div>
-													<div className="min-w-0 flex-1 space-y-1">
-														<h3 className="truncate text-sm font-medium text-foreground">
-															{name}
-														</h3>
-														<p className="text-xs text-muted-foreground">
-															{t("detail.selfMedia.home.aiCard")}
-														</p>
-													</div>
-												</div>
-											</button>
-										)
-									})}
-								</div>
-							</section>
-						) : null}
-						{hasPosts ? (
-							<section className="space-y-4" data-testid="self-media-home-post-list">
-								<div className="flex items-center justify-between">
-									<div className="flex items-center gap-2 text-sm font-medium text-foreground">
-										<Layers size={14} />
-										<span>
-											{t("detail.selfMedia.home.articleCount", {
-												count: posts.length,
-											})}
-										</span>
-									</div>
-								</div>
-								<div className="space-y-6">
-									{postGroups.map(({ platform, posts: platformPosts }) => (
-										<section
-											key={platform}
-											className="space-y-3"
-											data-testid={`self-media-home-platform-group-${platform}`}
-										>
-											<div className="flex items-center gap-2">
-												<PlatformBrandIcon
-													platform={platform}
-													className="size-4 shrink-0"
-												/>
-												<h3 className="text-sm font-medium text-foreground">
-													{getPlatformLabel(platform)}
-												</h3>
-											</div>
-											<div className="grid gap-3 md:grid-cols-2">
-												{platformPosts.map((item) => {
-													const { post, index } = item
-													const postId =
-														post.meta.id || `${platform}-post-${index}`
-													const title =
-														post.meta.feedTitle ||
-														post.meta.title ||
-														t(
-															"detail.selfMedia.common.postFallbackTitle",
-															{
-																index: index + 1,
-															},
-														)
-													const subtitle =
-														post.meta.subtitle || post.meta.author || ""
-													const opsArtifacts = opsArtifactsByPostKey.get(
-														getPostKey(item),
-													) ?? {
-														source: false,
-														metrics: false,
-														comments: false,
-														review: false,
-													}
-													const opsMetrics =
-														opsMetricsByPostKey.get(getPostKey(item)) ??
-														null
-
-													return (
-														<SelfMediaPostCard
-															key={`${platform}-${postId}`}
-															item={item}
-															title={title}
-															subtitle={subtitle}
-															postId={postId}
-															opsArtifacts={opsArtifacts}
-															opsArtifactAnimations={opsArtifactAnimationsByPostKey.get(
-																getPostKey(item),
-															)}
-															opsMetrics={opsMetrics}
-															attachmentList={attachmentList}
-															onOpenPost={onOpenPost}
-															onRequestPrePublishAnalysis={
-																onRequestPrePublishAnalysis
-															}
-															onPostPublishRefresh={
-																onPostPublishRefresh
-															}
-															onConfigureAutoSync={
-																onConfigureAutoSync
-															}
-															onOpenOpsReview={
-																setActiveOpsReviewTarget
-															}
-															onLoadPublishedUrl={onLoadPublishedUrl}
-															onLoadOpsSource={onLoadOpsSource}
-															onBindPublishedUrl={onBindPublishedUrl}
-														/>
-													)
-												})}
-											</div>
-										</section>
-									))}
-								</div>
+								<SelfMediaOpsOverviewCard
+									overview={opsOverview}
+									onAction={handleOpsOverviewAction}
+								/>
 							</section>
 						) : (
-							<section
-								className="flex min-h-[22rem] flex-col items-center justify-center gap-4 rounded-lg border border-dashed bg-card px-6 py-10 text-center shadow-xs"
-								data-testid="self-media-home-empty"
-							>
-								<div className="flex h-14 w-14 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-									<FileText size={24} />
-								</div>
-								<div className="space-y-1">
-									<h3 className="text-lg font-semibold text-foreground">
-										{t("detail.selfMedia.home.emptyTitle")}
-									</h3>
-									<p className="text-sm text-muted-foreground">
-										{t("detail.selfMedia.home.emptyDesc")}
-									</p>
-								</div>
-								<Button
-									type="button"
-									size="sm"
-									className="text-xs"
-									onClick={onCreateArticle}
-									data-testid="self-media-home-empty-create-button"
-								>
-									<Plus size={14} />
-									<span>{t("detail.selfMedia.home.create")}</span>
-								</Button>
-							</section>
+							<SelfMediaHomeEmptyState onCreateArticle={onCreateArticle} t={t} />
 						)}
+						<SelfMediaHomeAICardList
+							aiCardFolders={aiCardFolders}
+							attachmentList={attachmentList}
+							openingPost={openingPost}
+							onOpenAICardFolder={onOpenAICardFolder}
+							t={t}
+						/>
+						<SelfMediaHomePostList
+							postGroups={postGroups}
+							postCount={posts.length}
+							attachmentList={attachmentList}
+							openingPost={openingPost}
+							opsArtifactsByPostKey={opsArtifactsByPostKey}
+							opsMetricsByPostKey={opsMetricsByPostKey}
+							opsArtifactAnimationsByPostKey={opsArtifactAnimationsByPostKey}
+							onOpenPost={handleOpenPost}
+							onRequestPrePublishAnalysis={onRequestPrePublishAnalysis}
+							onPostPublishRefresh={onPostPublishRefresh}
+							onConfigureAutoSync={onConfigureAutoSync}
+							onOpenOpsReview={setActiveOpsReviewTarget}
+							onLoadPublishedUrl={onLoadPublishedUrl}
+							onLoadOpsSource={onLoadOpsSource}
+							onBindPublishedUrl={onBindPublishedUrl}
+							onRenamePost={onRenamePost}
+							onDeletePost={onDeletePost}
+							t={t}
+						/>
 					</div>
 				</ScrollArea>
 			</main>
@@ -618,10 +459,6 @@ function isAICardDisplayConfig(value: unknown): value is { type: "ai-card" } {
 	return Boolean(
 		value && typeof value === "object" && "type" in value && value.type === "ai-card",
 	)
-}
-
-function getPostKey(item: SelfMediaPlatformPostItem) {
-	return `${item.platform}:${item.index}:${item.entry.entry}`
 }
 
 function buildOpsArtifactStateSignature(

@@ -406,6 +406,9 @@ interface DetailProps {
 	onAddCardToNewChat?: (cardIndex: number) => void
 	/** Increment to force-refresh the currently active card */
 	activeCardExternalRefreshVersion?: number
+	onPreviewFocus?: (
+		event?: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>,
+	) => void
 }
 
 function InstagramDetailView({
@@ -417,11 +420,10 @@ function InstagramDetailView({
 	onChangeCard,
 	onBackHome,
 	backLabel,
-	onAddCardToCurrentChat,
 	activeCardExternalRefreshVersion,
+	onPreviewFocus,
 }: DetailProps) {
 	const { t } = useTranslation("super")
-	const store = useSelfMediaStore()
 	const [cardRefreshVersions, setCardRefreshVersions] = useState<Record<number, number>>({})
 	const displayAuthor = post.meta.author || t("detail.selfMedia.common.unknownAuthor")
 	const authorInitial = post.meta.author?.[0]?.toUpperCase() || displayAuthor[0]?.toUpperCase()
@@ -458,6 +460,22 @@ function InstagramDetailView({
 		total: post.cards.length,
 		initialIndex: cardIndex,
 	})
+	const handlePreviewPointerDown: React.PointerEventHandler<HTMLDivElement> = (event) => {
+		onPreviewFocus?.(event)
+		bind.onPointerDown(event)
+	}
+	const handlePrevCard = (event: React.MouseEvent<HTMLButtonElement>) => {
+		prev()
+		onPreviewFocus?.(event)
+	}
+	const handleNextCard = (event: React.MouseEvent<HTMLButtonElement>) => {
+		next()
+		onPreviewFocus?.(event)
+	}
+	const handleGoToCard = (idx: number, event: React.MouseEvent<HTMLButtonElement>) => {
+		goTo(idx)
+		onPreviewFocus?.(event)
+	}
 	useEffect(() => {
 		if (currentIndex !== cardIndex) {
 			onChangeCard(currentIndex)
@@ -516,7 +534,7 @@ function InstagramDetailView({
 			</div>
 			<div
 				ref={bind.ref}
-				onPointerDown={bind.onPointerDown}
+				onPointerDown={handlePreviewPointerDown}
 				onPointerMove={bind.onPointerMove}
 				onPointerUp={bind.onPointerUp}
 				onPointerCancel={bind.onPointerCancel}
@@ -560,7 +578,7 @@ function InstagramDetailView({
 								currentIndex === 0 && "pointer-events-none opacity-0",
 							)}
 							onPointerDown={handleControlPointerDown}
-							onClick={prev}
+							onClick={handlePrevCard}
 							data-testid="instagram-detail-prev-button"
 							aria-label="Previous card"
 						>
@@ -575,7 +593,7 @@ function InstagramDetailView({
 									"pointer-events-none opacity-0",
 							)}
 							onPointerDown={handleControlPointerDown}
-							onClick={next}
+							onClick={handleNextCard}
 							data-testid="instagram-detail-next-button"
 							aria-label="Next card"
 						>
@@ -589,7 +607,7 @@ function InstagramDetailView({
 							key={idx}
 							type="button"
 							onPointerDown={handleControlPointerDown}
-							onClick={() => goTo(idx)}
+							onClick={(event) => handleGoToCard(idx, event)}
 							data-testid={`ig-detail-dot-${idx}`}
 							className={cn(
 								"h-1.5 w-1.5 rounded-full transition-all",
@@ -751,7 +769,14 @@ export interface InstagramFooterLabels {
 function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 	return (
 		<div className="flex h-[50px] shrink-0 items-center justify-around border-t border-[#dbdbdb] bg-white pb-1 pt-1 text-[#262626]">
-			<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+			<svg
+				width="24"
+				height="24"
+				viewBox="0 0 24 24"
+				fill="currentColor"
+				role="img"
+				aria-label={labels.home}
+			>
 				<path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
 			</svg>
 			<svg
@@ -763,6 +788,8 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeWidth="2"
 				strokeLinecap="round"
 				strokeLinejoin="round"
+				role="img"
+				aria-label={labels.search}
 			>
 				<circle cx="11" cy="11" r="8" />
 				<line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -776,6 +803,8 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeWidth="2"
 				strokeLinecap="round"
 				strokeLinejoin="round"
+				role="img"
+				aria-label={labels.reels}
 			>
 				<polygon points="23 7 16 12 23 17 23 7" />
 				<rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
@@ -789,6 +818,8 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeWidth="2"
 				strokeLinecap="round"
 				strokeLinejoin="round"
+				role="img"
+				aria-label={labels.create}
 			>
 				<polygon points="22 2 15 22 11 13 2 9 22 2" />
 			</svg>
@@ -801,6 +832,8 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeWidth="2"
 				strokeLinecap="round"
 				strokeLinejoin="round"
+				role="img"
+				aria-label={labels.profile}
 			>
 				<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
 				<circle cx="12" cy="7" r="4" />

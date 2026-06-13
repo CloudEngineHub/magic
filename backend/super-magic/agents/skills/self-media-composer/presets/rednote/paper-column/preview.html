@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Paper Column — Preview</title>
+    <link rel="stylesheet" href="paper-column.css" />
+    <style>
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e5ddd1;
+      }
+      .preview-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 32px;
+        padding: 40px;
+        justify-content: center;
+        align-items: flex-start;
+      }
+      .preview-card-wrapper {
+        width: 540px;
+        height: 720px;
+        overflow: hidden;
+        box-shadow: 0 18px 48px rgba(71, 65, 55, 0.16);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-card-wrapper">
+        <section class="em-card em-cover">
+          <div class="em-content">
+            <div class="em-issue-row">
+              <span class="em-kicker">Field Journal</span>
+              <span class="em-meta">Issue 01</span>
+            </div>
+            <div class="em-stack em-gap-md em-mt-lg">
+              <h1 class="em-title-xl">
+                雨后<br />社区花园<br /><span class="em-highlight"
+                  >观察笔记</span
+                >
+              </h1>
+              <p class="em-subtitle">
+                从一条小径、两张长椅和几处植物角，看见空间如何让人慢下来。
+              </p>
+            </div>
+            <div class="em-photo-well em-mt-lg" style="height: 208px">
+              <img
+                src="https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=900&q=80"
+                alt="Community garden"
+              />
+            </div>
+            <div class="em-issue-strip">
+              <span class="em-meta">Garden / Slow walk</span>
+              <span class="em-meta">3:4</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="em-card">
+          <div class="em-content">
+            <div class="em-section-mark">
+              <span class="em-section-no">02</span>
+              <div>
+                <p class="em-kicker">Observation</p>
+                <h2 class="em-title">为什么这里<br />让人愿意停留</h2>
+              </div>
+            </div>
+            <div class="em-marginalia em-mt-lg">
+              <div class="em-stack em-gap-md">
+                <p class="em-body">
+                  雨停后的花园没有明显的景点，吸引人的反而是低处的细节：湿润的砖缝、半遮阴的座椅，以及刚好能绕一圈的小径。
+                </p>
+                <p class="em-body">
+                  这些不起眼的安排，让散步从“经过”变成“停一会儿”。
+                </p>
+              </div>
+              <aside class="em-margin-box">
+                <span class="em-chip is-accent">Note</span>
+                <p class="em-note">
+                  最好的公共空间，常常不是更热闹，而是更容易让人放松。
+                </p>
+              </aside>
+            </div>
+            <div class="em-pull-quote em-mt-lg">
+              一条慢路径，比一块大草坪更会留住人。
+              <small>Field note</small>
+            </div>
+            <div class="em-issue-strip">
+              <span class="em-meta">After rain</span>
+              <span class="em-meta">02 / 05</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="em-card">
+          <div class="em-content">
+            <p class="em-kicker">Page 03 / Ledger</p>
+            <h2 class="em-title">三个细节<br />决定停留感</h2>
+            <div class="em-ledger em-mt-lg">
+              <div class="em-ledger-row">
+                <span class="em-ledger-num">01</span>
+                <div>
+                  <h3 class="em-ledger-title">路径有回环</h3>
+                  <p class="em-ledger-desc">
+                    不用原路返回，散步自然会多走一段。
+                  </p>
+                </div>
+              </div>
+              <div class="em-ledger-row">
+                <span class="em-ledger-num">02</span>
+                <div>
+                  <h3 class="em-ledger-title">长椅半遮阴</h3>
+                  <p class="em-ledger-desc">
+                    坐下时有光，也有一点被保护的感觉。
+                  </p>
+                </div>
+              </div>
+              <div class="em-ledger-row">
+                <span class="em-ledger-num">03</span>
+                <div>
+                  <h3 class="em-ledger-title">植物有层次</h3>
+                  <p class="em-ledger-desc">
+                    视线不会一下到底，边走边有新的小发现。
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div
+              id="paper-column-ledger-chart"
+              style="height: 150px; margin-top: 22px"
+            ></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="em-card">
+          <div class="em-content">
+            <p class="em-kicker">Page 04 / Evidence</p>
+            <h2 class="em-title">把散步变成<br />观察证据</h2>
+            <div class="em-evidence-grid em-mt-lg">
+              <div class="em-evidence-card">
+                <span class="em-evidence-label">Path</span>
+                <h3 class="em-evidence-title">小径宽度刚好能两人并行。</h3>
+              </div>
+              <div class="em-evidence-card">
+                <span class="em-evidence-label">Quote</span>
+                <h3 class="em-evidence-title">“这里比大广场安静很多。”</h3>
+              </div>
+              <div class="em-evidence-card">
+                <span class="em-evidence-label">Bench</span>
+                <h3 class="em-evidence-title">三张椅子都朝向不同的景。</h3>
+              </div>
+              <div class="em-evidence-card">
+                <span class="em-evidence-label">Plant</span>
+                <h3 class="em-evidence-title">低矮植物让边界不显得生硬。</h3>
+              </div>
+            </div>
+            <div class="em-compare em-mt-lg">
+              <div class="em-compare-panel">
+                <p class="em-compare-title">Only green</p>
+                <p class="em-compare-copy">
+                  只看绿化面积，会忽略人如何使用空间。
+                </p>
+              </div>
+              <div class="em-compare-panel is-accent">
+                <p class="em-compare-title">Real stay</p>
+                <p class="em-compare-copy">
+                  看停留点、视线和路径，才知道空间好不好用。
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="em-card">
+          <div class="em-content">
+            <p class="em-kicker">Page 05 / Closing</p>
+            <h2 class="em-title">下次散步<br />可以看这三件事</h2>
+            <div class="em-timeline em-mt-lg">
+              <div class="em-timeline-item">
+                <span class="em-timeline-dot"></span>
+                <div>
+                  <h3 class="em-timeline-title">哪里让你自然慢下来</h3>
+                  <p class="em-timeline-desc">
+                    停留点比打卡点更能说明空间质量。
+                  </p>
+                </div>
+              </div>
+              <div class="em-timeline-item">
+                <span class="em-timeline-dot"></span>
+                <div>
+                  <h3 class="em-timeline-title">哪里让你想坐十分钟</h3>
+                  <p class="em-timeline-desc">
+                    座椅朝向、遮阴和声音都会影响选择。
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div
+              id="paper-column-radar-chart"
+              style="height: 176px; margin-top: 24px"
+            ></div>
+            <div class="em-closing-note">
+              <p class="em-meta">Closing note</p>
+              <p class="em-closing-title">
+                好的社区花园，不只是在城市里放一片绿色。
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="paper-column.js"></script>
+    <script>
+      echarts
+        .init(document.getElementById("paper-column-ledger-chart"))
+        .setOption(PaperColumnPresets.get("ledger-bar"));
+      echarts
+        .init(document.getElementById("paper-column-radar-chart"))
+        .setOption(PaperColumnPresets.get("note-radar"));
+    </script>
+  </body>
+</html>

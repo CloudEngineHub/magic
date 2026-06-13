@@ -1,5 +1,6 @@
 import { useRef } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import { useTranslation } from "react-i18next"
 import { Search, FileText, Loader2, Upload, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { setProjectFilePickerDragData } from "../../lib/projectFileDrag"
@@ -19,7 +20,7 @@ interface ProjectFilePickerContentProps {
 	onSearchChange: (q: string) => void
 	onSelect: (fileId: string, fileName: string, relativePath?: string) => void
 	selectedPaths: Set<string>
-	/** If provided, renders a "本地上传" button at the top */
+	/** If provided, renders a local upload button at the top */
 	onLocalUpload?: () => void
 	/** Override the local upload button label */
 	localUploadLabel?: string
@@ -40,6 +41,7 @@ interface ProjectFileRowProps {
 	isPending: boolean
 	loading: boolean
 	multiSelect: boolean
+	alreadySelectedLabel: string
 	onSelect: (fileId: string, fileName: string, relativePath?: string) => void
 	onToggle?: (fileId: string, fileName: string, relativePath?: string) => void
 }
@@ -52,6 +54,7 @@ function ProjectFileRow({
 	isPending,
 	loading,
 	multiSelect,
+	alreadySelectedLabel,
 	onSelect,
 	onToggle,
 }: ProjectFileRowProps) {
@@ -105,7 +108,9 @@ function ProjectFileRow({
 			)}
 			<span className="flex-1 truncate text-foreground/90">{fileName}</span>
 			{isAlreadyAdded ? (
-				<span className="text-primary text-[10px] font-semibold">已选</span>
+				<span className="text-[10px] font-semibold text-primary">
+					{alreadySelectedLabel}
+				</span>
 			) : null}
 		</button>
 	)
@@ -131,6 +136,7 @@ export default function ProjectFilePickerContent({
 	confirmLabel,
 	pendingCount = 0,
 }: ProjectFilePickerContentProps) {
+	const { t } = useTranslation("super")
 	const listRef = useRef<HTMLDivElement>(null)
 	const useVirtualList = files.length >= VIRTUAL_LIST_THRESHOLD
 
@@ -144,9 +150,12 @@ export default function ProjectFilePickerContent({
 
 	const renderRow = (index: number) => {
 		const f = files[index]
-		const fileId = f.file_id!
-		const fileName = f.display_filename || f.file_name || "未命名文件"
+		const fileName =
+			f.display_filename ||
+			f.file_name ||
+			t("detail.selfMedia.initPanel.referenceFilePicker.unnamedFile", "未命名文件")
 		const filePath = f.relative_file_path || undefined
+		const fileId = f.file_id || filePath || `${fileName}-${index}`
 		const isAlreadyAdded = selectedPaths.has(f.relative_file_path || "")
 		const isPending = pendingIds?.has(fileId) ?? false
 
@@ -160,6 +169,10 @@ export default function ProjectFilePickerContent({
 				isPending={isPending}
 				loading={loading}
 				multiSelect={multiSelect}
+				alreadySelectedLabel={t(
+					"detail.selfMedia.initPanel.referenceFilePicker.alreadySelected",
+					"已选",
+				)}
 				onSelect={onSelect}
 				onToggle={onToggle}
 			/>
@@ -178,9 +191,18 @@ export default function ProjectFilePickerContent({
 						disabled={loading}
 					>
 						<Upload className="size-3" />
-						{localUploadLabel || "本地上传"}
+						{localUploadLabel ||
+							t(
+								"detail.selfMedia.initPanel.referenceFilePicker.localUpload",
+								"本地上传",
+							)}
 					</button>
-					<span className="text-[10px] text-muted-foreground/50">或粘贴 / 拖拽</span>
+					<span className="text-[10px] text-muted-foreground/50">
+						{t(
+							"detail.selfMedia.initPanel.referenceFilePicker.pasteOrDrag",
+							"或粘贴 / 拖拽",
+						)}
+					</span>
 				</div>
 			)}
 
@@ -190,7 +212,10 @@ export default function ProjectFilePickerContent({
 				<input
 					type="text"
 					className="flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/50"
-					placeholder="搜索文件..."
+					placeholder={t(
+						"detail.selfMedia.initPanel.referenceFilePicker.searchPlaceholder",
+						"搜索文件...",
+					)}
 					value={searchQuery}
 					onChange={(e) => onSearchChange(e.target.value)}
 					onKeyDown={(e) => e.stopPropagation()}
@@ -199,10 +224,18 @@ export default function ProjectFilePickerContent({
 			</div>
 
 			{/* File list — flex-1 + min-h-0 keeps footer visible inside max-h container */}
-			<div ref={listRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-1">
+			<div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-1">
 				{files.length === 0 ? (
 					<p className="px-2 py-3 text-center text-[10px] text-muted-foreground/60">
-						{searchQuery ? "没有匹配的文件" : "暂无项目文件"}
+						{searchQuery
+							? t(
+									"detail.selfMedia.initPanel.referenceFilePicker.noMatches",
+									"没有匹配的文件",
+								)
+							: t(
+									"detail.selfMedia.initPanel.referenceFilePicker.emptyProjectFiles",
+									"暂无项目文件",
+								)}
 					</p>
 				) : useVirtualList ? (
 					<div
@@ -229,8 +262,14 @@ export default function ProjectFilePickerContent({
 				<div className="flex shrink-0 flex-col gap-2 border-t border-border/50 px-2.5 py-2">
 					<span className="text-[10px] leading-snug text-muted-foreground/70">
 						{pendingCount > 0
-							? `已选 ${pendingCount} 个`
-							: "可多选确认，或拖拽到目标区域"}
+							? t("detail.selfMedia.initPanel.referenceFilePicker.pendingSelection", {
+									count: pendingCount,
+									defaultValue: "已选 {{count}} 个",
+								})
+							: t(
+									"detail.selfMedia.initPanel.referenceFilePicker.multiSelectHint",
+									"可多选确认，或拖拽到目标区域",
+								)}
 					</span>
 					<button
 						type="button"
@@ -238,7 +277,11 @@ export default function ProjectFilePickerContent({
 						onClick={onConfirm}
 						disabled={loading || pendingCount === 0}
 					>
-						{confirmLabel || "确认添加"}
+						{confirmLabel ||
+							t(
+								"detail.selfMedia.initPanel.referenceFilePicker.confirmAdd",
+								"确认添加",
+							)}
 					</button>
 				</div>
 			) : null}

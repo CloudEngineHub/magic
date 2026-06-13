@@ -98,7 +98,7 @@ describe("SelfMediaOpsMetricsDialog", () => {
 		)
 	})
 
-	it("opens in preview mode before the user chooses to edit", async () => {
+	it("opens directly in editable data mode", async () => {
 		render(
 			<SelfMediaOpsMetricsDialog
 				open
@@ -108,13 +108,10 @@ describe("SelfMediaOpsMetricsDialog", () => {
 			/>,
 		)
 
-		expect(await screen.findByTestId("self-media-ops-preview")).toBeInTheDocument()
-		expect(screen.queryByTestId("self-media-ops-source-url")).not.toBeInTheDocument()
-		expect(screen.queryByTestId("self-media-ops-metrics-save")).not.toBeInTheDocument()
-
-		fireEvent.click(screen.getByTestId("self-media-ops-edit"))
-
 		expect(await screen.findByTestId("self-media-ops-source-url")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-ops-metrics-save")).toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-ops-preview")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-ops-edit")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("self-media-ops-metrics-reads")).not.toBeInTheDocument()
 
 		fireEvent.click(screen.getByTestId("self-media-ops-optional-toggle"))
@@ -132,7 +129,6 @@ describe("SelfMediaOpsMetricsDialog", () => {
 			/>,
 		)
 
-		fireEvent.click(await screen.findByTestId("self-media-ops-edit"))
 		await screen.findByTestId("self-media-ops-source-url")
 		fireEvent.click(screen.getByTestId("self-media-ops-optional-toggle"))
 
@@ -163,7 +159,6 @@ describe("SelfMediaOpsMetricsDialog", () => {
 			/>,
 		)
 
-		fireEvent.click(await screen.findByTestId("self-media-ops-edit"))
 		fireEvent.change(await screen.findByTestId("self-media-ops-source-url"), {
 			target: { value: "https://www.xiaohongshu.com/explore/post-1" },
 		})
@@ -204,7 +199,6 @@ describe("SelfMediaOpsMetricsDialog", () => {
 			/>,
 		)
 
-		fireEvent.click(await screen.findByTestId("self-media-ops-edit"))
 		await screen.findByTestId("self-media-ops-source-url")
 		fireEvent.click(screen.getByTestId("self-media-ops-optional-toggle"))
 
@@ -306,8 +300,6 @@ describe("SelfMediaOpsMetricsDialog", () => {
 			/>,
 		)
 
-		await screen.findByTestId("self-media-ops-preview")
-		fireEvent.click(screen.getByTestId("self-media-ops-edit"))
 		await screen.findByDisplayValue("https://www.xiaohongshu.com/explore/post-1")
 		fireEvent.click(screen.getByTestId("self-media-ops-optional-toggle"))
 		fireEvent.change(screen.getByTestId("self-media-ops-metrics-reads"), {
@@ -360,8 +352,6 @@ describe("SelfMediaOpsMetricsDialog", () => {
 			/>,
 		)
 
-		await screen.findByTestId("self-media-ops-preview")
-		fireEvent.click(screen.getByTestId("self-media-ops-edit"))
 		await screen.findByDisplayValue("https://www.xiaohongshu.com/explore/post-1")
 		fireEvent.click(screen.getByTestId("self-media-ops-metrics-save"))
 
@@ -410,8 +400,6 @@ describe("SelfMediaOpsMetricsDialog", () => {
 			/>,
 		)
 
-		await screen.findByTestId("self-media-ops-preview")
-		fireEvent.click(screen.getByTestId("self-media-ops-edit"))
 		fireEvent.change(await screen.findByTestId("self-media-ops-source-url"), {
 			target: { value: "https://www.xiaohongshu.com/explore/new-post-1" },
 		})
@@ -451,7 +439,6 @@ describe("SelfMediaOpsMetricsDialog", () => {
 			/>,
 		)
 
-		fireEvent.click(await screen.findByTestId("self-media-ops-edit"))
 		const fetchButton = await screen.findByTestId("self-media-ops-fetch-published-data")
 
 		expect(fetchButton).toBeDisabled()
@@ -476,7 +463,6 @@ describe("SelfMediaOpsMetricsDialog", () => {
 			/>,
 		)
 
-		fireEvent.click(await screen.findByTestId("self-media-ops-edit"))
 		fireEvent.change(await screen.findByTestId("self-media-ops-source-url"), {
 			target: { value: "https://www.xiaohongshu.com/explore/post-1" },
 		})

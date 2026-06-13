@@ -97,7 +97,10 @@ vi.mock("react-i18next", () => ({
 					"detail.selfMedia.opsReview.sourceStatus.pending": "Pending",
 					"detail.selfMedia.opsReview.sourceStatus.failed": "Failed",
 					"detail.selfMedia.opsReview.sourceStatus.unknown": "Not fetched",
-					"detail.selfMedia.opsReview.summaryTitle": "Performance brief",
+					"detail.selfMedia.opsReview.summaryTitle": "Review summary",
+					"detail.selfMedia.opsReview.summaryTrendEmpty":
+						"Sync data twice or more to build the reading trend.",
+					"detail.selfMedia.opsReview.summaryTrendTitle": "Reading trend",
 					"detail.selfMedia.opsReview.sync": "Sync data",
 					"detail.selfMedia.opsReview.title": "Operations review",
 					"detail.selfMedia.opsReview.trendTitle": "Sync trend",
@@ -107,7 +110,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 describe("SelfMediaOpsReviewDashboard", () => {
-	it("renders a dense executive operations dashboard with unified chart colors", async () => {
+	it("renders a single-post case review dashboard with warm workspace styling", async () => {
 		render(
 			<SelfMediaOpsReviewDashboard
 				open
@@ -119,11 +122,12 @@ describe("SelfMediaOpsReviewDashboard", () => {
 
 		expect(await screen.findByTestId("self-media-ops-review-dashboard")).toHaveAttribute(
 			"data-palette",
-			"executive",
+			"case-review",
 		)
-		expect(screen.getByTestId("self-media-ops-review-brief")).toHaveTextContent(
-			"Performance brief",
+		expect(screen.getByTestId("self-media-ops-review-case-summary")).toHaveTextContent(
+			"Review summary",
 		)
+		expect(screen.getByTestId("self-media-ops-review-summary-trend")).toBeInTheDocument()
 		expect(screen.getByTestId("self-media-ops-review-kpis")).toHaveTextContent("12.8%")
 		expect(screen.getByTestId("self-media-ops-review-impact-map")).toHaveTextContent(
 			"Impact map",
@@ -134,11 +138,44 @@ describe("SelfMediaOpsReviewDashboard", () => {
 		expect(screen.getByTestId("self-media-ops-review-quality-mix")).toHaveTextContent(
 			"Quality mix",
 		)
-		expect(screen.getByTestId("self-media-ops-review-actions")).toHaveTextContent(
+		expect(screen.getByTestId("self-media-ops-review-next-actions")).toHaveTextContent(
 			"把教程场景拆成团队协作案例",
 		)
 		expect(screen.getByTestId("self-media-ops-review-trend")).toHaveTextContent("Sync trend")
 		expect(screen.getByTestId("self-media-ops-review-trend-chart")).toHaveClass("h-52")
+	})
+
+	it("frames the review as a single-post case review workspace", async () => {
+		render(
+			<SelfMediaOpsReviewDashboard
+				open
+				target={buildTarget()}
+				onClose={vi.fn()}
+				onLoadData={async () => buildOpsReviewData()}
+			/>,
+		)
+
+		expect(await screen.findByTestId("self-media-ops-review-dashboard")).toHaveAttribute(
+			"data-palette",
+			"case-review",
+		)
+		expect(screen.getByTestId("self-media-ops-review-case-summary")).toHaveTextContent(
+			"Review summary",
+		)
+		expect(
+			within(screen.getByTestId("self-media-ops-review-case-summary")).queryByText(
+				"Post One Feed",
+			),
+		).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-ops-review-next-actions")).toHaveTextContent(
+			"Next actions",
+		)
+		expect(screen.getByTestId("self-media-ops-review-comment-signals")).toHaveTextContent(
+			"Audience signals",
+		)
+		expect(screen.getByTestId("self-media-ops-review-report-preview")).toHaveTextContent(
+			"Review report",
+		)
 	})
 
 	it("renders review.html through the shared HTML preview runtime", async () => {
@@ -255,7 +292,7 @@ describe("SelfMediaOpsReviewDashboard", () => {
 			"sm:px-6",
 		)
 		expect(screen.getByTestId("self-media-ops-review-brief")).toHaveClass(
-			"lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.75fr)]",
+			"lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.8fr)]",
 		)
 		expect(screen.getByTestId("self-media-ops-review-chart-grid")).toHaveClass(
 			"xl:grid-cols-2",
@@ -310,6 +347,10 @@ describe("SelfMediaOpsReviewDashboard", () => {
 		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.exitFullscreen")).toBe("退出全屏")
 		expect(getLocaleValue(enUS, "detail.selfMedia.opsReview.exitFullscreen")).toBe(
 			"Exit fullscreen",
+		)
+		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.summaryTitle")).toBe("复盘摘要")
+		expect(getLocaleValue(enUS, "detail.selfMedia.opsReview.summaryTitle")).toBe(
+			"Review summary",
 		)
 	})
 })

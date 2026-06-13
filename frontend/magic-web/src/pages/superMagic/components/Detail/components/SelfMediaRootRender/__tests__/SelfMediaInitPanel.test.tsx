@@ -12,6 +12,7 @@ const {
 	mockLoadTemplate,
 	mockDispose,
 	mockMessageError,
+	mockConfirmGenerate,
 } = vi.hoisted(() => ({
 	mockSaveDraft: vi.fn(),
 	mockLoadDraft: vi.fn(),
@@ -22,6 +23,7 @@ const {
 	mockLoadTemplate: vi.fn(),
 	mockDispose: vi.fn(),
 	mockMessageError: vi.fn(),
+	mockConfirmGenerate: vi.fn(),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -30,7 +32,7 @@ vi.mock("react-i18next", () => ({
 	}),
 	initReactI18next: {
 		type: "3rdParty",
-		init: () => {},
+		init: vi.fn(),
 	},
 }))
 
@@ -82,23 +84,57 @@ vi.mock("../components/SelfMediaInitPanel/steps/StepTopicAndDetail", () => ({
 }))
 
 vi.mock("../components/SelfMediaInitPanel/steps/StepConfirm", () => ({
-	default: function MockStepConfirm() {
+	default: function MockStepConfirm({
+		onFooterActionChange,
+		onExecutionLockedChange,
+	}: {
+		onFooterActionChange?: (
+			action: {
+				label: string
+				onClick: () => void
+				disabled?: boolean
+				disabledReason?: string
+			} | null,
+		) => void
+		onExecutionLockedChange?: (locked: boolean) => void
+	}) {
+		useEffect(() => {
+			onFooterActionChange?.({
+				label: "开始 AI 创作（共 1 篇）",
+				onClick: () => {
+					onExecutionLockedChange?.(true)
+					mockConfirmGenerate()
+				},
+				disabled: false,
+			})
+			return () => {
+				onFooterActionChange?.(null)
+				onExecutionLockedChange?.(false)
+			}
+		}, [onExecutionLockedChange, onFooterActionChange])
+
 		return <div>confirm-step</div>
 	},
 }))
 
+interface MockStepBrandInfoProps {
+	onChange: (field: "author" | "brandPosition" | "targetAudience", value: string) => void
+	onBrandImagesUploadingChange?: (uploading: boolean) => void
+}
+
 vi.mock("../components/SelfMediaInitPanel/steps/StepBrandInfo", () => ({
-	default: forwardRef(function MockStepBrandInfo(props: any, ref) {
+	default: forwardRef(function MockStepBrandInfo(props: MockStepBrandInfoProps, ref) {
+		const { onBrandImagesUploadingChange, onChange } = props
+
 		useImperativeHandle(ref, () => ({
-			checkBeforeNext: () => true,
+			checkBeforeNext: () => {
+				onChange("author", "Magic Lab")
+				onChange("brandPosition", "AI tools")
+				onBrandImagesUploadingChange?.(false)
+				return true
+			},
 			isBrandAssetsReady: () => true,
 		}))
-
-		useEffect(() => {
-			props.onChange("author", "Magic Lab")
-			props.onChange("brandPosition", "AI tools")
-			props.onBrandImagesUploadingChange?.(false)
-		}, [])
 
 		return <div>brand-step</div>
 	}),
@@ -133,6 +169,7 @@ describe("SelfMediaInitPanel", () => {
 		mockLoadTemplate.mockReset()
 		mockDispose.mockReset()
 		mockMessageError.mockReset()
+		mockConfirmGenerate.mockReset()
 
 		mockLoadDraft.mockResolvedValue(null)
 		mockLoadBrandConfig.mockResolvedValue(null)
@@ -200,7 +237,6 @@ describe("SelfMediaInitPanel", () => {
 		expect(screen.getByTestId("self-media-init-panel-root")).toHaveClass("relative")
 		expect(dialogBackdrop).toHaveClass("absolute")
 		expect(dialogBackdrop).not.toHaveClass("fixed")
-		expect(dialogBackdrop?.className).not.toMatch(/backdrop-blur/)
 
 		expect(screen.queryByTestId("self-media-init-panel-draft-loading")).not.toBeInTheDocument()
 		expect(screen.getByText("brand-step")).toBeInTheDocument()
@@ -257,6 +293,18 @@ describe("SelfMediaInitPanel", () => {
 		})
 
 		fireEvent.click(screen.getByTestId("self-media-init-panel-prev-button"))
+
+		await waitFor(() => {
+			expect(screen.getByText("brand-step")).toBeInTheDocument()
+		})
+
+		const nextButton = screen.getByText("detail.selfMedia.initPanel.nav.next").closest("button")
+		expect(nextButton).not.toBeNull()
+		if (!nextButton) throw new Error("next button not found")
+
+		await act(async () => {
+			fireEvent.click(nextButton)
+		})
 
 		await waitFor(() => {
 			expect(mockSaveBrandConfig).toHaveBeenCalledWith(
@@ -316,7 +364,7 @@ describe("SelfMediaInitPanel", () => {
 
 		fireEvent.click(screen.getByTestId("self-media-init-panel-prev-button"))
 
-		expect(screen.getByText("brand-step")).toBeInTheDocument()
+		expect(await screen.findByText("brand-step")).toBeInTheDocument()
 		expect(mockSaveDraft).toHaveBeenCalledTimes(1)
 		expect(mockSaveDraft).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -342,13 +390,128 @@ describe("SelfMediaInitPanel", () => {
 		)
 
 		await waitFor(() => {
-			expect(screen.getByText("detail.selfMedia.initPanel.nav.next")).not.toBeDisabled()
+			const nextButton = screen
+				.getByText("detail.selfMedia.initPanel.nav.next")
+				.closest("button")
+			expect(nextButton).not.toBeNull()
+			expect(nextButton).not.toBeDisabled()
+		})
+		expect(screen.getByTestId("self-media-init-panel-shell")).toHaveClass("grid-cols-1")
+		expect(screen.queryByTestId("self-media-init-panel-proceed-hint")).not.toBeInTheDocument()
+		expect(screen.getByLabelText("detail.selfMedia.initPanel.nav.nextWithHint")).toBeEnabled()
+
+		const nextButton = screen.getByText("detail.selfMedia.initPanel.nav.next").closest("button")
+		expect(nextButton).not.toBeNull()
+		if (!nextButton) throw new Error("next button not found")
+		await act(async () => {
+			fireEvent.click(nextButton)
 		})
 
-		fireEvent.click(screen.getByText("detail.selfMedia.initPanel.nav.next"))
-
-		expect(screen.getByText("topics-step")).toBeInTheDocument()
+		expect(await screen.findByText("topics-step")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-init-panel-proceed-hint")).toHaveTextContent(
+			"detail.selfMedia.initPanel.nav.hints.noArticle",
+		)
+		const disabledNextButton = screen
+			.getByText("detail.selfMedia.initPanel.nav.next")
+			.closest("button")
+		expect(disabledNextButton).toBeDisabled()
 		expect(mockSaveDraft).not.toHaveBeenCalled()
+	})
+
+	it("uses the shared footer for the final AI creation action", async () => {
+		mockLoadDraft.mockResolvedValue({
+			currentStep: 2,
+			data: {
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+					targetAudience: "",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "Draft article",
+						platform: "rednote",
+					},
+				],
+			},
+		})
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+				onBackHome={vi.fn()}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-draft-restore-load-button"))
+
+		await waitFor(() => {
+			expect(screen.getByText("confirm-step")).toBeInTheDocument()
+		})
+
+		expect(
+			screen.queryByTestId("self-media-init-panel-back-home-button"),
+		).not.toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-init-panel-clear-button")).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByRole("button", { name: /开始 AI 创作/ }))
+
+		expect(mockConfirmGenerate).toHaveBeenCalledTimes(1)
+	})
+
+	it("hides the footer once final creation enters execution", async () => {
+		mockLoadDraft.mockResolvedValue({
+			currentStep: 2,
+			data: {
+				global: {
+					author: "Magic Lab",
+					brandPosition: "AI tools",
+					targetAudience: "",
+					brandImages: [],
+				},
+				articles: [
+					{
+						title: "Draft article",
+						platform: "rednote",
+					},
+				],
+			},
+		})
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+				onBackHome={vi.fn()}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-draft-restore-dialog")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("self-media-draft-restore-load-button"))
+
+		await waitFor(() => {
+			expect(screen.getByText("confirm-step")).toBeInTheDocument()
+		})
+		expect(screen.getByTestId("self-media-init-panel-footer")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByRole("button", { name: /开始 AI 创作/ }))
+
+		expect(screen.queryByTestId("self-media-init-panel-footer")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("self-media-init-panel-prev-button")).not.toBeInTheDocument()
+		expect(mockConfirmGenerate).toHaveBeenCalledTimes(1)
 	})
 
 	it("shows a restore prompt when a draft exists", async () => {
@@ -587,6 +750,11 @@ describe("SelfMediaInitPanel", () => {
 
 		fireEvent.click(screen.getByTestId("self-media-init-panel-clear-button"))
 
+		expect(mockClearDraft).not.toHaveBeenCalled()
+		expect(screen.getByTestId("self-media-clear-confirm-dialog")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("self-media-clear-confirm-confirm"))
+
 		await waitFor(() => {
 			expect(screen.getByText("brand-step")).toBeInTheDocument()
 		})
@@ -595,7 +763,7 @@ describe("SelfMediaInitPanel", () => {
 		expect(mockClearDraft).toHaveBeenCalledTimes(1)
 	})
 
-	it("keeps header and footer fixed while middle content owns scrolling", async () => {
+	it("keeps the top progress preview and footer fixed while middle content owns scrolling", async () => {
 		render(
 			<SelfMediaInitPanel
 				selectedProject={{ id: "project-1" }}
@@ -610,16 +778,65 @@ describe("SelfMediaInitPanel", () => {
 		})
 
 		const root = screen.getByTestId("self-media-init-panel-root")
+		const shell = screen.getByTestId("self-media-init-panel-shell")
 		const header = screen.getByTestId("self-media-init-panel-header")
 		const content = screen.getByTestId("self-media-init-panel-content")
 		const footer = screen.getByTestId("self-media-init-panel-footer")
 
 		expect(root.className).toContain("overflow-hidden")
+		expect(shell.className).toContain("grid-rows-[auto_minmax(0,1fr)_auto]")
 		expect(header.className).toContain("shrink-0")
-		expect(content.className).toContain("flex-1")
 		expect(content.className).toContain("min-h-0")
 		expect(content.className).toContain("overflow-y-auto")
 		expect(footer.className).toContain("shrink-0")
+	})
+
+	it("compacts the top preview while the content viewport is scrolled", async () => {
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByText("brand-step")).toBeInTheDocument()
+		})
+
+		const content = screen.getByTestId("self-media-init-panel-content")
+		const viewport = content.querySelector('[data-slot="scroll-area-viewport"]')
+		expect(viewport).toBeInstanceOf(HTMLDivElement)
+		if (!(viewport instanceof HTMLDivElement)) {
+			throw new Error("content viewport not found")
+		}
+
+		expect(screen.getByTestId("self-media-init-panel-header")).not.toHaveAttribute(
+			"data-compact",
+		)
+		expect(screen.getByTestId("self-media-step-brand-orbit")).toBeInTheDocument()
+
+		viewport.scrollTop = 80
+		fireEvent.scroll(viewport)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-init-panel-header")).toHaveAttribute(
+				"data-compact",
+				"true",
+			)
+		})
+		expect(screen.queryByTestId("self-media-step-brand-orbit")).not.toBeInTheDocument()
+
+		viewport.scrollTop = 0
+		fireEvent.scroll(viewport)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-init-panel-header")).not.toHaveAttribute(
+				"data-compact",
+			)
+		})
+		expect(screen.getByTestId("self-media-step-brand-orbit")).toBeInTheDocument()
 	})
 
 	it("shows an error toast when background draft save fails", async () => {
@@ -641,7 +858,7 @@ describe("SelfMediaInitPanel", () => {
 			},
 		})
 		mockSaveDraft.mockRejectedValueOnce(new Error("save failed"))
-		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
 
 		render(
 			<SelfMediaInitPanel

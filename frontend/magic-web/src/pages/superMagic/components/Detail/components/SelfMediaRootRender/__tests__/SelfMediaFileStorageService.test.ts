@@ -303,6 +303,46 @@ describe("SelfMediaFileStorageService", () => {
 		)
 	})
 
+	it("rejects when project-level brand config cannot be written", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+		mockSaveFileContent.mockRejectedValueOnce(new Error("write failed"))
+
+		await expect(service.saveBrandConfig(data.global)).rejects.toThrow(
+			"Failed to save brand config",
+		)
+	})
+
+	it("rejects when a pending project-level brand image cannot be uploaded", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+		const uploadSpy = vi
+			.spyOn(service, "uploadBrandImageToBrandConfig")
+			.mockResolvedValueOnce(null)
+
+		await expect(
+			service.saveBrandConfig({
+				...data.global,
+				brandImages: [
+					{
+						id: "pending-brand",
+						file: new File(["image"], "pending.png", { type: "image/png" }),
+						previewUrl: "",
+						description: "",
+						isImage: true,
+					},
+				],
+			}),
+		).rejects.toThrow("Failed to upload brand image")
+		expect(uploadSpy).toHaveBeenCalled()
+	})
+
 	it("saves and loads post ops metrics as a file-backed operations record", async () => {
 		const service = new SelfMediaFileStorageService(
 			"project-1",
@@ -351,6 +391,261 @@ describe("SelfMediaFileStorageService", () => {
 				},
 			}),
 		)
+	})
+
+	it("updates the current post title in post.json while preserving manifest content", async () => {
+		seedNode({
+			file_id: "posts-dir",
+			file_name: "posts",
+			is_directory: true,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/posts",
+		})
+		seedNode({
+			file_id: "post-1-dir",
+			file_name: "post-1",
+			is_directory: true,
+			parent_id: "posts-dir",
+			relative_file_path: "self-media/posts/post-1",
+		})
+		seedNode({
+			file_id: "post-1-json",
+			file_name: "post.json",
+			is_directory: false,
+			parent_id: "post-1-dir",
+			relative_file_path: "self-media/posts/post-1/post.json",
+		})
+		contentByFileId.set(
+			"post-1-json",
+			JSON.stringify({
+				id: "post-1",
+				meta: {
+					title: "Old title",
+					subtitle: "Keep me",
+				},
+				cards: ["cards/01.html"],
+			}),
+		)
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.updatePostTitle("posts/post-1/post.json", "New title")
+
+		expect(JSON.parse(contentByFileId.get("post-1-json") || "{}")).toEqual({
+			id: "post-1",
+			meta: {
+				title: "New title",
+				subtitle: "Keep me",
+			},
+			cards: ["cards/01.html"],
+		})
+	})
+
+	it("renames a home post in both post.json and magic.project.js", async () => {
+		seedNode({
+			file_id: "magic-project-js",
+			file_name: "magic.project.js",
+			is_directory: false,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/magic.project.js",
+		})
+		seedNode({
+			file_id: "posts-dir",
+			file_name: "posts",
+			is_directory: true,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/posts",
+		})
+		seedNode({
+			file_id: "post-1-dir",
+			file_name: "post-1",
+			is_directory: true,
+			parent_id: "posts-dir",
+			relative_file_path: "self-media/posts/post-1",
+		})
+		seedNode({
+			file_id: "post-1-json",
+			file_name: "post.json",
+			is_directory: false,
+			parent_id: "post-1-dir",
+			relative_file_path: "self-media/posts/post-1/post.json",
+		})
+		contentByFileId.set(
+			"magic-project-js",
+			`window.magicProjectConfig = {
+  "self-media": {
+    "rednote": {
+      "posts": [
+        { "id": "post-1", "name": "Old Name", "entry": "posts/post-1/post.json" }
+      ]
+    }
+  }
+};
+window.magicProjectConfigure(window.magicProjectConfig);`,
+		)
+		contentByFileId.set(
+			"post-1-json",
+			JSON.stringify({
+				id: "post-1",
+				meta: {
+					title: "Old title",
+					subtitle: "Keep me",
+				},
+				cards: ["cards/01.html"],
+			}),
+		)
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.renamePost({
+			platform: "rednote",
+			id: "post-1",
+			entry: "posts/post-1/post.json",
+			name: "New Name",
+		})
+
+		expect(JSON.parse(contentByFileId.get("post-1-json") || "{}").meta.title).toBe("New Name")
+		expect(contentByFileId.get("magic-project-js")).toContain('"name": "New Name"')
+	})
+
+	it("renames a home post when the index entry already stores a project-relative path", async () => {
+		seedNode({
+			file_id: "magic-project-js",
+			file_name: "magic.project.js",
+			is_directory: false,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/magic.project.js",
+		})
+		seedNode({
+			file_id: "posts-dir",
+			file_name: "posts",
+			is_directory: true,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/posts",
+		})
+		seedNode({
+			file_id: "post-1-dir",
+			file_name: "post-1",
+			is_directory: true,
+			parent_id: "posts-dir",
+			relative_file_path: "self-media/posts/post-1",
+		})
+		seedNode({
+			file_id: "post-1-json",
+			file_name: "post.json",
+			is_directory: false,
+			parent_id: "post-1-dir",
+			relative_file_path: "self-media/posts/post-1/post.json",
+		})
+		contentByFileId.set(
+			"magic-project-js",
+			`window.magicProjectConfig = {
+  "self-media": {
+    "rednote": {
+      "posts": [
+        { "id": "post-1", "name": "Old Name", "entry": "self-media/posts/post-1/post.json" }
+      ]
+    }
+  }
+};
+window.magicProjectConfigure(window.magicProjectConfig);`,
+		)
+		contentByFileId.set(
+			"post-1-json",
+			JSON.stringify({
+				id: "post-1",
+				meta: {
+					title: "Old title",
+				},
+			}),
+		)
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.renamePost({
+			platform: "rednote",
+			id: "post-1",
+			entry: "self-media/posts/post-1/post.json",
+			name: "New Name",
+		})
+
+		expect(JSON.parse(contentByFileId.get("post-1-json") || "{}").meta.title).toBe("New Name")
+		expect(contentByFileId.get("magic-project-js")).toContain('"name": "New Name"')
+	})
+
+	it("deletes a post directory and removes the post from magic.project.js", async () => {
+		seedNode({
+			file_id: "magic-project-js",
+			file_name: "magic.project.js",
+			is_directory: false,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/magic.project.js",
+		})
+		seedNode({
+			file_id: "posts-dir",
+			file_name: "posts",
+			is_directory: true,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/posts",
+		})
+		seedNode({
+			file_id: "delete-me-dir",
+			file_name: "delete-me",
+			is_directory: true,
+			parent_id: "posts-dir",
+			relative_file_path: "self-media/posts/delete-me",
+		})
+		seedNode({
+			file_id: "delete-me-json",
+			file_name: "post.json",
+			is_directory: false,
+			parent_id: "delete-me-dir",
+			relative_file_path: "self-media/posts/delete-me/post.json",
+		})
+		contentByFileId.set(
+			"magic-project-js",
+			`window.magicProjectConfig = {
+  "self-media": {
+    "rednote": {
+      "posts": [
+        { "id": "keep", "name": "Keep", "entry": "posts/keep/post.json" },
+        { "id": "delete-me", "name": "Delete Me", "entry": "posts/delete-me/post.json" }
+      ]
+    }
+  }
+};
+window.magicProjectConfigure(window.magicProjectConfig);`,
+		)
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.deletePost({
+			platform: "rednote",
+			id: "delete-me",
+			entry: "posts/delete-me/post.json",
+		})
+
+		expect(mockDeleteFile).toHaveBeenCalledWith("delete-me-dir")
+		expect(contentByFileId.get("magic-project-js")).toContain('"id": "keep"')
+		expect(contentByFileId.get("magic-project-js")).not.toContain('"id": "delete-me"')
+		expect(mockSaveFileContent).toHaveBeenCalledWith([
+			expect.objectContaining({
+				file_id: "magic-project-js",
+				enable_shadow: true,
+			}),
+		])
 	})
 
 	it("saves and loads a bound published article source link", async () => {

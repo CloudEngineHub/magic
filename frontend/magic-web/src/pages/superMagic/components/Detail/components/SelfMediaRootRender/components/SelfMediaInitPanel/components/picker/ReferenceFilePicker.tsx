@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { FileText, Upload, FolderOpen, X, Loader2, Plus } from "lucide-react"
+import { Upload, FolderOpen, Plus } from "lucide-react"
 import {
 	DropdownMenu,
 	DropdownMenuTrigger,
@@ -10,10 +10,11 @@ import projectFilesStore from "@/stores/projectFiles"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import { cn } from "@/lib/utils"
 import ProjectFilePickerContent from "./ProjectFilePickerContent"
+import { selfMediaOverlayStyles } from "../../../selfMediaOverlayStyles"
 import { useDropZone } from "../../lib/useDropZone"
-import type { DropPayload } from "../../lib/projectFileDrag"
-import type { SelfMediaProjectFileRef } from "../../lib/projectFileDrag"
+import type { DropPayload, SelfMediaProjectFileRef } from "../../lib/projectFileDrag"
 import type { ReferenceFileValue } from "../../types"
+import ReferenceFileChips from "./ReferenceFileChips"
 
 export type { ReferenceFileValue }
 
@@ -141,8 +142,8 @@ export default function ReferenceFilePicker({
 			new Set(
 				value
 					.filter((v) => v.file_path)
-					.map((v) => v.file_path!)
-					.filter((p): p is string => !!p),
+					.map((v) => v.file_path)
+					.filter((p): p is string => Boolean(p)),
 			),
 		[value],
 	)
@@ -279,6 +280,21 @@ export default function ReferenceFilePicker({
 	}, [])
 
 	const isDisabled = disabled || loadingProjectFile
+	const referenceStatus =
+		value.length > 0
+			? t("detail.selfMedia.initPanel.referenceFilePicker.addedCount", {
+					count: value.length,
+					defaultValue: "已添加 {{count}} 个参考",
+				})
+			: t("detail.selfMedia.initPanel.referenceFilePicker.hint")
+	const getRemoveLabel = useCallback(
+		(fileName: string) =>
+			t("detail.selfMedia.initPanel.referenceFilePicker.removeFile", {
+				name: fileName,
+				defaultValue: "移除 {{name}}",
+			}),
+		[t],
+	)
 
 	const projectFiles = projectFilesStore.workspaceFilesList.filter((f) => !f.is_directory)
 
@@ -297,7 +313,10 @@ export default function ReferenceFilePicker({
 		<DropdownMenuContent
 			align="start"
 			sideOffset={4}
-			className="flex max-h-96 w-72 flex-col overflow-hidden p-0"
+			className={cn(
+				"flex max-h-96 w-72 flex-col overflow-hidden p-0",
+				selfMediaOverlayStyles.floatingPanel,
+			)}
 			onCloseAutoFocus={(e) => e.preventDefault()}
 		>
 			<ProjectFilePickerContent
@@ -353,35 +372,19 @@ export default function ReferenceFilePicker({
 								)}
 							</span>
 						) : null}
-						{value.length > 0 && (
-							<div className="flex items-center gap-1.5">
-								{value.map((file, index) => (
-									<div
-										key={`${file.name}-${index}`}
-										className="group flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-foreground transition-colors hover:bg-accent"
-									>
-										<FileText className="size-3 text-zinc-500" />
-										<span className="max-w-[70px] truncate text-[11px] font-medium">
-											{file.name}
-										</span>
-										<button
-											type="button"
-											className="shrink-0 p-0.5 text-zinc-400 transition-all hover:bg-zinc-200/80 hover:text-destructive"
-											onClick={() => handleRemove(index)}
-											disabled={disabled}
-										>
-											<X className="size-2.5" />
-										</button>
-									</div>
-								))}
-							</div>
-						)}
+						<ReferenceFileChips
+							files={value}
+							compact
+							disabled={disabled}
+							onRemove={handleRemove}
+							getRemoveLabel={getRemoveLabel}
+						/>
 						{canAddMore && (
 							<DropdownMenu open={showProjectPicker} onOpenChange={handleOpenChange}>
 								<DropdownMenuTrigger asChild>
 									<button
 										type="button"
-										className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-700 hover:bg-zinc-50/80 dark:text-zinc-500 dark:hover:text-zinc-300 dark:hover:bg-zinc-900/80 transition-all font-semibold"
+										className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-zinc-400 transition-all hover:bg-zinc-50/80 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-zinc-900/80 dark:hover:text-zinc-300"
 										disabled={disabled}
 									>
 										<Upload className="size-3.5" />
@@ -403,30 +406,12 @@ export default function ReferenceFilePicker({
 				</>
 			) : (
 				<>
-					{/* File chips */}
-					{value.length > 0 && (
-						<div className="mb-2 flex flex-wrap gap-1.5">
-							{value.map((file, index) => (
-								<div
-									key={`${file.name}-${index}`}
-									className="group flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 transition-colors hover:border-border hover:bg-muted/70"
-								>
-									<FileText className="size-3 shrink-0 text-primary/70" />
-									<span className="max-w-[140px] truncate text-xs text-foreground/90">
-										{file.name}
-									</span>
-									<button
-										type="button"
-										className="ml-0.5 shrink-0 rounded-full p-0.5 text-muted-foreground/60 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-										onClick={() => handleRemove(index)}
-										disabled={disabled}
-									>
-										<X className="size-3" />
-									</button>
-								</div>
-							))}
-						</div>
-					)}
+					<ReferenceFileChips
+						files={value}
+						disabled={disabled}
+						onRemove={handleRemove}
+						getRemoveLabel={getRemoveLabel}
+					/>
 
 					{/* Drop zone & action buttons */}
 					{canAddMore && (
@@ -489,11 +474,18 @@ export default function ReferenceFilePicker({
 									</span>
 								)}
 							</div>
-							<p className="mt-1 text-[11px] text-muted-foreground/50">
-								{t("detail.selfMedia.initPanel.referenceFilePicker.hint")}
-							</p>
 						</>
 					)}
+					<p
+						className={cn(
+							"mt-1 text-[11px]",
+							value.length > 0
+								? "font-medium text-primary/70"
+								: "text-muted-foreground/50",
+						)}
+					>
+						{referenceStatus}
+					</p>
 				</>
 			)}
 		</div>

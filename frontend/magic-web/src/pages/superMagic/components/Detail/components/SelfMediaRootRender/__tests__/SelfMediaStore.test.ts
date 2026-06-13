@@ -415,6 +415,60 @@ describe("SelfMediaStore", () => {
 	})
 
 	describe("navigation actions", () => {
+		it("updates the cached post title for immediate UI feedback", () => {
+			const entry = makeEntry("p1")
+			const post = makePost("p1", {
+				meta: { id: "p1", title: "Old title", subtitle: "Keep me" },
+			})
+			runInAction(() => {
+				store.slices = [makeSlice("rednote", [entry])]
+				store.loadedPosts = { [cacheKey("rednote", "p1")]: post }
+				store.activePlatform = "rednote"
+				store.rootLoading = false
+			})
+
+			store.updatePostTitle(0, "New title")
+
+			expect(store.posts[0].meta).toEqual({
+				id: "p1",
+				feedTitle: "New title",
+				title: "New title",
+				subtitle: "Keep me",
+			})
+			expect(store.postEntries[0].name).toBe("New title")
+		})
+
+		it("updates a home post title by platform and entry id", () => {
+			const rednoteEntry = makeEntry("rednote-1")
+			const wechatEntry = makeEntry("wechat-1")
+			runInAction(() => {
+				store.slices = [
+					makeSlice("rednote", [rednoteEntry]),
+					makeSlice("wechat-official-accounts", [wechatEntry]),
+				]
+				store.loadedPosts = {
+					[cacheKey("rednote", "rednote-1")]: makePost("rednote-1", {
+						meta: { id: "rednote-1", title: "Rednote old", feedTitle: "Rednote feed" },
+					}),
+					[cacheKey("wechat-official-accounts", "wechat-1")]: makePost("wechat-1", {
+						meta: { id: "wechat-1", title: "Wechat old", feedTitle: "Wechat feed" },
+					}),
+				}
+				store.activePlatform = "rednote"
+				store.rootLoading = false
+			})
+
+			store.updatePlatformPostTitle("wechat-official-accounts", "wechat-1", "Wechat renamed")
+
+			const renamed = store.allPosts.find((item) => item.entry.id === "wechat-1")
+			expect(renamed?.post.meta).toMatchObject({
+				feedTitle: "Wechat renamed",
+				title: "Wechat renamed",
+			})
+			expect(renamed?.entry.name).toBe("Wechat renamed")
+			expect(store.postEntries[0].name).toBe("Name rednote-1")
+		})
+
 		it("setActivePostIndex resets activeCardIndex", () => {
 			runInAction(() => {
 				store.activeCardIndex = 3

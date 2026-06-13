@@ -442,6 +442,46 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("should report visual rect dimensions for scaled elements", () => {
+			container.innerHTML =
+				'<div style="transform: matrix(0.5, 0, 0, 0.5, 10, 20);">Scaled</div>'
+			const element = container.querySelector("div") as HTMLElement
+
+			Object.defineProperties(element, {
+				offsetWidth: { configurable: true, value: 400 },
+				offsetHeight: { configurable: true, value: 200 },
+			})
+			element.getBoundingClientRect = vi.fn(
+				() =>
+					({
+						top: 120,
+						left: 80,
+						width: 200,
+						height: 100,
+						right: 280,
+						bottom: 220,
+						x: 80,
+						y: 120,
+						toJSON: () => ({}),
+					}) as DOMRect,
+			)
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					rect: {
+						top: 120,
+						left: 80,
+						width: 200,
+						height: 100,
+					},
+					rotation: 0,
+				}),
+			)
+		})
+
 		it("should handle text elements with multiple children", () => {
 			container.innerHTML = `
 				<div>

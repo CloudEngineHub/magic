@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react"
+import { useTranslation } from "react-i18next"
 import { Mic } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useVoiceInput } from "@/components/business/VoiceInput/hooks"
@@ -24,6 +25,7 @@ export default function InlineVoiceButton({
 	variant = "input",
 	className,
 }: InlineVoiceButtonProps) {
+	const { t } = useTranslation("super")
 	const resultRef = useRef(onResult)
 	resultRef.current = onResult
 	const valueRef = useRef(value)
@@ -98,10 +100,14 @@ export default function InlineVoiceButton({
 				variant === "input" ? "right-1 top-1/2 -translate-y-1/2" : "right-1.5 top-1.5",
 				isActive
 					? "text-orange-500 hover:text-orange-600"
-					: "hover:text-foreground opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
+					: "opacity-0 hover:text-foreground group-focus-within:opacity-100 group-hover:opacity-100",
 				className,
 			)}
-			title={isActive ? "停止语音输入" : "语音输入"}
+			title={
+				isActive
+					? t("detail.selfMedia.initPanel.voiceInput.stop", "停止语音输入")
+					: t("detail.selfMedia.initPanel.voiceInput.start", "语音输入")
+			}
 			onClick={handleToggle}
 		>
 			{isActive ? (

@@ -114,9 +114,16 @@ presets/
 │   ├── gradient-editorial/
 │   ├── personal-insight/
 │   ├── film-vintage/
+│   ├── warm-journal/
+│   ├── paper-column/
+│   ├── signal-grid/
 │   └── product-launch-preset/
 ├── instagram/
-│   └── ins-modern/
+│   ├── ins-modern/
+│   ├── ins-minimal/
+│   ├── ins-dark/
+│   ├── ins-gradient/
+│   └── ins-retro/
 └── wechat-official-accounts/
     └── (coming soon)
 ```
@@ -175,8 +182,15 @@ Presets are organized by platform under `presets/<platform>/<preset>/`. Each pre
 | `rednote`                  | `gradient-editorial`    | Image Editorial: cover uses hero/theme image with gradient overlay for text readability, clean white content pages, rounded cards. Best for AI/tech insight articles.                                  |
 | `rednote`                  | `personal-insight`      | Personal Insight: clean white background, profile avatar, numbered sections, reading-note style. Best for personal reflections and knowledge sharing.                                                  |
 | `rednote`                  | `film-vintage`          | Film Vintage: dark cinematic cover, polaroid-style photo frames, mono grain texture, red accent, serif+mono typography. Best for film photography, gear reviews, and city walk journals.               |
+| `rednote`                  | `warm-journal`          | Warm Journal: photo-led journal pages, handwritten titles, khaki/beige paper textures, scattered notes, and polaroid frames. Best for lifestyle, product notes, and city records.                     |
+| `rednote`                  | `paper-column`          | Paper Column: paper texture, serif display titles, marginal notes, pull quotes, ledgers, and evidence frames. Best for essays, analysis, knowledge columns, and field-note narratives.                 |
+| `rednote`                  | `signal-grid`           | Signal Grid: strict grid rhythm, light display type, one accent color, matrix rows, KPI blocks, and ranking bars. Best for product notes, comparisons, launch explainers, and structured decisions.    |
 | `rednote`                  | `product-launch-preset` | Product Launch: white background, 6px red top accent bar, black text + red highlights only, sharp 2px badges, 10px rounded image containers. Best for product feature announcements and release notes. |
 | `instagram`                | `ins-modern`            | Instagram-style modern: white background, generous whitespace, minimal typography.                                                                                                                     |
+| `instagram`                | `ins-minimal`           | Instagram minimal clean: restrained whitespace, fine dividers, and editorial hierarchy. Best for digests, summaries, and point-of-view posts.                                                          |
+| `instagram`                | `ins-dark`              | Instagram dark tech: dark base, neon accents, and high-contrast modules. Best for tools, productivity, and technical topics.                                                                           |
+| `instagram`                | `ins-gradient`          | Instagram gradient glow: saturated gradients, glow layers, and modern metric cards. Best for trends, design, and growth insights.                                                                      |
+| `instagram`                | `ins-retro`             | Instagram retro story: warm paper tones, ornamental marks, and vintage headline composition. Best for storytelling content and visual guides.                                                          |
 | `wechat-official-accounts` | _(coming soon)_         | Presets for WeChat article style will be added here.                                                                                                                                                   |
 
 Source paths inside this skill:
@@ -188,8 +202,15 @@ presets/rednote/dark-tech/dark-tech.{css,js}
 presets/rednote/gradient-editorial/gradient-editorial.{css,js}
 presets/rednote/personal-insight/personal-insight.{css,js}
 presets/rednote/film-vintage/film-vintage.{css,js}
+presets/rednote/warm-journal/warm-journal.{css,js}
+presets/rednote/paper-column/paper-column.{css,js}
+presets/rednote/signal-grid/signal-grid.{css,js}
 presets/rednote/product-launch-preset/product-launch.{css,js}
 presets/instagram/ins-modern/ins-modern.{css,js}
+presets/instagram/ins-minimal/ins-minimal.{css,js}
+presets/instagram/ins-dark/ins-dark.{css,js}
+presets/instagram/ins-gradient/ins-gradient.{css,js}
+presets/instagram/ins-retro/ins-retro.{css,js}
 ```
 
 When the user picks a preset (see Workflow Step 4.1), read the source files from `presets/<platform>/<preset>/` and copy both files once into the project at `shared/presets/<preset>/`. Reference them from every card with `<link>` and `<script>` tags using `../../../shared/presets/<preset>/<preset>.css|.js`.
@@ -340,6 +361,12 @@ Please choose a visual template for the cards:
 <option>neo-brutalism — thick black borders, hard offset shadows, saturated palette</option>
 <option>code-dispatch — high-contrast editorial, black/white/red, monospace labels, grid texture; ideal for tech/coding/AI topics</option>
 <option>dark-tech — deep black background, gold accent, thin borders, DJI-style; ideal for product/gear reviews</option>
+<option>gradient-editorial — hero image with gradient overlay, clean white content pages, modern editorial style; ideal for AI/tech insight articles</option>
+<option>personal-insight — clean white background, profile avatar, numbered sections; ideal for personal reflections and knowledge sharing</option>
+<option>film-vintage — cinematic cover, polaroid photo frames, grain texture, red accent; ideal for photography, gear reviews, and city walks</option>
+<option>warm-journal — photo-led journal pages, handwritten titles, khaki/beige paper textures; ideal for lifestyle, product notes, and city records</option>
+<option>paper-column — paper texture, serif titles, marginal notes, pull quotes, and ledgers; ideal for essays, analysis, and knowledge columns</option>
+<option>signal-grid — strict grid rhythm, one accent color, KPI blocks, matrix rows, and ranking bars; ideal for comparisons, product notes, and decisions</option>
 <option>product-launch-preset — white background, red top accent bar, sharp badges, minimal dual-color; ideal for product feature announcements and release notes</option>
 <option>Custom style — describe the visual language you want and a preset will be generated for you</option>
 <option>No template — design freely following the platform baseline</option>
@@ -352,6 +379,10 @@ Please choose a visual template for the cards:
 <question type="select">
 Please choose a visual template for the cards:
 <option>ins-modern — white background, generous whitespace, minimal typography</option>
+<option>ins-minimal — restrained whitespace, fine dividers, minimal hierarchy; ideal for digests and summary posts</option>
+<option>ins-dark — dark tech styling, neon accents, high-contrast modules; ideal for tools, productivity, and technical topics</option>
+<option>ins-gradient — saturated gradients, glow layers, modern metric cards; ideal for trends, design, and growth insights</option>
+<option>ins-retro — retro headlines, warm paper tones, ornamental marks; ideal for storytelling and visual guides</option>
 <option>Custom style — describe the visual language you want and a preset will be generated for you</option>
 <option>No template — design freely following the platform baseline</option>
 </question>

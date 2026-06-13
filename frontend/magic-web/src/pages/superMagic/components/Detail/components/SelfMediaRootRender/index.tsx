@@ -17,12 +17,12 @@ import { getPlatformComponent } from "./platforms"
 import { SelfMediaStoreProvider, useSelfMediaStore } from "./stores"
 import SelfMediaInitPanel from "./components/SelfMediaInitPanel"
 import SelfMediaHomePage from "./components/SelfMediaHomePage"
+import SelfMediaSplashScreen from "./components/SelfMediaSplashScreen"
 import type { SelfMediaOpsReviewData } from "./components/SelfMediaOpsReviewDashboard"
 import BrandConfigDialog from "./components/BrandConfigDialog"
 import AICardCreateDialog, { type AICardCreateInitialValues } from "./components/AICardCreateDialog"
 import SelfMediaOpsMetricsDialog from "./components/SelfMediaOpsMetricsDialog"
 import PrePublishAnalysisDialog from "./components/PrePublishAnalysisDialog"
-import PrePublishAnalysisFloatingButton from "./components/PrePublishAnalysisFloatingButton"
 import {
 	SelfMediaFileStorageService,
 	type SelfMediaPostOpsMetricsPayload,
@@ -47,7 +47,7 @@ import {
 	disableSelfMediaPostAutoSyncTask,
 	saveSelfMediaPostAutoSyncTask,
 } from "./services/selfMediaPostAutoSync"
-import type { SelfMediaAttachmentNode, SelfMediaRootRenderProps } from "./types"
+import type { SelfMediaAttachmentNode, SelfMediaPostEntry, SelfMediaRootRenderProps } from "./types"
 import type { SelfMediaPlatformPostItem } from "./stores/SelfMediaStore"
 
 type SelfMediaRootMode = "home" | "create" | "platform"
@@ -157,6 +157,14 @@ interface SelfMediaRootRenderInnerProps {
 	openFileTab?: (fileItem: SelfMediaAttachmentNode) => void
 }
 
+const SPLASH_SCREEN_SEEN_KEY = "selfMediaSplashSeen"
+
+function shouldShowSelfMediaSplash() {
+	if (process.env.NODE_ENV === "test") return false
+	if (process.env.NODE_ENV === "development") return true
+	return localStorage.getItem(SPLASH_SCREEN_SEEN_KEY) !== "true"
+}
+
 const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	attachmentList,
 	className,
@@ -169,6 +177,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 }: SelfMediaRootRenderInnerProps) {
 	const { t } = useTranslation("super")
 	const store = useSelfMediaStore()
+	const [showSplash, setShowSplash] = useState(shouldShowSelfMediaSplash)
 	const [rootMode, setRootMode] = useState<SelfMediaRootMode | null>(null)
 	const [aiCardDialogOpen, setAiCardDialogOpen] = useState(false)
 	const [aiCardInitialValues, setAiCardInitialValues] =
@@ -586,6 +595,65 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		},
 		[fileStorageService, handleUpdateAutoSyncPublishedUrl, t],
 	)
+	const handleDeletePost = useCallback(
+		async (target: SelfMediaPlatformPostItem) => {
+			try {
+				if (!fileStorageService) return false
+				await fileStorageService.deletePost({
+					platform: target.platform,
+					id: target.entry.id,
+					entry: target.entry.entry,
+				})
+				store.removePlatformPost(target.platform, target.entry.id)
+				magicToast.success(t("detail.selfMedia.home.deletePostSuccess"))
+				return true
+			} catch (error) {
+				console.error("Self-media post deletion failed:", error)
+				magicToast.error(t("detail.selfMedia.home.deletePostFailed"))
+				return false
+			}
+		},
+		[fileStorageService, store, t],
+	)
+	const handleUpdatePostTitle = useCallback(
+		async (
+			target: { platform: SelfMediaPlatform; index: number; entry: SelfMediaPostEntry },
+			nextTitle: string,
+			errorMessageKey = "detail.selfMedia.titleEdit.failed",
+		) => {
+			try {
+				if (!fileStorageService) return false
+				await fileStorageService.updatePostTitle(target.entry.entry, nextTitle)
+				return true
+			} catch (error) {
+				console.error("Self-media post title update failed:", error)
+				magicToast.error(t(errorMessageKey, "标题保存失败，请稍后重试"))
+				return false
+			}
+		},
+		[fileStorageService, t],
+	)
+	const handleRenameHomePost = useCallback(
+		async (target: SelfMediaPlatformPostItem, nextTitle: string) => {
+			try {
+				if (!fileStorageService) return false
+				await fileStorageService.renamePost({
+					platform: target.platform,
+					id: target.entry.id,
+					entry: target.entry.entry,
+					name: nextTitle,
+				})
+				store.updatePlatformPostTitle(target.platform, target.entry.id, nextTitle)
+				magicToast.success(t("detail.selfMedia.home.renamePostSuccess"))
+				return true
+			} catch (error) {
+				console.error("Self-media post rename failed:", error)
+				magicToast.error(t("detail.selfMedia.home.renamePostFailed"))
+				return false
+			}
+		},
+		[fileStorageService, store, t],
+	)
 	const handleRequestActivePrePublishAnalysis = useCallback(() => {
 		if (!platform) return
 		handleRequestPrePublishAnalysis({
@@ -644,102 +712,235 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 
 	const PlatformComponent = useMemo(() => getPlatformComponent(platform), [platform])
 
-	if (rootLoading) {
-		return (
-			<Flex
-				justify="center"
-				align="center"
-				className={cn("h-full w-full bg-background", className)}
-				data-testid="self-media-root-loading"
-			>
-				<MagicSpin spinning />
-			</Flex>
-		)
-	}
+	const handleSplashComplete = useCallback(() => {
+		localStorage.setItem(SPLASH_SCREEN_SEEN_KEY, "true")
+		setShowSplash(false)
+	}, [])
 
-	if (activeRootMode === "create" && isEmptyProject) {
-		if (!allowEdit) {
+	const renderContent = () => {
+		if (rootLoading) {
 			return (
 				<Flex
 					justify="center"
 					align="center"
 					className={cn("h-full w-full bg-background", className)}
+					data-testid="self-media-root-loading"
 				>
-					<p className="text-sm text-muted-foreground">
-						{t("detail.selfMedia.home.subtitle")}
-					</p>
+					<MagicSpin spinning />
 				</Flex>
 			)
 		}
-		return (
-			<div
-				className={cn("h-full min-h-0 w-full", className)}
-				data-testid="self-media-init-panel"
-			>
-				<SelfMediaInitPanel
-					selectedProject={selectedProject}
-					folderFileId={folderFileId}
-					folderPath={folderPath}
-					attachmentList={attachmentList}
-					onBackHome={handleBackHome}
-				/>
-			</div>
-		)
-	}
 
-	if (activeRootMode === "home") {
+		if (activeRootMode === "create" && isEmptyProject) {
+			if (!allowEdit) {
+				return (
+					<Flex
+						justify="center"
+						align="center"
+						className={cn("h-full w-full bg-background", className)}
+					>
+						<p className="text-sm text-muted-foreground">
+							{t("detail.selfMedia.home.subtitle")}
+						</p>
+					</Flex>
+				)
+			}
+			return (
+				<div
+					className={cn("h-full min-h-0 w-full", className)}
+					data-testid="self-media-init-panel"
+				>
+					<SelfMediaInitPanel
+						selectedProject={selectedProject}
+						folderFileId={folderFileId}
+						folderPath={folderPath}
+						attachmentList={attachmentList}
+						onBackHome={handleBackHome}
+					/>
+				</div>
+			)
+		}
+
+		if (activeRootMode === "home") {
+			return (
+				<div
+					className={cn("h-full min-h-0 w-full", className)}
+					data-testid="self-media-root"
+				>
+					<SelfMediaHomePage
+						posts={store.allPosts}
+						attachmentList={attachmentList}
+						onEnsurePostLoaded={handleEnsureHomePostLoaded}
+						onCreateArticle={allowEdit ? handleStartCreateArticle : undefined}
+						onOpenPost={handleOpenPost}
+						onRequestPrePublishAnalysis={
+							allowEdit ? handleRequestPrePublishAnalysis : undefined
+						}
+						onOpenOpsMetrics={allowEdit ? handleOpenOpsMetrics : undefined}
+						onPostPublishRefresh={allowEdit ? handlePostPublishRefresh : undefined}
+						onConfigureAutoSync={allowEdit ? handleConfigurePostAutoSync : undefined}
+						onLoadOpsReviewData={handleLoadPostOpsReviewData}
+						onLoadOpsMetrics={handleLoadPostOpsMetrics}
+						onLoadPublishedUrl={allowEdit ? handleLoadPostPublishedUrl : undefined}
+						onLoadOpsSource={allowEdit ? handleLoadPostOpsSource : undefined}
+						onBindPublishedUrl={allowEdit ? handleBindPostPublishedUrl : undefined}
+						onRenamePost={allowEdit ? handleRenameHomePost : undefined}
+						onDeletePost={allowEdit ? handleDeletePost : undefined}
+						onOpenBrandConfig={allowEdit ? handleOpenBrandConfig : undefined}
+						onCreateAICard={allowEdit ? handleOpenAICardCreate : undefined}
+						onOpenAICardFolder={openFileTab ? handleOpenAICardFolder : undefined}
+						folderFileId={folderFileId}
+					/>
+					<BrandConfigDialog
+						open={brandConfigOpen}
+						onOpenChange={setBrandConfigOpen}
+						fileStorageService={fileStorageService}
+						attachmentList={attachmentList}
+					/>
+					<AICardCreateDialog
+						open={aiCardDialogOpen}
+						onOpenChange={(open) => {
+							setAiCardDialogOpen(open)
+							if (!open) setAiCardInitialValues(null)
+						}}
+						projectId={projectId}
+						folderPath={folderPath}
+						initialValues={aiCardInitialValues ?? undefined}
+					/>
+					<SelfMediaOpsMetricsDialog
+						open={Boolean(opsMetricsTarget)}
+						onOpenChange={(open) => {
+							if (!open) setOpsMetricsTarget(null)
+						}}
+						target={opsMetricsTarget}
+						fileStorageService={fileStorageService}
+						onUpdateAutoSyncPublishedUrl={handleUpdateAutoSyncPublishedUrl}
+						onFetchPublishedData={handlePostPublishRefresh}
+					/>
+					<PrePublishAnalysisDialog
+						open={Boolean(analysisTarget)}
+						onOpenChange={(open) => {
+							if (!open) setAnalysisTarget(null)
+						}}
+						onConfirm={handleConfirmPrePublishAnalysis}
+						loading={analysisSubmitting}
+						modelList={analysisModelList}
+						selectedModel={selectedAnalysisModel}
+					/>
+				</div>
+			)
+		}
+
+		if (activeRootMode === "create") {
+			return (
+				<div
+					className={cn("h-full min-h-0 w-full", className)}
+					data-testid="self-media-root"
+				>
+					<div className="h-full min-h-0" data-testid="self-media-init-panel">
+						<SelfMediaInitPanel
+							selectedProject={selectedProject}
+							folderFileId={folderFileId}
+							folderPath={folderPath}
+							attachmentList={attachmentList}
+							onBackHome={handleBackHome}
+						/>
+					</div>
+				</div>
+			)
+		}
+
+		if (!PlatformComponent) {
+			return (
+				<div className={cn("h-full w-full", className)}>
+					<UnsupportedPlatform platform={platform} />
+					<button type="button" className="sr-only" onClick={handleShowPlatform}>
+						{t("detail.selfMedia.home.openPlatform")}
+					</button>
+				</div>
+			)
+		}
+
 		return (
-			<div className={cn("h-full min-h-0 w-full", className)} data-testid="self-media-root">
-				<SelfMediaHomePage
-					posts={store.allPosts}
-					attachmentList={attachmentList}
-					onEnsurePostLoaded={handleEnsureHomePostLoaded}
-					onCreateArticle={allowEdit ? handleStartCreateArticle : undefined}
-					onOpenPost={handleOpenPost}
-					onRequestPrePublishAnalysis={
-						allowEdit ? handleRequestPrePublishAnalysis : undefined
+			<div className={cn("relative h-full w-full", className)} data-testid="self-media-root">
+				<style>{`
+					@keyframes self-media-platform-detail-in {
+						from {
+							opacity: 0;
+							transform: translate3d(0, 6px, 0) scale(0.996);
+						}
+						to {
+							opacity: 1;
+							transform: translate3d(0, 0, 0) scale(1);
+						}
 					}
-					onOpenOpsMetrics={allowEdit ? handleOpenOpsMetrics : undefined}
-					onPostPublishRefresh={allowEdit ? handlePostPublishRefresh : undefined}
-					onConfigureAutoSync={allowEdit ? handleConfigurePostAutoSync : undefined}
-					onLoadOpsReviewData={handleLoadPostOpsReviewData}
-					onLoadOpsMetrics={handleLoadPostOpsMetrics}
-					onLoadPublishedUrl={allowEdit ? handleLoadPostPublishedUrl : undefined}
-					onLoadOpsSource={allowEdit ? handleLoadPostOpsSource : undefined}
-					onBindPublishedUrl={allowEdit ? handleBindPostPublishedUrl : undefined}
-					onOpenBrandConfig={allowEdit ? handleOpenBrandConfig : undefined}
-					onCreateAICard={allowEdit ? handleOpenAICardCreate : undefined}
-					onOpenAICardFolder={openFileTab ? handleOpenAICardFolder : undefined}
-					folderFileId={folderFileId}
-				/>
-				<BrandConfigDialog
-					open={brandConfigOpen}
-					onOpenChange={setBrandConfigOpen}
-					fileStorageService={fileStorageService}
-					attachmentList={attachmentList}
-					projectId={projectId}
-					folderPath={folderPath}
-				/>
-				<AICardCreateDialog
-					open={aiCardDialogOpen}
-					onOpenChange={(open) => {
-						setAiCardDialogOpen(open)
-						if (!open) setAiCardInitialValues(null)
-					}}
-					projectId={projectId}
-					folderPath={folderPath}
-					initialValues={aiCardInitialValues ?? undefined}
-				/>
-				<SelfMediaOpsMetricsDialog
-					open={Boolean(opsMetricsTarget)}
-					onOpenChange={(open) => {
-						if (!open) setOpsMetricsTarget(null)
-					}}
-					target={opsMetricsTarget}
-					fileStorageService={fileStorageService}
-					onUpdateAutoSyncPublishedUrl={handleUpdateAutoSyncPublishedUrl}
-					onFetchPublishedData={handlePostPublishRefresh}
-				/>
+					@keyframes self-media-workspace-view-out {
+						from {
+							opacity: 1;
+							transform: translate3d(0, 0, 0) scale(1);
+						}
+						to {
+							opacity: 0;
+							transform: translate3d(0, -4px, 0) scale(0.996);
+						}
+					}
+					@keyframes self-media-workspace-view-in {
+						from {
+							opacity: 0;
+							transform: translate3d(0, 6px, 0) scale(0.996);
+						}
+						to {
+							opacity: 1;
+							transform: translate3d(0, 0, 0) scale(1);
+						}
+					}
+					.self-media-platform-detail-stage {
+						animation: self-media-platform-detail-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+						contain: layout;
+						view-transition-name: self-media-workspace;
+						will-change: transform, opacity;
+					}
+					@supports (view-transition-name: self-media-workspace) {
+						::view-transition-old(self-media-workspace) {
+							animation: self-media-workspace-view-out 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+						}
+						::view-transition-new(self-media-workspace) {
+							animation: self-media-workspace-view-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+						}
+					}
+					@media (prefers-reduced-motion: reduce) {
+						.self-media-platform-detail-stage {
+							animation: none !important;
+							opacity: 1 !important;
+							transform: none !important;
+						}
+					}
+				`}</style>
+				<div
+					className="self-media-platform-detail-stage h-full w-full"
+					data-testid="self-media-platform-detail-stage"
+				>
+					<Suspense
+						fallback={
+							<Flex justify="center" align="center" className="h-full w-full">
+								<MagicSpin spinning />
+							</Flex>
+						}
+					>
+						<PlatformComponent
+							platform={platform as SelfMediaPlatform}
+							attachmentList={attachmentList}
+							allowEdit={allowEdit}
+							saveEditContent={saveEditContent}
+							selectedProject={selectedProject}
+							onBackHome={handleBackHome}
+							onUpdatePostTitle={allowEdit ? handleUpdatePostTitle : undefined}
+							onRequestPrePublishAnalysis={
+								allowEdit ? handleRequestActivePrePublishAnalysis : undefined
+							}
+						/>
+					</Suspense>
+				</div>
 				<PrePublishAnalysisDialog
 					open={Boolean(analysisTarget)}
 					onOpenChange={(open) => {
@@ -754,66 +955,15 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		)
 	}
 
-	if (activeRootMode === "create") {
+	if (showSplash) {
 		return (
-			<div className={cn("h-full min-h-0 w-full", className)} data-testid="self-media-root">
-				<div className="h-full min-h-0" data-testid="self-media-init-panel">
-					<SelfMediaInitPanel
-						selectedProject={selectedProject}
-						folderFileId={folderFileId}
-						folderPath={folderPath}
-						attachmentList={attachmentList}
-						onBackHome={handleBackHome}
-					/>
-				</div>
+			<div className={cn("h-full w-full", className)} data-testid="self-media-splash">
+				<SelfMediaSplashScreen onComplete={handleSplashComplete} />
 			</div>
 		)
 	}
 
-	if (!PlatformComponent) {
-		return (
-			<div className={cn("h-full w-full", className)}>
-				<UnsupportedPlatform platform={platform} />
-				<button type="button" className="sr-only" onClick={handleShowPlatform}>
-					{t("detail.selfMedia.home.openPlatform")}
-				</button>
-			</div>
-		)
-	}
-
-	return (
-		<div className={cn("relative h-full w-full", className)} data-testid="self-media-root">
-			<Suspense
-				fallback={
-					<Flex justify="center" align="center" className="h-full w-full">
-						<MagicSpin spinning />
-					</Flex>
-				}
-			>
-				<PlatformComponent
-					platform={platform as SelfMediaPlatform}
-					attachmentList={attachmentList}
-					allowEdit={allowEdit}
-					saveEditContent={saveEditContent}
-					selectedProject={selectedProject}
-					onBackHome={handleBackHome}
-				/>
-			</Suspense>
-			{allowEdit && platform ? (
-				<PrePublishAnalysisFloatingButton onClick={handleRequestActivePrePublishAnalysis} />
-			) : null}
-			<PrePublishAnalysisDialog
-				open={Boolean(analysisTarget)}
-				onOpenChange={(open) => {
-					if (!open) setAnalysisTarget(null)
-				}}
-				onConfirm={handleConfirmPrePublishAnalysis}
-				loading={analysisSubmitting}
-				modelList={analysisModelList}
-				selectedModel={selectedAnalysisModel}
-			/>
-		</div>
-	)
+	return <div className={cn("relative h-full w-full", className)}>{renderContent()}</div>
 })
 
 export default observer(SelfMediaRootRender)

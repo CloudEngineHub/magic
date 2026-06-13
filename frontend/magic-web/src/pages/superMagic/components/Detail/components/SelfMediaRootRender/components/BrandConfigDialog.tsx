@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { message } from "antd"
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	Dialog,
@@ -13,6 +14,7 @@ import {
 import { useSelfMediaBrandConfig } from "../hooks/useSelfMediaBrandConfig"
 import type { AttachmentNode } from "../services"
 import type { SelfMediaFileStorageService } from "../services/SelfMediaFileStorageService"
+import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 import { BrandInfoFields } from "./SelfMediaInitPanel/steps/StepBrandInfo/components/BrandInfoFields"
 import type { BrandImageItem, SelfMediaInitGlobalSettings } from "./SelfMediaInitPanel/types"
 
@@ -21,8 +23,6 @@ interface BrandConfigDialogProps {
 	onOpenChange: (open: boolean) => void
 	fileStorageService: SelfMediaFileStorageService | null
 	attachmentList?: AttachmentNode[]
-	projectId?: string
-	folderPath?: string
 }
 
 function BrandConfigDialog({
@@ -30,8 +30,6 @@ function BrandConfigDialog({
 	onOpenChange,
 	fileStorageService,
 	attachmentList,
-	projectId,
-	folderPath,
 }: BrandConfigDialogProps) {
 	const { t } = useTranslation("super")
 	const { settings, saveSettings, isLoading, isSaving } = useSelfMediaBrandConfig({
@@ -57,34 +55,50 @@ function BrandConfigDialog({
 	}, [])
 
 	const handleSave = useCallback(async () => {
-		await saveSettings(draftSettings)
-		onOpenChange(false)
-	}, [draftSettings, onOpenChange, saveSettings])
+		try {
+			await saveSettings(draftSettings)
+			onOpenChange(false)
+		} catch {
+			message.error(t("detail.selfMedia.brandConfig.saveError"))
+		}
+	}, [draftSettings, onOpenChange, saveSettings, t])
+
+	const handleOpenChange = useCallback(
+		(nextOpen: boolean) => {
+			if (!nextOpen && (isSaving || brandImagesUploading)) return
+			onOpenChange(nextOpen)
+		},
+		[brandImagesUploading, isSaving, onOpenChange],
+	)
 
 	const handleCancel = useCallback(() => {
+		if (isSaving || brandImagesUploading) return
 		setDraftSettings(settings)
 		onOpenChange(false)
-	}, [onOpenChange, settings])
+	}, [brandImagesUploading, isSaving, onOpenChange, settings])
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
+		<Dialog open={open} onOpenChange={handleOpenChange}>
 			<DialogContent
-				className="grid max-h-[88vh] !max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
+				className={`grid max-h-[88vh] !max-w-5xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 ${selfMediaOverlayStyles.dialogSurface}`}
 				data-testid="self-media-brand-config-dialog"
 			>
-				<DialogHeader className="gap-1 border-b bg-card px-5 py-4">
-					<DialogTitle className="text-lg font-semibold tracking-tight">
+				<DialogHeader
+					className={selfMediaOverlayStyles.dialogHeader}
+					data-testid="self-media-brand-config-header"
+				>
+					<DialogTitle className={selfMediaOverlayStyles.dialogTitle}>
 						{t("detail.selfMedia.brandConfig.title")}
 					</DialogTitle>
-					<DialogDescription className="text-xs">
+					<DialogDescription className={selfMediaOverlayStyles.dialogDescription}>
 						{t("detail.selfMedia.brandConfig.description")}
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="min-h-0 overflow-y-auto bg-muted/20 px-4 py-4 sm:px-5">
+				<div className={selfMediaOverlayStyles.dialogBody}>
 					{isLoading ? (
 						<div
-							className="flex min-h-64 items-center justify-center gap-2 rounded-lg border bg-card text-sm font-medium text-muted-foreground"
+							className={`min-h-64 ${selfMediaOverlayStyles.loadingPanel}`}
 							data-testid="self-media-brand-config-loading"
 						>
 							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -100,20 +114,18 @@ function BrandConfigDialog({
 							onBrandImagesChange={handleBrandImagesChange}
 							fileStorageService={fileStorageService}
 							attachmentList={attachmentList}
-							projectId={projectId}
-							folderPath={folderPath}
 							onBrandImagesUploadingChange={setBrandImagesUploading}
 							brandImageUploadTarget="brand"
-							compact
 							layout="settings"
 						/>
 					)}
 				</div>
 
-				<DialogFooter className="border-t bg-card px-5 py-3">
+				<DialogFooter className={selfMediaOverlayStyles.dialogFooter}>
 					<Button
 						type="button"
 						variant="outline"
+						className={selfMediaOverlayStyles.secondaryButton}
 						onClick={handleCancel}
 						data-testid="self-media-brand-config-cancel-button"
 					>
@@ -121,6 +133,7 @@ function BrandConfigDialog({
 					</Button>
 					<Button
 						type="button"
+						className={selfMediaOverlayStyles.primaryButton}
 						onClick={() => void handleSave()}
 						disabled={isLoading || isSaving || brandImagesUploading}
 						data-testid="self-media-brand-config-save-button"

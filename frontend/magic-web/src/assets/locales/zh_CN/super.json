@@ -864,6 +864,13 @@
 				"create": "新增文章",
 				"dataOverview": "数据总览",
 				"dataSyncNow": "立即同步",
+				"deletePost": "删除文章",
+				"deletePostCancel": "取消",
+				"deletePostConfirm": "永久删除",
+				"deletePostDescription": "这篇文章和相关运营文件会被永久删除，删除后无法恢复。",
+				"deletePostFailed": "删除文章失败，请稍后重试",
+				"deletePostSuccess": "文章已删除",
+				"deletePostTitle": "确认删除这篇文章？",
 				"editPublishedLink": "修改发布链接",
 				"emptyDesc": "点击新增文章，进入初始化向导开始规划内容。",
 				"emptyTitle": "暂无文章",
@@ -871,6 +878,12 @@
 					"comments": "评论",
 					"likes": "点赞",
 					"reads": "阅读"
+				},
+				"lifecycle": {
+					"draft": "待发布",
+					"published": "已发布",
+					"reviewed": "已复盘",
+					"synced": "数据已同步"
 				},
 				"loadingAutoSync": "正在加载自动同步配置...",
 				"loadingPublishedLink": "正在读取链接...",
@@ -900,14 +913,30 @@
 				"postReviewCardName": "复盘：{{title}}",
 				"publishedLinkInput": "已发布内容链接",
 				"publishedLinkPlaceholder": "粘贴已发布内容链接",
+				"renamePost": "重命名文章",
+				"renamePostCancel": "取消",
+				"renamePostConfirm": "保存名称",
+				"renamePostDescription": "修改首页文章卡片显示的名称。",
+				"renamePostFailed": "重命名失败，请稍后重试",
+				"renamePostInput": "文章名称",
+				"renamePostSuccess": "文章名称已更新",
+				"renamePostTitle": "重命名文章",
 				"subtitle": "从文章列表进入详情，数据更新时会保留当前页面。",
 				"title": "文章首页"
 			},
 			"initPanel": {
+				"clearConfirm": {
+					"cancel": "继续编辑",
+					"clearing": "正在清空...",
+					"confirm": "确认清空",
+					"description": "会清空当前填写的品牌、选题和文章规划，并删除本地草稿。",
+					"title": "清空当前新建内容？"
+				},
 				"draft": {
 					"backHome": "返回首页",
 					"clear": "清除草稿",
 					"clearError": "清空草稿失败，请稍后重试",
+					"clearing": "正在清除...",
 					"confirmDescription": "检测到上次未完成的创作草稿，你可以继续编辑、清除后重新开始，或先返回文章首页。",
 					"detected": "检测到未完成的编辑",
 					"discard": "丢弃",
@@ -917,12 +946,34 @@
 					"resumeHint": "你上次编辑到第 {{step}} 步，是否恢复继续？",
 					"saveError": "草稿保存失败，请稍后重试"
 				},
+				"materialAttachment": {
+					"addCompact": "添加附件",
+					"addFull": "点击、拖拽或粘贴上传素材",
+					"descriptionPlaceholder": "补一句素材说明…",
+					"emptyHint": "支持图片、视频、PDF、Office 文档等"
+				},
+				"modelSelector": {
+					"switchModel": "切换模型"
+				},
 				"nav": {
 					"backHome": "返回首页",
 					"clear": "清空数据",
+					"hints": {
+						"articleReady": "文章骨架已就绪，可以进入确认",
+						"brandReady": "品牌信息已准备好，可以继续",
+						"brandUploading": "品牌素材上传完成后即可继续",
+						"missingPlatform": "选择发布平台后即可继续",
+						"missingTitle": "补全每篇文章标题后即可继续",
+						"noArticle": "先添加一篇文章，或让 AI 策划选题"
+					},
 					"jumpTo": "跳转到{{title}}",
 					"next": "下一步",
-					"prev": "上一步"
+					"nextWithHint": "下一步：{{hint}}",
+					"prev": "上一步",
+					"stepCompleted": "已完成：{{title}}",
+					"stepCurrent": "当前步骤：{{title}}",
+					"stepPosition": "第 {{index}} 步，共 {{total}} 步",
+					"stepUpcoming": "待完成：{{title}}"
 				},
 				"platforms": {
 					"facebook": "Facebook",
@@ -934,20 +985,35 @@
 					"x": "X (Twitter)"
 				},
 				"referenceFilePicker": {
+					"addedCount": "已添加 {{count}} 个参考",
+					"alreadySelected": "已选",
+					"confirmAdd": "确认添加",
 					"confirmSelection": "确认添加 ({{count}})",
 					"dropHere": "拖放文件到这里",
+					"emptyProjectFiles": "暂无项目文件",
 					"hint": "选填，支持任意格式参考文件",
 					"localUpload": "本地上传",
+					"multiSelectHint": "可多选确认，或拖拽到目标区域",
+					"noMatches": "没有匹配的文件",
 					"noProjectFiles": "项目中暂无可选文件",
+					"pasteOrDrag": "或粘贴 / 拖拽",
+					"pendingSelection": "已选 {{count}} 个",
 					"pickProjectTitle": "选择项目文件",
 					"projectFile": "项目文件",
 					"readLocalError": "读取本地文件失败，请重试",
 					"readProjectError": "读取项目文件失败，请重试",
+					"removeFile": "移除 {{name}}",
+					"searchPlaceholder": "搜索文件...",
+					"unnamedFile": "未命名文件",
 					"uploadLabel": "上传参考资料"
 				},
 				"stepBrand": {
 					"accountName": "账号名称",
 					"accountPlaceholder": "如：@超级麦吉",
+					"autoSaveFailed": "自动保存失败",
+					"autoSavePending": "稍后自动保存",
+					"autoSaveSaved": "已自动保存",
+					"autoSaveSaving": "正在保存",
 					"brandImages": "品牌形象素材",
 					"brandImagesDescPlaceholder": "描述（如：品牌吉祥物）",
 					"brandImagesDropHint": "支持拖拽、粘贴或从项目选择",
@@ -959,42 +1025,60 @@
 					"brandPosition": "品牌/IP 定位",
 					"brandPositionHint": "清晰的定位能帮助 AI 生成更精准的内容策略",
 					"brandPositionPlaceholder": "一句话描述你的品牌定位，如：AI 效率工具分享",
-					"historyRecords": "历史记录",
+					"closeHistoryRecords": "关闭品牌记录",
+					"deleteRecord": "删除 {{name}}",
+					"historyRecords": "一键回填",
 					"optional": "选填",
 					"platformFetchLoading": "正在从平台获取账号信息，完成后将自动填入表单…",
 					"platformFetchTimeout": "获取账号信息超时，请稍后重试或在对话中查看进度",
 					"platformFetching": "获取中…",
 					"quickFillHint": "提示：填写越详细，AI 生成的选题越精准",
+					"readyStatus": "品牌信息已就绪",
+					"readySummary": "{{author}} · {{brandPosition}}",
 					"required": "必填",
+					"reusableRecordsTitle": "可复用品牌信息",
 					"saveAsNew": "保存为新记录",
-					"saveConfirmDesc": "是否将当前品牌信息保存为历史记录，方便下次快速回填？",
-					"saveConfirmSave": "保存并继续",
-					"saveConfirmSkip": "暂不保存",
-					"saveConfirmTitle": "保存品牌信息？",
+					"saveConfirmDesc": "保存后，下次新建文章可一键回填。",
+					"saveConfirmSave": "保存，继续",
+					"saveConfirmSkip": "不保存，继续",
+					"saveConfirmTitle": "下次还用这套品牌信息吗？",
 					"selectRecordHint": "选择历史记录以回填",
+					"skippableHint": "后续可在品牌设置里补充。",
+					"skippableStatus": "可跳过",
 					"subtitle": "填写基础品牌定位，AI 将据此理解你的内容方向并生成匹配的选题",
 					"targetAudience": "目标受众",
 					"targetAudienceHint": "帮助 AI 调整内容口吻与选题方向",
 					"targetAudiencePlaceholder": "如：25-35岁职场人、大学生、宝妈群体",
-					"title": "账号与品牌信息"
+					"title": "账号与品牌信息",
+					"useRecord": "回填 {{name}}"
 				},
 				"stepConfirm": {
 					"accountLabel": "账号",
+					"articleListAutomationHint": "开始后会自动拆分话题、上传素材，并打开第一篇。",
+					"articleListAutomationHintWithoutMaterials": "开始后会自动拆分话题，并打开第一篇。",
+					"articleListTitle": "已准备的文章（{{count}} 篇）",
+					"articleReadyHint": "已整理 {{outlineCount}} 个大纲要点和 {{materialCount}} 个参考资料",
+					"articleReadyHintMaterials": "已整理 {{materialCount}} 个参考资料",
+					"articleReadyHintOutline": "已整理 {{outlineCount}} 个大纲要点",
 					"audienceLabel": "受众",
 					"backHome": "返回首页",
 					"brandAssetCount": "已上传 {{count}} 项品牌素材",
 					"cancel": "取消",
 					"cardCount": "{{count}} 张卡片",
 					"cardOutlineLabel": "卡片大纲",
+					"completeSummaryDesc": "内容创作 Agent 已接手，当前话题会自动打开。",
+					"completeSummaryTitle": "已创建 {{count}} 个创作话题",
+					"completeTopicListHint": "已自动打开第一篇；点击其它标题即可切换。",
 					"creatingTopic": "正在创建话题…",
-					"doneDesc": "已为 {{count}} 篇文章创建独立话题，由 AI 创作助手继续创作",
+					"doneDesc": "已为 {{count}} 篇文章创建独立话题，由内容创作 Agent 继续处理",
 					"doneTitle": "创作已启动",
 					"generatingBtn": "AI 创作中…",
-					"generatingDesc": "正在创建话题并交由 AI 创作助手处理（{{done}}/{{total}}）",
+					"generatingDesc": "正在创建话题并交由内容创作 Agent 处理（{{done}}/{{total}}）",
 					"generatingTitle": "正在启动创作",
 					"globalSummary": "全局设置",
 					"imageModel": "图像",
 					"modelSettings": "模型配置",
+					"opened": "已打开",
 					"outlinePoints": "{{count}} 个大纲要点",
 					"phase": {
 						"archiving": "正在归档当前方案，确保 Agent 能读取完整规划。",
@@ -1003,20 +1087,31 @@
 						"sending-message": "正在发送创作指令和模型配置。",
 						"uploading-materials": "正在上传参考素材和大纲附件。"
 					},
+					"phaseLabels": {
+						"archiving": "归档方案",
+						"creating-topic": "创建话题",
+						"idle": "准备任务",
+						"sending-message": "发送指令",
+						"uploading-materials": "上传素材"
+					},
+					"phaseStatus": "当前阶段：{{phase}}",
 					"positionLabel": "定位",
 					"preparingDesc": "正在准备创作任务，请稍候。",
 					"preparingHint": "正在归档方案、准备素材，并创建第一个创作话题",
 					"preparingTitle": "正在准备创作任务",
+					"projectPendingHint": "项目准备完成后即可开始创作。",
 					"refCount": "{{count}} 个参考资料",
 					"saveAsTemplate": "保存为模板",
 					"saveTemplate": "保存",
 					"startBtn": "开始 AI 创作（共 {{count}} 篇）",
-					"subtitle": "确认信息无误后开始，每篇文章将创建独立话题并由 AI 创作助手执行",
+					"statusReady": "准备生成",
+					"subtitle": "确认后会自动创建创作话题，并打开第一篇文章。",
+					"templateNameLabel": "模板名称",
 					"templateNamePlaceholder": "输入模板名称",
 					"templateSaved": "模板已保存",
 					"textModel": "文本",
 					"title": "确认并生成",
-					"topicListHint": "点击切换到对应话题，查看 AI 创作助手的创作进度",
+					"topicListHint": "点击切换到对应话题，查看内容创作 Agent 的处理进度",
 					"videoModel": "视频",
 					"viewing": "查看中"
 				},
@@ -1025,14 +1120,19 @@
 					"aiAutoFillHint": "根据描述自动推荐风格、模板、大纲等",
 					"aiAutoFilling": "智能填充中…",
 					"articleFallback": "文章 {{index}}",
+					"cardContentCanGenerateStatus": "可生成卡片",
 					"cardContentEmpty": "请先设置卡片数量",
 					"cardContentGenerateBtn": "AI 生成卡片内容",
 					"cardContentLabel": "卡片内容规划",
 					"cardContentOptimizeBtn": "AI 优化",
 					"cardContentOptimizePlaceholder": "描述你想如何调整卡片内容，例如：封面更吸引人、增加互动引导…",
 					"cardContentPlaceholder": "第 {{index}} 张卡片的内容描述…",
+					"cardContentReadyStatus": "卡片已就绪 · {{count}} 张",
+					"cardContentRequiresTitleHint": "先填写文章标题，AI 才能生成卡片内容。",
+					"cardContentRequiresTitleStatus": "先填标题",
 					"cardCountHint": "小红书/Instagram 建议 6-9 张",
 					"cardCountLabel": "卡片数量",
+					"cardCountUnit": "张卡片",
 					"cardRemoveBtn": "移除此卡片",
 					"currentArticle": "当前文章",
 					"descriptionLabel": "内容描述",
@@ -1045,6 +1145,7 @@
 					"outlineAddRootBtn": "添加要点",
 					"outlineAttachBtn": "添加附件",
 					"outlineAttachPlaceholder": "说明此附件与该要点的关系…",
+					"outlineCanGenerateStatus": "可生成大纲",
 					"outlineEmpty": "暂无大纲内容，点击下方按钮或使用 AI 生成",
 					"outlineGenerateBtn": "AI 生成大纲",
 					"outlineGenerating": "生成中…",
@@ -1054,7 +1155,10 @@
 					"outlineOptimizePlaceholder": "描述你想如何调整大纲，例如：增加案例、缩短篇幅、调整顺序…",
 					"outlineOptimizeSubmit": "生成",
 					"outlineOptimizing": "优化中…",
+					"outlineReadyStatus": "大纲已就绪 · {{count}} 节",
 					"outlineRemoveBtn": "删除",
+					"outlineRequiresTitleHint": "先填写文章标题，AI 才能生成大纲。",
+					"outlineRequiresTitleStatus": "先填标题",
 					"platformLabel": "发布平台",
 					"platformRequired": "请选择本文的发布平台",
 					"referencesFilePlaceholder": "说明此附件用途…",
@@ -1076,26 +1180,56 @@
 					"visualReferenceLabel": "添加视觉参考"
 				},
 				"stepTopic": {
+					"activeStatus": "继续完善当前文章",
+					"activeTopicStatus": "编辑中",
 					"addManual": "手动添加选题",
+					"addTopic": "添加选题",
 					"aiAssistantTitle": "让 AI 帮我策划选题与内容大纲",
 					"aiGenerateBtn": "AI 智能生成选题",
+					"articleCountLabel": "文章：{{count}} 篇",
+					"articleCountUnit": "篇文章",
+					"autoFolder": "自动",
+					"autoFolderHint": "标题会自动生成归档目录，也可以手动修改",
 					"collapseDetail": "收起详情",
+					"collapseNavigator": "收起看板",
+					"createFirstTopic": "添加第一个选题",
 					"directionPlaceholder": "输入创作方向或关键词（选填），如：职场效率、AI工具测评...",
 					"errorEmpty": "生成失败，请重试或手动添加选题",
 					"errorNetwork": "网络异常，请稍后重试",
 					"expandDetail": "展开详情",
+					"expandNavigator": "展开选题看板",
+					"folderInputAutoLabel": "归档目录，当前为自动生成",
+					"folderInputLabel": "归档目录",
+					"folderInputPlaceholder": "归档目录",
 					"folderPlaceholder": "文件夹名（选填，留空自动生成）",
+					"folderSynced": "已同步目录",
 					"generateBtn": "生成选题",
 					"generateCount": "生成",
+					"generateCountHint": "建议一次生成 3-5 个，便于挑选",
+					"generateCountInputLabel": "生成数量",
 					"generateCountUnit": "个选题",
 					"generateWithDetails": "同时生成内容规划",
+					"generatedStatus": "已生成 {{count}} 个选题",
+					"kicker": "新建文章",
+					"manualFolderHint": "手动目录会保留，后续标题变更不会覆盖它",
+					"navigatorTitle": "选题看板",
+					"nextArticle": "下一篇",
+					"prevArticle": "上一篇",
 					"removeCancel": "取消",
 					"removeConfirm": "删除",
+					"removeTopic": "删除选题",
+					"removeTopicLabel": "删除{{title}}",
+					"selectTopicLabel": "选择{{title}}",
 					"stopBtn": "停止",
-					"subtitle": "使用 AI 智能生成选题和内容规划，或手动添加后展开配置详情",
-					"title": "选题策划",
+					"subtitle": "先生成候选方向，再补标题、材料和大纲。",
+					"title": "选题与大纲",
+					"titleInputHint": "输入标题后，归档目录会自动同步生成",
+					"titleInputLabel": "选题标题",
+					"titleInputManualFolderHint": "目录已手动修改，标题变更不会覆盖它",
 					"titlePlaceholder": "文章标题（必填）",
-					"totalTopics": "共 {{count}} 个选题"
+					"topicFallback": "选题 {{index}}",
+					"totalTopics": "共 {{count}} 个选题",
+					"untitledTopic": "未命名选题"
 				},
 				"steps": {
 					"brand": "欢迎与定位",
@@ -1120,8 +1254,8 @@
 				},
 				"visuals": {
 					"codeDispatch": {
-						"description": "高对比编辑风、黑白红配色、等宽标签、网格纹理，适合科技/编程/AI话题",
-						"label": "代码快报"
+						"description": "黑白技术版式、顶栏状态点、等宽标签和信息块，适合 AI、编程和工具拆解",
+						"label": "技术快报"
 					},
 					"custom": {
 						"description": "描述你想要的视觉语言，AI 将为你生成专属预设",
@@ -1129,32 +1263,69 @@
 					},
 					"darkTech": {
 						"description": "深黑背景、金色强调、细边框、字重对比强烈，适合产品/装备测评",
-						"label": "暗黑科技"
+						"label": "深色测评"
+					},
+					"filmVintage": {
+						"description": "暗色电影封面、拍立得相框、颗粒质感与红色强调，适合摄影、装备测评和城市漫步",
+						"label": "胶片故事"
 					},
 					"gradientEditorial": {
-						"description": "封面使用主题图+渐变遮罩，白色内容页、圆角卡片、清新现代，适合AI/科技资讯分享",
-						"label": "图文编辑"
+						"description": "封面大图、渐变遮罩、白色内容页和卡片层级，适合资讯解读、观点合集和图文长帖",
+						"label": "封面图文"
+					},
+					"insDark": {
+						"description": "深色科技感、霓虹强调、强对比排版，适合工具、效率和技术主题",
+						"label": "INS 暗色科技"
+					},
+					"insGradient": {
+						"description": "高饱和渐变、发光层次和现代数据卡片，适合趋势、设计和增长洞察",
+						"label": "INS 渐变发光"
+					},
+					"insMinimal": {
+						"description": "克制留白、细线分割和极简信息层级，适合周报、摘要和观点合集",
+						"label": "INS 极简"
 					},
 					"insModern": {
 						"description": "白色背景、充裕留白、极简排版",
 						"label": "现代简约"
 					},
+					"insRetro": {
+						"description": "复古标题、暖色纸张和装饰符号，适合故事型内容和视觉指南",
+						"label": "INS 复古故事"
+					},
 					"neoBrutalism": {
-						"description": "粗黑边框、硬偏移阴影、高饱和配色",
-						"label": "新布鲁塔主义"
+						"description": "横线纸背景、超粗标题、黄红标签和硬阴影数据块，适合把复杂问题拆成醒目的卡片",
+						"label": "醒目卡片"
 					},
 					"none": {
 						"description": "按平台默认规范自由设计",
 						"label": "不使用模板"
 					},
+					"paperColumn": {
+						"description": "纸张肌理、宋体标题、边栏注释、引文和台账式信息行，适合观点长文、知识专栏和观察笔记",
+						"label": "长文专栏"
+					},
 					"personalInsight": {
-						"description": "简约白底、头像署名、编号段落、读书笔记风，适合个人观点/知识分享",
-						"label": "个人洞察"
+						"description": "简约白底、头像署名、编号段落和笔记卡片，适合个人观点、读书笔记和知识分享",
+						"label": "观点笔记"
 					},
 					"productLaunch": {
 						"description": "白底极简、顶部红线、黑字红色强调、锐利徽章、截图容器，适合产品功能发布/更新公告",
-						"label": "产品发布"
+						"label": "新品发布"
+					},
+					"scrollHint": "可滚动浏览",
+					"signalGrid": {
+						"description": "严格网格、单一强调色、KPI 模块、矩阵行和排行条，适合产品说明、对比清单和决策型内容",
+						"label": "数据清单"
+					},
+					"warmJournal": {
+						"description": "照片主导、手写标题、米色手账和散落排版，适合生活方式、好物分享和城市记录",
+						"label": "生活手账"
 					}
+				},
+				"voiceInput": {
+					"start": "语音输入",
+					"stop": "停止语音输入"
 				}
 			},
 			"opsMetrics": {
@@ -1262,7 +1433,9 @@
 					"pending": "待抓取",
 					"unknown": "尚未抓取"
 				},
-				"summaryTitle": "表现简报",
+				"summaryTitle": "复盘摘要",
+				"summaryTrendEmpty": "同步两次以上数据后，这里会形成阅读走势。",
+				"summaryTrendTitle": "阅读走势",
 				"sync": "同步数据",
 				"title": "运营复盘",
 				"trendTitle": "同步趋势"

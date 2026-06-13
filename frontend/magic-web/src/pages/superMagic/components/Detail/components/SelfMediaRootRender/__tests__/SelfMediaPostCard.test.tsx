@@ -26,6 +26,20 @@ vi.mock("react-i18next", () => ({
 				"detail.selfMedia.home.loadingPublishedLink": "Loading link...",
 				"detail.selfMedia.home.bindPublishedLinkAction": "Save link",
 				"detail.selfMedia.home.bindAndFetchPublishedData": "Save and fetch",
+				"detail.selfMedia.home.deletePost": "Delete article",
+				"detail.selfMedia.home.deletePostCancel": "Cancel",
+				"detail.selfMedia.home.deletePostConfirm": "Delete permanently",
+				"detail.selfMedia.home.deletePostDescription":
+					"This article will be permanently deleted and cannot be restored.",
+				"detail.selfMedia.home.deletePostTitle": "Delete this article?",
+				"detail.selfMedia.home.renamePost": "Rename article",
+				"detail.selfMedia.home.renamePostCancel": "Cancel",
+				"detail.selfMedia.home.renamePostConfirm": "Save name",
+				"detail.selfMedia.home.renamePostDescription":
+					"Update the article name shown on the home page.",
+				"detail.selfMedia.home.renamePostFailed": "Failed to rename article.",
+				"detail.selfMedia.home.renamePostInput": "Article name",
+				"detail.selfMedia.home.renamePostTitle": "Rename article",
 				"detail.selfMedia.home.opsArtifacts.sourceReady": "Source ready",
 				"detail.selfMedia.home.opsArtifacts.sourceMissing": "Source missing",
 				"detail.selfMedia.home.opsArtifacts.metricsReady": "Metrics ready",
@@ -34,6 +48,10 @@ vi.mock("react-i18next", () => ({
 				"detail.selfMedia.home.opsArtifacts.commentsMissing": "Comments missing",
 				"detail.selfMedia.home.opsArtifacts.reviewReady": "Review ready",
 				"detail.selfMedia.home.opsArtifacts.reviewMissing": "Review missing",
+				"detail.selfMedia.home.lifecycle.draft": "To publish",
+				"detail.selfMedia.home.lifecycle.published": "Published",
+				"detail.selfMedia.home.lifecycle.synced": "Data synced",
+				"detail.selfMedia.home.lifecycle.reviewed": "Reviewed",
 			})[key] || key,
 	}),
 }))
@@ -87,6 +105,66 @@ function renderCard(props: Partial<React.ComponentProps<typeof SelfMediaPostCard
 }
 
 describe("SelfMediaPostCard", () => {
+	it("passes the card geometry when opening a post", () => {
+		const onOpenPost = vi.fn()
+		const getBoundingClientRect = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue({
+				x: 18,
+				y: 92,
+				left: 18,
+				top: 92,
+				right: 338,
+				bottom: 252,
+				width: 320,
+				height: 160,
+				toJSON: () => ({}),
+			})
+
+		renderCard({ onOpenPost })
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-open-post-1"))
+
+		expect(onOpenPost).toHaveBeenCalledWith(
+			{ platform: "rednote", index: 0 },
+			expect.objectContaining({
+				postId: "post-1",
+				title: "Post One",
+				subtitle: "Post subtitle",
+				rect: { left: 18, top: 92, width: 320, height: 160 },
+			}),
+		)
+
+		getBoundingClientRect.mockRestore()
+	})
+
+	it("surfaces the post lifecycle state near the title", () => {
+		const { rerender } = renderCard({
+			opsArtifacts: { source: false, metrics: false, comments: false, review: false },
+		})
+
+		const draftStatus = screen.getByTestId("self-media-home-post-lifecycle-post-1")
+		expect(draftStatus).toHaveTextContent("To publish")
+		expect(draftStatus).toHaveAttribute("data-lifecycle", "draft")
+
+		rerender(
+			<SelfMediaPostCard
+				item={createPostItem()}
+				title="Post One"
+				subtitle="Post subtitle"
+				postId="post-1"
+				opsArtifacts={{ source: true, metrics: true, comments: false, review: false }}
+				onOpenPost={vi.fn()}
+				onPostPublishRefresh={vi.fn()}
+				onConfigureAutoSync={vi.fn()}
+			/>,
+		)
+
+		const syncedStatus = screen.getByTestId("self-media-home-post-lifecycle-post-1")
+		expect(syncedStatus).toHaveTextContent("Data synced")
+		expect(syncedStatus).toHaveAttribute("data-lifecycle", "synced")
+	})
+
 	it("uses the data action as immediate sync and opens auto sync settings on hover", async () => {
 		const onPostPublishRefresh = vi.fn().mockResolvedValue(undefined)
 		renderCard({ onPostPublishRefresh })
@@ -143,6 +221,87 @@ describe("SelfMediaPostCard", () => {
 		expect(
 			screen.getByTestId("self-media-home-post-auto-sync-enabled-post-1"),
 		).toBeInTheDocument()
+	})
+
+	it("opens auto sync settings on click when immediate sync is unavailable", async () => {
+		renderCard({
+			onPostPublishRefresh: undefined,
+			onConfigureAutoSync: vi.fn(),
+			onLoadOpsSource: vi.fn().mockResolvedValue(null),
+		})
+
+		const trigger = screen.getByTestId("self-media-home-post-ops-data-post-1")
+		expect(trigger).toHaveTextContent("Auto sync")
+		expect(trigger).toHaveAttribute("aria-label", "Auto sync")
+		expect(trigger).not.toHaveTextContent("Sync now")
+
+		fireEvent.click(trigger)
+
+		expect(
+			await screen.findByTestId("self-media-home-post-data-popover-post-1"),
+		).toHaveTextContent("Auto sync")
+		expect(
+			await screen.findByTestId("self-media-home-post-auto-sync-enabled-post-1"),
+		).toBeInTheDocument()
+	})
+
+	it("opens a context menu and asks for confirmation before deleting an article", async () => {
+		const onDeletePost = vi.fn().mockResolvedValue(undefined)
+		renderCard({ onDeletePost })
+
+		fireEvent.contextMenu(screen.getByTestId("self-media-home-post-card-post-1"))
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Delete article" }))
+
+		expect(screen.getByRole("alertdialog")).toHaveTextContent("Delete this article?")
+		expect(screen.getByRole("alertdialog")).toHaveTextContent(
+			"This article will be permanently deleted and cannot be restored.",
+		)
+		expect(onDeletePost).not.toHaveBeenCalled()
+
+		fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }))
+
+		await waitFor(() => expect(onDeletePost).toHaveBeenCalledWith(createPostItem()))
+	})
+
+	it("opens a rename dialog from the context menu with the old name prefilled", async () => {
+		const onRenamePost = vi.fn().mockResolvedValue(undefined)
+		renderCard({ onRenamePost })
+
+		fireEvent.contextMenu(screen.getByTestId("self-media-home-post-card-post-1"))
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Rename article" }))
+
+		const input = screen.getByLabelText("Article name")
+		const dialog = screen.getByRole("dialog")
+		expect(dialog).toHaveTextContent("Rename article")
+		expect(dialog).toHaveClass("overflow-hidden")
+		expect(dialog).toHaveClass("p-0")
+		expect(input).toHaveValue("Post One")
+		expect(screen.getByRole("button", { name: "Save name" })).toHaveAttribute(
+			"data-slot",
+			"button",
+		)
+
+		fireEvent.change(input, { target: { value: "Renamed Post" } })
+		fireEvent.click(screen.getByRole("button", { name: "Save name" }))
+
+		await waitFor(() =>
+			expect(onRenamePost).toHaveBeenCalledWith(createPostItem(), "Renamed Post"),
+		)
+	})
+
+	it("shows an inline error when renaming fails", async () => {
+		const onRenamePost = vi.fn().mockResolvedValue(false)
+		renderCard({ onRenamePost })
+
+		fireEvent.contextMenu(screen.getByTestId("self-media-home-post-card-post-1"))
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Rename article" }))
+		fireEvent.change(screen.getByLabelText("Article name"), {
+			target: { value: "Broken Name" },
+		})
+		fireEvent.click(screen.getByRole("button", { name: "Save name" }))
+
+		expect(await screen.findByText("Failed to rename article.")).toBeInTheDocument()
+		expect(screen.getByRole("dialog")).toBeInTheDocument()
 	})
 
 	it("opens the bind link form directly when the card is already in the no-link state", async () => {

@@ -1,10 +1,9 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
-import type { JSONContent } from "@tiptap/react"
 import type {
 	ArticleDetail,
 	SelfMediaInitGlobalSettings,
@@ -12,16 +11,7 @@ import type {
 	ReferenceFileValue,
 	MaterialItem,
 } from "../../types"
-import { STYLE_PRESETS, ALL_PLATFORMS, getVisualPresetsForPlatform } from "../../types"
-import type { SelfMediaPlatform } from "../../../../../../types"
 import type { SelfMediaFileStorageService } from "../../../../services/SelfMediaFileStorageService"
-import ArticleOutlineEditor from "./ArticleOutlineEditor"
-import CardContentEditor from "./CardContentEditor"
-import AiInputBox from "../ai/AiInputBox"
-import AiActionButton from "../ai/AiActionButton"
-import VisualPresetPicker from "../picker/VisualPresetPicker"
-import ReferenceFilePicker from "../picker/ReferenceFilePicker"
-import { MagicPromptEditor } from "@/components/base/MagicPromptEditor"
 import {
 	generateOutline,
 	generateCardContent,
@@ -29,7 +19,7 @@ import {
 	optimizeCardContent,
 } from "../../../../services/selfMediaAiGenerate"
 import { Trash2, ChevronDown, Folder } from "lucide-react"
-import PlatformBrandIcon from "../../../PlatformBrandIcon"
+import ArticleCardWorkspace from "./ArticleCardWorkspace"
 
 interface ArticleCardProps {
 	index: number
@@ -41,6 +31,7 @@ interface ArticleCardProps {
 	fileStorageService?: SelfMediaFileStorageService | null
 	alwaysExpanded?: boolean
 	hideHeader?: boolean
+	showFolderField?: boolean
 }
 
 export default function ArticleCard({
@@ -53,6 +44,7 @@ export default function ArticleCard({
 	fileStorageService,
 	alwaysExpanded = false,
 	hideHeader = false,
+	showFolderField = true,
 }: ArticleCardProps) {
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useState(false)
@@ -89,10 +81,6 @@ export default function ArticleCard({
 
 	const effectivePlatform = article.platform || "rednote"
 	const isCardPlatform = effectivePlatform === "rednote" || effectivePlatform === "instagram"
-	const availableVisualPresets = useMemo(
-		() => getVisualPresetsForPlatform(effectivePlatform as SelfMediaPlatform),
-		[effectivePlatform],
-	)
 
 	const handleFieldChange = useCallback(
 		<K extends keyof ArticleDetail>(field: K, value: ArticleDetail[K]) => {
@@ -380,317 +368,30 @@ export default function ArticleCard({
 
 			{/* Collapsible/Always open workspace section */}
 			{isExpanded && (
-				<div
-					className={cn(
-						hideHeader
-							? "space-y-6 duration-200 animate-in fade-in"
-							: "mt-4 space-y-5 border-t border-border/10 pt-5 duration-200 animate-in fade-in slide-in-from-top-3",
-					)}
-				>
-					{/* Folder name - only shown in hideHeader mode (header row already contains it otherwise) */}
-					{hideHeader && (
-						<div className="space-y-1.5">
-							<label className="block text-xs font-medium text-muted-foreground">
-								{t(
-									"detail.selfMedia.initPanel.stepDetail.folderLabel",
-									"归档文件夹",
-								)}
-							</label>
-							<div className="relative">
-								<Folder
-									className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/45"
-									size={12}
-								/>
-								<Input
-									type="text"
-									className="h-9 pl-7 text-xs"
-									placeholder={t(
-										"detail.selfMedia.initPanel.stepTopic.folderPlaceholder",
-										"文件夹名（选填，留空自动生成）",
-									)}
-									value={article.folderName || ""}
-									onChange={(e) =>
-										handleFieldChange("folderName", e.target.value)
-									}
-									data-testid="self-media-step-topic-folder-name-input"
-								/>
-							</div>
-						</div>
-					)}
-
-					{/* 1. Platform selection + Card count */}
-					<div className="grid grid-cols-1 gap-5 md:grid-cols-12">
-						<div className="space-y-2 md:col-span-8">
-							<label className="block text-xs font-medium text-muted-foreground">
-								{t(
-									"detail.selfMedia.initPanel.stepDetail.platformLabel",
-									"目标自媒体平台",
-								)}
-							</label>
-							<div className="flex flex-wrap gap-1.5">
-								{ALL_PLATFORMS.filter((p) => !p.disabled).map((p) => (
-									<button
-										key={p.value}
-										type="button"
-										className={cn(
-											"flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-all duration-300",
-											article.platform === p.value
-												? "border-primary bg-primary text-primary-foreground"
-												: "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground",
-										)}
-										onClick={() =>
-											handleFieldChange(
-												"platform",
-												p.value as SelfMediaPlatform,
-											)
-										}
-									>
-										<PlatformBrandIcon
-											platform={p.value}
-											className="size-3.5"
-										/>
-										{t(p.labelKey)}
-									</button>
-								))}
-							</div>
-						</div>
-
-						{article.platform !== "wechat-official-accounts" && (
-							<div className="space-y-2 md:col-span-4">
-								<label className="block text-xs font-medium text-muted-foreground">
-									{t(
-										"detail.selfMedia.initPanel.stepDetail.cardCountLabel",
-										"生成卡片数量",
-									)}
-								</label>
-								<div className="flex items-center gap-2">
-									<Input
-										type="number"
-										min={1}
-										max={20}
-										className="h-9 w-16 text-center text-xs"
-										value={article.cardCount}
-										onChange={(e) =>
-											handleCardCountChange(parseInt(e.target.value) || 1)
-										}
-									/>
-									<span className="text-[10px] font-bold text-muted-foreground">
-										张卡片
-									</span>
-								</div>
-							</div>
-						)}
-					</div>
-
-					{/* 2. Content style */}
-					<div className="space-y-2">
-						<label className="block text-xs font-medium text-muted-foreground">
-							{t("detail.selfMedia.initPanel.stepDetail.styleLabel", "文案口吻预设")}
-						</label>
-						<div className="flex flex-wrap gap-1.5">
-							{STYLE_PRESETS.map((preset) => (
-								<button
-									key={preset.value}
-									type="button"
-									className={cn(
-										"cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-all duration-300",
-										article.style === preset.value
-											? "border-primary bg-primary text-primary-foreground"
-											: "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground",
-									)}
-									onClick={() => handleFieldChange("style", preset.value)}
-								>
-									{t(preset.labelKey)}
-								</button>
-							))}
-						</div>
-					</div>
-
-					{/* 3. Visual preset */}
-					<div className="space-y-2">
-						<label className="block text-xs font-medium text-muted-foreground">
-							{t("detail.selfMedia.initPanel.stepDetail.visualLabel", "配图视觉基调")}
-						</label>
-						<VisualPresetPicker
-							presets={availableVisualPresets}
-							value={article.visualPreset || "none"}
-							onChange={(v) => handleFieldChange("visualPreset", v)}
-							customDescription={
-								article.notes.includes("[视觉描述]")
-									? article.notes
-											.split("[视觉描述]")[1]
-											?.split("[/视觉描述]")[0] || ""
-									: ""
-							}
-							onCustomDescriptionChange={(desc) => {
-								const base = article.notes
-									.replace(/\[视觉描述\].*?\[\/视觉描述\]/g, "")
-									.trim()
-								const newNotes = desc
-									? `${base}\n[视觉描述]${desc}[/视觉描述]`.trim()
-									: base
-								handleFieldChange("notes", newNotes)
-							}}
-							customDescriptionJson={article.visualDescriptionJson}
-							onCustomDescriptionJsonChange={(json) =>
-								handleFieldChange("visualDescriptionJson", json)
-							}
-							visualReferenceFiles={article.visualReferenceFiles || []}
-							onVisualReferenceFilesChange={(files) =>
-								handleFieldChange("visualReferenceFiles", files)
-							}
-							onBlur={onPersistDraft}
-						/>
-					</div>
-
-					{/* 4. Content description (with attachments) */}
-					<div className="space-y-1.5">
-						<label className="mb-1 block text-xs font-semibold">
-							{t(
-								"detail.selfMedia.initPanel.stepDetail.descriptionLabel",
-								"内容描述与核心观点",
-							)}
-						</label>
-						<MagicPromptEditor
-							value={article.descriptionJson}
-							textValue={article.description ?? ""}
-							onChange={(json) => handleFieldChange("descriptionJson", json)}
-							onTextChange={(text) => handleFieldChange("description", text)}
-							onBlur={onPersistDraft}
-							placeholder={t(
-								"detail.selfMedia.initPanel.stepDetail.descriptionPlaceholder",
-							)}
-							enableAIPolish
-							enableVoice
-							enableMention
-							rows={3}
-							className="rounded-lg border bg-card shadow-xs ring-0 ring-offset-0 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50"
-							bottomToolbar={
-								<div className="flex items-center bg-muted/30 px-3 py-1.5">
-									<ReferenceFilePicker
-										value={article.referenceFiles || []}
-										onChange={handleReferenceFilesChange}
-										compact
-									/>
-									<span className="flex-1" />
-								</div>
-							}
-						/>
-					</div>
-
-					{/* 5. Outline / Card Content Workspace */}
-					<div className="space-y-3">
-						<div className="flex items-center justify-between border-b pb-2">
-							<label className="text-xs font-medium text-muted-foreground">
-								{t(
-									isCardPlatform
-										? "detail.selfMedia.initPanel.stepDetail.cardContentLabel"
-										: "detail.selfMedia.initPanel.stepDetail.outlineLabel",
-									"文章大纲规划",
-								)}
-							</label>
-							<div ref={outlineActionRef} className="relative">
-								<AiActionButton
-									modelValue={outlineModel}
-									onModelChange={setOutlineModel}
-									loading={generatingOutline}
-									disabled={!article.title.trim()}
-									onClick={handleOutlineButtonClick}
-									variant="primary"
-									size="sm"
-									label={t(
-										hasOutline
-											? isCardPlatform
-												? "detail.selfMedia.initPanel.stepDetail.cardContentOptimizeBtn"
-												: "detail.selfMedia.initPanel.stepDetail.outlineOptimizeBtn"
-											: isCardPlatform
-												? "detail.selfMedia.initPanel.stepDetail.cardContentGenerateBtn"
-												: "detail.selfMedia.initPanel.stepDetail.outlineGenerateBtn",
-									)}
-									loadingLabel={
-										<div className="flex items-center gap-1.5">
-											<svg
-												className="animate-spin"
-												width="10"
-												height="10"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												strokeWidth="2.5"
-											>
-												<path d="M21 12a9 9 0 1 1-6.219-8.56" />
-											</svg>
-											<span>
-												{t(
-													hasOutline
-														? "detail.selfMedia.initPanel.stepDetail.outlineOptimizing"
-														: "detail.selfMedia.initPanel.stepDetail.outlineGenerating",
-												)}
-											</span>
-										</div>
-									}
-								/>
-
-								{optimizePopoverOpen && hasOutline && !generatingOutline && (
-									<div className="absolute right-0 top-full z-[1000] mt-1.5 w-72 rounded-xl border border-border bg-popover p-3 shadow-lg animate-in fade-in-0 zoom-in-95">
-										<textarea
-											className="min-h-[80px] w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-xs placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-											placeholder={t(
-												isCardPlatform
-													? "detail.selfMedia.initPanel.stepDetail.cardContentOptimizePlaceholder"
-													: "detail.selfMedia.initPanel.stepDetail.outlineOptimizePlaceholder",
-											)}
-											rows={3}
-											value={optimizeInstruction}
-											onChange={(e) => setOptimizeInstruction(e.target.value)}
-											autoFocus
-										/>
-										<div className="mt-2 flex justify-end">
-											<button
-												type="button"
-												className={cn(
-													"inline-flex cursor-pointer items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.97]",
-													!optimizeInstruction.trim() &&
-														"cursor-not-allowed opacity-50",
-												)}
-												disabled={!optimizeInstruction.trim()}
-												onClick={() =>
-													handleAiOptimize(optimizeInstruction)
-												}
-											>
-												{t(
-													"detail.selfMedia.initPanel.stepDetail.outlineOptimizeSubmit",
-												)}
-											</button>
-										</div>
-									</div>
-								)}
-							</div>
-						</div>
-
-						{isCardPlatform ? (
-							<CardContentEditor
-								outline={article.outline}
-								cardCount={article.cardCount}
-								onChange={handleOutlineChange}
-								onRemoveCard={handleRemoveCard}
-								onBlur={onPersistDraft}
-								uploadToProject={
-									fileStorageService ? handleUploadToProject : undefined
-								}
-							/>
-						) : (
-							<ArticleOutlineEditor
-								outline={article.outline}
-								onChange={handleOutlineChange}
-								onBlur={onPersistDraft}
-								uploadToProject={
-									fileStorageService ? handleUploadToProject : undefined
-								}
-							/>
-						)}
-					</div>
-				</div>
+				<ArticleCardWorkspace
+					article={article}
+					hideHeader={hideHeader}
+					showFolderField={showFolderField}
+					isCardPlatform={isCardPlatform}
+					hasOutline={hasOutline}
+					generatingOutline={generatingOutline}
+					outlineModel={outlineModel}
+					optimizePopoverOpen={optimizePopoverOpen}
+					optimizeInstruction={optimizeInstruction}
+					outlineActionRef={outlineActionRef}
+					fileStorageService={fileStorageService}
+					onFieldChange={handleFieldChange}
+					onCardCountChange={handleCardCountChange}
+					onReferenceFilesChange={handleReferenceFilesChange}
+					onOutlineButtonClick={handleOutlineButtonClick}
+					onOptimizeInstructionChange={setOptimizeInstruction}
+					onOutlineModelChange={setOutlineModel}
+					onAiOptimize={handleAiOptimize}
+					onOutlineChange={handleOutlineChange}
+					onRemoveCard={handleRemoveCard}
+					onPersistDraft={onPersistDraft}
+					onUploadToProject={handleUploadToProject}
+				/>
 			)}
 		</div>
 	)

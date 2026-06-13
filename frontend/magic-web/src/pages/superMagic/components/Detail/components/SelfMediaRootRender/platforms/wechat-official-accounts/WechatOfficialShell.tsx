@@ -3,7 +3,7 @@ import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { ElementInspectorOverlay } from "@/components/business/ElementInspector"
 import { flattenAttachments } from "../../../../contents/HTML/utils"
-import SelfMediaShellHeader from "../../components/SelfMediaShellHeader"
+import SelfMediaShellHeader, { SelfMediaShellViewBar } from "../../components/SelfMediaShellHeader"
 import { useSelfMediaInspector } from "../../hooks/useSelfMediaInspector"
 import { useShellFileHandlers } from "../../hooks/useShellFileHandlers"
 import { SelfMediaStoreProvider, useOptionalSelfMediaStore, useSelfMediaStore } from "../../stores"
@@ -13,7 +13,6 @@ import WechatCodeView from "./code"
 import { WechatCoverPhonePanel } from "./WechatCoverPhonePanel"
 import WechatEditView from "./edit"
 import { WechatOfficialContentGate } from "./WechatOfficialContentGate"
-import { wechatOfficialTokens } from "./tokens"
 
 const TAB_ORDER: SelfMediaView[] = ["feed", "detail", "edit", "code"]
 
@@ -32,8 +31,16 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 	props: PlatformComponentProps,
 ) {
 	const { t } = useTranslation("super")
-	const { platform, attachmentList, allowEdit, saveEditContent, selectedProject, onBackHome } =
-		props
+	const {
+		platform,
+		attachmentList,
+		allowEdit,
+		saveEditContent,
+		selectedProject,
+		onBackHome,
+		onUpdatePostTitle,
+		onRequestPrePublishAnalysis,
+	} = props
 	const store = useSelfMediaStore()
 	const { posts, loading, error, activePostIndex, view, rootLoading } = store
 
@@ -217,10 +224,24 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 		void store.init({ preserveNavigation: true })
 	}, [store])
 
+	const handleSaveTitle = useCallback(
+		async (nextTitle: string) => {
+			const entry = store.activePostEntry
+			if (!entry || !onUpdatePostTitle) return false
+			const saved = await onUpdatePostTitle(
+				{ platform, index: activePostIndex, entry },
+				nextTitle,
+			)
+			if (saved === false) return false
+			store.updatePostTitle(activePostIndex, nextTitle)
+			return true
+		},
+		[activePostIndex, onUpdatePostTitle, platform, store],
+	)
+
 	return (
 		<div
-			className="flex h-full w-full flex-col"
-			style={{ background: wechatOfficialTokens.background }}
+			className="relative flex h-full w-full flex-col bg-white"
 			data-testid="wechat-official-shell"
 		>
 			<SelfMediaShellHeader
@@ -240,9 +261,10 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 				onStopInspector={inspector.stop}
 				inspectorActive={inspector.active}
 				inspectorDisabled={inspectorDisabled}
+				onSaveTitle={allowEdit === false ? undefined : handleSaveTitle}
 			/>
 
-			<div className="relative flex-1 overflow-hidden">
+			<div className="relative min-h-0 flex-1 overflow-hidden">
 				{shouldRenderFeed ? (
 					<WechatCoverPhonePanel
 						visible={view === "feed"}
@@ -346,6 +368,13 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 					hideInfoCard
 				/>
 			</div>
+			<SelfMediaShellViewBar
+				view={view}
+				tabLabels={tabLabels}
+				visibleTabs={visibleTabs}
+				onChangeView={handleGuardedViewChange}
+				onRequestPrePublishAnalysis={allowEdit ? onRequestPrePublishAnalysis : undefined}
+			/>
 		</div>
 	)
 })

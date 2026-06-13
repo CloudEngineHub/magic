@@ -23,9 +23,9 @@ function ExportPanel({ onOpen, className, label = "Export ZIP", disabled }: Expo
 				disabled={disabled}
 				data-testid="self-media-export-btn"
 				size="sm"
-				className="text-xs"
+				className="h-11 rounded-[14px] bg-[#18181b] px-5 text-sm font-[800] text-white shadow-[0_10px_24px_rgba(24,24,27,0.18)] hover:bg-[#27272a] disabled:bg-[#18181b]/45"
 			>
-				<Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+				<Download className="h-4 w-4 shrink-0" aria-hidden />
 				{displayLabel}
 			</Button>
 		</div>

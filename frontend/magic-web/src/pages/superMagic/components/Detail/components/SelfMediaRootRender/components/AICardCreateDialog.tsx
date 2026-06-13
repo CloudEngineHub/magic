@@ -17,6 +17,7 @@ import { MagicSwitch } from "@/components/base/MagicSwitch"
 import AICardFormFields from "../../AICardRootRender/components/AICardFormFields"
 import type { AICardFormFieldsValues } from "../../AICardRootRender/components/AICardFormFields"
 import { createAICardViaTopic } from "../services/aiCardCreate"
+import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 
 const AI_CARD_TOPIC_PATTERN = "ip-manager"
 
@@ -130,21 +131,23 @@ function AICardCreateDialog({
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
 			<DialogContent
-				className="grid max-h-[88vh] !max-w-[820px] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
+				className={`grid max-h-[88vh] !max-w-[820px] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 ${selfMediaOverlayStyles.dialogSurface}`}
 				data-testid="ai-card-create-dialog-content"
 			>
-				<DialogHeader className="gap-1.5 border-b bg-card px-6 py-5">
-					<DialogTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-						<Sparkles size={18} className="text-primary" />
+				<DialogHeader className={selfMediaOverlayStyles.dialogHeader}>
+					<DialogTitle
+						className={`flex items-center gap-2 ${selfMediaOverlayStyles.dialogTitle}`}
+					>
+						<Sparkles size={18} className="text-[#18181b]" />
 						{t("detail.aiCard.createDialog.title")}
 					</DialogTitle>
-					<DialogDescription className="text-xs">
+					<DialogDescription className={selfMediaOverlayStyles.dialogDescription}>
 						{t("detail.aiCard.createDialog.description")}
 					</DialogDescription>
 				</DialogHeader>
 
 				<div
-					className="min-h-0 space-y-5 overflow-y-auto bg-muted/20 px-6 py-5"
+					className={`${selfMediaOverlayStyles.dialogBody} space-y-5`}
 					data-testid="ai-card-create-dialog-body"
 				>
 					<AICardFormFields
@@ -160,7 +163,7 @@ function AICardCreateDialog({
 				</div>
 
 				<DialogFooter
-					className="flex-col gap-3 border-t bg-card px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
+					className={`flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${selfMediaOverlayStyles.dialogFooter}`}
 					data-testid="ai-card-create-dialog-footer"
 				>
 					<div className="flex items-center gap-3">
@@ -181,12 +184,17 @@ function AICardCreateDialog({
 					<div className="flex justify-end gap-3">
 						<Button
 							variant="outline"
+							className={selfMediaOverlayStyles.secondaryButton}
 							onClick={() => onOpenChange(false)}
 							disabled={submitting}
 						>
 							{t("detail.aiCard.createDialog.cancel")}
 						</Button>
-						<Button onClick={handleSubmit} disabled={!isValid || submitting}>
+						<Button
+							className={selfMediaOverlayStyles.primaryButton}
+							onClick={handleSubmit}
+							disabled={!isValid || submitting}
+						>
 							{submitting && <Loader2 size={14} className="mr-1.5 animate-spin" />}
 							{submitting
 								? t("detail.aiCard.createDialog.creating")

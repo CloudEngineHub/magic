@@ -131,7 +131,13 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 	// Pre-compute all transformed data to avoid calculations during render (memoized)
 	const transformedSelections = useMemo(() => {
 		return selectedInfoList.map((info) => {
-			const transformedRect = transformRect(info.rect, iframeRef, isPptRender, scaleRatio)
+			const transformedRect = transformRect(
+				info.rect,
+				iframeRef,
+				isPptRender,
+				scaleRatio,
+				info.selector,
+			)
 			const transform = getSelectionBoxTransform(
 				info.rotation ?? 0,
 				isMultiSelect,
