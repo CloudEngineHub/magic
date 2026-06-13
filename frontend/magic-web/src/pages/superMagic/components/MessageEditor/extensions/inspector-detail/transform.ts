@@ -1,4 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { INSPECTOR_DETAIL_MARKER, INSPECTOR_DETAIL_TYPE } from "./const"
 
 /**
@@ -33,6 +34,29 @@ function getFirstText(node: JSONContent): string {
 	return ""
 }
 
+function getOnlyMention(node: JSONContent | undefined): TiptapMentionAttributes | null {
+	const content = node?.content
+	if (node?.type !== "paragraph" || !Array.isArray(content) || content.length !== 1) {
+		return null
+	}
+	const child = content[0]
+	return child?.type === "mention" && child.attrs
+		? (child.attrs as TiptapMentionAttributes)
+		: null
+}
+
+function createInspectorParagraph(attrs: ReturnType<typeof extractInspectorAttrs>): JSONContent {
+	return {
+		type: "paragraph",
+		content: [
+			{
+				type: INSPECTOR_DETAIL_TYPE,
+				attrs,
+			},
+		],
+	}
+}
+
 /**
  * Extracts inspector detail attributes from consecutive paragraphs.
  */
@@ -47,6 +71,7 @@ function extractInspectorAttrs(
 	computedStyles: string
 	styleCount: number
 	textContent: string
+	fileMention?: TiptapMentionAttributes | null
 } {
 	let selector = ""
 	let size = ""
@@ -164,15 +189,16 @@ export function transformInspectorContent(doc: JSONContent): JSONContent {
 				// (old format stored title as a separate paragraph before the marker)
 				if (newContent.length > 0) {
 					const prev = newContent[newContent.length - 1]
-					if (prev.type === "paragraph" && getFirstText(prev) === titleText) {
+					const fileMention = getOnlyMention(prev)
+					if (fileMention) {
+						attrs.fileMention = fileMention
+						newContent.pop()
+					} else if (prev.type === "paragraph" && getFirstText(prev) === titleText) {
 						newContent.pop()
 					}
 				}
 
-				newContent.push({
-					type: INSPECTOR_DETAIL_TYPE,
-					attrs,
-				})
+				newContent.push(createInspectorParagraph(attrs))
 				i = j // Skip past the consumed paragraphs
 			} else {
 				// No detail paragraphs found, keep original (strip marker for display)
@@ -214,47 +240,69 @@ export function serializeInspectorContent(
 		type: "paragraph",
 		content,
 	})
+	const isInspectorNode = (node: JSONContent | undefined): boolean =>
+		node?.type === INSPECTOR_DETAIL_TYPE && Boolean(node.attrs)
+	const serializeInspectorNode = (node: JSONContent): JSONContent[] => {
+		const attrs = node.attrs as {
+			selector?: string
+			size?: string
+			computedStyles?: string
+			textContent?: string
+			fileMention?: TiptapMentionAttributes | null
+		}
+
+		const content: JSONContent[] = []
+
+		if (attrs.fileMention) {
+			content.push(para({ type: "mention", attrs: attrs.fileMention }))
+		}
+
+		// Title with marker
+		content.push(para(text(`${INSPECTOR_DETAIL_MARKER}${labels.title}`)))
+
+		// Selector
+		if (attrs.selector) {
+			content.push(para(text(`${labels.selector}: ${attrs.selector}`)))
+		}
+
+		// Size
+		if (attrs.size) {
+			content.push(para(text(`${labels.size}: ${attrs.size}`)))
+		}
+
+		// Computed styles
+		if (attrs.computedStyles && attrs.computedStyles !== "{}") {
+			try {
+				const styles = JSON.parse(attrs.computedStyles) as Record<string, string>
+				const pairs = Object.entries(styles).map(([k, v]) => `${k}: ${v}`)
+				if (pairs.length > 0) {
+					content.push(para(text(`${labels.computedStyles}: ${pairs.join("; ")}`)))
+				}
+			} catch {
+				// skip malformed styles
+			}
+		}
+
+		// Text content
+		if (attrs.textContent) {
+			content.push(para(text(`${labels.textContent}: "${attrs.textContent}"`)))
+		}
+
+		return content
+	}
 
 	const newContent: JSONContent[] = []
 
 	for (const node of doc.content) {
-		if (node.type === INSPECTOR_DETAIL_TYPE && node.attrs) {
-			const attrs = node.attrs as {
-				selector?: string
-				size?: string
-				computedStyles?: string
-				textContent?: string
-			}
-
-			// Title with marker
-			newContent.push(para(text(`${INSPECTOR_DETAIL_MARKER}${labels.title}`)))
-
-			// Selector
-			if (attrs.selector) {
-				newContent.push(para(text(`${labels.selector}: ${attrs.selector}`)))
-			}
-
-			// Size
-			if (attrs.size) {
-				newContent.push(para(text(`${labels.size}: ${attrs.size}`)))
-			}
-
-			// Computed styles
-			if (attrs.computedStyles && attrs.computedStyles !== "{}") {
-				try {
-					const styles = JSON.parse(attrs.computedStyles) as Record<string, string>
-					const pairs = Object.entries(styles).map(([k, v]) => `${k}: ${v}`)
-					if (pairs.length > 0) {
-						newContent.push(para(text(`${labels.computedStyles}: ${pairs.join("; ")}`)))
-					}
-				} catch {
-					// skip malformed styles
+		if (isInspectorNode(node)) {
+			newContent.push(...serializeInspectorNode(node))
+		} else if (node.type === "paragraph" && node.content?.some(isInspectorNode)) {
+			for (const child of node.content) {
+				if (isInspectorNode(child)) {
+					newContent.push(...serializeInspectorNode(child))
+				} else {
+					newContent.push(para(child))
 				}
-			}
-
-			// Text content
-			if (attrs.textContent) {
-				newContent.push(para(text(`${labels.textContent}: "${attrs.textContent}"`)))
 			}
 		} else {
 			newContent.push(node)

@@ -45,6 +45,12 @@ interface DetailProps {
 	showFallbackWhenEmpty?: boolean
 	/** 当前项目文件 tabs 缓存一轮加载结束 */
 	onFileTabsCacheLoaded?: (projectId: string) => void
+	/** When false, hides file preview toolbar (CommonHeaderV2) */
+	showFileHeader?: boolean
+	/** When true, hides FilesViewer tab bar for immersive read-only preview */
+	hideTabBar?: boolean
+	/** Overrides default footer visibility (mobile non-share shows footer by default) */
+	showFileFooter?: boolean
 }
 
 // Forward ref type for Detail component
@@ -55,6 +61,14 @@ export interface DetailRef {
 	switchToTab: (fileId: string) => void
 	openPlaybackTab: (options?: { toolData?: any; forceActivate?: boolean }) => void
 	closePlaybackTab: () => void
+	openKnowledgeBaseTab: (data: {
+		knowledgeBaseId: string
+		documentCode?: string
+		fileKey?: string
+		title: string
+		knowledgeBaseName?: string
+		fileExtension?: string
+	}) => void
 }
 
 const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
@@ -83,6 +97,9 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		allowDownload,
 		showFallbackWhenEmpty,
 		onFileTabsCacheLoaded,
+		showFileHeader,
+		hideTabBar,
+		showFileFooter: showFileFooterProp,
 	} = props
 
 	const filesViewerRef = useRef<FilesViewerRef>(null)
@@ -139,6 +156,11 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				filesViewerRef.current.closePlaybackTab()
 			}
 		},
+		openKnowledgeBaseTab: (data) => {
+			if (filesViewerRef.current) {
+				filesViewerRef.current.openKnowledgeBaseTab(data)
+			}
+		},
 	}))
 
 	// Return unified files mode with playback tab
@@ -162,7 +184,9 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				onFullscreenChange={onFullscreenChange}
 				openFileTab={openNewTab}
 				activeFileId={activeFileId}
-				showFileFooter={!isShareRoute && isMobile}
+				showFileFooter={showFileFooterProp ?? (!isShareRoute && isMobile)}
+				showFileHeader={showFileHeader}
+				hideTabBar={hideTabBar}
 				currentTopicStatus={currentTopicStatus}
 				messages={messages}
 				autoDetail={autoDetail}

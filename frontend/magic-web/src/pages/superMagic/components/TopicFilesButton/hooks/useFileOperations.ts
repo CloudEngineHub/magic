@@ -23,6 +23,7 @@ import { SuperMagicApi } from "@/apis"
 import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
 import { useMemoizedFn } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { uploadLogger } from "../utils/uploadLogger"
 import { exportPPTX } from "../../../../../../packages/html2pptx/src"
 import { exportHtmlToPdf } from "../../../../../../packages/pdf-export/src"
 import {
@@ -283,10 +284,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// 分享模态框状态
 	const [shareModalVisible, setShareModalVisible] = useState(false)
+	// 打开文件分享弹层时携带的上下文：预选文件、资源 id、以及树/列表中默认展开定位的文件 id
 	const [shareFileInfo, setShareFileInfo] = useState<{
 		projectName?: string
 		fileIds: string[]
 		resourceId?: string
+		/** 与 createShareHandler / useShareFile 对齐：弹层内默认展开或高亮的文件 id */
+		defaultOpenFileId?: string
 	} | null>(null)
 
 	// 文件导出loading状态
@@ -314,14 +318,33 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// 通用的文件上传处理函数（实际执行上传）- 用于普通文件上传（每个文件一个任务）
 	const processFilesUpload = useCallback(
-		async (files: File[], suffixDir?: string) => {
+		async (files: File[], suffixDir?: string, parentIdOverride?: string) => {
 			// 获取父文件夹路径
 			const parentPath = suffixDir ? `/${suffixDir}` : undefined
 			// 获取父文件夹ID
-			const parentId = getParentIdFromPath(parentPath) as string
+			const parentId = parentIdOverride ?? (getParentIdFromPath(parentPath) as string)
+			const parentIdSource = parentIdOverride ? "targetItem.file_id" : "pathLookup"
+			let createdTaskCount = 0
+			let failedTaskCount = 0
+
+			uploadLogger.log("resolveUploadParent", {
+				uploadType: "file",
+				suffixDir,
+				parentPath,
+				parentId,
+				parentIdSource,
+				filesCount: files.length,
+			})
+
 			// 为每个文件创建单独的任务
 			for (const file of files) {
 				try {
+					uploadLogger.log("createUploadTaskStart", {
+						uploadType: "file",
+						fileName: file.name,
+						parentId,
+						parentIdSource,
+					})
 					// 为单个文件创建任务
 					await multiFolderUploadStore.createUploadTask([file], parentId, {
 						projectId: projectId || "",
@@ -361,11 +384,32 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						},
 					})
 
+					createdTaskCount += 1
+					uploadLogger.log("createUploadTaskSuccess", {
+						uploadType: "file",
+						fileName: file.name,
+						parentId,
+					})
 					console.log(`✅ Successfully created upload task for file: ${file.name}`)
 				} catch (error) {
+					failedTaskCount += 1
+					uploadLogger.logError("createUploadTask", error, {
+						uploadType: "file",
+						fileName: file.name,
+						parentId,
+					})
 					console.error(`❌ Failed to create upload task for file ${file.name}:`, error)
 				}
 			}
+
+			uploadLogger.finishSession({
+				uploadType: "file",
+				status: failedTaskCount > 0 ? "partial_failed" : "task_created",
+				createdTaskCount,
+				failedTaskCount,
+				parentId,
+				parentIdSource,
+			})
 		},
 		[
 			projectId,
@@ -380,11 +424,27 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// 文件夹上传处理函数（所有文件作为一个任务）
 	const processFolderUpload = useCallback(
-		async (files: File[], suffixDir?: string) => {
+		async (files: File[], suffixDir?: string, parentIdOverride?: string) => {
 			// 获取父文件夹ID
 			const parentPath = suffixDir ? `/${suffixDir}` : undefined
-			const parentId = getParentIdFromPath(parentPath) as string
+			const parentId = parentIdOverride ?? (getParentIdFromPath(parentPath) as string)
+			const parentIdSource = parentIdOverride ? "targetItem.file_id" : "pathLookup"
+			uploadLogger.log("resolveUploadParent", {
+				uploadType: "folder",
+				suffixDir,
+				parentPath,
+				parentId,
+				parentIdSource,
+				filesCount: files.length,
+			})
+
 			try {
+				uploadLogger.log("createUploadTaskStart", {
+					uploadType: "folder",
+					filesCount: files.length,
+					parentId,
+					parentIdSource,
+				})
 				// 所有文件作为一个任务
 				await multiFolderUploadStore.createUploadTask(files, parentId, {
 					projectId: projectId || "",
@@ -424,8 +484,32 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					},
 				})
 
+				uploadLogger.log("createUploadTaskSuccess", {
+					uploadType: "folder",
+					filesCount: files.length,
+					parentId,
+				})
+				uploadLogger.finishSession({
+					uploadType: "folder",
+					status: "task_created",
+					filesCount: files.length,
+					parentId,
+					parentIdSource,
+				})
 				console.log(`✅ Successfully created folder upload task with ${files.length} files`)
 			} catch (error) {
+				uploadLogger.logError("createUploadTask", error, {
+					uploadType: "folder",
+					filesCount: files.length,
+					parentId,
+				})
+				uploadLogger.finishSession({
+					uploadType: "folder",
+					status: "failed",
+					filesCount: files.length,
+					parentId,
+					parentIdSource,
+				})
 				console.error(`❌ Failed to create folder upload task:`, error)
 			}
 		},
@@ -640,6 +724,18 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		const targetPath = item?.is_directory ? item.relative_file_path || item.name : undefined
 		// 清理路径：移除前导和尾随斜杠，确保路径格式统一
 		const targetSuffixDir = targetPath ? targetPath.replace(/^\/+|\/+$/g, "") : ""
+		const targetParentId = item?.is_directory && item.file_id ? item.file_id : undefined
+
+		uploadLogger.startSession({
+			uploadType: "file",
+			trigger: item?.is_directory ? "folderContextMenu" : "rootContextMenu",
+			targetItemId: item?.file_id,
+			targetItemName: item?.name || item?.file_name,
+			targetPath,
+			targetSuffixDir,
+			targetParentId,
+			parentIdSource: targetParentId ? "targetItem.file_id" : "pathLookup",
+		})
 
 		// 创建隐藏的文件输入框
 		const input = document.createElement("input")
@@ -656,13 +752,28 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				console.log("选择的文件:", files)
 				console.log("上传目标路径:", targetPath)
 				console.log("计算的suffixDir:", targetSuffixDir)
+				uploadLogger.log("fileInputSelected", {
+					uploadType: "file",
+					filesCount: files.length,
+					fileNames: files.map((file) => file.name),
+					targetPath,
+					targetSuffixDir,
+					targetParentId,
+				})
 
 				// 通过同名检测处理文件上传
 				await duplicateFileHandler.handleFilesWithDuplicateCheck(
 					files,
 					targetSuffixDir,
-					processFilesUpload,
+					(processedFiles, uploadPath) =>
+						processFilesUpload(processedFiles, uploadPath, targetParentId),
 				)
+			} else {
+				uploadLogger.finishSession({
+					uploadType: "file",
+					status: "cancelled",
+					reason: "noFilesSelected",
+				})
 			}
 
 			// 清理DOM
@@ -680,6 +791,18 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		const targetPath = item?.is_directory ? item.relative_file_path || item.name : undefined
 		// 清理路径：移除前导和尾随斜杠，确保路径格式统一
 		const targetSuffixDir = targetPath ? targetPath.replace(/^\/+|\/+$/g, "") : ""
+		const targetParentId = item?.is_directory && item.file_id ? item.file_id : undefined
+
+		uploadLogger.startSession({
+			uploadType: "folder",
+			trigger: item?.is_directory ? "folderContextMenu" : "rootContextMenu",
+			targetItemId: item?.file_id,
+			targetItemName: item?.name || item?.file_name,
+			targetPath,
+			targetSuffixDir,
+			targetParentId,
+			parentIdSource: targetParentId ? "targetItem.file_id" : "pathLookup",
+		})
 
 		// 创建隐藏的文件输入框
 		const input = document.createElement("input")
@@ -693,13 +816,28 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const fileList = (e.target as HTMLInputElement).files
 			if (fileList && fileList.length > 0) {
 				const files = Array.from(fileList)
+				uploadLogger.log("fileInputSelected", {
+					uploadType: "folder",
+					filesCount: files.length,
+					fileNames: files.map((file) => file.name),
+					targetPath,
+					targetSuffixDir,
+					targetParentId,
+				})
 
 				// 通过同名检测处理文件夹上传（使用 processFolderUpload 创建单个任务）
 				await duplicateFileHandler.handleFilesWithDuplicateCheck(
 					files,
 					targetSuffixDir,
-					processFolderUpload,
+					(processedFiles, uploadPath) =>
+						processFolderUpload(processedFiles, uploadPath, targetParentId),
 				)
+			} else {
+				uploadLogger.finishSession({
+					uploadType: "folder",
+					status: "cancelled",
+					reason: "noFilesSelected",
+				})
 			}
 
 			// 清理DOM
@@ -1304,6 +1442,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			downloadName?: string,
 		) => {
 			const fileIds = Array.isArray(file_id) ? file_id : [file_id]
+			const folderDownloadToastId = isFolder ? createRandomUuidV4() : undefined
 
 			if (fileIds.length === 0) return
 
@@ -1343,6 +1482,16 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			} else {
 				// 多个文件使用批量下载
 				return new Promise<void>((resolve, reject) => {
+					if (folderDownloadToastId) {
+						// Mobile folder downloads close the action sheet immediately, so the toast
+						// must be owned by the async download task rather than the transient sheet UI.
+						magicToast.loading({
+							key: folderDownloadToastId,
+							content: t("topicFiles.downloading"),
+							duration: 0,
+						})
+					}
+
 					SuperMagicApi.createBatchDownload({
 						project_id: projectId,
 						file_ids: fileIds,
@@ -1350,6 +1499,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						.then((data) => {
 							if (data.status === "ready" && data.download_url) {
 								downloadFileWithAnchor(data.download_url, downloadName)
+								if (folderDownloadToastId) {
+									magicToast.success({
+										key: folderDownloadToastId,
+										content: t("topicFiles.downloadSuccess"),
+										duration: 1000,
+									})
+								}
 								resolve()
 								return
 							}
@@ -1373,13 +1529,24 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 												checkData.download_url,
 												downloadName,
 											)
+											if (folderDownloadToastId) {
+												magicToast.success({
+													key: folderDownloadToastId,
+													content: t("topicFiles.downloadSuccess"),
+													duration: 1000,
+												})
+											}
 											resolve()
 										}
 										if (checkData?.status === "failed") {
 											clearInterval(timer)
-											magicToast.error(
-												checkData.message || t("interface:ErrorHappened"),
-											)
+											magicToast.error({
+												key: folderDownloadToastId,
+												content:
+													checkData.message ||
+													t("interface:ErrorHappened"),
+												duration: 1000,
+											})
 											reject(
 												new Error(checkData.message || "Download failed"),
 											)
@@ -1387,17 +1554,31 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 									} catch (error: any) {
 										clearInterval(timer)
 										console.error("Batch download check failed:", error)
-										magicToast.error(
-											error?.message || t("interface:ErrorHappened"),
-										)
+										magicToast.error({
+											key: folderDownloadToastId,
+											content: error?.message || t("interface:ErrorHappened"),
+											duration: 1000,
+										})
 										reject(error)
 									}
 								}, 2000)
+								return
 							}
+
+							magicToast.error({
+								key: folderDownloadToastId,
+								content: t("topicFiles.downloadFailed"),
+								duration: 1000,
+							})
+							reject(new Error("Download failed"))
 						})
 						.catch((error) => {
 							console.error("Batch download failed:", error)
-							magicToast.error(error?.message || t("interface:ErrorHappened"))
+							magicToast.error({
+								key: folderDownloadToastId,
+								content: error?.message || t("interface:ErrorHappened"),
+								duration: 1000,
+							})
 							reject(error)
 						})
 				})

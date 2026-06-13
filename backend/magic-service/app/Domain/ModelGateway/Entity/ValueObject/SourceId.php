@@ -21,6 +21,8 @@ final class SourceId
 
     public const string KNOWLEDGE_EMBEDDING_TEST = 'knowledge_embedding_test';
 
+    public const string KNOWLEDGE_EMBEDDING_MODEL_DIMENSION_PROBE = 'knowledge_embedding_model_dimension_probe';
+
     public const string SUPER_MAGIC = 'super_magic';
 
     public const string SUPER_MAGIC_AGENT_OPTIMIZER = 'super_magic_agent_optimizer';
@@ -32,6 +34,8 @@ final class SourceId
     public const string API_PLATFORM = 'api_platform';
 
     public const string IMAGE_GENERATE = 'image_generate';
+
+    public const string DESIGN_IMAGE_PROMPT_COMPLETION = 'design_image_prompt_completion';
 
     public const string CONNECTIVITY_TEST = 'connectivity_test';
 
@@ -48,6 +52,7 @@ final class SourceId
         self::CONVERSATION_CHAT_COMPLETION,
         self::FRAGMENT_SAVED,
         self::KNOWLEDGE_EMBEDDING_TEST,
+        self::KNOWLEDGE_EMBEDDING_MODEL_DIMENSION_PROBE,
         self::SUPER_MAGIC_AGENT_OPTIMIZER,
         self::SUPER_MAGIC_TEST_SG,
         self::SEMANTIC_SEARCH,

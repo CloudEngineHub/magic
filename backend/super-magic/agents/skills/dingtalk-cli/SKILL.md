@@ -1,7 +1,6 @@
 ---
 name: dingtalk-cli
-description: "Use when the user wants to interact with DingTalk in any way — including but not limited to: sending messages or DING alerts; managing group chats; querying contacts or org structure; reading, creating, or editing DingTalk docs; managing cloud drive files; operating AI tables (aitable); handling OA approvals; reviewing attendance; managing todos; submitting daily/weekly reports (logs); querying AI meeting minutes; reading mail; browsing calendar events or booking meeting rooms."
-
+description: "Use when the user wants to interact with DingTalk in any way — including but not limited to: reading, querying, searching, sending, replying to, forwarding, or recalling DingTalk chat messages and chat history; managing group chats and conversations; sending DING alerts; querying contacts, org structure, AI search, or coworkers; reading, searching, creating, or editing DingTalk docs, drive files, sheets, AI tables, wiki, mail, calendar events, meeting rooms, AI meeting minutes, attendance, OA approvals, todos, reports/logs, live sessions, AI apps, permissions, or open-platform docs."
 ---
 
 # DingTalk CLI Skill Index
@@ -18,20 +17,26 @@ read_skills(skill_names=["dws"])
 
 | Product | Use for | CLI entry |
 |---------|---------|-----------|
+| `aiapp` | AI apps: create, query, update | `dws aiapp` |
+| `aisearch` | AI search: find people by name, employee number, phone, department, responsibility, reporting lines | `dws aisearch` |
 | `aitable` | AI tables: bases, tables, fields, records, views, charts, dashboards, import/export | `dws aitable` |
 | `attendance` | Attendance: punch records, shift schedules, statistics | `dws attendance` |
 | `calendar` | Calendar: events, attendees, meeting rooms, availability | `dws calendar` |
-| `chat` | Group chats, bot messaging, single chat, Webhook | `dws chat` |
+| `chat` | Conversations, group chats, bot messaging, single chat, Webhook, message history, direct/group message list, sender filters, unread conversations, keyword and advanced message search, read/send status, send/reply/forward/recall | `dws chat` |
 | `contact` | Contacts: user lookup, department structure | `dws contact` |
 | `devdoc` | DingTalk open platform developer documentation search | `dws devdoc` |
 | `ding` | DING alerts: send/recall (in-app / SMS / phone) | `dws ding` |
 | `doc` | DingTalk docs: search, read, write, block edit, comments, copy/move | `dws doc` |
 | `drive` | Cloud drive: file list, upload, download, folders | `dws drive` |
+| `live` | Live sessions: list and info | `dws live` |
 | `mail` | Mail: search, view, send | `dws mail` |
 | `minutes` | AI meeting minutes: list, summary, transcript, todos, mindmap | `dws minutes` |
 | `oa` | OA approvals: pending, submitted, approve, reject, revoke | `dws oa` |
+| `pat` | Behavior authorization management | `dws pat` |
 | `report` | Logs/reports: create by template, inbox, sent, statistics | `dws report` |
+| `sheet` | DingTalk spreadsheets: worksheets, cells, formulas, images, find/replace | `dws sheet` |
 | `todo` | Todos: create, query, update, complete, delete | `dws todo` |
+| `wiki` | DingTalk wiki spaces and knowledge-base nodes | `dws wiki` |
 
 ---
 

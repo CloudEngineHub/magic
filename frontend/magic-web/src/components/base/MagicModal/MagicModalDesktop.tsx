@@ -16,6 +16,11 @@ import { convertButtonProps } from "./utils"
 import { useStyles } from "./styles"
 import { Modal as AntdModal } from "antd"
 import ThemeProvider from "@/providers/ThemeProvider"
+import {
+	acquireOverlayZIndex,
+	getOverlayScopeBaseZIndex,
+	type OverlayZIndexEntry,
+} from "@/utils/overlayZIndex/overlayStackManager"
 
 // Breakpoint type for responsive width (compatible with antd)
 type Breakpoint = "xs" | "sm" | "md" | "lg" | "xl" | "xxl"
@@ -175,8 +180,16 @@ function createImperativeModal(
 	const root = createRoot(container)
 
 	let currentConfig = { ...config }
+	let overlayEntry: OverlayZIndexEntry | null = null
+
+	/** 释放命令式弹窗占用的全局 overlay 层级，避免影响后续 MagicPopup / Modal。 */
+	const releaseOverlayEntry = () => {
+		overlayEntry?.release()
+		overlayEntry = null
+	}
 
 	const destroy = () => {
+		releaseOverlayEntry()
 		root.unmount()
 		if (container.parentNode) {
 			container.parentNode.removeChild(container)
@@ -309,14 +322,26 @@ function createImperativeModal(
 			footerNode = defaultFooterNode
 		}
 
+		// Mobile uses the global overlay stack so nested MagicPopup / Sheet stay ordered.
+		// PC honors the caller zIndex literally so fixed z-dropdown (1000) can sit above modal content.
+		let resolvedContentZIndex: number
+		if (isMobile) {
+			if (!overlayEntry) {
+				overlayEntry = acquireOverlayZIndex({ zIndex })
+			}
+			// DialogContent mirrors style.zIndex onto overlay; contentZIndex keeps mask above lower sheets.
+			resolvedContentZIndex = overlayEntry.contentZIndex
+		} else {
+			resolvedContentZIndex = zIndex ?? getOverlayScopeBaseZIndex("global")
+		}
+
 		root.render(
 			<ThemeProvider>
 				<Dialog open={true} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
 					<DialogContent
 						className={cn("gap-0 p-0", "z-dialog", classNames?.content, className)}
 						overlayClassName={cn(`z-dialog`)}
-						overlayStyle={{ zIndex }}
-						style={{ width: normalizedWidth, zIndex }}
+						style={{ width: normalizedWidth, zIndex: resolvedContentZIndex }}
 						showCloseButton={
 							typeof closable === "boolean" ? closable : !closable?.disabled
 						}

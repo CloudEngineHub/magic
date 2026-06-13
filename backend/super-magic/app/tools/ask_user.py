@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import Field
 

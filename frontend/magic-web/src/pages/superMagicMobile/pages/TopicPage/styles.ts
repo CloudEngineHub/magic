@@ -9,30 +9,14 @@ export const useStyles = createStyles(() => {
 		},
 		body: {
 			flex: 1,
-			overflowY: "auto",
-			overflowX: "hidden",
+			minHeight: 0,
+			// Scroll lives on MessageList ScrollArea viewport; avoid nested scroll with edge-fade masks.
+			overflow: "hidden",
 			display: "flex",
 			flexDirection: "column",
-			backgroundColor: "white",
 		},
 		list: {},
 		item: {},
-		footer: {
-			backgroundColor: "white",
-			paddingBottom: "max(var(--safe-area-inset-bottom), 10px)",
-		},
-		emptyMessageWelcome: {
-			height: "auto",
-			flex: "none",
-			"& > div": {
-				padding: 0,
-				"& > div:first-child": {
-					fontSize: "36px",
-					width: "auto",
-					height: "auto",
-					marginBottom: "10px",
-				},
-			},
-		},
+		footer: {},
 	}
 })

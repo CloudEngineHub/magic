@@ -98,6 +98,9 @@ const FilesViewer = memo(
 				openPlaybackTab,
 				closePlaybackTab,
 				isPlaybackTab,
+				openKnowledgeBaseTab,
+				closeKnowledgeBaseTab,
+				isKnowledgeBaseTab,
 				handleFileFullscreen,
 				handleExitFullscreen,
 				getCheckBeforeClose,
@@ -224,6 +227,9 @@ const FilesViewer = memo(
 				// Playback tab相关方法
 				openPlaybackTab,
 				closePlaybackTab,
+				// Knowledge base tab相关方法
+				openKnowledgeBaseTab,
+				closeKnowledgeBaseTab,
 			}))
 
 			// Notify parent about fullscreen state changes via callback
@@ -400,6 +406,10 @@ const FilesViewer = memo(
 							}
 						: undefined
 
+					// 判断是否是知识库tab
+					const isKbTab = isKnowledgeBaseTab(tab.id)
+					const knowledgeBaseData = isKbTab ? (tab as any).data : undefined
+
 					return (
 						<TabCache
 							key={tab.id}
@@ -410,6 +420,8 @@ const FilesViewer = memo(
 							isFullscreen={isFullscreen}
 							openFileTab={openFileTab}
 							playbackProps={playbackProps}
+							hideTabBar={props.hideTabBar}
+							knowledgeBaseData={knowledgeBaseData}
 						/>
 					)
 				})
@@ -438,8 +450,8 @@ const FilesViewer = memo(
 							"fixed inset-0 z-detail-fullscreen h-screen w-screen rounded-none bg-white",
 					)}
 				>
-					{/* Tab Bar */}
-					{tabs.length > 0 && !isFullscreenMode && (
+					{/* Tab Bar — hidden in immersive read-only mode (e.g. audio recording detail) */}
+					{tabs.length > 0 && !isFullscreenMode && !props.hideTabBar && (
 						<div className="relative flex h-11 items-center bg-accent">
 							<HeadlessHorizontalScroll
 								className="h-full min-w-0 flex-1"

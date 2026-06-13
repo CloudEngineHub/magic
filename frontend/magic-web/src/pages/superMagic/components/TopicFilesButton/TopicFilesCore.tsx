@@ -54,6 +54,7 @@ import SimilarSharesDialog from "../Share/SimilarSharesDialog"
 import SimilarSharesDrawer from "../Share/SimilarSharesDrawer"
 import { generateShareUrl } from "../ShareManagement/utils/shareTypeHelpers"
 import { ShareMode, ShareType } from "../Share/types"
+import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
 import { findTreeNodeByKey, type TreeNodeData } from "./utils/treeDataConverter"
 import { DuplicateFileModal } from "./components/DuplicateFileModal"
 import { CustomFolderMagicIcon } from "./components/CustomFolderMagicIcon"
@@ -76,6 +77,7 @@ import { handleAttachmentDragEnd } from "../MessageEditor/utils/drag"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
+import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 
 import { useDownloadImageMenu } from "../Detail/contents/Image/hooks/useDownloadImageMenu"
 import { DownloadImageMode } from "../../pages/Workspace/types"
@@ -146,6 +148,7 @@ export interface TopicFilesCoreRef {
 	handleUploadFile: (item?: any) => void
 	handleUploadFolder: (item?: any) => void
 	handleImportFromOtherProject: (item?: any) => void
+	openBatchMoveByFileIds: (fileIds: string[]) => void
 	resetAllStates: () => void
 }
 
@@ -195,6 +198,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
 	const hasLogin = userStore.user?.userInfo?.user_id
+	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
+	const canUseDesktopCrossProjectMove = projects.length > 0 && !isChatProject && !isMobile
 
 	const workspaceId = selectedProject?.workspace_id
 
@@ -601,9 +606,22 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	})
 
 	// 确认移动：交由 hook 内部批量处理
-	const handleBatchMoveConfirm = useMemoizedFn(async ({ path }: { path: AttachmentItem[] }) => {
-		await moveFileHook.confirmMove({ path })
-	})
+	const handleBatchMoveConfirm = useMemoizedFn(
+		async ({ path, targetProjectId, targetAttachments, sourceAttachments }) => {
+			if (targetProjectId && targetAttachments && sourceAttachments) {
+				await crossProjectOperation.executeMoveOperation({
+					fileIds: moveFileHook.selectorConfig.pendingMoveFileIds,
+					targetProjectId,
+					targetPath: path,
+					targetAttachments,
+					sourceAttachments,
+				})
+				return
+			}
+
+			await moveFileHook.confirmMove({ path })
+		},
+	)
 
 	// 跨项目文件操作 Hook
 	const crossProjectOperation = useCrossProjectFileOperation({
@@ -632,8 +650,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 	// 创建移动文件处理函数的适配器
 	const handleMoveFileAdapter = useMemoizedFn((item: AttachmentItem) => {
-		// 如果有跨项目操作所需的数据，使用新的跨项目 Modal
-		if (projects.length > 0) {
+		// 桌面端普通项目继续复用现有跨项目 Modal；移动端和 chat 项目统一走目录 Sheet。
+		if (canUseDesktopCrossProjectMove) {
 			if (item.file_id) {
 				// 获取文件的父目录路径
 				const parentPath = getParentPathFromFileId(item.file_id, attachments)
@@ -686,7 +704,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleAddMultipleFilesToCurrentChat,
 	})
 
-	const { getMenuItems, getBatchDownloadLayerMenuItems } = useContextMenu({
+	const { getMenuItems, getBatchDownloadLayerMenuItems, deleteConfirmNode } = useContextMenu({
 		handleUploadFile,
 		handleUploadFolder,
 		handleImportFromOtherProject,
@@ -721,6 +739,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
 		treeData,
+		attachments,
 	})
 
 	// 重置所有状态的方法
@@ -752,6 +771,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleUploadFile,
 		handleUploadFolder,
 		handleImportFromOtherProject,
+		openBatchMoveByFileIds: (fileIds: string[]) => {
+			moveFileHook.openBatchMoveByFileIds(fileIds)
+		},
 		resetAllStates,
 	}))
 
@@ -1231,14 +1253,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							) : !isFolderBusy && isMagicSystemFolder(item) ? (
 								<MagicSystemFolderIcon size={16} />
 							) : display_config?.type ? (
-								display_config?.type === "custom" ? (
+								["custom", "micro-app"].includes(display_config?.type) &&
+								(display_config?.type === "custom" || item?.is_directory) ? (
 									<CustomFolderMagicIcon
 										displayConfig={item?.display_config}
 										childrenItems={getChildrenForCustomMetadataIconPath(
 											item,
 											(id) => findFileInTree(id),
 										)}
-										typeFallback="custom"
+										typeFallback={display_config?.type}
 										size={16}
 									/>
 								) : (
@@ -1439,13 +1462,14 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : null}
 						{decoration?.icon && !isFileBusy ? (
 							decoration.icon
-						) : item?.display_config?.type === "custom" ? (
+						) : item?.display_config?.type === "custom" ||
+						  (item?.display_config?.type === "micro-app" && item?.is_directory) ? (
 							<CustomFolderMagicIcon
 								displayConfig={item?.display_config}
 								childrenItems={getChildrenForCustomMetadataIconPath(item, (id) =>
 									findFileInTree(id),
 								)}
-								typeFallback="custom"
+								typeFallback={item?.display_config?.type}
 								size={16}
 							/>
 						) : (
@@ -1530,7 +1554,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		)
 	})
 
-	const { batchLoading, showBatchDownload, batchMenuItems } = useBatchDownload({
+	const {
+		batchLoading,
+		showBatchDownload,
+		batchMenuItems,
+		deleteConfirmNode: batchDeleteConfirmNode,
+	} = useBatchDownload({
 		projectId,
 		getItemId,
 		selectedItems,
@@ -1616,6 +1645,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			{/* 右键菜单内容 */}
 			{(allowEdit || filterMenuItems) && dropdownContent}
 			{allowEdit && batchDownloadDropdownContent}
+			{deleteConfirmNode}
+			{batchDeleteConfirmNode}
 			{/* Content area */}
 			{/* <div className={styles.contentArea}> */}
 			{/* File tree */}
@@ -1685,11 +1716,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			<div
 				className={cx(styles.batchDownloadLayer, {
 					[styles.hidden]:
-						(!isMobile && !showBatchDownload) || (isMobile && attachments.length <= 0),
+						(!isMobile && (!isSelectMode || !showBatchDownload)) ||
+						(isMobile && attachments.length <= 0),
 					[styles.pcBatchDownloadLayer]: !isMobile,
 				})}
 			>
-				{!isMobile && showBatchDownload && (
+				{!isMobile && isSelectMode && showBatchDownload && (
 					<Flex className={styles.batchOperations}>
 						<MagicDropdown
 							menu={{ items: batchMenuItems, style: { width: "100%" } }}
@@ -1765,46 +1797,74 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				)} */}
 			</div>
 			{/* 文件分享模态框 */}
-			{shareFileInfo && (
-				<ShareModal
-					open={shareModalVisible}
-					onCancel={() => {
+			{isMobile ? (
+				<ProjectShareSheet
+					open={Boolean(shareFileInfo && shareModalVisible) || Boolean(shareSuccessInfo)}
+					onClose={() => {
 						setShareModalVisible(false)
 						setShareFileInfo(null)
+						closeSuccessModal()
 					}}
-					shareMode={ShareMode.File}
-					types={[ShareType.PasswordProtected, ShareType.Public, ShareType.Organization]}
+					mode="file"
 					attachments={attachments}
-					resourceId={
-						shareFileInfo.resourceId || shareSuccessInfo?.shareInfo?.resource_id
-					}
-					defaultSelectedFileIds={shareFileInfo.fileIds}
-					projectName={shareFileInfo.projectName}
+					projectName={shareFileInfo?.projectName || selectedProject?.project_name}
 					projectId={projectId}
+					defaultSelectedFileIds={
+						shareFileInfo?.fileIds || shareSuccessInfo?.shareInfo?.file_ids
+					}
+					defaultOpenFileId={shareFileInfo?.defaultOpenFileId}
+					initialSelectedShare={shareSuccessInfo?.shareInfo || null}
 				/>
-			)}
-			{/* 文件分享成功Modal - 用于已存在的分享 */}
-			{shareSuccessInfo && (
-				<ShareSuccessModal
-					open={true}
-					onClose={closeSuccessModal}
-					onCancelShare={handleCancelShare}
-					onEditShare={handleEditShare}
-					shareName={shareSuccessInfo.shareInfo.resource_name || ""}
-					projectName={shareSuccessInfo.shareInfo.project_name}
-					fileCount={shareSuccessInfo.shareInfo?.extend?.file_count || 1}
-					mainFileName={shareSuccessInfo.shareInfo.main_file_name || t("share.untitled")}
-					shareUrl={generateShareUrl(
-						shareSuccessInfo.shareInfo.resource_id,
-						shareSuccessInfo.shareInfo.password,
-						"files",
+			) : (
+				<>
+					{shareFileInfo && (
+						<ShareModal
+							open={shareModalVisible}
+							onCancel={() => {
+								setShareModalVisible(false)
+								setShareFileInfo(null)
+							}}
+							shareMode={ShareMode.File}
+							types={[
+								ShareType.PasswordProtected,
+								ShareType.Public,
+								ShareType.Organization,
+							]}
+							attachments={attachments}
+							resourceId={
+								shareFileInfo.resourceId || shareSuccessInfo?.shareInfo?.resource_id
+							}
+							defaultSelectedFileIds={shareFileInfo.fileIds}
+							projectName={shareFileInfo.projectName}
+							projectId={projectId}
+						/>
 					)}
-					password={shareSuccessInfo.shareInfo.password}
-					expire_at={shareSuccessInfo.shareInfo.expire_at}
-					shareType={shareSuccessInfo.shareInfo.share_type}
-					shareProject={shareSuccessInfo.shareInfo.share_project}
-					fileIds={shareSuccessInfo.shareInfo.file_ids}
-				/>
+					{/* 文件分享成功Modal - 用于已存在的分享 */}
+					{shareSuccessInfo && (
+						<ShareSuccessModal
+							open={true}
+							onClose={closeSuccessModal}
+							onCancelShare={handleCancelShare}
+							onEditShare={handleEditShare}
+							shareName={shareSuccessInfo.shareInfo.resource_name || ""}
+							projectName={shareSuccessInfo.shareInfo.project_name}
+							fileCount={shareSuccessInfo.shareInfo?.extend?.file_count || 1}
+							mainFileName={
+								shareSuccessInfo.shareInfo.main_file_name || t("share.untitled")
+							}
+							shareUrl={generateShareUrl(
+								shareSuccessInfo.shareInfo.resource_id,
+								shareSuccessInfo.shareInfo.password,
+								"files",
+							)}
+							password={shareSuccessInfo.shareInfo.password}
+							expire_at={shareSuccessInfo.shareInfo.expire_at}
+							shareType={shareSuccessInfo.shareInfo.share_type}
+							shareProject={shareSuccessInfo.shareInfo.share_project}
+							fileIds={shareSuccessInfo.shareInfo.file_ids}
+						/>
+					)}
+				</>
 			)}
 			{/* 相似分享Dialog/Drawer */}
 			{similarSharesInfo &&
@@ -1842,6 +1902,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					{...{
 						...moveFileHook.selectorConfig,
 						visible: moveFileHook.selectorConfig.visible,
+						mobileCrossProjectConfig:
+							isMobile && selectedProject
+								? {
+									currentProject: selectedProject,
+									currentWorkspace: selectedWorkspace,
+									sourceAttachments: attachments,
+									isChatProject,
+								}
+								: undefined,
 						onSubmit: handleBatchMoveConfirm,
 					}}
 				/>

@@ -5,6 +5,7 @@ import {
 	IconCheck,
 	IconChevronRight,
 	IconDots,
+	IconHome,
 	IconLock,
 	IconFolderPlus,
 	IconSearch,
@@ -24,6 +25,7 @@ import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import { InputWithError } from "@/pages/superMagic/components/TopicFilesButton/components"
+import MobileFilesMoveSheet from "./MobileFilesMoveSheet"
 
 import type { SelectDirectoryModalProps } from "./types"
 import type { BreadcrumbItem } from "../../types"
@@ -61,6 +63,7 @@ const SelectDirectoryModal = forwardRef<SelectDirectoryModalRef, SelectDirectory
 			okText,
 			cancelText,
 			disabledFolderIds = [],
+			mobileCrossProjectConfig,
 		},
 		ref,
 	) {
@@ -451,9 +454,9 @@ const SelectDirectoryModal = forwardRef<SelectDirectoryModalRef, SelectDirectory
 														maxWidth:
 															breadcrumbItems.length > 1
 																? 470 /
-																(breadcrumbItems.length -
-																	1) -
-																24
+																		(breadcrumbItems.length -
+																			1) -
+																	24
 																: undefined,
 													}}
 													onClick={() => onBreadcrumbClick(item)}
@@ -759,6 +762,32 @@ const SelectDirectoryModal = forwardRef<SelectDirectoryModalRef, SelectDirectory
 				</div>
 			</div>
 		)
+
+		if (isMobile) {
+			return (
+				<MobileFilesMoveSheet
+					visible={visible}
+					title={modalTitle}
+					attachments={attachments}
+					defaultPath={defaultPath}
+					disabledFolderIds={disabledFolderIds}
+					mobileCrossProjectConfig={mobileCrossProjectConfig}
+					rootLabel={t("selectPathModal.rootDirectory")}
+					backLabel={t("back")}
+					homeLabel={t("selectPathModal.rootDirectory")}
+					closeLabel={t("close")}
+					confirmLabel={okText || t("common.confirm")}
+					clearSearchAriaLabel={t("clearSearch")}
+					searchPlaceholder={searchPlaceholder}
+					searchEmptyDescription={searchEmptyDescription}
+					emptyTip={emptyTip}
+					onClose={handleCancel}
+					onSubmit={(params) => {
+						onSubmit && onSubmit(params)
+					}}
+				/>
+			)
+		}
 
 		return (
 			<BaseModal

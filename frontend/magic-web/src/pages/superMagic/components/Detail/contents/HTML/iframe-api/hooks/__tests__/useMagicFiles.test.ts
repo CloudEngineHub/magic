@@ -1,6 +1,7 @@
 import { renderHook, act } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { useMagicFiles } from "../useMagicFiles"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -86,6 +87,8 @@ function makeIframeRef(postMessage = vi.fn()) {
 	}
 }
 
+const targetOrigin = "https://sandbox.example.com"
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("useMagicFiles", () => {
@@ -107,6 +110,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: null,
 					uploadImageFileToProject,
 				}),
@@ -135,7 +139,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "No project selected",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -143,6 +147,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					uploadImageFileToProject,
 				}),
@@ -163,7 +168,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "Invalid request data",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -175,6 +180,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					uploadImageFileToProject,
 				}),
@@ -209,7 +215,44 @@ describe("useMagicFiles", () => {
 						}),
 					],
 				}),
-				"*",
+				targetOrigin,
+			)
+		})
+
+		it("上传 loading toast 使用固定 key 避免重复展示", async () => {
+			uploadImageFileToProject.mockResolvedValueOnce({
+				uploadedRelativeFilePath: "uploads/a.txt",
+			})
+
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: { id: "proj-1" },
+					uploadImageFileToProject,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicUploadFiles({
+					type: "MAGIC_UPLOAD_FILES_REQUEST",
+					requestId: "req-toast",
+					files: [
+						{
+							base64: "data",
+							filename: "a.txt",
+							path: "./a.txt",
+							fileSize: 4,
+							fileType: "text/plain",
+						},
+					],
+				})
+			})
+
+			expect(magicToast.loading).toHaveBeenCalledWith(
+				expect.objectContaining({
+					key: "html-magic-upload-files",
+				}),
 			)
 		})
 
@@ -219,6 +262,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					uploadImageFileToProject,
 				}),
@@ -253,7 +297,7 @@ describe("useMagicFiles", () => {
 						}),
 					],
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 	})
@@ -265,6 +309,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: null,
 					uploadImageFileToProject,
 				}),
@@ -285,7 +330,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "No project selected",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -293,6 +338,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
 					attachmentList: [],
 					uploadImageFileToProject,
@@ -314,7 +360,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "No files found",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -330,6 +376,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
 					attachmentList: [{ relative_file_path: "a.csv", file_id: "f-1" }],
 					uploadImageFileToProject,
@@ -349,7 +396,7 @@ describe("useMagicFiles", () => {
 			// 回复和 addMultipleFilesToCurrentChat 在 500ms 后触发
 			expect(iframePostMessage).not.toHaveBeenCalledWith(
 				expect.objectContaining({ success: true }),
-				"*",
+				targetOrigin,
 			)
 
 			await act(async () => {
@@ -363,7 +410,7 @@ describe("useMagicFiles", () => {
 					requestId: "req-7",
 					success: true,
 				}),
-				"*",
+				targetOrigin,
 			)
 
 			vi.useRealTimers()
@@ -376,6 +423,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
 					attachmentList: [{ relative_file_path: "b.csv", file_id: "f-2" }],
 					uploadImageFileToProject,
@@ -397,7 +445,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "Failed to create topic",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 	})
@@ -409,6 +457,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					attachmentList: [],
 					uploadImageFileToProject,
@@ -430,7 +479,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "No files found",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -446,6 +495,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					attachmentList: [
 						{
@@ -477,7 +527,7 @@ describe("useMagicFiles", () => {
 					success: true,
 					result: expect.objectContaining({ successCount: 1, failedCount: 0 }),
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -489,6 +539,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					attachmentList: [{ relative_file_path: "doc.pdf", file_id: "f-4" }],
 					uploadImageFileToProject,
@@ -510,7 +561,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					result: expect.objectContaining({ successCount: 0, failedCount: 1 }),
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -518,6 +569,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					uploadImageFileToProject,
 				}),
@@ -538,7 +590,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "Invalid request data",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 	})

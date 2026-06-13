@@ -32,6 +32,14 @@ class WorkspaceService {
 			if (res) {
 				runInAction(() => {
 					workspaceStore.setWorkspaces(res.list)
+					const refreshedSelectedWorkspace = res.list.find(
+						(workspace: Workspace) =>
+							workspace.id === workspaceStore.selectedWorkspace?.id,
+					)
+					if (refreshedSelectedWorkspace) {
+						// 列表刷新后用服务端最新对象回填当前选中项，避免详情页标题停留在旧快照。
+						workspaceStore.setSelectedWorkspace(refreshedSelectedWorkspace)
+					}
 				})
 
 				if (isAutoSelect && isSelectLast && res.list.length > 0) {
@@ -69,9 +77,14 @@ class WorkspaceService {
 				id,
 				workspace_name: name,
 			})
-			const targetWorkspace = workspaceStore.getWorkspaceById(id)
+			const selectedWorkspace =
+				workspaceStore.selectedWorkspace?.id === id
+					? workspaceStore.selectedWorkspace
+					: null
+			const targetWorkspace = workspaceStore.getWorkspaceById(id) ?? selectedWorkspace
 			if (targetWorkspace) {
 				runInAction(() => {
+					// 详情页可能只持有 selectedWorkspace，不能只更新列表里的对象。
 					const updatedWorkspace = { ...targetWorkspace, name } as Workspace
 					workspaceStore.updateWorkspace(updatedWorkspace)
 
@@ -131,6 +144,34 @@ class WorkspaceService {
 			isEditLast: false,
 			page: 1,
 		})
+	}
+
+	pinWorkspace = async (id: string, isPinned: boolean): Promise<void> => {
+		const selectedWorkspace =
+			workspaceStore.selectedWorkspace?.id === id ? workspaceStore.selectedWorkspace : null
+		const targetWorkspace = workspaceStore.getWorkspaceById(id) ?? selectedWorkspace
+
+		if (!targetWorkspace?.name) {
+			throw new Error("workspaceNameRequired")
+		}
+
+		try {
+			await SuperMagicApi.editWorkspace({
+				id,
+				workspace_name: targetWorkspace.name,
+				is_pinned: isPinned,
+			})
+
+			runInAction(() => {
+				workspaceStore.updateWorkspace({
+					...targetWorkspace,
+					is_pinned: isPinned,
+				})
+			})
+		} catch (error) {
+			console.log("置顶工作区失败，失败原因：", error)
+			throw error
+		}
 	}
 
 	deleteWorkspace = async (id: string): Promise<Workspace | null> => {

@@ -29,6 +29,19 @@ import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { SuperMagicApi } from "@/apis"
 import type { TopicStore } from "../stores/core/topic"
 import topicReadProgressService from "./topicReadProgressService"
+import { mergeProjectListItemWithStoreCache } from "@/pages/superMagicMobile/utils/mergeProjectListItemWithStoreCache"
+export {
+	syncChatConversationName,
+	resolveChatTopicId,
+	shouldSyncChatConversationName,
+	renameTopicWithChatSync,
+	syncChatProjectNameOnly,
+} from "./chatConversationNameSync"
+export type {
+	SyncChatConversationNameParams,
+	RenameTopicWithChatSyncParams,
+	SyncChatProjectNameOnlyParams,
+} from "./chatConversationNameSync"
 
 class SuperMagicService {
 	workspace: WorkspaceService
@@ -161,6 +174,11 @@ class SuperMagicService {
 		this.topicStore.setTopics([])
 	}
 
+	initializeMobileHomeState() {
+		this.clearProjectAndTopicSelection()
+		workspaceStore.setSelectedWorkspace(null)
+	}
+
 	/**
 	 * Switch workspace - fetch projects and navigate to workspace
 	 * @param workspaceId Workspace ID to switch to
@@ -220,7 +238,14 @@ class SuperMagicService {
 	 * @param workspaceId Workspace ID that contains the project
 	 * @returns Next project after deletion or null if no projects remain
 	 */
-	async deleteProject(project: ProjectListItem): Promise<ProjectListItem | null> {
+	async deleteProject(
+		project: ProjectListItem,
+		options: {
+			selectedProjectBehavior?: "switch-next" | "navigate-home"
+			lastUsedWorkspaceId?: string | null
+		} = {},
+	): Promise<ProjectListItem | null> {
+		const { selectedProjectBehavior = "switch-next", lastUsedWorkspaceId } = options
 		const isDeletingSelectedProject = projectStore.selectedProject?.id === project.id
 
 		// Get current projects list before deletion to calculate next project index
@@ -242,6 +267,18 @@ class SuperMagicService {
 			// Reset topic state (clear selected topic and topics list)
 			this.topicStore.setSelectedTopic(null)
 			this.topicStore.setTopics([])
+
+			if (selectedProjectBehavior === "navigate-home") {
+				projectStore.setSelectedProject(null)
+				await this.navigateToHome(lastUsedWorkspaceId || workspaceId)
+
+				this.project.fetchProjects({
+					workspaceId,
+					page: 1,
+				})
+
+				return projectStore.selectedProject || null
+			}
 
 			// Use local state to select next project immediately (optimistic update)
 			const remainingProjects = projectStore.projects
@@ -322,6 +359,71 @@ class SuperMagicService {
 		}
 	}
 
+	async switchChatProjectById(projectId: string, options?: Omit<RequestConfig, "url">) {
+		let project = projectStore.projects.find((p) => p.id === projectId) || null
+
+		if (!project) {
+			project = await this.project.getProjectDetail(projectId, options).catch(() => null)
+		}
+
+		if (!project) throw new Error("Project not found")
+
+		return this.switchChatProject(project)
+	}
+
+	async switchChatProject(project: ProjectListItem, initialTopic?: Topic | null) {
+		if (interfaceStore.isMobile) {
+			projectStore.setSelectedProject(project)
+
+			if (isOtherCollaborationProject(project)) {
+				workspaceStore.setSelectedWorkspace(SHARE_WORKSPACE_DATA(t))
+			}
+
+			if (isReadOnlyProject(project.user_role)) {
+				this.topicStore.setSelectedTopic(null)
+				this.route.navigateToChatProject(project)
+				return
+			}
+
+			const selectedTopic =
+				initialTopic ||
+				(await this.getTopicDataByProject(project, project.current_topic_id || undefined))
+
+			this.topicStore.setSelectedTopic(selectedTopic)
+			this.route.navigateToChatProject(project, selectedTopic?.id)
+
+			requestIdleCallback(() => {
+				this.topic.fetchTopics({
+					projectId: project.id,
+					isAutoSelect: false,
+					page: 1,
+				})
+			})
+			return
+		}
+
+		if (isReadOnlyProject(project.user_role)) {
+			if (interfaceStore.isMobile) {
+				this.switchProjectInMobile(project)
+			} else {
+				this.switchProjectInDesktop(project)
+			}
+			return
+		}
+
+		const selectedTopic =
+			initialTopic ||
+			(await this.getTopicDataByProject(project, project.current_topic_id || undefined))
+
+		const topicId = selectedTopic?.id
+		if (interfaceStore.isMobile) {
+			this.switchProjectInMobile(project, topicId)
+			return
+		}
+
+		this.switchProjectInDesktop(project, topicId)
+	}
+
 	/**
 	 * 切换项目 - 设置选中项目并获取话题列表（乐观路由策略）
 	 * @param project Project to switch to
@@ -329,18 +431,29 @@ class SuperMagicService {
 	 */
 	async switchProjectInMobile(project: ProjectListItem, topic_id?: string) {
 		this.flushCurrentTopicReadProgress("switch-project")
+
+		let resolvedProject = mergeProjectListItemWithStoreCache(project) ?? project
+		if (!resolvedProject.user_role) {
+			const detail = await this.project
+				.getProjectDetail(project.id, { enableErrorMessagePrompt: false })
+				.catch(() => null)
+			if (detail) {
+				resolvedProject = mergeProjectListItemWithStoreCache(detail) ?? detail
+			}
+		}
+
 		// 1. 同步设置与检查
-		const _isReadOnlyProject = isReadOnlyProject(project.user_role)
+		const _isReadOnlyProject = isReadOnlyProject(resolvedProject.user_role)
 
 		let targetWorkspaceId: string | null = null
-		if (isOtherCollaborationProject(project)) {
+		if (isOtherCollaborationProject(resolvedProject)) {
 			targetWorkspaceId = SHARE_WORKSPACE_ID
 		} else {
-			targetWorkspaceId = project.workspace_id
+			targetWorkspaceId = resolvedProject.workspace_id
 		}
 
 		// 2. 乐观状态更新
-		projectStore.setSelectedProject(project)
+		projectStore.setSelectedProject(resolvedProject)
 
 		// 如果工作区已在缓存中，立即更新
 		let optimisticWorkspaceId: string | null = null
@@ -373,17 +486,17 @@ class SuperMagicService {
 			this.topicStore.setSelectedTopic(null) // Clear first, wait for background data
 			this.route.navigateToTopic({
 				workspaceId: navigationWorkspaceId,
-				projectId: project.id,
+				projectId: resolvedProject.id,
 				topicId: optimisticTopicId,
 			})
 			navigatedToTopic = true
 		} else {
 			// Navigate to project optimistically
 			this.topicStore.setSelectedTopic(null)
-			if (isOtherCollaborationProject(project)) {
-				this.route.navigateToCollaborationProject(project)
+			if (isOtherCollaborationProject(resolvedProject)) {
+				this.route.navigateToCollaborationProject(resolvedProject)
 			} else {
-				this.route.navigateToProject(project)
+				this.route.navigateToProject(resolvedProject)
 			}
 		}
 
@@ -410,20 +523,20 @@ class SuperMagicService {
 					this.topicStore.setSelectedTopic(actualTopic)
 
 					// Verify the topic belongs to the project
-					if (actualTopic.project_id !== project.id) {
+					if (actualTopic.project_id !== resolvedProject.id) {
 						// Topic doesn't belong to this project, navigate back to project
 						this.topicStore.setSelectedTopic(null)
-						if (isOtherCollaborationProject(project)) {
-							this.route.navigateToCollaborationProject(project, true)
+						if (isOtherCollaborationProject(resolvedProject)) {
+							this.route.navigateToCollaborationProject(resolvedProject, true)
 						} else {
-							this.route.navigateToProject(project, true)
+							this.route.navigateToProject(resolvedProject, true)
 						}
 					}
 
 					// Load topic list in the background
 					requestIdleCallback(() => {
 						this.topic.fetchTopics({
-							projectId: project.id,
+							projectId: resolvedProject.id,
 							isAutoSelect: false,
 							page: 1,
 						})
@@ -431,10 +544,10 @@ class SuperMagicService {
 				} else {
 					// Topic not found, navigate back to project
 					this.topicStore.setSelectedTopic(null)
-					if (isOtherCollaborationProject(project)) {
-						this.route.navigateToCollaborationProject(project, true)
+					if (isOtherCollaborationProject(resolvedProject)) {
+						this.route.navigateToCollaborationProject(resolvedProject, true)
 					} else {
-						this.route.navigateToProject(project, true)
+						this.route.navigateToProject(resolvedProject, true)
 					}
 				}
 			} else {
@@ -443,7 +556,7 @@ class SuperMagicService {
 				})
 				// Normal project switch without topic, fetch topic list
 				this.topic
-					.fetchTopics({ projectId: project.id, isAutoSelect: false, page: 1 })
+					.fetchTopics({ projectId: resolvedProject.id, isAutoSelect: false, page: 1 })
 					.finally(() => {
 						runInAction(() => {
 							this.topicStore.setFetchList(false)
@@ -660,6 +773,11 @@ class SuperMagicService {
 
 		// 移动端返回首页使用 replace，避免 ProjectPage 残留在历史栈中导致左滑可回退
 		const shouldReplace = interfaceStore.isMobile
+		if (interfaceStore.isMobile) {
+			workspaceStore.setSelectedWorkspace(null)
+			this.route.navigateToHome(shouldReplace)
+			return
+		}
 
 		let workspaceId = workspaceStore.selectedWorkspace?.id
 		if (!workspaceId || isCollaborationWorkspace(workspaceStore.selectedWorkspace)) {
@@ -694,11 +812,6 @@ class SuperMagicService {
 
 		if (workspaceId) {
 			this.route.navigateToWorkspace(workspaceId, shouldReplace)
-
-			this.project.fetchProjects({
-				workspaceId: workspaceId,
-				page: 1,
-			})
 		} else {
 			workspaceStore.setSelectedWorkspace(null)
 			this.route.navigateToHome(shouldReplace)
@@ -927,7 +1040,12 @@ class SuperMagicService {
 		// 移动端：只有传了 topicId 才拉取
 		// PC端：无 topicId 时也进行 topic 自动初始化（自动选择或创建）
 		if (project && !isReadOnlyProject(project.user_role)) {
-			if (topicId || !interfaceStore.isMobile) {
+			const shouldEnsureTopic =
+				Boolean(topicId) ||
+				!interfaceStore.isMobile ||
+				this.route.isCurrentChatProjectRoute()
+
+			if (shouldEnsureTopic) {
 				const selectedTopic = await this.getTopicDataByProject(project, topicId)
 
 				if (selectedTopic) {
@@ -954,7 +1072,7 @@ class SuperMagicService {
 	handleCreateProject = async (
 		params: HandleCreateProjectParams,
 	): Promise<CreatedProject | null> => {
-		const { projectMode, isAutoSelect = true, isEditProject, workdir } = params
+		const { projectMode, isAutoSelect = true, isEditProject, workdir, projectName } = params
 		// Note: isEditProject is kept for backward compatibility but editing state
 		// is now managed within ProjectsMenu component via useProjectEditing hook
 		void isEditProject
@@ -967,6 +1085,7 @@ class SuperMagicService {
 				workspaceId: selectedWorkspace.id,
 				projectMode,
 				workdir,
+				projectName,
 			})
 
 			if (res) {
@@ -1052,7 +1171,7 @@ class SuperMagicService {
 		onError,
 		onSuccess,
 		onNavigated,
-		topicMode,
+		sourceTopic,
 	}: {
 		selectedProject: ProjectListItem | null | undefined
 		targetProject?: ProjectListItem
@@ -1060,8 +1179,8 @@ class SuperMagicService {
 		onSuccess?: (topic: Topic) => Promise<void> | void
 		/** Called after navigateToState — safe moment to insert content into the new topic's editor */
 		onNavigated?: (topic: Topic) => void
-		/** Mode to set on the new topic (only applied if mode is available in the current project) */
-		topicMode?: import("../pages/Workspace/types").TopicMode
+		/** 新话题后端空创建；该字段只用于前端选中态继承员工/mode */
+		sourceTopic?: Pick<Topic, "project_id" | "topic_mode" | "agent_code"> | null
 	}): Promise<Topic | null> {
 		const project = targetProject ?? selectedProject
 
@@ -1073,7 +1192,7 @@ class SuperMagicService {
 			const newTopic = await this.topic.createTopic({
 				projectId: project.id,
 				topicName: "",
-				topicMode,
+				sourceTopic,
 			})
 
 			if (newTopic) {
@@ -1087,9 +1206,18 @@ class SuperMagicService {
 					await onSuccess(newTopic)
 				}
 
-				this.route.navigateToState({
-					topicId: newTopic.id || null,
-				})
+				// Mobile project topic pages must update URL; navigateToState skips mobile navigation.
+				if (interfaceStore.isMobile && newTopic.id && project.id) {
+					this.route.navigateToProjectTopicOnMobile({
+						projectId: project.id,
+						topicId: newTopic.id,
+						workspaceId: project.workspace_id,
+					})
+				} else {
+					this.route.navigateToState({
+						topicId: newTopic.id || null,
+					})
+				}
 
 				if (onNavigated) {
 					setTimeout(() => {

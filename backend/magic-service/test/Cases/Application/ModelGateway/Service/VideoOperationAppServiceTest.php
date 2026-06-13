@@ -37,6 +37,7 @@ use App\Domain\ModelGateway\Service\VideoGenerationConfigDomainService;
 use App\Domain\ModelGateway\Service\VideoQueueDomainService;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
+use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
 use App\Infrastructure\Core\DataIsolation\BaseThirdPlatformDataIsolationManager;
 use App\Infrastructure\Core\DataIsolation\OrganizationInfoManagerInterface;
 use App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface;
@@ -64,15 +65,17 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoModel;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoProviderOperationExecutor;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkSeedanceVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkVideoClient;
+use App\Infrastructure\Util\Locker\LockerInterface;
 use DateTime;
 use Dtyq\CloudFile\Kernel\Struct\ChunkUploadFile;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\FilePreSignedUrl;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
-use Dtyq\MagicEnterprise\Application\Kernel\EnterpriseSubscriptionManager;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Response;
+use Hyperf\Amqp\Message\ProducerMessageInterface;
+use Hyperf\Amqp\Producer;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
@@ -88,6 +91,7 @@ use Psr\Log\AbstractLogger;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Psr\SimpleCache\CacheInterface;
+use ReflectionProperty;
 use RuntimeException;
 use Throwable;
 
@@ -178,6 +182,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
         $logger = new RecordingLogger();
         $service->logger = $logger;
@@ -191,6 +197,65 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame('provider-task-1', $operationRepository->operations[$response->getId()]->getProviderTaskId());
         $this->assertSame(VideoOperationStatus::PROVIDER_RUNNING, $operationRepository->operations[$response->getId()]->getStatus());
         $this->assertTrue($logger->hasRecord('info', 'video operation submitted'));
+    }
+
+    public function testEnqueueDispatchesManagedPollMessageByDefault(): void
+    {
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $executor = new RecordingQueueOperationExecutor(submitResult: 'provider-task-1');
+        $producer = new RecordingProducer();
+        $service = $this->createVideoOperationAppService($operationRepository, $executor, producer: $producer);
+
+        $response = $service->enqueue('token-poll-default', new CreateVideoDTO([
+            'model_id' => 'veo-3.1-fast-generate-preview',
+            'task' => 'generate',
+            'prompt' => 'make a video',
+        ]));
+
+        $this->assertCount(1, $producer->messages);
+        $this->assertSame($response->getId(), $producer->payloads[0]['operation_id']);
+    }
+
+    public function testEnqueueSkipsManagedPollMessageWhenDisabled(): void
+    {
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $executor = new RecordingQueueOperationExecutor(submitResult: 'provider-task-1');
+        $producer = new RecordingProducer();
+        $service = $this->createVideoOperationAppService($operationRepository, $executor, producer: $producer);
+
+        $service->enqueue('token-poll-disabled', new CreateVideoDTO([
+            'model_id' => 'veo-3.1-fast-generate-preview',
+            'task' => 'generate',
+            'prompt' => 'make a video',
+            'execution' => [
+                'managed_polling' => false,
+            ],
+        ]));
+
+        $this->assertSame([], $producer->messages);
+    }
+
+    public function testEnqueueKeepsActiveSlotWhenManagedPollDispatchFails(): void
+    {
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $executor = new RecordingQueueOperationExecutor(submitResult: 'provider-task-1');
+        $producer = new RecordingProducer(new RuntimeException('amqp unavailable'));
+        $service = $this->createVideoOperationAppService($operationRepository, $executor, producer: $producer);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('amqp unavailable');
+
+        try {
+            $service->enqueue('token-poll-fail', new CreateVideoDTO([
+                'model_id' => 'veo-3.1-fast-generate-preview',
+                'task' => 'generate',
+                'prompt' => 'make a video',
+            ]));
+        } finally {
+            $operationId = array_key_first($operationRepository->operations);
+            $this->assertIsString($operationId);
+            $this->assertSame([$operationId], $operationRepository->activeSlots['org-test:user-test'] ?? null);
+        }
     }
 
     public function testEnqueueRejectsSecondRunningVideoForSameOrganizationUser(): void
@@ -218,6 +283,140 @@ class VideoOperationAppServiceTest extends TestCase
             $this->assertSame(trans('video.errors.user_concurrency_limit', ['limit' => 1]), $exception->getMessage());
         }
 
+        $this->assertCount(1, $executor->submittedOperations);
+    }
+
+    public function testEnqueueRecoversFinishedActiveOperationBeforeRejectingForUserConcurrency(): void
+    {
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $executor = new RecordingQueueOperationExecutor(
+            submitResult: 'provider-task-new',
+            queryResult: [
+                'status' => 'succeeded',
+                'output' => [
+                    'video_url' => 'https://example.com/recovered.mp4',
+                ],
+            ],
+        );
+        $service = $this->createVideoOperationAppService($operationRepository, $executor);
+
+        $staleOperation = $this->createOperation('stale-operation-1');
+        $staleOperation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $staleOperation->setProviderTaskId('provider-task-stale');
+        $operationRepository->saveOperation($staleOperation, 3600);
+        $operationRepository->activeSlots['org-test:user-test'] = [$staleOperation->getId()];
+
+        $response = $service->enqueue('token-active-recover', new CreateVideoDTO([
+            'model_id' => 'veo-3.1-fast-generate-preview',
+            'task' => 'generate',
+            'prompt' => 'make the next video after recovery',
+        ]));
+
+        $this->assertSame('running', $response->getStatus());
+        $this->assertSame(1, $executor->queryCalls);
+        $this->assertSame(['provider-task-stale'], $executor->queriedProviderTaskIds);
+        $this->assertSame(VideoOperationStatus::SUCCEEDED, $operationRepository->operations['stale-operation-1']->getStatus());
+        $this->assertSame([$response->getId()], $operationRepository->activeSlots['org-test:user-test'] ?? null);
+        $this->assertCount(1, $this->eventDispatcher->events);
+        $this->assertCount(1, $executor->submittedOperations);
+    }
+
+    public function testEnqueueRecoversFinishedActiveOperationBeforeClaimingUserSlot(): void
+    {
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $executor = new RecordingQueueOperationExecutor(
+            submitResult: 'provider-task-new',
+            queryResult: [
+                'status' => 'succeeded',
+                'output' => [
+                    'video_url' => 'https://example.com/recovered-before-claim.mp4',
+                ],
+            ],
+        );
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            $executor,
+            $this->createDataIsolationWithVideoConcurrencyLimit(2)
+        );
+
+        $staleOperation = $this->createOperation('stale-operation-before-claim');
+        $staleOperation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $staleOperation->setProviderTaskId('provider-task-before-claim');
+        $operationRepository->saveOperation($staleOperation, 3600);
+        $operationRepository->activeSlots['org-test:user-test'] = [$staleOperation->getId()];
+
+        $response = $service->enqueue('token-active-recover-before-claim', new CreateVideoDTO([
+            'model_id' => 'veo-3.1-fast-generate-preview',
+            'task' => 'generate',
+            'prompt' => 'make the next video after pre-claim recovery',
+        ]));
+
+        $this->assertSame('running', $response->getStatus());
+        $this->assertSame(1, $executor->queryCalls);
+        $this->assertSame(['provider-task-before-claim'], $executor->queriedProviderTaskIds);
+        $this->assertSame(VideoOperationStatus::SUCCEEDED, $operationRepository->operations['stale-operation-before-claim']->getStatus());
+        $this->assertSame([$response->getId()], $operationRepository->activeSlots['org-test:user-test'] ?? null);
+        $this->assertCount(1, $this->eventDispatcher->events);
+        $this->assertCount(1, $executor->submittedOperations);
+    }
+
+    public function testEnqueueKeepsRunningActiveOperationWhenRecoveryStillFindsItRunning(): void
+    {
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $executor = new RecordingQueueOperationExecutor(
+            submitResult: 'provider-task-new',
+            queryResult: [
+                'status' => 'running',
+                'output' => [],
+            ],
+        );
+        $service = $this->createVideoOperationAppService($operationRepository, $executor);
+
+        $runningOperation = $this->createOperation('running-operation-1');
+        $runningOperation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $runningOperation->setProviderTaskId('provider-task-running');
+        $operationRepository->saveOperation($runningOperation, 3600);
+        $operationRepository->activeSlots['org-test:user-test'] = [$runningOperation->getId()];
+
+        try {
+            $service->enqueue('token-active-running', new CreateVideoDTO([
+                'model_id' => 'veo-3.1-fast-generate-preview',
+                'task' => 'generate',
+                'prompt' => 'make another video while old one is running',
+            ]));
+            $this->fail('Expected the request to remain rejected while the old provider task is running.');
+        } catch (BusinessException $exception) {
+            $this->assertSame(trans('video.errors.user_concurrency_limit', ['limit' => 1]), $exception->getMessage());
+        }
+
+        $this->assertSame(1, $executor->queryCalls);
+        $this->assertSame(['provider-task-running'], $executor->queriedProviderTaskIds);
+        $this->assertSame([$runningOperation->getId()], $operationRepository->activeSlots['org-test:user-test'] ?? null);
+        $this->assertCount(0, $executor->submittedOperations);
+    }
+
+    public function testEnqueueFailsAndReleasesStaleActiveOperationWithoutProviderTaskId(): void
+    {
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $executor = new RecordingQueueOperationExecutor(submitResult: 'provider-task-new');
+        $service = $this->createVideoOperationAppService($operationRepository, $executor);
+
+        $staleOperation = $this->createOperation('stale-without-provider-task');
+        $staleOperation->setCreatedAt(date(DATE_ATOM, time() - 300));
+        $operationRepository->saveOperation($staleOperation, 3600);
+        $operationRepository->activeSlots['org-test:user-test'] = [$staleOperation->getId()];
+
+        $response = $service->enqueue('token-active-stale-without-provider', new CreateVideoDTO([
+            'model_id' => 'veo-3.1-fast-generate-preview',
+            'task' => 'generate',
+            'prompt' => 'make a video after stale pre-submit lock',
+        ]));
+
+        $this->assertSame('running', $response->getStatus());
+        $this->assertSame(0, $executor->queryCalls);
+        $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations['stale-without-provider-task']->getStatus());
+        $this->assertSame([$response->getId()], $operationRepository->activeSlots['org-test:user-test'] ?? null);
+        $this->assertCount(1, $this->eventDispatcher->events);
         $this->assertCount(1, $executor->submittedOperations);
     }
 
@@ -554,6 +753,7 @@ class VideoOperationAppServiceTest extends TestCase
                 $this->callback(function (VideoPointEstimateRequest $request): bool {
                     $this->assertSame(8, $request->getInputVideoDurationSeconds());
                     $this->assertTrue($request->hasReferenceVideo());
+                    $this->assertTrue($request->hasAudioOutput());
 
                     return true;
                 }),
@@ -605,12 +805,177 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $probe,
             $resolver,
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $result = $service->estimate('token-estimate-remote', $requestDTO);
 
         $this->assertSame(88, $result->getPoints());
         $this->assertSame(['mode' => 'test'], $result->getDetail());
+    }
+
+    public function testEstimateUsesKelingOmniAdapterToResolveAudioOutputWhenReferenceVideoExists(): void
+    {
+        $dataIsolation = $this->createDataIsolation();
+        $referenceVideoUrl = 'https://93.184.216.34/keling-reference-estimate.mp4';
+        $requestDTO = new CreateVideoDTO([
+            'model_id' => 'kling-v3-omni',
+            'task' => 'generate',
+            'prompt' => 'follow the reference motion',
+            'inputs' => [
+                'reference_videos' => [
+                    ['uri' => $referenceVideoUrl],
+                ],
+            ],
+            'generation' => [
+                'duration_seconds' => 5,
+                'resolution' => '720p',
+                'generate_audio' => true,
+            ],
+        ]);
+
+        MockHttpsStreamWrapper::setBody($referenceVideoUrl, 'keling-reference-video-binary');
+
+        $llmAppService = $this->createMock(LLMAppService::class);
+        $llmAppService->expects($this->once())
+            ->method('createModelGatewayDataIsolationByAccessToken')
+            ->with('token-estimate-keling-reference', [])
+            ->willReturn($dataIsolation);
+
+        $pointComponent = $this->createMock(PointComponentInterface::class);
+        $pointComponent->expects($this->once())
+            ->method('estimateVideoPoints')
+            ->with(
+                $this->callback(function (VideoPointEstimateRequest $request): bool {
+                    $this->assertFalse($request->hasAudioOutput());
+
+                    return true;
+                }),
+                $dataIsolation,
+            )
+            ->willReturn(new PointEstimateResult('video', 66, ['mode' => 'adapter-audio-output']));
+
+        $modelGatewayMapper = $this->createMock(ModelGatewayMapper::class);
+        $modelGatewayMapper->expects($this->once())
+            ->method('getOrganizationVideoModel')
+            ->with($dataIsolation, 'kling-v3-omni')
+            ->willReturn($this->createVideoModelEntry(
+                new VideoModel([], 'kling-v3-omni', 'provider-model-keling', ProviderCode::Keling)
+            ));
+
+        $probe = new CallbackVideoMediaProbe(function (string $filePath): VideoMediaMetadata {
+            $this->assertFileExists($filePath);
+            $this->assertSame('keling-reference-video-binary', file_get_contents($filePath));
+
+            return new VideoMediaMetadata(6.11, 1280, 720);
+        });
+
+        $service = new VideoOperationAppService(
+            $llmAppService,
+            new VideoQueueDomainService(new InMemoryVideoQueueOperationRepository()),
+            new QueueOperationExecutionDomainService(
+                new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
+                new RecordingQueueOperationExecutor(submitResult: 'unused'),
+            ),
+            $pointComponent,
+            $modelGatewayMapper,
+            $this->createVideoGenerationConfigDomainService(),
+            new FileDomainService(new InMemoryCloudFileRepository()),
+            $this->createVideoBillingDetailsResolver(),
+            $probe,
+            new VideoInputMediaMetadataResolver(
+                $this->createMock(TaskFileDomainService::class),
+                new FileDomainService(new InMemoryCloudFileRepository()),
+                $probe,
+                $this->createMock(CacheInterface::class),
+            ),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
+        );
+
+        $result = $service->estimate('token-estimate-keling-reference', $requestDTO);
+
+        $this->assertSame(66, $result->getPoints());
+        $this->assertSame(['mode' => 'adapter-audio-output'], $result->getDetail());
+    }
+
+    public function testGeneratedEventIncludesHasAudioOutputFromKelingOmniAdapter(): void
+    {
+        $dataIsolation = $this->createDataIsolation();
+        $requestDTO = new CreateVideoDTO([
+            'model_id' => 'kling-v3-omni',
+            'task' => 'generate',
+            'prompt' => 'follow the reference motion',
+            'inputs' => [
+                'reference_videos' => [
+                    ['uri' => 'https://example.com/reference-motion.mp4'],
+                ],
+            ],
+            'generation' => [
+                'duration_seconds' => 5,
+                'resolution' => '720p',
+                'generate_audio' => true,
+            ],
+        ]);
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $videoQueueDomainService = new VideoQueueDomainService($operationRepository);
+        $executionDomainService = new QueueOperationExecutionDomainService(
+            new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
+            new RecordingQueueOperationExecutor(
+                submitResult: 'provider-task-keling-omni-reference',
+                queryResult: [
+                    'status' => 'succeeded',
+                    'output' => [
+                        'video_url' => 'https://example.com/keling-omni-reference.mp4',
+                    ],
+                ],
+            ),
+        );
+
+        $llmAppService = $this->createMock(LLMAppService::class);
+        $llmAppService->expects($this->exactly(2))
+            ->method('createModelGatewayDataIsolationByAccessToken')
+            ->with('token-keling-omni-reference', [])
+            ->willReturn($dataIsolation);
+
+        $pointComponent = $this->createMock(PointComponentInterface::class);
+        $pointComponent->expects($this->once())
+            ->method('checkPointsSufficient')
+            ->with($requestDTO, $dataIsolation);
+
+        $modelGatewayMapper = $this->createMock(ModelGatewayMapper::class);
+        $modelGatewayMapper->expects($this->once())
+            ->method('getOrganizationVideoModel')
+            ->with($dataIsolation, 'kling-v3-omni')
+            ->willReturn($this->createVideoModelEntry(
+                new VideoModel([], 'kling-v3-omni', 'provider-model-keling', ProviderCode::Keling)
+            ));
+
+        $service = new VideoOperationAppService(
+            $llmAppService,
+            $videoQueueDomainService,
+            $executionDomainService,
+            $pointComponent,
+            $modelGatewayMapper,
+            $this->createVideoGenerationConfigDomainService(),
+            new FileDomainService(new InMemoryCloudFileRepository()),
+            $this->createVideoBillingDetailsResolver(),
+            $this->createFallbackProbe(),
+            $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
+        );
+
+        $enqueueResponse = $service->enqueue('token-keling-omni-reference', $requestDTO);
+        $response = $service->getOperation('token-keling-omni-reference', $enqueueResponse->getId());
+        $this->assertFalse($response->getOutput()['has_audio_output'] ?? true);
+
+        $this->assertCount(1, $this->eventDispatcher->events);
+        $event = $this->eventDispatcher->events[0];
+        $this->assertInstanceOf(VideoGeneratedEvent::class, $event);
+        $this->assertFalse($event->hasAudioOutput());
     }
 
     public function testGetOperationRejectsProviderTaskIdFallbackWhenInternalOperationIsMissing(): void
@@ -654,6 +1019,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $this->expectException(BusinessException::class);
@@ -718,6 +1085,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $enqueueResponse = $service->enqueue('token-veo-default', $requestDTO);
@@ -787,6 +1156,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $enqueueResponse = $service->enqueue('token-seedance-default', $requestDTO);
@@ -856,6 +1227,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $enqueueResponse = $service->enqueue('token-keling-default', $requestDTO);
@@ -992,6 +1365,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $enqueueResponse = $service->enqueue('token-ark', $requestDTO);
@@ -1075,6 +1450,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $probe,
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $response = $service->getOperation('token-probe-base64', $operation->getId(), ['organization_id' => 'org-test']);
@@ -1142,6 +1519,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $probe,
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $response = $service->getOperation('token-probe-remote', $operation->getId(), ['organization_id' => 'org-test']);
@@ -1215,6 +1594,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
         $service->logger = $logger;
 
@@ -1293,6 +1674,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
         $logger = new RecordingLogger();
         $service->logger = $logger;
@@ -1404,6 +1787,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $response = $service->getOperation('token-keling', 'op-keling-billing', ['organization_id' => 'org-test']);
@@ -1484,6 +1869,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $response = $service->getOperation('token-3', 'op-3', ['organization_id' => 'org-test']);
@@ -1552,6 +1939,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $response = $service->getOperation('token-4', 'op-4', ['organization_id' => 'org-test']);
@@ -1607,6 +1996,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $this->expectException(BusinessException::class);
@@ -1648,6 +2039,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $response = $service->getOperation('token-provider-query-error', $operation->getId(), ['organization_id' => 'org-test']);
@@ -1655,6 +2048,33 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame('failed', $response->getStatus());
         $this->assertSame('provider says operationName is invalid', $response->getError()?->getMessage());
         $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations[$operation->getId()]->getStatus());
+    }
+
+    public function testManagedPollKeepsOperationRunningWhenProviderQueryThrows(): void
+    {
+        $operation = $this->createOperation('op-provider-query-retry');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-retry');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                queryThrowable: new ProviderVideoException('temporary provider query error'),
+            ),
+        );
+
+        $this->expectException(ProviderVideoException::class);
+        $this->expectExceptionMessage('temporary provider query error');
+
+        try {
+            $service->pollOperationById($operation->getId(), ['organization_id' => 'org-test']);
+        } finally {
+            $this->assertSame(VideoOperationStatus::PROVIDER_RUNNING, $operationRepository->operations[$operation->getId()]->getStatus());
+        }
     }
 
     public function testGetOperationRejectsFullProviderTaskIdFallbackWhenStoredOperationIsMissing(): void
@@ -1700,6 +2120,8 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
         );
 
         $this->expectException(BusinessException::class);
@@ -1741,6 +2163,7 @@ class VideoOperationAppServiceTest extends TestCase
         InMemoryVideoQueueOperationRepository $operationRepository,
         RecordingQueueOperationExecutor $executor,
         ?ModelGatewayDataIsolation $dataIsolation = null,
+        ?Producer $producer = null,
     ): VideoOperationAppService {
         $dataIsolation ??= $this->createDataIsolation();
 
@@ -1771,7 +2194,14 @@ class VideoOperationAppServiceTest extends TestCase
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
             $this->createVideoInputMediaMetadataResolver(),
+            $producer ?? new RecordingProducer(),
+            $this->createNoopLocker(),
         );
+    }
+
+    private function createNoopLocker(): LockerInterface
+    {
+        return new NoopLocker();
     }
 
     private function setVideoQueueConfig(string $key, mixed $value): void
@@ -1880,6 +2310,26 @@ class VideoOperationAppServiceTest extends TestCase
                 )),
             )
         );
+    }
+}
+
+class VideoOperationTestSubscriptionManager extends BaseSubscriptionManager
+{
+    protected bool $enabled = true;
+
+    public function getPersonalVideoGenerationConcurrencyLimit(): ?int
+    {
+        $featureLimits = $this->getCurrentSubscriptionInfo()['skus'][0]['attributes']['feature_limits'] ?? [];
+        if (! array_key_exists('personal_video_generation_concurrency_limit', $featureLimits)) {
+            return 1;
+        }
+
+        $limit = $featureLimits['personal_video_generation_concurrency_limit'];
+        if (is_numeric($limit)) {
+            return (int) $limit;
+        }
+
+        return null;
     }
 }
 
@@ -2060,6 +2510,51 @@ final class RecordingQueueOperationExecutor implements QueueOperationExecutorInt
         $this->queriedOperations[] = clone $operation;
         $this->queriedProviderTaskIds[] = $providerTaskId;
         return $this->queryResult;
+    }
+}
+
+final class RecordingProducer extends Producer
+{
+    /** @var list<ProducerMessageInterface> */
+    public array $messages = [];
+
+    /** @var list<array<string, mixed>> */
+    public array $payloads = [];
+
+    public function __construct(
+        private readonly ?Throwable $throwable = null,
+    ) {
+    }
+
+    public function produce(ProducerMessageInterface $producerMessage, bool $confirm = false, int $timeout = 5): bool
+    {
+        if ($this->throwable instanceof Throwable) {
+            throw $this->throwable;
+        }
+
+        $this->messages[] = $producerMessage;
+        $payload = (new ReflectionProperty($producerMessage, 'payload'))->getValue($producerMessage);
+        $this->payloads[] = is_array($payload) ? $payload : [];
+
+        return true;
+    }
+}
+
+final class NoopLocker implements LockerInterface
+{
+    public function mutexLock(string $name, string $owner, int $expire = 180): bool
+    {
+        return true;
+    }
+
+    public function spinLock(string $name, string $owner, int $expire = 10, ?int $waitTimeout = null): bool
+    {
+        return true;
+    }
+
+    public function release(string $name, string $owner): bool
+    {
+        return true;
     }
 }
 
@@ -2463,6 +2958,7 @@ final readonly class EventDispatcherContainer implements ContainerInterface
         return in_array($id, [
             EventDispatcherInterface::class,
             ConfigInterface::class,
+            Producer::class,
             ThirdPlatformDataIsolationManagerInterface::class,
             SubscriptionManagerInterface::class,
             OrganizationInfoManagerInterface::class,
@@ -2478,15 +2974,16 @@ final readonly class EventDispatcherContainer implements ContainerInterface
         return match ($id) {
             EventDispatcherInterface::class => $this->eventDispatcher,
             ConfigInterface::class => $this->config,
+            Producer::class => new RecordingProducer(),
             ThirdPlatformDataIsolationManagerInterface::class => new BaseThirdPlatformDataIsolationManager(),
-            SubscriptionManagerInterface::class => new EnterpriseSubscriptionManager(),
+            SubscriptionManagerInterface::class => new VideoOperationTestSubscriptionManager(),
             OrganizationInfoManagerInterface::class => new BaseOrganizationInfoManager(),
             PhpSerializerPacker::class => new PhpSerializerPacker(),
             LoggerFactory::class => $this->loggerFactory,
             TranslatorInterface::class => new class implements TranslatorInterface {
                 private string $locale = 'zh_CN';
 
-                public function trans(string $key, array $replace = [], ?string $locale = null): array|string
+                public function trans(string $key, array $replace = [], ?string $locale = null): string
                 {
                     foreach ($replace as $name => $value) {
                         $key = str_replace('{' . $name . '}', (string) $value, $key);

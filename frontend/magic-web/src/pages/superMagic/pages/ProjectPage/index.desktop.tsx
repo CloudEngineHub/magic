@@ -24,6 +24,12 @@ import { workspaceStore, projectStore, topicStore } from "../../stores/core"
 import { Files } from "lucide-react"
 import ProjectCardContainer from "../../components/ProjectCardContainer"
 import TopicDesktopPanels from "../TopicPage/components/TopicDesktopPanels"
+import { isAudioProjectMode } from "../AudioRecordings/utils/is-audio-project-mode"
+import type {
+	SuperMagicOpenFileTabPayload,
+	SuperMagicOpenKnowledgeBaseTabPayload,
+} from "../../events/openFileTab"
+import type { SuperMagicOpenPlaybackTabPayload } from "../../events/openPlaybackTab"
 
 // 项目页组件
 function ProjectPage() {
@@ -53,6 +59,7 @@ function ProjectPage() {
 	const isReadOnly = true
 	const shouldShowDetailPanel = true
 	const showProjectResizeHandle = true
+	const hideProjectCard = isAudioProjectMode(selectedProject?.project_mode)
 
 	// 使用详情模式缓存 hook
 	useDetailModeCache({
@@ -85,22 +92,33 @@ function ProjectPage() {
 	}, [selectedProject?.id])
 
 	useEffect(() => {
-		pubsub.subscribe(PubSubEvents.Open_File_Tab, (data) => {
+		const handleOpenFileTab = (data: SuperMagicOpenFileTabPayload) => {
 			// 使用setTimeout确保DOM更新后再打开tab
 			setTimeout(() => {
 				// 允许消息区直接传入临时 fileData，复用右侧详情区打开逻辑。
 				detailRef.current?.openFileTab?.({ file_id: data.fileId })
 			}, 100)
-		})
-		pubsub.subscribe(PubSubEvents.Open_Playback_Tab, (toolData) => {
+		}
+		const handleOpenPlaybackTab = (toolData: SuperMagicOpenPlaybackTabPayload) => {
 			// 打开playback tab，用户主动点击时应该强制激活
 			setTimeout(() => {
 				detailRef.current?.openPlaybackTab?.({ toolData, forceActivate: true })
 			}, 100)
-		})
+		}
+		const handleOpenKnowledgeBaseTab = (data: SuperMagicOpenKnowledgeBaseTabPayload) => {
+			setTimeout(() => {
+				detailRef.current?.openKnowledgeBaseTab?.(data)
+			}, 100)
+		}
+
+		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
+		pubsub.subscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
+		pubsub.subscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
+
 		return () => {
-			pubsub?.unsubscribe(PubSubEvents.Open_File_Tab)
-			pubsub?.unsubscribe(PubSubEvents.Open_Playback_Tab)
+			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
+			pubsub.unsubscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
+			pubsub.unsubscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
 		}
 	}, [])
 
@@ -235,10 +253,12 @@ function ProjectPage() {
 			isDetailPanelFullscreen={false}
 			sidebar={
 				<div className="flex h-full flex-col gap-2" data-testid="workspace-sidebar-wrapper">
-					<ProjectCardContainer
-						selectedProject={selectedProject}
-						selectedWorkspace={selectedWorkspace}
-					/>
+					{hideProjectCard ? null : (
+						<ProjectCardContainer
+							selectedProject={selectedProject}
+							selectedWorkspace={selectedWorkspace}
+						/>
+					)}
 					<ProjectSider
 						items={[
 							{

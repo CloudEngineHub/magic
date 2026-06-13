@@ -1,0 +1,136 @@
+import { describe, expect, it } from "vitest"
+import { Schema, type SchemaSpec } from "prosemirror-model"
+import { MentionItemType } from "@/components/business/MentionPanel/types"
+import { buildAgentPromptContent } from "@/components/business/ElementInspector/ElementInspectorOverlay"
+import { INSPECTOR_DETAIL_MARKER, INSPECTOR_DETAIL_TYPE } from "../const"
+import { serializeInspectorContent, transformInspectorContent } from "../transform"
+import type { InspectedElementInfo } from "@/components/business/ElementInspector/types"
+import schemaConfig from "@/pages/superMagic/components/MessageList/components/Text/components/RichText/schemaConfig"
+
+const fileMention = {
+	type: MentionItemType.PROJECT_FILE,
+	data: {
+		file_id: "file-1",
+		file_name: "index.html",
+		file_path: "/index.html",
+		file_extension: "html",
+	},
+}
+
+const labels = {
+	title: "Selected element",
+	selector: "Selector",
+	size: "Size",
+	computedStyles: "Computed Styles",
+	textContent: "Text Content",
+}
+
+function createInspectedElement(): InspectedElementInfo {
+	return {
+		selector: "body > button.primary",
+		tagName: "button",
+		id: "",
+		classList: ["primary"],
+		textContent: "Submit",
+		rect: {
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 120,
+			bottom: 40,
+			width: 120,
+			height: 40,
+		},
+		computedStyles: {
+			display: "flex",
+			width: "120px",
+			height: "40px",
+		},
+	}
+}
+
+describe("inspector-detail transform", () => {
+	it("stores the inspected file mention on the inspector node instead of a standalone paragraph", () => {
+		const content = buildAgentPromptContent(createInspectedElement(), (key) => key, {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "/index.html",
+		})
+
+		const paragraph = content.content?.[0]
+		const inspectorNode = paragraph?.content?.[0]
+
+		expect(content.content).toHaveLength(1)
+		expect(paragraph?.type).toBe("paragraph")
+		expect(inspectorNode?.type).toBe(INSPECTOR_DETAIL_TYPE)
+		expect(inspectorNode?.attrs?.fileMention).toEqual(fileMention)
+	})
+
+	it("serializes a paragraph-wrapped inspector file mention back to normal detail paragraphs", () => {
+		const serialized = serializeInspectorContent(
+			{
+				type: "doc",
+				content: [
+					{
+						type: "paragraph",
+						content: [
+							{
+								type: INSPECTOR_DETAIL_TYPE,
+								attrs: {
+									title: labels.title,
+									selector: "body > button.primary",
+									tagName: "button",
+									size: "120 x 40 px",
+									computedStyles: "{}",
+									styleCount: 0,
+									textContent: "Submit",
+									fileMention,
+								},
+							},
+						],
+					},
+				],
+			},
+			labels,
+		)
+
+		expect(serialized.content?.[0]).toEqual({
+			type: "paragraph",
+			content: [{ type: "mention", attrs: fileMention }],
+		})
+		expect(serialized.content?.[1]?.content?.[0]?.text).toBe(
+			`${INSPECTOR_DETAIL_MARKER}${labels.title}`,
+		)
+	})
+
+	it("transforms serialized inspector paragraphs into schema-valid paragraph-wrapped nodes", () => {
+		const transformed = transformInspectorContent({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "mention", attrs: fileMention }],
+				},
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: `${INSPECTOR_DETAIL_MARKER}${labels.title}` }],
+				},
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: `${labels.selector}: body > button.primary` }],
+				},
+			],
+		})
+
+		const inspectorParagraph = transformed.content?.[0]
+		const inspectorNode = inspectorParagraph?.content?.[0]
+
+		expect(inspectorParagraph?.type).toBe("paragraph")
+		expect(inspectorNode?.type).toBe(INSPECTOR_DETAIL_TYPE)
+		expect(inspectorNode?.attrs?.fileMention).toEqual(fileMention)
+
+		const schema = new Schema(schemaConfig as SchemaSpec)
+		expect(() => schema.nodeFromJSON(transformed)).not.toThrow()
+	})
+})

@@ -30,7 +30,7 @@ const OrganizationSwitchPanelComponent = () => {
 	})
 
 	const onSwitchBefore = useMemoizedFn(() => {
-		GlobalSidebarStore.close()
+		// 组织切换可能从移动端设置 Sheet 上层打开，切换前只收起当前切换面板，避免把底层设置一起关闭。
 		GlobalSidebarStore.closeOrganizationSwitch()
 	})
 
@@ -38,7 +38,11 @@ const OrganizationSwitchPanelComponent = () => {
 		await cancelRecord()
 		GlobalSidebarStore.closeOrganizationSwitch()
 		GlobalSidebarStore.close()
-		functionHub.execute(DefaultFunction.openAccountModal)
+		functionHub.execute(DefaultFunction.openAccountModal, {
+			// 组织切换面板可能被临时提升层级（如从付费弹窗内打开），添加账号弹窗需要继续在其上方。
+			zIndex: Math.max(1300, GlobalSidebarStore.organizationSwitchZIndex + 100),
+		})
+		// TODO: remove hardcoded zIndex once overlay stack auto-inference is stable
 	})
 
 	const handleClose = useMemoizedFn(() => {
@@ -49,6 +53,8 @@ const OrganizationSwitchPanelComponent = () => {
 		<MagicPopup
 			visible={isOrganizationSwitchOpen}
 			destroyOnClose
+			// 组织切换可从移动端设置 Sheet 内打开，默认高于 Sheet 的 z-[1100]，并支持业务场景临时抬升。
+			zIndex={GlobalSidebarStore.organizationSwitchZIndex}
 			bodyClassName={styles.panelContainer}
 			onClose={handleClose}
 		>

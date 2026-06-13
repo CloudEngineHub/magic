@@ -37,6 +37,7 @@ import {
 import { TopicMode } from "../pages/Workspace/TopicMode"
 import { superMagicStore } from "../stores"
 import { smartRenameTopicIfUnnamed } from "./topicRename"
+import { shouldSyncChatConversationName, syncChatProjectNameOnly } from "./chatConversationNameSync"
 import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
 
 const logger = Logger.createLogger("messageSendService")
@@ -410,19 +411,25 @@ class MessageSendService {
 
 		const model = params.selectedModel
 			? {
-					model_id: params.selectedModel.model_id,
-				}
+				model_id: params.selectedModel.model_id,
+				model_name: params.selectedModel.model_name,
+				model_icon: params.selectedModel.model_icon,
+			}
 			: undefined
 
 		const imageModel = params.selectedImageModel?.model_id
 			? {
-					model_id: params.selectedImageModel.model_id,
-				}
+				model_id: params.selectedImageModel.model_id,
+				model_name: params.selectedImageModel.model_name,
+				model_icon: params.selectedImageModel.model_icon,
+			}
 			: undefined
 		const videoModel = params.selectedVideoModel?.model_id
 			? {
-					model_id: params.selectedVideoModel.model_id,
-				}
+				model_id: params.selectedVideoModel.model_id,
+				model_name: params.selectedVideoModel.model_name,
+				model_icon: params.selectedVideoModel.model_icon,
+			}
 			: undefined
 
 		// 根据话题读取联网搜索开关
@@ -484,7 +491,18 @@ class MessageSendService {
 		topicName: string
 		context?: SendRuntimeContext
 	}) {
-		if (topicName && project && !project.project_name) {
+		if (!topicName || !project) return
+
+		// Chat conversations: topic was already renamed by smartRenameTopic; mirror name on project.
+		if (shouldSyncChatConversationName(project)) {
+			void syncChatProjectNameOnly({
+				projectId: project.id,
+				name: topicName,
+			})
+			return
+		}
+
+		if (!project.project_name) {
 			const workspaceId =
 				(context?.workspaceId ?? context?.selectedWorkspace?.id ?? project.workspace_id) ||
 				""

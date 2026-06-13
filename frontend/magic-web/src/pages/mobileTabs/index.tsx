@@ -10,12 +10,13 @@ import SuperMagicMobileTabsWrapper from "./components/SuperMagicMobileTabsWrappe
 import ChatMobileSkeleton from "@/pages/chatNew/lazy/skeleton/ChatMobileSkeleton"
 import WorkspacePageMobileSkeleton from "../superMagic/lazy/skeleton/WorkspacePageMobileSkeleton"
 import { TAB_PARAM_TO_TAB_KEY, MobileTabBarKey } from "./constants"
+import { isLegacyMobileTabsHomeEntry } from "./legacyEntry"
+import { LegacyMobileHomeRedirect } from "./legacyHomeRedirect"
 import { notifyAppTabChange } from "@/layouts/BaseLayoutMobile/components/MobileTabBar/utils"
 
 // Lazy load tab pages (只加载一次)
 const WorkspacePage = lazy(() => import("@/pages/superMagicMobile/pages/ChatPage"))
 const ChatPage = lazy(() => import("@/pages/chatNew"))
-const MagiClawPage = lazy(() => import("@/pages/superMagic/pages/MagiClawPage"))
 const ContactsPage = lazy(() => import("@/pages/contacts/lazy/Contacts"))
 const ProfilePage = lazy(() => import("@/pages/user/pages/my/lazy/Profile"))
 
@@ -43,10 +44,6 @@ function MobileTabs() {
 			return TAB_PARAM_TO_TAB_KEY[tabParam as keyof typeof TAB_PARAM_TO_TAB_KEY]
 		}
 
-		// 如果没有查询参数，检查是否有 super 相关的 query 参数
-		if (searchParams.has("workspaceId")) {
-			return MobileTabBarKey.Super
-		}
 		// 如果是 /mobile-tabs 根路径，默认显示 Super
 		if (pathname.match(/\/mobile-tabs\/?$/)) {
 			return MobileTabBarKey.Super
@@ -57,15 +54,25 @@ function MobileTabs() {
 
 	// 使用路由判断的 activeTab，如果没有则使用 store 的值
 	const activeTab = activeTabFromRoute || mobileTabStore.activeTab
+	const shouldRedirectLegacyMobileHome = isLegacyMobileTabsHomeEntry(
+		location.pathname,
+		location.search,
+	)
+
+	/**
+	 * 兼容历史 `mobile-tabs?tab=magi-claw` 链接，命中后立即跳转到独立页，避免继续挂在旧 Tabs 容器下。
+	 */
+	const shouldRedirectLegacyMagiClaw = activeTabFromRoute === MobileTabBarKey.MagiClaw
 
 	// 同步路由状态到 store（不触发导航）
 	useEffect(() => {
+		if (shouldRedirectLegacyMagiClaw) return
 		if (activeTabFromRoute && activeTabFromRoute !== mobileTabStore.activeTab) {
 			mobileTabStore.setActiveTab(activeTabFromRoute, false)
 			// 通知 Magic App 当前 Tab 和 TabBar 高度
 			notifyAppTabChange(activeTabFromRoute)
 		}
-	}, [activeTabFromRoute])
+	}, [activeTabFromRoute, shouldRedirectLegacyMagiClaw])
 
 	// 当 activeTab 变化时，标记为已加载
 	useEffect(() => {
@@ -78,9 +85,17 @@ function MobileTabs() {
 		}
 	}, [activeTab])
 
-	// PC端重定向到桌面版
+	if (shouldRedirectLegacyMobileHome) {
+		return <LegacyMobileHomeRedirect />
+	}
+
+	// Legacy mobile home aliases now collapse to /mobile-home before desktop/mobile fallback handling.
 	if (!isMobile) {
 		return <Navigate name={RouteName.Super} replace />
+	}
+
+	if (shouldRedirectLegacyMagiClaw) {
+		return <Navigate name={RouteName.MagiClaw} replace />
 	}
 
 	return (
@@ -111,20 +126,6 @@ function MobileTabs() {
 				{loadedTabs.has(MobileTabBarKey.Chat) && (
 					<Suspense fallback={<ChatMobileSkeleton />}>
 						<ChatPage />
-					</Suspense>
-				)}
-			</div>
-
-			{/* MagiClaw Tab - 常驻 */}
-			<div
-				className={cx(styles.tabContent, {
-					[styles.activeTab]: activeTab === MobileTabBarKey.MagiClaw,
-					[styles.inactiveTab]: activeTab !== MobileTabBarKey.MagiClaw,
-				})}
-			>
-				{loadedTabs.has(MobileTabBarKey.MagiClaw) && (
-					<Suspense fallback={null}>
-						<MagiClawPage />
 					</Suspense>
 				)}
 			</div>

@@ -11,13 +11,14 @@ const RecordingSummaryFloatPanel = lazy(
 const BaseLayoutMobile = lazy(() => import("@/layouts/BaseLayoutMobile"))
 const BaseLayoutPc = lazy(() => import("./BaseLayoutPc"))
 
+/** Root layout: PC shell or mobile V1 shell (SuperMobileShell lives inside route-level layouts). */
 const BaseLayout = observer(() => {
 	const isMobile = useIsMobile()
 
 	return (
 		<>
 			<Suspense fallback={<BaseLayoutSketch />}>
-				{isMobile ? <BaseLayoutMobile /> : <BaseLayoutPc />}
+				{!isMobile ? <BaseLayoutPc /> : <BaseLayoutMobile />}
 			</Suspense>
 			{(recordingSummaryStore.isFloatPanelLoaded || recordingSummaryStore.isVisible) && (
 				<Suspense fallback={null}>

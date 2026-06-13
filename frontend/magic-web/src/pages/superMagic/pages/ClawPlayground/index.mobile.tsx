@@ -67,6 +67,19 @@ import { collectMentionItemsFromContent } from "@/pages/superMagic/components/Me
 import { transformMentions } from "@/pages/superMagic/components/MessageEditor/utils/mention"
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
+import { toast } from "sonner"
+import { MagicClawApi } from "@/apis"
+import { MobileSettingsFeedbackSheet } from "@/layouts/BaseLayoutMobile/components/MobileSettings/components/FeedbackSheet"
+import { useClawFeedbackSheet } from "@/pages/superMagic/hooks/useClawFeedbackSheet"
+import { ClawMobileMoreSheet } from "./components/ClawMobileMoreSheet"
+import { MagiClawEditDialog } from "../MagiClawPage/MagiClawEditDialog"
+import type { MagiClawEditPayload } from "../MagiClawPage/useMagiClawMobilePage"
+import {
+	SuperMobileShellRouteLayout,
+	useOptionalSuperMobileShellOutlet,
+} from "@/pages/superMagicMobile/components/MobileShell/SuperMobileShellRouteLayout"
+import { useMobileKnowledgeBasePreview } from "@/pages/superMagic/hooks/useMobileKnowledgeBasePreview"
+import KnowledgeBasePreviewPopup from "@/pages/superMagic/components/KnowledgeBasePreviewPopup"
 
 interface ClawMobileConversationPanelRef {
 	sendSkillInstallPrompt: (content: JSONContent) => void
@@ -362,6 +375,7 @@ const ClawMobileConversationPanel = observer(
 			const messageListProviderValue = useClawPlaygroundMessageListContextValue({
 				setSelectedTopic: topicStore.setSelectedTopic,
 				magicClaw: store.magicClaw,
+				projectFilesStore: store.projectFilesStore,
 			})
 			const emptyStateSubtitle = t(
 				"superLobster.workspace.emptyHeroSubtitle",
@@ -432,7 +446,6 @@ const ClawMobileConversationPanel = observer(
 					currentTopicStatus={selectedTopic?.task_status}
 					handleSendMsg={handleSendMsg}
 					isMessagesLoading={isMessagesInitialLoading}
-					stickyMessageClassName="top-0 pt-2"
 					messageLayoutPaddingBottomPx={CLAW_MOBILE_MESSAGE_LIST_RESERVE_PX}
 					messageListBottomFade
 					backToLatestButtonClassName={CLAW_MOBILE_BACK_TO_LATEST_BUTTON_CLASS}
@@ -445,6 +458,7 @@ const ClawMobileConversationPanel = observer(
 function ClawPlaygroundMobile() {
 	const { t } = useTranslation("sidebar")
 	const { t: tSuper } = useTranslation("super")
+	const shellOutlet = useOptionalSuperMobileShellOutlet()
 	const clawBrandValues = getClawBrandTranslationValues()
 	const navigate = useNavigate()
 	const { code, store, selectedProject, attachments, attachmentList } = useClawPlaygroundCore()
@@ -456,10 +470,126 @@ function ClawPlaygroundMobile() {
 
 	const [filesDrawerOpen, setFilesDrawerOpen] = useState(false)
 	const [skillsDrawerOpen, setSkillsDrawerOpen] = useState(false)
+	const [moreSheetOpen, setMoreSheetOpen] = useState(false)
+	const [editDialogOpen, setEditDialogOpen] = useState(false)
+	const [isUpdating, setIsUpdating] = useState(false)
+	const [isSandboxActionLoading, setIsSandboxActionLoading] = useState(false)
+
+	const handleUpdateClaw = useMemoizedFn(async (payload: MagiClawEditPayload) => {
+		const editingClaw = store.magicClaw
+		if (!editingClaw?.code) return
+
+		setIsUpdating(true)
+		try {
+			const updatedClaw = await MagicClawApi.updateMagicClaw(
+				{
+					code: editingClaw.code,
+					name: payload.name.trim(),
+					icon: payload.icon ?? null,
+				},
+				{ enableErrorMessagePrompt: false },
+			)
+			toast.success(t("superLobster.editDialog.updateSuccess", clawBrandValues))
+			setEditDialogOpen(false)
+			store.setMagicClaw(updatedClaw)
+		} catch {
+			toast.error(t("superLobster.editDialog.updateFailed", clawBrandValues))
+		} finally {
+			setIsUpdating(false)
+		}
+	})
+
+	/** Refreshes magicClaw.status from sandbox API so the more sheet reflects the latest lifecycle state. */
+	const refreshMagicClawSandboxStatus = useMemoizedFn(async (topicId: string) => {
+		if (!store.magicClaw) return
+
+		try {
+			const statusData = await MagicClawApi.getMagicClawSandboxStatus(
+				{ topic_id: topicId },
+				{ enableErrorMessagePrompt: false },
+			)
+			const nextStatus = statusData?.status
+			if (!nextStatus || store.magicClaw.status === nextStatus) return
+
+			store.setMagicClaw({
+				...store.magicClaw,
+				status: nextStatus,
+			})
+		} catch {
+			// Polling will eventually reconcile; ignore one-off refresh failures.
+		}
+	})
+
+	const handleRestart = useMemoizedFn(async () => {
+		const topicId = selectedTopic?.id
+		if (!topicId || !store.magicClaw) return
+
+		setIsSandboxActionLoading(true)
+		try {
+			await MagicClawApi.restartMagicClawSandbox({ topic_id: topicId })
+			toast.success(t("superLobster.created.restartSuccess", clawBrandValues))
+			await refreshMagicClawSandboxStatus(topicId)
+		} catch {
+			toast.error(t("superLobster.created.restartFailed", clawBrandValues))
+		} finally {
+			setIsSandboxActionLoading(false)
+		}
+	})
+
+	/** Explicit start handler — stops the ambiguity in ClawMobileMoreSheet's onStart prop. */
+	const handleStart = useMemoizedFn(async () => {
+		const topicId = selectedTopic?.id
+		if (!topicId || !store.magicClaw) return
+
+		setIsSandboxActionLoading(true)
+		try {
+			await MagicClawApi.startMagicClawSandbox(
+				{ topic_id: topicId },
+				{ enableErrorMessagePrompt: false },
+			)
+			await refreshMagicClawSandboxStatus(topicId)
+		} catch {
+			toast.error(t("superLobster.created.startFailed", clawBrandValues))
+		} finally {
+			setIsSandboxActionLoading(false)
+		}
+	})
+
+	/** Explicit stop handler — stops the ambiguity in ClawMobileMoreSheet's onStop prop. */
+	const handleStop = useMemoizedFn(async () => {
+		const topicId = selectedTopic?.id
+		if (!topicId || !store.magicClaw) return
+
+		setIsSandboxActionLoading(true)
+		try {
+			await MagicClawApi.stopMagicClawSandbox({ topic_id: topicId })
+			toast.success(t("superLobster.created.stopSuccess", clawBrandValues))
+			await refreshMagicClawSandboxStatus(topicId)
+		} catch {
+			toast.error(t("superLobster.created.stopFailed", clawBrandValues))
+		} finally {
+			setIsSandboxActionLoading(false)
+		}
+	})
 
 	const selectedWorkspace = store.selectedWorkspace
 	const selectedTopic = store.selectedTopic
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
+
+	const clawDisplayName =
+		store.magicClaw?.name?.trim() ||
+		t("superLobster.workspace.untitledProject", clawBrandValues)
+
+	const { feedbackSheetOpen, feedbackPrefill, openClawFeedback, closeClawFeedback } =
+		useClawFeedbackSheet({
+			magicClaw: store.magicClaw,
+			clawDisplayName,
+		})
+
+	const handleOpenClawFeedback = useMemoizedFn(() => {
+		setMoreSheetOpen(false)
+		openClawFeedback()
+	})
 	useNamedPageTitle({
 		entityName: store.magicClaw?.name,
 		fallbackName: t("superLobster.workspace.untitledProject", clawBrandValues),
@@ -503,9 +633,26 @@ function ClawPlaygroundMobile() {
 	const syncMobileDetailRef = useMemoizedFn(() => {
 		mobileDetailRef.current.openFileTab = (fileItem?: unknown) => {
 			setTimeout(() => {
-				const fileId = (fileItem as { file_id?: string })?.file_id
+				const item = fileItem as Record<string, any> | undefined
+				if (!item) return
+
+				// 支持两种格式：
+				// 1. detail-like: { type, data: { file_id, file_name, ... }, currentFileId }（来自消息附件点击）
+				// 2. file item: { file_id, file_name, ... }（来自附件列表点击）
+				const fileId = item.file_id || item.data?.file_id || item.currentFileId
 				if (!fileId) return
-				const fileAttachment = attachmentList.find((item) => item.file_id === fileId)
+
+				// 如果是 detail-like 对象且已包含 type，直接打开预览
+				if (item.type && item.data && item.currentFileId) {
+					previewDetailPopupRef.current?.open(
+						item as PreviewDetail,
+						attachments,
+						attachmentList,
+					)
+					return
+				}
+
+				const fileAttachment = attachmentList.find((f) => f.file_id === fileId)
 				if (!fileAttachment) return
 				const fileExtension = fileAttachment.file_extension ?? ""
 				const type = getFileType(fileExtension)
@@ -515,7 +662,7 @@ function ClawPlaygroundMobile() {
 						data: {
 							file_id: fileId,
 							file_name:
-								(fileItem as { file_name?: string })?.file_name ||
+								(item as { file_name?: string })?.file_name ||
 								fileAttachment.file_name,
 						},
 						currentFileId: fileId,
@@ -560,6 +707,7 @@ function ClawPlaygroundMobile() {
 		topicFilesProps,
 		attachmentList,
 	})
+	const knowledgeBasePreviewState = useMobileKnowledgeBasePreview()
 
 	const resolveTopicFileRowDecoration = useMemoizedFn(
 		createClawPlaygroundFileRowDecorationResolver({
@@ -595,7 +743,7 @@ function ClawPlaygroundMobile() {
 	if (store.error || !selectedProject) {
 		return (
 			<div
-				className={`flex h-full w-full flex-col items-center justify-center gap-4 bg-background ${CLAW_MOBILE_VIEWPORT_MIN_HEIGHT_CLASS}`}
+				className={`flex h-full w-full flex-col items-center justify-center gap-4 bg-mobile-background ${CLAW_MOBILE_VIEWPORT_MIN_HEIGHT_CLASS}`}
 				data-testid="claw-playground-error"
 			>
 				<p className="text-sm text-muted-foreground">
@@ -613,19 +761,16 @@ function ClawPlaygroundMobile() {
 		)
 	}
 
-	return (
+	const content = (
 		<div
-			className={`flex h-full min-h-0 w-full flex-col bg-sidebar ${CLAW_MOBILE_VIEWPORT_MIN_HEIGHT_CLASS}`}
+			className={`flex h-full min-h-0 w-full flex-col bg-mobile-background ${CLAW_MOBILE_VIEWPORT_MIN_HEIGHT_CLASS}`}
 			data-testid="claw-playground-mobile-root"
 		>
 			{dialog}
 			<ClawMobileHeader
 				magicClaw={store.magicClaw}
-				sandboxLatestVersion={store.sandboxLatestVersion}
-				isUpdatingSandbox={store.isUpgradingSandbox}
 				onBack={handleBack}
-				onUpgradeSandbox={handleConfirmUpgradeSandbox}
-				onFilesClick={() => setFilesDrawerOpen(true)}
+				onOpenMoreSheet={() => setMoreSheetOpen(true)}
 			/>
 
 			<div className="min-h-0 flex-1 overflow-hidden">
@@ -641,13 +786,49 @@ function ClawPlaygroundMobile() {
 			<ClawMobileFilesDrawer
 				open={filesDrawerOpen}
 				onClose={() => setFilesDrawerOpen(false)}
+				clawName={store.magicClaw?.name}
 				topicFilesProps={topicFilesPropsWithPanel}
 				resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
+			/>
+
+			<ClawMobileMoreSheet
+				magicClaw={store.magicClaw}
+				open={moreSheetOpen}
+				displayStatus={store.magicClaw?.status}
+				isSandboxActionLoading={isSandboxActionLoading}
+				isUpgradingSandbox={store.isUpgradingSandbox}
+				onOpenChange={setMoreSheetOpen}
+				onViewFiles={() => setFilesDrawerOpen(true)}
+				onEditInfo={() => setEditDialogOpen(true)}
+				onRestart={handleRestart}
+				onStart={handleStart}
+				onStop={handleStop}
+				onUpgradeSandbox={() => {
+					if (store.magicClaw) {
+						handleConfirmUpgradeSandbox(store.magicClaw)
+					}
+				}}
+				onFeedback={handleOpenClawFeedback}
+			/>
+
+			<MobileSettingsFeedbackSheet
+				open={feedbackSheetOpen}
+				onClose={closeClawFeedback}
+				prefill={feedbackPrefill}
+			/>
+
+			<MagiClawEditDialog
+				claw={store.magicClaw}
+				open={editDialogOpen}
+				onOpenChange={setEditDialogOpen}
+				isSubmitting={isUpdating}
+				onSubmit={handleUpdateClaw}
 			/>
 
 			<ClawMobileSkillsDrawer
 				open={skillsDrawerOpen}
 				onClose={() => setSkillsDrawerOpen(false)}
+				headerSubtitle={clawDisplayName}
 				overrideInstall={async ({ content }) => {
 					conversationPanelRef.current?.sendSkillInstallPrompt(content)
 				}}
@@ -676,8 +857,24 @@ function ClawPlaygroundMobile() {
 					void 0
 				}}
 			/>
+			<KnowledgeBasePreviewPopup state={knowledgeBasePreviewState} />
 		</div>
 	)
+
+	// ClawPlayground can render under standalone routes; wrap with mobile shell there so swipe gestures stay available.
+	if (!shellOutlet) {
+		return (
+			<SuperMobileShellRouteLayout
+				activeView="magiClaw"
+				testIdPrefix="magi-claw-shell"
+				closeSidebarAriaLabel={tSuper("mobile.shell.closeSidebar")}
+			>
+				{content}
+			</SuperMobileShellRouteLayout>
+		)
+	}
+
+	return content
 }
 
 export default observer(ClawPlaygroundMobile)

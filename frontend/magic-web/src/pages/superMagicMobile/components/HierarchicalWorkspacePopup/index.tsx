@@ -130,7 +130,7 @@ function HierarchicalWorkspacePopup(
 				visible={visible}
 				onClose={closePopup}
 				position="bottom"
-				bodyStyle={{ height: `calc(90vh - ${safeAreaInsetBottom})` }}
+				bodyStyle={{ height: `calc(90dvh - ${safeAreaInsetBottom})` }}
 				bodyClassName="bg-background overflow-hidden rounded-t-2xl [--adm-color-background:theme(colors.background)] flex flex-col"
 			>
 				<div className="sticky top-0 z-10 flex h-11 items-center justify-between border-border bg-background px-4 py-2.5">
@@ -271,12 +271,13 @@ function HierarchicalWorkspacePopup(
 				onInputChange={handleRenameInputChange}
 				translations={{
 					workspaceRename: t("hierarchicalWorkspacePopup.workspaceRename"),
-					projectRename: t("hierarchicalWorkspacePopup.projectRename"),
+					projectRename: t("project.rename"),
 					topicRename: t("hierarchicalWorkspacePopup.topicRename"),
 					inputWorkspaceName: t("hierarchicalWorkspacePopup.inputWorkspaceName"),
 					inputProjectName: t("hierarchicalWorkspacePopup.inputProjectName"),
 					inputTopicName: t("hierarchicalWorkspacePopup.inputTopicName"),
 					newName: t("hierarchicalWorkspacePopup.newName"),
+					projectNameLabel: t("chat.projectNameFieldLabel"),
 					cancel: t("common.cancel"),
 					confirm: t("common.confirm"),
 				}}
@@ -295,6 +296,15 @@ function HierarchicalWorkspacePopup(
 						t("ui.deleteWorkspaceConfirm", { name }),
 					deleteProjectConfirm: (name: string) => t("ui.deleteProjectConfirm", { name }),
 					deleteTopicConfirm: (name: string) => t("ui.deleteTopicConfirm", { name }),
+					deleteTopicConfirmTitle: t("ui.deleteTopicConfirmTitle"),
+					deleteWorkspaceConfirmTitle: t("ui.deleteWorkspaceConfirmTitle"),
+					deleteProjectConfirmTitle: t("ui.deleteProjectConfirmTitle"),
+					deleteTopicDescription: (name: string) =>
+						t("ui.deleteTopicDescription", { name }),
+					deleteWorkspaceDescription: (name: string) =>
+						t("ui.deleteWorkspaceDescription", { name }),
+					deleteProjectDescription: (name: string) =>
+						t("ui.deleteProjectDescription", { name }),
 					unnamedWorkspace: t("workspace.unnamedWorkspace"),
 					unnamedProject: t("project.unnamedProject"),
 					unnamedTopic: t("topic.unnamedTopic"),

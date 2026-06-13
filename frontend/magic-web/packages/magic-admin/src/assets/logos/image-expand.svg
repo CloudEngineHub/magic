@@ -1,0 +1,20 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="&#230;&#137;&#169;&#229;&#155;&#190;">
+<rect id="Rectangle 1" x="7" y="7" width="34" height="34" rx="4" stroke="#5450FF" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 4"/>
+<rect id="Rectangle 1_2" x="6" y="17.9043" width="24.0957" height="24.0957" rx="4" fill="url(#paint0_linear_7376_5118)"/>
+<g id="Group 2">
+<circle id="Ellipse 1" opacity="0.5" cx="3.38846" cy="3.38846" r="3.38846" transform="matrix(-1 0 0 1 21.0598 24.6812)" fill="white"/>
+<path id="Vector 1" d="M9.20284 36.2139H26.5345C27.1858 36.2139 27.5905 35.5062 27.2603 34.9448L21.474 25.108C21.1558 24.5672 20.3791 24.5518 20.0398 25.0796L14.2758 34.0458L12.1512 30.8588C11.8015 30.3343 11.0205 30.3659 10.7144 30.917L8.46671 34.9628C8.15488 35.5241 8.56075 36.2139 9.20284 36.2139Z" fill="white"/>
+</g>
+<foreignObject x="25.0957" y="-1.0957" width="24" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="backdrop-filter:blur(2.5px);clip-path:url(#bgblur_0_7376_5118_clip_path);height:100%;width:100%"></div></foreignObject><path id="Rectangle 7" data-figma-bg-blur-radius="5" d="M30.0957 10.9043C30.0957 7.0383 33.2297 3.9043 37.0957 3.9043C40.9617 3.9043 44.0957 7.0383 44.0957 10.9043C44.0957 14.7703 40.9617 17.9043 37.0957 17.9043C33.2297 17.9043 30.0957 14.7703 30.0957 10.9043Z" fill="#8779D3" fill-opacity="0.51"/>
+<rect id="Rectangle 12" x="36.0957" y="7" width="2" height="7.80859" rx="1" fill="white"/>
+<rect id="Rectangle 13" x="41" y="9.9043" width="2" height="7.80859" rx="1" transform="rotate(90 41 9.9043)" fill="white"/>
+</g>
+<defs>
+<clipPath id="bgblur_0_7376_5118_clip_path" transform="translate(-25.0957 1.0957)"><path d="M30.0957 10.9043C30.0957 7.0383 33.2297 3.9043 37.0957 3.9043C40.9617 3.9043 44.0957 7.0383 44.0957 10.9043C44.0957 14.7703 40.9617 17.9043 37.0957 17.9043C33.2297 17.9043 30.0957 14.7703 30.0957 10.9043Z"/>
+</clipPath><linearGradient id="paint0_linear_7376_5118" x1="0.645399" y1="15.2688" x2="20.1833" y2="42.2843" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0051FF"/>
+<stop offset="1" stop-color="#AD4FFF"/>
+</linearGradient>
+</defs>
+</svg>

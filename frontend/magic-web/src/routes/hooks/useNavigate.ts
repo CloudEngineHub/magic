@@ -1,9 +1,6 @@
 import { useCallback } from "react"
 import { useViewTransition } from "@/hooks/use-view-transition"
-import type {
-	EnhancedNavigateOptions,
-	ViewTransitionConfig,
-} from "@/types/viewTransition"
+import type { EnhancedNavigateOptions, ViewTransitionConfig } from "@/types/viewTransition"
 import { useIsMobile } from "../../hooks/useIsMobile"
 import type { RouteParams } from "@/routes/history/types"
 import { history } from "@/routes/history"
@@ -19,6 +16,29 @@ const isHistoryLengthEnough = (path: number) => {
 	// }
 
 	return window.history.length > 2 && window.history.length > Math.abs(path)
+}
+
+interface ResolveDeltaFallbackParams {
+	name?: string
+	params?: RouteParams["params"]
+	query?: RouteParams["query"]
+	state?: RouteParams["state"]
+}
+
+/**
+ * When history.go(delta) is unavailable, merge per-call target with hook-level fallbackRoute.
+ */
+function resolveDeltaFallbackTarget(
+	call: ResolveDeltaFallbackParams,
+	fallbackRoute: MagicNavigateParams | undefined,
+	defaultRouteName: string,
+): RouteParams {
+	return {
+		name: call.name ?? fallbackRoute?.name ?? defaultRouteName,
+		params: call.params ?? fallbackRoute?.params,
+		query: call.query ?? fallbackRoute?.query,
+		state: call.state ?? fallbackRoute?.state,
+	}
 }
 
 export type MagicNavigateParams = Partial<RouteParams> &
@@ -37,7 +57,7 @@ export const useNavigate = ({ fallbackRoute }: { fallbackRoute?: MagicNavigatePa
 	const isMobile = useIsMobile()
 
 	// Get default route name based on device type
-	const defaultRouteName = isMobile ? RouteName.MobileTabs : RouteName.Super
+	const defaultRouteName = isMobile ? RouteName.MobileHome : RouteName.Super
 
 	return useCallback(
 		(props: MagicNavigateParams) => {
@@ -73,12 +93,13 @@ export const useNavigate = ({ fallbackRoute }: { fallbackRoute?: MagicNavigatePa
 							history.go(delta)
 							return
 						}
-						history.push({
-							name: fallbackRoute?.name ?? defaultRouteName,
-							params,
-							query,
-							state,
-						})
+						history.push(
+							resolveDeltaFallbackTarget(
+								{ name, params, query, state },
+								fallbackRoute,
+								defaultRouteName,
+							),
+						)
 					} else {
 						if (navigateOptions?.replace) {
 							history.replace({
@@ -106,12 +127,13 @@ export const useNavigate = ({ fallbackRoute }: { fallbackRoute?: MagicNavigatePa
 					history.go(delta)
 					return
 				}
-				history.push({
-					name: fallbackRoute?.name ?? defaultRouteName,
-					params,
-					query,
-					state,
-				})
+				history.push(
+					resolveDeltaFallbackTarget(
+						{ name, params, query, state },
+						fallbackRoute,
+						defaultRouteName,
+					),
+				)
 			} else {
 				if (navigateOptions?.replace) {
 					history.replace({
@@ -130,7 +152,7 @@ export const useNavigate = ({ fallbackRoute }: { fallbackRoute?: MagicNavigatePa
 				}
 			}
 		},
-		[fallbackRoute?.name, isMobile, startTransition, defaultRouteName],
+		[fallbackRoute, isMobile, startTransition, defaultRouteName],
 	)
 }
 

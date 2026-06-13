@@ -41,6 +41,7 @@ import type {
 import type {
 	SuperMagicOpenFileTabPayload,
 	SuperMagicOpenFileTabByPathPayload,
+	SuperMagicOpenKnowledgeBaseTabPayload,
 } from "@/pages/superMagic/events/openFileTab"
 import type { SuperMagicOpenPlaybackTabPayload } from "@/pages/superMagic/events/openPlaybackTab"
 import type {
@@ -119,6 +120,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Open_File_Tab]: SuperMagicOpenFileTabPayload
 	/** 通过文件相对路径打开文件 tab：订阅方在附件树中查找后再打开。 */
 	[PubSubEvents.Open_File_Tab_By_Path]: SuperMagicOpenFileTabByPathPayload
+	/** 打开知识库文件预览 tab：由引用点击触发，携带知识库 ID 与文档 code 或文件 key。 */
+	[PubSubEvents.Open_Knowledge_Base_Tab]: SuperMagicOpenKnowledgeBaseTabPayload
 	/** 打开 playback tab：当前保留历史透传 payload。 */
 	[PubSubEvents.Open_Playback_Tab]: SuperMagicOpenPlaybackTabPayload
 	/** 消息队列消费完成：传入可选消息数据。 */
@@ -143,7 +146,7 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Super_Magic_Update_Auto_Detail]: SuperMagicUpdateAutoDetailArgs
 	/** 新消息到达：传入当前订阅方依赖的最小消息结构。 */
 	[PubSubEvents.Super_Magic_New_Message_V2]: SuperMagicNewMessageArgs
-	/** 创建新话题：可选带创建后插入的内容。 */
+	/** 创建新话题：可选携带目标模式和创建后插入内容。 */
 	[PubSubEvents.Create_New_Topic]: [payload?: SuperMagicCreateNewTopicPayload]
 	/** 接收录音总结音频文件：传入标准音频 mention payload。 */
 	[PubSubEvents.Receive_RecordSummary_Audio_File]: SuperMagicReceiveRecordSummaryAudioFileArgs
@@ -175,8 +178,10 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Refresh_Share_List]: SuperMagicRefreshShareListArgs
 	/** 详情页刷新：无参数。 */
 	[PubSubEvents.Super_Magic_Detail_Refresh]: []
-	/** 追加建议文本到输入框末尾：传入建议文本。 */
-	[PubSubEvents.Append_Suggestion_To_Editor]: [text: string]
+	/** 追加建议内容到输入框末尾：传入文本字符串或 JSONContent。 */
+	[PubSubEvents.Append_Suggestion_To_Editor]: [
+		content: string | import("@tiptap/core").JSONContent,
+	]
 	/** 幻灯片添加后设置编辑器内容。 */
 	[PubSubEvents.Set_Content_When_Slide_Added]: SuperMagicSetContentWhenSlideAddedArgs
 	/** 设置 demo 文本到输入框：传入字符串文本。 */

@@ -1,0 +1,16 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="&#233;&#159;&#179;&#233;&#162;&#145;&#229;&#136;&#134;&#230;&#158;&#144;">
+<rect id="Rectangle 1" x="5" y="5" width="32" height="32" rx="4" fill="url(#paint0_linear_7376_5118)"/>
+<path id="Vector" d="M11.1614 19.0323V21.9839M15.0969 15.0968V25.9194M19.0323 12.1452V29.8548M22.9678 17.0645V23.9516M26.9033 14.1129V26.9032M30.8387 19.0323V21.9839" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<foreignObject x="17" y="17" width="33" height="33"><div xmlns="http://www.w3.org/1999/xhtml" style="backdrop-filter:blur(2.5px);clip-path:url(#bgblur_0_7376_5118_clip_path);height:100%;width:100%"></div></foreignObject><path id="Rectangle 7" data-figma-bg-blur-radius="5" d="M22 33.5C22 27.1487 27.1487 22 33.5 22C39.8513 22 45 27.1487 45 33.5C45 39.8513 39.8513 45 33.5 45C27.1487 45 22 39.8513 22 33.5Z" fill="#D84A7B" fill-opacity="0.26"/>
+<path id="Ellipse 9" d="M39.6086 33.5C39.6086 30.1264 36.8738 27.3915 33.5002 27.3915C30.1266 27.3915 27.3917 30.1264 27.3917 33.5C27.3917 36.8736 30.1266 39.6085 33.5002 39.6085" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle id="Ellipse 10" cx="33.5001" cy="33.5" r="2.14084" fill="white"/>
+</g>
+<defs>
+<clipPath id="bgblur_0_7376_5118_clip_path" transform="translate(-17 -17)"><path d="M22 33.5C22 27.1487 27.1487 22 33.5 22C39.8513 22 45 27.1487 45 33.5C45 39.8513 39.8513 45 33.5 45C27.1487 45 22 39.8513 22 33.5Z"/>
+</clipPath><linearGradient id="paint0_linear_7376_5118" x1="7.94704" y1="0.197365" x2="21.6827" y2="36.7434" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FF3385"/>
+<stop offset="1" stop-color="#FFCDBD"/>
+</linearGradient>
+</defs>
+</svg>

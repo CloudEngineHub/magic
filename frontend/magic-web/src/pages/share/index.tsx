@@ -92,7 +92,7 @@ function resolveImmersiveEntryFileId(params: {
 		(isLegacy
 			? fileId
 			: defaultOpenFileId ||
-				calculateDefaultOpenFileId(fallbackTopLevelIds, attachmentsTree)) || ""
+			calculateDefaultOpenFileId(fallbackTopLevelIds, attachmentsTree)) || ""
 
 	if (!candidateId) return ""
 
@@ -166,8 +166,6 @@ function Share() {
 	const responsive = useResponsive()
 	const isMobile = responsive.md === false // md breakpoint is typically 768px, so anything smaller is mobile
 	const [isProjectShare, setIsProjectShare] = useState(false)
-	// File sharing state
-	const [isFileShare, setIsFileShare] = useState(false)
 	const [fileId, setFileId] = useState("")
 	// Topic sharing: view_file_list state
 	const [viewFileList, setViewFileList] = useState(false)
@@ -215,7 +213,7 @@ function Share() {
 	const [copyProjectIsRunning, setCopyProjectIsRunning] = useState(false)
 	// 实际验证成功的密码（可能来自 URL 或用户手动输入）
 	const [verifiedPassword, setVerifiedPasswordFn] = useState<string | undefined>(passwordFromUrl)
-	const isRouteFileShare = routeInfo.isFileShare
+	const isFileShare = routeInfo.isFileShare
 	const entryHtmlFileId = useMemo(() => {
 		return resolveImmersiveEntryFileId({
 			attachmentsTree: attachments?.tree || [],
@@ -225,7 +223,7 @@ function Share() {
 		})
 	}, [attachments?.tree, defaultOpenFileId, fileId, routeInfo.isLegacy])
 	const isEntryHtmlPreview = Boolean(entryHtmlFileId) && currentPreviewFileId === entryHtmlFileId
-	const enableImmersiveShareChrome = isMobile && isRouteFileShare && isEntryHtmlPreview
+	const enableImmersiveShareChrome = isMobile && isFileShare && isEntryHtmlPreview
 	const isImmersiveFullscreen = enableImmersiveShareChrome && previewIsFullscreen
 
 	useBackHandler(
@@ -248,13 +246,13 @@ function Share() {
 	useEffect(() => {
 		if (!previewIsFullscreen) return
 		if (!isMobile) return
-		if (!isRouteFileShare) return
+		if (!isFileShare) return
 		if (!entryHtmlFileId) return
 		if (isEntryHtmlPreview) return
 
 		pubsub.publish(PubSubEvents.Exit_Fullscreen)
 		setPreviewIsFullscreen(false)
-	}, [entryHtmlFileId, isEntryHtmlPreview, isMobile, isRouteFileShare, previewIsFullscreen])
+	}, [entryHtmlFileId, isEntryHtmlPreview, isMobile, isFileShare, previewIsFullscreen])
 
 	useTokenRefreshPolling({
 		resourceId,
@@ -326,7 +324,6 @@ function Share() {
 		// Use route info from useShareRoute hook
 		if (routeInfo.isShareRoute) {
 			const params = routeInfo.shareParams
-			setIsFileShare(routeInfo.isFileShare)
 
 			if (routeInfo.isLegacy) {
 				// Legacy format
@@ -571,11 +568,10 @@ function Share() {
 	const shouldEnterSharedProject = useMemo(() => {
 		const currentUserId = toStringId(userInfo?.user_id)
 		const creatorUserId = getShareProjectCreatorUserId(data)
-
 		return Boolean(
-			isProjectShare && projectId && currentUserId && creatorUserId === currentUserId,
+			projectId && currentUserId && creatorUserId === currentUserId,
 		)
-	}, [data, isProjectShare, projectId, userInfo?.user_id])
+	}, [data, projectId, userInfo?.user_id])
 
 	// 是否显示复制项目按钮：旧文件分享 或 allowCopyProjectFiles 为 true 时显示，且用户已登录
 	const showCopyProjectButton = useMemo(() => {
