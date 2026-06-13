@@ -142,22 +142,88 @@
                 reject(new Error(type + ' timeout after ' + timeoutMs + 'ms'));
             }, timeoutMs);
             pending[requestId] = { resolve: resolve, reject: reject, timer: timer };
-            window.parent.postMessage({
-                source: SOURCE,
+            var body = payload || {};
+            window.parent.postMessage(Object.assign({
                 requestId: requestId,
                 type: type,
-                payload: payload || {}
-            }, '*');
+                payload: body
+            }, body), '*');
         });
+    }
+
+    function postOneWay(type, payload) {
+        window.parent.postMessage(Object.assign({
+            type: type,
+            timestamp: Date.now()
+        }, payload || {}), '*');
+    }
+
+    function normalizeListedFiles(files) {
+        if (!Array.isArray(files)) return [];
+        return files.map(function (item) {
+            if (typeof item === 'string') return item;
+            if (item && typeof item.name === 'string') return item.name;
+            if (item && typeof item.file_name === 'string') return item.file_name;
+            if (item && typeof item.path === 'string') return item.path.split('/').filter(Boolean).pop() || item.path;
+            if (item && typeof item.relative_file_path === 'string') return item.relative_file_path.split('/').filter(Boolean).pop() || item.relative_file_path;
+            return '';
+        }).filter(Boolean);
+    }
+
+    function validateSingleFileName(newName) {
+        return typeof newName === 'string'
+            && newName.trim().length > 0
+            && !/[\\\\/]/.test(newName)
+            && newName.indexOf('..') < 0
+            && !/[\\x00-\\x1F\\x7F]/.test(newName);
+    }
+
+    function toAgentPayload(message, options) {
+        if (message && typeof message === 'object' && !message.type && arguments.length === 1) {
+            return message;
+        }
+        return Object.assign({}, options || {}, { message: message });
+    }
+
+    function uploadFiles(files) {
+        if (!Array.isArray(files)) return Promise.reject(new Error('uploadFiles: files must be an array'));
+        if (!files.length) return Promise.reject(new Error('window.Magic.uploadFiles: files array cannot be empty'));
+        return request('MAGIC_UPLOAD_FILES_REQUEST', { files: files }, { timeoutMs: 60000 }).then(function (r) { return r.results || r.result || r; });
+    }
+
+    function addFilesToMessage(filePaths, agentMode) {
+        if (!Array.isArray(filePaths)) return Promise.reject(new Error('addFilesToMessage: filePaths must be an array'));
+        if (!filePaths.length) return Promise.reject(new Error('addFilesToMessage: filePaths array cannot be empty'));
+        return request('MAGIC_ADD_FILES_TO_MESSAGE_REQUEST', { filePaths: filePaths, agentMode: agentMode }).then(function (r) { return r.result || r; });
+    }
+
+    function downloadFiles(filePaths) {
+        if (!Array.isArray(filePaths)) return Promise.reject(new Error('downloadFiles: filePaths must be an array'));
+        if (!filePaths.length) return Promise.reject(new Error('downloadFiles: filePaths array cannot be empty'));
+        return request('MAGIC_DOWNLOAD_FILES_REQUEST', { filePaths: filePaths }, { timeoutMs: 30000 }).then(function (r) { return r.result || r; });
+    }
+
+    function getAgents() {
+        return request('MAGIC_GET_AGENTS_REQUEST').then(function (r) { return r.agents || []; });
+    }
+
+    function createTopicAndSend(message, options) {
+        return request('MAGIC_CREATE_TOPIC_AND_SEND_REQUEST', toAgentPayload(message, options), { timeoutMs: 120000 }).then(function (r) {
+            return { topicId: r.topicId || r.messageId || '' };
+        });
+    }
+
+    function sendMessage(message, options) {
+        return request('MAGIC_SEND_MESSAGE_REQUEST', toAgentPayload(message, options), { timeoutMs: 120000 }).then(function () {});
     }
 
     window.addEventListener('message', function (event) {
         var data = event.data || {};
-        if (data.source !== HOST_SOURCE) return;
+        if (data.source && data.source !== HOST_SOURCE) return;
         if (data.type === 'MAGIC_FS_FILE_CHANGED') {
-            var watchId = data.watchId;
+            var watchId = data.watchId || data.requestId;
             if (watchId && watchers[watchId]) {
-                try { watchers[watchId](data.payload || {}); } catch (error) { console.error(error); }
+                try { watchers[watchId](data.payload || data || {}); } catch (error) { console.error(error); }
             }
             return;
         }
@@ -165,10 +231,10 @@
         if (!item) return;
         clearTimeout(item.timer);
         delete pending[data.requestId];
-        if (data.ok) {
-            item.resolve(data.payload);
+        if (data.ok || data.success) {
+            item.resolve(data.payload || data);
         } else {
-            var message = data.error && data.error.message ? data.error.message : 'Magic host request failed';
+            var message = data.error && data.error.message ? data.error.message : (typeof data.error === 'string' ? data.error : 'Magic host request failed');
             var error = new Error(message);
             error.code = data.error && data.error.code ? data.error.code : 'HOST_ERROR';
             item.reject(error);
@@ -197,33 +263,55 @@
             return Promise.resolve(${JSON.stringify(appBasePath)});
         },
         reload: function () {
-            return request('MAGIC_RELOAD_REQUEST');
+            postOneWay('MAGIC_RELOAD_REQUEST');
         },
+        setInputMessage: function (message) {
+            if (typeof message !== 'string') return;
+            postOneWay('MAGIC_SET_INPUT_MESSAGE', { message: message });
+        },
+        uploadFiles: uploadFiles,
+        downloadFiles: downloadFiles,
+        addFilesToMessage: addFilesToMessage,
+        getAgents: getAgents,
+        createTopicAndSend: createTopicAndSend,
+        sendMessage: sendMessage,
         fs: {
             readFile: function (path) { return request('MAGIC_FS_READ_REQUEST', { path: path }).then(function (r) { return r.content; }); },
             writeFile: function (path, content) { return request('MAGIC_FS_WRITE_REQUEST', { path: path, content: content }); },
-            getFileUrl: function (path) { return request('MAGIC_FS_RAW_URL_REQUEST', { path: path }).then(function (r) { return r.url; }); },
-            listFiles: function (path) { return request('MAGIC_FS_LIST_REQUEST', { path: path || '.' }).then(function (r) { return r.files || []; }); },
-            deleteFile: function (path) { return request('MAGIC_FS_DELETE_REQUEST', { path: path }); },
-            renameFile: function (path, newName) { return request('MAGIC_FS_RENAME_REQUEST', { path: path, newName: newName }); },
-            moveFile: function (sourcePath, targetDir) { return request('MAGIC_FS_MOVE_REQUEST', { sourcePath: sourcePath, targetDir: targetDir }); },
+            listFiles: function (dir) { return request('MAGIC_FS_LIST_REQUEST', { dir: dir == null ? './' : dir, path: dir == null ? './' : dir }).then(function (r) { return normalizeListedFiles(r.files || []); }); },
+            deleteFile: function (path) { return request('MAGIC_FS_DELETE_FILE_REQUEST', { path: path }); },
+            deleteDir: function (path) { return request('MAGIC_FS_DELETE_DIR_REQUEST', { path: path }); },
+            renameFile: function (path, newName) {
+                if (!validateSingleFileName(newName)) return Promise.reject(new Error('renameFile: newName must be a single file name'));
+                return request('MAGIC_FS_RENAME_FILE_REQUEST', { path: path, newName: newName });
+            },
+            moveFile: function (path, targetDir) { return request('MAGIC_FS_MOVE_FILE_REQUEST', { path: path, sourcePath: path, targetDir: targetDir }); },
             watchFile: watchFile
         },
         agent: {
-            getAgents: function () { return request('MAGIC_GET_AGENTS_REQUEST').then(function (r) { return r.agents || []; }); }
+            getAgents: getAgents
         },
         project: {
-            createTopicAndSend: function (options) { return request('MAGIC_CREATE_TOPIC_AND_SEND_REQUEST', options || {}, { timeoutMs: 120000 }); },
-            sendMessage: function (options) { return request('MAGIC_SEND_MESSAGE_REQUEST', options || {}, { timeoutMs: 120000 }); },
-            draftMessage: function (options) { return request('MAGIC_DRAFT_MESSAGE_REQUEST', options || {}); }
+            uploadFiles: uploadFiles,
+            downloadFiles: downloadFiles,
+            addFilesToMessage: addFilesToMessage,
+            createTopicAndSend: createTopicAndSend,
+            sendMessage: sendMessage
         },
         llm: {
             getModels: function () { return request('MAGIC_LLM_GET_MODELS_REQUEST').then(function (r) { return r.models || []; }); },
-            chat: function (options) { return request('MAGIC_LLM_CHAT_REQUEST', options || {}, { timeoutMs: 120000 }); },
-            stream: function () { return Promise.reject(new Error('window.Magic.llm.stream is not implemented in http_client runtime yet')); }
+            chat: function (messages, options) { return request('MAGIC_LLM_CHAT_REQUEST', { messages: messages || [], options: options || {} }, { timeoutMs: 120000 }).then(function (r) { return typeof r.content === 'string' ? r.content : String(r.content || ''); }); },
+            stream: function (messages, onChunk, options) {
+                request('MAGIC_LLM_CHAT_REQUEST', { messages: messages || [], options: Object.assign({}, options || {}, { stream: true }) }, { timeoutMs: 120000 }).then(function (r) {
+                    if (typeof onChunk === 'function') onChunk(typeof r.content === 'string' ? r.content : String(r.content || ''), true);
+                }).catch(function () {
+                    if (typeof onChunk === 'function') onChunk('', true);
+                });
+                return function () {};
+            }
         },
         user: {
-            getInfo: function (options) { return request('MAGIC_GET_USER_INFO_REQUEST', options || {}); }
+            getInfo: function (options) { return request('MAGIC_GET_USER_INFO_REQUEST', options || {}).then(function (r) { return r.userInfo || r.user || r; }); }
         }
     };
     window.dispatchEvent(new CustomEvent('magic-ready', { detail: { runtime: 'http_client' } }));
@@ -243,6 +331,10 @@
             this.serverUrlProvider = options.serverUrlProvider;
             this.sendAgentMessage = options.sendAgentMessage;
             this.fillMessageDraft = options.fillMessageDraft;
+            this.setInputMessage = options.setInputMessage;
+            this.uploadWorkspaceFiles = options.uploadWorkspaceFiles;
+            this.addFilesToMessage = options.addFilesToMessage;
+            this.downloadWorkspaceFiles = options.downloadWorkspaceFiles;
             this.refreshFileTree = options.refreshFileTree;
             this.logTarget = null;
             this.iframe = null;
@@ -425,9 +517,14 @@
         async onMessage(event) {
             if (!this.iframe || event.source !== this.iframe.contentWindow) return;
             const data = event.data || {};
-            if (data.source !== MESSAGE_SOURCE || !data.requestId) return;
+            if (data.source && data.source !== MESSAGE_SOURCE) return;
             const type = data.type;
-            const payload = data.payload || {};
+            if (!data.requestId) {
+                this.log('request', type, data);
+                this.handleOneWayMessage(type, data);
+                return;
+            }
+            const payload = data.payload || data;
             this.log('request', type, payload);
             try {
                 const result = await this.dispatch(type, payload);
@@ -445,32 +542,53 @@
 
         respond(requestId, type, ok, payload, error) {
             if (!this.iframe || !this.iframe.contentWindow) return;
-            this.iframe.contentWindow.postMessage({
-                source: HOST_SOURCE,
+            this.iframe.contentWindow.postMessage(Object.assign({
                 requestId,
                 type: type.replace(/_REQUEST$/, '_RESPONSE'),
                 ok,
+                success: ok,
                 payload: payload || {},
                 error: error || null,
-            }, '*');
+            }, payload || {}), '*');
+        }
+
+        handleOneWayMessage(type, payload) {
+            if (type === 'MAGIC_RELOAD_REQUEST') {
+                setTimeout(() => {
+                    this.mount().catch(error => this.log('error', 'reload failed', { error: error.message }));
+                }, 0);
+                return;
+            }
+            if (type === 'MAGIC_SET_INPUT_MESSAGE') {
+                this.setMessageInput(payload).catch(error => this.log('error', type, { error: error.message }));
+            }
         }
 
         async dispatch(type, payload) {
             switch (type) {
+                case 'MAGIC_FS_GET_APP_BASE_PATH_REQUEST':
+                    return { content: this.appRootPath || '' };
                 case 'MAGIC_FS_READ_REQUEST':
                     return this.readFile(payload.path);
                 case 'MAGIC_FS_WRITE_REQUEST':
                     return this.writeFile(payload.path, payload.content);
+                case 'MAGIC_FS_WRITE_BLOB_REQUEST':
+                    return this.writeFile(payload.path, payload.blob);
                 case 'MAGIC_FS_RAW_URL_REQUEST':
                     return this.getFileUrl(payload.path);
                 case 'MAGIC_FS_LIST_REQUEST':
-                    return this.listFiles(payload.path);
+                    return this.listFiles(payload.dir || payload.path);
                 case 'MAGIC_FS_DELETE_REQUEST':
+                case 'MAGIC_FS_DELETE_FILE_REQUEST':
                     return this.deleteFile(payload.path);
+                case 'MAGIC_FS_DELETE_DIR_REQUEST':
+                    return this.deleteDir(payload.path);
                 case 'MAGIC_FS_RENAME_REQUEST':
+                case 'MAGIC_FS_RENAME_FILE_REQUEST':
                     return this.renameFile(payload.path, payload.newName);
                 case 'MAGIC_FS_MOVE_REQUEST':
-                    return this.moveFile(payload.sourcePath, payload.targetDir);
+                case 'MAGIC_FS_MOVE_FILE_REQUEST':
+                    return this.moveFile(payload.sourcePath || payload.path, payload.targetDir);
                 case 'MAGIC_FS_WATCH_REGISTER':
                     return this.registerWatcher(payload.path, payload.watchId);
                 case 'MAGIC_FS_WATCH_UNREGISTER':
@@ -486,8 +604,16 @@
                     return this.createTopicAndSend(payload);
                 case 'MAGIC_SEND_MESSAGE_REQUEST':
                     return this.createTopicAndSend(payload);
+                case 'MAGIC_SET_INPUT_MESSAGE_REQUEST':
+                    return this.setMessageInput(payload);
                 case 'MAGIC_DRAFT_MESSAGE_REQUEST':
                     return this.draftMessage(payload);
+                case 'MAGIC_UPLOAD_FILES_REQUEST':
+                    return this.uploadFiles(payload);
+                case 'MAGIC_ADD_FILES_TO_MESSAGE_REQUEST':
+                    return this.addFilesToMessageRequest(payload);
+                case 'MAGIC_DOWNLOAD_FILES_REQUEST':
+                    return this.downloadFiles(payload);
                 case 'MAGIC_LLM_GET_MODELS_REQUEST':
                     return this.getModels();
                 case 'MAGIC_LLM_CHAT_REQUEST':
@@ -692,6 +818,27 @@
             return { path: normalized, implementation: 'local-adapter' };
         }
 
+        async deleteDir(path) {
+            if (this.workspaceApi) {
+                const result = await this.workspaceApi.deletePath(this.workspacePath(path), true);
+                if (this.refreshFileTree) await this.refreshFileTree();
+                return Object.assign({}, result, {
+                    path: this.resolveAppPath(path),
+                    implementation: 'real',
+                });
+            }
+            await this.ensureWritePermission();
+            const normalized = this.resolveAppPath(path);
+            const parts = normalized.split('/').filter(Boolean);
+            let dir = this.appRootHandle;
+            for (const part of parts.slice(0, -1)) {
+                dir = await dir.getDirectoryHandle(part);
+            }
+            await dir.removeEntry(parts[parts.length - 1], { recursive: true });
+            if (this.refreshFileTree) await this.refreshFileTree();
+            return { path: normalized, implementation: 'local-adapter' };
+        }
+
         async renameFile(path, newName) {
             if (!newName || /[\\/]/.test(newName) || newName === '.' || newName === '..') {
                 throw Object.assign(new Error('renameFile: newName must be a single file name'), { code: 'INVALID_PATH' });
@@ -798,12 +945,12 @@
 
         postFileChanged(watchId, payload) {
             if (!this.iframe || !this.iframe.contentWindow) return;
-            this.iframe.contentWindow.postMessage({
-                source: HOST_SOURCE,
+            this.iframe.contentWindow.postMessage(Object.assign({
                 type: 'MAGIC_FS_FILE_CHANGED',
+                requestId: watchId,
                 watchId,
                 payload,
-            }, '*');
+            }, payload || {}), '*');
         }
 
         async getAgents() {
@@ -834,13 +981,22 @@
 
         getUserInfo(payload) {
             const scopes = Array.isArray(payload.scopes) ? payload.scopes : [];
+            const userInfo = {
+                name: 'Local Debug User',
+                avatar: '',
+                nickname: scopes.includes('user.profile.name') ? 'Local Debug User' : undefined,
+                real_name: scopes.includes('user.profile.name') ? 'Local Debug User' : undefined,
+                user_id: scopes.includes('user.profile.identity') ? 'local-debug-user' : undefined,
+                magic_id: scopes.includes('user.profile.identity') ? 'local-debug-user' : undefined,
+                organization_code: scopes.includes('user.profile.organization') ? 'local-debug-org' : undefined,
+            };
             return {
                 implementation: 'mock',
                 scopes,
+                userInfo,
                 user: {
                     displayName: 'Local Debug User',
                     userId: 'local-debug-user',
-                    email: scopes.includes('email') ? 'local-debug@example.com' : undefined,
                 },
             };
         }
@@ -853,12 +1009,44 @@
             return Object.assign({ implementation: 'real' }, result || {});
         }
 
+        async uploadFiles(payload) {
+            if (!this.uploadWorkspaceFiles) {
+                throw Object.assign(new Error('Workspace file uploader is not configured'), { code: 'NOT_IMPLEMENTED' });
+            }
+            const results = await this.uploadWorkspaceFiles(Array.isArray(payload.files) ? payload.files : []);
+            return { results, implementation: 'local-workspace' };
+        }
+
+        async addFilesToMessageRequest(payload) {
+            if (!this.addFilesToMessage) {
+                throw Object.assign(new Error('File mention writer is not configured'), { code: 'NOT_IMPLEMENTED' });
+            }
+            const result = await this.addFilesToMessage(Array.isArray(payload.filePaths) ? payload.filePaths : [], payload.agentMode);
+            return { result, implementation: 'local-workspace' };
+        }
+
+        async downloadFiles(payload) {
+            if (!this.downloadWorkspaceFiles) {
+                throw Object.assign(new Error('Workspace file downloader is not configured'), { code: 'NOT_IMPLEMENTED' });
+            }
+            const result = await this.downloadWorkspaceFiles(Array.isArray(payload.filePaths) ? payload.filePaths : []);
+            return { result, implementation: 'local-workspace' };
+        }
+
         async draftMessage(payload) {
             if (!this.fillMessageDraft) {
                 throw Object.assign(new Error('Message draft writer is not configured'), { code: 'NOT_IMPLEMENTED' });
             }
             const result = await this.fillMessageDraft(payload || {});
             return Object.assign({ implementation: 'local-draft' }, result || {});
+        }
+
+        async setMessageInput(payload) {
+            if (!this.setInputMessage) {
+                throw Object.assign(new Error('Message input writer is not configured'), { code: 'NOT_IMPLEMENTED' });
+            }
+            const result = await this.setInputMessage(payload && typeof payload.message === 'string' ? payload.message : '');
+            return Object.assign({ implementation: 'local-input-message' }, result || {});
         }
     }
 

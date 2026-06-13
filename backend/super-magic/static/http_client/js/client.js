@@ -6978,6 +6978,10 @@ async function renderMicroAppPreviewTab(tab) {
         },
         sendAgentMessage: sendMicroAppAgentMessage,
         fillMessageDraft: fillMicroAppMessageDraft,
+        setInputMessage: setMicroAppInputMessage,
+        uploadWorkspaceFiles: uploadMicroAppWorkspaceFiles,
+        addFilesToMessage: addMicroAppFilesToMessage,
+        downloadWorkspaceFiles: downloadMicroAppWorkspaceFiles,
     });
     setFilePreviewWorkbenchVisible(true);
 }
@@ -7061,6 +7065,70 @@ async function fillMicroAppMessageDraft(payload) {
     return {
         drafted: true,
         length: prompt.length,
+    };
+}
+
+async function setMicroAppInputMessage(message) {
+    if (!messageInput) {
+        throw new Error('Message input is not available');
+    }
+    const text = String(message == null ? '' : message);
+    messageInput.value = text;
+    messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+    messageInput.focus();
+    showSystemMessage('微应用消息已填入聊天框，确认后可手动发送');
+    return {
+        drafted: true,
+        length: text.length,
+    };
+}
+
+async function uploadMicroAppWorkspaceFiles(files) {
+    const list = Array.from(files || []).filter(item => item && item.file instanceof File);
+    if (!list.length) {
+        throw new Error('uploadFiles: files array cannot be empty');
+    }
+    const uploaded = [];
+    for (const item of list) {
+        const rawPath = normalizeMentionFilePath(item.path || item.filename || item.file.name);
+        const targetPath = rawPath || item.file.name;
+        const targetDir = getWorkspaceParentPath(targetPath);
+        const filename = getWorkspaceFileBaseName(targetPath) || item.filename || item.file.name;
+        const contentBase64 = await fileToBase64(item.file);
+        uploaded.push(await debugWorkspaceApi.uploadFile(targetDir, filename, contentBase64, true));
+        if (targetDir) expandedDirs.add(targetDir);
+    }
+    await renderFileTree();
+    await refreshWorkspaceMentionIndex();
+    showSystemMessage(`微应用已上传 ${uploaded.length} 个文件`);
+    return uploaded;
+}
+
+async function addMicroAppFilesToMessage(filePaths, agentMode) {
+    const paths = Array.from(filePaths || []).filter(path => typeof path === 'string' && path.trim());
+    if (!paths.length) {
+        throw new Error('addFilesToMessage: filePaths array cannot be empty');
+    }
+    const snippets = paths
+        .map(path => `[@file_path:${normalizeMentionFilePath(path)}]${MENTION_PROMPT_SEPARATOR}`)
+        .join('');
+    insertMentionAtCursor(snippets);
+    return {
+        foundCount: paths.length,
+        notFoundPaths: [],
+        agentMode: typeof agentMode === 'string' ? agentMode : undefined,
+    };
+}
+
+async function downloadMicroAppWorkspaceFiles(filePaths) {
+    const paths = Array.from(filePaths || []).filter(path => typeof path === 'string' && path.trim());
+    if (!paths.length) {
+        throw new Error('downloadFiles: filePaths array cannot be empty');
+    }
+    paths.forEach(path => triggerWorkspaceDownload(path));
+    showSystemMessage(`微应用已触发 ${paths.length} 个文件下载`);
+    return {
+        downloadedCount: paths.length,
     };
 }
 
