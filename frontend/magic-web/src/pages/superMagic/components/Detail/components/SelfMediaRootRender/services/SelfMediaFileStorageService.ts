@@ -13,10 +13,14 @@ import type {
 	SelfMediaInitGlobalSettings,
 	MaterialItem,
 } from "../components/SelfMediaInitPanel/types"
+import type { SelfMediaPostPublishStatus } from "../types"
 import {
 	removeSelfMediaPostFromIndex,
 	renameSelfMediaPostInIndex,
+	setSelfMediaPostPublishStatusInIndex,
 } from "./selfMediaMagicProjectIndex"
+import type { SelfMediaHomeDailyInsightPayload } from "./selfMediaHomeInsight"
+import { normalizePostOpsMetricsPayload } from "./selfMediaOpsMetricsNormalize"
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -174,6 +178,10 @@ export interface DeleteSelfMediaPostParams {
 
 export interface RenameSelfMediaPostParams extends DeleteSelfMediaPostParams {
 	name: string
+}
+
+export interface SetSelfMediaPostPublishStatusParams extends DeleteSelfMediaPostParams {
+	publishStatus?: SelfMediaPostPublishStatus
 }
 
 interface SerializedReferenceFile {
@@ -403,6 +411,48 @@ export class SelfMediaFileStorageService {
 		this.invalidateFileListCache()
 	}
 
+	async setPostPublishStatus(target: SetSelfMediaPostPublishStatusParams): Promise<void> {
+		const files = await this.getProjectFileList()
+		const postFile = this.findFileByProjectRelativePath(files, target.entry)
+		if (!postFile?.file_id) {
+			throw new Error("postManifestMissing")
+		}
+		const magicProjectFile = this.findFileByProjectRelativePath(files, "magic.project.js")
+		if (!magicProjectFile?.file_id) {
+			throw new Error("magicProjectNotFound")
+		}
+
+		const [postContent, magicProjectContent] = await Promise.all([
+			getFileContentById(postFile.file_id, { responseType: "text" }) as Promise<string>,
+			getFileContentById(magicProjectFile.file_id, {
+				responseType: "text",
+			}) as Promise<string>,
+		])
+		const updatedPostContent = updatePostManifestPublishStatusContent(
+			postContent,
+			target.publishStatus,
+		)
+		const updatedIndexContent = setSelfMediaPostPublishStatusInIndex(magicProjectContent, {
+			platform: target.platform,
+			id: target.id,
+			entry: target.entry,
+			publishStatus: target.publishStatus,
+		})
+
+		await SuperMagicApi.saveFileContent([
+			{
+				file_id: postFile.file_id,
+				content: updatedPostContent,
+			},
+			{
+				file_id: magicProjectFile.file_id,
+				content: updatedIndexContent,
+				enable_shadow: true,
+			},
+		])
+		this.invalidateFileListCache()
+	}
+
 	async deletePost(target: DeleteSelfMediaPostParams): Promise<void> {
 		const files = await this.getProjectFileList()
 		const magicProjectFile = this.findFileByProjectRelativePath(files, "magic.project.js")
@@ -465,7 +515,7 @@ export class SelfMediaFileStorageService {
 			const content = (await getFileContentById(file.file_id, {
 				responseType: "text",
 			})) as string
-			return JSON.parse(content) as SelfMediaPostOpsMetricsPayload
+			return normalizePostOpsMetricsPayload(JSON.parse(content))
 		} catch {
 			return null
 		}
@@ -565,6 +615,20 @@ export class SelfMediaFileStorageService {
 			const content = await this.loadPostOpsFileContent(postEntryPath, "review.html")
 			if (content === null) return null
 			return { content }
+		} catch {
+			return null
+		}
+	}
+
+	async saveHomeDailyInsight(payload: SelfMediaHomeDailyInsightPayload): Promise<void> {
+		await this.saveProjectOpsJsonFile("home-daily-insight.json", payload)
+	}
+
+	async loadHomeDailyInsight(): Promise<SelfMediaHomeDailyInsightPayload | null> {
+		try {
+			const content = await this.loadProjectOpsFileContent("home-daily-insight.json")
+			if (!content) return null
+			return JSON.parse(content) as SelfMediaHomeDailyInsightPayload
 		} catch {
 			return null
 		}
@@ -1075,6 +1139,11 @@ export class SelfMediaFileStorageService {
 		await this.createAndWriteFile(opsDir, fileName, JSON.stringify(payload, null, 2))
 	}
 
+	private async saveProjectOpsJsonFile(fileName: string, payload: unknown): Promise<void> {
+		const opsDir = await this.ensureDirectory("ops")
+		await this.createAndWriteFile(opsDir, fileName, JSON.stringify(payload, null, 2))
+	}
+
 	private async loadPostOpsFileContent(
 		postEntryPath: string,
 		fileName: string,
@@ -1084,6 +1153,16 @@ export class SelfMediaFileStorageService {
 			files,
 			`${this.getPostOpsPath(postEntryPath)}/${fileName}`,
 		)
+		if (!file?.file_id) return null
+
+		return (await getFileContentById(file.file_id, {
+			responseType: "text",
+		})) as string
+	}
+
+	private async loadProjectOpsFileContent(fileName: string): Promise<string | null> {
+		const files = await this.getProjectFileList()
+		const file = this.findFileByProjectRelativePath(files, `ops/${fileName}`)
 		if (!file?.file_id) return null
 
 		return (await getFileContentById(file.file_id, {
@@ -1997,6 +2076,43 @@ function updatePostManifestTitleContent(content: string, title: string): string 
 				...meta,
 				title,
 			},
+		},
+		null,
+		2,
+	)
+}
+
+function updatePostManifestPublishStatusContent(
+	content: string,
+	publishStatus?: SelfMediaPostPublishStatus,
+): string {
+	let manifest: Record<string, unknown>
+	try {
+		const parsed = JSON.parse(content) as Record<string, unknown>
+		if (!parsed || typeof parsed !== "object") {
+			throw new Error("postManifestInvalid")
+		}
+		manifest = parsed
+	} catch {
+		throw new Error("postManifestInvalid")
+	}
+
+	const rawMeta = manifest.meta
+	const meta =
+		rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta)
+			? { ...(rawMeta as Record<string, unknown>) }
+			: {}
+
+	if (publishStatus) {
+		meta.publishStatus = publishStatus
+	} else {
+		delete meta.publishStatus
+	}
+
+	return JSON.stringify(
+		{
+			...manifest,
+			meta,
 		},
 		null,
 		2,

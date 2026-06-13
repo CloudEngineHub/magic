@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
 import { topicModelStore } from "@/stores/superMagic"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ModelStatusEnum, type ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { ScheduledTask } from "@/types/scheduledTask"
@@ -23,6 +24,7 @@ import BrandConfigDialog from "./components/BrandConfigDialog"
 import AICardCreateDialog, { type AICardCreateInitialValues } from "./components/AICardCreateDialog"
 import SelfMediaOpsMetricsDialog from "./components/SelfMediaOpsMetricsDialog"
 import PrePublishAnalysisDialog from "./components/PrePublishAnalysisDialog"
+import { useSelfMediaHomeScrollMemory } from "./hooks/useSelfMediaHomeScrollPosition"
 import {
 	SelfMediaFileStorageService,
 	type SelfMediaPostOpsMetricsPayload,
@@ -40,14 +42,21 @@ import {
 } from "./services/selfMediaPrePublishAnalysis"
 import {
 	SELF_MEDIA_POST_PUBLISH_DATA_TOPIC_PATTERN,
+	buildFolderMention,
 	sendSelfMediaPostPublishDataRefresh,
 } from "./services/selfMediaPostPublishDataRefresh"
+import { clearPostPublishStatusAfterPublishedLinkBind } from "./services/selfMediaPostPublishStatus"
 import {
 	buildSelfMediaPostAutoSyncTaskData,
 	disableSelfMediaPostAutoSyncTask,
 	saveSelfMediaPostAutoSyncTask,
 } from "./services/selfMediaPostAutoSync"
-import type { SelfMediaAttachmentNode, SelfMediaPostEntry, SelfMediaRootRenderProps } from "./types"
+import type {
+	SelfMediaAttachmentNode,
+	SelfMediaPostEntry,
+	SelfMediaPostPublishStatus,
+	SelfMediaRootRenderProps,
+} from "./types"
 import type { SelfMediaPlatformPostItem } from "./stores/SelfMediaStore"
 
 type SelfMediaRootMode = "home" | "create" | "platform"
@@ -189,6 +198,9 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		index: number
 	} | null>(null)
 	const [analysisSubmitting, setAnalysisSubmitting] = useState(false)
+	const homeScrollMemory = useSelfMediaHomeScrollMemory(
+		`${folderFileId || ""}:${folderPath || ""}`,
+	)
 	const analysisModelList =
 		superMagicModeService.getModelGroupsByMode(
 			SELF_MEDIA_PRE_PUBLISH_TOPIC_PATTERN as unknown as TopicMode,
@@ -212,7 +224,6 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		if (rootLoading || rootMode !== null) return
 		setRootMode(isEmptyProject && allowEdit ? "create" : "home")
 	}, [isEmptyProject, rootLoading, rootMode, allowEdit])
-
 	const handleStartCreateArticle = useCallback(() => {
 		setRootMode("create")
 	}, [])
@@ -252,6 +263,40 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 			openFileTab?.(folder)
 		},
 		[openFileTab],
+	)
+	const handleMentionHomePost = useCallback(
+		async (target: SelfMediaPlatformPostItem) => {
+			try {
+				const post =
+					(await store.ensurePlatformPostLoaded(target.platform, target.index)) ||
+					target.post
+				const mentionFileId = resolveSelfMediaPostMentionFileId(post)
+				const postDirectoryItem = resolveSelfMediaPostDirectoryAttachmentItem(
+					attachmentList,
+					mentionFileId,
+					target.entry.entry,
+				)
+				if (!postDirectoryItem) {
+					showActionStartFailed(
+						t,
+						"detail.selfMedia.mentionPost.startFailed",
+						undefined,
+						"detail.selfMedia.errors.postDirectoryMissing",
+					)
+					return
+				}
+				pubsub.publish(PubSubEvents.Add_File_To_Chat, {
+					items: [buildFolderMention(postDirectoryItem)],
+					is_new_topic: false,
+					autoFocus: true,
+				})
+				magicToast.success(t("detail.selfMedia.mentionPost.success"))
+			} catch (error) {
+				console.error("Self-media post mention failed:", error)
+				showActionStartFailed(t, "detail.selfMedia.mentionPost.startFailed", error)
+			}
+		},
+		[attachmentList, store, t],
 	)
 	const handleRequestPrePublishAnalysis = useCallback(
 		(target: { platform: SelfMediaPlatform; index: number }) => {
@@ -555,6 +600,29 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 		},
 		[fileStorageService],
 	)
+	const homeDailyInsightStorage = useMemo(
+		() =>
+			fileStorageService
+				? {
+						loadHomeDailyInsight: () => fileStorageService.loadHomeDailyInsight(),
+						saveHomeDailyInsight: (
+							payload: Parameters<typeof fileStorageService.saveHomeDailyInsight>[0],
+						) => fileStorageService.saveHomeDailyInsight(payload),
+					}
+				: undefined,
+		[fileStorageService],
+	)
+	const clearPostPublishStatus = useCallback(
+		async (target: SelfMediaPlatformPostItem) => {
+			await clearPostPublishStatusAfterPublishedLinkBind({
+				target,
+				fileStorageService,
+				store,
+			})
+			return true
+		},
+		[fileStorageService, store],
+	)
 	const handleBindPostPublishedUrl = useCallback(
 		async (target: SelfMediaPlatformPostItem, publishedUrl: string) => {
 			try {
@@ -586,6 +654,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					notes: source?.notes,
 					...(source?.autoSync ? { autoSync: { ...source.autoSync, updatedAt } } : {}),
 				})
+				await clearPostPublishStatus(target)
 				return true
 			} catch (error) {
 				console.error("Self-media published URL binding failed:", error)
@@ -593,7 +662,38 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				return false
 			}
 		},
-		[fileStorageService, handleUpdateAutoSyncPublishedUrl, t],
+		[clearPostPublishStatus, fileStorageService, handleUpdateAutoSyncPublishedUrl, t],
+	)
+	const handleSetPostPublishStatus = useCallback(
+		async (target: SelfMediaPlatformPostItem, publishStatus?: SelfMediaPostPublishStatus) => {
+			try {
+				if (!fileStorageService) return false
+				await fileStorageService.setPostPublishStatus({
+					platform: target.platform,
+					id: target.entry.id,
+					entry: target.entry.entry,
+					publishStatus,
+				})
+				store.updatePlatformPostPublishStatus(
+					target.platform,
+					target.entry.id,
+					publishStatus,
+				)
+				magicToast.success(
+					t(
+						publishStatus
+							? "detail.selfMedia.home.archivePostSuccess"
+							: "detail.selfMedia.home.restorePostPublishSuccess",
+					),
+				)
+				return true
+			} catch (error) {
+				console.error("Self-media post publish status update failed:", error)
+				magicToast.error(t("detail.selfMedia.home.setPostPublishStatusFailed"))
+				return false
+			}
+		},
+		[fileStorageService, store, t],
 	)
 	const handleDeletePost = useCallback(
 		async (target: SelfMediaPlatformPostItem) => {
@@ -786,9 +886,15 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 						onBindPublishedUrl={allowEdit ? handleBindPostPublishedUrl : undefined}
 						onRenamePost={allowEdit ? handleRenameHomePost : undefined}
 						onDeletePost={allowEdit ? handleDeletePost : undefined}
+						onSetPostPublishStatus={allowEdit ? handleSetPostPublishStatus : undefined}
+						onMentionPost={allowEdit ? handleMentionHomePost : undefined}
 						onOpenBrandConfig={allowEdit ? handleOpenBrandConfig : undefined}
 						onCreateAICard={allowEdit ? handleOpenAICardCreate : undefined}
 						onOpenAICardFolder={openFileTab ? handleOpenAICardFolder : undefined}
+						homeDailyInsightStorage={homeDailyInsightStorage}
+						homeDailyInsightModelId={dataSyncModel?.model_id}
+						initialScrollTop={homeScrollMemory.initialScrollTop}
+						onScrollTopChange={homeScrollMemory.onScrollTopChange}
 						folderFileId={folderFileId}
 					/>
 					<BrandConfigDialog

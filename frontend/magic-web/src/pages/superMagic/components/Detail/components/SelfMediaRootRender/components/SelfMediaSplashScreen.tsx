@@ -89,6 +89,8 @@ const RING_RELEASE_TRANSITION = {
 	times: [0, 0.7, 1],
 	ease: [0.24, 0.58, 0.18, 1],
 } as const
+const SPLASH_HEADING_LINES = ["从这里开始", "建立你的创作系统"]
+const SPLASH_SUPPORTING_COPY = "收集灵感 · 输出内容 · 沉淀回响"
 
 function getRingScale(ringIndex: number, exiting: boolean, isActionEngaged: boolean) {
 	if (exiting) {
@@ -240,6 +242,32 @@ export default function SelfMediaSplashScreen({ onComplete }: SelfMediaSplashScr
 						transform: translate3d(0, 86px, 0) scale(0.96);
 					}
 				}
+				@keyframes splash-system-flow {
+					0% {
+						opacity: 0;
+						transform: translateX(-120%) scaleX(0.42);
+					}
+					18% {
+						opacity: 0.52;
+					}
+					54% {
+						opacity: 0.82;
+					}
+					100% {
+						opacity: 0;
+						transform: translateX(185%) scaleX(0.72);
+					}
+				}
+				@keyframes splash-action-dot {
+					0%, 100% {
+						opacity: 0.48;
+						transform: scale(0.82);
+					}
+					50% {
+						opacity: 1;
+						transform: scale(1.16);
+					}
+				}
 				.self-media-splash-root-exit {
 					animation: splash-root-exit ${EXIT_ANIMATION_MS}ms ease-out forwards;
 				}
@@ -260,6 +288,18 @@ export default function SelfMediaSplashScreen({ onComplete }: SelfMediaSplashScr
 				}
 				.self-media-splash-action-exit {
 					animation: splash-action-exit 900ms cubic-bezier(0.34, 1.34, 0.42, 1) forwards;
+				}
+				.self-media-splash-system-flow::after {
+					animation: splash-system-flow 2.8s ease-in-out 360ms infinite;
+				}
+				.self-media-splash-action-dot {
+					animation: splash-action-dot 1.8s ease-in-out infinite;
+				}
+				@media (prefers-reduced-motion: reduce) {
+					.self-media-splash-system-flow::after,
+					.self-media-splash-action-dot {
+						animation: none;
+					}
 				}
 			`}</style>
 
@@ -354,11 +394,21 @@ export default function SelfMediaSplashScreen({ onComplete }: SelfMediaSplashScr
 					<p className="mb-5 text-[13px] font-[800] uppercase text-[#18181b]">
 						Magic · 自媒体
 					</p>
-					<h2 className="mb-10 text-[52px] font-[760] leading-[1.08] text-[#09090b] sm:text-[68px]">
-						一处创作，
-						<br />
-						触达所有人
+					<h2 className="mb-6 text-[42px] font-[760] leading-[1.12] text-[#09090b] sm:text-[58px]">
+						{SPLASH_HEADING_LINES.map((line) => (
+							<span key={line} className="block">
+								{line}
+							</span>
+						))}
 					</h2>
+					<p className="mb-5 text-[14px] font-[650] text-zinc-500 sm:text-[15px]">
+						{SPLASH_SUPPORTING_COPY}
+					</p>
+					<div
+						aria-hidden="true"
+						className="self-media-splash-system-flow relative mx-auto mb-9 h-px w-[min(360px,72vw)] overflow-hidden rounded-full bg-zinc-950/10 before:absolute before:left-1/2 before:top-1/2 before:h-1.5 before:w-1.5 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:bg-zinc-950/55 before:shadow-[0_0_18px_rgba(24,24,27,0.32)] after:absolute after:left-0 after:top-1/2 after:h-[3px] after:w-[44%] after:-translate-y-1/2 after:rounded-full after:bg-gradient-to-r after:from-transparent after:via-zinc-950/45 after:to-transparent"
+						data-testid="self-media-splash-system-flow"
+					/>
 				</div>
 				<div
 					className={cn(
@@ -376,9 +426,14 @@ export default function SelfMediaSplashScreen({ onComplete }: SelfMediaSplashScr
 					<button
 						type="button"
 						disabled={exiting}
-						className="flex h-[54px] items-center rounded-full bg-[#09090b] px-10 text-[15px] font-[700] text-white shadow-[0_18px_40px_rgba(24,24,27,0.16)] transition-transform hover:-translate-y-0.5 active:scale-95"
+						className="flex h-[54px] items-center gap-3 rounded-full bg-[#09090b] px-10 text-[15px] font-[700] text-white shadow-[0_18px_40px_rgba(24,24,27,0.16)] transition-transform hover:-translate-y-0.5 active:scale-95"
 						onClick={handleStart}
 					>
+						<span
+							aria-hidden="true"
+							className="self-media-splash-action-dot h-1.5 w-1.5 rounded-full bg-white"
+							data-testid="self-media-splash-action-dot"
+						/>
 						开始创作
 					</button>
 				</div>

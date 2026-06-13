@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { buildSelfMediaOpsOverview, getSelfMediaPostKey } from "../services/selfMediaOpsOverview"
+import { buildSelfMediaOpsMetricDisplay } from "../services/selfMediaOpsOverviewPresentation"
 import type { SelfMediaPostOpsMetricsPayload } from "../services/SelfMediaFileStorageService"
 import type { SelfMediaPostOpsArtifacts } from "../services/selfMediaOpsArtifactStates"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
@@ -79,6 +80,12 @@ describe("self-media ops overview", () => {
 		expect(overview.totalPosts).toBe(3)
 		expect(overview.totalReads).toBe(3600)
 		expect(overview.totalEngagement).toBe(170)
+		expect(overview.engagementTotals).toEqual({
+			likes: 120,
+			comments: 15,
+			saves: 26,
+			shares: 9,
+		})
 		expect(overview.engagementRate).toBeCloseTo(0.0472, 4)
 		expect(overview.bestPost?.title).toBe("Needs Review")
 		expect(overview.weakestPost?.title).toBe("Weak Engagement")
@@ -101,5 +108,79 @@ describe("self-media ops overview", () => {
 		expect(overview.nextActions[0].description).toBe(
 			"这篇文章还没绑定发布链接。绑定后，系统才能同步真实阅读、点赞和评论数据。",
 		)
+	})
+
+	it("keeps real aggregate metrics visible while the ops chain still needs setup", () => {
+		const missingSource = createPostItem("missing-source", 0, "Missing Source")
+		const ready = createPostItem("ready-post", 1, "Ready Post")
+		const overview = buildSelfMediaOpsOverview({
+			posts: [missingSource, ready],
+			artifactsByPostKey: new Map<string, SelfMediaPostOpsArtifacts>([
+				[
+					getSelfMediaPostKey(missingSource),
+					{ source: false, metrics: false, comments: false, review: false },
+				],
+				[getSelfMediaPostKey(ready), readyArtifacts],
+			]),
+			metricsByPostKey: new Map<string, SelfMediaPostOpsMetricsPayload | null>([
+				[
+					getSelfMediaPostKey(ready),
+					metrics({ reads: 1800, likes: 144, comments: 36, saves: 54, shares: 18 }),
+				],
+			]),
+		})
+
+		const display = buildSelfMediaOpsMetricDisplay(overview, {
+			reads: "1.8k",
+			engagement: "252",
+			rate: "14%",
+		})
+
+		expect(overview.operationStage).toBe("setup")
+		expect(display.reads).toEqual({ label: "总阅读", value: "1.8k" })
+		expect(display.engagement).toEqual({ label: "总互动", value: "252" })
+		expect(display.rate).toEqual({ label: "平均互动率", value: "14%" })
+	})
+
+	it("switches to continuation actions when every post ops artifact is complete", () => {
+		const best = createPostItem("best-post", 0, "Best Post")
+		const steady = createPostItem("steady-post", 1, "Steady Post")
+		const posts = [best, steady]
+		const artifactsByPostKey = new Map<string, SelfMediaPostOpsArtifacts>([
+			[getSelfMediaPostKey(best), readyArtifacts],
+			[getSelfMediaPostKey(steady), readyArtifacts],
+		])
+		const metricsByPostKey = new Map<string, SelfMediaPostOpsMetricsPayload | null>([
+			[
+				getSelfMediaPostKey(best),
+				metrics({ reads: 2000, likes: 240, comments: 36, saves: 80, shares: 24 }),
+			],
+			[
+				getSelfMediaPostKey(steady),
+				metrics({ reads: 1200, likes: 72, comments: 18, saves: 32, shares: 14 }),
+			],
+		])
+
+		const overview = buildSelfMediaOpsOverview({
+			posts,
+			artifactsByPostKey,
+			metricsByPostKey,
+		})
+
+		expect(overview.operationStage).toBe("closed")
+		expect(overview.opportunityCount).toBe(2)
+		expect(overview.nextActions.map((item) => item.key)).toEqual([
+			"repurpose-best-post",
+			"plan-next-post",
+		])
+		expect(overview.nextActions[0]).toMatchObject({
+			postKey: getSelfMediaPostKey(best),
+			title: "复用高互动结构",
+			cta: "看样本",
+		})
+		expect(overview.nextActions[1]).toMatchObject({
+			title: "规划下一篇内容",
+			cta: "新建文章",
+		})
 	})
 })

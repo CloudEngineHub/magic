@@ -1,6 +1,6 @@
 import { SuperMagicApi } from "@/apis"
 import type { ArticleDetail } from "../components/SelfMediaInitPanel/types"
-import { resolveArticleFolderName } from "./selfMediaPromptBuilder"
+import { resolveArticleFolderName } from "./selfMediaArticleFolderName"
 
 export interface ArticlePostTarget {
 	articleIndex: number

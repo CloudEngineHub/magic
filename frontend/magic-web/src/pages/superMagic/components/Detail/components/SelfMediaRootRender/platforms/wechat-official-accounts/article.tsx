@@ -8,9 +8,6 @@ import {
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
-import { Edit, MessageSquarePlus, RefreshCcw } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererRef,
@@ -19,6 +16,7 @@ import { processHtmlContent } from "../../../../contents/HTML/htmlProcessor"
 import { flattenAttachments } from "../../../../contents/HTML/utils"
 import type { FileItem } from "../../../../contents/HTML/utils/fetchInterceptor"
 import type { PlatformComponentProps, SelfMediaPost } from "../../types"
+import { CardActionStrip } from "../../components/CardActionStrip"
 
 interface WechatArticleViewProps {
 	post: SelfMediaPost
@@ -202,64 +200,21 @@ function WechatArticleViewInner(
 				className="h-full w-full"
 			/>
 			{hasActions && (
-				<div
-					className={cn(
-						"absolute right-10 top-6 z-10 flex flex-col gap-1 rounded-md bg-background/80 p-1 shadow-md backdrop-blur-sm",
-					)}
-					data-testid="wechat-article-floating-actions"
-				>
-					{!readOnly && onAddToCurrentChat && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									onClick={onAddToCurrentChat}
-									data-testid="wechat-article-action-add-file"
-									className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
-								>
-									<MessageSquarePlus className="h-4 w-4" />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent side="left">
-								{t("detail.selfMedia.edit.addArticleFileToChat")}
-							</TooltipContent>
-						</Tooltip>
-					)}
-					{!readOnly && onGoToEdit && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									onClick={onGoToEdit}
-									data-testid="wechat-article-action-edit"
-									className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
-								>
-									<Edit className="h-4 w-4" />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent side="left">
-								{t("detail.selfMedia.edit.goToArticleEdit")}
-							</TooltipContent>
-						</Tooltip>
-					)}
-					{onRefresh && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									onClick={onRefresh}
-									data-testid="wechat-article-action-refresh"
-									className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
-								>
-									<RefreshCcw className="h-4 w-4" />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent side="left">
-								{t("detail.selfMedia.edit.refreshArticle")}
-							</TooltipContent>
-						</Tooltip>
-					)}
-				</div>
+				<CardActionStrip
+					className="absolute right-10 top-6 z-10"
+					testId="wechat-article-floating-actions"
+					testIdPrefix="wechat-article-action"
+					tooltipSide="left"
+					allowEdit={allowEdit}
+					onAddToCurrentChat={onAddToCurrentChat}
+					onGoToEdit={onGoToEdit}
+					onRefresh={onRefresh}
+					labels={{
+						addToCurrentChat: t("detail.selfMedia.edit.addArticleFileToChat"),
+						goToEdit: t("detail.selfMedia.edit.goToArticleEdit"),
+						refresh: t("detail.selfMedia.edit.refreshArticle"),
+					}}
+				/>
 			)}
 		</div>
 	)

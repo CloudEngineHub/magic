@@ -57,6 +57,8 @@ const actionUnlockCopyMap = {
 	"collect-comments": "解锁评论情绪分析",
 	"generate-review": "沉淀下一轮优化",
 	"improve-weak-post": "生成标题/封面优化建议",
+	"repurpose-best-post": "复用高效内容资产",
+	"plan-next-post": "进入下一轮创作",
 } satisfies Record<SelfMediaOpsOverviewActionKey, string>
 
 export function buildSelfMediaOpsPrimarySignal(
@@ -111,6 +113,23 @@ export function buildSelfMediaOpsMetricStatusLabels(
 		reads: status,
 		engagement: status,
 		rate: status,
+	}
+}
+
+export function buildSelfMediaOpsMetricDisplay(
+	overview: SelfMediaOpsOverview,
+	values: Record<SelfMediaOpsMetricKey, string>,
+): Record<
+	SelfMediaOpsMetricKey,
+	{
+		label: string
+		value: string
+	}
+> {
+	return {
+		reads: { label: "总阅读", value: values.reads },
+		engagement: { label: "总互动", value: values.engagement },
+		rate: { label: "平均互动率", value: values.rate },
 	}
 }
 

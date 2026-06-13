@@ -128,6 +128,10 @@ describe("SelfMediaOpsReviewDashboard", () => {
 			"Review summary",
 		)
 		expect(screen.getByTestId("self-media-ops-review-summary-trend")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-ops-review-summary-trend-chart")).toHaveClass(
+			"focus:outline-none",
+			"focus-visible:outline-none",
+		)
 		expect(screen.getByTestId("self-media-ops-review-kpis")).toHaveTextContent("12.8%")
 		expect(screen.getByTestId("self-media-ops-review-impact-map")).toHaveTextContent(
 			"Impact map",
@@ -175,6 +179,34 @@ describe("SelfMediaOpsReviewDashboard", () => {
 		)
 		expect(screen.getByTestId("self-media-ops-review-report-preview")).toHaveTextContent(
 			"Review report",
+		)
+	})
+
+	it("enters as an immersive bottom sheet over the home workspace", async () => {
+		render(
+			<SelfMediaOpsReviewDashboard
+				open
+				target={buildTarget()}
+				onClose={vi.fn()}
+				onLoadData={async () => buildOpsReviewData()}
+			/>,
+		)
+
+		expect(await screen.findByTestId("self-media-ops-review-backdrop")).toHaveClass(
+			"items-end",
+			"backdrop-blur-[2px]",
+		)
+		expect(screen.getByTestId("self-media-ops-review-dashboard")).toHaveAttribute(
+			"data-motion-origin",
+			"bottom",
+		)
+		expect(screen.getByTestId("self-media-ops-review-dashboard")).toHaveClass(
+			"rounded-t-[32px]",
+			"bg-white",
+			"backdrop-blur-xl",
+		)
+		expect(screen.getByTestId("self-media-ops-review-content")).toHaveClass(
+			"bg-[linear-gradient(180deg,#ffffff_0%,#f8f8f9_42%,#f1f0eb_100%)]",
 		)
 	})
 
@@ -335,11 +367,105 @@ describe("SelfMediaOpsReviewDashboard", () => {
 		expect(screen.queryByTestId("self-media-ops-review-markdown")).not.toBeInTheDocument()
 	})
 
-	it("defines localized copy for completed source status", () => {
+	it("keeps source status labels localized and falls back for unsupported status values", async () => {
+		render(
+			<SelfMediaOpsReviewDashboard
+				open
+				target={buildTarget()}
+				onClose={vi.fn()}
+				onLoadData={async () => ({
+					...buildOpsReviewData(),
+					source: {
+						...buildOpsReviewData().source,
+						fetchStatus: "queued" as never,
+					},
+				})}
+			/>,
+		)
+
+		await screen.findByText("Not fetched")
+		expect(
+			screen.queryByText("detail.selfMedia.opsReview.sourceStatus.queued"),
+		).not.toBeInTheDocument()
+	})
+
+	it("defines localized copy for self-media init, title edit, and ops review states", () => {
+		const expectedLocales = {
+			"detail.selfMedia.initPanel.nav.stepShortBrand": ["定位", "Brand"],
+			"detail.selfMedia.initPanel.nav.stepShortConfirm": ["确认", "Confirm"],
+			"detail.selfMedia.initPanel.nav.stepShortTopics": ["选题", "Topics"],
+			"detail.selfMedia.initPanel.stepBrand.collapse": [
+				"收起品牌信息",
+				"Collapse brand info",
+			],
+			"detail.selfMedia.initPanel.stepBrand.expand": ["展开品牌信息", "Expand brand info"],
+			"detail.selfMedia.initPanel.stepBrand.profileSection": ["账号档案", "Account profile"],
+			"detail.selfMedia.initPanel.stepBrand.profileSectionHint": [
+				"配置 AI 生成内容时默认使用的身份、定位与受众。",
+				"Configure the identity, positioning, and audience AI uses by default.",
+			],
+			"detail.selfMedia.initPanel.stepBrand.saveSuccess": ["保存成功", "Saved"],
+			"detail.selfMedia.initPanel.stepConfirm.articleUnit": ["篇文章", "articles"],
+			"detail.selfMedia.initPanel.stepConfirm.modelSettingsHint": [
+				"默认即可，也可以在开始前微调。",
+				"Defaults are fine, or tune them before starting.",
+			],
+			"detail.selfMedia.initPanel.stepConfirm.modelSettingsTitle": [
+				"生成设置",
+				"Generation settings",
+			],
+			"detail.selfMedia.initPanel.stepDetail.cardCountReduceConfirm": [
+				"减少卡片数量将移除末尾已有内容的卡片，是否确认？",
+				"Reducing the card count removes filled cards at the end. Continue?",
+			],
+			"detail.selfMedia.initPanel.stepDetail.folderLabel": ["归档文件夹", "Archive folder"],
+			"detail.selfMedia.initPanel.stepTopic.generating": ["策划中", "Planning"],
+			"detail.selfMedia.initPanel.stepTopic.generatingStep1": [
+				"深度思考领域特征...",
+				"Thinking through the domain...",
+			],
+			"detail.selfMedia.initPanel.stepTopic.generatingStep2": [
+				"挖掘爆款选题角度...",
+				"Finding high-potential angles...",
+			],
+			"detail.selfMedia.initPanel.stepTopic.generatingStep3": [
+				"构思核心大纲框架...",
+				"Drafting the core outline...",
+			],
+			"detail.selfMedia.initPanel.stepTopic.generatingStep4": [
+				"打磨最终输出细节...",
+				"Polishing the final details...",
+			],
+			"detail.selfMedia.initPanel.stepTopic.ready": ["待策划", "Ready"],
+			"detail.selfMedia.titleEdit.cancel": ["取消编辑", "Cancel editing"],
+			"detail.selfMedia.titleEdit.edit": ["编辑标题", "Edit title"],
+			"detail.selfMedia.titleEdit.empty": ["标题不能为空", "Title cannot be empty"],
+			"detail.selfMedia.titleEdit.failed": [
+				"标题保存失败，请稍后重试",
+				"Failed to save the title. Please try again later.",
+			],
+			"detail.selfMedia.titleEdit.input": ["文章标题", "Article title"],
+			"detail.selfMedia.titleEdit.save": ["保存标题", "Save title"],
+			"detail.selfMedia.opsReview.sourceStatus.partial": [
+				"部分数据已同步",
+				"Partially synced",
+			],
+		} satisfies Record<string, [string, string]>
+
+		for (const [key, [zhValue, enValue]] of Object.entries(expectedLocales)) {
+			expect(getLocaleValue(zhCN, key)).toBe(zhValue)
+			expect(getLocaleValue(enUS, key)).toBe(enValue)
+		}
 		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.sourceStatus.completed")).toBe(
 			"已完成",
 		)
 		expect(getLocaleValue(enUS, "detail.selfMedia.opsReview.sourceStatus.completed")).toBe(
+			"Completed",
+		)
+		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.sourceStatus.success")).toBe(
+			"已完成",
+		)
+		expect(getLocaleValue(enUS, "detail.selfMedia.opsReview.sourceStatus.success")).toBe(
 			"Completed",
 		)
 		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.fullscreen")).toBe("全屏预览")

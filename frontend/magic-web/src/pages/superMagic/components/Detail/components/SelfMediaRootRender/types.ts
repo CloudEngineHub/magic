@@ -34,6 +34,8 @@ export interface SelfMediaComment {
 }
 
 /** Post meta surfaced on feed/detail views */
+export type SelfMediaPostPublishStatus = "planned" | "archived"
+
 export interface SelfMediaPostMeta {
 	id: string
 	title?: string
@@ -44,6 +46,7 @@ export interface SelfMediaPostMeta {
 	feedLikes?: string
 	readCount?: string
 	reads?: string
+	publishStatus?: SelfMediaPostPublishStatus
 	commentCount?: string
 	comments?: SelfMediaComment[]
 	[key: string]: any
@@ -82,6 +85,7 @@ export interface SelfMediaPostEntry {
 	id: string
 	name: string
 	entry: string
+	publishStatus?: SelfMediaPostPublishStatus
 }
 
 /** Parsed post.json content for a single post */

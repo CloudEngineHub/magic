@@ -393,6 +393,176 @@ describe("SelfMediaFileStorageService", () => {
 		)
 	})
 
+	it("saves and loads the project-level home daily insight under ops", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.saveHomeDailyInsight({
+			version: 1,
+			date: "2026-06-13",
+			generatedAt: "2026-06-13T09:00:00+08:00",
+			stateSignature: "source:2/2|metrics:2/2|comments:2/2|review:2/2",
+			welcomeTitle: "今日重点：复用高互动样本",
+			greeting: "今天可以看复用机会",
+			summary: "链路已闭环，优先拆高互动样本。",
+			actions: [
+				{
+					id: "reuse-best",
+					title: "复用高互动结构",
+					description: "从 Best Post 拆一套下一篇结构。",
+					cta: "看样本",
+					kind: "repurpose-best-post",
+					postKey: "rednote:0:posts/best/post.json",
+				},
+			],
+		})
+
+		const insightFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/ops/home-daily-insight.json",
+		)
+		expect(insightFile?.file_id).toBeTruthy()
+		if (!insightFile?.file_id) throw new Error("home-daily-insight.json was not created")
+
+		expect(JSON.parse(contentByFileId.get(insightFile.file_id) || "{}")).toEqual(
+			expect.objectContaining({
+				version: 1,
+				welcomeTitle: "今日重点：复用高互动样本",
+				date: "2026-06-13",
+				greeting: "今天可以看复用机会",
+				actions: [
+					expect.objectContaining({
+						kind: "repurpose-best-post",
+						postKey: "rednote:0:posts/best/post.json",
+					}),
+				],
+			}),
+		)
+
+		await expect(service.loadHomeDailyInsight()).resolves.toEqual(
+			expect.objectContaining({
+				date: "2026-06-13",
+				welcomeTitle: "今日重点：复用高互动样本",
+				summary: "链路已闭环，优先拆高互动样本。",
+			}),
+		)
+	})
+
+	it("normalizes grouped post ops metrics into the fixed skill contract on load", async () => {
+		seedNode({
+			file_id: "post-1-dir",
+			file_name: "post-1",
+			is_directory: true,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/posts/post-1",
+		})
+		seedNode({
+			file_id: "ops-dir",
+			file_name: "ops",
+			is_directory: true,
+			parent_id: "post-1-dir",
+			relative_file_path: "self-media/posts/post-1/ops",
+		})
+		seedNode({
+			file_id: "metrics-json",
+			file_name: "metrics.json",
+			is_directory: false,
+			parent_id: "ops-dir",
+			relative_file_path: "self-media/posts/post-1/ops/metrics.json",
+		})
+		contentByFileId.set(
+			"metrics-json",
+			JSON.stringify({
+				version: 2,
+				updatedAt: "2026-06-13T10:50:00.000Z",
+				platform: "wechat-official-accounts",
+				dataSource: "weixin-mp-api",
+				metrics: {
+					reach: {
+						impressions: 12707,
+					},
+					engagement: {
+						reads: 12707,
+						shares: 1149,
+						collects: 402,
+						likes: 130,
+						recommends: 69,
+						comments: 12,
+						engagementRate: 13.87,
+					},
+					conversion: {
+						linkClicks: 381,
+						newFollowers: 95,
+						signups: 57,
+						followConversionRate: 0.75,
+						signupConversionRate: 0.45,
+					},
+					ratios: {
+						shareRate: 9.04,
+						collectRate: 3.16,
+						commentRate: 0.09,
+					},
+					account: {
+						name: "超级麦吉",
+					},
+				},
+				history: [
+					{
+						fetchedAt: "2026-06-13T10:50:00.000Z",
+						reads: 12707,
+						shares: 1149,
+						collects: 402,
+						likes: 130,
+						comments: 12,
+						newFollowers: 95,
+						signups: 57,
+					},
+				],
+			}),
+		)
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await expect(service.loadPostOpsMetrics("posts/post-1/post.json")).resolves.toEqual(
+			expect.objectContaining({
+				version: 2,
+				source: "real-platform",
+				metrics: {
+					reads: 12707,
+					likes: 130,
+					saves: 402,
+					comments: 12,
+					shares: 1149,
+					follows: 95,
+					conversions: 57,
+				},
+				derivedMetrics: expect.objectContaining({
+					engagementRate: "13.87%",
+					saveRate: "3.16%",
+					shareRate: "9.04%",
+					commentRate: "0.09%",
+					followRate: "0.75%",
+					conversionRate: "0.45%",
+				}),
+				history: [
+					expect.objectContaining({
+						metrics: expect.objectContaining({
+							reads: 12707,
+							saves: 402,
+							follows: 95,
+							conversions: 57,
+						}),
+					}),
+				],
+			}),
+		)
+	})
+
 	it("updates the current post title in post.json while preserving manifest content", async () => {
 		seedNode({
 			file_id: "posts-dir",
@@ -580,6 +750,93 @@ window.magicProjectConfigure(window.magicProjectConfig);`,
 
 		expect(JSON.parse(contentByFileId.get("post-1-json") || "{}").meta.title).toBe("New Name")
 		expect(contentByFileId.get("magic-project-js")).toContain('"name": "New Name"')
+	})
+
+	it("sets and clears a home post publish status in the index and manifest", async () => {
+		seedNode({
+			file_id: "magic-project-js",
+			file_name: "magic.project.js",
+			is_directory: false,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/magic.project.js",
+		})
+		seedNode({
+			file_id: "posts-dir",
+			file_name: "posts",
+			is_directory: true,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/posts",
+		})
+		seedNode({
+			file_id: "post-1-dir",
+			file_name: "post-1",
+			is_directory: true,
+			parent_id: "posts-dir",
+			relative_file_path: "self-media/posts/post-1",
+		})
+		seedNode({
+			file_id: "post-1-json",
+			file_name: "post.json",
+			is_directory: false,
+			parent_id: "post-1-dir",
+			relative_file_path: "self-media/posts/post-1/post.json",
+		})
+		contentByFileId.set(
+			"magic-project-js",
+			`window.magicProjectConfig = {
+  "self-media": {
+    "rednote": {
+      "posts": [
+        { "id": "post-1", "name": "Post One", "entry": "posts/post-1/post.json" }
+      ]
+    }
+  }
+};
+window.magicProjectConfigure(window.magicProjectConfig);`,
+		)
+		contentByFileId.set(
+			"post-1-json",
+			JSON.stringify({
+				id: "post-1",
+				meta: {
+					title: "Post One",
+					subtitle: "Keep me",
+				},
+			}),
+		)
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.setPostPublishStatus({
+			platform: "rednote",
+			id: "post-1",
+			entry: "posts/post-1/post.json",
+			publishStatus: "archived",
+		})
+
+		expect(contentByFileId.get("magic-project-js")).toContain('"publishStatus": "archived"')
+		expect(JSON.parse(contentByFileId.get("post-1-json") || "{}").meta).toEqual(
+			expect.objectContaining({
+				title: "Post One",
+				subtitle: "Keep me",
+				publishStatus: "archived",
+			}),
+		)
+
+		await service.setPostPublishStatus({
+			platform: "rednote",
+			id: "post-1",
+			entry: "posts/post-1/post.json",
+		})
+
+		expect(contentByFileId.get("magic-project-js")).not.toContain("publishStatus")
+		expect(JSON.parse(contentByFileId.get("post-1-json") || "{}").meta).toEqual({
+			title: "Post One",
+			subtitle: "Keep me",
+		})
 	})
 
 	it("deletes a post directory and removes the post from magic.project.js", async () => {

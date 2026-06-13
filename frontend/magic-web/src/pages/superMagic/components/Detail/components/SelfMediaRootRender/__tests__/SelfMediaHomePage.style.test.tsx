@@ -1,7 +1,8 @@
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import SelfMediaHomePage from "../components/SelfMediaHomePage"
 import SelfMediaOpsOverviewCard from "../components/SelfMediaOpsOverviewCard"
+import { getSelfMediaHomeInsightDateKey } from "../services/selfMediaHomeInsight"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 
 const mocks = vi.hoisted(() => ({
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 		nickname: "Jiabo",
 		real_name: "谢佳波",
 	},
+	chat: vi.fn(),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -25,6 +27,12 @@ vi.mock("@/models/user/hooks/useUserInfo", () => ({
 	useUserInfo: () => ({
 		userInfo: mocks.userInfo,
 	}),
+}))
+
+vi.mock("@/services/ai", () => ({
+	aiLLMService: {
+		chat: mocks.chat,
+	},
 }))
 
 vi.mock("@/components/base/MagicTooltip", () => ({
@@ -115,14 +123,15 @@ function createPostItem(): SelfMediaPlatformPostItem {
 describe("SelfMediaHomePage styles", () => {
 	afterEach(() => {
 		vi.useRealTimers()
+		mocks.chat.mockReset()
 		Reflect.deleteProperty(document, "startViewTransition")
 	})
 
-	it("shows the upgraded ops overview metrics and completion progress", () => {
+	it("hides published-data summary before any article is published", () => {
 		render(<SelfMediaHomePage posts={[createPostItem()]} onOpenPost={vi.fn()} />)
 
 		expect(screen.getByTestId("self-media-home-header")).toHaveTextContent(
-			"Hi，Jiabo，今天先看重点文章",
+			"今日重点：绑定发布链接",
 		)
 		expect(screen.getByTestId("self-media-home-header")).toHaveTextContent(
 			"按优先级推进发布、数据和复盘，先把今日重点往前推。",
@@ -131,18 +140,57 @@ describe("SelfMediaHomePage styles", () => {
 			screen.getAllByText("先绑定已发布链接，系统才能同步真实阅读、互动和评论数据。"),
 		).toHaveLength(1)
 		expect(screen.getByTestId("self-media-home-ops-overview")).toHaveTextContent("继续处理")
-		expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveTextContent("总阅读")
-		expect(screen.getByTestId("self-media-home-ops-total-engagement")).toHaveTextContent(
-			"总互动",
-		)
-		expect(screen.getByTestId("self-media-home-ops-engagement-rate")).toHaveTextContent(
-			"平均互动率",
-		)
+		expect(screen.queryByTestId("self-media-home-ops-data-summary")).not.toBeInTheDocument()
 		expect(screen.getByTestId("self-media-home-ops-completion")).toHaveTextContent("已发布")
 		expect(screen.getByTestId("self-media-home-ops-completion")).toHaveTextContent(
 			"发布 / 数据 / 评论 / 复盘",
 		)
 		expect(screen.getByTestId("self-media-home-ops-completion")).toHaveTextContent("0/1")
+		expect(screen.getByTestId("self-media-home-ops-overview")).toHaveClass(
+			"min-w-0",
+			"max-w-full",
+		)
+		expect(screen.getByTestId("self-media-home-ops-health")).toHaveClass("w-full")
+	})
+
+	it("lets the compact home header actions adapt to the available width", () => {
+		render(
+			<SelfMediaHomePage
+				posts={[createPostItem()]}
+				onOpenPost={vi.fn()}
+				onCreateArticle={vi.fn()}
+			/>,
+		)
+
+		const createButton = screen.getByTestId("self-media-home-create-button")
+		expect(createButton.className).not.toContain("min-w-[9rem]")
+		expect(createButton.className).toContain("min-w-0")
+		expect(createButton.querySelector("span")).toHaveClass("truncate")
+	})
+
+	it("uses the wide ops overview layout once the card reaches the near-max width", () => {
+		const getBoundingClientRect = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue({
+				x: 0,
+				y: 0,
+				left: 0,
+				top: 0,
+				right: 900,
+				bottom: 420,
+				width: 900,
+				height: 420,
+				toJSON: () => ({}),
+			})
+
+		render(<SelfMediaHomePage posts={[createPostItem()]} onOpenPost={vi.fn()} />)
+
+		expect(screen.getByTestId("self-media-home-ops-overview")).toHaveAttribute(
+			"data-ops-layout",
+			"wide",
+		)
+
+		getBoundingClientRect.mockRestore()
 	})
 
 	it("responds to pointer movement on the ops overview card", () => {
@@ -224,7 +272,7 @@ describe("SelfMediaHomePage styles", () => {
 		})
 	})
 
-	it("flips a metric card to show richer drill-down data", () => {
+	it("shows a compact published-data summary with best-post context", () => {
 		vi.useFakeTimers()
 		render(
 			<SelfMediaOpsOverviewCard
@@ -238,6 +286,12 @@ describe("SelfMediaHomePage styles", () => {
 						metrics: { done: 1, total: 3 },
 						comments: { done: 1, total: 3 },
 						review: { done: 0, total: 3 },
+					},
+					engagementTotals: {
+						likes: 120,
+						comments: 20,
+						saves: 18,
+						shares: 12,
 					},
 					bestPost: {
 						postKey: "rednote:0:posts/top/post.json",
@@ -267,28 +321,20 @@ describe("SelfMediaHomePage styles", () => {
 			vi.advanceTimersByTime(720)
 		})
 
-		const readsMetric = screen.getByTestId("self-media-home-ops-total-reads")
-		expect(readsMetric).toHaveAttribute("data-flipped", "false")
-
-		fireEvent.click(readsMetric)
-
-		expect(readsMetric).toHaveAttribute("data-flipped", "true")
-		expect(screen.getByTestId("self-media-home-ops-metric-detail-reads")).toHaveTextContent(
-			"阅读拆解",
+		expect(screen.getByTestId("self-media-home-ops-data-summary")).toHaveTextContent(
+			"发布后数据汇总",
 		)
-		expect(screen.getByTestId("self-media-home-ops-metric-detail-reads")).toHaveTextContent(
-			"Top Post",
+		expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveTextContent("1.2k")
+		expect(screen.getByTestId("self-media-home-ops-likes")).toHaveTextContent("120")
+		expect(screen.getByTestId("self-media-home-ops-comments")).toHaveTextContent("20")
+		expect(screen.getByTestId("self-media-home-ops-saves")).toHaveTextContent("18")
+		expect(screen.getByTestId("self-media-home-ops-shares")).toHaveTextContent("12")
+		expect(screen.getByTestId("self-media-home-ops-best-post")).toHaveTextContent(
+			"最佳样本：Top Post",
 		)
-		expect(screen.getByTestId("self-media-home-ops-metric-detail-reads")).toHaveTextContent(
-			/最近同步\s*2026\/06\/13 09:30/,
-		)
-
-		fireEvent.click(readsMetric)
-
-		expect(readsMetric).toHaveAttribute("data-flipped", "false")
 	})
 
-	it("uses actionable copy and multiline support for the rate drill-down", () => {
+	it("keeps the aggregate metric labels stable in the decision panel", () => {
 		vi.useFakeTimers()
 		render(
 			<SelfMediaOpsOverviewCard
@@ -332,12 +378,9 @@ describe("SelfMediaHomePage styles", () => {
 		})
 
 		const rateMetric = screen.getByTestId("self-media-home-ops-engagement-rate")
-		fireEvent.click(rateMetric)
-
-		const rateDetail = screen.getByTestId("self-media-home-ops-metric-detail-rate")
-		expect(rateDetail).toHaveTextContent("找出高效样本和风险内容")
-		expect(screen.getByText("找出高效样本和风险内容")).toHaveClass("line-clamp-2")
-		expect(screen.getByText("找出高效样本和风险内容")).not.toHaveClass("line-clamp-1")
+		expect(rateMetric).toHaveTextContent("平均互动率")
+		expect(rateMetric).toHaveTextContent("4.7%")
+		expect(screen.getByTestId("self-media-home-ops-data-summary")).toHaveTextContent("篇均阅读")
 	})
 
 	it("turns the overview into an operation decision panel", () => {
@@ -384,6 +427,223 @@ describe("SelfMediaHomePage styles", () => {
 		expect(screen.getByTestId("self-media-home-ops-action-sync-metrics")).toHaveTextContent(
 			"解锁互动率判断",
 		)
+	})
+
+	it("renders cached home daily insight content in the closed ops state", () => {
+		render(
+			<SelfMediaOpsOverviewCard
+				overview={{
+					totalPosts: 2,
+					totalReads: 3200,
+					totalEngagement: 516,
+					engagementRate: 0.16125,
+					operationStage: "closed",
+					opportunityCount: 2,
+					completion: {
+						source: { done: 2, total: 2 },
+						metrics: { done: 2, total: 2 },
+						comments: { done: 2, total: 2 },
+						review: { done: 2, total: 2 },
+					},
+					bestPost: {
+						postKey: "rednote:0:posts/best/post.json",
+						title: "Best Post",
+						platform: "rednote",
+						index: 0,
+						reads: 2000,
+						engagement: 380,
+						engagementRate: 0.19,
+					},
+					weakestPost: null,
+					nextActions: [
+						{
+							key: "plan-next-post",
+							title: "规划下一篇内容",
+							description: "当前运营链路已闭环，可以继续生成新选题。",
+							cta: "新建文章",
+							priority: 70,
+						},
+					],
+					lastUpdatedAt: "2026-06-13T09:30:00+08:00",
+				}}
+				dailyInsight={{
+					version: 1,
+					date: "2026-06-13",
+					generatedAt: "2026-06-13T09:00:00+08:00",
+					stateSignature: "cached-signature",
+					greeting: "Jiabo，今天可以看复用机会",
+					summary: "链路已闭环，优先拆高互动样本。",
+					actions: [
+						{
+							id: "reuse-best",
+							title: "复用高互动结构",
+							description: "从 Best Post 拆一套下一篇结构。",
+							cta: "看样本",
+							kind: "repurpose-best-post",
+							postKey: "rednote:0:posts/best/post.json",
+						},
+					],
+				}}
+				dailyInsightStatus="cached"
+				onRegenerateDailyInsight={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByText("今日建议")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-daily-insight-refresh")).toHaveTextContent(
+			"更新建议",
+		)
+		expect(screen.getByTestId("self-media-home-ops-aside")).not.toContainElement(
+			screen.getByTestId("self-media-home-daily-insight-refresh"),
+		)
+		expect(screen.getByText("链路已闭环，优先拆高互动样本。")).toBeInTheDocument()
+		expect(screen.getByText("链路已闭环，优先拆高互动样本。")).not.toHaveClass("line-clamp-2")
+		expect(screen.getByTestId("self-media-home-ops-insight-greeting")).toHaveTextContent(
+			"Jiabo，今天可以看复用机会",
+		)
+		expect(
+			screen.getByTestId("self-media-home-ops-action-repurpose-best-post"),
+		).toHaveTextContent("复用高互动结构")
+		expect(screen.getByText("从 Best Post 拆一套下一篇结构。")).not.toHaveClass("line-clamp-2")
+		expect(
+			screen.queryByTestId("self-media-home-ops-action-plan-next-post"),
+		).not.toBeInTheDocument()
+	})
+
+	it("places the cached daily insight greeting in the ops suggestion panel", async () => {
+		const date = getSelfMediaHomeInsightDateKey()
+		const storage = {
+			loadHomeDailyInsight: vi.fn().mockResolvedValue({
+				version: 1,
+				date,
+				generatedAt: "2026-06-14T08:00:00+08:00",
+				stateSignature: "cached-signature",
+				welcomeTitle: "今日重点：复用高互动样本",
+				greeting: "早上好，谢佳博！今天是2026年6月14日，周日。",
+				summary: "先看高互动样本，再安排下一篇。",
+				actions: [
+					{
+						id: "reuse-best",
+						title: "复用高互动结构",
+						description: "拆一套下一篇结构。",
+						cta: "看样本",
+						kind: "repurpose-best-post",
+					},
+				],
+			}),
+			saveHomeDailyInsight: vi.fn().mockResolvedValue(undefined),
+		}
+
+		render(
+			<SelfMediaHomePage
+				posts={[createPostItem()]}
+				onOpenPost={vi.fn()}
+				homeDailyInsightStorage={storage}
+				homeDailyInsightModelId="first-available-model"
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-home-ops-insight-greeting")).toHaveTextContent(
+				"谢佳博，运营工作台已准备就绪",
+			)
+		})
+		expect(screen.getByTestId("self-media-home-header")).toHaveTextContent(
+			"今日重点：复用高互动样本",
+		)
+		expect(screen.getByTestId("self-media-home-header")).not.toHaveTextContent("早上好")
+		expect(screen.getByTestId("self-media-home-header")).not.toHaveTextContent("谢佳博")
+		expect(screen.getByTestId("self-media-home-header")).not.toHaveTextContent("2026年6月14日")
+		expect(screen.getByTestId("self-media-home-header")).not.toHaveTextContent("周日")
+		expect(screen.getByTestId("self-media-home-ops-insight-greeting")).not.toHaveTextContent(
+			"早上好",
+		)
+		expect(screen.getByTestId("self-media-home-ops-insight-greeting")).not.toHaveTextContent(
+			"2026年6月14日",
+		)
+		expect(screen.getByTestId("self-media-home-ops-insight-greeting")).not.toHaveTextContent(
+			"周日",
+		)
+		expect(
+			within(screen.getByTestId("self-media-home-ops-overview")).queryByText(
+				"早上好，谢佳博！今天是2026年6月14日，周日。",
+			),
+		).not.toBeInTheDocument()
+	})
+
+	it("auto-generates home daily insight when the project opens and the insight file is missing", async () => {
+		mocks.chat.mockResolvedValueOnce({
+			content: JSON.stringify({
+				welcomeTitle: "今日重点：复用高互动样本",
+				greeting: "Jiabo，今天直接看复用机会",
+				summary: "链路已闭环，优先拆高互动样本。",
+				actions: [
+					{
+						id: "reuse-best",
+						title: "复用高互动结构",
+						description: "从高互动样本拆一套下一篇结构。",
+						cta: "看样本",
+						kind: "repurpose-best-post",
+					},
+				],
+			}),
+		})
+		const storage = {
+			loadHomeDailyInsight: vi.fn().mockResolvedValue(null),
+			saveHomeDailyInsight: vi.fn().mockResolvedValue(undefined),
+		}
+
+		render(
+			<SelfMediaHomePage
+				posts={[createPostItem()]}
+				onOpenPost={vi.fn()}
+				homeDailyInsightStorage={storage}
+				homeDailyInsightModelId="first-available-model"
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(storage.loadHomeDailyInsight).toHaveBeenCalledTimes(1)
+		})
+		await waitFor(() => {
+			expect(storage.saveHomeDailyInsight).toHaveBeenCalled()
+		})
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-home-header")).toHaveTextContent(
+				"今日重点：复用高互动样本",
+			)
+		})
+		expect(storage.saveHomeDailyInsight.mock.calls[0]?.[0]).toEqual(
+			expect.objectContaining({
+				welcomeTitle: "今日重点：复用高互动样本",
+			}),
+		)
+		expect(mocks.chat).toHaveBeenCalledWith(
+			expect.any(Array),
+			expect.objectContaining({
+				model: "first-available-model",
+			}),
+		)
+	})
+
+	it("waits for an available model before auto-generating home daily insight", async () => {
+		const storage = {
+			loadHomeDailyInsight: vi.fn().mockResolvedValue(null),
+			saveHomeDailyInsight: vi.fn().mockResolvedValue(undefined),
+		}
+
+		render(
+			<SelfMediaHomePage
+				posts={[createPostItem()]}
+				onOpenPost={vi.fn()}
+				homeDailyInsightStorage={storage}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(storage.loadHomeDailyInsight).not.toHaveBeenCalled()
+		})
+		expect(mocks.chat).not.toHaveBeenCalled()
 	})
 
 	it("adds breathing motion only to active operation states", () => {
@@ -452,6 +712,7 @@ describe("SelfMediaHomePage styles", () => {
 		expect(screen.getByTestId("self-media-home-ops-total-reads")).not.toHaveClass(
 			"self-media-ops-metric-flow",
 		)
+		expect(screen.queryByTestId("self-media-home-ops-completion")).not.toBeInTheDocument()
 	})
 
 	it("opens the relevant next action from the quick continue list", () => {

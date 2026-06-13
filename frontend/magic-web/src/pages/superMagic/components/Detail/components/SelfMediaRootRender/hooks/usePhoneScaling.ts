@@ -29,7 +29,7 @@ interface UsePhoneScalingResult<E extends HTMLElement> {
 export function usePhoneScaling<E extends HTMLElement = HTMLDivElement>({
 	designWidth,
 	designHeight,
-	padding = 24,
+	padding = 16,
 	fixedWidth = 0,
 	fixedHeight = 0,
 	maxScale = 1,

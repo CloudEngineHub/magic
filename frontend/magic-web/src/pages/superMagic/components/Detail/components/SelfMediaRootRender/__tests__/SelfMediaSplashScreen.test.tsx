@@ -7,6 +7,21 @@ describe("SelfMediaSplashScreen", () => {
 		vi.useRealTimers()
 	})
 
+	it("renders the content system launch copy with subtle motion details", () => {
+		const onComplete = vi.fn()
+		render(<SelfMediaSplashScreen onComplete={onComplete} />)
+
+		expect(screen.getByText("从这里开始")).toBeInTheDocument()
+		expect(screen.getByText("建立你的创作系统")).toBeInTheDocument()
+		expect(screen.getByText("收集灵感 · 输出内容 · 沉淀回响")).toBeInTheDocument()
+		expect(screen.queryByText("建立创作系统")).not.toBeInTheDocument()
+		expect(screen.queryByText("建立你的内容创作系统")).not.toBeInTheDocument()
+		expect(screen.queryByText("一处创作，")).not.toBeInTheDocument()
+		expect(screen.queryByText("触达所有人")).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-splash-system-flow")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-splash-action-dot")).toBeInTheDocument()
+	})
+
 	it("renders a varied orbit gallery", () => {
 		const onComplete = vi.fn()
 		render(<SelfMediaSplashScreen onComplete={onComplete} />)
@@ -123,6 +138,9 @@ describe("SelfMediaSplashScreen", () => {
 		expect(styles).toContain("34%")
 		expect(styles).toContain("9%")
 		expect(styles).toContain("calc(var(--tile-radius) - 22px)")
+		expect(styles).toContain("splash-system-flow")
+		expect(styles).toContain("splash-action-dot")
+		expect(styles).toContain("prefers-reduced-motion: reduce")
 		expect(styles).not.toContain("splash-white-mask")
 		expect(styles).not.toContain("62%")
 		expect(styles).not.toContain("68%")

@@ -9,7 +9,7 @@ import type { ScheduledTask } from "@/types/scheduledTask"
 import type { SelfMediaPlatform } from "../../../types"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 import type { AICardCreateInitialValues } from "./AICardCreateDialog"
-import type { SelfMediaAttachmentNode } from "../types"
+import type { SelfMediaAttachmentNode, SelfMediaPostPublishStatus } from "../types"
 import type { SelfMediaPostOpenTransitionPayload } from "./SelfMediaPostCard"
 import type {
 	SelfMediaPostOpsMetricsPayload,
@@ -38,6 +38,24 @@ import SelfMediaHomeAnimations, {
 import SelfMediaHomeEmptyState from "./SelfMediaHomeEmptyState"
 import SelfMediaHomeHeader from "./SelfMediaHomeHeader"
 import SelfMediaHomePostList from "./SelfMediaHomePostList"
+import { SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE } from "./SelfMediaWorkspaceBackground"
+import {
+	buildOpsArtifactStateSignature,
+	buildOpsReviewDataVersion,
+	findSelfMediaFolderNode,
+	getSelfMediaHomeLayout,
+	getSelfMediaHomeDisplayName,
+	getSelfMediaHomePostColumnCount,
+	hasHomePreviewAsset,
+	isAICardDisplayConfig,
+} from "./SelfMediaHomePage.helpers"
+import { useSelfMediaHomeDailyInsight } from "../hooks/useSelfMediaHomeDailyInsight"
+import { useMeasuredContainerWidth } from "../hooks/useMeasuredContainerWidth"
+import { useSelfMediaHomeScrollPosition } from "../hooks/useSelfMediaHomeScrollPosition"
+import {
+	formatSelfMediaHomeWelcomeTitle,
+	type SelfMediaHomeDailyInsightStorage,
+} from "../services/selfMediaHomeInsight"
 import type {
 	AICardFolderItem,
 	SelfMediaHomeOpeningPost,
@@ -79,19 +97,24 @@ interface SelfMediaHomePageProps {
 		nextTitle: string,
 	) => Promise<boolean | void> | boolean | void
 	onDeletePost?: (target: SelfMediaPlatformPostItem) => Promise<boolean | void> | boolean | void
+	onMentionPost?: (target: SelfMediaPlatformPostItem) => void
+	onSetPostPublishStatus?: (
+		target: SelfMediaPlatformPostItem,
+		publishStatus?: SelfMediaPostPublishStatus,
+	) => Promise<boolean | void> | boolean | void
 	onOpenBrandConfig?: () => void
 	onCreateAICard?: (initialValues?: AICardCreateInitialValues) => void
 	onOpenAICardFolder?: (folder: AICardFolderItem) => void
+	homeDailyInsightStorage?: SelfMediaHomeDailyInsightStorage
+	homeDailyInsightModelId?: string
+	initialScrollTop?: number
+	onScrollTopChange?: (scrollTop: number) => void
 	folderFileId?: string
 	className?: string
 }
 
-interface ViewTransitionDocument extends Document {
-	startViewTransition?: (callback: () => void) => {
-		finished?: Promise<void>
-		ready?: Promise<void>
-		updateCallbackDone?: Promise<void>
-	}
+type ViewTransitionDocument = Document & {
+	startViewTransition?: (callback: () => void) => unknown
 }
 
 function prefersReducedMotion() {
@@ -106,12 +129,6 @@ function getViewTransitionDocument() {
 	if (typeof document === "undefined") return null
 	const candidate = document as ViewTransitionDocument
 	return typeof candidate.startViewTransition === "function" ? candidate : null
-}
-
-function getSelfMediaHomeDisplayName(
-	userInfo: { nickname?: string | null; real_name?: string | null } | null,
-) {
-	return (userInfo?.nickname || userInfo?.real_name || "").trim()
 }
 
 function SelfMediaHomePage({
@@ -131,9 +148,15 @@ function SelfMediaHomePage({
 	onBindPublishedUrl,
 	onRenamePost,
 	onDeletePost,
+	onMentionPost,
+	onSetPostPublishStatus,
 	onOpenBrandConfig,
 	onCreateAICard,
 	onOpenAICardFolder,
+	homeDailyInsightStorage,
+	homeDailyInsightModelId,
+	initialScrollTop,
+	onScrollTopChange,
 	folderFileId,
 	className,
 }: SelfMediaHomePageProps) {
@@ -144,6 +167,12 @@ function SelfMediaHomePage({
 	const currentOpsArtifactStatesRef = useRef(new Map<string, SelfMediaPostOpsArtifactStates>())
 	const previousOpsArtifactStatesRef = useRef(new Map<string, SelfMediaPostOpsArtifactStates>())
 	const openPostTransitionTimerRef = useRef<number | null>(null)
+	const { containerRef: homeContainerRef, width: homeContainerWidth } =
+		useMeasuredContainerWidth<HTMLDivElement>()
+	const homeScrollViewportRef = useSelfMediaHomeScrollPosition({
+		initialScrollTop,
+		onScrollTopChange,
+	})
 	const [activeOpsReviewTarget, setActiveOpsReviewTarget] =
 		useState<SelfMediaPlatformPostItem | null>(null)
 	const [openingPost, setOpeningPost] = useState<SelfMediaHomeOpeningPost | null>(null)
@@ -185,13 +214,29 @@ function SelfMediaHomePage({
 		() => new Map(posts.map((item) => [getSelfMediaPostKey(item), item])),
 		[posts],
 	)
+	const activeOpsReviewDataVersion = activeOpsReviewTarget
+		? buildOpsReviewDataVersion(
+				opsArtifactStatesByPostKey.get(getSelfMediaPostKey(activeOpsReviewTarget)),
+			)
+		: ""
 	const displayName = getSelfMediaHomeDisplayName(userInfo)
-	const greetingTitle = displayName
-		? `Hi，${displayName}，今天先看重点文章`
-		: "Hi，今天先看重点文章"
+	const homeDailyInsight = useSelfMediaHomeDailyInsight({
+		overview: opsOverview,
+		displayName,
+		enabled: Boolean(homeDailyInsightStorage && homeDailyInsightModelId),
+		model: homeDailyInsightModelId,
+		storage: homeDailyInsightStorage,
+	})
+	const defaultWelcomeTitle = formatSelfMediaHomeWelcomeTitle(undefined, "", opsOverview)
+	const greetingTitle = formatSelfMediaHomeWelcomeTitle(
+		homeDailyInsight.insight?.welcomeTitle,
+		defaultWelcomeTitle,
+	)
 	const greetingSubtitle = hasPosts
 		? "按优先级推进发布、数据和复盘，先把今日重点往前推。"
 		: t("detail.selfMedia.home.emptyDesc")
+	const homeLayout = getSelfMediaHomeLayout(homeContainerWidth)
+	const inlineHomeHeader = homeContainerWidth >= 900
 
 	const handleOpenPost = useCallback(
 		(
@@ -245,6 +290,11 @@ function SelfMediaHomePage({
 
 	const handleOpsOverviewAction = useCallback(
 		(action: SelfMediaOpsOverviewAction) => {
+			if (action.key === "plan-next-post") {
+				onCreateArticle?.()
+				return
+			}
+			if (!action.postKey) return
 			const target = postsByPostKey.get(action.postKey)
 			if (!target) return
 			if (action.key === "sync-metrics" || action.key === "collect-comments") {
@@ -259,24 +309,12 @@ function SelfMediaHomePage({
 			}
 			handleOpenPost({ platform: target.platform, index: target.index })
 		},
-		[handleOpenPost, onPostPublishRefresh, postsByPostKey],
+		[handleOpenPost, onCreateArticle, onPostPublishRefresh, postsByPostKey],
 	)
 
-	// Find AI card folders that are children of the self-media folder
 	const aiCardFolders = useMemo(() => {
 		if (!attachmentList?.length || !folderFileId) return []
-		// Find the self-media folder node and look at its children
-		const findNode = (nodes: SelfMediaAttachmentNode[]): SelfMediaAttachmentNode | null => {
-			for (const node of nodes) {
-				if (node.file_id === folderFileId) return node
-				if (node.is_directory && node.children?.length) {
-					const result = findNode(node.children as SelfMediaAttachmentNode[])
-					if (result) return result
-				}
-			}
-			return null
-		}
-		const selfMediaFolder = findNode(attachmentList)
+		const selfMediaFolder = findSelfMediaFolderNode(attachmentList, folderFileId)
 		const children = (selfMediaFolder?.children || []) as SelfMediaAttachmentNode[]
 		return children.filter((node): node is AICardFolderItem =>
 			Boolean(
@@ -369,68 +407,82 @@ function SelfMediaHomePage({
 				openingPost && "self-media-home-opening",
 				className,
 			)}
-			style={{
-				background:
-					"linear-gradient(145deg, rgba(255, 255, 255, 0.52), transparent 40%), #f8f8f9",
-			}}
+			style={SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE}
 			data-testid="self-media-home-page"
 		>
 			<SelfMediaHomeAnimations />
 			<main className="min-h-0 flex-1" data-testid="self-media-home-main">
-				<ScrollArea className="h-full">
-					<div className="mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-6">
-						<SelfMediaHomeHeader
-							greetingTitle={greetingTitle}
-							greetingSubtitle={greetingSubtitle}
-							opening={Boolean(openingPost)}
-							onCreateArticle={onCreateArticle}
-							onOpenBrandConfig={onOpenBrandConfig}
-							onCreateAICard={onCreateAICard}
-							t={t}
-						/>
-						{hasPosts ? (
-							<section
-								className={cn(
-									"self-media-home-enter-item mb-8",
-									openingPost && "self-media-home-opening-dim",
-								)}
-								style={{ animationDelay: "100ms" }}
-							>
-								<SelfMediaOpsOverviewCard
-									overview={opsOverview}
-									onAction={handleOpsOverviewAction}
-								/>
-							</section>
-						) : (
-							<SelfMediaHomeEmptyState onCreateArticle={onCreateArticle} t={t} />
-						)}
-						<SelfMediaHomeAICardList
-							aiCardFolders={aiCardFolders}
-							attachmentList={attachmentList}
-							openingPost={openingPost}
-							onOpenAICardFolder={onOpenAICardFolder}
-							t={t}
-						/>
-						<SelfMediaHomePostList
-							postGroups={postGroups}
-							postCount={posts.length}
-							attachmentList={attachmentList}
-							openingPost={openingPost}
-							opsArtifactsByPostKey={opsArtifactsByPostKey}
-							opsMetricsByPostKey={opsMetricsByPostKey}
-							opsArtifactAnimationsByPostKey={opsArtifactAnimationsByPostKey}
-							onOpenPost={handleOpenPost}
-							onRequestPrePublishAnalysis={onRequestPrePublishAnalysis}
-							onPostPublishRefresh={onPostPublishRefresh}
-							onConfigureAutoSync={onConfigureAutoSync}
-							onOpenOpsReview={setActiveOpsReviewTarget}
-							onLoadPublishedUrl={onLoadPublishedUrl}
-							onLoadOpsSource={onLoadOpsSource}
-							onBindPublishedUrl={onBindPublishedUrl}
-							onRenamePost={onRenamePost}
-							onDeletePost={onDeletePost}
-							t={t}
-						/>
+				<ScrollArea className="h-full" viewportRef={homeScrollViewportRef}>
+					<div
+						ref={homeContainerRef}
+						className="mx-auto w-full min-w-0 max-w-5xl"
+						data-home-layout={homeLayout}
+					>
+						<div className={cn("px-3 py-3", homeLayout !== "compact" && "px-6 py-6")}>
+							<SelfMediaHomeHeader
+								greetingTitle={greetingTitle}
+								greetingSubtitle={greetingSubtitle}
+								opening={Boolean(openingPost)}
+								comfortable={inlineHomeHeader}
+								onCreateArticle={onCreateArticle}
+								onOpenBrandConfig={onOpenBrandConfig}
+								onCreateAICard={onCreateAICard}
+								t={t}
+							/>
+							{hasPosts ? (
+								<section
+									className={cn(
+										"self-media-home-enter-item mb-8",
+										openingPost && "self-media-home-opening-dim",
+									)}
+									style={{ animationDelay: "100ms" }}
+								>
+									<SelfMediaOpsOverviewCard
+										overview={opsOverview}
+										onAction={handleOpsOverviewAction}
+										dailyInsight={homeDailyInsight.insight}
+										dailyInsightStatus={homeDailyInsight.status}
+										onRegenerateDailyInsight={
+											homeDailyInsightStorage
+												? homeDailyInsight.regenerate
+												: undefined
+										}
+									/>
+								</section>
+							) : (
+								<SelfMediaHomeEmptyState onCreateArticle={onCreateArticle} t={t} />
+							)}
+							<SelfMediaHomeAICardList
+								aiCardFolders={aiCardFolders}
+								attachmentList={attachmentList}
+								openingPost={openingPost}
+								onOpenAICardFolder={onOpenAICardFolder}
+								t={t}
+							/>
+							<SelfMediaHomePostList
+								postGroups={postGroups}
+								postCount={posts.length}
+								attachmentList={attachmentList}
+								openingPost={openingPost}
+								opsArtifactsByPostKey={opsArtifactsByPostKey}
+								opsMetricsByPostKey={opsMetricsByPostKey}
+								opsArtifactAnimationsByPostKey={opsArtifactAnimationsByPostKey}
+								columnCount={getSelfMediaHomePostColumnCount(homeLayout)}
+								onOpenPost={handleOpenPost}
+								onRequestPrePublishAnalysis={onRequestPrePublishAnalysis}
+								onPostPublishRefresh={onPostPublishRefresh}
+								onConfigureAutoSync={onConfigureAutoSync}
+								onOpenOpsReview={setActiveOpsReviewTarget}
+								onLoadPublishedUrl={onLoadPublishedUrl}
+								onLoadOpsSource={onLoadOpsSource}
+								onBindPublishedUrl={onBindPublishedUrl}
+								onRenamePost={onRenamePost}
+								onDeletePost={onDeletePost}
+								onMentionPost={onMentionPost}
+								onSetPostPublishStatus={onSetPostPublishStatus}
+								t={t}
+							/>
+						</div>
 					</div>
 				</ScrollArea>
 			</main>
@@ -441,41 +493,10 @@ function SelfMediaHomePage({
 				onEditData={(target) => onOpenOpsMetrics?.(target)}
 				onSyncData={onPostPublishRefresh}
 				onLoadData={onLoadOpsReviewData}
+				dataVersion={activeOpsReviewDataVersion}
 			/>
 		</div>
 	)
-}
-
-function hasHomePreviewAsset({ platform, post }: SelfMediaPlatformPostItem) {
-	if (platform === "wechat-official-accounts") {
-		const cover = post.thumbnailCover || post.heroCover
-		return Boolean(cover?.fileId || cover?.url)
-	}
-	const card = post.cards[0]
-	return Boolean(card?.fileId || card?.url)
-}
-
-function isAICardDisplayConfig(value: unknown): value is { type: "ai-card" } {
-	return Boolean(
-		value && typeof value === "object" && "type" in value && value.type === "ai-card",
-	)
-}
-
-function buildOpsArtifactStateSignature(
-	statesByPostKey: Map<string, SelfMediaPostOpsArtifactStates>,
-) {
-	const keys: Array<keyof SelfMediaPostOpsArtifacts> = ["source", "metrics", "comments", "review"]
-	return Array.from(statesByPostKey.entries())
-		.map(([postKey, states]) =>
-			[
-				postKey,
-				...keys.flatMap((key) => {
-					const state = states[key]
-					return [key, state.ready ? "1" : "0", state.fileId || "", state.version || ""]
-				}),
-			].join(":"),
-		)
-		.join("|")
 }
 
 export default observer(SelfMediaHomePage)

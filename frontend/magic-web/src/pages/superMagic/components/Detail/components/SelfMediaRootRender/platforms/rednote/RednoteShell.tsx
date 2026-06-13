@@ -7,6 +7,7 @@ import type { CardFrameRef } from "../../components/CardFrame"
 import ExportPreviewDialog from "../../components/ExportPreviewDialog"
 import type { ExportPreviewConfirmArgs } from "../../components/ExportPreviewDialog"
 import SelfMediaShellHeader, { SelfMediaShellViewBar } from "../../components/SelfMediaShellHeader"
+import { SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE } from "../../components/SelfMediaWorkspaceBackground"
 import { useExportZip } from "../../hooks/useExportZip"
 import { useExportProgressToast } from "../../hooks/useExportProgressToast"
 import { usePhoneScaling } from "../../hooks/usePhoneScaling"
@@ -339,7 +340,8 @@ function RednoteShell(props: PlatformComponentProps) {
 
 	return (
 		<div
-			className="relative flex h-full w-full flex-col bg-white"
+			className="relative flex h-full w-full flex-col"
+			style={SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE}
 			onPointerDown={handleShellPointerDown}
 			data-testid="rednote-shell-workspace"
 		>

@@ -126,7 +126,7 @@ describe("SelfMediaShellHeader", () => {
 			</>,
 		)
 
-		expect(screen.getByTestId("self-media-shell-header")).toHaveClass("bg-white")
+		expect(screen.getByTestId("self-media-shell-header")).toHaveClass("bg-transparent")
 		expect(screen.getByTestId("self-media-shell-header")).not.toHaveClass("border-b")
 		expect(screen.getByTestId("self-media-shell-header")).toHaveClass(
 			"grid-cols-[minmax(14rem,1fr)_auto]",

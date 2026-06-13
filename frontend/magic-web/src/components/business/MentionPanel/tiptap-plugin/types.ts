@@ -216,10 +216,12 @@ export function getMentionDisplayName(attrs: TiptapMentionAttributes): string {
 }
 
 // Get description for mention
-export function getMentionDescription(attrs: TiptapMentionAttributes): string {
-	const data = attrs.data as Record<string, unknown>
+export function getMentionDescription(attrs: TiptapMentionAttributes | null | undefined): string {
+	const data = attrs?.data as Record<string, unknown>
 
-	switch (attrs.type) {
+	if (!data) return ""
+
+	switch (attrs?.type) {
 		case MentionItemType.MCP:
 			return (data?.description as string) || ""
 		case MentionItemType.AGENT:
@@ -244,10 +246,12 @@ export function getMentionDescription(attrs: TiptapMentionAttributes): string {
 }
 
 // Get icon for mention
-export function getMentionIcon(attrs: TiptapMentionAttributes): string {
-	const data = attrs.data as MentionData
+export function getMentionIcon(attrs: TiptapMentionAttributes | null | undefined): string {
+	const data = attrs?.data as MentionData
 
-	switch (attrs.type) {
+	if (!data) return ""
+
+	switch (attrs?.type) {
 		case MentionItemType.MCP:
 			return (data as McpMentionData)?.icon as string
 		case MentionItemType.AGENT:

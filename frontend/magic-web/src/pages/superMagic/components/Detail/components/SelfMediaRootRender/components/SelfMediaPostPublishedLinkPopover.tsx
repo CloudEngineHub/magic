@@ -144,8 +144,8 @@ function SelfMediaPostPublishedLinkPopover({
 					<button
 						type="button"
 						className={cn(
-							"inline-flex h-8 items-center justify-center rounded-full text-[12px] font-[700] transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-							showLabel ? "gap-1.5 px-3" : "w-8",
+							"inline-flex h-9 items-center justify-center rounded-full text-[12px] font-[700] transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+							showLabel ? "gap-1.5 px-3" : "w-9",
 							sourceReady
 								? "bg-[#f4f4f5] text-[#18181b] hover:bg-[#e4e4e7]"
 								: "bg-[#18181b] text-[#ffffff] hover:bg-[#27272a]",
@@ -162,7 +162,7 @@ function SelfMediaPostPublishedLinkPopover({
 			<PopoverContent
 				side="top"
 				align={contentAlign}
-				className={`w-80 space-y-3 p-3 ${selfMediaOverlayStyles.floatingPanel}`}
+				className={`w-[min(20rem,calc(100vw-2rem))] space-y-3 p-3 ${selfMediaOverlayStyles.floatingPanel}`}
 				data-testid={`self-media-home-post-bind-link-popover-${postId}`}
 			>
 				{loading ? (

@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
+import { getSelfMediaHomeLayout } from "../components/SelfMediaHomePage.helpers"
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -14,5 +15,9 @@ function countFileLines(relativePath: string): number {
 describe("SelfMediaHomePage structure", () => {
 	it("keeps the main homepage orchestration file below the local 500-line split threshold", () => {
 		expect(countFileLines("../components/SelfMediaHomePage.tsx")).toBeLessThanOrEqual(500)
+	})
+
+	it("treats a near-max home container as the spacious layout tier", () => {
+		expect(getSelfMediaHomeLayout(900)).toBe("spacious")
 	})
 })

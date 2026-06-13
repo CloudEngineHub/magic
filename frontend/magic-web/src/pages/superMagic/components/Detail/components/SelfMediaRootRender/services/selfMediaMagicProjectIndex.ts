@@ -2,7 +2,8 @@ import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import type { SelfMediaPlatform } from "../../../types"
 import type { ArticleDetail } from "../components/SelfMediaInitPanel/types"
-import { resolveArticleFolderName } from "./selfMediaPromptBuilder"
+import type { SelfMediaPostPublishStatus } from "../types"
+import { resolveArticleFolderName } from "./selfMediaArticleFolderName"
 import {
 	findMagicProjectJsUnderSelfMediaRoot,
 	findNodeById,
@@ -28,6 +29,13 @@ export interface RenameSelfMediaPostIndexEntry {
 	id: string
 	entry: string
 	name: string
+}
+
+export interface SetSelfMediaPostPublishStatusIndexEntry {
+	platform: SelfMediaPlatform
+	id: string
+	entry: string
+	publishStatus?: SelfMediaPostPublishStatus
 }
 
 export interface PrefillSelfMediaMagicProjectIndexParams {
@@ -62,6 +70,7 @@ interface SelfMediaPostIndexRecord {
 	id: string
 	name: string
 	entry: string
+	publishStatus?: SelfMediaPostPublishStatus
 }
 
 const CONFIG_ASSIGN_PATTERN = /window\.magicProjectConfig\s*=\s*/
@@ -154,6 +163,34 @@ export function renameSelfMediaPostInIndex(
 			...post,
 			name: target.name,
 		}
+	})
+	if (!changed) return content
+
+	return `${prefix}${JSON.stringify(config, null, 2)}${suffix}`
+}
+
+export function setSelfMediaPostPublishStatusInIndex(
+	content: string,
+	target: SetSelfMediaPostPublishStatusIndexEntry,
+): string {
+	const { config, prefix, suffix } = splitMagicProjectJs(content)
+	const selfMedia = ensureSelfMediaConfig(config)
+	const platformBlock = selfMedia[target.platform]
+	if (!isObjectRecord(platformBlock) || !Array.isArray(platformBlock.posts)) {
+		return content
+	}
+
+	let changed = false
+	platformBlock.posts = platformBlock.posts.map((post) => {
+		if (post.id !== target.id && post.entry !== target.entry) return post
+		const nextPost = { ...post }
+		changed = true
+		if (target.publishStatus) {
+			nextPost.publishStatus = target.publishStatus
+		} else {
+			delete nextPost.publishStatus
+		}
+		return nextPost
 	})
 	if (!changed) return content
 

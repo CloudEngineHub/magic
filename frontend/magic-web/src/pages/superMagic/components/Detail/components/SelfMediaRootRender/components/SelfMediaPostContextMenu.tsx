@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from "react"
-import { PencilLine, Trash2 } from "lucide-react"
+import { Archive, AtSign, PencilLine, RotateCcw, Trash2 } from "lucide-react"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -29,6 +29,7 @@ import {
 } from "@/components/shadcn-ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
+import type { SelfMediaPostPublishStatus } from "../types"
 import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 
 interface SelfMediaPostContextMenuProps {
@@ -40,6 +41,11 @@ interface SelfMediaPostContextMenuProps {
 		nextTitle: string,
 	) => Promise<boolean | void> | boolean | void
 	onDeletePost?: (target: SelfMediaPlatformPostItem) => Promise<boolean | void> | boolean | void
+	onMentionPost?: (target: SelfMediaPlatformPostItem) => void
+	onSetPostPublishStatus?: (
+		target: SelfMediaPlatformPostItem,
+		publishStatus?: SelfMediaPostPublishStatus,
+	) => Promise<boolean | void> | boolean | void
 	t: (key: string, options?: Record<string, unknown>) => string
 }
 
@@ -49,6 +55,8 @@ function SelfMediaPostContextMenu({
 	title,
 	onRenamePost,
 	onDeletePost,
+	onMentionPost,
+	onSetPostPublishStatus,
 	t,
 }: SelfMediaPostContextMenuProps) {
 	const [confirmOpen, setConfirmOpen] = useState(false)
@@ -57,8 +65,13 @@ function SelfMediaPostContextMenu({
 	const [renameValue, setRenameValue] = useState("")
 	const [renameError, setRenameError] = useState("")
 	const [renaming, setRenaming] = useState(false)
+	const [settingPublishStatus, setSettingPublishStatus] = useState(false)
+	const publishStatus = item.entry.publishStatus || item.post.meta.publishStatus
+	const isArchived = publishStatus === "archived"
 
-	if (!onDeletePost && !onRenamePost) return children
+	if (!onDeletePost && !onRenamePost && !onMentionPost && !onSetPostPublishStatus) {
+		return children
+	}
 
 	const openRenameDialog = () => {
 		setRenameValue(title)
@@ -98,6 +111,16 @@ function SelfMediaPostContextMenu({
 		}
 	}
 
+	const handleTogglePublishStatus = async () => {
+		if (!onSetPostPublishStatus || settingPublishStatus) return
+		setSettingPublishStatus(true)
+		try {
+			await onSetPostPublishStatus(item, isArchived ? undefined : "archived")
+		} finally {
+			setSettingPublishStatus(false)
+		}
+	}
+
 	return (
 		<>
 			<ContextMenu>
@@ -105,6 +128,16 @@ function SelfMediaPostContextMenu({
 				<ContextMenuContent
 					className={cn("w-48 p-1.5", selfMediaOverlayStyles.floatingPanel)}
 				>
+					{onMentionPost ? (
+						<ContextMenuItem
+							className="cursor-pointer rounded-[14px] px-3 py-2 text-[13px] font-[760] text-[#18181b] transition-colors focus:bg-[#18181b]/[0.06] data-[highlighted]:bg-[#18181b]/[0.06] [&_svg]:text-[#71717a]"
+							onSelect={() => onMentionPost(item)}
+							data-testid={`self-media-home-post-mention-menu-${item.entry.id}`}
+						>
+							<AtSign className="size-4" aria-hidden="true" />
+							{t("detail.selfMedia.home.mentionPost")}
+						</ContextMenuItem>
+					) : null}
 					{onRenamePost ? (
 						<ContextMenuItem
 							className="cursor-pointer rounded-[14px] px-3 py-2 text-[13px] font-[760] text-[#18181b] transition-colors focus:bg-[#18181b]/[0.06] data-[highlighted]:bg-[#18181b]/[0.06] [&_svg]:text-[#71717a]"
@@ -115,7 +148,26 @@ function SelfMediaPostContextMenu({
 							{t("detail.selfMedia.home.renamePost")}
 						</ContextMenuItem>
 					) : null}
-					{onRenamePost && onDeletePost ? (
+					{onSetPostPublishStatus ? (
+						<ContextMenuItem
+							className="cursor-pointer rounded-[14px] px-3 py-2 text-[13px] font-[760] text-[#18181b] transition-colors focus:bg-[#18181b]/[0.06] data-[highlighted]:bg-[#18181b]/[0.06] [&_svg]:text-[#71717a]"
+							disabled={settingPublishStatus}
+							onSelect={() => void handleTogglePublishStatus()}
+							data-testid={`self-media-home-post-publish-status-menu-${item.entry.id}`}
+						>
+							{isArchived ? (
+								<RotateCcw className="size-4" aria-hidden="true" />
+							) : (
+								<Archive className="size-4" aria-hidden="true" />
+							)}
+							{t(
+								isArchived
+									? "detail.selfMedia.home.restorePostPublish"
+									: "detail.selfMedia.home.archivePost",
+							)}
+						</ContextMenuItem>
+					) : null}
+					{(onMentionPost || onRenamePost || onSetPostPublishStatus) && onDeletePost ? (
 						<ContextMenuSeparator className="mx-1 bg-[#18181b]/[0.06]" />
 					) : null}
 					{onDeletePost ? (

@@ -1,9 +1,21 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { ArticleDetail } from "../components/SelfMediaInitPanel/types"
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		saveFileContent: vi.fn(),
+	},
+}))
+
+vi.mock("@/pages/superMagic/utils/api", () => ({
+	getFileContentById: vi.fn(),
+}))
+
 import {
 	buildSelfMediaPostIndexEntries,
 	removeSelfMediaPostFromIndex,
 	renameSelfMediaPostInIndex,
+	setSelfMediaPostPublishStatusInIndex,
 	upsertSelfMediaPostsIndex,
 } from "../services/selfMediaMagicProjectIndex"
 
@@ -11,7 +23,17 @@ interface ParsedMagicProjectConfig {
 	version?: string
 	type?: string
 	name?: string
-	"self-media": Record<string, { posts: Array<{ id: string; name: string; entry: string }> }>
+	"self-media": Record<
+		string,
+		{
+			posts: Array<{
+				id: string
+				name: string
+				entry: string
+				publishStatus?: string
+			}>
+		}
+	>
 }
 
 function parseConfig(content: string): ParsedMagicProjectConfig {
@@ -223,5 +245,55 @@ window.magicProjectConfigure(window.magicProjectConfig);`
 			{ id: "post-1", name: "Instagram Twin", entry: "posts/post-1/post.json" },
 		])
 		expect(updated).toContain("window.magicProjectConfigure(window.magicProjectConfig);")
+	})
+
+	it("sets and clears a post publish status in the matching platform index", () => {
+		const current = `window.magicProjectConfig = {
+  "version": "1.0.0",
+  "type": "self-media",
+  "self-media": {
+    "rednote": {
+      "posts": [
+        { "id": "post-1", "name": "Post One", "entry": "posts/post-1/post.json" }
+      ]
+    },
+    "instagram": {
+      "posts": [
+        { "id": "post-1", "name": "Instagram Twin", "entry": "posts/post-1/post.json" }
+      ]
+    }
+  }
+};
+window.magicProjectConfigure(window.magicProjectConfig);`
+
+		const archived = setSelfMediaPostPublishStatusInIndex(current, {
+			platform: "rednote",
+			id: "post-1",
+			entry: "posts/post-1/post.json",
+			publishStatus: "archived",
+		})
+		const archivedConfig = parseConfig(archived)
+		expect(archivedConfig["self-media"].rednote.posts).toEqual([
+			{
+				id: "post-1",
+				name: "Post One",
+				entry: "posts/post-1/post.json",
+				publishStatus: "archived",
+			},
+		])
+		expect(archivedConfig["self-media"].instagram.posts).toEqual([
+			{ id: "post-1", name: "Instagram Twin", entry: "posts/post-1/post.json" },
+		])
+
+		const restored = setSelfMediaPostPublishStatusInIndex(archived, {
+			platform: "rednote",
+			id: "post-1",
+			entry: "posts/post-1/post.json",
+		})
+		const restoredConfig = parseConfig(restored)
+		expect(restoredConfig["self-media"].rednote.posts).toEqual([
+			{ id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+		])
+		expect(restored).toContain("window.magicProjectConfigure(window.magicProjectConfig);")
 	})
 })

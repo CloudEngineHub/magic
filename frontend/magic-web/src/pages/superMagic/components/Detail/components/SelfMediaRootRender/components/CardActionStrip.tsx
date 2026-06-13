@@ -5,6 +5,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/
 import { CardVersionHistoryButton } from "./CardVersionHistoryButton"
 import type { SelfMediaAttachmentNode } from "../types"
 
+type CardActionStripTooltipSide = "top" | "right" | "bottom" | "left"
+
+interface CardActionStripLabels {
+	addToCurrentChat?: string
+	addPostFolderToCurrentChat?: string
+	goToEdit?: string
+	refresh?: string
+}
+
 export interface CardActionStripProps {
 	/** Add the current page/card file to the chat (article slice). */
 	onAddToCurrentChat?: () => void
@@ -23,7 +32,13 @@ export interface CardActionStripProps {
 	attachmentList?: SelfMediaAttachmentNode[]
 	/** 打开版本历史前的拦截回调（有未保存内容时弹框询问用户） */
 	onBeforeOpenVersionHistory?: () => Promise<boolean>
+	tooltipSide?: CardActionStripTooltipSide
+	testId?: string
+	labels?: CardActionStripLabels
 }
+
+const cardActionStripButtonClass =
+	"flex h-9 w-9 items-center justify-center rounded-[14px] text-[#52525b] transition-[background,color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:bg-[#18181b] hover:text-[#ffd637] hover:shadow-[0_10px_20px_rgba(24,24,27,0.14)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15 active:translate-y-0"
 
 /**
  * Vertical strip of icon buttons for card actions (add to chat, refresh, go to edit).
@@ -41,12 +56,22 @@ export function CardActionStrip({
 	fileId,
 	attachmentList,
 	onBeforeOpenVersionHistory,
+	tooltipSide = "right",
+	testId,
+	labels,
 }: CardActionStripProps) {
 	const { t } = useTranslation("super")
 	const readOnly = allowEdit === false
 
 	return (
-		<div className={cn("flex flex-col gap-1", className)} style={style}>
+		<div
+			className={cn(
+				"flex flex-col gap-1.5 rounded-[18px] border border-white/80 bg-white/85 p-1.5 shadow-[inset_0_1px_rgba(255,255,255,0.86),0_16px_38px_rgba(24,24,27,0.12)] backdrop-blur-xl",
+				className,
+			)}
+			style={style}
+			data-testid={testId}
+		>
 			{!readOnly && onAddToCurrentChat && (
 				<Tooltip>
 					<TooltipTrigger asChild>
@@ -54,13 +79,14 @@ export function CardActionStrip({
 							type="button"
 							onClick={onAddToCurrentChat}
 							data-testid={`${testIdPrefix}-add-current`}
-							className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+							className={cardActionStripButtonClass}
 						>
-							<MessageSquarePlus className="h-4 w-4" />
+							<MessageSquarePlus className="h-[18px] w-[18px]" />
 						</button>
 					</TooltipTrigger>
-					<TooltipContent side="right">
-						{t("detail.selfMedia.edit.addCurrentPageToChat")}
+					<TooltipContent side={tooltipSide}>
+						{labels?.addToCurrentChat ??
+							t("detail.selfMedia.edit.addCurrentPageToChat")}
 					</TooltipContent>
 				</Tooltip>
 			)}
@@ -71,13 +97,14 @@ export function CardActionStrip({
 							type="button"
 							onClick={onAddPostFolderToCurrentChat}
 							data-testid={`${testIdPrefix}-add-post-folder`}
-							className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+							className={cardActionStripButtonClass}
 						>
-							<Newspaper className="h-4 w-4" />
+							<Newspaper className="h-[18px] w-[18px]" />
 						</button>
 					</TooltipTrigger>
-					<TooltipContent side="right">
-						{t("detail.selfMedia.edit.addPostFolderToCurrentChat")}
+					<TooltipContent side={tooltipSide}>
+						{labels?.addPostFolderToCurrentChat ??
+							t("detail.selfMedia.edit.addPostFolderToCurrentChat")}
 					</TooltipContent>
 				</Tooltip>
 			)}
@@ -88,13 +115,13 @@ export function CardActionStrip({
 							type="button"
 							onClick={onGoToEdit}
 							data-testid={`${testIdPrefix}-go-to-edit`}
-							className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+							className={cardActionStripButtonClass}
 						>
-							<Edit className="h-4 w-4" />
+							<Edit className="h-[18px] w-[18px]" />
 						</button>
 					</TooltipTrigger>
-					<TooltipContent side="right">
-						{t("detail.selfMedia.edit.goToEdit")}
+					<TooltipContent side={tooltipSide}>
+						{labels?.goToEdit ?? t("detail.selfMedia.edit.goToEdit")}
 					</TooltipContent>
 				</Tooltip>
 			)}
@@ -105,13 +132,13 @@ export function CardActionStrip({
 							type="button"
 							onClick={onRefresh}
 							data-testid={`${testIdPrefix}-refresh`}
-							className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+							className={cardActionStripButtonClass}
 						>
-							<RefreshCcw className="h-4 w-4" />
+							<RefreshCcw className="h-[18px] w-[18px]" />
 						</button>
 					</TooltipTrigger>
-					<TooltipContent side="right">
-						{t("detail.selfMedia.edit.refreshCard")}
+					<TooltipContent side={tooltipSide}>
+						{labels?.refresh ?? t("detail.selfMedia.edit.refreshCard")}
 					</TooltipContent>
 				</Tooltip>
 			)}
@@ -119,6 +146,7 @@ export function CardActionStrip({
 				<CardVersionHistoryButton
 					fileId={fileId}
 					attachmentList={attachmentList}
+					className={cardActionStripButtonClass}
 					testIdPrefix={`${testIdPrefix}-version-history`}
 					onBeforeOpen={onBeforeOpenVersionHistory}
 				/>

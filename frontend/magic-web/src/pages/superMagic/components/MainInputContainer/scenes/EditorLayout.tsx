@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import PluginTips from "../components/PluginTips"
 import { AgentCommonModal } from "@/components/Agent/AgentCommonModal"
+import { cn } from "@/lib/utils"
 
 const AgentSettingsLazy = lazy(() => import("@/components/Agent/MCP/AgentSettings"))
 import CurrentSceneBadge from "../components/SelectedSkillBadge"
@@ -12,6 +13,8 @@ import { defaultMCPStore } from "@/components/Agent/MCP/store/mcp-store"
 import { useSkillPanelScroll } from "../hooks/useSkillPanelScroll"
 import { useSceneSelection } from "../hooks/useSceneSelection"
 import LazyScenePanel from "../components/LazyScenePanel"
+import SelfMediaComposerConfigPanel from "../components/SelfMediaComposerConfigPanel"
+import { shouldShowSelfMediaComposerConfigPanel } from "../utils/selfMediaComposerConfig"
 import { roleStore } from "@/pages/superMagic/stores"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import type { SceneEditorContext } from "../components/editors/types"
@@ -136,6 +139,12 @@ function EditorLayout({
 		scenes,
 		sceneStateStore,
 	})
+	const shouldShowSelfMediaConfig = shouldShowSelfMediaComposerConfigPanel({
+		context: editorContext,
+		hasSelectedScene: Boolean(selectedScene),
+		hasAvailableScenes: Boolean(scenes?.length),
+		variant: ScenePanelVariant.HomePage,
+	})
 
 	const shouldShowPluginTips =
 		!selectedScene &&
@@ -145,7 +154,7 @@ function EditorLayout({
 
 	return (
 		<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.HomePage}>
-			<div className="flex size-full max-w-4xl flex-col items-center gap-4">
+			<div className={cn("flex size-full max-w-4xl flex-col items-center")}>
 				{/* Main Input Container */}
 				<div className="w-full rounded-2xl border border-border bg-sidebar p-2">
 					{/* skill editor input container with min height to prevent layout shift */}
@@ -172,12 +181,16 @@ function EditorLayout({
 
 				{/* skill config container with smooth transition */}
 				<div
-					className="w-full p-2 pb-[40px] transition-all duration-200 ease-in-out"
+					className={cn(
+						"w-full transition-all duration-200 ease-in-out",
+						shouldShowSelfMediaConfig ? "px-2 pb-8 pt-0" : "p-2 pb-[40px]",
+					)}
 					style={{
 						minHeight: selectedScene ? SCENE_PANEL_MIN_HEIGHT.HomePage : undefined,
 					}}
 				>
 					<LazyScenePanel scenes={scenes} editorContext={editorContext} />
+					{shouldShowSelfMediaConfig ? <SelfMediaComposerConfigPanel /> : null}
 				</div>
 			</div>
 			<AgentCommonModal

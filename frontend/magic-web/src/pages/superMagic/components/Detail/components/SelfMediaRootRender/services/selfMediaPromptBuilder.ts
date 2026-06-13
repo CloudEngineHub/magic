@@ -18,6 +18,10 @@ import {
 	VISUAL_PRESETS,
 	collectArticleMaterials,
 } from "../components/SelfMediaInitPanel/types"
+export {
+	buildDefaultArticleFolderName,
+	resolveArticleFolderName,
+} from "./selfMediaArticleFolderName"
 
 function getPlatformLabel(value: string): string {
 	const info = ALL_PLATFORMS.find((p) => p.value === value)
@@ -342,23 +346,6 @@ function buildTargetDirectoryMention(
 		directoryPath,
 		directoryMetadata: { type: "self-media" },
 	})
-}
-
-// ─── Folder name ─────────────────────────────────────────────────────────────
-
-function generateSlug(title: string): string {
-	const ascii = title.replace(/[^a-zA-Z0-9\s-]/g, "").trim()
-	if (ascii.length > 3) return ascii.toLowerCase().replace(/\s+/g, "-").slice(0, 40)
-	return "post"
-}
-
-export function buildDefaultArticleFolderName(title: string, index: number): string {
-	return `${String(index + 1).padStart(2, "0")}-${generateSlug(title)}`
-}
-
-export function resolveArticleFolderName(article: ArticleDetail, index: number): string {
-	if (article.folderName.trim()) return article.folderName.trim()
-	return buildDefaultArticleFolderName(article.title, index)
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────

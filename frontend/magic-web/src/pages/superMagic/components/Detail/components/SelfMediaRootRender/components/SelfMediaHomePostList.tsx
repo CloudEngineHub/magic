@@ -2,7 +2,7 @@ import { Layers } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ScheduledTask } from "@/types/scheduledTask"
 import type { SelfMediaPlatform } from "../../../types"
-import type { SelfMediaAttachmentNode } from "../types"
+import type { SelfMediaAttachmentNode, SelfMediaPostPublishStatus } from "../types"
 import type {
 	SelfMediaPostOpsMetricsPayload,
 	SelfMediaPostOpsSourcePayload,
@@ -30,6 +30,7 @@ interface SelfMediaHomePostListProps {
 	opsArtifactsByPostKey: Map<string, SelfMediaPostOpsArtifacts>
 	opsMetricsByPostKey: Map<string, SelfMediaPostOpsMetricsPayload | null>
 	opsArtifactAnimationsByPostKey: Map<string, SelfMediaPostOpsArtifactAnimations>
+	columnCount?: 1 | 2 | 3
 	onOpenPost: (
 		target: { platform: SelfMediaPlatform; index: number },
 		transition?: SelfMediaPostOpenTransitionPayload,
@@ -59,6 +60,11 @@ interface SelfMediaHomePostListProps {
 		nextTitle: string,
 	) => Promise<boolean | void> | boolean | void
 	onDeletePost?: (target: SelfMediaPlatformPostItem) => Promise<boolean | void> | boolean | void
+	onMentionPost?: (target: SelfMediaPlatformPostItem) => void
+	onSetPostPublishStatus?: (
+		target: SelfMediaPlatformPostItem,
+		publishStatus?: SelfMediaPostPublishStatus,
+	) => Promise<boolean | void> | boolean | void
 	t: SelfMediaHomeTranslate
 }
 
@@ -70,6 +76,7 @@ function SelfMediaHomePostList({
 	opsArtifactsByPostKey,
 	opsMetricsByPostKey,
 	opsArtifactAnimationsByPostKey,
+	columnCount = 1,
 	onOpenPost,
 	onRequestPrePublishAnalysis,
 	onPostPublishRefresh,
@@ -80,6 +87,8 @@ function SelfMediaHomePostList({
 	onBindPublishedUrl,
 	onRenamePost,
 	onDeletePost,
+	onMentionPost,
+	onSetPostPublishStatus,
 	t,
 }: SelfMediaHomePostListProps) {
 	if (postGroups.length === 0) return null
@@ -123,7 +132,13 @@ function SelfMediaHomePostList({
 								{getPlatformLabel(platform)}
 							</h3>
 						</div>
-						<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+						<div
+							className={cn(
+								"grid gap-4",
+								columnCount === 2 && "grid-cols-2",
+								columnCount === 3 && "grid-cols-3",
+							)}
+						>
 							{posts.map((item) => {
 								const { post, index } = item
 								const postKey = getSelfMediaPostKey(item)
@@ -170,6 +185,8 @@ function SelfMediaHomePostList({
 										onBindPublishedUrl={onBindPublishedUrl}
 										onRenamePost={onRenamePost}
 										onDeletePost={onDeletePost}
+										onMentionPost={onMentionPost}
+										onSetPostPublishStatus={onSetPostPublishStatus}
 									/>
 								)
 							})}

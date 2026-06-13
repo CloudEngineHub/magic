@@ -40,6 +40,7 @@ interface SelfMediaOpsReviewDashboardProps {
 	onEditData?: (target: SelfMediaPlatformPostItem) => void
 	onSyncData?: (target: SelfMediaPlatformPostItem) => Promise<void> | void
 	onLoadData?: (target: SelfMediaPlatformPostItem) => Promise<SelfMediaOpsReviewData>
+	dataVersion?: string
 }
 
 function SelfMediaOpsReviewDashboard({
@@ -49,6 +50,7 @@ function SelfMediaOpsReviewDashboard({
 	onEditData,
 	onSyncData,
 	onLoadData,
+	dataVersion,
 }: SelfMediaOpsReviewDashboardProps) {
 	const { t } = useTranslation("super")
 	const reduceMotion = useReducedMotion()
@@ -75,7 +77,7 @@ function SelfMediaOpsReviewDashboard({
 		return () => {
 			cancelled = true
 		}
-	}, [onLoadData, open, target])
+	}, [dataVersion, onLoadData, open, target])
 
 	useEffect(() => {
 		if (!open) setIsReviewFullscreen(false)
@@ -170,69 +172,86 @@ function SelfMediaOpsReviewDashboard({
 		<>
 			<AnimatePresence>
 				{open && target ? (
-					<motion.section
-						layoutId={`self-media-ops-review-${target.platform}-${target.index}-${target.entry.entry}`}
-						initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
-						animate={{ opacity: 1, scale: 1 }}
-						exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
-						transition={{ type: "spring", stiffness: 320, damping: 34 }}
-						className="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-[#f8f8f9] shadow-2xl"
-						style={REVIEW_DASHBOARD_STYLE}
-						data-palette="case-review"
-						data-testid="self-media-ops-review-dashboard"
+					<motion.div
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						exit={{ opacity: 0 }}
+						transition={{ duration: reduceMotion ? 0.08 : 0.18 }}
+						className="absolute inset-0 z-20 flex min-h-0 items-end overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.74),rgba(248,248,249,0.54)_34%,rgba(24,24,27,0.18)_100%)] px-2 pt-5 backdrop-blur-[2px] sm:px-4 sm:pt-8"
+						data-testid="self-media-ops-review-backdrop"
 					>
-						<OpsReviewHeader
-							title={title}
-							target={target}
-							sourceStatus={sourceStatus}
-							syncing={syncing}
-							onSync={handleSync}
-							onEditData={onEditData}
-							onClose={onClose}
-						/>
-						<div
-							className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f8f8f9_0%,#f1f0eb_100%)] px-3 py-3 sm:px-6 sm:py-4"
-							data-testid="self-media-ops-review-content"
+						<motion.section
+							layoutId={`self-media-ops-review-${target.platform}-${target.index}-${target.entry.entry}`}
+							initial={
+								reduceMotion ? { opacity: 0 } : { opacity: 0, y: 56, scale: 0.985 }
+							}
+							animate={{ opacity: 1, y: 0, scale: 1 }}
+							exit={
+								reduceMotion ? { opacity: 0 } : { opacity: 0, y: 48, scale: 0.99 }
+							}
+							transition={{ type: "spring", stiffness: 360, damping: 36, mass: 0.82 }}
+							className="relative flex h-[calc(100%-0.75rem)] min-h-0 w-full flex-col overflow-hidden rounded-t-[32px] border border-white/75 bg-white shadow-[0_-24px_70px_rgba(24,24,27,0.18),inset_0_1px_rgba(255,255,255,0.92)] backdrop-blur-xl sm:mx-auto sm:h-[calc(100%-1.5rem)] sm:max-w-[1440px]"
+							style={REVIEW_DASHBOARD_STYLE}
+							data-motion-origin="bottom"
+							data-palette="case-review"
+							data-testid="self-media-ops-review-dashboard"
 						>
-							{loading ? (
-								<div className="flex min-h-64 items-center justify-center gap-2 rounded-[24px] bg-white/90 text-sm font-medium text-[#71717a] shadow-[inset_0_1px_rgba(255,255,255,0.82)]">
-									<Loader2 className="size-4 animate-spin" aria-hidden="true" />
-									{t("detail.selfMedia.opsMetrics.loading")}
-								</div>
-							) : (
-								<div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-3">
-									<section
-										className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.8fr)]"
-										data-testid="self-media-ops-review-brief"
-									>
-										<CaseSummary
-											briefItems={briefItems}
-											readsDelta={readsDelta}
-											trendData={trendData}
+							<OpsReviewHeader
+								title={title}
+								target={target}
+								sourceStatus={sourceStatus}
+								syncing={syncing}
+								onSync={handleSync}
+								onEditData={onEditData}
+								onClose={onClose}
+							/>
+							<div
+								className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#ffffff_0%,#f8f8f9_42%,#f1f0eb_100%)] px-3 py-3 sm:px-6 sm:py-4"
+								data-testid="self-media-ops-review-content"
+							>
+								{loading ? (
+									<div className="flex min-h-64 items-center justify-center gap-2 rounded-[24px] bg-white/90 text-sm font-medium text-[#71717a] shadow-[inset_0_1px_rgba(255,255,255,0.82)]">
+										<Loader2
+											className="size-4 animate-spin"
+											aria-hidden="true"
 										/>
-										<div className="grid min-w-0 gap-3">
-											<NextActions items={actionItems} />
-											<CommentSignals data={data} />
-										</div>
-									</section>
-									<KpiStrip kpis={kpis} />
-									<ChartsSection
-										trendData={trendData}
-										impactData={impactData}
-										qualityData={qualityData}
-										funnelItems={funnelItems}
-										readsDelta={readsDelta}
-									/>
-									<ReportPreview
-										hasReviewContent={hasReviewContent}
-										onFullscreen={() => setIsReviewFullscreen(true)}
-									>
-										{renderReviewPreview()}
-									</ReportPreview>
-								</div>
-							)}
-						</div>
-					</motion.section>
+										{t("detail.selfMedia.opsMetrics.loading")}
+									</div>
+								) : (
+									<div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-3">
+										<section
+											className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.8fr)]"
+											data-testid="self-media-ops-review-brief"
+										>
+											<CaseSummary
+												briefItems={briefItems}
+												readsDelta={readsDelta}
+												trendData={trendData}
+											/>
+											<div className="grid min-w-0 gap-3">
+												<NextActions items={actionItems} />
+												<CommentSignals data={data} />
+											</div>
+										</section>
+										<KpiStrip kpis={kpis} />
+										<ChartsSection
+											trendData={trendData}
+											impactData={impactData}
+											qualityData={qualityData}
+											funnelItems={funnelItems}
+											readsDelta={readsDelta}
+										/>
+										<ReportPreview
+											hasReviewContent={hasReviewContent}
+											onFullscreen={() => setIsReviewFullscreen(true)}
+										>
+											{renderReviewPreview()}
+										</ReportPreview>
+									</div>
+								)}
+							</div>
+						</motion.section>
+					</motion.div>
 				) : null}
 			</AnimatePresence>
 			{fullscreenOverlay}

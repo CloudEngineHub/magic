@@ -1,7 +1,12 @@
 import { comparer, makeAutoObservable, reaction, runInAction, type IReactionDisposer } from "mobx"
 import { logger as rootLogger } from "@/utils/log"
 import type { SelfMediaInitialNavigation, SelfMediaPlatform } from "../../../types"
-import type { SelfMediaPost, SelfMediaPostEntry, SelfMediaView } from "../types"
+import type {
+	SelfMediaPost,
+	SelfMediaPostEntry,
+	SelfMediaPostPublishStatus,
+	SelfMediaView,
+} from "../types"
 import { SelfMediaPostsService, type SelfMediaSnapshot } from "../services/SelfMediaPostsService"
 import {
 	buildPlaceholderPost,
@@ -252,6 +257,44 @@ export class SelfMediaStore {
 				postEntries: slice.postEntries.map((item) =>
 					item.id === entryId ? { ...item, name: title } : item,
 				),
+			}
+		})
+	}
+
+	updatePlatformPostPublishStatus(
+		platform: SelfMediaPlatform,
+		entryId: string,
+		publishStatus?: SelfMediaPostPublishStatus,
+	): void {
+		const slice = this.slices.find((item) => item.platform === platform)
+		const entry = slice?.postEntries.find((item) => item.id === entryId)
+		if (!entry) return
+		const key = cacheKey(platform, entryId)
+		const currentPost = this.loadedPosts[key] || buildPlaceholderPost(entry)
+		const nextMeta = { ...currentPost.meta }
+		if (publishStatus) {
+			nextMeta.publishStatus = publishStatus
+		} else {
+			delete nextMeta.publishStatus
+		}
+		this.loadedPosts = {
+			...this.loadedPosts,
+			[key]: {
+				...currentPost,
+				meta: nextMeta,
+			},
+		}
+		this.slices = this.slices.map((slice) => {
+			if (slice.platform !== platform) return slice
+			return {
+				...slice,
+				postEntries: slice.postEntries.map((item) => {
+					if (item.id !== entryId) return item
+					if (publishStatus) return { ...item, publishStatus }
+					const nextEntry = { ...item }
+					delete nextEntry.publishStatus
+					return nextEntry
+				}),
 			}
 		})
 	}

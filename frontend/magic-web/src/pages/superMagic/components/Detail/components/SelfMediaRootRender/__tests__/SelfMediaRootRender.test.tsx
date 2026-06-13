@@ -7,6 +7,7 @@ const mockBuildSelfMediaPostAutoSyncTaskData = vi.hoisted(() => vi.fn())
 const mockSaveSelfMediaPostAutoSyncTask = vi.hoisted(() => vi.fn())
 const mockDisableSelfMediaPostAutoSyncTask = vi.hoisted(() => vi.fn())
 const mockToastError = vi.hoisted(() => vi.fn())
+const mockToastSuccess = vi.hoisted(() => vi.fn())
 const mockLoadPostOpsSource = vi.hoisted(() => vi.fn())
 const mockLoadPostOpsMetrics = vi.hoisted(() => vi.fn())
 const mockLoadPostOpsComments = vi.hoisted(() => vi.fn())
@@ -97,15 +98,20 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer
 	return {
 		default: React.forwardRef(function MockIsolatedHTMLRenderer(
 			props: {
+				content?: string
 				relative_file_path?: string
 			},
 			ref,
 		) {
 			void ref
-			return React.createElement("div", {
-				"data-testid": "self-media-ops-review-html-renderer",
-				"data-relative-file-path": props.relative_file_path,
-			})
+			return React.createElement(
+				"div",
+				{
+					"data-testid": "self-media-ops-review-html-renderer",
+					"data-relative-file-path": props.relative_file_path,
+				},
+				props.content,
+			)
 		}),
 	}
 })
@@ -182,6 +188,7 @@ vi.mock("react-i18next", () => ({
 						"detail.selfMedia.home.autoSyncSave": "Save auto sync",
 						"detail.selfMedia.home.autoSyncTurnOff": "Turn off auto sync",
 						"detail.selfMedia.home.loadingAutoSync": "Loading auto sync",
+						"detail.selfMedia.home.mentionPost": "Mention this article",
 						"detail.selfMedia.analysis.action": "AI diagnosis",
 						"detail.selfMedia.home.bindPublishedLink": "Connect published link",
 						"detail.selfMedia.home.editPublishedLink": "Change published link",
@@ -198,6 +205,11 @@ vi.mock("react-i18next", () => ({
 							"Failed to start data sync. Please try again later.",
 						"detail.selfMedia.opsRefresh.startFailedWithReason":
 							"Failed to start data sync: {{reason}}",
+						"detail.selfMedia.mentionPost.success": "Mention added to the input box",
+						"detail.selfMedia.mentionPost.startFailed":
+							"Failed to mention the article. Please try again later.",
+						"detail.selfMedia.mentionPost.startFailedWithReason":
+							"Failed to mention the article: {{reason}}",
 						"detail.selfMedia.analysis.startFailedWithReason":
 							"Failed to start pre-publish diagnosis: {{reason}}",
 						"detail.selfMedia.errors.noProjectSelected":
@@ -293,6 +305,7 @@ vi.mock("@/components/base/MagicSpin", () => ({
 vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: {
 		error: mockToastError,
+		success: mockToastSuccess,
 	},
 }))
 
@@ -480,13 +493,20 @@ vi.mock("../components/PrePublishAnalysisDialog", () => ({
 vi.mock("../platforms", () => ({
 	getPlatformComponent: () =>
 		function MockPlatformComponent({
+			onBackHome,
 			onRequestPrePublishAnalysis,
 		}: {
+			onBackHome?: () => void
 			onRequestPrePublishAnalysis?: () => void
 		}) {
 			return (
 				<div data-testid="mock-platform-component">
 					platform-content
+					{onBackHome ? (
+						<button type="button" onClick={onBackHome}>
+							Back to content
+						</button>
+					) : null}
 					{onRequestPrePublishAnalysis ? (
 						<button
 							type="button"
@@ -527,6 +547,22 @@ vi.mock("../services/selfMediaPrePublishAnalysis", () => ({
 
 vi.mock("../services/selfMediaPostPublishDataRefresh", () => ({
 	SELF_MEDIA_POST_PUBLISH_DATA_TOPIC_PATTERN: "ip-manager",
+	buildFolderMention: (item: {
+		file_id?: string
+		file_name?: string
+		filename?: string
+		display_filename?: string
+		relative_file_path?: string
+		display_config?: unknown
+	}) => ({
+		type: "project_directory",
+		data: {
+			directory_id: item.file_id || "",
+			directory_name: item.file_name || item.filename || item.display_filename || "",
+			directory_path: item.relative_file_path || "",
+			directory_metadata: {},
+		},
+	}),
 	sendSelfMediaPostPublishDataRefresh: mockSendSelfMediaPostPublishDataRefresh,
 }))
 
@@ -580,6 +616,7 @@ vi.mock("../context/PlatformChromeContext", () => ({
 
 import SelfMediaRootRender from "../index"
 import type { SelfMediaRootRenderProps } from "../types"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 const ROOT_DATA = {
 	file_id: "folder-1",
@@ -657,6 +694,8 @@ const POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST = [
 
 function withMockedCardWidth(width: number, run: () => void | Promise<void>) {
 	const originalResizeObserver = globalThis.ResizeObserver
+	const originalElementGetBoundingClientRect = Element.prototype.getBoundingClientRect
+	const originalHTMLElementGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
 	class MockResizeObserver {
 		private readonly callback: ResizeObserverCallback
 
@@ -680,8 +719,34 @@ function withMockedCardWidth(width: number, run: () => void | Promise<void>) {
 		disconnect = vi.fn()
 	}
 	vi.stubGlobal("ResizeObserver", MockResizeObserver)
+	const getMockedBoundingClientRect = function getBoundingClientRect(this: Element) {
+		if (
+			this instanceof HTMLElement &&
+			this.dataset.testid?.startsWith("self-media-home-post-card-")
+		) {
+			return {
+				x: 0,
+				y: 0,
+				left: 0,
+				top: 0,
+				right: width,
+				bottom: 180,
+				width,
+				height: 180,
+				toJSON: () => ({}),
+			} as DOMRect
+		}
+		if (this instanceof HTMLElement) {
+			return originalHTMLElementGetBoundingClientRect.call(this)
+		}
+		return originalElementGetBoundingClientRect.call(this)
+	}
+	Element.prototype.getBoundingClientRect = getMockedBoundingClientRect
+	HTMLElement.prototype.getBoundingClientRect = getMockedBoundingClientRect
 
 	return Promise.resolve(run()).finally(() => {
+		Element.prototype.getBoundingClientRect = originalElementGetBoundingClientRect
+		HTMLElement.prototype.getBoundingClientRect = originalHTMLElementGetBoundingClientRect
 		if (originalResizeObserver) {
 			vi.stubGlobal("ResizeObserver", originalResizeObserver)
 		} else {
@@ -738,6 +803,7 @@ describe("SelfMediaRootRender", () => {
 		mockStore.openPostDetail.mockReset()
 		mockStore.ensurePlatformPostLoaded.mockReset()
 		mockStore.goHomeList.mockReset()
+		mockToastSuccess.mockReset()
 		mockSendSelfMediaPrePublishAnalysis.mockReset()
 		mockSendSelfMediaPostPublishDataRefresh.mockReset()
 		mockBuildSelfMediaPostAutoSyncTaskData.mockReset().mockReturnValue({
@@ -806,6 +872,72 @@ describe("SelfMediaRootRender", () => {
 			"self-media-platform-detail-stage",
 		)
 		expect(screen.queryByTestId("self-media-home-page")).not.toBeInTheDocument()
+	})
+
+	it("restores the article home scroll position after returning from a post editor", async () => {
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		const getHomeViewport = () =>
+			screen
+				.getByTestId("self-media-home-page")
+				.querySelector('[data-slot="scroll-area-viewport"]') as HTMLDivElement
+
+		const viewport = getHomeViewport()
+		viewport.scrollTop = 420
+		fireEvent.scroll(viewport)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-open-post-1"))
+		expect(screen.queryByTestId("self-media-home-page")).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByRole("button", { name: "Back to content" }))
+
+		await waitFor(() => {
+			expect(getHomeViewport().scrollTop).toBe(420)
+		})
+	})
+
+	it("adds the article folder mention to the editor from the home context menu", async () => {
+		const publishSpy = vi.spyOn(pubsub, "publish")
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.contextMenu(screen.getByTestId("self-media-home-post-card-post-1"))
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Mention this article" }))
+
+		await waitFor(() =>
+			expect(publishSpy).toHaveBeenCalledWith(PubSubEvents.Add_File_To_Chat, {
+				items: [
+					{
+						type: "project_directory",
+						data: {
+							directory_id: "post-dir",
+							directory_name: "post-1",
+							directory_path: "posts/post-1/",
+							directory_metadata: {},
+						},
+					},
+				],
+				is_new_topic: false,
+				autoFocus: true,
+			}),
+		)
+		expect(mockToastSuccess).toHaveBeenCalledWith("Mention added to the input box")
 	})
 
 	it("shows articles from every platform on the article home", () => {
@@ -1531,6 +1663,72 @@ describe("SelfMediaRootRender", () => {
 		).toBeInTheDocument()
 	})
 
+	it("uses the freshly bound published link when syncing from the article card", async () => {
+		const post = {
+			meta: {
+				id: "post-1",
+				title: "Post One",
+				feedTitle: "Post One Feed",
+				author: "Magic Lab",
+			},
+			cards: [{ path: "cards/01.html", fileId: "card-file" }],
+		}
+		mockStore.allPosts = [
+			{
+				platform: "rednote",
+				index: 0,
+				entry: { id: "post-1", name: "Post One", entry: "posts/post-1/post.json" },
+				post,
+			},
+		]
+		mockStore.ensurePlatformPostLoaded.mockResolvedValue(post)
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-bind-link-post-1"))
+		fireEvent.change(await screen.findByTestId("self-media-home-post-bind-link-input-post-1"), {
+			target: { value: "https://www.xiaohongshu.com/explore/fresh-bound-post-1" },
+		})
+		fireEvent.click(screen.getByTestId("self-media-home-post-bind-link-save-post-1"))
+
+		await waitFor(() => {
+			expect(mockSavePostOpsSource).toHaveBeenCalledWith(
+				"posts/post-1/post.json",
+				expect.objectContaining({
+					publishedUrl: "https://www.xiaohongshu.com/explore/fresh-bound-post-1",
+				}),
+			)
+		})
+		mockLoadPostOpsSource.mockClear()
+		mockLoadPostOpsSource.mockResolvedValue(null)
+
+		fireEvent.click(await screen.findByTestId("self-media-home-post-ops-data-post-1"))
+
+		await waitFor(() => {
+			expect(mockSendSelfMediaPostPublishDataRefresh).toHaveBeenCalledWith(
+				expect.objectContaining({
+					publishedUrl: "https://www.xiaohongshu.com/explore/fresh-bound-post-1",
+					postDirectoryItem: expect.objectContaining({
+						file_id: "post-dir",
+						relative_file_path: "posts/post-1/",
+					}),
+				}),
+			)
+		})
+		expect(mockLoadPostOpsSource).not.toHaveBeenCalled()
+		expect(mockToastError).not.toHaveBeenCalledWith(
+			"Please bind the published article URL first.",
+		)
+	})
+
 	it("updates the existing auto sync task when changing the published link", async () => {
 		const post = {
 			meta: {
@@ -2019,6 +2217,12 @@ describe("SelfMediaRootRender", () => {
 		)
 
 		fireEvent.mouseEnter(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+		expect(
+			await screen.findByTestId("self-media-home-post-auto-sync-enabled-post-1"),
+		).toHaveValue("0")
+		fireEvent.change(screen.getByTestId("self-media-home-post-auto-sync-enabled-post-1"), {
+			target: { value: "1" },
+		})
 		fireEvent.change(
 			await screen.findByTestId("self-media-home-post-auto-sync-frequency-post-1"),
 			{ target: { value: "weekly_repeat" } },
@@ -2381,8 +2585,14 @@ describe("SelfMediaRootRender", () => {
 		expect(screen.getByTestId("self-media-home-ops-total-engagement")).toHaveTextContent(
 			"总互动",
 		)
+		expect(screen.getByTestId("self-media-home-ops-engagement-rate")).toHaveTextContent(
+			"平均互动率",
+		)
 		expect(screen.getByTestId("self-media-home-ops-completion")).toHaveTextContent("已发布1/1")
 		expect(screen.getByTestId("self-media-home-ops-completion")).toHaveTextContent("已同步1/1")
+		expect(screen.getByTestId("self-media-home-ops-completion")).toHaveTextContent(
+			"评论已处理0/1",
+		)
 		expect(screen.getByTestId("self-media-home-ops-completion")).toHaveTextContent(
 			"复盘已完成1/1",
 		)
@@ -2704,6 +2914,92 @@ describe("SelfMediaRootRender", () => {
 		await waitFor(() => {
 			expect(screen.queryByTestId("self-media-ops-review-dashboard")).not.toBeInTheDocument()
 		})
+	})
+
+	it("reloads the open operations review when its backing ops files update", async () => {
+		const withReviewVersion = (version: string) =>
+			[
+				{
+					file_id: "root",
+					file_name: "self-media",
+					relative_file_path: "",
+					is_directory: true,
+					children: [
+						{
+							file_id: "post-dir",
+							file_name: "post-1",
+							relative_file_path: "posts/post-1/",
+							is_directory: true,
+							children: [
+								{
+									file_id: "post-json",
+									file_name: "post.json",
+									relative_file_path: "posts/post-1/post.json",
+								},
+								{
+									file_id: "card-file",
+									file_name: "01.html",
+									relative_file_path: "posts/post-1/cards/01.html",
+								},
+								{
+									file_id: "source-json",
+									file_name: "source.json",
+									relative_file_path: "posts/post-1/ops/source.json",
+									updated_at: "source-v1",
+								},
+								{
+									file_id: "review-html",
+									file_name: "review.html",
+									relative_file_path: "posts/post-1/ops/review.html",
+									updated_at: version,
+								},
+							],
+						},
+					],
+				},
+			] as NonNullable<SelfMediaRootRenderProps["attachmentList"]>
+		const v1Attachments = withReviewVersion("review-v1")
+		const v2Attachments = withReviewVersion("review-v2")
+		mockLoadPostOpsReviewHtml
+			.mockResolvedValueOnce({
+				content: "<!doctype html><html><body><h1>旧复盘</h1></body></html>",
+			})
+			.mockResolvedValueOnce({
+				content: "<!doctype html><html><body><h1>新复盘</h1></body></html>",
+			})
+
+		const { rerender } = render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={v1Attachments}
+				attachmentList={v1Attachments}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-post-review-card-post-1"))
+
+		expect(await screen.findByTestId("self-media-ops-review-html-renderer")).toHaveTextContent(
+			"旧复盘",
+		)
+
+		rerender(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={v2Attachments}
+				attachmentList={v2Attachments}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockLoadPostOpsReviewHtml).toHaveBeenCalledTimes(2)
+		})
+		expect(screen.getByTestId("self-media-ops-review-html-renderer")).toHaveTextContent(
+			"新复盘",
+		)
 	})
 
 	it("keeps the init panel mounted when generated posts arrive", () => {

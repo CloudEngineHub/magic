@@ -11,12 +11,14 @@ import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 
 const DATA_POPOVER_CLOSE_DELAY = 120
+const DEFAULT_AUTO_SYNC_ENABLED = false
 
 interface SelfMediaPostDataPopoverProps {
 	item: SelfMediaPlatformPostItem
 	postId: string
 	label: string
 	showLabel: boolean
+	publishedUrl?: string
 	onPostPublishRefresh?: (
 		target: SelfMediaPlatformPostItem,
 		publishedUrl?: string,
@@ -35,6 +37,7 @@ function SelfMediaPostDataPopover({
 	postId,
 	label,
 	showLabel,
+	publishedUrl,
 	onPostPublishRefresh,
 	onConfigureAutoSync,
 	onLoadOpsSource,
@@ -50,7 +53,7 @@ function SelfMediaPostDataPopover({
 	)
 	const [time, setTime] = useState("09:00")
 	const [day, setDay] = useState("1")
-	const [autoSyncEnabled, setAutoSyncEnabled] = useState(true)
+	const [autoSyncEnabled, setAutoSyncEnabled] = useState(DEFAULT_AUTO_SYNC_ENABLED)
 	const triggerLabel = onPostPublishRefresh ? label : t("detail.selfMedia.home.autoSync")
 	const timeConfig: ScheduledTask.TimeConfig = useMemo(
 		() => ({
@@ -66,7 +69,7 @@ function SelfMediaPostDataPopover({
 	const applyAutoSyncConfig = useCallback(
 		(autoSync?: SelfMediaPostOpsSourcePayload["autoSync"]) => {
 			const savedTimeConfig = autoSync?.timeConfig
-			setAutoSyncEnabled(autoSync?.enabled ?? true)
+			setAutoSyncEnabled(Boolean(autoSync?.enabled && autoSync.taskId))
 			setFrequency(savedTimeConfig?.type ?? ScheduledTask.ScheduleType.Daily)
 			setTime(savedTimeConfig?.time || "09:00")
 			setDay(savedTimeConfig?.day || "1")
@@ -124,12 +127,12 @@ function SelfMediaPostDataPopover({
 		if (!onPostPublishRefresh) return
 		setSyncing(true)
 		try {
-			await onPostPublishRefresh(item)
+			await onPostPublishRefresh(item, publishedUrl?.trim() || undefined)
 			setOpen(false)
 		} finally {
 			setSyncing(false)
 		}
-	}, [item, onPostPublishRefresh])
+	}, [item, onPostPublishRefresh, publishedUrl])
 
 	const handleTriggerClick = useCallback(
 		(event: MouseEvent<HTMLButtonElement>) => {
@@ -171,8 +174,8 @@ function SelfMediaPostDataPopover({
 				<button
 					type="button"
 					className={cn(
-						"inline-flex h-8 items-center justify-center rounded-full text-[12px] font-[700] transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-						showLabel ? "gap-1.5 px-3" : "w-8",
+						"inline-flex h-9 items-center justify-center rounded-full text-[12px] font-[700] transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+						showLabel ? "gap-1.5 px-3" : "w-9",
 						"bg-[#f4f4f5] text-[#18181b] hover:bg-[#e4e4e7]",
 					)}
 					aria-label={triggerLabel}
@@ -195,7 +198,7 @@ function SelfMediaPostDataPopover({
 			<PopoverContent
 				side="top"
 				align="end"
-				className={`w-80 space-y-3 p-3 ${selfMediaOverlayStyles.floatingPanel}`}
+				className={`w-[min(20rem,calc(100vw-2rem))] space-y-3 p-3 ${selfMediaOverlayStyles.floatingPanel}`}
 				onMouseEnter={openAutoSyncPopover}
 				onMouseLeave={scheduleCloseAutoSyncPopover}
 				data-testid={`self-media-home-post-data-popover-${postId}`}

@@ -15,6 +15,7 @@ class SceneStateStore {
 	currentScene: SceneItem | null = null
 	presetSuffixContent: JSONContent | undefined = undefined
 	sendCount = 0
+	private presetSuffixContentSources = new Map<string, JSONContent | undefined>()
 
 	/**
 	 * Bumped when input is bound to a new scope (topicMode, topic, agent).
@@ -58,11 +59,20 @@ class SceneStateStore {
 		if (this.inputScopeKey === scopeKey) return
 
 		this.inputScopeKey = scopeKey
-		this.presetSuffixContent = undefined
+		this.clearPresetSuffixContentSources()
 	}
 
 	setPresetSuffixContent(content: JSONContent | undefined) {
-		this.presetSuffixContent = content
+		this.setPresetSuffixContentForSource("default", content)
+	}
+
+	setPresetSuffixContentForSource(sourceKey: string, content: JSONContent | undefined) {
+		if (content?.content?.length) {
+			this.presetSuffixContentSources.set(sourceKey, content)
+		} else {
+			this.presetSuffixContentSources.delete(sourceKey)
+		}
+		this.presetSuffixContent = joinPresetSuffixContentSources(this.presetSuffixContentSources)
 	}
 
 	incrementSendCount() {
@@ -71,7 +81,7 @@ class SceneStateStore {
 
 	setCurrentScene(scene: SceneItem | null) {
 		this.currentScene = scene
-		this.presetSuffixContent = undefined
+		this.clearPresetSuffixContentSources()
 		if (scene) {
 			this.configStore.fetchSkillConfigs(scene.id)
 		}
@@ -79,10 +89,29 @@ class SceneStateStore {
 
 	resetState() {
 		this.currentScene = null
-		this.presetSuffixContent = undefined
+		this.clearPresetSuffixContentSources()
 		this.inputScopeKey = ""
 		this.configStore.clearCache()
 	}
+
+	private clearPresetSuffixContentSources() {
+		this.presetSuffixContentSources.clear()
+		this.presetSuffixContent = undefined
+	}
+}
+
+function joinPresetSuffixContentSources(contentSources: Map<string, JSONContent | undefined>) {
+	const docs = Array.from(contentSources.values()).filter((content): content is JSONContent =>
+		Boolean(content?.content?.length),
+	)
+	if (docs.length === 0) return undefined
+
+	const content = docs.flatMap((doc, index) => {
+		const shouldAddGap = index < docs.length - 1
+		return shouldAddGap ? [...(doc.content ?? []), { type: "paragraph" }] : (doc.content ?? [])
+	})
+
+	return { type: "doc", content }
 }
 
 const createSceneStateStore = (configStore?: SceneConfigStore) => new SceneStateStore(configStore)

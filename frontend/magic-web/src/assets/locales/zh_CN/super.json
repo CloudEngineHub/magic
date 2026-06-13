@@ -864,6 +864,8 @@
 				"create": "新增文章",
 				"dataOverview": "数据总览",
 				"dataSyncNow": "立即同步",
+				"archivePost": "暂不发布",
+				"archivePostSuccess": "文章已标记为暂不发布",
 				"deletePost": "删除文章",
 				"deletePostCancel": "取消",
 				"deletePostConfirm": "永久删除",
@@ -880,13 +882,16 @@
 					"reads": "阅读"
 				},
 				"lifecycle": {
+					"archived": "暂不发布",
 					"draft": "待发布",
+					"planned": "待计划",
 					"published": "已发布",
 					"reviewed": "已复盘",
 					"synced": "数据已同步"
 				},
 				"loadingAutoSync": "正在加载自动同步配置...",
 				"loadingPublishedLink": "正在读取链接...",
+				"mentionPost": "引用该文章",
 				"openOpsReview": "查看复盘",
 				"openPlatform": "打开平台内容",
 				"opsArtifacts": {
@@ -921,8 +926,19 @@
 				"renamePostInput": "文章名称",
 				"renamePostSuccess": "文章名称已更新",
 				"renamePostTitle": "重命名文章",
+				"restorePostPublish": "恢复待发布",
+				"restorePostPublishSuccess": "文章已恢复为待发布",
+				"setPostPublishStatusFailed": "文章发布状态保存失败，请稍后重试",
 				"subtitle": "从文章列表进入详情，数据更新时会保留当前页面。",
 				"title": "文章首页"
+			},
+			"titleEdit": {
+				"cancel": "取消编辑",
+				"edit": "编辑标题",
+				"empty": "标题不能为空",
+				"failed": "标题保存失败，请稍后重试",
+				"input": "文章标题",
+				"save": "保存标题"
 			},
 			"initPanel": {
 				"clearConfirm": {
@@ -973,6 +989,9 @@
 					"stepCompleted": "已完成：{{title}}",
 					"stepCurrent": "当前步骤：{{title}}",
 					"stepPosition": "第 {{index}} 步，共 {{total}} 步",
+					"stepShortBrand": "定位",
+					"stepShortConfirm": "确认",
+					"stepShortTopics": "选题",
 					"stepUpcoming": "待完成：{{title}}"
 				},
 				"platforms": {
@@ -1025,13 +1044,17 @@
 					"brandPosition": "品牌/IP 定位",
 					"brandPositionHint": "清晰的定位能帮助 AI 生成更精准的内容策略",
 					"brandPositionPlaceholder": "一句话描述你的品牌定位，如：AI 效率工具分享",
+					"collapse": "收起品牌信息",
 					"closeHistoryRecords": "关闭品牌记录",
 					"deleteRecord": "删除 {{name}}",
+					"expand": "展开品牌信息",
 					"historyRecords": "一键回填",
 					"optional": "选填",
 					"platformFetchLoading": "正在从平台获取账号信息，完成后将自动填入表单…",
 					"platformFetchTimeout": "获取账号信息超时，请稍后重试或在对话中查看进度",
 					"platformFetching": "获取中…",
+					"profileSection": "账号档案",
+					"profileSectionHint": "配置 AI 生成内容时默认使用的身份、定位与受众。",
 					"quickFillHint": "提示：填写越详细，AI 生成的选题越精准",
 					"readyStatus": "品牌信息已就绪",
 					"readySummary": "{{author}} · {{brandPosition}}",
@@ -1042,6 +1065,7 @@
 					"saveConfirmSave": "保存，继续",
 					"saveConfirmSkip": "不保存，继续",
 					"saveConfirmTitle": "下次还用这套品牌信息吗？",
+					"saveSuccess": "保存成功",
 					"selectRecordHint": "选择历史记录以回填",
 					"skippableHint": "后续可在品牌设置里补充。",
 					"skippableStatus": "可跳过",
@@ -1060,6 +1084,7 @@
 					"articleReadyHint": "已整理 {{outlineCount}} 个大纲要点和 {{materialCount}} 个参考资料",
 					"articleReadyHintMaterials": "已整理 {{materialCount}} 个参考资料",
 					"articleReadyHintOutline": "已整理 {{outlineCount}} 个大纲要点",
+					"articleUnit": "篇文章",
 					"audienceLabel": "受众",
 					"backHome": "返回首页",
 					"brandAssetCount": "已上传 {{count}} 项品牌素材",
@@ -1078,6 +1103,8 @@
 					"globalSummary": "全局设置",
 					"imageModel": "图像",
 					"modelSettings": "模型配置",
+					"modelSettingsHint": "默认即可，也可以在开始前微调。",
+					"modelSettingsTitle": "生成设置",
 					"opened": "已打开",
 					"outlinePoints": "{{count}} 个大纲要点",
 					"phase": {
@@ -1132,12 +1159,14 @@
 					"cardContentRequiresTitleStatus": "先填标题",
 					"cardCountHint": "小红书/Instagram 建议 6-9 张",
 					"cardCountLabel": "卡片数量",
+					"cardCountReduceConfirm": "减少卡片数量将移除末尾已有内容的卡片，是否确认？",
 					"cardCountUnit": "张卡片",
 					"cardRemoveBtn": "移除此卡片",
 					"currentArticle": "当前文章",
 					"descriptionLabel": "内容描述",
 					"descriptionPlaceholder": "随便说说这篇文章想表达什么，口语化也没关系，AI 帮你润色…",
 					"expandConfig": "展开高级配置（风格、模板、大纲）",
+					"folderLabel": "归档文件夹",
 					"materialsLabel": "素材上传",
 					"notesLabel": "补充说明",
 					"notesPlaceholder": "任何额外的创作要求或注意事项…",
@@ -1209,6 +1238,11 @@
 					"generateCountInputLabel": "生成数量",
 					"generateCountUnit": "个选题",
 					"generateWithDetails": "同时生成内容规划",
+					"generating": "策划中",
+					"generatingStep1": "深度思考领域特征...",
+					"generatingStep2": "挖掘爆款选题角度...",
+					"generatingStep3": "构思核心大纲框架...",
+					"generatingStep4": "打磨最终输出细节...",
 					"generatedStatus": "已生成 {{count}} 个选题",
 					"kicker": "新建文章",
 					"manualFolderHint": "手动目录会保留，后续标题变更不会覆盖它",
@@ -1219,6 +1253,7 @@
 					"removeConfirm": "删除",
 					"removeTopic": "删除选题",
 					"removeTopicLabel": "删除{{title}}",
+					"ready": "待策划",
 					"selectTopicLabel": "选择{{title}}",
 					"stopBtn": "停止",
 					"subtitle": "先生成候选方向，再补标题、材料和大纲。",
@@ -1251,6 +1286,19 @@
 					"blankDesc": "从零开始创建新的内容方案",
 					"selectSubtitle": "从已保存的模板快速开始，或创建全新方案",
 					"selectTitle": "选择开始方式"
+				},
+				"composerConfig": {
+					"cardCountValue": "{{count}}张",
+					"clear": "清空",
+					"currentConfig": "当前配置：{{value}}",
+					"custom": "自定义",
+					"empty": "未选择",
+					"emptyPresets": "当前平台暂无可选模板",
+					"fields": {
+						"cardCount": "卡片数量",
+						"platform": "平台",
+						"visualPreset": "模板"
+					}
 				},
 				"visuals": {
 					"codeDispatch": {
@@ -1381,14 +1429,19 @@
 			"opsRefresh": {
 				"missingSourceUrl": "请先绑定发布后的文章链接",
 				"prompt": {
-					"instruction": "请优先读取当前文章目录下 ops/source.json、ops/metrics.json、ops/comments.json，并以本次消息里的真实文章链接作为兜底目标。访问真实文章链接，获取或整理真实曝光、阅读、点赞、收藏、评论、转发、涨粉、转化等数据；更新 ops/metrics.json 的最新结构化指标，并将本次同步追加或合并到 metrics.json.history；更新 ops/comments.json 的评论/用户反馈，并将本次同步追加或合并到 comments.json.history；更新 ops/source.json 的 fetchStatus、lastFetchedAt、必要失败原因，并将本次同步状态追加或合并到 source.json.history；将运营复盘写入 ops/review.html，必须是可直接预览的精美 HTML 报告页，而不是普通段落：至少包含表现简报、KPI 解读、趋势解释、流量效率漏斗、互动质量构成、评论/购买信号、原因归因和下一步动作；图表或图表块使用统一高级配色，内容紧凑，使用内联 CSS/SVG 或纯 HTML/CSS，不依赖外部资源。下一步动作要渲染为可点击按钮；用 addEventListener 绑定事件，不要使用内联 onclick；点击时优先调用 window.Magic.project.sendMessage(message, { model: \"auto\" })，不可用时降级调用 window.Magic.setInputMessage(message)。",
+					"instruction": "按 Skill 内置的发布后运营流程执行，并使用固定 ops schema。读取并更新当前文章目录下 ops/source.json、ops/metrics.json、ops/comments.json、ops/review.html；本消息里的真实文章链接仅作为兜底目标；保留 history 快照，更新 fetchStatus，不要创建 AI Card 产物。",
 					"metadata": "平台：{{platform}}\n标题：{{title}}\n真实文章链接：{{publishedUrl}}",
-					"opening": "请作为 IP 运营专家，基于 {{mention}} 抓取并回写发布后的真实运营数据。",
+					"opening": "请加载并执行 self-media-composer Skill，对 {{mention}} 进行发布入盘 / 发布后数据同步。",
 					"topicName": "[真实数据刷新] {{title}}",
 					"untitled": "自媒体文章"
 				},
 				"startFailed": "真实数据同步启动失败，请稍后重试",
 				"startFailedWithReason": "启动真实数据同步失败：{{reason}}"
+			},
+			"mentionPost": {
+				"startFailed": "引用文章失败，请稍后重试",
+				"startFailedWithReason": "引用文章失败：{{reason}}",
+				"success": "已引用到输入框"
 			},
 			"opsReview": {
 				"actionsTitle": "下一步动作",
@@ -1430,7 +1483,9 @@
 					"completed": "已完成",
 					"failed": "抓取失败",
 					"fetched": "已抓取真实数据",
+					"partial": "部分数据已同步",
 					"pending": "待抓取",
+					"success": "已完成",
 					"unknown": "尚未抓取"
 				},
 				"summaryTitle": "复盘摘要",

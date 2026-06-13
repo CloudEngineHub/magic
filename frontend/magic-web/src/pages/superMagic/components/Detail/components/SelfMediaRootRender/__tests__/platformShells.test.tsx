@@ -7,6 +7,7 @@ import InstagramShell from "../platforms/instagram/InstagramShell"
 import WechatOfficialShell from "../platforms/wechat-official-accounts/WechatOfficialShell"
 import { WechatCoverPhonePanel } from "../platforms/wechat-official-accounts/WechatCoverPhonePanel"
 import type { SelfMediaPost, SelfMediaView } from "../types"
+import { SELF_MEDIA_WORKSPACE_BACKGROUND } from "../components/SelfMediaWorkspaceBackground"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { createTestStore, wrapWithStore } from "./testStoreHelpers"
 import type { StoreSeed } from "./testStoreHelpers"
@@ -206,13 +207,33 @@ describe("platform shells", () => {
 		)
 
 		expect(await screen.findByTestId("self-media-view-tabs")).toBeInTheDocument()
-		expect(screen.getByTestId("wechat-official-shell")).toHaveClass("bg-white")
+		expect(screen.getByTestId("wechat-official-shell")).toHaveStyle({
+			background: SELF_MEDIA_WORKSPACE_BACKGROUND,
+		})
+	})
+
+	it("uses the shared workspace background across platform article editors", () => {
+		renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} />, { view: "edit" })
+		expect(screen.getByTestId("rednote-shell-workspace")).toHaveStyle({
+			background: SELF_MEDIA_WORKSPACE_BACKGROUND,
+		})
+
+		renderWithStore(<InstagramShell platform="instagram" attachmentList={[]} />, {
+			platform: "instagram",
+			view: "edit",
+		})
+		expect(screen.getByTestId("instagram-shell-workspace")).toHaveStyle({
+			background: SELF_MEDIA_WORKSPACE_BACKGROUND,
+		})
 	})
 
 	it("keeps RednoteShell detail cards mounted across view switches", () => {
 		cardFrameMountCounts.clear()
 		const { store } = renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} />)
 
+		expect(screen.getByTestId("rednote-shell-workspace")).toHaveStyle({
+			background: SELF_MEDIA_WORKSPACE_BACKGROUND,
+		})
 		expect(cardFrameMountCounts.get("red-detail-post-1-0-0")).toBe(1)
 		expect(cardFrameMountCounts.get("red-detail-post-1-1-0")).toBe(1)
 		expect(cardFrameMountCounts.get("red-detail-post-1-2-0")).toBe(1)

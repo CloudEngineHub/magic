@@ -131,7 +131,7 @@ function SelfMediaShellHeader({
 
 	return (
 		<header
-			className="grid min-h-[88px] grid-cols-[minmax(14rem,1fr)_auto] items-center gap-4 bg-white px-6 py-3 max-lg:grid-cols-1 max-lg:items-stretch"
+			className="grid min-h-[72px] grid-cols-[minmax(14rem,1fr)_auto] items-center gap-3 bg-transparent px-3 py-2 max-lg:grid-cols-1 max-lg:items-stretch sm:min-h-[88px] sm:px-4 sm:py-3 lg:gap-4 lg:px-6"
 			data-testid="self-media-shell-header"
 		>
 			<div className="flex min-w-0 items-center gap-3" data-testid="self-media-shell-title">
@@ -140,15 +140,17 @@ function SelfMediaShellHeader({
 						type="button"
 						variant="outline"
 						size="sm"
-						className="h-11 shrink-0 rounded-[14px] border-[#e4e4e7] bg-white px-4 text-sm font-[700] text-[#18181b] shadow-[0_3px_12px_rgba(24,24,27,0.06)] hover:bg-white hover:text-[#18181b]"
+						className="h-10 shrink-0 rounded-[14px] border-[#e4e4e7] bg-white px-3 text-sm font-[700] text-[#18181b] shadow-[0_3px_12px_rgba(24,24,27,0.06)] hover:bg-white hover:text-[#18181b] max-[380px]:w-10 max-[380px]:px-0 sm:h-11 sm:px-4"
 						onClick={onBackHome}
 						data-testid="self-media-shell-back-home-button"
 					>
 						<ChevronLeft size={17} />
-						<span>{t("detail.selfMedia.home.backHome")}</span>
+						<span className="max-[380px]:sr-only">
+							{t("detail.selfMedia.home.backHome")}
+						</span>
 					</Button>
 				) : null}
-				<span className="flex size-11 shrink-0 items-center justify-center rounded-[14px] bg-white text-[#18181b] shadow-[0_3px_12px_rgba(24,24,27,0.06)]">
+				<span className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-white text-[#18181b] shadow-[0_3px_12px_rgba(24,24,27,0.06)] sm:size-11">
 					<PlatformBrandIcon
 						platform={platform}
 						className="size-5"
@@ -214,7 +216,7 @@ function SelfMediaShellHeader({
 					) : (
 						<div className="mt-0.5 flex min-w-0 items-start gap-1.5">
 							<h2
-								className="min-w-0 whitespace-normal break-words text-base font-[800] leading-[1.25] text-[#18181b]"
+								className="min-w-0 whitespace-normal break-words text-sm font-[800] leading-[1.3] text-[#18181b] sm:text-base sm:leading-[1.25]"
 								data-testid="self-media-shell-platform-title"
 							>
 								{articleTitle}
@@ -246,12 +248,12 @@ function SelfMediaShellHeader({
 					)}
 				</div>
 			</div>
-			<div className="flex min-w-0 items-center justify-end gap-4 max-lg:justify-start max-md:flex-col max-md:items-stretch">
+			<div className="flex min-w-0 items-center justify-end gap-3 max-lg:justify-start max-md:flex-col max-md:items-stretch lg:gap-4">
 				<div
-					className="flex shrink-0 items-center justify-end gap-2 rounded-[18px] max-lg:justify-start max-sm:overflow-x-auto"
+					className="flex max-w-full shrink-0 items-center justify-end gap-2 overflow-x-auto rounded-[18px] max-lg:justify-start"
 					data-testid="self-media-shell-toolbar"
 				>
-					<div className="flex h-12 shrink-0 items-center gap-2 rounded-[18px] bg-white/80 px-2 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_3px_14px_rgba(24,24,27,0.05)]">
+					<div className="flex h-11 shrink-0 items-center gap-1.5 rounded-[16px] bg-white/80 px-1.5 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_3px_14px_rgba(24,24,27,0.05)] sm:h-12 sm:gap-2 sm:rounded-[18px] sm:px-2">
 						{onStartInspector && !inspectorDisabled ? (
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -321,12 +323,12 @@ export function SelfMediaShellViewBar({
 
 	return (
 		<footer
-			className="shrink-0 border-t border-[#f1f1f2] bg-white px-4 py-3"
+			className="shrink-0 border-t border-[#f1f1f2] bg-white px-2 py-2 sm:px-4 sm:py-3"
 			data-testid="self-media-shell-view-bar"
 		>
 			<div className="mx-auto grid max-w-full grid-cols-[1fr_auto_1fr] items-center gap-3 max-md:grid-cols-1">
 				<div aria-hidden="true" className="min-w-0 max-md:hidden" />
-				<div className="flex min-w-0 justify-center overflow-x-auto">
+				<div className="flex min-w-0 justify-start overflow-x-auto sm:justify-center">
 					<ViewTabs
 						value={view}
 						onChange={onChangeView}

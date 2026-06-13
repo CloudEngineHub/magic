@@ -32,6 +32,8 @@ vi.mock("react-i18next", () => ({
 				"detail.selfMedia.home.deletePostDescription":
 					"This article will be permanently deleted and cannot be restored.",
 				"detail.selfMedia.home.deletePostTitle": "Delete this article?",
+				"detail.selfMedia.home.archivePost": "Pause publishing",
+				"detail.selfMedia.home.restorePostPublish": "Restore to publish",
 				"detail.selfMedia.home.renamePost": "Rename article",
 				"detail.selfMedia.home.renamePostCancel": "Cancel",
 				"detail.selfMedia.home.renamePostConfirm": "Save name",
@@ -40,6 +42,7 @@ vi.mock("react-i18next", () => ({
 				"detail.selfMedia.home.renamePostFailed": "Failed to rename article.",
 				"detail.selfMedia.home.renamePostInput": "Article name",
 				"detail.selfMedia.home.renamePostTitle": "Rename article",
+				"detail.selfMedia.home.mentionPost": "Mention this article",
 				"detail.selfMedia.home.opsArtifacts.sourceReady": "Source ready",
 				"detail.selfMedia.home.opsArtifacts.sourceMissing": "Source missing",
 				"detail.selfMedia.home.opsArtifacts.metricsReady": "Metrics ready",
@@ -49,6 +52,7 @@ vi.mock("react-i18next", () => ({
 				"detail.selfMedia.home.opsArtifacts.reviewReady": "Review ready",
 				"detail.selfMedia.home.opsArtifacts.reviewMissing": "Review missing",
 				"detail.selfMedia.home.lifecycle.draft": "To publish",
+				"detail.selfMedia.home.lifecycle.archived": "Paused",
 				"detail.selfMedia.home.lifecycle.published": "Published",
 				"detail.selfMedia.home.lifecycle.synced": "Data synced",
 				"detail.selfMedia.home.lifecycle.reviewed": "Reviewed",
@@ -68,7 +72,9 @@ vi.mock("../platforms/wechat-official-accounts/useCoverImageUrl", () => ({
 	useCoverImageUrl: () => ({ url: "" }),
 }))
 
-function createPostItem(): SelfMediaPlatformPostItem {
+function createPostItem(
+	entryOverrides: Partial<SelfMediaPlatformPostItem["entry"]> = {},
+): SelfMediaPlatformPostItem {
 	return {
 		platform: "rednote",
 		index: 0,
@@ -76,6 +82,7 @@ function createPostItem(): SelfMediaPlatformPostItem {
 			id: "post-1",
 			name: "Post One",
 			entry: "posts/post-1/post.json",
+			...entryOverrides,
 		},
 		post: {
 			meta: {
@@ -105,6 +112,81 @@ function renderCard(props: Partial<React.ComponentProps<typeof SelfMediaPostCard
 }
 
 describe("SelfMediaPostCard", () => {
+	it("keeps action labels visible even before the card width is measured", () => {
+		renderCard()
+
+		expect(screen.getByTestId("self-media-home-post-card-post-1")).toHaveAttribute(
+			"data-card-layout",
+			"compact",
+		)
+		expect(screen.getByTestId("self-media-home-post-open-post-1").className).not.toContain(
+			"@md/self-media-card",
+		)
+		expect(screen.getByTestId("self-media-home-post-actions-post-1")).toHaveAttribute(
+			"data-label-mode",
+			"expanded",
+		)
+		expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toHaveTextContent(
+			"Sync now",
+		)
+	})
+
+	it("expands card controls after the card width is measured", async () => {
+		const getBoundingClientRect = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue({
+				x: 0,
+				y: 0,
+				left: 0,
+				top: 0,
+				right: 390,
+				bottom: 160,
+				width: 390,
+				height: 160,
+				toJSON: () => ({}),
+			})
+
+		renderCard()
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-home-post-card-post-1")).toHaveAttribute(
+				"data-card-layout",
+				"comfortable",
+			)
+			expect(screen.getByTestId("self-media-home-post-actions-post-1")).toHaveAttribute(
+				"data-label-mode",
+				"expanded",
+			)
+			expect(screen.getByTestId("self-media-home-post-actions-post-1")).toHaveClass(
+				"flex-nowrap",
+			)
+			expect(
+				screen.getByTestId("self-media-home-post-actions-post-1").className,
+			).not.toContain("max-w-[calc(100%-6rem)]")
+		})
+
+		getBoundingClientRect.mockRestore()
+	})
+
+	it("limits the title and subtitle copy to two lines", () => {
+		renderCard({
+			title: "This is a very long article title that should remain readable across two lines",
+			subtitle:
+				"This is a very long article subtitle that can also use up to two lines before it gets clipped by the card layout.",
+		})
+
+		const title = screen.getByText(
+			"This is a very long article title that should remain readable across two lines",
+		)
+		const subtitle = screen.getByText(
+			"This is a very long article subtitle that can also use up to two lines before it gets clipped by the card layout.",
+		)
+
+		expect(title).toHaveClass("line-clamp-2")
+		expect(title.className).not.toContain("truncate")
+		expect(subtitle).toHaveClass("line-clamp-2")
+	})
+
 	it("passes the card geometry when opening a post", () => {
 		const onOpenPost = vi.fn()
 		const getBoundingClientRect = vi
@@ -165,12 +247,66 @@ describe("SelfMediaPostCard", () => {
 		expect(syncedStatus).toHaveAttribute("data-lifecycle", "synced")
 	})
 
+	it("prioritizes the manual publish status over inferred ops lifecycle state", () => {
+		renderCard({
+			item: createPostItem({ publishStatus: "archived" }),
+			opsArtifacts: { source: true, metrics: true, comments: true, review: true },
+			onLoadPublishedUrl: vi.fn(),
+			onBindPublishedUrl: vi.fn(),
+		})
+
+		const lifecycle = screen.getByTestId("self-media-home-post-lifecycle-post-1")
+		expect(lifecycle).toHaveTextContent("Paused")
+		expect(lifecycle).toHaveAttribute("data-lifecycle", "archived")
+		expect(screen.getByTestId("self-media-home-post-card-post-1")).toHaveAttribute(
+			"data-publish-status",
+			"archived",
+		)
+		expect(
+			screen.getByTestId("self-media-home-post-ops-artifact-post-1-source"),
+		).toBeInTheDocument()
+	})
+
+	it("places ops artifact shortcuts under the subtitle copy", async () => {
+		const getBoundingClientRect = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue({
+				x: 0,
+				y: 0,
+				left: 0,
+				top: 0,
+				right: 390,
+				bottom: 160,
+				width: 390,
+				height: 160,
+				toJSON: () => ({}),
+			})
+
+		renderCard()
+
+		const artifacts = screen.getByTestId("self-media-home-post-ops-artifacts-post-1")
+		await waitFor(() => {
+			expect(artifacts.closest(".self-media-post-card-copy")).toBeInTheDocument()
+		})
+		expect(screen.getByTestId("self-media-home-post-open-post-1").parentElement).toHaveClass(
+			"min-h-[192px]",
+			"pb-[76px]",
+		)
+		expect(artifacts).toHaveClass("mt-3")
+		expect(artifacts.className).not.toContain("absolute")
+		expect(artifacts.className).not.toContain("ml-")
+		expect(artifacts.className).not.toContain("top-")
+		expect(artifacts.className).not.toContain("left-")
+
+		getBoundingClientRect.mockRestore()
+	})
+
 	it("uses the data action as immediate sync and opens auto sync settings on hover", async () => {
 		const onPostPublishRefresh = vi.fn().mockResolvedValue(undefined)
 		renderCard({ onPostPublishRefresh })
 
 		const trigger = screen.getByTestId("self-media-home-post-ops-data-post-1")
-		expect(trigger).toHaveTextContent("Sync now")
+		expect(trigger).toHaveAttribute("aria-label", "Sync now")
 
 		fireEvent.click(trigger)
 		await waitFor(() => expect(onPostPublishRefresh).toHaveBeenCalledTimes(1))
@@ -212,7 +348,7 @@ describe("SelfMediaPostCard", () => {
 		resolveSource(null)
 		expect(
 			await screen.findByTestId("self-media-home-post-auto-sync-enabled-post-1"),
-		).toBeInTheDocument()
+		).toHaveValue("0")
 
 		fireEvent.mouseEnter(screen.getByTestId("self-media-home-post-data-popover-post-1"))
 		expect(
@@ -223,6 +359,34 @@ describe("SelfMediaPostCard", () => {
 		).toBeInTheDocument()
 	})
 
+	it("treats a saved auto sync flag without task id as not configured", async () => {
+		renderCard({
+			onLoadOpsSource: vi.fn().mockResolvedValue({
+				version: 1,
+				updatedAt: "2026-06-13T10:00:00.000Z",
+				platform: "rednote",
+				publishedUrl: "https://www.xiaohongshu.com/explore/post-1",
+				fetchStatus: "pending",
+				autoSync: {
+					enabled: true,
+					timeConfig: {
+						type: "weekly_repeat",
+						time: "10:30",
+						day: "2",
+					},
+				},
+			}),
+		})
+
+		fireEvent.mouseEnter(screen.getByTestId("self-media-home-post-ops-data-post-1"))
+
+		expect(
+			await screen.findByTestId("self-media-home-post-auto-sync-enabled-post-1"),
+		).toHaveValue("0")
+		expect(screen.getByTestId("self-media-home-post-auto-sync-frequency-post-1")).toBeDisabled()
+		expect(screen.getByTestId("self-media-home-post-auto-sync-time-post-1")).toBeDisabled()
+	})
+
 	it("opens auto sync settings on click when immediate sync is unavailable", async () => {
 		renderCard({
 			onPostPublishRefresh: undefined,
@@ -231,7 +395,6 @@ describe("SelfMediaPostCard", () => {
 		})
 
 		const trigger = screen.getByTestId("self-media-home-post-ops-data-post-1")
-		expect(trigger).toHaveTextContent("Auto sync")
 		expect(trigger).toHaveAttribute("aria-label", "Auto sync")
 		expect(trigger).not.toHaveTextContent("Sync now")
 
@@ -261,6 +424,50 @@ describe("SelfMediaPostCard", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }))
 
 		await waitFor(() => expect(onDeletePost).toHaveBeenCalledWith(createPostItem()))
+	})
+
+	it("mentions the article folder from the context menu", async () => {
+		const onMentionPost = vi.fn()
+		renderCard({ onMentionPost })
+
+		fireEvent.contextMenu(screen.getByTestId("self-media-home-post-card-post-1"))
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Mention this article" }))
+
+		expect(onMentionPost).toHaveBeenCalledWith(createPostItem())
+	})
+
+	it("toggles the manual publish status from the context menu", async () => {
+		const onSetPostPublishStatus = vi.fn().mockResolvedValue(undefined)
+		const { rerender } = renderCard({ onSetPostPublishStatus })
+
+		fireEvent.contextMenu(screen.getByTestId("self-media-home-post-card-post-1"))
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Pause publishing" }))
+
+		await waitFor(() =>
+			expect(onSetPostPublishStatus).toHaveBeenCalledWith(createPostItem(), "archived"),
+		)
+
+		rerender(
+			<SelfMediaPostCard
+				item={createPostItem({ publishStatus: "archived" })}
+				title="Post One"
+				subtitle="Post subtitle"
+				postId="post-1"
+				opsArtifacts={{ source: false, metrics: false, comments: false, review: false }}
+				onOpenPost={vi.fn()}
+				onSetPostPublishStatus={onSetPostPublishStatus}
+			/>,
+		)
+
+		fireEvent.contextMenu(screen.getByTestId("self-media-home-post-card-post-1"))
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Restore to publish" }))
+
+		await waitFor(() =>
+			expect(onSetPostPublishStatus).toHaveBeenCalledWith(
+				createPostItem({ publishStatus: "archived" }),
+				undefined,
+			),
+		)
 	})
 
 	it("opens a rename dialog from the context menu with the old name prefilled", async () => {

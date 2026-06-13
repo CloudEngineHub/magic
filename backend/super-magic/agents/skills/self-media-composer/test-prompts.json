@@ -28,5 +28,10 @@
     "id": "self-media-ops-fixed-schema",
     "prompt": "把这篇已经发布的小红书文章发布入盘，抓取真实数据并生成复盘看板。",
     "expected": "走 self-media/IP-operations 数据同步流程，不创建 AI Card；读取并更新 ops/source.json、ops/metrics.json、ops/comments.json、ops/review.html；metrics 只写 reads/likes/saves/comments/shares/follows/conversions；derivedMetrics 只写 engagementRate/saveRate/shareRate/commentRate/followRate/conversionRate；fetchStatus、source、sentiment、intent 都使用固定枚举；新数据写 saves，不写 legacy collects；未知平台指标写入 notes 或 review.html。"
+  },
+  {
+    "id": "self-media-ops-immediate-sync-trigger",
+    "prompt": "立即同步这篇文章的真实数据，做一次真实数据刷新。",
+    "expected": "加载 self-media-composer，走发布后运营数据同步流程；使用固定 ops schema 更新 ops/source.json、ops/metrics.json、ops/comments.json、ops/review.html；不要把长流程写在用户消息里，也不要创建 AI Card。"
   }
 ]

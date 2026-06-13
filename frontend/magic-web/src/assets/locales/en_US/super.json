@@ -863,6 +863,8 @@
 				"create": "New article",
 				"dataOverview": "Data overview",
 				"dataSyncNow": "Sync now",
+				"archivePost": "Pause publishing",
+				"archivePostSuccess": "Article paused for publishing",
 				"deletePost": "Delete article",
 				"deletePostCancel": "Cancel",
 				"deletePostConfirm": "Delete permanently",
@@ -879,13 +881,16 @@
 					"reads": "Reads"
 				},
 				"lifecycle": {
+					"archived": "Paused",
 					"draft": "To publish",
+					"planned": "Planned",
 					"published": "Published",
 					"reviewed": "Reviewed",
 					"synced": "Data synced"
 				},
 				"loadingAutoSync": "Loading auto sync settings...",
 				"loadingPublishedLink": "Loading link...",
+				"mentionPost": "Mention this article",
 				"openOpsReview": "View review",
 				"openPlatform": "Open platform content",
 				"opsArtifacts": {
@@ -920,8 +925,19 @@
 				"renamePostInput": "Article name",
 				"renamePostSuccess": "Article name updated",
 				"renamePostTitle": "Rename article",
+				"restorePostPublish": "Restore to publish",
+				"restorePostPublishSuccess": "Article restored to publish queue",
+				"setPostPublishStatusFailed": "Failed to save article publish status. Please try again later.",
 				"subtitle": "Open details from the list. Data updates keep you on the current page.",
 				"title": "Article home"
+			},
+			"titleEdit": {
+				"cancel": "Cancel editing",
+				"edit": "Edit title",
+				"empty": "Title cannot be empty",
+				"failed": "Failed to save the title. Please try again later.",
+				"input": "Article title",
+				"save": "Save title"
 			},
 			"initPanel": {
 				"clearConfirm": {
@@ -972,6 +988,9 @@
 					"stepCompleted": "Completed: {{title}}",
 					"stepCurrent": "Current step: {{title}}",
 					"stepPosition": "Step {{index}} of {{total}}",
+					"stepShortBrand": "Brand",
+					"stepShortConfirm": "Confirm",
+					"stepShortTopics": "Topics",
 					"stepUpcoming": "Upcoming: {{title}}"
 				},
 				"platforms": {
@@ -1024,13 +1043,17 @@
 					"brandPosition": "Brand / IP Positioning",
 					"brandPositionHint": "A clear positioning helps AI generate more accurate content strategies",
 					"brandPositionPlaceholder": "Describe your brand positioning in one sentence, e.g. AI productivity tools",
+					"collapse": "Collapse brand info",
 					"closeHistoryRecords": "Close brand records",
 					"deleteRecord": "Delete {{name}}",
+					"expand": "Expand brand info",
 					"historyRecords": "One-click fill",
 					"optional": "Optional",
 					"platformFetchLoading": "Fetching account info from the platform. The form will auto-fill when ready…",
 					"platformFetchTimeout": "Account fetch timed out. Retry later or check the conversation for progress.",
 					"platformFetching": "Fetching…",
+					"profileSection": "Account profile",
+					"profileSectionHint": "Configure the identity, positioning, and audience AI uses by default.",
 					"quickFillHint": "Tip: The more detail you provide, the more accurate AI-generated topics will be",
 					"readyStatus": "Brand info ready",
 					"readySummary": "{{author}} · {{brandPosition}}",
@@ -1041,6 +1064,7 @@
 					"saveConfirmSave": "Save, continue",
 					"saveConfirmSkip": "Do not save, continue",
 					"saveConfirmTitle": "Reuse this brand info next time?",
+					"saveSuccess": "Saved",
 					"selectRecordHint": "Select a record to auto-fill",
 					"skippableHint": "You can fill this in later from brand settings.",
 					"skippableStatus": "Skippable",
@@ -1059,6 +1083,7 @@
 					"articleReadyHint": "{{outlineCount}} outline point(s) and {{materialCount}} reference(s) organized",
 					"articleReadyHintMaterials": "{{materialCount}} reference(s) organized",
 					"articleReadyHintOutline": "{{outlineCount}} outline point(s) organized",
+					"articleUnit": "articles",
 					"audienceLabel": "Audience",
 					"backHome": "Back home",
 					"brandAssetCount": "{{count}} brand asset(s) uploaded",
@@ -1077,6 +1102,8 @@
 					"globalSummary": "Global settings",
 					"imageModel": "Image",
 					"modelSettings": "Model settings",
+					"modelSettingsHint": "Defaults are fine, or tune them before starting.",
+					"modelSettingsTitle": "Generation settings",
 					"opened": "Opened",
 					"outlinePoints": "{{count}} outline points",
 					"phase": {
@@ -1131,12 +1158,14 @@
 					"cardContentRequiresTitleStatus": "Title first",
 					"cardCountHint": "6-9 cards recommended for Rednote/Instagram",
 					"cardCountLabel": "Card Count",
+					"cardCountReduceConfirm": "Reducing the card count removes filled cards at the end. Continue?",
 					"cardCountUnit": "cards",
 					"cardRemoveBtn": "Remove this card",
 					"currentArticle": "Current Article",
 					"descriptionLabel": "Content Description",
 					"descriptionPlaceholder": "Describe what this article is about in your own words, AI will help polish it...",
 					"expandConfig": "Expand advanced config (style, template, outline)",
+					"folderLabel": "Archive folder",
 					"materialsLabel": "Materials",
 					"notesLabel": "Additional Notes",
 					"notesPlaceholder": "Any extra requirements or instructions...",
@@ -1208,6 +1237,11 @@
 					"generateCountInputLabel": "Generate count",
 					"generateCountUnit": "topics",
 					"generateWithDetails": "Also generate content plan",
+					"generating": "Planning",
+					"generatingStep1": "Thinking through the domain...",
+					"generatingStep2": "Finding high-potential angles...",
+					"generatingStep3": "Drafting the core outline...",
+					"generatingStep4": "Polishing the final details...",
 					"generatedStatus": "{{count}} topics generated",
 					"kicker": "New article",
 					"manualFolderHint": "Manual folders stay in place. Later title changes will not overwrite them.",
@@ -1218,6 +1252,7 @@
 					"removeConfirm": "Delete",
 					"removeTopic": "Delete topic",
 					"removeTopicLabel": "Delete {{title}}",
+					"ready": "Ready",
 					"selectTopicLabel": "Select {{title}}",
 					"stopBtn": "Stop",
 					"subtitle": "Generate candidate directions first, then add titles, materials, and outlines.",
@@ -1250,6 +1285,19 @@
 					"blankDesc": "Create a new content plan from scratch",
 					"selectSubtitle": "Start quickly from a saved template, or create a new plan from scratch",
 					"selectTitle": "Choose how to start"
+				},
+				"composerConfig": {
+					"cardCountValue": "{{count}} cards",
+					"clear": "Clear",
+					"currentConfig": "Current configuration: {{value}}",
+					"custom": "Custom",
+					"empty": "Not selected",
+					"emptyPresets": "No templates available for this platform",
+					"fields": {
+						"cardCount": "Card count",
+						"platform": "Platform",
+						"visualPreset": "Template"
+					}
 				},
 				"visuals": {
 					"codeDispatch": {
@@ -1380,14 +1428,19 @@
 			"opsRefresh": {
 				"missingSourceUrl": "Bind the published article URL first.",
 				"prompt": {
-					"instruction": "Read ops/source.json, ops/metrics.json, and ops/comments.json in the current post folder first, and use the published URL in this message as the fallback target. Visit the real article URL and collect or organize real exposure, reads, likes, saves, comments, shares, follows, and conversion metrics. Update the latest structured metrics in ops/metrics.json and append or upsert this sync as a history snapshot in metrics.json.history. Update comments/audience feedback in ops/comments.json and append or upsert this sync in comments.json.history. Update ops/source.json fetchStatus, lastFetchedAt, any failure reason, and append or upsert the source sync status in source.json.history. Write ops/review.html as a polished standalone HTML report, not plain paragraphs: include at least a performance brief, KPI interpretation, trend explanation, traffic-efficiency funnel, interaction-quality mix, comment/buying signals, attribution, and next actions. Use compact content, a unified premium chart palette, and inline CSS/SVG or pure HTML/CSS only; do not depend on external resources. Render next actions as clickable buttons; bind events with addEventListener, do not use inline onclick; on click, prefer window.Magic.project.sendMessage(message, { model: \"auto\" }) and fall back to window.Magic.setInputMessage(message).",
+					"instruction": "Run the Skill's post-publication operations workflow using the fixed ops schema. Read and update ops/source.json, ops/metrics.json, ops/comments.json, and ops/review.html in the current post folder. Use the published URL above only as the fallback target, keep history snapshots, set fetchStatus, and do not create AI Card artifacts.",
 					"metadata": "Platform: {{platform}}\nTitle: {{title}}\nPublished URL: {{publishedUrl}}",
-					"opening": "Act as an IP operations specialist and fetch then write back post-publication real operations data for {{mention}}.",
+					"opening": "Load and execute the self-media-composer Skill for 发布入盘 / 发布后数据同步 on {{mention}}.",
 					"topicName": "[Real data refresh] {{title}}",
 					"untitled": "Self-media post"
 				},
 				"startFailed": "Failed to start data sync. Please try again later.",
 				"startFailedWithReason": "Failed to start data sync: {{reason}}"
+			},
+			"mentionPost": {
+				"startFailed": "Failed to mention the article. Please try again later.",
+				"startFailedWithReason": "Failed to mention the article: {{reason}}",
+				"success": "Mention added to the input box"
 			},
 			"opsReview": {
 				"actionsTitle": "Next actions",
@@ -1429,7 +1482,9 @@
 					"completed": "Completed",
 					"failed": "Fetch failed",
 					"fetched": "Real data fetched",
+					"partial": "Partially synced",
 					"pending": "Pending",
+					"success": "Completed",
 					"unknown": "Not fetched"
 				},
 				"summaryTitle": "Review summary",

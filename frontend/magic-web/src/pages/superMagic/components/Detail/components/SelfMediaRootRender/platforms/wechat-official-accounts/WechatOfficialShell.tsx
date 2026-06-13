@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { ElementInspectorOverlay } from "@/components/business/ElementInspector"
 import { flattenAttachments } from "../../../../contents/HTML/utils"
 import SelfMediaShellHeader, { SelfMediaShellViewBar } from "../../components/SelfMediaShellHeader"
+import { SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE } from "../../components/SelfMediaWorkspaceBackground"
 import { useSelfMediaInspector } from "../../hooks/useSelfMediaInspector"
 import { useShellFileHandlers } from "../../hooks/useShellFileHandlers"
 import { SelfMediaStoreProvider, useOptionalSelfMediaStore, useSelfMediaStore } from "../../stores"
@@ -241,7 +242,8 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 
 	return (
 		<div
-			className="relative flex h-full w-full flex-col bg-white"
+			className="relative flex h-full w-full flex-col"
+			style={SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE}
 			data-testid="wechat-official-shell"
 		>
 			<SelfMediaShellHeader

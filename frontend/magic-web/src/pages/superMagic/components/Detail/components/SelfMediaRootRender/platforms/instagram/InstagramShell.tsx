@@ -7,6 +7,7 @@ import type { CardFrameRef } from "../../components/CardFrame"
 import ExportPreviewDialog from "../../components/ExportPreviewDialog"
 import type { ExportPreviewConfirmArgs } from "../../components/ExportPreviewDialog"
 import SelfMediaShellHeader, { SelfMediaShellViewBar } from "../../components/SelfMediaShellHeader"
+import { SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE } from "../../components/SelfMediaWorkspaceBackground"
 import { useExportZip } from "../../hooks/useExportZip"
 import { useExportProgressToast } from "../../hooks/useExportProgressToast"
 import { usePhoneScaling } from "../../hooks/usePhoneScaling"
@@ -19,7 +20,6 @@ import { INSTAGRAM_PHONE_HEIGHT, INSTAGRAM_PHONE_WIDTH } from "./instagramShellC
 import { InstagramShellEditViewPanel } from "./InstagramShellEditViewPanel"
 import { InstagramShellPhoneViewPanel } from "./InstagramShellPhoneViewPanel"
 import { InstagramShellScrollViewPanel } from "./InstagramShellScrollViewPanel"
-import { instagramTokens } from "./tokens"
 
 const noop = () => undefined
 
@@ -353,7 +353,7 @@ function InstagramShell(props: PlatformComponentProps) {
 	return (
 		<div
 			className="relative flex h-full w-full flex-col"
-			style={{ backgroundColor: instagramTokens.chromeBg }}
+			style={SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE}
 			onPointerDown={handleShellPointerDown}
 			data-testid="instagram-shell-workspace"
 		>

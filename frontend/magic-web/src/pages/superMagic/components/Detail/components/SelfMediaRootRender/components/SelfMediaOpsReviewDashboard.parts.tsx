@@ -28,6 +28,19 @@ import { trendChartConfig } from "./SelfMediaOpsReviewDashboard.helpers"
 
 const EMPTY_FILE_PATH_MAPPING = new Map<string, string>()
 const NOOP_OPEN_NEW_TAB = () => undefined
+const OPS_REVIEW_SOURCE_STATUSES = new Set([
+	"pending",
+	"fetched",
+	"failed",
+	"unknown",
+	"completed",
+	"success",
+	"partial",
+])
+
+function normalizeOpsReviewSourceStatus(status: string) {
+	return OPS_REVIEW_SOURCE_STATUSES.has(status) ? status : "unknown"
+}
 
 export function OpsReviewHeader({
 	title,
@@ -47,9 +60,10 @@ export function OpsReviewHeader({
 	onClose: () => void
 }) {
 	const { t } = useTranslation("super")
+	const normalizedSourceStatus = normalizeOpsReviewSourceStatus(sourceStatus)
 
 	return (
-		<header className="bg-white/82 flex shrink-0 flex-col gap-3 border-b border-[#18181b]/[0.06] px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6">
+		<header className="flex shrink-0 flex-col gap-3 border-b border-[#18181b]/[0.06] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
 			<div className="min-w-0 flex-1">
 				<div className="flex flex-wrap items-center gap-2 text-xs">
 					<span className="inline-flex items-center gap-1.5 rounded-full bg-[#18181b] px-2.5 py-1 font-[780] text-white shadow-[0_10px_22px_rgba(24,24,27,0.12)]">
@@ -59,14 +73,18 @@ export function OpsReviewHeader({
 					<span
 						className={cn(
 							"rounded-full px-2.5 py-1 font-[700]",
-							sourceStatus === "fetched" || sourceStatus === "completed"
+							normalizedSourceStatus === "fetched" ||
+								normalizedSourceStatus === "completed" ||
+								normalizedSourceStatus === "success"
 								? "bg-[#59b981]/12 text-[#377f59]"
-								: sourceStatus === "failed"
+								: normalizedSourceStatus === "failed"
 									? "bg-destructive/10 text-destructive"
-									: "bg-[#f4f4f5] text-[#71717a]",
+									: normalizedSourceStatus === "partial"
+										? "bg-[#f59e0b]/12 text-[#8a5a00]"
+										: "bg-[#f4f4f5] text-[#71717a]",
 						)}
 					>
-						{t(`detail.selfMedia.opsReview.sourceStatus.${sourceStatus}`)}
+						{t(`detail.selfMedia.opsReview.sourceStatus.${normalizedSourceStatus}`)}
 					</span>
 				</div>
 				<h2 className="mt-2 truncate text-[18px] font-[820] leading-tight text-[#18181b]">
@@ -178,7 +196,11 @@ function SummaryTrend({ trendData }: { trendData: SelfMediaOpsReviewTrendPoint[]
 				</div>
 			</div>
 			{hasTrend ? (
-				<ChartContainer config={trendChartConfig} className="h-24 min-h-24 w-full min-w-0">
+				<ChartContainer
+					config={trendChartConfig}
+					className="h-24 min-h-24 w-full min-w-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 [&_*]:focus:outline-none [&_*]:focus-visible:outline-none"
+					data-testid="self-media-ops-review-summary-trend-chart"
+				>
 					<LineChart data={trendData} margin={{ top: 6, right: 8, left: -24, bottom: 0 }}>
 						<XAxis
 							dataKey="label"

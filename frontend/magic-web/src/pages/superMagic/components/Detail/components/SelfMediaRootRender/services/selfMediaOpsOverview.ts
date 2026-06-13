@@ -24,16 +24,27 @@ export interface SelfMediaOpsOverviewPostSummary {
 	updatedAt?: string
 }
 
+export interface SelfMediaOpsOverviewEngagementTotals {
+	likes: number
+	comments: number
+	saves: number
+	shares: number
+}
+
 export type SelfMediaOpsOverviewActionKey =
 	| "bind-source"
 	| "sync-metrics"
 	| "collect-comments"
 	| "generate-review"
 	| "improve-weak-post"
+	| "repurpose-best-post"
+	| "plan-next-post"
+
+export type SelfMediaOpsOverviewStage = "empty" | "setup" | "syncing" | "reviewing" | "closed"
 
 export interface SelfMediaOpsOverviewAction {
 	key: SelfMediaOpsOverviewActionKey
-	postKey: string
+	postKey?: string
 	title: string
 	description: string
 	cta: string
@@ -44,11 +55,14 @@ export interface SelfMediaOpsOverview {
 	totalPosts: number
 	totalReads: number
 	totalEngagement: number
+	engagementTotals: SelfMediaOpsOverviewEngagementTotals
 	engagementRate: number | null
 	completion: Record<keyof SelfMediaPostOpsArtifacts, SelfMediaOpsOverviewCompletionItem>
 	bestPost: SelfMediaOpsOverviewPostSummary | null
 	weakestPost: SelfMediaOpsOverviewPostSummary | null
 	nextActions: SelfMediaOpsOverviewAction[]
+	operationStage: SelfMediaOpsOverviewStage
+	opportunityCount: number
 	lastUpdatedAt?: string
 }
 
@@ -80,6 +94,12 @@ export function buildSelfMediaOpsOverview({
 	const nextActions: SelfMediaOpsOverviewAction[] = []
 	let totalReads = 0
 	let totalEngagement = 0
+	const engagementTotals: SelfMediaOpsOverviewEngagementTotals = {
+		likes: 0,
+		comments: 0,
+		saves: 0,
+		shares: 0,
+	}
 	let lastUpdatedAt: string | undefined
 
 	posts.forEach((post) => {
@@ -97,15 +117,19 @@ export function buildSelfMediaOpsOverview({
 
 		const metrics = metricsByPostKey.get(postKey) ?? null
 		const reads = readMetricNumber(metrics, READ_KEYS) ?? 0
-		const engagement =
-			(readMetricNumber(metrics, LIKE_KEYS) ?? 0) +
-			(readMetricNumber(metrics, COMMENT_KEYS) ?? 0) +
-			(readMetricNumber(metrics, SAVE_KEYS) ?? 0) +
-			(readMetricNumber(metrics, SHARE_KEYS) ?? 0)
+		const likes = readMetricNumber(metrics, LIKE_KEYS) ?? 0
+		const comments = readMetricNumber(metrics, COMMENT_KEYS) ?? 0
+		const saves = readMetricNumber(metrics, SAVE_KEYS) ?? 0
+		const shares = readMetricNumber(metrics, SHARE_KEYS) ?? 0
+		const engagement = likes + comments + saves + shares
 		const engagementRate = reads > 0 ? engagement / reads : null
 		const title = getPostTitle(post)
 		totalReads += reads
 		totalEngagement += engagement
+		engagementTotals.likes += likes
+		engagementTotals.comments += comments
+		engagementTotals.saves += saves
+		engagementTotals.shares += shares
 		if (metrics?.updatedAt && (!lastUpdatedAt || metrics.updatedAt > lastUpdatedAt)) {
 			lastUpdatedAt = metrics.updatedAt
 		}
@@ -139,18 +163,29 @@ export function buildSelfMediaOpsOverview({
 			priority: 50,
 		})
 	}
+	const operationStage = getOperationStage(completion)
+	const continuationActions =
+		nextActions.length === 0
+			? buildContinuationActions({
+					bestPost,
+					totalPosts: total,
+				})
+			: []
 
 	return {
 		totalPosts: total,
 		totalReads,
 		totalEngagement,
+		engagementTotals,
 		engagementRate: totalReads > 0 ? totalEngagement / totalReads : null,
 		completion,
 		bestPost,
 		weakestPost,
-		nextActions: nextActions
+		nextActions: [...nextActions, ...continuationActions]
 			.sort((left, right) => left.priority - right.priority)
 			.slice(0, MAX_NEXT_ACTIONS),
+		operationStage,
+		opportunityCount: continuationActions.length,
 		lastUpdatedAt,
 	}
 }
@@ -214,6 +249,49 @@ function buildPrimaryActionForPost({
 		}
 	}
 	return null
+}
+
+function getOperationStage(
+	completion: SelfMediaOpsOverview["completion"],
+): SelfMediaOpsOverviewStage {
+	const total = completion.source.total
+	if (total <= 0) return "empty"
+	if (completion.source.done < total) return "setup"
+	if (completion.metrics.done < total) return "syncing"
+	if (completion.comments.done < total || completion.review.done < total) return "reviewing"
+	return "closed"
+}
+
+function buildContinuationActions({
+	bestPost,
+	totalPosts,
+}: {
+	bestPost: SelfMediaOpsOverviewPostSummary | null
+	totalPosts: number
+}): SelfMediaOpsOverviewAction[] {
+	if (totalPosts <= 0) return []
+
+	const actions: SelfMediaOpsOverviewAction[] = []
+	if (bestPost) {
+		actions.push({
+			key: "repurpose-best-post",
+			postKey: bestPost.postKey,
+			title: "复用高互动结构",
+			description: `${bestPost.title} 的互动效率最高，可以拆解标题、开头和评论引导，复用到下一篇。`,
+			cta: "看样本",
+			priority: 60,
+		})
+	}
+
+	actions.push({
+		key: "plan-next-post",
+		title: "规划下一篇内容",
+		description: "当前运营链路已闭环，可以基于复盘结论继续生成新选题或做二次分发。",
+		cta: "新建文章",
+		priority: 70,
+	})
+
+	return actions
 }
 
 function pickBestPost(posts: SelfMediaOpsOverviewPostSummary[]) {

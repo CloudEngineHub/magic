@@ -94,6 +94,8 @@ def validate_skill_md() -> None:
         skill,
         [
             "references/human-writing-style.md",
+            "立即同步",
+            "真实数据刷新",
             "Human Writing Style",
             "4.4.0 Build the human-writing brief",
             "4.4.2 Human-writing self-check",
@@ -239,7 +241,12 @@ def validate_ai_card_boundary() -> None:
 def validate_test_prompts() -> None:
     prompts = json.loads(require_file("test-prompts.json"))
     ids = {item.get("id") for item in prompts}
-    required = {"rednote-human-voice", "wechat-human-voice", "self-media-ops-fixed-schema"}
+    required = {
+        "rednote-human-voice",
+        "wechat-human-voice",
+        "self-media-ops-fixed-schema",
+        "self-media-ops-immediate-sync-trigger",
+    }
     missing = sorted(required - ids)
     if missing:
         fail(f"test-prompts.json missing ids: {', '.join(missing)}")
