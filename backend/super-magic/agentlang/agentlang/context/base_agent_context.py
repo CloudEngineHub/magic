@@ -49,15 +49,16 @@ class BaseAgentContext(BaseContext, AgentContextInterface):
 
     def _init_shared_fields(self):
         """初始化共享字段并注册到 shared_context"""
-        # 检查是否已经初始化
-        if self.shared_context.has_field("event_dispatcher"):
-            return
-
-        self.shared_context.register_fields({
+        fields = {
             "event_dispatcher": (EventDispatcher(), EventDispatcherInterface),
+            "runtime_model_id": (None, Optional[str]),       # 当前 Agent 运行时模型 ID
+            "dynamic_image_model_id": (None, Optional[str]), # 动态图片生成模型 ID
             "non_human_options": (None, Optional[Any]),      # 非人类限流配置
             "user_timezone": (None, Optional[str]),          # 用户时区（IANA 名称），None 时回落系统时区
-        })
+        }
+        for field_name, (field_value, field_type) in fields.items():
+            if not self.shared_context.has_field(field_name):
+                self.shared_context.register_field(field_name, field_value, field_type)
 
     def get_workspace_dir(self) -> str:
         """获取工作空间目录"""
@@ -228,6 +229,66 @@ class BaseAgentContext(BaseContext, AgentContextInterface):
         继承自BaseContext，返回所有元数据
         """
         return {**self._metadata}
+
+    # 运行时模型 ID 管理接口（使用 shared_context）
+    def set_runtime_model_id(self, model_id: str) -> None:
+        """设置当前 Agent 运行时模型 ID。
+
+        Args:
+            model_id: 运行时模型 ID
+        """
+        self.shared_context.update_field("runtime_model_id", model_id)
+        logger.info(f"已设置运行时模型 ID: {model_id}")
+
+    def get_runtime_model_id(self) -> Optional[str]:
+        """获取当前 Agent 运行时模型 ID。
+
+        Returns:
+            Optional[str]: 运行时模型 ID，如果未设置则返回 None
+        """
+        return self.shared_context.get_field("runtime_model_id")
+
+    def has_runtime_model_id(self) -> bool:
+        """检查是否设置了运行时模型 ID。
+
+        Returns:
+            bool: 是否设置了运行时模型 ID
+        """
+        model_id = self.shared_context.get_field("runtime_model_id")
+        return isinstance(model_id, str) and model_id.strip() != ""
+
+    def clear_runtime_model_id(self) -> None:
+        """清除运行时模型 ID。"""
+        self.shared_context.update_field("runtime_model_id", None)
+        logger.debug("已清除运行时模型 ID")
+
+    def set_dynamic_image_model_id(self, model_id: str) -> None:
+        """设置动态图片模型ID（生图工具优先使用此值，覆盖 dynamic_config.yaml 的配置）"""
+        self.shared_context.update_field("dynamic_image_model_id", model_id)
+        logger.info(f"已设置动态图片模型ID: {model_id}")
+
+    def get_dynamic_image_model_id(self) -> Optional[str]:
+        """获取图片生成模型ID。
+
+        优先返回通过 set_dynamic_image_model_id 设置的值；
+        未设置时回落到 dynamic_config.yaml 的 image_model.model_id；
+        均未配置时返回 None。
+        """
+        model_id = self.shared_context.get_field("dynamic_image_model_id")
+        if model_id and isinstance(model_id, str) and model_id.strip():
+            return model_id.strip()
+        try:
+            from agentlang.config.dynamic_config import dynamic_config
+            config_data = dynamic_config.read_dynamic_config()
+            if config_data:
+                image_model_config = config_data.get("image_model", {})
+                if isinstance(image_model_config, dict):
+                    cfg_id = image_model_config.get("model_id")
+                    if cfg_id and isinstance(cfg_id, str) and cfg_id.strip():
+                        return cfg_id.strip()
+        except Exception:
+            pass
+        return None
 
     # 非人类限流配置管理接口（使用shared_context）
     def set_non_human_options(self, options: Any) -> None:

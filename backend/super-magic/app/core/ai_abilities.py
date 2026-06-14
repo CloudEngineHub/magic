@@ -246,17 +246,18 @@ def get_compact_model_id() -> str | None:
         Optional[str]: 模型ID，未配置或配置不可用时返回 None
     """
     from agentlang.logger import get_logger
-    from agentlang.llms.factory import LLMFactory
+    from agentlang.config.ai_ability_manager import ai_ability_manager
 
     logger = get_logger(__name__)
 
-    model_id = get_ability_config(AIAbility.COMPACT, "model_id", default=None)
+    model_id = ai_ability_manager.get(AIAbility.COMPACT.value, "model_id", default=None)
     if not model_id or not model_id.strip():
         return None
 
     try:
+        from agentlang.llms.factory import LLMFactory
         LLMFactory.get_model_config(model_id, expected_type="llm", allow_fallback=False)
         return model_id
     except Exception as e:
-        logger.warning(f"compact 专属模型 '{model_id}' 配置不可用，将使用主 Agent 默认模型: {e}")
+        logger.warning(f"compact 专属模型 '{model_id}' 配置不可用，将使用当前运行时模型: {e}")
         return None

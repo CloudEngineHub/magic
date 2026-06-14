@@ -41,6 +41,15 @@ class PricingTierCompactionRule:
     model_keywords: tuple[str, ...]
     token_threshold: int
 
+@dataclass(frozen=True)
+class CompactionThresholdResult:
+    """模型压缩阈值解析结果。"""
+    model_id: str
+    token_threshold: int
+    max_context_tokens: int
+    matched_rule_name: Optional[str] = None
+    used_default: bool = False
+
 @dataclass
 class CompactionConfig:
     """Simplified compaction configuration for agent-initiated compaction"""
@@ -67,7 +76,11 @@ class CompactionConfig:
             int(self.token_threshold * self.early_compact_ratio),
         )
 
-    # Dynamic threshold calculation (kept for compatibility)
+    # 模型缺失或没有 agent_model_id 时使用 default_token_threshold；有模型时先读取
+    # max_context_tokens，再按「命中 pricing_tier_rules 则取固定阈值，否则按
+    # max_context_tokens * context_usage_ratio」计算。若模型容量不小于 min_token_threshold，
+    # 结果至少为 min_token_threshold，最后再限制为不超过 max_context_tokens。
+    # max_token_threshold 是旧字段，当前动态阈值链路不再用它做上限，保留给存量配置兼容。
     default_token_threshold: int = 180_000
     min_token_threshold: int = 100_000
     max_token_threshold: int = 180_000
@@ -91,8 +104,14 @@ class CompactionConfig:
                     "claude-4.6-sonnet",
                     "claude-opus-4.6",
                     "claude-4.6-opus",
-                    # "gemini-3.1-pro" 子串覆盖 gemini-3.1-pro-preview
+                    "claude-sonnet-4.5",
+                    "claude-4.5-sonnet",
+                    "claude-sonnet-4",
+                    "claude-4-sonnet",
+                    "gemini-3-pro",
+                    "gemini-3-pro-preview",
                     "gemini-3.1-pro",
+                    "gemini-3.1-pro-preview",
                     # Step / MiMo 系列（上下文窗口待确认，保守归入 200K 档）
                     "step-3.5-flash",
                     "mimo-v2.5",
@@ -116,6 +135,7 @@ class CompactionConfig:
                     "qwen3.6-plus",
                     "qwen3.5-plus",
                     "qwen3.5-flash",
+                    "qwen-plus",
                     # Doubao Seed 系列（256K 跳档，子串覆盖 pro/lite/code）
                     "doubao-seed-2.0",
                     # GPT 系列（1M 上下文，线性计费）
@@ -166,10 +186,10 @@ class CompactionConfig:
 
         return self.token_threshold or self.default_token_threshold
 
-    def _get_model_match_texts(self) -> List[str]:
+    def _get_model_match_texts_for_model(self, model_id: str) -> List[str]:
         """收集用于匹配策略规则的模型文本"""
-        match_texts = [self.agent_model_id]
-        model_config = model_config_utils.get_model_config(self.agent_model_id)
+        match_texts = [model_id]
+        model_config = model_config_utils.get_model_config(model_id)
         if model_config:
             match_texts.extend([model_config.name, model_config.provider])
             metadata = model_config.metadata or {}
@@ -178,19 +198,77 @@ class CompactionConfig:
                 match_texts.append(str(label))
         return [str(text).lower() for text in match_texts if text]
 
-    def _match_pricing_tier_rule(self, match_texts: List[str]) -> Optional[PricingTierCompactionRule]:
+    def _get_model_match_texts(self) -> List[str]:
+        """收集用于匹配策略规则的基准模型文本。"""
+        return self._get_model_match_texts_for_model(self.agent_model_id)
+
+    def _match_pricing_tier_rule_for_model(
+        self,
+        model_id: str,
+        match_texts: List[str],
+    ) -> Optional[PricingTierCompactionRule]:
         """根据硬编码定价分区规则匹配命中项（命中即返回规则）"""
         for rule in self.pricing_tier_rules:
             for keyword in rule.model_keywords:
                 keyword_lower = keyword.lower()
                 if any(keyword_lower in text for text in match_texts):
                     logger.info(
-                        f"模型 {self.agent_model_id} 命中定价区间 {rule.pricing_interval} "
+                        f"模型 {model_id} 命中定价区间 {rule.pricing_interval} "
                         f"(strategy={rule.name}, keyword={keyword}), "
                         f"token_threshold={rule.token_threshold:,}"
                     )
                     return rule
         return None
+
+    def _match_pricing_tier_rule(self, match_texts: List[str]) -> Optional[PricingTierCompactionRule]:
+        """根据基准模型文本匹配定价分区规则。"""
+        return self._match_pricing_tier_rule_for_model(self.agent_model_id, match_texts)
+
+    def resolve_threshold_for_model(self, model_id: str) -> CompactionThresholdResult:
+        """按指定模型计算压缩阈值；模型缺失时显式返回默认阈值。"""
+        if not model_id:
+            return CompactionThresholdResult(
+                model_id="",
+                token_threshold=self.default_token_threshold,
+                max_context_tokens=0,
+                used_default=True,
+            )
+
+        max_context_tokens = model_config_utils.get_max_context_tokens(model_id, default=0)
+        if max_context_tokens <= 0:
+            logger.warning(
+                f"无法获取模型 {model_id} 的 max_context_tokens，"
+                f"压缩阈值使用默认值 {self.default_token_threshold}"
+            )
+            return CompactionThresholdResult(
+                model_id=model_id,
+                token_threshold=self.default_token_threshold,
+                max_context_tokens=0,
+                used_default=True,
+            )
+
+        match_texts = self._get_model_match_texts_for_model(model_id)
+        matched_rule = self._match_pricing_tier_rule_for_model(model_id, match_texts)
+        capacity_threshold = int(max_context_tokens * self.context_usage_ratio)
+
+        if matched_rule is not None:
+            threshold = min(matched_rule.token_threshold, capacity_threshold)
+            matched_rule_name = matched_rule.name
+        else:
+            threshold = capacity_threshold
+            matched_rule_name = None
+
+        if max_context_tokens >= self.min_token_threshold:
+            threshold = max(threshold, self.min_token_threshold)
+        threshold = min(threshold, max_context_tokens)
+
+        return CompactionThresholdResult(
+            model_id=model_id,
+            token_threshold=threshold,
+            max_context_tokens=max_context_tokens,
+            matched_rule_name=matched_rule_name,
+            used_default=False,
+        )
 
     def _calculate_model_based_threshold(self) -> int:
         """
@@ -200,38 +278,8 @@ class CompactionConfig:
             int: 计算得到的token阈值
         """
         try:
-            # 获取模型信息
-            threshold = self.default_token_threshold  # 默认阈值
-            dynamic_max_threshold = self.max_token_threshold  # 默认使用配置的上限
-
-            if self.agent_model_id:
-                # 使用统一的模型配置工具获取上下文 tokens
-                max_context_tokens = model_config_utils.get_max_context_tokens(
-                    self.agent_model_id,
-                    default=0
-                )
-
-                if max_context_tokens > 0:
-                    # 优先命中定价分区固定规则；未命中时回退到比例计算
-                    match_texts = self._get_model_match_texts()
-                    matched_rule = self._match_pricing_tier_rule(match_texts)
-                    if matched_rule is not None:
-                        # 命中规则时，同时更新触发阈值与最终上限钳制
-                        threshold = matched_rule.token_threshold
-                        dynamic_max_threshold = matched_rule.token_threshold
-                        logger.info(
-                            f"模型 {self.agent_model_id} 命中定价规则后更新上限钳制: "
-                            f"dynamic_max_threshold={dynamic_max_threshold:,}"
-                        )
-                    else:
-                        threshold = int(max_context_tokens * self.context_usage_ratio)
-                        # 非命中规则模型使用比例阈值，避免被默认上限过早钳制
-                        dynamic_max_threshold = max(dynamic_max_threshold, threshold)
-
-            # 应用最小和最大限制（使用动态计算的上限）
-            threshold = max(threshold, self.min_token_threshold)
-            threshold = min(threshold, dynamic_max_threshold)
-            return threshold
+            result = self.resolve_threshold_for_model(self.agent_model_id)
+            return result.token_threshold
 
         except Exception as e:
             logger.error(f"设置token阈值时出错: {e}")

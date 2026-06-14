@@ -63,6 +63,9 @@ class _FakeCompactAgent:
     async def _interruptible_sleep(self, seconds: float) -> None:
         return None
 
+    def _log_compaction_event(self, event_type: str, message: str) -> None:
+        return None
+
 
 class _FakeForceCompactAgent:
     _has_pending_compact_request = Agent._has_pending_compact_request
@@ -105,6 +108,9 @@ class _FakeLoopCompactAgent:
         self.llm_id = "mock-default-text"
         self.chat_history = SimpleNamespace(messages=[SimpleNamespace(content=last_content)])
         self._compact_request_pending_llm_call = compact_request_pending
+
+    def _log_compaction_event(self, event_type: str, message: str) -> None:
+        return None
 
 
 class _FakeChatHistory:
@@ -162,6 +168,9 @@ class _FakePrecompactAgent:
     def _build_compact_request(self) -> str:
         self.built_compact_request = True
         return "mock compact request"
+
+    def _log_compaction_event(self, event_type: str, message: str) -> None:
+        return None
 
 
 class _FakeRunningBackgroundState:

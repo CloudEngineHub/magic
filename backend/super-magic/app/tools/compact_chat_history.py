@@ -26,8 +26,10 @@ Compress the current chat history when the conversation becomes too long, DO NOT
 
     async def execute(self, tool_context: ToolContext, params: CompactChatHistoryParams) -> ToolResult:
         """Execute chat history compaction"""
-        # Log compaction action
-        logger.info(f"Executing chat history compaction. Summary length: {len(params.summary)} chars")
+        logger.info(
+            "compaction.tool_execute: "
+            f"摘要字符数={len(params.summary or '')}"
+        )
 
         # Return with special system marker for Agent to process
         return ToolResult(

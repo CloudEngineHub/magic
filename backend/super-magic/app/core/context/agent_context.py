@@ -255,12 +255,17 @@ class AgentContext(BaseAgentContext):
 
     def _init_shared_fields(self):
         """初始化共享字段并注册到 shared_context"""
+        # 基础字段可能随版本新增，必须先让父类补注册缺失字段。
+        is_initialized = (
+            hasattr(self.shared_context, 'is_initialized')
+            and self.shared_context.is_initialized()
+        )
+        super()._init_shared_fields()
+
         # 检查是否已经初始化
-        if hasattr(self.shared_context, 'is_initialized') and self.shared_context.is_initialized():
+        if is_initialized:
             logger.debug("SharedContext 已经初始化，跳过重复初始化")
             return
-
-        super()._init_shared_fields()
 
         # 使用 register_fields 一次性注册所有字段
         from typing import Dict, List, Optional, Any
@@ -812,6 +817,7 @@ class AgentContext(BaseAgentContext):
         from app.utils.init_client_message_util import InitClientMessageUtil
         from app.i18n import i18n
         metadata = dict(InitClientMessageUtil.get_metadata())
+        metadata.update(self._metadata)
         metadata["language"] = i18n.get_language()
         return metadata
 

@@ -670,7 +670,7 @@ class AgentHorizon:
         )
 
     def update_llm_model(self, model_id: str, model_name: str, description: str = "") -> None:
-        """LLM 调用返回后调用，记录实际生效的模型信息；仅在模型变化时标记需要注入。"""
+        """LLM 调用返回后调用，记录运行时模型信息；仅在模型变化时标记需要注入。"""
         if model_id != self._last_llm_model_id or model_name != self._last_llm_model_name:
             self._last_llm_model_id = model_id
             self._last_llm_model_name = model_name

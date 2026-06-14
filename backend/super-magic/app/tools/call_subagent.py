@@ -150,6 +150,18 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 _inherit_parent_context(new_agent_context, parent, depth=current_depth + 1)
                 new_agent_context.set_chat_history_dir(str(PathManager.get_subagents_chat_history_dir()))
 
+                if params.model_id:
+                    new_agent_context.set_runtime_model_id(params.model_id)
+                    new_agent_context.set_metadata("runtime_model_source", "request")
+                elif parent and parent.has_runtime_model_id():
+                    # 未指定模型时，继承调用方 Agent 的运行时模型 ID
+                    new_agent_context.set_runtime_model_id(parent.get_runtime_model_id())
+                    new_agent_context.set_metadata("runtime_model_source", "parent")
+                else:
+                    new_agent_context.set_runtime_model_id("auto")
+                    new_agent_context.set_metadata("runtime_model_source", "unknown")
+                    logger.warning("call_subagent 未指定运行时模型且父 Agent 无模型，使用 auto")
+
                 agent = Agent(
                     params.agent_name,
                     agent_id=params.agent_id,
