@@ -664,6 +664,7 @@ export const ImageGenerationTaskTypeMap = {
 	RemoveBackground: "remove-background",
 	Eraser: "eraser",
 	Expand: "expand",
+	Batch: "batch",
 } as const
 
 export type ImageGenerationTaskType =
@@ -690,6 +691,10 @@ export interface ImageGenerationTaskMeta {
 	size?: string
 	/** 参考图参数（高清 / 去背景 / 橡皮擦除 / 扩图） */
 	reference_image_options?: ReferenceImageOptions
+	/** 批量生成结果序号，从 1 开始 */
+	output_index?: number
+	/** 批量生成总数 */
+	output_count?: number
 }
 
 /**

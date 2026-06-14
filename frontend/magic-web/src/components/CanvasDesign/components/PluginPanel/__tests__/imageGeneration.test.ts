@@ -155,6 +155,12 @@ describe("imageGeneration", () => {
 					prompt: "Generate",
 					size: "1024x1024",
 				}),
+				imageGenerationTaskMeta: {
+					type: "batch",
+					image_id: batchImageId,
+					output_index: 1,
+					output_count: 3,
+				},
 			}),
 			{ silent: false },
 		)
@@ -163,6 +169,12 @@ describe("imageGeneration", () => {
 			expect.objectContaining({
 				generateImageRequest: expect.not.objectContaining({
 					image_id: expect.any(String),
+				}),
+				imageGenerationTaskMeta: expect.objectContaining({
+					type: "batch",
+					image_id: batchImageId,
+					output_index: 2,
+					output_count: 3,
 				}),
 			}),
 			{ silent: false },

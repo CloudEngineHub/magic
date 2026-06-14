@@ -1,6 +1,7 @@
 import { withHistoryManagerAsync } from "../../canvas/utils/elementUtils"
 import type { Canvas } from "../../canvas/Canvas"
 import { ImageBatchPollingManager } from "../../canvas/utils/ImageBatchPollingManager"
+import { createBatchImageTaskMeta } from "../../canvas/utils/imageGenerationTaskMeta"
 import { generateUUID } from "../../canvas/utils/utils"
 import type { GenerateImageRequest, GenerateImagesRequest, ImageModelItem } from "../../types.magic"
 import type { PluginGenerateAndPlaceParams } from "./runtime/v1"
@@ -56,13 +57,18 @@ export async function generatePluginImages(canvas: Canvas, params: PluginGenerat
 			})
 		})
 
-		nextElementIds.forEach((elementId) => {
+		nextElementIds.forEach((elementId, index) => {
 			canvas.elementManager.update(
 				elementId,
 				{
 					status: "processing",
 					errorMessage: undefined,
 					generateImageRequest: persistedGenerateImageRequest,
+					imageGenerationTaskMeta: createBatchImageTaskMeta({
+						imageId: batchImageId,
+						outputIndex: index + 1,
+						outputCount: count,
+					}),
 				},
 				{ silent: false },
 			)

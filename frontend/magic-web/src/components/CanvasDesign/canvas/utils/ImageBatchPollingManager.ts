@@ -17,13 +17,16 @@ export interface ImageBatchPollingManagerConfig {
 	canvas: Canvas
 	imageId: string
 	elementIds: string[]
+	outputIndexes?: number[]
 	registry: ImageBatchPollingRegistry
 }
 
 export class ImageBatchPollingManager {
 	private readonly canvas: Canvas
 	private readonly imageId: string
-	private readonly elementIds: string[]
+	private elementIds: string[]
+	private elementOutputIndexes: number[]
+	private outputIndexToElementId = new Map<number, string>()
 	private readonly registry: ImageBatchPollingRegistry
 	private readonly aliveElementIds: Set<string>
 	private readonly syncedIndexes = new Set<number>()
@@ -36,9 +39,11 @@ export class ImageBatchPollingManager {
 	constructor(config: ImageBatchPollingManagerConfig) {
 		this.canvas = config.canvas
 		this.imageId = config.imageId
-		this.elementIds = config.elementIds
 		this.registry = config.registry
-		this.aliveElementIds = new Set(config.elementIds)
+		this.elementIds = []
+		this.elementOutputIndexes = []
+		this.aliveElementIds = new Set()
+		this.syncElementIds(config.elementIds, config.outputIndexes)
 		this.unsubscribeElementDeleted = this.canvas.eventEmitter.on("element:deleted", (event) => {
 			this.handleDeletedElementIds([event.data.elementId])
 		})
@@ -95,6 +100,26 @@ export class ImageBatchPollingManager {
 		this.stop()
 	}
 
+	public getImageId(): string {
+		return this.imageId
+	}
+
+	public syncElementIds(elementIds: string[], outputIndexes?: number[]): void {
+		this.elementIds = elementIds
+		this.elementOutputIndexes =
+			outputIndexes ?? elementIds.map((_, index) => index + 1)
+		this.outputIndexToElementId = new Map<number, string>()
+		this.aliveElementIds.clear()
+		elementIds.forEach((elementId, index) => {
+			if (!elementId) return
+			const outputIndex = this.elementOutputIndexes[index]
+			if (!Number.isFinite(outputIndex) || outputIndex < 1) return
+			this.aliveElementIds.add(elementId)
+			this.outputIndexToElementId.set(outputIndex, elementId)
+			this.syncedIndexes.delete(outputIndex)
+		})
+	}
+
 	/**
 	 * 获取图片生成结果
 	 */
@@ -122,13 +147,14 @@ export class ImageBatchPollingManager {
 			if (
 				!Number.isFinite(outputIndex) ||
 				outputIndex < 1 ||
-				outputIndex > this.elementIds.length
+				!this.outputIndexToElementId.has(outputIndex)
 			) {
 				continue
 			}
 			if (this.syncedIndexes.has(outputIndex)) continue
 
-			const elementId = this.elementIds[outputIndex - 1]
+			const elementId = this.outputIndexToElementId.get(outputIndex)
+			if (!elementId) continue
 			if (!this.shouldSyncElement(elementId)) continue
 			const updateData = this.buildCompletedElementUpdate(result, image)
 			// 更新元素数据
@@ -144,19 +170,22 @@ export class ImageBatchPollingManager {
 
 		if (result.status === "failed") {
 			this.elementIds.forEach((elementId, index) => {
-				if (this.syncedIndexes.has(index + 1)) return
+				const outputIndex = this.elementOutputIndexes[index]
+				if (this.syncedIndexes.has(outputIndex)) return
 				if (!this.shouldSyncElement(elementId)) return
 				this.canvas.elementManager.update(
 					elementId,
 					{
 						status: "failed",
 						errorMessage: result.error_message ?? undefined,
+						imageGenerationTaskMeta: undefined,
 					} satisfies Partial<ImageElementData>,
 					{ silent: false },
 				)
 			})
 			this.elementIds.forEach((elementId, index) => {
-				if (this.syncedIndexes.has(index + 1)) return
+				const outputIndex = this.elementOutputIndexes[index]
+				if (this.syncedIndexes.has(outputIndex)) return
 				if (!this.shouldSyncElement(elementId)) return
 				this.canvas.eventEmitter.emit({
 					type: "element:image:generate-submit-failed",
@@ -168,13 +197,15 @@ export class ImageBatchPollingManager {
 
 		if (result.status === "completed") {
 			this.elementIds.forEach((elementId, index) => {
-				if (this.syncedIndexes.has(index + 1)) return
+				const outputIndex = this.elementOutputIndexes[index]
+				if (this.syncedIndexes.has(outputIndex)) return
 				if (!this.shouldSyncElement(elementId)) return
 				this.canvas.elementManager.update(
 					elementId,
 					{
 						status: "completed",
 						errorMessage: undefined,
+						imageGenerationTaskMeta: undefined,
 					} satisfies Partial<ImageElementData>,
 					{ silent: false },
 				)
@@ -192,6 +223,7 @@ export class ImageBatchPollingManager {
 		const updateData: Partial<ImageElementData> = {
 			status: "completed",
 			errorMessage: undefined,
+			imageGenerationTaskMeta: undefined,
 		}
 
 		if (result.file_dir && image.file_name) {

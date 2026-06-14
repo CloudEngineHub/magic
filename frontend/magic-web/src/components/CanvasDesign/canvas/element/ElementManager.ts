@@ -14,6 +14,7 @@ import { exportCanvasDocument } from "../utils/exportDocument"
 import { syncCropConfigOnResize } from "../utils/imageCropUtils"
 import { normalizeSize } from "../utils/normalizeUtils"
 import { sanitizeCanvasDocument } from "../utils/temporaryElementUtils"
+import { resumeImageBatchPollingManagers } from "../utils/resumeImageBatchPolling"
 
 /**
  * 更新模式
@@ -1088,6 +1089,7 @@ export class ElementManager {
 		// 深拷贝传入的数据，确保内部数据独立，不受外部状态管理工具影响
 		const docCopy = sanitizeCanvasDocument(JSON.parse(JSON.stringify(doc)) as CanvasDocument)
 		this.replaceAll(docCopy.elements || [])
+		resumeImageBatchPollingManagers(this.canvas)
 	}
 
 	/**
@@ -1212,6 +1214,7 @@ export class ElementManager {
 		} finally {
 			this.batchMode = false
 			this.flush()
+			resumeImageBatchPollingManagers(this.canvas)
 
 			// 触发文档恢复事件，通知所有管理器更新（如 name labels、hover 等）
 			// 因为批量模式不会触发 element:updated 事件，需要手动通知
