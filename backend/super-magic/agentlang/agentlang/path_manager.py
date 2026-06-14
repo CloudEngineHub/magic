@@ -53,23 +53,23 @@ class PathManager:
         """
         import sys
         import os
-        
+
         # 在 PyInstaller 环境中，可执行文件通常在 /app 目录下
         # 我们需要查找包含必要文件的目录
         current_dir = Path.cwd()
-        
+
         # 在 PyInstaller 环境中，我们通常使用当前工作目录作为项目根目录
         # 因为所有必要的文件都被打包到了可执行文件中
         if current_dir.exists():
             # 检查是否有必要的目录结构
             if (current_dir / "logs").exists() or (current_dir / ".credentials").exists():
                 return current_dir
-            
+
             # 如果没有找到，尝试使用当前目录的父目录
             parent_dir = current_dir.parent
             if parent_dir.exists() and ((parent_dir / "logs").exists() or (parent_dir / ".credentials").exists()):
                 return parent_dir
-        
+
         # 如果都找不到，使用当前工作目录作为默认值
         return current_dir
 
@@ -87,7 +87,7 @@ class PathManager:
         # 检查是否在 PyInstaller 打包环境中
         if cls._is_pyinstaller_environment():
             return cls._detect_project_root_in_pyinstaller()
-        
+
         # 定义项目根目录的标识文件/目录
         project_markers = [
             '.git',
