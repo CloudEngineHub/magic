@@ -372,7 +372,7 @@ function DesignViewer(props: DesignViewerProps) {
 	}, [automaticUpgradeKey])
 
 	const handleUpgrade = useCallback(async () => {
-		if (!magicProjectJsFileId || !projectId) return
+		if (!magicProjectJsFileId || !projectId || isUpgrading) return
 		setIsUpgrading(true)
 		setAutoUpgradeFailed(false)
 		setUpgradeProgress({ step: "backup", percent: 0 })
@@ -411,6 +411,7 @@ function DesignViewer(props: DesignViewerProps) {
 		designProjectBasePath,
 		updateDesignDataAndScheduleSave,
 		updateAttachments,
+		isUpgrading,
 		t,
 	])
 
@@ -422,7 +423,8 @@ function DesignViewer(props: DesignViewerProps) {
 		void handleUpgrade()
 	}, [autoUpgradeFailed, automaticUpgradeKey, handleUpgrade, isOffline, isUpgrading])
 
-	const isUpgradeBlockingCanvas = shouldAutoUpgrade && !isOffline
+	const isUpgradeBlockingCanvas =
+		isUpgrading || (shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)
 	const shouldShowUpgradeProgress =
 		isUpgrading || (shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)
 	const shouldShowUpgradeFailed =
@@ -908,6 +910,7 @@ function DesignViewer(props: DesignViewerProps) {
 									title={t("design.upgrade.failedTitle")}
 									subtitle={t("design.upgrade.failedSubtitle")}
 									actionLabel={t("design.upgrade.retry")}
+									actionDisabled={isUpgrading}
 									onAction={() => void handleUpgrade()}
 								/>
 							)}

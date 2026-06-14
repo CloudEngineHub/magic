@@ -1,6 +1,7 @@
 import Konva from "konva"
 import { ElementTypeEnum, type LayerElement } from "../types"
 import type { Canvas } from "../Canvas"
+import type { CanvasEvent, CanvasEventMap } from "../EventEmitter"
 import { getViewportCanvasRect } from "../utils/elementUtils"
 
 /**
@@ -140,17 +141,22 @@ export abstract class BaseLabelManager {
 	protected lastHoveredElementId: string | null = null
 	private visibleLabelSyncRafId: number | null = null
 	private labelCandidateIndex: LabelCandidateIndex
+	private eventUnsubscribers: Array<() => void> = []
+	private destroyed = false
 
 	// 静态注册表，用于不同 LabelManager 之间的协调
 	protected static labelManagers: BaseLabelManager[] = []
-	private static candidateIndexes = new WeakMap<Canvas, LabelCandidateIndex>()
+	private static candidateIndexRefs = new WeakMap<
+		Canvas,
+		{ index: LabelCandidateIndex; refCount: number }
+	>()
 
 	constructor(options: BaseLabelManagerConfig) {
 		const { canvas } = options
 		this.canvas = canvas
 		this.labelConfig = options.labelConfig
 		this.visibilityConfig = options.visibilityConfig
-		this.labelCandidateIndex = BaseLabelManager.getCandidateIndex(canvas)
+		this.labelCandidateIndex = BaseLabelManager.acquireCandidateIndex(canvas)
 
 		// 注册到静态列表
 		BaseLabelManager.labelManagers.push(this)
@@ -158,13 +164,31 @@ export abstract class BaseLabelManager {
 		this.setupEventListeners()
 	}
 
-	private static getCandidateIndex(canvas: Canvas): LabelCandidateIndex {
-		let index = BaseLabelManager.candidateIndexes.get(canvas)
-		if (!index) {
-			index = new LabelCandidateIndex(canvas)
-			BaseLabelManager.candidateIndexes.set(canvas, index)
+	private static acquireCandidateIndex(canvas: Canvas): LabelCandidateIndex {
+		let ref = BaseLabelManager.candidateIndexRefs.get(canvas)
+		if (!ref) {
+			ref = { index: new LabelCandidateIndex(canvas), refCount: 0 }
+			BaseLabelManager.candidateIndexRefs.set(canvas, ref)
 		}
-		return index
+		ref.refCount += 1
+		return ref.index
+	}
+
+	private static releaseCandidateIndex(canvas: Canvas): void {
+		const ref = BaseLabelManager.candidateIndexRefs.get(canvas)
+		if (!ref) return
+		if (ref.refCount <= 1) {
+			BaseLabelManager.candidateIndexRefs.delete(canvas)
+			return
+		}
+		ref.refCount -= 1
+	}
+
+	private listen<K extends keyof CanvasEventMap>(
+		eventType: K,
+		listener: (event: CanvasEvent<K>) => void,
+	): void {
+		this.eventUnsubscribers.push(this.canvas.eventEmitter.on(eventType, listener))
 	}
 
 	private requestOverlayDraw(reason: string): void {
@@ -228,13 +252,13 @@ export abstract class BaseLabelManager {
 	 */
 	private setupEventListeners(): void {
 		// 监听元素创建
-		this.canvas.eventEmitter.on("element:created", (event) => {
+		this.listen("element:created", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
 		})
 
 		// 监听元素删除
-		this.canvas.eventEmitter.on("element:deleted", (event) => {
+		this.listen("element:deleted", (event) => {
 			this.labelCandidateIndex.removeElement(event.data.elementId)
 			this.removeLabel(event.data.elementId)
 		})
@@ -253,17 +277,17 @@ export abstract class BaseLabelManager {
 		}
 
 		// 监听拖拽移动事件
-		this.canvas.eventEmitter.on("elements:transform:dragmove", ({ data }) => {
+		this.listen("elements:transform:dragmove", ({ data }) => {
 			data.elementIds.forEach((elementId) => handleDragMove(elementId))
 		})
 
 		// 监听缩放移动事件
-		this.canvas.eventEmitter.on("elements:transform:anchorDragmove", ({ data }) => {
+		this.listen("elements:transform:anchorDragmove", ({ data }) => {
 			data.elementIds.forEach((elementId) => handleDragMove(elementId))
 		})
 
 		// 监听元素数据更新（属性变化，如名称变化或 zIndex 变化）
-		this.canvas.eventEmitter.on("element:updated", (event) => {
+		this.listen("element:updated", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
 			// zIndex 可能已改变，需要重新排序所有标签
@@ -271,7 +295,7 @@ export abstract class BaseLabelManager {
 		})
 
 		// 监听元素重新渲染（位置、尺寸变化等）
-		this.canvas.eventEmitter.on("element:rerendered", (event) => {
+		this.listen("element:rerendered", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
 			// zIndex 可能已改变，需要重新排序所有标签
@@ -279,16 +303,16 @@ export abstract class BaseLabelManager {
 		})
 
 		// 监听选择变化
-		this.canvas.eventEmitter.on("element:select", () => {
+		this.listen("element:select", () => {
 			this.updateAllLabelsVisibility()
 		})
 
-		this.canvas.eventEmitter.on("element:deselect", () => {
+		this.listen("element:deselect", () => {
 			this.updateAllLabelsVisibility()
 		})
 
 		// 监听 hover 变化
-		this.canvas.eventEmitter.on("element:hover", (event) => {
+		this.listen("element:hover", (event) => {
 			const newHoveredId = event.data.elementId
 
 			// 如果有之前 hover 的元素，更新其可见性
@@ -306,45 +330,45 @@ export abstract class BaseLabelManager {
 		})
 
 		// 监听 viewport 缩放变化（pan 不需要：overlayLayer 随 stage 平移，标签相对关系不变）
-		this.canvas.eventEmitter.on("viewport:scale", () => {
+		this.listen("viewport:scale", () => {
 			this.scheduleVisibleLabelSync("viewport-scale")
 		})
 
-		this.canvas.eventEmitter.on("viewport:changed", ({ data }) => {
+		this.listen("viewport:changed", ({ data }) => {
 			if (data.phase === "end") {
 				this.scheduleVisibleLabelSync("viewport-end")
 			}
 		})
 
 		// 监听文档恢复事件（撤销/恢复时触发）
-		this.canvas.eventEmitter.on("document:restored", () => {
+		this.listen("document:restored", () => {
 			this.markLabelCandidatesDirty()
 			this.pruneMissingLabels()
 			this.syncVisibleLabels("document-restored")
 		})
 
 		// 监听裁剪模式进入/退出事件，更新标签可见性
-		this.canvas.eventEmitter.on("crop:enter", () => {
+		this.listen("crop:enter", () => {
 			this.updateAllLabelsVisibility()
 		})
 
-		this.canvas.eventEmitter.on("crop:exit", () => {
+		this.listen("crop:exit", () => {
 			this.updateAllLabelsVisibility()
 		})
 
-		this.canvas.eventEmitter.on("extend:enter", () => {
+		this.listen("extend:enter", () => {
 			this.updateAllLabelsVisibility()
 		})
 
-		this.canvas.eventEmitter.on("extend:exit", () => {
+		this.listen("extend:exit", () => {
 			this.updateAllLabelsVisibility()
 		})
 
-		this.canvas.eventEmitter.on("eraser:enter", () => {
+		this.listen("eraser:enter", () => {
 			this.updateAllLabelsVisibility()
 		})
 
-		this.canvas.eventEmitter.on("eraser:exit", () => {
+		this.listen("eraser:exit", () => {
 			this.updateAllLabelsVisibility()
 		})
 	}
@@ -906,7 +930,15 @@ export abstract class BaseLabelManager {
 	 * 销毁管理器
 	 */
 	public destroy(): void {
+		if (this.destroyed) return
+		this.destroyed = true
 		this.cancelVisibleLabelSync()
+		for (const unsubscribe of this.eventUnsubscribers) {
+			unsubscribe()
+		}
+		this.eventUnsubscribers = []
+		BaseLabelManager.releaseCandidateIndex(this.canvas)
+
 		// 从静态列表中移除
 		const index = BaseLabelManager.labelManagers.indexOf(this)
 		if (index > -1) {
@@ -921,25 +953,5 @@ export abstract class BaseLabelManager {
 
 		// 清理追踪的 hover 元素
 		this.lastHoveredElementId = null
-
-		// 销毁标签层
-		this.canvas.overlayLayer.destroy()
-
-		// 移除所有事件监听器
-		this.canvas.eventEmitter.off("element:created")
-		this.canvas.eventEmitter.off("element:deleted")
-		this.canvas.eventEmitter.off("elements:transform:dragmove")
-		this.canvas.eventEmitter.off("elements:transform:anchorDragmove")
-		this.canvas.eventEmitter.off("element:updated")
-		this.canvas.eventEmitter.off("element:select")
-		this.canvas.eventEmitter.off("element:deselect")
-		this.canvas.eventEmitter.off("element:hover")
-		this.canvas.eventEmitter.off("viewport:scale")
-		this.canvas.eventEmitter.off("crop:enter")
-		this.canvas.eventEmitter.off("crop:exit")
-		this.canvas.eventEmitter.off("extend:enter")
-		this.canvas.eventEmitter.off("extend:exit")
-		this.canvas.eventEmitter.off("eraser:enter")
-		this.canvas.eventEmitter.off("eraser:exit")
 	}
 }
