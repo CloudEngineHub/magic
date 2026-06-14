@@ -13,6 +13,7 @@ import type {
 	TabAction,
 	WebsitePreset,
 	PlaybackTabItem,
+	ActiveDetailTabType,
 } from "../types"
 import { TabActionType } from "../types"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
@@ -23,7 +24,7 @@ import { DetailType } from "../../../types"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
-import { usePlaybackTab, PLAYBACK_TAB_ID } from "./usePlaybackTab"
+import { usePlaybackTab } from "./usePlaybackTab"
 import { useKnowledgeBaseTab, type KnowledgeBaseTabItem } from "./useKnowledgeBaseTab"
 import { detectContentTypeRender } from "../utils/preview"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -36,6 +37,8 @@ import {
 } from "./previewPolicy"
 import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { buildWebsiteTab, isWebsiteTab } from "../utils/websiteTabs"
+import { getFileViewerTabType } from "../utils/tabType"
+import { PLAYBACK_TAB_ID } from "../utils/tabConstants"
 
 function normalizeFileId(value: unknown): string | undefined {
 	if (typeof value === "string" && value.trim()) return value.trim()
@@ -425,7 +428,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const manuallyClosedLastTabRef = useRef(false)
 	const lastFileListRef = useRef<FileItem[]>([])
 	const lastNotifiedActiveFileIdRef = useRef<string | null | undefined>(undefined)
-	const lastNotifiedTabTypeRef = useRef<"playback" | "file" | null | undefined>(undefined)
+	const lastNotifiedTabTypeRef = useRef<ActiveDetailTabType | undefined>(undefined)
 	// 存储 tab 打开后的回调函数（key: fileId）
 	const tabCallbacksRef = useRef<Map<string, () => void>>(new Map())
 	const isProjectSwitching = viewerProjectId !== lastProjectIdRef.current
@@ -591,6 +594,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		if (playbackTab?.active) {
 			updatePlaybackTab({ active: false })
 		}
+		deactivateAllKnowledgeBaseTabs()
 
 		dispatchTabs({
 			type: TabActionType.ADD_TAB,
@@ -1073,6 +1077,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 								return {
 									...tab,
+									type: tab.type || (isCachedWebsiteTab ? "website" : "file"),
 									closeable: true,
 									isDeleted: isDeleted || false, // 确保类型为boolean
 									fileData: {
@@ -1399,6 +1404,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				...currentState?.fileState,
 				tabs: persistableTabs.map((tab) => ({
 					id: tab.id,
+					type: tab.type || getFileViewerTabType(tab),
 					title: tab.title,
 					fileData: {
 						file_id: tab.fileData.file_id,
@@ -1500,13 +1506,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 	}, [])
 
 	const activeTabFileId =
-		activeTab && !isWebsiteTab(activeTab) ? activeTab.fileData.file_id : null
+		getFileViewerTabType(activeTab) === "file" ? activeTab?.fileData.file_id || null : null
 	const activeTabId = activeTab?.id
+	const activeTabType = getFileViewerTabType(activeTab)
 
 	// Notify parent when active tab changes
 	useEffect(() => {
 		// 知识库tab和回放tab没有fileId，不需要通知parent文件变更
-		if (activeTabId && (isKnowledgeBaseTab(activeTabId) || isPlaybackTab(activeTabId))) {
+		if (activeTabType === "knowledge_base" || activeTabType === "playback") {
 			return
 		}
 
@@ -1525,17 +1532,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 		lastNotifiedActiveFileIdRef.current = currentActiveFileId
 		onActiveFileChange?.(currentActiveFileId)
-	}, [activeTabFileId, activeTabId, isKnowledgeBaseTab, isPlaybackTab, onActiveFileChange])
+	}, [activeTabFileId, activeTabId, activeTabType, onActiveFileChange])
 
 	// Notify parent with current active tab type
 	useEffect(() => {
 		if (!onActiveTabChange) return
 
-		const currentActiveTabType: "playback" | "file" | null = !activeTabId
-			? null
-			: isPlaybackTab(activeTabId)
-				? "playback"
-				: "file"
+		const currentActiveTabType: ActiveDetailTabType = activeTabType
 		const lastNotifiedTabType = lastNotifiedTabTypeRef.current
 
 		// Skip initial null notification on first mount to avoid overriding parent open intent.
@@ -1550,7 +1553,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 		lastNotifiedTabTypeRef.current = currentActiveTabType
 		onActiveTabChange(currentActiveTabType)
-	}, [activeTabId, isPlaybackTab, onActiveTabChange])
+	}, [activeTabType, onActiveTabChange])
 
 	// 执行 tab 打开后的回调
 	useEffect(() => {

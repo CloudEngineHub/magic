@@ -55,7 +55,7 @@ export function buildAICardDashboardItems({
 		fileId: entry.fileId,
 		title: entry.displayTime,
 		fileName: entry.fileName,
-		createdAt: resolveFileTime(fileById.get(entry.fileId)) || entry.timestamp,
+		createdAt: entry.timestamp || resolveFileTime(fileById.get(entry.fileId)),
 		kind: "history" as const,
 		historyEntry: entry,
 	}))

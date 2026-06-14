@@ -7,6 +7,7 @@ import {
 	WEBSITE_TAB_PREFIX,
 	WEBSITE_PRESETS,
 } from "../utils/websiteTabs"
+import { getFileViewerTabType } from "../utils/tabType"
 import WebsiteIframeTabContent from "../components/WebsiteIframeTabContent"
 import WebsitePresetMenu from "../components/WebsitePresetMenu"
 
@@ -130,6 +131,7 @@ describe("website tabs", () => {
 		})
 
 		expect(tab.id).toBe(`${WEBSITE_TAB_PREFIX}image-search`)
+		expect(tab.type).toBe("website")
 		expect(tab.title).toBe("Image Search")
 		expect(tab.fileData.file_id).toBe(tab.id)
 		expect(tab.fileData.url).toBe("https://example.com/images")
@@ -141,7 +143,7 @@ describe("website tabs", () => {
 		})
 	})
 
-	it("identifies website tabs only by the website tab id prefix", () => {
+	it("identifies website tabs by tab type while keeping id-prefix fallback", () => {
 		expect(
 			isWebsiteTab({
 				id: "file:website-preview",
@@ -155,7 +157,16 @@ describe("website tabs", () => {
 			}),
 		).toBe(false)
 
+		expect(isWebsiteTab({ id: "file:website-preview", type: "website" })).toBe(true)
 		expect(isWebsiteTab({ id: `${WEBSITE_TAB_PREFIX}example` })).toBe(true)
+	})
+
+	it("resolves tab type from explicit type with id-prefix fallbacks", () => {
+		expect(getFileViewerTabType({ id: "file-1", type: "file" })).toBe("file")
+		expect(getFileViewerTabType({ id: "file-2", type: "website" })).toBe("website")
+		expect(getFileViewerTabType({ id: `${WEBSITE_TAB_PREFIX}legacy` })).toBe("website")
+		expect(getFileViewerTabType({ id: "__kb__doc" })).toBe("knowledge_base")
+		expect(getFileViewerTabType({ id: "__playback__" })).toBe("playback")
 	})
 
 	it("renders website tabs through an iframe with an external-open fallback", () => {

@@ -1,5 +1,6 @@
 import { memo, useRef, useImperativeHandle, forwardRef } from "react"
 import FilesViewer, { type FilesViewerRef } from "./components/FilesViewer"
+import type { ActiveDetailTabType } from "./components/FilesViewer/types"
 import { useDetailActions } from "./hooks/useDetailActions"
 import useDetailHandlers from "./hooks/useDetailHandlers"
 import { TaskStatus, ProjectListItem, Topic } from "../../pages/Workspace/types"
@@ -33,7 +34,7 @@ interface DetailProps {
 	activeFileId?: string | null
 	onActiveFileChange?: (fileId: string | null) => void
 	// Active tab type change callback
-	onActiveTabChange?: (tabType: "playback" | "file" | null) => void
+	onActiveTabChange?: (tabType: ActiveDetailTabType) => void
 	// Fullscreen change callback
 	onFullscreenChange?: (isFullscreen: boolean) => void
 	// Topic name for share scenario

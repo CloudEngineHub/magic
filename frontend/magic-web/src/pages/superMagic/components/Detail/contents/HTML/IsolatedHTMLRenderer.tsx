@@ -60,6 +60,8 @@ export interface IsolatedHTMLRendererRef {
 	toggleDevConsole: () => void
 	/** Start element inspector in toolbar mode (no info card; selection creates new topic) */
 	startInspector: () => void
+	/** Stop element inspector mode */
+	stopInspector: () => void
 	/** Start element inspector in append mode (selection appends element info to current editor) */
 	startInspectorAppend: () => void
 }
@@ -157,6 +159,10 @@ interface IsolatedHTMLRendererProps {
 	onDevConsoleClose?: () => void
 	/** AI 选取（appendToEditor）状态变化回调 */
 	onAppendPickingChange?: (picking: boolean) => void
+	/** 元素选取状态变化回调 */
+	onInspectorActiveChange?: (active: boolean) => void
+	/** Enable content-level inspector fallback for renderers without runtime support. */
+	enableInlineInspectorFallback?: boolean
 }
 
 function isHtmlImagesUploadPath(path: string): boolean {
@@ -250,6 +256,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			onContentMetrics,
 			onDevConsoleClose,
 			onAppendPickingChange,
+			onInspectorActiveChange,
+			enableInlineInspectorFallback = false,
 		} = props
 		const renderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
 		const renderSiteOrigin = useMemo(() => {
@@ -441,6 +449,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		useEffect(() => {
 			onAppendPickingChange?.(isAppendPicking)
 		}, [isAppendPicking, onAppendPickingChange])
+
+		useEffect(() => {
+			onInspectorActiveChange?.(elementInspector.active)
+		}, [elementInspector.active, onInspectorActiveChange])
 
 		const { upload } = useUpload<any>({
 			url: superMagicUploadTokenService.getUploadTokenUrl,
@@ -904,6 +916,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				containOverscroll: containIframeOverscroll,
 				hideVerticalScroll,
 				disableParentClickBridge: disableIframeDocumentClickBridge,
+				enableInlineInspectorFallback,
 				postMessageTargetStrategy,
 			})
 			// 发送内容到iframe
@@ -1013,6 +1026,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						containOverscroll: containIframeOverscroll,
 						hideVerticalScroll,
 						disableParentClickBridge: disableIframeDocumentClickBridge,
+						enableInlineInspectorFallback,
 						postMessageTargetStrategy,
 					})
 					// 发送内容到iframe
@@ -1061,6 +1075,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				toggleDevConsole: devConsole.toggle,
 				startInspector: () => {
 					startInToolbarMode()
+				},
+				stopInspector: () => {
+					elementInspector.stop()
 				},
 				startInspectorAppend: () => {
 					startInAppendMode()

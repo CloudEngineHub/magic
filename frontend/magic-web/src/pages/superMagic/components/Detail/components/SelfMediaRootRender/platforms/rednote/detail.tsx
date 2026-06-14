@@ -12,6 +12,35 @@ import { useSelfMediaStore } from "../../stores"
 import type { PlatformComponentProps, SelfMediaPost } from "../../types"
 import { rednoteTokens } from "./tokens"
 
+const REDNOTE_STRUCTURED_TAG_KEYS = ["core", "mid", "longtail", "trend"] as const
+
+function splitRednoteTagText(value: unknown): string[] {
+	if (typeof value !== "string" && typeof value !== "number") {
+		return []
+	}
+
+	return String(value)
+		.split(/[\s,，、#]+/)
+		.map((tag) => tag.trim().replace(/^#+/, ""))
+		.filter(Boolean)
+}
+
+function normalizeRednoteTags(tagsRaw: SelfMediaPost["meta"]["tags"]): string[] {
+	const tags =
+		tagsRaw && typeof tagsRaw === "object" && !Array.isArray(tagsRaw)
+			? REDNOTE_STRUCTURED_TAG_KEYS.flatMap((key) => {
+					const value = tagsRaw[key]
+					return Array.isArray(value)
+						? value.flatMap(splitRednoteTagText)
+						: splitRednoteTagText(value)
+				})
+			: Array.isArray(tagsRaw)
+				? tagsRaw.flatMap(splitRednoteTagText)
+				: splitRednoteTagText(tagsRaw)
+
+	return Array.from(new Set(tags))
+}
+
 interface DetailViewProps {
 	attachmentList?: PlatformComponentProps["attachmentList"]
 	cardRefs: React.MutableRefObject<Array<Array<CardFrameRef | null>>>
@@ -94,10 +123,7 @@ function RednoteDetailHeader({
 function RednoteDetailContent({ post }: { post: SelfMediaPost }) {
 	const title = post.meta.title || post.meta.feedTitle
 	const subtitle = post.meta.subtitle
-	const tagsRaw = post.meta.tags
-	const tags = (Array.isArray(tagsRaw) ? tagsRaw : String(tagsRaw ?? "").split(/[\s,，、#]+/))
-		.map((tag) => String(tag).trim().replace(/^#+/, ""))
-		.filter(Boolean)
+	const tags = normalizeRednoteTags(post.meta.tags)
 	const metaLine = [post.meta.time, post.meta.location].filter(Boolean).join(" ")
 
 	if (!title && !subtitle && !tags.length && !metaLine) {

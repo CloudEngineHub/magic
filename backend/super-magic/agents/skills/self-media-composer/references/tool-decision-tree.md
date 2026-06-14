@@ -7,6 +7,12 @@ No magic.project.js in target folder?
 ├─ Yes -> create_self_media_project (choose platform first)
 └─ No  -> continue
 
+Need brand context but draft global fields are missing, sparse, or stale?
+└─ Try __brand/brand-config.json before asking the user again.
+   Current user instructions and explicit draft.json.global values outrank this
+   fallback. Use it to fill author, brand position, target audience, voice,
+   reusable proof points, and brand/IP assets when available.
+
 User asks for 发布入盘, post-publication review, article ops review, 复盘看板,
 published-data fetch, or `ops/*` update for an existing post?
 └─ Run the self-media/IP-operations data-sync workflow against the current

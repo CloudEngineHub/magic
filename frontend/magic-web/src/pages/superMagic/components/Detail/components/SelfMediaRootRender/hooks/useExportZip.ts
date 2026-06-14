@@ -3,6 +3,7 @@ import JSZip from "jszip"
 import { saveAs } from "file-saver"
 import * as htmlToImage from "html-to-image"
 import { logger as rootLogger } from "@/utils/log"
+import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import type { CardFrameRef } from "../components/CardFrame"
 import type { SelfMediaCard, SelfMediaPost } from "../types"
 
@@ -30,11 +31,19 @@ interface UseExportZipResult {
 		pixelRatio?: number
 		getCardRef: (cardIdx: number) => CardFrameRef | null
 	}) => Promise<void>
+	exportWechatCoverImage: (args: {
+		post: SelfMediaPost
+		fileName?: string
+		/** Output pixel ratio for the stitched cover. Defaults to 2. */
+		pixelRatio?: number
+	}) => Promise<void>
 }
 
 const DEFAULT_PIXEL_RATIO = 2
 const PER_CARD_TIMEOUT = 20000
 const LONG_IMAGE_SEPARATOR_COLOR = "#e5e7eb"
+const WECHAT_COVER_BASE_HEIGHT = 540
+const WECHAT_COVER_FALLBACK_ASPECT_RATIO = 16 / 9
 
 function dataUrlToBlob(dataUrl: string): Blob {
 	const [meta, base64] = dataUrl.split(",")
@@ -78,6 +87,11 @@ function resolveZipBaseName(posts: SelfMediaPost[], zipName: string | undefined)
 function resolvePostBaseName(post: SelfMediaPost, fileName: string | undefined): string {
 	if (fileName && fileName.trim()) return safeName(fileName.trim(), "self-media-long-image")
 	return safeName(post.meta.title || post.meta.id, "self-media-long-image")
+}
+
+function resolveWechatCoverBaseName(post: SelfMediaPost, fileName: string | undefined): string {
+	if (fileName && fileName.trim()) return safeName(fileName.trim(), "wechat-cover")
+	return safeName(post.meta.title || post.meta.feedTitle || post.meta.id, "wechat-cover")
 }
 
 async function captureCardDataUrl(args: {
@@ -148,6 +162,93 @@ function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 			else reject(new Error("Failed to create long image blob"))
 		}, "image/png")
 	})
+}
+
+async function loadImageFromFileId(fileId: string): Promise<HTMLImageElement> {
+	const urls = await getTemporaryDownloadUrl({ file_ids: [fileId] })
+	const url = urls?.[0]?.url
+	if (!url) throw new Error("Cover image URL is unavailable")
+	const resp = await fetch(url, { credentials: "omit" })
+	if (!resp.ok) throw new Error("Cover image download failed")
+	const blob = await resp.blob()
+	const objectUrl = URL.createObjectURL(blob)
+	try {
+		return await new Promise<HTMLImageElement>((resolve, reject) => {
+			const image = new Image()
+			image.onload = () => resolve(image)
+			image.onerror = () => reject(new Error("Failed to load cover image"))
+			image.src = objectUrl
+		})
+	} finally {
+		URL.revokeObjectURL(objectUrl)
+	}
+}
+
+function getImageAspectRatio(image: HTMLImageElement, fallback: number): number {
+	const width = image.naturalWidth || image.width
+	const height = image.naturalHeight || image.height
+	if (width > 0 && height > 0) return width / height
+	return fallback
+}
+
+function drawImageCover(
+	context: CanvasRenderingContext2D,
+	image: HTMLImageElement,
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+) {
+	const sourceWidth = image.naturalWidth || image.width
+	const sourceHeight = image.naturalHeight || image.height
+	if (sourceWidth <= 0 || sourceHeight <= 0 || width <= 0 || height <= 0) return
+	const sourceRatio = sourceWidth / sourceHeight
+	const targetRatio = width / height
+	let sx = 0
+	let sy = 0
+	let sw = sourceWidth
+	let sh = sourceHeight
+	if (sourceRatio > targetRatio) {
+		sw = sourceHeight * targetRatio
+		sx = (sourceWidth - sw) / 2
+	} else {
+		sh = sourceWidth / targetRatio
+		sy = (sourceHeight - sh) / 2
+	}
+	context.drawImage(image, sx, sy, sw, sh, x, y, width, height)
+}
+
+async function stitchWechatCoverImagesToPngBlob(args: {
+	thumbnailFileId?: string
+	heroFileId?: string
+	pixelRatio: number
+}): Promise<Blob> {
+	const { thumbnailFileId, heroFileId, pixelRatio } = args
+	const squareFileId = thumbnailFileId || heroFileId
+	const horizontalFileId = heroFileId || thumbnailFileId
+	if (!squareFileId || !horizontalFileId) throw new Error("Cover images are missing")
+
+	const [squareImage, horizontalImage] = await Promise.all([
+		loadImageFromFileId(squareFileId),
+		loadImageFromFileId(horizontalFileId),
+	])
+	const targetHeight = Math.max(1, Math.round(WECHAT_COVER_BASE_HEIGHT * pixelRatio))
+	const squareWidth = targetHeight
+	const horizontalAspect = Math.max(
+		1,
+		getImageAspectRatio(horizontalImage, WECHAT_COVER_FALLBACK_ASPECT_RATIO),
+	)
+	const horizontalWidth = Math.round(targetHeight * horizontalAspect)
+	const canvas = document.createElement("canvas")
+	canvas.width = squareWidth + horizontalWidth
+	canvas.height = targetHeight
+	const context = canvas.getContext("2d")
+	if (!context) throw new Error("Canvas 2D context is unavailable")
+	context.fillStyle = "#ffffff"
+	context.fillRect(0, 0, canvas.width, canvas.height)
+	drawImageCover(context, squareImage, 0, 0, squareWidth, targetHeight)
+	drawImageCover(context, horizontalImage, squareWidth, 0, horizontalWidth, targetHeight)
+	return canvasToPngBlob(canvas)
 }
 
 async function stitchCardDataUrlsToPngBlob(
@@ -327,5 +428,45 @@ export function useExportZip(): UseExportZipResult {
 		[],
 	)
 
-	return { progress, exportZip, exportLongImage }
+	const exportWechatCoverImage = useCallback<UseExportZipResult["exportWechatCoverImage"]>(
+		async ({ post, fileName, pixelRatio }) => {
+			if (runningRef.current) return
+			runningRef.current = true
+			const effectivePixelRatio =
+				typeof pixelRatio === "number" && pixelRatio > 0 ? pixelRatio : DEFAULT_PIXEL_RATIO
+			const imageName = resolveWechatCoverBaseName(post, fileName)
+			setProgress({ current: 0, total: 1, status: "running" })
+			const startedAt = Date.now()
+			log.log("📤 开始导出微信公众号封面拼图", {
+				fileName: imageName,
+				pixelRatio: effectivePixelRatio,
+			})
+
+			try {
+				const blob = await stitchWechatCoverImagesToPngBlob({
+					thumbnailFileId: post.thumbnailCover?.fileId,
+					heroFileId: post.heroCover?.fileId,
+					pixelRatio: effectivePixelRatio,
+				})
+				saveAs(blob, `${imageName}-wechat-cover.png`)
+				setProgress({ current: 1, total: 1, status: "done" })
+				log.log("✅ 导出微信公众号封面拼图完成", {
+					fileName: imageName,
+					durationMs: Date.now() - startedAt,
+				})
+			} catch (err) {
+				log.error("❌ 导出微信公众号封面拼图失败", {
+					fileName: imageName,
+					durationMs: Date.now() - startedAt,
+					error: err,
+				})
+				setProgress((prev) => ({ ...prev, status: "error" }))
+			} finally {
+				runningRef.current = false
+			}
+		},
+		[],
+	)
+
+	return { progress, exportZip, exportLongImage, exportWechatCoverImage }
 }

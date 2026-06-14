@@ -14,6 +14,11 @@ vi.mock("@/utils/log", () => ({
 		}),
 	},
 }))
+vi.mock("@/pages/superMagic/utils/api", () => ({
+	getTemporaryDownloadUrl: vi.fn(async ({ file_ids }: { file_ids: string[] }) =>
+		file_ids.map((fileId) => ({ file_id: fileId, url: `https://example.test/${fileId}.png` })),
+	),
+}))
 
 const { lastZipRef, MockJSZip } = vi.hoisted(() => {
 	const lastZipRef: { current: MockInst | null } = { current: null }
@@ -300,5 +305,68 @@ describe("useExportZip", () => {
 
 		await waitFor(() => expect(result.current.progress.status).toBe("error"))
 		expect(saveAs).not.toHaveBeenCalled()
+	})
+
+	it("exports a WeChat cover image by stitching square and horizontal covers", async () => {
+		const outputBlob = new Blob(["wechat-cover"], { type: "image/png" })
+		const mockContext = {
+			drawImage: vi.fn(),
+			fillStyle: "",
+			fillRect: vi.fn(),
+		}
+		const mockCanvas = {
+			width: 0,
+			height: 0,
+			getContext: vi.fn(() => mockContext),
+			toBlob: vi.fn((callback: BlobCallback) => callback(outputBlob)),
+		}
+		document.createElement = vi.fn((tagName: string) => {
+			if (tagName === "canvas") return mockCanvas as unknown as HTMLCanvasElement
+			return originalCreateElement(tagName)
+		}) as unknown as typeof document.createElement
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(() =>
+				Promise.resolve({
+					ok: true,
+					blob: () => Promise.resolve(new Blob(["img"])),
+				}),
+			),
+		)
+		vi.stubGlobal("URL", {
+			createObjectURL: vi.fn((blob: Blob) => `blob:${blob.size}`),
+			revokeObjectURL: vi.fn(),
+		})
+		globalThis.Image = class {
+			width = 1600
+			height = 900
+			naturalWidth = 1600
+			naturalHeight = 900
+			onload: (() => void) | null = null
+			onerror: (() => void) | null = null
+			set src(_value: string) {
+				this.onload?.()
+			}
+		} as unknown as typeof Image
+
+		const { result } = renderHook(() => useExportZip())
+
+		await act(async () => {
+			await result.current.exportWechatCoverImage({
+				post: {
+					meta: { id: "wechat-1", title: "公众号封面" },
+					cards: [],
+					thumbnailCover: { path: "thumb.png", fileId: "thumb-file" },
+					heroCover: { path: "hero.png", fileId: "hero-file" },
+				} as any,
+				pixelRatio: 2,
+			})
+		})
+
+		await waitFor(() => expect(result.current.progress.status).toBe("done"))
+		expect(mockCanvas.height).toBe(1080)
+		expect(mockCanvas.width).toBe(3000)
+		expect(mockContext.drawImage).toHaveBeenCalledTimes(2)
+		expect(saveAs).toHaveBeenCalledWith(outputBlob, "公众号封面-wechat-cover.png")
 	})
 })

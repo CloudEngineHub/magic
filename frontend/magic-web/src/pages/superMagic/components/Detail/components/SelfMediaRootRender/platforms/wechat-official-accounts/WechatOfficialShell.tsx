@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { ElementInspectorOverlay } from "@/components/business/ElementInspector"
-import { flattenAttachments } from "../../../../contents/HTML/utils"
+import magicToast from "@/components/base/MagicToaster/utils"
+import ExportPreviewDialog from "../../components/ExportPreviewDialog"
+import type { ExportPreviewConfirmArgs } from "../../components/ExportPreviewDialog"
 import SelfMediaShellHeader, { SelfMediaShellViewBar } from "../../components/SelfMediaShellHeader"
 import { SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE } from "../../components/SelfMediaWorkspaceBackground"
-import { useSelfMediaInspector } from "../../hooks/useSelfMediaInspector"
+import { useExportProgressToast } from "../../hooks/useExportProgressToast"
+import { useExportZip } from "../../hooks/useExportZip"
 import { useShellFileHandlers } from "../../hooks/useShellFileHandlers"
 import { SelfMediaStoreProvider, useOptionalSelfMediaStore, useSelfMediaStore } from "../../stores"
 import type { PlatformComponentProps, SelfMediaView } from "../../types"
@@ -14,8 +16,25 @@ import WechatCodeView from "./code"
 import { WechatCoverPhonePanel } from "./WechatCoverPhonePanel"
 import WechatEditView from "./edit"
 import { WechatOfficialContentGate } from "./WechatOfficialContentGate"
+import { loadWechatArticleHtml } from "./wechatArticleHtml"
 
 const TAB_ORDER: SelfMediaView[] = ["feed", "detail", "edit", "code"]
+
+async function writeWechatHtmlToClipboard(html: string): Promise<void> {
+	if (
+		typeof navigator === "undefined" ||
+		!navigator.clipboard?.write ||
+		typeof ClipboardItem === "undefined"
+	) {
+		throw new Error("htmlClipboardUnsupported")
+	}
+
+	await navigator.clipboard.write([
+		new ClipboardItem({
+			"text/html": new Blob([html], { type: "text/html" }),
+		}),
+	])
+}
 
 function WechatOfficialShell(props: PlatformComponentProps) {
 	const store = useOptionalSelfMediaStore()
@@ -127,42 +146,27 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 	const shouldRenderCode = mountedViews.code || view === "code"
 
 	const articleViewRef = useRef<WechatArticleViewRef>(null)
+	const [inspectorActive, setInspectorActive] = useState(false)
+	const { progress, exportWechatCoverImage } = useExportZip()
+	const [exportDialogOpen, setExportDialogOpen] = useState(false)
+	const [isExporting, setIsExporting] = useState(false)
+	const [isCopyingWechatHtml, setIsCopyingWechatHtml] = useState(false)
 
-	const inspectorGetIframes = useCallback(() => {
-		const el = articleViewRef.current?.getIframeElement()
-		return el ? [el] : []
+	useExportProgressToast(progress, "wechat-official-shell-export")
+
+	const handleStartInspector = useCallback(() => {
+		articleViewRef.current?.startInspectorAppend()
 	}, [])
 
-	const inspectorGetFileInfo = useCallback(
-		(_iframe: HTMLIFrameElement) => {
-			// Wechat has a single article iframe per post
-			const post = store.activePost
-			const card = post?.article
-			if (!card?.fileId) return undefined
-			const file = flattenAttachments(attachmentList ?? []).find(
-				(f) => f?.file_id === card.fileId,
-			)
-			if (!file) return undefined
-			return {
-				fileId: file.file_id,
-				fileName: file.file_name,
-				filePath: file.relative_file_path,
-			}
-		},
-		[store, attachmentList],
-	)
+	const handleStopInspector = useCallback(() => {
+		articleViewRef.current?.stopInspector()
+	}, [])
 
-	const inspector = useSelfMediaInspector({
-		getIframeElements: inspectorGetIframes,
-		skipInjection: true,
-		getFileInfoForIframe: inspectorGetFileInfo,
-	})
-
-	const inspectorDisabled = view !== "detail" || rootLoading
+	const inspectorDisabled = view !== "detail" || rootLoading || !activePost?.article?.fileId
 
 	// Auto-stop inspector when view changes
 	useEffect(() => {
-		if (inspector.active) inspector.stop()
+		if (inspectorActive) articleViewRef.current?.stopInspector()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [view])
 
@@ -225,6 +229,52 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 		void store.init({ preserveNavigation: true })
 	}, [store])
 
+	const handleOpenExportDialog = useCallback(() => {
+		setExportDialogOpen(true)
+	}, [])
+
+	const handleConfirmExport = useCallback(
+		async ({ postIndex, pixelRatio, exportType }: ExportPreviewConfirmArgs) => {
+			if (exportType !== "wechatCoverImage") return
+			setIsExporting(true)
+			try {
+				const target = await store.ensurePostLoaded(postIndex)
+				if (!target) return
+				await exportWechatCoverImage({
+					post: target,
+					fileName: target.meta.title || target.meta.feedTitle || target.meta.id,
+					pixelRatio,
+				})
+				setExportDialogOpen(false)
+			} finally {
+				setIsExporting(false)
+			}
+		},
+		[exportWechatCoverImage, store],
+	)
+
+	const handleCopyWechatHtml = useCallback(async () => {
+		if (isCopyingWechatHtml) return
+		setIsCopyingWechatHtml(true)
+		try {
+			let html = articleViewRef.current?.getArticleHtml()
+			if (!html) {
+				const target = await store.ensurePostLoaded(activePostIndex)
+				const fileId = target?.article?.fileId
+				if (!fileId) throw new Error("noArticleUrl")
+				const result = await loadWechatArticleHtml({ fileId, attachmentList })
+				html = result.content
+			}
+			await writeWechatHtmlToClipboard(html)
+			magicToast.success(t("detail.selfMedia.export.wechat.copySuccess"))
+		} catch (error) {
+			magicToast.error(t("detail.selfMedia.export.wechat.copyFailed"))
+			throw error
+		} finally {
+			setIsCopyingWechatHtml(false)
+		}
+	}, [activePostIndex, attachmentList, isCopyingWechatHtml, store, t])
+
 	const handleSaveTitle = useCallback(
 		async (nextTitle: string) => {
 			const entry = store.activePostEntry
@@ -259,11 +309,28 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 				refreshLabel={t("detail.selfMedia.refreshAllData")}
 				refreshDisabled={rootLoading}
 				refreshTestId="wechat-shell-refresh-post-button"
-				onStartInspector={inspector.start}
-				onStopInspector={inspector.stop}
-				inspectorActive={inspector.active}
+				onOpenExport={handleOpenExportDialog}
+				exportLabel={t("detail.selfMedia.export.action")}
+				exportDisabled={isExporting || posts.length === 0}
+				onStartInspector={handleStartInspector}
+				onStopInspector={handleStopInspector}
+				inspectorActive={inspectorActive}
 				inspectorDisabled={inspectorDisabled}
 				onSaveTitle={allowEdit === false ? undefined : handleSaveTitle}
+			/>
+			<ExportPreviewDialog
+				open={exportDialogOpen}
+				onOpenChange={setExportDialogOpen}
+				posts={posts}
+				initialPostIndex={activePostIndex}
+				attachmentList={attachmentList}
+				onSyncActivePost={onChangePost}
+				onConfirm={handleConfirmExport}
+				isExporting={isExporting}
+				exportMode="wechatOfficial"
+				onCopyWechatHtml={handleCopyWechatHtml}
+				isCopyingWechatHtml={isCopyingWechatHtml}
+				exportSizeHintCss={{ width: 1500, height: 540 }}
 			/>
 
 			<div className="relative min-h-0 flex-1 overflow-hidden">
@@ -301,6 +368,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 									onGoToEdit={handleGoToEdit}
 									onRefresh={handleRefresh}
 									allowEdit={allowEdit}
+									onInspectorActiveChange={setInspectorActive}
 								/>
 							) : null}
 						</WechatOfficialContentGate>
@@ -361,14 +429,6 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 						</WechatOfficialContentGate>
 					</div>
 				) : null}
-				<ElementInspectorOverlay
-					active={inspector.active}
-					iframeRef={inspector.activeIframeRef}
-					hoveredElement={inspector.hoveredElement}
-					selectedElement={inspector.selectedElement}
-					onClearSelection={() => {}}
-					hideInfoCard
-				/>
 			</div>
 			<SelfMediaShellViewBar
 				view={view}

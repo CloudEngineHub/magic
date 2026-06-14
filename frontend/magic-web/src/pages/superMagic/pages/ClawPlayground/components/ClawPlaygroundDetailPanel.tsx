@@ -1,5 +1,6 @@
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import Detail, { type DetailRef } from "@/pages/superMagic/components/Detail"
+import type { ActiveDetailTabType } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { ProjectListItem, TaskStatus, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { RefObject } from "react"
 import { ClawSkillsPanel } from "./ClawSkillsPanel"
@@ -16,7 +17,7 @@ export interface ClawPlaygroundDetailPanelProps {
 	selectedProject: ProjectListItem
 	activeFileId: string | null
 	setActiveFileId: (fileId: string | null) => void
-	handleActiveDetailTabChange: (tabType: "playback" | "file" | null) => void
+	handleActiveDetailTabChange: (tabType: ActiveDetailTabType) => void
 	setIsDetailPanelFullscreen: (isFullscreen: boolean) => void
 	isReadOnly: boolean
 }

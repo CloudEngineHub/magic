@@ -1,11 +1,10 @@
-import { memo, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useMemo, useRef } from "react"
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
 import {
 	Bot,
 	CalendarClock,
 	Clock3,
-	History,
 	Loader2,
 	Play,
 	Settings,
@@ -13,7 +12,8 @@ import {
 	type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import AICardIframe from "./AICardIframe"
+import AICardDashboardCard, { formatDateTime } from "./AICardDashboardCard"
+import AICardDashboardHistoryTimeline from "./AICardDashboardHistoryTimeline"
 import type { AICardEntry, AICardHistoryEntry, AICardProjectConfig } from "../types"
 import {
 	buildAICardDashboardItems,
@@ -65,7 +65,6 @@ function useStableAttachmentList(
 }
 
 type DashboardTranslate = (key: string, values?: Record<string, unknown>) => string
-type HistoryScrollSyncSource = "card" | "timeline"
 
 function buildHeaderMetaItems(
 	projectConfig: AICardProjectConfig | null | undefined,
@@ -91,28 +90,6 @@ function buildHeaderMetaItems(
 	}
 
 	return items
-}
-
-function getClosestHorizontalItemIndex(container: HTMLElement, items: Array<HTMLElement | null>) {
-	const containerRect = container.getBoundingClientRect()
-	const containerCenter = containerRect.left + containerRect.width / 2
-	let nextIndex = 0
-	let closestDistance = Number.POSITIVE_INFINITY
-
-	for (let index = 0; index < items.length; index += 1) {
-		const item = items[index]
-		if (!item) continue
-
-		const rect = item.getBoundingClientRect()
-		const itemCenter = rect.left + rect.width / 2
-		const distance = Math.abs(itemCenter - containerCenter)
-		if (distance < closestDistance) {
-			closestDistance = distance
-			nextIndex = index
-		}
-	}
-
-	return nextIndex
 }
 
 interface AICardDashboardProps {
@@ -236,10 +213,8 @@ function AICardDashboard({
 							isRunNowLoading={isRunNowLoading}
 							onOpenHistoryEntry={onOpenHistoryEntry}
 						/>
-						<HistoryTimeline
+						<AICardDashboardHistoryTimeline
 							items={historyItems}
-							attachmentList={stableAttachmentList}
-							onOpenCard={onOpenCard}
 							onOpenHistoryEntry={onOpenHistoryEntry}
 						/>
 					</div>
@@ -315,13 +290,13 @@ function LatestSection({
 			<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,#ffffff_0%,#f7f7f6_52%,#eeeeec_100%)]" />
 			<motion.div
 				aria-hidden="true"
-				className="pointer-events-none absolute -left-1/3 top-10 h-px w-2/3 bg-gradient-to-r from-transparent via-neutral-900/12 to-transparent"
+				className="via-neutral-900/12 pointer-events-none absolute -left-1/3 top-10 h-px w-2/3 bg-gradient-to-r from-transparent to-transparent"
 				animate={{ x: ["0%", "210%"], opacity: [0, 0.7, 0] }}
 				transition={{ duration: 13, repeat: Infinity, ease: "easeInOut" }}
 			/>
 			<motion.div
 				aria-hidden="true"
-				className="pointer-events-none absolute -right-1/4 bottom-14 h-px w-1/2 bg-gradient-to-r from-transparent via-primary/18 to-transparent"
+				className="via-primary/18 pointer-events-none absolute -right-1/4 bottom-14 h-px w-1/2 bg-gradient-to-r from-transparent to-transparent"
 				animate={{ x: ["0%", "-220%"], opacity: [0, 0.55, 0] }}
 				transition={{ duration: 16, repeat: Infinity, ease: "easeInOut", delay: 2.5 }}
 			/>
@@ -337,7 +312,7 @@ function LatestSection({
 					<div className="absolute h-[86%] w-[72%] max-w-[340px] translate-x-8 -rotate-3 rounded-[28px] border border-neutral-200 bg-neutral-100/80 shadow-[0_18px_48px_rgb(24,24,27,0.08)]" />
 					<div className="absolute h-[90%] w-[76%] max-w-[350px] translate-x-4 rotate-2 rounded-[28px] border border-neutral-200 bg-white/90 shadow-[0_18px_52px_rgb(24,24,27,0.10)]" />
 					<div className="relative z-10 w-full max-w-[360px]">
-						<DashboardCard
+						<AICardDashboardCard
 							item={primaryItem}
 							index={0}
 							variant="featured"
@@ -428,413 +403,6 @@ function LatestSection({
 			</div>
 		</section>
 	)
-}
-
-function HistoryTimeline({
-	items,
-	attachmentList,
-	onOpenCard,
-	onOpenHistoryEntry,
-}: DashboardSectionProps) {
-	const { t } = useTranslation("super")
-	const [activeIndex, setActiveIndex] = useState(0)
-	const activeIndexRef = useRef(0)
-	const cardRefs = useRef<Array<HTMLDivElement | null>>([])
-	const markerRefs = useRef<Array<HTMLButtonElement | null>>([])
-	const cardScrollRafRef = useRef<number | null>(null)
-	const timelineScrollRafRef = useRef<number | null>(null)
-	const syncSourceRef = useRef<HistoryScrollSyncSource | null>(null)
-	const syncResetTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
-
-	useEffect(() => {
-		activeIndexRef.current = activeIndex
-		if (activeIndex >= items.length) {
-			activeIndexRef.current = 0
-			setActiveIndex(0)
-		}
-		cardRefs.current = cardRefs.current.slice(0, items.length)
-		markerRefs.current = markerRefs.current.slice(0, items.length)
-	}, [activeIndex, items.length])
-
-	useEffect(
-		() => () => {
-			if (cardScrollRafRef.current !== null) {
-				cancelAnimationFrame(cardScrollRafRef.current)
-			}
-			if (timelineScrollRafRef.current !== null) {
-				cancelAnimationFrame(timelineScrollRafRef.current)
-			}
-			if (syncResetTimerRef.current !== null) {
-				window.clearTimeout(syncResetTimerRef.current)
-			}
-		},
-		[],
-	)
-
-	const markProgrammaticSync = useCallback(
-		(source: HistoryScrollSyncSource, resetDelay = 180) => {
-			syncSourceRef.current = source
-			if (syncResetTimerRef.current !== null) {
-				window.clearTimeout(syncResetTimerRef.current)
-			}
-			syncResetTimerRef.current = window.setTimeout(() => {
-				syncSourceRef.current = null
-				syncResetTimerRef.current = null
-			}, resetDelay)
-		},
-		[],
-	)
-
-	const updateActiveIndex = useCallback((index: number) => {
-		activeIndexRef.current = index
-		setActiveIndex((current) => (current === index ? current : index))
-	}, [])
-
-	const scrollCardIntoView = useCallback((index: number, behavior: ScrollBehavior = "auto") => {
-		cardRefs.current[index]?.scrollIntoView({
-			behavior,
-			block: "nearest",
-			inline: "center",
-		})
-	}, [])
-
-	const scrollMarkerIntoView = useCallback((index: number, behavior: ScrollBehavior = "auto") => {
-		markerRefs.current[index]?.scrollIntoView({
-			behavior,
-			block: "nearest",
-			inline: "center",
-		})
-	}, [])
-
-	const handleTimelineSelect = useCallback(
-		(index: number) => {
-			updateActiveIndex(index)
-			markProgrammaticSync("timeline", 450)
-			scrollCardIntoView(index, "smooth")
-		},
-		[markProgrammaticSync, scrollCardIntoView, updateActiveIndex],
-	)
-
-	const handleTimelineScroll = useCallback(
-		(event: UIEvent<HTMLDivElement>) => {
-			if (syncSourceRef.current === "card") return
-			if (timelineScrollRafRef.current !== null || items.length === 0) return
-
-			const timelineRail = event.currentTarget
-			timelineScrollRafRef.current = requestAnimationFrame(() => {
-				const nextIndex = getClosestHorizontalItemIndex(timelineRail, markerRefs.current)
-
-				if (activeIndexRef.current !== nextIndex) {
-					updateActiveIndex(nextIndex)
-					markProgrammaticSync("timeline")
-					scrollCardIntoView(nextIndex)
-				}
-
-				timelineScrollRafRef.current = null
-			})
-		},
-		[items.length, markProgrammaticSync, scrollCardIntoView, updateActiveIndex],
-	)
-
-	const handleCardRailScroll = useCallback(
-		(event: UIEvent<HTMLDivElement>) => {
-			if (syncSourceRef.current === "timeline") return
-			if (cardScrollRafRef.current !== null || items.length === 0) return
-
-			const cardRail = event.currentTarget
-			cardScrollRafRef.current = requestAnimationFrame(() => {
-				const nextIndex = getClosestHorizontalItemIndex(cardRail, cardRefs.current)
-
-				if (activeIndexRef.current !== nextIndex) {
-					updateActiveIndex(nextIndex)
-					markProgrammaticSync("card")
-					scrollMarkerIntoView(nextIndex)
-				}
-
-				cardScrollRafRef.current = null
-			})
-		},
-		[items.length, markProgrammaticSync, scrollMarkerIntoView, updateActiveIndex],
-	)
-
-	return (
-		<section
-			className="overflow-hidden rounded-2xl border border-border/70 bg-background/75 shadow-[0_16px_52px_rgb(15,23,42,0.08)] backdrop-blur"
-			data-testid="ai-card-dashboard-history-timeline"
-		>
-			<div className="border-b border-border/60 bg-gradient-to-r from-muted/60 via-background/80 to-muted/30 px-4 py-4 sm:px-5">
-				<div className="flex flex-wrap items-end justify-between gap-3">
-					<div>
-						<div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-							<History size={14} />
-							<span>{t("detail.aiCard.dashboard.historySectionTitle")}</span>
-						</div>
-						<p className="mt-1 text-sm text-muted-foreground">
-							{t("detail.aiCard.dashboard.historySectionDescription")}
-						</p>
-					</div>
-					{items.length > 0 && (
-						<span className="rounded-full border border-border bg-background/80 px-2.5 py-1 text-xs font-medium text-muted-foreground shadow-sm">
-							{t("detail.aiCard.dashboard.historyCount", { count: items.length })}
-						</span>
-					)}
-				</div>
-
-				{items.length > 0 && (
-					<div className="relative mt-5">
-						<div className="absolute left-3 right-3 top-[17px] h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-						<div
-							onScroll={handleTimelineScroll}
-							className="relative flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-							data-testid="ai-card-dashboard-timeline-rail"
-						>
-							{items.map((item, index) => {
-								const isActive = index === activeIndex
-								return (
-									<button
-										key={item.id}
-										ref={(node) => {
-											markerRefs.current[index] = node
-										}}
-										type="button"
-										onClick={() => handleTimelineSelect(index)}
-										aria-current={isActive ? "true" : "false"}
-										className={cn(
-											"relative flex min-w-[76px] flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-xs transition-all duration-300",
-											"focus:outline-none focus:ring-2 focus:ring-primary/25",
-											isActive
-												? "bg-background text-primary shadow-sm"
-												: "text-muted-foreground hover:bg-background/70 hover:text-foreground",
-										)}
-										data-testid={`ai-card-dashboard-timeline-marker-${item.fileId}`}
-									>
-										<span
-											className={cn(
-												"size-3 rounded-full border transition-all duration-300",
-												isActive
-													? "border-primary bg-primary shadow-[0_0_0_5px_hsl(var(--primary)/0.12)]"
-													: "border-border bg-background",
-											)}
-										/>
-										<span className="max-w-[70px] truncate font-medium">
-											{formatShortDate(item.createdAt)}
-										</span>
-									</button>
-								)
-							})}
-						</div>
-					</div>
-				)}
-			</div>
-
-			{items.length > 0 ? (
-				<div className="relative px-4 py-5 sm:px-5">
-					<div className="pointer-events-none absolute inset-y-5 left-0 z-20 w-10 bg-gradient-to-r from-background to-transparent" />
-					<div className="pointer-events-none absolute inset-y-5 right-0 z-20 w-10 bg-gradient-to-l from-background to-transparent" />
-					<div
-						onScroll={handleCardRailScroll}
-						className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-4 pb-2 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-5 sm:gap-5 sm:px-5"
-						data-testid="ai-card-dashboard-card-rail"
-					>
-						{items.map((item, index) => {
-							const isActive = index === activeIndex
-							return (
-								<div
-									key={item.id}
-									ref={(node) => {
-										cardRefs.current[index] = node
-									}}
-									className={cn(
-										"group/history shrink-0 snap-center rounded-[26px] bg-gradient-to-b p-1 transition-all duration-500",
-										"w-[min(74vw,320px)] sm:w-[300px] lg:w-[320px]",
-										isActive
-											? "from-primary/30 to-primary/5 opacity-100 shadow-[0_18px_48px_rgb(15,23,42,0.14)]"
-											: "from-background to-muted/40 opacity-75 hover:opacity-95",
-										!isActive && "scale-[0.96]",
-									)}
-									data-active={isActive ? "true" : "false"}
-									data-testid="ai-card-dashboard-timeline-item"
-								>
-									<DashboardCard
-										item={item}
-										index={index}
-										variant="timeline"
-										isActive={isActive}
-										attachmentList={attachmentList}
-										onOpenCard={onOpenCard}
-										onOpenHistoryEntry={onOpenHistoryEntry}
-									/>
-								</div>
-							)
-						})}
-					</div>
-				</div>
-			) : (
-				<div
-					className="m-4 flex min-h-[120px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground"
-					data-testid="ai-card-dashboard-history-empty"
-				>
-					{t("detail.aiCard.dashboard.historyEmpty")}
-				</div>
-			)}
-		</section>
-	)
-}
-
-interface DashboardCardProps {
-	item: AICardDashboardItem
-	index: number
-	variant: "featured" | "timeline"
-	isActive?: boolean
-	attachmentList?: AICardAttachmentNode[]
-	onOpenCard: (cardId: string) => void
-	onOpenHistoryEntry?: (entry: AICardHistoryEntry) => void
-}
-
-const DashboardCard = memo(function DashboardCard({
-	item,
-	index,
-	variant,
-	isActive = false,
-	attachmentList,
-	onOpenCard,
-	onOpenHistoryEntry,
-}: DashboardCardProps) {
-	const { t } = useTranslation("super")
-	function handleClick() {
-		if (item.kind === "latest" && item.cardId) {
-			onOpenCard(item.cardId)
-			return
-		}
-
-		if (item.historyEntry) onOpenHistoryEntry?.(item.historyEntry)
-	}
-
-	return (
-		<motion.button
-			type="button"
-			initial={{ opacity: 0, y: 12 }}
-			animate={{ opacity: 1, y: 0 }}
-			transition={{ delay: Math.min(index * 0.03, 0.3) }}
-			onClick={handleClick}
-			className={cn(
-				"group relative flex aspect-[9/16] w-full overflow-hidden bg-card text-left transition-all duration-500 ease-out",
-				"hover:-translate-y-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30",
-				variant === "featured" &&
-					"max-w-[360px] rounded-[24px] border border-primary/25 shadow-[0_24px_70px_rgb(0,0,0,0.18)] hover:border-primary/45 hover:shadow-[0_30px_80px_rgb(0,0,0,0.22)]",
-				variant === "timeline" &&
-					cn(
-						"max-w-[320px] rounded-[22px] border shadow-[0_12px_32px_rgb(0,0,0,0.08)] hover:border-primary/35 hover:shadow-[0_20px_52px_rgb(0,0,0,0.14)]",
-						isActive ? "border-primary/45" : "border-border/70",
-					),
-			)}
-			data-testid="ai-card-dashboard-card"
-			data-variant={variant}
-			data-active={isActive ? "true" : "false"}
-			data-card-id={item.fileId}
-		>
-			<div className="absolute inset-0 z-0 bg-muted/20 transition-transform duration-700 ease-out group-hover:scale-105">
-				<AICardIframe
-					fileId={item.fileId}
-					attachmentList={attachmentList}
-					className="pointer-events-none h-full w-full [&_iframe]:h-full [&_iframe]:w-full"
-					hideVerticalScroll
-					showSkeleton
-				/>
-			</div>
-
-			<div className="absolute inset-x-5 top-0 z-10 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-			<div className="absolute inset-0 z-10 bg-gradient-to-t from-black/90 via-black/25 to-transparent opacity-75 transition-opacity duration-500 group-hover:opacity-90" />
-			<div className="absolute inset-0 z-10 bg-gradient-to-br from-white/20 via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-
-			<div className="absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2">
-				<div
-					className={cn(
-						"rounded-full border border-white/20 bg-black/40 px-2 py-0.5 text-[10px] font-medium tracking-wide text-white shadow-sm backdrop-blur-md transition-colors duration-300 group-hover:bg-black/60",
-						variant === "featured" && "px-2.5 py-1 text-[11px]",
-					)}
-				>
-					{item.kind === "latest"
-						? t("detail.aiCard.dashboard.latestVersion")
-						: t("detail.aiCard.dashboard.historyVersion")}
-				</div>
-				<div className="rounded-full border border-white/20 bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white/90 shadow-sm backdrop-blur-md">
-					#{String(index + 1).padStart(2, "0")}
-				</div>
-			</div>
-
-			<div
-				className={cn(
-					"absolute inset-x-0 bottom-0 z-20 flex translate-y-1.5 flex-col gap-2 transition-transform duration-500 ease-out group-hover:translate-y-0",
-					variant === "featured" ? "p-5 sm:p-6" : "p-4",
-				)}
-			>
-				<div className="flex items-start justify-between gap-2">
-					<div className="min-w-0">
-						<h3
-							className={cn(
-								"truncate font-semibold tracking-tight text-white drop-shadow-sm",
-								variant === "featured" ? "text-lg sm:text-xl" : "text-sm",
-							)}
-						>
-							{item.title}
-						</h3>
-						{item.description && (
-							<p
-								className={cn(
-									"mt-1 line-clamp-2 leading-relaxed text-white/90 drop-shadow-sm",
-									variant === "featured" ? "text-sm" : "text-xs",
-								)}
-							>
-								{item.description}
-							</p>
-						)}
-					</div>
-				</div>
-				<div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-white/80">
-					<span className="flex items-center gap-1 font-medium drop-shadow-sm">
-						<Clock3 size={variant === "featured" ? 13 : 11} />
-						{formatDateTime(item.createdAt)}
-					</span>
-					{item.kind === "latest" ? (
-						<span className="flex-shrink-0 rounded-full bg-primary px-2 py-0.5 font-medium text-primary-foreground shadow-sm">
-							{t("detail.aiCard.dashboard.current")}
-						</span>
-					) : (
-						<span className="flex-shrink-0 rounded-full border border-white/30 bg-white/20 px-2 py-0.5 font-medium text-white shadow-sm backdrop-blur-md">
-							{t("detail.aiCard.dashboard.archived")}
-						</span>
-					)}
-				</div>
-			</div>
-		</motion.button>
-	)
-})
-
-function formatDateTime(value?: string) {
-	if (!value) return "—"
-
-	const date = new Date(value)
-	if (Number.isNaN(date.getTime())) return "—"
-
-	return date.toLocaleString(undefined, {
-		month: "short",
-		day: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-	})
-}
-
-function formatShortDate(value?: string) {
-	if (!value) return "—"
-
-	const date = new Date(value)
-	if (Number.isNaN(date.getTime())) return "—"
-
-	return date.toLocaleDateString(undefined, {
-		month: "numeric",
-		day: "numeric",
-	})
 }
 
 function formatScheduleSummary(

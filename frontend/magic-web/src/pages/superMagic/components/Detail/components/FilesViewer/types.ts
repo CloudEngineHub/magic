@@ -35,6 +35,9 @@ export interface WebsitePreset {
 	iconSrc?: string
 }
 
+export type FileViewerTabType = "file" | "website" | "knowledge_base" | "playback"
+export type ActiveDetailTabType = FileViewerTabType | null
+
 // File item interface
 export interface FileItem {
 	file_id: string
@@ -64,6 +67,7 @@ export interface FileItem {
 // Tab item interface
 export interface TabItem {
 	id: string
+	type?: FileViewerTabType
 	name?: string // 组件中使用，但未在接口中定义，先补充，待确认是否删除
 	title: string
 	fileData: FileItem
@@ -148,7 +152,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 	autoDetail?: any
 	showPlaybackControl?: boolean
 	isFileShare?: boolean
-	onActiveTabChange?: (tabType: "playback" | "file" | null) => void
+	onActiveTabChange?: (tabType: ActiveDetailTabType) => void
 	topicName?: string // 话题名称（用于分享场景）
 	projectId?: string
 	// 是否允许下载（用于分享页面权限控制）

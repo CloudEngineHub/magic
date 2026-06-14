@@ -36,11 +36,21 @@ export interface SelfMediaComment {
 /** Post meta surfaced on feed/detail views */
 export type SelfMediaPostPublishStatus = "planned" | "archived"
 
+export interface SelfMediaStructuredTags {
+	core?: string[]
+	mid?: string[]
+	longtail?: string[]
+	trend?: string[]
+	[key: string]: unknown
+}
+
+export type SelfMediaPostTags = string | string[] | SelfMediaStructuredTags
+
 export interface SelfMediaPostMeta {
 	id: string
 	title?: string
 	subtitle?: string
-	tags?: string
+	tags?: SelfMediaPostTags
 	author?: string
 	feedTitle?: string
 	feedLikes?: string

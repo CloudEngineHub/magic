@@ -100,9 +100,11 @@ def validate_skill_md() -> None:
             "4.4.0 Build the human-writing brief",
             "4.4.2 Human-writing self-check",
             "人味",
+            "__brand/brand-config.json",
         ],
         "SKILL.md",
     )
+    require_absent(skill, ["brand-info", "brand-info.json", "brand-info.md"], "SKILL.md")
     require_no_external_skill_refs(skill, "SKILL.md")
 
 
@@ -196,6 +198,8 @@ def validate_tool_decision_tree() -> None:
     require_text(
         text,
         [
+            "Need brand context but draft global fields are missing",
+            "__brand/brand-config.json",
             "发布入盘",
             "post-publication review",
             "fixed ops schema",
@@ -213,6 +217,21 @@ def validate_tool_decision_tree() -> None:
         + OPS_INTENT_VALUES,
         "references/tool-decision-tree.md",
     )
+    require_absent(text, ["brand-info", "brand-info.json", "brand-info.md"], "references/tool-decision-tree.md")
+
+
+def validate_drafts_format() -> None:
+    text = require_file("references/drafts-format.md")
+    require_text(
+        text,
+        [
+            "__brand/",
+            "__brand/brand-config.json",
+            "Brand config fallback",
+        ],
+        "references/drafts-format.md",
+    )
+    require_absent(text, ["brand-info", "brand-info.json", "brand-info.md"], "references/drafts-format.md")
 
 
 def validate_ai_card_boundary() -> None:
@@ -246,6 +265,7 @@ def validate_test_prompts() -> None:
         "wechat-human-voice",
         "self-media-ops-fixed-schema",
         "self-media-ops-immediate-sync-trigger",
+        "self-media-brand-config-file-fallback",
     }
     missing = sorted(required - ids)
     if missing:
@@ -255,6 +275,7 @@ def validate_test_prompts() -> None:
         if not item.get("prompt") or not item.get("expected"):
             fail(f"prompt {item.get('id')} missing prompt or expected")
     require_no_external_skill_refs(json.dumps(prompts, ensure_ascii=False), "test-prompts.json")
+    require_absent(json.dumps(prompts, ensure_ascii=False), ["brand-info", "brand-info.json", "brand-info.md"], "test-prompts.json")
 
 
 def main() -> None:
@@ -263,6 +284,7 @@ def main() -> None:
     validate_failure_modes()
     validate_ops_contract()
     validate_tool_decision_tree()
+    validate_drafts_format()
     validate_ai_card_boundary()
     validate_test_prompts()
     print("self-media-composer skill contract ok")

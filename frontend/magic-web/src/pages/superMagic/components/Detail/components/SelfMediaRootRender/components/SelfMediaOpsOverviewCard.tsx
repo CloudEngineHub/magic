@@ -203,7 +203,13 @@ function SelfMediaOpsOverviewCard({
 		? insightActions
 		: overview.nextActions
 	const hasNextActions = displayActions.length > 0
-	const isActionListScrollable = displayActions.length > 2
+	const opsLayout = getOpsOverviewLayout(opsContainerWidth)
+	const isOpsWide = opsLayout === "wide"
+	const isOpsComfortable = opsLayout !== "compact"
+	// Wide layout stretches the side panel to match the left data/progress stack; two action cards
+	// still need a bounded scroller so the lower card is not clipped by the outer card.
+	const isActionListScrollable =
+		displayActions.length > 2 || (isOpsWide && displayActions.length > 1)
 	const actionListMaxHeight =
 		OPS_ACTION_ROW_HEIGHT * OPS_VISIBLE_ACTION_COUNT +
 		OPS_ACTION_GAP * OPS_VISIBLE_ACTION_GAP_COUNT +
@@ -221,9 +227,6 @@ function SelfMediaOpsOverviewCard({
 	const insightGreeting = dailyInsight?.greeting
 		? formatSelfMediaHomeInsightGreeting(dailyInsight.greeting, "")
 		: ""
-	const opsLayout = getOpsOverviewLayout(opsContainerWidth)
-	const isOpsWide = opsLayout === "wide"
-	const isOpsComfortable = opsLayout !== "compact"
 	const opsContentClass = isOpsWide
 		? "grid-cols-[minmax(0,1.16fr)_minmax(280px,0.84fr)] items-stretch p-8"
 		: isOpsComfortable

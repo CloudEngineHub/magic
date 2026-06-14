@@ -54,4 +54,42 @@ describe("buildAICardDashboardItems", () => {
 			"history-old",
 		])
 	})
+
+	it("uses the history snapshot timestamp instead of the uploaded file time", () => {
+		const historyEntries: AICardHistoryEntry[] = [
+			{
+				fileId: "history-13",
+				fileName: "2026-06-13_09-00.html",
+				timestamp: "2026-06-13T09:00:00Z",
+				displayTime: "2026-06-13 09:00",
+			},
+			{
+				fileId: "history-10",
+				fileName: "2026-06-10_09-00.html",
+				timestamp: "2026-06-10T09:00:00Z",
+				displayTime: "2026-06-10 09:00",
+			},
+		]
+		const attachmentList = [
+			{
+				file_id: "history",
+				is_directory: true,
+				children: [
+					{ file_id: "history-13", created_at: "2026-06-15T01:40:00Z" },
+					{ file_id: "history-10", created_at: "2026-06-15T01:40:00Z" },
+				],
+			},
+		]
+
+		const items = buildAICardDashboardItems({
+			cards: [],
+			historyEntries,
+			attachmentList,
+		})
+
+		expect(items.map((item) => [item.fileId, item.createdAt])).toEqual([
+			["history-13", "2026-06-13T09:00:00Z"],
+			["history-10", "2026-06-10T09:00:00Z"],
+		])
+	})
 })

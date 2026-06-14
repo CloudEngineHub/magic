@@ -629,6 +629,8 @@
 				"empty": "暂无卡片内容，等待定时任务生成",
 				"historyCount": "{{count}} 个版本",
 				"historyEmpty": "暂无历史版本，后续自动更新后会在这里沉淀记录",
+				"historyPreviewDescription": "首页仅展示版本摘要，打开后再加载完整卡片内容。",
+				"historyPreviewTitle": "历史快照",
 				"historySectionDescription": "按生成时间回看每一次归档版本",
 				"historySectionTitle": "历史版本时间线",
 				"historyVersion": "🕰 历史版本",
@@ -638,6 +640,7 @@
 				"loading": "AI 卡片加载中...",
 				"loadingDescription": "正在解析卡片数据",
 				"modelSummary": "模型 {{model}}",
+				"openHistoryVersion": "打开完整版本",
 				"runNow": "立即运行",
 				"running": "运行中...",
 				"scheduleCustom": "{{time}} 执行",
@@ -836,7 +839,18 @@
 						"title": "长图"
 					}
 				},
-				"typeLabel": "导出项"
+				"typeLabel": "导出项",
+				"wechat": {
+					"copyFailed": "HTML 复制失败，请稍后重试",
+					"copyHtml": "复制 HTML",
+					"copySuccess": "HTML 已复制",
+					"coverDescription": "将方形封面和横向封面拼接成一张图片，适合上传到公众号素材。",
+					"coverTitle": "封面拼图",
+					"exportCover": "导出封面图",
+					"htmlCopied": "已复制",
+					"htmlDescription": "复制处理后的文章 HTML，可直接粘贴到微信公众号编辑器。",
+					"htmlTitle": "公众号 HTML"
+				}
 			},
 			"home": {
 				"aiCard": "AI 卡片",

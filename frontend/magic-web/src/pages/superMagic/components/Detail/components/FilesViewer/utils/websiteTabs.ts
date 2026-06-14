@@ -127,6 +127,7 @@ export function buildWebsiteTab(preset: WebsitePreset): TabItem {
 
 	return {
 		id: tabId,
+		type: "website",
 		title,
 		fileData,
 		active: true,
@@ -136,9 +137,9 @@ export function buildWebsiteTab(preset: WebsitePreset): TabItem {
 }
 
 export function isWebsiteTab(
-	tab: (Pick<TabItem, "id"> & Partial<Pick<TabItem, "fileData">>) | null | undefined,
+	tab: (Pick<TabItem, "id"> & Partial<Pick<TabItem, "type" | "fileData">>) | null | undefined,
 ) {
-	return tab?.id.startsWith(WEBSITE_TAB_PREFIX) === true
+	return tab?.type === "website" || tab?.id.startsWith(WEBSITE_TAB_PREFIX) === true
 }
 
 export function getWebsiteTabData(tab: Partial<Pick<TabItem, "title" | "fileData">>) {

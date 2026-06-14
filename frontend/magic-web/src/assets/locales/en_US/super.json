@@ -628,6 +628,8 @@
 				"empty": "No card content yet, waiting for scheduled task to generate",
 				"historyCount": "{{count}} versions",
 				"historyEmpty": "No history versions yet. Future automated updates will appear here.",
+				"historyPreviewDescription": "The dashboard shows only a summary; open it to load the full card.",
+				"historyPreviewTitle": "History snapshot",
 				"historySectionDescription": "Review archived versions by generation time.",
 				"historySectionTitle": "Version timeline",
 				"historyVersion": "🕰 History",
@@ -637,6 +639,7 @@
 				"loading": "Loading AI Cards...",
 				"loadingDescription": "Parsing card data",
 				"modelSummary": "Model {{model}}",
+				"openHistoryVersion": "Open full version",
 				"runNow": "Run Now",
 				"running": "Running...",
 				"scheduleCustom": "{{time}}",
@@ -835,7 +838,18 @@
 						"title": "Long image"
 					}
 				},
-				"typeLabel": "Export item"
+				"typeLabel": "Export item",
+				"wechat": {
+					"copyFailed": "Failed to copy HTML. Try again later.",
+					"copyHtml": "Copy HTML",
+					"copySuccess": "HTML copied",
+					"coverDescription": "Stitch the square cover and horizontal cover into one image for WeChat Official Account assets.",
+					"coverTitle": "Cover image",
+					"exportCover": "Export cover",
+					"htmlCopied": "Copied",
+					"htmlDescription": "Copy the processed article HTML and paste it into the WeChat Official Account editor.",
+					"htmlTitle": "WeChat HTML"
+				}
 			},
 			"home": {
 				"aiCard": "AI Card",

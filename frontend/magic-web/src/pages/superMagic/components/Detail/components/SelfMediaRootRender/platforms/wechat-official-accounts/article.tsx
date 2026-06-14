@@ -8,15 +8,14 @@ import {
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererRef,
 } from "../../../../contents/HTML/IsolatedHTMLRenderer"
-import { processHtmlContent } from "../../../../contents/HTML/htmlProcessor"
 import { flattenAttachments } from "../../../../contents/HTML/utils"
 import type { FileItem } from "../../../../contents/HTML/utils/fetchInterceptor"
 import type { PlatformComponentProps, SelfMediaPost } from "../../types"
 import { CardActionStrip } from "../../components/CardActionStrip"
+import { loadWechatArticleHtml } from "./wechatArticleHtml"
 
 interface WechatArticleViewProps {
 	post: SelfMediaPost
@@ -30,22 +29,15 @@ interface WechatArticleViewProps {
 	onRefresh?: () => void
 	/** Whether the user has permission to edit */
 	allowEdit?: boolean
+	onInspectorActiveChange?: (active: boolean) => void
 }
 
 export interface WechatArticleViewRef {
 	getIframeElement: () => HTMLIFrameElement | null
-}
-
-function getFileFolderPath(
-	file: Pick<FileItem, "file_name" | "relative_file_path"> | null,
-): string {
-	const path = file?.relative_file_path || ""
-	if (!path) return "/"
-	if (file?.file_name && path.endsWith(file.file_name)) {
-		return path.slice(0, -file.file_name.length)
-	}
-	const slashIndex = path.lastIndexOf("/")
-	return slashIndex >= 0 ? path.slice(0, slashIndex + 1) : "/"
+	getArticleHtml: () => string | null
+	startInspector: () => void
+	startInspectorAppend: () => void
+	stopInspector: () => void
 }
 
 function WechatArticleViewInner(
@@ -57,6 +49,7 @@ function WechatArticleViewInner(
 		onGoToEdit,
 		onRefresh,
 		allowEdit,
+		onInspectorActiveChange,
 	}: WechatArticleViewProps,
 	ref: React.ForwardedRef<WechatArticleViewRef>,
 ) {
@@ -69,9 +62,17 @@ function WechatArticleViewInner(
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
 	const rendererRef = useRef<IsolatedHTMLRendererRef>(null)
 
-	useImperativeHandle(ref, () => ({
-		getIframeElement: () => rendererRef.current?.getIframeElement() ?? null,
-	}))
+	useImperativeHandle(
+		ref,
+		() => ({
+			getIframeElement: () => rendererRef.current?.getIframeElement() ?? null,
+			getArticleHtml: () => content,
+			startInspector: () => rendererRef.current?.startInspectorAppend(),
+			startInspectorAppend: () => rendererRef.current?.startInspectorAppend(),
+			stopInspector: () => rendererRef.current?.stopInspector(),
+		}),
+		[content],
+	)
 
 	// Keep a ref so the effect can read the latest attachmentList without
 	// treating reference changes as a reason to re-fetch the HTML content.
@@ -99,40 +100,13 @@ function WechatArticleViewInner(
 		setContent(null)
 		;(async () => {
 			try {
-				const urls = await getTemporaryDownloadUrl({ file_ids: [fileId] })
-				const url = urls?.[0]?.url
-				if (!url) throw new Error("noArticleUrl")
+				const result = await loadWechatArticleHtml({
+					fileId,
+					attachmentList: attachmentListRef.current,
+				})
 				if (cancelled) return
-
-				const resp = await fetch(url, { credentials: "omit" })
-				if (!resp.ok) throw new Error("loadArticleError")
-				const html = await resp.text()
-				if (cancelled) return
-
-				let processedContent = html
-				let mapping = new Map<string, string>()
-				const currentAttachmentList = attachmentListRef.current
-				if (currentAttachmentList?.length) {
-					const flattened = flattenAttachments(currentAttachmentList)
-					const currentFile =
-						flattened.find((item): item is FileItem =>
-							Boolean(item?.file_id === fileId),
-						) || null
-					const result = await processHtmlContent({
-						content: html,
-						attachments: currentAttachmentList,
-						attachmentList: currentAttachmentList,
-						fileId,
-						fileName: currentFile?.file_name,
-						html_relative_path: getFileFolderPath(currentFile),
-					})
-					processedContent = result.processedContent || html
-					mapping = result.filePathMapping || new Map()
-				}
-				if (cancelled) return
-
-				setContent(processedContent)
-				setFilePathMapping(mapping)
+				setContent(result.content)
+				setFilePathMapping(result.filePathMapping)
 			} catch (err) {
 				if (cancelled) return
 				setError(err instanceof Error ? err.message : "unknownError")
@@ -198,6 +172,8 @@ function WechatArticleViewInner(
 				attachmentList={attachmentList}
 				isVisible
 				className="h-full w-full"
+				onInspectorActiveChange={onInspectorActiveChange}
+				enableInlineInspectorFallback
 			/>
 			{hasActions && (
 				<CardActionStrip

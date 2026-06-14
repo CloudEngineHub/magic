@@ -160,6 +160,36 @@ describe("AICardDashboard", () => {
 		)
 	})
 
+	it("keeps historical versions as summary cards instead of rendering their iframe previews", () => {
+		renderDashboard()
+
+		expect(screen.getByTestId("ai-card-iframe-latest-file")).toBeInTheDocument()
+		expect(screen.queryByTestId("ai-card-iframe-history-new")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("ai-card-iframe-history-old")).not.toBeInTheDocument()
+		expect(screen.getAllByTestId("ai-card-dashboard-history-card")).toHaveLength(2)
+		expect(screen.getAllByText("Archived")).toHaveLength(2)
+	})
+
+	it("keeps history cards compact, varied, and free of file names", () => {
+		renderDashboard()
+
+		const historyCards = screen.getAllByTestId("ai-card-dashboard-history-card")
+		const tones = new Set(historyCards.map((card) => card.getAttribute("data-tone")))
+		const cardShell = historyCards[0].closest('[data-testid="ai-card-dashboard-timeline-item"]')
+
+		expect(tones.size).toBeGreaterThan(1)
+		expect(cardShell).toHaveClass("sm:w-[240px]")
+		expect(screen.queryByText("2026-05-03_09-00.html")).not.toBeInTheDocument()
+		expect(screen.queryByText("2026-05-01_09-00.html")).not.toBeInTheDocument()
+	})
+
+	it("does not show latest or history type labels on the card previews", () => {
+		renderDashboard()
+
+		expect(screen.queryByText("Latest")).not.toBeInTheDocument()
+		expect(screen.queryByText("History")).not.toBeInTheDocument()
+	})
+
 	it("shows the saved schedule and model summary in the dashboard header", () => {
 		renderDashboard({
 			projectConfig: {
@@ -189,8 +219,14 @@ describe("AICardDashboard", () => {
 
 		const items = screen.getAllByTestId("ai-card-dashboard-timeline-item")
 
-		expect(within(items[0]).getByText("2026-05-03 09:00")).toBeInTheDocument()
-		expect(within(items[1]).getByText("2026-05-01 09:00")).toBeInTheDocument()
+		expect(within(items[0]).getByTestId("ai-card-dashboard-history-card")).toHaveAttribute(
+			"data-card-id",
+			"history-new",
+		)
+		expect(within(items[1]).getByTestId("ai-card-dashboard-history-card")).toHaveAttribute(
+			"data-card-id",
+			"history-old",
+		)
 	})
 
 	it("scrolls the horizontal history rail when a timeline marker is selected", () => {

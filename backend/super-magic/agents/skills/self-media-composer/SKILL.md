@@ -282,9 +282,11 @@ Before asking any questions, check if the project already contains user planning
 1. Look for `__drafts/draft.json` in the self-media folder.
 2. If found, `read_files` to load it. See [Drafts & Templates Format](./references/drafts-format.md) for the schema.
 3. If `__drafts/reference-index.json` exists, read it immediately after `draft.json`. Treat it as the unified reference entry point.
-4. Extract and apply context:
+4. If brand context is needed and `draft.json.global` is missing, sparse, or stale, try to read `__brand/brand-config.json` before asking the user. Treat it as an optional fallback. Current-session user instructions and explicit `draft.json.global` values outrank it.
+5. Extract and apply context:
    - `global.author` / `global.brandPosition` / `global.targetAudience` → brand context (no need to ask)
    - `global.brandImages` → brand IP image assets for image generation reference (use in Step 4.3)
+   - `__brand/brand-config.json` fields → brand context fallback when `global` fields are unavailable
    - `articles[].title` / `articles[].outline` → content structure is pre-planned
    - `articles[].visualPreset` → visual preset is pre-selected (skip Step 4.1 for that article)
    - `articles[].style` → content tone is chosen
@@ -294,8 +296,8 @@ Before asking any questions, check if the project already contains user planning
    - `articles[].visualReferenceFiles` → visual-style references available via `file_path` or inline `content`
    - `articles[].notes` → explicit user instructions to follow
    - `articles[].cardCount` → target card count
-5. Read and understand all uploaded references before drafting, designing, or generating images. This rule applies regardless of where the user attached the file in the frontend.
-6. If the draft provides enough information to proceed (at least one article with title plus either platform or clear continuation context), skip directly to the appropriate step. If the draft is incomplete, proceed from Step 1 but pre-fill known fields.
+6. Read and understand all uploaded references before drafting, designing, or generating images. This rule applies regardless of where the user attached the file in the frontend.
+7. If the draft provides enough information to proceed (at least one article with title plus either platform or clear continuation context), skip directly to the appropriate step. If the draft is incomplete, proceed from Step 1 but pre-fill known fields.
 
 > This step is silent — do not announce "I found a draft" unless the data is ambiguous and needs user confirmation.
 
@@ -305,6 +307,7 @@ This step is mandatory whenever uploaded references exist.
 
 1. Resolve references from `reference-index.json` first.
 2. If `reference-index.json` is missing or incomplete, fall back to:
+   - `__brand/brand-config.json`, when brand context is needed
    - `global.brandImages`
    - `articles[].materials`
    - `articles[].outline[].materials`
@@ -546,7 +549,7 @@ Before authoring HTML, write a short internal brief from the available context:
 - reader action: save, comment, follow, consult, compare, try, buy, or remember a viewpoint
 - evidence: uploaded references, product details, screenshots, comparisons, cases, constraints, or observed scenes
 
-Infer from `global.author`, `global.brandPosition`, `global.targetAudience`, `articles[].style`, `articles[].notes`, title, outline, and uploaded materials. Ask only when the missing answer changes the direction of the post. Do not invent first-person experience, customer proof, metrics, or quotes to create 人味.
+Infer from `global.author`, `global.brandPosition`, `global.targetAudience`, optional `__brand/brand-config.json`, `articles[].style`, `articles[].notes`, title, outline, and uploaded materials. Ask only when the missing answer changes the direction of the post and no brand config fallback can answer it. Do not invent first-person experience, customer proof, metrics, or quotes to create 人味.
 
 **4.4.1 Author the platform content**
 
@@ -654,12 +657,13 @@ When the project contains `__drafts/draft.json`, read it at the **start** of the
 2. `read_files` on `__drafts/draft.json`.
 3. If present, also `read_files` on `__drafts/reference-index.json`.
 4. Extract `global` fields → skip asking for author, brand position, and target audience if already filled.
-5. Extract `articles[].platform` → skip platform questions for that article when already resolved.
-6. Extract `articles[].outline` → use as the content structure for card authoring.
-7. Extract `articles[].visualPreset` → treat as if the visual requirement block was present.
-8. Extract `articles[].materials`, `articles[].outline[].materials`, and `articles[].visualReferenceFiles` → read all of them before creating.
-9. Extract `articles[].notes` → treat as explicit user instructions.
-10. If archive recovery is requested, inspect `__drafts/archive/<archiveId>/manifest.json`, then read the matching archived `draft.json` and `reference-index.json`.
+5. If those fields are missing and brand context matters, try `__brand/brand-config.json` before asking.
+6. Extract `articles[].platform` → skip platform questions for that article when already resolved.
+7. Extract `articles[].outline` → use as the content structure for card authoring.
+8. Extract `articles[].visualPreset` → treat as if the visual requirement block was present.
+9. Extract `articles[].materials`, `articles[].outline[].materials`, and `articles[].visualReferenceFiles` → read all of them before creating.
+10. Extract `articles[].notes` → treat as explicit user instructions.
+11. If archive recovery is requested, inspect `__drafts/archive/<archiveId>/manifest.json`, then read the matching archived `draft.json` and `reference-index.json`.
 
 This allows the AI to seamlessly continue where the user left off in the frontend planning panel.
 
@@ -678,4 +682,4 @@ Load these files on demand during the corresponding workflow steps:
 | [Human Writing Style](./references/human-writing-style.md)         | Before drafting card copy or WeChat article prose, and before final writing self-check      |
 | [Tool Selection Decision Tree](./references/tool-decision-tree.md) | When unsure which tool or action to take next                                              |
 | [Common Failure Modes](./references/failure-modes.md)              | Before submitting — verify no violations                                                   |
-| [Drafts & Templates Format](./references/drafts-format.md)         | When reading/writing `__drafts/` files, or when recovering user planning context           |
+| [Drafts & Templates Format](./references/drafts-format.md)         | When reading/writing `__drafts/` files, `__brand/brand-config.json`, or recovering user planning context |

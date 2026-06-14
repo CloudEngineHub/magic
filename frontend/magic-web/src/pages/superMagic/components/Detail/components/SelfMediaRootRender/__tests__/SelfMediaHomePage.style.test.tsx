@@ -337,6 +337,78 @@ describe("SelfMediaHomePage styles", () => {
 		getBoundingClientRect.mockRestore()
 	})
 
+	it("keeps the wide suggestion panel scrollable when two actions sit beside the data and progress cards", () => {
+		const getBoundingClientRect = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue({
+				x: 0,
+				y: 0,
+				left: 0,
+				top: 0,
+				right: 900,
+				bottom: 420,
+				width: 900,
+				height: 420,
+				toJSON: () => ({}),
+			})
+
+		render(
+			<SelfMediaOpsOverviewCard
+				overview={{
+					totalPosts: 4,
+					totalReads: 0,
+					totalEngagement: 0,
+					engagementRate: null,
+					operationStage: "syncing",
+					completion: {
+						source: { done: 2, total: 4 },
+						metrics: { done: 0, total: 4 },
+						comments: { done: 0, total: 4 },
+						review: { done: 0, total: 4 },
+					},
+					bestPost: null,
+					weakestPost: null,
+					nextActions: [
+						{
+							key: "bind-source",
+							postKey: "rednote:0:posts/post-1/post.json",
+							targetTitle: "AI大模型成本对比：用开源模型一年...",
+							title: "绑定已发布链接",
+							description:
+								"这篇文章还没绑定发布链接。绑定后，系统才能同步真实阅读、点赞和评论数据。",
+							cta: "去绑定",
+							priority: 10,
+						},
+						{
+							key: "bind-source",
+							postKey: "rednote:0:posts/post-2/post.json",
+							targetTitle: "AI大模型成本对比：用开源模型一年...",
+							title: "绑定已发布链接",
+							description:
+								"这篇文章还没绑定发布链接。绑定后，系统才能同步真实阅读、点赞和评论数据。",
+							cta: "去绑定",
+							priority: 10,
+						},
+					],
+				}}
+			/>,
+		)
+
+		const actionList = screen.getByTestId("self-media-home-ops-next-actions")
+		expect(screen.getByTestId("self-media-home-ops-overview")).toHaveAttribute(
+			"data-ops-layout",
+			"wide",
+		)
+		expect(screen.getByTestId("self-media-home-ops-data-summary")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-ops-completion")).toBeInTheDocument()
+		expect(actionList).toHaveClass("self-media-ops-action-scroll")
+		expect(actionList).toHaveStyle({
+			maxHeight: "260px",
+		})
+
+		getBoundingClientRect.mockRestore()
+	})
+
 	it("separates AI ops health from workflow completion in the overview card", () => {
 		render(
 			<SelfMediaOpsOverviewCard

@@ -113,6 +113,24 @@ describe("ExportPreviewDialog", () => {
 		expect(selectedItem.className).toContain("bg-primary/5")
 	})
 
+	it("keeps export options outside the card preview scroll region", () => {
+		renderDialog({ posts: [manyCardPost], initialPostIndex: 0 })
+
+		const dialog = screen.getByTestId("self-media-export-dialog")
+		const cardGrid = screen.getByTestId("self-media-export-card-grid")
+		const typeSection = screen.getByTestId("self-media-export-type-section")
+		const scaleSection = screen.getByTestId("self-media-export-scale-section")
+		const footer = screen.getByTestId("self-media-export-footer")
+
+		expect(dialog.className).toContain("overflow-hidden")
+		expect(cardGrid.className).toContain("min-h-0")
+		expect(typeSection.className).toContain("shrink-0")
+		expect(typeSection.className).toContain("px-4")
+		expect(scaleSection.className).toContain("shrink-0")
+		expect(scaleSection.className).toContain("px-4")
+		expect(footer.className).toContain("shrink-0")
+	})
+
 	it("does not override the selected checkbox background", () => {
 		renderDialog()
 
@@ -209,5 +227,41 @@ describe("ExportPreviewDialog", () => {
 		fireEvent.click(screen.getByTestId("self-media-export-toggle-all"))
 		const confirm = screen.getByTestId("self-media-export-confirm") as HTMLButtonElement
 		expect(confirm.disabled).toBe(true)
+	})
+
+	it("renders WeChat export products without the card picker", async () => {
+		const onCopyHtml = vi.fn()
+		const { onConfirm } = renderDialog({
+			exportMode: "wechatOfficial",
+			onCopyWechatHtml: onCopyHtml,
+			posts: [
+				{
+					...posts[0],
+					thumbnailCover: { path: "thumb.png", fileId: "thumb-file" },
+					heroCover: { path: "hero.png", fileId: "hero-file" },
+				},
+			],
+		})
+
+		expect(screen.queryByTestId("self-media-export-card-grid")).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-export-dialog").className).not.toContain("h-[85vh]")
+		expect(screen.getByTestId("self-media-export-dialog").className).toContain("max-h-[720px]")
+		expect(screen.getByTestId("self-media-export-wechat-products").className).not.toContain(
+			"flex-1",
+		)
+		expect(screen.getByTestId("self-media-export-wechat-cover-product")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-export-wechat-html-product")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("self-media-export-copy-html"))
+		expect(onCopyHtml).toHaveBeenCalledTimes(1)
+
+		fireEvent.click(screen.getByTestId("self-media-export-confirm"))
+		expect(onConfirm).toHaveBeenCalledWith(
+			expect.objectContaining({
+				postIndex: 0,
+				cardIndexes: [],
+				exportType: "wechatCoverImage",
+			}),
+		)
 	})
 })

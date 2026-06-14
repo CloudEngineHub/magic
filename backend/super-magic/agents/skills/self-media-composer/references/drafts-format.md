@@ -12,6 +12,8 @@ The frontend self-media planning panel stores work-in-progress files inside the 
     ├── draft.json
     ├── draft.md
     ├── reference-index.json
+    ├── __brand/
+    │   └── brand-config.json
     ├── brand-images/
     │   ├── mascot.png
     │   └── style-guide.pdf
@@ -40,6 +42,10 @@ The frontend self-media planning panel stores work-in-progress files inside the 
 ```
 
 `draft.json` is the active slot. `archive/` contains historical snapshots created when generation starts. `templates/` is for reusable patterns and must not be confused with archive snapshots.
+
+`__brand/brand-config.json` is optional. When brand context is needed and `draft.json.global` is missing or incomplete, try this file before asking the user again.
+
+Current-session user instructions and explicit `draft.json.global` values outrank `__brand/brand-config.json`. Use the brand config as reusable account/brand context, not as a reason to override a fresh draft.
 
 ---
 
@@ -121,6 +127,35 @@ The frontend self-media planning panel stores work-in-progress files inside the 
   - an existing project file via `file_path` / `file_id`
   - inline `content` with `kind: "text"` or `kind: "data-url"`
 - `platform` is stored per article. Do not expect `global.platforms`.
+
+## Brand config fallback
+
+`__brand/brand-config.json` may use the same field names as `draft.json.global`:
+
+```jsonc
+{
+  "author": "Magic Lab",
+  "brandPosition": "AI productivity tutorials",
+  "targetAudience": "Young professionals",
+  "brandImages": [
+    {
+      "name": "mascot.png",
+      "relativePath": "self-media/__drafts/brand-images/mascot.png",
+      "description": "Brand mascot reference"
+    }
+  ]
+}
+```
+
+Extract only actionable brand context: account/author, positioning, audience, voice, product or service boundaries, reusable proof points, and visual/IP assets. Do not treat vague slogans as factual claims.
+
+Reading priority for brand context:
+
+1. Current user message.
+2. `draft.json.global`.
+3. `reference-index.json` items with `role: "brand"`.
+4. `__brand/brand-config.json`.
+5. Ask the user only when the missing brand answer changes the content direction.
 
 ---
 
