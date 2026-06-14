@@ -34,6 +34,10 @@ def should_skip_model(model_config: ModelConfig) -> bool:
         )
         return True
 
+    # auto 是无管理后台时的本地兜底入口，即使复用 Magic Service 的 OpenAI 兼容地址也不能过滤。
+    if model_config.model_id == "auto":
+        return False
+
     api_base_url = model_config.api_base_url
     if not api_base_url:
         return False

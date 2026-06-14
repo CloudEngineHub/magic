@@ -13,7 +13,6 @@ from agentlang.context.application_context import ApplicationContext
 from agentlang.llms.token_usage.pricing import ModelPricing
 from agentlang.llms.token_usage.models import TokenUsage, CostReport, ModelUsage, InputTokensDetails, get_currency_symbol
 from agentlang.logger import get_logger
-from agentlang.config import config
 
 # 为避免循环导入，使用字符串类型注解
 from typing import TYPE_CHECKING
@@ -36,16 +35,7 @@ class TokenUsageReport:
 
     @staticmethod
     def _create_default_pricing() -> ModelPricing:
-        try:
-            # 尝试从配置中加载模型价格
-            models_config = config.get("models", {})
-            pricing = ModelPricing(models_config=models_config)
-            logger.info("已从配置加载模型价格信息")
-            return pricing
-        except Exception as e:
-            # 配置获取失败时，使用默认价格
-            logger.warning(f"无法从配置加载模型价格，使用默认价格: {e}")
-            return ModelPricing()
+        return ModelPricing()
 
     @classmethod
     def get_instance(cls, sandbox_id: str = "default", token_tracker: Optional[Any] = None,

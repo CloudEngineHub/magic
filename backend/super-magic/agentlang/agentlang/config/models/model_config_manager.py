@@ -77,6 +77,8 @@ class ModelConfigManager:
         self._models = merged
         self._sync_pricing()
         model_ids = list(self._models.keys())
+        if "auto" not in self._models:
+            logger.warning("模型配置中缺少 auto，auto fallback 当前不可用")
         logger.info(f"ModelConfigManager initialized with {len(self._models)} models: {model_ids}")
 
     async def refresh_provider(self, provider: ModelProvider) -> None:
@@ -104,6 +106,8 @@ class ModelConfigManager:
         self._mark_loaded(provider)
         self._sync_pricing()
         model_ids = list(self._models.keys())
+        if "auto" not in self._models:
+            logger.warning("模型配置中缺少 auto，auto fallback 当前不可用")
         logger.info(
             f"Provider '{provider.provider_type}' refreshed: {updated} models updated, "
             f"total {len(self._models)} models in manager: {model_ids}"
