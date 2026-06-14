@@ -37,7 +37,6 @@ import { DropOverlay } from "./components/DropOverlay"
 import { useZoomControls } from "./hooks/useZoomControls"
 import { StylePanelStoreProvider } from "./iframe-bridge/contexts/StylePanelContext"
 import { TAILWIND_Z_INDEX_CLASSES } from "./constants/z-index"
-import { LogPanel } from "./components/LogPanel"
 import { DevConsolePanel } from "./components/DevConsole"
 import { useDevConsole } from "./hooks/useDevConsole"
 import { useInspectorToolbarMode } from "./hooks/useInspectorToolbarMode"
@@ -1794,10 +1793,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 										onDragLeave={dragOverHandlers.onDragLeave}
 										onDrop={dragOverHandlers.onDrop}
 									/>
-								)}
-								{/* 日志面板 - 用于查看运行时日志的开发工具 */}
-								{isEditMode && process.env.NODE_ENV === "development" && (
-									<LogPanel iframeRef={iframeRef} />
 								)}
 								{/* 元素检查覆盖层 - 独立于编辑模式 */}
 								<ElementInspectorOverlay

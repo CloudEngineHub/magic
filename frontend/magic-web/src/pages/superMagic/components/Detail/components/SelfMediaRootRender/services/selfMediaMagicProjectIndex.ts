@@ -1,5 +1,6 @@
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import { parseMagicProjectConfigContentWithRange } from "@/pages/superMagic/utils/magicProjectConfigParser"
 import type { SelfMediaPlatform } from "../../../types"
 import type { ArticleDetail } from "../components/SelfMediaInitPanel/types"
 import type { SelfMediaPostPublishStatus } from "../types"
@@ -72,8 +73,6 @@ interface SelfMediaPostIndexRecord {
 	entry: string
 	publishStatus?: SelfMediaPostPublishStatus
 }
-
-const CONFIG_ASSIGN_PATTERN = /window\.magicProjectConfig\s*=\s*/
 
 export function buildSelfMediaPostIndexEntries(
 	articles: ArticleDetail[],
@@ -226,59 +225,14 @@ export async function prefillSelfMediaMagicProjectIndex({
 }
 
 function splitMagicProjectJs(content: string): SplitMagicProjectJsResult {
-	const match = CONFIG_ASSIGN_PATTERN.exec(content)
-	if (!match) throw new Error("Invalid magic.project.js")
+	const parsed = parseMagicProjectConfigContentWithRange(content)
+	if (!parsed) throw new Error("Invalid magic.project.js")
 
-	const bodyStart = match.index + match[0].length
-	const bodyEnd = findJsonObjectEnd(content, bodyStart)
-	if (bodyEnd < 0) throw new Error("Invalid magic.project.js")
-
-	try {
-		return {
-			config: JSON.parse(content.slice(bodyStart, bodyEnd)) as MagicProjectConfig,
-			prefix: content.slice(0, bodyStart),
-			suffix: content.slice(bodyEnd),
-		}
-	} catch {
-		throw new Error("Invalid magic.project.js")
+	return {
+		config: parsed.config as MagicProjectConfig,
+		prefix: content.slice(0, parsed.startIndex),
+		suffix: content.slice(parsed.endIndex),
 	}
-}
-
-function findJsonObjectEnd(content: string, start: number): number {
-	if (content[start] !== "{") return -1
-
-	let depth = 0
-	let inString = false
-	let quote = ""
-	let escaped = false
-
-	for (let index = start; index < content.length; index++) {
-		const char = content[index]
-		if (inString) {
-			if (escaped) {
-				escaped = false
-			} else if (char === "\\") {
-				escaped = true
-			} else if (char === quote) {
-				inString = false
-			}
-			continue
-		}
-
-		if (char === '"' || char === "'") {
-			inString = true
-			quote = char
-			continue
-		}
-
-		if (char === "{") depth += 1
-		if (char === "}") {
-			depth -= 1
-			if (depth === 0) return index + 1
-		}
-	}
-
-	return -1
 }
 
 function ensureSelfMediaConfig(config: MagicProjectConfig): SelfMediaConfig {

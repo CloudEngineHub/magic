@@ -51,6 +51,9 @@ vi.mock("react-i18next", () => ({
 				"detail.selfMedia.home.opsArtifacts.commentsMissing": "Comments missing",
 				"detail.selfMedia.home.opsArtifacts.reviewReady": "Review ready",
 				"detail.selfMedia.home.opsArtifacts.reviewMissing": "Review missing",
+				"detail.selfMedia.home.engagement.reads": "Reads",
+				"detail.selfMedia.home.engagement.likes": "Likes",
+				"detail.selfMedia.home.engagement.comments": "Comments",
 				"detail.selfMedia.home.lifecycle.draft": "To publish",
 				"detail.selfMedia.home.lifecycle.archived": "Paused",
 				"detail.selfMedia.home.lifecycle.published": "Published",
@@ -185,6 +188,47 @@ describe("SelfMediaPostCard", () => {
 		expect(title).toHaveClass("line-clamp-2")
 		expect(title.className).not.toContain("truncate")
 		expect(subtitle).toHaveClass("line-clamp-2")
+	})
+
+	it("stretches the card surface to the grid row height so uneven copy stays aligned", () => {
+		renderCard({
+			title: "Short title",
+			subtitle: "One line subtitle",
+		})
+
+		const card = screen.getByTestId("self-media-home-post-card-post-1")
+		const surface = screen.getByTestId("self-media-home-post-open-post-1").parentElement
+
+		expect(card).toHaveClass("h-full")
+		expect(surface).toHaveClass("h-full")
+		expect(surface).toHaveClass("min-h-[168px]")
+		expect(surface).toHaveClass("pb-[76px]")
+	})
+
+	it("keeps engagement metrics on one line", () => {
+		renderCard({
+			opsMetrics: {
+				version: 1,
+				updatedAt: "2026-06-14T10:00:00.000Z",
+				source: "real-platform",
+				metrics: {
+					reads: 12708,
+					likes: 130,
+					comments: 12,
+				},
+			},
+		})
+
+		const engagement = screen.getByTestId("self-media-home-post-engagement-post-1")
+
+		expect(engagement).toHaveTextContent("Reads 12708")
+		expect(engagement).toHaveTextContent("Likes 130")
+		expect(engagement).toHaveTextContent("Comments 12")
+		expect(engagement).toHaveClass("flex-nowrap", "overflow-hidden", "whitespace-nowrap")
+		expect(engagement.className).not.toContain("flex-wrap")
+		for (const metric of Array.from(engagement.children)) {
+			expect(metric).toHaveClass("shrink-0", "whitespace-nowrap")
+		}
 	})
 
 	it("passes the card geometry when opening a post", () => {

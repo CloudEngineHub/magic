@@ -1,7 +1,14 @@
 import type { ElementRect } from "../types"
 
+function getElementComputedStyle(element: HTMLElement): CSSStyleDeclaration {
+	return (
+		element.ownerDocument.defaultView?.getComputedStyle(element) ??
+		window.getComputedStyle(element)
+	)
+}
+
 function extractRotation(element: HTMLElement): number {
-	const styles = window.getComputedStyle(element)
+	const styles = getElementComputedStyle(element)
 	const transform = styles.transform || styles.webkitTransform
 
 	if (!transform || transform === "none") {
@@ -23,7 +30,7 @@ function extractRotation(element: HTMLElement): number {
 }
 
 function extractTransformScale(element: HTMLElement): { scaleX: number; scaleY: number } {
-	const styles = window.getComputedStyle(element)
+	const styles = getElementComputedStyle(element)
 	const transform = styles.transform || styles.webkitTransform
 
 	if (!transform || transform === "none") {
@@ -111,12 +118,23 @@ function getRectFromIframeElement(
 	if (!selector) return null
 
 	try {
-		const iframeDocument =
-			iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document
-		const element = iframeDocument?.querySelector(selector)
-		if (!(element instanceof HTMLElement)) return null
+		const iframeWindow = iframeRef.current?.contentWindow
+		const iframeDocument = iframeRef.current?.contentDocument || iframeWindow?.document
+		if (!iframeDocument) return null
 
-		return getElementVisualRect(element)
+		const element = iframeDocument?.querySelector(selector)
+		if (!element) return null
+
+		const parentHTMLElementInstanceof = element instanceof HTMLElement
+		const iframeHTMLElement = iframeWindow?.HTMLElement
+		const iframeHTMLElementInstanceof =
+			typeof iframeHTMLElement === "function" && element instanceof iframeHTMLElement
+
+		if (!parentHTMLElementInstanceof && !iframeHTMLElementInstanceof) {
+			return null
+		}
+
+		return getElementVisualRect(element as HTMLElement)
 	} catch {
 		return null
 	}
@@ -139,23 +157,38 @@ export function transformRect(
 	const iframeRect = iframeRef.current.getBoundingClientRect()
 	const iframeElementRect = getRectFromIframeElement(selector, iframeRef)
 	const sourceRect = iframeElementRect ?? rect
+	const result = isPptRender
+		? {
+				top: iframeRect.top + sourceRect.top * scaleRatio,
+				left: iframeRect.left + sourceRect.left * scaleRatio,
+				width: sourceRect.width * scaleRatio,
+				height: sourceRect.height * scaleRatio,
+			}
+		: {
+				top: iframeRect.top + sourceRect.top,
+				left: iframeRect.left + sourceRect.left,
+				width: sourceRect.width,
+				height: sourceRect.height,
+			}
 
 	// For PPT mode, consider scale transforms
 	if (isPptRender) {
-		return {
-			top: iframeRect.top + sourceRect.top * scaleRatio,
-			left: iframeRect.left + sourceRect.left * scaleRatio,
-			width: sourceRect.width * scaleRatio,
-			height: sourceRect.height * scaleRatio,
-		}
+		return result
 	}
 
 	// For normal mode, just offset by iframe position in viewport
+	return result
+}
+
+export function offsetRect(
+	rect: ElementRect,
+	offset: Pick<ElementRect, "top" | "left">,
+): ElementRect {
 	return {
-		top: iframeRect.top + sourceRect.top,
-		left: iframeRect.left + sourceRect.left,
-		width: sourceRect.width,
-		height: sourceRect.height,
+		top: rect.top - offset.top,
+		left: rect.left - offset.left,
+		width: rect.width,
+		height: rect.height,
 	}
 }
 

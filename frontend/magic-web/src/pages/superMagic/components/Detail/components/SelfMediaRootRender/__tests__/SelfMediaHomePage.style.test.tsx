@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import SelfMediaHomePage from "../components/SelfMediaHomePage"
 import SelfMediaOpsOverviewCard from "../components/SelfMediaOpsOverviewCard"
 import { getSelfMediaHomeInsightDateKey } from "../services/selfMediaHomeInsight"
+import type { SelfMediaPostOpsMetricsPayload } from "../services/SelfMediaFileStorageService"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
+import type { SelfMediaAttachmentNode } from "../types"
 
 const mocks = vi.hoisted(() => ({
 	userInfo: {
@@ -120,6 +122,38 @@ function createPostItem(): SelfMediaPlatformPostItem {
 	}
 }
 
+function createOpsAttachments(metricsVersion = "metrics-v1"): SelfMediaAttachmentNode[] {
+	return [
+		{
+			file_id: "source-json",
+			file_name: "source.json",
+			relative_file_path: "posts/post-1/ops/source.json",
+			updated_at: "source-v1",
+		},
+		{
+			file_id: "metrics-json",
+			file_name: "metrics.json",
+			relative_file_path: "posts/post-1/ops/metrics.json",
+			updated_at: metricsVersion,
+		},
+	]
+}
+
+function createOpsMetrics(): SelfMediaPostOpsMetricsPayload {
+	return {
+		version: 1,
+		updatedAt: "2026-06-14T10:00:00.000Z",
+		source: "real-platform",
+		metrics: {
+			reads: 2400,
+			likes: 180,
+			comments: 32,
+			saves: 48,
+			shares: 20,
+		},
+	}
+}
+
 describe("SelfMediaHomePage styles", () => {
 	afterEach(() => {
 		vi.useRealTimers()
@@ -168,6 +202,51 @@ describe("SelfMediaHomePage styles", () => {
 		expect(createButton.querySelector("span")).toHaveClass("truncate")
 	})
 
+	it("retries loading ops metrics when the storage loader becomes available after the first empty read", async () => {
+		const firstLoadOpsMetrics = vi.fn().mockResolvedValue(null)
+		const secondLoadOpsMetrics = vi.fn().mockResolvedValue(createOpsMetrics())
+		const post = createPostItem()
+		const { rerender } = render(
+			<SelfMediaHomePage
+				posts={[post]}
+				attachmentList={createOpsAttachments()}
+				onOpenPost={vi.fn()}
+				onLoadOpsMetrics={firstLoadOpsMetrics}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(firstLoadOpsMetrics).toHaveBeenCalledTimes(1)
+		})
+		expect(screen.getByTestId("self-media-home-ops-data-summary")).toHaveTextContent(
+			"已同步 1/1",
+		)
+		expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveTextContent("0")
+
+		rerender(
+			<SelfMediaHomePage
+				posts={[post]}
+				attachmentList={createOpsAttachments()}
+				onOpenPost={vi.fn()}
+				onLoadOpsMetrics={secondLoadOpsMetrics}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(secondLoadOpsMetrics).toHaveBeenCalledTimes(1)
+		})
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveTextContent("2.4k")
+			expect(screen.getByTestId("self-media-home-ops-total-engagement")).toHaveTextContent(
+				"280",
+			)
+			expect(screen.getByTestId("self-media-home-ops-engagement-rate")).toHaveTextContent(
+				"11.7%",
+			)
+		})
+	})
+
 	it("uses the wide ops overview layout once the card reaches the near-max width", () => {
 		const getBoundingClientRect = vi
 			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
@@ -191,6 +270,121 @@ describe("SelfMediaHomePage styles", () => {
 		)
 
 		getBoundingClientRect.mockRestore()
+	})
+
+	it("aligns the wide ops data summary and suggestion panel to the same bottom edge", () => {
+		const getBoundingClientRect = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue({
+				x: 0,
+				y: 0,
+				left: 0,
+				top: 0,
+				right: 900,
+				bottom: 420,
+				width: 900,
+				height: 420,
+				toJSON: () => ({}),
+			})
+
+		render(
+			<SelfMediaOpsOverviewCard
+				overview={{
+					totalPosts: 2,
+					totalReads: 0,
+					totalEngagement: 0,
+					engagementRate: null,
+					operationStage: "closed",
+					opportunityCount: 1,
+					completion: {
+						source: { done: 2, total: 2 },
+						metrics: { done: 2, total: 2 },
+						comments: { done: 2, total: 2 },
+						review: { done: 2, total: 2 },
+					},
+					engagementTotals: {
+						likes: 0,
+						comments: 0,
+						saves: 0,
+						shares: 0,
+					},
+					bestPost: null,
+					weakestPost: null,
+					nextActions: [
+						{
+							key: "plan-next-post",
+							title: "规划下一篇内容",
+							description: "当前运营链路已闭环，可以基于复盘结论继续生成新选题。",
+							cta: "新建文章",
+							priority: 70,
+						},
+					],
+				}}
+				onRegenerateDailyInsight={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("self-media-home-ops-overview")).toHaveAttribute(
+			"data-ops-layout",
+			"wide",
+		)
+		expect(screen.getByTestId("self-media-home-ops-content")).toHaveClass("items-stretch")
+		expect(screen.getByTestId("self-media-home-ops-main-column")).toHaveClass("h-full")
+		expect(screen.getByTestId("self-media-home-ops-data-summary")).toHaveClass("flex-1")
+		expect(screen.getByTestId("self-media-home-ops-side-column")).toHaveClass("h-full")
+		expect(screen.getByTestId("self-media-home-ops-aside")).toHaveClass("flex-1")
+
+		getBoundingClientRect.mockRestore()
+	})
+
+	it("separates AI ops health from workflow completion in the overview card", () => {
+		render(
+			<SelfMediaOpsOverviewCard
+				overview={{
+					totalPosts: 2,
+					totalReads: 0,
+					totalEngagement: 0,
+					engagementRate: null,
+					operationStage: "closed",
+					opportunityCount: 1,
+					completion: {
+						source: { done: 2, total: 2 },
+						metrics: { done: 2, total: 2 },
+						comments: { done: 2, total: 2 },
+						review: { done: 2, total: 2 },
+					},
+					engagementTotals: {
+						likes: 0,
+						comments: 0,
+						saves: 0,
+						shares: 0,
+					},
+					bestPost: null,
+					weakestPost: null,
+					nextActions: [],
+				}}
+				healthInsight={{
+					version: 1,
+					generatedAt: "2026-06-13T09:00:00+08:00",
+					stateSignature: "closed-zero-data",
+					score: 58,
+					level: "warning",
+					summary: "流程链路已闭环，但真实数据仍为 0。",
+					reasons: ["链路完成度 100%", "真实阅读为 0"],
+					nextAction: "重新同步阅读数据。",
+					confidence: "medium",
+				}}
+			/>,
+		)
+
+		const health = screen.getByTestId("self-media-home-ops-health")
+		expect(health).toHaveAttribute("data-health-source", "ai")
+		expect(health).toHaveTextContent("运营健康度")
+		expect(health).toHaveTextContent("58")
+		expect(screen.getByTestId("self-media-home-ops-health-link-completion")).toHaveTextContent(
+			"链路 100%",
+		)
+		expect(health).toHaveAttribute("title", expect.stringContaining("链路完成度 100%"))
 	})
 
 	it("responds to pointer movement on the ops overview card", () => {
@@ -324,13 +518,36 @@ describe("SelfMediaHomePage styles", () => {
 		expect(screen.getByTestId("self-media-home-ops-data-summary")).toHaveTextContent(
 			"发布后数据汇总",
 		)
+		expect(screen.getByTestId("self-media-home-ops-data-summary")).toHaveClass(
+			"border-[#d4dcdd]/70",
+			"bg-[linear-gradient(135deg,rgba(250,251,250,0.94)_0%,rgba(246,248,246,0.84)_52%,rgba(255,249,226,0.48)_100%)]",
+		)
 		expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveTextContent("1.2k")
+		expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveClass(
+			"border-[#d3dde1]/70",
+			"bg-[linear-gradient(180deg,rgba(255,255,255,0.93)_0%,rgba(247,250,251,0.86)_100%)]",
+		)
+		expect(screen.getByTestId("self-media-home-ops-total-engagement")).toHaveClass(
+			"border-[#d2e0da]/70",
+			"bg-[linear-gradient(180deg,rgba(255,255,255,0.93)_0%,rgba(247,250,248,0.86)_100%)]",
+		)
+		expect(screen.getByTestId("self-media-home-ops-engagement-rate")).toHaveClass(
+			"border-[#ead899]/80",
+			"bg-[linear-gradient(180deg,rgba(255,255,255,0.9)_0%,rgba(255,249,229,0.82)_100%)]",
+		)
 		expect(screen.getByTestId("self-media-home-ops-likes")).toHaveTextContent("120")
+		expect(screen.getByTestId("self-media-home-ops-likes")).toHaveClass(
+			"border-[#d7e5e4]/75",
+			"bg-white/68",
+		)
 		expect(screen.getByTestId("self-media-home-ops-comments")).toHaveTextContent("20")
 		expect(screen.getByTestId("self-media-home-ops-saves")).toHaveTextContent("18")
 		expect(screen.getByTestId("self-media-home-ops-shares")).toHaveTextContent("12")
 		expect(screen.getByTestId("self-media-home-ops-best-post")).toHaveTextContent(
 			"最佳样本：Top Post",
+		)
+		expect(screen.getByTestId("self-media-home-ops-best-post")).toHaveClass(
+			"bg-[linear-gradient(90deg,rgba(247,250,248,0.92)_0%,rgba(250,250,246,0.88)_100%)]",
 		)
 	})
 
@@ -403,6 +620,7 @@ describe("SelfMediaHomePage styles", () => {
 						{
 							key: "sync-metrics",
 							postKey: "rednote:0:posts/post-1/post.json",
+							targetTitle: "Post One",
 							title: "同步最新数据",
 							description:
 								"已检测到发布源。现在可以同步最新阅读、点赞、评论和转发数据。",
@@ -426,6 +644,9 @@ describe("SelfMediaHomePage styles", () => {
 		)
 		expect(screen.getByTestId("self-media-home-ops-action-sync-metrics")).toHaveTextContent(
 			"解锁互动率判断",
+		)
+		expect(screen.getByTestId("self-media-home-ops-action-sync-metrics")).toHaveTextContent(
+			"文章：Post One",
 		)
 	})
 
@@ -504,9 +725,117 @@ describe("SelfMediaHomePage styles", () => {
 		expect(
 			screen.getByTestId("self-media-home-ops-action-repurpose-best-post"),
 		).toHaveTextContent("复用高互动结构")
+		expect(
+			screen.getByTestId("self-media-home-ops-action-repurpose-best-post"),
+		).toHaveTextContent("文章：Best Post")
 		expect(screen.getByText("从 Best Post 拆一套下一篇结构。")).not.toHaveClass("line-clamp-2")
 		expect(
 			screen.queryByTestId("self-media-home-ops-action-plan-next-post"),
+		).not.toBeInTheDocument()
+	})
+
+	it("lets users scroll and dismiss AI generated daily insight actions", () => {
+		render(
+			<SelfMediaOpsOverviewCard
+				overview={{
+					totalPosts: 2,
+					totalReads: 3200,
+					totalEngagement: 420,
+					engagementRate: 0.1312,
+					operationStage: "closed",
+					opportunityCount: 4,
+					completion: {
+						source: { done: 2, total: 2 },
+						metrics: { done: 2, total: 2 },
+						comments: { done: 2, total: 2 },
+						review: { done: 2, total: 2 },
+					},
+					engagementTotals: {
+						likes: 260,
+						comments: 64,
+						saves: 72,
+						shares: 24,
+					},
+					bestPost: null,
+					weakestPost: null,
+					nextActions: [
+						{
+							key: "plan-next-post",
+							title: "规划下一篇内容",
+							description: "当前运营链路已闭环，可以继续生成新选题。",
+							cta: "新建文章",
+							priority: 70,
+						},
+					],
+				}}
+				dailyInsight={{
+					version: 1,
+					date: "2026-06-14",
+					generatedAt: "2026-06-14T08:00:00+08:00",
+					stateSignature: "scrollable-actions",
+					greeting: "今天优先处理可复用机会",
+					summary: "建议较多时需要保持面板可控。",
+					actions: [
+						{
+							id: "reuse-best",
+							title: "复用高互动结构",
+							description: "拆一套下一篇结构。",
+							cta: "看样本",
+							kind: "repurpose-best-post",
+						},
+						{
+							id: "improve-weak",
+							title: "优化弱互动文章",
+							description: "调整标题和开头。",
+							cta: "去优化",
+							kind: "improve-weak-post",
+						},
+						{
+							id: "plan-next",
+							title: "规划下一篇内容",
+							description: "补一篇承接内容。",
+							cta: "新建文章",
+							kind: "plan-next-post",
+						},
+						{
+							id: "collect-comments",
+							title: "整理评论问题",
+							description: "把高频问题变成选题池。",
+							cta: "看评论",
+							kind: "collect-comments",
+						},
+					],
+				}}
+				dailyInsightStatus="generated"
+			/>,
+		)
+
+		const actionList = screen.getByTestId("self-media-home-ops-next-actions")
+		expect(actionList).toHaveClass("self-media-ops-action-scroll")
+		expect(actionList).toHaveClass("-mx-4")
+		expect(actionList).toHaveClass("px-4")
+		expect(actionList).toHaveStyle({
+			maxHeight: "260px",
+		})
+		expect(screen.getByTestId("self-media-home-ops-next-actions-inner")).toHaveClass("py-4")
+		fireEvent.click(screen.getByLabelText("移除建议：优化弱互动文章"))
+
+		expect(screen.queryByText("优化弱互动文章")).not.toBeInTheDocument()
+		expect(screen.getByText("复用高互动结构")).toBeInTheDocument()
+		expect(screen.getByText("规划下一篇内容")).toBeInTheDocument()
+		expect(screen.getByText("整理评论问题")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByLabelText("移除建议：复用高互动结构"))
+		fireEvent.click(screen.getByLabelText("移除建议：规划下一篇内容"))
+		fireEvent.click(screen.getByLabelText("移除建议：整理评论问题"))
+
+		expect(
+			screen.getByText(
+				"今天的发布、数据、评论和复盘都已经齐了，可以继续新建文章或做二次分发。",
+			),
+		).toBeInTheDocument()
+		expect(
+			screen.queryByText("当前运营链路已闭环，可以继续生成新选题。"),
 		).not.toBeInTheDocument()
 	})
 
@@ -624,6 +953,191 @@ describe("SelfMediaHomePage styles", () => {
 				model: "first-available-model",
 			}),
 		)
+	})
+
+	it("auto-generates AI ops health insight when the project opens and the insight file is missing", async () => {
+		mocks.chat.mockResolvedValueOnce({
+			content: JSON.stringify({
+				score: 61,
+				level: "warning",
+				summary: "链路未完全闭环，真实数据样本还不够稳定。",
+				reasons: ["链路完成度 50%", "真实阅读为 0"],
+				nextAction: "先同步发布后的阅读数据。",
+				confidence: "medium",
+			}),
+		})
+		const storage = {
+			loadOpsHealthInsight: vi.fn().mockResolvedValue(null),
+			saveOpsHealthInsight: vi.fn().mockResolvedValue(undefined),
+		}
+
+		render(
+			<SelfMediaHomePage
+				posts={[createPostItem()]}
+				attachmentList={createOpsAttachments()}
+				onOpenPost={vi.fn()}
+				opsHealthInsightStorage={storage}
+				homeDailyInsightModelId="first-available-model"
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(storage.loadOpsHealthInsight).toHaveBeenCalledTimes(1)
+		})
+		await waitFor(() => {
+			expect(storage.saveOpsHealthInsight).toHaveBeenCalledWith(
+				expect.objectContaining({
+					score: 61,
+					level: "warning",
+				}),
+			)
+		})
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-home-ops-health")).toHaveTextContent("61")
+		})
+		expect(screen.getByTestId("self-media-home-ops-health")).toHaveAttribute(
+			"data-health-source",
+			"ai",
+		)
+	})
+
+	it("shows a metrics loading state instead of flashing zero values before ops metrics hydrate", async () => {
+		let resolveMetrics: (value: SelfMediaPostOpsMetricsPayload) => void = () => undefined
+		const onLoadOpsMetrics = vi.fn(
+			() =>
+				new Promise<SelfMediaPostOpsMetricsPayload>((resolve) => {
+					resolveMetrics = resolve
+				}),
+		)
+
+		render(
+			<SelfMediaHomePage
+				posts={[createPostItem()]}
+				attachmentList={createOpsAttachments()}
+				onOpenPost={vi.fn()}
+				onLoadOpsMetrics={onLoadOpsMetrics}
+			/>,
+		)
+
+		expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveAttribute(
+			"data-loading",
+			"true",
+		)
+		expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveTextContent("同步中")
+		expect(screen.getByTestId("self-media-home-ops-total-reads")).not.toHaveTextContent("0")
+
+		await waitFor(() => {
+			expect(onLoadOpsMetrics).toHaveBeenCalledTimes(1)
+		})
+		await act(async () => {
+			resolveMetrics(createOpsMetrics())
+		})
+
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveAttribute(
+				"data-loading",
+				"false",
+			)
+			expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveTextContent("2.4k")
+		})
+	})
+
+	it("keeps an in-flight ops metrics result when a same-signature rerender cleans up the effect", async () => {
+		let resolveMetrics: (value: SelfMediaPostOpsMetricsPayload) => void = () => undefined
+		const onLoadOpsMetrics = vi.fn(
+			() =>
+				new Promise<SelfMediaPostOpsMetricsPayload>((resolve) => {
+					resolveMetrics = resolve
+				}),
+		)
+		const post = createPostItem()
+		const { rerender } = render(
+			<SelfMediaHomePage
+				posts={[post]}
+				attachmentList={createOpsAttachments()}
+				onOpenPost={vi.fn()}
+				onLoadOpsMetrics={onLoadOpsMetrics}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(onLoadOpsMetrics).toHaveBeenCalledTimes(1)
+		})
+		rerender(
+			<SelfMediaHomePage
+				posts={[post]}
+				attachmentList={createOpsAttachments()}
+				onOpenPost={vi.fn()}
+				onLoadOpsMetrics={onLoadOpsMetrics}
+				initialScrollTop={12}
+			/>,
+		)
+
+		await act(async () => {
+			resolveMetrics(createOpsMetrics())
+		})
+
+		await waitFor(() => {
+			expect(onLoadOpsMetrics).toHaveBeenCalledTimes(1)
+			expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveAttribute(
+				"data-loading",
+				"false",
+			)
+			expect(screen.getByTestId("self-media-home-ops-total-reads")).toHaveTextContent("2.4k")
+		})
+	})
+
+	it("waits for pending ops metrics before generating AI ops health insight", async () => {
+		let resolveMetrics: (value: SelfMediaPostOpsMetricsPayload) => void = () => undefined
+		const onLoadOpsMetrics = vi.fn(
+			() =>
+				new Promise<SelfMediaPostOpsMetricsPayload>((resolve) => {
+					resolveMetrics = resolve
+				}),
+		)
+		const storage = {
+			loadOpsHealthInsight: vi.fn().mockResolvedValue(null),
+			saveOpsHealthInsight: vi.fn().mockResolvedValue(undefined),
+		}
+		mocks.chat.mockResolvedValueOnce({
+			content: JSON.stringify({
+				score: 82,
+				level: "good",
+				summary: "真实数据已经完成加载。",
+				reasons: ["链路完成度 50%", "总阅读 2400"],
+				nextAction: "复用互动样本。",
+				confidence: "high",
+			}),
+		})
+
+		render(
+			<SelfMediaHomePage
+				posts={[createPostItem()]}
+				attachmentList={createOpsAttachments()}
+				onOpenPost={vi.fn()}
+				onLoadOpsMetrics={onLoadOpsMetrics}
+				opsHealthInsightStorage={storage}
+				homeDailyInsightModelId="first-available-model"
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(onLoadOpsMetrics).toHaveBeenCalledTimes(1)
+		})
+		expect(storage.loadOpsHealthInsight).not.toHaveBeenCalled()
+		expect(mocks.chat).not.toHaveBeenCalled()
+
+		await act(async () => {
+			resolveMetrics(createOpsMetrics())
+		})
+
+		await waitFor(() => {
+			expect(storage.loadOpsHealthInsight).toHaveBeenCalledTimes(1)
+		})
+		await waitFor(() => {
+			expect(mocks.chat).toHaveBeenCalledTimes(1)
+		})
+		expect(screen.getByTestId("self-media-home-ops-health")).toHaveTextContent("82")
 	})
 
 	it("waits for an available model before auto-generating home daily insight", async () => {

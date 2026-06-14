@@ -20,6 +20,7 @@ import {
 	setSelfMediaPostPublishStatusInIndex,
 } from "./selfMediaMagicProjectIndex"
 import type { SelfMediaHomeDailyInsightPayload } from "./selfMediaHomeInsight"
+import type { SelfMediaOpsHealthInsightPayload } from "./selfMediaOpsHealthInsight"
 import { normalizePostOpsMetricsPayload } from "./selfMediaOpsMetricsNormalize"
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -505,11 +506,14 @@ export class SelfMediaFileStorageService {
 		postEntryPath: string,
 	): Promise<SelfMediaPostOpsMetricsPayload | null> {
 		try {
-			const files = await this.getProjectFileList()
-			const file = this.findFileByProjectRelativePath(
-				files,
-				`${this.getPostOpsPath(postEntryPath)}/metrics.json`,
-			)
+			const metricsPath = `${this.getPostOpsPath(postEntryPath)}/metrics.json`
+			let files = await this.getProjectFileList()
+			let file = this.findFileByProjectRelativePath(files, metricsPath)
+			if (!file?.file_id) {
+				this.invalidateFileListCache()
+				files = await this.getProjectFileList()
+				file = this.findFileByProjectRelativePath(files, metricsPath)
+			}
 			if (!file?.file_id) return null
 
 			const content = (await getFileContentById(file.file_id, {
@@ -629,6 +633,20 @@ export class SelfMediaFileStorageService {
 			const content = await this.loadProjectOpsFileContent("home-daily-insight.json")
 			if (!content) return null
 			return JSON.parse(content) as SelfMediaHomeDailyInsightPayload
+		} catch {
+			return null
+		}
+	}
+
+	async saveOpsHealthInsight(payload: SelfMediaOpsHealthInsightPayload): Promise<void> {
+		await this.saveProjectOpsJsonFile("ops-health-insight.json", payload)
+	}
+
+	async loadOpsHealthInsight(): Promise<SelfMediaOpsHealthInsightPayload | null> {
+		try {
+			const content = await this.loadProjectOpsFileContent("ops-health-insight.json")
+			if (!content) return null
+			return JSON.parse(content) as SelfMediaOpsHealthInsightPayload
 		} catch {
 			return null
 		}

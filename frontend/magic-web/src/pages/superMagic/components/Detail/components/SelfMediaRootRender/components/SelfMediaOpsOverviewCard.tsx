@@ -7,6 +7,7 @@ import {
 	RefreshCw,
 	Sparkles,
 	TrendingUp,
+	X,
 } from "lucide-react"
 import { useEffect, useState } from "react"
 import type { CSSProperties, MouseEvent } from "react"
@@ -33,6 +34,14 @@ import type {
 	SelfMediaHomeDailyInsightStatus,
 } from "../services/selfMediaHomeInsight"
 import { formatSelfMediaHomeInsightGreeting } from "../services/selfMediaHomeInsight"
+import type {
+	SelfMediaOpsHealthInsightPayload,
+	SelfMediaOpsHealthInsightStatus,
+} from "../services/selfMediaOpsHealthInsight"
+import {
+	buildDailyInsightDisplayActions,
+	type DisplaySelfMediaOpsOverviewAction,
+} from "../services/selfMediaOpsOverviewDailyInsight"
 import { useMeasuredContainerWidth } from "../hooks/useMeasuredContainerWidth"
 import SelfMediaOpsCompletionProgress from "./SelfMediaOpsCompletionProgress"
 import SelfMediaOpsDataSummary from "./SelfMediaOpsDataSummary"
@@ -43,7 +52,11 @@ interface SelfMediaOpsOverviewCardProps {
 	onAction?: (action: SelfMediaOpsOverviewAction) => void
 	dailyInsight?: SelfMediaHomeDailyInsightPayload | null
 	dailyInsightStatus?: SelfMediaHomeDailyInsightStatus
+	healthInsight?: SelfMediaOpsHealthInsightPayload | null
+	healthInsightStatus?: SelfMediaOpsHealthInsightStatus
+	metricsLoading?: boolean
 	onRegenerateDailyInsight?: () => void
+	onDismissDailyInsightAction?: (actionId: string) => void
 	className?: string
 }
 
@@ -62,6 +75,11 @@ function getOverviewActionIcon(key: SelfMediaOpsOverviewActionKey | string) {
 }
 
 const NUMBER_ANIMATION_MS = 720
+const OPS_ACTION_ROW_HEIGHT = 144
+const OPS_ACTION_GAP = 12
+const OPS_ACTION_SHADOW_PADDING = 16
+const OPS_VISIBLE_ACTION_COUNT = 1.5
+const OPS_VISIBLE_ACTION_GAP_COUNT = 1
 
 interface OpsOverviewCardStyle extends CSSProperties {
 	"--ops-card-pointer-x": string
@@ -84,6 +102,10 @@ const defaultOpsOverviewCardStyle: OpsOverviewCardStyle = {
 }
 
 type OpsOverviewLayout = "compact" | "comfortable" | "spacious" | "wide"
+
+interface OpsActionListStyle extends CSSProperties {
+	"--ops-action-row-height": string
+}
 
 function getOpsOverviewLayout(width: number): OpsOverviewLayout {
 	if (width >= 900) return "wide"
@@ -118,7 +140,11 @@ function SelfMediaOpsOverviewCard({
 	onAction,
 	dailyInsight,
 	dailyInsightStatus = "idle",
+	healthInsight,
+	healthInsightStatus = "idle",
+	metricsLoading = false,
 	onRegenerateDailyInsight,
+	onDismissDailyInsightAction,
 	className,
 }: SelfMediaOpsOverviewCardProps) {
 	const { containerRef: opsContainerRef, width: opsContainerWidth } =
@@ -136,7 +162,19 @@ function SelfMediaOpsOverviewCard({
 	const engagement = formatSelfMediaCompactNumber(animatedEngagement)
 	const engagementRate = formatSelfMediaPercent(animatedEngagementRate)
 	const primarySignal = buildSelfMediaOpsPrimarySignal(overview)
-	const health = buildSelfMediaOpsHealth(overview)
+	const workflowHealth = buildSelfMediaOpsHealth(overview)
+	const opsHealthScore = healthInsight?.score ?? workflowHealth.score
+	const opsHealthSource = healthInsight ? "ai" : "workflow"
+	const isOpsHealthLoading =
+		metricsLoading || (healthInsightStatus === "loading" && !healthInsight)
+	const opsHealthTitle = [
+		healthInsight?.summary,
+		metricsLoading ? "正在读取发布后数据" : "",
+		`链路完成度 ${workflowHealth.score}%`,
+		healthInsightStatus === "loading" ? "AI 计算中" : "",
+	]
+		.filter(Boolean)
+		.join(" · ")
 	const metricStatusLabels = buildSelfMediaOpsMetricStatusLabels(overview)
 	const metricMotionStates = buildSelfMediaOpsMetricMotionStates(overview)
 	const metricDisplay = buildSelfMediaOpsMetricDisplay(overview, {
@@ -145,23 +183,35 @@ function SelfMediaOpsOverviewCard({
 		rate: engagementRate,
 	})
 	const hasPublishedSource = overview.completion.source.done > 0
-	const insightActions = dailyInsight?.actions?.length
-		? dailyInsight.actions.map(
-				(action, index): SelfMediaOpsOverviewAction => ({
-					key: action.kind,
-					postKey: action.postKey,
-					title: action.title,
-					description: action.description,
-					cta: action.cta,
-					priority: 80 + index,
-				}),
-			)
-		: []
-	const displayActions =
-		dailyInsight && overview.operationStage === "closed" && insightActions.length > 0
-			? insightActions
-			: overview.nextActions
+	const dailyInsightKey = dailyInsight
+		? `${dailyInsight.date}-${dailyInsight.generatedAt}-${dailyInsight.stateSignature}`
+		: ""
+	const [dismissedDailyInsightActionIds, setDismissedDailyInsightActionIds] = useState<string[]>(
+		[],
+	)
+	useEffect(() => {
+		setDismissedDailyInsightActionIds([])
+	}, [dailyInsightKey])
+	const insightActions = buildDailyInsightDisplayActions({
+		dailyInsight,
+		overview,
+		dismissedDailyInsightActionIds,
+	})
+	const shouldUseDailyInsightActions =
+		Boolean(dailyInsight?.actions?.length) && overview.operationStage === "closed"
+	const displayActions: DisplaySelfMediaOpsOverviewAction[] = shouldUseDailyInsightActions
+		? insightActions
+		: overview.nextActions
 	const hasNextActions = displayActions.length > 0
+	const isActionListScrollable = displayActions.length > 2
+	const actionListMaxHeight =
+		OPS_ACTION_ROW_HEIGHT * OPS_VISIBLE_ACTION_COUNT +
+		OPS_ACTION_GAP * OPS_VISIBLE_ACTION_GAP_COUNT +
+		OPS_ACTION_SHADOW_PADDING * 2
+	const actionListStyle: OpsActionListStyle = {
+		"--ops-action-row-height": `${OPS_ACTION_ROW_HEIGHT}px`,
+		maxHeight: isActionListScrollable ? `${actionListMaxHeight}px` : undefined,
+	}
 	const isInsightLoading = dailyInsightStatus === "loading"
 	const asideTitle = overview.operationStage === "closed" ? "今日建议" : "继续处理"
 	const asideSubtitle =
@@ -172,15 +222,15 @@ function SelfMediaOpsOverviewCard({
 		? formatSelfMediaHomeInsightGreeting(dailyInsight.greeting, "")
 		: ""
 	const opsLayout = getOpsOverviewLayout(opsContainerWidth)
+	const isOpsWide = opsLayout === "wide"
 	const isOpsComfortable = opsLayout !== "compact"
-	const opsContentClass =
-		opsLayout === "wide"
-			? "grid-cols-[minmax(0,1.16fr)_minmax(280px,0.84fr)] p-8"
-			: isOpsComfortable
-				? "p-6"
-				: "p-4"
+	const opsContentClass = isOpsWide
+		? "grid-cols-[minmax(0,1.16fr)_minmax(280px,0.84fr)] items-stretch p-8"
+		: isOpsComfortable
+			? "p-6"
+			: "p-4"
 	const opsHeaderClass = isOpsComfortable ? "flex-row items-start justify-between" : "flex-col"
-	const opsHealthClass = isOpsComfortable ? "w-[92px]" : "w-full"
+	const opsHealthClass = isOpsComfortable ? "w-[118px]" : "w-full"
 	const opsAsideClass =
 		opsLayout === "wide"
 			? "rounded-[24px] p-5"
@@ -200,6 +250,12 @@ function SelfMediaOpsOverviewCard({
 			<span>{isInsightLoading ? "更新中" : "更新建议"}</span>
 		</button>
 	) : null
+	const handleDismissDailyInsightAction = (actionId: string) => {
+		setDismissedDailyInsightActionIds((current) =>
+			current.includes(actionId) ? current : [...current, actionId],
+		)
+		onDismissDailyInsightAction?.(actionId)
+	}
 
 	return (
 		<article
@@ -228,8 +284,17 @@ function SelfMediaOpsOverviewCard({
 			/>
 			<div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/95 to-transparent" />
 			<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.44),rgba(255,255,255,0)_34%,rgba(24,24,27,0.035)_100%)]" />
-			<div className={cn("relative grid gap-8", opsContentClass)}>
-				<div className="min-w-0 space-y-6">
+			<div
+				className={cn("relative grid gap-8", opsContentClass)}
+				data-testid="self-media-home-ops-content"
+			>
+				<div
+					className={cn(
+						"min-w-0",
+						isOpsWide ? "flex h-full flex-col gap-6" : "space-y-6",
+					)}
+					data-testid="self-media-home-ops-main-column"
+				>
 					<div className={cn("flex gap-4", opsHeaderClass)}>
 						<div>
 							<div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/75 bg-white/55 px-3 py-1 text-[11px] font-[780] text-[#52525b] shadow-[inset_0_1px_rgba(255,255,255,0.75)] backdrop-blur">
@@ -251,18 +316,28 @@ function SelfMediaOpsOverviewCard({
 						</div>
 						<div
 							className={cn(
-								"flex min-h-16 shrink-0 flex-col justify-center rounded-[20px] bg-[#18181b] px-4 text-[#ffd637] shadow-[0_16px_34px_rgba(24,24,27,0.22),inset_0_1px_rgba(255,255,255,0.18)]",
+								"flex min-h-16 shrink-0 flex-col justify-center rounded-[20px] bg-[#18181b] px-4 py-3 text-[#ffd637] shadow-[0_16px_34px_rgba(24,24,27,0.22),inset_0_1px_rgba(255,255,255,0.18)]",
 								opsHealthClass,
-								health.score < 100 && "self-media-ops-health-pulse",
+								opsHealthScore < 100 && "self-media-ops-health-pulse",
 							)}
 							data-testid="self-media-home-ops-health"
+							data-health-source={opsHealthSource}
+							data-health-level={healthInsight?.level ?? "workflow"}
+							data-loading={isOpsHealthLoading ? "true" : "false"}
+							title={opsHealthTitle}
 						>
 							<div className="text-white/62 flex items-center gap-1.5 text-[11px] font-[760]">
 								<BarChart3 size={13} />
-								健康度
+								运营健康度
 							</div>
 							<div className="mt-1 text-[24px] font-[840] leading-none text-[#ffd637]">
-								{health.score}
+								{isOpsHealthLoading ? "..." : opsHealthScore}
+							</div>
+							<div
+								className="mt-1 text-[10px] font-[760] leading-none text-white/55"
+								data-testid="self-media-home-ops-health-link-completion"
+							>
+								链路 {workflowHealth.score}%
 							</div>
 						</div>
 					</div>
@@ -277,20 +352,29 @@ function SelfMediaOpsOverviewCard({
 							}}
 							statusLabels={metricStatusLabels}
 							motionStates={metricMotionStates}
+							loading={metricsLoading}
 							comfortable={isOpsComfortable}
+							className={cn(isOpsWide && "flex-1")}
 						/>
 					) : null}
 
 					<SelfMediaOpsCompletionProgress completion={overview.completion} />
 				</div>
 
-				<div className="min-w-0 space-y-3">
+				<div
+					className={cn(
+						"min-w-0",
+						isOpsWide ? "flex h-full flex-col gap-3" : "space-y-3",
+					)}
+					data-testid="self-media-home-ops-side-column"
+				>
 					{regenerateInsightButton ? (
 						<div className="flex justify-end">{regenerateInsightButton}</div>
 					) : null}
 					<aside
 						className={cn(
 							"min-w-0 border border-white/70 bg-white/50 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_18px_46px_rgba(47,43,36,0.08)] backdrop-blur-xl",
+							isOpsWide && "flex-1",
 							opsAsideClass,
 						)}
 						data-testid="self-media-home-ops-aside"
@@ -317,51 +401,92 @@ function SelfMediaOpsOverviewCard({
 							</div>
 						) : null}
 						<div
-							className="mt-5 space-y-3"
+							className={cn(
+								"mt-5",
+								isActionListScrollable && "self-media-ops-action-scroll -mx-4 px-4",
+							)}
+							style={actionListStyle}
 							data-testid="self-media-home-ops-next-actions"
 						>
-							{hasNextActions ? (
-								displayActions.map((action) => {
-									const Icon = getOverviewActionIcon(action.key)
-									return (
-										<button
-											key={`${action.key}-${action.postKey || action.title}`}
-											type="button"
-											className="group/action w-full rounded-[20px] border border-white/70 bg-white/70 p-4 text-left shadow-[inset_0_1px_rgba(255,255,255,0.82),0_10px_28px_rgba(47,43,36,0.055)] transition-[border-color,box-shadow,transform,background] duration-200 hover:-translate-y-0.5 hover:border-[#ffd637]/70 hover:bg-white/90 hover:shadow-[inset_0_1px_rgba(255,255,255,0.9),0_16px_38px_rgba(47,43,36,0.1)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15"
-											onClick={() => onAction?.(action)}
-											data-testid={`self-media-home-ops-action-${action.key}`}
-										>
-											<div className="flex items-start gap-3">
-												<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[15px] bg-[#18181b] text-[#ffd637] shadow-[0_10px_22px_rgba(24,24,27,0.18)] transition-transform group-hover/action:scale-105">
-													<Icon size={16} />
-												</span>
-												<span className="min-w-0 flex-1">
-													<span className="flex flex-col gap-2 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between min-[420px]:gap-3">
-														<span className="truncate text-[13px] font-[800] text-[#18181b]">
-															{action.title}
+							<div
+								className={cn("space-y-3", isActionListScrollable && "py-4")}
+								data-testid="self-media-home-ops-next-actions-inner"
+							>
+								{hasNextActions ? (
+									displayActions.map((action) => {
+										const Icon = getOverviewActionIcon(action.key)
+										const dailyInsightId = action.dailyInsightId
+										return (
+											<div
+												key={`${action.key}-${action.postKey || action.title}`}
+												className="self-media-ops-action-card group/card relative rounded-[20px] border border-white/70 bg-white/70 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_10px_28px_rgba(47,43,36,0.055)] transition-[border-color,box-shadow,transform,background] duration-200 hover:-translate-y-0.5 hover:border-[#ffd637]/70 hover:bg-white/90 hover:shadow-[inset_0_1px_rgba(255,255,255,0.9),0_16px_38px_rgba(47,43,36,0.1)]"
+											>
+												<button
+													type="button"
+													className={cn(
+														"group/action h-full w-full rounded-[20px] p-4 text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15",
+														dailyInsightId && "pr-11",
+													)}
+													onClick={() => onAction?.(action)}
+													data-testid={`self-media-home-ops-action-${action.key}`}
+												>
+													<div className="flex items-start gap-3">
+														<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[15px] bg-[#18181b] text-[#ffd637] shadow-[0_10px_22px_rgba(24,24,27,0.18)] transition-transform group-hover/action:scale-105">
+															<Icon size={16} />
 														</span>
-														<span className="w-fit shrink-0 rounded-full bg-[#ffd637]/55 px-2.5 py-1 text-[11px] font-[780] text-[#18181b] opacity-90 transition-colors group-hover/action:bg-[#ffd637]">
-															{action.cta}
+														<span className="min-w-0 flex-1">
+															<span className="flex flex-col gap-2 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between min-[420px]:gap-3">
+																<span className="truncate text-[13px] font-[800] text-[#18181b]">
+																	{action.title}
+																</span>
+																<span className="w-fit shrink-0 rounded-full bg-[#ffd637]/55 px-2.5 py-1 text-[11px] font-[780] text-[#18181b] opacity-90 transition-colors group-hover/action:bg-[#ffd637]">
+																	{action.cta}
+																</span>
+															</span>
+															<span className="mt-1.5 block text-[12px] leading-[1.5] text-[#71717a]">
+																{action.description}
+															</span>
+															<span className="mt-2 flex flex-wrap gap-1.5">
+																{action.targetTitle ? (
+																	<span className="inline-flex max-w-full rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-[780] text-[#18181b] shadow-[inset_0_1px_rgba(255,255,255,0.82)]">
+																		<span className="truncate">
+																			文章：
+																			{action.targetTitle}
+																		</span>
+																	</span>
+																) : null}
+																<span className="inline-flex rounded-full bg-[#18181b]/[0.055] px-2.5 py-1 text-[11px] font-[760] text-[#52525b]">
+																	{getSelfMediaOpsActionUnlockCopy(
+																		action.key,
+																	)}
+																</span>
+															</span>
 														</span>
-													</span>
-													<span className="mt-1.5 block text-[12px] leading-[1.5] text-[#71717a]">
-														{action.description}
-													</span>
-													<span className="mt-2 inline-flex rounded-full bg-[#18181b]/[0.055] px-2.5 py-1 text-[11px] font-[760] text-[#52525b]">
-														{getSelfMediaOpsActionUnlockCopy(
-															action.key,
-														)}
-													</span>
-												</span>
+													</div>
+												</button>
+												{dailyInsightId ? (
+													<button
+														type="button"
+														className="bg-white/82 absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full text-[#71717a] shadow-[inset_0_1px_rgba(255,255,255,0.9),0_8px_18px_rgba(47,43,36,0.08)] transition-[background,color,transform] hover:-translate-y-0.5 hover:bg-white hover:text-[#18181b] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15"
+														aria-label={`移除建议：${action.title}`}
+														onClick={() =>
+															handleDismissDailyInsightAction(
+																dailyInsightId,
+															)
+														}
+													>
+														<X size={14} />
+													</button>
+												) : null}
 											</div>
-										</button>
-									)
-								})
-							) : (
-								<div className="bg-white/78 rounded-[18px] p-4 text-[13px] leading-[1.6] text-[#52525b]">
-									今天的发布、数据、评论和复盘都已经齐了，可以继续新建文章或做二次分发。
-								</div>
-							)}
+										)
+									})
+								) : (
+									<div className="bg-white/78 rounded-[18px] p-4 text-[13px] leading-[1.6] text-[#52525b]">
+										今天的发布、数据、评论和复盘都已经齐了，可以继续新建文章或做二次分发。
+									</div>
+								)}
+							</div>
 						</div>
 					</aside>
 				</div>

@@ -57,6 +57,24 @@ export function buildOpsReviewDataVersion(states?: SelfMediaPostOpsArtifactState
 	return buildOpsStateVersion(stateMap)
 }
 
+type ViewTransitionDocument = Document & {
+	startViewTransition?: (callback: () => void) => unknown
+}
+
+export function prefersReducedMotion() {
+	return (
+		typeof window !== "undefined" &&
+		typeof window.matchMedia === "function" &&
+		window.matchMedia("(prefers-reduced-motion: reduce)").matches
+	)
+}
+
+export function getViewTransitionDocument() {
+	if (typeof document === "undefined") return null
+	const candidate = document as ViewTransitionDocument
+	return typeof candidate.startViewTransition === "function" ? candidate : null
+}
+
 function buildOpsStateVersion(statesByPostKey: Map<string, SelfMediaPostOpsArtifactStates>) {
 	const keys: Array<keyof SelfMediaPostOpsArtifacts> = ["source", "metrics", "comments", "review"]
 	return Array.from(statesByPostKey.entries())

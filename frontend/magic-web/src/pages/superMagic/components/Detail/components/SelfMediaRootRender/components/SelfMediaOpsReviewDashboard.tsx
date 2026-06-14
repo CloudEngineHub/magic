@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { Loader2 } from "lucide-react"
@@ -56,6 +56,7 @@ function SelfMediaOpsReviewDashboard({
 	const reduceMotion = useReducedMotion()
 	const [data, setData] = useState<SelfMediaOpsReviewData | null>(null)
 	const [loading, setLoading] = useState(false)
+	const [refreshingReview, setRefreshingReview] = useState(false)
 	const [syncing, setSyncing] = useState(false)
 	const [isReviewFullscreen, setIsReviewFullscreen] = useState(false)
 	const title =
@@ -78,6 +79,16 @@ function SelfMediaOpsReviewDashboard({
 			cancelled = true
 		}
 	}, [dataVersion, onLoadData, open, target])
+
+	const handleRefreshReview = useCallback(async () => {
+		if (!target || !onLoadData) return
+		setRefreshingReview(true)
+		try {
+			setData(await onLoadData(target))
+		} finally {
+			setRefreshingReview(false)
+		}
+	}, [onLoadData, target])
 
 	useEffect(() => {
 		if (!open) setIsReviewFullscreen(false)
@@ -243,6 +254,8 @@ function SelfMediaOpsReviewDashboard({
 										/>
 										<ReportPreview
 											hasReviewContent={hasReviewContent}
+											refreshing={refreshingReview}
+											onRefresh={onLoadData ? handleRefreshReview : undefined}
 											onFullscreen={() => setIsReviewFullscreen(true)}
 										>
 											{renderReviewPreview()}

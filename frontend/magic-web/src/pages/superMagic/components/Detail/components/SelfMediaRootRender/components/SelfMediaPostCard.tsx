@@ -202,7 +202,7 @@ function SelfMediaPostCard({
 		<div
 			ref={cardRef}
 			className={cn(
-				"relative",
+				"relative h-full",
 				opening && "self-media-post-card-opening",
 				openingDimmed && "self-media-post-card-dimmed",
 			)}
@@ -213,7 +213,7 @@ function SelfMediaPostCard({
 		>
 			<div
 				className={cn(
-					"self-media-post-card-button group relative isolate flex min-h-[168px] w-full flex-col gap-3 rounded-[22px] bg-[#ffffff] p-4 pb-[76px] text-left shadow-[inset_0_1px_rgba(255,255,255,0.75),0_10px_30px_rgba(47,43,36,0.06)] transition-transform hover:-translate-y-0.5",
+					"self-media-post-card-button group relative isolate flex h-full min-h-[168px] w-full flex-col gap-3 rounded-[22px] bg-[#ffffff] p-4 pb-[76px] text-left shadow-[inset_0_1px_rgba(255,255,255,0.75),0_10px_30px_rgba(47,43,36,0.06)] transition-transform hover:-translate-y-0.5",
 					isCardComfortable && "min-h-[192px] rounded-[24px] p-[20px] pb-[76px]",
 				)}
 			>
@@ -265,7 +265,7 @@ function SelfMediaPostCard({
 				{engagementItems.length > 0 ? (
 					<div
 						className={cn(
-							"self-media-post-card-engagement pointer-events-none relative z-10 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1.5 pt-1 text-[12px] font-[500] text-[#71717a]",
+							"self-media-post-card-engagement pointer-events-none relative z-10 flex min-h-5 flex-nowrap items-center gap-x-3 overflow-hidden whitespace-nowrap pt-1 text-[12px] font-[500] text-[#71717a]",
 							isCardComfortable && "gap-x-4 pr-24",
 						)}
 						data-testid={`self-media-home-post-engagement-${postId}`}
@@ -273,10 +273,10 @@ function SelfMediaPostCard({
 						{engagementItems.map((metric) => (
 							<span
 								key={metric.key}
-								className="inline-flex min-w-0 items-center gap-1.5"
+								className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap"
 							>
 								<metric.Icon className="h-3.5 w-3.5 shrink-0" />
-								<span className="truncate">
+								<span>
 									{t(metric.labelKey)} {metric.value}
 								</span>
 							</span>

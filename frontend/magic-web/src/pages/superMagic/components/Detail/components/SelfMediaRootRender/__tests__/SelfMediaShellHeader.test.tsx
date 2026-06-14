@@ -139,6 +139,10 @@ describe("SelfMediaShellHeader", () => {
 		expect(screen.getByTestId("self-media-view-tabs")).toHaveClass("shrink-0")
 		expect(screen.getByRole("tablist")).toHaveClass("overflow-visible")
 		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("rounded-[18px]")
+		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("p-2")
+		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("-m-2")
+		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("overflow-visible")
+		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("max-lg:overflow-x-auto")
 		expect(screen.getByTestId("self-media-export-btn")).toHaveClass("bg-[#18181b]")
 	})
 

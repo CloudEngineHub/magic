@@ -15,6 +15,17 @@
 	animation: self-media-ops-health-pulse 5.4s ease-in-out infinite;
 }
 
+.self-media-ops-action-scroll {
+	/* Keep long AI suggestion sets to roughly 2.5 rows so the next item peeks in and signals scroll. */
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-gutter: stable;
+}
+
+.self-media-ops-action-card {
+	min-height: var(--ops-action-row-height);
+}
+
 .self-media-ops-metric-flow .self-media-ops-metric-line {
 	position: relative;
 	overflow: hidden;

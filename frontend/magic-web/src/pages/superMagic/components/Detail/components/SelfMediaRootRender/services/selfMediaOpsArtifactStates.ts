@@ -83,6 +83,20 @@ export function diffPostOpsArtifactAnimations(
 	return animations
 }
 
+export function buildOpsMetricsRequestSignature(
+	postKey: string,
+	metricState?: SelfMediaPostOpsArtifactState,
+) {
+	if (!metricState?.ready) return `${postKey}:metrics:missing`
+	return [
+		postKey,
+		"metrics",
+		metricState.fileId || "no-file-id",
+		metricState.version || "no-version",
+		metricState.path,
+	].join(":")
+}
+
 function toArtifactState(
 	targetPath: string,
 	file: SelfMediaAttachmentNode | null,

@@ -16,6 +16,7 @@ import type {
 	SelfMediaPostOpsSourcePayload,
 } from "../services/SelfMediaFileStorageService"
 import {
+	buildOpsMetricsRequestSignature,
 	buildPostOpsArtifactStates,
 	diffPostOpsArtifactAnimations,
 	getPostOpsArtifacts,
@@ -31,6 +32,7 @@ import {
 	getSelfMediaPostKey,
 	type SelfMediaOpsOverviewAction,
 } from "../services/selfMediaOpsOverview"
+import { executeSelfMediaOpsOverviewAction } from "../services/selfMediaOpsOverviewActionRunner"
 import SelfMediaHomeAICardList from "./SelfMediaHomeAICardList"
 import SelfMediaHomeAnimations, {
 	OPEN_POST_FALLBACK_TRANSITION_MS,
@@ -46,16 +48,20 @@ import {
 	getSelfMediaHomeLayout,
 	getSelfMediaHomeDisplayName,
 	getSelfMediaHomePostColumnCount,
+	getViewTransitionDocument,
 	hasHomePreviewAsset,
 	isAICardDisplayConfig,
+	prefersReducedMotion,
 } from "./SelfMediaHomePage.helpers"
 import { useSelfMediaHomeDailyInsight } from "../hooks/useSelfMediaHomeDailyInsight"
+import { useSelfMediaOpsHealthInsight } from "../hooks/useSelfMediaOpsHealthInsight"
 import { useMeasuredContainerWidth } from "../hooks/useMeasuredContainerWidth"
 import { useSelfMediaHomeScrollPosition } from "../hooks/useSelfMediaHomeScrollPosition"
 import {
 	formatSelfMediaHomeWelcomeTitle,
 	type SelfMediaHomeDailyInsightStorage,
 } from "../services/selfMediaHomeInsight"
+import type { SelfMediaOpsHealthInsightStorage } from "../services/selfMediaOpsHealthInsight"
 import type {
 	AICardFolderItem,
 	SelfMediaHomeOpeningPost,
@@ -106,6 +112,7 @@ interface SelfMediaHomePageProps {
 	onCreateAICard?: (initialValues?: AICardCreateInitialValues) => void
 	onOpenAICardFolder?: (folder: AICardFolderItem) => void
 	homeDailyInsightStorage?: SelfMediaHomeDailyInsightStorage
+	opsHealthInsightStorage?: SelfMediaOpsHealthInsightStorage
 	homeDailyInsightModelId?: string
 	initialScrollTop?: number
 	onScrollTopChange?: (scrollTop: number) => void
@@ -113,22 +120,9 @@ interface SelfMediaHomePageProps {
 	className?: string
 }
 
-type ViewTransitionDocument = Document & {
-	startViewTransition?: (callback: () => void) => unknown
-}
-
-function prefersReducedMotion() {
-	return (
-		typeof window !== "undefined" &&
-		typeof window.matchMedia === "function" &&
-		window.matchMedia("(prefers-reduced-motion: reduce)").matches
-	)
-}
-
-function getViewTransitionDocument() {
-	if (typeof document === "undefined") return null
-	const candidate = document as ViewTransitionDocument
-	return typeof candidate.startViewTransition === "function" ? candidate : null
+interface OpsMetricsLoadState {
+	signature: string
+	loading: boolean
 }
 
 function SelfMediaHomePage({
@@ -154,6 +148,7 @@ function SelfMediaHomePage({
 	onCreateAICard,
 	onOpenAICardFolder,
 	homeDailyInsightStorage,
+	opsHealthInsightStorage,
 	homeDailyInsightModelId,
 	initialScrollTop,
 	onScrollTopChange,
@@ -163,7 +158,8 @@ function SelfMediaHomePage({
 	const { t } = useTranslation("super")
 	const { userInfo } = useUserInfo()
 	const requestedPreviewPostKeysRef = useRef(new Set<string>())
-	const requestedOpsMetricsPostKeysRef = useRef(new Set<string>())
+	const requestedOpsMetricsPostKeysRef = useRef(new Map<string, string>())
+	const isHomePageMountedRef = useRef(false)
 	const currentOpsArtifactStatesRef = useRef(new Map<string, SelfMediaPostOpsArtifactStates>())
 	const previousOpsArtifactStatesRef = useRef(new Map<string, SelfMediaPostOpsArtifactStates>())
 	const openPostTransitionTimerRef = useRef<number | null>(null)
@@ -179,9 +175,18 @@ function SelfMediaHomePage({
 	const [opsMetricsByPostKey, setOpsMetricsByPostKey] = useState(
 		() => new Map<string, SelfMediaPostOpsMetricsPayload | null>(),
 	)
+	const [opsMetricsLoadStateByPostKey, setOpsMetricsLoadStateByPostKey] = useState(
+		() => new Map<string, OpsMetricsLoadState>(),
+	)
 	const [opsArtifactAnimationsByPostKey, setOpsArtifactAnimationsByPostKey] = useState(
 		() => new Map<string, ReturnType<typeof diffPostOpsArtifactAnimations>>(),
 	)
+	useEffect(() => {
+		isHomePageMountedRef.current = true
+		return () => {
+			isHomePageMountedRef.current = false
+		}
+	}, [])
 	const hasPosts = posts.length > 0
 	const postGroups = posts.reduce<SelfMediaHomePostGroup[]>((groups, item) => {
 		const group = groups.find((candidate) => candidate.platform === item.platform)
@@ -210,6 +215,21 @@ function SelfMediaHomePage({
 		artifactsByPostKey: opsArtifactsByPostKey,
 		metricsByPostKey: opsMetricsByPostKey,
 	})
+	const isOpsMetricsHydrating =
+		Boolean(onLoadOpsMetrics) &&
+		posts.some((item) => {
+			const postKey = getSelfMediaPostKey(item)
+			const metricState = opsArtifactStatesByPostKey.get(postKey)?.metrics
+			if (!metricState?.ready) return false
+			const requestSignature = buildOpsMetricsRequestSignature(postKey, metricState)
+			const loadState = opsMetricsLoadStateByPostKey.get(postKey)
+			return (
+				!loadState ||
+				loadState.signature !== requestSignature ||
+				loadState.loading ||
+				!opsMetricsByPostKey.has(postKey)
+			)
+		})
 	const postsByPostKey = useMemo(
 		() => new Map(posts.map((item) => [getSelfMediaPostKey(item), item])),
 		[posts],
@@ -223,9 +243,19 @@ function SelfMediaHomePage({
 	const homeDailyInsight = useSelfMediaHomeDailyInsight({
 		overview: opsOverview,
 		displayName,
-		enabled: Boolean(homeDailyInsightStorage && homeDailyInsightModelId),
+		enabled: Boolean(
+			homeDailyInsightStorage && homeDailyInsightModelId && !isOpsMetricsHydrating,
+		),
 		model: homeDailyInsightModelId,
 		storage: homeDailyInsightStorage,
+	})
+	const opsHealthInsight = useSelfMediaOpsHealthInsight({
+		overview: opsOverview,
+		enabled: Boolean(
+			opsHealthInsightStorage && homeDailyInsightModelId && !isOpsMetricsHydrating,
+		),
+		model: homeDailyInsightModelId,
+		storage: opsHealthInsightStorage,
 	})
 	const defaultWelcomeTitle = formatSelfMediaHomeWelcomeTitle(undefined, "", opsOverview)
 	const greetingTitle = formatSelfMediaHomeWelcomeTitle(
@@ -290,24 +320,14 @@ function SelfMediaHomePage({
 
 	const handleOpsOverviewAction = useCallback(
 		(action: SelfMediaOpsOverviewAction) => {
-			if (action.key === "plan-next-post") {
-				onCreateArticle?.()
-				return
-			}
-			if (!action.postKey) return
-			const target = postsByPostKey.get(action.postKey)
-			if (!target) return
-			if (action.key === "sync-metrics" || action.key === "collect-comments") {
-				if (onPostPublishRefresh) {
-					void Promise.resolve(onPostPublishRefresh(target))
-					return
-				}
-			}
-			if (action.key === "generate-review") {
-				setActiveOpsReviewTarget(target)
-				return
-			}
-			handleOpenPost({ platform: target.platform, index: target.index })
+			executeSelfMediaOpsOverviewAction({
+				action,
+				postsByPostKey,
+				onOpenPost: (target) => handleOpenPost(target),
+				onCreateArticle,
+				onPostPublishRefresh,
+				onOpenOpsReview: setActiveOpsReviewTarget,
+			})
 		},
 		[handleOpenPost, onCreateArticle, onPostPublishRefresh, postsByPostKey],
 	)
@@ -345,6 +365,11 @@ function SelfMediaHomePage({
 	}, [])
 
 	useEffect(() => {
+		requestedOpsMetricsPostKeysRef.current.clear()
+		setOpsMetricsLoadStateByPostKey(new Map())
+	}, [onLoadOpsMetrics])
+
+	useEffect(() => {
 		const previous = previousOpsArtifactStatesRef.current
 		const currentStates = currentOpsArtifactStatesRef.current
 		const nextAnimations = new Map<string, ReturnType<typeof diffPostOpsArtifactAnimations>>()
@@ -370,35 +395,64 @@ function SelfMediaHomePage({
 	useEffect(() => {
 		if (!onLoadOpsMetrics) return
 
-		let cancelled = false
 		posts.forEach((item) => {
 			const postKey = getSelfMediaPostKey(item)
-			if (requestedOpsMetricsPostKeysRef.current.has(postKey)) return
+			const metricState = currentOpsArtifactStatesRef.current.get(postKey)?.metrics
+			const requestSignature = buildOpsMetricsRequestSignature(postKey, metricState)
+			const previousRequestSignature = requestedOpsMetricsPostKeysRef.current.get(postKey)
+			if (previousRequestSignature === requestSignature) return
 
-			requestedOpsMetricsPostKeysRef.current.add(postKey)
+			requestedOpsMetricsPostKeysRef.current.set(postKey, requestSignature)
+			setOpsMetricsLoadStateByPostKey((current) => {
+				const existing = current.get(postKey)
+				if (existing?.signature === requestSignature && existing.loading) return current
+				const next = new Map(current)
+				next.set(postKey, { signature: requestSignature, loading: true })
+				return next
+			})
 			void Promise.resolve(onLoadOpsMetrics(item))
 				.then((metrics) => {
-					if (cancelled) return
+					const latestRequestSignature =
+						requestedOpsMetricsPostKeysRef.current.get(postKey)
+					if (
+						!isHomePageMountedRef.current ||
+						latestRequestSignature !== requestSignature
+					) {
+						return
+					}
 					setOpsMetricsByPostKey((current) => {
 						const next = new Map(current)
 						next.set(postKey, metrics)
 						return next
 					})
+					setOpsMetricsLoadStateByPostKey((current) => {
+						const next = new Map(current)
+						next.set(postKey, { signature: requestSignature, loading: false })
+						return next
+					})
 				})
 				.catch(() => {
-					if (cancelled) return
+					const latestRequestSignature =
+						requestedOpsMetricsPostKeysRef.current.get(postKey)
+					if (
+						!isHomePageMountedRef.current ||
+						latestRequestSignature !== requestSignature
+					) {
+						return
+					}
 					setOpsMetricsByPostKey((current) => {
 						const next = new Map(current)
 						next.set(postKey, null)
 						return next
 					})
+					setOpsMetricsLoadStateByPostKey((current) => {
+						const next = new Map(current)
+						next.set(postKey, { signature: requestSignature, loading: false })
+						return next
+					})
 				})
 		})
-
-		return () => {
-			cancelled = true
-		}
-	}, [onLoadOpsMetrics, posts])
+	}, [onLoadOpsMetrics, opsArtifactStateSignature, posts])
 
 	return (
 		<div
@@ -442,9 +496,17 @@ function SelfMediaHomePage({
 										onAction={handleOpsOverviewAction}
 										dailyInsight={homeDailyInsight.insight}
 										dailyInsightStatus={homeDailyInsight.status}
+										healthInsight={opsHealthInsight.insight}
+										healthInsightStatus={opsHealthInsight.status}
+										metricsLoading={isOpsMetricsHydrating}
 										onRegenerateDailyInsight={
 											homeDailyInsightStorage
 												? homeDailyInsight.regenerate
+												: undefined
+										}
+										onDismissDailyInsightAction={
+											homeDailyInsightStorage
+												? homeDailyInsight.dismissAction
 												: undefined
 										}
 									/>

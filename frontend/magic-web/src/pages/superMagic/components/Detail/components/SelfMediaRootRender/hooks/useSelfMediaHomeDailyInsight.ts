@@ -66,11 +66,30 @@ export function useSelfMediaHomeDailyInsight({
 	}, [dateKey, enabled, generate, stateSignature, storage])
 
 	const regenerate = useCallback(() => generate(true), [generate])
+	const dismissAction = useCallback(
+		(actionId: string) => {
+			if (!storage) return
+			setInsight((current) => {
+				if (!current?.actions.some((action) => action.id === actionId)) return current
+				const next = {
+					...current,
+					actions: current.actions.filter((action) => action.id !== actionId),
+				}
+				void storage.saveHomeDailyInsight(next).catch((nextError) => {
+					setError(nextError)
+					setStatus("error")
+				})
+				return next
+			})
+		},
+		[storage],
+	)
 
 	return {
 		insight,
 		status,
 		error,
 		regenerate,
+		dismissAction,
 	}
 }

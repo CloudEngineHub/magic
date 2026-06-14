@@ -2,6 +2,7 @@ import {
 	fireEvent,
 	render,
 	screen,
+	waitFor,
 	waitForElementToBeRemoved,
 	within,
 } from "@testing-library/react"
@@ -91,6 +92,7 @@ vi.mock("react-i18next", () => ({
 					"detail.selfMedia.opsReview.impactTitle": "Impact map",
 					"detail.selfMedia.opsReview.markdownTitle": "Markdown review report",
 					"detail.selfMedia.opsReview.qualityTitle": "Quality mix",
+					"detail.selfMedia.opsReview.refreshReport": "Refresh report",
 					"detail.selfMedia.opsReview.reviewHtmlTitle": "HTML review report",
 					"detail.selfMedia.opsReview.reviewTitle": "Review report",
 					"detail.selfMedia.opsReview.sourceStatus.fetched": "Fetched",
@@ -276,6 +278,55 @@ describe("SelfMediaOpsReviewDashboard", () => {
 		await waitForElementToBeRemoved(() =>
 			screen.queryByTestId("self-media-ops-review-fullscreen-overlay"),
 		)
+	})
+
+	it("refreshes the review report file content from the report card header", async () => {
+		const onLoadData = vi
+			.fn()
+			.mockResolvedValueOnce({
+				...buildOpsReviewData(),
+				reviewHtml: {
+					content: "<html><body><main>Old Review</main></body></html>",
+				},
+			})
+			.mockResolvedValueOnce({
+				...buildOpsReviewData(),
+				reviewHtml: {
+					content: "<html><body><main>Fresh Review</main></body></html>",
+				},
+			})
+
+		render(
+			<SelfMediaOpsReviewDashboard
+				open
+				target={buildTarget()}
+				onClose={vi.fn()}
+				onLoadData={onLoadData}
+			/>,
+		)
+
+		await screen.findByTestId("self-media-ops-review-html-renderer")
+		const reportSection = screen
+			.getByRole("heading", { name: "Review report" })
+			.closest("section")
+		const refreshButton = await screen.findByTestId("self-media-ops-review-refresh")
+		const fullscreenButton = screen.getByTestId("self-media-ops-review-fullscreen")
+		expect(reportSection).not.toBeNull()
+		const reportButtons = within(reportSection as HTMLElement).getAllByRole("button")
+		expect(reportButtons.indexOf(refreshButton)).toBeLessThan(
+			reportButtons.indexOf(fullscreenButton),
+		)
+
+		fireEvent.click(refreshButton)
+
+		await waitFor(() => {
+			expect(onLoadData).toHaveBeenCalledTimes(2)
+			expect(mockHtmlRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					content: "<html><body><main>Fresh Review</main></body></html>",
+				}),
+			)
+		})
 	})
 
 	it("exits fullscreen preview when Escape is pressed", async () => {
@@ -470,6 +521,10 @@ describe("SelfMediaOpsReviewDashboard", () => {
 		)
 		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.fullscreen")).toBe("全屏预览")
 		expect(getLocaleValue(enUS, "detail.selfMedia.opsReview.fullscreen")).toBe("Fullscreen")
+		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.refreshReport")).toBe("刷新报告")
+		expect(getLocaleValue(enUS, "detail.selfMedia.opsReview.refreshReport")).toBe(
+			"Refresh report",
+		)
 		expect(getLocaleValue(zhCN, "detail.selfMedia.opsReview.exitFullscreen")).toBe("退出全屏")
 		expect(getLocaleValue(enUS, "detail.selfMedia.opsReview.exitFullscreen")).toBe(
 			"Exit fullscreen",

@@ -11,6 +11,7 @@ export interface SelfMediaHomeDailyInsightAction {
 	cta: string
 	kind: SelfMediaOpsOverviewActionKey
 	postKey?: string
+	targetTitle?: string
 }
 
 export interface SelfMediaHomeDailyInsightPayload {
@@ -199,6 +200,7 @@ export function buildFallbackSelfMediaHomeDailyInsight({
 			cta: "去优化",
 			kind: "improve-weak-post",
 			postKey: weakPost.postKey,
+			targetTitle: weakPost.title,
 		})
 	}
 	if (bestPost) {
@@ -211,6 +213,7 @@ export function buildFallbackSelfMediaHomeDailyInsight({
 			cta: "看样本",
 			kind: "repurpose-best-post",
 			postKey: bestPost.postKey,
+			targetTitle: bestPost.title,
 		})
 	}
 	actions.push({
@@ -239,6 +242,7 @@ function buildDailyInsightPrompt(
 	date: string,
 ) {
 	const completion = overview.completion
+	const actionCandidates = buildDailyInsightActionCandidates(overview)
 	return JSON.stringify(
 		{
 			task: "为自媒体首页生成今日运营问候和下一步建议",
@@ -249,6 +253,7 @@ function buildDailyInsightPrompt(
 				"如果链路未完成，优先给补链路动作",
 				"如果链路已闭环，给复用、二次分发、下一篇规划等动作",
 				"最多 4 个 actions",
+				"actions 只能从 actionCandidates 中选择；kind、postKey、targetTitle 必须与候选动作一致",
 				"输出字段必须是 welcomeTitle, greeting, summary, actions",
 			],
 			user: { displayName: displayName || "" },
@@ -264,6 +269,7 @@ function buildDailyInsightPrompt(
 				weakestPost: overview.weakestPost,
 				nextActions: overview.nextActions,
 			},
+			actionCandidates,
 			outputShape: {
 				welcomeTitle: "string，例如：今日重点：绑定发布链接",
 				greeting: "string，例如：运营工作台已准备就绪，优先推进数据同步和复盘",
@@ -276,6 +282,8 @@ function buildDailyInsightPrompt(
 						cta: "string",
 						kind: "bind-source|sync-metrics|collect-comments|generate-review|improve-weak-post|repurpose-best-post|plan-next-post",
 						postKey: "optional string",
+						targetTitle:
+							"optional string, the exact article name shown in the UI when postKey is present",
 					},
 				],
 			},
@@ -292,9 +300,12 @@ function normalizeDailyInsightPayload(
 ): SelfMediaHomeDailyInsightPayload {
 	try {
 		const parsed = JSON.parse(cleanJson(content)) as Partial<SelfMediaHomeDailyInsightPayload>
+		const actionCandidates = buildDailyInsightActionCandidates(overview)
 		const actions = Array.isArray(parsed.actions)
 			? parsed.actions
-					.map((item, index) => normalizeDailyInsightAction(item, index))
+					.map((item, index) =>
+						normalizeDailyInsightAction(item, index, actionCandidates),
+					)
 					.filter((item): item is SelfMediaHomeDailyInsightAction => Boolean(item))
 					.slice(0, MAX_DAILY_ACTIONS)
 			: []
@@ -331,6 +342,7 @@ function buildFallbackSelfMediaHomeWelcomeTitle(overview: SelfMediaOpsOverview) 
 function normalizeDailyInsightAction(
 	value: unknown,
 	index: number,
+	actionCandidates: SelfMediaHomeDailyInsightAction[],
 ): SelfMediaHomeDailyInsightAction | null {
 	if (!value || typeof value !== "object") return null
 	const record = value as Record<string, unknown>
@@ -339,15 +351,50 @@ function normalizeDailyInsightAction(
 	const cta = readText(record.cta)
 	const kind = readActionKind(record.kind)
 	if (!title || !description || !cta || !kind) return null
+	const postKey = readText(record.postKey) || undefined
+	const candidate = findDailyInsightActionCandidate(actionCandidates, kind, postKey)
+	if (!candidate) return null
 
 	return {
 		id: readText(record.id) || `${kind}-${index}`,
 		title,
 		description,
 		cta,
-		kind,
-		postKey: readText(record.postKey) || undefined,
+		kind: candidate.kind,
+		postKey: candidate.postKey,
+		targetTitle: candidate.targetTitle,
 	}
+}
+
+function buildDailyInsightActionCandidates(
+	overview: SelfMediaOpsOverview,
+): SelfMediaHomeDailyInsightAction[] {
+	const candidates = overview.nextActions.map((action, index) => ({
+		id: `${action.key}-${index}`,
+		title: action.title,
+		description: action.description,
+		cta: action.cta,
+		kind: action.key,
+		postKey: action.postKey,
+		targetTitle: action.targetTitle,
+	}))
+
+	if (candidates.length > 0) return candidates.slice(0, MAX_DAILY_ACTIONS)
+
+	const fallback = buildFallbackSelfMediaHomeDailyInsight({
+		overview,
+		date: getSelfMediaHomeInsightDateKey(),
+	}).actions
+
+	return fallback.slice(0, MAX_DAILY_ACTIONS)
+}
+
+function findDailyInsightActionCandidate(
+	candidates: SelfMediaHomeDailyInsightAction[],
+	kind: SelfMediaOpsOverviewActionKey,
+	postKey?: string,
+) {
+	return candidates.find((candidate) => candidate.kind === kind && candidate.postKey === postKey)
 }
 
 function readActionKind(value: unknown): SelfMediaOpsOverviewActionKey | null {

@@ -250,7 +250,7 @@ function SelfMediaShellHeader({
 			</div>
 			<div className="flex min-w-0 items-center justify-end gap-3 max-lg:justify-start max-md:flex-col max-md:items-stretch lg:gap-4">
 				<div
-					className="flex max-w-full shrink-0 items-center justify-end gap-2 overflow-x-auto rounded-[18px] max-lg:justify-start"
+					className="-m-2 flex max-w-full shrink-0 items-center justify-end gap-2 overflow-visible rounded-[18px] p-2 max-lg:justify-start max-lg:overflow-x-auto"
 					data-testid="self-media-shell-toolbar"
 				>
 					<div className="flex h-11 shrink-0 items-center gap-1.5 rounded-[16px] bg-white/80 px-1.5 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_3px_14px_rgba(24,24,27,0.05)] sm:h-12 sm:gap-2 sm:rounded-[18px] sm:px-2">

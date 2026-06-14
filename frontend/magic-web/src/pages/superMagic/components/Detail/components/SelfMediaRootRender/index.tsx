@@ -612,6 +612,18 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 				: undefined,
 		[fileStorageService],
 	)
+	const opsHealthInsightStorage = useMemo(
+		() =>
+			fileStorageService
+				? {
+						loadOpsHealthInsight: () => fileStorageService.loadOpsHealthInsight(),
+						saveOpsHealthInsight: (
+							payload: Parameters<typeof fileStorageService.saveOpsHealthInsight>[0],
+						) => fileStorageService.saveOpsHealthInsight(payload),
+					}
+				: undefined,
+		[fileStorageService],
+	)
 	const clearPostPublishStatus = useCallback(
 		async (target: SelfMediaPlatformPostItem) => {
 			await clearPostPublishStatusAfterPublishedLinkBind({
@@ -892,6 +904,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 						onCreateAICard={allowEdit ? handleOpenAICardCreate : undefined}
 						onOpenAICardFolder={openFileTab ? handleOpenAICardFolder : undefined}
 						homeDailyInsightStorage={homeDailyInsightStorage}
+						opsHealthInsightStorage={opsHealthInsightStorage}
 						homeDailyInsightModelId={dataSyncModel?.model_id}
 						initialScrollTop={homeScrollMemory.initialScrollTop}
 						onScrollTopChange={homeScrollMemory.onScrollTopChange}

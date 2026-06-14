@@ -5,7 +5,12 @@ import type { SelfMediaPostOpsMetricsPayload } from "../services/SelfMediaFileSt
 import type { SelfMediaPostOpsArtifacts } from "../services/selfMediaOpsArtifactStates"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 
-function createPostItem(id: string, index: number, title: string): SelfMediaPlatformPostItem {
+function createPostItem(
+	id: string,
+	index: number,
+	title: string,
+	publishStatus?: SelfMediaPlatformPostItem["entry"]["publishStatus"],
+): SelfMediaPlatformPostItem {
 	return {
 		platform: "rednote",
 		index,
@@ -13,12 +18,14 @@ function createPostItem(id: string, index: number, title: string): SelfMediaPlat
 			id,
 			name: title,
 			entry: `posts/${id}/post.json`,
+			publishStatus,
 		},
 		post: {
 			meta: {
 				id,
 				title,
 				feedTitle: title,
+				publishStatus,
 			},
 			cards: [],
 		},
@@ -102,6 +109,7 @@ describe("self-media ops overview", () => {
 		])
 		expect(overview.nextActions[0]).toMatchObject({
 			postKey: getSelfMediaPostKey(missingSource),
+			targetTitle: "Missing Source",
 			title: "绑定已发布链接",
 			cta: "去绑定",
 		})
@@ -142,6 +150,51 @@ describe("self-media ops overview", () => {
 		expect(display.rate).toEqual({ label: "平均互动率", value: "14%" })
 	})
 
+	it("excludes archived posts from home overview calculations", () => {
+		const active = createPostItem("active-post", 0, "Active Post")
+		const archived = createPostItem("archived-post", 1, "Archived Post", "archived")
+		const artifactsByPostKey = new Map<string, SelfMediaPostOpsArtifacts>([
+			[getSelfMediaPostKey(active), readyArtifacts],
+			[getSelfMediaPostKey(archived), readyArtifacts],
+		])
+		const metricsByPostKey = new Map<string, SelfMediaPostOpsMetricsPayload | null>([
+			[
+				getSelfMediaPostKey(active),
+				metrics({ reads: 1000, likes: 80, comments: 10, saves: 20, shares: 10 }),
+			],
+			[
+				getSelfMediaPostKey(archived),
+				metrics({ reads: 9000, likes: 900, comments: 90, saves: 900, shares: 90 }),
+			],
+		])
+
+		const overview = buildSelfMediaOpsOverview({
+			posts: [active, archived],
+			artifactsByPostKey,
+			metricsByPostKey,
+		})
+
+		expect(overview.totalPosts).toBe(1)
+		expect(overview.totalReads).toBe(1000)
+		expect(overview.totalEngagement).toBe(120)
+		expect(overview.engagementTotals).toEqual({
+			likes: 80,
+			comments: 10,
+			saves: 20,
+			shares: 10,
+		})
+		expect(overview.completion).toEqual({
+			source: { done: 1, total: 1 },
+			metrics: { done: 1, total: 1 },
+			comments: { done: 1, total: 1 },
+			review: { done: 1, total: 1 },
+		})
+		expect(overview.bestPost?.title).toBe("Active Post")
+		expect(overview.nextActions.map((item) => item.postKey)).not.toContain(
+			getSelfMediaPostKey(archived),
+		)
+	})
+
 	it("switches to continuation actions when every post ops artifact is complete", () => {
 		const best = createPostItem("best-post", 0, "Best Post")
 		const steady = createPostItem("steady-post", 1, "Steady Post")
@@ -175,6 +228,7 @@ describe("self-media ops overview", () => {
 		])
 		expect(overview.nextActions[0]).toMatchObject({
 			postKey: getSelfMediaPostKey(best),
+			targetTitle: "Best Post",
 			title: "复用高互动结构",
 			cta: "看样本",
 		})

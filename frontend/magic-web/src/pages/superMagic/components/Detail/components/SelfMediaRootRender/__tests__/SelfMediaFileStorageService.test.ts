@@ -393,6 +393,61 @@ describe("SelfMediaFileStorageService", () => {
 		)
 	})
 
+	it("refreshes the project file list when an initial metrics lookup misses a ready file", async () => {
+		seedNode({
+			file_id: "post-1-dir",
+			file_name: "post-1",
+			is_directory: true,
+			parent_id: "self-media-root",
+			relative_file_path: "self-media/posts/post-1",
+		})
+		seedNode({
+			file_id: "ops-dir",
+			file_name: "ops",
+			is_directory: true,
+			parent_id: "post-1-dir",
+			relative_file_path: "self-media/posts/post-1/ops",
+		})
+		seedNode({
+			file_id: "metrics-json",
+			file_name: "metrics.json",
+			is_directory: false,
+			parent_id: "ops-dir",
+			relative_file_path: "self-media/posts/post-1/ops/metrics.json",
+		})
+		contentByFileId.set(
+			"metrics-json",
+			JSON.stringify({
+				version: 1,
+				updatedAt: "2026-06-14T08:00:00.000Z",
+				source: "real-platform",
+				metrics: {
+					reads: 12708,
+					likes: 130,
+					comments: 12,
+				},
+			}),
+		)
+		mockGetAttachmentsByProjectId.mockResolvedValueOnce({ list: [] })
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await expect(service.loadPostOpsMetrics("posts/post-1/post.json")).resolves.toEqual(
+			expect.objectContaining({
+				source: "real-platform",
+				metrics: expect.objectContaining({
+					reads: 12708,
+					likes: 130,
+					comments: 12,
+				}),
+			}),
+		)
+		expect(mockGetAttachmentsByProjectId).toHaveBeenCalledTimes(2)
+	})
+
 	it("saves and loads the project-level home daily insight under ops", async () => {
 		const service = new SelfMediaFileStorageService(
 			"project-1",
@@ -446,6 +501,49 @@ describe("SelfMediaFileStorageService", () => {
 				date: "2026-06-13",
 				welcomeTitle: "今日重点：复用高互动样本",
 				summary: "链路已闭环，优先拆高互动样本。",
+			}),
+		)
+	})
+
+	it("saves and loads the project-level ops health insight under ops", async () => {
+		const service = new SelfMediaFileStorageService(
+			"project-1",
+			"self-media-root",
+			"self-media",
+		)
+
+		await service.saveOpsHealthInsight({
+			version: 1,
+			generatedAt: "2026-06-13T09:00:00+08:00",
+			stateSignature: "source:2/2|metrics:2/2|comments:2/2|review:2/2",
+			score: 72,
+			level: "warning",
+			summary: "链路完成，但真实互动数据还需要复查。",
+			reasons: ["链路完成度 100%", "真实阅读为 0"],
+			nextAction: "重新同步阅读数据。",
+			confidence: "medium",
+		})
+
+		const insightFile = attachments.find(
+			(item) => item.relative_file_path === "self-media/ops/ops-health-insight.json",
+		)
+		expect(insightFile?.file_id).toBeTruthy()
+		if (!insightFile?.file_id) throw new Error("ops-health-insight.json was not created")
+
+		expect(JSON.parse(contentByFileId.get(insightFile.file_id) || "{}")).toEqual(
+			expect.objectContaining({
+				version: 1,
+				score: 72,
+				level: "warning",
+				summary: "链路完成，但真实互动数据还需要复查。",
+			}),
+		)
+
+		await expect(service.loadOpsHealthInsight()).resolves.toEqual(
+			expect.objectContaining({
+				score: 72,
+				level: "warning",
+				nextAction: "重新同步阅读数据。",
 			}),
 		)
 	})

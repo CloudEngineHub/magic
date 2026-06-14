@@ -1,5 +1,6 @@
 import type { SelfMediaPostOpsMetricsPayload } from "./SelfMediaFileStorageService"
 import type { SelfMediaPostOpsArtifacts } from "./selfMediaOpsArtifactStates"
+import { getSelfMediaPostPublishStatus } from "./selfMediaPostPublishStatus"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 
 export interface SelfMediaOpsOverviewInput {
@@ -45,6 +46,7 @@ export type SelfMediaOpsOverviewStage = "empty" | "setup" | "syncing" | "reviewi
 export interface SelfMediaOpsOverviewAction {
 	key: SelfMediaOpsOverviewActionKey
 	postKey?: string
+	targetTitle?: string
 	title: string
 	description: string
 	cta: string
@@ -83,7 +85,10 @@ export function buildSelfMediaOpsOverview({
 	artifactsByPostKey,
 	metricsByPostKey,
 }: SelfMediaOpsOverviewInput): SelfMediaOpsOverview {
-	const total = posts.length
+	const calculablePosts = posts.filter(
+		(post) => getSelfMediaPostPublishStatus(post) !== "archived",
+	)
+	const total = calculablePosts.length
 	const completion: SelfMediaOpsOverview["completion"] = {
 		source: { done: 0, total },
 		metrics: { done: 0, total },
@@ -102,7 +107,7 @@ export function buildSelfMediaOpsOverview({
 	}
 	let lastUpdatedAt: string | undefined
 
-	posts.forEach((post) => {
+	calculablePosts.forEach((post) => {
 		const postKey = getSelfMediaPostKey(post)
 		const artifacts = artifactsByPostKey.get(postKey) ?? {
 			source: false,
@@ -147,7 +152,7 @@ export function buildSelfMediaOpsOverview({
 			})
 		}
 
-		const action = buildPrimaryActionForPost({ postKey, artifacts })
+		const action = buildPrimaryActionForPost({ postKey, targetTitle: title, artifacts })
 		if (action) nextActions.push(action)
 	})
 
@@ -157,6 +162,7 @@ export function buildSelfMediaOpsOverview({
 		nextActions.push({
 			key: "improve-weak-post",
 			postKey: weakestPost.postKey,
+			targetTitle: weakestPost.title,
 			title: "优化低互动文章",
 			description: `${weakestPost.title} 的互动率偏低，可以继续让运营助手拆解标题、封面和评论引导。`,
 			cta: "去优化",
@@ -203,15 +209,18 @@ export function formatSelfMediaPercent(value: number | null) {
 
 function buildPrimaryActionForPost({
 	postKey,
+	targetTitle,
 	artifacts,
 }: {
 	postKey: string
+	targetTitle: string
 	artifacts: SelfMediaPostOpsArtifacts
 }): SelfMediaOpsOverviewAction | null {
 	if (!artifacts.source) {
 		return {
 			key: "bind-source",
 			postKey,
+			targetTitle,
 			title: "绑定已发布链接",
 			description: "这篇文章还没绑定发布链接。绑定后，系统才能同步真实阅读、点赞和评论数据。",
 			cta: "去绑定",
@@ -222,6 +231,7 @@ function buildPrimaryActionForPost({
 		return {
 			key: "sync-metrics",
 			postKey,
+			targetTitle,
 			title: "同步最新数据",
 			description: "已检测到发布源。现在可以同步最新阅读、点赞、评论和转发数据。",
 			cta: "去同步",
@@ -232,6 +242,7 @@ function buildPrimaryActionForPost({
 		return {
 			key: "collect-comments",
 			postKey,
+			targetTitle,
 			title: "补充评论反馈",
 			description: "这篇文章还缺少评论样本。补齐后，复盘判断会更可靠。",
 			cta: "补评论",
@@ -242,6 +253,7 @@ function buildPrimaryActionForPost({
 		return {
 			key: "generate-review",
 			postKey,
+			targetTitle,
 			title: "生成运营复盘",
 			description: "数据和评论已经准备好，可以沉淀复盘结论和下一步动作。",
 			cta: "去复盘",
@@ -276,6 +288,7 @@ function buildContinuationActions({
 		actions.push({
 			key: "repurpose-best-post",
 			postKey: bestPost.postKey,
+			targetTitle: bestPost.title,
 			title: "复用高互动结构",
 			description: `${bestPost.title} 的互动效率最高，可以拆解标题、开头和评论引导，复用到下一篇。`,
 			cta: "看样本",

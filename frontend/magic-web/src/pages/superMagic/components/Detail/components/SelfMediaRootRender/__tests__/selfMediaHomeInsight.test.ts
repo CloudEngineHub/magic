@@ -204,6 +204,7 @@ describe("self-media home daily insight", () => {
 						cta: "看样本",
 						kind: "repurpose-best-post",
 						postKey: "rednote:0:posts/best/post.json",
+						targetTitle: "Best Post",
 					},
 				],
 			}),
@@ -217,13 +218,77 @@ describe("self-media home daily insight", () => {
 		})
 
 		expect(result.welcomeTitle).toBe("今日重点：复用高互动样本")
+		expect(result.actions[0]).toMatchObject({
+			postKey: "rednote:0:posts/best/post.json",
+			targetTitle: "Best Post",
+		})
 		expect(aiMocks.chat).toHaveBeenCalledWith(
 			expect.any(Array),
 			expect.objectContaining({
 				model: "first-available-model",
 			}),
 		)
+		const prompt = aiMocks.chat.mock.calls[0]?.[0]?.[0]?.content
+		expect(prompt).toContain('"actionCandidates"')
+		expect(prompt).toContain('"targetTitle": "Best Post"')
 		expect(aiMocks.chat.mock.calls[0]?.[1]).not.toHaveProperty("maxTokens")
 		expect(aiMocks.chat.mock.calls[0]?.[1]).not.toHaveProperty("max_tokens")
+	})
+
+	it("merges AI copy onto preset action candidates and rejects unknown actions", async () => {
+		aiMocks.chat.mockResolvedValueOnce({
+			content: JSON.stringify({
+				welcomeTitle: "今日重点：复用高互动样本",
+				greeting: "Jiabo，今天看复用机会",
+				summary: "链路已闭环，优先拆高互动样本。",
+				actions: [
+					{
+						id: "ai-reuse",
+						title: "把高互动样本拆成下一篇",
+						description: "沿用这篇文章的开头结构。",
+						cta: "看样本",
+						kind: "repurpose-best-post",
+						postKey: "rednote:0:posts/best/post.json",
+					},
+					{
+						id: "invented",
+						title: "发明一个动作",
+						description: "这个动作不在候选里。",
+						cta: "去处理",
+						kind: "collect-comments",
+						postKey: "rednote:999:posts/unknown/post.json",
+					},
+				],
+			}),
+		})
+
+		const result = await generateSelfMediaHomeDailyInsight({
+			overview: {
+				...createOverview(),
+				nextActions: [
+					{
+						key: "repurpose-best-post",
+						postKey: "rednote:0:posts/best/post.json",
+						targetTitle: "Best Post",
+						title: "复用高互动结构",
+						description: "拆解高互动文章。",
+						cta: "看样本",
+						priority: 60,
+					},
+				],
+			},
+			displayName: "Jiabo",
+			date: "2026-06-13",
+			model: "first-available-model",
+		})
+
+		expect(result.actions).toHaveLength(1)
+		expect(result.actions[0]).toMatchObject({
+			id: "ai-reuse",
+			kind: "repurpose-best-post",
+			postKey: "rednote:0:posts/best/post.json",
+			targetTitle: "Best Post",
+			title: "把高互动样本拆成下一篇",
+		})
 	})
 })

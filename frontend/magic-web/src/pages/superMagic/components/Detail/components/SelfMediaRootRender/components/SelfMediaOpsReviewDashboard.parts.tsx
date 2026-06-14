@@ -341,10 +341,14 @@ export function CommentSignals({ data }: { data: SelfMediaOpsReviewData | null }
 
 export function ReportPreview({
 	hasReviewContent,
+	refreshing = false,
+	onRefresh,
 	onFullscreen,
 	children,
 }: {
 	hasReviewContent: boolean
+	refreshing?: boolean
+	onRefresh?: () => void
 	onFullscreen: () => void
 	children: React.ReactNode
 }) {
@@ -359,21 +363,41 @@ export function ReportPreview({
 				<h3 className="text-sm font-[820] text-[#18181b]">
 					{t("detail.selfMedia.opsReview.reviewTitle")}
 				</h3>
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					className="h-8 rounded-full px-2 text-[#71717a] hover:bg-[#f4f4f5] hover:text-[#18181b]"
-					disabled={!hasReviewContent}
-					onClick={onFullscreen}
-					aria-label={t("detail.selfMedia.opsReview.fullscreen")}
-					data-testid="self-media-ops-review-fullscreen"
-				>
-					<Maximize2 className="size-4" aria-hidden="true" />
-					<span className="hidden sm:inline">
-						{t("detail.selfMedia.opsReview.fullscreen")}
-					</span>
-				</Button>
+				<div className="flex shrink-0 items-center gap-2">
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="h-8 rounded-full px-2 text-[#71717a] hover:bg-[#f4f4f5] hover:text-[#18181b]"
+						disabled={!onRefresh || refreshing}
+						onClick={onRefresh}
+						aria-label={t("detail.selfMedia.opsReview.refreshReport")}
+						data-testid="self-media-ops-review-refresh"
+					>
+						<RefreshCw
+							className={cn("size-4", refreshing && "animate-spin")}
+							aria-hidden="true"
+						/>
+						<span className="hidden sm:inline">
+							{t("detail.selfMedia.opsReview.refreshReport")}
+						</span>
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="h-8 rounded-full px-2 text-[#71717a] hover:bg-[#f4f4f5] hover:text-[#18181b]"
+						disabled={!hasReviewContent}
+						onClick={onFullscreen}
+						aria-label={t("detail.selfMedia.opsReview.fullscreen")}
+						data-testid="self-media-ops-review-fullscreen"
+					>
+						<Maximize2 className="size-4" aria-hidden="true" />
+						<span className="hidden sm:inline">
+							{t("detail.selfMedia.opsReview.fullscreen")}
+						</span>
+					</Button>
+				</div>
 			</div>
 			{children}
 		</section>
