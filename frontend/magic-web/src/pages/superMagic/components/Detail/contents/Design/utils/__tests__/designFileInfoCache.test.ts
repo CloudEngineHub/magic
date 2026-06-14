@@ -77,6 +77,13 @@ describe("getFileResourceMetaByPath", () => {
 		await expect(getFileResourceMetaByPath("images/missing.png", [])).resolves.toEqual({
 			status: "unknown",
 		})
+		await expect(
+			getFileResourceMetaByPath("images/missing.png", [], {
+				hasAttachmentSnapshot: true,
+			}),
+		).resolves.toEqual({
+			status: "deleted",
+		})
 	})
 
 	it("preserves raw get-file-url version but uses metadata-visible version for comparison", async () => {
@@ -216,6 +223,52 @@ describe("getFileResourceMetaByPath", () => {
 
 		expect(fileInfo?.src).toBe(cachedSrc)
 		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
+	})
+
+	it("returns missing immediately for a known empty attachment snapshot", async () => {
+		vi.useFakeTimers()
+
+		const fileInfoPromise = getFileInfoByPath("images/missing.png", [], {
+			hasAttachmentSnapshot: true,
+		})
+		await vi.advanceTimersByTimeAsync(0)
+
+		await expect(fileInfoPromise).resolves.toBeNull()
+		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
+	})
+
+	it("allows a previously missing path to load after attachments are restored", async () => {
+		vi.useFakeTimers()
+
+		const missingPromise = getFileInfoByPath("images/restored.png", [], {
+			hasAttachmentSnapshot: true,
+		})
+		await vi.advanceTimersByTimeAsync(0)
+		await expect(missingPromise).resolves.toBeNull()
+
+		vi.mocked(getTemporaryDownloadUrl).mockResolvedValueOnce([
+			{
+				file_id: "file-restored",
+				url: "https://example.test/restored.png?signature=1",
+			},
+		])
+		const restoredFiles = [
+			fileItem({
+				file_id: "file-restored",
+				relative_file_path: "images/restored.png",
+				file_name: "restored.png",
+			}),
+		]
+		const restoredPromise = getFileInfoByPath("images/restored.png", restoredFiles, {
+			hasAttachmentSnapshot: true,
+		})
+		await vi.advanceTimersByTimeAsync(100)
+
+		await expect(restoredPromise).resolves.toMatchObject({
+			src: "https://example.test/restored.png?signature=1",
+			fileName: "restored.png",
+		})
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
 	})
 
 	it("chunks large path-based get-file-url batches", async () => {

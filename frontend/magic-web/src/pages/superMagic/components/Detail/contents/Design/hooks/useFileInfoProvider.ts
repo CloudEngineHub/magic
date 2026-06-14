@@ -35,6 +35,8 @@ interface DebounceItem {
 interface UseFileInfoProviderOptions {
 	/** 已扁平化的附件列表（从入口传入） */
 	flatAttachments?: FileItem[]
+	/** 附件快照是否已由入口提供；观测过真实快照后，空数组也可能是一个有效快照 */
+	attachmentsReady?: boolean
 	/** 设计目录 ID，用于为 file info cache 建立命名空间 */
 	designProjectId?: string
 	/** 画布目录在项目中的路径段（与 magic.project.js 同级），用于解析 DSL 相对路径（如 `images/...` 或 `./images/...`） */
@@ -81,7 +83,13 @@ function createFileInfoRequestCancelledError(): Error {
 export function useFileInfoProvider(
 	options: UseFileInfoProviderOptions,
 ): UseFileInfoProviderReturn {
-	const { flatAttachments, designProjectBasePath, designProjectId, attachmentIndex } = options
+	const {
+		flatAttachments,
+		attachmentsReady,
+		designProjectBasePath,
+		designProjectId,
+		attachmentIndex,
+	} = options
 	const { t } = useTranslation("super")
 
 	// 存储每个 path 的防抖项
@@ -89,8 +97,10 @@ export function useFileInfoProvider(
 
 	// 当文件列表变化时，清理已删除文件的缓存
 	useEffect(() => {
-		cleanupFileInfoCache(flatAttachments, designProjectId)
-	}, [flatAttachments, designProjectId])
+		cleanupFileInfoCache(flatAttachments, designProjectId, {
+			hasAttachmentSnapshot: attachmentsReady === true,
+		})
+	}, [flatAttachments, designProjectId, attachmentsReady])
 
 	// 组件卸载时清理所有防抖定时器
 	useEffect(() => {
@@ -119,33 +129,40 @@ export function useFileInfoProvider(
 			const base = designProjectBasePath
 			const attachmentsSnapshotKey = attachmentIndex?.attachmentsSnapshotKey ?? ""
 			const debounceKey = `${path}\0${opts?.useImageProcess === true ? "1" : "0"}\0${opts?.forceRefresh === true ? "1" : "0"}\0${base ?? ""}\0${attachmentsSnapshotKey}`
+			const resolveFileInfo = async (
+				resolve: (value: GetFileInfoResponse) => void,
+				reject: (error: Error) => void,
+			) => {
+				try {
+					const result = await getFileInfoByPath(path, flatAttachments, {
+						...opts,
+						designProjectBasePath: base,
+						designProjectId,
+						attachmentIndex,
+						attachmentsSnapshotKeyOverride: attachmentIndex?.attachmentsSnapshotKey,
+						hasAttachmentSnapshot: attachmentsReady === true,
+					})
+					if (!result) {
+						reject(
+							createFileNotFoundByPathError(
+								path,
+								t("design.errors.fileNotFoundByPath", { path }),
+							),
+						)
+						return
+					}
+					resolve(result)
+				} catch (error) {
+					reject(error as Error)
+				}
+			}
 
 			const existingItem = debounceMap.get(debounceKey)
 			if (existingItem) {
 				clearTimeout(existingItem.timer)
 				const timer = setTimeout(async () => {
 					debounceMap.delete(debounceKey)
-					try {
-						const result = await getFileInfoByPath(path, flatAttachments, {
-							...opts,
-							designProjectBasePath: base,
-							designProjectId,
-							attachmentIndex,
-							attachmentsSnapshotKeyOverride: attachmentIndex?.attachmentsSnapshotKey,
-						})
-						if (!result) {
-							existingItem.reject(
-								createFileNotFoundByPathError(
-									path,
-									t("design.errors.fileNotFoundByPath", { path }),
-								),
-							)
-							return
-						}
-						existingItem.resolve(result)
-					} catch (error) {
-						existingItem.reject(error as Error)
-					}
+					await resolveFileInfo(existingItem.resolve, existingItem.reject)
 				}, DEBOUNCE_DELAY_MS)
 				existingItem.timer = timer
 				return existingItem.promise
@@ -165,27 +182,7 @@ export function useFileInfoProvider(
 
 			const timer = setTimeout(async () => {
 				debounceMap.delete(debounceKey)
-				try {
-					const result = await getFileInfoByPath(path, flatAttachments, {
-						...opts,
-						designProjectBasePath: base,
-						designProjectId,
-						attachmentIndex,
-						attachmentsSnapshotKeyOverride: attachmentIndex?.attachmentsSnapshotKey,
-					})
-					if (!result) {
-						promiseCallbacks.reject(
-							createFileNotFoundByPathError(
-								path,
-								t("design.errors.fileNotFoundByPath", { path }),
-							),
-						)
-						return
-					}
-					promiseCallbacks.resolve(result)
-				} catch (error) {
-					promiseCallbacks.reject(error as Error)
-				}
+				await resolveFileInfo(promiseCallbacks.resolve, promiseCallbacks.reject)
 			}, DEBOUNCE_DELAY_MS)
 
 			debounceMap.set(debounceKey, {
@@ -196,7 +193,14 @@ export function useFileInfoProvider(
 			})
 			return promise
 		},
-		[t, flatAttachments, designProjectBasePath, designProjectId, attachmentIndex],
+		[
+			t,
+			flatAttachments,
+			attachmentsReady,
+			designProjectBasePath,
+			designProjectId,
+			attachmentIndex,
+		],
 	)
 
 	const getFileResourceMeta = useCallback(
@@ -204,9 +208,10 @@ export function useFileInfoProvider(
 			return getFileResourceMetaByPath(path, flatAttachments, {
 				designProjectBasePath,
 				attachmentIndex,
+				hasAttachmentSnapshot: attachmentsReady === true,
 			})
 		},
-		[flatAttachments, designProjectBasePath, attachmentIndex],
+		[flatAttachments, designProjectBasePath, attachmentIndex, attachmentsReady],
 	)
 
 	/**

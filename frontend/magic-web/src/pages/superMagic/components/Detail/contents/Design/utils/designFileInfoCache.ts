@@ -672,6 +672,7 @@ export async function getFileInfoByPath(
 		designProjectId?: string
 		attachmentIndex?: DesignAttachmentIndex | null
 		attachmentsSnapshotKeyOverride?: string
+		hasAttachmentSnapshot?: boolean
 	},
 ): Promise<GetFileInfoResponse | null> {
 	ensureStorageCacheLoaded()
@@ -685,7 +686,8 @@ export async function getFileInfoByPath(
 	const namespace = buildNamespaceKey(options?.designProjectId)
 	const storeFiles = getStoreFiles(filesList)
 	const hasFilesContext = storeFiles.length > 0
-	const attachmentsSnapshotKey = hasFilesContext
+	const hasAttachmentSnapshot = hasFilesContext || options?.hasAttachmentSnapshot === true
+	const attachmentsSnapshotKey = hasAttachmentSnapshot
 		? (options?.attachmentsSnapshotKeyOverride ?? buildAttachmentsSnapshotKey(filesList))
 		: undefined
 	if (attachmentsSnapshotKey !== undefined) {
@@ -709,7 +711,7 @@ export async function getFileInfoByPath(
 				cachedEntry,
 				cachedFileItem,
 				attachmentsSnapshotKey,
-				hasFilesContext,
+				hasAttachmentSnapshot,
 			)
 			if (staleReasons.length > 0) {
 				deleteMemoryCache(cacheKey)
@@ -764,7 +766,7 @@ export async function getFileInfoByPath(
 				cachedEntry,
 				cachedFileItem,
 				attachmentsSnapshotKey,
-				hasFilesContext,
+				hasAttachmentSnapshot,
 			)
 			if (staleReasons.length > 0) {
 				deleteMemoryCache(cacheKey)
@@ -782,7 +784,7 @@ export async function getFileInfoByPath(
 		options?.attachmentIndex,
 	)
 	if (!lookupResult) {
-		if (hasFilesContext) {
+		if (hasAttachmentSnapshot) {
 			const latestStoreFiles = getStoreFiles(undefined)
 			const latestHasFilesContext = latestStoreFiles.length > 0
 			const latestSnapshotKey = latestHasFilesContext
@@ -857,6 +859,7 @@ export async function getFileResourceMetaByPath(
 	options?: {
 		designProjectBasePath?: string
 		attachmentIndex?: DesignAttachmentIndex | null
+		hasAttachmentSnapshot?: boolean
 	},
 ): Promise<CanvasFileResourceMeta> {
 	const candidates = getResolvedPathCandidates(filePath, options?.designProjectBasePath)
@@ -864,6 +867,7 @@ export async function getFileResourceMetaByPath(
 
 	const storeFiles = getStoreFiles(filesList)
 	const hasFilesContext = storeFiles.length > 0
+	const hasAttachmentSnapshot = hasFilesContext || options?.hasAttachmentSnapshot === true
 	let lookupResult = lookupAttachmentAmongCandidates(
 		candidates,
 		filePath,
@@ -871,7 +875,7 @@ export async function getFileResourceMetaByPath(
 		options?.attachmentIndex,
 	)
 
-	if (!lookupResult && hasFilesContext) {
+	if (!lookupResult && hasAttachmentSnapshot) {
 		const latestStoreFiles = getStoreFiles(undefined)
 		const latestHasFilesContext = latestStoreFiles.length > 0
 		if (latestHasFilesContext && latestStoreFiles !== storeFiles) {
@@ -885,7 +889,7 @@ export async function getFileResourceMetaByPath(
 	}
 
 	if (!lookupResult) {
-		return hasFilesContext ? { status: "deleted" } : { status: "unknown" }
+		return hasAttachmentSnapshot ? { status: "deleted" } : { status: "unknown" }
 	}
 
 	return buildFileResourceMeta(lookupResult.fileItem)
@@ -1068,11 +1072,16 @@ export function isCacheEnabled(): boolean {
 	return cacheEnabled
 }
 
-export function cleanupFileInfoCache(filesList?: FileItem[], designProjectId?: string): void {
+export function cleanupFileInfoCache(
+	filesList?: FileItem[],
+	designProjectId?: string,
+	options?: { hasAttachmentSnapshot?: boolean },
+): void {
 	ensureStorageCacheLoaded()
 
 	const storeFiles = getStoreFiles(filesList)
-	if (storeFiles.length === 0) {
+	const hasAttachmentSnapshot = storeFiles.length > 0 || options?.hasAttachmentSnapshot === true
+	if (!hasAttachmentSnapshot) {
 		return
 	}
 

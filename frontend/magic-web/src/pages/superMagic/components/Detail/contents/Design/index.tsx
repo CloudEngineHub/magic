@@ -184,10 +184,11 @@ function DesignViewer(props: DesignViewerProps) {
 	} = props
 
 	// 文件列表更新处理
-	const { flatAttachments, attachmentIndex, updateAttachments } = useAttachments({
-		attachments,
-		attachmentList,
-	})
+	const { flatAttachments, attachmentsReady, attachmentIndex, updateAttachments } =
+		useAttachments({
+			attachments,
+			attachmentList,
+		})
 
 	const propsElements = props.data?.elements
 
@@ -530,6 +531,7 @@ function DesignViewer(props: DesignViewerProps) {
 		selectedTopic,
 		currentFile,
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		selectedProject,
 		selectedWorkspace,
