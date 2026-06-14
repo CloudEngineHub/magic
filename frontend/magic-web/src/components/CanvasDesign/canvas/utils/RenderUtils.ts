@@ -86,6 +86,72 @@ export class RenderUtils {
 		}
 	}
 
+	private static getBackgroundImageSize(backgroundImage: CanvasImageSource):
+		| {
+				width: number
+				height: number
+		  }
+		| undefined {
+		const { width, height } = backgroundImage as { width?: unknown; height?: unknown }
+		if (typeof width !== "number" || typeof height !== "number" || width <= 0 || height <= 0) {
+			return undefined
+		}
+
+		return { width, height }
+	}
+
+	private static getBackgroundImageCoverCrop(
+		imageSize: { width: number; height: number },
+		width: number,
+		height: number,
+	): { x: number; y: number; width: number; height: number } {
+		const imgWidth = imageSize.width
+		const imgHeight = imageSize.height
+		const imgRatio = imgWidth / imgHeight
+		const containerRatio = width / height
+
+		let cropX = 0
+		let cropY = 0
+		let cropWidth = imgWidth
+		let cropHeight = imgHeight
+
+		if (imgRatio > containerRatio) {
+			cropWidth = imgHeight * containerRatio
+			cropX = (imgWidth - cropWidth) / 2
+		} else {
+			cropHeight = imgWidth / containerRatio
+			cropY = (imgHeight - cropHeight) / 2
+		}
+
+		return {
+			x: cropX,
+			y: cropY,
+			width: cropWidth,
+			height: cropHeight,
+		}
+	}
+
+	public static updateBackgroundImageLayout(
+		backgroundNode: Konva.Image,
+		width: number,
+		height: number,
+	): void {
+		backgroundNode.width(width)
+		backgroundNode.height(height)
+
+		const backgroundImage = backgroundNode.image()
+		const backgroundImageSize = backgroundImage
+			? RenderUtils.getBackgroundImageSize(backgroundImage)
+			: undefined
+		if (!backgroundImageSize || width <= 0 || height <= 0) {
+			return
+		}
+
+		backgroundNode.crop(
+			RenderUtils.getBackgroundImageCoverCrop(backgroundImageSize, width, height),
+		)
+	}
+
 	/**
 	 * 创建背景图片节点（使用 cover 模式裁剪）
 	 * @param group 父容器
@@ -99,27 +165,7 @@ export class RenderUtils {
 		height: number,
 		backgroundImage: HTMLImageElement,
 	): Konva.Image {
-		// 计算 cover 模式下的裁剪参数
-		const imgWidth = backgroundImage.width
-		const imgHeight = backgroundImage.height
-		const imgRatio = imgWidth / imgHeight
-		const containerRatio = width / height
-
-		let cropX = 0
-		let cropY = 0
-		let cropWidth = imgWidth
-		let cropHeight = imgHeight
-
-		if (imgRatio > containerRatio) {
-			// 图片更宽，裁剪左右
-			cropWidth = imgHeight * containerRatio
-			cropX = (imgWidth - cropWidth) / 2
-		} else {
-			// 图片更高，裁剪上下
-			cropHeight = imgWidth / containerRatio
-			cropY = (imgHeight - cropHeight) / 2
-		}
-
+		const backgroundImageSize = RenderUtils.getBackgroundImageSize(backgroundImage)
 		const backgroundNode = new Konva.Image({
 			image: backgroundImage,
 			x: 0,
@@ -127,12 +173,9 @@ export class RenderUtils {
 			width,
 			height,
 			name: "background",
-			crop: {
-				x: cropX,
-				y: cropY,
-				width: cropWidth,
-				height: cropHeight,
-			},
+			crop: backgroundImageSize
+				? RenderUtils.getBackgroundImageCoverCrop(backgroundImageSize, width, height)
+				: undefined,
 			listening: false,
 		})
 

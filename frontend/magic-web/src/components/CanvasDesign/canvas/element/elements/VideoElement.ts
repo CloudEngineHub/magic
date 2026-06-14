@@ -985,9 +985,13 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				child.cornerRadius(VIDEO_CONFIG.CORNER_RADIUS)
 			}
 
-			if (child instanceof Konva.Image && !child.name()) {
-				child.width(width)
-				child.height(height)
+			if (child instanceof Konva.Image) {
+				if (child.name() === "background") {
+					RenderUtils.updateBackgroundImageLayout(child, width, height)
+				} else if (!child.name()) {
+					child.width(width)
+					child.height(height)
+				}
 			}
 		})
 

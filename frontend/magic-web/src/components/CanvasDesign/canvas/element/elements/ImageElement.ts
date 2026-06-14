@@ -61,7 +61,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private isGenerating: boolean = false
 
 	// 渲染相关
-	private backgroundNode?: Konva.Image
 	private isLoadingState: boolean = false // 加载中状态（图片已生成，等待 ossSrc）
 	private isErrorState: boolean = false
 	private contentGroup?: Konva.Group
@@ -1818,9 +1817,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				backgroundImage,
 			)
 
-			// 保存背景节点引用
-			this.backgroundNode = backgroundNode
-
 			// 创建居中的图标和文本
 			RenderUtils.createCenteredIconText(group, width, height, {
 				text: this.getText("image.empty", "请发送生成图像的指令"),
@@ -1834,7 +1830,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			})
 
 			// 创建边框
-			this.createBorder(group, width, height, false)
+			this.createBorder(group, width, height, false, backgroundNode)
 			if (this.shouldShowInfoButton()) {
 				this.createInfoButton(group, width, height)
 			}
@@ -2119,9 +2115,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				backgroundImage,
 			)
 
-			// 保存背景节点引用
-			this.backgroundNode = backgroundNode
-
 			// 创建居中的图标和错误文本
 			RenderUtils.createCenteredIconText(group, width, height, {
 				text: this.isRetryEditing ? this.getRetryEditingPlaceholderText() : errorMessage,
@@ -2148,7 +2141,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			})
 
 			// 创建边框
-			this.createBorder(group, width, height, false)
+			this.createBorder(group, width, height, false, backgroundNode)
 			if (this.shouldShowInfoButton()) {
 				this.createInfoButton(group, width, height)
 			}
@@ -2166,13 +2159,14 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		width: number,
 		height: number,
 		isAnimated: boolean,
+		backgroundNode?: Konva.Image,
 	): void {
 		this.borderDecorator = new BorderDecorator(group, width, height, {
 			isAnimated,
 			elementId: this.data.id,
 			canvas: this.canvas,
 		})
-		this.borderDecorator.create(this.backgroundNode)
+		this.borderDecorator.create(backgroundNode)
 	}
 
 	/**
@@ -2211,7 +2205,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			const childName = child.name()
 
 			if (child instanceof Konva.Image) {
-				if (!childName || childName === IMAGE_CONTENT_NODE_NAME) {
+				if (childName === "background") {
+					RenderUtils.updateBackgroundImageLayout(child, width, height)
+				} else if (!childName || childName === IMAGE_CONTENT_NODE_NAME) {
 					child.width(width)
 					child.height(height)
 				}
@@ -2226,11 +2222,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				}
 			}
 		})
-
-		if (this.backgroundNode) {
-			this.backgroundNode.width(width)
-			this.backgroundNode.height(height)
-		}
 
 		this.updateContentScale(width, height)
 		this.borderDecorator?.updateSize(width, height)

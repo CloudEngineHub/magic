@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { ImageElement } from "../elements/ImageElement"
 import { VideoElement } from "../elements/VideoElement"
 import { GenerationStatus } from "../../../types.magic"
+import { RenderUtils } from "../../utils/RenderUtils"
 
 describe("ImageElement mounted image node sync", () => {
 	afterEach(() => {
@@ -177,13 +178,11 @@ describe("ImageElement mounted image node sync", () => {
 		const infoButtonDecorator = { updateConfig: vi.fn() }
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			node: Konva.Group
-			backgroundNode: Konva.Image
 			borderDecorator: typeof borderDecorator
 			infoButtonDecorator: typeof infoButtonDecorator
 			data: { id: string; width: number; height: number }
 		}
 		element.node = group
-		element.backgroundNode = backgroundNode
 		element.borderDecorator = borderDecorator
 		element.infoButtonDecorator = infoButtonDecorator
 		element.data = { id: "image-1", width: 100, height: 80 }
@@ -201,6 +200,77 @@ describe("ImageElement mounted image node sync", () => {
 			width: 240,
 			height: 160,
 		})
+	})
+
+	it("resizes named placeholder background images without relying on backgroundNode", () => {
+		const backgroundImage = new Image()
+		backgroundImage.width = 400
+		backgroundImage.height = 200
+		const group = new Konva.Group({ width: 100, height: 100 })
+		const backgroundNode = RenderUtils.createBackgroundImage(group, 100, 100, backgroundImage)
+		const hitRect = new Konva.Rect({
+			name: "hit-area",
+			width: 100,
+			height: 100,
+		})
+		group.add(hitRect)
+
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			node: Konva.Group
+			borderDecorator: undefined
+			infoButtonDecorator: undefined
+		}
+		element.node = group
+		element.borderDecorator = undefined
+		element.infoButtonDecorator = undefined
+
+		expect(backgroundNode.crop()).toEqual({ x: 100, y: 0, width: 200, height: 200 })
+
+		element.onTransformResize(240, 60)
+
+		expect(backgroundNode.width()).toBe(240)
+		expect(backgroundNode.height()).toBe(60)
+		expect(backgroundNode.crop()).toEqual({ x: 0, y: 50, width: 400, height: 100 })
+	})
+
+	it("resizes named video placeholder background images", () => {
+		const backgroundImage = new Image()
+		backgroundImage.width = 400
+		backgroundImage.height = 200
+		const group = new Konva.Group({ width: 100, height: 100 })
+		const backgroundNode = RenderUtils.createBackgroundImage(group, 100, 100, backgroundImage)
+		const hitRect = new Konva.Rect({
+			name: "hit-area",
+			width: 100,
+			height: 100,
+		})
+		group.add(hitRect)
+
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			node: Konva.Group
+			borderDecorator: undefined
+			infoButtonDecorator: undefined
+		}
+		element.node = group
+		element.borderDecorator = undefined
+		element.infoButtonDecorator = undefined
+		;(
+			element as unknown as {
+				renderer: {
+					updatePlaceholderContentLayout: ReturnType<typeof vi.fn>
+					updatePlayerLayout: ReturnType<typeof vi.fn>
+				}
+			}
+		).renderer = {
+			updatePlaceholderContentLayout: vi.fn(),
+			updatePlayerLayout: vi.fn(),
+		}
+
+		element.onTransformResize(240, 60)
+
+		expect(backgroundNode.width()).toBe(240)
+		expect(backgroundNode.height()).toBe(60)
+		expect(backgroundNode.crop()).toEqual({ x: 0, y: 50, width: 400, height: 100 })
 	})
 
 	it("switches mounted image away from a resource before it closes", () => {
