@@ -1787,7 +1787,7 @@ class Agent(BaseAgent):
         """fork 一个同类型子 Agent 执行后台压缩"""
         compact_model_id = get_compact_model_id()
         if not compact_model_id:
-            compact_model_id = self.agent_context.model_context.current_text_model_id or self.llm_id
+            compact_model_id = self._resolve_runtime_model_info().model_id
 
         await start_background_compact(
             state=self._bg_compact_state,
@@ -2063,14 +2063,14 @@ Since your subsequent output will be merged with pre-interruption content and di
         if not model_context.consume_compact_text_model_fallback():
             return None
 
-        failed_model_id = model_context.current_text_model_id or self.llm_id
+        failed_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None)
         logger.warning(
             f"compact 临时模型请求失败，回退压缩前模型重试一次: "
             f"failed_model={failed_model_id}, error={exception!r}"
         )
         self._restore_pre_compact_model(reason="compact 临时模型请求失败，回退当前模型重试")
 
-        retry_model_id = model_context.current_text_model_id or self.llm_id
+        retry_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None)
         logger.info(f"compact fallback 使用文本模型重试: {retry_model_id}")
         return await self._prepare_and_call_llm(
             use_stream=False,

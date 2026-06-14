@@ -1,5 +1,4 @@
 ---
-llm: writer_llm
 tools:
   - list_dir
   - read_files

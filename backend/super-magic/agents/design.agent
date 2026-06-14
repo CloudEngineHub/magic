@@ -1,5 +1,4 @@
 ---
-llm: coder_llm
 tools:
   - web_search
   - read_webpages_as_markdown

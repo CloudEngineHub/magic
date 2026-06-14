@@ -1,5 +1,4 @@
 ---
-llm: main_llm
 tools:
   - list_dir
   - read_file

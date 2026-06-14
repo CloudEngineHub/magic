@@ -65,7 +65,6 @@ class BaseAgent(ABC):
             agent_id: Agent 唯一标识，如果为 None 则会自动生成
             tool_validator: 工具验证器，用于过滤无效工具，如果为 None 则不进行过滤
         """
-        self.llm_id = None
         self.agent_name = agent_name
         self.agent_context = agent_context
         if self.agent_context:
@@ -103,9 +102,8 @@ class BaseAgent(ABC):
 
         此方法应在构造函数中调用，负责：
         1. 加载 Agent 配置文件
-        2. 初始化 LLM 客户端
-        3. 设置工具集合
-        4. 准备系统提示词
+        2. 设置工具集合
+        3. 准备系统提示词
         """
         pass
 
@@ -288,7 +286,8 @@ class BaseAgent(ABC):
         """
         从 .agent 文件加载 agent 配置并设置相关属性
 
-        从 .agent 文件中加载模型定义、工具定义和提示词，并设置到实例属性中
+        从 .agent 文件中加载工具定义和提示词，并设置到实例属性中。
+        模型选择由运行时请求、会话配置或 auto fallback 决定。
         """
         logger.info(f"加载 agent 配置: {agent_name}")
 
@@ -305,9 +304,7 @@ class BaseAgent(ABC):
         else:
             self.tools = agent_define.tools_config
 
-        # 保持 llm_id 始终是 Agent 文件中定义的原始模型 ID
-        self.llm_id = agent_define.model_id
-        logger.info(f"加载完成: model_id={agent_define.model_id}, 工具数量={len(self.tools)}")
+        logger.info(f"加载完成: 工具数量={len(self.tools)}")
 
     def set_agent_state(self, state: AgentState) -> None:
         """

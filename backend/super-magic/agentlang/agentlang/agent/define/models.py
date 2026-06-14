@@ -60,7 +60,6 @@ class SkillsConfig:
 class AgentDefine:
     """Agent 完整定义：YAML frontmatter 解析结果 + 处理后的系统提示"""
 
-    model_id: str
     tools_config: Dict[str, Any]
     skills_config: Optional[SkillsConfig]
     # 经语法处理器处理后的系统提示正文；由 AgentLoader.load_agent 填入
