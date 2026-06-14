@@ -70,7 +70,7 @@ agent_modes:
   # apex - 至强模式：全部使用高性能模型
   apex:
     model_aliases:
-      main_llm: claude-3.7-cache
+      main_llm: deepseek-v4-flash
       coder_llm: claude-3.7-cache
       writer_llm: claude-3.7-cache
       browser_llm: gpt-4.1
@@ -117,7 +117,7 @@ image_generator:
 # 允许在 .agent 文件中使用别名，实际模型可通过环境变量指定
 # 例如，WRITER_LLM 环境变量可以覆盖 writer_llm 的默认值
 model_aliases:
-  main_llm: ${MAIN_LLM:-claude-3.7-cache} # 主控 Agent (super-magic, magic) 使用
+  main_llm: ${MAIN_LLM:-deepseek-v4-flash} # 主控 Agent (super-magic, magic) 使用
   coder_llm: ${CODER_LLM:-claude-3.7-cache} # 编程组 Agent (coder, data-analyst) 使用
   writer_llm: ${WRITER_LLM:-claude-3.7-cache} # 写作组 Agent (writer, slide) 使用
   browser_llm: ${BROWSER_LLM:-claude-3.7-cache} # 浏览器 Agent (web-browser) 使用
@@ -159,6 +159,28 @@ models:
       cache_write_price: 0.00375
       cache_hit_price: 0.0003
       currency: "USD"
+
+  deepseek-v4-flash:
+    api_key: "${DEEPSEEK_V4_FLASH_API_KEY}"
+    api_base_url: "${DEEPSEEK_V4_FLASH_API_BASE_URL:-https://api.deepseek.com}"
+    name: "deepseek-v4-flash"
+    type: "llm"
+    supports_tool_use: true
+    provider: "openai"
+    max_output_tokens: 64000
+    max_context_tokens: 1000000
+    temperature: 0.7
+
+  qwen3.7-plus:
+    api_key: "${QWEN3_7_PLUS_API_KEY}"
+    api_base_url: "${QWEN3_7_PLUS_API_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}"
+    name: "qwen3.7-plus"
+    type: "llm"
+    supports_tool_use: true
+    provider: "openai"
+    max_output_tokens: 64000
+    max_context_tokens: 1000000
+    temperature: 0.7
 
   deepseek-chat:
     api_key: "${DEEPSEEK_API_KEY}"
@@ -967,9 +989,9 @@ ai_abilities:
 
   # Compact Ability (上下文压缩能力)
   # 压缩触发时临时切换到此模型，压缩完成后恢复原模型
-  # 不配置 model_id（或设为空）时，沿用主 Agent 当前模型，行为与之前一致
+  # 不配置 model_id（或设为空）时，沿用主 Agent 当前模型
   compact:
-    model_id: "${COMPACT_MODEL_ID:-}"
+    model_id: "${COMPACT_MODEL_ID:-qwen3.7-plus}"
 
 # =====================================================
 # Web Scraping 网页爬取配置

@@ -112,6 +112,7 @@ class CompactionConfig:
                     # Qwen 系列（256K 跳档）
                     "qwen3-max",
                     "qwen3-coder-plus",
+                    "qwen3.7-plus",
                     "qwen3.6-plus",
                     "qwen3.5-plus",
                     "qwen3.5-flash",
