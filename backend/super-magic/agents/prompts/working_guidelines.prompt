@@ -6,10 +6,6 @@
 {{ @include(path="./prompts/mention_mechanism.prompt") }}
 </mention_mechanism>
 
-<memory_evaluation_instructions>
-{{ @include(path="./prompts/memory_evaluation.prompt") }}
-</memory_evaluation_instructions>
-
 <file_operation_instructions>
 {{ @include(path="./prompts/file_operation_instructions.prompt") }}
 </file_operation_instructions>
