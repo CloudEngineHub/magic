@@ -34,13 +34,16 @@ function TopicSidebar({
 	const { t } = useTranslation("super")
 	const { t: tLongMemory } = useTranslation("super/longMemory")
 	const isChatSider = siderVariant === "chat"
+	// Chat sidebars use a shorter label to avoid implying the list is project-scoped metadata.
+	const topicFilesTitle = isChatSider ? t("topicFiles.fileTitle") : t("topicFiles.title")
 	const items = useMemo(
 		() => [
 			{
 				key: "topicFiles",
-				title: t("topicFiles.title"),
+				title: topicFilesTitle,
 				icon: <Files size={16} />,
-				content: <TopicFilesButton {...topicFilesProps} />,
+				// Keep the panel header aligned with the active sidebar label in chat scenes.
+				content: <TopicFilesButton {...topicFilesProps} title={topicFilesTitle} />,
 			},
 			...(isChatSider
 				? []
@@ -80,6 +83,7 @@ function TopicSidebar({
 			selectedWorkspace?.id,
 			t,
 			tLongMemory,
+			topicFilesTitle,
 			topicFilesProps,
 		],
 	)

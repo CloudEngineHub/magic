@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { describe, it, expect, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import TopicSidebar from "../TopicSidebar"
@@ -13,19 +14,26 @@ vi.mock("@/pages/superMagic/components/ProjectCardContainer", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/ProjectSider", () => ({
-	default: ({ items }: { items: Array<{ key: string; title: string }> }) => (
+	default: ({
+		items,
+	}: {
+		items: Array<{ key: string; title: string; content?: ReactNode }>
+	}) => (
 		<div data-testid="project-sider">
 			{items.map((item) => (
-				<span key={item.key} data-testid={`project-sider-item-${item.key}`}>
-					{item.title}
-				</span>
+				<div key={item.key}>
+					<span data-testid={`project-sider-item-${item.key}`}>{item.title}</span>
+					<div data-testid={`project-sider-content-${item.key}`}>{item.content}</div>
+				</div>
 			))}
 		</div>
 	),
 }))
 
 vi.mock("@/pages/superMagic/components/TopicFilesButton", () => ({
-	default: () => <div data-testid="topic-files-button" />,
+	default: ({ title }: { title?: string }) => (
+		<div data-testid="topic-files-button">{title ?? "topicFiles.title"}</div>
+	),
 }))
 
 vi.mock("@/pages/superMagic/components/SiderTask", () => ({
@@ -56,7 +64,10 @@ describe("TopicSidebar", () => {
 	it("renders all sider tabs in default variant", () => {
 		render(<TopicSidebar {...baseProps} />)
 
-		expect(screen.getByTestId("project-sider-item-topicFiles")).toBeInTheDocument()
+		expect(screen.getByTestId("project-sider-item-topicFiles")).toHaveTextContent(
+			"topicFiles.title",
+		)
+		expect(screen.getByTestId("topic-files-button")).toHaveTextContent("topicFiles.title")
 		expect(screen.getByTestId("project-sider-item-task")).toBeInTheDocument()
 		expect(screen.getByTestId("project-sider-item-longMemory")).toBeInTheDocument()
 		expect(screen.getByTestId("project-sider-item-share")).toBeInTheDocument()
@@ -65,7 +76,10 @@ describe("TopicSidebar", () => {
 	it("renders only files and share tabs in chat variant", () => {
 		render(<TopicSidebar {...baseProps} siderVariant="chat" hideProjectCard />)
 
-		expect(screen.getByTestId("project-sider-item-topicFiles")).toBeInTheDocument()
+		expect(screen.getByTestId("project-sider-item-topicFiles")).toHaveTextContent(
+			"topicFiles.fileTitle",
+		)
+		expect(screen.getByTestId("topic-files-button")).toHaveTextContent("topicFiles.fileTitle")
 		expect(screen.getByTestId("project-sider-item-share")).toBeInTheDocument()
 		expect(screen.queryByTestId("project-sider-item-task")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("project-sider-item-longMemory")).not.toBeInTheDocument()
