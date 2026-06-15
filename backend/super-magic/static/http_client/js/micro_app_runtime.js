@@ -162,11 +162,10 @@
         if (!Array.isArray(files)) return [];
         return files.map(function (item) {
             if (typeof item === 'string') return item;
-            if (item && typeof item.name === 'string') return item.name;
-            if (item && typeof item.file_name === 'string') return item.file_name;
-            if (item && typeof item.path === 'string') return item.path.split('/').filter(Boolean).pop() || item.path;
-            if (item && typeof item.relative_file_path === 'string') return item.relative_file_path.split('/').filter(Boolean).pop() || item.relative_file_path;
-            return '';
+            if (!item || typeof item !== 'object') return '';
+            var path = item.path || item.relative_file_path || '';
+            var name = item.name || item.file_name || String(path).split('/').filter(Boolean).pop() || '';
+            return name || path;
         }).filter(Boolean);
     }
 
@@ -765,15 +764,10 @@
             if (this.workspaceApi) {
                 const appPath = this.resolveAppPath(path || '.');
                 const result = await this.workspaceApi.listTree(this.workspacePath(appPath), 1);
-                const files = (result.entries || []).map(item => ({
-                    name: item.name,
-                    path: item.path && this.appRootPath && item.path.startsWith(`${this.appRootPath}/`)
-                        ? item.path.slice(this.appRootPath.length + 1) + (item.type === 'directory' ? '/' : '')
-                        : item.path,
-                    type: item.type,
-                    size: item.size,
-                    updatedAt: item.updated_at,
-                }));
+                const files = (result.entries || []).map(item => {
+                    if (item.type === 'directory') return `${item.name}/`;
+                    return item.name;
+                }).filter(Boolean);
                 return { files, implementation: 'real' };
             }
             const normalized = this.resolveAppPath(path || '.');
@@ -781,25 +775,16 @@
             const files = [];
             for await (const entry of dir.values()) {
                 if (entry.kind === 'file') {
-                    const file = await entry.getFile();
-                    files.push({
-                        name: entry.name,
-                        path: normalized ? `${normalized}/${entry.name}` : entry.name,
-                        type: 'file',
-                        size: file.size,
-                        updatedAt: file.lastModified,
-                    });
+                    files.push(entry.name);
                 } else {
-                    files.push({
-                        name: entry.name,
-                        path: normalized ? `${normalized}/${entry.name}/` : `${entry.name}/`,
-                        type: 'directory',
-                    });
+                    files.push(`${entry.name}/`);
                 }
             }
             files.sort((a, b) => {
-                if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-                return a.name.localeCompare(b.name);
+                const aIsDir = String(a).endsWith('/');
+                const bIsDir = String(b).endsWith('/');
+                if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
+                return String(a).localeCompare(String(b));
             });
             return { files, implementation: 'local-adapter' };
         }
