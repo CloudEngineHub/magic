@@ -147,7 +147,7 @@ readonly class VideoOperationAppService
     public function enqueue(string $accessToken, CreateVideoDTO $requestDTO): VideoOperationResponseDTO
     {
         $dataIsolation = $this->llmAppService->createModelGatewayDataIsolationByAccessToken($accessToken, $requestDTO->getBusinessParams());
-        $this->pointComponent->checkPointsSufficient($requestDTO, $dataIsolation);
+        //        $this->pointComponent->checkPointsSufficient($requestDTO, $dataIsolation); TODO: 下面已经做了积分预冻结，所以这里不需要检查积分是否充足，后续看看如何统一两者
         $videoModelEntry = $this->modelGatewayMapper->getOrganizationVideoModel($dataIsolation, $requestDTO->getModel());
         $videoModel = $videoModelEntry?->getVideoModel();
         if ($videoModel === null) {
