@@ -1,10 +1,19 @@
-import { memo, useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
+import {
+	memo,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	type KeyboardEvent,
+	type MouseEvent,
+} from "react"
 import {
 	AudioLines,
 	CheckCircle2,
 	Clock,
 	Ellipsis,
 	FileAudio,
+	FolderOpen,
 	Loader2,
 	PenLine,
 	Smartphone,
@@ -39,6 +48,7 @@ interface AudioRecordingCardProps {
 	item: AudioProjectListItem
 	onOpen?: (item: AudioProjectListItem) => void
 	onSummarize?: (item: AudioProjectListItem) => void
+	onOpenProject?: (item: AudioProjectListItem) => void
 	onRename?: (item: AudioProjectListItem) => void
 	onDelete?: (item: AudioProjectListItem) => void
 	isSubmitting?: boolean
@@ -188,21 +198,34 @@ function CardTagsRow({
 interface CardActionMenuProps {
 	cardId: string
 	label: string
+	openProjectLabel: string
 	renameLabel: string
 	deleteLabel: string
+	onOpenProject?: () => void
 	onRename?: () => void
 	onDelete?: () => void
 }
 
-/** Renders rename/delete actions behind the card ellipsis menu */
+/** Renders project navigation, rename, and delete actions behind the card ellipsis menu */
 function CardActionMenu({
 	cardId,
 	label,
+	openProjectLabel,
 	renameLabel,
 	deleteLabel,
+	onOpenProject,
 	onRename,
 	onDelete,
 }: CardActionMenuProps) {
+	/** Routes to the source project while keeping the card click handler from firing */
+	const handleOpenProject = useCallback(
+		(event: MouseEvent) => {
+			event.stopPropagation()
+			onOpenProject?.()
+		},
+		[onOpenProject],
+	)
+
 	const handleRename = useCallback(
 		(event: MouseEvent) => {
 			event.stopPropagation()
@@ -223,6 +246,11 @@ function CardActionMenu({
 		event.stopPropagation()
 	}, [])
 
+	/** Keeps keyboard menu activation from bubbling to the card-level Enter/Space handler */
+	const handleTriggerKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
+		event.stopPropagation()
+	}, [])
+
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
@@ -231,12 +259,20 @@ function CardActionMenu({
 					className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 					aria-label={label}
 					onClick={handleTriggerClick}
+					onKeyDown={handleTriggerKeyDown}
 					data-testid={`audio-recording-card-${cardId}-more-actions`}
 				>
 					<Ellipsis className="h-4 w-4" aria-hidden />
 				</button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="min-w-[120px]">
+				<DropdownMenuItem
+					onClick={handleOpenProject}
+					data-testid={`audio-recording-card-${cardId}-action-open-project`}
+				>
+					<FolderOpen className="h-4 w-4" aria-hidden />
+					{openProjectLabel}
+				</DropdownMenuItem>
 				<DropdownMenuItem
 					onClick={handleRename}
 					data-testid={`audio-recording-card-${cardId}-action-rename`}
@@ -262,6 +298,7 @@ function AudioRecordingCard({
 	item,
 	onOpen,
 	onSummarize,
+	onOpenProject,
 	onRename,
 	onDelete,
 	isSubmitting = false,
@@ -319,6 +356,11 @@ function AudioRecordingCard({
 	const handleDelete = useCallback(() => {
 		onDelete?.(item)
 	}, [item, onDelete])
+
+	/** Opens the backing Super project without entering the audio preview detail page */
+	const handleOpenProject = useCallback(() => {
+		onOpenProject?.(item)
+	}, [item, onOpenProject])
 
 	const displayName = resolveRecordingDisplayName(item.project_name, item.created_at)
 	const sourceLabel = resolveRecordingSourceLabel(item, {
@@ -495,8 +537,10 @@ function AudioRecordingCard({
 					<CardActionMenu
 						cardId={item.id}
 						label={t("card.moreActions")}
+						openProjectLabel={t("card.openProject")}
 						renameLabel={t("card.rename")}
 						deleteLabel={t("card.delete")}
+						onOpenProject={handleOpenProject}
 						onRename={handleRename}
 						onDelete={handleDelete}
 					/>

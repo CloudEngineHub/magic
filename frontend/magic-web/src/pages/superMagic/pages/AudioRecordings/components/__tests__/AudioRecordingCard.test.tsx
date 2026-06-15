@@ -18,6 +18,8 @@ vi.mock("react-i18next", () => ({
 				"card.generateSummary": "Generate summary",
 				"card.retrySummary": "Retry summary",
 				"card.collapseTags": "Collapse",
+				"card.moreActions": "More actions",
+				"card.openProject": "View project details",
 				"card.rename": "Rename",
 				"card.delete": "Delete",
 			}
@@ -288,6 +290,29 @@ describe("AudioRecordingCard", () => {
 		expect(
 			screen.getByTestId("audio-recording-card-project-1-more-actions"),
 		).toBeInTheDocument()
+	})
+
+	it("opens the project detail action without opening the recording preview", async () => {
+		const onOpen = vi.fn()
+		const onOpenProject = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem()}
+				onOpen={onOpen}
+				onOpenProject={onOpenProject}
+			/>,
+		)
+
+		const trigger = screen.getByTestId("audio-recording-card-project-1-more-actions")
+		trigger.focus()
+		fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
+		fireEvent.click(
+			await screen.findByTestId("audio-recording-card-project-1-action-open-project"),
+		)
+
+		expect(onOpenProject).toHaveBeenCalledTimes(1)
+		expect(onOpenProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-1" }))
+		expect(onOpen).not.toHaveBeenCalled()
 	})
 
 	it("shows created_at fallback title when project name is empty", () => {
