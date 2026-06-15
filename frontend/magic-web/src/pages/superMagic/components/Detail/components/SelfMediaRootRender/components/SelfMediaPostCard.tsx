@@ -124,7 +124,7 @@ function SelfMediaPostCard({
 	const canOpenDataPopover = Boolean(
 		onPostPublishRefresh || onConfigureAutoSync || onLoadOpsSource,
 	)
-	const isCardComfortable = cardWidth >= COMPACT_ACTION_LABEL_MIN_WIDTH
+	const isCardComfortable = cardWidth > COMPACT_ACTION_LABEL_MIN_WIDTH
 	const handleOpenPost = useCallback(() => {
 		const rect = cardRef.current?.getBoundingClientRect()
 		const canAnimateFromCard = Boolean(rect && rect.width > 0 && rect.height > 0)
@@ -288,14 +288,14 @@ function SelfMediaPostCard({
 						"self-media-post-card-actions absolute bottom-4 left-4 right-4 z-20 flex max-w-none flex-nowrap items-center justify-end gap-2 whitespace-nowrap",
 						isCardComfortable && "right-[16px]",
 					)}
-					data-label-mode="expanded"
+					data-label-mode={isCardComfortable ? "expanded" : "compact"}
 					data-testid={`self-media-home-post-actions-${postId}`}
 				>
 					{onRequestPrePublishAnalysis ? (
 						<SelfMediaPostActionButton
 							label={t("detail.selfMedia.analysis.action")}
 							Icon={ClipboardCheck}
-							showLabel
+							showLabel={isCardComfortable}
 							onClick={() => onRequestPrePublishAnalysis({ platform, index })}
 							dataTestId={`self-media-home-post-analysis-${postId}`}
 						/>
@@ -306,7 +306,7 @@ function SelfMediaPostCard({
 							postId={postId}
 							sourceReady={sourceReady}
 							trigger="action"
-							showLabel
+							showLabel={isCardComfortable}
 							localPublishedUrl={localPublishedUrl}
 							onLocalPublishedUrlChange={setLocalPublishedUrl}
 							onLoadPublishedUrl={onLoadPublishedUrl}
@@ -319,7 +319,7 @@ function SelfMediaPostCard({
 							item={item}
 							postId={postId}
 							label={t("detail.selfMedia.home.dataSyncNow")}
-							showLabel
+							showLabel={isCardComfortable}
 							publishedUrl={localPublishedUrl}
 							onPostPublishRefresh={onPostPublishRefresh}
 							onConfigureAutoSync={onConfigureAutoSync}
@@ -330,7 +330,7 @@ function SelfMediaPostCard({
 						<SelfMediaPostActionButton
 							label={t("detail.selfMedia.home.openOpsReview")}
 							Icon={BarChart3}
-							showLabel
+							showLabel={isCardComfortable}
 							variant="primary"
 							onClick={() => onOpenOpsReview(item)}
 							dataTestId={`self-media-home-post-review-card-${postId}`}

@@ -11,6 +11,7 @@ import {
 import { observer } from "mobx-react-lite"
 import { IconMenu2, IconX } from "@tabler/icons-react"
 import { Tooltip } from "antd"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/lib/utils"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import {
@@ -37,6 +38,14 @@ import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll
 import DetailEmpty from "../DetailEmpty"
 import { FileTabMagicIcon } from "./components/FileTabMagicIcon"
 import WebsitePresetMenu from "./components/WebsitePresetMenu"
+import CommonWebsitePresetDialog, {
+	type CommonWebsitePresetFormValues,
+} from "./components/CommonWebsitePresetDialog"
+import {
+	COMMON_WEBSITE_PRESETS_LIMIT,
+	getWebsiteTabData,
+	saveCommonWebsitePreset,
+} from "./utils/websiteTabs"
 
 // 获取文件路径用作tooltip的工具函数
 const getFileTooltip = (tab: any, unknownFileText: string) => {
@@ -74,6 +83,9 @@ const FilesViewer = memo(
 			const { t } = useTranslation("super")
 			const isFullscreenMode = useFullscreenMode()
 			const [expandPanelVisible, setExpandPanelVisible] = useState(false)
+			const [commonWebsiteDialogOpen, setCommonWebsiteDialogOpen] = useState(false)
+			const [commonWebsiteInitialValues, setCommonWebsiteInitialValues] =
+				useState<CommonWebsitePresetFormValues>()
 			const tabsContainerRef = useRef<HTMLDivElement>(null)
 
 			// 使用自定义 Hook 管理状态
@@ -196,6 +208,41 @@ const FilesViewer = memo(
 				[activeTab, switchToTab, handleRefresh],
 			)
 
+			const handleAddWebsiteToCommon = useCallback((tab: TabItemType) => {
+				const tabData = getWebsiteTabData(tab)
+				setCommonWebsiteInitialValues({
+					title: tabData.title,
+					url: tabData.url,
+					description: tabData.description,
+				})
+				setCommonWebsiteDialogOpen(true)
+			}, [])
+
+			const handleSubmitCommonWebsite = useCallback(
+				(values: CommonWebsitePresetFormValues) => {
+					const result = saveCommonWebsitePreset(values)
+					if (result.status === "saved") {
+						magicToast.success(t("fileViewer.website.commonSaved"))
+						setCommonWebsiteDialogOpen(false)
+						return
+					}
+					if (result.status === "limit") {
+						magicToast.warning(
+							t("fileViewer.website.commonLimitReached", {
+								count: COMMON_WEBSITE_PRESETS_LIMIT,
+							}),
+						)
+						return
+					}
+					if (result.status === "exists") {
+						magicToast.warning(t("fileViewer.website.commonAlreadyExists"))
+						return
+					}
+					magicToast.warning(t("fileViewer.website.commonSaveFailed"))
+				},
+				[t],
+			)
+
 			// 使用右键菜单 Hook
 			const {
 				contextMenuState,
@@ -210,6 +257,7 @@ const FilesViewer = memo(
 					closeTabsToRight,
 					clearAllTabs: handleClearAllTabs,
 					refreshTab: handleRefreshTab,
+					addWebsiteToCommon: handleAddWebsiteToCommon,
 				},
 			})
 
@@ -508,6 +556,13 @@ const FilesViewer = memo(
 						contextMenuState={contextMenuState}
 						getContextMenuItems={getContextMenuItems}
 						onClose={hideContextMenu}
+					/>
+					<CommonWebsitePresetDialog
+						open={commonWebsiteDialogOpen}
+						mode="add"
+						initialValues={commonWebsiteInitialValues}
+						onOpenChange={setCommonWebsiteDialogOpen}
+						onSubmit={handleSubmitCommonWebsite}
 					/>
 
 					{/* Content Area */}

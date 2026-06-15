@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { message } from "antd"
@@ -37,26 +37,47 @@ function BrandConfigDialog({
 	})
 	const [draftSettings, setDraftSettings] = useState<SelfMediaInitGlobalSettings>(settings)
 	const [brandImagesUploading, setBrandImagesUploading] = useState(false)
+	const wasOpenRef = useRef(open)
+	const draftRevisionRef = useRef(0)
+	const syncedDraftRevisionRef = useRef(0)
 
 	useEffect(() => {
-		if (!open) return
+		if (!open) {
+			wasOpenRef.current = false
+			return
+		}
+
+		if (!wasOpenRef.current) {
+			wasOpenRef.current = true
+			draftRevisionRef.current = 0
+			syncedDraftRevisionRef.current = 0
+			setDraftSettings(settings)
+			return
+		}
+
+		if (draftRevisionRef.current !== syncedDraftRevisionRef.current) return
 		setDraftSettings(settings)
 	}, [open, settings])
 
 	const handleFieldChange = useCallback(
 		(field: "author" | "brandPosition" | "targetAudience", value: string) => {
+			draftRevisionRef.current += 1
 			setDraftSettings((prev) => ({ ...prev, [field]: value }))
 		},
 		[],
 	)
 
 	const handleBrandImagesChange = useCallback((brandImages: BrandImageItem[]) => {
+		draftRevisionRef.current += 1
 		setDraftSettings((prev) => ({ ...prev, brandImages }))
 	}, [])
 
 	const handleSave = useCallback(async () => {
+		const saveRevision = draftRevisionRef.current
 		try {
 			await saveSettings(draftSettings)
+			if (draftRevisionRef.current !== saveRevision) return
+			syncedDraftRevisionRef.current = saveRevision
 			onOpenChange(false)
 		} catch {
 			message.error(t("detail.selfMedia.brandConfig.saveError"))
@@ -73,6 +94,8 @@ function BrandConfigDialog({
 
 	const handleCancel = useCallback(() => {
 		if (isSaving || brandImagesUploading) return
+		draftRevisionRef.current += 1
+		syncedDraftRevisionRef.current = draftRevisionRef.current
 		setDraftSettings(settings)
 		onOpenChange(false)
 	}, [brandImagesUploading, isSaving, onOpenChange, settings])

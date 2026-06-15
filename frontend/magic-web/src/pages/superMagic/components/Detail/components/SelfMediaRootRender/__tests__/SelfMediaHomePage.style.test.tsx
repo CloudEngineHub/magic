@@ -21,6 +21,7 @@ vi.mock("react-i18next", () => ({
 			({
 				"detail.selfMedia.home.articleCount": `${options?.count ?? 0} articles`,
 				"detail.selfMedia.home.create": "Create",
+				"detail.selfMedia.refreshAllData": "Refresh all data",
 			})[key] || key,
 	}),
 }))
@@ -202,6 +203,24 @@ describe("SelfMediaHomePage styles", () => {
 		expect(createButton.querySelector("span")).toHaveClass("truncate")
 	})
 
+	it("adds a refresh-all-data action beside brand settings in the home header", () => {
+		const refreshAllData = vi.fn()
+
+		render(
+			<SelfMediaHomePage
+				posts={[createPostItem()]}
+				onOpenPost={vi.fn()}
+				onOpenBrandConfig={vi.fn()}
+				onRefreshAllData={refreshAllData}
+			/>,
+		)
+
+		expect(screen.getByTestId("self-media-home-brand-config-button")).toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("self-media-home-refresh-all-data-button"))
+
+		expect(refreshAllData).toHaveBeenCalledTimes(1)
+	})
+
 	it("retries loading ops metrics when the storage loader becomes available after the first empty read", async () => {
 		const firstLoadOpsMetrics = vi.fn().mockResolvedValue(null)
 		const secondLoadOpsMetrics = vi.fn().mockResolvedValue(createOpsMetrics())
@@ -272,7 +291,7 @@ describe("SelfMediaHomePage styles", () => {
 		getBoundingClientRect.mockRestore()
 	})
 
-	it("aligns the wide ops data summary and suggestion panel to the same bottom edge", () => {
+	it("keeps the wide suggestion panel pinned to the measured left column height", async () => {
 		const getBoundingClientRect = vi
 			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
 			.mockReturnValue({
@@ -328,16 +347,20 @@ describe("SelfMediaHomePage styles", () => {
 			"data-ops-layout",
 			"wide",
 		)
-		expect(screen.getByTestId("self-media-home-ops-content")).toHaveClass("items-stretch")
-		expect(screen.getByTestId("self-media-home-ops-main-column")).toHaveClass("h-full")
+		expect(screen.getByTestId("self-media-home-ops-content")).toHaveClass("items-start")
+		expect(screen.getByTestId("self-media-home-ops-main-column")).not.toHaveClass("h-full")
 		expect(screen.getByTestId("self-media-home-ops-data-summary")).toHaveClass("flex-1")
-		expect(screen.getByTestId("self-media-home-ops-side-column")).toHaveClass("h-full")
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-home-ops-side-column")).toHaveStyle({
+				height: "420px",
+			})
+		})
 		expect(screen.getByTestId("self-media-home-ops-aside")).toHaveClass("flex-1")
 
 		getBoundingClientRect.mockRestore()
 	})
 
-	it("keeps the wide suggestion panel scrollable when two actions sit beside the data and progress cards", () => {
+	it("lets the wide suggestion list fill the stretched side panel beside the data and progress cards", () => {
 		const getBoundingClientRect = vi
 			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
 			.mockReturnValue({
@@ -401,10 +424,96 @@ describe("SelfMediaHomePage styles", () => {
 		)
 		expect(screen.getByTestId("self-media-home-ops-data-summary")).toBeInTheDocument()
 		expect(screen.getByTestId("self-media-home-ops-completion")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-ops-aside")).toHaveClass("flex", "min-h-0")
 		expect(actionList).toHaveClass("self-media-ops-action-scroll")
-		expect(actionList).toHaveStyle({
-			maxHeight: "260px",
+		expect(actionList).toHaveClass("flex-1", "min-h-0")
+		expect(actionList).not.toHaveStyle({ maxHeight: "260px" })
+		expect(actionList).toHaveStyle({ minHeight: "260px" })
+
+		getBoundingClientRect.mockRestore()
+	})
+
+	it("uses the left column height as the wide suggestion panel height when more actions overflow", async () => {
+		const getBoundingClientRect = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue({
+				x: 0,
+				y: 0,
+				left: 0,
+				top: 0,
+				right: 900,
+				bottom: 420,
+				width: 900,
+				height: 420,
+				toJSON: () => ({}),
+			})
+
+		render(
+			<SelfMediaOpsOverviewCard
+				overview={{
+					totalPosts: 3,
+					totalReads: 0,
+					totalEngagement: 0,
+					engagementRate: null,
+					operationStage: "syncing",
+					completion: {
+						source: { done: 0, total: 3 },
+						metrics: { done: 0, total: 3 },
+						comments: { done: 0, total: 3 },
+						review: { done: 0, total: 3 },
+					},
+					bestPost: null,
+					weakestPost: null,
+					nextActions: [
+						{
+							key: "bind-source",
+							postKey: "rednote:0:posts/post-1/post.json",
+							targetTitle: "做自媒体，最烧时间的不是写稿...",
+							title: "绑定已发布链接",
+							description:
+								"这篇文章还没绑定发布链接。绑定后，系统才能同步真实阅读、点赞和评论数据。",
+							cta: "去绑定",
+							priority: 10,
+						},
+						{
+							key: "bind-source",
+							postKey: "rednote:0:posts/post-2/post.json",
+							targetTitle: "生成不是终点，工作台才是创作真正...",
+							title: "绑定已发布链接",
+							description:
+								"这篇文章还没绑定发布链接。绑定后，系统才能同步真实阅读、点赞和评论数据。",
+							cta: "去绑定",
+							priority: 10,
+						},
+						{
+							key: "bind-source",
+							postKey: "rednote:0:posts/post-3/post.json",
+							targetTitle: "稳定输出的创作者，都先建好了输入...",
+							title: "绑定已发布链接",
+							description:
+								"这篇文章还没绑定发布链接。绑定后，系统才能同步真实阅读、点赞和评论数据。",
+							cta: "去绑定",
+							priority: 10,
+						},
+					],
+				}}
+				onRegenerateDailyInsight={vi.fn()}
+			/>,
+		)
+
+		const sideColumn = screen.getByTestId("self-media-home-ops-side-column")
+		const actionList = screen.getByTestId("self-media-home-ops-next-actions")
+		expect(screen.getByTestId("self-media-home-ops-overview")).toHaveAttribute(
+			"data-ops-layout",
+			"wide",
+		)
+		await waitFor(() => {
+			expect(sideColumn).toHaveStyle({ height: "420px" })
 		})
+		expect(sideColumn).toHaveStyle({ minHeight: "484px" })
+		expect(actionList).toHaveClass("self-media-ops-action-scroll", "flex-1", "min-h-0")
+		expect(actionList).not.toHaveStyle({ maxHeight: "260px" })
+		expect(actionList).toHaveStyle({ minHeight: "260px" })
 
 		getBoundingClientRect.mockRestore()
 	})

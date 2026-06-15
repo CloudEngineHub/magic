@@ -9,7 +9,7 @@ import {
 	TrendingUp,
 	X,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import type { CSSProperties, MouseEvent } from "react"
 import { cn } from "@/lib/utils"
 import type {
@@ -80,6 +80,7 @@ const OPS_ACTION_GAP = 12
 const OPS_ACTION_SHADOW_PADDING = 16
 const OPS_VISIBLE_ACTION_COUNT = 1.5
 const OPS_VISIBLE_ACTION_GAP_COUNT = 1
+const OPS_SIDE_PANEL_STATIC_MIN_HEIGHT = 224
 
 interface OpsOverviewCardStyle extends CSSProperties {
 	"--ops-card-pointer-x": string
@@ -106,6 +107,8 @@ type OpsOverviewLayout = "compact" | "comfortable" | "spacious" | "wide"
 interface OpsActionListStyle extends CSSProperties {
 	"--ops-action-row-height": string
 }
+
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
 
 function getOpsOverviewLayout(width: number): OpsOverviewLayout {
 	if (width >= 900) return "wide"
@@ -205,19 +208,34 @@ function SelfMediaOpsOverviewCard({
 	const hasNextActions = displayActions.length > 0
 	const opsLayout = getOpsOverviewLayout(opsContainerWidth)
 	const isOpsWide = opsLayout === "wide"
+	const { elementRef: mainColumnRef, height: mainColumnHeight } =
+		useMeasuredElementHeight<HTMLDivElement>(isOpsWide)
 	const isOpsComfortable = opsLayout !== "compact"
-	// Wide layout stretches the side panel to match the left data/progress stack; two action cards
-	// still need a bounded scroller so the lower card is not clipped by the outer card.
+	// Wide layout stretches the side panel to match the left data/progress stack; let the list
+	// consume the remaining panel height instead of leaving a fixed-height scroll strip at the top.
 	const isActionListScrollable =
 		displayActions.length > 2 || (isOpsWide && displayActions.length > 1)
+	const shouldStretchActionList = isOpsWide && isActionListScrollable
 	const actionListMaxHeight =
 		OPS_ACTION_ROW_HEIGHT * OPS_VISIBLE_ACTION_COUNT +
 		OPS_ACTION_GAP * OPS_VISIBLE_ACTION_GAP_COUNT +
 		OPS_ACTION_SHADOW_PADDING * 2
+	const sideColumnMinHeight = actionListMaxHeight + OPS_SIDE_PANEL_STATIC_MIN_HEIGHT
 	const actionListStyle: OpsActionListStyle = {
 		"--ops-action-row-height": `${OPS_ACTION_ROW_HEIGHT}px`,
-		maxHeight: isActionListScrollable ? `${actionListMaxHeight}px` : undefined,
+		maxHeight:
+			isActionListScrollable && !shouldStretchActionList
+				? `${actionListMaxHeight}px`
+				: undefined,
+		minHeight: shouldStretchActionList ? `${actionListMaxHeight}px` : undefined,
 	}
+	const sideColumnStyle: CSSProperties | undefined =
+		isOpsWide && mainColumnHeight > 0
+			? {
+					height: `${mainColumnHeight}px`,
+					minHeight: shouldStretchActionList ? `${sideColumnMinHeight}px` : undefined,
+				}
+			: undefined
 	const isInsightLoading = dailyInsightStatus === "loading"
 	const asideTitle = overview.operationStage === "closed" ? "今日建议" : "继续处理"
 	const asideSubtitle =
@@ -228,7 +246,7 @@ function SelfMediaOpsOverviewCard({
 		? formatSelfMediaHomeInsightGreeting(dailyInsight.greeting, "")
 		: ""
 	const opsContentClass = isOpsWide
-		? "grid-cols-[minmax(0,1.16fr)_minmax(280px,0.84fr)] items-stretch p-8"
+		? "grid-cols-[minmax(0,1.16fr)_minmax(280px,0.84fr)] items-start p-8"
 		: isOpsComfortable
 			? "p-6"
 			: "p-4"
@@ -292,10 +310,8 @@ function SelfMediaOpsOverviewCard({
 				data-testid="self-media-home-ops-content"
 			>
 				<div
-					className={cn(
-						"min-w-0",
-						isOpsWide ? "flex h-full flex-col gap-6" : "space-y-6",
-					)}
+					ref={mainColumnRef}
+					className={cn("min-w-0", isOpsWide ? "flex flex-col gap-6" : "space-y-6")}
 					data-testid="self-media-home-ops-main-column"
 				>
 					<div className={cn("flex gap-4", opsHeaderClass)}>
@@ -367,8 +383,9 @@ function SelfMediaOpsOverviewCard({
 				<div
 					className={cn(
 						"min-w-0",
-						isOpsWide ? "flex h-full flex-col gap-3" : "space-y-3",
+						isOpsWide ? "flex min-h-0 flex-col gap-3" : "space-y-3",
 					)}
+					style={sideColumnStyle}
 					data-testid="self-media-home-ops-side-column"
 				>
 					{regenerateInsightButton ? (
@@ -377,7 +394,7 @@ function SelfMediaOpsOverviewCard({
 					<aside
 						className={cn(
 							"min-w-0 border border-white/70 bg-white/50 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_18px_46px_rgba(47,43,36,0.08)] backdrop-blur-xl",
-							isOpsWide && "flex-1",
+							isOpsWide && "flex min-h-0 flex-1 flex-col",
 							opsAsideClass,
 						)}
 						data-testid="self-media-home-ops-aside"
@@ -407,6 +424,7 @@ function SelfMediaOpsOverviewCard({
 							className={cn(
 								"mt-5",
 								isActionListScrollable && "self-media-ops-action-scroll -mx-4 px-4",
+								shouldStretchActionList && "min-h-0 flex-1",
 							)}
 							style={actionListStyle}
 							data-testid="self-media-home-ops-next-actions"
@@ -523,6 +541,54 @@ function useAnimatedOverviewValue(target: number, duration: number) {
 	}, [duration, target])
 
 	return value
+}
+
+function useMeasuredElementHeight<Element extends HTMLElement>(enabled: boolean) {
+	const elementRef = useRef<Element | null>(null)
+	const [height, setHeight] = useState(0)
+
+	const updateHeight = useCallback(() => {
+		const measuredHeight = elementRef.current?.getBoundingClientRect().height ?? 0
+		setHeight((current) =>
+			Math.abs(current - measuredHeight) < 0.5 ? current : measuredHeight,
+		)
+	}, [])
+
+	useIsomorphicLayoutEffect(() => {
+		if (!enabled) {
+			setHeight(0)
+			return undefined
+		}
+
+		const element = elementRef.current
+		if (!element) return undefined
+
+		updateHeight()
+		let frame = 0
+		const handleResize = () => updateHeight()
+		window.addEventListener("resize", handleResize)
+
+		if (typeof ResizeObserver === "undefined") {
+			return () => {
+				window.cancelAnimationFrame(frame)
+				window.removeEventListener("resize", handleResize)
+			}
+		}
+
+		const observer = new ResizeObserver(() => {
+			window.cancelAnimationFrame(frame)
+			frame = window.requestAnimationFrame(() => updateHeight())
+		})
+		observer.observe(element)
+
+		return () => {
+			window.cancelAnimationFrame(frame)
+			window.removeEventListener("resize", handleResize)
+			observer.disconnect()
+		}
+	}, [enabled, updateHeight])
+
+	return { elementRef, height }
 }
 
 function clamp(value: number, min: number, max: number) {

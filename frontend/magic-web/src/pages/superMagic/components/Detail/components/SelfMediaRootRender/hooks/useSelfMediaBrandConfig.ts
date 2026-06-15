@@ -60,10 +60,11 @@ export function useSelfMediaBrandConfig({ fileStorageService }: UseSelfMediaBran
 	const saveSettings = useCallback(
 		async (nextSettings = settings) => {
 			if (!fileStorageService) return
+			const settingsAtSaveStart = settings
 			setIsSaving(true)
 			try {
 				await fileStorageService.saveBrandConfig(nextSettings)
-				setSettings(nextSettings)
+				setSettings((current) => (current === settingsAtSaveStart ? nextSettings : current))
 			} catch {
 				throw new Error("Failed to save self-media brand config")
 			} finally {

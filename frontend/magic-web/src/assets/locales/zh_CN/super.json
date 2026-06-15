@@ -847,9 +847,11 @@
 					"coverDescription": "将方形封面和横向封面拼接成一张图片，适合上传到公众号素材。",
 					"coverTitle": "封面拼图",
 					"exportCover": "导出封面图",
+					"horizontalCover": "横向封面",
 					"htmlCopied": "已复制",
 					"htmlDescription": "复制处理后的文章 HTML，可直接粘贴到微信公众号编辑器。",
-					"htmlTitle": "公众号 HTML"
+					"htmlTitle": "公众号 HTML",
+					"squareCover": "方形封面"
 				}
 			},
 			"home": {
@@ -1220,7 +1222,17 @@
 					"visualCustomPlaceholder": "描述你想要的视觉风格（配色、字体、装饰、氛围）…",
 					"visualHint": "选择卡片的视觉风格预设，AI 将使用对应的 CSS/JS 模板生成内容",
 					"visualLabel": "视觉模板",
-					"visualReferenceLabel": "添加视觉参考"
+					"visualReferenceLabel": "添加视觉参考",
+					"wechatArticleContentLabel": "全文内容",
+					"wechatContentEditorView": "编辑",
+					"wechatContentPhoneView": "手机预览",
+					"wechatContentViewToggle": "全文内容视图切换",
+					"wechatPreviewAccount": "公众号草稿",
+					"wechatPreviewBack": "返回",
+					"wechatPreviewEmpty": "添加全文要点后，这里会同步显示手机阅读预览。",
+					"wechatPreviewMore": "更多",
+					"wechatPreviewNavTitle": "公众号预览",
+					"wechatPreviewUntitled": "未命名文章"
 				},
 				"stepTopic": {
 					"activeStatus": "继续完善当前文章",
@@ -1561,6 +1573,13 @@
 					"label": "平台"
 				},
 				"wechat-official-accounts": {
+					"articleModes": {
+						"desktop": "原文",
+						"label": "全文内容视图切换",
+						"phone": "手机预览"
+					},
+					"commentsFromPost": "来自评论区",
+					"commentsTotal": "精选评论 {{count}}",
 					"cover": {
 						"navTitle": "公众号",
 						"timeHint": "刚刚"
@@ -1751,6 +1770,7 @@
 		"sortSlidesSuccess": "页面顺序已更新",
 		"sortSlidesTitle": "调整页面顺序",
 		"tabs": {
+			"addWebsiteToCommon": "设为常用",
 			"close": "关闭",
 			"closeAll": "全部关闭",
 			"closeOthers": "关闭其他",
@@ -1761,10 +1781,25 @@
 		"unknownFile": "未知文件",
 		"waitForPreviousOperation": "请等待上一次操作结束",
 		"website": {
-			"add": "打开网站",
-			"customDescription": "自定义网站",
-			"customPlaceholder": "输入网址",
-			"loadFallbackDescription": "如果页面未完整显示，可能是站点限制 iframe 嵌入，或当前网络加载较慢。",
+				"add": "打开网站",
+				"commonAddTitle": "保存常用链接",
+				"commonCancel": "取消",
+				"commonConfirm": "保存",
+				"commonDialogDescription": "确认这个常用入口的名称和链接，保存后会显示在常用链接列表中。",
+				"commonEditTitle": "编辑常用链接",
+				"commonAlreadyExists": "这个链接已添加为常用",
+				"commonLimitReached": "常用链接最多可保存 {{count}} 个，请先删除不再使用的链接。",
+				"commonSaveFailed": "未能保存为常用网站",
+				"commonSaved": "已保存为常用网站",
+				"commonTitle": "常用链接",
+				"commonTitleLabel": "名称",
+				"commonUrlLabel": "链接",
+				"customDescription": "自定义网站",
+				"customPlaceholder": "输入网址",
+				"deleteCommon": "删除",
+				"editCommon": "编辑",
+				"removeCommon": "移除常用链接",
+				"loadFallbackDescription": "如果页面未完整显示，可能是站点限制 iframe 嵌入，或当前网络加载较慢。",
 			"loadFallbackTitle": "网页加载时间较长",
 			"menuTitle": "常用网站",
 			"openCustom": "打开",
@@ -1773,6 +1808,10 @@
 				"baiduImages": {
 					"description": "图片搜索与素材参考",
 					"title": "百度图片"
+				},
+				"bingImages": {
+					"description": "多源图片搜索与视觉参考",
+					"title": "Bing 图片"
 				},
 				"gptImage2": {
 					"description": "GPT Image 2 提示词示例",

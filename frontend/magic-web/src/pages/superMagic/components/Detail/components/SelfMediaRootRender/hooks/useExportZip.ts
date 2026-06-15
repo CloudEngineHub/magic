@@ -43,7 +43,7 @@ const DEFAULT_PIXEL_RATIO = 2
 const PER_CARD_TIMEOUT = 20000
 const LONG_IMAGE_SEPARATOR_COLOR = "#e5e7eb"
 const WECHAT_COVER_BASE_HEIGHT = 540
-const WECHAT_COVER_FALLBACK_ASPECT_RATIO = 16 / 9
+const WECHAT_COVER_HORIZONTAL_ASPECT_RATIO = 2.35
 
 function dataUrlToBlob(dataUrl: string): Blob {
 	const [meta, base64] = dataUrl.split(",")
@@ -184,13 +184,6 @@ async function loadImageFromFileId(fileId: string): Promise<HTMLImageElement> {
 	}
 }
 
-function getImageAspectRatio(image: HTMLImageElement, fallback: number): number {
-	const width = image.naturalWidth || image.width
-	const height = image.naturalHeight || image.height
-	if (width > 0 && height > 0) return width / height
-	return fallback
-}
-
 function drawImageCover(
 	context: CanvasRenderingContext2D,
 	image: HTMLImageElement,
@@ -234,11 +227,7 @@ async function stitchWechatCoverImagesToPngBlob(args: {
 	])
 	const targetHeight = Math.max(1, Math.round(WECHAT_COVER_BASE_HEIGHT * pixelRatio))
 	const squareWidth = targetHeight
-	const horizontalAspect = Math.max(
-		1,
-		getImageAspectRatio(horizontalImage, WECHAT_COVER_FALLBACK_ASPECT_RATIO),
-	)
-	const horizontalWidth = Math.round(targetHeight * horizontalAspect)
+	const horizontalWidth = Math.round(targetHeight * WECHAT_COVER_HORIZONTAL_ASPECT_RATIO)
 	const canvas = document.createElement("canvas")
 	canvas.width = squareWidth + horizontalWidth
 	canvas.height = targetHeight

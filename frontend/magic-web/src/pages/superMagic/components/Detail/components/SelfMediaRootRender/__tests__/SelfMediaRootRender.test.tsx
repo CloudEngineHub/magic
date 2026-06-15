@@ -63,6 +63,7 @@ const mockStore = vi.hoisted(() => ({
 	openPostDetail: vi.fn(),
 	ensurePlatformPostLoaded: vi.fn(),
 	goHomeList: vi.fn(),
+	init: vi.fn(),
 }))
 
 vi.mock("react-dom", async () => {
@@ -249,6 +250,7 @@ vi.mock("react-i18next", () => ({
 			)
 		},
 	}),
+	Trans: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
 	initReactI18next: {
 		type: "3rdParty",
 		init: vi.fn(),
@@ -803,6 +805,7 @@ describe("SelfMediaRootRender", () => {
 		mockStore.openPostDetail.mockReset()
 		mockStore.ensurePlatformPostLoaded.mockReset()
 		mockStore.goHomeList.mockReset()
+		mockStore.init.mockReset().mockResolvedValue(undefined)
 		mockToastSuccess.mockReset()
 		mockSendSelfMediaPrePublishAnalysis.mockReset()
 		mockSendSelfMediaPostPublishDataRefresh.mockReset()
@@ -1345,6 +1348,24 @@ describe("SelfMediaRootRender", () => {
 		fireEvent.click(screen.getByTestId("self-media-home-brand-config-button"))
 
 		expect(screen.getByTestId("self-media-brand-config-dialog")).toBeInTheDocument()
+	})
+
+	it("refreshes all self-media data from the home header", async () => {
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_WITH_SOURCE_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-home-refresh-all-data-button"))
+
+		await waitFor(() => {
+			expect(mockStore.init).toHaveBeenCalledWith({ preserveNavigation: true })
+		})
 	})
 
 	it("does not expose the data overview dialog from an article card", async () => {

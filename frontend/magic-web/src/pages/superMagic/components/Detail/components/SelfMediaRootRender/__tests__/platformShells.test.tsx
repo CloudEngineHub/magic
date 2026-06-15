@@ -125,7 +125,8 @@ vi.mock("../platforms/wechat-official-accounts/code", () => ({
 vi.mock("../platforms/wechat-official-accounts/wechatArticleHtml", () => ({
 	loadWechatArticleHtml: vi.fn(() =>
 		Promise.resolve({
-			content: "<section><strong>fallback html</strong></section>",
+			content:
+				'<html><head><style>.fallback{color:red;font-weight:700}</style></head><body><section class="fallback">fallback html</section></body></html>',
 			filePathMapping: new Map(),
 		}),
 	),
@@ -582,7 +583,9 @@ describe("platform shells", () => {
 		expect(Object.keys(clipboardItemPayloads[0])).toEqual(["text/html"])
 		const htmlBlob = clipboardItemPayloads[0]["text/html"] as unknown as MockBlob
 		expect(htmlBlob.type).toBe("text/html")
-		expect(htmlBlob.parts).toEqual(["<section><strong>fallback html</strong></section>"])
+		expect(htmlBlob.parts).toEqual([
+			'<section class="fallback" style="color:red;font-weight:700">fallback html</section>',
+		])
 	})
 
 	it("adds a scroll card to the current chat from the action strip", () => {

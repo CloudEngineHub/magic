@@ -21,10 +21,12 @@ import {
 	SelectValue,
 } from "@/components/shadcn-ui/select"
 import { cn } from "@/lib/utils"
+import type { ImageProcessOptions } from "@/utils/image-processing"
 import CardFrame from "./CardFrame"
 import type { CardFrameRef } from "./CardFrame"
 import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 import type { SelfMediaAttachmentNode, SelfMediaPost } from "../types"
+import { useCoverImageUrl } from "../platforms/wechat-official-accounts/useCoverImageUrl"
 
 export type SelfMediaExportType = "cardsZip" | "longImage" | "wechatCoverImage"
 export type SelfMediaExportMode = "cards" | "wechatOfficial"
@@ -69,6 +71,16 @@ const EXPORT_PIXEL_RATIO_STORAGE_KEY = "dtyq:self-media:export-pixel-ratio"
  * (e.g. 2x → 2160×2880). Varies if card HTML has different body size.
  */
 const EXPORT_SIZE_HINT_CSS = { width: 1080, height: 1440 } as const
+const WECHAT_COVER_SQUARE_PREVIEW_PROCESS: ImageProcessOptions = {
+	resize: { w: 240, h: 240, m: "fill" },
+	quality: 82,
+	format: "webp",
+}
+const WECHAT_COVER_HORIZONTAL_PREVIEW_PROCESS: ImageProcessOptions = {
+	resize: { w: 640, m: "lfit" },
+	quality: 82,
+	format: "webp",
+}
 
 function isPixelRatioOption(value: number): value is (typeof PIXEL_RATIO_OPTIONS)[number] {
 	return (PIXEL_RATIO_OPTIONS as readonly number[]).includes(value)
@@ -103,6 +115,73 @@ function isExportTypeOption(value: string): value is SelfMediaExportType {
 function buildAllCardIndexes(post: SelfMediaPost | undefined): Set<number> {
 	if (!post) return new Set()
 	return new Set(post.cards.map((_, idx) => idx))
+}
+
+function WechatCoverPreviewImage({
+	url,
+	loading,
+	alt,
+	className,
+	testId,
+}: {
+	url: string | null
+	loading: boolean
+	alt: string
+	className?: string
+	testId?: string
+}) {
+	return (
+		<div className={cn("overflow-hidden bg-white", className)} data-testid={testId}>
+			{url ? (
+				<img src={url} alt={alt} className="h-full w-full object-cover" draggable={false} />
+			) : (
+				<div
+					className={cn(
+						"h-full w-full bg-gradient-to-b from-[#fafafa] to-[#e4e4e7]",
+						loading && "animate-pulse",
+					)}
+					aria-label={alt}
+				/>
+			)}
+		</div>
+	)
+}
+
+function WechatCoverExportPreview({ post }: { post?: SelfMediaPost }) {
+	const { t } = useTranslation("super")
+	const squareFileId = post?.thumbnailCover?.fileId || post?.heroCover?.fileId
+	const horizontalFileId = post?.heroCover?.fileId || post?.thumbnailCover?.fileId
+	const { url: squareUrl, loading: squareLoading } = useCoverImageUrl(
+		squareFileId,
+		Boolean(squareFileId),
+		WECHAT_COVER_SQUARE_PREVIEW_PROCESS,
+	)
+	const { url: horizontalUrl, loading: horizontalLoading } = useCoverImageUrl(
+		horizontalFileId,
+		Boolean(horizontalFileId),
+		WECHAT_COVER_HORIZONTAL_PREVIEW_PROCESS,
+	)
+
+	return (
+		<div
+			className="mt-4 grid aspect-[335/100] w-full grid-cols-[100fr_235fr] overflow-hidden rounded-[14px] bg-[#f4f4f5]"
+			data-testid="self-media-export-wechat-cover-preview"
+		>
+			<WechatCoverPreviewImage
+				url={squareUrl}
+				loading={squareLoading}
+				alt={t("detail.selfMedia.export.wechat.squareCover")}
+				className="aspect-square h-full min-w-0"
+			/>
+			<WechatCoverPreviewImage
+				url={horizontalUrl}
+				loading={horizontalLoading}
+				alt={t("detail.selfMedia.export.wechat.horizontalCover")}
+				className="aspect-[235/100] h-full min-w-0"
+				testId="self-media-export-wechat-horizontal-preview"
+			/>
+		</div>
+	)
 }
 
 function ExportPreviewDialog({
@@ -494,10 +573,7 @@ function ExportPreviewDialog({
 									</p>
 								</div>
 							</div>
-							<div className="mt-4 flex h-16 items-center gap-2 rounded-[14px] bg-[#f4f4f5] p-2">
-								<div className="h-12 w-12 rounded-[10px] bg-white shadow-sm" />
-								<div className="h-12 flex-1 rounded-[10px] bg-white shadow-sm" />
-							</div>
+							<WechatCoverExportPreview post={selectedPost} />
 						</section>
 
 						<section

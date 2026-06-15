@@ -99,7 +99,7 @@ export function useCreateTopicListener(options: UseCreateTopicListenerOptions = 
 				})
 			}
 			const sourceTopic = resolveRequestedModeSourceTopic({
-				sourceTopic: topicStore?.selectedTopic ?? globalTopicStore.selectedTopic,
+				sourceTopic: scopedTopicStore?.selectedTopic ?? globalTopicStore.selectedTopic,
 				selectedProject,
 				topicMode,
 			})

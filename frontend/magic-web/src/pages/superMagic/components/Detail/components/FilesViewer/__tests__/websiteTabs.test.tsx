@@ -1,15 +1,23 @@
-import { act, fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { act, fireEvent, render, renderHook, screen } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	buildCustomWebsitePreset,
 	buildWebsiteTab,
+	COMMON_WEBSITE_PRESETS_LIMIT,
+	getCommonWebsitePresets,
 	isWebsiteTab,
+	removeCommonWebsitePreset,
+	saveCommonWebsitePreset,
+	updateCommonWebsitePreset,
 	WEBSITE_TAB_PREFIX,
 	WEBSITE_PRESETS,
 } from "../utils/websiteTabs"
 import { getFileViewerTabType } from "../utils/tabType"
 import WebsiteIframeTabContent from "../components/WebsiteIframeTabContent"
 import WebsitePresetMenu from "../components/WebsitePresetMenu"
+import CommonWebsitePresetDialog from "../components/CommonWebsitePresetDialog"
+import { useTabContextMenu } from "../hooks/useTabContextMenu"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -18,7 +26,68 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("antd", () => ({
+	Flex: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) => (
+		<div {...props}>{children}</div>
+	),
 	Tooltip: ({ children }: { children: React.ReactNode }) => children,
+}))
+
+vi.mock("@/components/base/MagicToaster/utils", () => ({
+	default: {
+		success: vi.fn(),
+		warning: vi.fn(),
+		error: vi.fn(),
+		info: vi.fn(),
+	},
+}))
+
+vi.mock("@/components/shadcn-ui/context-menu", () => ({
+	ContextMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+	ContextMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+	ContextMenuItem: ({
+		children,
+		onClick,
+		onSelect,
+		...props
+	}: {
+		children: React.ReactNode
+		onClick?: (event: React.MouseEvent) => void
+		onSelect?: () => void
+		[key: string]: unknown
+	}) => (
+		<button
+			type="button"
+			onClick={(event) => {
+				onClick?.(event)
+				onSelect?.()
+			}}
+			{...props}
+		>
+			{children}
+		</button>
+	),
+	ContextMenuSeparator: () => <hr />,
+	ContextMenuTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}))
+
+vi.mock("@/components/shadcn-ui/dialog", () => ({
+	Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
+		open ? <div>{children}</div> : null,
+	DialogContent: ({
+		children,
+		...props
+	}: {
+		children: React.ReactNode
+		[key: string]: unknown
+	}) => (
+		<div role="dialog" {...props}>
+			{children}
+		</div>
+	),
+	DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
+	DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+	DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+	DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
 }))
 
 vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
@@ -43,9 +112,9 @@ vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 		onClick?: () => void
 		[key: string]: unknown
 	}) => (
-		<button onClick={onClick} {...props}>
+		<div role="button" tabIndex={0} onClick={onClick} {...props}>
 			{children}
-		</button>
+		</div>
 	),
 	DropdownMenuLabel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 	DropdownMenuSeparator: () => <hr />,
@@ -53,6 +122,11 @@ vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 }))
 
 describe("website tabs", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		window.localStorage.clear()
+	})
+
 	it("normalizes custom website urls into stable presets", () => {
 		const preset = buildCustomWebsitePreset("example.com/prompts")
 
@@ -90,7 +164,14 @@ describe("website tabs", () => {
 					titleKey: "fileViewer.website.presets.baiduImages.title",
 					descriptionKey: "fileViewer.website.presets.baiduImages.description",
 					iconSrc: expect.stringContaining("baidu-images.png"),
-					url: "https://image.baidu.com/",
+					url: expect.stringContaining("https://image.baidu.com/search/index"),
+				}),
+				expect.objectContaining({
+					id: "bing-images",
+					titleKey: "fileViewer.website.presets.bingImages.title",
+					descriptionKey: "fileViewer.website.presets.bingImages.description",
+					iconSrc: expect.stringMatching(/^data:image\/svg\+xml/),
+					url: "https://www.bing.com/images/search",
 				}),
 				expect.objectContaining({
 					id: "xiaohongshu",
@@ -167,6 +248,204 @@ describe("website tabs", () => {
 		expect(getFileViewerTabType({ id: `${WEBSITE_TAB_PREFIX}legacy` })).toBe("website")
 		expect(getFileViewerTabType({ id: "__kb__doc" })).toBe("knowledge_base")
 		expect(getFileViewerTabType({ id: "__playback__" })).toBe("playback")
+	})
+
+	it("reports existing common website presets without overwriting them", () => {
+		expect(
+			saveCommonWebsitePreset({
+				title: "Example Images",
+				url: "example.com/images",
+				description: "Saved from tab",
+			}),
+		).toMatchObject({ status: "saved" })
+		expect(
+			saveCommonWebsitePreset({
+				title: "Example Images Updated",
+				url: "https://example.com/images",
+				description: "Updated from tab",
+			}),
+		).toMatchObject({ status: "exists" })
+
+		expect(getCommonWebsitePresets()).toEqual([
+			expect.objectContaining({
+				id: "common-example-com-images",
+				title: "Example Images",
+				url: "https://example.com/images",
+				description: "Saved from tab",
+			}),
+		])
+	})
+
+	it("keeps at most 20 common website presets and reports limit overflow", () => {
+		Array.from({ length: COMMON_WEBSITE_PRESETS_LIMIT }, (_, index) => {
+			expect(
+				saveCommonWebsitePreset({
+					title: `Saved ${index}`,
+					url: `https://example.com/images/${index}`,
+				}),
+			).toMatchObject({ status: "saved" })
+		})
+
+		expect(
+			saveCommonWebsitePreset({
+				title: "Overflow",
+				url: "https://example.com/images/overflow",
+			}),
+		).toMatchObject({ status: "limit" })
+
+		const presets = getCommonWebsitePresets()
+		expect(presets).toHaveLength(COMMON_WEBSITE_PRESETS_LIMIT)
+		expect(presets.some((preset) => preset.title === "Overflow")).toBe(false)
+	})
+
+	it("removes common website presets from local storage", () => {
+		const result = saveCommonWebsitePreset({
+			title: "Example Images",
+			url: "example.com/images",
+			description: "Saved from tab",
+		})
+		expect(result.status).toBe("saved")
+		if (result.status !== "saved") return
+
+		expect(removeCommonWebsitePreset(result.preset.id)).toBe(true)
+		expect(getCommonWebsitePresets()).toEqual([])
+	})
+
+	it("updates common website preset title and link", () => {
+		const result = saveCommonWebsitePreset({
+			title: "Example Images",
+			url: "example.com/images",
+			description: "Saved from tab",
+		})
+		expect(result.status).toBe("saved")
+		if (result.status !== "saved") return
+
+		expect(
+			updateCommonWebsitePreset(result.preset.id, {
+				title: "Edited Images",
+				url: "https://example.com/edited",
+				description: "Edited from menu",
+			}),
+		).toMatchObject({ status: "saved" })
+
+		expect(getCommonWebsitePresets()).toEqual([
+			expect.objectContaining({
+				id: "common-example-com-edited",
+				title: "Edited Images",
+				url: "https://example.com/edited",
+				description: "Edited from menu",
+			}),
+		])
+	})
+
+	it("reports existing common website when editing to another saved link", () => {
+		const firstResult = saveCommonWebsitePreset({
+			title: "First Images",
+			url: "https://example.com/first",
+		})
+		const secondResult = saveCommonWebsitePreset({
+			title: "Second Images",
+			url: "https://example.com/second",
+		})
+		expect(firstResult.status).toBe("saved")
+		expect(secondResult.status).toBe("saved")
+		if (firstResult.status !== "saved" || secondResult.status !== "saved") return
+
+		expect(
+			updateCommonWebsitePreset(secondResult.preset.id, {
+				title: "Edited Second",
+				url: "https://example.com/first",
+			}),
+		).toMatchObject({ status: "exists" })
+
+		expect(getCommonWebsitePresets()).toEqual([
+			expect.objectContaining({ title: "Second Images", url: "https://example.com/second" }),
+			expect.objectContaining({ title: "First Images", url: "https://example.com/first" }),
+		])
+	})
+
+	it("submits edited title and link from the common website dialog", () => {
+		const onSubmit = vi.fn()
+		render(
+			<CommonWebsitePresetDialog
+				open
+				mode="add"
+				initialValues={{
+					title: "Saved Image Board",
+					url: "https://example.com/saved-images",
+					description: "Saved from tab",
+				}}
+				onOpenChange={vi.fn()}
+				onSubmit={onSubmit}
+			/>,
+		)
+
+		fireEvent.change(screen.getByLabelText("fileViewer.website.commonTitleLabel"), {
+			target: { value: "Edited Board" },
+		})
+		fireEvent.change(screen.getByLabelText("fileViewer.website.commonUrlLabel"), {
+			target: { value: "https://example.com/edited-board" },
+		})
+		fireEvent.click(screen.getByRole("button", { name: "fileViewer.website.commonConfirm" }))
+
+		expect(onSubmit).toHaveBeenCalledWith({
+			title: "Edited Board",
+			url: "https://example.com/edited-board",
+			description: "Saved from tab",
+		})
+	})
+
+	it("adds a common-website action only for website tab context menus", () => {
+		const addWebsiteToCommon = vi.fn()
+		const websiteTab = buildWebsiteTab({
+			id: "example-images",
+			title: "Example Images",
+			url: "https://example.com/images",
+			description: "Saved from tab",
+		})
+		const fileTab = {
+			id: "file-1",
+			title: "File",
+			type: "file" as const,
+			active: true,
+			closeable: true,
+			fileData: {
+				file_id: "file-1",
+				file_name: "file.txt",
+			},
+		}
+		const actions = {
+			closeFileTab: vi.fn(),
+			closeOtherTabs: vi.fn(),
+			closeTabsToRight: vi.fn(),
+			clearAllTabs: vi.fn(),
+			refreshTab: vi.fn(),
+			addWebsiteToCommon,
+		}
+		const { result } = renderHook(() =>
+			useTabContextMenu({
+				tabs: [websiteTab, fileTab],
+				actions,
+			}),
+		)
+
+		const websiteItems = result.current.getContextMenuItems(websiteTab.id) || []
+		const fileItems = result.current.getContextMenuItems(fileTab.id) || []
+
+		const commonItem = websiteItems.find((item) => item?.key === "addWebsiteToCommon")
+		expect(commonItem).toMatchObject({
+			key: "addWebsiteToCommon",
+			label: "fileViewer.tabs.addWebsiteToCommon",
+		})
+		expect(fileItems.some((item) => item?.key === "addWebsiteToCommon")).toBe(false)
+
+		act(() => {
+			if (commonItem && "onClick" in commonItem && commonItem.onClick) {
+				commonItem.onClick({} as never)
+			}
+		})
+
+		expect(addWebsiteToCommon).toHaveBeenCalledWith(websiteTab)
 	})
 
 	it("renders website tabs through an iframe with an external-open fallback", () => {
@@ -346,13 +625,17 @@ describe("website tabs", () => {
 		expect(screen.getByTestId("website-preset-icon-gpt-image-2")).toBeInTheDocument()
 	})
 
-	it("renders downloaded website icons for material discovery presets", () => {
+	it("renders website icons for material discovery presets", () => {
 		const onOpenWebsiteTab = vi.fn()
 		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
 
 		expect(screen.getByTestId("website-preset-icon-baidu-images")).toHaveAttribute(
 			"src",
 			expect.stringContaining("baidu-images.png"),
+		)
+		expect(screen.getByTestId("website-preset-icon-bing-images")).toHaveAttribute(
+			"src",
+			expect.stringMatching(/^data:image\/svg\+xml/),
 		)
 		expect(screen.getByTestId("website-preset-icon-xiaohongshu")).toHaveAttribute(
 			"src",
@@ -383,6 +666,125 @@ describe("website tabs", () => {
 			url: "https://example.com/prompts",
 			description: "fileViewer.website.customDescription",
 		})
+	})
+
+	it("renders saved common websites at the bottom of the website menu", () => {
+		saveCommonWebsitePreset({
+			title: "Saved Image Board",
+			url: "https://example.com/saved-images",
+			description: "Saved from tab",
+		})
+
+		const onOpenWebsiteTab = vi.fn()
+		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
+
+		expect(screen.getByText("fileViewer.website.commonTitle")).toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "Saved Image Board" }))
+
+		expect(onOpenWebsiteTab).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: "common-example-com-saved-images",
+				title: "Saved Image Board",
+				url: "https://example.com/saved-images",
+				description: "Saved from tab",
+			}),
+		)
+	})
+
+	it("edits saved common websites from the website menu context actions", () => {
+		saveCommonWebsitePreset({
+			title: "Saved Image Board",
+			url: "https://example.com/saved-images",
+			description: "Saved from tab",
+		})
+
+		const onOpenWebsiteTab = vi.fn()
+		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
+
+		fireEvent.click(screen.getByRole("button", { name: "fileViewer.website.editCommon" }))
+		fireEvent.change(screen.getByLabelText("fileViewer.website.commonTitleLabel"), {
+			target: { value: "Edited Image Board" },
+		})
+		fireEvent.change(screen.getByLabelText("fileViewer.website.commonUrlLabel"), {
+			target: { value: "https://example.com/edited-images" },
+		})
+		fireEvent.click(screen.getByRole("button", { name: "fileViewer.website.commonConfirm" }))
+
+		expect(onOpenWebsiteTab).not.toHaveBeenCalled()
+		expect(screen.getByRole("button", { name: "Edited Image Board" })).toBeInTheDocument()
+		expect(getCommonWebsitePresets()).toEqual([
+			expect.objectContaining({
+				title: "Edited Image Board",
+				url: "https://example.com/edited-images",
+			}),
+		])
+	})
+
+	it("warns when editing a common website to an existing link", () => {
+		saveCommonWebsitePreset({
+			title: "First Images",
+			url: "https://example.com/first",
+		})
+		saveCommonWebsitePreset({
+			title: "Second Images",
+			url: "https://example.com/second",
+		})
+
+		const onOpenWebsiteTab = vi.fn()
+		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
+
+		fireEvent.click(screen.getAllByRole("button", { name: "fileViewer.website.editCommon" })[0])
+		fireEvent.change(screen.getByLabelText("fileViewer.website.commonUrlLabel"), {
+			target: { value: "https://example.com/first" },
+		})
+		fireEvent.click(screen.getByRole("button", { name: "fileViewer.website.commonConfirm" }))
+
+		expect(magicToast.warning).toHaveBeenCalledWith("fileViewer.website.commonAlreadyExists")
+		expect(getCommonWebsitePresets()).toEqual([
+			expect.objectContaining({ title: "Second Images", url: "https://example.com/second" }),
+			expect.objectContaining({ title: "First Images", url: "https://example.com/first" }),
+		])
+		expect(
+			screen.getByRole("button", { name: "fileViewer.website.commonConfirm" }),
+		).toBeInTheDocument()
+	})
+
+	it("deletes saved common websites from the website menu context actions", () => {
+		saveCommonWebsitePreset({
+			title: "Saved Image Board",
+			url: "https://example.com/saved-images",
+			description: "Saved from tab",
+		})
+
+		const onOpenWebsiteTab = vi.fn()
+		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
+
+		fireEvent.click(screen.getByRole("button", { name: "fileViewer.website.deleteCommon" }))
+
+		expect(onOpenWebsiteTab).not.toHaveBeenCalled()
+		expect(screen.queryByRole("button", { name: "Saved Image Board" })).not.toBeInTheDocument()
+		expect(getCommonWebsitePresets()).toEqual([])
+	})
+
+	it("removes saved common websites from the visible close button without opening the link", () => {
+		saveCommonWebsitePreset({
+			title: "Saved Image Board",
+			url: "https://example.com/saved-images",
+			description: "Saved from tab",
+		})
+
+		const onOpenWebsiteTab = vi.fn()
+		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "fileViewer.website.removeCommon Saved Image Board",
+			}),
+		)
+
+		expect(onOpenWebsiteTab).not.toHaveBeenCalled()
+		expect(screen.queryByRole("button", { name: "Saved Image Board" })).not.toBeInTheDocument()
+		expect(getCommonWebsitePresets()).toEqual([])
 	})
 
 	it("keeps the menu header and custom url input sticky above a scrollable preset list", () => {

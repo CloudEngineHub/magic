@@ -136,4 +136,46 @@ describe("BrandConfigDialog style", () => {
 		expect(onOpenChange).not.toHaveBeenCalledWith(false)
 		expect(mockMessageError).toHaveBeenCalledWith("detail.selfMedia.brandConfig.saveError")
 	})
+
+	it("preserves draft edits typed while an older save is still in flight", async () => {
+		let hookState = {
+			settings: {
+				author: "Magic Lab",
+				brandPosition: "AI tools",
+				targetAudience: "Creators",
+				brandImages: [],
+			},
+			saveSettings: vi.fn().mockResolvedValue(undefined),
+			isLoading: false,
+			isSaving: false,
+		}
+		mockUseSelfMediaBrandConfig.mockImplementation(() => hookState)
+		const onOpenChange = vi.fn()
+
+		const { rerender } = render(
+			<BrandConfigDialog open onOpenChange={onOpenChange} fileStorageService={null} />,
+		)
+
+		const accountInput = screen.getByPlaceholderText("如：@超级麦吉")
+		fireEvent.change(accountInput, { target: { value: "Saved snapshot" } })
+		fireEvent.click(screen.getByTestId("self-media-brand-config-save-button"))
+
+		await waitFor(() => {
+			expect(hookState.saveSettings).toHaveBeenCalledWith(
+				expect.objectContaining({ author: "Saved snapshot" }),
+			)
+		})
+
+		fireEvent.change(accountInput, { target: { value: "Typed during save" } })
+		expect(accountInput).toHaveValue("Typed during save")
+
+		hookState = {
+			...hookState,
+			settings: hookState.saveSettings.mock.calls[0][0],
+			isSaving: false,
+		}
+		rerender(<BrandConfigDialog open onOpenChange={onOpenChange} fileStorageService={null} />)
+
+		expect(screen.getByPlaceholderText("如：@超级麦吉")).toHaveValue("Typed during save")
+	})
 })

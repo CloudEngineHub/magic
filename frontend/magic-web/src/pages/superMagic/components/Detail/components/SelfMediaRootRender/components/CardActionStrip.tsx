@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next"
+import type { ComponentType } from "react"
 import { Edit, MessageSquarePlus, Newspaper, RefreshCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
@@ -12,6 +13,15 @@ interface CardActionStripLabels {
 	addPostFolderToCurrentChat?: string
 	goToEdit?: string
 	refresh?: string
+}
+
+export interface CardActionStripCustomAction {
+	key: string
+	label: string
+	icon: ComponentType<{ className?: string }>
+	onClick: () => void
+	active?: boolean
+	testId?: string
 }
 
 export interface CardActionStripProps {
@@ -35,6 +45,7 @@ export interface CardActionStripProps {
 	tooltipSide?: CardActionStripTooltipSide
 	testId?: string
 	labels?: CardActionStripLabels
+	customActions?: CardActionStripCustomAction[]
 }
 
 const cardActionStripButtonClass =
@@ -59,6 +70,7 @@ export function CardActionStrip({
 	tooltipSide = "right",
 	testId,
 	labels,
+	customActions,
 }: CardActionStripProps) {
 	const { t } = useTranslation("super")
 	const readOnly = allowEdit === false
@@ -72,6 +84,31 @@ export function CardActionStrip({
 			style={style}
 			data-testid={testId}
 		>
+			{customActions?.map((action) => {
+				const Icon = action.icon
+				return (
+					<Tooltip key={action.key}>
+						<TooltipTrigger asChild>
+							<button
+								type="button"
+								onClick={action.onClick}
+								aria-pressed={action.active}
+								aria-label={action.label}
+								data-testid={action.testId ?? `${testIdPrefix}-${action.key}`}
+								className={cn(
+									cardActionStripButtonClass,
+									action.active &&
+										"bg-[#18181b] text-[#ffd637] shadow-[0_10px_20px_rgba(24,24,27,0.14)]",
+								)}
+							>
+								<Icon className="h-[18px] w-[18px]" />
+							</button>
+						</TooltipTrigger>
+						<TooltipContent side={tooltipSide}>{action.label}</TooltipContent>
+					</Tooltip>
+				)
+			})}
+			{customActions?.length ? <div className="mx-2 h-px bg-[#18181b]/10" /> : null}
 			{!readOnly && onAddToCurrentChat && (
 				<Tooltip>
 					<TooltipTrigger asChild>

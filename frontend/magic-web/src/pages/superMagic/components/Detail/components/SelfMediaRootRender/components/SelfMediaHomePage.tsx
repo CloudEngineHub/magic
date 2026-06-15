@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type CSSProperties, useCallback, useMemo, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
@@ -18,7 +18,6 @@ import type {
 import {
 	buildOpsMetricsRequestSignature,
 	buildPostOpsArtifactStates,
-	diffPostOpsArtifactAnimations,
 	getPostOpsArtifacts,
 	type SelfMediaPostOpsArtifacts,
 	type SelfMediaPostOpsArtifactStates,
@@ -49,10 +48,14 @@ import {
 	getSelfMediaHomeDisplayName,
 	getSelfMediaHomePostColumnCount,
 	getViewTransitionDocument,
-	hasHomePreviewAsset,
 	isAICardDisplayConfig,
 	prefersReducedMotion,
 } from "./SelfMediaHomePage.helpers"
+import {
+	useSelfMediaHomePageRuntime,
+	type OpsArtifactAnimations,
+	type OpsMetricsLoadState,
+} from "./SelfMediaHomePage.hooks"
 import { useSelfMediaHomeDailyInsight } from "../hooks/useSelfMediaHomeDailyInsight"
 import { useSelfMediaOpsHealthInsight } from "../hooks/useSelfMediaOpsHealthInsight"
 import { useMeasuredContainerWidth } from "../hooks/useMeasuredContainerWidth"
@@ -109,6 +112,7 @@ interface SelfMediaHomePageProps {
 		publishStatus?: SelfMediaPostPublishStatus,
 	) => Promise<boolean | void> | boolean | void
 	onOpenBrandConfig?: () => void
+	onRefreshAllData?: () => void
 	onCreateAICard?: (initialValues?: AICardCreateInitialValues) => void
 	onOpenAICardFolder?: (folder: AICardFolderItem) => void
 	homeDailyInsightStorage?: SelfMediaHomeDailyInsightStorage
@@ -118,11 +122,6 @@ interface SelfMediaHomePageProps {
 	onScrollTopChange?: (scrollTop: number) => void
 	folderFileId?: string
 	className?: string
-}
-
-interface OpsMetricsLoadState {
-	signature: string
-	loading: boolean
 }
 
 function SelfMediaHomePage({
@@ -145,6 +144,7 @@ function SelfMediaHomePage({
 	onMentionPost,
 	onSetPostPublishStatus,
 	onOpenBrandConfig,
+	onRefreshAllData,
 	onCreateAICard,
 	onOpenAICardFolder,
 	homeDailyInsightStorage,
@@ -179,14 +179,8 @@ function SelfMediaHomePage({
 		() => new Map<string, OpsMetricsLoadState>(),
 	)
 	const [opsArtifactAnimationsByPostKey, setOpsArtifactAnimationsByPostKey] = useState(
-		() => new Map<string, ReturnType<typeof diffPostOpsArtifactAnimations>>(),
+		() => new Map<string, OpsArtifactAnimations>(),
 	)
-	useEffect(() => {
-		isHomePageMountedRef.current = true
-		return () => {
-			isHomePageMountedRef.current = false
-		}
-	}, [])
 	const hasPosts = posts.length > 0
 	const postGroups = posts.reduce<SelfMediaHomePostGroup[]>((groups, item) => {
 		const group = groups.find((candidate) => candidate.platform === item.platform)
@@ -343,116 +337,22 @@ function SelfMediaHomePage({
 		)
 	}, [attachmentList, folderFileId])
 
-	useEffect(() => {
-		if (!onEnsurePostLoaded) return
-
-		posts.forEach((item) => {
-			if (hasHomePreviewAsset(item)) return
-			const requestKey = `${item.platform}:${item.entry.id}:${item.index}`
-			if (requestedPreviewPostKeysRef.current.has(requestKey)) return
-
-			requestedPreviewPostKeysRef.current.add(requestKey)
-			onEnsurePostLoaded({ platform: item.platform, index: item.index })
-		})
-	}, [onEnsurePostLoaded, posts])
-
-	useEffect(() => {
-		return () => {
-			if (openPostTransitionTimerRef.current) {
-				window.clearTimeout(openPostTransitionTimerRef.current)
-			}
-		}
-	}, [])
-
-	useEffect(() => {
-		requestedOpsMetricsPostKeysRef.current.clear()
-		setOpsMetricsLoadStateByPostKey(new Map())
-	}, [onLoadOpsMetrics])
-
-	useEffect(() => {
-		const previous = previousOpsArtifactStatesRef.current
-		const currentStates = currentOpsArtifactStatesRef.current
-		const nextAnimations = new Map<string, ReturnType<typeof diffPostOpsArtifactAnimations>>()
-		currentStates.forEach((states, postKey) => {
-			const prevStates = previous.get(postKey)
-			if (!prevStates) return
-			const animations = diffPostOpsArtifactAnimations(prevStates, states)
-			if (Object.keys(animations).length > 0) nextAnimations.set(postKey, animations)
-		})
-		previousOpsArtifactStatesRef.current = new Map(currentStates)
-		setOpsArtifactAnimationsByPostKey((current) => {
-			if (nextAnimations.size === 0 && current.size === 0) return current
-			return nextAnimations
-		})
-		if (nextAnimations.size === 0) return undefined
-
-		const timer = window.setTimeout(() => {
-			setOpsArtifactAnimationsByPostKey(new Map())
-		}, 1400)
-		return () => window.clearTimeout(timer)
-	}, [opsArtifactStateSignature])
-
-	useEffect(() => {
-		if (!onLoadOpsMetrics) return
-
-		posts.forEach((item) => {
-			const postKey = getSelfMediaPostKey(item)
-			const metricState = currentOpsArtifactStatesRef.current.get(postKey)?.metrics
-			const requestSignature = buildOpsMetricsRequestSignature(postKey, metricState)
-			const previousRequestSignature = requestedOpsMetricsPostKeysRef.current.get(postKey)
-			if (previousRequestSignature === requestSignature) return
-
-			requestedOpsMetricsPostKeysRef.current.set(postKey, requestSignature)
-			setOpsMetricsLoadStateByPostKey((current) => {
-				const existing = current.get(postKey)
-				if (existing?.signature === requestSignature && existing.loading) return current
-				const next = new Map(current)
-				next.set(postKey, { signature: requestSignature, loading: true })
-				return next
-			})
-			void Promise.resolve(onLoadOpsMetrics(item))
-				.then((metrics) => {
-					const latestRequestSignature =
-						requestedOpsMetricsPostKeysRef.current.get(postKey)
-					if (
-						!isHomePageMountedRef.current ||
-						latestRequestSignature !== requestSignature
-					) {
-						return
-					}
-					setOpsMetricsByPostKey((current) => {
-						const next = new Map(current)
-						next.set(postKey, metrics)
-						return next
-					})
-					setOpsMetricsLoadStateByPostKey((current) => {
-						const next = new Map(current)
-						next.set(postKey, { signature: requestSignature, loading: false })
-						return next
-					})
-				})
-				.catch(() => {
-					const latestRequestSignature =
-						requestedOpsMetricsPostKeysRef.current.get(postKey)
-					if (
-						!isHomePageMountedRef.current ||
-						latestRequestSignature !== requestSignature
-					) {
-						return
-					}
-					setOpsMetricsByPostKey((current) => {
-						const next = new Map(current)
-						next.set(postKey, null)
-						return next
-					})
-					setOpsMetricsLoadStateByPostKey((current) => {
-						const next = new Map(current)
-						next.set(postKey, { signature: requestSignature, loading: false })
-						return next
-					})
-				})
-		})
-	}, [onLoadOpsMetrics, opsArtifactStateSignature, posts])
+	const handleRefreshAllData = useSelfMediaHomePageRuntime({
+		posts,
+		opsArtifactStateSignature,
+		onEnsurePostLoaded,
+		onLoadOpsMetrics,
+		onRefreshAllData,
+		requestedPreviewPostKeysRef,
+		requestedOpsMetricsPostKeysRef,
+		isHomePageMountedRef,
+		currentOpsArtifactStatesRef,
+		previousOpsArtifactStatesRef,
+		openPostTransitionTimerRef,
+		setOpsMetricsByPostKey,
+		setOpsMetricsLoadStateByPostKey,
+		setOpsArtifactAnimationsByPostKey,
+	})
 
 	return (
 		<div
@@ -480,6 +380,9 @@ function SelfMediaHomePage({
 								comfortable={inlineHomeHeader}
 								onCreateArticle={onCreateArticle}
 								onOpenBrandConfig={onOpenBrandConfig}
+								onRefreshAllData={
+									onRefreshAllData ? handleRefreshAllData : undefined
+								}
 								onCreateAICard={onCreateAICard}
 								t={t}
 							/>

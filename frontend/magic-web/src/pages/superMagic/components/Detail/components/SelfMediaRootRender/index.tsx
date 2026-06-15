@@ -230,6 +230,14 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 	const handleOpenBrandConfig = useCallback(() => {
 		setBrandConfigOpen(true)
 	}, [])
+	const handleRefreshAllData = useCallback(async () => {
+		try {
+			await store.init({ preserveNavigation: true })
+		} catch (error) {
+			console.error("Self-media refresh all data failed:", error)
+			showActionStartFailed(t, "detail.selfMedia.opsRefresh.startFailed", error)
+		}
+	}, [store, t])
 	const handleOpenAICardCreate = useCallback((initialValues?: AICardCreateInitialValues) => {
 		setAiCardInitialValues(initialValues ?? null)
 		setAiCardDialogOpen(true)
@@ -901,6 +909,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 						onSetPostPublishStatus={allowEdit ? handleSetPostPublishStatus : undefined}
 						onMentionPost={allowEdit ? handleMentionHomePost : undefined}
 						onOpenBrandConfig={allowEdit ? handleOpenBrandConfig : undefined}
+						onRefreshAllData={allowEdit ? handleRefreshAllData : undefined}
 						onCreateAICard={allowEdit ? handleOpenAICardCreate : undefined}
 						onOpenAICardFolder={openFileTab ? handleOpenAICardFolder : undefined}
 						homeDailyInsightStorage={homeDailyInsightStorage}

@@ -1,16 +1,36 @@
-import { Plus } from "lucide-react"
-import { memo, useMemo, useState } from "react"
+import { Plus, X } from "lucide-react"
+import { memo, useEffect, useMemo, useState } from "react"
+import type { MouseEvent } from "react"
 import { Tooltip } from "antd"
+import magicToast from "@/components/base/MagicToaster/utils"
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuSeparator,
+	ContextMenuTrigger,
+} from "@/components/shadcn-ui/context-menu"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuLabel,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
-import { buildCustomWebsitePreset, WEBSITE_PRESETS } from "../utils/websiteTabs"
+import {
+	buildCustomWebsitePreset,
+	COMMON_WEBSITE_PRESETS_CHANGE_EVENT,
+	getCommonWebsitePresets,
+	removeCommonWebsitePreset,
+	updateCommonWebsitePreset,
+	WEBSITE_PRESETS,
+} from "../utils/websiteTabs"
 import type { WebsitePreset } from "../types"
 import { useTranslation } from "react-i18next"
+import CommonWebsitePresetDialog, {
+	type CommonWebsitePresetFormValues,
+} from "./CommonWebsitePresetDialog"
 
 interface WebsitePresetMenuProps {
 	onOpenWebsiteTab: (preset: WebsitePreset) => void
@@ -81,15 +101,63 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 }: WebsitePresetMenuProps) {
 	const { t } = useTranslation("super")
 	const [customUrl, setCustomUrl] = useState("")
+	const [commonWebsitePresets, setCommonWebsitePresets] = useState(() =>
+		getCommonWebsitePresets(),
+	)
+	const [editingPreset, setEditingPreset] = useState<WebsitePreset | null>(null)
 	const customPreset = useMemo(
 		() => buildCustomWebsitePreset(customUrl, t("fileViewer.website.customDescription")),
 		[customUrl, t],
 	)
 
+	useEffect(() => {
+		const syncCommonWebsitePresets = () => {
+			setCommonWebsitePresets(getCommonWebsitePresets())
+		}
+
+		window.addEventListener("storage", syncCommonWebsitePresets)
+		window.addEventListener(COMMON_WEBSITE_PRESETS_CHANGE_EVENT, syncCommonWebsitePresets)
+		return () => {
+			window.removeEventListener("storage", syncCommonWebsitePresets)
+			window.removeEventListener(
+				COMMON_WEBSITE_PRESETS_CHANGE_EVENT,
+				syncCommonWebsitePresets,
+			)
+		}
+	}, [])
+
 	const handleOpenCustomWebsite = () => {
 		if (!customPreset) return
 		onOpenWebsiteTab(customPreset)
 		setCustomUrl("")
+	}
+
+	const handleDeleteCommonWebsite = (presetId: string) => {
+		removeCommonWebsitePreset(presetId)
+		setCommonWebsitePresets(getCommonWebsitePresets())
+	}
+
+	const handleCloseCommonWebsite = (event: MouseEvent<HTMLButtonElement>, presetId: string) => {
+		event.preventDefault()
+		event.stopPropagation()
+		handleDeleteCommonWebsite(presetId)
+	}
+
+	const handleSubmitEditCommonWebsite = (values: CommonWebsitePresetFormValues) => {
+		if (!editingPreset) return
+		const result = updateCommonWebsitePreset(editingPreset.id, values)
+		if (result.status === "exists") {
+			magicToast.warning(t("fileViewer.website.commonAlreadyExists"))
+			return
+		}
+		if (result.status !== "saved") {
+			magicToast.warning(t("fileViewer.website.commonSaveFailed"))
+			return
+		}
+
+		setEditingPreset(null)
+		setCommonWebsitePresets(getCommonWebsitePresets())
+		magicToast.success(t("fileViewer.website.commonSaved"))
 	}
 
 	return (
@@ -160,8 +228,95 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 							</span>
 						</DropdownMenuItem>
 					))}
+					{commonWebsitePresets.length > 0 && (
+						<>
+							<DropdownMenuSeparator />
+							<DropdownMenuLabel className="px-2 py-1.5 text-xs font-normal text-muted-foreground">
+								{t("fileViewer.website.commonTitle")}
+							</DropdownMenuLabel>
+							{commonWebsitePresets.map((preset) => {
+								const translatedPreset = getTranslatedPreset(preset, t)
+								return (
+									<ContextMenu key={preset.id}>
+										<ContextMenuTrigger asChild>
+											<DropdownMenuItem
+												aria-label={translatedPreset.title}
+												className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2"
+												onClick={() => onOpenWebsiteTab(translatedPreset)}
+											>
+												<span
+													className="flex size-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-semibold leading-none text-primary"
+													aria-hidden="true"
+												>
+													{translatedPreset.title
+														.slice(0, 1)
+														.toUpperCase()}
+												</span>
+												<span className="min-w-0 flex-1 truncate text-sm leading-5 text-foreground">
+													{translatedPreset.title}
+												</span>
+												<Tooltip
+													title={t("fileViewer.website.removeCommon")}
+													placement="left"
+												>
+													<button
+														type="button"
+														className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+														aria-label={`${t("fileViewer.website.removeCommon")} ${translatedPreset.title}`}
+														onPointerDown={(event) =>
+															event.stopPropagation()
+														}
+														onClick={(event) =>
+															handleCloseCommonWebsite(
+																event,
+																preset.id,
+															)
+														}
+													>
+														<X
+															className="size-3.5"
+															aria-hidden="true"
+														/>
+													</button>
+												</Tooltip>
+											</DropdownMenuItem>
+										</ContextMenuTrigger>
+										<ContextMenuContent>
+											<ContextMenuItem
+												onSelect={() => setEditingPreset(preset)}
+											>
+												{t("fileViewer.website.editCommon")}
+											</ContextMenuItem>
+											<ContextMenuSeparator />
+											<ContextMenuItem
+												className="text-destructive focus:text-destructive"
+												onSelect={() =>
+													handleDeleteCommonWebsite(preset.id)
+												}
+											>
+												{t("fileViewer.website.deleteCommon")}
+											</ContextMenuItem>
+										</ContextMenuContent>
+									</ContextMenu>
+								)
+							})}
+						</>
+					)}
 				</div>
 			</DropdownMenuContent>
+			<CommonWebsitePresetDialog
+				open={Boolean(editingPreset)}
+				mode="edit"
+				initialValues={{
+					title: editingPreset?.title || "",
+					url: editingPreset?.url || "",
+					description: editingPreset?.description || "",
+				}}
+				onOpenChange={(open) => {
+					if (!open) setEditingPreset(null)
+				}}
+				onSubmit={handleSubmitEditCommonWebsite}
+			/>
 		</DropdownMenu>
 	)
 })

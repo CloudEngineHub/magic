@@ -16,8 +16,10 @@ import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/comp
 import { MagicSwitch } from "@/components/base/MagicSwitch"
 import AICardFormFields from "../../AICardRootRender/components/AICardFormFields"
 import type { AICardFormFieldsValues } from "../../AICardRootRender/components/AICardFormFields"
+import { getPromptPlainText } from "../../AICardRootRender/hooks/aiCardScheduleMessage"
 import { createAICardViaTopic } from "../services/aiCardCreate"
 import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
+import type { JSONContent } from "@tiptap/react"
 
 const AI_CARD_TOPIC_PATTERN = "ip-manager"
 
@@ -26,6 +28,16 @@ const DEFAULT_AI_CARD_FORM_VALUES: AICardFormFieldsValues = {
 	prompt: "",
 	template: "hotspot-tracker",
 	enabled: true,
+}
+
+function parsePromptJSONContent(prompt: string): JSONContent | undefined {
+	try {
+		const parsed = JSON.parse(prompt) as JSONContent
+		if (parsed?.type === "doc" && Array.isArray(parsed.content)) return parsed
+	} catch {
+		// Plain text prompts are still valid; only rich editor values need parsing.
+	}
+	return undefined
 }
 
 export type AICardCreateInitialValues = Partial<AICardFormFieldsValues>
@@ -87,7 +99,8 @@ function AICardCreateDialog({
 		}
 	}, [open, projectId, initialValues])
 
-	const isValid = formValues.taskName.trim() && formValues.prompt.trim()
+	const promptText = getPromptPlainText(formValues.prompt)
+	const isValid = Boolean(formValues.taskName.trim() && promptText)
 
 	const handleChange = useCallback((updates: Partial<AICardFormFieldsValues>) => {
 		setFormValues((prev) => ({ ...prev, ...updates }))
@@ -99,7 +112,8 @@ function AICardCreateDialog({
 
 		try {
 			await createAICardViaTopic({
-				prompt: formValues.prompt.trim(),
+				prompt: promptText,
+				promptJSONContent: parsePromptJSONContent(formValues.prompt),
 				cardName: formValues.taskName.trim(),
 				template: formValues.template,
 				customTemplatePrompt: formValues.customTemplatePrompt?.trim(),
@@ -118,7 +132,7 @@ function AICardCreateDialog({
 		} finally {
 			setSubmitting(false)
 		}
-	}, [isValid, submitting, formValues, projectId, folderPath, onOpenChange])
+	}, [isValid, submitting, formValues, promptText, projectId, folderPath, onOpenChange])
 
 	const handleOpenChange = useCallback(
 		(nextOpen: boolean) => {

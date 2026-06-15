@@ -86,6 +86,7 @@ vi.mock("../components/SelfMediaInitPanel/steps/StepConfirm", () => ({
 }))
 
 interface MockStepBrandInfoProps {
+	author: string
 	brandAutoSaveStatus?: string
 	onChange: (field: "author" | "brandPosition" | "targetAudience", value: string) => void
 	onBrandImagesUploadingChange?: (uploading: boolean) => void
@@ -103,6 +104,7 @@ vi.mock("../components/SelfMediaInitPanel/steps/StepBrandInfo", () => ({
 		return (
 			<div>
 				<div data-testid="brand-auto-save-status">{brandAutoSaveStatus}</div>
+				<div data-testid="brand-author">{props.author}</div>
 				<button
 					type="button"
 					data-testid="edit-brand-info"
@@ -112,6 +114,16 @@ vi.mock("../components/SelfMediaInitPanel/steps/StepBrandInfo", () => ({
 					}}
 				>
 					edit brand info
+				</button>
+				<button
+					type="button"
+					data-testid="edit-brand-info-again"
+					onClick={() => {
+						onChange("author", "Magic Lab v2")
+						onBrandImagesUploadingChange?.(false)
+					}}
+				>
+					edit brand info again
 				</button>
 			</div>
 		)
@@ -263,5 +275,49 @@ describe("SelfMediaInitPanel brand auto-save feedback", () => {
 				author: "Magic Lab",
 			}),
 		)
+	})
+
+	it("keeps newer brand edits when an older auto-save resolves", async () => {
+		const saveDeferred = createDeferred<void>()
+		mockSaveBrandConfig.mockReturnValueOnce(saveDeferred.promise)
+
+		render(
+			<SelfMediaInitPanel
+				selectedProject={{ id: "project-1" }}
+				folderFileId="folder-1"
+				folderPath="self-media"
+				attachmentList={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("edit-brand-info")).toBeInTheDocument()
+		})
+
+		vi.useFakeTimers()
+		fireEvent.click(screen.getByTestId("edit-brand-info"))
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(5000)
+			await Promise.resolve()
+		})
+
+		expect(mockSaveBrandConfig).toHaveBeenCalledWith(
+			expect.objectContaining({
+				author: "Magic Lab",
+			}),
+		)
+		expect(screen.getByTestId("brand-auto-save-status")).toHaveTextContent("saving")
+
+		fireEvent.click(screen.getByTestId("edit-brand-info-again"))
+		expect(screen.getByTestId("brand-author")).toHaveTextContent("Magic Lab v2")
+
+		await act(async () => {
+			saveDeferred.resolve()
+			await saveDeferred.promise
+			await Promise.resolve()
+		})
+
+		expect(screen.getByTestId("brand-author")).toHaveTextContent("Magic Lab v2")
 	})
 })

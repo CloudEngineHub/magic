@@ -365,7 +365,7 @@ describe("useExportZip", () => {
 
 		await waitFor(() => expect(result.current.progress.status).toBe("done"))
 		expect(mockCanvas.height).toBe(1080)
-		expect(mockCanvas.width).toBe(3000)
+		expect(mockCanvas.width).toBe(3618)
 		expect(mockContext.drawImage).toHaveBeenCalledTimes(2)
 		expect(saveAs).toHaveBeenCalledWith(outputBlob, "公众号封面-wechat-cover.png")
 	})

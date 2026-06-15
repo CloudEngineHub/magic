@@ -17,6 +17,7 @@ import { WechatCoverPhonePanel } from "./WechatCoverPhonePanel"
 import WechatEditView from "./edit"
 import { WechatOfficialContentGate } from "./WechatOfficialContentGate"
 import { loadWechatArticleHtml } from "./wechatArticleHtml"
+import { buildWechatClipboardHtmlFromSource } from "./wechatClipboardHtml"
 
 const TAB_ORDER: SelfMediaView[] = ["feed", "detail", "edit", "code"]
 
@@ -263,7 +264,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 				const fileId = target?.article?.fileId
 				if (!fileId) throw new Error("noArticleUrl")
 				const result = await loadWechatArticleHtml({ fileId, attachmentList })
-				html = result.content
+				html = buildWechatClipboardHtmlFromSource(result.content)
 			}
 			await writeWechatHtmlToClipboard(html)
 			magicToast.success(t("detail.selfMedia.export.wechat.copySuccess"))

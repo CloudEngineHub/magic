@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import AICardCreateDialog from "../components/AICardCreateDialog"
+import { createAICardViaTopic } from "../services/aiCardCreate"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -57,6 +58,10 @@ vi.mock("../../AICardRootRender/components/AICardFormFields", () => ({
 }))
 
 describe("AICardCreateDialog", () => {
+	beforeEach(() => {
+		vi.mocked(createAICardViaTopic).mockReset()
+	})
+
 	it("renders prefilled values in a constrained scrollable dialog with the schedule toggle in footer", async () => {
 		render(
 			<AICardCreateDialog
@@ -95,5 +100,46 @@ describe("AICardCreateDialog", () => {
 			"data-checked",
 			"false",
 		)
+	})
+
+	it("submits plain prompt text while preserving rich JSONContent for AI card creation", async () => {
+		const promptJSONContent = {
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [
+						{ type: "text", text: "分析 " },
+						{ type: "mention", attrs: { label: "sales.csv" } },
+					],
+				},
+			],
+		}
+
+		render(
+			<AICardCreateDialog
+				open
+				onOpenChange={vi.fn()}
+				projectId="project-1"
+				initialValues={{
+					taskName: "销售看板",
+					prompt: JSON.stringify(promptJSONContent),
+					template: "analytics-panel",
+					enabled: true,
+				}}
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "Create" }))
+
+		await waitFor(() => {
+			expect(createAICardViaTopic).toHaveBeenCalledWith(
+				expect.objectContaining({
+					prompt: "分析 sales.csv",
+					promptJSONContent,
+					cardName: "销售看板",
+				}),
+			)
+		})
 	})
 })

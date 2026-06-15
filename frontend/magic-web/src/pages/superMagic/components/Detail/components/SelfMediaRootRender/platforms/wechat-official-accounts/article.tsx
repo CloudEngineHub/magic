@@ -6,8 +6,10 @@ import {
 	useImperativeHandle,
 	useRef,
 	useState,
+	useMemo,
 } from "react"
 import { useTranslation } from "react-i18next"
+import { FileText, Smartphone } from "lucide-react"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererRef,
 } from "../../../../contents/HTML/IsolatedHTMLRenderer"
@@ -15,7 +17,12 @@ import { flattenAttachments } from "../../../../contents/HTML/utils"
 import type { FileItem } from "../../../../contents/HTML/utils/fetchInterceptor"
 import type { PlatformComponentProps, SelfMediaPost } from "../../types"
 import { CardActionStrip } from "../../components/CardActionStrip"
+import WechatArticlePhonePreview from "./WechatArticlePhonePreview"
 import { loadWechatArticleHtml } from "./wechatArticleHtml"
+import {
+	buildWechatClipboardHtmlFromIframe,
+	buildWechatClipboardHtmlFromSource,
+} from "./wechatClipboardHtml"
 
 interface WechatArticleViewProps {
 	post: SelfMediaPost
@@ -40,6 +47,77 @@ export interface WechatArticleViewRef {
 	stopInspector: () => void
 }
 
+type WechatArticleRenderMode = "desktop" | "phone"
+
+function escapeHtml(value: string | number | undefined) {
+	return String(value ?? "")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;")
+}
+
+function appendWechatArticleCommentsHtml({
+	html,
+	post,
+	commentsTitle,
+	commentsSourceLabel,
+	unknownAuthor,
+}: {
+	html: string
+	post: SelfMediaPost
+	commentsTitle: string
+	commentsSourceLabel: string
+	unknownAuthor: string
+}) {
+	const comments = post.meta.comments || []
+	if (!comments.length) return html
+
+	const items = comments
+		.map((comment) => {
+			const name = comment.name || unknownAuthor
+			const avatar = comment.avatarChar || name[0] || unknownAuthor[0] || "评"
+			const metaText = [
+				comment.time,
+				comment.location,
+				comment.likes ? `♥ ${comment.likes}` : "",
+			]
+				.filter(Boolean)
+				.join(" · ")
+			return `
+				<div style="display:flex;gap:12px;padding:16px 0;border-top:1px solid #f4f4f4;">
+					<div style="width:32px;height:32px;flex:0 0 32px;border-radius:999px;background:${escapeHtml(comment.avatarColor || "#07c160")};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">${escapeHtml(avatar)}</div>
+					<div style="min-width:0;flex:1;">
+						<div style="font-size:13px;line-height:1.45;font-weight:500;color:#576b95;">${escapeHtml(name)}</div>
+						<div style="margin-top:5px;font-size:14px;line-height:1.7;color:#2b2b2b;">${escapeHtml(comment.text)}</div>
+						${
+							metaText
+								? `<div style="margin-top:5px;font-size:12px;line-height:1.4;color:#9a9a9a;">${escapeHtml(metaText)}</div>`
+								: ""
+						}
+					</div>
+				</div>
+			`
+		})
+		.join("")
+
+	const commentsHtml = `
+		<section data-wechat-article-comments="true" style="box-sizing:border-box;max-width:760px;margin:56px auto 0;padding:24px 24px 34px;border-top:1px solid #eeeeee;background:#fff;color:#1f1f1f;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,'PingFang SC','Microsoft YaHei',Arial,sans-serif;user-select:none;-webkit-user-select:none;">
+			<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:2px;">
+				<h2 style="margin:0;font-size:16px;line-height:1.4;font-weight:600;color:#1f1f1f;">${escapeHtml(commentsTitle)}</h2>
+				<span style="font-size:12px;line-height:1.4;color:#9a9a9a;white-space:nowrap;">${escapeHtml(commentsSourceLabel)}</span>
+			</div>
+			${items}
+		</section>
+	`
+
+	if (/<\/body>/i.test(html)) {
+		return html.replace(/<\/body>/i, `${commentsHtml}</body>`)
+	}
+	return `${html}${commentsHtml}`
+}
+
 function WechatArticleViewInner(
 	{
 		post,
@@ -60,18 +138,37 @@ function WechatArticleViewInner(
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
+	const [renderMode, setRenderMode] = useState<WechatArticleRenderMode>("desktop")
 	const rendererRef = useRef<IsolatedHTMLRendererRef>(null)
+	const renderedContent = useMemo(() => {
+		if (!content) return null
+		return appendWechatArticleCommentsHtml({
+			html: content,
+			post,
+			commentsTitle: t("detail.selfMedia.platform.wechat-official-accounts.commentsTotal", {
+				count: Number(post.meta.commentCount || post.meta.comments?.length || 0),
+				defaultValue: "精选评论 {{count}}",
+			}),
+			commentsSourceLabel: t(
+				"detail.selfMedia.platform.wechat-official-accounts.commentsFromPost",
+				"来自评论区",
+			),
+			unknownAuthor: t("detail.selfMedia.common.unknownAuthor"),
+		})
+	}, [content, post, t])
 
 	useImperativeHandle(
 		ref,
 		() => ({
 			getIframeElement: () => rendererRef.current?.getIframeElement() ?? null,
-			getArticleHtml: () => content,
+			getArticleHtml: () =>
+				buildWechatClipboardHtmlFromIframe(rendererRef.current?.getIframeElement()) ||
+				(renderedContent ? buildWechatClipboardHtmlFromSource(renderedContent) : content),
 			startInspector: () => rendererRef.current?.startInspectorAppend(),
 			startInspectorAppend: () => rendererRef.current?.startInspectorAppend(),
 			stopInspector: () => rendererRef.current?.stopInspector(),
 		}),
-		[content],
+		[content, renderedContent],
 	)
 
 	// Keep a ref so the effect can read the latest attachmentList without
@@ -154,28 +251,55 @@ function WechatArticleViewInner(
 			</div>
 		)
 	}
-	if (!content) return null
+	if (!content || !renderedContent) return null
 
 	const readOnly = allowEdit === false
 	const hasActions = (!readOnly && onAddToCurrentChat) || (!readOnly && onGoToEdit) || onRefresh
+	const modeActions = [
+		{
+			value: "desktop",
+			label: t(
+				"detail.selfMedia.platform.wechat-official-accounts.articleModes.desktop",
+				"原文",
+			),
+			icon: FileText,
+		},
+		{
+			value: "phone",
+			label: t(
+				"detail.selfMedia.platform.wechat-official-accounts.articleModes.phone",
+				"手机预览",
+			),
+			icon: Smartphone,
+		},
+	]
 
 	return (
 		<div className="relative h-full w-full bg-white" data-testid="wechat-article-view">
-			<IsolatedHTMLRenderer
-				ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
-				content={content}
-				sandboxType="iframe"
-				fileId={fileId}
-				filePathMapping={filePathMapping}
-				openNewTab={openNewTab}
-				selectedProject={selectedProject}
-				attachmentList={attachmentList}
-				isVisible
-				className="h-full w-full"
-				onInspectorActiveChange={onInspectorActiveChange}
-				enableInlineInspectorFallback
-			/>
-			{hasActions && (
+			{renderMode === "desktop" ? (
+				<div
+					className="h-full w-full duration-300 ease-out animate-in fade-in-0 zoom-in-95"
+					data-testid="wechat-article-desktop-frame"
+				>
+					<IsolatedHTMLRenderer
+						ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
+						content={renderedContent}
+						sandboxType="iframe"
+						fileId={fileId}
+						filePathMapping={filePathMapping}
+						openNewTab={openNewTab}
+						selectedProject={selectedProject}
+						attachmentList={attachmentList}
+						isVisible
+						className="h-full w-full"
+						onInspectorActiveChange={onInspectorActiveChange}
+						enableInlineInspectorFallback
+					/>
+				</div>
+			) : (
+				<WechatArticlePhonePreview post={post} renderedContent={renderedContent} />
+			)}
+			{(modeActions.length || hasActions) && (
 				<CardActionStrip
 					className="absolute right-10 top-6 z-10"
 					testId="wechat-article-floating-actions"
@@ -185,6 +309,14 @@ function WechatArticleViewInner(
 					onAddToCurrentChat={onAddToCurrentChat}
 					onGoToEdit={onGoToEdit}
 					onRefresh={onRefresh}
+					customActions={modeActions.map((option) => ({
+						key: option.value,
+						label: option.label,
+						icon: option.icon,
+						active: renderMode === option.value,
+						onClick: () => setRenderMode(option.value),
+						testId: `wechat-article-mode-${option.value}`,
+					}))}
 					labels={{
 						addToCurrentChat: t("detail.selfMedia.edit.addArticleFileToChat"),
 						goToEdit: t("detail.selfMedia.edit.goToArticleEdit"),

@@ -1,7 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle } from "react"
 import { fireEvent, render, screen, within } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { CardFrameRef } from "../components/CardFrame"
+
+const mockUseCoverImageUrl = vi.hoisted(() => vi.fn())
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -13,6 +15,10 @@ vi.mock("react-i18next", () => ({
 			return `${key}|${params}`
 		},
 	}),
+}))
+
+vi.mock("../platforms/wechat-official-accounts/useCoverImageUrl", () => ({
+	useCoverImageUrl: mockUseCoverImageUrl,
 }))
 
 vi.mock("../components/CardFrame", () => ({
@@ -91,6 +97,10 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof ExportPrevi
 }
 
 describe("ExportPreviewDialog", () => {
+	beforeEach(() => {
+		mockUseCoverImageUrl.mockReturnValue({ url: null, loading: false })
+	})
+
 	it("defaults to the current active post and selects all of its cards", () => {
 		renderDialog({ initialPostIndex: 1 })
 
@@ -263,5 +273,39 @@ describe("ExportPreviewDialog", () => {
 				exportType: "wechatCoverImage",
 			}),
 		)
+	})
+
+	it("renders a stitched WeChat cover preview from the selected post cover images", () => {
+		mockUseCoverImageUrl.mockImplementation((fileId?: string) => ({
+			url: fileId ? `https://example.test/${fileId}.png` : null,
+			loading: false,
+		}))
+
+		renderDialog({
+			exportMode: "wechatOfficial",
+			posts: [
+				{
+					...posts[0],
+					thumbnailCover: { path: "thumb.png", fileId: "thumb-file" },
+					heroCover: { path: "hero.png", fileId: "hero-file" },
+				},
+			],
+		})
+
+		const preview = screen.getByTestId("self-media-export-wechat-cover-preview")
+		const squareImage = within(preview).getByAltText(
+			"detail.selfMedia.export.wechat.squareCover",
+		)
+		const horizontalImage = within(preview).getByAltText(
+			"detail.selfMedia.export.wechat.horizontalCover",
+		)
+		const horizontalFrame = screen.getByTestId("self-media-export-wechat-horizontal-preview")
+
+		expect(preview.className).toContain("w-full")
+		expect(preview.className).toContain("aspect-[335/100]")
+		expect(preview.className).toContain("grid-cols-[100fr_235fr]")
+		expect(squareImage).toHaveAttribute("src", "https://example.test/thumb-file.png")
+		expect(horizontalImage).toHaveAttribute("src", "https://example.test/hero-file.png")
+		expect(horizontalFrame.className).toContain("aspect-[235/100]")
 	})
 })

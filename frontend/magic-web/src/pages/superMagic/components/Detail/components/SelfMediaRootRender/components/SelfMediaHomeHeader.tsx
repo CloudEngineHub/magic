@@ -1,4 +1,4 @@
-import { Plus, Settings, Sparkles } from "lucide-react"
+import { Plus, RefreshCw, Settings, Sparkles } from "lucide-react"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "@/lib/utils"
 import type { AICardCreateInitialValues } from "./AICardCreateDialog"
@@ -11,6 +11,7 @@ interface SelfMediaHomeHeaderProps {
 	comfortable?: boolean
 	onCreateArticle?: () => void
 	onOpenBrandConfig?: () => void
+	onRefreshAllData?: () => void
 	onCreateAICard?: (initialValues?: AICardCreateInitialValues) => void
 	t: SelfMediaHomeTranslate
 }
@@ -22,6 +23,7 @@ function SelfMediaHomeHeader({
 	comfortable = false,
 	onCreateArticle,
 	onOpenBrandConfig,
+	onRefreshAllData,
 	onCreateAICard,
 	t,
 }: SelfMediaHomeHeaderProps) {
@@ -82,6 +84,22 @@ function SelfMediaHomeHeader({
 									data-testid="self-media-home-brand-config-button"
 								>
 									<Settings size={19} />
+								</button>
+							</MagicTooltip>
+						) : null}
+						{onRefreshAllData ? (
+							<MagicTooltip title={t("detail.selfMedia.refreshAllData")}>
+								<button
+									type="button"
+									className={cn(
+										"flex items-center justify-center rounded-full text-[#18181b] transition-colors hover:bg-[#18181b] hover:text-[#ffd637]",
+										iconButtonClass,
+									)}
+									onClick={onRefreshAllData}
+									aria-label={t("detail.selfMedia.refreshAllData")}
+									data-testid="self-media-home-refresh-all-data-button"
+								>
+									<RefreshCw size={18} />
 								</button>
 							</MagicTooltip>
 						) : null}

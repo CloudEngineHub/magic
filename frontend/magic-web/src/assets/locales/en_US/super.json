@@ -846,9 +846,11 @@
 					"coverDescription": "Stitch the square cover and horizontal cover into one image for WeChat Official Account assets.",
 					"coverTitle": "Cover image",
 					"exportCover": "Export cover",
+					"horizontalCover": "Horizontal cover",
 					"htmlCopied": "Copied",
 					"htmlDescription": "Copy the processed article HTML and paste it into the WeChat Official Account editor.",
-					"htmlTitle": "WeChat HTML"
+					"htmlTitle": "WeChat HTML",
+					"squareCover": "Square cover"
 				}
 			},
 			"home": {
@@ -1219,7 +1221,17 @@
 					"visualCustomPlaceholder": "Describe the visual style you want (colors, fonts, decorations, mood)...",
 					"visualHint": "Choose a visual style preset for cards. AI will use the corresponding CSS/JS template",
 					"visualLabel": "Visual Template",
-					"visualReferenceLabel": "Add visual reference"
+					"visualReferenceLabel": "Add visual reference",
+					"wechatArticleContentLabel": "Full Content",
+					"wechatContentEditorView": "Edit",
+					"wechatContentPhoneView": "Phone preview",
+					"wechatContentViewToggle": "Full content view switch",
+					"wechatPreviewAccount": "Official Account Draft",
+					"wechatPreviewBack": "Back",
+					"wechatPreviewEmpty": "Add full-content points and the mobile reading preview will update here.",
+					"wechatPreviewMore": "More",
+					"wechatPreviewNavTitle": "Official Account Preview",
+					"wechatPreviewUntitled": "Untitled article"
 				},
 				"stepTopic": {
 					"activeStatus": "Keep refining the current article",
@@ -1560,6 +1572,13 @@
 					"label": "Platform"
 				},
 				"wechat-official-accounts": {
+					"articleModes": {
+						"desktop": "Original",
+						"label": "Full content view switch",
+						"phone": "Phone preview"
+					},
+					"commentsFromPost": "From comments",
+					"commentsTotal": "Selected comments {{count}}",
 					"cover": {
 						"navTitle": "Official Accounts",
 						"timeHint": "Just now"
@@ -1750,6 +1769,7 @@
 		"sortSlidesSuccess": "Page order updated",
 		"sortSlidesTitle": "Sort Pages",
 		"tabs": {
+			"addWebsiteToCommon": "Set as common",
 			"close": "Close",
 			"closeAll": "Close All",
 			"closeOthers": "Close Others",
@@ -1760,10 +1780,25 @@
 		"unknownFile": "Unknown File",
 		"waitForPreviousOperation": "Please wait for the previous operation to complete",
 		"website": {
-			"add": "Open website",
-			"customDescription": "Custom website",
-			"customPlaceholder": "Enter URL",
-			"loadFallbackDescription": "If the page is not fully visible, the site may restrict iframe embedding or the network may be loading slowly.",
+				"add": "Open website",
+				"commonAddTitle": "Save common link",
+				"commonCancel": "Cancel",
+				"commonConfirm": "Save",
+				"commonDialogDescription": "Confirm the name and link for this shortcut. It will appear in Common links after saving.",
+				"commonEditTitle": "Edit common link",
+				"commonAlreadyExists": "This link is already saved",
+				"commonLimitReached": "You can save up to {{count}} common links. Delete unused links first.",
+				"commonSaveFailed": "Could not save as a common website",
+				"commonSaved": "Saved as a common website",
+				"commonTitle": "Common links",
+				"commonTitleLabel": "Name",
+				"commonUrlLabel": "Link",
+				"customDescription": "Custom website",
+				"customPlaceholder": "Enter URL",
+				"deleteCommon": "Delete",
+				"editCommon": "Edit",
+				"removeCommon": "Remove common link",
+				"loadFallbackDescription": "If the page is not fully visible, the site may restrict iframe embedding or the network may be loading slowly.",
 			"loadFallbackTitle": "This page is taking longer to load",
 			"menuTitle": "Common websites",
 			"openCustom": "Open",
@@ -1772,6 +1807,10 @@
 				"baiduImages": {
 					"description": "Image search and visual references",
 					"title": "Baidu Images"
+				},
+				"bingImages": {
+					"description": "Multi-source image search and visual references",
+					"title": "Bing Images"
 				},
 				"gptImage2": {
 					"description": "Prompt examples for GPT Image 2",
