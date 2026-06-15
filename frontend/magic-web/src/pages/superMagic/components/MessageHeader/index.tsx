@@ -63,6 +63,8 @@ interface MessageHeaderProps {
 	isConversationPanelCollapsed?: boolean
 	onToggleConversationPanel?: () => void
 	onExpandConversationPanel?: () => void
+	/** Closes the layout history panel only when the user is collapsing the conversation pane. */
+	onCloseHistoryPanelWhenCollapsing?: () => void
 	detailPanelVisible?: boolean
 	selectedProject: ProjectListItem | null
 	topicStore: TopicStore
@@ -298,6 +300,8 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 			topics={topics}
 			projectId={selectedProject?.id || ""}
 			selectedTopicId={selectedTopic?.id}
+			isConversationPanelCollapsed={isConversationPanelCollapsed}
+			onExpandConversationPanel={onExpandConversationPanel}
 			editingTopicId={editingTopicId}
 			editingValue={editingValue}
 			onEditingValueChange={setEditingValue}
@@ -328,6 +332,7 @@ function MessageHeader({
 	isConversationPanelCollapsed = false,
 	onToggleConversationPanel,
 	onExpandConversationPanel,
+	onCloseHistoryPanelWhenCollapsing,
 	detailPanelVisible = true,
 	selectedProject,
 	topicStore,
@@ -453,7 +458,12 @@ function MessageHeader({
 		setTopicHistoryOpen(false)
 	}, [selectedTopic?.id])
 
+	// Closing the history panel only applies to the collapse action; expanding the
+	// conversation pane should not mutate the persisted history-panel preference.
 	const handleToggleConversationPanel = useMemoizedFn(() => {
+		if (!isConversationPanelCollapsed) {
+			onCloseHistoryPanelWhenCollapsing?.()
+		}
 		onToggleConversationPanel?.()
 	})
 
@@ -493,6 +503,8 @@ function MessageHeader({
 					onSelectTopic: (topic) => {
 						void topicActions.selectTopic(topic)
 					},
+					isConversationPanelCollapsed,
+					onExpandConversationPanel,
 					canDeleteTopic: topics.length > 1,
 					onCreateTopic: handleCreateTopic,
 					onPinTopic: topicActions.pinTopic,

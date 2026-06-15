@@ -53,6 +53,10 @@ export interface TopicHistoryPanelContentProps {
 	topics: Topic[]
 	projectId: string
 	selectedTopicId?: string
+	/** Expands the conversation panel before switching topics when the sliver-only layout is active. */
+	isConversationPanelCollapsed?: boolean
+	/** Restores the conversation panel so the selected topic becomes immediately visible. */
+	onExpandConversationPanel?: () => void
 	editingTopicId: string | null
 	editingValue: string
 	onEditingValueChange: (value: string) => void
@@ -87,6 +91,8 @@ function TopicHistoryPanelContentInner({
 	topics,
 	projectId,
 	selectedTopicId,
+	isConversationPanelCollapsed = false,
+	onExpandConversationPanel,
 	editingTopicId,
 	editingValue,
 	onEditingValueChange,
@@ -260,6 +266,12 @@ function TopicHistoryPanelContentInner({
 
 	async function handleTopicSelect(topic: Topic) {
 		if (editingTopicId === topic.id) return
+
+		// Re-expand the conversation panel before switching topics so the target thread
+		// is visible immediately instead of staying hidden behind the collapsed sliver.
+		if (isConversationPanelCollapsed) {
+			onExpandConversationPanel?.()
+		}
 
 		let resolvedTopic = topic
 

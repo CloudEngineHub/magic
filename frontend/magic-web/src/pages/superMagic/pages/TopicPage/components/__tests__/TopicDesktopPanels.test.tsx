@@ -139,9 +139,6 @@ describe("TopicDesktopPanels", () => {
 		})
 
 		expect(screen.getByTestId("topic-history-panel-fixed")).toBeInTheDocument()
-		expect(screen.getByTestId("topic-history-panel-fixed")).toHaveStyle({
-			width: "256px",
-		})
 		expect(screen.queryByTestId("topic-history-panel-drawer")).not.toBeInTheDocument()
 		expect(screen.getAllByTestId("mock-topic-resize-handle")).toHaveLength(1)
 	})
@@ -158,9 +155,6 @@ describe("TopicDesktopPanels", () => {
 		renderComponent()
 
 		expect(screen.getByTestId("topic-history-panel-fixed")).toBeInTheDocument()
-		expect(screen.getByTestId("topic-history-panel-fixed")).toHaveStyle({
-			width: "256px",
-		})
 		expect(screen.queryByTestId("topic-history-panel-drawer")).not.toBeInTheDocument()
 		expect(screen.getAllByTestId("mock-topic-resize-handle")).toHaveLength(2)
 	})
@@ -174,11 +168,7 @@ describe("TopicDesktopPanels", () => {
 		renderComponent()
 
 		expect(screen.getByTestId("topic-history-panel-drawer")).toBeInTheDocument()
-		expect(screen.getByTestId("topic-history-panel-drawer")).toHaveStyle({
-			width: "256px",
-		})
-		expect(screen.getByTestId("topic-history-panel-backdrop")).toBeInTheDocument()
-		expect(screen.getByTestId("topic-history-panel-drawer")).toHaveClass("z-20")
+		expect(screen.getByTestId("topic-history-panel-dismiss-area")).toBeInTheDocument()
 		expect(screen.getByTestId("topic-conversation-panel-root")).toHaveClass("z-10")
 	})
 
@@ -199,7 +189,7 @@ describe("TopicDesktopPanels", () => {
 			},
 		})
 
-		fireEvent.click(screen.getByTestId("topic-history-panel-backdrop"))
+		fireEvent.click(screen.getByTestId("topic-history-panel-dismiss-area"))
 
 		expect(handleCloseTopicHistoryPanel).toHaveBeenCalledTimes(1)
 	})
@@ -375,7 +365,7 @@ describe("TopicDesktopPanels", () => {
 			"topic-detail-panel-slot",
 			"topic-detail-resize-handle-slot",
 			"topic-conversation-panel-slot",
-			"topic-history-panel-fixed",
+			null,
 		])
 	})
 
@@ -401,7 +391,7 @@ describe("TopicDesktopPanels", () => {
 		expect(orderedTestIds).toEqual([
 			"topic-detail-panel-slot",
 			"topic-conversation-panel-slot",
-			"topic-history-panel-fixed",
+			null,
 		])
 	})
 
@@ -440,6 +430,40 @@ describe("TopicDesktopPanels", () => {
 
 		fireEvent.click(screen.getByTestId("topic-history-panel-contract-drawer"))
 		expect(handleCloseTopicHistoryPanel).toHaveBeenCalledTimes(1)
+	})
+
+	it("collapses the history panel before collapsing the conversation panel", () => {
+		const handleCloseTopicHistoryPanel = vi.fn()
+		const handleToggleConversationPanel = vi.fn()
+
+		layoutState = createLayoutState({
+			isConversationPanelCollapsed: false,
+			toggleConversationPanel: handleToggleConversationPanel,
+		})
+
+		renderComponent({
+			historyLayout: {
+				isOpen: true,
+				onClose: handleCloseTopicHistoryPanel,
+				onToggle: vi.fn(),
+				renderPanel: ({ closeButtonRef, onClose, mode }) =>
+					renderTopicHistoryPanelContent({ closeButtonRef, onClose, mode }),
+			},
+			renderMessagePanel: ({ onToggleConversationPanel }) => (
+				<button
+					type="button"
+					data-testid="topic-conversation-collapse-trigger"
+					onClick={onToggleConversationPanel}
+				>
+					collapse
+				</button>
+			),
+		})
+
+		fireEvent.click(screen.getByTestId("topic-conversation-collapse-trigger"))
+
+		expect(handleCloseTopicHistoryPanel).toHaveBeenCalledTimes(1)
+		expect(handleToggleConversationPanel).toHaveBeenCalledTimes(1)
 	})
 
 	it("抽屉打开后关闭按钮获得焦点且键盘可达", async () => {

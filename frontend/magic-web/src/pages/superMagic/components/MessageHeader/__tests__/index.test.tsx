@@ -427,6 +427,23 @@ describe("MessageHeader", () => {
 		expect(handleToggleHistoryPanel).not.toHaveBeenCalled()
 	})
 
+	it("collapses the history panel together when collapsing the conversation panel", () => {
+		const handleToggleConversationPanel = vi.fn()
+		const handleCloseHistoryPanel = vi.fn()
+
+		renderComponent({
+			historyTriggerMode: "layout",
+			isHistoryPanelOpen: true,
+			onToggleConversationPanel: handleToggleConversationPanel,
+			onCloseHistoryPanelWhenCollapsing: handleCloseHistoryPanel,
+		})
+
+		fireEvent.click(screen.getByTestId("message-header-toggle-conversation-panel-button"))
+
+		expect(handleToggleConversationPanel).toHaveBeenCalledTimes(1)
+		expect(handleCloseHistoryPanel).toHaveBeenCalledTimes(1)
+	})
+
 	it("chat workspace projects show unnamed conversation fallback instead of untitled topic", () => {
 		renderComponent({
 			selectedProject: {
