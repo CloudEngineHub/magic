@@ -2157,22 +2157,32 @@ function createChatMessage(prompt, contextType = ContextType.NORMAL, remark = nu
         }
     }
 
-    // custom_agent 模式：强制 task_mode=chat、model_id=auto，并注入完整 dynamic_config
+    // custom_agent 模式：强制 task_mode=chat，并注入完整 dynamic_config
+    // 若用户已在调试面板选了具体模型，保留该选择；否则回落到 auto
     if (currentAgentMode === 'custom_agent') {
         message.task_mode = 'chat';
-        message.model_id = 'auto';
         const customAgentCode = customAgentCodeInput ? customAgentCodeInput.value.trim() : '';
-        message.dynamic_config = Object.assign({}, message.dynamic_config, {
-            models: {
-                auto: {
+        const selectedModelId = message.model_id && message.model_id !== 'auto' ? message.model_id : null;
+        const effectiveModelId = selectedModelId || 'auto';
+        if (!selectedModelId) {
+            message.model_id = 'auto';
+        }
+        // 若已由前面的选模型逻辑注入了 models，不再覆盖；否则注入 auto 配置
+        const existingModels = message.dynamic_config && message.dynamic_config.models;
+        const modelsConfig = (existingModels && Object.keys(existingModels).length > 0)
+            ? existingModels
+            : {
+                [effectiveModelId]: {
                     api_key: '${MAGIC_API_KEY}',
                     api_base_url: '${MAGIC_API_BASE_URL}',
-                    name: 'auto'
+                    name: effectiveModelId
                 }
-            },
-            video_model: {
-                model_id: 'doubao-seedance-2-0-fast-260128'
-            },
+            };
+        message.dynamic_config = Object.assign({}, message.dynamic_config, {
+            models: modelsConfig,
+            video_model: message.dynamic_config && message.dynamic_config.video_model
+                ? message.dynamic_config.video_model
+                : { model_id: 'doubao-seedance-2-0-fast-260128' },
             ...(customAgentCode ? { agent_code: customAgentCode } : {})
         });
     }
