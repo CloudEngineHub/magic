@@ -808,10 +808,6 @@ registerMagicCanvasPlugin({
 						select: false,
 					}
 				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "款式设计生成成功！"), "success")
-					ctx.ui.close?.()
-				},
 			},
 		})
 	},

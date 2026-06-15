@@ -415,10 +415,6 @@ registerMagicCanvasPlugin({
 						selectedSize,
 					})
 				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "鞋靴上脚图生成成功！"), "success")
-					ctx.ui.close?.()
-				},
 			},
 		})
 	},

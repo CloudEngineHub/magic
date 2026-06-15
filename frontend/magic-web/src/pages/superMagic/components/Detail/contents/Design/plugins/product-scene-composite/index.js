@@ -267,10 +267,6 @@ registerMagicCanvasPlugin({
 					)
 					return results.length === 1 ? results[0] : results
 				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "商品图合成生成成功！"), "success")
-					ctx.ui.close?.()
-				},
 			},
 		})
 	},

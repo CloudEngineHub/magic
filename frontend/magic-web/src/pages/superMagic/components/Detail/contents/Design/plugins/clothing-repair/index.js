@@ -262,10 +262,6 @@ registerMagicCanvasPlugin({
 						selectedSize,
 					})
 				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "服饰修复图生成成功！"), "success")
-					ctx.ui.close?.()
-				},
 			},
 		})
 	},

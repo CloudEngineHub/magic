@@ -751,10 +751,6 @@ registerMagicCanvasPlugin({
 					}
 					return results
 				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "服饰换色图生成成功！"), "success")
-					ctx.ui.close?.()
-				},
 			},
 		})
 

@@ -510,10 +510,6 @@ registerMagicCanvasPlugin({
 						select: false,
 					}
 				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "大牌设计方案生成成功！"), "success")
-					ctx.ui.close?.()
-				},
 			},
 		})
 	},

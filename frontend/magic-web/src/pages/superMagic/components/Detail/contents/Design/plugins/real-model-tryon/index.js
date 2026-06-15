@@ -247,10 +247,6 @@ registerMagicCanvasPlugin({
 						select: false,
 					}
 				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "真人图试衣图生成成功！"), "success")
-					ctx.ui.close?.()
-				},
 			},
 		})
 	},

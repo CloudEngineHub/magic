@@ -292,10 +292,6 @@ registerMagicCanvasPlugin({
 						select: false,
 					}
 				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "AI 试戴图生成成功！"), "success")
-					ctx.ui.close?.()
-				},
 			},
 		})
 	},

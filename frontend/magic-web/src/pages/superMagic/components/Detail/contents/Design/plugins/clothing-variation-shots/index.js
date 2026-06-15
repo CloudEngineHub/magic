@@ -508,10 +508,6 @@ registerMagicCanvasPlugin({
 					})
 					return Promise.all(requests.map((request) => generateAndPlace(request)))
 				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "百变服饰图生成成功！"), "success")
-					ctx.ui.close?.()
-				},
 			},
 		})
 	},

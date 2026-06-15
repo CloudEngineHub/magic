@@ -2019,10 +2019,6 @@ registerMagicCanvasPlugin({
 					}
 					return results
 				},
-				onSuccess: ({ ctx }) => {
-					ctx.ui.toast(t("toast.success", "商品套图生成成功！"), "success")
-					ctx.ui.close?.()
-				},
 			},
 		})
 
