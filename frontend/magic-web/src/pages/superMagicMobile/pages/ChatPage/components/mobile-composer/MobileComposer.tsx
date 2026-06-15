@@ -1,5 +1,5 @@
 import { EditorContent } from "@tiptap/react"
-import { ArrowUp, Loader2, Plus, Square, X } from "lucide-react"
+import { ArrowUp, Check, Loader2, Plus, Square, X } from "lucide-react"
 import { useDebounceFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -21,6 +21,7 @@ import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import MobileComposerAddSheet from "./MobileComposerAddSheet"
 import MobileComposerAttachments from "./MobileComposerAttachments"
 import MobileComposerHeader from "./MobileComposerHeader"
+import MobileVoiceEdgeGlow from "./MobileVoiceEdgeGlow"
 import MobileScenePanels from "./MobileScenePanels"
 import useMobileComposerLogic from "./useMobileComposerLogic"
 
@@ -50,30 +51,152 @@ const mobileComposerEditorClassName = cn(
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]",
 )
 
+const MOBILE_VOICE_WAVEFORM_BAR_COUNT = 76
+const MOBILE_VOICE_WAVEFORM_HEIGHT = 40
+const MOBILE_VOICE_WAVEFORM_BAR_WIDTH = 2
+const MOBILE_VOICE_WAVEFORM_BAR_GAP = 1
+const MOBILE_VOICE_WAVEFORM_FADE_WIDTH = 20
+const MOBILE_VOICE_WAVEFORM_SAMPLE_INTERVAL_MS = 44
+
 const voiceRecordingWaveformClassName =
-	"flex h-10 min-w-0 flex-1 items-center justify-between overflow-hidden text-muted-foreground"
+	"relative h-10 min-w-0 flex-1 overflow-hidden text-muted-foreground"
 
 function createMobileVoiceWaveformLevels(): number[] {
-	return Array.from({ length: 44 }, (_, index) => {
-		const center = (44 - 1) / 2
-		const distanceFromCenter = Math.abs(index - center) / center
-		return 0.16 + (1 - distanceFromCenter) * 0.18
-	})
+	return Array.from({ length: MOBILE_VOICE_WAVEFORM_BAR_COUNT }, () => 0)
+}
+
+function normalizeMobileVoiceLevel(level: number): number {
+	if (Number.isNaN(level) || !Number.isFinite(level)) return 0
+	if (level <= 0.16) return 0
+	if (level >= 1) return 1
+	return (level - 0.16) / 0.84
 }
 
 function MobileVoiceRecordingWaveform({ levels }: { levels: number[] }) {
+	const containerRef = useRef<HTMLDivElement>(null)
+	const canvasRef = useRef<HTMLCanvasElement>(null)
+	const stateRef = useRef({
+		amplitudes: [] as number[],
+		latestLevel: normalizeMobileVoiceLevel(levels[levels.length - 1] ?? 0),
+		scrollOffset: 0,
+		lastFrameTime: 0,
+		rafId: 0,
+	})
+
+	useEffect(() => {
+		stateRef.current.latestLevel = normalizeMobileVoiceLevel(levels[levels.length - 1] ?? 0)
+	}, [levels])
+
+	useEffect(() => {
+		const canvas = canvasRef.current
+		const container = containerRef.current
+		if (!canvas || !container) return
+
+		const dpr = window.devicePixelRatio || 1
+		const barPitch = MOBILE_VOICE_WAVEFORM_BAR_WIDTH + MOBILE_VOICE_WAVEFORM_BAR_GAP
+		const pixelsPerMs = barPitch / MOBILE_VOICE_WAVEFORM_SAMPLE_INTERVAL_MS
+
+		const resize = () => {
+			const width = container.getBoundingClientRect().width
+			canvas.width = Math.round(width * dpr)
+			canvas.height = Math.round(MOBILE_VOICE_WAVEFORM_HEIGHT * dpr)
+			canvas.style.width = `${width}px`
+			canvas.style.height = `${MOBILE_VOICE_WAVEFORM_HEIGHT}px`
+
+			// Keep enough silent bars buffered to cover the full canvas, avoiding an empty left edge.
+			const maxBars = Math.ceil(width / barPitch) + 2
+			const amplitudes = stateRef.current.amplitudes
+			if (amplitudes.length < maxBars) {
+				amplitudes.push(...new Array(maxBars - amplitudes.length).fill(0))
+			}
+			if (amplitudes.length > maxBars) amplitudes.length = maxBars
+		}
+
+		resize()
+		const resizeObserver = new ResizeObserver(resize)
+		resizeObserver.observe(container)
+
+		const draw = (timestamp: number) => {
+			const context = canvas.getContext("2d")
+			if (!context) {
+				stateRef.current.rafId = requestAnimationFrame(draw)
+				return
+			}
+
+			const width = canvas.width
+			const height = canvas.height
+			const deltaTime = stateRef.current.lastFrameTime
+				? Math.min(timestamp - stateRef.current.lastFrameTime, 100)
+				: 16
+			stateRef.current.lastFrameTime = timestamp
+			stateRef.current.scrollOffset += pixelsPerMs * deltaTime
+
+			const maxBars = Math.ceil(width / ((barPitch * dpr))) + 2
+			while (stateRef.current.scrollOffset >= barPitch) {
+				stateRef.current.scrollOffset -= barPitch
+				stateRef.current.amplitudes.unshift(stateRef.current.latestLevel)
+				if (stateRef.current.amplitudes.length > maxBars) {
+					stateRef.current.amplitudes.length = maxBars
+				}
+			}
+
+			context.clearRect(0, 0, width, height)
+			context.fillStyle = getComputedStyle(canvas).color
+
+			const barPitchInPixels = barPitch * dpr
+			const barWidthInPixels = MOBILE_VOICE_WAVEFORM_BAR_WIDTH * dpr
+			const radius = barWidthInPixels / 2
+			const newestRight = width - stateRef.current.scrollOffset * dpr
+
+			for (let index = 0; index < stateRef.current.amplitudes.length; index += 1) {
+				const barRight = newestRight - index * barPitchInPixels
+				const barLeft = barRight - barWidthInPixels
+				if (barLeft > width) continue
+				if (barRight < 0) break
+
+				const amplitude = stateRef.current.amplitudes[index]
+				const barHeight = Math.max(2 * dpr, amplitude * height)
+				const barTop = (height - barHeight) / 2
+
+				context.beginPath()
+				if (typeof context.roundRect === "function") {
+					context.roundRect(barLeft, barTop, barWidthInPixels, barHeight, radius)
+				} else {
+					context.rect(barLeft, barTop, barWidthInPixels, barHeight)
+				}
+				context.fill()
+			}
+
+			stateRef.current.rafId = requestAnimationFrame(draw)
+		}
+
+		stateRef.current.rafId = requestAnimationFrame(draw)
+
+		return () => {
+			cancelAnimationFrame(stateRef.current.rafId)
+			resizeObserver.disconnect()
+		}
+	}, [])
+
 	return (
 		<div
+			ref={containerRef}
 			className={voiceRecordingWaveformClassName}
 			data-testid="mobile-composer-voice-waveform"
+			aria-hidden
 		>
-			{levels.map((level, index) => (
-				<div
-					key={index}
-					className="w-0.5 shrink-0 rounded-full bg-current transition-[height] duration-150 ease-out"
-					style={{ height: Math.max(4, 40 * Math.min(1, Math.max(0.16, level))) }}
-				/>
-			))}
+			<canvas ref={canvasRef} className="block text-inherit" />
+
+			<div
+				className="pointer-events-none absolute inset-y-0 left-0 bg-gradient-to-r from-card to-transparent"
+				style={{ width: MOBILE_VOICE_WAVEFORM_FADE_WIDTH }}
+				aria-hidden
+			/>
+			<div
+				className="pointer-events-none absolute inset-y-0 right-0 bg-gradient-to-l from-card to-transparent"
+				style={{ width: MOBILE_VOICE_WAVEFORM_FADE_WIDTH }}
+				aria-hidden
+			/>
 		</div>
 	)
 }
@@ -257,6 +380,9 @@ function MobileComposerComponent({
 	}, [voiceRecordingElapsedSeconds])
 	const isVoiceInputInitializing = isVoicePanelActive && !isVoiceRecording
 	const shouldShowVoiceRecordingUi = isVoicePanelActive || isVoiceRecording
+	const currentVoiceEdgeGlowLevel = normalizeMobileVoiceLevel(
+		voiceWaveformLevels[voiceWaveformLevels.length - 1] ?? 0,
+	)
 
 	useEffect(() => {
 		if (!voiceRecordingStartedAt) return
@@ -295,7 +421,7 @@ function MobileComposerComponent({
 			onRecordingChange={handleVoiceRecordingChange}
 			onDeferredTextChange={handleDeferredVoiceTextChange}
 			onWaveformLevelsChange={setVoiceWaveformLevels}
-			waveformBarCount={44}
+			waveformBarCount={MOBILE_VOICE_WAVEFORM_BAR_COUNT}
 		/>
 	)
 	const voiceRecordingContent = (
@@ -347,7 +473,7 @@ function MobileComposerComponent({
 				{isVoiceConfirming ? (
 					<Loader2 className="size-5 animate-spin" />
 				) : (
-					<ArrowUp className="size-6" strokeWidth={1.5} />
+					<Check className="size-6" strokeWidth={2} />
 				)}
 			</Button>
 		</div>
@@ -515,7 +641,15 @@ function MobileComposerComponent({
 		</div>
 	)
 
-	return <MessageEditorStoreProvider store={logic.store}>{content}</MessageEditorStoreProvider>
+	return (
+		<MessageEditorStoreProvider store={logic.store}>
+			<MobileVoiceEdgeGlow
+				active={shouldShowVoiceRecordingUi}
+				audioLevel={currentVoiceEdgeGlowLevel}
+			/>
+			{content}
+		</MessageEditorStoreProvider>
+	)
 }
 
 const MobileComposer = observer(MobileComposerComponent)
