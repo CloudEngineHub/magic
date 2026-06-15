@@ -5,12 +5,14 @@
 	"label": "{{label}}",
 	"locales": {
 		"en-US": {
+			"button.aiPlaceholder": "AI Generate",
 			"button.generate": "Generate Pose Swap",
 			"button.generating": "Generating…",
 			"description": "Upload a model photo and change the pose with smart, text, or image guidance while keeping face identity and campaign style consistent.",
 			"empty.modelImage": "Please upload a model image first",
 			"error.noModels": "No AI model is currently available",
 			"error.noSize": "The current model does not provide a usable size preset",
+			"error.extraReferences": "Upload a model image first",
 			"error.posePromptRequired": "Please enter a pose description",
 			"error.poseReferenceRequired": "Please upload at least 1 pose reference image",
 			"error.referenceLimit": "The reference image limit for the current model has been reached",
@@ -42,12 +44,14 @@
 			"upload.poseReferenceImages.help": "Upload one or more pose reference images. Only the pose is reused — not the face, clothing, or background. Multi-image generation assigns one pose reference to each output in order; when outputs exceed pose references, the pose references are reused cyclically."
 		},
 		"zh-CN": {
+			"button.aiPlaceholder": "AI 生成",
 			"button.generate": "生成模特换姿势图",
 			"button.generating": "生成中…",
 			"description": "上传真人模特图，通过智能、文字或以图换姿生成人脸一致、风格统一的模特组图。",
 			"empty.modelImage": "请先上传模特图",
 			"error.noModels": "暂无可用 AI 模型",
 			"error.noSize": "当前模型缺少可用尺寸配置",
+			"error.extraReferences": "请先上传模特图",
 			"error.posePromptRequired": "请输入姿势描述",
 			"error.poseReferenceRequired": "请上传至少 1 张姿势参考图",
 			"error.referenceLimit": "参考图数量已达当前模型上限",
@@ -65,7 +69,7 @@
 			"poseMode.text": "文字换姿",
 			"poseMode.text.desc": "用文字描述目标姿势，适合快速尝试不同创意姿态。",
 			"section.canvasSize": "宽高比",
-			"section.count": "生成张数",
+			"section.count": "生成数量",
 			"section.generationMode": "生成模式",
 			"section.modelImage": "模特图",
 			"section.modelSelect": "AI 模型",
@@ -97,7 +101,8 @@
 		"assets.uploadFile",
 		"assets.fetchBlob",
 		"ai.getImageModels",
-		"ai.generateAndPlace"
+		"ai.generateAndPlace",
+		"ai.completeImagePrompt"
 	],
 	"version": 1
 }

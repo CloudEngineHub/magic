@@ -18,6 +18,7 @@
 	--mpk-input-alpha: var(--input-alpha, 1);
 	--mpk-ring-rgb: var(--ring-rgb, 161 161 161);
 	--mpk-destructive-rgb: var(--destructive-rgb, 228 0 22);
+	--mpk-hint-rgb: 234 88 12;
 	--mpk-popover-rgb: var(--popover-rgb, var(--background-rgb, 255 255 255));
 	--mpk-leading-snug: var(--leading-snug, 1.375);
 	--mpk-background: rgb(var(--mpk-background-rgb));
@@ -33,6 +34,7 @@
 	--mpk-ring: rgb(var(--mpk-ring-rgb));
 	--mpk-ring-soft: rgb(var(--mpk-ring-rgb) / 0.18);
 	--mpk-destructive: rgb(var(--mpk-destructive-rgb));
+	--mpk-hint: rgb(var(--mpk-hint-rgb));
 	font-family:
 		system-ui,
 		-apple-system,
@@ -563,7 +565,7 @@
 
 .mpk-empty {
 	margin: 0 0 10px;
-	color: var(--mpk-muted-foreground);
+	color: var(--mpk-hint);
 	font-size: 11px;
 	line-height: 1.5;
 }

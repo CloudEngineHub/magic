@@ -270,6 +270,9 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "一键生成穿搭图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.garments.length) {
+						return t("empty.garments", "请先上传至少 1 张商品图")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.garments.length,

@@ -30,6 +30,12 @@ const SMART_POSE_VARIATION_PROMPT = {
 	en: "When generating multiple images, create slightly different but still natural and commercially believable poses across the set. Each image must still contain only one person with realistic anatomy. ",
 }
 
+const POSE_MODE = {
+	SMART: "smart",
+	TEXT: "text",
+	IMAGE: "image",
+}
+
 const GENERATION_MODE_DEFINITIONS = [
 	{
 		value: "standard",
@@ -58,18 +64,17 @@ const GENERATION_MODE_DEFINITIONS = [
 function createInitialState() {
 	return {
 		modelImage: null,
-		poseMode: "smart",
+		poseMode: POSE_MODE.SMART,
 		posePrompt: "",
 		poseReferenceImages: [],
 		generationMode: "standard",
-		genCount: 1,
 	}
 }
 
 function buildPoseModeOptions(t) {
 	return [
 		{
-			value: "smart",
+			value: POSE_MODE.SMART,
 			label: t("poseMode.smart", "智能姿势"),
 			description: t(
 				"poseMode.smart.desc",
@@ -77,12 +82,12 @@ function buildPoseModeOptions(t) {
 			),
 		},
 		{
-			value: "text",
+			value: POSE_MODE.TEXT,
 			label: t("poseMode.text", "文字换姿"),
 			description: t("poseMode.text.desc", "用文字描述目标姿势，适合快速尝试不同创意姿态。"),
 		},
 		{
-			value: "image",
+			value: POSE_MODE.IMAGE,
 			label: t("poseMode.image", "以图换姿"),
 			description: t(
 				"poseMode.image.desc",
@@ -93,7 +98,7 @@ function buildPoseModeOptions(t) {
 }
 
 function getReferenceImages(state) {
-	if (state.poseMode === "image") {
+	if (state.poseMode === POSE_MODE.IMAGE) {
 		return [state.modelImage, ...state.poseReferenceImages].filter(Boolean)
 	}
 	return state.modelImage ? [state.modelImage] : []
@@ -107,6 +112,22 @@ function getMaxReferenceImages(state, helpers) {
 	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 2
 }
 
+function buildCurrentTextBlock(currentText) {
+	const normalizedCurrentText = String(currentText ?? "").trim()
+	if (!normalizedCurrentText) return "用户当前未填写。"
+	return normalizedCurrentText
+}
+
+function buildPosePromptCompletionUserPrompt({ currentText }) {
+	return [
+		"任务目标：为模特换姿势插件的“姿势描述”输入框生成或补全一段提示词。",
+		`当前输入：${buildCurrentTextBlock(currentText)}`,
+		"参考图角色：模特图用于理解人物身份、服饰、镜头裁切、商业风格、场景和当前身体姿态。",
+		"补全方向：可补充站姿、坐姿、行走姿态、手臂位置、重心方向、躯干朝向、腿部动作、头部角度和时尚商拍感。",
+		"业务限制：姿势必须自然可信、解剖合理、适合单人商业模特图；不要改变人物身份、服装、背景和画面裁切；只输出适合填入“姿势描述”的短提示词。",
+	].join("\n")
+}
+
 function buildPoseSwapRequest({
 	state,
 	helpers,
@@ -114,6 +135,7 @@ function buildPoseSwapRequest({
 	referenceImages,
 	poseReferenceCount,
 	genCount,
+	select,
 }) {
 	const selectedSize = helpers.getSelectedSize(state)
 	const width = selectedSize.genW
@@ -139,7 +161,7 @@ function buildPoseSwapRequest({
 		width,
 		height,
 		count: resolvedGenCount,
-		select: false,
+		select: select ?? false,
 	}
 }
 
@@ -147,14 +169,15 @@ function buildImagePoseSwapRequests({ state, helpers, locale }) {
 	const modelReferenceId = helpers.collectReferenceIds([state.modelImage])[0]
 	const poseReferenceIds = helpers.collectReferenceIds(state.poseReferenceImages)
 
-	return Array.from({ length: state.genCount }, (_, index) =>
+	return poseReferenceIds.map((poseReferenceId, index) =>
 		buildPoseSwapRequest({
 			state,
 			helpers,
 			locale,
-			referenceImages: [modelReferenceId, poseReferenceIds[index % poseReferenceIds.length]],
+			referenceImages: [modelReferenceId, poseReferenceId],
 			poseReferenceCount: 1,
-			genCount: 1,
+			genCount: state.genCount,
+			select: index === poseReferenceIds.length - 1,
 		}),
 	)
 }
@@ -169,7 +192,7 @@ function buildPoseSwapPrompt({ poseMode, posePrompt, generationMode, genCount, l
 	if (isChinese) {
 		const modelReference = MagicPromptLocale.getReferenceLabel(1, locale)
 		const basePrompt =
-			poseMode === "image"
+			poseMode === POSE_MODE.IMAGE
 				? `使用 ${modelReference} 作为底图生成商业模特换姿结果。` +
 					"第一张附图是参考图 1（身份基准图），第二张附图是参考图 2（姿势蓝图）。" +
 					MagicPromptLocale.pickText(IMAGE_IDENTITY_LOCK, locale) +
@@ -185,11 +208,11 @@ function buildPoseSwapPrompt({ poseMode, posePrompt, generationMode, genCount, l
 					MagicPromptLocale.pickText(ANATOMY_CONSTRAINT, locale)
 
 		let poseGuidance = ""
-		if (poseMode === "smart") {
+		if (poseMode === POSE_MODE.SMART) {
 			const variationGuidance =
 				genCount > 1 ? MagicPromptLocale.pickText(SMART_POSE_VARIATION_PROMPT, locale) : ""
 			poseGuidance = MagicPromptLocale.pickText(SMART_POSE_PROMPT, locale) + variationGuidance
-		} else if (poseMode === "text") {
+		} else if (poseMode === POSE_MODE.TEXT) {
 			poseGuidance =
 				`请按照以下方向调整模特姿势：${posePrompt.trim()}。` +
 				"不要改变人物身份、服装风格或场景类型。"
@@ -205,7 +228,7 @@ function buildPoseSwapPrompt({ poseMode, posePrompt, generationMode, genCount, l
 
 	const modelReference = "reference image 1"
 	const basePrompt =
-		poseMode === "image"
+		poseMode === POSE_MODE.IMAGE
 			? `Create a commercial model pose swap result using ${modelReference} as the base photo. ` +
 				"The first attached image is reference image 1 (IDENTITY BASE). The second attached image is reference image 2 (POSE BLUEPRINT). " +
 				MagicPromptLocale.pickText(IMAGE_IDENTITY_LOCK, locale) +
@@ -221,11 +244,11 @@ function buildPoseSwapPrompt({ poseMode, posePrompt, generationMode, genCount, l
 				MagicPromptLocale.pickText(ANATOMY_CONSTRAINT, locale)
 
 	let poseGuidance = ""
-	if (poseMode === "smart") {
+	if (poseMode === POSE_MODE.SMART) {
 		const variationGuidance =
 			genCount > 1 ? MagicPromptLocale.pickText(SMART_POSE_VARIATION_PROMPT, locale) : ""
 		poseGuidance = MagicPromptLocale.pickText(SMART_POSE_PROMPT, locale) + variationGuidance
-	} else if (poseMode === "text") {
+	} else if (poseMode === POSE_MODE.TEXT) {
 		poseGuidance =
 			`Adjust the model pose according to this direction: ${posePrompt.trim()}. ` +
 			"Do not change the person's identity, garment style, or scene type. "
@@ -288,27 +311,36 @@ registerMagicCanvasPlugin({
 				},
 				{
 					id: "poseMode",
-					kind: "option-group",
+					kind: "tabs",
 					stateKey: "poseMode",
 					title: t("section.poseMode", "参考姿势"),
-					variant: "card",
-					descriptionMode: "inline",
 					options: buildPoseModeOptions(t),
 				},
 				{
 					id: "posePrompt",
 					kind: "textarea",
 					stateKey: "posePrompt",
-					deps: ["poseMode"],
+					deps: ["poseMode", "modelImage"],
 					title: t("section.posePrompt", "姿势描述"),
 					required: true,
 					placeholder: t(
 						"placeholder.posePrompt",
 						"将图中模特调整为一个更具创意和时尚感的姿势。",
 					),
-					rows: 3,
-					maxLength: 2000,
-					when: ({ state }) => state.poseMode === "text",
+					when: ({ state }) => state.poseMode === POSE_MODE.TEXT,
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) => !state.modelImage,
+						completeImagePrompt: {
+							referenceImages: ({ state }) => [state.modelImage],
+							referencesMessage: t("error.extraReferences", "请先上传模特图"),
+							userPrompt: ({ state }) =>
+								buildPosePromptCompletionUserPrompt({
+									currentText: state.posePrompt,
+								}),
+						},
+					},
 				},
 				{
 					id: "poseReferenceImages",
@@ -319,11 +351,11 @@ registerMagicCanvasPlugin({
 					required: true,
 					help: t(
 						"upload.poseReferenceImages.help",
-						"支持上传多张姿势参考图，只会复用姿态，不会复制脸、衣服或背景。多图生成时会按顺序为每张结果分配 1 张姿势参考图；当生成张数多于参考图数量时，会循环复用姿势参考图。",
+						"支持上传多张姿势参考图，只会复用姿态，不会复制脸、衣服或背景。每张姿势参考图会分别生成一组结果，生成数量对每组生效。",
 					),
 					addLabel: "+",
 					alt: t("section.poseReferenceImages", "姿势参考图"),
-					when: ({ state }) => state.poseMode === "image",
+					when: ({ state }) => state.poseMode === POSE_MODE.IMAGE,
 					maxCount: ({ state, helpers }) => {
 						const maxReferenceImages = getMaxReferenceImages(state, helpers)
 						const modelCount = state.modelImage ? 1 : 0
@@ -348,13 +380,11 @@ registerMagicCanvasPlugin({
 					id: "canvasSize",
 					kind: "size-control",
 					title: t("section.canvasSize", "宽高比"),
-					deps: ["modelId", "modelOptions", "scale"],
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
 					title: t("section.resolution", "尺寸倍数"),
-					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "count",
@@ -367,12 +397,21 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成模特换姿势图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.modelImage) {
+						return t("error.modelImage", "请先上传模特图")
+					}
+					if (state.poseMode === POSE_MODE.TEXT && !state.posePrompt.trim()) {
+						return t("error.posePromptRequired", "请输入姿势描述")
+					}
+					if (state.poseMode === POSE_MODE.IMAGE && !state.poseReferenceImages.length) {
+						return t("error.poseReferenceRequired", "请上传至少 1 张姿势参考图")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) =>
 					!state.modelImage ||
-					(state.poseMode === "text" && !state.posePrompt.trim()) ||
-					(state.poseMode === "image" && !state.poseReferenceImages.length),
+					(state.poseMode === POSE_MODE.TEXT && !state.posePrompt.trim()) ||
+					(state.poseMode === POSE_MODE.IMAGE && !state.poseReferenceImages.length),
 				validate: ({ state, helpers }) => {
 					const referenceImages = getReferenceImages(state)
 					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
@@ -390,11 +429,8 @@ registerMagicCanvasPlugin({
 					}
 					return null
 				},
-				buildRequest: ({ state, helpers }) => {
-					return buildPoseSwapRequest({ state, helpers, locale: promptLocale })
-				},
 				execute: async ({ state, helpers, generateAndPlace }) => {
-					if (state.poseMode !== "image") {
+					if (state.poseMode !== POSE_MODE.IMAGE) {
 						return generateAndPlace(
 							buildPoseSwapRequest({ state, helpers, locale: promptLocale }),
 						)
@@ -405,11 +441,10 @@ registerMagicCanvasPlugin({
 						helpers,
 						locale: promptLocale,
 					})
-					const results = []
-					for (const request of requests) {
-						results.push(await generateAndPlace(request))
-					}
-					return results
+					const results = await Promise.all(
+						requests.map((request) => generateAndPlace(request)),
+					)
+					return results.length === 1 ? results[0] : results
 				},
 				onSuccess: ({ ctx }) => {
 					ctx.ui.toast(t("toast.success", "模特换姿势图生成成功！"), "success")

@@ -1,16 +1,4 @@
-.pose-swap .mpk-image-grid {
-	grid-template-columns: repeat(4, 1fr);
-}
 
-.pose-swap .mpk-option-group.is-card {
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.pose-swap .mpk-card-tab {
-	height: 100%;
-	min-height: 96px;
-	max-height: 120px;
-}
 
 .pose-swap .mpk-image-slot-preview {
 	max-height: 240px;
