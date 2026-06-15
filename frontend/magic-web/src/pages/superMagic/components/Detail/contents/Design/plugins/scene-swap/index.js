@@ -280,6 +280,21 @@ registerMagicCanvasPlugin({
 			generate: {
 				buttonLabel: `✨ ${t("button.generate", "生成模拍换景图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
+				getIdleHint: ({ state }) => {
+					if (!state.modelImages.length) {
+						return t("empty.modelImages", "请先上传至少 1 张模特图")
+					}
+					if (state.backgroundMode === BACKGROUND_MODE.IMAGE && !state.backgroundImage) {
+						return t("empty.backgroundImage", "请先上传背景参考图")
+					}
+					if (
+						state.backgroundMode === BACKGROUND_MODE.PROMPT &&
+						!state.backgroundPrompt.trim()
+					) {
+						return t("empty.backgroundPrompt", "请先输入背景描述")
+					}
+					return null
+				},
 				isDisabled: ({ state }) =>
 					!state.modelImages.length ||
 					(state.backgroundMode === BACKGROUND_MODE.IMAGE && !state.backgroundImage) ||

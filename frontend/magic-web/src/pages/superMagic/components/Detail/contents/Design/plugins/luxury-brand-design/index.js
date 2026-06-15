@@ -458,6 +458,18 @@ registerMagicCanvasPlugin({
 			generate: {
 				buttonLabel: `✨ ${t("button.generate", "生成大牌设计方案")}`,
 				loadingLabel: t("button.generating", "生成中…"),
+				getIdleHint: ({ state }) => {
+					if (!state.styleImages.length) {
+						return t("empty.styleImages", "请先上传至少 1 张款式图")
+					}
+					if (!state.brandName.trim()) {
+						return t("empty.brandName", "请先输入品牌名称")
+					}
+					if (!state.garmentCategory.trim()) {
+						return t("empty.garmentCategory", "请先输入服装品类")
+					}
+					return null
+				},
 				isDisabled: ({ state }) =>
 					!state.styleImages.length ||
 					!state.brandName.trim() ||

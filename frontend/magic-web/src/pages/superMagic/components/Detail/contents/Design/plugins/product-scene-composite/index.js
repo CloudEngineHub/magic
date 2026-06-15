@@ -30,7 +30,6 @@ function createInitialState() {
 		productImage: null,
 		sceneImages: [],
 		generationMode: "standard",
-		genCount: 1,
 	}
 }
 
@@ -71,7 +70,7 @@ function buildSceneCompositeRequests({ state, helpers, locale }) {
 	const productReferenceId = helpers.collectReferenceIds([state.productImage])[0]
 	const sceneReferenceIds = helpers.collectReferenceIds(state.sceneImages)
 
-	return sceneReferenceIds.map((_, index) => {
+	return sceneReferenceIds.map((sceneReferenceId, index) => {
 		const sceneImage = state.sceneImages[index]
 		const selectedSize = resolveSceneRequestSize(sceneImage, state, helpers)
 		return buildProductSceneCompositeRequest({
@@ -79,8 +78,9 @@ function buildSceneCompositeRequests({ state, helpers, locale }) {
 			helpers,
 			locale,
 			selectedSize,
-			referenceImages: [productReferenceId, sceneReferenceIds[index]],
+			referenceImages: [productReferenceId, sceneReferenceId],
 			count: state.genCount,
+			select: index === sceneReferenceIds.length - 1,
 		})
 	})
 }
@@ -92,6 +92,7 @@ function buildProductSceneCompositeRequest({
 	selectedSize,
 	referenceImages,
 	count,
+	select,
 }) {
 	const width = selectedSize.genW
 	const height = selectedSize.genH
@@ -108,7 +109,7 @@ function buildProductSceneCompositeRequest({
 		width,
 		height,
 		count,
-		select: false,
+		select: select ?? false,
 	}
 }
 
@@ -222,6 +223,12 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成商品图合成")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.productImage) {
+						return t("empty.productImage", "请先上传商品图")
+					}
+					if (!state.sceneImages.length) {
+						return t("empty.sceneImages", "请先上传至少 1 张场景图")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.productImage || !state.sceneImages.length,
@@ -255,11 +262,10 @@ registerMagicCanvasPlugin({
 						helpers,
 						locale: promptLocale,
 					})
-					const results = []
-					for (const request of requests) {
-						results.push(await generateAndPlace(request))
-					}
-					return results
+					const results = await Promise.all(
+						requests.map((request) => generateAndPlace(request)),
+					)
+					return results.length === 1 ? results[0] : results
 				},
 				onSuccess: ({ ctx }) => {
 					ctx.ui.toast(t("toast.success", "商品图合成生成成功！"), "success")

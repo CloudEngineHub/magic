@@ -657,7 +657,6 @@ registerMagicCanvasPlugin({
 					id: "modelSelect",
 					kind: "model-select",
 					title: t("section.modelSelect", "AI 模型"),
-
 				},
 				{
 					id: "canvasSize",
@@ -682,6 +681,15 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成换色图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.modelImages.length) {
+						return t("empty.modelImages", "请先上传至少 1 张模特图")
+					}
+					if (!state.bodyPart.trim()) {
+						return t("empty.bodyPart", "请先输入换色部位")
+					}
+					if (!state.color) {
+						return t("empty.color", "请先选择颜色")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) =>

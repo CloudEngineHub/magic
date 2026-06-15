@@ -158,6 +158,12 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成 AI 换脸图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.baseModelImages.length) {
+						return t("empty.baseModelImages", "请先上传至少 1 张原模特图")
+					}
+					if (!state.targetFaceImage) {
+						return t("empty.targetFaceImage", "请先上传目标人脸图")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.baseModelImages.length || !state.targetFaceImage,
