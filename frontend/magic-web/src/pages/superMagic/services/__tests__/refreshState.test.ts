@@ -13,6 +13,7 @@ const {
 	projectServiceMock: {
 		getProjectDetail: vi.fn(),
 		fetchProjects: vi.fn(),
+		updateProjects: vi.fn(),
 	},
 	workspaceServiceMock: {
 		getWorkspaceDetail: vi.fn(),
@@ -33,8 +34,10 @@ const {
 	},
 	projectStoreMock: {
 		selectedProject: { id: "project-stale" },
+		loadedWorkspaces: new Set<string>(),
 		setSelectedProject: vi.fn(),
 		updateProject: vi.fn(),
+		loadProjectsForWorkspace: vi.fn(),
 	},
 	workspaceStoreMock: {
 		selectedWorkspace: null as Workspace | null,
@@ -83,8 +86,8 @@ vi.mock("../../utils/superMagicCache", () => ({
 }))
 
 vi.mock("../constants", () => ({
-	SHARE_WORKSPACE_ID: "share-workspace",
-	SHARE_WORKSPACE_DATA: () => ({ id: "share-workspace" }),
+	SHARE_WORKSPACE_ID: "collaboration",
+	SHARE_WORKSPACE_DATA: () => ({ id: "collaboration" }),
 	isOtherCollaborationProject: () => false,
 	isCollaborationWorkspace: () => false,
 }))
@@ -145,6 +148,8 @@ describe("SuperMagicService.refreshState", () => {
 		})
 		workspaceStoreMock.selectedWorkspace = null
 		workspaceStoreMock.workspaces = []
+		projectStoreMock.selectedProject = { id: "project-stale" }
+		projectStoreMock.loadedWorkspaces = new Set<string>()
 		routeManageServiceMock.getCurrentRouteParams.mockReturnValue({})
 		routeManageServiceMock.isStaleScopedRefresh.mockReturnValue(false)
 		workspaceServiceMock.getWorkspaceDetail.mockResolvedValue({
@@ -223,5 +228,81 @@ describe("SuperMagicService.refreshState", () => {
 			false,
 		)
 		expect(workspaceServiceMock.createWorkspace).not.toHaveBeenCalled()
+	})
+})
+
+describe("SuperMagicService.silentRefreshSidebarLoadedCaches", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		projectStoreMock.loadedWorkspaces = new Set(["workspace-a", "workspace-b"])
+		workspaceStoreMock.selectedWorkspace = {
+			id: "workspace-selected",
+			workspace_type: "default",
+		} as Workspace
+	})
+
+	/**
+	 * The sidebar refresh should only touch normal loaded workspace caches
+	 * and the currently selected flat project list without changing selection.
+	 */
+	it("refreshes loaded workspace caches and the selected flat project list", async () => {
+		const selectedWorkspace = workspaceStoreMock.selectedWorkspace
+		const selectedProject = projectStoreMock.selectedProject
+
+		await SuperMagicService.silentRefreshSidebarLoadedCaches()
+
+		expect(workspaceServiceMock.fetchWorkspaces).toHaveBeenCalledWith({
+			page: 1,
+			isAutoSelect: false,
+			isSelectLast: false,
+		})
+		expect(projectStoreMock.loadProjectsForWorkspace).toHaveBeenCalledTimes(2)
+		expect(projectStoreMock.loadProjectsForWorkspace).toHaveBeenNthCalledWith(
+			1,
+			"workspace-a",
+			true,
+			true,
+		)
+		expect(projectStoreMock.loadProjectsForWorkspace).toHaveBeenNthCalledWith(
+			2,
+			"workspace-b",
+			true,
+			true,
+		)
+		expect(projectServiceMock.updateProjects).toHaveBeenCalledWith({
+			workspaceId: "workspace-selected",
+		})
+		expect(workspaceStoreMock.setSelectedWorkspace).not.toHaveBeenCalled()
+		expect(projectStoreMock.setSelectedProject).not.toHaveBeenCalled()
+		expect(workspaceStoreMock.selectedWorkspace).toBe(selectedWorkspace)
+		expect(projectStoreMock.selectedProject).toBe(selectedProject)
+	})
+
+	/**
+	 * Shared and invalid workspace ids should be ignored so manual refresh only
+	 * hits concrete personal workspace caches and skips flat list sync for shared selection.
+	 */
+	it("skips shared or invalid workspace caches and avoids flat sync for shared selection", async () => {
+		projectStoreMock.loadedWorkspaces = new Set(["workspace-a", "", "collaboration"])
+		workspaceStoreMock.selectedWorkspace = {
+			id: "collaboration",
+			workspace_type: "default",
+		} as Workspace
+
+		await SuperMagicService.silentRefreshSidebarLoadedCaches()
+
+		expect(projectStoreMock.loadProjectsForWorkspace).toHaveBeenCalledWith(
+			"workspace-a",
+			true,
+			true,
+		)
+		const refreshedWorkspaceIds = projectStoreMock.loadProjectsForWorkspace.mock.calls.map(
+			(args: [string]) => args[0],
+		)
+		expect(refreshedWorkspaceIds).not.toContain("collaboration")
+		expect(refreshedWorkspaceIds).not.toContain("")
+		expect(projectServiceMock.updateProjects).not.toHaveBeenCalled()
+		expect(workspaceStoreMock.setSelectedWorkspace).not.toHaveBeenCalled()
+		expect(projectStoreMock.setSelectedProject).not.toHaveBeenCalled()
 	})
 })

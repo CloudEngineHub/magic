@@ -149,8 +149,10 @@ class SuperMagicService {
 	 * 静默刷新侧栏已加载的工作区列表与各工作区项目缓存（含当前工作区扁平 projects），不改变选中项。
 	 */
 	silentRefreshSidebarLoadedCaches = async (): Promise<void> => {
+		// Normalize the loaded workspace cache ids so manual refresh only touches
+		// concrete personal workspaces and never duplicates requests for invalid entries.
 		const loadedIds = Array.from(projectStore.loadedWorkspaces).filter(
-			(id) => id !== SHARE_WORKSPACE_ID,
+			(id): id is string => Boolean(id) && id !== SHARE_WORKSPACE_ID,
 		)
 		const selectedId = workspaceStore.selectedWorkspace?.id
 		const needsFlatSync = Boolean(selectedId && selectedId !== SHARE_WORKSPACE_ID)
