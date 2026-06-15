@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ChatConversationListItem } from "@/pages/superMagicMobile/pages/ChatsPage/hooks/useChatConversationList"
 import ChatConversationSubMenuRow from "../ChatConversationSubMenuRow"
 
@@ -47,6 +47,14 @@ const defaultRowProps = {
 }
 
 describe("ChatConversationSubMenuRow", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
 	it("does not mark an unselected row as selected", () => {
 		render(
 			<ChatConversationSubMenuRow
@@ -98,5 +106,17 @@ describe("ChatConversationSubMenuRow", () => {
 			"focus-visible:ring-0",
 			"active:bg-transparent",
 		)
+	})
+
+	it("clears the pending row-click suppression timer on unmount", () => {
+		const clearTimeoutSpy = vi.spyOn(window, "clearTimeout")
+		const { unmount } = render(
+			<ChatConversationSubMenuRow item={createListItem()} {...defaultRowProps} />,
+		)
+
+		fireEvent.click(screen.getByTestId("sidebar-chats-submenu-more-chat-project-alpha"))
+		unmount()
+
+		expect(clearTimeoutSpy).toHaveBeenCalled()
 	})
 })

@@ -151,7 +151,8 @@ export function useDesktopChatProjectActions({
 			setDeleteModalOpen(false)
 			setCurrentActionItem(null)
 		} catch (error) {
-			console.log("Failed to delete chat project:", error)
+			console.error("Failed to delete chat project:", error)
+			magicToast.error(t("chat.deleteChatFailed"))
 		}
 	})
 
@@ -207,7 +208,8 @@ export function useDesktopChatProjectActions({
 				setSaveAsModalOpen(false)
 				setCurrentActionItem(null)
 			} catch (error) {
-				console.log("Failed to save chat as project:", error)
+				console.error("Failed to save chat as project:", error)
+				magicToast.error(t("chat.saveAsProjectFailed"))
 			} finally {
 				setIsSaveAsSubmitting(false)
 			}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Ellipsis } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -19,6 +19,8 @@ import {
 	chatConversationActionMenuItemDangerClassName,
 } from "@/pages/superMagic/utils/chat-conversation-action-icon"
 import { DESKTOP_CHATS_SUBMENU_SHOW_TIME_LABEL } from "./chats-submenu-config"
+
+const ROW_CLICK_SUPPRESS_MS = 80
 
 interface ChatConversationSubMenuRowProps {
 	item: ChatConversationListItem
@@ -55,14 +57,28 @@ function ChatConversationSubMenuRow({
 	const { t } = useTranslation("interface")
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const suppressRowClickRef = useRef(false)
+	const suppressRowClickTimeoutRef = useRef<number | null>(null)
 	const moreButtonRef = useRef<HTMLButtonElement | null>(null)
+
+	useEffect(() => {
+		/** Clear the delayed reset so list reorders or route switches never leave orphan callbacks behind. */
+		return () => {
+			if (suppressRowClickTimeoutRef.current !== null) {
+				window.clearTimeout(suppressRowClickTimeoutRef.current)
+			}
+		}
+	}, [])
 
 	/** Block row navigation briefly after opening the more menu, same as project rows. */
 	function blockRowClickTemporarily() {
 		suppressRowClickRef.current = true
-		setTimeout(() => {
+		if (suppressRowClickTimeoutRef.current !== null) {
+			window.clearTimeout(suppressRowClickTimeoutRef.current)
+		}
+		suppressRowClickTimeoutRef.current = window.setTimeout(() => {
 			suppressRowClickRef.current = false
-		}, 80)
+			suppressRowClickTimeoutRef.current = null
+		}, ROW_CLICK_SUPPRESS_MS)
 	}
 
 	function handleRowClick() {

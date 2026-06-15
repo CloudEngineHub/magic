@@ -518,6 +518,26 @@ describe("useDesktopChatProjectActions", () => {
 		})
 	})
 
+	it("shows an error toast when save-as project fails", async () => {
+		moveProjectMock.mockRejectedValueOnce(new Error("save as failed"))
+		projectStoreMock.selectedProject = currentChatProject
+		isCurrentChatProjectRouteMock.mockReturnValue(true)
+
+		render(<SaveAsHarness project={currentChatProject} />)
+
+		act(() => {
+			screen.getByTestId("open-save-as").click()
+		})
+		const confirmButton = await screen.findByTestId("confirm-save-as-project")
+		act(() => {
+			confirmButton.click()
+		})
+
+		await waitFor(() => {
+			expect(toastErrorMock).toHaveBeenCalledWith("chat.saveAsProjectFailed")
+		})
+	})
+
 	it("uses the first normal workspace as home fallback when deleting the visible chat detail project", async () => {
 		projectStoreMock.selectedProject = currentChatProject
 
@@ -536,6 +556,25 @@ describe("useDesktopChatProjectActions", () => {
 				selectedProjectBehavior: "navigate-home",
 				lastUsedWorkspaceId: "workspace-home",
 			})
+		})
+	})
+
+	it("shows an error toast when deleting the chat project fails", async () => {
+		deleteProjectMock.mockRejectedValueOnce(new Error("delete failed"))
+		projectStoreMock.selectedProject = currentChatProject
+
+		render(<SaveAsHarness project={currentChatProject} />)
+
+		act(() => {
+			screen.getByTestId("open-delete").click()
+		})
+		const confirmButton = await screen.findByTestId("confirm-delete-project")
+		act(() => {
+			confirmButton.click()
+		})
+
+		await waitFor(() => {
+			expect(toastErrorMock).toHaveBeenCalledWith("chat.deleteChatFailed")
 		})
 	})
 })
