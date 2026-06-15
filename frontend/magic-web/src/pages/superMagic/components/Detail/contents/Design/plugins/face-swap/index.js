@@ -4,7 +4,6 @@ function createInitialState() {
 	return {
 		baseModelImages: [],
 		targetFaceImage: null,
-		genCount: 1,
 	}
 }
 
@@ -37,6 +36,7 @@ function buildFaceSwapRequest({
 	height,
 	resolution,
 	count,
+	select,
 }) {
 	const referenceImages = helpers.collectReferenceIds([baseImage, targetFaceImage])
 
@@ -49,7 +49,7 @@ function buildFaceSwapRequest({
 		width,
 		height,
 		count,
-		select: false,
+		select: select ?? false,
 	}
 }
 
@@ -186,44 +186,27 @@ registerMagicCanvasPlugin({
 				},
 				execute: async ({ state, helpers, generateAndPlace }) => {
 					const selectedSize = helpers.getSelectedSize(state)
+					const results = await Promise.all(
+						state.baseModelImages.map((baseImage, index) => {
+							const { width, height } = getEffectiveSize(baseImage, selectedSize)
+							return generateAndPlace(
+								buildFaceSwapRequest({
+									modelId: state.modelId,
+									baseImage,
+									targetFaceImage: state.targetFaceImage,
+									locale: promptLocale,
+									helpers,
+									width,
+									height,
+									resolution: state.scale || undefined,
+									count: state.genCount,
+									select: index === state.baseModelImages.length - 1,
+								}),
+							)
+						}),
+					)
 
-					if (state.baseModelImages.length <= 1) {
-						const baseImage = state.baseModelImages[0]
-						const { width, height } = getEffectiveSize(baseImage, selectedSize)
-						return generateAndPlace(
-							buildFaceSwapRequest({
-								modelId: state.modelId,
-								baseImage,
-								targetFaceImage: state.targetFaceImage,
-								locale: promptLocale,
-								helpers,
-								width,
-								height,
-								resolution: state.scale || undefined,
-								count: state.genCount,
-							}),
-						)
-					}
-
-					const results = []
-					for (let index = 0; index < state.genCount; index += 1) {
-						const baseImage =
-							state.baseModelImages[index % state.baseModelImages.length]
-						const { width, height } = getEffectiveSize(baseImage, selectedSize)
-						const request = buildFaceSwapRequest({
-							modelId: state.modelId,
-							baseImage,
-							targetFaceImage: state.targetFaceImage,
-							locale: promptLocale,
-							helpers,
-							width,
-							height,
-							resolution: state.scale || undefined,
-							count: 1,
-						})
-						results.push(await generateAndPlace(request))
-					}
-					return results
+					return results.length === 1 ? results[0] : results
 				},
 				onSuccess: ({ ctx }) => {
 					ctx.ui.toast(t("toast.success", "AI 换脸图生成成功！"), "success")
