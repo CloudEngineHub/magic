@@ -472,23 +472,30 @@ function createInitialState() {
 	return {
 		sourceImage: null,
 		targetLanguages: [],
-		genCount: 1,
 	}
 }
 
 function buildImageTranslationRequests({ state, helpers, locale, selectedSize }) {
-	return state.targetLanguages.map((targetLanguage) =>
+	return state.targetLanguages.map((targetLanguage, index) =>
 		buildImageTranslationRequest({
 			state,
 			helpers,
 			locale,
 			selectedSize,
 			targetLanguage,
+			select: index === state.targetLanguages.length - 1,
 		}),
 	)
 }
 
-function buildImageTranslationRequest({ state, helpers, locale, selectedSize, targetLanguage }) {
+function buildImageTranslationRequest({
+	state,
+	helpers,
+	locale,
+	selectedSize,
+	targetLanguage,
+	select,
+}) {
 	const width = selectedSize.genW
 	const height = selectedSize.genH
 	const referenceImages = helpers.collectReferenceIds([state.sourceImage])
@@ -502,7 +509,7 @@ function buildImageTranslationRequest({ state, helpers, locale, selectedSize, ta
 		width,
 		height,
 		count: state.genCount,
-		select: false,
+		select: select ?? false,
 	}
 }
 
@@ -617,13 +624,19 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "genCount",
 					title: t("section.count", "生成数量"),
-					suffix: t("section.count.suffix", "每图每语言"),
+					suffix: t("section.count.suffix", "每种语言生成数"),
 				},
 			],
 			generate: {
 				buttonLabel: `✨ ${t("button.generate", "生成图片翻译")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.sourceImage) {
+						return t("empty.sourceImage", "请先上传待翻译图")
+					}
+					if (!state.targetLanguages.length) {
+						return t("empty.targetLanguages", "请先选择目标语言")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.sourceImage || !state.targetLanguages.length,
@@ -645,11 +658,10 @@ registerMagicCanvasPlugin({
 						locale: promptLocale,
 						selectedSize,
 					})
-					const results = []
-					for (const request of requests) {
-						results.push(await generateAndPlace(request))
-					}
-					return results
+					const results = await Promise.all(
+						requests.map((request) => generateAndPlace(request)),
+					)
+					return results.length === 1 ? results[0] : results
 				},
 				onSuccess: ({ ctx }) => {
 					ctx.ui.toast(t("toast.success", "图片翻译生成成功！"), "success")
