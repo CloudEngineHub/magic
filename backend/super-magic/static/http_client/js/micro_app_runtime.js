@@ -116,7 +116,7 @@
         return null;
     }
 
-    function createIframeRuntimeScript(appBasePath) {
+    function createIframeRuntimeScript(appBasePath, serverOrigin) {
         return `
 <script>
 (function () {
@@ -259,6 +259,7 @@
 
     window.Magic = {
         __httpClientRuntime: true,
+        __httpClientRuntimeServerOrigin: ${JSON.stringify(serverOrigin || '')},
         getAppBasePath: function () {
             return Promise.resolve(${JSON.stringify(appBasePath)});
         },
@@ -279,6 +280,7 @@
             readFile: function (path) { return request('MAGIC_FS_READ_REQUEST', { path: path }).then(function (r) { return r.content; }); },
             writeFile: function (path, content) { return request('MAGIC_FS_WRITE_REQUEST', { path: path, content: content }); },
             listFiles: function (dir) { return request('MAGIC_FS_LIST_REQUEST', { dir: dir == null ? './' : dir, path: dir == null ? './' : dir }).then(function (r) { return normalizeListedFiles(r.files || []); }); },
+            getFileUrl: function (path) { return request('MAGIC_FS_GET_FILE_URL_REQUEST', { path: path }).then(function (r) { return r.url || r; }); },
             deleteFile: function (path) { return request('MAGIC_FS_DELETE_FILE_REQUEST', { path: path }); },
             deleteDir: function (path) { return request('MAGIC_FS_DELETE_DIR_REQUEST', { path: path }); },
             renameFile: function (path, newName) {
@@ -406,7 +408,10 @@
                 : await (await this.entryHandle.getFile()).text();
             const baseDir = dirname(this.entryPath);
             const processed = await this.rewriteHtmlResources(original, baseDir);
-            const runtimeScript = createIframeRuntimeScript(this.appRootPath);
+            const runtimeScript = createIframeRuntimeScript(
+                this.appRootPath,
+                this.serverUrlProvider ? this.serverUrlProvider() : ''
+            );
             if (/<\/head>/i.test(processed)) {
                 return processed.replace(/<\/head>/i, `${runtimeScript}\n</head>`);
             }
@@ -574,6 +579,7 @@
                     return this.writeFile(payload.path, payload.content);
                 case 'MAGIC_FS_WRITE_BLOB_REQUEST':
                     return this.writeFile(payload.path, payload.blob);
+                case 'MAGIC_FS_GET_FILE_URL_REQUEST':
                 case 'MAGIC_FS_RAW_URL_REQUEST':
                     return this.getFileUrl(payload.path);
                 case 'MAGIC_FS_LIST_REQUEST':
@@ -740,8 +746,9 @@
         async getFileUrl(path) {
             const normalized = this.resolveAppPath(path);
             if (this.workspaceApi) {
+                const url = await this.createBlobUrlForAppPath(normalized);
                 return {
-                    url: this.workspaceApi.rawUrl(this.workspacePath(normalized)),
+                    url,
                     path: normalized,
                     implementation: 'real',
                 };
