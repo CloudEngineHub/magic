@@ -175,11 +175,14 @@ function createId(prefix) {
 function createDefaultMoreSettings() {
 	return {
 		targetMarkets: ["cn"],
+		customTargetMarket: "",
 		copyLanguage: "zh",
+		customCopyLanguage: "",
 		targetPlatforms: ["taobao"],
 		themeMode: "smart",
 		themeColor: THEME_COLOR_OPTIONS[0],
 		fontStyle: "smart",
+		customFontStyle: "",
 		extraDescription: "",
 	}
 }
@@ -224,6 +227,17 @@ function getLabelByValue(options, value, t) {
 
 function getLabelsByValues(options, values, t) {
 	return values.map((value) => getLabelByValue(options, value, t)).filter(Boolean)
+}
+
+function getResolvedSettingValue(options, value, customValue, t) {
+	if (value === "custom") return String(customValue ?? "").trim()
+	return getLabelByValue(options, value, t)
+}
+
+function getResolvedSettingValues(options, values, customValue, t) {
+	return values
+		.map((value) => getResolvedSettingValue(options, value, customValue, t))
+		.filter(Boolean)
 }
 
 function getUploadedStyleCount(styleItems) {
@@ -348,10 +362,25 @@ function resolveCustomStyleSize(state, styleItem, helpers) {
 
 /* summarize more settings */
 function summarizeMoreSettings(settings, t) {
-	const markets = getLabelsByValues(MARKET_OPTIONS, settings.targetMarkets, t).slice(0, 2)
+	const markets = getResolvedSettingValues(
+		MARKET_OPTIONS,
+		settings.targetMarkets,
+		settings.customTargetMarket,
+		t,
+	).slice(0, 2)
 	const platforms = getLabelsByValues(PLATFORM_OPTIONS, settings.targetPlatforms, t).slice(0, 2)
-	const language = getLabelByValue(COPY_LANGUAGE_OPTIONS, settings.copyLanguage, t)
-	const fontStyle = getLabelByValue(FONT_STYLE_OPTIONS, settings.fontStyle, t)
+	const language = getResolvedSettingValue(
+		COPY_LANGUAGE_OPTIONS,
+		settings.copyLanguage,
+		settings.customCopyLanguage,
+		t,
+	)
+	const fontStyle = getResolvedSettingValue(
+		FONT_STYLE_OPTIONS,
+		settings.fontStyle,
+		settings.customFontStyle,
+		t,
+	)
 	const theme =
 		settings.themeMode === "smart"
 			? t("themeMode.smart", "智能主题色")
@@ -362,7 +391,7 @@ function summarizeMoreSettings(settings, t) {
 		.join(" · ")
 }
 
-function createSectionNode(title, suffix, required = false) {
+function createSectionNode(title, suffix, required = false, requiredLabel = "必填") {
 	const section = document.createElement("section")
 	section.className = "mpk-section"
 	const header = document.createElement("div")
@@ -373,7 +402,7 @@ function createSectionNode(title, suffix, required = false) {
 	if (required) {
 		const requiredEl = document.createElement("span")
 		requiredEl.className = "mpk-section-required"
-		requiredEl.textContent = "*"
+		requiredEl.textContent = requiredLabel
 		titleEl.append(requiredEl)
 	}
 	header.append(titleEl)
@@ -516,6 +545,22 @@ const MoreSettingsUI = (() => {
 			return section
 		}
 
+		function renderCustomField({ titleText, placeholder, value, onInput }) {
+			const section = document.createElement("section")
+			section.className = "pis-drawer-section"
+			const titleEl = document.createElement("h4")
+			titleEl.className = "pis-drawer-section-title"
+			titleEl.textContent = titleText
+			const input = document.createElement("input")
+			input.className = "pis-input pis-custom-field"
+			input.type = "text"
+			input.placeholder = placeholder
+			input.value = value
+			input.addEventListener("input", () => onInput(input.value))
+			section.append(titleEl, input)
+			return section
+		}
+
 		function renderThemeSection() {
 			const section = document.createElement("section")
 			section.className = "pis-drawer-section"
@@ -616,7 +661,7 @@ const MoreSettingsUI = (() => {
 		function renderAll() {
 			const scrollTop = body.scrollTop
 			const scrollLeft = body.scrollLeft
-			body.replaceChildren(
+			const sections = [
 				renderMultiSelectSection(
 					t("moreSettings.targetMarkets", "目标销售国家/地区"),
 					MARKET_OPTIONS,
@@ -632,6 +677,24 @@ const MoreSettingsUI = (() => {
 						renderAll()
 					},
 				),
+			]
+			if (draft.targetMarkets.includes("custom")) {
+				sections.push(
+					renderCustomField({
+						titleText: t("moreSettings.customTargetMarket", "自定义目标销售国家/地区"),
+						placeholder: t(
+							"moreSettings.customTargetMarket.placeholder",
+							"请输入自定义国家、地区或市场",
+						),
+						value: draft.customTargetMarket,
+						onInput: (value) => {
+							draft = { ...draft, customTargetMarket: value.slice(0, 100) }
+						},
+					}),
+				)
+			}
+
+			sections.push(
 				renderSingleSelectSection(
 					t("moreSettings.copyLanguage", "图片文案语言"),
 					COPY_LANGUAGE_OPTIONS,
@@ -641,6 +704,24 @@ const MoreSettingsUI = (() => {
 						renderAll()
 					},
 				),
+			)
+			if (draft.copyLanguage === "custom") {
+				sections.push(
+					renderCustomField({
+						titleText: t("moreSettings.customCopyLanguage", "自定义图片文案语言"),
+						placeholder: t(
+							"moreSettings.customCopyLanguage.placeholder",
+							"请输入自定义文案语言",
+						),
+						value: draft.customCopyLanguage,
+						onInput: (value) => {
+							draft = { ...draft, customCopyLanguage: value.slice(0, 100) }
+						},
+					}),
+				)
+			}
+
+			sections.push(
 				renderMultiSelectSection(
 					t("moreSettings.targetPlatforms", "目标平台"),
 					PLATFORM_OPTIONS,
@@ -666,8 +747,25 @@ const MoreSettingsUI = (() => {
 						renderAll()
 					},
 				),
-				renderDescriptionSection(),
 			)
+			if (draft.fontStyle === "custom") {
+				sections.push(
+					renderCustomField({
+						titleText: t("moreSettings.customFontStyle", "自定义字体风格"),
+						placeholder: t(
+							"moreSettings.customFontStyle.placeholder",
+							"请输入自定义字体风格说明",
+						),
+						value: draft.customFontStyle,
+						onInput: (value) => {
+							draft = { ...draft, customFontStyle: value.slice(0, 100) }
+						},
+					}),
+				)
+			}
+
+			sections.push(renderDescriptionSection())
+			body.replaceChildren(...sections)
 			body.scrollTop = scrollTop
 			body.scrollLeft = scrollLeft
 		}
@@ -701,7 +799,7 @@ const MoreSettingsUI = (() => {
 	}
 
 	function createSection({ state, t, getDrawer }) {
-		const section = createSectionNode(t("section.moreSettings", "更多设置"), undefined, true)
+		const section = createSectionNode(t("section.moreSettings", "更多设置"))
 		const button = document.createElement("button")
 		button.type = "button"
 		button.className = "pis-summary-btn"
@@ -977,7 +1075,7 @@ const StyleEditorUI = (() => {
 			countField.className = "pis-style-editor-field"
 			const countLabel = document.createElement("label")
 			countLabel.className = "pis-style-editor-label"
-			countLabel.textContent = t("styleEditor.count", "生成张数")
+			countLabel.textContent = t("styleEditor.count", "生成数量")
 			countField.append(
 				countLabel,
 				createCounterControl(draft.count, (value) => {
@@ -1205,7 +1303,7 @@ function createSmartCompositionSection({ state, setState, t }) {
 }
 
 function createSmartCountReadonlySection({ state, t }) {
-	const section = createSectionNode(t("section.count", "生成张数"))
+	const section = createSectionNode(t("section.count", "生成数量"))
 	const input = document.createElement("input")
 	input.className = "pis-input"
 	input.readOnly = true
@@ -1230,10 +1328,27 @@ function createInitialState() {
 
 function buildBusinessSettingPrompt(settings, locale, t) {
 	const isChinese = MagicPromptLocale.isChinese(locale)
-	const markets = getLabelsByValues(MARKET_OPTIONS, settings.targetMarkets, t).join("/")
+	const markets = getResolvedSettingValues(
+		MARKET_OPTIONS,
+		settings.targetMarkets,
+		settings.customTargetMarket,
+		t,
+	).join("/")
 	const platforms = getLabelsByValues(PLATFORM_OPTIONS, settings.targetPlatforms, t).join("/")
-	const language = getLabelByValue(COPY_LANGUAGE_OPTIONS, settings.copyLanguage, t)
-	const fontStyle = getLabelByValue(FONT_STYLE_OPTIONS, settings.fontStyle, t)
+	const language =
+		getResolvedSettingValue(
+			COPY_LANGUAGE_OPTIONS,
+			settings.copyLanguage,
+			settings.customCopyLanguage,
+			t,
+		) || (isChinese ? "未指定" : "unspecified")
+	const fontStyle =
+		getResolvedSettingValue(
+			FONT_STYLE_OPTIONS,
+			settings.fontStyle,
+			settings.customFontStyle,
+			t,
+		) || (isChinese ? "未指定" : "unspecified")
 	const themeText =
 		settings.themeMode === "smart"
 			? t("themeMode.smart", "智能主题色")
@@ -1259,6 +1374,38 @@ function buildBusinessSettingPrompt(settings, locale, t) {
 		`Font style: ${fontStyle}. ` +
 		(extraText ? `Additional business requirements: ${extraText}. ` : "")
 	)
+}
+
+function buildProductInfoCompletionUserPrompt({ currentText, imageCount }) {
+	const currentValue = String(currentText ?? "").trim()
+	return [
+		"任务目标：基于已上传的商品图，为“商品信息”输入框生成或补全一段适合商品套图生成的商品信息。",
+		`已上传商品图数量：${imageCount} 张。`,
+		`当前输入：${currentValue || "用户当前未填写。"}`,
+		"请综合分析商品名称、品类、核心卖点、材质、规格特征、适用人群、使用场景与营销表达重点。",
+		"仅输出适合直接填入“商品信息”文本框的内容，不要添加标题、列表符号或解释说明。",
+	].join("\n")
+}
+
+function buildSmartExtraPromptCompletionUserPrompt({ state, currentText, t }) {
+	const currentValue = String(currentText ?? "").trim()
+	const composition = getSmartCompositionCounts(state)
+	const businessSummary =
+		summarizeMoreSettings(
+			{
+				...createDefaultMoreSettings(),
+				...(state.moreSettings ?? {}),
+			},
+			t,
+		) || "未额外设置"
+	return [
+		"任务目标：为商品套图插件智能模式下的“额外描述”输入框生成或补全一段可直接用于生成的附加要求。",
+		`当前输入：${currentValue || "用户当前未填写。"}`,
+		`当前套图规划：主图/模特图 ${composition.hero} 张，卖点图 ${composition.selling} 张，详情图/A+图 ${composition.detail} 张。`,
+		`当前更多设置摘要：${businessSummary}。`,
+		"补全方向：可以补充视觉风格、镜头语言、模特气质、版式偏好、文案密度、品牌氛围或创意要求，但不要与当前套图张数或图片类型规划冲突。",
+		"仅输出适合直接填入“额外描述”输入框的内容，不要添加标题、解释或多余前后缀。",
+	].join("\n")
 }
 
 function buildSmartModePrompt({ state, shotPlanItem, locale, t }) {
@@ -1603,18 +1750,32 @@ registerMagicCanvasPlugin({
 					kind: "textarea",
 					stateKey: "productInfo",
 					title: t("section.productInfo", "商品信息"),
+					deps: ["productImages"],
 					placeholder: t(
 						"section.productInfo.placeholder",
 						"请输入商品卖点、材质、规格、目标人群等信息",
 					),
 					rows: 4,
 					maxLength: 2000,
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) => !state.productImages.length,
+						completeImagePrompt: {
+							referenceImages: ({ state }) => state.productImages,
+							referencesMessage: t("empty.productImages", "请先上传至少 1 张商品图"),
+							userPrompt: ({ state }) =>
+								buildProductInfoCompletionUserPrompt({
+									currentText: state.productInfo,
+									imageCount: state.productImages.length,
+								}),
+						},
+					},
 				},
 				{
 					id: "moreSettings",
 					kind: "custom",
 					deps: ["moreSettings"],
-					required: true,
 					render: ({ state, setState, elements }) => {
 						panelEl = elements.panel || panelEl || root
 						setPluginState = setState
@@ -1627,12 +1788,10 @@ registerMagicCanvasPlugin({
 				},
 				{
 					id: "creationMode",
-					kind: "option-group",
+					kind: "tabs",
 					stateKey: "creationMode",
 					required: true,
 					title: t("section.creationMode", "创作模式"),
-					groupClassName: "pis-creation-mode-group",
-					showDescriptionOnHover: true,
 					options: creationModes,
 				},
 				{
@@ -1657,7 +1816,7 @@ registerMagicCanvasPlugin({
 					kind: "textarea",
 					stateKey: "smartExtraPrompt",
 					title: t("smart.section.extraPrompt", "额外描述"),
-					deps: ["creationMode"],
+					deps: ["creationMode", "productImages", "smartComposition", "moreSettings"],
 					placeholder: t(
 						"smart.extraPrompt.placeholder",
 						"您可以在此处输入其它需求，例如：生成的套图中需要有3张模特图、1张卖点图，模特图要拼贴式的lookbook风格，模特图不要带文案",
@@ -1665,6 +1824,21 @@ registerMagicCanvasPlugin({
 					rows: 4,
 					maxLength: 2000,
 					when: ({ state }) => state.creationMode === "smart",
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) => !state.productImages.length,
+						completeImagePrompt: {
+							referenceImages: ({ state }) => state.productImages,
+							referencesMessage: t("empty.productImages", "请先上传至少 1 张商品图"),
+							userPrompt: ({ state }) =>
+								buildSmartExtraPromptCompletionUserPrompt({
+									state,
+									currentText: state.smartExtraPrompt,
+									t,
+								}),
+						},
+					},
 				},
 				{
 					id: "creationConfig",
@@ -1725,6 +1899,9 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成商品套图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.productImages.length) {
+						return t("empty.productImages", "请先上传至少 1 张商品图")
+					}
 					if (state.creationMode === "smart" && !getSmartShotCount(state)) {
 						return t("empty.smartComposition", "请至少配置 1 张套图")
 					}
