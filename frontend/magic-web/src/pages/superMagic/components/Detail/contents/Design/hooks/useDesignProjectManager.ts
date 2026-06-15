@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useTranslation } from "react-i18next"
+import { produce } from "immer"
 import { useImmer } from "use-immer"
 import { useMount, useUnmount } from "ahooks"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
@@ -10,6 +11,7 @@ import {
 	type DesignProjectStateBag,
 } from "../managers"
 import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
+import type { DesignDraftReason } from "../utils/designDraftStorage"
 
 export type UseDesignProjectManagerOptions = DesignProjectManagerOptions
 
@@ -24,6 +26,10 @@ export interface UseDesignProjectManagerReturn {
 
 	scheduleAutoSave: () => void
 	cancelAutoSave: () => void
+	persistLocalDraft: (
+		designData: DesignData,
+		options?: { immediate?: boolean; reason?: DesignDraftReason },
+	) => void
 	manualSave: () => Promise<void>
 	syncDesignData: (newDesignData: DesignData) => void
 
@@ -96,6 +102,15 @@ export function useDesignProjectManager(
 	fileVersionsListRef.current = fileVersionsList
 	fileVersionRef.current = fileVersion
 
+	const updateDesignDataState = useCallback(
+		(updater: (draft: DesignData) => void) => {
+			const nextData = produce(designDataRef.current, updater)
+			designDataRef.current = nextData
+			updateDesignData(() => nextData)
+		},
+		[updateDesignData],
+	)
+
 	const stateBag: DesignProjectStateBag = useMemo(
 		() => ({
 			getDesignData: () => designDataRef.current,
@@ -111,7 +126,10 @@ export function useDesignProjectManager(
 			getIsReadOnly: () => isReadOnlyRef.current,
 			setters: {
 				setMagicProjectJsFileId,
-				setDesignData: (data) => updateDesignData(() => data),
+				setDesignData: (data) => {
+					designDataRef.current = data
+					updateDesignData(() => data)
+				},
 				setIsInitialLoading,
 				setIsSaving,
 				setIsReadOnly: (v) => {
@@ -158,7 +176,10 @@ export function useDesignProjectManager(
 
 	const updateDesignDataAndScheduleSave = useCallback(
 		(updater: (draft: DesignData) => void) => {
-			updateDesignData(updater)
+			const nextData = produce(designDataRef.current, updater)
+			designDataRef.current = nextData
+			updateDesignData(() => nextData)
+			manager.persistLocalDraft(nextData)
 			manager.scheduleAutoSave()
 		},
 		[updateDesignData, manager],
@@ -173,7 +194,7 @@ export function useDesignProjectManager(
 	return {
 		magicProjectJsFileId,
 		designData,
-		updateDesignData,
+		updateDesignData: updateDesignDataState,
 		updateDesignDataAndScheduleSave,
 
 		isInitialLoading,
@@ -181,6 +202,8 @@ export function useDesignProjectManager(
 
 		scheduleAutoSave: () => manager.scheduleAutoSave(),
 		cancelAutoSave: () => manager.cancelAutoSave(),
+		persistLocalDraft: (data, persistOptions) =>
+			manager.persistLocalDraft(data, persistOptions),
 		manualSave: () => manager.manualSave(),
 		syncDesignData: (data) => manager.syncDesignData(data),
 

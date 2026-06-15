@@ -6,6 +6,7 @@ import {
 	normalizeDesignDataPathsAfterLoad,
 	resolveActualDesignCurrentFile,
 } from "../utils/utils"
+import { hashDesignDataComparable } from "../utils/designContentHash"
 import { SuperMagicApi } from "@/apis"
 import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
 import type { DesignProjectStateBag, DesignProjectManagerOptions } from "./types"
@@ -115,6 +116,9 @@ export class DesignLoadManager {
 						})
 
 						this.stateBag.setters.setDesignData(parsedData)
+						this.stateBag.setPrevDesignDataFingerprint(
+							hashDesignDataComparable(parsedData),
+						)
 						this.lastLoadedFileId = actualCurrentFileId
 					}
 				}

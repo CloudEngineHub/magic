@@ -134,8 +134,8 @@ export async function hydrateDesignDataDetails(
 export async function writeUserElementDetails(
 	designData: DesignData,
 	ctx: ElementDetailsContext,
-): Promise<void> {
-	if (!isDesignDataV2(designData) || !ctx.mainFileId) return
+): Promise<boolean> {
+	if (!isDesignDataV2(designData) || !ctx.mainFileId) return true
 
 	const agentLookup = findSiblingFile(
 		ctx.attachments,
@@ -158,16 +158,16 @@ export async function writeUserElementDetails(
 	let userFileId = userLookup.fileItem?.file_id ?? null
 
 	// 用户文件不存在且当前没有任何用户重字段，无需创建空文件
-	if (!userFileId && !hasEntries) return
+	if (!userFileId && !hasEntries) return true
 
 	if (userFileId) {
 		const currentUserDoc = await readComparableElementDetailsByFile(userLookup.fileItem)
-		if (currentUserDoc && isEqual(currentUserDoc, userDoc)) return
+		if (currentUserDoc && isEqual(currentUserDoc, userDoc)) return true
 	}
 
 	if (!userFileId) {
 		const parentId = userLookup.parentId ?? agentLookup.parentId
-		if (!ctx.projectId || !parentId) return
+		if (!ctx.projectId || !parentId) return false
 		try {
 			const created = await SuperMagicApi.createFile({
 				project_id: ctx.projectId,
@@ -178,16 +178,18 @@ export async function writeUserElementDetails(
 			})
 			userFileId = (created as { file_id?: string })?.file_id ?? null
 		} catch {
-			return
+			return false
 		}
 	}
 
-	if (!userFileId) return
+	if (!userFileId) return false
 
 	const content = JSON.stringify(userDoc, null, 2)
 	try {
 		await SuperMagicApi.saveFileContent([{ file_id: userFileId, content, enable_shadow: true }])
+		return true
 	} catch {
 		// 用户 sidecar 写失败不影响主文件保存
+		return false
 	}
 }

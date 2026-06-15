@@ -250,6 +250,8 @@ export interface CanvasDesignRef {
 	fitToScreen: () => void
 	/** 热更新画布数据，远端快照可使用 replace 模式确保嵌套元素完整同步 */
 	updateData: (data: CanvasDocument, options?: { mode?: "smart" | "replace" }) => void
+	/** 导出当前画布文档；用于宿主在页面卸载前保存本地草稿 */
+	exportCurrentDocument: () => CanvasDocument | null
 	/** 按资源路径强制刷新画布内已缓存的图片/视频资源 */
 	refreshResources: (resources: CanvasResourceRefreshItem[]) => Promise<void>
 	/** 如果元素不在可视区域，则移动到可视区域 */

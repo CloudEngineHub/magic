@@ -11,7 +11,7 @@ import { SuperMagicApi } from "@/apis"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./types"
 
-const AUTO_SAVE_DEBOUNCE_MS = 500
+const AUTO_SAVE_DEBOUNCE_MS = 3000
 
 export interface RemoteUpdateCheckResult {
 	hasUpdate: boolean
@@ -35,6 +35,8 @@ export class DesignSaveManager {
 	private saveLifecycleHandlers: DesignSaveLifecycleHandlers
 
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null
+	private hasRemoteConflictPending = false
+	private lastSaveFullyPersisted = false
 
 	constructor(
 		stateBag: DesignProjectStateBag,
@@ -85,14 +87,42 @@ export class DesignSaveManager {
 		this.stateBag.setters.setIsSaving(false)
 	}
 
-	async manualSave(): Promise<void> {
+	async manualSave(): Promise<boolean> {
 		this.cancelAutoSave()
 		this.stateBag.setters.setIsSaving(true)
-		await this.commitSave()
+		return this.commitSave({ allowRemoteConflict: true })
 	}
 
 	syncDesignData(newDesignData: DesignData): void {
 		this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(newDesignData))
+		this.clearRemoteConflict()
+	}
+
+	hasPendingAutoSave(): boolean {
+		return this.debounceTimer !== null
+	}
+
+	isLocalDirty(): boolean {
+		const prevFingerprint = this.stateBag.getPrevDesignDataFingerprint()
+		if (!prevFingerprint) return false
+		const currentData = this.getDesignDataForSave()
+		return hashDesignDataComparable(currentData) !== prevFingerprint
+	}
+
+	hasRemoteConflict(): boolean {
+		return this.hasRemoteConflictPending
+	}
+
+	markRemoteConflict(): void {
+		this.hasRemoteConflictPending = true
+	}
+
+	clearRemoteConflict(): void {
+		this.hasRemoteConflictPending = false
+	}
+
+	wasLastSaveFullyPersisted(): boolean {
+		return this.lastSaveFullyPersisted
 	}
 
 	private runDebouncedSave(): void {
@@ -122,7 +152,8 @@ export class DesignSaveManager {
 		}, AUTO_SAVE_DEBOUNCE_MS)
 	}
 
-	async commitSave(): Promise<boolean> {
+	async commitSave(options?: { allowRemoteConflict?: boolean }): Promise<boolean> {
+		this.lastSaveFullyPersisted = false
 		if (this.stateBag.getIsReadOnly()) {
 			this.stateBag.setters.setIsSaving(false)
 			return false
@@ -132,15 +163,19 @@ export class DesignSaveManager {
 			this.stateBag.setters.setIsSaving(false)
 			return false
 		}
+		if (this.hasRemoteConflict() && !options?.allowRemoteConflict) {
+			this.stateBag.setters.setIsSaving(false)
+			return false
+		}
 
 		let saveToken: number | null | undefined
 		let didSave = false
 		let savedUpdatedAt: string | null = null
 		try {
 			saveToken = this.saveLifecycleHandlers.onSaveStart?.()
-			const { hasUpdate, currentVersion } = await this.checkRemoteUpdate()
+			const { hasUpdate } = await this.checkRemoteUpdate()
 			if (hasUpdate) {
-				if (currentVersion !== null) this.updateLocalVersion(currentVersion)
+				this.markRemoteConflict()
 				this.stateBag.setters.setIsSaving(false)
 				return false
 			}
@@ -163,18 +198,23 @@ export class DesignSaveManager {
 			savedUpdatedAt = saveResponse?.success_files?.[0]?.data?.updated_at ?? null
 
 			// v2：主文件保存成功后写用户 sidecar（仅写 element-details-user.json）
+			let didPersistDetails = true
 			if (isV2Version(designDataToSave.version)) {
-				await writeUserElementDetails(designDataToSave, {
+				didPersistDetails = await writeUserElementDetails(designDataToSave, {
 					attachments: this.options.attachments,
 					flatAttachments: this.options.flatAttachments,
 					mainFileId: magicProjectJsFileId,
 					projectId: this.options.projectId,
 				})
 			}
+			this.lastSaveFullyPersisted = didPersistDetails
 			if (designDataToSave !== currentDesignData) {
 				this.stateBag.setters.setDesignData(designDataToSave)
 			}
-			this.stateBag.setPrevDesignDataFingerprint(fp)
+			if (didPersistDetails) {
+				this.stateBag.setPrevDesignDataFingerprint(fp)
+			}
+			this.clearRemoteConflict()
 
 			if (!this.options.isShareRoute) {
 				try {

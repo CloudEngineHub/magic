@@ -96,6 +96,10 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 					canvas.historyManager.recordHistoryImmediate()
 				}
 			},
+			exportCurrentDocument: () => {
+				if (!canvas) return null
+				return canvas.exportDocument({ includeTemporary: false })
+			},
 			refreshResources: async (resources) => {
 				if (!canvas) return
 				await runWithConcurrency(

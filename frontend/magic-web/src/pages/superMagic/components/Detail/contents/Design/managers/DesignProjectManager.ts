@@ -15,6 +15,20 @@ import { DesignSaveManager, type DesignSaveLifecycleHandlers } from "./DesignSav
 import { DesignVersionManager } from "./DesignVersionManager"
 import { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import { hashDesignDataComparable } from "../utils/designContentHash"
+import {
+	normalizeDesignDataPathsAfterLoad,
+	resolveDesignProjectBasePathFromAttachments,
+} from "../utils/utils"
+import {
+	deleteDesignDraft,
+	getDesignDraftWriteDebounceMs,
+	readDesignDraft,
+	writeDesignDraft,
+	type DesignDraftIdentity,
+	type DesignDraftReason,
+	type DesignDraftWriteResult,
+} from "../utils/designDraftStorage"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 export interface DesignProjectManagerFactoryParams {
 	stateBag: DesignProjectStateBag
@@ -34,6 +48,10 @@ export interface DesignProjectManagerAPI {
 
 	scheduleAutoSave: () => void
 	cancelAutoSave: () => void
+	persistLocalDraft: (
+		designData: DesignData,
+		options?: { immediate?: boolean; reason?: DesignDraftReason },
+	) => void
 	manualSave: () => Promise<void>
 	syncDesignData: (newDesignData: DesignData) => void
 
@@ -93,6 +111,16 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	private fetchRemoteDesignDataFn: FetchRemoteDesignDataFn
 	private applyRemoteDesignDataFn: ApplyRemoteDesignDataFn
 	private loadAndApplyRemoteFn: LoadAndApplyRemoteFn
+	private pendingRemoteDesignData: {
+		data: DesignData
+		updateType: "message" | "revoke" | "restore"
+	} | null = null
+	private draftSaveTimer: ReturnType<typeof setTimeout> | null = null
+	private pendingDraftSave: {
+		designData: DesignData
+		reason: DesignDraftReason
+	} | null = null
+	private hasShownLocalDraftUnavailableToast = false
 
 	private stateBag: DesignProjectStateBag
 	private options: DesignProjectManagerOptions
@@ -132,6 +160,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			onSaveStart: () => this.remoteListener?.beginLocalSave() ?? null,
 			onSaveEnd: async (saveToken, didSave, savedUpdatedAt) => {
 				await this.remoteListener?.endLocalSave(saveToken, didSave, savedUpdatedAt)
+				if (didSave && this.saveManager.wasLastSaveFullyPersisted()) {
+					this.clearLocalDraft()
+				}
 			},
 		}
 		this.saveManager = new DesignSaveManager(
@@ -170,17 +201,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			newData: DesignData,
 			updateType: "message" | "revoke" | "restore",
 		) => {
-			try {
-				const oldData = this.stateBag.getDesignData()
-				this.saveManager.cancelAutoSave()
-				this.stateBag.setters.setIsSaving(false)
-				this.stateBag.setters.setDesignData(newData)
-				this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(newData))
-				this.options.onRemoteDesignDataUpdate?.(oldData, newData, updateType)
-				return true
-			} catch {
-				return false
-			}
+			return this.applyRemoteDesignDataSafely(newData, updateType)
 		}
 
 		const loadAndApplyRemote: LoadAndApplyRemoteFn = async (
@@ -234,6 +255,68 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		})
 	}
 
+	private hasUnsafeLocalChanges(): boolean {
+		return (
+			this.saveManager.isLocalDirty() ||
+			this.saveManager.hasPendingAutoSave() ||
+			this.saveManager.hasRemoteConflict()
+		)
+	}
+
+	private deferRemoteDesignData(
+		newData: DesignData,
+		updateType: "message" | "revoke" | "restore",
+	): void {
+		this.pendingRemoteDesignData = {
+			data: cloneDeep(newData) as DesignData,
+			updateType,
+		}
+		this.saveManager.cancelAutoSave()
+		this.saveManager.markRemoteConflict()
+	}
+
+	private applyRemoteDesignDataNow(
+		newData: DesignData,
+		updateType: "message" | "revoke" | "restore",
+	): boolean {
+		try {
+			const oldData = this.stateBag.getDesignData()
+			this.pendingRemoteDesignData = null
+			this.saveManager.cancelAutoSave()
+			this.saveManager.clearRemoteConflict()
+			this.stateBag.setters.setIsSaving(false)
+			this.stateBag.setters.setDesignData(newData)
+			this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(newData))
+			this.options.onRemoteDesignDataUpdate?.(oldData, newData, updateType)
+			return true
+		} catch {
+			return false
+		}
+	}
+
+	private applyRemoteDesignDataSafely(
+		newData: DesignData,
+		updateType: "message" | "revoke" | "restore",
+	): boolean {
+		if (this.hasUnsafeLocalChanges()) {
+			this.deferRemoteDesignData(newData, updateType)
+			return false
+		}
+
+		return this.applyRemoteDesignDataNow(newData, updateType)
+	}
+
+	private tryApplyPendingRemoteDesignData(): boolean {
+		const pending = this.pendingRemoteDesignData
+		if (!pending || this.hasUnsafeLocalChanges()) return false
+		return this.applyRemoteDesignDataNow(pending.data, pending.updateType)
+	}
+
+	private clearPendingRemoteDesignData(): void {
+		this.pendingRemoteDesignData = null
+		this.saveManager.clearRemoteConflict()
+	}
+
 	scheduleAutoSave(): void {
 		this.saveManager.scheduleAutoSave()
 	}
@@ -242,26 +325,193 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.saveManager.cancelAutoSave()
 	}
 
+	private getDraftIdentity(): DesignDraftIdentity {
+		return {
+			projectId: this.options.projectId,
+			designProjectId: this.options.designProjectId,
+			magicProjectJsFileId: this.stateBag.getMagicProjectJsFileId(),
+		}
+	}
+
+	private canUseLocalDraft(): boolean {
+		return (
+			!!this.options.projectId &&
+			!!this.options.designProjectId &&
+			!!this.stateBag.getMagicProjectJsFileId() &&
+			this.options.allowEdit &&
+			!this.options.isPlaybackMode &&
+			!this.options.isShareRoute &&
+			!this.options.isMobile &&
+			this.getFileVersion() === undefined
+		)
+	}
+
+	private getDesignProjectBasePath(): string | undefined {
+		return resolveDesignProjectBasePathFromAttachments(this.options)
+	}
+
+	private clearPendingLocalDraftTimer(): void {
+		if (this.draftSaveTimer) {
+			clearTimeout(this.draftSaveTimer)
+			this.draftSaveTimer = null
+		}
+		this.pendingDraftSave = null
+	}
+
+	private writeLocalDraftNow(designData: DesignData, reason: DesignDraftReason): void {
+		if (!this.canUseLocalDraft()) return
+		const baseRemoteFingerprint = this.stateBag.getPrevDesignDataFingerprint()
+		if (!baseRemoteFingerprint) return
+
+		const localFingerprint = hashDesignDataComparable(designData)
+		const identity = this.getDraftIdentity()
+		if (localFingerprint === baseRemoteFingerprint) {
+			void deleteDesignDraft(identity)
+			return
+		}
+
+		void writeDesignDraft(
+			{
+				...identity,
+				designProjectBasePath: this.getDesignProjectBasePath(),
+				baseRemoteVersion: this.stateBag.getMagicProjectJsVersion(),
+				baseRemoteFingerprint,
+				localFingerprint,
+				localUpdatedAt: Date.now(),
+				reason,
+				designData,
+			},
+			{ emergency: reason === "pagehide" },
+		).then((result) => this.handleLocalDraftWriteResult(result, reason))
+	}
+
+	private handleLocalDraftWriteResult(
+		result: DesignDraftWriteResult,
+		reason: DesignDraftReason,
+	): void {
+		if (result.durable) {
+			this.hasShownLocalDraftUnavailableToast = false
+			return
+		}
+		if (reason === "pagehide" || this.hasShownLocalDraftUnavailableToast) return
+		this.hasShownLocalDraftUnavailableToast = true
+		magicToast.warning("本地画布草稿暂不可用，请等待自动保存完成后再关闭页面。")
+	}
+
+	persistLocalDraft(
+		designData: DesignData,
+		options: { immediate?: boolean; reason?: DesignDraftReason } = {},
+	): void {
+		const reason = options.reason ?? "local-edit"
+		if (options.immediate) {
+			this.clearPendingLocalDraftTimer()
+			this.writeLocalDraftNow(designData, reason)
+			return
+		}
+
+		this.pendingDraftSave = {
+			designData: cloneDeep(designData) as DesignData,
+			reason,
+		}
+		if (this.draftSaveTimer) {
+			clearTimeout(this.draftSaveTimer)
+		}
+		this.draftSaveTimer = setTimeout(() => {
+			const pending = this.pendingDraftSave
+			this.draftSaveTimer = null
+			this.pendingDraftSave = null
+			if (!pending) return
+			this.writeLocalDraftNow(pending.designData, pending.reason)
+		}, getDesignDraftWriteDebounceMs())
+	}
+
+	private clearLocalDraft(): void {
+		this.clearPendingLocalDraftTimer()
+		void deleteDesignDraft(this.getDraftIdentity())
+	}
+
+	private async tryRestoreLocalDraftAfterRemoteLoad(): Promise<void> {
+		if (!this.canUseLocalDraft()) return
+
+		const identity = this.getDraftIdentity()
+		const draft = await readDesignDraft(identity)
+		if (!draft) return
+
+		const remoteFingerprint = this.stateBag.getPrevDesignDataFingerprint()
+		if (!remoteFingerprint) return
+		if (draft.localFingerprint === remoteFingerprint) {
+			this.clearLocalDraft()
+			return
+		}
+
+		const remoteVersion = this.stateBag.getMagicProjectJsVersion()
+		const hasRemoteVersionAdvanced =
+			draft.baseRemoteVersion !== null &&
+			remoteVersion !== null &&
+			remoteVersion > draft.baseRemoteVersion
+		const hasRemoteFingerprintChanged =
+			!!draft.baseRemoteFingerprint && draft.baseRemoteFingerprint !== remoteFingerprint
+
+		if (hasRemoteVersionAdvanced || hasRemoteFingerprintChanged) {
+			magicToast.warning(
+				"检测到本地画布草稿，但远端版本已更新，已保留草稿并暂不自动覆盖远端内容。",
+			)
+			return
+		}
+
+		const restoredData = cloneDeep(draft.designData) as DesignData
+		const dslBase = this.getDesignProjectBasePath()
+		if (dslBase) normalizeDesignDataPathsAfterLoad(restoredData, dslBase)
+
+		const oldData = this.stateBag.getDesignData()
+		this.stateBag.setters.setDesignData(restoredData)
+		this.stateBag.setPrevDesignDataFingerprint(remoteFingerprint)
+		this.options.onRemoteDesignDataUpdate?.(oldData, restoredData, "draft")
+		this.saveManager.scheduleAutoSave()
+		magicToast.info("已恢复本地未保存的画布草稿。")
+	}
+
 	async manualSave(): Promise<void> {
-		await this.saveManager.manualSave()
+		const didSave = await this.saveManager.manualSave()
+		if (didSave) {
+			if (this.saveManager.wasLastSaveFullyPersisted()) {
+				this.clearLocalDraft()
+			}
+			this.pendingRemoteDesignData = null
+			return
+		}
+		this.tryApplyPendingRemoteDesignData()
 	}
 
 	syncDesignData(newDesignData: DesignData): void {
 		this.saveManager.syncDesignData(newDesignData)
+		this.tryApplyPendingRemoteDesignData()
 	}
 
 	async loadFromRemote(): Promise<void> {
+		this.clearPendingRemoteDesignData()
 		await this.loadManager.loadFromRemote()
+		await this.tryRestoreLocalDraftAfterRemoteLoad()
 	}
 
 	async resetAndReload(): Promise<void> {
+		this.clearPendingRemoteDesignData()
+		this.clearLocalDraft()
 		await this.loadManager.resetAndReload()
 	}
 
 	async saveToRemote(): Promise<void> {
 		if (this.getIsReadOnly()) return
 		this.stateBag.setters.setIsSaving(true)
-		await this.saveManager.commitSave()
+		const didSave = await this.saveManager.commitSave()
+		if (didSave) {
+			if (this.saveManager.wasLastSaveFullyPersisted()) {
+				this.clearLocalDraft()
+			}
+			this.pendingRemoteDesignData = null
+			return
+		}
+		this.tryApplyPendingRemoteDesignData()
 	}
 
 	generateContent(data?: DesignData): string {
@@ -297,14 +547,20 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	}
 
 	handleChangeFileVersion(version: number, isNewestVersion: boolean): Promise<void> {
+		this.clearPendingRemoteDesignData()
+		this.clearLocalDraft()
 		return this.versionManager.handleChangeFileVersion(version, isNewestVersion)
 	}
 
 	handleReturnLatest(): void {
+		this.clearPendingRemoteDesignData()
+		this.clearLocalDraft()
 		this.versionManager.handleReturnLatest()
 	}
 
 	handleVersionRollback(version?: number): Promise<void> {
+		this.clearPendingRemoteDesignData()
+		this.clearLocalDraft()
 		return this.versionManager.handleVersionRollback(version)
 	}
 

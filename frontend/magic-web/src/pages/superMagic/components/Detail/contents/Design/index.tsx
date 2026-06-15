@@ -313,7 +313,9 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const {
 		designData,
+		updateDesignData,
 		updateDesignDataAndScheduleSave,
+		persistLocalDraft,
 		magicProjectJsFileId,
 		isInitialLoading,
 		// isSaving - 迁移后不再用于头部保存状态指示器，暂时注释掉，如需使用可取消注释
@@ -331,6 +333,11 @@ function DesignViewer(props: DesignViewerProps) {
 	} = designProjectManager
 
 	const { isProcessingRevoke, revokeType } = designProjectManager
+	const latestDesignDataRef = useRef(designData)
+
+	useEffect(() => {
+		latestDesignDataRef.current = designData
+	}, [designData])
 
 	// v1 → v2 升级相关状态
 	const [isUpgrading, setIsUpgrading] = useState(false)
@@ -657,6 +664,55 @@ function DesignViewer(props: DesignViewerProps) {
 		[updateDesignDataAndScheduleSave],
 	)
 
+	const persistCanvasDataLocally = useCallback(
+		(
+			canvasData: CanvasDocument,
+			options?: { immediate?: boolean; reason?: "local-edit" | "pagehide" },
+		) => {
+			const nextDesignData: DesignData = {
+				...latestDesignDataRef.current,
+				canvas: canvasData,
+			}
+			latestDesignDataRef.current = nextDesignData
+			updateDesignData(() => nextDesignData)
+			persistLocalDraft(nextDesignData, options)
+		},
+		[persistLocalDraft, updateDesignData],
+	)
+
+	const persistCanvasPatchLocally = useCallback(
+		(patch: CanvasDesignDataPatch): CanvasDocument | undefined => {
+			const nextCanvasData = applyCanvasDesignDataPatch(
+				latestDesignDataRef.current.canvas,
+				patch,
+			)
+			persistCanvasDataLocally(nextCanvasData)
+			return nextCanvasData
+		},
+		[persistCanvasDataLocally],
+	)
+
+	const persistCurrentCanvasDraftImmediately = useCallback(() => {
+		const currentCanvasData = canvasDesignRef.current?.exportCurrentDocument?.()
+		if (currentCanvasData) {
+			persistCanvasDataLocally(currentCanvasData, {
+				immediate: true,
+				reason: "pagehide",
+			})
+			return
+		}
+		persistLocalDraft(latestDesignDataRef.current, {
+			immediate: true,
+			reason: "pagehide",
+		})
+	}, [persistCanvasDataLocally, persistLocalDraft])
+
+	const persistCurrentCanvasDraftImmediatelyRef = useRef(persistCurrentCanvasDraftImmediately)
+
+	useEffect(() => {
+		persistCurrentCanvasDraftImmediatelyRef.current = persistCurrentCanvasDraftImmediately
+	}, [persistCurrentCanvasDraftImmediately])
+
 	const { handleCanvasDesignDataChange: syncCanvasImageFileRename } =
 		useCanvasImageFileRenameSync({
 			canvasDesignRef,
@@ -673,26 +729,46 @@ function DesignViewer(props: DesignViewerProps) {
 	const handleCanvasDesignDataChange = useCallback(
 		(canvasData: CanvasDocument, meta?: CanvasDesignDataChangeMeta) => {
 			if (isApplyingRemoteCanvasUpdateRef.current) return
-			if (isOffline) return
+			if (isOffline) {
+				persistCanvasDataLocally(canvasData)
+				return
+			}
 
 			persistCanvasData(canvasData)
 			syncCanvasImageFileRename(canvasData, meta)
 		},
-		[isOffline, persistCanvasData, syncCanvasImageFileRename],
+		[isOffline, persistCanvasData, persistCanvasDataLocally, syncCanvasImageFileRename],
 	)
 
 	const handleCanvasDesignDataPatchChange = useCallback(
 		(patch: CanvasDesignDataPatch, meta?: CanvasDesignDataChangeMeta) => {
 			if (isApplyingRemoteCanvasUpdateRef.current) return
-			if (isOffline) return
+			if (isOffline) {
+				persistCanvasPatchLocally(patch)
+				return
+			}
 
 			const nextCanvasData = persistCanvasDataPatch(patch)
 			if (nextCanvasData) {
 				syncCanvasImageFileRename(nextCanvasData, meta)
 			}
 		},
-		[isOffline, persistCanvasDataPatch, syncCanvasImageFileRename],
+		[isOffline, persistCanvasDataPatch, persistCanvasPatchLocally, syncCanvasImageFileRename],
 	)
+
+	useEffect(() => {
+		const handlePageLeave = () => {
+			persistCurrentCanvasDraftImmediatelyRef.current()
+		}
+
+		window.addEventListener("pagehide", handlePageLeave)
+		window.addEventListener("beforeunload", handlePageLeave)
+		return () => {
+			handlePageLeave()
+			window.removeEventListener("pagehide", handlePageLeave)
+			window.removeEventListener("beforeunload", handlePageLeave)
+		}
+	}, [])
 
 	useCanvasResourceRefresh({
 		canvasDesignRef,
