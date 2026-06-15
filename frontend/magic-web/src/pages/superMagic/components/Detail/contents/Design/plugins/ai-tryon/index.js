@@ -59,31 +59,6 @@ const ACCESSORY_CATEGORY_OPTIONS = [
 	},
 ]
 
-const GENERATION_MODE_DEFINITIONS = [
-	{
-		value: "standard",
-		labelKey: "generationMode.standard",
-		labelFallback: "标准模式",
-		descriptionKey: "generationMode.standard.desc",
-		descriptionFallback: "强调稳定、准确的配饰试戴结果，适合常规商拍生成。",
-		promptSuffix: {
-			zh: "保持试戴结果稳定、准确，具备商业可用的完成度，并在当前模特场景中呈现自然佩戴关系。",
-			en: "Keep the try-on stable, accurate, and commercially polished while preserving natural placement in the model's current scene.",
-		},
-	},
-	{
-		value: "advanced",
-		labelKey: "generationMode.advanced",
-		labelFallback: "高级模式",
-		descriptionKey: "generationMode.advanced.desc",
-		descriptionFallback: "增强材质反射、遮挡、贴合与环境氛围适配，适合更高级的商拍试戴效果。",
-		promptSuffix: {
-			zh: "增强材质反馈、真实反射、接触阴影、细微遮挡和场景适配，使配饰在当前画面的光线、氛围和动态中更像真实佩戴。",
-			en: "Add richer material response, realistic reflections, contact shadows, subtle occlusion, and scene-aware styling so the accessory feels naturally worn in the lighting, mood, and motion of the current image.",
-		},
-	},
-]
-
 const ACCESSORY_CATEGORY_PROMPTS = {
 	bag: {
 		zh: "根据参考图 2 中可见的手臂、肩部和躯干姿态，自然地将包包处理为手提、单肩或斜挎状态，并匹配肩带张力、身体接触、重力方向和行走动态。",
@@ -120,7 +95,6 @@ function createInitialState() {
 		accessoryCategory: "bag",
 		productImage: null,
 		modelImage: null,
-		generationMode: "standard",
 		genCount: 1,
 	}
 }
@@ -148,11 +122,8 @@ function getMaxReferenceImages(state, helpers) {
 	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 2
 }
 
-function buildAccessoryTryOnPrompt({ accessoryCategory, generationMode, locale }) {
+function buildAccessoryTryOnPrompt({ accessoryCategory, locale }) {
 	const isChinese = MagicPromptLocale.isChinese(locale)
-	const modeDefinition =
-		GENERATION_MODE_DEFINITIONS.find((item) => item.value === generationMode) ??
-		GENERATION_MODE_DEFINITIONS[0]
 	const categoryDefinition = ACCESSORY_CATEGORY_OPTIONS.find(
 		(item) => item.value === accessoryCategory,
 	)
@@ -164,7 +135,6 @@ function buildAccessoryTryOnPrompt({ accessoryCategory, generationMode, locale }
 		(isChinese
 			? "将所选配饰自然放置在正确且可见的人体区域。"
 			: "Place the selected accessory naturally on the correct visible body region.")
-	const modePromptSuffix = MagicPromptLocale.pickText(modeDefinition.promptSuffix, locale)
 
 	if (isChinese) {
 		return (
@@ -174,7 +144,7 @@ function buildAccessoryTryOnPrompt({ accessoryCategory, generationMode, locale }
 			"参考图 1 可以是纯商品图，也可以是模特图，但只提取所选品类对应的配饰，不要复制其中其他人物、服装、身体部位或背景。" +
 			"配饰必须像在当前场景中真实佩戴一样自然，匹配参考图 2 的透视、比例、阴影、色彩反馈、反射和整体氛围。" +
 			`${categoryPrompt} ` +
-			modePromptSuffix
+			"保持试戴结果稳定、准确，具备商业可用的完成度，并在当前模特场景中呈现自然佩戴关系。"
 		)
 	}
 
@@ -185,7 +155,7 @@ function buildAccessoryTryOnPrompt({ accessoryCategory, generationMode, locale }
 		"Reference image 1 may be a product-only image or a model image. Extract only the selected accessory category from reference image 1; do not copy any other person, garment, body part, or background. " +
 		"The accessory must look naturally worn in the current scene, matching perspective, scale, shadow behavior, color response, reflections, and atmosphere of reference image 2. " +
 		`${categoryPrompt} ` +
-		modePromptSuffix
+		"Keep the try-on stable, accurate, and commercially polished while preserving natural placement in the model's current scene."
 	)
 }
 
@@ -203,14 +173,9 @@ registerMagicCanvasPlugin({
 			label: t(item.labelKey, item.labelFallback),
 			description: t(item.descriptionKey, item.descriptionFallback),
 		}))
-		const generationModes = GENERATION_MODE_DEFINITIONS.map((item) => ({
-			value: item.value,
-			label: t(item.labelKey, item.labelFallback),
-			description: t(item.descriptionKey, item.descriptionFallback),
-		}))
 
 		return ctx.panel.render(root, {
-			panelClassName: "accessory-tryon",
+			panelClassName: "ai-tryon",
 			state: instance.state,
 			modelConfig: {
 				autoLoad: true,
@@ -225,6 +190,7 @@ registerMagicCanvasPlugin({
 					stateKey: "accessoryCategory",
 					title: t("section.accessoryCategory", "商品品类"),
 					options: accessoryCategories,
+					groupClassName: "category-group",
 				},
 				{
 					id: "productImage",
@@ -253,15 +219,6 @@ registerMagicCanvasPlugin({
 						"建议模特图中目标配饰区域清晰可见，姿态和构图便于保持。",
 					),
 					beforePick: createBeforePickHandler("modelImage", t),
-				},
-				{
-					id: "generationMode",
-					kind: "option-group",
-					stateKey: "generationMode",
-					title: t("section.generationMode", "生成模式"),
-					showDescriptionOnHover: true,
-					groupClassName: "generation-mode-group",
-					options: generationModes,
 				},
 				{
 					id: "modelSelect",
@@ -324,7 +281,6 @@ registerMagicCanvasPlugin({
 						model_id: state.modelId,
 						prompt: buildAccessoryTryOnPrompt({
 							accessoryCategory: state.accessoryCategory,
-							generationMode: state.generationMode,
 							locale: promptLocale,
 						}),
 						reference_images: referenceImages,

@@ -8,7 +8,7 @@ export const BUILTIN_PLUGIN_SLUGS = [
 	"real-model-tryon",
 	"boots-tryon",
 	"scene-swap",
-	"accessory-tryon",
+	"ai-tryon",
 	"face-swap",
 	"model-swap",
 	"pose-swap",
