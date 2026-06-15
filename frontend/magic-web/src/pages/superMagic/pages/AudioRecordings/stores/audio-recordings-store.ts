@@ -1,6 +1,7 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import type { RecordTaskProgress } from "@/apis/modules/superMagic/recordSummary"
 import {
+	ALL_RECORDING_GROUP_ID,
 	audioRecordingsService,
 	type PagedAudioProjects,
 	type QueryAudioProjectsOptions,
@@ -19,7 +20,13 @@ import {
 } from "@/pages/superMagic/utils/paged-list-store"
 import { summaryProgressPoller } from "../services/summary-progress-poller"
 import { resolveCardStatusFromListItem } from "../utils/normalize-audio-project-item"
-import { canSubmitSummary, shouldPollSummaryProgress } from "../utils/summary-action-utils"
+import { shouldPollSummaryProgress } from "../utils/summary-action-utils"
+import {
+	buildOptimisticSummarizingProject,
+	deleteAudioRecordingProjects,
+	renameAudioRecordingProject,
+	submitAudioRecordingSummary,
+} from "../utils/audio-recording-actions"
 
 const DEFAULT_PAGE_SIZE = 20
 
@@ -36,6 +43,7 @@ export class AudioRecordingsStore {
 	summaryFilter: AudioRecordingSummaryFilter = "all"
 	createdAtStart?: number
 	createdAtEnd?: number
+	workspaceId = ALL_RECORDING_GROUP_ID
 	sortBy: AudioProjectSortBy = "created_at"
 	sortOrder: AudioProjectSortOrder = "desc"
 	loading = false
@@ -126,6 +134,11 @@ export class AudioRecordingsStore {
 		this.sortOrder = sortOrder
 	}
 
+	/** Updates the workspace group used by subsequent list queries */
+	setWorkspaceId(workspaceId: string) {
+		this.workspaceId = workspaceId
+	}
+
 	/** Builds query options from current filter state for service calls */
 	private buildQueryOptions(page: number, keyword: string): QueryAudioProjectsOptions {
 		return {
@@ -137,6 +150,7 @@ export class AudioRecordingsStore {
 			createdAtEnd: this.createdAtEnd,
 			sortBy: this.sortBy,
 			sortOrder: this.sortOrder,
+			workspaceId: this.workspaceId,
 		}
 	}
 
@@ -270,49 +284,26 @@ export class AudioRecordingsStore {
 	async submitSummary(item: AudioProjectListItem): Promise<SubmitSummaryResult> {
 		if (this.submittingIds.has(item.id)) return { ok: false, reason: "busy" }
 
-		if (
-			!canSubmitSummary({
-				task_key: item.task_key,
-				topic_id: item.topic_id,
-				audio_file_id: item.audio_file_id,
-				audio_source: item.audio_source,
-			})
-		) {
-			return { ok: false, reason: "missingParams" }
-		}
-
 		const taskKey = item.task_key
-		const topicId = item.topic_id
-		if (!taskKey || !topicId) return { ok: false, reason: "missingParams" }
-
-		const modelId = await audioRecordingsService.resolveModelIdForSubmit(item.model_id)
-		if (!modelId) return { ok: false, reason: "missingModel" }
+		if (!taskKey) return { ok: false, reason: "missingParams" }
 
 		runInAction(() => {
 			this.submittingIds.add(item.id)
 		})
 
 		try {
-			await audioRecordingsService.submitSummary(item, modelId)
+			const result = await submitAudioRecordingSummary(item)
+			if (!result.ok) return result
 
 			runInAction(() => {
 				const index = this.list.findIndex((entry) => entry.id === item.id)
 				if (index < 0) return
 
-				const optimistic: AudioProjectListItem = {
-					...this.list[index],
-					current_phase: "summarizing",
-					phase_status: "in_progress",
-					card_status: "summarizing",
-					is_summarized: false,
-				}
-				this.list[index] = optimistic
+				this.list[index] = buildOptimisticSummarizingProject(this.list[index])
 			})
 
 			summaryProgressPoller.addTask(taskKey)
 			return { ok: true }
-		} catch {
-			return { ok: false, reason: "api" }
 		} finally {
 			runInAction(() => {
 				this.submittingIds.delete(item.id)
@@ -330,7 +321,7 @@ export class AudioRecordingsStore {
 		})
 
 		try {
-			await audioRecordingsService.renameProject(projectId, trimmed)
+			await renameAudioRecordingProject(projectId, trimmed)
 
 			runInAction(() => {
 				const index = this.list.findIndex((entry) => entry.id === projectId)
@@ -366,7 +357,7 @@ export class AudioRecordingsStore {
 		})
 
 		try {
-			await audioRecordingsService.batchDeleteProjects(pendingIds)
+			await deleteAudioRecordingProjects(pendingIds)
 
 			runInAction(() => {
 				const deletedIdSet = new Set(pendingIds)

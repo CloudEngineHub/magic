@@ -2,6 +2,7 @@ import { Check, RotateCcw, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
+import type { AudioRecordingSummaryFilter } from "@/types/audioProject"
 import {
 	MOBILE_AUDIO_RECORDINGS_FILTER_DEFAULT,
 	type MobileAudioRecordingsDatePreset,
@@ -13,7 +14,9 @@ interface MobileRecordingFilterSheetProps {
 	open: boolean
 	onOpenChange: (open: boolean) => void
 	filter: MobileAudioRecordingsFilterState
+	summaryFilter: AudioRecordingSummaryFilter
 	onChange: (nextFilter: MobileAudioRecordingsFilterState) => void
+	onSummaryFilterChange: (nextFilter: AudioRecordingSummaryFilter) => void
 }
 
 /** Single-select row with trailing check indicator (recycle-bin filter pattern) */
@@ -41,12 +44,17 @@ function SelectRow(props: {
 /** Prototype date presets — custom range is intentionally omitted on mobile */
 const DATE_PRESETS: MobileAudioRecordingsDatePreset[] = ["all", "today", "week", "month"]
 const SORT_OPTIONS: MobileAudioRecordingsSortOption[] = ["updated_at_desc", "created_at_desc"]
+const SUMMARY_OPTIONS: AudioRecordingSummaryFilter[] = ["all", "not_summarized", "summarized"]
 
 /** Returns whether secondary filters differ from the mobile default preset */
-function hasActiveFilters(filter: MobileAudioRecordingsFilterState) {
+function hasActiveFilters(
+	filter: MobileAudioRecordingsFilterState,
+	summaryFilter: AudioRecordingSummaryFilter,
+) {
 	return (
 		filter.datePreset !== MOBILE_AUDIO_RECORDINGS_FILTER_DEFAULT.datePreset ||
-		filter.sortOption !== MOBILE_AUDIO_RECORDINGS_FILTER_DEFAULT.sortOption
+		filter.sortOption !== MOBILE_AUDIO_RECORDINGS_FILTER_DEFAULT.sortOption ||
+		summaryFilter !== "all"
 	)
 }
 
@@ -58,7 +66,9 @@ export function MobileRecordingFilterSheet({
 	open,
 	onOpenChange,
 	filter,
+	summaryFilter,
 	onChange,
+	onSummaryFilterChange,
 }: MobileRecordingFilterSheetProps) {
 	const { t } = useTranslation(["super", "audioRecordings"])
 
@@ -68,6 +78,7 @@ export function MobileRecordingFilterSheet({
 
 	function handleReset() {
 		onChange(MOBILE_AUDIO_RECORDINGS_FILTER_DEFAULT)
+		onSummaryFilterChange("all")
 	}
 
 	function handleSortChange(nextSort: MobileAudioRecordingsSortOption) {
@@ -78,13 +89,31 @@ export function MobileRecordingFilterSheet({
 		onChange({ ...filter, datePreset: nextDate })
 	}
 
+	function handleSummaryChange(nextSummaryFilter: AudioRecordingSummaryFilter) {
+		onSummaryFilterChange(nextSummaryFilter)
+	}
+
+	/** Maps each supported mobile date preset to a literal translation key for static locale analysis. */
 	function resolveDateLabel(preset: MobileAudioRecordingsDatePreset) {
-		return t(`super:mobile.recordingEntry.filterSheet.dateRange.${preset}`)
+		if (preset === "all") return t("super:mobile.recordingEntry.filterSheet.dateRange.all")
+		if (preset === "today") return t("super:mobile.recordingEntry.filterSheet.dateRange.today")
+		if (preset === "week") return t("super:mobile.recordingEntry.filterSheet.dateRange.week")
+		return t("super:mobile.recordingEntry.filterSheet.dateRange.month")
 	}
 
 	function resolveSortLabel(option: MobileAudioRecordingsSortOption) {
 		if (option === "updated_at_desc") return t("audioRecordings:filters.sortByUpdatedDesc")
 		return t("audioRecordings:filters.sortByCreatedDesc")
+	}
+
+	function resolveSummaryLabel(option: AudioRecordingSummaryFilter) {
+		if (option === "not_summarized") {
+			return t("audioRecordings:filters.summaryNotDone")
+		}
+		if (option === "summarized") {
+			return t("audioRecordings:filters.summaryDone")
+		}
+		return t("audioRecordings:filters.summaryAll")
 	}
 
 	return (
@@ -103,7 +132,7 @@ export function MobileRecordingFilterSheet({
 				testId: "mobile-recording-filter-sheet-close",
 			}}
 			headerTrailingAction={
-				hasActiveFilters(filter)
+				hasActiveFilters(filter, summaryFilter)
 					? {
 							icon: <RotateCcw />,
 							ariaLabel: t("super:mobile.recordingEntry.filterSheet.resetAria"),
@@ -121,8 +150,30 @@ export function MobileRecordingFilterSheet({
 				fadeColor="muted"
 				className="min-h-0 flex-1"
 				scrollClassName="no-scrollbar flex flex-col gap-2.5 px-[10px] pb-5 pt-2"
-				contentDeps={[filter.sortOption, filter.datePreset]}
+				contentDeps={[filter.sortOption, filter.datePreset, summaryFilter]}
 			>
+				<div
+					className="flex flex-col gap-2"
+					data-testid="mobile-recording-filter-summary-section"
+				>
+					<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
+						{t("audioRecordings:filters.summaryStatus")}
+					</p>
+					<div className="w-full overflow-hidden rounded-lg bg-card">
+						{SUMMARY_OPTIONS.map((option, index) => (
+							<div key={option}>
+								{index > 0 ? <div className="h-px w-full bg-border" /> : null}
+								<SelectRow
+									label={resolveSummaryLabel(option)}
+									selected={summaryFilter === option}
+									onSelect={() => handleSummaryChange(option)}
+									dataTestId={`mobile-recording-filter-summary-${option}`}
+								/>
+							</div>
+						))}
+					</div>
+				</div>
+
 				<div
 					className="flex flex-col gap-2"
 					data-testid="mobile-recording-filter-sort-section"

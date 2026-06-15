@@ -6,6 +6,10 @@ import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { Input } from "@/components/shadcn-ui/input"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { resolveRecordingDisplayName } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
+import {
+	getSummaryButtonVariant,
+	shouldShowSummaryButton,
+} from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
 
 interface MobileRecordingMoreSheetProps {
 	isOpen: boolean
@@ -13,7 +17,12 @@ interface MobileRecordingMoreSheetProps {
 	onClose: () => void
 	onRename: (projectId: string, name: string) => Promise<boolean>
 	onDelete: (projectId: string) => Promise<boolean>
+	onSummarize?: (item: AudioProjectListItem) => Promise<boolean>
+	onMoveToGroup?: (item: AudioProjectListItem) => void
 	isSubmittingAction?: boolean
+	isSubmittingSummary?: boolean
+	hideShareAction?: boolean
+	hideRenameAction?: boolean
 }
 
 type MoreSheetView = "menu" | "rename" | "deleteConfirm"
@@ -21,12 +30,14 @@ type MoreSheetView = "menu" | "rename" | "deleteConfirm"
 function MenuItem({
 	label,
 	danger,
+	disabled,
 	showDivider,
 	dataTestId,
 	onClick,
 }: {
 	label: string
 	danger?: boolean
+	disabled?: boolean
 	showDivider?: boolean
 	dataTestId?: string
 	onClick?: () => void
@@ -36,8 +47,9 @@ function MenuItem({
 			<button
 				type="button"
 				onClick={onClick}
+				disabled={disabled}
 				data-testid={dataTestId}
-				className="flex h-12 w-full items-center gap-2 bg-transparent px-[14px] transition-opacity active:opacity-60"
+				className="flex h-12 w-full items-center gap-2 bg-transparent px-[14px] transition-opacity active:opacity-60 disabled:opacity-50"
 			>
 				<span
 					className={`flex-1 text-left text-[16px] leading-5 ${danger ? "text-destructive" : "text-foreground"}`}
@@ -56,7 +68,7 @@ function MenuGroup({ children }: { children: React.ReactNode }) {
 
 /**
  * More-actions sheet aligned with prototype RecordingMoreSheet:
- * full menu groups; only rename and delete are wired — other items show coming-soon toast.
+ * wired actions are injected by the parent so list and detail pages can share one menu shell.
  */
 export function MobileRecordingMoreSheet({
 	isOpen,
@@ -64,13 +76,23 @@ export function MobileRecordingMoreSheet({
 	onClose,
 	onRename,
 	onDelete,
+	onSummarize,
+	onMoveToGroup,
 	isSubmittingAction = false,
+	isSubmittingSummary = false,
+	hideShareAction = false,
+	hideRenameAction = false,
 }: MobileRecordingMoreSheetProps) {
 	const { t } = useTranslation(["super", "audioRecordings"])
 	const recordingName = item
 		? resolveRecordingDisplayName(item.project_name, item.created_at)
 		: t("super:mobile.recordingEntry.moreSheet.untitled")
-	const hasSummary = item?.card_status === "summarized"
+	const showSummarizeAction = item
+		? shouldShowSummaryButton(item.current_phase, item.phase_status)
+		: false
+	const summaryVariant = item
+		? getSummaryButtonVariant(item.current_phase, item.phase_status)
+		: null
 
 	const [view, setView] = useState<MoreSheetView>("menu")
 	const [renameValue, setRenameValue] = useState("")
@@ -117,6 +139,18 @@ export function MobileRecordingMoreSheet({
 		const success = await onDelete(item.id)
 		if (success) handleClose()
 	}, [item, onDelete, handleClose])
+
+	const handleSummarize = useCallback(async () => {
+		if (!item || !onSummarize) return
+		const success = await onSummarize(item)
+		if (success) handleClose()
+	}, [handleClose, item, onSummarize])
+
+	const handleMoveToGroup = useCallback(() => {
+		if (!item) return
+		onMoveToGroup?.(item)
+		handleClose()
+	}, [item, onMoveToGroup, handleClose])
 
 	function resolveHeaderTitle() {
 		if (view === "rename") return t("super:mobile.recordingEntry.moreSheet.rename")
@@ -191,35 +225,46 @@ export function MobileRecordingMoreSheet({
 			{view === "menu" ? (
 				<>
 					<MenuGroup>
-						<MenuItem
-							label={t("super:mobile.recordingEntry.moreSheet.rename")}
-							dataTestId="mobile-recording-more-rename"
-							showDivider
-							onClick={handleRenamePress}
-						/>
+						{hideRenameAction ? null : (
+							<MenuItem
+								label={t("super:mobile.recordingEntry.moreSheet.rename")}
+								dataTestId="mobile-recording-more-rename"
+								showDivider
+								onClick={handleRenamePress}
+							/>
+						)}
 						<MenuItem
 							label={t("super:mobile.recordingEntry.moreSheet.moveToGroup")}
 							dataTestId="mobile-recording-more-move-to-group"
-							onClick={handleComingSoon}
+							onClick={handleMoveToGroup}
 						/>
 					</MenuGroup>
 
 					<MenuGroup>
-						<MenuItem
-							label={
-								hasSummary
-									? t("super:mobile.recordingEntry.moreSheet.regenerateSummary")
-									: t("super:mobile.recordingEntry.moreSheet.generateSummary")
-							}
-							dataTestId="mobile-recording-more-generate-summary"
-							showDivider
-							onClick={handleComingSoon}
-						/>
-						<MenuItem
-							label={t("super:mobile.recordingEntry.moreSheet.share")}
-							dataTestId="mobile-recording-more-share"
-							onClick={handleComingSoon}
-						/>
+						{showSummarizeAction ? (
+							<MenuItem
+								label={
+									summaryVariant === "retry"
+										? t(
+												"super:mobile.recordingEntry.moreSheet.regenerateSummary",
+											)
+										: t("super:mobile.recordingEntry.moreSheet.generateSummary")
+								}
+								dataTestId="mobile-recording-more-summarize"
+								disabled={isSubmittingSummary}
+								showDivider={!hideShareAction}
+								onClick={() => {
+									void handleSummarize()
+								}}
+							/>
+						) : null}
+						{hideShareAction ? null : (
+							<MenuItem
+								label={t("super:mobile.recordingEntry.moreSheet.share")}
+								dataTestId="mobile-recording-more-share"
+								onClick={handleComingSoon}
+							/>
+						)}
 					</MenuGroup>
 
 					<MenuGroup>

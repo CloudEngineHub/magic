@@ -90,6 +90,8 @@ export interface AudioProjectListItem {
 	is_summarized: boolean
 	project_status?: string
 	current_topic_status?: string
+	workspace_id?: string | null
+	workspace_name?: string | null
 	/** ASR task key required for summarize/progress APIs */
 	task_key?: string
 	topic_id?: string

@@ -1,4 +1,8 @@
-import type { AudioProjectSortBy, AudioProjectSortOrder } from "@/types/audioProject"
+import type {
+	AudioProjectSortBy,
+	AudioProjectSortOrder,
+	AudioRecordingSummaryFilter,
+} from "@/types/audioProject"
 
 /** Prototype-aligned date presets — no custom range on mobile */
 export type MobileAudioRecordingsDatePreset = "all" | "today" | "week" | "month"
@@ -31,11 +35,15 @@ export function parseMobileSortOption(option: MobileAudioRecordingsSortOption): 
 
 /**
  * Counts active secondary filters for the toolbar badge.
- * Summary status is excluded — it has its own row in the toolbar.
+ * Summary status is included because mobile now places it inside the filter sheet.
  */
-export function countActiveMobileAudioFilters(state: MobileAudioRecordingsFilterState): number {
+export function countActiveMobileAudioFilters(
+	state: MobileAudioRecordingsFilterState,
+	summaryFilter: AudioRecordingSummaryFilter = "all",
+): number {
 	let count = 0
 	if (state.datePreset !== "all") count++
 	if (state.sortOption !== "updated_at_desc") count++
+	if (summaryFilter !== "all") count++
 	return count
 }

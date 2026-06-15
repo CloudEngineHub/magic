@@ -49,9 +49,7 @@ vi.mock("@/components/base-mobile/MagicPullToRefresh", () => ({
 }))
 
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
-	ScrollEdgeFadeContainer: ({ children }: { children: React.ReactNode }) => (
-		<div>{children}</div>
-	),
+	ScrollEdgeFadeContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
 vi.mock("@/components/shadcn-ui/sheet", () => ({
@@ -84,10 +82,6 @@ vi.mock("../components/MobileRecordingFilterSheet", () => ({
 	MobileRecordingFilterSheet: () => null,
 }))
 
-vi.mock("../components/MobileRecordingSummarySheet", () => ({
-	MobileRecordingSummarySheet: () => null,
-}))
-
 vi.mock("../components/MobileRecordingImportSheet", () => ({
 	MobileRecordingImportSheet: () => null,
 }))
@@ -106,10 +100,21 @@ vi.mock("../hooks/useMobileAudioRecordingsList", () => ({
 		filterState: { datePreset: "all", sortOption: "updated_at_desc" },
 		filterSheetOpen: false,
 		setFilterSheetOpen: vi.fn(),
-		summarySheetOpen: false,
-		setSummarySheetOpen: vi.fn(),
 		importSheetOpen: false,
 		setImportSheetOpen: vi.fn(),
+		groupSheetOpen: false,
+		setGroupSheetOpen: vi.fn(),
+		moveGroupSheetOpen: false,
+		setMoveGroupSheetOpen: vi.fn(),
+		moveTarget: null,
+		groups: [],
+		totalGroupCount: 0,
+		ungroupedCount: 0,
+		currentGroupId: "-1",
+		currentGroupLabel: "all",
+		currentGroupCount: 0,
+		groupsLoading: false,
+		groupActionSubmitting: false,
 		activeFilterCount: 0,
 		debouncedKeyword: "",
 		moreTarget: null,
@@ -121,6 +126,13 @@ vi.mock("../hooks/useMobileAudioRecordingsList", () => ({
 		handleDismissSearch: vi.fn(),
 		handleOpenMore: vi.fn(),
 		handleCloseMore: vi.fn(),
+		handleGroupChange: vi.fn(),
+		handleCreateGroup: vi.fn(),
+		handleRenameGroup: vi.fn(),
+		handleDeleteGroup: vi.fn(),
+		handleOpenMoveGroup: vi.fn(),
+		handleMoveGroupChange: vi.fn(),
+		refreshGroups: vi.fn(),
 	}),
 }))
 

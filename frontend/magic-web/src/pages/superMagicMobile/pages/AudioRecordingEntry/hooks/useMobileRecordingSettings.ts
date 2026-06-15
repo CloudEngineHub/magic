@@ -27,6 +27,7 @@ interface UseMobileRecordingSettingsResult {
 	summaryModelGroups: ModelListGroup[]
 	selectedModel: ModelItem | null
 	isLoading: boolean
+	isRefreshing: boolean
 	isSaving: boolean
 	updateSetting: (key: RecordingSettingsKey, value: boolean | string) => Promise<void>
 }
@@ -34,6 +35,8 @@ interface UseMobileRecordingSettingsResult {
 /** Module-level cache for Phase 3 consumers (recording entry facade) */
 let cachedApiResponse: RecordingTopicModelResponse | null = null
 let cachedSettings: RecordingSettings | null = null
+let cachedSummaryModels: ModelItem[] = []
+let cachedSummaryModelGroups: ModelListGroup[] = []
 
 /** Exposes stable cached settings for non-hook consumers */
 export function getCachedMobileRecordingSettings() {
@@ -44,15 +47,55 @@ export function getCachedMobileRecordingSettings() {
 export function resetMobileRecordingSettingsCacheForTests() {
 	cachedApiResponse = null
 	cachedSettings = null
+	cachedSummaryModels = []
+	cachedSummaryModelGroups = []
 }
 
 /** Seeds module cache — test-only helper for updateSetting without async bootstrap */
 export function seedMobileRecordingSettingsCacheForTests(
 	response: RecordingTopicModelResponse,
 	settings: RecordingSettings,
+	summaryModels: ModelItem[] = [],
+	summaryModelGroups: ModelListGroup[] = [],
 ) {
 	cachedApiResponse = response
 	cachedSettings = settings
+	cachedSummaryModels = summaryModels
+	cachedSummaryModelGroups = summaryModelGroups
+}
+
+/** Returns whether cached settings are complete enough to render without a blocking spinner. */
+function hasRenderableCachedSettings() {
+	return (
+		cachedSettings !== null &&
+		cachedSummaryModels.length > 0 &&
+		cachedSummaryModelGroups.length > 0
+	)
+}
+
+/** Syncs freshly loaded settings/model data into both hook state and module-level cache. */
+function applyLoadedSettingsCache(
+	apiResponse: RecordingTopicModelResponse,
+	nextSettings: RecordingSettings,
+	models: ModelItem[],
+	groups: ModelListGroup[],
+) {
+	cachedApiResponse = {
+		...apiResponse,
+		model: { ...apiResponse.model, model_id: nextSettings.model_id },
+		extra: {
+			...apiResponse.extra,
+			model: {
+				...apiResponse.extra?.model,
+				model_id: nextSettings.model_id,
+			},
+		},
+	}
+	cachedSettings = nextSettings
+	cachedSummaryModels = models
+	cachedSummaryModelGroups = groups
+
+	return cachedApiResponse
 }
 
 /** Loads and persists default_audio recording settings with optimistic PUT + rollback */
@@ -60,10 +103,13 @@ export function useMobileRecordingSettings({
 	enabled,
 }: UseMobileRecordingSettingsOptions): UseMobileRecordingSettingsResult {
 	const { t } = useTranslation("super")
+	const saveFailedMessage = t("mobile.recordingEntry.settings.saveFailed")
 	const [settings, setSettings] = useState<RecordingSettings | null>(cachedSettings)
-	const [summaryModels, setSummaryModels] = useState<ModelItem[]>([])
-	const [summaryModelGroups, setSummaryModelGroups] = useState<ModelListGroup[]>([])
+	const [summaryModels, setSummaryModels] = useState<ModelItem[]>(cachedSummaryModels)
+	const [summaryModelGroups, setSummaryModelGroups] =
+		useState<ModelListGroup[]>(cachedSummaryModelGroups)
 	const [isLoading, setIsLoading] = useState(false)
+	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isSaving, setIsSaving] = useState(false)
 	const cachedResponseRef = useRef<RecordingTopicModelResponse | null>(cachedApiResponse)
 
@@ -96,61 +142,62 @@ export function useMobileRecordingSettings({
 			} catch {
 				cachedSettings = previousSettings
 				setSettings(previousSettings)
-				toast.error(t("mobile.recordingEntry.settings.saveFailed"))
+				toast.error(saveFailedMessage)
 			} finally {
 				setIsSaving(false)
 			}
 		},
-		[t],
+		[saveFailedMessage],
 	)
 
-	const loadSettings = useCallback(async () => {
-		setIsLoading(true)
+	const loadSettings = useCallback(
+		async (options: { silentlyRefresh: boolean }) => {
+			const { silentlyRefresh } = options
 
-		try {
-			const [apiResponse, groups] = await Promise.all([
-				getRecordingTopicModel(),
-				fetchSummaryModelGroups(),
-			])
-			const models = groups.flatMap((group) => group.models ?? [])
+			// Silent refresh keeps cached values visible while the latest data is fetched in background.
+			setIsLoading(!silentlyRefresh)
+			setIsRefreshing(silentlyRefresh)
 
-			const fallbackModelId = resolveDefaultSummaryModelId(models)
-			let nextSettings = apiResponseToSettings(apiResponse, fallbackModelId)
-			const validModelId = resolveValidSummaryModelId(models, nextSettings.model_id)
+			try {
+				const [apiResponse, groups] = await Promise.all([
+					getRecordingTopicModel(),
+					fetchSummaryModelGroups(),
+				])
+				const models = groups.flatMap((group) => group.models ?? [])
 
-			if (validModelId && validModelId !== nextSettings.model_id) {
-				nextSettings = { ...nextSettings, model_id: validModelId }
-				cachedResponseRef.current = apiResponse
-				cachedApiResponse = apiResponse
-				await saveRecordingTopicModel(settingsToApiPayload(nextSettings, apiResponse))
+				const fallbackModelId = resolveDefaultSummaryModelId(models)
+				let nextSettings = apiResponseToSettings(apiResponse, fallbackModelId)
+				const validModelId = resolveValidSummaryModelId(models, nextSettings.model_id)
+
+				if (validModelId && validModelId !== nextSettings.model_id) {
+					nextSettings = { ...nextSettings, model_id: validModelId }
+					cachedResponseRef.current = apiResponse
+					cachedApiResponse = apiResponse
+					await saveRecordingTopicModel(settingsToApiPayload(nextSettings, apiResponse))
+				}
+
+				cachedResponseRef.current = applyLoadedSettingsCache(
+					apiResponse,
+					nextSettings,
+					models,
+					groups,
+				)
+				setSummaryModelGroups(groups)
+				setSummaryModels(models)
+				setSettings(nextSettings)
+			} catch {
+				toast.error(saveFailedMessage)
+			} finally {
+				setIsLoading(false)
+				setIsRefreshing(false)
 			}
-
-			cachedResponseRef.current = {
-				...apiResponse,
-				model: { ...apiResponse.model, model_id: nextSettings.model_id },
-				extra: {
-					...apiResponse.extra,
-					model: {
-						...apiResponse.extra?.model,
-						model_id: nextSettings.model_id,
-					},
-				},
-			}
-			cachedApiResponse = cachedResponseRef.current
-			cachedSettings = nextSettings
-			setSummaryModelGroups(groups)
-			setSummaryModels(models)
-			setSettings(nextSettings)
-		} catch {
-			toast.error(t("mobile.recordingEntry.settings.saveFailed"))
-		} finally {
-			setIsLoading(false)
-		}
-	}, [t])
+		},
+		[saveFailedMessage],
+	)
 
 	useEffect(() => {
 		if (!enabled) return
-		void loadSettings()
+		void loadSettings({ silentlyRefresh: hasRenderableCachedSettings() })
 	}, [enabled, loadSettings])
 
 	const updateSetting = useCallback(
@@ -176,6 +223,7 @@ export function useMobileRecordingSettings({
 		summaryModelGroups,
 		selectedModel,
 		isLoading,
+		isRefreshing,
 		isSaving,
 		updateSetting,
 	}

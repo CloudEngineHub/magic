@@ -26,6 +26,7 @@ vi.mock("../utils/summary-model-list", () => ({
 }))
 
 import { getRecordingTopicModel, saveRecordingTopicModel } from "../apis/recording-settings-api"
+import { toast } from "sonner"
 import {
 	fetchSummaryModelGroups,
 	resolveDefaultSummaryModelId,
@@ -65,28 +66,30 @@ const mockModels = [
 	},
 ]
 
+const mockModelGroups = [
+	{
+		group: {
+			id: "mock-group-1",
+			mode_id: "mock-mode-1",
+			icon: "",
+			color: "",
+			name: "Mock Provider",
+			description: "",
+			sort: 1,
+			status: true,
+			created_at: "",
+		},
+		models: mockModels,
+		model_ids: [MOCK_MODEL_ALPHA, MOCK_MODEL_BETA],
+		image_model_ids: [],
+	},
+]
+
 describe("useMobileRecordingSettings", () => {
 	beforeEach(() => {
 		resetMobileRecordingSettingsCacheForTests()
 		vi.clearAllMocks()
-		vi.mocked(fetchSummaryModelGroups).mockResolvedValue([
-			{
-				group: {
-					id: "mock-group-1",
-					mode_id: "mock-mode-1",
-					icon: "",
-					color: "",
-					name: "Mock Provider",
-					description: "",
-					sort: 1,
-					status: true,
-					created_at: "",
-				},
-				models: mockModels,
-				model_ids: [MOCK_MODEL_ALPHA, MOCK_MODEL_BETA],
-				image_model_ids: [],
-			},
-		])
+		vi.mocked(fetchSummaryModelGroups).mockResolvedValue(mockModelGroups)
 		vi.mocked(resolveDefaultSummaryModelId).mockReturnValue(MOCK_MODEL_ALPHA)
 		vi.mocked(resolveValidSummaryModelId).mockImplementation(
 			(_models, currentModelId) => currentModelId || MOCK_MODEL_ALPHA,
@@ -115,6 +118,8 @@ describe("useMobileRecordingSettings", () => {
 				auto_summary_enabled: false,
 				model_id: MOCK_MODEL_ALPHA,
 			},
+			mockModels,
+			mockModelGroups,
 		)
 
 		const { result } = renderHook(() => useMobileRecordingSettings({ enabled: false }))
@@ -154,5 +159,91 @@ describe("useMobileRecordingSettings", () => {
 				model_id: MOCK_MODEL_BETA,
 			}),
 		)
+	})
+
+	it("shows blocking loading only on first open without cache", async () => {
+		const { result } = renderHook(() => useMobileRecordingSettings({ enabled: true }))
+
+		expect(result.current.isLoading).toBe(true)
+		expect(result.current.settings).toBeNull()
+
+		await waitFor(() => {
+			expect(result.current.isLoading).toBe(false)
+		})
+
+		expect(result.current.settings?.model_id).toBe(MOCK_MODEL_ALPHA)
+		expect(result.current.summaryModelGroups).toHaveLength(1)
+	})
+
+	it("reuses cached values and silently refreshes on reopen", async () => {
+		const { result, unmount } = renderHook(
+			({ enabled }) => useMobileRecordingSettings({ enabled }),
+			{ initialProps: { enabled: true } },
+		)
+
+		await waitFor(() => {
+			expect(result.current.settings?.model_id).toBe(MOCK_MODEL_ALPHA)
+		})
+		expect(vi.mocked(getRecordingTopicModel)).toHaveBeenCalledTimes(1)
+
+		unmount()
+
+		const deferredRefresh = Promise.resolve({
+			model: { model_id: MOCK_MODEL_BETA },
+			extra: {
+				transcription_enabled: false,
+				auto_summary_enabled: true,
+			},
+		})
+		vi.mocked(getRecordingTopicModel).mockReturnValueOnce(deferredRefresh)
+
+		const reopened = renderHook(({ enabled }) => useMobileRecordingSettings({ enabled }), {
+			initialProps: { enabled: false },
+		})
+
+		reopened.rerender({ enabled: true })
+
+		expect(reopened.result.current.isLoading).toBe(false)
+		expect(reopened.result.current.isRefreshing).toBe(true)
+		expect(reopened.result.current.settings?.model_id).toBe(MOCK_MODEL_ALPHA)
+
+		await waitFor(() => {
+			expect(reopened.result.current.settings?.model_id).toBe(MOCK_MODEL_BETA)
+		})
+		expect(reopened.result.current.isRefreshing).toBe(false)
+
+		reopened.unmount()
+	})
+
+	it("keeps cached values visible when silent refresh fails", async () => {
+		seedMobileRecordingSettingsCacheForTests(
+			{
+				model: { model_id: MOCK_MODEL_ALPHA },
+				extra: {
+					transcription_enabled: true,
+					auto_summary_enabled: false,
+				},
+			},
+			{
+				transcription_enabled: true,
+				auto_summary_enabled: false,
+				model_id: MOCK_MODEL_ALPHA,
+			},
+			mockModels,
+			mockModelGroups,
+		)
+		vi.mocked(getRecordingTopicModel).mockRejectedValueOnce(new Error("refresh failed"))
+
+		const { result } = renderHook(() => useMobileRecordingSettings({ enabled: true }))
+
+		expect(result.current.isLoading).toBe(false)
+		expect(result.current.settings?.model_id).toBe(MOCK_MODEL_ALPHA)
+
+		await waitFor(() => {
+			expect(result.current.isRefreshing).toBe(false)
+		})
+
+		expect(result.current.settings?.model_id).toBe(MOCK_MODEL_ALPHA)
+		expect(toast.error).toHaveBeenCalledWith("mobile.recordingEntry.settings.saveFailed")
 	})
 })

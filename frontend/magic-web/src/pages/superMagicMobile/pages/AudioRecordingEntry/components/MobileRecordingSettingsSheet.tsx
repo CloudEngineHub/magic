@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, X } from "lucide-react"
+import { ChevronRight, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import MagicPopup from "@/components/base-mobile/MagicPopup"
@@ -228,16 +228,27 @@ export function MobileRecordingSettingsSheet({
 }: MobileRecordingSettingsSheetProps) {
 	const { t } = useTranslation("super")
 	const [view, setView] = useState<SettingsSheetView>("menu")
-	const { settings, summaryModelGroups, selectedModel, isLoading, isSaving, updateSetting } =
-		useMobileRecordingSettings({ enabled: open })
+	const {
+		settings,
+		summaryModels,
+		summaryModelGroups,
+		selectedModel,
+		isLoading,
+		isSaving,
+		updateSetting,
+	} = useMobileRecordingSettings({ enabled: open })
 
 	function handleClose() {
 		onOpenChange(false)
 		setView("menu")
 	}
 
-	function handleBack() {
-		setView("menu")
+	function handleLeadingAction() {
+		if (view === "model") {
+			setView("menu")
+			return
+		}
+		handleClose()
 	}
 
 	async function handleSelectModel(modelId: string) {
@@ -249,6 +260,8 @@ export function MobileRecordingSettingsSheet({
 		view === "menu"
 			? t("mobile.recordingEntry.settings.title")
 			: t("mobile.recordingEntry.settings.model.title")
+	const shouldShowBlockingLoading =
+		!settings || (isLoading && summaryModelGroups.length === 0 && summaryModels.length === 0)
 
 	return (
 		<MagicPopup
@@ -260,23 +273,21 @@ export function MobileRecordingSettingsSheet({
 			headerVariant="actionHeader"
 			headerTitle={sheetTitle}
 			headerLeadingAction={{
-				icon: view === "menu" ? <X /> : <ChevronLeft />,
+				// Model selection is an in-sheet subview, so its leading action returns to settings.
+				icon: <X />,
 				ariaLabel:
-					view === "menu"
-						? t("mobile.recordingEntry.settings.closeAria")
-						: t("mobile.recordingEntry.settings.backAria"),
-				onClick: view === "menu" ? handleClose : handleBack,
-				testId:
-					view === "menu"
-						? "mobile-recording-settings-sheet-close"
-						: "mobile-recording-settings-sheet-back",
+					view === "model"
+						? t("mobile.recordingEntry.settings.backAria")
+						: t("mobile.recordingEntry.settings.closeAria"),
+				onClick: handleLeadingAction,
+				testId: "mobile-recording-settings-sheet-close",
 			}}
 			className="max-h-[78vh] gap-0 rounded-t-[14px] border-0 bg-muted p-0"
 			bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
 			style={{ boxShadow: "0 -4px 24px rgba(0,0,0,0.08)" }}
 			data-testid="mobile-recording-settings-sheet"
 		>
-			{isLoading || !settings ? (
+			{shouldShowBlockingLoading ? (
 				<div
 					className="flex min-h-[200px] items-center justify-center px-4"
 					data-testid="mobile-recording-settings-loading"

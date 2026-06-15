@@ -65,6 +65,8 @@ export function normalizeAudioProjectListItem(
 		is_summarized: cardStatus === "summarized",
 		project_status: raw.project_status,
 		current_topic_status: raw.current_topic_status,
+		workspace_id: raw.workspace_id ?? null,
+		workspace_name: raw.workspace_name ?? null,
 		task_key: extra.task_key,
 		topic_id: coerceIdToString(extra.topic_id),
 		audio_file_id: coerceIdToString(extra.audio_file_id),

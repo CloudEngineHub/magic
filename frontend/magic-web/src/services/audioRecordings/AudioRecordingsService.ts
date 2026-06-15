@@ -15,6 +15,7 @@ import { resolveAutoSummaryModelId } from "@/pages/superMagic/pages/AudioRecordi
 import { resolveSummaryModelId } from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
 
 const DEFAULT_AUDIO_SETTING_TOPIC_ID = "default_audio"
+const BATCH_MOVE_PROJECTS_LIMIT = 20
 
 export interface PagedAudioProjects {
 	list: AudioProjectListItem[]
@@ -34,6 +35,7 @@ export interface QueryAudioProjectsOptions {
 	sortBy: AudioProjectSortBy
 	sortOrder: AudioProjectSortOrder
 	projectIds?: string[]
+	workspaceId?: string
 }
 
 /** Encapsulates audio recordings list API calls and DTO normalization */
@@ -68,6 +70,18 @@ export class AudioRecordingsService {
 	/** Deletes multiple audio projects in one batch request */
 	async batchDeleteProjects(projectIds: string[]): Promise<void> {
 		await SuperMagicApi.batchDeleteProjects({ project_ids: projectIds })
+	}
+
+	/** Moves audio projects in App-compatible chunks to avoid oversized batch requests */
+	async batchMoveProjects(projectIds: string[], targetWorkspaceId: string): Promise<void> {
+		for (let index = 0; index < projectIds.length; index += BATCH_MOVE_PROJECTS_LIMIT) {
+			const batch = projectIds.slice(index, index + BATCH_MOVE_PROJECTS_LIMIT)
+			if (batch.length === 0) continue
+			await SuperMagicApi.batchMoveProjects({
+				project_ids: batch,
+				target_workspace_id: targetWorkspaceId,
+			})
+		}
 	}
 
 	/** Reads App-compatible recording settings so H5 manual summary honors the recording setting page */

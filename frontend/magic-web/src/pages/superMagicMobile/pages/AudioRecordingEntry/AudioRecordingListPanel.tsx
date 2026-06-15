@@ -13,14 +13,16 @@ import {
 	isAudioProjectPreviewReady,
 	resolveRecordingDisplayName,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
+import { UNGROUPED_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
 import { useMobileAudioRecordingsList } from "./hooks/useMobileAudioRecordingsList"
 import { MobileRecordingCard } from "./components/MobileRecordingCard"
 import { MobileRecordingFab } from "./components/MobileRecordingFab"
 import { MobileRecordingFilterSheet } from "./components/MobileRecordingFilterSheet"
+import { MobileRecordingGroupSheet } from "./components/MobileRecordingGroupSheet"
 import { MobileRecordingImportSheet } from "./components/MobileRecordingImportSheet"
 import { MobileRecordingListToolbar } from "./components/MobileRecordingListToolbar"
+import { MobileRecordingMoveGroupSheet } from "./components/MobileRecordingMoveGroupSheet"
 import { MobileRecordingMoreSheet } from "./components/MobileRecordingMoreSheet"
-import { MobileRecordingSummarySheet } from "./components/MobileRecordingSummarySheet"
 
 /**
  * Mobile recordings list panel: toolbar, pull-to-refresh list, sheets, and FAB placeholder.
@@ -38,10 +40,20 @@ function AudioRecordingListPanel() {
 		filterState,
 		filterSheetOpen,
 		setFilterSheetOpen,
-		summarySheetOpen,
-		setSummarySheetOpen,
 		importSheetOpen,
 		setImportSheetOpen,
+		groupSheetOpen,
+		setGroupSheetOpen,
+		moveGroupSheetOpen,
+		setMoveGroupSheetOpen,
+		moveTarget,
+		groups,
+		totalGroupCount,
+		ungroupedCount,
+		currentGroupId,
+		currentGroupLabel,
+		currentGroupCount,
+		groupActionSubmitting,
 		activeFilterCount,
 		debouncedKeyword,
 		moreTarget,
@@ -53,6 +65,13 @@ function AudioRecordingListPanel() {
 		handleDismissSearch,
 		handleOpenMore,
 		handleCloseMore,
+		handleGroupChange,
+		handleCreateGroup,
+		handleRenameGroup,
+		handleDeleteGroup,
+		handleOpenMoveGroup,
+		handleMoveGroupChange,
+		refreshGroups,
 	} = useMobileAudioRecordingsList()
 
 	const showInitialSkeleton = store.showInitialSkeleton
@@ -76,19 +95,21 @@ function AudioRecordingListPanel() {
 
 	async function handleSummarize(item: AudioProjectListItem) {
 		const result = await store.submitSummary(item)
-		if (result.ok) return
+		if (result.ok) return true
 
 		if (result.reason === "missingParams") {
 			toast.error(t("audioRecordings:summary.missingParams"))
-			return
+			return false
 		}
 		if (result.reason === "missingModel") {
 			toast.error(t("audioRecordings:summary.missingModel"))
-			return
+			return false
 		}
 		if (result.reason === "api") {
 			toast.error(t("audioRecordings:summary.submitFailed"))
+			return false
 		}
+		return false
 	}
 
 	async function handleRename(projectId: string, name: string) {
@@ -105,10 +126,20 @@ function AudioRecordingListPanel() {
 		const success = await store.deleteProject(projectId)
 		if (success) {
 			toast.success(t("audioRecordings:actions.deleteSuccess"))
+			void refreshGroups()
 			return true
 		}
 		toast.error(t("audioRecordings:actions.deleteFailed"))
 		return false
+	}
+
+	async function handleMoveToGroup(groupId: string) {
+		const success = await handleMoveGroupChange(groupId)
+		if (success) {
+			toast.success(t("super:mobile.recordingEntry.groupSheet.moveSuccess"))
+			return
+		}
+		toast.error(t("super:mobile.recordingEntry.groupSheet.moveFailed"))
 	}
 
 	return (
@@ -117,8 +148,8 @@ function AudioRecordingListPanel() {
 			data-testid="mobile-audio-recording-list-panel"
 		>
 			<MobileRecordingListToolbar
-				listCount={store.list.length}
-				summaryFilter={store.summaryFilter}
+				groupLabel={currentGroupLabel}
+				groupCount={currentGroupCount}
 				activeFilterCount={activeFilterCount}
 				searchOpen={searchOpen}
 				searchKeyword={searchKeyword}
@@ -127,7 +158,7 @@ function AudioRecordingListPanel() {
 				onSearchCompositionEnd={() => setIsSearchComposing(false)}
 				onOpenSearch={handleOpenSearch}
 				onDismissSearch={handleDismissSearch}
-				onOpenSummarySheet={() => setSummarySheetOpen(true)}
+				onOpenGroupSheet={() => setGroupSheetOpen(true)}
 				onOpenFilterSheet={() => setFilterSheetOpen(true)}
 				onOpenImportSheet={() => setImportSheetOpen(true)}
 			/>
@@ -200,14 +231,23 @@ function AudioRecordingListPanel() {
 				open={filterSheetOpen}
 				onOpenChange={setFilterSheetOpen}
 				filter={filterState}
+				summaryFilter={store.summaryFilter}
 				onChange={handleFilterStateChange}
+				onSummaryFilterChange={handleSummaryFilterChange}
 			/>
 
-			<MobileRecordingSummarySheet
-				open={summarySheetOpen}
-				onOpenChange={setSummarySheetOpen}
-				summaryFilter={store.summaryFilter}
-				onChange={handleSummaryFilterChange}
+			<MobileRecordingGroupSheet
+				open={groupSheetOpen}
+				onOpenChange={setGroupSheetOpen}
+				groups={groups}
+				selectedGroupId={currentGroupId}
+				totalCount={totalGroupCount}
+				ungroupedCount={ungroupedCount}
+				onSelect={handleGroupChange}
+				onCreateGroup={handleCreateGroup}
+				onRenameGroup={handleRenameGroup}
+				onDeleteGroup={handleDeleteGroup}
+				isSubmitting={groupActionSubmitting}
 			/>
 
 			<MobileRecordingImportSheet open={importSheetOpen} onOpenChange={setImportSheetOpen} />
@@ -218,7 +258,19 @@ function AudioRecordingListPanel() {
 				onClose={handleCloseMore}
 				onRename={handleRename}
 				onDelete={handleDelete}
+				onSummarize={handleSummarize}
+				onMoveToGroup={handleOpenMoveGroup}
 				isSubmittingAction={moreTarget != null && store.isSubmittingAction(moreTarget.id)}
+				isSubmittingSummary={moreTarget != null && store.isSubmittingSummary(moreTarget.id)}
+			/>
+
+			<MobileRecordingMoveGroupSheet
+				open={moveGroupSheetOpen}
+				onOpenChange={setMoveGroupSheetOpen}
+				groups={groups}
+				selectedGroupId={moveTarget?.workspace_id ?? UNGROUPED_RECORDING_GROUP_ID}
+				ungroupedCount={ungroupedCount}
+				onSelect={(groupId) => void handleMoveToGroup(groupId)}
 			/>
 		</div>
 	)

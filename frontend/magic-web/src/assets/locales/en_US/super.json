@@ -2865,6 +2865,28 @@
 				"deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
 				"comingSoon": "Coming soon"
 			},
+			"groupSheet": {
+				"title": "Groups",
+				"createTitle": "New group",
+				"manageTitle": "Manage groups",
+				"renameTitle": "Rename group",
+				"closeAria": "Close groups",
+				"backAria": "Back",
+				"confirmAria": "Confirm",
+				"all": "All",
+				"ungrouped": "Ungrouped",
+				"newGroup": "New group",
+				"manageGroups": "Manage groups",
+				"groupNameLabel": "Group name",
+				"groupNamePlaceholder": "For example: customer interviews",
+				"deleteGroupAria": "Delete group",
+				"moveSuccess": "Moved successfully",
+				"moveFailed": "Failed to move. Please try again later."
+			},
+			"moveGroupSheet": {
+				"title": "Move to group",
+				"closeAria": "Close"
+			},
 			"summarySheet": {
 				"title": "Summary status",
 				"closeAria": "Close"

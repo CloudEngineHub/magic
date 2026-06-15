@@ -1,0 +1,416 @@
+import type { ReactNode } from "react"
+import { useMemo, useState } from "react"
+import { AlignLeft, Network } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
+import { cn } from "@/lib/utils"
+import MagicMarkmap from "@/components/base/MagicMarkmap"
+import type { RecordingDetailFileRef, RecordingTopicSection } from "../types"
+import { parseTopicsMarkdown } from "../utils/topics-parser"
+import { formatRecordingTime } from "../utils/time"
+import { MobileRecordingMarkdownContent } from "./MobileRecordingMarkdownContent"
+
+interface MobileRecordingSummaryPanelProps {
+	summaryFiles: RecordingDetailFileRef[]
+	summaryContent: Record<string, string | undefined>
+	scrollPaddingBottom: number
+	speakerNameMap: Record<string, string>
+	onOpenSpeakerSettings: () => void
+	onTimeClick: (seconds: number, end?: number) => void
+}
+
+/** Renders dynamic completed-summary tabs from the project file map. */
+export function MobileRecordingSummaryPanel({
+	summaryFiles,
+	summaryContent,
+	scrollPaddingBottom,
+	speakerNameMap,
+	onOpenSpeakerSettings,
+	onTimeClick,
+}: MobileRecordingSummaryPanelProps) {
+	const { t } = useTranslation("audioRecordings")
+	const [activeType, setActiveType] = useState<string>(summaryFiles[0]?.type ?? "")
+	const activeFile = summaryFiles.find((file) => file.type === activeType) ?? summaryFiles[0]
+	const content = activeFile ? summaryContent[activeFile.type] : undefined
+
+	if (summaryFiles.length === 0) {
+		return (
+			<div className="flex flex-1 items-center justify-center px-8 text-center text-sm text-muted-foreground">
+				{t("detail.emptySummary")}
+			</div>
+		)
+	}
+
+	return (
+		<div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-recording-summary-panel">
+			<div className="sticky top-0 z-10 overflow-x-auto bg-[#f7f7f8] px-4 py-3">
+				<div className="flex w-max">
+					{summaryFiles.map((file) => (
+						<SummaryTabButton
+							key={file.type}
+							active={file.type === activeFile?.type}
+							label={resolveSummaryTypeLabel(file.type, t)}
+							type={file.type}
+							onClick={() => setActiveType(file.type)}
+						/>
+					))}
+				</div>
+			</div>
+
+			<ScrollEdgeFadeContainer
+				fadeColor="mobile-background"
+				className="min-h-0 flex-1"
+				scrollClassName="px-4"
+				contentDeps={[activeType, summaryFiles.length, Boolean(content?.trim())]}
+			>
+				<div className="min-h-full" style={{ paddingBottom: scrollPaddingBottom }}>
+					{activeFile ? (
+						<SummaryContent
+							file={activeFile}
+							content={content}
+							emptyText={t("detail.emptySummaryFile")}
+							unsupportedText={t("detail.unsupportedSummaryFile")}
+							scrollPaddingBottom={scrollPaddingBottom}
+							speakerNameMap={speakerNameMap}
+							onOpenSpeakerSettings={onOpenSpeakerSettings}
+							onTimeClick={onTimeClick}
+						/>
+					) : null}
+				</div>
+			</ScrollEdgeFadeContainer>
+		</div>
+	)
+}
+
+/** Compact text-only tab button matching the prototype's second-level pill row. */
+function SummaryTabButton({
+	active,
+	label,
+	type,
+	onClick,
+}: {
+	active: boolean
+	label: string
+	type: string
+	onClick: () => void
+}) {
+	return (
+		<button
+			type="button"
+			className={cn(
+				"relative z-10 inline-flex h-8 shrink-0 items-center rounded-full px-5 text-[14px] font-medium leading-none transition-colors",
+				active
+					? "bg-foreground text-background shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+					: "text-muted-foreground",
+			)}
+			onClick={onClick}
+			data-testid={`mobile-recording-summary-tab-${type}`}
+		>
+			{label}
+		</button>
+	)
+}
+
+/** Selects the renderer for each supported completed-summary file type. */
+function SummaryContent({
+	file,
+	content,
+	emptyText,
+	unsupportedText,
+	scrollPaddingBottom,
+	speakerNameMap,
+	onOpenSpeakerSettings,
+	onTimeClick,
+}: {
+	file: RecordingDetailFileRef
+	content?: string
+	emptyText: string
+	unsupportedText: string
+	scrollPaddingBottom: number
+	speakerNameMap: Record<string, string>
+	onOpenSpeakerSettings: () => void
+	onTimeClick: (seconds: number, end?: number) => void
+}) {
+	if (file.type === "unsupported") {
+		return <PanelMessage>{unsupportedText}</PanelMessage>
+	}
+
+	if (!content?.trim()) {
+		return <PanelMessage>{emptyText}</PanelMessage>
+	}
+
+	if (file.type === "topics") {
+		return (
+			<TopicsContent
+				topics={parseTopicsMarkdown(content)}
+				speakerNameMap={speakerNameMap}
+				onOpenSpeakerSettings={onOpenSpeakerSettings}
+				onTimeClick={onTimeClick}
+			/>
+		)
+	}
+
+	if (file.type === "mindmap") {
+		return (
+			<MindmapContent
+				content={content}
+				scrollPaddingBottom={scrollPaddingBottom}
+				speakerNameMap={speakerNameMap}
+				onOpenSpeakerSettings={onOpenSpeakerSettings}
+				onTimeClick={onTimeClick}
+			/>
+		)
+	}
+
+	return (
+		<div className="pb-8">
+			<MobileRecordingMarkdownContent
+				content={content}
+				speakerNameMap={speakerNameMap}
+				onSpeakerClick={onOpenSpeakerSettings}
+				onTimeClick={(time) => onTimeClick(time)}
+			/>
+		</div>
+	)
+}
+
+/** Mobile mind map view with draggable map mode and markdown fallback mode. */
+function MindmapContent({
+	content,
+	scrollPaddingBottom,
+	speakerNameMap,
+	onOpenSpeakerSettings,
+	onTimeClick,
+}: {
+	content: string
+	scrollPaddingBottom: number
+	speakerNameMap: Record<string, string>
+	onOpenSpeakerSettings: () => void
+	onTimeClick: (seconds: number, end?: number) => void
+}) {
+	const [viewMode, setViewMode] = useState<"map" | "markdown">("map")
+	// Keep the mobile recording detail mindmap background aligned with the prototype:
+	// this page needs a clean solid canvas, while other markmap scenes can keep their dotted default.
+	const mobileMindmapCanvasClassName =
+		"h-full min-h-[520px] bg-[#f7f7f8] [&_svg]:bg-[#f7f7f8] [&_svg]:[background-image:none]"
+
+	return (
+		<div
+			className="-mx-4 -mt-3 min-h-[calc(100dvh-300px)] bg-[#f7f7f8]"
+			data-testid="mobile-recording-mindmap"
+		>
+			{viewMode === "map" ? (
+				<div className="relative h-[calc(100dvh-300px)] min-h-[520px] overflow-hidden bg-[#f7f7f8]">
+					<MagicMarkmap
+						data={content}
+						fullScreen
+						showTitle={false}
+						showToolBar={false}
+						className={mobileMindmapCanvasClassName}
+					/>
+					<MindmapViewSwitch
+						value={viewMode}
+						bottom={scrollPaddingBottom}
+						onChange={setViewMode}
+					/>
+				</div>
+			) : (
+				<div className="relative px-4 pb-8 pt-3">
+					<MobileRecordingMarkdownContent
+						content={content}
+						speakerNameMap={speakerNameMap}
+						onSpeakerClick={onOpenSpeakerSettings}
+						onTimeClick={(time) => onTimeClick(time)}
+					/>
+					<MindmapViewSwitch
+						value={viewMode}
+						bottom={scrollPaddingBottom}
+						onChange={setViewMode}
+					/>
+				</div>
+			)}
+		</div>
+	)
+}
+
+/** Floating switch used by the mindmap tab to toggle between map and markdown text. */
+function MindmapViewSwitch({
+	value,
+	bottom,
+	onChange,
+}: {
+	value: "map" | "markdown"
+	bottom: number
+	onChange: (value: "map" | "markdown") => void
+}) {
+	const { t } = useTranslation("audioRecordings")
+
+	return (
+		<div
+			className="fixed right-4 z-20 inline-flex rounded-2xl bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,0.14)]"
+			style={{ bottom }}
+		>
+			<button
+				type="button"
+				className={cn(
+					"flex size-9 items-center justify-center rounded-xl",
+					value === "map" ? "bg-foreground text-background" : "text-foreground",
+				)}
+				aria-label={t("detail.showMindmap")}
+				onClick={() => onChange("map")}
+			>
+				<Network className="size-4" />
+			</button>
+			<button
+				type="button"
+				className={cn(
+					"flex size-9 items-center justify-center rounded-xl",
+					value === "markdown" ? "bg-foreground text-background" : "text-foreground",
+				)}
+				aria-label={t("detail.showMarkdown")}
+				onClick={() => onChange("markdown")}
+			>
+				<AlignLeft className="size-4" />
+			</button>
+		</div>
+	)
+}
+
+/** Renders the structured chapter-topic summary cards from topics markdown. */
+function TopicsContent({
+	topics,
+	speakerNameMap,
+	onOpenSpeakerSettings,
+	onTimeClick,
+}: {
+	topics: RecordingTopicSection[]
+	speakerNameMap: Record<string, string>
+	onOpenSpeakerSettings: () => void
+	onTimeClick: (seconds: number, end?: number) => void
+}) {
+	const { t } = useTranslation("audioRecordings")
+	const [activeTopicId, setActiveTopicId] = useState(topics[0]?.id ?? "")
+	const activeTopic = useMemo(
+		() => topics.find((topic) => topic.id === activeTopicId) ?? topics[0],
+		[activeTopicId, topics],
+	)
+
+	if (topics.length === 0 || !activeTopic) {
+		return <PanelMessage>{t("detail.emptySummaryFile")}</PanelMessage>
+	}
+
+	return (
+		<div className="flex flex-col gap-4" data-testid="mobile-recording-topics-content">
+			<div className="-mx-4 overflow-x-auto px-4">
+				<div className="flex w-max gap-2">
+					{topics.map((topic) => (
+						<button
+							key={topic.id}
+							type="button"
+							className={cn(
+								"h-8 rounded-full border px-4 text-[14px] font-medium leading-none transition-colors",
+								topic.id === activeTopic.id
+									? "border-foreground bg-foreground text-background"
+									: "border-border bg-card/70 text-muted-foreground",
+							)}
+							onClick={() => setActiveTopicId(topic.id)}
+						>
+							{topic.name}
+						</button>
+					))}
+				</div>
+			</div>
+
+			<div>
+				{activeTopic.summaryText ? (
+					<section>
+						<h3 className="mb-3 text-[16px] font-semibold leading-6 text-foreground">
+							{activeTopic.summaryTitle || t("detail.topicSummary")}
+						</h3>
+						{activeTopic.summarySpeakers.length > 0 ? (
+							<div className="mb-3 flex flex-wrap gap-1.5">
+								{activeTopic.summarySpeakers.map((speaker) => (
+									<button
+										type="button"
+										key={speaker}
+										className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground active:opacity-70"
+										onClick={onOpenSpeakerSettings}
+									>
+										{speakerNameMap[speaker] ?? speaker}
+									</button>
+								))}
+							</div>
+						) : null}
+						<MobileRecordingMarkdownContent
+							content={activeTopic.summaryText}
+							speakerNameMap={speakerNameMap}
+							onSpeakerClick={onOpenSpeakerSettings}
+							onTimeClick={(time) => onTimeClick(time)}
+						/>
+					</section>
+				) : null}
+
+				{activeTopic.items.length > 0 ? (
+					<section className="mt-6">
+						<h3 className="mb-3 text-[16px] font-semibold leading-6 text-foreground">
+							{activeTopic.itemsTitle || t("detail.relatedDialogue")}
+						</h3>
+						<div className="flex flex-col gap-2">
+							{activeTopic.items.map((item) => (
+								<button
+									key={`${item.time}-${item.text}`}
+									type="button"
+									className="rounded-xl bg-card/80 px-3 py-2.5 text-left shadow-[0_4px_16px_rgba(0,0,0,0.03)] active:bg-muted"
+									onClick={() => onTimeClick(item.time, item.timeEnd)}
+									data-testid="mobile-recording-topic-time-card"
+								>
+									<div className="mb-1 flex flex-wrap items-center gap-1.5">
+										<span className="rounded-full bg-foreground px-2 py-0.5 text-[11px] font-medium text-background">
+											{formatRecordingTime(item.time)}
+											{item.timeEnd
+												? `-${formatRecordingTime(item.timeEnd)}`
+												: ""}
+										</span>
+										{item.speakers.map((speaker) => (
+											<span
+												key={speaker}
+												className="rounded-full px-2 py-0.5 text-[11px] text-muted-foreground"
+											>
+												{speakerNameMap[speaker] ?? speaker}
+											</span>
+										))}
+									</div>
+									<p className="text-[13px] leading-5 text-foreground">
+										{item.text}
+									</p>
+								</button>
+							))}
+						</div>
+					</section>
+				) : null}
+			</div>
+		</div>
+	)
+}
+
+/** Lightweight empty/error message panel for individual summary tabs. */
+function PanelMessage({ children }: { children: ReactNode }) {
+	return (
+		<div className="rounded-2xl bg-card px-6 py-16 text-center text-sm text-muted-foreground">
+			{children}
+		</div>
+	)
+}
+
+/** Resolves summary tab labels with literal i18n keys so locale tooling can statically discover every entry. */
+function resolveSummaryTypeLabel(type: string, t: ReturnType<typeof useTranslation>["t"]) {
+	if (type === "summary") return t("detail.tabs.summary")
+	if (type === "topics") return t("detail.tabs.topics")
+	if (type === "highlights") return t("detail.tabs.highlights")
+	if (type === "insights") return t("detail.tabs.insights")
+	if (type === "mindmap") return t("detail.tabs.mindmap")
+	if (type === "followup") return t("detail.tabs.followup")
+	if (type === "power_dynamics") return t("detail.tabs.powerDynamics")
+	if (type === "intent") return t("detail.tabs.intent")
+	return t("detail.tabs.unsupported")
+}

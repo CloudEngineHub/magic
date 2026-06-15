@@ -1074,9 +1074,23 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param page
 	 * @param page_size
 	 */
-	getWorkspaces({ page, page_size }: { page: number; page_size: number }) {
+	getWorkspaces({
+		page,
+		page_size,
+		workspace_type,
+		auto_create,
+	}: {
+		page: number
+		page_size: number
+		workspace_type?: string
+		auto_create?: boolean
+	}) {
 		return fetch.get(
-			`/api/v1/super-agent/workspaces/queries?page=${page}&page_size=${page_size}`,
+			genRequestUrl(
+				"/api/v1/super-agent/workspaces/queries",
+				{},
+				{ page, page_size, workspace_type, auto_create },
+			),
 			{
 				enableRequestUnion: true,
 			},
@@ -1101,10 +1115,16 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @description 新增工作区
 	 * @param workspace_name
 	 */
-	createWorkspace({ workspace_name }: { workspace_name: string }) {
+	createWorkspace({
+		workspace_name,
+		workspace_type,
+	}: {
+		workspace_name: string
+		workspace_type?: string
+	}) {
 		return fetch.post<Workspace>(
 			`/api/v1/super-agent/workspaces`,
-			{ workspace_name },
+			{ workspace_name, workspace_type },
 			{
 				enableRequestUnion: true,
 			},

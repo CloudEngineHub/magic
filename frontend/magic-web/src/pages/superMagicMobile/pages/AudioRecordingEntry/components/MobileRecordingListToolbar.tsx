@@ -2,11 +2,10 @@ import { ChevronDown, ListFilter, Search, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import { cn } from "@/lib/utils"
-import type { AudioRecordingSummaryFilter } from "@/types/audioProject"
 
 interface MobileRecordingListToolbarProps {
-	listCount: number
-	summaryFilter: AudioRecordingSummaryFilter
+	groupLabel: string
+	groupCount: number
 	activeFilterCount: number
 	searchOpen: boolean
 	searchKeyword: string
@@ -15,28 +14,18 @@ interface MobileRecordingListToolbarProps {
 	onSearchCompositionEnd?: () => void
 	onOpenSearch: () => void
 	onDismissSearch: () => void
-	onOpenSummarySheet: () => void
+	onOpenGroupSheet: () => void
 	onOpenFilterSheet: () => void
 	onOpenImportSheet: () => void
 }
 
-/** Resolves the toolbar primary row label from the current summary filter */
-function resolveSummaryFilterLabel(
-	filter: AudioRecordingSummaryFilter,
-	t: (key: string) => string,
-) {
-	if (filter === "not_summarized") return t("audioRecordings:filters.summaryNotDone")
-	if (filter === "summarized") return t("audioRecordings:filters.summaryDone")
-	return t("audioRecordings:filters.summaryAll")
-}
-
 /**
- * Fixed h-11 toolbar row: summary status picker, upload/filter/search actions,
+ * Fixed h-11 toolbar row: recording group picker, upload/filter/search actions,
  * or inline search bar when search mode is active.
  */
 export function MobileRecordingListToolbar({
-	listCount,
-	summaryFilter,
+	groupLabel,
+	groupCount,
 	activeFilterCount,
 	searchOpen,
 	searchKeyword,
@@ -45,12 +34,17 @@ export function MobileRecordingListToolbar({
 	onSearchCompositionEnd,
 	onOpenSearch,
 	onDismissSearch,
-	onOpenSummarySheet,
+	onOpenGroupSheet,
 	onOpenFilterSheet,
 	onOpenImportSheet,
 }: MobileRecordingListToolbarProps) {
 	const { t } = useTranslation(["super", "audioRecordings"])
-	const summaryLabel = resolveSummaryFilterLabel(summaryFilter, t)
+	const displayGroupLabel =
+		groupLabel === "all"
+			? t("super:mobile.recordingEntry.groupSheet.all")
+			: groupLabel === "ungrouped"
+				? t("super:mobile.recordingEntry.groupSheet.ungrouped")
+				: groupLabel
 
 	// !stroke-2 beats unlayered .lucide { stroke-width: 1.5px } from lucide.css
 	const lucideStrokeClass = "[&_.lucide]:!stroke-2"
@@ -88,16 +82,16 @@ export function MobileRecordingListToolbar({
 		>
 			<button
 				type="button"
-				onClick={onOpenSummarySheet}
+				onClick={onOpenGroupSheet}
 				className="-ml-2 inline-flex h-full items-center gap-1.5 px-5 active:opacity-70"
-				data-testid="mobile-recording-summary-trigger"
+				data-testid="mobile-recording-group-trigger"
 			>
 				<span className="font-poppins text-[18px] font-medium leading-7 text-foreground">
-					{summaryLabel}
+					{displayGroupLabel}
 				</span>
 				<ChevronDown className="size-5 text-foreground" />
 				<span className="ml-1 text-[13px] tabular-nums leading-5 text-muted-foreground">
-					{listCount}
+					{groupCount}
 				</span>
 			</button>
 

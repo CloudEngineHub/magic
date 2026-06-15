@@ -2865,6 +2865,28 @@
 				"deleteConfirm": "确定删除「{{name}}」？此操作不可撤销。",
 				"comingSoon": "功能即将上线"
 			},
+			"groupSheet": {
+				"title": "分组",
+				"createTitle": "新建分组",
+				"manageTitle": "管理分组",
+				"renameTitle": "重命名分组",
+				"closeAria": "关闭分组",
+				"backAria": "返回",
+				"confirmAria": "确认",
+				"all": "全部",
+				"ungrouped": "未分组",
+				"newGroup": "新建分组",
+				"manageGroups": "管理分组",
+				"groupNameLabel": "分组名称",
+				"groupNamePlaceholder": "例如：客户访谈",
+				"deleteGroupAria": "删除分组",
+				"moveSuccess": "移动成功",
+				"moveFailed": "移动失败，请稍后重试"
+			},
+			"moveGroupSheet": {
+				"title": "移动到分组",
+				"closeAria": "关闭"
+			},
 			"summarySheet": {
 				"title": "总结状态",
 				"closeAria": "关闭"

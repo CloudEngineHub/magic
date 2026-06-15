@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ModelStatusEnum } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 
@@ -132,6 +133,7 @@ vi.mock("../../hooks/useMobileRecordingSettings", () => ({
 			model_status: ModelStatusEnum.Normal,
 		},
 		isLoading: false,
+		isRefreshing: false,
 		isSaving: false,
 		updateSetting: mockUpdateSetting,
 	})),
@@ -152,6 +154,7 @@ describe("MobileRecordingSettingsSheet", () => {
 			summaryModelGroups: [],
 			selectedModel: null,
 			isLoading: true,
+			isRefreshing: false,
 			isSaving: false,
 			updateSetting: mockUpdateSetting,
 		})
@@ -164,6 +167,41 @@ describe("MobileRecordingSettingsSheet", () => {
 		expect(loadingContainer.querySelector('[role="status"]')).toBeInTheDocument()
 		expect(screen.queryByText("loading")).toBeNull()
 		expect(screen.queryByTestId("recording-setting-transcription-enabled")).toBeNull()
+	})
+
+	it("keeps cached settings visible during silent refresh", () => {
+		vi.mocked(useMobileRecordingSettings).mockReturnValueOnce({
+			settings: mockSettings,
+			summaryModels: mockSummaryModels,
+			summaryModelGroups: [
+				{
+					group: {
+						id: "mock-provider-group",
+						mode_id: "mock-mode-1",
+						icon: "",
+						color: "",
+						name: "Mock Provider",
+						description: "",
+						sort: 1,
+						status: true,
+						created_at: "",
+					},
+					models: mockSummaryModels,
+					model_ids: ["mock-model-alpha", "mock-model-beta"],
+					image_model_ids: [],
+				},
+			],
+			selectedModel: mockSummaryModels[0],
+			isLoading: true,
+			isRefreshing: true,
+			isSaving: false,
+			updateSetting: mockUpdateSetting,
+		})
+
+		render(<MobileRecordingSettingsSheet open onOpenChange={vi.fn()} />)
+
+		expect(screen.queryByTestId("mobile-recording-settings-loading")).toBeNull()
+		expect(screen.getByTestId("recording-setting-transcription-enabled")).toBeInTheDocument()
 	})
 
 	it("renders three settings rows without language options", () => {
@@ -191,12 +229,44 @@ describe("MobileRecordingSettingsSheet", () => {
 		const betaModelItem = screen
 			.getAllByTestId("model-switch-item")
 			.find((item) => item.getAttribute("data-model-id") === "mock-model-beta")
-		expect(betaModelItem).toBeTruthy()
+		if (!betaModelItem) {
+			throw new Error("Expected mock-model-beta to be rendered")
+		}
 
-		fireEvent.click(betaModelItem!)
+		fireEvent.click(betaModelItem)
 
 		await waitFor(() => {
 			expect(mockUpdateSetting).toHaveBeenCalledWith("model_id", "mock-model-beta")
 		})
+	})
+
+	it("returns to settings menu when closing the model subview", () => {
+		/** Mirrors the parent-controlled open state so the close action can fully dismiss the sheet. */
+		function TestHost() {
+			const [open, setOpen] = useState(true)
+			return <MobileRecordingSettingsSheet open={open} onOpenChange={setOpen} />
+		}
+
+		render(<TestHost />)
+
+		fireEvent.click(screen.getByTestId("recording-setting-model-picker"))
+		fireEvent.click(screen.getByTestId("mobile-recording-settings-sheet-close"))
+
+		expect(screen.getByTestId("mock-magic-popup")).toBeInTheDocument()
+		expect(screen.getByTestId("recording-setting-model-picker")).toBeInTheDocument()
+	})
+
+	it("closes the whole sheet from the settings menu", () => {
+		/** Mirrors parent-controlled open state so the menu close action dismisses the sheet. */
+		function TestHost() {
+			const [open, setOpen] = useState(true)
+			return <MobileRecordingSettingsSheet open={open} onOpenChange={setOpen} />
+		}
+
+		render(<TestHost />)
+
+		fireEvent.click(screen.getByTestId("mobile-recording-settings-sheet-close"))
+
+		expect(screen.queryByTestId("mock-magic-popup")).toBeNull()
 	})
 })

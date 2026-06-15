@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, Loader2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -12,6 +12,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import SuperMagicService from "@/pages/superMagic/services"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import type { AudioRecordingCardStatus } from "@/types/audioProject"
 import {
 	resolveAudioPreviewTarget,
@@ -21,14 +22,18 @@ import {
 } from "./utils/resolve-audio-preview-target"
 import { AudioRecordingsStore } from "./stores/audio-recordings-store"
 
+const MobileAudioRecordingDetailPage = lazy(
+	() => import("@/pages/superMagicMobile/pages/AudioRecordingDetail"),
+)
+
 interface AudioRecordingDetailLocationState {
 	projectName?: string
 	cardStatus?: AudioRecordingCardStatus
 	audioFileId?: string
 }
 
-/** Full-width audio HTML detail page without project file tree sidebar */
-function AudioRecordingDetailPage() {
+/** Full-width desktop audio HTML detail page without project file tree sidebar */
+function AudioRecordingDetailPageDesktop() {
 	const { t } = useTranslation("audioRecordings")
 	const navigate = useNavigate()
 	const location = useLocation()
@@ -257,4 +262,21 @@ function AudioRecordingDetailPage() {
 	)
 }
 
-export default observer(AudioRecordingDetailPage)
+const ObservedAudioRecordingDetailPageDesktop = observer(AudioRecordingDetailPageDesktop)
+
+/** Shared recording detail route: mobile renders component preview, desktop keeps HTML preview. */
+function AudioRecordingDetailPage() {
+	const isMobile = useIsMobile()
+
+	if (isMobile) {
+		return (
+			<Suspense fallback={null}>
+				<MobileAudioRecordingDetailPage />
+			</Suspense>
+		)
+	}
+
+	return <ObservedAudioRecordingDetailPageDesktop />
+}
+
+export default AudioRecordingDetailPage

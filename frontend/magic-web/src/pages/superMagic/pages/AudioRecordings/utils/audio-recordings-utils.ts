@@ -42,6 +42,7 @@ export function buildAudioProjectsQueryParams(options: {
 	sortBy: AudioProjectSortBy
 	sortOrder: AudioProjectSortOrder
 	projectIds?: string[]
+	workspaceId?: string
 }): QueryAudioProjectsParams {
 	const params: QueryAudioProjectsParams = {
 		page: options.page,
@@ -60,6 +61,7 @@ export function buildAudioProjectsQueryParams(options: {
 	if (options.createdAtStart != null) params.created_at_start = options.createdAtStart
 	if (options.createdAtEnd != null) params.created_at_end = options.createdAtEnd
 	if (options.projectIds?.length) params.project_ids = options.projectIds
+	if (options.workspaceId != null) params.workspace_id = options.workspaceId
 
 	return params
 }

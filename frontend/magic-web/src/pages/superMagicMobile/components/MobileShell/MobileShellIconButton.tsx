@@ -1,7 +1,8 @@
+import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 interface MobileShellIconButtonProps {
-	children: React.ReactNode
+	children: ReactNode
 	label: string
 	onClick: () => void
 	testId: string

@@ -1,0 +1,109 @@
+import { Check, X } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import MagicPopup from "@/components/base-mobile/MagicPopup"
+import { UNGROUPED_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
+import type { MobileRecordingGroup } from "./MobileRecordingGroupSheet"
+
+interface MobileRecordingMoveGroupSheetProps {
+	open: boolean
+	onOpenChange: (open: boolean) => void
+	groups: MobileRecordingGroup[]
+	selectedGroupId?: string | null
+	ungroupedCount: number
+	onSelect: (groupId: string) => void
+}
+
+/** Move-target row that only represents a valid destination workspace */
+function MoveGroupRow({
+	label,
+	count,
+	selected,
+	dataTestId,
+	onClick,
+}: {
+	label: string
+	count: number
+	selected: boolean
+	dataTestId: string
+	onClick: () => void
+}) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			data-testid={dataTestId}
+			className="flex h-12 w-full items-center gap-2 bg-transparent px-[14px] transition-opacity active:opacity-60"
+		>
+			<span className="flex-1 truncate text-left text-[16px] leading-5 text-foreground">
+				{label}
+			</span>
+			<span className="text-[13px] tabular-nums text-muted-foreground">{count}</span>
+			{selected ? <Check className="size-4 shrink-0 text-primary" strokeWidth={2.5} /> : null}
+		</button>
+	)
+}
+
+/** Selects a legal destination for moving a recording; aggregate "all" is intentionally hidden */
+export function MobileRecordingMoveGroupSheet({
+	open,
+	onOpenChange,
+	groups = [],
+	selectedGroupId,
+	ungroupedCount,
+	onSelect,
+}: MobileRecordingMoveGroupSheetProps) {
+	const { t } = useTranslation("super")
+
+	function handleClose() {
+		onOpenChange(false)
+	}
+
+	function handleSelect(groupId: string) {
+		onSelect(groupId)
+		onOpenChange(false)
+	}
+
+	return (
+		<MagicPopup
+			visible={open}
+			onOpenChange={onOpenChange}
+			onClose={handleClose}
+			position="bottom"
+			title={t("mobile.recordingEntry.moveGroupSheet.title")}
+			headerVariant="actionHeader"
+			headerTitle={t("mobile.recordingEntry.moveGroupSheet.title")}
+			headerLeadingAction={{
+				icon: <X />,
+				ariaLabel: t("mobile.recordingEntry.moveGroupSheet.closeAria"),
+				onClick: handleClose,
+				testId: "mobile-recording-move-group-close",
+			}}
+			className="max-h-[78vh] gap-0 rounded-t-[14px] border-0 bg-muted p-0"
+			bodyClassName="no-scrollbar flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-[14px] py-[10px]"
+			style={{ boxShadow: "0 -4px 24px rgba(0,0,0,0.08)" }}
+			data-testid="mobile-recording-move-group-sheet"
+		>
+			<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
+				{groups.map((group) => (
+					<div key={group.id}>
+						<MoveGroupRow
+							label={group.name}
+							count={group.projectCount}
+							selected={selectedGroupId === group.id}
+							dataTestId="mobile-recording-move-group-option"
+							onClick={() => handleSelect(group.id)}
+						/>
+						<div className="h-px w-full bg-border" />
+					</div>
+				))}
+				<MoveGroupRow
+					label={t("mobile.recordingEntry.groupSheet.ungrouped")}
+					count={ungroupedCount}
+					selected={selectedGroupId === UNGROUPED_RECORDING_GROUP_ID}
+					dataTestId="mobile-recording-move-group-option-ungrouped"
+					onClick={() => handleSelect(UNGROUPED_RECORDING_GROUP_ID)}
+				/>
+			</div>
+		</MagicPopup>
+	)
+}
