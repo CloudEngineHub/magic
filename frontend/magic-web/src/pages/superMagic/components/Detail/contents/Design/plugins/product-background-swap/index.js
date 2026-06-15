@@ -531,6 +531,21 @@ registerMagicCanvasPlugin({
 			generate: {
 				buttonLabel: `✨ ${t("button.generate", "商品换背景")}`,
 				loadingLabel: t("button.generating", "生成中…"),
+				getIdleHint: ({ state }) => {
+					if (!state.productImages.length) {
+						return t("empty.productImages", "请先上传至少 1 张商品图")
+					}
+					if (state.backgroundMode === BACKGROUND_MODE.IMAGE && !state.backgroundImage) {
+						return t("empty.backgroundImage", "请先上传背景参考图")
+					}
+					if (
+						state.backgroundMode === BACKGROUND_MODE.PROMPT &&
+						!state.backgroundPrompt.trim()
+					) {
+						return t("empty.backgroundPrompt", "请先输入背景描述")
+					}
+					return ""
+				},
 				isDisabled: ({ state }) =>
 					!state.productImages.length ||
 					(state.backgroundMode === BACKGROUND_MODE.IMAGE && !state.backgroundImage) ||

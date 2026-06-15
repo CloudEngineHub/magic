@@ -1,6 +1,17 @@
 /* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
 const MAX_STYLE_IMAGES = 8
+const GENDER = {
+	WOMENS: "womens",
+	MENS: "mens",
+	GENDER_NEUTRAL: "genderNeutral",
+}
+const SEASON = {
+	AUTUMN_WINTER: "autumnWinter",
+	SPRING_SUMMER: "springSummer",
+	RESORT: "resort",
+	EARLY_AUTUMN: "earlyAutumn",
+}
 const MODEL_COUNT_OPTIONS = [1, 2, 3].map((count) => ({
 	value: count,
 	label: String(count),
@@ -8,7 +19,7 @@ const MODEL_COUNT_OPTIONS = [1, 2, 3].map((count) => ({
 
 const GENDER_DEFINITIONS = [
 	{
-		value: "womens",
+		value: GENDER.WOMENS,
 		labelKey: "gender.womens",
 		labelFallback: "女装",
 		promptText: {
@@ -17,7 +28,7 @@ const GENDER_DEFINITIONS = [
 		},
 	},
 	{
-		value: "mens",
+		value: GENDER.MENS,
 		labelKey: "gender.mens",
 		labelFallback: "男装",
 		promptText: {
@@ -26,7 +37,7 @@ const GENDER_DEFINITIONS = [
 		},
 	},
 	{
-		value: "genderNeutral",
+		value: GENDER.GENDER_NEUTRAL,
 		labelKey: "gender.genderNeutral",
 		labelFallback: "无性别",
 		promptText: {
@@ -38,7 +49,7 @@ const GENDER_DEFINITIONS = [
 
 const SEASON_DEFINITIONS = [
 	{
-		value: "autumnWinter",
+		value: SEASON.AUTUMN_WINTER,
 		labelKey: "season.autumnWinter",
 		labelFallback: "秋冬",
 		promptText: {
@@ -47,7 +58,7 @@ const SEASON_DEFINITIONS = [
 		},
 	},
 	{
-		value: "springSummer",
+		value: SEASON.SPRING_SUMMER,
 		labelKey: "season.springSummer",
 		labelFallback: "春夏",
 		promptText: {
@@ -56,7 +67,7 @@ const SEASON_DEFINITIONS = [
 		},
 	},
 	{
-		value: "resort",
+		value: SEASON.RESORT,
 		labelKey: "season.resort",
 		labelFallback: "度假",
 		promptText: {
@@ -65,7 +76,7 @@ const SEASON_DEFINITIONS = [
 		},
 	},
 	{
-		value: "earlyAutumn",
+		value: SEASON.EARLY_AUTUMN,
 		labelKey: "season.earlyAutumn",
 		labelFallback: "早秋",
 		promptText: {
@@ -90,14 +101,13 @@ function createInitialState() {
 		styleImages: [],
 		brandName: "",
 		garmentCategory: "",
-		gender: "womens",
+		gender: GENDER.WOMENS,
 		season: "",
 		styleKeywords: "",
 		designDescription: "",
 		displayScene: "",
 		modelTryon: true,
 		modelCount: 2,
-		genCount: 1,
 	}
 }
 
@@ -143,6 +153,55 @@ function getEffectiveStyleKeywords(styleKeywords, locale) {
 
 function getEffectiveModelCount(modelCount) {
 	return MODEL_COUNT_OPTIONS.some((item) => item.value === modelCount) ? modelCount : 2
+}
+
+function buildCurrentTextBlock(currentText) {
+	const normalizedCurrentText = String(currentText ?? "").trim()
+	if (!normalizedCurrentText) return "用户当前未填写。"
+	return normalizedCurrentText
+}
+
+function buildReferenceContextBlock(state) {
+	return [
+		`品牌名称：${state.brandName.trim() || "未填写"}`,
+		`服装品类：${state.garmentCategory.trim() || "未填写"}`,
+		`性别：${getGenderDefinition(state.gender).labelFallback}`,
+		`季节：${getSeasonDefinition(state.season)?.labelFallback ?? "未选择"}`,
+	].join("\n")
+}
+
+function buildStyleKeywordsCompletionUserPrompt({ state, currentText }) {
+	return [
+		"任务目标：为大牌设计插件的“风格关键词”输入框生成或补全一段提示词。",
+		`当前输入：${buildCurrentTextBlock(currentText)}`,
+		buildReferenceContextBlock(state),
+		"参考图角色：款式图、面料图或局部细节图用于理解品牌调性、廓形、面料质感、工艺语言和装饰细节。",
+		"补全方向：可补充风格流派、品牌气质、色彩氛围、面料语言、剪裁感和视觉关键词。",
+		"业务限制：关键词要简短、明确、适合服装设计方向；不要输出完整生成任务说明，只输出适合填入“风格关键词”的短提示词。",
+	].join("\n")
+}
+
+function buildDesignDescriptionCompletionUserPrompt({ state, currentText }) {
+	return [
+		"任务目标：为大牌设计插件的“设计描述”输入框生成或补全一段提示词。",
+		`当前输入：${buildCurrentTextBlock(currentText)}`,
+		buildReferenceContextBlock(state),
+		"参考图角色：款式图、面料图或局部细节图用于理解廓形、结构、面料、工艺、辅料和局部设计语言。",
+		"补全方向：可补充廓形结构、拼接方式、领口袖口、口袋、门襟、面料组合、工艺细节、装饰元素和成衣落地感。",
+		"业务限制：描述要服务于可落地的大牌款式方案，避免泛化、廉价、偏离品类；只输出适合填入“设计描述”的短提示词。",
+	].join("\n")
+}
+
+function buildDisplaySceneCompletionUserPrompt({ state, currentText }) {
+	return [
+		"任务目标：为大牌设计插件的“陈列场景”输入框生成或补全一段提示词。",
+		`当前输入：${buildCurrentTextBlock(currentText)}`,
+		buildReferenceContextBlock(state),
+		`模特试穿：${state.modelTryon ? "开启" : "关闭"}。`,
+		"参考图角色：款式参考用于理解服装调性，陈列场景需要承托品牌感和成片质感。",
+		"补全方向：可补充摄影棚、秀场、城市街景、荒漠、画廊、极简空间、光线、镜头氛围和高级陈列方式。",
+		"业务限制：场景要突出服装款式方案，不要喧宾夺主；只输出适合填入“陈列场景”的短提示词。",
+	].join("\n")
 }
 
 function buildLuxuryBrandDesignPrompt({ state, locale }) {
@@ -245,7 +304,6 @@ registerMagicCanvasPlugin({
 							1,
 							Math.min(MAX_STYLE_IMAGES, getMaxReferenceImages(state, helpers)),
 						),
-					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "brandName",
@@ -275,7 +333,6 @@ registerMagicCanvasPlugin({
 					kind: "option-group",
 					stateKey: "gender",
 					title: t("section.gender", "性别"),
-					required: true,
 					options: buildGenderOptions(t),
 				},
 				{
@@ -294,8 +351,21 @@ registerMagicCanvasPlugin({
 						"placeholder.styleKeywords",
 						"请输入，例如：极简风、学院风、淑女风",
 					),
-					rows: 2,
-					maxLength: 200,
+					deps: ["styleImages"],
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) => !state.styleImages?.length,
+						completeImagePrompt: {
+							referenceImages: ({ state }) => state.styleImages,
+							referencesMessage: t("error.extraReferences", "请先上传款式图"),
+							userPrompt: ({ state }) =>
+								buildStyleKeywordsCompletionUserPrompt({
+									state,
+									currentText: state.styleKeywords,
+								}),
+						},
+					},
 				},
 				{
 					id: "designDescription",
@@ -306,8 +376,21 @@ registerMagicCanvasPlugin({
 						"placeholder.designDescription",
 						"请输入，例如：同色异质拼接设计、有创意的细节和工艺设计",
 					),
-					rows: 3,
-					maxLength: 1000,
+					deps: ["styleImages"],
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) => !state.styleImages?.length,
+						completeImagePrompt: {
+							referenceImages: ({ state }) => state.styleImages,
+							referencesMessage: t("error.extraReferences", "请先上传款式图"),
+							userPrompt: ({ state }) =>
+								buildDesignDescriptionCompletionUserPrompt({
+									state,
+									currentText: state.designDescription,
+								}),
+						},
+					},
 				},
 				{
 					id: "displayScene",
@@ -315,8 +398,21 @@ registerMagicCanvasPlugin({
 					stateKey: "displayScene",
 					title: t("section.displayScene", "陈列场景"),
 					placeholder: t("placeholder.displayScene", "请输入，例如：摄影棚、极简、荒漠"),
-					rows: 2,
-					maxLength: 200,
+					deps: ["styleImages"],
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) => !state.styleImages?.length,
+						completeImagePrompt: {
+							referenceImages: ({ state }) => state.styleImages,
+							referencesMessage: t("error.extraReferences", "请先上传款式图"),
+							userPrompt: ({ state }) =>
+								buildDisplaySceneCompletionUserPrompt({
+									state,
+									currentText: state.displayScene,
+								}),
+						},
+					},
 				},
 				{
 					id: "modelTryon",
@@ -346,19 +442,16 @@ registerMagicCanvasPlugin({
 					id: "canvasSize",
 					kind: "size-control",
 					title: t("section.canvasSize", "宽高比"),
-					deps: ["modelId", "modelOptions", "scale"],
 				},
 				{
 					id: "resolution",
 					kind: "resolution-select",
 					title: t("section.resolution", "尺寸倍数"),
-					deps: ["modelId", "modelOptions"],
 				},
 				{
 					id: "count",
 					kind: "option-group",
 					stateKey: "genCount",
-					required: true,
 					title: t("section.count", "生成数量"),
 				},
 			],
