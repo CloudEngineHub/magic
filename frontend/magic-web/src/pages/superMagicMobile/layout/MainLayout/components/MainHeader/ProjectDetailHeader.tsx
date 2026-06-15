@@ -77,7 +77,10 @@ export function ProjectDetailHeader({
 					{title || ""}
 				</p>
 				{subtitle ? (
-					<p className="w-full truncate text-[12px] leading-4 text-muted-foreground">
+					<p
+						className="w-full truncate text-[12px] leading-4 text-muted-foreground"
+						data-testid="project-detail-header-subtitle"
+					>
 						{subtitle}
 					</p>
 				) : null}

@@ -130,6 +130,40 @@ export function AddCollaborationToWorkspaceModal({
 		onConfirm(selectedWorkspaceId)
 	})
 
+	useEffect(() => {
+		if (!open || isMobile) return
+
+		/** Scrolls the nested modal list manually because the parent Radix dialog locks body portals. */
+		const handleNestedModalWheel = (event: WheelEvent) => {
+			const target = event.target
+			if (!(target instanceof Element)) return
+
+			const scrollContainer = target.closest<HTMLElement>(
+				"[data-add-collaboration-workspace-scroll]",
+			)
+			if (!scrollContainer) return
+
+			const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight
+			if (maxScrollTop <= 0) return
+
+			event.preventDefault()
+			event.stopPropagation()
+			event.stopImmediatePropagation()
+
+			const nextScrollTop = Math.min(
+				Math.max(scrollContainer.scrollTop + event.deltaY, 0),
+				maxScrollTop,
+			)
+			scrollContainer.scrollTop = nextScrollTop
+		}
+
+		window.addEventListener("wheel", handleNestedModalWheel, { capture: true, passive: false })
+
+		return () => {
+			window.removeEventListener("wheel", handleNestedModalWheel, { capture: true })
+		}
+	}, [isMobile, open])
+
 	const Content = (
 		<>
 			<div className={styles.header}>
@@ -147,7 +181,7 @@ export function AddCollaborationToWorkspaceModal({
 						onChange={(e) => setSearchValue(e.target.value)}
 					/>
 				</div>
-				<div className={styles.contentList}>
+				<div className={styles.contentList} data-add-collaboration-workspace-scroll>
 					{isCreatingWorkspace && (
 						<div className={styles.contentItem}>
 							<div className={styles.contentItemName}>
@@ -230,6 +264,7 @@ export function AddCollaborationToWorkspaceModal({
 			footer={null}
 			closeIcon={null}
 			centered
+			zIndex={1100}
 		>
 			{Content}
 		</MagicModal>

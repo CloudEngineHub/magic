@@ -36,7 +36,5 @@ export function normalizeSelectionIdsForShare(
 		return childIds
 	}
 
-	return attachments
-		.filter((item) => !item?.is_hidden)
-		.flatMap((item) => visit(item))
+	return attachments.filter((item) => !item?.is_hidden).flatMap((item) => visit(item))
 }
