@@ -4,7 +4,6 @@ function createInitialState() {
 	return {
 		sourceImage: null,
 		cropImage: null,
-		genCount: 1,
 	}
 }
 
@@ -132,6 +131,9 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成手脚修复图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.sourceImage) {
+						return t("empty.sourceImage", "请先上传 1 张待修复图")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.sourceImage,

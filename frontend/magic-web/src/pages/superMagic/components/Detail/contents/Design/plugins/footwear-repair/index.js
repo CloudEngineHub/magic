@@ -6,7 +6,6 @@ function createInitialState() {
 		referenceProductImage: null,
 		cropImage: null,
 		refCropImage: null,
-		genCount: 1,
 	}
 }
 
@@ -168,6 +167,12 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成鞋靴修复图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.sourceImage) {
+						return t("empty.sourceImage", "请先上传 1 张待修复图")
+					}
+					if (!state.referenceProductImage) {
+						return t("empty.referenceProductImage", "请先上传 1 张参考商品图")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.sourceImage || !state.referenceProductImage,

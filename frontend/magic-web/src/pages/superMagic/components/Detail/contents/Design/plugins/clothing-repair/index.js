@@ -7,7 +7,6 @@ function createInitialState() {
 		referenceProductImage: null,
 		cropImage: null,
 		refCropImage: null,
-		genCount: 1,
 	}
 }
 
@@ -129,9 +128,9 @@ registerMagicCanvasPlugin({
 			sections: [
 				{
 					id: "repairType",
-					kind: "option-group",
+					kind: "tabs",
 					stateKey: "repairType",
-					title: t("section.repairType", "修复类型"),
+					title: t("section.repairType", "修复模式"),
 					options: repairTypeOptions,
 				},
 				{
@@ -218,6 +217,12 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成服饰修复图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.sourceImage) {
+						return t("empty.sourceImage", "请先上传 1 张待修复图")
+					}
+					if (!state.referenceProductImage) {
+						return t("empty.referenceProductImage", "请先上传 1 张参考商品图")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) => !state.sourceImage || !state.referenceProductImage,
