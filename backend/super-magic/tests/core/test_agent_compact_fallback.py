@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -5,6 +6,7 @@ import pytest
 from agentlang.exceptions import ResourceLimitExceededException
 from agentlang.chat_history import CompactionConfig
 from agentlang.llms.factory import LLMFactory
+from agentlang.tools.tool_result import ToolResult
 from app.core import ai_abilities
 from app.core.models.agent_model_context import AgentModelContext
 from app.core.models.agent_model_selection import AgentModelSelection
@@ -16,6 +18,14 @@ from app.magic.background_compact import (
     start_background_compact,
 )
 from app.magic.agent import Agent, AgentLoopState
+from app.magic.compact_request_tracker import CompactRequestTracker
+
+
+def _make_compact_request_tracker(pending: bool = False) -> CompactRequestTracker:
+    tracker = CompactRequestTracker()
+    if pending:
+        tracker.start(reason="test")
+    return tracker
 
 
 class _FakeCompactAgent:
@@ -25,6 +35,9 @@ class _FakeCompactAgent:
     _call_llm_with_retry = Agent._call_llm_with_retry
     _try_fallback_compact_model_once = Agent._try_fallback_compact_model_once
     _restore_pre_compact_model = Agent._restore_pre_compact_model
+    _has_pending_compact_request = Agent._has_pending_compact_request
+    _fallback_compact_request_to_main_model = Agent._fallback_compact_request_to_main_model
+    _finish_compact_request = Agent._finish_compact_request
 
     def __init__(self, failures: list[Exception]):
         model_context = AgentModelContext()
@@ -35,10 +48,10 @@ class _FakeCompactAgent:
         model_context.activate_compact_text_model("mock-compact-text")
 
         self.agent_context = SimpleNamespace(model_context=model_context)
-        self.llm_id = "mock-default-text"
         self.failures = list(failures)
         self.calls: list[dict[str, object]] = []
         self.recovery_messages: list[str] = []
+        self._compact_request_tracker = _make_compact_request_tracker(pending=True)
 
     async def _prepare_and_call_llm(self, **kwargs):
         self.calls.append({
@@ -73,7 +86,7 @@ class _FakeForceCompactAgent:
 
     def __init__(self):
         self.build_called = False
-        self._compact_request_pending_llm_call = True
+        self._compact_request_tracker = _make_compact_request_tracker(pending=True)
         self._bg_compact_state = BackgroundCompactState()
         self.chat_history = SimpleNamespace(
             messages=[
@@ -91,10 +104,9 @@ class _FakeForceCompactAgent:
 
 class _FakeLoopCompactAgent:
     _has_pending_compact_request = Agent._has_pending_compact_request
-    _mark_compact_request_pending_llm_call = Agent._mark_compact_request_pending_llm_call
-    _clear_compact_request_pending_llm_call = Agent._clear_compact_request_pending_llm_call
     _restore_pre_compact_model = Agent._restore_pre_compact_model
     _restore_stale_compact_model_before_loop = Agent._restore_stale_compact_model_before_loop
+    _finish_compact_request = Agent._finish_compact_request
 
     def __init__(self, last_content: str, compact_request_pending: bool = False):
         model_context = AgentModelContext()
@@ -105,12 +117,31 @@ class _FakeLoopCompactAgent:
         model_context.activate_compact_text_model("mock-compact-text")
 
         self.agent_context = SimpleNamespace(model_context=model_context)
-        self.llm_id = "mock-default-text"
         self.chat_history = SimpleNamespace(messages=[SimpleNamespace(content=last_content)])
-        self._compact_request_pending_llm_call = compact_request_pending
+        self._compact_request_tracker = _make_compact_request_tracker(
+            pending=compact_request_pending
+        )
 
     def _log_compaction_event(self, event_type: str, message: str) -> None:
         return None
+
+
+class _FakeCompactToolResultAgent(_FakeLoopCompactAgent):
+    _process_tool_call_results = Agent._process_tool_call_results
+
+    def __init__(self):
+        super().__init__("mock latest message", compact_request_pending=True)
+        self.compact_executed = False
+        self.capture_compact_history_result = False
+        self.appended_tool_messages: list[dict[str, object]] = []
+
+        async def append_tool_message(**kwargs):
+            self.appended_tool_messages.append(kwargs)
+
+        self.chat_history.append_tool_message = append_tool_message
+
+    async def _execute_history_compact(self, summary: str) -> None:
+        self.compact_executed = True
 
 
 class _FakeChatHistory:
@@ -136,10 +167,8 @@ class _FakePrecompactAgent:
     _try_compact_chat_history = Agent._try_compact_chat_history
     _trigger_foreground_compact = Agent._trigger_foreground_compact
     _has_pending_compact_request = Agent._has_pending_compact_request
-    _mark_compact_request_pending_llm_call = Agent._mark_compact_request_pending_llm_call
 
     def __init__(self, token_count: int, *, pending: bool = False):
-        self.llm_id = "mock-default-text"
         self.agent_context = SimpleNamespace(
             model_context=SimpleNamespace(current_text_model_id="mock-runtime-text")
         )
@@ -158,7 +187,7 @@ class _FakePrecompactAgent:
             token_count=token_count,
         )
         self._bg_compact_state = BackgroundCompactState()
-        self._compact_request_pending_llm_call = pending
+        self._compact_request_tracker = _make_compact_request_tracker(pending=pending)
         self.background_start_count = 0
         self.built_compact_request = False
 
@@ -286,6 +315,32 @@ async def test_compact_model_failure_falls_back_to_runtime_model_once():
     assert agent.calls[0]["use_stream"] is True
     assert agent.calls[1]["use_stream"] is False
     assert not agent.agent_context.model_context.has_active_compact_text_model()
+    assert not agent._has_pending_compact_request()
+
+
+@pytest.mark.asyncio
+async def test_compact_model_fallback_keeps_pending_during_main_model_retry():
+    agent = _FakeCompactAgent([RuntimeError("mock compact model blocked")])
+    pending_seen_during_retry: list[bool] = []
+
+    original_prepare = agent._prepare_and_call_llm
+
+    async def prepare_and_check_pending(**kwargs):
+        pending_seen_during_retry.append(agent._has_pending_compact_request())
+        return await original_prepare(**kwargs)
+
+    agent._prepare_and_call_llm = prepare_and_check_pending
+
+    result = await agent._call_llm_with_retry(AgentLoopState())
+
+    assert result.content == "mock compact result"
+    assert pending_seen_during_retry == [True, True]
+    assert [call["model_id"] for call in agent.calls] == [
+        "mock-compact-text",
+        "mock-runtime-text",
+    ]
+    assert not agent._has_pending_compact_request()
+    assert not agent.agent_context.model_context.has_active_compact_text_model()
 
 
 @pytest.mark.asyncio
@@ -303,6 +358,7 @@ async def test_compact_model_fallback_is_not_repeated_after_runtime_failure():
         "mock-runtime-text",
     ]
     assert not agent.agent_context.model_context.has_active_compact_text_model()
+    assert not agent._has_pending_compact_request()
 
 
 @pytest.mark.asyncio
@@ -348,8 +404,19 @@ def test_pending_compact_flag_keeps_model_even_when_last_message_changes():
     model_context = agent.agent_context.model_context
     assert model_context.has_active_compact_text_model()
     assert model_context.current_text_model_id == "mock-compact-text"
-    agent._clear_compact_request_pending_llm_call()
+    agent._finish_compact_request(reason="test cleanup", restore_model=False)
     assert not agent._has_pending_compact_request()
+
+
+def test_finish_compact_request_clears_pending_when_model_already_restored():
+    agent = _FakeLoopCompactAgent("mock latest message", compact_request_pending=True)
+    agent.agent_context.model_context.restore_pre_compact_text_model()
+
+    agent._finish_compact_request(reason="test cleanup", restore_model=True)
+
+    assert not agent._has_pending_compact_request()
+    assert not agent.agent_context.model_context.has_active_compact_text_model()
+    assert agent.agent_context.model_context.current_text_model_id == "mock-runtime-text"
 
 
 def test_stale_compact_model_restores_before_loop_without_pending_request():
@@ -358,6 +425,26 @@ def test_stale_compact_model_restores_before_loop_without_pending_request():
     agent._restore_stale_compact_model_before_loop()
 
     model_context = agent.agent_context.model_context
+    assert not model_context.has_active_compact_text_model()
+    assert model_context.current_text_model_id == "mock-runtime-text"
+
+
+@pytest.mark.asyncio
+async def test_blank_compact_tool_result_restores_model_and_clears_pending_request():
+    agent = _FakeCompactToolResultAgent()
+
+    should_exit, final_response, inject_horizon = await agent._process_tool_call_results([
+        ToolResult(
+            content="mock compact result",
+            system="COMPACT_HISTORY",
+            extra_info={"summary": "  "},
+        )
+    ])
+
+    model_context = agent.agent_context.model_context
+    assert (should_exit, final_response, inject_horizon) == (False, None, True)
+    assert not agent.compact_executed
+    assert not agent._has_pending_compact_request()
     assert not model_context.has_active_compact_text_model()
     assert model_context.current_text_model_id == "mock-runtime-text"
 
@@ -522,6 +609,71 @@ async def test_start_background_compact_forks_isolated_agent_and_captures_summar
     assert calls[0]["disable_compaction"] is True
     assert calls[0]["capture_compact_history_result"] is True
     assert registered_cleanups
+
+
+@pytest.mark.asyncio
+async def test_background_compact_cleanup_only_cancels_own_generation(monkeypatch):
+    second_task_started = asyncio.Event()
+    release_second_task = asyncio.Event()
+    calls = 0
+
+    async def fake_run_isolated_agent(**kwargs) -> str:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return "first summary"
+        second_task_started.set()
+        await release_second_task.wait()
+        return "second summary"
+
+    monkeypatch.setattr(
+        "app.service.agent_runner.run_isolated_agent",
+        fake_run_isolated_agent,
+    )
+    state = BackgroundCompactState()
+    messages = [
+        SimpleNamespace(role="system", content="system", show_in_ui=False),
+        SimpleNamespace(role="user", content="question", show_in_ui=True),
+    ]
+    chat_history = _FakeChatHistory(messages=messages, token_count=90)
+    registered_cleanups: dict[str, object] = {}
+    agent_context = SimpleNamespace(
+        context_id="parent-context",
+        register_run_cleanup=lambda key, callback: registered_cleanups.update({key: callback}),
+    )
+
+    await start_background_compact(
+        state=state,
+        agent_name="mock-agent",
+        agent_context=agent_context,
+        chat_history=chat_history,
+        compact_instruction="Use a complete summary.",
+        model_id="mock-compact-model",
+    )
+    first_cleanup = next(iter(registered_cleanups.values()))
+    assert state._task is not None
+    assert await state._task == "first summary"
+    state.reset()
+
+    await start_background_compact(
+        state=state,
+        agent_name="mock-agent",
+        agent_context=agent_context,
+        chat_history=chat_history,
+        compact_instruction="Use a complete summary.",
+        model_id="mock-compact-model",
+    )
+    await second_task_started.wait()
+    second_task = state._task
+
+    await first_cleanup()
+
+    assert state._task is second_task
+    assert second_task is not None
+    assert not second_task.done()
+
+    release_second_task.set()
+    assert await second_task == "second summary"
 
 
 @pytest.mark.asyncio

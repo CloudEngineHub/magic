@@ -26,6 +26,11 @@ Compress the current chat history when the conversation becomes too long, DO NOT
 
     async def execute(self, tool_context: ToolContext, params: CompactChatHistoryParams) -> ToolResult:
         """Execute chat history compaction"""
+        if not params.summary or not params.summary.strip():
+            return ToolResult.error(
+                "Compaction summary is empty. Provide a non-empty summary before calling compact_chat_history."
+            )
+
         logger.info(
             "compaction.tool_execute: "
             f"摘要字符数={len(params.summary or '')}"

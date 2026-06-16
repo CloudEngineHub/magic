@@ -19,3 +19,14 @@ async def test_compact_chat_history_builds_frontend_detail():
     assert "压缩摘要" in detail.data.content
     assert str(len(summary)) in detail.data.content
     assert summary in detail.data.content
+
+
+@pytest.mark.asyncio
+async def test_compact_chat_history_rejects_blank_summary():
+    tool = CompactChatHistory()
+
+    result = await tool.execute(None, CompactChatHistoryParams(summary="  \n\t  "))
+
+    assert not result.ok
+    assert result.system is None
+    assert "summary" in result.content.lower()

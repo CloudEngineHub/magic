@@ -186,7 +186,7 @@ async def start_background_compact(
 
     from app.service.agent_runner import run_isolated_agent
 
-    state._task = asyncio.create_task(
+    compact_task = asyncio.create_task(
         run_isolated_agent(
             agent_name=agent_name,
             agent_id=agent_id,
@@ -198,12 +198,13 @@ async def start_background_compact(
             capture_compact_history_result=True,
         )
     )
+    state._task = compact_task
 
     async def _cancel_background_compact() -> None:
-        task = state._task
-        state.cancel()
-        if task is None:
-            return
+        task = compact_task
+        if not task.done():
+            task.cancel()
+            logger.info("后台压缩任务已取消")
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=10.0)
         except asyncio.TimeoutError:
@@ -213,7 +214,8 @@ async def start_background_compact(
         except Exception as exc:
             logger.warning(f"Background compact task ended during cleanup: {exc}")
         finally:
-            state.reset()
+            if state._task is task:
+                state.reset()
 
     agent_context.register_run_cleanup(
         f"background_compact:{agent_id}",

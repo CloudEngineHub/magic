@@ -55,6 +55,7 @@ from app.magic.background_compact import (
     BACKGROUND_COMPACT_WAIT_TIMEOUT,
     build_messages_digest,
 )
+from app.magic.compact_request_tracker import CompactRequestTracker
 from app.core.entity.final_task_state import (
     FinalTaskState,
     FinalTaskStateCode,
@@ -77,7 +78,7 @@ from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
 from app.core.skill_utils.skill_sources import get_system_skills_dir, get_workspace_skills_dir
 from agentlang.agent.define import SkillsConfig, SystemSkillEntry
-from app.magic.runtime_model import ModelSource, RuntimeModelInfo, RuntimeModelResolveError, resolve_runtime_model
+from app.magic.runtime_model import AUTO_MODEL_ID, ModelSource, RuntimeModelInfo, RuntimeModelResolveError, resolve_runtime_model
 
 logger = get_logger(__name__)
 
@@ -267,7 +268,7 @@ class Agent(BaseAgent):
             # 压缩阈值运行时按 runtime model 解析，避免 .agent 历史默认模型影响运行时模型任务。
             agent_model_id="",
         )
-        self._compact_request_pending_llm_call = False
+        self._compact_request_tracker = CompactRequestTracker()
 
         # 后台压缩状态（双阈值机制：early_compact_threshold 触发后台，token_threshold 硬限制）
         self._bg_compact_state = BackgroundCompactState()
@@ -420,11 +421,6 @@ class Agent(BaseAgent):
 
         if not self.system_prompt:
             raise ValueError("Prompt is not set")
-
-        # Agent 初始化阶段只绑定配置模型 ID，不读取模型配置。
-        # 请求模型 / 会话模型 / Agent 默认模型的最终选择由 Dispatcher 统一写入 model_context。
-        if getattr(self, "llm_id", None):
-            self.agent_context.model_context.set_configured_text_model(self.llm_id)
 
         # 准备静态变量并应用到 system_prompt
         static_vars = self._prepare_prompt_static_variables()
@@ -1540,6 +1536,7 @@ class Agent(BaseAgent):
             threshold_model_id = (
                 getattr(model_context, "current_text_model_id", None)
                 or getattr(self, "llm_id", "")
+                or AUTO_MODEL_ID
             )
 
         auto_threshold = getattr(
@@ -1669,6 +1666,7 @@ class Agent(BaseAgent):
                 f"当前Token={token_count}，预压缩阈值={early_threshold}，"
                 f"硬阈值={token_threshold}，阈值模型={threshold_model_for_log}",
             )
+            return False
 
         self._log_compaction_event(
             "skip",
@@ -1706,16 +1704,131 @@ class Agent(BaseAgent):
         return True
 
     def _has_pending_compact_request(self) -> bool:
-        """判断是否存在待执行的 compact 请求。"""
-        return self._compact_request_pending_llm_call
+        """判断是否已有 compact 请求被注入但尚未结束。"""
+        return self._compact_request_tracker.has_pending_request
 
-    def _mark_compact_request_pending_llm_call(self) -> None:
-        """标记已注入 compact 请求，下一次 LLM 调用前不要还原 compact 模型。"""
-        self._compact_request_pending_llm_call = True
+    def _begin_compact_request(self, reason: str) -> None:
+        """开始一轮主 Agent 直接注入的 compact 请求。
 
-    def _clear_compact_request_pending_llm_call(self) -> None:
-        """清理 compact 请求待执行标记。"""
-        self._compact_request_pending_llm_call = False
+        这里必须同时做两件事：
+
+        1. 调用 `_activate_compact_model()`，让下一次 LLM 调用优先使用 compact 模型。
+        2. 标记 compact 请求 pending，阻止后续阈值检查重复注入 compact 请求。
+
+        不能把这两件事散落在调用方里。否则未来新增任意一个入口时，容易只切了模型
+        但没标记 pending，或只标记 pending 但没切模型。
+
+        ```text
+        Mock：正常触发硬阈值
+
+        当前默认配置下，main model 和 compact model 都是 deepseek-v4-flash。
+        所以这个 Mock 里模型名看起来没有变化，但语义上仍然进入了 compact
+        model 通道：model_context 会记录「当前 LLM 调用属于 compact 请求」。
+        未来如果通过 COMPACT_MODEL_ID 单独指定其它模型，这里无需改状态管理代码。
+
+        before:
+          model = deepseek-v4-flash
+          tracker.state = NO_REQUEST
+          chat_history = [...old messages...]
+
+        _build_compact_request()
+          -> _begin_compact_request()
+          -> _activate_compact_model()
+          -> tracker.start()
+
+        after:
+          model = deepseek-v4-flash
+          tracker.state = COMPACT_MODEL
+          chat_history 即将追加隐藏 user 消息：
+            "You must call compact_chat_history immediately."
+        ```
+        """
+        self._activate_compact_model()
+        self._compact_request_tracker.start(reason=reason)
+        self._log_compaction_event(
+            "compact_request_started",
+            "压缩请求已开始："
+            f"原因={reason}，"
+            f"状态={self._compact_request_tracker.state.value}，"
+            f"generation={self._compact_request_tracker.generation}",
+        )
+
+    def _fallback_compact_request_to_main_model(self, reason: str) -> None:
+        """compact 模型失败后，改由主模型继续处理同一条 compact 请求。
+
+        这个状态最容易误清理：
+
+        ```text
+        before:
+          tracker.state = COMPACT_MODEL
+          model = deepseek-v4-flash
+          chat_history 最后一条 = compact 请求
+
+        compact 模型请求失败：
+          -> 先把 tracker.state 改成 MAIN_MODEL_FALLBACK
+          -> 再恢复主模型 deepseek-v4-flash
+
+        after:
+          tracker.has_pending_request = True
+            因为 compact 请求还在 chat_history 里，不能重复注入第二条。
+          tracker.should_keep_compact_model = False
+            因为后续重试已经改由主模型处理。
+        ```
+
+        也就是说，fallback 不是 finish。finish 必须等这次主模型重试结束后再做。
+        """
+        self._compact_request_tracker.fallback_to_main_model(reason=reason)
+        self._log_compaction_event(
+            "compact_request_main_model_fallback",
+            "压缩请求已回退到主模型："
+            f"原因={reason}，"
+            f"状态={self._compact_request_tracker.state.value}，"
+            f"generation={self._compact_request_tracker.generation}",
+        )
+
+    def _finish_compact_request(self, reason: str, *, restore_model: bool = True) -> None:
+        """结束当前 compact 请求，必要时恢复 compact 前模型。
+
+        统一出口覆盖所有终态：
+
+        ```text
+        compact_chat_history 返回有效 summary
+          -> _execute_history_compact(...).finally
+          -> finish + restore model
+
+        compact_chat_history 返回空 summary
+          -> finish + restore model
+
+        compact 模型失败，主模型 fallback 重试结束
+          -> finish only
+          -> restore_model=False，因为 fallback 前已经恢复过主模型
+
+        Agent 结束兜底发现模型或请求还没清干净
+          -> finish + restore model
+        ```
+
+        维护规则：
+        - 除了「fallback 主模型重试期间」之外，不要直接手动清 tracker。
+        - 如果这个方法被重复调用，它也应该安全；tracker.finish() 是幂等的。
+        - `restore_model=False` 只用于「已经恢复主模型，但同一条 compact 请求刚处理完」的路径。
+        """
+        had_pending_request = self._compact_request_tracker.has_pending_request
+        generation = self._compact_request_tracker.generation
+        state = self._compact_request_tracker.state.value
+        self._compact_request_tracker.finish()
+
+        if restore_model:
+            self._restore_pre_compact_model(reason=reason)
+
+        if had_pending_request:
+            self._log_compaction_event(
+                "compact_request_finished",
+                "压缩请求已结束："
+                f"原因={reason}，"
+                f"结束前状态={state}，"
+                f"generation={generation or '无'}，"
+                f"是否尝试恢复模型={restore_model}",
+            )
 
     async def _try_compact_chat_history_force(self, reason: str = "手动或被动压缩") -> bool:
         """强制触发上下文压缩（不检查阈值），用于 reactive compact 场景。
@@ -1910,7 +2023,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                 if hasattr(self.agent_context, "has_runtime_model_id") and self.agent_context.has_runtime_model_id():
                     self._pre_compact_model_id = self.agent_context.get_runtime_model_id()
                 else:
-                    self._pre_compact_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None)
+                    self._pre_compact_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None) or AUTO_MODEL_ID
                 if hasattr(self.agent_context, "get_metadata"):
                     self._pre_compact_model_source = self.agent_context.get_metadata().get("runtime_model_source")
                 else:
@@ -1945,8 +2058,13 @@ Since your subsequent output will be merged with pre-interruption content and di
         model_context = self.agent_context.model_context
         if not model_context.has_active_compact_text_model():
             return
+        pre_compact_model_id = getattr(self, "_pre_compact_model_id", None)
         restored = model_context.restore_pre_compact_text_model()
-        current_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None)
+        current_model_id = (
+            pre_compact_model_id
+            if isinstance(pre_compact_model_id, str) and pre_compact_model_id
+            else model_context.current_text_model_id or getattr(self, "llm_id", None) or AUTO_MODEL_ID
+        )
         original_source = getattr(self, "_pre_compact_model_source", None)
         if hasattr(self, "_pre_compact_model_id"):
             del self._pre_compact_model_id
@@ -1969,14 +2087,35 @@ Since your subsequent output will be merged with pre-interruption content and di
         )
 
     def _restore_stale_compact_model_before_loop(self) -> None:
-        """新一轮 LLM 调用前，恢复未被 compact 请求占用的临时 compact 模型。"""
+        """新一轮 LLM 调用前，恢复不再被 compact 请求占用的临时模型。
+
+        这个方法只在 Agent 主循环每次 LLM 调用前执行。它处理的是「上一轮 LLM
+        没有按要求调用 compact_chat_history」这类脏状态。
+
+        ```text
+        A. 正常等待 compact 模型处理
+           active compact model = True
+           tracker.state = COMPACT_MODEL
+           -> 保留 compact 模型，继续等 LLM 处理那条 compact 请求。
+
+        B. LLM 已经偏离 compact 请求，compact 模型还挂着
+           active compact model = True
+           tracker.state = NO_REQUEST 或 MAIN_MODEL_FALLBACK
+           -> 结束请求并恢复模型，避免下一轮普通对话继续使用 compact 模型。
+
+        C. 没有配置 compact 专属模型
+           active compact model = False
+           tracker.state = COMPACT_MODEL
+           -> 不在这里清理。此时 compact 请求会由主模型处理，pending 仍然用于防重复注入。
+        ```
+        """
         model_context = self.agent_context.model_context
         if not model_context.has_active_compact_text_model():
             return
-        if self._has_pending_compact_request():
-            logger.debug("检测到待处理的 compact 请求，保留 compact 临时模型")
+        if self._compact_request_tracker.should_keep_compact_model:
+            logger.debug("检测到 compact 请求仍由 compact 模型处理，保留 compact 临时模型")
             return
-        self._restore_pre_compact_model(reason="LLM 未调用压缩工具，新一轮调用前还原")
+        self._finish_compact_request(reason="LLM 未继续处理压缩请求，新一轮调用前还原")
 
     def _build_compact_request(self, user_instruction: str = "") -> str:
         """构建压缩请求内容，同时切换到 compact 专属模型（如果配置了的话）
@@ -1984,11 +2123,10 @@ Since your subsequent output will be merged with pre-interruption content and di
         Args:
             user_instruction: 用户在 /compact 命令后附带的额外要求（可选）
 
-        切换后的模型将在 _execute_history_compact 的 finally 块中统一还原，
-        无论压缩成功还是失败都能正确恢复。
+        切换后的模型和请求状态必须通过 compact request 生命周期统一管理，
+        不能由调用方分别手动 mark/clear。
         """
-        self._activate_compact_model()
-        self._mark_compact_request_pending_llm_call()
+        self._begin_compact_request(reason="构建 compact 请求")
 
         # 被动触发：直接注入 SKILL.md 内容，无需 Agent 额外调用 read_skills
         prompt = f"The conversation is too long and must be compacted now. You must call the `compact_chat_history` tool immediately.\n\n{self._compact_skill_content}"
@@ -2063,19 +2201,23 @@ Since your subsequent output will be merged with pre-interruption content and di
         if not model_context.consume_compact_text_model_fallback():
             return None
 
-        failed_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None)
+        failed_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None) or AUTO_MODEL_ID
         logger.warning(
             f"compact 临时模型请求失败，回退压缩前模型重试一次: "
             f"failed_model={failed_model_id}, error={exception!r}"
         )
+        self._fallback_compact_request_to_main_model(reason="compact 临时模型请求失败")
         self._restore_pre_compact_model(reason="compact 临时模型请求失败，回退当前模型重试")
 
-        retry_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None)
+        retry_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None) or AUTO_MODEL_ID
         logger.info(f"compact fallback 使用文本模型重试: {retry_model_id}")
-        return await self._prepare_and_call_llm(
-            use_stream=False,
-            non_stream_timeout=non_stream_timeout or config.get("llm.non_stream_timeout_seconds", 600),
-        )
+        try:
+            return await self._prepare_and_call_llm(
+                use_stream=False,
+                non_stream_timeout=non_stream_timeout or config.get("llm.non_stream_timeout_seconds", 600),
+            )
+        finally:
+            self._finish_compact_request(reason="compact fallback 重试结束", restore_model=False)
 
     def _log_agent_loop_exception(self, exception: Exception) -> None:
         """记录 agent loop 异常，已分类的模型配置错误不打印完整堆栈。"""
@@ -2691,6 +2833,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                         await self._execute_history_compact(summary)
                     else:
                         logger.error("COMPACT_HISTORY tool result missing summary in extra_info")
+                        self._finish_compact_request(reason="压缩工具返回空摘要")
                     # Continue the agent loop after compact
                     continue
             except ValueError as ve:
@@ -2829,9 +2972,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         finally:
             if blocker_acquired:
                 self.agent_context.decrement_cancel_blocker()
-            self._clear_compact_request_pending_llm_call()
-            # 压缩完成后还原 runtime_model_id（无论成功或失败都执行）
-            self._restore_pre_compact_model(reason="压缩完成")
+            self._finish_compact_request(reason="压缩完成")
 
     async def _reset_for_new_session(self) -> None:
         """
@@ -3148,11 +3289,13 @@ Since your subsequent output will be merged with pre-interruption content and di
             logger.info("最终响应为空")
             self.agent_context.set_final_response(None)
 
-        # 兜底还原 compact 模型（防止 LLM 未调用 compact_chat_history 工具导致模型卡住）
-        if self.agent_context.model_context.has_active_compact_text_model():
-            logger.warning("Agent 结束时检测到 compact 模型未还原，执行兜底恢复")
-            self._clear_compact_request_pending_llm_call()
-            self._restore_pre_compact_model(reason="Agent 结束兜底")
+        # 兜底还原 compact 请求状态（防止 LLM 未调用 compact_chat_history 工具导致模型或 pending 状态卡住）
+        if (
+            self.agent_context.model_context.has_active_compact_text_model()
+            or self._has_pending_compact_request()
+        ):
+            logger.warning("Agent 结束时检测到 compact 请求未结束，执行兜底恢复")
+            self._finish_compact_request(reason="Agent 结束兜底")
 
         # 更新Agent状态 - 使用is_agent_running替代直接比较
         logger.info(f"_finalize_agent_loop: 检查最终状态，当前 agent_state = {self.agent_state.value}")
