@@ -44,12 +44,7 @@ export class ImageBatchPollingManager {
 		this.elementOutputIndexes = []
 		this.aliveElementIds = new Set()
 		this.syncElementIds(config.elementIds, config.outputIndexes)
-		this.unsubscribeElementDeleted = this.canvas.eventEmitter.on("element:deleted", (event) => {
-			this.handleDeletedElementIds([event.data.elementId])
-		})
-		this.unsubscribeBatchDeleted = this.canvas.eventEmitter.on("element:batchdeleted", (event) => {
-			this.handleDeletedElementIds(event.data.elementIds)
-		})
+		
 	}
 
 	/**
@@ -59,6 +54,7 @@ export class ImageBatchPollingManager {
 		if (this.isPolling) return
 		this.isPolling = true
 		this.registry.track(this)
+		this.handleBindSubscriptions()
 
 		try {
 			while (this.isPolling) {
@@ -92,6 +88,7 @@ export class ImageBatchPollingManager {
 	 */
 	public stop(): void {
 		this.isPolling = false
+		this.registry.untrack(this)
 		this.cleanupTimer()
 		this.cleanupSubscriptions()
 	}
@@ -264,6 +261,15 @@ export class ImageBatchPollingManager {
 		if (hasChanges && this.aliveElementIds.size === 0) {
 			this.stop()
 		}
+	}
+
+	private handleBindSubscriptions() {
+		this.unsubscribeElementDeleted = this.canvas.eventEmitter.on("element:deleted", (event) => {
+			this.handleDeletedElementIds([event.data.elementId])
+		})
+		this.unsubscribeBatchDeleted = this.canvas.eventEmitter.on("element:batchdeleted", (event) => {
+			this.handleDeletedElementIds(event.data.elementIds)
+		})
 	}
 
 	private cleanupTimer() {

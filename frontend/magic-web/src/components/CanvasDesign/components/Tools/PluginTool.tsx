@@ -105,7 +105,9 @@ export default function PluginTool() {
 			})
 		}
 
-		return Array.from(staticCategoryMap.values())
+		return Array.from(staticCategoryMap.values()).filter(
+			(category) => category.plugins.length > 0,
+		)
 	}, [plugins, t])
 
 	const activeCategory = useMemo(() => {
