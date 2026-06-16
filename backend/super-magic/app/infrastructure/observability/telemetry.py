@@ -232,7 +232,7 @@ def setup_telemetry(
         from .llm_cost_tracking import install_llm_cost_tracking
 
         install_llm_cost_tracking()
-    except Exception as e:
+    except Exception:
         # Never block telemetry setup, but log the error
         logger.warning("[OpenTelemetry] Failed to install LLM cost tracking", exc_info=True)
 

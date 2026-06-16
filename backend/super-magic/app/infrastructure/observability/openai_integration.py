@@ -30,8 +30,7 @@ except ImportError:
 
 # Import token usage tracking and pricing
 try:
-    from agentlang.config import config
-    from agentlang.llms.token_usage.pricing import ModelPricing
+    from agentlang.llms.factory import LLMFactory
     from agentlang.llms.token_usage.models import TokenUsage, OpenAIParser
     TOKEN_TRACKING_AVAILABLE = True
 except ImportError as e:
@@ -76,8 +75,7 @@ def _get_model_pricing():
     global _model_pricing
     if _model_pricing is None and TOKEN_TRACKING_AVAILABLE:
         try:
-            models_config = config.get("models", {})
-            _model_pricing = ModelPricing(models_config=models_config)
+            _model_pricing = LLMFactory.pricing
         except Exception as e:
             # Log error without exposing configuration details
             _logger.warning("Failed to initialize ModelPricing", exc_info=True)
