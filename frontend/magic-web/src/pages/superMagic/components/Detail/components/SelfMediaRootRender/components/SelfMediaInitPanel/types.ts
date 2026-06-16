@@ -174,7 +174,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/neo-brutalism/preview.html",
-			imageUrl: "/self-media-preset-previews/rednote/neo-brutalism.png",
+			imageUrl: "/self-media-preset-previews/rednote/neo-brutalism.webp",
 		},
 		swatch: "linear-gradient(135deg, #fafaf8 0%, #ffe566 52%, #ff2442 100%)",
 	},
@@ -186,7 +186,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/code-dispatch/preview.html",
-			imageUrl: "/self-media-preset-previews/rednote/code-dispatch.png",
+			imageUrl: "/self-media-preset-previews/rednote/code-dispatch.webp",
 		},
 		swatch: "linear-gradient(135deg, #0f1923 0%, #1a3a4a 50%, #00d2d3 100%)",
 	},
@@ -198,7 +198,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/dark-tech/preview.html",
-			imageUrl: "/self-media-preset-previews/rednote/dark-tech.png",
+			imageUrl: "/self-media-preset-previews/rednote/dark-tech.webp",
 		},
 		swatch: "linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #d4af37 100%)",
 	},
@@ -210,7 +210,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/gradient-editorial/preview.html",
-			imageUrl: "/self-media-preset-previews/rednote/gradient-editorial.png",
+			imageUrl: "/self-media-preset-previews/rednote/gradient-editorial.webp",
 		},
 		swatch: "linear-gradient(135deg, #667eea 0%, #764ba2 50%, #a78bfa 100%)",
 	},
@@ -222,7 +222,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/personal-insight/preview.html",
-			imageUrl: "/self-media-preset-previews/rednote/personal-insight.png",
+			imageUrl: "/self-media-preset-previews/rednote/personal-insight.webp",
 		},
 		swatch: "linear-gradient(135deg, #ffffff 0%, #f0f7ff 50%, #1a73e8 100%)",
 	},
@@ -234,7 +234,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/film-vintage/preview.html",
-			imageUrl: "/self-media-preset-previews/rednote/film-vintage.png",
+			imageUrl: "/self-media-preset-previews/rednote/film-vintage.webp",
 		},
 		swatch: "linear-gradient(135deg, #0f0d0a 0%, #6f1d1b 50%, #f2dfb8 100%)",
 	},
@@ -246,7 +246,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/warm-journal/preview.html",
-			imageUrl: "/self-media-preset-previews/rednote/warm-journal.png",
+			imageUrl: "/self-media-preset-previews/rednote/warm-journal.webp",
 		},
 		swatch: "linear-gradient(135deg, #0a0a0a 0%, #c5bba5 52%, #f5f0e6 100%)",
 	},
@@ -258,7 +258,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/paper-column/preview.html",
-			imageUrl: "/self-media-preset-previews/rednote/paper-column.png",
+			imageUrl: "/self-media-preset-previews/rednote/paper-column.webp",
 		},
 		swatch: "linear-gradient(135deg, #f5f1ea 0%, #dbe7f0 54%, #567493 100%)",
 	},
@@ -270,7 +270,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/signal-grid/preview.html",
-			imageUrl: "/self-media-preset-previews/rednote/signal-grid.png",
+			imageUrl: "/self-media-preset-previews/rednote/signal-grid.webp",
 		},
 		swatch: "linear-gradient(135deg, #fbfbfa 0%, #111111 58%, #1f5fe8 100%)",
 	},
@@ -282,7 +282,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/rednote/product-launch-preset/preview.html",
-			imageUrl: "/self-media-preset-previews/rednote/product-launch-preset.png",
+			imageUrl: "/self-media-preset-previews/rednote/product-launch-preset.webp",
 		},
 		swatch: "linear-gradient(135deg, #FFFFFF 0%, #FFF5F5 50%, #E63946 100%)",
 	},
@@ -295,7 +295,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-modern/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-modern.png",
+			imageUrl: "/self-media-preset-previews/instagram/ins-modern.webp",
 		},
 		swatch: "linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #e9ecef 100%)",
 	},
@@ -307,7 +307,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-minimal/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-minimal.png",
+			imageUrl: "/self-media-preset-previews/instagram/ins-minimal.webp",
 		},
 		swatch: "linear-gradient(135deg, #ffffff 0%, #f7f2ea 50%, #151515 100%)",
 	},
@@ -319,7 +319,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-dark/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-dark.png",
+			imageUrl: "/self-media-preset-previews/instagram/ins-dark.webp",
 		},
 		swatch: "linear-gradient(135deg, #080a12 0%, #6d28d9 52%, #14f1d9 100%)",
 	},
@@ -331,7 +331,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-fluent-depth/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-fluent-depth.png",
+			imageUrl: "/self-media-preset-previews/instagram/ins-fluent-depth.webp",
 		},
 		swatch: "linear-gradient(135deg, #f5f7fb 0%, #2563eb 52%, #7c3aed 100%)",
 	},
@@ -343,7 +343,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-retro/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-retro.png",
+			imageUrl: "/self-media-preset-previews/instagram/ins-retro.webp",
 		},
 		swatch: "linear-gradient(135deg, #2f1b12 0%, #c2410c 52%, #f7d08a 100%)",
 	},
@@ -355,7 +355,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-creator-studio/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-creator-studio.png",
+			imageUrl: "/self-media-preset-previews/instagram/ins-creator-studio.webp",
 		},
 		swatch: "linear-gradient(135deg, #fffdf8 0%, #d97706 48%, #2563eb 100%)",
 	},
@@ -367,7 +367,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-film-frame/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-film-frame.png",
+			imageUrl: "/self-media-preset-previews/instagram/ins-film-frame.webp",
 		},
 		swatch: "linear-gradient(135deg, #11100e 0%, #e23d28 50%, #d6a64f 100%)",
 	},
@@ -379,7 +379,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-warm-journal/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-warm-journal.png",
+			imageUrl: "/self-media-preset-previews/instagram/ins-warm-journal.webp",
 		},
 		swatch: "linear-gradient(135deg, #f3e7d3 0%, #c75d38 48%, #4f7b69 100%)",
 	},
@@ -391,7 +391,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-signal-grid/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-signal-grid.png",
+			imageUrl: "/self-media-preset-previews/instagram/ins-signal-grid.webp",
 		},
 		swatch: "linear-gradient(135deg, #f8fafc 0%, #0ea5e9 52%, #111827 100%)",
 	},
@@ -403,7 +403,7 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		preview: {
 			sourcePath:
 				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-token-system/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-token-system.png",
+			imageUrl: "/self-media-preset-previews/instagram/ins-token-system.webp",
 		},
 		swatch: "linear-gradient(135deg, #f7f8fa 0%, #1868db 52%, #172b4d 100%)",
 	},

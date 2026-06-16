@@ -242,7 +242,7 @@ describe("SelfMediaComposerConfigPanel", () => {
 		)
 		expect(
 			screen.getByTestId("self-media-composer-preview-image-personal-insight"),
-		).toHaveAttribute("src", "/self-media-preset-previews/rednote/personal-insight.png")
+		).toHaveAttribute("src", "/self-media-preset-previews/rednote/personal-insight.webp")
 		expect(
 			screen.getByTestId("self-media-composer-preview-scroll-personal-insight"),
 		).toHaveClass("overflow-y-auto")

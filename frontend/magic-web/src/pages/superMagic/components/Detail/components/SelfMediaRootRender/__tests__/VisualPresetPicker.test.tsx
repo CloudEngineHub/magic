@@ -196,7 +196,7 @@ describe("VisualPresetPicker", () => {
 
 		expect(panel).toHaveAttribute(
 			"data-self-media-preset-preview-image",
-			"/self-media-preset-previews/rednote/code-dispatch.png",
+			"/self-media-preset-previews/rednote/code-dispatch.webp",
 		)
 		expect(scrollArea).toHaveClass("overflow-y-auto", "max-h-[min(48vh,360px)]")
 		expect(scrollHint).toHaveClass("pointer-events-none", "absolute", "right-2", "top-2")
@@ -208,7 +208,7 @@ describe("VisualPresetPicker", () => {
 		expect(scrollHint).toHaveTextContent("detail.selfMedia.initPanel.visuals.scrollHint")
 		expect(image).toHaveAttribute(
 			"src",
-			"/self-media-preset-previews/rednote/code-dispatch.png",
+			"/self-media-preset-previews/rednote/code-dispatch.webp",
 		)
 		expect(scrollArea.compareDocumentPosition(copy)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
 		expect(
@@ -248,11 +248,11 @@ describe("VisualPresetPicker", () => {
 
 		expect(panel).toHaveAttribute(
 			"data-self-media-preset-preview-image",
-			"/self-media-preset-previews/rednote/paper-column.png",
+			"/self-media-preset-previews/rednote/paper-column.webp",
 		)
 		expect(scrollArea).toHaveClass("overflow-y-auto", "max-h-[min(48vh,360px)]")
 		expect(scrollHint).toHaveTextContent("detail.selfMedia.initPanel.visuals.scrollHint")
-		expect(image).toHaveAttribute("src", "/self-media-preset-previews/rednote/paper-column.png")
+		expect(image).toHaveAttribute("src", "/self-media-preset-previews/rednote/paper-column.webp")
 		expect(
 			screen.queryByTestId("visual-preset-real-card-paper-column-cover"),
 		).not.toBeInTheDocument()

@@ -66,7 +66,7 @@ function resolveTarget(target) {
 	}
 
 	return {
-		outputPath: path.join(outputRoot, platform, `${preset}.png`),
+		outputPath: path.join(outputRoot, platform, `${preset}.webp`),
 		platform,
 		preset,
 		previewPath,
@@ -179,7 +179,8 @@ async function captureTarget(browser, target) {
 	await container.screenshot({
 		animations: "disabled",
 		path: target.outputPath,
-		type: "png",
+		quality: 82,
+		type: "webp",
 	})
 	await page.close()
 
