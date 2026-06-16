@@ -49,6 +49,31 @@ export interface WechatArticleViewRef {
 
 type WechatArticleRenderMode = "desktop" | "phone"
 
+function getIframeScrollTop(iframe: HTMLIFrameElement | null) {
+	if (!iframe) return 0
+	const win = iframe.contentWindow
+	const doc = iframe.contentDocument
+	const scrollTop =
+		win?.scrollY ??
+		win?.pageYOffset ??
+		doc?.documentElement?.scrollTop ??
+		doc?.body?.scrollTop ??
+		0
+	return Math.max(0, Math.round(scrollTop))
+}
+
+function restoreIframeScrollTop(iframe: HTMLIFrameElement | null, scrollTop: number) {
+	if (!iframe || scrollTop <= 0) return
+	const top = Math.max(0, Math.round(scrollTop))
+	if (typeof iframe.contentWindow?.scrollTo === "function") {
+		iframe.contentWindow.scrollTo({ top, left: 0, behavior: "auto" })
+		return
+	}
+	if (iframe.contentDocument?.documentElement)
+		iframe.contentDocument.documentElement.scrollTop = top
+	if (iframe.contentDocument?.body) iframe.contentDocument.body.scrollTop = top
+}
+
 function escapeHtml(value: string | number | undefined) {
 	return String(value ?? "")
 		.replace(/&/g, "&amp;")
@@ -140,6 +165,7 @@ function WechatArticleViewInner(
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
 	const [renderMode, setRenderMode] = useState<WechatArticleRenderMode>("desktop")
 	const rendererRef = useRef<IsolatedHTMLRendererRef>(null)
+	const articleScrollTopsRef = useRef(new Map<string, number>())
 	const renderedContent = useMemo(() => {
 		if (!content) return null
 		return appendWechatArticleCommentsHtml({
@@ -184,6 +210,11 @@ function WechatArticleViewInner(
 				(item): item is FileItem => item?.file_id === fileId,
 			)?.updated_at
 		: undefined
+	const articleRenderToken = useMemo(
+		() => [fileId, fileUpdatedAt, renderedContent, renderMode] as const,
+		[fileId, fileUpdatedAt, renderedContent, renderMode],
+	)
+	const restoredRenderTokenRef = useRef<typeof articleRenderToken | null>(null)
 
 	useEffect(() => {
 		let cancelled = false
@@ -216,6 +247,36 @@ function WechatArticleViewInner(
 			cancelled = true
 		}
 	}, [fileId, fileUpdatedAt]) // attachmentList intentionally omitted: reference changes on every file-tree update; fileUpdatedAt tracks actual content changes
+
+	useEffect(() => {
+		if (!fileId || !renderedContent || renderMode !== "desktop") return undefined
+		const iframe = rendererRef.current?.getIframeElement() ?? null
+		const win = iframe?.contentWindow
+		if (!iframe || !win) return undefined
+
+		const rememberScrollTop = () => {
+			articleScrollTopsRef.current.set(fileId, getIframeScrollTop(iframe))
+		}
+		win.addEventListener("scroll", rememberScrollTop, { passive: true })
+		iframe.contentDocument?.addEventListener("scroll", rememberScrollTop, { passive: true })
+
+		return () => {
+			rememberScrollTop()
+			win.removeEventListener("scroll", rememberScrollTop)
+			iframe.contentDocument?.removeEventListener("scroll", rememberScrollTop)
+		}
+	}, [fileId, renderedContent, renderMode])
+
+	const handleRenderReady = useCallback(() => {
+		if (!fileId || renderMode !== "desktop") return
+		if (restoredRenderTokenRef.current === articleRenderToken) return
+		restoredRenderTokenRef.current = articleRenderToken
+		const scrollTop = articleScrollTopsRef.current.get(fileId) ?? 0
+		if (scrollTop <= 0) return
+		window.requestAnimationFrame(() => {
+			restoreIframeScrollTop(rendererRef.current?.getIframeElement() ?? null, scrollTop)
+		})
+	}, [articleRenderToken, fileId, renderMode])
 
 	const openNewTab = useCallback(() => {
 		// No-op in read-only context
@@ -293,6 +354,7 @@ function WechatArticleViewInner(
 						isVisible
 						className="h-full w-full"
 						onInspectorActiveChange={onInspectorActiveChange}
+						onRenderReady={handleRenderReady}
 						enableInlineInspectorFallback
 					/>
 				</div>

@@ -947,6 +947,13 @@
 				"subtitle": "Open details from the list. Data updates keep you on the current page.",
 				"title": "Article home"
 			},
+			"splash": {
+				"description": "Capture ideas · publish content · compound feedback",
+				"headingFirstLine": "Turn every spark",
+				"headingSecondLine": "into a lasting echo",
+				"startCreating": "Start creating",
+				"subtitle": "Magic · Self Media"
+			},
 			"titleEdit": {
 				"cancel": "Cancel editing",
 				"edit": "Edit title",
@@ -1317,7 +1324,7 @@
 					"clear": "Clear",
 					"currentConfig": "Current configuration: {{value}}",
 					"custom": "Custom",
-					"empty": "Choose settings",
+					"empty": "Template settings",
 					"emptyPresets": "No templates available for this platform",
 					"fields": {
 						"cardCount": "Card count",

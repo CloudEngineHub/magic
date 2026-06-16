@@ -54,6 +54,7 @@ vi.mock("../components/SelfMediaPostCard", () => ({
 		opening,
 		openingDimmed,
 		openingStyle,
+		publishedLinkAutoOpenSignal,
 	}: {
 		onOpenPost: (
 			target: { platform: "rednote"; index: number },
@@ -67,12 +68,14 @@ vi.mock("../components/SelfMediaPostCard", () => ({
 		opening?: boolean
 		openingDimmed?: boolean
 		openingStyle?: React.CSSProperties
+		publishedLinkAutoOpenSignal?: number
 	}) => (
 		<button
 			type="button"
 			data-testid="mock-self-media-post-card"
 			data-opening={opening ? "true" : "false"}
 			data-dimmed={openingDimmed ? "true" : "false"}
+			data-published-link-auto-open-signal={publishedLinkAutoOpenSignal ?? ""}
 			style={openingStyle}
 			onClick={() =>
 				onOpenPost(
@@ -1422,13 +1425,19 @@ describe("SelfMediaHomePage styles", () => {
 		expect(screen.queryByTestId("self-media-home-ops-completion")).not.toBeInTheDocument()
 	})
 
-	it("opens the relevant next action from the quick continue list", () => {
+	it("opens the relevant binding action from the quick continue list", async () => {
 		const onOpenPost = vi.fn()
 		render(<SelfMediaHomePage posts={[createPostItem()]} onOpenPost={onOpenPost} />)
 
 		fireEvent.click(screen.getByTestId("self-media-home-ops-action-bind-source"))
 
-		expect(onOpenPost).toHaveBeenCalledWith({ platform: "rednote", index: 0 })
+		expect(onOpenPost).not.toHaveBeenCalled()
+		await waitFor(() => {
+			expect(screen.getByTestId("mock-self-media-post-card")).toHaveAttribute(
+				"data-published-link-auto-open-signal",
+				"1",
+			)
+		})
 	})
 
 	it("keeps the home header in the normal scroll layout", () => {

@@ -574,6 +574,28 @@ describe("SelfMediaPostCard", () => {
 		expect(onLoadPublishedUrl).not.toHaveBeenCalled()
 	})
 
+	it("scrolls the target card into view and opens the bind link form from a home action", async () => {
+		const scrollIntoView = vi.fn()
+		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+			configurable: true,
+			value: scrollIntoView,
+		})
+
+		renderCard({
+			opsArtifacts: { source: false, metrics: false, comments: false, review: false },
+			onBindPublishedUrl: vi.fn(),
+			publishedLinkAutoOpenSignal: 1,
+		})
+
+		expect(
+			await screen.findByTestId("self-media-home-post-bind-link-input-post-1"),
+		).toBeInTheDocument()
+		expect(scrollIntoView).toHaveBeenCalledWith({
+			behavior: "smooth",
+			block: "center",
+		})
+	})
+
 	it("marks created and updated artifact buttons with their matching animations", () => {
 		renderCard({
 			opsArtifacts: { source: true, metrics: true, comments: false, review: false },

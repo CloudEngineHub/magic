@@ -1,6 +1,22 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import enUS from "@/assets/locales/en_US/super.json"
+import zhCN from "@/assets/locales/zh_CN/super.json"
 import SelfMediaSplashScreen from "../components/SelfMediaSplashScreen"
+
+const splashTranslations = vi.hoisted(() => ({
+	"detail.selfMedia.splash.subtitle": "Localized splash badge",
+	"detail.selfMedia.splash.headingFirstLine": "Localized heading line one",
+	"detail.selfMedia.splash.headingSecondLine": "Localized heading line two",
+	"detail.selfMedia.splash.description": "Localized splash description",
+	"detail.selfMedia.splash.startCreating": "Localized start",
+}))
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => splashTranslations[key as keyof typeof splashTranslations] || key,
+	}),
+}))
 
 describe("SelfMediaSplashScreen", () => {
 	afterEach(() => {
@@ -11,15 +27,34 @@ describe("SelfMediaSplashScreen", () => {
 		const onComplete = vi.fn()
 		render(<SelfMediaSplashScreen onComplete={onComplete} />)
 
-		expect(screen.getByText("从这里开始")).toBeInTheDocument()
-		expect(screen.getByText("建立你的创作系统")).toBeInTheDocument()
-		expect(screen.getByText("收集灵感 · 输出内容 · 沉淀回响")).toBeInTheDocument()
+		expect(screen.getByText("Localized splash badge")).toBeInTheDocument()
+		expect(screen.getByText("Localized heading line one")).toBeInTheDocument()
+		expect(screen.getByText("Localized heading line two")).toBeInTheDocument()
+		expect(screen.getByText("Localized splash description")).toBeInTheDocument()
+		expect(screen.getByRole("button", { name: "Localized start" })).toBeInTheDocument()
 		expect(screen.queryByText("建立创作系统")).not.toBeInTheDocument()
 		expect(screen.queryByText("建立你的内容创作系统")).not.toBeInTheDocument()
 		expect(screen.queryByText("一处创作，")).not.toBeInTheDocument()
 		expect(screen.queryByText("触达所有人")).not.toBeInTheDocument()
 		expect(screen.getByTestId("self-media-splash-system-flow")).toBeInTheDocument()
 		expect(screen.getByTestId("self-media-splash-action-dot")).toBeInTheDocument()
+	})
+
+	it("keeps the splash copy available in both super locale files", () => {
+		expect(zhCN.detail.selfMedia.splash).toEqual({
+			subtitle: "Magic · 自媒体",
+			headingFirstLine: "让每一次灵感",
+			headingSecondLine: "都听到回响",
+			description: "收集灵感 · 输出内容 · 沉淀回响",
+			startCreating: "开始创作",
+		})
+		expect(enUS.detail.selfMedia.splash).toEqual({
+			subtitle: "Magic · Self Media",
+			headingFirstLine: "Turn every spark",
+			headingSecondLine: "into a lasting echo",
+			description: "Capture ideas · publish content · compound feedback",
+			startCreating: "Start creating",
+		})
 	})
 
 	it("renders a varied orbit gallery", () => {
@@ -100,7 +135,7 @@ describe("SelfMediaSplashScreen", () => {
 		render(<SelfMediaSplashScreen onComplete={onComplete} />)
 
 		const ringShell = screen.getAllByTestId("self-media-splash-ring-shell")[0]
-		fireEvent.click(screen.getByRole("button", { name: "开始创作" }))
+		fireEvent.click(screen.getByRole("button", { name: "Localized start" }))
 
 		expect(screen.queryByTestId("self-media-splash-exit-mask")).not.toBeInTheDocument()
 		expect(ringShell).toHaveAttribute("data-motion-state", "release")

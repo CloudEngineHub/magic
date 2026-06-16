@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import type { ImageProcessOptions } from "@/utils/image-processing"
@@ -27,8 +27,14 @@ interface EnsurePostLoaded {
 interface WechatCoverViewProps {
 	posts: SelfMediaPost[]
 	attachmentList?: PlatformComponentProps["attachmentList"]
+	priorityPostIndex?: number
 	onSelectPost: (idx: number) => void
 	onEnsurePostLoaded?: EnsurePostLoaded
+}
+
+interface WechatCoverDisplayPost {
+	post: SelfMediaPost
+	originalIndex: number
 }
 
 interface WechatCoverCardProps {
@@ -179,6 +185,22 @@ function ThumbnailImage({ fileId, enabled }: { fileId?: string; enabled: boolean
 	)
 }
 
+export function buildWechatCoverDisplayPosts(
+	posts: SelfMediaPost[],
+	priorityPostIndex?: number,
+): WechatCoverDisplayPost[] {
+	const items = posts.map((post, originalIndex) => ({ post, originalIndex }))
+	if (
+		priorityPostIndex === undefined ||
+		priorityPostIndex <= 0 ||
+		priorityPostIndex >= items.length
+	) {
+		return items
+	}
+	const [priority] = items.splice(priorityPostIndex, 1)
+	return priority ? [priority, ...items] : items
+}
+
 function AccountHeader({ post }: { post: SelfMediaPost }) {
 	const { t } = useTranslation("super")
 	const author = (post.meta.author || "").replace(/^@+/, "")
@@ -303,8 +325,17 @@ function WechatCoverCard({
 	)
 }
 
-function WechatCoverView({ posts, onSelectPost, onEnsurePostLoaded }: WechatCoverViewProps) {
+function WechatCoverView({
+	posts,
+	priorityPostIndex,
+	onSelectPost,
+	onEnsurePostLoaded,
+}: WechatCoverViewProps) {
 	const scrollRootRef = useRef<HTMLDivElement>(null)
+	const displayPosts = useMemo(
+		() => buildWechatCoverDisplayPosts(posts, priorityPostIndex),
+		[posts, priorityPostIndex],
+	)
 
 	return (
 		<div
@@ -314,11 +345,11 @@ function WechatCoverView({ posts, onSelectPost, onEnsurePostLoaded }: WechatCove
 			data-testid="wechat-cover-view"
 		>
 			<div className="w-full pt-2">
-				{posts.map((post, idx) => (
+				{displayPosts.map(({ post, originalIndex }, idx) => (
 					<WechatCoverCard
 						key={post.meta.id || idx}
 						post={post}
-						postIndex={idx}
+						postIndex={originalIndex}
 						onSelectPost={onSelectPost}
 						onEnsurePostLoaded={onEnsurePostLoaded}
 						scrollRootRef={scrollRootRef}

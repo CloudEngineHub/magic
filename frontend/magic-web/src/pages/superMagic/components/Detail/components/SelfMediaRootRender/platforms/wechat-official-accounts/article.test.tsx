@@ -12,6 +12,19 @@ const { rendererStartInspectorMock, rendererStartInspectorAppendMock, rendererSt
 		rendererStopInspectorMock: vi.fn(),
 	}))
 
+type MockIframeWindow = {
+	scrollY: number
+	pageYOffset: number
+	scrollTo: ReturnType<typeof vi.fn>
+	addEventListener: ReturnType<typeof vi.fn>
+	removeEventListener: ReturnType<typeof vi.fn>
+	dispatchScroll: () => void
+}
+
+const { mockIframeWindows } = vi.hoisted(() => ({
+	mockIframeWindows: [] as MockIframeWindow[],
+}))
+
 vi.mock("./wechatArticleHtml", () => ({
 	loadWechatArticleHtml: vi.fn(() =>
 		Promise.resolve({
@@ -103,22 +116,60 @@ vi.mock("../../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 	return {
 		__esModule: true,
 		default: forwardRef<IsolatedHTMLRendererRef>(function MockIsolatedHTMLRenderer(
-			props: { content?: string },
+			props: { content?: string; onRenderReady?: () => void },
 			ref,
 		) {
+			const { content, onRenderReady } = props
 			const iframeRef = useRef<HTMLIFrameElement>(null)
+			const windowRef = useRef<MockIframeWindow | null>(null)
+			if (!windowRef.current) {
+				const listeners = new Set<EventListenerOrEventListenerObject>()
+				const mockWindow = {
+					scrollY: 0,
+					pageYOffset: 0,
+					scrollTo: vi.fn((options: ScrollToOptions | number, y?: number) => {
+						const top = typeof options === "number" ? y : options.top
+						mockWindow.scrollY = Number(top || 0)
+						mockWindow.pageYOffset = mockWindow.scrollY
+					}),
+					addEventListener: vi.fn(
+						(type: string, listener: EventListenerOrEventListenerObject) => {
+							if (type === "scroll") listeners.add(listener)
+						},
+					),
+					removeEventListener: vi.fn(
+						(type: string, listener: EventListenerOrEventListenerObject) => {
+							if (type === "scroll") listeners.delete(listener)
+						},
+					),
+					dispatchScroll: () => {
+						const event = new Event("scroll")
+						listeners.forEach((listener) => {
+							if (typeof listener === "function") listener(event)
+							else listener.handleEvent(event)
+						})
+					},
+				}
+				windowRef.current = mockWindow
+				mockIframeWindows.push(mockWindow)
+			}
 
 			useEffect(() => {
 				if (!iframeRef.current) return
 				const frameDocument = document.implementation.createHTMLDocument("wechat article")
 				frameDocument.open()
-				frameDocument.write(props.content || "")
+				frameDocument.write(content || "")
 				frameDocument.close()
 				Object.defineProperty(iframeRef.current, "contentDocument", {
 					configurable: true,
 					value: frameDocument,
 				})
-			}, [props.content])
+				Object.defineProperty(iframeRef.current, "contentWindow", {
+					configurable: true,
+					value: windowRef.current,
+				})
+				onRenderReady?.()
+			}, [content, onRenderReady])
 
 			useImperativeHandle(ref, () => ({
 				getIframeElement: () => iframeRef.current,
@@ -136,7 +187,7 @@ vi.mock("../../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 			return (
 				<div data-testid="mock-isolated-html-renderer">
 					<iframe ref={iframeRef} title="mock wechat article" />
-					{props.content}
+					{content}
 				</div>
 			)
 		}),
@@ -148,6 +199,7 @@ describe("WechatArticleView", () => {
 		rendererStartInspectorMock.mockClear()
 		rendererStartInspectorAppendMock.mockClear()
 		rendererStopInspectorMock.mockClear()
+		mockIframeWindows.length = 0
 		vi.mocked(loadWechatArticleHtml).mockResolvedValue({
 			content: "<main>article</main>",
 			filePathMapping: new Map(),
@@ -234,6 +286,66 @@ describe("WechatArticleView", () => {
 			expect(html).toContain('<p class="lead" style="color:red;font-weight:700">article</p>')
 			expect(html).not.toContain("<style>")
 			expect(html).not.toContain("<script>")
+		})
+	})
+
+	it("restores the iframe scroll position after the same article file refreshes", async () => {
+		vi.mocked(loadWechatArticleHtml)
+			.mockResolvedValueOnce({
+				content: "<main>article v1</main>",
+				filePathMapping: new Map(),
+			})
+			.mockResolvedValueOnce({
+				content: "<main>article v2</main>",
+				filePathMapping: new Map(),
+			})
+
+		const post = {
+			meta: { id: "wechat-post-1", title: "Article" },
+			cards: [],
+			article: { path: "article.html", fileId: "article-file-1" },
+		}
+		const { rerender } = render(
+			<WechatArticleView
+				post={post}
+				attachmentList={[{ file_id: "article-file-1", updated_at: "1" }]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("mock-isolated-html-renderer")).toHaveTextContent(
+				"article v1",
+			)
+		})
+		await waitFor(() => {
+			expect(mockIframeWindows[0]?.addEventListener).toHaveBeenCalledWith(
+				"scroll",
+				expect.any(Function),
+				{ passive: true },
+			)
+		})
+		mockIframeWindows[0].scrollY = 360
+		mockIframeWindows[0].pageYOffset = 360
+		mockIframeWindows[0].dispatchScroll()
+
+		rerender(
+			<WechatArticleView
+				post={post}
+				attachmentList={[{ file_id: "article-file-1", updated_at: "2" }]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("mock-isolated-html-renderer")).toHaveTextContent(
+				"article v2",
+			)
+		})
+		await waitFor(() => {
+			expect(mockIframeWindows.at(-1)?.scrollTo).toHaveBeenCalledWith({
+				top: 360,
+				left: 0,
+				behavior: "auto",
+			})
 		})
 	})
 

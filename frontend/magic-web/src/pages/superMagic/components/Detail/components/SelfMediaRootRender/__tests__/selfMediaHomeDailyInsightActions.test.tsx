@@ -166,6 +166,59 @@ describe("self-media home daily insight actions", () => {
 		expect(onCreateArticle).toHaveBeenCalledTimes(1)
 	})
 
+	it("routes setup and review actions to the matching home workflow target", () => {
+		const onOpenPost = vi.fn()
+		const onOpenPublishedLinkBinding = vi.fn()
+		const onOpenOpsMetrics = vi.fn()
+		const onPostPublishRefresh = vi.fn()
+		const onOpenOpsReview = vi.fn()
+		const postsByPostKey = new Map([
+			["rednote:0:posts/best/post.json", createPostItem(0, "posts/best/post.json")],
+		])
+
+		executeSelfMediaOpsOverviewAction({
+			action: {
+				key: "bind-source",
+				postKey: "rednote:0:posts/best/post.json",
+				title: "绑定已发布链接",
+				description: "补齐链接",
+				cta: "去绑定",
+				priority: 10,
+			},
+			postsByPostKey,
+			onOpenPost,
+			onOpenPublishedLinkBinding,
+			onOpenOpsMetrics,
+			onPostPublishRefresh,
+			onOpenOpsReview,
+		})
+
+		expect(onOpenPublishedLinkBinding).toHaveBeenCalledWith(
+			createPostItem(0, "posts/best/post.json"),
+		)
+		expect(onOpenPost).not.toHaveBeenCalled()
+
+		executeSelfMediaOpsOverviewAction({
+			action: {
+				key: "collect-comments",
+				postKey: "rednote:0:posts/best/post.json",
+				title: "补充评论反馈",
+				description: "补评论",
+				cta: "补评论",
+				priority: 30,
+			},
+			postsByPostKey,
+			onOpenPost,
+			onOpenPublishedLinkBinding,
+			onOpenOpsMetrics,
+			onPostPublishRefresh,
+			onOpenOpsReview,
+		})
+
+		expect(onOpenOpsMetrics).toHaveBeenCalledWith(createPostItem(0, "posts/best/post.json"))
+		expect(onPostPublishRefresh).not.toHaveBeenCalled()
+	})
+
 	it("persists removed AI generated suggestions back to the insight file", async () => {
 		const cachedInsight = createInsight()
 		const storage = {

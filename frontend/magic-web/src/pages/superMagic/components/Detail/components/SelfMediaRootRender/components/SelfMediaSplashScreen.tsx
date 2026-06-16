@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react"
 import type { CSSProperties } from "react"
 import { motion } from "framer-motion"
-import { useTranslation, Trans } from "react-i18next"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 
 const galleryImageModules = import.meta.glob<string>("./splash-gallery/open-art-*.jpg", {
@@ -392,30 +392,18 @@ export default function SelfMediaSplashScreen({ onComplete }: SelfMediaSplashScr
 					data-testid="self-media-splash-copy"
 				>
 					<p className="mb-5 text-[13px] font-[800] uppercase text-[#18181b]">
-						{t("selfMedia.splash.subtitle", "Magic · 自媒体")}
+						{t("detail.selfMedia.splash.subtitle")}
 					</p>
 					<h2 className="mb-6 text-[42px] font-[760] leading-[1.12] text-[#09090b] sm:text-[58px]">
 						<span className="block">
-							<Trans
-								ns="super"
-								i18nKey="selfMedia.splash.heading1"
-								defaults="让每一个灵感"
-							/>
+							{t("detail.selfMedia.splash.headingFirstLine")}
 						</span>
 						<span className="block">
-							<Trans
-								ns="super"
-								i18nKey="selfMedia.splash.heading2"
-								defaults="都听到回响"
-							/>
+							{t("detail.selfMedia.splash.headingSecondLine")}
 						</span>
 					</h2>
 					<p className="mb-5 text-[14px] font-[650] text-zinc-500 sm:text-[15px]">
-						<Trans
-							ns="super"
-							i18nKey="selfMedia.splash.description"
-							defaults="收集灵感 · 输出内容 · 沉淀回响"
-						/>
+						{t("detail.selfMedia.splash.description")}
 					</p>
 					<div
 						aria-hidden="true"
@@ -447,7 +435,7 @@ export default function SelfMediaSplashScreen({ onComplete }: SelfMediaSplashScr
 							className="self-media-splash-action-dot h-1.5 w-1.5 rounded-full bg-white"
 							data-testid="self-media-splash-action-dot"
 						/>
-						{t("selfMedia.splash.startCreating", "开始创作")}
+						{t("detail.selfMedia.splash.startCreating")}
 					</button>
 				</div>
 			</div>

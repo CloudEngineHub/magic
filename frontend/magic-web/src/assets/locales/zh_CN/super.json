@@ -948,6 +948,13 @@
 				"subtitle": "从文章列表进入详情，数据更新时会保留当前页面。",
 				"title": "文章首页"
 			},
+			"splash": {
+				"description": "收集灵感 · 输出内容 · 沉淀回响",
+				"headingFirstLine": "让每一次灵感",
+				"headingSecondLine": "都听到回响",
+				"startCreating": "开始创作",
+				"subtitle": "Magic · 自媒体"
+			},
 			"titleEdit": {
 				"cancel": "取消编辑",
 				"edit": "编辑标题",
@@ -1318,7 +1325,7 @@
 					"clear": "清空",
 					"currentConfig": "当前配置：{{value}}",
 					"custom": "自定义",
-					"empty": "选择配置",
+					"empty": "模板配置",
 					"emptyPresets": "当前平台暂无可选模板",
 					"fields": {
 						"cardCount": "卡片数量",

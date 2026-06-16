@@ -181,6 +181,10 @@ function SelfMediaHomePage({
 	const [opsArtifactAnimationsByPostKey, setOpsArtifactAnimationsByPostKey] = useState(
 		() => new Map<string, OpsArtifactAnimations>(),
 	)
+	const [publishedLinkAutoOpenTarget, setPublishedLinkAutoOpenTarget] = useState<{
+		postKey: string
+		signal: number
+	} | null>(null)
 	const hasPosts = posts.length > 0
 	const postGroups = posts.reduce<SelfMediaHomePostGroup[]>((groups, item) => {
 		const group = groups.find((candidate) => candidate.platform === item.platform)
@@ -319,11 +323,19 @@ function SelfMediaHomePage({
 				postsByPostKey,
 				onOpenPost: (target) => handleOpenPost(target),
 				onCreateArticle,
+				onOpenPublishedLinkBinding: (target) => {
+					const postKey = getSelfMediaPostKey(target)
+					setPublishedLinkAutoOpenTarget((current) => ({
+						postKey,
+						signal: (current?.signal ?? 0) + 1,
+					}))
+				},
 				onPostPublishRefresh,
+				onOpenOpsMetrics,
 				onOpenOpsReview: setActiveOpsReviewTarget,
 			})
 		},
-		[handleOpenPost, onCreateArticle, onPostPublishRefresh, postsByPostKey],
+		[handleOpenPost, onCreateArticle, onOpenOpsMetrics, onPostPublishRefresh, postsByPostKey],
 	)
 
 	const aiCardFolders = useMemo(() => {
@@ -432,6 +444,7 @@ function SelfMediaHomePage({
 								opsArtifactsByPostKey={opsArtifactsByPostKey}
 								opsMetricsByPostKey={opsMetricsByPostKey}
 								opsArtifactAnimationsByPostKey={opsArtifactAnimationsByPostKey}
+								publishedLinkAutoOpenTarget={publishedLinkAutoOpenTarget}
 								columnCount={getSelfMediaHomePostColumnCount(homeLayout)}
 								onOpenPost={handleOpenPost}
 								onRequestPrePublishAnalysis={onRequestPrePublishAnalysis}

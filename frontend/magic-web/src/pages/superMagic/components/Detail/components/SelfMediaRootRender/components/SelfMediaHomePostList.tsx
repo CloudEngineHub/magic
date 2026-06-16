@@ -30,6 +30,7 @@ interface SelfMediaHomePostListProps {
 	opsArtifactsByPostKey: Map<string, SelfMediaPostOpsArtifacts>
 	opsMetricsByPostKey: Map<string, SelfMediaPostOpsMetricsPayload | null>
 	opsArtifactAnimationsByPostKey: Map<string, SelfMediaPostOpsArtifactAnimations>
+	publishedLinkAutoOpenTarget?: { postKey: string; signal: number } | null
 	columnCount?: 1 | 2 | 3
 	onOpenPost: (
 		target: { platform: SelfMediaPlatform; index: number },
@@ -76,6 +77,7 @@ function SelfMediaHomePostList({
 	opsArtifactsByPostKey,
 	opsMetricsByPostKey,
 	opsArtifactAnimationsByPostKey,
+	publishedLinkAutoOpenTarget,
 	columnCount = 1,
 	onOpenPost,
 	onRequestPrePublishAnalysis,
@@ -170,6 +172,11 @@ function SelfMediaHomePostList({
 										opsArtifactAnimations={opsArtifactAnimationsByPostKey.get(
 											postKey,
 										)}
+										publishedLinkAutoOpenSignal={
+											publishedLinkAutoOpenTarget?.postKey === postKey
+												? publishedLinkAutoOpenTarget.signal
+												: undefined
+										}
 										opsMetrics={opsMetrics}
 										attachmentList={attachmentList}
 										opening={isOpening}

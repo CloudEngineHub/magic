@@ -341,6 +341,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 						loading={loading}
 						error={error}
 						posts={posts}
+						activePostIndex={activePostIndex}
 						attachmentList={attachmentList}
 						onSelectPost={handleFeedSelectPost}
 						onEnsurePostLoaded={onEnsurePostLoaded}

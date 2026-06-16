@@ -32,6 +32,7 @@ interface SelfMediaPostPublishedLinkPopoverProps {
 		target: SelfMediaPlatformPostItem,
 		publishedUrl?: string,
 	) => Promise<void> | void
+	autoOpenSignal?: number
 }
 
 function SelfMediaPostPublishedLinkPopover({
@@ -48,6 +49,7 @@ function SelfMediaPostPublishedLinkPopover({
 	onLoadPublishedUrl,
 	onBindPublishedUrl,
 	onPostPublishRefresh,
+	autoOpenSignal,
 }: SelfMediaPostPublishedLinkPopoverProps) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
@@ -62,6 +64,11 @@ function SelfMediaPostPublishedLinkPopover({
 			: "detail.selfMedia.home.bindPublishedLink",
 	)
 	const contentAlign = trigger === "artifact" ? "start" : "end"
+
+	useEffect(() => {
+		if (!autoOpenSignal) return
+		setOpen(true)
+	}, [autoOpenSignal])
 
 	useEffect(() => {
 		if (!open) return
