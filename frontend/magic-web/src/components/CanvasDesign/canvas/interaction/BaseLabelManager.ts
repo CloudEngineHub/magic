@@ -329,9 +329,13 @@ export abstract class BaseLabelManager {
 			this.lastHoveredElementId = newHoveredId
 		})
 
-		// 监听 viewport 缩放变化（pan 不需要：overlayLayer 随 stage 平移，标签相对关系不变）
+		// 监听 viewport 变化：scale 会改变反向缩放；pan 可能让带旧 scale 的离屏标签进入视口。
 		this.listen("viewport:scale", () => {
 			this.scheduleVisibleLabelSync("viewport-scale")
+		})
+
+		this.listen("viewport:pan", () => {
+			this.scheduleVisibleLabelSync("viewport-pan")
 		})
 
 		this.listen("viewport:changed", ({ data }) => {
@@ -808,16 +812,24 @@ export abstract class BaseLabelManager {
 		const candidateIds = this.getVisibleLabelCandidateIds()
 		let touched = false
 		const isViewportScale = reason === "viewport-scale"
+		const isViewportPan = reason === "viewport-pan"
+		let createdLabel = false
 
 		for (const elementId of candidateIds) {
 			if (!this.shouldShowLabel(elementId)) continue
+			const hadLabel = this.labelMap.has(elementId)
 			this.createOrUpdateLabel(elementId, { skipReorder: true, skipNotify: true })
+			if (!hadLabel && this.labelMap.has(elementId)) {
+				createdLabel = true
+			}
 			touched = true
 		}
 
-		if (isViewportScale) {
-			if (touched) {
+		if (isViewportScale || isViewportPan) {
+			if (createdLabel) {
 				this.reorderAllLabels()
+			}
+			if (touched) {
 				this.requestOverlayDraw(`visible-labels:${reason}`)
 			}
 			return
