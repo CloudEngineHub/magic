@@ -86,7 +86,7 @@ After writing, verify against this checklist:
 
 ### Completeness
 - [ ] Is the content semantically complete and self-consistent?
-- [ ] Does it follow the `<!--zh ... -->` annotation format if bilingual?
+- [ ] If multilingual content is required, does it use clear language-specific sections instead of HTML comment annotations?
 - [ ] Is any information lost or ambiguous?
 
 ## 3. Anti-pattern Detection
@@ -136,12 +136,10 @@ In the Crew Agent file system, this means:
 
 ## 4. Multilingual Strategy
 
-- Default: generate single-language employee prompts in the user's preferred language (from `<user_preferred_language>`)
+- Default: generate single-language employee prompts in the user's preferred language from `<user_preferred_language>`
 - Only enable multilingual mode when the user explicitly requests it
-- In multilingual mode, the user's preferred language is the active (non-commented) content; auxiliary languages use `<!--xx -->` comment blocks:
-  - Chinese auxiliary → `<!--zh Chinese content -->`
-  - English auxiliary → `<!--en English content -->`
-- YAML header base fields (name, role, description) always use the user's preferred language; auxiliary language fields use `_cn` / `_en` suffixes
+- In multilingual mode, keep the user's preferred language first, then add auxiliary languages in clear sections or fields. Do not use HTML comment annotations for translations.
+- YAML header base fields (name, role, description) always use the user's preferred language; auxiliary language fields may use language suffixes when the target format requires them
 - When translating, maintain information density: express the most with the fewest words, avoid translationese
 
 ## 5. Security Constraint Template

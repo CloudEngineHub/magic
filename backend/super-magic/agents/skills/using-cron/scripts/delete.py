@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-删除定时消息任务
+Delete a scheduled message task.
 
-参数：
-    --id    定时任务 ID（必填）
+Arguments:
+    --id    Scheduled task ID. Required.
 
-输出格式：JSON
+Output format: JSON
 """
 import json
 import argparse
 
-import _context  # 初始化项目根路径
+import _context  # initialize project root path
 from app.infrastructure.sdk.magic_service.factory import create_magic_service_sdk_with_defaults
 from app.infrastructure.sdk.magic_service.parameter.message_schedule_parameter import (
     DeleteMessageScheduleParameter,
 )
 
-parser = argparse.ArgumentParser(description="删除定时消息任务")
-parser.add_argument("--id", required=True, help="定时任务 ID")
+parser = argparse.ArgumentParser(description="Delete a scheduled message task")
+parser.add_argument("--id", required=True, help="Scheduled task ID")
 args = parser.parse_args()
 
 try:

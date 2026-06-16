@@ -1,8 +1,9 @@
-"""SystemSkillsProvider：从 agents/skills/ 和 agents/crews/*/skills/ 目录加载内置系统 skill
+"""Load built-in system skills from agents/skills/ and agents/crews/*/skills/.
 
-系统 skill 已内置于项目中，无需安装，最高优先级。
-同时扫描数字员工（crew）的专属 skill 目录，对外统一以 system 来源呈现。
-搜索时联合匹配 name / description / name-cn / description-cn / 目录名。
+System skills are bundled with the project, require no installation, and have
+the highest provider priority. Crew-specific skill directories are exposed
+through the same system provider. Search matches name, description, and
+directory name.
 """
 from __future__ import annotations
 
@@ -25,7 +26,7 @@ _loader = SkillLoader()
 
 
 class SystemSkillsProvider(SkillProvider):
-    """内置系统 skill 来源（agents/skills/ 及 agents/crews/*/skills/ 目录）"""
+    """System skill provider for agents/skills/ and agents/crews/*/skills/."""
 
     id = SkillProviderId.SYSTEM
 
@@ -34,7 +35,7 @@ class SystemSkillsProvider(SkillProvider):
         return PathManager.get_agents_dir() / "skills"
 
     def _get_crew_skills_roots(self) -> list[Path]:
-        """返回所有 crew 的 skills 目录路径列表（agents/crews/*/skills/）"""
+        """Return all crew skill directories under agents/crews/*/skills/."""
         from app.path_manager import PathManager
         crews_root = PathManager.get_crew_root_dir()
         if not crews_root.exists():
@@ -46,11 +47,11 @@ class SystemSkillsProvider(SkillProvider):
                 if entry.is_dir() and not entry.name.startswith(".")
             ]
         except Exception as e:
-            logger.warning(f"[system_skills] 遍历 crews 目录失败: {e}")
+            logger.warning(f"[system_skills] failed to scan crews directory: {e}")
             return []
 
     async def _scan_dir(self, skills_dir: Path) -> list[dict]:
-        """扫描单个 skills 目录，返回 skill 元数据列表"""
+        """Scan one skills directory and return skill metadata."""
         if not await async_exists(skills_dir):
             return []
 
@@ -58,7 +59,7 @@ class SystemSkillsProvider(SkillProvider):
             all_entries = await async_iterdir(skills_dir)
             entries = [e for e in all_entries if e.is_dir() and not e.name.startswith(".")]
         except Exception as e:
-            logger.warning(f"[system_skills] 遍历 {skills_dir} 失败: {e}")
+            logger.warning(f"[system_skills] failed to scan {skills_dir}: {e}")
             return []
 
         results: list[dict] = []
@@ -68,23 +69,19 @@ class SystemSkillsProvider(SkillProvider):
                 continue
             try:
                 meta = await _loader.load_from_file(skill_md)
-                raw = meta.raw_metadata or {}
                 results.append({
                     "dir_name": entry.name,
                     "local_path": entry,
                     "name": meta.name or entry.name,
-                    "description": meta.description or raw.get("description-cn") or "",
-                    # 兼容社区 skill 仍在使用的中文字段
-                    "name_cn": raw.get("name-cn") or "",
-                    "description_cn": raw.get("description-cn") or "",
+                    "description": meta.description or "",
                 })
             except Exception as e:
-                logger.warning(f"[system_skills] 读取 {skill_md} 失败: {e}")
+                logger.warning(f"[system_skills] failed to read {skill_md}: {e}")
 
         return results
 
     async def _load_all(self) -> list[dict]:
-        """扫描 agents/skills/ 和所有 crew skills 目录，返回完整 skill 元数据列表"""
+        """Scan agents/skills/ plus all crew skill directories."""
         results = await self._scan_dir(self._get_skills_root())
 
         crew_roots = await asyncio.to_thread(self._get_crew_skills_roots)
@@ -95,14 +92,13 @@ class SystemSkillsProvider(SkillProvider):
         return results
 
     def _matches(self, skill: dict, keyword: str) -> bool:
-        """keyword 为空时全量返回；否则多字段联合匹配"""
+        """Return all skills for an empty keyword; otherwise match searchable fields."""
         if not keyword:
             return True
         kw = keyword.lower()
         return any(
             kw in str(skill.get(f, "")).lower()
-            # name_cn/description_cn: 兼容社区 skill 的中文字段搜索
-            for f in ("name", "description", "name_cn", "description_cn", "dir_name")
+            for f in ("name", "description", "dir_name")
         )
 
     async def search(self, keyword: str, limit: int | None = 10) -> list[SkillCandidate]:
@@ -118,9 +114,6 @@ class SystemSkillsProvider(SkillProvider):
                 version=None,
                 extra={
                     "local_path": str(s["local_path"]),
-                    # 兼容社区 skill 的中文字段，供搜索和展示使用
-                    "name_cn": s["name_cn"],
-                    "description_cn": s["description_cn"],
                 },
             )
             for s in effective
@@ -132,10 +125,10 @@ class SystemSkillsProvider(SkillProvider):
         *,
         version: str | None = None,
     ) -> FetchedSkill:
-        """系统 skill 已在本地，直接返回本地路径"""
+        """Return the local path for a bundled system skill."""
         skill_id = self._get_id(ref)
 
-        # 优先从 candidate extra 中取精确路径
+        # Prefer the exact path carried by the search candidate.
         if isinstance(ref, SkillCandidate) and ref.extra.get("local_path"):
             local_path = Path(ref.extra["local_path"])
             if await async_exists(local_path):
@@ -145,7 +138,7 @@ class SystemSkillsProvider(SkillProvider):
                     source_url=f"system://{skill_id}",
                 )
 
-        # 先查 agents/skills/
+        # Check agents/skills/ first.
         local_path = self._get_skills_root() / skill_id
         if await async_exists(local_path):
             return FetchedSkill(
@@ -154,7 +147,7 @@ class SystemSkillsProvider(SkillProvider):
                 source_url=f"system://{skill_id}",
             )
 
-        # 再查 crew skills 目录
+        # Then check crew skill directories.
         crew_roots = await asyncio.to_thread(self._get_crew_skills_roots)
         for crew_root in crew_roots:
             candidate = crew_root / skill_id
@@ -166,7 +159,7 @@ class SystemSkillsProvider(SkillProvider):
                 )
 
         raise FileNotFoundError(
-            f"[system_skills] skill '{skill_id}' 不存在于 agents/skills/ 或任何 crew skills 目录"
+            f"[system_skills] skill '{skill_id}' does not exist in agents/skills/ or any crew skills directory"
         )
 
     async def resolve_latest(self, ref: SkillCandidate | str) -> str | None:

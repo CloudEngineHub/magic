@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-将 skill 目录打包为 .zip 文件；可选在打包结束后调用 upload_skill.py 上传。
+Package a skill directory as a .zip file; optionally call upload_skill.py after packaging.
 
-只打包（默认）：
+Package only (default):
     python scripts/package_skill.py <skill-dir> [output-dir] [--version 1.0.0]
 
-打包并上传（内部会再执行一次 upload_skill.py）：
+Package and upload (internally runs upload_skill.py):
     python scripts/package_skill.py <skill-dir> [output-dir] --version 1.0.0 --upload
 
-稍后单独上传已生成的 .zip：
+Upload an already generated .zip later:
     python scripts/upload_skill.py <path-to.zip>
 
-上传接口说明见 upload_skill.py 文档字符串。
+See upload_skill.py for upload API notes.
 """
 
 from __future__ import annotations
@@ -29,26 +29,26 @@ import _skill_scripts_bootstrap  # noqa: F401
 from quick_validate import validate_skill  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# 打包配置
+# Packaging config
 # ---------------------------------------------------------------------------
 
-# 排除所有层级中包含这些名称的目录
+# Exclude directories with these names at any depth.
 EXCLUDE_DIRS = {"__pycache__", "node_modules"}
 EXCLUDE_GLOBS = {"*.pyc"}
 EXCLUDE_FILES = {".DS_Store"}
-# 仅在 skill 根目录第一层排除的目录
+# Exclude these directories only at the skill root's first child level.
 ROOT_EXCLUDE_DIRS = {"evals"}
 
-# 打包产物文件名后缀（zip 格式，与后端 import 接受的扩展名一致）
+# Package filename suffix; zip format matches the backend import contract.
 PACKAGE_FILE_SUFFIX = ".zip"
 
 
 def should_exclude(rel_path: Path) -> bool:
-    """判断路径是否应在打包时排除。"""
+    """Return whether a relative path should be excluded from the package."""
     parts = rel_path.parts
     if any(part in EXCLUDE_DIRS for part in parts):
         return True
-    # parts[0] = skill 文件夹名，parts[1] = 第一级子目录
+    # parts[0] is the skill folder name; parts[1] is its first child directory.
     if len(parts) > 1 and parts[1] in ROOT_EXCLUDE_DIRS:
         return True
     name = rel_path.name
@@ -58,7 +58,7 @@ def should_exclude(rel_path: Path) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# 打包
+# Packaging
 # ---------------------------------------------------------------------------
 
 async def package_skill(
@@ -67,15 +67,15 @@ async def package_skill(
     version: Optional[str] = None,
 ) -> Optional[Path]:
     """
-    将 skill 目录打包为 .zip 文件。
+    Package a skill directory as a .zip file.
 
     Args:
-        skill_path: skill 目录路径
-        output_dir: 输出目录（默认为当前工作目录）
-        version:    版本号字符串，如 "1.0.0"；若提供则文件名为 <name>-v<version>.zip
+        skill_path: Skill directory path.
+        output_dir: Output directory; defaults to the current working directory.
+        version: Version string such as "1.0.0"; when provided, filename becomes <name>-v<version>.zip.
 
     Returns:
-        打包成功返回 .zip 文件路径，否则返回 None
+        The .zip file path on success, otherwise None.
     """
     skill_path = Path(skill_path).resolve()
 
@@ -105,10 +105,10 @@ async def package_skill(
         output_path = Path(output_dir).resolve()
         await asyncio.to_thread(output_path.mkdir, parents=True, exist_ok=True)
     else:
-        # 默认输出到 skill 目录的父目录，与 skill 文件夹同层
+        # Default output sits next to the skill folder.
         output_path = skill_path.parent
 
-    # 带版本号时文件名加 -v<version> 后缀
+    # Add -v<version> to the filename when a version is provided.
     filename_stem = f"{skill_name}-v{version}" if version else skill_name
     skill_filename = output_path / f"{filename_stem}{PACKAGE_FILE_SUFFIX}"
 
@@ -136,7 +136,7 @@ async def package_skill(
 
 
 # ---------------------------------------------------------------------------
-# 调用独立上传脚本（打包并上传时分步执行）
+# Invoke the standalone upload script after packaging when requested.
 # ---------------------------------------------------------------------------
 
 async def _run_upload_script(
@@ -144,7 +144,7 @@ async def _run_upload_script(
     name_zh: Optional[str],
     name_en: Optional[str],
 ) -> int:
-    """异步子进程执行 scripts/upload_skill.py，返回进程退出码。"""
+    """Run scripts/upload_skill.py as an async subprocess and return its exit code."""
     upload_script = Path(__file__).resolve().parent / "upload_skill.py"
     cmd = [sys.executable, str(upload_script), str(skill_file)]
     if name_zh:
@@ -160,26 +160,26 @@ async def _run_upload_script(
 
 
 # ---------------------------------------------------------------------------
-# 入口
+# Entry point
 # ---------------------------------------------------------------------------
 
 async def _main():
     parser = argparse.ArgumentParser(
-        description="将 skill 目录打包为 .zip 文件；加 --upload 时再调用 upload_skill.py 上传",
+        description="Package a skill directory as a .zip file; add --upload to call upload_skill.py afterwards",
     )
-    parser.add_argument("skill_path", help="skill 目录路径")
-    parser.add_argument("output_dir", nargs="?", default=None, help="输出目录（默认为当前工作目录）")
+    parser.add_argument("skill_path", help="Skill directory path")
+    parser.add_argument("output_dir", nargs="?", default=None, help="Output directory; defaults to the current working directory")
     parser.add_argument("--version", default=None, metavar="VERSION",
-                        help="版本号，如 1.0.0；文件名将变为 <name>-v<version>.zip")
+                        help="Version such as 1.0.0; filename becomes <name>-v<version>.zip")
     parser.add_argument("--upload", dest="upload", action="store_true",
-                        help="打包成功后调用 upload_skill.py 上传到「我的技能库」（默认不调用）")
+                        help="Call upload_skill.py after successful packaging")
     parser.add_argument("--no-upload", dest="upload", action="store_false",
-                        help="只打包，不上传（默认行为）")
+                        help="Package only without upload; this is the default")
     parser.set_defaults(upload=False)
     parser.add_argument("--name-zh", default=None, metavar="NAME",
-                        help="随 --upload 传给 upload_skill.py，覆盖技能中文名称（可选）")
+                        help="Forward to upload_skill.py to override the Chinese display name")
     parser.add_argument("--name-en", default=None, metavar="NAME",
-                        help="随 --upload 传给 upload_skill.py，覆盖技能英文名称（可选）")
+                        help="Forward to upload_skill.py to override the English display name")
     args = parser.parse_args()
 
     print(f"Packaging skill: {args.skill_path}")

@@ -20,9 +20,9 @@ Also handles first-time employee initialization when the workspace has no defini
 
 The system injects `<user_preferred_language>` indicating the user's preferred language. Follow these rules when generating employee files:
 
-**Default single-language mode**: Generate all content in the user's preferred language, without `<!--zh -->` bilingual format. YAML header uses single-language fields only.
+**Default single-language mode**: Generate all content in the user's preferred language. YAML header uses single-language fields only.
 
-**Only enable bilingual mode when the user explicitly requests multiple languages**. In bilingual format, use the user's preferred language as primary (non-commented), with the auxiliary language in comments.
+**Only enable multilingual mode when the user explicitly requests multiple languages**. Use clear language-specific sections or fields. Do not use HTML comment annotations for translations.
 
 ## Employee Initialization Flow
 
@@ -204,12 +204,18 @@ shell_exec(
 
 ## Multilingual Content Format
 
-**Default single-language mode**: Write staff files directly in the user's preferred language, without `<!--zh -->` comment format.
+**Default single-language mode**: Write staff files directly in the user's preferred language. Do not use HTML comment annotations for translations.
 
-**Only when the user explicitly requests multiple languages**, use the following bilingual format. The user's preferred language is the primary (non-commented) content; the auxiliary language goes inside comment blocks:
+**Only when the user explicitly requests multiple languages**, use ordinary language-specific sections. Keep the user's preferred language first, then add the auxiliary language below it with a clear heading:
 
 ```markdown
-English content (primary language as active content)
+## English
+
+English content.
+
+## Chinese
+
+Chinese content.
 ```
 
 ## Reference Documents

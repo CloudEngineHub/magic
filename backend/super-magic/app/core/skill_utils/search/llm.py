@@ -10,7 +10,7 @@
 使用方式：
     from app.core.skill_utils.search import LLMSearchDriver
     aggregator = SearchAggregator(search_driver=LLMSearchDriver())
-    aggregator = SearchAggregator(search_driver=LLMSearchDriver(model_id="deepseek-v3.2"))
+    aggregator = SearchAggregator(search_driver=LLMSearchDriver(model_id="qwen3.5-flash"))
 """
 from __future__ import annotations
 
@@ -36,21 +36,21 @@ _PER_KEYWORD_TOP_K = 10
 _MIN_PER_PROVIDER = 1
 
 _SYSTEM_PROMPT = """\
-你是一个技能搜索助手。根据用户的搜索关键词，对候选技能的相关性打分，并调用 score_skills 工具返回结果。
+You are a skill search assistant. Score how relevant each candidate skill is to the user's search keywords, then call the score_skills tool.
 
-技能来源（provider）说明：
-- system：系统内置技能，已预装，无需安装，稳定可靠
-- my_library：用户个人技能库，已收藏或安装的技能，使用前可能需要确认是否已安装
-- skillhub：官方技能市场，需安装后使用
-- clawhub：第三方技能市场，需安装后使用
-- market：通用技能市场，需安装后使用
+Provider meanings:
+- system: built-in skills, already installed, stable and preferred
+- my_library: the user's personal skill library; skills may need installation confirmation before use
+- skillhub: official skill marketplace; skills require installation before use
+- clawhub: third-party skill marketplace; skills require installation before use
+- market: generic skill marketplace; skills require installation before use
 
-规则：
-- 只为与任意关键词相关的技能打分，完全无关的技能跳过
-- 分数范围 0.0-5.0，越相关越高；低于 1.0 视为无关，不必返回
-- provider 和 id 必须来自候选列表，不能编造
-- 如果多个搜索关键词语义相同或高度重叠（如中英文互译、同义词），视为同一查询，只为其中一个关键词返回打分结果，不要重复输出相同内容
-- 优先级：system 和 my_library 来源的技能能满足需求时，必须给予更高分数（≥4.0），尤其 provider=system 的内置技能优先级最高；同功能的外部来源技能（skillhub / clawhub / market）分数应低于本地技能\
+Rules:
+- Score only skills that are relevant to at least one keyword. Skip unrelated skills.
+- Scores range from 0.0 to 5.0. Higher means more relevant. Treat scores below 1.0 as unrelated and omit them.
+- provider and id must come from the candidate list. Do not invent values.
+- If multiple keywords have the same or highly overlapping meaning, score the skill for only one keyword and do not duplicate the same result.
+- Prefer system and my_library skills when they can satisfy the request. Give them higher scores, especially built-in system skills. External skills with the same function should score lower than local skills.\
 """
 
 # tool calling 工具定义：打分而非筛选，逻辑更清晰
@@ -58,31 +58,31 @@ _SCORE_SKILLS_TOOL: dict = {
     "type": "function",
     "function": {
         "name": "score_skills",
-        "description": "对候选技能与搜索关键词的相关性打分，只需对相关技能打分，无关技能跳过",
+        "description": "Score candidate skills against the search keywords. Score only relevant skills and skip unrelated ones.",
         "parameters": {
             "type": "object",
             "properties": {
                 "scores": {
                     "type": "array",
-                    "description": "相关技能的打分列表，每条记录表示某个技能对某个关键词的相关性得分",
+                    "description": "Scores for relevant skills. Each item is one skill's relevance score for one keyword.",
                     "items": {
                         "type": "object",
                         "properties": {
                             "provider": {
                                 "type": "string",
-                                "description": "技能来源，如 system / my_library / skillhub / clawhub / market",
+                                "description": "Skill provider, such as system, my_library, skillhub, clawhub, or market.",
                             },
                             "id": {
                                 "type": "string",
-                                "description": "技能唯一 ID",
+                                "description": "Unique skill ID.",
                             },
                             "keyword": {
                                 "type": "string",
-                                "description": "与该技能相关的搜索关键词",
+                                "description": "Search keyword related to this skill.",
                             },
                             "score": {
                                 "type": "number",
-                                "description": "相关性得分，范围 0.0-5.0，越高越相关",
+                                "description": "Relevance score from 0.0 to 5.0. Higher means more relevant.",
                             },
                         },
                         "required": ["provider", "id", "keyword", "score"],
@@ -97,23 +97,15 @@ _SCORE_SKILLS_TOOL: dict = {
 
 def _candidate_line(c: SkillCandidate, index: int) -> str:
     desc = (c.description or "").strip()[:100]
-    # 兼容社区 skill 的中文名/中文描述字段
-    name_cn = (c.extra or {}).get("name_cn", "")
-    desc_cn = ((c.extra or {}).get("description_cn", "") or "")[:80]
-    extra = ""
-    if name_cn:
-        extra += f"，中文名：{name_cn}"
-    if desc_cn:
-        extra += f"，中文描述：{desc_cn}"
     provider_val = c.provider.value if hasattr(c.provider, "value") else str(c.provider)
-    return f"{index}. provider={provider_val} ID: {c.id}，名称: {c.name}{extra}，描述: {desc}"
+    return f"{index}. provider={provider_val}, id: {c.id}, name: {c.name}, description: {desc}"
 
 
 def _build_system_content(system_candidates: list[SkillCandidate]) -> str:
     """构建 system 消息：指令 + 系统内置技能列表（内容稳定，利于缓存）"""
     lines = [_SYSTEM_PROMPT]
     if system_candidates:
-        lines.append("\n\n## 系统内置技能（provider=system，优先级最高）\n")
+        lines.append("\n\n## Built-in skills (provider=system, highest priority)\n")
         for i, c in enumerate(system_candidates, 1):
             lines.append(_candidate_line(c, i))
     return "\n".join(lines)
@@ -128,13 +120,13 @@ def _build_user_content(
     """构建 user 消息：用户需求 + 搜索关键词 + 非系统来源候选（随请求变化）"""
     lines = []
     if query:
-        lines.append(f"用户需求：{query.strip()}")
-    lines.append(f"搜索关键词：{json.dumps(keywords, ensure_ascii=False)}")
+        lines.append(f"User request: {query.strip()}")
+    lines.append(f"Search keywords: {json.dumps(keywords, ensure_ascii=False)}")
     if user_candidates:
-        lines.append("\n## 其他候选技能\n")
+        lines.append("\n## Other candidate skills\n")
         for i, c in enumerate(user_candidates, 1):
             lines.append(_candidate_line(c, i))
-    lines.append("\n请调用 score_skills 工具对相关技能打分：")
+    lines.append("\nCall score_skills to score the relevant skills.")
     return "\n".join(lines)
 
 
@@ -210,7 +202,7 @@ class LLMSearchDriver(SearchDriver):
         if self._model_id:
             return self._model_id
         from app.core.ai_abilities import AIAbility, get_ability_config
-        return get_ability_config(AIAbility.SKILL_RERANK, "model_id", default="deepseek-v3.2")
+        return get_ability_config(AIAbility.SKILL_RERANK, "model_id", default="qwen3.5-flash")
 
     def _get_fallback(self) -> SearchDriver:
         if self._fallback is None:

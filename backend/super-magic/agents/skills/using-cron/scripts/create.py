@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-创建定时消息任务
+Create a scheduled message task.
 
-参数：
-    --task-name     任务名称，如 "每日早报"（必填）
-    --message-content   消息内容（任务指令）（必填）
-    --type          调度类型（必填）：
-                      no_repeat      不重复，需要 --day YYYY-MM-DD
-                      daily_repeat   每天重复
-                      weekly_repeat  每周重复，需要 --day 0-6（0=周日）
-                      monthly_repeat 每月重复，需要 --day 1-31
-    --time          执行时间，格式 HH:MM，如 "9:00"（必填）
-    --day           日期/星期/日号，含义随 --type 不同（见上）
-    --deadline      截止日期，格式 YYYY-MM-DD HH:MM:SS；若只填日期或格式不明确将自动补全（如当日 23:59:59）（可选，重复任务到期后停止）
-    --specify-topic 是否指定话题，0=否 1=是，默认 0；仅当意图为「周期性且后续执行依赖前次结果」时由调用方传 1
+Arguments:
+    --task-name     Task name, for example "Daily briefing". Required.
+    --message-content   Message content, used as the task instruction. Required.
+    --type          Schedule type. Required:
+                      no_repeat      Non-repeating; requires --day YYYY-MM-DD.
+                      daily_repeat   Repeats daily.
+                      weekly_repeat  Repeats weekly; requires --day 0-6, where 0 is Sunday.
+                      monthly_repeat Repeats monthly; requires --day 1-31.
+    --time          Execution time in HH:MM format, for example "9:00". Required.
+    --day           Date, weekday, or day-of-month; meaning depends on --type.
+    --deadline      End date in YYYY-MM-DD HH:MM:SS format. Date-only or partial time values are normalized. Optional.
+    --specify-topic Whether to specify a topic, 0=no and 1=yes. Default: 0. Use 1 only when repeated runs depend on prior results.
 
-topic_id 和 model_id 自动从当前会话读取，无需传入。
+topic_id and model_id are read from the current session automatically.
 
-输出格式：JSON
+Output format: JSON
 """
 import json
 import re
@@ -34,48 +34,49 @@ from app.infrastructure.sdk.magic_service.parameter.message_schedule_parameter i
     TimeConfig,
 )
 
-parser = argparse.ArgumentParser(description="创建定时消息任务")
-parser.add_argument("--task-name", required=True, help="任务名称")
-parser.add_argument("--message-content", dest="message_content", required=True, help="消息内容（任务指令），与详情 message_content/task_describe 对应")
+parser = argparse.ArgumentParser(description="Create a scheduled message task")
+parser.add_argument("--task-name", required=True, help="Task name")
+parser.add_argument("--message-content", dest="message_content", required=True, help="Message content; maps to detail fields message_content/task_describe")
 parser.add_argument(
     "--type",
     required=True,
     choices=["no_repeat", "daily_repeat", "weekly_repeat", "monthly_repeat"],
-    help="调度类型",
+    help="Schedule type",
 )
-parser.add_argument("--time", required=True, help="执行时间，格式 HH:MM")
-parser.add_argument("--day", default=None, help="日期/星期/日号，含义随 --type 不同")
+parser.add_argument("--time", required=True, help="Execution time in HH:MM format")
+parser.add_argument("--day", default=None, help="Date, weekday, or day-of-month; meaning depends on --type")
 parser.add_argument(
     "--deadline",
     default=None,
-    help="截止日期，格式 YYYY-MM-DD HH:MM:SS；仅填日期或格式不完整时会自动理解并补全（重复任务可选）",
+    help="End date in YYYY-MM-DD HH:MM:SS format; date-only or partial time values are normalized",
 )
 parser.add_argument(
     "--specify-topic",
     type=int,
     default=0,
     choices=[0, 1],
-    help="是否指定话题，0=否 1=是，默认 0；仅当周期性且后续执行依赖前次结果时传 1",
+    help="Whether to specify a topic, 0=no and 1=yes. Use 1 only when repeated runs depend on prior results",
 )
 args = parser.parse_args()
 
 
 def normalize_deadline(value: Optional[str]) -> Optional[str]:
     """
-    将用户传入的 deadline 规范为 YYYY-MM-DD HH:MM:SS。
-    仅日期 -> 补全为 00:00:00；日期+时分 -> 补全秒为 :00；已是完整格式 -> 原样返回。
+    Normalize a user-provided deadline to YYYY-MM-DD HH:MM:SS.
+    Date-only values become 00:00:00; date+minute values get :00 seconds;
+    full datetime values are returned as-is.
     """
     if not value or not value.strip():
         return None
     s = value.strip()
-    # 已是 YYYY-MM-DD HH:MM:SS
+    # Already YYYY-MM-DD HH:MM:SS.
     if re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", s):
         return s
     # YYYY-MM-DD HH:MM
     m = re.match(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})$", s)
     if m:
         return f"{m.group(1)} {m.group(2)}:00"
-    # 仅日期 YYYY-MM-DD 或 YYYY-M-D（先试完整格式再试仅日期）
+    # Date-only YYYY-MM-DD or YYYY-M-D; try full datetime before date-only.
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
             dt = datetime.strptime(s, fmt)
@@ -84,7 +85,7 @@ def normalize_deadline(value: Optional[str]) -> Optional[str]:
             return dt.strftime("%Y-%m-%d 00:00:00")
         except ValueError:
             continue
-    # 宽松解析 YYYY-M-D
+    # Lenient YYYY-M-D parsing.
     m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", s)
     if m:
         y, mon, d = m.group(1), m.group(2).zfill(2), m.group(3).zfill(2)
@@ -96,10 +97,10 @@ try:
     topic_id, model_id = get_context()
 
     if not topic_id:
-        print(json.dumps({"error": "无法从当前会话获取 topic_id"}, ensure_ascii=False))
+        print(json.dumps({"error": "Failed to read topic_id from the current session"}, ensure_ascii=False))
         sys.exit(1)
     if not model_id:
-        print(json.dumps({"error": "无法从当前会话获取 model_id"}, ensure_ascii=False))
+        print(json.dumps({"error": "Failed to read model_id from the current session"}, ensure_ascii=False))
         sys.exit(1)
 
     sdk = create_magic_service_sdk_with_defaults()

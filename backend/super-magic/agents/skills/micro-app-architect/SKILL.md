@@ -7,13 +7,6 @@ description: |
   Required output pattern: a static Super Magic micro-app folder with app.json, index.html, window.Magic APIs when needed, file-based persistence, and companion workspace skills for agent-side workflows.
   Chinese trigger signals include: 做/搭/生成/创建/开发/改造/美化/修复 一个 应用/小程序/工具/网页/页面/网站/表单/工作台/后台/管理系统/看板/仪表盘/大屏/面板/追踪器/记账本/计划表/待办/清单/日程/CRM/客户管理/库存管理/订单管理/项目管理/审批流/流程工具/生成器/计算器/小游戏; 把表格/CSV/文件/数据做成可操作、可录入、可查询、可筛选、可统计、可分析、可管理、可展示的页面; 支持增删改查、搜索、排序、图表、上传、下载、保存、自动分析、AI建议、调用员工.
   Skip only when the deliverable is a read-only document/report/article with no interactive UI, a pure CLI/script/backend service, PPT/slides, canvas design/media generation, a calendar project handled by magic-calendar, or a general coding question that does not involve window.Magic APIs or an interactive frontend.
-
-name-cn: 微应用构建器
-description-cn: |
-  用于 Super Magic HTML 微应用的创建、改造和维护。即使用户没有说"微应用"、"HTML"或"window.Magic"，只要目标是做一个可交互、可操作、可录入、可查询、可统计、可分析或可管理的应用/工具/网页/页面/网站/表单/工作台/后台/管理系统/看板/仪表盘/大屏/面板/追踪器/记账本/计划表/待办/清单/日程/CRM/客户管理/库存管理/订单管理/项目管理/审批流/流程工具/生成器/计算器/小游戏，都应优先加载。
-  只要任务会使用任何 window.Magic API（如 window.Magic.fs/llm/agent/project/user/getAppBasePath/setInputMessage/reload），包括给 HTML 页面增加文件读写、数据持久化、模型调用、员工调度、话题消息、上传下载、用户信息或刷新能力，也应优先加载。
-  当已有项目包含 app.json 或旧版 magic.project.js，或用户说"这个应用/页面/工具/看板/系统"并要求修改、美化、修复、增加功能/按钮/字段/页面/图表/交互、保存数据、接入模型/员工/文件 API、解决打开/保存/显示/更新问题时，也必须优先加载。
-  不用于无交互的只读文档/报告/文章、纯 CLI 脚本、纯后端服务、PPT/幻灯片、画布设计/媒体生成、magic-calendar 负责的日历项目，或既不涉及 window.Magic API、也不涉及交互式前端的一般代码问题。
 ---
 
 # Micro-App Architect
@@ -62,8 +55,8 @@ Every micro-app request follows this sequence:
    └─ Companion skill scope (if needed)
 
 4. ⭐ Design Review (output to user for confirmation)
-   ├─ Product feature checklist (功能清单)
-   ├─ Interaction flow (交互流程)
+   ├─ Product feature checklist
+   ├─ Interaction flow
    ├─ Companion skill list + purpose (if any)
    ├─ Directory structure plan
    └─ Wait for user confirmation before proceeding
@@ -84,48 +77,48 @@ Every micro-app request follows this sequence:
 
 Before diving into architecture design and code generation, **use `ask_user` to confirm with the user** when:
 
-- The requirement is a single vague sentence (e.g. "做一个管理系统") without specifying what to manage, what fields, what workflows
+- The requirement is a single vague sentence (e.g. "make a management system") without specifying what to manage, what fields, what workflows
 - Key functional scope is unclear — you cannot determine the feature list or data model confidently
 - Interaction flow is ambiguous — unclear whether the user wants a simple CRUD or a complex multi-step pipeline
 - Target audience or usage scenario is not specified and would significantly affect the design
 
-**Do NOT over-ask** — if the requirement is clear enough to decompose (e.g. "做一个待办事项应用，支持添加、完成、删除"), proceed directly. Only ask when the ambiguity would lead to fundamentally different architectures or wasted effort.
+**Do NOT over-ask** — if the requirement is clear enough to decompose (e.g. "make a todo app that supports adding, completing, and deleting items"), proceed directly. Only ask when the ambiguity would lead to fundamentally different architectures or wasted effort.
 
 ### Design Review (Step 4)
 
 Before generating any code, **output a structured design document** for user confirmation. Format:
 
 ```markdown
-## 产品设计确认
+## Product Design Confirmation
 
-### 功能清单
+### Feature Checklist
 
-1. [功能名称] — 简要描述
-2. [功能名称] — 简要描述
+1. [Feature name] — brief description
+2. [Feature name] — brief description
    ...
 
-### 交互流程
+### Interaction Flow
 
-[主要用户操作路径，用简明的步骤或流程图描述]
+[Main user operation path, described with concise steps or a flow diagram]
 
-### 技术方案
+### Technical Plan
 
-- 架构类型: Simple / Medium / Complex
-- 目录结构: (列出主要文件)
-- 伴生技能: (如有)
-  - `.magic/skills/<name>/SKILL.md` — 作用说明
-  - `.magic/skills/<name2>/SKILL.md` — 作用说明
+- Architecture type: Simple / Medium / Complex
+- Directory structure: list major files
+- Companion skills: if any
+  - `.magic/skills/<name>/SKILL.md` — purpose
+  - `.magic/skills/<name2>/SKILL.md` — purpose
 
-### 确认项
+### Confirmation Items
 
-- [ ] 功能范围是否正确？
-- [ ] 是否有遗漏的功能？
-- [ ] 交互流程是否符合预期？
+- [ ] Is the feature scope correct?
+- [ ] Are any features missing?
+- [ ] Does the interaction flow match expectations?
 ```
 
 **Rules:**
 
-- Simple apps with clear requirements (e.g. "做一个计算器") can skip detailed review — just briefly confirm the plan
+- Simple apps with clear requirements (e.g. "make a calculator") can skip detailed review — just briefly confirm the plan
 - Medium/Complex apps **must** output full design review and wait for user confirmation
 - If user requests changes during review, update the design and re-confirm
 - After confirmation, proceed to Generation Phase
@@ -160,7 +153,7 @@ User requirement complexity?
 - Does the app need the Agent to perform multi-step operations that take time? → Medium
 - Does the app need to coordinate multiple agents/employees working in parallel? → Complex
 
-**Medium vs Complex:** Both can have multiple skills. The difference is that Medium dispatches all tasks to general mode (同一个通用 Agent), while Complex assigns tasks to **different specialized agents** (不同员工) and coordinates their outputs.
+**Medium vs Complex:** Both can have multiple skills. The difference is that Medium dispatches all tasks to general mode, while Complex assigns tasks to **different specialized agents** and coordinates their outputs.
 
 ---
 
@@ -195,7 +188,7 @@ The HTML layer has access to `window.Magic.*` APIs (pre-injected, no imports nee
    - **CSS separation**: dedicated `<style>` blocks or external CSS files per component/page
    - **Data templates**: initial data files in `data/`, configuration in dedicated config files
    - The directory structure must be decided in the Design Phase, not as an afterthought
-8. **Provide agent selector + model selector UI when dispatching skills** — when the app triggers companion skills via `createTopicAndSend`, provide UI for users to select agent (员工) and model. Defaults: general mode (不选员工) + model `"auto"`. Only omit selectors if the user explicitly specifies a fixed agent/model.
+8. **Provide agent selector + model selector UI when dispatching skills** — when the app triggers companion skills via `createTopicAndSend`, provide UI for users to select agent and model. Defaults: general mode (no agent selected) + model `"auto"`. Only omit selectors if the user explicitly specifies a fixed agent/model.
 9. **Use `getAppBasePath()` for workspace-relative paths in mentions** — `window.Magic.fs.*` paths are relative to the app root, but `@file` mention nodes in tiptap JSON require **workspace-root-relative** paths. Always call `const basePath = await window.Magic.getAppBasePath()` and prefix data file paths: `file_path: basePath + "data/file.json"`. The `.magic/` directory is already at workspace root, so `.magic/` paths need no prefix.
 10. **Data storage: files first, localStorage only for preferences** — app data (records, state, user content) must be stored in workspace files via `window.Magic.fs` (JSON/MD). `localStorage` is only for UI preferences (theme, language, collapsed state, etc.) that don't need to be shared or persisted across workspaces.
 11. **File-based AI analysis: prefer topic + skill pattern for complex tasks** — when the app requires users to upload/select files and perform AI analysis on file contents, evaluate task complexity to choose the right approach:
@@ -210,14 +203,14 @@ When the architecture decision is "Medium" or "Complex", generate a companion wo
 
 ### Generation Approach
 
-**始终使用 `skill-creator` 技能来创建伴生技能。** 不要手动编写 SKILL.md。调用 `skill-creator` 时提供以下信息：
+**Always use the `skill-creator` skill to create companion skills.** Do not write SKILL.md manually. Provide the following information when calling `skill-creator`:
 
-- 技能名称（小写 + 下划线，反映应用领域）
-- 技能功能的清晰描述
-- 预期的输入/输出文件
-- 工作流步骤
+- Skill name: lowercase + underscores, reflecting the app domain
+- Clear description of the skill's purpose
+- Expected input/output files
+- Workflow steps
 
-`skill-creator` 会自动处理格式校验、命名规则、目录放置和最佳实践。
+`skill-creator` handles format validation, naming rules, directory placement, and best practices.
 
 ### Runtime Trigger Mechanism
 
@@ -225,7 +218,7 @@ The companion skill is **not** auto-loaded. At runtime, the HTML app triggers it
 
 ```javascript
 // Get workspace-relative base path for file mentions
-const basePath = await window.Magic.getAppBasePath(); // e.g. "个人财务记账/"
+const basePath = await window.Magic.getAppBasePath(); // e.g. "personal-finance/"
 
 // Trigger companion skill via new topic with @file mentions
 const { topicId } = await window.Magic.project.createTopicAndSend(
@@ -237,7 +230,7 @@ const { topicId } = await window.Magic.project.createTopicAndSend(
         content: [
           {
             type: "text",
-            text: "请阅读以下技能文件并按照其中的指引执行任务：",
+            text: "Read the following skill file and follow its instructions: ",
           },
           {
             type: "mention",
@@ -251,7 +244,7 @@ const { topicId } = await window.Magic.project.createTopicAndSend(
               },
             },
           },
-          { type: "text", text: "\n\n数据文件：" },
+          { type: "text", text: "\n\nData file: " },
           {
             type: "mention",
             attrs: {
@@ -264,7 +257,7 @@ const { topicId } = await window.Magic.project.createTopicAndSend(
               },
             },
           },
-          { type: "text", text: "\n\n用户任务：" + userTaskDescription },
+          { type: "text", text: "\n\nUser task: " + userTaskDescription },
         ],
       },
     ],
@@ -276,7 +269,7 @@ const { topicId } = await window.Magic.project.createTopicAndSend(
 
 **Key points:**
 
-- Do NOT pass `agentId` — defaults to general mode (通用模式)
+- Do NOT pass `agentId` — defaults to general mode
 - Model: always `"auto"` unless user selects otherwise
 - Message format: tiptap JSON with @file mention of `.magic/skills/<name>/SKILL.md` + user task text
 - **Path rules for mentions**: `.magic/` paths stay as-is (already at workspace root); app data file paths must be prefixed with `basePath` from `getAppBasePath()`
@@ -284,45 +277,45 @@ const { topicId } = await window.Magic.project.createTopicAndSend(
 
 ### Invoking Built-in System Skills (`@skill` mention)
 
-内置系统技能（如网页搜索、代码执行等）通过 `@skill` mention 调用，与生成的伴生技能使用 `@file` mention 引用 SKILL.md 文件不同。
+Built-in system skills, such as web search or code execution, are invoked through `@skill` mentions. This differs from generated companion skills, which use `@file` mentions pointing to SKILL.md.
 
-**两种技能调用方式对比：**
+**Two skill invocation styles:**
 
-| 类型 | mention type | 数据结构 | 适用场景 |
+| Type | mention type | Data structure | Use case |
 |------|-------------|----------|----------|
-| 生成的伴生技能 | `project_file` | `{file_id, file_name, file_path, file_extension}` | 自定义工作流 |
-| 内置系统技能 | `skill` | `{id, name, icon, description, mention_source}` | 平台预注册的能力 |
+| Generated companion skill | `project_file` | `{file_id, file_name, file_path, file_extension}` | Custom workflows |
+| Built-in system skill | `skill` | `{id, name, icon, description, mention_source}` | Platform-registered capabilities |
 
-**`@skill` mention 结构：**
+**`@skill` mention structure:**
 
 ```javascript
 {
   type: "mention",
   attrs: {
-    type: "skill",       // ← 注意：不是 "project_file"
-    data: {
-      id: "skill_unique_id",         // 平台分配的技能 ID（必填）
-      name: "网页搜索",               // 技能显示名称（必填）
-      icon: "https://...",           // 技能图标 URL（必填）
-      description: "搜索互联网获取信息", // 技能描述（必填）
-      mention_source: "system",      // 可选: "system" | "agent" | "mine"
+      type: "skill",       // Note: not "project_file"
+      data: {
+      id: "skill_unique_id",         // Platform-assigned skill ID. Required.
+      name: "Web Search",            // Skill display name. Required.
+      icon: "https://...",           // Skill icon URL. Required.
+      description: "Search the internet for information", // Skill description. Required.
+      mention_source: "system",      // Optional: "system" | "agent" | "mine"
     },
   },
 }
 ```
 
-**`mention_source` 说明：**
+**`mention_source` values:**
 
-| 值 | 含义 |
+| Value | Meaning |
 |-----|------|
-| `"system"` | 系统内置技能（平台默认提供） |
-| `"agent"` | 绑定在某个员工上的技能 |
-| `"mine"` | 用户自己的技能库（my_library） |
+| `"system"` | Built-in system skill provided by the platform |
+| `"agent"` | Skill bound to a specific agent |
+| `"mine"` | Skill from the user's My Library provider |
 
-**调用示例 — 在消息中引用系统技能：**
+**Invocation example — reference a system skill in a message:**
 
 ```javascript
-// 创建话题并发送消息，附带 @skill 引用让 Agent 使用指定技能
+  // Create a topic and send a message with an @skill reference so the agent uses the specified skill.
 const { topicId } = await window.Magic.project.createTopicAndSend(
   {
     type: "doc",
@@ -330,21 +323,21 @@ const { topicId } = await window.Magic.project.createTopicAndSend(
       {
         type: "paragraph",
         content: [
-          { type: "text", text: "请使用 " },
+          { type: "text", text: "Use " },
           {
             type: "mention",
             attrs: {
               type: "skill",
               data: {
                 id: "web_search_001",
-                name: "网页搜索",
+                name: "Web Search",
                 icon: "https://example.com/icons/search.svg",
-                description: "搜索互联网获取最新信息",
+                description: "Search the internet for latest information",
                 mention_source: "system",
               },
             },
           },
-          { type: "text", text: " 查找最新的AI行业报告，并将结果整理写入 " },
+          { type: "text", text: " to find the latest AI industry reports and write the results to " },
           {
             type: "mention",
             attrs: {
@@ -365,11 +358,11 @@ const { topicId } = await window.Magic.project.createTopicAndSend(
 );
 ```
 
-**何时使用 `@skill` vs `@file` SKILL.md：**
+**When to use `@skill` vs `@file` SKILL.md:**
 
-- 需要调用平台已注册的标准能力（搜索、代码执行等）→ `@skill` mention
-- 需要执行自定义的多步骤工作流（数据分析管道、报告生成等）→ `@file` mention 指向 `.magic/skills/<name>/SKILL.md`
-- 两者可以组合使用 — 在同一条消息中同时引用系统技能和伴生技能文件
+- Need a platform-registered standard capability such as search or code execution → `@skill` mention
+- Need a custom multi-step workflow such as data analysis pipeline or report generation → `@file` mention pointing to `.magic/skills/<name>/SKILL.md`
+- Both can be combined in one message by referencing system skills and companion skill files together
 
 ---
 
@@ -433,44 +426,44 @@ For apps that need to trigger backend skills or drive multiple agents:
 
 ### Built-in Agent IDs
 
-| agentId | 名称 | 说明 |
+| agentId | Name | Description |
 |---------|------|------|
-| `general` | 通用模式 | 适用于各种通用场景的智能助手（默认，不传 agentId 即使用此模式） |
-| `chat` | 聊天模式 | 专注于对话交流的智能助手 |
-| `data_analysis` | 数据分析 | 专业的数据分析和处理助手 |
-| `ppt` | PPT | 专业的PPT制作和演示助手 |
-| `summary` | 录音总结 | 专业的录音内容总结助手 |
+| `general` | General mode | General-purpose assistant for broad scenarios; default when no agentId is passed |
+| `chat` | Chat mode | Assistant focused on conversation |
+| `data_analysis` | Data analysis | Assistant specialized in data analysis and processing |
+| `ppt` | Presentation | Assistant specialized in slide creation and presentations |
+| `summary` | Recording summary | Assistant specialized in summarizing recorded content |
 
-> 注：除内置 agentId 外，也可以通过 `window.Magic.agent.getAgents()` 获取用户自定义的员工（Agent）列表，使用其 `id` 字段作为 `agentId`。
+> Note: Besides built-in agentIds, use `window.Magic.agent.getAgents()` to retrieve the user's custom agent list and use each agent's `id` field as `agentId`.
 
-### 获取可用员工列表（代码生成阶段）
+### Get Available Agents During Code Generation
 
-在生成微应用代码前，如果需要知道用户有哪些可用员工以便写入正确的 `agentId`，可使用 `list-agents` 技能的脚本：
+Before generating micro-app code, if you need to know which agents are available so the correct `agentId` can be written, use the `agent-info` skill script:
 
 ```bash
-# 获取当前用户所有可用员工
+# List all agents available to the current user.
 python agents/skills/agent-info/scripts/list.py
 
-# 按名称过滤
-python agents/skills/agent-info/scripts/list.py --name-filter "数据分析"
+# Filter by name.
+python agents/skills/agent-info/scripts/list.py --name-filter "data analysis"
 
-# 按类型过滤（official / custom / public）
+# Filter by type: official / custom / public.
 python agents/skills/agent-info/scripts/list.py --type-filter custom
 ```
 
-返回结果包含每个员工的 `code`（即 agentId）、`name`、`description` 和 `type`（official/custom/public）。
-这样在生成代码时就可以直接将真实的 agentId 硬编码进 HTML，而非依赖运行时动态查询。
+The result includes each agent's `code` (agentId), `name`, `description`, and `type` (official/custom/public).
+This allows generated HTML to use the real agentId directly instead of relying on runtime lookup.
 
 ### Agent Selector UI Pattern
 
-当用户需要调用自定义员工时，应在界面上提供**员工选择器**，并支持通过名称匹配默认选中。实现要点：
+When the app may call custom agents, provide an **agent selector** in the UI and support default selection by name matching. Implementation points:
 
 ```javascript
-// 1. 加载员工列表并渲染选择器
+  // 1. Load the agent list and render the selector.
 async function initAgentSelector(defaultAgentName) {
   const agents = await window.Magic.agent.getAgents();
 
-  // 2. 通过名称模糊匹配默认选中
+  // 2. Default-select by fuzzy name match.
   let selectedAgent = null;
   if (defaultAgentName) {
     selectedAgent = agents.find(
@@ -478,34 +471,34 @@ async function initAgentSelector(defaultAgentName) {
     );
   }
 
-  // 3. 渲染选择器 UI
+  // 3. Render selector UI.
   const selector = document.getElementById("agent-selector");
-  selector.innerHTML = `<option value="">通用模式（不选员工）</option>`;
+  selector.innerHTML = `<option value="">General mode (no agent selected)</option>`;
   agents.forEach((agent) => {
     const selected = selectedAgent && agent.id === selectedAgent.id ? "selected" : "";
     selector.innerHTML += `<option value="${agent.id}" ${selected}>${agent.name}</option>`;
   });
 }
 
-// 4. 派发任务时读取选中的 agentId
+// 4. Read the selected agentId when dispatching tasks.
 function getSelectedAgentId() {
   const selector = document.getElementById("agent-selector");
-  return selector.value || undefined; // 空值 → 通用模式
+  return selector.value || undefined; // Empty value -> general mode.
 }
 
-// 5. 调用时传入
+// 5. Pass it when invoking.
 const { topicId } = await window.Magic.project.createTopicAndSend(
   tiptapMessage,
   { agentId: getSelectedAgentId(), model: getSelectedModel() }
 );
 ```
 
-**规则：**
+**Rules:**
 
-- 选择器默认选项为"通用模式"（不传 agentId）
-- 如果用户在需求中指定了员工名称（如"让研究员去搜集资料"），通过 `name.includes()` 模糊匹配并默认选中
-- 选择器应同时提供**模型选择器**（默认 `"auto"`）
-- 当 `agentId` 为空或未选择时，不传该字段（等同于通用模式）
+- The selector's default option is "General mode"; do not pass agentId.
+- If the user specifies an agent name in the requirement, use `name.includes()` for fuzzy matching and default selection.
+- The UI should also provide a **model selector** with default `"auto"`.
+- When `agentId` is empty or not selected, do not pass the field; this is equivalent to general mode.
 
 ### Pattern 1: Skill Dispatch via New Topic (Primary Pattern)
 
@@ -523,7 +516,7 @@ async function triggerSkill(userTask) {
           content: [
             {
               type: "text",
-              text: "请阅读以下技能文件并按照其中的指引执行任务：",
+              text: "Read the following skill file and follow its instructions: ",
             },
             {
               type: "mention",
@@ -537,14 +530,14 @@ async function triggerSkill(userTask) {
                 },
               },
             },
-            { type: "text", text: "\n\n用户任务：" + userTask },
+            { type: "text", text: "\n\nUser task: " + userTask },
           ],
         },
       ],
     },
     { model: "auto" },
   );
-  // No agentId → general mode (通用模式)
+  // No agentId -> general mode.
   return topicId;
 }
 ```
@@ -604,7 +597,7 @@ async function runPipeline(steps) {
     // Attach skill file if this step has one
     if (step.skillPath) {
       content.unshift(
-        { type: "text", text: "请阅读技能文件 " },
+        { type: "text", text: "Read the skill file " },
         {
           type: "mention",
           attrs: {
@@ -617,7 +610,7 @@ async function runPipeline(steps) {
             },
           },
         },
-        { type: "text", text: " 并执行：" },
+        { type: "text", text: " and execute: " },
       );
     }
 
@@ -662,10 +655,10 @@ This skill generates the following artifacts:
 | app.json        | `<app-dir>/app.json`        | Yes                            |
 | Main HTML       | `<app-dir>/index.html`      | Yes                            |
 | Data files      | `<app-dir>/data/*.json`     | If app needs persistence       |
-| Companion skill | 由 `skill-creator` 技能创建 | If Medium/Complex architecture |
+| Companion skill | Created by the `skill-creator` skill | If Medium/Complex architecture |
 | README          | `<app-dir>/README.md`       | For Medium/Complex apps        |
 
-**Naming the app directory:** Use the user's language for the directory name. If the user says "做一个销售看板", the directory should be named descriptively (e.g., `销售看板/` or `sales-dashboard/`).
+**Naming the app directory:** Use the user's language for the directory name. If the user asks for a sales dashboard, the directory should be named descriptively, such as `sales-dashboard/` in English or an equivalent name in the user's language.
 
 ### app.json (Micro-App Manifest)
 
@@ -689,7 +682,7 @@ Every new HTML micro-app **must** include an `app.json` file in the app root dir
 
 - `type` must be `"micro-app"` — this enables the micro-app icon and click-to-open behavior
 - Do not use `"webapp"` for `app.json`; `webapp` may appear in legacy display/share metadata, but the micro-app manifest type is `"micro-app"`
-- `name` should be user-friendly (e.g., `"销售看板"`, `"Task Manager"`)
+- `name` should be user-friendly (e.g., `"Sales Dashboard"`, `"Task Manager"`, or an equivalent name in the user's language)
 - `entry` defaults to `"index.html"`; include it explicitly for new apps
 - Generate this file **before** `index.html` so the frontend recognizes the project immediately
 - Do not generate `magic.project.js` for new HTML micro-apps. It is only a legacy compatibility file for older projects or for non-micro-app project types such as slides/design/media.
@@ -705,7 +698,7 @@ You can provide a custom icon for the app folder by adding an `icon` field to `a
 {
   "version": "1.0.0",
   "type": "micro-app",
-  "name": "销售看板",
+  "name": "Sales Dashboard",
   "entry": "index.html",
   "icon": "icon.svg"
 }
@@ -740,12 +733,12 @@ For Medium/Complex apps, generate a `README.md` in the app directory documenting
 ```markdown
 # [App Name]
 
-## 功能说明
+## Feature Overview
 
-- 功能1: 描述
-- 功能2: 描述
+- Feature 1: description
+- Feature 2: description
 
-## 目录结构
+## Directory Structure
 ```
 
 app-dir/
@@ -757,18 +750,18 @@ app-dir/
 
 ```
 
-## 伴生技能
-| 技能 | 路径 | 作用 |
+## Companion Skills
+| Skill | Path | Purpose |
 |------|------|------|
-| [name] | `.magic/skills/[name]/SKILL.md` | 描述 |
+| [name] | `.magic/skills/[name]/SKILL.md` | Description |
 
-## 交互流程
-[主要操作流程说明]
+## Interaction Flow
+[Main operation flow description]
 
-## 变更记录
-| 日期 | 变更内容 |
+## Change Log
+| Date | Change |
 |------|----------|
-| YYYY-MM-DD | 初始版本 |
+| YYYY-MM-DD | Initial version |
 ```
 
 ### Change Management Rules
@@ -776,7 +769,7 @@ app-dir/
 When user requests feature changes to an existing micro-app:
 
 1. **Identify scope** — determine which files/skills are affected
-2. **Update README.md** — add entry to 变更记录, update 功能说明 if features changed
+2. **Update README.md** — add a Change Log entry and update Feature Overview if features changed
 3. **Update companion skills** — if workflow logic changes, regenerate or edit the relevant SKILL.md
 4. **Update data schema** — if data model changes, migrate existing data files
 5. **Notify user** — summarize what was changed and what was preserved
@@ -787,30 +780,30 @@ When user requests feature changes to an existing micro-app:
 
 ### Simple App (Pure HTML)
 
-User: "做一个计算器"
+User: "Make a calculator"
 → Generate `calculator/app.json` + `calculator/index.html` with all logic in `<script>`, no companion skill needed.
 
 ### Medium App (HTML + Skill)
 
-User: "做一个能自动分析CSV数据并生成报告的工具"
+User: "Make a tool that can automatically analyze CSV data and generate a report"
 → Generate:
 
 - `data-analyzer/app.json` — micro-app manifest (`type: "micro-app"`)
 - `data-analyzer/index.html` — upload UI, results display, watch for report, agent/model selector
 - `data-analyzer/data/` — uploaded data storage
-- 通过 `skill-creator` 创建 `data_analyzer` 伴生技能，定义分析工作流
+- Create the `data_analyzer` companion skill via `skill-creator`, defining the analysis workflow
 
-Runtime: HTML 通过 @file mention 引用伴生技能 → `createTopicAndSend` → general mode agent 读取技能并执行
+Runtime: HTML references the companion skill via @file mention → `createTopicAndSend` → general mode agent reads the skill and executes it
 
 ### Complex App (Multi-Agent)
 
-User: "做一个内容创作工作台，能让研究员搜集资料，写手写文章，编辑审核"
+User: "Make a content creation workspace where researchers collect materials, writers draft articles, and editors review"
 → Generate:
 
 - `content-studio/app.json` — micro-app manifest (`type: "micro-app"`)
 - `content-studio/index.html` — agent selector, model selector, task dispatch UI, status dashboard
 - `content-studio/data/` — tasks, drafts, reviews
-- 通过 `skill-creator` 创建 `content_pipeline` 伴生技能，定义编排工作流
+- Create the `content_pipeline` companion skill via `skill-creator`, defining the orchestration workflow
 
 ---
 

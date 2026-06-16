@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-更新定时消息任务（支持部分更新，只传需要修改的字段）
+Update a scheduled message task. Supports partial updates; pass only fields to change.
 
-参数：
-    --id            定时任务 ID（必填）
-    --task-name     任务名称（可选）
-    --message-content   消息内容（可选）
-    --type          调度类型：no_repeat | daily_repeat | weekly_repeat | monthly_repeat（可选，与 --time 一起使用）
-    --time          执行时间，格式 HH:MM（可选，与 --type 一起使用）
-    --day           日期/星期/日号，含义随 --type 不同（可选）
-    --deadline      截止日期，格式 YYYY-MM-DD HH:MM:SS；若只填日期或格式不明确将自动补全（可选）
-    --enabled       启用/禁用任务：1=启用 0=禁用（可选）
+Arguments:
+    --id            Scheduled task ID. Required.
+    --task-name     Task name. Optional.
+    --message-content   Message content. Optional.
+    --type          Schedule type: no_repeat | daily_repeat | weekly_repeat | monthly_repeat. Optional; use with --time.
+    --time          Execution time in HH:MM format. Optional; use with --type.
+    --day           Date, weekday, or day-of-month; meaning depends on --type. Optional.
+    --deadline      End date in YYYY-MM-DD HH:MM:SS format. Date-only or partial time values are normalized. Optional.
+    --enabled       Enable/disable the task: 1=enabled, 0=disabled. Optional.
 
-输出格式：JSON
+Output format: JSON
 """
 import json
 import re
@@ -20,38 +20,39 @@ import argparse
 from datetime import datetime
 from typing import Optional
 
-import _context  # 初始化项目根路径
+import _context  # initialize project root path
 from app.infrastructure.sdk.magic_service.factory import create_magic_service_sdk_with_defaults
 from app.infrastructure.sdk.magic_service.parameter.message_schedule_parameter import (
     UpdateMessageScheduleParameter,
     TimeConfig,
 )
 
-parser = argparse.ArgumentParser(description="更新定时消息任务")
-parser.add_argument("--id", required=True, help="定时任务 ID")
-parser.add_argument("--task-name", default=None, help="任务名称")
-parser.add_argument("--message-content", dest="message_content", default=None, help="消息内容（与详情中的 message_content/task_describe 对应）")
+parser = argparse.ArgumentParser(description="Update a scheduled message task")
+parser.add_argument("--id", required=True, help="Scheduled task ID")
+parser.add_argument("--task-name", default=None, help="Task name")
+parser.add_argument("--message-content", dest="message_content", default=None, help="Message content; maps to detail fields message_content/task_describe")
 parser.add_argument(
     "--type",
     default=None,
     choices=["no_repeat", "daily_repeat", "weekly_repeat", "monthly_repeat"],
-    help="调度类型",
+    help="Schedule type",
 )
-parser.add_argument("--time", default=None, help="执行时间，格式 HH:MM")
-parser.add_argument("--day", default=None, help="日期/星期/日号，含义随 --type 不同")
+parser.add_argument("--time", default=None, help="Execution time in HH:MM format")
+parser.add_argument("--day", default=None, help="Date, weekday, or day-of-month; meaning depends on --type")
 parser.add_argument(
     "--deadline",
     default=None,
-    help="截止日期，格式 YYYY-MM-DD HH:MM:SS；仅填日期或格式不完整时将自动补全",
+    help="End date in YYYY-MM-DD HH:MM:SS format; date-only or partial time values are normalized",
 )
-parser.add_argument("--enabled", type=int, choices=[0, 1], default=None, help="启用/禁用：1=启用 0=禁用")
+parser.add_argument("--enabled", type=int, choices=[0, 1], default=None, help="Enable or disable: 1=enabled, 0=disabled")
 args = parser.parse_args()
 
 
 def normalize_deadline(value: Optional[str]) -> Optional[str]:
     """
-    将用户传入的 deadline 规范为 YYYY-MM-DD HH:MM:SS。
-    仅日期 -> 补全为 00:00:00；日期+时分 -> 补全秒为 :00；已是完整格式 -> 原样返回。
+    Normalize a user-provided deadline to YYYY-MM-DD HH:MM:SS.
+    Date-only values become 00:00:00; date+minute values get :00 seconds;
+    full datetime values are returned as-is.
     """
     if not value or not value.strip():
         return None
@@ -77,7 +78,7 @@ def normalize_deadline(value: Optional[str]) -> Optional[str]:
 
 
 try:
-    # 只有同时提供了 --type 和 --time 才构造 time_config
+    # Build time_config only when both --type and --time are provided.
     time_config = None
     if args.type and args.time:
         time_config = TimeConfig(

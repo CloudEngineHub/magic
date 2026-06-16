@@ -77,12 +77,12 @@ async function triggerSkill(userTask, selectedAgentId, selectedModel) {
     content: [{
       type: "paragraph",
       content: [
-        { type: "text", text: "请阅读以下技能文件并按照其中的指引执行任务：" },
+        { type: "text", text: "Read the following skill file and follow its instructions: " },
         { type: "mention", attrs: {
           type: "project_file",
           data: { file_id: "skill_ref", file_name: "SKILL.md", file_path: ".magic/skills/report_writer/SKILL.md", file_extension: "md" }
         }},
-        { type: "text", text: "\n\n用户任务：" + userTask }
+        { type: "text", text: "\n\nUser task: " + userTask }
       ]
     }]
   }, {
@@ -94,7 +94,7 @@ async function triggerSkill(userTask, selectedAgentId, selectedModel) {
 ```
 
 **Key points:**
-- `agentId`: undefined (不选员工) → defaults to general mode (通用模式, `topic_pattern: "general"`)
+- `agentId`: undefined (no agent selected) → defaults to general mode (`topic_pattern: "general"`)
 - `model`: `"auto"` unless user selects a specific model
 - The skill file is attached via @file mention so the agent reads it as context/instructions
 - Each invocation creates a new topic — ensures task isolation
@@ -104,7 +104,7 @@ async function triggerSkill(userTask, selectedAgentId, selectedModel) {
 // When the skill needs to process specific data files
 // IMPORTANT: data file paths must be workspace-root-relative (use getAppBasePath)
 async function triggerWithData(userTask, relativeDataPath) {
-  const basePath = await window.Magic.getAppBasePath(); // e.g. "个人财务记账/"
+  const basePath = await window.Magic.getAppBasePath(); // e.g. "personal-finance/"
   const fullDataPath = basePath + relativeDataPath;     // workspace-root-relative
   const fileName = relativeDataPath.split("/").pop();
   const ext = relativeDataPath.split(".").pop();
@@ -114,12 +114,12 @@ async function triggerWithData(userTask, relativeDataPath) {
     content: [{
       type: "paragraph",
       content: [
-        { type: "text", text: "请阅读技能文件 " },
+        { type: "text", text: "Read the skill file " },
         { type: "mention", attrs: {
           type: "project_file",
           data: { file_id: "skill_ref", file_name: "SKILL.md", file_path: ".magic/skills/data_analyzer/SKILL.md", file_extension: "md" }
         }},
-        { type: "text", text: " 并处理以下数据文件：" },
+        { type: "text", text: " and process the following data file: " },
         { type: "mention", attrs: {
           type: "project_file",
           data: { file_id: "data_ref", file_name: fileName, file_path: fullDataPath, file_extension: ext }
@@ -176,8 +176,8 @@ The skill writes final results for HTML to consume:
 
 When the HTML app dispatches companion skills, it **must** provide:
 
-1. **Agent selector (员工选择器)** — populated via `getAgents()`, default: none selected (general mode)
-2. **Model selector (模型选择器)** — populated via `getModels()`, default: `"auto"`
+1. **Agent selector** — populated via `getAgents()`, default: none selected (general mode)
+2. **Model selector** — populated via `getModels()`, default: `"auto"`
 3. **Task input** — user describes what they want done
 
 ```javascript
@@ -186,11 +186,11 @@ async function initSelectors() {
   const agents = await window.Magic.agent.getAgents();
   const models = await window.Magic.llm.getModels();
   
-  // Agent selector: first item is "通用模式 (默认)" with value ""
-  renderAgentSelector([{ id: "", name: "通用模式 (默认)" }, ...agents]);
+  // Agent selector: first item is "General mode (default)" with value ""
+  renderAgentSelector([{ id: "", name: "General mode (default)" }, ...agents]);
   
   // Model selector: first item is "auto"
-  const autoItem = { id: "auto", label: "自动选择 (推荐)" };
+  const autoItem = { id: "auto", label: "Auto select (recommended)" };
   renderModelSelector([autoItem, ...models]);
 }
 ```

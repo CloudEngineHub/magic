@@ -250,45 +250,19 @@ description: "English description of what this skill does and when to trigger"
 ---
 ```
 
----
+By default, write definition files in one language. If the user explicitly requests multiple languages, use ordinary language-specific sections with clear headings. Do not use HTML comment annotations for translations.
 
-English content
-Can be multiple lines
-```
+Example:
 
-**Inline format** (for short content):
 ```markdown
-English content
+## English
+
+English content.
+
+## Chinese
+
+Chinese content.
 ```
-
-### Key Principles
-
-1. Group by logical paragraphs, not line-by-line
-2. Chinese above (in HTML comment), English below
-3. Information in Chinese must be present in English; do not omit due to length
-4. Maintain structural consistency: if Chinese has lists, English should too
-
----
-
-All content in definition files must follow the bilingual format:
-
-**Block format** (recommended for multi-line content):
-```markdown
-English content
-Multiple lines allowed
-```
-
-**Inline format** (for short content):
-```markdown
-English content
-```
-
-### Key Principles
-
-1. Group by logical paragraphs, not line-by-line
-2. Chinese above (in HTML comment), English below
-3. Information in Chinese must be present in English; do not omit due to length
-4. Maintain structural consistency: if Chinese has lists, English should too
 
 ---
 
