@@ -186,6 +186,7 @@ export const PluginWindow = memo(function PluginWindow({
 	)
 
 	const handleFilePickerSourceSelect = useCallback((source: ReferenceResourceSourceType) => {
+		awaitingLocalFileDialogRef.current = false
 		if (source === REFERENCE_RESOURCE_SOURCE_TYPES.localUpload) {
 			awaitingLocalFileDialogRef.current = true
 			localFileInputRef.current?.click()
