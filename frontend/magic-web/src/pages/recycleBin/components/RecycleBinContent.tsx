@@ -77,7 +77,6 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 				hasSelection={selection.hasSelection}
 				isAllSelected={selection.isAllSelected}
 				isPartiallySelected={selection.isPartiallySelected}
-				hasMixedSelectionTypes={selection.hasMixedSelectionTypes}
 				onToggleSelectAll={selection.handleToggleSelectAll}
 				onCancelSelection={selection.clearSelection}
 				onRestoreSelection={actions.handleRestoreSelected}

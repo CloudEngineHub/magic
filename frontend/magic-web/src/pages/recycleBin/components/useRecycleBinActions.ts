@@ -246,7 +246,10 @@ export function useRecycleBinActions({
 
 	async function handleRestoreSelected() {
 		if (selectedIds.length === 0) return
-		if (hasMixedSelectionTypes) return
+		if (hasMixedSelectionTypes) {
+			magicToast.error(t("recycleBin.restoreCheck.mixedTypes"))
+			return
+		}
 
 		if (selectedIds.length === 1) {
 			const onlyId = selectedIds[0]
