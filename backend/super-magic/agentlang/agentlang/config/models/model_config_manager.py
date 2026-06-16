@@ -225,9 +225,12 @@ class ModelConfigManager:
         try:
             from agentlang.llms.factory import LLMFactory
             models_config = {}
+            pricing_model_count = 0
+            pricing_alias_count = 0
             for mc in self._models.values():
                 if not mc.pricing:
                     continue
+                pricing_model_count += 1
                 models_config[mc.model_id] = {"pricing": mc.pricing}
                 # 同一个模型在系统里可能有多个名字。模型配置里保存的是业务入口名，
                 # 但请求上游和统计成本时未必继续使用这个名字。
@@ -253,8 +256,21 @@ class ModelConfigManager:
                 }
                 for alias in aliases:
                     if isinstance(alias, str) and alias.strip():
-                        models_config.setdefault(alias.strip(), {"pricing": mc.pricing})
+                        alias_id = alias.strip()
+                        if alias_id not in models_config:
+                            models_config[alias_id] = {"pricing": mc.pricing}
+                            pricing_alias_count += 1
             LLMFactory.pricing.replace_pricing_from_config(models_config)
+            if self._models and pricing_model_count == 0:
+                logger.warning(
+                    f"已加载 {len(self._models)} 个模型，但没有任何 pricing 配置，将继续使用默认价格"
+                )
+            elif pricing_model_count > 0:
+                logger.debug(
+                    "模型价格配置已同步: "
+                    f"模型价格={pricing_model_count}, alias={pricing_alias_count}, "
+                    f"总入口={len(models_config)}"
+                )
         except Exception as e:
             logger.warning(f"Pricing sync failed: {e}")
 

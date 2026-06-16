@@ -71,17 +71,19 @@ class ModelPricing:
         self.exchange_rate = exchange_rate
         self.display_currency = display_currency
 
-        # 从models_config中加载价格信息，如果提供了配置
-        if models_config:
+        # 从 models_config 中加载价格信息；空参初始化是启动期默认价格表，不代表配置错误。
+        if models_config is not None:
             self._load_pricing_from_config(models_config)
         else:
-            logger.warning("没有提供模型配置，将使用默认价格")
-            # 设置默认价格
-            self.pricing["default"] = {
-                "input_price": 0.001,
-                "output_price": 0.002,
-                "currency": CurrencyType.USD.value
-            }
+            self._set_default_pricing()
+
+    def _set_default_pricing(self) -> None:
+        """设置默认价格；用于启动占位或模型配置确实没有 pricing 时的兜底。"""
+        self.pricing["default"] = {
+            "input_price": 0.001,
+            "output_price": 0.002,
+            "currency": CurrencyType.USD.value
+        }
 
     def _load_pricing_from_config(self, models_config: Dict[str, Dict[str, Any]]) -> None:
         """从配置中加载价格信息
@@ -123,13 +125,7 @@ class ModelPricing:
 
         # 确保有默认价格配置
         if "default" not in self.pricing:
-            # 创建默认价格配置
-            self.pricing["default"] = {
-                "input_price": 0.001,
-                "output_price": 0.002,
-                "currency": CurrencyType.USD.value
-            }
-            logger.info("已创建默认价格配置")
+            self._set_default_pricing()
 
     def add_model_pricing(self, model_name: str, price_info: PricingInfo) -> None:
         """添加或更新模型价格配置
