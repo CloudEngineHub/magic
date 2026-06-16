@@ -327,6 +327,8 @@ function MobileVoiceEdgeGlow({ active, audioLevel }: MobileVoiceEdgeGlowProps) {
 	}, [active])
 
 	useEffect(() => {
+		if (!isMounted) return
+
 		const wrapper = wrapperRef.current
 		const glowCanvas = glowCanvasRef.current
 		const coreCanvas = coreCanvasRef.current
@@ -464,7 +466,7 @@ function MobileVoiceEdgeGlow({ active, audioLevel }: MobileVoiceEdgeGlowProps) {
 			document.removeEventListener("visibilitychange", handleVisibilityChange)
 			resizeObserver.disconnect()
 		}
-	}, [])
+	}, [isMounted])
 
 	if (!isMounted) return null
 
