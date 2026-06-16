@@ -56,7 +56,7 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Smart Filename Ability (v1.1)
     # Used for generating smart filenames from webpage titles
     AIAbility.SMART_FILENAME: {
-        "model_id": "deepseek-v3.2",
+        "model_id": "deepseek-v4-flash",
         "timeout": 60,
         "enabled": True,
     },
@@ -64,7 +64,7 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Purify Ability (v1.1)
     # Used for content purification and cleaning
     AIAbility.PURIFY: {
-        "model_id": "deepseek-v3.2",
+        "model_id": "deepseek-v4-flash",
         "max_tokens": 24000,
         "enabled": True,
     },
@@ -72,7 +72,7 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Deep Write Ability (v1.1)
     # Used for deep content writing with references
     AIAbility.DEEP_WRITE: {
-        "model_id": "deepseek-v3.2",
+        "model_id": "deepseek-v4-flash",
         "temperature": 0.7,
         "min_reference_files": 3,
         "enabled": True,
@@ -81,7 +81,7 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Analysis Slide Ability (v1.1)
     # Used for analyzing webpage/slide content
     AIAbility.ANALYSIS_SLIDE: {
-        "model_id": "deepseek-v3.2",
+        "model_id": "deepseek-v4-flash",
         "timeout": 60,
         "enabled": True,
     },
@@ -89,7 +89,7 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Compact Ability (v1.2)
     # 上下文压缩专属模型，不配置（或配置为空）时使用主 Agent 模型
     AIAbility.COMPACT: {
-        "model_id": "qwen3.7-plus",
+        "model_id": "deepseek-v4-flash",
         "enabled": True,
         # TODO: compact 当前未消费 enabled 开关，后续可接入统一的能力启停控制
     },
@@ -179,7 +179,7 @@ def get_smart_filename_model_id() -> str:
     Returns:
         str: 模型ID
     """
-    return get_ability_config(AIAbility.SMART_FILENAME, "model_id", default="deepseek-v3.2")
+    return get_ability_config(AIAbility.SMART_FILENAME, "model_id", default="deepseek-v4-flash")
 
 
 def get_purify_model_id() -> str:
@@ -188,7 +188,7 @@ def get_purify_model_id() -> str:
     Returns:
         str: 模型ID
     """
-    return get_ability_config(AIAbility.PURIFY, "model_id", default="deepseek-v3.2")
+    return get_ability_config(AIAbility.PURIFY, "model_id", default="deepseek-v4-flash")
 
 
 def get_deep_write_model_id() -> str:
@@ -197,7 +197,7 @@ def get_deep_write_model_id() -> str:
     Returns:
         str: 模型ID
     """
-    return get_ability_config(AIAbility.DEEP_WRITE, "model_id", default="deepseek-v3.2")
+    return get_ability_config(AIAbility.DEEP_WRITE, "model_id", default="deepseek-v4-flash")
 
 
 def get_analysis_slide_model_id() -> str:
@@ -206,7 +206,7 @@ def get_analysis_slide_model_id() -> str:
     Returns:
         str: 模型ID
     """
-    return get_ability_config(AIAbility.ANALYSIS_SLIDE, "model_id", default="deepseek-v3.2")
+    return get_ability_config(AIAbility.ANALYSIS_SLIDE, "model_id", default="deepseek-v4-flash")
 
 
 def get_analysis_audio_model_id() -> str:

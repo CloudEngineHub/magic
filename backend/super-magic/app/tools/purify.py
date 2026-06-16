@@ -184,7 +184,7 @@ class Purify(BaseTool[PurifyParams]):
             model_id = get_ability_config(
                 AIAbility.PURIFY,
                 "model_id",
-                default="deepseek-chat"
+                default="deepseek-v4-flash"
             )
 
             # 调用 LLM

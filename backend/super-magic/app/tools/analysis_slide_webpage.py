@@ -204,7 +204,7 @@ class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
                 model_id = get_ability_config(
                     AIAbility.ANALYSIS_SLIDE,
                     "model_id",
-                    default="deepseek-chat"
+                    default="deepseek-v4-flash"
                 )
 
             # Truncate HTML content to avoid token limits

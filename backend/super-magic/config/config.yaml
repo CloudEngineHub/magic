@@ -51,6 +51,8 @@ llm:
   api_max_retries: ${LLM_API_MAX_RETRIES:-3}
   # 自定义API请求头配置 - 所有请求头都从环境变量读取
   custom_api_headers: ${LLM_CUSTOM_API_HEADERS:-None}
+  # 允许携带 Magic/User Authorization 的 LLM base_url，逗号分隔；MAGIC_API_BASE_URL 会自动加入允许范围
+  auth_header_base_urls: ${LLM_AUTH_HEADER_BASE_URLS:-None}
   # 两阶梯重试策略
   # 第一阶梯：流式
   # > 设 600s 等同于禁用 per-chunk 超时检测，由总超时兜底
@@ -403,28 +405,28 @@ ai_abilities:
   # Summarize Ability (信息精炼能力)
   # Used for text summarization and information extraction
   summarize:
-    model_id: "${SUMMARIZE_MODEL_ID:-qwen-flash}"
+    model_id: "${SUMMARIZE_MODEL_ID:-qwen3.5-flash}"
     default_target_length: 500
     enabled: true
 
   # Smart Filename Ability (智能文件名生成能力)
   # Used for generating smart filenames from webpage titles
   smart_filename:
-    model_id: "${SMART_FILENAME_MODEL_ID:-deepseek-chat}"
+    model_id: "${SMART_FILENAME_MODEL_ID:-deepseek-v4-flash}"
     timeout: 60
     enabled: true
 
   # Purify Ability (内容净化能力)
   # Used for content purification and cleaning
   purify:
-    model_id: "${PURIFY_MODEL_ID:-deepseek-chat}"
+    model_id: "${PURIFY_MODEL_ID:-deepseek-v4-flash}"
     max_tokens: 24000
     enabled: true
 
   # Deep Write Ability (深度写作能力)
   # Used for deep content writing with references
   deep_write:
-    model_id: "${DEEP_WRITE_MODEL_ID:-deepseek-reasoner}"
+    model_id: "${DEEP_WRITE_MODEL_ID:-deepseek-v4-flash}"
     temperature: 0.7
     min_reference_files: 3
     enabled: true
@@ -438,7 +440,7 @@ ai_abilities:
   # Analysis Slide Ability (网页/幻灯片分析能力)
   # Used for analyzing webpage/slide content
   analysis_slide:
-    model_id: "${ANALYSIS_SLIDE_MODEL_ID:-deepseek-chat}"
+    model_id: "${ANALYSIS_SLIDE_MODEL_ID:-deepseek-v4-flash}"
     timeout: 60
     enabled: true
 
@@ -446,7 +448,7 @@ ai_abilities:
   # 压缩触发时临时切换到此模型，压缩完成后恢复原模型
   # 不配置 model_id（或设为空）时，沿用主 Agent 当前模型
   compact:
-    model_id: "${COMPACT_MODEL_ID:-qwen3.7-plus}"
+    model_id: "${COMPACT_MODEL_ID:-deepseek-v4-flash}"
 
 # =====================================================
 # Web Scraping 网页爬取配置

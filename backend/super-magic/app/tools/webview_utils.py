@@ -426,7 +426,7 @@ async def generate_smart_filename(title: str, url: str = "") -> str:
         model_id = get_ability_config(
             AIAbility.SMART_FILENAME,
             "model_id",
-            default="deepseek-chat"
+            default="deepseek-v4-flash"
         )
 
         # 请求模型
