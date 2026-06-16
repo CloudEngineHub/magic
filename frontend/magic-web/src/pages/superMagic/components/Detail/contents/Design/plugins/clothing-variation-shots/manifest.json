@@ -105,6 +105,7 @@
 		"ui.toast",
 		"ui.close",
 		"ui.setHeight",
+		"plugin.storage",
 		"assets.pickFiles",
 		"assets.uploadFile",
 		"assets.fetchBlob",

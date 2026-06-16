@@ -483,6 +483,7 @@ export type CanvasDesignPluginCapability =
 	| "ai.getImageModels"
 	| "ai.generateAndPlace"
 	| "ai.completeImagePrompt"
+	| "plugin.storage"
 
 export type CanvasDesignPluginRuntimeVersion = number
 

@@ -23,6 +23,10 @@ import { resolvePluginResource, getErrorMessage } from "./resourceUtils"
 import { pickPluginFiles } from "./fileAssets"
 import { generatePluginImages, getPluginImageModels } from "./imageGeneration"
 import { completePluginImagePrompt } from "./imagePromptCompletion"
+import {
+	resolvePluginStorageKey,
+	resolveSharedGenerationConfigStorageKey,
+} from "./pluginStorage"
 
 interface UsePluginRuntimeBridgeParams {
 	awaitingLocalFileDialogRef: MutableRefObject<boolean>
@@ -81,6 +85,12 @@ export function usePluginRuntimeBridge({
 				})
 			}
 		}
+
+		const withPluginStorageKey = (key: string): string => {
+			return resolvePluginStorageKey(plugin.name, key)
+		}
+
+		const sharedGenerationConfigStorageKey = resolveSharedGenerationConfigStorageKey()
 
 		const closeFilePicker = () => {
 			const request = filePickerRequestRef.current
@@ -256,10 +266,11 @@ export function usePluginRuntimeBridge({
 
 			if (data.type === "magic-canvas-plugin:storage-get") {
 				try {
+					const storageKey = withPluginStorageKey(data.key)
 					postPluginMessage({
 						type: "magic-canvas-plugin:storage-get-result",
 						requestId: data.requestId,
-						value: window.localStorage.getItem(data.key),
+						value: window.localStorage.getItem(storageKey),
 					})
 				} catch (error) {
 					postPluginMessage({
@@ -273,7 +284,8 @@ export function usePluginRuntimeBridge({
 
 			if (data.type === "magic-canvas-plugin:storage-set") {
 				try {
-					window.localStorage.setItem(data.key, data.value)
+					const storageKey = withPluginStorageKey(data.key)
+					window.localStorage.setItem(storageKey, data.value)
 					postPluginMessage({
 						type: "magic-canvas-plugin:storage-set-result",
 						requestId: data.requestId,
@@ -290,7 +302,8 @@ export function usePluginRuntimeBridge({
 
 			if (data.type === "magic-canvas-plugin:storage-remove") {
 				try {
-					window.localStorage.removeItem(data.key)
+					const storageKey = withPluginStorageKey(data.key)
+					window.localStorage.removeItem(storageKey)
 					postPluginMessage({
 						type: "magic-canvas-plugin:storage-remove-result",
 						requestId: data.requestId,
@@ -298,6 +311,57 @@ export function usePluginRuntimeBridge({
 				} catch (error) {
 					postPluginMessage({
 						type: "magic-canvas-plugin:storage-remove-result",
+						requestId: data.requestId,
+						error: getErrorMessage(error),
+					})
+				}
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:storage-get-shared-generation-config") {
+				try {
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-get-shared-generation-config-result",
+						requestId: data.requestId,
+						value: window.localStorage.getItem(sharedGenerationConfigStorageKey),
+					})
+				} catch (error) {
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-get-shared-generation-config-result",
+						requestId: data.requestId,
+						error: getErrorMessage(error),
+					})
+				}
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:storage-set-shared-generation-config") {
+				try {
+					window.localStorage.setItem(sharedGenerationConfigStorageKey, data.value)
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-set-shared-generation-config-result",
+						requestId: data.requestId,
+					})
+				} catch (error) {
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-set-shared-generation-config-result",
+						requestId: data.requestId,
+						error: getErrorMessage(error),
+					})
+				}
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:storage-remove-shared-generation-config") {
+				try {
+					window.localStorage.removeItem(sharedGenerationConfigStorageKey)
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-remove-shared-generation-config-result",
+						requestId: data.requestId,
+					})
+				} catch (error) {
+					postPluginMessage({
+						type: "magic-canvas-plugin:storage-remove-shared-generation-config-result",
 						requestId: data.requestId,
 						error: getErrorMessage(error),
 					})

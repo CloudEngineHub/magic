@@ -103,6 +103,19 @@ export type PluginRuntimeMessage =
 			requestId: string
 			key: string
 	  }
+	| {
+			type: "magic-canvas-plugin:storage-get-shared-generation-config"
+			requestId: string
+	  }
+	| {
+			type: "magic-canvas-plugin:storage-set-shared-generation-config"
+			requestId: string
+			value: string
+	  }
+	| {
+			type: "magic-canvas-plugin:storage-remove-shared-generation-config"
+			requestId: string
+	  }
 
 export const PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE = {
 	"magic-canvas-plugin:resolve-resource": "magic-canvas-plugin:resolve-resource-result",
@@ -115,6 +128,12 @@ export const PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE = {
 	"magic-canvas-plugin:storage-get": "magic-canvas-plugin:storage-get-result",
 	"magic-canvas-plugin:storage-set": "magic-canvas-plugin:storage-set-result",
 	"magic-canvas-plugin:storage-remove": "magic-canvas-plugin:storage-remove-result",
+	"magic-canvas-plugin:storage-get-shared-generation-config":
+		"magic-canvas-plugin:storage-get-shared-generation-config-result",
+	"magic-canvas-plugin:storage-set-shared-generation-config":
+		"magic-canvas-plugin:storage-set-shared-generation-config-result",
+	"magic-canvas-plugin:storage-remove-shared-generation-config":
+		"magic-canvas-plugin:storage-remove-shared-generation-config-result",
 } as const
 
 const PLUGIN_RUNTIME_CAPABILITY_BY_MESSAGE_TYPE: Partial<
@@ -130,6 +149,12 @@ const PLUGIN_RUNTIME_CAPABILITY_BY_MESSAGE_TYPE: Partial<
 	"magic-canvas-plugin:complete-image-prompt": "ai.completeImagePrompt",
 	"magic-canvas-plugin:upload-file": "assets.uploadFile",
 	"magic-canvas-plugin:fetch-blob": "assets.fetchBlob",
+	"magic-canvas-plugin:storage-get": "plugin.storage",
+	"magic-canvas-plugin:storage-set": "plugin.storage",
+	"magic-canvas-plugin:storage-remove": "plugin.storage",
+	"magic-canvas-plugin:storage-get-shared-generation-config": "plugin.storage",
+	"magic-canvas-plugin:storage-set-shared-generation-config": "plugin.storage",
+	"magic-canvas-plugin:storage-remove-shared-generation-config": "plugin.storage",
 }
 
 export function createPluginChannelToken(): string {
@@ -293,6 +318,35 @@ export function parsePluginRuntimeMessage(
 			type: "magic-canvas-plugin:storage-remove",
 			requestId: record.requestId,
 			key: record.key,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:storage-get-shared-generation-config" &&
+		typeof record.requestId === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:storage-get-shared-generation-config",
+			requestId: record.requestId,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:storage-set-shared-generation-config" &&
+		typeof record.requestId === "string" &&
+		typeof record.value === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:storage-set-shared-generation-config",
+			requestId: record.requestId,
+			value: record.value,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:storage-remove-shared-generation-config" &&
+		typeof record.requestId === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:storage-remove-shared-generation-config",
+			requestId: record.requestId,
 		}
 	}
 	if (record.type === "magic-canvas-plugin:error" && typeof record.message === "string") {

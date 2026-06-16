@@ -6,7 +6,6 @@
 	const IMAGE_GENERATION_CONFIG_PREFIX = "image_generation_config."
 	const DEFAULT_SIZE_CONTROL_RATIO_OPTIONS = ["1:1", "3:4", "4:5", "9:16", "16:9"]
 	const DEFAULT_MAX_OUTPUT_IMAGES = 4
-	const SHARED_GENERATION_CONFIG_CACHE_KEY = "magic-canvas:design-plugin:shared-generation-config"
 	const SHARED_GENERATION_CONFIG_CACHE_VERSION = 1
 	const SHARED_GENERATION_CONFIG_KEYS = [
 		"modelId",
@@ -196,10 +195,10 @@
 	}
 
 	async function readSharedGenerationConfigCache(ctx) {
-		if (!ctx.storage?.getItem) return {}
+		if (!ctx.storage?.shared?.getGenerationConfig) return {}
 		let rawValue = null
 		try {
-			rawValue = await ctx.storage.getItem(SHARED_GENERATION_CONFIG_CACHE_KEY)
+			rawValue = await ctx.storage.shared.getGenerationConfig()
 		} catch (error) {
 			console.warn("[MagicPluginKit] Failed to read shared generation config cache.", error)
 			return {}
@@ -209,7 +208,7 @@
 		} catch (error) {
 			console.warn("[MagicPluginKit] Failed to parse shared generation config cache.", error)
 			try {
-				await ctx.storage.removeItem?.(SHARED_GENERATION_CONFIG_CACHE_KEY)
+				await ctx.storage.shared.clearGenerationConfig?.()
 			} catch (removeError) {
 				console.warn(
 					"[MagicPluginKit] Failed to remove invalid shared generation config cache.",
@@ -221,11 +220,10 @@
 	}
 
 	function writeSharedGenerationConfigCache(ctx, source = {}) {
-		if (!ctx.storage?.setItem) return
+		if (!ctx.storage?.shared?.setGenerationConfig) return
 		try {
-			void ctx.storage
-				.setItem(
-					SHARED_GENERATION_CONFIG_CACHE_KEY,
+			void ctx.storage.shared
+				.setGenerationConfig(
 					JSON.stringify({
 						version: SHARED_GENERATION_CONFIG_CACHE_VERSION,
 						updatedAt: Date.now(),

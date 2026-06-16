@@ -323,30 +323,64 @@ export function createPluginSrcDocV1(
 					).then((data) => new Blob([data.arrayBuffer]));
 				},
 			},
-			storage: {
-				getItem(key) {
-					return requestHost(
-						{ type: "magic-canvas-plugin:storage-get", key: String(key) },
-						"magic-canvas-plugin:storage-get-result"
-					).then((data) => data.value ?? null);
-				},
-				setItem(key, value) {
-					return requestHost(
-						{
-							type: "magic-canvas-plugin:storage-set",
-							key: String(key),
-							value: String(value ?? ""),
-						},
-						"magic-canvas-plugin:storage-set-result"
-					).then(() => undefined);
-				},
-				removeItem(key) {
-					return requestHost(
-						{ type: "magic-canvas-plugin:storage-remove", key: String(key) },
-						"magic-canvas-plugin:storage-remove-result"
-					).then(() => undefined);
-				},
-			},
+			storage: (() => {
+				const privateStorage = {
+					getItem(key) {
+						return requestHost(
+							{ type: "magic-canvas-plugin:storage-get", key: String(key) },
+							"magic-canvas-plugin:storage-get-result"
+						).then((data) => data.value ?? null);
+					},
+					setItem(key, value) {
+						return requestHost(
+							{
+								type: "magic-canvas-plugin:storage-set",
+								key: String(key),
+								value: String(value ?? ""),
+							},
+							"magic-canvas-plugin:storage-set-result"
+						).then(() => undefined);
+					},
+					removeItem(key) {
+						return requestHost(
+							{ type: "magic-canvas-plugin:storage-remove", key: String(key) },
+							"magic-canvas-plugin:storage-remove-result"
+						).then(() => undefined);
+					},
+				};
+
+				const sharedStorage = {
+					getGenerationConfig() {
+						return requestHost(
+							{ type: "magic-canvas-plugin:storage-get-shared-generation-config" },
+							"magic-canvas-plugin:storage-get-shared-generation-config-result"
+						).then((data) => data.value ?? null);
+					},
+					setGenerationConfig(value) {
+						return requestHost(
+							{
+								type: "magic-canvas-plugin:storage-set-shared-generation-config",
+								value: String(value ?? ""),
+							},
+							"magic-canvas-plugin:storage-set-shared-generation-config-result"
+						).then(() => undefined);
+					},
+					clearGenerationConfig() {
+						return requestHost(
+							{ type: "magic-canvas-plugin:storage-remove-shared-generation-config" },
+							"magic-canvas-plugin:storage-remove-shared-generation-config-result"
+						).then(() => undefined);
+					},
+				};
+
+				return {
+					getItem: privateStorage.getItem,
+					setItem: privateStorage.setItem,
+					removeItem: privateStorage.removeItem,
+					private: privateStorage,
+					shared: sharedStorage,
+				};
+			})(),
 			ai: {
 				getImageModels() {
 					return requestHost(
