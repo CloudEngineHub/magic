@@ -1,0 +1,973 @@
+/*
+ * code-dispatch.css
+ * Code Dispatch — High-contrast editorial style card CSS library
+ *
+ * Design principles:
+ *   Black & white palette, #DD0000 red accent, JetBrains Mono monospace label system,
+ *   no border-radius, no blur shadows, grid background texture, hard-edged typography.
+ *   Suited for tech-focused content cards (programming, AI, tools).
+ *
+ * Color palette:
+ *   Black   #000000   White   #FFFFFF   Red     #DD0000
+ *   Gray-1  #F2F2F2   Gray-2  #E0E0E0  Gray-3  #888888  (brightened from #595959)
+ *   Muted   #BBBBBB  (brightened from #A6A6A6)
+ *   Dark-1  #141414   Dark-2  #1A1A1A  Dark-3  #333333
+ *
+ * ─────────────────────────────────────────────────────────────
+ * Table of Contents
+ *
+ * §0  Base Reset & Fonts
+ * §1  Card Container (body)
+ *     §1.1  Light Background (.bg-light)
+ *     §1.2  Dark Background (.bg-dark)
+ * §2  Fixed Regions
+ *     §2.1  Top Bar (.cd-header)
+ *     §2.2  Bottom Bar (.cd-footer)
+ *     §2.3  Content Area (.cd-body)
+ * §3  Cover Components
+ *     §3.1  Eyebrow Label (.cd-eyebrow)
+ *     §3.2  Display Title (.cd-display)
+ *     §3.3  Subtitle (.cd-subtitle)
+ *     §3.4  Tag Group (.cd-tags)
+ * §4  Content Components
+ *     §4.1  Section Label (.cd-section-label)
+ *     §4.2  Divider (.cd-rule)
+ *     §4.3  Knowledge Card (.cd-know-card)
+ *     §4.4  Truth Block (.cd-truth-block)
+ *     §4.5  Dispatch Board / Data Table (.cd-board)
+ *     §4.6  Data Grid (.cd-data-grid)
+ *     §4.7  Checklist (.cd-point-list)
+ *     §4.8  Summary Block (.cd-summary-block)
+ *     §4.9  Interact Block (.cd-interact-block)
+ *     §4.10 CTA Row (.cd-cta-row)
+ * §5  Utilities (cd-*)
+ *     §5.1  Text Colors
+ *     §5.2  Background Highlights
+ *     §5.3  Badges & Tags
+ * §6  Layout Helpers
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/* ════════════════════════════════════════
+   §0  Base Reset & Fonts
+   ════════════════════════════════════════ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+}
+
+body {
+  font-family:
+    "Inter",
+    "Helvetica Neue",
+    -apple-system,
+    sans-serif;
+  background: #fff;
+  color: #000;
+  position: relative;
+}
+
+/* ════════════════════════════════════════
+   §1  Card Container
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §1.1  Light Background (.bg-light)
+   White base + light gray grid texture
+   ──────────────────────────────────────── */
+
+.bg-light {
+  background-color: #fff;
+  background-image:
+    linear-gradient(#e0e0e0 1px, transparent 1px),
+    linear-gradient(90deg, #e0e0e0 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ────────────────────────────────────────
+   §1.2  Neutral Background (.bg-neutral)
+   Light gray base + grid texture (common for content pages)
+   ──────────────────────────────────────── */
+
+.bg-neutral {
+  background-color: #f2f2f2;
+  background-image:
+    linear-gradient(#e0e0e0 1px, transparent 1px),
+    linear-gradient(90deg, #e0e0e0 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ────────────────────────────────────────
+   §1.3  Dark Background (.bg-dark)
+   Black base + dark gray grid texture (common for ending pages)
+   ──────────────────────────────────────── */
+
+.bg-dark {
+  background-color: #000;
+  background-image:
+    linear-gradient(#1a1a1a 1px, transparent 1px),
+    linear-gradient(90deg, #1a1a1a 1px, transparent 1px);
+  background-size: 48px 48px;
+  color: #fff;
+}
+
+/* ════════════════════════════════════════
+   §2  Fixed Regions
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §2.1  Top Bar (.cd-header)
+   Black background, white text, fixed height 56px
+   ──────────────────────────────────────── */
+
+.cd-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 10;
+}
+
+/* Inverted header for dark background pages */
+.bg-dark .cd-header {
+  background: #fff;
+}
+
+/* Brand name */
+.cd-header-brand {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.bg-dark .cd-header-brand {
+  color: #000;
+}
+
+/* Page number / meta info */
+.cd-header-meta {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: #c8c8c8;
+  letter-spacing: 0.08em;
+}
+
+/* ────────────────────────────────────────
+   §2.2  Bottom Bar (.cd-footer)
+   White background, black text, fixed height 56px, 1px top border
+   ──────────────────────────────────────── */
+
+.cd-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  border-top: 1px solid #000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 10;
+  background: #fff;
+}
+
+/* Inverted footer for dark background pages */
+.bg-dark .cd-footer {
+  background: #000;
+  border-top-color: #fff;
+}
+
+.cd-footer-left {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: #888888;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Status indicator (dot + label) */
+.cd-footer-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cd-status-dot {
+  width: 6px;
+  height: 6px;
+  background: #dd0000;
+  flex-shrink: 0;
+}
+
+.cd-footer-right {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #000;
+  letter-spacing: 0.08em;
+}
+
+.bg-dark .cd-footer-right {
+  color: #fff;
+}
+
+/* ────────────────────────────────────────
+   §2.3  Content Area (.cd-body)
+   Between header and footer, flex column layout
+   ──────────────────────────────────────── */
+
+.cd-body {
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  bottom: 56px;
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+}
+
+/* Cover-type content area: centered, large padding */
+.cd-body.is-cover {
+  justify-content: center;
+  padding: 48px 40px;
+}
+
+/* Content-type content area: top-aligned, standard padding */
+.cd-body.is-content {
+  padding: 28px 32px 24px;
+  gap: 14px;
+}
+
+/* Ending-type content area: centered, generous spacing */
+.cd-body.is-ending {
+  justify-content: center;
+  padding: 40px 40px 32px;
+  gap: 24px;
+}
+
+/* ════════════════════════════════════════
+   §3  Cover Components
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §3.1  Eyebrow Label (.cd-eyebrow)
+   Red dot + all-caps small label
+   ──────────────────────────────────────── */
+
+.cd-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.cd-eyebrow-dot {
+  width: 10px;
+  height: 10px;
+  background: #dd0000;
+  flex-shrink: 0;
+}
+
+.cd-eyebrow-text {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #dd0000;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ────────────────────────────────────────
+   §3.2  Display Title (.cd-display)
+   Extra heavy weight, negative tracking, very tight leading
+   ──────────────────────────────────────── */
+
+.cd-display {
+  font-size: 80px;
+  font-weight: 800;
+  line-height: 0.94;
+  letter-spacing: -0.035em;
+  color: #000;
+  margin-bottom: 32px;
+}
+
+.bg-dark .cd-display {
+  color: #fff;
+}
+
+/* Red accent text (used inside .cd-display) */
+.cd-display .accent {
+  color: #dd0000;
+}
+
+/* Ending page display title (slightly smaller) */
+.cd-display.is-ending {
+  font-size: 76px;
+}
+
+/* ────────────────────────────────────────
+   §3.3  Subtitle (.cd-subtitle)
+   2px black left border, gray text
+   ──────────────────────────────────────── */
+
+.cd-subtitle {
+  font-size: 15px;
+  font-weight: 400;
+  color: #777777;
+  line-height: 1.6;
+  border-left: 2px solid #000;
+  padding-left: 16px;
+  margin-bottom: 36px;
+  max-width: 380px;
+}
+
+/* ────────────────────────────────────────
+   §3.4  Tag Group (.cd-tags)
+   Zero-gap inline tag blocks
+   ──────────────────────────────────────── */
+
+.cd-tags {
+  display: flex;
+  gap: 0;
+}
+
+.cd-tag {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #000;
+  padding: 7px 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-right: 1px solid #595959;
+}
+
+.cd-tag:last-child {
+  border-right: none;
+}
+
+/* Red tag variant */
+.cd-tag.red {
+  background: #dd0000;
+}
+
+/* ════════════════════════════════════════
+   §4  Content Components
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §4.1  Section Label (.cd-section-label)
+   Red-background number + bold title
+   ──────────────────────────────────────── */
+
+.cd-section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Red background, white text number block */
+.cd-section-num {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #dd0000;
+  padding: 4px 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+/* Section title text */
+.cd-section-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111111;
+  letter-spacing: -0.02em;
+}
+
+/* ────────────────────────────────────────
+   §4.2  Divider (.cd-rule)
+   1px black horizontal line
+   ──────────────────────────────────────── */
+
+.cd-rule {
+  height: 1px;
+  background: #000;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* ────────────────────────────────────────
+   §4.3  Knowledge Card (.cd-know-card)
+   White bg, black border, 3px red left accent
+   ──────────────────────────────────────── */
+
+.cd-know-card {
+  background: #fff;
+  border: 1px solid #000;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+/* Left red vertical accent stripe */
+.cd-know-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: #dd0000;
+}
+
+/* Card top label (all-caps monospace red text) */
+.cd-know-card-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #dd0000;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Card main title */
+.cd-know-card-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #000;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+/* Card body text */
+.cd-know-card-body {
+  font-size: 13px;
+  font-weight: 400;
+  color: #777777;
+  line-height: 1.6;
+}
+
+/* Card code hint row (gray bg, monospace font) */
+.cd-know-card-code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: #000;
+  background: #f2f2f2;
+  border: 1px solid #e0e0e0;
+  padding: 8px 12px;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ────────────────────────────────────────
+   §4.4  Truth Block (.cd-truth-block)
+   Black bg, white text, small red label
+   ──────────────────────────────────────── */
+
+.cd-truth-block {
+  background: #000;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cd-truth-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #dd0000;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cd-truth-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.5;
+}
+
+/* ────────────────────────────────────────
+   §4.5  Dispatch Board / Data Table (.cd-board)
+   Black bg, monospace table, flight-board style
+   ──────────────────────────────────────── */
+
+.cd-board {
+  width: 100%;
+  border: 1px solid #000;
+  background: #000;
+}
+
+/* Table header row */
+.cd-board-header {
+  display: grid;
+  border-bottom: 1px solid #333;
+}
+
+.cd-board-header-cell {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #595959;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 8px 10px;
+}
+
+/* Data row */
+.cd-board-row {
+  display: grid;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.cd-board-row:last-child {
+  border-bottom: none;
+}
+
+/* Highlighted row (current item) */
+.cd-board-row.highlight {
+  background: #141414;
+}
+
+/* General cell */
+.cd-board-cell {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  padding: 10px 10px;
+  line-height: 1.3;
+}
+
+/* Numeric cell (large red text) */
+.cd-board-cell.num {
+  font-size: 15px;
+  font-weight: 700;
+  color: #dd0000;
+}
+
+/* Status cell: ok (gray) */
+.cd-board-cell.status-ok {
+  font-size: 11px;
+  font-weight: 700;
+  color: #595959;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Status cell: warning (red) */
+.cd-board-cell.status-bad {
+  font-size: 11px;
+  font-weight: 700;
+  color: #dd0000;
+  text-transform: uppercase;
+}
+
+/* Three-column shorthand (number + content + status) */
+.cd-board-cols-3 {
+  grid-template-columns: 64px 1fr 96px;
+}
+
+/* ────────────────────────────────────────
+   §4.6  Data Grid (.cd-data-grid)
+   2×N grid, alternating black/white, large number display
+   ──────────────────────────────────────── */
+
+.cd-data-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #000;
+}
+
+.cd-data-cell {
+  padding: 14px 16px;
+  border-right: 1px solid #000;
+  border-bottom: 1px solid #000;
+  background: #fff;
+}
+
+.cd-data-cell:nth-child(even) {
+  border-right: none;
+}
+
+.cd-data-cell:nth-last-child(-n + 2) {
+  border-bottom: none;
+}
+
+/* Dark cell variant */
+.cd-data-cell.dark {
+  background: #000;
+}
+
+.cd-data-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #888888;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.cd-data-value {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 32px;
+  font-weight: 700;
+  color: #000;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+/* Dark cell numeric value in red */
+.cd-data-cell.dark .cd-data-value {
+  color: #dd0000;
+}
+
+.cd-data-unit {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: #888888;
+  margin-top: 3px;
+}
+
+/* ────────────────────────────────────────
+   §4.7  Checklist (.cd-point-list)
+   Zebra-striped list, red index/check markers
+   ──────────────────────────────────────── */
+
+.cd-point-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.cd-point-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 13px 16px;
+  border: 1px solid #000;
+  border-bottom: none;
+  background: #fff;
+}
+
+.cd-point-row:last-child {
+  border-bottom: 1px solid #000;
+}
+
+/* Odd rows light gray background (zebra stripe) */
+.cd-point-row:nth-child(odd) {
+  background: #f2f2f2;
+}
+
+/* Index / check marker */
+.cd-point-index {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #dd0000;
+  flex-shrink: 0;
+  min-width: 20px;
+  margin-top: 1px;
+}
+
+/* Item primary text */
+.cd-point-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: #000;
+  line-height: 1.4;
+}
+
+/* Item supplementary description */
+.cd-point-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: #777777;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+/* ────────────────────────────────────────
+   §4.8  Summary Block (.cd-summary-block)
+   White bg, black border, large red number + description
+   ──────────────────────────────────────── */
+
+.cd-summary-block {
+  background: #fff;
+  border: 1px solid #000;
+  padding: 16px 20px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.cd-summary-num {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 40px;
+  font-weight: 700;
+  color: #dd0000;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.cd-summary-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111111;
+  line-height: 1.6;
+  padding-top: 4px;
+}
+
+/* ────────────────────────────────────────
+   §4.9  Interact Block (.cd-interact-block)
+   Dark-page exclusive, white border, option list
+   ──────────────────────────────────────── */
+
+.cd-interact-block {
+  border: 1px solid #fff;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cd-interact-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #dd0000;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cd-interact-question {
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.5;
+}
+
+.cd-interact-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.cd-interact-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.cd-interact-option:last-child {
+  border-bottom: none;
+}
+
+/* Option letter key */
+.cd-option-key {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #dd0000;
+  padding: 3px 8px;
+  flex-shrink: 0;
+}
+
+/* Option text */
+.cd-option-text {
+  font-size: 13px;
+  font-weight: 400;
+  color: #cccccc;
+  line-height: 1.4;
+}
+
+/* ────────────────────────────────────────
+   §4.10  CTA Row (.cd-cta-row)
+   Two inline buttons, solid + outline variant
+   ──────────────────────────────────────── */
+
+.cd-cta-row {
+  display: flex;
+  gap: 0;
+}
+
+.cd-cta-btn {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 13px 20px;
+  border: 1px solid #fff;
+  color: #000;
+  background: #fff;
+  flex: 1;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* Outline variant (transparent bg, white text) */
+.cd-cta-btn.outline {
+  background: transparent;
+  color: #fff;
+  border-left: none;
+}
+
+/* ════════════════════════════════════════
+   §5  Utilities (cd-*)
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §5.1  Text Colors
+   ──────────────────────────────────────── */
+
+.cd-text-red {
+  color: #dd0000;
+}
+.cd-text-gray {
+  color: #888888;
+}
+.cd-text-muted {
+  color: #bbbbbb;
+}
+.cd-text-white {
+  color: #fff;
+}
+.cd-text-black {
+  color: #000;
+}
+
+/* ────────────────────────────────────────
+   §5.2  Background Highlights (inline)
+   ──────────────────────────────────────── */
+
+.cd-bg-red {
+  background: #dd0000;
+  color: #fff;
+  padding: 0 6px;
+}
+.cd-bg-black {
+  background: #000;
+  color: #fff;
+  padding: 0 6px;
+}
+.cd-bg-gray {
+  background: #f2f2f2;
+  color: #000;
+  padding: 0 6px;
+}
+
+/* ────────────────────────────────────────
+   §5.3  Badges & Tags
+   ──────────────────────────────────────── */
+
+/* General small badge */
+.cd-badge {
+  display: inline-block;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+}
+
+.cd-badge.red {
+  background: #dd0000;
+  color: #fff;
+}
+.cd-badge.black {
+  background: #000;
+  color: #fff;
+}
+.cd-badge.gray {
+  background: #f2f2f2;
+  color: #777777;
+  border: 1px solid #e0e0e0;
+}
+
+/* Inline code style */
+.cd-code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 500;
+  background: #f2f2f2;
+  border: 1px solid #e0e0e0;
+  padding: 1px 6px;
+  color: #000;
+}
+
+/* ════════════════════════════════════════
+   §6  Layout Helpers
+   ════════════════════════════════════════ */
+
+/* Horizontal divider */
+.cd-divider {
+  width: 100%;
+  height: 1px;
+  background: #000;
+  flex-shrink: 0;
+}
+
+.cd-divider.light {
+  background: #e0e0e0;
+}
+
+/* Two-column equal-width grid */
+.cd-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* Flex spacer */
+.cd-spacer {
+  flex: 1;
+}
+
+/* Small gap helpers */
+.cd-gap-sm {
+  gap: 8px;
+}
+.cd-gap-md {
+  gap: 14px;
+}
+.cd-gap-lg {
+  gap: 24px;
+}

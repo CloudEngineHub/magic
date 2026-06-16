@@ -1,43 +1,51 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { RefreshCw } from "lucide-react"
-import { Button } from "@/components/shadcn-ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
+import { ElementInspectorOverlay } from "@/components/business/ElementInspector"
+import { flattenAttachments } from "../../../../contents/HTML/utils"
 import type { CardFrameRef } from "../../components/CardFrame"
-import ExportPanel from "../../components/ExportPanel"
 import ExportPreviewDialog from "../../components/ExportPreviewDialog"
 import type { ExportPreviewConfirmArgs } from "../../components/ExportPreviewDialog"
-import PostSelector from "../../components/PostSelector"
-import ViewTabs from "../../components/ViewTabs"
+import SelfMediaShellHeader, { SelfMediaShellViewBar } from "../../components/SelfMediaShellHeader"
+import { SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE } from "../../components/SelfMediaWorkspaceBackground"
 import { useExportZip } from "../../hooks/useExportZip"
 import { useExportProgressToast } from "../../hooks/useExportProgressToast"
 import { usePhoneScaling } from "../../hooks/usePhoneScaling"
+import { useSelfMediaInspector } from "../../hooks/useSelfMediaInspector"
 import { useShellFileHandlers } from "../../hooks/useShellFileHandlers"
 import { useShellMountedViews } from "../../hooks/useShellMountedViews"
-import { useSelfMediaPlatformChrome } from "../../context/PlatformChromeContext"
 import { useSelfMediaStore } from "../../stores"
 import type { PlatformComponentProps, SelfMediaPost, SelfMediaView } from "../../types"
 import { INSTAGRAM_PHONE_HEIGHT, INSTAGRAM_PHONE_WIDTH } from "./instagramShellConstants"
 import { InstagramShellEditViewPanel } from "./InstagramShellEditViewPanel"
 import { InstagramShellPhoneViewPanel } from "./InstagramShellPhoneViewPanel"
 import { InstagramShellScrollViewPanel } from "./InstagramShellScrollViewPanel"
-import { instagramTokens } from "./tokens"
+
+const noop = () => undefined
 
 function InstagramShell(props: PlatformComponentProps) {
 	const { t } = useTranslation("super")
-	const { attachmentList, allowEdit, saveEditContent, selectedProject } = props
-	const { setHostElement } = useSelfMediaPlatformChrome()
+	const {
+		platform,
+		attachmentList,
+		allowEdit,
+		saveEditContent,
+		selectedProject,
+		onBackHome,
+		onUpdatePostTitle,
+		onRequestPrePublishAnalysis,
+	} = props
 	const store = useSelfMediaStore()
 	const { posts, activePostIndex, activeCardIndex, view, rootLoading } = store
 	const activePost = store.activePost ?? undefined
+	const activePostEntry = store.activePostEntry
 
 	const cardRefs = useRef<Array<Array<CardFrameRef | null>>>([])
 	const { containerRef, scale } = usePhoneScaling<HTMLDivElement>({
 		designWidth: INSTAGRAM_PHONE_WIDTH + 28,
 		designHeight: INSTAGRAM_PHONE_HEIGHT + 28,
 	})
-	const { progress, exportZip } = useExportZip()
+	const { progress, exportZip, exportLongImage } = useExportZip()
 	const [exportDialogOpen, setExportDialogOpen] = useState(false)
 	const [isExporting, setIsExporting] = useState(false)
 	const editViewChangeHandlerRef = useRef<((nextView: SelfMediaView) => void) | null>(null)
@@ -48,6 +56,7 @@ function InstagramShell(props: PlatformComponentProps) {
 	const isEditView = view === "edit"
 	const shouldShowFooter = view !== "detail" && view !== "edit"
 	const [isCardEditing, setIsCardEditing] = useState(false)
+	const [phoneFocused, setPhoneFocused] = useState(false)
 
 	const { shouldRenderFeed, shouldRenderDetail, shouldRenderScroll, shouldRenderEdit } =
 		useShellMountedViews(view)
@@ -56,6 +65,63 @@ function InstagramShell(props: PlatformComponentProps) {
 		useShellFileHandlers({ attachmentList, activePost })
 
 	useExportProgressToast(progress, "instagram-shell-export")
+
+	const inspectorGetIframes = useCallback(() => {
+		const iframes: HTMLIFrameElement[] = []
+		const postIndex = store.activePostIndex
+		const refs = cardRefs.current[postIndex]
+		if (!refs) return iframes
+		if (view === "detail") {
+			const activeCard = refs[store.activeCardIndex]
+			const el = activeCard?.getIframeElement()
+			if (el) iframes.push(el)
+		} else {
+			for (const ref of refs) {
+				const el = ref?.getIframeElement()
+				if (el) iframes.push(el)
+			}
+		}
+		return iframes
+	}, [view, store])
+
+	const inspectorGetFileInfo = useCallback(
+		(iframe: HTMLIFrameElement) => {
+			for (let pIdx = 0; pIdx < cardRefs.current.length; pIdx++) {
+				const postRefs = cardRefs.current[pIdx]
+				if (!postRefs) continue
+				for (let cIdx = 0; cIdx < postRefs.length; cIdx++) {
+					if (postRefs[cIdx]?.getIframeElement() === iframe) {
+						const card = posts[pIdx]?.cards[cIdx]
+						if (!card?.fileId) return undefined
+						const file = flattenAttachments(attachmentList ?? []).find(
+							(f) => f?.file_id === card.fileId,
+						)
+						if (!file) return undefined
+						return {
+							fileId: file.file_id,
+							fileName: file.file_name,
+							filePath: file.relative_file_path,
+						}
+					}
+				}
+			}
+			return undefined
+		},
+		[posts, attachmentList],
+	)
+
+	const inspector = useSelfMediaInspector({
+		getIframeElements: inspectorGetIframes,
+		getFileInfoForIframe: inspectorGetFileInfo,
+	})
+
+	const inspectorDisabled = view === "edit" || rootLoading
+
+	// Auto-stop inspector when view changes
+	useEffect(() => {
+		if (inspector.active) inspector.stop()
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [view])
 
 	useEffect(() => {
 		if (view !== "edit") setIsCardEditing(false)
@@ -205,16 +271,39 @@ function InstagramShell(props: PlatformComponentProps) {
 		shellDataReloadWithGuardRef.current = handler
 	}, [])
 
+	const handleShellPointerDown = useCallback(() => {
+		setPhoneFocused(false)
+	}, [])
+
+	const handlePhoneFocus = useCallback(() => {
+		setPhoneFocused(true)
+	}, [])
+
+	const handleSaveTitle = useCallback(
+		async (nextTitle: string) => {
+			if (!activePostEntry || !onUpdatePostTitle) return false
+			const saved = await onUpdatePostTitle(
+				{ platform, index: activePostIndex, entry: activePostEntry },
+				nextTitle,
+			)
+			if (saved === false) return false
+			store.updatePostTitle(activePostIndex, nextTitle)
+			return true
+		},
+		[activePostEntry, activePostIndex, onUpdatePostTitle, platform, store],
+	)
+
 	const handleConfirmExport = async ({
 		postIndex,
 		cardIndexes,
 		pixelRatio,
+		exportType,
+		getCardRef,
 	}: ExportPreviewConfirmArgs) => {
 		if (!cardIndexes.length) return
 		setIsExporting(true)
 		try {
-			const exportPosts = await store.ensureAllPostsLoaded()
-			const target = exportPosts[postIndex]
+			const target = await store.ensurePostLoaded(postIndex)
 			if (!target) return
 			const subsetCards = cardIndexes
 				.map((cardIndex) => target.cards[cardIndex])
@@ -224,15 +313,29 @@ function InstagramShell(props: PlatformComponentProps) {
 				meta: target.meta,
 				cards: subsetCards,
 			}
-			await exportZip({
-				posts: [subset],
-				zipName: target.meta.title || target.meta.id,
-				pixelRatio,
-				getCardRef: (_p, c) => {
-					const originalCardIndex = cardIndexes[c]
-					return cardRefs.current[postIndex]?.[originalCardIndex] || null
-				},
-			})
+			const getSubsetCardRef = (subsetCardIndex: number) => {
+				const originalCardIndex = cardIndexes[subsetCardIndex]
+				return (
+					getCardRef(originalCardIndex) ||
+					cardRefs.current[postIndex]?.[originalCardIndex] ||
+					null
+				)
+			}
+			if (exportType === "longImage") {
+				await exportLongImage({
+					post: subset,
+					fileName: target.meta.title || target.meta.id,
+					pixelRatio,
+					getCardRef: getSubsetCardRef,
+				})
+			} else {
+				await exportZip({
+					posts: [subset],
+					zipName: target.meta.title || target.meta.id,
+					pixelRatio,
+					getCardRef: (_p, c) => getSubsetCardRef(c),
+				})
+			}
 			setExportDialogOpen(false)
 		} finally {
 			setIsExporting(false)
@@ -241,51 +344,41 @@ function InstagramShell(props: PlatformComponentProps) {
 
 	const phoneShellVisible = !isScrollView && !isEditView
 
+	useEffect(() => {
+		if (!phoneShellVisible || view !== "detail") {
+			setPhoneFocused(false)
+		}
+	}, [phoneShellVisible, view])
+
 	return (
 		<div
-			className="flex h-full w-full flex-col"
-			style={{ backgroundColor: instagramTokens.chromeBg }}
+			className="relative flex h-full w-full flex-col"
+			style={SELF_MEDIA_WORKSPACE_BACKGROUND_STYLE}
+			onPointerDown={handleShellPointerDown}
+			data-testid="instagram-shell-workspace"
 		>
-			<div className="flex flex-wrap items-center gap-3 border-b border-border bg-background px-4 py-2">
-				<div
-					ref={setHostElement}
-					className="flex min-w-0 shrink-0 items-center gap-2 [&:empty]:hidden"
-					data-testid="self-media-platform-switcher-host"
-				/>
-				<PostSelector
-					posts={posts}
-					activeIndex={activePostIndex}
-					onChange={handleSelectPostKeepingView}
-					className="flex-1"
-				/>
-				<ViewTabs
-					value={view}
-					onChange={handleGuardedViewChange}
-					labels={headerLabels}
-					order={visibleTabs}
-				/>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon"
-							disabled={rootLoading}
-							onClick={handleClickToolbarRefresh}
-							data-testid="instagram-shell-refresh-post-button"
-							aria-label={t("detail.selfMedia.refreshAllData")}
-						>
-							<RefreshCw className="h-4 w-4" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent>{t("detail.selfMedia.refreshAllData")}</TooltipContent>
-				</Tooltip>
-				<ExportPanel
-					onOpen={handleOpenExportDialog}
-					label={t("detail.selfMedia.export.action")}
-					disabled={isExporting || posts.length === 0}
-				/>
-			</div>
+			<SelfMediaShellHeader
+				platform={platform}
+				posts={posts}
+				activePostIndex={activePostIndex}
+				view={view}
+				tabLabels={headerLabels}
+				visibleTabs={visibleTabs}
+				onChangeView={handleGuardedViewChange}
+				onRefresh={handleClickToolbarRefresh}
+				onBackHome={onBackHome}
+				refreshLabel={t("detail.selfMedia.refreshAllData")}
+				refreshDisabled={rootLoading}
+				refreshTestId="instagram-shell-refresh-post-button"
+				onOpenExport={handleOpenExportDialog}
+				exportLabel={t("detail.selfMedia.export.action")}
+				exportDisabled={isExporting || posts.length === 0}
+				onStartInspector={inspector.start}
+				onStopInspector={inspector.stop}
+				inspectorActive={inspector.active}
+				inspectorDisabled={inspectorDisabled}
+				onSaveTitle={allowEdit === false ? undefined : handleSaveTitle}
+			/>
 			<ExportPreviewDialog
 				open={exportDialogOpen}
 				onOpenChange={setExportDialogOpen}
@@ -296,7 +389,7 @@ function InstagramShell(props: PlatformComponentProps) {
 				onConfirm={handleConfirmExport}
 				isExporting={isExporting}
 			/>
-			<div ref={containerRef} className="relative flex-1 overflow-hidden">
+			<div ref={containerRef} className="relative min-h-0 flex-1 overflow-hidden">
 				<InstagramShellEditViewPanel
 					shouldRender={shouldRenderEdit}
 					isActive={isEditView}
@@ -343,8 +436,25 @@ function InstagramShell(props: PlatformComponentProps) {
 						handleAddActivePostDirectoryToCurrentChat
 					}
 					onGoToEdit={handleGoToDetailEdit}
+					phoneFocused={phoneFocused}
+					onPhoneFocus={handlePhoneFocus}
+				/>
+				<ElementInspectorOverlay
+					active={inspector.active}
+					iframeRef={inspector.activeIframeRef}
+					hoveredElement={inspector.hoveredElement}
+					selectedElement={inspector.selectedElement}
+					onClearSelection={noop}
+					hideInfoCard
 				/>
 			</div>
+			<SelfMediaShellViewBar
+				view={view}
+				tabLabels={headerLabels}
+				visibleTabs={visibleTabs}
+				onChangeView={handleGuardedViewChange}
+				onRequestPrePublishAnalysis={allowEdit ? onRequestPrePublishAnalysis : undefined}
+			/>
 		</div>
 	)
 }

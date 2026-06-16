@@ -27,6 +27,36 @@ from app.infrastructure.sdk.magic_service.parameter.message_schedule_parameter i
     TimeConfig,
 )
 
+
+def text_to_json_content(text: str) -> dict:
+    """将纯文本转换为 Tiptap JSONContent 格式（rich_text）。"""
+    paragraphs = []
+    for line in text.split("\n"):
+        if line:
+            paragraphs.append({
+                "type": "paragraph",
+                "content": [{"type": "text", "text": line}],
+            })
+        else:
+            paragraphs.append({"type": "paragraph"})
+    return {"type": "doc", "content": paragraphs}
+
+
+def parse_message_content(raw: str):
+    """
+    解析消息内容：
+    - 如果是合法的 JSONContent dict（含 type 字段），直接使用
+    - 否则视为纯文本，转换为 JSONContent
+    返回 (content, message_type)
+    """
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict) and parsed.get("type"):
+            return parsed, "rich_text"
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return text_to_json_content(raw), "rich_text"
+
 parser = argparse.ArgumentParser(description="更新定时消息任务")
 parser.add_argument("--id", required=True, help="定时任务 ID")
 parser.add_argument("--task-name", default=None, help="任务名称")
@@ -88,15 +118,22 @@ try:
 
     normalized_deadline = normalize_deadline(args.deadline)
 
+    # 解析 message_content 为 rich_text 格式
+    message_content = None
+    message_type = None
+    if args.message_content is not None:
+        message_content, message_type = parse_message_content(args.message_content)
+
     sdk = create_magic_service_sdk_with_defaults()
 
     parameter = UpdateMessageScheduleParameter(
         schedule_id=args.id,
         task_name=args.task_name,
-        message_content=args.message_content,
+        message_content=message_content,
         time_config=time_config,
         deadline=normalized_deadline,
         enabled=args.enabled,
+        message_type=message_type,
     )
 
     result = sdk.message_schedule.update_message_schedule(parameter)

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{CARD_TITLE}}</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <article class="paper">
+        <header class="masthead analysis-source">
+            <div class="hero-copy">
+                <div class="hero-topline">
+                    <span>Daily Intelligence</span>
+                    <span>Signal Brief</span>
+                </div>
+                <h1>{{CARD_TITLE}}</h1>
+                <p class="sub">{{CARD_DESCRIPTION}}</p>
+                <div class="meta-row">
+                    <span>{{GENERATED_AT}}</span>
+                    <span>Update #{{UPDATE_COUNT}}</span>
+                    <span>Window yesterday 00:00-23:59</span>
+                </div>
+            </div>
+            <div class="hero-panel" aria-label="Briefing status">
+                <div>
+                    <span>Momentum</span>
+                    <strong>Positive</strong>
+                </div>
+                <div>
+                    <span>Risk focus</span>
+                    <strong>Retention</strong>
+                </div>
+                <div>
+                    <span>Action window</span>
+                    <strong>24h</strong>
+                </div>
+            </div>
+        </header>
+
+        <div class="layout">
+            <section class="col">
+                <!-- DATA:executive_summary_START -->
+                <section class="block analysis-source">
+                    <h2>Executive summary</h2>
+                    <p class="lead">Overall positive: revenue and new users beat expectations, but content conversion and next-day retention face structural pressure.</p>
+                    <div class="bullet-list summary-bullets">
+                        <div class="bullet-item"><span class="sub">1) Private-domain campaigns drove a 19% increase in repeat-purchase revenue, but first-order conversion for new users is weak.</span></div>
+                        <div class="bullet-item"><span class="sub">2) Competitors are using intensive high-ticket discount tactics, creating short-term interception risk.</span></div>
+                        <div class="bullet-item"><span class="sub">3) Engagement hit a new high and topic selection is working, but funnel conversion has not caught up.</span></div>
+                    </div>
+                </section>
+                <!-- DATA:executive_summary_END -->
+
+                <!-- DATA:metrics_START -->
+                <section class="block analysis-source">
+                    <h2>Key metrics</h2>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <div class="group">Business</div>
+                            <div class="name">GMV</div>
+                            <div class="value">¥428K</div>
+                            <div class="delta up">Day +12.4% / week +18.1%</div>
+                            <div class="spark" data-series="320,334,345,362,380,396,428"></div>
+                        </div>
+                        <div class="metric">
+                            <div class="group">Business</div>
+                            <div class="name">Orders</div>
+                            <div class="value">3,842</div>
+                            <div class="delta warn">Day +7.3% / week +1.1%</div>
+                            <div class="spark" data-series="2920,3012,3088,3150,3296,3410,3842"></div>
+                        </div>
+                        <div class="metric">
+                            <div class="group">Users</div>
+                            <div class="name">New users</div>
+                            <div class="value">2,318</div>
+                            <div class="delta up">Day +15.8% / week +20.6%</div>
+                            <div class="spark" data-series="1450,1510,1630,1722,1844,2010,2318"></div>
+                        </div>
+                        <div class="metric">
+                            <div class="group">Users</div>
+                            <div class="name">Next-day retention</div>
+                            <div class="value">31.4%</div>
+                            <div class="delta down">Day -2.1% / week -0.6%</div>
+                            <div class="spark" data-series="35,34.8,34.2,33.7,33.2,32.8,31.4"></div>
+                        </div>
+                        <div class="metric">
+                            <div class="group">Content</div>
+                            <div class="name">Engagement volume</div>
+                            <div class="value">96.2K</div>
+                            <div class="delta up">Day +24.7% / week +41.2%</div>
+                            <div class="spark" data-series="51,56,60,65,71,80,96"></div>
+                        </div>
+                        <div class="metric">
+                            <div class="group">Content</div>
+                            <div class="name">Content conversion</div>
+                            <div class="value">2.8%</div>
+                            <div class="delta warn">Day -0.3% / week +0.2%</div>
+                            <div class="spark" data-series="2.4,2.6,2.7,2.9,3.0,2.9,2.8"></div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:metrics_END -->
+
+                <!-- DATA:highlights_START -->
+                <section class="block analysis-source">
+                    <h2>Today's key events</h2>
+                    <div class="bullet-list">
+                        <div class="bullet-item"><span class="badge b-red">Major</span><strong>Competitor A 48h limited-time discount</strong>
+                            <div class="sub">Adjust comparison-style creative assets today.</div>
+                        </div>
+                        <div class="bullet-item"><span class="badge b-yel">Industry</span><strong>Platform traffic tilts toward long-dwell content</strong>
+                            <div class="sub">Deep reviews and case content are more likely to receive exposure.</div>
+                        </div>
+                        <div class="bullet-item"><span class="badge b-green">Competitor</span><strong>Competitor B launches first-order coupon returns</strong>
+                            <div class="sub">Test light incentives in parallel.</div>
+                        </div>
+                        <div class="bullet-item"><span class="badge b-gray">General</span><strong>Customer-service feedback focuses on delivery and after-sales entry points</strong>
+                            <div class="sub">Optimize the product-detail FAQ.</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:highlights_END -->
+            </section>
+
+            <aside class="col">
+                <!-- DATA:insights_START -->
+                <section class="block analysis-source">
+                    <h2>Insights and recommendations</h2>
+                    <div class="bullet-list">
+                        <div class="bullet-item"><strong>Insight 1</strong>
+                            <div class="sub">Engagement rose sharply but conversion did not follow; strengthen the bridge from content to transaction.</div>
+                        </div>
+                        <div class="bullet-item"><strong>Insight 2</strong>
+                            <div class="sub">High-ticket competition is heating up; move service and guarantee selling points earlier.</div>
+                        </div>
+                        <div class="bullet-item"><strong>Insight 3</strong>
+                            <div class="sub">Retention volatility exposes a handoff gap; fix the first 24h post-signup flow.</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:insights_END -->
+
+                <!-- DATA:upcoming_START -->
+                <section class="block analysis-source">
+                    <h2>Tomorrow preview</h2>
+                    <div class="timeline">
+                        <div class="time-item"><strong>09:30 advertising review meeting</strong>
+                            <div class="sub">Confirm replacement plan for high-CPA creative assets.</div>
+                        </div>
+                        <div class="time-item"><strong>12:00 private-domain second touch</strong>
+                            <div class="sub">Send incentives to high-click users who have not ordered.</div>
+                        </div>
+                        <div class="time-item"><strong>18:00 competitor price monitoring</strong>
+                            <div class="sub">Prepare price matching or differentiated positioning.</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:upcoming_END -->
+
+                <!-- DATA:sources_START -->
+                <section class="block analysis-source">
+                    <h2>Data sources</h2>
+                    <div class="source-grid">
+                        <div class="source"><strong>Business</strong>
+                            <div class="sub">07:40 · 99.2%</div>
+                        </div>
+                        <div class="source"><strong>Content</strong>
+                            <div class="sub">07:55 · 97.8%</div>
+                        </div>
+                        <div class="source"><strong>Intelligence</strong>
+                            <div class="sub">08:10 · 94.6%</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:sources_END -->
+
+                <!-- DATA:source_preview_START -->
+                <section class="block source-panel analysis-source">
+                    <div class="source-head">
+                        <div>
+                            <h2>Original sources</h2>
+                            <p class="sub">Keep links for key external information; preview or open directly.</p>
+                        </div>
+                        <button class="source-close" id="sourceClose" type="button">Collapse</button>
+                    </div>
+                    <div class="source-list">
+                        <article class="source-card">
+                            <span class="badge b-red">Competitor</span>
+                            <strong>Competitor A limited-time discount page</strong>
+                            <p class="sub">Verify pricing action and campaign deadline.</p>
+                            <div class="source-actions">
+                                <button class="source-preview active" type="button"
+                                    data-preview-url="https://example.com/campaign">Preview</button>
+                                <a href="https://example.com/campaign" target="_blank" rel="noopener noreferrer">Open</a>
+                            </div>
+                        </article>
+                        <article class="source-card">
+                            <span class="badge b-yel">Platform</span>
+                            <strong>Platform traffic-rule announcement</strong>
+                            <p class="sub">Supports the judgment that traffic is tilting toward long-dwell content.</p>
+                            <div class="source-actions">
+                                <button class="source-preview" type="button"
+                                    data-preview-url="https://example.com/platform-update">Preview</button>
+                                <a href="https://example.com/platform-update" target="_blank"
+                                    rel="noopener noreferrer">Open</a>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="source-frame-wrap">
+                        <div class="source-frame-fallback" id="sourceFallback">If the page blocks embedding, use Open.</div>
+                        <iframe id="sourceFrame" title="Daily digest source preview" sandbox="allow-scripts allow-same-origin allow-popups"
+                            loading="lazy" referrerpolicy="no-referrer"></iframe>
+                    </div>
+                </section>
+                <!-- DATA:source_preview_END -->
+
+                <section class="ai-insight">
+                    <div class="insight-header"><span class="insight-icon">✦</span><span>AI Insight</span></div>
+                    <p class="insight-text">Engagement hit a new high but conversion did not follow, suggesting strong content resonance but a broken transaction bridge; add purchase guidance in comments on high-performing posts.</p>
+                    <div class="suggestion-chips">
+                        <button class="chip" type="button"
+                            data-prompt="Analyze why engagement rose while conversion underperformed, and propose a content-to-transaction optimization path.">High engagement but low conversion?</button>
+                        <button class="chip" type="button" data-prompt="Summarize recent competitor moves and assess short-term impact on our users and revenue.">Competitor threat assessment</button>
+                        <button class="chip" type="button"
+                            data-prompt="Based on today's data, output an executable morning-meeting checklist with owners and timing.">Generate morning checklist</button>
+                        <button class="chip" type="button"
+                            data-prompt="What are the structural causes of retention volatility? Give a concrete fix for the first 24h novice flow.">Why is retention volatile?</button>
+                    </div>
+                    <div class="ask-row">
+                        <input class="ask-input" id="askInput" type="text" placeholder="Ask something else...">
+                        <button class="ask-send" id="askSend" type="button">→</button>
+                    </div>
+                    <div class="config-row">
+                        <div class="select-group">
+                            <label class="select-label" for="agentSelect">AI employee</label>
+                            <select class="select" id="agentSelect">
+                                <option value="">Loading employees...</option>
+                            </select>
+                        </div>
+                        <div class="select-group">
+                            <label class="select-label" for="modelSelect">Model</label>
+                            <select class="select" id="modelSelect">
+                                <option value="auto">Auto select</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="insight-status" id="insightStatus"></div>
+                </section>
+            </aside>
+        </div>
+    </article>
+    <script src="scripts.js"></script>
+</body>
+
+</html>

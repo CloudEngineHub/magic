@@ -1,7 +1,15 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import pubsub, { PubSubEvents } from "@/opensource/utils/pubsub"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useTopicDetailPanelController } from "../useTopicDetailPanelController"
+
+vi.mock("@/pages/superMagic/utils/api", () => ({
+	getTemporaryDownloadUrl: vi.fn(),
+}))
+
+vi.mock("@/pages/superMagic/utils/handleFIle", () => ({
+	downloadFileWithAnchor: vi.fn(),
+}))
 
 describe("useTopicDetailPanelController", () => {
 	beforeEach(() => {
@@ -46,6 +54,36 @@ describe("useTopicDetailPanelController", () => {
 		expect(result.current.shouldShowDetailPanel).toBe(false)
 	})
 
+	it("keeps the detail panel visible for non-file preview tab types", () => {
+		const detailRef = {
+			current: {
+				openFileTab: vi.fn(),
+				openPlaybackTab: vi.fn(),
+			},
+		}
+
+		const { result } = renderHook(() =>
+			useTopicDetailPanelController({
+				detailRef,
+				isReadOnly: false,
+				activeFileId: null,
+				setActiveFileId: vi.fn(),
+				handleFileClick: vi.fn(),
+				topicFilesProps: {},
+			}),
+		)
+
+		act(() => {
+			result.current.handleActiveDetailTabChange("website")
+		})
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+
+		act(() => {
+			result.current.handleActiveDetailTabChange("knowledge_base")
+		})
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+	})
+
 	it("should reset file tab intent when fallback timer expires without active file", () => {
 		const setActiveFileId = vi.fn()
 		const handleFileClick = vi.fn()
@@ -72,7 +110,7 @@ describe("useTopicDetailPanelController", () => {
 			result.current.handleFileClickWithPanel({ file_id: "file-1" })
 		})
 
-		expect(setActiveFileId).toHaveBeenCalledWith(null)
+		expect(setActiveFileId).not.toHaveBeenCalled()
 		expect(handleFileClick).toHaveBeenCalledWith({ file_id: "file-1" })
 		expect(result.current.shouldShowDetailPanel).toBe(true)
 
@@ -80,6 +118,72 @@ describe("useTopicDetailPanelController", () => {
 			vi.advanceTimersByTime(301)
 		})
 		expect(result.current.shouldShowDetailPanel).toBe(false)
+	})
+
+	it("keeps existing detail panel visible when a file open attempt produces no active file", () => {
+		const handleFileClick = vi.fn()
+		const detailRef = {
+			current: {
+				openFileTab: vi.fn(),
+				openPlaybackTab: vi.fn(),
+			},
+		}
+
+		const { result } = renderHook(() =>
+			useTopicDetailPanelController({
+				detailRef,
+				isReadOnly: false,
+				activeFileId: "existing-file",
+				setActiveFileId: vi.fn(),
+				handleFileClick,
+				topicFilesProps: {},
+			}),
+		)
+
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+
+		act(() => {
+			result.current.handleFileClickWithPanel({ file_id: "empty-folder", is_directory: true })
+		})
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+
+		act(() => {
+			vi.advanceTimersByTime(301)
+		})
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+	})
+
+	it("restores the previous non-file tab type when a file open attempt does not produce a file", () => {
+		const handleFileClick = vi.fn()
+		const detailRef = {
+			current: {
+				openFileTab: vi.fn(),
+				openPlaybackTab: vi.fn(),
+			},
+		}
+
+		const { result } = renderHook(() =>
+			useTopicDetailPanelController({
+				detailRef,
+				isReadOnly: false,
+				activeFileId: null,
+				setActiveFileId: vi.fn(),
+				handleFileClick,
+				topicFilesProps: {},
+			}),
+		)
+
+		act(() => {
+			result.current.handleActiveDetailTabChange("website")
+		})
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+
+		act(() => {
+			result.current.handleFileClickWithPanel({ file_id: "empty-folder", is_directory: true })
+			vi.advanceTimersByTime(301)
+		})
+
+		expect(result.current.shouldShowDetailPanel).toBe(true)
 	})
 
 	it("should handle pubsub open tab events", () => {

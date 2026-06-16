@@ -1,0 +1,8 @@
+Please perform a second-level deep analysis based on this Analytics Panel:
+
+1. Identify the key growth drivers and main risks
+2. Provide three executable optimization actions in priority order
+3. Estimate the impact range on core metrics after implementation
+4. Judge whether current growth efficiency is sustainable
+
+Please combine metric movement, funnel conversion rates, and channel quality for the final judgment.

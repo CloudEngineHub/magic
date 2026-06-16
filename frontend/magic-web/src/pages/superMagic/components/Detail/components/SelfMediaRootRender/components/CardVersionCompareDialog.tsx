@@ -11,6 +11,7 @@ import {
 } from "@/components/shadcn-ui/select"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import CardFrame from "./CardFrame"
+import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 import type { SelfMediaAttachmentNode } from "../types"
 
 interface CardVersionCompareDialogProps {
@@ -90,7 +91,7 @@ export function CardVersionCompareDialog({
 			width="95vw"
 			footer={null}
 			closable={true}
-			classNames={{ body: "!p-0" }}
+			classNames={{ body: "!bg-[#f8f8f9] !p-0" }}
 		>
 			<div className="flex flex-col gap-3" data-testid="card-history-version-compare-dialog">
 				<p className="mt-3 px-6 text-sm text-muted-foreground">
@@ -209,14 +210,14 @@ export function CardVersionCompareDialog({
 				<div className="flex justify-end gap-2 px-6 pb-4 pt-2">
 					<button
 						data-testid="card-history-compare-cancel"
-						className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+						className={`px-4 py-2 text-sm font-medium ${selfMediaOverlayStyles.secondaryButton}`}
 						onClick={() => onOpenChange(false)}
 					>
 						{t("common.cancel")}
 					</button>
 					<button
 						data-testid="card-history-compare-confirm"
-						className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+						className={`px-4 py-2 text-sm font-medium ${selfMediaOverlayStyles.primaryButton}`}
 						onClick={handleConfirm}
 					>
 						{selectedSide === "history"

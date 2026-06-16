@@ -3,8 +3,8 @@ import type { TFunction } from "i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { buildAgentPromptContent } from "@/components/business/ElementInspector"
 import type { useElementInspector } from "@/components/business/ElementInspector"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { roleStore } from "@/pages/superMagic/stores"
 
 type ElementInspector = ReturnType<typeof useElementInspector>
@@ -21,9 +21,8 @@ export interface InspectorFileInfo {
  *
  * When activated via `startInToolbarMode()`:
  *  - The inspector runs but the info card is hidden.
- *  - On element selection: creates a new topic then — once navigation is
- *    complete — inserts a pre-filled prompt with a super-placeholder into
- *    the new topic's chat editor.
+ *  - On element selection: appends a pre-filled prompt with a super-placeholder
+ *    into the current topic's chat editor without overwriting existing content.
  */
 export function useInspectorToolbarMode(
 	elementInspector: ElementInspector,

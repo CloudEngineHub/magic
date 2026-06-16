@@ -6,6 +6,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/shadcn-ui/select"
+import { Badge } from "@/components/shadcn-ui/badge"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
 import type { SelfMediaPost } from "../types"
@@ -28,9 +29,9 @@ function PostSelector({ posts, activeIndex, onChange, className }: PostSelectorP
 			className={cn("flex min-w-0 items-center gap-2", className)}
 			data-testid="self-media-post-selector"
 		>
-			<span className="text-xs text-muted-foreground">
+			<Badge variant="secondary" className="rounded-md text-[10px]">
 				{t("detail.selfMedia.postSelector.label")}
-			</span>
+			</Badge>
 			<div className="min-w-0 max-w-full flex-1">
 				<Select value={String(activeIndex)} onValueChange={(v) => onChange(Number(v))}>
 					<SelectTrigger size="sm" className="h-8 w-fit min-w-0 max-w-full text-xs">

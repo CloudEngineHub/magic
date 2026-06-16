@@ -55,6 +55,8 @@ export const VoiceInput = memo(
 				config,
 				iconSize = 20,
 				enableHotkey = true,
+				tooltipText,
+				tooltipSide,
 			},
 			ref,
 		) => {
@@ -124,6 +126,7 @@ export const VoiceInput = memo(
 			}
 
 			const getTooltipText = () => {
+				if (tooltipText) return tooltipText
 				const hotkeyText = enableHotkey ? `(${hotkeyDisplay})` : ""
 				switch (status) {
 					case "idle":
@@ -172,7 +175,7 @@ export const VoiceInput = memo(
 							{children || getIcon()}
 						</button>
 					</TooltipTrigger>
-					<TooltipContent side="top">{getTooltipText()}</TooltipContent>
+					<TooltipContent side={tooltipSide ?? "top"}>{getTooltipText()}</TooltipContent>
 				</Tooltip>
 			)
 		},

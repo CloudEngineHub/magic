@@ -1,0 +1,481 @@
+/*
+ * film-vintage.css
+ * Film Vintage — film-vintage style with polaroid-style photography display
+ *
+ * Design principles:
+ *   • Warm off-white / cream background simulating the natural fading of old photos
+ *   • Polaroid-style wide border with bottom whitespace for captions
+ *   • Subtle grain texture for a film feel
+ *   • Serif + monospace pairing balancing vintage mood and professional structure
+ *   • Low-saturation colors to avoid excessive brightness
+ *
+ * Color palette:
+ *   bg-primary    #F5F1E8   Cream off-white, primary background
+ *   bg-surface    #FFFFFF   Pure white, photo area
+ *   bg-footer     #FBF9F4   Light beige, bottom info bar
+ *   accent        #8B7355   Warm brown, accent color
+ *   accent-light  #B8A68F   Light brown, secondary accent
+ *   text-primary  #3A3226   Deep brown-gray, primary text
+ *   text-muted    #7A6F5D   Medium gray-brown, secondary text
+ *   border        #D4CCBB   Beige-gray, border
+ *   border-shadow #C5BAA3   Deep beige, shadow border
+ *
+ * ─────────────────────────────────────────────────────────────
+ * Table of Contents
+ *
+ * §0  CSS Variables & Base Reset
+ * §1  Card Shell (.fv-card)
+ *     §1.1  Cover type (.fv-cover)
+ *     §1.2  Content type (.fv-content)
+ * §2  Content Components
+ *     §2.1  Photo frame (.fv-photo-frame)
+ *     §2.2  Caption bar (.fv-caption)
+ *     §2.3  Info footer (.fv-info-footer)
+ *     §2.4  Metadata row (.fv-meta-row)
+ *     §2.5  Section label (.fv-section-label)
+ *     §2.6  Divider (.fv-divider)
+ * §3  Utility Classes (fv-*)
+ *     §3.1  Text colors
+ *     §3.2  Badges & tags
+ *     §3.3  Background fills
+ * §4  Layout Helpers
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   §0  CSS Variables & Base Reset
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --fv-bg: #1a1a1a;
+  --fv-surface: #fdfbf7;
+  --fv-footer: #f5f4f0;
+  --fv-accent: #d32f2f;
+  --fv-accent-light: #e57373;
+  --fv-text: #212121;
+  --fv-muted: #757575;
+  --fv-border: #e0e0e0;
+  --fv-shadow: #bdbdbd;
+
+  --fv-font-display: "Noto Serif SC", Georgia, serif;
+  --fv-font-body: "Noto Sans SC", -apple-system, sans-serif;
+  --fv-font-mono: "SF Mono", "Courier New", monospace;
+  --fv-font-hand: "Caveat", "Kaiti SC", "STKaiti", cursive;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--fv-font-body);
+  background: var(--fv-bg);
+  color: var(--fv-text);
+  position: relative;
+}
+
+body.fv-cover {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+}
+
+/* Film grain texture (SVG noise) */
+body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 10;
+}
+
+body.fv-content::before {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+}
+
+body > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §1  Card Shell
+   ═══════════════════════════════════════════════════════════ */
+
+.fv-card {
+  width: 540px;
+  height: 720px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* §1.1  Cover type — Cover card */
+.fv-cover {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.fv-cover-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.fv-cover-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.15;
+  filter: blur(2px) grayscale(1);
+}
+
+.fv-cover-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(26, 26, 26, 0.7) 0%,
+    rgba(26, 26, 26, 1) 100%
+  );
+}
+
+.fv-cover-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 40px 32px;
+}
+
+/* Light leak / glow effect */
+.fv-cover::after {
+  content: "";
+  position: absolute;
+  top: -30%;
+  right: -30%;
+  width: 150%;
+  height: 150%;
+  background: radial-gradient(
+    circle,
+    rgba(211, 47, 47, 0.15) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.fv-cover .fv-title {
+  font-family: var(--fv-font-display);
+  font-size: 52px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.15;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+.fv-cover .fv-subtitle {
+  font-size: 14px;
+  color: #b0b0b0;
+  letter-spacing: 0.15em;
+  margin: 0;
+}
+
+.fv-cover .fv-author {
+  font-size: 13px;
+  color: var(--fv-accent-light);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+/* §1.2  Content type — Content card (photo showcase) */
+.fv-content {
+  padding: 28px 24px 24px;
+  background: #fafafa;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §2  Content Components
+   ═══════════════════════════════════════════════════════════ */
+
+/* §2.1  Photo frame — Polaroid-style photo frame */
+.fv-photo-frame {
+  background: #fdfbf7;
+  background: var(--fv-surface);
+  border: 1px solid var(--fv-border);
+  border-radius: 2px;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.04),
+    inset 0 2px 6px rgba(255, 255, 255, 0.8),
+    inset 0 -1px 4px rgba(0, 0, 0, 0.02);
+  padding: 12px 12px 56px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.fv-photo-frame-inner {
+  width: 100%;
+  height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #f8f8f8;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.fv-photo-frame img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: grayscale(1) contrast(1.1) brightness(0.95);
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Bottom caption area of photo frame */
+.fv-photo-frame::after {
+  content: "";
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  height: 44px;
+  background: var(--fv-surface);
+  border-top: 1px solid var(--fv-border);
+}
+
+/* §2.2  Caption bar — Photo title bar */
+.fv-caption {
+  font-family: var(--fv-font-display);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--fv-text);
+  text-align: center;
+  margin-bottom: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* §2.3  Info footer — Bottom info bar (shooting parameters) */
+.fv-info-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--fv-footer);
+  border-top: 1px solid var(--fv-border);
+  padding: 14px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fv-info-footer .fv-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--fv-font-mono);
+  font-size: 10px;
+  color: var(--fv-muted);
+  letter-spacing: 0.02em;
+}
+
+.fv-info-footer .fv-info-label {
+  text-transform: uppercase;
+  color: var(--fv-accent);
+  font-weight: 600;
+  min-width: 60px;
+}
+
+.fv-info-footer .fv-info-value {
+  flex: 1;
+  text-align: right;
+}
+
+/* §2.4  Metadata row */
+.fv-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--fv-border);
+  font-size: 12px;
+  color: var(--fv-muted);
+}
+
+.fv-meta-row .fv-meta-icon {
+  color: var(--fv-accent);
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+.fv-meta-row .fv-meta-text {
+  flex: 1;
+  font-family: var(--fv-font-mono);
+  font-size: 11px;
+}
+
+/* §2.5  Section label — Section label */
+.fv-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fv-accent);
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--fv-accent);
+  display: inline-block;
+}
+
+/* §2.6  Divider — Divider */
+.fv-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--fv-border) 10%,
+    var(--fv-border) 90%,
+    transparent
+  );
+  margin: 20px 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §3  Utility Classes
+   ═══════════════════════════════════════════════════════════ */
+
+/* §3.1  Text colors */
+.fv-text-accent {
+  color: var(--fv-accent);
+}
+.fv-text-muted {
+  color: var(--fv-muted);
+}
+.fv-text-primary {
+  color: var(--fv-text);
+}
+
+/* §3.2  Badges & tags */
+.fv-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--fv-accent-light);
+  color: var(--fv-surface);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 2px;
+}
+
+.fv-badge-outline {
+  background: transparent;
+  border: 1px solid var(--fv-accent);
+  color: var(--fv-accent);
+}
+
+.fv-handwriting {
+  font-family: var(--fv-font-hand);
+  font-size: 16px;
+  color: #1a1a1a;
+  transform: rotate(-2deg);
+  display: inline-block;
+}
+
+.fv-tag {
+  display: inline-block;
+  padding: 3px 8px;
+  background: var(--fv-footer);
+  border: 1px solid var(--fv-border);
+  color: var(--fv-muted);
+  font-size: 10px;
+  font-family: var(--fv-font-mono);
+  letter-spacing: 0.05em;
+  margin-right: 6px;
+}
+
+/* §3.3  Background fills */
+.fv-bg-surface {
+  background: var(--fv-surface);
+}
+.fv-bg-footer {
+  background: var(--fv-footer);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §4  Layout Helpers
+   ═══════════════════════════════════════════════════════════ */
+
+.fv-row {
+  display: flex;
+  align-items: center;
+}
+.fv-col {
+  display: flex;
+  flex-direction: column;
+}
+.fv-spacer {
+  flex: 1;
+}
+.fv-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fv-gap-xs {
+  gap: 6px;
+}
+.fv-gap-sm {
+  gap: 12px;
+}
+.fv-gap-md {
+  gap: 20px;
+}
+.fv-gap-lg {
+  gap: 32px;
+}
+
+.fv-mb-sm {
+  margin-bottom: 12px;
+}
+.fv-mb-md {
+  margin-bottom: 20px;
+}
+.fv-mb-lg {
+  margin-bottom: 32px;
+}
+
+.fv-mt-sm {
+  margin-top: 12px;
+}
+.fv-mt-md {
+  margin-top: 20px;
+}
+.fv-mt-lg {
+  margin-top: 32px;
+}

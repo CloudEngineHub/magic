@@ -2,6 +2,12 @@ export type MagicProjectConfig = Record<string, unknown>
 
 const MAX_PARSE_DEPTH = 100
 
+export interface ParsedMagicProjectConfigContent {
+	config: MagicProjectConfig
+	startIndex: number
+	endIndex: number
+}
+
 class MagicProjectLiteralParser {
 	private index: number
 
@@ -12,12 +18,14 @@ class MagicProjectLiteralParser {
 		this.index = startIndex
 	}
 
-	parseConfig(): { value: MagicProjectConfig; endIndex: number } {
+	parseConfig(): { value: MagicProjectConfig; startIndex: number; endIndex: number } {
+		this.skipIgnored()
+		const startIndex = this.index
 		const value = this.parseValue(0)
 		if (!isRecord(value)) {
 			throw new Error("magic.project.js config must be an object literal")
 		}
-		return { value, endIndex: this.index }
+		return { value, startIndex, endIndex: this.index }
 	}
 
 	private parseValue(depth: number): unknown {
@@ -266,25 +274,31 @@ class MagicProjectLiteralParser {
 }
 
 export function parseMagicProjectConfigContent(content: string): MagicProjectConfig | null {
+	return parseMagicProjectConfigContentWithRange(content)?.config ?? null
+}
+
+export function parseMagicProjectConfigContentWithRange(
+	content: string,
+): ParsedMagicProjectConfigContent | null {
 	if (!content) return null
 
 	try {
-		const source = content.trim()
-		if (!source) return null
+		const startIndex = content.search(/\S/)
+		if (startIndex < 0) return null
 
-		if (source.startsWith("{")) {
-			const parser = new MagicProjectLiteralParser(source)
-			const { value, endIndex } = parser.parseConfig()
-			if (source.slice(endIndex).trim()) return null
-			return value
+		if (content[startIndex] === "{") {
+			const parser = new MagicProjectLiteralParser(content, startIndex)
+			const { value, startIndex: objectStartIndex, endIndex } = parser.parseConfig()
+			if (content.slice(endIndex).trim()) return null
+			return { config: value, startIndex: objectStartIndex, endIndex }
 		}
 
 		const assignmentValueIndex = findConfigAssignmentValueIndex(content)
 		if (assignmentValueIndex === -1) return null
 
 		const parser = new MagicProjectLiteralParser(content, assignmentValueIndex)
-		const { value } = parser.parseConfig()
-		return value
+		const { value, startIndex: objectStartIndex, endIndex } = parser.parseConfig()
+		return { config: value, startIndex: objectStartIndex, endIndex }
 	} catch {
 		return null
 	}

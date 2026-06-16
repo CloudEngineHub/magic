@@ -1,0 +1,692 @@
+/*
+ * personal-insight.css
+ * Personal Insight — Clean minimal knowledge-sharing card CSS library
+ *
+ * Design principles:
+ *   Pure white backgrounds, clean typography hierarchy, personal avatar/profile style,
+ *   numbered sections, subtle card borders, warm accent color, reading-friendly spacing.
+ *   Inspired by WeChat articles and personal blog notes.
+ *   Suited for personal reflections, reading notes, tech insights, knowledge sharing.
+ *
+ * Color palette:
+ *   White      #FFFFFF   Main background
+ *   Gray-1     #FAFAFA   Card surface
+ *   Gray-2     #F5F5F5   Section background
+ *   Gray-3     #EEEEEE   Border/divider
+ *   Gray-4     #999999   Secondary text
+ *   Gray-5     #666666   Body text
+ *   Black      #1A1A1A   Heading text
+ *   Accent     #1A73E8   Blue accent (links, highlights)
+ *   Warm       #FF7043   Warm accent (emphasis)
+ *   Green      #43A047   Positive/tip
+ *   Surface    #F0F7FF   Light blue surface
+ *
+ * ─────────────────────────────────────────────────────────────
+ * Table of Contents
+ *
+ * §0  Base Reset & Fonts
+ * §1  Card Shell (.pi-card)
+ *     §1.1  Cover type (.pi-cover)
+ *     §1.2  Content type (.pi-content)
+ * §2  Cover Components
+ *     §2.1  Profile row (.pi-profile)
+ *     §2.2  Cover title (.pi-cover-title)
+ *     §2.3  Cover abstract (.pi-abstract)
+ *     §2.4  Cover decoration (.pi-cover-deco)
+ * §3  Content Components
+ *     §3.1  Page header (.pi-header)
+ *     §3.2  Section number (.pi-num)
+ *     §3.3  Section heading (.pi-heading)
+ *     §3.4  Paragraph (.pi-text)
+ *     §3.5  Key point card (.pi-keypoint)
+ *     §3.6  Numbered list (.pi-numbered-list)
+ *     §3.7  Quote block (.pi-quote)
+ *     §3.8  Tip box (.pi-tip)
+ *     §3.9  Divider (.pi-divider)
+ *     §3.10 Footer (.pi-footer)
+ *     §3.11 Ending card (.pi-ending)
+ * §4  Utility Classes (pi-*)
+ * §5  Layout Helpers
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/* ════════════════════════════════════════
+   §0  Base Reset & Fonts
+   ════════════════════════════════════════ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+}
+
+body {
+  font-family:
+    "Noto Sans SC",
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  background: #fff;
+  color: #1a1a1a;
+  line-height: 1.75;
+}
+
+/* ════════════════════════════════════════
+   §1  Card Shell
+   ════════════════════════════════════════ */
+
+.pi-card {
+  width: 540px;
+  height: 720px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ────────────────────────────────────────
+   §1.1  Cover type (.pi-cover)
+   Clean white cover with profile and title
+   ──────────────────────────────────────── */
+
+.pi-cover {
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  padding: 56px 44px 44px;
+}
+
+/* Cover with light warm tint */
+.pi-cover.warm {
+  background: #fffbf5;
+}
+
+/* Cover with light blue tint */
+.pi-cover.blue {
+  background: #f5f9ff;
+}
+
+/* ────────────────────────────────────────
+   §1.2  Content type (.pi-content)
+   White background, clean reading layout
+   ──────────────────────────────────────── */
+
+.pi-content {
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  padding: 40px 44px 36px;
+  gap: 20px;
+}
+
+/* ════════════════════════════════════════
+   §2  Cover Components
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §2.1  Profile row (.pi-profile)
+   Avatar + author name + date
+   ──────────────────────────────────────── */
+
+.pi-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 36px;
+}
+
+.pi-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.pi-avatar-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pi-author {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.pi-date {
+  font-size: 13px;
+  font-weight: 400;
+  color: #999999;
+}
+
+/* ────────────────────────────────────────
+   §2.2  Cover title (.pi-cover-title)
+   Large bold title for cover page
+   ──────────────────────────────────────── */
+
+.pi-cover-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #1a1a1a;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  margin-bottom: 20px;
+}
+
+/* Smaller variant */
+.pi-cover-title.sm {
+  font-size: 26px;
+}
+
+/* ────────────────────────────────────────
+   §2.3  Cover abstract (.pi-abstract)
+   Short summary text below title
+   ──────────────────────────────────────── */
+
+.pi-abstract {
+  font-size: 15px;
+  font-weight: 400;
+  color: #666666;
+  line-height: 1.8;
+  margin-bottom: 28px;
+}
+
+/* ────────────────────────────────────────
+   §2.4  Cover decoration (.pi-cover-deco)
+   Bottom decorative elements
+   ──────────────────────────────────────── */
+
+.pi-cover-deco {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pi-cover-deco-line {
+  height: 2px;
+  flex: 1;
+  background: linear-gradient(90deg, #1a73e8, transparent);
+}
+
+.pi-cover-deco-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #999999;
+}
+
+/* ════════════════════════════════════════
+   §3  Content Components
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §3.1  Page header (.pi-header)
+   Compact page indicator
+   ──────────────────────────────────────── */
+
+.pi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.pi-header-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #999999;
+}
+
+.pi-header-page {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a73e8;
+}
+
+/* ────────────────────────────────────────
+   §3.2  Section number (.pi-num)
+   Large standalone number as section marker
+   ──────────────────────────────────────── */
+
+.pi-num {
+  font-size: 48px;
+  font-weight: 800;
+  color: #1a1a1a;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+/* Smaller number variant */
+.pi-num.sm {
+  font-size: 36px;
+}
+
+/* Colored number */
+.pi-num.blue {
+  color: #1a73e8;
+}
+
+/* ────────────────────────────────────────
+   §3.3  Section heading (.pi-heading)
+   Bold section title
+   ──────────────────────────────────────── */
+
+.pi-heading {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+/* Large variant */
+.pi-heading.lg {
+  font-size: 24px;
+  font-weight: 800;
+}
+
+/* ────────────────────────────────────────
+   §3.4  Paragraph (.pi-text)
+   Body text with comfortable reading spacing
+   ──────────────────────────────────────── */
+
+.pi-text {
+  font-size: 14px;
+  font-weight: 400;
+  color: #4a4a4a;
+  line-height: 1.85;
+}
+
+/* Smaller secondary text */
+.pi-text.sm {
+  font-size: 13px;
+  color: #666666;
+}
+
+/* Larger intro text */
+.pi-text.lg {
+  font-size: 15px;
+  color: #333333;
+}
+
+/* ────────────────────────────────────────
+   §3.5  Key point card (.pi-keypoint)
+   Highlighted insight/key takeaway card
+   ──────────────────────────────────────── */
+
+.pi-keypoint {
+  background: #f5f5f5;
+  border-radius: 10px;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Blue accent variant */
+.pi-keypoint.blue {
+  background: #f0f7ff;
+  border-left: 3px solid #1a73e8;
+  border-radius: 0 10px 10px 0;
+}
+
+/* Warm accent variant */
+.pi-keypoint.warm {
+  background: #fff8f5;
+  border-left: 3px solid #ff7043;
+  border-radius: 0 10px 10px 0;
+}
+
+.pi-keypoint-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1a73e8;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pi-keypoint-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+
+.pi-keypoint-body {
+  font-size: 13px;
+  font-weight: 400;
+  color: #666666;
+  line-height: 1.7;
+}
+
+/* ────────────────────────────────────────
+   §3.6  Numbered list (.pi-numbered-list)
+   Clean numbered items
+   ──────────────────────────────────────── */
+
+.pi-numbered-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pi-numbered-item {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.pi-item-num {
+  width: 28px;
+  height: 28px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Blue number variant */
+.pi-item-num.blue {
+  background: #1a73e8;
+}
+
+.pi-item-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pi-item-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.pi-item-desc {
+  font-size: 13px;
+  color: #666666;
+  line-height: 1.7;
+}
+
+/* ────────────────────────────────────────
+   §3.7  Quote block (.pi-quote)
+   Left-bordered emphasis block
+   ──────────────────────────────────────── */
+
+.pi-quote {
+  border-left: 3px solid #1a1a1a;
+  padding: 12px 20px;
+  background: #fafafa;
+  border-radius: 0 8px 8px 0;
+}
+
+.pi-quote-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333333;
+  line-height: 1.75;
+  font-style: italic;
+}
+
+/* Blue quote variant */
+.pi-quote.blue {
+  border-left-color: #1a73e8;
+  background: #f5f9ff;
+}
+
+/* ────────────────────────────────────────
+   §3.8  Tip box (.pi-tip)
+   Rounded tip/note container
+   ──────────────────────────────────────── */
+
+.pi-tip {
+  background: #f0f7ff;
+  border: 1px solid #d4e5f7;
+  border-radius: 10px;
+  padding: 16px 20px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.pi-tip-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.pi-tip-text {
+  font-size: 13px;
+  color: #4a4a4a;
+  line-height: 1.7;
+}
+
+/* Warning variant */
+.pi-tip.warn {
+  background: #fff8f0;
+  border-color: #ffe0c0;
+}
+
+/* ────────────────────────────────────────
+   §3.9  Divider (.pi-divider)
+   Clean horizontal divider
+   ──────────────────────────────────────── */
+
+.pi-divider {
+  height: 1px;
+  background: #eeeeee;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* Dashed variant */
+.pi-divider.dashed {
+  background: none;
+  border-top: 1px dashed #dddddd;
+}
+
+/* Centered dot divider */
+.pi-divider.dots {
+  background: none;
+  text-align: center;
+  height: auto;
+  color: #cccccc;
+  font-size: 16px;
+  letter-spacing: 8px;
+}
+
+/* ────────────────────────────────────────
+   §3.10  Footer (.pi-footer)
+   Bottom attribution area
+   ──────────────────────────────────────── */
+
+.pi-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  border-top: 1px solid #eeeeee;
+}
+
+.pi-footer-author {
+  font-size: 12px;
+  font-weight: 500;
+  color: #999999;
+}
+
+.pi-footer-page {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a73e8;
+}
+
+/* ────────────────────────────────────────
+   §3.11  Ending card (.pi-ending)
+   Centered conclusion/ending block
+   ──────────────────────────────────────── */
+
+.pi-ending {
+  text-align: center;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.pi-ending-emoji {
+  font-size: 40px;
+}
+
+.pi-ending-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.pi-ending-text {
+  font-size: 14px;
+  color: #666666;
+  line-height: 1.7;
+  max-width: 360px;
+}
+
+.pi-ending-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.pi-ending-tag {
+  font-size: 12px;
+  color: #1a73e8;
+  background: #f0f7ff;
+  padding: 4px 12px;
+  border-radius: 14px;
+}
+
+/* ════════════════════════════════════════
+   §4  Utility Classes
+   ════════════════════════════════════════ */
+
+/* Text colors */
+.pi-text-blue {
+  color: #1a73e8;
+}
+.pi-text-warm {
+  color: #ff7043;
+}
+.pi-text-muted {
+  color: #999999;
+}
+.pi-text-dark {
+  color: #1a1a1a;
+}
+.pi-text-green {
+  color: #43a047;
+}
+
+/* Background colors */
+.pi-bg-blue {
+  background: #f0f7ff;
+}
+.pi-bg-warm {
+  background: #fff8f5;
+}
+.pi-bg-gray {
+  background: #f5f5f5;
+}
+
+/* Inline highlights */
+.pi-hl {
+  background: linear-gradient(transparent 55%, #ffe066 55%);
+  padding: 0 2px;
+}
+
+.pi-hl-blue {
+  background: linear-gradient(transparent 55%, #b3d4fc 55%);
+  padding: 0 2px;
+}
+
+/* Bold / emphasis */
+.pi-bold {
+  font-weight: 700;
+}
+.pi-em {
+  font-style: italic;
+}
+
+/* Tags */
+.pi-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: #f5f5f5;
+  color: #666666;
+}
+
+.pi-tag.blue {
+  background: #f0f7ff;
+  color: #1a73e8;
+}
+
+/* ════════════════════════════════════════
+   §5  Layout Helpers
+   ════════════════════════════════════════ */
+
+.pi-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.pi-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pi-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pi-spacer {
+  flex: 1;
+}
+
+.pi-center {
+  text-align: center;
+  align-items: center;
+}
+
+.pi-mt-auto {
+  margin-top: auto;
+}

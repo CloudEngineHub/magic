@@ -22,6 +22,7 @@ export interface WechatCoverPhonePanelProps {
 	loading: boolean
 	error: string | null
 	posts: SelfMediaPost[]
+	activePostIndex?: number
 	attachmentList?: PlatformComponentProps["attachmentList"]
 	onSelectPost: (idx: number) => void
 	onEnsurePostLoaded?: EnsurePostLoaded
@@ -67,8 +68,16 @@ function WechatTopNavBar({ title }: { title: string }) {
 }
 
 export function WechatCoverPhonePanel(props: WechatCoverPhonePanelProps) {
-	const { visible, loading, error, posts, attachmentList, onSelectPost, onEnsurePostLoaded } =
-		props
+	const {
+		visible,
+		loading,
+		error,
+		posts,
+		activePostIndex,
+		attachmentList,
+		onSelectPost,
+		onEnsurePostLoaded,
+	} = props
 	const { t } = useTranslation("super")
 	const { containerRef, scale } = usePhoneScaling<HTMLDivElement>({
 		designWidth: WECHAT_PHONE_WIDTH + 28,
@@ -84,7 +93,7 @@ export function WechatCoverPhonePanel(props: WechatCoverPhonePanelProps) {
 			aria-hidden={!visible}
 			data-testid="wechat-cover-phone-panel"
 		>
-			<div className="flex h-full items-start justify-center py-4">
+			<div className="flex h-full items-center justify-center py-4">
 				<PhoneShell
 					scale={scale}
 					width={WECHAT_PHONE_WIDTH}
@@ -104,6 +113,7 @@ export function WechatCoverPhonePanel(props: WechatCoverPhonePanelProps) {
 							>
 								<WechatCoverView
 									posts={posts}
+									priorityPostIndex={activePostIndex}
 									attachmentList={attachmentList}
 									onSelectPost={onSelectPost}
 									onEnsurePostLoaded={onEnsurePostLoaded}

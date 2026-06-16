@@ -6,9 +6,9 @@ import {
 	MAGIC_FETCH_POST_MESSAGE_TARGET_HELPER,
 } from "./fetchInterceptor"
 import { getNestedIframeInterceptorScript } from "./nested-iframe-content"
-import { getIframeRuntimeScript } from "../iframe-bridge/utils/iframe-script"
 import { configStore } from "@/models/config"
 import { normalizeLocale } from "@/utils/locale"
+import magicApiPreludeScript from "virtual:magic-api"
 
 type ServiceWorkerMockMode = "off" | "auto" | "on"
 
@@ -1521,6 +1521,174 @@ function replaceGlobalLetConst(scriptContent: string): string {
 	return result.join("\n")
 }
 
+function getInlineInspectorFallbackScript(enable = false): string {
+	if (!enable) return ""
+
+	return `
+		(function() {
+			var INSPECTOR_MSG = {
+				START: "MAGIC_INSPECTOR_START",
+				STOP: "MAGIC_INSPECTOR_STOP",
+				HOVER: "MAGIC_INSPECTOR_HOVER",
+				SELECT: "MAGIC_INSPECTOR_SELECT",
+				HOVER_END: "MAGIC_INSPECTOR_HOVER_END"
+			};
+			var active = false;
+			var hoveredElement = null;
+			function parsePx(value) {
+				var n = parseFloat(value);
+				return isFinite(n) ? n : 0;
+			}
+			function getBoxSides(computed, prefix) {
+				return {
+					top: parsePx(computed.getPropertyValue(prefix + "-top")),
+					right: parsePx(computed.getPropertyValue(prefix + "-right")),
+					bottom: parsePx(computed.getPropertyValue(prefix + "-bottom")),
+					left: parsePx(computed.getPropertyValue(prefix + "-left"))
+				};
+			}
+			function getElementSelector(element) {
+				if (!element || element.nodeType !== 1) return "";
+				if (element === document.documentElement) return "html";
+				if (element === document.body) return "body";
+				var path = [];
+				var current = element;
+				while (current && current.nodeType === 1 && current !== document.documentElement && current !== document.body) {
+					var selector = current.tagName.toLowerCase();
+					if (current.id) {
+						selector += "#" + current.id;
+						path.unshift(selector);
+						break;
+					}
+					var classes = [];
+					if (current.className && typeof current.className === "string") {
+						classes = current.className.trim().split(/\\s+/).filter(Boolean);
+					}
+					var baseSelector = selector;
+					if (classes.length > 0) {
+						baseSelector += classes.map(function(c) { return "." + c; }).join("");
+					}
+					var parent = current.parentElement;
+					if (parent) {
+						var tag = current.tagName.toLowerCase();
+						var siblings = Array.from(parent.children).filter(function(ch) {
+							return ch.tagName.toLowerCase() === tag;
+						});
+						selector = siblings.length > 1
+							? baseSelector + ":nth-of-type(" + (siblings.indexOf(current) + 1) + ")"
+							: baseSelector;
+					} else {
+						selector = baseSelector;
+					}
+					path.unshift(selector);
+					current = parent;
+				}
+				var selectorPath = path.join(" > ");
+				return element.parentElement === document.body && selectorPath ? "body > " + selectorPath : selectorPath;
+			}
+			function collectElementInfo(el) {
+				var computed = window.getComputedStyle(el);
+				var rect = el.getBoundingClientRect();
+				var computedStyles = {};
+				[
+					"display","position","width","height","color","backgroundColor",
+					"fontSize","fontFamily","fontWeight","lineHeight","textAlign",
+					"opacity","borderRadius","overflow","zIndex","flexDirection",
+					"justifyContent","alignItems"
+				].forEach(function(prop) { computedStyles[prop] = computed[prop] || ""; });
+				var attributes = {};
+				var skipAttrs = ["class", "id", "style"];
+				var attrCount = 0;
+				for (var i = 0; i < el.attributes.length && attrCount < 10; i++) {
+					var attr = el.attributes[i];
+					if (skipAttrs.indexOf(attr.name) === -1) {
+						attributes[attr.name] = attr.value.length > 100 ? attr.value.slice(0, 100) + "…" : attr.value;
+						attrCount++;
+					}
+				}
+				var classList = [];
+				if (el.className && typeof el.className === "string") {
+					classList = el.className.trim().split(/\\s+/).filter(Boolean);
+				}
+				var rawText = (el.textContent || "").trim();
+				return {
+					selector: getElementSelector(el),
+					tagName: el.tagName.toLowerCase(),
+					id: el.id || "",
+					classList: classList,
+					rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+					margin: getBoxSides(computed, "margin"),
+					padding: getBoxSides(computed, "padding"),
+					border: {
+						top: parsePx(computed.borderTopWidth),
+						right: parsePx(computed.borderRightWidth),
+						bottom: parsePx(computed.borderBottomWidth),
+						left: parsePx(computed.borderLeftWidth)
+					},
+					computedStyles: computedStyles,
+					attributes: attributes,
+					textContent: rawText.length > 120 ? rawText.slice(0, 120) + "…" : rawText,
+					accessibleName: el.getAttribute("aria-label") || el.getAttribute("alt") || el.getAttribute("title") || undefined
+				};
+			}
+			function post(type, info) {
+				try {
+					window.parent.postMessage({ type: type, elementInfo: info, timestamp: Date.now() }, "*");
+				} catch (error) {}
+			}
+			function onMouseMove(event) {
+				if (!active) return;
+				var target = event.target;
+				if (!target || target === document.body || target === document.documentElement) return;
+				if (target.getAttribute && target.getAttribute("data-injected") === "true") return;
+				if (hoveredElement === target) return;
+				hoveredElement = target;
+				post(INSPECTOR_MSG.HOVER, collectElementInfo(target));
+			}
+			function onMouseOut(event) {
+				if (!active) return;
+				var related = event.relatedTarget;
+				if (!related || related === document.documentElement) {
+					hoveredElement = null;
+					post(INSPECTOR_MSG.HOVER_END);
+				}
+			}
+			function onClick(event) {
+				if (!active) return;
+				var target = event.target;
+				if (!target || (target.getAttribute && target.getAttribute("data-injected") === "true")) return;
+				event.preventDefault();
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				post(INSPECTOR_MSG.SELECT, collectElementInfo(target));
+				deactivate();
+			}
+			function activate() {
+				if (active) return;
+				active = true;
+				hoveredElement = null;
+				document.addEventListener("mousemove", onMouseMove, true);
+				document.addEventListener("mouseout", onMouseOut, true);
+				document.addEventListener("click", onClick, true);
+				document.documentElement.style.cursor = "crosshair";
+			}
+			function deactivate() {
+				if (!active) return;
+				active = false;
+				hoveredElement = null;
+				document.removeEventListener("mousemove", onMouseMove, true);
+				document.removeEventListener("mouseout", onMouseOut, true);
+				document.removeEventListener("click", onClick, true);
+				document.documentElement.style.cursor = "";
+			}
+			window.addEventListener("message", function(event) {
+				if (event.data && event.data.type === INSPECTOR_MSG.START) activate();
+				if (event.data && event.data.type === INSPECTOR_MSG.STOP) deactivate();
+			});
+		})();
+	`
+}
+
 //TAILWIND_CSS_URL和ECHARTS_JS_URL注入后不删除，其他资源注入后删除
 export const getFullContent = (
 	decodedContent: string,
@@ -1553,13 +1721,45 @@ export const getFullContent = (
 		doc.documentElement.appendChild(body)
 	}
 
+	const initialLang = normalizeLocale(configStore.i18n.language)
+	const firstHeadChild = doc.head.firstChild
+	const injectedHeadFragment = doc.createDocumentFragment()
+
 	// 创建防翻译meta标签
 	const metaNoTranslate = doc.createElement("meta")
 	metaNoTranslate.setAttribute("name", "google")
 	metaNoTranslate.setAttribute("content", "notranslate")
 	metaNoTranslate.setAttribute("data-injected", "true")
-	// 插入到head的最前面
-	doc.head.insertBefore(metaNoTranslate, doc.head.firstChild)
+	injectedHeadFragment.appendChild(metaNoTranslate)
+
+	// 初始语言必须在 Magic API prelude 之前写入，MagicI18nApi 在 install 时读取。
+	const langBootstrapScript = doc.createElement("script")
+	langBootstrapScript.setAttribute("data-injected", "magic-lang")
+	langBootstrapScript.textContent = `window.__MAGIC_INITIAL_LANG__=${JSON.stringify(initialLang)}`
+	injectedHeadFragment.appendChild(langBootstrapScript)
+
+	// Magic API 必须在业务 HTML 的同步脚本之前注册，避免用户脚本抢先调用 window.Magic。
+	const magicApiScriptElement = doc.createElement("script")
+	magicApiScriptElement.setAttribute("data-injected", "magic-api")
+	magicApiScriptElement.textContent = magicApiPreludeScript
+	injectedHeadFragment.appendChild(magicApiScriptElement)
+
+	// 创建注入脚本
+	const scriptElement = doc.createElement("script")
+	scriptElement.setAttribute("data-injected", "true")
+	scriptElement.textContent = `
+		${getPostMessageTargetBootstrapScript(postMessageTargetStrategy)}
+		${getCookieMockScript()}
+		${getStorageMockScript(markerId)}
+		${getIndexedDBMockScript()}
+		${getServiceWorkerMockScript(serviceWorkerMockMode)}
+		${getDOMContentLoadedScript(options.disableParentClickBridge === true)}
+		${getLinkHandlingScript()}
+		${getNestedIframeInterceptorScript()}
+		${getDynamicResourceInterceptorScript(dynamicInterceptionOptions)}
+		${getInlineInspectorFallbackScript(options.enableInlineInspectorFallback === true)}
+	`
+	injectedHeadFragment.appendChild(scriptElement)
 
 	// 创建基础样式
 	const styleElement = doc.createElement("style")
@@ -1572,33 +1772,8 @@ export const getFullContent = (
 	]
 		.filter(Boolean)
 		.join("\n")
-	doc.head.appendChild(styleElement)
-
-	// 创建注入脚本
-	const scriptElement = doc.createElement("script")
-	scriptElement.setAttribute("data-injected", "true")
-	// 注入初始语言变量，供 iframe-runtime 中 MagicI18nApi 在安装时读取
-	const initialLang = normalizeLocale(configStore.i18n.language)
-	scriptElement.textContent = `
-		window.__MAGIC_INITIAL_LANG__ = "${initialLang}";
-		${getPostMessageTargetBootstrapScript(postMessageTargetStrategy)}
-		${getCookieMockScript()}
-		${getStorageMockScript(markerId)}
-		${getIndexedDBMockScript()}
-		${getServiceWorkerMockScript(serviceWorkerMockMode)}
-		${getDOMContentLoadedScript(options.disableParentClickBridge === true)}
-		${getLinkHandlingScript()}
-		${getNestedIframeInterceptorScript()}
-		${getDynamicResourceInterceptorScript(dynamicInterceptionOptions)}
-	`
-	doc.head.appendChild(scriptElement)
-
-	// 注入 iframe-runtime.js：Phase 1 立即安装 window.Magic.fs / llm；
-	// Phase 2 在收到 { type: "activateEditorRuntime" } 消息后激活编辑器。
-	const runtimeScriptElement = doc.createElement("script")
-	runtimeScriptElement.setAttribute("data-injected", "true")
-	runtimeScriptElement.textContent = getIframeRuntimeScript()
-	doc.head.appendChild(runtimeScriptElement)
+	injectedHeadFragment.appendChild(styleElement)
+	doc.head.insertBefore(injectedHeadFragment, firstHeadChild)
 
 	// 在html标签上添加translate="no"属性
 	doc.documentElement.setAttribute("translate", "no")
@@ -1661,5 +1836,6 @@ interface GetFullContentOptions {
 	containOverscroll?: boolean
 	hideVerticalScroll?: boolean
 	disableParentClickBridge?: boolean
+	enableInlineInspectorFallback?: boolean
 	postMessageTargetStrategy?: PostMessageTargetStrategy
 }

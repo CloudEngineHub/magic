@@ -3,8 +3,7 @@ import { useTranslation } from "react-i18next"
 import { isEmpty } from "lodash-es"
 import type { PlaybackTabItem } from "../types"
 import type { Topic, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
-
-export const PLAYBACK_TAB_ID = "__playback__"
+import { PLAYBACK_TAB_ID } from "../utils/tabConstants"
 
 interface UsePlaybackTabProps {
 	selectedTopic?: Topic | null

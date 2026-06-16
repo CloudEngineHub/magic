@@ -1,22 +1,50 @@
-import { forwardRef, useEffect } from "react"
-import { render, screen, fireEvent, within } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react"
+import { act, render, screen, fireEvent, within, waitFor } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type { ReactElement } from "react"
 import RednoteShell from "../platforms/rednote/RednoteShell"
 import InstagramShell from "../platforms/instagram/InstagramShell"
+import WechatOfficialShell from "../platforms/wechat-official-accounts/WechatOfficialShell"
+import { WechatCoverPhonePanel } from "../platforms/wechat-official-accounts/WechatCoverPhonePanel"
 import type { SelfMediaPost, SelfMediaView } from "../types"
+import { SELF_MEDIA_WORKSPACE_BACKGROUND } from "../components/SelfMediaWorkspaceBackground"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { createTestStore, wrapWithStore } from "./testStoreHelpers"
 import type { StoreSeed } from "./testStoreHelpers"
 import type { SelfMediaPlatform } from "../../../types"
 
-const { addFileToCurrentChat } = vi.hoisted(() => ({
+const {
+	addFileToCurrentChat,
+	injectInspectorHandlerMock,
+	startWechatArticleInspectorMock,
+	startWechatArticleInspectorAppendMock,
+	clipboardWriteMock,
+	clipboardWriteTextMock,
+	clipboardItemPayloads,
+	usePhoneScalingMock,
+} = vi.hoisted(() => ({
 	addFileToCurrentChat: vi.fn(),
+	injectInspectorHandlerMock: vi.fn(),
+	startWechatArticleInspectorMock: vi.fn(),
+	startWechatArticleInspectorAppendMock: vi.fn(),
+	clipboardWriteMock: vi.fn(),
+	clipboardWriteTextMock: vi.fn(),
+	clipboardItemPayloads: [] as Array<Record<string, Blob>>,
+	usePhoneScalingMock: vi.fn(() => ({
+		containerRef: { current: null },
+		scale: 1,
+		width: 375,
+		height: 812,
+	})),
 }))
 
 vi.mock("@/pages/superMagic/utils/topics", () => ({
 	addFileToCurrentChat,
 	addFileToNewChat: vi.fn(),
+}))
+
+vi.mock("../utils/inspectorHandlerScript", () => ({
+	injectInspectorHandler: injectInspectorHandlerMock,
 }))
 
 vi.mock("@/pages/superMagic/stores/core", () => ({
@@ -26,6 +54,13 @@ vi.mock("@/pages/superMagic/stores/core", () => ({
 	projectStore: {
 		selectedProject: { id: "project-1" },
 	},
+}))
+
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getAdminLocaleModules: () => ({}),
+	getLocaleModules: () => ({}),
+	loadFallbackLocale: () => Promise.resolve({ default: {} }),
+	loadMagicFlowLocale: () => Promise.resolve({ default: {} }),
 }))
 
 const translationMap: Record<string, string> = {
@@ -46,6 +81,55 @@ vi.mock("react-i18next", () => ({
 vi.mock("../platforms/rednote/edit", () => ({
 	__esModule: true,
 	default: () => <div data-testid="mock-red-edit" />,
+}))
+
+vi.mock("../platforms/wechat-official-accounts/article", () => ({
+	__esModule: true,
+	default: forwardRef(function MockWechatArticle(
+		_props: { onInspectorActiveChange?: (active: boolean) => void },
+		ref,
+	) {
+		const iframeRef = useRef<HTMLIFrameElement>(null)
+		useImperativeHandle(ref, () => ({
+			getIframeElement: () => iframeRef.current,
+			getArticleHtml: () => "<section><strong>article html</strong></section>",
+			startInspector: () => {
+				startWechatArticleInspectorMock()
+				_props.onInspectorActiveChange?.(true)
+			},
+			startInspectorAppend: () => {
+				startWechatArticleInspectorAppendMock()
+				_props.onInspectorActiveChange?.(true)
+			},
+			stopInspector: () => _props.onInspectorActiveChange?.(false),
+		}))
+
+		return (
+			<div data-testid="mock-wechat-article">
+				<iframe ref={iframeRef} title="wechat article" srcDoc="<main>article</main>" />
+			</div>
+		)
+	}),
+}))
+
+vi.mock("../platforms/wechat-official-accounts/edit", () => ({
+	__esModule: true,
+	default: () => <div data-testid="mock-wechat-edit" />,
+}))
+
+vi.mock("../platforms/wechat-official-accounts/code", () => ({
+	__esModule: true,
+	default: () => <div data-testid="mock-wechat-code" />,
+}))
+
+vi.mock("../platforms/wechat-official-accounts/wechatArticleHtml", () => ({
+	loadWechatArticleHtml: vi.fn(() =>
+		Promise.resolve({
+			content:
+				'<html><head><style>.fallback{color:red;font-weight:700}</style></head><body><section class="fallback">fallback html</section></body></html>',
+			filePathMapping: new Map(),
+		}),
+	),
 }))
 
 const cardFrameMountCounts = new Map<string, number>()
@@ -98,8 +182,28 @@ vi.mock("../components/ExportPanel", () => ({
 
 vi.mock("../components/ExportPreviewDialog", () => ({
 	__esModule: true,
-	default: ({ open }: { open: boolean }) =>
-		open ? <div data-testid="self-media-export-dialog" /> : null,
+	default: ({
+		open,
+		exportMode,
+		onCopyWechatHtml,
+	}: {
+		open: boolean
+		exportMode?: string
+		onCopyWechatHtml?: () => void | Promise<void>
+	}) =>
+		open ? (
+			<div data-testid="self-media-export-dialog" data-export-mode={exportMode || "cards"}>
+				<button
+					type="button"
+					data-testid="mock-copy-wechat-html"
+					onClick={() => void onCopyWechatHtml?.()}
+				/>
+			</div>
+		) : null,
+}))
+
+vi.mock("../components/CardVersionHistoryButton", () => ({
+	CardVersionHistoryButton: () => null,
 }))
 
 vi.mock("../components/PostSelector", () => ({
@@ -122,16 +226,13 @@ vi.mock("../hooks/useExportZip", () => ({
 	useExportZip: () => ({
 		progress: { current: 0, total: 0, status: "idle" },
 		exportZip: vi.fn(),
+		exportLongImage: vi.fn(),
+		exportWechatCoverImage: vi.fn(),
 	}),
 }))
 
 vi.mock("../hooks/usePhoneScaling", () => ({
-	usePhoneScaling: () => ({
-		containerRef: { current: null },
-		scale: 1,
-		width: 375,
-		height: 812,
-	}),
+	usePhoneScaling: usePhoneScalingMock,
 }))
 
 const DEFAULT_POSTS: SelfMediaPost[] = [
@@ -148,6 +249,13 @@ const DEFAULT_POSTS: SelfMediaPost[] = [
 		],
 	},
 ]
+
+afterEach(() => {
+	vi.unstubAllGlobals()
+	clipboardWriteMock.mockReset()
+	clipboardWriteTextMock.mockReset()
+	clipboardItemPayloads.length = 0
+})
 
 function renderWithStore(
 	element: ReactElement,
@@ -167,10 +275,43 @@ function renderWithStore(
 }
 
 describe("platform shells", () => {
+	it("does not throw when WechatOfficialShell mounts without the root provider", async () => {
+		render(
+			<WechatOfficialShell
+				platform="wechat-official-accounts"
+				attachmentList={[]}
+				allowEdit
+			/>,
+		)
+
+		expect(await screen.findByTestId("self-media-view-tabs")).toBeInTheDocument()
+		expect(screen.getByTestId("wechat-official-shell")).toHaveStyle({
+			background: SELF_MEDIA_WORKSPACE_BACKGROUND,
+		})
+	})
+
+	it("uses the shared workspace background across platform article editors", () => {
+		renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} />, { view: "edit" })
+		expect(screen.getByTestId("rednote-shell-workspace")).toHaveStyle({
+			background: SELF_MEDIA_WORKSPACE_BACKGROUND,
+		})
+
+		renderWithStore(<InstagramShell platform="instagram" attachmentList={[]} />, {
+			platform: "instagram",
+			view: "edit",
+		})
+		expect(screen.getByTestId("instagram-shell-workspace")).toHaveStyle({
+			background: SELF_MEDIA_WORKSPACE_BACKGROUND,
+		})
+	})
+
 	it("keeps RednoteShell detail cards mounted across view switches", () => {
 		cardFrameMountCounts.clear()
 		const { store } = renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} />)
 
+		expect(screen.getByTestId("rednote-shell-workspace")).toHaveStyle({
+			background: SELF_MEDIA_WORKSPACE_BACKGROUND,
+		})
 		expect(cardFrameMountCounts.get("red-detail-post-1-0-0")).toBe(1)
 		expect(cardFrameMountCounts.get("red-detail-post-1-1-0")).toBe(1)
 		expect(cardFrameMountCounts.get("red-detail-post-1-2-0")).toBe(1)
@@ -258,6 +399,195 @@ describe("platform shells", () => {
 		})
 	})
 
+	it("reserves width for the Rednote detail action strip when scaling the phone shell", () => {
+		usePhoneScalingMock.mockClear()
+
+		renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} allowEdit />, {
+			view: "detail",
+		})
+
+		expect(usePhoneScalingMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				designWidth: 421,
+				designHeight: 880,
+				fixedWidth: 36,
+			}),
+		)
+	})
+
+	it("aligns the Rednote detail action strip top with the scaled phone shell top", () => {
+		usePhoneScalingMock.mockReturnValueOnce({
+			containerRef: { current: null },
+			scale: 0.8,
+			width: 375,
+			height: 812,
+		})
+
+		renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} allowEdit />, {
+			view: "detail",
+		})
+
+		const actionStrip = screen
+			.getByTestId("red-detail-strip-go-to-edit")
+			.closest(".flex.flex-col")
+
+		expect(actionStrip).toHaveStyle({ marginTop: "88px" })
+	})
+
+	it("centers the WeChat cover phone panel in its available preview area", () => {
+		render(
+			<WechatCoverPhonePanel
+				visible
+				loading={false}
+				error={null}
+				posts={[]}
+				onSelectPost={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("wechat-cover-phone-panel").firstElementChild).toHaveClass(
+			"items-center",
+		)
+	})
+
+	it("activates the WeChat article inspector from the shared header action", async () => {
+		injectInspectorHandlerMock.mockClear()
+		startWechatArticleInspectorMock.mockClear()
+		startWechatArticleInspectorAppendMock.mockClear()
+
+		renderWithStore(
+			<WechatOfficialShell
+				platform="wechat-official-accounts"
+				attachmentList={[]}
+				allowEdit
+			/>,
+			{
+				platform: "wechat-official-accounts",
+				view: "feed",
+				posts: [
+					{
+						meta: {
+							id: "wechat-post-1",
+							title: "公众号文章",
+							author: "Magic",
+						},
+						cards: [],
+						article: { path: "article.html", fileId: "article-file-1" },
+					},
+				],
+			},
+		)
+
+		fireEvent.click(screen.getByTestId("wechat-cover-hero-wechat-post-1"))
+		const inspectorButton = await screen.findByTestId("self-media-shell-inspector-button")
+		fireEvent.click(inspectorButton)
+
+		await waitFor(() => {
+			expect(inspectorButton).toHaveClass("bg-[#18181b]")
+		})
+		expect(injectInspectorHandlerMock).not.toHaveBeenCalled()
+		expect(startWechatArticleInspectorAppendMock).toHaveBeenCalledTimes(1)
+		expect(startWechatArticleInspectorMock).not.toHaveBeenCalled()
+	})
+
+	it("opens the WeChat official account export dialog from the editor shell", async () => {
+		renderWithStore(
+			<WechatOfficialShell
+				platform="wechat-official-accounts"
+				attachmentList={[]}
+				allowEdit
+			/>,
+			{
+				platform: "wechat-official-accounts",
+				view: "edit",
+				posts: [
+					{
+						meta: {
+							id: "wechat-post-1",
+							title: "公众号文章",
+							author: "Magic",
+						},
+						cards: [],
+						article: { path: "article.html", fileId: "article-file-1" },
+						thumbnailCover: { path: "thumb.png", fileId: "thumb-file-1" },
+						heroCover: { path: "hero.png", fileId: "hero-file-1" },
+					},
+				],
+			},
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-export-panel"))
+
+		expect(await screen.findByTestId("self-media-export-dialog")).toHaveAttribute(
+			"data-export-mode",
+			"wechatOfficial",
+		)
+	})
+
+	it("copies WeChat article HTML as text/html clipboard data", async () => {
+		class MockBlob {
+			readonly parts: unknown[]
+			readonly type: string
+
+			constructor(parts: unknown[], options?: { type?: string }) {
+				this.parts = parts
+				this.type = options?.type || ""
+			}
+		}
+		class MockClipboardItem {
+			constructor(items: Record<string, Blob>) {
+				clipboardItemPayloads.push(items)
+			}
+		}
+		vi.stubGlobal("Blob", MockBlob as unknown as typeof Blob)
+		vi.stubGlobal("ClipboardItem", MockClipboardItem)
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: {
+				write: clipboardWriteMock,
+				writeText: clipboardWriteTextMock,
+			},
+		})
+
+		renderWithStore(
+			<WechatOfficialShell
+				platform="wechat-official-accounts"
+				attachmentList={[]}
+				allowEdit
+			/>,
+			{
+				platform: "wechat-official-accounts",
+				view: "edit",
+				posts: [
+					{
+						meta: {
+							id: "wechat-post-1",
+							title: "公众号文章",
+							author: "Magic",
+						},
+						cards: [],
+						article: { path: "article.html", fileId: "article-file-1" },
+						thumbnailCover: { path: "thumb.png", fileId: "thumb-file-1" },
+						heroCover: { path: "hero.png", fileId: "hero-file-1" },
+					},
+				],
+			},
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-export-panel"))
+		fireEvent.click(await screen.findByTestId("mock-copy-wechat-html"))
+
+		await waitFor(() => expect(clipboardWriteMock).toHaveBeenCalledTimes(1))
+		expect(clipboardWriteMock).toHaveBeenCalledWith([expect.any(MockClipboardItem)])
+		expect(clipboardWriteTextMock).not.toHaveBeenCalled()
+		expect(Object.keys(clipboardItemPayloads[0])).toEqual(["text/html"])
+		const htmlBlob = clipboardItemPayloads[0]["text/html"] as unknown as MockBlob
+		expect(htmlBlob.type).toBe("text/html")
+		expect(htmlBlob.parts).toEqual([
+			'<section class="fallback" style="color:red;font-weight:700">fallback html</section>',
+		])
+	})
+
 	it("adds a scroll card to the current chat from the action strip", () => {
 		addFileToCurrentChat.mockClear()
 
@@ -271,6 +601,7 @@ describe("platform shells", () => {
 						relative_file_path: "posts/post-1/cards/01.html",
 					},
 				]}
+				allowEdit
 			/>,
 			{ view: "scroll", activeCardIndex: 0 },
 		)
@@ -289,8 +620,8 @@ describe("platform shells", () => {
 		})
 	})
 
-	it("keeps RednoteShell preview mode when the toolbar selector switches posts", () => {
-		renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} />, {
+	it("keeps RednoteShell preview mode when the active post changes", () => {
+		const { store } = renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} />, {
 			view: "scroll",
 			posts: [
 				{
@@ -318,7 +649,9 @@ describe("platform shells", () => {
 			"red-scroll-post-1-0-0",
 		)
 
-		fireEvent.click(screen.getByTestId("self-media-platform-selector"))
+		act(() => {
+			store.setActivePostIndex(1)
+		})
 
 		expect(screen.getByTestId("red-scroll-view")).toBeInTheDocument()
 		expect(screen.queryByTestId("red-detail-root")).not.toBeInTheDocument()
@@ -374,10 +707,40 @@ describe("platform shells", () => {
 		expect(detailRoot.className).toContain("overflow-y-auto")
 		expect(detailHeader).toBeInTheDocument()
 		expect(within(content).getByText("用 AI 写代码，你可能踩了这 5 个坑")).toBeInTheDocument()
-		expect(within(content).getByText("#AI编程 #Cursor #提效")).toBeInTheDocument()
+		expect(within(content).getByText("#AI编程")).toBeInTheDocument()
+		expect(within(content).getByText("#Cursor")).toBeInTheDocument()
+		expect(within(content).getByText("#提效")).toBeInTheDocument()
 		expect(within(content).getByText("今天 09:41 广东")).toBeInTheDocument()
 		expect(comments.className).not.toContain("overflow-y-auto")
 		expect(comments.className).not.toContain("max-h-44")
+	})
+
+	it("flattens structured Rednote tags in detail content", () => {
+		renderWithStore(<RednoteShell platform="rednote" attachmentList={[]} />, {
+			posts: [
+				{
+					meta: {
+						id: "post-1",
+						title: "AI 大模型成本对比",
+						tags: {
+							core: ["AI大模型", "开源"],
+							mid: ["企业降本增效", "AI成本", "私有化部署"],
+							longtail: ["中小企业省钱攻略", "企业数字化转型", "创业必看"],
+							trend: [],
+						},
+					},
+					cards: [{ path: "cards/01.html", fileId: "card-1" }],
+				},
+			],
+		})
+
+		const content = screen.getByTestId("red-detail-content")
+
+		expect(within(content).getByText("#AI大模型")).toBeInTheDocument()
+		expect(within(content).getByText("#开源")).toBeInTheDocument()
+		expect(within(content).getByText("#企业降本增效")).toBeInTheDocument()
+		expect(within(content).getByText("#中小企业省钱攻略")).toBeInTheDocument()
+		expect(within(content).queryByText("#[object Object]")).not.toBeInTheDocument()
 	})
 
 	it("returns RednoteShell detail view to feed when header back is clicked", () => {

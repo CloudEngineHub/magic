@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Instagram Token System - Preview</title>
+    <link rel="stylesheet" href="ins-token-system.css" />
+    <style>
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e8e8e8;
+      }
+      .preview-container {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        padding: 40px;
+        align-items: center;
+      }
+      .preview-card-wrapper {
+        width: 1080px;
+        height: 1350px;
+        transform: scale(0.5);
+        transform-origin: top center;
+        margin-bottom: -675px;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-card-wrapper">
+        <section class="its-card its-cover">
+          <div class="its-cover-kicker">Instagram Token System</div>
+          <div class="its-hero-panel">
+            <h1 class="its-cover-title">Decision<br />Board</h1>
+          </div>
+          <p class="its-cover-subtitle">
+            A tokenized, enterprise-ready Instagram carousel for clear
+            comparisons and planning notes.
+          </p>
+          <div class="its-tag-row">
+            <span class="its-badge">System-led</span
+            ><span class="its-badge-muted"
+              >structured decisions and product comparisons</span
+            >
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="its-card its-content">
+          <header class="its-header">
+            <div>
+              <div class="its-eyebrow">System anatomy</div>
+              <h2 class="its-title">A carousel with product-grade hierarchy</h2>
+            </div>
+            <div class="its-page">02</div>
+          </header>
+          <div class="its-section-label">Signature component</div>
+          <div class="its-signature">
+            <div class="its-token-row">
+              <span class="its-role is-brand">brand</span
+              ><strong>Primary decision</strong><em>highest emphasis</em>
+            </div>
+            <div class="its-token-row">
+              <span class="its-role is-success">success</span
+              ><strong>What is working</strong><em>validated signal</em>
+            </div>
+            <div class="its-token-row">
+              <span class="its-role is-danger">risk</span
+              ><strong>What can break</strong><em>needs action</em>
+            </div>
+          </div>
+          <div class="its-data-grid">
+            <div class="its-data-card">
+              <div class="label">Readability</div>
+              <div class="value">92<span class="unit">%</span></div>
+            </div>
+            <div class="its-data-card">
+              <div class="label">Decision support</div>
+              <div class="value">86<span class="unit">%</span></div>
+            </div>
+          </div>
+          <div class="its-note">
+            The visual system keeps attention on the decision path instead of
+            decorative noise.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="its-card its-content">
+          <header class="its-header">
+            <div>
+              <div class="its-eyebrow">Metrics</div>
+              <h2 class="its-title">Data cards that still feel editorial</h2>
+            </div>
+            <div class="its-page">03</div>
+          </header>
+          <div class="its-section-label">Signal trend</div>
+          <div id="ins-token-system-preview-chart" class="its-chart"></div>
+          <div class="its-quote-block">
+            Strong templates behave like product UI: predictable enough to
+            trust, expressive enough to save.
+          </div>
+          <div class="its-note">
+            <span class="its-text-positive">Use:</span> one semantic emphasis
+            per card. <span class="its-text-negative">Avoid:</span> random color
+            without meaning.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="its-card its-content">
+          <header class="its-header">
+            <div>
+              <div class="its-eyebrow">Swipe plan</div>
+              <h2 class="its-title">A calmer four-card structure</h2>
+            </div>
+            <div class="its-page">04</div>
+          </header>
+          <div class="its-list">
+            <div class="its-list-row is-highlight">
+              <div class="its-rank">01</div>
+              <div>
+                <div class="its-item-title">State the user problem</div>
+                <div class="its-item-meta">
+                  Start with the reader's decision moment.
+                </div>
+              </div>
+              <span class="its-badge">Hook</span>
+            </div>
+            <div class="its-list-row">
+              <div class="its-rank">02</div>
+              <div>
+                <div class="its-item-title">Show the system</div>
+                <div class="its-item-meta">
+                  Use stable modules, not decorative chaos.
+                </div>
+              </div>
+              <span class="its-badge-muted">Body</span>
+            </div>
+            <div class="its-list-row">
+              <div class="its-rank">03</div>
+              <div>
+                <div class="its-item-title">Give the next action</div>
+                <div class="its-item-meta">Make the save reason practical.</div>
+              </div>
+              <span class="its-badge-muted">CTA</span>
+            </div>
+          </div>
+          <div class="its-divider"></div>
+          <div class="its-timeline-row">
+            <strong class="its-text-accent">Rule</strong
+            ><span class="its-text-muted"
+              >If color has meaning, give it one consistent role.</span
+            >
+          </div>
+          <div class="its-progress-bar"><span style="width: 82%"></span></div>
+          <p class="its-note">
+            <span class="its-hl">Best for:</span> explainers, launches,
+            comparisons, and product strategy posts.
+          </p>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="ins-token-system.js"></script>
+    <script>
+      (function () {
+        var el = document.getElementById("ins-token-system-preview-chart");
+        if (el && window.echarts && window.InsTokenSystemPresets) {
+          var chart = echarts.init(el);
+          chart.setOption(
+            window.InsTokenSystemPresets.get("ins-token-system-bar", {
+              categories: ["Clarity", "Flow", "Trust", "Action"],
+              values: [86, 74, 92, 68],
+            }),
+          );
+        }
+      })();
+    </script>
+  </body>
+</html>

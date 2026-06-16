@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Instagram Warm Journal - Preview</title>
+    <link rel="stylesheet" href="ins-warm-journal.css" />
+    <style>
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e8e8e8;
+      }
+      .preview-container {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        padding: 40px;
+        align-items: center;
+      }
+      .preview-card-wrapper {
+        width: 1080px;
+        height: 1350px;
+        transform: scale(0.5);
+        transform-origin: top center;
+        margin-bottom: -675px;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-card-wrapper">
+        <section class="iwj-card iwj-cover">
+          <div class="iwj-cover-kicker">Instagram Warm Journal</div>
+          <div class="iwj-hero-panel">
+            <h1 class="iwj-cover-title">A Week Of<br />Small Upgrades</h1>
+          </div>
+          <p class="iwj-cover-subtitle">
+            Warm, saveable journal cards without clutter
+          </p>
+          <div class="iwj-tag-row">
+            <span class="iwj-badge">Swipe</span
+            ><span class="iwj-badge-muted"
+              >lifestyle notes and product diaries</span
+            >
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="iwj-card iwj-content">
+          <header class="iwj-header">
+            <div>
+              <div class="iwj-eyebrow">Performance map</div>
+              <h2 class="iwj-title">What makes this post saveable?</h2>
+            </div>
+            <div class="iwj-page">02</div>
+          </header>
+          <div class="iwj-section-label">Content signals</div>
+          <div class="iwj-signature">
+            <div class="iwj-signature-title">Tiny upgrade, visible payoff.</div>
+            <div class="iwj-signature-note">
+              Use the card like a sticky note: one observation, one cue, one
+              save reason.
+            </div>
+          </div>
+          <div class="iwj-data-grid">
+            <div class="iwj-data-card">
+              <div class="label">Hook clarity</div>
+              <div class="value">82<span class="unit">%</span></div>
+            </div>
+            <div class="iwj-data-card">
+              <div class="label">Save intent</div>
+              <div class="value">91<span class="unit">%</span></div>
+            </div>
+          </div>
+          <div class="iwj-compare-grid">
+            <div class="iwj-compare-card">
+              <span class="iwj-badge">Before</span>
+              <p class="iwj-item-title">Pretty layout, weak promise</p>
+            </div>
+            <div class="iwj-compare-card">
+              <span class="iwj-badge-muted">After</span>
+              <p class="iwj-item-title">Specific route, stronger payoff</p>
+            </div>
+          </div>
+          <div class="iwj-note">
+            Use this preset when the reader needs a clear reason to swipe, save,
+            and act.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="iwj-card iwj-content">
+          <header class="iwj-header">
+            <div>
+              <div class="iwj-eyebrow">Chart card</div>
+              <h2 class="iwj-title">Data without dashboard noise</h2>
+            </div>
+            <div class="iwj-page">03</div>
+          </header>
+          <div class="iwj-section-label">Weekly signal</div>
+          <div id="ins-warm-journal-preview-chart" class="iwj-chart"></div>
+          <div class="iwj-quote-block">
+            A good carousel turns scattered notes into one clean decision path.
+          </div>
+          <div class="iwj-note">
+            <span class="iwj-text-positive">Positive:</span> chart has one job.
+            <span class="iwj-text-negative">Avoid:</span> decorative numbers
+            with no reader action.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="iwj-card iwj-content">
+          <header class="iwj-header">
+            <div>
+              <div class="iwj-eyebrow">Swipe plan</div>
+              <h2 class="iwj-title">A stronger four-card arc</h2>
+            </div>
+            <div class="iwj-page">04</div>
+          </header>
+          <div class="iwj-list">
+            <div class="iwj-list-row is-highlight">
+              <div class="iwj-rank">01</div>
+              <div>
+                <div class="iwj-item-title">Name the pain fast</div>
+                <div class="iwj-item-meta">
+                  Make the reader feel seen in three seconds.
+                </div>
+              </div>
+              <span class="iwj-badge">Hook</span>
+            </div>
+            <div class="iwj-list-row">
+              <div class="iwj-rank">02</div>
+              <div>
+                <div class="iwj-item-title">Show the operating model</div>
+                <div class="iwj-item-meta">
+                  Use diagrams, rules, and crisp labels.
+                </div>
+              </div>
+              <span class="iwj-badge-muted">Body</span>
+            </div>
+            <div class="iwj-list-row">
+              <div class="iwj-rank">03</div>
+              <div>
+                <div class="iwj-item-title">Add a decision cue</div>
+                <div class="iwj-item-meta">
+                  Help readers pick the next step.
+                </div>
+              </div>
+              <span class="iwj-badge-muted">CTA</span>
+            </div>
+          </div>
+          <div class="iwj-divider"></div>
+          <div class="iwj-timeline-row">
+            <strong class="iwj-text-accent">Day 1</strong
+            ><span class="iwj-text-muted"
+              >Draft the reader promise and card rhythm.</span
+            >
+          </div>
+          <div class="iwj-progress-bar"><span style="width: 76%"></span></div>
+          <p class="iwj-note">
+            <span class="iwj-hl">Reusable structure:</span> cover, proof, chart,
+            checklist.
+          </p>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="ins-warm-journal.js"></script>
+    <script>
+      (function () {
+        var el = document.getElementById("ins-warm-journal-preview-chart");
+        if (el && window.echarts && window.InsWarmJournalPresets) {
+          var chart = echarts.init(el);
+          chart.setOption(
+            window.InsWarmJournalPresets.get("ins-warm-journal-bar", {
+              categories: ["Hook", "Proof", "Save", "Share"],
+              values: [82, 68, 91, 57],
+            }),
+          );
+        }
+      })();
+    </script>
+  </body>
+</html>

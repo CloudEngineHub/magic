@@ -32,7 +32,12 @@ export namespace ScheduledTask {
 				input_mode?: string
 				chat_mode?: string
 				topic_pattern?: string
+				agent_code?: string
+				enable_web_search?: boolean
+				dynamic_params?: Record<string, unknown>
 				model?: ModelItem | null
+				image_model?: { model_id: string } | null
+				video_model?: { model_id: string } | null
 			}
 		}
 	}
@@ -95,6 +100,21 @@ export namespace ScheduledTask {
 		Success = 1,
 		Failed = 2,
 		Running = 3,
+	}
+
+	/** 立即执行定时任务响应 */
+	export interface ExecuteResult {
+		success: boolean
+		error_message?: string | null
+		result?: {
+			type?: string
+			seq?: {
+				conversation_id?: string
+				message?: {
+					topic_id?: string
+				}
+			}
+		}
 	}
 
 	/** 定时任务运行记录 */

@@ -1,5 +1,9 @@
+import { forwardRef, useEffect, useImperativeHandle } from "react"
 import { fireEvent, render, screen, within } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { CardFrameRef } from "../components/CardFrame"
+
+const mockUseCoverImageUrl = vi.hoisted(() => vi.fn())
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -13,10 +17,27 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
+vi.mock("../platforms/wechat-official-accounts/useCoverImageUrl", () => ({
+	useCoverImageUrl: mockUseCoverImageUrl,
+}))
+
 vi.mock("../components/CardFrame", () => ({
 	__esModule: true,
-	default: ({ cardId }: { cardId: string }) => (
-		<div data-testid="mock-card-frame" data-card-id={cardId} />
+	default: forwardRef<CardFrameRef, { cardId: string; onLoaded?: () => void }>(
+		function MockCardFrame({ cardId, onLoaded }, ref) {
+			useImperativeHandle(
+				ref,
+				() => ({
+					capture: vi.fn(),
+					getIframeElement: vi.fn(() => null),
+				}),
+				[],
+			)
+			useEffect(() => {
+				onLoaded?.()
+			}, [onLoaded])
+			return <div data-testid="mock-card-frame" data-card-id={cardId} />
+		},
 	),
 }))
 
@@ -41,6 +62,14 @@ const posts: SelfMediaPost[] = [
 	},
 ]
 
+const manyCardPost: SelfMediaPost = {
+	meta: { id: "post-many", title: "Many cards" },
+	cards: Array.from({ length: 10 }, (_, idx) => ({
+		path: `${String(idx + 1).padStart(2, "0")}.html`,
+		fileId: `file-many-${idx + 1}`,
+	})),
+}
+
 function renderDialog(overrides: Partial<React.ComponentProps<typeof ExportPreviewDialog>> = {}) {
 	const onOpenChange = vi.fn()
 	const onSyncActivePost = vi.fn()
@@ -53,11 +82,25 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof ExportPrevi
 		onSyncActivePost,
 		onConfirm,
 	}
-	render(<ExportPreviewDialog {...defaultProps} {...overrides} />)
-	return { onOpenChange, onSyncActivePost, onConfirm }
+	const view = render(<ExportPreviewDialog {...defaultProps} {...overrides} />)
+	return {
+		onOpenChange,
+		onSyncActivePost,
+		onConfirm,
+		rerenderDialog: (
+			nextOverrides: Partial<React.ComponentProps<typeof ExportPreviewDialog>>,
+		) =>
+			view.rerender(
+				<ExportPreviewDialog {...defaultProps} {...overrides} {...nextOverrides} />,
+			),
+	}
 }
 
 describe("ExportPreviewDialog", () => {
+	beforeEach(() => {
+		mockUseCoverImageUrl.mockReturnValue({ url: null, loading: false })
+	})
+
 	it("defaults to the current active post and selects all of its cards", () => {
 		renderDialog({ initialPostIndex: 1 })
 
@@ -69,6 +112,41 @@ describe("ExportPreviewDialog", () => {
 		const summary = within(dialog).getByTestId("self-media-export-selected-summary")
 		expect(summary.textContent).toContain("count=2")
 		expect(summary.textContent).toContain("total=2")
+	})
+
+	it("shows a visible selected style on selected cards", () => {
+		renderDialog()
+
+		const selectedItem = screen.getByTestId("self-media-export-card-item-0")
+		expect(selectedItem).toHaveAttribute("aria-pressed", "true")
+		expect(selectedItem.className).toContain("ring-2")
+		expect(selectedItem.className).toContain("bg-primary/5")
+	})
+
+	it("keeps export options outside the card preview scroll region", () => {
+		renderDialog({ posts: [manyCardPost], initialPostIndex: 0 })
+
+		const dialog = screen.getByTestId("self-media-export-dialog")
+		const cardGrid = screen.getByTestId("self-media-export-card-grid")
+		const typeSection = screen.getByTestId("self-media-export-type-section")
+		const scaleSection = screen.getByTestId("self-media-export-scale-section")
+		const footer = screen.getByTestId("self-media-export-footer")
+
+		expect(dialog.className).toContain("overflow-hidden")
+		expect(cardGrid.className).toContain("min-h-0")
+		expect(typeSection.className).toContain("shrink-0")
+		expect(typeSection.className).toContain("px-4")
+		expect(scaleSection.className).toContain("shrink-0")
+		expect(scaleSection.className).toContain("px-4")
+		expect(footer.className).toContain("shrink-0")
+	})
+
+	it("does not override the selected checkbox background", () => {
+		renderDialog()
+
+		const selectedCheckbox = screen.getByTestId("self-media-export-card-checkbox-0")
+		expect(selectedCheckbox).toHaveAttribute("data-state", "checked")
+		expect(selectedCheckbox.className).not.toMatch(/(^|\s)bg-background(\s|$)/)
 	})
 
 	it("supports clearing and re-selecting all cards via the toggle button", () => {
@@ -106,11 +184,128 @@ describe("ExportPreviewDialog", () => {
 		)
 	})
 
+	it("passes the long-image export type when selected", async () => {
+		const { onConfirm } = renderDialog({ initialPostIndex: 0 })
+
+		fireEvent.click(screen.getByTestId("self-media-export-type-long-image"))
+		fireEvent.click(screen.getByTestId("self-media-export-confirm"))
+
+		expect(onConfirm).toHaveBeenCalledWith(
+			expect.objectContaining({
+				postIndex: 0,
+				cardIndexes: [0, 1, 2],
+				exportType: "longImage",
+			}),
+		)
+	})
+
+	it("keeps long-image export disabled until every selected preview card is ready", () => {
+		const { onConfirm } = renderDialog({ posts: [manyCardPost], initialPostIndex: 0 })
+
+		fireEvent.click(screen.getByTestId("self-media-export-type-long-image"))
+
+		const confirm = screen.getByTestId("self-media-export-confirm") as HTMLButtonElement
+		expect(confirm.disabled).toBe(true)
+
+		fireEvent.click(confirm)
+		expect(onConfirm).not.toHaveBeenCalled()
+	})
+
+	it("passes preview card refs so export can use the freshly mounted dialog cards", async () => {
+		const { onConfirm, rerenderDialog } = renderDialog({ initialPostIndex: 0 })
+
+		fireEvent.click(screen.getByTestId("self-media-export-confirm"))
+
+		const args = onConfirm.mock.calls[0]?.[0]
+		const firstPreviewRef = args.getCardRef(0)
+		expect(firstPreviewRef).toEqual(expect.objectContaining({ capture: expect.any(Function) }))
+
+		rerenderDialog({
+			posts: posts.map((post) => ({
+				...post,
+				cards: post.cards.map((card) => ({ ...card })),
+			})),
+		})
+
+		expect(args.getCardRef(0)).toBe(firstPreviewRef)
+		expect(args.getCardRef(99)).toBeNull()
+	})
+
 	it("disables confirm when nothing is selected", () => {
 		renderDialog()
 
 		fireEvent.click(screen.getByTestId("self-media-export-toggle-all"))
 		const confirm = screen.getByTestId("self-media-export-confirm") as HTMLButtonElement
 		expect(confirm.disabled).toBe(true)
+	})
+
+	it("renders WeChat export products without the card picker", async () => {
+		const onCopyHtml = vi.fn()
+		const { onConfirm } = renderDialog({
+			exportMode: "wechatOfficial",
+			onCopyWechatHtml: onCopyHtml,
+			posts: [
+				{
+					...posts[0],
+					thumbnailCover: { path: "thumb.png", fileId: "thumb-file" },
+					heroCover: { path: "hero.png", fileId: "hero-file" },
+				},
+			],
+		})
+
+		expect(screen.queryByTestId("self-media-export-card-grid")).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-export-dialog").className).not.toContain("h-[85vh]")
+		expect(screen.getByTestId("self-media-export-dialog").className).toContain("max-h-[720px]")
+		expect(screen.getByTestId("self-media-export-wechat-products").className).not.toContain(
+			"flex-1",
+		)
+		expect(screen.getByTestId("self-media-export-wechat-cover-product")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-export-wechat-html-product")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("self-media-export-copy-html"))
+		expect(onCopyHtml).toHaveBeenCalledTimes(1)
+
+		fireEvent.click(screen.getByTestId("self-media-export-confirm"))
+		expect(onConfirm).toHaveBeenCalledWith(
+			expect.objectContaining({
+				postIndex: 0,
+				cardIndexes: [],
+				exportType: "wechatCoverImage",
+			}),
+		)
+	})
+
+	it("renders a stitched WeChat cover preview from the selected post cover images", () => {
+		mockUseCoverImageUrl.mockImplementation((fileId?: string) => ({
+			url: fileId ? `https://example.test/${fileId}.png` : null,
+			loading: false,
+		}))
+
+		renderDialog({
+			exportMode: "wechatOfficial",
+			posts: [
+				{
+					...posts[0],
+					thumbnailCover: { path: "thumb.png", fileId: "thumb-file" },
+					heroCover: { path: "hero.png", fileId: "hero-file" },
+				},
+			],
+		})
+
+		const preview = screen.getByTestId("self-media-export-wechat-cover-preview")
+		const squareImage = within(preview).getByAltText(
+			"detail.selfMedia.export.wechat.squareCover",
+		)
+		const horizontalImage = within(preview).getByAltText(
+			"detail.selfMedia.export.wechat.horizontalCover",
+		)
+		const horizontalFrame = screen.getByTestId("self-media-export-wechat-horizontal-preview")
+
+		expect(preview.className).toContain("w-full")
+		expect(preview.className).toContain("aspect-[335/100]")
+		expect(preview.className).toContain("grid-cols-[100fr_235fr]")
+		expect(squareImage).toHaveAttribute("src", "https://example.test/thumb-file.png")
+		expect(horizontalImage).toHaveAttribute("src", "https://example.test/hero-file.png")
+		expect(horizontalFrame.className).toContain("aspect-[235/100]")
 	})
 })
