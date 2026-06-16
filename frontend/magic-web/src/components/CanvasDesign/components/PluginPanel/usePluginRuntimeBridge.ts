@@ -27,6 +27,7 @@ import {
 	resolvePluginStorageKey,
 	resolveSharedGenerationConfigStorageKey,
 } from "./pluginStorage"
+import { validatePluginFetchBlobUrl } from "./pluginFetchBlob"
 
 interface UsePluginRuntimeBridgeParams {
 	awaitingLocalFileDialogRef: MutableRefObject<boolean>
@@ -242,7 +243,19 @@ export function usePluginRuntimeBridge({
 			}
 
 			if (data.type === "magic-canvas-plugin:fetch-blob") {
-				void fetch(data.url)
+				let validatedUrl: URL
+				try {
+					validatedUrl = validatePluginFetchBlobUrl(plugin, data.url, window.location.origin)
+				} catch (error) {
+					postPluginMessage({
+						type: "magic-canvas-plugin:fetch-blob-result",
+						requestId: data.requestId,
+						error: getErrorMessage(error),
+					})
+					return
+				}
+
+				void fetch(validatedUrl.toString())
 					.then((r) => r.arrayBuffer())
 					.then((arrayBuffer) => {
 						postPluginMessage(
