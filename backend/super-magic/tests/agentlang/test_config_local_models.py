@@ -151,6 +151,40 @@ def test_load_config_merges_local_providers_and_overrides_same_model_id(tmp_path
     assert config.get("model_profiles.secret-local-model.max_context_tokens") == 1000000
 
 
+def test_load_config_merges_local_default_model(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    local_config_path = tmp_path / "config.local.yaml"
+
+    _write_yaml(
+        config_path,
+        {
+            "default_model": "default-model",
+            "providers": {
+                "custom": _provider_config(
+                    {
+                        "default-model": _provider_model("default-model"),
+                        "local-model": _provider_model("local-model"),
+                    }
+                ),
+            },
+            "model_profiles": {
+                "default-model": _model_profile(),
+                "local-model": _model_profile(),
+            },
+        },
+    )
+    _write_yaml(
+        local_config_path,
+        {
+            "default_model": "local-model",
+        },
+    )
+
+    config.load_config(str(config_path))
+
+    assert config.get("default_model") == "local-model"
+
+
 def test_load_config_ignores_invalid_local_config(tmp_path):
     config_path = tmp_path / "config.yaml"
     local_config_path = tmp_path / "config.local.yaml"
@@ -287,3 +321,14 @@ def test_model_filter_skips_local_models_without_runtime_credentials():
     assert should_skip_model(missing_api_key) is True
     assert should_skip_model(missing_api_base_url) is True
     assert should_skip_model(valid_model) is False
+
+
+def test_model_filter_keeps_magic_service_static_model_entries(monkeypatch):
+    monkeypatch.setenv("MAGIC_API_BASE_URL", "https://magic.example.com/v1")
+    qwen_model = ModelConfig.from_dict(
+        "qwen3.7-plus",
+        _model_config("qwen3.7-plus", api_base_url="https://magic.example.com/v1"),
+        provider_source="config.yaml",
+    )
+
+    assert should_skip_model(qwen_model) is False

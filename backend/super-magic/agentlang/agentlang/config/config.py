@@ -163,6 +163,11 @@ class Config(Generic[T]):
             section="model_profiles",
             local_config_path=local_config_path,
         )
+        self._merge_local_default_model(
+            base_config=base_config,
+            local_config=local_config,
+            local_config_path=local_config_path,
+        )
         self._logger.info(f"已合并本地模型配置: {local_config_path}")
         return base_config
 
@@ -200,6 +205,24 @@ class Config(Generic[T]):
                 self._merge_dict(current, value)
             else:
                 base[key] = value
+
+    def _merge_local_default_model(
+        self,
+        *,
+        base_config: Dict[str, Any],
+        local_config: Dict[str, Any],
+        local_config_path: Path,
+    ) -> None:
+        """允许本地私有模型把 default_model 指向本地 provider 中的模型入口。"""
+        if "default_model" not in local_config:
+            return
+
+        value = local_config.get("default_model")
+        if not isinstance(value, str) or not value.strip():
+            self._logger.warning(f"本地配置文件 {local_config_path} 的 'default_model' 不是非空字符串，将忽略")
+            return
+
+        base_config["default_model"] = value
 
     def get_model(self) -> Optional[T]:
         """获取验证后的 Pydantic 模型实例"""

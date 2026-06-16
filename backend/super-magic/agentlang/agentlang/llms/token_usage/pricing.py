@@ -140,6 +140,11 @@ class ModelPricing:
         """
         self.pricing[model_name] = price_info
 
+    def replace_pricing_from_config(self, models_config: Dict[str, Dict[str, Any]]) -> None:
+        """用当前模型配置重建价格表，避免动态刷新后保留已删除模型的旧价格。"""
+        self.pricing.clear()
+        self._load_pricing_from_config(models_config)
+
     def get_model_pricing(self, model_name: str) -> PricingInfo:
         """获取模型的价格配置
 
@@ -153,10 +158,13 @@ class ModelPricing:
         if model_name in self.pricing:
             return self.pricing[model_name]
 
-        # 尝试前缀匹配
-        for key in self.pricing:
-            if model_name.startswith(key):
-                return self.pricing[key]
+        # 尝试最长前缀匹配，避免 deepseek-v4 抢先命中 deepseek-v4-flash 等更具体配置。
+        prefix_matches = [
+            key for key in self.pricing
+            if key != "default" and model_name.startswith(key)
+        ]
+        if prefix_matches:
+            return self.pricing[max(prefix_matches, key=len)]
 
         # 返回默认价格
         logger.info(f"未找到模型 '{model_name}' 的价格配置，使用默认价格")

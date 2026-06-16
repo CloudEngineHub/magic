@@ -57,6 +57,8 @@ class ModelConfigManager:
         """从 providers 列表加载全部模型配置
 
         按 priority 从低到高依次加载，高优先级的同 model_id 条目覆盖低优先级。
+        例如 magic-service(priority=3) 与 config.yaml(priority=2) 出现同 model_id 时，
+        保留 config.yaml 静态入口参与加载，但最终由 magic-service 动态模型覆盖。
 
         Args:
             providers: 要加载的服务商列表
@@ -86,6 +88,8 @@ class ModelConfigManager:
 
         高优先级的同 model_id 会覆盖已有的低优先级条目。
         如果当前注册表已有相同 model_id 但优先级更高，则不覆盖。
+        这保证了本地 config.yaml 可以保留同 host 静态模型，而 magic-service 刷新成功后
+        仍然以动态模型配置为准。
 
         Args:
             provider: 要重新加载的服务商实例
@@ -220,9 +224,37 @@ class ModelConfigManager:
         """将当前全部模型的 pricing 信息同步到 LLMFactory.pricing"""
         try:
             from agentlang.llms.factory import LLMFactory
+            models_config = {}
             for mc in self._models.values():
-                if mc.pricing:
-                    LLMFactory.pricing.add_model_pricing(mc.model_id, mc.pricing)  # type: ignore[arg-type]
+                if not mc.pricing:
+                    continue
+                models_config[mc.model_id] = {"pricing": mc.pricing}
+                # 同一个模型在系统里可能有多个名字。模型配置里保存的是业务入口名，
+                # 但请求上游和统计成本时未必继续使用这个名字。
+                #
+                # 例子：
+                #   model_id = "auto"                         # 业务入口，用户/Agent 选择的是它
+                #   name = "deepseek-v4-flash"                 # 真正发给 OpenAI 兼容接口的模型名
+                #   resolved_model_id = "deepseek-v4-flash-x"  # 动态路由后实际落地的模型名
+                #   metadata.api_model = "deepseek-v4-flash"   # config.yaml provider 里的 api_model
+                #
+                # 如果 pricing 只注册在 "auto" 上，而成本统计拿 "deepseek-v4-flash" 去查，
+                # 就会查不到这份价格，最后退回 default pricing。aliases 的作用就是把这些
+                # “同一个模型的不同名字”都挂到同一份 pricing 上，让以下查询都命中同一价格：
+                #   auto -> 价格 A
+                #   deepseek-v4-flash -> 价格 A
+                #   deepseek-v4-flash-x -> 价格 A
+                #
+                # 注意：这里不是新增模型，也不是改变实际调用模型，只是补齐成本统计的查价入口。
+                aliases = {
+                    mc.name,
+                    mc.resolved_model_id,
+                    mc.metadata.get("api_model") if isinstance(mc.metadata, dict) else None,
+                }
+                for alias in aliases:
+                    if isinstance(alias, str) and alias.strip():
+                        models_config.setdefault(alias.strip(), {"pricing": mc.pricing})
+            LLMFactory.pricing.replace_pricing_from_config(models_config)
         except Exception as e:
             logger.warning(f"Pricing sync failed: {e}")
 
