@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agentlang.chat_history.chat_history_models import CompactionConfig
+from agentlang.chat_history.chat_history_models import CompactionConfig, resolve_user_facing_max_context_tokens
 from agentlang.llms.factory import LLMClientConfig
 from app.core.models.agent_model_context import AgentModelContext
 from app.core.models.media_model import ImageModelSpec, VideoModelSpec
@@ -43,6 +43,32 @@ def test_model_selection_falls_back_to_session_and_agent_default():
         configured_text_model_id="mock-default-text",
     ))
     assert selection.text_model_id == "mock-default-text"
+
+
+def test_model_selection_defaults_to_auto_without_agent_default():
+    selection = ModelSelectionPolicy.resolve(ModelSelectionInput(
+        configured_text_model_id=None,
+    ))
+
+    assert selection.configured_text_model_id == "auto"
+    assert selection.text_model_id == "auto"
+
+
+def test_model_selection_uses_configured_default_model(monkeypatch):
+    from agentlang.config.config import config
+
+    monkeypatch.setattr(
+        config,
+        "get",
+        lambda key, default=None: "mock-config-default" if key == "default_model" else default,
+    )
+
+    selection = ModelSelectionPolicy.resolve(ModelSelectionInput(
+        configured_text_model_id=None,
+    ))
+
+    assert selection.configured_text_model_id == "mock-config-default"
+    assert selection.text_model_id == "mock-config-default"
 
 
 def test_model_selection_keeps_session_media_capability_when_request_only_has_same_model_id():
@@ -99,17 +125,17 @@ def test_agent_model_context_defers_config_lookup_until_runtime_resolve(monkeypa
     assert calls == ["mock-runtime-text"]
 
 
-def test_agent_model_context_uses_effective_fallback_model_id(monkeypatch):
+def test_agent_model_context_resolves_text_model_without_llm_fallback(monkeypatch):
+    calls: list[dict[str, object]] = []
+
     def fake_get_model_config(model_id, *args, **kwargs):
+        calls.append({
+            "model_id": model_id,
+            "expected_type": kwargs.get("expected_type"),
+            "allow_fallback": kwargs.get("allow_fallback"),
+        })
         assert model_id == "missing-runtime-text"
-        return LLMClientConfig(
-            model_id="mock-auto-text",
-            api_key="mock-key",
-            name="Mock Auto Text",
-            provider="mock-provider",
-            max_output_tokens=2048,
-            max_context_tokens=8192,
-        )
+        raise ValueError("missing exact model")
 
     monkeypatch.setattr("app.core.models.agent_model_context.LLMFactory.get_model_config", fake_get_model_config)
 
@@ -120,10 +146,15 @@ def test_agent_model_context_uses_effective_fallback_model_id(monkeypatch):
         request_text_model_id="missing-runtime-text",
     )))
 
-    state = context.resolve_text_model()
+    with pytest.raises(ValueError, match="missing exact model"):
+        context.resolve_text_model()
 
-    assert state.model_id == "mock-auto-text"
-    assert context.current_text_model_id == "mock-auto-text"
+    assert calls == [{
+        "model_id": "missing-runtime-text",
+        "expected_type": "llm",
+        "allow_fallback": False,
+    }]
+    assert context.current_text_model_id == "missing-runtime-text"
 
 
 def test_agent_model_context_restores_pre_compact_text_model(monkeypatch):
@@ -188,3 +219,42 @@ def test_compaction_config_does_not_read_model_config_on_init(monkeypatch):
     assert calls == []
     assert config.resolve_token_threshold("mock-runtime-text") == 108_000
     assert calls == [("max", "mock-runtime-text"), ("config", "mock-runtime-text")]
+
+
+@pytest.mark.parametrize("model_id", ["deepseek-v4-flash", "qwen3.7-plus"])
+def test_compaction_threshold_uses_230k_rule_for_current_magic_models(monkeypatch, model_id):
+    monkeypatch.setattr(
+        "agentlang.chat_history.chat_history_models.model_config_utils.get_max_context_tokens",
+        lambda requested_model_id, default=0: 1_000_000,
+    )
+    monkeypatch.setattr(
+        "agentlang.chat_history.chat_history_models.model_config_utils.get_model_config",
+        lambda requested_model_id: SimpleNamespace(
+            name=requested_model_id,
+            provider="mock-provider",
+            metadata={},
+        ),
+    )
+
+    config = CompactionConfig(agent_model_id=model_id)
+
+    result = config.resolve_threshold_for_model(model_id)
+    config.token_threshold = result.token_threshold
+
+    assert result.token_threshold == 230_000
+    assert result.matched_rule_name == "threshold_230k"
+    assert result.max_context_tokens == 1_000_000
+    assert config.early_compact_threshold == 184_000
+
+
+def test_user_facing_context_tokens_parse_pricing_interval(monkeypatch):
+    monkeypatch.setattr(
+        "agentlang.chat_history.chat_history_models.model_config_utils.get_model_config",
+        lambda requested_model_id: SimpleNamespace(
+            name=requested_model_id,
+            provider="mock-provider",
+            metadata={},
+        ),
+    )
+
+    assert resolve_user_facing_max_context_tokens("qwen3.7-plus") == 256_000

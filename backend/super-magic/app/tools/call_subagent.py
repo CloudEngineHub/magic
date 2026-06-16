@@ -439,6 +439,8 @@ def _resolve_subagent_display_model_id(tool_context: ToolContext, explicit_model
     parent: Optional["AgentContext"] = tool_context.get_extension("agent_context") if tool_context else None
     if parent is None:
         return None
+    # 展示模型表示用户选择或继承到的入口模型。子 Agent 会独立走运行时模型解析，
+    # 这里不提前替换成父 Agent 解析后的 provider 模型，避免 UI/日志失去用户选择语义。
     return parent.model_context.current_text_model_id
 
 

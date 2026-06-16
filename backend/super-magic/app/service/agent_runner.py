@@ -34,6 +34,12 @@ def apply_isolated_agent_model_selection(
     current_session_config = agent.chat_history.get_current_session_config()
     last_session_config = agent.chat_history.get_last_session_config()
     parent_model_context = parent_context.model_context if parent_context is not None else None
+    parent_text_model_id = None
+    if parent_context is not None:
+        if parent_context.has_runtime_model_id():
+            parent_text_model_id = parent_context.get_runtime_model_id()
+        if not parent_text_model_id and parent_model_context is not None:
+            parent_text_model_id = parent_model_context.current_text_model_id
 
     request_image_model = ImageModelSpec.from_values(model_id=image_model_id)
     request_video_model = VideoModelSpec.from_values(
@@ -42,11 +48,11 @@ def apply_isolated_agent_model_selection(
     )
 
     selection = ModelSelectionPolicy.resolve(ModelSelectionInput(
-        configured_text_model_id=agent.llm_id,
+        configured_text_model_id=agent.agent_context.model_context.configured_text_model_id,
         request_text_model_id=model_id,
         session_text_model_id=(
-            parent_model_context.current_text_model_id
-            if parent_model_context is not None
+            parent_text_model_id
+            if parent_context is not None
             else current_session_config.model_id or last_session_config.model_id
         ),
         request_image_model=request_image_model,
@@ -63,6 +69,7 @@ def apply_isolated_agent_model_selection(
         ),
     ))
     agent.agent_context.model_context.apply_selection(selection)
+    agent.agent_context.set_runtime_model_id(selection.text_model_id)
     logger.info(
         "已为隔离 Agent 应用模型选择: "
         f"agent={agent.agent_name}, text={selection.text_model_id}, "
