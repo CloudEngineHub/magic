@@ -1,4 +1,4 @@
-import { ExternalLink, RefreshCw } from "lucide-react"
+import { ExternalLink, RefreshCw, X } from "lucide-react"
 import { memo, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
@@ -26,11 +26,13 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 	const shouldLoadIframe = isActive !== false
 	const [hasLoaded, setHasLoaded] = useState(false)
 	const [showLoadFallback, setShowLoadFallback] = useState(false)
+	const [isLoadFallbackDismissed, setIsLoadFallbackDismissed] = useState(false)
 	const [refreshKey, setRefreshKey] = useState(0)
 
 	useEffect(() => {
 		setHasLoaded(false)
 		setShowLoadFallback(false)
+		setIsLoadFallbackDismissed(false)
 
 		if (!shouldLoadIframe || !url) return undefined
 
@@ -93,11 +95,20 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 					}}
 					className="absolute inset-0 h-full w-full border-0 bg-white"
 				/>
-				{showLoadFallback && !hasLoaded ? (
+				{showLoadFallback && !hasLoaded && !isLoadFallbackDismissed ? (
 					<div
 						data-testid="website-load-fallback"
-						className="pointer-events-none absolute bottom-4 right-4 z-10 max-w-[360px] rounded-lg border border-border/70 bg-background/95 p-4 text-left shadow-lg"
+						className="absolute bottom-4 right-4 z-10 max-w-[360px] rounded-lg border border-border/70 bg-background/95 p-4 pr-10 text-left shadow-lg"
 					>
+						<button
+							type="button"
+							aria-label={t("fileViewer.website.closeLoadFallback")}
+							title={t("fileViewer.website.closeLoadFallback")}
+							className="absolute right-2 top-2 inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+							onClick={() => setIsLoadFallbackDismissed(true)}
+						>
+							<X size={13} aria-hidden="true" />
+						</button>
 						<div>
 							<div className="text-sm font-medium text-foreground">
 								{t("fileViewer.website.loadFallbackTitle")}
@@ -109,7 +120,7 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 								href={url}
 								target="_blank"
 								rel="noreferrer"
-								className="pointer-events-auto mt-4 inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+								className="mt-4 inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
 							>
 								<ExternalLink size={14} />
 								{t("fileViewer.website.openExternal")}

@@ -80,7 +80,9 @@ const OPS_ACTION_GAP = 12
 const OPS_ACTION_SHADOW_PADDING = 16
 const OPS_VISIBLE_ACTION_COUNT = 1.5
 const OPS_VISIBLE_ACTION_GAP_COUNT = 1
-const OPS_SIDE_PANEL_STATIC_MIN_HEIGHT = 224
+const OPS_WIDE_SIDE_COLUMN_GAP = 12
+const OPS_WIDE_SIDE_PANEL_VERTICAL_PADDING = 40
+const OPS_WIDE_ACTION_LIST_TOP_MARGIN = 20
 
 interface OpsOverviewCardStyle extends CSSProperties {
 	"--ops-card-pointer-x": string
@@ -216,11 +218,21 @@ function SelfMediaOpsOverviewCard({
 	const isActionListScrollable =
 		displayActions.length > 2 || (isOpsWide && displayActions.length > 1)
 	const shouldStretchActionList = isOpsWide && isActionListScrollable
+	const { elementRef: sideToolbarRef, height: sideToolbarHeight } =
+		useMeasuredElementHeight<HTMLDivElement>(shouldStretchActionList)
+	const { elementRef: sidePanelIntroRef, height: sidePanelIntroHeight } =
+		useMeasuredElementHeight<HTMLDivElement>(shouldStretchActionList)
 	const actionListMaxHeight =
 		OPS_ACTION_ROW_HEIGHT * OPS_VISIBLE_ACTION_COUNT +
 		OPS_ACTION_GAP * OPS_VISIBLE_ACTION_GAP_COUNT +
 		OPS_ACTION_SHADOW_PADDING * 2
-	const sideColumnMinHeight = actionListMaxHeight + OPS_SIDE_PANEL_STATIC_MIN_HEIGHT
+	const sideColumnMinHeight =
+		actionListMaxHeight +
+		OPS_WIDE_SIDE_PANEL_VERTICAL_PADDING +
+		OPS_WIDE_ACTION_LIST_TOP_MARGIN +
+		sidePanelIntroHeight +
+		sideToolbarHeight +
+		(sideToolbarHeight > 0 ? OPS_WIDE_SIDE_COLUMN_GAP : 0)
 	const actionListStyle: OpsActionListStyle = {
 		"--ops-action-row-height": `${OPS_ACTION_ROW_HEIGHT}px`,
 		maxHeight:
@@ -389,7 +401,13 @@ function SelfMediaOpsOverviewCard({
 					data-testid="self-media-home-ops-side-column"
 				>
 					{regenerateInsightButton ? (
-						<div className="flex justify-end">{regenerateInsightButton}</div>
+						<div
+							ref={sideToolbarRef}
+							className="flex justify-end"
+							data-testid="self-media-home-ops-side-toolbar"
+						>
+							{regenerateInsightButton}
+						</div>
 					) : null}
 					<aside
 						className={cn(
@@ -399,27 +417,32 @@ function SelfMediaOpsOverviewCard({
 						)}
 						data-testid="self-media-home-ops-aside"
 					>
-						<div className="flex items-center justify-between gap-3">
-							<div className="min-w-0 flex-1">
-								<h4 className="text-[15px] font-[800] text-[#18181b]">
-									{asideTitle}
-								</h4>
-								<p className="mt-1 text-[12px] leading-[1.55] text-[#71717a]">
-									{asideSubtitle}
-								</p>
+						<div
+							ref={sidePanelIntroRef}
+							data-testid="self-media-home-ops-side-panel-intro"
+						>
+							<div className="flex items-center justify-between gap-3">
+								<div className="min-w-0 flex-1">
+									<h4 className="text-[15px] font-[800] text-[#18181b]">
+										{asideTitle}
+									</h4>
+									<p className="mt-1 text-[12px] leading-[1.55] text-[#71717a]">
+										{asideSubtitle}
+									</p>
+								</div>
+								<span className="rounded-full bg-white/80 px-3 py-1 text-[12px] font-[700] text-[#18181b]">
+									{overview.totalPosts} 篇
+								</span>
 							</div>
-							<span className="rounded-full bg-white/80 px-3 py-1 text-[12px] font-[700] text-[#18181b]">
-								{overview.totalPosts} 篇
-							</span>
+							{insightGreeting ? (
+								<div
+									className="mt-4 rounded-[18px] border border-white/65 bg-white/55 p-3 text-[13px] font-[760] leading-[1.55] text-[#18181b] shadow-[inset_0_1px_rgba(255,255,255,0.76)]"
+									data-testid="self-media-home-ops-insight-greeting"
+								>
+									{insightGreeting}
+								</div>
+							) : null}
 						</div>
-						{insightGreeting ? (
-							<div
-								className="mt-4 rounded-[18px] border border-white/65 bg-white/55 p-3 text-[13px] font-[760] leading-[1.55] text-[#18181b] shadow-[inset_0_1px_rgba(255,255,255,0.76)]"
-								data-testid="self-media-home-ops-insight-greeting"
-							>
-								{insightGreeting}
-							</div>
-						) : null}
 						<div
 							className={cn(
 								"mt-5",

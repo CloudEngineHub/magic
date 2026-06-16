@@ -436,16 +436,26 @@ describe("SelfMediaHomePage styles", () => {
 	it("uses the left column height as the wide suggestion panel height when more actions overflow", async () => {
 		const getBoundingClientRect = vi
 			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
-			.mockReturnValue({
-				x: 0,
-				y: 0,
-				left: 0,
-				top: 0,
-				right: 900,
-				bottom: 420,
-				width: 900,
-				height: 420,
-				toJSON: () => ({}),
+			.mockImplementation(function (this: HTMLElement) {
+				const testId = this.getAttribute("data-testid")
+				const heightByTestId: Record<string, number> = {
+					"self-media-home-ops-overview": 420,
+					"self-media-home-ops-main-column": 420,
+					"self-media-home-ops-side-toolbar": 36,
+					"self-media-home-ops-side-panel-intro": 160,
+				}
+				const height = heightByTestId[testId || ""] ?? 0
+				return {
+					x: 0,
+					y: 0,
+					left: 0,
+					top: 0,
+					right: 900,
+					bottom: height,
+					width: 900,
+					height,
+					toJSON: () => ({}),
+				}
 			})
 
 		render(
@@ -510,7 +520,9 @@ describe("SelfMediaHomePage styles", () => {
 		await waitFor(() => {
 			expect(sideColumn).toHaveStyle({ height: "420px" })
 		})
-		expect(sideColumn).toHaveStyle({ minHeight: "484px" })
+		expect(screen.getByTestId("self-media-home-ops-side-toolbar")).toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-ops-side-panel-intro")).toBeInTheDocument()
+		expect(sideColumn).toHaveStyle({ minHeight: "528px" })
 		expect(actionList).toHaveClass("self-media-ops-action-scroll", "flex-1", "min-h-0")
 		expect(actionList).not.toHaveStyle({ maxHeight: "260px" })
 		expect(actionList).toHaveStyle({ minHeight: "260px" })

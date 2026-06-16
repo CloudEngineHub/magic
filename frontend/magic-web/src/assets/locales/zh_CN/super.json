@@ -1318,7 +1318,7 @@
 					"clear": "清空",
 					"currentConfig": "当前配置：{{value}}",
 					"custom": "自定义",
-					"empty": "未选择",
+					"empty": "选择配置",
 					"emptyPresets": "当前平台暂无可选模板",
 					"fields": {
 						"cardCount": "卡片数量",
@@ -1799,6 +1799,7 @@
 				"deleteCommon": "删除",
 				"editCommon": "编辑",
 				"removeCommon": "移除常用链接",
+				"closeLoadFallback": "关闭加载提示",
 				"loadFallbackDescription": "如果页面未完整显示，可能是站点限制 iframe 嵌入，或当前网络加载较慢。",
 			"loadFallbackTitle": "网页加载时间较长",
 			"menuTitle": "常用网站",

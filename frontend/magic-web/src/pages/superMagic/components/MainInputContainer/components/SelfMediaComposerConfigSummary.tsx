@@ -24,14 +24,14 @@ export function SelfMediaComposerConfigSummary({
 				isTrigger ? "max-w-full overflow-hidden" : "flex-wrap",
 			)}
 		>
-			<span
+			{/* <span
 				className={cn(
 					"flex shrink-0 items-center justify-center rounded-full text-muted-foreground",
 					isTrigger ? "size-6" : "size-7 bg-muted/50",
 				)}
 			>
 				<SlidersHorizontal className="size-3.5" />
-			</span>
+			</span> */}
 			<div
 				className={cn(
 					"flex min-w-0 items-center gap-1.5",
@@ -65,7 +65,7 @@ export function SelfMediaComposerConfigSummary({
 				) : (
 					<span
 						className={cn(
-							"inline-flex items-center font-semibold text-foreground",
+							"inline-flex items-center font-medium text-muted-foreground",
 							isTrigger
 								? "h-6 min-w-0 truncate rounded-none bg-transparent px-0 text-sm"
 								: "h-7 rounded-full bg-muted/45 px-2.5 text-sm",

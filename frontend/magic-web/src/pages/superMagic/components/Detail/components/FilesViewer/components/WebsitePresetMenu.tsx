@@ -239,22 +239,26 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 								return (
 									<ContextMenu key={preset.id}>
 										<ContextMenuTrigger asChild>
-											<DropdownMenuItem
-												aria-label={translatedPreset.title}
-												className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2"
-												onClick={() => onOpenWebsiteTab(translatedPreset)}
-											>
-												<span
-													className="flex size-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-semibold leading-none text-primary"
-													aria-hidden="true"
+											<div className="flex items-center rounded-md">
+												<DropdownMenuItem
+													aria-label={translatedPreset.title}
+													className="min-w-0 flex-1 cursor-pointer gap-2 rounded-md px-2 py-2"
+													onClick={() =>
+														onOpenWebsiteTab(translatedPreset)
+													}
 												>
-													{translatedPreset.title
-														.slice(0, 1)
-														.toUpperCase()}
-												</span>
-												<span className="min-w-0 flex-1 truncate text-sm leading-5 text-foreground">
-													{translatedPreset.title}
-												</span>
+													<span
+														className="flex size-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-semibold leading-none text-primary"
+														aria-hidden="true"
+													>
+														{translatedPreset.title
+															.slice(0, 1)
+															.toUpperCase()}
+													</span>
+													<span className="min-w-0 flex-1 truncate text-sm leading-5 text-foreground">
+														{translatedPreset.title}
+													</span>
+												</DropdownMenuItem>
 												<Tooltip
 													title={t("fileViewer.website.removeCommon")}
 													placement="left"
@@ -279,7 +283,7 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 														/>
 													</button>
 												</Tooltip>
-											</DropdownMenuItem>
+											</div>
 										</ContextMenuTrigger>
 										<ContextMenuContent>
 											<ContextMenuItem

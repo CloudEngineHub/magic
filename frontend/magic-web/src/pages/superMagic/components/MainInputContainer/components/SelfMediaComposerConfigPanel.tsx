@@ -455,7 +455,7 @@ function SelfMediaComposerConfigPanel({ className }: { className?: string }) {
 							aria-label={`self-media-config-trigger ${triggerText}`}
 							aria-expanded={popoverOpen}
 							className={cn(
-								"inline-flex h-9 max-w-full items-center gap-2 overflow-hidden rounded-full bg-background px-3 shadow-xs ring-1 ring-border transition-colors",
+								"inline-flex h-8 ml-0.5 mb-0.5 max-w-full items-center gap-2 overflow-hidden rounded-full bg-background px-3 shadow-xs ring-1 ring-border transition-colors",
 								"hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
 								popoverOpen && "bg-sidebar-accent ring-foreground/20",
 							)}

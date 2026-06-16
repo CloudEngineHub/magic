@@ -25,7 +25,7 @@ const translationMap = vi.hoisted(() => ({
 	"detail.selfMedia.initPanel.composerConfig.clear": "清空",
 	"detail.selfMedia.initPanel.composerConfig.currentConfig": "当前配置：{{value}}",
 	"detail.selfMedia.initPanel.composerConfig.custom": "自定义",
-	"detail.selfMedia.initPanel.composerConfig.empty": "未选择",
+	"detail.selfMedia.initPanel.composerConfig.empty": "选择配置",
 	"detail.selfMedia.initPanel.composerConfig.emptyPresets": "当前平台暂无可选模板",
 	"detail.selfMedia.initPanel.composerConfig.fields.cardCount": "卡片数量",
 	"detail.selfMedia.initPanel.composerConfig.fields.platform": "平台",
@@ -95,7 +95,9 @@ describe("SelfMediaComposerConfigPanel", () => {
 	it("uses a compact popover trigger in topic page projects", () => {
 		renderPanel("topicPage")
 
-		expect(screen.getByTestId("self-media-composer-config-trigger")).toHaveTextContent("未选择")
+		expect(screen.getByTestId("self-media-composer-config-trigger")).toHaveTextContent(
+			"选择配置",
+		)
 		expect(screen.queryByText("平台")).not.toBeInTheDocument()
 
 		openComposerConfigPopover()
@@ -108,7 +110,10 @@ describe("SelfMediaComposerConfigPanel", () => {
 		renderPanel()
 
 		expect(getLastPresetSuffixContent()).toBeUndefined()
-		expect(screen.getByTestId("self-media-composer-config-panel")).toHaveTextContent("未选择")
+		expect(screen.getByTestId("self-media-composer-config-panel")).toHaveTextContent(
+			"选择配置",
+		)
+		expect(screen.getByText("选择配置")).toHaveClass("text-muted-foreground")
 		expect(screen.getByTestId("self-media-composer-config-panel")).not.toHaveTextContent(
 			"自媒体配置",
 		)
@@ -162,7 +167,9 @@ describe("SelfMediaComposerConfigPanel", () => {
 		fireEvent.click(screen.getByRole("button", { name: "clear-self-media-composer-config" }))
 
 		expect(getLastPresetSuffixContent()).toBeUndefined()
-		expect(screen.getByTestId("self-media-composer-config-panel")).toHaveTextContent("未选择")
+		expect(screen.getByTestId("self-media-composer-config-panel")).toHaveTextContent(
+			"选择配置",
+		)
 	})
 
 	it("toggles a selected option off when the user clicks it again", () => {
@@ -174,7 +181,9 @@ describe("SelfMediaComposerConfigPanel", () => {
 		expect(getLastPresetSuffixText()).toBe("平台: rednote.")
 		fireEvent.click(platformButton)
 		expect(getLastPresetSuffixContent()).toBeUndefined()
-		expect(screen.getByTestId("self-media-composer-config-panel")).toHaveTextContent("未选择")
+		expect(screen.getByTestId("self-media-composer-config-panel")).toHaveTextContent(
+			"选择配置",
+		)
 
 		const presetButton = screen.getByRole("button", {
 			name: /select-visual-preset-personal-insight/,
@@ -190,7 +199,9 @@ describe("SelfMediaComposerConfigPanel", () => {
 		expect(getLastPresetSuffixText()).toBe("卡片数量: 6.")
 		fireEvent.click(cardCountButton)
 		expect(getLastPresetSuffixContent()).toBeUndefined()
-		expect(screen.getByTestId("self-media-composer-config-panel")).toHaveTextContent("未选择")
+		expect(screen.getByTestId("self-media-composer-config-panel")).toHaveTextContent(
+			"选择配置",
+		)
 	})
 
 	it("clears the config after send", async () => {
@@ -205,7 +216,7 @@ describe("SelfMediaComposerConfigPanel", () => {
 
 		await waitFor(() =>
 			expect(screen.getByTestId("self-media-composer-config-panel")).toHaveTextContent(
-				"未选择",
+				"选择配置",
 			),
 		)
 		expect(getLastPresetSuffixContent()).toBeUndefined()

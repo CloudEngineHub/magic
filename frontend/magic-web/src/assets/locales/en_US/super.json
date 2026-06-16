@@ -1317,7 +1317,7 @@
 					"clear": "Clear",
 					"currentConfig": "Current configuration: {{value}}",
 					"custom": "Custom",
-					"empty": "Not selected",
+					"empty": "Choose settings",
 					"emptyPresets": "No templates available for this platform",
 					"fields": {
 						"cardCount": "Card count",
@@ -1798,6 +1798,7 @@
 				"deleteCommon": "Delete",
 				"editCommon": "Edit",
 				"removeCommon": "Remove common link",
+				"closeLoadFallback": "Close loading notice",
 				"loadFallbackDescription": "If the page is not fully visible, the site may restrict iframe embedding or the network may be loading slowly.",
 			"loadFallbackTitle": "This page is taking longer to load",
 			"menuTitle": "Common websites",

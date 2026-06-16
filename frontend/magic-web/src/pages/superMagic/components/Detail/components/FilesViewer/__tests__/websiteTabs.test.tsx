@@ -112,7 +112,15 @@ vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 		onClick?: () => void
 		[key: string]: unknown
 	}) => (
-		<div role="button" tabIndex={0} onClick={onClick} {...props}>
+		<div
+			role="button"
+			tabIndex={0}
+			onPointerDownCapture={(event) => {
+				if (event.target !== event.currentTarget) onClick?.()
+			}}
+			onClick={onClick}
+			{...props}
+		>
 			{children}
 		</div>
 	),
@@ -596,6 +604,34 @@ describe("website tabs", () => {
 		}
 	})
 
+	it("lets users dismiss the delayed website fallback", () => {
+		vi.useFakeTimers()
+
+		try {
+			render(
+				<WebsiteIframeTabContent
+					title="Dismissable Slow Site"
+					url="https://example.com/dismissable"
+					description="May load slowly"
+				/>,
+			)
+
+			act(() => {
+				vi.advanceTimersByTime(8000)
+			})
+
+			expect(screen.getByTestId("website-load-fallback")).toBeInTheDocument()
+
+			fireEvent.click(
+				screen.getByRole("button", { name: "fileViewer.website.closeLoadFallback" }),
+			)
+
+			expect(screen.queryByTestId("website-load-fallback")).not.toBeInTheDocument()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	it("opens the selected preset from the add menu", () => {
 		const onOpenWebsiteTab = vi.fn()
 		const { container } = render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
@@ -776,6 +812,11 @@ describe("website tabs", () => {
 		const onOpenWebsiteTab = vi.fn()
 		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
 
+		fireEvent.pointerDown(
+			screen.getByRole("button", {
+				name: "fileViewer.website.removeCommon Saved Image Board",
+			}),
+		)
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: "fileViewer.website.removeCommon Saved Image Board",
