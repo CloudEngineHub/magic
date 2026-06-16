@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
 
 interface MobileVoiceEdgeGlowProps {
@@ -45,6 +46,33 @@ const MOBILE_VOICE_EDGE_GLOW_HOTSPOTS: MobileVoiceEdgeGlowHotspot[] = [
 ]
 
 const MOBILE_VOICE_EDGE_GLOW_COLOR_DRIFT_SPEED = 0.04
+const MOBILE_VOICE_EDGE_GLOW_RADIUS = 28
+
+function addMobileVoiceEdgeGlowRoundedRectPath(
+	context: CanvasRenderingContext2D,
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+	radius: number,
+) {
+	const safeRadius = Math.max(0, Math.min(radius, width / 2, height / 2))
+
+	if (typeof context.roundRect === "function") {
+		context.roundRect(x, y, width, height, safeRadius)
+		return
+	}
+
+	context.moveTo(x + safeRadius, y)
+	context.lineTo(x + width - safeRadius, y)
+	context.quadraticCurveTo(x + width, y, x + width, y + safeRadius)
+	context.lineTo(x + width, y + height - safeRadius)
+	context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height)
+	context.lineTo(x + safeRadius, y + height)
+	context.quadraticCurveTo(x, y + height, x, y + height - safeRadius)
+	context.lineTo(x, y + safeRadius)
+	context.quadraticCurveTo(x, y, x + safeRadius, y)
+}
 
 function pointOnMobileVoiceEdgeGlowRect(
 	position: number,
@@ -241,11 +269,19 @@ function clipMobileVoiceEdgeGlowCoreRing(
 	context: CanvasRenderingContext2D,
 	width: number,
 	height: number,
+	radius: number,
 	ringWidth: number,
 ) {
 	context.beginPath()
-	context.rect(0, 0, width, height)
-	context.rect(ringWidth, ringWidth, width - ringWidth * 2, height - ringWidth * 2)
+	addMobileVoiceEdgeGlowRoundedRectPath(context, 0, 0, width, height, radius)
+	addMobileVoiceEdgeGlowRoundedRectPath(
+		context,
+		ringWidth,
+		ringWidth,
+		width - ringWidth * 2,
+		height - ringWidth * 2,
+		Math.max(0, radius - ringWidth),
+	)
 	context.clip("evenodd")
 }
 
@@ -258,7 +294,12 @@ function MobileVoiceEdgeGlow({ active, audioLevel }: MobileVoiceEdgeGlowProps) {
 	const startLoopRef = useRef<(() => void) | null>(null)
 	const audioLevelRef = useRef<number | null>(typeof audioLevel === "number" ? audioLevel : null)
 	const [isDark, setIsDark] = useState(false)
+	const [isMounted, setIsMounted] = useState(false)
 	const isDarkRef = useRef(isDark)
+
+	useEffect(() => {
+		setIsMounted(true)
+	}, [])
 
 	useEffect(() => {
 		audioLevelRef.current = typeof audioLevel === "number" ? audioLevel : null
@@ -364,7 +405,7 @@ function MobileVoiceEdgeGlow({ active, audioLevel }: MobileVoiceEdgeGlowProps) {
 			const glowAlphaScale = dark ? 1 : 1.35
 			const edgeWidth = 1.5
 			const segments = 360
-			const radius = 0
+			const radius = MOBILE_VOICE_EDGE_GLOW_RADIUS
 
 			glowContext.clearRect(0, 0, width, height)
 			glowContext.globalCompositeOperation = glowComposite
@@ -391,7 +432,13 @@ function MobileVoiceEdgeGlow({ active, audioLevel }: MobileVoiceEdgeGlowProps) {
 
 			coreContext.clearRect(0, 0, width, height)
 			coreContext.save()
-			clipMobileVoiceEdgeGlowCoreRing(coreContext, width, height, edgeWidth + 2)
+			clipMobileVoiceEdgeGlowCoreRing(
+				coreContext,
+				width,
+				height,
+				radius,
+				edgeWidth + 2,
+			)
 			coreContext.globalCompositeOperation = "source-over"
 			drawMobileVoiceEdgeGlowRing(coreContext, width, height, radius, {
 				width: edgeWidth * 2.2,
@@ -419,13 +466,19 @@ function MobileVoiceEdgeGlow({ active, audioLevel }: MobileVoiceEdgeGlowProps) {
 		}
 	}, [])
 
-	return (
+	if (!isMounted) return null
+
+	return createPortal(
 		<div
 			ref={wrapperRef}
 			className={cn(
 				"pointer-events-none fixed inset-0 z-[60] transition-opacity duration-500",
 				active ? "opacity-100" : "opacity-0",
 			)}
+			style={{
+				borderRadius: MOBILE_VOICE_EDGE_GLOW_RADIUS,
+				overflow: "hidden",
+			}}
 			aria-hidden
 			data-testid="mobile-composer-voice-edge-glow"
 		>
@@ -442,7 +495,8 @@ function MobileVoiceEdgeGlow({ active, audioLevel }: MobileVoiceEdgeGlowProps) {
 				className="absolute inset-0 size-full blur-[0.8px]"
 				style={{ willChange: "filter, opacity" }}
 			/>
-		</div>
+		</div>,
+		document.body,
 	)
 }
 
