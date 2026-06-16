@@ -20,6 +20,7 @@
 			"@enterprise/*": ["./enterprise/src/*"],
 			"@admin/*": ["./packages/magic-admin/src/*"],
 			"@admin-components": ["./packages/magic-admin/components/index.ts"],
+			"@magic-web/html2image": ["./packages/html2image/src/index.ts"],
 		},
 		"resolveJsonModule": true,
 		"skipLibCheck": true,

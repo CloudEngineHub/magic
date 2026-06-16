@@ -54,8 +54,8 @@ import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { env } from "@/utils/env"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { exportHtmlToPdf, exportHtmlToImage } from "../../../../../../../packages/pdf-export/src"
-import type { ImageExportFormat } from "../../../../../../../packages/pdf-export/src"
+import { exportHtmlToPdf } from "../../../../../../../packages/pdf-export/src"
+import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
 import { resolvePptScaleContentDimensions } from "./utils/slide-dimensions"
 import {
 	AlertDialog,

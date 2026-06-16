@@ -1239,8 +1239,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					attachmentList: attachments ?? [],
 				})
 
-				const { exportHtmlToImage } =
-					await import("../../../../../../packages/pdf-export/src")
+				const { exportHtmlToImage } = await import("@magic-web/html2image")
 				await exportHtmlToImage({
 					pages: preparedHtmlSlides,
 					format,

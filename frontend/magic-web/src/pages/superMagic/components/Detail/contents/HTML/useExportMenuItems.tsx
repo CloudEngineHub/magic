@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next"
 import { HTMLGuideTourElementId } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
 import { Download } from "lucide-react"
-import type { ImageExportFormat } from "../../../../../../../packages/pdf-export/src"
+import type { ImageExportFormat } from "@magic-web/html2image"
 
 const useStyles = createStyles(({ css, token }) => ({
 	downloadText: css`

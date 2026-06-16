@@ -116,6 +116,9 @@ importers:
       '@lottiefiles/dotlottie-react':
         specifier: ^0.13.0
         version: 0.13.5(react@18.3.1)
+      '@magic-web/html2image':
+        specifier: workspace:*
+        version: link:packages/html2image
       '@marp-team/marpit':
         specifier: ^3.1.1
         version: 3.2.1
@@ -1041,6 +1044,27 @@ importers:
       vite-plugin-mkcert:
         specifier: ^1.17.6
         version: 1.17.12(vite@8.0.16)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.6(@types/debug@4.1.13)(@types/node@22.19.20)(jiti@1.21.7)(jsdom@26.1.0(canvas@3.2.3))(less@4.6.4)(lightningcss@1.32.0)(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
+
+  packages/html2image:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.13.10
+        version: 22.19.20
+      '@zumer/snapdom':
+        specifier: ^2.0.2
+        version: 2.12.8
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
+      typescript:
+        specifier: ^5.4.5
+        version: 5.7.3
+      vite:
+        specifier: ^8.0.3
+        version: 8.0.16(@types/node@22.19.20)(@vitejs/devtools@0.1.24)(esbuild@0.24.0)(jiti@1.21.7)(less@4.6.4)(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
       vitest:
         specifier: ^3.2.4
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.19.20)(jiti@1.21.7)(jsdom@26.1.0(canvas@3.2.3))(less@4.6.4)(lightningcss@1.32.0)(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
