@@ -1,456 +1,429 @@
-/* ins-retro.css - Instagram Retro / Vintage card preset for 1080x1350 */
-
+/* ins-retro.css
+ * Instagram Retro Story - warm paper, stamp details, ornamental rules, and story-first pacing.
+ * Sections: tokens, shell, components, utilities, layouts.
+ */
+:root {
+  --irt-bg: #f7e8ca;
+  --irt-surface: #fff7e6;
+  --irt-surface-2: #ead2a7;
+  --irt-accent: #b8322a;
+  --irt-accent-2: #275d5b;
+  --irt-text: #2a211a;
+  --irt-muted: #76624f;
+  --irt-border: #6c4932;
+  --irt-positive: #2f7d52;
+  --irt-negative: #b8322a;
+  --irt-radius: 12px;
+  --irt-shadow: 10px 10px 0 #6c4932;
+  --irt-font-display: Georgia, Times New Roman, serif;
+  --irt-font-body: Inter, Arial, sans-serif;
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+  padding: 0;
+}
 html,
 body {
   width: 1080px;
   height: 1350px;
   overflow: hidden;
-  margin: 0;
-  padding: 0;
 }
-
-.ins-card {
-  --ir-cream: #fdf6e3;
-  --ir-paper: #f5ead6;
-  --ir-ink: #2c1810;
-  --ir-brown: #6b3a2a;
-  --ir-muted: #8b6f5e;
-  --ir-subtle: #b8a089;
-  --ir-line: #d4c4a8;
-  --ir-red: #c0392b;
-  --ir-orange: #d35400;
-  --ir-teal: #1a7a6c;
-  --ir-gold: #d4a543;
-  --ir-radius-sm: 4px;
-  --ir-radius-md: 8px;
-  --ir-radius-lg: 12px;
-  --ir-radius-pill: 100px;
-  --ir-gap-xs: 8px;
-  --ir-gap-sm: 16px;
-  --ir-gap-md: 24px;
-  --ir-gap-lg: 32px;
-  --ir-gap-xl: 48px;
-  --ir-card-width: 1080px;
-  --ir-card-height: 1350px;
-  --ir-border: 3px solid var(--ir-ink);
-
-  font-family: "Playfair Display", "Georgia", serif;
-  width: var(--ir-card-width);
-  height: var(--ir-card-height);
-  background: var(--ir-cream);
-  padding: 80px;
+body {
+  font-family: var(--irt-font-body);
+  background: var(--irt-bg);
+  color: var(--irt-text);
+}
+.irt-card {
+  width: 1080px;
+  height: 1350px;
+  position: relative;
+  overflow: hidden;
+  padding: 76px;
   display: flex;
   flex-direction: column;
-  color: var(--ir-ink);
-  position: relative;
-  box-sizing: border-box;
+  gap: 34px;
+  background:
+    radial-gradient(
+      circle at 18% 12%,
+      rgba(184, 50, 42, 0.13),
+      transparent 20%
+    ),
+    radial-gradient(circle at 88% 86%, rgba(39, 93, 91, 0.12), transparent 24%),
+    linear-gradient(180deg, #f9edcf 0%, #f3dfb8 100%);
+  color: var(--irt-text);
+  isolation: isolate;
 }
-
-/* Paper texture overlay */
-.ins-card::before {
+.irt-card::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  background-image:
+    repeating-linear-gradient(
+      8deg,
+      rgba(108, 73, 50, 0.08) 0 1px,
+      transparent 1px 17px
+    ),
+    repeating-linear-gradient(
+      97deg,
+      rgba(255, 255, 255, 0.18) 0 2px,
+      transparent 2px 19px
+    ),
+    linear-gradient(135deg, rgba(108, 73, 50, 0.12) 25%, transparent 25%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.28) 25%, transparent 25%);
+  background-size:
+    100% 100%,
+    100% 100%,
+    84px 84px,
+    84px 84px;
+  opacity: 0.72;
   pointer-events: none;
-  opacity: 0.5;
+  z-index: -2;
 }
-
-/* Cover */
-.ins-card.ir-cover {
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  border: 8px double var(--ir-ink);
-}
-.ir-cover-ornament {
-  font-size: 60px;
-  color: var(--ir-gold);
-  margin-bottom: var(--ir-gap-lg);
-  letter-spacing: 16px;
-}
-.ir-cover-title {
-  font-size: 88px;
-  font-weight: 900;
-  line-height: 1.1;
-  letter-spacing: -1px;
-  color: var(--ir-ink);
-  position: relative;
-  z-index: 1;
-}
-.ir-hl-red {
-  color: var(--ir-red);
-}
-.ir-hl-teal {
-  color: var(--ir-teal);
-}
-.ir-hl-gold {
-  color: var(--ir-gold);
-}
-.ir-cover-subtitle {
-  font-family: "Inter", sans-serif;
-  font-size: 36px;
-  font-weight: 500;
-  color: var(--ir-muted);
-  margin-top: var(--ir-gap-lg);
-  letter-spacing: 4px;
-  text-transform: uppercase;
-}
-.ir-cover-ornament-bottom {
-  width: 200px;
-  height: 3px;
-  background: var(--ir-ink);
-  margin-top: var(--ir-gap-xl);
-  position: relative;
-}
-.ir-cover-ornament-bottom::before,
-.ir-cover-ornament-bottom::after {
-  content: "◆";
-  position: absolute;
-  top: -10px;
-  font-size: 18px;
-  color: var(--ir-gold);
-}
-.ir-cover-ornament-bottom::before {
-  left: -20px;
-}
-.ir-cover-ornament-bottom::after {
-  right: -20px;
-}
-
-/* Content */
-.ins-card.ir-content {
-  background: var(--ir-cream);
-}
-.ir-header {
-  margin-bottom: var(--ir-gap-lg);
-  padding-bottom: var(--ir-gap-md);
-  border-bottom: 2px solid var(--ir-ink);
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-.ir-tag {
-  font-family: "Inter", sans-serif;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--ir-cream);
-  background: var(--ir-ink);
-  padding: 8px 20px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-}
-.ir-title {
-  font-size: 54px;
-  font-weight: 900;
-  line-height: 1.2;
-  margin-top: var(--ir-gap-sm);
-}
-.ir-page-num {
-  font-family: "Inter", sans-serif;
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--ir-subtle);
-}
-.ir-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--ir-gap-md);
-  position: relative;
-  z-index: 1;
-}
-
-/* Article block */
-.ir-article {
-  background: var(--ir-paper);
-  border: var(--ir-border);
-  padding: 40px;
-}
-.ir-article-title {
-  font-size: 36px;
-  font-weight: 800;
-  margin-bottom: var(--ir-gap-sm);
-  color: var(--ir-ink);
-}
-.ir-article-text {
-  font-family: "Inter", sans-serif;
-  font-size: 30px;
-  font-weight: 400;
-  line-height: 1.7;
-  color: var(--ir-brown);
-}
-
-/* Stamp / badge */
-.ir-stamp {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ir-gap-sm);
-  border: 3px solid var(--ir-red);
-  border-radius: var(--ir-radius-sm);
-  padding: 14px 28px;
-  font-family: "Inter", sans-serif;
-  font-size: 26px;
-  font-weight: 900;
-  color: var(--ir-red);
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  transform: rotate(-2deg);
-}
-
-/* Numbered list */
-.ir-list-item {
-  display: flex;
-  align-items: baseline;
-  gap: var(--ir-gap-md);
-  padding: var(--ir-gap-md) 0;
-  border-bottom: 1px dashed var(--ir-line);
-}
-.ir-list-item:last-child {
-  border-bottom: none;
-}
-.ir-list-num {
-  font-size: 52px;
-  font-weight: 900;
-  color: var(--ir-red);
-  width: 80px;
-  font-style: italic;
-}
-.ir-list-content {
-  flex: 1;
-}
-.ir-list-title {
-  font-size: 40px;
-  font-weight: 800;
-  margin-bottom: var(--ir-gap-xs);
-}
-.ir-list-desc {
-  font-family: "Inter", sans-serif;
-  font-size: 28px;
-  color: var(--ir-muted);
-  line-height: 1.5;
-}
-
-/* Quote */
-.ins-card.ir-quote {
-  justify-content: center;
-  background: var(--ir-paper);
-  border: 8px double var(--ir-ink);
-}
-.ir-quote-mark {
-  font-size: 180px;
-  line-height: 0.6;
-  color: var(--ir-gold);
-  font-family: Georgia, serif;
-  position: relative;
-  z-index: 1;
-}
-.ir-quote-text {
-  font-size: 58px;
-  font-weight: 700;
-  line-height: 1.4;
-  color: var(--ir-ink);
-  margin: var(--ir-gap-xl) 0;
-  position: relative;
-  z-index: 1;
-}
-.ir-quote-author {
-  font-family: "Inter", sans-serif;
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--ir-muted);
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  position: relative;
-  z-index: 1;
-}
-
-/* Footer */
-.ir-footer {
-  margin-top: auto;
-  padding-top: var(--ir-gap-md);
-  border-top: 2px solid var(--ir-ink);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-family: "Inter", sans-serif;
-  font-size: 24px;
-  color: var(--ir-muted);
-}
-
-/* ══════════════════════════════════════════
-   Newspaper Column Layout
-   ══════════════════════════════════════════ */
-.ir-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--ir-gap-lg);
-  flex: 1;
-  position: relative;
-  z-index: 1;
-}
-.ir-columns::after {
+.irt-card::after {
   content: "";
   position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--ir-ink);
+  inset: 36px;
+  border: 2px solid var(--irt-border);
+  border-radius: calc(var(--irt-radius) + 14px);
+  background:
+    repeating-linear-gradient(
+        90deg,
+        rgba(108, 73, 50, 0.24) 0 12px,
+        transparent 12px 26px
+      )
+      top / 100% 10px no-repeat,
+    repeating-linear-gradient(
+        90deg,
+        rgba(108, 73, 50, 0.18) 0 12px,
+        transparent 12px 26px
+      )
+      bottom / 100% 10px no-repeat,
+    linear-gradient(
+      180deg,
+      rgba(255, 247, 230, 0.42),
+      transparent 18%,
+      transparent 82%,
+      rgba(108, 73, 50, 0.12)
+    );
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: -1;
 }
-.ir-col-text {
-  font-family: "Inter", sans-serif;
-  font-size: 28px;
-  line-height: 1.8;
-  color: var(--ir-brown);
-}
-.ir-col-text .ir-drop-cap {
-  font-family: "Playfair Display", Georgia, serif;
-  float: left;
-  font-size: 96px;
-  font-weight: 900;
-  line-height: 0.8;
-  margin-right: 12px;
-  margin-top: 8px;
-  color: var(--ir-red);
-}
-
-/* ══════════════════════════════════════════
-   Fact / Did You Know Card
-   ══════════════════════════════════════════ */
-.ir-fact-box {
-  background: var(--ir-paper);
-  border: var(--ir-border);
-  padding: 48px;
-  text-align: center;
-  position: relative;
-  z-index: 1;
-}
-.ir-fact-box::before,
-.ir-fact-box::after {
-  content: "✦";
-  position: absolute;
-  font-size: 36px;
-  color: var(--ir-gold);
-}
-.ir-fact-box::before {
-  top: 16px;
-  left: 24px;
-}
-.ir-fact-box::after {
-  bottom: 16px;
-  right: 24px;
-}
-.ir-fact-label {
-  font-family: "Inter", sans-serif;
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--ir-red);
-  letter-spacing: 4px;
-  text-transform: uppercase;
-  margin-bottom: var(--ir-gap-md);
-}
-.ir-fact-value {
-  font-size: 100px;
-  font-weight: 900;
-  color: var(--ir-ink);
-  line-height: 1;
-  margin-bottom: var(--ir-gap-md);
-}
-.ir-fact-desc {
-  font-family: "Inter", sans-serif;
-  font-size: 32px;
-  color: var(--ir-brown);
-  line-height: 1.5;
-}
-
-/* ══════════════════════════════════════════
-   Recipe / Instructions Card
-   ══════════════════════════════════════════ */
-.ir-recipe-header {
-  display: flex;
+.irt-cover {
   justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: var(--ir-gap-lg);
-  padding-bottom: var(--ir-gap-md);
-  border-bottom: 3px double var(--ir-ink);
 }
-.ir-recipe-title {
-  font-size: 52px;
+.irt-content {
+  background: var(--irt-bg);
+}
+.irt-cover-kicker {
+  width: max-content;
+  max-width: 100%;
+  padding: 16px 24px;
+  border: 2px solid var(--irt-border);
+  border-radius: 999px;
+  background: var(--irt-surface);
+  box-shadow: var(--irt-shadow);
+  font-size: 28px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+.irt-cover-title {
+  font-family: var(--irt-font-display);
+  font-size: 118px;
+  line-height: 0.98;
   font-weight: 900;
+  max-width: 880px;
+  white-space: pre-line;
 }
-.ir-recipe-meta {
-  font-family: "Inter", sans-serif;
-  font-size: 22px;
-  color: var(--ir-muted);
-  text-align: right;
+.irt-cover-subtitle {
+  max-width: 780px;
+  font-size: 42px;
+  line-height: 1.22;
+  color: var(--irt-muted);
+  font-weight: 700;
 }
-.ir-recipe-step {
-  display: flex;
-  gap: var(--ir-gap-md);
-  padding: var(--ir-gap-md) 0;
-  border-bottom: 1px dashed var(--ir-line);
-  align-items: flex-start;
+.irt-hero-panel {
+  border: 3px solid var(--irt-border);
+  border-radius: var(--irt-radius);
+  background: var(--irt-surface);
+  box-shadow: var(--irt-shadow);
+  padding: 34px;
 }
-.ir-recipe-step:last-child {
-  border-bottom: none;
-}
-.ir-recipe-num {
-  font-size: 44px;
-  font-weight: 900;
-  color: var(--ir-gold);
-  font-style: italic;
-  min-width: 60px;
-}
-.ir-recipe-text {
-  font-family: "Inter", sans-serif;
-  font-size: 32px;
-  color: var(--ir-brown);
-  line-height: 1.6;
-  flex: 1;
-}
-
-/* ══════════════════════════════════════════
-   Postcard / Vintage Badge Grid
-   ══════════════════════════════════════════ */
-.ir-badge-grid {
+.irt-header {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--ir-gap-lg);
-  flex: 1;
-  position: relative;
-  z-index: 1;
+  grid-template-columns: 1fr auto;
+  gap: 24px;
+  align-items: start;
 }
-.ir-badge-item {
-  border: var(--ir-border);
-  border-radius: 50%;
-  aspect-ratio: 1;
+.irt-eyebrow {
+  font-size: 22px;
+  font-weight: 850;
+  color: var(--irt-accent);
+  text-transform: uppercase;
+}
+.irt-title {
+  margin-top: 8px;
+  font-family: var(--irt-font-display);
+  font-size: 72px;
+  line-height: 1.04;
+  font-weight: 900;
+}
+.irt-page {
+  min-width: 96px;
+  padding: 14px 18px;
+  border: 2px solid var(--irt-border);
+  border-radius: 999px;
+  text-align: center;
+  font-size: 28px;
+  font-weight: 900;
+  background: var(--irt-accent);
+  color: var(--irt-surface);
+}
+.irt-section-label {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--irt-accent);
+  font-size: 24px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.irt-section-label::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  background: var(--irt-border);
+  opacity: 0.28;
+}
+.irt-data-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.irt-data-card {
+  min-height: 184px;
+  padding: 28px;
+  border: 2px solid var(--irt-border);
+  border-radius: var(--irt-radius);
+  background: var(--irt-surface);
+  box-shadow: var(--irt-shadow);
+}
+.irt-data-card .label {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--irt-muted);
+}
+.irt-data-card .value {
+  margin-top: 16px;
+  font-size: 72px;
+  line-height: 0.95;
+  font-weight: 950;
+  color: var(--irt-accent);
+}
+.irt-data-card .unit {
+  font-size: 28px;
+  color: var(--irt-muted);
+  margin-left: 6px;
+}
+.irt-list {
   display: flex;
   flex-direction: column;
+  gap: 18px;
+}
+.irt-list-row {
+  display: grid;
+  grid-template-columns: 78px 1fr auto;
+  align-items: center;
+  gap: 20px;
+  padding: 22px 24px;
+  border: 2px solid var(--irt-border);
+  border-radius: calc(var(--irt-radius) - 4px);
+  background: var(--irt-surface);
+}
+.irt-list-row.is-highlight {
+  background: var(--irt-surface-2);
+  box-shadow: var(--irt-shadow);
+}
+.irt-rank {
+  font-size: 34px;
+  font-weight: 950;
+  color: var(--irt-accent);
+}
+.irt-item-title {
+  font-size: 34px;
+  font-weight: 850;
+}
+.irt-item-meta {
+  font-size: 24px;
+  color: var(--irt-muted);
+}
+.irt-divider {
+  height: 2px;
+  background: var(--irt-border);
+  opacity: 0.22;
+}
+.irt-note {
+  margin-top: auto;
+  padding: 22px 26px;
+  border: 2px solid var(--irt-border);
+  border-radius: var(--irt-radius);
+  background: var(--irt-surface-2);
+  font-size: 26px;
+  line-height: 1.35;
+  color: var(--irt-muted);
+}
+.irt-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+.irt-compare-card {
+  padding: 26px;
+  border: 2px solid var(--irt-border);
+  border-radius: var(--irt-radius);
+  background: var(--irt-surface);
+}
+.irt-timeline-row {
+  display: grid;
+  grid-template-columns: 118px 1fr;
+  gap: 24px;
+  padding: 20px 0;
+  border-bottom: 2px solid rgba(120, 120, 120, 0.18);
+}
+.irt-quote-block {
+  padding: 32px;
+  border-left: 12px solid var(--irt-accent);
+  border-radius: var(--irt-radius);
+  background: var(--irt-surface);
+  font-family: var(--irt-font-display);
+  font-size: 40px;
+  line-height: 1.18;
+}
+.irt-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.irt-progress-bar {
+  height: 18px;
+  border: 2px solid var(--irt-border);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--irt-surface-2);
+}
+.irt-progress-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--irt-accent), var(--irt-accent-2));
+}
+.irt-chart {
+  height: 360px;
+  border: 2px solid var(--irt-border);
+  border-radius: var(--irt-radius);
+  background: var(--irt-surface);
+  padding: 14px;
+}
+.irt-badge,
+.irt-badge-muted {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 22px;
+  font-weight: 850;
+}
+.irt-badge {
+  background: var(--irt-accent);
+  color: var(--irt-surface);
+}
+.irt-badge-muted {
+  background: var(--irt-surface-2);
+  color: var(--irt-muted);
+  border: 1px solid var(--irt-border);
+}
+.irt-text-accent {
+  color: var(--irt-accent);
+}
+.irt-text-muted {
+  color: var(--irt-muted);
+}
+.irt-text-positive {
+  color: var(--irt-positive);
+}
+.irt-text-negative {
+  color: var(--irt-negative);
+}
+.irt-bg-accent {
+  background: var(--irt-accent);
+  color: var(--irt-surface);
+}
+.irt-bg-surface {
+  background: var(--irt-surface);
+}
+.irt-hl {
+  background: linear-gradient(
+    180deg,
+    transparent 58%,
+    color-mix(in srgb, var(--irt-accent) 34%, transparent) 58%
+  );
+}
+.irt-row {
+  display: flex;
+  align-items: center;
+}
+.irt-col {
+  display: flex;
+  flex-direction: column;
+}
+.irt-spacer {
+  flex: 1;
+}
+.irt-center {
+  display: flex;
   align-items: center;
   justify-content: center;
-  text-align: center;
+}
+.irt-gap-xs {
+  gap: 8px;
+}
+.irt-gap-sm {
+  gap: 14px;
+}
+.irt-gap-md {
+  gap: 24px;
+}
+.irt-gap-lg {
+  gap: 36px;
+}
+.irt-signature {
+  display: grid;
+  grid-template-columns: 1fr 150px;
+  gap: 22px;
   padding: 28px;
-  background: var(--ir-paper);
+  border: 2px dashed var(--irt-border);
+  border-radius: var(--irt-radius);
+  background: var(--irt-surface);
+  box-shadow: var(--irt-shadow);
 }
-.ir-badge-item:nth-child(2) {
-  transform: rotate(3deg);
+.irt-signature-copy {
+  font-family: var(--irt-font-display);
+  font-size: 42px;
+  line-height: 1.12;
 }
-.ir-badge-item:nth-child(3) {
-  transform: rotate(-2deg);
-}
-.ir-badge-icon {
-  font-size: 52px;
-  margin-bottom: var(--ir-gap-sm);
-}
-.ir-badge-text {
+.irt-signature-stamp {
+  height: 150px;
+  border: 4px double var(--irt-accent);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  transform: rotate(8deg);
+  color: var(--irt-accent);
   font-size: 28px;
-  font-weight: 800;
-  color: var(--ir-ink);
-}
-.ir-badge-sub {
-  font-family: "Inter", sans-serif;
-  font-size: 22px;
-  color: var(--ir-muted);
-  margin-top: 4px;
+  font-weight: 900;
+  text-align: center;
 }

@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import ModelSwitch from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch"
 import type { ModelItem, ModelSwitchProps } from "@/pages/superMagic/components/MessageEditor/types"
+import { isModelDisabled } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/utils"
 import {
 	Dialog,
 	DialogContent,
@@ -31,23 +32,53 @@ interface PrePublishAnalysisDialogProps {
 	selectedModel?: ModelItem | null
 }
 
+const EMPTY_MODEL_LIST: ModelSwitchProps["modelList"] = []
+
+function resolveFirstAvailableModel(modelList: ModelSwitchProps["modelList"]): ModelItem | null {
+	for (const group of modelList ?? []) {
+		const model = group.models?.find((item) => !isModelDisabled(item))
+		if (model) return model
+	}
+	return null
+}
+
 export function PrePublishAnalysisDialog({
 	open,
 	onOpenChange,
 	onConfirm,
 	loading = false,
-	modelList = [],
+	modelList = EMPTY_MODEL_LIST,
 	selectedModel: selectedModelProp = null,
 }: PrePublishAnalysisDialogProps) {
 	const { t } = useTranslation("super")
 	const [goal, setGoal] = useState<SelfMediaPrePublishAnalysisGoal>("ip-growth")
 	const [selectedModel, setSelectedModel] = useState<ModelItem | null>(selectedModelProp)
+	const wasOpenRef = useRef(false)
+	const firstAvailableModel = useMemo(() => resolveFirstAvailableModel(modelList), [modelList])
 
+	// Default late-arriving model lists without overwriting a model the user already picked.
 	useEffect(() => {
-		if (!open) return
-		setGoal("ip-growth")
-		setSelectedModel(selectedModelProp)
-	}, [open, selectedModelProp])
+		if (!open) {
+			wasOpenRef.current = false
+			return
+		}
+
+		const justOpened = !wasOpenRef.current
+		wasOpenRef.current = true
+
+		if (justOpened) {
+			setGoal("ip-growth")
+			setSelectedModel(selectedModelProp ?? firstAvailableModel)
+			return
+		}
+
+		if (selectedModelProp) {
+			setSelectedModel(selectedModelProp)
+			return
+		}
+
+		setSelectedModel((current) => current ?? firstAvailableModel)
+	}, [firstAvailableModel, open, selectedModelProp])
 
 	return (
 		<Dialog open={open} onOpenChange={loading ? undefined : onOpenChange}>
@@ -100,11 +131,12 @@ export function PrePublishAnalysisDialog({
 							selectedModel={selectedModel}
 							onModelChange={setSelectedModel}
 							size="small"
-							showBorder
+							showLabel={false}
+							showSelectedModelName
 							defaultTab="language"
 							triggerTab="language"
 							editable={false}
-							className="w-full justify-between"
+							className="h-10 w-full justify-between rounded-[18px] border-0 bg-white/90 px-3 py-2 text-[#18181b] shadow-[inset_0_0_0_1px_rgba(24,24,27,0.06)] transition hover:bg-white hover:shadow-[inset_0_0_0_2px_rgba(24,24,27,0.12)]"
 							triggerTestId="pre-publish-analysis-model-switch"
 						/>
 					</div>

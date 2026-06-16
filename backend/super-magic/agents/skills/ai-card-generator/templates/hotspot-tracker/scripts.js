@@ -196,6 +196,4 @@
   setupInsight();
   rebuild();
   window.addEventListener("resize", function () { charts.forEach(function (c) { c.resize(); }); });
-  var mq = window.matchMedia("(prefers-color-scheme: dark)");
-  if (typeof mq.addEventListener === "function") mq.addEventListener("change", rebuild);
 })();

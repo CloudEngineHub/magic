@@ -1,8 +1,7 @@
 ---
 name: self-media-composer
 description: >
-  Use when the user wants to create, extend, or edit self-media posts or card/article projects for Rednote/Xiaohongshu, Instagram, WeChat Official Accounts, or similar platforms. Trigger on [@self_media_project:...], create/add post, make cards, generate social cards, write WeChat article, multilingual self-media requests, Rednote tags, WeChat article, Instagram cards, social media cards, content project.
-  Also use for self-media post-publication operations such as immediate sync, real data refresh, published-data import, post-publication data sync, operations review dashboards, article ops review, and fixed `ops/*` data updates.
+  Use when the user wants to create, extend, or edit self-media posts or card/article projects for Rednote/Xiaohongshu, Instagram, WeChat Official Accounts, or similar platforms. Trigger on [@self_media_project:...], create/add post, make cards, generate social cards, write WeChat article, multilingual self-media requests, Rednote tags, WeChat article, Instagram cards, social media cards, content project. Also use for self-media post-publication operations such as immediate sync, real data refresh, published-data import, post-publication data sync, operations review dashboards, article ops review, and fixed `ops/*` data updates.
 ---
 
 # Self-Media Composer Skill
@@ -17,18 +16,18 @@ Load this skill **immediately and before any other action** when the user's mess
 
 ### English
 
-| User says                                                 | Load reason                |
-| --------------------------------------------------------- | -------------------------- |
-| "create a post" / "add a post"                            | New post creation          |
-| "make cards for Rednote / Instagram"                      | Card-based post authoring  |
-| "write a WeChat article" / "WeChat official account post" | Article post authoring     |
-| "build a self-media project" / "start a content project"  | Project scaffolding        |
-| "generate social cards" / "design card images"            | Card design                |
-| "create content for [platform]"                           | Any platform post          |
-| "post-publication review" / "article ops review"          | Operations data sync       |
-| "fetch published data" / "update ops files"               | Operations data sync       |
-| "sync now" / "real data refresh"                          | Operations data sync       |
-| Contains `[@self_media_project:...]`                      | Existing project reference |
+| User says | Load reason |
+| --- | --- |
+| "create a post" / "add a post" | New post creation |
+| "make cards for Rednote / Instagram" | Card-based post authoring |
+| "write a WeChat article" / "WeChat official account post" | Article post authoring |
+| "build a self-media project" / "start a content project" | Project scaffolding |
+| "generate social cards" / "design card images" | Card design |
+| "create content for [platform]" | Any platform post |
+| "post-publication review" / "article ops review" | Operations data sync |
+| "fetch published data" / "update ops files" | Operations data sync |
+| "sync now" / "real data refresh" | Operations data sync |
+| Contains `[@self_media_project:...]` | Existing project reference |
 
 ### Multilingual
 
@@ -126,8 +125,13 @@ presets/
 │   ├── ins-modern/
 │   ├── ins-minimal/
 │   ├── ins-dark/
-│   ├── ins-gradient/
-│   └── ins-retro/
+│   ├── ins-retro/
+│   ├── ins-fluent-depth/
+│   ├── ins-token-system/
+│   ├── ins-creator-studio/
+│   ├── ins-film-frame/
+│   ├── ins-warm-journal/
+│   └── ins-signal-grid/
 └── wechat-official-accounts/
     └── (coming soon)
 ```
@@ -158,11 +162,11 @@ When the user mentions any localized alias above, treat it as the corresponding 
 
 The table below is a fallback only. When the user explicitly specifies card size or aspect ratio, follow the user's values; do not override them with the defaults.
 
-| platform                   | Default size | Aspect | Notes                                                  |
-| -------------------------- | ------------ | ------ | ------------------------------------------------------ |
-| `rednote`                  | 540x720      | 3:4    | Xiaohongshu vertical card, standard feed               |
-| `instagram`                | 540x675      | 4:5    | Instagram feed portrait                                |
-| `wechat-official-accounts` | N/A          | N/A    | Article post: single HTML + heroCover + thumbnailCover |
+| platform | Default size | Aspect | Notes |
+| --- | --- | --- | --- |
+| `rednote` | 540x720 | 3:4 | Xiaohongshu vertical card, standard feed |
+| `instagram` | 540x675 | 4:5 | Instagram feed portrait |
+| `wechat-official-accounts` | N/A | N/A | Article post: single HTML + heroCover + thumbnailCover |
 
 Fallback rules inside `instagram`: if the user wants a square layout, use `540x540` (1:1); for stories or reels covers, use `540x960` (9:16). Ask before assuming.
 
@@ -178,24 +182,29 @@ Decision order every time you pick a card canvas size:
 
 Presets are organized by platform under `presets/<platform>/<preset>/`. Each preset is a pair of files (`<preset>.css` + `<preset>.js`).
 
-| Platform                   | Preset                  | Style summary                                                                                                                                                                                          |
-| -------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `rednote`                  | `neo-brutalism`         | Neo-Brutalism: thick black borders, hard offset shadows, saturated palette.                                                                                                                            |
-| `rednote`                  | `code-dispatch`         | Code Dispatch: high-contrast editorial style, black/white/red palette, monospace labels, no rounded corners, grid background texture. Best for tech/coding/AI topics.                                  |
-| `rednote`                  | `dark-tech`             | Dark-Tech: deep black background, gold accent, thin 1px borders, heavy/light font-weight contrast. Inspired by DJI-style review cards. Best for product/gear reviews.                                  |
-| `rednote`                  | `gradient-editorial`    | Image Editorial: cover uses hero/theme image with gradient overlay for text readability, clean white content pages, rounded cards. Best for AI/tech insight articles.                                  |
-| `rednote`                  | `personal-insight`      | Personal Insight: clean white background, profile avatar, numbered sections, reading-note style. Best for personal reflections and knowledge sharing.                                                  |
-| `rednote`                  | `film-vintage`          | Film Vintage: dark cinematic cover, polaroid-style photo frames, mono grain texture, red accent, serif+mono typography. Best for film photography, gear reviews, and city walk journals.               |
-| `rednote`                  | `warm-journal`          | Warm Journal: photo-led journal pages, handwritten titles, khaki/beige paper textures, scattered notes, and polaroid frames. Best for lifestyle, product notes, and city records.                     |
-| `rednote`                  | `paper-column`          | Paper Column: paper texture, serif display titles, marginal notes, pull quotes, ledgers, and evidence frames. Best for essays, analysis, knowledge columns, and field-note narratives.                 |
-| `rednote`                  | `signal-grid`           | Signal Grid: strict grid rhythm, light display type, one accent color, matrix rows, KPI blocks, and ranking bars. Best for product notes, comparisons, launch explainers, and structured decisions.    |
-| `rednote`                  | `product-launch-preset` | Product Launch: white background, 6px red top accent bar, black text + red highlights only, sharp 2px badges, 10px rounded image containers. Best for product feature announcements and release notes. |
-| `instagram`                | `ins-modern`            | Instagram-style modern: white background, generous whitespace, minimal typography.                                                                                                                     |
-| `instagram`                | `ins-minimal`           | Instagram minimal clean: restrained whitespace, fine dividers, and editorial hierarchy. Best for digests, summaries, and point-of-view posts.                                                          |
-| `instagram`                | `ins-dark`              | Instagram dark tech: dark base, neon accents, and high-contrast modules. Best for tools, productivity, and technical topics.                                                                           |
-| `instagram`                | `ins-gradient`          | Instagram gradient glow: saturated gradients, glow layers, and modern metric cards. Best for trends, design, and growth insights.                                                                      |
-| `instagram`                | `ins-retro`             | Instagram retro story: warm paper tones, ornamental marks, and vintage headline composition. Best for storytelling content and visual guides.                                                          |
-| `wechat-official-accounts` | _(coming soon)_         | Presets for WeChat article style will be added here.                                                                                                                                                   |
+| Platform | Preset | Style summary |
+| --- | --- | --- |
+| `rednote` | `neo-brutalism` | Neo-Brutalism: thick black borders, hard offset shadows, saturated palette. |
+| `rednote` | `code-dispatch` | Code Dispatch: high-contrast editorial style, black/white/red palette, monospace labels, no rounded corners, grid background texture. Best for tech/coding/AI topics. |
+| `rednote` | `dark-tech` | Dark-Tech: deep black background, gold accent, thin 1px borders, heavy/light font-weight contrast. Inspired by DJI-style review cards. Best for product/gear reviews. |
+| `rednote` | `gradient-editorial` | Image Editorial: cover uses hero/theme image with gradient overlay for text readability, clean white content pages, rounded cards. Best for AI/tech insight articles. |
+| `rednote` | `personal-insight` | Personal Insight: clean white background, profile avatar, numbered sections, reading-note style. Best for personal reflections and knowledge sharing. |
+| `rednote` | `film-vintage` | Film Vintage: dark cinematic cover, polaroid-style photo frames, mono grain texture, red accent, serif+mono typography. Best for film photography, gear reviews, and city walk journals. |
+| `rednote` | `warm-journal` | Warm Journal: photo-led journal pages, handwritten titles, khaki/beige paper textures, scattered notes, and polaroid frames. Best for lifestyle, product notes, and city records. |
+| `rednote` | `paper-column` | Paper Column: paper texture, serif display titles, marginal notes, pull quotes, ledgers, and evidence frames. Best for essays, analysis, knowledge columns, and field-note narratives. |
+| `rednote` | `signal-grid` | Signal Grid: strict grid rhythm, light display type, one accent color, matrix rows, KPI blocks, and ranking bars. Best for product notes, comparisons, launch explainers, and structured decisions. |
+| `rednote` | `product-launch-preset` | Product Launch: white background, 6px red top accent bar, black text + red highlights only, sharp 2px badges, 10px rounded image containers. Best for product feature announcements and release notes. |
+| `instagram` | `ins-modern` | Instagram Modern: bold white editorial cards, crisp black structure, hard shadows, and selective social accents. Best for creator productivity and punchy carousel hooks. |
+| `instagram` | `ins-minimal` | Instagram Minimal: quiet premium whitespace, fine rules, serif display type, and calm editorial hierarchy. Best for digests, summaries, and point-of-view posts. |
+| `instagram` | `ins-dark` | Instagram Dark Tech: dark product-launch energy, electric accents, console-like modules, and high-contrast data blocks. Best for tools, productivity, and technical topics. |
+| `instagram` | `ins-retro` | Instagram Retro Story: warm paper, stamp details, ornamental rules, and story-first pacing. Best for storytelling content and visual guides. |
+| `instagram` | `ins-fluent-depth` | Instagram Fluent Depth: soft layered surfaces, restrained depth, calm material feel, and readable product storytelling. Best for workflow explainers and high-trust product stories. |
+| `instagram` | `ins-token-system` | Instagram Token System: neutral surfaces, semantic color roles, compact lozenges, and enterprise grid rhythm. Best for structured decisions and product comparisons. |
+| `instagram` | `ins-creator-studio` | Instagram Creator Studio: profile-led structure, numbered lessons, credibility blocks, and personal voice cues. Best for personal insights and creator education. |
+| `instagram` | `ins-film-frame` | Instagram Film Frame: cinematic black frame, contact-sheet rhythm, warm highlights, and review-ready panels. Best for photography, gear reviews, and city walk journals. |
+| `instagram` | `ins-warm-journal` | Instagram Warm Journal: soft journal pages, taped-note modules, warm accents, and lifestyle-friendly grids. Best for lifestyle notes, product diaries, and cozy recommendations. |
+| `instagram` | `ins-signal-grid` | Instagram Signal Grid: strict grid rhythm, matrix rows, KPI cells, and decision-oriented comparison blocks. Best for product comparisons, launch explainers, and structured decisions. |
+| `wechat-official-accounts` | _(coming soon)_ | Presets for WeChat article style will be added here. |
 
 Source paths inside this skill:
 
@@ -213,8 +222,13 @@ presets/rednote/product-launch-preset/product-launch.{css,js}
 presets/instagram/ins-modern/ins-modern.{css,js}
 presets/instagram/ins-minimal/ins-minimal.{css,js}
 presets/instagram/ins-dark/ins-dark.{css,js}
-presets/instagram/ins-gradient/ins-gradient.{css,js}
 presets/instagram/ins-retro/ins-retro.{css,js}
+presets/instagram/ins-fluent-depth/ins-fluent-depth.{css,js}
+presets/instagram/ins-token-system/ins-token-system.{css,js}
+presets/instagram/ins-creator-studio/ins-creator-studio.{css,js}
+presets/instagram/ins-film-frame/ins-film-frame.{css,js}
+presets/instagram/ins-warm-journal/ins-warm-journal.{css,js}
+presets/instagram/ins-signal-grid/ins-signal-grid.{css,js}
 ```
 
 When the user picks a preset (see Workflow Step 4.1), read the source files from `presets/<platform>/<preset>/` and copy both files once into the project at `shared/presets/<preset>/`. Reference them from every card with `<link>` and `<script>` tags using `../../../shared/presets/<preset>/<preset>.css|.js`.
@@ -243,11 +257,11 @@ generate-preset/SKILL.md   (inside this skill folder)
 
 Scaffolds a new self-media project. Creates the project folder, `posts/`, `shared/`, and a valid `magic.project.js`. It does not generate any frontend loader HTML - rendering lives in other frontends.
 
-| Parameter      | Required | Description                                                                                           |
-| -------------- | -------- | ----------------------------------------------------------------------------------------------------- |
-| `project_path` | Yes      | Project folder path, workspace-relative. Reflect the topic; prefer a safe ASCII slug unless the user explicitly needs a localized filesystem name. |
-| `platform`     | Yes      | One of `rednote`, `instagram`, `wechat-official-accounts`.                                            |
-| `posts`        | No       | Optional pre-registered post index entries. Each item `{ "id": "...", "name": "..." }`. Default `[]`. |
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `project_path` | Yes | Project folder path, workspace-relative. Reflect the topic; prefer a safe ASCII slug unless the user explicitly needs a localized filesystem name. |
+| `platform` | Yes | One of `rednote`, `instagram`, `wechat-official-accounts`. |
+| `posts` | No | Optional pre-registered post index entries. Each item `{ "id": "...", "name": "..." }`. Default `[]`. |
 
 Returns: `{ project_path, project_name, platform, posts_count }`.
 
@@ -255,17 +269,17 @@ Returns: `{ project_path, project_name, platform, posts_count }`.
 
 Creates a single post directory (`posts/<post_id>/`) with `post.json` and an empty `assets/`. For card-based platforms (rednote / instagram) also creates an empty `cards/`. Optionally registers the post in the root `magic.project.js` posts array of the project's platform.
 
-| Parameter             | Required | Description                                                                                                                                                                                                 |
-| --------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `project_path`        | Yes      | Self-media project root, workspace-relative.                                                                                                                                                                |
-| `post_id`             | Yes      | Stable id, safe for filesystem (for example `ai-bill`). Used as folder name and `post.json.id`.                                                                                                             |
-| `post_name`           | Yes      | Display name written into the root `posts[]` entry and as the fallback `meta.title`.                                                                                                                        |
-| `meta`                | No       | Object merged into `post.json.meta`. Free-form fields: `title`, `subtitle`, `tags`, `author`, `feedTitle`, `feedLikes`, `commentCount`, `comments`, `time` (wechat), `interactionReference`, etc. For `rednote`, `tags` should use the structured hashtag pyramid unless the user supplied a legacy string/array format. |
-| `cards`               | No       | **rednote / instagram only.** Initial value for `post.json.cards`. Paths relative to the post folder, for example `"cards/01.html"`.                                                                        |
-| `article`             | No       | **wechat-official-accounts only.** Relative path to the single HTML article file, for example `"my-article.html"`. When provided, the post is treated as a WeChat article post; `cards` is ignored.         |
-| `hero_cover`          | No       | **wechat-official-accounts only.** Relative path to the hero cover image (16:9), for example `"assets/cover-hero.jpg"`. Written as `heroCover` in `post.json`.                                              |
-| `thumbnail_cover`     | No       | **wechat-official-accounts only.** Relative path to the square thumbnail cover image, for example `"assets/cover-square.jpg"`. Written as `thumbnailCover` in `post.json`.                                  |
-| `register_in_project` | No       | Default `true`. Append/update the entry in the root `magic.project.js` posts array. If the frontend prompt says the post is already pre-registered, explicitly pass `false` and do not edit the root index. |
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `project_path` | Yes | Self-media project root, workspace-relative. |
+| `post_id` | Yes | Stable id, safe for filesystem (for example `ai-bill`). Used as folder name and `post.json.id`. |
+| `post_name` | Yes | Display name written into the root `posts[]` entry and as the fallback `meta.title`. |
+| `meta` | No | Object merged into `post.json.meta`. Free-form fields: `title`, `subtitle`, `tags`, `author`, `feedTitle`, `feedLikes`, `commentCount`, `comments`, `time` (wechat), `interactionReference`, etc. For `rednote`, `tags` should use the structured hashtag pyramid unless the user supplied a legacy string/array format. |
+| `cards` | No | **rednote / instagram only.** Initial value for `post.json.cards`. Paths relative to the post folder, for example `"cards/01.html"`. |
+| `article` | No | **wechat-official-accounts only.** Relative path to the single HTML article file, for example `"my-article.html"`. When provided, the post is treated as a WeChat article post; `cards` is ignored. |
+| `hero_cover` | No | **wechat-official-accounts only.** Relative path to the hero cover image (16:9), for example `"assets/cover-hero.jpg"`. Written as `heroCover` in `post.json`. |
+| `thumbnail_cover` | No | **wechat-official-accounts only.** Relative path to the square thumbnail cover image, for example `"assets/cover-square.jpg"`. Written as `thumbnailCover` in `post.json`. |
+| `register_in_project` | No | Default `true`. Append/update the entry in the root `magic.project.js` posts array. If the frontend prompt says the post is already pre-registered, explicitly pass `false` and do not edit the root index. |
 
 Idempotence: if `posts/<post_id>/` already exists, the tool merges `meta` (shallow merge, new keys win), keeps existing `cards` / `article` / `heroCover` / `thumbnailCover` untouched unless the caller passes new values, and preserves the root posts entry order.
 
@@ -388,8 +402,13 @@ Please choose a visual template for the cards:
 <option>ins-modern — white background, generous whitespace, minimal typography</option>
 <option>ins-minimal — restrained whitespace, fine dividers, minimal hierarchy; ideal for digests and summary posts</option>
 <option>ins-dark — dark tech styling, neon accents, high-contrast modules; ideal for tools, productivity, and technical topics</option>
-<option>ins-gradient — saturated gradients, glow layers, modern metric cards; ideal for trends, design, and growth insights</option>
 <option>ins-retro — retro headlines, warm paper tones, ornamental marks; ideal for storytelling and visual guides</option>
+<option>ins-fluent-depth — soft layered surfaces, restrained depth, calm product storytelling; ideal for workflow explainers and product stories</option>
+<option>ins-token-system — neutral surfaces, semantic color roles, compact lozenges, enterprise grid rhythm; ideal for product comparisons and structured decisions</option>
+<option>ins-creator-studio — profile-led lessons, credibility blocks, personal voice cues; ideal for creator education and reflections</option>
+<option>ins-film-frame — cinematic frame, contact-sheet rhythm, warm highlights; ideal for photography, gear reviews, and city walks</option>
+<option>ins-warm-journal — soft journal pages, taped-note modules, warm lifestyle grids; ideal for product notes and cozy recommendations</option>
+<option>ins-signal-grid — strict grid rhythm, KPI cells, matrix rows; ideal for comparisons, launch explainers, and decisions</option>
 <option>Custom style — describe the visual language you want and a preset will be generated for you</option>
 <option>No template — design freely following the platform baseline</option>
 </question>
@@ -644,12 +663,9 @@ Preset description: {description}
 
 ### Behavior When Received
 
-| `Preset ID` value                                              | Action                                                                              |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `neo-brutalism` / `code-dispatch` / `dark-tech` / `ins-modern` | Skip Step 4.1. Read preset from `presets/<platform>/<preset>/` and copy to project. |
-| `custom:{user_description}`                                    | Skip Step 4.1. Load `generate-preset` sub-skill with the description.               |
-| `none`                                                         | Skip Step 4.1. Design freely per platform defaults.                                 |
-| _(absent — no visual template section)_                        | Run Step 4.1 normally (ask the user).                                               |
+<<<<<<< Updated upstream | `Preset ID` value | Action | | -------------------------------------------------------------- | ----------------------------------------------------------------------------------- | | `neo-brutalism` / `code-dispatch` / `dark-tech` / `ins-modern` | Skip Step 4.1. Read preset from `presets/<platform>/<preset>/` and copy to project. | | `custom:{user_description}` | Skip Step 4.1. Load `generate-preset` sub-skill with the description. | | `none` | Skip Step 4.1. Design freely per platform defaults. | | _(absent — no visual template section)_ | Run Step 4.1 normally (ask the user). | ======= | `Preset ID` value | Action | | --- | --- | | Any built-in preset ID listed in Built-in Presets | Skip Step 4.1. Read preset from `presets/<platform>/<preset>/` and copy to project. | | `custom:{user_description}` | Skip Step 4.1. Load `generate-preset` sub-skill with the description. | | `none` | Skip Step 4.1. Design freely per platform defaults. | | _(absent — no visual template section)_ | Run Step 4.1 normally (ask the user). |
+
+> > > > > > > Stashed changes
 
 For backward compatibility, accept localized legacy field labels that carry the same meaning, but normalize them internally to the English field names above.
 
@@ -677,13 +693,13 @@ This allows the AI to seamlessly continue where the user left off in the fronten
 
 Load these files on demand during the corresponding workflow steps:
 
-| Reference                                                          | When to load                                                                               |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| [File Formats & Examples](./references/file-formats.md)            | When you need `magic.project.js` / `post.json` format, path rules, or file authoring rules |
-| [Card HTML Constraints](./references/card-html-constraints.md)     | Before writing any card HTML (Step 4.4 for rednote / instagram)                            |
-| [Post Meta Field Reference](./references/post-meta.md)             | When populating `post.json.meta` fields                                                    |
-| [Rednote Hashtag Library](./references/hashtag-library.md)         | Before filling `meta.tags` for rednote, or when the user asks to optimize Xiaohongshu tags  |
-| [Human Writing Style](./references/human-writing-style.md)         | Before drafting card copy or WeChat article prose, and before final writing self-check      |
-| [Tool Selection Decision Tree](./references/tool-decision-tree.md) | When unsure which tool or action to take next                                              |
-| [Common Failure Modes](./references/failure-modes.md)              | Before submitting — verify no violations                                                   |
-| [Drafts & Templates Format](./references/drafts-format.md)         | When reading/writing `__drafts/` files, `__brand/brand-config.json`, or recovering user planning context |
+| Reference | When to load |
+| --- | --- |
+| [File Formats & Examples](./references/file-formats.md) | When you need `magic.project.js` / `post.json` format, path rules, or file authoring rules |
+| [Card HTML Constraints](./references/card-html-constraints.md) | Before writing any card HTML (Step 4.4 for rednote / instagram) |
+| [Post Meta Field Reference](./references/post-meta.md) | When populating `post.json.meta` fields |
+| [Rednote Hashtag Library](./references/hashtag-library.md) | Before filling `meta.tags` for rednote, or when the user asks to optimize Xiaohongshu tags |
+| [Human Writing Style](./references/human-writing-style.md) | Before drafting card copy or WeChat article prose, and before final writing self-check |
+| [Tool Selection Decision Tree](./references/tool-decision-tree.md) | When unsure which tool or action to take next |
+| [Common Failure Modes](./references/failure-modes.md) | Before submitting — verify no violations |
+| [Drafts & Templates Format](./references/drafts-format.md) | When reading/writing `__drafts/` files, `__brand/brand-config.json`, or recovering user planning context |

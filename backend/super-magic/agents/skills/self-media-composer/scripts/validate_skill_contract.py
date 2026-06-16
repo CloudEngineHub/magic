@@ -266,6 +266,53 @@ def validate_drafts_format() -> None:
     require_absent(text, ["brand-info", "brand-info.json", "brand-info.md"], "references/drafts-format.md")
 
 
+def extract_registered_presets(skill: str, platform: str) -> set[str]:
+    return set(re.findall(rf"\| `{re.escape(platform)}` \| `([^`]+)` \|", skill))
+
+
+def validate_visual_presets() -> None:
+    skill = require_file("SKILL.md")
+    rednote_presets = sorted(
+        path.name
+        for path in (ROOT / "presets" / "rednote").iterdir()
+        if path.is_dir() and any(path.iterdir())
+    )
+    instagram_presets = sorted(path.name for path in (ROOT / "presets" / "instagram").iterdir() if path.is_dir())
+
+    if len(instagram_presets) != len(rednote_presets):
+        fail(
+            "instagram presets must match rednote preset coverage: "
+            f"{len(instagram_presets)} instagram vs {len(rednote_presets)} rednote"
+        )
+
+    registered_instagram = extract_registered_presets(skill, "instagram")
+    missing_from_skill = sorted(set(instagram_presets) - registered_instagram)
+    extra_in_skill = sorted(registered_instagram - set(instagram_presets))
+    if missing_from_skill or extra_in_skill:
+        fail(
+            "instagram preset registry mismatch: "
+            f"missing from SKILL.md={missing_from_skill}; extra in SKILL.md={extra_in_skill}"
+        )
+
+    for preset in instagram_presets:
+        preset_dir = ROOT / "presets" / "instagram" / preset
+        css = require_external_file(preset_dir / f"{preset}.css", f"presets/instagram/{preset}/{preset}.css")
+        require_external_file(preset_dir / f"{preset}.js", f"presets/instagram/{preset}/{preset}.js")
+        preview = require_external_file(preset_dir / "preview.html", f"presets/instagram/{preset}/preview.html")
+        require_text(
+            preview,
+            [
+                f'<link rel="stylesheet" href="{preset}.css"',
+                f'<script src="{preset}.js"></script>',
+            ],
+            f"presets/instagram/{preset}/preview.html",
+        )
+        signature_class = re.search(r"\.([a-z0-9]+-signature)\b", css)
+        if not signature_class:
+            fail(f"presets/instagram/{preset}/{preset}.css missing signature component")
+        require_text(preview, [signature_class.group(1)], f"presets/instagram/{preset}/preview.html")
+
+
 def validate_ai_card_boundary() -> None:
     text = require_external_file(SKILLS_ROOT / "ai-card-generator" / "SKILL.md", "ai-card-generator/SKILL.md")
     require_text(
@@ -327,6 +374,7 @@ def main() -> None:
     validate_ops_contract()
     validate_tool_decision_tree()
     validate_drafts_format()
+    validate_visual_presets()
     validate_ai_card_boundary()
     validate_test_prompts()
     print("self-media-composer skill contract ok")

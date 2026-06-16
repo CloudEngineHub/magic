@@ -324,16 +324,16 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 		swatch: "linear-gradient(135deg, #080a12 0%, #6d28d9 52%, #14f1d9 100%)",
 	},
 	{
-		value: "ins-gradient",
-		labelKey: "detail.selfMedia.initPanel.visuals.insGradient.label",
-		descriptionKey: "detail.selfMedia.initPanel.visuals.insGradient.description",
+		value: "ins-fluent-depth",
+		labelKey: "detail.selfMedia.initPanel.visuals.insFluentDepth.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insFluentDepth.description",
 		platforms: ["instagram"],
 		preview: {
 			sourcePath:
-				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-gradient/preview.html",
-			imageUrl: "/self-media-preset-previews/instagram/ins-gradient.png",
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-fluent-depth/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-fluent-depth.png",
 		},
-		swatch: "linear-gradient(135deg, #ff7ab6 0%, #7c3aed 52%, #22d3ee 100%)",
+		swatch: "linear-gradient(135deg, #f5f7fb 0%, #2563eb 52%, #7c3aed 100%)",
 	},
 	{
 		value: "ins-retro",
@@ -346,6 +346,66 @@ export const VISUAL_PRESETS: VisualPresetOption[] = [
 			imageUrl: "/self-media-preset-previews/instagram/ins-retro.png",
 		},
 		swatch: "linear-gradient(135deg, #2f1b12 0%, #c2410c 52%, #f7d08a 100%)",
+	},
+	{
+		value: "ins-creator-studio",
+		labelKey: "detail.selfMedia.initPanel.visuals.insCreatorStudio.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insCreatorStudio.description",
+		platforms: ["instagram"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-creator-studio/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-creator-studio.png",
+		},
+		swatch: "linear-gradient(135deg, #fffdf8 0%, #d97706 48%, #2563eb 100%)",
+	},
+	{
+		value: "ins-film-frame",
+		labelKey: "detail.selfMedia.initPanel.visuals.insFilmFrame.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insFilmFrame.description",
+		platforms: ["instagram"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-film-frame/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-film-frame.png",
+		},
+		swatch: "linear-gradient(135deg, #11100e 0%, #e23d28 50%, #d6a64f 100%)",
+	},
+	{
+		value: "ins-warm-journal",
+		labelKey: "detail.selfMedia.initPanel.visuals.insWarmJournal.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insWarmJournal.description",
+		platforms: ["instagram"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-warm-journal/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-warm-journal.png",
+		},
+		swatch: "linear-gradient(135deg, #f3e7d3 0%, #c75d38 48%, #4f7b69 100%)",
+	},
+	{
+		value: "ins-signal-grid",
+		labelKey: "detail.selfMedia.initPanel.visuals.insSignalGrid.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insSignalGrid.description",
+		platforms: ["instagram"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-signal-grid/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-signal-grid.png",
+		},
+		swatch: "linear-gradient(135deg, #f8fafc 0%, #0ea5e9 52%, #111827 100%)",
+	},
+	{
+		value: "ins-token-system",
+		labelKey: "detail.selfMedia.initPanel.visuals.insTokenSystem.label",
+		descriptionKey: "detail.selfMedia.initPanel.visuals.insTokenSystem.description",
+		platforms: ["instagram"],
+		preview: {
+			sourcePath:
+				"backend/super-magic/agents/skills/self-media-composer/presets/instagram/ins-token-system/preview.html",
+			imageUrl: "/self-media-preset-previews/instagram/ins-token-system.png",
+		},
+		swatch: "linear-gradient(135deg, #f7f8fa 0%, #1868db 52%, #172b4d 100%)",
 	},
 	{
 		value: "custom",
@@ -381,9 +441,14 @@ const VISUAL_PRESET_DISPLAY_ORDER: Partial<Record<SelfMediaPlatform, string[]>> 
 	instagram: [
 		"ins-modern",
 		"ins-minimal",
-		"ins-gradient",
+		"ins-fluent-depth",
 		"ins-dark",
 		"ins-retro",
+		"ins-creator-studio",
+		"ins-film-frame",
+		"ins-warm-journal",
+		"ins-signal-grid",
+		"ins-token-system",
 		"custom",
 		"none",
 	],

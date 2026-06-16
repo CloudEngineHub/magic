@@ -1,144 +1,198 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <title>Ins Minimal — Preview</title>
-    <link rel="stylesheet" href="ins-minimal.css">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Instagram Minimal - Preview</title>
+    <link rel="stylesheet" href="ins-minimal.css" />
     <style>
-        html,
-        body {
-            width: auto;
-            height: auto;
-            overflow: auto;
-            background: #e8e8e8;
-        }
-
-        .preview-container {
-            display: flex;
-            flex-direction: column;
-            gap: 40px;
-            padding: 40px;
-            align-items: center;
-        }
-
-        .preview-card-wrapper {
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-            border-radius: 4px;
-            overflow: hidden;
-            transform: scale(0.35);
-            transform-origin: top center;
-            width: 1080px;
-            height: 1350px;
-            margin-bottom: calc(-1350px * 0.65);
-        }
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e8e8e8;
+      }
+      .preview-container {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        padding: 40px;
+        align-items: center;
+      }
+      .preview-card-wrapper {
+        width: 1080px;
+        height: 1350px;
+        transform: scale(0.5);
+        transform-origin: top center;
+        margin-bottom: -675px;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+        border-radius: 10px;
+        overflow: hidden;
+      }
     </style>
-</head>
-
-<body>
+  </head>
+  <body>
     <div class="preview-container">
-
-        <!-- Card 1: Cover -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card im-cover">
-                <p class="im-cover-eyebrow">Weekly Digest</p>
-                <h1 class="im-cover-title">Less noise,<br>more signal.</h1>
-                <div class="im-cover-line"></div>
+      <div class="preview-card-wrapper">
+        <section class="imn-card imn-cover">
+          <div class="imn-cover-kicker">Instagram Minimal</div>
+          <div class="imn-hero-panel">
+            <h1 class="imn-cover-title">Less Noise<br />More Signal</h1>
+          </div>
+          <p class="imn-cover-subtitle">
+            A clean system for swipeable decisions
+          </p>
+          <div class="imn-tag-row">
+            <span class="imn-badge">Swipe</span
+            ><span class="imn-badge-muted">strategic summaries</span>
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="imn-card imn-content">
+          <header class="imn-header">
+            <div>
+              <div class="imn-eyebrow">Performance map</div>
+              <h2 class="imn-title">What makes this post saveable?</h2>
             </div>
-        </div>
-
-        <!-- Card 2: Stats -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card im-content">
-                <div class="im-header">
-                    <span class="im-tag">Performance</span>
-                    <h2 class="im-title">Q2 Results</h2>
-                </div>
-                <div class="im-body">
-                    <div class="im-stat">
-                        <span class="im-stat-label">Revenue Growth</span>
-                        <span class="im-stat-value im-accent">+34%</span>
-                    </div>
-                    <div class="im-stat">
-                        <span class="im-stat-label">Customer Retention</span>
-                        <span class="im-stat-value im-sage">92%</span>
-                    </div>
-                    <div class="im-stat">
-                        <span class="im-stat-label">Churn Rate</span>
-                        <span class="im-stat-value im-warm">-8%</span>
-                    </div>
-                </div>
+            <div class="imn-page">02</div>
+          </header>
+          <div class="imn-section-label">Content signals</div>
+          <div class="imn-signature">
+            <div class="imn-signature-row">
+              <span class="imn-signature-index">I</span
+              ><span class="imn-signature-label">Reader promise</span
+              ><span class="imn-signature-note">clear</span>
             </div>
-        </div>
-
-        <!-- Card 3: List -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card im-content">
-                <div class="im-header">
-                    <span class="im-tag">Resources</span>
-                    <h2 class="im-title">Must-Read Books</h2>
-                </div>
-                <div class="im-body">
-                    <div class="im-list-item">
-                        <span class="im-list-num">01</span>
-                        <span class="im-list-text">Atomic Habits</span>
-                        <span class="im-list-meta">James Clear</span>
-                    </div>
-                    <div class="im-list-item">
-                        <span class="im-list-num">02</span>
-                        <span class="im-list-text">Deep Work</span>
-                        <span class="im-list-meta">Cal Newport</span>
-                    </div>
-                    <div class="im-list-item">
-                        <span class="im-list-num">03</span>
-                        <span class="im-list-text">Show Your Work</span>
-                        <span class="im-list-meta">Austin Kleon</span>
-                    </div>
-                    <div class="im-list-item">
-                        <span class="im-list-num">04</span>
-                        <span class="im-list-text">The War of Art</span>
-                        <span class="im-list-meta">S. Pressfield</span>
-                    </div>
-                </div>
+            <div class="imn-signature-row">
+              <span class="imn-signature-index">II</span
+              ><span class="imn-signature-label">Evidence path</span
+              ><span class="imn-signature-note">tight</span>
             </div>
-        </div>
-
-        <!-- Card 4: Quote -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card im-quote">
-                <div class="im-quote-line"></div>
-                <div class="im-quote-text">Simplicity is the ultimate sophistication.</div>
-                <div class="im-quote-author">— Leonardo da Vinci</div>
+            <div class="imn-signature-row">
+              <span class="imn-signature-index">III</span
+              ><span class="imn-signature-label">Save reason</span
+              ><span class="imn-signature-note">useful</span>
             </div>
-        </div>
-
-        <!-- Card 5: Tip -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card im-content">
-                <div class="im-header">
-                    <span class="im-tag">Productivity</span>
-                    <h2 class="im-title">Daily Framework</h2>
-                </div>
-                <div class="im-body">
-                    <div class="im-tip-box">
-                        <p class="im-tip-label">Pro Tip</p>
-                        <p class="im-tip-text">Block the first 2 hours of your morning for deep, creative work. No
-                            meetings, no emails.</p>
-                    </div>
-                    <div class="im-tip-box">
-                        <p class="im-tip-label">Key Insight</p>
-                        <p class="im-tip-text">Context switching costs you 23 minutes per interruption on average.</p>
-                    </div>
-                </div>
-                <div class="im-footer">
-                    <span>Save this for later →</span>
-                    <span>@minimalist</span>
-                </div>
+          </div>
+          <div class="imn-data-grid">
+            <div class="imn-data-card">
+              <div class="label">Hook clarity</div>
+              <div class="value">82<span class="unit">%</span></div>
             </div>
-        </div>
-
+            <div class="imn-data-card">
+              <div class="label">Save intent</div>
+              <div class="value">91<span class="unit">%</span></div>
+            </div>
+          </div>
+          <div class="imn-compare-grid">
+            <div class="imn-compare-card">
+              <span class="imn-badge">Before</span>
+              <p class="imn-item-title">Pretty layout, weak promise</p>
+            </div>
+            <div class="imn-compare-card">
+              <span class="imn-badge-muted">After</span>
+              <p class="imn-item-title">Specific route, stronger payoff</p>
+            </div>
+          </div>
+          <div class="imn-note">
+            Use this preset when the reader needs a clear reason to swipe, save,
+            and act.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="imn-card imn-content">
+          <header class="imn-header">
+            <div>
+              <div class="imn-eyebrow">Chart card</div>
+              <h2 class="imn-title">Data without dashboard noise</h2>
+            </div>
+            <div class="imn-page">03</div>
+          </header>
+          <div class="imn-section-label">Weekly signal</div>
+          <div id="ins-minimal-preview-chart" class="imn-chart"></div>
+          <div class="imn-quote-block">
+            A good carousel turns scattered notes into one clean decision path.
+          </div>
+          <div class="imn-note">
+            <span class="imn-text-positive">Positive:</span> chart has one job.
+            <span class="imn-text-negative">Avoid:</span> decorative numbers
+            with no reader action.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="imn-card imn-content">
+          <header class="imn-header">
+            <div>
+              <div class="imn-eyebrow">Swipe plan</div>
+              <h2 class="imn-title">A stronger four-card arc</h2>
+            </div>
+            <div class="imn-page">04</div>
+          </header>
+          <div class="imn-list">
+            <div class="imn-list-row is-highlight">
+              <div class="imn-rank">01</div>
+              <div>
+                <div class="imn-item-title">Name the pain fast</div>
+                <div class="imn-item-meta">
+                  Make the reader feel seen in three seconds.
+                </div>
+              </div>
+              <span class="imn-badge">Hook</span>
+            </div>
+            <div class="imn-list-row">
+              <div class="imn-rank">02</div>
+              <div>
+                <div class="imn-item-title">Show the operating model</div>
+                <div class="imn-item-meta">
+                  Use diagrams, rules, and crisp labels.
+                </div>
+              </div>
+              <span class="imn-badge-muted">Body</span>
+            </div>
+            <div class="imn-list-row">
+              <div class="imn-rank">03</div>
+              <div>
+                <div class="imn-item-title">Add a decision cue</div>
+                <div class="imn-item-meta">
+                  Help readers pick the next step.
+                </div>
+              </div>
+              <span class="imn-badge-muted">CTA</span>
+            </div>
+          </div>
+          <div class="imn-divider"></div>
+          <div class="imn-timeline-row">
+            <strong class="imn-text-accent">Day 1</strong
+            ><span class="imn-text-muted"
+              >Draft the reader promise and card rhythm.</span
+            >
+          </div>
+          <div class="imn-progress-bar"><span style="width: 76%"></span></div>
+          <p class="imn-note">
+            <span class="imn-hl">Reusable structure:</span> cover, proof, chart,
+            checklist.
+          </p>
+        </section>
+      </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <script src="ins-minimal.js"></script>
-</body>
-
+    <script>
+      (function () {
+        var el = document.getElementById("ins-minimal-preview-chart");
+        if (el && window.echarts && window.InsMinimalPresets) {
+          var chart = echarts.init(el);
+          chart.setOption(
+            window.InsMinimalPresets.get("ins-minimal-bar", {
+              categories: ["Hook", "Proof", "Save", "Share"],
+              values: [82, 68, 91, 57],
+            }),
+          );
+        }
+      })();
+    </script>
+  </body>
 </html>

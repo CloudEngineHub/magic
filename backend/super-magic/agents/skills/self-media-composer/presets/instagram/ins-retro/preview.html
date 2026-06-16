@@ -1,254 +1,185 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <title>Ins Retro — Preview</title>
-    <link rel="stylesheet" href="ins-retro.css">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Instagram Retro Story - Preview</title>
+    <link rel="stylesheet" href="ins-retro.css" />
     <style>
-        html,
-        body {
-            width: auto;
-            height: auto;
-            overflow: auto;
-            background: #d4c4a8;
-        }
-
-        .preview-container {
-            display: flex;
-            flex-direction: column;
-            gap: 40px;
-            padding: 40px;
-            align-items: center;
-        }
-
-        .preview-card-wrapper {
-            box-shadow: 0 8px 32px rgba(44, 24, 16, 0.2);
-            border-radius: 4px;
-            overflow: hidden;
-            transform: scale(0.35);
-            transform-origin: top center;
-            width: 1080px;
-            height: 1350px;
-            margin-bottom: calc(-1350px * 0.65);
-        }
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e8e8e8;
+      }
+      .preview-container {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        padding: 40px;
+        align-items: center;
+      }
+      .preview-card-wrapper {
+        width: 1080px;
+        height: 1350px;
+        transform: scale(0.5);
+        transform-origin: top center;
+        margin-bottom: -675px;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+        border-radius: 10px;
+        overflow: hidden;
+      }
     </style>
-</head>
-
-<body>
+  </head>
+  <body>
     <div class="preview-container">
-
-        <!-- Card 1: Cover -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card ir-cover">
-                <div class="ir-cover-ornament">✦ ✦ ✦</div>
-                <h1 class="ir-cover-title">The Art of<br><span class="ir-hl-red">Storytelling</span></h1>
-                <p class="ir-cover-subtitle">A Visual Guide · Vol. III</p>
-                <div class="ir-cover-ornament-bottom"></div>
+      <div class="preview-card-wrapper">
+        <section class="irt-card irt-cover">
+          <div class="irt-cover-kicker">Instagram Retro Story</div>
+          <div class="irt-hero-panel">
+            <h1 class="irt-cover-title">Field Notes<br />For Modern Work</h1>
+          </div>
+          <p class="irt-cover-subtitle">A nostalgic frame for useful stories</p>
+          <div class="irt-tag-row">
+            <span class="irt-badge">Swipe</span
+            ><span class="irt-badge-muted">storytelling guides</span>
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="irt-card irt-content">
+          <header class="irt-header">
+            <div>
+              <div class="irt-eyebrow">Performance map</div>
+              <h2 class="irt-title">What makes this post saveable?</h2>
             </div>
-        </div>
-
-        <!-- Card 2: Article -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card ir-content">
-                <div class="ir-header">
-                    <div>
-                        <span class="ir-tag">Chapter I</span>
-                        <h2 class="ir-title">Finding Your Voice</h2>
-                    </div>
-                    <span class="ir-page-num">01/05</span>
-                </div>
-                <div class="ir-body">
-                    <div class="ir-article">
-                        <p class="ir-article-title">The Power of Authenticity</p>
-                        <p class="ir-article-text">In a world saturated with content, the most powerful thing you can do
-                            is be genuinely yourself. Your unique perspective is your unfair advantage.</p>
-                    </div>
-                    <div class="ir-article">
-                        <p class="ir-article-title">Start Before You're Ready</p>
-                        <p class="ir-article-text">Perfectionism is the enemy of progress. Ship your work, gather
-                            feedback, iterate. The first version doesn't need to be flawless.</p>
-                    </div>
-                    <div class="ir-stamp">★ Editor's Pick</div>
-                </div>
+            <div class="irt-page">02</div>
+          </header>
+          <div class="irt-section-label">Content signals</div>
+          <div class="irt-signature">
+            <div class="irt-signature-copy">
+              A useful story needs a receipt, not just a mood.
             </div>
-        </div>
-
-        <!-- Card 3: List -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card ir-content">
-                <div class="ir-header">
-                    <div>
-                        <span class="ir-tag">Essentials</span>
-                        <h2 class="ir-title">Key Principles</h2>
-                    </div>
-                    <span class="ir-page-num">02/05</span>
-                </div>
-                <div class="ir-body">
-                    <div class="ir-list-item">
-                        <span class="ir-list-num">I.</span>
-                        <div class="ir-list-content">
-                            <div class="ir-list-title">Consistency</div>
-                            <div class="ir-list-desc">Show up every day, even when inspiration is absent.</div>
-                        </div>
-                    </div>
-                    <div class="ir-list-item">
-                        <span class="ir-list-num">II.</span>
-                        <div class="ir-list-content">
-                            <div class="ir-list-title">Depth Over Breadth</div>
-                            <div class="ir-list-desc">Master one thing before moving to the next.</div>
-                        </div>
-                    </div>
-                    <div class="ir-list-item">
-                        <span class="ir-list-num">III.</span>
-                        <div class="ir-list-content">
-                            <div class="ir-list-title">Community</div>
-                            <div class="ir-list-desc">Build with others, not just for them.</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="ir-footer">
-                    <span>@vintagecreator</span>
-                    <span>Save for later ☞</span>
-                </div>
+            <div class="irt-signature-stamp">SAVE<br />THIS</div>
+          </div>
+          <div class="irt-data-grid">
+            <div class="irt-data-card">
+              <div class="label">Hook clarity</div>
+              <div class="value">82<span class="unit">%</span></div>
             </div>
-        </div>
-
-        <!-- Card 4: Quote -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card ir-quote">
-                <div class="ir-quote-mark">"</div>
-                <div class="ir-quote-text">The secret of getting ahead is getting started.</div>
-                <div class="ir-quote-author">— Mark Twain</div>
+            <div class="irt-data-card">
+              <div class="label">Save intent</div>
+              <div class="value">91<span class="unit">%</span></div>
             </div>
-        </div>
-
-        <!-- Card 5: Newspaper Columns -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card ir-content">
-                <div class="ir-header">
-                    <div>
-                        <span class="ir-tag">Feature</span>
-                        <h2 class="ir-title">The Creative Process</h2>
-                    </div>
-                    <span class="ir-page-num">03/05</span>
-                </div>
-                <div class="ir-body">
-                    <div class="ir-columns">
-                        <div class="ir-col-text">
-                            <span class="ir-drop-cap">C</span>reativity doesn't come from waiting for inspiration. It
-                            comes from showing up consistently, even on days when nothing feels right. The muse rewards
-                            the dedicated.
-                        </div>
-                        <div class="ir-col-text">
-                            The greatest artists in history all had one thing in common: they treated their craft like a
-                            discipline. They scheduled time, showed up daily, and trusted the process above all.
-                        </div>
-                    </div>
-                </div>
-                <div class="ir-footer">
-                    <span>@vintagecreator</span>
-                    <span>Continue reading ☞</span>
-                </div>
+          </div>
+          <div class="irt-compare-grid">
+            <div class="irt-compare-card">
+              <span class="irt-badge">Before</span>
+              <p class="irt-item-title">Pretty layout, weak promise</p>
             </div>
-        </div>
-
-        <!-- Card 6: Fact / Did You Know -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card ir-content">
-                <div class="ir-header">
-                    <div>
-                        <span class="ir-tag">Fun Fact</span>
-                        <h2 class="ir-title">Did You Know?</h2>
-                    </div>
-                    <span class="ir-page-num">04/05</span>
-                </div>
-                <div class="ir-body">
-                    <div class="ir-fact-box">
-                        <p class="ir-fact-label">Average Person Reads</p>
-                        <p class="ir-fact-value">12</p>
-                        <p class="ir-fact-desc">books per year. The top 1% of readers finish over 50 books annually.</p>
-                    </div>
-                    <div class="ir-stamp">★ Verified Data</div>
-                </div>
+            <div class="irt-compare-card">
+              <span class="irt-badge-muted">After</span>
+              <p class="irt-item-title">Specific route, stronger payoff</p>
             </div>
-        </div>
-
-        <!-- Card 7: Recipe / How-To -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card ir-content">
-                <div class="ir-recipe-header">
-                    <div class="ir-recipe-title">Morning<br><span class="ir-hl-teal">Ritual</span></div>
-                    <div class="ir-recipe-meta">⏱ 45 min<br>Daily Practice</div>
-                </div>
-                <div class="ir-body">
-                    <div class="ir-recipe-step">
-                        <span class="ir-recipe-num">1.</span>
-                        <span class="ir-recipe-text">Wake at 5:30 AM — no snooze. Place feet on the floor within 3
-                            seconds.</span>
-                    </div>
-                    <div class="ir-recipe-step">
-                        <span class="ir-recipe-num">2.</span>
-                        <span class="ir-recipe-text">Hydrate immediately. Drink 500ml of room-temperature water with
-                            lemon.</span>
-                    </div>
-                    <div class="ir-recipe-step">
-                        <span class="ir-recipe-num">3.</span>
-                        <span class="ir-recipe-text">10 minutes of journaling. Write 3 intentions for the day
-                            ahead.</span>
-                    </div>
-                    <div class="ir-recipe-step">
-                        <span class="ir-recipe-num">4.</span>
-                        <span class="ir-recipe-text">20 minutes of reading. Non-fiction only, no screens allowed.</span>
-                    </div>
-                    <div class="ir-recipe-step">
-                        <span class="ir-recipe-num">5.</span>
-                        <span class="ir-recipe-text">Movement — walk, stretch, or light exercise to activate body and
-                            mind.</span>
-                    </div>
-                </div>
+          </div>
+          <div class="irt-note">
+            Use this preset when the reader needs a clear reason to swipe, save,
+            and act.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="irt-card irt-content">
+          <header class="irt-header">
+            <div>
+              <div class="irt-eyebrow">Chart card</div>
+              <h2 class="irt-title">Data without dashboard noise</h2>
             </div>
-        </div>
-
-        <!-- Card 8: Badge Grid -->
-        <div class="preview-card-wrapper">
-            <div class="ins-card ir-content">
-                <div class="ir-header">
-                    <div>
-                        <span class="ir-tag">Values</span>
-                        <h2 class="ir-title">What We Stand For</h2>
-                    </div>
-                    <span class="ir-page-num">05/05</span>
-                </div>
-                <div class="ir-body">
-                    <div class="ir-badge-grid">
-                        <div class="ir-badge-item">
-                            <span class="ir-badge-icon">🎯</span>
-                            <span class="ir-badge-text">Focus</span>
-                            <span class="ir-badge-sub">Do less, better</span>
-                        </div>
-                        <div class="ir-badge-item">
-                            <span class="ir-badge-icon">🌱</span>
-                            <span class="ir-badge-text">Growth</span>
-                            <span class="ir-badge-sub">Never stop learning</span>
-                        </div>
-                        <div class="ir-badge-item">
-                            <span class="ir-badge-icon">🤝</span>
-                            <span class="ir-badge-text">Trust</span>
-                            <span class="ir-badge-sub">Earn it daily</span>
-                        </div>
-                        <div class="ir-badge-item">
-                            <span class="ir-badge-icon">✨</span>
-                            <span class="ir-badge-text">Craft</span>
-                            <span class="ir-badge-sub">Details matter</span>
-                        </div>
-                    </div>
-                </div>
+            <div class="irt-page">03</div>
+          </header>
+          <div class="irt-section-label">Weekly signal</div>
+          <div id="ins-retro-preview-chart" class="irt-chart"></div>
+          <div class="irt-quote-block">
+            A good carousel turns scattered notes into one clean decision path.
+          </div>
+          <div class="irt-note">
+            <span class="irt-text-positive">Positive:</span> chart has one job.
+            <span class="irt-text-negative">Avoid:</span> decorative numbers
+            with no reader action.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="irt-card irt-content">
+          <header class="irt-header">
+            <div>
+              <div class="irt-eyebrow">Swipe plan</div>
+              <h2 class="irt-title">A stronger four-card arc</h2>
             </div>
-        </div>
-
+            <div class="irt-page">04</div>
+          </header>
+          <div class="irt-list">
+            <div class="irt-list-row is-highlight">
+              <div class="irt-rank">01</div>
+              <div>
+                <div class="irt-item-title">Name the pain fast</div>
+                <div class="irt-item-meta">
+                  Make the reader feel seen in three seconds.
+                </div>
+              </div>
+              <span class="irt-badge">Hook</span>
+            </div>
+            <div class="irt-list-row">
+              <div class="irt-rank">02</div>
+              <div>
+                <div class="irt-item-title">Show the operating model</div>
+                <div class="irt-item-meta">
+                  Use diagrams, rules, and crisp labels.
+                </div>
+              </div>
+              <span class="irt-badge-muted">Body</span>
+            </div>
+            <div class="irt-list-row">
+              <div class="irt-rank">03</div>
+              <div>
+                <div class="irt-item-title">Add a decision cue</div>
+                <div class="irt-item-meta">
+                  Help readers pick the next step.
+                </div>
+              </div>
+              <span class="irt-badge-muted">CTA</span>
+            </div>
+          </div>
+          <div class="irt-divider"></div>
+          <div class="irt-timeline-row">
+            <strong class="irt-text-accent">Day 1</strong
+            ><span class="irt-text-muted"
+              >Draft the reader promise and card rhythm.</span
+            >
+          </div>
+          <div class="irt-progress-bar"><span style="width: 76%"></span></div>
+          <p class="irt-note">
+            <span class="irt-hl">Reusable structure:</span> cover, proof, chart,
+            checklist.
+          </p>
+        </section>
+      </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <script src="ins-retro.js"></script>
-</body>
-
+    <script>
+      (function () {
+        var el = document.getElementById("ins-retro-preview-chart");
+        if (el && window.echarts && window.InsRetroPresets) {
+          var chart = echarts.init(el);
+          chart.setOption(
+            window.InsRetroPresets.get("ins-retro-bar", {
+              categories: ["Hook", "Proof", "Save", "Share"],
+              values: [82, 68, 91, 57],
+            }),
+          );
+        }
+      })();
+    </script>
+  </body>
 </html>

@@ -1355,15 +1355,15 @@
 					},
 					"insDark": {
 						"description": "Dark tech styling, neon accents, and high-contrast layouts for tools, productivity, and technical topics",
-						"label": "INS Dark Tech"
+						"label": "Dark Tech"
 					},
-					"insGradient": {
-						"description": "Saturated gradients, glow layers, and modern metric cards for trends, design, and growth insights",
-						"label": "INS Gradient Glow"
+					"insFluentDepth": {
+						"description": "Soft layered surfaces, restrained depth, light cards, and clear product storytelling for workflow explainers and high-trust product stories",
+						"label": "Fluent Depth"
 					},
 					"insMinimal": {
 						"description": "Restrained whitespace, fine dividers, and minimal hierarchy for digests, summaries, and point-of-view posts",
-						"label": "INS Minimal"
+						"label": "Minimal"
 					},
 					"insModern": {
 						"description": "White background, generous whitespace, minimal typography",
@@ -1371,7 +1371,27 @@
 					},
 					"insRetro": {
 						"description": "Retro headlines, warm paper tones, and ornamental marks for storytelling content and visual guides",
-						"label": "INS Retro Story"
+						"label": "Retro Story"
+					},
+					"insCreatorStudio": {
+						"description": "Profile-led openings, numbered lessons, credibility blocks, and personal voice cues for creator education, retrospectives, and POV posts",
+						"label": "Creator Studio"
+					},
+					"insFilmFrame": {
+						"description": "Cinematic black frames, contact-sheet rhythm, warm highlights, and review panels for photography, gear reviews, and city walks",
+						"label": "Film Frame"
+					},
+					"insWarmJournal": {
+						"description": "Soft journal pages, taped-note modules, warm accents, and lifestyle grids for product diaries, cozy notes, and recommendations",
+						"label": "Warm Journal"
+					},
+					"insSignalGrid": {
+						"description": "Strict grid rhythm, KPI cells, matrix rows, and decision-oriented comparison blocks for product comparisons and structured decisions",
+						"label": "Signal Grid"
+					},
+					"insTokenSystem": {
+						"description": "Neutral surfaces, semantic color roles, compact lozenges, and enterprise grid rhythm for product comparisons and structured decisions",
+						"label": "Token System"
 					},
 					"neoBrutalism": {
 						"description": "Ruled-paper background, heavy headlines, yellow/red tags, and hard-shadow data blocks for turning complex ideas into punchy cards",

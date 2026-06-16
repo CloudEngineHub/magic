@@ -37,8 +37,8 @@ localized equivalent for an existing post?
 
 Preset not yet chosen for this post? (mandatory for ALL platforms)
 └─ ask_user with platform-specific options
-   ├─ rednote:   neo-brutalism / code-dispatch / dark-tech / Custom style / No template
-   ├─ instagram: ins-modern / Custom style / No template
+   ├─ rednote:   all built-in rednote presets / Custom style / No template
+   ├─ instagram: all built-in instagram presets / Custom style / No template
    └─ wechat:    Custom style / No template (presets coming soon)
       └─ If a preset is picked, read from presets/<platform>/<preset>/ and copy
          to shared/presets/<preset>/<preset>.{css,js} via read_files + write_file.

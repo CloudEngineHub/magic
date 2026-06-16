@@ -82,9 +82,14 @@ describe("VisualPresetPicker", () => {
 		expect(instagramBuiltIns.map((preset) => preset.value)).toEqual([
 			"ins-modern",
 			"ins-minimal",
-			"ins-gradient",
+			"ins-fluent-depth",
 			"ins-dark",
 			"ins-retro",
+			"ins-creator-studio",
+			"ins-film-frame",
+			"ins-warm-journal",
+			"ins-signal-grid",
+			"ins-token-system",
 		])
 		expect(rednotePresets.slice(-2).map((preset) => preset.value)).toEqual(["custom", "none"])
 

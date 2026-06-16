@@ -12,12 +12,32 @@
 <body>
     <article class="paper">
         <header class="masthead analysis-source">
-            <h1>{{CARD_TITLE}}</h1>
-            <p class="sub">{{CARD_DESCRIPTION}}</p>
-            <div class="meta-row">
-                <span>{{GENERATED_AT}}</span>
-                <span>Update #{{UPDATE_COUNT}}</span>
-                <span>Window yesterday 00:00-23:59</span>
+            <div class="hero-copy">
+                <div class="hero-topline">
+                    <span>Daily Intelligence</span>
+                    <span>Signal Brief</span>
+                </div>
+                <h1>{{CARD_TITLE}}</h1>
+                <p class="sub">{{CARD_DESCRIPTION}}</p>
+                <div class="meta-row">
+                    <span>{{GENERATED_AT}}</span>
+                    <span>Update #{{UPDATE_COUNT}}</span>
+                    <span>Window yesterday 00:00-23:59</span>
+                </div>
+            </div>
+            <div class="hero-panel" aria-label="Briefing status">
+                <div>
+                    <span>Momentum</span>
+                    <strong>Positive</strong>
+                </div>
+                <div>
+                    <span>Risk focus</span>
+                    <strong>Retention</strong>
+                </div>
+                <div>
+                    <span>Action window</span>
+                    <strong>24h</strong>
+                </div>
             </div>
         </header>
 
@@ -27,7 +47,7 @@
                 <section class="block analysis-source">
                     <h2>Executive summary</h2>
                     <p class="lead">Overall positive: revenue and new users beat expectations, but content conversion and next-day retention face structural pressure.</p>
-                    <div class="bullet-list" style="margin-top:10px;">
+                    <div class="bullet-list summary-bullets">
                         <div class="bullet-item"><span class="sub">1) Private-domain campaigns drove a 19% increase in repeat-purchase revenue, but first-order conversion for new users is weak.</span></div>
                         <div class="bullet-item"><span class="sub">2) Competitors are using intensive high-ticket discount tactics, creating short-term interception risk.</span></div>
                         <div class="bullet-item"><span class="sub">3) Engagement hit a new high and topic selection is working, but funnel conversion has not caught up.</span></div>

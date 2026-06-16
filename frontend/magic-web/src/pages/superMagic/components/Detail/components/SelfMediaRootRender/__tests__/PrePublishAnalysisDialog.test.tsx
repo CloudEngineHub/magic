@@ -10,7 +10,7 @@ const DEFAULT_MODEL = {
 	model_name: "GPT-5",
 	provider_model_id: "gpt-5",
 	model_description: "",
-	model_icon: "",
+	model_icon: "https://example.com/gpt-5.svg",
 	model_status: "normal",
 	sort: 1,
 }
@@ -22,13 +22,21 @@ const ALT_MODEL = {
 	model_name: "Claude Sonnet",
 }
 
+const DISABLED_MODEL = {
+	...DEFAULT_MODEL,
+	id: "model-disabled",
+	model_id: "disabled-model",
+	model_name: "Disabled Model",
+	model_status: "disabled",
+}
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
 	initReactI18next: {
 		type: "3rdParty",
-		init: () => {},
+		init: vi.fn(),
 	},
 }))
 
@@ -111,12 +119,21 @@ vi.mock("@/pages/superMagic/components/MessageEditor/components/ModelSwitch", ()
 	default: ({
 		selectedModel,
 		onModelChange,
+		showSelectedModelName,
+		className,
 	}: {
 		selectedModel: typeof DEFAULT_MODEL | null
 		onModelChange: (model: typeof DEFAULT_MODEL | null) => void
+		showSelectedModelName?: boolean
+		className?: string
 	}) => (
-		<div data-testid="pre-publish-analysis-model-switch">
-			<span>{selectedModel?.model_name}</span>
+		<div data-testid="pre-publish-analysis-model-switch" className={className}>
+			{showSelectedModelName && selectedModel ? (
+				<span>
+					<img src={selectedModel.model_icon} alt={selectedModel.model_name} />
+					{selectedModel.model_name}
+				</span>
+			) : null}
 			<button type="button" onClick={() => onModelChange(ALT_MODEL)}>
 				choose-alt-model
 			</button>
@@ -125,6 +142,34 @@ vi.mock("@/pages/superMagic/components/MessageEditor/components/ModelSwitch", ()
 }))
 
 describe("PrePublishAnalysisDialog", () => {
+	it("selects the first available model by default when no selected model is provided", () => {
+		const onOpenChange = vi.fn()
+		const onConfirm = vi.fn()
+
+		render(
+			<PrePublishAnalysisDialog
+				open
+				onOpenChange={onOpenChange}
+				onConfirm={onConfirm}
+				modelList={[
+					{
+						group: { id: "group-1", name: "Models" },
+						models: [DISABLED_MODEL, DEFAULT_MODEL, ALT_MODEL],
+					},
+				]}
+				selectedModel={null}
+			/>,
+		)
+
+		expect(screen.getByTestId("pre-publish-analysis-model-switch")).toHaveTextContent("GPT-5")
+		expect(screen.getByAltText("GPT-5")).toHaveAttribute("src", DEFAULT_MODEL.model_icon)
+		expect(screen.getByTestId("pre-publish-analysis-model-switch")).toHaveClass(
+			"rounded-[18px]",
+		)
+		fireEvent.click(screen.getByTestId("pre-publish-analysis-confirm"))
+		expect(onConfirm).toHaveBeenCalledWith("ip-growth", DEFAULT_MODEL)
+	})
+
 	it("confirms only after a goal is selected and cancel does not confirm", () => {
 		const onOpenChange = vi.fn()
 		const onConfirm = vi.fn()

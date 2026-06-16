@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import puppeteer from "puppeteer"
 
 const CARD_WIDTH = 540
+const CARD_HEIGHT = 675
 const PAGE_GAP = 18
 const PAGE_PADDING = 20
 
@@ -149,7 +150,16 @@ async function captureTarget(browser, target) {
 
 			.preview-card-wrapper {
 				flex: 0 0 auto !important;
+				width: ${CARD_WIDTH}px !important;
+				height: ${CARD_HEIGHT}px !important;
 				margin: 0 !important;
+				transform: none !important;
+				transform-origin: top left !important;
+			}
+
+			.preview-card-wrapper > section {
+				transform: scale(0.5) !important;
+				transform-origin: top left !important;
 			}
 
 			.em-photo-well,

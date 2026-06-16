@@ -1356,15 +1356,15 @@
 					},
 					"insDark": {
 						"description": "深色科技感、霓虹强调、强对比排版，适合工具、效率和技术主题",
-						"label": "INS 暗色科技"
+						"label": "暗色科技"
 					},
-					"insGradient": {
-						"description": "高饱和渐变、发光层次和现代数据卡片，适合趋势、设计和增长洞察",
-						"label": "INS 渐变发光"
+					"insFluentDepth": {
+						"description": "柔和层级、克制阴影、轻质卡片和清晰产品叙事，适合工作流拆解、产品故事和高信任内容",
+						"label": "柔和层级"
 					},
 					"insMinimal": {
 						"description": "克制留白、细线分割和极简信息层级，适合周报、摘要和观点合集",
-						"label": "INS 极简"
+						"label": "极简"
 					},
 					"insModern": {
 						"description": "白色背景、充裕留白、极简排版",
@@ -1372,7 +1372,27 @@
 					},
 					"insRetro": {
 						"description": "复古标题、暖色纸张和装饰符号，适合故事型内容和视觉指南",
-						"label": "INS 复古故事"
+						"label": "复古故事"
+					},
+					"insCreatorStudio": {
+						"description": "头像式开场、编号经验、可信背书和个人表达，适合创作者经验、复盘和观点教育",
+						"label": "创作者工作室"
+					},
+					"insFilmFrame": {
+						"description": "电影黑框、接触印相节奏、暖色高光和测评面板，适合摄影、装备测评和城市漫步",
+						"label": "胶片画框"
+					},
+					"insWarmJournal": {
+						"description": "柔和手帐纸张、胶带便签、暖色模块和生活方式网格，适合生活笔记、产品日记和好物推荐",
+						"label": "暖调手帐"
+					},
+					"insSignalGrid": {
+						"description": "严谨网格、KPI 单元、矩阵行和决策对比块，适合产品比较、发布解读和结构化决策",
+						"label": "信号网格"
+					},
+					"insTokenSystem": {
+						"description": "中性界面、语义色角色、紧凑标签和企业级网格节奏，适合产品对比、结构化决策和规划说明",
+						"label": "系统网格"
 					},
 					"neoBrutalism": {
 						"description": "横线纸背景、超粗标题、黄红标签和硬阴影数据块，适合把复杂问题拆成醒目的卡片",

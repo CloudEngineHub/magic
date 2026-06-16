@@ -1,6 +1,7 @@
 (function () {
   var charts = [];
 
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
   function init(node) { var c = echarts.init(node, null, { renderer: "svg" }); charts.push(c); return c; }
 
   function renderSparks() {
@@ -11,7 +12,7 @@
         grid: { left: 2, right: 2, top: 2, bottom: 2 },
         xAxis: { type: "category", show: false, data: d.map(function (_, i) { return i + 1; }) },
         yAxis: { type: "value", show: false },
-        series: [{ type: "line", smooth: true, symbol: "none", data: d, lineStyle: { width: 2, color: "#2e7d5b" }, areaStyle: { color: "rgba(46, 125, 91, .12)" } }]
+        series: [{ type: "line", smooth: true, symbol: "none", data: d, lineStyle: { width: 2, color: css("--accent") }, areaStyle: { color: css("--chart-fill") } }]
       });
     });
   }
@@ -142,6 +143,4 @@
   bindInsight();
   rebuild();
   window.addEventListener("resize", function () { charts.forEach(function (c) { c.resize(); }); });
-  var mq = window.matchMedia("(prefers-color-scheme: dark)");
-  if (typeof mq.addEventListener === "function") mq.addEventListener("change", rebuild);
 })();

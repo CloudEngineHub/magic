@@ -27,26 +27,34 @@
             <main>
                 <!-- DATA:overview_START -->
                 <section class="card analysis-source">
-                    <div
-                        style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                    <div class="overview-hero">
                         <div>
+                            <div class="hero-topline">
+                                <span>Trend Intelligence</span>
+                                <span>Live Radar</span>
+                            </div>
                             <span class="eyebrow">{{CARD_TITLE}}</span>
                             <h1>Heat Index</h1>
                             <div class="heat-score">92.4</div>
                             <div class="heat-sub"><span class="level">Extremely hot</span><span class="meta">+14.6% in the past 24h</span>
                             </div>
+                            <div class="heat-bars" aria-label="Heat dimensions">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
                         </div>
-                        <div style="flex:0 0 180px;">
-                            <div class="chart" id="pieChart" style="height:160px;"></div>
+                        <div class="pie-wrap">
+                            <div class="chart pie-chart" id="pieChart"></div>
                         </div>
                     </div>
                     <div class="overview-row">
                         <div class="card-soft">
-                            <h2 style="font-size:14px;">Fastest rising</h2>
+                            <h2 class="mini-title">Fastest rising</h2>
                             <div class="chart" id="risingChart"></div>
                         </div>
                         <div class="card-soft">
-                            <h2 style="font-size:14px;">Composite radar</h2>
+                            <h2 class="mini-title">Composite radar</h2>
                             <div class="chart" id="radarChart"></div>
                         </div>
                     </div>
@@ -129,20 +137,15 @@
                 <section class="card analysis-source">
                     <h2>Platform heat details</h2>
                     <div class="plat-list">
-                        <div class="plat"><span class="dot"
-                                style="background:var(--coral)"></span><strong>Weibo</strong><span class="meta">38% · topic reads
+                        <div class="plat"><span class="dot dot-coral"></span><strong>Weibo</strong><span class="meta">38% · topic reads
                                 420M</span></div>
-                        <div class="plat"><span class="dot"
-                                style="background:var(--mint)"></span><strong>Douyin</strong><span class="meta">25% · views
+                        <div class="plat"><span class="dot dot-mint"></span><strong>Douyin</strong><span class="meta">25% · views
                                 280M</span></div>
-                        <div class="plat"><span class="dot"
-                                style="background:var(--violet)"></span><strong>WeChat</strong><span class="meta">18% · 10w+
+                        <div class="plat"><span class="dot dot-violet"></span><strong>WeChat</strong><span class="meta">18% · 10w+
                                 12 articles</span></div>
-                        <div class="plat"><span class="dot"
-                                style="background:var(--warn)"></span><strong>Rednote</strong><span class="meta">12% · notes
+                        <div class="plat"><span class="dot dot-warn"></span><strong>Rednote</strong><span class="meta">12% · notes
                                 6800</span></div>
-                        <div class="plat"><span class="dot"
-                                style="background:var(--sub)"></span><strong>Other</strong><span class="meta">7% ·
+                        <div class="plat"><span class="dot dot-muted"></span><strong>Other</strong><span class="meta">7% ·
                                 forums + Twitter</span></div>
                     </div>
                 </section>
