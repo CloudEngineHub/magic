@@ -41,7 +41,8 @@ logger = get_logger(__name__)
 # === 内容安全阈值 ===
 
 # 单条 assistant 消息 content 的 token 安全上限
-# 模型正常 max_output_tokens 约 8K-64K；超过此值视为退化输出，保留头尾后截断
+# 模型正常 max_output_tokens 约 8K-64K；超过此值视为退化输出，保留头尾后截断（如模型死循环输出时会超出此值）。
+# 如需适配更大输出窗口，应单独评估退化保护、成本和上下文风险后再调整。
 _MSG_CONTENT_TOKEN_LIMIT = 100_000
 
 # 截断时保留的头部 token 数（展示原始意图）
@@ -49,10 +50,6 @@ _TRUNCATION_HEAD_TOKENS = 500
 
 # 截断时保留的尾部 token 数（展示退化模式，帮助模型避免再犯）
 _TRUNCATION_TAIL_TOKENS = 200
-
-# 流式积累的字符数安全上限
-# 模型单次输出不可能超过 ~50K tokens ≈ 200K chars，超过即退化
-_STREAM_CONTENT_MAX_CHARS = 200_000
 
 # Horizon 注入消息的安全上限；超过此值说明历史中存在异常膨胀的 diff bomb，
 # 需要在 load 时自动修复以避免后续每轮都把垃圾内容发给 LLM

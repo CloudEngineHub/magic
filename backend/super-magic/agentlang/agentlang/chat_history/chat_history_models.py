@@ -126,7 +126,7 @@ class CompactionConfig:
             # 前缀/子串匹配：如 "gpt-5.4" 覆盖 mini/nano，"doubao-seed-2.0" 覆盖 pro/lite/code。
             PricingTierCompactionRule(
                 name="threshold_230k",
-                pricing_interval="256K+",
+                pricing_interval="256K",
                 model_keywords=(
                     # Qwen 系列（256K 跳档）
                     "qwen3-max",
