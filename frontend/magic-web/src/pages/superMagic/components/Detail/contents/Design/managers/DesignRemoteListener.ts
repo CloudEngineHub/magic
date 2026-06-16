@@ -35,7 +35,7 @@ import {
 	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
-import { designDebugLog } from "../utils/designDebugLog"
+import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
 	// "create_canvas_element",
@@ -582,13 +582,18 @@ export class DesignRemoteListener {
 		try {
 			const content = await loadMagicProjectJsContent(fid)
 			parsed = parseMagicProjectJsContent(content)
-		} catch (e) {
-			designDebugLog("remote:parse-magic-project", e)
+		} catch {
 			return null
 		}
 
 		if (!parsed) return null
 		if (dslBase) normalizeDesignDataPathsAfterLoad(parsed, dslBase)
+		await hydrateDesignDataDetails(parsed, {
+			attachments: this.options.attachments,
+			flatAttachments: this.options.flatAttachments,
+			mainFileId: fid,
+			projectId: this.options.projectId,
+		})
 
 		const storeFiles = [
 			...(this.options.flatAttachments ?? []),
@@ -602,17 +607,24 @@ export class DesignRemoteListener {
 
 		try {
 			await waitForNextAttachmentsRefreshForProject(projectId, { timeoutMs: 15_000 })
-		} catch (e) {
-			designDebugLog("remote:wait-attachments", e)
+		} catch {
+			return null
 		}
 
 		try {
 			const content = await loadMagicProjectJsContent(fid)
 			const again = parseMagicProjectJsContent(content)
-			if (again && dslBase) normalizeDesignDataPathsAfterLoad(again, dslBase)
+			if (again) {
+				if (dslBase) normalizeDesignDataPathsAfterLoad(again, dslBase)
+				await hydrateDesignDataDetails(again, {
+					attachments: this.options.attachments,
+					flatAttachments: this.options.flatAttachments,
+					mainFileId: fid,
+					projectId: this.options.projectId,
+				})
+			}
 			return again
-		} catch (e) {
-			designDebugLog("remote:reload-after-wait", e)
+		} catch {
 			return null
 		}
 	}
@@ -717,8 +729,6 @@ export class DesignRemoteListener {
 						if (applied) {
 							this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
 						}
-					} catch (e) {
-						designDebugLog("remote:file-change-apply", e)
 					} finally {
 						if (this.latestRemoteApplyToken === applyToken) {
 							this.remoteApplyFlightKey = null

@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { History, Check, RotateCcw, ChevronDown } from "lucide-react"
+import { History } from "lucide-react"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/
 import { usePPTVersionManager } from "../../PPTRender/hooks/usePPTVersionManager"
 import { processHtmlContent } from "../../../contents/HTML/htmlProcessor"
 import { CardVersionCompareDialog } from "./CardVersionCompareDialog"
+import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 import { CARD_IMAGE_PROCESS } from "../constants/imageProcess"
 import type { SelfMediaAttachmentNode } from "../types"
 
@@ -148,7 +149,11 @@ export function CardVersionHistoryButton({
 					</span>
 				</DropdownMenuTrigger>
 
-				<DropdownMenuContent side="right" align="start" className="min-w-[280px]">
+				<DropdownMenuContent
+					side="right"
+					align="start"
+					className={cn("min-w-[280px] p-1", selfMediaOverlayStyles.floatingPanel)}
+				>
 					<DropdownMenuLabel className="flex items-center gap-2 text-xs text-muted-foreground">
 						<History size={14} />
 						{t("common.historyVersion")}

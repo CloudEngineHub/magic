@@ -38,6 +38,10 @@ export interface VoiceInputProps {
 	size?: MessageEditorSize
 	/** 是否启用快捷键 (⌘+Shift+E / Ctrl+Shift+E) */
 	enableHotkey?: boolean
+	/** 自定义 tooltip 文本（覆盖默认状态文本） */
+	tooltipText?: string
+	/** tooltip 方向 */
+	tooltipSide?: "top" | "bottom" | "left" | "right"
 }
 
 /**

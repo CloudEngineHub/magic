@@ -41,7 +41,7 @@ export function useCanvasResourceRefresh(options: UseCanvasResourceRefreshOption
 		isNewestVersion,
 		isPlaybackMode,
 	} = options
-	const resourceSnapshotRef = useRef<Map<string, CanvasResourceSnapshot> | null>(null)
+	const resourceSnapshotRef = useRef<CanvasResourceSnapshotState | null>(null)
 
 	useEffect(() => {
 		const nextSnapshot = buildCanvasResourceSnapshot({
@@ -84,7 +84,7 @@ export function useCanvasResourceRefresh(options: UseCanvasResourceRefreshOption
 			if (!isNewestVersion || isPlaybackMode) return
 
 			const snapshot = resourceSnapshotRef.current
-			if (!snapshot?.size) return
+			if (!snapshot?.items.size) return
 
 			const changedResources = getChangedCanvasResourcesFromFileChanges(
 				messageData.changes,
@@ -119,19 +119,22 @@ function buildCanvasResourceSnapshot(params: {
 	flatAttachments?: FileItem[]
 	attachmentIndex?: DesignAttachmentIndex | null
 	designProjectBasePath?: string
-}): Map<string, CanvasResourceSnapshot> {
+}): CanvasResourceSnapshotState {
 	const { canvas, flatAttachments, attachmentIndex, designProjectBasePath } = params
-	const snapshot = new Map<string, CanvasResourceSnapshot>()
+	const items = new Map<string, CanvasResourceSnapshot>()
 
 	collectCanvasResourceSnapshots({
 		elements: canvas?.elements,
 		flatAttachments,
 		attachmentIndex,
 		designProjectBasePath,
-		snapshot,
+		snapshot: items,
 	})
 
-	return snapshot
+	return {
+		items,
+		resourcesByResolvedPath: buildResourcesByResolvedPathIndex(items),
+	}
 }
 
 function collectCanvasResourceSnapshots(params: {
@@ -222,13 +225,13 @@ function addCanvasResourceSnapshot(params: {
 }
 
 function getChangedCanvasResources(
-	previousSnapshot: Map<string, CanvasResourceSnapshot>,
-	nextSnapshot: Map<string, CanvasResourceSnapshot>,
+	previousSnapshot: CanvasResourceSnapshotState,
+	nextSnapshot: CanvasResourceSnapshotState,
 ): CanvasResourceRefreshItem[] {
 	const changedMap = new Map<string, CanvasResourceRefreshItem>()
 
-	nextSnapshot.forEach((nextItem, key) => {
-		const previousItem = previousSnapshot.get(key)
+	nextSnapshot.items.forEach((nextItem, key) => {
+		const previousItem = previousSnapshot.items.get(key)
 		if (!previousItem) return
 		if (previousItem.signature === nextItem.signature) return
 
@@ -243,7 +246,7 @@ function getChangedCanvasResources(
 
 function getChangedCanvasResourcesFromFileChanges(
 	changes: SuperMagicFileChangeMessage["changes"],
-	snapshot: Map<string, CanvasResourceSnapshot>,
+	snapshot: CanvasResourceSnapshotState,
 ): CanvasResourceRefreshItem[] {
 	const changedMap = new Map<string, CanvasResourceRefreshItem>()
 
@@ -251,9 +254,9 @@ function getChangedCanvasResourcesFromFileChanges(
 		const changedPath = normalizeCanvasResourcePath(change.file?.relative_file_path || "")
 		if (!changedPath || !isDesignMediaResourcePath(changedPath)) continue
 
-		snapshot.forEach((resource) => {
-			if (resource.resolvedPath !== changedPath) return
-
+		const resources = snapshot.resourcesByResolvedPath.get(changedPath)
+		if (!resources?.length) continue
+		resources.forEach((resource) => {
 			changedMap.set(`${resource.mediaType}\0${resource.path}`, {
 				path: resource.path,
 				mediaType: resource.mediaType,
@@ -262,6 +265,21 @@ function getChangedCanvasResourcesFromFileChanges(
 	}
 
 	return Array.from(changedMap.values())
+}
+
+function buildResourcesByResolvedPathIndex(
+	snapshot: Map<string, CanvasResourceSnapshot>,
+): Map<string, CanvasResourceSnapshot[]> {
+	const index = new Map<string, CanvasResourceSnapshot[]>()
+	snapshot.forEach((resource) => {
+		const resources = index.get(resource.resolvedPath)
+		if (resources) {
+			resources.push(resource)
+			return
+		}
+		index.set(resource.resolvedPath, [resource])
+	})
+	return index
 }
 
 function findCanvasResourceAttachment(
@@ -299,4 +317,9 @@ function isDesignMediaResourcePath(path: string): boolean {
 interface CanvasResourceSnapshot extends CanvasResourceRefreshItem {
 	resolvedPath: string
 	signature: string
+}
+
+interface CanvasResourceSnapshotState {
+	items: Map<string, CanvasResourceSnapshot>
+	resourcesByResolvedPath: Map<string, CanvasResourceSnapshot[]>
 }

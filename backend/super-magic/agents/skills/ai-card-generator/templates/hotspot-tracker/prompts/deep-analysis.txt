@@ -1,0 +1,8 @@
+Please perform a second-level deep analysis based on this Hotspot Tracker card:
+
+1. Identify the current hotspot lifecycle stage and forecast the decay inflection point
+2. Analyze the trigger factors behind the key event and the likely evolution path
+3. Recommend the best brand-timing window and the risk red lines
+4. Summarize competitor moves around this hotspot and our differentiated strategy
+
+Please combine heat index, sentiment polarity, platform distribution, and time-series trend for the final judgment.

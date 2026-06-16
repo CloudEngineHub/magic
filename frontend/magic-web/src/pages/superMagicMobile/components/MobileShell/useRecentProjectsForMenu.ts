@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { SuperMagicApi } from "@/apis"
 import { type ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
@@ -16,6 +16,26 @@ import type { MobileShellMenuRecentItem } from "./MobileShellMenuContext"
 import { mergeProjectListItemWithStoreCache } from "@/pages/superMagicMobile/utils/mergeProjectListItemWithStoreCache"
 
 const RECENT_PROJECTS_PAGE_SIZE = 20
+
+/** Derives the last fetchable page from API total and fixed page size. */
+function getRecentProjectsMaxPage(total: number) {
+	if (total <= 0) return 0
+	return Math.ceil(total / RECENT_PROJECTS_PAGE_SIZE)
+}
+
+/** True when list count or page cursor indicates all server pages are consumed. */
+function hasMoreRecentProjects({
+	loadedCount,
+	total,
+	currentPage,
+}: {
+	loadedCount: number
+	total: number
+	currentPage: number
+}) {
+	if (total <= 0) return false
+	return loadedCount < total && currentPage < getRecentProjectsMaxPage(total)
+}
 
 function getRecentProjectTitle(
 	project: ProjectListItem,
@@ -139,6 +159,8 @@ export function useRecentProjectsForMenu() {
 	const [recentTotal, setRecentTotal] = useState(0)
 	const [currentPage, setCurrentPage] = useState(1)
 	const [isLoadingMore, setIsLoadingMore] = useState(false)
+	// Synchronous guard: React state cannot block concurrent InfiniteScroll triggers in the same tick.
+	const isLoadingMoreRef = useRef(false)
 	const recentItemTranslations = useMemo(
 		() => ({
 			unnamedChat: t("chat.unnamedChat"),
@@ -147,7 +169,11 @@ export function useRecentProjectsForMenu() {
 		[t],
 	)
 
-	const hasMore = recentItems.length < recentTotal
+	const hasMore = hasMoreRecentProjects({
+		loadedCount: recentItems.length,
+		total: recentTotal,
+		currentPage,
+	})
 
 	const applyRecentPage = useMemoizedFn(
 		({
@@ -177,16 +203,32 @@ export function useRecentProjectsForMenu() {
 		applyRecentPage({ projects, total, chatWorkspaceId, mode: "replace" })
 	})
 
-	const loadMoreRecentItems = useMemoizedFn(async () => {
-		if (!hasMore || isLoadingMore) return
+	/** Ends pagination when the next page adds no rows, keeping hasMore in sync with loaded items. */
+	const stopPaginationWithNoProgress = useMemoizedFn((loadedCount: number, nextPage: number) => {
+		setRecentTotal(loadedCount)
+		setCurrentPage(nextPage)
+	})
 
+	const loadMoreRecentItems = useMemoizedFn(async () => {
+		if (!hasMore || isLoadingMore || isLoadingMoreRef.current) return
+
+		isLoadingMoreRef.current = true
 		setIsLoadingMore(true)
 		const nextPage = currentPage + 1
+		const loadedCountBeforeRequest = recentItems.length
 
 		try {
 			const { projects, total, chatWorkspaceId } = await requestRecentProjects(nextPage)
+			const existingIds = new Set(recentItems.map((item) => item.id))
+			const uniqueNewCount = projects.filter((project) => !existingIds.has(project.id)).length
+
 			if (projects.length === 0) {
-				setRecentTotal(total)
+				stopPaginationWithNoProgress(loadedCountBeforeRequest, nextPage)
+				return
+			}
+
+			if (uniqueNewCount === 0) {
+				stopPaginationWithNoProgress(loadedCountBeforeRequest, nextPage)
 				return
 			}
 
@@ -195,6 +237,7 @@ export function useRecentProjectsForMenu() {
 		} catch (error) {
 			console.error("Failed to load more recent projects:", error)
 		} finally {
+			isLoadingMoreRef.current = false
 			setIsLoadingMore(false)
 		}
 	})

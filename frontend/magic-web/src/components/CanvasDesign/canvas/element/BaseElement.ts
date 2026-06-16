@@ -42,6 +42,12 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 
 	protected node: Konva.Node | null = null
 	protected data: T
+	private pendingTransformIdleRerender = false
+	private transformIdleDragendUnsubscribe?: () => void
+	private transformIdleAnchorDragendUnsubscribe?: () => void
+	private transformIdleIntentendUnsubscribe?: () => void
+	private transformIdleRerenderRafId: number | null = null
+	private destroyedForDeferredRerender = false
 
 	constructor(data: T, canvas: Canvas) {
 		this.data = data
@@ -347,6 +353,7 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 		updates: Partial<LayerElement>,
 		context: TransformContext,
 	): Partial<LayerElement> {
+		void context
 		const behavior = this.getTransformBehavior()
 
 		// 默认行为：USE_SCALE
@@ -422,7 +429,7 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 	public setLocked(locked: boolean): void {
 		this.data = { ...this.data, locked }
 		if (this.node) {
-			const canDrag = this.canElementTransform()
+			const canDrag = this.canvas.elementManager.canDragElement(this.data)
 			this.node.draggable(canDrag)
 			this.node.getLayer()?.batchDraw()
 		}
@@ -451,7 +458,103 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 	 * 销毁元素
 	 */
 	destroy(): void {
+		this.destroyedForDeferredRerender = true
+		this.cancelTransformIdleRerender()
 		this.node?.destroy()
+		this.node = null
+	}
+
+	/**
+	 * 图片/视频资源状态变化可能需要重建 Konva 节点。
+	 * 多选拖动/缩放进行中如果立即重建选中节点，会替换 Transformer 正在操作的节点并中断手势；
+	 * 因此选中变换中的元素把这类 rerender 延迟到 dragend/anchorDragend 后的下一帧。
+	 */
+	protected rerenderWhenTransformIdle(): Konva.Node | null | undefined {
+		if (this.transformIdleRerenderRafId !== null) {
+			return undefined
+		}
+
+		const transformManager = this.canvas.transformManager
+		const shouldDefer =
+			transformManager.isTransformInteractionActive() &&
+			transformManager.isTransforming(this.data.id)
+		if (!shouldDefer) {
+			return this.rerender()
+		}
+
+		this.scheduleTransformIdleRerender()
+		return undefined
+	}
+
+	private scheduleTransformIdleRerender(): void {
+		if (this.pendingTransformIdleRerender) return
+
+		this.pendingTransformIdleRerender = true
+		const flush = () => this.flushTransformIdleRerender()
+		this.transformIdleDragendUnsubscribe = this.canvas.eventEmitter.on(
+			"elements:transform:dragend",
+			flush,
+		)
+		this.transformIdleAnchorDragendUnsubscribe = this.canvas.eventEmitter.on(
+			"elements:transform:anchorDragend",
+			flush,
+		)
+		this.transformIdleIntentendUnsubscribe = this.canvas.eventEmitter.on(
+			"elements:transform:intentend",
+			flush,
+		)
+	}
+
+	private flushTransformIdleRerender(): void {
+		if (!this.pendingTransformIdleRerender) return
+
+		this.pendingTransformIdleRerender = false
+		this.removeTransformIdleRerenderListeners()
+		if (!this.node || this.destroyedForDeferredRerender) return
+
+		const schedule =
+			typeof requestAnimationFrame === "function"
+				? requestAnimationFrame
+				: (callback: FrameRequestCallback) =>
+						globalThis.setTimeout(() => callback(Date.now()), 0) as unknown as number
+		this.transformIdleRerenderRafId = schedule(() => {
+			this.transformIdleRerenderRafId = null
+			if (!this.node || this.destroyedForDeferredRerender) return
+			this.rerender()
+		})
+	}
+
+	private cancelTransformIdleRerender(): void {
+		this.pendingTransformIdleRerender = false
+		this.removeTransformIdleRerenderListeners()
+		if (this.transformIdleRerenderRafId === null) return
+
+		if (typeof cancelAnimationFrame === "function") {
+			cancelAnimationFrame(this.transformIdleRerenderRafId)
+		} else {
+			globalThis.clearTimeout(this.transformIdleRerenderRafId)
+		}
+		this.transformIdleRerenderRafId = null
+	}
+
+	private removeTransformIdleRerenderListeners(): void {
+		this.transformIdleDragendUnsubscribe?.()
+		this.transformIdleAnchorDragendUnsubscribe?.()
+		this.transformIdleIntentendUnsubscribe?.()
+		this.transformIdleDragendUnsubscribe = undefined
+		this.transformIdleAnchorDragendUnsubscribe = undefined
+		this.transformIdleIntentendUnsubscribe = undefined
+	}
+
+	/**
+	 * 仅销毁当前 Konva 渲染节点，用于离屏渲染回收。
+	 * 不触发子类 destroy() 的资源/轮询/事件清理，元素实例仍可通过 render() 重新挂载。
+	 * 业务删除仍必须调用 destroy()，不要用这个方法替代真正的元素销毁。
+	 */
+	public destroyRenderNodeForVisibilityCull(): void {
+		if (!this.node) return
+		this.cleanupNodeListeners(this.node)
+		this.node.destroy()
 		this.node = null
 	}
 
@@ -537,8 +640,8 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 			node.name(this.data.name)
 		}
 
-		// 设置拖拽和交互 - 使用 PermissionManager 判断
-		const canDrag = this.canElementTransform()
+		// 设置拖拽和交互 - 复用 ElementManager 的统一判断，保持 rerender 前后一致
+		const canDrag = this.canvas.elementManager.canDragElement(this.data)
 		node.draggable(canDrag)
 	}
 
@@ -571,7 +674,10 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 
 		// 锁定状态 - 使用 PermissionManager 判断
 		if (newData.locked !== undefined) {
-			const canDrag = this.canElementTransform()
+			const canDrag = this.canvas.elementManager.canDragElement({
+				...this.data,
+				...newData,
+			})
 			node.draggable(canDrag)
 		}
 	}
@@ -598,6 +704,7 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 	 * 子类在 render() 方法中创建节点后应该调用此方法
 	 */
 	protected finalizeNode(node: Konva.Node): void {
+		this.destroyedForDeferredRerender = false
 		this.applyBaseProps(node)
 		this.setupNodeListeners(node)
 		this.setupCustomBoundingRect(node)

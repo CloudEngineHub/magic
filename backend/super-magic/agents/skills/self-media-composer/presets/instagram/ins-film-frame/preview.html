@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Instagram Film Frame - Preview</title>
+    <link rel="stylesheet" href="ins-film-frame.css" />
+    <style>
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e8e8e8;
+      }
+      .preview-container {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        padding: 40px;
+        align-items: center;
+      }
+      .preview-card-wrapper {
+        width: 1080px;
+        height: 1350px;
+        transform: scale(0.5);
+        transform-origin: top center;
+        margin-bottom: -675px;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-card-wrapper">
+        <section class="iff-card iff-cover">
+          <div class="iff-cover-kicker">Instagram Film Frame</div>
+          <div class="iff-hero-panel">
+            <h1 class="iff-cover-title">Frame By<br />Frame</h1>
+          </div>
+          <p class="iff-cover-subtitle">
+            Cinematic notes with useful takeaways
+          </p>
+          <div class="iff-tag-row">
+            <span class="iff-badge">Swipe</span
+            ><span class="iff-badge-muted"
+              >film, product, and city walk reviews</span
+            >
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="iff-card iff-content">
+          <header class="iff-header">
+            <div>
+              <div class="iff-eyebrow">Performance map</div>
+              <h2 class="iff-title">What makes this post saveable?</h2>
+            </div>
+            <div class="iff-page">02</div>
+          </header>
+          <div class="iff-section-label">Content signals</div>
+          <div class="iff-signature">
+            <div class="iff-signature-frame"></div>
+            <div class="iff-signature-frame"></div>
+            <div class="iff-signature-frame"></div>
+            <div class="iff-signature-frame"></div>
+            <div class="iff-signature-caption">
+              contact sheet / four useful frames
+            </div>
+          </div>
+          <div class="iff-data-grid">
+            <div class="iff-data-card">
+              <div class="label">Hook clarity</div>
+              <div class="value">82<span class="unit">%</span></div>
+            </div>
+            <div class="iff-data-card">
+              <div class="label">Save intent</div>
+              <div class="value">91<span class="unit">%</span></div>
+            </div>
+          </div>
+          <div class="iff-compare-grid">
+            <div class="iff-compare-card">
+              <span class="iff-badge">Before</span>
+              <p class="iff-item-title">Pretty layout, weak promise</p>
+            </div>
+            <div class="iff-compare-card">
+              <span class="iff-badge-muted">After</span>
+              <p class="iff-item-title">Specific route, stronger payoff</p>
+            </div>
+          </div>
+          <div class="iff-note">
+            Use this preset when the reader needs a clear reason to swipe, save,
+            and act.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="iff-card iff-content">
+          <header class="iff-header">
+            <div>
+              <div class="iff-eyebrow">Chart card</div>
+              <h2 class="iff-title">Data without dashboard noise</h2>
+            </div>
+            <div class="iff-page">03</div>
+          </header>
+          <div class="iff-section-label">Weekly signal</div>
+          <div id="ins-film-frame-preview-chart" class="iff-chart"></div>
+          <div class="iff-quote-block">
+            A good carousel turns scattered notes into one clean decision path.
+          </div>
+          <div class="iff-note">
+            <span class="iff-text-positive">Positive:</span> chart has one job.
+            <span class="iff-text-negative">Avoid:</span> decorative numbers
+            with no reader action.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="iff-card iff-content">
+          <header class="iff-header">
+            <div>
+              <div class="iff-eyebrow">Swipe plan</div>
+              <h2 class="iff-title">A stronger four-card arc</h2>
+            </div>
+            <div class="iff-page">04</div>
+          </header>
+          <div class="iff-list">
+            <div class="iff-list-row is-highlight">
+              <div class="iff-rank">01</div>
+              <div>
+                <div class="iff-item-title">Name the pain fast</div>
+                <div class="iff-item-meta">
+                  Make the reader feel seen in three seconds.
+                </div>
+              </div>
+              <span class="iff-badge">Hook</span>
+            </div>
+            <div class="iff-list-row">
+              <div class="iff-rank">02</div>
+              <div>
+                <div class="iff-item-title">Show the operating model</div>
+                <div class="iff-item-meta">
+                  Use diagrams, rules, and crisp labels.
+                </div>
+              </div>
+              <span class="iff-badge-muted">Body</span>
+            </div>
+            <div class="iff-list-row">
+              <div class="iff-rank">03</div>
+              <div>
+                <div class="iff-item-title">Add a decision cue</div>
+                <div class="iff-item-meta">
+                  Help readers pick the next step.
+                </div>
+              </div>
+              <span class="iff-badge-muted">CTA</span>
+            </div>
+          </div>
+          <div class="iff-divider"></div>
+          <div class="iff-timeline-row">
+            <strong class="iff-text-accent">Day 1</strong
+            ><span class="iff-text-muted"
+              >Draft the reader promise and card rhythm.</span
+            >
+          </div>
+          <div class="iff-progress-bar"><span style="width: 76%"></span></div>
+          <p class="iff-note">
+            <span class="iff-hl">Reusable structure:</span> cover, proof, chart,
+            checklist.
+          </p>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="ins-film-frame.js"></script>
+    <script>
+      (function () {
+        var el = document.getElementById("ins-film-frame-preview-chart");
+        if (el && window.echarts && window.InsFilmFramePresets) {
+          var chart = echarts.init(el);
+          chart.setOption(
+            window.InsFilmFramePresets.get("ins-film-frame-bar", {
+              categories: ["Hook", "Proof", "Save", "Share"],
+              values: [82, 68, 91, 57],
+            }),
+          );
+        }
+      })();
+    </script>
+  </body>
+</html>

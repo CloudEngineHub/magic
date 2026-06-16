@@ -63,9 +63,20 @@ export interface SuperMagicAddContentToChatPayload {
 export interface SuperMagicCreateNewTopicPayload {
 	/** Mode to create the new topic in */
 	topicMode?: import("@/pages/superMagic/pages/Workspace/types").TopicMode
+	/** Optional topic name for the newly created topic */
+	topicName?: string
 	afterCreate?: {
 		content: JSONContent
 		extraData?: SuperMagicAddContentToChatPayload["extraData"]
+		/** Send through the existing Send_Message_by_Content event after navigation */
+		send?: boolean
+		mentionItems?: SendMessageByContentPayload["mentionItems"]
+		topicMode?: SendMessageByContentPayload["topicMode"]
+		selectedModel?: SendMessageByContentPayload["selectedModel"]
+		selectedImageModel?: SendMessageByContentPayload["selectedImageModel"]
+		selectedVideoModel?: SendMessageByContentPayload["selectedVideoModel"]
+		shouldClearEditorAfterSend?: SendMessageByContentPayload["shouldClearEditorAfterSend"]
+		extra?: SendMessageByContentPayload["extra"]
 	}
 }
 

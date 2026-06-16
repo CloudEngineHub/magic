@@ -1,0 +1,43 @@
+.magic-prompt-editor .ProseMirror {
+	outline: none;
+	min-height: 100%;
+}
+
+.magic-prompt-editor .ProseMirror p {
+	margin: 0;
+	line-height: 1.6;
+}
+
+/* Placeholder rendering */
+.magic-prompt-editor .ProseMirror .is-empty.is-editor-empty {
+	position: relative;
+}
+
+.magic-prompt-editor .ProseMirror .is-empty.is-editor-empty::before {
+	content: attr(data-placeholder);
+	color: oklch(var(--muted-foreground));
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Mention node styles */
+.magic-prompt-editor .ProseMirror .magic-mention {
+	display: inline;
+	margin: 0 2px;
+	padding: 2px 6px;
+	font-weight: 500;
+	font-size: 0.875rem;
+	line-height: 1.25rem;
+	vertical-align: baseline;
+	background: hsl(var(--primary) / 0.1);
+	color: hsl(var(--primary));
+	border-radius: 9999px;
+	cursor: default;
+	white-space: nowrap;
+}

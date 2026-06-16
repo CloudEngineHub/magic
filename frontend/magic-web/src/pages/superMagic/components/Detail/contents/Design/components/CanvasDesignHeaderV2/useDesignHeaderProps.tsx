@@ -82,6 +82,27 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 	// 刷新状态
 	const [isRefreshing, setIsRefreshing] = useState(false)
 
+	const designDownloadDirectoryInfo = useMemo(() => {
+		if (!currentFile?.id || !attachments?.length) {
+			return null
+		}
+
+		return getDesignDirectoryInfo(currentFile, attachments)
+	}, [attachments, currentFile])
+
+	const canShowDesignDownload = useMemo(() => {
+		if (allowDownload === false) {
+			return false
+		}
+
+		const isAllowedByAttachmentActions = allowEdit === true || allowDownload === true
+		if (!isAllowedByAttachmentActions) {
+			return false
+		}
+
+		return Boolean(designDownloadDirectoryInfo?.path && designDownloadDirectoryInfo.id)
+	}, [allowDownload, allowEdit, designDownloadDirectoryInfo])
+
 	// 全屏处理函数
 	const handleFullscreen = useCallback(async () => {
 		if (!containerRef?.current) return
@@ -116,14 +137,18 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 
 	// Design 特定的下载逻辑：打包目录下所有图片
 	const handleDesignDownload = useCallback(async () => {
+		if (!canShowDesignDownload) {
+			return
+		}
+
 		if (!attachments || attachments.length === 0) {
 			magicToast.warning(t("design.errors.noFileList"))
 			return
 		}
 
 		// 获取 design 文件的目录路径和目录名称
-		const directoryInfo = getDesignDirectoryInfo(currentFile, attachments)
-		if (!directoryInfo.path) {
+		const directoryInfo = designDownloadDirectoryInfo
+		if (!directoryInfo?.path || !directoryInfo.id) {
 			magicToast.warning(t("design.errors.cannotDetermineDirectory"))
 			return
 		}
@@ -166,7 +191,14 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 				key: loadingKey,
 			})
 		}
-	}, [attachments, currentFile, hasGlobalAgreement, t])
+	}, [
+		attachments,
+		canShowDesignDownload,
+		currentFile,
+		designDownloadDirectoryInfo,
+		hasGlobalAgreement,
+		t,
+	])
 
 	// 适配 CommonHeaderV2 的 changeFileVersion 接口
 	const handleChangeFileVersionForHeader = useCallback(
@@ -349,7 +381,7 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 		handleVersionRollback,
 		onLocateFile: locateFileId ? onLocateFile : undefined,
 		allowEdit,
-		showDownload: allowDownload,
+		showDownload: canShowDesignDownload,
 		showRefreshButton: true,
 		isFullscreen,
 		detailMode: "files", // 设置为 "files" 以显示刷新和更多按钮

@@ -2188,8 +2188,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param file_id 文件id
 	 * @returns 文件信息
 	 */
-	getFileInfo({ file_id }: { file_id: string }) {
-		return fetch.get<FileInfo>(`/api/v1/super-agent/file/${file_id}`)
+	getFileInfo(
+		{ file_id }: { file_id: string },
+		options?: { enableErrorMessagePrompt?: boolean },
+	) {
+		const config =
+			options?.enableErrorMessagePrompt === undefined
+				? undefined
+				: { enableErrorMessagePrompt: options.enableErrorMessagePrompt }
+		return fetch.get<FileInfo>(`/api/v1/super-agent/file/${file_id}`, config)
 	},
 
 	/**

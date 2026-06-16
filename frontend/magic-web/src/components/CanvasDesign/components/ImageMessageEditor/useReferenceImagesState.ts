@@ -84,18 +84,18 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 
 			const infos: ReferenceResourceFileInfo[] = []
 
-			// 并行请求所有 Resource（提升性能）
+			// 并行换取所有 OSS URL（只需要链接，不触发图片解码）
 			const resourcePromises = fileInfos.map((info) =>
-				canvas.imageResourceManager.getResource(info.path).then((resource) => ({
+				canvas.imageResourceManager.ensureFreshOssInfo(info.path).then((ossInfo) => ({
 					info,
-					resource,
+					ossInfo,
 				})),
 			)
 
 			const results = await Promise.all(resourcePromises)
 
-			for (const { info, resource } of results) {
-				const ossSrc = resource?.ossSrc ?? info.path
+			for (const { info, ossInfo } of results) {
+				const ossSrc = ossInfo?.ossSrc ?? info.path
 				const fileName = info.path.split("/").pop() || info.path
 
 				infos.push({

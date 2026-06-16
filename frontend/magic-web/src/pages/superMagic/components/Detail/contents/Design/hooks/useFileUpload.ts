@@ -2,8 +2,6 @@ import { useCallback, useRef, useEffect, useState, useMemo } from "react"
 import { UploadSource } from "@/pages/superMagic/components/MessageEditor/hooks/useFileUpload"
 import { multiFolderUploadStore } from "@/stores/folderUpload"
 import { useTranslation } from "react-i18next"
-import { SuperMagicApi } from "@/apis"
-import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
 import {
 	type GetFileInfoResponse,
 	type UploadFileResponse,
@@ -11,20 +9,25 @@ import {
 	type UploadFilesOptions,
 	type UploadPrivateFile,
 	type UploadPrivateFileResponse,
+	UploadSubDir,
 	type UploadSubDirType,
 } from "@/components/CanvasDesign/types.magic"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { GetOrCreateImagesDirFn } from "./useGetOrCreateImagesDir"
-import { getUploadDirectoryBase } from "../utils/calculateUploadDirectory"
+import {
+	getOrCreateUploadSubDirFileId,
+	getUploadDirectoryBase,
+	validateUploadDirectoryFileId as validateUploadDirectoryFileIdRequest,
+} from "../utils/designAssetDirectory"
 import { prepareFilesForUpload } from "../utils/fileNaming"
 import {
 	createUploadCallbacks,
 	callFailedCallbacksForUnprocessedFiles,
 	GetFileInfoResponseWithFileId,
 } from "../utils/uploadCallbacks"
-import { resolveDesignProjectBasePathFromAttachments, normalizePath } from "../utils/utils"
+import { resolveDesignProjectBasePathFromAttachments } from "../utils/utils"
 import magicClient from "@/apis/clients/magic"
 
 import { genRequestUrl } from "@/utils/http"
@@ -106,6 +109,7 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 	const pendingGetFileInfoRef = useRef<Map<string, Promise<GetFileInfoResponse>>>(new Map())
 
 	const getOrCreateImagesDir = getOrCreateImagesDirProp
+	const validateUploadDirectoryFileId = useCallback(validateUploadDirectoryFileIdRequest, [])
 
 	// 组件卸载时清理引用
 	useEffect(() => {
@@ -121,14 +125,14 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 	const groupByUploadSubDir = useCallback(
 		(
 			files: Parameters<UseFileUploadReturn["uploadFiles"]>[0],
-		): { suffixDir: string; uploadSubDir: string; uploadFiles: UploadFile[] }[] => {
+		): { suffixDir: string; uploadSubDir: UploadSubDirType; uploadFiles: UploadFile[] }[] => {
 			const basePath = getUploadDirectoryBase({
 				currentFile,
 				flatAttachments,
 			})
 			const order: string[] = []
 			const map = new Map<string, UploadFile[]>()
-			const subDirMap = new Map<string, string>()
+			const subDirMap = new Map<string, UploadSubDirType>()
 			for (const uf of files) {
 				const subDir = uf.uploadSubDir
 				const suffixDir = basePath ? `${basePath}/${subDir}` : subDir
@@ -142,7 +146,7 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 			}
 			return order.map((suffixDir) => ({
 				suffixDir,
-				uploadSubDir: subDirMap.get(suffixDir) ?? "images",
+				uploadSubDir: subDirMap.get(suffixDir) ?? UploadSubDir.Images,
 				uploadFiles: map.get(suffixDir) ?? [],
 			}))
 		},
@@ -152,11 +156,11 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 	const ensureUploadDirectory = useCallback(
 		async (group: {
 			suffixDir: string
-			uploadSubDir: string
+			uploadSubDir: UploadSubDirType
 		}): Promise<{ parentId: string; suffixDir: string } | null> => {
-			const { uploadSubDir, suffixDir } = group
+			const { uploadSubDir } = group
 
-			if (uploadSubDir === "images" && getOrCreateImagesDir) {
+			if (uploadSubDir === UploadSubDir.Images && getOrCreateImagesDir) {
 				const imagesDirInfo = await getOrCreateImagesDir()
 				if (imagesDirInfo?.imagesDirFileId) {
 					return {
@@ -166,63 +170,31 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 				}
 			}
 
-			if (!projectId || !currentFile?.id || !flatAttachments?.length) {
+			if (!projectId) {
 				return null
 			}
 
-			const normalizedSuffixDir = normalizePath(suffixDir)
-			let assetDirItem = flatAttachments.find(
-				(item) =>
-					item.is_directory &&
-					normalizePath(item.relative_file_path || "") === normalizedSuffixDir,
-			)
-			if (assetDirItem?.file_id) {
-				return { parentId: assetDirItem.file_id, suffixDir }
-			}
+			const assetDirInfo = await getOrCreateUploadSubDirFileId({
+				currentFile,
+				flatAttachments,
+				projectId,
+				subDir: uploadSubDir,
+				updateAttachments,
+				validateDirFileId: validateUploadDirectoryFileId,
+			})
 
-			const basePath = getUploadDirectoryBase({ currentFile, flatAttachments })
-			const normalizedBasePath = normalizePath(basePath)
-			const parentDirItem = normalizedBasePath
-				? flatAttachments.find(
-						(item) =>
-							item.is_directory &&
-							normalizePath(item.relative_file_path || "") === normalizedBasePath,
-					)
-				: undefined
-			const parentId = parentDirItem?.file_id || currentFile.id
-			if (!parentId) return null
-
-			try {
-				const createResponse = await SuperMagicApi.createFile({
-					project_id: projectId,
-					parent_id: parentId,
-					file_name: uploadSubDir,
-					is_directory: true,
-					ignore_duplicate: true,
-				})
-				const fileId = (createResponse as { file_id?: string })?.file_id
-				if (fileId) {
-					updateAttachments()
-					return { parentId: fileId, suffixDir }
-				}
-			} catch (error: unknown) {
-				const errorObj = error as { code?: number }
-				if (errorObj.code === SuperMagicApiErrorCode.DuplicateFile) {
-					updateAttachments()
-					assetDirItem = flatAttachments.find(
-						(item) =>
-							item.is_directory &&
-							normalizePath(item.relative_file_path || "") === normalizedSuffixDir,
-					)
-					if (assetDirItem?.file_id) {
-						return { parentId: assetDirItem.file_id, suffixDir }
-					}
-				}
-			}
-
-			return null
+			return assetDirInfo
+				? { parentId: assetDirInfo.assetDirFileId, suffixDir: assetDirInfo.suffixDir }
+				: null
 		},
-		[projectId, currentFile, flatAttachments, getOrCreateImagesDir, updateAttachments],
+		[
+			projectId,
+			currentFile,
+			flatAttachments,
+			getOrCreateImagesDir,
+			updateAttachments,
+			validateUploadDirectoryFileId,
+		],
 	)
 
 	/**
@@ -251,7 +223,7 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 
 			const runGroup = async (group: {
 				suffixDir: string
-				uploadSubDir: string
+				uploadSubDir: UploadSubDirType
 				uploadFiles: UploadFile[]
 			}): Promise<UploadFileResponse[]> => {
 				const directoryInfo = await ensureUploadDirectory(group)
@@ -292,7 +264,7 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 
 					const callbacks = createUploadCallbacks({
 						suffixDir,
-						uploadSubDir: uploadSubDir as UploadSubDirType,
+						uploadSubDir,
 						showSuccessToast: options?.showSuccessToast ?? true,
 						designProjectBasePath,
 						fileNameToUploadFileMap,

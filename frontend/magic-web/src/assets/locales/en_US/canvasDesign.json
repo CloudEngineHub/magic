@@ -173,6 +173,11 @@
 			"description": "Let AI help you easily generate various creative images!",
 			"title": "Canvas is empty"
 		},
+		"search": {
+			"clear": "Clear search",
+			"empty": "No matching layers found",
+			"placeholder": "Search layers"
+		},
 		"title": "Layers"
 	},
 	"menu": {

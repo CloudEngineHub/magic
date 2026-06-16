@@ -2,10 +2,10 @@
 Read current session context, including topic_id and model_id.
 
 - topic_id: read from metadata.topic_id in .credentials/init_client_message.json
-- model_id: read from current.model_id in the local .chat_history/magic<main>.session.json
+- model_id: read from current.model_id in .chat_history/{agent_code or topic_pattern}<main>.session.json,
+            falling back to .chat_history/magic<main>.session.json
 """
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
@@ -40,15 +40,12 @@ def get_project_id() -> Optional[str]:
     return _get_project_id()
 
 
-def _get_model_id() -> Optional[str]:
-    """Read model_id from the local session file."""
+def _read_model_id(session_file: Path) -> Optional[str]:
+    """Read model_id from a local session file."""
     try:
-        from app.path_manager import PathManager
-        chat_history_dir = str(PathManager.get_chat_history_dir())
-        session_file = os.path.join(chat_history_dir, "magic<main>.session.json")
-        if not os.path.exists(session_file):
+        if not session_file.exists():
             return None
-        with open(session_file, "r", encoding="utf-8") as f:
+        with session_file.open("r", encoding="utf-8") as f:
             data = json.load(f)
         # Prefer current, then fall back to last.
         current = data.get("current") or {}
@@ -61,10 +58,49 @@ def _get_model_id() -> Optional[str]:
         return None
 
 
-def get_context() -> Tuple[Optional[str], Optional[str]]:
+def _is_safe_session_name(value: str) -> bool:
+    """Validate a session filename prefix and reject path traversal."""
+    return "/" not in value and "\\" not in value and ".." not in value
+
+
+def _append_session_candidate(candidates: list[Path], chat_history_dir: Path, name: Optional[str]) -> None:
+    if not name:
+        return
+    normalized = name.strip()
+    if not normalized or not _is_safe_session_name(normalized):
+        return
+    session_file = chat_history_dir / f"{normalized}<main>.session.json"
+    if session_file not in candidates:
+        candidates.append(session_file)
+
+
+def _get_model_id(topic_pattern: Optional[str] = None, agent_code: Optional[str] = None) -> Optional[str]:
+    """Read model_id from the session file for the current agent mode."""
+    try:
+        from app.path_manager import PathManager
+
+        chat_history_dir = Path(PathManager.get_chat_history_dir())
+        candidates: list[Path] = []
+        _append_session_candidate(candidates, chat_history_dir, agent_code)
+        _append_session_candidate(candidates, chat_history_dir, topic_pattern)
+        candidates.append(chat_history_dir / "magic<main>.session.json")
+
+        for session_file in candidates:
+            model_id = _read_model_id(session_file)
+            if model_id:
+                return model_id
+        return None
+    except Exception:
+        return None
+
+
+def get_context(
+    topic_pattern: Optional[str] = None,
+    agent_code: Optional[str] = None,
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Return (topic_id, model_id).
 
     Either value may be None when source files are missing or fields are absent.
     """
-    return _get_topic_id(), _get_model_id()
+    return _get_topic_id(), _get_model_id(topic_pattern=topic_pattern, agent_code=agent_code)

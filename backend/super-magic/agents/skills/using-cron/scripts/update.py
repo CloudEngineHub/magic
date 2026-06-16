@@ -27,10 +27,47 @@ from app.infrastructure.sdk.magic_service.parameter.message_schedule_parameter i
     TimeConfig,
 )
 
+
+def text_to_json_content(text: str) -> dict:
+    """Convert plain text to Tiptap JSONContent format for rich_text messages."""
+    paragraphs = []
+    for line in text.split("\n"):
+        if line:
+            paragraphs.append({
+                "type": "paragraph",
+                "content": [{"type": "text", "text": line}],
+            })
+        else:
+            paragraphs.append({"type": "paragraph"})
+    return {"type": "doc", "content": paragraphs}
+
+
+def parse_message_content(raw: str):
+    """
+    Parse message content.
+
+    - Use valid JSONContent dicts directly when they contain a type field.
+    - Treat all other input as plain text and convert it to JSONContent.
+    Return (content, message_type).
+    """
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict) and parsed.get("type"):
+            return parsed, "rich_text"
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return text_to_json_content(raw), "rich_text"
+
+
 parser = argparse.ArgumentParser(description="Update a scheduled message task")
 parser.add_argument("--id", required=True, help="Scheduled task ID")
 parser.add_argument("--task-name", default=None, help="Task name")
-parser.add_argument("--message-content", dest="message_content", default=None, help="Message content; maps to detail fields message_content/task_describe")
+parser.add_argument(
+    "--message-content",
+    dest="message_content",
+    default=None,
+    help="Message content; maps to detail fields message_content/task_describe",
+)
 parser.add_argument(
     "--type",
     default=None,
@@ -89,15 +126,22 @@ try:
 
     normalized_deadline = normalize_deadline(args.deadline)
 
+    # Convert message_content to rich_text format when provided.
+    message_content = None
+    message_type = None
+    if args.message_content is not None:
+        message_content, message_type = parse_message_content(args.message_content)
+
     sdk = create_magic_service_sdk_with_defaults()
 
     parameter = UpdateMessageScheduleParameter(
         schedule_id=args.id,
         task_name=args.task_name,
-        message_content=args.message_content,
+        message_content=message_content,
         time_config=time_config,
         deadline=normalized_deadline,
         enabled=args.enabled,
+        message_type=message_type,
     )
 
     result = sdk.message_schedule.update_message_schedule(parameter)

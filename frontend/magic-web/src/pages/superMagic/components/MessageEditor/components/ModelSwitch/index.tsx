@@ -45,6 +45,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 	videoModelList,
 	onVideoModelChange,
 	showName = true,
+	showSelectedModelName = false,
 	showBorder = false,
 	className,
 	modelList,
@@ -327,6 +328,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 							isLoading={isLoading}
 							iconSize={iconSize}
 							triggerTab={triggerTab}
+							showSelectedModelName={showSelectedModelName}
 						/>
 					)}
 					<ChevronsUpDownIcon size={chevronSize} />
@@ -452,6 +454,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 											isLoading={isLoading}
 											iconSize={iconSize}
 											triggerTab={triggerTab}
+											showSelectedModelName={showSelectedModelName}
 										/>
 									)}
 									<ChevronsUpDownIcon size={chevronSize} />

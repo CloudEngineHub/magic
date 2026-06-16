@@ -52,6 +52,8 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 		`,
 		contentList: css`
 			flex: 1;
+			/* Allow the flex child to shrink so overflow-y can create the scroll area. */
+			min-height: 0;
 			padding: 10px;
 			overflow-y: auto;
 			display: flex;

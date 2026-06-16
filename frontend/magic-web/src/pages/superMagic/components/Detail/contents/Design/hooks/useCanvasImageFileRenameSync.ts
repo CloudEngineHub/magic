@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
-import type { CanvasDocument, ImageElement } from "@/components/CanvasDesign/canvas/types"
-import type { CanvasDesignRef } from "@/components/CanvasDesign/types"
+import type {
+	CanvasDocument,
+	ImageElement,
+	LayerElement,
+} from "@/components/CanvasDesign/canvas/types"
+import type { CanvasDesignDataChangeMeta, CanvasDesignRef } from "@/components/CanvasDesign/types"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
@@ -32,7 +36,10 @@ interface UseCanvasImageFileRenameSyncOptions {
 }
 
 interface UseCanvasImageFileRenameSyncReturn {
-	handleCanvasDesignDataChange: (canvasData: CanvasDocument) => void
+	handleCanvasDesignDataChange: (
+		canvasData: CanvasDocument,
+		meta?: CanvasDesignDataChangeMeta,
+	) => void
 }
 
 function isGenericClipboardImageFileName(fileName: string): boolean {
@@ -56,6 +63,15 @@ function getParentDirectoryPath(filePath: string): string {
 	return normalizedFilePath.slice(0, lastSlashIndex)
 }
 
+function getPathFileName(filePath: string | null | undefined): string {
+	const normalizedFilePath = normalizePath(filePath || "")
+	if (!normalizedFilePath) return ""
+
+	const lastSlashIndex = normalizedFilePath.lastIndexOf("/")
+	if (lastSlashIndex === -1) return normalizedFilePath
+	return normalizedFilePath.slice(lastSlashIndex + 1)
+}
+
 function buildFallbackRelativeFilePath(filePath: string, nextFileName: string): string {
 	const normalizedFilePath = normalizePath(filePath)
 	if (!normalizedFilePath) return nextFileName
@@ -64,6 +80,15 @@ function buildFallbackRelativeFilePath(filePath: string, nextFileName: string): 
 	if (!parentDirectoryPath) return nextFileName
 
 	return `${parentDirectoryPath}/${nextFileName}`
+}
+
+function isRenamedFileItemFresh(
+	fileItem: FileItem | null | undefined,
+	targetFileName: string,
+): boolean {
+	if (!fileItem) return false
+	if (getFileDisplayName(fileItem) === targetFileName) return true
+	return getPathFileName(fileItem.relative_file_path) === targetFileName
 }
 
 function hasDuplicateSiblingFileName(
@@ -77,6 +102,32 @@ function hasDuplicateSiblingFileName(
 		if (getFileDisplayName(item) !== targetFileName) return false
 		return getParentDirectoryPath(item.relative_file_path || "") === parentDirectoryPath
 	})
+}
+
+function collectElementsByIds(
+	elements: LayerElement[] | undefined,
+	elementIds: readonly string[],
+): Map<string, LayerElement> {
+	const result = new Map<string, LayerElement>()
+	const remainingIds = new Set(elementIds)
+	if (!elements?.length || remainingIds.size === 0) return result
+
+	const traverse = (items: LayerElement[]): boolean => {
+		for (const item of items) {
+			if (remainingIds.has(item.id)) {
+				result.set(item.id, item)
+				remainingIds.delete(item.id)
+				if (remainingIds.size === 0) return true
+			}
+			if ("children" in item && item.children && traverse(item.children)) {
+				return true
+			}
+		}
+		return false
+	}
+
+	traverse(elements)
+	return result
 }
 
 export function useCanvasImageFileRenameSync(
@@ -186,12 +237,18 @@ export function useCanvasImageFileRenameSync(
 
 			const oldWorkspaceRelativePath =
 				currentFileItem.relative_file_path || currentFileItem.file_name || currentFileName
+			const fallbackRenamedRelativeFilePath = buildFallbackRelativeFilePath(
+				currentFileItem.relative_file_path || currentFileName,
+				task.targetFileName,
+			)
+			const isRefreshedFileFresh = isRenamedFileItemFresh(
+				renamedFileItem,
+				task.targetFileName,
+			)
 			const renamedRelativeFilePath =
-				renamedFileItem?.relative_file_path ||
-				buildFallbackRelativeFilePath(
-					currentFileItem.relative_file_path || currentFileName,
-					task.targetFileName,
-				)
+				isRefreshedFileFresh && renamedFileItem?.relative_file_path
+					? renamedFileItem.relative_file_path
+					: fallbackRenamedRelativeFilePath
 			if (!oldWorkspaceRelativePath || !renamedRelativeFilePath) return
 
 			const latestCanvasData = latestCanvasDataRef.current
@@ -240,7 +297,7 @@ export function useCanvasImageFileRenameSync(
 	)
 
 	const handleCanvasDesignDataChange = useCallback(
-		(canvasData: CanvasDocument) => {
+		(canvasData: CanvasDocument, meta?: CanvasDesignDataChangeMeta) => {
 			latestCanvasDataRef.current = canvasData
 
 			if (isApplyingSyncedCanvasUpdateRef.current) {
@@ -253,15 +310,10 @@ export function useCanvasImageFileRenameSync(
 			previousCanvasDataRef.current = canvasData
 			if (!previousCanvasData) return
 
-			const diff = compareDesignData(
-				{ type: "design", name: "", version: "1.0.0", canvas: previousCanvasData },
-				{ type: "design", name: "", version: "1.0.0", canvas: canvasData },
-			)
-			if (!diff.modified.length) return
-
-			diff.modified.forEach((change) => {
-				const oldElement = change.oldElement as ImageElement | undefined
-				const newElement = change.newElement as ImageElement | undefined
+			const processImageNameChange = (
+				oldElement: ImageElement | undefined,
+				newElement: ImageElement | undefined,
+			) => {
 				if (oldElement?.type !== "image" || newElement?.type !== "image") return
 				if ((oldElement.name || "").trim() === (newElement.name || "").trim()) return
 
@@ -289,6 +341,77 @@ export function useCanvasImageFileRenameSync(
 					fileId: matchedFileItem.file_id,
 					targetFileName,
 				})
+			}
+
+			const processImageNameChangePatch = (
+				change: NonNullable<CanvasDesignDataChangeMeta["elementNameChanges"]>[number],
+			) => {
+				if (change.elementType !== "image") return
+				if ((change.oldName || "").trim() === (change.newName || "").trim()) return
+
+				const nextElementName = (change.newName || "").trim()
+				if (!nextElementName) return
+
+				const sourcePath = change.newSrc || change.oldSrc
+				if (!sourcePath) return
+
+				const matchedFileItem = findFileBySrc(
+					sourcePath,
+					flatAttachmentsRef.current,
+					designProjectBasePathRef.current,
+					attachmentIndexRef.current,
+				)
+				if (!matchedFileItem?.file_id) return
+
+				const currentFileName = getFileDisplayName(matchedFileItem)
+				if (!currentFileName || !isGenericClipboardImageFileName(currentFileName)) return
+
+				const targetFileName = buildTargetFileName(nextElementName, currentFileName)
+				if (!targetFileName || targetFileName === currentFileName) return
+
+				enqueueRenameTask({
+					fileId: matchedFileItem.file_id,
+					targetFileName,
+				})
+			}
+
+			const elementNameChanges = meta?.elementNameChanges
+			if (elementNameChanges?.length) {
+				elementNameChanges.forEach(processImageNameChangePatch)
+				return
+			}
+
+			const changedElementIds = meta?.changedElementIds
+			if (changedElementIds?.length) {
+				const uniqueChangedElementIds = Array.from(new Set(changedElementIds))
+				const oldElementsById = collectElementsByIds(
+					previousCanvasData.elements,
+					uniqueChangedElementIds,
+				)
+				const newElementsById = collectElementsByIds(
+					canvasData.elements,
+					uniqueChangedElementIds,
+				)
+				uniqueChangedElementIds.forEach((elementId) => {
+					processImageNameChange(
+						oldElementsById.get(elementId) as ImageElement | undefined,
+						newElementsById.get(elementId) as ImageElement | undefined,
+					)
+				})
+				return
+			}
+
+			const diff = compareDesignData(
+				{ type: "design", name: "", version: "1.0.0", canvas: previousCanvasData },
+				{ type: "design", name: "", version: "1.0.0", canvas: canvasData },
+			)
+			if (!diff.modified.length) return
+
+			diff.modified.forEach((change) => {
+				processImageNameChange(
+					change.oldElement as ImageElement | undefined,
+					change.newElement as ImageElement | undefined,
+				)
 			})
 		},
 		[enqueueRenameTask],

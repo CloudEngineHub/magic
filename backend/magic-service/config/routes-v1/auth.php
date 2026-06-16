@@ -6,6 +6,7 @@ declare(strict_types=1);
  */
 use App\Interfaces\Authentication\Facade\AuthenticationApi;
 use App\Interfaces\Authentication\Facade\LoginApi;
+use App\Interfaces\Authentication\Facade\LogoutApi;
 use Hyperf\HttpServer\Router\Router;
 
 Router::addGroup('/api/v1', static function () {
@@ -22,7 +23,7 @@ Router::addGroup('/api/v1', static function () {
     Router::addGroup('/sessions', static function () {
         // 创建会话（登录）
         Router::post('', [LoginApi::class, 'login']);
-        // 销毁会话（登出）- 如果需要可以添加
-        // Router::delete('', [LoginApi::class, 'logout']);
+        // 销毁会话（登出）
+        Router::delete('', [LogoutApi::class, 'logout']);
     });
 });

@@ -28,6 +28,7 @@ import ImageCropPanel from "./components/ImageCropPanel"
 import ImageExtendPanel from "./components/ImageExtendPanel"
 import ImageEraserPanel from "./components/ImageEraserPanel"
 import ElementRenameOverlay from "./components/ElementRenameOverlay"
+export { prewarmCanvasDesignImageWorker } from "./prewarm"
 
 import styles from "./index.module.css"
 
@@ -43,7 +44,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		shareHostBottomChrome = false,
 	} = props
 
-	const { defaultData, onCanvasDesignDataChange } = data
+	const { defaultData, onCanvasDesignDataChange, onCanvasDesignDataPatchChange } = data
 
 	const {
 		defaultMarkers,
@@ -80,6 +81,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		onMarkerDeleted,
 		onMarkerUpdated,
 		onCanvasDesignDataChange,
+		onCanvasDesignDataPatchChange,
 	})
 
 	// 更新视口偏移量
@@ -205,12 +207,10 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	)
 })
 
-CanvasDesignContent.displayName = "CanvasDesignContent"
-
 const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref) => {
 	const { getIsMobile } = props
 
-	const appContainerRef = useRef<HTMLDivElement>(null)
+	const appContainerRef = useRef<HTMLDivElement | null>(null)
 
 	const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
 
@@ -260,7 +260,5 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 		</MagicProvider>
 	)
 })
-
-CanvasDesign.displayName = "CanvasDesign"
 
 export default CanvasDesign

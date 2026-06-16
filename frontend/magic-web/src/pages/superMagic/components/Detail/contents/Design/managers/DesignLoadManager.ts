@@ -6,7 +6,9 @@ import {
 	normalizeDesignDataPathsAfterLoad,
 	resolveActualDesignCurrentFile,
 } from "../utils/utils"
+import { hashDesignDataComparable } from "../utils/designContentHash"
 import { SuperMagicApi } from "@/apis"
+import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
 import type { DesignProjectStateBag, DesignProjectManagerOptions } from "./types"
 
 export class DesignLoadManager {
@@ -105,7 +107,18 @@ export class DesignLoadManager {
 						})
 						if (dslBase) normalizeDesignDataPathsAfterLoad(parsedData, dslBase)
 
+						// v2：从 sidecar 回填重字段，让画布与生成编辑器拿到完整数据
+						await hydrateDesignDataDetails(parsedData, {
+							attachments,
+							flatAttachments,
+							mainFileId: result.fileId,
+							projectId: projectId ?? undefined,
+						})
+
 						this.stateBag.setters.setDesignData(parsedData)
+						this.stateBag.setPrevDesignDataFingerprint(
+							hashDesignDataComparable(parsedData),
+						)
 						this.lastLoadedFileId = actualCurrentFileId
 					}
 				}

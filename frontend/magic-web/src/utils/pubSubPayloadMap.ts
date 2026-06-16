@@ -124,6 +124,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Open_Knowledge_Base_Tab]: SuperMagicOpenKnowledgeBaseTabPayload
 	/** 打开 playback tab：当前保留历史透传 payload。 */
 	[PubSubEvents.Open_Playback_Tab]: SuperMagicOpenPlaybackTabPayload
+	/** 展开话题对话面板：无参数。 */
+	[PubSubEvents.Expand_Topic_Conversation_Panel]: []
 	/** 消息队列消费完成：传入可选消息数据。 */
 	[PubSubEvents.SuperMagicMessageQueueConsumed]: SuperMagicQueueConsumedArgs
 	/** Intermediate 文件变更：传入完整 seq，订阅方自行解析。 */
@@ -178,6 +180,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Refresh_Share_List]: SuperMagicRefreshShareListArgs
 	/** 详情页刷新：无参数。 */
 	[PubSubEvents.Super_Magic_Detail_Refresh]: []
+	/** 追加 JSONContent 到输入框末尾（不覆盖已有内容）：传入 JSONContent。 */
+	[PubSubEvents.Append_Content_To_Editor]: [content: import("@tiptap/react").JSONContent]
 	/** 追加建议内容到输入框末尾：传入文本字符串或 JSONContent。 */
 	[PubSubEvents.Append_Suggestion_To_Editor]: [
 		content: string | import("@tiptap/core").JSONContent,

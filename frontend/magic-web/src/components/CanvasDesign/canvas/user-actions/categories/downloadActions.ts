@@ -11,7 +11,7 @@ async function getDownloadImageOptions(
 			if (!imageElement.id || !imageElement.src) return null
 
 			const resource = await canvas.imageResourceManager
-				.getResource(imageElement.src)
+				.getResource(imageElement.src, { variant: "preview" })
 				.catch(() => null)
 			const naturalWidth = resource?.imageInfo?.naturalWidth ?? 0
 			const naturalHeight = resource?.imageInfo?.naturalHeight ?? 0

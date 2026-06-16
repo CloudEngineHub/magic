@@ -8,6 +8,7 @@ import {
 	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
+import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
 import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./types"
 import type { DesignData } from "../types"
 import type { DesignSaveManager } from "./DesignSaveManager"
@@ -62,6 +63,12 @@ export class DesignVersionManager {
 		if (data) {
 			const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
 			if (dslBase) normalizeDesignDataPathsAfterLoad(data, dslBase)
+			await hydrateDesignDataDetails(data, {
+				attachments: this.options.attachments,
+				flatAttachments: this.options.flatAttachments,
+				mainFileId: magicProjectJsFileId,
+				projectId: this.options.projectId,
+			})
 		}
 
 		let version: number | null = null
@@ -101,6 +108,7 @@ export class DesignVersionManager {
 
 	applyVersionData(parsedDesignData: DesignData, isViewingHistory: boolean): void {
 		this.saveManager.cancelAutoSave()
+		this.saveManager.clearRemoteConflict()
 		this.stateBag.setters.setIsSaving(false)
 		this.stateBag.setters.setDesignData(parsedDesignData)
 		this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedDesignData))

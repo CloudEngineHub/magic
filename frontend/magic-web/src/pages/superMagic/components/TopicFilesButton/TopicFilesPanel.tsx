@@ -188,6 +188,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			targetAttachments?: AttachmentItem[]
 			sourceAttachments?: AttachmentItem[]
 		}) => {
+			magicToast.info(t("topicFiles.moving"))
+
 			if (params.targetProjectId && params.targetAttachments && params.sourceAttachments) {
 				await crossProjectOperation.executeMoveOperation({
 					fileIds:
@@ -202,6 +204,38 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 
 			await projectDetailFilesController.moveSelectorProps.onSubmit?.({
 				path: params.path,
+			})
+		}
+
+		const handleProjectDetailCopySubmit = async (params: {
+			path: AttachmentItem[]
+			targetProjectId?: string
+			targetAttachments?: AttachmentItem[]
+			sourceAttachments?: AttachmentItem[]
+		}) => {
+			const fileIds = projectDetailFilesController.copySelectorProps.pendingCopyFileIds || []
+
+			magicToast.info(t("topicFiles.copying"))
+
+			if (params.targetProjectId && params.targetAttachments && params.sourceAttachments) {
+				await crossProjectOperation.executeCopyOperation({
+					fileIds,
+					targetProjectId: params.targetProjectId,
+					targetPath: params.path,
+					targetAttachments: params.targetAttachments,
+					sourceAttachments: params.sourceAttachments,
+				})
+				return
+			}
+
+			if (!projectId) return
+
+			await crossProjectOperation.executeCopyOperation({
+				fileIds,
+				targetProjectId: projectId,
+				targetPath: params.path,
+				targetAttachments: attachments,
+				sourceAttachments: attachments,
 			})
 		}
 
@@ -418,8 +452,14 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 							}
 							batchDownloadLoading={mobileBatchDownloadLoading}
 							onBatchShare={projectDetailFilesController.batchShare}
-							onBatchMove={projectDetailFilesController.batchMove}
-							onBatchDelete={projectDetailFilesController.batchDelete}
+							// Copy does not mutate source files; keep available in read-only views (desktop parity).
+							onBatchCopy={projectDetailFilesController.batchCopy}
+							onBatchMove={
+								allowEdit ? projectDetailFilesController.batchMove : undefined
+							}
+							onBatchDelete={
+								allowEdit ? projectDetailFilesController.batchDelete : undefined
+							}
 						/>
 					) : (
 						<>
@@ -602,6 +642,20 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									: undefined
 							}
 							onSubmit={handleProjectDetailMoveSubmit}
+						/>
+						<SelectDirectoryModal
+							{...projectDetailFilesController.copySelectorProps}
+							mobileCrossProjectConfig={
+								selectedProject
+									? {
+											currentProject: selectedProject,
+											currentWorkspace: selectedWorkspace,
+											sourceAttachments: attachments,
+											isChatProject,
+										}
+									: undefined
+							}
+							onSubmit={handleProjectDetailCopySubmit}
 						/>
 						<DuplicateFileModal
 							visible={crossProjectOperation.duplicateModalVisible}

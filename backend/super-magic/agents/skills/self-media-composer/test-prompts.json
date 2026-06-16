@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "prompt": "Create a Chinese-language Rednote carousel about 155cm petite commute outfits for new office workers. I want 6 cards.",
+    "expected": "Follow the user's language. When creating a rednote card post, generate structured meta.tags with core/mid/longtail/trend, 5-8 relevant tags, and confirm once when the user supplied no tags."
+  },
+  {
+    "id": 2,
+    "prompt": "Add another Rednote post to this self-media project: a relaxed one-day Hangzhou citywalk route. Do not make it feel like a generic travel guide.",
+    "expected": "Follow the user's language. Travel rednote tags include a concrete city, area, route, or attraction tag, avoid only broad tags, and render the complete tag block only on the final card."
+  },
+  {
+    "id": 3,
+    "prompt": "Complete the engagement data and comments for this Instagram post, but keep my original #AI #Design tags.",
+    "expected": "Follow the user's language. Instagram does not require the Rednote four-layer tag structure; fill feedLikes/commentCount/comments/interactionReference while preserving the user's original tag format."
+  },
+  {
+    "id": "rednote-human-voice",
+    "prompt": "Create a Chinese-language Rednote carousel about an AI meeting-notes tool for project managers who sit in meetings all day. It should not sound like AI press-release flavor; include a real usage scene.",
+    "expected": "Follow the user's language and the Output Language Contract. Load human-writing-style before writing cards; first build author voice, target reader, reader action, and evidence. Avoid macro background, empty empowerment claims, mechanical three-part structure, and fake human texture. The first screen should include a concrete meeting scene, project-manager pain point, and a save-worthy rule or checklist."
+  },
+  {
+    "id": "wechat-human-voice",
+    "prompt": "Write a Chinese-language WeChat Official Account article explaining why self-media creation tools cannot rely only on chat boxes and should feel more like a workspace. It should sound like a product lead, not PR copy.",
+    "expected": "Follow the user's language and the Output Language Contract. Load human-writing-style before writing the article; build a product-lead viewpoint and boundaries, support claims with workflow, failure scenes, or product mechanisms, and avoid macro-era openings, three-value piles, summary-and-outlook endings, and unsupported industry claims."
+  },
+  {
+    "id": "self-media-brand-config-file-fallback",
+    "prompt": "Add another Rednote post to this self-media project. Continue the account's brand positioning and target audience; if you need brand information, check __brand/brand-config.json.",
+    "expected": "Follow the user's language. When draft.json.global lacks author, brandPosition, targetAudience, voice, or brand/IP assets, try __brand/brand-config.json first. Use its brand context to complete the human-writing brief and visual/content consistency, while current user instructions and explicit draft fields still win."
+  },
+  {
+    "id": "self-media-ops-fixed-schema",
+    "prompt": "Import this already-published Rednote article into the project, fetch real data, and generate an operations review dashboard.",
+    "expected": "Follow the user's language for user-facing review prose. Run the self-media/IP-operations data sync workflow, do not create AI Card artifacts; read and update ops/source.json, ops/metrics.json, ops/comments.json, ops/review.html; metrics only use reads/likes/saves/comments/shares/follows/conversions; derivedMetrics only use engagementRate/saveRate/shareRate/commentRate/followRate/conversionRate; fetchStatus, source, sentiment, and intent use fixed enums; new data writes saves, not legacy collects; unknown platform metrics go into notes or review.html."
+  },
+  {
+    "id": "self-media-ops-immediate-sync-trigger",
+    "prompt": "Sync this article's real data now and run a real-data refresh.",
+    "expected": "Follow the user's language for user-facing review prose. Load self-media-composer, run the post-publication operations data-sync workflow, update ops/source.json, ops/metrics.json, ops/comments.json, and ops/review.html with the fixed ops schema; do not write the long workflow into the user message and do not create AI Card artifacts."
+  }
+]

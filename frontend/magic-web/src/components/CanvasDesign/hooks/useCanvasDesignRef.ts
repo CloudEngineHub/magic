@@ -5,6 +5,28 @@ import type { CanvasDocument, Marker, PaddingInsetConfig } from "../canvas/types
 import { toPlainObject } from "../canvas/utils/utils"
 import { ImageElement as ImageElementClass } from "../canvas/element/elements/ImageElement"
 
+const RESOURCE_REFRESH_CONCURRENCY = 3
+
+async function runWithConcurrency<T>(
+	items: T[],
+	concurrency: number,
+	task: (item: T) => Promise<unknown>,
+): Promise<void> {
+	if (items.length === 0) return
+	const workerCount = Math.min(Math.max(1, concurrency), items.length)
+	let nextIndex = 0
+
+	await Promise.all(
+		Array.from({ length: workerCount }, async () => {
+			while (nextIndex < items.length) {
+				const currentIndex = nextIndex
+				nextIndex += 1
+				await task(items[currentIndex])
+			}
+		}),
+	)
+}
+
 /**
  * 处理 CanvasDesignRef 的暴露
  * 职责：将 Canvas 实例的方法暴露给外部 ref
@@ -74,15 +96,21 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 					canvas.historyManager.recordHistoryImmediate()
 				}
 			},
+			exportCurrentDocument: () => {
+				if (!canvas) return null
+				return canvas.exportDocument({ includeTemporary: false })
+			},
 			refreshResources: async (resources) => {
 				if (!canvas) return
-				await Promise.all(
-					resources.map((resource) => {
+				await runWithConcurrency(
+					resources,
+					RESOURCE_REFRESH_CONCURRENCY,
+					async (resource) => {
 						if (resource.mediaType === "video") {
 							return canvas.videoResourceManager.refreshResource(resource.path)
 						}
 						return canvas.imageResourceManager.refreshResource(resource.path)
-					}),
+					},
 				)
 			},
 			ensureElementVisible: (
@@ -110,8 +138,10 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				if (elementInstance && elementInstance instanceof ImageElementClass) {
 					const imageData = elementInstance.getData()
 					if (!imageData.src) return null
-					const resource = await canvas.imageResourceManager.getResource(imageData.src)
-					return resource?.ossSrc ?? null
+					const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(
+						imageData.src,
+					)
+					return ossInfo?.ossSrc ?? null
 				}
 				return null
 			},
@@ -123,7 +153,9 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				const imageData = elementInstance.getData()
 				if (!imageData.src) return null
 
-				const resource = await canvas.imageResourceManager.getResource(imageData.src)
+				const resource = await canvas.imageResourceManager.getResource(imageData.src, {
+					variant: "full",
+				})
 				if (!resource) return null
 
 				return {

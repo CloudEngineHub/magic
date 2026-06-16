@@ -22,6 +22,7 @@ from agentlang.tools.tool_result import ToolResult
 from app.tools.core import BaseToolParams
 from app.tools.design.constants import DEFAULT_ELEMENT_SPACING
 from app.tools.design.manager.canvas_manager import CanvasManager
+from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 from app.tools.design.tools.base_design_tool import BaseDesignTool
 from app.tools.design.utils.magic_project_design_parser import (
     ImageElement,
@@ -441,7 +442,7 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
         existing_task_indices = [idx for idx, t in enumerate(tasks) if getattr(t, "element_id", None)]
 
         task_placeholders: Dict[int, ElementDetail] = {}
-        manager = CanvasManager(str(project_path))
+        manager = await get_canvas_manager(str(project_path))
         config_file = self._get_magic_project_js_path(project_path)
 
         # 复用已有占位符：校验重试次数上限，再批量重置为 processing
@@ -676,7 +677,7 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
         project_path: Path,
     ) -> List[ElementDetail]:
         """将 TaskExecutionResult.placeholder_update 写回对应占位符，返回更新后的元素快照。"""
-        manager = CanvasManager(str(project_path))
+        manager = await get_canvas_manager(str(project_path))
         config_file = self._get_magic_project_js_path(project_path)
         element_id = placeholder.id
         update_dict = result.placeholder_update.to_dict()

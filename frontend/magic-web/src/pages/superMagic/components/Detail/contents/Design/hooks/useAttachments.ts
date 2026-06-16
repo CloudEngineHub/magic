@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useRef } from "react"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { flattenAttachmentsList } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
@@ -15,6 +15,8 @@ interface UseAttachmentsOptions {
 interface UseAttachmentsReturn {
 	/** 已扁平化的附件列表 */
 	flatAttachments: FileItem[]
+	/** 附件快照是否已由入口提供；观测过真实快照后，空数组也可能是一个有效快照 */
+	attachmentsReady: boolean
 	/** 附件索引（路径 / id / 文件名维度快速查找） */
 	attachmentIndex: DesignAttachmentIndex
 	/** 触发文件列表更新，返回新的文件列表 */
@@ -26,6 +28,7 @@ interface UseAttachmentsReturn {
  */
 export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsReturn {
 	const { attachments, attachmentList } = options
+	const hasObservedAttachmentSnapshotRef = useRef(false)
 
 	// 扁平化附件列表
 	const flatAttachments = useMemo(() => {
@@ -37,6 +40,14 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
 		if (!attachments) return []
 		return flattenAttachmentsList(attachments)
 	}, [attachments, attachmentList])
+
+	if (flatAttachments.length > 0) {
+		hasObservedAttachmentSnapshotRef.current = true
+	}
+
+	const attachmentsReady =
+		hasObservedAttachmentSnapshotRef.current &&
+		(Array.isArray(attachmentList) || Array.isArray(attachments))
 
 	const attachmentIndex = useMemo(
 		() => buildDesignAttachmentIndex(flatAttachments),
@@ -52,6 +63,7 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
 
 	return {
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		updateAttachments,
 	}

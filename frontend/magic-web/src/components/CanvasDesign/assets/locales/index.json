@@ -11,6 +11,7 @@
 	},
 	"dropOverlay": {
 		"loading": "加载中",
+		"processing": "正在处理 {{current}}/{{total}}",
 		"referenceImageLimitReached": "参考图数量已达上限",
 		"referenceImageUnavailable": "当前不支持添加参考图",
 		"releaseToAddAttachment": "松开以添加附件",
@@ -172,6 +173,11 @@
 		"empty": {
 			"description": "让智能体帮你轻松生成各种创意图像!",
 			"title": "画布内容为空"
+		},
+		"search": {
+			"clear": "清空搜索",
+			"empty": "未找到匹配图层",
+			"placeholder": "搜索图层"
 		},
 		"title": "图层"
 	},

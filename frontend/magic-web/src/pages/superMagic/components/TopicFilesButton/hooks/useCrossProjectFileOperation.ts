@@ -75,9 +75,9 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 					} else if (checkData.status === "failed") {
 						magicToast.error(
 							checkData.message ||
-							(operationType === "move"
-								? t("topicFiles.error.moveFileFailed")
-								: t("topicFiles.error.copyFileFailed")),
+								(operationType === "move"
+									? t("topicFiles.error.moveFileFailed")
+									: t("topicFiles.error.copyFileFailed")),
 						)
 						clearInterval(timer)
 						setIsOperating(false)
@@ -197,8 +197,10 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			targetPath: AttachmentItem[]
 			targetAttachments: AttachmentItem[]
 			sourceAttachments: AttachmentItem[]
+			fileIds?: string[]
 		}) => {
-			if (!projectId || fileIds.length === 0) return
+			const effectiveFileIds = data.fileIds ?? fileIds
+			if (!projectId || effectiveFileIds.length === 0) return
 
 			// 辅助函数：在文件树中查找指定 ID 的项目
 			const findItemById = (
@@ -215,8 +217,8 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				return null
 			}
 
-			// 检查 fileIds 中是否都是文件夹
-			const areAllFolders = fileIds.every((id) => {
+			// 检查 effectiveFileIds 中是否都是文件夹
+			const areAllFolders = effectiveFileIds.every((id) => {
 				const item = findItemById(id, data.sourceAttachments)
 				return item?.is_directory === true
 			})
@@ -226,7 +228,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			if (!areAllFolders) {
 				// 只有包含文件时才进行冲突检测
 				duplicates = detectDuplicateFilesForMove(
-					fileIds,
+					effectiveFileIds,
 					data.sourceAttachments,
 					data.targetAttachments,
 					data.targetPath,
@@ -244,7 +246,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			}
 
 			// 3. 如果是文件夹，将文件夹ID添加到 keepBothIds 中
-			const folderIds = fileIds.filter((id) => {
+			const folderIds = effectiveFileIds.filter((id) => {
 				const item = findItemById(id, data.sourceAttachments)
 				return item?.is_directory === true
 			})
@@ -263,7 +265,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						: ""
 
 				const result = await SuperMagicApi.copyFiles({
-					file_ids: fileIds,
+					file_ids: effectiveFileIds,
 					project_id: projectId,
 					target_project_id: data.targetProjectId,
 					target_parent_id: targetParentId,

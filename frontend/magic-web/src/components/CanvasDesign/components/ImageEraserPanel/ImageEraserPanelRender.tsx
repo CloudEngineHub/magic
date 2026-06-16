@@ -204,7 +204,9 @@ export default function ImageEraserPanelRender() {
 					})
 				: await (async () => {
 						if (!sourceDimensions) {
-							await erasingImageElementInstance.getHTMLImageElement()
+							await erasingImageElementInstance.getHTMLImageElement({
+								variant: "preview",
+							})
 							imageInfo = erasingImageElementInstance.getImageInfo()
 							if (!imageInfo?.naturalWidth || !imageInfo?.naturalHeight) {
 								throw new Error(
