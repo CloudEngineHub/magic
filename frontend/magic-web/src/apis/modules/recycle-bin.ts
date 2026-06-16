@@ -58,6 +58,13 @@ export namespace RecycleBin {
 	export interface RestoreParams {
 		resource_ids: string[]
 		resource_type: number
+		conflict_resolutions?: Record<
+			string,
+			{
+				parent_missing?: "restore_to_root"
+				name_conflict?: "overwrite" | "skip"
+			}
+		>
 	}
 
 	export interface MoveProjectParams {

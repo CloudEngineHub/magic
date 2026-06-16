@@ -2710,6 +2710,9 @@
 			"loader": {
 				"noMoreData": "没有更多数据了"
 			},
+			"nameConflictResolve": {
+				"cancelAria": "取消"
+			},
 			"orphanWarn": {
 				"cancel": "取消还原",
 				"intro": "以下 {{count}} 条内容因原父级位置已不存在，无法自动还原：",
@@ -3592,10 +3595,22 @@
 		"restoreCheck": {
 			"confirmMessage": "将{{type}}「{{name}}」恢复至原位置？",
 			"errorMessage": "父级检查失败，请稍后重试",
+			"fileConflictConfirmMessage": "有 {{parentMissingCount}} 个文件原目录已不存在，将恢复到原项目根目录；原项目根目录已存在同名文件 {{conflictNames}}，这 {{nameConflictCount}} 个文件需要逐个确认。确认继续？",
+			"fileConflictCountConfirmMessage": "有 {{parentMissingCount}} 个文件原目录已不存在，将恢复到原项目根目录；另有 {{nameConflictCount}} 个同名文件需要逐个确认。确认继续？",
+			"nameConflictConfirmMessage": "原项目根目录已存在同名文件 {{conflictNames}}，这 {{count}} 个文件需要逐个确认。确认继续？",
+			"nameConflictCountConfirmMessage": "原项目根目录已存在 {{count}} 个同名文件，这些文件需要逐个确认。确认继续？",
+			"nameConflictDialogTitle": "是否覆盖文件「{{fileName}}」？",
+			"conflictNamesWithEtc": "{{names}} 等文件",
+			"parentMissingConfirmMessage": "有 {{count}} 个文件原目录已不存在，将恢复到原项目根目录。确认恢复？",
 			"invalidMessage": "恢复前检查未通过",
 			"locationLabel": "位置",
 			"missingParentMessage": "原{{parentLabel}}已不存在，请选择新的{{locationLabel}}以恢复「{{name}}」。",
 			"mixedTypes": "所选资源类型不一致",
+			"skipNameConflict": "跳过",
+			"applySameActionToRemaining": "后续 {{count}} 个冲突文件都执行相同操作",
+			"processingAllNameConflicts": "处理中...",
+			"pendingNameConflictCount": "还有 {{count}} 个冲突文件待处理",
+			"nameConflictSkipped": "{{count}} 个同名文件已跳过",
 			"needMoveFiles": "部分项的原项目已不存在，请为这 {{count}} 个文件选择目标项目。",
 			"needMoveProjects": "部分项的原工作区已不存在，请为这 {{count}} 个项目选择目标工作区。",
 			"needMoveTopics": "部分项的原项目已不存在，请为这 {{count}} 个话题选择目标项目。",

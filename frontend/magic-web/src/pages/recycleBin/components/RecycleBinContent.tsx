@@ -105,6 +105,7 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 				items={items}
 				restoreTarget={actions.restoreTarget}
 				restoreCheckResult={actions.restoreCheckResult}
+				pendingNameConflictRestore={actions.pendingNameConflictRestore}
 				deleteTarget={actions.deleteTarget}
 				moveProjectModalOpen={actions.moveProjectModalOpen}
 				selectPathModalOpen={actions.selectPathModalOpen}
@@ -114,9 +115,13 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 				workspaces={actions.workspaces}
 				isMoveProjectLoading={actions.isMoveProjectLoadingCombined}
 				isPermanentDeleteLoading={actions.isPermanentDeleteLoading}
+				isResolvingAllNameConflicts={actions.isResolvingAllNameConflicts}
 				onRestoreOpenChange={actions.handleRestoreModalOpenChange}
 				onDeleteOpenChange={actions.handleDeleteModalOpenChange}
 				onConfirmRestore={actions.handleConfirmRestore}
+				onNameConflictRestoreCancel={actions.handleNameConflictRestoreCancel}
+				onNameConflictRestoreReplace={actions.handleNameConflictRestoreReplace}
+				onNameConflictRestoreSkip={actions.handleNameConflictRestoreSkip}
 				onConfirmDelete={actions.handleConfirmDelete}
 				onMoveProjectClose={actions.handleMoveProjectClose}
 				onMoveProjectConfirm={actions.handleMoveProject}

@@ -2710,6 +2710,9 @@
 			"loader": {
 				"noMoreData": "You've seen everything!"
 			},
+			"nameConflictResolve": {
+				"cancelAria": "Cancel"
+			},
 			"orphanWarn": {
 				"cancel": "Cancel restore",
 				"intro": "{{count}} items can't be restored automatically because the original location no longer exists:",
@@ -3590,10 +3593,22 @@
 		"restoreCheck": {
 			"confirmMessage": "Restore {{type}}「{{name}}」to its original location?",
 			"errorMessage": "Parent check failed, please retry later",
+			"fileConflictConfirmMessage": "{{parentMissingCount}} file(s) whose original folder no longer exists will be restored to the original project's root directory. The original project root already contains {{conflictNames}}, and {{nameConflictCount}} file(s) with the same name will need confirmation one by one. Continue?",
+			"fileConflictCountConfirmMessage": "{{parentMissingCount}} file(s) whose original folder no longer exists will be restored to the original project's root directory; another {{nameConflictCount}} conflicting file(s) will need confirmation one by one. Continue?",
+			"nameConflictConfirmMessage": "The original project root already contains {{conflictNames}}, and {{count}} file(s) with the same name will need confirmation one by one. Continue?",
+			"nameConflictCountConfirmMessage": "The original project root already contains {{count}} file(s) with the same name. These files will need confirmation one by one. Continue?",
+			"nameConflictDialogTitle": "Overwrite file \"{{fileName}}\"?",
+			"conflictNamesWithEtc": "{{names}}, and more",
+			"parentMissingConfirmMessage": "{{count}} file(s) whose original folder no longer exists will be restored to the original project's root directory. Continue?",
 			"invalidMessage": "Pre-restore check did not pass",
 			"locationLabel": "location",
 			"missingParentMessage": "The original {{parentLabel}} no longer exists. Please select a new {{locationLabel}} to restore 「{{name}}」.",
 			"mixedTypes": "Selected resources have mixed types",
+			"skipNameConflict": "Skip",
+			"applySameActionToRemaining": "Apply the same action to the remaining {{count}} conflicting file(s)",
+			"processingAllNameConflicts": "Processing...",
+			"pendingNameConflictCount": "{{count}} conflicting file(s) remaining",
+			"nameConflictSkipped": "{{count}} file(s) with a name conflict were skipped",
 			"needMoveFiles": "Original projects no longer exist for some items. Please select a project for these {{count}} Files.",
 			"needMoveProjects": "Original workspaces no longer exist for some items. Please select a workspace for these {{count}} projects.",
 			"needMoveTopics": "Original projects no longer exist for some items. Please select a project for these {{count}} Topics.",

@@ -2,13 +2,11 @@ import type { TFunction } from "i18next"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import MoveProjectModal from "@/pages/superMagic/components/EmptyWorkspacePanel/components/MoveProjectModal"
 import CrossProjectFileOperationModal from "@/pages/superMagic/components/SelectPathModal/components/CrossProjectFileOperationModal"
-import type {
-	ProjectListItem,
-	Workspace,
-} from "@/pages/superMagic/pages/Workspace/types"
+import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import SuperMagicService from "@/pages/superMagic/services"
 import { workspaceStore } from "@/pages/superMagic/stores/core"
 import { DeleteModal } from "./DeleteModal"
+import { NameConflictRestoreModal } from "./NameConflictRestoreModal"
 import { RestoreModal } from "./RestoreModal"
 import {
 	getCategoryLabel,
@@ -27,6 +25,10 @@ interface RecycleBinModalsProps {
 	items: RecycleBinItem[]
 	restoreTarget: RestoreTarget | null
 	restoreCheckResult: RestoreCheckResult | null
+	pendingNameConflictRestore: {
+		fileName: string
+		pendingCount: number
+	} | null
 	deleteTarget: DeleteTarget | null
 	moveProjectModalOpen: boolean
 	selectPathModalOpen: boolean
@@ -36,9 +38,13 @@ interface RecycleBinModalsProps {
 	workspaces: Workspace[]
 	isMoveProjectLoading: boolean
 	isPermanentDeleteLoading: boolean
+	isResolvingAllNameConflicts: boolean
 	onRestoreOpenChange: (open: boolean) => void
 	onDeleteOpenChange: (open: boolean) => void
 	onConfirmRestore: () => void
+	onNameConflictRestoreCancel: () => void
+	onNameConflictRestoreReplace: (applyToRemaining: boolean) => void
+	onNameConflictRestoreSkip: (applyToRemaining: boolean) => void
 	onConfirmDelete: () => void
 	onMoveProjectClose: () => void
 	onMoveProjectConfirm: (workspaceId: string) => void
@@ -56,6 +62,7 @@ export function RecycleBinModals({
 	items,
 	restoreTarget,
 	restoreCheckResult,
+	pendingNameConflictRestore,
 	deleteTarget,
 	moveProjectModalOpen,
 	selectPathModalOpen,
@@ -65,9 +72,13 @@ export function RecycleBinModals({
 	workspaces,
 	isMoveProjectLoading,
 	isPermanentDeleteLoading,
+	isResolvingAllNameConflicts,
 	onRestoreOpenChange,
 	onDeleteOpenChange,
 	onConfirmRestore,
+	onNameConflictRestoreCancel,
+	onNameConflictRestoreReplace,
+	onNameConflictRestoreSkip,
 	onConfirmDelete,
 	onMoveProjectClose,
 	onMoveProjectConfirm,
@@ -98,6 +109,16 @@ export function RecycleBinModals({
 				)}
 				onConfirm={onConfirmDelete}
 				confirmLoading={isPermanentDeleteLoading}
+			/>
+
+			<NameConflictRestoreModal
+				open={pendingNameConflictRestore !== null}
+				fileName={pendingNameConflictRestore?.fileName ?? ""}
+				pendingCount={pendingNameConflictRestore?.pendingCount ?? 0}
+				isResolvingAll={isResolvingAllNameConflicts}
+				onCancel={onNameConflictRestoreCancel}
+				onReplace={onNameConflictRestoreReplace}
+				onSkip={onNameConflictRestoreSkip}
 			/>
 
 			<MoveProjectModal

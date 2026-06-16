@@ -15,6 +15,8 @@ const CATEGORY_TO_FALLBACK_TITLE_KEY: Record<RecycleBinItem["category"], string>
 	files: "common.untitledFile",
 }
 
+const MAX_CONFLICT_NAME_PREVIEW_COUNT = 5
+
 export const RESOURCE_TYPE = {
 	WORKSPACE: 1,
 	PROJECT: 2,
@@ -74,6 +76,25 @@ export interface RestoreCheckResult {
 	itemsNeedMove: string[]
 	/** 无需移动的 resource_id（父级存在可直接恢复） */
 	itemsNoNeedMove: string[]
+	/** 文件恢复冲突策略，key 为 resource_id */
+	conflictResolutions?: Record<
+		string,
+		{
+			parent_missing?: "restore_to_root"
+			name_conflict?: "overwrite" | "skip"
+		}
+	>
+	/** 同名冲突被跳过的文件数量 */
+	skippedNameConflictCount?: number
+	/** 同名冲突文件名，用于恢复确认提示 */
+	skippedNameConflictNames?: string[]
+	/** 同名冲突资源 ID，恢复请求必须排除 */
+	skippedNameConflictResourceIds?: string[]
+	/** 同名冲突文件列表，用于逐个恢复确认 */
+	skippedNameConflictItems?: Array<{
+		resourceId: string
+		fileName: string
+	}>
 	message?: string
 	messageKey?: string
 	shouldBlockRestore: boolean
@@ -348,6 +369,48 @@ export function getRestoreStatusMessage(
 		return t(result.messageKey ?? messageKeyMap[result.status])
 	if (result.status === "skipped") return t("recycleBin.restoreCheck.skippedMessage")
 
+	const resourceType = target ? getRestoreTargetResourceType({ target, items }) : undefined
+	const conflictCount = Object.keys(result.conflictResolutions ?? {}).length
+	const skippedCount = result.skippedNameConflictCount ?? 0
+	const conflictNameList = result.skippedNameConflictNames ?? []
+	const visibleConflictNames = conflictNameList
+		.slice(0, MAX_CONFLICT_NAME_PREVIEW_COUNT)
+		.map((name) => `「${name}」`)
+		.join("、")
+	const conflictNames =
+		conflictNameList.length > MAX_CONFLICT_NAME_PREVIEW_COUNT
+			? t("recycleBin.restoreCheck.conflictNamesWithEtc", {
+					names: visibleConflictNames,
+			  })
+			: visibleConflictNames
+	if (resourceType === RESOURCE_TYPE.FILE && (conflictCount > 0 || skippedCount > 0)) {
+		if (conflictCount > 0 && skippedCount > 0) {
+			if (!conflictNames) {
+				return t("recycleBin.restoreCheck.fileConflictCountConfirmMessage", {
+					parentMissingCount: conflictCount,
+					nameConflictCount: skippedCount,
+				})
+			}
+			return t("recycleBin.restoreCheck.fileConflictConfirmMessage", {
+				parentMissingCount: conflictCount,
+				nameConflictCount: skippedCount,
+				conflictNames,
+			})
+		}
+		if (skippedCount > 0) {
+			if (!conflictNames) {
+				return t("recycleBin.restoreCheck.nameConflictCountConfirmMessage", {
+					count: skippedCount,
+				})
+			}
+			return t("recycleBin.restoreCheck.nameConflictConfirmMessage", {
+				count: skippedCount,
+				conflictNames,
+			})
+		}
+		return t("recycleBin.restoreCheck.parentMissingConfirmMessage", { count: conflictCount })
+	}
+
 	if (result.itemsNeedMove.length > 0) {
 		if (target?.kind !== "selection") return getMissingParentMessage(target, t)
 		const resourceType = getRestoreTargetResourceType({ target, items })
@@ -527,4 +590,38 @@ export function extractSuccessResourceIds(
 ) {
 	if (!Array.isArray(results)) return []
 	return results.filter((result) => result.success).map((result) => result.resource_id)
+}
+
+export function getRestoreFailureMessage(
+	data: {
+		success_count: number
+		failed_count: number
+		results: Array<{ success: boolean; error_message?: string }>
+	},
+	t: TFunction,
+) {
+	const rawReason = data.results
+		.find((item) => !item.success && item.error_message?.trim())
+		?.error_message?.trim()
+	const reason = rawReason?.replace(/，请选择覆盖或退出$/, "")
+	const messageKey =
+		data.success_count > 0
+			? reason
+				? "recycleBin.restoreResult.partialWithReason"
+				: "recycleBin.restoreResult.partial"
+			: reason
+			  ? "recycleBin.restoreResult.failedWithReason"
+			  : "recycleBin.restoreResult.failed"
+
+	return t(messageKey, {
+		successCount: data.success_count,
+		failedCount: data.failed_count,
+		reason,
+	})
+}
+
+export function excludeRestoreResourceIds(resourceIds: string[], excludedResourceIds: string[]) {
+	if (excludedResourceIds.length === 0) return Array.from(new Set(resourceIds))
+	const excludedSet = new Set(excludedResourceIds)
+	return Array.from(new Set(resourceIds)).filter((resourceId) => !excludedSet.has(resourceId))
 }
