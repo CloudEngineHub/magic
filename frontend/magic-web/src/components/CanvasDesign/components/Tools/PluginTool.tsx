@@ -242,7 +242,7 @@ export default function PluginTool() {
 													container={portalContainer || undefined}
 												>
 													<TooltipContent
-														side="top"
+														side="right"
 														sideOffset={8}
 														className="max-w-xs"
 													>
