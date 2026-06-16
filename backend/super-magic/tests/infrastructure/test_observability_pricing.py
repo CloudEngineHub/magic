@@ -88,6 +88,74 @@ def test_model_config_manager_pricing_sync_registers_model_aliases():
         LLMFactory.pricing = saved_pricing
 
 
+def test_model_config_manager_does_not_warn_missing_pricing_for_config_yaml_only():
+    from agentlang.config.models.model_config import ModelConfig
+    from agentlang.config.models.model_config_manager import model_config_manager
+
+    saved_models = dict(model_config_manager._models)
+    saved_provider_types = set(model_config_manager._loaded_provider_types)
+    saved_pricing = LLMFactory.pricing
+    try:
+        LLMFactory.pricing = ModelPricing()
+        model_config_manager._loaded_provider_types = {"config.yaml"}
+        model_config_manager._models = {
+            "auto": ModelConfig.from_dict(
+                "auto",
+                {
+                    "name": "deepseek-v4-flash",
+                    "provider": "openai",
+                    "api_key": "mock-key",
+                    "api_base_url": "https://llm.example.com/v1",
+                    "type": "llm",
+                },
+                provider_source="config.yaml",
+            )
+        }
+
+        assert model_config_manager._should_warn_missing_pricing(0) is False
+        model_config_manager._sync_pricing()
+
+        assert "default" in LLMFactory.pricing.pricing
+    finally:
+        model_config_manager._models = saved_models
+        model_config_manager._loaded_provider_types = saved_provider_types
+        LLMFactory.pricing = saved_pricing
+
+
+def test_model_config_manager_warns_missing_pricing_after_dynamic_provider():
+    from agentlang.config.models.model_config import ModelConfig
+    from agentlang.config.models.model_config_manager import model_config_manager
+
+    saved_models = dict(model_config_manager._models)
+    saved_provider_types = set(model_config_manager._loaded_provider_types)
+    saved_pricing = LLMFactory.pricing
+    try:
+        LLMFactory.pricing = ModelPricing()
+        model_config_manager._loaded_provider_types = {"config.yaml", "magic-service"}
+        model_config_manager._models = {
+            "auto": ModelConfig.from_dict(
+                "auto",
+                {
+                    "name": "deepseek-v4-flash",
+                    "provider": "openai",
+                    "api_key": "mock-key",
+                    "api_base_url": "https://llm.example.com/v1",
+                    "type": "llm",
+                },
+                provider_source="magic-service",
+            )
+        }
+
+        assert model_config_manager._should_warn_missing_pricing(0) is True
+        model_config_manager._sync_pricing()
+
+        assert "default" in LLMFactory.pricing.pricing
+    finally:
+        model_config_manager._models = saved_models
+        model_config_manager._loaded_provider_types = saved_provider_types
+        LLMFactory.pricing = saved_pricing
+
+
 def test_openai_integration_uses_synced_factory_pricing(monkeypatch):
     from app.infrastructure.observability import openai_integration
 

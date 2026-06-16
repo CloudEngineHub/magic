@@ -261,7 +261,7 @@ class ModelConfigManager:
                             models_config[alias_id] = {"pricing": mc.pricing}
                             pricing_alias_count += 1
             LLMFactory.pricing.replace_pricing_from_config(models_config)
-            if self._models and pricing_model_count == 0:
+            if self._should_warn_missing_pricing(pricing_model_count):
                 logger.warning(
                     f"已加载 {len(self._models)} 个模型，但没有任何 pricing 配置，将继续使用默认价格"
                 )
@@ -273,6 +273,21 @@ class ModelConfigManager:
                 )
         except Exception as e:
             logger.warning(f"Pricing sync failed: {e}")
+
+    def _should_warn_missing_pricing(self, pricing_model_count: int) -> bool:
+        """判断 0 pricing 是否值得报警。
+
+        config.yaml 是启动期本地兜底 provider，通常只承载可调用入口和上下文窗口，
+        不一定承载线上定价。只有更高优先级 provider（例如 magic-service）加载完成后，
+        仍然没有任何 pricing，才说明成本统计会长期退回默认价格，需要 warning。
+        """
+        if not self._models or pricing_model_count > 0:
+            return False
+        config_priority = self._get_source_priority("config.yaml")
+        return any(
+            self._get_source_priority(provider_type) > config_priority
+            for provider_type in self._loaded_provider_types
+        )
 
 
 # 全局单例
