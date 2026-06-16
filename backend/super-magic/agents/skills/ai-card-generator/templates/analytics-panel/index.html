@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 
 <head>
     <meta charset="utf-8">
@@ -16,22 +16,22 @@
                 <span class="eyebrow">Operations Cockpit</span>
                 <h1>{{CARD_TITLE}}</h1>
                 <p class="sub">{{CARD_DESCRIPTION}}</p>
-                <p class="meta">{{GENERATED_AT}} · 更新 #{{UPDATE_COUNT}}</p>
+                <p class="meta">{{GENERATED_AT}} · Update #{{UPDATE_COUNT}}</p>
             </section>
 
             <!-- DATA:summary_START -->
             <section class="card analysis-source">
-                <span class="pill">健康</span>
+                <span class="pill">Healthy</span>
                 <div class="score">87</div>
-                <p class="sub">流量和收入保持增速，注册到激活仍是主要流失段。</p>
+                <p class="sub">Traffic and revenue keep growing, while signup-to-activation remains the main drop-off segment.</p>
             </section>
             <!-- DATA:summary_END -->
 
             <section class="card-soft analysis-source">
-                <p class="sub">建议优先修复新手引导，预计可提升激活 5-8%。</p>
+                <p class="sub">Prioritize fixing onboarding; expected activation lift is 5-8%.</p>
             </section>
             <section class="card-soft analysis-source">
-                <p class="sub">私域回流 ROI 最高，付费广告成本持续上行。</p>
+                <p class="sub">Private-domain return has the highest ROI, while paid-ad costs continue rising.</p>
             </section>
         </aside>
 
@@ -40,43 +40,43 @@
             <section class="card analysis-source">
                 <div class="head">
                     <div>
-                        <h2>KPI 总览</h2>
-                        <p>核心指标与趋势</p>
+                        <h2>KPI Overview</h2>
+                        <p>Core metrics and trends</p>
                     </div>
                 </div>
                 <div class="kpi-grid">
                     <article class="card-soft kpi">
-                        <div class="name">总访问量</div>
+                        <div class="name">Total visits</div>
                         <div class="value">428K</div>
                         <div class="delta up">+18.6%</div>
                         <div class="spark" data-series="112,126,134,142,155,166,174"></div>
                     </article>
                     <article class="card-soft kpi">
-                        <div class="name">新增用户</div>
+                        <div class="name">New users</div>
                         <div class="value">18,420</div>
                         <div class="delta up">+14.3%</div>
                         <div class="spark" data-series="9,10,11,12,14,15,16"></div>
                     </article>
                     <article class="card-soft kpi">
-                        <div class="name">7日留存</div>
+                        <div class="name">7-day retention</div>
                         <div class="value">38.7%</div>
                         <div class="delta flat">-1.9%</div>
                         <div class="spark" data-series="42,41,41,40,39,39,38.7"></div>
                     </article>
                     <article class="card-soft kpi">
-                        <div class="name">激活率</div>
+                        <div class="name">Activation rate</div>
                         <div class="value">63.4%</div>
                         <div class="delta down">-2.4%</div>
                         <div class="spark" data-series="69,68,68,67,66,65,63"></div>
                     </article>
                     <article class="card-soft kpi">
-                        <div class="name">付费转化</div>
+                        <div class="name">Paid conversion</div>
                         <div class="value">4.9%</div>
                         <div class="delta up">+0.6%</div>
                         <div class="spark" data-series="3.8,4.1,4.0,4.3,4.5,4.7,4.9"></div>
                     </article>
                     <article class="card-soft kpi">
-                        <div class="name">月收入</div>
+                        <div class="name">Monthly revenue</div>
                         <div class="value">¥1.38M</div>
                         <div class="delta up">+21.4%</div>
                         <div class="spark" data-series="0.72,0.84,0.93,1.02,1.11,1.24,1.38"></div>
@@ -90,8 +90,8 @@
                 <section class="card analysis-source">
                     <div class="head">
                         <div>
-                            <h2>转化漏斗</h2>
-                            <p>访问→复购效率</p>
+                            <h2>Conversion funnel</h2>
+                            <p>Visit-to-repeat-purchase efficiency</p>
                         </div>
                     </div>
                     <div class="chart" id="funnelChart"></div>
@@ -99,11 +99,11 @@
                 <!-- DATA:funnel_END -->
 
                 <section class="card analysis-source">
-                    <h2>漏斗解读</h2>
+                    <h2>Funnel interpretation</h2>
                     <div class="list">
-                        <div class="item"><strong>访问→注册 12.8%</strong><span>落地页匹配改善。</span></div>
-                        <div class="item"><strong>注册→激活 63.4%</strong><span>首日任务完成率下滑。</span></div>
-                        <div class="item"><strong>激活→付费 7.7%</strong><span>高意向召回有效。</span></div>
+                        <div class="item"><strong>Visit -> signup 12.8%</strong><span>Landing-page match improved.</span></div>
+                        <div class="item"><strong>Signup -> activation 63.4%</strong><span>First-day task completion declined.</span></div>
+                        <div class="item"><strong>Activation -> paid 7.7%</strong><span>High-intent recall is effective.</span></div>
                     </div>
                 </section>
             </div>
@@ -113,8 +113,8 @@
                 <section class="card analysis-source">
                     <div class="head">
                         <div>
-                            <h2>渠道拆解</h2>
-                            <p>规模 / 收入 / 成本对比</p>
+                            <h2>Channel breakdown</h2>
+                            <p>Scale / revenue / cost comparison</p>
                         </div>
                     </div>
                     <div class="chart tall" id="channelChart"></div>
@@ -123,11 +123,11 @@
 
                 <!-- DATA:alerts_START -->
                 <section class="card analysis-source">
-                    <h2>告警与行动</h2>
+                    <h2>Alerts and actions</h2>
                     <div class="list">
-                        <div class="item"><strong class="down">P1 激活率低于阈值</strong><span>回滚复杂表单，增加默认模板。</span></div>
-                        <div class="item"><strong class="flat">P2 CPA 连续上涨</strong><span>暂停低 CTR 创意素材。</span></div>
-                        <div class="item"><strong>P3 留存未传导收入</strong><span>补充老客转化激励。</span></div>
+                        <div class="item"><strong class="down">P1 activation rate below threshold</strong><span>Roll back complex forms and add default templates.</span></div>
+                        <div class="item"><strong class="flat">P2 CPA keeps rising</strong><span>Pause low-CTR creative assets.</span></div>
+                        <div class="item"><strong>P3 retention has not translated into revenue</strong><span>Add conversion incentives for returning users.</span></div>
                     </div>
                 </section>
                 <!-- DATA:alerts_END -->
@@ -137,8 +137,8 @@
             <section class="card analysis-source">
                 <div class="head">
                     <div>
-                        <h2>增长趋势</h2>
-                        <p>流量 / 收入 / 转化率联动</p>
+                        <h2>Growth trend</h2>
+                        <p>Traffic / revenue / conversion-rate linkage</p>
                     </div>
                     <div class="tabs" id="trendTabs">
                         <button class="tab active" data-range="7d" type="button">7D</button>
@@ -154,67 +154,67 @@
             <section class="card source-panel analysis-source">
                 <div class="source-head">
                     <div>
-                        <h2>证据链接</h2>
-                        <p>支撑指标判断、异常告警和行动建议的外部页面。</p>
+                        <h2>Evidence links</h2>
+                        <p>External pages supporting metric judgments, anomaly alerts, and action recommendations.</p>
                     </div>
-                    <button class="source-close" id="sourceClose" type="button">收起预览</button>
+                    <button class="source-close" id="sourceClose" type="button">Collapse preview</button>
                 </div>
                 <div class="source-grid">
                     <article class="source-card">
-                        <span class="pill">数据</span>
-                        <strong>渠道投放日报</strong>
-                        <p class="sub">用于验证 CPA 上涨和素材 CTR 下滑。</p>
+                        <span class="pill">Data</span>
+                        <strong>Channel advertising daily report</strong>
+                        <p class="sub">Used to verify CPA increases and creative CTR decline.</p>
                         <div class="source-actions">
                             <button class="source-preview active" type="button"
-                                data-preview-url="https://example.com/channel-report">预览</button>
+                                data-preview-url="https://example.com/channel-report">Preview</button>
                             <a href="https://example.com/channel-report" target="_blank"
-                                rel="noopener noreferrer">打开</a>
+                                rel="noopener noreferrer">Open</a>
                         </div>
                     </article>
                     <article class="source-card">
-                        <span class="pill">产品</span>
-                        <strong>注册流程改版记录</strong>
-                        <p class="sub">用于核对激活率下滑是否与近期改版相关。</p>
+                        <span class="pill">Product</span>
+                        <strong>Signup-flow redesign record</strong>
+                        <p class="sub">Used to check whether the activation decline is related to the recent redesign.</p>
                         <div class="source-actions">
                             <button class="source-preview" type="button"
-                                data-preview-url="https://example.com/release-note">预览</button>
+                                data-preview-url="https://example.com/release-note">Preview</button>
                             <a href="https://example.com/release-note" target="_blank"
-                                rel="noopener noreferrer">打开</a>
+                                rel="noopener noreferrer">Open</a>
                         </div>
                     </article>
                 </div>
                 <div class="source-frame-wrap">
-                    <div class="source-frame-fallback" id="sourceFallback">如果网页禁止嵌入，请使用“打开”。</div>
-                    <iframe id="sourceFrame" title="证据链接预览" sandbox="allow-scripts allow-same-origin allow-popups"
+                    <div class="source-frame-fallback" id="sourceFallback">If the page blocks embedding, use Open.</div>
+                    <iframe id="sourceFrame" title="Evidence-link preview" sandbox="allow-scripts allow-same-origin allow-popups"
                         loading="lazy" referrerpolicy="no-referrer"></iframe>
                 </div>
             </section>
             <!-- DATA:sources_END -->
 
             <section class="ai-insight">
-                <div class="insight-header"><span class="insight-icon">✦</span><span>AI 洞察</span></div>
-                <p class="insight-text">激活率连续 3 日走低且首日任务完成率同步下滑，可能与注册流程改版相关；建议优先回滚并做 A/B 验证。</p>
+                <div class="insight-header"><span class="insight-icon">✦</span><span>AI Insight</span></div>
+                <p class="insight-text">Activation rate has declined for three consecutive days while first-day task completion also fell. This may be related to the signup-flow redesign; prioritize rollback and A/B validation.</p>
                 <div class="suggestion-chips">
-                    <button class="chip" type="button" data-prompt="为什么激活率在下滑？请结合漏斗各环节和最近产品改动给出原因分析。">为什么激活下滑？</button>
-                    <button class="chip" type="button" data-prompt="请给出优化转化漏斗的三步可执行方案，含预期收益区间。">如何优化漏斗？</button>
-                    <button class="chip" type="button" data-prompt="分析竞品近期主要动作，判断对我方核心指标的潜在影响。">竞品在做什么？</button>
-                    <button class="chip" type="button" data-prompt="基于当前数据，写一份包含优先级、负责人建议和时间节点的行动计划。">写一份行动计划</button>
+                    <button class="chip" type="button" data-prompt="Why is activation declining? Analyze funnel stages and recent product changes.">Why is activation declining?</button>
+                    <button class="chip" type="button" data-prompt="Give three executable steps to optimize the conversion funnel, including expected benefit ranges.">How can we optimize the funnel?</button>
+                    <button class="chip" type="button" data-prompt="Analyze recent competitor moves and assess potential impact on our core metrics.">What are competitors doing?</button>
+                    <button class="chip" type="button" data-prompt="Based on current data, write an action plan with priorities, suggested owners, and timing.">Write an action plan</button>
                 </div>
                 <div class="ask-row">
-                    <input class="ask-input" id="askInput" type="text" placeholder="还想问点别的...">
+                    <input class="ask-input" id="askInput" type="text" placeholder="Ask something else...">
                     <button class="ask-send" id="askSend" type="button">→</button>
                 </div>
                 <div class="config-row">
                     <div class="select-group">
-                        <label class="select-label" for="agentSelect">AI 员工</label>
+                        <label class="select-label" for="agentSelect">AI employee</label>
                         <select class="select" id="agentSelect">
-                            <option value="">加载员工中…</option>
+                            <option value="">Loading employees...</option>
                         </select>
                     </div>
                     <div class="select-group">
-                        <label class="select-label" for="modelSelect">模型</label>
+                        <label class="select-label" for="modelSelect">Model</label>
                         <select class="select" id="modelSelect">
-                            <option value="auto">自动选择</option>
+                            <option value="auto">Auto select</option>
                         </select>
                     </div>
                 </div>

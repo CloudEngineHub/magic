@@ -10,11 +10,9 @@ description: >
   - "design a theme that looks like…", "generate a matching preset"
   - User provides a reference image / Figma frame / screenshot and asks for a matching preset
 
-  中文触发词：
-  - 自定义样式 / 帮我设计一套风格 / 我想要一个自定义模板
-  - 新建预设 / 创建新的视觉模板 / 帮我设计一个主题
-  - 生成一套配色方案 / 做一套设计规范
-  - 用户提供参考图 / Figma 稿 / 截图并要求匹配风格时
+  Multilingual triggers:
+  - Equivalent custom-style, new-template, theme-design, palette-system, design-system, reference-image,
+    Figma, or screenshot-matching requests in any user language.
 ---
 
 # Generate Preset Sub-Skill
@@ -33,15 +31,24 @@ Load this skill immediately when **any** of the following is true:
 - The user says phrases like "make a new preset", "create a style for me", "I want a custom template", "design a theme that looks like…".
 - The user provides a reference image, Figma frame, or screenshot and asks to "generate a matching preset".
 
-**中文触发词（出现以下任意表达时立即加载本技能）：**
+**Multilingual triggers:**
 
-- 用户在 Step 4.1 中选择了"自定义样式"选项
-- 自定义样式 / 帮我设计一套风格 / 我想要一个自定义模板
-- 新建预设 / 创建新的视觉模板 / 帮我设计一个主题
-- 生成一套配色方案 / 做一套设计规范 / 搞一个新的预设
-- 用户提供参考图、Figma 稿或截图并要求"参考这个风格生成预设"
+- The user selects the localized equivalent of "Custom style" in Step 4.1.
+- The user asks for a custom visual style, new preset, visual template, theme, palette system, or design system in any language.
+- The user provides a reference image, Figma file, or screenshot and asks to match that style.
 
 Do **not** load this skill for small card-level tweaks (e.g. "change this card's background color"). This skill is exclusively for authoring a reusable preset bundle.
+
+---
+
+## Output Language Contract
+
+Follow the parent `self-media-composer` Output Language Contract:
+
+- Keep CSS class names, preset slugs, JS namespaces, token names, filenames, and API-shaped values in stable English/ASCII.
+- Write preview card copy, placeholder content, comments, labels, and visible demo prose in the user's preferred output language.
+- If the user did not specify a language for demo content, infer it from the parent post request; otherwise default to concise English for preview scaffolds.
+- Do not translate brand names, product names, source quotes, code identifiers, or fixed schema values.
 
 ---
 

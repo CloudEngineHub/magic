@@ -2,6 +2,8 @@
 
 `post.json.meta` is free-form but these keys have conventional meanings consumed by previewers:
 
+All user-facing string values in `meta` must follow the parent Output Language Contract. Keep JSON keys and enum-like values stable; localize titles, subtitles, feed titles, comments, relative time strings, and display labels.
+
 | Key            | Type   | Platform          | Purpose                                                                                                                        |
 | -------------- | ------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `title`        | string | all               | Primary post title shown on card and feed.                                                                                     |
@@ -24,19 +26,19 @@ Use this shape for `rednote` posts:
 ```json
 {
   "tags": {
-    "core": ["穿搭"],
-    "mid": ["通勤穿搭", "显瘦穿搭"],
-    "longtail": ["梨形身材显瘦", "155穿搭日记"],
-    "trend": ["多巴胺穿搭"]
+    "core": ["workwear"],
+    "mid": ["commute outfits", "petite styling"],
+    "longtail": ["outfits for new office workers", "155cm styling tips"],
+    "trend": ["dopamine dressing"]
   }
 }
 ```
 
 | Field | Type | Count | Meaning |
 | --- | --- | --- | --- |
-| `core` | string[] | 1-2 | Category anchors, such as `穿搭`, `美食`, `护肤`. |
-| `mid` | string[] | 2-3 | Search-intent tags, such as `通勤穿搭`, `懒人食谱`, `极简护肤`. |
-| `longtail` | string[] | 2-3 | Audience, pain-point, location, or use-case tags, such as `梨形身材显瘦`, `15分钟快手菜`, `杭州旅游攻略`. |
+| `core` | string[] | 1-2 | Category anchors, such as `workwear`, `food`, or `skincare`. |
+| `mid` | string[] | 2-3 | Search-intent tags, such as `commute outfits`, `quick recipes`, or `minimal skincare`. |
+| `longtail` | string[] | 2-3 | Audience, pain-point, location, or use-case tags, such as `155cm styling tips`, `15-minute dinners`, or `Hangzhou travel guide`. |
 | `trend` | string[] | 0-1 | Current trend or official activity tag. Omit when no relevant trend exists. |
 
 Flattened render order: `core -> mid -> longtail -> trend`.
@@ -49,7 +51,7 @@ Compatibility rule: if an existing post uses `tags` as a string or `string[]`, p
 
 Generate engagement metadata together with the article/card content. Do not leave it for a later cleanup pass.
 
-- Values must fit the platform and content: Rednote can use `"1.8w"`-style likes, Instagram can use `"12.3k"`, and WeChat can use Chinese display strings such as `"23.8w"`.
+- Values must fit the platform, content, and output language: Rednote can use `"1.8w"`-style likes, Instagram can use `"12.3k"`, and WeChat can use localized display strings.
 - Sample evaluations should reveal likely audience reactions, objections, use cases, or purchase/reading intent. Avoid empty compliments.
 - If the user provides real metrics, use them and state that they came from user-provided data in `interactionReference.basis`.
 - If no real metrics are provided, make `interactionReference.disclaimer` explicit: `"reference display data, not real platform analytics"`.

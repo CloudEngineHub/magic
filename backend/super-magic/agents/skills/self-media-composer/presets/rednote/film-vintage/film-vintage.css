@@ -1,24 +1,24 @@
 /*
  * film-vintage.css
- * Film Vintage — 胶片复古风格，拍立得式摄影展示
+ * Film Vintage — film-vintage style with polaroid-style photography display
  *
  * Design principles:
- *   • 温暖的米白/奶油色背景，模拟老照片的自然褪色
- *   • 拍立得式宽边框设计，底部留白区域用于标注信息
- *   • 细微颗粒纹理，营造胶片质感
- *   • 衬线字体+等宽字体组合，平衡复古与专业
- *   • 低饱和度色彩，避免过于鲜艳
+ *   • Warm off-white / cream background simulating the natural fading of old photos
+ *   • Polaroid-style wide border with bottom whitespace for captions
+ *   • Subtle grain texture for a film feel
+ *   • Serif + monospace pairing balancing vintage mood and professional structure
+ *   • Low-saturation colors to avoid excessive brightness
  *
  * Color palette:
- *   bg-primary    #F5F1E8   奶油米白，主背景
- *   bg-surface    #FFFFFF   纯白，照片区域
- *   bg-footer     #FBF9F4   浅米色，底部信息栏
- *   accent        #8B7355   温暖棕色，强调色
- *   accent-light  #B8A68F   浅棕色，次要强调
- *   text-primary  #3A3226   深棕灰，主文本
- *   text-muted    #7A6F5D   中灰棕，次要文本
- *   border        #D4CCBB   米灰色，边框
- *   border-shadow #C5BAA3   深米色，阴影边框
+ *   bg-primary    #F5F1E8   Cream off-white, primary background
+ *   bg-surface    #FFFFFF   Pure white, photo area
+ *   bg-footer     #FBF9F4   Light beige, bottom info bar
+ *   accent        #8B7355   Warm brown, accent color
+ *   accent-light  #B8A68F   Light brown, secondary accent
+ *   text-primary  #3A3226   Deep brown-gray, primary text
+ *   text-muted    #7A6F5D   Medium gray-brown, secondary text
+ *   border        #D4CCBB   Beige-gray, border
+ *   border-shadow #C5BAA3   Deep beige, shadow border
  *
  * ─────────────────────────────────────────────────────────────
  * Table of Contents
@@ -91,7 +91,7 @@ body.fv-cover {
   background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
 }
 
-/* 胶片颗粒纹理（SVG Noise） */
+/* Film grain texture (SVG noise) */
 body::before {
   content: "";
   position: absolute;
@@ -123,7 +123,7 @@ body > * {
   flex-direction: column;
 }
 
-/* §1.1  Cover type — 封面卡片 */
+/* §1.1  Cover type — Cover card */
 .fv-cover {
   display: flex;
   flex-direction: column;
@@ -165,7 +165,7 @@ body > * {
   padding: 40px 32px;
 }
 
-/* 漏光/光晕效果 */
+/* Light leak / glow effect */
 .fv-cover::after {
   content: "";
   position: absolute;
@@ -208,7 +208,7 @@ body > * {
   margin: 0;
 }
 
-/* §1.2  Content type — 内容卡片（照片展示） */
+/* §1.2  Content type — Content card (photo showcase) */
 .fv-content {
   padding: 28px 24px 24px;
   background: #fafafa;
@@ -218,7 +218,7 @@ body > * {
    §2  Content Components
    ═══════════════════════════════════════════════════════════ */
 
-/* §2.1  Photo frame — 拍立得式照片框 */
+/* §2.1  Photo frame — Polaroid-style photo frame */
 .fv-photo-frame {
   background: #fdfbf7;
   background: var(--fv-surface);
@@ -255,7 +255,7 @@ body > * {
   object-position: center;
 }
 
-/* 照片框底部标注区域 */
+/* Bottom caption area of photo frame */
 .fv-photo-frame::after {
   content: "";
   position: absolute;
@@ -267,7 +267,7 @@ body > * {
   border-top: 1px solid var(--fv-border);
 }
 
-/* §2.2  Caption bar — 照片标题栏 */
+/* §2.2  Caption bar — Photo title bar */
 .fv-caption {
   font-family: var(--fv-font-display);
   font-size: 15px;
@@ -278,7 +278,7 @@ body > * {
   letter-spacing: 0.02em;
 }
 
-/* §2.3  Info footer — 底部信息栏（拍摄参数） */
+/* §2.3  Info footer — Bottom info bar (shooting parameters) */
 .fv-info-footer {
   position: absolute;
   bottom: 0;
@@ -314,7 +314,7 @@ body > * {
   text-align: right;
 }
 
-/* §2.4  Metadata row — 元数据行 */
+/* §2.4  Metadata row */
 .fv-meta-row {
   display: flex;
   align-items: center;
@@ -338,7 +338,7 @@ body > * {
   font-size: 11px;
 }
 
-/* §2.5  Section label — 区域标签 */
+/* §2.5  Section label — Section label */
 .fv-section-label {
   font-size: 11px;
   font-weight: 600;
@@ -351,7 +351,7 @@ body > * {
   display: inline-block;
 }
 
-/* §2.6  Divider — 分隔线 */
+/* §2.6  Divider — Divider */
 .fv-divider {
   height: 1px;
   background: linear-gradient(

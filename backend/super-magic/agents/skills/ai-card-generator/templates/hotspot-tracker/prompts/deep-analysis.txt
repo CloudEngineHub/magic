@@ -1,8 +1,8 @@
-请基于这张【热点追踪卡】进行二次深度分析：
+Please perform a second-level deep analysis based on this Hotspot Tracker card:
 
-1. 判断当前热点生命周期阶段和衰减拐点预测
-2. 关键事件引爆因子和后续演化路径
-3. 品牌借势的最佳窗口与风险红线
-4. 竞品在该热点中的动作及我方差异化策略
+1. Identify the current hotspot lifecycle stage and forecast the decay inflection point
+2. Analyze the trigger factors behind the key event and the likely evolution path
+3. Recommend the best brand-timing window and the risk red lines
+4. Summarize competitor moves around this hotspot and our differentiated strategy
 
-请结合热度指数、情感极性、平台分布和时序趋势综合判断。
+Please combine heat index, sentiment polarity, platform distribution, and time-series trend for the final judgment.

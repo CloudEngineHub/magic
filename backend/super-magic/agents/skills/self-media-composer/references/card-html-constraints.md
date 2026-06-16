@@ -13,11 +13,11 @@ Top beats bottom:
 ## Technical Constraints
 
 - **Fixed canvas**: set both `<html>` and `<body>` to the chosen `width` and `height`. No media queries, no responsive tricks. The card must render identically at any viewport.
-- **Tech stack**: 优先使用预设模板 CSS（通过 `<link>` 引用），模板未覆盖的样式使用内联 `<style>` 标签编写原生 CSS。非必要不使用 TailwindCSS。inline JS at the bottom of `<body>` only when strictly needed. Do not load external data.
-- **CSS 策略**:
-  1. 首选：直接使用预设 CSS 中已定义的 class（如 `.cd-header`, `.cd-body`, `.bg-dark` 等）
-  2. 次选：在 `<head>` 中用 `<style>` 标签编写原生 CSS 补充模板缺少的样式
-  3. 避免：不要引入 TailwindCSS CDN，除非项目明确要求
+- **Tech stack**: Prefer the chosen preset CSS via `<link>`. Add native CSS in a `<style>` block only for styles the preset does not cover. Avoid TailwindCSS unless the project explicitly requires it. Inline JS at the bottom of `<body>` only when strictly needed. Do not load external data.
+- **CSS strategy**:
+  1. First choice: use classes already defined by the preset, such as `.cd-header`, `.cd-body`, or `.bg-dark`.
+  2. Second choice: add small native CSS supplements in `<head><style>`.
+  3. Avoid: do not add the TailwindCSS CDN unless the project explicitly requires it.
 - **Images**: only reference local files. `assets/<name>` for post-local assets, `../../shared/<name>` for shared assets. Never hotlink remote images in the final card.
 - **Fonts and icons** — use the same CDN set as other Magic projects to keep caching consistent:
   - FontAwesome: `https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css`
@@ -35,11 +35,11 @@ Top beats bottom:
 
 ```html
 <!doctype html>
-<html lang="zh">
+<html lang="{user-language}">
   <head>
     <meta charset="utf-8" />
     <title>Card 01</title>
-    <!-- 预设模板 CSS (必选) -->
+    <!-- Required preset CSS -->
     <link
       rel="stylesheet"
       href="../../shared/presets/code-dispatch/code-dispatch.css"
@@ -48,13 +48,13 @@ Top beats bottom:
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
     />
-    <!-- 模板未覆盖的补充样式 -->
+    <!-- Small style supplements not covered by the preset -->
     <style>
-      /* 仅放置模板 CSS 中没有的自定义样式 */
+      /* Only custom styles missing from the preset CSS */
     </style>
   </head>
   <body class="bg-light">
-    <!-- 直接使用模板 class 构建布局 -->
+    <!-- Build the layout directly with preset classes -->
     <div class="cd-header">...</div>
     <div class="cd-body is-content">...</div>
     <div class="cd-footer">...</div>
@@ -73,10 +73,10 @@ Use these rules when `post.json.meta.tags` exists for a `rednote` post:
 2. Format each tag with `#`; separate tags with single spaces. Do not use commas, bullets, or one-tag-per-line blocks.
 3. Flatten structured tags in this order: `core -> mid -> longtail -> trend`.
 4. Tag text should be visually secondary: 1-2 steps smaller than body text, brand accent or muted gray, no oversized badges that compete with the card message.
-5. Inline 1-2 high-value tags only when the sentence remains natural, for example:
+5. Inline 1-2 high-value tags only when the sentence remains natural and matches the user's output language, for example:
 
 ```html
-<p>这套 <span class="tag-inline">#通勤穿搭</span> 的重点是腰线和外套长度。</p>
+<p>This checklist makes <span class="tag-inline">#commuteoutfits</span> easier to reuse on busy mornings.</p>
 ```
 
 Do not repeat the same full hashtag block on every card. Do not place unrelated traffic tags in visible copy.

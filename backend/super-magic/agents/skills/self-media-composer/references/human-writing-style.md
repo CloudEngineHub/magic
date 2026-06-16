@@ -4,7 +4,7 @@ Use this reference before writing Xiaohongshu/Rednote cards, Instagram cards, or
 
 ## Core Principle
 
-人味 comes from concrete judgment, not casual wording. A piece has human texture when the reader can sense:
+Human texture comes from concrete judgment, not casual wording. A piece has human texture when the reader can sense:
 
 - who is speaking
 - what the speaker has actually seen, tried, built, bought, compared, or noticed
@@ -13,18 +13,18 @@ Use this reference before writing Xiaohongshu/Rednote cards, Instagram cards, or
 
 Do not add fake personal stories, fake metrics, fake customer quotes, or fake firsthand experience. If the material is thin, write from observable evidence and say less.
 
-## 写作前四问
+## Four Questions Before Writing
 
 Answer these before drafting any card copy or article section:
 
-1. 作者是谁: founder, operator, product team, reviewer, practitioner, brand account, or ordinary user?
-2. 读者是谁: beginner, buyer, practitioner, commuter, parent, student, fan, or decision maker?
-3. 读者看完要做什么: save, comment, follow, consult, compare, try, buy, avoid a mistake, or remember a viewpoint?
-4. 真实支撑是什么: uploaded material, product detail, comparison, workflow, screenshot, case, observation, constraint, or lived scene?
+1. Who is speaking: founder, operator, product team, reviewer, practitioner, brand account, or ordinary user?
+2. Who is the reader: beginner, buyer, practitioner, commuter, parent, student, fan, or decision maker?
+3. What should the reader do next: save, comment, follow, consult, compare, try, buy, avoid a mistake, or remember a viewpoint?
+4. What real support exists: uploaded material, product detail, comparison, workflow, screenshot, case, observation, constraint, or lived scene?
 
 If one answer is missing, infer it from `global.brandPosition`, `global.targetAudience`, `articles[].style`, `articles[].notes`, title, outline, and uploaded materials. Ask only when the missing answer changes the content direction.
 
-## 作者声音
+## Author Voice
 
 Pick one voice profile and keep it stable through the post:
 
@@ -37,45 +37,45 @@ Pick one voice profile and keep it stable through the post:
 
 Human voice is not slang. Avoid forced internet tone, excessive emojis, fake confessions, and sudden self-deprecation.
 
-## AI 通稿味 Signals
+## AI press-release flavor Signals
 
 Rewrite when three or more signals appear in one post:
 
 - opens with macro background instead of the reader's concrete situation
-- uses broad value words without mechanism, such as "提升效率", "赋能", "打造闭环", "深度融合", "全面升级"
+- uses broad value words without mechanism, such as "improve efficiency", "empower", "close the loop", "deep integration", or "comprehensive upgrade"
 - repeats the same section shape: problem, explanation, summary
 - every paragraph is similar length and ends neatly
-- uses vague authority: "很多人认为", "研究表明", "行业趋势显示" without a named source or visible material
+- uses vague authority, such as "many people believe", "research shows", or "industry trends indicate", without a named source or visible material
 - piles up parallel phrases where the third item adds no new meaning
-- ends with generic optimism, slogans, or "欢迎关注/一起成长" without a specific reason
+- ends with generic optimism, slogans, or empty follow prompts without a specific reason
 
 Fix by replacing the vague sentence with a concrete scene, proof, trade-off, or reader action. If there is no evidence, make the claim smaller.
 
-## 假人味 Signals
+## fake human texture Signals
 
 Do not solve AI taste by adding fake imperfection. These are also failures:
 
 - invented first-person experience not supported by materials
-- "说实话", "我真的", "狠狠共鸣" inserted into an otherwise official article
+- forced confessional phrases inserted into an otherwise official article
 - jokes that do not clarify the point
 - casual particles on every sentence
 - fake reader comments inside the main argument
 - exaggerated emotion without a concrete trigger
 
-Real 人味 is restraint plus specificity.
+Real human texture is restraint plus specificity.
 
 ## Platform Rules
 
-### 小红书 / Rednote
+### Rednote
 
 - The first card should name the exact reader state or conflict within one glance.
 - Prefer one sharp promise over three broad benefits.
 - Put the most useful or surprising detail before the midpoint, not only at the end.
 - Save value should be visible: checklist, comparison, route, template, decision rule, or mistake list.
-- CTA should fit the post: ask for a scenario, invite a keyword, or point to a followable series. Avoid empty "点赞收藏".
+- CTA should fit the post: ask for a scenario, invite a keyword, or point to a followable series. Avoid empty like/save prompts.
 - For product content, introduce the product after the pain is accepted. Do not start as an ad unless the user asked for a launch announcement.
 
-### 公众号 / WeChat Official Accounts
+### WeChat Official Accounts
 
 - The title and lead should carry a viewpoint, not only a topic.
 - The first screen should move from reader pain or tension into the author's position quickly.
@@ -89,7 +89,14 @@ Real 人味 is restraint plus specificity.
 - Use fewer claims per card. Let image, hierarchy, and concise captions carry the rhythm.
 - Avoid translating Chinese platform rhetoric directly into English captions.
 
-## 自检
+## Language Adaptation
+
+- Write the final copy in the user's preferred output language from the parent Output Language Contract.
+- Preserve platform-native terms when they are search vocabulary or proper nouns; translate the surrounding explanation.
+- Do not directly translate one platform's rhetoric into another language. Rewrite for the reader's natural idiom instead.
+- Keep comments, CTA, tags, and relative time strings in the same output language unless the user explicitly asks for multilingual content.
+
+## Self-Check
 
 Before finalizing files, check:
 

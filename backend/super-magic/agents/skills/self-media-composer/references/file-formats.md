@@ -41,6 +41,8 @@ Each platform lives under its own key inside `self-media`. The key itself (`redn
 
 Plain JSON (not JSONP). Produced by `create_self_media_post`; edit with `edit_file` for subsequent changes.
 
+User-facing string values in these examples are illustrative. During generation, localize titles, subtitles, tags, comments, labels, time strings, summaries, insights, and review prose according to the parent Output Language Contract. Keep JSON keys, enum values, metric keys, and paths stable.
+
 ### rednote / instagram (card-based)
 
 ```json
@@ -51,8 +53,8 @@ Plain JSON (not JSONP). Produced by `create_self_media_post`; edit with `edit_fi
     "subtitle": "Cost, structure, and optimization",
     "tags": {
       "core": ["AI"],
-      "mid": ["AI工具", "效率工具"],
-      "longtail": ["AI账单优化", "团队降本"],
+      "mid": ["AI tools", "productivity tools"],
+      "longtail": ["AI bill optimization", "team cost reduction"],
       "trend": []
     },
     "author": "@magic",
@@ -241,11 +243,11 @@ Stores real or user-entered operation metrics using only the fixed metric and de
     "comments": 18,
     "shares": 22,
     "follows": 6,
-    "conversions": {
-      "value": 3,
-      "label": "咨询线索",
-      "source": "real-platform",
-      "note": "Counted from public comment and private-message leads available to the operator."
+      "conversions": {
+        "value": 3,
+        "label": "consultation leads",
+        "source": "real-platform",
+        "note": "Counted from public comment and private-message leads available to the operator."
     }
   },
   "derivedMetrics": {
@@ -313,7 +315,7 @@ Allowed `comments[].intent` values:
     {
       "id": "comment-1",
       "author": "Alice",
-      "text": "能不能团队一起维护？",
+      "text": "Can a team maintain this together?",
       "sentiment": "question",
       "intent": "consult",
       "time": "2026-06-11T08:45:00.000Z"
@@ -321,7 +323,7 @@ Allowed `comments[].intent` values:
     {
       "id": "comment-2",
       "author": "Bob",
-      "text": "想看真实案例。",
+      "text": "I would like to see a real example.",
       "sentiment": "positive",
       "intent": "case-request",
       "time": "2026-06-11T08:52:00.000Z"
@@ -339,7 +341,7 @@ Allowed `comments[].intent` values:
         {
           "id": "comment-1",
           "author": "Alice",
-          "text": "能不能团队一起维护？",
+          "text": "Can a team maintain this together?",
           "sentiment": "question",
           "intent": "consult",
           "time": "2026-06-11T08:45:00.000Z"
@@ -374,10 +376,10 @@ New `rednote` posts should use structured `meta.tags`:
 
 ```json
 {
-  "core": ["穿搭"],
-  "mid": ["通勤穿搭", "显瘦穿搭"],
-  "longtail": ["梨形身材显瘦", "155穿搭日记"],
-  "trend": ["多巴胺穿搭"]
+  "core": ["workwear"],
+  "mid": ["commute outfits", "petite styling"],
+  "longtail": ["outfits for new office workers", "155cm styling tips"],
+  "trend": ["dopamine dressing"]
 }
 ```
 

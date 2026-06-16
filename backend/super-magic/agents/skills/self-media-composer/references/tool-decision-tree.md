@@ -13,8 +13,9 @@ Need brand context but draft global fields are missing, sparse, or stale?
    fallback. Use it to fill author, brand position, target audience, voice,
    reusable proof points, and brand/IP assets when available.
 
-User asks for 发布入盘, post-publication review, article ops review, 复盘看板,
-published-data fetch, or `ops/*` update for an existing post?
+User asks for published-data import, post-publication review, article ops
+review, operations dashboard, published-data fetch, `ops/*` update, or a
+localized equivalent for an existing post?
 └─ Run the self-media/IP-operations data-sync workflow against the current
    posts/<post-id>/ folder. Read references/file-formats.md first and write only
    the fixed ops schema:
@@ -81,7 +82,7 @@ Need to tweak post meta or card order?
 
 Finished writing final cards/article?
 └─ Run the human-writing self-check from references/human-writing-style.md.
-   Remove AI 通稿味 or 假人味, then re-check post.json.meta. If the final
+   Remove AI press-release flavor or fake human texture, then re-check post.json.meta. If the final
    angle changed, update feedTitle, feedLikes, commentCount, comments,
    tags, and interactionReference to match.
 

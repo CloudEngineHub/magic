@@ -2,7 +2,7 @@
  * film-vintage.js
  * Film Vintage ECharts preset library
  *
- * Design language: 温暖米白背景 + 棕褐色调 + 胶片质感，模拟拍立得照片风格
+ * Design language: warm cream background + brown tones + film texture, simulating polaroid photography
  *
  * Usage (in card HTML):
  *   <div class="fv-card fv-content"
@@ -36,13 +36,13 @@
  *   .fv-content       Content card variant (photo display)
  *
  * Components:
- *   .fv-photo-frame   拍立得式照片框（白边+底部标注区）
- *   .fv-caption       照片标题栏
- *   .fv-info-footer   底部信息栏（拍摄参数）
- *   .fv-info-row      信息行（label + value）
- *   .fv-meta-row      元数据行（icon + text）
- *   .fv-section-label 区域标签
- *   .fv-divider       分隔线
+ *   .fv-photo-frame   Polaroid-style photo frame (white border + bottom caption area)
+ *   .fv-caption       Photo title bar
+ *   .fv-info-footer   Bottom info bar (shooting parameters)
+ *   .fv-info-row      Info row (label + value)
+ *   .fv-meta-row      Metadata row (icon + text)
+ *   .fv-section-label Section label
+ *   .fv-divider       Divider
  *
  * Utilities:
  *   .fv-text-accent / .fv-text-muted / .fv-text-primary

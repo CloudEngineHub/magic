@@ -1,8 +1,8 @@
-请基于这张【数据分析面板】做二次深度分析：
+Please perform a second-level deep analysis based on this Analytics Panel:
 
-1. 找出增长的关键驱动和主要风险
-2. 给出可执行的三步优化动作（按优先级）
-3. 预估动作落地后对核心指标的影响区间
-4. 判断当前的增长效率是否可持续
+1. Identify the key growth drivers and main risks
+2. Provide three executable optimization actions in priority order
+3. Estimate the impact range on core metrics after implementation
+4. Judge whether current growth efficiency is sustainable
 
-请结合指标变动幅度、漏斗各环节转化率和渠道质量给出综合判断。
+Please combine metric movement, funnel conversion rates, and channel quality for the final judgment.

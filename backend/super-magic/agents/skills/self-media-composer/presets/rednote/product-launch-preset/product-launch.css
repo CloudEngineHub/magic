@@ -1,26 +1,26 @@
 /*
  * product-launch.css
- * Product Launch — 产品功能发布型小红书卡片预设
+ * Product Launch — Product feature launch Rednote card preset
  *
  * Design principles:
- *   · 白底极简，用顶部 6px 红线锚定品牌感
- *   · 黑色主文字 + 红色强调，双色系高对比
- *   · Badge 圆角 2px，刻意锐利，强调感强
- *   · 图片容器圆角 10px，自带边框，截图放入即好看
- *   · 无阴影、无渐变，适合截图导出与二次传播
+ *   · Minimal white base with a 6px red top line for brand anchoring
+ *   · Black primary text plus red accents for high-contrast dual-color styling
+ *   · 2px badge radius for deliberately sharp emphasis
+ *   · 10px rounded image containers with borders, ready for screenshots
+ *   · No shadows or gradients, suitable for screenshot export and resharing
  *
  * Color palette:
- *   --pl-bg           #FFFFFF   主背景
- *   --pl-surface      #F5F5F7   次级面板/图片容器背景
- *   --pl-surface2     #EBEBEB   分割线/边框
- *   --pl-accent       #E63946   强调红（顶线、badge、标题高亮）
- *   --pl-accent-light #FF6B74   浅红（hover态、高亮标记）
- *   --pl-text         #111111   主文字
- *   --pl-text-muted   #666666   辅助文字
- *   --pl-text-faint   #999999   弱化文字（来源、版权）
- *   --pl-border       #EBEBEB   默认边框
- *   --pl-positive     #2DC653   正向指标绿
- *   --pl-negative     #E63946   负向指标红（与 accent 复用）
+ *   --pl-bg           #FFFFFF   Primary background
+ *   --pl-surface      #F5F5F7   Secondary panel / image-container background
+ *   --pl-surface2     #EBEBEB   Divider / border
+ *   --pl-accent       #E63946   Accent red (top line, badges, title highlights)
+ *   --pl-accent-light #FF6B74   Light red (hover states, highlight marks)
+ *   --pl-text         #111111   Primary text
+ *   --pl-text-muted   #666666   Secondary text
+ *   --pl-text-faint   #999999   Faint text (source, copyright)
+ *   --pl-border       #EBEBEB   Default border
+ *   --pl-positive     #2DC653   Positive metric green
+ *   --pl-negative     #E63946   Negative metric red (same as accent)
  *   --pl-font-display 'Noto Sans SC', sans-serif
  *   --pl-font-body    'Noto Sans SC', sans-serif
  *
@@ -92,7 +92,7 @@ body {
    §1  Card Shell
    ═══════════════════════════════════════════════════════════ */
 
-/* §1 Base shell — 所有卡片共用 */
+/* §1 Base shell — Shared by all cards */
 .pl-card {
   width: 540px;
   height: 720px;
@@ -103,12 +103,12 @@ body {
   flex-direction: column;
 }
 
-/* §1.1 Cover — 封面卡，顶部留更多呼吸感 */
+/* §1.1 Cover — Cover card with extra breathing room at the top */
 .pl-cover {
   background: var(--pl-bg);
 }
 
-/* §1.2 Content — 内容卡，标准内边距 */
+/* §1.2 Content — Content card with standard padding */
 .pl-content {
   background: var(--pl-bg);
 }
@@ -117,7 +117,7 @@ body {
    §2  Content Components
    ═══════════════════════════════════════════════════════════ */
 
-/* §2.1 Top accent bar — 顶部 6px 品牌红线，每张卡必有 */
+/* §2.1 Top accent bar — Top 6px brand red line, required on every card */
 .pl-topbar {
   width: 100%;
   height: 6px;
@@ -125,7 +125,7 @@ body {
   flex-shrink: 0;
 }
 
-/* §2.2 Page header — 卡片主内容区容器 */
+/* §2.2 Page header — Main content container */
 .pl-header {
   flex: 1;
   display: flex;
@@ -133,7 +133,7 @@ body {
   padding: 36px 48px 28px;
 }
 
-/* 封面专用内边距（更大顶部留白，配合装饰图） */
+/* Cover-specific padding with larger top space for decorative imagery */
 .pl-cover .pl-header {
   padding: 100px 48px 80px;
   justify-content: space-between;
@@ -141,7 +141,7 @@ body {
 
 /* §2.3 Section label / badge */
 
-/* 黑底白字 badge — 步骤说明、序号、普通标签 */
+/* Black badge with white text for steps, numbers, and regular labels */
 .pl-badge {
   display: inline-block;
   background: var(--pl-text);
@@ -156,7 +156,7 @@ body {
   line-height: 1.4;
 }
 
-/* 红底白字 badge — 核心能力、彩蛋、强调 */
+/* Red badge with white text for core capability, bonus note, and emphasis */
 .pl-badge-red {
   background: var(--pl-accent);
   color: #fff;
@@ -171,7 +171,7 @@ body {
   display: inline-block;
 }
 
-/* 卡片主标题 */
+/* Main card title */
 .pl-title {
   font-size: 32px;
   font-weight: 900;
@@ -180,7 +180,7 @@ body {
   margin-bottom: 4px;
 }
 
-/* 封面大标题 */
+/* Large cover title */
 .pl-title-xl {
   font-size: 46px;
   font-weight: 900;
@@ -189,13 +189,13 @@ body {
   margin-bottom: 24px;
 }
 
-/* 红色强调文字（用于标题内 span） */
+/* Red accent text for title spans */
 .pl-title .pl-accent,
 .pl-title-xl .pl-accent {
   color: var(--pl-accent);
 }
 
-/* 副标题 / 说明文字 */
+/* Subtitle / explanatory text */
 .pl-lead {
   font-size: 16px;
   color: var(--pl-text-muted);
@@ -203,14 +203,14 @@ body {
   margin-bottom: 18px;
 }
 
-/* 封面副标题 */
+/* Cover subtitle */
 .pl-lead-sm {
   font-size: 15px;
   color: var(--pl-text-muted);
   line-height: 1.7;
 }
 
-/* §2.4 Data card — 单个指标块 */
+/* §2.4 Data card — Single metric block */
 .pl-data-card {
   flex: 1;
   display: flex;
@@ -234,7 +234,7 @@ body {
   margin-top: 2px;
 }
 
-/* §2.5 Stats row — 三列指标横排 */
+/* §2.5 Stats row — Three-column metric row */
 .pl-stats-row {
   display: flex;
   align-items: center;
@@ -248,7 +248,7 @@ body {
   flex-shrink: 0;
 }
 
-/* §2.6 Image box — 截图/配图容器 */
+/* §2.6 Image box — Screenshot / image container */
 .pl-img-box {
   border-radius: var(--pl-img-radius);
   overflow: hidden;
@@ -259,12 +259,12 @@ body {
   justify-content: center;
 }
 
-/* 自动撑满剩余高度 */
+/* Automatically fill remaining height */
 .pl-img-box.is-flex {
   flex: 1;
 }
 
-/* 固定高度变体 */
+/* Fixed-height variant */
 .pl-img-box.is-fixed {
   height: 340px;
 }
@@ -274,7 +274,7 @@ body {
   object-fit: contain;
 }
 
-/* §2.7 List / feature row — 功能列表行 */
+/* §2.7 List / feature row — Feature list row */
 .pl-list-row {
   display: flex;
   align-items: flex-start;
@@ -317,7 +317,7 @@ body {
   line-height: 1.5;
 }
 
-/* 高亮行（顶部功能/核心卖点） */
+/* Highlighted row (top feature / core selling point) */
 .pl-list-row.is-highlight .pl-list-icon {
   background: var(--pl-accent);
   color: #fff;
@@ -327,7 +327,7 @@ body {
   color: var(--pl-accent);
 }
 
-/* §2.8 CTA box — 结尾互动引导区 */
+/* §2.8 CTA box — Ending interaction CTA area */
 .pl-cta-box {
   background: var(--pl-surface);
   border-radius: 8px;
@@ -355,7 +355,7 @@ body {
   margin: 12px 0;
 }
 
-/* §2.10 Footer / note — 底部品牌栏 */
+/* §2.10 Footer / note — Bottom brand bar */
 .pl-note {
   display: flex;
   align-items: center;
@@ -381,12 +381,12 @@ body {
   width: auto;
 }
 
-/* 封面底部品牌栏（稍大 logo） */
+/* Cover bottom brand bar (slightly larger logo) */
 .pl-cover .pl-note .pl-note-logo {
   height: 28px;
 }
 
-/* 装饰图（封面右上角吉祥物/产品图） */
+/* Decorative image (mascot/product image at cover top-right) */
 .pl-mascot {
   position: absolute;
   top: 106px;

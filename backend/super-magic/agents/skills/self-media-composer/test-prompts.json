@@ -1,42 +1,42 @@
 [
   {
     "id": 1,
-    "prompt": "帮我做一篇小红书图文：主题是 155 小个子通勤显高穿搭，目标是职场新人，想要 6 张卡片。",
-    "expected": "创建 rednote 卡片帖时生成结构化 meta.tags，包含 core/mid/longtail/trend，5-8 个相关标签，并在无用户标签时先确认。"
+    "prompt": "Create a Chinese-language Rednote carousel about 155cm petite commute outfits for new office workers. I want 6 cards.",
+    "expected": "Follow the user's language. When creating a rednote card post, generate structured meta.tags with core/mid/longtail/trend, 5-8 relevant tags, and confirm once when the user supplied no tags."
   },
   {
     "id": 2,
-    "prompt": "基于这个自媒体项目再加一篇杭州 citywalk 一日路线小红书，风格要轻松，别太像攻略大全。",
-    "expected": "旅行类 rednote 标签包含具体地点或路线标签，避免纯泛词；卡片只在最后集中渲染完整标签。"
+    "prompt": "Add another Rednote post to this self-media project: a relaxed one-day Hangzhou citywalk route. Do not make it feel like a generic travel guide.",
+    "expected": "Follow the user's language. Travel rednote tags include a concrete city, area, route, or attraction tag, avoid only broad tags, and render the complete tag block only on the final card."
   },
   {
     "id": 3,
-    "prompt": "把这篇 Instagram 帖子的互动数据和评论补完整，标签保持我原来的 #AI #Design。",
-    "expected": "Instagram 不强制 Rednote 四层标签；补齐 feedLikes/commentCount/comments/interactionReference，同时保留用户原始标签格式。"
+    "prompt": "Complete the engagement data and comments for this Instagram post, but keep my original #AI #Design tags.",
+    "expected": "Follow the user's language. Instagram does not require the Rednote four-layer tag structure; fill feedLikes/commentCount/comments/interactionReference while preserving the user's original tag format."
   },
   {
     "id": "rednote-human-voice",
-    "prompt": "帮我做一篇小红书图文，主题是 AI 会议纪要工具，目标读者是每天开很多会的项目经理。不要写得像 AI 通稿，要有一点真实使用场景。",
-    "expected": "写卡片前加载 human-writing-style；先建立作者声音、目标读者、读者动作和真实支撑；避免宏大背景、赋能式空话和机械三段式；首屏要出现具体会议场景、项目经理痛点和可保存的判断/清单。"
+    "prompt": "Create a Chinese-language Rednote carousel about an AI meeting-notes tool for project managers who sit in meetings all day. It should not sound like AI press-release flavor; include a real usage scene.",
+    "expected": "Follow the user's language and the Output Language Contract. Load human-writing-style before writing cards; first build author voice, target reader, reader action, and evidence. Avoid macro background, empty empowerment claims, mechanical three-part structure, and fake human texture. The first screen should include a concrete meeting scene, project-manager pain point, and a save-worthy rule or checklist."
   },
   {
     "id": "wechat-human-voice",
-    "prompt": "写一篇公众号文章，讲为什么自媒体创作工具不能只靠对话框，要更像一个工作台。文章要像产品负责人写的，不要像公关稿。",
-    "expected": "写文章前加载 human-writing-style；以产品负责人视角建立观点和边界；用工作流、失败场景或产品机制支撑判断；避免时代背景开头、三点价值堆叠、总结展望式结尾和没有证据的行业判断。"
+    "prompt": "Write a Chinese-language WeChat Official Account article explaining why self-media creation tools cannot rely only on chat boxes and should feel more like a workspace. It should sound like a product lead, not PR copy.",
+    "expected": "Follow the user's language and the Output Language Contract. Load human-writing-style before writing the article; build a product-lead viewpoint and boundaries, support claims with workflow, failure scenes, or product mechanisms, and avoid macro-era openings, three-value piles, summary-and-outlook endings, and unsupported industry claims."
   },
   {
     "id": "self-media-brand-config-file-fallback",
-    "prompt": "帮我基于这个自媒体项目再写一篇小红书，延续账号的品牌定位和目标用户；如果需要品牌信息，可以看看项目里的 __brand/brand-config.json。",
-    "expected": "当 draft.json.global 缺少 author、brandPosition、targetAudience、voice 或品牌/IP资产信息时，先尝试读取 __brand/brand-config.json；使用其中的品牌上下文补齐人味 brief 和视觉/内容一致性，但当前用户消息和明确 draft 字段优先。"
+    "prompt": "Add another Rednote post to this self-media project. Continue the account's brand positioning and target audience; if you need brand information, check __brand/brand-config.json.",
+    "expected": "Follow the user's language. When draft.json.global lacks author, brandPosition, targetAudience, voice, or brand/IP assets, try __brand/brand-config.json first. Use its brand context to complete the human-writing brief and visual/content consistency, while current user instructions and explicit draft fields still win."
   },
   {
     "id": "self-media-ops-fixed-schema",
-    "prompt": "把这篇已经发布的小红书文章发布入盘，抓取真实数据并生成复盘看板。",
-    "expected": "走 self-media/IP-operations 数据同步流程，不创建 AI Card；读取并更新 ops/source.json、ops/metrics.json、ops/comments.json、ops/review.html；metrics 只写 reads/likes/saves/comments/shares/follows/conversions；derivedMetrics 只写 engagementRate/saveRate/shareRate/commentRate/followRate/conversionRate；fetchStatus、source、sentiment、intent 都使用固定枚举；新数据写 saves，不写 legacy collects；未知平台指标写入 notes 或 review.html。"
+    "prompt": "Import this already-published Rednote article into the project, fetch real data, and generate an operations review dashboard.",
+    "expected": "Follow the user's language for user-facing review prose. Run the self-media/IP-operations data sync workflow, do not create AI Card artifacts; read and update ops/source.json, ops/metrics.json, ops/comments.json, ops/review.html; metrics only use reads/likes/saves/comments/shares/follows/conversions; derivedMetrics only use engagementRate/saveRate/shareRate/commentRate/followRate/conversionRate; fetchStatus, source, sentiment, and intent use fixed enums; new data writes saves, not legacy collects; unknown platform metrics go into notes or review.html."
   },
   {
     "id": "self-media-ops-immediate-sync-trigger",
-    "prompt": "立即同步这篇文章的真实数据，做一次真实数据刷新。",
-    "expected": "加载 self-media-composer，走发布后运营数据同步流程；使用固定 ops schema 更新 ops/source.json、ops/metrics.json、ops/comments.json、ops/review.html；不要把长流程写在用户消息里，也不要创建 AI Card。"
+    "prompt": "Sync this article's real data now and run a real-data refresh.",
+    "expected": "Follow the user's language for user-facing review prose. Load self-media-composer, run the post-publication operations data-sync workflow, update ops/source.json, ops/metrics.json, ops/comments.json, and ops/review.html with the fixed ops schema; do not write the long workflow into the user message and do not create AI Card artifacts."
   }
 ]

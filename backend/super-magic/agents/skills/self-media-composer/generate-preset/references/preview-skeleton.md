@@ -14,7 +14,7 @@ Sits alongside `<preset-name>.css` and `<preset-name>.js` in the same directory.
 
 1. **Override the fixed canvas** — The preset CSS locks `html, body` to `540×720` (or platform-specific size). The preview must override this to allow scrolling and show multiple cards.
 2. **Show at least 3 card variants** — Demonstrate the preset's cover card, at least one content card, and one card showcasing data/chart components.
-3. **Use real-looking content** — Fill cards with representative placeholder content that matches the preset's content domain (from Step G1). Never leave cards empty.
+3. **Use real-looking content** — Fill cards with representative placeholder content that matches the preset's content domain (from Step G1) and the user's preferred output language. Never leave cards empty.
 4. **Exercise all major CSS classes** — Every §2 component and §3 utility class should appear at least once across all preview cards.
 5. **Load the preset's JS** — Include `<script src="<preset-name>.js"></script>` at the end of `<body>` so chart presets can be demonstrated.
 6. **Include ECharts** — If the preset includes chart presets, load ECharts from CDN and render at least one chart to verify the JS file works.
@@ -25,7 +25,7 @@ Sits alongside `<preset-name>.css` and `<preset-name>.js` in the same directory.
 
 ```html
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{user-language}">
   <head>
     <meta charset="UTF-8" />
     <title><Preset Display Name> — Preview</title>

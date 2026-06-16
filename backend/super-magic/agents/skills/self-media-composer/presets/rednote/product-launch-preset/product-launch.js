@@ -2,7 +2,7 @@
  * product-launch.js
  * Product Launch ECharts preset library
  *
- * Design language: 白底极简，#E63946 强调红，黑色主文字，无阴影无渐变
+ * Design language: minimal white base, #E63946 accent red, black primary text, no shadows or gradients
  *
  * Usage (in card HTML):
  *   <div id="chart-id" style="width:100%;height:200px;"></div>
@@ -20,53 +20,53 @@
  *
  * ─────────────────────────────────────────────────────────────
  * Preset index
- *   product-launch-bar      竖向柱状图（高亮单根柱）
- *   product-launch-line     折线趋势图（面积填充）
- *   product-launch-donut    环形比例图（中心数字）
- *   product-launch-hbar     横向条形图（排名/对比）
- *   product-launch-radar    雷达图（多维能力对比）
+ *   product-launch-bar      Vertical bar chart (single highlighted bar)
+ *   product-launch-line     Line trend chart (area fill)
+ *   product-launch-donut    Donut ratio chart (center number)
+ *   product-launch-hbar     Horizontal bar chart (ranking/comparison)
+ *   product-launch-radar    Radar chart for multi-dimensional capability comparison
  * ─────────────────────────────────────────────────────────────
  *
  * CSS quick-reference (product-launch.css)
  *
  * §1 Card Shell
- *   .pl-card            540×720 基础卡片容器
- *   .pl-cover           封面卡变体
- *   .pl-content         内容卡变体
+ *   .pl-card            540×720 Base card container
+ *   .pl-cover           Cover card variant
+ *   .pl-content         Content card variant
  *
  * §2 Components
- *   .pl-topbar          顶部 6px 红线
- *   .pl-header          主内容区容器（flex-col，含内边距）
- *   .pl-badge           黑底白字 badge（步骤/说明）
- *   .pl-badge-red       红底白字 badge（核心/彩蛋）
- *   .pl-title           卡片主标题（32px 900）
- *   .pl-title-xl        封面大标题（46px 900）
- *   .pl-title .pl-accent / .pl-title-xl .pl-accent   红色高亮
- *   .pl-lead            副标题说明（16px muted）
- *   .pl-lead-sm         封面副标题（15px muted）
- *   .pl-data-card       单个指标块（flex-col center）
- *   .pl-data-card .pl-data-num    指标数字（22px 900 红）
- *   .pl-data-card .pl-data-label  指标标签（12px faint）
- *   .pl-stats-row       三列指标横排容器
- *   .pl-stats-divider   指标间分割线（1px 32px）
- *   .pl-img-box         图片/截图容器（圆角10px 边框）
- *   .pl-img-box.is-flex 撑满剩余高度
- *   .pl-img-box.is-fixed 固定高度 340px
- *   .pl-list-row        功能列表行
- *   .pl-list-row.is-highlight  高亮行（红色 icon + 标题）
- *   .pl-cta-box         结尾互动引导区
- *   .pl-cta-box .pl-cta-title  引导标题
- *   .pl-cta-box .pl-cta-sub    引导说明
- *   .pl-divider         水平分割线
- *   .pl-note            底部品牌栏
- *   .pl-note.no-border  无上边框版本
- *   .pl-mascot          封面装饰图（绝对定位，右上角旋转）
+ *   .pl-topbar          Top 6px red line
+ *   .pl-header          Main content container (flex-column with padding)
+ *   .pl-badge           Black badge with white text (step/explanation)
+ *   .pl-badge-red       Red badge with white text (core/bonus)
+ *   .pl-title           Main card title (32px 900)
+ *   .pl-title-xl        Large cover title (46px 900)
+ *   .pl-title .pl-accent / .pl-title-xl .pl-accent   Red highlight
+ *   .pl-lead            Subtitle explanation (16px muted)
+ *   .pl-lead-sm         Cover subtitle (15px muted)
+ *   .pl-data-card       Single metric block (flex-column center)
+ *   .pl-data-card .pl-data-num    Metric number (22px 900 red)
+ *   .pl-data-card .pl-data-label  Metric label (12px faint)
+ *   .pl-stats-row       Three-column metric-row container
+ *   .pl-stats-divider   Divider between metrics (1px 32px)
+ *   .pl-img-box         Image/screenshot container (10px radius with border)
+ *   .pl-img-box.is-flex Fill remaining height
+ *   .pl-img-box.is-fixed Fixed height 340px
+ *   .pl-list-row        Feature list row
+ *   .pl-list-row.is-highlight  Highlighted row (red icon + title)
+ *   .pl-cta-box         Ending interaction CTA area
+ *   .pl-cta-box .pl-cta-title  CTA title
+ *   .pl-cta-box .pl-cta-sub    CTA description
+ *   .pl-divider         Horizontal divider
+ *   .pl-note            Bottom brand bar
+ *   .pl-note.no-border  No-top-border variant
+ *   .pl-mascot          Cover decorative image (absolute positioned, rotated top-right)
  *
  * §3 Utilities
- *   .pl-tag / .pl-tag-accent     标签芯片
+ *   .pl-tag / .pl-tag-accent     Tag chip
  *   .pl-text-accent/muted/faint/positive/negative/bold
  *   .pl-bg-accent/surface/surface2
- *   .pl-hl                       红色下划线高亮
+ *   .pl-hl                       Red underline highlight
  *
  * §4 Layout
  *   .pl-row/col/spacer/center
@@ -106,7 +106,7 @@
 
   /* ════════════════════════════════════════
      Preset: product-launch-bar
-     竖向柱状图，高亮指定柱
+     Vertical bar chart with a specified highlighted bar
      params: { categories, values, highlightIndex, title, unit }
      ════════════════════════════════════════ */
   add('product-launch-bar', function (p) {
@@ -164,7 +164,7 @@
 
   /* ════════════════════════════════════════
      Preset: product-launch-line
-     折线趋势图，面积填充
+     Line trend chart with area fill
      params: { xData, yData, smooth, areaOpacity, title, unit }
      ════════════════════════════════════════ */
   add('product-launch-line', function (p) {
@@ -225,7 +225,7 @@
 
   /* ════════════════════════════════════════
      Preset: product-launch-donut
-     环形比例图，中心显示数字
+     Donut ratio chart with center number
      params: { value, total, label, unit, centerLabel }
      ════════════════════════════════════════ */
   add('product-launch-donut', function (p) {
@@ -265,7 +265,7 @@
 
   /* ════════════════════════════════════════
      Preset: product-launch-hbar
-     横向条形图（功能对比/排名）
+     Horizontal bar chart for feature comparison/ranking
      params: { categories, values, highlightIndex, title, unit }
      ════════════════════════════════════════ */
   add('product-launch-hbar', function (p) {
@@ -322,7 +322,7 @@
 
   /* ════════════════════════════════════════
      Preset: product-launch-radar
-     雷达图（多维能力对比）
+     Radar chart for multi-dimensional capability comparison
      params: { indicators, values, title }
      indicators: [{ name, max }]
      values: number[]

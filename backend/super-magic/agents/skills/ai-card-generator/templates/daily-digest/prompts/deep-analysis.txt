@@ -1,8 +1,8 @@
-请基于这张【每日摘要卡】继续深度分析：
+Please continue deep analysis based on this Daily Digest card:
 
-1. 提炼 3 个最关键的风险与机会
-2. 给出明日跨团队协同动作（运营/投放/内容各 1-2 条）
-3. 输出一个可直接执行的晨会行动清单（含负责人建议）
-4. 竞品动态对我方短期 ROI 的预估影响
+1. Extract the three most important risks and opportunities
+2. Provide cross-team actions for tomorrow (1-2 each for operations, ads, and content)
+3. Output a directly executable morning-meeting action checklist with suggested owners
+4. Estimate the short-term ROI impact of competitor activity
 
-请结合收入/用户增长/内容转化趋势做综合分析。
+Please combine revenue, user growth, and content-conversion trends for the final analysis.

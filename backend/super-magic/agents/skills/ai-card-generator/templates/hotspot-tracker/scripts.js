@@ -11,11 +11,11 @@
         type: "pie", radius: ["45%", "75%"], avoidLabelOverlap: true,
         label: { color: css("--text"), fontSize: 11 },
         data: [
-          { value: 38, name: "微博", itemStyle: { color: "#f43f5e" } },
-          { value: 25, name: "抖音", itemStyle: { color: "#06b6d4" } },
-          { value: 18, name: "微信", itemStyle: { color: "#8b5cf6" } },
-          { value: 12, name: "小红书", itemStyle: { color: "#f59e0b" } },
-          { value: 7, name: "其他", itemStyle: { color: "#94a3b8" } }
+          { value: 38, name: "Weibo", itemStyle: { color: "#f43f5e" } },
+          { value: 25, name: "Douyin", itemStyle: { color: "#06b6d4" } },
+          { value: 18, name: "WeChat", itemStyle: { color: "#8b5cf6" } },
+          { value: 12, name: "Rednote", itemStyle: { color: "#f59e0b" } },
+          { value: 7, name: "Other", itemStyle: { color: "#94a3b8" } }
         ]
       }]
     });
@@ -26,7 +26,7 @@
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
       grid: { top: 8, right: 12, bottom: 8, left: 100, containLabel: true },
       xAxis: { type: "value", axisLabel: { color: css("--sub"), formatter: "{value}%" }, splitLine: { lineStyle: { color: css("--border") } } },
-      yAxis: { type: "category", axisLabel: { color: css("--text"), fontSize: 11 }, data: ["AI Agent 开发", "边缘计算", "具身智能", "量子纠错", "合成生物"] },
+      yAxis: { type: "category", axisLabel: { color: css("--text"), fontSize: 11 }, data: ["AI agent development", "Edge computing", "Embodied intelligence", "Quantum error correction", "Synthetic biology"] },
       series: [{ type: "bar", data: [86, 73, 64, 52, 41], itemStyle: { color: css("--coral"), borderRadius: [0, 8, 8, 0] }, barMaxWidth: 16 }]
     });
   }
@@ -35,9 +35,9 @@
     init(document.getElementById("radarChart")).setOption({
       radar: {
         indicator: [
-          { name: "讨论量", max: 100 }, { name: "增长速度", max: 100 },
-          { name: "情感极性", max: 100 }, { name: "媒体覆盖", max: 100 },
-          { name: "商业关联", max: 100 }, { name: "持续力", max: 100 }
+          { name: "Discussion volume", max: 100 }, { name: "Growth speed", max: 100 },
+          { name: "Sentiment polarity", max: 100 }, { name: "Media coverage", max: 100 },
+          { name: "Commercial relevance", max: 100 }, { name: "Staying power", max: 100 }
         ],
         shape: "circle",
         axisName: { color: css("--sub"), fontSize: 11 },
@@ -47,8 +47,8 @@
       series: [{
         type: "radar",
         data: [
-          { name: "本周", value: [88, 92, 74, 81, 67, 72], lineStyle: { color: css("--coral"), width: 2.5 }, areaStyle: { color: "rgba(244, 63, 94, .12)" }, itemStyle: { color: css("--coral") } },
-          { name: "上周", value: [72, 68, 71, 75, 62, 65], lineStyle: { color: css("--mint"), width: 2, type: "dashed" }, areaStyle: { color: "rgba(6, 182, 212, .08)" }, itemStyle: { color: css("--mint") } }
+          { name: "This week", value: [88, 92, 74, 81, 67, 72], lineStyle: { color: css("--coral"), width: 2.5 }, areaStyle: { color: "rgba(244, 63, 94, .12)" }, itemStyle: { color: css("--coral") } },
+          { name: "Last week", value: [72, 68, 71, 75, 62, 65], lineStyle: { color: css("--mint"), width: 2, type: "dashed" }, areaStyle: { color: "rgba(6, 182, 212, .08)" }, itemStyle: { color: css("--mint") } }
         ]
       }]
     });
@@ -85,14 +85,14 @@
         btn.classList.add("active");
         frame.src = btn.dataset.previewUrl;
         wrap.classList.remove("collapsed");
-        if (close) close.textContent = "收起";
+        if (close) close.textContent = "Collapse";
       });
     });
 
     if (close) {
       close.addEventListener("click", function () {
         var collapsed = wrap.classList.toggle("collapsed");
-        close.textContent = collapsed ? "展开" : "收起";
+        close.textContent = collapsed ? "Expand" : "Collapse";
       });
     }
 
@@ -102,12 +102,12 @@
 
   function sendToAgent(prompt) {
     var status = document.getElementById("insightStatus");
-    var full = prompt + "\n\n卡片上下文摘要：\n- " + gatherContext();
+    var full = prompt + "\n\nCard context summary:\n- " + gatherContext();
     var agentId = document.getElementById("agentSelect").value;
     var model = document.getElementById("modelSelect").value || "auto";
 
     if (!window.Magic) {
-      status.textContent = "当前环境未提供 Magic API。";
+      status.textContent = "Magic API is not available in the current environment.";
       return;
     }
 
@@ -115,22 +115,22 @@
       var opts = { model: model };
       if (agentId) opts.agentId = agentId;
 
-      status.textContent = "正在创建话题…";
+      status.textContent = "Creating topic...";
       window.Magic.project.createTopicAndSend(full, opts).then(function () {
-        status.textContent = "已创建新话题并发送 ✓";
+        status.textContent = "Created a new topic and sent the message.";
       }).catch(function (err) {
-        status.textContent = "发送失败：" + (err.message || err);
+        status.textContent = "Send failed: " + (err.message || err);
       });
       return;
     }
 
     if (typeof window.Magic.setInputMessage === "function") {
       window.Magic.setInputMessage(full);
-      status.textContent = "已发送到当前话题（降级模式）";
+      status.textContent = "Sent to the current topic (fallback mode).";
       return;
     }
 
-    status.textContent = "当前环境不支持消息发送。";
+    status.textContent = "The current environment does not support message sending.";
   }
 
   function loadSelectors() {
@@ -149,15 +149,15 @@
         var target = agents.find(function (a) { return a.id.indexOf("ip-manager") !== -1 || a.id.indexOf("ip_manager") !== -1; });
         if (target) agentSel.value = target.id;
       }).catch(function () {
-        agentSel.innerHTML = "<option value=''>无法加载</option>";
+        agentSel.innerHTML = "<option value=''>Unable to load</option>";
       });
     } else {
-      agentSel.innerHTML = "<option value=''>不可用</option>";
+      agentSel.innerHTML = "<option value=''>Unavailable</option>";
     }
 
     if (window.Magic && window.Magic.llm && typeof window.Magic.llm.getModels === "function") {
       window.Magic.llm.getModels().then(function (models) {
-        modelSel.innerHTML = "<option value=\"auto\">自动选择（推荐）</option>";
+        modelSel.innerHTML = "<option value=\"auto\">Auto select (recommended)</option>";
         models.forEach(function (m) {
           var opt = document.createElement("option");
           opt.value = m.id;

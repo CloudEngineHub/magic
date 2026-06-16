@@ -94,13 +94,30 @@ def validate_skill_md() -> None:
         skill,
         [
             "references/human-writing-style.md",
-            "立即同步",
-            "真实数据刷新",
+            "Output Language Contract",
+            "Infer the user's preferred output language",
+            "immediate sync",
+            "real data refresh",
             "Human Writing Style",
             "4.4.0 Build the human-writing brief",
             "4.4.2 Human-writing self-check",
-            "人味",
+            "human texture",
             "__brand/brand-config.json",
+        ],
+        "SKILL.md",
+    )
+    require_absent(
+        skill,
+        [
+            "### \u4e2d\u6587",
+            "Chinese user language",
+            "AI \u901a\u7a3f\u5473",
+            "\u5047\u4eba\u5473",
+            "\u89c6\u89c9\u8981\u6c42",
+            "\u9884\u8bbe\u6807\u8bc6",
+            "\u9002\u7528\u5e73\u53f0",
+            "\u9884\u8bbe\u8bf4\u660e",
+            "4 \u5206\u949f\u524d",
         ],
         "SKILL.md",
     )
@@ -114,14 +131,27 @@ def validate_human_writing_reference() -> None:
         text,
         [
             "# Human Writing Style",
-            "人味",
-            "作者声音",
-            "写作前四问",
-            "小红书",
-            "公众号",
-            "假人味",
-            "AI 通稿味",
-            "自检",
+            "human texture",
+            "Author Voice",
+            "Four Questions Before Writing",
+            "Rednote",
+            "WeChat Official Accounts",
+            "fake human texture",
+            "AI press-release flavor",
+            "Self-Check",
+        ],
+        "references/human-writing-style.md",
+    )
+    require_absent(
+        text,
+        [
+            "\u5199\u4f5c\u524d\u56db\u95ee",
+            "\u4f5c\u8005\u58f0\u97f3",
+            "AI \u901a\u7a3f\u5473",
+            "\u5047\u4eba\u5473",
+            "\u81ea\u68c0",
+            "\u70b9\u8d5e\u6536\u85cf",
+            "\u6b22\u8fce\u5173\u6ce8",
         ],
         "references/human-writing-style.md",
     )
@@ -133,9 +163,9 @@ def validate_failure_modes() -> None:
     require_text(
         text,
         [
-            "AI 通稿味",
-            "假人味",
-            "作者声音",
+            "AI press-release flavor",
+            "fake human texture",
+            "author voice",
             "ops/metrics.json.metrics",
             "derivedMetrics",
             "collects",
@@ -200,7 +230,7 @@ def validate_tool_decision_tree() -> None:
         [
             "Need brand context but draft global fields are missing",
             "__brand/brand-config.json",
-            "发布入盘",
+            "published-data import",
             "post-publication review",
             "fixed ops schema",
             "ops/source.json.fetchStatus",
@@ -210,6 +240,8 @@ def validate_tool_decision_tree() -> None:
             "ops/comments.json comments[].intent",
             "legacy collects",
             "Do not create AI Card artifacts",
+            "AI press-release flavor",
+            "fake human texture",
         ]
         + OPS_METRIC_KEYS
         + OPS_DERIVED_METRIC_KEYS
@@ -276,6 +308,16 @@ def validate_test_prompts() -> None:
             fail(f"prompt {item.get('id')} missing prompt or expected")
     require_no_external_skill_refs(json.dumps(prompts, ensure_ascii=False), "test-prompts.json")
     require_absent(json.dumps(prompts, ensure_ascii=False), ["brand-info", "brand-info.json", "brand-info.md"], "test-prompts.json")
+    require_text(
+        json.dumps(prompts, ensure_ascii=False),
+        [
+            "Follow the user's language",
+            "Output Language Contract",
+            "AI press-release flavor",
+            "fake human texture",
+        ],
+        "test-prompts.json",
+    )
 
 
 def main() -> None:

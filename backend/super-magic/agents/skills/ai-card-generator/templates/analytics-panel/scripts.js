@@ -2,7 +2,7 @@
   var charts = [];
   var trendInstance = null;
   var trendData = {
-    "7d": { x: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"], v: [52, 58, 61, 67, 72, 64, 70], r: [138, 142, 151, 166, 181, 162, 176], c: [4.2, 4.4, 4.1, 4.8, 5.0, 4.5, 4.9] },
+    "7d": { x: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], v: [52, 58, 61, 67, 72, 64, 70], r: [138, 142, 151, 166, 181, 162, 176], c: [4.2, 4.4, 4.1, 4.8, 5.0, 4.5, 4.9] },
     "14d": { x: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"], v: [42, 43, 45, 47, 48, 50, 52, 53, 58, 61, 63, 67, 70, 74], r: [98, 102, 107, 113, 116, 121, 128, 132, 138, 145, 151, 160, 169, 178], c: [3.8, 3.9, 4.0, 3.9, 4.1, 4.2, 4.3, 4.3, 4.4, 4.5, 4.6, 4.8, 4.8, 4.9] },
     "30d": { x: ["1", "3", "5", "7", "9", "11", "13", "15", "17", "19", "21", "23", "25", "27", "29"], v: [28, 30, 31, 33, 35, 38, 39, 42, 45, 47, 51, 54, 58, 61, 65], r: [64, 66, 69, 71, 75, 82, 85, 92, 97, 104, 112, 118, 129, 138, 146], c: [3.2, 3.3, 3.4, 3.4, 3.6, 3.8, 3.9, 4.0, 4.1, 4.2, 4.2, 4.3, 4.5, 4.6, 4.8] }
   };
@@ -26,7 +26,7 @@
   function renderFunnel() {
     init(document.getElementById("funnelChart")).setOption({
       tooltip: { trigger: "item" },
-      series: [{ type: "funnel", left: "8%", width: "84%", gap: 5, label: { color: css("--text"), fontSize: 12 }, itemStyle: { borderColor: css("--panel"), borderWidth: 2 }, data: [{ value: 428000, name: "访问" }, { value: 54800, name: "注册" }, { value: 34720, name: "激活" }, { value: 2670, name: "付费" }, { value: 1108, name: "复购" }], color: ["#a5b4fc", "#6366f1", "#3b82f6", "#10b981", "#f59e0b"] }]
+      series: [{ type: "funnel", left: "8%", width: "84%", gap: 5, label: { color: css("--text"), fontSize: 12 }, itemStyle: { borderColor: css("--panel"), borderWidth: 2 }, data: [{ value: 428000, name: "Visits" }, { value: 54800, name: "Signups" }, { value: 34720, name: "Activation" }, { value: 2670, name: "Paid" }, { value: 1108, name: "Repeat purchase" }], color: ["#a5b4fc", "#6366f1", "#3b82f6", "#10b981", "#f59e0b"] }]
     });
   }
 
@@ -36,11 +36,11 @@
       legend: { top: 0, textStyle: { color: css("--sub"), fontSize: 11 } },
       grid: { top: 36, right: 6, bottom: 6, left: 68, containLabel: true },
       xAxis: { type: "value", axisLabel: { color: css("--sub") }, splitLine: { lineStyle: { color: css("--grid") } } },
-      yAxis: { type: "category", axisLabel: { color: css("--text"), fontSize: 11 }, data: ["自然搜索", "内容种草", "私域回流", "付费广告", "渠道推荐"] },
+      yAxis: { type: "category", axisLabel: { color: css("--text"), fontSize: 11 }, data: ["Organic search", "Content seeding", "Private-domain return", "Paid ads", "Channel referrals"] },
       series: [
-        { name: "流量", type: "bar", stack: "s", data: [24, 31, 18, 17, 10], itemStyle: { color: "#6366f1", borderRadius: [0, 6, 6, 0] } },
-        { name: "收入", type: "bar", stack: "s", data: [22, 19, 29, 15, 15], itemStyle: { color: "#10b981", borderRadius: [0, 6, 6, 0] } },
-        { name: "成本", type: "bar", stack: "s", data: [8, 12, 4, 16, 6], itemStyle: { color: "#f59e0b", borderRadius: [0, 6, 6, 0] } }
+        { name: "Traffic", type: "bar", stack: "s", data: [24, 31, 18, 17, 10], itemStyle: { color: "#6366f1", borderRadius: [0, 6, 6, 0] } },
+        { name: "Revenue", type: "bar", stack: "s", data: [22, 19, 29, 15, 15], itemStyle: { color: "#10b981", borderRadius: [0, 6, 6, 0] } },
+        { name: "Cost", type: "bar", stack: "s", data: [8, 12, 4, 16, 6], itemStyle: { color: "#f59e0b", borderRadius: [0, 6, 6, 0] } }
       ]
     });
   }
@@ -55,9 +55,9 @@
       xAxis: { type: "category", data: d.x, axisLabel: { color: css("--sub") }, axisLine: { lineStyle: { color: css("--grid") } } },
       yAxis: [{ type: "value", axisLabel: { color: css("--sub") }, splitLine: { lineStyle: { color: css("--grid") } } }, { type: "value", axisLabel: { color: css("--sub"), formatter: "{value}%" }, splitLine: { show: false } }],
       series: [
-        { name: "访问量", type: "line", smooth: true, symbolSize: 6, data: d.v, lineStyle: { color: css("--accent"), width: 2.5 }, itemStyle: { color: css("--accent") } },
-        { name: "收入(千元)", type: "bar", data: d.r, itemStyle: { color: "rgba(99, 102, 241, .45)", borderRadius: [5, 5, 0, 0] } },
-        { name: "转化率", type: "line", yAxisIndex: 1, smooth: true, data: d.c, lineStyle: { color: css("--ok"), width: 2.5, type: "dashed" }, itemStyle: { color: css("--ok") } }
+        { name: "Visits", type: "line", smooth: true, symbolSize: 6, data: d.v, lineStyle: { color: css("--accent"), width: 2.5 }, itemStyle: { color: css("--accent") } },
+        { name: "Revenue (k CNY)", type: "bar", data: d.r, itemStyle: { color: "rgba(99, 102, 241, .45)", borderRadius: [5, 5, 0, 0] } },
+        { name: "Conversion rate", type: "line", yAxisIndex: 1, smooth: true, data: d.c, lineStyle: { color: css("--ok"), width: 2.5, type: "dashed" }, itemStyle: { color: css("--ok") } }
       ]
     }, true);
   }
@@ -84,14 +84,14 @@
         btn.classList.add("active");
         frame.src = btn.dataset.previewUrl;
         wrap.classList.remove("collapsed");
-        if (close) close.textContent = "收起预览";
+        if (close) close.textContent = "Collapse preview";
       });
     });
 
     if (close) {
       close.addEventListener("click", function () {
         var collapsed = wrap.classList.toggle("collapsed");
-        close.textContent = collapsed ? "展开预览" : "收起预览";
+        close.textContent = collapsed ? "Expand preview" : "Collapse preview";
       });
     }
 
@@ -107,37 +107,37 @@
 
   function sendToAgent(prompt) {
     var status = document.getElementById("insightStatus");
-    var full = prompt + "\n\n卡片上下文摘要：\n- " + gatherContext();
+    var full = prompt + "\n\nCard context summary:\n- " + gatherContext();
     var agentId = document.getElementById("agentSelect").value;
     var model = document.getElementById("modelSelect").value || "auto";
 
     if (!window.Magic) {
-      status.textContent = "当前环境未提供 Magic API。";
+      status.textContent = "Magic API is not available in the current environment.";
       return;
     }
 
-    // 优先: createTopicAndSend（新话题 + 指定员工/模型）
+    // Prefer createTopicAndSend (new topic + selected employee/model)
     if (window.Magic.project && typeof window.Magic.project.createTopicAndSend === "function") {
       var opts = { model: model };
       if (agentId) opts.agentId = agentId;
 
-      status.textContent = "正在创建话题…";
+      status.textContent = "Creating topic...";
       window.Magic.project.createTopicAndSend(full, opts).then(function () {
-        status.textContent = "已创建新话题并发送 ✓";
+        status.textContent = "Created a new topic and sent the message.";
       }).catch(function (err) {
-        status.textContent = "发送失败：" + (err.message || err);
+        status.textContent = "Send failed: " + (err.message || err);
       });
       return;
     }
 
-    // 降级: setInputMessage（当前话题追加消息）
+    // Fallback: setInputMessage (append message to current topic)
     if (typeof window.Magic.setInputMessage === "function") {
       window.Magic.setInputMessage(full);
-      status.textContent = "已发送到当前话题（降级模式）";
+      status.textContent = "Sent to the current topic (fallback mode).";
       return;
     }
 
-    status.textContent = "当前环境不支持消息发送。";
+    status.textContent = "The current environment does not support message sending.";
   }
 
   function loadSelectors() {
@@ -153,19 +153,19 @@
           opt.textContent = a.name;
           agentSel.appendChild(opt);
         });
-        // 默认选中 ip-manager（如果存在）
+        // Select ip-manager by default when available
         var target = agents.find(function (a) { return a.id.indexOf("ip-manager") !== -1 || a.id.indexOf("ip_manager") !== -1; });
         if (target) agentSel.value = target.id;
       }).catch(function () {
-        agentSel.innerHTML = "<option value=''>无法加载</option>";
+        agentSel.innerHTML = "<option value=''>Unable to load</option>";
       });
     } else {
-      agentSel.innerHTML = "<option value=''>不可用</option>";
+      agentSel.innerHTML = "<option value=''>Unavailable</option>";
     }
 
     if (window.Magic && window.Magic.llm && typeof window.Magic.llm.getModels === "function") {
       window.Magic.llm.getModels().then(function (models) {
-        modelSel.innerHTML = "<option value=\"auto\">自动选择（推荐）</option>";
+        modelSel.innerHTML = "<option value=\"auto\">Auto select (recommended)</option>";
         models.forEach(function (m) {
           var opt = document.createElement("option");
           opt.value = m.id;

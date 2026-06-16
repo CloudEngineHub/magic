@@ -34,14 +34,14 @@
         btn.classList.add("active");
         frame.src = btn.dataset.previewUrl;
         wrap.classList.remove("collapsed");
-        if (close) close.textContent = "收起";
+        if (close) close.textContent = "Collapse";
       });
     });
 
     if (close) {
       close.addEventListener("click", function () {
         var collapsed = wrap.classList.toggle("collapsed");
-        close.textContent = collapsed ? "展开" : "收起";
+        close.textContent = collapsed ? "Expand" : "Collapse";
       });
     }
 
@@ -51,12 +51,12 @@
 
   function sendToAgent(prompt) {
     var status = document.getElementById("insightStatus");
-    var full = prompt + "\n\n卡片上下文摘要：\n- " + gatherContext();
+    var full = prompt + "\n\nCard context summary:\n- " + gatherContext();
     var agentId = document.getElementById("agentSelect").value;
     var model = document.getElementById("modelSelect").value || "auto";
 
     if (!window.Magic) {
-      status.textContent = "当前环境未提供 Magic API。";
+      status.textContent = "Magic API is not available in the current environment.";
       return;
     }
 
@@ -64,22 +64,22 @@
       var opts = { model: model };
       if (agentId) opts.agentId = agentId;
 
-      status.textContent = "正在创建话题…";
+      status.textContent = "Creating topic...";
       window.Magic.project.createTopicAndSend(full, opts).then(function () {
-        status.textContent = "已创建新话题并发送 ✓";
+        status.textContent = "Created a new topic and sent the message.";
       }).catch(function (err) {
-        status.textContent = "发送失败：" + (err.message || err);
+        status.textContent = "Send failed: " + (err.message || err);
       });
       return;
     }
 
     if (typeof window.Magic.setInputMessage === "function") {
       window.Magic.setInputMessage(full);
-      status.textContent = "已发送到当前话题（降级模式）";
+      status.textContent = "Sent to the current topic (fallback mode).";
       return;
     }
 
-    status.textContent = "当前环境不支持消息发送。";
+    status.textContent = "The current environment does not support message sending.";
   }
 
   function loadSelectors() {
@@ -98,15 +98,15 @@
         var target = agents.find(function (a) { return a.id.indexOf("ip-manager") !== -1 || a.id.indexOf("ip_manager") !== -1; });
         if (target) agentSel.value = target.id;
       }).catch(function () {
-        agentSel.innerHTML = "<option value=''>无法加载</option>";
+        agentSel.innerHTML = "<option value=''>Unable to load</option>";
       });
     } else {
-      agentSel.innerHTML = "<option value=''>不可用</option>";
+      agentSel.innerHTML = "<option value=''>Unavailable</option>";
     }
 
     if (window.Magic && window.Magic.llm && typeof window.Magic.llm.getModels === "function") {
       window.Magic.llm.getModels().then(function (models) {
-        modelSel.innerHTML = "<option value=\"auto\">自动选择（推荐）</option>";
+        modelSel.innerHTML = "<option value=\"auto\">Auto select (recommended)</option>";
         models.forEach(function (m) {
           var opt = document.createElement("option");
           opt.value = m.id;

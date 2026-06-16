@@ -1,8 +1,8 @@
 ---
 name: self-media-composer
 description: >
-  Use when the user wants to create, extend, or edit self-media posts or card/article projects for Rednote/Xiaohongshu, Instagram, WeChat Official Accounts, or similar platforms. Trigger on [@self_media_project:...], create/add post, make cards, generate social cards, write WeChat article, 小红书图文, 小红书标签, 公众号文章, ins卡片, 自媒体项目, 社媒卡片.
-  Also use for self-media post-publication operations such as 立即同步, 真实数据刷新, 发布入盘, 发布后数据同步, 复盘看板, 运营复盘, article ops review, and fixed `ops/*` data updates.
+  Use when the user wants to create, extend, or edit self-media posts or card/article projects for Rednote/Xiaohongshu, Instagram, WeChat Official Accounts, or similar platforms. Trigger on [@self_media_project:...], create/add post, make cards, generate social cards, write WeChat article, multilingual self-media requests, Rednote tags, WeChat article, Instagram cards, social media cards, content project.
+  Also use for self-media post-publication operations such as immediate sync, real data refresh, published-data import, post-publication data sync, operations review dashboards, article ops review, and fixed `ops/*` data updates.
 ---
 
 # Self-Media Composer Skill
@@ -30,23 +30,11 @@ Load this skill **immediately and before any other action** when the user's mess
 | "sync now" / "real data refresh"                          | Operations data sync       |
 | Contains `[@self_media_project:...]`                      | Existing project reference |
 
-### 中文
+### Multilingual
 
-| 用户说                                              | 加载原因               |
-| --------------------------------------------------- | ---------------------- |
-| 帮我做小红书 / 做小红书图文 / 发小红书 / 小红书帖子 | 小红书卡片帖子创作     |
-| 小红书推文 / 做一套小红书 / 小红书内容              | 小红书卡片帖子创作     |
-| 公众号文章 / 写公众号 / 公众号推文 / 微信推文       | 公众号文章创作         |
-| 微信公众号内容 / 给公众号写一篇                     | 公众号文章创作         |
-| ins 图文 / ins 卡片 / Instagram 帖子                | Instagram 卡片帖子创作 |
-| 做卡片 / 制作图文卡片 / 生成社媒卡片                | 卡片图文设计           |
-| 新建自媒体项目 / 创建内容项目 / 做一套图文          | 项目脚手架搭建         |
-| 帮我排版一篇文章（配合平台名称）                    | 平台内容排版           |
-| 发布入盘 / 发布后数据同步 / 复盘看板 / 运营复盘     | 发布后运营数据同步     |
-| 立即同步 / 真实数据刷新 / 数据刷新                   | 发布后运营数据同步     |
-| 包含 `[@self_media_project:...]`                    | 现有项目引用           |
+Load for equivalent requests in any user language, including Chinese-language requests for Xiaohongshu/Rednote posts, WeChat Official Account articles, Instagram cards, card-based social posts, content projects, publishing-data import, immediate sync, real data refresh, operations review, or any message containing `[@self_media_project:...]`.
 
-> **Note:** When Chinese platform aliases appear (小红书, 公众号, ins), treat them as the corresponding platform values. See Platform Aliases table in the Platform Defaults section.
+> **Note:** When localized platform aliases appear, treat them as the corresponding platform values. See Platform Aliases in the Platform Defaults section.
 
 ---
 
@@ -68,6 +56,20 @@ print(result)
 ```
 
 `result` exposes `result.ok`, `result.content`, `result.data`. Access structured data via `result.data`; the object is not subscriptable.
+
+---
+
+## Output Language Contract
+
+The skill documentation is written in English, but generated content must adapt to the user's language.
+
+1. Infer the user's preferred output language from the current user message first, then from active draft content, existing post language, project context, and explicit platform requirements. If the target language is still ambiguous and the choice affects the final content, ask one concise clarification.
+2. Write all user-facing text in the inferred language: questions, option labels, project/post display names, titles, subtitles, card copy, article prose, captions, comments, CTA text, placeholder labels, relative time strings, operations review prose, and template descriptions.
+3. Keep machine contracts stable: platform values, preset IDs, JSON keys, enum values, CSS class names, JS namespaces, file extensions, and API/tool parameters stay in their documented form.
+4. Use safe filesystem IDs. Prefer lowercase ASCII slugs for `project_path`, `post_id`, card filenames, and preset names unless the user explicitly needs localized filenames and the path is safe.
+5. Do not translate brand names, platform names, product names, source quotes, code identifiers, or fixed schema values. Translate surrounding explanation and content intent.
+6. For Rednote tags, choose tags that fit the user's output language and the platform's search behavior. The Chinese hashtag library is a reference set for Chinese/Xiaohongshu SEO, not a command to force Chinese tags in non-Chinese output.
+7. Set HTML `lang` attributes to the inferred language when writing cards or articles (`zh-CN`, `en`, `ja`, etc.).
 
 ---
 
@@ -144,7 +146,7 @@ presets/
 
 Currently supported `platform` values: `rednote`, `instagram`, `wechat-official-accounts`.
 
-### Platform aliases (Chinese user language)
+### Platform Aliases
 
 | User says                          | Maps to platform           |
 | ---------------------------------- | -------------------------- |
@@ -152,7 +154,7 @@ Currently supported `platform` values: `rednote`, `instagram`, `wechat-official-
 | 小红书 / 红书 / RED                | `rednote`                  |
 | ins / Instagram                    | `instagram`                |
 
-When the user mentions any of the above Chinese terms, treat them as the corresponding platform value without asking for clarification.
+When the user mentions any localized alias above, treat it as the corresponding platform value without asking for clarification. Keep the canonical platform values in files and tool calls.
 
 The table below is a fallback only. When the user explicitly specifies card size or aspect ratio, follow the user's values; do not override them with the defaults.
 
@@ -243,7 +245,7 @@ Scaffolds a new self-media project. Creates the project folder, `posts/`, `share
 
 | Parameter      | Required | Description                                                                                           |
 | -------------- | -------- | ----------------------------------------------------------------------------------------------------- |
-| `project_path` | Yes      | Project folder path, workspace-relative. Name it in the user's language, reflect the topic.           |
+| `project_path` | Yes      | Project folder path, workspace-relative. Reflect the topic; prefer a safe ASCII slug unless the user explicitly needs a localized filesystem name. |
 | `platform`     | Yes      | One of `rednote`, `instagram`, `wechat-official-accounts`.                                            |
 | `posts`        | No       | Optional pre-registered post index entries. Each item `{ "id": "...", "name": "..." }`. Default `[]`. |
 
@@ -356,7 +358,7 @@ Before running 4.1-4.5 for a post, confirm that you have already read and unders
 
 **4.1 Ask the user which preset to use (mandatory for all platforms)**
 
-Before creating any post content, call `ask_user` exactly once and let the user pick the visual template. Present only the presets available for the current platform, plus an explicit "No template" option:
+Before creating any post content, call `ask_user` exactly once and let the user pick the visual template. Render the question and option labels in the user's preferred output language while keeping the canonical preset IDs unchanged. Present only the presets available for the current platform, plus an explicit "No template" option:
 
 **For `rednote`:**
 
@@ -427,7 +429,7 @@ Before calling `create_self_media_post`, generate a complete `meta` object from 
 - `feedLikes`: a platform-appropriate display string, such as `"1.8w"`, `"12.3k"`, or `"860"`.
 - `commentCount`: a display string aligned with `feedLikes` and the likely engagement level.
 - `comments`: 3-5 plausible sample evaluations for every generated post, written in the audience's voice and tied to the actual content. Rednote / Instagram previewers render them; WeChat stores them as a reference evaluation pool. Do not use generic praise such as "Great post".
-- `time`: for `wechat-official-accounts`, a natural relative feed time such as `"4 minutes ago"` / `"4 分钟前"`.
+- `time`: for `wechat-official-accounts`, a natural relative feed time in the user's output language, such as `"4 minutes ago"` or the localized equivalent.
 - `interactionReference`: optional but recommended. Use it for non-rendered notes such as `{ "level": "medium-high", "basis": "product launch / strong pain point", "disclaimer": "reference display data, not real platform analytics" }`.
 
 Treat these numbers and evaluations as reference/display data, not verified analytics. They should feel credible for the platform, topic, audience size, and content intensity; do not invent factual performance claims such as "real launch data" unless the user supplied the data.
@@ -438,10 +440,10 @@ For every `rednote` post, load [Rednote Hashtag Library](./references/hashtag-li
 
 ```json
 {
-  "core": ["穿搭"],
-  "mid": ["通勤穿搭", "显瘦穿搭"],
-  "longtail": ["梨形身材显瘦", "155穿搭日记"],
-  "trend": ["多巴胺穿搭"]
+  "core": ["workwear"],
+  "mid": ["commute outfits", "petite styling"],
+  "longtail": ["outfits for new office workers", "155cm styling tips"],
+  "trend": ["dopamine dressing"]
 }
 ```
 
@@ -538,7 +540,7 @@ For every image the cards need:
 
 **4.4 Write the content**
 
-Load [Human Writing Style](./references/human-writing-style.md) before drafting card copy or article prose. This reference is the internal source of truth for 人味, author voice, anti-generic-copy checks, and platform-specific writing self-checks.
+Load [Human Writing Style](./references/human-writing-style.md) before drafting card copy or article prose. This reference is the internal source of truth for human texture, author voice, anti-generic-copy checks, and platform-specific writing self-checks.
 
 **4.4.0 Build the human-writing brief**
 
@@ -549,7 +551,7 @@ Before authoring HTML, write a short internal brief from the available context:
 - reader action: save, comment, follow, consult, compare, try, buy, or remember a viewpoint
 - evidence: uploaded references, product details, screenshots, comparisons, cases, constraints, or observed scenes
 
-Infer from `global.author`, `global.brandPosition`, `global.targetAudience`, optional `__brand/brand-config.json`, `articles[].style`, `articles[].notes`, title, outline, and uploaded materials. Ask only when the missing answer changes the direction of the post and no brand config fallback can answer it. Do not invent first-person experience, customer proof, metrics, or quotes to create 人味.
+Infer from `global.author`, `global.brandPosition`, `global.targetAudience`, optional `__brand/brand-config.json`, `articles[].style`, `articles[].notes`, title, outline, and uploaded materials. Ask only when the missing answer changes the direction of the post and no brand config fallback can answer it. Do not invent first-person experience, customer proof, metrics, or quotes to create human texture.
 
 **4.4.1 Author the platform content**
 
@@ -567,8 +569,8 @@ Reference only local image files saved in 4.3. Load [Card HTML Constraints](./re
 
 Before finalizing files, run the self-check in [Human Writing Style](./references/human-writing-style.md):
 
-- remove AI 通稿味: macro openings, generic value words, mechanical three-part structure, vague authority, and slogan endings
-- remove 假人味: unsupported first-person stories, fake casual tone, forced jokes, and exaggerated emotion
+- remove AI press-release flavor: macro openings, generic value words, mechanical three-part structure, vague authority, and slogan endings
+- remove fake human texture: unsupported first-person stories, fake casual tone, forced jokes, and exaggerated emotion
 - confirm at least one detail could only come from this topic, product, route, uploaded material, reader, or author
 - confirm the strongest promise appears early enough for the platform
 - confirm title, tags, comments, CTA, and card/article body all support the same reader promise
@@ -583,7 +585,7 @@ Rename `posts/<post_id>/` when a clearer, topic-specific folder name would help 
 
 If a rename is needed:
 
-1. Choose one safe, stable filesystem id in the user's language context when possible. Use lowercase ASCII slug when appropriate, and avoid `/`, `\`, `..`, spaces-only names, query characters, or punctuation that can break paths.
+1. Choose one safe, stable filesystem id. Prefer a lowercase ASCII slug, and avoid `/`, `\`, `..`, spaces-only names, query characters, or punctuation that can break paths. Keep the user-facing display title in the user's output language.
 2. Rename the folder from `posts/<old_id>/` to `posts/<new_id>/`.
 3. Update `posts/<new_id>/post.json` so its top-level `id` equals `<new_id>`.
 4. Update the root `magic.project.js` platform post entry so:
@@ -634,20 +636,22 @@ When the frontend self-media creation panel sends a prompt to the AI, it may inc
 The frontend injects a visual requirement section equivalent to:
 
 ```
-视觉要求
-预设标识：{preset_id}
-适用平台：{platform}
-预设说明：{description}
+Visual requirements
+Preset ID: {preset_id}
+Platform: {platform}
+Preset description: {description}
 ```
 
 ### Behavior When Received
 
-| `预设ID` value                                                 | Action                                                                              |
+| `Preset ID` value                                              | Action                                                                              |
 | -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `neo-brutalism` / `code-dispatch` / `dark-tech` / `ins-modern` | Skip Step 4.1. Read preset from `presets/<platform>/<preset>/` and copy to project. |
 | `custom:{user_description}`                                    | Skip Step 4.1. Load `generate-preset` sub-skill with the description.               |
 | `none`                                                         | Skip Step 4.1. Design freely per platform defaults.                                 |
-| _(absent — no "视觉模板" section)_                             | Run Step 4.1 normally (ask the user).                                               |
+| _(absent — no visual template section)_                        | Run Step 4.1 normally (ask the user).                                               |
+
+For backward compatibility, accept localized legacy field labels that carry the same meaning, but normalize them internally to the English field names above.
 
 ### Draft Context Recovery
 
