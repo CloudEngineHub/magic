@@ -2700,6 +2700,7 @@
 				"remainingShort": "剩 {{days}} 天",
 				"selectRow": "选择此项",
 				"type": {
+					"folder": "文件夹",
 					"file": "文件",
 					"project": "项目",
 					"topic": "话题",
@@ -3582,6 +3583,7 @@
 			"more": "更多操作",
 			"pathPrefix": "路径：",
 			"type": {
+				"folder": "文件夹",
 				"file": "文件",
 				"project": "项目",
 				"topic": "话题",
@@ -3594,6 +3596,12 @@
 		},
 		"restoreCheck": {
 			"confirmMessage": "将{{type}}「{{name}}」恢复至原位置？",
+			"projectMissing": "文件所属项目不存在或已删除，请先恢复项目",
+			"duplicateRestoreTarget": "同批恢复里有同目标同名文件，系统默认仅恢复最新删除的那个",
+			"projectMissingTip": "有 {{count}} 个文件所属项目不存在或已删除，请先恢复项目。",
+			"projectMissingTipWithNames": "有 {{count}} 个文件所属项目不存在或已删除（{{fileNames}}），请先恢复项目。",
+			"fileNamesWithEtc": "{{names}} 等文件",
+			"duplicateRestoreTargetTip": "选择中的文件有 {{count}} 个同目标同名文件，系统默认仅恢复最新删除的那个",
 			"errorMessage": "父级检查失败，请稍后重试",
 			"fileConflictConfirmMessage": "有 {{parentMissingCount}} 个文件原目录已不存在，将恢复到原项目根目录；原项目根目录已存在同名文件 {{conflictNames}}，这 {{nameConflictCount}} 个文件需要逐个确认。确认继续？",
 			"fileConflictCountConfirmMessage": "有 {{parentMissingCount}} 个文件原目录已不存在，将恢复到原项目根目录；另有 {{nameConflictCount}} 个同名文件需要逐个确认。确认继续？",

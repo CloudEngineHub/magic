@@ -44,6 +44,7 @@ export interface RecycleBinItem {
 	resourceId: string
 	resourceType: ResourceType
 	category: "workspaces" | "projects" | "topics" | "files"
+	fileKind?: "file" | "folder"
 	title: string
 	deletedBy: string
 	deletedByUser?: RecycleBinDeletedByUser
@@ -95,6 +96,12 @@ export interface RestoreCheckResult {
 		resourceId: string
 		fileName: string
 	}>
+	/** 文件所属项目不存在或已删除的数量（终止型冲突，仅提示） */
+	projectMissingCount?: number
+	/** project_missing 对应的文件名（用于提示，最多展示前若干项） */
+	projectMissingFileNames?: string[]
+	/** 同批恢复同目标同名文件数量（终止型冲突，仅提示） */
+	duplicateRestoreTargetCount?: number
 	message?: string
 	messageKey?: string
 	shouldBlockRestore: boolean
@@ -123,7 +130,12 @@ export interface FilterItemsByTabPayload {
 
 export type RecycleBinListItemDto = RecycleBin.ListItem
 
-export function getCategoryLabel(category: RecycleBinItem["category"], t: TFunction) {
+export function getCategoryLabel(
+	category: RecycleBinItem["category"],
+	t: TFunction,
+	fileKind?: RecycleBinItem["fileKind"],
+) {
+	if (category === "files" && fileKind === "folder") return t("recycleBin.item.type.folder")
 	return t(`recycleBin.item.type.${CATEGORY_TO_TYPE_KEY[category]}`)
 }
 
@@ -151,11 +163,18 @@ export function mapRecycleBinItem(item: RecycleBinListItemDto, t: TFunction): Re
 		? { nickname: item.deleted_by_user.nickname, avatar: item.deleted_by_user.avatar }
 		: undefined
 	const resourceType = toResourceType(item.resource_type)
+	const fileKind =
+		resourceType === RESOURCE_TYPE.FILE
+			? item.extra_data?.is_directory
+				? "folder"
+				: "file"
+			: undefined
 	return {
 		id: item.id,
 		resourceId: item.resource_id,
 		resourceType,
 		category: getCategoryByResourceType(resourceType),
+		fileKind,
 		title: getRecycleBinItemTitle({
 			resourceName: item.resource_name,
 			resourceType,
@@ -372,6 +391,9 @@ export function getRestoreStatusMessage(
 	const resourceType = target ? getRestoreTargetResourceType({ target, items }) : undefined
 	const conflictCount = Object.keys(result.conflictResolutions ?? {}).length
 	const skippedCount = result.skippedNameConflictCount ?? 0
+	const projectMissingCount = result.projectMissingCount ?? 0
+	const projectMissingFileNames = result.projectMissingFileNames ?? []
+	const duplicateRestoreTargetCount = result.duplicateRestoreTargetCount ?? 0
 	const conflictNameList = result.skippedNameConflictNames ?? []
 	const visibleConflictNames = conflictNameList
 		.slice(0, MAX_CONFLICT_NAME_PREVIEW_COUNT)
@@ -383,32 +405,72 @@ export function getRestoreStatusMessage(
 					names: visibleConflictNames,
 			  })
 			: visibleConflictNames
-	if (resourceType === RESOURCE_TYPE.FILE && (conflictCount > 0 || skippedCount > 0)) {
+	const terminalConflictMessages: string[] = []
+	if (projectMissingCount > 0) {
+		const visibleFileNames = projectMissingFileNames
+			.slice(0, MAX_CONFLICT_NAME_PREVIEW_COUNT)
+			.map((name) => `「${name}」`)
+			.join("、")
+		const fileNames =
+			projectMissingFileNames.length > MAX_CONFLICT_NAME_PREVIEW_COUNT
+				? t("recycleBin.restoreCheck.fileNamesWithEtc", {
+						names: visibleFileNames,
+				  })
+				: visibleFileNames
+		terminalConflictMessages.push(
+			fileNames
+				? t("recycleBin.restoreCheck.projectMissingTipWithNames", {
+						count: projectMissingCount,
+						fileNames,
+				  })
+				: t("recycleBin.restoreCheck.projectMissingTip", { count: projectMissingCount }),
+		)
+	}
+	if (duplicateRestoreTargetCount > 0) {
+		terminalConflictMessages.push(
+			t("recycleBin.restoreCheck.duplicateRestoreTargetTip", {
+				count: duplicateRestoreTargetCount,
+			}),
+		)
+	}
+	if (
+		resourceType === RESOURCE_TYPE.FILE &&
+		(conflictCount > 0 || skippedCount > 0 || terminalConflictMessages.length > 0)
+	) {
+		let baseMessage = ""
 		if (conflictCount > 0 && skippedCount > 0) {
 			if (!conflictNames) {
-				return t("recycleBin.restoreCheck.fileConflictCountConfirmMessage", {
+				baseMessage = t("recycleBin.restoreCheck.fileConflictCountConfirmMessage", {
 					parentMissingCount: conflictCount,
 					nameConflictCount: skippedCount,
 				})
+				return [baseMessage, ...terminalConflictMessages].filter(Boolean).join("\n")
 			}
-			return t("recycleBin.restoreCheck.fileConflictConfirmMessage", {
+			baseMessage = t("recycleBin.restoreCheck.fileConflictConfirmMessage", {
 				parentMissingCount: conflictCount,
 				nameConflictCount: skippedCount,
 				conflictNames,
 			})
+			return [baseMessage, ...terminalConflictMessages].filter(Boolean).join("\n")
 		}
 		if (skippedCount > 0) {
 			if (!conflictNames) {
-				return t("recycleBin.restoreCheck.nameConflictCountConfirmMessage", {
+				baseMessage = t("recycleBin.restoreCheck.nameConflictCountConfirmMessage", {
 					count: skippedCount,
 				})
+				return [baseMessage, ...terminalConflictMessages].filter(Boolean).join("\n")
 			}
-			return t("recycleBin.restoreCheck.nameConflictConfirmMessage", {
+			baseMessage = t("recycleBin.restoreCheck.nameConflictConfirmMessage", {
 				count: skippedCount,
 				conflictNames,
 			})
+			return [baseMessage, ...terminalConflictMessages].filter(Boolean).join("\n")
 		}
-		return t("recycleBin.restoreCheck.parentMissingConfirmMessage", { count: conflictCount })
+		if (conflictCount > 0) {
+			baseMessage = t("recycleBin.restoreCheck.parentMissingConfirmMessage", { count: conflictCount })
+			return [baseMessage, ...terminalConflictMessages].filter(Boolean).join("\n")
+		}
+		return terminalConflictMessages.join("\n")
 	}
 
 	if (result.itemsNeedMove.length > 0) {

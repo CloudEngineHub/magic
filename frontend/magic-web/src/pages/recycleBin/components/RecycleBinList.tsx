@@ -119,7 +119,7 @@ export function RecycleBinList({
 									data-testid={`recycle-bin-row-select-${item.id}`}
 								/>
 								<Badge variant="outline" className="rounded-lg px-2 py-0.5">
-									{getCategoryLabel(item.category, t)}
+									{getCategoryLabel(item.category, t, item.fileKind)}
 								</Badge>
 								<div className="truncate text-sm font-medium leading-normal text-foreground">
 									{getDisplayTitle(item, t)}

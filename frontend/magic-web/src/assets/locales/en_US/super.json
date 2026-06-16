@@ -2700,6 +2700,7 @@
 				"remainingShort": "{{days}} days left",
 				"selectRow": "Select this item",
 				"type": {
+					"folder": "Folder",
 					"file": "File",
 					"project": "Project",
 					"topic": "Topic",
@@ -3580,6 +3581,7 @@
 			"more": "More actions",
 			"pathPrefix": "Path: ",
 			"type": {
+				"folder": "Folder",
 				"file": "File",
 				"project": "Project",
 				"topic": "Topic",
@@ -3592,6 +3594,12 @@
 		},
 		"restoreCheck": {
 			"confirmMessage": "Restore {{type}}「{{name}}」to its original location?",
+			"projectMissing": "The file's project does not exist or has been deleted. Please restore the project first.",
+			"duplicateRestoreTarget": "There are files with the same target path and name in this restore batch. By default, only the most recently deleted one will be restored.",
+			"projectMissingTip": "{{count}} file(s) belong to projects that do not exist or were deleted. Please restore those projects first.",
+			"projectMissingTipWithNames": "{{count}} file(s) belong to projects that do not exist or were deleted ({{fileNames}}). Please restore those projects first.",
+			"fileNamesWithEtc": "{{names}} and more files",
+			"duplicateRestoreTargetTip": "There are {{count}} file(s) with duplicate target path and name in this batch. By default, only the most recently deleted one will be restored.",
 			"errorMessage": "Parent check failed, please retry later",
 			"fileConflictConfirmMessage": "{{parentMissingCount}} file(s) whose original folder no longer exists will be restored to the original project's root directory. The original project root already contains {{conflictNames}}, and {{nameConflictCount}} file(s) with the same name will need confirmation one by one. Continue?",
 			"fileConflictCountConfirmMessage": "{{parentMissingCount}} file(s) whose original folder no longer exists will be restored to the original project's root directory; another {{nameConflictCount}} conflicting file(s) will need confirmation one by one. Continue?",

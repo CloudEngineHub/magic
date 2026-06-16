@@ -8,7 +8,7 @@ import { Separator } from "@/components/shadcn-ui/separator"
 
 export interface RecycleBinItemData {
 	id: string
-	type: "workspace" | "project" | "topic" | "file"
+	type: "workspace" | "project" | "topic" | "file" | "folder"
 	title: string
 	deletedBy: string
 	deletedByUser?: { nickname: string; avatar: string }
@@ -46,6 +46,8 @@ function RecycleBinItem(props: RecycleBinItemProps) {
 				return t("mobile.recycleBin.item.type.topic")
 			case "file":
 				return t("mobile.recycleBin.item.type.file")
+			case "folder":
+				return t("mobile.recycleBin.item.type.folder")
 			default:
 				return type
 		}

@@ -16,6 +16,10 @@ import { projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import SuperMagicService from "@/pages/superMagic/services"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	excludeRestoreResourceIds,
+	getRestoreFailureMessage,
+} from "@/pages/recycleBin/components/recycle-bin-domain"
 import RecycleBinItem, { type RecycleBinItemData } from "./RecycleBinItem"
 import BulkActions from "./BulkActions"
 import emptyStateIcon from "../assets/svg/empty-state-icon.svg"
@@ -52,6 +56,123 @@ interface SelectPathSubmitPayload {
 	targetPath: AttachmentItem[]
 	targetAttachments: AttachmentItem[]
 	sourceAttachments: AttachmentItem[]
+}
+
+type ConflictType =
+	| "parent_missing"
+	| "name_conflict"
+	| "project_missing"
+	| "duplicate_restore_target"
+
+type ConflictResolution = {
+	parent_missing?: "restore_to_root"
+}
+
+type ConflictResolutions = Record<string, ConflictResolution>
+const MAX_CONFLICT_NAME_PREVIEW_COUNT = 5
+
+interface ParsedCheckResult {
+	needMoveResourceIds: string[]
+	noNeedMoveResourceIds: string[]
+	conflictResolutions: ConflictResolutions
+	skippedNameConflictCount: number
+	skippedNameConflictResourceIds: string[]
+	projectMissingCount: number
+	projectMissingFileNames: string[]
+	duplicateRestoreTargetCount: number
+}
+
+function parseCheckResult(data: {
+	items_need_move?: Array<{ resource_id: string }>
+	items_no_need_move?: Array<{ resource_id: string }>
+	items_with_conflict?: Array<{
+		resource_id: string
+		resource_name?: string
+		conflict?: {
+			type?: string
+		}
+	}>
+	items_no_conflict?: Array<{ resource_id: string }>
+}): ParsedCheckResult {
+	const fromOldNeedMove = Array.isArray(data?.items_need_move) ? data.items_need_move : []
+	const fromOldNoNeedMove = Array.isArray(data?.items_no_need_move) ? data.items_no_need_move : []
+	const fromNewWithConflict = Array.isArray(data?.items_with_conflict)
+		? data.items_with_conflict
+		: []
+	const fromNewNoConflict = Array.isArray(data?.items_no_conflict) ? data.items_no_conflict : []
+
+	const conflictResolutions: ConflictResolutions = {}
+	const needMoveFromConflicts = fromNewWithConflict
+		.filter((item) => item?.conflict?.type === "parent_missing")
+		.map((item) => String(item.resource_id))
+
+	// 同名冲突：直接跳过，不纳入恢复请求
+	let skippedNameConflictCount = 0
+	const skippedNameConflictResourceIds: string[] = []
+	let projectMissingCount = 0
+	const projectMissingFileNames: string[] = []
+	let duplicateRestoreTargetCount = 0
+
+	fromNewWithConflict.forEach((item) => {
+		const resourceId = String(item.resource_id)
+		const conflictType = item?.conflict?.type as ConflictType | undefined
+		if (conflictType === "parent_missing") {
+			// 父级不存在：直接恢复到根目录
+			conflictResolutions[resourceId] = {
+				parent_missing: "restore_to_root",
+			}
+		}
+		if (conflictType === "name_conflict") {
+			skippedNameConflictCount += 1
+			skippedNameConflictResourceIds.push(resourceId)
+		}
+		if (conflictType === "project_missing") {
+			projectMissingCount += 1
+			const resourceName = item.resource_name?.trim()
+			if (resourceName) projectMissingFileNames.push(resourceName)
+		}
+		if (conflictType === "duplicate_restore_target") duplicateRestoreTargetCount += 1
+	})
+
+	// 兼容老版 check 结构：items_need_move 也视为 parent_missing
+	const skippedNameConflictResourceIdSet = new Set(skippedNameConflictResourceIds)
+	fromOldNeedMove.forEach((item) => {
+		const resourceId = String(item.resource_id)
+		if (skippedNameConflictResourceIdSet.has(resourceId)) return
+		conflictResolutions[resourceId] = {
+			...(conflictResolutions[resourceId] ?? {}),
+			parent_missing: "restore_to_root",
+		}
+	})
+
+	const needMoveResourceIds =
+		fromOldNeedMove.length > 0
+			? excludeRestoreResourceIds(
+					toResourceIds(fromOldNeedMove),
+					skippedNameConflictResourceIds,
+				)
+			: excludeRestoreResourceIds(needMoveFromConflicts, skippedNameConflictResourceIds)
+	const noNeedMoveResourceIds =
+		fromOldNoNeedMove.length > 0
+			? excludeRestoreResourceIds(
+					toResourceIds(fromOldNoNeedMove),
+					skippedNameConflictResourceIds,
+				)
+			: excludeRestoreResourceIds(
+					toResourceIds(fromNewNoConflict),
+					skippedNameConflictResourceIds,
+				)
+
+	return {
+		needMoveResourceIds,
+		noNeedMoveResourceIds,
+		conflictResolutions,
+		skippedNameConflictCount,
+		skippedNameConflictResourceIds,
+		projectMissingCount,
+		projectMissingFileNames,
+		duplicateRestoreTargetCount,
+	}
 }
 
 function getRestoreResourceIds(target: RestoreTarget, items: RecycleBinItemData[]): string[] {
@@ -119,7 +240,12 @@ function getRecycleBinItemTitle(props: {
 function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): RecycleBinItemData {
 	const resourceType = item.resource_type as ResourceType
 	const tabKey = RESOURCE_TYPE_TO_TAB[resourceType] ?? "files"
-	const type = TAB_KEY_TO_TYPE[tabKey] ?? "file"
+	const type =
+		resourceType === RESOURCE_TYPE.FILE
+			? item.extra_data?.is_directory
+				? "folder"
+				: "file"
+			: (TAB_KEY_TO_TYPE[tabKey] ?? "file")
 	const deletedBy =
 		item.deleted_by_user?.nickname ?? item.deleted_by_name ?? item.deleted_by ?? ""
 	const deletedByUser = item.deleted_by_user
@@ -266,9 +392,9 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 
 	/** 恢复成功后的统一刷新：回收站列表 + 工作区列表（与 PC 端一致，保证弹窗/侧边栏工作区列表为最新） */
 	const handleRestoreSuccess = useCallback(
-		(count: number) => {
+		(count: number, showToast = true) => {
 			if (count <= 0) return
-			magicToast.success(t("recycleBin.restoreSuccess.content", { count }))
+			if (showToast) magicToast.success(t("recycleBin.restoreSuccess.content", { count }))
 			run(queryParams)
 			SuperMagicService.workspace
 				.fetchWorkspaces({
@@ -279,6 +405,57 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 				.catch((error) => console.error(error))
 		},
 		[t, queryParams, run],
+	)
+
+	const runRestoreWithPayload = useCallback(
+		async ({
+			resourceType,
+			resourceIds,
+			conflictResolutions,
+			skippedNameConflictCount = 0,
+		}: {
+			resourceType: ResourceType
+			resourceIds: string[]
+			conflictResolutions?: ConflictResolutions
+			skippedNameConflictCount?: number
+		}) => {
+			if (resourceIds.length === 0) {
+				if (skippedNameConflictCount > 0)
+					magicToast.info(
+						t("recycleBin.restoreCheck.nameConflictSkipped", {
+							count: skippedNameConflictCount,
+						}),
+					)
+				return
+			}
+			const hasConflictResolutions =
+				conflictResolutions && Object.keys(conflictResolutions).length > 0
+			const data = await RecycleBinApi.restoreRecycleBinResources({
+				resource_ids: resourceIds,
+				resource_type: resourceType,
+				...(hasConflictResolutions ? { conflict_resolutions: conflictResolutions } : {}),
+			})
+			const successIds = data.results
+				.filter((r) => r.success)
+				.map((r) => items.find((i) => i.resourceId === r.resource_id)?.id)
+				.filter(Boolean) as string[]
+			setItems((prev) => prev.filter((item) => !successIds.includes(item.id)))
+			setSelectedIds((prev) => prev.filter((id) => !successIds.includes(id)))
+			if (data.success_count > 0)
+				handleRestoreSuccess(data.success_count, data.failed_count === 0)
+			if (data.failed_count > 0) {
+				const message = getRestoreFailureMessage(data, t)
+				if (data.success_count > 0) magicToast.warning(message)
+				else magicToast.error(message)
+			}
+			if (skippedNameConflictCount > 0)
+				magicToast.info(
+					t("recycleBin.restoreCheck.nameConflictSkipped", {
+						count: skippedNameConflictCount,
+					}),
+				)
+		},
+		[handleRestoreSuccess, items, t],
 	)
 
 	/** 选择路径确认后：恢复「无需移动」的项（与 PC 端一致） */
@@ -297,8 +474,13 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 				.filter(Boolean) as string[]
 			setItems((prev) => prev.filter((item) => !successIds.includes(item.id)))
 			setSelectedIds((prev) => prev.filter((id) => !successIds.includes(id)))
-			if (data.success_count > 0) handleRestoreSuccess(data.success_count)
-			if (data.failed_count > 0) magicToast.error(t("operationFailed"))
+			if (data.success_count > 0)
+				handleRestoreSuccess(data.success_count, data.failed_count === 0)
+			if (data.failed_count > 0) {
+				const message = getRestoreFailureMessage(data, t)
+				if (data.success_count > 0) magicToast.warning(message)
+				else magicToast.error(message)
+			}
 		} catch {
 			magicToast.error(t("operationFailed"))
 		}
@@ -323,12 +505,64 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 				resource_ids: selectedItems.map((i) => i.resourceId),
 				resource_type: resourceType,
 			})
-			const rawNeedMove = Array.isArray(check?.items_need_move) ? check.items_need_move : []
-			const rawNoNeedMove = Array.isArray(check?.items_no_need_move)
-				? check.items_no_need_move
-				: []
-			const needMoveResourceIds = toResourceIds(rawNeedMove)
-			const noNeedMoveResourceIds = toResourceIds(rawNoNeedMove)
+			const {
+				needMoveResourceIds,
+				noNeedMoveResourceIds,
+				conflictResolutions,
+				skippedNameConflictCount,
+				skippedNameConflictResourceIds,
+				projectMissingCount,
+				projectMissingFileNames,
+				duplicateRestoreTargetCount,
+			} = parseCheckResult(check)
+			if (projectMissingCount > 0) {
+				const visibleFileNames = projectMissingFileNames
+					.slice(0, MAX_CONFLICT_NAME_PREVIEW_COUNT)
+					.map((name) => `「${name}」`)
+					.join("、")
+				const fileNames =
+					projectMissingFileNames.length > MAX_CONFLICT_NAME_PREVIEW_COUNT
+						? t("recycleBin.restoreCheck.fileNamesWithEtc", {
+								names: visibleFileNames,
+						  })
+						: visibleFileNames
+				magicToast.info(
+					fileNames
+						? t("recycleBin.restoreCheck.projectMissingTipWithNames", {
+								count: projectMissingCount,
+								fileNames,
+						  })
+						: t("recycleBin.restoreCheck.projectMissingTip", {
+								count: projectMissingCount,
+						  }),
+				)
+			}
+			if (duplicateRestoreTargetCount > 0) {
+				magicToast.info(
+					t("recycleBin.restoreCheck.duplicateRestoreTargetTip", {
+						count: duplicateRestoreTargetCount,
+					}),
+				)
+			}
+
+			if (resourceType === RESOURCE_TYPE.FILE) {
+				const conflictResourceIds = Object.keys(conflictResolutions)
+				const resourceIds = excludeRestoreResourceIds(
+					[...noNeedMoveResourceIds, ...conflictResourceIds],
+					skippedNameConflictResourceIds,
+				)
+				if (resourceIds.length === 0 && skippedNameConflictCount === 0) {
+					magicToast.info(t("recycleBin.restoreCheck.noResourcesFound"))
+					return
+				}
+				await runRestoreWithPayload({
+					resourceType,
+					resourceIds,
+					conflictResolutions,
+					skippedNameConflictCount,
+				})
+				return
+			}
 			const needMoveItemIds = resolveNeedMoveItemIds(needMoveResourceIds, items)
 			const hasNeedMove = needMoveItemIds.length > 0
 
@@ -374,22 +608,14 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 				return
 			}
 			if (noNeedMoveResourceIds.length === 0) return
-			const data = await RecycleBinApi.restoreRecycleBinResources({
-				resource_ids: noNeedMoveResourceIds,
-				resource_type: resourceType,
+			await runRestoreWithPayload({
+				resourceType: resourceType as ResourceType,
+				resourceIds: noNeedMoveResourceIds,
 			})
-			const successIds = data.results
-				.filter((r) => r.success)
-				.map((r) => items.find((i) => i.resourceId === r.resource_id)?.id)
-				.filter(Boolean) as string[]
-			setItems((prev) => prev.filter((item) => !successIds.includes(item.id)))
-			setSelectedIds((prev) => prev.filter((id) => !successIds.includes(id)))
-			if (data.success_count > 0) handleRestoreSuccess(data.success_count)
-			if (data.failed_count > 0) magicToast.error(t("operationFailed"))
 		} catch {
 			magicToast.error(t("operationFailed"))
 		}
-	}, [selectedIds, items, handleRestoreSuccess, t])
+	}, [selectedIds, items, runRestoreWithPayload, t])
 
 	const handlePermanentDelete = useCallback(async () => {
 		if (selectedIds.length === 0) return
@@ -425,14 +651,64 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 					resource_ids: [item.resourceId],
 					resource_type: item.resourceType,
 				})
-				const rawNeedMove = Array.isArray(check?.items_need_move)
-					? check.items_need_move
-					: []
-				const rawNoNeedMove = Array.isArray(check?.items_no_need_move)
-					? check.items_no_need_move
-					: []
-				const needMoveResourceIds = toResourceIds(rawNeedMove)
-				const noNeedMoveResourceIds = toResourceIds(rawNoNeedMove)
+				const {
+					needMoveResourceIds,
+					noNeedMoveResourceIds,
+					conflictResolutions,
+					skippedNameConflictCount,
+					skippedNameConflictResourceIds,
+					projectMissingCount,
+					projectMissingFileNames,
+					duplicateRestoreTargetCount,
+				} = parseCheckResult(check)
+				if (projectMissingCount > 0) {
+					const visibleFileNames = projectMissingFileNames
+						.slice(0, MAX_CONFLICT_NAME_PREVIEW_COUNT)
+						.map((name) => `「${name}」`)
+						.join("、")
+					const fileNames =
+						projectMissingFileNames.length > MAX_CONFLICT_NAME_PREVIEW_COUNT
+							? t("recycleBin.restoreCheck.fileNamesWithEtc", {
+									names: visibleFileNames,
+							  })
+							: visibleFileNames
+					magicToast.info(
+						fileNames
+							? t("recycleBin.restoreCheck.projectMissingTipWithNames", {
+									count: projectMissingCount,
+									fileNames,
+							  })
+							: t("recycleBin.restoreCheck.projectMissingTip", {
+									count: projectMissingCount,
+							  }),
+					)
+				}
+				if (duplicateRestoreTargetCount > 0) {
+					magicToast.info(
+						t("recycleBin.restoreCheck.duplicateRestoreTargetTip", {
+							count: duplicateRestoreTargetCount,
+						}),
+					)
+				}
+
+				if (item.resourceType === RESOURCE_TYPE.FILE) {
+					const conflictResourceIds = Object.keys(conflictResolutions)
+					const resourceIds = excludeRestoreResourceIds(
+						[...noNeedMoveResourceIds, ...conflictResourceIds],
+						skippedNameConflictResourceIds,
+					)
+					if (resourceIds.length === 0 && skippedNameConflictCount === 0) {
+						magicToast.info(t("recycleBin.restoreCheck.noResourcesFound"))
+						return
+					}
+					await runRestoreWithPayload({
+						resourceType: item.resourceType,
+						resourceIds,
+						conflictResolutions,
+						skippedNameConflictCount,
+					})
+					return
+				}
 				const needMove = needMoveResourceIds.includes(item.resourceId)
 				if (needMove) {
 					const restoreTarget: RestoreTarget = { kind: "item", item }
@@ -458,23 +734,15 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 					return
 				}
 				if (noNeedMoveResourceIds.length === 0) return
-				const data = await RecycleBinApi.restoreRecycleBinResources({
-					resource_ids: noNeedMoveResourceIds,
-					resource_type: item.resourceType,
+				await runRestoreWithPayload({
+					resourceType: item.resourceType as ResourceType,
+					resourceIds: noNeedMoveResourceIds,
 				})
-				const success = data.results.some(
-					(r) => r.success && r.resource_id === item.resourceId,
-				)
-				if (success) {
-					setItems((prev) => prev.filter((i) => i.id !== itemId))
-					setSelectedIds((prev) => prev.filter((id) => id !== itemId))
-					handleRestoreSuccess(1)
-				} else magicToast.error(t("operationFailed"))
 			} catch {
 				magicToast.error(t("operationFailed"))
 			}
 		},
-		[items, handleRestoreSuccess, t],
+		[items, runRestoreWithPayload, t],
 	)
 
 	const handlePermanentDeleteSingle = useCallback(

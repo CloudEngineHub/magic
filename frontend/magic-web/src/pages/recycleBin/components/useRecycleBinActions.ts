@@ -38,7 +38,11 @@ interface SelectPathSubmitPayload {
 	sourceAttachments: AttachmentItem[]
 }
 
-type ConflictType = "parent_missing" | "name_conflict"
+type ConflictType =
+	| "parent_missing"
+	| "name_conflict"
+	| "project_missing"
+	| "duplicate_restore_target"
 
 type ConflictResolution = {
 	parent_missing?: "restore_to_root"
@@ -101,6 +105,11 @@ function parseRestoreCheckResponse(data: {
 	const skippedNameConflictNames: string[] = []
 	const skippedNameConflictResourceIds: string[] = []
 	const skippedNameConflictItems: PendingNameConflictItem[] = []
+	let projectMissingCount = 0
+	const projectMissingResourceIds: string[] = []
+	const projectMissingFileNames: string[] = []
+	let duplicateRestoreTargetCount = 0
+	const duplicateRestoreTargetResourceIds: string[] = []
 
 	withConflict.forEach((item) => {
 		const resourceId = String(item.resource_id)
@@ -120,6 +129,16 @@ function parseRestoreCheckResponse(data: {
 				resourceId,
 				fileName: resourceName || "",
 			})
+		}
+		if (conflictType === "project_missing") {
+			projectMissingCount += 1
+			projectMissingResourceIds.push(resourceId)
+			const resourceName = item.resource_name?.trim()
+			if (resourceName) projectMissingFileNames.push(resourceName)
+		}
+		if (conflictType === "duplicate_restore_target") {
+			duplicateRestoreTargetCount += 1
+			duplicateRestoreTargetResourceIds.push(resourceId)
 		}
 	})
 
@@ -149,7 +168,7 @@ function parseRestoreCheckResponse(data: {
 						skippedNameConflictResourceIds,
 					)
 				: excludeRestoreResourceIds(
-						toResourceIds(noConflict),
+						[...toResourceIds(noConflict), ...duplicateRestoreTargetResourceIds],
 						skippedNameConflictResourceIds,
 					),
 		conflictResolutions,
@@ -157,6 +176,10 @@ function parseRestoreCheckResponse(data: {
 		skippedNameConflictNames,
 		skippedNameConflictResourceIds,
 		skippedNameConflictItems,
+		projectMissingCount,
+		projectMissingResourceIds,
+		projectMissingFileNames,
+		duplicateRestoreTargetCount,
 	}
 }
 
@@ -440,6 +463,7 @@ export function useRecycleBinActions({
 			advancePendingNameConflictQueue()
 			return
 		}
+		if (!pendingNameConflictRestore) return
 
 		const { resourceType, conflictResolutions } = pendingNameConflictRestore
 		const restored = await restoreResources({
@@ -585,7 +609,9 @@ export function useRecycleBinActions({
 		const isFileRestore = resourceType === RESOURCE_TYPE.FILE
 
 		if (isFileRestore && isRestorableResourceType(resourceType)) {
-			const resourceIds = [...new Set([...canRestoreResourceIds, ...conflictResourceIds])]
+			const resourceIds = Array.from(
+				new Set([...canRestoreResourceIds, ...conflictResourceIds]),
+			)
 			setRestoreTarget(null)
 			setRestoreCheckResult(null)
 			if (resourceIds.length > 0) {
@@ -845,7 +871,20 @@ export function useRecycleBinActions({
 				skippedNameConflictNames,
 				skippedNameConflictResourceIds,
 				skippedNameConflictItems,
+				projectMissingCount,
+				projectMissingResourceIds,
+				projectMissingFileNames,
+				duplicateRestoreTargetCount,
 			} = parseRestoreCheckResponse(data)
+			const fileNameByResourceId = new Map(
+				projectMissingResourceIds.map((resourceId, index) => [
+					resourceId,
+					projectMissingFileNames[index] ?? "",
+				]),
+			)
+			const projectMissingResolvedFileNames = projectMissingResourceIds
+				.map((resourceId) => fileNameByResourceId.get(resourceId))
+				.filter((name): name is string => Boolean(name))
 
 			if (
 				target.kind === "item" &&
@@ -877,6 +916,9 @@ export function useRecycleBinActions({
 				skippedNameConflictNames,
 				skippedNameConflictResourceIds,
 				skippedNameConflictItems,
+				projectMissingCount,
+				projectMissingFileNames: projectMissingResolvedFileNames,
+				duplicateRestoreTargetCount,
 				shouldBlockRestore: false,
 				status: "success",
 			})

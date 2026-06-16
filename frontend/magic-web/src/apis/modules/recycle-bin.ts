@@ -25,6 +25,8 @@ export namespace RecycleBin {
 		extra_data?: {
 			workspace_name?: string
 			project_name?: string
+			relative_file_path?: string
+			is_directory?: boolean
 			parent_info?: {
 				workspace_id?: number
 				workspace_name?: string
