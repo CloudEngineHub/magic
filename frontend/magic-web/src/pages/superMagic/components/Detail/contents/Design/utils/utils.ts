@@ -649,9 +649,10 @@ export function replaceNameInMagicProjectJsContent(
 		// 2. 兼容 v2：canvas 为压缩串时先解压，改完路径再压回
 		const rawCanvas = config.canvas
 		const canvasCompressed = isCompressedCanvas(rawCanvas)
-		const canvasObj = (
-			canvasCompressed ? decompressCanvasData(rawCanvas) : rawCanvas
-		) as { elements?: LayerElement[] } | null | undefined
+		const canvasObj = (canvasCompressed ? decompressCanvasData(rawCanvas) : rawCanvas) as
+			| { elements?: LayerElement[] }
+			| null
+			| undefined
 
 		if (canvasObj?.elements && Array.isArray(canvasObj.elements)) {
 			for (let i = 0; i < canvasObj.elements.length; i++) {
@@ -1575,9 +1576,10 @@ export async function packAndDownloadFiles(
 			throw new Error(t("design.errors.cannotGetDownloadUrl"))
 		}
 
-		downloadUrls.forEach((item: { url?: string }, index: number) => {
-			if (item?.url && fileIds[index]) {
-				urlMap.set(fileIds[index], item.url)
+		downloadUrls.forEach((item: { file_id?: string; url?: string }, index: number) => {
+			const fileId = item?.file_id || fileIds[index]
+			if (item?.url && fileId) {
+				urlMap.set(fileId, item.url)
 			}
 		})
 	}
