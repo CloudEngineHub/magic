@@ -9,6 +9,8 @@ export { useFileFilter } from "./useFileFilter"
 export { useVirtualFile } from "./useVirtualFile"
 export { useVirtualFolder } from "./useVirtualFolder"
 export { useVirtualDesignProject } from "./useVirtualDesignProject"
+export { useVirtualSelfMediaProject } from "./useVirtualSelfMediaProject"
+export { useVirtualAICardProject } from "./useVirtualAICardProject"
 export { useTreeUI } from "./useTreeUI"
 export { useTreeData } from "./useTreeData"
 export { useDropHandler } from "./useDropHandler"
@@ -19,6 +21,8 @@ export { useFileReplace } from "./useFileReplace"
 export { useDragMove, isInRootDirectory, canMoveToTarget } from "./useDragMove"
 export { useAutoExpandFolder } from "./useAutoExpandFolder"
 export { createFileDragHandlers } from "./useFileDragHandlers"
+export { useSelfMediaTreeNavigation } from "./useSelfMediaTreeNavigation"
+export { useAICardTreeNavigation } from "./useAICardTreeNavigation"
 export {
 	useSelectedFilesManager,
 	findFileById,

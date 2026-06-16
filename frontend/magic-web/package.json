@@ -36,6 +36,7 @@
 		"dev:enterprise": "EDITION=enterprise node scripts/dev.cjs",
 		"dev:iframe": "cd src/pages/superMagic/components/Detail/contents/HTML/iframe-runtime && pnpm run build:watch",
 		"dev:opensource": "node scripts/dev.cjs",
+		"generate:self-media-preset-previews": "node scripts/capture-self-media-preset-previews.mjs",
 		"generate:icon-tags": "node scripts/icons/gen-tabler-icon-tags.cjs",
 		"generate:theme-rgb-tokens": "pnpm tsx scripts/generate-theme-rgb-tokens.ts",
 		"generate:theme-rgb-tokens:check": "pnpm tsx scripts/generate-theme-rgb-tokens.ts --check",

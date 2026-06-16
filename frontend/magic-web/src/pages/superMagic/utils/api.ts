@@ -257,6 +257,7 @@ export const getFileContentById = async (
 		responseType?: "text" | "arrayBuffer" | "blob"
 		file_versions?: Record<string, number>
 		download_mode?: DownloadImageMode
+		xMagicImageProcess?: ImageProcessOptions
 	} = {},
 ): Promise<string | ArrayBuffer | Blob> => {
 	if (!fileId) {
@@ -269,6 +270,9 @@ export const getFileContentById = async (
 			file_ids: [fileId],
 			file_versions: options.file_versions,
 			download_mode: options.download_mode,
+			options: options.xMagicImageProcess
+				? { xMagicImageProcess: options.xMagicImageProcess }
+				: undefined,
 		})
 
 		if (!downloadUrls || !Array.isArray(downloadUrls) || downloadUrls.length === 0) {

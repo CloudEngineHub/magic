@@ -24,6 +24,20 @@ export interface FilePreviewPolicy {
 	readonly?: boolean
 }
 
+export interface WebsitePreset {
+	id: string
+	title?: string
+	titleKey?: string
+	url: string
+	description?: string
+	descriptionKey?: string
+	icon?: "nano-banana-pro" | "gpt-image-2"
+	iconSrc?: string
+}
+
+export type FileViewerTabType = "file" | "website" | "knowledge_base" | "playback"
+export type ActiveDetailTabType = FileViewerTabType | null
+
 // File item interface
 export interface FileItem {
 	file_id: string
@@ -43,6 +57,7 @@ export interface FileItem {
 	display_config?: {
 		type?: "slide" | "design" | "dashboard" | "audio" | "video" | string
 		name?: string
+		description?: string
 		previewPolicy?: FilePreviewPolicy
 	}
 	file_size?: number
@@ -54,6 +69,7 @@ export interface FileItem {
 // Tab item interface
 export interface TabItem {
 	id: string
+	type?: FileViewerTabType
 	name?: string // 组件中使用，但未在接口中定义，先补充，待确认是否删除
 	title: string
 	fileData: FileItem
@@ -138,7 +154,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 	autoDetail?: any
 	showPlaybackControl?: boolean
 	isFileShare?: boolean
-	onActiveTabChange?: (tabType: "playback" | "file" | null) => void
+	onActiveTabChange?: (tabType: ActiveDetailTabType) => void
 	topicName?: string // 话题名称（用于分享场景）
 	projectId?: string
 	// 是否允许下载（用于分享页面权限控制）
@@ -167,6 +183,7 @@ export interface FilesViewerRef {
 	// Playback tab相关方法
 	openPlaybackTab: (options?: { toolData?: any; forceActivate?: boolean }) => void
 	closePlaybackTab: () => void
+	openWebsiteTab: (preset: WebsitePreset) => void
 	// Knowledge base tab相关方法
 	openKnowledgeBaseTab: (data: {
 		knowledgeBaseId: string

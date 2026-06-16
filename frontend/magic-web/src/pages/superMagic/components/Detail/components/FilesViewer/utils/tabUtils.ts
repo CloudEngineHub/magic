@@ -133,6 +133,7 @@ export function convertFileToTabItem(
 
 	const tabItem: TabItem = {
 		id: file.file_id,
+		type: "file",
 		title: tabTitle,
 		fileData: {
 			...file,

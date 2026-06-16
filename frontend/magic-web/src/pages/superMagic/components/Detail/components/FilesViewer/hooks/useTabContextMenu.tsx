@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import type { MenuProps } from "antd"
 import type { TabItem } from "../types"
 import FlexBox from "@/components/base/FlexBox"
+import { isWebsiteTab } from "../utils/websiteTabs"
 
 export interface TabContextMenuState {
 	visible: boolean
@@ -16,6 +17,7 @@ export interface TabContextMenuActions {
 	closeTabsToRight: (tabId: string) => void
 	clearAllTabs: () => void
 	refreshTab: (tabId: string) => void
+	addWebsiteToCommon?: (tab: TabItem) => void
 }
 
 export interface UseTabContextMenuProps {
@@ -77,8 +79,22 @@ export function useTabContextMenu({ tabs, actions }: UseTabContextMenuProps) {
 	// 生成右键菜单项
 	const getContextMenuItems = (tabId: string): MenuProps["items"] => {
 		const tabIndex = tabs.findIndex((tab) => tab.id === tabId)
+		const tab = tabs[tabIndex]
 		const hasTabsToRight = tabIndex < tabs.length - 1
 		const hasOtherTabs = tabs.length > 1
+		const websiteCommonItems: MenuProps["items"] =
+			tab && isWebsiteTab(tab) && actions.addWebsiteToCommon
+				? [
+						{
+							key: "addWebsiteToCommon",
+							label: t("fileViewer.tabs.addWebsiteToCommon"),
+							onClick: () => {
+								actions.addWebsiteToCommon?.(tab)
+								hideContextMenu()
+							},
+						},
+					]
+				: []
 
 		return [
 			{
@@ -89,6 +105,7 @@ export function useTabContextMenu({ tabs, actions }: UseTabContextMenuProps) {
 					hideContextMenu()
 				},
 			},
+			...websiteCommonItems,
 			{
 				key: "close",
 				label: t("fileViewer.tabs.close"),

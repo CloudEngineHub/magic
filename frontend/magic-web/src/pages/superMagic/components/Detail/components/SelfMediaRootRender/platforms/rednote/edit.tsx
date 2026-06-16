@@ -29,6 +29,8 @@ import {
 import { RednoteEditRefreshConfirmDialog } from "./RednoteEditRefreshConfirmDialog"
 import { RednoteEditThumbnailSidebar } from "./RednoteEditThumbnailSidebar"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
+import { resolveSelfMediaCardScaleContentDimensions } from "../../utils/selfMediaCardDimensions"
+import { selfMediaOverlayStyles } from "../../components/selfMediaOverlayStyles"
 
 interface RednoteEditViewProps {
 	attachmentList?: PlatformComponentProps["attachmentList"]
@@ -98,6 +100,10 @@ const RednoteEditView = observer(function RednoteEditView({
 	const [cardContent, setCardContent] = useState<string | null>(null)
 	const [contentLoading, setContentLoading] = useState(false)
 	const [contentError, setContentError] = useState<string | null>(null)
+	const scaleContentDimensions = useMemo(
+		() => resolveSelfMediaCardScaleContentDimensions(store.resolvedPlatform, cardContent),
+		[cardContent, store.resolvedPlatform],
+	)
 	// Track loaded fileId to prevent server-side content refreshes from flickering
 	const loadedFileIdRef = useRef<string | null>(null)
 
@@ -575,6 +581,7 @@ const RednoteEditView = observer(function RednoteEditView({
 							content={cardContent}
 							sandboxType="iframe"
 							isPptRender
+							scaleContentDimensions={scaleContentDimensions}
 							enableScalingHeightCalculation
 							waitForSettledContentMetrics
 							autoFitScalePaddingFactor={0.75}
@@ -590,7 +597,7 @@ const RednoteEditView = observer(function RednoteEditView({
 							attachmentList={attachmentList}
 							isVisible
 							toolbarEndRef={onHtmlToolbarEndRef}
-							toolbarClassName="absolute left-1/2 top-2 z-[10] -translate-x-1/2 w-[98%] rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/60"
+							toolbarClassName={`absolute left-1/2 top-2 z-[10] w-[98%] -translate-x-1/2 p-2 ${selfMediaOverlayStyles.floatingPanel}`}
 							className="h-full w-full"
 						/>
 						{htmlToolbarEndHost && hasUnsavedChanges && cardContent
@@ -619,7 +626,10 @@ const RednoteEditView = observer(function RednoteEditView({
 			</div>
 
 			<AlertDialog open={showUnsavedNavDialog}>
-				<AlertDialogContent data-testid="red-edit-unsaved-nav-dialog">
+				<AlertDialogContent
+					className={selfMediaOverlayStyles.alertSurface}
+					data-testid="red-edit-unsaved-nav-dialog"
+				>
 					<AlertDialogHeader>
 						<AlertDialogTitle>
 							{t("detail.selfMedia.edit.unsavedTitle")}
@@ -630,6 +640,7 @@ const RednoteEditView = observer(function RednoteEditView({
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel
+							className={selfMediaOverlayStyles.secondaryButton}
 							onClick={handleCancelNav}
 							data-testid="red-edit-unsaved-nav-cancel-btn"
 						>
@@ -637,12 +648,14 @@ const RednoteEditView = observer(function RednoteEditView({
 						</AlertDialogCancel>
 						<AlertDialogAction
 							variant="outline"
+							className={selfMediaOverlayStyles.secondaryButton}
 							onClick={handleDiscardBeforeNav}
 							data-testid="red-edit-unsaved-nav-discard-btn"
 						>
 							{t("detail.selfMedia.edit.discard")}
 						</AlertDialogAction>
 						<AlertDialogAction
+							className={selfMediaOverlayStyles.primaryButton}
 							onClick={handleSaveBeforeNav}
 							data-testid="red-edit-unsaved-nav-save-btn"
 						>
@@ -652,7 +665,10 @@ const RednoteEditView = observer(function RednoteEditView({
 				</AlertDialogContent>
 			</AlertDialog>
 			<AlertDialog open={showSaveRetryDialog}>
-				<AlertDialogContent data-testid="red-edit-save-retry-dialog">
+				<AlertDialogContent
+					className={selfMediaOverlayStyles.alertSurface}
+					data-testid="red-edit-save-retry-dialog"
+				>
 					<AlertDialogHeader>
 						<AlertDialogTitle>{t("detail.selfMedia.edit.saveFailed")}</AlertDialogTitle>
 						<AlertDialogDescription>
@@ -662,12 +678,14 @@ const RednoteEditView = observer(function RednoteEditView({
 					<AlertDialogFooter>
 						<AlertDialogAction
 							variant="outline"
+							className={selfMediaOverlayStyles.secondaryButton}
 							onClick={handleDiscardAfterFailedSave}
 							data-testid="red-edit-failed-discard-btn"
 						>
 							{t("detail.selfMedia.edit.discard")}
 						</AlertDialogAction>
 						<AlertDialogAction
+							className={selfMediaOverlayStyles.primaryButton}
 							onClick={handleRetryFailedSave}
 							data-testid="red-edit-failed-retry-btn"
 						>
@@ -683,7 +701,10 @@ const RednoteEditView = observer(function RednoteEditView({
 				onCancel={handleCancelRefreshConfirm}
 			/>
 			<AlertDialog open={showVersionHistoryGuardDialog}>
-				<AlertDialogContent data-testid="red-edit-version-history-guard-dialog">
+				<AlertDialogContent
+					className={selfMediaOverlayStyles.alertSurface}
+					data-testid="red-edit-version-history-guard-dialog"
+				>
 					<AlertDialogHeader>
 						<AlertDialogTitle>
 							{t("detail.selfMedia.edit.unsavedTitle")}
@@ -694,6 +715,7 @@ const RednoteEditView = observer(function RednoteEditView({
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel
+							className={selfMediaOverlayStyles.secondaryButton}
 							onClick={handleVersionHistoryGuardCancel}
 							data-testid="red-edit-version-history-guard-cancel-btn"
 						>
@@ -701,12 +723,14 @@ const RednoteEditView = observer(function RednoteEditView({
 						</AlertDialogCancel>
 						<AlertDialogAction
 							variant="outline"
+							className={selfMediaOverlayStyles.secondaryButton}
 							onClick={handleVersionHistoryGuardDiscard}
 							data-testid="red-edit-version-history-guard-discard-btn"
 						>
 							{t("detail.selfMedia.edit.discard")}
 						</AlertDialogAction>
 						<AlertDialogAction
+							className={selfMediaOverlayStyles.primaryButton}
 							onClick={handleVersionHistoryGuardSave}
 							data-testid="red-edit-version-history-guard-save-btn"
 						>

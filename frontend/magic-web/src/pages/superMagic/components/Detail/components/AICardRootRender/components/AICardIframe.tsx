@@ -1,0 +1,176 @@
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { cn } from "@/lib/utils"
+import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { processHtmlContent } from "../../../contents/HTML/htmlProcessor"
+import { flattenAttachments } from "../../../contents/HTML/utils"
+import { injectFetchInterceptorScript } from "../../../contents/HTML/utils/fetchInterceptor"
+import type { FileItem } from "../../../contents/HTML/utils/fetchInterceptor"
+import IsolatedHTMLRenderer from "../../../contents/HTML/IsolatedHTMLRenderer"
+
+interface AICardIframeProps {
+	fileId?: string
+	attachmentList?: any[]
+	className?: string
+	style?: React.CSSProperties
+	/** When true, the component shows a skeleton loader */
+	showSkeleton?: boolean
+	/** When true, hides vertical scroll (useful for thumbnail previews) */
+	hideVerticalScroll?: boolean
+	onLoad?: () => void
+}
+
+const EMPTY_FILE_PATH_MAPPING = new Map<string, string>()
+const NOOP_OPEN_NEW_TAB = () => {}
+
+/**
+ * Lightweight iframe renderer for AI Cards.
+ * Delegates to IsolatedHTMLRenderer — no editing, no DevConsole.
+ */
+function AICardIframe({
+	fileId,
+	attachmentList,
+	className,
+	style,
+	showSkeleton = true,
+	hideVerticalScroll = false,
+	onLoad,
+}: AICardIframeProps) {
+	const [processedContent, setProcessedContent] = useState<string | null>(null)
+	const [filePathMapping, setFilePathMapping] =
+		useState<Map<string, string>>(EMPTY_FILE_PATH_MAPPING)
+	const [loading, setLoading] = useState(true)
+	const [error, setError] = useState<string | null>(null)
+
+	const flattenedFiles = useMemo(
+		() =>
+			(attachmentList?.length ? flattenAttachments(attachmentList) : []).filter(
+				(item): item is FileItem =>
+					Boolean(item?.file_id) &&
+					Boolean(item?.relative_file_path) &&
+					!item?.is_directory,
+			),
+		[attachmentList],
+	)
+
+	const currentFile = useMemo(
+		() => flattenedFiles.find((item) => item.file_id === fileId) || null,
+		[flattenedFiles, fileId],
+	)
+
+	const relativeFolderPath = useMemo(() => {
+		const path = currentFile?.relative_file_path || ""
+		if (!path) return "/"
+		if (currentFile?.file_name && path.endsWith(currentFile.file_name)) {
+			return path.slice(0, -currentFile.file_name.length)
+		}
+		const slashIndex = path.lastIndexOf("/")
+		return slashIndex >= 0 ? path.slice(0, slashIndex + 1) : "/"
+	}, [currentFile])
+
+	const attachmentListRef = useRef(attachmentList)
+	attachmentListRef.current = attachmentList
+
+	// Load and process HTML content
+	useEffect(() => {
+		if (!fileId) {
+			setProcessedContent(null)
+			setFilePathMapping(EMPTY_FILE_PATH_MAPPING)
+			setLoading(false)
+			return
+		}
+
+		let cancelled = false
+		setLoading(true)
+		setError(null)
+		setProcessedContent(null)
+		setFilePathMapping(EMPTY_FILE_PATH_MAPPING)
+		;(async () => {
+			try {
+				const urls = await getTemporaryDownloadUrl({ file_ids: [fileId] })
+				const url = urls?.[0]?.url
+				if (!url) throw new Error("No download URL")
+				if (cancelled) return
+
+				const resp = await fetch(url, { credentials: "omit" })
+				if (!resp.ok) throw new Error("Failed to load HTML")
+				const html = await resp.text()
+				if (cancelled) return
+
+				let finalContent = html
+				let mapping = EMPTY_FILE_PATH_MAPPING
+				const currentAttachmentList = attachmentListRef.current
+				if (currentAttachmentList?.length) {
+					const result = await processHtmlContent({
+						content: html,
+						attachments: currentAttachmentList,
+						attachmentList: currentAttachmentList,
+						fileId,
+						fileName: currentFile?.file_name,
+						html_relative_path: relativeFolderPath,
+					})
+					finalContent = result.processedContent || html
+					mapping = result.filePathMapping
+				}
+
+				finalContent = injectFetchInterceptorScript(finalContent, { fileId })
+
+				if (cancelled) return
+				setProcessedContent(finalContent)
+				setFilePathMapping(mapping)
+				setLoading(false)
+			} catch (err) {
+				if (cancelled) return
+				setError(err instanceof Error ? err.message : "Load error")
+				setLoading(false)
+			}
+		})()
+
+		return () => {
+			cancelled = true
+		}
+	}, [fileId, currentFile?.file_name, relativeFolderPath])
+
+	const handleRenderReady = useCallback(() => {
+		onLoad?.()
+	}, [onLoad])
+
+	if (error) {
+		return (
+			<div
+				className={cn(
+					"flex h-full w-full items-center justify-center rounded-lg bg-muted/50 text-sm text-muted-foreground",
+					className,
+				)}
+				style={style}
+			>
+				<span>Failed to load card</span>
+			</div>
+		)
+	}
+
+	return (
+		<div className={cn("relative h-full w-full overflow-hidden", className)} style={style}>
+			{loading && showSkeleton && (
+				<div className="absolute inset-0 z-10 animate-pulse rounded-lg bg-muted/40" />
+			)}
+			{processedContent && (
+				<IsolatedHTMLRenderer
+					content={processedContent}
+					fileId={fileId}
+					filePathMapping={filePathMapping}
+					openNewTab={NOOP_OPEN_NEW_TAB}
+					attachmentList={attachmentList}
+					relative_file_path={relativeFolderPath}
+					isVisible
+					containIframeOverscroll
+					hideVerticalScroll={hideVerticalScroll}
+					disableIframeDocumentClickBridge
+					disableDynamicResourceInterception
+					onRenderReady={handleRenderReady}
+				/>
+			)}
+		</div>
+	)
+}
+
+export default memo(AICardIframe)

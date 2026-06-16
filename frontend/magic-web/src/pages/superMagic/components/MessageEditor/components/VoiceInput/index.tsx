@@ -14,6 +14,8 @@ interface SuperMagicVoiceInputProps {
 	tiptapEditor?: Editor | null
 	updateValue?: (value: JSONContent) => void
 	iconSize?: number
+	tooltipText?: string
+	tooltipSide?: "top" | "bottom" | "left" | "right"
 }
 
 const logger = Logger.createLogger("SuperMagicVoiceInput")
@@ -36,7 +38,14 @@ const config = {
 
 const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps>(
 	(
-		{ tiptapEditor, updateValue, iconSize = 20, className }: SuperMagicVoiceInputProps,
+		{
+			tiptapEditor,
+			updateValue,
+			iconSize = 20,
+			className,
+			tooltipText,
+			tooltipSide,
+		}: SuperMagicVoiceInputProps,
 		ref: Ref<VoiceInputRef>,
 	) => {
 		const voiceInputRef = useRef<VoiceInputRef>(null)
@@ -282,6 +291,8 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 				className={className}
 				enableHotkey={!isMobile}
 				config={config}
+				tooltipText={tooltipText}
+				tooltipSide={tooltipSide}
 			/>
 		)
 	},

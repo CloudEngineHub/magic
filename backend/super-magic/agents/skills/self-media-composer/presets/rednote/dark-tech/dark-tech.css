@@ -1,0 +1,1208 @@
+/*
+ * dark-tech.css
+ * Dark-Tech visual style CSS library
+ *
+ * Design principles:
+ *   Deep black backgrounds, gold accent color, thin 1px borders (no hard shadows),
+ *   heavy/light font-weight contrast, generous letter-spacing, minimal decoration.
+ *   Inspired by DJI Pocket review card series.
+ *
+ * Color palette:
+ *   --dt-bg        #080808   Deep black background
+ *   --dt-surface   #111111   Card surface
+ *   --dt-surface2  #1a1a1a   Elevated surface
+ *   --dt-gold      #c8a96e   Gold accent (primary)
+ *   --dt-gold-l    #e2c98a   Gold light (highlight text)
+ *   --dt-white     #f0f0f0   Primary text
+ *   --dt-muted     #888888   Secondary text
+ *   --dt-border    #222222   Default border
+ *   --dt-border2   #2e2e2e   Elevated border
+ *   --dt-green     #4caf80   Upgrade / positive indicator
+ *   --dt-red       #e05252   Downgrade / negative indicator
+ *
+ * ─────────────────────────────────────────────────────────────
+ * Table of Contents
+ *
+ * §0  CSS Variables & Base Reset
+ * §1  Card Shell (.dt-card)
+ *     §1.1  Cover type (.dt-cover)
+ *     §1.2  Content type (.dt-content)
+ * §2  Content Components
+ *     §2.1  Page header (.dt-header)
+ *     §2.2  Section label (.dt-section-label)
+ *     §2.3  Compare grid (.dt-compare-grid)
+ *     §2.4  Device card (.dt-device-card)
+ *     §2.5  Spec list (.dt-spec-list)
+ *     §2.6  Data cards (.dt-data-cards / .dt-data-card)
+ *     §2.7  Compare rows (.dt-compare-row)
+ *     §2.8  Spec table (.dt-table)
+ *     §2.9  Vote / CTA buttons (.dt-vote-btn)
+ *     §2.10 Bottom note (.dt-note)
+ *     §2.11 Decorative elements
+ * §3  Utility Classes (dt-*)
+ *     §3.1  Tags & badges
+ *     §3.2  Inline highlights
+ *     §3.3  Text colors
+ *     §3.4  Dividers
+ * §4  Layout Helpers
+ * ─────────────────────────────────────────────────────────────
+ */
+
+
+/* ════════════════════════════════════════
+   §0  CSS Variables & Base Reset
+   ════════════════════════════════════════ */
+
+:root {
+  --dt-bg:       #0a0a0f;   /* cold charcoal black — crisp, tech, not blue */
+  --dt-surface:  #131313;   /* neutral dark surface — no blue */
+  --dt-surface2: #1c1c1c;   /* elevated surface — neutral */
+  --dt-gold:     #d4b07a;   /* brighter, warmer gold */
+  --dt-gold-l:   #f0d090;   /* vivid gold-light for highlights */
+  --dt-white:    #ffffff;   /* pure white — crisp text */
+  --dt-muted:    #9a9a9a;   /* neutral muted — no tint */
+  --dt-border:   #242424;   /* neutral border */
+  --dt-border2:  #303030;   /* elevated border — neutral */
+  --dt-green:    #52c98a;   /* slightly brighter green */
+  --dt-red:      #f06060;   /* slightly brighter red */
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  background: var(--dt-bg);
+  color: var(--dt-white);
+  letter-spacing: 0.02em;  /* subtle global spacing — more air between chars */
+}
+
+
+/* ════════════════════════════════════════
+   §1  Card Shell
+   ════════════════════════════════════════ */
+
+.dt-card {
+  width: 540px;
+  height: 720px;
+  position: relative;
+  overflow: hidden;
+  font-family: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  background: var(--dt-bg);
+}
+
+
+/* ────────────────────────────────────────
+   §1.1  Cover type (.dt-cover)
+   Full-bleed image background with gradient overlay
+   ──────────────────────────────────────── */
+
+.dt-cover {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Background image layer */
+.dt-cover-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.45;
+}
+
+/* Gradient overlay: transparent top → solid black bottom */
+.dt-cover-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 8, 8, 0.3)  0%,
+    rgba(8, 8, 8, 0.1)  35%,
+    rgba(8, 8, 8, 0.6)  65%,
+    rgba(8, 8, 8, 0.96) 100%
+  );
+}
+
+/* Top brand bar */
+.dt-top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 26px 32px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+}
+
+.dt-brand-tag {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dt-gold);
+  letter-spacing: 3.5px;
+  text-transform: uppercase;
+}
+
+.dt-issue-tag {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dt-muted);
+  letter-spacing: 3px;
+}
+
+/* Bottom content area (cover) */
+.dt-cover-content {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 0 32px 40px;
+  z-index: 10;
+}
+
+/* Label row with extending line */
+.dt-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.dt-label-badge {
+  background: var(--dt-gold);
+  color: #000;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  letter-spacing: 2px;
+  flex-shrink: 0;
+}
+
+.dt-label-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--dt-gold), transparent);
+}
+
+/* Product VS row */
+.dt-product-vs {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.dt-product-name {
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--dt-white);
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.dt-product-name.is-new {
+  color: var(--dt-gold-l);
+}
+
+.dt-vs-badge {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--dt-gold);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--dt-gold);
+  flex-shrink: 0;
+}
+
+/* Cover main title */
+.dt-cover-title {
+  font-size: 44px;
+  font-weight: 900;
+  color: var(--dt-white);
+  line-height: 1.05;
+  letter-spacing: -2px;
+  margin-bottom: 16px;
+}
+
+.dt-cover-title .highlight {
+  color: var(--dt-gold);
+}
+
+/* Cover subtitle */
+.dt-cover-sub {
+  font-size: 16px;
+  font-weight: 300;
+  color: var(--dt-muted);
+  letter-spacing: 2.5px;
+  margin-bottom: 26px;
+  line-height: 1.65;
+}
+
+/* Keyword tag row */
+.dt-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.dt-tag {
+  border: 1px solid var(--dt-border);
+  color: var(--dt-muted);
+  font-size: 11px;
+  font-weight: 400;
+  padding: 5px 11px;
+  letter-spacing: 1px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dt-tag.active {
+  border-color: var(--dt-gold);
+  color: var(--dt-gold);
+}
+
+
+/* ────────────────────────────────────────
+   §1.2  Content type (.dt-content)
+   ──────────────────────────────────────── */
+
+.dt-content {
+  display: flex;
+  flex-direction: column;
+  padding: 36px 32px 32px;
+}
+
+
+/* ════════════════════════════════════════
+   §2  Content Components
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §2.1  Page header
+   ──────────────────────────────────────── */
+
+.dt-header {
+  margin-bottom: 22px;
+}
+
+/* Page title */
+.dt-page-title {
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--dt-white);
+  line-height: 1.1;
+  letter-spacing: -2px;
+}
+
+.dt-page-title .sub {
+  font-size: 17px;
+  font-weight: 300;
+  color: var(--dt-muted);
+  display: block;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+/* Page title variant: smaller */
+.dt-page-title-sm {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--dt-white);
+  line-height: 1.1;
+  letter-spacing: -2px;
+}
+
+.dt-page-title-sm .sub {
+  font-size: 14px;
+  font-weight: 300;
+  color: var(--dt-muted);
+  display: block;
+  margin-top: 3px;
+  letter-spacing: 1px;
+}
+
+/* Thin horizontal divider */
+.dt-divider {
+  width: 100%;
+  height: 1px;
+  background: var(--dt-border2);
+  margin-bottom: 22px;
+}
+
+
+/* ────────────────────────────────────────
+   §2.2  Section label
+   Gold dot + uppercase label text
+   ──────────────────────────────────────── */
+
+.dt-section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.dt-section-label .dot {
+  width: 4px;
+  height: 4px;
+  background: var(--dt-gold);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dt-section-label span {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--dt-gold);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+
+/* ────────────────────────────────────────
+   §2.3  Compare grid
+   Two-column product comparison layout
+   ──────────────────────────────────────── */
+
+.dt-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  flex: 1;
+}
+
+
+/* ────────────────────────────────────────
+   §2.4  Device card
+   Used inside .dt-compare-grid
+   ──────────────────────────────────────── */
+
+.dt-device-card {
+  background: var(--dt-surface);
+  border: 1px solid var(--dt-border2);
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* New product variant: gold border + gradient bg */
+.dt-device-card.is-new {
+  border-color: var(--dt-gold);
+  background: linear-gradient(160deg, #1e1600 0%, #141420 50%, var(--dt-surface) 100%);
+}
+
+/* "New" badge in top-right corner */
+.dt-device-card.is-new::before {
+  content: 'NEW';
+  position: absolute;
+  top: 10px; right: 10px;
+  background: var(--dt-gold);
+  color: #000;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 8px;
+  letter-spacing: 2px;
+}
+
+.dt-device-model {
+  font-size: 21px;
+  font-weight: 900;
+  color: var(--dt-white);
+  margin-bottom: 3px;
+  letter-spacing: 0;
+}
+
+.dt-device-card.is-new .dt-device-model {
+  color: var(--dt-gold-l);
+}
+
+.dt-device-year {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dt-muted);
+  margin-bottom: 18px;
+  letter-spacing: 1px;
+}
+
+/* Image placeholder inside device card */
+.dt-device-img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: var(--dt-surface2);
+  border: 1px solid var(--dt-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  position: relative;
+  overflow: hidden;
+}
+
+.dt-device-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.dt-device-img .img-label {
+  position: absolute;
+  bottom: 8px; left: 8px;
+  font-size: 9px;
+  color: var(--dt-muted);
+  letter-spacing: 1px;
+}
+
+
+/* ────────────────────────────────────────
+   §2.5  Spec list
+   Vertical list of key-value spec items
+   ──────────────────────────────────────── */
+
+.dt-spec-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1;
+}
+
+.dt-spec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-spec-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dt-spec-key {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--dt-muted);
+  letter-spacing: 1.5px;
+}
+
+.dt-spec-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dt-white);
+}
+
+/* Upgraded value: gold color */
+.dt-spec-val.upgraded {
+  color: var(--dt-gold);
+}
+
+/* Inline "new" mini badge */
+.dt-spec-val .tag-new {
+  display: inline-block;
+  background: rgba(200, 169, 110, 0.15);
+  border: 1px solid var(--dt-gold);
+  color: var(--dt-gold);
+  font-size: 8px;
+  font-weight: 500;
+  padding: 2px 5px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+
+/* ────────────────────────────────────────
+   §2.6  Data cards
+   Metric highlight cards (2-column grid)
+   ──────────────────────────────────────── */
+
+.dt-data-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.dt-data-card {
+  background: var(--dt-surface);
+  border: 1px solid var(--dt-border2);
+  padding: 18px 16px;
+  position: relative;
+  transition: border-color 0.2s;
+}
+
+/* Highlight variant: gold border + gradient bg */
+.dt-data-card.highlight {
+  border-color: var(--dt-gold);
+  background: linear-gradient(140deg, #1e1600 0%, #141420 60%, var(--dt-surface) 100%);
+  box-shadow: inset 0 0 24px rgba(212, 176, 122, 0.05);
+}
+
+.dt-data-card .label {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--dt-muted);
+  letter-spacing: 2.5px;
+  margin-bottom: 6px;
+}
+
+.dt-data-card .value {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--dt-white);
+  line-height: 1;
+  letter-spacing: -2px;
+  margin-bottom: 3px;
+}
+
+.dt-data-card.highlight .value {
+  color: var(--dt-gold-l);
+}
+
+.dt-data-card .unit {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dt-muted);
+}
+
+/* Top-right upgrade badge */
+.dt-data-card .badge {
+  position: absolute;
+  top: 8px; right: 8px;
+  background: var(--dt-gold);
+  color: #000;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  letter-spacing: 1px;
+}
+
+
+/* ────────────────────────────────────────
+   §2.7  Compare rows
+   Three-column spec comparison: A | label | B
+   ──────────────────────────────────────── */
+
+.dt-compare-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.dt-compare-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 1fr;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-compare-row:last-child {
+  border-bottom: none;
+}
+
+.dt-compare-row .val-a {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dt-muted);
+  text-align: right;
+  padding-right: 14px;
+}
+
+.dt-compare-row .spec-name {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--dt-muted);
+  text-align: center;
+  letter-spacing: 1px;
+  line-height: 1.4;
+}
+
+.dt-compare-row .val-b {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dt-white);
+  text-align: left;
+  padding-left: 14px;
+}
+
+/* Winner value: gold color */
+.dt-compare-row .val-b.win {
+  color: var(--dt-gold);
+}
+
+/* Win star icon */
+.dt-win-icon {
+  display: inline-block;
+  color: var(--dt-gold);
+  margin-left: 3px;
+  font-size: 9px;
+}
+
+
+/* ────────────────────────────────────────
+   §2.8  Spec table
+   Full comparison table with header
+   ──────────────────────────────────────── */
+
+.dt-table-header {
+  display: grid;
+  grid-template-columns: 2fr 1.6fr 1.6fr;
+}
+
+.dt-th {
+  padding: 9px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.dt-th.spec-col {
+  color: var(--dt-muted);
+  background: var(--dt-surface2);
+}
+
+.dt-th.col-a {
+  color: var(--dt-muted);
+  background: var(--dt-surface);
+  text-align: center;
+  border-left: 1px solid var(--dt-border2);
+}
+
+.dt-th.col-b {
+  color: var(--dt-gold);
+  background: linear-gradient(135deg, #1e1600, #141420);
+  text-align: center;
+  border-left: 1px solid var(--dt-gold);
+}
+
+.dt-table-body {
+  overflow: hidden;
+}
+
+.dt-table-row {
+  display: grid;
+  grid-template-columns: 2fr 1.6fr 1.6fr;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-table-row:last-child {
+  border-bottom: none;
+}
+
+.dt-td {
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+}
+
+.dt-td.spec-name {
+  color: var(--dt-muted);
+  font-weight: 400;
+  background: var(--dt-surface2);
+  font-size: 10px;
+}
+
+.dt-td.val-a {
+  color: var(--dt-muted);
+  background: var(--dt-surface);
+  border-left: 1px solid var(--dt-border2);
+  justify-content: center;
+  text-align: center;
+  font-weight: 400;
+}
+
+.dt-td.val-b {
+  color: var(--dt-white);
+  background: linear-gradient(135deg, #1e1600, #141420);
+  border-left: 1px solid rgba(212, 176, 122, 0.35);
+  justify-content: center;
+  text-align: center;
+  font-weight: 700;
+}
+
+.dt-td.val-b.win {
+  color: var(--dt-gold-l);
+}
+
+/* Win mark arrow/star */
+.dt-win-mark {
+  display: inline-block;
+  color: var(--dt-gold);
+  font-size: 8px;
+  margin-left: 2px;
+}
+
+/* Price row emphasis */
+.dt-table-row.price-row .dt-td.val-b {
+  color: var(--dt-gold);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.dt-table-row.price-row .dt-td.val-a {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dt-white);
+}
+
+
+/* ────────────────────────────────────────
+   §2.9  Vote / CTA buttons
+   Interactive choice buttons
+   ──────────────────────────────────────── */
+
+.dt-vote-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 28px;
+}
+
+.dt-vote-btn {
+  border: 1px solid var(--dt-border2);
+  background: var(--dt-surface);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.dt-vote-btn:hover,
+.dt-vote-btn.active {
+  border-color: var(--dt-gold);
+  background: linear-gradient(135deg, #1e1600, #141420);
+}
+
+.dt-vote-btn .btn-label {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--dt-white);
+  letter-spacing: 0;
+}
+
+.dt-vote-btn.is-new .btn-label {
+  color: var(--dt-gold-l);
+}
+
+.dt-vote-btn .btn-sub {
+  font-size: 11px;
+  font-weight: 300;
+  color: var(--dt-muted);
+  margin-top: 2px;
+}
+
+.dt-vote-btn .btn-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+/* Centered divider with text */
+.dt-row-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 24px;
+}
+
+.dt-row-divider .line {
+  flex: 1;
+  height: 1px;
+  background: var(--dt-border2);
+}
+
+.dt-row-divider .text {
+  font-size: 10px;
+  color: var(--dt-muted);
+  letter-spacing: 2px;
+}
+
+
+/* ────────────────────────────────────────
+   §2.10  Bottom note
+   Gold left-border info block
+   ──────────────────────────────────────── */
+
+.dt-note {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: rgba(17, 24, 32, 0.7);
+  border-left: 2px solid var(--dt-gold);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dt-muted);
+  line-height: 1.75;
+  backdrop-filter: blur(4px);
+}
+
+.dt-note strong {
+  color: var(--dt-gold);
+  font-weight: 700;
+}
+
+/* Larger note variant */
+.dt-note-lg {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: rgba(17, 24, 32, 0.7);
+  border-left: 2px solid var(--dt-gold);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--dt-muted);
+  line-height: 1.85;
+  backdrop-filter: blur(4px);
+}
+
+.dt-note-lg strong {
+  color: var(--dt-gold);
+  font-weight: 700;
+}
+
+
+/* ────────────────────────────────────────
+   §2.11  Decorative elements
+   ──────────────────────────────────────── */
+
+/* Vertical gold line from top (cover accent) */
+.dt-deco-line-left {
+  position: absolute;
+  top: 0;
+  left: 32px;
+  width: 2px;
+  height: 80px;
+  background: linear-gradient(to bottom, var(--dt-gold), transparent);
+  z-index: 10;
+}
+
+/* Vertical center line from top */
+.dt-deco-line-top {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 60px;
+  background: linear-gradient(to bottom, var(--dt-gold), transparent);
+}
+
+/* Vertical center line from bottom */
+.dt-deco-line-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 60px;
+  background: linear-gradient(to top, var(--dt-gold), transparent);
+}
+
+/* Radial glow background decoration */
+.dt-bg-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 360px 240px at 50% 38%, rgba(212, 176, 122, 0.10) 0%, transparent 65%),
+    radial-gradient(ellipse 200px 180px at 18% 78%, rgba(212, 176, 122, 0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* Page number (bottom-right) */
+.dt-page-num {
+  position: absolute;
+  bottom: 32px;
+  right: 32px;
+  font-size: 11px;
+  color: var(--dt-muted);
+  letter-spacing: 2px;
+  z-index: 10;
+}
+
+/* Eyebrow label above big question */
+.dt-eyebrow {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--dt-gold);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+/* Big centered question text */
+.dt-question {
+  font-size: 40px;
+  font-weight: 900;
+  color: var(--dt-white);
+  line-height: 1.1;
+  letter-spacing: -2px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.dt-question em {
+  color: var(--dt-gold);
+  font-style: normal;
+}
+
+
+/* ════════════════════════════════════════
+   §3  Utility Classes (dt-*)
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §3.1  Tags & badges
+   ──────────────────────────────────────── */
+
+/* Gold solid badge */
+.dt-badge-gold {
+  display: inline-block;
+  background: var(--dt-gold);
+  color: #000;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  letter-spacing: 2px;
+}
+
+/* Gold outline badge */
+.dt-badge-outline {
+  display: inline-block;
+  background: rgba(200, 169, 110, 0.12);
+  border: 1px solid var(--dt-gold);
+  color: var(--dt-gold);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 8px;
+  letter-spacing: 1px;
+}
+
+/* Surface tag (dark bg, muted text) */
+.dt-tag-surface {
+  display: inline-block;
+  background: var(--dt-surface);
+  border: 1px solid var(--dt-border2);
+  color: var(--dt-muted);
+  font-size: 11px;
+  font-weight: 400;
+  padding: 5px 11px;
+  letter-spacing: 1px;
+}
+
+/* Green upgrade indicator */
+.dt-tag-up {
+  display: inline-block;
+  background: rgba(76, 175, 128, 0.15);
+  border: 1px solid var(--dt-green);
+  color: var(--dt-green);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  letter-spacing: 1px;
+}
+
+/* Red downgrade indicator */
+.dt-tag-down {
+  display: inline-block;
+  background: rgba(224, 82, 82, 0.15);
+  border: 1px solid var(--dt-red);
+  color: var(--dt-red);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  letter-spacing: 1px;
+}
+
+
+/* ────────────────────────────────────────
+   §3.2  Inline highlights
+   ──────────────────────────────────────── */
+
+/* Gold text highlight */
+.dt-hl-gold {
+  color: var(--dt-gold);
+  font-weight: 700;
+}
+
+/* Gold light text */
+.dt-hl-gold-l {
+  color: var(--dt-gold-l);
+  font-weight: 700;
+}
+
+/* Gold background highlight (inline) */
+.dt-bg-gold {
+  background: var(--dt-gold);
+  color: #000;
+  padding: 0 5px;
+  font-weight: 700;
+}
+
+/* Green positive text */
+.dt-hl-green {
+  color: var(--dt-green);
+  font-weight: 700;
+}
+
+/* Red negative text */
+.dt-hl-red {
+  color: var(--dt-red);
+  font-weight: 700;
+}
+
+
+/* ────────────────────────────────────────
+   §3.3  Text colors
+   ──────────────────────────────────────── */
+
+.dt-text-gold   { color: var(--dt-gold);   }
+.dt-text-gold-l { color: var(--dt-gold-l); }
+.dt-text-white  { color: var(--dt-white);  }
+.dt-text-muted  { color: var(--dt-muted);  }
+.dt-text-green  { color: var(--dt-green);  }
+.dt-text-red    { color: var(--dt-red);    }
+
+
+/* ────────────────────────────────────────
+   §3.4  Dividers
+   ──────────────────────────────────────── */
+
+/* Standard 1px divider */
+.dt-divider-sm {
+  width: 100%;
+  height: 1px;
+  background: var(--dt-border2);
+  margin: 8px 0;
+}
+
+/* Gold accent divider */
+.dt-divider-gold {
+  width: 32px;
+  height: 2px;
+  background: var(--dt-gold);
+  margin: 12px 0;
+}
+
+/* Full-width gold divider */
+.dt-divider-gold-full {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(to right, var(--dt-gold), transparent);
+  margin: 12px 0;
+}
+
+
+/* ════════════════════════════════════════
+   §4  Layout Helpers
+   ════════════════════════════════════════ */
+
+/* Two-column equal grid */
+.dt-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* Three-column equal grid */
+.dt-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+/* Three-column spec table layout */
+.dt-grid-spec {
+  display: grid;
+  grid-template-columns: 2fr 1.6fr 1.6fr;
+  gap: 0;
+}
+
+/* Flex row with space-between */
+.dt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Flex column, fills remaining space */
+.dt-col-fill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Stat number + unit combination */
+.dt-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.dt-stat-num {
+  font-size: 40px;
+  font-weight: 900;
+  color: var(--dt-gold-l);
+  line-height: 1;
+  letter-spacing: -2px;
+}
+
+.dt-stat-unit {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--dt-muted);
+}
+
+.dt-stat-label {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--dt-muted);
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+/* Engage / interaction text block */
+.dt-engage-text {
+  font-size: 14px;
+  font-weight: 300;
+  color: var(--dt-muted);
+  line-height: 1.8;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.dt-engage-text strong {
+  color: var(--dt-white);
+  font-weight: 700;
+}
+
+/* Hashtag row */
+.dt-hashtags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.dt-hashtag {
+  font-size: 10px;
+  color: var(--dt-muted);
+  letter-spacing: 1px;
+}

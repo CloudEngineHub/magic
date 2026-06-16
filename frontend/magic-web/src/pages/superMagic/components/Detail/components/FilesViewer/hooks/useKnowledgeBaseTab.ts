@@ -1,6 +1,5 @@
 import { useState, useCallback } from "react"
-
-export const KNOWLEDGE_BASE_TAB_ID_PREFIX = "__kb__"
+import { KNOWLEDGE_BASE_TAB_ID_PREFIX } from "../utils/tabConstants"
 
 /** 知识库预览 Tab 的数据 */
 export interface KnowledgeBaseTabData {

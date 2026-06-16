@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Code Dispatch — Preview</title>
+<link rel="stylesheet" href="code-dispatch.css">
+<style>
+  html, body { width: auto; height: auto; overflow: auto; background: #e5e5e5; }
+  .preview-container {
+    display: flex; flex-wrap: wrap; gap: 32px; padding: 40px;
+    justify-content: center; align-items: flex-start;
+  }
+  .preview-card-wrapper {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    border-radius: 4px; overflow: hidden;
+    width: 540px; height: 720px; position: relative;
+  }
+</style>
+</head>
+<body>
+<div class="preview-container">
+
+  <!-- Card 1: Cover (Light) -->
+  <div class="preview-card-wrapper bg-light">
+    <div class="cd-header">
+      <span class="cd-header-brand">CODE DISPATCH</span>
+      <span class="cd-header-meta">VOL.07 / 2024</span>
+    </div>
+    <div class="cd-body is-cover">
+      <div class="cd-eyebrow">
+        <span class="cd-eyebrow-dot"></span>
+        <span class="cd-eyebrow-text">DEEP DIVE</span>
+      </div>
+      <h1 class="cd-display">Harness<br>Engi<span class="accent">neer</span>ing</h1>
+      <p class="cd-subtitle">The model is only the brain. What lets AI work in the real world is the harness: the infrastructure wrapped around the model.</p>
+      <div class="cd-tags">
+        <span class="cd-tag">AI AGENT</span>
+        <span class="cd-tag">INFRA</span>
+        <span class="cd-tag red">HOT</span>
+      </div>
+    </div>
+    <div class="cd-footer">
+      <div class="cd-footer-left">
+        <div class="cd-footer-status">
+          <span class="cd-status-dot"></span>
+          <span>LIVE</span>
+        </div>
+      </div>
+      <span class="cd-footer-right">@SuperMagic</span>
+    </div>
+  </div>
+
+  <!-- Card 2: Content Page -->
+  <div class="preview-card-wrapper bg-neutral">
+    <div class="cd-header">
+      <span class="cd-header-brand">CODE DISPATCH</span>
+      <span class="cd-header-meta">02 / 05</span>
+    </div>
+    <div class="cd-body is-content">
+      <div class="cd-section-label">
+        <span class="cd-section-num">01</span>
+        <span class="cd-section-title">What is a harness?</span>
+      </div>
+      <div class="cd-rule"></div>
+      <div class="cd-know-card">
+        <span class="cd-know-card-label">DEFINITION</span>
+        <h3 class="cd-know-card-title">A harness is infrastructure around the model</h3>
+        <p class="cd-know-card-body">A complete harness includes a tool registry, context management, error recovery, state tracking, and more. It determines whether an agent can work reliably in the real world.</p>
+      </div>
+      <div class="cd-truth-block">
+        <span class="cd-truth-label">KEY INSIGHT</span>
+        <p class="cd-truth-text">A more detailed prompt or a stronger model may still not help. The issue is that the agent has no harness.</p>
+      </div>
+    </div>
+    <div class="cd-footer">
+      <div class="cd-footer-left">
+        <div class="cd-footer-status">
+          <span class="cd-status-dot"></span>
+          <span>LIVE</span>
+        </div>
+      </div>
+      <span class="cd-footer-right">@SuperMagic</span>
+    </div>
+  </div>
+
+  <!-- Card 3: Dark ending -->
+  <div class="preview-card-wrapper bg-dark">
+    <div class="cd-header">
+      <span class="cd-header-brand">CODE DISPATCH</span>
+      <span class="cd-header-meta">05 / 05</span>
+    </div>
+    <div class="cd-body is-ending">
+      <h2 class="cd-display is-ending">Think<br>in <span class="accent">Sys</span>tems.</h2>
+      <p class="cd-subtitle" style="border-left-color:#fff;color:#aaa;">Follow @SuperMagic for more practical AI engineering notes. Like and save so you can find it next time.</p>
+      <div class="cd-tags">
+        <span class="cd-tag">AI</span>
+        <span class="cd-tag">AGENT</span>
+        <span class="cd-tag">HARNESS</span>
+      </div>
+    </div>
+    <div class="cd-footer">
+      <div class="cd-footer-left">
+        <div class="cd-footer-status">
+          <span class="cd-status-dot"></span>
+          <span>END</span>
+        </div>
+      </div>
+      <span class="cd-footer-right">@SuperMagic</span>
+    </div>
+  </div>
+
+</div>
+<script src="code-dispatch.js"></script>
+</body>
+</html>

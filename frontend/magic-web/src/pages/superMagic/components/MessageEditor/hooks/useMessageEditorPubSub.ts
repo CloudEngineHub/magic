@@ -217,6 +217,30 @@ function useMessageEditorPubSub({
 			pubsub.unsubscribe(PubSubEvents.Append_Suggestion_To_Editor, handleAppendSuggestion)
 		}
 	}, [editor, updateContent])
+
+	useEffect(() => {
+		const handleAppendContent = (content: JSONContent) => {
+			if (!content || !editor) return
+
+			const newNodes: JSONContent[] =
+				content.type === "doc" ? (content.content ?? []) : [content]
+			if (newNodes.length === 0) return
+
+			const currentContent = editor.getJSON()
+			const mergedContent: JSONContent = !editor?.isEmpty
+				? {
+					...currentContent,
+					content: [...(currentContent.content ?? []), ...newNodes],
+				}
+				: { type: "doc", content: newNodes }
+			updateContent(mergedContent)
+			safeEditorFocus(editor)
+		}
+		pubsub.subscribe(PubSubEvents.Append_Content_To_Editor, handleAppendContent)
+		return () => {
+			pubsub.unsubscribe(PubSubEvents.Append_Content_To_Editor, handleAppendContent)
+		}
+	}, [editor, updateContent])
 }
 
 export default useMessageEditorPubSub

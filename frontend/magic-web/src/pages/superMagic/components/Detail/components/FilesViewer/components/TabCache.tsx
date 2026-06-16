@@ -4,18 +4,20 @@ import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
 import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabContent"
 import KnowledgeBaseTabContent from "./KnowledgeBaseTabContent"
-import { PLAYBACK_TAB_ID } from "../hooks/usePlaybackTab"
-import {
-	KNOWLEDGE_BASE_TAB_ID_PREFIX,
-	type KnowledgeBaseTabData,
-} from "../hooks/useKnowledgeBaseTab"
+import WebsiteIframeTabContent from "./WebsiteIframeTabContent"
+import { getWebsiteTabData } from "../utils/websiteTabs"
+import type { TabItem } from "../types"
+import type { KnowledgeBaseTabData } from "../hooks/useKnowledgeBaseTab"
+import { getFileViewerTabType } from "../utils/tabType"
+
+type CachedTab = Partial<TabItem> & {
+	id: string
+	refreshKey?: string
+	[key: string]: unknown
+}
 
 interface TabCacheProps {
-	tab: {
-		id: string
-		refreshKey?: string
-		[key: string]: unknown
-	}
+	tab: CachedTab
 	isActive: boolean
 	renderProps: Record<string, unknown>
 	onActiveFileChange?: (fileId: string | null) => void
@@ -43,8 +45,10 @@ const TabCache = memo(
 		hideTabBar = false,
 		knowledgeBaseData,
 	}: TabCacheProps) => {
-		const isPlaybackTab = tab.id === PLAYBACK_TAB_ID
-		const isKnowledgeBaseTab = tab.id.startsWith(KNOWLEDGE_BASE_TAB_ID_PREFIX)
+		const tabType = getFileViewerTabType(tab)
+		const isPlaybackTab = tabType === "playback"
+		const isWebsite = tabType === "website"
+		const isKnowledgeBaseTab = tabType === "knowledge_base"
 		const tabContentRef = useRef<HTMLDivElement>(null)
 		const isFullscreenMode = useFullscreenMode()
 
@@ -104,6 +108,8 @@ const TabCache = memo(
 			>
 				{isPlaybackTab && playbackProps ? (
 					<PlaybackTabContent {...playbackProps} />
+				) : isWebsite ? (
+					<WebsiteIframeTabContent {...getWebsiteTabData(tab)} isActive={isActive} />
 				) : isKnowledgeBaseTab && knowledgeBaseData ? (
 					<KnowledgeBaseTabContent data={knowledgeBaseData} />
 				) : (

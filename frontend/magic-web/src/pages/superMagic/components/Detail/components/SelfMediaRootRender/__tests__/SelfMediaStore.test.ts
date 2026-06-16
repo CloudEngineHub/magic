@@ -4,10 +4,36 @@ import { runInAction } from "mobx"
 import { render, waitFor } from "@testing-library/react"
 import { SelfMediaStore } from "../stores/SelfMediaStore"
 import { SelfMediaStoreProvider } from "../stores"
-import type { PlatformSlice, SelfMediaPostsService, SelfMediaSnapshot } from "../services"
-import { cacheKey } from "../services"
+import type { SelfMediaPostsService, SelfMediaSnapshot } from "../services/SelfMediaPostsService"
+import { cacheKey, type PlatformSlice } from "../services/selfMediaHelpers"
 import type { SelfMediaPost, SelfMediaPostEntry } from "../types"
 import type { SelfMediaPlatform } from "../../../types"
+
+vi.mock("@/utils/log", () => {
+	const noop = () => undefined
+	return {
+		logger: {
+			createLogger: () => ({
+				log: noop,
+				info: noop,
+				warn: noop,
+				error: noop,
+				debug: noop,
+			}),
+		},
+	}
+})
+
+vi.mock("@/pages/superMagic/utils/api", () => ({
+	getFileContentById: vi.fn(),
+}))
+
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getLocaleModules: () => ({ zhCNModules: {}, enUSModules: {} }),
+	getAdminLocaleModules: () => ({ zhCNModules: {}, enUSModules: {} }),
+	loadFallbackLocale: vi.fn(),
+	loadMagicFlowLocale: vi.fn(),
+}))
 
 type FakeService = SelfMediaPostsService & {
 	initialize: ReturnType<typeof vi.fn>
@@ -47,6 +73,18 @@ function buildSnapshot(
 	}
 }
 
+function buildMultiPlatformSnapshot(
+	slices: PlatformSlice[],
+	cached: Record<string, SelfMediaPost> = {},
+): SelfMediaSnapshot {
+	return {
+		slices,
+		loadedPosts: cached,
+		error: null,
+		folderRelativePath: "/root/",
+	}
+}
+
 function createFakeService(): FakeService {
 	return {
 		initialize: vi.fn(),
@@ -77,6 +115,47 @@ describe("SelfMediaStore", () => {
 	})
 
 	describe("sync lifecycle", () => {
+		it("derives all posts across platforms with platform-local indexes", async () => {
+			const rednoteEntry = makeEntry("rednote-1")
+			const instagramEntry = makeEntry("instagram-1")
+			const rednotePost = makePost("rednote-1", {
+				meta: { id: "rednote-1", title: "Rednote article" },
+			})
+			const instagramPost = makePost("instagram-1", {
+				meta: { id: "instagram-1", title: "Instagram article" },
+			})
+			service.initialize.mockResolvedValueOnce(
+				buildMultiPlatformSnapshot(
+					[
+						makeSlice("rednote", [rednoteEntry]),
+						makeSlice("instagram", [instagramEntry]),
+					],
+					{
+						[cacheKey("rednote", "rednote-1")]: rednotePost,
+						[cacheKey("instagram", "instagram-1")]: instagramPost,
+					},
+				),
+			)
+			service.ensurePostLoaded.mockResolvedValue(rednotePost)
+
+			await store.sync({ folderFileId: "folder-1", attachmentList: STUB_TREE })
+
+			expect(store.allPosts).toEqual([
+				{
+					platform: "rednote",
+					index: 0,
+					entry: rednoteEntry,
+					post: rednotePost,
+				},
+				{
+					platform: "instagram",
+					index: 0,
+					entry: instagramEntry,
+					post: instagramPost,
+				},
+			])
+		})
+
 		it("disposes and resets state when folderFileId is empty", async () => {
 			await store.sync({ folderFileId: undefined, attachmentList: STUB_TREE })
 
@@ -336,6 +415,60 @@ describe("SelfMediaStore", () => {
 	})
 
 	describe("navigation actions", () => {
+		it("updates the cached post title for immediate UI feedback", () => {
+			const entry = makeEntry("p1")
+			const post = makePost("p1", {
+				meta: { id: "p1", title: "Old title", subtitle: "Keep me" },
+			})
+			runInAction(() => {
+				store.slices = [makeSlice("rednote", [entry])]
+				store.loadedPosts = { [cacheKey("rednote", "p1")]: post }
+				store.activePlatform = "rednote"
+				store.rootLoading = false
+			})
+
+			store.updatePostTitle(0, "New title")
+
+			expect(store.posts[0].meta).toEqual({
+				id: "p1",
+				feedTitle: "New title",
+				title: "New title",
+				subtitle: "Keep me",
+			})
+			expect(store.postEntries[0].name).toBe("New title")
+		})
+
+		it("updates a home post title by platform and entry id", () => {
+			const rednoteEntry = makeEntry("rednote-1")
+			const wechatEntry = makeEntry("wechat-1")
+			runInAction(() => {
+				store.slices = [
+					makeSlice("rednote", [rednoteEntry]),
+					makeSlice("wechat-official-accounts", [wechatEntry]),
+				]
+				store.loadedPosts = {
+					[cacheKey("rednote", "rednote-1")]: makePost("rednote-1", {
+						meta: { id: "rednote-1", title: "Rednote old", feedTitle: "Rednote feed" },
+					}),
+					[cacheKey("wechat-official-accounts", "wechat-1")]: makePost("wechat-1", {
+						meta: { id: "wechat-1", title: "Wechat old", feedTitle: "Wechat feed" },
+					}),
+				}
+				store.activePlatform = "rednote"
+				store.rootLoading = false
+			})
+
+			store.updatePlatformPostTitle("wechat-official-accounts", "wechat-1", "Wechat renamed")
+
+			const renamed = store.allPosts.find((item) => item.entry.id === "wechat-1")
+			expect(renamed?.post.meta).toMatchObject({
+				feedTitle: "Wechat renamed",
+				title: "Wechat renamed",
+			})
+			expect(renamed?.entry.name).toBe("Wechat renamed")
+			expect(store.postEntries[0].name).toBe("Name rednote-1")
+		})
+
 		it("setActivePostIndex resets activeCardIndex", () => {
 			runInAction(() => {
 				store.activeCardIndex = 3
@@ -359,6 +492,33 @@ describe("SelfMediaStore", () => {
 			expect(store.activePostIndex).toBe(0)
 			expect(store.activeCardIndex).toBe(0)
 			expect(store.view).toBe("detail")
+		})
+
+		it("openPostDetail selects a post and enters detail view", () => {
+			runInAction(() => {
+				store.activeCardIndex = 3
+				store.view = "feed"
+			})
+
+			store.openPostDetail(2)
+
+			expect(store.activePostIndex).toBe(2)
+			expect(store.activeCardIndex).toBe(0)
+			expect(store.view).toBe("detail")
+		})
+
+		it("goHomeList returns to feed view without changing the active post", () => {
+			runInAction(() => {
+				store.activePostIndex = 2
+				store.activeCardIndex = 1
+				store.view = "edit"
+			})
+
+			store.goHomeList()
+
+			expect(store.activePostIndex).toBe(2)
+			expect(store.activeCardIndex).toBe(1)
+			expect(store.view).toBe("feed")
 		})
 	})
 
@@ -455,6 +615,27 @@ describe("SelfMediaStore", () => {
 			)
 			expect(out).toEqual(fresh)
 			expect(store.loadedPosts[cacheKey("rednote", "p-new")]).toEqual(fresh)
+		})
+	})
+
+	describe("ensurePlatformPostLoaded", () => {
+		it("returns null when article-home preloading hits a missing post manifest", async () => {
+			const entry = makeEntry("missing-post")
+			const preloadError = new Error("postManifestMissing")
+			service.ensurePostLoaded.mockRejectedValue(preloadError)
+
+			runInAction(() => {
+				store.slices = [makeSlice("rednote", [entry])]
+				store.activePlatform = "rednote"
+			})
+			await Promise.resolve()
+			service.ensurePostLoaded.mockClear()
+
+			const out = await store.ensurePlatformPostLoaded("rednote", 0)
+
+			expect(out).toBeNull()
+			expect(service.ensurePostLoaded).toHaveBeenCalledTimes(1)
+			expect(store.loadedPosts[cacheKey("rednote", "missing-post")]).toBeUndefined()
 		})
 	})
 

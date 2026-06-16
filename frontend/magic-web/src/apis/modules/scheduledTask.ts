@@ -43,4 +43,11 @@ export const generateScheduledTaskApi = (fetch: HttpClient) => ({
 			data,
 		)
 	},
+
+	/** 立即执行定时任务 */
+	executeScheduledTask(id: string) {
+		return fetch.post<ScheduledTask.ExecuteResult>(
+			genRequestUrl("/api/v1/super-agent/message-schedule/${id}/execute", { id }),
+		)
+	},
 })

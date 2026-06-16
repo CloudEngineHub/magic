@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Instagram Fluent Depth - Preview</title>
+    <link rel="stylesheet" href="ins-fluent-depth.css" />
+    <style>
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e8e8e8;
+      }
+      .preview-container {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        padding: 40px;
+        align-items: center;
+      }
+      .preview-card-wrapper {
+        width: 1080px;
+        height: 1350px;
+        transform: scale(0.5);
+        transform-origin: top center;
+        margin-bottom: -675px;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-card-wrapper">
+        <section class="ifd-card ifd-cover">
+          <div class="ifd-cover-kicker">Instagram Fluent Depth</div>
+          <div class="ifd-hero-panel">
+            <h1 class="ifd-cover-title">Depth That<br />Doesn’t Shout</h1>
+          </div>
+          <p class="ifd-cover-subtitle">
+            A softer system for product stories, workflow explainers, and calm
+            high-trust carousels.
+          </p>
+          <div class="ifd-tag-row">
+            <span class="ifd-badge">System-led</span
+            ><span class="ifd-badge-muted"
+              >product stories and workflow explainers</span
+            >
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="ifd-card ifd-content">
+          <header class="ifd-header">
+            <div>
+              <div class="ifd-eyebrow">System anatomy</div>
+              <h2 class="ifd-title">A carousel with product-grade hierarchy</h2>
+            </div>
+            <div class="ifd-page">02</div>
+          </header>
+          <div class="ifd-section-label">Signature component</div>
+          <div class="ifd-signature">
+            <div class="ifd-glass-pane">
+              <span>01</span><strong>Context</strong>
+            </div>
+            <div class="ifd-glass-pane is-focus">
+              <span>02</span><strong>Action</strong>
+            </div>
+            <div class="ifd-glass-pane">
+              <span>03</span><strong>Outcome</strong>
+            </div>
+          </div>
+          <div class="ifd-data-grid">
+            <div class="ifd-data-card">
+              <div class="label">Readability</div>
+              <div class="value">92<span class="unit">%</span></div>
+            </div>
+            <div class="ifd-data-card">
+              <div class="label">Decision support</div>
+              <div class="value">86<span class="unit">%</span></div>
+            </div>
+          </div>
+          <div class="ifd-note">
+            The visual system keeps attention on the decision path instead of
+            decorative noise.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="ifd-card ifd-content">
+          <header class="ifd-header">
+            <div>
+              <div class="ifd-eyebrow">Metrics</div>
+              <h2 class="ifd-title">Data cards that still feel editorial</h2>
+            </div>
+            <div class="ifd-page">03</div>
+          </header>
+          <div class="ifd-section-label">Signal trend</div>
+          <div id="ins-fluent-depth-preview-chart" class="ifd-chart"></div>
+          <div class="ifd-quote-block">
+            Strong templates behave like product UI: predictable enough to
+            trust, expressive enough to save.
+          </div>
+          <div class="ifd-note">
+            <span class="ifd-text-positive">Use:</span> one semantic emphasis
+            per card. <span class="ifd-text-negative">Avoid:</span> random color
+            without meaning.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="ifd-card ifd-content">
+          <header class="ifd-header">
+            <div>
+              <div class="ifd-eyebrow">Swipe plan</div>
+              <h2 class="ifd-title">A calmer four-card structure</h2>
+            </div>
+            <div class="ifd-page">04</div>
+          </header>
+          <div class="ifd-list">
+            <div class="ifd-list-row is-highlight">
+              <div class="ifd-rank">01</div>
+              <div>
+                <div class="ifd-item-title">State the user problem</div>
+                <div class="ifd-item-meta">
+                  Start with the reader's decision moment.
+                </div>
+              </div>
+              <span class="ifd-badge">Hook</span>
+            </div>
+            <div class="ifd-list-row">
+              <div class="ifd-rank">02</div>
+              <div>
+                <div class="ifd-item-title">Show the system</div>
+                <div class="ifd-item-meta">
+                  Use stable modules, not decorative chaos.
+                </div>
+              </div>
+              <span class="ifd-badge-muted">Body</span>
+            </div>
+            <div class="ifd-list-row">
+              <div class="ifd-rank">03</div>
+              <div>
+                <div class="ifd-item-title">Give the next action</div>
+                <div class="ifd-item-meta">Make the save reason practical.</div>
+              </div>
+              <span class="ifd-badge-muted">CTA</span>
+            </div>
+          </div>
+          <div class="ifd-divider"></div>
+          <div class="ifd-timeline-row">
+            <strong class="ifd-text-accent">Rule</strong
+            ><span class="ifd-text-muted"
+              >If color has meaning, give it one consistent role.</span
+            >
+          </div>
+          <div class="ifd-progress-bar"><span style="width: 82%"></span></div>
+          <p class="ifd-note">
+            <span class="ifd-hl">Best for:</span> explainers, launches,
+            comparisons, and product strategy posts.
+          </p>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="ins-fluent-depth.js"></script>
+    <script>
+      (function () {
+        var el = document.getElementById("ins-fluent-depth-preview-chart");
+        if (el && window.echarts && window.InsFluentDepthPresets) {
+          var chart = echarts.init(el);
+          chart.setOption(
+            window.InsFluentDepthPresets.get("ins-fluent-depth-bar", {
+              categories: ["Clarity", "Flow", "Trust", "Action"],
+              values: [86, 74, 92, 68],
+            }),
+          );
+        }
+      })();
+    </script>
+  </body>
+</html>

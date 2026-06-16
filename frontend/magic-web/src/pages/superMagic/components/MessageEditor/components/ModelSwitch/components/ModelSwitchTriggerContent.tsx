@@ -12,6 +12,7 @@ interface ModelSwitchTriggerContentProps {
 	isLoading: boolean
 	iconSize: number
 	triggerTab?: ModelTabType
+	showSelectedModelName?: boolean
 }
 
 export function ModelSwitchTriggerContent({
@@ -22,6 +23,7 @@ export function ModelSwitchTriggerContent({
 	isLoading,
 	iconSize,
 	triggerTab,
+	showSelectedModelName = false,
 }: ModelSwitchTriggerContentProps) {
 	const { t } = useTranslation("super")
 	const filterSelectedModel = (model: ModelItem | null | undefined): model is ModelItem =>
@@ -50,21 +52,34 @@ export function ModelSwitchTriggerContent({
 		<span
 			className={cn(
 				"inline-flex items-center gap-1 text-xs font-normal leading-4 text-secondary-foreground",
-				hasSelectedModel
-					? "shrink-0"
-					: "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap",
+				showSelectedModelName && hasSelectedModel
+					? "min-w-0 flex-1 overflow-hidden"
+					: hasSelectedModel
+						? "shrink-0"
+						: "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap",
 			)}
 		>
 			{showLabel && labelText}
 			{hasSelectedModel ? (
-				<span className="inline-flex flex-shrink-0 items-center gap-1">
+				<span
+					className={cn(
+						"inline-flex items-center gap-1",
+						showSelectedModelName ? "min-w-0 flex-1" : "flex-shrink-0",
+					)}
+				>
 					{visibleModels.map((model) => (
-						<ModelIcon
+						<span
 							key={model.id}
-							model={model}
-							size={iconSize}
-							className="flex-shrink-0"
-						/>
+							className="inline-flex min-w-0 items-center gap-1.5"
+							title={model.model_name || model.model_id}
+						>
+							<ModelIcon model={model} size={iconSize} className="flex-shrink-0" />
+							{showSelectedModelName ? (
+								<span className="truncate font-medium text-[#18181b]">
+									{model.model_name || model.model_id}
+								</span>
+							) : null}
+						</span>
 					))}
 				</span>
 			) : (

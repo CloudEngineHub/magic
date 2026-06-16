@@ -23,6 +23,8 @@ import {
 	useVirtualFile,
 	useVirtualFolder,
 	useVirtualDesignProject,
+	useVirtualSelfMediaProject,
+	useVirtualAICardProject,
 	useTreeUI,
 	useDragMove,
 	useTreeData,
@@ -87,10 +89,11 @@ import { detectContentTypeRender } from "../Detail/components/FilesViewer/utils/
 import type { FileItem } from "../Detail/components/FilesViewer/types"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
 import { DetailType } from "../Detail/types"
-import type { AttachmentNode } from "../Detail/components/SelfMediaRootRender/services/selfMediaHelpers"
-import { createSelfMediaTreeNavigationIndex } from "../Detail/components/SelfMediaRootRender/utils/selfMediaTreeNavigation"
 import SelfMediaPostRowPlatformIcon from "../Detail/components/SelfMediaRootRender/components/SelfMediaPostRowPlatformIcon"
+import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
+import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
 import { isMagicSystemFolder } from "./utils/magic-system-folder"
+import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
 
 interface TopicFilesCoreProps {
 	className?: string
@@ -201,6 +204,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const canUseDesktopCrossProjectMove = projects.length > 0 && !isChatProject && !isMobile
 
+	// AI 卡片创建弹窗 hook
+	const { open: openAICardDialog, dialogElement: aiCardDialogElement } = useAICardCreateDialog({
+		projectId,
+	})
+
 	const workspaceId = selectedProject?.workspace_id
 
 	// 创建共享的同名文件处理 handler（单例）
@@ -276,6 +284,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		createFileAndUpload,
 		createFolderAndUpload,
 		createDesignProject,
+		createSelfMediaProject,
+		createAICardProject,
 		movingFiles,
 		downloadingFolders,
 		isFolderDownloading,
@@ -411,12 +421,62 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		onAttachmentsChange,
 	})
 
-	// 合并虚拟文件和虚拟文件夹和虚拟画布项目和真实文件
+	const {
+		editingVirtualId: editingVirtualSelfMediaProjectId,
+		virtualSelfMediaProjectName,
+		setVirtualSelfMediaProjectName,
+		errorMessage: selfMediaProjectErrorMessage,
+		virtualInputRef: virtualSelfMediaProjectInputRef,
+		createVirtualSelfMediaProject,
+		cancelVirtualSelfMediaProject,
+		handleVirtualSelfMediaProjectKeyDown,
+		mergeVirtualSelfMediaProjects,
+		confirmVirtualSelfMediaProject,
+		resetVirtualSelfMediaProject,
+	} = useVirtualSelfMediaProject({
+		attachments,
+		setExpandedKeys,
+		expandedKeys,
+		onSelfMediaProjectCreate: createSelfMediaProject,
+		onAttachmentsChange,
+	})
+
+	const {
+		editingVirtualId: editingVirtualAICardProjectId,
+		virtualAICardProjectName,
+		setVirtualAICardProjectName,
+		errorMessage: aiCardProjectErrorMessage,
+		virtualInputRef: virtualAICardProjectInputRef,
+		createVirtualAICardProject,
+		cancelVirtualAICardProject,
+		handleVirtualAICardProjectKeyDown,
+		mergeVirtualAICardProjects,
+		confirmVirtualAICardProject,
+		resetVirtualAICardProject,
+	} = useVirtualAICardProject({
+		attachments,
+		setExpandedKeys,
+		expandedKeys,
+		onAICardProjectCreate: createAICardProject,
+		onAttachmentsChange,
+	})
+
+	// 合并虚拟文件和虚拟文件夹和虚拟画布项目和虚拟自媒体项目和虚拟AI卡片项目和真实文件
 	const mergedFiles = useMemo(() => {
 		const withVirtualFiles = mergeVirtualFiles(filteredFiles)
 		const withVirtualFolders = mergeVirtualFolders(withVirtualFiles)
-		return mergeVirtualDesignProjects(withVirtualFolders)
-	}, [filteredFiles, mergeVirtualFiles, mergeVirtualFolders, mergeVirtualDesignProjects])
+		const withVirtualDesignProjects = mergeVirtualDesignProjects(withVirtualFolders)
+		const withVirtualSelfMediaProjects =
+			mergeVirtualSelfMediaProjects(withVirtualDesignProjects)
+		return mergeVirtualAICardProjects(withVirtualSelfMediaProjects)
+	}, [
+		filteredFiles,
+		mergeVirtualFiles,
+		mergeVirtualFolders,
+		mergeVirtualDesignProjects,
+		mergeVirtualSelfMediaProjects,
+		mergeVirtualAICardProjects,
+	])
 
 	// 树形数据 hook
 	const { treeData, getAllFileIds, getTotalCount } = useTreeData({
@@ -725,6 +785,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		createVirtualFile,
 		createVirtualFolder,
 		createVirtualDesignProject,
+		createVirtualSelfMediaProject,
+		createVirtualAICardProject: (_key?: string, parentPath?: string) => {
+			openAICardDialog(parentPath)
+		},
 		isMoving,
 		selectedItems,
 		handleAddMultipleFilesToCurrentChat,
@@ -752,6 +816,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		resetVirtualFile()
 		resetVirtualFolder()
 		resetVirtualDesignProject()
+		resetVirtualSelfMediaProject()
+		resetVirtualAICardProject()
 	}
 
 	// 使用 useImperativeHandle 暴露内部方法
@@ -795,60 +861,19 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		return node?.item
 	})
 
-	const selfMediaNavigation = useMemo(
-		() => createSelfMediaTreeNavigationIndex(attachments as unknown as AttachmentNode[]),
-		[attachments],
-	)
+	const selfMediaNavigation = useSelfMediaTreeNavigation({
+		attachments,
+		findFileInTree,
+		onFileClick,
+		setUserSelectDetail,
+	})
+	const { tryOpenSelfMediaFromPostRootFolder } = selfMediaNavigation
 
-	/** Open self-media root when clicking the exact `posts/<id>` folder row. */
-	const tryOpenSelfMediaFromPostRootFolder = useMemoizedFn((item: AttachmentItem): boolean => {
-		if (!attachments?.length) return false
-		const resolution = selfMediaNavigation.resolvePostRootFolderClick({
-			...item,
-			display_config: item.display_config,
-		})
-		const nav = resolution?.navigationTarget
-		if (!nav) return false
-		const root = findFileInTree(nav.rootFolderFileId)
-		if (!root?.file_id) return false
-		const fileItem: FileItem = {
-			file_id: root.file_id,
-			file_name: root.file_name || root.name || "",
-			display_filename: root.name || root.file_name,
-			is_directory: root.is_directory,
-			children: root.children as FileItem[] | undefined,
-			display_config: root.display_config,
-			file_extension: root.file_extension,
-			file_size: root.file_size,
-		}
-		const contentTypeConfig = detectContentTypeRender(fileItem)
-		if (!contentTypeConfig || contentTypeConfig.detailType !== DetailType.SelfMedia) {
-			return false
-		}
-		const transformedData = contentTypeConfig.dataTransformer
-			? contentTypeConfig.dataTransformer(fileItem)
-			: fileItem
-		const platformGuess = resolution.targetPlatform
-		const rootDetailData = {
-			...root,
-			...transformedData,
-			file_id: root.file_id,
-			file_name: root.name || root.file_name,
-			display_config: root.display_config,
-			initialNavigation: {
-				activePostId: nav.activePostId,
-				initialView: "detail" as const,
-				...(platformGuess ? { activePlatform: platformGuess } : {}),
-			},
-		}
-		if (onFileClick && root.file_id) onFileClick(rootDetailData)
-		setUserSelectDetail?.({
-			type: contentTypeConfig.detailType,
-			data: rootDetailData,
-			currentFileId: root.file_id,
-			attachments,
-		})
-		return true
+	const { tryOpenAICardFromSubFolder } = useAICardTreeNavigation({
+		attachments,
+		findFileInTree,
+		onFileClick,
+		setUserSelectDetail,
 	})
 
 	// 检查文件是否在文件夹的直接子项中（只检查一级，不递归）
@@ -932,7 +957,13 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		if (node.isVirtual) {
 			const isVirtualFolder = item?.is_directory && node.isVirtual
 			const isVirtualDesignProject = editingVirtualDesignProjectId === itemId
-			const isVirtualNormalFolder = isVirtualFolder && !isVirtualDesignProject
+			const isVirtualSelfMediaProject = editingVirtualSelfMediaProjectId === itemId
+			const isVirtualAICardProject = editingVirtualAICardProjectId === itemId
+			const isVirtualNormalFolder =
+				isVirtualFolder &&
+				!isVirtualDesignProject &&
+				!isVirtualSelfMediaProject &&
+				!isVirtualAICardProject
 
 			return (
 				<div
@@ -965,6 +996,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								decoration.icon
 							) : isVirtualDesignProject ? (
 								<MagicFileIcon type="design" size={16} />
+							) : isVirtualSelfMediaProject ? (
+								<MagicFileIcon type="self-media" size={16} />
+							) : isVirtualAICardProject ? (
+								<MagicFileIcon type="ai-card" size={16} />
 							) : isVirtualNormalFolder ? (
 								<img
 									src={FoldIcon as unknown as string}
@@ -983,27 +1018,43 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								ref={
 									isVirtualDesignProject
 										? virtualDesignProjectInputRef
-										: isVirtualNormalFolder
-											? virtualFolderInputRef
-											: virtualFileInputRef
+										: isVirtualSelfMediaProject
+											? virtualSelfMediaProjectInputRef
+											: isVirtualAICardProject
+												? virtualAICardProjectInputRef
+												: isVirtualNormalFolder
+													? virtualFolderInputRef
+													: virtualFileInputRef
 								}
 								data-testid={
 									isVirtualDesignProject
 										? "design-project-name-input-virtual"
-										: isVirtualNormalFolder
-											? "folder-name-input-virtual"
-											: "file-name-input-virtual"
+										: isVirtualSelfMediaProject
+											? "self-media-project-name-input-virtual"
+											: isVirtualAICardProject
+												? "ai-card-project-name-input-virtual"
+												: isVirtualNormalFolder
+													? "folder-name-input-virtual"
+													: "file-name-input-virtual"
 								}
 								value={
 									isVirtualDesignProject
 										? virtualDesignProjectName
-										: isVirtualNormalFolder
-											? virtualFolderName
-											: virtualFileName
+										: isVirtualSelfMediaProject
+											? virtualSelfMediaProjectName
+											: isVirtualAICardProject
+												? virtualAICardProjectName
+												: isVirtualNormalFolder
+													? virtualFolderName
+													: virtualFileName
 								}
 								onChange={(e: any) => {
 									if (isVirtualDesignProject) {
 										setVirtualDesignProjectName(e.target.value)
+									} else if (isVirtualSelfMediaProject) {
+										setVirtualSelfMediaProjectName(e.target.value)
+									} else if (isVirtualAICardProject) {
+										setVirtualAICardProjectName(e.target.value)
 									} else if (isVirtualNormalFolder) {
 										setVirtualFolderName(e.target.value)
 									} else {
@@ -1016,31 +1067,47 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								onBlur={
 									isVirtualDesignProject
 										? confirmVirtualDesignProject
-										: isVirtualNormalFolder
-											? confirmVirtualFolder
-											: confirmVirtualFile
+										: isVirtualSelfMediaProject
+											? confirmVirtualSelfMediaProject
+											: isVirtualAICardProject
+												? confirmVirtualAICardProject
+												: isVirtualNormalFolder
+													? confirmVirtualFolder
+													: confirmVirtualFile
 								}
 								onKeyDown={
 									isVirtualDesignProject
 										? handleVirtualDesignProjectKeyDown
-										: isVirtualNormalFolder
-											? handleVirtualFolderKeyDown
-											: handleVirtualFileKeyDown
+										: isVirtualSelfMediaProject
+											? handleVirtualSelfMediaProjectKeyDown
+											: isVirtualAICardProject
+												? handleVirtualAICardProjectKeyDown
+												: isVirtualNormalFolder
+													? handleVirtualFolderKeyDown
+													: handleVirtualFileKeyDown
 								}
 								onClick={(e: any) => e.stopPropagation()}
 								errorMessage={
 									isVirtualDesignProject
 										? designProjectErrorMessage
-										: isVirtualNormalFolder
-											? folderErrorMessage
-											: fileErrorMessage
+										: isVirtualSelfMediaProject
+											? selfMediaProjectErrorMessage
+											: isVirtualAICardProject
+												? aiCardProjectErrorMessage
+												: isVirtualNormalFolder
+													? folderErrorMessage
+													: fileErrorMessage
 								}
 								showError={
 									isVirtualDesignProject
 										? !!designProjectErrorMessage
-										: isVirtualNormalFolder
-											? !!folderErrorMessage
-											: !!fileErrorMessage
+										: isVirtualSelfMediaProject
+											? !!selfMediaProjectErrorMessage
+											: isVirtualAICardProject
+												? !!aiCardProjectErrorMessage
+												: isVirtualNormalFolder
+													? !!folderErrorMessage
+													: !!fileErrorMessage
 								}
 							/>
 						</div>
@@ -1101,10 +1168,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				isFolderDownloading(item)
 
 			const { folderIconPlatform: selfMediaRowPlatform } = attachments?.length
-				? selfMediaNavigation.resolveNode({
-						...item,
-						display_config: item.display_config,
-					})
+				? { folderIconPlatform: selfMediaNavigation.resolveNodeFolderIconPlatform(item) }
 				: { folderIconPlatform: null }
 
 			// 使用 createFileDragHandlers 获取拖拽事件处理器
@@ -1141,6 +1205,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						}
 
 						if (tryOpenSelfMediaFromPostRootFolder(item)) return
+						if (tryOpenAICardFromSubFolder(item)) return
 
 						if (isEmpty(item.display_config)) {
 							// 普通文件夹，没有 display_config，直接展开/折叠
@@ -1389,6 +1454,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					}
 
 					if (tryOpenSelfMediaFromPostRootFolder(item)) return
+					if (tryOpenAICardFromSubFolder(item)) return
 
 					if (renamingItemId !== itemId) {
 						// 检查是否是内容类型渲染（不依赖文件内容，有自己的 detail render content）
@@ -1716,12 +1782,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			<div
 				className={cx(styles.batchDownloadLayer, {
 					[styles.hidden]:
-						(!isMobile && (!isSelectMode || !showBatchDownload)) ||
-						(isMobile && attachments.length <= 0),
+						(!isMobile && !showBatchDownload) || (isMobile && attachments.length <= 0),
 					[styles.pcBatchDownloadLayer]: !isMobile,
 				})}
 			>
-				{!isMobile && isSelectMode && showBatchDownload && (
+				{!isMobile && showBatchDownload && (
 					<Flex className={styles.batchOperations}>
 						<MagicDropdown
 							menu={{ items: batchMenuItems, style: { width: "100%" } }}
@@ -2055,6 +2120,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			)}
 			{/* 下载无水印图片协议弹窗 */}
 			{agreementModal}
+			{/* AI 卡片创建弹窗 */}
+			{aiCardDialogElement}
 		</div>
 	)
 })

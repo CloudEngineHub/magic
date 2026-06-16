@@ -1,19 +1,30 @@
 import { comparer, makeAutoObservable, reaction, runInAction, type IReactionDisposer } from "mobx"
 import { logger as rootLogger } from "@/utils/log"
 import type { SelfMediaInitialNavigation, SelfMediaPlatform } from "../../../types"
-import type { SelfMediaPost, SelfMediaPostEntry, SelfMediaView } from "../types"
+import type {
+	SelfMediaPost,
+	SelfMediaPostEntry,
+	SelfMediaPostPublishStatus,
+	SelfMediaView,
+} from "../types"
+import { SelfMediaPostsService, type SelfMediaSnapshot } from "../services/SelfMediaPostsService"
 import {
 	buildPlaceholderPost,
 	cacheKey,
 	normalizeSelfMediaError,
-	SelfMediaPostsService,
 	type AttachmentNode,
 	type PlatformSlice,
-	type SelfMediaSnapshot,
-} from "../services"
+} from "../services/selfMediaHelpers"
 import { invalidateCardFrameSourceCache } from "../components/CardFrame"
 
 const log = rootLogger.createLogger("SelfMediaStore")
+
+export interface SelfMediaPlatformPostItem {
+	platform: SelfMediaPlatform
+	index: number
+	entry: SelfMediaPostEntry
+	post: SelfMediaPost
+}
 
 /** Payload used to drive the store's sync lifecycle */
 export interface SelfMediaSyncArgs {
@@ -158,6 +169,19 @@ export class SelfMediaStore {
 		})
 	}
 
+	get allPosts(): SelfMediaPlatformPostItem[] {
+		return this.slices.flatMap((slice) =>
+			slice.postEntries.map((entry, index) => ({
+				platform: slice.platform,
+				index,
+				entry,
+				post:
+					this.loadedPosts[cacheKey(slice.platform, entry.id)] ||
+					buildPlaceholderPost(entry),
+			})),
+		)
+	}
+
 	get activePost(): SelfMediaPost | null {
 		return this.posts[this.activePostIndex] ?? null
 	}
@@ -189,6 +213,116 @@ export class SelfMediaStore {
 	setActiveCardIndex(next: number): void {
 		if (this.activeCardIndex === next) return
 		this.activeCardIndex = next
+	}
+
+	openPostDetail(index: number): void {
+		this.activePostIndex = index
+		this.activeCardIndex = 0
+		this.view = "detail"
+		void this.ensurePostLoaded(index)
+	}
+
+	goHomeList(): void {
+		this.view = "feed"
+	}
+
+	updatePostTitle(index: number, nextTitle: string): void {
+		const platform = this.resolvedPlatform
+		const entry = this.postEntries[index]
+		if (!platform || !entry) return
+		this.updatePlatformPostTitle(platform, entry.id, nextTitle)
+	}
+
+	updatePlatformPostTitle(platform: SelfMediaPlatform, entryId: string, nextTitle: string): void {
+		const title = nextTitle.trim()
+		if (!title) return
+		const slice = this.slices.find((item) => item.platform === platform)
+		const entry = slice?.postEntries.find((item) => item.id === entryId)
+		if (!entry) return
+		const key = cacheKey(platform, entryId)
+		const currentPost = this.loadedPosts[key] || buildPlaceholderPost(entry)
+		const nextPost: SelfMediaPost = {
+			...currentPost,
+			meta: {
+				...currentPost.meta,
+				feedTitle: title,
+				title,
+			},
+		}
+		this.loadedPosts = { ...this.loadedPosts, [key]: nextPost }
+		this.slices = this.slices.map((slice) => {
+			if (slice.platform !== platform) return slice
+			return {
+				...slice,
+				postEntries: slice.postEntries.map((item) =>
+					item.id === entryId ? { ...item, name: title } : item,
+				),
+			}
+		})
+	}
+
+	updatePlatformPostPublishStatus(
+		platform: SelfMediaPlatform,
+		entryId: string,
+		publishStatus?: SelfMediaPostPublishStatus,
+	): void {
+		const slice = this.slices.find((item) => item.platform === platform)
+		const entry = slice?.postEntries.find((item) => item.id === entryId)
+		if (!entry) return
+		const key = cacheKey(platform, entryId)
+		const currentPost = this.loadedPosts[key] || buildPlaceholderPost(entry)
+		const nextMeta = { ...currentPost.meta }
+		if (publishStatus) {
+			nextMeta.publishStatus = publishStatus
+		} else {
+			delete nextMeta.publishStatus
+		}
+		this.loadedPosts = {
+			...this.loadedPosts,
+			[key]: {
+				...currentPost,
+				meta: nextMeta,
+			},
+		}
+		this.slices = this.slices.map((slice) => {
+			if (slice.platform !== platform) return slice
+			return {
+				...slice,
+				postEntries: slice.postEntries.map((item) => {
+					if (item.id !== entryId) return item
+					if (publishStatus) return { ...item, publishStatus }
+					const nextEntry = { ...item }
+					delete nextEntry.publishStatus
+					return nextEntry
+				}),
+			}
+		})
+	}
+
+	removePlatformPost(platform: SelfMediaPlatform, entryId: string): void {
+		const key = cacheKey(platform, entryId)
+		const nextLoadedPosts = { ...this.loadedPosts }
+		delete nextLoadedPosts[key]
+
+		this.loadedPosts = nextLoadedPosts
+		this.slices = this.slices
+			.map((slice) =>
+				slice.platform === platform
+					? {
+							...slice,
+							postEntries: slice.postEntries.filter((entry) => entry.id !== entryId),
+						}
+					: slice,
+			)
+			.filter((slice) => slice.postEntries.length > 0)
+
+		if (this.activePlatform === platform && !this.postEntries.length) {
+			this.activePlatform = this.slices[0]?.platform
+		}
+		const count = this.postEntries.length
+		this.activePostIndex = count > 0 ? Math.min(this.activePostIndex, count - 1) : 0
+		this.activeCardIndex = 0
+		if (this.slices.length === 0) this.view = "feed"
 	}
 
 	/** Switch platform; mirrors the reset previously done in index.tsx */
@@ -371,6 +505,29 @@ export class SelfMediaStore {
 		const key = cacheKey(platform, entry.id)
 		if (this.loadedPosts[key]) return this.loadedPosts[key]
 		return this.loadPostFor(platform, entry)
+	}
+
+	/** Ensure a post from any platform is loaded without changing navigation. */
+	async ensurePlatformPostLoaded(
+		platform: SelfMediaPlatform,
+		index: number,
+	): Promise<SelfMediaPost | null> {
+		const entry = this.slices.find((slice) => slice.platform === platform)?.postEntries[index]
+		if (!entry) return null
+		const key = cacheKey(platform, entry.id)
+		if (this.loadedPosts[key]) return this.loadedPosts[key]
+		try {
+			return await this.loadPostFor(platform, entry)
+		} catch (err) {
+			const code = normalizeSelfMediaError(err)
+			log.warn("⚠️ 首页文章预加载失败，已跳过", {
+				platform,
+				postId: entry.id,
+				code,
+				error: err,
+			})
+			return null
+		}
 	}
 
 	/** Preload every post for the active platform (export flow) */
