@@ -6,9 +6,9 @@ describe("MagicFSApi", () => {
 	let api: MagicFSApi
 
 	beforeEach(() => {
-		; (window as any).Magic = undefined
+		;(window as any).Magic = undefined
 		// mockImplementation prevents jsdom from echoing postMessage back to the same window
-		postMessageSpy = vi.spyOn(window.parent, "postMessage").mockImplementation(() => { })
+		postMessageSpy = vi.spyOn(window.parent, "postMessage").mockImplementation(() => {})
 		api = new MagicFSApi()
 		api.install()
 	})
@@ -16,7 +16,7 @@ describe("MagicFSApi", () => {
 	afterEach(() => {
 		vi.restoreAllMocks()
 		vi.useRealTimers()
-			; (window as any).Magic = undefined
+		;(window as any).Magic = undefined
 	})
 
 	// ─── 辅助：模拟来自 parent 的响应 ──────────────────────────────────────────
@@ -148,6 +148,33 @@ describe("MagicFSApi", () => {
 		await expect(promise).resolves.toEqual([])
 	})
 
+	// ─── getFileUrl ─────────────────────────────────────────────────────────────
+
+	it("getFileUrl() 发送 MAGIC_FS_GET_FILE_URL_REQUEST 并在响应成功时 resolve 文件 URL", async () => {
+		const promise = (window as any).Magic.fs.getFileUrl("./assets/image.png")
+
+		const [req] = postMessageSpy.mock.calls[0]
+		expect(req.type).toBe("MAGIC_FS_GET_FILE_URL_REQUEST")
+		expect(req.path).toBe("./assets/image.png")
+		expect(typeof req.requestId).toBe("string")
+
+		simulateResponse({
+			type: "MAGIC_FS_GET_FILE_URL_RESPONSE",
+			requestId: req.requestId,
+			success: true,
+			url: "https://example.com/assets/image.png",
+		})
+
+		await expect(promise).resolves.toBe("https://example.com/assets/image.png")
+	})
+
+	it("getFileUrl() 传入非字符串路径时立即 reject", async () => {
+		await expect((window as any).Magic.fs.getFileUrl(123)).rejects.toThrow(
+			"getFileUrl: path must be a string",
+		)
+		expect(postMessageSpy).not.toHaveBeenCalled()
+	})
+
 	// ─── watchFile ──────────────────────────────────────────────────────────────
 
 	it("moveFile() 发送 MAGIC_FS_MOVE_FILE_REQUEST 并在响应成功时 resolve", async () => {
@@ -212,22 +239,26 @@ describe("MagicFSApi", () => {
 		expect(postMessageSpy).not.toHaveBeenCalled()
 	})
 
-
-	it.each(["", "   ", "../evil.txt", "subdir/file.txt", "subdir\\file.txt", "/tmp", "bad\u0000name.txt"])(
-		"renameFile() 传入非法 newName %s 时立即 reject",
-		async (newName) => {
-			await expect((window as any).Magic.fs.renameFile("./file.txt", newName)).rejects.toThrow(
-				"renameFile: newName must be a single file name",
-			)
-			expect(postMessageSpy).not.toHaveBeenCalled()
-		},
-	)
+	it.each([
+		"",
+		"   ",
+		"../evil.txt",
+		"subdir/file.txt",
+		"subdir\\file.txt",
+		"/tmp",
+		"bad\u0000name.txt",
+	])("renameFile() 传入非法 newName %s 时立即 reject", async (newName) => {
+		await expect((window as any).Magic.fs.renameFile("./file.txt", newName)).rejects.toThrow(
+			"renameFile: newName must be a single file name",
+		)
+		expect(postMessageSpy).not.toHaveBeenCalled()
+	})
 
 	// ─── watchFile（原有测试） ───────────────────────────────────────────────────
 
 	it("watchFile() 发送 MAGIC_FS_WATCH_REGISTER 并在文件变更时触发回调", () => {
 		const cb = vi.fn()
-			; (window as any).Magic.fs.watchFile("./data.json", cb)
+		;(window as any).Magic.fs.watchFile("./data.json", cb)
 
 		const [req] = postMessageSpy.mock.calls[0]
 		expect(req.type).toBe("MAGIC_FS_WATCH_REGISTER")
@@ -245,7 +276,7 @@ describe("MagicFSApi", () => {
 
 	it("watchFile() 只响应匹配路径的 MAGIC_FS_FILE_CHANGED 消息", () => {
 		const cb = vi.fn()
-			; (window as any).Magic.fs.watchFile("./a.json", cb)
+		;(window as any).Magic.fs.watchFile("./a.json", cb)
 
 		simulateResponse({
 			type: "MAGIC_FS_FILE_CHANGED",
@@ -278,13 +309,13 @@ describe("MagicFSApi", () => {
 
 	it("watchFile() 传入非字符串路径时抛出错误", () => {
 		expect(() => {
-			; (window as any).Magic.fs.watchFile(123, vi.fn())
+			;(window as any).Magic.fs.watchFile(123, vi.fn())
 		}).toThrow("watchFile: path must be a string")
 	})
 
 	it("watchFile() 传入非函数回调时抛出错误", () => {
 		expect(() => {
-			; (window as any).Magic.fs.watchFile("./data.json", "not-a-function")
+			;(window as any).Magic.fs.watchFile("./data.json", "not-a-function")
 		}).toThrow("watchFile: callback must be a function")
 	})
 

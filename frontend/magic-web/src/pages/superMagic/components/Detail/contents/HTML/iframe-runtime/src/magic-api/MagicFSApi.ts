@@ -2,7 +2,7 @@
  * MagicFSApi
  *
  * 向 iframe 内的 window.Magic.fs 注入文件系统 API（低层 I/O）。
- * 提供 readFile / writeFile / listFiles / watchFile，均通过 postMessage
+ * 提供 readFile / writeFile / listFiles / getFileUrl / watchFile，均通过 postMessage
  * 委托给主站（parent window）的 IframeFSService 处理。
  *
  * 同时注入 window.Magic.getAppBasePath() 返回应用在 workspace 中的根目录路径。
@@ -17,9 +17,13 @@ import { getParentOrigin } from "../utils/parentOrigin"
 function isSingleFileName(name: string): boolean {
 	return (
 		name.trim().length > 0 &&
-		!/[\/\\]/.test(name) &&
+		!name.includes("/") &&
+		!name.includes("\\") &&
 		!name.includes("..") &&
-		!/[\x00-\x1F\x7F]/.test(name)
+		!Array.from(name).some((char) => {
+			const code = char.charCodeAt(0)
+			return code <= 31 || code === 127
+		})
 	)
 }
 
@@ -85,6 +89,18 @@ export class MagicFSApi extends MagicBaseApi {
 					}
 					return []
 				})
+			},
+
+			getFileUrl: (path: string): Promise<string> => {
+				if (typeof path !== "string") {
+					return Promise.reject(new Error("getFileUrl: path must be a string"))
+				}
+				return this.request<string>(
+					"MAGIC_FS_GET_FILE_URL_REQUEST",
+					{ path },
+					15000,
+					(data) => data["url"] as string,
+				)
 			},
 
 			deleteFile: (path: string): Promise<void> => {

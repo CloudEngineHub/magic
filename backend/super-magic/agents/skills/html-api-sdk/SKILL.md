@@ -1,6 +1,6 @@
 ---
 name: html-api-sdk
-description: "Complete API reference for window.Magic.* in SuperMagic HTML micro-apps (HTML 微应用). Read this skill when you need exact method signatures, parameters, return types, or usage examples for: fs (readFile/writeFile/listFiles/deleteFile/deleteDir/moveFile/renameFile/watchFile), llm (chat/stream/getModels), agent (getAgents/selectAgent), project (createTopicAndSend/sendMessage/uploadFiles/downloadFiles), user (getInfo with app.json userInfo scopes), getAppBasePath, setInputMessage, reload. Also covers tiptap JSON message format, @file and @skill mention structures, model selector UI rules, user info authorization, error handling patterns, and backward compatibility table. Trigger phrases: 'window.Magic API', 'readFile writeFile', 'deleteFile deleteDir', 'moveFile renameFile', 'watchFile callback', 'llm.stream', 'llm.chat', 'createTopicAndSend format', 'tiptap JSON mention', '@file mention structure', '@skill mention', 'getAppBasePath usage', 'model selector UI', 'user.getInfo', 'get user info', 'user avatar', 'userInfo scopes', 'app.json permissions', 'Magic API 用法', 'fs 读写文件 API', 'fs 删除文件', 'fs 移动重命名', '流式调用参数', '文件监听回调', '话题消息格式', 'mention 结构', '模型选择器', '用户信息', '用户授权', '获取头像'."
+description: "Complete API reference for window.Magic.* in SuperMagic HTML micro-apps (HTML 微应用). Read this skill when you need exact method signatures, parameters, return types, or usage examples for: fs (readFile/writeFile/listFiles/getFileUrl/deleteFile/deleteDir/moveFile/renameFile/watchFile), llm (chat/stream/getModels), agent (getAgents/selectAgent), project (createTopicAndSend/sendMessage/uploadFiles/downloadFiles), user (getInfo with app.json userInfo scopes), getAppBasePath, setInputMessage, reload. Also covers tiptap JSON message format, @file and @skill mention structures, model selector UI rules, user info authorization, error handling patterns, and backward compatibility table. Trigger phrases: 'window.Magic API', 'readFile writeFile', 'getFileUrl', 'get file url', '文件 URL', '获取文件链接', 'deleteFile deleteDir', 'moveFile renameFile', 'watchFile callback', 'llm.stream', 'llm.chat', 'createTopicAndSend format', 'tiptap JSON mention', '@file mention structure', '@skill mention', 'getAppBasePath usage', 'model selector UI', 'user.getInfo', 'get user info', 'user avatar', 'userInfo scopes', 'app.json permissions', 'Magic API 用法', 'fs 读写文件 API', 'fs 获取文件链接', 'fs 删除文件', 'fs 移动重命名', '流式调用参数', '文件监听回调', '话题消息格式', 'mention 结构', '模型选择器', '用户信息', '用户授权', '获取头像'."
 ---
 
 # window.Magic API — HTML Micro-App Guide
@@ -80,6 +80,18 @@ Path rules:
 ```javascript
 const files = await window.Magic.fs.listFiles("data/");
 ```
+
+### `getFileUrl(path)` → `Promise<string>`
+
+```javascript
+const imageUrl = await window.Magic.fs.getFileUrl("assets/chart.png");
+document.getElementById("preview").src = imageUrl;
+```
+
+- Returns a temporary browser-accessible URL for an existing workspace file.
+- Use it for previews, `<img>`, `<audio>`, `<video>`, download links, or libraries that need a URL instead of file text.
+- It does not download the file by itself. Use `window.Magic.project.downloadFiles(paths)` when the user action should trigger a browser download.
+- Rejects if the file is missing or the path is invalid. `../` blocked.
 
 ### `deleteFile(path)` → `Promise<void>`
 
@@ -417,6 +429,7 @@ window.Magic.llm.stream(
 | `window.Magic.fs.readFile(path)` | `Promise<string>` |
 | `window.Magic.fs.writeFile(path, content)` | `Promise<void>` |
 | `window.Magic.fs.listFiles(dir?)` | `Promise<string[]>` |
+| `window.Magic.fs.getFileUrl(path)` | `Promise<string>` |
 | `window.Magic.fs.deleteFile(path)` | `Promise<void>` |
 | `window.Magic.fs.deleteDir(path)` | `Promise<void>` |
 | `window.Magic.fs.moveFile(path, targetDir)` | `Promise<void>` |

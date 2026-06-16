@@ -42,6 +42,12 @@
       "prompt": "帮我做一个计算器",
       "expected_output": "Triggers the html-api-sdk skill and generates an HTML calculator application with a functional UI. Uses addEventListener for button events. May optionally use window.Magic.fs for saving calculation history.",
       "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "Create an HTML page that previews assets/chart.png from the workspace and provides an open-file link.",
+      "expected_output": "Generates an HTML file using window.Magic.fs.getFileUrl(\"assets/chart.png\") to get a temporary browser-accessible URL, assigns it to an img src and/or anchor href, handles errors, and uses addEventListener or startup functions instead of inline handlers. Does not use project.downloadFiles unless the user explicitly asks to trigger a browser download.",
+      "files": []
     }
   ]
 }

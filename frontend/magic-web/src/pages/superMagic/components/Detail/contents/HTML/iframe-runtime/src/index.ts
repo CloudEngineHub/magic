@@ -529,6 +529,7 @@ declare global {
 				readFile: (path: string) => Promise<string>
 				writeFile: (path: string, content: string) => Promise<void>
 				listFiles: (dir?: string) => Promise<string[]>
+				getFileUrl: (path: string) => Promise<string>
 				deleteFile: (path: string) => Promise<void>
 				deleteDir: (path: string) => Promise<void>
 				moveFile: (path: string, targetDir: string) => Promise<void>
