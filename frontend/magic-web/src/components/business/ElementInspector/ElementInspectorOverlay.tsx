@@ -313,13 +313,6 @@ export function buildAgentPromptContent(
 	t: (key: string) => string,
 	fileInfo?: { fileId: string; fileName: string; filePath: string },
 ): JSONContent {
-	const text = (s: string): JSONContent => ({ type: "text", text: s })
-	const para = (...content: JSONContent[]): JSONContent => ({
-		type: "paragraph",
-		content,
-	})
-	const emptyPara = (): JSONContent => ({ type: "paragraph" })
-
 	const paragraphs: JSONContent[] = []
 
 	// If we have a file, add an @mention of it at the top
@@ -408,15 +401,6 @@ export function buildAgentPromptContent(
 			textContent: textPreview,
 		},
 	})
-
-	// User-fillable area (no placeholder)
-	paragraphs.push(emptyPara())
-	paragraphs.push(
-		para(
-			text(`${t("stylePanel.inspector.agentPromptSuffix")}`),
-			// placeholder(t("stylePanel.inspector.agentPromptPlaceholder")),
-		),
-	)
 
 	return { type: "doc", content: paragraphs }
 }
