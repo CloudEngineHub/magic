@@ -28,7 +28,6 @@ import {
 	type DesignDraftReason,
 	type DesignDraftWriteResult,
 } from "../utils/designDraftStorage"
-import magicToast from "@/components/base/MagicToaster/utils"
 
 export interface DesignProjectManagerFactoryParams {
 	stateBag: DesignProjectStateBag
@@ -395,7 +394,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}
 		if (reason === "pagehide" || this.hasShownLocalDraftUnavailableToast) return
 		this.hasShownLocalDraftUnavailableToast = true
-		magicToast.warning("本地画布草稿暂不可用，请等待自动保存完成后再关闭页面。")
 	}
 
 	persistLocalDraft(
@@ -453,9 +451,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			!!draft.baseRemoteFingerprint && draft.baseRemoteFingerprint !== remoteFingerprint
 
 		if (hasRemoteVersionAdvanced || hasRemoteFingerprintChanged) {
-			magicToast.warning(
-				"检测到本地画布草稿，但远端版本已更新，已保留草稿并暂不自动覆盖远端内容。",
-			)
 			return
 		}
 
@@ -468,7 +463,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.stateBag.setPrevDesignDataFingerprint(remoteFingerprint)
 		this.options.onRemoteDesignDataUpdate?.(oldData, restoredData, "draft")
 		this.saveManager.scheduleAutoSave()
-		magicToast.info("已恢复本地未保存的画布草稿。")
 	}
 
 	async manualSave(): Promise<void> {
