@@ -63,12 +63,18 @@ class MagicServiceProvider(ModelProvider):
         if not host:
             raise MagicServiceProviderError("magic_service_host not available")
 
-        url = f"{host}/v1/models"
+        url = f"{_normalize_magic_service_host(host)}/v1/models"
         params = {"with_info": "1", "with_dynamic_models": "1"}
         headers: Dict[str, str] = {}
-        if authorization:
+        can_send_magic_headers = MetadataUtil.should_send_magic_authorization_headers(host)
+        if authorization and can_send_magic_headers:
             headers["user-authorization"] = authorization
-        MetadataUtil.add_magic_and_user_authorization_headers(headers)
+        elif not authorization and can_send_magic_headers:
+            api_key = os.environ.get("MAGIC_API_KEY", "")
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+        if can_send_magic_headers:
+            MetadataUtil.add_magic_and_user_authorization_headers(headers)
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
@@ -138,7 +144,7 @@ class MagicServiceProvider(ModelProvider):
             host = os.environ.get("MAGIC_API_BASE_URL", "").rstrip("/")
             logger.debug("MagicServiceProvider: falling back to MAGIC_API_BASE_URL env var")
 
-        return host, authorization
+        return _normalize_magic_service_host(host), authorization
 
     def _parse_model(
         self,
@@ -218,3 +224,11 @@ class MagicServiceProvider(ModelProvider):
         except Exception as e:
             logger.error(f"MagicServiceProvider: failed to parse model '{model_id}': {e}")
             return None
+
+
+def _normalize_magic_service_host(host: str) -> str:
+    """把 OpenAI 兼容调用地址规范化为 magic-service 主机地址，用于拼接 /v1/models。"""
+    normalized = host.strip().rstrip("/")
+    if normalized.endswith("/v1"):
+        return normalized[:-3].rstrip("/")
+    return normalized

@@ -220,16 +220,6 @@ class LLMFactory:
             "top_p": llm_config.top_p,
         }
 
-        # 部分模型硬编码 max_tokens 覆盖
-        if llm_config.name == "deepseek-reasoner" or llm_config.name == "deepseek-chat":
-            request_params["max_tokens"] = 16384
-
-        if llm_config.name == "doubao-seed-1.6" or llm_config.name == "doubao-seed-1.6-thinking" or llm_config.name == "doubao-seed-1.6-flash":
-            request_params["max_tokens"] = 8192
-
-        if llm_config.name == "deepseek-v3.2-exp":
-            request_params["max_tokens"] = 8192
-
         # Dynamically adjust max_tokens to fit within context window based on actual token usage
         request_params["max_tokens"] = adjust_max_tokens(
             requested_max_tokens=request_params["max_tokens"],
@@ -585,7 +575,7 @@ class LLMFactory:
         Returns:
             AsyncOpenAI 客户端实例。
         """
-        default_headers = cls._build_default_headers()
+        default_headers = cls._build_default_headers(llm_config.api_base_url or "")
         default_headers.update(llm_config.headers)
 
         logger.debug(
@@ -603,7 +593,7 @@ class LLMFactory:
         )
 
     @classmethod
-    def _build_default_headers(cls) -> Dict[str, str]:
+    def _build_default_headers(cls, api_base_url: str = "") -> Dict[str, str]:
         """构建 OpenAI 客户端的默认请求头。
 
         包含以下请求头（按优先级顺序添加）：
@@ -617,8 +607,9 @@ class LLMFactory:
         """
         headers: Dict[str, str] = {}
 
-        # 1-2. 添加 Magic-Authorization 与 User-Authorization
-        MetadataUtil.add_magic_and_user_authorization_headers(headers)
+        # 1-2. 仅配置允许的 magic-service 请求携带业务认证头，避免发给官方/第三方渠道。
+        if MetadataUtil.should_send_magic_authorization_headers(api_base_url):
+            MetadataUtil.add_magic_and_user_authorization_headers(headers)
 
         # 3. 添加业务元数据请求头
         headers.update(MetadataUtil.get_llm_request_headers())
