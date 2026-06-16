@@ -713,7 +713,7 @@
 						config.generate.successMessage ?? t("toast.success", "生成成功！"),
 						"success",
 					)
-					if (config.generate.closeOnSuccess !== false) {
+					if (config.generate.closeOnSuccess === true) {
 						ctx.ui?.close?.()
 					}
 				}

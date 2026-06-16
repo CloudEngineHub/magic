@@ -263,7 +263,7 @@ kit 会按顺序渲染这些 section。
 - `onSuccess`: 成功后的自定义行为
 - `successMessage`: 未自定义 `onSuccess` 时的成功文案
 - `errorMessage`: 失败兜底文案
-- `closeOnSuccess`: 未自定义 `onSuccess` 时是否自动关闭
+- `closeOnSuccess`: 未自定义 `onSuccess` 时是否在成功后自动关闭面板，默认 `false`
 
 ## Section Required（必填）
 
