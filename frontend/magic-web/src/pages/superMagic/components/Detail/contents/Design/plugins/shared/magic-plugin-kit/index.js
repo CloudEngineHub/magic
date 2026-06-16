@@ -709,10 +709,9 @@
 				if (config.generate.onSuccess) {
 					config.generate.onSuccess({ ctx, state, result, helpers, t })
 				} else {
-					ctx.ui?.toast?.(
-						config.generate.successMessage ?? t("toast.success", "生成成功！"),
-						"success",
-					)
+					if (config.generate.successMessage) {
+						ctx.ui?.toast?.(config.generate.successMessage, "success")
+					}
 					if (config.generate.closeOnSuccess === true) {
 						ctx.ui?.close?.()
 					}

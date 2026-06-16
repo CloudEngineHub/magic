@@ -261,7 +261,7 @@ kit 会按顺序渲染这些 section。
 - `buildRequest`: 组装最终请求
 - `execute`: 可选，自定义完整生成流程；签名 `({ ctx, state, helpers, t, generateAndPlace }) => Promise<unknown>`
 - `onSuccess`: 成功后的自定义行为
-- `successMessage`: 未自定义 `onSuccess` 时的成功文案
+- `successMessage`: 未自定义 `onSuccess` 时的成功文案, 默认不展示
 - `errorMessage`: 失败兜底文案
 - `closeOnSuccess`: 未自定义 `onSuccess` 时是否在成功后自动关闭面板，默认 `false`
 
