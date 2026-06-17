@@ -9,19 +9,33 @@ interface UseRecycleBinSelectionParams {
 
 export function useRecycleBinSelection({ items, activeTabId }: UseRecycleBinSelectionParams) {
 	const [selectedIds, setSelectedIds] = useState<string[]>([])
+	const [isSelectAllActive, setIsSelectAllActive] = useState(false)
 
 	const visibleItems = useMemo(
 		() => filterItemsByTab({ items, tabId: activeTabId }),
 		[activeTabId, items],
 	)
+	const visibleItemIds = useMemo(() => visibleItems.map((item) => item.id), [visibleItems])
+
+	useEffect(() => {
+		setIsSelectAllActive(false)
+		setSelectedIds([])
+	}, [activeTabId])
 
 	useEffect(() => {
 		setSelectedIds((prev) => prev.filter((id) => items.some((item) => item.id === id)))
 	}, [items])
 
-	const isAllSelected = visibleItems.length > 0 && selectedIds.length === visibleItems.length
-	const isPartiallySelected = selectedIds.length > 0 && !isAllSelected
-	const hasSelection = selectedIds.length > 0
+	useEffect(() => {
+		if (!isSelectAllActive) return
+		setSelectedIds(visibleItemIds)
+	}, [isSelectAllActive, visibleItemIds])
+
+	const visibleSelectedCount = visibleItemIds.filter((id) => selectedIds.includes(id)).length
+	const isAllSelected =
+		visibleItemIds.length > 0 && visibleSelectedCount === visibleItemIds.length
+	const isPartiallySelected = visibleSelectedCount > 0 && !isAllSelected
+	const hasSelection = visibleSelectedCount > 0
 	const hasMixedSelectionTypes = useMemo(() => {
 		if (selectedIds.length <= 1) return false
 		const selectedItems = items.filter((item) => selectedIds.includes(item.id))
@@ -32,14 +46,17 @@ export function useRecycleBinSelection({ items, activeTabId }: UseRecycleBinSele
 
 	function handleToggleSelectAll(checked: boolean) {
 		if (!checked) {
+			setIsSelectAllActive(false)
 			setSelectedIds([])
 			return
 		}
 
-		setSelectedIds(visibleItems.map((item) => item.id))
+		setIsSelectAllActive(true)
+		setSelectedIds(visibleItemIds)
 	}
 
 	function handleToggleItem({ id, checked }: { id: string; checked: boolean }) {
+		setIsSelectAllActive(false)
 		if (checked) {
 			setSelectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
 			return
@@ -49,6 +66,7 @@ export function useRecycleBinSelection({ items, activeTabId }: UseRecycleBinSele
 	}
 
 	function clearSelection() {
+		setIsSelectAllActive(false)
 		setSelectedIds([])
 	}
 
