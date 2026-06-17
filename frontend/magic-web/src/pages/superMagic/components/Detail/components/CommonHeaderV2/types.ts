@@ -32,7 +32,7 @@ export interface CurrentFileInfo {
 	source?: AttachmentSource
 	projectId?: string
 	projectName?: string
-    relativeFilePath?: string
+	relativeFilePath?: string
 }
 
 export interface ActionContext {
@@ -157,4 +157,6 @@ export interface CommonHeaderV2Props {
 	onLocateFile?: () => void
 	/** 额外的「更多」菜单项，追加在默认菜单项之后 */
 	extraMoreMenuItems?: MenuProps["items"]
+	/** 「更多」菜单开关状态变化 */
+	onMoreMenuOpenChange?: (open: boolean) => void
 }

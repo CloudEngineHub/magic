@@ -64,6 +64,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 		getPopupContainer,
 		onLocateFile,
 		extraMoreMenuItems,
+		onMoreMenuOpenChange,
 	} = props
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -378,6 +379,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 						menu={{ items: moreOperationsDropdownItems }}
 						trigger={["click"]}
 						placement="bottomRight"
+						onOpenChange={onMoreMenuOpenChange}
 						getPopupContainer={
 							actionContext.getPopupContainer
 								? () => actionContext.getPopupContainer?.() ?? document.body
@@ -498,6 +500,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			moreOperationsDropdownItems,
 			onDownload,
 			onFullscreen,
+			onMoreMenuOpenChange,
 			onOpenUrl,
 			onViewModeChange,
 			showButtonText,

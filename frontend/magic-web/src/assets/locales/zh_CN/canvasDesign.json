@@ -455,6 +455,7 @@
 		"sendConfirmOk": "确认执行",
 		"sendConfirmSkip": "下次不再提示",
 		"sendConfirmTitle": "消耗提示",
+		"sendConfirmUnknownPointsDescription": "本次任务将产生积分消耗，是否确认执行？",
 		"size": "尺寸",
 		"slotLabelFirstFrame": "首帧",
 		"slotLabelLastFrame": "尾帧",

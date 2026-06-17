@@ -520,6 +520,9 @@
 		"status": "已删除"
 	},
 	"design": {
+		"actions": {
+			"videoPointsPrompt": "积分提示"
+		},
 		"errors": {
 			"cannotDetermineDirectory": "无法确定设计文件目录",
 			"cannotFindOrLoadFile": "无法找到或加载 magic.project.js 文件",

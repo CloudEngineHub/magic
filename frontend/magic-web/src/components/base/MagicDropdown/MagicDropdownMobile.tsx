@@ -1,11 +1,7 @@
 import { useState, useEffect } from "react"
 import type { MenuProps } from "antd"
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
-import {
-	ActionDrawer,
-	ActionGroup,
-	ActionItem,
-} from "@/components/shadcn-composed/action-drawer"
+import { ActionDrawer, ActionGroup, ActionItem } from "@/components/shadcn-composed/action-drawer"
 import type { MagicDropdownProps } from "./types"
 
 type MenuItem = NonNullable<MenuProps["items"]>[number]
@@ -167,22 +163,24 @@ function MagicDropdownMobile({
 										// Call menu's onClick if exists
 										if (menu?.onClick) {
 											const clickEvent = new MouseEvent("click")
-												; (
-													menu.onClick as (info: {
-														key: string
-														keyPath: string[]
-														domEvent: React.MouseEvent<HTMLElement>
-													}) => void
-												)({
-													key,
-													keyPath: [key],
-													domEvent:
-														clickEvent as unknown as React.MouseEvent<HTMLElement>,
-												})
+											;(
+												menu.onClick as (info: {
+													key: string
+													keyPath: string[]
+													domEvent: React.MouseEvent<HTMLElement>
+												}) => void
+											)({
+												key,
+												keyPath: [key],
+												domEvent:
+													clickEvent as unknown as React.MouseEvent<HTMLElement>,
+											})
 										}
 
 										// Close drawer after clicking
-										handleOpenChange(false)
+										if (!menuItem.keepOpenOnClick) {
+											handleOpenChange(false)
+										}
 									}}
 								/>
 							)
@@ -209,16 +207,16 @@ function MagicDropdownMobile({
 	// For context menu, we need to handle onContextMenu event
 	const triggerProps = isContextMenu
 		? {
-			onContextMenu: (e: React.MouseEvent) => {
-				e.preventDefault()
-				if (!disabled) {
-					handleOpenChange(!actualOpen)
-				}
-			},
-		}
+				onContextMenu: (e: React.MouseEvent) => {
+					e.preventDefault()
+					if (!disabled) {
+						handleOpenChange(!actualOpen)
+					}
+				},
+			}
 		: {
-			onClick: handleTriggerClick,
-		}
+				onClick: handleTriggerClick,
+			}
 
 	return (
 		<>

@@ -452,10 +452,10 @@
 		"resolution": "Resolution",
 		"sendButtonEstimatedPoints": "Estimated {{points}}",
 		"sendConfirmDescription": "This task is estimated to consume approximately {{points}} points. Confirm execution?",
-
 		"sendConfirmOk": "Confirm",
 		"sendConfirmSkip": "Don't ask again",
 		"sendConfirmTitle": "Consumption notice",
+		"sendConfirmUnknownPointsDescription": "This task will consume points. Confirm execution?",
 		"size": "Size",
 		"slotLabelFirstFrame": "Start",
 		"slotLabelLastFrame": "End",

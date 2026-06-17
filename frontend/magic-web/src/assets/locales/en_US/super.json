@@ -519,6 +519,9 @@
 		"status": "Deleted"
 	},
 	"design": {
+		"actions": {
+			"videoPointsPrompt": "Points prompt"
+		},
 		"errors": {
 			"cannotDetermineDirectory": "Cannot determine design file directory",
 			"cannotFindOrLoadFile": "Cannot find or load magic.project.js file",
