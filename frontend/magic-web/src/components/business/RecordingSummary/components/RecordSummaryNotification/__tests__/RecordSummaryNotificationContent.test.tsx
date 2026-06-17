@@ -5,6 +5,14 @@ import RecordSummaryNotificationContent from "../RecordSummaryNotificationConten
 
 vi.mock("@/services/audioRecordings", () => ({
 	isAudioProjectMode: (projectMode?: string | null) => projectMode === "audio",
+	resolveRecordSummaryResultHref: (params: {
+		projectId?: string | null
+		projectMode?: string | null
+	}) => {
+		return params.projectMode === "audio"
+			? `/global/recordings/${params.projectId || ""}`
+			: "/global/super/workspace/project/topic"
+	},
 }))
 
 vi.mock("@/routes/history", () => ({

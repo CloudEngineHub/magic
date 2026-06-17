@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { DEFAULT_AUDIO_SETTING_TOPIC_ID } from "../constants/recording-settings"
-import { apiResponseToSettings, settingsToApiPayload } from "../utils/recording-settings-mapper"
+import { DEFAULT_AUDIO_SETTING_TOPIC_ID } from "../../constants/recording-settings"
+import { apiResponseToSettings, settingsToApiPayload } from "../recording-settings-mapper"
 
 const MOCK_FALLBACK_MODEL = "mock-fallback-model"
 
-describe("mobile-recording-settings-mapper-proxy", () => {
+describe("recording-settings-mapper", () => {
 	it("applies defaults when extra fields are missing", () => {
 		const settings = apiResponseToSettings({}, MOCK_FALLBACK_MODEL)
 
@@ -15,7 +15,7 @@ describe("mobile-recording-settings-mapper-proxy", () => {
 		})
 	})
 
-	it("builds PUT payload with managed extra fields", () => {
+	it("builds PUT payload with managed extra fields and Android-compatible model", () => {
 		const payload = settingsToApiPayload(
 			{
 				transcription_enabled: false,
@@ -41,5 +41,19 @@ describe("mobile-recording-settings-mapper-proxy", () => {
 				},
 			},
 		})
+	})
+
+	it("prefers Android-compatible extra.model before top-level model", () => {
+		const settings = apiResponseToSettings(
+			{
+				model: { model_id: "mock-top-level-model" },
+				extra: {
+					model: { model_id: "mock-extra-model" },
+				},
+			},
+			MOCK_FALLBACK_MODEL,
+		)
+
+		expect(settings.model_id).toBe("mock-extra-model")
 	})
 })

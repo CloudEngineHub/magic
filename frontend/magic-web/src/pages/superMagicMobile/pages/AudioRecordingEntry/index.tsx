@@ -98,6 +98,7 @@ function AudioRecordingEntryPanel() {
 				onResolveOptimisticItem={facade.clearOptimisticItem}
 				onRetryUpload={facade.retryImport}
 				AudioUploadActionComponent={facade.AudioUploadActionComponent}
+				isOtherTabRecording={facade.isOtherTabRecording}
 			/>
 			<MobileRecordingSettingsSheet
 				open={settingsSheetOpen}

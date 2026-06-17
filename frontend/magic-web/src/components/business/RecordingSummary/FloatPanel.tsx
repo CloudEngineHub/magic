@@ -392,6 +392,7 @@ export function RecordingSummaryFloatPanel() {
 
 	// Early return after all hooks have been called
 	if (
+		recordingSummaryStore.isOtherTabRecording ||
 		shouldHideRecordingFloatPanel({
 			isVisible: recordingSummaryStore.isVisible,
 			isOnMobileRecordingsListRoute,

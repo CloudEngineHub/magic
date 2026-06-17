@@ -59,6 +59,7 @@ interface AudioRecordingListPanelProps {
 		onFileChange?: (files: FileList) => void
 	}>
 	onRetryUpload?: (projectId: string) => Promise<void>
+	isOtherTabRecording?: boolean
 }
 
 interface ShareSheetState {
@@ -115,6 +116,7 @@ function AudioRecordingListPanel({
 	onResolveOptimisticItem,
 	AudioUploadActionComponent,
 	onRetryUpload,
+	isOtherTabRecording = false,
 }: AudioRecordingListPanelProps) {
 	const { t } = useTranslation(["audioRecordings", "super"])
 	const navigate = useNavigate()
@@ -409,7 +411,7 @@ function AudioRecordingListPanel({
 						) : (
 							<>
 								{/* Active Recording Card shown ABOVE the toolbar row */}
-								{isSessionActive && WaveformComponent ? (
+								{isSessionActive && !isOtherTabRecording && WaveformComponent ? (
 									<div ref={setActiveRecordingCardElement}>
 										<MobileActiveRecordingCard
 											title={sessionTitle}
@@ -482,7 +484,7 @@ function AudioRecordingListPanel({
 			<MobileRecordingFab hidden={isSessionActive} onClick={() => onStartRecording?.()} />
 
 			<MobileActiveRecordingIndicator
-				hidden={!isSessionActive || isActiveCardVisible}
+				hidden={!isSessionActive || isOtherTabRecording || isActiveCardVisible}
 				duration={sessionDuration}
 				isPaused={isSessionPaused}
 				onOpen={() => onResumeRecording?.()}

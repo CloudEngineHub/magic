@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
+import { MemoryRouter } from "react-router"
 
 const facadeMock = {
 	presentation: "recording" as "recording" | "list",
@@ -78,7 +79,11 @@ describe("AudioRecordingEntryPage active flow", () => {
 	it("shows the full-screen recording page when the shared session should be taken over", () => {
 		facadeMock.presentation = "recording"
 
-		render(<AudioRecordingEntryPage />)
+		render(
+			<MemoryRouter>
+				<AudioRecordingEntryPage />
+			</MemoryRouter>,
+		)
 
 		expect(screen.getByTestId("mobile-recording-session-page")).toBeInTheDocument()
 		expect(screen.queryByTestId("mobile-audio-recording-list-panel")).toBeNull()
@@ -87,14 +92,22 @@ describe("AudioRecordingEntryPage active flow", () => {
 	it("returns to list mode while keeping the session resumable from the list", () => {
 		facadeMock.presentation = "recording"
 
-		render(<AudioRecordingEntryPage />)
+		render(
+			<MemoryRouter>
+				<AudioRecordingEntryPage />
+			</MemoryRouter>,
+		)
 		fireEvent.click(screen.getByTestId("mobile-recording-session-back"))
 
 		expect(facadeMock.showList).toHaveBeenCalled()
 
 		cleanup()
 		facadeMock.presentation = "list"
-		render(<AudioRecordingEntryPage />)
+		render(
+			<MemoryRouter>
+				<AudioRecordingEntryPage />
+			</MemoryRouter>,
+		)
 
 		expect(screen.getByTestId("mobile-audio-recording-list-panel")).toBeInTheDocument()
 		fireEvent.click(screen.getByTestId("resume-recording-entry"))

@@ -3,96 +3,95 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
-import { useMobileRecordingEntryFacade } from "../hooks/useMobileRecordingEntryFacade"
+import { useRecordingEntryFacade } from "../useRecordingEntryFacade"
 
-const runtimeMock = {
-	state: {
-		isRecording: false,
-		isPaused: false,
-		duration: "00:00:00",
-		isStartingRecord: false,
-		currentSession: {},
-	},
-	actions: {
-		startRecording: vi.fn(),
-		finishRecording: vi.fn(),
-		openCurrentRecording: vi.fn(),
-		cancelRecording: vi.fn(),
-	},
-	WaveformComponent: () => null,
-}
-
-const recordSummaryServiceMock = {
-	ensureProjectAndTopic: vi.fn(),
-	pauseRecording: vi.fn(),
-	continueRecording: vi.fn(),
-	updateNote: vi.fn(),
-	on: vi.fn(() => () => undefined),
-}
-
-const recordSummaryStoreMock = {
-	status: "init",
-	isOtherTabRecording: false,
-	message: [] as Array<VoiceResultUtterance & { add_time: number; id: string }>,
-	note: { content: "", file_extension: "md" },
-	errorState: {
-		recordingError: undefined as Error | undefined,
-	},
-	businessData: {
-		workspace: null,
-		project: null,
-		topic: null,
-		model: null,
-		audioSource: undefined,
-	},
-}
-
-const workspaceStoreMock = {
-	selectedWorkspace: { id: "workspace-1", name: "Workspace One" },
-	firstWorkspace: { id: "workspace-1", name: "Workspace One" },
-}
-
-const topicModelStoreMock = {
-	selectedLanguageModel: {
-		id: "model-local-1",
-		group_id: "group-1",
-		model_id: "model-alpha",
-		model_name: "Model Alpha",
-		provider_model_id: "model-alpha",
-		model_description: "Model Alpha",
-		model_icon: "",
-		model_status: "normal",
-		sort: 1,
-	},
-}
-
-const recordingTopicModelApiMock = {
-	getRecordingTopicModel: vi.fn(),
-}
-
-const summaryModelListMock = {
-	fetchSummaryModelGroups: vi.fn(),
-	resolveDefaultSummaryModelId: vi.fn(),
-}
-
-const superMagicApiMock = {
-	getWorkspaces: vi.fn(),
-	createProject: vi.fn(),
-	createAudioProject: vi.fn(),
-	deleteProject: vi.fn(),
-}
-
-function createFileList(files: File[]): FileList {
+const {
+	runtimeMock,
+	recordSummaryServiceMock,
+	recordSummaryStoreMock,
+	workspaceStoreMock,
+	topicModelStoreMock,
+	recordingTopicModelApiMock,
+	summaryModelListMock,
+	superMagicApiMock,
+	audioRecordingsServiceMock,
+} = vi.hoisted(() => {
 	return {
-		length: files.length,
-		item: (index: number) => files[index] ?? null,
-		...files,
-	} as FileList
-}
+		runtimeMock: {
+			state: {
+				isRecording: false,
+				isPaused: false,
+				duration: "00:00:00",
+				isStartingRecord: false,
+				currentSession: {},
+			},
+			actions: {
+				startRecording: vi.fn(),
+				finishRecording: vi.fn(),
+				openCurrentRecording: vi.fn(),
+				cancelRecording: vi.fn(),
+			},
+			WaveformComponent: () => null,
+		},
+		recordSummaryServiceMock: {
+			ensureProjectAndTopic: vi.fn(),
+			pauseRecording: vi.fn(),
+			continueRecording: vi.fn(),
+			updateNote: vi.fn(),
+			on: vi.fn(() => () => undefined),
+		},
+		recordSummaryStoreMock: {
+			status: "init",
+			message: [] as Array<VoiceResultUtterance & { add_time: number; id: string }>,
+			note: { content: "", file_extension: "md" },
+			errorState: {
+				recordingError: undefined as Error | undefined,
+			},
+			businessData: {
+				workspace: null,
+				project: null,
+				topic: null,
+				model: null,
+				audioSource: undefined,
+			},
+		},
+		workspaceStoreMock: {
+			selectedWorkspace: { id: "workspace-1", name: "Workspace One" },
+			firstWorkspace: { id: "workspace-1", name: "Workspace One" },
+		},
+		topicModelStoreMock: {
+			selectedLanguageModel: {
+				id: "model-local-1",
+				group_id: "group-1",
+				model_id: "model-alpha",
+				model_name: "Model Alpha",
+				provider_model_id: "model-alpha",
+				model_description: "Model Alpha",
+				model_icon: "",
+				model_status: "normal",
+				sort: 1,
+			},
+		},
+		recordingTopicModelApiMock: {
+			getRecordingTopicModel: vi.fn(),
+		},
+		summaryModelListMock: {
+			fetchSummaryModelGroups: vi.fn(),
+			resolveDefaultSummaryModelId: vi.fn(),
+		},
+		superMagicApiMock: {
+			getWorkspaces: vi.fn(),
+			createProject: vi.fn(),
+			createAudioProject: vi.fn(),
+			deleteProject: vi.fn(),
+		},
+		audioRecordingsServiceMock: {
+			submitSummary: vi.fn(),
+		},
+	}
+})
 
-const audioRecordingsServiceMock = {
-	submitSummary: vi.fn(),
-}
+let queuedFiles: File[] = []
 
 interface MockSaveUploadFileToProjectResponse {
 	file_id: string
@@ -107,7 +106,6 @@ interface MockSaveUploadFileToProjectResponse {
 	relative_file_path: string
 }
 
-let queuedFiles: File[] = []
 let completedUpload:
 	| ((
 			fileId: string,
@@ -129,6 +127,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("sonner", () => ({
 	toast: {
 		error: vi.fn(),
+		success: vi.fn(),
 	},
 }))
 
@@ -141,53 +140,35 @@ vi.mock("@/services/recordSummary/serviceInstance", () => ({
 }))
 
 vi.mock("@/stores/recordingSummary", () => ({
-	get default() {
-		return recordSummaryStoreMock
-	},
+	default: recordSummaryStoreMock,
 }))
 
 vi.mock("@/pages/superMagic/stores/core", () => ({
-	get workspaceStore() {
-		return workspaceStoreMock
-	},
+	workspaceStore: workspaceStoreMock,
 	projectStore: {},
 	topicStore: {},
 }))
 
 vi.mock("@/stores/superMagic/topicModelStore", () => ({
-	get default() {
-		return topicModelStoreMock
-	},
+	default: topicModelStoreMock,
 }))
 
 vi.mock(
 	"@/pages/superMagic/pages/AudioRecordings/apis/recording-settings-api",
-	() => ({
-		getRecordingTopicModel: (...args: any[]) =>
-			recordingTopicModelApiMock.getRecordingTopicModel(...args),
-	}),
+	() => recordingTopicModelApiMock,
 )
 
 vi.mock(
 	"@/pages/superMagic/pages/AudioRecordings/utils/summary-model-list",
-	() => ({
-		fetchSummaryModelGroups: (...args: any[]) =>
-			summaryModelListMock.fetchSummaryModelGroups(...args),
-		resolveDefaultSummaryModelId: (...args: any[]) =>
-			summaryModelListMock.resolveDefaultSummaryModelId(...args),
-	}),
+	() => summaryModelListMock,
 )
 
 vi.mock("@/services/audioRecordings/AudioRecordingsService", () => ({
-	get audioRecordingsService() {
-		return audioRecordingsServiceMock
-	},
+	audioRecordingsService: audioRecordingsServiceMock,
 }))
 
 vi.mock("@/apis", () => ({
-	get SuperMagicApi() {
-		return superMagicApiMock
-	},
+	SuperMagicApi: superMagicApiMock,
 }))
 
 vi.mock("@/pages/superMagic/components/MessageEditor/hooks/useFileUpload", () => {
@@ -227,10 +208,6 @@ vi.mock("@/components/business/RecordingSummary/components/MessageList", () => (
 	default: () => null,
 }))
 
-vi.mock("@/components/business/RecordingSummary/AudioUploadAction", () => ({
-	default: () => null,
-}))
-
 vi.mock("@/assets/locales/locale-adapters", () => ({
 	getLocaleModules: () => ({}),
 	getAdminLocaleModules: () => ({}),
@@ -238,7 +215,15 @@ vi.mock("@/assets/locales/locale-adapters", () => ({
 	loadMagicFlowLocale: vi.fn(),
 }))
 
-describe("useMobileRecordingEntryFacade", () => {
+function createFileList(files: File[]): FileList {
+	return {
+		length: files.length,
+		item: (index: number) => files[index] ?? null,
+		...files,
+	} as FileList
+}
+
+describe("useRecordingEntryFacade", () => {
 	beforeEach(() => {
 		runtimeMock.state.isRecording = false
 		runtimeMock.state.isPaused = false
@@ -325,19 +310,17 @@ describe("useMobileRecordingEntryFacade", () => {
 		})
 	})
 
-	it("defaults to recording presentation when a shared session is already active", () => {
+	it("defaults to recording presentation when a shared session is already active", async () => {
 		recordSummaryStoreMock.status = "recording"
 
-		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		expect(result.current.presentation).toBe("recording")
 		expect(result.current.isSessionActive).toBe(true)
 	})
 
 	it("starts recording with a new audio project context and switches to recording presentation", async () => {
-		const { useMobileRecordingEntryFacade } =
-			await import("../hooks/useMobileRecordingEntryFacade")
-		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		await act(async () => {
 			await result.current.startRecording()
@@ -369,9 +352,7 @@ describe("useMobileRecordingEntryFacade", () => {
 	it("collapses back to list presentation without stopping the shared session", async () => {
 		recordSummaryStoreMock.status = "recording"
 
-		const { useMobileRecordingEntryFacade } =
-			await import("../hooks/useMobileRecordingEntryFacade")
-		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		act(() => {
 			result.current.showList()
@@ -398,9 +379,7 @@ describe("useMobileRecordingEntryFacade", () => {
 			},
 		})
 
-		const { useMobileRecordingEntryFacade } =
-			await import("../hooks/useMobileRecordingEntryFacade")
-		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		await act(async () => {
 			await result.current.startRecording()
@@ -458,9 +437,7 @@ describe("useMobileRecordingEntryFacade", () => {
 		])
 		summaryModelListMock.resolveDefaultSummaryModelId.mockReturnValue("model-fallback")
 
-		const { useMobileRecordingEntryFacade } =
-			await import("../hooks/useMobileRecordingEntryFacade")
-		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		await act(async () => {
 			await result.current.startRecording()
@@ -515,13 +492,11 @@ describe("useMobileRecordingEntryFacade", () => {
 
 		vi.useFakeTimers()
 
-		const { useMobileRecordingEntryFacade } =
-			await import("../hooks/useMobileRecordingEntryFacade")
-		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		const startPromise = act(async () => {
 			const pendingStart = result.current.startRecording()
-			await vi.advanceTimersByTimeAsync(15001)
+			await vi.advanceTimersByTimeAsync(15500)
 			await pendingStart
 		})
 
@@ -544,9 +519,7 @@ describe("useMobileRecordingEntryFacade", () => {
 			return () => undefined
 		})
 
-		const { useMobileRecordingEntryFacade } =
-			await import("../hooks/useMobileRecordingEntryFacade")
-		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		recordSummaryStoreMock.errorState.recordingError = new Error(
 			"Failed to start recording: PermissionDeniedError: Microphone permission denied by user",
@@ -578,9 +551,7 @@ describe("useMobileRecordingEntryFacade", () => {
 			},
 		})
 
-		const { useMobileRecordingEntryFacade } =
-			await import("../hooks/useMobileRecordingEntryFacade")
-		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		await act(async () => {
 			await result.current.importAudioFiles(
@@ -641,9 +612,7 @@ describe("useMobileRecordingEntryFacade", () => {
 			},
 		)
 
-		const { useMobileRecordingEntryFacade } =
-			await import("../hooks/useMobileRecordingEntryFacade")
-		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		await act(async () => {
 			await result.current.finishRecording()

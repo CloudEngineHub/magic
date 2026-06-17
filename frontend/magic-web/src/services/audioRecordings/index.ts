@@ -16,3 +16,4 @@ export {
 	type AudioRecordingGroupsResult,
 } from "./RecordingGroupsService"
 export { AUDIO_PROJECT_MODE, isAudioProjectMode } from "./audioProjectMode"
+export { resolveRecordSummaryResultHref } from "./recordingOrigin"

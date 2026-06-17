@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
+import { MemoryRouter } from "react-router"
 
 import AudioRecordingEntryPage from "../index"
 import { useOptionalSuperMobileShellOutlet } from "@/pages/superMagicMobile/components/MobileShell"
@@ -96,7 +97,11 @@ vi.mock("@/pages/superMagicMobile/components/MobileShell", () => ({
 
 describe("AudioRecordingEntryPage", () => {
 	it("renders mobile shell header and list panel when mounted under app route layout", () => {
-		render(<AudioRecordingEntryPage />)
+		render(
+			<MemoryRouter>
+				<AudioRecordingEntryPage />
+			</MemoryRouter>,
+		)
 
 		expect(screen.getByTestId("mobile-audio-entry-page")).toBeInTheDocument()
 		expect(screen.getByTestId("mobile-audio-entry-menu-button")).toBeInTheDocument()
@@ -107,7 +112,11 @@ describe("AudioRecordingEntryPage", () => {
 	})
 
 	it("opens settings sheet when header settings button is clicked", () => {
-		render(<AudioRecordingEntryPage />)
+		render(
+			<MemoryRouter>
+				<AudioRecordingEntryPage />
+			</MemoryRouter>,
+		)
 
 		expect(screen.getByTestId("mobile-recording-settings-trigger")).toBeInTheDocument()
 		expect(screen.queryByTestId("mobile-recording-settings-sheet")).toBeNull()
@@ -119,7 +128,11 @@ describe("AudioRecordingEntryPage", () => {
 	it("wraps panel with SuperMobileShellRouteLayout when shell outlet is unavailable", () => {
 		vi.mocked(useOptionalSuperMobileShellOutlet).mockReturnValueOnce(null)
 
-		render(<AudioRecordingEntryPage />)
+		render(
+			<MemoryRouter>
+				<AudioRecordingEntryPage />
+			</MemoryRouter>,
+		)
 
 		const shell = screen.getByTestId("audio-recording-entry-shell-fallback")
 		expect(shell).toHaveAttribute("data-active-view", "recording")
