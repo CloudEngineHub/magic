@@ -128,7 +128,7 @@ describe("MobileRecordingCard", () => {
 		expect(summarizeButton).toHaveTextContent("Summarizing now")
 	})
 
-	it("shows pending duration placeholder while summarizing duration is unavailable", () => {
+	it("shows duration fallback while summarizing duration is unavailable", () => {
 		render(
 			<MobileRecordingCard
 				item={createItem({
@@ -144,10 +144,43 @@ describe("MobileRecordingCard", () => {
 		expect(screen.getByText("--:--")).toBeInTheDocument()
 	})
 
+	it("shows duration fallback for imported audio when duration is unavailable", () => {
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					audio_source: "imported",
+					card_status: "summarizing",
+					is_summarized: false,
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+					duration: 0,
+				})}
+			/>,
+		)
+
+		expect(screen.getByText("--:--")).toBeInTheDocument()
+		expect(screen.getByText("Imported audio")).toBeInTheDocument()
+	})
+
+	it("shows formatted duration for imported audio when duration is available", () => {
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					audio_source: "imported",
+					duration: 754,
+				})}
+			/>,
+		)
+
+		expect(screen.getByText("12:34")).toBeInTheDocument()
+	})
+
 	it("renders transferring progress state and hides time meta", () => {
 		render(
 			<MobileRecordingCard
 				item={createItem({
+					card_status: "uploading",
+					is_summarized: false,
 					transferStatus: "transferring",
 					transferProgress: 0.45,
 				})}
@@ -166,6 +199,8 @@ describe("MobileRecordingCard", () => {
 		render(
 			<MobileRecordingCard
 				item={createItem({
+					card_status: "upload_failed",
+					is_summarized: false,
 					transferStatus: "failed",
 					transferProgress: 0.8,
 				})}

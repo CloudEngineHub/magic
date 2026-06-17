@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useDebounce } from "ahooks"
 import type { AudioProjectListItem, AudioRecordingSummaryFilter } from "@/types/audioProject"
-import { AudioRecordingsStore } from "@/pages/superMagic/pages/AudioRecordings/stores/audio-recordings-store"
+import { audioRecordingsStore } from "@/pages/superMagic/pages/AudioRecordings/stores/audio-recordings-store"
 import {
 	ALL_RECORDING_GROUP_ID,
 	audioRecordingsService,
@@ -20,12 +20,11 @@ import {
 const SEARCH_DEBOUNCE_MS = 300
 
 /**
- * Binds mobile recording list UI to a page-scoped AudioRecordingsStore instance.
+ * Binds mobile recording list UI to a global shared AudioRecordingsStore instance.
  * Mirrors PC desktop lifecycle: register poller on mount, reset on unmount.
  */
 export function useMobileAudioRecordingsList() {
-	const storeRef = useRef(new AudioRecordingsStore())
-	const store = storeRef.current
+	const store = audioRecordingsStore
 
 	const [searchKeyword, setSearchKeyword] = useState("")
 	const [isSearchComposing, setIsSearchComposing] = useState(false)

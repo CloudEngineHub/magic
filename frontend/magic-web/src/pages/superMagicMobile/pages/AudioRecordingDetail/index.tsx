@@ -74,6 +74,7 @@ export default function MobileAudioRecordingDetailPage() {
 		title,
 		attachmentTree,
 		attachmentList,
+		mutateAudioProjectItem,
 	} = useMobileRecordingDetailData({
 		projectId,
 		initialTitle: locationState?.projectName,
@@ -367,9 +368,9 @@ export default function MobileAudioRecordingDetailPage() {
 				return false
 			}
 
-			setDetailItem((current) =>
-				current ? buildOptimisticSummarizingProject(current) : current,
-			)
+			const optimisticItem = buildOptimisticSummarizingProject(item)
+			setDetailItem(optimisticItem)
+			mutateAudioProjectItem(optimisticItem)
 			if (activeTab === "summary") {
 				setActiveTab("summary")
 			}
@@ -575,6 +576,7 @@ export default function MobileAudioRecordingDetailPage() {
 				onMoveToGroup={handleOpenMoveGroup}
 				isSubmittingAction={actionSubmitting}
 				isSubmittingSummary={summarySubmitting}
+				showRegenerateAction
 			/>
 
 			<MobileRecordingMoveGroupSheet

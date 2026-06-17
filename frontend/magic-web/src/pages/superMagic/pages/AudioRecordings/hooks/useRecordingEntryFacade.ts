@@ -21,6 +21,7 @@ import { getRecordingTopicModel } from "../apis/recording-settings-api"
 import { fetchSummaryModelGroups, resolveDefaultSummaryModelId } from "../utils/summary-model-list"
 import { getCachedRecordingSettings } from "./useRecordingSettings"
 import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordingsService"
+import { audioRecordingsStore } from "../stores/audio-recordings-store"
 import { SuperMagicApi } from "@/apis"
 import { AUDIO_WORKSPACE_TYPE } from "@/services/audioRecordings"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
@@ -195,6 +196,8 @@ interface PendingImportRequest {
 	modelId: string
 	files: File[]
 	status: "queued" | "uploading"
+	/** The task key generated when the audio project was created; must be forwarded to the ASR summary API. */
+	taskKey: string
 }
 
 interface AudioProjectContext {
@@ -272,7 +275,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	const [startupState, setStartupState] = useState<RecordingStartupState>("idle")
 	const [startupErrorMessage, setStartupErrorMessage] = useState("")
 	const [startupErrorDetail, setStartupErrorDetail] = useState("")
-	const [optimisticItems, setOptimisticItems] = useState<AudioProjectListItem[]>([])
+	const optimisticItems = audioRecordingsStore.optimisticItems
 	const [refreshToken, setRefreshToken] = useState(0)
 	const [pendingImportRequest, setPendingImportRequest] = useState<PendingImportRequest | null>(
 		null,
@@ -386,48 +389,39 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			if (!pendingImportRequest) return
 			const projId = pendingImportRequest.projectId
 			if (status === "error") {
-				setOptimisticItems((currentItems) =>
-					currentItems.map((item) =>
-						item.id === projId ? { ...item, transferStatus: "failed" } : item,
-					),
-				)
+				audioRecordingsStore.updateOptimisticItemTransfer(projId, "failed")
 				toast.error(
 					error || t("audioRecordings:summary.submitFailed", { ns: "audioRecordings" }),
 				)
 			} else if (status === "uploading") {
-				setOptimisticItems((currentItems) =>
-					currentItems.map((item) =>
-						item.id === projId
-							? {
-									...item,
-									transferStatus: "transferring",
-									transferProgress: progress / 100,
-								}
-							: item,
-					),
+				audioRecordingsStore.updateOptimisticItemTransfer(
+					projId,
+					"transferring",
+					progress / 100,
 				)
 			}
 		},
 		onFileCompleted: async (_fileId, _reportResult, saveResult) => {
 			if (!saveResult || !pendingImportRequest) return
 
+			// Use the task key that was generated when the audio project was created.
+			// saveResult.task_id is the file-save task ID from /super-agent/file/project/save,
+			// which is unrelated to the ASR session key and is often "0" or another
+			// placeholder — using it would send the wrong key to /api/v1/asr/summary.
 			const importedProject = buildOptimisticRecordingItem({
 				projectId: pendingImportRequest.projectId,
 				projectName: pendingImportRequest.projectName,
 				workspaceId: pendingImportRequest.workspaceId,
 				modelId: pendingImportRequest.modelId,
 				audioFileId: saveResult.file_id,
-				taskKey: saveResult.task_id,
+				taskKey: pendingImportRequest.taskKey,
 				audioSource: "imported",
 				topicId: pendingImportRequest.topicId,
 			})
 			importedProject.transferStatus = "done"
 			importedProject.card_status = "summarizing"
 
-			setOptimisticItems((currentItems) => [
-				importedProject,
-				...currentItems.filter((item) => item.id !== pendingImportRequest.projectId),
-			])
+			audioRecordingsStore.addOptimisticItem(importedProject)
 
 			try {
 				await audioRecordingsService.submitSummary(
@@ -653,7 +647,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				onSuccess: (result) => {
 					const localDurationSeconds = parseHmsDurationToSeconds(runtime.state.duration)
 
-					setOptimisticItems((currentItems) => [
+					audioRecordingsStore.addOptimisticItem(
 						buildOptimisticRecordingItem({
 							projectId: result.project_id,
 							projectName: result.project_name,
@@ -662,8 +656,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 							duration: localDurationSeconds,
 							topicId: result.topic_id,
 						}),
-						...currentItems.filter((item) => item.id !== result.project_id),
-					])
+					)
 					setRefreshToken((currentToken) => currentToken + 1)
 					setPresentation("list")
 					setStartupState("idle")
@@ -717,7 +710,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	)
 
 	const clearOptimisticItem = useCallback((projectId: string) => {
-		setOptimisticItems((currentItems) => currentItems.filter((item) => item.id !== projectId))
+		audioRecordingsStore.clearOptimisticItem(projectId)
 	}, [])
 
 	const retryImport = useCallback(
@@ -725,13 +718,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			const fileId = projectToFileIdMap[projectId]
 			if (!fileId) return
 
-			setOptimisticItems((currentItems) =>
-				currentItems.map((item) =>
-					item.id === projectId
-						? { ...item, transferStatus: "transferring", transferProgress: 0 }
-						: item,
-				),
-			)
+			audioRecordingsStore.updateOptimisticItemTransfer(projectId, "transferring", 0)
 
 			try {
 				await handleRetry(fileId)
@@ -778,7 +765,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			initialOptimisticItem.transferStatus = "transferring"
 			initialOptimisticItem.transferProgress = 0
 
-			setOptimisticItems((currentItems) => [initialOptimisticItem, ...currentItems])
+			audioRecordingsStore.addOptimisticItem(initialOptimisticItem)
 
 			setPendingImportRequest({
 				projectId: audioProjectContext.project.id,
@@ -788,6 +775,9 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				modelId: model.model_id,
 				files: normalizedFiles,
 				status: "queued",
+				// Forward the project-level task key so onFileCompleted can pass it
+				// directly to the ASR summary API instead of the unrelated file-save task_id.
+				taskKey,
 			})
 		},
 		[createAudioProjectContext, resolveRecordingModel, t],

@@ -14,7 +14,14 @@ export type AudioProjectPhase = "waiting" | "merging" | "summarizing" | (string 
 export type AudioProjectAudioSource = "recorded" | "imported" | (string & {})
 
 /** PC list card status — only items past APP upload/merge pipeline reach these states */
-export type AudioRecordingCardStatus = "not_summarized" | "summarizing" | "summarized"
+export type AudioRecordingCardStatus =
+	| "uploading"
+	| "upload_failed"
+	| "merging"
+	| "not_summarized"
+	| "summarizing"
+	| "summary_failed"
+	| "summarized"
 
 export interface QueryAudioProjectsParams {
 	page: number

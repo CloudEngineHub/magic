@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
@@ -38,81 +38,126 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 	const [attachmentTree, setAttachmentTree] = useState<AttachmentItem[]>([])
 	const [attachmentList, setAttachmentList] = useState<AttachmentItem[]>([])
 
+	const activeProjectIdRef = useRef(projectId)
 	useEffect(() => {
-		let cancelled = false
+		activeProjectIdRef.current = projectId
+	}, [projectId])
 
-		/** Loads all completed preview assets for the current route project. */
-		async function loadDetail() {
-			if (!projectId) {
-				setLoading(false)
-				setError(true)
-				return
-			}
-
-			setLoading(true)
-			setError(false)
-			setProjectDetail(null)
-			setTexts({ summary: {} })
-			setAudioUrl("")
-			setAttachmentTree([])
-			setAttachmentList([])
-
-			try {
-				const [attachmentsResponse, projectDetail, item] = await Promise.all([
-					SuperMagicApi.getAttachmentsByProjectId({ projectId, temporaryToken: "" }),
-					loadProjectDetail(projectId),
-					loadSingleProject(projectId),
-				])
-				if (cancelled) return
-
-				const processed = AttachmentDataProcessor.processAttachmentData(attachmentsResponse)
-				setAttachmentTree(processed.tree)
-				setAttachmentList(processed.list)
-
-				const bundleRootPath = resolveRecordingBundleRootPath(
-					processed.tree,
-					processed.list,
-				)
-				const magicProjectFile = findMagicProjectFile(processed.list, bundleRootPath)
-				const magicProjectContent = magicProjectFile
-					? await readTextFile(magicProjectFile.file_id)
-					: undefined
-				const magicProjectConfig = magicProjectContent
-					? parseMagicProjectConfig(magicProjectContent.content)
-					: null
-				const nextFileMap = buildRecordingDetailFileMap({
-					tree: processed.tree,
-					list: processed.list,
-					magicProjectConfig,
-					bundleRootPath,
-				})
-				if (cancelled) return
-
-				const [nextTexts, nextAudioUrl] = await Promise.all([
-					loadTextFiles(nextFileMap),
-					loadAudioUrl(nextFileMap.audio),
-				])
-				if (cancelled) return
-
-				setAudioProjectItem(item)
-				setProjectDetail(projectDetail)
-				setFileMap(nextFileMap)
-				setTexts(nextTexts)
-				setAudioUrl(nextAudioUrl)
-			} catch (loadError) {
-				console.error("Failed to load recording detail:", loadError)
-				if (!cancelled) setError(true)
-			} finally {
-				if (!cancelled) setLoading(false)
-			}
+	/** Loads all completed preview assets for the current route project. */
+	const loadDetail = useCallback(async () => {
+		if (!projectId) {
+			setLoading(false)
+			setError(true)
+			return
 		}
 
-		void loadDetail()
+		const currentProjectId = projectId
+		setLoading(true)
+		setError(false)
+		setProjectDetail(null)
+		setTexts({ summary: {} })
+		setAudioUrl("")
+		setAttachmentTree([])
+		setAttachmentList([])
 
-		return () => {
-			cancelled = true
+		try {
+			const [attachmentsResponse, projectDetail, item] = await Promise.all([
+				SuperMagicApi.getAttachmentsByProjectId({ projectId, temporaryToken: "" }),
+				loadProjectDetail(projectId),
+				loadSingleProject(projectId),
+			])
+			if (currentProjectId !== activeProjectIdRef.current) return
+
+			const processed = AttachmentDataProcessor.processAttachmentData(attachmentsResponse)
+
+			const bundleRootPath = resolveRecordingBundleRootPath(processed.tree, processed.list)
+			const magicProjectFile = findMagicProjectFile(processed.list, bundleRootPath)
+			const magicProjectContent = magicProjectFile
+				? await readTextFile(magicProjectFile.file_id)
+				: undefined
+			if (currentProjectId !== activeProjectIdRef.current) return
+
+			const magicProjectConfig = magicProjectContent
+				? parseMagicProjectConfig(magicProjectContent.content)
+				: null
+			const nextFileMap = buildRecordingDetailFileMap({
+				tree: processed.tree,
+				list: processed.list,
+				magicProjectConfig,
+				bundleRootPath,
+			})
+
+			const [nextTexts, nextAudioUrl] = await Promise.all([
+				loadTextFiles(nextFileMap),
+				loadAudioUrl(nextFileMap.audio),
+			])
+			if (currentProjectId !== activeProjectIdRef.current) return
+
+			setAttachmentTree(processed.tree)
+			setAttachmentList(processed.list)
+			setAudioProjectItem(item)
+			setProjectDetail(projectDetail)
+			setFileMap(nextFileMap)
+			setTexts(nextTexts)
+			setAudioUrl(nextAudioUrl)
+		} catch (loadError) {
+			console.error("Failed to load recording detail:", loadError)
+			if (currentProjectId === activeProjectIdRef.current) setError(true)
+		} finally {
+			if (currentProjectId === activeProjectIdRef.current) setLoading(false)
 		}
 	}, [projectId])
+
+	useEffect(() => {
+		void loadDetail()
+	}, [loadDetail])
+
+	// Polls summary task status every 10s if in progress
+	useEffect(() => {
+		if (!projectId) return
+
+		const isSummarizing =
+			audioProjectItem?.card_status === "summarizing" ||
+			(audioProjectItem?.current_phase === "summarizing" &&
+				audioProjectItem?.phase_status === "in_progress")
+
+		if (!isSummarizing) return
+
+		const currentProjectId = projectId
+		let timerId: ReturnType<typeof setInterval> | null = null
+
+		async function pollStatus() {
+			try {
+				const latestItem = await loadSingleProject(projectId)
+				if (currentProjectId !== activeProjectIdRef.current) return
+				if (!latestItem) return
+
+				const latestIsSummarizing =
+					latestItem.card_status === "summarizing" ||
+					(latestItem.current_phase === "summarizing" &&
+						latestItem.phase_status === "in_progress")
+
+				if (!latestIsSummarizing) {
+					if (timerId) clearInterval(timerId)
+					void loadDetail()
+				} else {
+					setAudioProjectItem(latestItem)
+				}
+			} catch (err) {
+				console.error("Failed to poll recording status:", err)
+			}
+		}
+
+		timerId = setInterval(pollStatus, 10000)
+
+		return () => {
+			if (timerId) clearInterval(timerId)
+		}
+	}, [projectId, audioProjectItem, loadDetail])
+
+	const mutateAudioProjectItem = useCallback((item: AudioProjectListItem) => {
+		setAudioProjectItem(item)
+	}, [])
 
 	const projectItem = useMemo(
 		() => mergeProjectDetailIntoAudioItem(audioProjectItem, projectDetail),
@@ -135,6 +180,8 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 		title,
 		attachmentTree,
 		attachmentList,
+		refresh: loadDetail,
+		mutateAudioProjectItem,
 	}
 }
 

@@ -200,4 +200,20 @@ describe("MobileRecordingMoreSheet", () => {
 		expect(onClose).toHaveBeenCalledTimes(1)
 		expect(toast.info).not.toHaveBeenCalled()
 	})
+
+	it("shows regenerate summary action for summarized items when showRegenerateAction is enabled", () => {
+		render(
+			<MobileRecordingMoreSheet
+				isOpen
+				item={createItem()}
+				onClose={vi.fn()}
+				onRename={vi.fn()}
+				onDelete={vi.fn()}
+				onSummarize={vi.fn()}
+				showRegenerateAction
+			/>,
+		)
+
+		expect(screen.getByText("Regenerate summary")).toBeInTheDocument()
+	})
 })

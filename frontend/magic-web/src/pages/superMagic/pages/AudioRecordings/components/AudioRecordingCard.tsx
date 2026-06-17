@@ -205,6 +205,8 @@ interface CardActionMenuProps {
 	onOpenProject?: () => void
 	onRename?: () => void
 	onDelete?: () => void
+	onRegenerateSummary?: () => void
+	regenerateSummaryLabel?: string
 }
 
 /** Renders project navigation, rename, and delete actions behind the card ellipsis menu */
@@ -217,6 +219,8 @@ function CardActionMenu({
 	onOpenProject,
 	onRename,
 	onDelete,
+	onRegenerateSummary,
+	regenerateSummaryLabel,
 }: CardActionMenuProps) {
 	/** Routes to the source project while keeping the card click handler from firing */
 	const handleOpenProject = useCallback(
@@ -241,6 +245,14 @@ function CardActionMenu({
 			onDelete?.()
 		},
 		[onDelete],
+	)
+
+	const handleRegenerateSummary = useCallback(
+		(event: MouseEvent) => {
+			event.stopPropagation()
+			onRegenerateSummary?.()
+		},
+		[onRegenerateSummary],
 	)
 
 	const handleTriggerClick = useCallback((event: MouseEvent) => {
@@ -281,6 +293,15 @@ function CardActionMenu({
 					<PenLine className="h-4 w-4" aria-hidden />
 					{renameLabel}
 				</DropdownMenuItem>
+				{onRegenerateSummary ? (
+					<DropdownMenuItem
+						onClick={handleRegenerateSummary}
+						data-testid={`audio-recording-card-${cardId}-action-regenerate`}
+					>
+						<Sparkles className="h-4 w-4" aria-hidden />
+						{regenerateSummaryLabel}
+					</DropdownMenuItem>
+				) : null}
 				<DropdownMenuItem
 					variant="destructive"
 					onClick={handleDelete}
@@ -547,6 +568,12 @@ function AudioRecordingCard({
 						onOpenProject={handleOpenProject}
 						onRename={handleRename}
 						onDelete={handleDelete}
+						regenerateSummaryLabel={t("card.retrySummary")}
+						onRegenerateSummary={
+							item.card_status === "summarized" && onSummarize
+								? () => onSummarize(item)
+								: undefined
+						}
 					/>
 				</div>
 			</div>

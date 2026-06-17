@@ -2,7 +2,7 @@ import type { ComponentType, ReactNode } from "react"
 import { observer } from "mobx-react-lite"
 import { InfiniteScroll } from "antd-mobile"
 import { toast } from "sonner"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
@@ -109,7 +109,7 @@ function AudioRecordingListPanel({
 	onContinueRecording,
 	onFinishRecording,
 	WaveformComponent,
-	optimisticItems = [],
+	optimisticItems: propsOptimisticItems = [],
 	refreshToken = 0,
 	onImportFiles,
 	isImporting = false,
@@ -167,7 +167,14 @@ function AudioRecordingListPanel({
 		refreshGroups,
 	} = useMobileAudioRecordingsList()
 
-	const mergedList = useMemo(() => {
+	// Prioritize store.optimisticItems to guarantee MobX reactive tracking,
+	// falling back to propsOptimisticItems (mainly for unit tests where store is mocked).
+	const optimisticItems =
+		store.optimisticItems !== undefined ? store.optimisticItems : propsOptimisticItems
+
+	// Directly calculate mergedList on every render to prevent React useMemo from caching
+	// outdated array contents when MobX updates property fields of items inside the array.
+	const mergedList = (() => {
 		const mergedMap = new Map<string, AudioProjectListItem>()
 
 		// Keep optimistic items first so freshly finished recordings appear instantly.
@@ -179,7 +186,7 @@ function AudioRecordingListPanel({
 		}
 
 		return Array.from(mergedMap.values())
-	}, [optimisticItems, store.list])
+	})()
 
 	const showInitialSkeleton = store.showInitialSkeleton
 	const isEmpty = !showInitialSkeleton && mergedList.length === 0
@@ -195,6 +202,19 @@ function AudioRecordingListPanel({
 		void handleRefresh()
 	}, [handleRefresh, refreshToken])
 
+	// Serialize array properties to static strings so react-hooks/exhaustive-deps lint check passes
+	// and React correctly detects item state changes without triggering warnings.
+	const optimisticItemsStatusStr = optimisticItems
+		.map((item) => `${item.id}-${item.card_status}-${item.duration}`)
+		.join(",")
+	const authoritativeItemsStatusStr = store.list
+		.map((item) => `${item.id}-${item.card_status}-${item.duration}`)
+		.join(",")
+	const optimisticItemsIdsStr = optimisticItems.map((item) => item.id).join(",")
+	const authoritativeItemsIdsStr = store.list.map((item) => item.id).join(",")
+
+	// Detect when authoritative list catches up with the optimistic uploads and resolves them.
+	// We serialize id, status, and duration into the dependency list to force execution on property updates.
 	useEffect(() => {
 		if (!optimisticItems.length) return
 
@@ -213,8 +233,16 @@ function AudioRecordingListPanel({
 		hydratedIds.forEach((projectId) => {
 			onResolveOptimisticItem?.(projectId)
 		})
-	}, [onResolveOptimisticItem, optimisticItems, store.list])
+	}, [
+		onResolveOptimisticItem,
+		optimisticItems,
+		store.list,
+		optimisticItemsStatusStr,
+		authoritativeItemsStatusStr,
+	])
 
+	// Poll backend for items that exist in optimistic array but are not yet saved to store.list.
+	// Dependency array checks for id list changes to establish or clear the fetch interval.
 	useEffect(() => {
 		if (!optimisticItems.length) return
 
@@ -230,7 +258,13 @@ function AudioRecordingListPanel({
 		return () => {
 			window.clearInterval(timer)
 		}
-	}, [handleRefresh, optimisticItems, store.list])
+	}, [
+		handleRefresh,
+		optimisticItems,
+		store.list,
+		optimisticItemsIdsStr,
+		authoritativeItemsIdsStr,
+	])
 
 	/**
 	 * Mirrors the prototype behavior: once the active recording card scrolls out
@@ -536,6 +570,7 @@ function AudioRecordingListPanel({
 				}}
 				isSubmittingAction={moreTarget != null && store.isSubmittingAction(moreTarget.id)}
 				isSubmittingSummary={moreTarget != null && store.isSubmittingSummary(moreTarget.id)}
+				showRegenerateAction
 			/>
 
 			<MobileRecordingMoveGroupSheet

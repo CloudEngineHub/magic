@@ -79,5 +79,17 @@ export function shouldPollSummaryProgress(
 	taskKey: string | undefined,
 ): boolean {
 	if (!taskKey) return false
-	return phase === "summarizing" && status === "in_progress"
+	// Only skip polling when the phase is already in a known terminal state.
+	// We intentionally do NOT require status === "in_progress" because the list
+	// API may return current_phase without a phase_status (null/missing), yet the
+	// backend is still actively processing. resolveCardStatus uses the same
+	// "phase present + not finished" heuristic, so polling must match that breadth.
+	const isTerminal = status === "completed" || status === "failed"
+	if (isTerminal) return false
+	// Poll while merging so the UI learns when merging completes and the
+	// "Generate Summary" button should appear (merging → audio_processed state).
+	if (phase === "merging") return true
+	// Poll while summarizing to track AI generation progress in real time.
+	if (phase === "summarizing") return true
+	return false
 }

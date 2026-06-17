@@ -24,6 +24,7 @@ interface MobileRecordingMoreSheetProps {
 	isSubmittingSummary?: boolean
 	hideShareAction?: boolean
 	hideRenameAction?: boolean
+	showRegenerateAction?: boolean
 }
 
 type MoreSheetView = "menu" | "rename" | "deleteConfirm"
@@ -84,16 +85,24 @@ export function MobileRecordingMoreSheet({
 	isSubmittingSummary = false,
 	hideShareAction = false,
 	hideRenameAction = false,
+	showRegenerateAction = false,
 }: MobileRecordingMoreSheetProps) {
 	const { t } = useTranslation(["super", "audioRecordings"])
 	const recordingName = item
 		? resolveRecordingDisplayName(item.project_name, item.created_at)
 		: t("super:mobile.recordingEntry.moreSheet.untitled")
+	const isSummarized = item
+		? item.card_status === "summarized" ||
+			(item.current_phase === "summarizing" && item.phase_status === "completed")
+		: false
 	const showSummarizeAction = item
-		? shouldShowSummaryButton(item.current_phase, item.phase_status)
+		? shouldShowSummaryButton(item.current_phase, item.phase_status) ||
+			(showRegenerateAction && isSummarized)
 		: false
 	const summaryVariant = item
-		? getSummaryButtonVariant(item.current_phase, item.phase_status)
+		? showRegenerateAction && isSummarized
+			? "retry"
+			: getSummaryButtonVariant(item.current_phase, item.phase_status)
 		: null
 
 	const [view, setView] = useState<MoreSheetView>("menu")

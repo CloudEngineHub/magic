@@ -340,4 +340,24 @@ describe("AudioRecordingCard", () => {
 			"2026/06/06 11:05 的录音",
 		)
 	})
+
+	it("renders regenerate option in more-actions dropdown for summarized items", async () => {
+		const onSummarize = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem({ card_status: "summarized" })}
+				onSummarize={onSummarize}
+			/>,
+		)
+
+		const trigger = screen.getByTestId("audio-recording-card-project-1-more-actions")
+		trigger.focus()
+		fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
+
+		const regenerateOption = await screen.findByTestId("audio-recording-card-project-1-action-regenerate")
+		expect(regenerateOption).toBeInTheDocument()
+
+		fireEvent.click(regenerateOption)
+		expect(onSummarize).toHaveBeenCalledTimes(1)
+	})
 })

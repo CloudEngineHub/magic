@@ -37,6 +37,7 @@ export type SubmitSummaryResult =
 /** MobX store for PC audio recordings list: filters, pagination, and fetch lifecycle */
 export class AudioRecordingsStore {
 	list: AudioProjectListItem[] = []
+	optimisticItems: AudioProjectListItem[] = []
 	page = 1
 	pageSize = DEFAULT_PAGE_SIZE
 	keyword = ""
@@ -70,8 +71,33 @@ export class AudioRecordingsStore {
 		return this.actionSubmittingIds.has(projectId)
 	}
 
-	/**
-	 * Whether the server may return another page.
+	/** Adds an optimistic item to keep track of local uploads/recording placeholders */
+	addOptimisticItem(item: AudioProjectListItem) {
+		this.optimisticItems = [item, ...this.optimisticItems.filter((x) => x.id !== item.id)]
+	}
+
+	/** Clears an optimistic item after it is replaced by an authoritative item */
+	clearOptimisticItem(projectId: string) {
+		this.optimisticItems = this.optimisticItems.filter((x) => x.id !== projectId)
+	}
+
+	/** Updates transfer status properties for an optimistic item during upload */
+	updateOptimisticItemTransfer(
+		projectId: string,
+		status: AudioProjectListItem["transferStatus"],
+		progress?: number,
+	) {
+		this.optimisticItems = this.optimisticItems.map((item) => {
+			if (item.id !== projectId) return item
+			return {
+				...item,
+				transferStatus: status,
+				transferProgress: progress !== undefined ? progress : item.transferProgress,
+			}
+		})
+	}
+
+	/** Whether the server may return another page.
 	 * Uses server pagination (page × pageSize vs total), not client list.length,
 	 * because normalize/tab filters can shrink visible rows without implying more pages.
 	 */
@@ -100,6 +126,7 @@ export class AudioRecordingsStore {
 		this.actionSubmittingIds = new Set()
 		summaryProgressPoller.dispose()
 		this.pollerRegistered = false
+		// Keep optimisticItems across resets to preserve uploading items when switching pages
 	}
 
 	/** Binds progress poller callbacks once per store lifetime */
@@ -112,6 +139,9 @@ export class AudioRecordingsStore {
 			onTaskDone: () => undefined,
 			onTaskMissing: () => undefined,
 		})
+
+		// Trigger background polling for any already existing optimistic items
+		this.registerInProgressTasksForPolling(this.optimisticItems)
 	}
 
 	/** Unregisters poller when the list page unmounts */
@@ -252,32 +282,53 @@ export class AudioRecordingsStore {
 		const projectId = progress.project_id
 		if (!projectId) return
 
+		// 1. Update matching authoritative item in store.list
 		const index = this.list.findIndex((item) => item.id === projectId)
-		if (index < 0) return
+		if (index >= 0) {
+			const current = this.list[index]
+			const nextPhase = progress.current_phase ?? current.current_phase
+			const nextStatus = progress.phase_status ?? current.phase_status
+			const isFinished = nextStatus === "completed" && nextPhase === "summarizing"
+			const patched: AudioProjectListItem = {
+				...current,
+				current_phase: (nextPhase as AudioProjectListItem["current_phase"]) ?? null,
+				phase_status: nextStatus ?? null,
+				phase_percent: progress.phase_percent ?? current.phase_percent,
+				project_status: isFinished ? "finished" : current.project_status,
+				current_topic_status: isFinished ? "finished" : current.current_topic_status,
+				is_summarized: isFinished ? true : current.is_summarized,
+			}
+			patched.card_status = resolveCardStatusFromListItem(patched)
+			patched.is_summarized = patched.card_status === "summarized"
 
-		const current = this.list[index]
-		const nextPhase = progress.current_phase ?? current.current_phase
-		const nextStatus = progress.phase_status ?? current.phase_status
-		const patched: AudioProjectListItem = {
-			...current,
-			current_phase: (nextPhase as AudioProjectListItem["current_phase"]) ?? null,
-			phase_status: nextStatus ?? null,
-			phase_percent: progress.phase_percent ?? current.phase_percent,
-			project_status:
-				nextStatus === "completed" && nextPhase === "summarizing"
-					? "finished"
-					: current.project_status,
-			current_topic_status:
-				nextStatus === "completed" && nextPhase === "summarizing"
-					? "finished"
-					: current.current_topic_status,
+			runInAction(() => {
+				this.list[index] = patched
+			})
 		}
-		patched.card_status = resolveCardStatusFromListItem(patched)
-		patched.is_summarized = patched.card_status === "summarized"
 
-		runInAction(() => {
-			this.list[index] = patched
-		})
+		// 2. Update matching optimistic item in optimisticItems
+		const optIndex = this.optimisticItems.findIndex((item) => item.id === projectId)
+		if (optIndex >= 0) {
+			const current = this.optimisticItems[optIndex]
+			const nextPhase = progress.current_phase ?? current.current_phase
+			const nextStatus = progress.phase_status ?? current.phase_status
+			const isFinished = nextStatus === "completed" && nextPhase === "summarizing"
+			const patched: AudioProjectListItem = {
+				...current,
+				current_phase: (nextPhase as AudioProjectListItem["current_phase"]) ?? null,
+				phase_status: nextStatus ?? null,
+				phase_percent: progress.phase_percent ?? current.phase_percent,
+				project_status: isFinished ? "finished" : current.project_status,
+				current_topic_status: isFinished ? "finished" : current.current_topic_status,
+				is_summarized: isFinished ? true : current.is_summarized,
+			}
+			patched.card_status = resolveCardStatusFromListItem(patched)
+			patched.is_summarized = patched.card_status === "summarized"
+
+			runInAction(() => {
+				this.optimisticItems[optIndex] = patched
+			})
+		}
 	}
 
 	/** Triggers summary for a single list item and starts progress polling */
@@ -395,3 +446,5 @@ export class AudioRecordingsStore {
 		}
 	}
 }
+
+export const audioRecordingsStore = new AudioRecordingsStore()

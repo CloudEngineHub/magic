@@ -63,9 +63,19 @@ describe("summary-action-utils", () => {
 		expect(resolveSummaryModelId(undefined, undefined)).toBeUndefined()
 	})
 
-	it("registers polling only for summarizing in progress with task_key", () => {
+	it("registers polling for active phases, skips terminal states", () => {
+		// Explicit in_progress
 		expect(shouldPollSummaryProgress("summarizing", "in_progress", "task-1")).toBe(true)
+		expect(shouldPollSummaryProgress("merging", "in_progress", "task-1")).toBe(true)
+		// phase_status null/missing — backend may omit it; card_status still shows "summarizing"
+		// so polling must trigger to eventually update the UI
+		expect(shouldPollSummaryProgress("summarizing", null, "task-1")).toBe(true)
+		expect(shouldPollSummaryProgress("merging", null, "task-1")).toBe(true)
+		// Terminal states must NOT poll
+		expect(shouldPollSummaryProgress("summarizing", "completed", "task-1")).toBe(false)
+		expect(shouldPollSummaryProgress("summarizing", "failed", "task-1")).toBe(false)
 		expect(shouldPollSummaryProgress("merging", "completed", "task-1")).toBe(false)
+		// Missing task_key always returns false
 		expect(shouldPollSummaryProgress("summarizing", "in_progress", undefined)).toBe(false)
 	})
 })

@@ -19,16 +19,10 @@ import { cn } from "@/lib/utils"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import {
 	formatRecordingDuration,
-	isRecordingDurationPending,
 	parseAudioProjectTimestamp,
 	resolveRecordingDisplayName,
 	resolveRecordingSourceLabel,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
-import {
-	canClickSummaryButton,
-	getSummaryButtonVariant,
-	shouldShowSummaryButton,
-} from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
 import { formatRelativeTime } from "@/utils/string"
 
 interface MobileRecordingCardProps {
@@ -77,7 +71,9 @@ function LinearProgress({
 						? `repeating-linear-gradient(45deg, ${fg} 0 8px, rgba(255, 255, 255, 0.15) 8px 16px)`
 						: undefined,
 					backgroundSize: indeterminate ? "32px 32px" : undefined,
-					animation: indeterminate ? "linear-progress-stripes 0.9s linear infinite" : undefined,
+					animation: indeterminate
+						? "linear-progress-stripes 0.9s linear infinite"
+						: undefined,
 				}}
 			/>
 			{indeterminate && (
@@ -93,12 +89,11 @@ function LinearProgress({
 }
 
 interface ProgressMetaProps {
-	isTransferring: boolean
 	isTransferFailed: boolean
 	pctText: number
 }
 
-function ProgressMeta({ isTransferring, isTransferFailed, pctText }: ProgressMetaProps) {
+function ProgressMeta({ isTransferFailed, pctText }: ProgressMetaProps) {
 	const { t } = useTranslation("super")
 
 	let label = ""
@@ -117,11 +112,14 @@ function ProgressMeta({ isTransferring, isTransferFailed, pctText }: ProgressMet
 
 	return (
 		<div className="flex items-center justify-between gap-2 text-[13px] leading-5">
-			<span className="inline-flex items-center gap-1.5 min-w-0 font-medium" style={{ color }}>
+			<span
+				className="inline-flex min-w-0 items-center gap-1.5 font-medium"
+				style={{ color }}
+			>
 				<Icon className="size-3.5 shrink-0" strokeWidth={1.8} />
 				<span className="truncate">{label}</span>
 			</span>
-			<span className="font-semibold tabular-nums shrink-0" style={{ color }}>
+			<span className="shrink-0 font-semibold tabular-nums" style={{ color }}>
 				{pctText}%
 			</span>
 		</div>
@@ -174,6 +172,12 @@ function resolveSourceIcon(item: AudioProjectListItem) {
 	return Smartphone
 }
 
+/** Resolves card duration label: valid seconds are formatted, otherwise show static fallback. */
+function resolveCardDurationLabel(item: AudioProjectListItem): string {
+	const hasValidDuration = Number.isFinite(item.duration) && (item.duration ?? 0) > 0
+	return hasValidDuration ? formatRecordingDuration(item.duration ?? 0) : "--:--"
+}
+
 /**
  * Prototype-aligned recording card: three rows (title, meta, chips + CTA + more).
  * Summary status follows prototype — only "summarized" gets a chip; pending/generating use CTA buttons.
@@ -191,8 +195,7 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 	const title = resolveRecordingDisplayName(item.project_name, item.created_at)
 	const createdSeconds = parseAudioProjectTimestamp(item.created_at)
 	const timeLabel = createdSeconds != null ? relativeTimeFormatter(createdSeconds) : ""
-	const isDurationPending = isRecordingDurationPending(item)
-	const durationLabel = formatRecordingDuration(item.duration ?? 0)
+	const durationDisplayLabel = resolveCardDurationLabel(item)
 	const sourceLabel = resolveRecordingSourceLabel(item, {
 		sourceRecorded: t("card.sourceRecorded"),
 		sourceImported: t("card.sourceImported"),
@@ -200,25 +203,24 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 	})
 	const SourceIcon = resolveSourceIcon(item)
 
+	const isUploading = item.card_status === "uploading"
+	const isUploadFailed = item.card_status === "upload_failed"
+	const isSummarizing = item.card_status === "summarizing"
 	const isSummarized = item.card_status === "summarized"
-	const isSummarizing =
-		item.card_status === "summarizing" ||
-		(item.current_phase === "summarizing" && item.phase_status === "in_progress")
-	const showSummaryButton = shouldShowSummaryButton(item.current_phase, item.phase_status)
-	const summaryVariant = getSummaryButtonVariant(item.current_phase, item.phase_status)
-	const canClickSummary = canClickSummaryButton(
-		item.current_phase,
-		item.phase_status,
-		isSubmitting,
-	)
+	const isSummaryFailed = item.card_status === "summary_failed"
+
+	const showSummaryButton = item.card_status === "not_summarized" || isSummaryFailed
+
+	const canClickSummary =
+		(item.card_status === "not_summarized" || isSummaryFailed) && !isSubmitting
 
 	function resolveSummaryLabel() {
-		if (isSummarizing || isSubmitting) return t("card.summarizing")
-		if (summaryVariant === "retry") return t("card.retrySummary")
+		if (isSubmitting) return t("card.summarizing")
+		if (isSummaryFailed) return t("card.retrySummary")
 		return t("card.generateSummary")
 	}
 
-	const isProgressMode = item.transferStatus === "transferring" || item.transferStatus === "failed"
+	const isProgressMode = isUploading || isUploadFailed
 
 	return (
 		<div
@@ -246,14 +248,15 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 			{isProgressMode ? (
 				<div className="flex flex-col gap-2">
 					<ProgressMeta
-						isTransferring={item.transferStatus === "transferring"}
 						isTransferFailed={item.transferStatus === "failed"}
 						pctText={Math.round((item.transferProgress ?? 0) * 100)}
 					/>
 					<LinearProgress
 						value={item.transferProgress ?? 0}
 						tone={item.transferStatus === "failed" ? "destructive" : "default"}
-						indeterminate={item.transferStatus === "transferring" && item.transferProgress === 0}
+						indeterminate={
+							item.transferStatus === "transferring" && item.transferProgress === 0
+						}
 					/>
 				</div>
 			) : (
@@ -268,9 +271,7 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 					)}
 					<span className="inline-flex shrink-0 items-center gap-1">
 						<AudioLines className="size-3.5" strokeWidth={1.8} />
-						<span className={cn("tabular-nums", isDurationPending && "animate-pulse")}>
-							{isDurationPending ? "--:--" : durationLabel}
-						</span>
+						<span className="tabular-nums">{durationDisplayLabel}</span>
 					</span>
 				</div>
 			)}

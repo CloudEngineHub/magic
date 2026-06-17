@@ -252,6 +252,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 			loading: false,
 			error: false,
 			projectItem: createItem(),
+			mutateAudioProjectItem: vi.fn(),
 			fileMap: {
 				summaryFiles: [{ type: "summary", fileId: "summary-file", fileName: "summary.md" }],
 				magicProject: { file_id: "magic-project-file-001" },
@@ -293,6 +294,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		detailDataMock.mockReturnValue({
 			loading: false,
 			error: false,
+			mutateAudioProjectItem: vi.fn(),
 			projectItem: createItem({
 				card_status: "summarized",
 				current_phase: "summarizing",
@@ -335,6 +337,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		detailDataMock.mockReturnValue({
 			loading: false,
 			error: false,
+			mutateAudioProjectItem: vi.fn(),
 			projectItem: createItem({
 				card_status: "summarized",
 				current_phase: "summarizing",
@@ -373,6 +376,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		detailDataMock.mockReturnValue({
 			loading: false,
 			error: false,
+			mutateAudioProjectItem: vi.fn(),
 			projectItem: createItem({
 				card_status: "summarizing",
 				current_phase: "summarizing",
@@ -461,6 +465,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		detailDataMock.mockReturnValue({
 			loading: false,
 			error: false,
+			mutateAudioProjectItem: vi.fn(),
 			projectItem: null,
 			fileMap: {
 				summaryFiles: [],
@@ -485,6 +490,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		detailDataMock.mockReturnValue({
 			loading: false,
 			error: false,
+			mutateAudioProjectItem: vi.fn(),
 			projectItem: createItem({ project_name: "Correct project title" }),
 			fileMap: {
 				summaryFiles: [],
@@ -556,6 +562,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		detailDataMock.mockReturnValue({
 			loading: true,
 			error: false,
+			mutateAudioProjectItem: vi.fn(),
 			projectItem: null,
 			fileMap: null,
 			texts: { summary: {} },
@@ -573,6 +580,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		detailDataMock.mockReturnValue({
 			loading: false,
 			error: true,
+			mutateAudioProjectItem: vi.fn(),
 			projectItem: null,
 			fileMap: null,
 			texts: { summary: {} },

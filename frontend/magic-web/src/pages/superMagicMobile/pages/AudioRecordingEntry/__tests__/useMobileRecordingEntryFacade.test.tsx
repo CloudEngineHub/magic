@@ -614,7 +614,10 @@ describe("useMobileRecordingEntryFacade", () => {
 				id: "project-import",
 				audio_source: "imported",
 				audio_file_id: "saved-file-id",
-				task_key: "task-import",
+				// task_key must come from the session key generated in importAudioFiles,
+				// NOT from saveResult.task_id (file-save response), which is often "0" or
+				// an unrelated placeholder value.
+				task_key: expect.stringContaining("session-web-"),
 			}),
 			"model-alpha",
 		)
@@ -622,7 +625,8 @@ describe("useMobileRecordingEntryFacade", () => {
 			id: "project-import",
 			audio_source: "imported",
 			audio_file_id: "saved-file-id",
-			task_key: "task-import",
+			// The optimistic item must also carry the correct project-level task key.
+			task_key: expect.stringContaining("session-web-"),
 			card_status: "summarizing",
 		})
 	})
