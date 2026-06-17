@@ -220,6 +220,15 @@
 		"size": "Size",
 		"title": "Generation History"
 	},
+	"mediaResourceFullscreenPreview": {
+		"audioLoadFailed": "Failed to load audio",
+		"close": "Close fullscreen preview",
+		"croppedImage": "Cropped",
+		"imageLoadFailed": "Failed to load image",
+		"originalImage": "Original",
+		"videoLoadFailed": "Failed to load video. Please try again later.",
+		"viewMode": "Image display mode"
+	},
 	"rectangle": {
 		"defaultName": "Rectangle"
 	},

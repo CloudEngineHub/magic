@@ -175,16 +175,16 @@ describe("ImageElement mounted image node sync", () => {
 		group.add(hitRect)
 
 		const borderDecorator = { updateSize: vi.fn() }
-		const infoButtonDecorator = { updateConfig: vi.fn() }
+		const cornerActionsDecorator = { updateConfig: vi.fn() }
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			node: Konva.Group
 			borderDecorator: typeof borderDecorator
-			infoButtonDecorator: typeof infoButtonDecorator
+			cornerActionsDecorator: typeof cornerActionsDecorator
 			data: { id: string; width: number; height: number }
 		}
 		element.node = group
 		element.borderDecorator = borderDecorator
-		element.infoButtonDecorator = infoButtonDecorator
+		element.cornerActionsDecorator = cornerActionsDecorator
 		element.data = { id: "image-1", width: 100, height: 80 }
 
 		element.onTransformResize(240, 160)
@@ -196,7 +196,7 @@ describe("ImageElement mounted image node sync", () => {
 		expect(hitRect.width()).toBe(240)
 		expect(hitRect.height()).toBe(160)
 		expect(borderDecorator.updateSize).toHaveBeenCalledWith(240, 160)
-		expect(infoButtonDecorator.updateConfig).toHaveBeenCalledWith({
+		expect(cornerActionsDecorator.updateConfig).toHaveBeenCalledWith({
 			width: 240,
 			height: 160,
 		})
@@ -218,11 +218,11 @@ describe("ImageElement mounted image node sync", () => {
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			node: Konva.Group
 			borderDecorator: undefined
-			infoButtonDecorator: undefined
+			cornerActionsDecorator: undefined
 		}
 		element.node = group
 		element.borderDecorator = undefined
-		element.infoButtonDecorator = undefined
+		element.cornerActionsDecorator = undefined
 
 		expect(backgroundNode.crop()).toEqual({ x: 100, y: 0, width: 200, height: 200 })
 
@@ -249,11 +249,11 @@ describe("ImageElement mounted image node sync", () => {
 		const element = Object.create(VideoElement.prototype) as VideoElement & {
 			node: Konva.Group
 			borderDecorator: undefined
-			infoButtonDecorator: undefined
+			cornerActionsDecorator: undefined
 		}
 		element.node = group
 		element.borderDecorator = undefined
-		element.infoButtonDecorator = undefined
+		element.cornerActionsDecorator = undefined
 		;(
 			element as unknown as {
 				renderer: {

@@ -14,6 +14,7 @@ import ImageMessageEditor from "./components/ImageMessageEditor"
 import VideoGenerateEditor from "./components/VideoGenerateEditor"
 import MessageHistory from "./components/MessageHistory"
 import VideoFullscreenOverlay from "./components/VideoFullscreenOverlay"
+import ImageElementFullscreenOverlay from "./components/ImageElementFullscreenOverlay"
 import { MagicProvider, useMagic } from "./context/MagicContext"
 import { toPlainObject } from "./canvas/utils/utils"
 import { PortalContainerProvider } from "./components/ui/custom/PortalContainerContext"
@@ -63,7 +64,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	const { methods, permissions } = useMagic()
 
-	const { fullscreenVideoElementId } = useCanvasPanelUI()
+	const { fullscreenMediaElement, setFullscreenMediaElement } = useCanvasPanelUI()
 
 	const canvasContainerRef = useRef<HTMLDivElement>(null)
 
@@ -198,7 +199,18 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			{!readonly && <ImageExtendPanel />}
 			{!readonly && <ImageEraserPanel />}
 			<MessageHistory />
-			{fullscreenVideoElementId ? <VideoFullscreenOverlay /> : null}
+			{fullscreenMediaElement?.type === "video" ? (
+				<VideoFullscreenOverlay
+					elementId={fullscreenMediaElement.elementId}
+					onClose={() => setFullscreenMediaElement(null)}
+				/>
+			) : null}
+			{fullscreenMediaElement?.type === "image" ? (
+				<ImageElementFullscreenOverlay
+					elementId={fullscreenMediaElement.elementId}
+					onClose={() => setFullscreenMediaElement(null)}
+				/>
+			) : null}
 			<Layers />
 			{!readonly && <Tools />}
 			{!readonly && <CanvasTips />}

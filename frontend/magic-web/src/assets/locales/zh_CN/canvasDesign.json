@@ -220,6 +220,15 @@
 		"size": "尺寸",
 		"title": "生成记录"
 	},
+	"mediaResourceFullscreenPreview": {
+		"audioLoadFailed": "音频加载失败",
+		"close": "关闭全屏预览",
+		"croppedImage": "裁剪图",
+		"imageLoadFailed": "图片加载失败",
+		"originalImage": "原图",
+		"videoLoadFailed": "视频加载失败，请稍后重试",
+		"viewMode": "图片显示模式"
+	},
 	"rectangle": {
 		"defaultName": "矩形"
 	},

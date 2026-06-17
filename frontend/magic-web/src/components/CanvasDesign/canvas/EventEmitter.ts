@@ -101,6 +101,7 @@ export interface CanvasEventMap {
 	"element:video:generate-submit-started": { elementId: string }
 	/** 宿主 generateVideo 提交失败或前置校验未通过，供 UI 恢复生成编辑器展示 */
 	"element:video:generate-submit-failed": { elementId: string }
+	"element:image:fullscreenClick": { elementId: string }
 	"element:video:fullscreenClick": { elementId: string }
 	"element:image:resultUpdated": { elementId: string }
 	"element:image:loaded": { elementId: string } // 图片加载完成事件

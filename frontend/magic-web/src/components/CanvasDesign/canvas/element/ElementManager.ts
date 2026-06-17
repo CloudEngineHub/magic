@@ -1013,6 +1013,7 @@ export class ElementManager {
 				case "element:image:retryClick":
 				case "element:image:generate-submit-started":
 				case "element:image:generate-submit-failed":
+				case "element:image:fullscreenClick":
 				case "element:video:infoButtonClick":
 				case "element:video:retryClick":
 				case "element:video:generate-submit-started":
