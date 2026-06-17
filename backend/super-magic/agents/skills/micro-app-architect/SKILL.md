@@ -433,44 +433,46 @@ For apps that need to trigger backend skills or drive multiple agents:
 
 ### Built-in Agent IDs
 
-| agentId | 名称 | 说明 |
+| agentId | Name | Description |
 |---------|------|------|
-| `general` | 通用模式 | 适用于各种通用场景的智能助手（默认，不传 agentId 即使用此模式） |
-| `chat` | 聊天模式 | 专注于对话交流的智能助手 |
-| `data_analysis` | 数据分析 | 专业的数据分析和处理助手 |
-| `ppt` | PPT | 专业的PPT制作和演示助手 |
-| `summary` | 录音总结 | 专业的录音内容总结助手 |
+| `general` | General mode | General-purpose assistant. This is the default when no `agentId` is passed. |
+| `chat` | Chat mode | Assistant focused on conversation. |
+| `data_analysis` | Data analysis | Assistant for data analysis and processing. |
+| `ppt` | PPT | Assistant for presentation creation. |
+| `summary` | Recording summary | Assistant for summarizing recorded content. |
 
-> 注：除内置 agentId 外，也可以通过 `window.Magic.agent.getAgents()` 获取用户自定义的员工（Agent）列表，使用其 `id` 字段作为 `agentId`。
+In addition to built-in agent IDs, generated micro-apps can call `window.Magic.agent.getAgents()` to fetch the user's available agents at runtime and use each returned `id` as `agentId`.
 
-### 获取可用员工列表（代码生成阶段）
+### Available Agents at Generation Time
 
-在生成微应用代码前，如果需要知道用户有哪些可用员工以便写入正确的 `agentId`，可使用 `list-agents` 技能的脚本：
+Prefer runtime discovery with `window.Magic.agent.getAgents()` in the generated micro-app. This lets the user choose from their latest available agents.
+
+Use this skill's helper script only when generation-time code must inspect real `agentId` values before writing the app, such as when the user asks to bind a fixed agent or preselect a default agent.
 
 ```bash
-# 获取当前用户所有可用员工
-python agents/skills/agent-info/scripts/list.py
+# List all available agents for the current user.
+python agents/skills/micro-app-architect/scripts/list_agents.py
 
-# 按名称过滤
-python agents/skills/agent-info/scripts/list.py --name-filter "数据分析"
+# Filter by display name.
+python agents/skills/micro-app-architect/scripts/list_agents.py --name-filter "Data"
 
-# 按类型过滤（official / custom / public）
-python agents/skills/agent-info/scripts/list.py --type-filter custom
+# Filter by type: official, custom, or public.
+python agents/skills/micro-app-architect/scripts/list_agents.py --type-filter custom
 ```
 
-返回结果包含每个员工的 `code`（即 agentId）、`name`、`description` 和 `type`（official/custom/public）。
-这样在生成代码时就可以直接将真实的 agentId 硬编码进 HTML，而非依赖运行时动态查询。
+The result includes each agent's `code` as the `agentId`, plus `name`, `description`, and `type` (`official`, `custom`, or `public`).
+Usually do not hardcode real `agentId` values into generated HTML. Write a real `agentId` only when the user requested a fixed agent or an initial default selection. Normal agent pickers should call `window.Magic.agent.getAgents()` at runtime.
 
 ### Agent Selector UI Pattern
 
-当用户需要调用自定义员工时，应在界面上提供**员工选择器**，并支持通过名称匹配默认选中。实现要点：
+When the user may want to call a custom agent, provide an agent selector in the UI and support default selection by display-name matching.
 
 ```javascript
-// 1. 加载员工列表并渲染选择器
+// 1. Load available agents and render the selector.
 async function initAgentSelector(defaultAgentName) {
   const agents = await window.Magic.agent.getAgents();
 
-  // 2. 通过名称模糊匹配默认选中
+  // 2. Preselect by fuzzy display-name matching.
   let selectedAgent = null;
   if (defaultAgentName) {
     selectedAgent = agents.find(
@@ -478,34 +480,34 @@ async function initAgentSelector(defaultAgentName) {
     );
   }
 
-  // 3. 渲染选择器 UI
+  // 3. Render the selector UI.
   const selector = document.getElementById("agent-selector");
-  selector.innerHTML = `<option value="">通用模式（不选员工）</option>`;
+  selector.innerHTML = `<option value="">General mode (no agent)</option>`;
   agents.forEach((agent) => {
     const selected = selectedAgent && agent.id === selectedAgent.id ? "selected" : "";
     selector.innerHTML += `<option value="${agent.id}" ${selected}>${agent.name}</option>`;
   });
 }
 
-// 4. 派发任务时读取选中的 agentId
+// 4. Read the selected agentId before dispatch.
 function getSelectedAgentId() {
   const selector = document.getElementById("agent-selector");
-  return selector.value || undefined; // 空值 → 通用模式
+  return selector.value || undefined; // Empty means general mode.
 }
 
-// 5. 调用时传入
+// 5. Pass it when dispatching.
 const { topicId } = await window.Magic.project.createTopicAndSend(
   tiptapMessage,
   { agentId: getSelectedAgentId(), model: getSelectedModel() }
 );
 ```
 
-**规则：**
+Rules:
 
-- 选择器默认选项为"通用模式"（不传 agentId）
-- 如果用户在需求中指定了员工名称（如"让研究员去搜集资料"），通过 `name.includes()` 模糊匹配并默认选中
-- 选择器应同时提供**模型选择器**（默认 `"auto"`）
-- 当 `agentId` 为空或未选择时，不传该字段（等同于通用模式）
+- The default selector option is general mode, with no `agentId`.
+- If the user names an agent in the request, match by `name.includes()` and preselect it.
+- Provide a model selector as well, defaulting to `"auto"`.
+- When `agentId` is empty or unselected, omit the field; this is equivalent to general mode.
 
 ### Pattern 1: Skill Dispatch via New Topic (Primary Pattern)
 
@@ -523,7 +525,7 @@ async function triggerSkill(userTask) {
           content: [
             {
               type: "text",
-              text: "请阅读以下技能文件并按照其中的指引执行任务：",
+              text: "Read the following skill file and follow its instructions for this task:",
             },
             {
               type: "mention",

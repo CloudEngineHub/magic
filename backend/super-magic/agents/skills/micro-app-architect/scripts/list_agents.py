@@ -50,7 +50,7 @@ try:
 
 except Exception as e:
     output = {"error": "failed to list agents"}
-    if os.getenv("AGENT_INFO_DEBUG_ERRORS") == "1":
+    if os.getenv("MICRO_APP_AGENT_LIST_DEBUG_ERRORS") == "1":
         output["debug_error"] = str(e)
     print(json.dumps(output, ensure_ascii=False))
     sys.exit(1)

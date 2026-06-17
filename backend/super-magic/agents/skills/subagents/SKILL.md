@@ -1,11 +1,11 @@
 ---
 name: subagents
-description: Use when multiple independent subtasks can run in parallel, when a research or exploration task is large enough to keep separate rather than do inline (doing it inline fills the conversation with intermediate steps you'll carry through to the end), or when you need a specialized agent type (explore for deep search, shell for system commands). Any task with a clear deliverable and no dependency on the current thread is a good candidate to delegate.
+description: Use when multiple independent subtasks can run in parallel, when a research or exploration task is large enough to keep separate rather than do inline, when you need a specialized built-in agent type, or when the user asks what Crew agents are available or wants work delegated to an available Crew.
 ---
 
 # Subagent Dispatch Skill
 
-Use `call_subagent` to delegate tasks to other agents, and `wait_for_subagents` to collect results from background runs.
+Use `call_subagent` to delegate tasks to other agents, `wait_for_subagents` to collect results from background runs, and `agent_list` to discover available Crew agents when the user wants employee-style delegation.
 
 ## When To Use
 
@@ -14,6 +14,8 @@ Delegate when at least one is true:
 - The task is large enough to benefit from an isolated execution context
 - Multiple independent tasks can run in parallel
 - You need a specialized agent type (read-only explore, shell-heavy work)
+- The user asks what employees, agents, or Crew agents are available
+- The user asks to assign work to a named or specialized Crew agent
 
 Do not delegate when:
 
@@ -48,6 +50,30 @@ Maps to a `.agent` filename under `agents/`. Built-in types:
 - `search`: web research specialist. Searches the web and reads pages to gather external information. Cannot modify local files.
 
 Other `.agent` files (e.g. `data-analyst`) can also be used by name.
+
+### Crew agents
+
+The system represents employee-style agents as Crew agents. They usually have codes such as `SMA-xxxx`.
+
+Use `agent_list` before dispatching when:
+
+- The user asks what employees, agents, or Crew agents are available
+- The user names a role or employee but does not provide an exact `SMA-*` code
+- You need to choose the best available Crew agent for a task
+
+```python
+from sdk.tool import tool
+
+result = tool.call("agent_list", {
+    "name_filter": None,   # optional keyword for code, name, or description
+    "type_filter": None,   # optional: official, custom, or public
+    "limit": 30,
+})
+```
+
+Use the returned Crew `code` as `agent_name` in `call_subagent`.
+For `SMA-*` Crew agents, `call_subagent` prepares the local Crew runtime automatically before dispatching.
+For generated micro-app or frontend code, prefer runtime agent selection with `window.Magic.agent.getAgents()`. If code generation must inspect real remote `agentId` values before writing the app, use the helper script owned by `micro-app-architect`; do not use sub-agent delegation for that code-generation lookup.
 
 ### agent_id
 
@@ -111,6 +137,7 @@ Result:
 - `Result:` appears only when status is `done` — contains the sub-agent's final output
 - When status is `running` (timed out), `Result:` is replaced by `Last message:` — this is the last assistant message the sub-agent produced before the timeout, useful for gauging progress
 - `wait_for_subagents` is idempotent — if status is still `running`, call it again or decide to stop waiting
+- Use `timeout=-1` only when the final answer must wait until every child agent finishes or the parent run is interrupted
 - `result.data["results"]`: structured list for programmatic access, fields: `agent_id`, `agent_name`, `status`, `result`, `error`, `last_activity`
 
 ## Output Target

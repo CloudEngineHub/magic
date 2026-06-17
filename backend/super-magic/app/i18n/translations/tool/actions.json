@@ -319,6 +319,10 @@
         "zh_CN": "调用子智能体",
         "en_US": "Call sub-agent"
     },
+    "agent_list": {
+        "zh_CN": "查找员工",
+        "en_US": "Find Crew agents"
+    },
     "wait_for_subagents": {
         "zh_CN": "等待子智能体完成",
         "en_US": "Wait for sub-agents"

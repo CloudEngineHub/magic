@@ -71,6 +71,7 @@ from app.utils.file_utils import convert_file_tree_to_string, extract_paths_from
 from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
 from app.core.skill_utils.skill_sources import get_system_skills_dir, get_workspace_skills_dir
+from app.core.subagent_delegation import SUBAGENTS_SKILL
 from agentlang.agent.define import SkillsConfig, SystemSkillEntry
 
 logger = get_logger(__name__)
@@ -354,6 +355,9 @@ class Agent(BaseAgent):
         self.loaded_skills = system_skill_names
         self.agent_context.set_loaded_skills(system_skill_names)
         self.agent_context.set_excluded_skills(skills_config.excluded_skills)
+        self.agent_context.set_subagent_delegation_enabled(
+            SUBAGENTS_SKILL in system_skill_names
+        )
         skills_prompt_content = generate_skills_prompt(
             skills_config,
             agent_name=self.agent_name,
