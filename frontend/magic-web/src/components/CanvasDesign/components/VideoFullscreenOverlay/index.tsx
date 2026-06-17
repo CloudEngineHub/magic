@@ -157,7 +157,6 @@ export default function VideoFullscreenOverlay() {
 			intrinsicSizeHint={intrinsicSizeHint}
 			isLoading={isLoading}
 			hasError={hasError}
-			fileName={videoElement?.name}
 			resourcePath={videoElement?.src ?? ""}
 		/>
 	)

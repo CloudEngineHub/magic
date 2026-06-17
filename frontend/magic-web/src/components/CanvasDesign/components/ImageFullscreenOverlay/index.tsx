@@ -46,14 +46,14 @@ function computeImagePanelPixelSize(
 
 interface ImageFullscreenOverlayProps {
 	path: string
-	title: string
+	fileName?: string
 	isOpen: boolean
 	onClose: () => void
 	closeAriaLabel?: string
 }
 
 export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProps) {
-	const { path, title, isOpen, onClose, closeAriaLabel } = props
+	const { path, fileName, isOpen, onClose, closeAriaLabel } = props
 	const { t } = useCanvasDesignI18n()
 
 	const hideChromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -186,7 +186,7 @@ export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProp
 		chromeVisible ? chromeStyles.layerVisible : chromeStyles.layerHidden,
 	].join(" ")
 
-	const fileLabel = getFullscreenMediaFileLabel(path, title)
+	const fileLabel = getFullscreenMediaFileLabel(path, fileName)
 
 	if (!isClient || !isOpen) {
 		return null
@@ -257,7 +257,7 @@ export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProp
 								ref={imgRef}
 								className={styles.video}
 								src={src}
-								alt={title}
+								alt={fileLabel}
 								draggable={false}
 								style={
 									isImageDecodePending
