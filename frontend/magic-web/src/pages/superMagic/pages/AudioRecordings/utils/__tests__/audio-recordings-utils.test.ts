@@ -12,6 +12,7 @@ vi.mock("@/utils/string", () => ({
 	formatTime: () => "mock-time",
 }))
 import {
+	formatRecordingDuration,
 	isAudioProjectDetailReady,
 	isAudioProjectPreviewReady,
 } from "../audio-recordings-utils"
@@ -98,5 +99,19 @@ describe("isAudioProjectDetailReady", () => {
 				}),
 			),
 		).toBe(false)
+	})
+})
+
+describe("formatRecordingDuration", () => {
+	it("formats sub-hour duration as mm:ss", () => {
+		expect(formatRecordingDuration(0)).toBe("00:00")
+		expect(formatRecordingDuration(1)).toBe("00:01")
+		expect(formatRecordingDuration(65)).toBe("01:05")
+		expect(formatRecordingDuration(3599)).toBe("59:59")
+	})
+
+	it("keeps hour segment for one hour and above", () => {
+		expect(formatRecordingDuration(3600)).toBe("1:00:00")
+		expect(formatRecordingDuration(3661)).toBe("1:01:01")
 	})
 })

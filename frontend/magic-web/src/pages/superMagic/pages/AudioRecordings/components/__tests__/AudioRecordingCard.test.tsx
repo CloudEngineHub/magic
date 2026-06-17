@@ -142,6 +142,24 @@ describe("AudioRecordingCard", () => {
 		).not.toBeInTheDocument()
 	})
 
+	it("shows pending duration placeholder while summarizing duration is unavailable", () => {
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "summarizing",
+					is_summarized: false,
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+					duration: 0,
+				})}
+			/>,
+		)
+
+		expect(screen.getByTestId("audio-recording-card-project-1-duration")).toHaveTextContent(
+			"--:--",
+		)
+	})
+
 	it("opens raw audio preview for summarizing items with audio_file_id", () => {
 		const onOpen = vi.fn()
 		render(

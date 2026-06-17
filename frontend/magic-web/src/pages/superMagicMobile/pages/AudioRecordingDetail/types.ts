@@ -9,11 +9,11 @@ export type MobileRecordingSummaryType =
 	| "topics"
 	| "highlights"
 	| "insights"
+	| "metrics"
 	| "mindmap"
 	| "followup"
 	| "power_dynamics"
 	| "intent"
-	| "unsupported"
 
 export interface MagicProjectConfig {
 	version?: string

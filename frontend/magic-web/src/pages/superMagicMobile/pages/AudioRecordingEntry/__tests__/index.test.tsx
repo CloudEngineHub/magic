@@ -14,6 +14,35 @@ vi.mock("../AudioRecordingListPanel", () => ({
 	default: () => <div data-testid="mobile-audio-recording-list-panel" />,
 }))
 
+vi.mock("../hooks/useMobileRecordingEntryFacade", () => ({
+	useMobileRecordingEntryFacade: () => ({
+		presentation: "list",
+		isSessionActive: false,
+		recordingTitle: "mock-recording",
+		duration: "00:00:00",
+		isPaused: false,
+		isBusy: false,
+		transcriptMessages: [],
+		noteContent: "",
+		optimisticItems: [],
+		refreshToken: 0,
+		startRecording: vi.fn(),
+		showRecording: vi.fn(),
+		showList: vi.fn(),
+		pauseRecording: vi.fn(),
+		resumeRecording: vi.fn(),
+		cancelRecording: vi.fn(),
+		finishRecording: vi.fn(),
+		updateNote: vi.fn(),
+		WaveformComponent: () => null,
+		MessageListComponent: () => null,
+	}),
+}))
+
+vi.mock("../components/MobileRecordingSessionPage", () => ({
+	MobileRecordingSessionPage: () => <div data-testid="mobile-recording-session-page" />,
+}))
+
 vi.mock("../components/MobileRecordingSettingsSheet", () => ({
 	MobileRecordingSettingsSheet: ({
 		open,

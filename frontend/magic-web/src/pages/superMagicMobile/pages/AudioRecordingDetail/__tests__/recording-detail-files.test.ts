@@ -116,6 +116,14 @@ describe("recording detail files", () => {
 				relative_file_path: "summary/intent.md",
 			}),
 			createAttachment({
+				file_id: "file-metrics-001",
+				file_name: "summary/metrics.html",
+				filename: "metrics.html",
+				file_extension: "html",
+				path: "/summary/metrics.html",
+				relative_file_path: "summary/metrics.html",
+			}),
+			createAttachment({
 				file_id: "file-custom-001",
 				file_name: "summary/custom-view.md",
 				filename: "custom-view.md",
@@ -141,6 +149,7 @@ describe("recording detail files", () => {
 				summary: "summary/meeting-summary.md",
 				topics: "summary/topics.md",
 				intent: "summary/intent.md",
+				metrics: "summary/metrics.html",
 				custom_outline: "summary/custom-view.md",
 			}),
 		})
@@ -152,12 +161,12 @@ describe("recording detail files", () => {
 		expect(result.summaryFiles.map((file) => file.type)).toEqual([
 			"summary",
 			"topics",
+			"metrics",
 			"intent",
-			"unsupported",
 		])
-		expect(result.summaryFiles[3]).toMatchObject({
-			type: "unsupported",
-			fileName: "summary/custom-view.md",
+		expect(result.summaryFiles[2]).toMatchObject({
+			type: "metrics",
+			fileName: "summary/metrics.html",
 		})
 	})
 

@@ -2859,6 +2859,7 @@
 				"moveToGroup": "Move to group",
 				"generateSummary": "Generate summary",
 				"regenerateSummary": "Regenerate summary",
+				"downloadOriginal": "Download original file",
 				"share": "Share",
 				"delete": "Delete",
 				"deleteTitle": "Delete recording",
@@ -2926,6 +2927,29 @@
 					"description": "AI model used to generate summaries",
 					"title": "AI Model"
 				}
+			},
+			"startMissingWorkspace": "Recording is unavailable right now. Please enter a workspace first.",
+			"active": {
+				"defaultTitle": "Current recording",
+				"backAria": "Back to recordings list",
+				"finishAria": "Finish recording and generate summary",
+				"renameAria": "Edit recording title",
+				"statusRecording": "Recording",
+				"statusPaused": "Paused",
+				"tabTranscript": "Transcript",
+				"tabNotes": "Notes",
+				"notesPlaceholder": "Capture key points while recording...",
+				"starting": "Starting recording",
+				"startingHint": "Requesting microphone access and initializing recording. Please wait...",
+				"startFailedTitle": "Recording ran into a problem",
+				"startFailed": "Failed to start recording. Please check microphone permission and try again.",
+				"startTimedOut": "Recording startup timed out. Please check microphone permission and try again.",
+				"permissionDenied": "Microphone permission was denied. Please allow microphone access and try again.",
+				"browserNotSupported": "This browser does not support recording yet. Please switch to a browser with microphone support.",
+				"audioSourceUnavailable": "No usable audio input is available. Please check your microphone device and try again.",
+				"cancel": "Cancel recording",
+				"pause": "Pause",
+				"resume": "Resume"
 			}
 		}
 	},

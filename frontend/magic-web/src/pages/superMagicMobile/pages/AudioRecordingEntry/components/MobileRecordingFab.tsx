@@ -1,25 +1,27 @@
 import { useTranslation } from "react-i18next"
-import { toast } from "sonner"
+
+interface MobileRecordingFabProps {
+	hidden?: boolean
+	onClick: () => void
+}
 
 /**
- * Prototype-aligned dual-ring FAB — visual placeholder only.
- * Recording flow wiring lands in a follow-up phase.
+ * Prototype-aligned dual-ring FAB that starts the shared recording session from
+ * the mobile recordings list without leaving the unified `/recordings` entry.
  */
-export function MobileRecordingFab() {
+export function MobileRecordingFab({ hidden = false, onClick }: MobileRecordingFabProps) {
 	const { t } = useTranslation("super")
-
-	function handleClick() {
-		toast.info(t("mobile.recordingEntry.fabComingSoon"))
-	}
 
 	return (
 		<div
-			className="pointer-events-none fixed bottom-[14px] left-1/2 z-20 -translate-x-1/2"
+			className="pointer-events-none fixed bottom-[14px] left-1/2 z-20 -translate-x-1/2 transition-opacity duration-200"
+			style={{ opacity: hidden ? 0 : 1 }}
 			data-testid="mobile-recording-fab"
 		>
 			<button
 				type="button"
-				onClick={handleClick}
+				onClick={onClick}
+				disabled={hidden}
 				className="pointer-events-auto flex size-[68px] items-center justify-center rounded-full bg-card"
 				style={{
 					boxShadow: "0px 4px 14px rgba(0,0,0,0.18), 0px 0px 0px 1px rgba(0,0,0,0.04)",

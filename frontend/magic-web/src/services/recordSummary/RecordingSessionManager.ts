@@ -82,6 +82,7 @@ export class RecordingSessionManager {
 		topic,
 		chatTopic,
 		audioSource,
+		sessionId,
 	}: {
 		workspace: Workspace | null
 		model: ModelItem | null
@@ -90,6 +91,7 @@ export class RecordingSessionManager {
 		topic?: Topic | null
 		chatTopic?: Topic | null
 		audioSource?: import("@/types/recordSummary").AudioSourceConfig
+		sessionId?: string
 	}): RecordingSession {
 		// 获取当前组织信息
 		const organizationCode = userStore.user.organizationCode || ""
@@ -97,7 +99,7 @@ export class RecordingSessionManager {
 		const organizationName = currentOrganization?.organization_name || ""
 
 		const session: RecordingSession = {
-			id: this.generateSessionId(),
+			id: sessionId || this.generateSessionId(),
 			startTime: Date.now(),
 			lastActivityTime: Date.now(),
 			totalDuration: 0,

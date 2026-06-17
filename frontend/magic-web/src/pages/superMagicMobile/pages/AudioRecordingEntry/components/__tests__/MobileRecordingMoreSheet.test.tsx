@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { MobileRecordingMoreSheet } from "../MobileRecordingMoreSheet"
+import { toast } from "sonner"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -176,5 +177,27 @@ describe("MobileRecordingMoreSheet", () => {
 		)
 
 		expect(screen.queryByText("Share")).toBeNull()
+	})
+
+	it("uses caller-provided share action instead of the coming-soon toast", () => {
+		const onShare = vi.fn()
+		const onClose = vi.fn()
+
+		render(
+			<MobileRecordingMoreSheet
+				isOpen
+				item={createItem()}
+				onClose={onClose}
+				onRename={vi.fn()}
+				onDelete={vi.fn()}
+				onShare={onShare}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-recording-more-share"))
+
+		expect(onShare).toHaveBeenCalledTimes(1)
+		expect(onClose).toHaveBeenCalledTimes(1)
+		expect(toast.info).not.toHaveBeenCalled()
 	})
 })

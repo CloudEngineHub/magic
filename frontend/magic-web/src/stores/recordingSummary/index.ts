@@ -113,15 +113,15 @@ class RecordingSummaryStore {
 			max: number
 		}
 	} = {
-			hasVoiceError: false,
-			hasRecordingError: false,
-			hasChunkError: false,
-			isRetrying: false,
-			retryInfo: {
-				current: 0,
-				max: 3,
-			},
-		}
+		hasVoiceError: false,
+		hasRecordingError: false,
+		hasChunkError: false,
+		isRetrying: false,
+		retryInfo: {
+			current: 0,
+			max: 3,
+		},
+	}
 
 	businessData = {
 		/**
@@ -174,13 +174,13 @@ class RecordingSummaryStore {
 			sessionId?: string
 		}
 	} = {
-			tabStatus: "inactive",
-			activeTabData: {
-				message: [],
-				duration: "00:00:00",
-				isRecording: false,
-			},
-		}
+		tabStatus: "inactive",
+		activeTabData: {
+			message: [],
+			duration: "00:00:00",
+			isRecording: false,
+		},
+	}
 
 	// ==== 代理属性和方法，保持向后兼容 ====
 
@@ -554,6 +554,7 @@ class RecordingSummaryStore {
 	 */
 	hide() {
 		this.isVisible = false
+		this.floatPanel.setExternallyHidden(false)
 		this.saveToStorage()
 	}
 
@@ -635,6 +636,7 @@ class RecordingSummaryStore {
 	reset() {
 		this.floatPanel.cleanup()
 		this.isVisible = false
+		this.floatPanel.setExternallyHidden(false)
 		this.status = "init"
 		this.isPausing = false
 		this.isContinuing = false

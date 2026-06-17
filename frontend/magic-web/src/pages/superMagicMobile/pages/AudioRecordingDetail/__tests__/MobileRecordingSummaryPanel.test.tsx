@@ -2,9 +2,12 @@ import type { ReactNode } from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { MobileRecordingSummaryPanel } from "../components/MobileRecordingSummaryPanel"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
 const scrollEdgeFadePropsMock = vi.fn()
 const magicMarkmapPropsMock = vi.fn()
+const isolatedHtmlRendererPropsMock = vi.fn()
+const processHtmlContentMock = vi.fn()
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -12,16 +15,15 @@ vi.mock("react-i18next", () => ({
 			const labels: Record<string, string> = {
 				"detail.emptySummary": "No summary",
 				"detail.emptySummaryFile": "No summary file",
-				"detail.unsupportedSummaryFile": "Unsupported summary file",
 				"detail.tabs.summary": "Minutes",
 				"detail.tabs.topics": "Topics",
 				"detail.tabs.highlights": "Highlights",
 				"detail.tabs.insights": "Insights",
+				"detail.tabs.metrics": "Metrics",
 				"detail.tabs.mindmap": "Mindmap",
 				"detail.tabs.followup": "Follow-up",
 				"detail.tabs.powerDynamics": "Power Dynamics",
 				"detail.tabs.intent": "Intent",
-				"detail.tabs.unsupported": "Unsupported",
 			}
 			return labels[key] ?? key
 		},
@@ -48,17 +50,69 @@ vi.mock("@/components/base/MagicMarkmap", () => ({
 	},
 }))
 
+vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer", () => ({
+	default: (props: Record<string, unknown>) => {
+		isolatedHtmlRendererPropsMock(props)
+		return <div data-testid="mobile-recording-metrics-html" />
+	},
+}))
+
+vi.mock("@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor", () => ({
+	processHtmlContent: (...args: unknown[]) => processHtmlContentMock(...args),
+}))
+
 vi.mock("../components/MobileRecordingMarkdownContent", () => ({
 	MobileRecordingMarkdownContent: ({ content }: { content: string }) => (
 		<div data-testid="summary-markdown-content">{content}</div>
 	),
 }))
 
+function createSummaryAttachment(overrides: Partial<AttachmentItem> = {}): AttachmentItem {
+	return {
+		file_id: "summary-file-id",
+		file_name: "summary.md",
+		filename: "summary.md",
+		path: "/summary/summary.md",
+		relative_file_path: "summary/summary.md",
+		is_directory: false,
+		children: [],
+		...overrides,
+	}
+}
+
+function createSummaryFileRef(type: string, fileName: string, file?: Partial<AttachmentItem>) {
+	return {
+		type,
+		fileId: `${type}-file`,
+		fileName,
+		file: createSummaryAttachment({
+			file_id: `${type}-file`,
+			file_name: fileName,
+			filename: fileName,
+			path: `/summary/${fileName}`,
+			relative_file_path: `summary/${fileName}`,
+			file_extension: fileName.split(".").pop(),
+			...file,
+		}),
+	}
+}
+
 describe("MobileRecordingSummaryPanel", () => {
 	/** Reset shared spies so each summary-panel assertion only observes its own render cycle. */
 	function resetSharedMocks() {
 		scrollEdgeFadePropsMock.mockClear()
 		magicMarkmapPropsMock.mockClear()
+		isolatedHtmlRendererPropsMock.mockClear()
+		processHtmlContentMock.mockReset()
+		processHtmlContentMock.mockResolvedValue({
+			processedContent: "<html><body>Metrics body</body></html>",
+			hasSlides: false,
+			filePathMapping: new Map([
+				["summary/metrics.css", "https://example.invalid/metrics.css"],
+			]),
+			slidesMap: new Map(),
+			originalSlidesPaths: [],
+		})
 	}
 
 	it("wraps summary markdown with the shared scroll shadow container", () => {
@@ -67,8 +121,8 @@ describe("MobileRecordingSummaryPanel", () => {
 		render(
 			<MobileRecordingSummaryPanel
 				summaryFiles={[
-					{ type: "summary", fileId: "summary-file", fileName: "summary.md" },
-					{ type: "highlights", fileId: "highlights-file", fileName: "highlights.md" },
+					createSummaryFileRef("summary", "summary.md"),
+					createSummaryFileRef("highlights", "highlights.md"),
 				]}
 				summaryContent={{
 					summary: "Summary body",
@@ -98,8 +152,8 @@ describe("MobileRecordingSummaryPanel", () => {
 		render(
 			<MobileRecordingSummaryPanel
 				summaryFiles={[
-					{ type: "summary", fileId: "summary-file", fileName: "summary.md" },
-					{ type: "highlights", fileId: "highlights-file", fileName: "highlights.md" },
+					createSummaryFileRef("summary", "summary.md"),
+					createSummaryFileRef("highlights", "highlights.md"),
 				]}
 				summaryContent={{
 					summary: "Summary body",
@@ -128,27 +182,28 @@ describe("MobileRecordingSummaryPanel", () => {
 		render(
 			<MobileRecordingSummaryPanel
 				summaryFiles={[
-					{ type: "summary", fileId: "summary-file", fileName: "summary.md" },
-					{ type: "topics", fileId: "topics-file", fileName: "topics.md" },
-					{ type: "highlights", fileId: "highlights-file", fileName: "highlights.md" },
-					{ type: "insights", fileId: "insights-file", fileName: "insights.md" },
-					{ type: "mindmap", fileId: "mindmap-file", fileName: "mindmap.md" },
-					{ type: "followup", fileId: "followup-file", fileName: "followup.md" },
-					{ type: "power_dynamics", fileId: "power-file", fileName: "power.md" },
-					{ type: "intent", fileId: "intent-file", fileName: "intent.md" },
-					{ type: "unexpected_type", fileId: "unsupported-file", fileName: "unsupported.md" },
+					createSummaryFileRef("summary", "summary.md"),
+					createSummaryFileRef("topics", "topics.md"),
+					createSummaryFileRef("highlights", "highlights.md"),
+					createSummaryFileRef("insights", "insights.md"),
+					createSummaryFileRef("metrics", "metrics.html"),
+					createSummaryFileRef("mindmap", "mindmap.md"),
+					createSummaryFileRef("followup", "followup.md"),
+					createSummaryFileRef("power_dynamics", "power.md"),
+					createSummaryFileRef("intent", "intent.md"),
 				]}
 				summaryContent={{
 					summary: "Summary body",
 					topics: "## Topics",
 					highlights: "Highlights body",
 					insights: "Insights body",
+					metrics: "<html><body>Metrics body</body></html>",
 					mindmap: "# Root",
 					followup: "Follow-up body",
 					power_dynamics: "Power body",
 					intent: "Intent body",
-					unexpected_type: "Unknown body",
 				}}
+				attachmentList={[]}
 				scrollPaddingBottom={72}
 				speakerNameMap={{}}
 				onOpenSpeakerSettings={vi.fn()}
@@ -160,11 +215,11 @@ describe("MobileRecordingSummaryPanel", () => {
 		expect(screen.getByText("Topics")).toBeInTheDocument()
 		expect(screen.getByText("Highlights")).toBeInTheDocument()
 		expect(screen.getByText("Insights")).toBeInTheDocument()
+		expect(screen.getByText("Metrics")).toBeInTheDocument()
 		expect(screen.getByText("Mindmap")).toBeInTheDocument()
 		expect(screen.getByText("Follow-up")).toBeInTheDocument()
 		expect(screen.getByText("Power Dynamics")).toBeInTheDocument()
 		expect(screen.getByText("Intent")).toBeInTheDocument()
-		expect(screen.getByText("Unsupported")).toBeInTheDocument()
 	})
 
 	it("renders the empty summary state when no summary files are available", () => {
@@ -174,6 +229,7 @@ describe("MobileRecordingSummaryPanel", () => {
 			<MobileRecordingSummaryPanel
 				summaryFiles={[]}
 				summaryContent={{}}
+				attachmentList={[]}
 				scrollPaddingBottom={72}
 				speakerNameMap={{}}
 				onOpenSpeakerSettings={vi.fn()}
@@ -190,8 +246,9 @@ describe("MobileRecordingSummaryPanel", () => {
 
 		render(
 			<MobileRecordingSummaryPanel
-				summaryFiles={[{ type: "mindmap", fileId: "mindmap-file", fileName: "mindmap.md" }]}
+				summaryFiles={[createSummaryFileRef("mindmap", "mindmap.md")]}
 				summaryContent={{ mindmap: "# Root\n## Child" }}
+				attachmentList={[]}
 				scrollPaddingBottom={72}
 				speakerNameMap={{}}
 				onOpenSpeakerSettings={vi.fn()}
@@ -204,6 +261,60 @@ describe("MobileRecordingSummaryPanel", () => {
 			expect.objectContaining({
 				className:
 					"h-full min-h-[520px] bg-[#f7f7f8] [&_svg]:bg-[#f7f7f8] [&_svg]:[background-image:none]",
+			}),
+		)
+	})
+
+	it("renders metrics summaries through the shared HTML renderer pipeline", async () => {
+		resetSharedMocks()
+
+		render(
+			<MobileRecordingSummaryPanel
+				summaryFiles={[
+					createSummaryFileRef("metrics", "metrics.html", {
+						file_id: "metrics-file",
+						file_name: "metrics.html",
+						filename: "metrics.html",
+						path: "/summary/metrics.html",
+						relative_file_path: "summary/metrics.html",
+						file_extension: "html",
+					}),
+				]}
+				summaryContent={{ metrics: "<html><body>Metrics body</body></html>" }}
+				attachmentList={[
+					createSummaryAttachment({
+						file_id: "metrics-file",
+						file_name: "metrics.html",
+						filename: "metrics.html",
+						path: "/summary/metrics.html",
+						relative_file_path: "summary/metrics.html",
+						file_extension: "html",
+					}),
+				]}
+				scrollPaddingBottom={72}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onTimeClick={vi.fn()}
+			/>,
+		)
+
+		await screen.findByTestId("mobile-recording-metrics-html")
+
+		expect(processHtmlContentMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				content: "<html><body>Metrics body</body></html>",
+				fileId: "metrics-file",
+				fileName: "metrics.html",
+				attachmentList: expect.any(Array),
+			}),
+		)
+		expect(isolatedHtmlRendererPropsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				content: "<html><body>Metrics body</body></html>",
+				fileId: "metrics-file",
+				className: expect.stringContaining("flex-1"),
+				iframeClassName: expect.stringContaining("h-full"),
+				filePathMapping: expect.any(Map),
 			}),
 		)
 	})

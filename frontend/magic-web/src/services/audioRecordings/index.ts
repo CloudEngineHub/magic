@@ -15,3 +15,4 @@ export {
 	type AudioRecordingGroup,
 	type AudioRecordingGroupsResult,
 } from "./RecordingGroupsService"
+export { AUDIO_PROJECT_MODE, isAudioProjectMode } from "./audioProjectMode"

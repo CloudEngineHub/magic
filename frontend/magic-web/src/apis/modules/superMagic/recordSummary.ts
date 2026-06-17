@@ -21,6 +21,7 @@ export type GetRecordingSummaryResultResponse = {
 	success: boolean
 	task_key: string
 	project_id: string
+	project_mode?: string | null
 	chat_topic_id: string
 	conversation_id: string
 	topic_id: string | undefined
@@ -209,8 +210,10 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 	},
 
 	/**
-	 * TODO: 与后端确认这个api 与 getRecordingSummaryResult 的区别，决定是否需要保留
-	 * @description Trigger AI summary for a live-recorded task (APP recorded audio)
+	 * @description 手动触发 recorded 音频任务的 AI 总结
+	 * 主要用于已完成录音或转写、但未自动生成总结的任务。
+	 * 与 getRecordingSummaryResult 不同，这里对应 recorded 音频场景；imported 文件场景仍走 getRecordingSummaryResult。
+	 * 调用后需结合 batchTaskProgress 轮询总结进度与结果。
 	 */
 	summarizeRecordedTask({
 		task_key,

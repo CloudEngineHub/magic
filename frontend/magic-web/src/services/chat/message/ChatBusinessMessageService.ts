@@ -27,6 +27,7 @@ export interface ShowRecordSummaryNotificationCallback {
 	(options: {
 		workspaceId: string
 		projectId: string
+		projectMode?: string | null
 		topicId: string
 		success: boolean
 		workspaceName?: string
@@ -195,6 +196,7 @@ class ChatBusinessMessageService {
 			this.showRecordSummaryNotificationCallback({
 				workspaceId: messagePayload.recording_summary_result.workspace_id,
 				projectId: messagePayload.recording_summary_result.project_id,
+				projectMode: messagePayload.recording_summary_result.project_mode,
 				topicId: messagePayload.recording_summary_result.topic_id,
 				success: messagePayload.recording_summary_result.success,
 				workspaceName: messagePayload.recording_summary_result.workspace_name,

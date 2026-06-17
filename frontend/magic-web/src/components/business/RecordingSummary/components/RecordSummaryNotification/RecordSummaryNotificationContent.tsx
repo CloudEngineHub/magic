@@ -1,7 +1,10 @@
 import type { RecordSummaryNotificationContentProps } from "./types"
 import { RecordSummaryActionButton, RecordSummaryAlertCard } from "../RecordSummaryAlertCard"
-import { genProjectTopicUrl } from "@/pages/superMagic/utils/project"
 import { Check, TriangleAlert } from "lucide-react"
+import { isAudioProjectMode } from "@/services/audioRecordings"
+import { RouteName } from "@/routes/constants"
+import { history } from "@/routes/history"
+import { genProjectTopicUrl } from "@/pages/superMagic/utils/project"
 
 function RecordSummaryNotificationContent({
 	title,
@@ -13,8 +16,16 @@ function RecordSummaryNotificationContent({
 	success = false,
 	workspaceId,
 	projectId,
+	projectMode,
 	topicId,
 }: RecordSummaryNotificationContentProps) {
+	const resultHref = isAudioProjectMode(projectMode)
+		? history.createHref({
+				name: RouteName.AudioRecordingDetail,
+				params: { projectId: projectId || "" },
+			})
+		: genProjectTopicUrl(workspaceId, projectId, topicId)
+
 	return (
 		<RecordSummaryAlertCard
 			title={title}
@@ -38,7 +49,7 @@ function RecordSummaryNotificationContent({
 						data-testid="record-summary-notification-view-button"
 					>
 						<a
-							href={genProjectTopicUrl(workspaceId, projectId, topicId)}
+							href={resultHref}
 							target="_blank"
 							rel="noreferrer"
 							className="hover:text-primary-foreground"

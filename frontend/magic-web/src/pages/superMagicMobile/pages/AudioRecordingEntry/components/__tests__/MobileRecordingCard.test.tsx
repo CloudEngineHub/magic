@@ -127,4 +127,56 @@ describe("MobileRecordingCard", () => {
 		expect(summarizeButton).toBeDisabled()
 		expect(summarizeButton).toHaveTextContent("Summarizing now")
 	})
+
+	it("shows pending duration placeholder while summarizing duration is unavailable", () => {
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					card_status: "summarizing",
+					is_summarized: false,
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+					duration: 0,
+				})}
+			/>,
+		)
+
+		expect(screen.getByText("--:--")).toBeInTheDocument()
+	})
+
+	it("renders transferring progress state and hides time meta", () => {
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					transferStatus: "transferring",
+					transferProgress: 0.45,
+				})}
+			/>,
+		)
+
+		expect(screen.getByText("45%")).toBeInTheDocument()
+		const progressbar = screen.getByRole("progressbar")
+		expect(progressbar).toBeInTheDocument()
+		expect(progressbar).toHaveAttribute("aria-valuenow", "45")
+		expect(screen.queryByText("2h ago")).toBeNull()
+	})
+
+	it("renders failed state and triggers onRetry callback when clicked", () => {
+		const onRetry = vi.fn()
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					transferStatus: "failed",
+					transferProgress: 0.8,
+				})}
+				onRetry={onRetry}
+			/>,
+		)
+
+		expect(screen.getByText("80%")).toBeInTheDocument()
+		const retryButton = screen.getByTestId("mobile-recording-card-retry-proj-beta-002")
+		expect(retryButton).toBeInTheDocument()
+		fireEvent.click(retryButton)
+		expect(onRetry).toHaveBeenCalledTimes(1)
+	})
 })

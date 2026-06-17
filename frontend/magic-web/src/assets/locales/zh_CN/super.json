@@ -2859,6 +2859,7 @@
 				"moveToGroup": "移动到分组",
 				"generateSummary": "生成总结",
 				"regenerateSummary": "重新生成总结",
+				"downloadOriginal": "下载原文件",
 				"share": "分享",
 				"delete": "删除",
 				"deleteTitle": "删除录音",
@@ -2926,6 +2927,29 @@
 					"description": "用于生成总结的 AI 模型",
 					"title": "AI 模型"
 				}
+			},
+			"startMissingWorkspace": "暂时无法开始录音，请先进入一个工作区",
+			"active": {
+				"defaultTitle": "当前录音",
+				"backAria": "返回录音列表",
+				"finishAria": "结束录音并生成纪要",
+				"renameAria": "编辑录音标题",
+				"statusRecording": "录音中",
+				"statusPaused": "已暂停",
+				"tabTranscript": "转写",
+				"tabNotes": "笔记",
+				"notesPlaceholder": "边录边记下关键要点...",
+				"starting": "正在启动录音",
+				"startingHint": "正在请求麦克风权限并初始化录音，请稍候...",
+				"startFailedTitle": "录制出现问题",
+				"startFailed": "录制启动失败，请检查麦克风权限后重试",
+				"startTimedOut": "录音启动超时，请检查麦克风权限后重试",
+				"permissionDenied": "麦克风权限被拒绝，请允许浏览器访问麦克风后重试",
+				"browserNotSupported": "当前浏览器暂不支持录音，请更换支持麦克风录制的浏览器",
+				"audioSourceUnavailable": "无法获取可用的音频输入，请检查麦克风设备后重试",
+				"cancel": "取消录音",
+				"pause": "暂停",
+				"resume": "继续"
 			}
 		}
 	},

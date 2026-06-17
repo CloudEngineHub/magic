@@ -68,7 +68,7 @@ export function buildAudioProjectsQueryParams(options: {
 
 /** Formats recording duration in seconds to mm:ss or h:mm:ss */
 export function formatRecordingDuration(seconds: number): string {
-	if (!Number.isFinite(seconds) || seconds <= 0) return "0:00"
+	if (!Number.isFinite(seconds) || seconds <= 0) return "00:00"
 
 	const totalSeconds = Math.floor(seconds)
 	const hours = Math.floor(totalSeconds / 3600)
@@ -79,7 +79,17 @@ export function formatRecordingDuration(seconds: number): string {
 		return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`
 	}
 
-	return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`
+	return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`
+}
+
+/** Treat missing summarizing duration as pending instead of a literal zero-length recording. */
+export function isRecordingDurationPending(
+	item: Pick<AudioProjectListItem, "card_status" | "duration">,
+): boolean {
+	return (
+		item.card_status === "summarizing" &&
+		(!Number.isFinite(item.duration) || item.duration <= 0)
+	)
 }
 
 /** Whether the card should navigate to the summarized HTML detail page */
@@ -133,15 +143,37 @@ export function resolveRecordingDisplayName(
 	return formatRecordingDefaultName(createdAt)
 }
 
-/** Resolves source label from normalized fields: device name preferred, then audio_source fallback */
+/** Resolves source label from normalized fields:
+ * - source === 'device': prefer device_id (device name) or sourceDevice fallback
+ * - source === 'app': prefer device_id name or sourceRecorded fallback
+ * - audio_source === 'imported': always show sourceImported
+ * - default: sourceRecorded
+ *
+ * Currently consumed by: H5 MobileRecordingCard (chip label).
+ * TODO(pc-source-label): PC list card does not yet show a source chip.
+ * When it does, verify whether PC needs a different label strategy
+ * (e.g. showing model name or upload origin) before reusing this function.
+ */
 export function resolveRecordingSourceLabel(
 	item: AudioProjectListItem,
 	labels: { sourceRecorded: string; sourceImported: string; sourceDevice: string },
 ): string {
-	const deviceName = item.device_id?.trim()
-	if (deviceName) return deviceName
-
 	if (item.audio_source === "imported") return labels.sourceImported
+
+	const deviceName = item.device_id?.trim()
+
+	if (item.source === "device") {
+		// External Bluetooth/recording device — prefer backend device name
+		return deviceName || labels.sourceDevice
+	}
+
+	if (item.source === "app") {
+		// Recorded via mobile app — show device name if available, else generic label
+		return deviceName || labels.sourceRecorded
+	}
+
+	// Legacy fallback: if device_id exists treat as device recording
+	if (deviceName) return deviceName
 	if (item.audio_source === "recorded") return labels.sourceRecorded
 	return labels.sourceRecorded
 }

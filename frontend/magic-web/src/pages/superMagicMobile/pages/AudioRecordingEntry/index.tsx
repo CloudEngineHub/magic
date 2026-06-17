@@ -1,6 +1,8 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Settings } from "lucide-react"
+import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import { useLocation } from "react-router"
 
 import {
 	MobileShellSidebarToggleButton,
@@ -9,6 +11,8 @@ import {
 } from "@/pages/superMagicMobile/components/MobileShell"
 import AudioRecordingListPanel from "./AudioRecordingListPanel"
 import { MobileRecordingSettingsSheet } from "./components/MobileRecordingSettingsSheet"
+import { MobileRecordingSessionPage } from "./components/MobileRecordingSessionPage"
+import { useMobileRecordingEntryFacade } from "./hooks/useMobileRecordingEntryFacade"
 
 /**
  * Recordings quick-entry panel: mobile shell header + list panel wired to PC data layer.
@@ -16,6 +20,45 @@ import { MobileRecordingSettingsSheet } from "./components/MobileRecordingSettin
 function AudioRecordingEntryPanel() {
 	const { t } = useTranslation("super")
 	const [settingsSheetOpen, setSettingsSheetOpen] = useState(false)
+	const location = useLocation()
+	const facade = useMobileRecordingEntryFacade()
+	const lastHandledDeletedProjectIdRef = useRef<string>("")
+
+	useEffect(() => {
+		const deletedProjectId = (location.state as { deletedProjectId?: string } | null)
+			?.deletedProjectId
+		if (!deletedProjectId) return
+		if (deletedProjectId === lastHandledDeletedProjectIdRef.current) return
+
+		lastHandledDeletedProjectIdRef.current = deletedProjectId
+		facade.clearOptimisticItem(deletedProjectId)
+	}, [facade, location.state])
+
+	if (facade.presentation === "recording") {
+		return (
+			<MobileRecordingSessionPage
+				title={facade.recordingTitle}
+				duration={facade.duration}
+				isPaused={facade.isPaused}
+				isBusy={facade.isBusy}
+				startupState={facade.startupState}
+				startupErrorMessage={facade.startupErrorMessage}
+				startupErrorDetail={facade.startupErrorDetail}
+				transcriptMessages={facade.transcriptMessages}
+				noteContent={facade.noteContent}
+				onBack={facade.showList}
+				onPause={() => void facade.pauseRecording()}
+				onResume={() => void facade.resumeRecording()}
+				onRetryStart={() => void facade.startRecording()}
+				onFinish={() => void facade.finishRecording()}
+				onCancel={() => void facade.cancelRecording()}
+				onNoteChange={facade.updateNote}
+				onRenameTitle={facade.renameRecordingTitle}
+				WaveformComponent={facade.WaveformComponent}
+				MessageListComponent={facade.MessageListComponent}
+			/>
+		)
+	}
 
 	return (
 		<div
@@ -36,7 +79,26 @@ function AudioRecordingEntryPanel() {
 				</button>
 			</div>
 
-			<AudioRecordingListPanel />
+			<AudioRecordingListPanel
+				isSessionActive={facade.isSessionActive}
+				sessionTitle={facade.recordingTitle}
+				sessionDuration={facade.duration}
+				isSessionPaused={facade.isPaused}
+				isSessionBusy={facade.isBusy}
+				onResumeRecording={facade.showRecording}
+				onStartRecording={() => void facade.startRecording()}
+				onPauseRecording={() => void facade.pauseRecording()}
+				onContinueRecording={() => void facade.resumeRecording()}
+				onFinishRecording={() => void facade.finishRecording()}
+				WaveformComponent={facade.WaveformComponent}
+				optimisticItems={facade.optimisticItems}
+				refreshToken={facade.refreshToken}
+				onImportFiles={(files) => void facade.importAudioFiles(files)}
+				isImporting={facade.isImporting}
+				onResolveOptimisticItem={facade.clearOptimisticItem}
+				onRetryUpload={facade.retryImport}
+				AudioUploadActionComponent={facade.AudioUploadActionComponent}
+			/>
 			<MobileRecordingSettingsSheet
 				open={settingsSheetOpen}
 				onOpenChange={setSettingsSheetOpen}
@@ -44,6 +106,8 @@ function AudioRecordingEntryPanel() {
 		</div>
 	)
 }
+
+const ObservedAudioRecordingEntryPanel = observer(AudioRecordingEntryPanel)
 
 /**
  * Page entry mounts the unified Super mobile shell when rendered outside the app route layout.
@@ -53,7 +117,7 @@ export default function AudioRecordingEntryPage() {
 	const { t } = useTranslation("super")
 
 	if (shellOutlet) {
-		return <AudioRecordingEntryPanel />
+		return <ObservedAudioRecordingEntryPanel />
 	}
 
 	return (
@@ -62,7 +126,7 @@ export default function AudioRecordingEntryPage() {
 			closeSidebarAriaLabel={t("mobile.shell.closeSidebar")}
 			testIdPrefix="mobile-audio-recordings-page"
 		>
-			<AudioRecordingEntryPanel />
+			<ObservedAudioRecordingEntryPanel />
 		</SuperMobileShellRouteLayout>
 	)
 }

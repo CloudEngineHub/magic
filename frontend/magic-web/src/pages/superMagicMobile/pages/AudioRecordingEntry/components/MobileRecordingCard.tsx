@@ -10,12 +10,16 @@ import {
 	Smartphone,
 	Sparkles,
 	Upload,
+	AlertTriangle,
+	CloudUpload,
+	RefreshCw,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import {
 	formatRecordingDuration,
+	isRecordingDurationPending,
 	parseAudioProjectTimestamp,
 	resolveRecordingDisplayName,
 	resolveRecordingSourceLabel,
@@ -32,7 +36,96 @@ interface MobileRecordingCardProps {
 	onOpen?: (item: AudioProjectListItem) => void
 	onSummarize?: (item: AudioProjectListItem) => void
 	onMore?: (item: AudioProjectListItem) => void
+	onRetry?: (item: AudioProjectListItem) => void
 	isSubmitting?: boolean
+}
+
+interface LinearProgressProps {
+	value: number
+	tone?: "default" | "destructive"
+	indeterminate?: boolean
+	height?: number
+}
+
+function LinearProgress({
+	value,
+	tone = "default",
+	indeterminate = false,
+	height = 6,
+}: LinearProgressProps) {
+	const pct = Math.max(0, Math.min(1, value)) * 100
+	const fg = tone === "destructive" ? "rgb(239, 68, 68)" : "rgb(59, 130, 246)"
+
+	return (
+		<div
+			className="w-full overflow-hidden rounded-full"
+			style={{
+				height,
+				background: "rgba(100, 116, 139, 0.18)",
+			}}
+			role="progressbar"
+			aria-valuemin={0}
+			aria-valuemax={100}
+			aria-valuenow={Math.round(pct)}
+		>
+			<div
+				className="h-full rounded-full transition-[width] duration-300 ease-out"
+				style={{
+					width: `${pct}%`,
+					backgroundColor: fg,
+					backgroundImage: indeterminate
+						? `repeating-linear-gradient(45deg, ${fg} 0 8px, rgba(255, 255, 255, 0.15) 8px 16px)`
+						: undefined,
+					backgroundSize: indeterminate ? "32px 32px" : undefined,
+					animation: indeterminate ? "linear-progress-stripes 0.9s linear infinite" : undefined,
+				}}
+			/>
+			{indeterminate && (
+				<style>{`
+					@keyframes linear-progress-stripes {
+						from { background-position: 0 0; }
+						to   { background-position: 32px 0; }
+					}
+				`}</style>
+			)}
+		</div>
+	)
+}
+
+interface ProgressMetaProps {
+	isTransferring: boolean
+	isTransferFailed: boolean
+	pctText: number
+}
+
+function ProgressMeta({ isTransferring, isTransferFailed, pctText }: ProgressMetaProps) {
+	const { t } = useTranslation("super")
+
+	let label = ""
+	let color = ""
+	let Icon = CloudUpload
+
+	if (isTransferFailed) {
+		label = t("recordingEntry.progress.transferFailed", { defaultValue: "上传失败" })
+		color = "rgb(239, 68, 68)"
+		Icon = AlertTriangle
+	} else {
+		label = t("recordingEntry.progress.uploading", { defaultValue: "正在上传" })
+		color = "rgb(59, 130, 246)"
+		Icon = CloudUpload
+	}
+
+	return (
+		<div className="flex items-center justify-between gap-2 text-[13px] leading-5">
+			<span className="inline-flex items-center gap-1.5 min-w-0 font-medium" style={{ color }}>
+				<Icon className="size-3.5 shrink-0" strokeWidth={1.8} />
+				<span className="truncate">{label}</span>
+			</span>
+			<span className="font-semibold tabular-nums shrink-0" style={{ color }}>
+				{pctText}%
+			</span>
+		</div>
+	)
 }
 
 /** Outlined status chip for summarized recordings (prototype ChipOutline) */
@@ -70,10 +163,14 @@ function ChipMuted(props: {
 
 const relativeTimeFormatter = formatRelativeTime()
 
-/** Picks the source icon shown beside the recording origin chip */
+/** Picks the source icon based on extra.source:
+ * - 'device': Bluetooth/external recorder → Bluetooth icon
+ * - 'app' or fallback: recorded from mobile app → Smartphone icon
+ * Note: 'imported' audio_source keeps Upload icon regardless of source field
+ */
 function resolveSourceIcon(item: AudioProjectListItem) {
-	if (item.device_id?.trim()) return Bluetooth
 	if (item.audio_source === "imported") return Upload
+	if (item.source === "device") return Bluetooth
 	return Smartphone
 }
 
@@ -86,6 +183,7 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 	onOpen,
 	onSummarize,
 	onMore,
+	onRetry,
 	isSubmitting = false,
 }: MobileRecordingCardProps) {
 	const { t } = useTranslation("audioRecordings")
@@ -93,6 +191,7 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 	const title = resolveRecordingDisplayName(item.project_name, item.created_at)
 	const createdSeconds = parseAudioProjectTimestamp(item.created_at)
 	const timeLabel = createdSeconds != null ? relativeTimeFormatter(createdSeconds) : ""
+	const isDurationPending = isRecordingDurationPending(item)
 	const durationLabel = formatRecordingDuration(item.duration ?? 0)
 	const sourceLabel = resolveRecordingSourceLabel(item, {
 		sourceRecorded: t("card.sourceRecorded"),
@@ -119,6 +218,8 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 		return t("card.generateSummary")
 	}
 
+	const isProgressMode = item.transferStatus === "transferring" || item.transferStatus === "failed"
+
 	return (
 		<div
 			role="button"
@@ -142,20 +243,37 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 				</p>
 			</div>
 
-			<div className="flex items-center justify-between gap-2 text-[13px] leading-5 text-muted-foreground">
-				{timeLabel ? (
-					<span className="inline-flex min-w-0 items-center gap-1">
-						<Clock className="size-3.5 shrink-0" strokeWidth={1.8} />
-						<span className="truncate">{timeLabel}</span>
+			{isProgressMode ? (
+				<div className="flex flex-col gap-2">
+					<ProgressMeta
+						isTransferring={item.transferStatus === "transferring"}
+						isTransferFailed={item.transferStatus === "failed"}
+						pctText={Math.round((item.transferProgress ?? 0) * 100)}
+					/>
+					<LinearProgress
+						value={item.transferProgress ?? 0}
+						tone={item.transferStatus === "failed" ? "destructive" : "default"}
+						indeterminate={item.transferStatus === "transferring" && item.transferProgress === 0}
+					/>
+				</div>
+			) : (
+				<div className="flex items-center justify-between gap-2 text-[13px] leading-5 text-muted-foreground">
+					{timeLabel ? (
+						<span className="inline-flex min-w-0 items-center gap-1">
+							<Clock className="size-3.5 shrink-0" strokeWidth={1.8} />
+							<span className="truncate">{timeLabel}</span>
+						</span>
+					) : (
+						<span />
+					)}
+					<span className="inline-flex shrink-0 items-center gap-1">
+						<AudioLines className="size-3.5" strokeWidth={1.8} />
+						<span className={cn("tabular-nums", isDurationPending && "animate-pulse")}>
+							{isDurationPending ? "--:--" : durationLabel}
+						</span>
 					</span>
-				) : (
-					<span />
-				)}
-				<span className="inline-flex shrink-0 items-center gap-1">
-					<AudioLines className="size-3.5" strokeWidth={1.8} />
-					<span className="tabular-nums">{durationLabel}</span>
-				</span>
-			</div>
+				</div>
+			)}
 
 			<div className="mt-0.5 flex items-center gap-1.5">
 				<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
@@ -165,7 +283,7 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 					<ChipMuted icon={SourceIcon}>{sourceLabel}</ChipMuted>
 				</div>
 
-				{showSummaryButton && !isSummarizing ? (
+				{!isProgressMode && showSummaryButton && !isSummarizing ? (
 					<button
 						type="button"
 						disabled={!canClickSummary}
@@ -189,7 +307,7 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 					</button>
 				) : null}
 
-				{isSummarizing ? (
+				{!isProgressMode && isSummarizing ? (
 					<button
 						type="button"
 						disabled
@@ -198,6 +316,21 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 					>
 						<Loader className="size-3.5 animate-spin" strokeWidth={2} />
 						{t("card.summarizing")}
+					</button>
+				) : null}
+
+				{isProgressMode && item.transferStatus === "failed" ? (
+					<button
+						type="button"
+						onClick={(event) => {
+							event.stopPropagation()
+							onRetry?.(item)
+						}}
+						className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-destructive/20 bg-destructive/10 px-3 text-[13px] font-medium leading-5 text-destructive transition-colors active:bg-destructive/20"
+						data-testid={`mobile-recording-card-retry-${item.id}`}
+					>
+						<RefreshCw className="size-3.5" strokeWidth={2} />
+						{t("card.retryUpload", { defaultValue: "重试" })}
 					</button>
 				) : null}
 

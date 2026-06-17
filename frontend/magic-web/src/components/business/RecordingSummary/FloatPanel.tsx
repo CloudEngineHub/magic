@@ -1,6 +1,7 @@
 import { observer } from "mobx-react-lite"
 import { useEffect, useCallback, useMemo, useState, useRef } from "react"
 import { reaction } from "mobx"
+import { matchPath, useLocation } from "react-router"
 import recordingSummaryStore from "@/stores/recordingSummary"
 import { initializeService } from "@/services/recordSummary/serviceInstance"
 import { getRecordingImagesDirPath } from "@/services/recordSummary/const/files"
@@ -25,6 +26,12 @@ import useSandboxPreWarm from "@/pages/superMagic/components/MessagePanel/hooks/
 import { loadProjectAttachments } from "@/pages/superMagic/services"
 import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
+import { RoutePath } from "@/constants/routes"
+import { RouteName } from "@/routes/constants"
+import useNavigate from "@/routes/hooks/useNavigate"
+import { shouldHideRecordingFloatPanel } from "./utils/float-panel-visibility-policy"
+import { isAudioProjectMode } from "@/services/audioRecordings"
+import { MobileActiveRecordingIndicator } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileActiveRecordingIndicator"
 
 /**
  * 录音纪要浮动面板
@@ -33,7 +40,15 @@ export interface RecordingSummaryFloatPanelProps {}
 
 export function RecordingSummaryFloatPanel() {
 	const isMobile = useIsMobile()
+	const location = useLocation()
+	const navigate = useNavigate()
 	const recordSummaryService = initializeService()
+	const isOnMobileRecordingsListRoute =
+		isMobile &&
+		matchPath(`/:clusterCode${RoutePath.AudioRecordings}`, location.pathname) != null
+	const isOnMobileRecordingDetailRoute =
+		isMobile &&
+		matchPath(`/:clusterCode${RoutePath.AudioRecordingDetail}`, location.pathname) != null
 
 	const editorRef = useRef<SimpleEditorRef>(null)
 	// Create projectFilesStore for managing workspace files
@@ -346,6 +361,10 @@ export function RecordingSummaryFloatPanel() {
 
 	const isExpanded = recordingSummaryStore.isExpanded
 	const isVisible = recordingSummaryStore.isVisible
+	const isAudioRecordingProject = isAudioProjectMode(
+		(recordingSummaryStore.businessData.project as { project_mode?: string | null } | null)
+			?.project_mode,
+	)
 	useEffect(() => {
 		if (!isExpanded || !isVisible) {
 			return
@@ -372,8 +391,27 @@ export function RecordingSummaryFloatPanel() {
 	})
 
 	// Early return after all hooks have been called
-	if (!recordingSummaryStore.isVisible) {
+	if (
+		shouldHideRecordingFloatPanel({
+			isVisible: recordingSummaryStore.isVisible,
+			isOnMobileRecordingsListRoute,
+			isOnMobileRecordingDetailRoute,
+		})
+	) {
 		return null
+	}
+
+	// Audio-recordings sessions (new mobile entry) use a dedicated new-style
+	// indicator on other pages instead of the legacy global float panel.
+	// At this point the policy has already ensured: isVisible, not on list/detail routes.
+	if (isMobile && isAudioRecordingProject) {
+		return (
+			<MobileActiveRecordingIndicator
+				duration={recordingSummaryStore.duration}
+				isPaused={recordingSummaryStore.isPaused}
+				onOpen={() => navigate({ name: RouteName.AudioRecordings })}
+			/>
+		)
 	}
 
 	if (isMobile) {

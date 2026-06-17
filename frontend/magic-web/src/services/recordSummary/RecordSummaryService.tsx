@@ -350,6 +350,7 @@ class RecordSummaryService {
 		topic,
 		chatTopic,
 		audioSource,
+		sessionId,
 	}: {
 		workspace: Workspace
 		model: ModelItem
@@ -357,6 +358,7 @@ class RecordSummaryService {
 		topic?: Topic | null
 		chatTopic?: Topic | null
 		audioSource?: AudioSourceConfig
+		sessionId?: string
 	}) => {
 		// Guard: prevent concurrent startRecording calls
 		if (recordSummaryStore.isStartingRecord) {
@@ -430,6 +432,7 @@ class RecordSummaryService {
 				model: model,
 				userId: userStore.user.userInfo?.user_id || "",
 				audioSource: audioSource,
+				sessionId: sessionId,
 			})
 
 			logger.report("开始录音", {

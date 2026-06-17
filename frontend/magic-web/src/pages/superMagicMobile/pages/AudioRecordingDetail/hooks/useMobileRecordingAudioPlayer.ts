@@ -12,6 +12,7 @@ export function useMobileRecordingAudioPlayer(audioUrl: string) {
 	const [currentTime, setCurrentTime] = useState(0)
 	const [duration, setDuration] = useState(0)
 	const [playing, setPlaying] = useState(false)
+	const [playbackRate, setPlaybackRate] = useState(1.0)
 
 	useEffect(() => {
 		const audio = audioRef.current
@@ -22,7 +23,7 @@ export function useMobileRecordingAudioPlayer(audioUrl: string) {
 			const nextTime = audio?.currentTime ?? 0
 			setCurrentTime(nextTime)
 			if (segmentEndRef.current != null && nextTime >= segmentEndRef.current) {
-				audio.pause()
+				audio?.pause()
 				segmentEndRef.current = undefined
 			}
 		}
@@ -30,6 +31,10 @@ export function useMobileRecordingAudioPlayer(audioUrl: string) {
 		/** Captures loaded duration once metadata is ready. */
 		function handleLoadedMetadata() {
 			setDuration(audio?.duration ?? 0)
+			// Re-apply rate on load in case browser resets it
+			if (audio) {
+				audio.playbackRate = playbackRate
+			}
 		}
 
 		/** Mirrors play/pause state into the compact mobile player. */
@@ -37,9 +42,17 @@ export function useMobileRecordingAudioPlayer(audioUrl: string) {
 			setPlaying(Boolean(audio && !audio.paused))
 		}
 
+		/** Re-applies playback rate when audio starts playing to ensure consistency. */
+		function handlePlay() {
+			if (audio) {
+				audio.playbackRate = playbackRate
+			}
+		}
+
 		audio.addEventListener("timeupdate", handleTimeUpdate)
 		audio.addEventListener("loadedmetadata", handleLoadedMetadata)
 		audio.addEventListener("play", handlePlayState)
+		audio.addEventListener("play", handlePlay)
 		audio.addEventListener("pause", handlePlayState)
 		audio.addEventListener("ended", handlePlayState)
 
@@ -47,10 +60,11 @@ export function useMobileRecordingAudioPlayer(audioUrl: string) {
 			audio.removeEventListener("timeupdate", handleTimeUpdate)
 			audio.removeEventListener("loadedmetadata", handleLoadedMetadata)
 			audio.removeEventListener("play", handlePlayState)
+			audio.removeEventListener("play", handlePlay)
 			audio.removeEventListener("pause", handlePlayState)
 			audio.removeEventListener("ended", handlePlayState)
 		}
-	}, [audioUrl])
+	}, [audioUrl, playbackRate])
 
 	useEffect(() => {
 		setCurrentTime(0)
@@ -58,6 +72,14 @@ export function useMobileRecordingAudioPlayer(audioUrl: string) {
 		setPlaying(false)
 		segmentEndRef.current = undefined
 	}, [audioUrl])
+
+	// Keep native audio.playbackRate in sync with playbackRate state updates.
+	useEffect(() => {
+		const audio = audioRef.current
+		if (audio) {
+			audio.playbackRate = playbackRate
+		}
+	}, [playbackRate])
 
 	const seekTo = useCallback((seconds: number, options: { autoplay?: boolean } = {}) => {
 		const audio = audioRef.current
@@ -67,7 +89,7 @@ export function useMobileRecordingAudioPlayer(audioUrl: string) {
 		if (options.autoplay) void audio.play()
 	}, [])
 
-	const playSegment = useCallback((range: SegmentRange) => {
+	const playSegment = useCallback((range: { start: number; end?: number }) => {
 		const audio = audioRef.current
 		if (!audio) return
 		audio.currentTime = Math.max(0, range.start)
@@ -96,6 +118,8 @@ export function useMobileRecordingAudioPlayer(audioUrl: string) {
 		duration,
 		playing,
 		progress,
+		playbackRate,
+		setPlaybackRate,
 		seekTo,
 		playSegment,
 		toggle,

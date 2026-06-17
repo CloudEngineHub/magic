@@ -47,7 +47,14 @@ export function useWebRecordingEditorRuntime(): RecordingEditorRuntime {
 	const state = useWebRecordingEditorRuntimeState()
 
 	const startRecording = useMemoizedFn(
-		async ({ workspace, project, topic, model, audioSource }: RecordingEditorStartParams) => {
+		async ({
+			workspace,
+			project,
+			topic,
+			model,
+			audioSource,
+			sessionId,
+		}: RecordingEditorStartParams) => {
 			await recordSummaryService.startRecording({
 				workspace,
 				model,
@@ -56,6 +63,7 @@ export function useWebRecordingEditorRuntime(): RecordingEditorRuntime {
 				audioSource: {
 					source: audioSource,
 				},
+				sessionId,
 			})
 		},
 	)

@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { AudioProjectListItem } from "@/types/audioProject"
 
 const mockStore = {
@@ -16,6 +16,18 @@ const mockStore = {
 	renameProject: vi.fn(),
 	deleteProject: vi.fn(),
 }
+
+const listHookState = {
+	moreTarget: null as AudioProjectListItem | null,
+	handleCloseMore: vi.fn(),
+	handleOpenMore: vi.fn(),
+}
+
+const getAttachmentsByProjectIdMock = vi.fn()
+const processAttachmentDataMock = vi.fn()
+const setExternallyHiddenMock = vi.fn()
+const setExpandedMock = vi.fn()
+let intersectionObserverCallback: IntersectionObserverCallback | null = null
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -35,9 +47,31 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 	default: () => vi.fn(),
 }))
 
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		getAttachmentsByProjectId: (...args: unknown[]) => getAttachmentsByProjectIdMock(...args),
+	},
+}))
+
+vi.mock("@/pages/superMagic/utils/attachmentDataProcessor", () => ({
+	AttachmentDataProcessor: {
+		processAttachmentData: (...args: unknown[]) => processAttachmentDataMock(...args),
+	},
+}))
+
 vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils", () => ({
 	isAudioProjectPreviewReady: () => true,
 	resolveRecordingDisplayName: (name: string) => name,
+}))
+
+vi.mock("@/stores/recordingSummary", () => ({
+	__esModule: true,
+	default: {
+		floatPanel: {
+			setExternallyHidden: (...args: unknown[]) => setExternallyHiddenMock(...args),
+			setExpanded: (...args: unknown[]) => setExpandedMock(...args),
+		},
+	},
 }))
 
 vi.mock("antd-mobile", () => ({
@@ -70,12 +104,38 @@ vi.mock("@/pages/superMagicMobile/components/MobileDeleteConfirmPopup", () => ({
 
 vi.mock("../components/MobileRecordingCard", () => ({
 	MobileRecordingCard: ({ item }: { item: AudioProjectListItem }) => (
-		<div data-testid={`mobile-recording-card-${item.id}`}>{item.project_name}</div>
+		<div data-testid={`mobile-recording-card-${item.id}`} data-duration={String(item.duration)}>
+			{item.project_name}
+		</div>
 	),
 }))
 
 vi.mock("../components/MobileRecordingMoreSheet", () => ({
-	MobileRecordingMoreSheet: () => null,
+	MobileRecordingMoreSheet: ({
+		isOpen,
+		onShare,
+		onDelete,
+		item,
+	}: {
+		isOpen: boolean
+		onShare?: () => void
+		onDelete?: (projectId: string) => Promise<boolean>
+		item?: AudioProjectListItem | null
+	}) =>
+		isOpen ? (
+			<div>
+				<button type="button" data-testid="mobile-recording-more-share" onClick={onShare}>
+					Share
+				</button>
+				<button
+					type="button"
+					data-testid="mobile-recording-more-delete"
+					onClick={() => void onDelete?.(item?.id || "")}
+				>
+					Delete
+				</button>
+			</div>
+		) : null,
 }))
 
 vi.mock("../components/MobileRecordingFilterSheet", () => ({
@@ -88,6 +148,12 @@ vi.mock("../components/MobileRecordingImportSheet", () => ({
 
 vi.mock("../components/MobileRecordingFab", () => ({
 	MobileRecordingFab: () => <div data-testid="mobile-recording-fab" />,
+}))
+
+vi.mock("@/pages/superMagicMobile/components/ProjectShareSheet", () => ({
+	__esModule: true,
+	default: ({ open, projectId }: { open: boolean; projectId?: string }) =>
+		open ? <div data-testid={`project-share-sheet-${projectId || "unknown"}`} /> : null,
 }))
 
 vi.mock("../hooks/useMobileAudioRecordingsList", () => ({
@@ -117,15 +183,15 @@ vi.mock("../hooks/useMobileAudioRecordingsList", () => ({
 		groupActionSubmitting: false,
 		activeFilterCount: 0,
 		debouncedKeyword: "",
-		moreTarget: null,
+		moreTarget: listHookState.moreTarget,
 		handleRefresh: vi.fn(),
 		handleLoadMore: vi.fn(),
 		handleSummaryFilterChange: vi.fn(),
 		handleFilterStateChange: vi.fn(),
 		handleOpenSearch: vi.fn(),
 		handleDismissSearch: vi.fn(),
-		handleOpenMore: vi.fn(),
-		handleCloseMore: vi.fn(),
+		handleOpenMore: listHookState.handleOpenMore,
+		handleCloseMore: listHookState.handleCloseMore,
 		handleGroupChange: vi.fn(),
 		handleCreateGroup: vi.fn(),
 		handleRenameGroup: vi.fn(),
@@ -139,6 +205,44 @@ vi.mock("../hooks/useMobileAudioRecordingsList", () => ({
 import AudioRecordingListPanel from "../AudioRecordingListPanel"
 
 describe("AudioRecordingListPanel", () => {
+	const listItem = {
+		id: "proj-alpha-001",
+		project_name: "Demo meeting notes",
+		created_at: 1710000000,
+		duration: 120,
+		tags: [],
+		device_id: "",
+		audio_source: "recorded",
+		current_phase: "summarizing",
+		phase_status: "completed",
+		card_status: "summarized",
+		is_summarized: true,
+	} satisfies AudioProjectListItem
+
+	beforeEach(() => {
+		listHookState.moreTarget = null
+		listHookState.handleCloseMore.mockReset()
+		listHookState.handleOpenMore.mockReset()
+		getAttachmentsByProjectIdMock.mockReset()
+		processAttachmentDataMock.mockReset()
+		setExternallyHiddenMock.mockReset()
+		setExpandedMock.mockReset()
+		intersectionObserverCallback = null
+
+		vi.stubGlobal(
+			"IntersectionObserver",
+			vi.fn((callback: IntersectionObserverCallback) => {
+				intersectionObserverCallback = callback
+				return {
+					observe: vi.fn(),
+					unobserve: vi.fn(),
+					disconnect: vi.fn(),
+					takeRecords: vi.fn(() => []),
+				}
+			}),
+		)
+	})
+
 	it("renders toolbar and recording empty state when list is empty", () => {
 		mockStore.list = []
 		mockStore.isEmpty = true
@@ -163,25 +267,253 @@ describe("AudioRecordingListPanel", () => {
 	it("renders cards when list has items", () => {
 		mockStore.showInitialSkeleton = false
 		mockStore.isEmpty = false
-		mockStore.list = [
-			{
-				id: "proj-alpha-001",
-				project_name: "Demo meeting notes",
-				created_at: 1710000000,
-				duration: 120,
-				tags: [],
-				device_id: "",
-				audio_source: "recorded",
-				current_phase: "summarizing",
-				phase_status: "completed",
-				card_status: "summarized",
-				is_summarized: true,
-			},
-		]
+		mockStore.list = [listItem]
 
 		render(<AudioRecordingListPanel />)
 
 		expect(screen.getByTestId("mobile-recording-card-list")).toBeInTheDocument()
 		expect(screen.getByTestId("mobile-recording-card-proj-alpha-001")).toBeInTheDocument()
+	})
+
+	it("resolves optimistic items once the authoritative list contains the same project", async () => {
+		const onResolveOptimisticItem = vi.fn()
+		mockStore.showInitialSkeleton = false
+		mockStore.isEmpty = false
+		mockStore.list = [
+			{
+				id: "proj-imported-001",
+				project_name: "Imported audio result",
+				created_at: 1710000001,
+				duration: 61,
+				tags: [],
+				device_id: "",
+				audio_source: "imported",
+				current_phase: "summarizing",
+				phase_status: "in_progress",
+				card_status: "summarizing",
+				is_summarized: false,
+			},
+		]
+
+		render(
+			<AudioRecordingListPanel
+				optimisticItems={[
+					{
+						id: "proj-imported-001",
+						project_name: "Imported audio result",
+						created_at: 1710000001,
+						duration: 0,
+						tags: [],
+						device_id: "",
+						audio_source: "imported",
+						current_phase: "summarizing",
+						phase_status: "in_progress",
+						card_status: "summarizing",
+						is_summarized: false,
+					},
+				]}
+				onResolveOptimisticItem={onResolveOptimisticItem}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(onResolveOptimisticItem).toHaveBeenCalledWith("proj-imported-001")
+		})
+	})
+
+	it("keeps optimistic duration when the authoritative summarizing row still reports zero seconds", () => {
+		mockStore.showInitialSkeleton = false
+		mockStore.isEmpty = false
+		mockStore.list = [
+			{
+				id: "proj-recorded-001",
+				project_name: "Recorded result",
+				created_at: 1710000002,
+				duration: 0,
+				tags: [],
+				device_id: "",
+				audio_source: "recorded",
+				current_phase: "summarizing",
+				phase_status: "in_progress",
+				card_status: "summarizing",
+				is_summarized: false,
+			},
+		]
+
+		render(
+			<AudioRecordingListPanel
+				optimisticItems={[
+					{
+						id: "proj-recorded-001",
+						project_name: "Recorded result",
+						created_at: 1710000002,
+						duration: 754,
+						tags: [],
+						device_id: "",
+						audio_source: "recorded",
+						current_phase: "summarizing",
+						phase_status: "in_progress",
+						card_status: "summarizing",
+						is_summarized: false,
+					},
+				]}
+			/>,
+		)
+
+		expect(screen.getByTestId("mobile-recording-card-proj-recorded-001")).toHaveAttribute(
+			"data-duration",
+			"754",
+		)
+	})
+
+	it("clears the matching optimistic item after a successful delete", async () => {
+		const onResolveOptimisticItem = vi.fn()
+		mockStore.showInitialSkeleton = false
+		mockStore.isEmpty = false
+		mockStore.list = [listItem]
+		mockStore.deleteProject.mockResolvedValue(true)
+		listHookState.moreTarget = listItem
+
+		render(
+			<AudioRecordingListPanel
+				optimisticItems={[listItem]}
+				onResolveOptimisticItem={onResolveOptimisticItem}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-recording-more-delete"))
+
+		await waitFor(() => {
+			expect(mockStore.deleteProject).toHaveBeenCalledWith("proj-alpha-001")
+		})
+		expect(onResolveOptimisticItem).toHaveBeenCalledWith("proj-alpha-001")
+	})
+
+	it("opens the shared project share sheet from the list more-actions share entry", async () => {
+		mockStore.showInitialSkeleton = false
+		mockStore.isEmpty = false
+		mockStore.list = [listItem]
+		listHookState.moreTarget = listItem
+		getAttachmentsByProjectIdMock.mockResolvedValue({
+			tree: [{ file_id: "file-tree-001" }],
+			list: [],
+		})
+		processAttachmentDataMock.mockReturnValue({
+			tree: [{ file_id: "file-tree-001" }],
+			list: [{ file_id: "file-flat-001" }],
+		})
+
+		render(<AudioRecordingListPanel />)
+
+		fireEvent.click(screen.getByTestId("mobile-recording-more-share"))
+
+		await waitFor(() => {
+			expect(getAttachmentsByProjectIdMock).toHaveBeenCalledWith({
+				projectId: "proj-alpha-001",
+				temporaryToken: "",
+			})
+		})
+		expect(processAttachmentDataMock).toHaveBeenCalledWith({
+			tree: [{ file_id: "file-tree-001" }],
+			list: [],
+		})
+		expect(await screen.findByTestId("project-share-sheet-proj-alpha-001")).toBeInTheDocument()
+	})
+
+	it("shows active recording floating indicator when active card leaves viewport", async () => {
+		mockStore.showInitialSkeleton = false
+		mockStore.isEmpty = true
+		mockStore.list = []
+		const onResumeRecording = vi.fn()
+
+		render(
+			<AudioRecordingListPanel
+				isSessionActive
+				sessionTitle="Current recording"
+				sessionDuration="00:05:12"
+				WaveformComponent={() => <div data-testid="mock-waveform" />}
+				onResumeRecording={onResumeRecording}
+			/>,
+		)
+
+		expect(screen.queryByTestId("mobile-active-recording-indicator")).not.toBeInTheDocument()
+		expect(intersectionObserverCallback).toBeTypeOf("function")
+
+		act(() => {
+			intersectionObserverCallback?.(
+				[{ isIntersecting: false } as IntersectionObserverEntry],
+				{} as IntersectionObserver,
+			)
+		})
+
+		await waitFor(() => {
+			expect(screen.getByTestId("mobile-active-recording-indicator")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("mobile-active-recording-indicator-button"))
+		expect(onResumeRecording).toHaveBeenCalledTimes(1)
+	})
+
+	it("hides floating indicator while active recording card is visible", async () => {
+		mockStore.showInitialSkeleton = false
+		mockStore.isEmpty = true
+		mockStore.list = []
+
+		render(
+			<AudioRecordingListPanel
+				isSessionActive
+				sessionTitle="Current recording"
+				sessionDuration="00:01:23"
+				WaveformComponent={() => <div data-testid="mock-waveform" />}
+			/>,
+		)
+
+		expect(intersectionObserverCallback).toBeTypeOf("function")
+
+		act(() => {
+			intersectionObserverCallback?.(
+				[{ isIntersecting: false } as IntersectionObserverEntry],
+				{} as IntersectionObserver,
+			)
+		})
+
+		await waitFor(() => {
+			expect(screen.getByTestId("mobile-active-recording-indicator")).toBeInTheDocument()
+		})
+
+		act(() => {
+			intersectionObserverCallback?.(
+				[{ isIntersecting: true } as IntersectionObserverEntry],
+				{} as IntersectionObserver,
+			)
+		})
+
+		await waitFor(() => {
+			expect(
+				screen.queryByTestId("mobile-active-recording-indicator"),
+			).not.toBeInTheDocument()
+		})
+
+		expect(setExternallyHiddenMock).toHaveBeenCalledWith(true)
+		expect(setExternallyHiddenMock).toHaveBeenCalledWith(false)
+	})
+
+	it("collapses the legacy float panel when navigating away during an active session", () => {
+		mockStore.showInitialSkeleton = false
+		mockStore.isEmpty = true
+		mockStore.list = []
+
+		const { unmount } = render(
+			<AudioRecordingListPanel
+				isSessionActive
+				sessionTitle="Current recording"
+				sessionDuration="00:05:00"
+				WaveformComponent={() => <div data-testid="mock-waveform" />}
+			/>,
+		)
+
+		unmount()
+
+		expect(setExpandedMock).toHaveBeenCalledWith(false)
 	})
 })

@@ -73,7 +73,14 @@ export interface AudioProjectApiItem {
 	tags?: string[]
 }
 
-/** Normalized view model consumed by list UI components */
+/**
+ * Normalized view model consumed by list UI components (H5 + PC shared).
+ *
+ * TODO: Split into platform-specific types once field divergence grows:
+ *   - `MobileAudioProjectListItem` — H5-only fields (e.g. source icon, swipe actions)
+ *   - `PcAudioProjectListItem`     — PC-only fields (e.g. column sort metadata)
+ * Keep this shared base for fields that are truly common to both platforms.
+ */
 export interface AudioProjectListItem {
 	id: string
 	project_name: string
@@ -97,6 +104,20 @@ export interface AudioProjectListItem {
 	topic_id?: string
 	audio_file_id?: string
 	model_id?: string
+	/**
+	 * Recording device source from extra.source:
+	 * - 'app': recorded via mobile app (show Smartphone icon)
+	 * - 'device': recorded via Bluetooth/external device (show Bluetooth icon)
+	 *
+	 * TODO(pc-source-icon): PC list card currently renders no source icon.
+	 * When PC adds its own source icon, evaluate whether the same 'app'/'device'
+	 * values cover PC semantics, or whether a separate pc_source field is needed.
+	 */
+	source?: string | null
+	/** Upload progress fields aligned with prototype UI */
+	transferStatus?: "transferring" | "failed" | "done" | "queued"
+	transferProgress?: number
+	uploadSpeedKBps?: number
 }
 
 export interface QueryAudioProjectsResponse {

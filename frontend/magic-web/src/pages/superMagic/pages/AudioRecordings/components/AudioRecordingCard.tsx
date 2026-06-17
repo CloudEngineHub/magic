@@ -34,6 +34,7 @@ import type { AudioProjectListItem } from "@/types/audioProject"
 import {
 	formatRecordingCreatedTime,
 	formatRecordingDuration,
+	isRecordingDurationPending,
 	isAudioProjectPreviewReady,
 	resolveRecordingDisplayName,
 	resolveRecordingSourceLabel,
@@ -369,6 +370,7 @@ function AudioRecordingCard({
 		sourceDevice: t("card.sourceDevice"),
 	})
 	const createdLabel = formatRecordingCreatedTime(item.created_at)
+	const isDurationPending = isRecordingDurationPending(item)
 	const durationLabel = formatRecordingDuration(item.duration)
 	const SourceIcon = item.audio_source === "imported" ? Upload : Smartphone
 	const summaryButtonLabel =
@@ -424,7 +426,9 @@ function AudioRecordingCard({
 					data-testid={`audio-recording-card-${item.id}-duration`}
 				>
 					<AudioLines className="h-3.5 w-3.5 shrink-0" aria-hidden />
-					<span>{durationLabel}</span>
+					<span className={isDurationPending ? "animate-pulse" : undefined}>
+						{isDurationPending ? "--:--" : durationLabel}
+					</span>
 				</span>
 			</div>
 

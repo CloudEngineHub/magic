@@ -1,29 +1,32 @@
 import { ChevronRight, FolderOpen, X } from "lucide-react"
+import type { ComponentType, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { toast } from "sonner"
 import { Button } from "@/components/shadcn-ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/shadcn-ui/sheet"
 
 interface MobileRecordingImportSheetProps {
 	open: boolean
 	onOpenChange: (open: boolean) => void
+	onImportFiles: (files: FileList) => void
+	isImporting?: boolean
+	AudioUploadActionComponent: ComponentType<{
+		handler: (onUpload: () => void) => ReactNode
+		onFileChange?: (files: FileList) => void
+	}>
 }
 
 /**
- * H5 import sheet — local file picker only (no photo library or cross-app share).
- * Upload wiring lands in a follow-up phase; tap shows a coming-soon toast for now.
+ * H5 import sheet — local file picker only, intentionally excluding APP-only
+ * sources such as the photo library or cross-app import flows.
  */
 export function MobileRecordingImportSheet({
 	open,
 	onOpenChange,
+	onImportFiles,
+	isImporting = false,
+	AudioUploadActionComponent,
 }: MobileRecordingImportSheetProps) {
 	const { t } = useTranslation("super")
-
-	/** Placeholder until local file import is wired to RecordSummaryService. */
-	function handleImportFromFile() {
-		toast.info(t("mobile.recordingEntry.importComingSoon"))
-		onOpenChange(false)
-	}
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
@@ -59,26 +62,38 @@ export function MobileRecordingImportSheet({
 
 				<div className="px-[14px] py-[10px] pb-6">
 					<div className="w-full overflow-hidden rounded-lg bg-card">
-						<button
-							type="button"
-							onClick={handleImportFromFile}
-							className="flex min-h-[72px] w-full items-center gap-3 px-[14px] py-3 transition-opacity active:opacity-60"
-							data-testid="mobile-recording-import-from-file"
-						>
-							<span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
-								<FolderOpen className="size-6 text-blue-500" strokeWidth={2} />
-							</span>
-							{/* Keep the import label stacked like the prototype so the source and scope read separately. */}
-							<span className="min-w-0 flex-1 text-left">
-								<span className="block truncate text-[16px] font-medium leading-5 text-foreground">
-									{t("mobile.recordingEntry.importSheet.fromFiles")}
-								</span>
-								<span className="mt-1 block truncate text-[12px] leading-4 text-muted-foreground">
-									{t("mobile.recordingEntry.importSheet.fromFilesSub")}
-								</span>
-							</span>
-							<ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-						</button>
+						<AudioUploadActionComponent
+							onFileChange={(files) => {
+								onImportFiles(files)
+								onOpenChange(false)
+							}}
+							handler={(onUpload) => (
+								<button
+									type="button"
+									onClick={onUpload}
+									disabled={isImporting}
+									className="flex min-h-[72px] w-full items-center gap-3 px-[14px] py-3 transition-opacity active:opacity-60 disabled:opacity-50"
+									data-testid="mobile-recording-import-from-file"
+								>
+									<span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
+										<FolderOpen
+											className="size-6 text-blue-500"
+											strokeWidth={2}
+										/>
+									</span>
+									{/* Keep the import label stacked like the prototype so the source and scope read separately. */}
+									<span className="min-w-0 flex-1 text-left">
+										<span className="block truncate text-[16px] font-medium leading-5 text-foreground">
+											{t("mobile.recordingEntry.importSheet.fromFiles")}
+										</span>
+										<span className="mt-1 block truncate text-[12px] leading-4 text-muted-foreground">
+											{t("mobile.recordingEntry.importSheet.fromFilesSub")}
+										</span>
+									</span>
+									<ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+								</button>
+							)}
+						/>
 					</div>
 				</div>
 			</SheetContent>

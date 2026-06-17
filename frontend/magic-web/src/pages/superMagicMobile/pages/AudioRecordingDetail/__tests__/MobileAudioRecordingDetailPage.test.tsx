@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import MobileAudioRecordingDetailPage from "../index"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { RouteName } from "@/routes/constants"
+import { toast } from "sonner"
 
 const navigateMock = vi.fn()
 const saveMediaSpeakersAndMagicProjectJsMock = vi.fn()
+const downloadRecordingAudioFileMock = vi.fn()
+const deleteAudioRecordingProjectsMock = vi.fn()
 
 const {
 	detailDataMock,
@@ -69,6 +72,15 @@ vi.mock("react-i18next", () => ({
 				"detail.tabs.source": "Source",
 				"detail.tabs.summaryRoot": "Summary",
 				"detail.share": "Share",
+				"detail.shareAndExport": "Share & Export",
+				"detail.shareSection": "Share",
+				"detail.shareLink": "Share link",
+				"detail.exportSection": "Export files",
+				"detail.exportRecording": "Recording",
+				"detail.exportTranscript": "Transcript",
+				"detail.exportNotes": "Notes",
+				"detail.exportSummary": "Summary",
+				"detail.exportUnavailable": "Only original recording export is available right now",
 				"card.moreActions": "More actions",
 				"card.rename": "Rename",
 				"detail.loading": "Loading",
@@ -122,8 +134,55 @@ vi.mock("../hooks/useMobileRecordingAudioPlayer", () => ({
 	}),
 }))
 
+vi.mock("sonner", () => ({
+	toast: {
+		error: vi.fn(),
+		info: vi.fn(),
+		success: vi.fn(),
+	},
+}))
+
 vi.mock("../components/MobileRecordingAudioPlayer", () => ({
 	MobileRecordingAudioPlayer: () => <div data-testid="mobile-recording-audio-player" />,
+}))
+
+vi.mock("@/pages/superMagicMobile/components/ProjectShareSheet", () => ({
+	__esModule: true,
+	default: ({ open }: { open: boolean }) =>
+		open ? <div data-testid="mobile-recording-project-share-sheet" /> : null,
+}))
+
+vi.mock("../components/MobileRecordingShareExportSheet", () => ({
+	MobileRecordingShareExportSheet: ({
+		open,
+		fileMap,
+		onShareLink,
+		onDownloadRecording,
+	}: {
+		open: boolean
+		fileMap: unknown
+		onShareLink: () => void
+		onDownloadRecording: () => void
+	}) =>
+		open ? (
+			<div data-testid="mobile-recording-share-export-sheet">
+				<span data-testid="file-map">{JSON.stringify(fileMap)}</span>
+				<button
+					type="button"
+					data-testid="mobile-recording-share-link"
+					onClick={onShareLink}
+				>
+					Share link
+				</button>
+				<button
+					type="button"
+					data-testid="mobile-recording-export-recording"
+					onClick={onDownloadRecording}
+				>
+					Recording
+				</button>
+			</div>
+		) : null,
 }))
 
 vi.mock("../components/MobileRecordingSourcePanel", () => ({
@@ -159,15 +218,36 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML/media/utils", () => 
 		saveMediaSpeakersAndMagicProjectJsMock(...args),
 }))
 
+vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/download-recording-audio", () => ({
+	downloadRecordingAudioFile: (...args: unknown[]) => downloadRecordingAudioFileMock(...args),
+}))
+
+vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions", async () => {
+	const actual = await vi.importActual<
+		typeof import("@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions")
+	>("@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions")
+
+	return {
+		...actual,
+		deleteAudioRecordingProjects: (...args: unknown[]) =>
+			deleteAudioRecordingProjectsMock(...args),
+	}
+})
+
 describe("MobileAudioRecordingDetailPage", () => {
 	beforeEach(() => {
 		navigateMock.mockReset()
+		deleteAudioRecordingProjectsMock.mockReset()
+		deleteAudioRecordingProjectsMock.mockResolvedValue(undefined)
 		saveMediaSpeakersAndMagicProjectJsMock.mockReset()
 		saveMediaSpeakersAndMagicProjectJsMock.mockResolvedValue(undefined)
 		sourcePanelPropsMock.mockReset()
 		summaryPanelPropsMock.mockReset()
 		collectSpeakerIdsFromTextMock.mockReset()
 		collectSpeakerIdsFromTextMock.mockReturnValue([])
+		downloadRecordingAudioFileMock.mockReset()
+		downloadRecordingAudioFileMock.mockResolvedValue(true)
+		vi.mocked(toast.info).mockReset()
 		detailDataMock.mockReturnValue({
 			loading: false,
 			error: false,
@@ -190,6 +270,8 @@ describe("MobileAudioRecordingDetailPage", () => {
 			},
 			audioUrl: "https://example.invalid/audio-mock.mp3",
 			title: "Mock mobile recording",
+			attachmentTree: [],
+			attachmentList: [],
 		})
 	})
 
@@ -228,6 +310,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 			},
 			audioUrl: "https://example.invalid/audio-mock.mp3",
 			title: "Mock mobile recording",
+			attachmentList: [],
 		})
 
 		render(<MobileAudioRecordingDetailPage />)
@@ -237,6 +320,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(screen.getByTestId("mobile-recording-summary-panel")).toBeInTheDocument()
 		expect(summaryPanelPropsMock).toHaveBeenCalledWith(
 			expect.objectContaining({
+				attachmentList: expect.any(Array),
 				scrollPaddingBottom: expect.any(Number),
 				summaryFiles: [
 					expect.objectContaining({
@@ -329,6 +413,48 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(backButton.querySelector("svg")?.getAttribute("class")).toContain("size-[22px]")
 		expect(shareButton.querySelector("svg")?.getAttribute("class")).toContain("size-[22px]")
 		expect(moreButton.querySelector("svg")?.getAttribute("class")).toContain("size-[22px]")
+	})
+
+	it("opens the share & export sheet from the header share action", async () => {
+		render(<MobileAudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByLabelText("Share"))
+
+		expect(await screen.findByTestId("mobile-recording-share-export-sheet")).toBeInTheDocument()
+	})
+
+	it("opens the existing project-share sheet from the share & export launcher", async () => {
+		render(<MobileAudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByLabelText("Share"))
+		fireEvent.click(await screen.findByTestId("mobile-recording-share-link"))
+
+		expect(
+			await screen.findByTestId("mobile-recording-project-share-sheet"),
+		).toBeInTheDocument()
+	})
+
+	it("downloads the original recording from the share & export launcher", async () => {
+		render(<MobileAudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByLabelText("Share"))
+		fireEvent.click(await screen.findByTestId("mobile-recording-export-recording"))
+
+		await waitFor(() => {
+			expect(downloadRecordingAudioFileMock).toHaveBeenCalledWith({
+				fileId: "audio-mobile-001",
+				audioFile: undefined,
+				fallbackName: "Mock mobile recording",
+			})
+		})
+	})
+
+	it("passes fileMap to the share-export sheet", async () => {
+		render(<MobileAudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByLabelText("Share"))
+		expect(await screen.findByTestId("mobile-recording-share-export-sheet")).toBeInTheDocument()
+		expect(screen.getByTestId("file-map")).not.toBeEmptyDOMElement()
 	})
 
 	it("opens the more-actions sheet even when the project query has not recovered the detail item yet", async () => {
@@ -459,5 +585,21 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(screen.getByText("Load failed")).toBeInTheDocument()
 		expect(screen.queryByTestId("mobile-recording-source-panel")).toBeNull()
 		expect(screen.queryByTestId("mobile-recording-summary-panel")).toBeNull()
+	})
+
+	it("passes deleted project id when navigating back to the list after delete", async () => {
+		render(<MobileAudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByLabelText("More actions"))
+		fireEvent.click(await screen.findByTestId("mobile-recording-more-delete"))
+		fireEvent.click(await screen.findByTestId("mobile-recording-delete-confirm"))
+
+		await waitFor(() => {
+			expect(deleteAudioRecordingProjectsMock).toHaveBeenCalledWith(["project-mobile-001"])
+		})
+		expect(navigateMock).toHaveBeenCalledWith({
+			name: RouteName.AudioRecordings,
+			state: { deletedProjectId: "project-mobile-001" },
+		})
 	})
 })

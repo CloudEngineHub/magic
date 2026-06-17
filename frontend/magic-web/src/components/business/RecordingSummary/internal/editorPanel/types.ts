@@ -57,6 +57,7 @@ export interface RecordingEditorStartParams {
 	selectedTopic: Topic | null
 	model: ModelItem
 	audioSource: AudioSourceType
+	sessionId?: string
 }
 
 export interface RecordingEditorFinishOptions {

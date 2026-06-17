@@ -39,10 +39,13 @@ import { useMobileRecordingDetailData } from "./hooks/useMobileRecordingDetailDa
 import { MobileRecordingAudioPlayer } from "./components/MobileRecordingAudioPlayer"
 import { MobileRecordingSourcePanel } from "./components/MobileRecordingSourcePanel"
 import { MobileRecordingSummaryPanel } from "./components/MobileRecordingSummaryPanel"
+import { MobileRecordingShareExportSheet } from "./components/MobileRecordingShareExportSheet"
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
 import { MobileRecordingMoreSheet } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingMoreSheet"
 import { MobileRecordingMoveGroupSheet } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingMoveGroupSheet"
 import type { MobileRecordingGroup } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingGroupSheet"
+import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
+import { downloadRecordingAudioFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-audio"
 
 const COLLAPSED_PLAYER_HEIGHT = 40
 const EXPANDED_PLAYER_HEIGHT = 178
@@ -61,11 +64,20 @@ export default function MobileAudioRecordingDetailPage() {
 	const location = useLocation()
 	const { projectId = "" } = useParams<{ projectId: string }>()
 	const locationState = location.state as AudioRecordingDetailLocationState | null
-	const { loading, error, projectItem, fileMap, texts, audioUrl, title } =
-		useMobileRecordingDetailData({
-			projectId,
-			initialTitle: locationState?.projectName,
-		})
+	const {
+		loading,
+		error,
+		projectItem,
+		fileMap,
+		texts,
+		audioUrl,
+		title,
+		attachmentTree,
+		attachmentList,
+	} = useMobileRecordingDetailData({
+		projectId,
+		initialTitle: locationState?.projectName,
+	})
 	const player = useMobileRecordingAudioPlayer(audioUrl)
 	const [detailItem, setDetailItem] = useState<AudioProjectListItem | null>(null)
 	const [titleOverride, setTitleOverride] = useState("")
@@ -82,6 +94,8 @@ export default function MobileAudioRecordingDetailPage() {
 	const [actionSubmitting, setActionSubmitting] = useState(false)
 	const [summarySubmitting, setSummarySubmitting] = useState(false)
 	const [playerExpanded, setPlayerExpanded] = useState(false)
+	const [shareExportSheetOpen, setShareExportSheetOpen] = useState(false)
+	const [projectShareSheetOpen, setProjectShareSheetOpen] = useState(false)
 	const titleInputRef = useRef<HTMLInputElement>(null)
 	const defaultTab = useMemo<MobileRecordingTopTab>(() => {
 		const cardStatus =
@@ -164,6 +178,8 @@ export default function MobileAudioRecordingDetailPage() {
 		setMoreSheetOpen(false)
 		setMoveGroupSheetOpen(false)
 		setPlayerExpanded(false)
+		setShareExportSheetOpen(false)
+		setProjectShareSheetOpen(false)
 	}, [projectId])
 
 	useEffect(() => {
@@ -212,6 +228,32 @@ export default function MobileAudioRecordingDetailPage() {
 		)
 		setSpeakerSettingsOpen(true)
 		setPlayerExpanded(false)
+	}
+
+	/** Opens the prototype-aligned share/export sheet instead of routing share through the more-actions menu. */
+	function openShareExportSheet() {
+		if (!projectId || loading || error) return
+		setShareExportSheetOpen(true)
+		setMoreSheetOpen(false)
+		setPlayerExpanded(false)
+	}
+
+	/** Downloads the original audio asset only, leaving format conversion for a later milestone. */
+	async function handleDownloadOriginal() {
+		const success = await downloadRecordingAudioFile({
+			fileId: fileMap?.audio?.file_id || resolvedActionItem?.audio_file_id,
+			audioFile: fileMap?.audio,
+			fallbackName: displayTitle,
+		})
+		if (!success) {
+			toast.error(t("detail.loadFailed"))
+		}
+	}
+
+	/** Opens the existing project-share flow from the dedicated share/export launcher. */
+	function openProjectShareSheet() {
+		setShareExportSheetOpen(false)
+		setProjectShareSheetOpen(true)
 	}
 
 	/** Saves local speaker names so transcript and summary content update together. */
@@ -294,7 +336,10 @@ export default function MobileAudioRecordingDetailPage() {
 		try {
 			await deleteAudioRecordingProjects([projectIdToDelete])
 			toast.success(t("actions.deleteSuccess"))
-			navigate({ name: RouteName.AudioRecordings })
+			navigate({
+				name: RouteName.AudioRecordings,
+				state: { deletedProjectId: projectIdToDelete },
+			})
 			return true
 		} catch {
 			toast.error(t("actions.deleteFailed"))
@@ -391,6 +436,7 @@ export default function MobileAudioRecordingDetailPage() {
 						<HeaderIconButton
 							label={t("detail.share")}
 							icon={<Share2 className="size-[22px]" />}
+							onClick={openShareExportSheet}
 						/>
 						<HeaderIconButton
 							label={t("card.moreActions")}
@@ -454,6 +500,7 @@ export default function MobileAudioRecordingDetailPage() {
 									file?.content,
 								]),
 							)}
+							attachmentList={attachmentList}
 							scrollPaddingBottom={scrollPaddingBottom}
 							speakerNameMap={speakerNameMap}
 							onOpenSpeakerSettings={openSpeakerSettings}
@@ -476,6 +523,8 @@ export default function MobileAudioRecordingDetailPage() {
 				onToggle={player.toggle}
 				onSeek={(seconds) => player.seekTo(seconds, { autoplay: false })}
 				onExpandedChange={setPlayerExpanded}
+				playbackRate={player.playbackRate}
+				onPlaybackRateChange={player.setPlaybackRate}
 			/>
 
 			<MobileRecordingRenameSheet
@@ -526,7 +575,6 @@ export default function MobileAudioRecordingDetailPage() {
 				onMoveToGroup={handleOpenMoveGroup}
 				isSubmittingAction={actionSubmitting}
 				isSubmittingSummary={summarySubmitting}
-				hideShareAction
 			/>
 
 			<MobileRecordingMoveGroupSheet
@@ -538,6 +586,27 @@ export default function MobileAudioRecordingDetailPage() {
 				onSelect={(groupId) => {
 					void handleMoveGroup(groupId)
 				}}
+			/>
+
+			<MobileRecordingShareExportSheet
+				open={shareExportSheetOpen}
+				recordingName={displayTitle}
+				fileMap={fileMap}
+				projectId={projectId}
+				onOpenChange={setShareExportSheetOpen}
+				onShareLink={openProjectShareSheet}
+				onDownloadRecording={() => {
+					void handleDownloadOriginal()
+				}}
+			/>
+
+			<ProjectShareSheet
+				open={projectShareSheetOpen}
+				onClose={() => setProjectShareSheetOpen(false)}
+				projectId={projectId}
+				projectName={displayTitle}
+				attachments={attachmentTree}
+				attachmentList={attachmentList}
 			/>
 		</div>
 	)

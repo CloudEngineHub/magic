@@ -19,6 +19,7 @@ interface MobileRecordingMoreSheetProps {
 	onDelete: (projectId: string) => Promise<boolean>
 	onSummarize?: (item: AudioProjectListItem) => Promise<boolean>
 	onMoveToGroup?: (item: AudioProjectListItem) => void
+	onShare?: () => void
 	isSubmittingAction?: boolean
 	isSubmittingSummary?: boolean
 	hideShareAction?: boolean
@@ -78,6 +79,7 @@ export function MobileRecordingMoreSheet({
 	onDelete,
 	onSummarize,
 	onMoveToGroup,
+	onShare,
 	isSubmittingAction = false,
 	isSubmittingSummary = false,
 	hideShareAction = false,
@@ -117,10 +119,6 @@ export function MobileRecordingMoreSheet({
 		onClose()
 	}, [onClose, resetState])
 
-	const handleComingSoon = useCallback(() => {
-		toast.info(t("super:mobile.recordingEntry.moreSheet.comingSoon"))
-	}, [t])
-
 	const handleRenamePress = useCallback(() => {
 		if (!item) return
 		setRenameValue(resolveRecordingDisplayName(item.project_name, item.created_at))
@@ -151,6 +149,16 @@ export function MobileRecordingMoreSheet({
 		onMoveToGroup?.(item)
 		handleClose()
 	}, [item, onMoveToGroup, handleClose])
+
+	const handleShare = useCallback(() => {
+		if (onShare) {
+			onShare()
+			handleClose()
+			return
+		}
+
+		toast.info(t("super:mobile.recordingEntry.moreSheet.comingSoon"))
+	}, [handleClose, onShare, t])
 
 	function resolveHeaderTitle() {
 		if (view === "rename") return t("super:mobile.recordingEntry.moreSheet.rename")
@@ -262,7 +270,7 @@ export function MobileRecordingMoreSheet({
 							<MenuItem
 								label={t("super:mobile.recordingEntry.moreSheet.share")}
 								dataTestId="mobile-recording-more-share"
-								onClick={handleComingSoon}
+								onClick={handleShare}
 							/>
 						)}
 					</MenuGroup>

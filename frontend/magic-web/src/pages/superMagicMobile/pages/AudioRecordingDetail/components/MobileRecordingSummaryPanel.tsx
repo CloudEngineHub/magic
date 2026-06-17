@@ -1,18 +1,22 @@
 import type { ReactNode } from "react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { AlignLeft, Network } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { cn } from "@/lib/utils"
 import MagicMarkmap from "@/components/base/MagicMarkmap"
+import IsolatedHTMLRenderer from "@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer"
+import { processHtmlContent } from "@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor"
 import type { RecordingDetailFileRef, RecordingTopicSection } from "../types"
 import { parseTopicsMarkdown } from "../utils/topics-parser"
 import { formatRecordingTime } from "../utils/time"
 import { MobileRecordingMarkdownContent } from "./MobileRecordingMarkdownContent"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
 interface MobileRecordingSummaryPanelProps {
 	summaryFiles: RecordingDetailFileRef[]
 	summaryContent: Record<string, string | undefined>
+	attachmentList: AttachmentItem[]
 	scrollPaddingBottom: number
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
@@ -23,6 +27,7 @@ interface MobileRecordingSummaryPanelProps {
 export function MobileRecordingSummaryPanel({
 	summaryFiles,
 	summaryContent,
+	attachmentList,
 	scrollPaddingBottom,
 	speakerNameMap,
 	onOpenSpeakerSettings,
@@ -57,27 +62,52 @@ export function MobileRecordingSummaryPanel({
 				</div>
 			</div>
 
-			<ScrollEdgeFadeContainer
-				fadeColor="mobile-background"
-				className="min-h-0 flex-1"
-				scrollClassName="px-4"
-				contentDeps={[activeType, summaryFiles.length, Boolean(content?.trim())]}
-			>
-				<div className="min-h-full" style={{ paddingBottom: scrollPaddingBottom }}>
-					{activeFile ? (
-						<SummaryContent
+			{/*
+			 * metrics tab: render directly in the panel's flex column so that flex-1
+			 * can properly stretch the iframe to fill remaining height.
+			 * Placing it inside an overflow-y-auto scroll port breaks the flex height
+			 * chain because the scroll container expands to content height, so
+			 * flex-1 children can never resolve a finite "remaining" height.
+			 */}
+			{activeFile?.type === "metrics" ? (
+				<div
+					className="flex min-h-0 flex-1 flex-col overflow-hidden px-4"
+					style={{ paddingBottom: scrollPaddingBottom }}
+				>
+					{content?.trim() ? (
+						<MetricsHtmlContent
 							file={activeFile}
 							content={content}
-							emptyText={t("detail.emptySummaryFile")}
-							unsupportedText={t("detail.unsupportedSummaryFile")}
-							scrollPaddingBottom={scrollPaddingBottom}
-							speakerNameMap={speakerNameMap}
-							onOpenSpeakerSettings={onOpenSpeakerSettings}
-							onTimeClick={onTimeClick}
+							attachmentList={attachmentList}
 						/>
-					) : null}
+					) : (
+						<PanelMessage>{t("detail.emptySummaryFile")}</PanelMessage>
+					)}
 				</div>
-			</ScrollEdgeFadeContainer>
+			) : (
+				/* All other tab types go through the scroll container with edge fade */
+				<ScrollEdgeFadeContainer
+					fadeColor="mobile-background"
+					className="min-h-0 flex-1"
+					scrollClassName="px-4"
+					contentDeps={[activeType, summaryFiles.length, Boolean(content?.trim())]}
+				>
+					<div className="min-h-full" style={{ paddingBottom: scrollPaddingBottom }}>
+						{activeFile ? (
+							<SummaryContent
+								file={activeFile}
+								content={content}
+								attachmentList={attachmentList}
+								emptyText={t("detail.emptySummaryFile")}
+								scrollPaddingBottom={scrollPaddingBottom}
+								speakerNameMap={speakerNameMap}
+								onOpenSpeakerSettings={onOpenSpeakerSettings}
+								onTimeClick={onTimeClick}
+							/>
+						) : null}
+					</div>
+				</ScrollEdgeFadeContainer>
+			)}
 		</div>
 	)
 }
@@ -115,8 +145,8 @@ function SummaryTabButton({
 function SummaryContent({
 	file,
 	content,
+	attachmentList,
 	emptyText,
-	unsupportedText,
 	scrollPaddingBottom,
 	speakerNameMap,
 	onOpenSpeakerSettings,
@@ -124,19 +154,19 @@ function SummaryContent({
 }: {
 	file: RecordingDetailFileRef
 	content?: string
+	attachmentList: AttachmentItem[]
 	emptyText: string
-	unsupportedText: string
 	scrollPaddingBottom: number
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
 }) {
-	if (file.type === "unsupported") {
-		return <PanelMessage>{unsupportedText}</PanelMessage>
-	}
-
 	if (!content?.trim()) {
 		return <PanelMessage>{emptyText}</PanelMessage>
+	}
+
+	if (file.type === "metrics") {
+		return <MetricsHtmlContent file={file} content={content} attachmentList={attachmentList} />
 	}
 
 	if (file.type === "topics") {
@@ -169,6 +199,58 @@ function SummaryContent({
 				speakerNameMap={speakerNameMap}
 				onSpeakerClick={onOpenSpeakerSettings}
 				onTimeClick={(time) => onTimeClick(time)}
+			/>
+		</div>
+	)
+}
+
+/** Reuses the shared HTML processor and isolated iframe renderer for metrics summaries so bundle-relative assets keep working. */
+function MetricsHtmlContent({
+	file,
+	content,
+	attachmentList,
+}: {
+	file: RecordingDetailFileRef
+	content: string
+	attachmentList: AttachmentItem[]
+}) {
+	const [processedContent, setProcessedContent] = useState(content)
+	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
+
+	useEffect(() => {
+		let cancelled = false
+
+		void processHtmlContent({
+			content,
+			attachments: attachmentList,
+			attachmentList,
+			fileId: file.file.file_id,
+			fileName: file.fileName,
+		}).then((result) => {
+			if (cancelled) return
+			setProcessedContent(result.processedContent)
+			setFilePathMapping(result.filePathMapping)
+		})
+
+		return () => {
+			cancelled = true
+		}
+	}, [attachmentList, content, file.file.file_id, file.fileName])
+
+	return (
+		<div
+			className="flex min-h-0 flex-1 flex-col"
+			data-testid="mobile-recording-metrics-container"
+		>
+			<IsolatedHTMLRenderer
+				content={processedContent}
+				fileId={file.file.file_id}
+				filePathMapping={filePathMapping}
+				attachmentList={attachmentList}
+				relative_file_path={file.file.relative_file_path}
+				openNewTab={() => undefined}
+				className="flex min-h-[520px] flex-1 overflow-hidden rounded-2xl bg-card"
+				iframeClassName="h-full min-h-[520px] bg-white"
 			/>
 		</div>
 	)
@@ -408,9 +490,10 @@ function resolveSummaryTypeLabel(type: string, t: ReturnType<typeof useTranslati
 	if (type === "topics") return t("detail.tabs.topics")
 	if (type === "highlights") return t("detail.tabs.highlights")
 	if (type === "insights") return t("detail.tabs.insights")
+	if (type === "metrics") return t("detail.tabs.metrics")
 	if (type === "mindmap") return t("detail.tabs.mindmap")
 	if (type === "followup") return t("detail.tabs.followup")
 	if (type === "power_dynamics") return t("detail.tabs.powerDynamics")
 	if (type === "intent") return t("detail.tabs.intent")
-	return t("detail.tabs.unsupported")
+	return type
 }

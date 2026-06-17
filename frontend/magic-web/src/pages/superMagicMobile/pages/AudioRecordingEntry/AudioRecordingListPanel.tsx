@@ -1,12 +1,15 @@
+import type { ComponentType, ReactNode } from "react"
 import { observer } from "mobx-react-lite"
 import { InfiniteScroll } from "antd-mobile"
 import { toast } from "sonner"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import MagicPullToRefresh from "@/components/base-mobile/MagicPullToRefresh"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
+import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
 import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
 import { MobileResourceListSkeletonList } from "@/pages/superMagicMobile/components/skeletons"
 import {
@@ -14,6 +17,8 @@ import {
 	resolveRecordingDisplayName,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
 import { UNGROUPED_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
+import { SuperMagicApi } from "@/apis"
+import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import { useMobileAudioRecordingsList } from "./hooks/useMobileAudioRecordingsList"
 import { MobileRecordingCard } from "./components/MobileRecordingCard"
 import { MobileRecordingFab } from "./components/MobileRecordingFab"
@@ -23,14 +28,100 @@ import { MobileRecordingImportSheet } from "./components/MobileRecordingImportSh
 import { MobileRecordingListToolbar } from "./components/MobileRecordingListToolbar"
 import { MobileRecordingMoveGroupSheet } from "./components/MobileRecordingMoveGroupSheet"
 import { MobileRecordingMoreSheet } from "./components/MobileRecordingMoreSheet"
+import { MobileActiveRecordingCard } from "./components/MobileActiveRecordingCard"
+import { MobileActiveRecordingIndicator } from "./components/MobileActiveRecordingIndicator"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import recordingSummaryStore from "@/stores/recordingSummary"
 
 /**
  * Mobile recordings list panel: toolbar, pull-to-refresh list, sheets, and FAB placeholder.
  * Data layer reuses PC AudioRecordingsStore scoped to this panel's lifecycle.
  */
-function AudioRecordingListPanel() {
+interface AudioRecordingListPanelProps {
+	isSessionActive?: boolean
+	sessionTitle?: string
+	sessionDuration?: string
+	isSessionPaused?: boolean
+	isSessionBusy?: boolean
+	onResumeRecording?: () => void
+	onStartRecording?: () => void
+	onPauseRecording?: () => void
+	onContinueRecording?: () => void
+	onFinishRecording?: () => void
+	WaveformComponent?: ComponentType<{ isRecording: boolean; isPaused: boolean }>
+	optimisticItems?: AudioProjectListItem[]
+	refreshToken?: number
+	onImportFiles?: (files: FileList) => void
+	isImporting?: boolean
+	onResolveOptimisticItem?: (projectId: string) => void
+	AudioUploadActionComponent?: ComponentType<{
+		handler: (onUpload: () => void) => ReactNode
+		onFileChange?: (files: FileList) => void
+	}>
+	onRetryUpload?: (projectId: string) => Promise<void>
+}
+
+interface ShareSheetState {
+	projectId: string
+	projectName: string
+	attachments: AttachmentItem[]
+	attachmentList: AttachmentItem[]
+}
+
+function shouldKeepOptimisticDurationFallback(
+	authoritativeItem: AudioProjectListItem,
+	optimisticItem: AudioProjectListItem,
+): boolean {
+	return (
+		authoritativeItem.card_status === "summarizing" &&
+		(authoritativeItem.duration ?? 0) <= 0 &&
+		(optimisticItem.duration ?? 0) > 0
+	)
+}
+
+function mergeAudioRecordingItems(
+	authoritativeItem: AudioProjectListItem,
+	optimisticItem?: AudioProjectListItem,
+): AudioProjectListItem {
+	if (!optimisticItem) return authoritativeItem
+	if (!shouldKeepOptimisticDurationFallback(authoritativeItem, optimisticItem)) {
+		return authoritativeItem
+	}
+
+	// The backend row is still authoritative for status and navigation fields, but
+	// freshly recorded items can keep the local session duration until merge finishes.
+	return {
+		...authoritativeItem,
+		duration: optimisticItem.duration,
+	}
+}
+
+function AudioRecordingListPanel({
+	isSessionActive = false,
+	sessionTitle = "",
+	sessionDuration = "00:00:00",
+	isSessionPaused = false,
+	isSessionBusy = false,
+	onResumeRecording,
+	onStartRecording,
+	onPauseRecording,
+	onContinueRecording,
+	onFinishRecording,
+	WaveformComponent,
+	optimisticItems = [],
+	refreshToken = 0,
+	onImportFiles,
+	isImporting = false,
+	onResolveOptimisticItem,
+	AudioUploadActionComponent,
+	onRetryUpload,
+}: AudioRecordingListPanelProps) {
 	const { t } = useTranslation(["audioRecordings", "super"])
 	const navigate = useNavigate()
+	const [shareSheetState, setShareSheetState] = useState<ShareSheetState | null>(null)
+	const [isActiveCardVisible, setIsActiveCardVisible] = useState(true)
+	const [activeRecordingCardElement, setActiveRecordingCardElement] =
+		useState<HTMLDivElement | null>(null)
 	const {
 		store,
 		searchKeyword,
@@ -74,10 +165,126 @@ function AudioRecordingListPanel() {
 		refreshGroups,
 	} = useMobileAudioRecordingsList()
 
+	const mergedList = useMemo(() => {
+		const mergedMap = new Map<string, AudioProjectListItem>()
+
+		// Keep optimistic items first so freshly finished recordings appear instantly.
+		for (const item of optimisticItems) {
+			mergedMap.set(item.id, item)
+		}
+		for (const item of store.list) {
+			mergedMap.set(item.id, mergeAudioRecordingItems(item, mergedMap.get(item.id)))
+		}
+
+		return Array.from(mergedMap.values())
+	}, [optimisticItems, store.list])
+
 	const showInitialSkeleton = store.showInitialSkeleton
-	const isEmpty = !showInitialSkeleton && store.isEmpty
+	const isEmpty = !showInitialSkeleton && mergedList.length === 0
 	const isSearchEmpty = isEmpty && debouncedKeyword.trim().length > 0
 	const shouldStretchPullToRefresh = !showInitialSkeleton && (isEmpty || isSearchEmpty)
+
+	/**
+	 * Re-syncs the list after a recording is completed so the optimistic card can
+	 * later be replaced by the authoritative backend row.
+	 */
+	useEffect(() => {
+		if (!refreshToken) return
+		void handleRefresh()
+	}, [handleRefresh, refreshToken])
+
+	useEffect(() => {
+		if (!optimisticItems.length) return
+
+		const hydratedIds = optimisticItems
+			.map((item) => item.id)
+			.filter((projectId) => {
+				const optimisticItem = optimisticItems.find((item) => item.id === projectId)
+				const authoritativeItem = store.list.find((entry) => entry.id === projectId)
+				if (!optimisticItem || !authoritativeItem) return false
+
+				return !shouldKeepOptimisticDurationFallback(authoritativeItem, optimisticItem)
+			})
+
+		if (!hydratedIds.length) return
+
+		hydratedIds.forEach((projectId) => {
+			onResolveOptimisticItem?.(projectId)
+		})
+	}, [onResolveOptimisticItem, optimisticItems, store.list])
+
+	useEffect(() => {
+		if (!optimisticItems.length) return
+
+		const unresolvedItems = optimisticItems.filter(
+			(item) => !store.list.some((entry) => entry.id === item.id),
+		)
+		if (!unresolvedItems.length) return
+
+		const timer = window.setInterval(() => {
+			void handleRefresh()
+		}, 5000)
+
+		return () => {
+			window.clearInterval(timer)
+		}
+	}, [handleRefresh, optimisticItems, store.list])
+
+	/**
+	 * Mirrors the prototype behavior: once the active recording card scrolls out
+	 * of view, promote a floating indicator so users can jump back immediately.
+	 */
+	useEffect(() => {
+		if (!isSessionActive) {
+			setIsActiveCardVisible(true)
+			return
+		}
+
+		if (!WaveformComponent) {
+			setIsActiveCardVisible(true)
+			return
+		}
+
+		if (typeof IntersectionObserver === "undefined") {
+			setIsActiveCardVisible(true)
+			return
+		}
+
+		const target = activeRecordingCardElement
+		if (!target) {
+			setIsActiveCardVisible(true)
+			return
+		}
+
+		const observer = new IntersectionObserver(
+			([entry]) => {
+				setIsActiveCardVisible(entry?.isIntersecting ?? true)
+			},
+			{ threshold: 0.1 },
+		)
+
+		observer.observe(target)
+
+		return () => {
+			observer.disconnect()
+			setIsActiveCardVisible(true)
+		}
+	}, [WaveformComponent, activeRecordingCardElement, isSessionActive])
+
+	useEffect(() => {
+		// Keep global FloatPanel suppression in sync with list-page card visibility.
+		recordingSummaryStore.floatPanel.setExternallyHidden(isSessionActive && isActiveCardVisible)
+
+		return () => {
+			recordingSummaryStore.floatPanel.setExternallyHidden(false)
+			// When the user navigates away from the recordings list while a session is
+			// active, collapse the legacy FloatPanel so it appears as the small
+			// floating capsule on other pages rather than as a pre-opened bottom sheet.
+			if (isSessionActive) {
+				recordingSummaryStore.floatPanel.setExpanded(false)
+			}
+		}
+	}, [isActiveCardVisible, isSessionActive])
 
 	function handleOpenDetail(item: AudioProjectListItem) {
 		if (!isAudioProjectPreviewReady(item)) return
@@ -125,6 +332,7 @@ function AudioRecordingListPanel() {
 	async function handleDelete(projectId: string) {
 		const success = await store.deleteProject(projectId)
 		if (success) {
+			onResolveOptimisticItem?.(projectId)
 			toast.success(t("audioRecordings:actions.deleteSuccess"))
 			void refreshGroups()
 			return true
@@ -142,27 +350,39 @@ function AudioRecordingListPanel() {
 		toast.error(t("super:mobile.recordingEntry.groupSheet.moveFailed"))
 	}
 
+	/**
+	 * Loads the target project's attachments on demand so the list-page share action
+	 * can reuse the same mobile project-share sheet as the detail page.
+	 */
+	async function handleShareProject() {
+		if (!moreTarget?.id) return
+
+		try {
+			const response = await SuperMagicApi.getAttachmentsByProjectId({
+				projectId: moreTarget.id,
+				temporaryToken: "",
+			})
+			const processed = AttachmentDataProcessor.processAttachmentData(response)
+
+			setShareSheetState({
+				projectId: moreTarget.id,
+				projectName: resolveRecordingDisplayName(
+					moreTarget.project_name,
+					moreTarget.created_at,
+				),
+				attachments: processed.tree,
+				attachmentList: processed.list,
+			})
+		} catch {
+			toast.error(t("audioRecordings:detail.loadFailed"))
+		}
+	}
+
 	return (
 		<div
 			className="relative flex min-h-0 flex-1 flex-col"
 			data-testid="mobile-audio-recording-list-panel"
 		>
-			<MobileRecordingListToolbar
-				groupLabel={currentGroupLabel}
-				groupCount={currentGroupCount}
-				activeFilterCount={activeFilterCount}
-				searchOpen={searchOpen}
-				searchKeyword={searchKeyword}
-				onSearchKeywordChange={setSearchKeyword}
-				onSearchCompositionStart={() => setIsSearchComposing(true)}
-				onSearchCompositionEnd={() => setIsSearchComposing(false)}
-				onOpenSearch={handleOpenSearch}
-				onDismissSearch={handleDismissSearch}
-				onOpenGroupSheet={() => setGroupSheetOpen(true)}
-				onOpenFilterSheet={() => setFilterSheetOpen(true)}
-				onOpenImportSheet={() => setImportSheetOpen(true)}
-			/>
-
 			<ScrollEdgeFadeContainer
 				fadeColor="mobile-background"
 				className="min-h-0 flex-1"
@@ -183,49 +403,90 @@ function AudioRecordingListPanel() {
 					}
 					showSuccessMessage={false}
 				>
-					<div className="flex min-h-full flex-col px-3 pb-20 pt-4">
+					<div className="flex min-h-full flex-col gap-2.5 px-3 pb-20 pt-4">
 						{showInitialSkeleton ? (
 							<MobileResourceListSkeletonList testId="mobile-recording-list-skeleton" />
-						) : null}
+						) : (
+							<>
+								{/* Active Recording Card shown ABOVE the toolbar row */}
+								{isSessionActive && WaveformComponent ? (
+									<div ref={setActiveRecordingCardElement}>
+										<MobileActiveRecordingCard
+											title={sessionTitle}
+											duration={sessionDuration}
+											isPaused={isSessionPaused}
+											isBusy={isSessionBusy}
+											onOpen={() => onResumeRecording?.()}
+											onPause={() => onPauseRecording?.()}
+											onResume={() => onContinueRecording?.()}
+											onFinish={() => onFinishRecording?.()}
+										/>
+									</div>
+								) : null}
 
-						{!showInitialSkeleton && isSearchEmpty ? (
-							<DataEmptyState variant="search" className="flex-1" />
-						) : null}
+								{/* Toolbar row (Filter, Search, Upload, Group Picker) */}
+								<MobileRecordingListToolbar
+									groupLabel={currentGroupLabel}
+									groupCount={currentGroupCount}
+									activeFilterCount={activeFilterCount}
+									searchOpen={searchOpen}
+									searchKeyword={searchKeyword}
+									onSearchKeywordChange={setSearchKeyword}
+									onSearchCompositionStart={() => setIsSearchComposing(true)}
+									onSearchCompositionEnd={() => setIsSearchComposing(false)}
+									onOpenSearch={handleOpenSearch}
+									onDismissSearch={handleDismissSearch}
+									onOpenGroupSheet={() => setGroupSheetOpen(true)}
+									onOpenFilterSheet={() => setFilterSheetOpen(true)}
+									onOpenImportSheet={() => setImportSheetOpen(true)}
+								/>
 
-						{!showInitialSkeleton && isEmpty && !isSearchEmpty ? (
-							<DataEmptyState variant="recording" className="flex-1" />
-						) : null}
+								{/* Data area (Empty states or the list of recording cards) */}
+								{isSearchEmpty ? (
+									<DataEmptyState variant="search" className="flex-1" />
+								) : isEmpty ? (
+									<DataEmptyState variant="recording" className="flex-1" />
+								) : (
+									<div
+										className="flex flex-col gap-2.5"
+										data-testid="mobile-recording-card-list"
+									>
+										{mergedList.map((item) => (
+											<MobileRecordingCard
+												key={item.id}
+												item={item}
+												onOpen={handleOpenDetail}
+												onSummarize={(entry) => void handleSummarize(entry)}
+												onMore={handleOpenMore}
+												onRetry={(entry) => void onRetryUpload?.(entry.id)}
+												isSubmitting={store.isSubmittingSummary(item.id)}
+											/>
+										))}
+									</div>
+								)}
 
-						{!showInitialSkeleton && store.list.length > 0 ? (
-							<div
-								className="flex flex-col gap-2.5"
-								data-testid="mobile-recording-card-list"
-							>
-								{store.list.map((item) => (
-									<MobileRecordingCard
-										key={item.id}
-										item={item}
-										onOpen={handleOpenDetail}
-										onSummarize={(entry) => void handleSummarize(entry)}
-										onMore={handleOpenMore}
-										isSubmitting={store.isSubmittingSummary(item.id)}
+								{/* Infinite scroll pagination */}
+								{mergedList.length > 0 ? (
+									<InfiniteScroll
+										loadMore={handleLoadMore}
+										hasMore={store.hasMore}
+										threshold={120}
 									/>
-								))}
-							</div>
-						) : null}
-
-						{store.list.length > 0 ? (
-							<InfiniteScroll
-								loadMore={handleLoadMore}
-								hasMore={store.hasMore}
-								threshold={120}
-							/>
-						) : null}
+								) : null}
+							</>
+						)}
 					</div>
 				</MagicPullToRefresh>
 			</ScrollEdgeFadeContainer>
 
-			<MobileRecordingFab />
+			<MobileRecordingFab hidden={isSessionActive} onClick={() => onStartRecording?.()} />
+
+			<MobileActiveRecordingIndicator
+				hidden={!isSessionActive || isActiveCardVisible}
+				duration={sessionDuration}
+				isPaused={isSessionPaused}
+				onOpen={() => onResumeRecording?.()}
+			/>
 
 			<MobileRecordingFilterSheet
 				open={filterSheetOpen}
@@ -250,7 +511,15 @@ function AudioRecordingListPanel() {
 				isSubmitting={groupActionSubmitting}
 			/>
 
-			<MobileRecordingImportSheet open={importSheetOpen} onOpenChange={setImportSheetOpen} />
+			{AudioUploadActionComponent ? (
+				<MobileRecordingImportSheet
+					open={importSheetOpen}
+					onOpenChange={setImportSheetOpen}
+					onImportFiles={(files) => onImportFiles?.(files)}
+					isImporting={isImporting}
+					AudioUploadActionComponent={AudioUploadActionComponent}
+				/>
+			) : null}
 
 			<MobileRecordingMoreSheet
 				isOpen={moreTarget != null}
@@ -260,6 +529,9 @@ function AudioRecordingListPanel() {
 				onDelete={handleDelete}
 				onSummarize={handleSummarize}
 				onMoveToGroup={handleOpenMoveGroup}
+				onShare={() => {
+					void handleShareProject()
+				}}
 				isSubmittingAction={moreTarget != null && store.isSubmittingAction(moreTarget.id)}
 				isSubmittingSummary={moreTarget != null && store.isSubmittingSummary(moreTarget.id)}
 			/>
@@ -271,6 +543,15 @@ function AudioRecordingListPanel() {
 				selectedGroupId={moveTarget?.workspace_id ?? UNGROUPED_RECORDING_GROUP_ID}
 				ungroupedCount={ungroupedCount}
 				onSelect={(groupId) => void handleMoveToGroup(groupId)}
+			/>
+
+			<ProjectShareSheet
+				open={shareSheetState != null}
+				onClose={() => setShareSheetState(null)}
+				projectId={shareSheetState?.projectId}
+				projectName={shareSheetState?.projectName}
+				attachments={shareSheetState?.attachments ?? []}
+				attachmentList={shareSheetState?.attachmentList ?? []}
 			/>
 		</div>
 	)

@@ -10,6 +10,7 @@ export interface RecordSummaryNotificationContentProps {
 	success?: boolean
 	workspaceId?: string | null
 	projectId?: string | null
+	projectMode?: string | null
 	topicId?: string | null
 }
 
@@ -21,6 +22,7 @@ export interface RecordSummaryNotificationOptions {
 	key?: string
 	workspaceId?: string | null
 	projectId?: string | null
+	projectMode?: string | null
 	topicId?: string | null
 	viewText?: string
 	ignoreText?: string

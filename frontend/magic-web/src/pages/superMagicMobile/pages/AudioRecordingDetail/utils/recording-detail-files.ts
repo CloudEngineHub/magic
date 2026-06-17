@@ -11,6 +11,7 @@ const SUMMARY_TYPE_ORDER: MobileRecordingSummaryType[] = [
 	"topics",
 	"highlights",
 	"insights",
+	"metrics",
 	"mindmap",
 	"followup",
 	"power_dynamics",
@@ -105,10 +106,7 @@ function resolveSummaryFiles(
 
 	Object.keys(configFiles).forEach((type) => {
 		if (EXCLUDED_DYNAMIC_TYPES.has(type) || added.has(type)) return
-		const file = findFileByName(files, configFiles[type])
-		if (!file) return
-		result.push({ type: "unsupported", fileName: configFiles[type], file })
-		added.add(type)
+		return
 	})
 
 	return result

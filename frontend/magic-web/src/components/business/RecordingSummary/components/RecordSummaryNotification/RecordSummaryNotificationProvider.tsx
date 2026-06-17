@@ -42,6 +42,7 @@ export function RecordSummaryNotificationProvider({
 			description,
 			workspaceId,
 			projectId,
+			projectMode,
 			topicId,
 			duration = 0, // Don't auto-close by default
 			success,
@@ -96,6 +97,7 @@ export function RecordSummaryNotificationProvider({
 						ignoreText={t("recordingSummary.notification.ignoreText")}
 						workspaceId={workspaceId}
 						projectId={projectId}
+						projectMode={projectMode}
 						topicId={topicId}
 					/>
 				),

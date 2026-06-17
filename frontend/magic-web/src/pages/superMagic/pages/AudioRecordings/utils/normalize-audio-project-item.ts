@@ -71,6 +71,7 @@ export function normalizeAudioProjectListItem(
 		topic_id: coerceIdToString(extra.topic_id),
 		audio_file_id: coerceIdToString(extra.audio_file_id),
 		model_id: coerceIdToString(extra.model_id ?? undefined),
+		source: extra.source ?? null,
 	}
 }
 

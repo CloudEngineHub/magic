@@ -35,6 +35,8 @@ export function useMobileRecordingDetailData(input: UseMobileRecordingDetailData
 	const [fileMap, setFileMap] = useState<RecordingDetailFileMap | null>(null)
 	const [texts, setTexts] = useState<RecordingDetailTextState>({ summary: {} })
 	const [audioUrl, setAudioUrl] = useState<string>("")
+	const [attachmentTree, setAttachmentTree] = useState<AttachmentItem[]>([])
+	const [attachmentList, setAttachmentList] = useState<AttachmentItem[]>([])
 
 	useEffect(() => {
 		let cancelled = false
@@ -52,6 +54,8 @@ export function useMobileRecordingDetailData(input: UseMobileRecordingDetailData
 			setProjectDetail(null)
 			setTexts({ summary: {} })
 			setAudioUrl("")
+			setAttachmentTree([])
+			setAttachmentList([])
 
 			try {
 				const [attachmentsResponse, projectDetail, item] = await Promise.all([
@@ -62,6 +66,8 @@ export function useMobileRecordingDetailData(input: UseMobileRecordingDetailData
 				if (cancelled) return
 
 				const processed = AttachmentDataProcessor.processAttachmentData(attachmentsResponse)
+				setAttachmentTree(processed.tree)
+				setAttachmentList(processed.list)
 				// Resolve the HTML bundle root first so all later file lookups stay inside one recording package.
 				const bundleRootPath = resolveRecordingBundleRootPath(
 					processed.tree,
@@ -127,6 +133,8 @@ export function useMobileRecordingDetailData(input: UseMobileRecordingDetailData
 		texts,
 		audioUrl,
 		title,
+		attachmentTree,
+		attachmentList,
 	}
 }
 
