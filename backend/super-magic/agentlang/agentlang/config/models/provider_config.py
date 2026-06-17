@@ -44,13 +44,15 @@ class ProviderConfig:
     base_url: str
     api_key: str
     models: Dict[str, ProviderModelConfig]
+    priority: int = 0
     headers: Dict[str, str] = field(default_factory=dict)
     query_params: Dict[str, str] = field(default_factory=dict)
     request_defaults: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, provider_id: str, raw: Dict[str, Any]) -> "ProviderConfig":
+    def from_dict(cls, provider_id: str, raw: Dict[str, Any], default_priority: int = 0) -> "ProviderConfig":
+        """从字典解析本地 Provider 调用入口配置。"""
         models_raw = raw.get("models", {})
         if not isinstance(models_raw, dict):
             raise ValueError(f"Provider '{provider_id}' 的 models 必须是字典")
@@ -67,6 +69,7 @@ class ProviderConfig:
             base_url=_text_or_default(raw.get("base_url"), ""),
             api_key=_text_or_default(raw.get("api_key"), ""),
             models=models,
+            priority=_int_or_default(raw.get("priority"), "priority", default_priority),
             headers=_string_map(raw.get("headers")),
             query_params=_string_map(raw.get("query_params")),
             request_defaults=_dict_or_empty(raw.get("request_defaults")),
@@ -104,6 +107,12 @@ def _int_or_none(value: Any, field_name: str) -> int | None:
     if parsed <= 0:
         raise ValueError(f"{field_name} 必须大于 0，当前值为 {value!r}")
     return parsed
+
+
+def _int_or_default(value: Any, field_name: str, default: int) -> int:
+    """把可选整数配置解析为 int，缺省时返回默认值。"""
+    parsed = _int_or_none(value, field_name)
+    return default if parsed is None else parsed
 
 
 def _string_map(value: Any) -> Dict[str, str]:

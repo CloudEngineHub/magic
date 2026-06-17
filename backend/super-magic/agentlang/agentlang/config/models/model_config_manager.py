@@ -56,8 +56,8 @@ class ModelConfigManager:
     async def initialize(self, providers: List[ModelProvider]) -> None:
         """从 providers 列表加载全部模型配置
 
-        按 priority 从低到高依次加载，高优先级的同 model_id 条目覆盖低优先级。
-        例如 magic-service(priority=3) 与 config.yaml(priority=2) 出现同 model_id 时，
+        按 provider priority 从低到高依次加载，具体冲突以 ModelConfig.priority 为准。
+        例如 magic-service(priority=100) 与 config.yaml(priority=2) 出现同 model_id 时，
         保留 config.yaml 静态入口参与加载，但最终由 magic-service 动态模型覆盖。
 
         Args:
@@ -68,7 +68,7 @@ class ModelConfigManager:
             try:
                 models = await provider.load()
                 for mc in models:
-                    merged[mc.model_id] = mc
+                    self._merge_model_config(merged, mc)
                 self._mark_loaded(provider)
                 logger.info(
                     f"Provider '{provider.provider_type}' loaded {len(models)} models"
@@ -79,15 +79,13 @@ class ModelConfigManager:
         self._models = merged
         self._sync_pricing()
         model_ids = list(self._models.keys())
-        if "auto" not in self._models:
-            logger.warning("模型配置中缺少 auto，auto fallback 当前不可用")
         logger.info(f"ModelConfigManager initialized with {len(self._models)} models: {model_ids}")
 
     async def refresh_provider(self, provider: ModelProvider) -> None:
         """重新加载单个服务商并将结果合并进当前注册表
 
-        高优先级的同 model_id 会覆盖已有的低优先级条目。
-        如果当前注册表已有相同 model_id 但优先级更高，则不覆盖。
+        高优先级的同 model_id 会覆盖已有的低优先级模型条目。
+        如果当前注册表已有相同 model_id 但 ModelConfig.priority 更高，则不覆盖。
         这保证了本地 config.yaml 可以保留同 host 静态模型，而 magic-service 刷新成功后
         仍然以动态模型配置为准。
 
@@ -102,16 +100,12 @@ class ModelConfigManager:
 
         updated = 0
         for mc in models:
-            existing = self._models.get(mc.model_id)
-            if existing is None or provider.priority >= self._get_source_priority(existing.provider_source):
-                self._models[mc.model_id] = mc
+            if self._merge_model_config(self._models, mc):
                 updated += 1
 
         self._mark_loaded(provider)
         self._sync_pricing()
         model_ids = list(self._models.keys())
-        if "auto" not in self._models:
-            logger.warning("模型配置中缺少 auto，auto fallback 当前不可用")
         logger.info(
             f"Provider '{provider.provider_type}' refreshed: {updated} models updated, "
             f"total {len(self._models)} models in manager: {model_ids}"
@@ -203,6 +197,28 @@ class ModelConfigManager:
     # 内部方法
     # ------------------------------------------------------------------
 
+    def _merge_model_config(self, registry: Dict[str, ModelConfig], model_config: ModelConfig) -> bool:
+        """按 ModelConfig.priority 合并单个模型配置。
+
+        Args:
+            registry: 目标模型注册表
+            model_config: 待合并模型配置
+
+        Returns:
+            bool: True 表示写入或覆盖，False 表示被已有高优先级配置保留
+        """
+        existing = registry.get(model_config.model_id)
+        if existing is not None and existing.priority > model_config.priority:
+            logger.debug(
+                "Skip lower priority model config: "
+                f"model_id={model_config.model_id}, "
+                f"incoming={model_config.provider_id}:{model_config.priority}, "
+                f"existing={existing.provider_id}:{existing.priority}"
+            )
+            return False
+        registry[model_config.model_id] = model_config
+        return True
+
     def _mark_loaded(self, provider: ModelProvider) -> None:
         """标记 provider 已成功加载，更新注册表和时间戳"""
         provider_type = provider.provider_type
@@ -216,7 +232,7 @@ class ModelConfigManager:
         _priority_map = {
             "openai": 1,
             "config.yaml": 2,
-            "magic-service": 3,
+            "magic-service": 100,
         }
         return _priority_map.get(provider_source, 0)
 

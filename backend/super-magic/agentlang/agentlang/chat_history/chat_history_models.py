@@ -172,7 +172,7 @@ class CompactionConfig:
                 raise ValueError("Pricing tier rule token_threshold must be positive")
 
     def resolve_token_threshold(self, agent_model_id: Optional[str] = None) -> int:
-        """Resolve token threshold lazily, after the runtime model is selected."""
+        """Resolve token threshold lazily, after the current text model is selected."""
         if agent_model_id and agent_model_id != self.agent_model_id:
             self.agent_model_id = agent_model_id
             if self._auto_token_threshold:

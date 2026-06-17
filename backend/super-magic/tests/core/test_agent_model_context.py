@@ -45,30 +45,11 @@ def test_model_selection_falls_back_to_session_and_agent_default():
     assert selection.text_model_id == "mock-default-text"
 
 
-def test_model_selection_defaults_to_auto_without_agent_default():
-    selection = ModelSelectionPolicy.resolve(ModelSelectionInput(
-        configured_text_model_id=None,
-    ))
-
-    assert selection.configured_text_model_id == "auto"
-    assert selection.text_model_id == "auto"
-
-
-def test_model_selection_uses_configured_default_model(monkeypatch):
-    from agentlang.config.config import config
-
-    monkeypatch.setattr(
-        config,
-        "get",
-        lambda key, default=None: "mock-config-default" if key == "default_model" else default,
-    )
-
-    selection = ModelSelectionPolicy.resolve(ModelSelectionInput(
-        configured_text_model_id=None,
-    ))
-
-    assert selection.configured_text_model_id == "mock-config-default"
-    assert selection.text_model_id == "mock-config-default"
+def test_model_selection_requires_configured_text_model():
+    with pytest.raises(ValueError, match="configured_text_model_id is required"):
+        ModelSelectionPolicy.resolve(ModelSelectionInput(
+            configured_text_model_id=None,
+        ))
 
 
 def test_model_selection_keeps_session_media_capability_when_request_only_has_same_model_id():
@@ -125,7 +106,7 @@ def test_agent_model_context_defers_config_lookup_until_runtime_resolve(monkeypa
     assert calls == ["mock-runtime-text"]
 
 
-def test_agent_model_context_resolves_text_model_without_llm_fallback(monkeypatch):
+def test_agent_model_context_delegates_missing_model_fallback_to_llm_factory(monkeypatch):
     calls: list[dict[str, object]] = []
 
     def fake_get_model_config(model_id, *args, **kwargs):
@@ -135,7 +116,14 @@ def test_agent_model_context_resolves_text_model_without_llm_fallback(monkeypatc
             "allow_fallback": kwargs.get("allow_fallback"),
         })
         assert model_id == "missing-runtime-text"
-        raise ValueError("missing exact model")
+        return LLMClientConfig(
+            model_id="auto",
+            api_key="mock-key",
+            name="Mock Auto Model",
+            provider="mock-provider",
+            max_output_tokens=2048,
+            max_context_tokens=8192,
+        )
 
     monkeypatch.setattr("app.core.models.agent_model_context.LLMFactory.get_model_config", fake_get_model_config)
 
@@ -146,15 +134,15 @@ def test_agent_model_context_resolves_text_model_without_llm_fallback(monkeypatc
         request_text_model_id="missing-runtime-text",
     )))
 
-    with pytest.raises(ValueError, match="missing exact model"):
-        context.resolve_text_model()
+    state = context.resolve_text_model()
 
     assert calls == [{
         "model_id": "missing-runtime-text",
-        "expected_type": "llm",
-        "allow_fallback": False,
+        "expected_type": None,
+        "allow_fallback": None,
     }]
-    assert context.current_text_model_id == "missing-runtime-text"
+    assert state.model_id == "auto"
+    assert context.current_text_model_id == "auto"
 
 
 def test_agent_model_context_restores_pre_compact_text_model(monkeypatch):

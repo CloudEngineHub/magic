@@ -2,9 +2,9 @@
 config.yaml 模型服务商
 
 从 config.yaml 的 providers/model_profiles 段读取本地模型配置，无网络请求。
-优先级 priority=2，处于 magic-service (3) 之下、openai (1) 之上。
+ConfigYamlProvider 是配置源，内部 providers.* 才是真正的本地服务商。
 """
-from typing import Callable, Dict, List, Optional
+from typing import Callable, List, Optional
 
 from agentlang.config.config import config
 from agentlang.config.models.model_catalog import ModelCatalog
@@ -56,22 +56,18 @@ class ConfigYamlProvider(ModelProvider):
         model_catalog = ModelCatalog(config.get("model_profiles", {}))
         result: List[ModelConfig] = []
         skipped: List[str] = []
-        seen_model_ids: Dict[str, str] = {}
 
         for provider_id, provider_dict in providers_dict.items():
             if not isinstance(provider_dict, dict):
                 logger.warning(f"Provider '{provider_id}' config is not a dict, skipping")
                 continue
             try:
-                provider = ProviderConfig.from_dict(str(provider_id), provider_dict)
+                provider = ProviderConfig.from_dict(
+                    str(provider_id),
+                    provider_dict,
+                    default_priority=PROVIDER_PRIORITY,
+                )
                 for model_id, provider_model in provider.models.items():
-                    if model_id in seen_model_ids:
-                        raise ValueError(
-                            f"本地 providers 中存在重复模型 ID: {model_id}，"
-                            f"已由 {seen_model_ids[model_id]} 注册，不能再由 {provider.provider_id} 注册"
-                        )
-                    seen_model_ids[model_id] = provider.provider_id
-
                     profile = model_catalog.resolve(
                         profile=provider_model.profile,
                         api_model=provider_model.api_model,
@@ -92,9 +88,6 @@ class ConfigYamlProvider(ModelProvider):
 
         if skipped:
             logger.info(f"Skipped {len(skipped)} models from config.yaml (filtered): {skipped}")
-
-        if not any(mc.model_id == "auto" and mc.type == "llm" for mc in result):
-            logger.warning("本地配置缺少 providers.*.models.auto，auto fallback 需要依赖管理后台模型列表")
 
         logger.debug(f"ConfigYamlProvider loaded {len(result)} models from config.yaml")
         return result

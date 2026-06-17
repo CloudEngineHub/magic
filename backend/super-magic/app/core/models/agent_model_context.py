@@ -144,11 +144,7 @@ class AgentModelContext:
         if self._resolved_text_model_id == model_id and self._resolved_text_state is not None:
             return self._resolved_text_state
 
-        model_config = LLMFactory.get_model_config(
-            model_id,
-            expected_type="llm",
-            allow_fallback=False,
-        )
+        model_config = LLMFactory.get_model_config(model_id)
         effective_model_id = normalize_model_id(model_config.model_id) or model_id
         model_name = model_config.name or effective_model_id
         state = TextModelState(

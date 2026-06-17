@@ -59,6 +59,10 @@ class ModelConfig:
 
     # 来源服务商标识，仅用于调试
     provider_source: str = ""
+    # 实际服务商 ID，用于区分 config.yaml 内部展开出的多个服务商
+    provider_id: str = ""
+    # 模型条目优先级，同 model_id 冲突时数值越高越优先
+    priority: int = 0
 
     @classmethod
     def from_dict(cls, model_id: str, config_dict: Dict[str, Any], provider_source: str = "") -> "ModelConfig":
@@ -93,6 +97,8 @@ class ModelConfig:
             resolved_model_id=config_dict.get("resolved_model_id") or None,
             pricing=config_dict.get("pricing", {}),
             provider_source=provider_source,
+            provider_id=str(config_dict.get("provider_id") or provider_source or config_dict.get("provider", "")),
+            priority=int(config_dict.get("priority", 0)),
         )
 
     @classmethod
@@ -142,6 +148,8 @@ class ModelConfig:
                 "profile": profile.model,
             },
             provider_source=provider_source,
+            provider_id=provider.provider_id,
+            priority=provider.priority,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -159,6 +167,8 @@ class ModelConfig:
             "temperature": self.temperature,
             "top_p": self.top_p,
             "supports_tool_use": self.supports_tool_use,
+            "provider_id": self.provider_id,
+            "priority": self.priority,
         }
 
         if self.stop:

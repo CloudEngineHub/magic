@@ -34,12 +34,6 @@ def apply_isolated_agent_model_selection(
     current_session_config = agent.chat_history.get_current_session_config()
     last_session_config = agent.chat_history.get_last_session_config()
     parent_model_context = parent_context.model_context if parent_context is not None else None
-    parent_text_model_id = None
-    if parent_context is not None:
-        if parent_context.has_runtime_model_id():
-            parent_text_model_id = parent_context.get_runtime_model_id()
-        if not parent_text_model_id and parent_model_context is not None:
-            parent_text_model_id = parent_model_context.current_text_model_id
 
     request_image_model = ImageModelSpec.from_values(model_id=image_model_id)
     request_video_model = VideoModelSpec.from_values(
@@ -51,8 +45,8 @@ def apply_isolated_agent_model_selection(
         configured_text_model_id=agent.agent_context.model_context.configured_text_model_id,
         request_text_model_id=model_id,
         session_text_model_id=(
-            parent_text_model_id
-            if parent_context is not None
+            parent_model_context.current_text_model_id
+            if parent_model_context is not None
             else current_session_config.model_id or last_session_config.model_id
         ),
         request_image_model=request_image_model,
@@ -69,7 +63,6 @@ def apply_isolated_agent_model_selection(
         ),
     ))
     agent.agent_context.model_context.apply_selection(selection)
-    agent.agent_context.set_runtime_model_id(selection.text_model_id)
     logger.info(
         "已为隔离 Agent 应用模型选择: "
         f"agent={agent.agent_name}, text={selection.text_model_id}, "
@@ -113,20 +106,6 @@ async def run_isolated_agent(
         _init_root_context(new_context)
 
     new_context.set_chat_history_dir(str(PathManager.get_subagents_chat_history_dir()))
-    if model_id:
-        new_context.set_runtime_model_id(model_id)
-        new_context.set_metadata(
-            "runtime_model_source",
-            "cron" if parent_context is None else "request",
-        )
-    elif parent_context is not None and parent_context.has_runtime_model_id():
-        # 未指定模型时，继承父 Agent 的运行时模型 ID
-        new_context.set_runtime_model_id(parent_context.get_runtime_model_id())
-        new_context.set_metadata("runtime_model_source", "parent")
-    else:
-        new_context.set_runtime_model_id("auto")
-        new_context.set_metadata("runtime_model_source", "unknown")
-        logger.warning("隔离 Agent 未指定运行时模型，使用 auto")
     if image_model_id:
         new_context.set_dynamic_image_model_id(image_model_id)
 

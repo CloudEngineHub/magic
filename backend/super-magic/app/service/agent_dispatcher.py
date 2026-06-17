@@ -688,8 +688,6 @@ class AgentDispatcher(Base):
             import traceback
             logger.error(traceback.format_exc())
             try:
-                from agentlang.event.data import ErrorEventData
-                from agentlang.event.event import EventType
                 if self.agent_context:
                     final_task_state = build_final_task_state(
                         FinalTaskStateCode.INTERNAL_DISPATCH_FAILED,
@@ -748,18 +746,6 @@ class AgentDispatcher(Base):
         if message.agent_mode is None:
             message.agent_mode = AgentMode.GENERAL
 
-        # 如果 agent_context 还没有 runtime_model_id（前端消息已在 messages.py 里 set），
-        # 且消息携带了 model_id（可能来自前端或 fill 补全），则在此设置，确保第三方 IM 消息也能使用正确模型。
-        current_runtime_model_id = (
-            self.agent_context.get_runtime_model_id()
-            if self.agent_context.has_runtime_model_id()
-            else None
-        )
-        if message.model_id and message.model_id != current_runtime_model_id:
-            self.agent_context.set_runtime_model_id(message.model_id)
-            if not self.agent_context.get_metadata().get("runtime_model_source"):
-                self.agent_context.set_metadata("runtime_model_source", "request")
-            logger.info(f"[AgentDispatcher] 从消息 model_id 设置运行时模型: {message.model_id}")
         # image_model_id：从 dynamic_config.image_model.model_id 读取并 set 进 context
         image_model_config = (message.dynamic_config or {}).get("image_model")
         if image_model_config and isinstance(image_model_config, dict):
@@ -863,13 +849,6 @@ class AgentDispatcher(Base):
             session_video_model=self._session_video_model(current_session_config, last_session_config),
         ))
         agent.agent_context.model_context.apply_selection(selection)
-        agent.agent_context.set_runtime_model_id(selection.text_model_id)
-        if message.model_id:
-            agent.agent_context.set_metadata("runtime_model_source", "request")
-        elif current_session_config.model_id or last_session_config.model_id:
-            agent.agent_context.set_metadata("runtime_model_source", "session")
-        else:
-            agent.agent_context.set_metadata("runtime_model_source", "unknown")
         logger.info(
             "[AgentDispatcher] 已应用模型选择: "
             f"text={selection.text_model_id}, "
@@ -893,37 +872,8 @@ class AgentDispatcher(Base):
             agent_context = agent.agent_context
             model_context = agent_context.model_context
             current_model_id = model_context.current_text_model_id
-            if not current_model_id and agent_context.has_runtime_model_id():
-                current_model_id = agent_context.get_runtime_model_id()
             if not current_model_id:
-                current_model_id = "auto"
-                logger.warning("[AgentDispatcher] 保存会话配置时未找到运行时模型，使用 auto")
-
-            from app.core.models.agent_model_selection import AgentModelSelection
-            from app.magic.runtime_model import resolve_runtime_model
-
-            runtime_model_info = resolve_runtime_model(current_model_id)
-            current_model_id = runtime_model_info.model_id
-            if runtime_model_info.fallback_applied:
-                logger.warning(
-                    "[AgentDispatcher] 会话模型保存前发生运行时模型降级: "
-                    f"input={runtime_model_info.input_model_id or '无'}, "
-                    f"resolved={runtime_model_info.model_id}, "
-                    f"reason={runtime_model_info.fallback_reason or '无'}"
-                )
-            if current_model_id != model_context.current_text_model_id:
-                model_context.apply_selection(AgentModelSelection(
-                    configured_text_model_id=model_context.configured_text_model_id or current_model_id,
-                    text_model_id=current_model_id,
-                    image_model=model_context.image,
-                    video_model=model_context.video,
-                ))
-            if agent_context.has_runtime_model_id() and agent_context.get_runtime_model_id() != current_model_id:
-                logger.warning(
-                    "[AgentDispatcher] 会话模型已按运行时解析结果修正: "
-                    f"input={agent_context.get_runtime_model_id()}, resolved={current_model_id}"
-                )
-            agent_context.set_runtime_model_id(current_model_id)
+                raise ValueError("Text model id is not configured")
 
             current_image_model_id = model_context.image_model_id
             current_image_model_sizes = model_context.image.sizes_payload()

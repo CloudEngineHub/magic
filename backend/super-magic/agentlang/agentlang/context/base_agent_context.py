@@ -51,7 +51,6 @@ class BaseAgentContext(BaseContext, AgentContextInterface):
         """初始化共享字段并注册到 shared_context"""
         fields = {
             "event_dispatcher": (EventDispatcher(), EventDispatcherInterface),
-            "runtime_model_id": (None, Optional[str]),       # 当前 Agent 运行时模型 ID
             "dynamic_image_model_id": (None, Optional[str]), # 动态图片生成模型 ID
             "non_human_options": (None, Optional[Any]),      # 非人类限流配置
             "user_timezone": (None, Optional[str]),          # 用户时区（IANA 名称），None 时回落系统时区
@@ -229,38 +228,6 @@ class BaseAgentContext(BaseContext, AgentContextInterface):
         继承自BaseContext，返回所有元数据
         """
         return {**self._metadata}
-
-    # 运行时模型 ID 管理接口（使用 shared_context）
-    def set_runtime_model_id(self, model_id: str) -> None:
-        """设置当前 Agent 运行时模型 ID。
-
-        Args:
-            model_id: 运行时模型 ID
-        """
-        self.shared_context.update_field("runtime_model_id", model_id)
-        logger.info(f"已设置运行时模型 ID: {model_id}")
-
-    def get_runtime_model_id(self) -> Optional[str]:
-        """获取当前 Agent 运行时模型 ID。
-
-        Returns:
-            Optional[str]: 运行时模型 ID，如果未设置则返回 None
-        """
-        return self.shared_context.get_field("runtime_model_id")
-
-    def has_runtime_model_id(self) -> bool:
-        """检查是否设置了运行时模型 ID。
-
-        Returns:
-            bool: 是否设置了运行时模型 ID
-        """
-        model_id = self.shared_context.get_field("runtime_model_id")
-        return isinstance(model_id, str) and model_id.strip() != ""
-
-    def clear_runtime_model_id(self) -> None:
-        """清除运行时模型 ID。"""
-        self.shared_context.update_field("runtime_model_id", None)
-        logger.debug("已清除运行时模型 ID")
 
     def set_dynamic_image_model_id(self, model_id: str) -> None:
         """设置动态图片模型ID（生图工具优先使用此值，覆盖 dynamic_config.yaml 的配置）"""

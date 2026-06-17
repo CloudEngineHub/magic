@@ -160,7 +160,6 @@ class ThirdPartyMessagePayloadBuilder:
         model_id = _normalize_text(session_config.get("model_id"))
         if model_id and not chat_message.model_id:
             chat_message.model_id = model_id
-            agent_context.set_metadata("runtime_model_source", "session")
         image_model_id = _normalize_text(session_config.get("image_model_id")) or "doubao-seedream-5.0-lite"
         enable_web_search = True
 

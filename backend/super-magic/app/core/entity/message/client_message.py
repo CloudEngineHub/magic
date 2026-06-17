@@ -149,9 +149,9 @@ class ChatClientMessage(ClientMessage):
         description="Channel-specific payload, owned and interpreted by the originating channel plugin.",
     )
 
-    # 运行时模型与动态配置字段
+    # 文本模型与动态配置字段
     model_id: Optional[str] = Field(
-        default=None, description="运行时模型 ID：指定本次对话使用的模型；为空时由 Agent fallback 到 auto"
+        default=None, description="文本模型 ID：指定本次对话使用的模型；为空时由模型选择策略决定"
     )
     dynamic_config: Optional[Dict[str, Any]] = Field(
         default=None, description="动态配置（JSON格式），将转换为YAML格式写入config/dynamic_config.yaml"

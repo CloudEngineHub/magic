@@ -3,7 +3,7 @@ Magic Service 模型服务商
 
 从 magic service 的 /v1/models 接口加载可用模型列表。
 需要在 init_client_message.json 写入后（客户端 init 完成后）才可调用。
-优先级 priority=3，最高，同 model_id 时覆盖其他服务商的配置。
+优先级 priority=100，最高，同 model_id 时覆盖其他服务商的配置。
 
 所有 magic-service 模型共用 MAGIC_API_BASE_URL + MAGIC_API_KEY 作为调用凭据。
 """
@@ -20,7 +20,7 @@ from agentlang.utils.metadata import MetadataUtil
 logger = get_logger(__name__)
 
 PROVIDER_TYPE = "magic-service"
-PROVIDER_PRIORITY = 3
+PROVIDER_PRIORITY = 100
 MAGIC_SERVICE_SUCCESS_CODE = 1000
 
 # 每 50 次使用或每小时，触发一次后台刷新
@@ -178,6 +178,8 @@ class MagicServiceProvider(ModelProvider):
             "api_key": api_key,
             "api_base_url": api_base_url,
             "type": "llm",
+            "provider_id": PROVIDER_TYPE,
+            "priority": PROVIDER_PRIORITY,
         }
 
         # 从 options 提取能力字段

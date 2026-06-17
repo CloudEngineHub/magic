@@ -78,7 +78,7 @@ from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
 from app.core.skill_utils.skill_sources import get_system_skills_dir, get_workspace_skills_dir
 from agentlang.agent.define import SkillsConfig, SystemSkillEntry
-from app.magic.runtime_model import AUTO_MODEL_ID, ModelSource, RuntimeModelInfo, RuntimeModelResolveError, resolve_runtime_model
+from app.core.models.agent_model_context import TextModelState
 
 logger = get_logger(__name__)
 
@@ -222,6 +222,17 @@ class Agent(BaseAgent):
 
         return agent_context
 
+    def _initialize_configured_text_model(self) -> None:
+        """从全局配置初始化 Agent 默认文本模型。"""
+        model_context = self.agent_context.model_context
+        if model_context.configured_text_model_id:
+            return
+        default_model_id = config.get("default_model")
+        if not default_model_id:
+            raise ValueError("default_model is not configured")
+        model_context.set_configured_text_model(default_model_id)
+        logger.info(f"Agent 默认文本模型已初始化: {model_context.configured_text_model_id}")
+
     def __init__(self, agent_name: str, agent_context: AgentContext = None, agent_id: str = None):
         self.agent_name = agent_name
         self._closed = False
@@ -229,6 +240,7 @@ class Agent(BaseAgent):
 
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
+        self._initialize_configured_text_model()
         agents_dir = Path(PathManager.get_project_root() / "agents")
 
         self._agent_loader = AgentLoader(agents_dir=agents_dir)
@@ -265,7 +277,7 @@ class Agent(BaseAgent):
         self.compaction_config = CompactionConfig(
             agent_name=self.agent_name,
             agent_id=self.id,
-            # 压缩阈值运行时按 runtime model 解析，避免 .agent 历史默认模型影响运行时模型任务。
+            # 压缩阈值运行时按当前文本模型解析，避免 .agent 历史默认模型影响当前任务。
             agent_model_id="",
         )
         self._compact_request_tracker = CompactRequestTracker()
@@ -366,6 +378,13 @@ class Agent(BaseAgent):
             if part
         )
         logger.info(f"compaction.{event}: {message} | {context}")
+
+    def _require_current_text_model_id(self) -> str:
+        """返回当前运行时文本模型；模型选择必须已在入口层完成。"""
+        model_id = self.agent_context.model_context.current_text_model_id
+        if not model_id:
+            raise ValueError("Text model id is not configured")
+        return model_id
 
     # compact-chat-history skill 永久挂载，无需在 .agent 文件中声明
     _ALWAYS_MOUNT_SKILL = "compact-chat-history"
@@ -738,12 +757,6 @@ class Agent(BaseAgent):
     def _build_final_task_state_from_exception(self, exception: Exception) -> Optional[FinalTaskState]:
         """把已知终态异常直接归一成 FinalTaskState。"""
         for current in self._iter_exception_chain(exception):
-            if isinstance(current, RuntimeModelResolveError):
-                return build_final_task_state(
-                    FinalTaskStateCode.MESSAGE_PROCESSING_FAILED,
-                    vendor_message=str(current),
-                )
-
             if isinstance(current, ResourceLimitExceededException):
                 if current.is_insufficient_points_error():
                     code = FinalTaskStateCode.INSUFFICIENT_POINTS
@@ -1532,12 +1545,7 @@ class Agent(BaseAgent):
         message_count = len(self.chat_history.messages)
 
         if not threshold_model_id:
-            model_context = getattr(self.agent_context, "model_context", None)
-            threshold_model_id = (
-                getattr(model_context, "current_text_model_id", None)
-                or getattr(self, "llm_id", "")
-                or AUTO_MODEL_ID
-            )
+            threshold_model_id = self._require_current_text_model_id()
 
         auto_threshold = getattr(
             self.compaction_config,
@@ -1900,7 +1908,7 @@ class Agent(BaseAgent):
         """fork 一个同类型子 Agent 执行后台压缩"""
         compact_model_id = get_compact_model_id()
         if not compact_model_id:
-            compact_model_id = self._resolve_runtime_model_info().model_id
+            compact_model_id = self._require_current_text_model_id()
 
         await start_background_compact(
             state=self._bg_compact_state,
@@ -2020,19 +2028,8 @@ Since your subsequent output will be merged with pre-interruption content and di
                     f"复用压缩模型：压缩模型={compact_model}",
                 )
             else:
-                if hasattr(self.agent_context, "has_runtime_model_id") and self.agent_context.has_runtime_model_id():
-                    self._pre_compact_model_id = self.agent_context.get_runtime_model_id()
-                else:
-                    self._pre_compact_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None) or AUTO_MODEL_ID
-                if hasattr(self.agent_context, "get_metadata"):
-                    self._pre_compact_model_source = self.agent_context.get_metadata().get("runtime_model_source")
-                else:
-                    self._pre_compact_model_source = None
+                self._pre_compact_model_id = self._require_current_text_model_id()
                 model_context.activate_compact_text_model(compact_model)
-                if hasattr(self.agent_context, "set_runtime_model_id"):
-                    self.agent_context.set_runtime_model_id(compact_model)
-                if hasattr(self.agent_context, "set_metadata"):
-                    self.agent_context.set_metadata("runtime_model_source", ModelSource.COMPACT.value)
                 logger.info(f"执行压缩，使用 compact 专属模型: {compact_model}")
                 self._log_compaction_event(
                     "compact_model_activated",
@@ -2040,11 +2037,11 @@ Since your subsequent output will be merged with pre-interruption content and di
                     f"压缩模型={compact_model}",
                 )
         else:
-            runtime_model_info = self._resolve_runtime_model_info()
-            logger.info(f"执行压缩，使用主 Agent 当前模型: {runtime_model_info.model_id}")
+            current_model_id = self._require_current_text_model_id()
+            logger.info(f"执行压缩，使用主 Agent 当前模型: {current_model_id}")
             self._log_compaction_event(
                 "compact_model_not_configured",
-                f"未配置压缩专属模型，使用当前模型执行压缩：当前模型={runtime_model_info.model_id}",
+                f"未配置压缩专属模型，使用当前模型执行压缩：当前模型={current_model_id}",
             )
 
     def _restore_pre_compact_model(self, reason: str = "压缩完成") -> None:
@@ -2063,24 +2060,14 @@ Since your subsequent output will be merged with pre-interruption content and di
         current_model_id = (
             pre_compact_model_id
             if isinstance(pre_compact_model_id, str) and pre_compact_model_id
-            else model_context.current_text_model_id or getattr(self, "llm_id", None) or AUTO_MODEL_ID
+            else self._require_current_text_model_id()
         )
-        original_source = getattr(self, "_pre_compact_model_source", None)
         if hasattr(self, "_pre_compact_model_id"):
             del self._pre_compact_model_id
-        if hasattr(self, "_pre_compact_model_source"):
-            del self._pre_compact_model_source
         if restored:
             logger.info(f"{reason}，已恢复压缩前文本模型: {current_model_id}")
-            if current_model_id and hasattr(self.agent_context, "set_runtime_model_id"):
-                self.agent_context.set_runtime_model_id(current_model_id)
         else:
             logger.info(f"{reason}，未检测到需要恢复的 compact 文本模型")
-        if hasattr(self.agent_context, "set_metadata"):
-            self.agent_context.set_metadata(
-                "runtime_model_source",
-                original_source if isinstance(original_source, str) and original_source else None,
-            )
         self._log_compaction_event(
             "model_restored",
             f"压缩模型状态已恢复：原因={reason}，恢复后的运行时模型={current_model_id or '无'}",
@@ -2201,7 +2188,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         if not model_context.consume_compact_text_model_fallback():
             return None
 
-        failed_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None) or AUTO_MODEL_ID
+        failed_model_id = self._require_current_text_model_id()
         logger.warning(
             f"compact 临时模型请求失败，回退压缩前模型重试一次: "
             f"failed_model={failed_model_id}, error={exception!r}"
@@ -2209,7 +2196,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         self._fallback_compact_request_to_main_model(reason="compact 临时模型请求失败")
         self._restore_pre_compact_model(reason="compact 临时模型请求失败，回退当前模型重试")
 
-        retry_model_id = model_context.current_text_model_id or getattr(self, "llm_id", None) or AUTO_MODEL_ID
+        retry_model_id = self._require_current_text_model_id()
         logger.info(f"compact fallback 使用文本模型重试: {retry_model_id}")
         try:
             return await self._prepare_and_call_llm(
@@ -2268,8 +2255,6 @@ Since your subsequent output will be merged with pre-interruption content and di
                     first_chunk_timeout=config.get("llm.stream_first_chunk_timeout_seconds", 60),
                     chunk_timeout=config.get("llm.stream_chunk_timeout_seconds", 60),
                 )
-            except RuntimeModelResolveError:
-                raise
             except ResourceLimitExceededException:
                 raise  # 平台业务限制（积分/并发），直接终止
             except Exception as e:
@@ -2322,8 +2307,6 @@ Since your subsequent output will be merged with pre-interruption content and di
                     use_stream=False,
                     non_stream_timeout=timeout,
                 )
-            except RuntimeModelResolveError:
-                raise
             except ResourceLimitExceededException:
                 raise  # 平台业务限制，直接终止
             except Exception as e:
@@ -2411,8 +2394,8 @@ Since your subsequent output will be merged with pre-interruption content and di
             LLMResponseContext: 包含LLM响应的所有相关数据
         """
         # 压缩判断必须使用压缩前的业务模型；若触发压缩，后续会切换到 compact 专属模型。
-        runtime_model_info = self._resolve_runtime_model_info()
-        await self._try_compact_chat_history(threshold_model_id=runtime_model_info.model_id)
+        threshold_model_id = self._require_current_text_model_id()
+        await self._try_compact_chat_history(threshold_model_id=threshold_model_id)
 
         # 使用ChatHistory获取格式化后的消息列表
         messages_for_llm = self.chat_history.get_messages_for_llm()
@@ -2421,14 +2404,13 @@ Since your subsequent output will be merged with pre-interruption content and di
             self.set_agent_state(AgentState.ERROR)
             raise ValueError("无法准备与LLM的对话。")
 
-        # 压缩可能切换到专属模型，调用前重新解析一次运行时模型。
-        runtime_model_info = self._resolve_runtime_model_info()
+        # 压缩可能切换到专属模型，调用前重新解析一次当前文本模型。
+        text_model_state = self._resolve_current_text_model()
 
         # _call_llm 的异常全部透传给 _call_llm_with_retry 做分类处理
         llm_start_time = time.time()
         chat_response = await self._call_llm(
             messages_for_llm,
-            runtime_model_info=runtime_model_info,
             use_stream=use_stream,
             first_chunk_timeout=first_chunk_timeout,
             chunk_timeout=chunk_timeout,
@@ -2439,16 +2421,14 @@ Since your subsequent output will be merged with pre-interruption content and di
         # 响应解析阶段：异常包装为 LLMCallRequestException 以区分 provider 异常
         try:
             token_usage = LLMFactory.token_tracker.extract_chat_history_usage_data(chat_response)
-            token_usage.model_id = runtime_model_info.model_id
-            token_usage.model_name = runtime_model_info.provider_model
-            token_usage.resolved_model_id = runtime_model_info.routed_model_id
+            token_usage.model_id = text_model_state.model_id
+            token_usage.model_name = text_model_state.model_name
+            token_usage.resolved_model_id = text_model_state.resolved_model_id
 
             # 更新 horizon：运行时 LM 模型 + 当前上下文窗口使用量
             try:
-                horizon_model_info = self._build_horizon_llm_model_info(
-                    runtime_model_info=runtime_model_info,
-                )
-                context_window_total = runtime_model_info.max_context_tokens
+                horizon_model_info = self._build_horizon_llm_model_info(text_model_state)
+                context_window_total = text_model_state.max_context_tokens
                 self.agent_context.horizon.update_llm_model(
                     horizon_model_info.model_id,
                     horizon_model_info.model_name,
@@ -2500,93 +2480,35 @@ Since your subsequent output will be merged with pre-interruption content and di
         except Exception as e:
             raise LLMCallRequestException(e) from e
 
-    def _get_runtime_model_source(self) -> ModelSource:
-        """推断运行时模型来源，仅用于诊断日志。"""
-        source = self.agent_context.get_metadata().get("runtime_model_source")
-        if isinstance(source, str):
-            try:
-                return ModelSource(source)
-            except ValueError:
-                pass
-        if self.agent_context.get_subagent_depth() > 0:
-            return ModelSource.PARENT
-        return ModelSource.UNKNOWN
-
-    def _resolve_runtime_model_info(self) -> RuntimeModelInfo:
-        """解析当前 Agent 运行时模型，并输出模型诊断日志。"""
-        input_model_id = None
-        if self.agent_context.has_runtime_model_id():
-            input_model_id = self.agent_context.get_runtime_model_id()
-        if not input_model_id:
-            input_model_id = self.agent_context.model_context.current_text_model_id
-        runtime_model_info = resolve_runtime_model(
-            model_id=input_model_id,
-            source=self._get_runtime_model_source(),
-        )
-
-        current_log_key = (
-            runtime_model_info.source.value,
-            runtime_model_info.input_model_id,
-            runtime_model_info.model_id,
-            runtime_model_info.fallback_reason,
-        )
-        previous_log_key = getattr(self, "_last_runtime_model_log_key", None)
-        if previous_log_key != current_log_key:
-            source_label = {
-                ModelSource.REQUEST: "请求",
-                ModelSource.SESSION: "会话",
-                ModelSource.PARENT: "父Agent",
-                ModelSource.CRON: "定时任务",
-                ModelSource.COMPACT: "压缩",
-                ModelSource.UNKNOWN: "未知",
-            }.get(runtime_model_info.source, runtime_model_info.source.value)
-            logger.info(
-                "运行时模型已确定："
-                f"来源={source_label}，"
-                f"输入模型={runtime_model_info.input_model_id or '无'}，"
-                f"运行时模型={runtime_model_info.model_id}，"
-                f"供应商模型={runtime_model_info.provider_model}，"
-                f"路由模型={runtime_model_info.routed_model_id or '无'}，"
-                f"上下文窗口={runtime_model_info.max_context_tokens}，"
-                f"最大输出={runtime_model_info.max_output_tokens}，"
-                f"fallback={runtime_model_info.fallback_applied}，"
-                f"原因={runtime_model_info.fallback_reason or '无'}"
-            )
-            self._last_runtime_model_log_key = current_log_key
-        else:
-            logger.debug(
-                "继续使用运行时模型："
-                f"运行时模型={runtime_model_info.model_id}，"
-                f"供应商模型={runtime_model_info.provider_model}"
-            )
-        return runtime_model_info
+    def _resolve_current_text_model(self) -> TextModelState:
+        """解析当前运行时文本模型。"""
+        return self.agent_context.model_context.resolve_text_model()
 
     def _get_runtime_output_budget(self) -> int:
         """获取当前运行时模型的输出预算；解析失败时保守使用默认值。"""
         try:
-            return self._resolve_runtime_model_info().max_output_tokens
+            return self._resolve_current_text_model().max_output_tokens
         except Exception as e:
             logger.warning(f"获取运行时模型输出预算失败，使用默认值 4096: {e}")
             return 4096
 
     def _build_horizon_llm_model_info(
         self,
-        *,
-        runtime_model_info: Optional[RuntimeModelInfo] = None,
+        text_model_state: Optional[TextModelState] = None,
     ) -> HorizonLlmModelInfo:
-        """把当前运行时模型标准化为注入给 horizon 的展示态信息。"""
-        if runtime_model_info is None:
-            runtime_model_info = self._resolve_runtime_model_info()
+        """把当前生效模型标准化为注入给 horizon 的展示态信息。"""
+        if text_model_state is None:
+            text_model_state = self._resolve_current_text_model()
 
-        display_model_id = runtime_model_info.routed_model_id or runtime_model_info.model_id
-        display_model_name = runtime_model_info.provider_model
+        display_model_id = text_model_state.display_model_id
+        display_model_name = text_model_state.model_name
 
         # 聚合模型要额外保留选择语义，否则只看到落地模型，看不出背后调度策略。
         special_model_descriptions = {
             "auto": "automatically selects the most efficient AI model for the current task",
             "max": "automatically selects the most capable AI model for the current scenario",
         }
-        description = special_model_descriptions.get(runtime_model_info.model_id.lower(), "")
+        description = special_model_descriptions.get(text_model_state.model_id.lower(), "")
         return HorizonLlmModelInfo(
             model_id=display_model_id,
             model_name=display_model_name,
@@ -3321,7 +3243,6 @@ Since your subsequent output will be merged with pre-interruption content and di
     async def _call_llm(
         self,
         messages: List[Dict[str, Any]],
-        runtime_model_info: RuntimeModelInfo,
         use_stream: bool = True,
         first_chunk_timeout: Optional[int] = None,
         chunk_timeout: Optional[int] = None,
@@ -3331,7 +3252,6 @@ Since your subsequent output will be merged with pre-interruption content and di
 
         Args:
             messages: 聊天消息历史
-            runtime_model_info: 本次调用已解析的运行时模型信息
             use_stream: 是否使用流式模式
             first_chunk_timeout: 流式首包超时（秒）
             chunk_timeout: 流式 chunk 间隔超时（秒）
@@ -3379,6 +3299,8 @@ Since your subsequent output will be merged with pre-interruption content and di
         # 将 AgentContext 作为扩展注册
         tool_context.register_extension("agent_context", self.agent_context)
 
+        text_model_state = self._resolve_current_text_model()
+
         # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ 调用 LLM ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ #
         start_time = time.time()
         # logger.debug(f"发送给 LLM 的 messages: {messages}")
@@ -3409,21 +3331,19 @@ Since your subsequent output will be merged with pre-interruption content and di
         if non_stream_timeout is not None:
             processor_config.non_stream_timeout_seconds = non_stream_timeout
 
-        # 将运行时模型信息写入 processor_config
-        processor_config.model_id = runtime_model_info.model_id
-        processor_config.model_name = runtime_model_info.provider_model
+        processor_config.model_id = text_model_state.model_id
+        processor_config.model_name = text_model_state.model_name
 
         try:
             llm_response: ChatCompletion = await LLMFactory.call_with_tool_support(
-                runtime_model_info.model_id,
+                text_model_state.model_id,
                 messages,
                 tools=tools_list if tools_list else None,
                 stop=self.agent_context.stop_sequences if hasattr(self.agent_context, 'stop_sequences') else None,
                 agent_context=self.agent_context,
                 processor_config=processor_config,
                 enable_llm_response_events=True,
-                allow_fallback=False,
-                llm_config=runtime_model_info.config,
+                llm_config=text_model_state.config,
             )
         except ResourceLimitExceededException:
             raise

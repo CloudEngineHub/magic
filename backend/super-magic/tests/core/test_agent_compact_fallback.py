@@ -302,7 +302,7 @@ class _FakeApplyBackgroundAgent:
 
 
 @pytest.mark.asyncio
-async def test_compact_model_failure_falls_back_to_runtime_model_once():
+async def test_compact_model_failure_falls_back_to_current_text_model_once():
     agent = _FakeCompactAgent([RuntimeError("mock compact model blocked")])
 
     result = await agent._call_llm_with_retry(AgentLoopState())
@@ -344,13 +344,13 @@ async def test_compact_model_fallback_keeps_pending_during_main_model_retry():
 
 
 @pytest.mark.asyncio
-async def test_compact_model_fallback_is_not_repeated_after_runtime_failure():
+async def test_compact_model_fallback_is_not_repeated_after_current_text_model_failure():
     agent = _FakeCompactAgent([
         RuntimeError("mock compact model blocked"),
-        RuntimeError("mock runtime model failed"),
+        RuntimeError("mock current text model failed"),
     ])
 
-    with pytest.raises(RuntimeError, match="mock runtime model failed"):
+    with pytest.raises(RuntimeError, match="mock current text model failed"):
         await agent._call_llm_with_retry(AgentLoopState())
 
     assert [call["model_id"] for call in agent.calls] == [

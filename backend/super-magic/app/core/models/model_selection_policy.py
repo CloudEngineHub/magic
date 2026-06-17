@@ -6,23 +6,6 @@ from typing import Optional
 from app.core.models.agent_model_selection import AgentModelSelection
 from app.core.models.media_model import ImageModelSpec, VideoModelSpec, normalize_model_id
 
-DEFAULT_TEXT_MODEL_ID = "auto"
-
-
-def _get_config_default_text_model_id() -> str:
-    """返回正常模型选择使用的配置默认模型。
-
-    这个函数只处理「请求、会话、Agent 都没有指定文本模型」时的默认入口。
-    它不处理运行时缺模型降级；缺模型必须走 `resolve_runtime_model()`，并固定降级到 `auto`
-    同时输出 warning，避免 `config.local.yaml` 改变线上 fallback 语义。
-    """
-    try:
-        from agentlang.config.config import config
-        configured = normalize_model_id(config.get("default_model", DEFAULT_TEXT_MODEL_ID))
-    except Exception:
-        configured = None
-    return configured or DEFAULT_TEXT_MODEL_ID
-
 
 @dataclass(frozen=True)
 class ModelSelectionInput:
@@ -32,7 +15,7 @@ class ModelSelectionInput:
     策略类只负责按优先级选择，不直接读取 AgentContext 或聊天历史。
     """
 
-    configured_text_model_id: Optional[str] = None
+    configured_text_model_id: str
     request_text_model_id: Optional[str] = None
     session_text_model_id: Optional[str] = None
     request_image_model: ImageModelSpec = field(default_factory=ImageModelSpec.empty)
@@ -51,10 +34,9 @@ class ModelSelectionPolicy:
     @classmethod
     def resolve(cls, selection_input: ModelSelectionInput) -> AgentModelSelection:
         """根据输入优先级解析本轮最终生效的模型选择结果。"""
-        configured_text_model_id = (
-            normalize_model_id(selection_input.configured_text_model_id)
-            or _get_config_default_text_model_id()
-        )
+        configured_text_model_id = normalize_model_id(selection_input.configured_text_model_id)
+        if not configured_text_model_id:
+            raise ValueError("configured_text_model_id is required")
 
         text_model_id = (
             normalize_model_id(selection_input.request_text_model_id)

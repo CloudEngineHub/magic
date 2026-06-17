@@ -144,39 +144,6 @@ class AgentContextInterface(ABC):
         """
         pass
 
-    # 运行时模型 ID 管理接口
-    @abstractmethod
-    def set_runtime_model_id(self, model_id: str) -> None:
-        """设置当前 Agent 运行时模型 ID
-
-        Args:
-            model_id: 运行时模型 ID
-        """
-        pass
-
-    @abstractmethod
-    def get_runtime_model_id(self) -> Optional[str]:
-        """获取当前 Agent 运行时模型 ID
-
-        Returns:
-            Optional[str]: 运行时模型 ID，如果未设置则返回 None
-        """
-        pass
-
-    @abstractmethod
-    def has_runtime_model_id(self) -> bool:
-        """检查是否设置了运行时模型 ID
-
-        Returns:
-            bool: 是否设置了运行时模型 ID
-        """
-        pass
-
-    @abstractmethod
-    def clear_runtime_model_id(self) -> None:
-        """清除运行时模型 ID"""
-        pass
-
     # 非人类限流配置管理接口
     @abstractmethod
     def set_non_human_options(self, options: Any) -> None:

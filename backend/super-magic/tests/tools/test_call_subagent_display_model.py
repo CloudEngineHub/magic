@@ -11,9 +11,8 @@ class _FakeToolContext:
         return self.parent if name == "agent_context" else None
 
 
-def test_subagent_display_model_uses_parent_entry_model_before_runtime_model():
+def test_subagent_display_model_uses_parent_model_context():
     parent = SimpleNamespace(
-        get_runtime_model_id=lambda: "mock-runtime-text",
         model_context=SimpleNamespace(current_text_model_id="mock-context-text"),
     )
 

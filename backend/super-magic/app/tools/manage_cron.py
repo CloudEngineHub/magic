@@ -303,11 +303,9 @@ CRITICAL CONSTRAINTS:
         model_id: Optional[str] = None
         image_model_id: Optional[str] = None
         video_model_id: Optional[str] = None
-        if agent_ctx and hasattr(agent_ctx, "get_runtime_model_id"):
-            model_id = agent_ctx.get_runtime_model_id() or None
         if agent_ctx and hasattr(agent_ctx, "model_context"):
             model_context = agent_ctx.model_context
-            model_id = model_id or model_context.current_text_model_id or None
+            model_id = model_context.current_text_model_id or None
             image_model_id = model_context.image_model_id
             video_model_id = model_context.video_model_id
         if not model_id:
