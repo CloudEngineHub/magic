@@ -32,6 +32,7 @@ from app.path_manager import PathManager
 from app.core.context.run_interruption import RunCancelState, RunCleanupRegistry, RunCancellationHandle
 from app.core.entity.final_task_state import FinalTaskState
 from app.core.models.agent_model_context import AgentModelContext
+from app.core.context.execution_source import SuperMagicExecutionSource
 from loguru import logger
 from app.infrastructure.storage.types import PlatformType
 from agentlang.llms.token_usage.models import TokenUsageCollection
@@ -306,6 +307,8 @@ class AgentContext(BaseAgentContext):
             "streaming_sinks": ([], List),
             # Human in the Loop：前端工具调用等待用户完成时的暂停标记
             "user_tool_call_pending_id": (None, Optional[str]),
+            # 当前 Agent run 的触发来源，供 ask_user 等运行态策略读取
+            "execution_source": (SuperMagicExecutionSource.HUMAN_CHAT, SuperMagicExecutionSource),
             # Agent Master 管理
             "agent_code": (None, Optional[str]),  # 当前自定义 Agent 的 agent_code
             # 消息版本协商（v1 / v2），由 set_chat_client_message 提取 dynamic_config.message_version 写入
@@ -369,6 +372,17 @@ class AgentContext(BaseAgentContext):
             Optional[str]: agent_code
         """
         return self.shared_context.get_field("agent_code")
+
+    def set_execution_source(self, source: SuperMagicExecutionSource) -> None:
+        """设置当前 Agent run 的触发来源。"""
+        self.shared_context.update_field("execution_source", source)
+
+    def get_execution_source(self) -> SuperMagicExecutionSource:
+        """获取当前 Agent run 的触发来源。"""
+        source = self.shared_context.get_field("execution_source")
+        if isinstance(source, SuperMagicExecutionSource):
+            return source
+        return SuperMagicExecutionSource.from_raw(source)
 
     def is_magiclaw(self) -> bool:
         """当前会话是否为 magiclaw 模式（龙虾 claw agent）。"""
