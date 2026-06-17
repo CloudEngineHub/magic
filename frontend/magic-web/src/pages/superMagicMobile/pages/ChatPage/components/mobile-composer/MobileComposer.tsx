@@ -486,7 +486,6 @@ function MobileComposerComponent({
 		<div className="relative">
 			<div
 				className={cn(
-					"transition-opacity",
 					shouldShowVoiceRecordingUi &&
 					"pointer-events-none absolute inset-x-0 top-0 opacity-0",
 				)}
