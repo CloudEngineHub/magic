@@ -43,6 +43,13 @@ const RECYCLE_BIN_TABS_CONFIG = [
 
 type RecycleBinTabId = (typeof RECYCLE_BIN_TABS_CONFIG)[number]["id"]
 
+const RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID: Record<number, RecycleBinTabId> = {
+	1: "workspaces",
+	2: "projects",
+	3: "topics",
+	4: "files",
+}
+
 interface RecycleBinTab {
 	id: RecycleBinTabId
 	labelKey: string
@@ -105,6 +112,7 @@ function getRecycleBinTabs(props: {
 
 export {
 	RECYCLE_BIN_TABS_CONFIG,
+	RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID,
 	createRecycleBinTabCounts,
 	getRecycleBinTabs,
 	getRecycleBinTabIdFromQuery,

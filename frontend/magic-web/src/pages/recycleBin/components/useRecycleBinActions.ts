@@ -27,7 +27,6 @@ import {
 	type RestoreTarget,
 	type SelectPathTarget,
 	type ResourceType,
-	updateTabCounts,
 	RESOURCE_TYPE,
 } from "./recycle-bin-domain"
 
@@ -188,7 +187,6 @@ interface UseRecycleBinActionsParams {
 	setItems: React.Dispatch<React.SetStateAction<RecycleBinItem[]>>
 	selectedIds: string[]
 	hasMixedSelectionTypes: boolean
-	onTabCountChange?: (tabId: string, count: number) => void
 	onRefresh: () => void
 }
 
@@ -197,7 +195,6 @@ export function useRecycleBinActions({
 	setItems,
 	selectedIds,
 	hasMixedSelectionTypes,
-	onTabCountChange,
 	onRefresh,
 }: UseRecycleBinActionsParams) {
 	const { t } = useTranslation("super")
@@ -694,12 +691,6 @@ export function useRecycleBinActions({
 
 			setItems((prev) => {
 				const nextItems = prev.filter((item) => !successIdStrings.includes(item.id))
-				if (successIdStrings.length > 0) {
-					updateTabCounts({
-						items: nextItems,
-						onTabCountChange,
-					})
-				}
 				return nextItems
 			})
 			if (data.failed.length > 0) {
@@ -709,6 +700,7 @@ export function useRecycleBinActions({
 				magicToast.success(
 					t("recycleBin.deleteSuccess.content", { count: successIdStrings.length }),
 				)
+				onRefresh()
 			}
 		} catch {
 			magicToast.error(t("operationFailed"))

@@ -44,6 +44,17 @@ export namespace RecycleBin {
 		page_size?: number
 	}
 
+	export interface CountsParams {
+		keyword?: string
+	}
+
+	export interface CountItem {
+		resource_type: number
+		resource_type_name: string
+		resource_type_label: string
+		count: number
+	}
+
 	export interface CheckItem {
 		id: string
 		resource_type: number
@@ -98,6 +109,11 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 	getRecycleBinList(params: RecycleBin.ListParams) {
 		return fetch.get<{ total: number; list: RecycleBin.ListItem[] }>(
 			genRequestUrl("/api/v1/recycle-bin/list", {}, params),
+		)
+	},
+	getRecycleBinCounts(params?: RecycleBin.CountsParams) {
+		return fetch.get<{ total: number; counts: RecycleBin.CountItem[] }>(
+			genRequestUrl("/api/v1/recycle-bin/counts", {}, params),
 		)
 	},
 	checkRecycleBinParent(params: RecycleBin.CheckParams) {

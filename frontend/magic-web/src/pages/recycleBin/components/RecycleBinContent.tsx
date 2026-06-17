@@ -1,23 +1,29 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useRequest } from "ahooks"
+import { useMemoizedFn, useRequest } from "ahooks"
 import { RecycleBinApi } from "@/apis"
+import magicToast from "@/components/base/MagicToaster/utils"
+import { createRecycleBinTabCounts, RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID } from "../tab-config"
 import { RecycleBinList } from "./RecycleBinList"
 import { RecycleBinModals } from "./RecycleBinModals"
 import { RecycleBinToolbar } from "./RecycleBinToolbar"
 import {
 	mapRecycleBinItem as mapRecycleBinItemFromDomain,
-	updateTabCounts as updateTabCountsFromDomain,
 	type RecycleBinItem,
 } from "./recycle-bin-domain"
 import { useRecycleBinActions } from "./useRecycleBinActions"
 import { useRecycleBinSelection } from "./useRecycleBinSelection"
+
+const RECYCLE_BIN_PAGE_SIZE = 50
 
 export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinContentProps) {
 	const { t } = useTranslation("super")
 	const [searchValue, setSearchValue] = useState("")
 	const [items, setItems] = useState<RecycleBinItem[]>([])
 	const [hasError, setHasError] = useState(false)
+	const [total, setTotal] = useState(0)
+	const [currentPage, setCurrentPage] = useState(1)
+	const [isLoadingMore, setIsLoadingMore] = useState(false)
 
 	const trimmedSearchValue = searchValue.trim()
 	const queryParams = useMemo(
@@ -25,10 +31,26 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 			keyword: trimmedSearchValue ? trimmedSearchValue : undefined,
 			order: "desc" as const,
 			page: 1,
-			page_size: 100,
+			page_size: RECYCLE_BIN_PAGE_SIZE,
 		}),
 		[trimmedSearchValue],
 	)
+
+	const refreshTabCounts = useMemoizedFn(async () => {
+		if (!onTabCountChange) return
+		const data = await RecycleBinApi.getRecycleBinCounts({
+			keyword: queryParams.keyword,
+		})
+		const nextCounts = createRecycleBinTabCounts()
+		nextCounts.all = data.total ?? 0
+		data.counts?.forEach((item) => {
+			const tabId = RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID[item.resource_type]
+			if (tabId) nextCounts[tabId] = item.count ?? 0
+		})
+		Object.entries(nextCounts).forEach(([tabId, count]) => {
+			onTabCountChange(tabId, count)
+		})
+	})
 
 	const { run, loading } = useRequest(RecycleBinApi.getRecycleBinList, {
 		manual: true,
@@ -38,10 +60,9 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 		onSuccess: (data) => {
 			const nextItems = data.list.map((item) => mapRecycleBinItemFromDomain(item, t))
 			setItems(nextItems)
-			updateTabCountsFromDomain({
-				items: nextItems,
-				onTabCountChange,
-			})
+			setTotal(data.total ?? nextItems.length)
+			setCurrentPage(1)
+			refreshTabCounts().catch((error) => console.error(error))
 		},
 		onError: () => {
 			setHasError(true)
@@ -52,6 +73,37 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 		run(queryParams)
 	}, [queryParams, run])
 
+	useEffect(() => {
+		refreshTabCounts().catch((error) => console.error(error))
+	}, [refreshTabCounts, queryParams.keyword])
+
+	const loadMore = useMemoizedFn(async () => {
+		if (isLoadingMore || currentPage * RECYCLE_BIN_PAGE_SIZE >= total) return
+		const nextPage = currentPage + 1
+		setIsLoadingMore(true)
+		try {
+			const data = await RecycleBinApi.getRecycleBinList({
+				...queryParams,
+				page: nextPage,
+			})
+			const nextItems = data.list.map((item) => mapRecycleBinItemFromDomain(item, t))
+			setItems((prev) => {
+				const existingIds = new Set(prev.map((item) => item.id))
+				const mergedItems = [
+					...prev,
+					...nextItems.filter((item) => !existingIds.has(item.id)),
+				]
+				return mergedItems
+			})
+			setTotal(data.total ?? total)
+			setCurrentPage(nextPage)
+		} catch {
+			magicToast.error(t("operationFailed"))
+		} finally {
+			setIsLoadingMore(false)
+		}
+	})
+
 	const selection = useRecycleBinSelection({
 		items,
 		activeTabId: activeTab?.id,
@@ -61,8 +113,10 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 		setItems,
 		selectedIds: selection.selectedIds,
 		hasMixedSelectionTypes: selection.hasMixedSelectionTypes,
-		onTabCountChange,
-		onRefresh: () => run(queryParams),
+		onRefresh: () => {
+			run(queryParams)
+			refreshTabCounts().catch((error) => console.error(error))
+		},
 	})
 
 	const hasItems = selection.visibleItems.length > 0
@@ -91,8 +145,11 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 					items={selection.visibleItems}
 					selectedIds={selection.selectedIds}
 					loading={loading}
+					loadingMore={isLoadingMore}
+					hasMore={currentPage * RECYCLE_BIN_PAGE_SIZE < total}
 					hasError={hasError}
 					shouldShowEmpty={shouldShowEmpty}
+					onLoadMore={loadMore}
 					onToggleItem={selection.handleToggleItem}
 					onRetry={() => run(queryParams)}
 					onOpenRestore={actions.openRestoreModal}
