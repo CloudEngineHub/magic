@@ -112,7 +112,7 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 		)
 	},
 	getRecycleBinCounts(params?: RecycleBin.CountsParams) {
-		return fetch.get<{ total: number; counts: RecycleBin.CountItem[] }>(
+		return fetch.get<RecycleBin.CountItem[]>(
 			genRequestUrl("/api/v1/recycle-bin/counts", {}, params),
 		)
 	},

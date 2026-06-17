@@ -42,11 +42,11 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 			keyword: queryParams.keyword,
 		})
 		const nextCounts = createRecycleBinTabCounts()
-		nextCounts.all = data.total ?? 0
-		data.counts?.forEach((item) => {
+		data.forEach((item) => {
 			const tabId = RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID[item.resource_type]
 			if (tabId) nextCounts[tabId] = item.count ?? 0
 		})
+		nextCounts.all = data.reduce((sum, item) => sum + (item.count ?? 0), 0)
 		Object.entries(nextCounts).forEach(([tabId, count]) => {
 			onTabCountChange(tabId, count)
 		})
