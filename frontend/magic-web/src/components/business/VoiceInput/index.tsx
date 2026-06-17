@@ -246,7 +246,7 @@ export const VoiceInput = memo(
 								"hover:opacity-80 active:opacity-60",
 								"disabled:cursor-not-allowed disabled:opacity-60",
 								// base: idle, connecting, default
-								"size-8 bg-fill text-foreground dark:bg-sidebar dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",
+								"bg-fill text-foreground dark:bg-sidebar dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",
 								// recording / processing
 								(status === "recording" || status === "processing") &&
 								"bg-orange-50 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400",
