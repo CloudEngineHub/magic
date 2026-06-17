@@ -13,6 +13,7 @@ export const BUILTIN_PLUGIN_SLUGS = [
 	"model-swap",
 	"pose-swap",
 	"clothing-color-change",
+	"fabric-swap",
 	"product-image-set",
 	"one-click-product",
 	"product-background-swap",
