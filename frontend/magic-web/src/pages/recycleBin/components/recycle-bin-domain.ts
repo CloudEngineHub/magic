@@ -77,6 +77,8 @@ export interface RestoreCheckResult {
 	itemsNeedMove: string[]
 	/** 无需移动的 resource_id（父级存在可直接恢复） */
 	itemsNoNeedMove: string[]
+	/** 显式可直接恢复的 resource_id，仅文件恢复使用 */
+	directResourceIds?: string[]
 	/** 文件恢复冲突策略，key 为 resource_id */
 	conflictResolutions?: Record<
 		string,
@@ -85,6 +87,13 @@ export interface RestoreCheckResult {
 			name_conflict?: "overwrite" | "skip"
 		}
 	>
+	/** 需要单独确认是否覆盖的同名冲突文件列表 */
+	pendingNameConflictItems?: Array<{
+		resourceId: string
+		fileName: string
+	}>
+	/** 必须跳过的资源 ID，例如 project_missing / duplicate_restore_target */
+	mustSkipResourceIds?: string[]
 	/** 同名冲突被跳过的文件数量 */
 	skippedNameConflictCount?: number
 	/** 同名冲突文件名，用于恢复确认提示 */

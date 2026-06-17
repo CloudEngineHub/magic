@@ -66,17 +66,33 @@ type ConflictType =
 
 type ConflictResolution = {
 	parent_missing?: "restore_to_root"
+	name_conflict?: "overwrite" | "skip"
 }
 
 type ConflictResolutions = Record<string, ConflictResolution>
 const MAX_CONFLICT_NAME_PREVIEW_COUNT = 5
 
+type PendingNameConflictItem = {
+	resourceId: string
+	fileName: string
+}
+
+type PendingNameConflictRestore = {
+	resourceType: ResourceType
+	conflictResolutions?: ConflictResolutions
+	items: PendingNameConflictItem[]
+	currentIndex: number
+}
+
 interface ParsedCheckResult {
 	needMoveResourceIds: string[]
 	noNeedMoveResourceIds: string[]
+	directResourceIds: string[]
 	conflictResolutions: ConflictResolutions
+	pendingNameConflictItems: PendingNameConflictItem[]
 	skippedNameConflictCount: number
 	skippedNameConflictResourceIds: string[]
+	skippedNameConflictNames: string[]
 	projectMissingCount: number
 	projectMissingFileNames: string[]
 	duplicateRestoreTargetCount: number
@@ -105,10 +121,12 @@ function parseCheckResult(data: {
 	const needMoveFromConflicts = fromNewWithConflict
 		.filter((item) => item?.conflict?.type === "parent_missing")
 		.map((item) => String(item.resource_id))
+	const directResourceIds: string[] = []
 
-	// 同名冲突：直接跳过，不纳入恢复请求
 	let skippedNameConflictCount = 0
 	const skippedNameConflictResourceIds: string[] = []
+	const skippedNameConflictNames: string[] = []
+	const pendingNameConflictItems: PendingNameConflictItem[] = []
 	let projectMissingCount = 0
 	const projectMissingFileNames: string[] = []
 	let duplicateRestoreTargetCount = 0
@@ -121,10 +139,17 @@ function parseCheckResult(data: {
 			conflictResolutions[resourceId] = {
 				parent_missing: "restore_to_root",
 			}
+			directResourceIds.push(resourceId)
 		}
 		if (conflictType === "name_conflict") {
 			skippedNameConflictCount += 1
 			skippedNameConflictResourceIds.push(resourceId)
+			const resourceName = item.resource_name?.trim()
+			if (resourceName) skippedNameConflictNames.push(resourceName)
+			pendingNameConflictItems.push({
+				resourceId,
+				fileName: resourceName || "",
+			})
 		}
 		if (conflictType === "project_missing") {
 			projectMissingCount += 1
@@ -143,7 +168,12 @@ function parseCheckResult(data: {
 			...(conflictResolutions[resourceId] ?? {}),
 			parent_missing: "restore_to_root",
 		}
+		directResourceIds.push(resourceId)
 	})
+
+	const noConflictResourceIds =
+		fromOldNoNeedMove.length > 0 ? toResourceIds(fromOldNoNeedMove) : toResourceIds(fromNewNoConflict)
+	directResourceIds.push(...noConflictResourceIds)
 
 	const needMoveResourceIds =
 		fromOldNeedMove.length > 0
@@ -166,9 +196,12 @@ function parseCheckResult(data: {
 	return {
 		needMoveResourceIds,
 		noNeedMoveResourceIds,
+		directResourceIds: Array.from(new Set(directResourceIds)),
 		conflictResolutions,
+		pendingNameConflictItems,
 		skippedNameConflictCount,
 		skippedNameConflictResourceIds,
+		skippedNameConflictNames,
 		projectMissingCount,
 		projectMissingFileNames,
 		duplicateRestoreTargetCount,
@@ -316,6 +349,9 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 		resourceIds: string[]
 		resourceType: ResourceType
 	} | null>(null)
+	const [pendingNameConflictRestore, setPendingNameConflictRestore] =
+		useState<PendingNameConflictRestore | null>(null)
+	const [isResolvingNameConflict, setIsResolvingNameConflict] = useState(false)
 
 	const queryParams = useMemo(
 		() => ({
@@ -458,6 +494,62 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 		[handleRestoreSuccess, items, t],
 	)
 
+	const getCurrentPendingNameConflict = useCallback(() => {
+		if (!pendingNameConflictRestore) return null
+		return pendingNameConflictRestore.items[pendingNameConflictRestore.currentIndex] ?? null
+	}, [pendingNameConflictRestore])
+
+	const advancePendingNameConflictQueue = useCallback(() => {
+		setPendingNameConflictRestore((prev) => {
+			if (!prev) return null
+			const nextIndex = prev.currentIndex + 1
+			if (nextIndex >= prev.items.length) return null
+			return {
+				...prev,
+				currentIndex: nextIndex,
+			}
+		})
+	}, [])
+
+	const handlePendingNameConflictChoice = useCallback(
+		async (strategy: "overwrite" | "skip") => {
+			const currentConflict = getCurrentPendingNameConflict()
+			if (!currentConflict || isResolvingNameConflict) return
+
+			if (strategy === "skip") {
+				advancePendingNameConflictQueue()
+				return
+			}
+			if (!pendingNameConflictRestore) return
+
+			setIsResolvingNameConflict(true)
+			try {
+				const { resourceType, conflictResolutions } = pendingNameConflictRestore
+				await runRestoreWithPayload({
+					resourceType,
+					resourceIds: [currentConflict.resourceId],
+					conflictResolutions: {
+						...(conflictResolutions ?? {}),
+						[currentConflict.resourceId]: {
+							...(conflictResolutions?.[currentConflict.resourceId] ?? {}),
+							name_conflict: "overwrite",
+						},
+					},
+				})
+				advancePendingNameConflictQueue()
+			} finally {
+				setIsResolvingNameConflict(false)
+			}
+		},
+		[
+			advancePendingNameConflictQueue,
+			getCurrentPendingNameConflict,
+			isResolvingNameConflict,
+			pendingNameConflictRestore,
+			runRestoreWithPayload,
+		],
+	)
+
 	/** 选择路径确认后：恢复「无需移动」的项（与 PC 端一致） */
 	const runPendingRestoreAfterMove = useCallback(async () => {
 		const pending = pendingRestoreAfterMove
@@ -508,9 +600,10 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 			const {
 				needMoveResourceIds,
 				noNeedMoveResourceIds,
+				directResourceIds,
 				conflictResolutions,
+				pendingNameConflictItems,
 				skippedNameConflictCount,
-				skippedNameConflictResourceIds,
 				projectMissingCount,
 				projectMissingFileNames,
 				duplicateRestoreTargetCount,
@@ -546,21 +639,28 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 			}
 
 			if (resourceType === RESOURCE_TYPE.FILE) {
-				const conflictResourceIds = Object.keys(conflictResolutions)
-				const resourceIds = excludeRestoreResourceIds(
-					[...noNeedMoveResourceIds, ...conflictResourceIds],
-					skippedNameConflictResourceIds,
-				)
-				if (resourceIds.length === 0 && skippedNameConflictCount === 0) {
+				if (directResourceIds.length === 0 && skippedNameConflictCount === 0) {
 					magicToast.info(t("recycleBin.restoreCheck.noResourcesFound"))
 					return
 				}
-				await runRestoreWithPayload({
-					resourceType,
-					resourceIds,
-					conflictResolutions,
-					skippedNameConflictCount,
-				})
+				if (directResourceIds.length > 0) {
+					await runRestoreWithPayload({
+						resourceType,
+						resourceIds: directResourceIds,
+						conflictResolutions,
+					})
+				}
+				if (pendingNameConflictItems.length > 0) {
+					setPendingNameConflictRestore({
+						resourceType,
+						conflictResolutions,
+						items: pendingNameConflictItems.map((item) => ({
+							resourceId: item.resourceId,
+							fileName: item.fileName || t("common.untitledFile"),
+						})),
+						currentIndex: 0,
+					})
+				}
 				return
 			}
 			const needMoveItemIds = resolveNeedMoveItemIds(needMoveResourceIds, items)
@@ -654,9 +754,10 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 				const {
 					needMoveResourceIds,
 					noNeedMoveResourceIds,
+					directResourceIds,
 					conflictResolutions,
+					pendingNameConflictItems,
 					skippedNameConflictCount,
-					skippedNameConflictResourceIds,
 					projectMissingCount,
 					projectMissingFileNames,
 					duplicateRestoreTargetCount,
@@ -692,21 +793,28 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 				}
 
 				if (item.resourceType === RESOURCE_TYPE.FILE) {
-					const conflictResourceIds = Object.keys(conflictResolutions)
-					const resourceIds = excludeRestoreResourceIds(
-						[...noNeedMoveResourceIds, ...conflictResourceIds],
-						skippedNameConflictResourceIds,
-					)
-					if (resourceIds.length === 0 && skippedNameConflictCount === 0) {
+					if (directResourceIds.length === 0 && skippedNameConflictCount === 0) {
 						magicToast.info(t("recycleBin.restoreCheck.noResourcesFound"))
 						return
 					}
-					await runRestoreWithPayload({
-						resourceType: item.resourceType,
-						resourceIds,
-						conflictResolutions,
-						skippedNameConflictCount,
-					})
+					if (directResourceIds.length > 0) {
+						await runRestoreWithPayload({
+							resourceType: item.resourceType,
+							resourceIds: directResourceIds,
+							conflictResolutions,
+						})
+					}
+					if (pendingNameConflictItems.length > 0) {
+						setPendingNameConflictRestore({
+							resourceType: item.resourceType,
+							conflictResolutions,
+							items: pendingNameConflictItems.map((conflictItem) => ({
+								resourceId: conflictItem.resourceId,
+								fileName: conflictItem.fileName || t("common.untitledFile"),
+							})),
+							currentIndex: 0,
+						})
+					}
 					return
 				}
 				const needMove = needMoveResourceIds.includes(item.resourceId)
@@ -916,6 +1024,10 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 					.getProjectsByWorkspace(selectPathWorkspaceId)
 					.find((p) => p.id === selectPathProjectId)
 			: undefined
+	const currentPendingNameConflict = getCurrentPendingNameConflict()
+	const pendingNameConflictCount = pendingNameConflictRestore
+		? pendingNameConflictRestore.items.length - pendingNameConflictRestore.currentIndex
+		: 0
 
 	// 加载中
 	if (loading && items.length === 0) {
@@ -1054,6 +1166,56 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 				showCancel
 				cancelText={t("common.cancel")}
 				onClose={() => setMoreItemId(null)}
+			/>
+
+			<ActionSheet
+				visible={currentPendingNameConflict !== null}
+				title={
+					currentPendingNameConflict
+						? `${t("recycleBin.restoreCheck.nameConflictDialogTitle", {
+								fileName: currentPendingNameConflict.fileName,
+						  })}\n${t("topicFiles.duplicateFile.message", {
+								fileName: currentPendingNameConflict.fileName,
+						  })}`
+						: ""
+				}
+				actionGroups={[
+					{
+						actions: [
+							{
+								key: "skipNameConflict",
+								label: t("recycleBin.restoreCheck.skipNameConflict"),
+								onClick: () => void handlePendingNameConflictChoice("skip"),
+								disabled: isResolvingNameConflict,
+							},
+							{
+								key: "replaceNameConflict",
+								label: isResolvingNameConflict
+									? t("recycleBin.restoreCheck.processingAllNameConflicts")
+									: t("topicFiles.duplicateFile.replace"),
+								onClick: () => void handlePendingNameConflictChoice("overwrite"),
+								disabled: isResolvingNameConflict,
+							},
+						],
+					},
+				]}
+				showCancel
+				cancelText={
+					pendingNameConflictCount > 1
+						? t("recycleBin.restoreCheck.skipNameConflict")
+						: t("common.cancel")
+				}
+				onClose={() => {
+					if (isResolvingNameConflict) return
+					setPendingNameConflictRestore(null)
+					if (pendingNameConflictCount > 0) {
+						magicToast.info(
+							t("recycleBin.restoreCheck.nameConflictSkipped", {
+								count: pendingNameConflictCount,
+							}),
+						)
+					}
+				}}
 			/>
 
 			<MoveProjectModal

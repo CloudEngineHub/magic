@@ -98,17 +98,13 @@ function parseRestoreCheckResponse(data: {
 	const needMoveFromConflict = withConflict
 		.filter((item) => item?.conflict?.type === "parent_missing")
 		.map((item) => String(item.resource_id))
-
-	// 同名冲突默认跳过；单个文件恢复会在 openRestoreModal 中拦截并让用户选择策略。
-	let skippedNameConflictCount = 0
+	const directResourceIds: string[] = []
 	const skippedNameConflictNames: string[] = []
-	const skippedNameConflictResourceIds: string[] = []
-	const skippedNameConflictItems: PendingNameConflictItem[] = []
+	const pendingNameConflictItems: PendingNameConflictItem[] = []
 	let projectMissingCount = 0
-	const projectMissingResourceIds: string[] = []
 	const projectMissingFileNames: string[] = []
 	let duplicateRestoreTargetCount = 0
-	const duplicateRestoreTargetResourceIds: string[] = []
+	const mustSkipResourceIds: string[] = []
 
 	withConflict.forEach((item) => {
 		const resourceId = String(item.resource_id)
@@ -118,65 +114,65 @@ function parseRestoreCheckResponse(data: {
 			conflictResolutions[resourceId] = {
 				parent_missing: "restore_to_root",
 			}
+			directResourceIds.push(resourceId)
 		}
 		if (conflictType === "name_conflict") {
-			skippedNameConflictCount += 1
-			skippedNameConflictResourceIds.push(resourceId)
 			const resourceName = item.resource_name?.trim()
 			if (resourceName) skippedNameConflictNames.push(resourceName)
-			skippedNameConflictItems.push({
+			pendingNameConflictItems.push({
 				resourceId,
 				fileName: resourceName || "",
 			})
 		}
 		if (conflictType === "project_missing") {
 			projectMissingCount += 1
-			projectMissingResourceIds.push(resourceId)
+			mustSkipResourceIds.push(resourceId)
 			const resourceName = item.resource_name?.trim()
 			if (resourceName) projectMissingFileNames.push(resourceName)
 		}
 		if (conflictType === "duplicate_restore_target") {
 			duplicateRestoreTargetCount += 1
-			duplicateRestoreTargetResourceIds.push(resourceId)
+			mustSkipResourceIds.push(resourceId)
 		}
 	})
 
+	const pendingNameConflictResourceIds = pendingNameConflictItems.map((item) => item.resourceId)
+	const pendingNameConflictResourceIdSet = new Set(pendingNameConflictResourceIds)
+
 	// 兼容老版 check 结构：items_need_move 也视为 parent_missing
-	const skippedNameConflictResourceIdSet = new Set(skippedNameConflictResourceIds)
 	oldNeedMove.forEach((item) => {
 		const resourceId = String(item.resource_id)
-		if (skippedNameConflictResourceIdSet.has(resourceId)) return
+		if (pendingNameConflictResourceIdSet.has(resourceId)) return
 		conflictResolutions[resourceId] = {
 			...(conflictResolutions[resourceId] ?? {}),
 			parent_missing: "restore_to_root",
 		}
+		directResourceIds.push(resourceId)
 	})
+
+	const noConflictResourceIds = oldNoNeedMove.length > 0 ? toResourceIds(oldNoNeedMove) : toResourceIds(noConflict)
+	directResourceIds.push(...noConflictResourceIds)
+	const uniqueDirectResourceIds = Array.from(new Set(directResourceIds))
+	const uniqueMustSkipResourceIds = Array.from(new Set(mustSkipResourceIds))
 
 	return {
 		itemsNeedMove:
 			oldNeedMove.length > 0
-				? excludeRestoreResourceIds(
-						toResourceIds(oldNeedMove),
-						skippedNameConflictResourceIds,
-					)
-				: excludeRestoreResourceIds(needMoveFromConflict, skippedNameConflictResourceIds),
-		itemsNoNeedMove:
-			oldNoNeedMove.length > 0
-				? excludeRestoreResourceIds(
-						toResourceIds(oldNoNeedMove),
-						skippedNameConflictResourceIds,
-					)
-				: excludeRestoreResourceIds(
-						[...toResourceIds(noConflict), ...duplicateRestoreTargetResourceIds],
-						skippedNameConflictResourceIds,
-					),
+				? excludeRestoreResourceIds(toResourceIds(oldNeedMove), pendingNameConflictResourceIds)
+				: excludeRestoreResourceIds(needMoveFromConflict, pendingNameConflictResourceIds),
+		itemsNoNeedMove: excludeRestoreResourceIds(
+			oldNoNeedMove.length > 0 ? toResourceIds(oldNoNeedMove) : toResourceIds(noConflict),
+			pendingNameConflictResourceIds,
+		),
+		directResourceIds: uniqueDirectResourceIds,
 		conflictResolutions,
-		skippedNameConflictCount,
+		pendingNameConflictItems,
+		mustSkipResourceIds: uniqueMustSkipResourceIds,
+		skippedNameConflictCount: pendingNameConflictItems.length,
 		skippedNameConflictNames,
-		skippedNameConflictResourceIds,
-		skippedNameConflictItems,
+		skippedNameConflictResourceIds: pendingNameConflictResourceIds,
+		skippedNameConflictItems: pendingNameConflictItems,
 		projectMissingCount,
-		projectMissingResourceIds,
 		projectMissingFileNames,
 		duplicateRestoreTargetCount,
 	}
@@ -596,25 +592,24 @@ export function useRecycleBinActions({
 		if (restoreCheckResult?.status === "invalid" || restoreCheckResult?.status === "error")
 			return
 		const resourceType = getRestoreTargetResourceType({ target: restoreTarget, items })
-		const allResourceIds = getRestoreResourceIds({ target: restoreTarget, items })
 		const canRestoreResourceIds = restoreCheckResult?.itemsNoNeedMove ?? []
+		const directResourceIds = restoreCheckResult?.directResourceIds ?? canRestoreResourceIds
 		const conflictResolutions = restoreCheckResult?.conflictResolutions ?? {}
-		const conflictResourceIds = Object.keys(conflictResolutions)
-		const nameConflictItems = restoreCheckResult?.skippedNameConflictItems ?? []
+		const nameConflictItems =
+			restoreCheckResult?.pendingNameConflictItems ??
+			restoreCheckResult?.skippedNameConflictItems ??
+			[]
 		const { needMoveItemIds } = resolveNeedMove(restoreCheckResult?.itemsNeedMove ?? [], items)
 		const hasNeedMove = needMoveItemIds.length > 0
 		const isFileRestore = resourceType === RESOURCE_TYPE.FILE
 
 		if (isFileRestore && isRestorableResourceType(resourceType)) {
-			const resourceIds = Array.from(
-				new Set([...canRestoreResourceIds, ...conflictResourceIds]),
-			)
 			setRestoreTarget(null)
 			setRestoreCheckResult(null)
-			if (resourceIds.length > 0) {
+			if (directResourceIds.length > 0) {
 				await restoreResources({
 					resourceType,
-					resourceIds,
+					resourceIds: directResourceIds,
 					conflictResolutions,
 				})
 			}
@@ -858,25 +853,17 @@ export function useRecycleBinActions({
 			const {
 				itemsNeedMove,
 				itemsNoNeedMove,
+				directResourceIds,
 				conflictResolutions,
 				skippedNameConflictCount,
 				skippedNameConflictNames,
 				skippedNameConflictResourceIds,
-				skippedNameConflictItems,
+				pendingNameConflictItems,
+				mustSkipResourceIds,
 				projectMissingCount,
-				projectMissingResourceIds,
 				projectMissingFileNames,
 				duplicateRestoreTargetCount,
 			} = parseRestoreCheckResponse(data)
-			const fileNameByResourceId = new Map(
-				projectMissingResourceIds.map((resourceId, index) => [
-					resourceId,
-					projectMissingFileNames[index] ?? "",
-				]),
-			)
-			const projectMissingResolvedFileNames = projectMissingResourceIds
-				.map((resourceId) => fileNameByResourceId.get(resourceId))
-				.filter((name): name is string => Boolean(name))
 
 			if (
 				target.kind === "item" &&
@@ -903,13 +890,15 @@ export function useRecycleBinActions({
 			setRestoreCheckResult({
 				itemsNeedMove,
 				itemsNoNeedMove,
+				directResourceIds,
 				conflictResolutions,
+				pendingNameConflictItems,
+				mustSkipResourceIds,
 				skippedNameConflictCount,
 				skippedNameConflictNames,
 				skippedNameConflictResourceIds,
-				skippedNameConflictItems,
 				projectMissingCount,
-				projectMissingFileNames: projectMissingResolvedFileNames,
+				projectMissingFileNames,
 				duplicateRestoreTargetCount,
 				shouldBlockRestore: false,
 				status: "success",
