@@ -21,8 +21,9 @@ type MockIframeWindow = {
 	dispatchScroll: () => void
 }
 
-const { mockIframeWindows } = vi.hoisted(() => ({
+const { mockIframeWindows, mockThrowOnRemoveEventListenerAccess } = vi.hoisted(() => ({
 	mockIframeWindows: [] as MockIframeWindow[],
+	mockThrowOnRemoveEventListenerAccess: { value: false },
 }))
 
 vi.mock("./wechatArticleHtml", () => ({
@@ -124,6 +125,11 @@ vi.mock("../../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 			const windowRef = useRef<MockIframeWindow | null>(null)
 			if (!windowRef.current) {
 				const listeners = new Set<EventListenerOrEventListenerObject>()
+				const removeEventListenerMock = vi.fn(
+					(type: string, listener: EventListenerOrEventListenerObject) => {
+						if (type === "scroll") listeners.delete(listener)
+					},
+				)
 				const mockWindow = {
 					scrollY: 0,
 					pageYOffset: 0,
@@ -137,11 +143,7 @@ vi.mock("../../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 							if (type === "scroll") listeners.add(listener)
 						},
 					),
-					removeEventListener: vi.fn(
-						(type: string, listener: EventListenerOrEventListenerObject) => {
-							if (type === "scroll") listeners.delete(listener)
-						},
-					),
+					removeEventListener: removeEventListenerMock,
 					dispatchScroll: () => {
 						const event = new Event("scroll")
 						listeners.forEach((listener) => {
@@ -150,6 +152,18 @@ vi.mock("../../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 						})
 					},
 				}
+				Object.defineProperty(mockWindow, "removeEventListener", {
+					configurable: true,
+					get: () => {
+						if (mockThrowOnRemoveEventListenerAccess.value) {
+							throw new DOMException(
+								"Failed to read a named property 'removeEventListener' from 'Window'",
+								"SecurityError",
+							)
+						}
+						return removeEventListenerMock
+					},
+				})
 				windowRef.current = mockWindow
 				mockIframeWindows.push(mockWindow)
 			}
@@ -200,6 +214,7 @@ describe("WechatArticleView", () => {
 		rendererStartInspectorAppendMock.mockClear()
 		rendererStopInspectorMock.mockClear()
 		mockIframeWindows.length = 0
+		mockThrowOnRemoveEventListenerAccess.value = false
 		vi.mocked(loadWechatArticleHtml).mockResolvedValue({
 			content: "<main>article</main>",
 			filePathMapping: new Map(),
@@ -289,7 +304,7 @@ describe("WechatArticleView", () => {
 		})
 	})
 
-	it("restores the iframe scroll position after the same article file refreshes", async () => {
+	it("restores the iframe scroll position and tolerates cross-origin cleanup", async () => {
 		vi.mocked(loadWechatArticleHtml)
 			.mockResolvedValueOnce({
 				content: "<main>article v1</main>",
@@ -297,6 +312,10 @@ describe("WechatArticleView", () => {
 			})
 			.mockResolvedValueOnce({
 				content: "<main>article v2</main>",
+				filePathMapping: new Map(),
+			})
+			.mockResolvedValueOnce({
+				content: "<main>article v3</main>",
 				filePathMapping: new Map(),
 			})
 
@@ -346,6 +365,21 @@ describe("WechatArticleView", () => {
 				left: 0,
 				behavior: "auto",
 			})
+		})
+
+		mockThrowOnRemoveEventListenerAccess.value = true
+		expect(() => {
+			rerender(
+				<WechatArticleView
+					post={post}
+					attachmentList={[{ file_id: "article-file-1", updated_at: "3" }]}
+				/>,
+			)
+		}).not.toThrow()
+		await waitFor(() => {
+			expect(screen.getByTestId("mock-isolated-html-renderer")).toHaveTextContent(
+				"article v3",
+			)
 		})
 	})
 

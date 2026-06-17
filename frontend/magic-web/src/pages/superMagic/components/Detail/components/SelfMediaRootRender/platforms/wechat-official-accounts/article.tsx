@@ -49,29 +49,61 @@ export interface WechatArticleViewRef {
 
 type WechatArticleRenderMode = "desktop" | "phone"
 
+function getSafeIframeWindow(iframe: HTMLIFrameElement | null) {
+	try {
+		return iframe?.contentWindow ?? null
+	} catch {
+		return null
+	}
+}
+
+function getSafeIframeDocument(iframe: HTMLIFrameElement | null) {
+	try {
+		return iframe?.contentDocument ?? null
+	} catch {
+		return null
+	}
+}
+
 function getIframeScrollTop(iframe: HTMLIFrameElement | null) {
 	if (!iframe) return 0
-	const win = iframe.contentWindow
-	const doc = iframe.contentDocument
-	const scrollTop =
-		win?.scrollY ??
-		win?.pageYOffset ??
-		doc?.documentElement?.scrollTop ??
-		doc?.body?.scrollTop ??
-		0
+	const win = getSafeIframeWindow(iframe)
+	const doc = getSafeIframeDocument(iframe)
+	let scrollTop = 0
+	try {
+		scrollTop = win?.scrollY ?? win?.pageYOffset ?? 0
+	} catch {
+		scrollTop = 0
+	}
+	if (!scrollTop) {
+		try {
+			scrollTop = doc?.documentElement?.scrollTop ?? doc?.body?.scrollTop ?? 0
+		} catch {
+			scrollTop = 0
+		}
+	}
 	return Math.max(0, Math.round(scrollTop))
 }
 
 function restoreIframeScrollTop(iframe: HTMLIFrameElement | null, scrollTop: number) {
 	if (!iframe || scrollTop <= 0) return
 	const top = Math.max(0, Math.round(scrollTop))
-	if (typeof iframe.contentWindow?.scrollTo === "function") {
-		iframe.contentWindow.scrollTo({ top, left: 0, behavior: "auto" })
-		return
+	const win = getSafeIframeWindow(iframe)
+	try {
+		if (typeof win?.scrollTo === "function") {
+			win.scrollTo({ top, left: 0, behavior: "auto" })
+			return
+		}
+	} catch {
+		// Cross-origin iframe windows can block named property reads.
 	}
-	if (iframe.contentDocument?.documentElement)
-		iframe.contentDocument.documentElement.scrollTop = top
-	if (iframe.contentDocument?.body) iframe.contentDocument.body.scrollTop = top
+	const doc = getSafeIframeDocument(iframe)
+	try {
+		if (doc?.documentElement) doc.documentElement.scrollTop = top
+		if (doc?.body) doc.body.scrollTop = top
+	} catch {
+		// Ignore cross-origin access; scroll restoration is best-effort.
+	}
 }
 
 function escapeHtml(value: string | number | undefined) {
@@ -251,19 +283,50 @@ function WechatArticleViewInner(
 	useEffect(() => {
 		if (!fileId || !renderedContent || renderMode !== "desktop") return undefined
 		const iframe = rendererRef.current?.getIframeElement() ?? null
-		const win = iframe?.contentWindow
+		const win = getSafeIframeWindow(iframe)
 		if (!iframe || !win) return undefined
 
 		const rememberScrollTop = () => {
 			articleScrollTopsRef.current.set(fileId, getIframeScrollTop(iframe))
 		}
-		win.addEventListener("scroll", rememberScrollTop, { passive: true })
-		iframe.contentDocument?.addEventListener("scroll", rememberScrollTop, { passive: true })
+		let removeWindowScrollListener: (() => void) | undefined
+		let removeDocumentScrollListener: (() => void) | undefined
+
+		try {
+			win.addEventListener("scroll", rememberScrollTop, { passive: true })
+			removeWindowScrollListener = () => {
+				try {
+					win.removeEventListener("scroll", rememberScrollTop)
+				} catch {
+					// Iframe may have navigated cross-origin before React cleanup runs.
+				}
+			}
+		} catch {
+			removeWindowScrollListener = undefined
+		}
+
+		const doc = getSafeIframeDocument(iframe)
+		try {
+			doc?.addEventListener("scroll", rememberScrollTop, { passive: true })
+			if (doc) {
+				removeDocumentScrollListener = () => {
+					try {
+						doc.removeEventListener("scroll", rememberScrollTop)
+					} catch {
+						// Iframe document access is best-effort across sandbox modes.
+					}
+				}
+			}
+		} catch {
+			removeDocumentScrollListener = undefined
+		}
+
+		if (!removeWindowScrollListener && !removeDocumentScrollListener) return undefined
 
 		return () => {
 			rememberScrollTop()
-			win.removeEventListener("scroll", rememberScrollTop)
-			iframe.contentDocument?.removeEventListener("scroll", rememberScrollTop)
+			removeWindowScrollListener?.()
+			removeDocumentScrollListener?.()
 		}
 	}, [fileId, renderedContent, renderMode])
 
