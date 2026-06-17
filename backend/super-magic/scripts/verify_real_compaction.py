@@ -37,7 +37,7 @@ magic-service。只有在排查静态 config.yaml provider 时才使用 `--allow
 - `ok=true`：整体验证通过。
 - `runtime_provider_source` / `compact_provider_source`：应该是 `magic-service`。
 - `tokens_before > tokens_after` 且 `history_message_count_before > history_message_count_after`。
-- `main_model_after` / `runtime_model_after`：压缩完成后应恢复为 runtime model。
+- `main_model_after` / `runtime_model_after`：压缩完成后当前文本模型应恢复为 runtime model。
 - precompact 额外看 `background_started=true`、`background_completed=true`、
   `summary_ok=true`、`apply_ok=true`、`first_check_result=false`、`second_check_result=true`。
 
@@ -181,8 +181,6 @@ async def _make_agent(
     context.set_agent_name(agent_name)
     context.set_sandbox_id(os.environ.get("SANDBOX_ID", "default"))
     context.set_chat_history_dir(str(PathManager.get_runtime_dir() / "real_compaction_verify" / agent_id))
-    context.set_runtime_model_id(runtime_model)
-    context.set_metadata("runtime_model_source", "request")
 
     agent = Agent(agent_name, agent_id=agent_id, agent_context=context)
     agent.agent_context.model_context.apply_selection(
@@ -477,7 +475,7 @@ async def _run_verification(args: argparse.Namespace) -> VerificationResult:
         current_text_model = agent.agent_context.model_context.current_text_model_id
         if current_text_model != runtime_model:
             validation_errors.append(f"main model was not restored: current={current_text_model}, expected={runtime_model}")
-        runtime_model_after = agent.agent_context.get_runtime_model_id()
+        runtime_model_after = current_text_model
         if runtime_model_after != runtime_model:
             validation_errors.append(
                 f"runtime model was not restored: current={runtime_model_after}, expected={runtime_model}"
