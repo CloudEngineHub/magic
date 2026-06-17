@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react"
 import { LoaderCircle, RotateCcw, SquarePen } from "lucide-react"
 import { useCanvasUI } from "../../context/CanvasUIContext"
 import { useCanvas } from "../../context/CanvasContext"
+import { useMagic } from "../../context/MagicContext"
 import useElementPositionEffect from "../../hooks/useElementPositionEffect"
 import { useFloatingComponent } from "../../hooks/useFloatingComponent"
 import { ElementTypeEnum, type VideoElement } from "../../canvas/types"
@@ -15,6 +16,7 @@ import styles from "./index.module.css"
 import { createAndSubmitVideoGeneration } from "./createAndSubmitVideoGeneration"
 import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
 import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
+import { resolveVideoGenerationSelection } from "./video-editor-config.generation"
 import { buildVideoPointsEstimateSignature } from "./video-points-estimate.utils"
 
 interface VideoSecondEditProps {
@@ -28,6 +30,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const { videoElement } = props
 	const { selectedElements } = useCanvasUI()
 	const { canvas } = useCanvas()
+	const { videoModelList } = useMagic()
 	const { t } = useCanvasDesignI18n()
 	const [isEditing, setIsEditing] = useState(false)
 	const [isGeneratingAgain, setIsGeneratingAgain] = useState(false)
@@ -42,6 +45,11 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		signature: estimateSignature,
 		enabled: Boolean(estimateRequest?.model_id),
 	})
+	const generateAgainElementSize = useMemo(() => {
+		if (!estimateRequest?.generation) return null
+		const model = videoModelList.find((item) => item.model_id === estimateRequest.model_id)
+		return resolveVideoGenerationSelection(model, estimateRequest.generation).size
+	}, [estimateRequest, videoModelList])
 
 	const { containerRef: positionRef } = useElementPositionEffect({
 		position: "bottom",
@@ -84,6 +92,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 					await createAndSubmitVideoGeneration({
 						canvas,
 						sourceVideoElement: videoElement,
+						newElementSize: generateAgainElementSize,
 						request: {
 							...generateVideoRequest,
 							video_id: generateUUID(),
@@ -98,6 +107,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		canvas,
 		confirmVideoGeneration,
 		estimatedPoints,
+		generateAgainElementSize,
 		isEstimateLoading,
 		isGeneratingAgain,
 		videoElement,
@@ -154,6 +164,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			autoFocus
 			restoreOnMount="originalRequestOnly"
 			submitTarget="new-element"
+			syncElementSize={false}
 		/>
 	)
 }

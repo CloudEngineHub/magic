@@ -55,6 +55,8 @@ interface VideoGenerateEditorRenderProps {
 	/** 成片后重新进入编辑器时仅按 generateVideoRequest 恢复，不合并临时草稿 */
 	restoreOnMount?: UseVideoEditorConfigOptions["restoreOnMount"]
 	submitTarget?: "current-element" | "new-element"
+	/** 尺寸选择变化时是否同步更新当前元素尺寸 */
+	syncElementSize?: UseVideoEditorConfigOptions["syncElementSize"]
 }
 
 /** 画布内浮动的视频生成编辑器：提示词、模型、输入区与发送 */
@@ -66,6 +68,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		onGenerateSubmitSucceeded,
 		restoreOnMount,
 		submitTarget = "current-element",
+		syncElementSize,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const hostUiLocale = useHostUiLocale()
@@ -96,6 +99,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		videoElement,
 		messageEditorRef: editorRef,
 		...(restoreOnMount ? { restoreOnMount } : {}),
+		...(syncElementSize !== undefined ? { syncElementSize } : {}),
 	})
 	const { handlers } = config
 	const { buildRequestParams } = handlers
@@ -406,6 +410,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 								canvas,
 								sourceVideoElement: videoElement,
 								request: requestParams,
+								newElementSize: config.ratioOption,
 							})
 						: await (async () => {
 								handlers.saveDraftRequest(requestParams)
@@ -420,6 +425,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		[
 			canvas,
 			config.prompt,
+			config.ratioOption,
 			config.selectedModelId,
 			handlers,
 			onGenerateSubmitSucceeded,

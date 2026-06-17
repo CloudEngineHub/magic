@@ -121,46 +121,6 @@ export default function SecondEdit(props: SecondEditProps) {
 			const { x: newX, y: newY } = newPosition
 
 			const originalElement = props.imageElement
-			const croppedVisibleWidth = originalElement.width ?? originalElement.crop?.displayWidth
-			const croppedVisibleHeight =
-				originalElement.height ?? originalElement.crop?.displayHeight
-			const hasCroppedVisibleSize =
-				!!originalElement.crop &&
-				Number.isFinite(croppedVisibleWidth) &&
-				Number.isFinite(croppedVisibleHeight) &&
-				!!croppedVisibleWidth &&
-				!!croppedVisibleHeight &&
-				croppedVisibleWidth > 0 &&
-				croppedVisibleHeight > 0
-
-			// 获取新图片的尺寸：已裁剪图片二次编辑时优先复用当前可视尺寸
-			let newWidth: number
-			let newHeight: number
-			if (hasCroppedVisibleSize) {
-				newWidth = croppedVisibleWidth
-				newHeight = croppedVisibleHeight
-			} else if (request.size) {
-				const [w, h] = request.size.split("x").map(Number)
-				if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
-					newWidth = w
-					newHeight = h
-				} else {
-					const defaultSize = getDefaultImageSize(imageModelList)
-					newWidth = originalElement.width ?? defaultSize?.width ?? 1024
-					newHeight = originalElement.height ?? defaultSize?.height ?? 1024
-				}
-			} else {
-				const defaultSize = getDefaultImageSize(imageModelList)
-				newWidth = originalElement.width ?? defaultSize?.width ?? 1024
-				newHeight = originalElement.height ?? defaultSize?.height ?? 1024
-			}
-
-			// 生成新元素 ID
-			const newElementId = generateElementId()
-
-			// 获取下一个 zIndex
-			const newZIndex = canvas.elementManager.getNextZIndexInLevel()
-
 			let imageInfo = originalElementInstance.getImageInfo()
 			if (!imageInfo?.naturalWidth || !imageInfo?.naturalHeight) {
 				await originalElementInstance.getHTMLImageElement({ variant: "preview" })
@@ -174,6 +134,44 @@ export default function SecondEdit(props: SecondEditProps) {
 					height: imageInfo?.naturalHeight ?? props.imageElement.height ?? 0,
 				},
 			})
+
+			const croppedVisibleWidth = originalElement.width ?? originalElement.crop?.displayWidth
+			const croppedVisibleHeight =
+				originalElement.height ?? originalElement.crop?.displayHeight
+			const hasCroppedVisibleSize =
+				!!originalElement.crop &&
+				Number.isFinite(croppedVisibleWidth) &&
+				Number.isFinite(croppedVisibleHeight) &&
+				!!croppedVisibleWidth &&
+				!!croppedVisibleHeight &&
+				croppedVisibleWidth > 0 &&
+				croppedVisibleHeight > 0
+
+			// 新元素尺寸优先跟随当前请求配置；没有请求尺寸时再复用裁剪可视尺寸。
+			const requestSize = parseImageElementSize(request.size)
+			const cropPayloadSize = parseImageElementSize(imageProcessRequestPayload.size)
+			let newWidth: number
+			let newHeight: number
+			if (requestSize) {
+				newWidth = requestSize.width
+				newHeight = requestSize.height
+			} else if (hasCroppedVisibleSize) {
+				newWidth = croppedVisibleWidth
+				newHeight = croppedVisibleHeight
+			} else if (cropPayloadSize) {
+				newWidth = cropPayloadSize.width
+				newHeight = cropPayloadSize.height
+			} else {
+				const defaultSize = getDefaultImageSize(imageModelList)
+				newWidth = originalElement.width ?? defaultSize?.width ?? 1024
+				newHeight = originalElement.height ?? defaultSize?.height ?? 1024
+			}
+
+			// 生成新元素 ID
+			const newElementId = generateElementId()
+
+			// 获取下一个 zIndex
+			const newZIndex = canvas.elementManager.getNextZIndexInLevel()
 
 			const generateRequest: GenerateImageRequest = {
 				...request,
@@ -438,4 +436,12 @@ export default function SecondEdit(props: SecondEditProps) {
 			/>
 		</div>
 	)
+}
+
+function parseImageElementSize(size?: string): { width: number; height: number } | null {
+	if (!size) return null
+	const [width, height] = size.split("x").map(Number)
+	if (!Number.isFinite(width) || !Number.isFinite(height)) return null
+	if (width <= 0 || height <= 0) return null
+	return { width, height }
 }
