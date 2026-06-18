@@ -24,7 +24,7 @@ import type {
 	ReferenceResourcePanelItem,
 	ReferenceResourcePanelSelectContext,
 } from "../../../types"
-import { useReferenceResourcePanelDataService } from "./useReferenceResourcePanelDataService"
+import { useCanvasReferenceMentionRuntime } from "./useCanvasReferenceMentionRuntime"
 import { FolderOpen, Upload } from "lucide-react"
 
 function defaultIconForSourceType(source: ReferenceResourceSourceType) {
@@ -100,10 +100,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		onProjectSelectPanelOpenChange,
 	} = props
 	const { t } = useCanvasDesignI18n()
-	const {
-		referenceResourcePanelRenderer: ReferenceResourcePanelRenderer,
-		defaultProjectAttachmentFolderName,
-	} = useMagic()
+	const { referenceResourcePanelRenderer: ReferenceResourcePanelRenderer } = useMagic()
 	const [displayMode, setDisplayMode] = useState<"hover" | "click">("click")
 	const [isProjectSelectVisible, setIsProjectSelectVisible] = useState(false)
 	const internalTriggerRef = useRef<HTMLDivElement>(null)
@@ -135,7 +132,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		}
 	}, [isProjectSelectVisible, onProjectSelectPanelOpenChange])
 
-	const projectSelectDataService = useReferenceResourcePanelDataService({
+	const projectSelectRuntime = useCanvasReferenceMentionRuntime({
 		maxReferenceFiles,
 		currentReferenceFiles,
 		isReferenceFileLimitReached,
@@ -143,8 +140,6 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		referenceFileInfos,
 		assetLimits,
 		currentAssetCounts,
-		projectFilesPathPrefix: t("referenceAssets.projectFilesRoot", "当前项目文件"),
-		mentionFileSubtitleParentPrefix: defaultProjectAttachmentFolderName?.trim() || undefined,
 	})
 	const currentContent = useMemo(() => {
 		if (displayMode === "hover") return hoverContent
@@ -215,13 +210,13 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		(source: ReferenceResourceSourceType) => {
 			onSelectSource(source)
 			if (source !== REFERENCE_RESOURCE_SOURCE_TYPES.projectSelect) return
-			if (!ReferenceResourcePanelRenderer || !projectSelectDataService) {
+			if (!ReferenceResourcePanelRenderer || !projectSelectRuntime.dataService) {
 				suppressNextContentDismissRef.current = false
 				return
 			}
 			setIsProjectSelectVisible(true)
 		},
-		[ReferenceResourcePanelRenderer, onSelectSource, projectSelectDataService],
+		[ReferenceResourcePanelRenderer, onSelectSource, projectSelectRuntime.dataService],
 	)
 
 	const handleProjectSelect = useCallback(
@@ -323,14 +318,17 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 					</div>
 				</PopoverContent>
 			</Popover>
-			{ReferenceResourcePanelRenderer && projectSelectDataService && (
+			{ReferenceResourcePanelRenderer && projectSelectRuntime.dataService && (
 				<ReferenceResourcePanelRenderer
 					visible={isProjectSelectVisible}
 					triggerRef={internalTriggerRef as React.RefObject<HTMLElement | null>}
 					language="zh-CN"
 					onSelect={handleProjectSelect}
 					onClose={handleProjectSelectClose}
-					dataService={projectSelectDataService}
+					dataService={projectSelectRuntime.dataService}
+					initialLoadOptions={projectSelectRuntime.initialLoadOptions}
+					initialNavigationStack={projectSelectRuntime.initialNavigationStack}
+					catalogBehavior={projectSelectRuntime.catalogBehavior}
 				/>
 			)}
 		</>

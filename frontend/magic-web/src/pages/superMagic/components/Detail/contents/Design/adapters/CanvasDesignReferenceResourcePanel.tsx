@@ -1,27 +1,18 @@
 import MentionPanel from "@/components/business/MentionPanel"
 import {
-	MentionItemType,
 	PanelState,
 	type MentionItem,
-	type MentionPanelCatalogBehaviorArgs,
 	type ProjectFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import type {
 	ReferenceResourcePanelItem,
 	ReferenceResourcePanelRendererProps,
 } from "@/components/CanvasDesign/types"
-import { useMagic } from "@/components/CanvasDesign/context/MagicContext"
+import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "@/components/CanvasDesign/components/MessageEditor/reference-assets/canvasReferenceMention.constants"
 import type { ComponentType } from "react"
-import { useEffect, useMemo } from "react"
+import { useEffect } from "react"
 
 const PANEL_CLASS_NAME = "canvas-design-reference-resource-panel"
-
-interface CanvasReferenceResourceCatalogBehavior {
-	shouldEnterFolderDirectly?: (args: MentionPanelCatalogBehaviorArgs<string>) => boolean
-	getDynamicTransition?: (
-		args: MentionPanelCatalogBehaviorArgs<string>,
-	) => { state: PanelState } | null
-}
 
 interface CanvasMentionPanelProps {
 	visible: boolean
@@ -29,28 +20,22 @@ interface CanvasMentionPanelProps {
 	language?: string
 	className?: string
 	initialState?: PanelState
-	initialLoadOptions?: {
-		itemId: string
-	}
-	initialNavigationStack?: Array<{
-		id: string
-		name: string
-		state: PanelState
-	}>
+	initialLoadOptions?: ReferenceResourcePanelRendererProps["initialLoadOptions"]
+	initialNavigationStack?: ReferenceResourcePanelRendererProps["initialNavigationStack"]
 	lockDismissToExplicitClose?: boolean
 	onSelect: (item: MentionItem, context?: { reset?: () => void }) => void
 	onClose: () => void
 	dataService?: ReferenceResourcePanelRendererProps["dataService"]
-	catalogBehavior?: CanvasReferenceResourceCatalogBehavior
+	catalogBehavior?: ReferenceResourcePanelRendererProps["catalogBehavior"]
 }
 
 const TypedMentionPanel = MentionPanel as unknown as ComponentType<CanvasMentionPanelProps>
 
 function isProjectFileMentionItem(item: MentionItem): item is MentionItem & {
-	type: typeof MentionItemType.PROJECT_FILE
+	type: typeof CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile
 	data: ProjectFileMentionData
 } {
-	return item.type === "project_file" && Boolean(item.data)
+	return item.type === CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile && Boolean(item.data)
 }
 
 function toReferenceResourcePanelItem(item: MentionItem): ReferenceResourcePanelItem | null {
@@ -61,31 +46,21 @@ function toReferenceResourcePanelItem(item: MentionItem): ReferenceResourcePanel
 	}
 }
 
-const referenceResourceCatalogBehavior: CanvasReferenceResourceCatalogBehavior = {
-	shouldEnterFolderDirectly: ({
-		selectedItem,
-		enterFolder,
-	}: MentionPanelCatalogBehaviorArgs<string>) => {
-		return Boolean(
-			!enterFolder && selectedItem.type === MentionItemType.FOLDER && selectedItem.isFolder,
-		)
-	},
-	getDynamicTransition: ({
-		selectedItem,
-		enterFolder,
-	}: MentionPanelCatalogBehaviorArgs<string>) => {
-		if (selectedItem.type !== MentionItemType.FOLDER) return null
-		if (!enterFolder || !selectedItem.isFolder) return null
-
-		return {
-			state: PanelState.FOLDER,
-		}
-	},
-}
-
+// This adapter is intentionally thin: CanvasDesign passes the shared reference
+// resource runtime into it. Rebuilding defaults, filters, limits, or navigation
+// here would split behavior between the "@" entry and project-select entry.
 export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanelRendererProps) {
-	const { visible, triggerRef, language, dataService, onSelect, onClose } = props
-	const { defaultProjectAttachmentFolderId, defaultProjectAttachmentFolderName } = useMagic()
+	const {
+		visible,
+		triggerRef,
+		language,
+		dataService,
+		initialLoadOptions,
+		initialNavigationStack,
+		catalogBehavior,
+		onSelect,
+		onClose,
+	} = props
 
 	useEffect(() => {
 		if (!visible) return
@@ -104,25 +79,6 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 		}
 	}, [visible, triggerRef, onClose])
 
-	const initialLoadOptions = useMemo(() => {
-		if (!defaultProjectAttachmentFolderId) return undefined
-		return {
-			itemId: defaultProjectAttachmentFolderId,
-		}
-	}, [defaultProjectAttachmentFolderId])
-
-	const initialNavigationStack = useMemo(() => {
-		if (!defaultProjectAttachmentFolderId || !defaultProjectAttachmentFolderName)
-			return undefined
-		return [
-			{
-				id: defaultProjectAttachmentFolderId,
-				name: defaultProjectAttachmentFolderName,
-				state: PanelState.DEFAULT,
-			},
-		]
-	}, [defaultProjectAttachmentFolderId, defaultProjectAttachmentFolderName])
-
 	return (
 		<TypedMentionPanel
 			visible={visible}
@@ -140,7 +96,7 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 			}}
 			onClose={onClose}
 			dataService={dataService}
-			catalogBehavior={referenceResourceCatalogBehavior}
+			catalogBehavior={catalogBehavior}
 		/>
 	)
 }

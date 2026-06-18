@@ -40,10 +40,17 @@ export function createMentionPanelSuggestion(
 		dataService,
 		initialLoadOptions,
 		initialNavigationStack,
+		getInitialLoadOptions,
+		getInitialNavigationStack,
 		catalogBehavior,
 		trailingTextAfterInsert,
 		canSelectItem,
 	} = options
+
+	const resolveInitialLoadOptions = () =>
+		getInitialLoadOptions ? getInitialLoadOptions() : initialLoadOptions
+	const resolveInitialNavigationStack = () =>
+		getInitialNavigationStack ? getInitialNavigationStack() : initialNavigationStack
 
 	return {
 		// 触发建议面板的字符
@@ -277,8 +284,8 @@ export function createMentionPanelSuggestion(
 							range: props.range,
 							decorationNode: props.decorationNode,
 							language,
-							initialLoadOptions,
-							initialNavigationStack,
+							initialLoadOptions: resolveInitialLoadOptions(),
+							initialNavigationStack: resolveInitialNavigationStack(),
 							catalogBehavior,
 							onSelect: handleSelect,
 							onExit: handleExit,
@@ -339,8 +346,8 @@ export function createMentionPanelSuggestion(
 							range: props.range,
 							decorationNode: props.decorationNode,
 							language,
-							initialLoadOptions,
-							initialNavigationStack,
+							initialLoadOptions: resolveInitialLoadOptions(),
+							initialNavigationStack: resolveInitialNavigationStack(),
 							catalogBehavior,
 							onSelect: handleSelect,
 							onExit: handleExit,

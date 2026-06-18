@@ -23,7 +23,7 @@ import type { UseVideoEditorConfigOptions } from "./video-editor-config.types"
 import { VideoElement as VideoElementClass } from "../../canvas/element/elements/VideoElement"
 import { generateUUID } from "../../canvas/utils/utils"
 import MessageEditor, { type MessageEditorRef } from "../MessageEditor/MessageEditor"
-import { useMessageEditorMention } from "../MessageEditor/useMessageEditorMention"
+import { useCanvasReferenceMention } from "../MessageEditor/useCanvasReferenceMention"
 import VideoEditorControls from "./VideoEditorControls"
 import { useVideoEditorConfig } from "./useVideoEditorConfig"
 import { validateReferenceAssetsByLimits } from "./video-editor-config.model"
@@ -129,7 +129,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	})
 
 	const { matchableItems, mentionDataService, mentionExtension, mentionEnabled } =
-		useMessageEditorMention({
+		useCanvasReferenceMention({
 			matchableItems: config.matchableItems,
 			mentionEnabledOverride: config.modelOptions.length > 0,
 			maxReferenceFiles: config.supportsReferenceAssets ? config.maxReferenceImages : 0,

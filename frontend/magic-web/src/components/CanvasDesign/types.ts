@@ -10,6 +10,10 @@ import type {
 	ReferenceAssetTypeCounts,
 	ReferenceResourceTypeFilter,
 } from "./components/MessageEditor/reference-assets/reference-resource.types"
+import type {
+	CanvasReferenceMentionPanelState,
+	CanvasReferenceMentionProjectFileType,
+} from "./components/MessageEditor/reference-assets/canvasReferenceMention.constants"
 
 /**
  * Mention 面板语言入参（与宿主 MentionPanel LocaleInput 约定一致，避免依赖业务包）
@@ -68,7 +72,7 @@ export interface ReferenceResourcePanelFileData {
 }
 
 export interface ReferenceResourcePanelItem {
-	type: "project_file"
+	type: CanvasReferenceMentionProjectFileType
 	data: ReferenceResourcePanelFileData
 }
 
@@ -124,11 +128,60 @@ export interface ReferenceResourcePanelSelectContext {
 	reset?: () => void
 }
 
+export interface ReferenceResourcePanelInitialLoadOptions {
+	itemId: string
+}
+
+export type ReferenceResourcePanelStateValue = CanvasReferenceMentionPanelState
+
+export interface ReferenceResourcePanelNavigationItem {
+	id: string
+	name: string
+	state: ReferenceResourcePanelStateValue
+	catalogId?: string
+	parentId?: string
+}
+
+export interface ReferenceResourcePanelSelectableItem {
+	type?: string
+	isFolder?: boolean
+}
+
+export interface ReferenceResourcePanelCatalogBehaviorArgs {
+	currentState?: ReferenceResourcePanelStateValue
+	currentCatalogId?: string
+	selectedItem: ReferenceResourcePanelSelectableItem
+	enterFolder: boolean
+}
+
+export interface ReferenceResourcePanelCatalogBehavior {
+	getStaticTransition?: (args: {
+		currentState?: ReferenceResourcePanelStateValue
+		itemId: string
+	}) => { state: ReferenceResourcePanelStateValue; catalogId?: string } | null
+	getDynamicTransition?: (
+		args: ReferenceResourcePanelCatalogBehaviorArgs,
+	) => { state: ReferenceResourcePanelStateValue; catalogId?: string } | null
+	shouldEnterFolderDirectly?: (args: ReferenceResourcePanelCatalogBehaviorArgs) => boolean
+	shouldSelectItemDirectly?: (args: ReferenceResourcePanelCatalogBehaviorArgs) => boolean
+}
+
+/**
+ * Host renderer boundary for Canvas reference-resource panels.
+ *
+ * CanvasDesign owns the shared runtime for inline "@" mentions and "select from
+ * project". Host adapters should consume these props as-is and stay
+ * presentation-only; do not rebuild default-directory, filtering, limit, or
+ * folder-navigation logic inside the adapter.
+ */
 export interface ReferenceResourcePanelRendererProps {
 	visible: boolean
 	triggerRef?: RefObject<HTMLElement | null>
 	language?: string
 	dataService?: MentionDataServicePort
+	initialLoadOptions?: ReferenceResourcePanelInitialLoadOptions
+	initialNavigationStack?: ReferenceResourcePanelNavigationItem[]
+	catalogBehavior?: ReferenceResourcePanelCatalogBehavior
 	onSelect: (
 		item: ReferenceResourcePanelItem,
 		context?: ReferenceResourcePanelSelectContext,
