@@ -65,17 +65,20 @@ function IsolatedHTMLRenderer({
 	currentFileName,
 }: IsolatedHTMLRendererProps) {
 	const { styles, cx } = useStyles()
-	const renderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
-	const renderSiteOrigin = useMemo(() => {
-		if (!renderSiteUrl) return ""
+	const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
+	const htmlSandboxShellUrl = useMemo(
+		() => externalRenderSiteUrl || "/husky.html",
+		[externalRenderSiteUrl],
+	)
+	const externalRenderSiteOrigin = useMemo(() => {
+		if (!externalRenderSiteUrl) return ""
 		try {
-			return new URL(renderSiteUrl).origin
+			return new URL(externalRenderSiteUrl).origin
 		} catch {
 			return ""
 		}
-	}, [renderSiteUrl])
+	}, [externalRenderSiteUrl])
 
-	const loadedRef = useRef(false)
 	const lastInjectedContentRef = useRef<string>("")
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const dashboardCards = useRef<DashboardCard[]>([])
@@ -164,46 +167,33 @@ function IsolatedHTMLRenderer({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [attachments, attachmentList, currentFileId, currentFileName])
 
-	// 初始化 iframe 入口：跨域走渲染站，非跨域沿用同域 document.write
+	// 初始化 iframe 入口：同源与跨域都先加载 sandbox shell，再通过 setContent 注入业务 HTML。
 	useEffect(() => {
 		const iframe = iframeRef.current
 		if (!iframe) return
 
-		if (renderSiteUrl) {
-			if (iframe.src !== renderSiteUrl) {
-				iframe.src = renderSiteUrl
-			}
-			setIframeLoaded(false)
-			loadedRef.current = false
-			lastInjectedContentRef.current = ""
-			return
+		setIframeLoaded(false)
+		lastInjectedContentRef.current = ""
+		if (iframe.getAttribute("src") !== htmlSandboxShellUrl) {
+			iframe.setAttribute("src", htmlSandboxShellUrl)
 		}
+	}, [htmlSandboxShellUrl])
 
-		const doc = iframe.contentDocument
-		if (!doc || !dashboardContent) return
-		if (loadedRef.current && lastInjectedContentRef.current === dashboardContent) return
-
-		doc.open()
-		doc.write(dashboardContent)
-		doc.close()
-		loadedRef.current = true
-		lastInjectedContentRef.current = dashboardContent
-		setIframeLoaded(true)
-	}, [dashboardContent, renderSiteUrl])
-
-	// 跨域渲染站准备好后通过 setContent 注入业务 HTML
+	// sandbox shell 准备好后通过 setContent 注入业务 HTML；同源/跨域共用同一条链路。
 	useEffect(() => {
-		if (!renderSiteUrl || !dashboardContent) return
+		if (!dashboardContent) return
 		if (!iframeLoaded) return
+		if (lastInjectedContentRef.current === dashboardContent) return
 
 		iframeRef.current?.contentWindow?.postMessage(
 			{
 				type: "setContent",
 				content: dashboardContent,
 			},
-			"*",
+			externalRenderSiteOrigin || "*",
 		)
-	}, [dashboardContent, iframeLoaded, renderSiteUrl])
+		lastInjectedContentRef.current = dashboardContent
+	}, [dashboardContent, externalRenderSiteOrigin, iframeLoaded])
 
 	// 接收子容器消息
 	useEffect(() => {
@@ -215,8 +205,7 @@ function IsolatedHTMLRenderer({
 			}
 			if (
 				event.data?.type === "pageLoaded" &&
-				renderSiteOrigin &&
-				event.origin === renderSiteOrigin
+				(externalRenderSiteOrigin ? event.origin === externalRenderSiteOrigin : true)
 			) {
 				setIframeLoaded(true)
 				return
@@ -231,7 +220,7 @@ function IsolatedHTMLRenderer({
 		return () => {
 			window.removeEventListener("message", callback)
 		}
-	}, [renderSiteOrigin])
+	}, [externalRenderSiteOrigin])
 
 	// 发送消息给子容器，编辑状态变更后
 	useEffect(() => {
@@ -241,9 +230,9 @@ function IsolatedHTMLRenderer({
 				type: "editModeChange",
 				isEditMode,
 			},
-			"*",
+			externalRenderSiteOrigin || "*",
 		)
-	}, [iframeLoaded, isEditMode])
+	}, [externalRenderSiteOrigin, iframeLoaded, isEditMode])
 
 	// 与头部预览模式同步：手机框 → mobile，桌面 → desktop（子页内调用 configManager.setRenderMode）
 	useEffect(() => {
@@ -254,9 +243,9 @@ function IsolatedHTMLRenderer({
 				type: "renderModeChange",
 				renderMode: dashboardRenderMode,
 			},
-			"*",
+			externalRenderSiteOrigin || "*",
 		)
-	}, [dashboardRenderMode, iframeLoaded])
+	}, [dashboardRenderMode, externalRenderSiteOrigin, iframeLoaded])
 
 	if (!contentTrim) {
 		return (
@@ -279,8 +268,8 @@ function IsolatedHTMLRenderer({
 				ref={iframeRef}
 				className={styles.iframe}
 				title="HTML Content"
-				src={renderSiteUrl || undefined}
-				sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups"
+				src={htmlSandboxShellUrl}
+				sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
 				allow="fullscreen"
 				allowFullScreen
 			/>

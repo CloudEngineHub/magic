@@ -52,6 +52,22 @@ const getVitestBaseConfig = () => {
 					replacement: `${resolve(__dirname, "./src/")}/`,
 				},
 				{
+					find: /^@dtyq\/html-sandbox\/index\.html(\?raw)?$/,
+					replacement: `${resolve(__dirname, "packages/html-sandbox/index.html")}$1`,
+				},
+				{
+					find: "@dtyq/html-sandbox/runtime",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/runtime/index.ts"),
+				},
+				{
+					find: "@dtyq/html-sandbox",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/index.ts"),
+				},
+				{
+					find: /^@dtyq\/html-sandbox\/(.+)$/,
+					replacement: resolve(__dirname, "packages/html-sandbox/src/$1"),
+				},
+				{
 					find: "@dtyq/es6-template-strings",
 					replacement: resolve(__dirname, "test/mocks/es6-template-strings.ts"),
 				},

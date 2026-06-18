@@ -55,8 +55,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { env } from "@/utils/env"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { exportHtmlToPdf } from "../../../../../../../packages/pdf-export/src"
-import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
+import { type ImageExportFormat } from "@magic-web/html2image"
 import { resolvePptScaleContentDimensions } from "./utils/slide-dimensions"
 import {
 	AlertDialog,
@@ -116,8 +115,10 @@ interface HTMLProps {
 	openFileTab?: (fileItem: any, autoEdit?: boolean) => void
 	exportFile?: (fileId: string, fileVersion?: number) => void
 	exportPdf?: (fileId: string) => void
+	exportRasterPdf?: (fileId: string, pageMode: "fit" | "paginate") => void
 	exportPpt?: (fileId: string) => void
 	exportPptx?: (fileId: string) => void
+	exportImage?: (fileId: string, format?: ImageExportFormat) => void
 	isExporting?: boolean
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
@@ -135,15 +136,17 @@ interface HTMLProps {
 
 interface HtmlExportActionProps {
 	handleExportSource: () => void
-	handleExportPDF: (pagination: "slice" | "none") => void
+	handleExportPDF: () => void
 	handleExportPPT: () => void
 	handleExportPptx: () => void
 	handleExportImage?: (format: ImageExportFormat) => void
+	handleExportRasterPdf?: (pageMode: "fit" | "paginate") => void
 	isExporting?: boolean
 	supportPPT: boolean
 	showButtonText: boolean
 	showExportPptx?: boolean
 	showExportImage?: boolean
+	showExportRasterPdf?: boolean
 }
 
 const HtmlExportAction = memo(function HtmlExportAction({
@@ -152,11 +155,13 @@ const HtmlExportAction = memo(function HtmlExportAction({
 	handleExportPPT,
 	handleExportPptx,
 	handleExportImage,
+	handleExportRasterPdf,
 	isExporting,
 	supportPPT,
 	showButtonText,
 	showExportPptx,
 	showExportImage,
+	showExportRasterPdf,
 }: HtmlExportActionProps) {
 	const { ExportDropdownButton } = useExportMenuItems({
 		handleExportSource,
@@ -164,11 +169,13 @@ const HtmlExportAction = memo(function HtmlExportAction({
 		handleExportPPT,
 		handleExportPptx,
 		handleExportImage,
+		handleExportRasterPdf,
 		isExporting,
 		showButtonText,
 		supportPPT,
 		showExportPptx,
 		showExportImage,
+		showExportRasterPdf,
 	})
 
 	return ExportDropdownButton
@@ -200,8 +207,10 @@ export default memo(function HTML(props: HTMLProps) {
 		openFileTab,
 		exportFile,
 		exportPdf,
+		exportRasterPdf,
 		exportPpt,
 		exportPptx,
+		exportImage,
 		isExporting,
 		selectedProject,
 		showFileHeader = true,
@@ -237,7 +246,6 @@ export default memo(function HTML(props: HTMLProps) {
 	/** 是否正处于编辑后的状态 */
 	const [isEditingAfter, setIsEditingAfter] = useState(false)
 	const [serverUpdatedContent, setServerUpdatedContent] = useState<string>()
-	const [isExportingPdf, setIsExportingPdf] = useState(false)
 	const editSessionUpdatedAtRef = useRef<string | undefined>(undefined)
 	const serverUpdateRequestIdRef = useRef(0)
 	const editSessionBaselineContentRef = useRef<string | null>(null)
@@ -469,6 +477,8 @@ export default memo(function HTML(props: HTMLProps) {
 	const [showHistoryCompareDialog, setShowHistoryCompareDialog] = useState(false)
 	const [compareHistoryVersion, setCompareHistoryVersion] = useState<number | undefined>(undefined)
 	const [compareHistoryContent, setCompareHistoryContent] = useState<string>("")
+	/** Ignore stale history version fetch responses when user switches versions quickly */
+	const compareHistorySwitchSeqRef = useRef(0)
 
 	/** 获取指定版本内容用于对比（不改变当前显示版本） */
 	const getVersionContentForCompare = useMemoizedFn(async (targetVersion: number): Promise<string | null> => {
@@ -527,15 +537,21 @@ export default memo(function HTML(props: HTMLProps) {
 
 	/** 在对比弹窗中切换历史版本 */
 	const handleSwitchHistoryVersion = useMemoizedFn(async (version: number) => {
+		const switchId = ++compareHistorySwitchSeqRef.current
 		try {
-			setCompareHistoryVersion(version)
 			const raw = await getVersionContentForCompare(version)
-			if (raw) {
-				const processed = await processHistoricalContent(raw)
-				setCompareHistoryContent(processed)
+			if (switchId !== compareHistorySwitchSeqRef.current) return
+			if (!raw) {
+				throw new Error(`Failed to load history version ${version}`)
 			}
+			const processed = await processHistoricalContent(raw)
+			if (switchId !== compareHistorySwitchSeqRef.current) return
+			// Update content and version together so dialog does not render mismatched state
+			setCompareHistoryContent(processed)
+			setCompareHistoryVersion(version)
 		} catch (error) {
 			console.error("Failed to switch history version:", error)
+			throw error
 		}
 	})
 
@@ -1011,53 +1027,12 @@ export default memo(function HTML(props: HTMLProps) {
 		exportFile?.(displayData?.file_id, htmlFileVersion)
 	})
 
-	const handleExportPDF = useMemoizedFn(async (pagination: "slice" | "none" = "slice") => {
-		const content = processedContent || editingCodeContent || displayData?.content || ""
-		const fileId = displayData?.file_id
-		if (!content) {
-			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
-			return
-		}
+	const handleExportPDF = useMemoizedFn(() => {
+		exportPdf?.(displayData?.file_id)
+	})
 
-		const toastKey = `pdf-export-${fileId || Date.now()}`
-		setIsExportingPdf(true)
-		magicToast.loading({
-			key: toastKey,
-			content: t("topicFiles.exporting"),
-			duration: 0,
-		})
-
-		try {
-			await exportHtmlToPdf({
-				pages: [content],
-				pagination,
-				fileName:
-					(displayData?.file_name || data?.file_name || "export").replace(
-						/\.html?$/i,
-						"",
-					) + ".pdf",
-				output: "download",
-				onProgress: ({ phase, current, total }) => {
-					if (phase !== "capture" || total <= 1) return
-					magicToast.loading({
-						key: toastKey,
-						content: `${t("topicFiles.exporting")} (${current}/${total})`,
-						duration: 0,
-					})
-				},
-			}).promise
-			magicToast.success({
-				key: toastKey,
-				content: t("topicFiles.exportSuccess"),
-				duration: 1000,
-			})
-		} catch (error) {
-			console.error("[pdf-export] HTML export failed:", error)
-			magicToast.destroy(toastKey)
-			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
-		} finally {
-			setIsExportingPdf(false)
-		}
+	const handleExportRasterPdf = useMemoizedFn((pageMode: "fit" | "paginate") => {
+		exportRasterPdf?.(displayData?.file_id, pageMode)
 	})
 
 	const handleExportPPT = useMemoizedFn(() => {
@@ -1068,51 +1043,8 @@ export default memo(function HTML(props: HTMLProps) {
 		exportPptx?.(displayData?.file_id)
 	})
 
-	const handleExportImage = useMemoizedFn(async (format: ImageExportFormat = "png") => {
-		const content = processedContent || editingCodeContent || displayData?.content || ""
-		const fileId = displayData?.file_id
-		if (!content) {
-			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
-			return
-		}
-
-		const toastKey = `image-export-${fileId || Date.now()}`
-		setIsExportingPdf(true)
-		magicToast.loading({
-			key: toastKey,
-			content: t("topicFiles.exporting"),
-			duration: 0,
-		})
-
-		try {
-			await exportHtmlToImage({
-				pages: [content],
-				format,
-				fileName: (displayData?.file_name || data?.file_name || "export").replace(
-					/\.html?$/i,
-					"",
-				),
-				onProgress: ({ phase, current, total }) => {
-					if (phase !== "capture" || total <= 1) return
-					magicToast.loading({
-						key: toastKey,
-						content: `${t("topicFiles.exporting")} (${current}/${total})`,
-						duration: 0,
-					})
-				},
-			}).promise
-			magicToast.success({
-				key: toastKey,
-				content: t("topicFiles.exportSuccess"),
-				duration: 1000,
-			})
-		} catch (error) {
-			console.error("[image-export] HTML export failed:", error)
-			magicToast.destroy(toastKey)
-			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
-		} finally {
-			setIsExportingPdf(false)
-		}
+	const handleExportImage = useMemoizedFn((format: ImageExportFormat = "png") => {
+		exportImage?.(displayData?.file_id, format)
 	})
 
 	const relative_file_path = useMemo(() => {
@@ -1278,7 +1210,7 @@ export default memo(function HTML(props: HTMLProps) {
 									showText
 									className={cn(
 										isAppendPicking &&
-											"bg-primary/10 text-primary ring-1 ring-primary/30",
+										"bg-primary/10 text-primary ring-1 ring-primary/30",
 									)}
 								/>
 							)}
@@ -1297,11 +1229,13 @@ export default memo(function HTML(props: HTMLProps) {
 							handleExportPPT={handleExportPPT}
 							handleExportPptx={handleExportPptx}
 							handleExportImage={handleExportImage}
-							isExporting={isExporting || isExportingPdf}
+							handleExportRasterPdf={handleExportRasterPdf}
+							isExporting={isExporting}
 							supportPPT={isInPPTMode}
 							showButtonText={context.showButtonText}
 							showExportPptx={isConvertibleFile(displayData, ["html"])}
 							showExportImage={isConvertibleFile(displayData, ["html"])}
+							showExportRasterPdf
 						/>
 					),
 				},
@@ -1316,6 +1250,7 @@ export default memo(function HTML(props: HTMLProps) {
 			handleExportPPT,
 			handleExportPptx,
 			handleExportImage,
+			handleExportRasterPdf,
 			handleExportSource,
 			handleSave,
 			handleSaveAndExit,
@@ -1365,21 +1300,21 @@ export default memo(function HTML(props: HTMLProps) {
 		extraMoreMenuItems:
 			!isDataAnalysis && !isCodeViewMode
 				? [
-						{
-							key: "dev-console-toggle",
-							label: (
-								<div className="flex items-center gap-1.5 text-sm">
-									<Terminal size={16} />
-									<span>
-										{devConsoleEnabled
-											? t("stylePanel.closeDevConsole")
-											: t("stylePanel.openDevConsole")}
-									</span>
-								</div>
-							),
-							onClick: handleDevConsoleToggle,
-						},
-					]
+					{
+						key: "dev-console-toggle",
+						label: (
+							<div className="flex items-center gap-1.5 text-sm">
+								<Terminal size={16} />
+								<span>
+									{devConsoleEnabled
+										? t("stylePanel.closeDevConsole")
+										: t("stylePanel.openDevConsole")}
+								</span>
+							</div>
+						),
+						onClick: handleDevConsoleToggle,
+					},
+				]
 				: [],
 	}
 
@@ -1539,7 +1474,7 @@ export default memo(function HTML(props: HTMLProps) {
 				/>
 			)}
 
-			{/* 历史版本对比弹窗 */}
+			{/* 历史版本对比弹窗；isPptRender 与单页预览一致，PPT 项目内启用缩放 */}
 			{compareHistoryVersion && (
 				<HistoryVersionCompareDialog
 					open={showHistoryCompareDialog}
@@ -1556,6 +1491,7 @@ export default memo(function HTML(props: HTMLProps) {
 					openNewTab={openNewTab}
 					selectedProject={selectedProject}
 					attachmentList={attachmentList}
+					isPptRender={isInPPTMode}
 				/>
 			)}
 		</div>

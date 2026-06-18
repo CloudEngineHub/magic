@@ -1,0 +1,70 @@
+{
+	"name": "@dtyq/html-sandbox",
+	"version": "0.1.0",
+	"private": false,
+	"description": "Self-contained HTML sandbox runtime for iframe rendering, inspection, and editor bridge workflows.",
+	"license": "Apache-2.0",
+	"type": "module",
+	"keywords": [
+		"html",
+		"iframe",
+		"sandbox",
+		"runtime",
+		"postmessage"
+	],
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"import": "./dist/index.js"
+		},
+		"./runtime": {
+			"types": "./src/runtime/index.ts",
+			"import": "./dist/runtime/index.js"
+		},
+		"./runtime/api": {
+			"types": "./src/runtime/api/index.ts",
+			"import": "./dist/runtime/api/index.js"
+		},
+		"./runtime/RuntimeLogger": {
+			"types": "./src/runtime/RuntimeLogger.ts",
+			"import": "./dist/runtime/RuntimeLogger.js"
+		},
+		"./runtime/RuntimePlugin": {
+			"types": "./src/runtime/RuntimePlugin.ts",
+			"import": "./dist/runtime/RuntimePlugin.js"
+		},
+		"./index.html": "./dist/index.html"
+	},
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./src/index.ts",
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "pnpm run build:npm && pnpm run build:html",
+		"build:html": "node scripts/build.cjs",
+		"build:lib": "pnpm run build:npm",
+		"build:npm": "tsc -p tsconfig.build.json",
+		"dev": "node server.cjs",
+		"dev:https": "sudo node server.cjs --host 127.0.0.2 --port 443",
+		"prepublishOnly": "pnpm run typecheck && pnpm run test && pnpm run build",
+		"start": "node server.cjs",
+		"test": "pnpm exec vitest run --config ./vitest.config.ts",
+		"test:watch": "pnpm exec vitest --config ./vitest.config.ts",
+		"typecheck": "tsc -p tsconfig.json --noEmit"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"devDependencies": {
+		"@types/node": "^22.16.4",
+		"typescript": "^5.4.5",
+		"vite": "^8.0.3",
+		"vitest": "^3.2.4"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"sideEffects": true
+}

@@ -1,4 +1,6 @@
 packages:
   - "packages/magic-admin"
   - "packages/html2image"
+  - "packages/magic-widget-sdk"
+  - "packages/html-sandbox"
   - "packages/x-markdown"

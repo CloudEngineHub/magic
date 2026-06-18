@@ -13,6 +13,7 @@ import {
 	type FSWriteRequest,
 	type FSWriteBlobRequest,
 	type FSListRequest,
+	type FSGetFileUrlRequest,
 	type FSDeleteFileRequest,
 	type FSDeleteDirRequest,
 	type FSMoveFileRequest,
@@ -203,6 +204,9 @@ export class IframeFSService {
 				return true
 			case FS_MESSAGE_TYPES.LIST_REQUEST:
 				this.handleList(payload as FSListRequest)
+				return true
+			case FS_MESSAGE_TYPES.GET_FILE_URL_REQUEST:
+				await this.handleGetFileUrl(payload as FSGetFileUrlRequest)
 				return true
 			case FS_MESSAGE_TYPES.DELETE_FILE_REQUEST:
 				await this.handleDeleteFile(payload as FSDeleteFileRequest)
@@ -439,6 +443,46 @@ export class IframeFSService {
 			.map((p) => p.split("/").pop() || p)
 
 		this.send({ type: FS_MESSAGE_TYPES.LIST_RESPONSE, requestId, success: true, files })
+	}
+
+	private async handleGetFileUrl(req: FSGetFileUrlRequest) {
+		const { requestId, path } = req
+		const resolved = this.resolvePath(path)
+		const replyType = FS_MESSAGE_TYPES.GET_FILE_URL_RESPONSE
+
+		if (!resolved) {
+			return this.send({
+				type: replyType,
+				requestId,
+				success: false,
+				error: `Access denied or invalid path: ${path}`,
+			})
+		}
+
+		try {
+			const item = this.findFile(resolved)
+			if (!item) {
+				return this.send({
+					type: replyType,
+					requestId,
+					success: false,
+					error: `File not found: ${path}`,
+				})
+			}
+
+			const urls = await getIframeDownloadUrl([item.file_id])
+			const url = urls?.[0]?.url
+			if (!url) throw new Error("Failed to get file URL")
+
+			this.send({ type: replyType, requestId, success: true, url })
+		} catch (err) {
+			this.send({
+				type: replyType,
+				requestId,
+				success: false,
+				error: err instanceof Error ? err.message : "Unknown error",
+			})
+		}
 	}
 
 	private async handleDeleteFile(req: FSDeleteFileRequest) {
@@ -990,9 +1034,13 @@ export class IframeFSService {
 	private isSingleFileName(name: string): boolean {
 		return (
 			name.trim().length > 0 &&
-			!/[\/\\]/.test(name) &&
+			!name.includes("/") &&
+			!name.includes("\\") &&
 			!name.includes("..") &&
-			!/[\x00-\x1F\x7F]/.test(name)
+			!Array.from(name).some((char) => {
+				const code = char.charCodeAt(0)
+				return code <= 31 || code === 127
+			})
 		)
 	}
 

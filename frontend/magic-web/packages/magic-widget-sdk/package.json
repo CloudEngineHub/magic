@@ -1,0 +1,23 @@
+{
+  "name": "@magic-web/widget-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Embeddable Magic Web widget runtime",
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm run build:public",
+    "build:public": "pnpm exec vite build --config ./vite.config.ts --mode production && pnpm run build:types",
+    "build:types": "tsc -p ./tsconfig.build.json --emitDeclarationOnly",
+    "dev:public": "pnpm exec vite build --config ./vite.config.ts --mode development --watch",
+    "test": "pnpm exec vitest run --config ./vitest.config.ts",
+    "test:watch": "pnpm exec vitest --config ./vitest.config.ts",
+    "typecheck": "tsc -p ./tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.4.5",
+    "vite": "^8.0.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -14,6 +14,7 @@ import { viteExternalsPlugin } from "vite-plugin-externals"
 import createAppServiceWorkerPlugin from "./plugins/vite-plugin-app-service-worker"
 import vitePluginTransformBaseImports from "./plugins/vite-plugin-transform-base-imports"
 import vitePluginCriticalFontPreload from "./plugins/vite-plugin-font-preload"
+import vitePluginMagicApi from "./plugins/vite-plugin-magic-api"
 import { getViteEditionConfig } from "./vite/edition"
 import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
 import Inspect from "vite-plugin-inspect"
@@ -139,7 +140,14 @@ function getBaseViteConfig(): UserConfig {
 		assetsInclude: ["**/*.md", "**/*.mdx", "**/*.mov", "**/*.webm", "**/*.png"],
 		resolve: {
 			// magic-flow lists react as a dep; force one React for hooks
-			dedupe: ["react", "react-dom"],
+			dedupe: [
+				"react",
+				"react-dom",
+				"react-router",
+				"react-router-dom",
+				"i18next",
+				"react-i18next",
+			],
 			alias: [
 				{
 					find: "@",
@@ -173,6 +181,22 @@ function getBaseViteConfig(): UserConfig {
 					replacement: resolve(__dirname, "packages/magic-admin/components/index.ts"),
 				},
 				{
+					find: /^@dtyq\/html-sandbox\/index\.html(\?raw)?$/,
+					replacement: `${resolve(__dirname, "packages/html-sandbox/index.html")}$1`,
+				},
+				{
+					find: "@dtyq/html-sandbox/runtime",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/runtime/index.ts"),
+				},
+				{
+					find: "@dtyq/html-sandbox",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/index.ts"),
+				},
+				{
+					find: /^@dtyq\/html-sandbox\/(.+)$/,
+					replacement: resolve(__dirname, "packages/html-sandbox/src/$1"),
+				},
+				{
 					find: "@dtyq/magic-admin/components",
 					replacement: resolve(__dirname, "packages/magic-admin/components/index.ts"),
 				},
@@ -191,6 +215,7 @@ function getBaseViteConfig(): UserConfig {
 		},
 		plugins: [
 			createAppServiceWorkerPlugin(),
+			vitePluginMagicApi({ projectRoot: __dirname }),
 			// Transform named imports from @/components/base to default imports
 			// 将 @/components/base 的命名导入转换为默认导入
 			vitePluginTransformBaseImports({

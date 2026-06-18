@@ -1,6 +1,11 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { getIframeDownloadUrl } from "../../iframeApi"
 import { FS_MESSAGE_TYPES } from "../../types"
 import { IframeFSService, type FSFileItem, type IframeFSConfig } from "../IframeFSService"
+
+vi.mock("../../iframeApi", () => ({
+	getIframeDownloadUrl: vi.fn(),
+}))
 
 function createService(overrides?: Partial<IframeFSConfig>) {
 	const postToIframe = vi.fn()
@@ -27,6 +32,76 @@ function file(file_id: string, relative_file_path: string, file_name?: string): 
 }
 
 describe("IframeFSService", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
+	it("returns a temporary file URL for an app file", async () => {
+		vi.mocked(getIframeDownloadUrl).mockResolvedValueOnce([
+			{
+				file_id: "image-id",
+				url: "https://example.com/app/assets/image.png",
+			},
+		])
+		const { service, postToIframe } = createService({
+			fileList: [file("image-id", "app/assets/image.png", "image.png")],
+		})
+
+		await service.handleMessage(FS_MESSAGE_TYPES.GET_FILE_URL_REQUEST, {
+			type: FS_MESSAGE_TYPES.GET_FILE_URL_REQUEST,
+			requestId: "req-get-url",
+			path: "./assets/image.png",
+		})
+
+		expect(getIframeDownloadUrl).toHaveBeenCalledWith(["image-id"])
+		expect(postToIframe).toHaveBeenCalledWith({
+			type: FS_MESSAGE_TYPES.GET_FILE_URL_RESPONSE,
+			requestId: "req-get-url",
+			success: true,
+			url: "https://example.com/app/assets/image.png",
+		})
+	})
+
+	it("rejects getFileUrl when the file is missing", async () => {
+		const { service, postToIframe } = createService()
+
+		await service.handleMessage(FS_MESSAGE_TYPES.GET_FILE_URL_REQUEST, {
+			type: FS_MESSAGE_TYPES.GET_FILE_URL_REQUEST,
+			requestId: "req-get-missing-url",
+			path: "./missing.png",
+		})
+
+		expect(getIframeDownloadUrl).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: FS_MESSAGE_TYPES.GET_FILE_URL_RESPONSE,
+				requestId: "req-get-missing-url",
+				success: false,
+			}),
+		)
+	})
+
+	it("rejects getFileUrl when download URL is unavailable", async () => {
+		vi.mocked(getIframeDownloadUrl).mockResolvedValueOnce([])
+		const { service, postToIframe } = createService({
+			fileList: [file("image-id", "app/assets/image.png", "image.png")],
+		})
+
+		await service.handleMessage(FS_MESSAGE_TYPES.GET_FILE_URL_REQUEST, {
+			type: FS_MESSAGE_TYPES.GET_FILE_URL_REQUEST,
+			requestId: "req-get-empty-url",
+			path: "./assets/image.png",
+		})
+
+		expect(postToIframe).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: FS_MESSAGE_TYPES.GET_FILE_URL_RESPONSE,
+				requestId: "req-get-empty-url",
+				success: false,
+			}),
+		)
+	})
+
 	it("deduplicates file_ids when deleteDir collects the directory and children", async () => {
 		const deleteFilesFn = vi.fn().mockResolvedValue(undefined)
 		const { service } = createService({
