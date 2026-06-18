@@ -15,6 +15,7 @@ export const BUILTIN_PLUGIN_SLUGS = [
 	"clothing-color-change",
 	"fabric-swap",
 	"product-image-set",
+	"product-multiview",
 	"one-click-product",
 	"product-background-swap",
 	"clothing-variation-shots",
