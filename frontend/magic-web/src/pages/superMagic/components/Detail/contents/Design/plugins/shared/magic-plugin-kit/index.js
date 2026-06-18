@@ -350,6 +350,11 @@
 			return { state: currentState, setState, helpers, t, elements: getElements() }
 		}
 
+		function getDefaultStartMessage() {
+			const locale = String(ctx.i18n?.locale ?? navigator.language ?? "").toLowerCase()
+			return locale.startsWith("zh") ? "开始生成" : "Generation started"
+		}
+
 		function normalizeTextareaValue(value, maxLength, hasMaxLength) {
 			const nextValue = String(value ?? "")
 			return hasMaxLength ? nextValue.slice(0, maxLength) : nextValue
@@ -513,8 +518,18 @@
 
 		function getValidatedOptionValue(section, options, currentState = state) {
 			const value = section.stateKey ? currentState[section.stateKey] : undefined
+			if (section.allowDeselect && (value === null || value === undefined || value === "")) {
+				return value
+			}
 			if (options.some((option) => option.value === value)) return value
 			return options[0]?.value
+		}
+
+		function getSelectedOptionValues(section, options, currentState = state) {
+			if (section.multiple !== true) return []
+			const value = section.stateKey ? currentState[section.stateKey] : []
+			const validValues = new Set(options.map((option) => option.value))
+			return Array.isArray(value) ? value.filter((item) => validValues.has(item)) : []
 		}
 
 		function getActiveTabsValue(tabsSection, currentState = state) {
@@ -690,6 +705,10 @@
 			}
 
 			setState({ loading: true, error: "" })
+			ctx.ui?.toast?.(
+				config.generate.startMessage ?? t("toast.start", getDefaultStartMessage()),
+				config.generate.startToastType ?? "info",
+			)
 
 			try {
 				if (!ctx.ai?.generateAndPlace) {
@@ -1543,7 +1562,7 @@
 				? createElement("span", "mpk-textarea-count", `${value.length} / ${maxLength}`)
 				: null
 			textarea.rows = Number(section.rows) > 0 ? Number(section.rows) : MAX_TEXT_AREA_ROWS
-			textarea.placeholder = section.placeholder ?? ""
+			textarea.placeholder = resolveValue(section.placeholder, getCallbackContext()) ?? ""
 			textarea.value = value
 			if (hasMaxLength) {
 				textarea.maxLength = maxLength
@@ -1783,9 +1802,10 @@
 						if (option.disabled || currentValue === option.value) return
 						const patch = { [section.stateKey]: option.value }
 						if (typeof section.patchOnSelect === "function") {
+							const nextState = { ...state, ...patch }
 							Object.assign(
 								patch,
-								section.patchOnSelect(option.value, getCallbackContext()) || {},
+								section.patchOnSelect(option.value, getCallbackContext(nextState)) || {},
 							)
 						}
 						setState(patch)
@@ -1826,28 +1846,34 @@
 			const options = getSectionOptions(section)
 			if (!options.length) return document.createDocumentFragment()
 			const isCardVariant = section.variant === "card"
+			const isMultiple = section.multiple === true
 			const descriptionMode =
 				section.descriptionMode ?? (section.showDescriptionOnHover ? "tooltip" : "title")
 			const sectionNode = createSection(section)
 			const list = createElement(
 				"div",
-				`mpk-option-group${isCardVariant ? " is-card" : ""} ${section.groupClassName ?? ""}`.trim(),
+				`mpk-option-group${isCardVariant ? " is-card" : ""}${isMultiple ? " is-multiple" : ""} ${section.groupClassName ?? ""}`.trim(),
 			)
 			const activeValue = getValidatedOptionValue(section, options)
+			const activeValues = getSelectedOptionValues(section, options)
 			options.forEach((option) => {
 				const hasTooltip = Boolean(descriptionMode === "tooltip" && option.description)
 				const showsInlineDescription = Boolean(
 					isCardVariant && descriptionMode === "inline" && option.description,
 				)
+				const isActive = isMultiple
+					? activeValues.includes(option.value)
+					: activeValue === option.value
 				const optionNode = createElement(
 					"div",
 					`mpk-option-item${hasTooltip ? " has-tooltip" : ""}`,
 				)
 				const button = createElement(
 					"button",
-					`${isCardVariant ? "mpk-card-tab" : "mpk-option"}${activeValue === option.value ? " is-active" : ""}`,
+					`${isCardVariant ? "mpk-card-tab" : "mpk-option"}${isActive ? " is-active" : ""}`,
 				)
 				button.type = "button"
+				button.setAttribute("aria-pressed", isActive ? "true" : "false")
 				button.title =
 					hasTooltip || showsInlineDescription ? "" : (option.description ?? "")
 				button.disabled = Boolean(option.disabled)
@@ -1859,15 +1885,50 @@
 						)
 					}
 				} else {
-					button.textContent = option.label
+					if (option.swatch) {
+						const swatch = createElement("span", "mpk-option-swatch")
+						swatch.style.background = option.swatch
+						button.append(swatch)
+					}
+					if (isMultiple) {
+						button.append(
+							createElement("span", "mpk-option-check", isActive ? "✓" : ""),
+						)
+						button.append(createElement("span", "mpk-option-label", option.label))
+					} else {
+						button.append(createElement("span", "mpk-option-label", option.label))
+					}
 				}
 				button.addEventListener("click", () => {
-					if (option.disabled || activeValue === option.value) return
-					const patch = { [section.stateKey]: option.value }
+					if (option.disabled) return
+					let patch
+					if (isMultiple) {
+						const currentValues = getSelectedOptionValues(section, options)
+						const nextValues = currentValues.includes(option.value)
+							? currentValues.filter((item) => item !== option.value)
+							: [...currentValues, option.value]
+						const maxSelected = Number(section.maxSelected)
+						if (
+							Number.isFinite(maxSelected) &&
+							maxSelected > 0 &&
+							nextValues.length > maxSelected
+						) {
+							return
+						}
+						patch = { [section.stateKey]: nextValues }
+					} else {
+						if (activeValue === option.value) {
+							if (!section.allowDeselect) return
+							patch = { [section.stateKey]: section.emptyValue ?? "" }
+						} else {
+							patch = { [section.stateKey]: option.value }
+						}
+					}
 					if (typeof section.patchOnSelect === "function") {
+						const nextState = { ...state, ...patch }
 						Object.assign(
 							patch,
-							section.patchOnSelect(option.value, getCallbackContext()) || {},
+							section.patchOnSelect(option.value, getCallbackContext(nextState)) || {},
 						)
 					}
 					setState(patch)

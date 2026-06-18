@@ -255,6 +255,8 @@ kit 会按顺序渲染这些 section。
 
 - `buttonLabel`: 按钮默认文案
 - `loadingLabel`: 生成中文案
+- `startMessage`: 校验通过并开始生成时的 toast 文案，默认 `t("toast.start", locale 为中文时 "开始生成"，其他语言为 "Generation started")`
+- `startToastType`: 开始生成 toast 类型，默认 `"info"`
 - `getIdleHint`: 按钮上方的空状态提示
 - `isDisabled`: 是否禁用生成按钮
 - `validate`: 业务校验，返回字符串表示失败
@@ -694,7 +696,7 @@ aiGenerate: {
 - `help`: 区块底部说明文案
 - `tabsClassName`: 额外挂到 Tab 容器上的 class
 - `options`: Tab 列表，结构与 `option-group` 的 `options` 一致
-- `patchOnSelect`: 切换 Tab 时的额外 state patch, 局部更新同步
+- `patchOnSelect`: 选中某个 Tab 后额外合并到 state 的 patch，用于同步清理或重置关联字段（见下方说明）
 - `panels`: 可选，面板配置，按 `value` 与 `options` 对应
 
 无 `panels` 的纯切换写法：
@@ -716,6 +718,39 @@ aiGenerate: {
 	when: ({ state }) => state.displayStyle === "mannequin",
 }
 ```
+
+`patchOnSelect` 用于在用户切换选项时顺带更新其他 state 字段。它常见于互斥模式：进入 A 模式时清空 B 模式的字段，进入 B 模式时清空 A 模式的字段，避免隐藏字段继续参与生成校验或 prompt 组装。
+
+```js
+{
+	id: "mode",
+	kind: "tabs",
+	stateKey: "mode",
+	options: [
+		{ value: "ref", label: t("mode.ref", "参考模特") },
+		{ value: "custom", label: t("mode.custom", "自定义") },
+	],
+	patchOnSelect: (value) =>
+		value === "ref"
+			? {
+					appearanceStyle: "",
+					faceShape: "",
+					hairstyle: "",
+				}
+			: {
+					refImage: null,
+					changeItems: [],
+				},
+}
+```
+
+执行规则：
+
+- 用户点击某个未选中的 option / tab 后，kit 先写入 `{ [stateKey]: option.value }`
+- 然后调用 `patchOnSelect(option.value, { state, helpers, t, setState, elements })`，其中 `state` 已包含本次选择值
+- 如果返回普通对象，kit 会把它合并到同一次 `setState`；返回 `null` / `undefined` 表示没有额外 patch
+- `patchOnSelect` 不是校验函数，不能阻止选择；需要阻止选择时用 option 的 `disabled`
+- 不建议在 `patchOnSelect` 里做异步上传、生成、toast 等副作用；它只适合做轻量 state 同步
 
 `panels` 结构：
 
@@ -763,6 +798,11 @@ panels: [
 - `showDescriptionOnHover`: 是否改为使用 tooltip DOM 展示 option 的 `description`
 - `variant`: 可选，传 `"card"` 时改为卡片式单选布局
 - `descriptionMode`: 描述展示方式，支持 `"title"`、`"tooltip"`、`"inline"`
+- `multiple`: 可选，传 `true` 时为多选，`state[stateKey]` 应是数组
+- `allowDeselect`: 可选，单选模式下允许再次点击已选项来取消选择
+- `emptyValue`: 可选，`allowDeselect` 取消选择时写入的空值，默认 `""`
+- `maxSelected`: 可选，多选模式下最多可选数量
+- `patchOnSelect`: 点击选项后额外合并到 state 的 patch，用于同步清理或重置关联字段
 - `deps`: 额外依赖的 state key，例如 `options` 为函数且依赖模型时需要声明
 - `when`: 条件渲染，返回 `false` 时不显示
 - `options`: 支持数组，或返回数组的函数
@@ -797,6 +837,9 @@ panels: [
 - 默认情况下，`description` 会写入按钮的 `title` 属性
 - 当 `showDescriptionOnHover: true` 或 `descriptionMode: "tooltip"` 时，kit 会渲染自定义 tooltip DOM
 - 当 `variant: "card"` 且 `descriptionMode: "inline"` 时，会渲染卡片式单选，并将 `description` 常驻显示在副文案区域
+- 当 `multiple: true` 时，点击选项会在数组中加入 / 移除该 `value`；多选通常需要 `required: true` 展示必填标记，并在 `generate.isDisabled` / `generate.validate` 中判断至少选择一项
+- 普通单选 `option-group` 通常不需要 `required: true`，因为会有默认选中值；可取消单选（`allowDeselect: true`）如果业务必填，则需要自行在生成逻辑中拦截
+- `patchOnSelect` 与 `tabs` 中同名字段语义一致：它在选中状态 patch 之后合并额外 patch，适合做关联字段重置；它不能阻止选择，也不应执行异步副作用
 - `options` 传函数时，kit 会在渲染阶段以 `({ state, helpers, t })` 调用它
 - 当 `kind: "option-group"` 且 `stateKey: "genCount"` 时，如果未显式传 `options`，kit 会自动根据当前模型的 `image_size_config.max_output_images` 生成数量选项，并在模型切换时自动修正 `genCount`
 

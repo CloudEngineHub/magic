@@ -338,6 +338,10 @@
 }
 
 .mpk-option {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
 	padding: 8px 12px;
 	color: var(--mpk-muted-foreground);
 	font-size: 12px;
@@ -366,6 +370,34 @@
 .mpk-option:disabled {
 	cursor: not-allowed;
 	opacity: 0.55;
+}
+
+.mpk-option-check {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 14px;
+	height: 14px;
+	color: var(--mpk-primary-foreground);
+	font-size: 10px;
+	line-height: 1;
+	background: transparent;
+	border: 1px solid rgb(var(--mpk-border-rgb) / calc(var(--mpk-border-alpha) * 0.7));
+	border-radius: 4px;
+}
+
+.mpk-option.is-active .mpk-option-check {
+	background: var(--mpk-primary);
+	border-color: var(--mpk-primary);
+}
+
+.mpk-option-swatch {
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	border: 1px solid rgb(var(--mpk-border-rgb) / calc(var(--mpk-border-alpha) * 0.7));
+	border-radius: 999px;
+	box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.35);
 }
 
 .mpk-option-tooltip {

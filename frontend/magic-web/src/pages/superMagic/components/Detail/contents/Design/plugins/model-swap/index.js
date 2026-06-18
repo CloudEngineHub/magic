@@ -1,178 +1,611 @@
-/* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
+/* global MagicPluginKit, registerMagicCanvasPlugin */
 
-const PRESET_TARGET_MODEL_OPTIONS = [
+const MODE = {
+	REF: "ref",
+	CUSTOM: "custom",
+}
+
+const CHANGE_ITEMS = [
 	{
-		value: "none",
-		labelKey: "preset.none",
-		labelFallback: "不使用预设",
-		descriptionKey: "preset.none.desc",
-		descriptionFallback: "只使用上传的目标模特图，或先留空稍后再选。",
-		promptFragment: "",
-	},
-	{
-		value: "asianYoungFemale",
-		labelKey: "preset.asianYoungFemale",
-		labelFallback: "亚洲年轻女性",
-		descriptionKey: "preset.asianYoungFemale.desc",
-		descriptionFallback: "偏年轻的亚洲女性模特，肤色偏浅，适合干净明亮的商业人像。",
-		promptFragment: {
-			zh: "年轻亚洲女性模特，浅肤色，五官精致，具备干净明亮的商业感",
-			en: "a young Asian female model with light skin tone, refined facial features, and a clean commercial beauty look",
+		value: "hairstyle",
+		labelKey: "change.hairstyle",
+		labelFallback: "换发型",
+		prompt: {
+			zh: "将发型替换为参考模特图中的发型，保持自然发丝、发量、长度和发型轮廓。",
+			en: "Replace the hairstyle with the exact hairstyle from the reference model image, preserving natural hair strands, volume, length, and silhouette.",
 		},
 	},
 	{
-		value: "blackYoungFemale",
-		labelKey: "preset.blackYoungFemale",
-		labelFallback: "黑人年轻女性",
-		descriptionKey: "preset.blackYoungFemale.desc",
-		descriptionFallback: "偏年轻的黑人女性模特，肤色较深，适合高级感编辑风格。",
-		promptFragment: {
-			zh: "年轻黑人女性模特，深肤色，五官鲜明，具备高级编辑感",
-			en: "a young Black female model with dark skin tone, confident facial features, and premium editorial presence",
+		value: "face",
+		labelKey: "change.face",
+		labelFallback: "换头部",
+		prompt: {
+			zh: "将脸部和头部替换为参考模特图中的人物特征，同时保持原图头部角度和表情风格自然一致。",
+			en: "Replace the face and head with the face from the reference model image while maintaining the original head angle and expression style naturally.",
 		},
 	},
 	{
-		value: "whiteMatureFemale",
-		labelKey: "preset.whiteMatureFemale",
-		labelFallback: "白人成熟女性",
-		descriptionKey: "preset.whiteMatureFemale.desc",
-		descriptionFallback: "成熟女性白人模特，气质优雅，适合高端商业形象。",
-		promptFragment: {
-			zh: "成熟女性白人模特，五官优雅，肤色自然平衡，适合高端商业形象",
-			en: "a mature white female model with elegant facial features, balanced skin tone, and high-end commercial styling",
+		value: "skinTone",
+		labelKey: "change.skinTone",
+		labelFallback: "换肤色",
+		prompt: {
+			zh: "将肤色调整为与参考模特图精准匹配，并保持全身可见皮肤色调一致。",
+			en: "Change the skin tone to precisely match the reference model image and keep all visible skin areas consistent.",
 		},
 	},
 	{
-		value: "asianMatureMale",
-		labelKey: "preset.asianMatureMale",
-		labelFallback: "亚洲成熟男性",
-		descriptionKey: "preset.asianMatureMale.desc",
-		descriptionFallback: "成熟亚洲男性模特，适合稳重高级的商业拍摄风格。",
-		promptFragment: {
-			zh: "成熟亚洲男性模特，面部轮廓利落，肤色自然，具备高级商业气质",
-			en: "a mature Asian male model with polished facial structure, natural skin tone, and luxury campaign presence",
+		value: "hairColor",
+		labelKey: "change.hairColor",
+		labelFallback: "换发色",
+		prompt: {
+			zh: "将发色调整为与参考模特图精准匹配，并保留真实光泽和明暗层次。",
+			en: "Change the hair color to exactly match the reference model image while preserving realistic sheen and tonal depth.",
 		},
 	},
 	{
-		value: "blackMatureMale",
-		labelKey: "preset.blackMatureMale",
-		labelFallback: "黑人成熟男性",
-		descriptionKey: "preset.blackMatureMale.desc",
-		descriptionFallback: "成熟黑人男性模特，面部结构鲜明，适合高级时尚视觉。",
-		promptFragment: {
-			zh: "成熟黑人男性模特，面部结构立体，深肤色，具备高端时尚表现力",
-			en: "a mature Black male model with strong facial structure, deep skin tone, and premium fashion presence",
-		},
-	},
-	{
-		value: "whiteYoungMale",
-		labelKey: "preset.whiteYoungMale",
-		labelFallback: "白人年轻男性",
-		descriptionKey: "preset.whiteYoungMale.desc",
-		descriptionFallback: "偏年轻的白人男性模特，适合现代感商业服饰展示。",
-		promptFragment: {
-			zh: "年轻白人男性模特，肤色明亮，五官现代，具备当代时尚表现力",
-			en: "a young white male model with bright skin tone, contemporary facial styling, and modern fashion presence",
+		value: "fullBody",
+		labelKey: "change.fullBody",
+		labelFallback: "换全身",
+		prompt: {
+			zh: "替换整个人物外貌，包括脸部、头发、肤色、视觉年龄和身体比例，只保持服装与商品不变。",
+			en: "Replace the entire model appearance, including face, hair, skin tone, apparent age, and body proportions, while keeping only the clothing and products unchanged.",
 		},
 	},
 ]
 
-const HAND_FOOT_REPAIR_PROMPT =
-	"Repair hands and feet carefully so the final model has natural finger structure, hand pose continuity, clean wrist and ankle transitions, correct limb alignment, and no warping, duplication, or misplaced joints. "
+const APPEARANCE_STYLE_OPTIONS = [
+	{
+		value: "european",
+		labelKey: "appearance.european",
+		labelFallback: "欧美超模",
+		descriptionKey: "appearance.european.desc",
+		descriptionFallback: "深邃立体五官",
+		prompt: {
+			zh: "欧美超模气质，深邃眼窝、立体五官、高鼻梁、高颧骨，具备高级时装表现力",
+			en: "European supermodel look, deep-set eyes, defined facial features, sharp nose, high cheekbones, high-fashion presence",
+		},
+	},
+	{
+		value: "asian",
+		labelKey: "appearance.asian",
+		labelFallback: "亚洲精致",
+		descriptionKey: "appearance.asian.desc",
+		descriptionFallback: "精致东方美",
+		prompt: {
+			zh: "亚洲精致美感，杏仁眼、细腻皮肤、优雅面部结构、干净商业气质",
+			en: "East Asian refined beauty, almond-shaped eyes, delicate skin, elegant facial structure, clean commercial look",
+		},
+	},
+	{
+		value: "korean",
+		labelKey: "appearance.korean",
+		labelFallback: "日韩清甜",
+		descriptionKey: "appearance.korean.desc",
+		descriptionFallback: "清透甜美系",
+		prompt: {
+			zh: "日韩清甜美感，清透光泽肌肤、柔和五官、年轻甜美、自然亲和",
+			en: "Korean and Japanese sweet beauty ideal, clear dewy skin, soft youthful features, natural approachable look",
+		},
+	},
+	{
+		value: "mixed",
+		labelKey: "appearance.mixed",
+		labelFallback: "混血甜心",
+		descriptionKey: "appearance.mixed.desc",
+		descriptionFallback: "东西合璧美",
+		prompt: {
+			zh: "混血甜心气质，东西方特征平衡，眼神突出，面部比例协调且有记忆点",
+			en: "Mixed ethnicity beauty, balanced East-West features, striking eyes, harmonious and memorable facial proportions",
+		},
+	},
+	{
+		value: "latina",
+		labelKey: "appearance.latina",
+		labelFallback: "拉丁热辣",
+		descriptionKey: "appearance.latina.desc",
+		descriptionFallback: "热情奔放感",
+		prompt: {
+			zh: "拉丁美感，暖橄榄肤色、深邃眼神、饱满唇形、热情有张力",
+			en: "Latina beauty, warm olive skin tone, expressive dark eyes, full lips, vibrant passionate look",
+		},
+	},
+	{
+		value: "african",
+		labelKey: "appearance.african",
+		labelFallback: "非洲女神",
+		descriptionKey: "appearance.african.desc",
+		descriptionFallback: "大气时髦感",
+		prompt: {
+			zh: "非洲高定模特气质，深色肌肤、鲜明五官、自信强大、时髦编辑感",
+			en: "African high-fashion beauty, rich melanin skin, bold striking features, confident powerful editorial presence",
+		},
+	},
+	{
+		value: "nordic",
+		labelKey: "appearance.nordic",
+		labelFallback: "北欧冷艳",
+		descriptionKey: "appearance.nordic.desc",
+		descriptionFallback: "冰雪高冷感",
+		prompt: {
+			zh: "北欧冷艳气质，浅色眼睛、冷调白皙肤色、利落脸部线条、高级疏离感",
+			en: "Nordic Scandinavian beauty, light eyes, cool fair skin, sharp angular features, refined distant elegance",
+		},
+	},
+	{
+		value: "middleEast",
+		labelKey: "appearance.middleEast",
+		labelFallback: "中东神秘",
+		descriptionKey: "appearance.middleEast.desc",
+		descriptionFallback: "神秘魅力感",
+		prompt: {
+			zh: "中东神秘美感，大杏仁眼、浓密眉形、橄榄至小麦肤色、异域魅力",
+			en: "Middle Eastern beauty, large almond-shaped dark eyes, arched brows, olive to tan skin, mysterious allure",
+		},
+	},
+	{
+		value: "southAsian",
+		labelKey: "appearance.southAsian",
+		labelFallback: "南亚异域",
+		descriptionKey: "appearance.southAsian.desc",
+		descriptionFallback: "异域风情感",
+		prompt: {
+			zh: "南亚异域美感，暖金棕肤色、大而有神的眼睛、饱满唇形、浓郁民族特征",
+			en: "South Asian beauty, warm golden-brown skin, large expressive eyes, full lips, rich ethnic features",
+		},
+	},
+]
+
+const FACE_SHAPE_OPTIONS = [
+	{
+		value: "oval",
+		labelKey: "face.oval",
+		labelFallback: "鹅蛋脸",
+		prompt: {
+			zh: "鹅蛋脸，比例均衡，轮廓流畅",
+			en: "oval egg-shaped face, balanced proportions",
+		},
+	},
+	{
+		value: "vShape",
+		labelKey: "face.vShape",
+		labelFallback: "瓜子脸",
+		prompt: {
+			zh: "瓜子脸，下巴精致，脸部线条纤细",
+			en: "V-shaped slender face, delicate pointed chin",
+		},
+	},
+	{
+		value: "heart",
+		labelKey: "face.heart",
+		labelFallback: "心形脸",
+		prompt: {
+			zh: "心形脸，额头略宽，下巴收窄",
+			en: "heart-shaped face, wider forehead, narrow pointed chin",
+		},
+	},
+	{
+		value: "round",
+		labelKey: "face.round",
+		labelFallback: "圆脸",
+		prompt: { zh: "圆脸，脸颊饱满，下颌线柔和", en: "round face, soft jawline, full cheeks" },
+	},
+	{
+		value: "square",
+		labelKey: "face.square",
+		labelFallback: "方形脸",
+		prompt: {
+			zh: "方形脸，清晰下颌线，面部更有力量感",
+			en: "square face, strong defined jawline, angular features",
+		},
+	},
+	{
+		value: "long",
+		labelKey: "face.long",
+		labelFallback: "长脸",
+		prompt: { zh: "长脸，脸部纵向比例更修长", en: "long narrow face, elongated features" },
+	},
+]
+
+const HAIRSTYLE_OPTIONS = [
+	{
+		value: "longStraight",
+		labelKey: "hair.longStraight",
+		labelFallback: "长直发",
+		prompt: { zh: "丝滑长直发，自然垂落", en: "long straight silky hair flowing down" },
+	},
+	{
+		value: "wavy",
+		labelKey: "hair.wavy",
+		labelFallback: "波浪卷",
+		prompt: { zh: "蓬松长波浪卷发", en: "long wavy voluminous curls" },
+	},
+	{
+		value: "shortBob",
+		labelKey: "hair.shortBob",
+		labelFallback: "短波波头",
+		prompt: { zh: "利落下巴长度短波波头", en: "sleek chin-length bob haircut" },
+	},
+	{
+		value: "pixie",
+		labelKey: "hair.pixie",
+		labelFallback: "超短发",
+		prompt: { zh: "时髦超短发，干练有个性", en: "edgy pixie cut, ultra-short stylish hair" },
+	},
+	{
+		value: "ponytail",
+		labelKey: "hair.ponytail",
+		labelFallback: "马尾辫",
+		prompt: { zh: "高马尾，干净利落", en: "high ponytail, sleek and polished" },
+	},
+	{
+		value: "updo",
+		labelKey: "hair.updo",
+		labelFallback: "盘发",
+		prompt: { zh: "优雅盘发造型", en: "elegant updo bun hairstyle" },
+	},
+	{
+		value: "curly",
+		labelKey: "hair.curly",
+		labelFallback: "自然卷",
+		prompt: { zh: "自然蓬松卷发", en: "natural curly voluminous hair" },
+	},
+	{
+		value: "braided",
+		labelKey: "hair.braided",
+		labelFallback: "辫子",
+		prompt: { zh: "时髦编发造型", en: "stylish braided hairstyle" },
+	},
+	{
+		value: "bangs",
+		labelKey: "hair.bangs",
+		labelFallback: "刘海",
+		prompt: { zh: "整齐刘海搭配自然发型", en: "full blunt bangs with flowing hair" },
+	},
+]
+
+const HAIR_COLOR_OPTIONS = [
+	{
+		value: "black",
+		labelKey: "hairColor.black",
+		labelFallback: "黑色",
+		prompt: { zh: "自然黑发色", en: "jet black hair color" },
+	},
+	{
+		value: "darkBrown",
+		labelKey: "hairColor.darkBrown",
+		labelFallback: "深棕",
+		prompt: { zh: "深巧克力棕发色", en: "dark chocolate brown hair color" },
+	},
+	{
+		value: "brown",
+		labelKey: "hairColor.brown",
+		labelFallback: "栗棕",
+		prompt: { zh: "暖栗棕发色", en: "warm chestnut brown hair color" },
+	},
+	{
+		value: "golden",
+		labelKey: "hairColor.golden",
+		labelFallback: "金色",
+		prompt: { zh: "金色金棕发色", en: "golden blonde hair color" },
+	},
+	{
+		value: "platinum",
+		labelKey: "hairColor.platinum",
+		labelFallback: "铂金",
+		prompt: { zh: "近白铂金发色", en: "platinum blonde almost white hair color" },
+	},
+	{
+		value: "red",
+		labelKey: "hairColor.red",
+		labelFallback: "红棕",
+		prompt: { zh: "浓郁红棕发色", en: "rich auburn red-brown hair color" },
+	},
+	{
+		value: "rose",
+		labelKey: "hairColor.rose",
+		labelFallback: "玫瑰金",
+		prompt: { zh: "玫瑰金粉调发色", en: "rose gold pink-tinted hair color" },
+	},
+	{
+		value: "silver",
+		labelKey: "hairColor.silver",
+		labelFallback: "银灰",
+		prompt: { zh: "冷调银灰发色", en: "cool silver grey hair color" },
+	},
+	{
+		value: "highlight",
+		labelKey: "hairColor.highlight",
+		labelFallback: "挑染",
+		prompt: {
+			zh: "自然层次挑染发色",
+			en: "balayage highlighted hair with natural-looking multi-tonal color",
+		},
+	},
+]
+
+const SKIN_TONE_OPTIONS = [
+	{
+		value: "fair",
+		labelKey: "skin.fair",
+		labelFallback: "瓷白",
+		swatch: "#F9EBE0",
+		prompt: { zh: "瓷白肤色，干净通透", en: "very fair porcelain white skin tone" },
+	},
+	{
+		value: "light",
+		labelKey: "skin.light",
+		labelFallback: "白皙",
+		swatch: "#F4D5B8",
+		prompt: { zh: "白皙肤色，自然明亮", en: "light fair skin tone" },
+	},
+	{
+		value: "natural",
+		labelKey: "skin.natural",
+		labelFallback: "自然",
+		swatch: "#E8B894",
+		prompt: { zh: "自然中等肤色", en: "natural medium skin tone" },
+	},
+	{
+		value: "warm",
+		labelKey: "skin.warm",
+		labelFallback: "小麦",
+		swatch: "#C98B5A",
+		prompt: { zh: "小麦肤色，暖调健康", en: "warm wheat medium-tan skin tone" },
+	},
+	{
+		value: "tan",
+		labelKey: "skin.tan",
+		labelFallback: "健康棕",
+		swatch: "#A0633A",
+		prompt: { zh: "健康古铜棕肤色", en: "healthy tan bronze skin tone" },
+	},
+	{
+		value: "deep",
+		labelKey: "skin.deep",
+		labelFallback: "深棕",
+		swatch: "#6B3C2A",
+		prompt: { zh: "浓郁深棕肤色", en: "rich deep brown skin tone" },
+	},
+	{
+		value: "ebony",
+		labelKey: "skin.ebony",
+		labelFallback: "黑曜",
+		swatch: "#3D2014",
+		prompt: { zh: "黑曜深色肤色", en: "deep ebony dark skin tone" },
+	},
+]
+
+const MAKEUP_OPTIONS = [
+	{
+		value: "bare",
+		labelKey: "makeup.bare",
+		labelFallback: "裸妆",
+		prompt: {
+			zh: "自然裸妆，清透微光肌肤",
+			en: "natural no-makeup look, bare skin with subtle glow",
+		},
+	},
+	{
+		value: "japanese",
+		labelKey: "makeup.japanese",
+		labelFallback: "日系清纯",
+		prompt: {
+			zh: "日系清纯妆，柔粉腮红，自然唇色",
+			en: "Japanese innocent makeup, soft pink blush, natural lip tint",
+		},
+	},
+	{
+		value: "korean",
+		labelKey: "makeup.korean",
+		labelFallback: "韩系光泽",
+		prompt: {
+			zh: "韩系水光妆，清透底妆，渐变唇色",
+			en: "Korean glass skin dewy makeup, subtle gradient lip",
+		},
+	},
+	{
+		value: "smoky",
+		labelKey: "makeup.smoky",
+		labelFallback: "欧美烟熏",
+		prompt: {
+			zh: "欧美烟熏妆，眼线和眼影更有张力",
+			en: "Western smoky eye makeup, bold eyeliner, dramatic shadow",
+		},
+	},
+	{
+		value: "vintage",
+		labelKey: "makeup.vintage",
+		labelFallback: "复古红唇",
+		prompt: {
+			zh: "复古红唇妆，经典眼线，精致眉形",
+			en: "vintage glamour makeup, classic red lips, winged eyeliner",
+		},
+	},
+	{
+		value: "editorial",
+		labelKey: "makeup.editorial",
+		labelFallback: "大片感",
+		prompt: {
+			zh: "高定大片妆容，具有艺术化视觉重点",
+			en: "high-fashion editorial makeup, bold artistic statement look",
+		},
+	},
+]
 
 function createInitialState() {
 	return {
-		baseModelImages: [],
-		targetModelImage: null,
-		presetTargetModel: "none",
-		handFootRepair: false,
+		mode: MODE.REF,
+		sourceImage: null,
+		refImage: null,
+		changeItems: [],
+		appearanceStyle: "",
+		faceShape: "",
+		hairstyle: "",
+		hairColor: "",
+		skinTone: "",
+		makeup: "",
+		extraPrompt: "",
 		genCount: 1,
 	}
 }
 
+function getOptionPrompt(options, value, locale) {
+	const option = options.find((item) => item.value === value)
+	if (!option) return ""
+	const prompt = option.prompt
+	if (typeof prompt === "string") return prompt
+	return prompt?.[locale] ?? prompt?.zh ?? prompt?.en ?? ""
+}
+
 function getReferenceImages(state) {
-	return [...state.baseModelImages, ...(state.targetModelImage ? [state.targetModelImage] : [])]
+	if (!state.sourceImage) return []
+	return state.mode === MODE.REF && state.refImage
+		? [state.sourceImage, state.refImage]
+		: [state.sourceImage]
 }
 
-function hasTargetModelInput(state) {
-	return Boolean(state.targetModelImage) || state.presetTargetModel !== "none"
+function hasCustomSelection(state) {
+	return Boolean(
+		state.appearanceStyle ||
+		state.faceShape ||
+		state.hairstyle ||
+		state.hairColor ||
+		state.skinTone ||
+		state.makeup,
+	)
 }
 
-function getMaxReferenceImages(state, helpers) {
-	return helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ?? 2
-}
-
-function buildReferenceLabelList(count, locale) {
-	return MagicPromptLocale.joinReferenceLabels(count, locale)
-}
-
-function getPresetTargetModelPrompt(presetTargetModel, locale) {
-	const promptFragment = PRESET_TARGET_MODEL_OPTIONS.find(
-		(item) => item.value === presetTargetModel,
-	)?.promptFragment
-	return MagicPromptLocale.pickText(promptFragment, locale)
-}
-
-function buildModelSwapPrompt({
-	baseImageCount,
-	hasTargetModelImage,
-	presetTargetModel,
-	handFootRepair,
-	locale,
-}) {
-	const isChinese = MagicPromptLocale.isChinese(locale)
-	const baseReferences = buildReferenceLabelList(baseImageCount, locale)
-	const targetModelReference = MagicPromptLocale.getReferenceLabel(baseImageCount + 1, locale)
-	const presetPrompt = getPresetTargetModelPrompt(presetTargetModel, locale)
-	const identitySourcePrompt = hasTargetModelImage
-		? isChinese
-			? `仅将 ${targetModelReference} 作为新模特的人物身份参考，用于脸部特征、肤色、视觉年龄、发型和整体身份特征。不要复制 ${targetModelReference} 中的服装、姿势、背景或场景。 `
-			: `Use ${targetModelReference} only as the identity reference for the new model's face, skin tone, apparent age, hairstyle, and overall human identity. Do not copy clothing, pose, background, or scene from ${targetModelReference}. `
-		: ""
-	const presetSupplementPrompt = presetPrompt
-		? hasTargetModelImage
-			? isChinese
-				? `仅在不与 ${targetModelReference} 冲突时，将该预设作为补充人物引导：${presetPrompt}。 `
-				: `Use this preset only as supplementary guidance when it does not conflict with ${targetModelReference}: ${presetPrompt}. `
-			: isChinese
-				? `请按照以下目标身份特征生成新模特：${presetPrompt}。 `
-				: `Create the new model with these target identity traits: ${presetPrompt}. `
-		: ""
-	const handFootRepairPrompt = handFootRepair
-		? isChinese
-			? "仔细修复手部和脚部，使最终人物具有自然的手指结构、连贯的手势、干净的手腕和脚踝过渡、正确的肢体对齐，并避免扭曲、重复或关节错位。 "
-			: HAND_FOOT_REPAIR_PROMPT
-		: ""
+function buildRefPrompt({ changeItems, extraPrompt, locale }) {
+	const isChinese = locale === "zh"
+	const selectedPrompts = CHANGE_ITEMS.filter((item) => changeItems.includes(item.value))
+		.map((item) => getOptionPrompt(CHANGE_ITEMS, item.value, locale))
+		.filter(Boolean)
+	const extra = String(extraPrompt ?? "").trim()
 
 	if (isChinese) {
-		return (
-			`使用 ${baseImageCount} 张原模特参考图生成商业换模特结果：${baseReferences}。` +
-			`将 ${baseReferences} 作为服饰、商品造型、姿势、身体位置、裁切、机位构图、场景、背景、光线和时尚商拍真实感的唯一来源。` +
-			"将原人物替换为新的目标模特，同时保持原参考图中的服装、商品展示、场景氛围和构图一致。" +
-			"保持可见身体范围、裁切边界、取景、拍摄距离和透视关系不变。不要扩图、补画，或生成原图里不可见的身体部位。" +
-			"保留原参考图中的服饰穿着方式、可见配饰、面料垂坠、手部与商品的相对位置，以及所有非人物场景元素。" +
-			identitySourcePrompt +
-			presetSupplementPrompt +
-			"如果提供了多张原模特图，请融合成一张风格统一、细节一致、具备同一系列感的结果。" +
-			"最终只生成一个人物，不要出现多人、重复脸部或身体拼接。" +
-			"除非为了让换模特结果更自然可信，否则不要改变服装设计、商品轮廓、镜头角度、场景类型或裁切方式。" +
-			handFootRepairPrompt
-		)
+		return [
+			"参考图 1 是原模特图，参考图 2 是目标参考模特图。",
+			"关键要求：严格保持参考图 1 中所有服装、商品、配饰、穿着方式、姿势、身体位置、构图、裁切、背景、光线和拍摄风格不变。",
+			"只把参考图 2 中选定的人物外貌特征迁移到参考图 1 的人物上。",
+			"需要执行的变化：",
+			...selectedPrompts.map((prompt) => `- ${prompt}`),
+			extra ? `补充描述：${extra}` : "",
+			"最终结果必须是单人真实商业时尚大片质感，人物与服装融合自然，不能改变服装设计、图案、颜色、面料和商品轮廓。",
+		]
+			.filter(Boolean)
+			.join("\n")
 	}
 
-	return (
-		`Create a commercial model-swap image using ${baseImageCount} original model reference image${baseImageCount > 1 ? "s" : ""}: ${baseReferences}. ` +
-		`Use ${baseReferences} as the ONLY source for the outfit, product styling, pose, body position, crop, camera framing, scene, background, lighting, and fashion-shoot realism. ` +
-		"Replace the original person with a new target model while keeping the clothing, product presentation, scene atmosphere, and composition consistent with the original references. " +
-		"Keep the visible body range, crop, framing, camera distance, and perspective unchanged. Do not uncrop, outpaint, or reveal body parts that are not visible in the original references. " +
-		"Preserve the exact garment styling, visible accessories, drape, hand placement relative to products, and all non-person scene elements from the original references. " +
-		identitySourcePrompt +
-		presetSupplementPrompt +
-		"When multiple original model images are provided, fuse them into one coherent result that keeps their shared fashion language, styling details, and campaign consistency. " +
-		"Only generate a single person. Do not create extra people, duplicate faces, or merge two different bodies. " +
-		"Do not change the clothing design, product silhouette, camera angle, scene type, or crop unless required to keep the swapped model natural and believable. " +
-		handFootRepairPrompt
-	)
+	return [
+		"Reference image 1 is the source model photo. Reference image 2 is the target reference model.",
+		"Critical: keep all clothing, products, accessories, styling, pose, body position, composition, crop, background, lighting, and photographic style from reference image 1 exactly unchanged.",
+		"Only transfer the selected appearance traits from reference image 2 onto the person in reference image 1.",
+		"Apply the following transformations:",
+		...selectedPrompts.map((prompt) => `- ${prompt}`),
+		extra ? `Additional requirements: ${extra}` : "",
+		"The result must look like a professional high-fashion editorial photo, with seamless photorealistic integration. Do not change garment design, patterns, colors, fabric, or product silhouette.",
+	]
+		.filter(Boolean)
+		.join("\n")
+}
+
+function buildCustomPrompt({ state, locale }) {
+	const isChinese = locale === "zh"
+	const extra = String(state.extraPrompt ?? "").trim()
+	const changes = [
+		[
+			"外貌风格",
+			"Appearance style",
+			getOptionPrompt(APPEARANCE_STYLE_OPTIONS, state.appearanceStyle, locale),
+		],
+		["脸型", "Face shape", getOptionPrompt(FACE_SHAPE_OPTIONS, state.faceShape, locale)],
+		["发型", "Hairstyle", getOptionPrompt(HAIRSTYLE_OPTIONS, state.hairstyle, locale)],
+		["发色", "Hair color", getOptionPrompt(HAIR_COLOR_OPTIONS, state.hairColor, locale)],
+		["肤色", "Skin tone", getOptionPrompt(SKIN_TONE_OPTIONS, state.skinTone, locale)],
+		["妆容", "Makeup", getOptionPrompt(MAKEUP_OPTIONS, state.makeup, locale)],
+	].filter((item) => item[2])
+
+	if (isChinese) {
+		return [
+			"参考图 1 是原模特图。请转换图中模特的外貌，让素人形象变成更专业的商业超模效果。",
+			"关键要求：严格保持参考图 1 中所有服装、商品、配饰、穿着方式、姿势、身体位置、构图、裁切、背景、光线和拍摄风格不变。",
+			"需要应用的外貌变化：",
+			...changes.map(([zhLabel, , prompt]) => `- ${zhLabel}：${prompt}`),
+			extra ? `补充描述：${extra}` : "",
+			"最终结果必须是单人真实商业时尚大片质感，人物与服装融合自然，不能改变服装设计、图案、颜色、面料和商品轮廓。",
+		]
+			.filter(Boolean)
+			.join("\n")
+	}
+
+	return [
+		"Reference image 1 is the source model photo. Transform the model appearance into a more professional commercial supermodel look.",
+		"Critical: keep all clothing, products, accessories, styling, pose, body position, composition, crop, background, lighting, and photographic style from reference image 1 exactly unchanged.",
+		"Apply the following appearance changes:",
+		...changes.map(([, enLabel, prompt]) => `- ${enLabel}: ${prompt}`),
+		extra ? `Additional requirements: ${extra}` : "",
+		"The result must look like a professional high-fashion editorial photo, with seamless photorealistic integration. Do not change garment design, patterns, colors, fabric, or product silhouette.",
+	]
+		.filter(Boolean)
+		.join("\n")
+}
+
+function buildCurrentTextBlock(currentText) {
+	const normalizedCurrentText = String(currentText ?? "").trim()
+	if (!normalizedCurrentText) return "用户当前未填写。"
+	return normalizedCurrentText
+}
+
+function getSelectedOptionLabels(options, values, t) {
+	const selectedValues = Array.isArray(values) ? values : [values].filter(Boolean)
+	return options
+		.filter((item) => selectedValues.includes(item.value))
+		.map((item) => t(item.labelKey, item.labelFallback))
+}
+
+function buildExtraPromptCompletionUserPrompt({ state, t }) {
+	const currentText = buildCurrentTextBlock(state.extraPrompt)
+	if (state.mode === MODE.REF) {
+		const changeLabels = getSelectedOptionLabels(CHANGE_ITEMS, state.changeItems, t)
+		return [
+			"任务目标：为 AI 换模特插件的“补充描述”输入框生成或补全一段提示词。",
+			`当前输入：${currentText}`,
+			"当前模式：参考模特。",
+			`参考图角色：参考图 1 是原模特图，需要保留服装、姿势、场景、构图和光线；参考图 2 是目标参考模特图，只提供人物外貌参考。`,
+			`已选择的变化项：${changeLabels.length ? changeLabels.join("、") : "尚未选择"}。`,
+			"补全方向：只补充外貌迁移的细节要求，例如表情、妆容保留、发丝自然度、肤色融合、年龄气质、五官风格等。",
+			"业务限制：不要要求改变服装、商品、配饰、背景、姿势、镜头角度或构图；不要输出完整任务说明，只输出适合填入“补充描述”的短提示词。",
+		].join("\n")
+	}
+
+	const selectedLabels = [
+		...getSelectedOptionLabels(APPEARANCE_STYLE_OPTIONS, state.appearanceStyle, t),
+		...getSelectedOptionLabels(FACE_SHAPE_OPTIONS, state.faceShape, t),
+		...getSelectedOptionLabels(HAIRSTYLE_OPTIONS, state.hairstyle, t),
+		...getSelectedOptionLabels(HAIR_COLOR_OPTIONS, state.hairColor, t),
+		...getSelectedOptionLabels(SKIN_TONE_OPTIONS, state.skinTone, t),
+		...getSelectedOptionLabels(MAKEUP_OPTIONS, state.makeup, t),
+	]
+
+	return [
+		"任务目标：为 AI 换模特插件的“补充描述”输入框生成或补全一段提示词。",
+		`当前输入：${currentText}`,
+		"当前模式：自定义。",
+		"参考图角色：参考图 1 是原模特图，需要保留服装、姿势、场景、构图和光线；自定义选项用于定义新模特外貌。",
+		`已选择的外貌方向：${selectedLabels.length ? selectedLabels.join("、") : "尚未选择"}。`,
+		"补全方向：补充更细的人像气质、五官细节、表情、妆容精修、商业大片质感和自然融合要求。",
+		"业务限制：不要要求改变服装、商品、配饰、背景、姿势、镜头角度或构图；不要输出完整任务说明，只输出适合填入“补充描述”的短提示词。",
+	].join("\n")
+}
+
+function mapOptions(options, t) {
+	return options.map((item) => ({
+		value: item.value,
+		label: t(item.labelKey, item.labelFallback),
+		description: item.descriptionKey
+			? t(item.descriptionKey, item.descriptionFallback)
+			: undefined,
+	}))
 }
 
 registerMagicCanvasPlugin({
@@ -183,12 +616,11 @@ registerMagicCanvasPlugin({
 	},
 	render(ctx, instance, root, scope) {
 		const t = (key, fallback) => ctx.i18n.t(key, fallback)
-		const presetTargetModels = PRESET_TARGET_MODEL_OPTIONS.map((item) => ({
-			value: item.value,
-			label: t(item.labelKey, item.labelFallback),
-			description: t(item.descriptionKey, item.descriptionFallback),
-		}))
-		const promptLocale = MagicPromptLocale.resolveLocale(ctx)
+		const locale = String(ctx.i18n?.locale ?? navigator.language ?? "")
+			.toLowerCase()
+			.startsWith("zh")
+			? "zh"
+			: "en"
 
 		return ctx.panel.render(root, {
 			panelClassName: "model-swap",
@@ -201,40 +633,26 @@ registerMagicCanvasPlugin({
 			},
 			sections: [
 				{
-					id: "baseModelImages",
-					kind: "image-grid",
-					stateKey: "baseModelImages",
-					title: t("section.baseModelImages", "原模特图"),
-					required: true,
-					help: t(
-						"upload.baseModelImages.help",
-						"仅支持单人模特图，不支持多人图、明显面部遮挡、明显低头/抬头或身体大面积被遮挡的图片。",
-					),
-					deps: ["targetModelImage", "modelId", "modelOptions"],
-					addLabel: "+",
-					alt: t("section.baseModelImages", "原模特图"),
-					maxCount: ({ state, helpers }) => {
-						const maxReferenceImages = getMaxReferenceImages(state, helpers)
-						const targetCount = state.targetModelImage ? 1 : 0
-						return Math.max(1, Math.min(6, maxReferenceImages - targetCount))
-					},
-				},
-				{
-					id: "targetModelImage",
+					id: "sourceImage",
 					kind: "image-slot",
-					stateKey: "targetModelImage",
-					title: t("section.targetModelImage", "目标模特"),
-					uploadLabel: t("upload.targetModelImage", "点击上传目标模特图"),
-					alt: t("section.targetModelImage", "目标模特"),
+					stateKey: "sourceImage",
+					title: t("section.sourceImage", "原模特图"),
+					required: true,
+					uploadLabel: t("upload.sourceImage", "上传 / 拖拽图片"),
+					alt: t("section.sourceImage", "原模特图"),
 					help: t(
-						"upload.targetModelImage.help",
-						"可选。用于提供新的模特脸部、肤色、发型和身份特征，不会复制该图里的服饰与场景。",
+						"upload.sourceImage.help",
+						"限 1 张，建议使用正面或接近正面的单人模特图。",
 					),
 					beforePick: ({ state, helpers }) => {
-						const maxReferenceImages = getMaxReferenceImages(state, helpers)
+						const maxReferenceImages =
+							helpers.getSelectedModel(state)?.image_size_config
+								?.max_reference_images ?? 2
 						if (
-							!state.targetModelImage &&
-							state.baseModelImages.length + 1 > maxReferenceImages
+							!state.sourceImage &&
+							state.mode === MODE.REF &&
+							state.refImage &&
+							maxReferenceImages < 2
 						) {
 							return t("error.referenceLimit", "参考图数量已达当前模型上限")
 						}
@@ -242,22 +660,173 @@ registerMagicCanvasPlugin({
 					},
 				},
 				{
-					id: "presetTargetModel",
-					kind: "option-group",
-					stateKey: "presetTargetModel",
-					required: true,
-					title: t("section.presetTargetModel", "预设 AI 模特"),
-					options: presetTargetModels,
+					id: "mode",
+					kind: "tabs",
+					stateKey: "mode",
+					title: t("section.mode", "换模特方式"),
+					options: [
+						{ value: MODE.REF, label: t("mode.ref", "参考模特") },
+						{ value: MODE.CUSTOM, label: t("mode.custom", "自定义") },
+					],
+					patchOnSelect: (value) =>
+						value === MODE.REF
+							? {
+									appearanceStyle: "",
+									faceShape: "",
+									hairstyle: "",
+									hairColor: "",
+									skinTone: "",
+									makeup: "",
+								}
+							: {
+									refImage: null,
+									changeItems: [],
+								},
+					panels: [
+						{
+							value: MODE.REF,
+							sections: [
+								{
+									id: "refImage",
+									kind: "image-slot",
+									stateKey: "refImage",
+									title: t("section.refImage", "参考模特图"),
+									required: true,
+									uploadLabel: t("upload.refImage", "上传目标参考模特图"),
+									alt: t("section.refImage", "参考模特图"),
+									help: t(
+										"upload.refImage.help",
+										"用于提供发型、头部、肤色、发色或全身外貌参考，不复制服装和场景。",
+									),
+										beforePick: ({ state, helpers }) => {
+											const maxReferenceImages =
+												helpers.getSelectedModel(state)?.image_size_config
+													?.max_reference_images ?? 2
+											if (!state.refImage && maxReferenceImages < 2) {
+												return t(
+													"error.referenceLimit",
+													"参考图数量已达当前模型上限",
+												)
+										}
+										return null
+									},
+								},
+								{
+									id: "changeItems",
+									kind: "option-group",
+									stateKey: "changeItems",
+									title: t("section.changeItems", "换什么"),
+									suffix: t("section.changeItems.suffix", "可多选"),
+									required: true,
+									multiple: true,
+									groupClassName: "model-swap-change-grid",
+									options: mapOptions(CHANGE_ITEMS, t),
+								},
+							],
+						},
+						{
+							value: MODE.CUSTOM,
+							sections: [
+								{
+									id: "appearanceStyle",
+									kind: "option-group",
+									stateKey: "appearanceStyle",
+									title: t("section.appearanceStyle", "外貌风格"),
+									variant: "card",
+									descriptionMode: "inline",
+									allowDeselect: true,
+									groupClassName: "model-swap-appearance-grid",
+									options: mapOptions(APPEARANCE_STYLE_OPTIONS, t),
+								},
+								{
+									id: "faceShape",
+									kind: "option-group",
+									stateKey: "faceShape",
+									title: t("section.faceShape", "脸型"),
+									allowDeselect: true,
+									options: mapOptions(FACE_SHAPE_OPTIONS, t),
+								},
+								{
+									id: "hairstyle",
+									kind: "option-group",
+									stateKey: "hairstyle",
+									title: t("section.hairstyle", "发型"),
+									allowDeselect: true,
+									options: mapOptions(HAIRSTYLE_OPTIONS, t),
+								},
+								{
+									id: "hairColor",
+									kind: "option-group",
+									stateKey: "hairColor",
+									title: t("section.hairColor", "发色"),
+									allowDeselect: true,
+									options: mapOptions(HAIR_COLOR_OPTIONS, t),
+								},
+								{
+									id: "skinTone",
+									kind: "option-group",
+									stateKey: "skinTone",
+									title: t("section.skinTone", "肤色"),
+									allowDeselect: true,
+									groupClassName: "model-swap-skin-grid",
+									options: SKIN_TONE_OPTIONS.map((item) => ({
+										value: item.value,
+										label: t(item.labelKey, item.labelFallback),
+										swatch: item.swatch,
+									})),
+								},
+								{
+									id: "makeup",
+									kind: "option-group",
+									stateKey: "makeup",
+									title: t("section.makeup", "妆容"),
+									allowDeselect: true,
+									options: mapOptions(MAKEUP_OPTIONS, t),
+								},
+							],
+						},
+					],
 				},
 				{
-					id: "handFootRepair",
-					kind: "toggle",
-					stateKey: "handFootRepair",
-					title: t("section.handFootRepair", "手脚修复"),
-					help: t(
-						"handFootRepair.help",
-						"“手脚修复”用于优化换模特后手脚部位的细节，减少变形、错位或肢体不自然的问题。",
-					),
+					id: "extraPrompt",
+					kind: "textarea",
+					stateKey: "extraPrompt",
+					title: t("section.extraPrompt", "补充描述"),
+					rows: 2,
+					maxLength: 500,
+					deps: [
+						"mode",
+						"sourceImage",
+						"refImage",
+						"changeItems",
+						"appearanceStyle",
+						"faceShape",
+						"hairstyle",
+						"hairColor",
+						"skinTone",
+						"makeup",
+					],
+					placeholder: ({ state }) =>
+						state.mode === MODE.REF
+							? t("placeholder.extra.ref", "如：保留原模特妆容，表情更自然")
+							: t("placeholder.extra.custom", "如：眼睛大一些，嘴唇饱满，气质更冷艳"),
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) =>
+							!state.sourceImage ||
+							(state.mode === MODE.REF && !state.refImage) ||
+							(state.mode === MODE.REF && !state.changeItems.length) ||
+							(state.mode === MODE.CUSTOM && !hasCustomSelection(state)),
+						completeImagePrompt: {
+							referenceImages: ({ state }) => getReferenceImages(state),
+							userPrompt: ({ state }) =>
+								buildExtraPromptCompletionUserPrompt({
+									state,
+									t,
+								}),
+						},
+					},
 				},
 				{
 					id: "modelSelect",
@@ -284,16 +853,31 @@ registerMagicCanvasPlugin({
 				},
 			],
 			generate: {
-				buttonLabel: `✨ ${t("button.generate", "生成 AI 换模特图")}`,
+				buttonLabel: `✨ ${t("button.generate", "一键素人变超模")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
+					if (!state.sourceImage) return t("empty.sourceImage", "请先上传原模特图")
+					if (state.mode === MODE.REF && !state.refImage) {
+						return t("empty.refImage", "请先上传参考模特图")
+					}
+					if (state.mode === MODE.REF && !state.changeItems.length) {
+						return t("empty.changeItems", "请至少选择 1 个换模特项目")
+					}
+					if (state.mode === MODE.CUSTOM && !hasCustomSelection(state)) {
+						return t("empty.custom", "请至少选择 1 个自定义外貌选项")
+					}
 					return ""
 				},
 				isDisabled: ({ state }) =>
-					!state.baseModelImages.length || !hasTargetModelInput(state),
+					!state.sourceImage ||
+					(state.mode === MODE.REF && (!state.refImage || !state.changeItems.length)) ||
+					(state.mode === MODE.CUSTOM && !hasCustomSelection(state)),
 				validate: ({ state, helpers }) => {
 					const referenceImages = getReferenceImages(state)
-					if (referenceImages.length > getMaxReferenceImages(state, helpers)) {
+					const maxReferenceImages =
+						helpers.getSelectedModel(state)?.image_size_config?.max_reference_images ??
+						2
+					if (referenceImages.length > maxReferenceImages) {
 						return t("error.referenceLimit", "参考图数量已达当前模型上限")
 					}
 					if (
@@ -308,65 +892,30 @@ registerMagicCanvasPlugin({
 					}
 					return null
 				},
-				execute: async ({ state, helpers, generateAndPlace }) => {
+				buildRequest: ({ state, helpers }) => {
 					const selectedSize = helpers.getSelectedSize(state)
 					const width = selectedSize.genW
 					const height = selectedSize.genH
+					const prompt =
+						state.mode === MODE.REF
+							? buildRefPrompt({
+									changeItems: state.changeItems,
+									extraPrompt: state.extraPrompt,
+									locale,
+								})
+							: buildCustomPrompt({ state, locale })
 
-					if (state.baseModelImages.length <= 1) {
-						const baseImage = state.baseModelImages[0]
-						const referenceImages = helpers.collectReferenceIds([
-							baseImage,
-							...(state.targetModelImage ? [state.targetModelImage] : []),
-						])
-						return generateAndPlace({
-							model_id: state.modelId,
-							prompt: buildModelSwapPrompt({
-								baseImageCount: 1,
-								hasTargetModelImage: Boolean(state.targetModelImage),
-								presetTargetModel: state.presetTargetModel,
-								handFootRepair: state.handFootRepair,
-								locale: promptLocale,
-							}),
-							reference_images: referenceImages,
-							size: `${width}x${height}`,
-							resolution: state.scale || undefined,
-							width,
-							height,
-							count: state.genCount,
-							select: false,
-						})
+					return {
+						model_id: state.modelId,
+						prompt,
+						reference_images: helpers.collectReferenceIds(getReferenceImages(state)),
+						size: `${width}x${height}`,
+						resolution: state.scale || undefined,
+						width,
+						height,
+						count: state.genCount,
+						select: false,
 					}
-
-					const results = []
-					for (let index = 0; index < state.genCount; index += 1) {
-						const baseImage =
-							state.baseModelImages[index % state.baseModelImages.length]
-						const referenceImages = helpers.collectReferenceIds([
-							baseImage,
-							...(state.targetModelImage ? [state.targetModelImage] : []),
-						])
-						results.push(
-							await generateAndPlace({
-								model_id: state.modelId,
-								prompt: buildModelSwapPrompt({
-									baseImageCount: 1,
-									hasTargetModelImage: Boolean(state.targetModelImage),
-									presetTargetModel: state.presetTargetModel,
-									handFootRepair: state.handFootRepair,
-									locale: promptLocale,
-								}),
-								reference_images: referenceImages,
-								size: `${width}x${height}`,
-								resolution: state.scale || undefined,
-								width,
-								height,
-								count: 1,
-								select: false,
-							}),
-						)
-					}
-					return results
 				},
 			},
 		})

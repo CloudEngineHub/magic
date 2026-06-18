@@ -198,7 +198,6 @@ registerMagicCanvasPlugin({
 					id: "count",
 					kind: "option-group",
 					stateKey: "genCount",
-					required: true,
 					title: t("section.count", "生成数量"),
 				},
 			],

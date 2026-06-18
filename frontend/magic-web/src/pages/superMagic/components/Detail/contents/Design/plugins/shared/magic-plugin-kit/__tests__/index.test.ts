@@ -495,6 +495,122 @@ describe("magic-plugin-kit", () => {
 		expect(nextButtons[1].classList.contains("is-active")).toBe(true)
 	})
 
+	it("supports multiple option-group selection and deselectable single options", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {
+				changeItems: [],
+				faceShape: "",
+			},
+			sections: [
+				{
+					id: "changeItems",
+					kind: "option-group",
+					stateKey: "changeItems",
+					title: "Change items",
+					required: true,
+					multiple: true,
+					options: [
+						{ value: "hair", label: "Hair" },
+						{ value: "face", label: "Face" },
+					],
+				},
+				{
+					id: "faceShape",
+					kind: "option-group",
+					stateKey: "faceShape",
+					title: "Face shape",
+					allowDeselect: true,
+					options: [
+						{ value: "oval", label: "Oval" },
+						{ value: "round", label: "Round" },
+					],
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		expect(root.querySelector(".mpk-section-required")?.textContent).toBe("必填")
+
+		const slots = root.querySelectorAll(".mpk-content > .mpk-slot")
+		const multipleButtons = slots[0].querySelectorAll<HTMLButtonElement>(".mpk-option")
+		multipleButtons[0].click()
+		multipleButtons[1].click()
+
+		let nextMultipleButtons = slots[0].querySelectorAll<HTMLButtonElement>(".mpk-option")
+		expect(nextMultipleButtons[0].classList.contains("is-active")).toBe(true)
+		expect(nextMultipleButtons[1].classList.contains("is-active")).toBe(true)
+
+		nextMultipleButtons[0].click()
+		nextMultipleButtons = slots[0].querySelectorAll<HTMLButtonElement>(".mpk-option")
+		expect(nextMultipleButtons[0].classList.contains("is-active")).toBe(false)
+		expect(nextMultipleButtons[1].classList.contains("is-active")).toBe(true)
+
+		const singleButtons = slots[1].querySelectorAll<HTMLButtonElement>(".mpk-option")
+		expect(singleButtons[0].classList.contains("is-active")).toBe(false)
+		singleButtons[0].click()
+		let nextSingleButtons = slots[1].querySelectorAll<HTMLButtonElement>(".mpk-option")
+		expect(nextSingleButtons[0].classList.contains("is-active")).toBe(true)
+		nextSingleButtons[0].click()
+		nextSingleButtons = slots[1].querySelectorAll<HTMLButtonElement>(".mpk-option")
+		expect(nextSingleButtons[0].classList.contains("is-active")).toBe(false)
+	})
+
+	it("passes the selected state to patchOnSelect callbacks", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		const tabStates: unknown[] = []
+		const optionStates: unknown[] = []
+
+		kit.mount(ctx, root, {
+			initialState: {
+				mode: "image",
+				style: "",
+			},
+			sections: [
+				{
+					id: "mode",
+					kind: "tabs",
+					stateKey: "mode",
+					title: "Mode",
+					options: [
+						{ value: "image", label: "Image" },
+						{ value: "prompt", label: "Prompt" },
+					],
+					patchOnSelect: (_value: string, { state }: { state: Record<string, unknown> }) => {
+						tabStates.push(state.mode)
+						return {}
+					},
+				},
+				{
+					id: "style",
+					kind: "option-group",
+					stateKey: "style",
+					title: "Style",
+					options: [
+						{ value: "clean", label: "Clean" },
+						{ value: "bold", label: "Bold" },
+					],
+					patchOnSelect: (_value: string, { state }: { state: Record<string, unknown> }) => {
+						optionStates.push(state.style)
+						return {}
+					},
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		root.querySelectorAll<HTMLButtonElement>(".mpk-tabs-trigger")[1].click()
+		root.querySelectorAll<HTMLButtonElement>(".mpk-option")[1].click()
+
+		expect(tabStates).toEqual(["prompt"])
+		expect(optionStates).toEqual(["bold"])
+	})
+
 	it("renders tabs panels and switches visible content", () => {
 		const kit = loadMagicPluginKit()
 		const root = createRoot()
@@ -819,6 +935,83 @@ describe("magic-plugin-kit", () => {
 		expect(generateAndPlace).toHaveBeenCalledTimes(2)
 		expect(generateAndPlace).toHaveBeenNthCalledWith(1, { prompt: "first-request" })
 		expect(generateAndPlace).toHaveBeenNthCalledWith(2, { prompt: "second-request" })
+	})
+
+	it("shows a start toast after validation passes and before generation runs", async () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		const buildRequest = vi.fn(() => ({ prompt: "request" }))
+		ctx.ai = {
+			generateAndPlace: vi.fn().mockResolvedValue({ elementIds: ["result"] }),
+		}
+
+		kit.mount(ctx, root, {
+			initialState: {},
+			sections: [],
+			generate: {
+				...createGenerateConfig(),
+				startMessage: "Custom start",
+				buildRequest,
+			},
+		})
+
+		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+		await vi.waitFor(() => {
+			expect(buildRequest).toHaveBeenCalledTimes(1)
+		})
+		expect(ctx.ui.toast).toHaveBeenCalledWith("Custom start", "info")
+		expect(ctx.ui.toast).toHaveBeenCalledTimes(1)
+	})
+
+	it("uses an English default start toast outside Chinese locales", async () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx() as ReturnType<typeof createCtx> & {
+			i18n: ReturnType<typeof createCtx>["i18n"] & { locale?: string }
+		}
+		const buildRequest = vi.fn(() => ({ prompt: "request" }))
+		ctx.i18n.locale = "en-US"
+		ctx.ai = {
+			generateAndPlace: vi.fn().mockResolvedValue({ elementIds: ["result"] }),
+		}
+
+		kit.mount(ctx, root, {
+			initialState: {},
+			sections: [],
+			generate: {
+				...createGenerateConfig(),
+				buildRequest,
+			},
+		})
+
+		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+		await vi.waitFor(() => {
+			expect(buildRequest).toHaveBeenCalledTimes(1)
+		})
+		expect(ctx.ui.toast).toHaveBeenCalledWith("Generation started", "info")
+	})
+
+	it("does not show a start toast when validation fails", () => {
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+
+		kit.mount(ctx, root, {
+			initialState: {},
+			sections: [],
+			generate: {
+				...createGenerateConfig(),
+				validate: () => "Missing input",
+			},
+		})
+
+		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+		expect(ctx.ui.toast).not.toHaveBeenCalled()
+		expect(root.querySelector(".mpk-error")?.textContent).toBe("Missing input")
 	})
 
 	it("renders a required marker for standard sections", () => {

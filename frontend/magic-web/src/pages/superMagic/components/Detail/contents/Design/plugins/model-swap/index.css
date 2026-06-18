@@ -1,4 +1,46 @@
-.model-swap .mpk-image-card-image,
 .model-swap .mpk-image-slot-preview {
 	max-height: 240px;
+}
+
+.model-swap .model-swap-change-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.model-swap .model-swap-change-grid .mpk-option-item,
+.model-swap .model-swap-change-grid .mpk-option {
+	width: 100%;
+	min-width: 0;
+}
+
+.model-swap .model-swap-change-grid .mpk-option {
+	justify-content: flex-start;
+	text-align: left;
+}
+
+.model-swap .model-swap-appearance-grid {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.model-swap .model-swap-appearance-grid .mpk-option-item {
+	width: 100%;
+}
+
+.model-swap .model-swap-appearance-grid .mpk-card-tab {
+	width: 100%;
+	align-items: center;
+	justify-content: center;
+}
+
+.model-swap .model-swap-skin-grid .mpk-option {
+	padding: 7px 10px;
+}
+
+@media (max-width: 360px) {
+	.model-swap .model-swap-change-grid,
+	.model-swap .model-swap-appearance-grid {
+		grid-template-columns: 1fr;
+	}
 }
