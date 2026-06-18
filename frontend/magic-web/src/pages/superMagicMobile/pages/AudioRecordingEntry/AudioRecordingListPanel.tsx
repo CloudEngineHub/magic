@@ -16,6 +16,7 @@ import {
 	isAudioProjectPreviewReady,
 	resolveRecordingDisplayName,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
+import { shouldResolveOptimisticItem } from "@/pages/superMagic/pages/AudioRecordings/utils/resolve-optimistic-item"
 import { UNGROUPED_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
 import { SuperMagicApi } from "@/apis"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
@@ -69,17 +70,6 @@ interface ShareSheetState {
 	attachmentList: AttachmentItem[]
 }
 
-function shouldKeepOptimisticDurationFallback(
-	authoritativeItem: AudioProjectListItem,
-	optimisticItem: AudioProjectListItem,
-): boolean {
-	return (
-		authoritativeItem.card_status === "summarizing" &&
-		(authoritativeItem.duration ?? 0) <= 0 &&
-		(optimisticItem.duration ?? 0) > 0
-	)
-}
-
 function mergeAudioRecordingItems(
 	authoritativeItem: AudioProjectListItem,
 	optimisticItem?: AudioProjectListItem,
@@ -88,7 +78,8 @@ function mergeAudioRecordingItems(
 
 	// If the optimistic item is currently uploading or has failed upload, preserve the upload state.
 	// This ensures that the upload progress bar and controls remain visible even if the backend list
-	// returns a preliminary record (e.g. not_summarized) for this project.
+	// returns a preliminary record (e.g. not_summarized) for this project. Per issue 录音状态核对.md,
+	// every other backend state directly replaces the local placeholder.
 	const isUploading =
 		optimisticItem.card_status === "uploading" ||
 		optimisticItem.card_status === "upload_failed" ||
@@ -105,16 +96,7 @@ function mergeAudioRecordingItems(
 		}
 	}
 
-	if (!shouldKeepOptimisticDurationFallback(authoritativeItem, optimisticItem)) {
-		return authoritativeItem
-	}
-
-	// The backend row is still authoritative for status and navigation fields, but
-	// freshly recorded items can keep the local session duration until merge finishes.
-	return {
-		...authoritativeItem,
-		duration: optimisticItem.duration,
-	}
+	return authoritativeItem
 }
 
 function AudioRecordingListPanel({
@@ -234,7 +216,10 @@ function AudioRecordingListPanel({
 	const authoritativeItemsIdsStr = store.list.map((item) => item.id).join(",")
 
 	// Detect when authoritative list catches up with the optimistic uploads and resolves them.
-	// We serialize id, status, and duration into the dependency list to force execution on property updates.
+	// Per issue 录音状态核对.md, the optimistic item is replaced by the authoritative row as soon
+	// as the backend returns the project — unless the optimistic item is still uploading, in which
+	// case the upload UI must stay visible. We serialize id/status/duration into the dependency list
+	// to force execution on property updates.
 	useEffect(() => {
 		if (!optimisticItems.length) return
 
@@ -245,7 +230,7 @@ function AudioRecordingListPanel({
 				const authoritativeItem = store.list.find((entry) => entry.id === projectId)
 				if (!optimisticItem || !authoritativeItem) return false
 
-				return !shouldKeepOptimisticDurationFallback(authoritativeItem, optimisticItem)
+				return shouldResolveOptimisticItem(optimisticItem)
 			})
 
 		if (!hydratedIds.length) return

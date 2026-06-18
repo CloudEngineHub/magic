@@ -16,6 +16,7 @@ vi.mock("react-i18next", () => ({
 				"card.sourceRecorded": "Phone mic",
 				"card.sourceImported": "Imported audio",
 				"card.sourceDevice": "Device recording",
+				"card.sourcePc": "PC",
 				"card.summarized": "Summarized",
 				"card.summarizing": "Summarizing now",
 				"card.notSummarized": "Not summarized",
@@ -225,10 +226,11 @@ describe("AudioRecordingCard", () => {
 		expect(onSummarize).toHaveBeenCalledTimes(1)
 	})
 
-	it("shows device id as source label", () => {
+	it("shows device id as source label for app recordings", () => {
 		render(
 			<AudioRecordingCard
 				item={createItem({
+					source: "app",
 					device_id: "Redmi K70 Ultra",
 					card_status: "not_summarized",
 					is_summarized: false,
@@ -238,6 +240,38 @@ describe("AudioRecordingCard", () => {
 
 		expect(screen.getByTestId("audio-recording-card-project-1-source")).toHaveTextContent(
 			"Redmi K70 Ultra",
+		)
+	})
+
+	it("shows fixed PC label for pc source recordings", () => {
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					source: "pc",
+					device_id: "Web",
+					card_status: "not_summarized",
+					is_summarized: false,
+				})}
+			/>,
+		)
+
+		expect(screen.getByTestId("audio-recording-card-project-1-source")).toHaveTextContent("PC")
+	})
+
+	it("shows fixed phone label for h5 source recordings ignoring device_id", () => {
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					source: "h5",
+					device_id: "Web",
+					card_status: "not_summarized",
+					is_summarized: false,
+				})}
+			/>,
+		)
+
+		expect(screen.getByTestId("audio-recording-card-project-1-source")).toHaveTextContent(
+			"Phone mic",
 		)
 	})
 

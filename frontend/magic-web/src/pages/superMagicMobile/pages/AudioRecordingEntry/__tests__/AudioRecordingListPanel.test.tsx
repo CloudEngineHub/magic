@@ -321,7 +321,10 @@ describe("AudioRecordingListPanel", () => {
 		})
 	})
 
-	it("keeps optimistic duration when the authoritative summarizing row still reports zero seconds", () => {
+	it("replaces optimistic duration with the authoritative row when the local item is not uploading", async () => {
+		// Per issue 录音状态核对.md, non-uploading optimistic items are directly replaced by the
+		// authoritative backend row — even when the backend summarizing row still reports zero duration.
+		const onResolveOptimisticItem = vi.fn()
 		mockStore.showInitialSkeleton = false
 		mockStore.isEmpty = false
 		mockStore.list = [
@@ -357,13 +360,62 @@ describe("AudioRecordingListPanel", () => {
 						is_summarized: false,
 					},
 				]}
+				onResolveOptimisticItem={onResolveOptimisticItem}
 			/>,
 		)
 
-		expect(screen.getByTestId("mobile-recording-card-proj-recorded-001")).toHaveAttribute(
-			"data-duration",
-			"754",
+		// The optimistic item is cleared so the backend row (duration=0) takes over.
+		await waitFor(() => {
+			expect(onResolveOptimisticItem).toHaveBeenCalledWith("proj-recorded-001")
+		})
+	})
+
+	it("does not resolve an optimistic item that is still uploading", () => {
+		// Upload-in-flight optimistic items must stay visible even when the backend already returns
+		// a row for the same project, otherwise the progress bar / retry UI disappears prematurely.
+		const onResolveOptimisticItem = vi.fn()
+		mockStore.showInitialSkeleton = false
+		mockStore.isEmpty = false
+		mockStore.list = [
+			{
+				id: "proj-importing-001",
+				project_name: "Importing audio",
+				created_at: 1710000003,
+				duration: 0,
+				tags: [],
+				device_id: "",
+				audio_source: "imported",
+				current_phase: "merging",
+				phase_status: "completed",
+				card_status: "not_summarized",
+				is_summarized: false,
+			},
+		]
+
+		render(
+			<AudioRecordingListPanel
+				optimisticItems={[
+					{
+						id: "proj-importing-001",
+						project_name: "Importing audio",
+						created_at: 1710000003,
+						duration: 0,
+						tags: [],
+						device_id: "",
+						audio_source: "imported",
+						current_phase: "summarizing",
+						phase_status: "in_progress",
+						card_status: "uploading",
+						is_summarized: false,
+						transferStatus: "transferring",
+						transferProgress: 0.42,
+					},
+				]}
+				onResolveOptimisticItem={onResolveOptimisticItem}
+			/>,
 		)
+
+		expect(onResolveOptimisticItem).not.toHaveBeenCalled()
 	})
 
 	it("clears the matching optimistic item after a successful delete", async () => {

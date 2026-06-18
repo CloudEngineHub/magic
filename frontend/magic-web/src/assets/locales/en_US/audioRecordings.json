@@ -27,6 +27,7 @@
 		"sourceDevice": "Device recording",
 		"sourceImported": "Imported audio",
 		"sourceRecorded": "Phone mic",
+		"sourcePc": "Desktop",
 		"summarize": "Summarize",
 		"summarized": "Summarized",
 		"summarizing": "Summarizing now"

@@ -11,7 +11,7 @@ export interface BatchMoveProjectsParams {
 export interface CreateAudioProjectParams {
 	project_name: string
 	workspace_id?: string
-	source: "app" | "device"
+	source: "app" | "device" | "h5" | "pc"
 	device_id?: string
 	is_hidden?: boolean
 	task_key: string

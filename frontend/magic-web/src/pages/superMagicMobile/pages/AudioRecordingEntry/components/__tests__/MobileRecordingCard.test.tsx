@@ -11,6 +11,7 @@ vi.mock("react-i18next", () => ({
 				"card.sourceRecorded": "Phone mic",
 				"card.sourceImported": "Imported audio",
 				"card.sourceDevice": "Device recording",
+				"card.sourcePc": "PC",
 				"card.summarized": "Summarized",
 				"card.summarizing": "Summarizing now",
 				"card.notSummarized": "Not summarized",
@@ -203,6 +204,32 @@ describe("MobileRecordingCard", () => {
 		)
 
 		expect(screen.getByText("12:34")).toBeInTheDocument()
+	})
+
+	it("shows fixed PC label for pc source recordings", () => {
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					source: "pc",
+					device_id: "Web",
+				})}
+			/>,
+		)
+
+		expect(screen.getByText("PC")).toBeInTheDocument()
+	})
+
+	it("shows fixed phone label for h5 source recordings ignoring device_id", () => {
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					source: "h5",
+					device_id: "Web",
+				})}
+			/>,
+		)
+
+		expect(screen.getByText("Phone mic")).toBeInTheDocument()
 	})
 
 	it("renders transferring progress state and hides time meta", () => {

@@ -16,10 +16,8 @@ import {
 	FolderOpen,
 	Loader2,
 	PenLine,
-	Smartphone,
 	Sparkles,
 	Trash2,
-	Upload,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -37,6 +35,7 @@ import {
 	isRecordingDurationPending,
 	isAudioProjectPreviewReady,
 	resolveRecordingDisplayName,
+	resolveRecordingSourceIcon,
 	resolveRecordingSourceLabel,
 } from "../utils/audio-recordings-utils"
 import {
@@ -389,11 +388,12 @@ function AudioRecordingCard({
 		sourceRecorded: t("card.sourceRecorded"),
 		sourceImported: t("card.sourceImported"),
 		sourceDevice: t("card.sourceDevice"),
+		sourcePc: t("card.sourcePc"),
 	})
 	const createdLabel = formatRecordingCreatedTime(item.created_at)
 	const isDurationPending = isRecordingDurationPending(item)
 	const durationLabel = formatRecordingDuration(item.duration)
-	const SourceIcon = item.audio_source === "imported" ? Upload : Smartphone
+	const SourceIcon = resolveRecordingSourceIcon(item)
 	const summaryButtonLabel =
 		summaryButtonVariant === "retry" ? t("card.retrySummary") : t("card.summarize")
 

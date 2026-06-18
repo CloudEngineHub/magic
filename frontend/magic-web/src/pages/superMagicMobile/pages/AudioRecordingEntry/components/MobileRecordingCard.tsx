@@ -1,15 +1,12 @@
 import { memo, type ComponentType } from "react"
 import {
 	AudioLines,
-	Bluetooth,
 	CheckCircle2,
 	Clock,
 	Ellipsis,
 	FileAudio,
 	Loader,
-	Smartphone,
 	Sparkles,
-	Upload,
 	AlertTriangle,
 	CloudUpload,
 	RefreshCw,
@@ -22,6 +19,7 @@ import {
 	isAudioProjectPreviewReady,
 	parseAudioProjectTimestamp,
 	resolveRecordingDisplayName,
+	resolveRecordingSourceIcon,
 	resolveRecordingSourceLabel,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
 import { formatRelativeTime } from "@/utils/string"
@@ -162,17 +160,6 @@ function ChipMuted(props: {
 
 const relativeTimeFormatter = formatRelativeTime()
 
-/** Picks the source icon based on extra.source:
- * - 'device': Bluetooth/external recorder → Bluetooth icon
- * - 'app' or fallback: recorded from mobile app → Smartphone icon
- * Note: 'imported' audio_source keeps Upload icon regardless of source field
- */
-function resolveSourceIcon(item: AudioProjectListItem) {
-	if (item.audio_source === "imported") return Upload
-	if (item.source === "device") return Bluetooth
-	return Smartphone
-}
-
 /** Resolves card duration label: valid seconds are formatted, otherwise show static fallback. */
 function resolveCardDurationLabel(item: AudioProjectListItem): string {
 	const hasValidDuration = Number.isFinite(item.duration) && (item.duration ?? 0) > 0
@@ -201,8 +188,9 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 		sourceRecorded: t("card.sourceRecorded"),
 		sourceImported: t("card.sourceImported"),
 		sourceDevice: t("card.sourceDevice"),
+		sourcePc: t("card.sourcePc"),
 	})
-	const SourceIcon = resolveSourceIcon(item)
+	const SourceIcon = resolveRecordingSourceIcon(item)
 
 	const isUploading = item.card_status === "uploading"
 	const isUploadFailed = item.card_status === "upload_failed"

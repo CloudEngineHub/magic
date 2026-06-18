@@ -171,6 +171,10 @@ vi.mock("@/apis", () => ({
 	SuperMagicApi: superMagicApiMock,
 }))
 
+vi.mock("@/hooks/useIsMobile", () => ({
+	useIsMobile: () => false,
+}))
+
 vi.mock("@/pages/superMagic/components/MessageEditor/hooks/useFileUpload", () => {
 	return {
 		UploadSource: {
@@ -336,6 +340,7 @@ describe("useRecordingEntryFacade", () => {
 			expect.objectContaining({
 				workspace_id: "workspace-audio-001",
 				audio_source: "recorded",
+				source: "pc",
 			}),
 		)
 		expect(runtimeMock.actions.startRecording).toHaveBeenCalledWith(

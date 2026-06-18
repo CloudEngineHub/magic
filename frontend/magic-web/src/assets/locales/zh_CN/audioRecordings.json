@@ -27,6 +27,7 @@
 		"sourceDevice": "设备录音",
 		"sourceImported": "导入音频",
 		"sourceRecorded": "手机麦克风",
+		"sourcePc": "PC",
 		"summarize": "总结",
 		"summarized": "已总结",
 		"summarizing": "正在总结"

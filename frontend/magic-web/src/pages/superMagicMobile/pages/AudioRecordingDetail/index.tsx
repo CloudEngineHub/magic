@@ -577,6 +577,9 @@ export default function MobileAudioRecordingDetailPage() {
 				onDelete={handleDelete}
 				onSummarize={handleSummarize}
 				onMoveToGroup={handleOpenMoveGroup}
+				// Wire the more-actions "share" entry to the same share & export sheet opened by the header share button,
+				// matching the prototype's single-share-sheet behavior (RecordingDetailScreen onShare).
+				onShare={openShareExportSheet}
 				isSubmittingAction={actionSubmitting}
 				isSubmittingSummary={summarySubmitting}
 				showRegenerateAction

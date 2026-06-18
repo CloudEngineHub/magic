@@ -597,6 +597,15 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(screen.queryByTestId("mobile-recording-summary-panel")).toBeNull()
 	})
 
+	it("opens the share & export sheet from the more-actions sheet share button", async () => {
+		render(<MobileAudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByLabelText("More actions"))
+		fireEvent.click(await screen.findByTestId("mobile-recording-more-share"))
+
+		expect(await screen.findByTestId("mobile-recording-share-export-sheet")).toBeInTheDocument()
+	})
+
 	it("passes deleted project id when navigating back to the list after delete", async () => {
 		render(<MobileAudioRecordingDetailPage />)
 

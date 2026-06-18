@@ -1,4 +1,5 @@
 import i18next from "i18next"
+import { Bluetooth, Monitor, Smartphone, Upload, type LucideIcon } from "lucide-react"
 import type {
 	AudioProjectListItem,
 	AudioProjectSortBy,
@@ -166,19 +167,22 @@ export function resolveRecordingDisplayName(
 }
 
 /** Resolves source label from normalized fields:
+ * - audio_source === 'imported': always show sourceImported
  * - source === 'device': prefer device_id (device name) or sourceDevice fallback
  * - source === 'app': prefer device_id name or sourceRecorded fallback
- * - audio_source === 'imported': always show sourceImported
- * - default: sourceRecorded
+ * - source === 'pc': fixed sourcePc label (device_id ignored — not user-meaningful)
+ * - source === 'h5' or legacy: fixed sourceRecorded label
  *
- * Currently consumed by: H5 MobileRecordingCard (chip label).
- * TODO(pc-source-label): PC list card does not yet show a source chip.
- * When it does, verify whether PC needs a different label strategy
- * (e.g. showing model name or upload origin) before reusing this function.
+ * Consumed by both H5 MobileRecordingCard and PC AudioRecordingCard.
  */
 export function resolveRecordingSourceLabel(
 	item: AudioProjectListItem,
-	labels: { sourceRecorded: string; sourceImported: string; sourceDevice: string },
+	labels: {
+		sourceRecorded: string
+		sourceImported: string
+		sourceDevice: string
+		sourcePc: string
+	},
 ): string {
 	if (item.audio_source === "imported") return labels.sourceImported
 
@@ -194,10 +198,28 @@ export function resolveRecordingSourceLabel(
 		return deviceName || labels.sourceRecorded
 	}
 
-	// Legacy fallback: if device_id exists treat as device recording
-	if (deviceName) return deviceName
-	if (item.audio_source === "recorded") return labels.sourceRecorded
+	// PC web recordings use a fixed label; the generic "Web" device_id is not user-meaningful
+	if (item.source === "pc") return labels.sourcePc
+
+	// h5 and legacy fallback: fixed label, ignore device_id
 	return labels.sourceRecorded
+}
+
+/**
+ * Picks the source icon based on extra.source + audio_source:
+ * - imported audio_source → Upload (regardless of source field)
+ * - 'device' → Bluetooth (external recorder)
+ * - 'pc' → Monitor (desktop web)
+ * - 'app', 'h5', or fallback → Smartphone
+ *
+ * Shared by both H5 MobileRecordingCard and PC AudioRecordingCard so the
+ * icon mapping stays single-sourced across platforms.
+ */
+export function resolveRecordingSourceIcon(item: AudioProjectListItem): LucideIcon {
+	if (item.audio_source === "imported") return Upload
+	if (item.source === "device") return Bluetooth
+	if (item.source === "pc") return Monitor
+	return Smartphone
 }
 
 /** Converts Date to unix timestamp (seconds) at start of local day */

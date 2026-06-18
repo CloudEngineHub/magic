@@ -160,23 +160,17 @@ vi.mock("@/stores/superMagic/topicModelStore", () => ({
 	},
 }))
 
-vi.mock(
-	"@/pages/superMagic/pages/AudioRecordings/apis/recording-settings-api",
-	() => ({
-		getRecordingTopicModel: (...args: any[]) =>
-			recordingTopicModelApiMock.getRecordingTopicModel(...args),
-	}),
-)
+vi.mock("@/pages/superMagic/pages/AudioRecordings/apis/recording-settings-api", () => ({
+	getRecordingTopicModel: (...args: any[]) =>
+		recordingTopicModelApiMock.getRecordingTopicModel(...args),
+}))
 
-vi.mock(
-	"@/pages/superMagic/pages/AudioRecordings/utils/summary-model-list",
-	() => ({
-		fetchSummaryModelGroups: (...args: any[]) =>
-			summaryModelListMock.fetchSummaryModelGroups(...args),
-		resolveDefaultSummaryModelId: (...args: any[]) =>
-			summaryModelListMock.resolveDefaultSummaryModelId(...args),
-	}),
-)
+vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/summary-model-list", () => ({
+	fetchSummaryModelGroups: (...args: any[]) =>
+		summaryModelListMock.fetchSummaryModelGroups(...args),
+	resolveDefaultSummaryModelId: (...args: any[]) =>
+		summaryModelListMock.resolveDefaultSummaryModelId(...args),
+}))
 
 vi.mock("@/services/audioRecordings/AudioRecordingsService", () => ({
 	get audioRecordingsService() {
@@ -188,6 +182,10 @@ vi.mock("@/apis", () => ({
 	get SuperMagicApi() {
 		return superMagicApiMock
 	},
+}))
+
+vi.mock("@/hooks/useIsMobile", () => ({
+	useIsMobile: () => true,
 }))
 
 vi.mock("@/pages/superMagic/components/MessageEditor/hooks/useFileUpload", () => {
@@ -353,6 +351,7 @@ describe("useMobileRecordingEntryFacade", () => {
 			expect.objectContaining({
 				workspace_id: "workspace-audio-001",
 				audio_source: "recorded",
+				source: "h5",
 			}),
 		)
 		expect(runtimeMock.actions.startRecording).toHaveBeenCalledWith(

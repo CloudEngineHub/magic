@@ -14,6 +14,7 @@ import { RECORD_SUMMARY_EVENTS } from "@/services/recordSummary/const/events"
 import recordSummaryStore from "@/stores/recordingSummary"
 import topicModelStore from "@/stores/superMagic/topicModelStore"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { getRecordingTopicModel } from "../apis/recording-settings-api"
 import { fetchSummaryModelGroups, resolveDefaultSummaryModelId } from "../utils/summary-model-list"
 import { getCachedRecordingSettings } from "./useRecordingSettings"
@@ -161,6 +162,7 @@ export function buildOptimisticRecordingItem(params: {
 	taskKey?: string
 	audioSource?: "recorded" | "imported"
 	topicId?: string
+	source?: string | null
 }): AudioProjectListItem {
 	return {
 		id: params.projectId,
@@ -183,6 +185,7 @@ export function buildOptimisticRecordingItem(params: {
 		audio_file_id: params.audioFileId,
 		task_key: params.taskKey,
 		topic_id: params.topicId,
+		source: params.source ?? null,
 	}
 }
 
@@ -267,6 +270,10 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	const { t } = useTranslation("super")
 	const runtime = useRecordingEditorRuntime()
 	const recordSummaryService = initializeService()
+	// Resolve the web recording source so backend can distinguish H5 vs PC origins;
+	// consumed by createAudioProject and seeded onto optimistic cards for immediate icon/label.
+	const isMobile = useIsMobile()
+	const recordingSource: "h5" | "pc" = isMobile ? "h5" : "pc"
 	const [presentation, setPresentation] = useState<EntryPresentation>(() =>
 		recordSummaryStore.status === "init" ? "list" : "recording",
 	)
@@ -341,7 +348,8 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				task_key: options.taskKey,
 				auto_summary: autoSummary,
 				model_id: options.modelId,
-				source: "app",
+				// Distinguish H5 vs PC web origin so list cards can render the right source icon/label
+				source: recordingSource,
 				device_id: "Web",
 				audio_source: options.audioSource,
 				is_hidden: false,
@@ -355,7 +363,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				topic: createdProject.topic,
 			}
 		},
-		[],
+		[recordingSource],
 	)
 
 	/**
@@ -567,6 +575,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 							modelId: result.model_id,
 							duration: localDurationSeconds,
 							topicId: result.topic_id,
+							source: recordingSource,
 						}),
 					)
 					setRefreshToken((currentToken) => currentToken + 1)
@@ -579,7 +588,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		} catch {
 			toast.error(t("recordingSummary.message.summaryGenerationFailed"))
 		}
-	}, [runtime.actions, runtime.state.duration, t])
+	}, [runtime.actions, runtime.state.duration, recordingSource, t])
 
 	/**
 	 * Updates the lightweight recording note content in-place.
@@ -622,7 +631,14 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	)
 
 	const clearOptimisticItem = useCallback((projectId: string) => {
+		// Cancel any active upload task first (no-op when no task exists, e.g. after
+		// upload completed or for recorded items that never create an import task).
 		audioImportStore.cancelImport(projectId)
+		// Unconditionally remove the optimistic placeholder from the store. The
+		// cancelImport call above early-returns when importingTasks has no entry
+		// for this project, which would otherwise skip the clear and leave stale
+		// optimistic items in the list forever.
+		audioRecordingsStore.clearOptimisticItem(projectId)
 	}, [])
 
 	const retryImport = useCallback(async (projectId: string) => {
@@ -662,6 +678,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				taskKey,
 				audioSource: "imported",
 				topicId: audioProjectContext.topic.id,
+				source: recordingSource,
 			})
 			initialOptimisticItem.transferStatus = "transferring"
 			initialOptimisticItem.transferProgress = 0
@@ -678,7 +695,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				taskKey,
 			})
 		},
-		[createAudioProjectContext, resolveRecordingModel, t],
+		[createAudioProjectContext, resolveRecordingModel, recordingSource, t],
 	)
 
 	return {

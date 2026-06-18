@@ -112,13 +112,11 @@ export interface AudioProjectListItem {
 	audio_file_id?: string
 	model_id?: string
 	/**
-	 * Recording device source from extra.source:
-	 * - 'app': recorded via mobile app (show Smartphone icon)
-	 * - 'device': recorded via Bluetooth/external device (show Bluetooth icon)
-	 *
-	 * TODO(pc-source-icon): PC list card currently renders no source icon.
-	 * When PC adds its own source icon, evaluate whether the same 'app'/'device'
-	 * values cover PC semantics, or whether a separate pc_source field is needed.
+	 * Recording source from extra.source:
+	 * - 'app': recorded via mobile app (Smartphone icon, shows device name)
+	 * - 'device': recorded via Bluetooth/external device (Bluetooth icon, shows device name)
+	 * - 'h5': recorded via H5 mobile web (Smartphone icon, fixed label)
+	 * - 'pc': recorded via PC web (Monitor icon, fixed label)
 	 */
 	source?: string | null
 	/** Upload progress fields aligned with prototype UI */
