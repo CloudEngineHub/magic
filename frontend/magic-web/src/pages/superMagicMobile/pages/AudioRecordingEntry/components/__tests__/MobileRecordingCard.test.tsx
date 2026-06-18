@@ -4,6 +4,7 @@ import type { AudioProjectListItem } from "@/types/audioProject"
 import { MobileRecordingCard } from "../MobileRecordingCard"
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({
 		t: (key: string) => {
 			const labels: Record<string, string> = {
@@ -27,12 +28,17 @@ vi.mock("@/utils/string", () => ({
 	formatTime: () => "Apr 10 09:15",
 }))
 
+vi.mock("@/services/audioRecordings", () => ({
+	ALL_RECORDING_GROUP_ID: "mock-all-group",
+}))
+
 vi.mock("i18next", () => ({
 	default: {
 		t: (key: string, options?: { datetime?: string }) => {
 			if (key === "defaultName") return `${options?.datetime} recording`
 			return key
 		},
+		use: vi.fn().mockReturnThis(),
 	},
 }))
 
@@ -110,7 +116,7 @@ describe("MobileRecordingCard", () => {
 		expect(screen.getByText("Generate summary")).toBeInTheDocument()
 	})
 
-	it("shows disabled summarizing CTA instead of status chip while in progress", () => {
+	it("shows summarizing indicator instead of status chip while in progress", () => {
 		render(
 			<MobileRecordingCard
 				item={createItem({
@@ -123,9 +129,33 @@ describe("MobileRecordingCard", () => {
 		)
 
 		expect(screen.queryByText("Not summarized")).toBeNull()
-		const summarizeButton = screen.getByTestId("mobile-recording-card-summarize-proj-beta-002")
-		expect(summarizeButton).toBeDisabled()
-		expect(summarizeButton).toHaveTextContent("Summarizing now")
+		const summarizeIndicator = screen.getByTestId(
+			"mobile-recording-card-summarize-proj-beta-002",
+		)
+		expect(summarizeIndicator.tagName).toBe("SPAN")
+		expect(summarizeIndicator).toHaveTextContent("Summarizing now")
+	})
+
+	it("navigates when summarizing card is clicked even without audio_file_id", () => {
+		const onOpen = vi.fn()
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					card_status: "summarizing",
+					is_summarized: false,
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+				})}
+				onOpen={onOpen}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-recording-card-proj-beta-002"))
+		expect(onOpen).toHaveBeenCalledTimes(1)
+
+		onOpen.mockClear()
+		fireEvent.click(screen.getByTestId("mobile-recording-card-summarize-proj-beta-002"))
+		expect(onOpen).toHaveBeenCalledTimes(1)
 	})
 
 	it("shows duration fallback while summarizing duration is unavailable", () => {

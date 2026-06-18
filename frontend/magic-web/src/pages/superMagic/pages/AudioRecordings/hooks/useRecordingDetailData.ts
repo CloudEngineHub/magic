@@ -3,15 +3,17 @@ import { SuperMagicApi } from "@/apis"
 import { getFileContentById, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import type { AudioProjectListItem } from "@/types/audioProject"
-import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { audioRecordingsService } from "@/services/audioRecordings"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { findAudioEntryFile } from "../utils/find-audio-entry-file"
 import type { LoadedRecordingTextFile, RecordingDetailFileMap } from "../types/recording-detail"
 import { parseMagicProjectConfig } from "../utils/magic-project-config"
 import { buildRecordingDetailFileMap, getAttachmentFileName } from "../utils/recording-detail-files"
-import { mergeProjectDetailIntoAudioItem } from "../utils/project-detail-merge"
 import { resolveRecordingDetailTitle } from "../utils/recording-detail-title"
+import {
+	isAudioProjectSummarizing,
+	isAudioProjectSummaryReady,
+} from "../utils/audio-recordings-utils"
 
 interface UseRecordingDetailDataInput {
 	projectId: string
@@ -27,11 +29,10 @@ interface RecordingDetailTextState {
 
 /** Loads recording preview data from project attachments and completed markdown files. */
 export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
-	const { projectId } = input
+	const { projectId, initialTitle } = input
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(false)
 	const [audioProjectItem, setAudioProjectItem] = useState<AudioProjectListItem | null>(null)
-	const [projectDetail, setProjectDetail] = useState<ProjectListItem | null>(null)
 	const [fileMap, setFileMap] = useState<RecordingDetailFileMap | null>(null)
 	const [texts, setTexts] = useState<RecordingDetailTextState>({ summary: {} })
 	const [audioUrl, setAudioUrl] = useState<string>("")
@@ -54,16 +55,14 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 		const currentProjectId = projectId
 		setLoading(true)
 		setError(false)
-		setProjectDetail(null)
 		setTexts({ summary: {} })
 		setAudioUrl("")
 		setAttachmentTree([])
 		setAttachmentList([])
 
 		try {
-			const [attachmentsResponse, projectDetail, item] = await Promise.all([
+			const [attachmentsResponse, item] = await Promise.all([
 				SuperMagicApi.getAttachmentsByProjectId({ projectId, temporaryToken: "" }),
-				loadProjectDetail(projectId),
 				loadSingleProject(projectId),
 			])
 			if (currentProjectId !== activeProjectIdRef.current) return
@@ -96,7 +95,6 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 			setAttachmentTree(processed.tree)
 			setAttachmentList(processed.list)
 			setAudioProjectItem(item)
-			setProjectDetail(projectDetail)
 			setFileMap(nextFileMap)
 			setTexts(nextTexts)
 			setAudioUrl(nextAudioUrl)
@@ -112,16 +110,10 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 		void loadDetail()
 	}, [loadDetail])
 
-	// Polls summary task status every 10s if in progress
+	// Polls summary task status every 10s while summarizing; stops when summary is ready.
 	useEffect(() => {
-		if (!projectId) return
-
-		const isSummarizing =
-			audioProjectItem?.card_status === "summarizing" ||
-			(audioProjectItem?.current_phase === "summarizing" &&
-				audioProjectItem?.phase_status === "in_progress")
-
-		if (!isSummarizing) return
+		if (!projectId || !audioProjectItem) return
+		if (!isAudioProjectSummarizing(audioProjectItem)) return
 
 		const currentProjectId = projectId
 		let timerId: ReturnType<typeof setInterval> | null = null
@@ -132,15 +124,13 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 				if (currentProjectId !== activeProjectIdRef.current) return
 				if (!latestItem) return
 
-				const latestIsSummarizing =
-					latestItem.card_status === "summarizing" ||
-					(latestItem.current_phase === "summarizing" &&
-						latestItem.phase_status === "in_progress")
-
-				if (!latestIsSummarizing) {
+				if (isAudioProjectSummaryReady(latestItem)) {
 					if (timerId) clearInterval(timerId)
 					void loadDetail()
-				} else {
+					return
+				}
+
+				if (isAudioProjectSummarizing(latestItem)) {
 					setAudioProjectItem(latestItem)
 				}
 			} catch (err) {
@@ -148,27 +138,34 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 			}
 		}
 
+		void pollStatus()
 		timerId = setInterval(pollStatus, 10000)
 
 		return () => {
 			if (timerId) clearInterval(timerId)
 		}
-	}, [projectId, audioProjectItem, loadDetail])
+		// Narrow phase fields so polling timer is not reset on every poll response object swap.
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: avoid resetting interval on item reference change
+	}, [
+		projectId,
+		audioProjectItem?.card_status,
+		audioProjectItem?.current_phase,
+		audioProjectItem?.phase_status,
+		loadDetail,
+	])
 
 	const mutateAudioProjectItem = useCallback((item: AudioProjectListItem) => {
 		setAudioProjectItem(item)
 	}, [])
 
-	const projectItem = useMemo(
-		() => mergeProjectDetailIntoAudioItem(audioProjectItem, projectDetail),
-		[audioProjectItem, projectDetail],
-	)
+	const projectItem = audioProjectItem
 
 	const title = useMemo(() => {
 		return resolveRecordingDetailTitle({
-			projectName: projectDetail?.project_name,
+			projectName: audioProjectItem?.project_name,
+			initialTitle,
 		})
-	}, [projectDetail?.project_name])
+	}, [audioProjectItem?.project_name, initialTitle])
 
 	return {
 		loading,
@@ -197,15 +194,6 @@ async function loadSingleProject(projectId: string): Promise<AudioProjectListIte
 		projectIds: [projectId],
 	})
 	return data.list[0] ?? null
-}
-
-/** Loads canonical project metadata. */
-async function loadProjectDetail(projectId: string): Promise<ProjectListItem | null> {
-	try {
-		return await SuperMagicApi.getProjectDetail({ id: projectId })
-	} catch {
-		return null
-	}
 }
 
 /** Finds the special config file generated beside recording project assets. */

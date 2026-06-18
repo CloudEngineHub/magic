@@ -31,7 +31,11 @@ import {
 	renameAudioRecordingProject,
 	submitAudioRecordingSummary,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions"
-import { resolveRecordingDisplayName } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
+import {
+	isAudioProjectSummarizing,
+	isAudioProjectSummaryReady,
+	resolveRecordingDisplayName,
+} from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
 import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
 import type { MobileRecordingTopTab } from "./types"
 import { useMobileRecordingAudioPlayer } from "./hooks/useMobileRecordingAudioPlayer"
@@ -118,16 +122,17 @@ export default function MobileAudioRecordingDetailPage() {
 		setSpeakerNameOverrides(fileMap?.magicProjectConfig?.metadata?.speakers ?? {})
 	}, [fileMap?.magicProjectConfig?.metadata?.speakers, projectId])
 
-	const summaryReady =
-		(detailItem?.card_status ?? projectItem?.card_status ?? locationState?.cardStatus) ===
-			"summarized" ||
-		((detailItem?.current_phase ?? projectItem?.current_phase) === "summarizing" &&
-			(detailItem?.phase_status ?? projectItem?.phase_status) === "completed")
-	const summarizing =
-		(detailItem?.card_status ?? projectItem?.card_status ?? locationState?.cardStatus) ===
-			"summarizing" ||
-		((detailItem?.current_phase ?? projectItem?.current_phase) === "summarizing" &&
-			(detailItem?.phase_status ?? projectItem?.phase_status) === "in_progress")
+	const summaryReady = useMemo(() => {
+		const item = detailItem ?? projectItem
+		if (item) return isAudioProjectSummaryReady(item)
+		return locationState?.cardStatus === "summarized"
+	}, [detailItem, locationState?.cardStatus, projectItem])
+
+	const summarizing = useMemo(() => {
+		const item = detailItem ?? projectItem
+		if (item) return isAudioProjectSummarizing(item)
+		return locationState?.cardStatus === "summarizing"
+	}, [detailItem, locationState?.cardStatus, projectItem])
 	const displayTitle = titleOverride || title || t("detail.untitled")
 	const resolvedActionItem = useMemo(
 		() =>
@@ -371,9 +376,7 @@ export default function MobileAudioRecordingDetailPage() {
 			const optimisticItem = buildOptimisticSummarizingProject(item)
 			setDetailItem(optimisticItem)
 			mutateAudioProjectItem(optimisticItem)
-			if (activeTab === "summary") {
-				setActiveTab("summary")
-			}
+			setActiveTab("summary")
 			return true
 		} finally {
 			setSummarySubmitting(false)
@@ -879,15 +882,30 @@ function SummaryPlaceholder({ summarizing }: { summarizing: boolean }) {
 	const { t } = useTranslation("audioRecordings")
 
 	return (
-		<div className="flex h-full items-center justify-center px-8 text-center">
+		<div
+			className="flex h-full items-center justify-center px-8 text-center"
+			role="status"
+			data-testid="mobile-recording-summary-placeholder"
+		>
 			<div className="flex flex-col items-center gap-3">
-				<div className="flex size-12 items-center justify-center rounded-2xl bg-card">
-					<Sparkles className={cn("size-5", summarizing && "animate-pulse")} />
+				<div
+					className={cn(
+						"flex items-center justify-center",
+						summarizing
+							? "rounded-full bg-muted p-4 text-muted-foreground"
+							: "size-12 rounded-2xl bg-card",
+					)}
+				>
+					{summarizing ? (
+						<Loader2 className="size-8 animate-spin" strokeWidth={1.5} />
+					) : (
+						<Sparkles className="size-5" />
+					)}
 				</div>
-				<p className="text-[15px] font-medium">
+				<p className="text-[16px] font-medium text-foreground">
 					{summarizing ? t("detail.summarizing") : t("detail.notSummarized")}
 				</p>
-				<p className="text-sm leading-6 text-muted-foreground">
+				<p className="max-w-[280px] text-[14px] leading-6 text-muted-foreground">
 					{summarizing ? t("detail.summarizingHint") : t("detail.notSummarizedHint")}
 				</p>
 			</div>

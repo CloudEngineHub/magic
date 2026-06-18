@@ -70,8 +70,8 @@
 		"speakerSettingsHint": "修改姓名后，全文使用该说话人的段落会同步更新。",
 		"speakerSettingsSave": "保存",
 		"speakerSettingsTitle": "说话人名称",
-		"summarizing": "总结中",
-		"summarizingHint": "总结完成后会在这里展示纪要、章节、精华和脑图。",
+		"summarizing": "总结中...",
+		"summarizingHint": "完成后会展示所有总结视图。",
 		"tabs": {
 			"followup": "待办事项",
 			"highlights": "精华",

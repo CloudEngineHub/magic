@@ -70,8 +70,8 @@
 		"speakerSettingsHint": "Renaming a speaker updates every paragraph they speak.",
 		"speakerSettingsSave": "Save",
 		"speakerSettingsTitle": "Speaker names",
-		"summarizing": "Summarizing",
-		"summarizingHint": "Minutes, chapters, highlights, and mind map will appear here when ready.",
+		"summarizing": "Generating summary...",
+		"summarizingHint": "All summary views will appear when it is ready.",
 		"tabs": {
 			"followup": "Follow-up",
 			"highlights": "Highlights",

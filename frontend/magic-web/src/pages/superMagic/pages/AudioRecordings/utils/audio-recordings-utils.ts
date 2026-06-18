@@ -98,6 +98,25 @@ export function isAudioProjectDetailReady(item: AudioProjectListItem): boolean {
 	return item.card_status === "summarized"
 }
 
+/** Whether the detail summary tab should render completed summary content */
+export function isAudioProjectSummaryReady(
+	item: Pick<AudioProjectListItem, "card_status" | "current_phase" | "phase_status">,
+): boolean {
+	if (item.card_status === "summarized") return true
+	return item.current_phase === "summarizing" && item.phase_status === "completed"
+}
+
+/** Whether the detail summary tab is in the summarizing placeholder state and should poll */
+export function isAudioProjectSummarizing(
+	item: Pick<AudioProjectListItem, "card_status" | "current_phase" | "phase_status">,
+): boolean {
+	if (item.card_status === "summarizing") return true
+	if (item.current_phase !== "summarizing") return false
+	// Match resolveCardStatus: phase present without a terminal status is still in progress.
+	if (item.phase_status === "completed" || item.phase_status === "failed") return false
+	return true
+}
+
 /** Whether the card can open raw audio playback while summary is pending or in progress */
 export function canPreviewRawAudioRecording(item: AudioProjectListItem): boolean {
 	const hasAudioFileId = Boolean(item.audio_file_id?.trim())
@@ -105,9 +124,11 @@ export function canPreviewRawAudioRecording(item: AudioProjectListItem): boolean
 	return item.card_status === "not_summarized" || item.card_status === "summarizing"
 }
 
-/** Whether the card can open a preview: HTML summary, or raw audio before summary completes */
+/** Whether the card can open detail: summarized HTML, raw audio preview, or summarizing placeholder */
 export function isAudioProjectPreviewReady(item: AudioProjectListItem): boolean {
 	if (item.card_status === "summarized") return true
+	// Summarizing items should open detail (placeholder + polling) even before audio_file_id hydrates.
+	if (item.card_status === "summarizing") return true
 	return canPreviewRawAudioRecording(item)
 }
 

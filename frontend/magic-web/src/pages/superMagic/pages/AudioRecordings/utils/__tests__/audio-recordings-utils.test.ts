@@ -4,8 +4,13 @@ import type { AudioProjectListItem } from "@/types/audioProject"
 vi.mock("i18next", () => ({
 	default: {
 		t: (key: string) => key,
+		use: vi.fn().mockReturnThis(),
 	},
 	t: (key: string) => key,
+}))
+
+vi.mock("@/services/audioRecordings", () => ({
+	ALL_RECORDING_GROUP_ID: "mock-all-group",
 }))
 
 vi.mock("@/utils/string", () => ({
@@ -15,6 +20,8 @@ import {
 	formatRecordingDuration,
 	isAudioProjectDetailReady,
 	isAudioProjectPreviewReady,
+	isAudioProjectSummarizing,
+	isAudioProjectSummaryReady,
 } from "../audio-recordings-utils"
 
 const MOCK_AUDIO_FILE_ID = "mock-audio-file-001"
@@ -64,7 +71,7 @@ describe("isAudioProjectPreviewReady", () => {
 		).toBe(false)
 	})
 
-	it("blocks summarizing items without audio_file_id", () => {
+	it("allows summarizing items without audio_file_id for detail placeholder navigation", () => {
 		expect(
 			isAudioProjectPreviewReady(
 				createItem({
@@ -72,7 +79,7 @@ describe("isAudioProjectPreviewReady", () => {
 					is_summarized: false,
 				}),
 			),
-		).toBe(false)
+		).toBe(true)
 	})
 
 	it("allows summarizing items with audio_file_id for raw audio preview", () => {
@@ -96,6 +103,106 @@ describe("isAudioProjectDetailReady", () => {
 				createItem({
 					card_status: "not_summarized",
 					audio_file_id: MOCK_AUDIO_FILE_ID,
+				}),
+			),
+		).toBe(false)
+	})
+})
+
+describe("isAudioProjectSummaryReady", () => {
+	it("treats summarized card_status as ready", () => {
+		expect(
+			isAudioProjectSummaryReady(
+				createItem({
+					card_status: "summarized",
+					current_phase: "summarizing",
+					phase_status: "completed",
+				}),
+			),
+		).toBe(true)
+	})
+
+	it("treats summarizing phase with completed status as ready", () => {
+		expect(
+			isAudioProjectSummaryReady(
+				createItem({
+					card_status: "summarizing",
+					current_phase: "summarizing",
+					phase_status: "completed",
+				}),
+			),
+		).toBe(true)
+	})
+
+	it("does not treat not_summarized items as ready", () => {
+		expect(
+			isAudioProjectSummaryReady(
+				createItem({
+					card_status: "not_summarized",
+					current_phase: "merging",
+					phase_status: "completed",
+				}),
+			),
+		).toBe(false)
+	})
+})
+
+describe("isAudioProjectSummarizing", () => {
+	it("treats not_summarized items as not summarizing", () => {
+		expect(
+			isAudioProjectSummarizing(
+				createItem({
+					card_status: "not_summarized",
+					current_phase: "merging",
+					phase_status: "completed",
+				}),
+			),
+		).toBe(false)
+	})
+
+	it("treats summarizing card_status as summarizing", () => {
+		expect(
+			isAudioProjectSummarizing(
+				createItem({
+					card_status: "summarizing",
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+				}),
+			),
+		).toBe(true)
+	})
+
+	it("treats summarizing phase with in_progress status as summarizing", () => {
+		expect(
+			isAudioProjectSummarizing(
+				createItem({
+					card_status: "summarizing",
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+				}),
+			),
+		).toBe(true)
+	})
+
+	it("treats summarizing phase with null status as summarizing", () => {
+		expect(
+			isAudioProjectSummarizing(
+				createItem({
+					card_status: "summarizing",
+					current_phase: "summarizing",
+					phase_status: null,
+				}),
+			),
+		).toBe(true)
+	})
+
+	it("does not treat completed summarizing phase as summarizing", () => {
+		expect(
+			isAudioProjectSummarizing(
+				createItem({
+					card_status: "summarized",
+					current_phase: "summarizing",
+					phase_status: "completed",
 				}),
 			),
 		).toBe(false)

@@ -3,7 +3,12 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import AudioRecordingCard from "../AudioRecordingCard"
 import type { AudioProjectListItem } from "@/types/audioProject"
 
+vi.mock("@/services/audioRecordings", () => ({
+	ALL_RECORDING_GROUP_ID: "mock-all-group",
+}))
+
 vi.mock("react-i18next", () => ({
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({
 		t: (key: string, options?: Record<string, unknown>) => {
 			if (key === "card.moreTags") return `+${options?.count}`
@@ -117,7 +122,7 @@ describe("AudioRecordingCard", () => {
 		expect(onOpen).not.toHaveBeenCalled()
 	})
 
-	it("shows summarizing spinner while summary is in progress", () => {
+	it("shows summarizing spinner while summary is in progress and opens detail on click", () => {
 		const onOpen = vi.fn()
 		render(
 			<AudioRecordingCard
@@ -133,13 +138,32 @@ describe("AudioRecordingCard", () => {
 		)
 
 		fireEvent.click(screen.getByTestId("audio-recording-card-project-1"))
-		expect(onOpen).not.toHaveBeenCalled()
+		expect(onOpen).toHaveBeenCalledTimes(1)
 		expect(
 			screen.getByTestId("audio-recording-card-project-1-status-summarizing"),
 		).toHaveTextContent("Summarizing now")
 		expect(
 			screen.queryByTestId("audio-recording-card-project-1-summary-button"),
 		).not.toBeInTheDocument()
+	})
+
+	it("opens detail for summarizing items without audio_file_id", () => {
+		const onOpen = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "summarizing",
+					is_summarized: false,
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+					project_status: "",
+				})}
+				onOpen={onOpen}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("audio-recording-card-project-1"))
+		expect(onOpen).toHaveBeenCalledTimes(1)
 	})
 
 	it("shows pending duration placeholder while summarizing duration is unavailable", () => {
@@ -354,7 +378,9 @@ describe("AudioRecordingCard", () => {
 		trigger.focus()
 		fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
 
-		const regenerateOption = await screen.findByTestId("audio-recording-card-project-1-action-regenerate")
+		const regenerateOption = await screen.findByTestId(
+			"audio-recording-card-project-1-action-regenerate",
+		)
 		expect(regenerateOption).toBeInTheDocument()
 
 		fireEvent.click(regenerateOption)

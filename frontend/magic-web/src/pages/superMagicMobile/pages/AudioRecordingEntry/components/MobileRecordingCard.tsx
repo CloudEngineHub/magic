@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import {
 	formatRecordingDuration,
+	isAudioProjectPreviewReady,
 	parseAudioProjectTimestamp,
 	resolveRecordingDisplayName,
 	resolveRecordingSourceLabel,
@@ -221,19 +222,33 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 	}
 
 	const isProgressMode = isUploading || isUploadFailed
+	const isOpenable = isAudioProjectPreviewReady(item)
+
+	/** Opens detail when the card is in a navigable state (summarized, summarizing, or previewable). */
+	function handleCardOpen() {
+		if (!isOpenable) return
+		onOpen?.(item)
+	}
 
 	return (
 		<div
-			role="button"
-			tabIndex={0}
-			onClick={() => onOpen?.(item)}
-			onKeyDown={(event) => {
-				if (event.key === "Enter" || event.key === " ") {
-					event.preventDefault()
-					onOpen?.(item)
-				}
-			}}
-			className="flex flex-col gap-2.5 rounded-2xl bg-card px-3.5 py-3.5 shadow-[0px_2px_12px_0px_rgba(0,0,0,0.06)]"
+			role={isOpenable ? "button" : undefined}
+			tabIndex={isOpenable ? 0 : -1}
+			onClick={isOpenable ? handleCardOpen : undefined}
+			onKeyDown={
+				isOpenable
+					? (event) => {
+							if (event.key === "Enter" || event.key === " ") {
+								event.preventDefault()
+								handleCardOpen()
+							}
+						}
+					: undefined
+			}
+			className={cn(
+				"flex flex-col gap-2.5 rounded-2xl bg-card px-3.5 py-3.5 shadow-[0px_2px_12px_0px_rgba(0,0,0,0.06)]",
+				isOpenable ? "cursor-pointer" : "cursor-default",
+			)}
 			data-testid={`mobile-recording-card-${item.id}`}
 		>
 			<div className="flex items-center gap-2.5">
@@ -309,15 +324,13 @@ export const MobileRecordingCard = memo(function MobileRecordingCard({
 				) : null}
 
 				{!isProgressMode && isSummarizing ? (
-					<button
-						type="button"
-						disabled
+					<span
 						className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-foreground px-3 text-[13px] font-medium leading-5 text-background opacity-50"
 						data-testid={`mobile-recording-card-summarize-${item.id}`}
 					>
 						<Loader className="size-3.5 animate-spin" strokeWidth={2} />
 						{t("card.summarizing")}
-					</button>
+					</span>
 				) : null}
 
 				{isProgressMode && item.transferStatus === "failed" ? (
