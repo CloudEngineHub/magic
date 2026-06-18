@@ -21,6 +21,7 @@ export const BUILTIN_PLUGIN_SLUGS = [
 	"product-scene-composite",
 	"luxury-brand-design",
 	"garment-style-design",
+	"style-extraction",
 	"image-translation",
 	"hand-foot-repair",
 	"clothing-repair",
