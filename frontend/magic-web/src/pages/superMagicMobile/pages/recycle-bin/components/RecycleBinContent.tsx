@@ -353,7 +353,7 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 
 	const queryParams = useMemo(
 		() => ({
-			resource_type: activeTab === "all" ? undefined : TAB_TO_RESOURCE_TYPE[activeTab],
+			...(activeTab !== "all" ? { resource_type: TAB_TO_RESOURCE_TYPE[activeTab] } : {}),
 			keyword: trimmedSearchValue || undefined,
 			order: "desc" as const,
 			page: 1,

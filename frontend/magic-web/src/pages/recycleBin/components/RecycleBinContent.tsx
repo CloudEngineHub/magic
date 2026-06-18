@@ -36,7 +36,9 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 	const trimmedSearchValue = searchValue.trim()
 	const queryParams = useMemo(
 		() => ({
-			resource_type: activeTabId ? TAB_ID_TO_RESOURCE_TYPE[activeTabId] : undefined,
+			...(activeTabId && TAB_ID_TO_RESOURCE_TYPE[activeTabId] !== undefined
+				? { resource_type: TAB_ID_TO_RESOURCE_TYPE[activeTabId] }
+				: {}),
 			keyword: trimmedSearchValue ? trimmedSearchValue : undefined,
 			order: "desc" as const,
 			page: 1,
