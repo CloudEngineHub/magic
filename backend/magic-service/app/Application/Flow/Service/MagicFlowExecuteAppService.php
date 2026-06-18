@@ -423,6 +423,9 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
         if (! $magicFlow) {
             return;
         }
+        if (! $magicFlow->isEnabled()) {
+            return;
+        }
         $dataIsolation->setCurrentOrganizationCode($magicFlow->getOrganizationCode());
         $dataIsolation->setCurrentUserId($magicFlow->getCreator());
         EnvManager::initDataIsolationEnv($dataIsolation);
