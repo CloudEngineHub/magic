@@ -9,7 +9,7 @@
 }
 
 .sketch-design .sketch-design-three-grid {
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .sketch-design .sketch-design-two-grid .mpk-option-item,

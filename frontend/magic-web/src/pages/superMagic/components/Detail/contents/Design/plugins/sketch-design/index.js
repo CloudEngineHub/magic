@@ -3,6 +3,7 @@
 const MODE = {
 	IMAGE_TO_SKETCH: "imageToSketch",
 	EXTEND: "extend",
+	SKETCH_TO_IMAGE: "sketchToImage",
 }
 
 const SKETCH_TYPE = {
@@ -22,6 +23,13 @@ const EXTENSION_DIRECTION = {
 	SERIES: "series",
 }
 
+const GARMENT_RENDER_STYLE = {
+	STUDIO_3D: "studio3d",
+	FLAT: "flat",
+	MANNEQUIN: "mannequin",
+	MODEL: "model",
+}
+
 const MODE_OPTIONS = [
 	{
 		value: MODE.IMAGE_TO_SKETCH,
@@ -32,6 +40,11 @@ const MODE_OPTIONS = [
 		value: MODE.EXTEND,
 		labelKey: "mode.extend",
 		labelFallback: "线稿延伸",
+	},
+	{
+		value: MODE.SKETCH_TO_IMAGE,
+		labelKey: "mode.sketchToImage",
+		labelFallback: "线稿转图",
 	},
 ]
 
@@ -116,6 +129,45 @@ const EXTENSION_DIRECTION_OPTIONS = [
 	},
 ]
 
+const GARMENT_RENDER_STYLE_OPTIONS = [
+	{
+		value: GARMENT_RENDER_STYLE.STUDIO_3D,
+		labelKey: "renderStyle.studio3d",
+		labelFallback: "3D棚拍",
+		promptText: {
+			zh: "生成独立服装 3D 棚拍效果图，白色或浅灰摄影棚背景，立体廓形清晰，干净商业光影",
+			en: "generate a standalone 3D studio apparel product image with a white or light gray studio background, clear dimensional silhouette, and clean commercial lighting",
+		},
+	},
+	{
+		value: GARMENT_RENDER_STYLE.FLAT,
+		labelKey: "renderStyle.flat",
+		labelFallback: "平铺商品图",
+		promptText: {
+			zh: "生成平铺商品图，服装自然平铺，俯视或接近俯视角度，背景干净",
+			en: "generate a flat lay product image with the garment laid naturally, top-down or near top-down view, and clean background",
+		},
+	},
+	{
+		value: GARMENT_RENDER_STYLE.MANNEQUIN,
+		labelKey: "renderStyle.mannequin",
+		labelFallback: "人台展示",
+		promptText: {
+			zh: "生成白色人台穿着展示图，全身或完整服装可见，纯净棚拍背景，不出现真人",
+			en: "generate a white mannequin display image with the full garment clearly visible, clean studio background, and no real person",
+		},
+	},
+	{
+		value: GARMENT_RENDER_STYLE.MODEL,
+		labelKey: "renderStyle.model",
+		labelFallback: "真人试穿",
+		promptText: {
+			zh: "生成真人模特试穿效果图，服装为画面核心，模特自然简洁，背景干净",
+			en: "generate a real model try-on image with the garment as the visual focus, natural minimal model styling, and clean background",
+		},
+	},
+]
+
 function createInitialState() {
 	return {
 		mode: MODE.IMAGE_TO_SKETCH,
@@ -123,6 +175,8 @@ function createInitialState() {
 		sketchImage: null,
 		referenceImage: null,
 		extensionDirection: EXTENSION_DIRECTION.DETAILS,
+		renderStyle: GARMENT_RENDER_STYLE.STUDIO_3D,
+		materialDescription: "",
 		sketchType: SKETCH_TYPE.SINGLE,
 		detailLevel: DETAIL_LEVEL.STANDARD,
 		extra: "",
@@ -148,6 +202,10 @@ function pickPromptText(option, locale) {
 function getReferenceImages(state) {
 	if (state.mode === MODE.IMAGE_TO_SKETCH) return [state.styleImage].filter(Boolean)
 	return [state.sketchImage, state.referenceImage].filter(Boolean)
+}
+
+function isSketchOutputMode(state) {
+	return state.mode !== MODE.SKETCH_TO_IMAGE
 }
 
 function buildExtraClause(extra, locale) {
@@ -241,7 +299,58 @@ function buildExtendPrompt({ state, locale }) {
 	)
 }
 
+function buildMaterialClause(materialDescription, locale) {
+	const normalizedText = String(materialDescription ?? "").trim()
+	if (!normalizedText) return ""
+	return MagicPromptLocale.isChinese(locale)
+		? `材质/颜色描述：${normalizedText}。`
+		: `Material and color description: ${normalizedText}. `
+}
+
+function buildSketchToImagePrompt({ state, locale }) {
+	const isChinese = MagicPromptLocale.isChinese(locale)
+	const sketchReference = MagicPromptLocale.getReferenceLabel(1, locale)
+	const referenceImage = state.referenceImage
+		? MagicPromptLocale.getReferenceLabel(2, locale)
+		: ""
+	const renderStyleText = pickPromptText(
+		getSelectedOption(GARMENT_RENDER_STYLE_OPTIONS, state.renderStyle),
+		locale,
+	)
+	const materialClause = buildMaterialClause(state.materialDescription, locale)
+	const extraClause = buildExtraClause(state.extra, locale)
+
+	if (isChinese) {
+		return (
+			`基于${sketchReference}的服装线稿/草图生成成衣效果图。` +
+			`${sketchReference}是最高优先级结构参考，必须保留其中的服装品类、廓形、比例、领口、袖型、门襟、口袋、褶裥、腰线、下摆、拼接线和关键设计点。` +
+			(referenceImage
+				? `${referenceImage}是辅助参考图，只用于借鉴面料、颜色、纹理、工艺质感、局部细节或品牌风格，不要覆盖线稿结构。`
+				: "未提供辅助参考图，请根据线稿结构生成合理成衣材质和商业展示效果。") +
+			`成衣展示类型：${renderStyleText}。` +
+			materialClause +
+			extraClause +
+			"输出必须是真实可信的成衣效果图，不要再输出线稿、手绘草图或技术图。" +
+			"不要随意改变线稿中的核心版型和关键结构；不要添加文字、水印、logo、吊牌或多余道具。"
+		)
+	}
+
+	return (
+		`Generate a finished garment image from apparel sketch or line drawing ${sketchReference}. ` +
+		`${sketchReference} is the highest-priority structural reference. Preserve its garment category, silhouette, proportions, neckline, sleeves, placket, pockets, pleats, waistline, hem, panel seams, and key design details. ` +
+		(referenceImage
+			? `${referenceImage} is a secondary reference. Borrow only fabric, color, texture, construction feel, local details, or brand style from it; do not override the sketch structure. `
+			: "No secondary reference image is provided; infer a reasonable garment material and commercial presentation from the sketch structure. ") +
+		`Garment presentation style: ${renderStyleText}. ` +
+		materialClause +
+		extraClause +
+		"The output must be a realistic finished garment image, not another sketch, hand drawing, or technical line drawing. " +
+		"Do not arbitrarily change the core pattern or key construction from the sketch. Do not add text, watermark, logo, hangtag, or extra props."
+	)
+}
+
 function buildPrompt({ state, locale }) {
+	if (state.mode === MODE.SKETCH_TO_IMAGE) return buildSketchToImagePrompt({ state, locale })
 	if (state.mode === MODE.EXTEND) return buildExtendPrompt({ state, locale })
 	return buildImageToSketchPrompt({ state, locale })
 }
@@ -291,6 +400,87 @@ registerMagicCanvasPlugin({
 							],
 						},
 						{
+							value: MODE.SKETCH_TO_IMAGE,
+							sections: [
+								{
+									id: "sketchImageToRender",
+									kind: "image-slot",
+									stateKey: "sketchImage",
+									title: t("section.sketchImage", "线稿图"),
+									required: true,
+									uploadLabel: t("upload.sketchImage", "点击上传线稿图"),
+									alt: t("section.sketchImage", "线稿图"),
+									help: t(
+										"upload.sketchImageToImage.help",
+										"上传 1 张服装线稿、手绘草图或款式平面图，AI 将严格参考其版型和结构生成成衣效果图。",
+									),
+									deps: ["referenceImage", "modelId", "modelOptions"],
+									beforePick: ({ state, helpers }) => {
+										const maxReferenceImages =
+											helpers.getSelectedModel(state)?.image_size_config
+												?.max_reference_images ?? 2
+										if (
+											!state.sketchImage &&
+											getReferenceImages(state).length >= maxReferenceImages
+										) {
+											return t(
+												"error.referenceLimit",
+												"参考图数量已达当前模型上限",
+											)
+										}
+										return null
+									},
+								},
+								{
+									id: "referenceImageToRender",
+									kind: "image-slot",
+									stateKey: "referenceImage",
+									title: t("section.referenceImage", "参考图"),
+									uploadLabel: t("upload.referenceImage", "点击上传参考图"),
+									alt: t("section.referenceImage", "参考图"),
+									help: t(
+										"upload.referenceImageToImage.help",
+										"可选。支持上传面料图、颜色图、实拍款式图、局部细节图或品牌风格图，用于提供材质、颜色、纹理和风格方向。",
+									),
+									deps: ["sketchImage", "modelId", "modelOptions"],
+									beforePick: ({ state, helpers }) => {
+										const maxReferenceImages =
+											helpers.getSelectedModel(state)?.image_size_config
+												?.max_reference_images ?? 2
+										if (
+											!state.referenceImage &&
+											getReferenceImages(state).length >= maxReferenceImages
+										) {
+											return t(
+												"error.referenceLimit",
+												"参考图数量已达当前模型上限",
+											)
+										}
+										return null
+									},
+								},
+								{
+									id: "renderStyle",
+									kind: "option-group",
+									stateKey: "renderStyle",
+									title: t("section.renderStyle", "成衣展示类型"),
+									groupClassName: "sketch-design-two-grid",
+									options: mapOptions(GARMENT_RENDER_STYLE_OPTIONS, t),
+								},
+								{
+									id: "materialDescription",
+									kind: "textarea",
+									stateKey: "materialDescription",
+									title: t("section.materialDescription", "材质/颜色描述"),
+									placeholder: t(
+										"placeholder.materialDescription",
+										"如：黑色羊毛呢，哑光质感，银色拉链",
+									),
+									rows: 2,
+								},
+							],
+						},
+						{
 							value: MODE.EXTEND,
 							sections: [
 								{
@@ -310,8 +500,14 @@ registerMagicCanvasPlugin({
 										const maxReferenceImages =
 											helpers.getSelectedModel(state)?.image_size_config
 												?.max_reference_images ?? 2
-										if (!state.sketchImage && getReferenceImages(state).length >= maxReferenceImages) {
-											return t("error.referenceLimit", "参考图数量已达当前模型上限")
+										if (
+											!state.sketchImage &&
+											getReferenceImages(state).length >= maxReferenceImages
+										) {
+											return t(
+												"error.referenceLimit",
+												"参考图数量已达当前模型上限",
+											)
 										}
 										return null
 									},
@@ -336,7 +532,10 @@ registerMagicCanvasPlugin({
 											!state.referenceImage &&
 											getReferenceImages(state).length >= maxReferenceImages
 										) {
-											return t("error.referenceLimit", "参考图数量已达当前模型上限")
+											return t(
+												"error.referenceLimit",
+												"参考图数量已达当前模型上限",
+											)
 										}
 										return null
 									},
@@ -360,6 +559,8 @@ registerMagicCanvasPlugin({
 					title: t("section.sketchType", "线稿类型"),
 					groupClassName: "sketch-design-two-grid",
 					options: mapOptions(SKETCH_TYPE_OPTIONS, t),
+					deps: ["mode"],
+					when: ({ state }) => isSketchOutputMode(state),
 				},
 				{
 					id: "detailLevel",
@@ -368,16 +569,15 @@ registerMagicCanvasPlugin({
 					title: t("section.detailLevel", "细节程度"),
 					groupClassName: "sketch-design-three-grid",
 					options: mapOptions(DETAIL_LEVEL_OPTIONS, t),
+					deps: ["mode"],
+					when: ({ state }) => isSketchOutputMode(state),
 				},
 				{
 					id: "extra",
 					kind: "textarea",
 					stateKey: "extra",
 					title: t("section.extra", "额外要求"),
-					placeholder: t(
-						"placeholder.extra",
-						"如：突出领口和口袋结构，保持干净黑白线稿",
-					),
+					placeholder: t("placeholder.extra", "如：突出领口和口袋结构，保持干净黑白线稿"),
 					rows: 2,
 				},
 				{
@@ -406,21 +606,21 @@ registerMagicCanvasPlugin({
 				buttonLabel: `✨ ${t("button.generate", "生成服装线稿")}`,
 				loadingLabel: t("button.generating", "生成中…"),
 				getIdleHint: ({ state }) => {
-					if (state.mode === MODE.EXTEND && !state.sketchImage) {
+					if (state.mode !== MODE.IMAGE_TO_SKETCH && !state.sketchImage) {
 						return t("empty.sketchImage", "请先上传线稿图")
 					}
-					if (state.mode !== MODE.EXTEND && !state.styleImage) {
+					if (state.mode === MODE.IMAGE_TO_SKETCH && !state.styleImage) {
 						return t("empty.styleImage", "请先上传款式图")
 					}
 					return ""
 				},
 				isDisabled: ({ state }) =>
-					state.mode === MODE.EXTEND ? !state.sketchImage : !state.styleImage,
+					state.mode === MODE.IMAGE_TO_SKETCH ? !state.styleImage : !state.sketchImage,
 				validate: ({ state, helpers }) => {
-					if (state.mode === MODE.EXTEND && !state.sketchImage) {
+					if (state.mode !== MODE.IMAGE_TO_SKETCH && !state.sketchImage) {
 						return t("empty.sketchImage", "请先上传线稿图")
 					}
-					if (state.mode !== MODE.EXTEND && !state.styleImage) {
+					if (state.mode === MODE.IMAGE_TO_SKETCH && !state.styleImage) {
 						return t("empty.styleImage", "请先上传款式图")
 					}
 
@@ -431,7 +631,10 @@ registerMagicCanvasPlugin({
 					if (referenceImages.length > maxReferenceImages) {
 						return t("error.referenceLimit", "参考图数量已达当前模型上限")
 					}
-					if (helpers.collectReferenceIds(referenceImages).length !== referenceImages.length) {
+					if (
+						helpers.collectReferenceIds(referenceImages).length !==
+						referenceImages.length
+					) {
 						return t("error.references", "图片缺少可用于生成的资源标识")
 					}
 
