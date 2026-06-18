@@ -89,11 +89,13 @@ export class AudioRecordingsStore {
 	) {
 		this.optimisticItems = this.optimisticItems.map((item) => {
 			if (item.id !== projectId) return item
-			return {
+			const updatedItem = {
 				...item,
 				transferStatus: status,
 				transferProgress: progress !== undefined ? progress : item.transferProgress,
 			}
+			updatedItem.card_status = resolveCardStatusFromListItem(updatedItem)
+			return updatedItem
 		})
 	}
 

@@ -7,7 +7,7 @@ import type {
 	QueryAudioProjectsParams,
 } from "@/types/audioProject"
 import { formatTime } from "@/utils/string"
-
+import { ALL_RECORDING_GROUP_ID } from "@/services/audioRecordings"
 /** Maps UI summary filter to API current_phase values (coarse server-side filter) */
 export function resolveSummaryPhaseFilter(
 	filter: AudioRecordingSummaryFilter,
@@ -48,6 +48,7 @@ export function buildAudioProjectsQueryParams(options: {
 		page: options.page,
 		page_size: options.pageSize,
 		is_hidden: 0,
+		workspace_id: ALL_RECORDING_GROUP_ID,
 		sort_by: options.sortBy,
 		sort_order: options.sortOrder,
 	}

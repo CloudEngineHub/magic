@@ -85,6 +85,26 @@ function mergeAudioRecordingItems(
 	optimisticItem?: AudioProjectListItem,
 ): AudioProjectListItem {
 	if (!optimisticItem) return authoritativeItem
+
+	// If the optimistic item is currently uploading or has failed upload, preserve the upload state.
+	// This ensures that the upload progress bar and controls remain visible even if the backend list
+	// returns a preliminary record (e.g. not_summarized) for this project.
+	const isUploading =
+		optimisticItem.card_status === "uploading" ||
+		optimisticItem.card_status === "upload_failed" ||
+		optimisticItem.transferStatus === "transferring" ||
+		optimisticItem.transferStatus === "failed"
+
+	if (isUploading) {
+		return {
+			...authoritativeItem,
+			card_status: optimisticItem.card_status,
+			transferStatus: optimisticItem.transferStatus,
+			transferProgress: optimisticItem.transferProgress,
+			duration: optimisticItem.duration ?? authoritativeItem.duration,
+		}
+	}
+
 	if (!shouldKeepOptimisticDurationFallback(authoritativeItem, optimisticItem)) {
 		return authoritativeItem
 	}

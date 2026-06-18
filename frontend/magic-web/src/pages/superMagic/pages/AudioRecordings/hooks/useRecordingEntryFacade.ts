@@ -4,11 +4,8 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { useRecordingEditorRuntime } from "@/components/business/RecordingSummary/internal/editorRuntime"
+import { audioImportStore } from "../stores/audio-import-store"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
-import {
-	UploadSource,
-	useFileUpload,
-} from "@/pages/superMagic/components/MessageEditor/hooks/useFileUpload"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { AudioProjectListItem } from "@/types/audioProject"
@@ -26,6 +23,7 @@ import { SuperMagicApi } from "@/apis"
 import { AUDIO_WORKSPACE_TYPE } from "@/services/audioRecordings"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
+import { resolveCardStatusFromListItem } from "../utils/normalize-audio-project-item"
 
 export type EntryPresentation = "list" | "recording"
 export type RecordingStartupState = "idle" | "starting" | "error"
@@ -277,9 +275,6 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	const [startupErrorDetail, setStartupErrorDetail] = useState("")
 	const optimisticItems = audioRecordingsStore.optimisticItems
 	const [refreshToken, setRefreshToken] = useState(0)
-	const [pendingImportRequest, setPendingImportRequest] = useState<PendingImportRequest | null>(
-		null,
-	)
 
 	const isSessionActive = recordSummaryStore.status !== "init"
 	const isBusy =
@@ -287,7 +282,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		recordSummaryStore.isPausing ||
 		recordSummaryStore.isContinuing ||
 		runtime.state.isStartingRecord
-	const isImporting = pendingImportRequest?.status === "uploading"
+	const isImporting = audioImportStore.hasUploadingTasks
 
 	/**
 	 * Resolves the summary model lazily for deep links into recordings, where
@@ -362,89 +357,6 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		},
 		[],
 	)
-
-	const [projectToFileIdMap, setProjectToFileIdMap] = useState<Record<string, string>>({})
-
-	const {
-		addFiles: uploadImportedAudioFiles,
-		uploading: isUploadingImportedAudio,
-		handleRetry,
-	} = useFileUpload({
-		projectId: pendingImportRequest?.projectId,
-		topicId: pendingImportRequest?.topicId,
-		maxUploadCount: 1,
-		maxUploadSize: 500 * 1024 * 1024,
-		source: UploadSource.RecordSummary,
-		onFileAdded: (fileList) => {
-			if (fileList.length > 0 && pendingImportRequest) {
-				const fileId = fileList[0].id
-				const projId = pendingImportRequest.projectId
-				setProjectToFileIdMap((prev) => ({
-					...prev,
-					[projId]: fileId,
-				}))
-			}
-		},
-		onFileProgressUpdate: (fileId, progress, status, error) => {
-			if (!pendingImportRequest) return
-			const projId = pendingImportRequest.projectId
-			if (status === "error") {
-				audioRecordingsStore.updateOptimisticItemTransfer(projId, "failed")
-				toast.error(
-					error || t("audioRecordings:summary.submitFailed", { ns: "audioRecordings" }),
-				)
-			} else if (status === "uploading") {
-				audioRecordingsStore.updateOptimisticItemTransfer(
-					projId,
-					"transferring",
-					progress / 100,
-				)
-			}
-		},
-		onFileCompleted: async (_fileId, _reportResult, saveResult) => {
-			if (!saveResult || !pendingImportRequest) return
-
-			// Use the task key that was generated when the audio project was created.
-			// saveResult.task_id is the file-save task ID from /super-agent/file/project/save,
-			// which is unrelated to the ASR session key and is often "0" or another
-			// placeholder — using it would send the wrong key to /api/v1/asr/summary.
-			const importedProject = buildOptimisticRecordingItem({
-				projectId: pendingImportRequest.projectId,
-				projectName: pendingImportRequest.projectName,
-				workspaceId: pendingImportRequest.workspaceId,
-				modelId: pendingImportRequest.modelId,
-				audioFileId: saveResult.file_id,
-				taskKey: pendingImportRequest.taskKey,
-				audioSource: "imported",
-				topicId: pendingImportRequest.topicId,
-			})
-			importedProject.transferStatus = "done"
-			importedProject.card_status = "summarizing"
-
-			audioRecordingsStore.addOptimisticItem(importedProject)
-
-			try {
-				await audioRecordingsService.submitSummary(
-					importedProject,
-					pendingImportRequest.modelId,
-				)
-			} catch {
-				toast.error(t("audioRecordings:summary.submitFailed", { ns: "audioRecordings" }))
-			} finally {
-				setRefreshToken((currentToken) => currentToken + 1)
-				setPendingImportRequest(null)
-			}
-		},
-	})
-
-	useEffect(() => {
-		if (!pendingImportRequest || pendingImportRequest.status !== "queued") return
-
-		uploadImportedAudioFiles(pendingImportRequest.files, undefined, "upload")
-		setPendingImportRequest((currentRequest) =>
-			currentRequest ? { ...currentRequest, status: "uploading" } : currentRequest,
-		)
-	}, [pendingImportRequest, uploadImportedAudioFiles])
 
 	/**
 	 * Keeps the entry page in list mode after a recording ends, while still
@@ -710,24 +622,12 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	)
 
 	const clearOptimisticItem = useCallback((projectId: string) => {
-		audioRecordingsStore.clearOptimisticItem(projectId)
+		audioImportStore.cancelImport(projectId)
 	}, [])
 
-	const retryImport = useCallback(
-		async (projectId: string) => {
-			const fileId = projectToFileIdMap[projectId]
-			if (!fileId) return
-
-			audioRecordingsStore.updateOptimisticItemTransfer(projectId, "transferring", 0)
-
-			try {
-				await handleRetry(fileId)
-			} catch (error) {
-				console.error("Failed to retry file upload:", error)
-			}
-		},
-		[handleRetry, projectToFileIdMap],
-	)
+	const retryImport = useCallback(async (projectId: string) => {
+		await audioImportStore.retryImport(projectId)
+	}, [])
 
 	const importAudioFiles = useCallback(
 		async (files: FileList) => {
@@ -761,22 +661,20 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				modelId: model.model_id,
 				taskKey,
 				audioSource: "imported",
+				topicId: audioProjectContext.topic.id,
 			})
 			initialOptimisticItem.transferStatus = "transferring"
 			initialOptimisticItem.transferProgress = 0
+			initialOptimisticItem.card_status = resolveCardStatusFromListItem(initialOptimisticItem)
 
 			audioRecordingsStore.addOptimisticItem(initialOptimisticItem)
 
-			setPendingImportRequest({
+			await audioImportStore.startAudioImport(normalizedFiles, {
 				projectId: audioProjectContext.project.id,
 				projectName: normalizedFiles[0]?.name || audioProjectContext.project.project_name,
 				topicId: audioProjectContext.topic.id,
 				workspaceId: audioProjectContext.workspace.id,
 				modelId: model.model_id,
-				files: normalizedFiles,
-				status: "queued",
-				// Forward the project-level task key so onFileCompleted can pass it
-				// directly to the ASR summary API instead of the unrelated file-save task_id.
 				taskKey,
 			})
 		},
@@ -789,7 +687,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		isRecording: runtime.state.isRecording,
 		isPaused: runtime.state.isPaused,
 		isBusy,
-		isImporting: isImporting || isUploadingImportedAudio,
+		isImporting,
 		startupState,
 		startupErrorMessage,
 		startupErrorDetail,
