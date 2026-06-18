@@ -2,13 +2,17 @@ import { memo, useState, useMemo, useCallback, useEffect } from "react"
 import type { TFunction } from "i18next"
 import { useTranslation } from "react-i18next"
 import { CheckLine } from "lucide-react"
-import { useRequest } from "ahooks"
+import { useMemoizedFn, useRequest } from "ahooks"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Button } from "@/components/shadcn-ui/button"
 import { Spinner } from "@/components/shadcn-ui/spinner"
 import { RecycleBinApi } from "@/apis"
 import type { RecycleBin } from "@/apis/modules/recycle-bin"
 import magicToast from "@/components/base/MagicToaster/utils"
+import {
+	createRecycleBinTabCounts,
+	RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID,
+} from "@/pages/recycleBin/tab-config"
 import ActionSheet from "@/pages/superMagicMobile/components/ActionSheet"
 import CrossProjectFileOperationModal from "@/pages/superMagic/components/SelectPathModal/components/CrossProjectFileOperationModal"
 import MoveProjectModal from "@/pages/superMagic/components/EmptyWorkspacePanel/components/MoveProjectModal"
@@ -301,29 +305,6 @@ function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): Recycle
 	}
 }
 
-function updateTabCounts(
-	items: RecycleBinItemData[],
-	onTabCountChange?: (tabId: string, count: number) => void,
-) {
-	if (!onTabCountChange) return
-	const counts: Record<string, number> = {
-		all: items.length,
-		workspaces: 0,
-		projects: 0,
-		topics: 0,
-		files: 0,
-	}
-	items.forEach((item) => {
-		const tab = RESOURCE_TYPE_TO_TAB[item.resourceType as ResourceType]
-		if (tab) counts[tab] = (counts[tab] ?? 0) + 1
-	})
-	onTabCountChange("all", counts.all)
-	onTabCountChange("workspaces", counts.workspaces)
-	onTabCountChange("projects", counts.projects)
-	onTabCountChange("topics", counts.topics)
-	onTabCountChange("files", counts.files)
-}
-
 interface RecycleBinContentProps {
 	activeTab?: string
 	searchValue?: string
@@ -353,14 +334,32 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 		useState<PendingNameConflictRestore | null>(null)
 	const [isResolvingNameConflict, setIsResolvingNameConflict] = useState(false)
 
+	const trimmedSearchValue = searchValue.trim()
+	const refreshTabCounts = useMemoizedFn(async () => {
+		if (!onTabCountChange) return
+		const data = await RecycleBinApi.getRecycleBinCounts({
+			keyword: trimmedSearchValue || undefined,
+		})
+		const nextCounts = createRecycleBinTabCounts()
+		data.forEach((item) => {
+			const tabId = RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID[item.resource_type]
+			if (tabId) nextCounts[tabId] = item.count ?? 0
+		})
+		nextCounts.all = data.reduce((sum, item) => sum + (item.count ?? 0), 0)
+		Object.entries(nextCounts).forEach(([tabId, count]) => {
+			onTabCountChange(tabId, count)
+		})
+	})
+
 	const queryParams = useMemo(
 		() => ({
-			keyword: searchValue.trim() || undefined,
+			resource_type: activeTab === "all" ? undefined : TAB_TO_RESOURCE_TYPE[activeTab],
+			keyword: trimmedSearchValue || undefined,
 			order: "desc" as const,
 			page: 1,
 			page_size: 100,
 		}),
-		[searchValue],
+		[activeTab, trimmedSearchValue],
 	)
 
 	const { run, loading } = useRequest(RecycleBinApi.getRecycleBinList, {
@@ -370,7 +369,7 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 			const nextItems = data.list.map((item) => mapListItemToItemData(item, t))
 			setItems(nextItems)
 			setSelectedIds((prev) => prev.filter((id) => nextItems.some((item) => item.id === id)))
-			updateTabCounts(nextItems, onTabCountChange)
+			refreshTabCounts().catch((error) => console.error(error))
 		},
 		onError: () => setHasError(true),
 	})
@@ -378,6 +377,10 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 	useEffect(() => {
 		run(queryParams)
 	}, [queryParams, run])
+
+	useEffect(() => {
+		refreshTabCounts().catch((error) => console.error(error))
+	}, [refreshTabCounts, trimmedSearchValue])
 
 	// 打开选择路径/移动项目弹窗时拉取工作区列表（与 PC 一致）
 	useEffect(() => {

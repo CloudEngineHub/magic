@@ -15,6 +15,13 @@ import { useRecycleBinActions } from "./useRecycleBinActions"
 import { useRecycleBinSelection } from "./useRecycleBinSelection"
 
 const RECYCLE_BIN_PAGE_SIZE = 50
+const TAB_ID_TO_RESOURCE_TYPE: Record<string, number | undefined> = {
+	all: undefined,
+	workspaces: 1,
+	projects: 2,
+	topics: 3,
+	files: 4,
+}
 
 export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinContentProps) {
 	const { t } = useTranslation("super")
@@ -25,15 +32,17 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 	const [currentPage, setCurrentPage] = useState(1)
 	const [isLoadingMore, setIsLoadingMore] = useState(false)
 
+	const activeTabId = activeTab?.id
 	const trimmedSearchValue = searchValue.trim()
 	const queryParams = useMemo(
 		() => ({
+			resource_type: activeTabId ? TAB_ID_TO_RESOURCE_TYPE[activeTabId] : undefined,
 			keyword: trimmedSearchValue ? trimmedSearchValue : undefined,
 			order: "desc" as const,
 			page: 1,
 			page_size: RECYCLE_BIN_PAGE_SIZE,
 		}),
-		[trimmedSearchValue],
+		[activeTabId, trimmedSearchValue],
 	)
 
 	const refreshTabCounts = useMemoizedFn(async () => {
@@ -106,7 +115,7 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 
 	const selection = useRecycleBinSelection({
 		items,
-		activeTabId: activeTab?.id,
+		activeTabId,
 	})
 	const actions = useRecycleBinActions({
 		items,
