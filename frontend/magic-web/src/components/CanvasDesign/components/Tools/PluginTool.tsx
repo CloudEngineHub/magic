@@ -26,9 +26,15 @@ const STATIC_PLUGIN_CATEGORIES = [
 	},
 	{
 		key: "product",
-		order: 20,
+		order: 30,
 		labelKey: "tools.pluginCategories.product",
 		fallbackLabel: "商品图",
+	},
+	{
+		key: "fashion-design",
+		order: 20,
+		labelKey: "tools.pluginCategories.fashionDesign",
+		fallbackLabel: "服装设计",
 	},
 	{
 		key: "ai-toolbox",

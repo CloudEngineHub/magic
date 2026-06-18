@@ -12,7 +12,7 @@
 		"ai.completeImagePrompt"
 	],
 	"category": {
-		"key": "product"
+		"key": "fashion-design"
 	},
 	"description": "{{description}}",
 	"entry": "index.js",

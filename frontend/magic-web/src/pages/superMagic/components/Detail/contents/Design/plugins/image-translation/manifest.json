@@ -62,7 +62,7 @@
 		}
 	},
 	"category": {
-		"key": "product"
+		"key": "ai-toolbox"
 	},
 	"name": "image-translation",
 	"styles": "index.css",
