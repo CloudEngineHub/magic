@@ -6,9 +6,9 @@ import {
 	MAGIC_FETCH_POST_MESSAGE_TARGET_HELPER,
 } from "./fetchInterceptor"
 import { getNestedIframeInterceptorScript } from "./nested-iframe-content"
+import { getIframeRuntimeScript } from "../iframe-bridge/utils/iframe-script"
 import { configStore } from "@/models/config"
 import { normalizeLocale } from "@/utils/locale"
-import magicApiPreludeScript from "virtual:magic-api"
 
 type ServiceWorkerMockMode = "off" | "auto" | "on"
 
@@ -1732,17 +1732,17 @@ export const getFullContent = (
 	metaNoTranslate.setAttribute("data-injected", "true")
 	injectedHeadFragment.appendChild(metaNoTranslate)
 
-	// 初始语言必须在 Magic API prelude 之前写入，MagicI18nApi 在 install 时读取。
+	// 初始语言必须在 iframe runtime 之前写入，MagicI18nApi 在 install 时读取。
 	const langBootstrapScript = doc.createElement("script")
 	langBootstrapScript.setAttribute("data-injected", "magic-lang")
 	langBootstrapScript.textContent = `window.__MAGIC_INITIAL_LANG__=${JSON.stringify(initialLang)}`
 	injectedHeadFragment.appendChild(langBootstrapScript)
 
-	// Magic API 必须在业务 HTML 的同步脚本之前注册，避免用户脚本抢先调用 window.Magic。
-	const magicApiScriptElement = doc.createElement("script")
-	magicApiScriptElement.setAttribute("data-injected", "magic-api")
-	magicApiScriptElement.textContent = magicApiPreludeScript
-	injectedHeadFragment.appendChild(magicApiScriptElement)
+	// iframe runtime 必须在业务 HTML 的同步脚本之前注册，避免用户脚本抢先调用 window.Magic。
+	const runtimeScriptElement = doc.createElement("script")
+	runtimeScriptElement.setAttribute("data-injected", "true")
+	runtimeScriptElement.textContent = getIframeRuntimeScript()
+	injectedHeadFragment.appendChild(runtimeScriptElement)
 
 	// 创建注入脚本
 	const scriptElement = doc.createElement("script")
