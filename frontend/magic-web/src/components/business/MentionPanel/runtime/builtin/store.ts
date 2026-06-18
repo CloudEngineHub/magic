@@ -328,6 +328,34 @@ export class MentionPanelStore {
 			return null
 		}
 
+		if (tab.fileData.is_directory) {
+			const fileId = tab.fileData.file_id || tab.id
+			const fileName =
+				tab.fileData.file_name ||
+				tab.fileData.display_filename ||
+				tab.fileData.filename ||
+				tab.title ||
+				fileId
+			const relativeFilePath = tab.fileData.relative_file_path || tab.filePath || ""
+
+			if (!fileId || !relativeFilePath) return null
+
+			const tabDirectory: WorkspaceFolder = {
+				...tab.fileData,
+				file_id: fileId,
+				file_name: fileName,
+				relative_file_path: relativeFilePath,
+				type: "directory",
+				is_directory: true,
+				is_hidden: Boolean(tab.fileData.is_hidden),
+				parent_id:
+					tab.fileData.parent_id == null ? undefined : String(tab.fileData.parent_id),
+				children: (tab.fileData.children ?? []) as WorkspaceFolder["children"],
+			}
+
+			return this.workspaceFilesStore.workspaceFilesToMentionItems([tabDirectory])[0] ?? null
+		}
+
 		let parentData = this.projectFilesStore.getFolderData(tab.fileData.parent_id)
 		if (!parentData && tab.fileData.relative_file_path) {
 			const filePath = tab.fileData.relative_file_path
