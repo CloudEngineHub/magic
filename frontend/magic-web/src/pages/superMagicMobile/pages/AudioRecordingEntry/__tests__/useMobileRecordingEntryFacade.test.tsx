@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { useMobileRecordingEntryFacade } from "../hooks/useMobileRecordingEntryFacade"
+import {
+	resetRecordingSettingsCacheForTests,
+	seedRecordingSettingsCacheForTests,
+} from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingSettings"
 
 const runtimeMock = {
 	state: {
@@ -267,6 +271,7 @@ describe("useMobileRecordingEntryFacade", () => {
 		superMagicApiMock.createProject.mockReset()
 		superMagicApiMock.createAudioProject.mockReset()
 		superMagicApiMock.deleteProject.mockReset()
+		resetRecordingSettingsCacheForTests()
 		queuedFiles = []
 		completedUpload = null
 
@@ -657,6 +662,55 @@ describe("useMobileRecordingEntryFacade", () => {
 			audio_source: "recorded",
 			duration: 754,
 			card_status: "summarizing",
+		})
+	})
+
+	it("skips auto summary when mobile settings disable it", async () => {
+		seedRecordingSettingsCacheForTests(
+			{
+				model: { model_id: "model-alpha" },
+				extra: {
+					model: { model_id: "model-alpha" },
+					auto_summary_enabled: false,
+				},
+			},
+			{
+				transcription_enabled: true,
+				auto_summary_enabled: false,
+				model_id: "model-alpha",
+			},
+		)
+
+		runtimeMock.actions.finishRecording.mockImplementation(
+			async ({
+				onSuccess,
+				skipSummary,
+			}: {
+				onSuccess?: (result: Record<string, string>) => void
+				skipSummary?: boolean
+			}) => {
+				expect(skipSummary).toBe(true)
+				onSuccess?.({
+					project_id: "project-mobile-manual",
+					project_name: "Mobile Manual",
+					workspace_id: "workspace-mobile",
+					model_id: "model-alpha",
+					topic_id: "topic-mobile",
+				})
+			},
+		)
+
+		const { useMobileRecordingEntryFacade } =
+			await import("../hooks/useMobileRecordingEntryFacade")
+		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.finishRecording()
+		})
+
+		expect(result.current.optimisticItems[0]).toMatchObject({
+			id: "project-mobile-manual",
+			card_status: "not_summarized",
 		})
 	})
 })

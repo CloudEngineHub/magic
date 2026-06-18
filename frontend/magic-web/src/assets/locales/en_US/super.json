@@ -2880,6 +2880,7 @@
 				"manageGroups": "Manage groups",
 				"groupNameLabel": "Group name",
 				"groupNamePlaceholder": "For example: customer interviews",
+				"unnamedGroup": "Unnamed group",
 				"deleteGroupAria": "Delete group",
 				"moveSuccess": "Moved successfully",
 				"moveFailed": "Failed to move. Please try again later."

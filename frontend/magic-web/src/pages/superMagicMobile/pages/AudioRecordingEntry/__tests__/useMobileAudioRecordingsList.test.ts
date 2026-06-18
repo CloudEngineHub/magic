@@ -76,6 +76,33 @@ describe("useMobileAudioRecordingsList", () => {
 		expect(result.current.currentGroupCount).toBe(3)
 	})
 
+	it("keeps empty group names in currentGroupLabel for toolbar fallback rendering", async () => {
+		serviceMocks.listGroups.mockResolvedValue({
+			groups: [
+				{
+					id: "workspace-audio-empty",
+					name: "",
+					projectCount: 2,
+					isVirtual: false,
+				},
+			],
+			totalCount: 2,
+			ungroupedCount: 0,
+		})
+
+		const { result } = renderHook(() => useMobileAudioRecordingsList())
+
+		await waitFor(() => {
+			expect(result.current.groups).toHaveLength(1)
+		})
+
+		act(() => {
+			result.current.handleGroupChange("workspace-audio-empty")
+		})
+
+		expect(result.current.currentGroupLabel).toBe("")
+	})
+
 	it("moves a recording then refreshes groups and current list", async () => {
 		const { result } = renderHook(() => useMobileAudioRecordingsList())
 

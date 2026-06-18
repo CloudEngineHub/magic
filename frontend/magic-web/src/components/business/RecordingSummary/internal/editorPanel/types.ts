@@ -61,6 +61,8 @@ export interface RecordingEditorStartParams {
 }
 
 export interface RecordingEditorFinishOptions {
+	/** When true, upload chunks but do not call the summarize API (manual summary later) */
+	skipSummary?: boolean
 	onSuccess?: (
 		res: GetRecordingSummaryResultResponse & {
 			model_id: string

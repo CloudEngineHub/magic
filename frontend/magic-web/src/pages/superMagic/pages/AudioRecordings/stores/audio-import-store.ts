@@ -7,6 +7,9 @@ import { SuperMagicApi, FileApi } from "@/apis"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { buildOptimisticRecordingItem } from "../hooks/useRecordingEntryFacade"
+import { getCachedRecordingSettings } from "../hooks/useRecordingSettings"
+import { getRecordingTopicModel } from "../apis/recording-settings-api"
+import { resolveAutoSummaryEnabled } from "../utils/recording-settings-mapper"
 
 // Common audio extensions for validation
 const COMMON_AUDIO_EXTENSIONS = [".raw", ".wav", ".mp3", ".ogg", ".webm", ".m4a"]
@@ -124,6 +127,17 @@ export class AudioImportStore {
 	}
 
 	/**
+	 * Reads auto-summary preference from cache or persisted default_audio settings.
+	 */
+	private async resolveAutoSummaryEnabled(): Promise<boolean> {
+		const cachedSettings = getCachedRecordingSettings()
+		if (cachedSettings) return cachedSettings.auto_summary_enabled
+
+		const settingsResponse = await getRecordingTopicModel().catch(() => null)
+		return resolveAutoSummaryEnabled(null, settingsResponse)
+	}
+
+	/**
 	 * Initiates the audio file import and upload process.
 	 * Registers the task in MobX, delegates the upload to ossUploadService,
 	 * and fires backend integration APIs upon completion.
@@ -210,6 +224,7 @@ export class AudioImportStore {
 						})
 
 						// 2. Build finalized optimistic project object
+						const autoSummaryEnabled = await this.resolveAutoSummaryEnabled()
 						const completedProject = buildOptimisticRecordingItem({
 							projectId,
 							projectName,
@@ -219,15 +234,16 @@ export class AudioImportStore {
 							taskKey,
 							audioSource: "imported",
 							topicId,
+							autoSummaryEnabled,
 						})
 						completedProject.transferStatus = "done"
-						completedProject.card_status = "summarizing"
 
-						// Push item to store to render it as "summarizing"
+						// Push item to store; summarizing vs manual-summary card depends on settings.
 						audioRecordingsStore.addOptimisticItem(completedProject)
 
-						// 3. Initiate summary API
-						await audioRecordingsService.submitSummary(completedProject, modelId)
+						if (autoSummaryEnabled) {
+							await audioRecordingsService.submitSummary(completedProject, modelId)
+						}
 
 						runInAction(() => {
 							this.importingTasks.delete(projectId)

@@ -15,6 +15,7 @@ vi.mock("react-i18next", () => ({
 				"super:mobile.recordingEntry.groupSheet.ungrouped": "Ungrouped",
 				"super:mobile.recordingEntry.groupSheet.manageGroups": "Manage groups",
 				"super:mobile.recordingEntry.groupSheet.newGroup": "New group",
+				"super:mobile.recordingEntry.groupSheet.unnamedGroup": "Mock unnamed group",
 			}
 			return labels[key] ?? key
 		},
@@ -124,5 +125,31 @@ describe("MobileRecordingGroupSheet", () => {
 		)
 		expect(within(manageList).queryByText("All")).toBeNull()
 		expect(within(manageList).queryByText("Ungrouped")).toBeNull()
+	})
+
+	it("shows a fallback label when a group name is empty", () => {
+		render(
+			<MobileRecordingGroupSheet
+				open
+				onOpenChange={vi.fn()}
+				groups={[
+					{
+						id: "workspace-audio-empty",
+						name: "",
+						projectCount: 1,
+						isVirtual: false,
+					},
+				]}
+				selectedGroupId={ALL_RECORDING_GROUP_ID}
+				totalCount={1}
+				ungroupedCount={0}
+				onSelect={vi.fn()}
+				onCreateGroup={vi.fn()}
+				onRenameGroup={vi.fn()}
+				onDeleteGroup={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByText("Mock unnamed group")).toBeInTheDocument()
 	})
 })

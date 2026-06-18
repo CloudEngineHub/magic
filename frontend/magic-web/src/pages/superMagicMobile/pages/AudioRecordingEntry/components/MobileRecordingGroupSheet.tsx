@@ -7,6 +7,7 @@ import {
 	ALL_RECORDING_GROUP_ID,
 	UNGROUPED_RECORDING_GROUP_ID,
 } from "@/services/audioRecordings/RecordingGroupsConstants"
+import { resolveRecordingGroupDisplayName } from "@/services/audioRecordings/resolveRecordingGroupDisplayName"
 
 export { ALL_RECORDING_GROUP_ID, UNGROUPED_RECORDING_GROUP_ID }
 
@@ -123,6 +124,7 @@ export function MobileRecordingGroupSheet({
 	isSubmitting = false,
 }: MobileRecordingGroupSheetProps) {
 	const { t } = useTranslation(["super", "audioRecordings"])
+	const unnamedGroupLabel = t("super:mobile.recordingEntry.groupSheet.unnamedGroup")
 	const [view, setView] = useState<GroupSheetView>("menu")
 	const [draftName, setDraftName] = useState("")
 	const [renamingGroup, setRenamingGroup] = useState<MobileRecordingGroup | null>(null)
@@ -226,7 +228,10 @@ export function MobileRecordingGroupSheet({
 						{groups.map((group) => (
 							<div key={group.id}>
 								<GroupRow
-									label={group.name}
+									label={resolveRecordingGroupDisplayName(
+										group.name,
+										unnamedGroupLabel,
+									)}
 									count={group.projectCount}
 									selected={selectedGroupId === group.id}
 									dataTestId="mobile-recording-group-option"
@@ -318,7 +323,10 @@ export function MobileRecordingGroupSheet({
 										setView("rename")
 									}}
 								>
-									{group.name}
+									{resolveRecordingGroupDisplayName(
+										group.name,
+										unnamedGroupLabel,
+									)}
 								</button>
 								<span className="text-[13px] tabular-nums text-muted-foreground">
 									{group.projectCount}

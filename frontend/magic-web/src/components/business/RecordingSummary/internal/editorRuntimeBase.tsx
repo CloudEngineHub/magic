@@ -71,6 +71,7 @@ export function useWebRecordingEditorRuntime(): RecordingEditorRuntime {
 	const finishRecording = useMemoizedFn(async (options?: RecordingEditorFinishOptions) => {
 		await new Promise<void>((resolve, reject) => {
 			recordSummaryService.completeRecordingWithSummary({
+				skipSummary: options?.skipSummary,
 				onSuccess: (result) => {
 					options?.onSuccess?.(result)
 					resolve()

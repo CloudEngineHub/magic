@@ -16,6 +16,7 @@ import topicModelStore from "@/stores/superMagic/topicModelStore"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { getRecordingTopicModel } from "../apis/recording-settings-api"
+import { resolveAutoSummaryEnabled } from "../utils/recording-settings-mapper"
 import { fetchSummaryModelGroups, resolveDefaultSummaryModelId } from "../utils/summary-model-list"
 import { getCachedRecordingSettings } from "./useRecordingSettings"
 import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordingsService"
@@ -163,7 +164,11 @@ export function buildOptimisticRecordingItem(params: {
 	audioSource?: "recorded" | "imported"
 	topicId?: string
 	source?: string | null
+	/** When false, card stays in merging-completed / not_summarized until user taps Generate Summary */
+	autoSummaryEnabled?: boolean
 }): AudioProjectListItem {
+	const autoSummaryEnabled = params.autoSummaryEnabled ?? true
+
 	return {
 		id: params.projectId,
 		project_name: params.projectName,
@@ -175,9 +180,9 @@ export function buildOptimisticRecordingItem(params: {
 		tags: [],
 		device_id: "",
 		audio_source: params.audioSource ?? "recorded",
-		current_phase: "summarizing",
-		phase_status: "in_progress",
-		card_status: "summarizing",
+		current_phase: autoSummaryEnabled ? "summarizing" : "merging",
+		phase_status: autoSummaryEnabled ? "in_progress" : "completed",
+		card_status: autoSummaryEnabled ? "summarizing" : "not_summarized",
 		is_summarized: false,
 		workspace_id: params.workspaceId ?? null,
 		workspace_name: null,
@@ -337,10 +342,10 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			if (!audioWorkspace) return null
 
 			const settingsResponse = await getRecordingTopicModel().catch(() => null)
-			const autoSummary =
-				getCachedRecordingSettings()?.auto_summary_enabled ??
-				settingsResponse?.extra?.auto_summary_enabled ??
-				true
+			const autoSummary = resolveAutoSummaryEnabled(
+				getCachedRecordingSettings(),
+				settingsResponse,
+			)
 
 			const createdProject = await SuperMagicApi.createAudioProject({
 				workspace_id: audioWorkspace.id,
@@ -559,11 +564,25 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	}, [runtime.actions, t])
 
 	/**
-	 * Completes the recording and immediately seeds a summarizing card.
+	 * Resolves auto-summary preference from cache first, then persisted default_audio settings.
+	 */
+	const resolveAutoSummaryForSession = useCallback(async () => {
+		const cachedSettings = getCachedRecordingSettings()
+		if (cachedSettings) return cachedSettings.auto_summary_enabled
+
+		const settingsResponse = await getRecordingTopicModel().catch(() => null)
+		return resolveAutoSummaryEnabled(null, settingsResponse)
+	}, [])
+
+	/**
+	 * Completes the recording and seeds an optimistic list card matching summary intent.
 	 */
 	const finishRecording = useCallback(async () => {
 		try {
+			const autoSummaryEnabled = await resolveAutoSummaryForSession()
+
 			await runtime.actions.finishRecording({
+				skipSummary: !autoSummaryEnabled,
 				onSuccess: (result) => {
 					const localDurationSeconds = parseHmsDurationToSeconds(runtime.state.duration)
 
@@ -574,8 +593,11 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 							workspaceId: result.workspace_id,
 							modelId: result.model_id,
 							duration: localDurationSeconds,
+							// task_key is required for manual "Generate Summary" after skipSummary finish.
+							taskKey: result.task_key,
 							topicId: result.topic_id,
 							source: recordingSource,
+							autoSummaryEnabled,
 						}),
 					)
 					setRefreshToken((currentToken) => currentToken + 1)
@@ -588,7 +610,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		} catch {
 			toast.error(t("recordingSummary.message.summaryGenerationFailed"))
 		}
-	}, [runtime.actions, runtime.state.duration, recordingSource, t])
+	}, [resolveAutoSummaryForSession, runtime.actions, runtime.state.duration, recordingSource, t])
 
 	/**
 	 * Updates the lightweight recording note content in-place.

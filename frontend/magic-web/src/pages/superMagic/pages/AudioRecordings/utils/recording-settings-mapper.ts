@@ -9,6 +9,21 @@ import type {
 } from "../types/recording-settings"
 
 /**
+ * Resolves whether auto-summary should run for the next recording/import.
+ * Cached UI settings win so toggles apply immediately before the API round-trip.
+ */
+export function resolveAutoSummaryEnabled(
+	settings: RecordingSettings | null,
+	apiResponse?: RecordingTopicModelResponse | null,
+): boolean {
+	return (
+		settings?.auto_summary_enabled ??
+		apiResponse?.extra?.auto_summary_enabled ??
+		DEFAULT_RECORDING_SETTINGS.auto_summary_enabled
+	)
+}
+
+/**
  * Maps API response to UI settings, applying defaults and fallback model id.
  */
 export function apiResponseToSettings(

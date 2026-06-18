@@ -1490,6 +1490,7 @@ class RecordSummaryService {
 		model_id,
 		note,
 		asr_stream_content,
+		skipSummary = false,
 	}: {
 		onSuccess: (
 			res: GetRecordingSummaryResultResponse & {
@@ -1508,11 +1509,14 @@ class RecordSummaryService {
 			file_extension: string
 		}
 		asr_stream_content?: string
+		skipSummary?: boolean
 	}) => {
-		logger.report("完成录音，开始生成总结")
+		logger.report(skipSummary ? "完成录音，等待手动总结" : "完成录音，开始生成总结")
 
-		// Show starting message
-		this.summaryMessageService.showStageMessage(SummaryStage.Starting)
+		// Show starting message only when summary will run automatically.
+		if (!skipSummary) {
+			this.summaryMessageService.showStageMessage(SummaryStage.Starting)
+		}
 
 		// 如果正在等待总结，则不进行总结
 		if (recordSummaryStore.isWaitingSummarize) {
@@ -1569,7 +1573,9 @@ class RecordSummaryService {
 			return
 		}
 
-		recordSummaryStore.showWaitingSummarize()
+		if (!skipSummary) {
+			recordSummaryStore.showWaitingSummarize()
+		}
 
 		const handleError = (error: Error) => {
 			recordSummaryStore.hideWaitingSummarize()
@@ -1683,6 +1689,40 @@ class RecordSummaryService {
 			return
 		}
 
+		// Manual-summary mode: finish upload/merge only; list card shows Generate Summary CTA.
+		if (skipSummary) {
+			this.summaryMessageService.destroy()
+
+			this.emit(RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS, {
+				topicId: finalTopic.id,
+				projectId: finalProject.id,
+				workspaceId: workspace?.id || "",
+			})
+
+			onSuccess({
+				success: true,
+				task_key: taskKey,
+				project_id: finalProject.id,
+				topic_id: finalTopic.id,
+				project_name: finalProject.project_name,
+				chat_topic_id: finalTopic.id,
+				conversation_id: "",
+				workspace_name: workspace?.name || "",
+				model_id: modelId,
+				workspace_id: workspace?.id || "",
+			})
+
+			this.cleanupAfterSessionComplete()
+			recordSummaryStore.hideWaitingSummarize()
+			recordSummaryStore.completeRecording()
+
+			if (shouldFetchQueueList) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				this.emit(RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE, {} as any)
+			}
+			return
+		}
+
 		try {
 			// Get model from store or find by model_id
 			const model = recordSummaryStore.businessData.model || this.findModelById(model_id)
@@ -1770,6 +1810,7 @@ class RecordSummaryService {
 	completeRecordingWithSummary = ({
 		onSuccess,
 		onError,
+		skipSummary,
 	}: {
 		onSuccess: (
 			res: GetRecordingSummaryResultResponse & {
@@ -1778,6 +1819,7 @@ class RecordSummaryService {
 			},
 		) => void
 		onError: (error: Error) => void
+		skipSummary?: boolean
 	}) => {
 		if (
 			!recordSummaryStore.businessData.workspace ||
@@ -1807,6 +1849,7 @@ class RecordSummaryService {
 			model_id: recordSummaryStore.businessData.model.model_id,
 			note: recordSummaryStore.note,
 			asr_stream_content: asrStreamContent,
+			skipSummary,
 		})
 	}
 

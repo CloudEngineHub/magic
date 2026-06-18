@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { useRecordingEntryFacade } from "../useRecordingEntryFacade"
+import {
+	resetRecordingSettingsCacheForTests,
+	seedRecordingSettingsCacheForTests,
+} from "../useRecordingSettings"
 
 const {
 	runtimeMock,
@@ -258,6 +262,7 @@ describe("useRecordingEntryFacade", () => {
 		superMagicApiMock.createProject.mockReset()
 		superMagicApiMock.createAudioProject.mockReset()
 		superMagicApiMock.deleteProject.mockReset()
+		resetRecordingSettingsCacheForTests()
 		queuedFiles = []
 		completedUpload = null
 
@@ -617,6 +622,7 @@ describe("useRecordingEntryFacade", () => {
 					workspace_id: "workspace-recorded",
 					model_id: "model-alpha",
 					topic_id: "topic-recorded",
+					task_key: "session-web-mock-recorded-task",
 				})
 			},
 		)
@@ -632,6 +638,59 @@ describe("useRecordingEntryFacade", () => {
 			audio_source: "recorded",
 			duration: 754,
 			card_status: "summarizing",
+			task_key: "session-web-mock-recorded-task",
+		})
+	})
+
+	it("skips auto summary and seeds a generate-summary card when auto summary is disabled", async () => {
+		seedRecordingSettingsCacheForTests(
+			{
+				model: { model_id: "model-alpha" },
+				extra: {
+					model: { model_id: "model-alpha" },
+					auto_summary_enabled: false,
+				},
+			},
+			{
+				transcription_enabled: true,
+				auto_summary_enabled: false,
+				model_id: "model-alpha",
+			},
+		)
+
+		runtimeMock.state.duration = "00:01:00"
+		runtimeMock.actions.finishRecording.mockImplementation(
+			async ({
+				onSuccess,
+				skipSummary,
+			}: {
+				onSuccess?: (result: Record<string, string>) => void
+				skipSummary?: boolean
+			}) => {
+				expect(skipSummary).toBe(true)
+				onSuccess?.({
+					project_id: "project-manual-summary",
+					project_name: "Manual Summary Project",
+					workspace_id: "workspace-manual",
+					model_id: "model-alpha",
+					topic_id: "topic-manual",
+					task_key: "session-web-mock-manual-summary-task",
+				})
+			},
+		)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.finishRecording()
+		})
+
+		expect(result.current.optimisticItems[0]).toMatchObject({
+			id: "project-manual-summary",
+			card_status: "not_summarized",
+			current_phase: "merging",
+			phase_status: "completed",
+			task_key: "session-web-mock-manual-summary-task",
 		})
 	})
 })

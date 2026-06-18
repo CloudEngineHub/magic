@@ -2,6 +2,7 @@ import { Check, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { UNGROUPED_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
+import { resolveRecordingGroupDisplayName } from "@/services/audioRecordings/resolveRecordingGroupDisplayName"
 import type { MobileRecordingGroup } from "./MobileRecordingGroupSheet"
 
 interface MobileRecordingMoveGroupSheetProps {
@@ -53,6 +54,7 @@ export function MobileRecordingMoveGroupSheet({
 	onSelect,
 }: MobileRecordingMoveGroupSheetProps) {
 	const { t } = useTranslation("super")
+	const unnamedGroupLabel = t("mobile.recordingEntry.groupSheet.unnamedGroup")
 
 	function handleClose() {
 		onOpenChange(false)
@@ -87,7 +89,7 @@ export function MobileRecordingMoveGroupSheet({
 				{groups.map((group) => (
 					<div key={group.id}>
 						<MoveGroupRow
-							label={group.name}
+							label={resolveRecordingGroupDisplayName(group.name, unnamedGroupLabel)}
 							count={group.projectCount}
 							selected={selectedGroupId === group.id}
 							dataTestId="mobile-recording-move-group-option"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { DEFAULT_AUDIO_SETTING_TOPIC_ID } from "../../constants/recording-settings"
-import { apiResponseToSettings, settingsToApiPayload } from "../recording-settings-mapper"
+import { apiResponseToSettings, resolveAutoSummaryEnabled, settingsToApiPayload } from "../recording-settings-mapper"
 
 const MOCK_FALLBACK_MODEL = "mock-fallback-model"
 
@@ -55,5 +55,18 @@ describe("recording-settings-mapper", () => {
 		)
 
 		expect(settings.model_id).toBe("mock-extra-model")
+	})
+
+	it("resolves auto summary from cached settings before API extra", () => {
+		expect(
+			resolveAutoSummaryEnabled(
+				{
+					transcription_enabled: true,
+					auto_summary_enabled: false,
+					model_id: "mock-model",
+				},
+				{ extra: { auto_summary_enabled: true } },
+			),
+		).toBe(false)
 	})
 })

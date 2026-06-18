@@ -2880,6 +2880,7 @@
 				"manageGroups": "管理分组",
 				"groupNameLabel": "分组名称",
 				"groupNamePlaceholder": "例如：客户访谈",
+				"unnamedGroup": "未命名分组",
 				"deleteGroupAria": "删除分组",
 				"moveSuccess": "移动成功",
 				"moveFailed": "移动失败，请稍后重试"

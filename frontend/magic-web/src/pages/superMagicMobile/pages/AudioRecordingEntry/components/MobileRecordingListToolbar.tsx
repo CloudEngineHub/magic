@@ -2,6 +2,7 @@ import { ChevronDown, ListFilter, Search, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import { cn } from "@/lib/utils"
+import { resolveRecordingGroupDisplayName } from "@/services/audioRecordings/resolveRecordingGroupDisplayName"
 
 interface MobileRecordingListToolbarProps {
 	groupLabel: string
@@ -39,12 +40,13 @@ export function MobileRecordingListToolbar({
 	onOpenImportSheet,
 }: MobileRecordingListToolbarProps) {
 	const { t } = useTranslation(["super", "audioRecordings"])
+	const unnamedGroupLabel = t("super:mobile.recordingEntry.groupSheet.unnamedGroup")
 	const displayGroupLabel =
 		groupLabel === "all"
 			? t("super:mobile.recordingEntry.groupSheet.all")
 			: groupLabel === "ungrouped"
 				? t("super:mobile.recordingEntry.groupSheet.ungrouped")
-				: groupLabel
+				: resolveRecordingGroupDisplayName(groupLabel, unnamedGroupLabel)
 
 	// !stroke-2 beats unlayered .lucide { stroke-width: 1.5px } from lucide.css
 	const lucideStrokeClass = "[&_.lucide]:!stroke-2"
