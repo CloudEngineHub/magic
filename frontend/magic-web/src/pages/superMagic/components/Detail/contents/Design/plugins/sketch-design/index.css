@@ -1,0 +1,21 @@
+.sketch-design .sketch-design-two-grid,
+.sketch-design .sketch-design-three-grid {
+	display: grid;
+	gap: 8px;
+}
+
+.sketch-design .sketch-design-two-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sketch-design .sketch-design-three-grid {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sketch-design .sketch-design-two-grid .mpk-option-item,
+.sketch-design .sketch-design-two-grid .mpk-option,
+.sketch-design .sketch-design-three-grid .mpk-option-item,
+.sketch-design .sketch-design-three-grid .mpk-option {
+	width: 100%;
+	min-width: 0;
+}
