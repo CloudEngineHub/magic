@@ -13,6 +13,10 @@ from app.core.entity.message.server_message import DisplayType, FileContent, Too
 from app.core.skill_manager import find_skill
 from app.i18n import i18n
 from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.read_skills_hooks import (
+    SkillLoadedHookContext,
+    notify_skill_loaded,
+)
 
 logger = get_logger(__name__)
 
@@ -58,7 +62,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
     Strongly recommended to use this tool for batch reading multiple skills at once, rather than calling tools multiple times individually, which will greatly improve task efficiency
     """
 
-    async def execute(self, tool_context: ToolContext, params: ReadSkillsParams) -> ToolResult:
+    async def execute(self, tool_context: ToolContext | None, params: ReadSkillsParams) -> ToolResult:
         """执行批量读取工具逻辑
 
         Args:
@@ -74,7 +78,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
 
         # 获取当前 agent 的 excluded_skills，确保被禁用的 skill 无法通过任何方式加载
         excluded_skills: set = set()
-        agent_context = tool_context.get_extension("agent_context")
+        agent_context = tool_context.get_extension("agent_context") if tool_context is not None else None
         if agent_context and hasattr(agent_context, "get_excluded_skills"):
             excluded_skills = set(agent_context.get_excluded_skills())
 
@@ -133,6 +137,16 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                     actual_skill_dir = skill.skill_dir or (
                         Path(skill.skill_file).parent if skill.skill_file else None
                     )
+                    await notify_skill_loaded(
+                        SkillLoadedHookContext(
+                            requested_skill_name=skill_name,
+                            resolved_skill_name=skill.name,
+                            location=str(location) if location else None,
+                            skill_dir=Path(actual_skill_dir) if actual_skill_dir else None,
+                            tool_context=tool_context,
+                            agent_context=agent_context,
+                        )
+                    )
                     results.append({
                         "skill_name": skill_name,
                         "success": True,
@@ -157,7 +171,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
 
             # 并发检查版本更新，有更新时推送 horizon 通知
             # 若调用方明确传入 check_updates=False（用户已忽略或拒绝更新），则跳过检查
-            if params.check_updates:
+            if params.check_updates and tool_context is not None:
                 skill_update_targets: List[Tuple[str, Path]] = [
                     (r["skill_name"], r["skill_dir_path"])
                     for r in results
