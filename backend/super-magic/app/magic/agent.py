@@ -274,7 +274,7 @@ class Agent(BaseAgent):
 
 
         # 初始化压缩配置（Agent 用于判断何时触发压缩）
-        self.compaction_config = CompactionConfig(
+        self.compaction_config = CompactionConfig.from_config(
             agent_name=self.agent_name,
             agent_id=self.id,
             # 压缩阈值运行时按当前文本模型解析，避免 .agent 历史默认模型影响当前任务。

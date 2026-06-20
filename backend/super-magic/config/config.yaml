@@ -63,6 +63,60 @@ llm:
   non_stream_timeout_seconds: 600          # 非流式请求超时
   backoff_max_retries: 5                   # 最大退避重试次数
 
+# 用户可见上下文窗口配置
+#
+# 这里配置的是产品对外展示和压缩策略共同使用的上下文窗口档位。
+# Python 只负责按模型关键词匹配档位，并用 context_usage_ratio 计算压缩阈值。
+context_window:
+  default_user_facing_max_context_tokens: 200000
+  compaction:
+    default_token_threshold: 180000
+    min_token_threshold: 100000
+    max_token_threshold: 180000
+    context_usage_ratio: 0.9
+  tiers:
+    # 200K 档：产品对外按 200K 展示，压缩阈值由 context_usage_ratio 派生。
+    # Claude 关键词同时兼容两种命名顺序（历史遗留的命名不规范问题）。
+    - name: context_window_200k
+      user_facing_max_context_tokens: 200000
+      model_keywords:
+        - claude-sonnet-4.6
+        - claude-4.6-sonnet
+        - claude-opus-4.6
+        - claude-4.6-opus
+        - claude-sonnet-4.5
+        - claude-4.5-sonnet
+        - claude-sonnet-4
+        - claude-4-sonnet
+        - gemini-3-pro
+        - gemini-3-pro-preview
+        - gemini-3.1-pro
+        - gemini-3.1-pro-preview
+        # Step / MiMo 系列上下文窗口待确认，先保守归入 200K 档。
+        - step-3.5-flash
+        - mimo-v2.5
+
+    # 256K 档：产品对外按 256K 展示，压缩阈值由 context_usage_ratio 派生。
+    # 子串匹配：如 gpt-5.x 覆盖 mini/nano，doubao-seed-2.0 覆盖 pro/lite/code。
+    - name: context_window_256k
+      user_facing_max_context_tokens: 256000
+      model_keywords:
+        - claude-opus-4.8
+        - gpt-5.5
+        - gpt-5.4
+        - glm-5.2
+        - qwen3.7-max
+        - qwen3.7-plus
+        - qwen3.6-plus
+        - qwen3.5-plus
+        - qwen3.5-flash
+        - qwen-plus
+        - doubao-seed-2.0
+        - deepseek-v4
+        - deepseek-v4-flash
+        - kimi-k2
+        - gemini-3-flash
+
 # 自定义默认模型。没有管理后台模型列表时，auto 必须能在 providers.*.models 中解析到。
 default_model: auto
 

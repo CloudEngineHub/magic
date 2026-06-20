@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional, Union
 
+from agentlang.config.config import config
 from agentlang.config.models.model_config import model_config_utils
 from agentlang.logger import get_logger
 from agentlang.llms.token_usage.models import TokenUsage  # 导入统一的 TokenUsage 类
@@ -29,17 +30,139 @@ ASSISTANT_TOOL_CONTENT_PLACEHOLDER = "我将继续执行任务"
 # ==============================================================================
 # 聊天记录压缩配置数据类
 # ==============================================================================
+FALLBACK_USER_FACING_MAX_CONTEXT_TOKENS = 200_000
+FALLBACK_DEFAULT_TOKEN_THRESHOLD = 180_000
+FALLBACK_MIN_TOKEN_THRESHOLD = 100_000
+FALLBACK_MAX_TOKEN_THRESHOLD = 180_000
+FALLBACK_CONTEXT_USAGE_RATIO = 0.9
+
+
 @dataclass(frozen=True)
-class PricingTierCompactionRule:
-    """按已知定价分区匹配压缩阈值规则（临时硬编码）"""
-    # 说明：
-    # 当前服务端未返回模型定价分区信息，无法在运行时精确判断价格跳档点。
-    # 这里先基于已调研模型名做临时映射，避免在高价区间才触发压缩导致成本失控。
-    # 后续若服务端提供定价分区元数据，应迁移为服务端驱动/配置驱动，移除此硬编码策略。
+class ContextWindowRule:
+    """按模型关键词匹配用户可见上下文窗口。"""
+
     name: str
-    pricing_interval: str
+    user_facing_max_context_tokens: int
     model_keywords: tuple[str, ...]
-    token_threshold: int
+
+
+def _parse_token_count(value: Any) -> Optional[int]:
+    """解析 token 数量，兼容 200000、"200K"、"1M" 等配置写法。"""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if not isinstance(value, str):
+        return None
+
+    text = value.strip().upper()
+    if not text:
+        return None
+    try:
+        if text.endswith("K"):
+            return int(float(text[:-1]) * 1000)
+        if text.endswith("M"):
+            return int(float(text[:-1]) * 1_000_000)
+        return int(float(text))
+    except Exception:
+        return None
+
+
+def _load_token_config(key_path: str, default: int) -> int:
+    value = _parse_token_count(config.get(key_path, default))
+    if value is None or value <= 0:
+        raise ValueError(f"{key_path} must be a positive token count")
+    return value
+
+
+def _load_float_config(key_path: str, default: float) -> float:
+    value = config.get(key_path, default)
+    try:
+        return float(value)
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"{key_path} must be a number") from e
+
+
+def _load_context_window_rules_from_config() -> List[ContextWindowRule]:
+    """从 config.yaml 读取用户可见上下文窗口规则。"""
+    raw_rules = config.get("context_window.tiers", [])
+    if raw_rules is None:
+        return []
+    if not isinstance(raw_rules, list):
+        raise ValueError("context_window.tiers must be a list")
+
+    rules: List[ContextWindowRule] = []
+    for index, raw_rule in enumerate(raw_rules):
+        if not isinstance(raw_rule, dict):
+            raise ValueError(f"context_window.tiers[{index}] must be a dict")
+
+        name = str(raw_rule.get("name") or "").strip()
+        if not name:
+            raise ValueError(f"context_window.tiers[{index}].name cannot be empty")
+
+        user_facing_max_context_tokens = _parse_token_count(
+            raw_rule.get("user_facing_max_context_tokens")
+        )
+        if user_facing_max_context_tokens is None or user_facing_max_context_tokens <= 0:
+            raise ValueError(
+                f"context_window.tiers[{index}].user_facing_max_context_tokens "
+                "must be a positive token count"
+            )
+
+        raw_keywords = raw_rule.get("model_keywords")
+        if not isinstance(raw_keywords, (list, tuple)):
+            raise ValueError(f"context_window.tiers[{index}].model_keywords must be a list")
+        model_keywords = tuple(
+            str(keyword).strip()
+            for keyword in raw_keywords
+            if str(keyword).strip()
+        )
+        if not model_keywords:
+            raise ValueError(f"context_window.tiers[{index}].model_keywords cannot be empty")
+
+        rules.append(
+            ContextWindowRule(
+                name=name,
+                user_facing_max_context_tokens=user_facing_max_context_tokens,
+                model_keywords=model_keywords,
+            )
+        )
+
+    return rules
+
+
+def _resolve_default_user_facing_max_context_tokens() -> int:
+    return _load_token_config(
+        "context_window.default_user_facing_max_context_tokens",
+        FALLBACK_USER_FACING_MAX_CONTEXT_TOKENS,
+    )
+
+
+def _collect_model_match_texts(*model_ids: Any) -> List[str]:
+    """收集用于上下文窗口规则匹配的模型文本。"""
+    candidates: List[Any] = list(model_ids)
+    for candidate in list(candidates):
+        if not candidate or not str(candidate).strip():
+            continue
+        model_config = model_config_utils.get_model_config(str(candidate).strip())
+        if not model_config:
+            continue
+        metadata = model_config.metadata or {}
+        candidates.extend([
+            model_config.model_id,
+            model_config.name,
+            model_config.provider,
+            model_config.resolved_model_id,
+            metadata.get("label"),
+            metadata.get("api_model"),
+            metadata.get("profile"),
+        ])
+
+    return list(dict.fromkeys(
+        str(value).strip().lower()
+        for value in candidates
+        if value and str(value).strip()
+    ))
 
 @dataclass(frozen=True)
 class CompactionThresholdResult:
@@ -77,83 +200,44 @@ class CompactionConfig:
         )
 
     # 模型缺失或没有 agent_model_id 时使用 default_token_threshold；有模型时先读取
-    # max_context_tokens，再按「命中 pricing_tier_rules 则取固定阈值，否则按
-    # max_context_tokens * context_usage_ratio」计算。若模型容量不小于 min_token_threshold，
-    # 结果至少为 min_token_threshold，最后再限制为不超过 max_context_tokens。
+    # max_context_tokens，再按「命中 context_window_rules 则使用该用户可见窗口，
+    # 否则使用模型物理窗口」乘以 context_usage_ratio 计算。若模型容量不小于
+    # min_token_threshold，结果至少为 min_token_threshold，最后不超过模型物理窗口。
     # max_token_threshold 是旧字段，当前动态阈值链路不再用它做上限，保留给存量配置兼容。
-    default_token_threshold: int = 180_000
-    min_token_threshold: int = 100_000
-    max_token_threshold: int = 180_000
-    context_usage_ratio: float = 0.9
-    # FIXME: 临时措施：定价分区压缩策略表（硬编码）
-    # 命中规则优先于 context_usage_ratio；未命中时回退到比例策略。
-    # 只收录上下文窗口 >200K 且需要显式规则的模型。
-    # 以下模型 ≤205K 上下文，回退到 context_usage_ratio 即可得到合理阈值（≤184K），无需加入规则：
-    #   MiniMax M2.7 (205K, 线性), GLM 5.1 (200K, 32K处跳档)
-    pricing_tier_rules: List[PricingTierCompactionRule] = field(
-        default_factory=lambda: [
-            # 200K 跳档：价格在 200K 输入附近翻倍的模型，固定在 180K 触发压缩。
-            # Claude $3→$6/MTok（Sonnet/Opus 均在 200K 处跳档）。
-            # Gemini Pro $1.25→$2.50 / $2→$4/MTok（200K 处跳档）。
-            # Claude 关键词同时兼容两种命名顺序（历史遗留的命名不规范问题）。
-            PricingTierCompactionRule(
-                name="pricing_cliff_200k",
-                pricing_interval="200K",
-                model_keywords=(
-                    "claude-sonnet-4.6",
-                    "claude-4.6-sonnet",
-                    "claude-opus-4.6",
-                    "claude-4.6-opus",
-                    "claude-sonnet-4.5",
-                    "claude-4.5-sonnet",
-                    "claude-sonnet-4",
-                    "claude-4-sonnet",
-                    "gemini-3-pro",
-                    "gemini-3-pro-preview",
-                    "gemini-3.1-pro",
-                    "gemini-3.1-pro-preview",
-                    # Step / MiMo 系列（上下文窗口待确认，保守归入 200K 档）
-                    "step-3.5-flash",
-                    "mimo-v2.5",
-                ),
-                token_threshold=180_000,
-            ),
-            # 230K 通用档：256K 跳档模型 + 1M 大上下文线性计费模型，统一在 230K 触发压缩。
-            # - Qwen/Doubao Seed: 价格在 256K 附近跳档
-            # - GPT-5.x, DeepSeek V4: 1M 上下文无跳档，但线性成本仍需控制
-            # - Kimi K2.6: 256K 上下文，线性计费
-            # - Gemini Flash: 1M 上下文无跳档，线性计费
-            # 前缀/子串匹配：如 "gpt-5.4" 覆盖 mini/nano，"doubao-seed-2.0" 覆盖 pro/lite/code。
-            PricingTierCompactionRule(
-                name="threshold_230k",
-                pricing_interval="256K",
-                model_keywords=(
-                    # Qwen 系列（256K 跳档）
-                    "qwen3-max",
-                    "qwen3-coder-plus",
-                    "qwen3.7-plus",
-                    "qwen3.6-plus",
-                    "qwen3.5-plus",
-                    "qwen3.5-flash",
-                    "qwen-plus",
-                    # Doubao Seed 系列（256K 跳档，子串覆盖 pro/lite/code）
-                    "doubao-seed-2.0",
-                    # GPT 系列（1M 上下文，线性计费）
-                    "gpt-5.4",
-                    # DeepSeek V4 系列（1M 上下文，线性计费）
-                    "deepseek-v4",
-                    "deepseek-v4-flash",
-                    # Kimi K2 系列（256K 上下文，线性计费）
-                    "kimi-k2",
-                    # Gemini Flash 系列（1M 上下文，线性计费）
-                    "gemini-3-flash",
-                ),
-                token_threshold=230_000,
-            ),
-        ]
+    default_token_threshold: int = FALLBACK_DEFAULT_TOKEN_THRESHOLD
+    min_token_threshold: int = FALLBACK_MIN_TOKEN_THRESHOLD
+    max_token_threshold: int = FALLBACK_MAX_TOKEN_THRESHOLD
+    context_usage_ratio: float = FALLBACK_CONTEXT_USAGE_RATIO
+    context_window_rules: List[ContextWindowRule] = field(
+        default_factory=_load_context_window_rules_from_config
     )
     _auto_token_threshold: bool = field(default=False, init=False, repr=False)
     _resolved_token_threshold_model_id: Optional[str] = field(default=None, init=False, repr=False)
+
+    @classmethod
+    def from_config(cls, **overrides: Any) -> "CompactionConfig":
+        """从 config.yaml 读取上下文窗口相关配置，并允许调用方覆盖 Agent 字段。"""
+        values: Dict[str, Any] = {
+            "default_token_threshold": _load_token_config(
+                "context_window.compaction.default_token_threshold",
+                FALLBACK_DEFAULT_TOKEN_THRESHOLD,
+            ),
+            "min_token_threshold": _load_token_config(
+                "context_window.compaction.min_token_threshold",
+                FALLBACK_MIN_TOKEN_THRESHOLD,
+            ),
+            "max_token_threshold": _load_token_config(
+                "context_window.compaction.max_token_threshold",
+                FALLBACK_MAX_TOKEN_THRESHOLD,
+            ),
+            "context_usage_ratio": _load_float_config(
+                "context_window.compaction.context_usage_ratio",
+                FALLBACK_CONTEXT_USAGE_RATIO,
+            ),
+            "context_window_rules": _load_context_window_rules_from_config(),
+        }
+        values.update(overrides)
+        return cls(**values)
 
     def __post_init__(self):
         """压缩配置的简化验证"""
@@ -165,11 +249,11 @@ class CompactionConfig:
             raise ValueError("Max conversation rounds must be positive")
         if not 0.01 <= self.context_usage_ratio <= 1.0:
             raise ValueError("Context usage ratio must be between 0.01 and 1.0")
-        for rule in self.pricing_tier_rules:
+        for rule in self.context_window_rules:
             if not rule.model_keywords:
-                raise ValueError("Pricing tier rule model_keywords cannot be empty")
-            if rule.token_threshold <= 0:
-                raise ValueError("Pricing tier rule token_threshold must be positive")
+                raise ValueError("Context window rule model_keywords cannot be empty")
+            if rule.user_facing_max_context_tokens <= 0:
+                raise ValueError("Context window rule tokens must be positive")
 
     def resolve_token_threshold(self, agent_model_id: Optional[str] = None) -> int:
         """Resolve token threshold lazily, after the current text model is selected."""
@@ -187,42 +271,33 @@ class CompactionConfig:
         return self.token_threshold or self.default_token_threshold
 
     def _get_model_match_texts_for_model(self, model_id: str) -> List[str]:
-        """收集用于匹配策略规则的模型文本"""
-        match_texts = [model_id]
-        model_config = model_config_utils.get_model_config(model_id)
-        if model_config:
-            match_texts.extend([model_config.name, model_config.provider])
-            metadata = model_config.metadata or {}
-            label = metadata.get("label")
-            if label:
-                match_texts.append(str(label))
-        return [str(text).lower() for text in match_texts if text]
+        """收集用于匹配上下文窗口规则的模型文本。"""
+        return _collect_model_match_texts(model_id)
 
     def _get_model_match_texts(self) -> List[str]:
-        """收集用于匹配策略规则的基准模型文本。"""
+        """收集用于匹配上下文窗口规则的基准模型文本。"""
         return self._get_model_match_texts_for_model(self.agent_model_id)
 
-    def _match_pricing_tier_rule_for_model(
+    def _match_context_window_rule_for_model(
         self,
         model_id: str,
         match_texts: List[str],
-    ) -> Optional[PricingTierCompactionRule]:
-        """根据硬编码定价分区规则匹配命中项（命中即返回规则）"""
-        for rule in self.pricing_tier_rules:
+    ) -> Optional[ContextWindowRule]:
+        """根据用户可见上下文窗口规则匹配命中项。"""
+        for rule in self.context_window_rules:
             for keyword in rule.model_keywords:
                 keyword_lower = keyword.lower()
                 if any(keyword_lower in text for text in match_texts):
                     logger.info(
-                        f"模型 {model_id} 命中定价区间 {rule.pricing_interval} "
-                        f"(strategy={rule.name}, keyword={keyword}), "
-                        f"token_threshold={rule.token_threshold:,}"
+                        f"模型 {model_id} 命中上下文窗口 {rule.user_facing_max_context_tokens:,} "
+                        f"(strategy={rule.name}, keyword={keyword})"
                     )
                     return rule
         return None
 
-    def _match_pricing_tier_rule(self, match_texts: List[str]) -> Optional[PricingTierCompactionRule]:
-        """根据基准模型文本匹配定价分区规则。"""
-        return self._match_pricing_tier_rule_for_model(self.agent_model_id, match_texts)
+    def _match_context_window_rule(self, match_texts: List[str]) -> Optional[ContextWindowRule]:
+        """根据基准模型文本匹配用户可见上下文窗口规则。"""
+        return self._match_context_window_rule_for_model(self.agent_model_id, match_texts)
 
     def resolve_threshold_for_model(self, model_id: str) -> CompactionThresholdResult:
         """按指定模型计算压缩阈值；模型缺失时显式返回默认阈值。"""
@@ -248,15 +323,14 @@ class CompactionConfig:
             )
 
         match_texts = self._get_model_match_texts_for_model(model_id)
-        matched_rule = self._match_pricing_tier_rule_for_model(model_id, match_texts)
-        capacity_threshold = int(max_context_tokens * self.context_usage_ratio)
-
-        if matched_rule is not None:
-            threshold = min(matched_rule.token_threshold, capacity_threshold)
-            matched_rule_name = matched_rule.name
-        else:
-            threshold = capacity_threshold
-            matched_rule_name = None
+        matched_rule = self._match_context_window_rule_for_model(model_id, match_texts)
+        threshold_context_tokens = (
+            matched_rule.user_facing_max_context_tokens
+            if matched_rule is not None
+            else max_context_tokens
+        )
+        threshold = int(threshold_context_tokens * self.context_usage_ratio)
+        matched_rule_name = matched_rule.name if matched_rule is not None else None
 
         if max_context_tokens >= self.min_token_threshold:
             threshold = max(threshold, self.min_token_threshold)
@@ -777,28 +851,6 @@ ChatMessage = Union[SystemMessage, UserMessage, AssistantMessage, ToolMessage]
 # ==============================================================================
 # 对外暴露的上下文容量查值入口
 # ==============================================================================
-def _parse_pricing_interval(interval: str) -> Optional[int]:
-    """将 pricing_interval 字符串转为具体 token 数值。
-
-    "200K" -> 200000、"256K" -> 256000、"1M" -> 1000000；不可解析时返回 None。
-    """
-    if not interval:
-        return None
-    s = interval.strip().upper()
-    try:
-        if s.endswith("K"):
-            return int(float(s[:-1]) * 1000)
-        if s.endswith("M"):
-            return int(float(s[:-1]) * 1_000_000)
-        return int(s)
-    except Exception:
-        return None
-
-
-# 未命中定价分区规则时的默认上下文容量（与最低档位 200K 对齐）
-DEFAULT_USER_FACING_MAX_CONTEXT_TOKENS = 200_000
-
-
 def resolve_user_facing_max_context_tokens(
     model_id: str,
     *,
@@ -808,47 +860,27 @@ def resolve_user_facing_max_context_tokens(
     """计算 `model_id` 对外暴露的最大上下文 token 容量。
 
     与 [CompactionConfig._calculate_model_based_threshold] 保持取值口径一致：
-      1. 优先命中 `pricing_tier_rules` 时，返回 `pricing_interval` 解析后的数值
-         （如 "200K" -> 200000、"256K" -> 256000）。这也是用户感知的「模型标称上下文」。
-      2. 未命中时统一回退到 [DEFAULT_USER_FACING_MAX_CONTEXT_TOKENS]（200K），避免使用模型
-         原始 `max_context_tokens`（如 128K）造成前端展示与系统对外口径不一致。
+      1. 优先命中 config.yaml 的 `context_window.tiers`，返回该规则的
+         `user_facing_max_context_tokens`。
+      2. 未命中时统一回退到 `context_window.default_user_facing_max_context_tokens`，
+         避免使用模型原始物理窗口造成前端展示与系统对外口径不一致。
 
     供压缩以外的消费者（如消息工厂的实时 token_usage 输出）复用，避免重复实现查表逻辑。
     """
+    default_context_tokens = _resolve_default_user_facing_max_context_tokens()
     if not (model_id or resolved_model_id or model_name):
-        return DEFAULT_USER_FACING_MAX_CONTEXT_TOKENS
+        return default_context_tokens
     try:
         # auto 本身不表达具体模型，必须把运行时解析结果和配置别名都纳入匹配。
-        candidates: List[Any] = [resolved_model_id, model_name, model_id]
-        for candidate in list(candidates):
-            if not candidate:
-                continue
-            mc = model_config_utils.get_model_config(str(candidate).strip())
-            if not mc:
-                continue
-            metadata = mc.metadata or {}
-            candidates.extend([
-                mc.model_id,
-                mc.name,
-                mc.provider,
-                mc.resolved_model_id,
-                metadata.get("label"),
-                metadata.get("api_model"),
-                metadata.get("profile"),
-            ])
-
-        # 去空、去重、统一小写后，沿用压缩规则的子串匹配口径。
-        match_texts = {str(value).strip().lower() for value in candidates if value and str(value).strip()}
-        rules = CompactionConfig.__dataclass_fields__["pricing_tier_rules"].default_factory()
+        match_texts = _collect_model_match_texts(resolved_model_id, model_name, model_id)
+        rules = _load_context_window_rules_from_config()
         for rule in rules:
             for keyword in rule.model_keywords:
                 keyword_lower = keyword.lower()
                 if any(keyword_lower in text for text in match_texts):
-                    interval_value = _parse_pricing_interval(rule.pricing_interval)
-                    if interval_value is not None:
-                        return interval_value
+                    return rule.user_facing_max_context_tokens
 
-        return DEFAULT_USER_FACING_MAX_CONTEXT_TOKENS
+        return default_context_tokens
     except Exception as e:
         logger.warning(f"resolve_user_facing_max_context_tokens 失败 model_id={model_id}: {e}")
-        return DEFAULT_USER_FACING_MAX_CONTEXT_TOKENS
+        return default_context_tokens
