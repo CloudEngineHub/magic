@@ -55,6 +55,9 @@ from app.magic.background_compact import (
     BACKGROUND_COMPACT_WAIT_TIMEOUT,
     build_messages_digest,
 )
+from app.magic.compact_user_input_references import (
+    format_user_input_reference_block,
+)
 from app.magic.compact_request_tracker import CompactRequestTracker
 from app.core.entity.final_task_state import (
     FinalTaskState,
@@ -1707,6 +1710,7 @@ class Agent(BaseAgent):
         compact_message = UserMessage(
             content=compact_request,
             show_in_ui=False,
+            source="compact_request",
         )
         await self.chat_history.add_message(compact_message)
         return True
@@ -1893,6 +1897,7 @@ class Agent(BaseAgent):
         compact_message = UserMessage(
             content=compact_request,
             show_in_ui=False,
+            source="compact_request",
         )
         await self.chat_history.add_message(compact_message)
         self._log_compaction_event(
@@ -1978,7 +1983,7 @@ Since your subsequent output will be merged with pre-interruption content and di
             compressed_content = self._build_compacted_summary_message(summary)
             replacement_messages = [
                 SystemMessage(content=self.system_prompt, show_in_ui=False),
-                UserMessage(content=compressed_content, show_in_ui=True),
+                UserMessage(content=compressed_content, show_in_ui=True, source="compact_summary"),
                 *new_messages,
             ]
 
@@ -2116,7 +2121,13 @@ Since your subsequent output will be merged with pre-interruption content and di
         self._begin_compact_request(reason="构建 compact 请求")
 
         # 被动触发：直接注入 SKILL.md 内容，无需 Agent 额外调用 read_skills
-        prompt = f"The conversation is too long and must be compacted now. You must call the `compact_chat_history` tool immediately.\n\n{self._compact_skill_content}"
+        reference_block = format_user_input_reference_block(self.chat_history.messages)
+        prompt = (
+            "The conversation is too long and must be compacted now. "
+            "You must call the `compact_chat_history` tool immediately.\n\n"
+            f"{reference_block}\n\n"
+            f"{self._compact_skill_content}"
+        )
 
         if user_instruction:
             prompt += f"\n\n## Additional User Instruction for This Compaction\n\n{user_instruction}"
@@ -2851,7 +2862,7 @@ Since your subsequent output will be merged with pre-interruption content and di
             compacted_tokens = num_tokens_from_string(compressed_content)
             replacement_messages = [
                 SystemMessage(content=self.system_prompt, show_in_ui=False),
-                UserMessage(content=compressed_content, show_in_ui=True),
+                UserMessage(content=compressed_content, show_in_ui=True, source="compact_summary"),
             ]
             await self.chat_history.replace_messages(replacement_messages)
             compressed_message_count = len(self.chat_history.messages)

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
 from agentlang.logger import get_logger
+from app.magic.compact_user_input_references import format_user_input_reference_block
 
 if TYPE_CHECKING:
     from agentlang.chat_history.chat_history import ChatHistory
@@ -162,10 +163,13 @@ async def start_background_compact(
 
     state.reset()
     snapshot_message_count = len(chat_history.messages)
-    snapshot_digest = build_messages_digest(chat_history.messages[:snapshot_message_count])
+    snapshot_messages = chat_history.messages[:snapshot_message_count]
+    snapshot_digest = build_messages_digest(snapshot_messages)
     if state.is_failed_snapshot(snapshot_message_count, snapshot_digest):
         logger.info("后台压缩快照与上次失败快照相同，跳过重复启动")
         return
+
+    user_input_reference_block = format_user_input_reference_block(snapshot_messages)
 
     generation = uuid.uuid4().hex
     state.generation = generation
@@ -178,6 +182,7 @@ async def start_background_compact(
         "Call the `compact_chat_history` tool immediately with the complete summary.\n"
         "Do not call any other tool. Do not ask clarifying questions.\n"
         "The summary must cover the conversation before this compaction request.\n\n"
+        f"{user_input_reference_block}\n\n"
         f"{compact_instruction}"
     )
 

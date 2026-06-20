@@ -19,6 +19,10 @@ Remember: subsequent work will restore context by reading files, so you must pro
 
 Treat the summary as a recovery index, not a transcript. Inline only information that cannot be reliably recovered by reading files or reloading skills: exact URLs, external IDs, user-provided constraints, active runtime references, and critical failure evidence.
 
+If a User Input Reference Index is provided, do not reproduce full user messages yourself. Select the indexes of user messages that must be preserved exactly, mention those indexes in Section 6 with short reasons, and pass the same indexes to `compact_chat_history` as `preserved_user_input_indexes`. The system restores the exact text from the original chat history.
+
+Use indexes only from the latest User Input Reference Index visible in context. If no current index is available, pass an empty list instead of guessing.
+
 Your summary must include the following sections:
 
 **1. Task Goals and Approach**
@@ -71,9 +75,25 @@ Your summary must include the following sections:
 - A task is incomplete when user-requested work remains, a promised action has not been done, the last relevant tool/command failed, or the required output has not been delivered.
 - Do not treat compaction itself as evidence that the original task is complete or incomplete.
 - Do not mark a task incomplete because of optional improvements, unrequested tests, unrequested review, or nice-to-have cleanup.
+- If the task is complete, say it is complete and do not imply more work remains.
+- If the task is incomplete, blocked, waiting for user confirmation, or recently had a failed tool call, say that clearly and include the next concrete step.
+- Do not continue old user requests after compression when the summary says they are complete or superseded.
 
 **6. High-Value User Input**
-- Verbatim quotes of user messages that are valuable for the current or future tasks — must be complete and unaltered; do not paraphrase or omit details the user expressed
+- If a User Input Reference Index is provided, select only the indexes of user messages that are valuable for current or future tasks. Do not reproduce full user messages yourself.
+- Include a short reason for each selected index.
+- When calling `compact_chat_history`, pass the selected indexes as `preserved_user_input_indexes`.
+- If no User Input Reference Index is provided, preserve only short user inputs that cannot be recovered elsewhere.
+
+Preserve exact carriers of future work when they are still relevant:
+- Web URLs, video URLs, source links, and temporary resource links that cannot be reliably rediscovered.
+- File paths. Workspace-root-relative paths are acceptable for files under `.workspace`; paths outside `.workspace` must be preserved as absolute paths.
+- User constraints, output language, commit scope, approval state, and explicit prohibitions.
+- Failed tool calls, unresolved errors, incomplete task state, and the next concrete action.
+- External IDs, command lines, parameters, versions, dates, and exact error fragments.
+
+Do not preserve full file contents when the file can be read again and the summary keeps the correct path. Preserve what to read and why instead.
+Do not preserve stale search-result links, old intermediate URLs, or details that were superseded by a later decision.
 
 If any of the above sections overlap, merge them — no need to repeat.
 
@@ -124,7 +144,10 @@ If any of the above sections overlap, merge them — no need to repeat.
    Relevant quote: "Please continue analyzing this video. The link is https://example.com/watch?v=abc123."
 
 6. High-Value User Input:
-   Verbatim quotes of user messages that are valuable — complete and unaltered
+   Selected user input indexes:
+   - 2: user gave a non-negotiable output-language constraint
+   - 5: user provided the source URL needed for the unfinished analysis
+   The system restores the exact text from the original chat history. Do not copy full user messages here.
 ```
 
 ---
@@ -133,3 +156,4 @@ If any of the above sections overlap, merge them — no need to repeat.
 
 - The summary must be at least 10,000 characters.
 - Do not output the summary directly — all content must be passed as the `summary` parameter of the `compact_chat_history` tool call to ensure complete delivery.
+- If you selected any user input indexes in Section 6, pass the exact same integers in the `preserved_user_input_indexes` parameter. If none are needed, pass an empty list.
