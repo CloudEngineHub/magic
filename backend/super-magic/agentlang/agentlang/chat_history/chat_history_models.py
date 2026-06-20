@@ -799,7 +799,12 @@ def _parse_pricing_interval(interval: str) -> Optional[int]:
 DEFAULT_USER_FACING_MAX_CONTEXT_TOKENS = 200_000
 
 
-def resolve_user_facing_max_context_tokens(model_id: str) -> Optional[int]:
+def resolve_user_facing_max_context_tokens(
+    model_id: str,
+    *,
+    resolved_model_id: Optional[str] = None,
+    model_name: Optional[str] = None,
+) -> Optional[int]:
     """计算 `model_id` 对外暴露的最大上下文 token 容量。
 
     与 [CompactionConfig._calculate_model_based_threshold] 保持取值口径一致：
@@ -810,33 +815,39 @@ def resolve_user_facing_max_context_tokens(model_id: str) -> Optional[int]:
 
     供压缩以外的消费者（如消息工厂的实时 token_usage 输出）复用，避免重复实现查表逻辑。
     """
-    if not model_id:
+    if not (model_id or resolved_model_id or model_name):
         return DEFAULT_USER_FACING_MAX_CONTEXT_TOKENS
     try:
-        # 1) 收集匹配文本（与 CompactionConfig._get_model_match_texts 等价）
-        match_texts: List[Any] = [model_id]
-        mc = model_config_utils.get_model_config(model_id)
-        if mc:
-            match_texts.extend([mc.name, mc.provider])
+        # auto 本身不表达具体模型，必须把运行时解析结果和配置别名都纳入匹配。
+        candidates: List[Any] = [resolved_model_id, model_name, model_id]
+        for candidate in list(candidates):
+            if not candidate:
+                continue
+            mc = model_config_utils.get_model_config(str(candidate).strip())
+            if not mc:
+                continue
             metadata = mc.metadata or {}
-            label = metadata.get("label")
-            if label:
-                match_texts.append(str(label))
-        match_texts_lower = [str(t).lower() for t in match_texts if t]
+            candidates.extend([
+                mc.model_id,
+                mc.name,
+                mc.provider,
+                mc.resolved_model_id,
+                metadata.get("label"),
+                metadata.get("api_model"),
+                metadata.get("profile"),
+            ])
 
-        # 2) 读取默认规则表（default_factory 返回默认 list，不需实例化 CompactionConfig）
+        # 去空、去重、统一小写后，沿用压缩规则的子串匹配口径。
+        match_texts = {str(value).strip().lower() for value in candidates if value and str(value).strip()}
         rules = CompactionConfig.__dataclass_fields__["pricing_tier_rules"].default_factory()
-
-        # 3) 与 _match_pricing_tier_rule 保持同步的子串包含匹配
         for rule in rules:
             for keyword in rule.model_keywords:
                 keyword_lower = keyword.lower()
-                if any(keyword_lower in t for t in match_texts_lower):
+                if any(keyword_lower in text for text in match_texts):
                     interval_value = _parse_pricing_interval(rule.pricing_interval)
                     if interval_value is not None:
                         return interval_value
 
-        # 4) 未命中规则时统一回退为 200K
         return DEFAULT_USER_FACING_MAX_CONTEXT_TOKENS
     except Exception as e:
         logger.warning(f"resolve_user_facing_max_context_tokens 失败 model_id={model_id}: {e}")
