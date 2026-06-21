@@ -16,6 +16,7 @@ import { userStore } from "@/models/user"
 import StreamMessageApplyServiceV2 from "./MessageApplyServices/StreamMessageApplyServiceV2"
 import IntermediateMessageApplyService from "./MessageApplyServices/IntermediateMessageApplyService"
 import { WorkspaceStateCache } from "@/pages/superMagic/utils/superMagicCache"
+import { shouldSuppressRecordSummaryNotification } from "@/services/audioRecordings"
 import { logger as Logger } from "@/utils/log"
 
 const logger = Logger.createLogger("ChatBusinessMessageService")
@@ -185,14 +186,17 @@ class ChatBusinessMessageService {
 		const isSameOrganization =
 			messagePayload.recording_summary_result.organization_code === currentOrganization
 
-		// Check if currently on target page
-		const isInTopicPage =
-			state.topicId === messagePayload.recording_summary_result.topic_id &&
-			state.workspaceId === messagePayload.recording_summary_result.workspace_id &&
-			state.projectId === messagePayload.recording_summary_result.project_id
+		const result = messagePayload.recording_summary_result
+		const shouldSuppressNotification = shouldSuppressRecordSummaryNotification({
+			projectId: result.project_id,
+			workspaceId: result.workspace_id,
+			topicId: result.topic_id,
+			projectMode: result.project_mode,
+			workspaceState: state,
+		})
 
-		// Show notification if same organization but not on target page
-		if (isSameOrganization && !isInTopicPage) {
+		// Show notification if same organization but not already on the result page
+		if (isSameOrganization && !shouldSuppressNotification) {
 			this.showRecordSummaryNotificationCallback({
 				workspaceId: messagePayload.recording_summary_result.workspace_id,
 				projectId: messagePayload.recording_summary_result.project_id,

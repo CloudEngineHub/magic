@@ -17,4 +17,10 @@ export {
 } from "./RecordingGroupsService"
 export { resolveRecordingGroupDisplayName } from "./resolveRecordingGroupDisplayName"
 export { AUDIO_PROJECT_MODE, isAudioProjectMode } from "./audioProjectMode"
-export { resolveRecordSummaryResultHref } from "./recordingOrigin"
+export {
+	navigateToRecordSummaryResult,
+	resolveRecordSummaryResultHref,
+	shouldSuppressRecordSummaryNotification,
+	type RecordSummaryNotificationSuppressParams,
+	type RecordSummaryResultNavigationParams,
+} from "./recordingOrigin"

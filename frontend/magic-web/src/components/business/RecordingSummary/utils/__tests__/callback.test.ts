@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { onSummarizeSuccessDefaultCallback } from "../callback"
 
-const { pushMock, waitingTipMock, recordErrorMock } = vi.hoisted(() => ({
-	pushMock: vi.fn(),
+const { navigateToRecordSummaryResultMock, waitingTipMock, recordErrorMock } = vi.hoisted(() => ({
+	navigateToRecordSummaryResultMock: vi.fn(),
 	waitingTipMock: vi.fn(),
 	recordErrorMock: vi.fn(),
 }))
@@ -12,10 +12,9 @@ const { isAudioProjectModeMock } = vi.hoisted(() => ({
 	isAudioProjectModeMock: vi.fn(),
 }))
 
-vi.mock("@/routes/history", () => ({
-	history: {
-		push: pushMock,
-	},
+vi.mock("@/services/audioRecordings", () => ({
+	isAudioProjectMode: isAudioProjectModeMock,
+	navigateToRecordSummaryResult: navigateToRecordSummaryResultMock,
 }))
 
 vi.mock("@/components/business/RecordingSummary/components/WaitingTipModal", () => ({
@@ -28,13 +27,9 @@ vi.mock("@/components/business/RecordingSummary/components/RecordErrorModal", ()
 	default: recordErrorMock,
 }))
 
-vi.mock("@/services/audioRecordings", () => ({
-	isAudioProjectMode: isAudioProjectModeMock,
-}))
-
 describe("onSummarizeSuccessDefaultCallback", () => {
 	beforeEach(() => {
-		pushMock.mockReset()
+		navigateToRecordSummaryResultMock.mockReset()
 		waitingTipMock.mockReset()
 		recordErrorMock.mockReset()
 		isAudioProjectModeMock.mockReset()
@@ -57,10 +52,11 @@ describe("onSummarizeSuccessDefaultCallback", () => {
 			project_mode: "audio",
 		})
 
-		expect(pushMock).toHaveBeenCalledWith({
-			name: "AudioRecordingDetail",
-			params: { projectId: "project-mobile-001" },
-			state: { projectName: "Mobile imported project" },
+		expect(navigateToRecordSummaryResultMock).toHaveBeenCalledWith({
+			projectId: "project-mobile-001",
+			projectMode: "audio",
+			projectName: "Mobile imported project",
+			openInNewTab: false,
 		})
 		expect(waitingTipMock).not.toHaveBeenCalled()
 	})
@@ -86,6 +82,6 @@ describe("onSummarizeSuccessDefaultCallback", () => {
 			projectName: "Legacy project",
 			workspaceName: "Workspace B",
 		})
-		expect(pushMock).not.toHaveBeenCalled()
+		expect(navigateToRecordSummaryResultMock).not.toHaveBeenCalled()
 	})
 })

@@ -1,7 +1,6 @@
 import type { RecordSummaryNotificationContentProps } from "./types"
 import { RecordSummaryActionButton, RecordSummaryAlertCard } from "../RecordSummaryAlertCard"
 import { Check, TriangleAlert } from "lucide-react"
-import { resolveRecordSummaryResultHref } from "@/services/audioRecordings"
 
 function RecordSummaryNotificationContent({
 	title,
@@ -11,18 +10,7 @@ function RecordSummaryNotificationContent({
 	viewText,
 	ignoreText,
 	success = false,
-	workspaceId,
-	projectId,
-	projectMode,
-	topicId,
 }: RecordSummaryNotificationContentProps) {
-	const resultHref = resolveRecordSummaryResultHref({
-		projectId,
-		workspaceId,
-		topicId,
-		projectMode,
-	})
-
 	return (
 		<RecordSummaryAlertCard
 			title={title}
@@ -41,19 +29,11 @@ function RecordSummaryNotificationContent({
 						{ignoreText}
 					</RecordSummaryActionButton>
 					<RecordSummaryActionButton
-						asChild
 						appearance="primary"
+						onClick={onViewClick}
 						data-testid="record-summary-notification-view-button"
 					>
-						<a
-							href={resultHref}
-							target="_blank"
-							rel="noreferrer"
-							className="hover:text-primary-foreground"
-							onClick={onViewClick}
-						>
-							{viewText}
-						</a>
+						{viewText}
 					</RecordSummaryActionButton>
 				</>
 			}

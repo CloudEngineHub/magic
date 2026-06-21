@@ -1,9 +1,7 @@
 import { GetRecordingSummaryResultResponse } from "@/apis/modules/superMagic/recordSummary"
 import showWaitingTipModal from "../components/WaitingTipModal"
 import showRecordErrorModal from "../components/RecordErrorModal"
-import { history } from "@/routes/history"
-import { RouteName } from "@/routes/constants"
-import { isAudioProjectMode } from "@/services/audioRecordings"
+import { isAudioProjectMode, navigateToRecordSummaryResult } from "@/services/audioRecordings"
 
 export function onSummarizeSuccessDefaultCallback(
 	res: GetRecordingSummaryResultResponse & {
@@ -15,14 +13,11 @@ export function onSummarizeSuccessDefaultCallback(
 ) {
 	if (res.success) {
 		if (isAudioProjectMode(res.project_mode)) {
-			history.push({
-				name: RouteName.AudioRecordingDetail,
-				params: {
-					projectId: res.project_id,
-				},
-				state: {
-					projectName: res.project_name,
-				},
+			navigateToRecordSummaryResult({
+				projectId: res.project_id,
+				projectMode: res.project_mode,
+				projectName: res.project_name,
+				openInNewTab: false,
 			})
 			return
 		}
