@@ -14,7 +14,14 @@ import aiofiles
 
 from agentlang.logger import get_logger
 from app.core.horizon.migration import CURRENT_VERSION, apply_migrations
-from app.core.horizon.models import HorizonState, FileReadRecord, PendingNotification, ImageModelState, VideoModelState
+from app.core.horizon.models import (
+    FileReadRecord,
+    HorizonState,
+    ImageModelState,
+    ManualContextWindowState,
+    PendingNotification,
+    VideoModelState,
+)
 from app.utils.async_file_utils import async_exists
 
 logger = get_logger(__name__)
@@ -62,6 +69,44 @@ def _notif_from_dict(d: dict) -> PendingNotification:
     )
 
 
+def _manual_context_window_to_dict(state: ManualContextWindowState) -> dict:
+    return {
+        "user_manual_max_context_tokens": state.user_manual_max_context_tokens,
+    }
+
+
+def _manual_context_window_from_dict(data: object) -> ManualContextWindowState:
+    if not isinstance(data, dict):
+        return ManualContextWindowState()
+    return ManualContextWindowState(
+        user_manual_max_context_tokens=int(data.get("user_manual_max_context_tokens") or 0),
+    )
+
+
+def _manual_context_windows_to_dict(
+    states: dict[str, ManualContextWindowState],
+) -> dict[str, dict]:
+    return {
+        model_key: _manual_context_window_to_dict(state)
+        for model_key, state in states.items()
+        if model_key and state.user_manual_max_context_tokens > 0
+    }
+
+
+def _manual_context_windows_from_dict(data: object) -> dict[str, ManualContextWindowState]:
+    if not isinstance(data, dict):
+        return {}
+    result: dict[str, ManualContextWindowState] = {}
+    for raw_model_key, raw_state in data.items():
+        model_key = str(raw_model_key or "").strip()
+        if not model_key:
+            continue
+        state = _manual_context_window_from_dict(raw_state)
+        if state.user_manual_max_context_tokens > 0:
+            result[model_key] = state
+    return result
+
+
 class HorizonStore:
     """原子写入的 JSON 持久化，与 ChatHistory 同目录。"""
 
@@ -102,6 +147,9 @@ class HorizonStore:
                 model_id=vid.get("model_id", ""),
                 config=vid.get("config", {}),
             )
+            state.manual_context_windows = _manual_context_windows_from_dict(
+                data.get("manual_context_windows")
+            )
             state.llm_model_id = data.get("llm_model_id", "")
             state.llm_model_name = data.get("llm_model_name", "")
             state.user_preferred_language = data.get("user_preferred_language", "")
@@ -129,6 +177,7 @@ class HorizonStore:
             "file_records": {k: _record_to_dict(v) for k, v in state.file_records.items()},
             "image_model": {"model_id": state.image_model.model_id, "sizes": state.image_model.sizes},
             "video_model": {"model_id": state.video_model.model_id, "config": state.video_model.config},
+            "manual_context_windows": _manual_context_windows_to_dict(state.manual_context_windows),
             "llm_model_id": state.llm_model_id,
             "llm_model_name": state.llm_model_name,
             "user_preferred_language": state.user_preferred_language,

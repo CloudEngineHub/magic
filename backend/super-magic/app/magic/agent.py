@@ -26,6 +26,7 @@ from agentlang.chat_history.chat_history import ChatHistory
 from agentlang.chat_history.chat_history_models import UserMessage
 from agentlang.context.tool_context import ToolContext
 from agentlang.event.data import (
+    AfterAgentReplyEventData,
     AfterMainAgentRunEventData,
     BeforeMainAgentRunEventData,
     ErrorEventData,
@@ -193,6 +194,7 @@ class SessionPrepResult:
     """Session preparation result after handling pending tool calls and user query"""
     pending_assistant_message: Optional[AssistantMessage] = None
     user_message_added: bool = True
+    direct_response: Optional[str] = None
 
 
 class Agent(BaseAgent):
@@ -285,7 +287,7 @@ class Agent(BaseAgent):
         )
         self._compact_request_tracker = CompactRequestTracker()
 
-        # 后台压缩状态（双阈值机制：early_compact_threshold 触发后台，token_threshold 硬限制）
+        # 后台压缩状态（双阈值机制：early_compact_threshold 触发后台，compaction_threshold_tokens 硬限制）
         self._bg_compact_state = BackgroundCompactState()
         self.capture_compact_history_result: bool = False
         self.captured_compact_summary: Optional[str] = None
@@ -753,6 +755,36 @@ class Agent(BaseAgent):
         except Exception as append_err:
             logger.error(f"添加异常终止上下文到历史记录时失败: {append_err}")
 
+    async def _dispatch_direct_command_response(self, content: str) -> None:
+        """把本地命令结果作为 assistant 消息发给前端，不触发 LLM。"""
+        from agentlang.utils.snowflake import Snowflake
+        from app.core.entity.event.event_context import EventContext
+
+        tool_context = ToolContext(metadata=self.agent_context.get_metadata())
+        tool_context.register_extension("agent_context", self.agent_context)
+        tool_context.register_extension("event_context", EventContext())
+
+        request_id = f"command_{Snowflake.create_default().get_id()}"
+        now = datetime.now().isoformat()
+        await self.agent_context.dispatch_event(
+            EventType.AFTER_AGENT_REPLY,
+            AfterAgentReplyEventData(
+                agent_context=self.agent_context,
+                model_id="command",
+                model_name="Command",
+                request_id=request_id,
+                request_timestamp=now,
+                response_timestamp=now,
+                tool_context=tool_context,
+                llm_response_message=ChatCompletionMessage(role="assistant", content=content),
+                response=None,
+                token_usage=None,
+                execution_time=0.0,
+                use_stream_mode=False,
+                success=True,
+            ),
+        )
+
     def _iter_exception_chain(self, exception: Exception) -> List[Exception]:
         """委托给统一的 iter_exception_chain，遍历完整异常图（含侧链）。"""
         return iter_exception_chain(exception)
@@ -893,6 +925,12 @@ class Agent(BaseAgent):
 
         session_prep_result = await self._prepare_run_session(query)
 
+        if session_prep_result.direct_response is not None:
+            await self._dispatch_direct_command_response(session_prep_result.direct_response)
+            self.agent_context.set_final_response(session_prep_result.direct_response)
+            self.set_agent_state(AgentState.FINISHED)
+            return session_prep_result.direct_response
+
         # 在首次 build_context_update 前设置输出预算，确保 output_size_limit 能写入 initial_context
         # set_output_token_budget 只在首次设置时生效，_handle_agent_loop 里的调用会成为幂等 no-op
         budget = self._get_runtime_output_budget()
@@ -978,7 +1016,13 @@ class Agent(BaseAgent):
         is_resume_request = command_match and command_match.command.name == "resume"
 
         if command_match:
-            query = await Commands.process(query, self)
+            command_result = await Commands.process(query, self)
+            if command_result.skip_llm:
+                return SessionPrepResult(
+                    user_message_added=False,
+                    direct_response=command_result.direct_response or "",
+                )
+            query = command_result.query or ""
 
         # 如果没有聊天历史，直接添加用户消息
         if not self.chat_history.messages:
@@ -1552,21 +1596,26 @@ class Agent(BaseAgent):
 
         auto_threshold = getattr(
             self.compaction_config,
-            "_auto_token_threshold",
-            self.compaction_config.token_threshold == 0,
+            "_auto_compaction_threshold",
+            self.compaction_config.compaction_threshold_tokens == 0,
         )
         if auto_threshold:
-            threshold_result = self.compaction_config.resolve_threshold_for_model(threshold_model_id)
-            token_threshold = threshold_result.token_threshold
+            text_model_state = self._resolve_current_text_model()
+            current_max_context_tokens = self._resolve_current_max_context_tokens(text_model_state)
+            threshold_result = self.compaction_config.resolve_threshold_for_model(
+                threshold_model_id,
+                current_max_context_tokens=current_max_context_tokens,
+            )
+            compaction_threshold_tokens = threshold_result.compaction_threshold_tokens
             self.compaction_config.agent_model_id = threshold_model_id
-            self.compaction_config.token_threshold = token_threshold
-            self.compaction_config._resolved_token_threshold_model_id = threshold_model_id
+            self.compaction_config.compaction_threshold_tokens = compaction_threshold_tokens
+            self.compaction_config._resolved_compaction_threshold_model_id = threshold_model_id
             threshold_model_for_log = threshold_result.model_id
             threshold_max_context_tokens = threshold_result.max_context_tokens
             threshold_matched_rule = threshold_result.matched_rule_name
             threshold_used_default = threshold_result.used_default
         else:
-            token_threshold = self.compaction_config.resolve_token_threshold(threshold_model_id)
+            compaction_threshold_tokens = self.compaction_config.resolve_compaction_threshold_tokens(threshold_model_id)
             threshold_model_for_log = threshold_model_id or ""
             threshold_max_context_tokens = 0
             threshold_matched_rule = None
@@ -1578,7 +1627,7 @@ class Agent(BaseAgent):
         logger.info(
             "压缩阈值已解析: "
             f"阈值模型={threshold_model_for_log}, "
-            f"Token阈值={token_threshold}, "
+            f"压缩阈值={compaction_threshold_tokens}, "
             f"最大上下文Token={threshold_max_context_tokens}, "
             f"命中规则={threshold_matched_rule}, "
             f"使用默认阈值={threshold_used_default}"
@@ -1586,7 +1635,7 @@ class Agent(BaseAgent):
         self._log_compaction_event(
             "check",
             "压缩检查："
-            f"当前Token={token_count}，Token阈值={token_threshold}，"
+            f"当前Token={token_count}，压缩阈值={compaction_threshold_tokens}，"
             f"当前消息数={message_count}，消息阈值={message_threshold}，"
             f"阈值模型={threshold_model_for_log}，"
             f"最大上下文Token={threshold_max_context_tokens}，"
@@ -1611,20 +1660,20 @@ class Agent(BaseAgent):
                 background_failed_this_snapshot = True
 
         # ── 阶段 2：到达硬阈值 ──
-        if token_count > token_threshold or message_count > message_threshold:
+        if token_count > compaction_threshold_tokens or message_count > message_threshold:
             if self._has_pending_compact_request():
                 logger.info("已存在待处理的 compact 请求，跳过重复注入")
                 self._log_compaction_event(
                     "skip",
                     "跳过压缩：已有待处理压缩请求，"
-                    f"当前Token={token_count}，Token阈值={token_threshold}，"
+                    f"当前Token={token_count}，压缩阈值={compaction_threshold_tokens}，"
                     f"当前消息数={message_count}，消息阈值={message_threshold}",
                 )
                 return False
 
             if self._bg_compact_state.is_running:
                 logger.info(
-                    f"到达硬阈值 (tokens={token_count}/{token_threshold})，"
+                    f"到达硬阈值 (tokens={token_count}/{compaction_threshold_tokens})，"
                     f"等待后台压缩完成 (已运行 {self._bg_compact_state.elapsed_seconds:.1f}s)"
                 )
                 summary = await self._wait_for_background_compact()
@@ -1638,7 +1687,7 @@ class Agent(BaseAgent):
 
             logger.info(
                 "触发上下文压缩: "
-                f"Token={token_count}/{token_threshold}, "
+                f"Token={token_count}/{compaction_threshold_tokens}, "
                 f"消息数={message_count}/{message_threshold}, "
                 f"阈值模型={threshold_model_for_log}, "
                 f"最大上下文Token={threshold_max_context_tokens}, "
@@ -1647,7 +1696,7 @@ class Agent(BaseAgent):
             self._log_compaction_event(
                 "trigger",
                 "触发压缩：触发方式=阈值，"
-                f"当前Token={token_count}，Token阈值={token_threshold}，"
+                f"当前Token={token_count}，压缩阈值={compaction_threshold_tokens}，"
                 f"当前消息数={message_count}，消息阈值={message_threshold}，"
                 f"阈值模型={threshold_model_for_log}，"
                 f"最大上下文Token={threshold_max_context_tokens}，"
@@ -1655,7 +1704,7 @@ class Agent(BaseAgent):
             )
 
             # 前台阻塞压缩（现有逻辑提取）
-            return await self._trigger_foreground_compact(token_count, token_threshold, message_count)
+            return await self._trigger_foreground_compact(token_count, compaction_threshold_tokens, message_count)
 
         # ── 阶段 3：到达预压缩阈值，fork 后台压缩 ──
         if (
@@ -1675,21 +1724,21 @@ class Agent(BaseAgent):
                 "background_start",
                 "启动后台预压缩："
                 f"当前Token={token_count}，预压缩阈值={early_threshold}，"
-                f"硬阈值={token_threshold}，阈值模型={threshold_model_for_log}",
+                f"硬阈值={compaction_threshold_tokens}，阈值模型={threshold_model_for_log}",
             )
             return False
 
         self._log_compaction_event(
             "skip",
             "跳过压缩：未达到阈值，"
-            f"当前Token={token_count}，Token阈值={token_threshold}，"
+            f"当前Token={token_count}，压缩阈值={compaction_threshold_tokens}，"
             f"当前消息数={message_count}，消息阈值={message_threshold}，"
             f"阈值模型={threshold_model_for_log}",
         )
         return False
 
     async def _trigger_foreground_compact(
-        self, token_count: int, token_threshold: int, message_count: int,
+        self, token_count: int, compaction_threshold_tokens: int, message_count: int,
     ) -> bool:
         """前台阻塞压缩（现有逻辑提取，保持行为不变）"""
         if self._has_pending_compact_request():
@@ -1697,13 +1746,13 @@ class Agent(BaseAgent):
             return False
 
         logger.info(
-            f"前台压缩触发: tokens={token_count}/{token_threshold}, "
+            f"前台压缩触发: tokens={token_count}/{compaction_threshold_tokens}, "
             f"messages={message_count}/{self.compaction_config.max_conversation_rounds}"
         )
         self._log_compaction_event(
             "foreground_trigger",
             "触发前台压缩："
-            f"当前Token={token_count}，Token阈值={token_threshold}，"
+            f"当前Token={token_count}，压缩阈值={compaction_threshold_tokens}，"
             f"当前消息数={message_count}，消息阈值={self.compaction_config.max_conversation_rounds}",
         )
         compact_request = self._build_compact_request()
@@ -2439,15 +2488,18 @@ Since your subsequent output will be merged with pre-interruption content and di
             # 更新 horizon：运行时 LM 模型 + 当前上下文窗口使用量
             try:
                 horizon_model_info = self._build_horizon_llm_model_info(text_model_state)
-                context_window_total = text_model_state.max_context_tokens
+                current_max_context_tokens = self._resolve_current_max_context_tokens(text_model_state)
                 self.agent_context.horizon.update_llm_model(
                     horizon_model_info.model_id,
                     horizon_model_info.model_name,
                     horizon_model_info.description,
                 )
-                self.agent_context.horizon.update_context_usage(token_usage.input_tokens, context_window_total)
-                # 记录当前模型的最大上下文 token 数，供前端实时展示
-                token_usage.max_context_tokens = context_window_total or None
+                self.agent_context.horizon.update_context_usage(
+                    token_usage.input_tokens,
+                    current_max_context_tokens,
+                )
+                # 记录当前采用的上下文上限，供前端实时展示。
+                token_usage.max_context_tokens = current_max_context_tokens or None
             except Exception as _horizon_err:
                 logger.warning(f"[AgentHorizon] 更新模型/上下文用量失败: {_horizon_err}")
 
@@ -2494,6 +2546,32 @@ Since your subsequent output will be merged with pre-interruption content and di
     def _resolve_current_text_model(self) -> TextModelState:
         """解析当前运行时文本模型。"""
         return self.agent_context.model_context.resolve_text_model()
+
+    def _resolve_current_max_context_tokens(self, text_model_state: TextModelState) -> int:
+        """返回当前用于展示、压缩判断和 Horizon 入参的上下文上限。"""
+        from agentlang.chat_history.chat_history_models import (
+            resolve_manual_context_window_limits,
+            resolve_user_facing_max_context_tokens,
+        )
+
+        model_key = (text_model_state.resolved_model_id or text_model_state.model_id).strip()
+        user_manual_max_context_tokens = self.agent_context.horizon.get_user_manual_max_context_tokens(
+            model_key=model_key,
+        )
+        if user_manual_max_context_tokens is not None:
+            limits = resolve_manual_context_window_limits(
+                max_context_tokens=text_model_state.max_context_tokens,
+                max_output_tokens=text_model_state.max_output_tokens,
+            )
+            if limits.contains(user_manual_max_context_tokens):
+                return user_manual_max_context_tokens
+
+        user_facing_max_context_tokens = resolve_user_facing_max_context_tokens(
+            text_model_state.model_id,
+            resolved_model_id=text_model_state.resolved_model_id,
+            model_name=text_model_state.model_name,
+        )
+        return user_facing_max_context_tokens or text_model_state.max_context_tokens
 
     def _get_runtime_output_budget(self) -> int:
         """获取当前运行时模型的输出预算；解析失败时保守使用默认值。"""

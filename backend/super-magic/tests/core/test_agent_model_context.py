@@ -191,7 +191,13 @@ def test_compaction_config_does_not_read_model_config_on_init(monkeypatch):
 
     def fake_get_model_config(model_id):
         calls.append(("config", model_id))
-        return SimpleNamespace(name="Mock Text Model", provider="mock-provider", metadata={})
+        return SimpleNamespace(
+            model_id=model_id,
+            name="Mock Text Model",
+            provider="mock-provider",
+            resolved_model_id="",
+            metadata={},
+        )
 
     monkeypatch.setattr(
         "agentlang.chat_history.chat_history_models.model_config_utils.get_max_context_tokens",
@@ -205,12 +211,12 @@ def test_compaction_config_does_not_read_model_config_on_init(monkeypatch):
     config = CompactionConfig(agent_model_id="mock-text")
 
     assert calls == []
-    assert config.resolve_token_threshold("mock-runtime-text") == 108_000
+    assert config.resolve_compaction_threshold_tokens("mock-runtime-text") == 108_000
     assert calls == [("max", "mock-runtime-text"), ("config", "mock-runtime-text")]
 
 
 @pytest.mark.parametrize("model_id", ["deepseek-v4-flash", "qwen3.7-plus"])
-def test_compaction_threshold_uses_230k_rule_for_current_magic_models(monkeypatch, model_id):
+def test_compaction_threshold_uses_256k_rule_for_current_magic_models(monkeypatch, model_id):
     monkeypatch.setattr(
         "agentlang.chat_history.chat_history_models.model_config_utils.get_max_context_tokens",
         lambda requested_model_id, default=0: 1_000_000,
@@ -218,8 +224,10 @@ def test_compaction_threshold_uses_230k_rule_for_current_magic_models(monkeypatc
     monkeypatch.setattr(
         "agentlang.chat_history.chat_history_models.model_config_utils.get_model_config",
         lambda requested_model_id: SimpleNamespace(
+            model_id=requested_model_id,
             name=requested_model_id,
             provider="mock-provider",
+            resolved_model_id="",
             metadata={},
         ),
     )
@@ -227,20 +235,22 @@ def test_compaction_threshold_uses_230k_rule_for_current_magic_models(monkeypatc
     config = CompactionConfig(agent_model_id=model_id)
 
     result = config.resolve_threshold_for_model(model_id)
-    config.token_threshold = result.token_threshold
+    config.compaction_threshold_tokens = result.compaction_threshold_tokens
 
-    assert result.token_threshold == 230_000
-    assert result.matched_rule_name == "threshold_230k"
+    assert result.compaction_threshold_tokens == 230_400
+    assert result.matched_rule_name == "context_window_256k"
     assert result.max_context_tokens == 1_000_000
-    assert config.early_compact_threshold == 184_000
+    assert config.early_compact_threshold == 184_320
 
 
 def test_user_facing_context_tokens_parse_pricing_interval(monkeypatch):
     monkeypatch.setattr(
         "agentlang.chat_history.chat_history_models.model_config_utils.get_model_config",
         lambda requested_model_id: SimpleNamespace(
+            model_id=requested_model_id,
             name=requested_model_id,
             provider="mock-provider",
+            resolved_model_id="",
             metadata={},
         ),
     )

@@ -43,6 +43,13 @@ class VideoModelState:
 
 
 @dataclass
+class ManualContextWindowState:
+    """用户对单个真实模型手动设置的上下文上限。"""
+
+    user_manual_max_context_tokens: int = 0
+
+
+@dataclass
 class ContextUsage:
     """当前 LLM 上下文窗口使用情况，由 AgentHorizon.get_context_usage() 返回。"""
     used: int    # 已使用的 token 数
@@ -66,6 +73,7 @@ class HorizonState:
     loaded_skills: list[str] = field(default_factory=list)
     image_model: ImageModelState = field(default_factory=ImageModelState)
     video_model: VideoModelState = field(default_factory=VideoModelState)
+    manual_context_windows: dict[str, ManualContextWindowState] = field(default_factory=dict)
     # LLM 模型 baseline：与 image_model/video_model 对齐，持久化避免重启后误判为"模型变更"
     llm_model_id: str = ""
     llm_model_name: str = ""

@@ -38,6 +38,7 @@ class _FakeCompactAgent:
     _has_pending_compact_request = Agent._has_pending_compact_request
     _fallback_compact_request_to_main_model = Agent._fallback_compact_request_to_main_model
     _finish_compact_request = Agent._finish_compact_request
+    _require_current_text_model_id = Agent._require_current_text_model_id
 
     def __init__(self, failures: list[Exception]):
         model_context = AgentModelContext()
@@ -107,6 +108,7 @@ class _FakeLoopCompactAgent:
     _restore_pre_compact_model = Agent._restore_pre_compact_model
     _restore_stale_compact_model_before_loop = Agent._restore_stale_compact_model_before_loop
     _finish_compact_request = Agent._finish_compact_request
+    _require_current_text_model_id = Agent._require_current_text_model_id
 
     def __init__(self, last_content: str, compact_request_pending: bool = False):
         model_context = AgentModelContext()
@@ -167,14 +169,15 @@ class _FakePrecompactAgent:
     _try_compact_chat_history = Agent._try_compact_chat_history
     _trigger_foreground_compact = Agent._trigger_foreground_compact
     _has_pending_compact_request = Agent._has_pending_compact_request
+    _require_current_text_model_id = Agent._require_current_text_model_id
 
     def __init__(self, token_count: int, *, pending: bool = False):
         self.agent_context = SimpleNamespace(
             model_context=SimpleNamespace(current_text_model_id="mock-runtime-text")
         )
         self.compaction_config = CompactionConfig(
-            token_threshold=100,
-            min_token_threshold=0,
+            compaction_threshold_tokens=100,
+            min_compaction_threshold_tokens=0,
             early_compact_ratio=0.8,
             max_conversation_rounds=100,
         )
@@ -234,7 +237,7 @@ class _FakeHardThresholdAgent(_FakePrecompactAgent):
     async def _trigger_foreground_compact(
         self,
         token_count: int,
-        token_threshold: int,
+        compaction_threshold_tokens: int,
         message_count: int,
     ) -> bool:
         self.foreground_count += 1

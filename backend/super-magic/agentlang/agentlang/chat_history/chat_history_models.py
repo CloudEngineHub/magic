@@ -31,9 +31,9 @@ ASSISTANT_TOOL_CONTENT_PLACEHOLDER = "我将继续执行任务"
 # 聊天记录压缩配置数据类
 # ==============================================================================
 FALLBACK_USER_FACING_MAX_CONTEXT_TOKENS = 200_000
-FALLBACK_DEFAULT_TOKEN_THRESHOLD = 180_000
-FALLBACK_MIN_TOKEN_THRESHOLD = 100_000
-FALLBACK_MAX_TOKEN_THRESHOLD = 180_000
+FALLBACK_DEFAULT_COMPACTION_THRESHOLD_TOKENS = 180_000
+FALLBACK_MIN_COMPACTION_THRESHOLD_TOKENS = 100_000
+FALLBACK_MAX_COMPACTION_THRESHOLD_TOKENS = 180_000
 FALLBACK_CONTEXT_USAGE_RATIO = 0.9
 
 
@@ -138,6 +138,11 @@ def _resolve_default_user_facing_max_context_tokens() -> int:
     )
 
 
+def resolve_default_user_facing_max_context_tokens() -> int:
+    """返回全局默认用户可见上下文上限。"""
+    return _resolve_default_user_facing_max_context_tokens()
+
+
 def _collect_model_match_texts(*model_ids: Any) -> List[str]:
     """收集用于上下文窗口规则匹配的模型文本。"""
     candidates: List[Any] = list(model_ids)
@@ -168,10 +173,49 @@ def _collect_model_match_texts(*model_ids: Any) -> List[str]:
 class CompactionThresholdResult:
     """模型压缩阈值解析结果。"""
     model_id: str
-    token_threshold: int
+    compaction_threshold_tokens: int
     max_context_tokens: int
     matched_rule_name: Optional[str] = None
     used_default: bool = False
+
+
+@dataclass(frozen=True)
+class ManualContextWindowLimits:
+    """当前模型允许用户手动设置的上下文上限范围。"""
+
+    system_default_max_context_tokens: int
+    max_allowed_context_tokens: int
+    max_context_tokens: int
+    max_output_tokens: int
+
+    @property
+    def has_valid_range(self) -> bool:
+        return self.max_allowed_context_tokens >= self.system_default_max_context_tokens
+
+    def contains(self, user_manual_max_context_tokens: int) -> bool:
+        return (
+            self.system_default_max_context_tokens
+            <= user_manual_max_context_tokens
+            <= self.max_allowed_context_tokens
+        )
+
+
+def resolve_manual_context_window_limits(
+    *,
+    max_context_tokens: int,
+    max_output_tokens: int,
+) -> ManualContextWindowLimits:
+    """按当前真实文本模型计算手动上下文上限的合法范围。"""
+    system_default_max_context_tokens = resolve_default_user_facing_max_context_tokens()
+    eighty_percent_tokens = int(max_context_tokens * 0.8)
+    output_reserved_tokens = max(0, max_context_tokens - max_output_tokens)
+    return ManualContextWindowLimits(
+        system_default_max_context_tokens=system_default_max_context_tokens,
+        max_allowed_context_tokens=min(eighty_percent_tokens, output_reserved_tokens),
+        max_context_tokens=max_context_tokens,
+        max_output_tokens=max_output_tokens,
+    )
+
 
 @dataclass
 class CompactionConfig:
@@ -185,50 +229,50 @@ class CompactionConfig:
     enable_compaction: bool = True  # 是否启用压缩（现在由 Agent 主动触发）
 
     # 触发阈值配置
-    token_threshold: int = 0  # 触发压缩的 Token 阈值
+    compaction_threshold_tokens: int = 0  # 触发压缩的 Token 阈值
     max_conversation_rounds: int = 500  # 触发压缩的消息数量阈值
 
-    # 后台压缩提前比例（到达 token_threshold 的此比例时启动后台压缩）
+    # 后台压缩提前比例（到达 compaction_threshold_tokens 的此比例时启动后台压缩）
     early_compact_ratio: float = 0.8
 
     @property
     def early_compact_threshold(self) -> int:
-        """后台压缩触发阈值 = token_threshold × early_compact_ratio"""
+        """后台压缩触发阈值 = compaction_threshold_tokens × early_compact_ratio"""
         return max(
-            self.min_token_threshold,
-            int(self.token_threshold * self.early_compact_ratio),
+            self.min_compaction_threshold_tokens,
+            int(self.compaction_threshold_tokens * self.early_compact_ratio),
         )
 
-    # 模型缺失或没有 agent_model_id 时使用 default_token_threshold；有模型时先读取
+    # 模型缺失或没有 agent_model_id 时使用 default_compaction_threshold_tokens；有模型时先读取
     # max_context_tokens，再按「命中 context_window_rules 则使用该用户可见窗口，
     # 否则使用模型物理窗口」乘以 context_usage_ratio 计算。若模型容量不小于
-    # min_token_threshold，结果至少为 min_token_threshold，最后不超过模型物理窗口。
-    # max_token_threshold 是旧字段，当前动态阈值链路不再用它做上限，保留给存量配置兼容。
-    default_token_threshold: int = FALLBACK_DEFAULT_TOKEN_THRESHOLD
-    min_token_threshold: int = FALLBACK_MIN_TOKEN_THRESHOLD
-    max_token_threshold: int = FALLBACK_MAX_TOKEN_THRESHOLD
+    # min_compaction_threshold_tokens，结果至少为 min_compaction_threshold_tokens，
+    # 最后不超过模型物理窗口。
+    default_compaction_threshold_tokens: int = FALLBACK_DEFAULT_COMPACTION_THRESHOLD_TOKENS
+    min_compaction_threshold_tokens: int = FALLBACK_MIN_COMPACTION_THRESHOLD_TOKENS
+    max_compaction_threshold_tokens: int = FALLBACK_MAX_COMPACTION_THRESHOLD_TOKENS
     context_usage_ratio: float = FALLBACK_CONTEXT_USAGE_RATIO
     context_window_rules: List[ContextWindowRule] = field(
         default_factory=_load_context_window_rules_from_config
     )
-    _auto_token_threshold: bool = field(default=False, init=False, repr=False)
-    _resolved_token_threshold_model_id: Optional[str] = field(default=None, init=False, repr=False)
+    _auto_compaction_threshold: bool = field(default=False, init=False, repr=False)
+    _resolved_compaction_threshold_model_id: Optional[str] = field(default=None, init=False, repr=False)
 
     @classmethod
     def from_config(cls, **overrides: Any) -> "CompactionConfig":
         """从 config.yaml 读取上下文窗口相关配置，并允许调用方覆盖 Agent 字段。"""
         values: Dict[str, Any] = {
-            "default_token_threshold": _load_token_config(
-                "context_window.compaction.default_token_threshold",
-                FALLBACK_DEFAULT_TOKEN_THRESHOLD,
+            "default_compaction_threshold_tokens": _load_token_config(
+                "context_window.compaction.default_compaction_threshold_tokens",
+                FALLBACK_DEFAULT_COMPACTION_THRESHOLD_TOKENS,
             ),
-            "min_token_threshold": _load_token_config(
-                "context_window.compaction.min_token_threshold",
-                FALLBACK_MIN_TOKEN_THRESHOLD,
+            "min_compaction_threshold_tokens": _load_token_config(
+                "context_window.compaction.min_compaction_threshold_tokens",
+                FALLBACK_MIN_COMPACTION_THRESHOLD_TOKENS,
             ),
-            "max_token_threshold": _load_token_config(
-                "context_window.compaction.max_token_threshold",
-                FALLBACK_MAX_TOKEN_THRESHOLD,
+            "max_compaction_threshold_tokens": _load_token_config(
+                "context_window.compaction.max_compaction_threshold_tokens",
+                FALLBACK_MAX_COMPACTION_THRESHOLD_TOKENS,
             ),
             "context_usage_ratio": _load_float_config(
                 "context_window.compaction.context_usage_ratio",
@@ -241,10 +285,10 @@ class CompactionConfig:
 
     def __post_init__(self):
         """压缩配置的简化验证"""
-        self._auto_token_threshold = self.token_threshold == 0
+        self._auto_compaction_threshold = self.compaction_threshold_tokens == 0
 
-        if self.token_threshold < 0:
-            raise ValueError("Token threshold cannot be negative")
+        if self.compaction_threshold_tokens < 0:
+            raise ValueError("Compaction threshold tokens cannot be negative")
         if self.max_conversation_rounds <= 0:
             raise ValueError("Max conversation rounds must be positive")
         if not 0.01 <= self.context_usage_ratio <= 1.0:
@@ -255,20 +299,26 @@ class CompactionConfig:
             if rule.user_facing_max_context_tokens <= 0:
                 raise ValueError("Context window rule tokens must be positive")
 
-    def resolve_token_threshold(self, agent_model_id: Optional[str] = None) -> int:
-        """Resolve token threshold lazily, after the current text model is selected."""
+    def resolve_compaction_threshold_tokens(self, agent_model_id: Optional[str] = None) -> int:
+        """Resolve compaction threshold lazily, after the current text model is selected."""
         if agent_model_id and agent_model_id != self.agent_model_id:
             self.agent_model_id = agent_model_id
-            if self._auto_token_threshold:
-                self._resolved_token_threshold_model_id = None
+            if self._auto_compaction_threshold:
+                self._resolved_compaction_threshold_model_id = None
 
-        if self._auto_token_threshold:
-            if self._resolved_token_threshold_model_id != self.agent_model_id or self.token_threshold <= 0:
-                self.token_threshold = self._calculate_model_based_threshold()
-                self._resolved_token_threshold_model_id = self.agent_model_id
-                logger.info(f"Set token_threshold to {self.token_threshold} based on model {self.agent_model_id}")
+        if self._auto_compaction_threshold:
+            if (
+                self._resolved_compaction_threshold_model_id != self.agent_model_id
+                or self.compaction_threshold_tokens <= 0
+            ):
+                self.compaction_threshold_tokens = self._calculate_model_based_threshold()
+                self._resolved_compaction_threshold_model_id = self.agent_model_id
+                logger.info(
+                    "Set compaction_threshold_tokens to "
+                    f"{self.compaction_threshold_tokens} based on model {self.agent_model_id}"
+                )
 
-        return self.token_threshold or self.default_token_threshold
+        return self.compaction_threshold_tokens or self.default_compaction_threshold_tokens
 
     def _get_model_match_texts_for_model(self, model_id: str) -> List[str]:
         """收集用于匹配上下文窗口规则的模型文本。"""
@@ -299,12 +349,16 @@ class CompactionConfig:
         """根据基准模型文本匹配用户可见上下文窗口规则。"""
         return self._match_context_window_rule_for_model(self.agent_model_id, match_texts)
 
-    def resolve_threshold_for_model(self, model_id: str) -> CompactionThresholdResult:
+    def resolve_threshold_for_model(
+        self,
+        model_id: str,
+        current_max_context_tokens: Optional[int] = None,
+    ) -> CompactionThresholdResult:
         """按指定模型计算压缩阈值；模型缺失时显式返回默认阈值。"""
         if not model_id:
             return CompactionThresholdResult(
                 model_id="",
-                token_threshold=self.default_token_threshold,
+                compaction_threshold_tokens=self.default_compaction_threshold_tokens,
                 max_context_tokens=0,
                 used_default=True,
             )
@@ -313,32 +367,36 @@ class CompactionConfig:
         if max_context_tokens <= 0:
             logger.warning(
                 f"无法获取模型 {model_id} 的 max_context_tokens，"
-                f"压缩阈值使用默认值 {self.default_token_threshold}"
+                f"压缩阈值使用默认值 {self.default_compaction_threshold_tokens}"
             )
             return CompactionThresholdResult(
                 model_id=model_id,
-                token_threshold=self.default_token_threshold,
+                compaction_threshold_tokens=self.default_compaction_threshold_tokens,
                 max_context_tokens=0,
                 used_default=True,
             )
 
         match_texts = self._get_model_match_texts_for_model(model_id)
         matched_rule = self._match_context_window_rule_for_model(model_id, match_texts)
-        threshold_context_tokens = (
-            matched_rule.user_facing_max_context_tokens
-            if matched_rule is not None
-            else max_context_tokens
-        )
+        if current_max_context_tokens is not None and current_max_context_tokens > 0:
+            threshold_context_tokens = current_max_context_tokens
+            matched_rule_name = "current_max_context_tokens"
+        else:
+            threshold_context_tokens = (
+                matched_rule.user_facing_max_context_tokens
+                if matched_rule is not None
+                else max_context_tokens
+            )
+            matched_rule_name = matched_rule.name if matched_rule is not None else None
         threshold = int(threshold_context_tokens * self.context_usage_ratio)
-        matched_rule_name = matched_rule.name if matched_rule is not None else None
 
-        if max_context_tokens >= self.min_token_threshold:
-            threshold = max(threshold, self.min_token_threshold)
+        if max_context_tokens >= self.min_compaction_threshold_tokens:
+            threshold = max(threshold, self.min_compaction_threshold_tokens)
         threshold = min(threshold, max_context_tokens)
 
         return CompactionThresholdResult(
             model_id=model_id,
-            token_threshold=threshold,
+            compaction_threshold_tokens=threshold,
             max_context_tokens=max_context_tokens,
             matched_rule_name=matched_rule_name,
             used_default=False,
@@ -353,11 +411,11 @@ class CompactionConfig:
         """
         try:
             result = self.resolve_threshold_for_model(self.agent_model_id)
-            return result.token_threshold
+            return result.compaction_threshold_tokens
 
         except Exception as e:
             logger.error(f"设置token阈值时出错: {e}")
-            return self.default_token_threshold  # 出错时返回默认值
+            return self.default_compaction_threshold_tokens  # 出错时返回默认值
 
 # ==============================================================================
 # 聊天记录压缩信息元数据

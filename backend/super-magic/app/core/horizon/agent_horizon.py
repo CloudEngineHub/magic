@@ -21,7 +21,15 @@ if TYPE_CHECKING:
 
 from agentlang.logger import get_logger
 from app.core.horizon.diff_builder import detect_file_changes
-from app.core.horizon.models import ContextUsage, FileReadRecord, HorizonState, ImageModelState, PendingNotification, VideoModelState
+from app.core.horizon.models import (
+    ContextUsage,
+    FileReadRecord,
+    HorizonState,
+    ImageModelState,
+    ManualContextWindowState,
+    PendingNotification,
+    VideoModelState,
+)
 from app.core.horizon.store import HorizonStore
 from app.utils.file_utils import calculate_file_hash, get_fresh_file_stat
 
@@ -681,10 +689,36 @@ class AgentHorizon:
         """返回当前上下文窗口使用情况，供工具决策使用。total=0 表示尚未获得模型数据。"""
         return ContextUsage(used=self._context_used, total=self._context_total)
 
-    def update_context_usage(self, input_tokens: int, context_window_total: int) -> None:
+    async def set_user_manual_max_context_tokens(
+        self,
+        *,
+        model_key: str,
+        user_manual_max_context_tokens: int,
+    ) -> None:
+        """保存用户对当前真实模型设置的上下文上限；业务校验在 command 层完成。"""
+        await self._ensure_loaded()
+        normalized_model_key = model_key.strip()
+        if not normalized_model_key or user_manual_max_context_tokens <= 0:
+            return
+        self._state.manual_context_windows[normalized_model_key] = ManualContextWindowState(
+            user_manual_max_context_tokens=user_manual_max_context_tokens,
+        )
+        await self._save()
+
+    def get_user_manual_max_context_tokens(self, *, model_key: str) -> int | None:
+        """返回指定真实模型的用户手动上下文上限；不存在时返回 None。"""
+        normalized_model_key = model_key.strip()
+        if not normalized_model_key:
+            return None
+        state = self._state.manual_context_windows.get(normalized_model_key)
+        if state is None or state.user_manual_max_context_tokens <= 0:
+            return None
+        return state.user_manual_max_context_tokens
+
+    def update_context_usage(self, input_tokens: int, current_max_context_tokens: int) -> None:
         """LLM 调用返回后调用，更新上下文窗口使用量。"""
         self._context_used = input_tokens
-        self._context_total = context_window_total
+        self._context_total = current_max_context_tokens
 
     def _calculate_context_used_pct(self, used: int, total: int) -> int:
         return int(used / total * 100)

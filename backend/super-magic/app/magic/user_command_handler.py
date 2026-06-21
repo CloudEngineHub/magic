@@ -5,15 +5,21 @@
 """
 
 import asyncio
+import re
 from dataclasses import dataclass
 from typing import Callable, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.magic.agent import Agent
 
+from agentlang.chat_history.chat_history_models import resolve_manual_context_window_limits
 from agentlang.logger import get_logger
+from app.core.models.agent_model_context import TextModelState
+from app.i18n import i18n
 
 logger = get_logger(__name__)
+
+_TOKEN_INPUT_RE = re.compile(r"^(?P<number>\d+(?:\.\d+)?)(?P<unit>[kKmM]?)$")
 
 
 @dataclass
@@ -30,6 +36,15 @@ class CommandMatch:
     """命令匹配结果"""
     command: Command
     args: str  # 命令后面的参数文本，无参数时为空字符串
+
+
+@dataclass(frozen=True)
+class CommandProcessResult:
+    """命令处理结果。query 继续进 LLM；direct_response 直接发给前端。"""
+
+    query: Optional[str] = None
+    direct_response: Optional[str] = None
+    skip_llm: bool = False
 
 
 class Commands:
@@ -101,7 +116,7 @@ class Commands:
         return None
 
     @classmethod
-    async def process(cls, query: str, agent: 'Agent') -> str:
+    async def process(cls, query: str, agent: 'Agent') -> CommandProcessResult:
         """处理命令
 
         检测并转换用户输入。如果是命令，调用处理函数并返回转换后的内容；
@@ -112,11 +127,11 @@ class Commands:
             agent: Agent 实例
 
         Returns:
-            str: 处理后的查询内容
+            CommandProcessResult: 处理后的查询内容或本地直出结果
         """
         match = cls.get(query)
         if not match:
-            return query
+            return CommandProcessResult(query=query)
 
         logger.info(f"检测到用户命令: {match.command.name}" + (f", 参数: {match.args}" if match.args else ""))
 
@@ -127,7 +142,9 @@ class Commands:
         if asyncio.iscoroutine(result):
             result = await result
 
-        return result
+        if isinstance(result, CommandProcessResult):
+            return result
+        return CommandProcessResult(query=str(result))
 
 
 # ===== 命令处理函数 =====
@@ -141,6 +158,100 @@ def handle_compact(agent: 'Agent', args: str = "") -> str:
 def handle_continue(agent: 'Agent', args: str = "") -> str:
     """处理继续命令：返回标准化的继续指令"""
     return "继续"
+
+
+def _parse_context_window_tokens(raw: str) -> Optional[int]:
+    text = raw.strip().replace("_", "")
+    match = _TOKEN_INPUT_RE.fullmatch(text)
+    if not match:
+        return None
+    value = float(match.group("number"))
+    unit = match.group("unit").lower()
+    if unit == "k":
+        value *= 1_000
+    elif unit == "m":
+        value *= 1_000_000
+    tokens = int(value)
+    return tokens if tokens > 0 else None
+
+
+def _format_context_window_tokens(tokens: int) -> str:
+    if tokens >= 1_000_000 and tokens % 1_000_000 == 0:
+        return f"{tokens // 1_000_000}M"
+    if tokens >= 1_000 and tokens % 1_000 == 0:
+        return f"{tokens // 1_000}K"
+    return f"{tokens:,}"
+
+
+def _resolve_manual_context_window_model_key(text_model_state: TextModelState) -> str:
+    """手动上下文设置按真实模型保存；auto 必须落到 resolved_model_id。"""
+    return (text_model_state.resolved_model_id or text_model_state.model_id).strip()
+
+
+async def handle_context_window(agent: 'Agent', args: str = "") -> CommandProcessResult:
+    """处理手动上下文窗口命令：保存会话设置并直接返回前端文案。"""
+    requested_tokens = _parse_context_window_tokens(args)
+    if requested_tokens is None:
+        return CommandProcessResult(
+            direct_response=i18n.translate(
+                "messages.context_window_invalid_format",
+                category="common.messages",
+            ),
+            skip_llm=True,
+        )
+
+    text_model_state = agent._resolve_current_text_model()
+    limits = resolve_manual_context_window_limits(
+        max_context_tokens=text_model_state.max_context_tokens,
+        max_output_tokens=text_model_state.max_output_tokens,
+    )
+
+    if not limits.has_valid_range:
+        return CommandProcessResult(
+            direct_response=i18n.translate(
+                "messages.context_window_no_valid_range",
+                category="common.messages",
+                system_default=_format_context_window_tokens(limits.system_default_max_context_tokens),
+                max_allowed=_format_context_window_tokens(limits.max_allowed_context_tokens),
+            ),
+            skip_llm=True,
+        )
+
+    if requested_tokens < limits.system_default_max_context_tokens:
+        return CommandProcessResult(
+            direct_response=i18n.translate(
+                "messages.context_window_below_default",
+                category="common.messages",
+                system_default=_format_context_window_tokens(limits.system_default_max_context_tokens),
+            ),
+            skip_llm=True,
+        )
+
+    if requested_tokens > limits.max_allowed_context_tokens:
+        return CommandProcessResult(
+            direct_response=i18n.translate(
+                "messages.context_window_above_limit",
+                category="common.messages",
+                max_allowed=_format_context_window_tokens(limits.max_allowed_context_tokens),
+            ),
+            skip_llm=True,
+        )
+
+    model_key = _resolve_manual_context_window_model_key(text_model_state)
+    await agent.agent_context.horizon.set_user_manual_max_context_tokens(
+        model_key=model_key,
+        user_manual_max_context_tokens=requested_tokens,
+    )
+
+    return CommandProcessResult(
+        direct_response=i18n.translate(
+            "messages.context_window_adjusted",
+            category="common.messages",
+            context_size=_format_context_window_tokens(requested_tokens),
+            max_allowed=_format_context_window_tokens(limits.max_allowed_context_tokens),
+        ),
+        skip_llm=True,
+    )
 
 
 async def handle_new_session(agent: 'Agent', args: str = "") -> str:
@@ -190,6 +301,13 @@ Commands.register(
     name="continue",
     variants=['/continue'],
     handler=handle_continue
+)
+
+Commands.register(
+    name="context_window",
+    variants=['/context-window', '/context', '/ctx'],
+    handler=handle_context_window,
+    accept_args=True,
 )
 
 Commands.register(

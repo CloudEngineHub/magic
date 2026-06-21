@@ -70,9 +70,9 @@ llm:
 context_window:
   default_user_facing_max_context_tokens: 200000
   compaction:
-    default_token_threshold: 180000
-    min_token_threshold: 100000
-    max_token_threshold: 180000
+    default_compaction_threshold_tokens: 180000
+    min_compaction_threshold_tokens: 100000
+    max_compaction_threshold_tokens: 180000
     context_usage_ratio: 0.9
   tiers:
     # 200K 档：产品对外按 200K 展示，压缩阈值由 context_usage_ratio 派生。
