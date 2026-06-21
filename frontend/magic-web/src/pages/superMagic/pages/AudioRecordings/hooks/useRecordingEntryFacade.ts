@@ -1,5 +1,6 @@
 import type { ComponentType } from "react"
 import { useCallback, useEffect, useState } from "react"
+import i18next from "i18next"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
@@ -22,9 +23,10 @@ import { getCachedRecordingSettings } from "./useRecordingSettings"
 import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordingsService"
 import { audioRecordingsStore } from "../stores/audio-recordings-store"
 import { SuperMagicApi } from "@/apis"
-import { AUDIO_WORKSPACE_TYPE } from "@/services/audioRecordings"
+import { AUDIO_WORKSPACE_TYPE } from "@/services/audioRecordings/RecordingGroupsConstants"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
+import { buildOptimisticRecordingItem } from "../utils/build-optimistic-recording-item"
 import { resolveCardStatusFromListItem } from "../utils/normalize-audio-project-item"
 
 export type EntryPresentation = "list" | "recording"
@@ -84,13 +86,13 @@ async function ensureMicrophoneReady(): Promise<void> {
  * Maps recorder startup errors to stable UI copy while keeping the raw detail
  * visible for debugging and support during the ongoing mobile rollout.
  */
-function resolveRecordingStartupErrorContent(
-	t: (key: string) => string,
-	error: Error | undefined,
-): { message: string; detail: string } {
+function resolveRecordingStartupErrorContent(error: Error | undefined): {
+	message: string
+	detail: string
+} {
 	if (!error) {
 		return {
-			message: t("mobile.recordingEntry.active.startFailed"),
+			message: i18next.t("mobile.recordingEntry.active.startFailed", { ns: "super" }),
 			detail: "",
 		}
 	}
@@ -105,7 +107,7 @@ function resolveRecordingStartupErrorContent(
 		normalizedDetail.includes("microphone permission denied")
 	) {
 		return {
-			message: t("mobile.recordingEntry.active.permissionDenied"),
+			message: i18next.t("mobile.recordingEntry.active.permissionDenied", { ns: "super" }),
 			detail: rawDetail,
 		}
 	}
@@ -116,7 +118,7 @@ function resolveRecordingStartupErrorContent(
 		normalizedDetail.includes("neither mixed audio nor microphone")
 	) {
 		return {
-			message: t("mobile.recordingEntry.active.browserNotSupported"),
+			message: i18next.t("mobile.recordingEntry.active.browserNotSupported", { ns: "super" }),
 			detail: rawDetail,
 		}
 	}
@@ -128,7 +130,9 @@ function resolveRecordingStartupErrorContent(
 		normalizedDetail.includes("failed to initialize microphone audio source")
 	) {
 		return {
-			message: t("mobile.recordingEntry.active.audioSourceUnavailable"),
+			message: i18next.t("mobile.recordingEntry.active.audioSourceUnavailable", {
+				ns: "super",
+			}),
 			detail: rawDetail,
 		}
 	}
@@ -138,72 +142,15 @@ function resolveRecordingStartupErrorContent(
 		normalizedDetail.includes("failed to start recording")
 	) {
 		return {
-			message: t("mobile.recordingEntry.active.startTimedOut"),
+			message: i18next.t("mobile.recordingEntry.active.startTimedOut", { ns: "super" }),
 			detail: rawDetail,
 		}
 	}
 
 	return {
-		message: t("mobile.recordingEntry.active.startFailed"),
+		message: i18next.t("mobile.recordingEntry.active.startFailed", { ns: "super" }),
 		detail: rawDetail,
 	}
-}
-
-/**
- * Builds a stable recording list item so the list can immediately show a
- * "summarizing" card before the backend query catches up.
- */
-export function buildOptimisticRecordingItem(params: {
-	projectId: string
-	projectName: string
-	workspaceId?: string
-	modelId: string
-	duration?: number
-	audioFileId?: string
-	taskKey?: string
-	audioSource?: "recorded" | "imported"
-	topicId?: string
-	source?: string | null
-	/** When false, card stays in merging-completed / not_summarized until user taps Generate Summary */
-	autoSummaryEnabled?: boolean
-}): AudioProjectListItem {
-	const autoSummaryEnabled = params.autoSummaryEnabled ?? true
-
-	return {
-		id: params.projectId,
-		project_name: params.projectName,
-		// Use unix seconds to match the API contract (created_at is always seconds-based).
-		// Date.now() returns milliseconds which would cause parseAudioProjectTimestamp to
-		// treat the value as ~57000 AD, breaking the relative time display.
-		created_at: Math.floor(Date.now() / 1000),
-		duration: params.duration ?? 0,
-		tags: [],
-		device_id: "",
-		audio_source: params.audioSource ?? "recorded",
-		current_phase: autoSummaryEnabled ? "summarizing" : "merging",
-		phase_status: autoSummaryEnabled ? "in_progress" : "completed",
-		card_status: autoSummaryEnabled ? "summarizing" : "not_summarized",
-		is_summarized: false,
-		workspace_id: params.workspaceId ?? null,
-		workspace_name: null,
-		model_id: params.modelId,
-		audio_file_id: params.audioFileId,
-		task_key: params.taskKey,
-		topic_id: params.topicId,
-		source: params.source ?? null,
-	}
-}
-
-interface PendingImportRequest {
-	projectId: string
-	projectName: string
-	topicId: string
-	workspaceId?: string
-	modelId: string
-	files: File[]
-	status: "queued" | "uploading"
-	/** The task key generated when the audio project was created; must be forwarded to the ASR summary API. */
-	taskKey: string
 }
 
 interface AudioProjectContext {
@@ -392,14 +339,13 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	useEffect(() => {
 		return recordSummaryService.on(RECORD_SUMMARY_EVENTS.RECORDING_ERROR, () => {
 			const nextContent = resolveRecordingStartupErrorContent(
-				t,
 				recordSummaryStore.errorState.recordingError,
 			)
 			setStartupState("error")
 			setStartupErrorMessage(nextContent.message)
 			setStartupErrorDetail(nextContent.detail)
 		})
-	}, [recordSummaryService, t])
+	}, [recordSummaryService])
 
 	/**
 	 * Opens the dedicated recording screen without mutating the underlying
@@ -509,7 +455,6 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			}
 
 			const nextContent = resolveRecordingStartupErrorContent(
-				t,
 				error instanceof Error ? error : undefined,
 			)
 			setStartupState("error")

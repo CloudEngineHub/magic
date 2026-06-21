@@ -2882,6 +2882,10 @@
 				"groupNamePlaceholder": "例如：客户访谈",
 				"unnamedGroup": "未命名分组",
 				"deleteGroupAria": "删除分组",
+				"deleteTitle": "删除分组",
+				"deleteConfirm": "确定删除此分组吗？删除后该分组下的录音将被归入「未分组」。",
+				"createSuccess": "分组创建成功",
+				"createFailed": "分组创建失败",
 				"moveSuccess": "移动成功",
 				"moveFailed": "移动失败，请稍后重试"
 			},
@@ -2904,6 +2908,10 @@
 				"filterAria": "筛选",
 				"searchAria": "搜索",
 				"clearSearchAria": "退出搜索"
+			},
+			"progress": {
+				"transferFailed": "上传失败",
+				"uploading": "正在上传"
 			},
 			"settings": {
 				"title": "录音设置",

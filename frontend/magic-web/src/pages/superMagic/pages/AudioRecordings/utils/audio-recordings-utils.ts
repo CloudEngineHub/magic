@@ -8,7 +8,7 @@ import type {
 	QueryAudioProjectsParams,
 } from "@/types/audioProject"
 import { formatTime } from "@/utils/string"
-import { ALL_RECORDING_GROUP_ID } from "@/services/audioRecordings"
+import { ALL_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
 /** Maps UI summary filter to API current_phase values (coarse server-side filter) */
 export function resolveSummaryPhaseFilter(
 	filter: AudioRecordingSummaryFilter,
@@ -49,8 +49,8 @@ export function buildAudioProjectsQueryParams(options: {
 		page: options.page,
 		page_size: options.pageSize,
 		is_hidden: 0,
-		workspace_id: ALL_RECORDING_GROUP_ID,
 		sort_by: options.sortBy,
+		workspace_id: ALL_RECORDING_GROUP_ID,
 		sort_order: options.sortOrder,
 	}
 
@@ -63,7 +63,9 @@ export function buildAudioProjectsQueryParams(options: {
 	if (options.createdAtStart != null) params.created_at_start = options.createdAtStart
 	if (options.createdAtEnd != null) params.created_at_end = options.createdAtEnd
 	if (options.projectIds?.length) params.project_ids = options.projectIds
-	if (options.workspaceId != null) params.workspace_id = options.workspaceId
+	if (options.workspaceId != null && options.workspaceId !== ALL_RECORDING_GROUP_ID) {
+		params.workspace_id = options.workspaceId
+	}
 
 	return params
 }

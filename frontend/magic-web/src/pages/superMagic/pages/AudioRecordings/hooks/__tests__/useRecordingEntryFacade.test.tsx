@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import { audioRecordingsStore } from "../../stores/audio-recordings-store"
+import { buildOptimisticRecordingItem } from "../../utils/build-optimistic-recording-item"
 import { useRecordingEntryFacade } from "../useRecordingEntryFacade"
 import {
 	resetRecordingSettingsCacheForTests,
@@ -19,7 +21,19 @@ const {
 	summaryModelListMock,
 	superMagicApiMock,
 	audioRecordingsServiceMock,
+	importTestState,
 } = vi.hoisted(() => {
+	const importTestState = {
+		queuedFiles: [] as File[],
+		pendingImportContext: null as {
+			projectId: string
+			projectName: string
+			topicId: string
+			workspaceId: string
+			modelId: string
+			taskKey: string
+		} | null,
+	}
 	return {
 		runtimeMock: {
 			state: {
@@ -92,10 +106,31 @@ const {
 		audioRecordingsServiceMock: {
 			submitSummary: vi.fn(),
 		},
+		importTestState,
 	}
 })
 
-let queuedFiles: File[] = []
+const audioImportStoreMock = vi.hoisted(() => ({
+	hasUploadingTasks: false,
+	startAudioImport: vi.fn(
+		async (
+			files: File[],
+			context: {
+				projectId: string
+				projectName: string
+				topicId: string
+				workspaceId: string
+				modelId: string
+				taskKey: string
+			},
+		) => {
+			importTestState.queuedFiles = files
+			importTestState.pendingImportContext = context
+		},
+	),
+	cancelImport: vi.fn(),
+	retryImport: vi.fn(),
+}))
 
 interface MockSaveUploadFileToProjectResponse {
 	file_id: string
@@ -110,13 +145,25 @@ interface MockSaveUploadFileToProjectResponse {
 	relative_file_path: string
 }
 
-let completedUpload:
-	| ((
-			fileId: string,
-			reportResult: unknown,
-			saveResult: MockSaveUploadFileToProjectResponse,
-	  ) => Promise<void>)
-	| null = null
+/** Simulates audio-import-store upload completion for facade import tests */
+async function completeImportUpload(saveResult: MockSaveUploadFileToProjectResponse) {
+	const context = importTestState.pendingImportContext
+	if (!context) return
+
+	const completedProject = buildOptimisticRecordingItem({
+		projectId: context.projectId,
+		projectName: context.projectName,
+		workspaceId: context.workspaceId,
+		modelId: context.modelId,
+		audioFileId: saveResult.file_id,
+		taskKey: context.taskKey,
+		audioSource: "imported",
+		topicId: context.topicId,
+	})
+	completedProject.transferStatus = "done"
+	audioRecordingsStore.addOptimisticItem(completedProject)
+	await audioRecordingsServiceMock.submitSummary(completedProject, context.modelId)
+}
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -127,6 +174,17 @@ vi.mock("react-i18next", () => ({
 		init: vi.fn(),
 	},
 }))
+
+// resolveRecordingStartupErrorContent uses i18next.t directly (not useTranslation).
+vi.mock("i18next", () => {
+	const chainable = {
+		use: vi.fn(() => chainable),
+		init: vi.fn(() => Promise.resolve()),
+		changeLanguage: vi.fn(() => Promise.resolve()),
+		t: (key: string) => key,
+	}
+	return { default: chainable }
+})
 
 vi.mock("sonner", () => ({
 	toast: {
@@ -179,32 +237,9 @@ vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: () => false,
 }))
 
-vi.mock("@/pages/superMagic/components/MessageEditor/hooks/useFileUpload", () => {
-	return {
-		UploadSource: {
-			Home: 1,
-			ProjectFile: 2,
-			AgentFile: 3,
-			RecordSummary: 4,
-		},
-		useFileUpload: (options: {
-			onFileCompleted?: (
-				fileId: string,
-				reportResult: unknown,
-				saveResult: MockSaveUploadFileToProjectResponse,
-			) => Promise<void>
-		}) => {
-			completedUpload = options.onFileCompleted ?? null
-			return {
-				addFiles: (files: File[]) => {
-					queuedFiles = files
-				},
-				uploading: false,
-				handleRetry: vi.fn(),
-			}
-		},
-	}
-})
+vi.mock("../../stores/audio-import-store", () => ({
+	audioImportStore: audioImportStoreMock,
+}))
 
 vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 	default: {
@@ -263,8 +298,10 @@ describe("useRecordingEntryFacade", () => {
 		superMagicApiMock.createAudioProject.mockReset()
 		superMagicApiMock.deleteProject.mockReset()
 		resetRecordingSettingsCacheForTests()
-		queuedFiles = []
-		completedUpload = null
+		importTestState.queuedFiles = []
+		importTestState.pendingImportContext = null
+		audioImportStoreMock.startAudioImport.mockClear()
+		audioRecordingsStore.optimisticItems = []
 
 		// Mock navigator.mediaDevices.getUserMedia for jsdom test environment compatibility
 		if (typeof navigator !== "undefined") {
@@ -561,7 +598,7 @@ describe("useRecordingEntryFacade", () => {
 			},
 		})
 
-		const { result } = renderHook(() => useRecordingEntryFacade())
+		const { result, rerender } = renderHook(() => useRecordingEntryFacade())
 
 		await act(async () => {
 			await result.current.importAudioFiles(
@@ -569,26 +606,25 @@ describe("useRecordingEntryFacade", () => {
 			)
 		})
 
-		expect(queuedFiles).toHaveLength(1)
+		expect(importTestState.queuedFiles).toHaveLength(1)
 
 		await act(async () => {
-			await completedUpload?.(
-				"upload-1",
-				{},
-				{
-					file_id: "saved-file-id",
-					file_key: "recording/upload.wav",
-					file_name: "hello.wav",
-					file_size: 128,
-					file_type: "user_upload",
-					project_id: "project-import",
-					topic_id: "topic-import",
-					task_id: "task-import",
-					created_at: "2026-06-15T00:00:00Z",
-					relative_file_path: "upload/hello.wav",
-				},
-			)
+			await completeImportUpload({
+				file_id: "saved-file-id",
+				file_key: "recording/upload.wav",
+				file_name: "hello.wav",
+				file_size: 128,
+				file_type: "user_upload",
+				project_id: "project-import",
+				topic_id: "topic-import",
+				task_id: "task-import",
+				created_at: "2026-06-15T00:00:00Z",
+				relative_file_path: "upload/hello.wav",
+			})
 		})
+
+		// Hook reads MobX store snapshot per render; without observer wrapper, rerender after store updates.
+		rerender()
 
 		expect(audioRecordingsServiceMock.submitSummary).toHaveBeenCalledWith(
 			expect.objectContaining({

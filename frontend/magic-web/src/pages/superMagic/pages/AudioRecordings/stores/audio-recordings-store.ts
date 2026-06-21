@@ -2,10 +2,12 @@ import { makeAutoObservable, runInAction } from "mobx"
 import type { RecordTaskProgress } from "@/apis/modules/superMagic/recordSummary"
 import {
 	ALL_RECORDING_GROUP_ID,
+} from "@/services/audioRecordings/RecordingGroupsConstants"
+import {
 	audioRecordingsService,
 	type PagedAudioProjects,
 	type QueryAudioProjectsOptions,
-} from "@/services/audioRecordings"
+} from "@/services/audioRecordings/AudioRecordingsService"
 import type {
 	AudioProjectListItem,
 	AudioProjectSortBy,

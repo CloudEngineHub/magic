@@ -18,6 +18,7 @@ vi.mock("@/utils/string", () => ({
 	formatTime: () => "mock-time",
 }))
 import {
+	buildAudioProjectsQueryParams,
 	formatRecordingDuration,
 	isAudioProjectDetailReady,
 	isAudioProjectPreviewReady,
@@ -318,5 +319,45 @@ describe("resolveRecordingSourceIcon", () => {
 
 	it("returns Smartphone fallback for legacy null source", () => {
 		expect(resolveRecordingSourceIcon(createItem({ source: null }))).toBe(Smartphone)
+	})
+})
+
+describe("buildAudioProjectsQueryParams", () => {
+	const defaultOptions = {
+		page: 1,
+		pageSize: 20,
+		keyword: "",
+		summaryFilter: "all" as const,
+		sortBy: "created_at" as const,
+		sortOrder: "desc" as const,
+	}
+
+	it("omits workspace_id parameter when options workspaceId matches ALL_RECORDING_GROUP_ID", () => {
+		const params = buildAudioProjectsQueryParams({
+			...defaultOptions,
+			workspaceId: "mock-all-group", // matches mocked ALL_RECORDING_GROUP_ID
+		})
+		expect(params.workspace_id).toBeUndefined()
+	})
+
+	it("omits workspace_id parameter when options workspaceId is not provided", () => {
+		const params = buildAudioProjectsQueryParams(defaultOptions)
+		expect(params.workspace_id).toBeUndefined()
+	})
+
+	it("includes empty workspace_id parameter when options workspaceId is empty (ungrouped)", () => {
+		const params = buildAudioProjectsQueryParams({
+			...defaultOptions,
+			workspaceId: "",
+		})
+		expect(params.workspace_id).toBe("")
+	})
+
+	it("includes workspace_id parameter when options workspaceId is a custom group id", () => {
+		const params = buildAudioProjectsQueryParams({
+			...defaultOptions,
+			workspaceId: "group-custom-123",
+		})
+		expect(params.workspace_id).toBe("group-custom-123")
 	})
 })

@@ -20,9 +20,11 @@
 		"generateSummary": "生成总结",
 		"moreActions": "更多操作",
 		"moreTags": "+{{count}}",
+		"moveToGroup": "移动到分组",
 		"notSummarized": "未总结",
 		"openProject": "查看项目详情",
 		"rename": "重命名",
+		"retryUpload": "重试",
 		"retrySummary": "重新总结",
 		"sourceDevice": "设备录音",
 		"sourceImported": "导入音频",
@@ -93,6 +95,7 @@
 	},
 	"empty": {
 		"description": "APP 端录制的项目会出现在这里",
+		"noCustomGroups": "暂无自定义分组",
 		"search": "没有匹配的录音",
 		"title": "暂无录音"
 	},

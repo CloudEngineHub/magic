@@ -172,7 +172,9 @@ describe("MobileRecordingCard", () => {
 			/>,
 		)
 
-		expect(screen.getByText("--:--")).toBeInTheDocument()
+		const durationPlaceholder = screen.getByText("--:--")
+		expect(durationPlaceholder).toBeInTheDocument()
+		expect(durationPlaceholder).not.toHaveClass("animate-pulse")
 	})
 
 	it("shows duration fallback for imported audio when duration is unavailable", () => {

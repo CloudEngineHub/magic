@@ -6,7 +6,7 @@ import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordin
 import { SuperMagicApi, FileApi } from "@/apis"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { buildOptimisticRecordingItem } from "../hooks/useRecordingEntryFacade"
+import { buildOptimisticRecordingItem } from "../utils/build-optimistic-recording-item"
 import { getCachedRecordingSettings } from "../hooks/useRecordingSettings"
 import { getRecordingTopicModel } from "../apis/recording-settings-api"
 import { resolveAutoSummaryEnabled } from "../utils/recording-settings-mapper"

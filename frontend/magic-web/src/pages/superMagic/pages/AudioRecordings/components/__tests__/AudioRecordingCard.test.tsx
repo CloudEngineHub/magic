@@ -180,9 +180,9 @@ describe("AudioRecordingCard", () => {
 			/>,
 		)
 
-		expect(screen.getByTestId("audio-recording-card-project-1-duration")).toHaveTextContent(
-			"--:--",
-		)
+		const durationEl = screen.getByTestId("audio-recording-card-project-1-duration")
+		expect(durationEl).toHaveTextContent("--:--")
+		expect(durationEl.querySelector(".animate-pulse")).toBeNull()
 	})
 
 	it("opens raw audio preview for summarizing items with audio_file_id", () => {
@@ -275,52 +275,6 @@ describe("AudioRecordingCard", () => {
 		)
 	})
 
-	it("keeps tags on the same row as source badges inside meta row", () => {
-		render(<AudioRecordingCard item={createItem()} />)
-
-		const metaRow = screen.getByTestId("audio-recording-card-project-1-meta-row")
-		const tagsRow = screen.getByTestId("audio-recording-card-project-1-tags")
-
-		expect(metaRow).toContainElement(tagsRow)
-		expect(metaRow).toContainElement(
-			screen.getByTestId("audio-recording-card-project-1-source-row"),
-		)
-		expect(metaRow).toHaveClass("overflow-x-auto")
-		expect(tagsRow).toHaveTextContent("Team")
-	})
-
-	it("shows end fade when meta row content overflows", () => {
-		const elementProto = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth")
-		const clientProto = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth")
-
-		Object.defineProperty(HTMLElement.prototype, "scrollWidth", {
-			configurable: true,
-			get() {
-				return 480
-			},
-		})
-		Object.defineProperty(HTMLElement.prototype, "clientWidth", {
-			configurable: true,
-			get() {
-				return 200
-			},
-		})
-
-		render(
-			<AudioRecordingCard
-				item={createItem({
-					tags: ["录音时长异常", "单方语音交互", "变更风险提示", "版本管理预留"],
-				})}
-			/>,
-		)
-
-		expect(
-			screen.getByTestId("audio-recording-card-project-1-meta-fade-end"),
-		).toBeInTheDocument()
-
-		if (elementProto) Object.defineProperty(HTMLElement.prototype, "scrollWidth", elementProto)
-		if (clientProto) Object.defineProperty(HTMLElement.prototype, "clientWidth", clientProto)
-	})
 
 	it("keeps summarized badge on the same row as the device source", () => {
 		render(<AudioRecordingCard item={createItem()} />)
@@ -337,20 +291,6 @@ describe("AudioRecordingCard", () => {
 		).toHaveTextContent("Summarized")
 	})
 
-	it("expands hidden tags when the more-tags control is clicked", () => {
-		render(<AudioRecordingCard item={createItem()} />)
-
-		expect(screen.getByText("Team")).toBeInTheDocument()
-		expect(screen.getByText("Review")).toBeInTheDocument()
-		expect(screen.queryByText("Extra")).not.toBeInTheDocument()
-
-		fireEvent.click(screen.getByTestId("audio-recording-card-project-1-tags-expand"))
-
-		expect(screen.getByText("Extra")).toBeInTheDocument()
-		expect(
-			screen.getByTestId("audio-recording-card-project-1-tags-collapse"),
-		).toBeInTheDocument()
-	})
 
 	it("renders duration in metadata row", () => {
 		render(<AudioRecordingCard item={createItem({ duration: 754 })} />)

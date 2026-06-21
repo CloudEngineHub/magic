@@ -1,4 +1,4 @@
-import { audioRecordingsService } from "@/services/audioRecordings"
+import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordingsService"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { canSubmitSummary } from "./summary-action-utils"
 

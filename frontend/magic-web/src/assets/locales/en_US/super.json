@@ -2882,6 +2882,10 @@
 				"groupNamePlaceholder": "For example: customer interviews",
 				"unnamedGroup": "Unnamed group",
 				"deleteGroupAria": "Delete group",
+				"deleteTitle": "Delete group",
+				"deleteConfirm": "Delete this group? Recordings in it will be moved to Ungrouped.",
+				"createSuccess": "Group created successfully",
+				"createFailed": "Failed to create group",
 				"moveSuccess": "Moved successfully",
 				"moveFailed": "Failed to move. Please try again later."
 			},
@@ -2904,6 +2908,10 @@
 				"filterAria": "Filter",
 				"searchAria": "Search",
 				"clearSearchAria": "Exit search"
+			},
+			"progress": {
+				"transferFailed": "Upload failed",
+				"uploading": "Uploading"
 			},
 			"settings": {
 				"title": "Recording Settings",

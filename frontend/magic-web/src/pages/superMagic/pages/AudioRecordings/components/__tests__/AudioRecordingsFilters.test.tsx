@@ -34,6 +34,7 @@ vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 	DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 	DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
 	DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+	DropdownMenuSeparator: () => <hr />,
 	DropdownMenuItem: ({
 		children,
 		onClick,
@@ -50,6 +51,7 @@ vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 }))
 
 import AudioRecordingsFilters from "../AudioRecordingsFilters"
+import { ALL_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
 
 /** Default props for filter bar rendering and interaction tests */
 function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilters>[0]> = {}) {
@@ -61,6 +63,9 @@ function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilte
 	const onSearchCompositionStart = vi.fn()
 	const onSearchCompositionEnd = vi.fn()
 	const onRefresh = vi.fn()
+	const onGroupChange = vi.fn()
+	const onManageGroups = vi.fn()
+	const onOpenSettings = vi.fn()
 
 	render(
 		<AudioRecordingsFilters
@@ -71,6 +76,13 @@ function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilte
 			sortOrder="desc"
 			searchKeyword=""
 			isRefreshing={false}
+			groups={[]}
+			totalGroupCount={3}
+			ungroupedCount={3}
+			currentGroupId={ALL_RECORDING_GROUP_ID}
+			onGroupChange={onGroupChange}
+			onManageGroups={onManageGroups}
+			onOpenSettings={onOpenSettings}
 			onSummaryFilterChange={onSummaryFilterChange}
 			onDatePresetChange={onDatePresetChange}
 			onSortByChange={onSortByChange}
@@ -90,6 +102,9 @@ function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilte
 		onSortOrderChange,
 		onSearchKeywordChange,
 		onRefresh,
+		onGroupChange,
+		onManageGroups,
+		onOpenSettings,
 	}
 }
 
@@ -103,16 +118,15 @@ describe("AudioRecordingsFilters", () => {
 		expect(screen.getByTestId("audio-recordings-sort-filter")).toBeInTheDocument()
 		expect(screen.getByTestId("audio-recordings-search-input")).toBeInTheDocument()
 		expect(screen.getByTestId("audio-recordings-refresh-button")).toBeInTheDocument()
-		expect(screen.getByTestId("audio-recordings-summary-filter-count")).toHaveTextContent("3")
+		expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent("3")
 	})
 
-	it("shows the active summary option label and count on the trigger", () => {
+	it("shows the active summary option label on the trigger", () => {
 		renderFilters({ summaryFilter: "summarized", listCount: 7 })
 
 		expect(screen.getByTestId("audio-recordings-summary-filter")).toHaveTextContent(
 			"Summarized",
 		)
-		expect(screen.getByTestId("audio-recordings-summary-filter-count")).toHaveTextContent("7")
 	})
 
 	it("calls onSummaryFilterChange when a summary menu item is selected", () => {
@@ -122,5 +136,36 @@ describe("AudioRecordingsFilters", () => {
 		fireEvent.click(screen.getByTestId("audio-recordings-summary-not_summarized"))
 
 		expect(onSummaryFilterChange).toHaveBeenCalledWith("not_summarized")
+	})
+
+	it("renders group switcher and supports changing group and opening group management", () => {
+		const groups = [
+			{ id: "group-1", name: "Work", projectCount: 2, isVirtual: false },
+			{ id: "group-2", name: "Life", projectCount: 1, isVirtual: false },
+		]
+		const { onGroupChange, onManageGroups } = renderFilters({
+			groups,
+			totalGroupCount: 3,
+			ungroupedCount: 1,
+			currentGroupId: "group-1",
+		})
+
+		// 1. Should display current active group name
+		expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent(
+			"Work",
+		)
+
+		// 2. Click trigger and click custom group items
+		fireEvent.click(screen.getByTestId("audio-recordings-group-filter-trigger"))
+		fireEvent.click(screen.getByTestId("audio-recordings-group-custom-group-2"))
+		expect(onGroupChange).toHaveBeenCalledWith("group-2")
+
+		// 3. Click virtual "All" item
+		fireEvent.click(screen.getByTestId("audio-recordings-group-all"))
+		expect(onGroupChange).toHaveBeenCalledWith(ALL_RECORDING_GROUP_ID)
+
+		// 4. Click manage groups button
+		fireEvent.click(screen.getByTestId("audio-recordings-group-manage-trigger"))
+		expect(onManageGroups).toHaveBeenCalled()
 	})
 })

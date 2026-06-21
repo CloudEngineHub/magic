@@ -16,7 +16,7 @@ import {
 	isAudioProjectPreviewReady,
 	resolveRecordingDisplayName,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
-import { shouldResolveOptimisticItem } from "@/pages/superMagic/pages/AudioRecordings/utils/resolve-optimistic-item"
+import { useAudioRecordingsOptimisticSync } from "@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingsOptimisticSync"
 import { UNGROUPED_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
 import { SuperMagicApi } from "@/apis"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
@@ -68,35 +68,6 @@ interface ShareSheetState {
 	projectName: string
 	attachments: AttachmentItem[]
 	attachmentList: AttachmentItem[]
-}
-
-function mergeAudioRecordingItems(
-	authoritativeItem: AudioProjectListItem,
-	optimisticItem?: AudioProjectListItem,
-): AudioProjectListItem {
-	if (!optimisticItem) return authoritativeItem
-
-	// If the optimistic item is currently uploading or has failed upload, preserve the upload state.
-	// This ensures that the upload progress bar and controls remain visible even if the backend list
-	// returns a preliminary record (e.g. not_summarized) for this project. Per issue 录音状态核对.md,
-	// every other backend state directly replaces the local placeholder.
-	const isUploading =
-		optimisticItem.card_status === "uploading" ||
-		optimisticItem.card_status === "upload_failed" ||
-		optimisticItem.transferStatus === "transferring" ||
-		optimisticItem.transferStatus === "failed"
-
-	if (isUploading) {
-		return {
-			...authoritativeItem,
-			card_status: optimisticItem.card_status,
-			transferStatus: optimisticItem.transferStatus,
-			transferProgress: optimisticItem.transferProgress,
-			duration: optimisticItem.duration ?? authoritativeItem.duration,
-		}
-	}
-
-	return authoritativeItem
 }
 
 function AudioRecordingListPanel({
@@ -174,21 +145,13 @@ function AudioRecordingListPanel({
 	const optimisticItems =
 		store.optimisticItems !== undefined ? store.optimisticItems : propsOptimisticItems
 
-	// Directly calculate mergedList on every render to prevent React useMemo from caching
-	// outdated array contents when MobX updates property fields of items inside the array.
-	const mergedList = (() => {
-		const mergedMap = new Map<string, AudioProjectListItem>()
-
-		// Keep optimistic items first so freshly finished recordings appear instantly.
-		for (const item of optimisticItems) {
-			mergedMap.set(item.id, item)
-		}
-		for (const item of store.list) {
-			mergedMap.set(item.id, mergeAudioRecordingItems(item, mergedMap.get(item.id)))
-		}
-
-		return Array.from(mergedMap.values())
-	})()
+	// Calculate mergedList and sync optimistic items with backend via shared sync hook
+	const mergedList = useAudioRecordingsOptimisticSync({
+		storeList: store.list,
+		optimisticItems,
+		onResolveOptimisticItem,
+		onRefresh: handleRefresh,
+	})
 
 	const showInitialSkeleton = store.showInitialSkeleton
 	const isEmpty = !showInitialSkeleton && mergedList.length === 0
@@ -203,73 +166,6 @@ function AudioRecordingListPanel({
 		if (!refreshToken) return
 		void handleRefresh()
 	}, [handleRefresh, refreshToken])
-
-	// Serialize array properties to static strings so react-hooks/exhaustive-deps lint check passes
-	// and React correctly detects item state changes without triggering warnings.
-	const optimisticItemsStatusStr = optimisticItems
-		.map((item) => `${item.id}-${item.card_status}-${item.duration}`)
-		.join(",")
-	const authoritativeItemsStatusStr = store.list
-		.map((item) => `${item.id}-${item.card_status}-${item.duration}`)
-		.join(",")
-	const optimisticItemsIdsStr = optimisticItems.map((item) => item.id).join(",")
-	const authoritativeItemsIdsStr = store.list.map((item) => item.id).join(",")
-
-	// Detect when authoritative list catches up with the optimistic uploads and resolves them.
-	// Per issue 录音状态核对.md, the optimistic item is replaced by the authoritative row as soon
-	// as the backend returns the project — unless the optimistic item is still uploading, in which
-	// case the upload UI must stay visible. We serialize id/status/duration into the dependency list
-	// to force execution on property updates.
-	useEffect(() => {
-		if (!optimisticItems.length) return
-
-		const hydratedIds = optimisticItems
-			.map((item) => item.id)
-			.filter((projectId) => {
-				const optimisticItem = optimisticItems.find((item) => item.id === projectId)
-				const authoritativeItem = store.list.find((entry) => entry.id === projectId)
-				if (!optimisticItem || !authoritativeItem) return false
-
-				return shouldResolveOptimisticItem(optimisticItem)
-			})
-
-		if (!hydratedIds.length) return
-
-		hydratedIds.forEach((projectId) => {
-			onResolveOptimisticItem?.(projectId)
-		})
-	}, [
-		onResolveOptimisticItem,
-		optimisticItems,
-		store.list,
-		optimisticItemsStatusStr,
-		authoritativeItemsStatusStr,
-	])
-
-	// Poll backend for items that exist in optimistic array but are not yet saved to store.list.
-	// Dependency array checks for id list changes to establish or clear the fetch interval.
-	useEffect(() => {
-		if (!optimisticItems.length) return
-
-		const unresolvedItems = optimisticItems.filter(
-			(item) => !store.list.some((entry) => entry.id === item.id),
-		)
-		if (!unresolvedItems.length) return
-
-		const timer = window.setInterval(() => {
-			void handleRefresh()
-		}, 5000)
-
-		return () => {
-			window.clearInterval(timer)
-		}
-	}, [
-		handleRefresh,
-		optimisticItems,
-		store.list,
-		optimisticItemsIdsStr,
-		authoritativeItemsIdsStr,
-	])
 
 	/**
 	 * Mirrors the prototype behavior: once the active recording card scrolls out
