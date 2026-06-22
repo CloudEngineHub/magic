@@ -25,6 +25,7 @@ import {
 	recordingGroupsService,
 	audioRecordingsService,
 	ALL_RECORDING_GROUP_ID,
+	UNGROUPED_RECORDING_GROUP_ID,
 	type AudioRecordingGroup,
 } from "@/services/audioRecordings"
 import {
@@ -142,11 +143,19 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		store.setWorkspaceId(groupId)
 	}
 
-	// Group Manage callbacks
-	const handleCreateGroup = async (name: string) => {
+	// Group Manage callbacks — manage dialog switches list filter after create
+	const handleCreateGroupFromManage = async (name: string) => {
 		const created = await recordingGroupsService.createGroup(name)
 		handleGroupChange(created.id)
 		await refreshGroups()
+		return created
+	}
+
+	// Move dialog create only refreshes groups; selection stays inside the dialog
+	const handleCreateGroupFromMove = async (name: string) => {
+		const created = await recordingGroupsService.createGroup(name)
+		await refreshGroups()
+		return created
 	}
 
 	const handleRenameGroup = async (id: string, name: string) => {
@@ -375,7 +384,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 				open={isManageGroupsOpen}
 				onOpenChange={setIsManageGroupsOpen}
 				groups={groups}
-				onCreateGroup={handleCreateGroup}
+				onCreateGroup={handleCreateGroupFromManage}
 				onRenameGroup={handleRenameGroup}
 				onDeleteGroup={handleDeleteGroup}
 				isSubmitting={groupLoading}
@@ -387,8 +396,12 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 					if (!open) setMoveTarget(null)
 				}}
 				groups={groups}
-				selectedGroupId={moveTarget?.workspace_id ?? "ungrouped"}
+				ungroupedCount={ungroupedCount}
+				selectedGroupId={moveTarget?.workspace_id ?? UNGROUPED_RECORDING_GROUP_ID}
 				onSelect={handleMoveGroupChange}
+				onCreateGroup={handleCreateGroupFromMove}
+				onRenameGroup={handleRenameGroup}
+				onDeleteGroup={handleDeleteGroup}
 				isSubmitting={groupLoading}
 			/>
 

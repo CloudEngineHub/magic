@@ -15,11 +15,13 @@ const {
 	sourcePanelPropsMock,
 	summaryPanelPropsMock,
 	collectSpeakerIdsFromTextMock,
+	magicPopupScrollLockCountRef,
 } = vi.hoisted(() => ({
 	detailDataMock: vi.fn(),
 	sourcePanelPropsMock: vi.fn(),
 	summaryPanelPropsMock: vi.fn(),
-	collectSpeakerIdsFromTextMock: vi.fn(() => []),
+	collectSpeakerIdsFromTextMock: vi.fn<(text: string) => string[]>(() => []),
+	magicPopupScrollLockCountRef: { current: 0 },
 }))
 
 /** Builds a fictional detail item so tests avoid any real recording identifiers. */
@@ -117,6 +119,17 @@ vi.mock("@/assets/locales/locale-adapters", () => ({
 	loadMagicFlowLocale: vi.fn(),
 }))
 
+vi.mock("@/services/audioRecordings", () => ({
+	recordingGroupsService: {
+		listGroups: vi.fn().mockResolvedValue({
+			groups: [],
+			ungroupedCount: 0,
+			totalCount: 0,
+		}),
+	},
+	UNGROUPED_RECORDING_GROUP_ID: "ungrouped-group",
+}))
+
 vi.mock("../hooks/useMobileRecordingDetailData", () => ({
 	useMobileRecordingDetailData: (...args: unknown[]) => detailDataMock(...args),
 }))
@@ -128,10 +141,16 @@ vi.mock("../hooks/useMobileRecordingAudioPlayer", () => ({
 		duration: 90,
 		progress: 0,
 		playing: false,
+		playbackRate: 1,
+		setPlaybackRate: vi.fn(),
 		toggle: vi.fn(),
 		seekTo: vi.fn(),
 		playSegment: vi.fn(),
 	}),
+}))
+
+vi.mock("@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec", () => ({
+	useRecordingPlayerCurrentSec: () => 0,
 }))
 
 vi.mock("sonner", () => ({
@@ -141,6 +160,171 @@ vi.mock("sonner", () => ({
 		success: vi.fn(),
 	},
 }))
+
+vi.mock("@/components/base-mobile/MagicPopup", async () => {
+	const React = await import("react")
+
+	/** Lightweight MagicPopup stand-in that avoids Vaul drawer side effects in jsdom. */
+	function MockMagicPopup({
+		children,
+		visible,
+		headerTitle,
+		headerLeadingAction,
+		headerTrailingAction,
+		"data-testid": dataTestId,
+	}: {
+		children?: React.ReactNode
+		visible?: boolean
+		headerTitle?: React.ReactNode
+		headerLeadingAction?: {
+			ariaLabel: string
+			onClick: () => void
+			disabled?: boolean
+			testId?: string
+		}
+		headerTrailingAction?: {
+			ariaLabel: string
+			onClick: () => void
+			disabled?: boolean
+			testId?: string
+		}
+		"data-testid"?: string
+	}) {
+		React.useEffect(() => {
+			if (!visible) return undefined
+
+			magicPopupScrollLockCountRef.current += 1
+			document.body.setAttribute("data-scroll-locked", "1")
+
+			return () => {
+				magicPopupScrollLockCountRef.current = Math.max(
+					0,
+					magicPopupScrollLockCountRef.current - 1,
+				)
+				if (magicPopupScrollLockCountRef.current === 0) {
+					document.body.removeAttribute("data-scroll-locked")
+				}
+			}
+		}, [visible])
+
+		if (!visible) return null
+
+		return (
+			<div data-testid={dataTestId ?? "mock-magic-popup"}>
+				{headerTitle ? <div>{headerTitle}</div> : null}
+				{headerLeadingAction ? (
+					<button
+						type="button"
+						data-testid={headerLeadingAction.testId}
+						aria-label={headerLeadingAction.ariaLabel}
+						disabled={headerLeadingAction.disabled}
+						onClick={headerLeadingAction.onClick}
+					>
+						{headerLeadingAction.ariaLabel}
+					</button>
+				) : null}
+				{headerTrailingAction ? (
+					<button
+						type="button"
+						data-testid={headerTrailingAction.testId}
+						aria-label={headerTrailingAction.ariaLabel}
+						disabled={headerTrailingAction.disabled}
+						onClick={headerTrailingAction.onClick}
+					>
+						{headerTrailingAction.ariaLabel}
+					</button>
+				) : null}
+				{children}
+			</div>
+		)
+	}
+
+	return { default: MockMagicPopup }
+})
+
+vi.mock(
+	"@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingMoreSheet",
+	async () => {
+		const React = await import("react")
+
+		/** Stubs the shared more-actions sheet so the page test never mounts real Vaul drawers. */
+		function MockMobileRecordingMoreSheet({
+			isOpen,
+			onShare,
+			onDelete,
+			item,
+		}: {
+			isOpen: boolean
+			onShare?: () => void
+			onDelete?: (projectId: string) => Promise<boolean>
+			item?: AudioProjectListItem | null
+		}) {
+			const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false)
+
+			React.useEffect(() => {
+				if (!isOpen) {
+					setShowDeleteConfirm(false)
+					return undefined
+				}
+
+				magicPopupScrollLockCountRef.current += 1
+				document.body.setAttribute("data-scroll-locked", "1")
+
+				return () => {
+					magicPopupScrollLockCountRef.current = Math.max(
+						0,
+						magicPopupScrollLockCountRef.current - 1,
+					)
+					if (magicPopupScrollLockCountRef.current === 0) {
+						document.body.removeAttribute("data-scroll-locked")
+					}
+				}
+			}, [isOpen])
+
+			if (!isOpen) return null
+
+			return (
+				<div data-testid="mobile-recording-more-sheet">
+					<button
+						type="button"
+						data-testid="mobile-recording-more-share"
+						onClick={onShare}
+					>
+						Share
+					</button>
+					{showDeleteConfirm ? (
+						<button
+							type="button"
+							data-testid="mobile-recording-delete-confirm"
+							onClick={() => {
+								void onDelete?.(item?.id ?? "")
+							}}
+						>
+							Confirm delete
+						</button>
+					) : (
+						<button
+							type="button"
+							data-testid="mobile-recording-more-delete"
+							onClick={() => setShowDeleteConfirm(true)}
+						>
+							Delete
+						</button>
+					)}
+				</div>
+			)
+		}
+
+		return { MobileRecordingMoreSheet: MockMobileRecordingMoreSheet }
+	},
+)
+
+vi.mock(
+	"@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingMoveGroupSheet",
+	() => ({
+		MobileRecordingMoveGroupSheet: () => null,
+	}),
+)
 
 vi.mock("../components/MobileRecordingAudioPlayer", () => ({
 	MobileRecordingAudioPlayer: () => <div data-testid="mobile-recording-audio-player" />,
@@ -210,7 +394,7 @@ vi.mock("../components/MobileRecordingSummaryPanel", () => ({
 }))
 
 vi.mock("../utils/markdown-time-links", () => ({
-	collectSpeakerIdsFromText: (...args: unknown[]) => collectSpeakerIdsFromTextMock(...args),
+	collectSpeakerIdsFromText: (text: string) => collectSpeakerIdsFromTextMock(text),
 }))
 
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML/media/utils", () => ({
@@ -222,20 +406,23 @@ vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/download-recording-audio
 	downloadRecordingAudioFile: (...args: unknown[]) => downloadRecordingAudioFileMock(...args),
 }))
 
-vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions", async () => {
-	const actual = await vi.importActual<
-		typeof import("@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions")
-	>("@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions")
-
-	return {
-		...actual,
-		deleteAudioRecordingProjects: (...args: unknown[]) =>
-			deleteAudioRecordingProjectsMock(...args),
-	}
-})
+vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions", () => ({
+	buildOptimisticSummarizingProject: (item: AudioProjectListItem) => ({
+		...item,
+		card_status: "summarizing",
+		current_phase: "summarizing",
+		phase_status: "in_progress",
+	}),
+	deleteAudioRecordingProjects: (...args: unknown[]) => deleteAudioRecordingProjectsMock(...args),
+	moveAudioRecordingProjects: vi.fn().mockResolvedValue(undefined),
+	renameAudioRecordingProject: vi.fn().mockResolvedValue(undefined),
+	submitAudioRecordingSummary: vi.fn().mockResolvedValue({ ok: true }),
+}))
 
 describe("MobileAudioRecordingDetailPage", () => {
 	beforeEach(() => {
+		magicPopupScrollLockCountRef.current = 0
+		document.body.removeAttribute("data-scroll-locked")
 		navigateMock.mockReset()
 		deleteAudioRecordingProjectsMock.mockReset()
 		deleteAudioRecordingProjectsMock.mockResolvedValue(undefined)
@@ -393,7 +580,9 @@ describe("MobileAudioRecordingDetailPage", () => {
 
 		expect(screen.getByTestId("mobile-recording-summary-placeholder")).toBeInTheDocument()
 		expect(screen.getByText("Generating summary...")).toBeInTheDocument()
-		expect(screen.getByText("All summary views will appear when it is ready.")).toBeInTheDocument()
+		expect(
+			screen.getByText("All summary views will appear when it is ready."),
+		).toBeInTheDocument()
 	})
 
 	it("navigates back to the recordings list", () => {

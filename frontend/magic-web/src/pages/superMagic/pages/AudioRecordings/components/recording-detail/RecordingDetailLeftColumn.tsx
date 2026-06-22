@@ -1,5 +1,6 @@
 import { useMemo } from "react"
 import type { RefObject } from "react"
+import type { FlatColorSegment } from "../../utils/chapter-color-segments"
 import { parseTranscriptMarkdown } from "../../utils/transcript-parser"
 import type { RecordingTranscriptSegment } from "../../types/recording-detail"
 import { RecordingDetailAudioPlayer } from "./RecordingDetailAudioPlayer"
@@ -9,12 +10,13 @@ interface RecordingDetailLeftColumnProps {
 	audioRef: RefObject<HTMLAudioElement>
 	audioUrl: string
 	transcriptMarkdown?: string
+	currentSec: number
 	currentTime: number
 	duration: number
-	progress: number
 	playing: boolean
 	expanded: boolean
 	playbackRate: number
+	colorSegments?: FlatColorSegment[]
 	speakerNameMap: Record<string, string>
 	onToggle: () => void
 	onSeek: (seconds: number) => void
@@ -29,12 +31,13 @@ export function RecordingDetailLeftColumn({
 	audioRef,
 	audioUrl,
 	transcriptMarkdown,
+	currentSec,
 	currentTime,
 	duration,
-	progress,
 	playing,
 	expanded,
 	playbackRate,
+	colorSegments,
 	speakerNameMap,
 	onToggle,
 	onSeek,
@@ -53,12 +56,12 @@ export function RecordingDetailLeftColumn({
 			<RecordingDetailAudioPlayer
 				audioRef={audioRef}
 				audioUrl={audioUrl}
-				currentTime={currentTime}
+				currentSec={currentSec}
 				duration={duration}
-				progress={progress}
 				playing={playing}
 				expanded={expanded}
 				playbackRate={playbackRate}
+				colorSegments={colorSegments}
 				onToggle={onToggle}
 				onSeek={onSeek}
 				onExpandedChange={onExpandedChange}

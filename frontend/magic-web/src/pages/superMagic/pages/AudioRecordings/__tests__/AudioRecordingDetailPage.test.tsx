@@ -109,6 +109,10 @@ vi.mock("../hooks/useRecordingAudioPlayer", () => ({
 	}),
 }))
 
+vi.mock("../hooks/useRecordingPlayerCurrentSec", () => ({
+	useRecordingPlayerCurrentSec: () => 0,
+}))
+
 vi.mock("../hooks/useRecordingDetailActions", () => ({
 	useRecordingDetailActions: () => ({
 		renaming: false,

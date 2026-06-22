@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef } from "react"
-import { Settings2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import type { RecordingTranscriptSegment } from "../../types/recording-detail"
 import { formatRecordingTime } from "../../utils/time"
@@ -48,16 +46,18 @@ export function RecordingDetailTranscriptPanel({
 					{t("detail.transcriptCount", { count: segments.length })}
 				</h2>
 				{capabilities.canEditSpeakers ? (
-					<Button
-						variant="ghost"
-						size="sm"
+					<button
+						type="button"
+						className={cn(
+							"inline-flex h-8 items-center rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors",
+							"hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50",
+						)}
 						onClick={onOpenSpeakerSettings}
 						disabled={segments.length === 0}
 						data-testid="recording-detail-open-speaker-settings"
 					>
-						<Settings2 className="mr-1 size-4" />
 						{t("detail.openSpeakerSettings")}
-					</Button>
+					</button>
 				) : null}
 			</div>
 
@@ -74,43 +74,127 @@ export function RecordingDetailTranscriptPanel({
 						{segments.map((segment) => {
 							const isActive = segment.id === activeSegmentId
 							return (
-								<button
+								<div
 									key={segment.id}
-									type="button"
+									role="button"
+									tabIndex={0}
 									data-segment-id={segment.id}
 									className={cn(
-										"rounded-xl px-3 py-2.5 text-left transition-opacity",
+										"cursor-pointer rounded-xl px-3 py-2.5 text-left transition-opacity",
 										isActive ? "bg-muted" : "opacity-70 hover:opacity-100",
 									)}
 									onClick={() => onSegmentClick(segment)}
+									onKeyDown={(event) => {
+										if (event.key === "Enter" || event.key === " ") {
+											event.preventDefault()
+											onSegmentClick(segment)
+										}
+									}}
 									data-testid="recording-detail-transcript-segment"
 								>
-									<div className="mb-1 flex flex-wrap items-center gap-2">
-										<span className="rounded-full bg-foreground px-2 py-0.5 text-[11px] font-medium text-background">
+									<div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-medium">
+										<span className="shrink-0 tabular-nums text-muted-foreground">
 											{formatRecordingTime(segment.start)}
 										</span>
 										{segment.speaker ? (
-											<span
-												className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-foreground"
-												onClick={(event) => {
-													event.stopPropagation()
-													onOpenSpeakerSettings()
-												}}
-											>
-												{speakerNameMap[segment.speaker] ?? segment.speaker}
-											</span>
+											<TranscriptSpeakerChip
+												speakerId={segment.speaker}
+												label={
+													speakerNameMap[segment.speaker] ??
+													segment.speaker
+												}
+												canEdit={capabilities.canEditSpeakers}
+												onOpenSpeakerSettings={onOpenSpeakerSettings}
+											/>
 										) : null}
 									</div>
 									<p className="whitespace-pre-wrap text-sm leading-6 text-foreground">
 										{segment.text}
 									</p>
-								</button>
+								</div>
 							)
 						})}
 					</div>
 				)}
 			</ScrollEdgeFadeContainer>
 		</div>
+	)
+}
+
+/** Palette tokens for speaker chips — aligned with legacy HTML detail palette order. */
+const SPEAKER_CHIP_STYLES = [
+	{ chip: "border-blue-200 bg-blue-50", dot: "bg-blue-500" },
+	{ chip: "border-orange-200 bg-orange-50", dot: "bg-orange-500" },
+	{ chip: "border-emerald-200 bg-emerald-50", dot: "bg-emerald-500" },
+	{ chip: "border-violet-200 bg-violet-50", dot: "bg-violet-500" },
+	{ chip: "border-rose-200 bg-rose-50", dot: "bg-rose-500" },
+	{ chip: "border-sky-200 bg-sky-50", dot: "bg-sky-500" },
+] as const
+
+/** Resolves stable chip colors for a speaker id so repeated speakers stay visually consistent. */
+function resolveSpeakerChipStyle(speakerId: string) {
+	const speakerNumberMatch = speakerId.match(/Speaker-(\d+)/i)
+	const paletteIndex = speakerNumberMatch
+		? Math.max(0, Number(speakerNumberMatch[1]) - 1)
+		: hashSpeakerId(speakerId)
+
+	return SPEAKER_CHIP_STYLES[paletteIndex % SPEAKER_CHIP_STYLES.length]
+}
+
+/** Builds a deterministic palette index for non-standard speaker ids. */
+function hashSpeakerId(speakerId: string) {
+	let hash = 0
+	for (let index = 0; index < speakerId.length; index += 1) {
+		hash = (hash + speakerId.charCodeAt(index)) % SPEAKER_CHIP_STYLES.length
+	}
+	return hash
+}
+
+/** Renders a prototype-style speaker pill; opens settings on click when editing is allowed. */
+function TranscriptSpeakerChip({
+	speakerId,
+	label,
+	canEdit,
+	onOpenSpeakerSettings,
+}: {
+	speakerId: string
+	label: string
+	canEdit: boolean
+	onOpenSpeakerSettings: () => void
+}) {
+	const chipStyle = resolveSpeakerChipStyle(speakerId)
+	const chipClassName = cn(
+		"inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-4 text-foreground",
+		chipStyle.chip,
+		canEdit ? "transition-opacity hover:opacity-80" : undefined,
+	)
+	const chipContent = (
+		<>
+			<span className={cn("mr-1 size-1.5 shrink-0 rounded-full", chipStyle.dot)} />
+			{label}
+		</>
+	)
+
+	if (!canEdit) {
+		return (
+			<span className={chipClassName} data-testid="recording-detail-transcript-speaker-chip">
+				{chipContent}
+			</span>
+		)
+	}
+
+	return (
+		<button
+			type="button"
+			className={chipClassName}
+			onClick={(event) => {
+				event.stopPropagation()
+				onOpenSpeakerSettings()
+			}}
+			data-testid="recording-detail-transcript-speaker-chip"
+		>
+			{chipContent}
+		</button>
 	)
 }
 

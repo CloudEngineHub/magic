@@ -39,6 +39,8 @@ import {
 import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
 import type { MobileRecordingTopTab } from "./types"
 import { useMobileRecordingAudioPlayer } from "./hooks/useMobileRecordingAudioPlayer"
+import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
+import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
 import { useMobileRecordingDetailData } from "./hooks/useMobileRecordingDetailData"
 import { MobileRecordingAudioPlayer } from "./components/MobileRecordingAudioPlayer"
 import { MobileRecordingSourcePanel } from "./components/MobileRecordingSourcePanel"
@@ -52,7 +54,7 @@ import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareS
 import { downloadRecordingAudioFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-audio"
 
 const COLLAPSED_PLAYER_HEIGHT = 40
-const EXPANDED_PLAYER_HEIGHT = 178
+const EXPANDED_PLAYER_HEIGHT = 182
 const FLOATING_PLAYER_BOTTOM = 12
 
 interface AudioRecordingDetailLocationState {
@@ -84,6 +86,12 @@ export default function MobileAudioRecordingDetailPage() {
 		initialTitle: locationState?.projectName,
 	})
 	const player = useMobileRecordingAudioPlayer(audioUrl)
+	const playerCurrentSec = useRecordingPlayerCurrentSec(
+		player.audioRef,
+		player.playing,
+		player.currentTime,
+	)
+	const [playerScrollSignal, setPlayerScrollSignal] = useState(0)
 	const [detailItem, setDetailItem] = useState<AudioProjectListItem | null>(null)
 	const [titleOverride, setTitleOverride] = useState("")
 	const [renameDialogOpen, setRenameDialogOpen] = useState(false)
@@ -176,6 +184,13 @@ export default function MobileAudioRecordingDetailPage() {
 		FLOATING_PLAYER_BOTTOM +
 		(playerExpanded ? EXPANDED_PLAYER_HEIGHT : COLLAPSED_PLAYER_HEIGHT) +
 		20
+
+	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
+
+	/** Closes the floating player rate menu when source/summary panels scroll. */
+	function handlePlayerContentScroll() {
+		setPlayerScrollSignal((value) => value + 1)
+	}
 
 	useEffect(() => {
 		setTitleOverride("")
@@ -491,6 +506,7 @@ export default function MobileAudioRecordingDetailPage() {
 						speakerNameMap={speakerNameMap}
 						onOpenSpeakerSettings={openSpeakerSettings}
 						onSeek={(seconds) => player.seekTo(seconds, { autoplay: true })}
+						onContentScroll={handlePlayerContentScroll}
 					/>
 				) : null}
 
@@ -509,6 +525,7 @@ export default function MobileAudioRecordingDetailPage() {
 							speakerNameMap={speakerNameMap}
 							onOpenSpeakerSettings={openSpeakerSettings}
 							onTimeClick={handleSummaryTimeClick}
+							onContentScroll={handlePlayerContentScroll}
 						/>
 					) : (
 						<SummaryPlaceholder summarizing={summarizing} />
@@ -519,9 +536,8 @@ export default function MobileAudioRecordingDetailPage() {
 			<MobileRecordingAudioPlayer
 				audioRef={player.audioRef}
 				audioUrl={audioUrl}
-				currentTime={player.currentTime}
+				currentSec={playerCurrentSec}
 				duration={player.duration}
-				progress={player.progress}
 				playing={player.playing}
 				expanded={playerExpanded}
 				onToggle={player.toggle}
@@ -529,6 +545,8 @@ export default function MobileAudioRecordingDetailPage() {
 				onExpandedChange={setPlayerExpanded}
 				playbackRate={player.playbackRate}
 				onPlaybackRateChange={player.setPlaybackRate}
+				colorSegments={colorSegments}
+				scrollSignal={playerScrollSignal}
 			/>
 
 			<MobileRecordingRenameSheet

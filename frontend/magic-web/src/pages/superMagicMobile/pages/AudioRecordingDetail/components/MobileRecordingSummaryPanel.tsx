@@ -21,6 +21,7 @@ interface MobileRecordingSummaryPanelProps {
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
+	onContentScroll?: () => void
 }
 
 /** Renders dynamic completed-summary tabs from the project file map. */
@@ -32,6 +33,7 @@ export function MobileRecordingSummaryPanel({
 	speakerNameMap,
 	onOpenSpeakerSettings,
 	onTimeClick,
+	onContentScroll,
 }: MobileRecordingSummaryPanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeType, setActiveType] = useState<string>(summaryFiles[0]?.type ?? "")
@@ -91,6 +93,7 @@ export function MobileRecordingSummaryPanel({
 					className="min-h-0 flex-1"
 					scrollClassName="px-4"
 					contentDeps={[activeType, summaryFiles.length, Boolean(content?.trim())]}
+					onScroll={onContentScroll}
 				>
 					<div className="min-h-full" style={{ paddingBottom: scrollPaddingBottom }}>
 						{activeFile ? (

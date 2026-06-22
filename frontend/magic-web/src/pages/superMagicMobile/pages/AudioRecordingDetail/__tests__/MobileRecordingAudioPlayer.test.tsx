@@ -1,14 +1,17 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { MobileRecordingAudioPlayer } from "../components/MobileRecordingAudioPlayer"
+
+vi.mock("@/pages/superMagic/pages/AudioRecordings/components/recording-detail/player", () => ({
+	RecordingDetailAudioBar: () => <div data-testid="recording-detail-audio-bar" />,
+}))
 
 describe("MobileRecordingAudioPlayer", () => {
 	const defaultProps = {
 		audioRef: { current: null },
 		audioUrl: "test.mp3",
-		currentTime: 10,
+		currentSec: 10,
 		duration: 125,
-		progress: 8,
 		playing: false,
 		expanded: false,
 		onToggle: vi.fn(),
@@ -18,35 +21,14 @@ describe("MobileRecordingAudioPlayer", () => {
 		onPlaybackRateChange: vi.fn(),
 	}
 
-	it("renders collapsed player correctly", () => {
+	it("renders fixed mobile shell with shared audio bar", () => {
 		render(<MobileRecordingAudioPlayer {...defaultProps} />)
-
-		// Collapsed player should display playback time in MM:SS format
-		expect(screen.getByText("0:10 / 2:05")).toBeInTheDocument()
-		// Should show play button and expand button
-		expect(screen.getByLabelText("expand")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-recording-audio-player")).toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-audio-bar")).toBeInTheDocument()
 	})
 
-	it("renders expanded player correctly with custom SVG and rate dropdown menu", () => {
-		const props = { ...defaultProps, expanded: true }
-		render(<MobileRecordingAudioPlayer {...props} />)
-
-		// Expanded player should display time in HH:MM:SS format
-		expect(screen.getByText("00:00:10")).toBeInTheDocument()
-		expect(screen.getByText("00:02:05")).toBeInTheDocument()
-
-		// Should show playback rate button
-		const rateBtn = screen.getByLabelText("Speed")
-		expect(rateBtn).toBeInTheDocument()
-		expect(rateBtn).toHaveTextContent("1.0x")
-
-		// Click to open rate listbox
-		fireEvent.click(rateBtn)
-		const option15 = screen.getByRole("option", { name: "1.5x" })
-		expect(option15).toBeInTheDocument()
-
-		// Select rate
-		fireEvent.click(option15)
-		expect(props.onPlaybackRateChange).toHaveBeenCalledWith(1.5)
+	it("returns null when audio url is missing", () => {
+		const { container } = render(<MobileRecordingAudioPlayer {...defaultProps} audioUrl="" />)
+		expect(container).toBeEmptyDOMElement()
 	})
 })

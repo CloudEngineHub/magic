@@ -13,7 +13,7 @@ export function RecordingDetailWorkbench({ left, right }: RecordingDetailWorkben
 			data-testid="recording-detail-workbench"
 		>
 			<div className="flex min-h-0 flex-col gap-4">{left}</div>
-			<div className="min-h-0">{right}</div>
+			<div className="min-h-0 min-w-0">{right}</div>
 		</div>
 	)
 }

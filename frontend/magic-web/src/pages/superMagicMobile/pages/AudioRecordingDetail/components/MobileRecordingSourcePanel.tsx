@@ -15,6 +15,7 @@ interface MobileRecordingSourcePanelProps {
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onSeek: (seconds: number) => void
+	onContentScroll?: () => void
 }
 
 /** Shows completed source attachments: transcript timeline and readonly notes markdown. */
@@ -26,6 +27,7 @@ export function MobileRecordingSourcePanel({
 	speakerNameMap,
 	onOpenSpeakerSettings,
 	onSeek,
+	onContentScroll,
 }: MobileRecordingSourcePanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeTab, setActiveTab] = useState<MobileRecordingSourceTab>("transcript")
@@ -55,6 +57,7 @@ export function MobileRecordingSourcePanel({
 				className="min-h-0 flex-1"
 				scrollClassName="px-4"
 				contentDeps={[activeTab, segments.length, Boolean(notesContent?.trim())]}
+				onScroll={onContentScroll}
 			>
 				<div className="min-h-full" style={{ paddingBottom: scrollPaddingBottom }}>
 					{activeTab === "transcript" ? (

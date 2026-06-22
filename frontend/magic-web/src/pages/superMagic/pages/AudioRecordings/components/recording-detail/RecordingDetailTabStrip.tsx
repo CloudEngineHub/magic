@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
+import { useHorizontalScrollWithFade } from "../../hooks/useHorizontalScrollWithFade"
 
 export interface RecordingDetailTabItem {
 	key: string
@@ -25,27 +26,28 @@ export function RecordingDetailTabStrip({
 	onChange,
 }: RecordingDetailTabStripProps) {
 	const tabRefs = useRef<Partial<Record<string, HTMLButtonElement>>>({})
-	const barRef = useRef<HTMLDivElement>(null)
+	const innerRef = useRef<HTMLDivElement>(null)
+	const { scrollRef, canScrollStart, canScrollEnd, refreshFadeState } =
+		useHorizontalScrollWithFade<HTMLDivElement>()
 	const [pill, setPill] = useState({ left: 0, width: 0, ready: false })
 
-	/** Measures active tab position relative to the scroll container for the sliding pill. */
+	/** Measures active tab position relative to the w-max inner row for the sliding pill. */
 	const measurePill = useCallback(() => {
-		const bar = barRef.current
+		const inner = innerRef.current
 		const btn = tabRefs.current[activeKey]
-		if (!bar || !btn) return
+		if (!inner || !btn) return
 
-		const barRect = bar.getBoundingClientRect()
-		const tabRect = btn.getBoundingClientRect()
 		setPill({
-			left: tabRect.left - barRect.left + bar.scrollLeft,
-			width: tabRect.width,
+			left: btn.offsetLeft,
+			width: btn.offsetWidth,
 			ready: true,
 		})
 	}, [activeKey])
 
 	useLayoutEffect(() => {
 		measurePill()
-		const bar = barRef.current
+		const bar = scrollRef.current
+		const inner = innerRef.current
 		if (!bar || typeof ResizeObserver === "undefined") {
 			window.addEventListener("resize", measurePill)
 			return () => window.removeEventListener("resize", measurePill)
@@ -53,6 +55,7 @@ export function RecordingDetailTabStrip({
 
 		const observer = new ResizeObserver(measurePill)
 		observer.observe(bar)
+		if (inner) observer.observe(inner)
 		bar.addEventListener("scroll", measurePill, { passive: true })
 		window.addEventListener("resize", measurePill)
 		return () => {
@@ -60,7 +63,12 @@ export function RecordingDetailTabStrip({
 			bar.removeEventListener("scroll", measurePill)
 			window.removeEventListener("resize", measurePill)
 		}
-	}, [measurePill, tabs])
+	}, [measurePill, scrollRef, tabs])
+
+	// Recompute edge fades when tab count/labels change the scrollable width.
+	useEffect(() => {
+		refreshFadeState()
+	}, [refreshFadeState, tabs])
 
 	// Keep the active tab visible when the strip overflows horizontally.
 	useEffect(() => {
@@ -72,54 +80,83 @@ export function RecordingDetailTabStrip({
 
 	return (
 		<div
-			className="relative flex min-h-[57px] shrink-0 items-center gap-3 border-b border-border px-4"
+			className="relative flex min-h-[57px] min-w-0 shrink-0 overflow-hidden rounded-t-[22px] border-b border-border px-4"
 			data-testid="recording-detail-tab-strip"
 		>
-			<div
-				ref={barRef}
-				className="no-scrollbar relative -mx-4 flex min-w-0 flex-1 overflow-x-auto overflow-y-visible px-4 py-3"
-			>
-				<span
-					aria-hidden
-					className="pointer-events-none absolute top-1/2 z-0 h-8 -translate-y-1/2 rounded-full bg-foreground"
-					style={{
-						left: pill.left,
-						width: pill.width,
-						opacity: pill.ready ? 1 : 0,
-						boxShadow: PILL_SHADOW,
-						transition: PILL_TRANSITION,
-					}}
-				/>
-				{tabs.map((tab) => {
-					const isActive = tab.key === activeKey
-					const showBadge = (tab.badgeCount ?? 0) > 0
-
-					return (
-						<button
-							key={tab.key}
-							ref={(element) => {
-								tabRefs.current[tab.key] = element ?? undefined
+			{/*
+			 * -mx-4 extends the scroll viewport to the card edges while outer px-4 keeps content aligned.
+			 * Fades must live on this same wrapper so they cover the full bleed width.
+			 */}
+			<div className="relative -mx-4 min-w-0 flex-1 overflow-hidden">
+				<div
+					ref={scrollRef}
+					className="no-scrollbar overflow-x-auto px-4 py-3"
+					data-testid="recording-detail-tab-scroll"
+				>
+					<div
+						ref={innerRef}
+						className="relative flex w-max flex-nowrap items-center gap-1"
+						data-testid="recording-detail-tab-inner"
+					>
+						<span
+							aria-hidden
+							className="pointer-events-none absolute top-1/2 z-0 h-8 -translate-y-1/2 rounded-full bg-foreground"
+							style={{
+								left: pill.left,
+								width: pill.width,
+								opacity: pill.ready ? 1 : 0,
+								boxShadow: PILL_SHADOW,
+								transition: PILL_TRANSITION,
 							}}
-							type="button"
-							data-tab-key={tab.key}
-							className={cn(
-								"relative z-10 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-5 text-[14px] font-medium leading-none transition-colors duration-200",
-								isActive ? "text-background" : "text-muted-foreground",
-							)}
-							onClick={() => onChange(tab.key)}
-							data-testid={`recording-detail-tab-${tab.key}`}
-						>
-							{tab.label}
-							{showBadge ? (
-								<RecordingDetailTabBadge
-									count={tab.badgeCount ?? 0}
-									isActive={isActive}
-									tabKey={tab.key}
-								/>
-							) : null}
-						</button>
-					)
-				})}
+						/>
+						{tabs.map((tab) => {
+							const isActive = tab.key === activeKey
+							const showBadge = (tab.badgeCount ?? 0) > 0
+
+							return (
+								<button
+									key={tab.key}
+									ref={(element) => {
+										tabRefs.current[tab.key] = element ?? undefined
+									}}
+									type="button"
+									data-tab-key={tab.key}
+									className={cn(
+										"relative z-10 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-5 text-[14px] font-medium leading-none transition-colors duration-200",
+										isActive ? "text-background" : "text-muted-foreground",
+									)}
+									onClick={() => onChange(tab.key)}
+									data-testid={`recording-detail-tab-${tab.key}`}
+								>
+									{tab.label}
+									{showBadge ? (
+										<RecordingDetailTabBadge
+											count={tab.badgeCount ?? 0}
+											isActive={isActive}
+											tabKey={tab.key}
+										/>
+									) : null}
+								</button>
+							)
+						})}
+					</div>
+				</div>
+
+				{canScrollStart ? (
+					<div
+						className="pointer-events-none absolute inset-y-0 left-0 z-20 w-8 bg-gradient-to-r from-card from-40% via-card/90 to-transparent"
+						data-testid="recording-detail-tab-fade-start"
+						aria-hidden
+					/>
+				) : null}
+
+				{canScrollEnd ? (
+					<div
+						className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 bg-gradient-to-l from-card from-40% via-card/90 to-transparent"
+						data-testid="recording-detail-tab-fade-end"
+						aria-hidden
+					/>
+				) : null}
 			</div>
 		</div>
 	)

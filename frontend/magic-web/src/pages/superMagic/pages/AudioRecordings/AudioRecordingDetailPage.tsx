@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useLocation, useParams } from "react-router"
@@ -25,6 +25,8 @@ import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/component
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
 import { useRecordingDetailData } from "./hooks/useRecordingDetailData"
 import { useRecordingAudioPlayer } from "./hooks/useRecordingAudioPlayer"
+import { useRecordingPlayerCurrentSec } from "./hooks/useRecordingPlayerCurrentSec"
+import { useRecordingColorSegments } from "./hooks/useRecordingColorSegments"
 import { useRecordingDetailActions } from "./hooks/useRecordingDetailActions"
 import {
 	isAudioProjectSummarizing,
@@ -83,6 +85,11 @@ function AudioRecordingDetailPageDesktop() {
 	})
 
 	const player = useRecordingAudioPlayer(audioUrl)
+	const playerCurrentSec = useRecordingPlayerCurrentSec(
+		player.audioRef,
+		player.playing,
+		player.currentTime,
+	)
 	const [detailItem, setDetailItem] = useState<AudioProjectListItem | null>(null)
 	const [titleOverride, setTitleOverride] = useState("")
 	const [playerExpanded, setPlayerExpanded] = useState(false)
@@ -92,6 +99,7 @@ function AudioRecordingDetailPageDesktop() {
 	const [moveGroupOpen, setMoveGroupOpen] = useState(false)
 	const [deleteOpen, setDeleteOpen] = useState(false)
 	const [groups, setGroups] = useState<AudioRecordingGroup[]>([])
+	const [ungroupedCount, setUngroupedCount] = useState(0)
 
 	const resolvedItem = detailItem ?? projectItem
 	const displayTitle = titleOverride || title || t("detail.untitled")
@@ -123,8 +131,43 @@ function AudioRecordingDetailPageDesktop() {
 
 	useEffect(() => {
 		if (!moveGroupOpen) return
-		void recordingGroupsService.listGroups().then((result) => setGroups(result.groups))
+		void recordingGroupsService.listGroups().then((result) => {
+			setGroups(result.groups)
+			setUngroupedCount(result.ungroupedCount)
+		})
 	}, [moveGroupOpen])
+
+	/** Refreshes move-target groups after inline CRUD without reloading the detail page */
+	const refreshMoveGroups = useCallback(async () => {
+		const result = await recordingGroupsService.listGroups()
+		setGroups(result.groups)
+		setUngroupedCount(result.ungroupedCount)
+	}, [])
+
+	const handleCreateGroupFromMove = useCallback(
+		async (name: string) => {
+			const created = await recordingGroupsService.createGroup(name)
+			await refreshMoveGroups()
+			return created
+		},
+		[refreshMoveGroups],
+	)
+
+	const handleRenameGroupFromMove = useCallback(
+		async (id: string, name: string) => {
+			await recordingGroupsService.renameGroup(id, name)
+			await refreshMoveGroups()
+		},
+		[refreshMoveGroups],
+	)
+
+	const handleDeleteGroupFromMove = useCallback(
+		async (id: string) => {
+			await recordingGroupsService.deleteGroup(id)
+			await refreshMoveGroups()
+		},
+		[refreshMoveGroups],
+	)
 
 	const summaryReady = useMemo(() => {
 		if (resolvedItem) return isAudioProjectSummaryReady(resolvedItem)
@@ -163,6 +206,8 @@ function AudioRecordingDetailPageDesktop() {
 			),
 		[texts.summary],
 	)
+
+	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
 
 	function handleBack() {
 		navigate({ name: RouteName.AudioRecordings })
@@ -242,12 +287,13 @@ function AudioRecordingDetailPageDesktop() {
 								audioRef={player.audioRef}
 								audioUrl={audioUrl}
 								transcriptMarkdown={texts.transcript?.content}
+								currentSec={playerCurrentSec}
 								currentTime={player.currentTime}
 								duration={player.duration}
-								progress={player.progress}
 								playing={player.playing}
 								expanded={playerExpanded}
 								playbackRate={player.playbackRate}
+								colorSegments={colorSegments}
 								speakerNameMap={speakerNameMap}
 								onToggle={player.toggle}
 								onSeek={player.seekTo}
@@ -294,10 +340,14 @@ function AudioRecordingDetailPageDesktop() {
 					open={moveGroupOpen}
 					onOpenChange={setMoveGroupOpen}
 					groups={groups.filter((group) => group.id !== UNGROUPED_RECORDING_GROUP_ID)}
+					ungroupedCount={ungroupedCount}
 					selectedGroupId={resolvedItem?.workspace_id ?? UNGROUPED_RECORDING_GROUP_ID}
 					onSelect={async (groupId) => {
 						await actions.moveToGroup(groupId)
 					}}
+					onCreateGroup={handleCreateGroupFromMove}
+					onRenameGroup={handleRenameGroupFromMove}
+					onDeleteGroup={handleDeleteGroupFromMove}
 					isSubmitting={actions.moving}
 				/>
 

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, FolderClosed, Plus, Trash2, X, AlertTriangle } from "lucide-react"
+import { Check, MoreHorizontal, Plus, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	Dialog,
@@ -9,23 +9,452 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { toast } from "sonner"
 import type { AudioRecordingGroup } from "@/services/audioRecordings"
+import { UNGROUPED_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
 import { resolveRecordingGroupDisplayName } from "@/services/audioRecordings/resolveRecordingGroupDisplayName"
+
+type GroupNameDialogMode = "create" | "rename" | null
+
+interface RecordingGroupCrudHandlers {
+	onCreateGroup: (name: string) => Promise<AudioRecordingGroup | void>
+	onRenameGroup: (id: string, name: string) => Promise<void>
+	onDeleteGroup: (id: string) => Promise<void>
+}
+
+interface UseRecordingGroupCrudStateOptions extends RecordingGroupCrudHandlers {
+	open: boolean
+	isSubmitting?: boolean
+	onCreated?: (group: AudioRecordingGroup) => void
+	onDeleted?: (id: string) => void
+}
+
+/** Shared CRUD state: name dialog for create/rename, separate dialog for delete confirm */
+function useRecordingGroupCrudState({
+	open,
+	onCreateGroup,
+	onRenameGroup,
+	onDeleteGroup,
+	isSubmitting = false,
+	onCreated,
+	onDeleted,
+}: UseRecordingGroupCrudStateOptions) {
+	const { t } = useTranslation(["super", "audioRecordings"])
+	const [nameDialogMode, setNameDialogMode] = useState<GroupNameDialogMode>(null)
+	const [draftName, setDraftName] = useState("")
+	const [activeGroup, setActiveGroup] = useState<AudioRecordingGroup | null>(null)
+	const [deleteConfirmGroup, setDeleteConfirmGroup] = useState<AudioRecordingGroup | null>(null)
+
+	useEffect(() => {
+		if (!open) return
+		setNameDialogMode(null)
+		setDraftName("")
+		setActiveGroup(null)
+		setDeleteConfirmGroup(null)
+	}, [open])
+
+	const openCreateDialog = useCallback(() => {
+		setDraftName("")
+		setActiveGroup(null)
+		setNameDialogMode("create")
+	}, [])
+
+	const openRenameDialog = useCallback((group: AudioRecordingGroup) => {
+		setActiveGroup(group)
+		setDraftName(group.name)
+		setNameDialogMode("rename")
+	}, [])
+
+	const closeNameDialog = useCallback(() => {
+		setNameDialogMode(null)
+		setDraftName("")
+		setActiveGroup(null)
+	}, [])
+
+	const handleNameDialogConfirm = useCallback(async () => {
+		const name = draftName.trim()
+		if (!name) return
+
+		try {
+			if (nameDialogMode === "create") {
+				const created = await onCreateGroup(name)
+				toast.success(t("super:mobile.recordingEntry.groupSheet.createSuccess"))
+				if (created) onCreated?.(created)
+			} else if (nameDialogMode === "rename" && activeGroup) {
+				await onRenameGroup(activeGroup.id, name)
+				toast.success(t("audioRecordings:actions.renameSuccess"))
+			}
+			closeNameDialog()
+		} catch {
+			if (nameDialogMode === "create") {
+				toast.error(t("super:mobile.recordingEntry.groupSheet.createFailed"))
+			} else {
+				toast.error(t("audioRecordings:actions.renameFailed"))
+			}
+		}
+	}, [
+		activeGroup,
+		closeNameDialog,
+		draftName,
+		nameDialogMode,
+		onCreateGroup,
+		onCreated,
+		onRenameGroup,
+		t,
+	])
+
+	const handleDelete = useCallback(async () => {
+		if (!deleteConfirmGroup) return
+		try {
+			await onDeleteGroup(deleteConfirmGroup.id)
+			toast.success(t("audioRecordings:actions.deleteSuccess"))
+			onDeleted?.(deleteConfirmGroup.id)
+			setDeleteConfirmGroup(null)
+		} catch {
+			toast.error(t("audioRecordings:actions.deleteFailed"))
+		}
+	}, [deleteConfirmGroup, onDeleteGroup, onDeleted, t])
+
+	return {
+		nameDialogMode,
+		draftName,
+		setDraftName,
+		deleteConfirmGroup,
+		setDeleteConfirmGroup,
+		isSubmitting,
+		openCreateDialog,
+		openRenameDialog,
+		closeNameDialog,
+		handleNameDialogConfirm,
+		handleDelete,
+	}
+}
+
+interface RecordingGroupNameDialogProps {
+	mode: GroupNameDialogMode
+	draftName: string
+	onDraftNameChange: (value: string) => void
+	onOpenChange: (open: boolean) => void
+	onConfirm: () => void
+	isSubmitting?: boolean
+	createTitle: string
+	renameTitle: string
+	nameLabel: string
+	placeholder: string
+	cancelLabel: string
+	confirmLabel: string
+}
+
+/** Modal for creating or renaming a group (mirrors mobile create/rename sheet views) */
+function RecordingGroupNameDialog({
+	mode,
+	draftName,
+	onDraftNameChange,
+	onOpenChange,
+	onConfirm,
+	isSubmitting = false,
+	createTitle,
+	renameTitle,
+	nameLabel,
+	placeholder,
+	cancelLabel,
+	confirmLabel,
+}: RecordingGroupNameDialogProps) {
+	return (
+		<Dialog open={mode != null} onOpenChange={onOpenChange}>
+			<DialogContent
+				className="sm:max-w-[400px]"
+				data-testid="audio-recording-group-name-dialog"
+			>
+				<DialogHeader>
+					<DialogTitle>{mode === "create" ? createTitle : renameTitle}</DialogTitle>
+				</DialogHeader>
+				<div className="flex flex-col gap-2">
+					<p className="text-sm text-muted-foreground">{nameLabel}</p>
+					<Input
+						maxLength={50}
+						value={draftName}
+						onChange={(e) => onDraftNameChange(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") void onConfirm()
+						}}
+						placeholder={placeholder}
+						autoFocus
+						disabled={isSubmitting}
+						data-testid="audio-recording-group-name-input"
+					/>
+				</div>
+				<DialogFooter>
+					<Button
+						variant="outline"
+						onClick={() => onOpenChange(false)}
+						disabled={isSubmitting}
+					>
+						{cancelLabel}
+					</Button>
+					<Button
+						onClick={() => void onConfirm()}
+						disabled={isSubmitting || !draftName.trim()}
+						data-testid="audio-recording-group-name-confirm-btn"
+					>
+						{confirmLabel}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	)
+}
+
+interface RecordingGroupDeleteConfirmDialogProps {
+	open: boolean
+	onOpenChange: (open: boolean) => void
+	onConfirm: () => void
+	isSubmitting?: boolean
+	cancelLabel: string
+	confirmLabel: string
+	deleteTitle: string
+	deleteConfirm: string
+}
+
+/** Delete confirmation dialog for group management flows */
+function RecordingGroupDeleteConfirmDialog({
+	open,
+	onOpenChange,
+	onConfirm,
+	isSubmitting = false,
+	cancelLabel,
+	confirmLabel,
+	deleteTitle,
+	deleteConfirm,
+}: RecordingGroupDeleteConfirmDialogProps) {
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent
+				className="sm:max-w-[400px]"
+				data-testid="audio-recording-group-delete-dialog"
+			>
+				<DialogHeader>
+					<DialogTitle className="flex items-center gap-2 font-semibold text-destructive">
+						<AlertTriangle className="h-5 w-5" />
+						<span>{deleteTitle}</span>
+					</DialogTitle>
+				</DialogHeader>
+				<div className="py-2 text-sm text-muted-foreground">{deleteConfirm}</div>
+				<DialogFooter>
+					<Button
+						variant="outline"
+						onClick={() => onOpenChange(false)}
+						disabled={isSubmitting}
+					>
+						{cancelLabel}
+					</Button>
+					<Button
+						variant="destructive"
+						onClick={() => void onConfirm()}
+						disabled={isSubmitting}
+						data-testid="audio-recording-group-delete-confirm-btn"
+					>
+						{confirmLabel}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	)
+}
+
+interface RecordingGroupListRowProps {
+	label: string
+	count?: number
+	selected?: boolean
+	onSelect?: () => void
+	onRename?: () => void
+	onDelete?: () => void
+	showMoreActions?: boolean
+	renameLabel: string
+	deleteLabel: string
+	moreAriaLabel?: string
+	dataTestId?: string
+	moreTestId?: string
+}
+
+/**
+ * Mobile-aligned row: leading check slot, inline count, trailing more-menu for CRUD.
+ */
+function RecordingGroupListRow({
+	label,
+	count,
+	selected = false,
+	onSelect,
+	onRename,
+	onDelete,
+	showMoreActions = false,
+	renameLabel,
+	deleteLabel,
+	moreAriaLabel,
+	dataTestId,
+	moreTestId,
+}: RecordingGroupListRowProps) {
+	const hasMoreMenu = showMoreActions && onRename && onDelete
+
+	return (
+		<div
+			className="flex h-10 w-full min-w-0 items-center overflow-hidden"
+			data-testid={dataTestId}
+		>
+			<button
+				type="button"
+				onClick={onSelect}
+				disabled={!onSelect}
+				// Radix Dialog auto-focuses the first tabbable row on open; suppress ring, keep subtle bg for keyboard users.
+				className={`flex h-full min-w-0 flex-1 items-center gap-2 overflow-hidden bg-transparent pl-3 pr-2 text-left outline-none transition-colors focus:outline-none focus-visible:bg-accent/40 focus-visible:outline-none focus-visible:ring-0 ${
+					onSelect ? "cursor-pointer hover:opacity-80" : "cursor-default"
+				}`}
+			>
+				<span
+					className="flex size-4 shrink-0 items-center justify-center"
+					aria-hidden="true"
+				>
+					{selected ? <Check className="size-4 text-primary" strokeWidth={2.5} /> : null}
+				</span>
+				<span className="min-w-0 flex-1 truncate text-sm text-foreground" title={label}>
+					{label}
+				</span>
+				{count != null ? (
+					<span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+						{count}
+					</span>
+				) : null}
+			</button>
+
+			{hasMoreMenu ? (
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							className="mr-1 size-8 shrink-0 text-muted-foreground"
+							data-testid={moreTestId}
+							aria-label={moreAriaLabel}
+							onClick={(event) => event.stopPropagation()}
+						>
+							<MoreHorizontal className="size-4" strokeWidth={2} />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="min-w-[120px]">
+						<DropdownMenuItem
+							data-testid="audio-recording-group-rename-menu-item"
+							onClick={onRename}
+						>
+							{renameLabel}
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							variant="destructive"
+							data-testid="audio-recording-group-delete-menu-item"
+							onClick={onDelete}
+						>
+							{deleteLabel}
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			) : (
+				<span className="mr-1 size-8 shrink-0" aria-hidden="true" />
+			)}
+		</div>
+	)
+}
+
+interface RecordingGroupBorderedListProps {
+	children: ReactNode
+	emptyMessage?: string
+	isEmpty?: boolean
+}
+
+/** Bordered card list container aligned with mobile group sheet */
+function RecordingGroupBorderedList({
+	children,
+	emptyMessage,
+	isEmpty = false,
+}: RecordingGroupBorderedListProps) {
+	return (
+		<ScrollArea
+			className="my-2 max-h-[min(280px,50vh)] w-full min-w-0 overflow-hidden rounded-lg border bg-card pr-2 shadow-sm [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:!w-full [&_[data-slot='scroll-area-viewport']>div]:!min-w-0"
+			viewportClassName="focus-visible:outline-none focus-visible:ring-0"
+			data-testid="audio-recording-group-bordered-list"
+		>
+			<div className="flex w-full min-w-0 flex-col overflow-hidden">
+				{isEmpty && emptyMessage ? (
+					<p className="py-8 text-center text-xs text-muted-foreground">{emptyMessage}</p>
+				) : (
+					children
+				)}
+			</div>
+		</ScrollArea>
+	)
+}
+
+/** Renders a divider between group rows inside the bordered list */
+function RecordingGroupRowDivider() {
+	return <div className="h-px w-full bg-border" />
+}
+
+interface RecordingGroupDialogFooterProps {
+	newGroupLabel: string
+	onNewGroup: () => void
+	isSubmitting?: boolean
+	showNewGroup?: boolean
+	children?: ReactNode
+}
+
+/** Footer with new-group action pinned to the left; optional right-side actions */
+function RecordingGroupDialogFooter({
+	newGroupLabel,
+	onNewGroup,
+	isSubmitting = false,
+	showNewGroup = true,
+	children,
+}: RecordingGroupDialogFooterProps) {
+	return (
+		<DialogFooter className="flex-row items-center justify-between gap-2 sm:justify-between">
+			{showNewGroup ? (
+				<Button
+					type="button"
+					variant="outline"
+					className="gap-1.5"
+					onClick={onNewGroup}
+					disabled={isSubmitting}
+					data-testid="audio-recording-group-create-trigger"
+				>
+					<Plus className="size-4" />
+					{newGroupLabel}
+				</Button>
+			) : (
+				<span />
+			)}
+			{children ? <div className="flex items-center gap-2">{children}</div> : null}
+		</DialogFooter>
+	)
+}
 
 interface AudioRecordingGroupManageDialogProps {
 	open: boolean
 	onOpenChange: (open: boolean) => void
 	groups: AudioRecordingGroup[]
-	onCreateGroup: (name: string) => Promise<void>
+	onCreateGroup: (name: string) => Promise<AudioRecordingGroup | void>
 	onRenameGroup: (id: string, name: string) => Promise<void>
 	onDeleteGroup: (id: string) => Promise<void>
 	isSubmitting?: boolean
 }
 
-/** Component representing the unified group settings modal (Create, Edit, Delete) */
+/** Manage dialog for creating, renaming, and deleting custom recording groups */
 export function AudioRecordingGroupManageDialog({
 	open,
 	onOpenChange,
@@ -36,65 +465,29 @@ export function AudioRecordingGroupManageDialog({
 	isSubmitting = false,
 }: AudioRecordingGroupManageDialogProps) {
 	const { t } = useTranslation(["super", "audioRecordings"])
-	const [newGroupName, setNewGroupName] = useState("")
-	const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
-	const [editingName, setEditingName] = useState("")
-	const [deleteConfirmGroupId, setDeleteConfirmGroupId] = useState<string | null>(null)
+	const unnamedGroupLabel = t("super:mobile.recordingEntry.groupSheet.unnamedGroup")
+	const crud = useRecordingGroupCrudState({
+		open,
+		onCreateGroup,
+		onRenameGroup,
+		onDeleteGroup,
+		isSubmitting,
+	})
 
-	// Clean up inputs on reopen
-	useEffect(() => {
-		if (open) {
-			setNewGroupName("")
-			setEditingGroupId(null)
-			setEditingName("")
-			setDeleteConfirmGroupId(null)
-		}
-	}, [open])
-
-	const handleCreate = async () => {
-		const name = newGroupName.trim()
-		if (!name) return
-		try {
-			await onCreateGroup(name)
-			setNewGroupName("")
-			toast.success(t("super:mobile.recordingEntry.groupSheet.createSuccess"))
-		} catch {
-			toast.error(t("super:mobile.recordingEntry.groupSheet.createFailed"))
-		}
-	}
-
-	const handleStartEdit = (group: AudioRecordingGroup) => {
-		setEditingGroupId(group.id)
-		setEditingName(group.name)
-	}
-
-	const handleSaveEdit = async (id: string) => {
-		const name = editingName.trim()
-		if (!name) return
-		try {
-			await onRenameGroup(id, name)
-			setEditingGroupId(null)
-			toast.success(t("audioRecordings:actions.renameSuccess"))
-		} catch {
-			toast.error(t("audioRecordings:actions.renameFailed"))
-		}
-	}
-
-	const handleDelete = async (id: string) => {
-		try {
-			await onDeleteGroup(id)
-			setDeleteConfirmGroupId(null)
-			toast.success(t("audioRecordings:actions.deleteSuccess"))
-		} catch {
-			toast.error(t("audioRecordings:actions.deleteFailed"))
-		}
-	}
+	const deleteConfirmMessage = crud.deleteConfirmGroup
+		? t("super:mobile.recordingEntry.groupSheet.deleteConfirm", {
+				name: resolveRecordingGroupDisplayName(
+					crud.deleteConfirmGroup.name,
+					unnamedGroupLabel,
+				),
+			})
+		: t("super:mobile.recordingEntry.groupSheet.deleteConfirm")
 
 	return (
 		<>
 			<Dialog open={open} onOpenChange={onOpenChange}>
 				<DialogContent
-					className="sm:max-w-[480px]"
+					className="sm:max-w-[420px]"
 					data-testid="audio-recording-group-manage-dialog"
 				>
 					<DialogHeader>
@@ -103,172 +496,87 @@ export function AudioRecordingGroupManageDialog({
 						</DialogTitle>
 					</DialogHeader>
 
-					{/* Create new group section */}
-					<div className="flex items-center gap-2 border-b pb-4">
-						<Input
-							maxLength={50}
-							value={newGroupName}
-							placeholder={t(
-								"super:mobile.recordingEntry.groupSheet.groupNamePlaceholder",
-							)}
-							onChange={(e) => setNewGroupName(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter") void handleCreate()
-							}}
-							className="h-9 flex-1"
-							data-testid="audio-recording-group-create-input"
-						/>
-						<Button
-							type="button"
-							size="sm"
-							onClick={handleCreate}
-							disabled={isSubmitting || !newGroupName.trim()}
-							className="h-9 gap-1"
-							data-testid="audio-recording-group-create-btn"
-						>
-							<Plus className="h-4 w-4" />
-							{t("audioRecordings:actions.confirm")}
-						</Button>
-					</div>
+					<RecordingGroupBorderedList
+						isEmpty={groups.length === 0}
+						emptyMessage={t("audioRecordings:empty.noCustomGroups")}
+					>
+						{groups.map((group, index) => (
+							<div key={group.id}>
+								{index > 0 ? <RecordingGroupRowDivider /> : null}
+								<RecordingGroupListRow
+									label={resolveRecordingGroupDisplayName(
+										group.name,
+										unnamedGroupLabel,
+									)}
+									count={group.projectCount}
+									onRename={() => crud.openRenameDialog(group)}
+									onDelete={() => crud.setDeleteConfirmGroup(group)}
+									showMoreActions
+									renameLabel={t("super:mobile.recordingEntry.groupSheet.rename")}
+									deleteLabel={t(
+										"super:mobile.recordingEntry.groupSheet.deleteGroup",
+									)}
+									moreAriaLabel={t(
+										"super:mobile.recordingEntry.groupSheet.moreGroupAria",
+										{
+											name: resolveRecordingGroupDisplayName(
+												group.name,
+												unnamedGroupLabel,
+											),
+										},
+									)}
+									moreTestId={`audio-recording-group-more-${group.id}`}
+									dataTestId={`group-item-${group.id}`}
+								/>
+							</div>
+						))}
+					</RecordingGroupBorderedList>
 
-					{/* Group list scroll area */}
-					<ScrollArea className="max-h-[300px] pr-4">
-						<div className="flex flex-col gap-1.5 py-2">
-							{groups.length === 0 ? (
-								<p className="py-6 text-center text-xs text-muted-foreground">
-									{t("audioRecordings:empty.noCustomGroups")}
-								</p>
-							) : (
-								groups.map((group) => {
-									const isEditing = editingGroupId === group.id
-									return (
-										<div
-											key={group.id}
-											className="flex h-10 items-center justify-between gap-3 rounded-lg px-2 hover:bg-muted/40"
-											data-testid={`group-item-${group.id}`}
-										>
-											<div className="flex flex-1 items-center gap-2">
-												<FolderClosed className="h-4 w-4 text-muted-foreground" />
-												{isEditing ? (
-													<Input
-														maxLength={50}
-														value={editingName}
-														onChange={(e) =>
-															setEditingName(e.target.value)
-														}
-														onKeyDown={(e) => {
-															if (e.key === "Enter")
-																void handleSaveEdit(group.id)
-														}}
-														className="h-8 flex-1 py-1 text-sm"
-														autoFocus
-													/>
-												) : (
-													<span className="max-w-[260px] truncate text-sm font-medium text-foreground">
-														{resolveRecordingGroupDisplayName(
-															group.name,
-															t(
-																"super:mobile.recordingEntry.groupSheet.unnamedGroup",
-															),
-														)}
-													</span>
-												)}
-											</div>
-
-											{/* Action button row */}
-											<div className="flex items-center gap-1.5">
-												{isEditing ? (
-													<>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-7 w-7 text-primary"
-															onClick={() =>
-																void handleSaveEdit(group.id)
-															}
-														>
-															<Check className="h-4 w-4" />
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-7 w-7 text-muted-foreground"
-															onClick={() => setEditingGroupId(null)}
-														>
-															<X className="h-4 w-4" />
-														</Button>
-													</>
-												) : (
-													<>
-														<Button
-															variant="ghost"
-															size="sm"
-															className="h-7 px-2 text-xs font-normal"
-															onClick={() => handleStartEdit(group)}
-														>
-															{t(
-																"super:mobile.recordingEntry.moreSheet.rename",
-															)}
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-7 w-7 text-destructive hover:text-destructive"
-															onClick={() =>
-																setDeleteConfirmGroupId(group.id)
-															}
-														>
-															<Trash2 className="h-4 w-4" />
-														</Button>
-													</>
-												)}
-											</div>
-										</div>
-									)
-								})
-							)}
-						</div>
-					</ScrollArea>
+					<RecordingGroupDialogFooter
+						newGroupLabel={t("super:mobile.recordingEntry.groupSheet.newGroup")}
+						onNewGroup={crud.openCreateDialog}
+						isSubmitting={crud.isSubmitting}
+					/>
 				</DialogContent>
 			</Dialog>
 
-			{/* Delete double-confirmation Dialog */}
-			<Dialog
-				open={deleteConfirmGroupId != null}
-				onOpenChange={(open) => {
-					if (!open) setDeleteConfirmGroupId(null)
+			<RecordingGroupNameDialog
+				mode={crud.nameDialogMode}
+				draftName={crud.draftName}
+				onDraftNameChange={crud.setDraftName}
+				onOpenChange={(nextOpen) => {
+					if (!nextOpen) crud.closeNameDialog()
 				}}
-			>
-				<DialogContent className="sm:max-w-[400px]">
-					<DialogHeader>
-						<div className="flex items-center gap-2 font-semibold text-destructive">
-							<AlertTriangle className="h-5 w-5" />
-							<span>{t("super:mobile.recordingEntry.groupSheet.deleteTitle")}</span>
-						</div>
-					</DialogHeader>
-					<div className="py-2 text-sm text-muted-foreground">
-						{t("super:mobile.recordingEntry.groupSheet.deleteConfirm")}
-					</div>
-					<DialogFooter>
-						<Button
-							variant="outline"
-							onClick={() => setDeleteConfirmGroupId(null)}
-							disabled={isSubmitting}
-						>
-							{t("audioRecordings:actions.cancel")}
-						</Button>
-						<Button
-							variant="destructive"
-							onClick={() =>
-								deleteConfirmGroupId && void handleDelete(deleteConfirmGroupId)
-							}
-							disabled={isSubmitting}
-						>
-							{t("audioRecordings:actions.confirm")}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+				onConfirm={crud.handleNameDialogConfirm}
+				isSubmitting={crud.isSubmitting}
+				createTitle={t("super:mobile.recordingEntry.groupSheet.createTitle")}
+				renameTitle={t("super:mobile.recordingEntry.groupSheet.renameTitle")}
+				nameLabel={
+					crud.nameDialogMode === "rename"
+						? t("super:mobile.recordingEntry.groupSheet.renameLabel")
+						: t("super:mobile.recordingEntry.groupSheet.groupNameLabel")
+				}
+				placeholder={
+					crud.nameDialogMode === "rename"
+						? t("super:mobile.recordingEntry.groupSheet.renamePlaceholder")
+						: t("super:mobile.recordingEntry.groupSheet.groupNamePlaceholder")
+				}
+				cancelLabel={t("audioRecordings:actions.cancel")}
+				confirmLabel={t("audioRecordings:actions.confirm")}
+			/>
+
+			<RecordingGroupDeleteConfirmDialog
+				open={crud.deleteConfirmGroup != null}
+				onOpenChange={(nextOpen) => {
+					if (!nextOpen) crud.setDeleteConfirmGroup(null)
+				}}
+				onConfirm={() => void crud.handleDelete()}
+				isSubmitting={crud.isSubmitting}
+				cancelLabel={t("audioRecordings:actions.cancel")}
+				confirmLabel={t("audioRecordings:actions.confirm")}
+				deleteTitle={t("super:mobile.recordingEntry.groupSheet.deleteTitle")}
+				deleteConfirm={deleteConfirmMessage}
+			/>
 		</>
 	)
 }
@@ -278,27 +586,48 @@ interface AudioRecordingMoveGroupDialogProps {
 	onOpenChange: (open: boolean) => void
 	groups: AudioRecordingGroup[]
 	selectedGroupId: string
+	ungroupedCount?: number
 	onSelect: (groupId: string) => Promise<void>
+	onCreateGroup?: (name: string) => Promise<AudioRecordingGroup | void>
+	onRenameGroup?: (id: string, name: string) => Promise<void>
+	onDeleteGroup?: (id: string) => Promise<void>
 	isSubmitting?: boolean
 }
 
-/** Component modal allowing user to re-locate a project under a customized folder */
+/** Move-target dialog with mobile-aligned list and footer new-group action */
 export function AudioRecordingMoveGroupDialog({
 	open,
 	onOpenChange,
 	groups,
 	selectedGroupId,
+	ungroupedCount,
 	onSelect,
+	onCreateGroup,
+	onRenameGroup,
+	onDeleteGroup,
 	isSubmitting = false,
 }: AudioRecordingMoveGroupDialogProps) {
 	const { t } = useTranslation(["super", "audioRecordings"])
+	const unnamedGroupLabel = t("super:mobile.recordingEntry.groupSheet.unnamedGroup")
 	const [activeGroupId, setActiveGroupId] = useState(selectedGroupId)
+	const canManageGroups = Boolean(onCreateGroup && onRenameGroup && onDeleteGroup)
 
 	useEffect(() => {
-		if (open) {
-			setActiveGroupId(selectedGroupId)
-		}
+		if (!open) return
+		setActiveGroupId(selectedGroupId)
 	}, [open, selectedGroupId])
+
+	const crud = useRecordingGroupCrudState({
+		open,
+		onCreateGroup: onCreateGroup ?? (async () => undefined),
+		onRenameGroup: onRenameGroup ?? (async () => undefined),
+		onDeleteGroup: onDeleteGroup ?? (async () => undefined),
+		isSubmitting,
+		onCreated: (group) => setActiveGroupId(group.id),
+		onDeleted: (id) => {
+			setActiveGroupId((current) => (current === id ? UNGROUPED_RECORDING_GROUP_ID : current))
+		},
+	})
 
 	const handleConfirm = async () => {
 		try {
@@ -309,77 +638,148 @@ export function AudioRecordingMoveGroupDialog({
 		}
 	}
 
+	const deleteConfirmMessage = crud.deleteConfirmGroup
+		? t("super:mobile.recordingEntry.groupSheet.deleteConfirm", {
+				name: resolveRecordingGroupDisplayName(
+					crud.deleteConfirmGroup.name,
+					unnamedGroupLabel,
+				),
+			})
+		: t("super:mobile.recordingEntry.groupSheet.deleteConfirm")
+
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent
-				className="sm:max-w-[420px]"
-				data-testid="audio-recording-move-group-dialog"
-			>
-				<DialogHeader>
-					<DialogTitle>
-						{t("super:mobile.recordingEntry.moveGroupSheet.title")}
-					</DialogTitle>
-				</DialogHeader>
+		<>
+			<Dialog open={open} onOpenChange={onOpenChange}>
+				<DialogContent
+					className="sm:max-w-[420px]"
+					data-testid="audio-recording-move-group-dialog"
+				>
+					<DialogHeader>
+						<DialogTitle>
+							{t("super:mobile.recordingEntry.moveGroupSheet.title")}
+						</DialogTitle>
+					</DialogHeader>
 
-				<ScrollArea className="my-2 max-h-[260px] rounded-lg border pr-2">
-					<div className="flex flex-col p-1">
-						{/* Virtual Ungrouped Item */}
-						<button
-							type="button"
-							onClick={() => setActiveGroupId("ungrouped")}
-							className={`flex h-9 w-full items-center justify-between rounded-md px-3 text-sm transition-colors hover:bg-muted/50 ${
-								activeGroupId === "ungrouped"
-									? "bg-muted font-medium text-foreground"
-									: "text-muted-foreground"
-							}`}
-						>
-							<span>{t("super:mobile.recordingEntry.groupSheet.ungrouped")}</span>
-							{activeGroupId === "ungrouped" && (
-								<Check className="h-4 w-4 text-primary" />
-							)}
-						</button>
+					<RecordingGroupBorderedList>
+						<RecordingGroupListRow
+							label={t("super:mobile.recordingEntry.groupSheet.ungrouped")}
+							count={ungroupedCount}
+							selected={activeGroupId === UNGROUPED_RECORDING_GROUP_ID}
+							onSelect={() => setActiveGroupId(UNGROUPED_RECORDING_GROUP_ID)}
+							renameLabel={t("super:mobile.recordingEntry.groupSheet.rename")}
+							deleteLabel={t("super:mobile.recordingEntry.groupSheet.deleteGroup")}
+							dataTestId="audio-recording-move-group-option-ungrouped"
+						/>
 
-						{/* Customized Real Groups */}
 						{groups.map((group) => (
-							<button
-								key={group.id}
-								type="button"
-								onClick={() => setActiveGroupId(group.id)}
-								className={`flex h-9 w-full items-center justify-between rounded-md px-3 text-sm transition-colors hover:bg-muted/50 ${
-									activeGroupId === group.id
-										? "bg-muted font-medium text-foreground"
-										: "text-muted-foreground"
-								}`}
-							>
-								<span className="max-w-[280px] truncate">
-									{resolveRecordingGroupDisplayName(
+							<div key={group.id}>
+								<RecordingGroupRowDivider />
+								<RecordingGroupListRow
+									label={resolveRecordingGroupDisplayName(
 										group.name,
-										t("super:mobile.recordingEntry.groupSheet.unnamedGroup"),
+										unnamedGroupLabel,
 									)}
-								</span>
-								{activeGroupId === group.id && (
-									<Check className="h-4 w-4 text-primary" />
-								)}
-							</button>
+									count={group.projectCount}
+									selected={activeGroupId === group.id}
+									onSelect={() => setActiveGroupId(group.id)}
+									onRename={
+										canManageGroups
+											? () => crud.openRenameDialog(group)
+											: undefined
+									}
+									onDelete={
+										canManageGroups
+											? () => crud.setDeleteConfirmGroup(group)
+											: undefined
+									}
+									showMoreActions={canManageGroups}
+									renameLabel={t("super:mobile.recordingEntry.groupSheet.rename")}
+									deleteLabel={t(
+										"super:mobile.recordingEntry.groupSheet.deleteGroup",
+									)}
+									moreAriaLabel={t(
+										"super:mobile.recordingEntry.groupSheet.moreGroupAria",
+										{
+											name: resolveRecordingGroupDisplayName(
+												group.name,
+												unnamedGroupLabel,
+											),
+										},
+									)}
+									moreTestId={`audio-recording-group-more-${group.id}`}
+									dataTestId={`audio-recording-move-group-option-${group.id}`}
+								/>
+							</div>
 						))}
-					</div>
-				</ScrollArea>
+					</RecordingGroupBorderedList>
 
-				<DialogFooter>
-					<Button
-						variant="outline"
-						onClick={() => onOpenChange(false)}
-						disabled={isSubmitting}
+					<RecordingGroupDialogFooter
+						newGroupLabel={t("super:mobile.recordingEntry.groupSheet.newGroup")}
+						onNewGroup={crud.openCreateDialog}
+						isSubmitting={isSubmitting}
+						showNewGroup={canManageGroups}
 					>
-						{t("audioRecordings:actions.cancel")}
-					</Button>
-					<Button onClick={() => void handleConfirm()} disabled={isSubmitting}>
-						{isSubmitting
-							? t("audioRecordings:actions.submitting")
-							: t("audioRecordings:actions.confirm")}
-					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
+						<Button
+							variant="outline"
+							onClick={() => onOpenChange(false)}
+							disabled={isSubmitting}
+						>
+							{t("audioRecordings:actions.cancel")}
+						</Button>
+						<Button
+							onClick={() => void handleConfirm()}
+							disabled={isSubmitting}
+							data-testid="audio-recording-move-group-confirm-btn"
+						>
+							{isSubmitting
+								? t("audioRecordings:actions.submitting")
+								: t("audioRecordings:actions.confirm")}
+						</Button>
+					</RecordingGroupDialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{canManageGroups ? (
+				<>
+					<RecordingGroupNameDialog
+						mode={crud.nameDialogMode}
+						draftName={crud.draftName}
+						onDraftNameChange={crud.setDraftName}
+						onOpenChange={(nextOpen) => {
+							if (!nextOpen) crud.closeNameDialog()
+						}}
+						onConfirm={crud.handleNameDialogConfirm}
+						isSubmitting={crud.isSubmitting}
+						createTitle={t("super:mobile.recordingEntry.groupSheet.createTitle")}
+						renameTitle={t("super:mobile.recordingEntry.groupSheet.renameTitle")}
+						nameLabel={
+							crud.nameDialogMode === "rename"
+								? t("super:mobile.recordingEntry.groupSheet.renameLabel")
+								: t("super:mobile.recordingEntry.groupSheet.groupNameLabel")
+						}
+						placeholder={
+							crud.nameDialogMode === "rename"
+								? t("super:mobile.recordingEntry.groupSheet.renamePlaceholder")
+								: t("super:mobile.recordingEntry.groupSheet.groupNamePlaceholder")
+						}
+						cancelLabel={t("audioRecordings:actions.cancel")}
+						confirmLabel={t("audioRecordings:actions.confirm")}
+					/>
+
+					<RecordingGroupDeleteConfirmDialog
+						open={crud.deleteConfirmGroup != null}
+						onOpenChange={(nextOpen) => {
+							if (!nextOpen) crud.setDeleteConfirmGroup(null)
+						}}
+						onConfirm={() => void crud.handleDelete()}
+						isSubmitting={crud.isSubmitting}
+						cancelLabel={t("audioRecordings:actions.cancel")}
+						confirmLabel={t("audioRecordings:actions.confirm")}
+						deleteTitle={t("super:mobile.recordingEntry.groupSheet.deleteTitle")}
+						deleteConfirm={deleteConfirmMessage}
+					/>
+				</>
+			) : null}
+		</>
 	)
 }

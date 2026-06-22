@@ -103,6 +103,7 @@ Important discussion.
 
 		expect(topics).toHaveLength(1)
 		expect(topics[0]?.name).toBe("Demo Topic")
+		expect(topics[0]?.color).toBe("#000000")
 		expect(topics[0]?.summarySpeakers).toEqual(["Speaker-1", "Speaker-2"])
 		expect(topics[0]?.items[0]).toMatchObject({
 			time: 10,
@@ -110,6 +111,22 @@ Important discussion.
 			speakers: ["Speaker-1", "Speaker-2"],
 			text: "Discussed the plan",
 		})
+	})
+
+	it("uses pastel fallback colors when markdown header omits hex", () => {
+		const topics = parseTopicsMarkdown(`
+## Topics
+
+### 📌 demo_topic | Demo Topic
+
+#### Key Points
+Summary body.
+
+#### Related Dialogue
+- \`00:10-00:20\` Speaker-1: Discussed the plan
+`)
+
+		expect(topics[0]?.color).toBe("#e0e0e0")
 	})
 
 	it("preserves existing magic-time links without leaking raw href text", () => {

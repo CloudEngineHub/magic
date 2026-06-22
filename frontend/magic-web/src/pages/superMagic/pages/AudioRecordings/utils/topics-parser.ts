@@ -1,7 +1,11 @@
 import type { RecordingTopicSection } from "../types/recording-detail"
 import { parseRecordingTimeToSeconds } from "./time"
 
-const TOPIC_COLORS = ["#4f46e5", "#0891b2", "#16a34a", "#d97706", "#dc2626", "#7c3aed"]
+/**
+ * Pastel fallback palette aligned with the recording-detail prototype chapter themes.
+ * Used only when the topics markdown header omits an explicit `#hex` color token.
+ */
+const TOPIC_COLORS_FALLBACK = ["#e0e0e0", "#a8d5f7", "#c5e1a5", "#ffd9b3", "#d4c5f0", "#ffccbc"]
 
 /** Normalizes generated topic ids so they are safe as React keys and DOM data attributes. */
 function normalizeTopicId(rawId: string, index: number): string {
@@ -26,10 +30,13 @@ export function parseTopicsMarkdown(markdown: string): RecordingTopicSection[] {
 
 /** Parses one topic block into summary copy and clickable related-dialogue items. */
 function parseTopicBlock(block: string, index: number): RecordingTopicSection | null {
-	const headerMatch = block.match(/### 📌 (\S+)\s*\|\s*([^|]+?)\s*(?:\||$)/)
+	// Header format: `### 📌 {id} | {name} | {#hex}` — hex is optional (prototype-aligned).
+	const headerMatch = block.match(
+		/^### 📌 (\S+)\s*\|\s*([^|\n]+?)(?:\s*\|\s*(#[0-9a-fA-F]{3,8}))?\s*$/m,
+	)
 	if (!headerMatch) return null
 
-	const [, rawId, rawName] = headerMatch
+	const [, rawId, rawName, rawColor] = headerMatch
 	const h4Lines = block.match(/^####\s+.+$/gm) ?? []
 	const summaryTitle = h4Lines[0]?.replace(/^####\s*/, "").trim() ?? ""
 	const itemsTitle = h4Lines[1]?.replace(/^####\s*/, "").trim() ?? ""
@@ -48,7 +55,7 @@ function parseTopicBlock(block: string, index: number): RecordingTopicSection | 
 	return {
 		id: normalizeTopicId(rawId, index),
 		name: rawName.trim(),
-		color: TOPIC_COLORS[index % TOPIC_COLORS.length],
+		color: rawColor?.trim() ?? TOPIC_COLORS_FALLBACK[index % TOPIC_COLORS_FALLBACK.length],
 		summaryTitle,
 		summaryText: cleanSummary,
 		summarySpeakers,
