@@ -51,9 +51,11 @@ function resolveAICardAttachmentSource({
 	const folderFileId = data?.file_id
 	const attachmentTree = attachments as AICardAttachmentNode[] | undefined
 	const flatAttachments = attachmentList as AICardAttachmentNode[] | undefined
-	if (findNodeWithChildrenByFileId(attachmentTree, folderFileId)) return attachments
+	const matchedAttachmentFolder = findNodeWithChildrenByFileId(attachmentTree, folderFileId)
+	if (matchedAttachmentFolder) return [matchedAttachmentFolder]
 	if (Array.isArray(data?.children) && data.children.length > 0) return [data]
-	if (findNodeWithChildrenByFileId(flatAttachments, folderFileId)) return attachmentList
+	const matchedFlatFolder = findNodeWithChildrenByFileId(flatAttachments, folderFileId)
+	if (matchedFlatFolder) return [matchedFlatFolder]
 	return attachmentList || attachments
 }
 
@@ -108,7 +110,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 		if (initialNavigation?.activeCardId) {
 			store.openCardDetail(initialNavigation.activeCardId)
 		}
-	}, [store, store.loading, initialNavigation, canEdit])
+	}, [store, store.loading, initialNavigation, canEdit, folderFileId])
 
 	const handleOpenConfig = useCallback(() => {
 		store.setViewMode("config")

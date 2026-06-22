@@ -1,57 +1,13 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
 import type { AICardEntry, AICardHistoryEntry, AICardProjectConfig, AICardViewMode } from "../types"
 import { buildAICardSyncFingerprint } from "../utils/aiCardSyncFingerprint"
 
-/**
- * Parse magic.project.js content to extract config.
- * Uses bracket-matching approach (no eval) for safety.
- */
-function parseMagicProjectConfig(content: string): AICardProjectConfig | null {
-	const marker = "window.magicProjectConfig"
-	const idx = content.indexOf(marker)
-	if (idx === -1) return null
-
-	const eqIdx = content.indexOf("=", idx + marker.length)
-	if (eqIdx === -1) return null
-
-	let braceStart = -1
-	for (let i = eqIdx + 1; i < content.length; i++) {
-		if (content[i] === "{") {
-			braceStart = i
-			break
-		}
-	}
-	if (braceStart === -1) return null
-
-	let depth = 0
-	let braceEnd = -1
-	for (let i = braceStart; i < content.length; i++) {
-		if (content[i] === "{") depth++
-		else if (content[i] === "}") {
-			depth--
-			if (depth === 0) {
-				braceEnd = i
-				break
-			}
-		}
-	}
-	if (braceEnd === -1) return null
-
-	const jsonLike = content.slice(braceStart, braceEnd + 1)
-	// Normalize JS object to JSON (handle trailing commas, unquoted keys)
-	const normalized = jsonLike
-		.replace(/\/\/[^\n]*/g, "") // remove single-line comments
-		.replace(/\/\*[\s\S]*?\*\//g, "") // remove multi-line comments
-		.replace(/,(\s*[}\]])/g, "$1") // remove trailing commas
-		.replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // quote unquoted keys
-		.replace(/:\s*'([^']*)'/g, ': "$1"') // single quotes to double
-
-	try {
-		return JSON.parse(normalized)
-	} catch {
-		return null
-	}
+function parseAICardProjectConfig(content: string): AICardProjectConfig | null {
+	const config = parseMagicProjectConfigContent(content)
+	if (!config || config.type !== "ai-card") return null
+	return config as unknown as AICardProjectConfig
 }
 
 export class AICardStore {
@@ -276,7 +232,7 @@ export class AICardStore {
 			const resp = await fetch(url, { credentials: "omit" })
 			if (!resp.ok) return null
 			const text = await resp.text()
-			return parseMagicProjectConfig(text)
+			return parseAICardProjectConfig(text)
 		} catch {
 			return null
 		}

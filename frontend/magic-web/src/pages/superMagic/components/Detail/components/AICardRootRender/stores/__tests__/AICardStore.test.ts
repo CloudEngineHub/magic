@@ -82,4 +82,28 @@ describe("AICardStore", () => {
 		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
 		expect(store.cards[0]?.latestHtmlFileId).toBe("latest-html")
 	})
+
+	it("parses magic.project.js with multiline template literal fields", async () => {
+		mockFetch.mockResolvedValue({
+			ok: true,
+			text: async () => `
+				window.magicProjectConfig = {
+					type: "ai-card",
+					name: "Daily Card",
+					prompt: \`line one
+line two\`,
+					schedule_id: "schedule-1",
+					cards: [{ file: "latest/index.html", label: "Latest" }],
+				}
+			`,
+		})
+
+		const store = new AICardStore()
+
+		await store.sync("folder", createAttachmentTree())
+
+		expect(store.projectConfig?.schedule_id).toBe("schedule-1")
+		expect(store.projectConfig?.prompt).toBe("line one\nline two")
+		expect(store.hasConfig).toBe(true)
+	})
 })

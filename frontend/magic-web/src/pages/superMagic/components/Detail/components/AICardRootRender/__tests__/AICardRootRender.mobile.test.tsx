@@ -101,6 +101,13 @@ const fetchMock = vi.fn(async (url: string) => {
 			description: "flat list should not win",
 			cards: [],
 		},
+		"config-nested": {
+			type: "ai-card",
+			name: "Nested Card Home",
+			description: "nested project tree config",
+			cards: [],
+			schedule_id: "schedule-nested",
+		},
 	}
 
 	return {
@@ -155,6 +162,76 @@ describe("AICardRootRender mobile preview data source", () => {
 
 		await waitFor(() => {
 			expect(screen.getByTestId("ai-card-dashboard")).toHaveTextContent("Mobile Card Home")
+		})
+		expect(screen.queryByTestId("ai-card-config-panel")).not.toBeInTheDocument()
+	})
+
+	it("uses the matched nested folder when attachments is an ancestor tree", async () => {
+		vi.stubGlobal("fetch", fetchMock)
+
+		const cardFolder = {
+			file_id: "nested-card-root",
+			file_name: "Nested AI Card",
+			is_directory: true,
+			display_config: { type: "ai-card" },
+			children: [
+				{
+					file_id: "config-nested",
+					file_name: "magic.project.js",
+					is_directory: false,
+				},
+				{
+					file_id: "nested-latest-folder",
+					file_name: "latest",
+					is_directory: true,
+					children: [
+						{
+							file_id: "nested-latest-index",
+							file_name: "index.html",
+							is_directory: false,
+						},
+					],
+				},
+			],
+		}
+
+		const ancestorTree = {
+			file_id: "ai-card-library",
+			file_name: "AI Card Library",
+			is_directory: true,
+			children: [
+				{
+					file_id: "sibling-card-root",
+					file_name: "Sibling AI Card",
+					is_directory: true,
+					children: [
+						{
+							file_id: "sibling-config",
+							file_name: "magic.project.js",
+							is_directory: false,
+						},
+					],
+				},
+				cardFolder,
+			],
+		}
+
+		render(
+			<AICardRootRender
+				data={cardFolder}
+				attachments={[ancestorTree]}
+				attachmentList={[
+					{
+						file_id: "config-flat",
+						file_name: "magic.project.js",
+						is_directory: false,
+					},
+				]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ai-card-dashboard")).toHaveTextContent("Nested Card Home")
 		})
 		expect(screen.queryByTestId("ai-card-config-panel")).not.toBeInTheDocument()
 	})
