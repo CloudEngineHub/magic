@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import { useMobileAudioRecordingsList } from "../hooks/useMobileAudioRecordingsList"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { audioRecordingsStore } from "@/pages/superMagic/pages/AudioRecordings/stores/audio-recordings-store"
+
+const ALL_RECORDING_GROUP_ID = "-1"
 
 const { serviceMocks } = vi.hoisted(() => ({
 	serviceMocks: {
@@ -13,13 +15,40 @@ const { serviceMocks } = vi.hoisted(() => ({
 	},
 }))
 
-vi.mock("@/services/audioRecordings", () => ({
-	ALL_RECORDING_GROUP_ID: "-1",
-	UNGROUPED_RECORDING_GROUP_ID: "",
+// Block barrel-transitive imports (recordingOrigin -> history -> i18n glob) during Vitest collect.
+vi.mock("@/routes/history", () => ({
+	history: {
+		createHref: vi.fn(),
+		push: vi.fn(),
+		go: vi.fn(),
+		replace: vi.fn(),
+	},
+	baseHistory: {
+		listen: vi.fn(() => vi.fn()),
+	},
+}))
+
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getLocaleModules: () => ({ zhCNModules: {}, enUSModules: {} }),
+	getAdminLocaleModules: () => ({ adminZhCNModules: {}, adminEnUSModules: {} }),
+	loadFallbackLocale: vi.fn(),
+	loadMagicFlowLocale: vi.fn(),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		queryAudioProjects: vi.fn(),
+	},
+}))
+
+vi.mock("@/services/audioRecordings/AudioRecordingsService", () => ({
 	audioRecordingsService: {
 		queryProjects: serviceMocks.queryProjects,
 		batchMoveProjects: serviceMocks.batchMoveProjects,
 	},
+}))
+
+vi.mock("@/services/audioRecordings/RecordingGroupsService", () => ({
 	recordingGroupsService: {
 		listGroups: serviceMocks.listGroups,
 		createGroup: serviceMocks.createGroup,
@@ -35,6 +64,8 @@ vi.mock("@/pages/superMagic/pages/AudioRecordings/services/summary-progress-poll
 		setCallbacks: vi.fn(),
 	},
 }))
+
+import { useMobileAudioRecordingsList } from "../hooks/useMobileAudioRecordingsList"
 
 describe("useMobileAudioRecordingsList", () => {
 	beforeEach(() => {
@@ -52,6 +83,11 @@ describe("useMobileAudioRecordingsList", () => {
 			totalCount: 4,
 			ungroupedCount: 1,
 		})
+	})
+
+	afterEach(() => {
+		audioRecordingsStore.disposePoller()
+		audioRecordingsStore.reset()
 	})
 
 	it("loads groups and refetches list for the selected group", async () => {
@@ -164,5 +200,109 @@ describe("useMobileAudioRecordingsList", () => {
 
 		expect(refreshed).toBe(false)
 		expect(result.current.groupsLoading).toBe(false)
+	})
+
+	it("creates a group without switching the active filter", async () => {
+		serviceMocks.createGroup.mockResolvedValue({
+			id: "workspace-audio-new",
+			name: "Mock new group",
+			projectCount: 0,
+			isVirtual: false,
+		})
+
+		const { result } = renderHook(() => useMobileAudioRecordingsList())
+
+		await waitFor(() => {
+			expect(result.current.groups).toHaveLength(1)
+		})
+
+		act(() => {
+			result.current.handleGroupChange("workspace-audio-001")
+		})
+
+		await act(async () => {
+			await result.current.handleCreateGroup("Mock new group")
+		})
+
+		expect(serviceMocks.createGroup).toHaveBeenCalledWith("Mock new group")
+		expect(result.current.currentGroupId).toBe("workspace-audio-001")
+		expect(serviceMocks.listGroups).toHaveBeenCalledTimes(2)
+	})
+
+	it("renames a group and refreshes group metadata", async () => {
+		const { result } = renderHook(() => useMobileAudioRecordingsList())
+
+		await waitFor(() => {
+			expect(result.current.groups).toHaveLength(1)
+		})
+
+		await act(async () => {
+			await result.current.handleRenameGroup("workspace-audio-001", "Mock renamed group")
+		})
+
+		expect(serviceMocks.renameGroup).toHaveBeenCalledWith(
+			"workspace-audio-001",
+			"Mock renamed group",
+		)
+		expect(serviceMocks.listGroups).toHaveBeenCalledTimes(2)
+		expect(result.current.groupActionSubmitting).toBe(false)
+	})
+
+	it("resets to all when deleting the active group", async () => {
+		const { result } = renderHook(() => useMobileAudioRecordingsList())
+
+		await waitFor(() => {
+			expect(result.current.groups).toHaveLength(1)
+		})
+
+		act(() => {
+			result.current.handleGroupChange("workspace-audio-001")
+		})
+
+		await act(async () => {
+			await result.current.handleDeleteGroup("workspace-audio-001")
+		})
+
+		expect(serviceMocks.deleteGroup).toHaveBeenCalledWith("workspace-audio-001")
+		expect(result.current.currentGroupId).toBe(ALL_RECORDING_GROUP_ID)
+		expect(serviceMocks.queryProjects).toHaveBeenCalled()
+	})
+
+	it("keeps the active filter when deleting a non-active group", async () => {
+		serviceMocks.listGroups.mockResolvedValue({
+			groups: [
+				{
+					id: "workspace-audio-001",
+					name: "Mock work group",
+					projectCount: 3,
+					isVirtual: false,
+				},
+				{
+					id: "workspace-audio-002",
+					name: "Mock meeting group",
+					projectCount: 2,
+					isVirtual: false,
+				},
+			],
+			totalCount: 5,
+			ungroupedCount: 0,
+		})
+
+		const { result } = renderHook(() => useMobileAudioRecordingsList())
+
+		await waitFor(() => {
+			expect(result.current.groups).toHaveLength(2)
+		})
+
+		act(() => {
+			result.current.handleGroupChange("workspace-audio-001")
+		})
+
+		await act(async () => {
+			await result.current.handleDeleteGroup("workspace-audio-002")
+		})
+
+		expect(serviceMocks.deleteGroup).toHaveBeenCalledWith("workspace-audio-002")
+		expect(result.current.currentGroupId).toBe("workspace-audio-001")
 	})
 })

@@ -31,6 +31,8 @@ import CopyProjectProgressToast from "@/components/base/CopyProjectProgressToast
 import useNavigate from "@/routes/hooks/useNavigate"
 import useRoutesMetaSet from "@/routes/hooks/useRoutesMetaSet"
 import useShareRoute from "../superMagic/hooks/useShareRoute"
+// Future: when share payload resolves to audio project_mode, route to RecordingDetailShareShell
+// instead of generic share page. See AudioRecordings/types/recording-detail-capabilities.ts.
 import useLegacyFileShareData from "./hooks/useLegacyFileShareData"
 import useLegacyTopicShareData from "./hooks/useLegacyTopicShareData"
 import useNewFileShareData from "./hooks/useNewFileShareData"

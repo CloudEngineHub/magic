@@ -4,11 +4,13 @@ import type { AudioProjectListItem, AudioRecordingSummaryFilter } from "@/types/
 import { audioRecordingsStore } from "@/pages/superMagic/pages/AudioRecordings/stores/audio-recordings-store"
 import {
 	ALL_RECORDING_GROUP_ID,
-	audioRecordingsService,
-	recordingGroupsService,
 	UNGROUPED_RECORDING_GROUP_ID,
+} from "@/services/audioRecordings/RecordingGroupsConstants"
+import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordingsService"
+import {
+	recordingGroupsService,
 	type AudioRecordingGroup,
-} from "@/services/audioRecordings"
+} from "@/services/audioRecordings/RecordingGroupsService"
 import { resolveMobileDatePresetRange } from "../utils/mobile-recording-date-filter"
 import {
 	countActiveMobileAudioFilters,
@@ -168,14 +170,14 @@ export function useMobileAudioRecordingsList() {
 		async (name: string) => {
 			setGroupActionSubmitting(true)
 			try {
-				const created = await recordingGroupsService.createGroup(name)
-				handleGroupChange(created.id)
+				// Refresh group list only; keep the current filter selection unchanged.
+				await recordingGroupsService.createGroup(name)
 				await refreshGroups()
 			} finally {
 				setGroupActionSubmitting(false)
 			}
 		},
-		[handleGroupChange, refreshGroups],
+		[refreshGroups],
 	)
 
 	const handleRenameGroup = useCallback(

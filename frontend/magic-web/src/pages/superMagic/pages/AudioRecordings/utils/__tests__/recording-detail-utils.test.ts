@@ -8,6 +8,8 @@ import {
 	injectMarkdownTimeLinks,
 } from "../markdownTimeLinks"
 import { formatRecordingTime, parseRecordingTimeToSeconds } from "../time"
+import { parseTopicsMarkdown } from "../topics-parser"
+import { parseTranscriptMarkdown } from "../transcript-parser"
 
 describe("recording detail utils", () => {
 	it("parses magic.project.js config without executing callbacks", () => {
@@ -69,6 +71,45 @@ window.magicProjectConfig = {
 `)
 
 		expect(config?.files?.audio).toBe("right.wav")
+	})
+
+	it("parses completed transcript markdown into timeline segments", () => {
+		const segments = parseTranscriptMarkdown(`
+## Transcript
+
+[00:00] Speaker-1: Hello there
+[00:05] Speaker-2: Hi
+`)
+
+		expect(segments).toEqual([
+			{ id: "0-0", start: 0, end: 5, speaker: "Speaker-1", text: "Hello there" },
+			{ id: "1-5", start: 5, end: undefined, speaker: "Speaker-2", text: "Hi" },
+		])
+	})
+
+	it("parses structured topics markdown into summary and time cards", () => {
+		const topics = parseTopicsMarkdown(`
+## Topics
+
+### 📌 demo_topic | Demo Topic | #000000
+
+#### Key Points
+[Speaker-1, Speaker-2]
+Important discussion.
+
+#### Related Dialogue
+- \`00:10-00:20\` Speaker-1, Speaker-2: Discussed the plan
+`)
+
+		expect(topics).toHaveLength(1)
+		expect(topics[0]?.name).toBe("Demo Topic")
+		expect(topics[0]?.summarySpeakers).toEqual(["Speaker-1", "Speaker-2"])
+		expect(topics[0]?.items[0]).toMatchObject({
+			time: 10,
+			timeEnd: 20,
+			speakers: ["Speaker-1", "Speaker-2"],
+			text: "Discussed the plan",
+		})
 	})
 
 	it("preserves existing magic-time links without leaking raw href text", () => {

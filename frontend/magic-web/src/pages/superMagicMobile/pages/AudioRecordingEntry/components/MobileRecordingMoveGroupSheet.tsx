@@ -14,7 +14,7 @@ interface MobileRecordingMoveGroupSheetProps {
 	onSelect: (groupId: string) => void
 }
 
-/** Move-target row that only represents a valid destination workspace */
+/** Move-target row with leading check slot aligned to the group picker sheet */
 function MoveGroupRow({
 	label,
 	count,
@@ -33,13 +33,19 @@ function MoveGroupRow({
 			type="button"
 			onClick={onClick}
 			data-testid={dataTestId}
-			className="flex h-12 w-full items-center gap-2 bg-transparent px-[14px] transition-opacity active:opacity-60"
+			className="flex h-12 w-full items-center gap-2 bg-transparent pl-[14px] pr-[14px] transition-opacity active:opacity-60"
 		>
-			<span className="flex-1 truncate text-left text-[16px] leading-5 text-foreground">
-				{label}
+			<span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+				{selected ? <Check className="size-4 text-primary" strokeWidth={2.5} /> : null}
 			</span>
-			<span className="text-[13px] tabular-nums text-muted-foreground">{count}</span>
-			{selected ? <Check className="size-4 shrink-0 text-primary" strokeWidth={2.5} /> : null}
+			<span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+				<span className="min-w-0 truncate text-left text-[16px] leading-5 text-foreground">
+					{label}
+				</span>
+				<span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
+					{count}
+				</span>
+			</span>
 		</button>
 	)
 }
