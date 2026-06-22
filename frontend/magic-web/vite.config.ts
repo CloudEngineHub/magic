@@ -30,7 +30,7 @@ const isDev = process.env.NODE_ENV === "development"
 const devServerPort = process.env.PORT ? Number(process.env.PORT) : undefined
 const isHttpsDevServer = isDev && devServerPort === 443
 
-/** 本地开发 HTTPS hosts，支持逗号分隔多个，默认 magic.t.teamshare.cn */
+/** 本地开发 HTTPS hosts，支持逗号分隔多个，默认 magic.com */
 const devHosts = (process.env.DEV_HOSTS ?? "magic.com")
 	.split(",")
 	.map((h) => h.trim())
@@ -235,22 +235,22 @@ function getBaseViteConfig(): UserConfig {
 			}),
 			keepConsole(),
 			isEnableInspect &&
-				Inspect({
-					build: true,
-					outputDir: ".vite-inspect",
-				}),
+			Inspect({
+				build: true,
+				outputDir: ".vite-inspect",
+			}),
 			// 构建分析插件
 			isVisualizer &&
-				(visualizer({
-					filename: "dist/stats.html",
-					gzipSize: true,
-					brotliSize: true,
-					// 生成的可视化文件的路径和名称
-					// 可视化的类型，可选值有 'sunburst'、'treemap'、'network' 等
-					template: "treemap",
-					// 是否打开生成的可视化文件
-					open: true,
-				}) as PluginOption),
+			(visualizer({
+				filename: "dist/stats.html",
+				gzipSize: true,
+				brotliSize: true,
+				// 生成的可视化文件的路径和名称
+				// 可视化的类型，可选值有 'sunburst'、'treemap'、'network' 等
+				template: "treemap",
+				// 是否打开生成的可视化文件
+				open: true,
+			}) as PluginOption),
 			codeInspectorPlugin({
 				bundler: "vite", // Automatically detect development or production environment
 				editor: "code",
@@ -298,12 +298,12 @@ function getBaseViteConfig(): UserConfig {
 			// Critical font preload plugin for LCP optimization
 			!isDev && vitePluginCriticalFontPreload(),
 			!isDev &&
-				viteExternalsPlugin({
-					// 模块名: 全局变量名
-					react: "React",
-					"react-dom": "ReactDOM",
-					"lodash-es": "_",
-				}),
+			viteExternalsPlugin({
+				// 模块名: 全局变量名
+				react: "React",
+				"react-dom": "ReactDOM",
+				"lodash-es": "_",
+			}),
 			vitePluginImp({
 				libList: [
 					{
@@ -314,13 +314,13 @@ function getBaseViteConfig(): UserConfig {
 			// Only bind mkcert for the 443 dev server; other dev ports stay on HTTP.
 			...(isHttpsDevServer
 				? [
-						mkcert({
-							// 本地配置该地址的 host, 满足文件私有桶上传
-							// 可通过环境变量 DEV_HOSTS 覆盖，多个 host 用逗号分隔
-							hosts: devHosts,
-						}),
-						// http2Proxy({ quiet: true }),
-					]
+					mkcert({
+						// 本地配置该地址的 host, 满足文件私有桶上传
+						// 可通过环境变量 DEV_HOSTS 覆盖，多个 host 用逗号分隔
+						hosts: devHosts,
+					}),
+					// http2Proxy({ quiet: true }),
+				]
 				: []), // optional -- suppress error logging],
 			// 浏览器兼容
 			// legacy({
