@@ -704,8 +704,8 @@
         "en_US": "Unknown audio file"
     },
     "audio_understanding.unknown_status_code": {
-        "zh_CN": "转译错误：未知的状态码 - {{status_code}}: {{status_message}}",
-        "en_US": "Transcription error: Unknown status code - {{status_code}}: {{status_message}}"
+        "zh_CN": "转译错误：未知的状态码 - {{status_code}}: {{status_message}}。请使用相同参数重试音频转译一次；若再次失败再向用户说明。",
+        "en_US": "Transcription error: Unknown status code - {{status_code}}: {{status_message}}. Retry the audio transcription once with the same inputs; if it fails again, explain the situation to the user."
     },
     "audio_understanding.transcription_progress_message": {
         "zh_CN": "{{percentage}}%",
@@ -987,6 +987,22 @@
         "zh_CN": "空项目",
         "en_US": "empty project"
     },
+    "create_self_media_project.success": {
+        "zh_CN": "自媒体项目 {{project_name}} 创建成功（平台：{{platform}}，文章 {{posts_count}} 篇）",
+        "en_US": "Self-media project {{project_name}} created (platform: {{platform}}, posts: {{posts_count}})"
+    },
+    "create_self_media_project.exception": {
+        "zh_CN": "自媒体项目创建异常，请重试",
+        "en_US": "Self-media project creation failed, please retry"
+    },
+    "create_self_media_post.success": {
+        "zh_CN": "自媒体内容 {{post_name}}（{{post_id}}）就绪",
+        "en_US": "Self-media post {{post_name}} ({{post_id}}) ready"
+    },
+    "create_self_media_post.exception": {
+        "zh_CN": "自媒体内容创建异常，请重试",
+        "en_US": "Self-media post creation failed, please retry"
+    },
     "create_slide.rewrite_success_with_file": {
         "zh_CN": "重写 {{file_name}} 成功",
         "en_US": "Successfully rewrote {{file_name}}"
@@ -1252,8 +1268,8 @@
         "en_US": "Sub-agent call failed: {{error}}"
     },
     "call_subagent.assign": {
-        "zh_CN": "{{agent_name}} 子智能体",
-        "en_US": "{{agent_name}} sub-agent"
+        "zh_CN": "{{agent_name}}",
+        "en_US": "{{agent_name}}"
     },
     "call_subagent.running": {
         "zh_CN": "{{agent_name}} 正在执行任务",
