@@ -687,6 +687,10 @@
         "zh_CN": "不支持的音频文件格式: {{format}}",
         "en_US": "Unsupported audio file format: {{format}}"
     },
+    "audio_understanding.file_corrupted": {
+        "zh_CN": "音频文件 {{file_name}} 已损坏，无法转录。可能是录制或上传过程中断导致文件不完整，请重新导出或重新录制后再试。具体细节：{{reason}}",
+        "en_US": "Audio file {{file_name}} is corrupted and cannot be transcribed. The recording or upload was likely interrupted, leaving the file incomplete. Please re-export or re-record and try again. Details: {{reason}}"
+    },
     "audio_understanding.project_folder_not_exists": {
         "zh_CN": "需要创建项目文件夹，正在处理...",
         "en_US": "Folder creation needed, processing..."

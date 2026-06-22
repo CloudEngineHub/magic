@@ -74,6 +74,8 @@ class AudioUnderstanding(WorkspaceTool[AudioUnderstandingParams]):
     # Constants
     PLATFORM_TYPE_VOLCENGINE = "volcengine"
     HTTP_TIMEOUT = 30
+    # ISO BMFF（mp4 家族）扩展名，提交前做轻量完整性校验
+    MP4_FAMILY_EXTS = {"mp4", "m4a", "m4v", "mov", "3gp", "3g2"}
     # 进度报告间隔：固定30秒，无论音频多长，保持用户体验一致
     # 频繁的进度更新可以减少用户等待时的焦虑感
     PROGRESS_REPORT_INTERVAL = 30
@@ -154,6 +156,21 @@ class AudioUnderstanding(WorkspaceTool[AudioUnderstandingParams]):
                 raise AudioUnderstandingError(
                     i18n.translate("audio_understanding.file_not_found", category="tool.messages", file_path=params.audio_path),
                     "FILE_NOT_FOUND",
+                )
+
+            # 提交前轻量完整性校验：拦截因录制/上传中断导致的截断损坏文件，
+            # 这类文件索引（moov）不完整，播放器和 ASR 都无法打开
+            corruption_reason = await self._detect_corruption(file_path)
+            if corruption_reason:
+                self.logger.warning(f"Corrupted audio file detected ({audio_filename}): {corruption_reason}")
+                raise AudioUnderstandingError(
+                    i18n.translate(
+                        "audio_understanding.file_corrupted",
+                        category="tool.messages",
+                        file_name=audio_filename,
+                        reason=corruption_reason,
+                    ),
+                    "FILE_CORRUPTED",
                 )
 
             # 获取真实音频时长（异步执行，不阻塞事件循环）
@@ -1059,6 +1076,78 @@ class AudioUnderstanding(WorkspaceTool[AudioUnderstandingParams]):
 
         # All methods failed
         self.logger.warning(f"Could not get audio duration from file: {file_path}, will use file size estimation")
+        return None
+
+    async def _detect_corruption(self, file_path: Path) -> Optional[str]:
+        """
+        Lightweight integrity check for ISO BMFF containers (mp4/m4a/mov/3gp).
+
+        Reads only box headers (no full decode) to detect a truncated file: if
+        any top-level box claims to extend beyond the actual file size, the file
+        is incomplete (e.g. interrupted recording or upload) and its sample index
+        (moov) cannot be parsed, so neither players nor ASR can open it.
+
+        Returns a short reason string when corruption is detected, otherwise
+        None (including when the format is not ISO BMFF or the check itself
+        fails, to avoid blocking otherwise valid files).
+        """
+        ext = file_path.suffix.lstrip(".").lower()
+        if ext not in self.MP4_FAMILY_EXTS:
+            return None
+
+        try:
+            return await asyncio.to_thread(self._scan_iso_boxes, file_path)
+        except Exception as e:
+            self.logger.warning(f"Corruption check failed for {file_path.name}: {e}")
+            return None
+
+    def _scan_iso_boxes(self, file_path: Path) -> Optional[str]:
+        """
+        Synchronously walk top-level ISO BMFF boxes and report truncation.
+
+        Returns a reason string if a box overflows the file or a header is
+        malformed, otherwise None. Runs in a thread pool via ``_detect_corruption``.
+        """
+        file_size = file_path.stat().st_size
+        if file_size < 8:
+            return f"file too small to be a valid audio container ({file_size} bytes)"
+
+        with open(file_path, "rb") as f:
+            pos = 0
+            while pos + 8 <= file_size:
+                f.seek(pos)
+                header = f.read(8)
+                if len(header) < 8:
+                    return "unexpected end of file while reading box header"
+
+                box_size = int.from_bytes(header[:4], "big")
+                box_type = header[4:8].decode("ascii", "replace")
+                header_len = 8
+
+                if box_size == 1:
+                    # 64-bit extended size follows the type
+                    ext_bytes = f.read(8)
+                    if len(ext_bytes) < 8:
+                        return "truncated 64-bit box header"
+                    box_size = int.from_bytes(ext_bytes, "big")
+                    header_len = 16
+                elif box_size == 0:
+                    # Box extends to EOF by definition; nothing past it
+                    break
+
+                if box_size < header_len:
+                    return f"invalid box size {box_size} for box '{box_type}'"
+
+                box_end = pos + box_size
+                if box_end > file_size:
+                    missing = box_end - file_size
+                    return (
+                        f"box '{box_type}' claims to end at byte {box_end} but the file "
+                        f"is only {file_size} bytes ({missing} bytes missing); the file "
+                        f"is truncated and its audio index is incomplete"
+                    )
+                pos = box_end
+
         return None
 
     async def _get_recording_start_time(self, tool_context: ToolContext) -> str:
