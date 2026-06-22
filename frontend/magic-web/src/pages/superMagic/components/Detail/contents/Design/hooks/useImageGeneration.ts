@@ -2,8 +2,9 @@ import { useCallback } from "react"
 import { SuperMagicApi } from "@/apis"
 import type { ServiceProviderModel } from "@/apis/modules/org-ai-model-provider"
 import type {
-	GetImageGenerationResultParams as ApiGetImageGenerationResultParams,
 	GetImageGenerationResultsParams as ApiGetImageGenerationResultsParams,
+	ImageGenerationResultsResponse as ApiImageGenerationResultsResponse,
+	GenerateImagesResponse as ApiGenerateImagesResponse,
 } from "@/apis/modules/superMagic"
 import { MODEL_TYPE_IMAGE } from "@/apis/modules/org-ai-model-provider"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
@@ -39,6 +40,53 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 const IMAGE_MODEL_LIST_TTL_MS = 60_000
 const imageModelListCacheByKey = new Map<string, { models: ImageModelItem[]; fetchedAt: number }>()
+
+function toSingleGenerateImageResponse(
+	response: ApiGenerateImagesResponse,
+	request: GenerateImageRequest,
+): GenerateImageResponse {
+	const firstImage = response.images?.[0]
+
+	return {
+		project_id: response.project_id,
+		image_id: response.image_id,
+		model_id: response.model_id,
+		prompt: response.prompt,
+		size: response.size,
+		file_dir: response.file_dir,
+		file_name: firstImage?.file_name ?? "",
+		reference_images: request.reference_images ?? [],
+		status: response.status,
+		error_message: response.error_message,
+		created_at: "",
+		updated_at: "",
+		file_url: firstImage?.file_url ?? null,
+		id: response.image_id,
+	}
+}
+
+function toSingleImageGenerationResultResponse(
+	response: ApiImageGenerationResultsResponse,
+): ImageGenerationResultResponse {
+	const firstImage = response.images?.[0]
+
+	return {
+		project_id: response.project_id,
+		image_id: response.image_id,
+		model_id: response.model_id,
+		prompt: response.prompt,
+		size: response.size,
+		file_dir: response.file_dir,
+		file_name: firstImage?.file_name ?? "",
+		reference_images: [],
+		status: response.status,
+		error_message: response.error_message,
+		created_at: "",
+		updated_at: "",
+		file_url: firstImage?.file_url ?? "",
+		id: response.image_id,
+	}
+}
 
 interface UseImageGenerationOptions {
 	projectId?: string
@@ -178,8 +226,13 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 				reference_image_options: referenceImageOptionsWithSlash,
 			}
 
-			const result = await SuperMagicApi.generateImage(requestParams)
-			return toCanvasGenerateHightImageResponse(result)
+			const result = await SuperMagicApi.generateImages({
+				...requestParams,
+				generate_num: 1,
+			})
+			return toCanvasGenerateHightImageResponse(
+				toSingleGenerateImageResponse(result, requestParams),
+			)
 		},
 		[projectId, currentFile, flatAttachments, designProjectBasePath, t, updateAttachments],
 	)
@@ -240,13 +293,15 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 				throw new Error(t("design.errors.imageIdNotExists"))
 			}
 
-			// 构建完整的请求参数，添加 project_id
-			const requestParams: ApiGetImageGenerationResultParams = {
+			// 单图查询也走新版多图结果接口，并在宿主层适配回画布期望的单图结构
+			const requestParams: ApiGetImageGenerationResultsParams = {
 				project_id: projectId,
 				image_id: params.image_id,
 			}
 
-			const result = await SuperMagicApi.getImageGenerationResult(requestParams)
+			const result = toSingleImageGenerationResultResponse(
+				await SuperMagicApi.getImageGenerationResults(requestParams),
+			)
 
 			if (result.status === "completed" && result.file_url && result.file_name) {
 				let filePath = ""

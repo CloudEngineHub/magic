@@ -2395,6 +2395,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	/**
 	 * @description 发起图片生成
+	 * @deprecated 后端将废弃 /api/v1/design/generate-image，请使用 generateImages({ generate_num: 1 }) 替代。
 	 * @param params 图片生成请求参数
 	 * @returns 图片生成响应数据
 	 */
@@ -2452,6 +2453,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	/**
 	 * @description 查询图片生成结果
+	 * @deprecated 后端将废弃 /api/v1/design/image-generation-result，请使用 getImageGenerationResults 替代。
 	 * @param params 查询参数
 	 * @returns 图片生成结果响应数据
 	 */
