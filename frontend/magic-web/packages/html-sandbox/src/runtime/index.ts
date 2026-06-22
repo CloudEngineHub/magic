@@ -13,3 +13,13 @@ export {
 	type RuntimeLogListener,
 	type RuntimeLogRecord,
 } from "./RuntimeLogger"
+export {
+	HTML_IFRAME_RENDER_LIFECYCLE_EVENT,
+	IFRAME_RENDER_TIMEOUT_MS,
+	clearIframeRenderLifecycleTimeout,
+	createIframeRenderLifecycleState,
+	reportIframeRenderLifecycleStage,
+	startIframeRenderLifecycleSession,
+	type IframeRenderLifecycleStage,
+	type IframeRenderLifecycleState,
+} from "./IframeRenderLifecycle"

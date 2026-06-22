@@ -25,6 +25,13 @@ import {
 	virtualStorageRegistry,
 	type VirtualStorageRuntimeContext,
 } from "./utils/virtual-storage"
+import {
+	clearIframeRenderLifecycleTimeout,
+	createIframeRenderLifecycleState,
+	reportIframeRenderLifecycleStage,
+	startIframeRenderLifecycleSession,
+	type IframeRenderLifecycleStage,
+} from "@dtyq/html-sandbox/runtime"
 import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
 import { cn } from "@/lib/utils"
@@ -318,6 +325,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const hasRenderedOnceRef = useRef(false) // 跟踪 iframe 是否至少已渲染一次
 		const hasNotifiedRenderReadyRef = useRef(false)
 		const hasIframeI18nSubscriberRef = useRef(false)
+		const renderLifecycleRef = useRef(createIframeRenderLifecycleState())
 		// Fallback timer: unblocks scaling when sandbox never sends contentMetrics
 		const contentMetricsFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -363,28 +371,108 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			autoFitScalePaddingFactor,
 		})
 
+		const buildRenderLifecycleContext = useMemoizedFn(
+			(extra: Record<string, unknown> = {}): Record<string, unknown> => {
+				const lifecycle = renderLifecycleRef.current
+
+				return {
+					sessionId: lifecycle.sessionId,
+					elapsedMs: Date.now() - lifecycle.startedAt,
+					sandboxType,
+					renderMode: externalRenderSiteUrl ? "cross-origin" : "same-origin",
+					shellUrl: htmlSandboxShellUrl,
+					shellOrigin: externalRenderSiteOrigin || window.location.origin,
+					targetOrigin: iframeTargetOrigin,
+					postMessageTargetStrategy,
+					source: {
+						layer: "top",
+						depth: 0,
+						fileId: fileId || "",
+						path: htmlRelativeFolderPath || "",
+					},
+					fileId: fileId || "",
+					relativeFilePath: htmlRelativeFolderPath || "",
+					isPptRender: Boolean(isPptRender),
+					isFullscreen: Boolean(isFullscreen),
+					isEditMode: Boolean(isEditMode),
+					isPlaybackMode: Boolean(isPlaybackMode),
+					isVisible: Boolean(isVisible),
+					shouldApplyScaling,
+					isScaleReady,
+					iframeLoaded,
+					contentInjected,
+					contentLength: content.length,
+					...extra,
+				}
+			},
+		)
+
+		const reportRenderLifecycleStage = useMemoizedFn(
+			(
+				stage: IframeRenderLifecycleStage,
+				extra: Record<string, unknown> = {},
+				options: { once?: boolean } = { once: true },
+			) => {
+				reportIframeRenderLifecycleStage({
+					logger,
+					lifecycle: renderLifecycleRef.current,
+					getContext: buildRenderLifecycleContext,
+					stage,
+					extra,
+					options,
+				})
+			},
+		)
+
+		const clearRenderLifecycleTimeout = useMemoizedFn(() => {
+			clearIframeRenderLifecycleTimeout(renderLifecycleRef.current)
+		})
+
+		const startRenderLifecycleSession = useMemoizedFn((reason: string) => {
+			startIframeRenderLifecycleSession({
+				logger,
+				lifecycleRef: renderLifecycleRef,
+				getContext: buildRenderLifecycleContext,
+				reason,
+			})
+		})
+
 		// 跟踪缩放准备就绪时机以避免后续渲染时闪烁
 		useEffect(() => {
 			if (isScaleReady && isVisible) {
 				hasRenderedOnceRef.current = true
+				reportRenderLifecycleStage("scale_ready")
 			}
-		}, [isScaleReady, isVisible])
+		}, [isScaleReady, isVisible, reportRenderLifecycleStage])
 		//控制HTML预览组件的skeleton结束时机
 		useEffect(() => {
 			hasNotifiedRenderReadyRef.current = false
+			if (content) {
+				startRenderLifecycleSession("content_changed")
+			} else {
+				clearRenderLifecycleTimeout()
+			}
 			setScalingContentMetrics(null)
 			if (contentMetricsFallbackTimerRef.current) {
 				clearTimeout(contentMetricsFallbackTimerRef.current)
 				contentMetricsFallbackTimerRef.current = null
 			}
-		}, [content])
+		}, [clearRenderLifecycleTimeout, content, startRenderLifecycleSession])
 
 		const notifyRenderReady = useMemoizedFn(() => {
 			if (hasNotifiedRenderReadyRef.current) return
 
 			hasNotifiedRenderReadyRef.current = true
+			reportRenderLifecycleStage("render_ready")
+			clearRenderLifecycleTimeout()
 			onRenderReady?.()
 		})
+
+		useEffect(() => {
+			return () => {
+				clearRenderLifecycleTimeout()
+			}
+		}, [clearRenderLifecycleTimeout])
 
 		// Handle zoom request from iframe (trackpad pinch-to-zoom)
 		const handleIframeZoomRequest = useMemoizedFn((delta: number) => {
@@ -900,6 +988,16 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			},
 		)
 
+		const handleIframeElementLoad = useMemoizedFn(() => {
+			reportRenderLifecycleStage("shell_loaded")
+		})
+
+		const handleIframeElementError = useMemoizedFn(() => {
+			reportRenderLifecycleStage("shell_load_failed", {
+				reason: "iframe_element_error",
+			})
+		})
+
 		const refreshIframeContent = useMemoizedFn(() => {
 			if (!virtualStorageContext) return
 			hasIframeI18nSubscriberRef.current = false
@@ -934,11 +1032,27 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						},
 						iframeTargetOrigin,
 					)
+					reportRenderLifecycleStage("set_content_sent", {
+						fullContentLength: fullContent.length,
+						markerId,
+						dynamicInterceptionEnabled: Boolean(
+							dynamicResourceInterceptionConfig?.enable,
+						),
+					})
 					setProcessedSourceCode(fullContent)
 				} else {
+					reportRenderLifecycleStage("set_content_failed", {
+						reason: "iframe_or_content_window_unavailable",
+					})
 					console.error("iframe或contentWindow不可用")
 				}
 			} catch (postError) {
+				reportRenderLifecycleStage("set_content_failed", {
+					reason: "post_message_failed",
+					errorMessage:
+						postError instanceof Error ? postError.message : String(postError),
+					errorStack: postError instanceof Error ? postError.stack : undefined,
+				})
 				console.error("发送消息到iframe时出错:", postError)
 			}
 		})
@@ -1367,6 +1481,19 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 				if (event.data && event.data.type === "iframeError") {
 					const payload = event.data.payload || {}
+					reportRenderLifecycleStage(
+						"content_inject_failed",
+						{
+							reason: "iframe_error",
+							errorType: payload.errorType,
+							errorMessage: payload.message,
+							errorStack: payload.stack,
+							errorSource: payload.source,
+							errorLineno: payload.lineno,
+							errorColno: payload.colno,
+						},
+						{ once: false },
+					)
 					logger.error(
 						"iframe 内部错误",
 						buildMessageLogContext(event, messageType, {
@@ -1385,6 +1512,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 				if (event.data && event.data.type === "iframeReady") {
 					// iframe已准备好接收内容
+					reportRenderLifecycleStage("iframe_ready", {
+						origin: event.origin,
+					})
 					setIframeLoaded(true)
 				} else if (
 					event.data &&
@@ -1394,9 +1524,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						: isExpectedSource)
 				) {
 					// Shell load 后再次兜底置为 ready，避免早期 iframeReady 丢失。
+					reportRenderLifecycleStage("page_loaded", {
+						origin: event.origin,
+						isExpectedSource,
+					})
 					setIframeLoaded(true)
 				} else if (event.data && event.data.type === "contentLoaded") {
 					// 内容已写入iframe，但可能还未完成渲染
+					reportRenderLifecycleStage("content_loaded")
 					// 如果处于编辑模式，重置 contentInjected 状态以触发脚本重新注入
 					// 因为 setContent 会清除 iframe 中的所有脚本，需要重新注入编辑脚本
 					if (isEditMode) {
@@ -1410,11 +1545,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					}
 				} else if (event.data && event.data.type === "domReady") {
 					// DOM树构建完成
+					reportRenderLifecycleStage("dom_ready")
 				} else if (event.data && event.data.type === "renderComplete") {
 					// iframe渲染真正完成，现在可以安全地计算缩放比例
+					reportRenderLifecycleStage("render_complete")
 					notifyRenderReady()
 				} else if (event.data && event.data.type === "pageFullyLoaded") {
 					// 页面完全加载完成（包括图片、样式表等）
+					reportRenderLifecycleStage("page_fully_loaded")
 					notifyRenderReady()
 					// When sandbox doesn't support contentMetrics, unblock scaling after timeout
 					if (shouldWaitForSettledContentMetrics) {
@@ -1442,6 +1580,21 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						contentHeight > 0
 					) {
 						const metricsPhase = event.data?.phase === "settled" ? "settled" : "initial"
+						reportRenderLifecycleStage(
+							metricsPhase === "settled"
+								? "content_metrics_settled"
+								: "content_metrics_initial",
+							{
+								contentWidth,
+								contentHeight,
+								hasHorizontalOverflow: event.data?.hasHorizontalOverflow === true,
+								hasVerticalOverflow: event.data?.hasVerticalOverflow === true,
+								verticalScrollbarWidth: Math.max(
+									0,
+									Number(event.data?.verticalScrollbarWidth) || 0,
+								),
+							},
+						)
 						// Real settled metrics arrived — cancel fallback timer
 						if (metricsPhase === "settled" && contentMetricsFallbackTimerRef.current) {
 							clearTimeout(contentMetricsFallbackTimerRef.current)
@@ -1639,7 +1792,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			try {
 				refreshIframeContent()
 				setContentInjected(true)
+				reportRenderLifecycleStage("content_injected")
 			} catch (error) {
+				reportRenderLifecycleStage("content_inject_failed", {
+					reason: "refresh_iframe_content_failed",
+					errorMessage: error instanceof Error ? error.message : String(error),
+					errorStack: error instanceof Error ? error.stack : undefined,
+				})
 				console.error("处理iframe内容时出错:", error)
 				setContentInjected(false)
 			}
@@ -1801,6 +1960,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									)}
 									title="Isolated HTML Content"
 									src={htmlSandboxShellUrl}
+									onLoad={handleIframeElementLoad}
+									onError={handleIframeElementError}
 									sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
 									allow="fullscreen"
 									allowFullScreen

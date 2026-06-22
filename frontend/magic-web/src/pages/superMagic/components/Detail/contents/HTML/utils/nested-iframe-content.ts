@@ -44,6 +44,7 @@ interface NestedIframeContentHandlerOptions {
 	projectId?: string
 	topicId?: string
 	parentTargetOrigin?: string
+	onTelemetry?: (data: Record<string, unknown>) => void
 }
 
 // 规范化链路文件 ID：去重并补齐当前请求发起文件
@@ -376,6 +377,32 @@ export function createNestedIframeContentHandler(
 		parentTargetOrigin,
 	} = options
 
+	const reportNestedIframeFailure = (
+		reason: string,
+		errorMessage: string,
+		details: {
+			requestId: string
+			relativePath: string
+			messageFileId?: string
+			chainFileIds: unknown
+		},
+	) => {
+		const chainFileIds = normalizeChainFileIds(details.chainFileIds, details.messageFileId)
+		options.onTelemetry?.({
+			stage: "nested_iframe_failed",
+			reason,
+			requestId: details.requestId,
+			errorMessage,
+			source: {
+				layer: "nested",
+				depth: chainFileIds.length,
+				path: details.relativePath,
+				requesterFileId: details.messageFileId || "",
+				chainFileIds,
+			},
+		})
+	}
+
 	return async (event: MessageEvent) => {
 		if (!event.data || event.data.type !== NESTED_IFRAME_MESSAGE_TYPES.REQUEST) return
 
@@ -420,6 +447,12 @@ export function createNestedIframeContentHandler(
 			const matchedFile = findMatchingFile(allFiles, relativePath, requesterFolderPath)
 
 			if (!matchedFile?.file_id) {
+				reportNestedIframeFailure("not_found", "File not found: " + relativePath, {
+					requestId,
+					relativePath,
+					messageFileId,
+					chainFileIds,
+				})
 				// 未找到文件时通知前端跳过，避免无限重试
 				sendResponse(
 					false,
@@ -433,6 +466,12 @@ export function createNestedIframeContentHandler(
 			}
 
 			if (requestChainFileIds.includes(matchedFile.file_id)) {
+				reportNestedIframeFailure("cycle", "Circular iframe nesting detected", {
+					requestId,
+					relativePath,
+					messageFileId,
+					chainFileIds,
+				})
 				// 命中循环依赖（A -> B -> A），直接跳过处理
 				sendResponse(false, undefined, "Circular iframe nesting detected", true)
 				return
@@ -444,6 +483,12 @@ export function createNestedIframeContentHandler(
 			})
 
 			if (typeof rawContent !== "string") {
+				reportNestedIframeFailure("fetch_failed", "Failed to fetch file content", {
+					requestId,
+					relativePath,
+					messageFileId,
+					chainFileIds,
+				})
 				sendResponse(false, undefined, "Failed to fetch file content")
 				return
 			}
@@ -496,6 +541,16 @@ export function createNestedIframeContentHandler(
 			const fullContentWithChain = injectIframeChainScript(fullContent, requestChainFileIds)
 			sendResponse(true, fullContentWithChain)
 		} catch (error) {
+			reportNestedIframeFailure(
+				"processing_error",
+				error instanceof Error ? error.message : "Unknown error",
+				{
+					requestId,
+					relativePath,
+					messageFileId,
+					chainFileIds,
+				},
+			)
 			sendResponse(false, undefined, error instanceof Error ? error.message : "Unknown error")
 		}
 	}

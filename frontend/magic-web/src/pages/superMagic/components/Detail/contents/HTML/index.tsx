@@ -11,6 +11,7 @@ import {
 } from "./utils/fetchInterceptor"
 import { createNestedIframeContentHandler } from "./utils/nested-iframe-content"
 import { createVirtualStorageMessageHandler } from "./utils/virtual-storage"
+import { HTML_IFRAME_RENDER_LIFECYCLE_EVENT } from "@dtyq/html-sandbox/runtime"
 import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
@@ -60,6 +61,7 @@ import { AlertTriangle, Crosshair, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { env } from "@/utils/env"
+import { logger as Logger } from "@/utils/log"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { type ImageExportFormat } from "@magic-web/html2image"
 import { resolvePptScaleContentDimensions } from "./utils/slide-dimensions"
@@ -76,6 +78,7 @@ import {
 
 /** 跨组件重挂载持久化调试面板开关状态（按文件 ID 存储） */
 const devConsoleStateMap = new Map<string, boolean>()
+const htmlRenderLogger = Logger.createLogger("HTMLContent")
 
 interface HTMLProps {
 	data: string | any
@@ -732,6 +735,15 @@ export default memo(function HTML(props: HTMLProps) {
 				projectId: selectedProject?.id,
 				topicId: selectedProject?.current_topic_id,
 				parentTargetOrigin: window.location.origin,
+				onTelemetry: (data) => {
+					htmlRenderLogger.report(HTML_IFRAME_RENDER_LIFECYCLE_EVENT, {
+						renderMode: env("MAGIC_HTML_SANDBOX_URL") ? "cross-origin" : "same-origin",
+						shellUrl: env("MAGIC_HTML_SANDBOX_URL") || "/husky.html",
+						fileId: currentFileId || "",
+						relativeFilePath: htmlRelativeFolderPath,
+						...data,
+					})
+				},
 			},
 		)
 
