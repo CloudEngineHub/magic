@@ -1,12 +1,20 @@
 #!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
+set -e
 
-# Check for hardcoded tokens
-echo "🔍 Checking for hardcoded tokens..."
-node scripts/git-hooks/check-hardcoded-tokens.cjs
-if [ $? -ne 0 ]; then
-  exit 1
+hook_dir="$(CDPATH= cd "$(dirname "$0")" && pwd -P)"
+project_dir="$(CDPATH= cd "$hook_dir/.." && pwd -P)"
+root="$(git -C "$project_dir" rev-parse --show-toplevel)"
+root_hook="$root/.husky/pre-commit"
+current_hook="$hook_dir/pre-commit"
+
+# A repo-level hook is optional in this monorepo; run it when present without
+# making magic-web depend on a root .husky directory.
+if [ -f "$root_hook" ] && [ "$root_hook" != "$current_hook" ] && [ "$MAGIC_WEB_SKIP_ROOT_HOOK" != "1" ]; then
+	MAGIC_WEB_SKIP_ROOT_HOOK=1 sh "$root_hook" "$@"
 fi
 
-# Run lint-staged for code formatting
-NODE_OPTIONS="--max-old-space-size=8192" npx lint-staged
+cd "$project_dir" || exit 1
+
+echo "Checking for hardcoded tokens..."
+node scripts/git-hooks/check-hardcoded-tokens.cjs
+NODE_OPTIONS="--max-old-space-size=8192" pnpm exec lint-staged

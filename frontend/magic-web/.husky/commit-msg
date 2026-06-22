@@ -1,35 +1,50 @@
-# add emoji to your commit
-filepath="$1"
-tmp_file=$(mktemp /tmp/emoji-commitzen.XXXX)
+#!/usr/bin/env sh
+set -e
 
-replacements=(
-    's/^feat/✨ feat/'
-    's/^version/🔖 version/'
-    's/^fix/🐛 fix/'
-    's/^doc/📚 doc/'
-    's/^docs/📚 docs/'
-    's/^style/💄 style/'
-    's/^refactor/🔨 refactor/'
-    's/^perf/🚀 perf/'
-    's/^chore/🔧 chore/'
-    's/^lint/🚨 lint/'
-    's/^test/✅ test/'
-    's/^build/👷 build/'
-    's/^ci/💚 ci/'
-    's/^revert/⏪ revert/'
-    's/^release/🎉 release/'
-    's/^config/🔧 config/'
-    's/^remove/🗑 remove/'
-    's/^typo/✏️ typo/'
-)
+if [ -z "$1" ]; then
+	echo "commit-msg hook requires the commit message file path" >&2
+	exit 1
+fi
 
-sed_command=$(printf "%s;" "${replacements[@]}")
-cat $filepath | sed "$sed_command" > $tmp_file
-mv $tmp_file $filepath
+case "$1" in
+	/*) commit_msg_file="$1" ;;
+	*) commit_msg_file="$(pwd)/$1" ;;
+esac
 
-# your custom logic
+hook_dir="$(CDPATH= cd "$(dirname "$0")" && pwd -P)"
+project_dir="$(CDPATH= cd "$hook_dir/.." && pwd -P)"
+root="$(git -C "$project_dir" rev-parse --show-toplevel)"
+root_hook="$root/.husky/commit-msg"
+current_hook="$hook_dir/commit-msg"
 
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
+# A repo-level hook is optional in this monorepo; pass an absolute commit
+# message path so later cd calls cannot break commitlint.
+if [ -f "$root_hook" ] && [ "$root_hook" != "$current_hook" ] && [ "$MAGIC_WEB_SKIP_ROOT_HOOK" != "1" ]; then
+	MAGIC_WEB_SKIP_ROOT_HOOK=1 sh "$root_hook" "$commit_msg_file"
+fi
 
-npx --no-install commitlint --edit $1
+tmp_file="$(mktemp /tmp/emoji-commitzen.XXXX)"
+sed \
+	-e 's/^feat/✨ feat/' \
+	-e 's/^version/🔖 version/' \
+	-e 's/^fix/🐛 fix/' \
+	-e 's/^docs/📚 docs/' \
+	-e 's/^doc/📚 doc/' \
+	-e 's/^style/💄 style/' \
+	-e 's/^refactor/🔨 refactor/' \
+	-e 's/^perf/🚀 perf/' \
+	-e 's/^chore/🔧 chore/' \
+	-e 's/^lint/🚨 lint/' \
+	-e 's/^test/✅ test/' \
+	-e 's/^build/👷 build/' \
+	-e 's/^ci/💚 ci/' \
+	-e 's/^revert/⏪ revert/' \
+	-e 's/^release/🎉 release/' \
+	-e 's/^config/🔧 config/' \
+	-e 's/^remove/🗑 remove/' \
+	-e 's/^typo/✏️ typo/' \
+	"$commit_msg_file" > "$tmp_file"
+mv "$tmp_file" "$commit_msg_file"
+
+cd "$project_dir" || exit 1
+pnpm exec commitlint --edit "$commit_msg_file"
