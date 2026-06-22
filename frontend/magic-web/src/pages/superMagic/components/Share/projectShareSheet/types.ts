@@ -10,9 +10,12 @@ import type {
 } from "@/pages/superMagic/components/ShareManagement/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { TreeNode } from "@dtyq/user-selector"
+import type { RecordingDetailFileMap } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail"
+import type { RecordingShareGroupedItem } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 
 export type ProjectShareSheetView = "create" | "manage" | "linkDetail" | "expiry" | "deleteConfirm"
 export type MobileShareSheetMode = "project" | "file"
+export type ProjectShareScene = "default" | "audioRecording"
 export type MobileShareItem = ProjectShareItem | FileShareItem
 
 export interface SelectedFileHierarchyNode {
@@ -26,10 +29,12 @@ export interface SelectedFileHierarchyNode {
 export interface ProjectShareSheetProps {
 	open: boolean
 	mode?: MobileShareSheetMode
+	shareScene?: ProjectShareScene
 	projectId?: string
 	projectName?: string
 	attachments: AttachmentItem[]
 	attachmentList?: AttachmentItem[]
+	fileMap?: RecordingDetailFileMap
 	defaultSelectedFileIds?: string[]
 	defaultOpenFileId?: string
 	initialSelectedShare?: MobileShareItem | null
@@ -49,6 +54,7 @@ export interface ProjectShareFormState {
 export interface ProjectShareSheetController {
 	open: boolean
 	mode: MobileShareSheetMode
+	shareScene: ProjectShareScene
 	shareMode: ShareMode
 	view: ProjectShareSheetView
 	viewStack: ProjectShareSheetView[]
@@ -62,6 +68,9 @@ export interface ProjectShareSheetController {
 	isCheckingShare: boolean
 	advancedOpen: boolean
 	defaultSelectedFileIds: string[]
+	selectedFileIds: string[]
+	groupedShareItems: RecordingShareGroupedItem[]
+	enableInlineFileSelection: boolean
 	selectedFileItems: AttachmentItem[]
 	selectedFileHierarchy: SelectedFileHierarchyNode[]
 	selectedFileCount: number
@@ -78,6 +87,8 @@ export interface ProjectShareSheetController {
 	setShareTargets: (value: ShareTarget[]) => void
 	setAdvancedSettings: (value: ShareAdvancedSettingsData) => void
 	setAdvancedOpen: (value: boolean) => void
+	setSelectedFileIds: (value: string[]) => void
+	toggleShareFileId: (fileId: string) => void
 	openMemberSelector: () => void
 	closeMemberSelector: () => void
 	setSelectedMemberNodes: (value: TreeNode[]) => void

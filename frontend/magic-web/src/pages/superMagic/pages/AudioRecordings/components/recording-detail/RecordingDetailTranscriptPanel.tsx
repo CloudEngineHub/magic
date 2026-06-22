@@ -7,6 +7,12 @@ import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade
 import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
 import { RecordingDetailRegionEmptySlot } from "./RecordingDetailRegionEmptySlot"
 import { useRecordingDetailCapabilities } from "./RecordingDetailProvider"
+import {
+	getTranscriptSegmentRowClassName,
+	getTranscriptSegmentTextClassName,
+	getTranscriptSegmentTimeClassName,
+	getTranscriptSpeakerChipToneClassName,
+} from "./transcript-segment-styles"
 
 interface RecordingDetailTranscriptPanelProps {
 	segments: RecordingTranscriptSegment[]
@@ -82,9 +88,10 @@ export function RecordingDetailTranscriptPanel({
 									role="button"
 									tabIndex={0}
 									data-segment-id={segment.id}
+									// Keep desktop rows on a stable box model and express focus through text contrast.
 									className={cn(
-										"cursor-pointer rounded-xl px-3 py-2.5 text-left transition-opacity",
-										isActive ? "bg-muted" : "opacity-70 hover:opacity-100",
+										getTranscriptSegmentRowClassName("desktop"),
+										"transition-colors",
 									)}
 									onClick={() => onSegmentClick(segment)}
 									onKeyDown={(event) => {
@@ -96,7 +103,9 @@ export function RecordingDetailTranscriptPanel({
 									data-testid="recording-detail-transcript-segment"
 								>
 									<div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-medium">
-										<span className="shrink-0 tabular-nums text-muted-foreground">
+										<span
+											className={getTranscriptSegmentTimeClassName(isActive)}
+										>
 											{formatRecordingTime(segment.start)}
 										</span>
 										{segment.speaker ? (
@@ -106,12 +115,18 @@ export function RecordingDetailTranscriptPanel({
 													speakerNameMap[segment.speaker] ??
 													segment.speaker
 												}
+												active={isActive}
 												canEdit={capabilities.canEditSpeakers}
 												onOpenSpeakerSettings={onOpenSpeakerSettings}
 											/>
 										) : null}
 									</div>
-									<p className="whitespace-pre-wrap text-sm leading-6 text-foreground">
+									<p
+										className={getTranscriptSegmentTextClassName(
+											isActive,
+											"desktop",
+										)}
+									>
 										{segment.text}
 									</p>
 								</div>
@@ -130,11 +145,13 @@ import { resolveSpeakerChipStyle } from "../../utils/resolve-speaker-chip-style"
 function TranscriptSpeakerChip({
 	speakerId,
 	label,
+	active,
 	canEdit,
 	onOpenSpeakerSettings,
 }: {
 	speakerId: string
 	label: string
+	active: boolean
 	canEdit: boolean
 	onOpenSpeakerSettings: () => void
 }) {
@@ -142,6 +159,7 @@ function TranscriptSpeakerChip({
 	const chipClassName = cn(
 		"inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-4 text-foreground",
 		chipStyle.chip,
+		getTranscriptSpeakerChipToneClassName(active),
 		canEdit ? "transition-opacity hover:opacity-80" : undefined,
 	)
 	const chipContent = (

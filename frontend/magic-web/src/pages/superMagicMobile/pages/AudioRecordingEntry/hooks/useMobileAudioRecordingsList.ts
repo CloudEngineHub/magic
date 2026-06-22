@@ -18,6 +18,7 @@ import {
 	parseMobileSortOption,
 	type MobileAudioRecordingsFilterState,
 } from "../types"
+import { registerAudioRecordingsShellRefreshHandler } from "@/pages/superMagic/pages/AudioRecordings/utils/request-audio-recordings-shell-refresh"
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -120,6 +121,10 @@ export function useMobileAudioRecordingsList() {
 			refreshGroups(),
 		])
 	}, [store, debouncedKeyword, refreshGroups])
+
+	useEffect(() => {
+		return registerAudioRecordingsShellRefreshHandler(handleRefresh)
+	}, [handleRefresh])
 
 	const handleLoadMore = useCallback(async () => {
 		await store.loadMore()

@@ -18,6 +18,7 @@ vi.mock("react-i18next", () => ({
 				"card.sourceDevice": "Device recording",
 				"card.sourcePc": "PC",
 				"card.summarized": "Summarized",
+				"card.processing": "Processing",
 				"card.summarizing": "Summarizing now",
 				"card.notSummarized": "Not summarized",
 				"card.summarize": "Summarize",
@@ -143,6 +144,31 @@ describe("AudioRecordingCard", () => {
 		expect(
 			screen.getByTestId("audio-recording-card-project-1-status-summarizing"),
 		).toHaveTextContent("Summarizing now")
+		expect(
+			screen.queryByTestId("audio-recording-card-project-1-summary-button"),
+		).not.toBeInTheDocument()
+	})
+
+	it("shows processing status and does not open detail while merging is in progress", () => {
+		const onOpen = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "processing",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "in_progress",
+					project_status: "",
+				})}
+				onOpen={onOpen}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("audio-recording-card-project-1"))
+		expect(onOpen).not.toHaveBeenCalled()
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-processing"),
+		).toHaveTextContent("Processing")
 		expect(
 			screen.queryByTestId("audio-recording-card-project-1-summary-button"),
 		).not.toBeInTheDocument()
@@ -275,7 +301,6 @@ describe("AudioRecordingCard", () => {
 		)
 	})
 
-
 	it("keeps summarized badge on the same row as the device source", () => {
 		render(<AudioRecordingCard item={createItem()} />)
 
@@ -290,7 +315,6 @@ describe("AudioRecordingCard", () => {
 			screen.getByTestId("audio-recording-card-project-1-status-summarized"),
 		).toHaveTextContent("Summarized")
 	})
-
 
 	it("renders duration in metadata row", () => {
 		render(<AudioRecordingCard item={createItem({ duration: 754 })} />)

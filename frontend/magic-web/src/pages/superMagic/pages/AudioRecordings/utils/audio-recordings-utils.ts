@@ -24,7 +24,11 @@ export function applyClientSummaryFilter(
 	filter: AudioRecordingSummaryFilter,
 ): AudioProjectListItem[] {
 	if (filter === "not_summarized") {
-		return items.filter((item) => item.card_status === "not_summarized")
+		// Treat backend merge processing as part of the "not summarized yet" bucket
+		// so users can continue tracking freshly finished recordings in the same tab.
+		return items.filter(
+			(item) => item.card_status === "not_summarized" || item.card_status === "processing",
+		)
 	}
 	if (filter === "summarized") {
 		return items.filter((item) => item.card_status === "summarized")
@@ -91,7 +95,7 @@ export function isRecordingDurationPending(
 	item: Pick<AudioProjectListItem, "card_status" | "duration">,
 ): boolean {
 	return (
-		item.card_status === "summarizing" &&
+		(item.card_status === "summarizing" || item.card_status === "processing") &&
 		(!Number.isFinite(item.duration) || item.duration <= 0)
 	)
 }
@@ -132,6 +136,8 @@ export function isAudioProjectPreviewReady(item: AudioProjectListItem): boolean 
 	if (item.card_status === "summarized") return true
 	// Summarizing items should open detail (placeholder + polling) even before audio_file_id hydrates.
 	if (item.card_status === "summarizing") return true
+	// Merge-processing items stay in the list but should not open a half-ready detail page.
+	if (item.card_status === "processing") return false
 	return canPreviewRawAudioRecording(item)
 }
 

@@ -61,6 +61,7 @@ export interface ShareAdvancedSettingsProps {
 	settings: ShareAdvancedSettingsData
 	onChange: (settings: ShareAdvancedSettingsData) => void
 	mode: ShareMode // file or topic
+	hiddenSettingKeys?: (keyof ShareAdvancedSettingsData)[]
 }
 
 /**

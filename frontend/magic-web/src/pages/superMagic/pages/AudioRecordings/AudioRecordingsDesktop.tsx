@@ -33,6 +33,8 @@ import {
 	AudioRecordingMoveGroupDialog,
 } from "./components/AudioRecordingGroupDialogs"
 import { AudioRecordingSettingsDialog } from "./components/AudioRecordingSettingsDialog"
+import { AudioRecordingsPrimaryActions } from "./components/AudioRecordingsPrimaryActions"
+import { registerAudioRecordingsShellRefreshHandler } from "./utils/request-audio-recordings-shell-refresh"
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -112,6 +114,11 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 			store.reset()
 		}
 	}, [store, refreshGroups])
+
+	// Keep list + group metadata in sync when a recording finishes on this page.
+	useEffect(() => {
+		return registerAudioRecordingsShellRefreshHandler(handleRefresh)
+	}, [handleRefresh])
 
 	useEffect(() => {
 		if (isSearchComposing) return
@@ -269,7 +276,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 			className="mt-5 flex w-full min-w-0 flex-col gap-5 sm:gap-6"
 			data-testid="audio-recordings-desktop"
 		>
-			<div className="flex min-w-0 items-center justify-between">
+			<div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
 				<div className="flex min-w-0 flex-col gap-2">
 					<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight text-transparent sm:text-3xl lg:text-4xl">
 						{t("pageTitle")}
@@ -278,6 +285,13 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 						{t("subtitle")}
 					</p>
 				</div>
+				{/* Desktop creation actions live beside the page title so the filter row stays query-focused. */}
+				<AudioRecordingsPrimaryActions
+					onOpenSettings={() => setIsSettingsOpen(true)}
+					onImportFiles={(files) => void facade.importAudioFiles(files)}
+					onStartRecording={() => void facade.startRecording()}
+					isStartingRecording={facade.startupState === "starting"}
+				/>
 			</div>
 
 			<AudioRecordingsFilters
@@ -302,8 +316,6 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 				onSearchCompositionStart={() => setIsSearchComposing(true)}
 				onSearchCompositionEnd={() => setIsSearchComposing(false)}
 				onRefresh={handleRefresh}
-				onOpenSettings={() => setIsSettingsOpen(true)}
-				onImportFiles={(files) => void facade.importAudioFiles(files)}
 			/>
 
 			{store.showInitialSkeleton ? (

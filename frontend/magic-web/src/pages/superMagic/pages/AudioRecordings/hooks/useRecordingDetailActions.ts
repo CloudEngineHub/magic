@@ -20,7 +20,7 @@ import {
 	resolveExportableFileRefs,
 } from "../utils/download-recording-batch"
 import { getAttachmentFileName } from "../utils/recording-detail-files"
-import { canSubmitSummary } from "../utils/summary-action-utils"
+import { canGenerateSummaryFromDetail } from "../utils/summary-action-utils"
 
 interface UseRecordingDetailActionsInput {
 	projectId: string
@@ -204,11 +204,16 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 	}, [fileMap, projectId, recordingName, runDownload])
 
 	const canGenerateSummary = projectItem
-		? canSubmitSummary({
-				task_key: projectItem.task_key,
-				topic_id: projectItem.topic_id,
-				audio_file_id: projectItem.audio_file_id,
-				audio_source: projectItem.audio_source,
+		? canGenerateSummaryFromDetail({
+				phase: projectItem.current_phase,
+				status: projectItem.phase_status,
+				isSubmitting: summarySubmitting,
+				extra: {
+					task_key: projectItem.task_key,
+					topic_id: projectItem.topic_id,
+					audio_file_id: projectItem.audio_file_id,
+					audio_source: projectItem.audio_source,
+				},
 			})
 		: false
 

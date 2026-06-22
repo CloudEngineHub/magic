@@ -14,6 +14,8 @@ import { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Work
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { isAudioProjectMode } from "@/services/audioRecordings"
+import { resolveIsOtherTabRecording } from "./resolveIsOtherTabRecording"
 
 /**
  * 录音纪要状态管理
@@ -510,8 +512,10 @@ class RecordingSummaryStore {
 		// 初始化浮动面板位置
 		this.floatPanel.initializePosition()
 		this.floatPanel.setExpanded(true)
-		// PC 端默认展开 AI 聊天，移动端默认收起
-		this.floatPanel.setExpandedAiChat(!this.floatPanel.isMobile)
+		// Legacy summary projects expand AiChat on desktop; audio-recordings mode keeps it hidden.
+		const shouldExpandAiChat =
+			!this.floatPanel.isMobile && !isAudioProjectMode(project?.project_mode)
+		this.floatPanel.setExpandedAiChat(shouldExpandAiChat)
 		this.floatPanel.setEnterAnimationStatus(true)
 
 		setTimeout(() => {
@@ -806,6 +810,12 @@ class RecordingSummaryStore {
 	updateTabStatus(status: TabStatus) {
 		this.multiTabState.tabStatus = status
 
+		// Once this tab becomes the active lock holder again, any mirrored
+		// "other tab is recording" snapshot is stale and must stop hiding local UI.
+		if (status === "active") {
+			this.multiTabState.activeTabData.isRecording = false
+		}
+
 		// 如果当前 tab 失去活跃状态，需要处理录音状态同步
 		if (status === "inactive") {
 			// 如果当前tab之前是录音状态，现在变为非活跃，说明录音已结束
@@ -835,7 +845,11 @@ class RecordingSummaryStore {
 	 * 检查当前是否有其他 tab 正在录音
 	 */
 	get isOtherTabRecording(): boolean {
-		return this.multiTabState.activeTabData.isRecording
+		return resolveIsOtherTabRecording({
+			localStatus: this.status,
+			tabStatus: this.multiTabState.tabStatus,
+			mirroredIsRecording: this.multiTabState.activeTabData.isRecording,
+		})
 	}
 
 	/**

@@ -50,6 +50,7 @@ export function showWaitingTipModal(options: ShowWaitingTipModalOptions = {}): P
 						onClose={handleClose}
 						projectName={options.projectName}
 						workspaceName={options.workspaceName}
+						presentation={options.presentation}
 					/>
 				</Suspense>
 			)

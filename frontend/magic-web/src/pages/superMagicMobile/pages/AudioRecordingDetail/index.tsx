@@ -51,6 +51,7 @@ import { MobileRecordingMoreSheet } from "@/pages/superMagicMobile/pages/AudioRe
 import { MobileRecordingMoveGroupSheet } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingMoveGroupSheet"
 import type { MobileRecordingGroup } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingGroupSheet"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
+import { buildRecordingShareSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import { downloadRecordingAudioFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-audio"
 
 const COLLAPSED_PLAYER_HEIGHT = 40
@@ -116,6 +117,10 @@ export default function MobileAudioRecordingDetailPage() {
 		return cardStatus === "summarized" ? "summary" : "source"
 	}, [detailItem?.card_status, locationState?.cardStatus, projectItem?.card_status])
 	const [activeTab, setActiveTab] = useState<MobileRecordingTopTab>(defaultTab)
+	const recordingShareSelection = useMemo(
+		() => buildRecordingShareSelection(fileMap),
+		[fileMap],
+	)
 
 	useEffect(() => {
 		setActiveTab(defaultTab)
@@ -273,6 +278,11 @@ export default function MobileAudioRecordingDetailPage() {
 
 	/** Opens the existing project-share flow from the dedicated share/export launcher. */
 	function openProjectShareSheet() {
+		if (recordingShareSelection.defaultSelectedFileIds.length === 0) {
+			toast.error(t("super:share.noShareableFiles"))
+			return
+		}
+
 		setShareExportSheetOpen(false)
 		setProjectShareSheetOpen(true)
 	}
@@ -629,10 +639,14 @@ export default function MobileAudioRecordingDetailPage() {
 			<ProjectShareSheet
 				open={projectShareSheetOpen}
 				onClose={() => setProjectShareSheetOpen(false)}
+				mode="file"
+				shareScene="audioRecording"
 				projectId={projectId}
 				projectName={displayTitle}
-				attachments={attachmentTree}
-				attachmentList={attachmentList}
+				attachments={recordingShareSelection.shareableFiles}
+				attachmentList={recordingShareSelection.shareableFiles}
+				fileMap={fileMap ?? undefined}
+				defaultSelectedFileIds={recordingShareSelection.defaultSelectedFileIds}
 			/>
 		</div>
 	)

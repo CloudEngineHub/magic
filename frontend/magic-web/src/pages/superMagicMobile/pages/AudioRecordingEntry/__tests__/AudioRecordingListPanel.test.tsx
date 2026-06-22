@@ -79,7 +79,17 @@ vi.mock("antd-mobile", () => ({
 }))
 
 vi.mock("@/components/base-mobile/MagicPullToRefresh", () => ({
-	default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+	default: ({
+		children,
+		containerClassName,
+	}: {
+		children: React.ReactNode
+		containerClassName?: string
+	}) => (
+		<div data-testid="mock-pull-to-refresh" data-container-class={containerClassName}>
+			{children}
+		</div>
+	),
 }))
 
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
@@ -252,7 +262,19 @@ describe("AudioRecordingListPanel", () => {
 
 		expect(screen.getByTestId("mobile-audio-recording-list-panel")).toBeInTheDocument()
 		expect(screen.getByTestId("mobile-recording-toolbar")).toBeInTheDocument()
-		expect(screen.getByTestId("mobile-data-empty-state-recording")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-recording-list-empty-state")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-recording-list-empty-state")).toHaveClass(
+			"flex-1",
+			"py-0",
+		)
+		expect(screen.getByTestId("mock-pull-to-refresh")).toHaveAttribute(
+			"data-container-class",
+			expect.stringContaining("!overflow-hidden"),
+		)
+		expect(screen.getByTestId("mock-pull-to-refresh")).toHaveAttribute(
+			"data-container-class",
+			expect.stringContaining("h-full"),
+		)
 	})
 
 	it("renders skeleton during initial loading", () => {

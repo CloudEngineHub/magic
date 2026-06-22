@@ -52,9 +52,11 @@ export default function ProjectShareSheetHeader({
 	const canGoBack = controller.viewStack.length > 0
 	const titleMap: Record<typeof controller.view, string> = {
 		create:
-			controller.mode === "file"
-				? t("projectShare.fileModeCreateTitle")
-				: t("projectShare.createTitle"),
+			controller.shareScene === "audioRecording"
+				? t("share.recordingShareCreateTitle")
+				: controller.mode === "file"
+					? t("projectShare.fileModeCreateTitle")
+					: t("projectShare.createTitle"),
 		manage: t("projectShare.manageTitle"),
 		linkDetail: linkDetailTitle,
 		expiry: t("projectShare.expiryTitle"),

@@ -146,7 +146,7 @@ describe("AudioRecordingsStore", () => {
 		expect(store.list[0]?.is_summarized).toBe(false)
 	})
 
-	it("excludes waiting and merging in progress items from the list", async () => {
+	it("keeps merging in progress items visible while waiting items stay hidden", async () => {
 		const store = new AudioRecordingsStore()
 		vi.mocked(SuperMagicApi.queryAudioProjects).mockResolvedValue({
 			list: [
@@ -165,6 +165,7 @@ describe("AudioRecordingsStore", () => {
 						duration: 90,
 						current_phase: "merging",
 						phase_status: "in_progress",
+						task_key: "task-merging-visible",
 						tags: [],
 					},
 				}),
@@ -183,12 +184,14 @@ describe("AudioRecordingsStore", () => {
 
 		await store.fetchList({ page: 1 })
 
-		expect(store.list).toHaveLength(1)
-		expect(store.list[0]?.id).toBe("done")
+		expect(store.list).toHaveLength(2)
+		expect(store.list.map((item) => item.id)).toEqual(["merging", "done"])
+		expect(store.list[0]?.card_status).toBe("processing")
+		expect(summaryProgressPollerMock.addTask).toHaveBeenCalled()
 		expect(store.hasMore).toBe(false)
 	})
 
-	it("stops pagination when all items on page 1 are filtered out but total is positive", async () => {
+	it("keeps processing items on page 1 and still stops pagination when total is exhausted", async () => {
 		const store = new AudioRecordingsStore()
 		vi.mocked(SuperMagicApi.queryAudioProjects).mockResolvedValue({
 			list: [
@@ -198,6 +201,7 @@ describe("AudioRecordingsStore", () => {
 						duration: 60,
 						current_phase: "merging",
 						phase_status: "in_progress",
+						task_key: "task-app-processing",
 						tags: [],
 					},
 				}),
@@ -207,9 +211,45 @@ describe("AudioRecordingsStore", () => {
 
 		await store.fetchList({ page: 1 })
 
-		expect(store.list).toHaveLength(0)
+		expect(store.list).toHaveLength(1)
+		expect(store.list[0]?.card_status).toBe("processing")
+		expect(summaryProgressPollerMock.addTask).toHaveBeenCalled()
 		expect(store.hasMore).toBe(false)
 		expect(SuperMagicApi.queryAudioProjects).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps processing items in the not_summarized tab", async () => {
+		const store = new AudioRecordingsStore()
+		store.setSummaryFilter("not_summarized")
+		vi.mocked(SuperMagicApi.queryAudioProjects).mockResolvedValue({
+			list: [
+				createApiItem("processing", {
+					project_status: "",
+					extra: {
+						duration: 90,
+						current_phase: "merging",
+						phase_status: "in_progress",
+						tags: [],
+						task_key: "task-processing",
+					},
+				}),
+				createApiItem("ready", {
+					project_status: "",
+					extra: {
+						duration: 120,
+						current_phase: "merging",
+						phase_status: "completed",
+						tags: [],
+					},
+				}),
+			],
+			total: 2,
+		})
+
+		await store.fetchList({ page: 1 })
+
+		expect(store.list.map((item) => item.id)).toEqual(["processing", "ready"])
+		expect(store.list.map((item) => item.card_status)).toEqual(["processing", "not_summarized"])
 	})
 
 	it("does not load more after client summary tab filters out the only visible item", async () => {

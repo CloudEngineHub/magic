@@ -8,7 +8,7 @@ interface RecordingDetailRegionEmptySlotProps {
 export function RecordingDetailRegionEmptySlot({ children }: RecordingDetailRegionEmptySlotProps) {
 	return (
 		<div
-			className="flex min-h-full w-full items-center justify-center"
+			className="flex h-full min-h-full w-full flex-1 items-center justify-center"
 			data-testid="recording-detail-region-empty-slot"
 		>
 			{children}

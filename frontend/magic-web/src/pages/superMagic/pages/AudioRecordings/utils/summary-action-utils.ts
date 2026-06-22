@@ -10,6 +10,13 @@ export interface SummarySubmitExtra {
 	model_id?: string
 }
 
+export interface DetailSummaryActionEligibilityInput {
+	phase: string | null
+	status: string | null
+	isSubmitting?: boolean
+	extra: SummarySubmitExtra
+}
+
 /**
  * Coerces API ids to strings for ASR request bodies.
  * Large snowflake integers must be quoted at JSON parse time — unsafe numbers are already corrupted.
@@ -61,6 +68,14 @@ export function canSubmitSummary(extra: SummarySubmitExtra): boolean {
 	if (!extra.task_key || !extra.topic_id) return false
 	if (extra.audio_source === "imported" && !extra.audio_file_id) return false
 	return true
+}
+
+/** Reuses the card CTA rules so detail header visibility never drifts from the list behavior. */
+export function canGenerateSummaryFromDetail(input: DetailSummaryActionEligibilityInput): boolean {
+	const { phase, status, isSubmitting = false, extra } = input
+	if (!canSubmitSummary(extra)) return false
+	if (!shouldShowSummaryButton(phase, status)) return false
+	return canClickSummaryButton(phase, status, isSubmitting)
 }
 
 /** Picks model_id from list item extra first, else API-resolved auto model */

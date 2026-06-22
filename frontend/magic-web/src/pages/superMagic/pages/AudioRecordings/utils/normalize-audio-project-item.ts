@@ -11,7 +11,9 @@ export function resolveIsProcessingComplete(
 	phaseStatus: string | null,
 ): boolean {
 	if (currentPhase === "waiting") return false
-	if (currentPhase === "merging" && phaseStatus === "in_progress") return false
+	// Keep backend audio merging visible so the list can render a processing card
+	// and continue polling until the item becomes ready for summary.
+	if (currentPhase === "merging" && phaseStatus === "in_progress") return true
 	if (currentPhase === "merging" && phaseStatus === "failed") return false
 	return true
 }
@@ -46,6 +48,7 @@ export function resolveCardStatus(
 
 	// 4. Audio merging phase
 	if (currentPhase === "merging") {
+		if (phaseStatus === "in_progress") return "processing"
 		if (phaseStatus === "completed") return "not_summarized"
 		return "merging"
 	}
@@ -56,7 +59,7 @@ export function resolveCardStatus(
 	return "not_summarized"
 }
 
-/** Maps raw API list item into a stable UI view model; returns null when still in APP processing */
+/** Maps raw API list item into a stable UI view model; returns null only for hidden pipeline states */
 export function normalizeAudioProjectListItem(
 	raw: AudioProjectApiItem & {
 		transferStatus?: "transferring" | "failed" | "done" | "queued" | null
@@ -127,7 +130,7 @@ export function resolveCardStatusFromListItem(
 	return resolveCardStatus(rawLike, item.current_phase, item.phase_status, item.transferStatus)
 }
 
-/** Normalizes an API list response batch and drops APP-side processing items */
+/** Normalizes an API list response batch and drops only hidden pipeline items */
 export function normalizeAudioProjectList(items: AudioProjectApiItem[]): AudioProjectListItem[] {
 	return items
 		.map(normalizeAudioProjectListItem)

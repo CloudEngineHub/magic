@@ -17,6 +17,7 @@ export type AudioProjectAudioSource = "recorded" | "imported" | (string & {})
 export type AudioRecordingCardStatus =
 	| "uploading"
 	| "upload_failed"
+	| "processing"
 	| "merging"
 	| "not_summarized"
 	| "summarizing"

@@ -34,6 +34,24 @@ export type RecordingStartupState = "idle" | "starting" | "error"
 
 const RECORDING_START_TIMEOUT_MS = 15000
 
+/**
+ * Expands the legacy global FloatPanel on desktop without switching the H5
+ * full-screen recording presentation used by the mobile recordings entry.
+ */
+function expandDesktopRecordingFloatPanel(): void {
+	recordSummaryStore.isVisible = true
+	recordSummaryStore.floatPanel.setExpanded(true)
+}
+
+/**
+ * Collapses the desktop FloatPanel after a bootstrap failure so the list page
+ * does not keep showing an empty shell when recording never actually started.
+ */
+function collapseDesktopRecordingFloatPanel(): void {
+	recordSummaryStore.isVisible = false
+	recordSummaryStore.floatPanel.setExpanded(false)
+}
+
 function parseHmsDurationToSeconds(duration: string): number {
 	const segments = duration.split(":")
 	if (segments.length !== 3) return 0
@@ -226,9 +244,11 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	// consumed by createAudioProject and seeded onto optimistic cards for immediate icon/label.
 	const isMobile = useIsMobile()
 	const recordingSource: "h5" | "pc" = isMobile ? "h5" : "pc"
-	const [presentation, setPresentation] = useState<EntryPresentation>(() =>
-		recordSummaryStore.status === "init" ? "list" : "recording",
-	)
+	const [presentation, setPresentation] = useState<EntryPresentation>(() => {
+		if (recordSummaryStore.status === "init") return "list"
+		// Desktop reuses the global FloatPanel; only mobile takes over with full-screen UI.
+		return isMobile ? "recording" : "list"
+	})
 	const [startupState, setStartupState] = useState<RecordingStartupState>("idle")
 	const [startupErrorMessage, setStartupErrorMessage] = useState("")
 	const [startupErrorDetail, setStartupErrorDetail] = useState("")
@@ -352,8 +372,12 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	 * recording session, so the list can later resume the same session.
 	 */
 	const showRecording = useCallback(() => {
+		if (!isMobile) {
+			expandDesktopRecordingFloatPanel()
+			return
+		}
 		setPresentation("recording")
-	}, [])
+	}, [isMobile])
 
 	/**
 	 * Returns from the full-screen recording page back to the list while keeping
@@ -377,11 +401,17 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		}
 
 		if (isSessionActive) {
+			if (!isMobile) {
+				expandDesktopRecordingFloatPanel()
+				return
+			}
 			setPresentation("recording")
 			return
 		}
 
-		setPresentation("recording")
+		if (isMobile) {
+			setPresentation("recording")
+		}
 		setStartupState("starting")
 		setStartupErrorMessage("")
 		setStartupErrorDetail("")
@@ -420,6 +450,13 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				return
 			}
 			createdProjectId = audioProjectContext.project.id
+
+			if (!isMobile) {
+				// Desktop should surface the FloatPanel before runtime startup finishes,
+				// otherwise browser mic capture can already be active while the UI still
+				// looks idle on the recordings list page.
+				expandDesktopRecordingFloatPanel()
+			}
 
 			await Promise.race([
 				Promise.resolve(
@@ -460,9 +497,13 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			setStartupState("error")
 			setStartupErrorMessage(nextContent.message)
 			setStartupErrorDetail(nextContent.detail)
+			if (!isMobile && !hasActiveRecording) {
+				collapseDesktopRecordingFloatPanel()
+			}
 			toast.error(nextContent.message)
 		}
 	}, [
+		isMobile,
 		isSessionActive,
 		createAudioProjectContext,
 		resolveRecordingModel,
@@ -532,18 +573,31 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 					const localDurationSeconds = parseHmsDurationToSeconds(runtime.state.duration)
 
 					audioRecordingsStore.addOptimisticItem(
-						buildOptimisticRecordingItem({
-							projectId: result.project_id,
-							projectName: result.project_name,
-							workspaceId: result.workspace_id,
-							modelId: result.model_id,
-							duration: localDurationSeconds,
-							// task_key is required for manual "Generate Summary" after skipSummary finish.
-							taskKey: result.task_key,
-							topicId: result.topic_id,
-							source: recordingSource,
-							autoSummaryEnabled,
-						}),
+						(() => {
+							const optimisticItem = buildOptimisticRecordingItem({
+								projectId: result.project_id,
+								projectName: result.project_name,
+								workspaceId: result.workspace_id,
+								modelId: result.model_id,
+								duration: localDurationSeconds,
+								// task_key is required for manual "Generate Summary" after skipSummary finish.
+								taskKey: result.task_key,
+								topicId: result.topic_id,
+								source: recordingSource,
+								autoSummaryEnabled,
+							})
+
+							// Manual-summary recorded sessions must first complete the backend
+							// merge stage before the list exposes the Generate Summary action.
+							if (!autoSummaryEnabled) {
+								optimisticItem.current_phase = "merging"
+								optimisticItem.phase_status = "in_progress"
+								optimisticItem.card_status =
+									resolveCardStatusFromListItem(optimisticItem)
+							}
+
+							return optimisticItem
+						})(),
 					)
 					setRefreshToken((currentToken) => currentToken + 1)
 					setPresentation("list")

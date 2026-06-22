@@ -30,7 +30,10 @@ import type {
 	MediaRecorderConfig,
 } from "@/types/recordSummary"
 import i18n from "i18next"
-import { GetRecordingSummaryResultResponse } from "@/apis/modules/superMagic/recordSummary"
+import {
+	FinishRecordingTaskResponse,
+	GetRecordingSummaryResultResponse,
+} from "@/apis/modules/superMagic/recordSummary"
 import { Topic, Workspace, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
@@ -117,6 +120,52 @@ class RecordSummaryService {
 	private silenceDetector: SilenceDetector
 	// 静音提示的 message key
 	private silenceMessageKey = "recording-silence-detected"
+
+	/**
+	 * Build the server-side finish-recording title without depending on list-only display helpers.
+	 * Prefer persisted project/topic names first, then fall back to a stable localized placeholder.
+	 */
+	private resolveFinishRecordingTitle(
+		project: ProjectListItem | null,
+		topic: Topic | null,
+	): string {
+		const projectName = project?.project_name?.trim()
+		if (projectName) return projectName
+
+		const topicName = topic?.topic_name?.trim()
+		if (topicName) return topicName
+
+		return i18n.t("detail.untitled", { ns: "audioRecordings" })
+	}
+
+	/**
+	 * Completes backend audio merge for manual-summary recorded sessions after all chunks settle.
+	 */
+	private async finishRecordedTaskAfterUpload({
+		taskKey,
+		project,
+		topic,
+		asrStreamContent,
+	}: {
+		taskKey: string
+		project: ProjectListItem
+		topic: Topic
+		asrStreamContent: string
+	}): Promise<FinishRecordingTaskResponse> {
+		const response = await SuperMagicApi.finishRecordingTask({
+			task_key: taskKey,
+			generated_title: this.resolveFinishRecordingTitle(project, topic),
+			asr_stream_content: asrStreamContent,
+		})
+
+		if (response.phase !== "merging") {
+			throw new Error(
+				`finish-recording returned unexpected phase: ${response.phase ?? "unknown"}`,
+			)
+		}
+
+		return response
+	}
 	// 用于管理总结过程中的消息提示
 	private summaryMessageService = getSummaryMessageService()
 	// 分片生产监控定时器，用于检测录音是否正常产出分片
@@ -1497,6 +1546,9 @@ class RecordSummaryService {
 				model_id: string
 				workspace_id: string
 				project_name: string
+				/** Post-finish merge/summary phase from finish-recording API (skipSummary path) */
+				current_phase?: string
+				phase_status?: string
 			},
 		) => void
 		onError: (error: Error) => void
@@ -1691,6 +1743,23 @@ class RecordSummaryService {
 
 		// Manual-summary mode: finish upload/merge only; list card shows Generate Summary CTA.
 		if (skipSummary) {
+			let finishRecordingResponse: FinishRecordingTaskResponse
+			try {
+				finishRecordingResponse = await this.finishRecordedTaskAfterUpload({
+					taskKey,
+					project: finalProject,
+					topic: finalTopic,
+					asrStreamContent: asr_stream_content || "",
+				})
+			} catch (err) {
+				logger.error("finish recording task failed", err)
+				this.summaryMessageService.showError(
+					i18n.t("recordingSummary.message.summaryGenerationFailed", { ns: "super" }),
+				)
+				handleError(err as Error)
+				return
+			}
+
 			this.summaryMessageService.destroy()
 
 			this.emit(RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS, {
@@ -1705,11 +1774,14 @@ class RecordSummaryService {
 				project_id: finalProject.id,
 				topic_id: finalTopic.id,
 				project_name: finalProject.project_name,
+				project_mode: finalProject.project_mode,
 				chat_topic_id: finalTopic.id,
 				conversation_id: "",
 				workspace_name: workspace?.name || "",
 				model_id: modelId,
 				workspace_id: workspace?.id || "",
+				current_phase: finishRecordingResponse.phase,
+				phase_status: finishRecordingResponse.status,
 			})
 
 			this.cleanupAfterSessionComplete()
@@ -1775,6 +1847,7 @@ class RecordSummaryService {
 
 			onSuccess({
 				...res,
+				project_mode: res.project_mode ?? finalProject?.project_mode,
 				model_id: modelId,
 				workspace_id: workspace?.id || "",
 			})

@@ -2,6 +2,13 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { cn } from "@/lib/utils"
+import { RecordingDetailRegionEmptySlot } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailRegionEmptySlot"
+import {
+	getTranscriptSegmentRowClassName,
+	getTranscriptSegmentTextClassName,
+	getTranscriptSegmentTimeClassName,
+	getTranscriptSpeakerChipToneClassName,
+} from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/transcript-segment-styles"
 import type { MobileRecordingSourceTab, RecordingTranscriptSegment } from "../types"
 import { parseTranscriptMarkdown } from "../utils/transcript-parser"
 import { formatRecordingTime } from "../utils/time"
@@ -35,6 +42,9 @@ export function MobileRecordingSourcePanel({
 		() => parseTranscriptMarkdown(transcriptContent ?? ""),
 		[transcriptContent],
 	)
+	const hasTranscriptContent = segments.length > 0
+	const hasNotesContent = Boolean(notesContent?.trim())
+	const activeTabHasContent = activeTab === "transcript" ? hasTranscriptContent : hasNotesContent
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-recording-source-panel">
@@ -56,10 +66,18 @@ export function MobileRecordingSourcePanel({
 				fadeColor="mobile-background"
 				className="min-h-0 flex-1"
 				scrollClassName="px-4"
-				contentDeps={[activeTab, segments.length, Boolean(notesContent?.trim())]}
+				contentDeps={[activeTab, segments.length, hasNotesContent]}
 				onScroll={onContentScroll}
 			>
-				<div className="min-h-full" style={{ paddingBottom: scrollPaddingBottom }}>
+				<div
+					className={cn(
+						"flex min-h-full flex-col",
+						// Keep both source tabs on the same height chain so their empty states
+						// center within the exact same viewport above the floating player.
+						!activeTabHasContent && "flex-1",
+					)}
+					style={{ paddingBottom: scrollPaddingBottom }}
+				>
 					{activeTab === "transcript" ? (
 						<TranscriptList
 							segments={segments}
@@ -69,22 +87,24 @@ export function MobileRecordingSourcePanel({
 							onOpenSpeakerSettings={onOpenSpeakerSettings}
 							onSeek={onSeek}
 						/>
-					) : (
+					) : hasNotesContent ? (
 						<div className="pb-8">
-							{notesContent?.trim() ? (
-								<MobileRecordingMarkdownContent
-									content={notesContent}
-									layout="mobile"
-									speakerNameMap={speakerNameMap}
-									onSpeakerClick={onOpenSpeakerSettings}
-									onTimeClick={onSeek}
-								/>
-							) : (
-								<p className="py-10 text-center text-sm text-muted-foreground">
-									{t("detail.emptyNotes")}
-								</p>
-							)}
+							<MobileRecordingMarkdownContent
+								content={notesContent ?? ""}
+								layout="mobile"
+								speakerNameMap={speakerNameMap}
+								onSpeakerClick={onOpenSpeakerSettings}
+								onTimeClick={onSeek}
+							/>
 						</div>
+					) : (
+						// Reuse the shared detail empty-slot wrapper so the notes empty state
+						// stays centered within the same source viewport as the transcript tab.
+						<RecordingDetailRegionEmptySlot>
+							<p className="text-center text-sm text-muted-foreground">
+								{t("detail.emptyNotes")}
+							</p>
+						</RecordingDetailRegionEmptySlot>
 					)}
 				</div>
 			</ScrollEdgeFadeContainer>
@@ -137,7 +157,13 @@ function TranscriptList({
 	const { t } = useTranslation("audioRecordings")
 
 	if (segments.length === 0) {
-		return <p className="py-12 text-center text-sm text-muted-foreground">{emptyText}</p>
+		// The transcript tab shares the same full-height centering behavior as the notes tab
+		// so empty source pages align with the detail prototype's visual balance.
+		return (
+			<RecordingDetailRegionEmptySlot>
+				<p className="text-center text-sm text-muted-foreground">{emptyText}</p>
+			</RecordingDetailRegionEmptySlot>
+		)
 	}
 
 	return (
@@ -155,9 +181,10 @@ function TranscriptList({
 						key={segment.id}
 						role="button"
 						tabIndex={0}
+						// Keep every row on the same box model so playback focus never shifts the list alignment.
 						className={cn(
-							"rounded-xl text-left transition-colors active:bg-muted/60",
-							active && "bg-card/80 px-3 py-2 shadow-[0_4px_16px_rgba(0,0,0,0.04)]",
+							getTranscriptSegmentRowClassName("mobile"),
+							"transition-colors active:bg-muted/35",
 						)}
 						onClick={handleSeek}
 						onKeyDown={(event) => {
@@ -169,13 +196,17 @@ function TranscriptList({
 						data-testid="mobile-recording-transcript-item"
 					>
 						<div className="mb-2 flex items-center gap-2 text-[12px] font-medium">
-							<span className="shrink-0 tabular-nums text-foreground">
+							<span className={getTranscriptSegmentTimeClassName(active)}>
 								{formatRecordingTime(segment.start)}
 							</span>
 							{segment.speaker ? (
 								<button
 									type="button"
-									className="inline-flex items-center rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[12px] leading-4 text-foreground active:opacity-70"
+									// Highlight the current sentence through chip contrast instead of inserting a new card.
+									className={cn(
+										"inline-flex items-center rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[12px] leading-4 text-foreground active:opacity-70",
+										getTranscriptSpeakerChipToneClassName(active),
+									)}
 									onClick={(event) => {
 										event.stopPropagation()
 										onOpenSpeakerSettings()
@@ -187,7 +218,9 @@ function TranscriptList({
 								</button>
 							) : null}
 						</div>
-						<p className="text-[16px] leading-7 text-foreground">{segment.text}</p>
+						<p className={getTranscriptSegmentTextClassName(active, "mobile")}>
+							{segment.text}
+						</p>
 					</div>
 				)
 			})}

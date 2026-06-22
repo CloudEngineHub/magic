@@ -350,6 +350,10 @@ function AudioRecordingCard({
 		item.card_status === "summarizing" &&
 		item.phase_status === "in_progress" &&
 		!showSummaryButton
+	const showProcessingIndicator =
+		item.card_status === "processing" &&
+		item.current_phase === "merging" &&
+		item.phase_status === "in_progress"
 
 	const isUploading = item.card_status === "uploading"
 	const isUploadFailed = item.card_status === "upload_failed"
@@ -497,7 +501,7 @@ function AudioRecordingCard({
 						}
 					>
 						<AudioLines className="h-3.5 w-3.5 shrink-0" aria-hidden />
-						{/* Static placeholder only — summarizing progress is shown in the footer spinner. */}
+						{/* Static placeholder only — async pipeline progress is shown in the footer status chip. */}
 						<span>{isDurationPending ? "--:--" : durationLabel}</span>
 					</span>
 				</div>
@@ -602,6 +606,20 @@ function AudioRecordingCard({
 						>
 							<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
 							{t("card.summarizing")}
+						</span>
+					) : null}
+
+					{!isProgressMode && showProcessingIndicator ? (
+						<span
+							className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground"
+							data-testid={
+								isMobile
+									? `mobile-recording-card-summarize-${item.id}`
+									: `audio-recording-card-${item.id}-status-processing`
+							}
+						>
+							<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+							{t("card.processing")}
 						</span>
 					) : null}
 

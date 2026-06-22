@@ -56,7 +56,7 @@ describe("resolveIsProcessingComplete", () => {
 	})
 
 	it("returns false for merging in progress or failed", () => {
-		expect(resolveIsProcessingComplete("merging", "in_progress")).toBe(false)
+		expect(resolveIsProcessingComplete("merging", "in_progress")).toBe(true)
 		expect(resolveIsProcessingComplete("merging", "failed")).toBe(false)
 	})
 
@@ -127,13 +127,20 @@ describe("normalizeAudioProjectListItem", () => {
 		).toBeNull()
 	})
 
-	it("returns null for merging in progress", () => {
-		expect(
-			normalizeAudioProjectListItem({
-				...SAMPLE_MERGING,
-				extra: { ...SAMPLE_MERGING.extra, phase_status: "in_progress" },
-			}),
-		).toBeNull()
+	it("maps merging in progress items as processing", () => {
+		const item = normalizeAudioProjectListItem({
+			...SAMPLE_MERGING,
+			project_status: "",
+			extra: {
+				...SAMPLE_MERGING.extra,
+				phase_status: "in_progress",
+				task_key: "mock-task-key-processing",
+			},
+		})
+
+		expect(item).not.toBeNull()
+		expect(item?.card_status).toBe("processing")
+		expect(item?.is_summarized).toBe(false)
 	})
 
 	it("marks summarizing phase without finished status but status in_progress as summarizing", () => {
@@ -216,6 +223,7 @@ describe("normalizeAudioProjectList", () => {
 describe("isPcListVisible", () => {
 	it("matches resolveIsProcessingComplete", () => {
 		expect(isPcListVisible("waiting", null)).toBe(false)
+		expect(isPcListVisible("merging", "in_progress")).toBe(true)
 		expect(isPcListVisible("merging", "completed")).toBe(true)
 	})
 })

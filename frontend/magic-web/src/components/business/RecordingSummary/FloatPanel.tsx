@@ -527,6 +527,7 @@ export function RecordingSummaryFloatPanel() {
 				editorRef={editorRef}
 				onSave={handleSave}
 				resolveImagesFolderParentId={resolveImagesFolderParentId}
+				isAudioProjectMode={isAudioRecordingProject}
 			/>
 		</>
 	)

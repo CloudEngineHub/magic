@@ -13,6 +13,7 @@ vi.mock("react-i18next", () => ({
 				"card.sourceDevice": "Device recording",
 				"card.sourcePc": "PC",
 				"card.summarized": "Summarized",
+				"card.processing": "Processing",
 				"card.summarizing": "Summarizing now",
 				"card.notSummarized": "Not summarized",
 				"card.generateSummary": "Generate summary",
@@ -135,6 +136,29 @@ describe("MobileRecordingCard", () => {
 		)
 		expect(summarizeIndicator.tagName).toBe("SPAN")
 		expect(summarizeIndicator).toHaveTextContent("Summarizing now")
+	})
+
+	it("shows processing indicator and blocks navigation while backend merge is running", () => {
+		const onOpen = vi.fn()
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					card_status: "processing",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "in_progress",
+				})}
+				onOpen={onOpen}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-recording-card-proj-beta-002"))
+		expect(onOpen).not.toHaveBeenCalled()
+		const processingIndicator = screen.getByTestId(
+			"mobile-recording-card-summarize-proj-beta-002",
+		)
+		expect(processingIndicator.tagName).toBe("SPAN")
+		expect(processingIndicator).toHaveTextContent("Processing")
 	})
 
 	it("navigates when summarizing card is clicked even without audio_file_id", () => {

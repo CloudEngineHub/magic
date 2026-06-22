@@ -39,6 +39,20 @@ vi.mock("../components/MobileRecordingMarkdownContent", () => ({
 	),
 }))
 
+const emptySlotMock = vi.fn()
+
+vi.mock(
+	"@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailRegionEmptySlot",
+	() => ({
+		RecordingDetailRegionEmptySlot: ({ children }: { children: ReactNode }) => (
+			<div data-testid="recording-detail-region-empty-slot">
+				{emptySlotMock(children)}
+				{children}
+			</div>
+		),
+	}),
+)
+
 describe("MobileRecordingSourcePanel", () => {
 	it("wraps transcript content with the shared scroll shadow container", () => {
 		render(
@@ -106,5 +120,123 @@ describe("MobileRecordingSourcePanel", () => {
 
 		expect(transcriptItem.tagName).not.toBe("BUTTON")
 		expect(speakerButton.closest("button")).toBe(speakerButton)
+	})
+
+	it("keeps the transcript row box model stable while only emphasizing the active content", () => {
+		render(
+			<MobileRecordingSourcePanel
+				transcriptContent={
+					"[00:05] Speaker-1: Earlier line\n[00:10] Speaker-1: Active line"
+				}
+				notesContent="Mock notes"
+				currentTime={10}
+				scrollPaddingBottom={64}
+				speakerNameMap={{ "Speaker-1": "Speaker-1" }}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		const transcriptItems = screen.getAllByTestId("mobile-recording-transcript-item")
+		const inactiveItem = transcriptItems[0]
+		const activeItem = transcriptItems[1]
+		const inactiveTime = screen.getByText("0:05")
+		const activeTime = screen.getByText("0:10")
+		const inactiveText = screen.getByText("Earlier line")
+		const activeText = screen.getByText("Active line")
+		const [inactiveSpeakerChip, activeSpeakerChip] = screen.getAllByRole("button", {
+			name: "Open speaker settings",
+		})
+
+		expect(inactiveItem).toHaveClass("rounded-xl", "px-3", "py-2")
+		expect(activeItem).toHaveClass("rounded-xl", "px-3", "py-2")
+		expect(activeItem).not.toHaveClass("bg-card/80")
+		expect(activeItem).not.toHaveClass("shadow-[0_4px_16px_rgba(0,0,0,0.04)]")
+
+		expect(inactiveTime).toHaveClass("text-foreground/35")
+		expect(activeTime).toHaveClass("text-foreground")
+		expect(inactiveText).toHaveClass("text-foreground/55")
+		expect(activeText).toHaveClass("text-foreground")
+		expect(inactiveSpeakerChip).toHaveClass("opacity-55")
+		expect(activeSpeakerChip).not.toHaveClass("opacity-55")
+	})
+
+	it("centers the transcript empty state inside the shared empty slot", () => {
+		render(
+			<MobileRecordingSourcePanel
+				transcriptContent=""
+				notesContent="Mock notes"
+				currentTime={0}
+				scrollPaddingBottom={64}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByText("No transcript")).toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-region-empty-slot")).toContainElement(
+			screen.getByText("No transcript"),
+		)
+	})
+
+	it("centers the notes empty state inside the shared empty slot", () => {
+		render(
+			<MobileRecordingSourcePanel
+				transcriptContent="[00:05] Mock transcript"
+				notesContent=""
+				currentTime={0}
+				scrollPaddingBottom={64}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByText("Notes"))
+
+		expect(screen.getByText("No notes")).toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-region-empty-slot")).toContainElement(
+			screen.getByText("No notes"),
+		)
+	})
+
+	it("uses the same full-height wrapper for transcript and notes empty states", () => {
+		const { rerender } = render(
+			<MobileRecordingSourcePanel
+				transcriptContent=""
+				notesContent=""
+				currentTime={0}
+				scrollPaddingBottom={64}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		const transcriptEmptyWrapper = screen.getByTestId(
+			"recording-detail-region-empty-slot",
+		).parentElement
+		expect(transcriptEmptyWrapper).toHaveClass("flex", "min-h-full", "flex-col", "flex-1")
+
+		rerender(
+			<MobileRecordingSourcePanel
+				transcriptContent="[00:05] Mock transcript"
+				notesContent=""
+				currentTime={0}
+				scrollPaddingBottom={64}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByText("Notes"))
+
+		const notesEmptyWrapper = screen.getByTestId(
+			"recording-detail-region-empty-slot",
+		).parentElement
+		expect(notesEmptyWrapper).toHaveClass("flex", "min-h-full", "flex-col", "flex-1")
+		expect(notesEmptyWrapper?.className).toBe(transcriptEmptyWrapper?.className)
 	})
 })

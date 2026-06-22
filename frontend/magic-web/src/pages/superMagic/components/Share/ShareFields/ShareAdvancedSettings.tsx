@@ -19,7 +19,7 @@ interface SwitchConfig {
 }
 
 export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsProps) {
-	const { settings, onChange, mode } = props
+	const { settings, onChange, mode, hiddenSettingKeys = [] } = props
 
 	const { t } = useTranslation("super")
 	const [isExpanded, setIsExpanded] = useState(true)
@@ -89,7 +89,9 @@ export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsP
 	}, [])
 
 	// 根据当前模式筛选需要显示的开关配置
-	const visibleConfigs = SWITCH_CONFIGS.filter((config) => config.modes.includes(mode))
+	const visibleConfigs = SWITCH_CONFIGS.filter(
+		(config) => config.modes.includes(mode) && !hiddenSettingKeys.includes(config.key),
+	)
 
 	return (
 		<div

@@ -12,6 +12,7 @@
 		"renamePlaceholder": "请输入录音标题",
 		"renameSuccess": "重命名成功",
 		"renameTitle": "重命名",
+		"startRecording": "开始录音",
 		"submitting": "提交中..."
 	},
 	"card": {
@@ -23,6 +24,7 @@
 		"moveToGroup": "移动到分组",
 		"notSummarized": "未总结",
 		"openProject": "查看项目详情",
+		"processing": "处理中",
 		"rename": "重命名",
 		"retryUpload": "重试",
 		"retrySummary": "重新总结",
@@ -149,6 +151,17 @@
 		"missingModel": "无法获取总结模型，请稍后重试",
 		"missingParams": "缺少总结所需参数，请刷新列表后重试",
 		"submitFailed": "提交总结失败，请稍后重试"
+	},
+	"share": {
+		"contentLabel": "分享内容",
+		"collapseSummary": "收起总结选项",
+		"expandSummary": "展开总结选项",
+		"items": {
+			"audio": "录音",
+			"notes": "笔记",
+			"summaryRoot": "总结",
+			"transcript": "转写"
+		}
 	},
 	"title": "录音与纪要"
 }

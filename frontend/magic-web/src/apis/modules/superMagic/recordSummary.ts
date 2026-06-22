@@ -65,6 +65,15 @@ export interface SummarizeRecordedTaskResponse {
 	}
 }
 
+export interface FinishRecordingTaskResponse {
+	success: boolean
+	task_key: string
+	phase?: string
+	status?: string
+	percent?: number
+	message?: string
+}
+
 export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 	/**
 	 * @description 获取录音总结上传token
@@ -207,6 +216,37 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 				organization_code: string
 			}
 		}>(genRequestUrl(`/api/v1/asr/download-url`, {}, { task_key }))
+	},
+
+	/**
+	 * @description Completes a recorded audio task after all chunks have uploaded
+	 */
+	finishRecordingTask({
+		task_key,
+		generated_title,
+		asr_stream_content,
+	}: {
+		task_key: string
+		generated_title: string
+		asr_stream_content: string
+	}) {
+		const limitedAsrStreamContent = asr_stream_content.slice(0, 10000)
+		return fetch.post<FinishRecordingTaskResponse>(
+			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/finish-recording`),
+			{
+				generated_title,
+				asr_stream_content: limitedAsrStreamContent,
+			},
+		)
+	},
+
+	/**
+	 * @description Queries progress for a single recorded audio task
+	 */
+	getTaskProgress({ task_key }: { task_key: string }) {
+		return fetch.get<RecordTaskProgress>(
+			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/progress`),
+		)
 	},
 
 	/**

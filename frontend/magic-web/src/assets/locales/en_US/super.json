@@ -3698,7 +3698,8 @@
 			"contentWillBeSavedTo": "Content will be saved to \"{{projectName}}\"",
 			"organizingRecording": "We're preparing your recording summary and will notify you once it's ready.",
 			"title": "Please wait a moment",
-			"understood": "Got it"
+			"understood": "Got it",
+			"viewOnAudioRecordingsPage": "When it's ready, open Recordings & Notes to view it."
 		}
 	},
 	"recycleBin": {
@@ -4114,6 +4115,7 @@
 		"shareConversation": "Share Conversation",
 		"shareExpiry": "Expiry",
 		"shareFile": "Share Project Files",
+		"recordingShareCreateTitle": "Share",
 		"shareInfo": "Share Information",
 		"shareLink": "Share Link",
 		"shareLinkGenerated": "File Sharing",

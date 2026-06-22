@@ -68,6 +68,8 @@ export interface RecordingEditorFinishOptions {
 			model_id: string
 			workspace_id: string
 			project_name: string
+			current_phase?: string
+			phase_status?: string
 		},
 	) => void
 	onError?: (error: Error) => void

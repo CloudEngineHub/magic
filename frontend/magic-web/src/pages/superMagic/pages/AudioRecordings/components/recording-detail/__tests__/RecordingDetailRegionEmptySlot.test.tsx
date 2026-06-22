@@ -11,7 +11,7 @@ describe("RecordingDetailRegionEmptySlot", () => {
 		)
 
 		const slot = screen.getByTestId("recording-detail-region-empty-slot")
-		expect(slot).toHaveClass("min-h-full", "items-center", "justify-center")
+		expect(slot).toHaveClass("h-full", "min-h-full", "flex-1", "items-center", "justify-center")
 		expect(screen.getByText("Empty placeholder")).toBeInTheDocument()
 	})
 })

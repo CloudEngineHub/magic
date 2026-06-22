@@ -32,7 +32,11 @@ import { MobileRecordingMoreSheet } from "./components/MobileRecordingMoreSheet"
 import { MobileActiveRecordingCard } from "./components/MobileActiveRecordingCard"
 import { MobileActiveRecordingIndicator } from "./components/MobileActiveRecordingIndicator"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { RecordingDetailFileMap } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail"
+import { buildRecordingDetailFileMap } from "@/pages/superMagic/pages/AudioRecordings/utils/recording-detail-files"
+import { buildRecordingShareSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import recordingSummaryStore from "@/stores/recordingSummary"
+import { cn } from "@/lib/utils"
 
 /**
  * Mobile recordings list panel: toolbar, pull-to-refresh list, sheets, and FAB placeholder.
@@ -68,6 +72,8 @@ interface ShareSheetState {
 	projectName: string
 	attachments: AttachmentItem[]
 	attachmentList: AttachmentItem[]
+	fileMap: RecordingDetailFileMap
+	defaultSelectedFileIds: string[]
 }
 
 function AudioRecordingListPanel({
@@ -157,6 +163,15 @@ function AudioRecordingListPanel({
 	const isEmpty = !showInitialSkeleton && mergedList.length === 0
 	const isSearchEmpty = isEmpty && debouncedKeyword.trim().length > 0
 	const shouldStretchPullToRefresh = !showInitialSkeleton && (isEmpty || isSearchEmpty)
+	// Mirror other mobile list pages: the pull-to-refresh wrapper must also hide overflow
+	// while empty so the inner antd-mobile structure keeps the remaining viewport height.
+	const pullToRefreshStretchClassName =
+		"[&_.adm-pull-to-refresh]:flex [&_.adm-pull-to-refresh]:h-full [&_.adm-pull-to-refresh]:min-h-0 [&_.adm-pull-to-refresh]:flex-col [&_.adm-pull-to-refresh-content]:flex [&_.adm-pull-to-refresh-content]:min-h-0 [&_.adm-pull-to-refresh-content]:flex-1 [&_.adm-pull-to-refresh-content]:flex-col"
+	// Let the list content consume the remaining viewport height when the page is empty,
+	// so the empty-state block can center itself within the area below the toolbar.
+	const listContentClassName = shouldStretchPullToRefresh
+		? "flex min-h-full flex-1 flex-col gap-2.5 px-3 pb-20 pt-4"
+		: "flex min-h-full flex-col gap-2.5 px-3 pb-20 pt-4"
 
 	/**
 	 * Re-syncs the list after a recording is completed so the optimistic card can
@@ -300,6 +315,16 @@ function AudioRecordingListPanel({
 				temporaryToken: "",
 			})
 			const processed = AttachmentDataProcessor.processAttachmentData(response)
+			const fileMap = buildRecordingDetailFileMap({
+				tree: processed.tree,
+				list: processed.list,
+			})
+			const shareSelection = buildRecordingShareSelection(fileMap)
+
+			if (shareSelection.defaultSelectedFileIds.length === 0) {
+				toast.error(t("super:share.noShareableFiles"))
+				return
+			}
 
 			setShareSheetState({
 				projectId: moreTarget.id,
@@ -307,8 +332,10 @@ function AudioRecordingListPanel({
 					moreTarget.project_name,
 					moreTarget.created_at,
 				),
-				attachments: processed.tree,
-				attachmentList: processed.list,
+				attachments: shareSelection.shareableFiles,
+				attachmentList: shareSelection.shareableFiles,
+				fileMap,
+				defaultSelectedFileIds: shareSelection.defaultSelectedFileIds,
 			})
 		} catch {
 			toast.error(t("audioRecordings:detail.loadFailed"))
@@ -333,14 +360,14 @@ function AudioRecordingListPanel({
 				<MagicPullToRefresh
 					embedInParentScroll
 					onRefresh={handleRefresh}
-					containerClassName={
-						shouldStretchPullToRefresh
-							? "relative min-h-0 flex-1 [&_.adm-pull-to-refresh]:flex [&_.adm-pull-to-refresh]:h-full [&_.adm-pull-to-refresh]:min-h-0 [&_.adm-pull-to-refresh]:flex-col [&_.adm-pull-to-refresh-content]:flex [&_.adm-pull-to-refresh-content]:min-h-0 [&_.adm-pull-to-refresh-content]:flex-1 [&_.adm-pull-to-refresh-content]:flex-col"
-							: "relative min-h-0 flex-1"
-					}
+					containerClassName={cn(
+						"relative min-h-0 flex-1",
+						shouldStretchPullToRefresh &&
+							cn("h-full !overflow-hidden", pullToRefreshStretchClassName),
+					)}
 					showSuccessMessage={false}
 				>
-					<div className="flex min-h-full flex-col gap-2.5 px-3 pb-20 pt-4">
+					<div className={listContentClassName}>
 						{showInitialSkeleton ? (
 							<MobileResourceListSkeletonList testId="mobile-recording-list-skeleton" />
 						) : (
@@ -380,9 +407,17 @@ function AudioRecordingListPanel({
 
 								{/* Data area (Empty states or the list of recording cards) */}
 								{isSearchEmpty ? (
-									<DataEmptyState variant="search" className="flex-1" />
+									<DataEmptyState
+										variant="search"
+										className="flex-1 py-0"
+										testId="mobile-recording-search-empty-state"
+									/>
 								) : isEmpty ? (
-									<DataEmptyState variant="recording" className="flex-1" />
+									<DataEmptyState
+										variant="recording"
+										className="flex-1 py-0"
+										testId="mobile-recording-list-empty-state"
+									/>
 								) : (
 									<div
 										className="flex flex-col gap-2.5"
@@ -486,10 +521,14 @@ function AudioRecordingListPanel({
 			<ProjectShareSheet
 				open={shareSheetState != null}
 				onClose={() => setShareSheetState(null)}
+				mode="file"
+				shareScene="audioRecording"
 				projectId={shareSheetState?.projectId}
 				projectName={shareSheetState?.projectName}
 				attachments={shareSheetState?.attachments ?? []}
 				attachmentList={shareSheetState?.attachmentList ?? []}
+				fileMap={shareSheetState?.fileMap}
+				defaultSelectedFileIds={shareSheetState?.defaultSelectedFileIds}
 			/>
 		</div>
 	)

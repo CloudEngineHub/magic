@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
 	canClickSummaryButton,
+	canGenerateSummaryFromDetail,
 	canSubmitSummary,
 	getSummaryButtonVariant,
 	resolveSummaryModelId,
@@ -24,6 +25,11 @@ describe("summary-action-utils", () => {
 	it("hides button while summarizing in progress", () => {
 		expect(shouldShowSummaryButton("summarizing", "in_progress")).toBe(false)
 		expect(canClickSummaryButton("summarizing", "in_progress", false)).toBe(false)
+	})
+
+	it("keeps manual-summary button hidden until merging is completed", () => {
+		expect(shouldShowSummaryButton("merging", "in_progress")).toBe(false)
+		expect(canClickSummaryButton("merging", "in_progress", false)).toBe(false)
 	})
 
 	it("disables button while submitting", () => {
@@ -53,6 +59,60 @@ describe("summary-action-utils", () => {
 				task_key: "session-Android-1",
 				topic_id: "topic-1",
 				audio_source: "imported",
+			}),
+		).toBe(false)
+	})
+
+	it("aligns detail summary CTA with card button visibility and submit requirements", () => {
+		expect(
+			canGenerateSummaryFromDetail({
+				phase: "merging",
+				status: "completed",
+				isSubmitting: false,
+				extra: {
+					task_key: "session-web-mock-1",
+					topic_id: "topic-web-mock-1",
+					audio_source: "recorded",
+				},
+			}),
+		).toBe(true)
+
+		expect(
+			canGenerateSummaryFromDetail({
+				phase: "summarizing",
+				status: "in_progress",
+				isSubmitting: false,
+				extra: {
+					task_key: "session-web-mock-1",
+					topic_id: "topic-web-mock-1",
+					audio_source: "recorded",
+				},
+			}),
+		).toBe(false)
+
+		expect(
+			canGenerateSummaryFromDetail({
+				phase: "summarizing",
+				status: "failed",
+				isSubmitting: false,
+				extra: {
+					task_key: "session-web-mock-1",
+					topic_id: "topic-web-mock-1",
+					audio_source: "recorded",
+				},
+			}),
+		).toBe(true)
+
+		expect(
+			canGenerateSummaryFromDetail({
+				phase: "merging",
+				status: "completed",
+				isSubmitting: false,
+				extra: {
+					task_key: "session-web-mock-1",
+					topic_id: "topic-web-mock-1",
+					audio_source: "imported",
+				},
 			}),
 		).toBe(false)
 	})

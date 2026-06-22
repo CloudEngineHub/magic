@@ -90,6 +90,8 @@ export interface PcFloatPanelProps {
 	isRetrying: boolean
 	expandedAiChat: boolean
 	onToggleExpandedAiChat: () => void
+	/** Audio-recordings (`project_mode=audio`) uses a simplified PC panel without legacy chrome. */
+	isAudioProjectMode?: boolean
 	projectFilesStore: ProjectFilesStore
 	attachments: AttachmentItem[]
 	attachmentList: AttachmentItem[]
@@ -136,6 +138,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 		isRetrying,
 		expandedAiChat,
 		onToggleExpandedAiChat,
+		isAudioProjectMode = false,
 		projectFilesStore,
 		attachments,
 		attachmentList,
@@ -502,9 +505,9 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 												event.stopPropagation()
 											}}
 										>
-											{isExpanded && isEditMode && (
+											{isExpanded && isEditMode && !isAudioProjectMode ? (
 												<PcSelectorButton disabled />
-											)}
+											) : null}
 
 											<button
 												type="button"
@@ -528,7 +531,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 													? t("recordingSummary.ui.minimize")
 													: t("recordingSummary.ui.expand")}
 											</button>
-											{isExpanded && (
+											{isExpanded && !isAudioProjectMode ? (
 												<button
 													type="button"
 													data-testid="record-summary-pc-float-panel-ai-chat-toggle"
@@ -548,7 +551,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 														? t("recordingSummary.ui.collapseAiChat")
 														: t("recordingSummary.ui.expandAiChat")}
 												</button>
-											)}
+											) : null}
 											{isDevEnvironment && isExpanded && isEditMode && (
 												<MagicDropdown
 													open={isDebugPanelOpen}
@@ -681,7 +684,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 								)}
 							</MagicSplitter>
 						</MagicSplitter.Panel>
-						{expandedAiChat && isExpanded && (
+						{expandedAiChat && isExpanded && !isAudioProjectMode ? (
 							<MagicSplitter.Panel
 								defaultSize={380}
 								max="50%"
@@ -697,7 +700,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 									recordSummaryFileStore={recordSummaryFileStore}
 								/>
 							</MagicSplitter.Panel>
-						)}
+						) : null}
 					</MagicSplitter>
 				</div>
 			</div>

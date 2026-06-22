@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import { ShareType } from "@/pages/superMagic/components/Share/types"
+import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
 import ProjectShareDeleteConfirmView from "../components/ProjectShareDeleteConfirmView"
 import type { ProjectShareSheetController } from "../types"
 
@@ -25,6 +25,9 @@ function createController(
 		open: true,
 		view: "deleteConfirm",
 		viewStack: ["linkDetail"],
+		mode: "project",
+		shareScene: "default",
+		shareMode: ShareMode.Project,
 		projectName: "Demo Project",
 		projectId: "project-1",
 		formState: {
@@ -53,8 +56,16 @@ function createController(
 		isCheckingShare: false,
 		advancedOpen: false,
 		defaultSelectedFileIds: [],
+		selectedFileIds: [],
+		groupedShareItems: [],
+		enableInlineFileSelection: false,
+		selectedFileItems: [],
+		selectedFileHierarchy: [],
+		selectedFileCount: 0,
 		memberSelectorOpen: false,
 		selectedMemberNodes: [],
+		detailMemberNodes: [],
+		detailMemberLoading: false,
 		setShareName: vi.fn(),
 		setShareType: vi.fn(),
 		setShareExpiry: vi.fn(),
@@ -64,6 +75,8 @@ function createController(
 		setShareTargets: vi.fn(),
 		setAdvancedSettings: vi.fn(),
 		setAdvancedOpen: vi.fn(),
+		setSelectedFileIds: vi.fn(),
+		toggleShareFileId: vi.fn(),
 		openMemberSelector: vi.fn(),
 		closeMemberSelector: vi.fn(),
 		setSelectedMemberNodes: vi.fn(),

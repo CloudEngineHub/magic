@@ -19,6 +19,7 @@ vi.mock("react-i18next", () => ({
 				"filters.sort": "Sort",
 				"filters.sortByUpdatedDesc": "By last updated",
 				"filters.sortByCreatedDesc": "By created time",
+				"actions.startRecording": "Start Recording",
 			}
 			return labels[key] ?? key
 		},
@@ -65,7 +66,6 @@ function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilte
 	const onRefresh = vi.fn()
 	const onGroupChange = vi.fn()
 	const onManageGroups = vi.fn()
-	const onOpenSettings = vi.fn()
 
 	render(
 		<AudioRecordingsFilters
@@ -82,7 +82,6 @@ function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilte
 			currentGroupId={ALL_RECORDING_GROUP_ID}
 			onGroupChange={onGroupChange}
 			onManageGroups={onManageGroups}
-			onOpenSettings={onOpenSettings}
 			onSummaryFilterChange={onSummaryFilterChange}
 			onDatePresetChange={onDatePresetChange}
 			onSortByChange={onSortByChange}
@@ -104,7 +103,6 @@ function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilte
 		onRefresh,
 		onGroupChange,
 		onManageGroups,
-		onOpenSettings,
 	}
 }
 

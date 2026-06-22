@@ -46,6 +46,17 @@ export interface FileInfo {
 	fileType?: string
 }
 
+/** UI overrides for file-share scenarios such as recording detail sharing. */
+export interface FileShareUiConfig {
+	hideShareProjectToggle?: boolean
+	hideShowFileListSetting?: boolean
+	forceViewFileList?: boolean
+	showSelectAll?: boolean
+	lockShareProject?: boolean
+	/** Use the recording share sheet title ("Share") instead of generic file-share copy. */
+	useRecordingShareCreateTitle?: boolean
+}
+
 /** Share extra data */
 export interface ShareExtraData {
 	passwordEnabled?: boolean
@@ -98,6 +109,7 @@ export interface ShareModalProps extends Omit<ShareProps, "type">, MagicModalPro
 	onCancel?: (e?: React.MouseEvent<HTMLButtonElement>) => void
 	onCancelShare?: (resourceId: string) => void // 取消分享的回调，用于更新列表
 	onSaveSuccess?: () => void // 保存成功的回调
+	fileShareUiConfig?: FileShareUiConfig
 }
 
 // API types for file sharing

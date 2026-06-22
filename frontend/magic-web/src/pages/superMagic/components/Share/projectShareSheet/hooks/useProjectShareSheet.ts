@@ -31,12 +31,13 @@ import type {
 import { buildShareClipboardText } from "../utils/buildShareClipboardText"
 import { isOrganizationShareScopeAll } from "@/pages/superMagic/components/ShareManagement/utils/shareScopeSummary"
 import { isPartialFileShare, isWholeProjectShare } from "../utils/shareScope"
+import { buildRecordingShareSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 
 /**
  * Constructs the base default values for the share form.
  * `shareName` will be overridden by `buildDefaultShareNameForSheet` when the Sheet opens the creation page.
  */
-function createInitialFormState(): ProjectShareFormState {
+function createInitialFormState(isAudioRecordingScene = false): ProjectShareFormState {
 	return {
 		shareName: "",
 		shareType: ShareType.PasswordProtected,
@@ -46,7 +47,7 @@ function createInitialFormState(): ProjectShareFormState {
 		shareTargets: [],
 		advancedSettings: {
 			allowCopy: true,
-			showFileList: true,
+			showFileList: isAudioRecordingScene ? false : true,
 			showOriginalInfo: true,
 			hideCreatorInfo: false,
 			allowDownloadProjectFile: true,
@@ -221,16 +222,27 @@ function normalizeDetailMemberNode(node: TreeNode): TreeNode {
 export function useProjectShareSheet({
 	open,
 	mode = "project",
+	shareScene = "default",
 	projectId,
 	projectName,
 	attachments,
+	fileMap,
 	defaultSelectedFileIds,
 	defaultOpenFileId,
 	initialSelectedShare,
 	onClose,
 }: ProjectShareSheetProps): ProjectShareSheetController {
 	const { t } = useTranslation("super")
-	const shareMode = mode === "file" ? ShareMode.File : ShareMode.Project
+	const isAudioRecordingScene = shareScene === "audioRecording"
+	const effectiveMode: MobileShareSheetMode = isAudioRecordingScene ? "file" : mode
+	const shareMode = effectiveMode === "file" ? ShareMode.File : ShareMode.Project
+	const recordingShareSelection = useMemo(
+		() => buildRecordingShareSelection(isAudioRecordingScene ? (fileMap ?? null) : null),
+		[fileMap, isAudioRecordingScene],
+	)
+	const shareableAttachments = isAudioRecordingScene
+		? recordingShareSelection.shareableFiles
+		: attachments
 	const [view, setView] = useState<ProjectShareSheetView>("create")
 	const [viewStack, setViewStack] = useState<ProjectShareSheetView[]>([])
 	const [selectedShareId, setSelectedShareId] = useState<string | null>(null)
@@ -243,15 +255,20 @@ export function useProjectShareSheet({
 	const [detailMemberNodes, setDetailMemberNodes] = useState<TreeNode[]>([])
 	const [detailMemberLoading, setDetailMemberLoading] = useState(false)
 	const [formState, setFormState] = useState<ProjectShareFormState>(() =>
-		createInitialFormState(),
+		createInitialFormState(isAudioRecordingScene),
 	)
+	const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])
 
 	const shareProject = useShareProject({
-		attachments,
+		attachments: shareableAttachments,
 		projectName,
 	})
 	const effectiveSelectedFileIds = useMemo(() => {
-		if (mode === "file") {
+		if (isAudioRecordingScene) {
+			return selectedFileIds
+		}
+
+		if (effectiveMode === "file") {
 			if (defaultSelectedFileIds) {
 				return defaultSelectedFileIds
 			}
@@ -268,7 +285,14 @@ export function useProjectShareSheet({
 		}
 
 		return shareProject.defaultSelectedFileIds
-	}, [defaultSelectedFileIds, initialSelectedShare, mode, shareProject.defaultSelectedFileIds])
+	}, [
+		defaultSelectedFileIds,
+		effectiveMode,
+		initialSelectedShare,
+		isAudioRecordingScene,
+		selectedFileIds,
+		shareProject.defaultSelectedFileIds,
+	])
 
 	// Share-management list API requires login; only fetch when the sheet is open.
 	const shouldFetchShareLists = open && Boolean(projectId)
@@ -305,18 +329,23 @@ export function useProjectShareSheet({
 		setDetailMemberNodes([])
 		setDetailMemberLoading(false)
 		setFormState({
-			...createInitialFormState(),
+			...createInitialFormState(isAudioRecordingScene),
 			shareName: initialSelectedShare
 				? ""
 				: buildDefaultShareNameForSheet({
-						mode,
+						mode: effectiveMode,
 						defaultOpenFileId,
-						attachments,
-						effectiveSelectedFileIds,
+						attachments: shareableAttachments,
+						effectiveSelectedFileIds: isAudioRecordingScene
+							? recordingShareSelection.defaultSelectedFileIds
+							: effectiveSelectedFileIds,
 						projectName,
 						t,
 					}),
 		})
+		if (isAudioRecordingScene) {
+			setSelectedFileIds(recordingShareSelection.defaultSelectedFileIds)
+		}
 		// Intentionally omit selection/mode deps so reopening does not overwrite user-edited shareName mid-session.
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when sheet open context changes
 	}, [open, projectName, initialSelectedShare])
@@ -365,12 +394,12 @@ export function useProjectShareSheet({
 		return effectiveSelectedFileIds
 	}, [effectiveSelectedFileIds, selectedShare])
 	const selectedFileItems = useMemo(
-		() => collectSelectedItems(attachments, displayedSelectedFileIds),
-		[attachments, displayedSelectedFileIds],
+		() => collectSelectedItems(shareableAttachments, displayedSelectedFileIds),
+		[displayedSelectedFileIds, shareableAttachments],
 	)
 	const selectedFileHierarchy = useMemo(
-		() => buildSelectedFileHierarchy(attachments, displayedSelectedFileIds),
-		[attachments, displayedSelectedFileIds],
+		() => buildSelectedFileHierarchy(shareableAttachments, displayedSelectedFileIds),
+		[displayedSelectedFileIds, shareableAttachments],
 	)
 	const selectedFileCount = useMemo(
 		() => countSelectedHierarchyFiles(selectedFileHierarchy),
@@ -516,11 +545,11 @@ export function useProjectShareSheet({
 			const password =
 				formState.shareType === ShareType.PasswordProtected ? formState.password : undefined
 			const fallbackShareName =
-				mode === "file"
+				effectiveMode === "file"
 					? calculateDefaultShareName(
 							defaultOpenFileId,
 							selectedFileItems,
-							attachments,
+							shareableAttachments,
 							t,
 							false,
 							projectName,
@@ -550,12 +579,14 @@ export function useProjectShareSheet({
 						: undefined,
 				password,
 				file_ids: effectiveSelectedFileIds,
-				default_open_file_id: mode === "file" ? defaultOpenFileId : undefined,
-				share_project: mode === "project",
+				default_open_file_id: effectiveMode === "file" ? defaultOpenFileId : undefined,
+				share_project: isAudioRecordingScene ? false : effectiveMode === "project",
 				project_id: projectId,
 				extra: {
 					allow_copy_project_files: formState.advancedSettings.allowCopy ?? true,
-					view_file_list: formState.advancedSettings.showFileList ?? true,
+					view_file_list: isAudioRecordingScene
+						? false
+						: (formState.advancedSettings.showFileList ?? true),
 					hide_created_by_super_magic:
 						formState.advancedSettings.hideCreatorInfo ?? false,
 					show_original_info: formState.advancedSettings.showOriginalInfo ?? true,
@@ -565,7 +596,7 @@ export function useProjectShareSheet({
 			})
 
 			const createdShareForClipboard: MobileShareItem =
-				mode === "file"
+				effectiveMode === "file"
 					? ({
 							title: resourceName,
 							project_name: projectName || t("common.untitledProject"),
@@ -646,9 +677,18 @@ export function useProjectShareSheet({
 		setViewStack([])
 	})
 
+	const toggleShareFileId = useMemoizedFn((fileId: string) => {
+		if (!isAudioRecordingScene) return
+
+		setSelectedFileIds((current) =>
+			current.includes(fileId) ? current.filter((id) => id !== fileId) : [...current, fileId],
+		)
+	})
+
 	return {
 		open,
-		mode,
+		mode: effectiveMode,
+		shareScene,
 		shareMode,
 		view,
 		viewStack,
@@ -659,9 +699,12 @@ export function useProjectShareSheet({
 		selectedShare,
 		loading: projectShareList.loading || fileShareList.loading,
 		saving,
-		isCheckingShare: mode === "project" ? shareProject.isCheckingShare : false,
+		isCheckingShare: effectiveMode === "project" ? shareProject.isCheckingShare : false,
 		advancedOpen,
 		defaultSelectedFileIds: effectiveSelectedFileIds,
+		selectedFileIds,
+		groupedShareItems: recordingShareSelection.groupedItems,
+		enableInlineFileSelection: isAudioRecordingScene,
 		selectedFileItems,
 		selectedFileHierarchy,
 		selectedFileCount,
@@ -678,6 +721,8 @@ export function useProjectShareSheet({
 		setShareTargets: (value) => setFormValue("shareTargets", value),
 		setAdvancedSettings: (value) => setFormValue("advancedSettings", value),
 		setAdvancedOpen,
+		setSelectedFileIds,
+		toggleShareFileId,
 		openMemberSelector: () => setMemberSelectorOpen(true),
 		closeMemberSelector: () => setMemberSelectorOpen(false),
 		setSelectedMemberNodes,

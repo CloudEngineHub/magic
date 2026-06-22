@@ -120,8 +120,7 @@ function AudioRecordingDetailPageDesktop() {
 
 	const shareControls = useRecordingDetailShareControls({
 		projectId,
-		attachments: attachmentTree,
-		attachmentList,
+		fileMap,
 	})
 
 	useEffect(() => {
@@ -392,12 +391,20 @@ function AudioRecordingDetailPageDesktop() {
 				<ShareModal
 					open={shareControls.shareModalOpen}
 					onCancel={shareControls.closeShareModal}
-					shareMode={ShareMode.Project}
+					shareMode={ShareMode.File}
+					projectId={projectId}
 					attachments={shareControls.attachments}
 					attachmentList={shareControls.attachmentList}
 					projectName={displayTitle}
 					defaultSelectedFileIds={shareControls.defaultSelectedFileIds}
 					types={[ShareType.PasswordProtected, ShareType.Organization, ShareType.Public]}
+					fileShareUiConfig={{
+						hideShareProjectToggle: true,
+						hideShowFileListSetting: true,
+						forceViewFileList: false,
+						lockShareProject: true,
+						useRecordingShareCreateTitle: true,
+					}}
 				/>
 			</div>
 		</RecordingDetailProvider>

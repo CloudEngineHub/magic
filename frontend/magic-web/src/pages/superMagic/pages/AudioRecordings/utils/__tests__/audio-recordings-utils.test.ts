@@ -18,6 +18,7 @@ vi.mock("@/utils/string", () => ({
 	formatTime: () => "mock-time",
 }))
 import {
+	applyClientSummaryFilter,
 	buildAudioProjectsQueryParams,
 	formatRecordingDuration,
 	isAudioProjectDetailReady,
@@ -96,6 +97,19 @@ describe("isAudioProjectPreviewReady", () => {
 				}),
 			),
 		).toBe(true)
+	})
+
+	it("blocks processing items before source content is ready", () => {
+		expect(
+			isAudioProjectPreviewReady(
+				createItem({
+					card_status: "processing",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "in_progress",
+				}),
+			),
+		).toBe(false)
 	})
 })
 
@@ -210,6 +224,37 @@ describe("isAudioProjectSummarizing", () => {
 				}),
 			),
 		).toBe(false)
+	})
+})
+
+describe("applyClientSummaryFilter", () => {
+	it("keeps processing items in the not_summarized tab", () => {
+		const filtered = applyClientSummaryFilter(
+			[
+				createItem({
+					id: "processing",
+					card_status: "processing",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "in_progress",
+				}),
+				createItem({
+					id: "not-summarized",
+					card_status: "not_summarized",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "completed",
+				}),
+				createItem({
+					id: "summarized",
+					card_status: "summarized",
+					is_summarized: true,
+				}),
+			],
+			"not_summarized",
+		)
+
+		expect(filtered.map((item) => item.id)).toEqual(["processing", "not-summarized"])
 	})
 })
 

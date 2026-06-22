@@ -710,7 +710,9 @@ describe("useMobileRecordingEntryFacade", () => {
 
 		expect(result.current.optimisticItems[0]).toMatchObject({
 			id: "project-mobile-manual",
-			card_status: "not_summarized",
+			card_status: "processing",
+			current_phase: "merging",
+			phase_status: "in_progress",
 		})
 	})
 })

@@ -7,8 +7,6 @@ import {
 	FolderClosed,
 	RefreshCw,
 	Search,
-	Settings,
-	Upload,
 	X,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -27,7 +25,6 @@ import type {
 	AudioProjectSortOrder,
 	AudioRecordingSummaryFilter,
 } from "@/types/audioProject"
-import AudioUploadAction from "@/components/business/RecordingSummary/AudioUploadAction"
 import type { AudioRecordingsDatePreset } from "../utils/resolve-date-preset-range"
 import {
 	ALL_RECORDING_GROUP_ID,
@@ -70,8 +67,6 @@ interface AudioRecordingsFiltersProps {
 	onSearchCompositionStart: () => void
 	onSearchCompositionEnd: () => void
 	onRefresh: () => void
-	onOpenSettings: () => void
-	onImportFiles?: (files: FileList) => void
 }
 
 /** Builds a stable sort option key from field and direction */
@@ -471,7 +466,7 @@ function RefreshButton({
 	)
 }
 
-/** Single-row filter bar: group filter on the left; date, status, sort, search, refresh, import and settings on the right */
+/** Query-only toolbar for desktop list filters; creation actions live in the header action cluster. */
 function AudioRecordingsFilters({
 	summaryFilter,
 	datePreset,
@@ -493,11 +488,7 @@ function AudioRecordingsFilters({
 	onSearchCompositionStart,
 	onSearchCompositionEnd,
 	onRefresh,
-	onOpenSettings,
-	onImportFiles,
 }: AudioRecordingsFiltersProps) {
-	const { t } = useTranslation("audioRecordings")
-
 	return (
 		<div
 			className="w-full min-w-0 rounded-lg bg-muted/50 px-4 py-2.5 dark:bg-white/5"
@@ -536,40 +527,8 @@ function AudioRecordingsFilters({
 						onSearchCompositionStart={onSearchCompositionStart}
 						onSearchCompositionEnd={onSearchCompositionEnd}
 					/>
+					{/* Refresh stays inside the filter bar because it re-fetches the active query state. */}
 					<RefreshButton isRefreshing={isRefreshing} onRefresh={onRefresh} />
-
-					{/* Audio File Import action — placed before settings per PC toolbar layout */}
-					{onImportFiles ? (
-						<AudioUploadAction
-							handler={(onUpload) => (
-								<Button
-									type="button"
-									variant="outline"
-									size="icon"
-									onClick={onUpload}
-									className="size-8 shrink-0 rounded-lg bg-background text-foreground shadow-xs"
-									aria-label={t("card.sourceImported")}
-									data-testid="audio-recordings-import-button"
-								>
-									<Upload className="size-3.5" />
-								</Button>
-							)}
-							onFileChange={onImportFiles}
-						/>
-					) : null}
-
-					{/* Settings trigger */}
-					<Button
-						type="button"
-						variant="outline"
-						size="icon"
-						onClick={onOpenSettings}
-						className="size-8 shrink-0 rounded-lg bg-background shadow-xs"
-						aria-label={t("super:mobile.recordingEntry.settings.title")}
-						data-testid="audio-recordings-settings-button"
-					>
-						<Settings className="size-3.5" />
-					</Button>
 				</div>
 			</div>
 		</div>

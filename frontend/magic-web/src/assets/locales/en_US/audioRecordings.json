@@ -12,6 +12,7 @@
 		"renamePlaceholder": "Enter recording title",
 		"renameSuccess": "Renamed successfully",
 		"renameTitle": "Rename",
+		"startRecording": "Start Recording",
 		"submitting": "Submitting..."
 	},
 	"card": {
@@ -23,6 +24,7 @@
 		"moveToGroup": "Move to group",
 		"notSummarized": "Not summarized",
 		"openProject": "View project details",
+		"processing": "Processing",
 		"rename": "Rename",
 		"retryUpload": "Retry",
 		"retrySummary": "Retry summary",
@@ -149,6 +151,17 @@
 		"missingModel": "Unable to load summary model. Please try again later.",
 		"missingParams": "Missing parameters required for summary. Please refresh the list.",
 		"submitFailed": "Failed to submit summary. Please try again later."
+	},
+	"share": {
+		"contentLabel": "Share content",
+		"collapseSummary": "Collapse summary options",
+		"expandSummary": "Expand summary options",
+		"items": {
+			"audio": "Recording",
+			"notes": "Notes",
+			"summaryRoot": "Summary",
+			"transcript": "Transcript"
+		}
 	},
 	"title": "Recordings & summaries"
 }

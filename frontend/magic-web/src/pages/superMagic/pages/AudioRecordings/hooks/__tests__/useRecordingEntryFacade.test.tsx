@@ -60,6 +60,11 @@ const {
 		},
 		recordSummaryStoreMock: {
 			status: "init",
+			isVisible: false,
+			isOtherTabRecording: false,
+			floatPanel: {
+				setExpanded: vi.fn(),
+			},
 			message: [] as Array<VoiceResultUtterance & { add_time: number; id: string }>,
 			note: { content: "", file_extension: "md" },
 			errorState: {
@@ -280,6 +285,8 @@ describe("useRecordingEntryFacade", () => {
 		recordSummaryServiceMock.on.mockReset()
 		recordSummaryServiceMock.on.mockImplementation(() => () => undefined)
 		recordSummaryStoreMock.status = "init"
+		recordSummaryStoreMock.isVisible = false
+		recordSummaryStoreMock.floatPanel.setExpanded.mockReset()
 		recordSummaryStoreMock.message = []
 		recordSummaryStoreMock.note = { content: "", file_extension: "md" }
 		recordSummaryStoreMock.errorState.recordingError = undefined
@@ -356,16 +363,16 @@ describe("useRecordingEntryFacade", () => {
 		})
 	})
 
-	it("defaults to recording presentation when a shared session is already active", async () => {
+	it("keeps list presentation on desktop when a shared session is already active", async () => {
 		recordSummaryStoreMock.status = "recording"
 
 		const { result } = renderHook(() => useRecordingEntryFacade())
 
-		expect(result.current.presentation).toBe("recording")
+		expect(result.current.presentation).toBe("list")
 		expect(result.current.isSessionActive).toBe(true)
 	})
 
-	it("starts recording with a new audio project context and switches to recording presentation", async () => {
+	it("starts recording with a new audio project context and keeps list presentation on desktop", async () => {
 		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		await act(async () => {
@@ -393,7 +400,40 @@ describe("useRecordingEntryFacade", () => {
 				model: expect.objectContaining({ model_id: "model-alpha" }),
 			}),
 		)
-		expect(result.current.presentation).toBe("recording")
+		expect(result.current.presentation).toBe("list")
+	})
+
+	it("reveals the desktop FloatPanel while recorder startup is still pending", async () => {
+		runtimeMock.actions.startRecording.mockImplementation(() => new Promise(() => undefined))
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		act(() => {
+			void result.current.startRecording()
+		})
+		await act(async () => {
+			await Promise.resolve()
+		})
+
+		expect(recordSummaryStoreMock.isVisible).toBe(true)
+		expect(recordSummaryStoreMock.floatPanel.setExpanded).toHaveBeenCalledWith(true)
+		expect(result.current.presentation).toBe("list")
+	})
+
+	it("re-expands the desktop FloatPanel when startRecording is called during an active session", async () => {
+		recordSummaryStoreMock.status = "recording"
+		recordSummaryStoreMock.isVisible = false
+		recordSummaryStoreMock.floatPanel.setExpanded.mockClear()
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(recordSummaryStoreMock.isVisible).toBe(true)
+		expect(recordSummaryStoreMock.floatPanel.setExpanded).toHaveBeenCalledWith(true)
+		expect(result.current.presentation).toBe("list")
 	})
 
 	it("collapses back to list presentation without stopping the shared session", async () => {
@@ -549,7 +589,7 @@ describe("useRecordingEntryFacade", () => {
 
 		await startPromise
 
-		expect(result.current.presentation).toBe("recording")
+		expect(result.current.presentation).toBe("list")
 		expect(result.current.startupState).toBe("error")
 		expect(result.current.startupErrorMessage).toBe(
 			"mobile.recordingEntry.active.startTimedOut",
@@ -723,9 +763,9 @@ describe("useRecordingEntryFacade", () => {
 
 		expect(result.current.optimisticItems[0]).toMatchObject({
 			id: "project-manual-summary",
-			card_status: "not_summarized",
+			card_status: "processing",
 			current_phase: "merging",
-			phase_status: "completed",
+			phase_status: "in_progress",
 			task_key: "session-web-mock-manual-summary-task",
 		})
 	})

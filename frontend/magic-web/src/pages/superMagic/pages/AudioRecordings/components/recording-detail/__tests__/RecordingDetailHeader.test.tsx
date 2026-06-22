@@ -6,6 +6,28 @@ import {
 	RECORDING_DETAIL_HEADER_TEXT_ACTION_CLASS,
 } from "../RecordingDetailHeaderActionMenu"
 
+const localStorageMock = vi.hoisted(() => ({
+	getItem: vi.fn(),
+	setItem: vi.fn(),
+	removeItem: vi.fn(),
+	clear: vi.fn(),
+	key: vi.fn(),
+	length: 0,
+}))
+
+Object.defineProperty(globalThis, "localStorage", {
+	value: localStorageMock,
+	writable: true,
+})
+
+vi.mock("@/models/config/stores/theme.store", () => ({
+	themeStore: {
+		theme: "light",
+		syncDocumentDarkClass: vi.fn(),
+		setTheme: vi.fn(),
+	},
+}))
+
 vi.mock("../RecordingDetailProvider", () => ({
 	useRecordingDetailCapabilities: () => ({
 		canRename: true,
@@ -150,6 +172,59 @@ describe("RecordingDetailHeader action styling", () => {
 			"h-9",
 			"text-[13px]",
 		)
+	})
+
+	it("hides generate summary CTA while summary generation is in progress", () => {
+		render(
+			<RecordingDetailHeader
+				{...baseProps}
+				projectItem={{
+					...baseProps.projectItem,
+					card_status: "summarizing",
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+				}}
+				canGenerateSummary={false}
+			/>,
+		)
+
+		expect(screen.queryByTestId("recording-detail-generate-summary")).not.toBeInTheDocument()
+	})
+
+	it("shows generate summary CTA when manual summary can be submitted", () => {
+		render(
+			<RecordingDetailHeader
+				{...baseProps}
+				projectItem={{
+					...baseProps.projectItem,
+					card_status: "not_summarized",
+					current_phase: "merging",
+					phase_status: "completed",
+				}}
+				canGenerateSummary
+			/>,
+		)
+
+		expect(screen.getByTestId("recording-detail-generate-summary")).toHaveTextContent(
+			"Generate summary",
+		)
+	})
+
+	it("shows summary CTA again when summary generation failed", () => {
+		render(
+			<RecordingDetailHeader
+				{...baseProps}
+				projectItem={{
+					...baseProps.projectItem,
+					card_status: "summary_failed",
+					current_phase: "summarizing",
+					phase_status: "failed",
+				}}
+				canGenerateSummary
+			/>,
+		)
+
+		expect(screen.getByTestId("recording-detail-generate-summary")).toBeInTheDocument()
 	})
 
 	it("passes export callbacks to the header contract", () => {

@@ -81,6 +81,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 		projectId,
 		onCancelShare,
 		onSaveSuccess,
+		fileShareUiConfig,
 	} = props
 
 	// Check if user is in free plan
@@ -222,11 +223,14 @@ export default memo(function ShareModel(props: ShareModalProps) {
 
 	// Generate title based on sharing mode
 	const modalTitle = useMemo(() => {
+		if (fileShareUiConfig?.useRecordingShareCreateTitle) {
+			return t("share.recordingShareCreateTitle")
+		}
 		if (shareMode === ShareMode.File || shareMode === ShareMode.Project) {
 			return t("share.shareFile")
 		}
 		return t("share.shareTopic")
-	}, [shareMode, t])
+	}, [fileShareUiConfig?.useRecordingShareCreateTitle, shareMode, t])
 	const topicShareSubtitle = topicTitle?.trim()
 
 	const handleCancel = useCallback(
@@ -378,6 +382,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 							shareMode={shareMode}
 							projectName={projectName}
 							projectId={projectId}
+							fileShareUiConfig={fileShareUiConfig}
 							onCancel={handleCancel}
 							onSaveSuccess={(data) => {
 								// 设置成功数据并显示 ShareSuccessModal
@@ -438,6 +443,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 							shareMode={shareMode}
 							projectName={projectName}
 							projectId={projectId}
+							fileShareUiConfig={fileShareUiConfig}
 							onCancel={handleCancel}
 							onSaveSuccess={(data) => {
 								// 设置成功数据并显示 ShareSuccessModal

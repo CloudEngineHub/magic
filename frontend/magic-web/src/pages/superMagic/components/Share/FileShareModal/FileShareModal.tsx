@@ -7,7 +7,13 @@ import { loadProjectAttachments } from "@/pages/superMagic/services"
 import FileSelector from "../FileSelector"
 import MobileFileSelectorPopup from "./MobileFileSelectorPopup"
 import FileShareModalFooter from "./FileShareModalFooter"
-import { ShareType, ShareMode, ResourceType, type ShareExtraData } from "../types"
+import {
+	ShareType,
+	ShareMode,
+	ResourceType,
+	type ShareExtraData,
+	type FileShareUiConfig,
+} from "../types"
 import useStyles from "./style"
 import { findFileInTree, calculateActualFileCount } from "../FileSelector/utils"
 import { useResponsive, useDebounceFn } from "ahooks"
@@ -58,6 +64,7 @@ interface FileShareModalProps {
 		fileIds?: string[] // 文件ID列表，用于查询文件详情
 	}) => void // 保存成功回调，传递成功数据
 	onCancelShareSuccess?: () => void // 取消分享成功回调
+	fileShareUiConfig?: FileShareUiConfig
 }
 
 export default memo(function FileShareModal(props: FileShareModalProps) {
@@ -74,7 +81,16 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		onCancel,
 		onSaveSuccess,
 		onCancelShareSuccess,
+		fileShareUiConfig,
 	} = props
+
+	const {
+		hideShareProjectToggle = false,
+		hideShowFileListSetting = false,
+		forceViewFileList,
+		showSelectAll = false,
+		lockShareProject = false,
+	} = fileShareUiConfig ?? {}
 
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
@@ -102,16 +118,25 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const [shareType, setShareType] = useState<ShareType>(
 		isFreePlan ? ShareType.Public : ShareType.PasswordProtected,
 	)
-	const [shareProject, setShareProject] = useState<boolean>(shareMode === ShareMode.Project) // 根据 shareMode 初始化
+	const [shareProject, setShareProject] = useState<boolean>(
+		lockShareProject ? false : shareMode === ShareMode.Project,
+	)
 	const [extraData, setExtraData] = useState<ShareExtraData>({
 		passwordEnabled: isFreePlan ? false : true,
 		password: shareType === ShareType.PasswordProtected ? generateSharePassword() : "",
 		allowCopy: true,
-		showFileList: true,
+		showFileList: forceViewFileList ?? true,
 		hideCreatorInfo: false,
 		allowDownloadProjectFile: true,
 		showOriginalInfo: true,
 	})
+
+	const effectiveShareProject = lockShareProject ? false : shareProject
+	const effectiveViewFileList =
+		forceViewFileList !== undefined ? forceViewFileList : (extraData.showFileList ?? true)
+	const advancedHiddenSettingKeys = hideShowFileListSetting
+		? (["showFileList"] as const)
+		: undefined
 
 	// State: resource ID (use external if provided, otherwise fetch and cache)
 	const [resourceId, setResourceId] = useState<string | undefined>(externalResourceId)
@@ -256,11 +281,11 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	// Statistics - 计算实际文件数量（递归统计并去重）
 	const actualFileCount = useMemo(() => {
 		// 如果分享了整个项目，返回附件列表的长度
-		if (shareProject) {
+		if (effectiveShareProject) {
 			return attachmentList.filter((item) => !item.is_hidden && !item.is_directory)?.length
 		}
 		return calculateActualFileCount(selectedFiles)
-	}, [selectedFiles, shareProject, attachmentList])
+	}, [selectedFiles, effectiveShareProject, attachmentList])
 
 	// Handle file selection change
 	const handleFileSelectionChange = useCallback((fileIds: string[], files: any[]) => {
@@ -362,6 +387,8 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	// 处理项目分享开关变化
 	const handleShareProjectChange = useCallback(
 		(checked: boolean) => {
+			if (lockShareProject) return
+
 			if (checked) {
 				// 开启项目分享，需要二次确认
 				MagicModal.confirm({
@@ -381,7 +408,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				updateShareNameOnToggle(false)
 			}
 		},
-		[t, updateShareNameOnToggle],
+		[t, updateShareNameOnToggle, lockShareProject],
 	)
 
 	// Sync external resourceId to internal state
@@ -493,14 +520,14 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				passwordEnabled: !!settingsData?.password,
 				password: settingsData?.password || "",
 				allowCopy: extra?.allow_copy_project_files ?? true,
-				showFileList: extra?.view_file_list ?? true,
+				showFileList: forceViewFileList ?? extra?.view_file_list ?? true,
 				hideCreatorInfo: extra?.hide_created_by_super_magic ?? false,
 				showOriginalInfo: extra?.show_original_info ?? true,
 				allowDownloadProjectFile: extra?.allow_download_project_file ?? true,
 			})
 
 			// Load shareProject from top level field
-			setShareProject(settingsData?.share_project ?? false)
+			setShareProject(lockShareProject ? false : (settingsData?.share_project ?? false))
 
 			// Set default open file ID if exists
 			if (defaultOpenFileIdFromApi) {
@@ -553,7 +580,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		}
 
 		// 验证是否选择了文件
-		if (selectedFileIds.length === 0 && !shareProject) {
+		if (selectedFileIds.length === 0 && !effectiveShareProject) {
 			magicToast.warning(t("share.pleaseSelectFiles"))
 			return
 		}
@@ -594,10 +621,10 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				password: extraData.passwordEnabled ? extraData.password : undefined,
 				file_ids: selectedFileIds,
 				default_open_file_id: defaultOpenFileId || undefined,
-				share_project: shareProject, // 顶层字段
+				share_project: effectiveShareProject,
 				extra: {
 					allow_copy_project_files: extraData.allowCopy ?? true,
-					view_file_list: extraData.showFileList ?? true,
+					view_file_list: effectiveViewFileList,
 					hide_created_by_super_magic: extraData.hideCreatorInfo ?? false,
 					show_original_info: extraData.showOriginalInfo ?? true,
 					allow_download_project_file: extraData.allowDownloadProjectFile ?? true,
@@ -640,7 +667,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					mainFileName: apiResult?.main_file_name || t("share.untitled"),
 					shareName,
 					projectName: projectName,
-					shareProject: shareProject,
+					shareProject: effectiveShareProject,
 					shareUrl,
 					fileDisplayConfig,
 					t,
@@ -674,7 +701,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				expire_at: apiResult?.data?.expire_at || apiResult?.expire_at, // 使用后端返回的 expire_at
 				shareType: shareType,
 				resourceId: currentResourceId, // 传递 resourceId
-				shareProject: shareProject, // 传递 shareProject
+				shareProject: effectiveShareProject, // 传递 shareProject
 				projectName: projectName, // 传递项目原始名称
 				fileIds: apiResult?.file_ids || selectedFileIds, // 传递 file_ids
 			})
@@ -687,7 +714,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	}, [
 		shareName,
 		selectedFileIds,
-		shareProject,
+		effectiveShareProject,
 		t,
 		resourceId,
 		shareType,
@@ -802,7 +829,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 								defaultOpenFileId={defaultOpenFileId || undefined}
 								selectedFiles={selectedFiles}
 								attachments={attachments}
-								shareProject={shareProject}
+								shareProject={effectiveShareProject}
 								projectName={internalProjectName}
 							/>
 
@@ -847,6 +874,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 								}}
 								onChange={handleAdvancedSettingsChange}
 								mode={ShareMode.File}
+								hiddenSettingKeys={advancedHiddenSettingKeys}
 							/>
 						</div>
 					</div>
@@ -873,10 +901,12 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					selectedFileIds={selectedFileIds}
 					defaultOpenFileId={defaultOpenFileId || undefined}
 					onDefaultOpenFileChange={handleDefaultOpenFileChange}
-					disabled={shareProject}
+					disabled={effectiveShareProject}
 					allowSetDefaultOpen
-					shareProject={shareProject}
+					shareProject={effectiveShareProject}
 					onShareProjectChange={handleShareProjectChange}
+					hideShareProjectToggle={hideShareProjectToggle}
+					showSelectAll={showSelectAll}
 				/>
 			</>
 		)
@@ -887,26 +917,32 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		<div className="flex flex-col" data-testid="file-share-modal">
 			<div className={styles.body} data-testid="file-share-modal-body">
 				{/* Left: File selector - 单文件模式下不显示 */}
-				<div
-					className={styles.fileListSection}
-					style={{ width: leftPanelWidth }}
+				<div 
+					className={styles.fileListSection} 
+					style={{ width: leftPanelWidth }} 
 					data-testid="file-share-file-list-section"
 				>
-					{/* Share Project Switch */}
-					<div className="flex items-start gap-3 px-3 py-3 pb-0" data-testid="file-share-project-field">
-						<Switch checked={shareProject} onCheckedChange={handleShareProjectChange}  data-testid="handle-share-project-change"/>
-						<div className="flex flex-col gap-2">
-							<div className="text-sm font-medium leading-none text-foreground">
-								{t("share.shareProject")}
+					{!hideShareProjectToggle ? (
+						<>
+							<div className="flex items-start gap-3 px-3 py-3 pb-0">
+								<Switch
+									checked={shareProject}
+									onCheckedChange={handleShareProjectChange}
+									data-testid="handle-share-project-change"
+								/>
+								<div className="flex flex-col gap-2">
+									<div className="text-sm font-medium leading-none text-foreground">
+										{t("share.shareProject")}
+									</div>
+									<div className="text-xs leading-normal text-muted-foreground">
+										{t("share.shareProjectDescription")}
+									</div>
+								</div>
 							</div>
-							<div className="text-xs leading-normal text-muted-foreground">
-								{t("share.shareProjectDescription")}
-							</div>
-						</div>
-					</div>
 
-					{/* Separator */}
-					<Separator className="mx-3 mt-2" style={{ width: "auto" }} />
+							<Separator className="mx-3 mt-2" style={{ width: "auto" }} />
+						</>
+					) : null}
 
 					{/* File Selector */}
 					<FileSelector
@@ -916,8 +952,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 						defaultSelectedFileIds={defaultSelectedFileIds}
 						defaultOpenFileId={defaultOpenFileId || undefined}
 						onDefaultOpenFileChange={handleDefaultOpenFileChange}
-						disabled={shareProject}
+						disabled={effectiveShareProject}
 						allowSetDefaultOpen
+						showSelectAll={showSelectAll}
 						className={styles.fileSelector}
 					/>
 
@@ -940,7 +977,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 								defaultOpenFileId={defaultOpenFileId || undefined}
 								selectedFiles={selectedFiles}
 								attachments={attachments}
-								shareProject={shareProject}
+								shareProject={effectiveShareProject}
 								projectName={internalProjectName}
 							/>
 
@@ -985,6 +1022,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 								}}
 								onChange={handleAdvancedSettingsChange}
 								mode={ShareMode.File}
+								hiddenSettingKeys={advancedHiddenSettingKeys}
 							/>
 						</div>
 					</div>
@@ -998,7 +1036,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				onSave={handleSave}
 				onCancelShare={handleCancelShare}
 				isSaving={isSaving}
-				isDisabled={selectedFileIds.length === 0 && !shareProject}
+				isDisabled={selectedFileIds.length === 0 && !effectiveShareProject}
 			/>
 		</div>
 	)
