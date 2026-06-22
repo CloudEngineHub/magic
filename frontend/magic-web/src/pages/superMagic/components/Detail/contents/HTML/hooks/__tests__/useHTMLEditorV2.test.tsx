@@ -72,10 +72,9 @@ function createIframeRef() {
 interface TestHarnessProps {
 	isEditMode: boolean
 	contentInjected?: boolean
-	renderSiteUrl?: string
 }
 
-function TestHarness({ isEditMode, contentInjected = true, renderSiteUrl }: TestHarnessProps) {
+function TestHarness({ isEditMode, contentInjected = true }: TestHarnessProps) {
 	const iframeRef = useRef(createIframeRef().current)
 	const editorRef = useRef<HTMLEditorV2Ref>(null)
 
@@ -86,7 +85,6 @@ function TestHarness({ isEditMode, contentInjected = true, renderSiteUrl }: Test
 		sandboxType: "iframe",
 		iframeLoaded: true,
 		contentInjected,
-		renderSiteUrl,
 		targetOrigin: "*",
 		filePathMapping: new Map(),
 	})
@@ -141,7 +139,7 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 	})
 
 	it("keeps runtime ready when cross-domain ready arrives before content reinjection completes", async () => {
-		const { rerender } = render(<TestHarness isEditMode renderSiteUrl="https://render.test" />)
+		const { rerender } = render(<TestHarness isEditMode />)
 
 		await waitFor(() => expect(bridgeState.instances).toHaveLength(1))
 		act(() => {
@@ -155,13 +153,7 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 			])
 		})
 
-		rerender(
-			<TestHarness
-				isEditMode={false}
-				contentInjected={false}
-				renderSiteUrl="https://render.test"
-			/>,
-		)
+		rerender(<TestHarness isEditMode={false} contentInjected={false} />)
 
 		await waitFor(() => {
 			expect(bridgeState.requests).toEqual([
@@ -176,8 +168,8 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 			bridgeState.instances[0].emit("EDITOR_READY")
 		})
 
-		rerender(<TestHarness isEditMode={false} renderSiteUrl="https://render.test" />)
-		rerender(<TestHarness isEditMode renderSiteUrl="https://render.test" />)
+		rerender(<TestHarness isEditMode={false} />)
+		rerender(<TestHarness isEditMode />)
 
 		await waitFor(() => {
 			expect(bridgeState.requests).toEqual([

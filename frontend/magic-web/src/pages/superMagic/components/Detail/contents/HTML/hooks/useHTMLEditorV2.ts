@@ -171,7 +171,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		bridge.on("EDITOR_READY", () => {
 			console.log("[useHTMLEditorV2] iframe-runtime 已准备就绪")
 			// 跨域刷新时，ready 可能早于宿主状态恢复
-			if (!contentInjected || !contentInjectedRef.current) {
+			if (!contentInjectedRef.current) {
 				hasPendingRuntimeReadyRef.current = true
 			}
 			setIsRuntimeReady(true)
@@ -646,7 +646,14 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		// setContent 会替换 iframe 文档，shell 内联 runtime 会重新安装，需要再次发送激活消息。
 		if (contentInjected && !prevContentInjectedRef.current) {
 			hasInjectedScriptRef.current = false
-			setIsRuntimeReady(false)
+			if (hasPendingRuntimeReadyRef.current) {
+				// EDITOR_READY can arrive before the host flips contentInjected back to true;
+				// preserve that signal so edit mode does not wait for an event that already fired.
+				hasPendingRuntimeReadyRef.current = false
+				setIsRuntimeReady(true)
+			} else {
+				setIsRuntimeReady(false)
+			}
 		}
 		// 更新 prevContentInjectedRef
 		prevContentInjectedRef.current = contentInjected
