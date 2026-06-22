@@ -74,6 +74,7 @@ export function MobileRecordingSourcePanel({
 							{notesContent?.trim() ? (
 								<MobileRecordingMarkdownContent
 									content={notesContent}
+									layout="mobile"
 									speakerNameMap={speakerNameMap}
 									onSpeakerClick={onOpenSpeakerSettings}
 									onTimeClick={onSeek}

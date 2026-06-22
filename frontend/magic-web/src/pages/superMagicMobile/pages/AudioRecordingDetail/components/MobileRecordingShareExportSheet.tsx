@@ -14,9 +14,8 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { cn } from "@/lib/utils"
-import { SuperMagicApi } from "@/apis"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
+import { downloadRecordingAttachmentFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-attachment"
+import { downloadRecordingFilesBatch } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-batch"
 import { getAttachmentFileName } from "../utils/recording-detail-files"
 import type { RecordingDetailFileMap } from "../types"
 
@@ -142,36 +141,27 @@ export function MobileRecordingShareExportSheet({
 		}
 	}, [open, fileMap])
 
-	/** Shared downloader utilizing the temporary OSS link resolver. */
-	async function downloadAttachment(fileId: string, fileName: string) {
-		try {
-			const [urlItem] = await getTemporaryDownloadUrl({ file_ids: [fileId] })
-			if (!urlItem?.url) {
-				toast.error(t("detail.loadFailed"))
-				return false
-			}
-			await downloadFileWithAnchor(urlItem.url, fileName)
-			return true
-		} catch (error) {
-			console.error("Failed to download attachment:", error)
-			toast.error(t("detail.loadFailed"))
-			return false
-		}
-	}
-
 	/** Instantly downloads the original transcript Markdown file. */
 	async function handleDownloadTranscript() {
 		if (!fileMap?.transcript?.file_id) return
 		const fileName =
 			getAttachmentFileName(fileMap.transcript) || `${recordingName}_transcript.md`
-		await downloadAttachment(fileMap.transcript.file_id, fileName)
+		const ok = await downloadRecordingAttachmentFile({
+			fileId: fileMap.transcript.file_id,
+			fileName,
+		})
+		if (!ok) toast.error(t("detail.loadFailed"))
 	}
 
 	/** Instantly downloads the original notes Markdown file. */
 	async function handleDownloadNotes() {
 		if (!fileMap?.notes?.file_id) return
 		const fileName = getAttachmentFileName(fileMap.notes) || `${recordingName}_notes.md`
-		await downloadAttachment(fileMap.notes.file_id, fileName)
+		const ok = await downloadRecordingAttachmentFile({
+			fileId: fileMap.notes.file_id,
+			fileName,
+		})
+		if (!ok) toast.error(t("detail.loadFailed"))
 	}
 
 	/** Downloads all checked summary files (single download directly, multi-select triggers backend batch download). */
@@ -192,52 +182,15 @@ export function MobileRecordingShareExportSheet({
 
 		if (filesToDownload.length === 0) return
 
-		try {
-			if (filesToDownload.length === 1) {
-				const { fileId, fileName } = filesToDownload[0]
-				await downloadAttachment(fileId, fileName)
-			} else {
-				const toastId = toast.loading(
-					t("detail.packing", { defaultValue: "正在打包中..." }),
-				)
-				const fileIds = filesToDownload.map((f) => f.fileId)
-				const data = await SuperMagicApi.createBatchDownload({
-					file_ids: fileIds,
-					project_id: projectId,
-				})
-
-				if (data.status === "ready" && data.download_url) {
-					await downloadFileWithAnchor(data.download_url)
-					toast.dismiss(toastId)
-					toast.success(t("detail.packSuccess", { defaultValue: "打包下载成功" }))
-					return
-				}
-
-				if (data.status === "processing") {
-					const timer = setInterval(async () => {
-						try {
-							const checkData = await SuperMagicApi.checkBatchDownloadStatus(
-								data.batch_key,
-							)
-							if (checkData.status === "ready" && checkData.download_url) {
-								await downloadFileWithAnchor(checkData.download_url)
-								toast.dismiss(toastId)
-								toast.success(
-									t("detail.packSuccess", { defaultValue: "打包下载成功" }),
-								)
-								clearInterval(timer)
-							}
-						} catch (err) {
-							console.error("Checking batch download status failed:", err)
-							toast.dismiss(toastId)
-							toast.error(t("detail.loadFailed"))
-							clearInterval(timer)
-						}
-					}, 2000)
-				}
-			}
-		} catch (error) {
-			console.error("Failed to batch download summaries:", error)
+		const fileNameById = Object.fromEntries(
+			filesToDownload.map((file) => [file.fileId, file.fileName]),
+		)
+		const ok = await downloadRecordingFilesBatch({
+			fileIds: filesToDownload.map((file) => file.fileId),
+			projectId,
+			fileNameById,
+		})
+		if (!ok && filesToDownload.length === 1) {
 			toast.error(t("detail.loadFailed"))
 		}
 	}

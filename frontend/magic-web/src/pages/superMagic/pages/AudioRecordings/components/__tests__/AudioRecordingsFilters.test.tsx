@@ -11,11 +11,11 @@ vi.mock("react-i18next", () => ({
 				"filters.summaryAll": "All",
 				"filters.summaryNotDone": "Not summarized",
 				"filters.summaryDone": "Summarized",
-				"filters.dateRange": "Created",
-				"filters.dateAll": "All time",
-				"filters.dateLast7Days": "Last 7 days",
-				"filters.dateLast30Days": "Last 30 days",
-				"filters.dateLast90Days": "Last 90 days",
+				"super:mobile.recordingEntry.filterSheet.dateRange.label": "Date range",
+				"super:mobile.recordingEntry.filterSheet.dateRange.all": "All time",
+				"super:mobile.recordingEntry.filterSheet.dateRange.today": "Today",
+				"super:mobile.recordingEntry.filterSheet.dateRange.week": "Last 7 days",
+				"super:mobile.recordingEntry.filterSheet.dateRange.month": "Last 30 days",
 				"filters.sort": "Sort",
 				"filters.sortByUpdatedDesc": "By last updated",
 				"filters.sortByCreatedDesc": "By created time",
@@ -136,6 +136,15 @@ describe("AudioRecordingsFilters", () => {
 		fireEvent.click(screen.getByTestId("audio-recordings-summary-not_summarized"))
 
 		expect(onSummaryFilterChange).toHaveBeenCalledWith("not_summarized")
+	})
+
+	it("calls onDatePresetChange when a date menu item is selected", () => {
+		const { onDatePresetChange } = renderFilters()
+
+		fireEvent.click(screen.getByTestId("audio-recordings-date-filter"))
+		fireEvent.click(screen.getByTestId("audio-recordings-date-week"))
+
+		expect(onDatePresetChange).toHaveBeenCalledWith("week")
 	})
 
 	it("renders group switcher and supports changing group and opening group management", () => {

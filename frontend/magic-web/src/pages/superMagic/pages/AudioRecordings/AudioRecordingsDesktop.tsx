@@ -14,9 +14,9 @@ import AudioRecordingCard from "./components/AudioRecordingCard"
 import { AudioRecordingDeleteDialog } from "./components/AudioRecordingDeleteDialog"
 import { AudioRecordingRenameDialog } from "./components/AudioRecordingRenameDialog"
 import AudioRecordingsFilters, {
-	resolveDatePresetRange,
 	type AudioRecordingsDatePreset,
 } from "./components/AudioRecordingsFilters"
+import { resolveDatePresetRange } from "./utils/resolve-date-preset-range"
 import { audioRecordingsStore } from "./stores/audio-recordings-store"
 import { resolveRecordingDisplayName } from "./utils/audio-recordings-utils"
 import { useRecordingEntryFacade } from "./hooks/useRecordingEntryFacade"

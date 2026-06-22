@@ -34,11 +34,24 @@ function SettingsSwitchRow(props: {
 }) {
 	const { label, description, checked, onCheckedChange, showDivider = false, dataTestId } = props
 
+	/** Toggles the switch from row-level pointer or keyboard interaction. */
+	function handleToggle() {
+		onCheckedChange(!checked)
+	}
+
 	return (
 		<>
-			<button
-				type="button"
-				onClick={() => onCheckedChange(!checked)}
+			<div
+				role="button"
+				tabIndex={0}
+				onClick={handleToggle}
+				// Use div+role instead of button so Radix Switch (also a button) is not nested inside one.
+				onKeyDown={(event) => {
+					if (event.key === "Enter" || event.key === " ") {
+						event.preventDefault()
+						handleToggle()
+					}
+				}}
 				className="flex w-full items-start gap-3 px-3.5 py-3 text-left transition-opacity active:opacity-60"
 				data-testid={dataTestId}
 				aria-pressed={checked}
@@ -53,12 +66,11 @@ function SettingsSwitchRow(props: {
 				</div>
 				<Switch
 					checked={checked}
-					onCheckedChange={onCheckedChange}
 					className={MOBILE_RECORDING_SETTINGS_SWITCH_CLASSNAME}
 					tabIndex={-1}
 					aria-hidden
 				/>
-			</button>
+			</div>
 			{showDivider ? (
 				<div className="px-3.5">
 					<div className="h-px w-full bg-border" />

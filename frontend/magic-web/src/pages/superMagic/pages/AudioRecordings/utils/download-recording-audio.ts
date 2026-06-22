@@ -1,7 +1,6 @@
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { getAttachmentFileName } from "@/pages/superMagicMobile/pages/AudioRecordingDetail/utils/recording-detail-files"
+import { getAttachmentFileName } from "./recording-detail-files"
+import { downloadRecordingAttachmentFile } from "./download-recording-attachment"
 
 interface DownloadRecordingAudioParams {
 	fileId?: string
@@ -20,10 +19,9 @@ export async function downloadRecordingAudioFile({
 }: DownloadRecordingAudioParams): Promise<boolean> {
 	if (!fileId) return false
 
-	const [urlItem] = await getTemporaryDownloadUrl({ file_ids: [fileId] })
-	if (!urlItem?.url) return false
-
 	const preferredName = getAttachmentFileName(audioFile) || fallbackName
-	await downloadFileWithAnchor(urlItem.url, preferredName || undefined)
-	return true
+	return downloadRecordingAttachmentFile({
+		fileId,
+		fileName: preferredName || undefined,
+	})
 }

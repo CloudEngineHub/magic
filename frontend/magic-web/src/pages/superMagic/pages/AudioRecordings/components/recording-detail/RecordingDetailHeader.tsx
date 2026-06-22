@@ -15,10 +15,13 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuSeparator,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import { Input } from "@/components/shadcn-ui/input"
 import type { AudioProjectListItem } from "@/types/audioProject"
+import type { RecordingDetailFileMap } from "../../types/recording-detail"
 import {
 	formatRecordingCreatedTime,
 	formatRecordingDuration,
@@ -26,18 +29,30 @@ import {
 	isAudioProjectSummaryReady,
 	resolveRecordingSourceLabel,
 } from "../../utils/audio-recordings-utils"
+import { resolveSummaryTypeLabel } from "./resolve-summary-type-label"
 import {
 	RECORDING_DETAIL_HEADER_ICON_ACTION_CLASS,
 	RECORDING_DETAIL_HEADER_MENU_CONTENT_CLASS,
 	RECORDING_DETAIL_HEADER_PRIMARY_ACTION_CLASS,
 	RECORDING_DETAIL_HEADER_TEXT_ACTION_CLASS,
 	RecordingDetailHeaderMenuItem,
+	RecordingDetailHeaderSubMenuTrigger,
 } from "./RecordingDetailHeaderActionMenu"
 import { useRecordingDetailCapabilities } from "./RecordingDetailProvider"
+
+interface RecordingDetailExportAvailability {
+	hasAudio: boolean
+	hasTranscript: boolean
+	hasNotes: boolean
+	hasSummaryFiles: boolean
+	hasAnyExportable: boolean
+}
 
 interface RecordingDetailHeaderProps {
 	title: string
 	projectItem: AudioProjectListItem | null
+	fileMap: RecordingDetailFileMap | null
+	exportAvailability: RecordingDetailExportAvailability
 	canGenerateSummary: boolean
 	summarySubmitting: boolean
 	renaming?: boolean
@@ -45,7 +60,10 @@ interface RecordingDetailHeaderProps {
 	onRename: (name: string) => Promise<boolean>
 	onGenerateSummary: () => void
 	onExportAudio: () => void
-	onExportUnavailable: () => void
+	onExportTranscript: () => void
+	onExportNotes: () => void
+	onExportSummaryType: (type: string) => void
+	onExportAll: () => void
 	onCreateShare: () => void
 	onManageShare: () => void
 	onMoveGroup: () => void
@@ -56,6 +74,8 @@ interface RecordingDetailHeaderProps {
 export function RecordingDetailHeader({
 	title,
 	projectItem,
+	fileMap,
+	exportAvailability,
 	canGenerateSummary,
 	summarySubmitting,
 	renaming = false,
@@ -63,7 +83,10 @@ export function RecordingDetailHeader({
 	onRename,
 	onGenerateSummary,
 	onExportAudio,
-	onExportUnavailable,
+	onExportTranscript,
+	onExportNotes,
+	onExportSummaryType,
+	onExportAll,
 	onCreateShare,
 	onManageShare,
 	onMoveGroup,
@@ -200,24 +223,60 @@ export function RecordingDetailHeader({
 									data-testid="recording-detail-export-trigger"
 								>
 									<Download className="size-4" />
-									{t("detail.exportSection")}
+									{t("detail.export")}
 								</button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent
 								align="end"
 								className={RECORDING_DETAIL_HEADER_MENU_CONTENT_CLASS}
 							>
-								<RecordingDetailHeaderMenuItem onClick={() => void onExportAudio()}>
-									{t("detail.exportRecording")}
+								<RecordingDetailHeaderMenuItem
+									disabled={!exportAvailability.hasAudio}
+									onClick={() => void onExportAudio()}
+								>
+									{t("detail.exportAudio")}
 								</RecordingDetailHeaderMenuItem>
-								<RecordingDetailHeaderMenuItem onClick={onExportUnavailable}>
+								<RecordingDetailHeaderMenuItem
+									disabled={!exportAvailability.hasTranscript}
+									onClick={() => void onExportTranscript()}
+								>
 									{t("detail.exportTranscript")}
 								</RecordingDetailHeaderMenuItem>
-								<RecordingDetailHeaderMenuItem onClick={onExportUnavailable}>
+								<RecordingDetailHeaderMenuItem
+									disabled={!exportAvailability.hasNotes}
+									onClick={() => void onExportNotes()}
+								>
 									{t("detail.exportNotes")}
 								</RecordingDetailHeaderMenuItem>
-								<RecordingDetailHeaderMenuItem onClick={onExportUnavailable}>
-									{t("detail.exportSummary")}
+								<DropdownMenuSub>
+									<RecordingDetailHeaderSubMenuTrigger
+										disabled={!exportAvailability.hasSummaryFiles}
+										data-testid="recording-detail-export-summary-sub"
+									>
+										{t("detail.exportSummary")}
+									</RecordingDetailHeaderSubMenuTrigger>
+									<DropdownMenuSubContent
+										className={RECORDING_DETAIL_HEADER_MENU_CONTENT_CLASS}
+									>
+										{fileMap?.summaryFiles.map((fileRef) => (
+											<RecordingDetailHeaderMenuItem
+												key={fileRef.type}
+												onClick={() =>
+													void onExportSummaryType(fileRef.type)
+												}
+											>
+												{resolveSummaryTypeLabel(fileRef.type)}
+											</RecordingDetailHeaderMenuItem>
+										))}
+									</DropdownMenuSubContent>
+								</DropdownMenuSub>
+								<DropdownMenuSeparator />
+								<RecordingDetailHeaderMenuItem
+									disabled={!exportAvailability.hasAnyExportable}
+									onClick={() => void onExportAll()}
+									data-testid="recording-detail-export-all"
+								>
+									{t("detail.exportAll")}
 								</RecordingDetailHeaderMenuItem>
 							</DropdownMenuContent>
 						</DropdownMenu>

@@ -3,9 +3,10 @@ import type {
 	AudioProjectSortOrder,
 	AudioRecordingSummaryFilter,
 } from "@/types/audioProject"
+import type { AudioRecordingsDatePreset } from "@/pages/superMagic/pages/AudioRecordings/utils/resolve-date-preset-range"
 
-/** Prototype-aligned date presets — no custom range on mobile */
-export type MobileAudioRecordingsDatePreset = "all" | "today" | "week" | "month"
+/** Prototype-aligned date presets — shared with PC list filters */
+export type MobileAudioRecordingsDatePreset = AudioRecordingsDatePreset
 
 /** Mobile list supports the same two sort options as PC V1 */
 export type MobileAudioRecordingsSortOption = "updated_at_desc" | "created_at_desc"

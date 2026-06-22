@@ -9,7 +9,7 @@ interface RecordingDetailWorkbenchProps {
 export function RecordingDetailWorkbench({ left, right }: RecordingDetailWorkbenchProps) {
 	return (
 		<div
-			className="grid min-h-0 flex-1 grid-cols-[400px_minmax(0,1fr)] gap-6 px-8 pb-8"
+			className="grid min-h-0 flex-1 grid-cols-[400px_minmax(0,1fr)] gap-6 px-8 pb-8 duration-300 animate-in fade-in"
 			data-testid="recording-detail-workbench"
 		>
 			<div className="flex min-h-0 flex-col gap-4">{left}</div>

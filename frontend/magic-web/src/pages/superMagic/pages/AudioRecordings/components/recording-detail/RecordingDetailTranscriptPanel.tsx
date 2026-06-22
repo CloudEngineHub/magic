@@ -5,6 +5,7 @@ import type { RecordingTranscriptSegment } from "../../types/recording-detail"
 import { formatRecordingTime } from "../../utils/time"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
+import { RecordingDetailRegionEmptySlot } from "./RecordingDetailRegionEmptySlot"
 import { useRecordingDetailCapabilities } from "./RecordingDetailProvider"
 
 interface RecordingDetailTranscriptPanelProps {
@@ -68,7 +69,9 @@ export function RecordingDetailTranscriptPanel({
 				contentDeps={[segments.length]}
 			>
 				{segments.length === 0 ? (
-					<RecordingDetailEmptyState variant="noTranscript" compact />
+					<RecordingDetailRegionEmptySlot>
+						<RecordingDetailEmptyState variant="noTranscript" compact />
+					</RecordingDetailRegionEmptySlot>
 				) : (
 					<div ref={listRef} className="flex flex-col gap-3 pb-4">
 						{segments.map((segment) => {
@@ -121,34 +124,7 @@ export function RecordingDetailTranscriptPanel({
 	)
 }
 
-/** Palette tokens for speaker chips — aligned with legacy HTML detail palette order. */
-const SPEAKER_CHIP_STYLES = [
-	{ chip: "border-blue-200 bg-blue-50", dot: "bg-blue-500" },
-	{ chip: "border-orange-200 bg-orange-50", dot: "bg-orange-500" },
-	{ chip: "border-emerald-200 bg-emerald-50", dot: "bg-emerald-500" },
-	{ chip: "border-violet-200 bg-violet-50", dot: "bg-violet-500" },
-	{ chip: "border-rose-200 bg-rose-50", dot: "bg-rose-500" },
-	{ chip: "border-sky-200 bg-sky-50", dot: "bg-sky-500" },
-] as const
-
-/** Resolves stable chip colors for a speaker id so repeated speakers stay visually consistent. */
-function resolveSpeakerChipStyle(speakerId: string) {
-	const speakerNumberMatch = speakerId.match(/Speaker-(\d+)/i)
-	const paletteIndex = speakerNumberMatch
-		? Math.max(0, Number(speakerNumberMatch[1]) - 1)
-		: hashSpeakerId(speakerId)
-
-	return SPEAKER_CHIP_STYLES[paletteIndex % SPEAKER_CHIP_STYLES.length]
-}
-
-/** Builds a deterministic palette index for non-standard speaker ids. */
-function hashSpeakerId(speakerId: string) {
-	let hash = 0
-	for (let index = 0; index < speakerId.length; index += 1) {
-		hash = (hash + speakerId.charCodeAt(index)) % SPEAKER_CHIP_STYLES.length
-	}
-	return hash
-}
+import { resolveSpeakerChipStyle } from "../../utils/resolve-speaker-chip-style"
 
 /** Renders a prototype-style speaker pill; opens settings on click when editing is allowed. */
 function TranscriptSpeakerChip({

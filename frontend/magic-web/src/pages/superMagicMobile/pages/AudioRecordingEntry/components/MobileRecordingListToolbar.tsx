@@ -54,7 +54,7 @@ export function MobileRecordingListToolbar({
 	if (searchOpen) {
 		return (
 			<div
-				className={cn("flex h-11 shrink-0 items-center px-3", lucideStrokeClass)}
+				className={cn("flex h-11 shrink-0 items-center", lucideStrokeClass)}
 				data-testid="mobile-recording-toolbar-search"
 			>
 				<MobileBottomSearchBar
@@ -76,10 +76,7 @@ export function MobileRecordingListToolbar({
 
 	return (
 		<div
-			className={cn(
-				"flex h-11 shrink-0 items-center justify-between px-3",
-				lucideStrokeClass,
-			)}
+			className={cn("flex h-11 shrink-0 items-center justify-between", lucideStrokeClass)}
 			data-testid="mobile-recording-toolbar"
 		>
 			<button

@@ -199,6 +199,7 @@ function SummaryContent({
 		<div className="pb-8">
 			<MobileRecordingMarkdownContent
 				content={content}
+				layout="mobile"
 				speakerNameMap={speakerNameMap}
 				onSpeakerClick={onOpenSpeakerSettings}
 				onTimeClick={(time) => onTimeClick(time)}
@@ -303,6 +304,7 @@ function MindmapContent({
 				<div className="relative px-4 pb-8 pt-3">
 					<MobileRecordingMarkdownContent
 						content={content}
+						layout="mobile"
 						speakerNameMap={speakerNameMap}
 						onSpeakerClick={onOpenSpeakerSettings}
 						onTimeClick={(time) => onTimeClick(time)}
@@ -428,6 +430,7 @@ function TopicsContent({
 						) : null}
 						<MobileRecordingMarkdownContent
 							content={activeTopic.summaryText}
+							layout="mobile"
 							speakerNameMap={speakerNameMap}
 							onSpeakerClick={onOpenSpeakerSettings}
 							onTimeClick={(time) => onTimeClick(time)}

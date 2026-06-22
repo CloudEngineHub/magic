@@ -46,6 +46,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 					"detail.share": "Share",
 					"detail.tabs.notes": "Notes",
 					"detail.emptyTranscript": "No transcript",
+					"detail.emptyNotes": "No notes",
 					"detail.openSpeakerSettings": "Speaker settings",
 					"card.summarized": "Summarized",
 					"card.notSummarized": "Not summarized",
@@ -120,13 +121,23 @@ vi.mock("../hooks/useRecordingDetailActions", () => ({
 		moving: false,
 		summarySubmitting: false,
 		downloading: false,
+		exportAvailability: {
+			hasAudio: true,
+			hasTranscript: true,
+			hasNotes: false,
+			hasSummaryFiles: false,
+			hasAnyExportable: true,
+		},
 		canGenerateSummary: false,
 		renameProject: vi.fn().mockResolvedValue(true),
 		deleteProject: vi.fn(),
 		moveToGroup: vi.fn(),
 		submitSummary: vi.fn(),
 		downloadAudio: vi.fn(),
-		exportUnavailable: vi.fn(),
+		downloadTranscript: vi.fn(),
+		downloadNotes: vi.fn(),
+		downloadSummaryType: vi.fn(),
+		downloadAll: vi.fn(),
 	}),
 }))
 
@@ -213,7 +224,21 @@ describe("AudioRecordingDetailPage", () => {
 	it("shows empty transcript state while keeping workbench layout", () => {
 		render(<AudioRecordingDetailPage />)
 
-		expect(screen.getByTestId("recording-detail-empty-noTranscript")).toBeInTheDocument()
+		const transcriptEmpty = screen.getByTestId("recording-detail-empty-noTranscript")
+		expect(transcriptEmpty).toBeInTheDocument()
+		expect(
+			transcriptEmpty.closest('[data-testid="recording-detail-region-empty-slot"]'),
+		).toHaveClass("min-h-full", "items-center", "justify-center")
 		expect(screen.getByTestId("recording-detail-audio-player")).toBeInTheDocument()
+	})
+
+	it("centers empty notes state inside the right panel scroll region", () => {
+		render(<AudioRecordingDetailPage />)
+
+		const notesEmpty = screen.getByTestId("recording-detail-empty-noNotes")
+		expect(notesEmpty).toBeInTheDocument()
+		expect(
+			notesEmpty.closest('[data-testid="recording-detail-region-empty-slot"]'),
+		).toHaveClass("min-h-full", "items-center", "justify-center")
 	})
 })

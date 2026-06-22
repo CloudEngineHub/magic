@@ -17,6 +17,10 @@ vi.mock("../RecordingDetailProvider", () => ({
 	}),
 }))
 
+vi.mock("../resolve-summary-type-label", () => ({
+	resolveSummaryTypeLabel: (type: string) => `Summary ${type}`,
+}))
+
 vi.mock("react-i18next", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("react-i18next")>()
 	return {
@@ -25,12 +29,13 @@ vi.mock("react-i18next", async (importOriginal) => {
 			t: (key: string) => {
 				const labels: Record<string, string> = {
 					"detail.back": "Back",
-					"detail.exportSection": "Export",
-					"detail.share": "Share",
-					"detail.exportRecording": "Export recording",
+					"detail.export": "Export",
+					"detail.exportAudio": "Export audio",
 					"detail.exportTranscript": "Export transcript",
 					"detail.exportNotes": "Export notes",
 					"detail.exportSummary": "Export summary",
+					"detail.exportAll": "Export all",
+					"detail.share": "Share",
 					"detail.shareCreate": "Create share",
 					"detail.shareManage": "Manage share",
 					"card.generateSummary": "Generate summary",
@@ -59,13 +64,32 @@ const baseProps = {
 		audio_source: "recorded" as const,
 		workspace_id: "group-a",
 	},
+	fileMap: {
+		summaryFiles: [
+			{
+				type: "summary",
+				fileName: "summary.md",
+				file: { file_id: "summary-alpha", file_name: "summary.md" },
+			},
+		],
+	},
+	exportAvailability: {
+		hasAudio: true,
+		hasTranscript: true,
+		hasNotes: false,
+		hasSummaryFiles: true,
+		hasAnyExportable: true,
+	},
 	canGenerateSummary: true,
 	summarySubmitting: false,
 	onBack: vi.fn(),
 	onRename: vi.fn(async () => true),
 	onGenerateSummary: vi.fn(),
 	onExportAudio: vi.fn(),
-	onExportUnavailable: vi.fn(),
+	onExportTranscript: vi.fn(),
+	onExportNotes: vi.fn(),
+	onExportSummaryType: vi.fn(),
+	onExportAll: vi.fn(),
 	onCreateShare: vi.fn(),
 	onManageShare: vi.fn(),
 	onMoveGroup: vi.fn(),
@@ -97,6 +121,7 @@ describe("RecordingDetailHeader action styling", () => {
 		expect(screen.getByTestId("recording-detail-share-trigger")).toHaveClass(
 			...RECORDING_DETAIL_HEADER_TEXT_ACTION_CLASS.split(" "),
 		)
+		expect(screen.getByTestId("recording-detail-export-trigger")).toHaveTextContent("Export")
 	})
 
 	it("uses a bordered square trigger for more actions", () => {
@@ -125,5 +150,22 @@ describe("RecordingDetailHeader action styling", () => {
 			"h-9",
 			"text-[13px]",
 		)
+	})
+
+	it("passes export callbacks to the header contract", () => {
+		const onExportTranscript = vi.fn()
+		const onExportAll = vi.fn()
+
+		render(
+			<RecordingDetailHeader
+				{...baseProps}
+				onExportTranscript={onExportTranscript}
+				onExportAll={onExportAll}
+			/>,
+		)
+
+		expect(screen.getByTestId("recording-detail-export-trigger")).toBeInTheDocument()
+		expect(typeof onExportTranscript).toBe("function")
+		expect(typeof onExportAll).toBe("function")
 	})
 })

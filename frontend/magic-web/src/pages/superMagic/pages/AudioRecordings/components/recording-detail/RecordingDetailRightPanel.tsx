@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { RecordingDetailFileMap, RecordingDetailFileRef } from "../../types/recording-detail"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
+import { RecordingDetailRegionEmptySlot } from "./RecordingDetailRegionEmptySlot"
 import { RecordingDetailSummaryState } from "./RecordingDetailSummaryState"
 import { RecordingDetailTabStrip } from "./RecordingDetailTabStrip"
+import { RECORDING_DESKTOP_MD_CONTENT_CLASS } from "./recording-detail-layout"
 import { RecordingMarkdownContent } from "./RecordingMarkdownContent"
 import { RecordingSummaryContent } from "./RecordingSummaryContent"
 import { resolveSummaryTypeLabel } from "./resolve-summary-type-label"
@@ -26,7 +28,7 @@ interface RecordingDetailRightPanelProps {
 }
 
 /** Builds the dynamic right-panel tabs and renders summary/notes content or state placeholders. */
-export function RecordingDetailRightPanel({
+export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel({
 	fileMap,
 	summaryContent,
 	notesContent,
@@ -103,7 +105,6 @@ export function RecordingDetailRightPanel({
 						file={activeTab.file}
 						content={activeTab.content}
 						attachmentList={attachmentList}
-						emptyText={t("detail.emptySummaryFile")}
 						speakerNameMap={speakerNameMap}
 						onOpenSpeakerSettings={onOpenSpeakerSettings}
 						onTimeClick={onTimeClick}
@@ -114,7 +115,7 @@ export function RecordingDetailRightPanel({
 				<ScrollEdgeFadeContainer
 					fadeColor="card"
 					className="min-h-0 flex-1"
-					scrollClassName="px-4 py-4 [scrollbar-width:thin]"
+					scrollClassName="py-4 [scrollbar-width:thin]"
 					contentDeps={[
 						resolvedActiveKey,
 						activeTab?.kind,
@@ -125,21 +126,25 @@ export function RecordingDetailRightPanel({
 				>
 					{activeTab?.kind === "notes" ? (
 						notesContent?.trim() ? (
-							<RecordingMarkdownContent
-								content={notesContent}
-								speakerNameMap={speakerNameMap}
-								onSpeakerClick={onOpenSpeakerSettings}
-								onTimeClick={(time) => onTimeClick(time)}
-							/>
+							<div className={RECORDING_DESKTOP_MD_CONTENT_CLASS}>
+								<RecordingMarkdownContent
+									content={notesContent}
+									layout="desktop"
+									speakerNameMap={speakerNameMap}
+									onSpeakerClick={onOpenSpeakerSettings}
+									onTimeClick={(time) => onTimeClick(time)}
+								/>
+							</div>
 						) : (
-							<RecordingDetailEmptyState variant="noNotes" compact />
+							<RecordingDetailRegionEmptySlot>
+								<RecordingDetailEmptyState variant="noNotes" compact />
+							</RecordingDetailRegionEmptySlot>
 						)
 					) : activeTab ? (
 						<RecordingSummaryContent
 							file={activeTab.file}
 							content={activeTab.content}
 							attachmentList={attachmentList}
-							emptyText={t("detail.emptySummaryFile")}
 							speakerNameMap={speakerNameMap}
 							onOpenSpeakerSettings={onOpenSpeakerSettings}
 							onTimeClick={onTimeClick}
@@ -150,7 +155,7 @@ export function RecordingDetailRightPanel({
 			)}
 		</div>
 	)
-}
+})
 
 interface RightPanelTab {
 	key: string

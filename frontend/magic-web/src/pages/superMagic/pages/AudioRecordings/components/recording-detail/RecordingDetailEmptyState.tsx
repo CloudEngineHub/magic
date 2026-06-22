@@ -1,6 +1,7 @@
 import { FileAudio, FileText, Loader2, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/lib/utils"
 
 export type RecordingDetailEmptyVariant =
@@ -104,7 +105,7 @@ function resolveEmptyCopy(
 		return { title: t("detail.emptySummary"), description: "" }
 	}
 	if (variant === "noSummaryFile") {
-		return { title: t("detail.emptySummaryFile"), description: "" }
+		return { title: t("detail.emptySummary"), description: "" }
 	}
 	if (variant === "summaryPending") {
 		return { title: t("detail.notSummarized"), description: t("detail.notSummarizedHint") }
@@ -136,21 +137,124 @@ function resolveEmptyIcon(variant: RecordingDetailEmptyVariant) {
 	if (variant === "summaryGenerating") {
 		return <Loader2 className="size-5 animate-spin" />
 	}
-	if (variant === "summaryPending" || variant === "summaryFailed") {
+	if (
+		variant === "noSummary" ||
+		variant === "noSummaryFile" ||
+		variant === "summaryPending" ||
+		variant === "summaryFailed"
+	) {
 		return <Sparkles className="size-5" />
 	}
 	return null
 }
 
-/** Dual-column skeleton shown while the detail data hook is loading. */
+/** Waveform bar heights mirroring the collapsed audio bar seek strip. */
+const PLAYER_WAVEFORM_BAR_HEIGHTS = [
+	6, 10, 8, 12, 7, 11, 9, 13, 8, 10, 6, 12, 9, 11, 7, 10, 8, 13, 9, 11,
+]
+
+/** Transcript segment placeholders with meta row plus multi-line body. */
+const TRANSCRIPT_SEGMENT_SKELETONS = [
+	{ bodyLines: ["w-full", "w-[92%]"] },
+	{ bodyLines: ["w-[88%]", "w-[76%]", "w-[64%]"] },
+	{ bodyLines: ["w-full", "w-[84%]"] },
+	{ bodyLines: ["w-[72%]"] },
+] as const
+
+/** Skeleton placeholder aligned with the collapsed RecordingDetailAudioBar layout. */
+function RecordingDetailPlayerSkeleton() {
+	return (
+		<div
+			className="shrink-0 rounded-2xl border border-border bg-card"
+			data-testid="recording-detail-player-skeleton"
+		>
+			<div className="flex items-center gap-1.5 px-3 py-1.5">
+				<Skeleton className="size-7 shrink-0 rounded-full" />
+				<Skeleton className="h-3 w-16 shrink-0 rounded-sm" />
+				<div className="flex min-w-0 flex-1 items-center gap-px">
+					{PLAYER_WAVEFORM_BAR_HEIGHTS.map((height, index) => (
+						<Skeleton
+							key={index}
+							className="w-0.5 shrink-0 rounded-full"
+							style={{ height }}
+						/>
+					))}
+				</div>
+				<Skeleton className="size-7 shrink-0 rounded-full" />
+			</div>
+		</div>
+	)
+}
+
+/** Skeleton placeholder aligned with RecordingDetailTranscriptPanel header and segments. */
+function RecordingDetailTranscriptSkeleton() {
+	return (
+		<div
+			className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card"
+			data-testid="recording-detail-transcript-skeleton"
+		>
+			<div className="flex items-center justify-between border-b border-border px-4 py-3">
+				<Skeleton className="h-4 w-24 rounded-sm" />
+				<Skeleton className="h-8 w-20 rounded-md" />
+			</div>
+			<div className="flex min-h-[320px] flex-1 flex-col gap-3 px-4 py-3">
+				{TRANSCRIPT_SEGMENT_SKELETONS.map((segment, index) => (
+					<div key={index} className="rounded-xl px-3 py-2.5">
+						<div className="mb-1 flex items-center gap-2">
+							<Skeleton className="h-3 w-8 shrink-0 rounded-sm" />
+							<Skeleton className="h-5 w-16 rounded-full" />
+						</div>
+						<div className="space-y-1.5">
+							{segment.bodyLines.map((lineWidth, lineIndex) => (
+								<Skeleton
+									key={lineIndex}
+									className={cn("h-4 rounded-sm", lineWidth)}
+								/>
+							))}
+						</div>
+					</div>
+				))}
+			</div>
+		</div>
+	)
+}
+
+/** Skeleton placeholder for the right panel tab strip and summary content. */
+function RecordingDetailRightPanelSkeleton() {
+	return (
+		<div className="flex min-h-0 flex-col gap-4 rounded-[22px] border border-border bg-card p-5">
+			<div className="flex items-center gap-2">
+				<Skeleton className="h-8 w-16 rounded-full" />
+				<Skeleton className="h-8 w-20 rounded-full" />
+				<Skeleton className="h-8 w-24 rounded-full" />
+				<Skeleton className="h-8 w-14 rounded-full" />
+			</div>
+			<div className="flex min-h-0 flex-1 flex-col gap-3">
+				<Skeleton className="h-5 w-40 rounded-md" />
+				<Skeleton className="h-4 w-full rounded-sm" />
+				<Skeleton className="h-4 w-[92%] rounded-sm" />
+				<Skeleton className="h-4 w-[78%] rounded-sm" />
+				<Skeleton className="h-4 w-[86%] rounded-sm" />
+				<Skeleton className="h-4 w-[60%] rounded-sm" />
+			</div>
+		</div>
+	)
+}
+
+/** Dual-column skeleton with shimmer and fade-in while the detail data hook is loading. */
 export function RecordingDetailPageSkeleton() {
 	return (
-		<div className="grid min-h-0 flex-1 grid-cols-[400px_minmax(0,1fr)] gap-6 px-8 pb-8">
+		<div
+			className="grid min-h-0 flex-1 grid-cols-[400px_minmax(0,1fr)] gap-6 px-8 pb-8 duration-300 animate-in fade-in"
+			role="status"
+			aria-busy="true"
+			data-testid="recording-detail-page-skeleton"
+		>
 			<div className="flex min-h-0 flex-col gap-4">
-				<div className="h-36 animate-pulse rounded-2xl bg-muted" />
-				<div className="min-h-0 flex-1 animate-pulse rounded-2xl bg-muted" />
+				<RecordingDetailPlayerSkeleton />
+				<RecordingDetailTranscriptSkeleton />
 			</div>
-			<div className="min-h-0 animate-pulse rounded-[22px] border border-border bg-muted" />
+			<RecordingDetailRightPanelSkeleton />
 		</div>
 	)
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import useNavigate from "@/routes/hooks/useNavigate"
@@ -13,6 +13,12 @@ import {
 	submitAudioRecordingSummary,
 } from "../utils/audio-recording-actions"
 import { downloadRecordingAudioFile } from "../utils/download-recording-audio"
+import { downloadRecordingAttachmentFile } from "../utils/download-recording-attachment"
+import {
+	collectExportableFileIds,
+	downloadRecordingFilesBatch,
+	resolveExportableFileRefs,
+} from "../utils/download-recording-batch"
 import { getAttachmentFileName } from "../utils/recording-detail-files"
 import { canSubmitSummary } from "../utils/summary-action-utils"
 
@@ -20,13 +26,14 @@ interface UseRecordingDetailActionsInput {
 	projectId: string
 	projectItem: AudioProjectListItem | null
 	fileMap: RecordingDetailFileMap | null
+	recordingName: string
 	onProjectItemChange: (item: AudioProjectListItem) => void
 	onRefresh: () => Promise<void> | void
 }
 
 /** Facade for owner recording detail mutations shared by PC workbench header actions. */
 export function useRecordingDetailActions(input: UseRecordingDetailActionsInput) {
-	const { projectId, projectItem, fileMap, onProjectItemChange, onRefresh } = input
+	const { projectId, projectItem, fileMap, recordingName, onProjectItemChange, onRefresh } = input
 	const { t } = useTranslation("audioRecordings")
 	const navigate = useNavigate()
 	const [renaming, setRenaming] = useState(false)
@@ -34,6 +41,17 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 	const [moving, setMoving] = useState(false)
 	const [summarySubmitting, setSummarySubmitting] = useState(false)
 	const [downloading, setDownloading] = useState(false)
+
+	const exportAvailability = useMemo(
+		() => ({
+			hasAudio: Boolean(fileMap?.audio?.file_id),
+			hasTranscript: Boolean(fileMap?.transcript?.file_id),
+			hasNotes: Boolean(fileMap?.notes?.file_id),
+			hasSummaryFiles: Boolean(fileMap?.summaryFiles?.length),
+			hasAnyExportable: collectExportableFileIds(fileMap).length > 0,
+		}),
+		[fileMap],
+	)
 
 	const renameProject = useCallback(
 		async (name: string) => {
@@ -112,29 +130,78 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 		}
 	}, [onProjectItemChange, projectItem, t])
 
+	const runDownload = useCallback(
+		async (task: () => Promise<boolean>) => {
+			if (downloading) return false
+			setDownloading(true)
+			try {
+				const ok = await task()
+				if (!ok) toast.error(t("detail.loadFailed"))
+				return ok
+			} finally {
+				setDownloading(false)
+			}
+		},
+		[downloading, t],
+	)
+
 	const downloadAudio = useCallback(async () => {
 		const fileId = fileMap?.audio?.file_id
-		if (!fileId || downloading) return false
-		setDownloading(true)
-		try {
-			const ok = await downloadRecordingAudioFile({
+		if (!fileId) return false
+		return runDownload(() =>
+			downloadRecordingAudioFile({
 				fileId,
 				audioFile: fileMap?.audio,
 				fallbackName: getAttachmentFileName(fileMap?.audio),
-			})
-			if (!ok) {
-				toast.error(t("detail.audioNotFound"))
-				return false
-			}
-			return true
-		} finally {
-			setDownloading(false)
-		}
-	}, [downloading, fileMap?.audio, t])
+			}),
+		)
+	}, [fileMap?.audio, runDownload])
 
-	const exportUnavailable = useCallback(() => {
-		toast.message(t("detail.exportUnavailable"))
-	}, [t])
+	const downloadTranscript = useCallback(async () => {
+		const fileId = fileMap?.transcript?.file_id
+		if (!fileId) return false
+		const fileName =
+			getAttachmentFileName(fileMap?.transcript) || `${recordingName}_transcript.md`
+		return runDownload(() => downloadRecordingAttachmentFile({ fileId, fileName }))
+	}, [fileMap?.transcript, recordingName, runDownload])
+
+	const downloadNotes = useCallback(async () => {
+		const fileId = fileMap?.notes?.file_id
+		if (!fileId) return false
+		const fileName = getAttachmentFileName(fileMap?.notes) || `${recordingName}_notes.md`
+		return runDownload(() => downloadRecordingAttachmentFile({ fileId, fileName }))
+	}, [fileMap?.notes, recordingName, runDownload])
+
+	const downloadSummaryType = useCallback(
+		async (type: string) => {
+			const fileRef = fileMap?.summaryFiles.find((item) => item.type === type)
+			const fileId = fileRef?.file?.file_id
+			if (!fileId) return false
+			const fileName = getAttachmentFileName(fileRef.file) || `${recordingName}_${type}.md`
+			return runDownload(() => downloadRecordingAttachmentFile({ fileId, fileName }))
+		},
+		[fileMap?.summaryFiles, recordingName, runDownload],
+	)
+
+	const downloadAll = useCallback(async () => {
+		const fileIds = collectExportableFileIds(fileMap)
+		if (fileIds.length === 0) return false
+
+		const fileNameById = Object.fromEntries(
+			resolveExportableFileRefs(fileMap, recordingName).map((ref) => [
+				ref.fileId,
+				ref.fileName,
+			]),
+		)
+
+		return runDownload(() =>
+			downloadRecordingFilesBatch({
+				fileIds,
+				projectId,
+				fileNameById,
+			}),
+		)
+	}, [fileMap, projectId, recordingName, runDownload])
 
 	const canGenerateSummary = projectItem
 		? canSubmitSummary({
@@ -151,12 +218,16 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 		moving,
 		summarySubmitting,
 		downloading,
+		exportAvailability,
 		canGenerateSummary,
 		renameProject,
 		deleteProject,
 		moveToGroup,
 		submitSummary,
 		downloadAudio,
-		exportUnavailable,
+		downloadTranscript,
+		downloadNotes,
+		downloadSummaryType,
+		downloadAll,
 	}
 }

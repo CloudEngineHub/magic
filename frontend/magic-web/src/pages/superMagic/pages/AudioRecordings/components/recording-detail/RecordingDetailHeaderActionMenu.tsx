@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
-import { DropdownMenuItem } from "@/components/shadcn-ui/dropdown-menu"
+import { DropdownMenuItem, DropdownMenuSubTrigger } from "@/components/shadcn-ui/dropdown-menu"
 
 /** Shared trigger styles for export/share text actions in the detail header. */
 export const RECORDING_DETAIL_HEADER_TEXT_ACTION_CLASS =
@@ -22,7 +22,9 @@ interface RecordingDetailHeaderMenuItemProps {
 	icon?: ReactNode
 	children: ReactNode
 	className?: string
+	disabled?: boolean
 	onClick?: () => void
+	"data-testid"?: string
 }
 
 /** Normalizes dropdown row height/spacing to match the prototype action menu. */
@@ -30,10 +32,14 @@ export function RecordingDetailHeaderMenuItem({
 	icon,
 	children,
 	className,
+	disabled = false,
 	onClick,
+	"data-testid": dataTestId,
 }: RecordingDetailHeaderMenuItemProps) {
 	return (
 		<DropdownMenuItem
+			disabled={disabled}
+			data-testid={dataTestId}
 			className={cn(
 				"flex h-9 cursor-pointer items-center gap-2 px-3 text-[13px] font-medium leading-4",
 				className,
@@ -45,5 +51,31 @@ export function RecordingDetailHeaderMenuItem({
 			) : null}
 			<span className="min-w-0 flex-1 truncate">{children}</span>
 		</DropdownMenuItem>
+	)
+}
+
+/** Submenu parent row aligned with the primary export menu typography. */
+export function RecordingDetailHeaderSubMenuTrigger({
+	children,
+	disabled = false,
+	className,
+	"data-testid": dataTestId,
+}: {
+	children: ReactNode
+	disabled?: boolean
+	className?: string
+	"data-testid"?: string
+}) {
+	return (
+		<DropdownMenuSubTrigger
+			disabled={disabled}
+			data-testid={dataTestId}
+			className={cn(
+				"flex h-9 cursor-pointer items-center gap-2 px-3 text-[13px] font-medium leading-4",
+				className,
+			)}
+		>
+			<span className="min-w-0 flex-1 truncate">{children}</span>
+		</DropdownMenuSubTrigger>
 	)
 }

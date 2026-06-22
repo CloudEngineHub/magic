@@ -26,11 +26,13 @@ export function RecordingDetailSummaryState({
 
 	if (status === "failed") {
 		return (
-			<RecordingDetailEmptyState
-				variant="summaryFailed"
-				onAction={onGenerateSummary}
-				actionLabel={t("card.retrySummary")}
-			/>
+			<div className="flex h-full flex-col items-center justify-center gap-3">
+				<RecordingDetailEmptyState
+					variant="summaryFailed"
+					onAction={onGenerateSummary}
+					actionLabel={t("card.retrySummary")}
+				/>
+			</div>
 		)
 	}
 

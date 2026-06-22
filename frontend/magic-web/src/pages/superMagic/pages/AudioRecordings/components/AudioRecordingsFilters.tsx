@@ -27,15 +27,15 @@ import type {
 	AudioProjectSortOrder,
 	AudioRecordingSummaryFilter,
 } from "@/types/audioProject"
-import { toEndOfDayTimestamp, toStartOfDayTimestamp } from "../utils/audio-recordings-utils"
 import AudioUploadAction from "@/components/business/RecordingSummary/AudioUploadAction"
+import type { AudioRecordingsDatePreset } from "../utils/resolve-date-preset-range"
 import {
 	ALL_RECORDING_GROUP_ID,
 	UNGROUPED_RECORDING_GROUP_ID,
 } from "@/services/audioRecordings/RecordingGroupsConstants"
 import { resolveRecordingGroupDisplayName } from "@/services/audioRecordings/resolveRecordingGroupDisplayName"
 
-export type AudioRecordingsDatePreset = "all" | "last7" | "last30" | "last90"
+export type { AudioRecordingsDatePreset } from "../utils/resolve-date-preset-range"
 
 type AudioRecordingsSortOption = `${AudioProjectSortBy}_${AudioProjectSortOrder}`
 
@@ -72,27 +72,6 @@ interface AudioRecordingsFiltersProps {
 	onRefresh: () => void
 	onOpenSettings: () => void
 	onImportFiles?: (files: FileList) => void
-}
-
-/** Resolves date preset into unix second range for API filters */
-export function resolveDatePresetRange(preset: AudioRecordingsDatePreset): {
-	start?: number
-	end?: number
-} {
-	if (preset === "all") return {}
-
-	const now = new Date()
-	const end = toEndOfDayTimestamp(now)
-	const startDate = new Date(now)
-
-	if (preset === "last7") startDate.setDate(startDate.getDate() - 6)
-	if (preset === "last30") startDate.setDate(startDate.getDate() - 29)
-	if (preset === "last90") startDate.setDate(startDate.getDate() - 89)
-
-	return {
-		start: toStartOfDayTimestamp(startDate),
-		end,
-	}
 }
 
 /** Builds a stable sort option key from field and direction */
@@ -163,24 +142,28 @@ function AudioRecordingGroupFilter({
 				align="start"
 				className="max-h-[360px] min-w-[190px] overflow-y-auto"
 			>
-				{/* Virtual Item: All */}
+				{/* Menu items use text-sm to match other filter dropdowns in this bar */}
 				<DropdownMenuItem
 					onClick={() => onGroupChange(ALL_RECORDING_GROUP_ID)}
-					className="flex items-center justify-between gap-3 text-xs font-medium"
+					className="flex items-center justify-between gap-3 font-medium"
 					data-testid="audio-recordings-group-all"
 				>
 					<span>{t("super:mobile.recordingEntry.groupSheet.all")}</span>
-					<span className="text-[10px] text-muted-foreground">{totalGroupCount}</span>
+					<span className="text-xs tabular-nums text-muted-foreground">
+						{totalGroupCount}
+					</span>
 				</DropdownMenuItem>
 
 				{/* Virtual Item: Ungrouped */}
 				<DropdownMenuItem
 					onClick={() => onGroupChange(UNGROUPED_RECORDING_GROUP_ID)}
-					className="flex items-center justify-between gap-3 text-xs font-medium"
+					className="flex items-center justify-between gap-3 font-medium"
 					data-testid="audio-recordings-group-ungrouped"
 				>
 					<span>{t("super:mobile.recordingEntry.groupSheet.ungrouped")}</span>
-					<span className="text-[10px] text-muted-foreground">{ungroupedCount}</span>
+					<span className="text-xs tabular-nums text-muted-foreground">
+						{ungroupedCount}
+					</span>
 				</DropdownMenuItem>
 
 				{/* Custom folder items */}
@@ -188,13 +171,13 @@ function AudioRecordingGroupFilter({
 					<DropdownMenuItem
 						key={group.id}
 						onClick={() => onGroupChange(group.id)}
-						className="flex items-center justify-between gap-3 text-xs font-medium"
+						className="flex items-center justify-between gap-3 font-medium"
 						data-testid={`audio-recordings-group-custom-${group.id}`}
 					>
 						<span className="max-w-[120px] truncate">
 							{resolveRecordingGroupDisplayName(group.name, unnamedGroupLabel)}
 						</span>
-						<span className="text-[10px] text-muted-foreground">
+						<span className="text-xs tabular-nums text-muted-foreground">
 							{group.projectCount}
 						</span>
 					</DropdownMenuItem>
@@ -208,10 +191,10 @@ function AudioRecordingGroupFilter({
 						e.stopPropagation()
 						onManageGroups()
 					}}
-					className="flex items-center gap-2 text-xs font-semibold text-primary"
+					className="flex items-center gap-2 font-semibold text-primary"
 					data-testid="audio-recordings-group-manage-trigger"
 				>
-					<FolderClosed className="h-3.5 w-3.5" />
+					<FolderClosed className="h-4 w-4" />
 					<span>{t("super:mobile.recordingEntry.groupSheet.manageGroups")}</span>
 				</DropdownMenuItem>
 			</DropdownMenuContent>
@@ -277,6 +260,20 @@ function SummaryStatusFilter({
 	)
 }
 
+/** Mobile-aligned date presets shared across PC and H5 recording list filters */
+const DATE_PRESETS: AudioRecordingsDatePreset[] = ["all", "today", "week", "month"]
+
+/** Resolves each supported date preset to a literal i18n key for static locale analysis */
+function resolveDatePresetLabel(
+	preset: AudioRecordingsDatePreset,
+	t: (key: string) => string,
+): string {
+	if (preset === "all") return t("super:mobile.recordingEntry.filterSheet.dateRange.all")
+	if (preset === "today") return t("super:mobile.recordingEntry.filterSheet.dateRange.today")
+	if (preset === "week") return t("super:mobile.recordingEntry.filterSheet.dateRange.week")
+	return t("super:mobile.recordingEntry.filterSheet.dateRange.month")
+}
+
 /** Date preset dropdown styled like shared workspace filter controls */
 function DatePresetFilter({
 	datePreset,
@@ -285,21 +282,18 @@ function DatePresetFilter({
 	datePreset: AudioRecordingsDatePreset
 	onDatePresetChange: (value: AudioRecordingsDatePreset) => void
 }) {
-	const { t } = useTranslation("audioRecordings")
+	const { t } = useTranslation(["audioRecordings", "super"])
 
 	const dateOptions = useMemo(
 		() =>
-			[
-				{ value: "all", label: t("filters.dateAll") },
-				{ value: "last7", label: t("filters.dateLast7Days") },
-				{ value: "last30", label: t("filters.dateLast30Days") },
-				{ value: "last90", label: t("filters.dateLast90Days") },
-			] as const,
+			DATE_PRESETS.map((value) => ({
+				value,
+				label: resolveDatePresetLabel(value, t),
+			})),
 		[t],
 	)
 
-	const activeLabel =
-		dateOptions.find((option) => option.value === datePreset)?.label ?? t("filters.dateAll")
+	const activeLabel = resolveDatePresetLabel(datePreset, t)
 
 	return (
 		<DropdownMenu>
@@ -310,7 +304,9 @@ function DatePresetFilter({
 					data-testid="audio-recordings-date-filter"
 				>
 					<CalendarRange className="h-4 w-4 text-muted-foreground" />
-					<span className="text-xs text-muted-foreground">{t("filters.dateRange")}</span>
+					<span className="text-xs text-muted-foreground">
+						{t("super:mobile.recordingEntry.filterSheet.dateRange.label")}
+					</span>
 					<span className="text-xs text-foreground">{activeLabel}</span>
 					<ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
 				</button>
@@ -321,6 +317,7 @@ function DatePresetFilter({
 						key={option.value}
 						onClick={() => onDatePresetChange(option.value)}
 						className="flex items-center justify-between gap-2"
+						data-testid={`audio-recordings-date-${option.value}`}
 					>
 						<span>{option.label}</span>
 						{datePreset === option.value ? (
@@ -474,7 +471,7 @@ function RefreshButton({
 	)
 }
 
-/** Single-row filter bar: group filter on the left; date, status, sort, search, refresh, settings and import on the right */
+/** Single-row filter bar: group filter on the left; date, status, sort, search, refresh, import and settings on the right */
 function AudioRecordingsFilters({
 	summaryFilter,
 	datePreset,
@@ -541,20 +538,7 @@ function AudioRecordingsFilters({
 					/>
 					<RefreshButton isRefreshing={isRefreshing} onRefresh={onRefresh} />
 
-					{/* Settings trigger */}
-					<Button
-						type="button"
-						variant="outline"
-						size="icon"
-						onClick={onOpenSettings}
-						className="size-8 shrink-0 rounded-lg bg-background shadow-xs"
-						aria-label={t("super:mobile.recordingEntry.settings.title")}
-						data-testid="audio-recordings-settings-button"
-					>
-						<Settings className="size-3.5" />
-					</Button>
-
-					{/* Audio File Import action */}
+					{/* Audio File Import action — placed before settings per PC toolbar layout */}
 					{onImportFiles ? (
 						<AudioUploadAction
 							handler={(onUpload) => (
@@ -573,6 +557,19 @@ function AudioRecordingsFilters({
 							onFileChange={onImportFiles}
 						/>
 					) : null}
+
+					{/* Settings trigger */}
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						onClick={onOpenSettings}
+						className="size-8 shrink-0 rounded-lg bg-background shadow-xs"
+						aria-label={t("super:mobile.recordingEntry.settings.title")}
+						data-testid="audio-recordings-settings-button"
+					>
+						<Settings className="size-3.5" />
+					</Button>
 				</div>
 			</div>
 		</div>

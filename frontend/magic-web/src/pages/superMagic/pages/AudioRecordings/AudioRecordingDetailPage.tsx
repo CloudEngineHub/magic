@@ -33,6 +33,7 @@ import {
 	isAudioProjectSummaryReady,
 } from "./utils/audio-recordings-utils"
 import { OWNER_RECORDING_DETAIL_CAPABILITIES } from "./types/recording-detail-capabilities"
+import type { RecordingTranscriptSegment } from "./types/recording-detail"
 import { RecordingDetailProvider } from "./components/recording-detail/RecordingDetailProvider"
 import { RecordingDetailHeader } from "./components/recording-detail/RecordingDetailHeader"
 import { RecordingDetailWorkbench } from "./components/recording-detail/RecordingDetailWorkbench"
@@ -85,6 +86,7 @@ function AudioRecordingDetailPageDesktop() {
 	})
 
 	const player = useRecordingAudioPlayer(audioUrl)
+	const { seekTo, playSegment } = player
 	const playerCurrentSec = useRecordingPlayerCurrentSec(
 		player.audioRef,
 		player.playing,
@@ -108,6 +110,7 @@ function AudioRecordingDetailPageDesktop() {
 		projectId,
 		projectItem: resolvedItem,
 		fileMap,
+		recordingName: displayTitle,
 		onProjectItemChange: (item) => {
 			setDetailItem(item)
 			mutateAudioProjectItem(item)
@@ -219,13 +222,28 @@ function AudioRecordingDetailPageDesktop() {
 		return ok
 	}
 
-	function openSpeakerSettings() {
+	const openSpeakerSettings = useCallback(() => {
 		const draft = Object.fromEntries(
 			speakerIds.map((speakerId) => [speakerId, speakerNameMap[speakerId] ?? speakerId]),
 		)
 		setSpeakerDraft(draft)
 		setSpeakerSettingsOpen(true)
-	}
+	}, [speakerIds, speakerNameMap])
+
+	const handleSummaryTimeClick = useCallback(
+		(seconds: number, end?: number) => {
+			if (end != null) playSegment({ start: seconds, end })
+			else seekTo(seconds, { autoplay: true })
+		},
+		[playSegment, seekTo],
+	)
+
+	const handlePlaySegment = useCallback(
+		(segment: RecordingTranscriptSegment) => {
+			playSegment({ start: segment.start, end: segment.end })
+		},
+		[playSegment],
+	)
 
 	async function handleSaveSpeakers() {
 		if (!texts.magicProject?.fileId || !texts.magicProject.content) return
@@ -255,6 +273,8 @@ function AudioRecordingDetailPageDesktop() {
 				<RecordingDetailHeader
 					title={displayTitle}
 					projectItem={resolvedItem}
+					fileMap={fileMap}
+					exportAvailability={actions.exportAvailability}
 					canGenerateSummary={actions.canGenerateSummary}
 					summarySubmitting={actions.summarySubmitting}
 					renaming={actions.renaming}
@@ -262,7 +282,10 @@ function AudioRecordingDetailPageDesktop() {
 					onRename={handleRename}
 					onGenerateSummary={() => void actions.submitSummary()}
 					onExportAudio={() => void actions.downloadAudio()}
-					onExportUnavailable={actions.exportUnavailable}
+					onExportTranscript={() => void actions.downloadTranscript()}
+					onExportNotes={() => void actions.downloadNotes()}
+					onExportSummaryType={(type) => void actions.downloadSummaryType(type)}
+					onExportAll={() => void actions.downloadAll()}
 					onCreateShare={shareControls.openCreateShare}
 					onManageShare={shareControls.openManageShare}
 					onMoveGroup={() => setMoveGroupOpen(true)}
@@ -297,9 +320,7 @@ function AudioRecordingDetailPageDesktop() {
 								speakerNameMap={speakerNameMap}
 								onToggle={player.toggle}
 								onSeek={player.seekTo}
-								onPlaySegment={(segment) =>
-									player.playSegment({ start: segment.start, end: segment.end })
-								}
+								onPlaySegment={handlePlaySegment}
 								onExpandedChange={setPlayerExpanded}
 								onPlaybackRateChange={player.setPlaybackRate}
 								onOpenSpeakerSettings={openSpeakerSettings}
@@ -316,10 +337,7 @@ function AudioRecordingDetailPageDesktop() {
 								summaryFailed={summaryFailed}
 								speakerNameMap={speakerNameMap}
 								onOpenSpeakerSettings={openSpeakerSettings}
-								onTimeClick={(seconds, end) => {
-									if (end != null) player.playSegment({ start: seconds, end })
-									else player.seekTo(seconds, { autoplay: true })
-								}}
+								onTimeClick={handleSummaryTimeClick}
 								onGenerateSummary={() => void actions.submitSummary()}
 								summarySubmitting={actions.summarySubmitting}
 							/>

@@ -1,5 +1,4 @@
-import type { ReactNode } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { AlignLeft, Network } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
@@ -9,14 +8,20 @@ import { processHtmlContent } from "@/pages/superMagic/components/Detail/content
 import type { RecordingDetailFileRef, RecordingTopicSection } from "../../types/recording-detail"
 import { parseTopicsMarkdown } from "../../utils/topics-parser"
 import { formatRecordingTime } from "../../utils/time"
+import {
+	RECORDING_DESKTOP_CONTENT_INSET_CLASS,
+	RECORDING_DESKTOP_MD_CONTENT_CLASS,
+} from "./recording-detail-layout"
 import { RecordingMarkdownContent } from "./RecordingMarkdownContent"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
+import { RecordingDetailRegionEmptySlot } from "./RecordingDetailRegionEmptySlot"
+import { useHorizontalScrollWithFade } from "../../hooks/useHorizontalScrollWithFade"
 
 export interface RecordingSummaryContentProps {
 	file: RecordingDetailFileRef
 	content?: string
 	attachmentList: AttachmentItem[]
-	emptyText: string
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
@@ -29,7 +34,6 @@ export function RecordingSummaryContent({
 	file,
 	content,
 	attachmentList,
-	emptyText,
 	speakerNameMap,
 	onOpenSpeakerSettings,
 	onTimeClick,
@@ -37,7 +41,7 @@ export function RecordingSummaryContent({
 	layout = "desktop",
 }: RecordingSummaryContentProps) {
 	if (!content?.trim()) {
-		return <PanelMessage>{emptyText}</PanelMessage>
+		return <SummaryTabEmptyState />
 	}
 
 	if (file.type === "metrics") {
@@ -51,7 +55,6 @@ export function RecordingSummaryContent({
 				speakerNameMap={speakerNameMap}
 				onOpenSpeakerSettings={onOpenSpeakerSettings}
 				onTimeClick={onTimeClick}
-				emptyText={emptyText}
 			/>
 		)
 	}
@@ -70,9 +73,10 @@ export function RecordingSummaryContent({
 	}
 
 	return (
-		<div className="pb-8">
+		<div className={RECORDING_DESKTOP_MD_CONTENT_CLASS}>
 			<RecordingMarkdownContent
 				content={content}
+				layout={layout}
 				speakerNameMap={speakerNameMap}
 				onSpeakerClick={onOpenSpeakerSettings}
 				onTimeClick={(time) => onTimeClick(time)}
@@ -132,6 +136,13 @@ function MetricsHtmlContent({
 	)
 }
 
+/**
+ * Desktop markdown scroll safe inset — reserves space for the bottom-left view switch
+ * (bottom-4 + ~80px wide control + left-4 offset) so list text is not obscured.
+ */
+const DESKTOP_MINDMAP_MARKDOWN_SCROLL_CLASS =
+	"absolute inset-0 overflow-y-auto pt-1 pr-1 pb-20 pl-28"
+
 function MindmapContent({
 	content,
 	scrollPaddingBottom,
@@ -167,9 +178,10 @@ function MindmapContent({
 						/>
 					</div>
 				) : (
-					<div className="absolute inset-0 overflow-y-auto px-1 pb-8 pt-1">
+					<div className={DESKTOP_MINDMAP_MARKDOWN_SCROLL_CLASS}>
 						<RecordingMarkdownContent
 							content={content}
+							layout={layout}
 							speakerNameMap={speakerNameMap}
 							onSpeakerClick={onOpenSpeakerSettings}
 							onTimeClick={(time) => onTimeClick(time)}
@@ -203,6 +215,7 @@ function MindmapContent({
 				<div className="relative px-1 pb-8 pt-1">
 					<RecordingMarkdownContent
 						content={content}
+						layout={layout}
 						speakerNameMap={speakerNameMap}
 						onSpeakerClick={onOpenSpeakerSettings}
 						onTimeClick={(time) => onTimeClick(time)}
@@ -273,45 +286,88 @@ function TopicsContent({
 	speakerNameMap,
 	onOpenSpeakerSettings,
 	onTimeClick,
-	emptyText,
 }: {
 	topics: RecordingTopicSection[]
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
-	emptyText: string
 }) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeTopicId, setActiveTopicId] = useState(topics[0]?.id ?? "")
+	const topicRefs = useRef<Partial<Record<string, HTMLButtonElement>>>({})
+	const { scrollRef, canScrollStart, canScrollEnd, refreshFadeState } =
+		useHorizontalScrollWithFade<HTMLDivElement>()
 	const activeTopic = useMemo(
 		() => topics.find((topic) => topic.id === activeTopicId) ?? topics[0],
 		[activeTopicId, topics],
 	)
 
+	// Recompute edge fades when topic list width changes.
+	useEffect(() => {
+		refreshFadeState()
+	}, [refreshFadeState, topics])
+
+	// Keep the active topic pill visible when the strip overflows horizontally.
+	useEffect(() => {
+		const activeButton = topicRefs.current[activeTopicId]
+		if (typeof activeButton?.scrollIntoView === "function") {
+			activeButton.scrollIntoView({ block: "nearest", inline: "center" })
+		}
+	}, [activeTopicId])
+
 	if (topics.length === 0 || !activeTopic) {
-		return <PanelMessage>{emptyText}</PanelMessage>
+		return <SummaryTabEmptyState />
 	}
 
 	return (
-		<div className="flex flex-col gap-4" data-testid="recording-detail-topics-content">
-			<div className="-mx-1 overflow-x-auto">
-				<div className="flex w-max gap-2">
-					{topics.map((topic) => (
-						<button
-							key={topic.id}
-							type="button"
-							className={cn(
-								"h-8 rounded-full border px-4 text-[14px] font-medium leading-none transition-colors",
-								topic.id === activeTopic.id
-									? "border-foreground bg-foreground text-background"
-									: "border-border bg-card/70 text-muted-foreground",
-							)}
-							onClick={() => setActiveTopicId(topic.id)}
-						>
-							{topic.name}
-						</button>
-					))}
+		<div
+			className={cn(RECORDING_DESKTOP_CONTENT_INSET_CLASS, "flex flex-col gap-4 pb-8")}
+			data-testid="recording-detail-topics-content"
+		>
+			<div className="relative -mx-1 min-w-0 overflow-hidden">
+				<div
+					ref={scrollRef}
+					className="no-scrollbar overflow-x-auto"
+					data-testid="recording-detail-topics-scroll"
+				>
+					<div className="flex w-max flex-nowrap gap-2">
+						{topics.map((topic) => (
+							<button
+								key={topic.id}
+								ref={(element) => {
+									topicRefs.current[topic.id] = element ?? undefined
+								}}
+								type="button"
+								className={cn(
+									"h-8 shrink-0 rounded-full border px-4 text-[14px] font-medium leading-none transition-colors",
+									topic.id === activeTopic.id
+										? "border-foreground bg-foreground text-background"
+										: "border-border bg-card/70 text-muted-foreground",
+								)}
+								onClick={() => setActiveTopicId(topic.id)}
+								data-testid={`recording-detail-topic-pill-${topic.id}`}
+							>
+								{topic.name}
+							</button>
+						))}
+					</div>
 				</div>
+
+				{canScrollStart ? (
+					<div
+						className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-card from-40% via-card/90 to-transparent"
+						data-testid="recording-detail-topics-fade-start"
+						aria-hidden
+					/>
+				) : null}
+
+				{canScrollEnd ? (
+					<div
+						className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-card from-40% via-card/90 to-transparent"
+						data-testid="recording-detail-topics-fade-end"
+						aria-hidden
+					/>
+				) : null}
 			</div>
 
 			<div>
@@ -336,6 +392,7 @@ function TopicsContent({
 						) : null}
 						<RecordingMarkdownContent
 							content={activeTopic.summaryText}
+							layout="desktop"
 							speakerNameMap={speakerNameMap}
 							onSpeakerClick={onOpenSpeakerSettings}
 							onTimeClick={(time) => onTimeClick(time)}
@@ -386,10 +443,11 @@ function TopicsContent({
 	)
 }
 
-function PanelMessage({ children }: { children: ReactNode }) {
+/** Centered empty placeholder for summary tabs whose file content is not yet available. */
+function SummaryTabEmptyState() {
 	return (
-		<div className="rounded-2xl bg-muted/50 px-6 py-16 text-center text-sm text-muted-foreground">
-			{children}
-		</div>
+		<RecordingDetailRegionEmptySlot>
+			<RecordingDetailEmptyState variant="noSummaryFile" compact />
+		</RecordingDetailRegionEmptySlot>
 	)
 }
