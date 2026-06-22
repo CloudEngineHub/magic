@@ -111,6 +111,10 @@ vi.mock("react-i18next", () => ({
 	},
 }))
 
+vi.mock("@/hooks/use-mobile", () => ({
+	useIsMobile: () => false,
+}))
+
 vi.mock("../../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 	const { forwardRef, useEffect, useImperativeHandle, useRef } = await import("react")
 
@@ -478,9 +482,11 @@ describe("WechatArticleView", () => {
 		fireEvent.click(screen.getByRole("button", { name: "手机预览" }))
 
 		const inlineArticle = screen.getByTestId("wechat-article-phone-inline-html")
-		expect(inlineArticle.shadowRoot?.querySelector("style")?.textContent).toContain(
-			"padding-right:48px",
-		)
+		expect(
+			Array.from(inlineArticle.shadowRoot?.querySelectorAll("style") || []).some((style) =>
+				style.textContent?.includes("padding-right:48px"),
+			),
+		).toBe(true)
 		expect(
 			Array.from(document.body.querySelectorAll("style")).some((style) =>
 				style.textContent?.includes("padding-right:48px"),

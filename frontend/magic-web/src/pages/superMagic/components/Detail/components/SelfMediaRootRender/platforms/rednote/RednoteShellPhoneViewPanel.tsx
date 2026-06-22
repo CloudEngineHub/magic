@@ -1,6 +1,7 @@
 import type { CSSProperties, MutableRefObject } from "react"
 import { useCallback, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import type { CardFrameRef } from "../../components/CardFrame"
 import { CardActionStrip } from "../../components/CardActionStrip"
@@ -51,6 +52,7 @@ export interface RednoteShellPhoneViewPanelProps {
 	onAddDetailCardToCurrentChat?: (cardIndex: number) => void
 	onAddActivePostDirectoryToCurrentChat?: () => void
 	phoneFocused?: boolean
+	focusDisabled?: boolean
 	onPhoneFocus?: () => void
 }
 
@@ -74,10 +76,14 @@ export const RednoteShellPhoneViewPanel = observer(function RednoteShellPhoneVie
 		onAddDetailCardToCurrentChat,
 		onAddActivePostDirectoryToCurrentChat,
 		phoneFocused = false,
+		focusDisabled = false,
 		onPhoneFocus,
 	} = props
 	const store = useSelfMediaStore()
 	const { loading, error, view, activePost, activeCardIndex } = store
+	const isMobile = useIsMobile()
+	const phoneFocusDisabled = focusDisabled || isMobile
+	const effectivePhoneFocused = phoneFocused && !phoneFocusDisabled
 	const [activeCardExternalRefreshVersion, setActiveCardExternalRefreshVersion] = useState(0)
 	const focusClusterRef = useRef<HTMLDivElement>(null)
 	const [phoneFocusPoint, setPhoneFocusPoint] =
@@ -88,6 +94,7 @@ export const RednoteShellPhoneViewPanel = observer(function RednoteShellPhoneVie
 	const actionStripMarginTop = Math.round((phoneShellLayoutHeight * (1 - scale)) / 2)
 	const handlePhoneFocusFromEvent = useCallback(
 		(event?: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) => {
+			if (phoneFocusDisabled) return
 			if (view !== "detail") return
 			if (phoneFocused) {
 				onPhoneFocus?.()
@@ -111,7 +118,7 @@ export const RednoteShellPhoneViewPanel = observer(function RednoteShellPhoneVie
 			}
 			onPhoneFocus?.()
 		},
-		[onPhoneFocus, phoneFocused, view],
+		[onPhoneFocus, phoneFocused, phoneFocusDisabled, view],
 	)
 
 	return (
@@ -119,7 +126,7 @@ export const RednoteShellPhoneViewPanel = observer(function RednoteShellPhoneVie
 			className={cn("absolute inset-0", visible ? "block" : "hidden")}
 			aria-hidden={!visible}
 			data-testid="rednote-phone-view-panel"
-			data-focused={phoneFocused ? "true" : "false"}
+			data-focused={effectivePhoneFocused ? "true" : "false"}
 			data-focus-x={phoneFocusPoint.xPercent.toFixed(2)}
 			data-focus-y={phoneFocusPoint.yPercent.toFixed(2)}
 		>
@@ -175,7 +182,7 @@ export const RednoteShellPhoneViewPanel = observer(function RednoteShellPhoneVie
 					<div
 						ref={focusClusterRef}
 						className="self-media-phone-focus-cluster flex items-start"
-						data-focused={phoneFocused ? "true" : "false"}
+						data-focused={effectivePhoneFocused ? "true" : "false"}
 						style={
 							{
 								"--phone-focus-origin-x": `${phoneFocusPoint.xPercent}%`,

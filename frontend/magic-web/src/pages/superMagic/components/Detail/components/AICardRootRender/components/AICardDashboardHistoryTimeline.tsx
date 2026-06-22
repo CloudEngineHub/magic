@@ -2,11 +2,14 @@ import { type UIEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { History } from "lucide-react"
 import { cn } from "@/lib/utils"
+import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import AICardHistorySummaryCard from "./AICardHistorySummaryCard"
 import type { AICardHistoryEntry } from "../types"
 import type { AICardDashboardItem } from "../utils/aiCardDashboardItems"
 
 type HistoryScrollSyncSource = "card" | "timeline"
+
+const renderNoScrollControl = () => null
 
 interface AICardDashboardHistoryTimelineProps {
 	items: AICardDashboardItem[]
@@ -186,10 +189,15 @@ function AICardDashboardHistoryTimeline({
 				{items.length > 0 && (
 					<div className="relative mt-5">
 						<div className="absolute left-3 right-3 top-[17px] h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-						<div
-							onScroll={handleTimelineScroll}
-							className="relative flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-							data-testid="ai-card-dashboard-timeline-rail"
+						<HeadlessHorizontalScroll
+							className="relative rounded-none pb-1"
+							renderLeftControl={renderNoScrollControl}
+							renderRightControl={renderNoScrollControl}
+							scrollContainerClassName="flex gap-2 overflow-x-auto overflow-y-hidden pb-1 scroll-smooth"
+							scrollContainerProps={{
+								onScroll: handleTimelineScroll,
+								"data-testid": "ai-card-dashboard-timeline-rail",
+							}}
 						>
 							{items.map((item, index) => {
 								const isActive = index === activeIndex
@@ -225,7 +233,7 @@ function AICardDashboardHistoryTimeline({
 									</button>
 								)
 							})}
-						</div>
+						</HeadlessHorizontalScroll>
 					</div>
 				)}
 			</div>
@@ -234,10 +242,15 @@ function AICardDashboardHistoryTimeline({
 				<div className="relative px-4 py-5 sm:px-5">
 					<div className="pointer-events-none absolute inset-y-5 left-0 z-20 w-10 bg-gradient-to-r from-background to-transparent" />
 					<div className="pointer-events-none absolute inset-y-5 right-0 z-20 w-10 bg-gradient-to-l from-background to-transparent" />
-					<div
-						onScroll={handleCardRailScroll}
-						className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-4 pb-2 pt-1 [scrollbar-width:none] sm:-mx-5 sm:gap-5 sm:px-5 [&::-webkit-scrollbar]:hidden"
-						data-testid="ai-card-dashboard-card-rail"
+					<HeadlessHorizontalScroll
+						className="-mx-4 rounded-none pb-2 sm:-mx-5"
+						renderLeftControl={renderNoScrollControl}
+						renderRightControl={renderNoScrollControl}
+						scrollContainerClassName="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden scroll-smooth px-4 pb-2 pt-1 sm:gap-5 sm:px-5"
+						scrollContainerProps={{
+							onScroll: handleCardRailScroll,
+							"data-testid": "ai-card-dashboard-card-rail",
+						}}
 					>
 						{items.map((item, index) => {
 							const isActive = index === activeIndex
@@ -267,7 +280,7 @@ function AICardDashboardHistoryTimeline({
 								</div>
 							)
 						})}
-					</div>
+					</HeadlessHorizontalScroll>
 				</div>
 			) : (
 				<div

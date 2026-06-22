@@ -369,6 +369,7 @@ function LegacyProjectPage() {
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
 				ref={previewDetailPopupRef}
+				allowEdit={!isReadonly}
 				setUserSelectDetail={setUserSelectDetail}
 				onClose={() => {
 					// FIXME
@@ -382,6 +383,7 @@ function LegacyProjectPage() {
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
 				ref={linkPreviewPopupRef}
+				allowEdit={!isReadonly}
 				setUserSelectDetail={setUserSelectDetail}
 				onClose={() => {
 					// Close link popup without any action

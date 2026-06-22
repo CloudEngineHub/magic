@@ -142,6 +142,7 @@ function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
 			initialNavigation={data?.initialNavigation}
 		>
 			<SelfMediaRootRenderInner
+				attachments={attachments}
 				attachmentList={innerAttachmentList}
 				className={className}
 				allowEdit={allowEdit}
@@ -156,6 +157,7 @@ function SelfMediaRootRender(props: SelfMediaRootRenderProps) {
 }
 
 interface SelfMediaRootRenderInnerProps {
+	attachments: SelfMediaRootRenderProps["attachments"]
 	attachmentList: SelfMediaRootRenderProps["attachmentList"]
 	className?: string
 	allowEdit?: boolean
@@ -175,6 +177,7 @@ function shouldShowSelfMediaSplash() {
 }
 
 const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
+	attachments,
 	attachmentList,
 	className,
 	allowEdit,
@@ -1057,6 +1060,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 					>
 						<PlatformComponent
 							platform={platform as SelfMediaPlatform}
+							attachments={attachments}
 							attachmentList={attachmentList}
 							allowEdit={allowEdit}
 							saveEditContent={saveEditContent}

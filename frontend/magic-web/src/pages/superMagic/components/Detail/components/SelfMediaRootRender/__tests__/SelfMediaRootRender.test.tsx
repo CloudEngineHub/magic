@@ -1625,6 +1625,38 @@ describe("SelfMediaRootRender", () => {
 		).not.toBeInTheDocument()
 	})
 
+	it("uses a saved published link as source-ready when the attachment tree has not refreshed", async () => {
+		mockLoadPostOpsSource.mockResolvedValue({
+			version: 1,
+			updatedAt: "2026-06-22T10:00:00.000Z",
+			platform: "rednote",
+			publishedUrl: "https://www.xiaohongshu.com/explore/already-bound",
+			fetchStatus: "pending",
+		})
+
+		render(
+			<SelfMediaRootRender
+				data={ROOT_DATA}
+				attachments={POST_DIRECTORY_ATTACHMENT_LIST}
+				attachmentList={POST_DIRECTORY_ATTACHMENT_LIST}
+				selectedProject={{ id: "project-1" }}
+				allowEdit
+			/>,
+		)
+
+		await waitFor(() =>
+			expect(mockLoadPostOpsSource).toHaveBeenCalledWith("posts/post-1/post.json"),
+		)
+		await waitFor(() => {
+			expect(screen.queryByText("绑定已发布链接")).not.toBeInTheDocument()
+		})
+		expect(screen.getByText("同步最新数据")).toBeInTheDocument()
+		expect(
+			screen.queryByTestId("self-media-home-post-bind-link-post-1"),
+		).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toBeInTheDocument()
+	})
+
 	it("keeps action labels visible when only the diagnosis and link binding actions fit", async () => {
 		await withMockedCardWidth(360, async () => {
 			render(
@@ -2752,6 +2784,15 @@ describe("SelfMediaRootRender", () => {
 		expect(engagement).toHaveTextContent("Likes 52")
 		expect(engagement).toHaveTextContent("Comments 3")
 		expect(mockLoadPostOpsMetrics).toHaveBeenCalledWith("posts/post-1/post.json")
+		expect(screen.queryByText("绑定已发布链接")).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("self-media-home-post-bind-link-post-1"),
+		).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-post-lifecycle-post-1")).toHaveAttribute(
+			"data-lifecycle",
+			"synced",
+		)
+		expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toBeInTheDocument()
 	})
 
 	it("does not fall back to post meta engagement when ops metrics are missing", async () => {

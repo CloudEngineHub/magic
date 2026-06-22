@@ -243,6 +243,18 @@ describe("AICardDashboard", () => {
 		})
 	})
 
+	it("uses headless horizontal scroll containers for the timeline and card rails", () => {
+		renderDashboard()
+
+		const historySection = screen.getByTestId("ai-card-dashboard-history-timeline")
+		const timelineRail = screen.getByTestId("ai-card-dashboard-timeline-rail")
+		const cardRail = screen.getByTestId("ai-card-dashboard-card-rail")
+
+		expect(historySection.querySelector('[data-slot="scroll-area"]')).not.toBeInTheDocument()
+		expect(timelineRail).toHaveClass("no-scrollbar")
+		expect(cardRail).toHaveClass("no-scrollbar")
+	})
+
 	it("keeps the timeline rail following horizontal card scrolling", async () => {
 		renderDashboard()
 

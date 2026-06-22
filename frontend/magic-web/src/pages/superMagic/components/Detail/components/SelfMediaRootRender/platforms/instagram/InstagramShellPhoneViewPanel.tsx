@@ -1,6 +1,7 @@
 import type { CSSProperties, MutableRefObject } from "react"
 import { useCallback, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import type { CardFrameRef } from "../../components/CardFrame"
 import { CardActionStrip } from "../../components/CardActionStrip"
@@ -51,6 +52,7 @@ export interface InstagramShellPhoneViewPanelProps {
 	onAddActivePostDirectoryToCurrentChat?: () => void
 	onGoToEdit?: () => void
 	phoneFocused?: boolean
+	focusDisabled?: boolean
 	onPhoneFocus?: () => void
 }
 
@@ -78,10 +80,14 @@ export const InstagramShellPhoneViewPanel = observer(function InstagramShellPhon
 		onAddActivePostDirectoryToCurrentChat,
 		onGoToEdit,
 		phoneFocused = false,
+		focusDisabled = false,
 		onPhoneFocus,
 	} = props
 	const store = useSelfMediaStore()
 	const { loading, error, view, activePost, activeCardIndex } = store
+	const isMobile = useIsMobile()
+	const phoneFocusDisabled = focusDisabled || isMobile
+	const effectivePhoneFocused = phoneFocused && !phoneFocusDisabled
 
 	const [activeCardExternalRefreshVersion, setActiveCardExternalRefreshVersion] = useState(0)
 	const focusClusterRef = useRef<HTMLDivElement>(null)
@@ -92,6 +98,7 @@ export const InstagramShellPhoneViewPanel = observer(function InstagramShellPhon
 	const actionStripMarginLeft = Math.round(8 + (phoneShellLayoutWidth * (scale - 1)) / 2)
 	const handlePhoneFocusFromEvent = useCallback(
 		(event?: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) => {
+			if (phoneFocusDisabled) return
 			if (view !== "detail") return
 			if (phoneFocused) {
 				onPhoneFocus?.()
@@ -115,7 +122,7 @@ export const InstagramShellPhoneViewPanel = observer(function InstagramShellPhon
 			}
 			onPhoneFocus?.()
 		},
-		[onPhoneFocus, phoneFocused, view],
+		[onPhoneFocus, phoneFocused, phoneFocusDisabled, view],
 	)
 
 	return (
@@ -123,7 +130,7 @@ export const InstagramShellPhoneViewPanel = observer(function InstagramShellPhon
 			className={cn("absolute inset-0", visible ? "block" : "hidden")}
 			aria-hidden={!visible}
 			data-testid="instagram-phone-view-panel"
-			data-focused={phoneFocused ? "true" : "false"}
+			data-focused={effectivePhoneFocused ? "true" : "false"}
 			data-focus-x={phoneFocusPoint.xPercent.toFixed(2)}
 			data-focus-y={phoneFocusPoint.yPercent.toFixed(2)}
 		>
@@ -179,7 +186,7 @@ export const InstagramShellPhoneViewPanel = observer(function InstagramShellPhon
 					<div
 						ref={focusClusterRef}
 						className="self-media-phone-focus-cluster flex items-start"
-						data-focused={phoneFocused ? "true" : "false"}
+						data-focused={effectivePhoneFocused ? "true" : "false"}
 						style={
 							{
 								"--phone-focus-origin-x": `${phoneFocusPoint.xPercent}%`,

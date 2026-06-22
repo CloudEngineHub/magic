@@ -31,6 +31,7 @@ import {
 	getSelfMediaPostKey,
 	type SelfMediaOpsOverviewAction,
 } from "../services/selfMediaOpsOverview"
+import { buildDisplayedSelfMediaPostOpsArtifactsByPostKey } from "../services/selfMediaPostOpsEvidence"
 import { executeSelfMediaOpsOverviewAction } from "../services/selfMediaOpsOverviewActionRunner"
 import SelfMediaHomeAICardList from "./SelfMediaHomeAICardList"
 import SelfMediaHomeAnimations, {
@@ -59,6 +60,7 @@ import {
 import { useSelfMediaHomeDailyInsight } from "../hooks/useSelfMediaHomeDailyInsight"
 import { useSelfMediaOpsHealthInsight } from "../hooks/useSelfMediaOpsHealthInsight"
 import { useMeasuredContainerWidth } from "../hooks/useMeasuredContainerWidth"
+import { useSelfMediaPublishedUrlsByPostKey } from "../hooks/useSelfMediaPublishedUrlsByPostKey"
 import { useSelfMediaHomeScrollPosition } from "../hooks/useSelfMediaHomeScrollPosition"
 import {
 	formatSelfMediaHomeWelcomeTitle,
@@ -208,9 +210,20 @@ function SelfMediaHomePage({
 	opsArtifactStatesByPostKey.forEach((states, postKey) => {
 		opsArtifactsByPostKey.set(postKey, getPostOpsArtifacts(states))
 	})
-	const opsOverview = buildSelfMediaOpsOverview({
+	const publishedUrlsByPostKey = useSelfMediaPublishedUrlsByPostKey({
 		posts,
 		artifactsByPostKey: opsArtifactsByPostKey,
+		opsArtifactStateSignature,
+		onLoadPublishedUrl,
+	})
+	const displayedOpsArtifactsByPostKey = buildDisplayedSelfMediaPostOpsArtifactsByPostKey({
+		artifactsByPostKey: opsArtifactsByPostKey,
+		metricsByPostKey: opsMetricsByPostKey,
+		publishedUrlsByPostKey,
+	})
+	const opsOverview = buildSelfMediaOpsOverview({
+		posts,
+		artifactsByPostKey: displayedOpsArtifactsByPostKey,
 		metricsByPostKey: opsMetricsByPostKey,
 	})
 	const isOpsMetricsHydrating =
@@ -441,8 +454,9 @@ function SelfMediaHomePage({
 								postCount={posts.length}
 								attachmentList={attachmentList}
 								openingPost={openingPost}
-								opsArtifactsByPostKey={opsArtifactsByPostKey}
+								opsArtifactsByPostKey={displayedOpsArtifactsByPostKey}
 								opsMetricsByPostKey={opsMetricsByPostKey}
+								publishedUrlsByPostKey={publishedUrlsByPostKey}
 								opsArtifactAnimationsByPostKey={opsArtifactAnimationsByPostKey}
 								publishedLinkAutoOpenTarget={publishedLinkAutoOpenTarget}
 								columnCount={getSelfMediaHomePostColumnCount(homeLayout)}

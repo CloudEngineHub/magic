@@ -66,6 +66,16 @@ function AICardIframe({
 		const slashIndex = path.lastIndexOf("/")
 		return slashIndex >= 0 ? path.slice(0, slashIndex + 1) : "/"
 	}, [currentFile])
+	const currentFileFingerprint = useMemo(
+		() =>
+			[
+				currentFile?.file_id || "",
+				currentFile?.file_name || "",
+				currentFile?.relative_file_path || "",
+				currentFile?.updated_at,
+			].join(":"),
+		[currentFile],
+	)
 
 	const attachmentListRef = useRef(attachmentList)
 	attachmentListRef.current = attachmentList
@@ -128,7 +138,7 @@ function AICardIframe({
 		return () => {
 			cancelled = true
 		}
-	}, [fileId, currentFile?.file_name, relativeFolderPath])
+	}, [fileId, currentFile?.file_name, currentFileFingerprint, relativeFolderPath])
 
 	const handleRenderReady = useCallback(() => {
 		onLoad?.()

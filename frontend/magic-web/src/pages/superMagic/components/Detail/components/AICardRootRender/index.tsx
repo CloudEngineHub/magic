@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { AnimatePresence } from "framer-motion"
@@ -19,6 +19,44 @@ import {
 	switchToTopicByChatTopicId,
 } from "./utils/aiCardRunNow"
 
+interface AICardAttachmentNode {
+	file_id?: string
+	children?: AICardAttachmentNode[]
+}
+
+function findNodeWithChildrenByFileId(
+	items: AICardAttachmentNode[] | undefined,
+	fileId?: string,
+): AICardAttachmentNode | null {
+	if (!items?.length || !fileId) return null
+
+	for (const item of items) {
+		if (item?.file_id === fileId && Array.isArray(item.children) && item.children.length > 0) {
+			return item
+		}
+		const matched = findNodeWithChildrenByFileId(item?.children, fileId)
+		if (matched) return matched
+	}
+
+	return null
+}
+
+function resolveAICardAttachmentSource({
+	data,
+	attachments,
+	attachmentList,
+}: Pick<AICardRootRenderProps, "data" | "attachments" | "attachmentList">):
+	| AICardRootRenderProps["attachments"]
+	| undefined {
+	const folderFileId = data?.file_id
+	const attachmentTree = attachments as AICardAttachmentNode[] | undefined
+	const flatAttachments = attachmentList as AICardAttachmentNode[] | undefined
+	if (findNodeWithChildrenByFileId(attachmentTree, folderFileId)) return attachments
+	if (Array.isArray(data?.children) && data.children.length > 0) return [data]
+	if (findNodeWithChildrenByFileId(flatAttachments, folderFileId)) return attachmentList
+	return attachmentList || attachments
+}
+
 /**
  * AICardRootRender
  *
@@ -36,8 +74,10 @@ function AICardRootRender(props: AICardRootRenderProps) {
 	const folderFileId = data?.file_id
 	const initialNavigation = data?.initialNavigation
 
-	// Stabilize attachment list reference
-	const stableAttachmentList = attachmentList || attachments
+	const stableAttachmentList = useMemo(
+		() => resolveAICardAttachmentSource({ data, attachments, attachmentList }),
+		[data, attachments, attachmentList],
+	)
 
 	// Create store instance per mount
 	const [store] = useState(() => new AICardStore())
@@ -68,7 +108,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 		if (initialNavigation?.activeCardId) {
 			store.openCardDetail(initialNavigation.activeCardId)
 		}
-	}, [store, store.loading, initialNavigation])
+	}, [store, store.loading, initialNavigation, canEdit])
 
 	const handleOpenConfig = useCallback(() => {
 		store.setViewMode("config")
@@ -112,7 +152,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 		} finally {
 			setIsRunNowLoading(false)
 		}
-	}, [store, isRunNowLoading])
+	}, [store, isRunNowLoading, t])
 
 	const handleOpenHistoryEntry = useCallback(
 		(entry: AICardHistoryEntry) => {

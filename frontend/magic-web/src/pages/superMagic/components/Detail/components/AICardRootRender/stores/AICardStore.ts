@@ -1,11 +1,7 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import type {
-	AICardEntry,
-	AICardHistoryEntry,
-	AICardProjectConfig,
-	AICardViewMode,
-} from "../types"
+import type { AICardEntry, AICardHistoryEntry, AICardProjectConfig, AICardViewMode } from "../types"
+import { buildAICardSyncFingerprint } from "../utils/aiCardSyncFingerprint"
 
 /**
  * Parse magic.project.js content to extract config.
@@ -71,6 +67,8 @@ export class AICardStore {
 
 	private folderFileId: string | undefined
 	private attachmentList: any[] | undefined
+	private lastSyncFingerprint = ""
+	private hasSynced = false
 
 	constructor() {
 		makeAutoObservable(this)
@@ -87,7 +85,7 @@ export class AICardStore {
 	}
 
 	get hasConfig(): boolean {
-		return !!(this.projectConfig?.schedule_id)
+		return !!this.projectConfig?.schedule_id
 	}
 
 	/** The file_id of magic.project.js (if found) */
@@ -127,6 +125,10 @@ export class AICardStore {
 	async sync(folderFileId?: string, attachmentList?: any[]) {
 		this.folderFileId = folderFileId
 		this.attachmentList = attachmentList
+		const nextFingerprint = buildAICardSyncFingerprint(folderFileId, this.findChildren())
+		if (this.hasSynced && nextFingerprint === this.lastSyncFingerprint) return
+		this.lastSyncFingerprint = nextFingerprint
+		this.hasSynced = true
 		await this.loadCards()
 	}
 
@@ -193,9 +195,7 @@ export class AICardStore {
 	}
 
 	private buildHistoryEntries(children: any[]): AICardHistoryEntry[] {
-		const historyDir = children.find(
-			(f: any) => f.file_name === "history" && f.is_directory,
-		)
+		const historyDir = children.find((f: any) => f.file_name === "history" && f.is_directory)
 		if (!historyDir?.children?.length) {
 			return []
 		}
@@ -233,9 +233,7 @@ export class AICardStore {
 			}
 		}
 
-		return entries.sort(
-			(a, b) => b.timestamp.localeCompare(a.timestamp),
-		)
+		return entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 	}
 
 	/**
@@ -246,9 +244,7 @@ export class AICardStore {
 	 */
 	private resolveEntryFile(children: any[], name: string): any | undefined {
 		// Folder-based: name/ directory with index.html
-		const folder = children.find(
-			(f: any) => f.file_name === name && f.is_directory,
-		)
+		const folder = children.find((f: any) => f.file_name === name && f.is_directory)
 		if (folder?.children?.length) {
 			const indexFile = folder.children.find(
 				(c: any) => c.file_name === "index.html" && !c.is_directory,
@@ -258,18 +254,14 @@ export class AICardStore {
 
 		// Legacy: name.html single file
 		const htmlName = name.endsWith(".html") ? name : `${name}.html`
-		return children.find(
-			(f: any) => f.file_name === htmlName && !f.is_directory,
-		)
+		return children.find((f: any) => f.file_name === htmlName && !f.is_directory)
 	}
 
 	private findChildren(): any[] {
 		if (!this.attachmentList?.length) return []
 
 		// The folder itself may be in attachmentList
-		const folder = this.attachmentList.find(
-			(f: any) => f.file_id === this.folderFileId,
-		)
+		const folder = this.attachmentList.find((f: any) => f.file_id === this.folderFileId)
 		if (folder?.children?.length) return folder.children
 
 		// Or the attachmentList IS the children

@@ -1,7 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import type { ButtonHTMLAttributes, ReactNode } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { PrePublishAnalysisDialog } from "../components/PrePublishAnalysisDialog"
+
+const mockIsMobile = vi.hoisted(() => vi.fn(() => false))
 
 const DEFAULT_MODEL = {
 	id: "model-1",
@@ -81,6 +83,73 @@ vi.mock("@/components/shadcn-ui/dialog", () => ({
 	DialogTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
 }))
 
+vi.mock("@/components/base-mobile/MagicPopup", () => ({
+	default: ({
+		visible,
+		children,
+		headerTitle,
+		headerSubtitle,
+		headerLeadingAction,
+		headerTrailingAction,
+		headerVariant,
+		maskClosable,
+		dismissible,
+		bodyClassName,
+		...props
+	}: {
+		visible?: boolean
+		children?: ReactNode
+		headerTitle?: ReactNode
+		headerSubtitle?: ReactNode
+		headerVariant?: string
+		maskClosable?: boolean
+		dismissible?: boolean
+		bodyClassName?: string
+		headerLeadingAction?: {
+			ariaLabel: string
+			onClick: () => void
+			disabled?: boolean
+			testId?: string
+		}
+		headerTrailingAction?: {
+			ariaLabel: string
+			onClick: () => void
+			disabled?: boolean
+			testId?: string
+		}
+	}) => {
+		void headerVariant
+		void maskClosable
+		void dismissible
+		void bodyClassName
+		return visible ? (
+			<div {...props}>
+				<h2>{headerTitle}</h2>
+				<p>{headerSubtitle}</p>
+				<button
+					type="button"
+					aria-label={headerLeadingAction?.ariaLabel}
+					disabled={headerLeadingAction?.disabled}
+					onClick={headerLeadingAction?.onClick}
+					data-testid={headerLeadingAction?.testId}
+				/>
+				<button
+					type="button"
+					aria-label={headerTrailingAction?.ariaLabel}
+					disabled={headerTrailingAction?.disabled}
+					onClick={headerTrailingAction?.onClick}
+					data-testid={headerTrailingAction?.testId}
+				/>
+				{children}
+			</div>
+		) : null
+	},
+}))
+
+vi.mock("@/hooks/use-mobile", () => ({
+	useIsMobile: () => mockIsMobile(),
+}))
+
 vi.mock("@/components/shadcn-ui/radio-group", async () => {
 	const React = await vi.importActual<typeof import("react")>("react")
 	const eventName = "pre-publish-analysis-test-radio-change"
@@ -142,6 +211,10 @@ vi.mock("@/pages/superMagic/components/MessageEditor/components/ModelSwitch", ()
 }))
 
 describe("PrePublishAnalysisDialog", () => {
+	beforeEach(() => {
+		mockIsMobile.mockReturnValue(false)
+	})
+
 	it("selects the first available model by default when no selected model is provided", () => {
 		const onOpenChange = vi.fn()
 		const onConfirm = vi.fn()
@@ -198,5 +271,33 @@ describe("PrePublishAnalysisDialog", () => {
 		fireEvent.click(screen.getByText("detail.selfMedia.analysis.goals.conversion"))
 		fireEvent.click(screen.getByTestId("pre-publish-analysis-confirm"))
 		expect(onConfirm).toHaveBeenCalledWith("conversion", ALT_MODEL)
+	})
+
+	it("uses MagicPopup instead of the desktop dialog on mobile", () => {
+		mockIsMobile.mockReturnValue(true)
+		const onOpenChange = vi.fn()
+		const onConfirm = vi.fn()
+
+		render(
+			<PrePublishAnalysisDialog
+				open
+				onOpenChange={onOpenChange}
+				onConfirm={onConfirm}
+				modelList={[
+					{
+						group: { id: "group-1", name: "Models" },
+						models: [DEFAULT_MODEL],
+					},
+				]}
+				selectedModel={DEFAULT_MODEL}
+			/>,
+		)
+
+		expect(screen.getByTestId("pre-publish-analysis-popup")).toBeInTheDocument()
+		expect(screen.queryByTestId("pre-publish-analysis-dialog")).not.toBeInTheDocument()
+		expect(screen.getByTestId("pre-publish-analysis-model-switch")).toHaveTextContent("GPT-5")
+
+		fireEvent.click(screen.getByTestId("pre-publish-analysis-confirm"))
+		expect(onConfirm).toHaveBeenCalledWith("ip-growth", DEFAULT_MODEL)
 	})
 })
