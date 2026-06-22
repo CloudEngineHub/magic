@@ -26,6 +26,10 @@ const ENV_PREFIX = "MAGIC_"
 /** 是否为开发环境 */
 const isDev = process.env.NODE_ENV === "development"
 
+/** 开发端口仅为 443 时才启用 mkcert，否则 Vite 以 HTTP dev server 启动 */
+const devServerPort = process.env.PORT ? Number(process.env.PORT) : undefined
+const isHttpsDevServer = isDev && devServerPort === 443
+
 /** 本地开发 HTTPS hosts，支持逗号分隔多个，默认 magic.t.teamshare.cn */
 const devHosts = (process.env.DEV_HOSTS ?? "magic.com")
 	.split(",")
@@ -307,8 +311,8 @@ function getBaseViteConfig(): UserConfig {
 					},
 				],
 			}),
-			// 用于本地生成HTTPS证书
-			...(isDev
+			// Only bind mkcert for the 443 dev server; other dev ports stay on HTTP.
+			...(isHttpsDevServer
 				? [
 						mkcert({
 							// 本地配置该地址的 host, 满足文件私有桶上传
