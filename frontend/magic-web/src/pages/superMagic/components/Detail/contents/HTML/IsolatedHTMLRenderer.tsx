@@ -31,7 +31,8 @@ import {
 	reportIframeRenderLifecycleStage,
 	startIframeRenderLifecycleSession,
 	type IframeRenderLifecycleStage,
-} from "@dtyq/html-sandbox/runtime"
+	type IframeRenderLifecycleContext,
+} from "./telemetry/iframeRenderLifecycle"
 import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
 import { cn } from "@/lib/utils"
@@ -371,41 +372,38 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			autoFitScalePaddingFactor,
 		})
 
-		const buildRenderLifecycleContext = useMemoizedFn(
-			(extra: Record<string, unknown> = {}): Record<string, unknown> => {
-				const lifecycle = renderLifecycleRef.current
+		const buildRenderLifecycleContext = useMemoizedFn((): IframeRenderLifecycleContext => {
+			const lifecycle = renderLifecycleRef.current
 
-				return {
-					sessionId: lifecycle.sessionId,
-					elapsedMs: Date.now() - lifecycle.startedAt,
-					sandboxType,
-					renderMode: externalRenderSiteUrl ? "cross-origin" : "same-origin",
-					shellUrl: htmlSandboxShellUrl,
-					shellOrigin: externalRenderSiteOrigin || window.location.origin,
-					targetOrigin: iframeTargetOrigin,
-					postMessageTargetStrategy,
-					source: {
-						layer: "top",
-						depth: 0,
-						fileId: fileId || "",
-						path: htmlRelativeFolderPath || "",
-					},
+			return {
+				sessionId: lifecycle.sessionId,
+				elapsedMs: Date.now() - lifecycle.startedAt,
+				sandboxType,
+				renderMode: externalRenderSiteUrl ? "cross-origin" : "same-origin",
+				shellUrl: htmlSandboxShellUrl,
+				shellOrigin: externalRenderSiteOrigin || window.location.origin,
+				targetOrigin: iframeTargetOrigin,
+				postMessageTargetStrategy,
+				source: {
+					layer: "top",
+					depth: 0,
 					fileId: fileId || "",
-					relativeFilePath: htmlRelativeFolderPath || "",
-					isPptRender: Boolean(isPptRender),
-					isFullscreen: Boolean(isFullscreen),
-					isEditMode: Boolean(isEditMode),
-					isPlaybackMode: Boolean(isPlaybackMode),
-					isVisible: Boolean(isVisible),
-					shouldApplyScaling,
-					isScaleReady,
-					iframeLoaded,
-					contentInjected,
-					contentLength: content.length,
-					...extra,
-				}
-			},
-		)
+					path: htmlRelativeFolderPath || "",
+				},
+				fileId: fileId || "",
+				relativeFilePath: htmlRelativeFolderPath || "",
+				isPptRender: Boolean(isPptRender),
+				isFullscreen: Boolean(isFullscreen),
+				isEditMode: Boolean(isEditMode),
+				isPlaybackMode: Boolean(isPlaybackMode),
+				isVisible: Boolean(isVisible),
+				shouldApplyScaling,
+				isScaleReady,
+				iframeLoaded,
+				contentInjected,
+				contentLength: content.length,
+			}
+		})
 
 		const reportRenderLifecycleStage = useMemoizedFn(
 			(
@@ -464,6 +462,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 			hasNotifiedRenderReadyRef.current = true
 			reportRenderLifecycleStage("render_ready")
+			reportRenderLifecycleStage("render_success")
 			clearRenderLifecycleTimeout()
 			onRenderReady?.()
 		})

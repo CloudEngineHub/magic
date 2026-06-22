@@ -11,7 +11,7 @@ import {
 } from "./utils/fetchInterceptor"
 import { createNestedIframeContentHandler } from "./utils/nested-iframe-content"
 import { createVirtualStorageMessageHandler } from "./utils/virtual-storage"
-import { HTML_IFRAME_RENDER_LIFECYCLE_EVENT } from "@dtyq/html-sandbox/runtime"
+import { HTML_IFRAME_RENDER_LIFECYCLE_EVENT } from "./telemetry/iframeRenderLifecycle"
 import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"

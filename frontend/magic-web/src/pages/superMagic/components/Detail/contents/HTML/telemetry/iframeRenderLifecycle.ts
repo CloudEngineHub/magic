@@ -19,7 +19,65 @@ export type IframeRenderLifecycleStage =
 	| "content_metrics_settled"
 	| "scale_ready"
 	| "render_ready"
+	| "render_success"
+	| "nested_iframe_failed"
 	| "timeout"
+
+export interface IframeRenderLifecycleSource {
+	layer: "top" | "nested"
+	depth: number
+	fileId?: string
+	path?: string
+	requesterFileId?: string
+	chainFileIds?: string[]
+}
+
+export interface IframeRenderLifecycleContext {
+	sessionId?: string
+	elapsedMs?: number
+	sandboxType?: string
+	renderMode: "cross-origin" | "same-origin"
+	shellUrl: string
+	shellOrigin?: string
+	targetOrigin?: string
+	postMessageTargetStrategy?: string
+	source: IframeRenderLifecycleSource
+	fileId?: string
+	relativeFilePath?: string
+	isPptRender?: boolean
+	isFullscreen?: boolean
+	isEditMode?: boolean
+	isPlaybackMode?: boolean
+	isVisible?: boolean
+	shouldApplyScaling?: boolean
+	isScaleReady?: boolean
+	iframeLoaded?: boolean
+	contentInjected?: boolean
+	contentLength?: number
+}
+
+export type IframeRenderLifecyclePayload = IframeRenderLifecycleContext & {
+	stage: IframeRenderLifecycleStage
+	reason?: string
+	requestId?: string
+	errorType?: unknown
+	errorMessage?: unknown
+	errorStack?: unknown
+	errorSource?: unknown
+	errorLineno?: unknown
+	errorColno?: unknown
+	origin?: string
+	isExpectedSource?: boolean
+	fullContentLength?: number
+	markerId?: string
+	dynamicInterceptionEnabled?: boolean
+	contentWidth?: number
+	contentHeight?: number
+	hasHorizontalOverflow?: boolean
+	hasVerticalOverflow?: boolean
+	verticalScrollbarWidth?: number
+	timeoutMs?: number
+}
 
 export interface IframeRenderLifecycleState {
 	sessionId: string
@@ -29,7 +87,7 @@ export interface IframeRenderLifecycleState {
 }
 
 interface IframeRenderLifecycleLogger {
-	report: (event: string, data: Record<string, unknown>) => void
+	report: (event: string, data: IframeRenderLifecyclePayload) => void
 }
 
 interface MutableRef<T> {
@@ -39,9 +97,9 @@ interface MutableRef<T> {
 interface ReportIframeRenderLifecycleStageParams {
 	logger: IframeRenderLifecycleLogger
 	lifecycle: IframeRenderLifecycleState
-	getContext: () => Record<string, unknown>
+	getContext: () => IframeRenderLifecycleContext
 	stage: IframeRenderLifecycleStage
-	extra?: Record<string, unknown>
+	extra?: Partial<IframeRenderLifecyclePayload>
 	options?: {
 		once?: boolean
 	}
@@ -50,7 +108,7 @@ interface ReportIframeRenderLifecycleStageParams {
 interface StartIframeRenderLifecycleSessionParams {
 	logger: IframeRenderLifecycleLogger
 	lifecycleRef: MutableRef<IframeRenderLifecycleState>
-	getContext: () => Record<string, unknown>
+	getContext: () => IframeRenderLifecycleContext
 	reason: string
 	timeoutMs?: number
 }
