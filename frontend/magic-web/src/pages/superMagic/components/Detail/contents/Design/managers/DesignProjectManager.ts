@@ -228,6 +228,8 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			fetchRemoteDesignData,
 			applyRemoteDesignData,
 			checkRemoteUpdate,
+			getLocalVersion: () => this.stateBag.getMagicProjectJsVersion(),
+			updateLocalVersion: (version) => this.updateLocalVersionIfNewer(version),
 			updateListenerDebounceMs: options.updateListenerDebounceMs ?? 200,
 			setIsProcessingRevoke: (v) => this.stateBag.setters.setIsProcessingRevoke(v),
 			setRevokeType: (v) => this.stateBag.setters.setRevokeType(v),
@@ -251,7 +253,15 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			fetchRemoteDesignData: this.fetchRemoteDesignDataFn,
 			applyRemoteDesignData: this.applyRemoteDesignDataFn,
 			checkRemoteUpdate: async () => this.saveManager.checkRemoteUpdate(),
+			getLocalVersion: () => this.stateBag.getMagicProjectJsVersion(),
+			updateLocalVersion: (version) => this.updateLocalVersionIfNewer(version),
 		})
+	}
+
+	private updateLocalVersionIfNewer(version: number): void {
+		const currentVersion = this.stateBag.getMagicProjectJsVersion()
+		if (currentVersion !== null && version < currentVersion) return
+		this.saveManager.updateLocalVersion(version)
 	}
 
 	private hasUnsafeLocalChanges(): boolean {
