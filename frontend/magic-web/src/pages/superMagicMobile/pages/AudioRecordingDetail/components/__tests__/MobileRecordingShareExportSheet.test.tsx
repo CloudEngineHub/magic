@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 import { MobileRecordingShareExportSheet } from "../MobileRecordingShareExportSheet"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
+import type { ReactNode } from "react"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -38,7 +39,17 @@ vi.mock("@/components/base-mobile/MagicPopup", () => ({
 		headerTitle,
 		headerSubtitle,
 		headerLeadingAction,
-	}: any) => {
+	}: {
+		children?: ReactNode
+		visible?: boolean
+		headerTitle?: string
+		headerSubtitle?: string
+		headerLeadingAction?: {
+			testId?: string
+			onClick?: () => void
+			ariaLabel?: string
+		}
+	}) => {
 		if (!visible) return null
 		return (
 			<div data-testid="mock-magic-popup">
@@ -70,7 +81,10 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
-		createBatchDownload: vi.fn().mockResolvedValue({ status: "ready", download_url: "http://mock-download.com/batch.zip" }),
+		createBatchDownload: vi.fn().mockResolvedValue({
+			status: "ready",
+			download_url: "http://mock-download.com/batch.zip",
+		}),
 		checkBatchDownloadStatus: vi.fn(),
 	},
 }))
@@ -119,6 +133,25 @@ describe("MobileRecordingShareExportSheet", () => {
 		expect(screen.getByText("Transcript")).toBeInTheDocument()
 		expect(screen.getByText("Notes")).toBeInTheDocument()
 		expect(screen.getByText("Summary")).toBeInTheDocument()
+	})
+
+	it("supports a caller-provided main title when the share page reuses the sheet", () => {
+		render(
+			<MobileRecordingShareExportSheet
+				open
+				recordingName="Prototype recording"
+				fileMap={mockFileMap}
+				showShareSection={false}
+				mainHeaderTitle="More actions"
+				onOpenChange={vi.fn()}
+				onShareLink={vi.fn()}
+				onDownloadRecording={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByText("More actions")).toBeInTheDocument()
+		expect(screen.queryByText("Share link")).not.toBeInTheDocument()
+		expect(screen.getByText("Export files")).toBeInTheDocument()
 	})
 
 	it("triggers original audio download and transcript/notes downloads directly", async () => {
@@ -173,12 +206,16 @@ describe("MobileRecordingShareExportSheet", () => {
 		expect(screen.getByText("Select content to export")).toBeInTheDocument()
 		expect(screen.getByText("Minutes")).toBeInTheDocument()
 		expect(screen.getByText("Highlights")).toBeInTheDocument()
+		// Keep the test aligned with the real i18n semantics:
+		// the export CTA should render the final summary action label directly
+		// instead of composing another "Export " prefix on top of it.
+		expect(screen.getByRole("button", { name: "Summary" })).toBeInTheDocument()
 
 		// Uncheck Highlights (leaving only Minutes selected)
 		fireEvent.click(screen.getByText("Highlights"))
 
 		// Export
-		fireEvent.click(screen.getByText("Export Summary"))
+		fireEvent.click(screen.getByRole("button", { name: "Summary" }))
 		await Promise.resolve()
 
 		// Should not close popup
@@ -206,8 +243,9 @@ describe("MobileRecordingShareExportSheet", () => {
 		// Transition
 		fireEvent.click(screen.getByText("Summary"))
 
-		// Both "Minutes" and "Highlights" are selected. Click Export Summary.
-		fireEvent.click(screen.getByText("Export Summary"))
+		// Both "Minutes" and "Highlights" are selected. The CTA should reuse
+		// the final summary export label instead of a separately prefixed copy.
+		fireEvent.click(screen.getByRole("button", { name: "Summary" }))
 		await Promise.resolve()
 
 		// Verify batch download API was called with both file IDs and projectId

@@ -31,8 +31,6 @@ import CopyProjectProgressToast from "@/components/base/CopyProjectProgressToast
 import useNavigate from "@/routes/hooks/useNavigate"
 import useRoutesMetaSet from "@/routes/hooks/useRoutesMetaSet"
 import useShareRoute from "../superMagic/hooks/useShareRoute"
-// Future: when share payload resolves to audio project_mode, route to RecordingDetailShareShell
-// instead of generic share page. See AudioRecordings/types/recording-detail-capabilities.ts.
 import useLegacyFileShareData from "./hooks/useLegacyFileShareData"
 import useLegacyTopicShareData from "./hooks/useLegacyTopicShareData"
 import useNewFileShareData from "./hooks/useNewFileShareData"
@@ -43,6 +41,9 @@ import { MagicAvatar } from "@/components/base"
 import useBackHandler from "@/utils/historyStackManager/hooks"
 import { useSharePermission } from "./hooks/useSharePermission"
 import UserAvatar from "@/assets/logos/user-avatar.svg"
+import { RecordingDetailShareDesktop } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailShareDesktop"
+import ShareMobileAudioRecordingDetailPage from "@/pages/superMagicMobile/pages/AudioRecordingDetail/ShareMobileAudioRecordingDetailPage"
+import { shouldRenderAudioRecordingShareShell } from "@/pages/superMagic/pages/AudioRecordings/utils/share-recording-detail"
 import {
 	calculateDefaultOpenFileId,
 	findFileInTree,
@@ -50,6 +51,7 @@ import {
 import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import SuperMagicService from "@/pages/superMagic/services"
+import { resolveMobileAudioShareTopbarOffset } from "./utils/audio-share-topbar-offset"
 // import { fixJsonPropertyNames } from "../flow/components/FlowAssistant/utils/streamUtils"
 
 const topicContainerBase =
@@ -573,6 +575,17 @@ function Share() {
 		return Boolean(projectId && currentUserId && creatorUserId === currentUserId)
 	}, [data, projectId, userInfo?.user_id])
 
+	/** Routes audio-mode share payloads into the readonly recording detail shell once share files are hydrated. */
+	const shouldRenderAudioShareShell = useMemo(
+		() =>
+			Boolean(projectId) &&
+			shouldRenderAudioRecordingShareShell({
+				projectMode: data?.data?.project_mode,
+				attachments,
+			}),
+		[attachments, data?.data?.project_mode, projectId],
+	)
+
 	// 是否显示复制项目按钮：旧文件分享 或 allowCopyProjectFiles 为 true 时显示，且用户已登录
 	const showCopyProjectButton = useMemo(() => {
 		if (!isProjectShare || !isLogined) return false
@@ -598,6 +611,15 @@ function Share() {
 		const urlSearchParams = new URLSearchParams(search)
 		return urlSearchParams.has("hideHeader")
 	}, [search])
+	const mobileAudioShareTopbarOffset = useMemo(
+		() =>
+			resolveMobileAudioShareTopbarOffset({
+				isMobile,
+				shouldHideHeader,
+				shouldRenderAudioShareShell,
+			}),
+		[isMobile, shouldHideHeader, shouldRenderAudioShareShell],
+	)
 
 	const clearWindowData = useMemoizedFn(() => {
 		// @ts-ignore
@@ -877,7 +899,7 @@ function Share() {
 								</span>
 							</Button>
 						)}
-						{showWorkspaceButton ? (
+						{showWorkspaceButton && !shouldRenderAudioShareShell ? (
 							<WorkspaceButton
 								label={
 									shouldEnterSharedProject
@@ -933,28 +955,47 @@ function Share() {
 						isFileShare={routeInfo.isFileShare}
 					/>
 				)}
-				{(!isEmpty(data) || isFileShare || isProjectShare) && !error && (
-					<ShareContent
-						isMobile={isMobile}
-						data={data}
-						attachments={attachments}
-						isLogined={isLogined}
-						isFileShare={isFileShare || isProjectShare}
-						isProjectShare={isProjectShare}
-						fileId={fileId}
-						defaultOpenFileId={defaultOpenFileId}
-						enableImmersiveShareChrome={enableImmersiveShareChrome}
-						isImmersiveFullscreen={isImmersiveFullscreen}
-						projectId={projectId}
-						topicId={resourceId}
-						showAllProjectFiles={showAllProjectFiles || viewFileList}
-						viewFileList={viewFileList}
-						showCreatedByBadge={data?.extra?.hide_created_by_super_magic === false}
-						allowDownloadProjectFile={allowDownloadProjectFile}
-						onPreviewFileChange={setCurrentPreviewFileId}
-						onPreviewFullscreenChange={setPreviewIsFullscreen}
-					/>
-				)}
+				{(!isEmpty(data) || isFileShare || isProjectShare) && !error ? (
+					shouldRenderAudioShareShell ? (
+						isMobile ? (
+							<ShareMobileAudioRecordingDetailPage
+								projectId={projectId}
+								resourceName={data?.data?.project_name || data?.resource_name}
+								allowDownloadProjectFile={allowDownloadProjectFile}
+								topbarOffset={mobileAudioShareTopbarOffset}
+								attachments={attachments}
+							/>
+						) : (
+							<RecordingDetailShareDesktop
+								projectId={projectId}
+								resourceName={data?.data?.project_name || data?.resource_name}
+								allowDownloadProjectFile={allowDownloadProjectFile}
+								attachments={attachments}
+							/>
+						)
+					) : (
+						<ShareContent
+							isMobile={isMobile}
+							data={data}
+							attachments={attachments}
+							isLogined={isLogined}
+							isFileShare={isFileShare || isProjectShare}
+							isProjectShare={isProjectShare}
+							fileId={fileId}
+							defaultOpenFileId={defaultOpenFileId}
+							enableImmersiveShareChrome={enableImmersiveShareChrome}
+							isImmersiveFullscreen={isImmersiveFullscreen}
+							projectId={projectId}
+							topicId={resourceId}
+							showAllProjectFiles={showAllProjectFiles || viewFileList}
+							viewFileList={viewFileList}
+							showCreatedByBadge={data?.extra?.hide_created_by_super_magic === false}
+							allowDownloadProjectFile={allowDownloadProjectFile}
+							onPreviewFileChange={setCurrentPreviewFileId}
+							onPreviewFullscreenChange={setPreviewIsFullscreen}
+						/>
+					)
+				) : null}
 			</div>
 			{/* 由超级麦吉创造按钮：默认不显示，只有 hide_created_by_super_magic 为 false 时才显示 */}
 			<CreatedByBadge

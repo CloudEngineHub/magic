@@ -75,6 +75,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 		attachments,
 		resourceId,
 		defaultSelectedFileIds,
+		requiredFileIds,
 		defaultOpenFileId,
 		topicTitle,
 		projectName,
@@ -378,6 +379,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 							types={types}
 							resourceId={resourceId || shareSuccessData?.resourceId}
 							defaultSelectedFileIds={defaultSelectedFileIds}
+							requiredFileIds={requiredFileIds}
 							defaultOpenFileId={defaultOpenFileId}
 							shareMode={shareMode}
 							projectName={projectName}
@@ -439,6 +441,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 							types={types}
 							resourceId={resourceId || shareSuccessData?.resourceId}
 							defaultSelectedFileIds={defaultSelectedFileIds}
+							requiredFileIds={requiredFileIds}
 							defaultOpenFileId={defaultOpenFileId}
 							shareMode={shareMode}
 							projectName={projectName}

@@ -56,6 +56,7 @@ interface RecordingDetailHeaderProps {
 	canGenerateSummary: boolean
 	summarySubmitting: boolean
 	renaming?: boolean
+	showBackButton?: boolean
 	onBack: () => void
 	onRename: (name: string) => Promise<boolean>
 	onGenerateSummary: () => void
@@ -79,6 +80,7 @@ export function RecordingDetailHeader({
 	canGenerateSummary,
 	summarySubmitting,
 	renaming = false,
+	showBackButton = true,
 	onBack,
 	onRename,
 	onGenerateSummary,
@@ -132,15 +134,17 @@ export function RecordingDetailHeader({
 		<div className="shrink-0 px-8 pb-3 pt-4" data-testid="recording-detail-header">
 			<div className="flex min-w-0 items-center justify-between gap-6">
 				<div className="flex min-w-0 items-center gap-4">
-					<button
-						type="button"
-						className={RECORDING_DETAIL_HEADER_ICON_ACTION_CLASS}
-						onClick={onBack}
-						aria-label={t("detail.back")}
-						data-testid="recording-detail-back"
-					>
-						<ChevronLeft className="size-5" />
-					</button>
+					{showBackButton ? (
+						<button
+							type="button"
+							className={RECORDING_DETAIL_HEADER_ICON_ACTION_CLASS}
+							onClick={onBack}
+							aria-label={t("detail.back")}
+							data-testid="recording-detail-back"
+						>
+							<ChevronLeft className="size-5" />
+						</button>
+					) : null}
 
 					<div className="min-w-0">
 						<div className="flex min-w-0 items-center gap-2">

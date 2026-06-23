@@ -61,7 +61,7 @@ vi.mock("../hooks/useProjectShareSheet", () => ({
 	useProjectShareSheet: () => ({
 		open: true,
 		mode: "project",
-		shareScene: "default",
+		projectMode: "",
 		shareMode: ShareMode.Project,
 		view: mockViewRef.current,
 		viewStack: ["create"],

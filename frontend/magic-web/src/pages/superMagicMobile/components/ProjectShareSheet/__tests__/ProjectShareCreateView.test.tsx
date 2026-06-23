@@ -36,7 +36,7 @@ function createController(
 		view: "create",
 		viewStack: [],
 		mode: "project",
-		shareScene: "default",
+		projectMode: "",
 		shareMode: ShareMode.Project,
 		projectName: "Demo Project",
 		projectId: "project-1",

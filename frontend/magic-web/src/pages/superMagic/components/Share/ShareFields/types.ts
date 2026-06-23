@@ -13,6 +13,7 @@ export interface ShareNameFieldProps {
 	attachments?: any[] // 用于查找文件名称
 	shareProject?: boolean // 是否分享整个项目
 	projectName?: string // 项目名称
+	projectMode?: string | null // 复用 project_mode 语义区分录音分享
 }
 
 /**

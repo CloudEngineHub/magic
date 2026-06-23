@@ -11,12 +11,14 @@ vi.mock("react-i18next", () => ({
 			const labels: Record<string, string> = {
 				"projectShare.empty": "暂无分享链接",
 				"mobile.emptyState.variants.shareLink.title": "还没有分享链接",
-				"mobile.emptyState.variants.shareLink.description": "返回上一页创建第一个分享链接。",
+				"mobile.emptyState.variants.shareLink.description":
+					"返回上一页创建第一个分享链接。",
 				"projectShare.defaultNameOrganization": "组织分享",
 				"projectShare.defaultNamePassword": "密码链接",
 				"projectShare.defaultNamePublic": "公开链接",
 				"projectShare.manageOrganizationDepartmentsOnly": "{{departmentCount}} 个部门",
-				"projectShare.manageOrganizationMembersAndDepartments": "{{userCount}} 个成员，{{departmentCount}} 个部门",
+				"projectShare.manageOrganizationMembersAndDepartments":
+					"{{userCount}} 个成员，{{departmentCount}} 个部门",
 				"projectShare.manageOrganizationMembersOnly": "{{userCount}} 个成员",
 				"projectShare.manageOrganizationSummary": "组织成员可访问",
 				"projectShare.managePasswordSummary": "需要密码访问",
@@ -52,7 +54,7 @@ function createController(
 		view: "manage",
 		viewStack: ["create"],
 		mode: "project",
-		shareScene: "default",
+		projectMode: "",
 		shareMode: ShareMode.Project,
 		projectName: "Demo Project",
 		projectId: "project-1",

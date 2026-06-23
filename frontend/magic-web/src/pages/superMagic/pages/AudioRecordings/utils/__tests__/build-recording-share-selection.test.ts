@@ -1,6 +1,40 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { RecordingDetailFileMap } from "../../types/recording-detail"
-import { buildRecordingShareSelection } from "../build-recording-share-selection"
+import {
+	buildRecordingShareSelection,
+	collectRecordingRequiredShareFileIds,
+	mergeRecordingShareFileIds,
+} from "../build-recording-share-selection"
+
+vi.hoisted(() => {
+	const storageMock = {
+		getItem: () => null,
+		setItem: vi.fn(),
+		removeItem: vi.fn(),
+		clear: vi.fn(),
+		key: vi.fn(),
+		length: 0,
+	}
+
+	Object.defineProperty(globalThis, "localStorage", {
+		value: storageMock,
+		configurable: true,
+	})
+	Object.defineProperty(globalThis, "sessionStorage", {
+		value: storageMock,
+		configurable: true,
+	})
+})
+
+vi.mock("react-i18next", () => ({
+	initReactI18next: {
+		type: "3rdParty",
+		init: () => undefined,
+	},
+	useTranslation: () => ({
+		t: (key: string) => key,
+	}),
+}))
 
 const mockFileMap: RecordingDetailFileMap = {
 	audio: { file_id: "file-audio", file_name: "session.wav" },
@@ -72,5 +106,15 @@ describe("buildRecordingShareSelection", () => {
 		expect(selection.defaultSelectedFileIds).toEqual(["file-audio-only"])
 		expect(selection.groupedItems).toHaveLength(1)
 		expect(selection.groupedItems[0]?.groupKey).toBe("audio")
+	})
+
+	it("collects only magic.project.js as the hidden required file without forcing audio into the final share payload", () => {
+		expect(collectRecordingRequiredShareFileIds(mockFileMap)).toEqual(["file-magic-project"])
+	})
+
+	it("merges user selection with required recording share file ids without duplicates", () => {
+		expect(
+			mergeRecordingShareFileIds(["file-transcript", "file-audio"], ["file-magic-project"]),
+		).toEqual(["file-transcript", "file-audio", "file-magic-project"])
 	})
 })

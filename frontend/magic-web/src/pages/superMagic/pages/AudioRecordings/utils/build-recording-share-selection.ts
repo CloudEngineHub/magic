@@ -20,6 +20,31 @@ export interface RecordingShareSelection {
 	defaultSelectedFileIds: string[]
 }
 
+/** Collects hidden-but-required bundle files that the shared recording viewer depends on. */
+export function collectRecordingRequiredShareFileIds(
+	fileMap: RecordingDetailFileMap | null,
+): string[] {
+	if (!fileMap) {
+		return []
+	}
+
+	// Keep only magic.project.js as a hidden dependency so the shared readonly shell can
+	// recover bundle metadata without forcing the original audio file into every share payload.
+	const requiredFileIds = [fileMap.magicProject?.file_id].filter((fileId): fileId is string =>
+		Boolean(fileId),
+	)
+
+	return Array.from(new Set(requiredFileIds))
+}
+
+/** Merges visible user selections with hidden required files while keeping a stable submission order. */
+export function mergeRecordingShareFileIds(
+	selectedFileIds: string[],
+	requiredFileIds: string[],
+): string[] {
+	return Array.from(new Set([...selectedFileIds, ...requiredFileIds]))
+}
+
 /**
  * Builds the recording share whitelist from the same fileMap used by the detail workbench.
  * Excludes magic.project.js and only includes files the detail page can surface.

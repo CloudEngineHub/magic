@@ -4118,6 +4118,7 @@
 		"shareExpiry": "分享有效期",
 		"shareFile": "分享项目文件",
 		"recordingShareCreateTitle": "分享",
+		"recordingShareName": "录音分享_{{projectName}}",
 		"shareInfo": "分享信息",
 		"shareLink": "分享链接",
 		"shareLinkGenerated": "文件分享",

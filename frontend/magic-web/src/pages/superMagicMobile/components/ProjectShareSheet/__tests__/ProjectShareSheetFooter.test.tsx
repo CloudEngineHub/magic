@@ -21,7 +21,7 @@ function createController(
 		view: "create",
 		viewStack: [],
 		mode: "project",
-		shareScene: "default",
+		projectMode: "",
 		shareMode: ShareMode.Project,
 		projectName: "Demo Project",
 		projectId: "project-1",
@@ -95,9 +95,7 @@ describe("ProjectShareSheetFooter", () => {
 
 	it("submits create share from the fixed footer", () => {
 		const submitCreateShare = vi.fn()
-		render(
-			<ProjectShareSheetFooter controller={createController({ submitCreateShare })} />,
-		)
+		render(<ProjectShareSheetFooter controller={createController({ submitCreateShare })} />)
 
 		fireEvent.click(screen.getByTestId("project-share-sheet-create-submit-button"))
 		expect(submitCreateShare).toHaveBeenCalledTimes(1)

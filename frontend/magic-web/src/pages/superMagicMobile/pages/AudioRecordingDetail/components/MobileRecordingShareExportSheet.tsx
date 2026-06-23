@@ -24,6 +24,9 @@ interface MobileRecordingShareExportSheetProps {
 	recordingName: string
 	fileMap: RecordingDetailFileMap | null
 	projectId?: string
+	allowDownload?: boolean
+	showShareSection?: boolean
+	mainHeaderTitle?: string
 	onOpenChange: (open: boolean) => void
 	onShareLink: () => void
 	onDownloadRecording: () => void
@@ -124,6 +127,9 @@ export function MobileRecordingShareExportSheet({
 	recordingName,
 	fileMap,
 	projectId,
+	allowDownload = true,
+	showShareSection = true,
+	mainHeaderTitle,
 	onOpenChange,
 	onShareLink,
 	onDownloadRecording,
@@ -225,6 +231,7 @@ export function MobileRecordingShareExportSheet({
 	}
 
 	const hasSummaryFiles = Boolean(fileMap?.summaryFiles && fileMap.summaryFiles.length > 0)
+	const resolvedMainHeaderTitle = mainHeaderTitle ?? t("detail.shareAndExport")
 
 	return (
 		<MagicPopup
@@ -233,8 +240,7 @@ export function MobileRecordingShareExportSheet({
 			onClose={() => onOpenChange(false)}
 			position="bottom"
 			headerVariant="actionHeader"
-			headerTitle={view === "main" ? t("detail.shareAndExport") : t("detail.exportSummary")}
-			headerSubtitle={recordingName}
+			headerTitle={view === "main" ? resolvedMainHeaderTitle : t("detail.exportSummary")}
 			headerLeadingAction={
 				view === "main"
 					? {
@@ -257,53 +263,57 @@ export function MobileRecordingShareExportSheet({
 		>
 			{view === "main" ? (
 				<>
-					<div className="flex flex-col gap-2">
-						<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
-							{t("detail.shareSection")}
-						</p>
-						<div className="overflow-hidden rounded-[22px] bg-card">
-							<ActionRow
-								label={t("detail.shareLink")}
-								icon={<Link2 />}
-								onClick={onShareLink}
-							/>
+					{showShareSection ? (
+						<div className="flex flex-col gap-2">
+							<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
+								{t("detail.shareSection")}
+							</p>
+							<div className="overflow-hidden rounded-[22px] bg-card">
+								<ActionRow
+									label={t("detail.shareLink")}
+									icon={<Link2 />}
+									onClick={onShareLink}
+								/>
+							</div>
 						</div>
-					</div>
+					) : null}
 
-					<div className="flex flex-col gap-2">
-						<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
-							{t("detail.exportSection")}
-						</p>
-						<div className="overflow-hidden rounded-[22px] bg-card">
-							<ActionRow
-								label={t("detail.exportRecording")}
-								icon={<Music />}
-								onClick={onDownloadRecording}
-								disabled={!fileMap?.audio}
-								showDivider
-							/>
-							<ActionRow
-								label={t("detail.exportTranscript")}
-								icon={<FileText />}
-								onClick={handleDownloadTranscript}
-								disabled={!fileMap?.transcript}
-								showDivider
-							/>
-							<ActionRow
-								label={t("detail.exportNotes")}
-								icon={<NotebookPen />}
-								onClick={handleDownloadNotes}
-								disabled={!fileMap?.notes}
-								showDivider
-							/>
-							<ActionRow
-								label={t("detail.exportSummary")}
-								icon={<Sparkles />}
-								onClick={() => setView("exportSummary")}
-								disabled={!hasSummaryFiles}
-							/>
+					{allowDownload ? (
+						<div className="flex flex-col gap-2">
+							<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
+								{t("detail.exportSection")}
+							</p>
+							<div className="overflow-hidden rounded-[22px] bg-card">
+								<ActionRow
+									label={t("detail.exportRecording")}
+									icon={<Music />}
+									onClick={onDownloadRecording}
+									disabled={!fileMap?.audio}
+									showDivider
+								/>
+								<ActionRow
+									label={t("detail.exportTranscript")}
+									icon={<FileText />}
+									onClick={handleDownloadTranscript}
+									disabled={!fileMap?.transcript}
+									showDivider
+								/>
+								<ActionRow
+									label={t("detail.exportNotes")}
+									icon={<NotebookPen />}
+									onClick={handleDownloadNotes}
+									disabled={!fileMap?.notes}
+									showDivider
+								/>
+								<ActionRow
+									label={t("detail.exportSummary")}
+									icon={<Sparkles />}
+									onClick={() => setView("exportSummary")}
+									disabled={!hasSummaryFiles}
+								/>
+							</div>
 						</div>
-					</div>
+					) : null}
 				</>
 			) : (
 				<>
@@ -331,7 +341,7 @@ export function MobileRecordingShareExportSheet({
 							disabled={selectedSummaryTypes.size === 0}
 							className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-[16px] font-medium text-primary-foreground transition-opacity active:opacity-80 disabled:opacity-40"
 						>
-							{t("detail.exportBtn", { target: t("detail.exportSummary") })}
+							{t("detail.exportSummary")}
 						</button>
 					</div>
 				</>

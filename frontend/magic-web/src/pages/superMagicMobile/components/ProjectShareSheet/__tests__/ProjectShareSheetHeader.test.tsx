@@ -43,7 +43,7 @@ function createController(
 		view: "linkDetail",
 		viewStack: ["create"],
 		mode: "file",
-		shareScene: "default",
+		projectMode: "",
 		shareMode: ShareMode.File,
 		projectName: "测试项目",
 		projectId: "project-1",
@@ -138,7 +138,7 @@ describe("ProjectShareSheetHeader", () => {
 				controller={createController({
 					view: "create",
 					viewStack: [],
-					shareScene: "audioRecording",
+					projectMode: "audio",
 				})}
 				projectName="测试录音"
 			/>,

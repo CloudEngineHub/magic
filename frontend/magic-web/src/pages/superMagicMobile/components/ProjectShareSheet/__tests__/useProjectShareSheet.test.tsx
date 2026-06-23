@@ -23,6 +23,26 @@ const mocks = vi.hoisted(() => ({
 	useShareDataCalls: [] as Array<{ resourceType: string; enabled?: boolean }>,
 }))
 
+vi.hoisted(() => {
+	const storageMock = {
+		getItem: () => null,
+		setItem: vi.fn(),
+		removeItem: vi.fn(),
+		clear: vi.fn(),
+		key: vi.fn(),
+		length: 0,
+	}
+
+	Object.defineProperty(globalThis, "localStorage", {
+		value: storageMock,
+		configurable: true,
+	})
+	Object.defineProperty(globalThis, "sessionStorage", {
+		value: storageMock,
+		configurable: true,
+	})
+})
+
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		getSnowflakeIds: mocks.getSnowflakeIds,
@@ -95,6 +115,10 @@ vi.mock("@/pages/superMagic/components/ShareManagement/hooks/useShareData", () =
 }))
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: {
+		type: "3rdParty",
+		init: () => undefined,
+	},
 	useTranslation: () => ({
 		t: (key: string, values?: Record<string, unknown>) =>
 			values?.days ? `${key}:${values.days}` : key,
@@ -438,6 +462,85 @@ describe("useProjectShareSheet", () => {
 			}),
 		])
 		expect(result.current.view).toBe("linkDetail")
+	})
+
+	it("录音分享场景创建分享时只会自动补齐 magic.project.js，音频仍保持默认勾选但不再强制注入", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "project-1",
+				projectName: "Demo Project",
+				attachments: [],
+				mode: "file",
+				projectMode: "audio",
+				fileMap: {
+					audio: { file_id: "file-audio", file_name: "session.wav" },
+					transcript: { file_id: "file-transcript", file_name: "session-transcript.md" },
+					magicProject: {
+						file_id: "file-magic-project",
+						file_name: "magic.project.js",
+					},
+					summaryFiles: [],
+				},
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => {
+			result.current.setShareName("Recording Share")
+			result.current.setSelectedFileIds(["file-transcript"])
+		})
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				share_project: false,
+				project_id: "project-1",
+				file_ids: ["file-transcript", "file-magic-project"],
+			}),
+		)
+	})
+
+	it("录音分享场景创建页默认使用录音分享文案，并在空名称提交时继续沿用该兜底", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "project-1",
+				projectName: "季度复盘",
+				attachments: [],
+				mode: "file",
+				projectMode: "audio",
+				fileMap: {
+					audio: { file_id: "file-audio", file_name: "meeting.wav" },
+					transcript: { file_id: "file-transcript", file_name: "meeting-transcript.md" },
+					magicProject: {
+						file_id: "file-magic-project",
+						file_name: "magic.project.js",
+					},
+					summaryFiles: [],
+				},
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.formState.shareName).toBe("share.recordingShareName")
+
+		act(() => {
+			result.current.setShareName("")
+		})
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				resource_name: "share.recordingShareName",
+			}),
+		)
 	})
 
 	it("文件模式下查看整项目分享详情时，不使用当前勾选文件作为已选文件", () => {

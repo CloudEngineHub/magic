@@ -702,6 +702,33 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(screen.queryByText("Older html title")).toBeNull()
 	})
 
+	it("renders the shared created-at fallback title instead of the untitled label", () => {
+		detailDataMock.mockReturnValue({
+			loading: false,
+			error: false,
+			mutateAudioProjectItem: vi.fn(),
+			projectItem: createItem({ project_name: "" }),
+			fileMap: {
+				summaryFiles: [],
+				magicProject: { file_id: "magic-project-file-001" },
+				magicProjectConfig: { metadata: { title: "Stale bundle title", speakers: {} } },
+			},
+			texts: { transcript: undefined, notes: undefined, summary: {} },
+			audioUrl: "",
+			title: "2024/03/09 16:00 的录音",
+			attachmentTree: [],
+			attachmentList: [],
+		})
+
+		render(<MobileAudioRecordingDetailPage />)
+
+		expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+			"2024/03/09 16:00 的录音",
+		)
+		expect(screen.queryByText("Untitled")).toBeNull()
+		expect(screen.queryByText("Stale bundle title")).toBeNull()
+	})
+
 	it("opens the speaker settings sheet with the shared action header controls", async () => {
 		collectSpeakerIdsFromTextMock.mockReturnValue(["Speaker-1"])
 

@@ -48,6 +48,7 @@ import { useRecordingDetailShareControls } from "./components/recording-detail/u
 import { AudioRecordingMoveGroupDialog } from "./components/AudioRecordingGroupDialogs"
 import ShareModal from "@/pages/superMagic/components/Share/Modal"
 import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
+import { createRecordingShareUiConfig } from "@/pages/superMagic/components/Share/utils/recordingShareUiConfig"
 import { AUDIO_RECORDINGS_PAGE_SHELL_CLASS } from "./constants/page-shell"
 
 const MobileAudioRecordingDetailPage = lazy(
@@ -397,14 +398,9 @@ function AudioRecordingDetailPageDesktop() {
 					attachmentList={shareControls.attachmentList}
 					projectName={displayTitle}
 					defaultSelectedFileIds={shareControls.defaultSelectedFileIds}
+					requiredFileIds={shareControls.requiredFileIds}
 					types={[ShareType.PasswordProtected, ShareType.Organization, ShareType.Public]}
-					fileShareUiConfig={{
-						hideShareProjectToggle: true,
-						hideShowFileListSetting: true,
-						forceViewFileList: false,
-						lockShareProject: true,
-						useRecordingShareCreateTitle: true,
-					}}
+					fileShareUiConfig={createRecordingShareUiConfig()}
 				/>
 			</div>
 		</RecordingDetailProvider>

@@ -4116,6 +4116,7 @@
 		"shareExpiry": "Expiry",
 		"shareFile": "Share Project Files",
 		"recordingShareCreateTitle": "Share",
+		"recordingShareName": "Recording Share_{{projectName}}",
 		"shareInfo": "Share Information",
 		"shareLink": "Share Link",
 		"shareLinkGenerated": "File Sharing",

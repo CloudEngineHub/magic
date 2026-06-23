@@ -147,6 +147,7 @@ vi.mock("../components/recording-detail/useRecordingDetailShareControls", () => 
 		attachments: [],
 		attachmentList: [],
 		defaultSelectedFileIds: [],
+		requiredFileIds: [],
 		openCreateShare: vi.fn(),
 		openManageShare: vi.fn(),
 		closeShareModal: vi.fn(),
@@ -178,7 +179,11 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer
 }))
 
 vi.mock("../components/recording-detail/RecordingDetailHeader", () => ({
-	RecordingDetailHeader: () => <div data-testid="recording-detail-header" />,
+	RecordingDetailHeader: ({ title }: { title: string }) => (
+		<div data-testid="recording-detail-header">
+			<h1>{title}</h1>
+		</div>
+	),
 }))
 
 vi.mock("@/services/audioRecordings", () => ({
@@ -240,5 +245,16 @@ describe("AudioRecordingDetailPage", () => {
 		expect(
 			notesEmpty.closest('[data-testid="recording-detail-region-empty-slot"]'),
 		).toHaveClass("min-h-full", "items-center", "justify-center")
+	})
+
+	it("renders the shared created-at fallback title instead of the untitled label", () => {
+		mockDetailData.title = "2024/03/09 16:00 的录音"
+
+		render(<AudioRecordingDetailPage />)
+
+		expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+			"2024/03/09 16:00 的录音",
+		)
+		expect(screen.queryByText("Untitled")).toBeNull()
 	})
 })

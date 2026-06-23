@@ -8,7 +8,8 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, params?: { count?: number }) => {
 			const labels: Record<string, string> = {
-				"detail.transcriptCount": `Transcript ${params?.count ?? 0}`,
+				"detail.tabs.transcript": "Transcript",
+				"detail.transcriptSegmentCountSuffix": `${params?.count ?? 0} segments`,
 				"detail.openSpeakerSettings": "Open speaker settings",
 			}
 			return labels[key] ?? key
@@ -101,6 +102,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 
 		renderTranscriptPanel(10)
 
+		const panel = screen.getByTestId("recording-detail-transcript-panel")
 		const segments = screen.getAllByTestId("recording-detail-transcript-segment")
 		const inactiveSegment = segments[0]
 		const activeSegment = segments[1]
@@ -109,18 +111,29 @@ describe("RecordingDetailTranscriptPanel", () => {
 		const inactiveText = screen.getByText("Earlier line")
 		const activeText = screen.getByText("Active line")
 		const speakerChips = screen.getAllByTestId("recording-detail-transcript-speaker-chip")
+		const title = screen.getByTestId("recording-detail-transcript-title")
+		const count = screen.getByTestId("recording-detail-transcript-count")
+		const settingsButton = screen.getByTestId("recording-detail-open-speaker-settings")
+		const accessory = screen.getByTestId("recording-detail-transcript-header-accessory")
 
-		expect(inactiveSegment).toHaveClass("rounded-xl", "px-3", "py-2.5")
-		expect(activeSegment).toHaveClass("rounded-xl", "px-3", "py-2.5")
+		expect(panel).not.toHaveClass("border", "bg-card")
+		expect(title).toHaveTextContent("Transcript")
+		expect(count).toHaveTextContent("2 segments")
+		expect(settingsButton).toHaveClass("h-8", "px-3", "text-[12px]", "rounded-full")
+		expect(settingsButton).not.toHaveClass("h-10", "px-4", "text-[14px]")
+		expect(accessory).toHaveClass("size-8", "rounded-full", "border", "bg-white")
+		expect(inactiveSegment).toHaveClass("rounded-xl", "px-2", "py-2.5")
+		expect(activeSegment).toHaveClass("rounded-xl", "px-2", "py-2.5")
+		expect(inactiveSegment).toHaveClass("px-2")
 		expect(activeSegment).not.toHaveClass("bg-muted")
 		expect(activeSegment).not.toHaveClass("shadow")
 
 		expect(inactiveTime).toHaveClass("text-foreground/35")
 		expect(activeTime).toHaveClass("text-foreground")
-		expect(inactiveText).toHaveClass("text-foreground/55")
+		expect(inactiveText).toHaveClass("text-foreground/65")
 		expect(activeText).toHaveClass("text-foreground")
-		expect(speakerChips[0]).toHaveClass("opacity-55")
-		expect(speakerChips[1]).not.toHaveClass("opacity-55")
+		expect(speakerChips[0]).toHaveClass("opacity-70")
+		expect(speakerChips[1]).not.toHaveClass("opacity-70")
 		expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: "center", behavior: "smooth" })
 
 		if (originalScrollIntoView) {

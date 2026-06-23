@@ -44,10 +44,10 @@ vi.mock("react-i18next", () => ({
 				"projectShare.expiresOn": "到期于",
 				"projectShare.expiresPermanent": "永久有效",
 				"projectShare.linkLabel": "分享链接",
-					"projectShare.organizationMembersLabel": "成员 / 部门",
+				"projectShare.organizationMembersLabel": "成员 / 部门",
 				"projectShare.shareScopeAllMembers": "所有成员",
 				"projectShare.typePassword": "密码",
-					"projectShare.typeOrganizationDescription": "仅限指定成员或部门访问",
+				"projectShare.typeOrganizationDescription": "仅限指定成员或部门访问",
 				"projectShare.typePasswordDescription": "需要正确密码才能访问",
 				"share.accessPassword": "访问密码",
 				"share.copyPassword": "复制密码",
@@ -76,7 +76,7 @@ function createController(
 		view: "linkDetail",
 		viewStack: ["create"],
 		mode: "project",
-		shareScene: "default",
+		projectMode: "",
 		shareMode: ShareMode.Project,
 		projectName: "Demo Project",
 		projectId: "project-1",
@@ -382,11 +382,11 @@ describe("ProjectShareLinkDetailView", () => {
 		expect(screen.getByTestId("project-share-sheet-detail-members-section")).toHaveTextContent(
 			"成员 / 部门",
 		)
-		expect(screen.getByTestId("project-share-sheet-detail-member-row-user-1")).toHaveTextContent(
-			"张三",
-		)
-		expect(screen.getByTestId("project-share-sheet-detail-member-row-dept-1")).toHaveTextContent(
-			"设计部",
-		)
+		expect(
+			screen.getByTestId("project-share-sheet-detail-member-row-user-1"),
+		).toHaveTextContent("张三")
+		expect(
+			screen.getByTestId("project-share-sheet-detail-member-row-dept-1"),
+		).toHaveTextContent("设计部")
 	})
 })

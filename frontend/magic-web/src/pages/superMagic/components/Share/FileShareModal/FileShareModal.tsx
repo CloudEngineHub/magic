@@ -38,12 +38,13 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { projectStore } from "@/pages/superMagic/stores/core"
 import { userStore } from "@/models/user"
 import { generateShareMessageText } from "../utils/generateShareMessageText"
-
+import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 interface FileShareModalProps {
 	attachments?: any[] // 可选，如果没有 resourceId 时使用（文件树）
 	attachmentList?: any[] // 可选，扁平化的文件列表
 	types: ShareType[]
 	defaultSelectedFileIds?: string[] // 默认选中的文件ID列表
+	requiredFileIds?: string[] // 提交时始终保留的录音依赖文件ID
 	defaultOpenFileId?: string // 默认打开的文件ID
 	resourceId?: string // 外层传入的资源ID（如从列表管理页面传入）
 	shareMode?: ShareMode // 分享模式：文件或项目
@@ -73,6 +74,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		attachmentList: externalAttachmentList,
 		types,
 		defaultSelectedFileIds,
+		requiredFileIds = [],
 		defaultOpenFileId: externalDefaultOpenFileId,
 		resourceId: externalResourceId,
 		shareMode,
@@ -84,20 +86,14 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		fileShareUiConfig,
 	} = props
 
-	const {
-		hideShareProjectToggle = false,
-		hideShowFileListSetting = false,
-		forceViewFileList,
-		showSelectAll = false,
-		lockShareProject = false,
-	} = fileShareUiConfig ?? {}
-
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
 	const responsive = useResponsive()
 	const isMobile = responsive.md === false
 
 	const isFreePlan = userStore.user.organizationSubscriptionInfo?.is_paid_plan === false
+	const initialLockShareProject = fileShareUiConfig?.lockShareProject ?? false
+	const initialForceViewFileList = fileShareUiConfig?.forceViewFileList
 
 	// State: saving status
 	const [isSaving, setIsSaving] = useState(false)
@@ -119,24 +115,17 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		isFreePlan ? ShareType.Public : ShareType.PasswordProtected,
 	)
 	const [shareProject, setShareProject] = useState<boolean>(
-		lockShareProject ? false : shareMode === ShareMode.Project,
+		initialLockShareProject ? false : shareMode === ShareMode.Project,
 	)
 	const [extraData, setExtraData] = useState<ShareExtraData>({
 		passwordEnabled: isFreePlan ? false : true,
 		password: shareType === ShareType.PasswordProtected ? generateSharePassword() : "",
 		allowCopy: true,
-		showFileList: forceViewFileList ?? true,
+		showFileList: initialForceViewFileList ?? true,
 		hideCreatorInfo: false,
 		allowDownloadProjectFile: true,
 		showOriginalInfo: true,
 	})
-
-	const effectiveShareProject = lockShareProject ? false : shareProject
-	const effectiveViewFileList =
-		forceViewFileList !== undefined ? forceViewFileList : (extraData.showFileList ?? true)
-	const advancedHiddenSettingKeys = hideShowFileListSetting
-		? (["showFileList"] as const)
-		: undefined
 
 	// State: resource ID (use external if provided, otherwise fetch and cache)
 	const [resourceId, setResourceId] = useState<string | undefined>(externalResourceId)
@@ -154,6 +143,20 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const [attachments, setAttachments] = useState<any[]>(externalAttachments || [])
 
 	const [attachmentList, setAttachmentList] = useState<any[]>([])
+	const {
+		projectMode,
+		hideShareProjectToggle = false,
+		hideShowFileListSetting = false,
+		forceViewFileList,
+		showSelectAll = false,
+		lockShareProject = false,
+	} = fileShareUiConfig ?? {}
+	const effectiveShareProject = lockShareProject ? false : shareProject
+	const effectiveViewFileList =
+		forceViewFileList !== undefined ? forceViewFileList : (extraData.showFileList ?? true)
+	const advancedHiddenSettingKeys = hideShowFileListSetting
+		? (["showFileList"] as const)
+		: undefined
 
 	// State: default open file ID (initialize from external prop if provided)
 	const [defaultOpenFileId, setDefaultOpenFileId] = useState<string | null>(
@@ -214,6 +217,14 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		}
 	}, [externalProjectId])
 
+	/**
+	 * Recording shares are always partial-file shares, so edit mode must not revive the legacy project toggle.
+	 */
+	useEffect(() => {
+		if (!lockShareProject) return
+		setShareProject(false)
+	}, [lockShareProject])
+
 	// Sync externalAttachments to internal attachments state
 	useEffect(() => {
 		// Only sync if externalAttachments is provided and we don't have resourceId
@@ -228,6 +239,17 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			setAttachmentList(externalAttachmentList)
 		}
 	}, [externalAttachmentList])
+
+	/**
+	 * Keeps the advanced setting state aligned with specialized scenes that force-hide file-list visibility.
+	 */
+	useEffect(() => {
+		if (forceViewFileList === undefined) return
+		setExtraData((prev) => ({
+			...prev,
+			showFileList: forceViewFileList,
+		}))
+	}, [forceViewFileList])
 
 	// Sync externalProjectName to internal projectName state
 	useEffect(() => {
@@ -286,6 +308,10 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		}
 		return calculateActualFileCount(selectedFiles)
 	}, [selectedFiles, effectiveShareProject, attachmentList])
+	const submittedFileIds = useMemo(
+		() => mergeRecordingShareFileIds(selectedFileIds, requiredFileIds),
+		[selectedFileIds, requiredFileIds],
+	)
 
 	// Handle file selection change
 	const handleFileSelectionChange = useCallback((fileIds: string[], files: any[]) => {
@@ -364,9 +390,16 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			const projectSharePrefix = t("share.projectShareName", {
 				projectName: "",
 			}).split("_")[0]
+			const recordingSharePrefix = t("share.recordingShareName", {
+				projectName: "",
+			}).split("_")[0]
 
-			// 检查当前分享名称是否以"文件分享"或"项目分享"开头
-			if (shareName.startsWith(fileSharePrefix) || shareName.startsWith(projectSharePrefix)) {
+			// Keep auto-renaming limited to system-generated prefixes so manual edits survive.
+			if (
+				shareName.startsWith(fileSharePrefix) ||
+				shareName.startsWith(projectSharePrefix) ||
+				shareName.startsWith(recordingSharePrefix)
+			) {
 				// 根据新的状态生成默认名称
 				const newName = calculateDefaultShareName(
 					defaultOpenFileId || undefined,
@@ -375,13 +408,22 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					t,
 					newShareProject,
 					internalProjectName,
+					projectMode,
 				)
 				if (newName) {
 					setShareName(newName)
 				}
 			}
 		},
-		[shareName, defaultOpenFileId, selectedFiles, attachments, t, internalProjectName],
+		[
+			shareName,
+			defaultOpenFileId,
+			selectedFiles,
+			attachments,
+			t,
+			internalProjectName,
+			projectMode,
+		],
 	)
 
 	// 处理项目分享开关变化
@@ -560,7 +602,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			// Remove from fetched set on error to allow retry
 			fetchedResourceIds.current.delete(externalResourceId)
 		}
-	}, [externalResourceId])
+	}, [externalResourceId, forceViewFileList, lockShareProject, projectId])
 
 	// 防抖版本的 fetchResourceData
 	const { run: debouncedFetchResourceData } = useDebounceFn(fetchResourceData, {
@@ -619,7 +661,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 							}))
 						: undefined,
 				password: extraData.passwordEnabled ? extraData.password : undefined,
-				file_ids: selectedFileIds,
+				// Recording shares keep hidden runtime files out of the selector but always
+				// send them to the backend so readonly pages can reconstruct the bundle.
+				file_ids: submittedFileIds,
 				default_open_file_id: defaultOpenFileId || undefined,
 				share_project: effectiveShareProject,
 				extra: {
@@ -639,7 +683,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 
 			// Step 3: Generate share message and copy to clipboard (silently, no toast)
 			try {
-				const fileIds = apiResult?.file_ids || selectedFileIds
+				const fileIds = apiResult?.file_ids || submittedFileIds
 				let fileDisplayConfig: { type?: string; [key: string]: unknown } | undefined =
 					undefined
 
@@ -703,7 +747,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				resourceId: currentResourceId, // 传递 resourceId
 				shareProject: effectiveShareProject, // 传递 shareProject
 				projectName: projectName, // 传递项目原始名称
-				fileIds: apiResult?.file_ids || selectedFileIds, // 传递 file_ids
+				fileIds: apiResult?.file_ids || submittedFileIds, // 传递实际提交的 file_ids
 			})
 		} catch (error) {
 			console.error("Failed to save share settings:", error)
@@ -714,6 +758,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	}, [
 		shareName,
 		selectedFileIds,
+		submittedFileIds,
 		effectiveShareProject,
 		t,
 		resourceId,
@@ -724,10 +769,10 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		extraData.passwordEnabled,
 		extraData.password,
 		extraData.allowCopy,
-		extraData.showFileList,
 		extraData.hideCreatorInfo,
 		extraData.showOriginalInfo,
 		extraData.allowDownloadProjectFile,
+		effectiveViewFileList,
 		defaultOpenFileId,
 		projectId,
 		externalResourceId,
@@ -831,6 +876,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 								attachments={attachments}
 								shareProject={effectiveShareProject}
 								projectName={internalProjectName}
+								projectMode={projectMode}
 							/>
 
 							{/* Share Type */}
@@ -979,6 +1025,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 								attachments={attachments}
 								shareProject={effectiveShareProject}
 								projectName={internalProjectName}
+								projectMode={projectMode}
 							/>
 
 							{/* Share Type */}

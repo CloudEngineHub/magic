@@ -31,7 +31,12 @@ import type {
 import { buildShareClipboardText } from "../utils/buildShareClipboardText"
 import { isOrganizationShareScopeAll } from "@/pages/superMagic/components/ShareManagement/utils/shareScopeSummary"
 import { isPartialFileShare, isWholeProjectShare } from "../utils/shareScope"
-import { buildRecordingShareSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
+import {
+	buildRecordingShareSelection,
+	collectRecordingRequiredShareFileIds,
+	mergeRecordingShareFileIds,
+} from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
+import { isAudioProjectMode } from "@/services/audioRecordings/audioProjectMode"
 
 /**
  * Constructs the base default values for the share form.
@@ -88,6 +93,7 @@ function collectSelectedItems(
 
 interface BuildDefaultShareNameForSheetParams {
 	mode: MobileShareSheetMode
+	projectMode?: string | null
 	defaultOpenFileId?: string
 	attachments: AttachmentItem[]
 	effectiveSelectedFileIds: string[]
@@ -97,6 +103,7 @@ interface BuildDefaultShareNameForSheetParams {
 
 function buildDefaultShareNameForSheet({
 	mode,
+	projectMode,
 	defaultOpenFileId,
 	attachments,
 	effectiveSelectedFileIds,
@@ -111,6 +118,7 @@ function buildDefaultShareNameForSheet({
 		t,
 		mode === "project",
 		projectName,
+		projectMode,
 	)
 }
 
@@ -222,7 +230,7 @@ function normalizeDetailMemberNode(node: TreeNode): TreeNode {
 export function useProjectShareSheet({
 	open,
 	mode = "project",
-	shareScene = "default",
+	projectMode,
 	projectId,
 	projectName,
 	attachments,
@@ -233,11 +241,15 @@ export function useProjectShareSheet({
 	onClose,
 }: ProjectShareSheetProps): ProjectShareSheetController {
 	const { t } = useTranslation("super")
-	const isAudioRecordingScene = shareScene === "audioRecording"
+	const isAudioRecordingScene = isAudioProjectMode(projectMode)
 	const effectiveMode: MobileShareSheetMode = isAudioRecordingScene ? "file" : mode
 	const shareMode = effectiveMode === "file" ? ShareMode.File : ShareMode.Project
 	const recordingShareSelection = useMemo(
 		() => buildRecordingShareSelection(isAudioRecordingScene ? (fileMap ?? null) : null),
+		[fileMap, isAudioRecordingScene],
+	)
+	const recordingRequiredFileIds = useMemo(
+		() => (isAudioRecordingScene ? collectRecordingRequiredShareFileIds(fileMap ?? null) : []),
 		[fileMap, isAudioRecordingScene],
 	)
 	const shareableAttachments = isAudioRecordingScene
@@ -334,6 +346,7 @@ export function useProjectShareSheet({
 				? ""
 				: buildDefaultShareNameForSheet({
 						mode: effectiveMode,
+						projectMode,
 						defaultOpenFileId,
 						attachments: shareableAttachments,
 						effectiveSelectedFileIds: isAudioRecordingScene
@@ -533,6 +546,12 @@ export function useProjectShareSheet({
 			return
 		}
 
+		// Recording shares keep the visible picker unchanged and only augment the payload
+		// so readonly/share pages always receive the bundle entry files they depend on.
+		const submittedFileIds = isAudioRecordingScene
+			? mergeRecordingShareFileIds(effectiveSelectedFileIds, recordingRequiredFileIds)
+			: effectiveSelectedFileIds
+
 		setSaving(true)
 		try {
 			// Align with desktop FileShareModal: allocate share resource_id via snowflake API.
@@ -553,6 +572,7 @@ export function useProjectShareSheet({
 							t,
 							false,
 							projectName,
+							projectMode,
 						)
 					: t("share.projectShareName", {
 							projectName: projectName || t("common.untitledProject"),
@@ -578,7 +598,7 @@ export function useProjectShareSheet({
 							}))
 						: undefined,
 				password,
-				file_ids: effectiveSelectedFileIds,
+				file_ids: submittedFileIds,
 				default_open_file_id: effectiveMode === "file" ? defaultOpenFileId : undefined,
 				share_project: isAudioRecordingScene ? false : effectiveMode === "project",
 				project_id: projectId,
@@ -610,12 +630,12 @@ export function useProjectShareSheet({
 							password,
 							main_file_name:
 								selectedFileItems[0]?.name || selectedFileItems[0]?.file_name || "",
-							file_ids: effectiveSelectedFileIds,
+							file_ids: submittedFileIds,
 							created_at: new Date().toISOString(),
 							expire_at: undefined,
 							share_project: false,
 							extend: {
-								file_count: effectiveSelectedFileIds.length,
+								file_count: submittedFileIds.length,
 							},
 						} satisfies FileShareItem)
 					: ({
@@ -632,7 +652,7 @@ export function useProjectShareSheet({
 							created_at: new Date().toISOString(),
 							expire_at: undefined,
 							extend: {
-								file_count: effectiveSelectedFileIds.length,
+								file_count: submittedFileIds.length,
 							},
 						} satisfies ProjectShareItem)
 
@@ -688,7 +708,7 @@ export function useProjectShareSheet({
 	return {
 		open,
 		mode: effectiveMode,
-		shareScene,
+		projectMode,
 		shareMode,
 		view,
 		viewStack,

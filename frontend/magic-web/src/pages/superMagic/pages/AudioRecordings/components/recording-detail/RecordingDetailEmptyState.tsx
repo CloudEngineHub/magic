@@ -95,7 +95,8 @@ function resolveEmptyCopy(
 	if (variant === "noTranscript") {
 		return {
 			title: t("detail.emptyTranscript"),
-			description: t("detail.empty.noTranscriptHint"),
+			// Keep transcript-empty copy minimal so the empty state matches the latest product wording.
+			description: "",
 		}
 	}
 	if (variant === "noNotes") {
@@ -190,16 +191,17 @@ function RecordingDetailPlayerSkeleton() {
 function RecordingDetailTranscriptSkeleton() {
 	return (
 		<div
-			className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card"
+			// Keep the transcript loading state borderless so it matches the prototype-style content column.
+			className="flex min-h-0 flex-1 flex-col overflow-hidden"
 			data-testid="recording-detail-transcript-skeleton"
 		>
-			<div className="flex items-center justify-between border-b border-border px-4 py-3">
+			<div className="flex items-center justify-between px-4 pb-3 pt-1">
 				<Skeleton className="h-4 w-24 rounded-sm" />
-				<Skeleton className="h-8 w-20 rounded-md" />
+				<Skeleton className="h-8 w-20 rounded-full" />
 			</div>
-			<div className="flex min-h-[320px] flex-1 flex-col gap-3 px-4 py-3">
+			<div className="flex min-h-[320px] flex-1 flex-col gap-3 px-4 pb-3">
 				{TRANSCRIPT_SEGMENT_SKELETONS.map((segment, index) => (
-					<div key={index} className="rounded-xl px-3 py-2.5">
+					<div key={index} className="rounded-xl px-2 py-2.5">
 						<div className="mb-1 flex items-center gap-2">
 							<Skeleton className="h-3 w-8 shrink-0 rounded-sm" />
 							<Skeleton className="h-5 w-16 rounded-full" />

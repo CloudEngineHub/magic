@@ -6,7 +6,8 @@ type TranscriptSegmentDensity = "desktop" | "mobile"
 export function getTranscriptSegmentRowClassName(density: TranscriptSegmentDensity) {
 	return cn(
 		"rounded-xl text-left",
-		density === "desktop" ? "cursor-pointer px-3 py-2.5" : "px-3 py-2",
+		// Desktop rows intentionally stay airy and borderless to match the latest PC prototype transcript column.
+		density === "desktop" ? "cursor-pointer px-2 py-2.5" : "px-3 py-2",
 	)
 }
 
@@ -26,11 +27,11 @@ export function getTranscriptSegmentTextClassName(
 	return cn(
 		density === "desktop" ? "whitespace-pre-wrap text-sm leading-6" : "text-[16px] leading-7",
 		"transition-colors",
-		active ? "text-foreground" : "text-foreground/55",
+		active ? "text-foreground" : "text-foreground/65",
 	)
 }
 
 /** Softens inactive speaker chips so the current sentence chip remains the primary focus cue. */
 export function getTranscriptSpeakerChipToneClassName(active: boolean) {
-	return cn("transition-opacity", !active && "opacity-55")
+	return cn("transition-opacity", !active && "opacity-70")
 }

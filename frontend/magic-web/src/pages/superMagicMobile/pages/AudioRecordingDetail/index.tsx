@@ -117,10 +117,7 @@ export default function MobileAudioRecordingDetailPage() {
 		return cardStatus === "summarized" ? "summary" : "source"
 	}, [detailItem?.card_status, locationState?.cardStatus, projectItem?.card_status])
 	const [activeTab, setActiveTab] = useState<MobileRecordingTopTab>(defaultTab)
-	const recordingShareSelection = useMemo(
-		() => buildRecordingShareSelection(fileMap),
-		[fileMap],
-	)
+	const recordingShareSelection = useMemo(() => buildRecordingShareSelection(fileMap), [fileMap])
 
 	useEffect(() => {
 		setActiveTab(defaultTab)
@@ -640,7 +637,7 @@ export default function MobileAudioRecordingDetailPage() {
 				open={projectShareSheetOpen}
 				onClose={() => setProjectShareSheetOpen(false)}
 				mode="file"
-				shareScene="audioRecording"
+				projectMode="audio"
 				projectId={projectId}
 				projectName={displayTitle}
 				attachments={recordingShareSelection.shareableFiles}

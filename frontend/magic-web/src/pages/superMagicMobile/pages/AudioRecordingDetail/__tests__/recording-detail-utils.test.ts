@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest"
+import i18next from "i18next"
+import { beforeAll, describe, expect, it } from "vitest"
+import { formatTime } from "@/utils/string"
 import { parseMagicProjectConfig } from "../utils/magic-project-config"
 import { mergeProjectDetailIntoAudioItem } from "../utils/project-detail-merge"
 import { resolveRecordingDetailTitle } from "../utils/recording-detail-title"
@@ -12,6 +14,21 @@ import { parseTopicsMarkdown } from "../utils/topics-parser"
 import { parseTranscriptMarkdown } from "../utils/transcript-parser"
 
 describe("mobile recording detail utils", () => {
+	beforeAll(async () => {
+		// Seed the minimal namespace used by the shared fallback-title helper.
+		await i18next.init({
+			lng: "zh-CN",
+			fallbackLng: "zh-CN",
+			resources: {
+				"zh-CN": {
+					audioRecordings: {
+						defaultName: "{{datetime}} 的录音",
+					},
+				},
+			},
+		})
+	})
+
 	it("parses magic.project.js config without executing callbacks", () => {
 		const config = parseMagicProjectConfig(`
 window.magicProjectConfig = {
@@ -177,6 +194,36 @@ Important discussion.
 		expect(collectSpeakerIdsFromText(markdown)).toEqual(["Speaker-1", "Speaker-2"])
 	})
 
+	it("preserves existing speaker links without nesting their href", () => {
+		const markdown = "[说话人1](magic-speaker://Speaker-1) keeps talking."
+
+		expect(injectMarkdownSpeakerLinks(markdown, { "Speaker-1": "说话人1" })).toBe(markdown)
+	})
+
+	it("only injects plain speaker ids when time links and speaker links already exist", () => {
+		const markdown =
+			"[00:11](magic-time://11) [说话人1](magic-speaker://Speaker-1) meets Speaker-2."
+		const result = injectMarkdownSpeakerLinks(markdown, {
+			"Speaker-1": "说话人1",
+			"Speaker-2": "说话人2",
+		})
+
+		expect(result).toContain("[00:11](magic-time://11)")
+		expect(result).toContain("[说话人1](magic-speaker://Speaker-1)")
+		expect(result).toContain("[说话人2](magic-speaker://Speaker-2)")
+		expect(result).not.toContain("magic-speaker://[")
+	})
+
+	it("does not rewrite speaker ids inside existing href text", () => {
+		const markdown = "[Speaker-1 profile](https://example.com/Speaker-1?from=Speaker-2)"
+		const result = injectMarkdownSpeakerLinks(markdown, {
+			"Speaker-1": "主持人",
+			"Speaker-2": "嘉宾",
+		})
+
+		expect(result).toBe(markdown)
+	})
+
 	it("parses recording time text into seconds for both minute and hour formats", () => {
 		expect(parseRecordingTimeToSeconds("05:12")).toBe(312)
 		expect(parseRecordingTimeToSeconds("1:05:12")).toBe(3912)
@@ -206,6 +253,7 @@ Important discussion.
 		expect(
 			resolveRecordingDetailTitle({
 				projectName: "",
+				createdAt: 0,
 				initialTitle: "",
 				magicProjectConfig: {
 					name: "Bundle name",
@@ -215,10 +263,28 @@ Important discussion.
 		).toBe("")
 	})
 
+	it("falls back to the same created-at title used by the recordings list", () => {
+		const createdAt = 1710000000
+
+		expect(
+			resolveRecordingDetailTitle({
+				projectName: "",
+				createdAt,
+				initialTitle: "Temporary route title",
+			}),
+		).toBe(
+			i18next.t("defaultName", {
+				ns: "audioRecordings",
+				datetime: formatTime(createdAt, "YYYY/MM/DD HH:mm"),
+			}),
+		)
+	})
+
 	it("does not use route title as a fallback before canonical project detail arrives", () => {
 		expect(
 			resolveRecordingDetailTitle({
 				projectName: "",
+				createdAt: 0,
 				initialTitle: "Temporary route title",
 			}),
 		).toBe("")
@@ -226,6 +292,7 @@ Important discussion.
 		expect(
 			resolveRecordingDetailTitle({
 				projectName: "Canonical detail title",
+				createdAt: 1710000000,
 				initialTitle: "Temporary route title",
 			}),
 		).toBe("Canonical detail title")

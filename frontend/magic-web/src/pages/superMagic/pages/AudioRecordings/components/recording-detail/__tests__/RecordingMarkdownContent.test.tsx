@@ -59,6 +59,43 @@ describe("RecordingMarkdownContent", () => {
 		expect(speakerLinks[1].className).toMatch(/orange/)
 	})
 
+	it("renders code-wrapped speaker ids as clickable speaker chips", () => {
+		const onSpeakerClick = vi.fn()
+
+		render(
+			<RecordingMarkdownContent
+				content="`Speaker-2` shared the core argument."
+				onSpeakerClick={onSpeakerClick}
+			/>,
+		)
+
+		const speakerChip = screen.getByTestId("recording-detail-speaker-link")
+		expect(speakerChip.tagName).toBe("BUTTON")
+		expect(speakerChip).toHaveAttribute("data-speaker-id", "Speaker-2")
+
+		fireEvent.click(speakerChip)
+		expect(onSpeakerClick).toHaveBeenCalledWith("Speaker-2")
+	})
+
+	it("renders code-wrapped speaker groups as clickable speaker chips", () => {
+		const onSpeakerClick = vi.fn()
+
+		render(
+			<RecordingMarkdownContent
+				content="`[Speaker-1, Speaker-2]` summarized the discussion."
+				onSpeakerClick={onSpeakerClick}
+			/>,
+		)
+
+		const speakerChips = screen.getAllByTestId("recording-detail-speaker-link")
+		expect(speakerChips).toHaveLength(2)
+		expect(speakerChips[0]).toHaveAttribute("data-speaker-id", "Speaker-1")
+		expect(speakerChips[1]).toHaveAttribute("data-speaker-id", "Speaker-2")
+
+		fireEvent.click(speakerChips[1] as HTMLElement)
+		expect(onSpeakerClick).toHaveBeenCalledWith("Speaker-2")
+	})
+
 	it("forwards time and speaker click handlers", () => {
 		const onTimeClick = vi.fn()
 		const onSpeakerClick = vi.fn()

@@ -15,7 +15,6 @@ import type { RecordingShareGroupedItem } from "@/pages/superMagic/pages/AudioRe
 
 export type ProjectShareSheetView = "create" | "manage" | "linkDetail" | "expiry" | "deleteConfirm"
 export type MobileShareSheetMode = "project" | "file"
-export type ProjectShareScene = "default" | "audioRecording"
 export type MobileShareItem = ProjectShareItem | FileShareItem
 
 export interface SelectedFileHierarchyNode {
@@ -29,7 +28,7 @@ export interface SelectedFileHierarchyNode {
 export interface ProjectShareSheetProps {
 	open: boolean
 	mode?: MobileShareSheetMode
-	shareScene?: ProjectShareScene
+	projectMode?: string | null
 	projectId?: string
 	projectName?: string
 	attachments: AttachmentItem[]
@@ -54,7 +53,7 @@ export interface ProjectShareFormState {
 export interface ProjectShareSheetController {
 	open: boolean
 	mode: MobileShareSheetMode
-	shareScene: ProjectShareScene
+	projectMode?: string | null
 	shareMode: ShareMode
 	view: ProjectShareSheetView
 	viewStack: ProjectShareSheetView[]

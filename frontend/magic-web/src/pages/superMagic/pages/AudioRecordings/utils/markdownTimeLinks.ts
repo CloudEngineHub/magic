@@ -5,6 +5,9 @@ const MARKDOWN_MAGIC_TIME_LINK_REGEX = /\[([^\]]+)]\(magic-time:\/\/\/?([^)]+)\)
 const CODED_MAGIC_TIME_LINK_REGEX = /`\\?\[([^\\\]]+)\\?]\??\\?\(magic-time:\/\/\/?([^\\)]+)\\?\)`/g
 const PLAIN_MAGIC_TIME_TEXT_REGEX =
 	/(\d{1,3}:[0-5]\d(?::[0-5]\d)?)\s*\(magic-time:\/\/\/?([^)]+)\)/g
+const MARKDOWN_LINK_REGEX = /\[[^\]]+]\([^)]+\)/g
+const INLINE_CODE_REGEX = /`[^`\n]+`/g
+const HTML_TAG_REGEX = /<\/?[A-Za-z][^>]*>/g
 const SPEAKER_GROUP_REGEX = /\[(Speaker-[\w-]+(?:\s*,\s*Speaker-[\w-]+)+)]/g
 const SPEAKER_ID_REGEX = /\bSpeaker-[\w-]+\b/g
 
@@ -42,6 +45,31 @@ export function parseMarkdownTimeLink(href: string | undefined): number | null {
 	return Number.isFinite(seconds) ? seconds : null
 }
 
+/** Replaces matched markdown fragments with placeholders so later text transforms cannot corrupt them. */
+function preserveMarkdownFragments(
+	markdown: string,
+	prefix: string,
+	patterns: RegExp[],
+): { text: string; restoreText: (value: string) => string } {
+	const preservedFragments: string[] = []
+	let text = markdown
+
+	patterns.forEach((pattern) => {
+		text = text.replace(pattern, (match) => {
+			const index = preservedFragments.push(match) - 1
+			return `${prefix}_${index}`
+		})
+	})
+
+	return {
+		text,
+		restoreText: (value: string) =>
+			value.replace(new RegExp(`${prefix}_(\\d+)`, "g"), (_match, index: string) => {
+				return preservedFragments[Number(index)] ?? ""
+			}),
+	}
+}
+
 /** Converts speaker ids in markdown into internal links so every speaker pill opens settings. */
 export function injectMarkdownSpeakerLinks(
 	markdown: string,
@@ -55,7 +83,15 @@ export function injectMarkdownSpeakerLinks(
 		return `MAGIC_SPEAKER_LINK_${index}`
 	}
 
-	return markdown
+	// Preserve existing markdown links, inline code, and raw HTML so speaker injection only
+	// touches plain text instead of rewriting href values or pre-authored rich content.
+	const preservedContent = preserveMarkdownFragments(markdown, "MAGIC_PRESERVED_FRAGMENT", [
+		MARKDOWN_LINK_REGEX,
+		INLINE_CODE_REGEX,
+		HTML_TAG_REGEX,
+	])
+
+	const withSpeakerLinks = preservedContent.text
 		.replace(SPEAKER_GROUP_REGEX, (_match, group: string) =>
 			group
 				.split(/\s*,\s*/)
@@ -67,6 +103,8 @@ export function injectMarkdownSpeakerLinks(
 			/MAGIC_SPEAKER_LINK_(\d+)/g,
 			(_match, index: string) => preservedLinks[Number(index)] ?? "",
 		)
+
+	return preservedContent.restoreText(withSpeakerLinks)
 }
 
 /** Reads the speaker id from an internal markdown speaker link href. */

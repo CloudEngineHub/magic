@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react"
 import { openShareManagementModal } from "@/pages/superMagic/components/ShareManagement/openShareManagementModal"
 import type { RecordingDetailFileMap } from "../../types/recording-detail"
-import { buildRecordingShareSelection } from "../../utils/build-recording-share-selection"
+import {
+	buildRecordingShareSelection,
+	collectRecordingRequiredShareFileIds,
+} from "../../utils/build-recording-share-selection"
 
 interface RecordingDetailShareControlsInput {
 	projectId: string
@@ -14,6 +17,7 @@ export function useRecordingDetailShareControls(input: RecordingDetailShareContr
 	const [shareModalOpen, setShareModalOpen] = useState(false)
 
 	const shareSelection = useMemo(() => buildRecordingShareSelection(fileMap), [fileMap])
+	const requiredFileIds = useMemo(() => collectRecordingRequiredShareFileIds(fileMap), [fileMap])
 
 	const attachments = shareSelection.shareableFiles
 	const attachmentList = shareSelection.shareableFiles
@@ -37,6 +41,7 @@ export function useRecordingDetailShareControls(input: RecordingDetailShareContr
 		attachments,
 		attachmentList,
 		defaultSelectedFileIds,
+		requiredFileIds,
 		hasShareableFiles,
 		openCreateShare,
 		openManageShare,

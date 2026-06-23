@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react"
+import { ListFilter } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import type { RecordingTranscriptSegment } from "../../types/recording-detail"
@@ -13,6 +14,11 @@ import {
 	getTranscriptSegmentTimeClassName,
 	getTranscriptSpeakerChipToneClassName,
 } from "./transcript-segment-styles"
+
+const TRANSCRIPT_HEADER_ACTION_BASE_CLASS =
+	"inline-flex shrink-0 items-center justify-center border border-black/10 bg-white text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:bg-muted/30"
+const TRANSCRIPT_HEADER_PILL_ACTION_CLASS = `${TRANSCRIPT_HEADER_ACTION_BASE_CLASS} h-8 rounded-full px-3 text-[12px] font-medium leading-none`
+const TRANSCRIPT_HEADER_ICON_ACTION_CLASS = `${TRANSCRIPT_HEADER_ACTION_BASE_CLASS} size-8 rounded-full`
 
 interface RecordingDetailTranscriptPanelProps {
 	segments: RecordingTranscriptSegment[]
@@ -47,31 +53,55 @@ export function RecordingDetailTranscriptPanel({
 	}, [activeSegmentId])
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card">
-			<div className="flex items-center justify-between border-b border-border px-4 py-3">
-				<h2 className="text-sm font-semibold text-foreground">
-					{t("detail.transcriptCount", { count: segments.length })}
-				</h2>
-				{capabilities.canEditSpeakers ? (
-					<button
-						type="button"
-						className={cn(
-							"inline-flex h-8 items-center rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors",
-							"hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50",
-						)}
-						onClick={onOpenSpeakerSettings}
-						disabled={segments.length === 0}
-						data-testid="recording-detail-open-speaker-settings"
+		<div
+			className="flex min-h-0 flex-1 flex-col overflow-hidden"
+			data-testid="recording-detail-transcript-panel"
+		>
+			<div className="flex items-center justify-between px-2 pb-4 pt-2">
+				<div className="flex min-w-0 items-baseline gap-2">
+					<h2
+						className="shrink-0 text-[18px] font-semibold leading-7 text-foreground"
+						data-testid="recording-detail-transcript-title"
 					>
-						{t("detail.openSpeakerSettings")}
-					</button>
-				) : null}
+						{t("detail.tabs.transcript")}
+					</h2>
+					<span
+						className="truncate text-sm font-normal leading-5 text-muted-foreground"
+						data-testid="recording-detail-transcript-count"
+					>
+						{t("detail.transcriptSegmentCountSuffix", { count: segments.length })}
+					</span>
+				</div>
+				<div className="flex shrink-0 items-center gap-2">
+					{capabilities.canEditSpeakers ? (
+						<button
+							type="button"
+							className={cn(
+								TRANSCRIPT_HEADER_PILL_ACTION_CLASS,
+								"disabled:cursor-not-allowed disabled:opacity-50",
+							)}
+							onClick={onOpenSpeakerSettings}
+							disabled={segments.length === 0}
+							data-testid="recording-detail-open-speaker-settings"
+						>
+							{t("detail.openSpeakerSettings")}
+						</button>
+					) : null}
+					<span
+						aria-hidden="true"
+						className={TRANSCRIPT_HEADER_ICON_ACTION_CLASS}
+						data-testid="recording-detail-transcript-header-accessory"
+					>
+						<ListFilter className="size-4" strokeWidth={2} />
+					</span>
+				</div>
 			</div>
 
 			<ScrollEdgeFadeContainer
-				fadeColor="card"
+				// The transcript should read like a plain content column, so fades blend into the page shell instead of a card.
+				fadeColor="background"
 				className="min-h-[320px] flex-1"
-				scrollClassName="px-4 py-3 [scrollbar-width:thin]"
+				scrollClassName="px-4 pb-3 [scrollbar-width:thin]"
 				contentDeps={[segments.length]}
 			>
 				{segments.length === 0 ? (

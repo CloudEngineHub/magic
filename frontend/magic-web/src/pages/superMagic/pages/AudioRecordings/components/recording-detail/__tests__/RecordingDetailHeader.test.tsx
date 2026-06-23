@@ -128,6 +128,12 @@ describe("RecordingDetailHeader action styling", () => {
 		expect(screen.queryByText("Back")).not.toBeInTheDocument()
 	})
 
+	it("can hide the back button for share readonly shells", () => {
+		render(<RecordingDetailHeader {...baseProps} showBackButton={false} />)
+
+		expect(screen.queryByTestId("recording-detail-back")).not.toBeInTheDocument()
+	})
+
 	it("does not render a bottom border on the header shell", () => {
 		render(<RecordingDetailHeader {...baseProps} />)
 

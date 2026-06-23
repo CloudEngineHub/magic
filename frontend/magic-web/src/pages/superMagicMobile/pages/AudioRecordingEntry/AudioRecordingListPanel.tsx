@@ -522,7 +522,7 @@ function AudioRecordingListPanel({
 				open={shareSheetState != null}
 				onClose={() => setShareSheetState(null)}
 				mode="file"
-				shareScene="audioRecording"
+				projectMode="audio"
 				projectId={shareSheetState?.projectId}
 				projectName={shareSheetState?.projectName}
 				attachments={shareSheetState?.attachments ?? []}

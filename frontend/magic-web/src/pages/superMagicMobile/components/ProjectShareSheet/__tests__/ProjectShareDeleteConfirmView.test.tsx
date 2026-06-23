@@ -26,7 +26,7 @@ function createController(
 		view: "deleteConfirm",
 		viewStack: ["linkDetail"],
 		mode: "project",
-		shareScene: "default",
+		projectMode: "",
 		shareMode: ShareMode.Project,
 		projectName: "Demo Project",
 		projectId: "project-1",

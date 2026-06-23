@@ -26,12 +26,12 @@
 		"openProject": "View project details",
 		"processing": "Processing",
 		"rename": "Rename",
-		"retryUpload": "Retry",
 		"retrySummary": "Retry summary",
+		"retryUpload": "Retry",
 		"sourceDevice": "Device recording",
 		"sourceImported": "Imported audio",
-		"sourceRecorded": "Phone mic",
 		"sourcePc": "Desktop",
+		"sourceRecorded": "Phone mic",
 		"summarize": "Summarize",
 		"summarized": "Summarized",
 		"summarizing": "Summarizing now"
@@ -40,27 +40,41 @@
 	"detail": {
 		"audioNotFound": "Recording audio file not found",
 		"back": "Back",
-		"emptyNotes": "No notes yet",
-		"emptySummary": "No summary content",
-		"emptySummaryFile": "This content has not been generated yet",
-		"emptyTranscript": "No transcript yet",
 		"empty": {
 			"noAudio": "No audio",
 			"noAudioHint": "This project has no playable recording file.",
 			"noTranscriptHint": "Transcript is not ready yet. Playback and other content remain available.",
-			"summaryFailed": "Summary failed",
-			"summaryFailedHint": "Please try again later or resubmit the summary.",
+			"shareNoReadable": "This link has no readable content yet",
 			"shareNoTranscript": "This share link does not include transcript content",
-			"shareNoReadable": "This link has no readable content yet"
+			"summaryFailed": "Summary failed",
+			"summaryFailedHint": "Please try again later or resubmit the summary."
 		},
+		"emptyNotes": "No notes yet",
+		"emptySummary": "No summary content",
+		"emptySummaryFile": "This content has not been generated yet",
+		"emptyTranscript": "No transcript yet",
 		"entryNotFound": "Recording entry file not found",
+		"export": "Export",
+		"exportAll": "Export all",
+		"exportAudio": "Export audio",
+		"exportBtn": "Export {{target}}",
+		"exportContentLabel": "Select content to export",
+		"exportNotes": "Export notes",
+		"exportRecording": "Recording",
+		"exportSection": "Export files",
+		"exportSummary": "Export summary",
+		"exportTranscript": "Export transcript",
+		"exportUnavailable": "Only original recording export is available right now",
 		"loadFailed": "Failed to load. Please try again.",
 		"loading": "Loading recording detail...",
+		"noExportFilesSelected": "Please select at least one item to export",
 		"notSummarized": "No summary yet",
 		"notSummarizedHint": "This recording has not generated a summary yet. You can review the source first.",
 		"openProject": "View project",
 		"openSpeakerSettings": "Set speakers",
 		"openingProject": "Opening project...",
+		"packSuccess": "Download ready",
+		"packing": "Packing files...",
 		"pause": "Pause",
 		"play": "Play",
 		"player": {
@@ -73,27 +87,12 @@
 			"waveformSeekAria": "Playback progress on waveform; drag or use arrow keys to seek"
 		},
 		"relatedDialogue": "Related dialogue",
-		"shareAndExport": "Share & Export",
-		"shareSection": "Share",
-		"shareLink": "Share link",
 		"share": "Share",
+		"shareAndExport": "Share & Export",
 		"shareCreate": "Create share",
+		"shareLink": "Share link",
 		"shareManage": "Manage shares",
-		"transcriptCount": "Transcript · {{count}} segments",
-		"export": "Export",
-		"exportSection": "Export files",
-		"exportAudio": "Export audio",
-		"exportRecording": "Recording",
-		"exportTranscript": "Export transcript",
-		"exportNotes": "Export notes",
-		"exportSummary": "Export summary",
-		"exportAll": "Export all",
-		"exportUnavailable": "Only original recording export is available right now",
-		"packing": "Packing files...",
-		"packSuccess": "Download ready",
-		"exportContentLabel": "Select content to export",
-		"exportBtn": "Export {{target}}",
-		"noExportFilesSelected": "Please select at least one item to export",
+		"shareSection": "Share",
 		"showMarkdown": "Show markdown",
 		"showMindmap": "Show mind map",
 		"speakerLabel": "Speaker {{label}}",
@@ -119,6 +118,8 @@
 			"transcript": "Transcript"
 		},
 		"topicSummary": "Key points",
+		"transcriptCount": "Transcript · {{count}} segments",
+		"transcriptSegmentCountSuffix": "{{count}} segments",
 		"untitled": "Untitled recording"
 	},
 	"empty": {
@@ -146,15 +147,9 @@
 	"refresh": "Refresh list",
 	"searchClear": "Clear search",
 	"searchPlaceholder": "Search recordings",
-	"subtitle": "View and manage recordings and AI summaries from the app.",
-	"summary": {
-		"missingModel": "Unable to load summary model. Please try again later.",
-		"missingParams": "Missing parameters required for summary. Please refresh the list.",
-		"submitFailed": "Failed to submit summary. Please try again later."
-	},
 	"share": {
-		"contentLabel": "Share content",
 		"collapseSummary": "Collapse summary options",
+		"contentLabel": "Share content",
 		"expandSummary": "Expand summary options",
 		"items": {
 			"audio": "Recording",
@@ -162,6 +157,12 @@
 			"summaryRoot": "Summary",
 			"transcript": "Transcript"
 		}
+	},
+	"subtitle": "View and manage recordings and AI summaries from the app.",
+	"summary": {
+		"missingModel": "Unable to load summary model. Please try again later.",
+		"missingParams": "Missing parameters required for summary. Please refresh the list.",
+		"submitFailed": "Failed to submit summary. Please try again later."
 	},
 	"title": "Recordings & summaries"
 }

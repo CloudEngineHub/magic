@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest"
+import i18next from "i18next"
+import { beforeAll, describe, expect, it } from "vitest"
+import { formatTime } from "@/utils/string"
 import { parseMagicProjectConfig } from "../magic-project-config"
 import { mergeProjectDetailIntoAudioItem } from "../project-detail-merge"
 import { resolveRecordingDetailTitle } from "../recording-detail-title"
@@ -12,6 +14,21 @@ import { parseTopicsMarkdown } from "../topics-parser"
 import { parseTranscriptMarkdown } from "../transcript-parser"
 
 describe("recording detail utils", () => {
+	beforeAll(async () => {
+		// Seed the minimal namespace used by the shared fallback-title helper.
+		await i18next.init({
+			lng: "zh-CN",
+			fallbackLng: "zh-CN",
+			resources: {
+				"zh-CN": {
+					audioRecordings: {
+						defaultName: "{{datetime}} 的录音",
+					},
+				},
+			},
+		})
+	})
+
 	it("parses magic.project.js config without executing callbacks", () => {
 		const config = parseMagicProjectConfig(`
 window.magicProjectConfig = {
@@ -193,6 +210,7 @@ Summary body.
 		expect(
 			resolveRecordingDetailTitle({
 				projectName: "",
+				createdAt: 0,
 				initialTitle: "",
 				magicProjectConfig: {
 					name: "Bundle name",
@@ -202,10 +220,28 @@ Summary body.
 		).toBe("")
 	})
 
+	it("falls back to the same created-at title used by the recordings list", () => {
+		const createdAt = 1710000000
+
+		expect(
+			resolveRecordingDetailTitle({
+				projectName: "",
+				createdAt,
+				initialTitle: "Temporary route title",
+			}),
+		).toBe(
+			i18next.t("defaultName", {
+				ns: "audioRecordings",
+				datetime: formatTime(createdAt, "YYYY/MM/DD HH:mm"),
+			}),
+		)
+	})
+
 	it("does not use route title as a fallback before canonical project detail arrives", () => {
 		expect(
 			resolveRecordingDetailTitle({
 				projectName: "",
+				createdAt: 0,
 				initialTitle: "Temporary route title",
 			}),
 		).toBe("")
@@ -213,6 +249,7 @@ Summary body.
 		expect(
 			resolveRecordingDetailTitle({
 				projectName: "Canonical detail title",
+				createdAt: 1710000000,
 				initialTitle: "Temporary route title",
 			}),
 		).toBe("Canonical detail title")

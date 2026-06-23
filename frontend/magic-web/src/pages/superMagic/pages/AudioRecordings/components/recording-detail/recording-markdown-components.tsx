@@ -33,7 +33,13 @@ export function createRecordingMarkdownComponents({
 			/>
 		),
 		code: (props: ComponentProps<"code">) => (
-			<MarkdownCode {...props} onTimeClick={onTimeClick} timeLinkTestId={timeLinkTestId} />
+			<MarkdownCode
+				{...props}
+				onSpeakerClick={onSpeakerClick}
+				onTimeClick={onTimeClick}
+				timeLinkTestId={timeLinkTestId}
+				speakerLinkTestId={speakerLinkTestId}
+			/>
 		),
 		// Wrapper div is required for isolated horizontal scroll; table cell styles use CSS.
 		table: ({ children }: { children?: React.ReactNode }) => (
@@ -51,16 +57,22 @@ export function createRecordingMarkdownComponents({
 /** Converts inline code-wrapped magic-time links into playable time controls. */
 function MarkdownCode({
 	children,
+	onSpeakerClick,
 	onTimeClick,
 	timeLinkTestId,
+	speakerLinkTestId,
 }: {
 	children?: React.ReactNode
+	onSpeakerClick?: (speakerId: string) => void
 	onTimeClick?: (seconds: number) => void
 	timeLinkTestId: string
+	speakerLinkTestId: string
 }) {
 	const text = String(children ?? "").trim()
 	const match = text.match(/^\[([^\]]+)]\(magic-time:\/\/\/?([^)]+)\)$/)
 	const seconds = match ? Number(match[2]) : null
+	const speakerId = text.match(/^(Speaker-[\w-]+)$/)?.[1] ?? null
+	const speakerGroup = text.match(/^\[((?:Speaker-[\w-]+)(?:\s*,\s*Speaker-[\w-]+)+)]$/)?.[1]
 
 	if (match && Number.isFinite(seconds)) {
 		return (
@@ -69,6 +81,37 @@ function MarkdownCode({
 				seconds={seconds as number}
 				onTimeClick={onTimeClick}
 				testId={timeLinkTestId}
+			/>
+		)
+	}
+
+	if (speakerGroup) {
+		const speakerIds = speakerGroup.split(/\s*,\s*/)
+		return (
+			<>
+				{/* Preserve the original group semantics while exposing each speaker as an individual settings entry. */}
+				{speakerIds.map((item, index) => (
+					<span key={item}>
+						{index > 0 ? " " : null}
+						<RecordingSpeakerChip
+							label={item}
+							speakerId={item}
+							onSpeakerClick={onSpeakerClick}
+							testId={speakerLinkTestId}
+						/>
+					</span>
+				))}
+			</>
+		)
+	}
+
+	if (speakerId) {
+		return (
+			<RecordingSpeakerChip
+				label={speakerId}
+				speakerId={speakerId}
+				onSpeakerClick={onSpeakerClick}
+				testId={speakerLinkTestId}
 			/>
 		)
 	}
@@ -106,18 +149,13 @@ function MarkdownAnchor({
 	}
 
 	if (speakerId) {
-		const chipStyle = resolveSpeakerChipStyle(speakerId)
 		return (
-			<button
-				type="button"
-				className={cn("recording-speaker-chip", chipStyle.chip)}
-				onClick={() => onSpeakerClick?.(speakerId)}
-				data-testid={speakerLinkTestId}
-				data-speaker-id={speakerId}
-			>
-				<span className={cn("recording-speaker-chip-dot", chipStyle.dot)} />
-				{children}
-			</button>
+			<RecordingSpeakerChip
+				label={String(children ?? "")}
+				speakerId={speakerId}
+				onSpeakerClick={onSpeakerClick}
+				testId={speakerLinkTestId}
+			/>
 		)
 	}
 
@@ -125,6 +163,34 @@ function MarkdownAnchor({
 		<a {...rest} href={href} target="_blank" rel="noreferrer">
 			{children}
 		</a>
+	)
+}
+
+/** Reuses the shared speaker chip look-and-feel for both markdown links and code-wrapped speaker ids. */
+function RecordingSpeakerChip({
+	label,
+	speakerId,
+	onSpeakerClick,
+	testId,
+}: {
+	label: string
+	speakerId: string
+	onSpeakerClick?: (speakerId: string) => void
+	testId: string
+}) {
+	const chipStyle = resolveSpeakerChipStyle(speakerId)
+
+	return (
+		<button
+			type="button"
+			className={cn("recording-speaker-chip", chipStyle.chip)}
+			onClick={() => onSpeakerClick?.(speakerId)}
+			data-testid={testId}
+			data-speaker-id={speakerId}
+		>
+			<span className={cn("recording-speaker-chip-dot", chipStyle.dot)} />
+			{label}
+		</button>
 	)
 }
 

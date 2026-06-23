@@ -62,4 +62,13 @@ describe("RecordingDetailAudioBar", () => {
 		fireEvent.click(screen.getByRole("option", { name: "1.5x" }))
 		expect(onPlaybackRateChange).toHaveBeenCalledWith(1.5)
 	})
+
+	it("requests expanded mode when the collapsed maximize trigger is clicked", () => {
+		const onExpandedChange = vi.fn()
+		render(<RecordingDetailAudioBar {...baseProps} onExpandedChange={onExpandedChange} />)
+
+		fireEvent.click(screen.getByLabelText("detail.player.expandPlayerAria"))
+
+		expect(onExpandedChange).toHaveBeenCalledWith(true)
+	})
 })

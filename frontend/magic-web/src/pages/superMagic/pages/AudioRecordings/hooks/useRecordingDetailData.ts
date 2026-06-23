@@ -163,9 +163,10 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 	const title = useMemo(() => {
 		return resolveRecordingDetailTitle({
 			projectName: audioProjectItem?.project_name,
+			createdAt: audioProjectItem?.created_at,
 			initialTitle,
 		})
-	}, [audioProjectItem?.project_name, initialTitle])
+	}, [audioProjectItem?.created_at, audioProjectItem?.project_name, initialTitle])
 
 	return {
 		loading,
