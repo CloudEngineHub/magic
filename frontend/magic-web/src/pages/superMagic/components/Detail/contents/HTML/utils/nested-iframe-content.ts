@@ -407,7 +407,6 @@ export function createNestedIframeContentHandler(
 			requestId: details.requestId,
 			errorMessage,
 			source: {
-				layer: "nested",
 				depth: chainFileIds.length,
 				path: details.relativePath,
 				requesterFileId: details.messageFileId || "",

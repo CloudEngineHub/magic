@@ -31,7 +31,6 @@ export type IframeRenderFailureType =
 	| "nested_iframe_failed"
 
 export interface IframeRenderLifecycleSource {
-	layer: "top" | "nested"
 	depth: number
 	fileId?: string
 	path?: string
@@ -63,27 +62,14 @@ export interface IframeRenderLifecycleContext {
 	contentLength?: number
 }
 
-export type IframeRenderLifecyclePayload = IframeRenderLifecycleContext & {
-	stage: IframeRenderLifecycleStage
-	failureType?: IframeRenderFailureType
+type IframeRenderNonFailureStage = Exclude<IframeRenderLifecycleStage, "iframe_failure">
+
+interface IframeRenderLifecycleCommonExtra {
 	reason?: string
 	requestId?: string
-	errorType?: unknown
 	errorMessage?: unknown
 	errorStack?: unknown
-	errorSource?: unknown
-	errorLineno?: unknown
-	errorColno?: unknown
-	tagName?: string
-	url?: string
-	resourceType?: string
 	origin?: string
-	sandboxTelemetryEventId?: string
-	sandboxTelemetryTimestamp?: number
-	sandboxTelemetryPageHref?: string
-	sandboxTelemetryPageReadyState?: string
-	sandboxTelemetryDedupeKey?: string
-	sandboxTelemetryDedupeCount?: number
 	isExpectedSource?: boolean
 	fullContentLength?: number
 	markerId?: string
@@ -95,6 +81,82 @@ export type IframeRenderLifecyclePayload = IframeRenderLifecycleContext & {
 	verticalScrollbarWidth?: number
 	timeoutMs?: number
 }
+
+interface IframeRenderSandboxTelemetryExtra {
+	origin: string
+	sandboxTelemetryEventId: string
+	sandboxTelemetryTimestamp: number
+	sandboxTelemetryPageHref: string
+	sandboxTelemetryPageReadyState: DocumentReadyState
+	sandboxTelemetryDedupeKey?: string
+	sandboxTelemetryDedupeCount?: number
+}
+
+type IframeRenderNonFailurePayload = IframeRenderLifecycleContext &
+	IframeRenderLifecycleCommonExtra & {
+		stage: IframeRenderNonFailureStage
+		failureType?: never
+	}
+
+type IframeRenderRuntimeErrorFailurePayload = IframeRenderLifecycleContext &
+	IframeRenderSandboxTelemetryExtra & {
+		stage: "iframe_failure"
+		failureType: "runtime_error"
+		reason: Extract<
+			HtmlSandboxTelemetryPayload["event"],
+			{ type: "runtime_error" }
+		>["errorType"]
+		errorType: Extract<
+			HtmlSandboxTelemetryPayload["event"],
+			{ type: "runtime_error" }
+		>["errorType"]
+		errorMessage: string
+		errorStack?: string
+		errorSource?: string
+		errorLineno?: number
+		errorColno?: number
+		tagName?: never
+		url?: never
+		resourceType?: never
+	}
+
+type IframeRenderResourceLoadFailurePayload = IframeRenderLifecycleContext &
+	IframeRenderSandboxTelemetryExtra & {
+		stage: "iframe_failure"
+		failureType: "resource_load_failed"
+		tagName: string
+		url: string
+		resourceType: Extract<
+			HtmlSandboxTelemetryPayload["event"],
+			{ type: "resource_load_failed" }
+		>["resourceType"]
+		reason?: never
+		errorType?: never
+		errorMessage?: never
+		errorStack?: never
+		errorSource?: never
+		errorLineno?: never
+		errorColno?: never
+	}
+
+type IframeRenderNestedIframeFailurePayload = IframeRenderLifecycleContext & {
+	stage: "iframe_failure"
+	failureType: "nested_iframe_failed"
+	reason: "not_found" | "cycle" | "fetch_failed" | "processing_error" | string
+	requestId: string
+	errorMessage: string
+	errorStack?: string
+	errorType?: never
+	tagName?: never
+	url?: never
+	resourceType?: never
+}
+
+export type IframeRenderLifecyclePayload =
+	| IframeRenderNonFailurePayload
+	| IframeRenderRuntimeErrorFailurePayload
+	| IframeRenderResourceLoadFailurePayload
+	| IframeRenderNestedIframeFailurePayload
 
 export interface IframeRenderLifecycleState {
 	sessionId: string
@@ -116,7 +178,7 @@ interface ReportIframeRenderLifecycleStageParams {
 	lifecycle: IframeRenderLifecycleState
 	getContext: () => IframeRenderLifecycleContext
 	stage: IframeRenderLifecycleStage
-	extra?: Partial<IframeRenderLifecyclePayload>
+	extra?: Record<string, unknown>
 	options?: {
 		once?: boolean
 	}
@@ -157,11 +219,12 @@ export function reportIframeRenderLifecycleStage({
 	if (options.once !== false && lifecycle.reportedStages.has(stage)) return
 
 	lifecycle.reportedStages.add(stage)
-	logger.report(HTML_IFRAME_RENDER_LIFECYCLE_EVENT, {
+	const payload = {
 		...getContext(),
 		stage,
 		...extra,
-	})
+	} as IframeRenderLifecyclePayload
+	logger.report(HTML_IFRAME_RENDER_LIFECYCLE_EVENT, payload)
 }
 
 export function startIframeRenderLifecycleSession({
@@ -199,7 +262,7 @@ export function startIframeRenderLifecycleSession({
 export function mapSandboxTelemetryToLifecycleReport(
 	payload: HtmlSandboxTelemetryPayload,
 	origin: string,
-): { stage: IframeRenderLifecycleStage; extra: Partial<IframeRenderLifecyclePayload> } | null {
+): { stage: "iframe_failure"; extra: Record<string, unknown> } | null {
 	const commonExtra = {
 		source: payload.source,
 		origin,

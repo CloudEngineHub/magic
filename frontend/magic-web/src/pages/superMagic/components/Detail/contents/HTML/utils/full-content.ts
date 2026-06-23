@@ -26,7 +26,6 @@ const getSandboxTelemetryScript = (fileId?: string) => {
 			window.__MAGIC_SANDBOX_TELEMETRY_INSTALLED__ = true;
 
 			var HTML_SANDBOX_TELEMETRY_MESSAGE = "MAGIC_HTML_SANDBOX_TELEMETRY";
-			var HTML_SANDBOX_TELEMETRY_SCHEMA_VERSION = 1;
 			var telemetrySequence = 0;
 			var telemetryDedupeCounts = {};
 			var TELEMETRY_MAX_PER_DEDUPE_KEY = 5;
@@ -68,7 +67,6 @@ const getSandboxTelemetryScript = (fileId?: string) => {
 				var chainFileIds = Array.isArray(window.__MAGIC_IFRAME_CHAIN__) ? window.__MAGIC_IFRAME_CHAIN__.slice() : [];
 				var depth = chainFileIds.length;
 				return {
-					layer: depth > 0 ? "nested" : "top",
 					depth: depth,
 					fileId: window.__MAGIC_FILE_ID__ || "",
 					path: window.__MAGIC_RELATIVE_PATH__ || "",
@@ -122,7 +120,6 @@ const getSandboxTelemetryScript = (fileId?: string) => {
 				postTelemetryMessage({
 					type: HTML_SANDBOX_TELEMETRY_MESSAGE,
 					payload: {
-						schemaVersion: HTML_SANDBOX_TELEMETRY_SCHEMA_VERSION,
 						eventId: nextTelemetryEventId(),
 						severity: options && options.severity ? options.severity : "error",
 						event: event,

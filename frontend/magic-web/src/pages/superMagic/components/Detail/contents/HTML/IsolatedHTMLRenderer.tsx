@@ -390,7 +390,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				targetOrigin: iframeTargetOrigin,
 				postMessageTargetStrategy,
 				source: {
-					layer: "top",
 					depth: 0,
 					fileId: fileId || "",
 					path: htmlRelativeFolderPath || "",

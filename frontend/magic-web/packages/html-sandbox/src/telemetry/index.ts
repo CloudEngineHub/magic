@@ -1,9 +1,7 @@
 export const HTML_SANDBOX_TELEMETRY_MESSAGE = "MAGIC_HTML_SANDBOX_TELEMETRY"
-export const HTML_SANDBOX_TELEMETRY_SCHEMA_VERSION = 1
 export type HtmlSandboxTelemetrySeverity = "info" | "warn" | "error"
 
 export interface HtmlSandboxTelemetrySource {
-	layer: "top" | "nested"
 	depth: number
 	fileId?: string
 	path?: string
@@ -49,7 +47,6 @@ export type HtmlSandboxTelemetryEvent =
 	  }
 
 export interface HtmlSandboxTelemetryPayload {
-	schemaVersion: typeof HTML_SANDBOX_TELEMETRY_SCHEMA_VERSION
 	eventId: string
 	severity: HtmlSandboxTelemetrySeverity
 	event: HtmlSandboxTelemetryEvent
@@ -121,10 +118,8 @@ export function sanitizeHtmlSandboxTelemetryText(
 
 function isTelemetrySource(value: unknown): value is HtmlSandboxTelemetrySource {
 	if (!isRecord(value)) return false
-	const layer = value.layer
 	const depth = value.depth
 	return (
-		(layer === "top" || layer === "nested") &&
 		typeof depth === "number" &&
 		Number.isFinite(depth) &&
 		depth >= 0 &&
@@ -196,7 +191,6 @@ export function isHtmlSandboxTelemetryMessage(
 	const payload = value.payload
 
 	return (
-		payload.schemaVersion === HTML_SANDBOX_TELEMETRY_SCHEMA_VERSION &&
 		typeof payload.eventId === "string" &&
 		["info", "warn", "error"].includes(String(payload.severity)) &&
 		isTelemetryEvent(payload.event) &&
