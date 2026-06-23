@@ -36,7 +36,8 @@ export async function generatePluginImages(canvas: Canvas, params: PluginGenerat
 	const width = params.width ?? (Number.isFinite(sizeWidth) ? sizeWidth : undefined)
 	const height = params.height ?? (Number.isFinite(sizeHeight) ? sizeHeight : undefined)
 	const batchImageId = generateUUID()
-	const persistedGenerateImageRequest: GenerateImageRequest = {
+	const request: GenerateImagesRequest = {
+		image_id: batchImageId,
 		model_id: params.model_id,
 		prompt: params.prompt,
 		size: params.size,
@@ -44,7 +45,10 @@ export async function generatePluginImages(canvas: Canvas, params: PluginGenerat
 		reference_images: params.reference_images,
 		reference_image_options: params.reference_image_options,
 		image_generation_config: params.image_generation_config,
+		generate_num: count,
 	}
+	const { image_id, generate_num, ...generateImageRequest } = request
+
 	const elementIds = await withHistoryManagerAsync(canvas.historyManager, async () => {
 		const nextElementIds = canvas.toolManager
 			.getImageGeneratorTool()
@@ -63,7 +67,7 @@ export async function generatePluginImages(canvas: Canvas, params: PluginGenerat
 				{
 					status: "processing",
 					errorMessage: undefined,
-					generateImageRequest: persistedGenerateImageRequest,
+					generateImageRequest: generateImageRequest,
 					imageGenerationTaskMeta: createBatchImageTaskMeta({
 						imageId: batchImageId,
 						outputIndex: index + 1,
@@ -73,18 +77,6 @@ export async function generatePluginImages(canvas: Canvas, params: PluginGenerat
 				{ silent: false },
 			)
 		})
-
-		const request: GenerateImagesRequest = {
-			image_id: batchImageId,
-			model_id: params.model_id,
-			prompt: params.prompt,
-			size: params.size,
-			resolution: params.resolution,
-			reference_images: params.reference_images,
-			reference_image_options: params.reference_image_options,
-			image_generation_config: params.image_generation_config,
-			generate_num: count,
-		}
 
 		await generateImages(request)
 		const batchPollingManager = new ImageBatchPollingManager({
