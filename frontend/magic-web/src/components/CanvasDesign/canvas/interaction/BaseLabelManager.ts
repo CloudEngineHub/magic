@@ -304,10 +304,17 @@ export abstract class BaseLabelManager {
 
 		// 监听选择变化
 		this.listen("element:select", (event) => {
+			let createdLabel = false
 			event.data.elementIds.forEach((elementId) => {
-				this.createOrUpdateLabel(elementId, { skipReorder: true, skipNotify: true })
+				createdLabel =
+					this.createOrUpdateLabel(elementId, {
+						skipReorder: true,
+						skipNotify: true,
+					}) || createdLabel
 			})
-			this.reorderAllLabels()
+			if (createdLabel) {
+				this.reorderAllLabels()
+			}
 			this.updateAllLabelsVisibility()
 		})
 
@@ -326,12 +333,13 @@ export abstract class BaseLabelManager {
 
 			// 如果有新 hover 的元素，更新其可见性
 			if (newHoveredId) {
-				this.createOrUpdateLabel(newHoveredId, {
+				const createdLabel = this.createOrUpdateLabel(newHoveredId, {
 					skipReorder: true,
 					skipNotify: true,
 				})
-				this.reorderAllLabels()
-				this.updateLabelVisibility(newHoveredId)
+				if (createdLabel) {
+					this.reorderAllLabels()
+				}
 			}
 
 			// 更新追踪的 hover 元素
@@ -392,27 +400,28 @@ export abstract class BaseLabelManager {
 	protected createOrUpdateLabel(
 		elementId: string,
 		options?: { skipReorder?: boolean; skipNotify?: boolean },
-	): void {
+	): boolean {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!element) {
 			this.removeLabel(elementId)
-			return
+			return false
 		}
 
 		// 检查元素是否需要显示标签
 		if (!this.shouldShowLabel(elementId)) {
 			this.removeLabel(elementId)
-			return
+			return false
 		}
 
 		const node = element.getNode()
 		if (!node) {
 			this.removeLabel(elementId)
-			return
+			return false
 		}
 
 		// 获取或创建标签
 		let labelGroup = this.labelMap.get(elementId)
+		const createdLabel = !labelGroup
 		if (!labelGroup) {
 			labelGroup = this.createLabel(elementId)
 			this.labelMap.set(elementId, labelGroup)
@@ -433,6 +442,8 @@ export abstract class BaseLabelManager {
 		if (!options?.skipNotify) {
 			this.notifyOtherManagersUpdateVisibility(elementId)
 		}
+
+		return createdLabel
 	}
 
 	/**
@@ -821,15 +832,39 @@ export abstract class BaseLabelManager {
 		return this.labelCandidateIndex.getCandidateIds(this.visibilityConfig.elementTypes)
 	}
 
+	private updateExistingLabels(skipBatchDraw = true): boolean {
+		const elementIds = Array.from(this.labelMap.keys())
+
+		for (const elementId of elementIds) {
+			this.updateLabelPosition(elementId, skipBatchDraw)
+		}
+
+		for (const elementId of elementIds) {
+			this.notifyOtherManagersUpdateVisibility(elementId, skipBatchDraw)
+		}
+
+		return elementIds.length > 0
+	}
+
 	private syncVisibleLabels(reason: string): void {
 		const candidateIds = this.getVisibleLabelCandidateIds()
 		let touched = false
 		const isViewportScale = reason === "viewport-scale"
 		const isViewportPan = reason === "viewport-pan"
 		let createdLabel = false
+		let updatedExistingLabels = false
+		const existingLabelIds = new Set(this.labelMap.keys())
+
+		if (isViewportScale) {
+			updatedExistingLabels = this.updateExistingLabels(true)
+		}
 
 		for (const elementId of candidateIds) {
 			if (!this.shouldShowLabel(elementId)) continue
+			if (isViewportScale && existingLabelIds.has(elementId)) {
+				touched = true
+				continue
+			}
 			const hadLabel = this.labelMap.has(elementId)
 			this.createOrUpdateLabel(elementId, { skipReorder: true, skipNotify: true })
 			if (!hadLabel && this.labelMap.has(elementId)) {
@@ -842,7 +877,7 @@ export abstract class BaseLabelManager {
 			if (createdLabel) {
 				this.reorderAllLabels()
 			}
-			if (touched) {
+			if (touched || updatedExistingLabels) {
 				this.requestOverlayDraw(`visible-labels:${reason}`)
 			}
 			return

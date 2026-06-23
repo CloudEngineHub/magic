@@ -184,7 +184,7 @@ describe("BaseLabelManager candidate cache", () => {
 		secondManager.destroy()
 	})
 
-	it("refreshes stale visible label scale when panning into view", () => {
+	it("refreshes existing label scale even when viewport query misses it", () => {
 		vi.spyOn(console, "warn").mockImplementation(() => undefined)
 		const rafCallbacks: FrameRequestCallback[] = []
 		vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(
@@ -271,7 +271,7 @@ describe("BaseLabelManager candidate cache", () => {
 		visibleElementIds = []
 		eventEmitter.emit("viewport:scale")
 		flushRaf()
-		expect(manager.getLabelScaleX("frame-1")).toBe(1)
+		expect(manager.getLabelScaleX("frame-1")).toBe(2)
 
 		visibleElementIds = ["frame-1"]
 		eventEmitter.emit("viewport:pan")
@@ -368,8 +368,20 @@ describe("BaseLabelManager candidate cache", () => {
 
 	it("creates a missing hover/select label after visible initialization skipped it", () => {
 		vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const rafCallbacks: FrameRequestCallback[] = []
+		vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(
+			(callback: FrameRequestCallback) => {
+				rafCallbacks.push(callback)
+				return rafCallbacks.length
+			},
+		)
+		const flushRaf = () => {
+			const callbacks = rafCallbacks.splice(0)
+			callbacks.forEach((callback) => callback(performance.now()))
+		}
 		const eventEmitter = createEventEmitter()
 		let hoveredElementId: string | null = null
+		let stageScale = 1
 		const selectedIds = new Set<string>()
 		const elements = new Map([
 			[
@@ -405,7 +417,7 @@ describe("BaseLabelManager candidate cache", () => {
 					}),
 				}),
 				height: () => 600,
-				scaleX: () => 1,
+				scaleX: () => stageScale,
 				width: () => 800,
 			},
 			viewportController: {
@@ -440,6 +452,14 @@ describe("BaseLabelManager candidate cache", () => {
 		eventEmitter.emit("element:hover", { data: { elementId: "image-1" } })
 		expect(manager.hasLabel("image-1")).toBe(true)
 		expect(manager.isLabelVisible("image-1")).toBe(true)
+		expect(manager.getLabelScaleX("image-1")).toBe(1)
+		const reorderCountAfterLabelCreated = manager.getReorderCount()
+		expect(reorderCountAfterLabelCreated).toBeGreaterThan(0)
+
+		stageScale = 0.5
+		eventEmitter.emit("viewport:scale")
+		flushRaf()
+		expect(manager.getLabelScaleX("image-1")).toBe(2)
 
 		hoveredElementId = null
 		eventEmitter.emit("element:hover", { data: { elementId: null } })
@@ -448,6 +468,7 @@ describe("BaseLabelManager candidate cache", () => {
 		selectedIds.add("image-1")
 		eventEmitter.emit("element:select", { data: { elementIds: ["image-1"] } })
 		expect(manager.isLabelVisible("image-1")).toBe(true)
+		expect(manager.getReorderCount()).toBe(reorderCountAfterLabelCreated)
 
 		manager.destroy()
 	})
