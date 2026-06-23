@@ -28,11 +28,16 @@ import {
 import {
 	clearIframeRenderLifecycleTimeout,
 	createIframeRenderLifecycleState,
+	mapSandboxTelemetryToLifecycleReport,
 	reportIframeRenderLifecycleStage,
 	startIframeRenderLifecycleSession,
 	type IframeRenderLifecycleStage,
 	type IframeRenderLifecycleContext,
 } from "./telemetry/iframeRenderLifecycle"
+import {
+	HTML_SANDBOX_TELEMETRY_MESSAGE,
+	normalizeHtmlSandboxTelemetryMessage,
+} from "@dtyq/html-sandbox/telemetry"
 import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
 import { cn } from "@/lib/utils"
@@ -1387,7 +1392,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					"renderComplete",
 					"pageFullyLoaded",
 					"contentMetrics",
-					"iframeError",
 					"linkClicked",
 					"DOWNLOAD_IMAGE",
 					"REQUEST_IMAGE_UPLOAD",
@@ -1404,6 +1408,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					"MAGIC_SEND_MESSAGE_REQUEST",
 					"MAGIC_I18N_LANG_SUBSCRIBE",
 					"DRAG_POSITION_RESPONSE",
+					HTML_SANDBOX_TELEMETRY_MESSAGE,
 					MEDIA_MESSAGE_TYPES.SPEAKER_EDITED,
 					MEDIA_MESSAGE_TYPES.IMAGE_URL_REQUEST,
 				]),
@@ -1448,6 +1453,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					"pageFullyLoaded",
 					"contentMetrics",
 				].includes(messageType)
+			const isAllowedTelemetryOrigin =
+				messageType === HTML_SANDBOX_TELEMETRY_MESSAGE &&
+				Boolean(event.origin) &&
+				(event.origin === iframeTargetOrigin || event.origin === window.location.origin)
 
 			// 只处理来自iframe的消息，兼容钉钉 WebView source 不一致
 			if (!isExpectedSource && !isAllowedType) {
@@ -1478,34 +1487,19 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			try {
 				// 处理旧协议消息（没有 version 字段的）
 
-				if (event.data && event.data.type === "iframeError") {
-					const payload = event.data.payload || {}
-					reportRenderLifecycleStage(
-						"content_inject_failed",
-						{
-							reason: "iframe_error",
-							errorType: payload.errorType,
-							errorMessage: payload.message,
-							errorStack: payload.stack,
-							errorSource: payload.source,
-							errorLineno: payload.lineno,
-							errorColno: payload.colno,
-						},
-						{ once: false },
+				if (event.data && event.data.type === HTML_SANDBOX_TELEMETRY_MESSAGE) {
+					const telemetryMessage = normalizeHtmlSandboxTelemetryMessage(event.data)
+					if (!telemetryMessage || !isAllowedTelemetryOrigin) return
+					const lifecycleReport = mapSandboxTelemetryToLifecycleReport(
+						telemetryMessage.payload,
+						event.origin,
 					)
-					logger.error(
-						"iframe 内部错误",
-						buildMessageLogContext(event, messageType, {
-							isExpectedSource,
-							isAllowedType,
-							errorType: payload.errorType,
-							errorMessage: payload.message,
-							errorStack: payload.stack,
-							errorSource: payload.source,
-							errorLineno: payload.lineno,
-							errorColno: payload.colno,
-						}),
-					)
+
+					if (lifecycleReport) {
+						reportRenderLifecycleStage(lifecycleReport.stage, lifecycleReport.extra, {
+							once: false,
+						})
+					}
 					return
 				}
 

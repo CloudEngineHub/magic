@@ -1,3 +1,5 @@
+import type { HtmlSandboxTelemetryPayload } from "@dtyq/html-sandbox/telemetry"
+
 export const HTML_IFRAME_RENDER_LIFECYCLE_EVENT = "html_iframe_render_lifecycle"
 export const IFRAME_RENDER_TIMEOUT_MS = 30_000
 
@@ -20,8 +22,13 @@ export type IframeRenderLifecycleStage =
 	| "scale_ready"
 	| "render_ready"
 	| "render_success"
-	| "nested_iframe_failed"
+	| "iframe_failure"
 	| "timeout"
+
+export type IframeRenderFailureType =
+	| "runtime_error"
+	| "resource_load_failed"
+	| "nested_iframe_failed"
 
 export interface IframeRenderLifecycleSource {
 	layer: "top" | "nested"
@@ -58,6 +65,7 @@ export interface IframeRenderLifecycleContext {
 
 export type IframeRenderLifecyclePayload = IframeRenderLifecycleContext & {
 	stage: IframeRenderLifecycleStage
+	failureType?: IframeRenderFailureType
 	reason?: string
 	requestId?: string
 	errorType?: unknown
@@ -66,7 +74,16 @@ export type IframeRenderLifecyclePayload = IframeRenderLifecycleContext & {
 	errorSource?: unknown
 	errorLineno?: unknown
 	errorColno?: unknown
+	tagName?: string
+	url?: string
+	resourceType?: string
 	origin?: string
+	sandboxTelemetryEventId?: string
+	sandboxTelemetryTimestamp?: number
+	sandboxTelemetryPageHref?: string
+	sandboxTelemetryPageReadyState?: string
+	sandboxTelemetryDedupeKey?: string
+	sandboxTelemetryDedupeCount?: number
 	isExpectedSource?: boolean
 	fullContentLength?: number
 	markerId?: string
@@ -177,4 +194,52 @@ export function startIframeRenderLifecycleSession({
 			},
 		})
 	}, timeoutMs)
+}
+
+export function mapSandboxTelemetryToLifecycleReport(
+	payload: HtmlSandboxTelemetryPayload,
+	origin: string,
+): { stage: IframeRenderLifecycleStage; extra: Partial<IframeRenderLifecyclePayload> } | null {
+	const commonExtra = {
+		source: payload.source,
+		origin,
+		sandboxTelemetryEventId: payload.eventId,
+		sandboxTelemetryTimestamp: payload.timestamp,
+		sandboxTelemetryPageHref: payload.page.href,
+		sandboxTelemetryPageReadyState: payload.page.readyState,
+		sandboxTelemetryDedupeKey: payload.dedupeKey,
+		sandboxTelemetryDedupeCount: payload.dedupeCount,
+	} satisfies Partial<IframeRenderLifecyclePayload>
+
+	if (payload.event.type === "runtime_error") {
+		return {
+			stage: "iframe_failure",
+			extra: {
+				...commonExtra,
+				failureType: payload.event.type,
+				reason: payload.event.errorType,
+				errorType: payload.event.errorType,
+				errorMessage: payload.event.message,
+				errorStack: payload.event.stack,
+				errorSource: payload.event.source,
+				errorLineno: payload.event.lineno,
+				errorColno: payload.event.colno,
+			},
+		}
+	}
+
+	if (payload.event.type === "resource_load_failed") {
+		return {
+			stage: "iframe_failure",
+			extra: {
+				...commonExtra,
+				failureType: payload.event.type,
+				tagName: payload.event.tagName,
+				url: payload.event.url,
+				resourceType: payload.event.resourceType,
+			},
+		}
+	}
+
+	return null
 }
