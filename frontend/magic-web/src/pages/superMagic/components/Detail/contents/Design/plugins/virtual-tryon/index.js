@@ -93,7 +93,7 @@ function buildExtraPromptCompletionUserPrompt({ garmentCount, hasModelImage, sty
 	].join("\n")
 }
 
-function buildPrompt({ garmentCount, hasModelImage, style, extra, locale }) {
+function buildPrompt({ garmentCount, hasModelImage, outputCount, style, extra, locale }) {
 	const isChinese = MagicPromptLocale.isChinese(locale)
 	const productReferences = MagicPromptLocale.joinReferenceLabels(garmentCount, locale)
 	const modelReference = hasModelImage
@@ -105,6 +105,7 @@ function buildPrompt({ garmentCount, hasModelImage, style, extra, locale }) {
 			? MagicPromptLocale.pickText(STYLE_OPTIONS[0].promptSuffix, locale)
 			: MagicPromptLocale.pickText(styleDefinition.promptSuffix, locale)
 	const normalizedExtra = extra?.trim()
+	const shouldKeepGeneratedModelConsistent = !hasModelImage && Number(outputCount) > 1
 
 	if (isChinese) {
 		const extraClause = normalizedExtra ? `额外要求：${normalizedExtra}。` : ""
@@ -117,10 +118,14 @@ function buildPrompt({ garmentCount, hasModelImage, style, extra, locale }) {
 		const modelClause = modelReference
 			? `${modelReference}是模特底图。保留它的人物身份、体型、发型、场景、背景、光线、镜头视角与整体摄影风格，只自然替换穿搭商品。`
 			: "如果没有模特底图，请生成一位适合商业服饰展示的单人模特，并确保所有商品都清晰可见。"
+		const modelConsistencyClause = shouldKeepGeneratedModelConsistent
+			? "本次会生成多张结果图，请让所有结果图使用同一个虚拟模特，保持一致的人物身份、面部特征、发型、肤色、体型比例和整体气质，只允许姿势、构图或拍摄角度有轻微变化。"
+			: ""
 
 		return (
 			basePrompt +
 			modelClause +
+			modelConsistencyClause +
 			"输出必须是单人全身或足够展示全部商品的构图，保持真实比例、自然穿着关系和商业可用完成度。" +
 			extraClause +
 			styleSuffix
@@ -137,10 +142,14 @@ function buildPrompt({ garmentCount, hasModelImage, style, extra, locale }) {
 	const modelClause = modelReference
 		? `Use ${modelReference} as the optional model base image. Preserve that person's identity, body type, hairstyle, scene, background, lighting, camera angle, and overall photographic style while replacing only the worn products naturally. `
 		: "If no model base image is provided, generate a single fashion model suitable for commercial apparel display and make every product clearly visible. "
+	const modelConsistencyClause = shouldKeepGeneratedModelConsistent
+		? "This request will generate multiple results. Use the same virtual model across all output images, keeping a consistent human identity, facial features, hairstyle, skin tone, body proportions, and overall presence; only pose, framing, or camera angle may vary slightly. "
+		: ""
 
 	return (
 		basePrompt +
 		modelClause +
+		modelConsistencyClause +
 		"The output must remain a single-person composition with believable proportions, natural wear relationships, and commercially usable polish. " +
 		extraClause +
 		styleSuffix
@@ -304,6 +313,7 @@ registerMagicCanvasPlugin({
 						prompt: buildPrompt({
 							garmentCount: state.garments.length,
 							hasModelImage: Boolean(state.modelImage),
+							outputCount: state.genCount,
 							style: state.style,
 							extra: state.extra,
 							locale: promptLocale,
