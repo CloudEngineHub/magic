@@ -21,6 +21,14 @@ class TestLabelManager extends BaseLabelManager {
 		return this.labelMap.get(elementId)?.scaleX()
 	}
 
+	public hasLabel(elementId: string): boolean {
+		return this.labelMap.has(elementId)
+	}
+
+	public isLabelVisible(elementId: string): boolean | undefined {
+		return this.labelMap.get(elementId)?.visible()
+	}
+
 	public getReorderCount(): number {
 		return this.reorderCount
 	}
@@ -356,5 +364,91 @@ describe("BaseLabelManager candidate cache", () => {
 		expect(requestAnimationFrameSpy).toHaveBeenCalledTimes(1)
 
 		secondManager.destroy()
+	})
+
+	it("creates a missing hover/select label after visible initialization skipped it", () => {
+		vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const eventEmitter = createEventEmitter()
+		let hoveredElementId: string | null = null
+		const selectedIds = new Set<string>()
+		const elements = new Map([
+			[
+				"image-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 0, width: 100, height: 100 }),
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getNode: () => ({}),
+				},
+			],
+		])
+		const canvas = {
+			cropManager: { getCroppingElementId: () => null },
+			elementManager: {
+				getAllElementIds: () => Array.from(elements.keys()),
+				getElementData: (elementId: string) => elements.get(elementId)?.getData(),
+				getElementInstance: (elementId: string) => elements.get(elementId),
+			},
+			eraserManager: { getErasingElementId: () => null },
+			eventEmitter,
+			extendManager: { getExtendingElementId: () => null },
+			geometryCacheManager: { queryElementIdsByExpandedRect: vi.fn(() => []) },
+			hoverManager: { getHoveredElementId: () => hoveredElementId },
+			overlayLayer: { add: vi.fn(), destroy: vi.fn() },
+			runtimeScheduler: { requestLayerDraw: vi.fn() },
+			selectionManager: { isSelected: (elementId: string) => selectedIds.has(elementId) },
+			stage: {
+				getAbsoluteTransform: () => ({
+					copy: () => ({
+						invert: () => ({
+							point: (point: { x: number; y: number }) => point,
+						}),
+					}),
+				}),
+				height: () => 600,
+				scaleX: () => 1,
+				width: () => 800,
+			},
+			viewportController: {
+				getResolvedDefaultViewportPadding: () => ({
+					bottom: 0,
+					left: 0,
+					right: 0,
+					top: 0,
+				}),
+			},
+		} as never
+		const manager = new TestLabelManager({
+			canvas,
+			labelConfig: {
+				fontFamily: "Arial",
+				fontSize: 12,
+				offsetLeft: 0,
+				offsetTop: 0,
+				textColor: "#000",
+			},
+			visibilityConfig: {
+				alwaysVisibleTypes: new Set(),
+				elementTypes: new Set([ElementTypeEnum.Image]),
+				hoverOrSelectTypes: new Set([ElementTypeEnum.Image]),
+			},
+		})
+
+		manager.initializeAllLabels()
+		expect(manager.hasLabel("image-1")).toBe(false)
+
+		hoveredElementId = "image-1"
+		eventEmitter.emit("element:hover", { data: { elementId: "image-1" } })
+		expect(manager.hasLabel("image-1")).toBe(true)
+		expect(manager.isLabelVisible("image-1")).toBe(true)
+
+		hoveredElementId = null
+		eventEmitter.emit("element:hover", { data: { elementId: null } })
+		expect(manager.isLabelVisible("image-1")).toBe(false)
+
+		selectedIds.add("image-1")
+		eventEmitter.emit("element:select", { data: { elementIds: ["image-1"] } })
+		expect(manager.isLabelVisible("image-1")).toBe(true)
+
+		manager.destroy()
 	})
 })

@@ -303,7 +303,11 @@ export abstract class BaseLabelManager {
 		})
 
 		// 监听选择变化
-		this.listen("element:select", () => {
+		this.listen("element:select", (event) => {
+			event.data.elementIds.forEach((elementId) => {
+				this.createOrUpdateLabel(elementId, { skipReorder: true, skipNotify: true })
+			})
+			this.reorderAllLabels()
 			this.updateAllLabelsVisibility()
 		})
 
@@ -322,6 +326,11 @@ export abstract class BaseLabelManager {
 
 			// 如果有新 hover 的元素，更新其可见性
 			if (newHoveredId) {
+				this.createOrUpdateLabel(newHoveredId, {
+					skipReorder: true,
+					skipNotify: true,
+				})
+				this.reorderAllLabels()
 				this.updateLabelVisibility(newHoveredId)
 			}
 
@@ -612,6 +621,10 @@ export abstract class BaseLabelManager {
 		labelGroup: Konva.Group,
 		baseVisibility: boolean,
 	): boolean | null {
+		void elementId
+		void element
+		void labelGroup
+		void baseVisibility
 		// 默认不修改基础可见性，子类可以重写此方法
 		return null
 	}
