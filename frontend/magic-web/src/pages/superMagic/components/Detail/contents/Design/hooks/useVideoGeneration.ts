@@ -28,6 +28,7 @@ import {
 	getOrCreateUploadSubDirFileId,
 	validateUploadDirectoryFileId,
 } from "../utils/designAssetDirectory"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 interface UseVideoGenerationOptions {
 	projectId?: string
@@ -74,7 +75,7 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 
 	const getVideoModelList = useCallback(async (): Promise<VideoModelItem[]> => {
 		const officialGroups = JSON.parse(
-			JSON.stringify(superMagicModeService.getVideoModelGroupsByMode("general") || []),
+			JSON.stringify(superMagicModeService.getVideoModelGroupsByMode(TopicMode.Design) || []),
 		) as Array<{
 			group: { id: string; name: string; icon: string; sort: number }
 			models: VideoModelItem[]
