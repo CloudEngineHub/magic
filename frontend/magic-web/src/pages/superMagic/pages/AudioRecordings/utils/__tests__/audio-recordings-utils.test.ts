@@ -111,6 +111,32 @@ describe("isAudioProjectPreviewReady", () => {
 			),
 		).toBe(false)
 	})
+
+	it("blocks waiting items before the backend starts merge work", () => {
+		expect(
+			isAudioProjectPreviewReady(
+				createItem({
+					card_status: "waiting",
+					is_summarized: false,
+					current_phase: "waiting",
+					phase_status: null,
+				}),
+			),
+		).toBe(false)
+	})
+
+	it("blocks merge_failed items before a retry flow exists", () => {
+		expect(
+			isAudioProjectPreviewReady(
+				createItem({
+					card_status: "merge_failed",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "failed",
+				}),
+			),
+		).toBe(false)
+	})
 })
 
 describe("isAudioProjectDetailReady", () => {
@@ -228,9 +254,16 @@ describe("isAudioProjectSummarizing", () => {
 })
 
 describe("applyClientSummaryFilter", () => {
-	it("keeps processing items in the not_summarized tab", () => {
+	it("keeps waiting, processing, and merge_failed items in the not_summarized tab", () => {
 		const filtered = applyClientSummaryFilter(
 			[
+				createItem({
+					id: "waiting",
+					card_status: "waiting",
+					is_summarized: false,
+					current_phase: "waiting",
+					phase_status: null,
+				}),
 				createItem({
 					id: "processing",
 					card_status: "processing",
@@ -246,6 +279,13 @@ describe("applyClientSummaryFilter", () => {
 					phase_status: "completed",
 				}),
 				createItem({
+					id: "merge-failed",
+					card_status: "merge_failed",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "failed",
+				}),
+				createItem({
 					id: "summarized",
 					card_status: "summarized",
 					is_summarized: true,
@@ -254,7 +294,12 @@ describe("applyClientSummaryFilter", () => {
 			"not_summarized",
 		)
 
-		expect(filtered.map((item) => item.id)).toEqual(["processing", "not-summarized"])
+		expect(filtered.map((item) => item.id)).toEqual([
+			"waiting",
+			"processing",
+			"not-summarized",
+			"merge-failed",
+		])
 	})
 })
 
@@ -267,8 +312,8 @@ describe("formatRecordingDuration", () => {
 	})
 
 	it("keeps hour segment for one hour and above", () => {
-		expect(formatRecordingDuration(3600)).toBe("1:00:00")
-		expect(formatRecordingDuration(3661)).toBe("1:01:01")
+		expect(formatRecordingDuration(3600)).toBe("01:00:00")
+		expect(formatRecordingDuration(3661)).toBe("01:01:01")
 	})
 })
 

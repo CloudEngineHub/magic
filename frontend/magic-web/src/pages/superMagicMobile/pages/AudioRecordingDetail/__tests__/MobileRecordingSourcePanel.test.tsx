@@ -180,8 +180,8 @@ describe("MobileRecordingSourcePanel", () => {
 		const transcriptItems = screen.getAllByTestId("mobile-recording-transcript-item")
 		const inactiveItem = transcriptItems[0]
 		const activeItem = transcriptItems[1]
-		const inactiveTime = screen.getByText("0:05")
-		const activeTime = screen.getByText("0:10")
+		const inactiveTime = screen.getByText("00:05")
+		const activeTime = screen.getByText("00:10")
 		const inactiveText = screen.getByText("Earlier line")
 		const activeText = screen.getByText("Active line")
 		const [inactiveSpeakerChip, activeSpeakerChip] = screen.getAllByRole("button", {
@@ -220,8 +220,8 @@ describe("MobileRecordingSourcePanel", () => {
 			/>,
 		)
 
-		const inactiveTime = screen.getByText("0:05")
-		const pausedTime = screen.getByText("0:10")
+		const inactiveTime = screen.getByText("00:05")
+		const pausedTime = screen.getByText("00:10")
 		const inactiveText = screen.getByText("Earlier line")
 		const pausedText = screen.getByText("Active line")
 		const [inactiveSpeakerChip, pausedSpeakerChip] = screen.getAllByRole("button", {

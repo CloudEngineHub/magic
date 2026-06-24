@@ -1,6 +1,9 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
+
+const openUploadPickerSpy = vi.fn()
+let emitSelectedFiles: (() => void) | null = null
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -42,17 +45,30 @@ vi.mock("@/components/business/RecordingSummary/AudioUploadAction", () => ({
 		handler: (onUpload: () => void) => ReactNode
 		onFileChange?: (files: FileList) => void
 	}) => {
-		// Expose the upload callback through a predictable test button.
+		// Split "open picker" from "files selected" to mirror the real desktop flow:
+		// the menu click happens first, the file callback returns later.
 		const trigger = handler(() => {
-			const file = new File(["demo"], "demo.wav", { type: "audio/wav" })
-			const files = {
-				0: file,
-				length: 1,
-				item: (index: number) => (index === 0 ? file : null),
-			} as unknown as FileList
-			onFileChange?.(files)
+			openUploadPickerSpy()
+			emitSelectedFiles = () => {
+				const file = new File(["demo"], "demo.wav", { type: "audio/wav" })
+				const files = {
+					0: file,
+					length: 1,
+					item: (index: number) => (index === 0 ? file : null),
+				} as unknown as FileList
+				onFileChange?.(files)
+			}
 		})
-		return <>{trigger}</>
+		return (
+			<>
+				{trigger}
+				<button
+					type="button"
+					data-testid="audio-upload-action-file-change"
+					onClick={() => emitSelectedFiles?.()}
+				/>
+			</>
+		)
 	},
 }))
 
@@ -83,6 +99,11 @@ function renderPrimaryActions(
 	}
 }
 
+beforeEach(() => {
+	openUploadPickerSpy.mockClear()
+	emitSelectedFiles = null
+})
+
 describe("AudioRecordingsPrimaryActions", () => {
 	it("renders the desktop primary action cluster", () => {
 		renderPrimaryActions()
@@ -103,7 +124,7 @@ describe("AudioRecordingsPrimaryActions", () => {
 		expect(handlers.onStartRecording).toHaveBeenCalledTimes(1)
 	})
 
-	it("shows the upload menu item and forwards imported files", () => {
+	it("shows the upload menu item and opens the stable picker callback", () => {
 		const handlers = renderPrimaryActions()
 
 		fireEvent.click(screen.getByTestId("audio-recordings-start-recording-menu-trigger"))
@@ -112,6 +133,17 @@ describe("AudioRecordingsPrimaryActions", () => {
 		)
 
 		fireEvent.click(screen.getByTestId("audio-recordings-import-menu-item"))
+		expect(openUploadPickerSpy).toHaveBeenCalledTimes(1)
+		expect(handlers.onImportFiles).not.toHaveBeenCalled()
+	})
+
+	it("forwards imported files after the menu trigger has already run", () => {
+		const handlers = renderPrimaryActions()
+
+		fireEvent.click(screen.getByTestId("audio-recordings-start-recording-menu-trigger"))
+		fireEvent.click(screen.getByTestId("audio-recordings-import-menu-item"))
+		fireEvent.click(screen.getByTestId("audio-upload-action-file-change"))
+
 		expect(handlers.onImportFiles).toHaveBeenCalledTimes(1)
 	})
 

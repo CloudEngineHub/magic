@@ -13,11 +13,15 @@ vi.mock("react-i18next", () => ({
 				"card.sourceDevice": "Device recording",
 				"card.sourcePc": "PC",
 				"card.summarized": "Summarized",
+				"card.waiting": "Waiting",
+				"card.summaryFailed": "Summary failed",
+				"card.mergeFailed": "Merge failed",
 				"card.processing": "Processing",
 				"card.summarizing": "Summarizing now",
 				"card.notSummarized": "Not summarized",
 				"card.generateSummary": "Generate summary",
-				"card.retrySummary": "Retry summary",
+				"card.retrySummary": "Retry",
+				"card.retryMerge": "Retry",
 				"card.moreActions": "More actions",
 			}
 			return labels[key] ?? key
@@ -159,6 +163,74 @@ describe("MobileRecordingCard", () => {
 		)
 		expect(processingIndicator.tagName).toBe("SPAN")
 		expect(processingIndicator).toHaveTextContent("Processing")
+	})
+
+	it("shows waiting indicator and blocks navigation before merge begins", () => {
+		const onOpen = vi.fn()
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					card_status: "waiting",
+					is_summarized: false,
+					current_phase: "waiting",
+					phase_status: null,
+				})}
+				onOpen={onOpen}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-recording-card-proj-beta-002"))
+		expect(onOpen).not.toHaveBeenCalled()
+		const waitingIndicator = screen.getByTestId("mobile-recording-card-summarize-proj-beta-002")
+		expect(waitingIndicator.tagName).toBe("SPAN")
+		expect(waitingIndicator).toHaveTextContent("Waiting")
+	})
+
+	it("shows merge failed chip and disabled retry placeholder", () => {
+		const onOpen = vi.fn()
+		const onSummarize = vi.fn()
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					card_status: "merge_failed",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "failed",
+				})}
+				onOpen={onOpen}
+				onSummarize={onSummarize}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-recording-card-proj-beta-002"))
+		expect(onOpen).not.toHaveBeenCalled()
+		expect(screen.getByText("Merge failed")).toBeInTheDocument()
+		const retryButton = screen.getByTestId("mobile-recording-card-merge-retry-proj-beta-002")
+		expect(retryButton).toHaveTextContent("Retry")
+		expect(retryButton).toBeDisabled()
+		fireEvent.click(retryButton)
+		expect(onSummarize).not.toHaveBeenCalled()
+	})
+
+	it("shows summary failed chip and retry summary button", () => {
+		const onSummarize = vi.fn()
+		render(
+			<MobileRecordingCard
+				item={createItem({
+					card_status: "summary_failed",
+					is_summarized: false,
+					current_phase: "summarizing",
+					phase_status: "failed",
+				})}
+				onSummarize={onSummarize}
+			/>,
+		)
+
+		expect(screen.getByText("Summary failed")).toBeInTheDocument()
+		const retryButton = screen.getByTestId("mobile-recording-card-summarize-proj-beta-002")
+		expect(retryButton).toHaveTextContent("Retry")
+		fireEvent.click(retryButton)
+		expect(onSummarize).toHaveBeenCalledTimes(1)
 	})
 
 	it("navigates when summarizing card is clicked even without audio_file_id", () => {

@@ -172,7 +172,7 @@ export function MobileRecordingSessionPage({
 				</button>
 
 				<div className="flex min-w-0 flex-1 items-center justify-center gap-2">
-					<div className="flex shrink-0 items-center gap-1.5">
+					<div className="flex min-w-0 items-center gap-1.5">
 						<span
 							className={`inline-block size-1.5 shrink-0 rounded-full ${
 								isPaused ? "bg-muted-foreground/60" : "bg-[#ef4444]"
@@ -185,7 +185,7 @@ export function MobileRecordingSessionPage({
 							aria-hidden
 						/>
 						<span
-							className={`text-[16px] font-medium leading-5 ${
+							className={`min-w-0 truncate text-[16px] font-medium leading-5 ${
 								isPaused ? "text-muted-foreground/80" : "text-foreground"
 							}`}
 						>

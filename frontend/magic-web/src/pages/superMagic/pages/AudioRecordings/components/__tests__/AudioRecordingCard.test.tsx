@@ -18,12 +18,16 @@ vi.mock("react-i18next", () => ({
 				"card.sourceDevice": "Device recording",
 				"card.sourcePc": "PC",
 				"card.summarized": "Summarized",
+				"card.waiting": "Waiting",
+				"card.summaryFailed": "Summary failed",
+				"card.mergeFailed": "Merge failed",
 				"card.processing": "Processing",
 				"card.summarizing": "Summarizing now",
 				"card.notSummarized": "Not summarized",
 				"card.summarize": "Summarize",
 				"card.generateSummary": "Generate summary",
-				"card.retrySummary": "Retry summary",
+				"card.retrySummary": "Retry",
+				"card.retryMerge": "Retry",
 				"card.collapseTags": "Collapse",
 				"card.moreActions": "More actions",
 				"card.openProject": "View project details",
@@ -174,6 +178,57 @@ describe("AudioRecordingCard", () => {
 		).not.toBeInTheDocument()
 	})
 
+	it("shows waiting status and blocks navigation before merge begins", () => {
+		const onOpen = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "waiting",
+					is_summarized: false,
+					current_phase: "waiting",
+					phase_status: null,
+					project_status: "",
+				})}
+				onOpen={onOpen}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("audio-recording-card-project-1"))
+		expect(onOpen).not.toHaveBeenCalled()
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-waiting"),
+		).toHaveTextContent("Waiting")
+	})
+
+	it("shows merge failed chip and disabled retry button placeholder", () => {
+		const onOpen = vi.fn()
+		const onSummarize = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "merge_failed",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "failed",
+					project_status: "",
+				})}
+				onOpen={onOpen}
+				onSummarize={onSummarize}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("audio-recording-card-project-1"))
+		expect(onOpen).not.toHaveBeenCalled()
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-merge-failed"),
+		).toHaveTextContent("Merge failed")
+		const button = screen.getByTestId("audio-recording-card-project-1-merge-retry-button")
+		expect(button).toHaveTextContent("Retry")
+		expect(button).toBeDisabled()
+		fireEvent.click(button)
+		expect(onSummarize).not.toHaveBeenCalled()
+	})
+
 	it("opens detail for summarizing items without audio_file_id", () => {
 		const onOpen = vi.fn()
 		render(
@@ -231,12 +286,12 @@ describe("AudioRecordingCard", () => {
 		expect(onOpen).toHaveBeenCalledTimes(1)
 	})
 
-	it("shows retry summary button when summarizing failed", () => {
+	it("shows summary failed chip and retry summary button when summarizing failed", () => {
 		const onSummarize = vi.fn()
 		render(
 			<AudioRecordingCard
 				item={createItem({
-					card_status: "summarizing",
+					card_status: "summary_failed",
 					is_summarized: false,
 					current_phase: "summarizing",
 					phase_status: "failed",
@@ -246,8 +301,11 @@ describe("AudioRecordingCard", () => {
 			/>,
 		)
 
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-summary-failed"),
+		).toHaveTextContent("Summary failed")
 		const button = screen.getByTestId("audio-recording-card-project-1-summary-button")
-		expect(button).toHaveTextContent("Retry summary")
+		expect(button).toHaveTextContent("Retry")
 		fireEvent.click(button)
 		expect(onSummarize).toHaveBeenCalledTimes(1)
 	})

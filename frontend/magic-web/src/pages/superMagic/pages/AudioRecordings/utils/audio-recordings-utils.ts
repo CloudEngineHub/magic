@@ -13,7 +13,9 @@ import { ALL_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGrou
 export function resolveSummaryPhaseFilter(
 	filter: AudioRecordingSummaryFilter,
 ): string[] | undefined {
-	if (filter === "not_summarized") return ["merging"]
+	// "Not summarized" spans queued work and merge-stage work, so request both
+	// backend phases before the client refines them into waiting/processing/ready cards.
+	if (filter === "not_summarized") return ["waiting", "merging"]
 	if (filter === "summarized") return ["summarizing"]
 	return undefined
 }
@@ -24,10 +26,14 @@ export function applyClientSummaryFilter(
 	filter: AudioRecordingSummaryFilter,
 ): AudioProjectListItem[] {
 	if (filter === "not_summarized") {
-		// Treat backend merge processing as part of the "not summarized yet" bucket
-		// so users can continue tracking freshly finished recordings in the same tab.
+		// Treat queued / merge-related backend states as part of the same
+		// "not summarized yet" bucket so users can track the full pre-summary pipeline.
 		return items.filter(
-			(item) => item.card_status === "not_summarized" || item.card_status === "processing",
+			(item) =>
+				item.card_status === "waiting" ||
+				item.card_status === "not_summarized" ||
+				item.card_status === "processing" ||
+				item.card_status === "merge_failed",
 		)
 	}
 	if (filter === "summarized") {
@@ -74,7 +80,7 @@ export function buildAudioProjectsQueryParams(options: {
 	return params
 }
 
-/** Formats recording duration in seconds to mm:ss or h:mm:ss */
+/** Formats recording duration in seconds to mm:ss or hh:mm:ss for shared list and session UI. */
 export function formatRecordingDuration(seconds: number): string {
 	if (!Number.isFinite(seconds) || seconds <= 0) return "00:00"
 
@@ -84,7 +90,7 @@ export function formatRecordingDuration(seconds: number): string {
 	const remainingSeconds = totalSeconds % 60
 
 	if (hours > 0) {
-		return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`
+		return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`
 	}
 
 	return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`
@@ -136,8 +142,14 @@ export function isAudioProjectPreviewReady(item: AudioProjectListItem): boolean 
 	if (item.card_status === "summarized") return true
 	// Summarizing items should open detail (placeholder + polling) even before audio_file_id hydrates.
 	if (item.card_status === "summarizing") return true
-	// Merge-processing items stay in the list but should not open a half-ready detail page.
-	if (item.card_status === "processing") return false
+	// Queueing / merge states stay visible in the list but should not open a half-ready detail page.
+	if (
+		item.card_status === "waiting" ||
+		item.card_status === "processing" ||
+		item.card_status === "merge_failed"
+	) {
+		return false
+	}
 	return canPreviewRawAudioRecording(item)
 }
 

@@ -12,6 +12,24 @@ vi.mock("react-i18next", async (importOriginal) => {
 	}
 })
 
+vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils", () => ({
+	// Mirror the shared duration formatter contract while keeping the test free from store side effects.
+	formatRecordingDuration: (seconds: number) => {
+		if (!Number.isFinite(seconds) || seconds <= 0) return "00:00"
+
+		const totalSeconds = Math.floor(seconds)
+		const hours = Math.floor(totalSeconds / 3600)
+		const minutes = Math.floor((totalSeconds % 3600) / 60)
+		const remain = totalSeconds % 60
+
+		if (hours > 0) {
+			return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remain).padStart(2, "0")}`
+		}
+
+		return `${String(minutes).padStart(2, "0")}:${String(remain).padStart(2, "0")}`
+	},
+}))
+
 function renderSessionPage(duration: string) {
 	render(
 		<MobileRecordingSessionPage
@@ -40,10 +58,10 @@ describe("MobileRecordingSessionPage duration display", () => {
 		expect(screen.getByText("00:01")).toBeInTheDocument()
 	})
 
-	it("keeps h:mm:ss for one hour and above", () => {
+	it("keeps hh:mm:ss for one hour and above", () => {
 		renderSessionPage("01:00:01")
 
-		expect(screen.getByText("1:00:01")).toBeInTheDocument()
+		expect(screen.getByText("01:00:01")).toBeInTheDocument()
 	})
 
 	it("falls back to 00:00 for malformed duration strings", () => {

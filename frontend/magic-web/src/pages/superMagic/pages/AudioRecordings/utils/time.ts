@@ -20,9 +20,9 @@ export function parseRecordingTimeToSeconds(value: string): number {
 	return parts[0] ?? 0
 }
 
-/** Formats seconds as M:SS or H:MM:SS for compact mobile playback labels. */
+/** Formats seconds as mm:ss or hh:mm:ss so transcript and player labels stay aligned. */
 export function formatRecordingTime(seconds: number): string {
-	if (!Number.isFinite(seconds) || seconds <= 0) return "0:00"
+	if (!Number.isFinite(seconds) || seconds <= 0) return "00:00"
 
 	const totalSeconds = Math.floor(seconds)
 	const hours = Math.floor(totalSeconds / 3600)
@@ -30,8 +30,8 @@ export function formatRecordingTime(seconds: number): string {
 	const remain = totalSeconds % 60
 
 	if (hours > 0) {
-		return `${hours}:${String(minutes).padStart(2, "0")}:${String(remain).padStart(2, "0")}`
+		return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remain).padStart(2, "0")}`
 	}
 
-	return `${minutes}:${String(remain).padStart(2, "0")}`
+	return `${String(minutes).padStart(2, "0")}:${String(remain).padStart(2, "0")}`
 }

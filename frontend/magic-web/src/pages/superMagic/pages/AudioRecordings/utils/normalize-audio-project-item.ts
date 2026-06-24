@@ -10,11 +10,11 @@ export function resolveIsProcessingComplete(
 	currentPhase: string | null,
 	phaseStatus: string | null,
 ): boolean {
-	if (currentPhase === "waiting") return false
-	// Keep backend audio merging visible so the list can render a processing card
-	// and continue polling until the item becomes ready for summary.
+	// Keep backend queue / merge states visible so users can see the authoritative
+	// pipeline state instead of losing rows while the task is still settling.
+	if (currentPhase === "waiting") return true
 	if (currentPhase === "merging" && phaseStatus === "in_progress") return true
-	if (currentPhase === "merging" && phaseStatus === "failed") return false
+	if (currentPhase === "merging" && phaseStatus === "failed") return true
 	return true
 }
 
@@ -47,12 +47,15 @@ export function resolveCardStatus(
 	}
 
 	// 4. Audio merging phase
+	if (currentPhase === "waiting") {
+		// Waiting is distinct from merge-in-progress so the shared card can explain
+		// that the backend has accepted the task but has not started processing yet.
+		return "waiting"
+	}
 	if (currentPhase === "merging") {
 		if (phaseStatus === "in_progress") return "processing"
+		if (phaseStatus === "failed") return "merge_failed"
 		if (phaseStatus === "completed") return "not_summarized"
-		return "merging"
-	}
-	if (currentPhase === "waiting") {
 		return "merging"
 	}
 

@@ -1,8 +1,6 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import type { RecordTaskProgress } from "@/apis/modules/superMagic/recordSummary"
-import {
-	ALL_RECORDING_GROUP_ID,
-} from "@/services/audioRecordings/RecordingGroupsConstants"
+import { ALL_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
 import {
 	audioRecordingsService,
 	type PagedAudioProjects,
@@ -47,7 +45,8 @@ export class AudioRecordingsStore {
 	createdAtStart?: number
 	createdAtEnd?: number
 	workspaceId = ALL_RECORDING_GROUP_ID
-	sortBy: AudioProjectSortBy = "created_at"
+	// Default to last-updated ordering so the desktop list matches the mobile recordings entry.
+	sortBy: AudioProjectSortBy = "updated_at"
 	sortOrder: AudioProjectSortOrder = "desc"
 	loading = false
 	loadingMore = false

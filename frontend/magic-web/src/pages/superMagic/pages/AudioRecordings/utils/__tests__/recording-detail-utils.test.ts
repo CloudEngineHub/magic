@@ -1,5 +1,5 @@
 import i18next from "i18next"
-import { beforeAll, describe, expect, it } from "vitest"
+import { beforeAll, describe, expect, it, vi } from "vitest"
 import { formatTime } from "@/utils/string"
 import { parseMagicProjectConfig } from "../magic-project-config"
 import { mergeProjectDetailIntoAudioItem } from "../project-detail-merge"
@@ -12,6 +12,14 @@ import {
 import { formatRecordingTime, parseRecordingTimeToSeconds } from "../time"
 import { parseTopicsMarkdown } from "../topics-parser"
 import { parseTranscriptMarkdown } from "../transcript-parser"
+
+vi.mock("@/utils/string", () => ({
+	// Keep fallback-title tests deterministic without loading the app theme store.
+	formatTime: vi.fn((value: number | string, format?: string) => {
+		if (format === "YYYY/MM/DD HH:mm") return "2026/06/24 15:24"
+		return String(value)
+	}),
+}))
 
 describe("recording detail utils", () => {
 	beforeAll(async () => {
@@ -188,9 +196,9 @@ Summary body.
 	})
 
 	it("formats compact playback labels for short and long recordings", () => {
-		expect(formatRecordingTime(0)).toBe("0:00")
-		expect(formatRecordingTime(312)).toBe("5:12")
-		expect(formatRecordingTime(3912)).toBe("1:05:12")
+		expect(formatRecordingTime(0)).toBe("00:00")
+		expect(formatRecordingTime(312)).toBe("05:12")
+		expect(formatRecordingTime(3912)).toBe("01:05:12")
 	})
 
 	it("prefers project-level titles over bundle metadata titles", () => {

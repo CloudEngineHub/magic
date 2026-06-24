@@ -22,6 +22,14 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
+vi.mock("@/models/config/stores/theme.store", () => ({
+	// The recordings store tests do not exercise theme persistence, so a stub avoids
+	// pulling the storage-backed global theme store into a localStorage-less runner.
+	themeStore: {
+		theme: "light",
+	},
+}))
+
 vi.mock("../../utils/resolve-auto-summary-model-id", () => ({
 	resolveAutoSummaryModelId: vi.fn(),
 }))
@@ -67,6 +75,27 @@ describe("AudioRecordingsStore", () => {
 		vi.clearAllMocks()
 	})
 
+	it("defaults desktop list sorting to updated_at desc and forwards it on first fetch", async () => {
+		const store = new AudioRecordingsStore()
+		vi.mocked(SuperMagicApi.queryAudioProjects).mockResolvedValue({
+			list: [],
+			total: 0,
+		})
+
+		// The desktop list should align with mobile by sorting newest updates first on initial load.
+		expect(store.sortBy).toBe("updated_at")
+		expect(store.sortOrder).toBe("desc")
+
+		await store.fetchList({ page: 1 })
+
+		expect(SuperMagicApi.queryAudioProjects).toHaveBeenCalledWith(
+			expect.objectContaining({
+				sort_by: "updated_at",
+				sort_order: "desc",
+			}),
+		)
+	})
+
 	it("normalizes API items and uses total for hasMore", async () => {
 		const store = new AudioRecordingsStore()
 		vi.mocked(SuperMagicApi.queryAudioProjects).mockResolvedValue({
@@ -104,7 +133,7 @@ describe("AudioRecordingsStore", () => {
 		expect(store.hasMore).toBe(false)
 	})
 
-	it("maps summary filter to merging phase in request payload", async () => {
+	it("maps not_summarized filter to waiting and merging phases in request payload", async () => {
 		const store = new AudioRecordingsStore()
 		store.setSummaryFilter("not_summarized")
 
@@ -114,7 +143,7 @@ describe("AudioRecordingsStore", () => {
 
 		expect(SuperMagicApi.queryAudioProjects).toHaveBeenCalledWith(
 			expect.objectContaining({
-				current_phase: ["merging"],
+				current_phase: ["waiting", "merging"],
 				is_hidden: 0,
 			}),
 		)
@@ -146,7 +175,7 @@ describe("AudioRecordingsStore", () => {
 		expect(store.list[0]?.is_summarized).toBe(false)
 	})
 
-	it("keeps merging in progress items visible while waiting items stay hidden", async () => {
+	it("keeps waiting and merging in progress items visible on the all tab", async () => {
 		const store = new AudioRecordingsStore()
 		vi.mocked(SuperMagicApi.queryAudioProjects).mockResolvedValue({
 			list: [
@@ -184,10 +213,14 @@ describe("AudioRecordingsStore", () => {
 
 		await store.fetchList({ page: 1 })
 
-		expect(store.list).toHaveLength(2)
-		expect(store.list.map((item) => item.id)).toEqual(["merging", "done"])
-		expect(store.list[0]?.card_status).toBe("processing")
-		expect(summaryProgressPollerMock.addTask).toHaveBeenCalled()
+		expect(store.list).toHaveLength(3)
+		expect(store.list.map((item) => item.id)).toEqual(["waiting", "merging", "done"])
+		expect(store.list.map((item) => item.card_status)).toEqual([
+			"waiting",
+			"processing",
+			"summarized",
+		])
+		expect(summaryProgressPollerMock.addTask).toHaveBeenCalledWith("task-merging-visible")
 		expect(store.hasMore).toBe(false)
 	})
 
@@ -250,6 +283,53 @@ describe("AudioRecordingsStore", () => {
 
 		expect(store.list.map((item) => item.id)).toEqual(["processing", "ready"])
 		expect(store.list.map((item) => item.card_status)).toEqual(["processing", "not_summarized"])
+	})
+
+	it("keeps waiting items in the not_summarized tab", async () => {
+		const store = new AudioRecordingsStore()
+		store.setSummaryFilter("not_summarized")
+		vi.mocked(SuperMagicApi.queryAudioProjects).mockResolvedValue({
+			list: [
+				createApiItem("waiting", {
+					project_status: "",
+					extra: {
+						duration: 30,
+						current_phase: "waiting",
+						phase_status: "in_progress",
+						tags: [],
+					},
+				}),
+				createApiItem("processing", {
+					project_status: "",
+					extra: {
+						duration: 90,
+						current_phase: "merging",
+						phase_status: "in_progress",
+						task_key: "task-processing",
+						tags: [],
+					},
+				}),
+				createApiItem("ready", {
+					project_status: "",
+					extra: {
+						duration: 120,
+						current_phase: "merging",
+						phase_status: "completed",
+						tags: [],
+					},
+				}),
+			],
+			total: 3,
+		})
+
+		await store.fetchList({ page: 1 })
+
+		expect(store.list.map((item) => item.id)).toEqual(["waiting", "processing", "ready"])
+		expect(store.list.map((item) => item.card_status)).toEqual([
+			"waiting",
+			"processing",
+			"not_summarized",
+		])
 	})
 
 	it("does not load more after client summary tab filters out the only visible item", async () => {

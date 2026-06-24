@@ -10,6 +10,7 @@ import {
 	FolderOpen,
 	Loader2,
 	PenLine,
+	Timer,
 	Sparkles,
 	Trash2,
 	RefreshCw,
@@ -175,6 +176,27 @@ function ChipMuted({
 	return (
 		<span
 			className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 text-[12px] font-medium leading-4 text-muted-foreground"
+			data-testid={testId}
+		>
+			<Icon className="size-3.5" strokeWidth={1.8} />
+			{children}
+		</span>
+	)
+}
+
+/** Destructive chip used for failed summary / merge states to mirror the prototype emphasis. */
+function ChipDestructive({
+	icon: Icon,
+	children,
+	"data-testid": testId,
+}: {
+	icon: LucideIcon
+	children: React.ReactNode
+	"data-testid"?: string
+}) {
+	return (
+		<span
+			className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2.5 text-[12px] font-medium leading-4 text-destructive"
 			data-testid={testId}
 		>
 			<Icon className="size-3.5" strokeWidth={1.8} />
@@ -354,6 +376,15 @@ function AudioRecordingCard({
 		item.card_status === "processing" &&
 		item.current_phase === "merging" &&
 		item.phase_status === "in_progress"
+	const showWaitingIndicator = item.card_status === "waiting" && item.current_phase === "waiting"
+	const showMergeFailedIndicator =
+		item.card_status === "merge_failed" &&
+		item.current_phase === "merging" &&
+		item.phase_status === "failed"
+	const showSummaryFailedIndicator =
+		item.card_status === "summary_failed" &&
+		item.current_phase === "summarizing" &&
+		item.phase_status === "failed"
 
 	const isUploading = item.card_status === "uploading"
 	const isUploadFailed = item.card_status === "upload_failed"
@@ -419,6 +450,7 @@ function AudioRecordingCard({
 			: isMobile
 				? t("card.generateSummary")
 				: t("card.summarize")
+	const showRetrySummaryButton = showSummaryButton && summaryButtonVariant === "retry"
 
 	return (
 		<div
@@ -536,6 +568,32 @@ function AudioRecordingCard({
 								</ChipOutline>
 							) : null}
 
+							{showSummaryFailedIndicator ? (
+								<ChipDestructive
+									icon={AlertTriangle}
+									data-testid={
+										isMobile
+											? `mobile-recording-card-status-summary-failed-${item.id}`
+											: `audio-recording-card-${item.id}-status-summary-failed`
+									}
+								>
+									{t("card.summaryFailed")}
+								</ChipDestructive>
+							) : null}
+
+							{showMergeFailedIndicator ? (
+								<ChipDestructive
+									icon={AlertTriangle}
+									data-testid={
+										isMobile
+											? `mobile-recording-card-status-merge-failed-${item.id}`
+											: `audio-recording-card-${item.id}-status-merge-failed`
+									}
+								>
+									{t("card.mergeFailed")}
+								</ChipDestructive>
+							) : null}
+
 							<ChipMuted
 								icon={SourceIcon}
 								data-testid={
@@ -623,13 +681,58 @@ function AudioRecordingCard({
 						</span>
 					) : null}
 
+					{!isProgressMode && showWaitingIndicator ? (
+						<span
+							className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground"
+							data-testid={
+								isMobile
+									? `mobile-recording-card-summarize-${item.id}`
+									: `audio-recording-card-${item.id}-status-waiting`
+							}
+						>
+							<Timer className="h-3.5 w-3.5" aria-hidden />
+							{t("card.waiting")}
+						</span>
+					) : null}
+
+					{!isProgressMode && showMergeFailedIndicator ? (
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							disabled
+							onClick={(event) => {
+								// TODO(audio-recordings): Replace this placeholder with the real
+								// retry-merge API flow once backend contract and action wiring land.
+								// Keep the current button non-interactive until that API is ready.
+								event.stopPropagation()
+							}}
+							className={cn(
+								"h-8 shrink-0 gap-1 rounded-full border border-destructive/30 bg-transparent px-3 font-medium text-destructive hover:bg-destructive/10 hover:text-destructive disabled:opacity-100",
+								isMobile && "text-[13px] leading-5",
+								!isMobile && "text-[13px] leading-5",
+							)}
+							data-testid={
+								isMobile
+									? `mobile-recording-card-merge-retry-${item.id}`
+									: `audio-recording-card-${item.id}-merge-retry-button`
+							}
+						>
+							<RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+							{t("card.retryMerge")}
+						</Button>
+					) : null}
+
 					{!isProgressMode && showSummaryButton ? (
 						<Button
 							type="button"
 							size="sm"
 							className={cn(
-								"h-8 shrink-0 gap-1 rounded-full bg-foreground px-3.5 text-xs font-medium text-background hover:bg-foreground/90",
-								isMobile && "text-[13px] leading-5",
+								showRetrySummaryButton
+									? "h-8 shrink-0 gap-1 rounded-full border border-destructive/30 bg-transparent px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+									: "h-8 shrink-0 gap-1 rounded-full bg-foreground px-3.5 text-background hover:bg-foreground/90",
+								isMobile ? "text-[13px] leading-5" : "text-[13px] leading-5",
+								showRetrySummaryButton ? "font-medium" : "font-medium",
 							)}
 							disabled={!canClickSummary}
 							onClick={handleSummarizeClick}
@@ -641,6 +744,8 @@ function AudioRecordingCard({
 						>
 							{isSubmitting ? (
 								<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+							) : showRetrySummaryButton ? (
+								<RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
 							) : (
 								<Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
 							)}

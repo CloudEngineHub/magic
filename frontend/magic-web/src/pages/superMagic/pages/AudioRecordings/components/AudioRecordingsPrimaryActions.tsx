@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { ChevronDown, Mic, Settings, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import AudioUploadAction from "@/components/business/RecordingSummary/AudioUploadAction"
@@ -16,6 +17,26 @@ interface AudioRecordingsPrimaryActionsProps {
 	isStartingRecording?: boolean
 }
 
+/** Renders the dropdown row that opens the stable desktop file picker. */
+function DesktopAudioImportMenuItem({
+	onOpenFilePicker,
+	label,
+}: {
+	onOpenFilePicker: () => void
+	label: string
+}) {
+	return (
+		<DropdownMenuItem
+			onClick={onOpenFilePicker}
+			className="gap-2"
+			data-testid="audio-recordings-import-menu-item"
+		>
+			<Upload className="size-4" aria-hidden />
+			<span>{label}</span>
+		</DropdownMenuItem>
+	)
+}
+
 /** Desktop-only action cluster that separates creation actions from the filter toolbar. */
 export function AudioRecordingsPrimaryActions({
 	onOpenSettings,
@@ -24,12 +45,25 @@ export function AudioRecordingsPrimaryActions({
 	isStartingRecording = false,
 }: AudioRecordingsPrimaryActionsProps) {
 	const { t } = useTranslation("audioRecordings")
+	const openFilePickerRef = useRef<() => void>(() => undefined)
 
 	return (
 		<div
 			className="flex flex-wrap items-center justify-end gap-2"
 			data-testid="audio-recordings-primary-actions"
 		>
+			{onImportFiles ? (
+				<AudioUploadAction
+					// Keep the hidden file input mounted outside the dropdown content so
+					// the browser can still deliver the selected files after the menu closes.
+					handler={(onUpload) => {
+						openFilePickerRef.current = onUpload
+						return null
+					}}
+					onFileChange={onImportFiles}
+				/>
+			) : null}
+
 			{/* Keep recording as the dominant CTA while exposing upload through the adjacent menu. */}
 			<DropdownMenu>
 				<div className="flex items-center">
@@ -59,19 +93,11 @@ export function AudioRecordingsPrimaryActions({
 				</div>
 				<DropdownMenuContent align="end" className="min-w-[160px]">
 					{onImportFiles ? (
-						<AudioUploadAction
-							// Reuse the existing upload pipeline so the PC shell only changes layout, not behavior.
-							handler={(onUpload) => (
-								<DropdownMenuItem
-									onClick={onUpload}
-									className="gap-2"
-									data-testid="audio-recordings-import-menu-item"
-								>
-									<Upload className="size-4" aria-hidden />
-									<span>{t("card.sourceImported")}</span>
-								</DropdownMenuItem>
-							)}
-							onFileChange={onImportFiles}
+						<DesktopAudioImportMenuItem
+							// The menu item only opens the stable picker; it must not own the
+							// hidden input because dropdown teardown happens before file selection returns.
+							onOpenFilePicker={() => openFilePickerRef.current()}
+							label={t("card.sourceImported")}
 						/>
 					) : null}
 				</DropdownMenuContent>

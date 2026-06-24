@@ -138,8 +138,8 @@ describe("RecordingDetailTranscriptPanel", () => {
 		const segments = screen.getAllByTestId("recording-detail-transcript-segment")
 		const inactiveSegment = segments[0]
 		const activeSegment = segments[1]
-		const inactiveTime = screen.getByText("0:05")
-		const activeTime = screen.getByText("0:10")
+		const inactiveTime = screen.getByText("00:05")
+		const activeTime = screen.getByText("00:10")
 		const inactiveText = screen.getByText("Earlier line")
 		const activeText = screen.getByText("Active line")
 		const speakerChips = screen.getAllByTestId("recording-detail-transcript-speaker-chip")
@@ -186,7 +186,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 
 		renderTranscriptPanel(10, false)
 
-		const [inactiveTime, pausedTime] = screen.getAllByText(/0:(05|10)/)
+		const [inactiveTime, pausedTime] = screen.getAllByText(/00:(05|10)/)
 		const inactiveText = screen.getByText("Earlier line")
 		const pausedText = screen.getByText("Active line")
 		const speakerChips = screen.getAllByTestId("recording-detail-transcript-speaker-chip")
