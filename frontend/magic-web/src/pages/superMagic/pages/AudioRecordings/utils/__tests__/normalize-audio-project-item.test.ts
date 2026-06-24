@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest"
 import type { AudioProjectApiItem } from "@/types/audioProject"
 import {
-	isPcListVisible,
 	normalizeAudioProjectList,
 	normalizeAudioProjectListItem,
-	resolveIsProcessingComplete,
 } from "../normalize-audio-project-item"
 import { canSubmitSummary } from "../summary-action-utils"
 
@@ -49,21 +47,6 @@ const SAMPLE_SUMMARIZED: AudioProjectApiItem = {
 		phase_percent: 100,
 	},
 }
-
-describe("resolveIsProcessingComplete", () => {
-	it("returns true for waiting phase so the card can render an explicit waiting state", () => {
-		expect(resolveIsProcessingComplete("waiting", null)).toBe(true)
-	})
-
-	it("returns true for merging in progress and failed so the list keeps authoritative backend states", () => {
-		expect(resolveIsProcessingComplete("merging", "in_progress")).toBe(true)
-		expect(resolveIsProcessingComplete("merging", "failed")).toBe(true)
-	})
-
-	it("returns true for merging completed", () => {
-		expect(resolveIsProcessingComplete("merging", "completed")).toBe(true)
-	})
-})
 
 describe("normalizeAudioProjectListItem", () => {
 	it("maps nested extra fields for merging completed items as not_summarized", () => {
@@ -245,14 +228,5 @@ describe("normalizeAudioProjectList", () => {
 			"visible-merge-failed",
 			SAMPLE_SUMMARIZED.id,
 		])
-	})
-})
-
-describe("isPcListVisible", () => {
-	it("matches resolveIsProcessingComplete", () => {
-		expect(isPcListVisible("waiting", null)).toBe(true)
-		expect(isPcListVisible("merging", "in_progress")).toBe(true)
-		expect(isPcListVisible("merging", "failed")).toBe(true)
-		expect(isPcListVisible("merging", "completed")).toBe(true)
 	})
 })

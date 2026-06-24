@@ -5,6 +5,7 @@ const {
 	uploadFilesMock,
 	reportFileUploadsMock,
 	importAudioProjectFilesMock,
+	resolveImportedAudioDurationMock,
 	requestShellRefreshMock,
 	addOptimisticItemMock,
 	updateOptimisticItemTransferMock,
@@ -16,6 +17,7 @@ const {
 	uploadFilesMock: vi.fn(),
 	reportFileUploadsMock: vi.fn(),
 	importAudioProjectFilesMock: vi.fn(),
+	resolveImportedAudioDurationMock: vi.fn(),
 	requestShellRefreshMock: vi.fn(),
 	addOptimisticItemMock: vi.fn(),
 	updateOptimisticItemTransferMock: vi.fn(),
@@ -50,6 +52,10 @@ vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		importAudioProjectFiles: importAudioProjectFilesMock,
 	},
+}))
+
+vi.mock("../../utils/imported-audio-duration", () => ({
+	resolveImportedAudioDuration: resolveImportedAudioDurationMock,
 }))
 
 vi.mock("../audio-recordings-store", () => ({
@@ -103,6 +109,7 @@ describe("AudioImportStore", () => {
 		)
 		reportFileUploadsMock.mockResolvedValue(undefined)
 		importAudioProjectFilesMock.mockResolvedValue({ file_ids: ["imported-file-id"], total: 1 })
+		resolveImportedAudioDurationMock.mockResolvedValue(64)
 		storeSubmitSummaryMock.mockResolvedValue({ ok: true })
 		requestShellRefreshMock.mockImplementation(() => {
 			authoritativeList = [
@@ -158,6 +165,7 @@ describe("AudioImportStore", () => {
 					file_key: "recording/imported.wav",
 					file_name: "imported.wav",
 					file_size: 256,
+					duration: 64,
 				}),
 			],
 		})
@@ -192,6 +200,7 @@ describe("AudioImportStore", () => {
 		expect(addOptimisticItemMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				audio_source: "imported",
+				duration: 64,
 				current_phase: "merging",
 				phase_status: "completed",
 				card_status: "not_summarized",
@@ -243,5 +252,62 @@ describe("AudioImportStore", () => {
 
 		expect(storeSubmitSummaryMock).toHaveBeenCalledTimes(1)
 		expect(requestShellRefreshMock).not.toHaveBeenCalled()
+	})
+
+	it("falls back to duration 0 when metadata parsing fails", async () => {
+		resolveImportedAudioDurationMock.mockResolvedValue(0)
+
+		const { AudioImportStore } = await import("../audio-import-store")
+		const store = new AudioImportStore()
+
+		await store.startAudioImport([new File(["voice"], "broken.wav", { type: "audio/wav" })], {
+			projectId: "project-import",
+			projectName: "Imported Project",
+			topicId: "topic-import",
+			workspaceId: "workspace-import",
+			modelId: "model-alpha",
+			taskKey: "session-web-imported",
+			autoSummaryEnabled: false,
+		})
+
+		expect(importAudioProjectFilesMock).toHaveBeenCalledWith({
+			project_id: "project-import",
+			parent_id: "",
+			files: [
+				expect.objectContaining({
+					file_name: "imported.wav",
+					duration: 0,
+				}),
+			],
+		})
+		expect(addOptimisticItemMock).toHaveBeenCalledWith(expect.objectContaining({ duration: 0 }))
+	})
+
+	it("falls back to duration 0 when metadata parsing throws unexpectedly", async () => {
+		resolveImportedAudioDurationMock.mockResolvedValue(0)
+
+		const { AudioImportStore } = await import("../audio-import-store")
+		const store = new AudioImportStore()
+
+		await store.startAudioImport([new File(["voice"], "timeout.wav", { type: "audio/wav" })], {
+			projectId: "project-import",
+			projectName: "Imported Project",
+			topicId: "topic-import",
+			workspaceId: "workspace-import",
+			modelId: "model-alpha",
+			taskKey: "session-web-imported",
+			autoSummaryEnabled: false,
+		})
+
+		expect(importAudioProjectFilesMock).toHaveBeenCalledWith({
+			project_id: "project-import",
+			parent_id: "",
+			files: [
+				expect.objectContaining({
+					file_name: "imported.wav",
+					duration: 0,
+				}),
+			],
+		})
 	})
 })

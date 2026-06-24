@@ -7,6 +7,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { buildOptimisticRecordingItem } from "../utils/build-optimistic-recording-item"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { requestAudioRecordingsShellRefresh } from "../utils/request-audio-recordings-shell-refresh"
+import { resolveImportedAudioDuration } from "../utils/imported-audio-duration"
 
 const IMPORT_AUDIO_FILE_SYNC_RETRY_COUNT = 3
 const IMPORT_AUDIO_FILE_SYNC_RETRY_DELAY_MS = 50
@@ -188,6 +189,8 @@ export class AudioImportStore {
 		}
 
 		const targetFile = files[0]
+		// Keep the import-only fallback logic inside the recordings domain instead of expanding shared audio utils.
+		const importedDuration = await resolveImportedAudioDuration(targetFile)
 
 		// Add new task to the local map
 		runInAction(() => {
@@ -261,8 +264,8 @@ export class AudioImportStore {
 									file_key: uploadResult.file_key,
 									file_name: uploadResult.file_name,
 									file_size: uploadResult.file_size,
-									// Browser import flow does not currently extract duration metadata up front.
-									duration: 0,
+									// Keep backend fallback compatibility by sending 0 only when metadata probing failed.
+									duration: importedDuration,
 								},
 							],
 						})
@@ -281,6 +284,7 @@ export class AudioImportStore {
 							taskKey,
 							audioSource: "imported",
 							topicId,
+							duration: importedDuration,
 							autoSummaryEnabled: false,
 						})
 						completedProject.transferStatus = "done"

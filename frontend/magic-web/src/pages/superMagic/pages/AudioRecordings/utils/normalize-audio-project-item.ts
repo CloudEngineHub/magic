@@ -5,24 +5,6 @@ import type {
 } from "@/types/audioProject"
 import { coerceIdToString } from "./summary-action-utils"
 
-/** Mirrors Android client: upload/merge pipeline still in progress */
-export function resolveIsProcessingComplete(
-	currentPhase: string | null,
-	phaseStatus: string | null,
-): boolean {
-	// Keep backend queue / merge states visible so users can see the authoritative
-	// pipeline state instead of losing rows while the task is still settling.
-	if (currentPhase === "waiting") return true
-	if (currentPhase === "merging" && phaseStatus === "in_progress") return true
-	if (currentPhase === "merging" && phaseStatus === "failed") return true
-	return true
-}
-
-/** Whether the item should appear on the PC recordings list */
-export function isPcListVisible(currentPhase: string | null, phaseStatus: string | null): boolean {
-	return resolveIsProcessingComplete(currentPhase, phaseStatus)
-}
-
 /** Resolves PC card status for items that passed the processing-complete gate */
 export function resolveCardStatus(
 	raw: Pick<AudioProjectApiItem, "project_status" | "current_topic_status" | "is_summarized">,
@@ -71,8 +53,6 @@ export function normalizeAudioProjectListItem(
 	const extra = raw.extra ?? {}
 	const currentPhase = extra.current_phase ?? null
 	const phaseStatus = extra.phase_status ?? null
-
-	if (!isPcListVisible(currentPhase, phaseStatus)) return null
 
 	const createdAt =
 		raw.created_at ?? (raw.create_timestamp ? Number(raw.create_timestamp) : undefined) ?? 0
