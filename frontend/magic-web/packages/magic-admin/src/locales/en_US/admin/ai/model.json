@@ -160,7 +160,6 @@
 		"serviceProvider": "Provider",
 		"serviceProviderDesc": "After creation, the provider cannot be modified",
 		"serviceProviderPlaceholder": "Please select a provider",
-		"sharedFieldHint": "The shared fields below can be imported from history and still edited afterward",
 		"sort": "Display Priority",
 		"sortDesc": "Used to control the display position in the provider list",
 		"sortPlaceholder": "Please enter the display priority, the larger the value, the higher the display priority",
