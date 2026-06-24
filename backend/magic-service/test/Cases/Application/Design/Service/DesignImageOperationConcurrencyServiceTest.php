@@ -25,7 +25,7 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
     {
         $entity = $this->createEntity(123456, ImageGenerationType::ERASER);
         $redis = new RecordingRedis();
-        $config = $this->createConfig(2, 600);
+        $config = $this->createConfig(2);
 
         $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
 
@@ -52,7 +52,7 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
     {
         $entity = $this->createEntity(123456, ImageGenerationType::EXPAND);
         $redis = new RecordingRedis();
-        $config = $this->createConfig(0, 600);
+        $config = $this->createConfig(0);
 
         $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
 
@@ -68,7 +68,7 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $entity = $this->createEntity(123456, ImageGenerationType::ERASER);
         $redis = new RecordingRedis();
         $redis->evalResult = [2, ''];
-        $config = $this->createConfig(2, 600);
+        $config = $this->createConfig(2);
 
         $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
 
@@ -83,7 +83,7 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $lease = ConcurrencyLease::acquired('123456', 'lease-token');
         $redis = new RecordingRedis();
         $redis->evalResult = 1;
-        $config = $this->createConfig(2, 600);
+        $config = $this->createConfig(2, 0);
 
         $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
         $this->assertTrue($service->release($lease));
@@ -107,17 +107,15 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         return $entity;
     }
 
-    private function createConfig(int $limit, int $ttlSeconds): ConfigInterface
+    private function createConfig(int $limit, int $expectedReads = 1): ConfigInterface
     {
         $config = $this->createMock(ConfigInterface::class);
-        $config->method('get')
-            ->willReturnCallback(static function (string $key, mixed $default = null) use ($limit, $ttlSeconds): mixed {
-                return match ($key) {
-                    'design_image_operation.max_concurrency' => $limit,
-                    'design_image_operation.slot_ttl_seconds' => $ttlSeconds,
-                    default => $default,
-                };
-            });
+        $expectation = $config->expects($this->exactly($expectedReads))
+            ->method('get');
+        if ($expectedReads > 0) {
+            $expectation->with('design_generation.image_operation.max_concurrency', 2)
+                ->willReturn($limit);
+        }
 
         return $config;
     }

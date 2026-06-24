@@ -25,9 +25,9 @@ use Throwable;
  */
 abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGenerationTaskHandlerInterface
 {
-    private const string ERASER_EXPAND_NORMALIZED_FORMAT = 'webp';
+    private const string IMAGE_COMPRESSION_FORMAT = 'webp';
 
-    private const int ERASER_EXPAND_NORMALIZED_QUALITY = 85;
+    private const int IMAGE_COMPRESSION_QUALITY = 85;
 
     public function __construct(
         protected readonly FileDomainService $fileDomainService,
@@ -195,8 +195,8 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         $imageLinkOptions = $this->buildEraserExpandReferenceImageLinkOptions($entity, $imagePath);
 
         // 只按原始文件元数据判断是否追加云存储处理参数，不下载或探测处理后的实际大小。
-        if ($this->shouldNormalizeEraserExpandImage($config, $this->resolveEraserExpandReferenceImageSize($dataIsolation, $entity, $imagePath))) {
-            $imageLinkOptions = $this->appendEraserExpandImageProcessOptions($imageLinkOptions);
+        if ($this->shouldCompressImageBySize($config, $this->resolveEraserExpandReferenceImageSize($dataIsolation, $entity, $imagePath))) {
+            $imageLinkOptions = $this->appendImageCompressionLinkOptions($imageLinkOptions);
         }
 
         $imageUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $imagePath, $imageLinkOptions);
@@ -231,7 +231,7 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         string $referenceImage,
     ): ?int {
         if (str_contains($referenceImage, 'design-mark/')) {
-            return $this->resolvePrivateReferenceImageSize($dataIsolation, $referenceImage);
+            return $this->resolvePrivateFileSizeFromMetadata($dataIsolation, $referenceImage);
         }
 
         return $this->getWorkspaceSandboxFileEntity($entity->getProjectId(), $referenceImage)?->getFileSize();
@@ -261,6 +261,30 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
     }
 
     /**
+     * 为原图/canvas 链接追加云存储图片压缩参数。
+     *
+     * @param array<string, mixed> $linkOptions
+     * @return array<string, mixed>
+     */
+    protected function appendImageCompressionLinkOptions(array $linkOptions): array
+    {
+        $imageOptions = $linkOptions['image'] ?? null;
+        if ($imageOptions instanceof ImageProcessOptions) {
+            $imageOptions = clone $imageOptions;
+        } else {
+            $imageOptions = new ImageProcessOptions();
+        }
+
+        $imageOptions->format(self::IMAGE_COMPRESSION_FORMAT);
+
+        $imageOptions->quality(self::IMAGE_COMPRESSION_QUALITY);
+
+        $linkOptions['image'] = $imageOptions;
+
+        return $linkOptions;
+    }
+
+    /**
      * @return null|array{0: string, 1: string}
      */
     private function nonEmptyUrlPair(?string $imageUrl, ?string $maskUrl): ?array
@@ -273,39 +297,18 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
     }
 
     /**
-     * 擦除/扩图只在原图或 canvas 超过下游限制时追加云存储 format/quality 参数。
-     * 不做 resize，避免 4K 输入被主动降到 2K。
+     * 只在原图或 canvas 超过下游限制时追加云存储 format/quality 参数。
      */
-    private function shouldNormalizeEraserExpandImage(ConfigInterface $config, ?int $fileSize): bool
+    private function shouldCompressImageBySize(ConfigInterface $config, ?int $fileSize): bool
     {
-        return $fileSize !== null && $fileSize > (int) $config->get('design_image_operation.input_max_bytes', 5 * 1024 * 1024);
+        return $fileSize !== null && $fileSize > (int) $config->get('design_generation.image_operation.input_max_bytes', 5 * 1024 * 1024);
     }
 
     /**
-     * 保留已有 crop 等图片处理参数，只追加擦除/扩图输入归一化需要的 format/quality。
-     *
-     * @param array<string, mixed> $linkOptions
-     * @return array<string, mixed>
+     * 读取 design-mark 私有桶图片的文件大小，用于判断扩图 canvas 是否需要追加云存储压缩/转码参数。
+     * 这里只查云存储 metadata，不下载图片本体；读取失败时返回 null，按“不主动处理”继续走原链路。
      */
-    private function appendEraserExpandImageProcessOptions(array $linkOptions): array
-    {
-        $imageOptions = $linkOptions['image'] ?? null;
-        if ($imageOptions instanceof ImageProcessOptions) {
-            $imageOptions = clone $imageOptions;
-        } else {
-            $imageOptions = new ImageProcessOptions();
-        }
-
-        $imageOptions->format(self::ERASER_EXPAND_NORMALIZED_FORMAT);
-
-        $imageOptions->quality(self::ERASER_EXPAND_NORMALIZED_QUALITY);
-
-        $linkOptions['image'] = $imageOptions;
-
-        return $linkOptions;
-    }
-
-    private function resolvePrivateReferenceImageSize(DesignDataIsolation $dataIsolation, string $referenceImage): ?int
+    private function resolvePrivateFileSizeFromMetadata(DesignDataIsolation $dataIsolation, string $referenceImage): ?int
     {
         try {
             $privateFileKey = ltrim($referenceImage, '/');

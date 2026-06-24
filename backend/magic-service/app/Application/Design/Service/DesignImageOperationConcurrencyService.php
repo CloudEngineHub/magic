@@ -17,6 +17,8 @@ readonly class DesignImageOperationConcurrencyService
 {
     private const POOL_NAME = 'design:image-operation:running:eraser-expand';
 
+    private const int SLOT_TTL_SECONDS = 600;
+
     public function __construct(
         private RedisConcurrencyLimiter $limiter,
         private ConfigInterface $config,
@@ -34,7 +36,7 @@ readonly class DesignImageOperationConcurrencyService
             self::POOL_NAME,
             (string) $entity->getId(),
             $this->maxConcurrency(),
-            $this->slotTtlSeconds()
+            self::SLOT_TTL_SECONDS
         );
     }
 
@@ -45,11 +47,6 @@ readonly class DesignImageOperationConcurrencyService
 
     private function maxConcurrency(): int
     {
-        return (int) $this->config->get('design_image_operation.max_concurrency', 2);
-    }
-
-    private function slotTtlSeconds(): int
-    {
-        return (int) $this->config->get('design_image_operation.slot_ttl_seconds', 600);
+        return (int) $this->config->get('design_generation.image_operation.max_concurrency', 2);
     }
 }

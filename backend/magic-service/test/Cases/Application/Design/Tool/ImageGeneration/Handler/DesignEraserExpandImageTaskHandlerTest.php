@@ -425,7 +425,7 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
         $config->method('get')
             ->willReturnCallback(static function (string $key, mixed $default = null): mixed {
                 return match ($key) {
-                    'design_image_operation.input_max_bytes' => 5 * 1024 * 1024,
+                    'design_generation.image_operation.input_max_bytes' => 5 * 1024 * 1024,
                     default => $default,
                 };
             });
