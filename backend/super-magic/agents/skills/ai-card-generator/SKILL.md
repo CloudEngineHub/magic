@@ -9,9 +9,7 @@ description: |
 
 ---
 
-
 # AI Card Generator
-
 
 Automatically generate and update HTML visual cards via scheduled tasks. Cards can be single-file or folder-based multi-file, and are generated from user prompts + templates with fresh data.
 
@@ -25,10 +23,7 @@ The skill documentation, built-in templates, and prompt snippets are written in 
 4. Set HTML `lang` attributes to the inferred language for generated cards. Built-in English templates may use `lang="en"`, but cards generated for users should update it.
 5. Do not translate brand names, product names, code identifiers, URLs, source quotes, or fixed schema values. Translate surrounding explanation and presentation text.
 
-
-
 ## Core Capabilities
-
 
 - Create AI visual cards with scheduled updates
 - Support user-customizable HTML templates (users can edit templates anytime)
@@ -37,7 +32,6 @@ The skill documentation, built-in templates, and prompt snippets are written in 
 - Support multiple card types (hotspot tracker, daily digest, analytics panel, etc.)
 - Design scenario-specific interactive templates instead of only filling the preset skeletons
 - Preserve source links from fetched data and expose them through source lists, new-tab links, or safe iframe previews
-
 
 ## Related Skill Usage
 
@@ -48,9 +42,7 @@ When a card needs interactivity, web-page previews, file I/O, agent/model select
 
 Do not treat an AI Card as a static screenshot. It is an updateable HTML micro-page: the template owns the interaction and visual structure, while the scheduled Agent workflow owns data fetching, source tracking, and content replacement.
 
-
 ## Directory Structure Convention
-
 
 Card directory name is user-defined, no fixed path required. The core requirement is the directory must contain `magic.project.js` with type set to `ai-card`.
 
@@ -98,9 +90,7 @@ Backward compatible (legacy):
   └── YYYY-MM-DD_HH-mm.html
 ```
 
-
 ## Creation Workflow
-
 
 ### Step 0: Requirement Decomposition and Template Design
 
@@ -122,7 +112,6 @@ When the prompt is for a self-media article/post review, post-publication retros
 
 AI Card may read already-produced self-media operation files only when the user explicitly asks for a separate visual card based on those existing files. It must not create, overwrite, backfill, or pretend to fetch self-media operation data.
 
-
 ### Step 1: Create Card Directory Structure
 
 Based on user requirements, create directory and write all required files:
@@ -134,7 +123,6 @@ Based on user requirements, create directory and write all required files:
 4. Fetch initial data and generate the latest card (recommended `latest/index.html`, legacy-compatible `latest.html`)
 5. If scheduled updates are needed, create the scheduled task with using-cron
 ```
-
 
 ### Step 2: magic.project.js Format
 
@@ -154,7 +142,7 @@ window.magicProjectConfig = {
   notification: {
     channels: [
       {
-        channel: "dingtalk", // dingtalk | lark
+        channel: "dingtalk", // dingtalk | wecom | lark
         targetDescription: "Send to the Ops Daily group",
       },
     ],
@@ -187,7 +175,6 @@ Field rules:
 
 Creation messages intentionally keep execution details concise. Treat sections such as `创建需求`, `创建位置`, `模板`, `更新方式`, `定时`, and `分析指令` as inputs. Apply this skill's Creation Workflow, Template Specification, Scheduled Update Workflow, and Notification Dispatch rules to decide the actual file structure, template behavior, scheduled task setup, and update process. Do not require the message itself to repeat these execution steps.
 
-
 ### Notification Dispatch
 
 AI Cards can optionally deliver a short update notice after a card is created or refreshed. The v1 configuration only stores notification channel and target description. Do not ask the frontend or user to provide platform credentials, webhook secrets, SMTP settings, message templates, target IDs, or channel-specific delivery options in `magic.project.js`.
@@ -202,8 +189,12 @@ notification: {
       targetDescription: "Send to the Ops Daily group",
     },
     {
+      channel: "wecom",
+      targetDescription: "Send to the WeCom Ops group",
+    },
+    {
       channel: "lark",
-      targetDescription: "Send to Zhang San",
+      targetDescription: "Send to: <target user>",
     },
   ],
 }
@@ -212,13 +203,14 @@ notification: {
 Rules:
 
 1. Treat missing `notification`, missing `channels`, or an empty `channels` array as notification disabled.
-2. Supported `channel` values are `dingtalk` and `lark` only. Ignore unknown channels and explain the skipped channel in the current topic.
+2. Supported `channel` values are `dingtalk`, `wecom`, and `lark` only. Ignore unknown channels and explain the skipped channel in the current topic.
 3. `targetDescription` is natural-language user intent. It may describe a person, group, chat, or another platform-specific target. Do not invent a target when it is ambiguous.
 4. Send notifications only after the card output has been written successfully, history has been archived when needed, and `magic.project.js` has been updated.
 5. For `dingtalk`, load `dingtalk-cli` and use its normal routing and authentication flow to resolve and send the message.
-6. For `lark`, load `lark-cli` and use its normal routing and authentication flow to resolve and send the message.
-7. Do not put channel routing rules, skill names, credentials, or fallback execution details into the scheduled task message. The scheduled task should instruct the agent to update the card; this skill owns notification behavior.
-8. If authentication, target resolution, or delivery fails, report the concrete missing information in the current topic. Do not claim the notification was sent.
+6. For `wecom`, guide the user to configure a WeCom group bot webhook outside `magic.project.js`; after the webhook is configured, the next card update can use the configured webhook delivery path.
+7. For `lark`, load `lark-cli` and use its normal routing and authentication flow to resolve and send the message.
+8. Do not put channel routing rules, skill names, credentials, or fallback execution details into the scheduled task message. The scheduled task should instruct the agent to update the card; this skill owns notification behavior.
+9. If authentication, webhook configuration, target resolution, or delivery fails, report the concrete missing information in the current topic. Do not claim the notification was sent.
 
 Recommended notification content:
 
@@ -228,14 +220,11 @@ Updated at: {generated_at}
 Latest card: {magic.project.js.card_path_or_link}
 ```
 
-
 ### Step 3: Template Specification (`template/index.html` or `template.html`)
 
 The template is the card's "skeleton", defining layout and styling. The agent reads the template each execution to understand the structure, then fills in new data to generate the latest card output (recommended `latest/index.html`).
 
-
 **Template Rules:**
-
 
 1. Prefer folder-based templates: `template/index.html` plus optional `styles.css` / `scripts.js`, generated into the same structure under `latest/`
 2. Include `<meta charset="utf-8">` and viewport meta
@@ -292,9 +281,7 @@ Implementation rules:
 - If a template supports iframe source preview, hide the preview frame in compact card mode but keep source count or source badge visible.
 - The card should still be usable if the host iframe height is clipped: important title/time/status content belongs near the top or bottom, not only after long scroll.
 
-
 ## Scheduled Execution Workflow
-
 
 When a scheduled task triggers, execute the following:
 
@@ -361,14 +348,9 @@ Recommended iframe pattern:
 ></iframe>
 ```
 
-
 ## Integration with using-cron
 
-
-After creating a card, if scheduled updates are needed, use using-cron to create a scheduled task.
-Use `shell_exec` from `agents/skills/using-cron`; do not use `run_sdk_snippet`.
-For long update instructions, write the message to a temporary file and pass `--message-content-file`
-to avoid shell parsing issues with punctuation, quotes, or brackets.
+After creating a card, if scheduled updates are needed, use using-cron to create a scheduled task. Use `shell_exec` from `agents/skills/using-cron`; do not use `run_sdk_snippet`. For long update instructions, write the message to a temporary file and pass `--message-content-file` to avoid shell parsing issues with punctuation, quotes, or brackets.
 
 ```python
 shell_exec(
@@ -387,9 +369,7 @@ python scripts/create.py --task-name "AI Card: {card_name}" --message-content-fi
 )
 ```
 
-
 After successful creation, write the returned schedule_id into magic.project.js.
-
 
 ## User Template Modification
 
@@ -419,7 +399,6 @@ Example pattern in card UI:
 
 When sending file paths, follow `html-api-sdk` and `micro-app-architect`: use tiptap JSON with `@file` mentions, call `getAppBasePath()` for app-relative data files, and keep `.magic/` skill paths workspace-root relative.
 
-
 ## Preset Templates
 
 This skill provides the following preset templates for reference, located in the templates/ directory (folder-based structure):
@@ -428,5 +407,4 @@ This skill provides the following preset templates for reference, located in the
 - `daily-digest/` — Daily digest (summary, metric groups, timeline, action list, source cards, AI follow-ups)
 - `analytics-panel/` — Analytics panel (KPIs, funnels, channel breakdowns, range tabs, alerts, source preview, AI follow-ups)
 
-Each template folder contains: `index.html`, `styles.css`, `scripts.js`, and `prompts/` (optional analysis prompt snippets).
-When creating cards, use these as module examples, not as fixed limits. Compose or extend modules according to the user's domain, source types, and desired interactions.
+Each template folder contains: `index.html`, `styles.css`, `scripts.js`, and `prompts/` (optional analysis prompt snippets). When creating cards, use these as module examples, not as fixed limits. Compose or extend modules according to the user's domain, source types, and desired interactions.

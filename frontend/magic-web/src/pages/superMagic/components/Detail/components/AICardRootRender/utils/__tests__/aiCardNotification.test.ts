@@ -7,6 +7,7 @@ describe("aiCardNotification", () => {
 			channels: [
 				{ channel: "dingtalk", targetDescription: "发到运营日报群" },
 				{ channel: "wechat", targetDescription: "发到微信群" },
+				{ channel: "wecom", targetDescription: "发到企业微信运营群" },
 				{ channel: "lark", targetDescription: "发到增长日报群" },
 			],
 		} as unknown as Parameters<typeof normalizeAICardNotification>[0])
@@ -14,6 +15,7 @@ describe("aiCardNotification", () => {
 		expect(notification).toEqual({
 			channels: [
 				{ channel: "dingtalk", targetDescription: "发到运营日报群" },
+				{ channel: "wecom", targetDescription: "发到企业微信运营群" },
 				{ channel: "lark", targetDescription: "发到增长日报群" },
 			],
 		})
@@ -24,11 +26,15 @@ describe("aiCardNotification", () => {
 			compactAICardNotification({
 				channels: [
 					{ channel: "dingtalk", targetDescription: "  " },
+					{ channel: "wecom", targetDescription: " 发到企业微信运营群 " },
 					{ channel: "lark", targetDescription: " 发到增长日报群 " },
 				],
 			}),
 		).toEqual({
-			channels: [{ channel: "lark", targetDescription: "发到增长日报群" }],
+			channels: [
+				{ channel: "wecom", targetDescription: "发到企业微信运营群" },
+				{ channel: "lark", targetDescription: "发到增长日报群" },
+			],
 		})
 	})
 })

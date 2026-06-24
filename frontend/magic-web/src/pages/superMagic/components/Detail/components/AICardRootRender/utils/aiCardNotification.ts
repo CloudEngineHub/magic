@@ -1,4 +1,4 @@
-export type AICardNotificationChannel = "dingtalk" | "lark"
+export type AICardNotificationChannel = "dingtalk" | "wecom" | "lark"
 
 export interface AICardNotificationChannelConfig {
 	channel: AICardNotificationChannel
@@ -44,5 +44,5 @@ export function compactAICardNotification(
 }
 
 function isAICardNotificationChannel(value: unknown): value is AICardNotificationChannel {
-	return value === "dingtalk" || value === "lark"
+	return value === "dingtalk" || value === "wecom" || value === "lark"
 }

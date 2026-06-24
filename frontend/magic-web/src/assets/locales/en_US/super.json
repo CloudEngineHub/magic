@@ -627,17 +627,24 @@
 				"description": "After a card is generated or updated successfully, send it to the described targets. This only stores targets, not platform credentials.",
 				"channels": {
 					"dingtalk": "DingTalk",
+					"wecom": "WeCom",
 					"lark": "Lark"
 				},
 				"placeholders": {
-					"dingtalk": "e.g. Send to the Ops Daily group, or send to Zhang San",
-					"lark": "e.g. Send to the Growth Daily group, or send to Li Si"
+					"dingtalk": "e.g. Send to the Ops Daily group, or send to someone",
+					"wecom": "e.g. Send to the WeCom Ops group, or send to someone",
+					"lark": "e.g. Send to the Growth Daily group, or send to someone"
 				},
 				"templates": {
 					"dingtalkGroup": "Send to the Ops Daily group",
-					"dingtalkUser": "Send to Zhang San",
+					"dingtalkUser": "Send to someone",
+					"wecomGroup": "Send to the WeCom Ops group",
+					"wecomUser": "Send to someone",
 					"larkGroup": "Send to the Growth Daily group",
-					"larkUser": "Send to Li Si"
+					"larkUser": "Send to someone"
+				},
+				"templateValues": {
+					"user": "Send to:"
 				}
 			},
 			"createDialog": {
@@ -660,6 +667,7 @@
 				"location": "Location: {{cardDir}}/",
 				"notificationChannels": {
 					"dingtalk": "DingTalk",
+					"wecom": "WeCom",
 					"lark": "Lark"
 				},
 				"notificationTargetLine": "{{channel}}: {{targetDescription}}",

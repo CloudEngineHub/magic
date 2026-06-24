@@ -55,6 +55,10 @@ const NOTIFICATION_CHANNEL_LABELS: Record<
 		key: "detail.aiCard.createMessage.notificationChannels.dingtalk",
 		defaultValue: "DingTalk",
 	},
+	wecom: {
+		key: "detail.aiCard.createMessage.notificationChannels.wecom",
+		defaultValue: "WeCom",
+	},
 	lark: {
 		key: "detail.aiCard.createMessage.notificationChannels.lark",
 		defaultValue: "Lark",

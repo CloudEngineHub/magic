@@ -11,6 +11,11 @@ import {
 	type AICardNotificationConfig,
 } from "../utils/aiCardNotification"
 
+interface NotificationTemplate {
+	label: string
+	value: string
+}
+
 interface AICardNotificationFieldsProps {
 	value?: AICardNotificationConfig | null
 	onChange: (value: AICardNotificationConfig) => void
@@ -26,8 +31,29 @@ function AICardNotificationFields({ value, onChange, disabled }: AICardNotificat
 			label: t("detail.aiCard.notification.channels.dingtalk"),
 			placeholder: t("detail.aiCard.notification.placeholders.dingtalk"),
 			templates: [
-				t("detail.aiCard.notification.templates.dingtalkGroup"),
-				t("detail.aiCard.notification.templates.dingtalkUser"),
+				{
+					label: t("detail.aiCard.notification.templates.dingtalkGroup"),
+					value: t("detail.aiCard.notification.templates.dingtalkGroup"),
+				},
+				{
+					label: t("detail.aiCard.notification.templates.dingtalkUser"),
+					value: t("detail.aiCard.notification.templateValues.user"),
+				},
+			],
+		},
+		{
+			channel: "wecom" as const,
+			label: t("detail.aiCard.notification.channels.wecom"),
+			placeholder: t("detail.aiCard.notification.placeholders.wecom"),
+			templates: [
+				{
+					label: t("detail.aiCard.notification.templates.wecomGroup"),
+					value: t("detail.aiCard.notification.templates.wecomGroup"),
+				},
+				{
+					label: t("detail.aiCard.notification.templates.wecomUser"),
+					value: t("detail.aiCard.notification.templateValues.user"),
+				},
 			],
 		},
 		{
@@ -35,8 +61,14 @@ function AICardNotificationFields({ value, onChange, disabled }: AICardNotificat
 			label: t("detail.aiCard.notification.channels.lark"),
 			placeholder: t("detail.aiCard.notification.placeholders.lark"),
 			templates: [
-				t("detail.aiCard.notification.templates.larkGroup"),
-				t("detail.aiCard.notification.templates.larkUser"),
+				{
+					label: t("detail.aiCard.notification.templates.larkGroup"),
+					value: t("detail.aiCard.notification.templates.larkGroup"),
+				},
+				{
+					label: t("detail.aiCard.notification.templates.larkUser"),
+					value: t("detail.aiCard.notification.templateValues.user"),
+				},
 			],
 		},
 	]
@@ -112,17 +144,17 @@ function AICardNotificationFields({ value, onChange, disabled }: AICardNotificat
 										disabled={disabled}
 									/>
 									<div className="flex flex-wrap gap-2">
-										{templates.map((template) => (
+										{templates.map((template: NotificationTemplate) => (
 											<Button
-												key={template}
+												key={template.label}
 												type="button"
 												variant="outline"
 												size="sm"
 												disabled={disabled}
-												onClick={() => updateChannel(channel, template)}
+												onClick={() => updateChannel(channel, template.value)}
 												className="h-7 rounded-full px-3 text-xs"
 											>
-												{template}
+												{template.label}
 											</Button>
 										))}
 									</div>

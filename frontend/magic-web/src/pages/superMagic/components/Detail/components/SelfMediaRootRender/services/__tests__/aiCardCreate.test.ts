@@ -15,6 +15,7 @@ const { mockT } = vi.hoisted(() => ({
 			"detail.aiCard.createMessage.notificationTargetLine":
 				"{{channel}}: {{targetDescription}}",
 			"detail.aiCard.createMessage.notificationChannels.dingtalk": "DingTalk",
+			"detail.aiCard.createMessage.notificationChannels.wecom": "WeCom",
 			"detail.aiCard.createMessage.notificationChannels.lark": "Lark",
 			"detail.aiCard.createMessage.cardId": "Card ID: {{cardId}}",
 			"detail.aiCard.createMessage.cardLink": "Card link: {{cardLink}}",
@@ -191,7 +192,8 @@ describe("createAICardViaTopic", () => {
 			notification: {
 				channels: [
 					{ channel: "dingtalk", targetDescription: "发到「运营日报群」" },
-					{ channel: "lark", targetDescription: "发给李四" },
+					{ channel: "wecom", targetDescription: "发到企业微信运营群" },
+					{ channel: "lark", targetDescription: "发给：目标用户" },
 				],
 			},
 		})
@@ -203,7 +205,8 @@ describe("createAICardViaTopic", () => {
 
 		expect(text).toContain("━━━ Notification targets ━━━")
 		expect(text).toContain("DingTalk: 发到「运营日报群」")
-		expect(text).toContain("Lark: 发给李四")
+		expect(text).toContain("WeCom: 发到企业微信运营群")
+		expect(text).toContain("Lark: 发给：目标用户")
 		expect(text).not.toContain('"channels"')
 		expect(text).not.toContain('"channel"')
 		expect(text).not.toContain('"targetDescription"')

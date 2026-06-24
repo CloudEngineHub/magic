@@ -628,17 +628,24 @@
 				"description": "卡片生成或更新成功后，按描述发送到指定渠道。这里只配置目标，不保存平台凭据。",
 				"channels": {
 					"dingtalk": "钉钉",
+					"wecom": "企业微信",
 					"lark": "飞书"
 				},
 				"placeholders": {
-					"dingtalk": "例如：发到「运营日报群」，或发给张三",
-					"lark": "例如：发到「增长日报群」，或发给李四"
+					"dingtalk": "例如：发到「运营日报群」，或发给某个人",
+					"wecom": "例如：发到「企业微信运营群」，或发给某个人",
+					"lark": "例如：发到「增长日报群」，或发给某个人"
 				},
 				"templates": {
 					"dingtalkGroup": "发到「运营日报群」",
-					"dingtalkUser": "发给张三",
+					"dingtalkUser": "发给某个人",
+					"wecomGroup": "发到「企业微信运营群」",
+					"wecomUser": "发给某个人",
 					"larkGroup": "发到「增长日报群」",
-					"larkUser": "发给李四"
+					"larkUser": "发给某个人"
+				},
+				"templateValues": {
+					"user": "发给："
 				}
 			},
 			"createDialog": {
@@ -661,6 +668,7 @@
 				"location": "创建位置：{{cardDir}}/",
 				"notificationChannels": {
 					"dingtalk": "钉钉",
+					"wecom": "企业微信",
 					"lark": "飞书"
 				},
 				"notificationTargetLine": "{{channel}}：{{targetDescription}}",
