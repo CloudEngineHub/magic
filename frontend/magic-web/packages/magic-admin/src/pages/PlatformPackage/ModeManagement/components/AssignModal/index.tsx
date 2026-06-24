@@ -14,7 +14,7 @@ import DraggableModelItem from "./components/DraggableModelItem"
 import RightWrapper from "./components/RightWrapper"
 import GroupItem from "./components/GroupItem"
 import { defaultDragState, DragType } from "./types"
-import { normalizeGroupListForSave } from "./utils"
+import { clearNewDynamicModelIds, normalizeGroupListForSave } from "./utils"
 import SortableModelItem from "./components/SortableModelItem"
 import { ModeConfigProvider } from "./context/ModeConfigContext"
 import { useModeConfigContext } from "./hooks/useModeConfigContext"
@@ -147,6 +147,7 @@ function AssignModalContent({
 
 	const afterClose = useMemoizedFn(() => {
 		setDragState(() => defaultDragState)
+		clearNewDynamicModelIds()
 	})
 
 	const footer = useMemoizedFn((originNode: React.ReactNode) => {
