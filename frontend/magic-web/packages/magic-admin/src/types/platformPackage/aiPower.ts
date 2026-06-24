@@ -87,6 +87,8 @@ export interface ProviderConfig {
 	// WebSearch 字段
 	request_url?: string
 	api_key?: string
+	ak?: string
+	sk?: string
 	cx?: string
 	region?: string
 	// OCR 字段
@@ -98,6 +100,7 @@ export interface ProviderConfig {
 	replacement_words?: string
 	// 图片编辑字段
 	timeout?: number | string
+	concurrent?: number | string
 }
 
 /** AI能力配置 */

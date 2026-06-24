@@ -52,6 +52,16 @@ const COMMON_FIELDS = {
 		description: "apiKeyPlaceholder",
 	}),
 
+	ak: createFieldConfig("ak", "AK", "password", {
+		placeholder: "akPlaceholder",
+		description: "akPlaceholder",
+	}),
+
+	sk: createFieldConfig("sk", "SK", "password", {
+		placeholder: "skPlaceholder",
+		description: "skPlaceholder",
+	}),
+
 	accessKey: createFieldConfig("access_key", "Access Key", "password", {
 		placeholder: "accessKeyPlaceholder",
 		description: "accessKeyPlaceholder",
@@ -69,6 +79,12 @@ const COMMON_FIELDS = {
 
 	timeout: createFieldConfig("timeout", "Timeout", "input", {
 		required: false,
+	}),
+
+	concurrent: createFieldConfig("concurrent", "concurrent", "input", {
+		required: false,
+		placeholder: "concurrentPlaceholder",
+		description: "concurrentDesc",
 	}),
 
 	// 语音识别专用字段
@@ -123,17 +139,26 @@ export const imageRemoveBackgroundConfig: Record<string, FieldConfig[]> = {
 
 // 擦图/扩图配置
 export const imageEditConfig: Record<string, FieldConfig[]> = {
+	jimeng: [
+		COMMON_FIELDS.provider,
+		COMMON_FIELDS.ak,
+		COMMON_FIELDS.sk,
+		COMMON_FIELDS.timeout,
+		COMMON_FIELDS.concurrent,
+	],
 	official_proxy: [
 		COMMON_FIELDS.provider,
 		COMMON_FIELDS.apiKey,
 		COMMON_FIELDS.requestUrl,
 		COMMON_FIELDS.timeout,
+		COMMON_FIELDS.concurrent,
 	],
 	volcengine: [
 		COMMON_FIELDS.provider,
 		COMMON_FIELDS.accessKey,
 		COMMON_FIELDS.secretKey,
 		COMMON_FIELDS.timeout,
+		COMMON_FIELDS.concurrent,
 	],
 }
 

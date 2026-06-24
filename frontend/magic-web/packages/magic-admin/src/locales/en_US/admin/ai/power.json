@@ -5,9 +5,13 @@
 	"aiModelDesc": "Select the AI model used by the capability",
 	"aiModelPlaceholder": "Please select an AI model",
 	"aiPower": "AI Power",
+	"akPlaceholder": "Please enter your AK",
 	"apiKeyPlaceholder": "Please enter your API Key",
 	"appKeyPlaceholder": "Please enter your App Key",
 	"checkServiceDocs": "Check provider documentation",
+	"concurrent": "Concurrency",
+	"concurrentDesc": "Please enter the concurrency allowed for this provider",
+	"concurrentPlaceholder": "Please enter concurrency",
 	"hotWords": "Hot Words",
 	"hotWordsDesc": "Multiple hot words support newlines",
 	"hotWordsPlaceholder": "Please enter your hot words (multiple hot words separated by newlines)",
@@ -27,6 +31,7 @@
 	"secretKeyPlaceholder": "Please enter your Secret Key",
 	"service": "Provider",
 	"serviceConfig": "Provider Configuration",
+	"skPlaceholder": "Please enter your SK",
 	"userInputUrl": "API URL",
 	"userInputUrlPlaceholder": "Please enter the API URL"
 }

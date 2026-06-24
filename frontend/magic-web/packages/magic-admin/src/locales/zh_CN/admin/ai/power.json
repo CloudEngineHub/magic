@@ -6,9 +6,13 @@
 	"aiModelDesc": "选择能力所使用的 AI 模型",
 	"aiModelPlaceholder": "请选择 AI 模型",
 	"aiPower": "AI 能力",
+	"akPlaceholder": "请输入 AK",
 	"apiKeyPlaceholder": "请填写你的 API Key",
 	"appKeyPlaceholder": "请输入 App Key",
 	"checkServiceDocs": "查看提供商文档",
+	"concurrent": "并发数",
+	"concurrentDesc": "请输入该服务商允许的并发数",
+	"concurrentPlaceholder": "请输入并发数",
 	"hotWords": "热词",
 	"hotWordsDesc": "多个热词支持换行",
 	"hotWordsPlaceholder": "请输入热词（多个热词换行分隔）",
@@ -27,6 +31,7 @@
 	"searchModel": "搜索模型",
 	"service": "提供商",
 	"serviceConfig": "提供商配置",
+	"skPlaceholder": "请输入 SK",
 	"userInputUrl": "API 地址",
 	"userInputUrlPlaceholder": "请输入 API 地址"
 }
