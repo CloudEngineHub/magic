@@ -51,7 +51,10 @@ import {
 import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import SuperMagicService from "@/pages/superMagic/services"
-import { resolveMobileAudioShareTopbarOffset } from "./utils/audio-share-topbar-offset"
+import {
+	resolveMobileAudioShareCreatedByBadgeBottom,
+	resolveMobileAudioShareTopbarOffset,
+} from "./utils/audio-share-topbar-offset"
 // import { fixJsonPropertyNames } from "../flow/components/FlowAssistant/utils/streamUtils"
 
 const topicContainerBase =
@@ -620,6 +623,15 @@ function Share() {
 			}),
 		[isMobile, shouldHideHeader, shouldRenderAudioShareShell],
 	)
+	const createdByBadgeBottom = useMemo(() => {
+		// Keep the default share footer behavior for every scene except the readonly mobile audio shell.
+		const defaultBottom = routeInfo.isFileShare || !hasStarted ? "12px" : "64px"
+		return resolveMobileAudioShareCreatedByBadgeBottom({
+			defaultBottom,
+			isMobile,
+			shouldRenderAudioShareShell,
+		})
+	}, [hasStarted, isMobile, routeInfo.isFileShare, shouldRenderAudioShareShell])
 
 	const clearWindowData = useMemoizedFn(() => {
 		// @ts-ignore
@@ -1002,7 +1014,7 @@ function Share() {
 				visible={
 					!isImmersiveFullscreen && data?.extra?.hide_created_by_super_magic === false
 				}
-				style={{ bottom: routeInfo.isFileShare || !hasStarted ? "12px" : "64px" }}
+				style={{ bottom: createdByBadgeBottom }}
 			/>
 		</div>
 	)

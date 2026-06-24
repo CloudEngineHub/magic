@@ -191,6 +191,31 @@ describe("ShareMobileAudioRecordingDetailPage", () => {
 		)
 	})
 
+	it("adds extra bottom reading room on top of the floating player offset", () => {
+		render(
+			<ShareMobileAudioRecordingDetailPage
+				projectId="project-share-001"
+				resourceName="Mock resource"
+				allowDownloadProjectFile
+				attachments={{ tree: [], list: [] }}
+			/>,
+		)
+
+		expect(summaryPanelPropsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				scrollPaddingBottom: 96,
+			}),
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "Source" }))
+
+		expect(sourcePanelPropsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				scrollPaddingBottom: 96,
+			}),
+		)
+	})
+
 	it("switches between source and summary tabs without changing readonly behavior", () => {
 		render(
 			<ShareMobileAudioRecordingDetailPage

@@ -18,6 +18,7 @@ import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
 const COLLAPSED_PLAYER_HEIGHT = 40
 const EXPANDED_PLAYER_HEIGHT = 182
 const FLOATING_PLAYER_BOTTOM = 12
+const SHARE_PAGE_BOTTOM_READABLE_GAP = 24
 
 interface ShareMobileAudioRecordingDetailPageProps {
 	projectId: string
@@ -84,7 +85,9 @@ export default function ShareMobileAudioRecordingDetailPage({
 	const scrollPaddingBottom =
 		FLOATING_PLAYER_BOTTOM +
 		(playerExpanded ? EXPANDED_PLAYER_HEIGHT : COLLAPSED_PLAYER_HEIGHT) +
-		20
+		20 +
+		// Reserve extra reading room for the share footer so the last lines stay above the floating player.
+		SHARE_PAGE_BOTTOM_READABLE_GAP
 	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
 
 	/** Keeps readonly share filtering session-local while still allowing transcript inspection controls. */
