@@ -36,6 +36,7 @@ import {
 	getImageGenerationSettings,
 	getSerializableImageGenerationConfig,
 	parseImageSelectValue,
+	resolveImageSizeOptionFromRequest,
 	restoreImageGenerationConfig,
 	supportsReferenceImages,
 	type ImageGenerationSettingConfig,
@@ -809,46 +810,22 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 		const sizes = restoredModel?.image_size_config?.sizes
 		if (sizes?.length) {
-			const scaleSet = new Set(sizes.map((size) => size.scale).filter(Boolean))
-			const availableScales = Array.from(scaleSet)
-			const nextResolution = availableScales.length
-				? getDefaultResolutionForModel(
-						restoredModel,
-						isSameModelAsSavedRequest ? sourceRequest?.resolution : undefined,
-					)
-				: undefined
-			const matchedSize = isSameModelAsSavedRequest
-				? sourceRequest?.size
-					? sizes.find(
-							(size) =>
-								size.value === sourceRequest.size &&
-								(size.scale || undefined) ===
-									(sourceRequest.resolution || undefined),
-						)
-					: undefined
-				: undefined
-			const targetSize =
-				matchedSize ||
-				findBestSizeForResolution(
-					sizes,
-					nextResolution,
-					undefined,
-					originalImageSrc ? currentImageVisibleAspectRatio : undefined,
-				) ||
-				(isSameModelAsSavedRequest && sourceRequest?.size
-					? sizes.find((size) => size.value === sourceRequest.size)
-					: undefined) ||
-				sizes[0]
+			const nextResolution = getDefaultResolutionForModel(
+				restoredModel,
+				isSameModelAsSavedRequest ? sourceRequest?.resolution : undefined,
+			)
+			const restoredSize = resolveImageSizeOptionFromRequest({
+				sizes,
+				request: isSameModelAsSavedRequest ? sourceRequest : undefined,
+				preferredResolution: nextResolution,
+				fallbackAspectRatio: originalImageSrc ? currentImageVisibleAspectRatio : undefined,
+			})
+			const targetSize = restoredSize?.size ?? sizes[0]
 
 			setSelectedLabel(targetSize.label)
 			setSelectedSize(targetSize.value)
 			setSelectedScale(targetSize.scale || undefined)
-
-			if (availableScales.length) {
-				setSelectedResolution(nextResolution || targetSize.scale || undefined)
-			} else {
-				setSelectedResolution(undefined)
-			}
+			setSelectedResolution(restoredSize?.resolution)
 		} else {
 			setSelectedLabel(undefined)
 			setSelectedSize(undefined)
@@ -946,40 +923,24 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			// 恢复尺寸配置
 			const sizes = restoredModel?.image_size_config?.sizes
 			if (sizes?.length) {
-				const matchedSize = requestToRestore.size
-					? sizes.find(
-							(size) =>
-								size.value === requestToRestore.size &&
-								(size.scale || undefined) ===
-									(requestToRestore.resolution || undefined),
-						)
-					: undefined
-
-				const targetSize = matchedSize || sizes[0]
+				const targetResolution = getDefaultResolutionForModel(
+					restoredModel,
+					requestToRestore.resolution,
+				)
+				const restoredSize = resolveImageSizeOptionFromRequest({
+					sizes,
+					request: requestToRestore,
+					preferredResolution: targetResolution,
+				})
+				const targetSize = restoredSize?.size ?? sizes[0]
 				setSelectedLabel(targetSize.label)
 				setSelectedSize(targetSize.value)
 				setSelectedScale(targetSize.scale || undefined)
+				setSelectedResolution(restoredSize?.resolution)
 			} else {
 				setSelectedLabel(undefined)
 				setSelectedSize(undefined)
 				setSelectedScale(undefined)
-			}
-
-			// 恢复分辨率配置
-			if (sizes?.length) {
-				const scaleSet = new Set(sizes.map((size) => size.scale).filter(Boolean))
-				const availableScales = Array.from(scaleSet)
-
-				if (availableScales.length) {
-					const matchedResolution = getDefaultResolutionForModel(
-						restoredModel,
-						requestToRestore.resolution,
-					)
-					setSelectedResolution(matchedResolution)
-				} else {
-					setSelectedResolution(undefined)
-				}
-			} else {
 				setSelectedResolution(undefined)
 			}
 		} else {
@@ -1018,43 +979,20 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 						restoredModel,
 						defaultConfig.resolution,
 					)
-					const matchedSize = defaultConfig.size
-						? sizes.find(
-								(size) =>
-									size.value === defaultConfig.size &&
-									(size.scale || undefined) ===
-										(defaultConfig.resolution || undefined),
-							)
-						: undefined
-
-					const targetSize =
-						matchedSize ||
-						findBestSizeForResolution(sizes, targetResolution, undefined) ||
-						sizes[0]
+					const restoredSize = resolveImageSizeOptionFromRequest({
+						sizes,
+						request: defaultConfig,
+						preferredResolution: targetResolution,
+					})
+					const targetSize = restoredSize?.size ?? sizes[0]
 					setSelectedLabel(targetSize.label)
 					setSelectedSize(targetSize.value)
 					setSelectedScale(targetSize.scale || undefined)
+					setSelectedResolution(restoredSize?.resolution)
 				} else {
 					setSelectedLabel(undefined)
 					setSelectedSize(undefined)
 					setSelectedScale(undefined)
-				}
-
-				// 恢复分辨率配置
-				if (sizes?.length) {
-					const scaleSet = new Set(sizes.map((size) => size.scale).filter(Boolean))
-					const availableScales = Array.from(scaleSet)
-
-					if (availableScales.length) {
-						const matchedResolution = getDefaultResolutionForModel(
-							restoredModel,
-							defaultConfig.resolution,
-						)
-						setSelectedResolution(matchedResolution)
-					} else {
-						setSelectedResolution(undefined)
-					}
-				} else {
 					setSelectedResolution(undefined)
 				}
 			} else {
@@ -1071,20 +1009,15 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 					const sizes = defaultModel?.image_size_config?.sizes
 					if (sizes?.length) {
 						const targetResolution = getDefaultResolutionForModel(defaultModel)
-						const targetSize =
-							findBestSizeForResolution(sizes, targetResolution, undefined) ||
-							sizes[0]
+						const restoredSize = resolveImageSizeOptionFromRequest({
+							sizes,
+							preferredResolution: targetResolution,
+						})
+						const targetSize = restoredSize?.size ?? sizes[0]
 						setSelectedLabel(targetSize.label)
 						setSelectedSize(targetSize.value)
 						setSelectedScale(targetSize.scale || undefined)
-
-						const scaleSet = new Set(sizes.map((size) => size.scale).filter(Boolean))
-						const availableScales = Array.from(scaleSet)
-						if (availableScales.length) {
-							setSelectedResolution(targetResolution)
-						} else {
-							setSelectedResolution(undefined)
-						}
+						setSelectedResolution(restoredSize?.resolution)
 					} else {
 						setSelectedLabel(undefined)
 						setSelectedSize(undefined)

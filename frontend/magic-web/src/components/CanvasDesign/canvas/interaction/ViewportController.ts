@@ -35,6 +35,8 @@ import type { ViewportChangePhase, ViewportChangeSource } from "../EventEmitter"
 type PanPending = { x: number; y: number }
 type ViewportBoundingRect = { x: number; y: number; width: number; height: number }
 
+const DEFAULT_VIEWPORT_SCALE = 0.3
+
 /**
  * 触摸事件处理器集合
  */
@@ -266,7 +268,7 @@ export class ViewportController {
 		return { horizontal: "center", vertical: "center" }
 	}
 
-	private scale = 1
+	private scale = DEFAULT_VIEWPORT_SCALE
 	private minScale = 0.001
 	private maxScale = 5
 	private scaleStep = 0.1
@@ -692,6 +694,10 @@ export class ViewportController {
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
 		this.canvas = canvas
+		this.canvas.stage.scale({
+			x: DEFAULT_VIEWPORT_SCALE,
+			y: DEFAULT_VIEWPORT_SCALE,
+		})
 
 		// 视口缩放/平移节流配置写死在本类（如需限频可在此增加 maxFps）
 		this.zoomThrottle = createLeadingRafThrottle<ZoomPending>((v) => this.applyZoomUpdate(v), {

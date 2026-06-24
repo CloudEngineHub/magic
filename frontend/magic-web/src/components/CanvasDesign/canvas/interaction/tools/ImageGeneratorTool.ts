@@ -130,11 +130,13 @@ export class ImageGeneratorTool extends BaseTool {
 				if (!sizes || sizes.length === 0) continue
 
 				// 查找匹配的尺寸（size 和 resolution 都要匹配）
-				const matchedSize = sizes.find(
-					(sizeItem) =>
-						sizeItem.value === defaultConfig.size &&
-						(sizeItem.scale || undefined) === (defaultConfig.resolution || undefined),
-				)
+				const matchedSize =
+					sizes.find(
+						(sizeItem) =>
+							sizeItem.value === defaultConfig.size &&
+							(sizeItem.scale || undefined) ===
+								(defaultConfig.resolution || undefined),
+					) || sizes.find((sizeItem) => sizeItem.value === defaultConfig.size)
 
 				if (matchedSize) {
 					// 找到匹配的尺寸，解析并返回
