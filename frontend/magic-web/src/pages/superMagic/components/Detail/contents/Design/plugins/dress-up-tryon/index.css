@@ -1,0 +1,14 @@
+.dress-up-tryon-tabs .mpk-tabs-list {
+	margin-bottom: 0;
+}
+
+.dress-up-tryon .mpk-image-slot-preview {
+	max-height: 240px;
+}
+
+.dress-up-tryon .dut-tip {
+	margin: -2px 0 2px;
+	color: var(--mpk-muted-foreground);
+	font-size: 12px;
+	line-height: 18px;
+}

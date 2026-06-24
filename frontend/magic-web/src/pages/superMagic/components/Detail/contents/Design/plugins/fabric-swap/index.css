@@ -1,0 +1,17 @@
+.fabric-swap .fabric-swap-type-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.fabric-swap .fabric-swap-type-grid .mpk-option-item,
+.fabric-swap .fabric-swap-type-grid .mpk-option {
+	width: 100%;
+	min-width: 0;
+}
+
+@media (max-width: 360px) {
+	.fabric-swap .fabric-swap-type-grid {
+		grid-template-columns: 1fr;
+	}
+}

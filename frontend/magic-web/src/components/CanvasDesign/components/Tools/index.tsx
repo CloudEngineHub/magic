@@ -27,6 +27,7 @@ import { VideoGeneratorTool } from "../../canvas/interaction/tools/VideoGenerato
 import { ToolTypeEnum, type ToolType } from "../../canvas/types"
 import type { ToolOptionItem } from "./types"
 import ToolItemWithPopover from "./ToolItemWithPopover"
+import PluginTool from "./PluginTool"
 import { useCanvasDesignI18n } from "../../context/I18nContext"
 import { useMagic } from "../../context/MagicContext"
 import {
@@ -363,6 +364,8 @@ export default function Tools() {
 					</Tooltip>
 				)
 			})}
+			<div className={styles.divider} />
+			<PluginTool />
 		</div>
 	)
 }

@@ -46,6 +46,7 @@ import {
 	createHighImageTaskMeta,
 	createRemoveBackgroundTaskMeta,
 	getImageGenerationTaskMeta,
+	isBatchImageGenerationTaskMeta,
 } from "../../utils/imageGenerationTaskMeta"
 
 const IMAGE_CONTENT_NODE_NAME = "image-content"
@@ -190,9 +191,15 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		else if (this.data.generateImageRequest?.image_id) {
 			this.createOssSrcPromise()
 			this.pollingManager.start()
-		} else if (this.getImageGenerationTaskMeta()?.image_id) {
-			this.createOssSrcPromise()
-			this.pollingManager.start()
+		} else {
+			const imageGenerationTaskMeta = this.getImageGenerationTaskMeta()
+			if (
+				imageGenerationTaskMeta?.image_id &&
+				!isBatchImageGenerationTaskMeta(imageGenerationTaskMeta)
+			) {
+				this.createOssSrcPromise()
+				this.pollingManager.start()
+			}
 		}
 	}
 
