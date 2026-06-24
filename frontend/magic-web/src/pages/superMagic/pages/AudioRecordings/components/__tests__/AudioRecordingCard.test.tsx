@@ -22,6 +22,7 @@ vi.mock("react-i18next", () => ({
 				"card.summaryFailed": "Summary failed",
 				"card.mergeFailed": "Merge failed",
 				"card.processing": "Processing",
+				"card.regenerateSummary": "Regenerate summary",
 				"card.summarizing": "Summarizing now",
 				"card.notSummarized": "Not summarized",
 				"card.summarize": "Summarize",
@@ -33,6 +34,8 @@ vi.mock("react-i18next", () => ({
 				"card.openProject": "View project details",
 				"card.rename": "Rename",
 				"card.delete": "Delete",
+				"mobile.recordingEntry.progress.uploading": "Uploading",
+				"mobile.recordingEntry.progress.transferFailed": "Upload failed",
 			}
 			return labels[key] ?? key
 		},
@@ -382,6 +385,27 @@ describe("AudioRecordingCard", () => {
 		)
 	})
 
+	it("uses neutral uploading colors that match the prototype hierarchy", () => {
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "uploading",
+					is_summarized: false,
+					transferStatus: "transferring",
+					transferProgress: 0.45,
+				})}
+			/>,
+		)
+
+		const progressbar = screen.getByRole("progressbar")
+		expect(progressbar).toHaveStyle({ background: "rgba(24, 24, 27, 0.08)" })
+		expect(progressbar.firstElementChild).toHaveStyle({
+			backgroundColor: "rgb(24, 24, 27)",
+		})
+		expect(screen.getByText("Uploading")).toHaveStyle({ color: "rgb(24, 24, 27)" })
+		expect(screen.getByText("45%")).toHaveStyle({ color: "rgb(24, 24, 27)" })
+	})
+
 	it("renders the more-actions menu trigger", () => {
 		render(<AudioRecordingCard item={createItem()} onRename={vi.fn()} onDelete={vi.fn()} />)
 
@@ -438,6 +462,7 @@ describe("AudioRecordingCard", () => {
 			"audio-recording-card-project-1-action-regenerate",
 		)
 		expect(regenerateOption).toBeInTheDocument()
+		expect(regenerateOption).toHaveTextContent("Regenerate summary")
 
 		fireEvent.click(regenerateOption)
 		expect(onSummarize).toHaveBeenCalledTimes(1)

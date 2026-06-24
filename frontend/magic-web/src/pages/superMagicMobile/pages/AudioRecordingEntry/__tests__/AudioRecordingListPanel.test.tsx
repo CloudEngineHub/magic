@@ -33,6 +33,10 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
+	initReactI18next: {
+		type: "3rdParty",
+		init: vi.fn(),
+	},
 }))
 
 vi.mock("sonner", () => ({
@@ -437,6 +441,54 @@ describe("AudioRecordingListPanel", () => {
 			/>,
 		)
 
+		expect(onResolveOptimisticItem).not.toHaveBeenCalled()
+	})
+
+	it("keeps summarizing optimistic card visible when authoritative row is still not_summarized", () => {
+		const onResolveOptimisticItem = vi.fn()
+		mockStore.showInitialSkeleton = false
+		mockStore.isEmpty = false
+		mockStore.list = [
+			{
+				id: "proj-auto-summary-001",
+				project_name: "Auto summary imported",
+				created_at: 1710000004,
+				duration: 0,
+				tags: [],
+				device_id: "",
+				audio_source: "imported",
+				current_phase: "merging",
+				phase_status: "completed",
+				card_status: "not_summarized",
+				is_summarized: false,
+			},
+		]
+
+		render(
+			<AudioRecordingListPanel
+				optimisticItems={[
+					{
+						id: "proj-auto-summary-001",
+						project_name: "Auto summary imported",
+						created_at: 1710000004,
+						duration: 0,
+						tags: [],
+						device_id: "",
+						audio_source: "imported",
+						current_phase: "summarizing",
+						phase_status: "in_progress",
+						card_status: "summarizing",
+						is_summarized: false,
+					},
+				]}
+				onResolveOptimisticItem={onResolveOptimisticItem}
+			/>,
+		)
+
+		expect(screen.getByTestId("mobile-recording-card-proj-auto-summary-001")).toHaveAttribute(
+			"data-duration",
+			"0",
+		)
 		expect(onResolveOptimisticItem).not.toHaveBeenCalled()
 	})
 

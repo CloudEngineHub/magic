@@ -42,6 +42,31 @@ export function mergeAudioRecordingItems(
 		}
 	}
 
+	const authoritativeIsPreSummary =
+		authoritativeItem.card_status === "not_summarized" &&
+		authoritativeItem.current_phase === "merging" &&
+		authoritativeItem.phase_status === "completed"
+	const optimisticIsSummarizing =
+		optimisticItem.card_status === "summarizing" &&
+		optimisticItem.current_phase === "summarizing" &&
+		optimisticItem.phase_status === "in_progress"
+
+	// Imported auto-summary fires before the authoritative list row necessarily catches up.
+	// Preserve the local summarizing card until the backend row itself advances beyond
+	// merging-completed, otherwise the CTA regresses back to "Generate Summary".
+	if (optimisticIsSummarizing && authoritativeIsPreSummary) {
+		return {
+			...authoritativeItem,
+			current_phase: optimisticItem.current_phase,
+			phase_status: optimisticItem.phase_status,
+			card_status: optimisticItem.card_status,
+			is_summarized: optimisticItem.is_summarized,
+			task_key: optimisticItem.task_key ?? authoritativeItem.task_key,
+			topic_id: optimisticItem.topic_id ?? authoritativeItem.topic_id,
+			audio_file_id: optimisticItem.audio_file_id ?? authoritativeItem.audio_file_id,
+		}
+	}
+
 	return authoritativeItem
 }
 
@@ -92,7 +117,7 @@ export function useAudioRecordingsOptimisticSync({
 				const authoritativeItem = storeList.find((entry) => entry.id === projectId)
 				if (!optimisticItem || !authoritativeItem) return false
 
-				return shouldResolveOptimisticItem(optimisticItem)
+				return shouldResolveOptimisticItem(optimisticItem, authoritativeItem)
 			})
 
 		if (!hydratedIds.length) return

@@ -8,6 +8,7 @@ import {
 	resetRecordingSettingsCacheForTests,
 	seedRecordingSettingsCacheForTests,
 } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingSettings"
+import { audioRecordingsStore } from "@/pages/superMagic/pages/AudioRecordings/stores/audio-recordings-store"
 
 const runtimeMock = {
 	state: {
@@ -86,6 +87,15 @@ const superMagicApiMock = {
 	deleteProject: vi.fn(),
 }
 
+const { audioImportStoreMock } = vi.hoisted(() => ({
+	audioImportStoreMock: {
+		hasUploadingTasks: false,
+		startAudioImport: vi.fn(),
+		cancelImport: vi.fn(),
+		retryImport: vi.fn(),
+	},
+}))
+
 function createFileList(files: File[]): FileList {
 	return {
 		length: files.length,
@@ -98,28 +108,6 @@ const audioRecordingsServiceMock = {
 	submitSummary: vi.fn(),
 }
 
-interface MockSaveUploadFileToProjectResponse {
-	file_id: string
-	file_key: string
-	file_name: string
-	file_size: number
-	file_type: "user_upload" | "directory"
-	project_id: string
-	topic_id: string
-	task_id: string
-	created_at: string
-	relative_file_path: string
-}
-
-let queuedFiles: File[] = []
-let completedUpload:
-	| ((
-			fileId: string,
-			reportResult: unknown,
-			saveResult: MockSaveUploadFileToProjectResponse,
-	  ) => Promise<void>)
-	| null = null
-
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
@@ -129,6 +117,16 @@ vi.mock("react-i18next", () => ({
 		init: vi.fn(),
 	},
 }))
+
+vi.mock("i18next", () => {
+	const chainable = {
+		use: vi.fn(() => chainable),
+		init: vi.fn(() => Promise.resolve()),
+		changeLanguage: vi.fn(() => Promise.resolve()),
+		t: (key: string) => key,
+	}
+	return { default: chainable }
+})
 
 vi.mock("sonner", () => ({
 	toast: {
@@ -165,14 +163,14 @@ vi.mock("@/stores/superMagic/topicModelStore", () => ({
 }))
 
 vi.mock("@/pages/superMagic/pages/AudioRecordings/apis/recording-settings-api", () => ({
-	getRecordingTopicModel: (...args: any[]) =>
+	getRecordingTopicModel: (...args: unknown[]) =>
 		recordingTopicModelApiMock.getRecordingTopicModel(...args),
 }))
 
 vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/summary-model-list", () => ({
-	fetchSummaryModelGroups: (...args: any[]) =>
+	fetchSummaryModelGroups: (...args: unknown[]) =>
 		summaryModelListMock.fetchSummaryModelGroups(...args),
-	resolveDefaultSummaryModelId: (...args: any[]) =>
+	resolveDefaultSummaryModelId: (...args: unknown[]) =>
 		summaryModelListMock.resolveDefaultSummaryModelId(...args),
 }))
 
@@ -192,32 +190,9 @@ vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: () => true,
 }))
 
-vi.mock("@/pages/superMagic/components/MessageEditor/hooks/useFileUpload", () => {
-	return {
-		UploadSource: {
-			Home: 1,
-			ProjectFile: 2,
-			AgentFile: 3,
-			RecordSummary: 4,
-		},
-		useFileUpload: (options: {
-			onFileCompleted?: (
-				fileId: string,
-				reportResult: unknown,
-				saveResult: MockSaveUploadFileToProjectResponse,
-			) => Promise<void>
-		}) => {
-			completedUpload = options.onFileCompleted ?? null
-			return {
-				addFiles: (files: File[]) => {
-					queuedFiles = files
-				},
-				uploading: false,
-				handleRetry: vi.fn(),
-			}
-		},
-	}
-})
+vi.mock("@/pages/superMagic/pages/AudioRecordings/stores/audio-import-store", () => ({
+	audioImportStore: audioImportStoreMock,
+}))
 
 vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 	default: {
@@ -267,13 +242,13 @@ describe("useMobileRecordingEntryFacade", () => {
 		summaryModelListMock.fetchSummaryModelGroups.mockReset()
 		summaryModelListMock.resolveDefaultSummaryModelId.mockReset()
 		audioRecordingsServiceMock.submitSummary.mockReset()
+		audioImportStoreMock.startAudioImport.mockReset()
 		superMagicApiMock.getWorkspaces.mockReset()
 		superMagicApiMock.createProject.mockReset()
 		superMagicApiMock.createAudioProject.mockReset()
 		superMagicApiMock.deleteProject.mockReset()
 		resetRecordingSettingsCacheForTests()
-		queuedFiles = []
-		completedUpload = null
+		audioRecordingsStore.optimisticItems = []
 
 		// Mock navigator.mediaDevices.getUserMedia for jsdom test environment compatibility
 		if (typeof navigator !== "undefined") {
@@ -326,6 +301,63 @@ describe("useMobileRecordingEntryFacade", () => {
 				auto_summary_enabled: true,
 			},
 		})
+	})
+
+	it("passes disabled auto summary into imported mobile upload context", async () => {
+		seedRecordingSettingsCacheForTests(
+			{
+				model: { model_id: "model-alpha" },
+				extra: {
+					model: { model_id: "model-alpha" },
+					auto_summary_enabled: false,
+				},
+			},
+			{
+				transcription_enabled: true,
+				auto_summary_enabled: false,
+				model_id: "model-alpha",
+			},
+		)
+
+		superMagicApiMock.getWorkspaces.mockResolvedValue({
+			list: [{ id: "workspace-import-mobile", name: "Workspace Import Mobile" }],
+		})
+		superMagicApiMock.createAudioProject.mockResolvedValue({
+			project: {
+				id: "project-import-mobile",
+				project_name: "Imported Mobile Project",
+			},
+			topic: {
+				id: "topic-import-mobile",
+				topic_name: "Imported Mobile Topic",
+			},
+		})
+
+		const { useMobileRecordingEntryFacade } =
+			await import("../hooks/useMobileRecordingEntryFacade")
+		const { result } = renderHook(() => useMobileRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.importAudioFiles(
+				createFileList([new File(["voice"], "manual-mobile.wav", { type: "audio/wav" })]),
+			)
+		})
+
+		expect(superMagicApiMock.createAudioProject).toHaveBeenCalledWith(
+			expect.objectContaining({
+				audio_source: "imported",
+				auto_summary: false,
+				source: "h5",
+			}),
+		)
+		expect(audioImportStoreMock.startAudioImport).toHaveBeenCalledWith(
+			expect.any(Array),
+			expect.objectContaining({
+				projectId: "project-import-mobile",
+				topicId: "topic-import-mobile",
+				autoSummaryEnabled: false,
+			}),
+		)
 	})
 
 	it("defaults to recording presentation when a shared session is already active", () => {
@@ -567,7 +599,7 @@ describe("useMobileRecordingEntryFacade", () => {
 		expect(result.current.startupErrorDetail).toContain("Microphone permission denied by user")
 	})
 
-	it("submits imported audio for summary after upload completes", async () => {
+	it("passes enabled auto summary into imported mobile upload context", async () => {
 		superMagicApiMock.getWorkspaces.mockResolvedValue({
 			list: [{ id: "workspace-import", name: "Workspace Import" }],
 		})
@@ -592,47 +624,21 @@ describe("useMobileRecordingEntryFacade", () => {
 			)
 		})
 
-		expect(queuedFiles).toHaveLength(1)
-
-		await act(async () => {
-			await completedUpload?.(
-				"upload-1",
-				{},
-				{
-					file_id: "saved-file-id",
-					file_key: "recording/upload.wav",
-					file_name: "hello.wav",
-					file_size: 128,
-					file_type: "user_upload",
-					project_id: "project-import",
-					topic_id: "topic-import",
-					task_id: "task-import",
-					created_at: "2026-06-15T00:00:00Z",
-					relative_file_path: "upload/hello.wav",
-				},
-			)
-		})
-
-		expect(audioRecordingsServiceMock.submitSummary).toHaveBeenCalledWith(
+		expect(superMagicApiMock.createAudioProject).toHaveBeenCalledWith(
 			expect.objectContaining({
-				id: "project-import",
 				audio_source: "imported",
-				audio_file_id: "saved-file-id",
-				// task_key must come from the session key generated in importAudioFiles,
-				// NOT from saveResult.task_id (file-save response), which is often "0" or
-				// an unrelated placeholder value.
-				task_key: expect.stringContaining("session-web-"),
+				auto_summary: true,
+				source: "h5",
 			}),
-			"model-alpha",
 		)
-		expect(result.current.optimisticItems[0]).toMatchObject({
-			id: "project-import",
-			audio_source: "imported",
-			audio_file_id: "saved-file-id",
-			// The optimistic item must also carry the correct project-level task key.
-			task_key: expect.stringContaining("session-web-"),
-			card_status: "summarizing",
-		})
+		expect(audioImportStoreMock.startAudioImport).toHaveBeenCalledWith(
+			expect.any(Array),
+			expect.objectContaining({
+				projectId: "project-import",
+				topicId: "topic-import",
+				autoSummaryEnabled: true,
+			}),
+		)
 	})
 
 	it("seeds finished recordings with local session duration while backend duration is still pending", async () => {

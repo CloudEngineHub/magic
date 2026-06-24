@@ -403,6 +403,45 @@ describe("AudioRecordingsStore", () => {
 		expect(summaryProgressPollerMock.addTask).toHaveBeenCalledWith("session-Android-1")
 	})
 
+	it("optimistically updates matching optimistic item after submitSummary when authoritative row has not landed yet", async () => {
+		const store = new AudioRecordingsStore()
+		const item: AudioProjectListItem = {
+			id: "project-opt-1",
+			project_name: "Import optimistic",
+			created_at: 1780657155,
+			duration: 120,
+			tags: [],
+			device_id: "device",
+			audio_source: "imported",
+			current_phase: "merging",
+			phase_status: "completed",
+			card_status: "not_summarized",
+			is_summarized: false,
+			task_key: "session-Android-opt-1",
+			topic_id: "topic-opt-1",
+			audio_file_id: "file-opt-1",
+			model_id: "model-1",
+		}
+
+		store.optimisticItems = [item]
+		vi.mocked(SuperMagicApi.getRecordingSummaryResult).mockResolvedValue({
+			success: true,
+			task_key: "session-Android-opt-1",
+			project_id: "project-opt-1",
+			chat_topic_id: "",
+			conversation_id: "",
+			topic_id: "topic-opt-1",
+			project_name: "Import optimistic",
+			workspace_name: "",
+		})
+
+		await store.submitSummary(item)
+
+		expect(store.optimisticItems[0]?.card_status).toBe("summarizing")
+		expect(store.optimisticItems[0]?.phase_status).toBe("in_progress")
+		expect(summaryProgressPollerMock.addTask).toHaveBeenCalledWith("session-Android-opt-1")
+	})
+
 	it("uses API auto model when extra.model_id is missing", async () => {
 		const store = new AudioRecordingsStore()
 		const item: AudioProjectListItem = {

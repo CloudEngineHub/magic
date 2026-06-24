@@ -2,14 +2,14 @@ import { makeAutoObservable, runInAction } from "mobx"
 import i18next from "i18next"
 import { ossUploadService } from "@/stores/folderUpload/uploadService"
 import { audioRecordingsStore } from "./audio-recordings-store"
-import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordingsService"
 import { SuperMagicApi, FileApi } from "@/apis"
-import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { buildOptimisticRecordingItem } from "../utils/build-optimistic-recording-item"
-import { getCachedRecordingSettings } from "../hooks/useRecordingSettings"
-import { getRecordingTopicModel } from "../apis/recording-settings-api"
-import { resolveAutoSummaryEnabled } from "../utils/recording-settings-mapper"
+import type { AudioProjectListItem } from "@/types/audioProject"
+import { requestAudioRecordingsShellRefresh } from "../utils/request-audio-recordings-shell-refresh"
+
+const IMPORT_AUDIO_FILE_SYNC_RETRY_COUNT = 3
+const IMPORT_AUDIO_FILE_SYNC_RETRY_DELAY_MS = 50
 
 // Common audio extensions for validation
 const COMMON_AUDIO_EXTENSIONS = [".raw", ".wav", ".mp3", ".ogg", ".webm", ".m4a"]
@@ -26,6 +26,7 @@ export interface AudioImportTask {
 	workspaceId: string
 	modelId: string
 	taskKey: string
+	autoSummaryEnabled: boolean
 	progress: number // 0 to 1
 	status: "transferring" | "done" | "failed"
 	file: File
@@ -126,15 +127,32 @@ export class AudioImportStore {
 		return true
 	}
 
-	/**
-	 * Reads auto-summary preference from cache or persisted default_audio settings.
-	 */
-	private async resolveAutoSummaryEnabled(): Promise<boolean> {
-		const cachedSettings = getCachedRecordingSettings()
-		if (cachedSettings) return cachedSettings.auto_summary_enabled
+	/** Small async delay used while waiting for authoritative list hydration after import-files. */
+	private async sleep(ms: number): Promise<void> {
+		await new Promise((resolve) => {
+			globalThis.setTimeout(resolve, ms)
+		})
+	}
 
-		const settingsResponse = await getRecordingTopicModel().catch(() => null)
-		return resolveAutoSummaryEnabled(null, settingsResponse)
+	/** Reads the latest authoritative project row after the shell refresh handler repopulates the list store. */
+	private findAuthoritativeImportedProject(projectId: string): AudioProjectListItem | null {
+		return audioRecordingsStore.list.find((item) => item.id === projectId) ?? null
+	}
+
+	/** Imported auto-summary must wait until backend hydrates audio_file_id onto the authoritative project row. */
+	private async waitForImportedProjectHydration(
+		projectId: string,
+	): Promise<AudioProjectListItem | null> {
+		for (let attempt = 0; attempt < IMPORT_AUDIO_FILE_SYNC_RETRY_COUNT; attempt += 1) {
+			requestAudioRecordingsShellRefresh()
+			const hydratedProject = this.findAuthoritativeImportedProject(projectId)
+			if (hydratedProject?.audio_file_id) return hydratedProject
+			if (attempt < IMPORT_AUDIO_FILE_SYNC_RETRY_COUNT - 1) {
+				await this.sleep(IMPORT_AUDIO_FILE_SYNC_RETRY_DELAY_MS)
+			}
+		}
+
+		return null
 	}
 
 	/**
@@ -151,9 +169,18 @@ export class AudioImportStore {
 			workspaceId: string
 			modelId: string
 			taskKey: string
+			autoSummaryEnabled: boolean
 		},
 	): Promise<void> {
-		const { projectId, projectName, topicId, workspaceId, modelId, taskKey } = context
+		const {
+			projectId,
+			projectName,
+			topicId,
+			workspaceId,
+			modelId,
+			taskKey,
+			autoSummaryEnabled,
+		} = context
 
 		// Perform client-side constraints validation
 		if (!this.validateFiles(files)) {
@@ -171,6 +198,7 @@ export class AudioImportStore {
 				workspaceId,
 				modelId,
 				taskKey,
+				autoSummaryEnabled,
 				progress: 0,
 				status: "transferring",
 				file: targetFile,
@@ -180,7 +208,14 @@ export class AudioImportStore {
 		try {
 			// Trigger file upload using global upload service
 			await ossUploadService.uploadFiles(
-				[{ file: targetFile, relativePath: targetFile.name, folderPath: "", targetPath: "" }],
+				[
+					{
+						file: targetFile,
+						relativePath: targetFile.name,
+						folderPath: "",
+						targetPath: "",
+					},
+				],
 				projectId,
 				"", // Folder path not needed for private summary files
 				projectId, // Use project ID as taskId for task-level management
@@ -195,7 +230,11 @@ export class AudioImportStore {
 						}
 					})
 					// Sync progress to the global list store optimistic item
-					audioRecordingsStore.updateOptimisticItemTransfer(projectId, "transferring", progress)
+					audioRecordingsStore.updateOptimisticItemTransfer(
+						projectId,
+						"transferring",
+						progress,
+					)
 				},
 				// onFileCompleted handler
 				async (fileId, uploadResult) => {
@@ -203,46 +242,110 @@ export class AudioImportStore {
 						// 1. Report upload to obtain file key mapping
 						await FileApi.reportFileUploads([
 							{
-								file_extension: uploadResult.file_extension || uploadResult.file_name.split(".").pop() || "",
+								file_extension:
+									uploadResult.file_extension ||
+									uploadResult.file_name.split(".").pop() ||
+									"",
 								file_key: uploadResult.file_key,
 								file_size: uploadResult.file_size,
 								file_name: uploadResult.file_name,
 							},
 						])
 
-						// 2. Save file record to project
-						const saveRes = await superMagicUploadTokenService.saveFileToProject({
+						// 2. Import the uploaded object into the audio project so backend can hydrate audio_file_id.
+						const importResponse = await SuperMagicApi.importAudioProjectFiles({
 							project_id: projectId,
-							topic_id: topicId,
 							parent_id: "",
-							file_key: uploadResult.file_key,
-							file_name: uploadResult.file_name,
-							file_size: uploadResult.file_size,
-							file_type: "user_upload",
-							storage_type: "workspace",
-							source: "RecordSummary",
+							files: [
+								{
+									file_key: uploadResult.file_key,
+									file_name: uploadResult.file_name,
+									file_size: uploadResult.file_size,
+									// Browser import flow does not currently extract duration metadata up front.
+									duration: 0,
+								},
+							],
 						})
+						// import-files returns the imported audio file ids directly. Use the first id
+						// as the summary input immediately so auto-summary does not depend on list hydration timing.
+						const importedAudioFileId = importResponse.file_ids[0]
 
-						// 2. Build finalized optimistic project object
-						const autoSummaryEnabled = await this.resolveAutoSummaryEnabled()
+						// 3. Seed a manual-summary-ready optimistic card first; it becomes
+						// summarizing only after imported auto-summary successfully starts.
 						const completedProject = buildOptimisticRecordingItem({
 							projectId,
 							projectName,
 							workspaceId,
 							modelId,
-							audioFileId: saveRes?.file_id,
+							audioFileId: importedAudioFileId,
 							taskKey,
 							audioSource: "imported",
 							topicId,
-							autoSummaryEnabled,
+							autoSummaryEnabled: false,
 						})
 						completedProject.transferStatus = "done"
 
-						// Push item to store; summarizing vs manual-summary card depends on settings.
+						// Push item to store; manual-summary stays here, while auto-summary upgrades
+						// the same optimistic item through the shared store state machine below.
 						audioRecordingsStore.addOptimisticItem(completedProject)
 
-						if (autoSummaryEnabled) {
-							await audioRecordingsService.submitSummary(completedProject, modelId)
+						if (!autoSummaryEnabled) {
+							requestAudioRecordingsShellRefresh()
+							runInAction(() => {
+								this.importingTasks.delete(projectId)
+							})
+							return
+						}
+
+						// Prefer the synchronous import-files response; fall back to the refreshed authoritative
+						// row only when backend does not include the file id in the immediate response.
+						const summaryProject =
+							importedAudioFileId != null && importedAudioFileId !== ""
+								? {
+										...completedProject,
+										audio_file_id: importedAudioFileId,
+									}
+								: await this.waitForImportedProjectHydration(projectId)
+						if (!summaryProject?.audio_file_id) {
+							magicToast.error(
+								i18next.t("audioRecordings:summary.missingParams", {
+									defaultValue: "Missing imported audio file id",
+								}),
+							)
+							runInAction(() => {
+								this.importingTasks.delete(projectId)
+							})
+							return
+						}
+
+						// Route imported auto-summary through the same store state machine used by
+						// manual summary so the list immediately flips to summarizing and registers polling.
+						const summaryResult =
+							await audioRecordingsStore.submitSummary(summaryProject)
+						if (!summaryResult.ok) {
+							if (summaryResult.reason === "missingParams") {
+								magicToast.error(
+									i18next.t("audioRecordings:summary.missingParams", {
+										defaultValue: "Missing imported audio file id",
+									}),
+								)
+							} else if (summaryResult.reason === "missingModel") {
+								magicToast.error(
+									i18next.t("audioRecordings:summary.missingModel", {
+										defaultValue: "Missing summary model",
+									}),
+								)
+							} else if (summaryResult.reason === "api") {
+								magicToast.error(
+									i18next.t("audioRecordings:summary.submitFailed", {
+										defaultValue: "Failed to submit summary",
+									}),
+								)
+							}
+							runInAction(() => {
+								this.importingTasks.delete(projectId)
+							})
+							return
 						}
 
 						runInAction(() => {
@@ -281,6 +384,7 @@ export class AudioImportStore {
 			workspaceId: task.workspaceId,
 			modelId: task.modelId,
 			taskKey: task.taskKey,
+			autoSummaryEnabled: task.autoSummaryEnabled,
 		})
 	}
 

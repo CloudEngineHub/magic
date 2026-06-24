@@ -23,6 +23,8 @@ vi.mock("react-i18next", () => ({
 				"card.retrySummary": "Retry",
 				"card.retryMerge": "Retry",
 				"card.moreActions": "More actions",
+				"mobile.recordingEntry.progress.uploading": "Uploading",
+				"mobile.recordingEntry.progress.transferFailed": "Upload failed",
 			}
 			return labels[key] ?? key
 		},
@@ -347,6 +349,12 @@ describe("MobileRecordingCard", () => {
 		expect(progressbar).toBeInTheDocument()
 		expect(progressbar).toHaveAttribute("aria-valuenow", "45")
 		expect(screen.queryByText("2h ago")).toBeNull()
+		expect(progressbar).toHaveStyle({ background: "rgba(24, 24, 27, 0.08)" })
+		expect(progressbar.firstElementChild).toHaveStyle({
+			backgroundColor: "rgb(24, 24, 27)",
+		})
+		expect(screen.getByText("Uploading")).toHaveStyle({ color: "rgb(24, 24, 27)" })
+		expect(screen.getByText("45%")).toHaveStyle({ color: "rgb(24, 24, 27)" })
 	})
 
 	it("renders failed state and triggers onRetry callback when clicked", () => {

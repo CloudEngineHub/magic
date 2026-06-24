@@ -1,0 +1,247 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { AudioProjectListItem } from "@/types/audioProject"
+
+const {
+	uploadFilesMock,
+	reportFileUploadsMock,
+	importAudioProjectFilesMock,
+	requestShellRefreshMock,
+	addOptimisticItemMock,
+	updateOptimisticItemTransferMock,
+	clearOptimisticItemMock,
+	toastErrorMock,
+	localStorageMock,
+	storeSubmitSummaryMock,
+} = vi.hoisted(() => ({
+	uploadFilesMock: vi.fn(),
+	reportFileUploadsMock: vi.fn(),
+	importAudioProjectFilesMock: vi.fn(),
+	requestShellRefreshMock: vi.fn(),
+	addOptimisticItemMock: vi.fn(),
+	updateOptimisticItemTransferMock: vi.fn(),
+	clearOptimisticItemMock: vi.fn(),
+	toastErrorMock: vi.fn(),
+	storeSubmitSummaryMock: vi.fn(),
+	localStorageMock: {
+		getItem: vi.fn(() => null),
+		setItem: vi.fn(),
+		removeItem: vi.fn(),
+	},
+}))
+
+let authoritativeList: AudioProjectListItem[] = []
+
+Object.defineProperty(globalThis, "localStorage", {
+	value: localStorageMock,
+	configurable: true,
+})
+
+vi.mock("@/stores/folderUpload/uploadService", () => ({
+	ossUploadService: {
+		uploadFiles: uploadFilesMock,
+		cancelTaskUploads: vi.fn(),
+	},
+}))
+
+vi.mock("@/apis", () => ({
+	FileApi: {
+		reportFileUploads: reportFileUploadsMock,
+	},
+	SuperMagicApi: {
+		importAudioProjectFiles: importAudioProjectFilesMock,
+	},
+}))
+
+vi.mock("../audio-recordings-store", () => ({
+	audioRecordingsStore: {
+		get list() {
+			return authoritativeList
+		},
+		submitSummary: storeSubmitSummaryMock,
+		addOptimisticItem: addOptimisticItemMock,
+		updateOptimisticItemTransfer: updateOptimisticItemTransferMock,
+		clearOptimisticItem: clearOptimisticItemMock,
+	},
+}))
+
+vi.mock("../../utils/request-audio-recordings-shell-refresh", () => ({
+	requestAudioRecordingsShellRefresh: requestShellRefreshMock,
+}))
+
+vi.mock("../../hooks/useRecordingSettings", () => ({
+	getCachedRecordingSettings: vi.fn(() => null),
+}))
+
+vi.mock("../../apis/recording-settings-api", () => ({
+	getRecordingTopicModel: vi.fn(),
+}))
+
+vi.mock("../../utils/recording-settings-mapper", () => ({
+	resolveAutoSummaryEnabled: vi.fn(() => true),
+}))
+
+vi.mock("@/components/base/MagicToaster/utils", () => ({
+	default: {
+		error: toastErrorMock,
+	},
+}))
+
+describe("AudioImportStore", () => {
+	beforeEach(() => {
+		vi.resetModules()
+		vi.clearAllMocks()
+		authoritativeList = []
+		uploadFilesMock.mockImplementation(
+			async (_files, _projectId, _folderPath, _taskId, _unused, _onProgress, onCompleted) => {
+				await onCompleted("upload-1", {
+					file_extension: "wav",
+					file_key: "recording/imported.wav",
+					file_name: "imported.wav",
+					file_size: 256,
+				})
+			},
+		)
+		reportFileUploadsMock.mockResolvedValue(undefined)
+		importAudioProjectFilesMock.mockResolvedValue({ file_ids: ["imported-file-id"], total: 1 })
+		storeSubmitSummaryMock.mockResolvedValue({ ok: true })
+		requestShellRefreshMock.mockImplementation(() => {
+			authoritativeList = [
+				{
+					id: "project-import",
+					project_name: "Imported Project",
+					created_at: 1780657155,
+					duration: 256,
+					tags: [],
+					device_id: "",
+					audio_source: "imported",
+					current_phase: "merging",
+					phase_status: "completed",
+					card_status: "not_summarized",
+					is_summarized: false,
+					workspace_id: "workspace-import",
+					workspace_name: null,
+					model_id: "model-alpha",
+					audio_file_id: "hydrated-audio-file-id",
+					task_key: "session-web-imported",
+					topic_id: "topic-import",
+					source: "pc",
+				},
+			]
+		})
+	})
+
+	it("uses import-files then auto submits imported audio after refresh hydrates audio_file_id", async () => {
+		const { AudioImportStore } = await import("../audio-import-store")
+		const store = new AudioImportStore()
+
+		await store.startAudioImport([new File(["voice"], "imported.wav", { type: "audio/wav" })], {
+			projectId: "project-import",
+			projectName: "Imported Project",
+			topicId: "topic-import",
+			workspaceId: "workspace-import",
+			modelId: "model-alpha",
+			taskKey: "session-web-imported",
+			autoSummaryEnabled: true,
+		})
+
+		expect(reportFileUploadsMock).toHaveBeenCalledWith([
+			expect.objectContaining({
+				file_key: "recording/imported.wav",
+				file_name: "imported.wav",
+			}),
+		])
+		expect(importAudioProjectFilesMock).toHaveBeenCalledWith({
+			project_id: "project-import",
+			parent_id: "",
+			files: [
+				expect.objectContaining({
+					file_key: "recording/imported.wav",
+					file_name: "imported.wav",
+					file_size: 256,
+				}),
+			],
+		})
+		expect(requestShellRefreshMock).not.toHaveBeenCalled()
+		expect(storeSubmitSummaryMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: "project-import",
+				audio_source: "imported",
+				audio_file_id: "imported-file-id",
+				task_key: "session-web-imported",
+			}),
+		)
+	})
+
+	it("stops after import-files when imported auto summary is disabled", async () => {
+		const { AudioImportStore } = await import("../audio-import-store")
+		const store = new AudioImportStore()
+
+		await store.startAudioImport([new File(["voice"], "manual.wav", { type: "audio/wav" })], {
+			projectId: "project-import",
+			projectName: "Imported Project",
+			topicId: "topic-import",
+			workspaceId: "workspace-import",
+			modelId: "model-alpha",
+			taskKey: "session-web-imported",
+			autoSummaryEnabled: false,
+		})
+
+		expect(importAudioProjectFilesMock).toHaveBeenCalledTimes(1)
+		expect(requestShellRefreshMock).toHaveBeenCalledTimes(1)
+		expect(storeSubmitSummaryMock).not.toHaveBeenCalled()
+		expect(addOptimisticItemMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				audio_source: "imported",
+				current_phase: "merging",
+				phase_status: "completed",
+				card_status: "not_summarized",
+			}),
+		)
+	})
+
+	it("auto summarizes from import-files file_ids even when refresh does not hydrate audio_file_id", async () => {
+		requestShellRefreshMock.mockImplementation(() => {
+			authoritativeList = []
+		})
+
+		const { AudioImportStore } = await import("../audio-import-store")
+		const store = new AudioImportStore()
+
+		await store.startAudioImport([new File(["voice"], "stalled.wav", { type: "audio/wav" })], {
+			projectId: "project-import",
+			projectName: "Imported Project",
+			topicId: "topic-import",
+			workspaceId: "workspace-import",
+			modelId: "model-alpha",
+			taskKey: "session-web-imported",
+			autoSummaryEnabled: true,
+		})
+
+		expect(importAudioProjectFilesMock).toHaveBeenCalledTimes(1)
+		expect(storeSubmitSummaryMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				audio_source: "imported",
+				audio_file_id: "imported-file-id",
+			}),
+		)
+		expect(toastErrorMock).not.toHaveBeenCalled()
+	})
+
+	it("does not refresh list immediately after imported auto summary starts", async () => {
+		const { AudioImportStore } = await import("../audio-import-store")
+		const store = new AudioImportStore()
+
+		await store.startAudioImport([new File(["voice"], "ordered.wav", { type: "audio/wav" })], {
+			projectId: "project-import",
+			projectName: "Imported Project",
+			topicId: "topic-import",
+			workspaceId: "workspace-import",
+			modelId: "model-alpha",
+			taskKey: "session-web-imported",
+			autoSummaryEnabled: true,
+		})
+
+		expect(storeSubmitSummaryMock).toHaveBeenCalledTimes(1)
+		expect(requestShellRefreshMock).not.toHaveBeenCalled()
+	})
+})

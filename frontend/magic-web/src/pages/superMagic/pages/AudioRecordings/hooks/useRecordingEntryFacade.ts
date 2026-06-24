@@ -296,6 +296,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			taskKey: string
 			audioSource: "recorded" | "imported"
 			modelId?: string
+			autoSummaryEnabled?: boolean
 		}): Promise<AudioProjectContext | null> => {
 			const workspacesResponse = (await SuperMagicApi.getWorkspaces({
 				page: 1,
@@ -308,11 +309,12 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			const audioWorkspace = workspacesResponse.list?.[0]
 			if (!audioWorkspace) return null
 
-			const settingsResponse = await getRecordingTopicModel().catch(() => null)
-			const autoSummary = resolveAutoSummaryEnabled(
-				getCachedRecordingSettings(),
-				settingsResponse,
-			)
+			const autoSummary =
+				options.autoSummaryEnabled ??
+				resolveAutoSummaryEnabled(
+					getCachedRecordingSettings(),
+					await getRecordingTopicModel().catch(() => null),
+				)
 
 			const createdProject = await SuperMagicApi.createAudioProject({
 				workspace_id: audioWorkspace.id,
@@ -678,12 +680,17 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			}
 
 			const taskKey = "session-web-" + createRandomUuidV4()
+			const autoSummaryEnabled = resolveAutoSummaryEnabled(
+				getCachedRecordingSettings(),
+				await getRecordingTopicModel().catch(() => null),
+			)
 
 			const audioProjectContext = await createAudioProjectContext({
 				projectName: normalizedFiles[0]?.name,
 				taskKey,
 				audioSource: "imported",
 				modelId: model.model_id,
+				autoSummaryEnabled,
 			})
 			if (!audioProjectContext) {
 				toast.error(t("mobile.recordingEntry.startMissingWorkspace"))
@@ -714,6 +721,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				workspaceId: audioProjectContext.workspace.id,
 				modelId: model.model_id,
 				taskKey,
+				autoSummaryEnabled,
 			})
 		},
 		[createAudioProjectContext, resolveRecordingModel, recordingSource, t],

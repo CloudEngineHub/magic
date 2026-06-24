@@ -26,6 +26,7 @@
 		"notSummarized": "Not summarized",
 		"openProject": "View project details",
 		"processing": "Processing",
+		"regenerateSummary": "Regenerate summary",
 		"rename": "Rename",
 		"retryMerge": "Retry",
 		"retrySummary": "Retry",

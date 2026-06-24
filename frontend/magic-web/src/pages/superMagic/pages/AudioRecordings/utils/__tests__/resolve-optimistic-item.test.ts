@@ -21,6 +21,27 @@ function makeOptimisticItem(
 	}
 }
 
+function makeAuthoritativeItem(
+	overrides: Partial<
+		Pick<AudioProjectListItem, "current_phase" | "phase_status" | "card_status">
+	>,
+): AudioProjectListItem {
+	return {
+		id: "proj-test-001",
+		project_name: "test",
+		created_at: 1710000000,
+		duration: 100,
+		tags: [],
+		device_id: "",
+		audio_source: "recorded",
+		current_phase: "merging",
+		phase_status: "completed",
+		card_status: "not_summarized",
+		is_summarized: false,
+		...overrides,
+	}
+}
+
 describe("shouldResolveOptimisticItem", () => {
 	it("returns false when the optimistic item is still transferring", () => {
 		expect(
@@ -50,8 +71,9 @@ describe("shouldResolveOptimisticItem", () => {
 		expect(
 			shouldResolveOptimisticItem(
 				makeOptimisticItem({ transferStatus: "done", card_status: "summarizing" }),
+				makeAuthoritativeItem({ card_status: "not_summarized" }),
 			),
-		).toBe(true)
+		).toBe(false)
 	})
 
 	it("returns true when card_status is not_summarized", () => {
@@ -66,6 +88,11 @@ describe("shouldResolveOptimisticItem", () => {
 		expect(
 			shouldResolveOptimisticItem(
 				makeOptimisticItem({ transferStatus: "done", card_status: "summarized" }),
+				makeAuthoritativeItem({
+					current_phase: "summarizing",
+					phase_status: "completed",
+					card_status: "summarized",
+				}),
 			),
 		).toBe(true)
 	})
@@ -79,8 +106,11 @@ describe("shouldResolveOptimisticItem", () => {
 	})
 
 	it("returns true when transferStatus is undefined (no upload phase)", () => {
-		expect(shouldResolveOptimisticItem(makeOptimisticItem({ transferStatus: undefined }))).toBe(
-			true,
-		)
+		expect(
+			shouldResolveOptimisticItem(
+				makeOptimisticItem({ transferStatus: undefined }),
+				makeAuthoritativeItem({ card_status: "not_summarized" }),
+			),
+		).toBe(false)
 	})
 })

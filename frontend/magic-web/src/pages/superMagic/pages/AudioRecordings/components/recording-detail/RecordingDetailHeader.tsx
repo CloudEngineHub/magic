@@ -159,7 +159,7 @@ export function RecordingDetailHeader({
 										if (event.key === "Enter") void commitTitleEdit()
 										if (event.key === "Escape") setEditingTitle(false)
 									}}
-									className="h-9 max-w-xl text-lg font-semibold"
+									className="h-9 max-w-xl min-w-[300px] text-lg font-semibold"
 									data-testid="recording-detail-title-input"
 								/>
 							) : (

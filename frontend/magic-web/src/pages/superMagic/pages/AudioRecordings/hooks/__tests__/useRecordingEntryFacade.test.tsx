@@ -32,6 +32,7 @@ const {
 			workspaceId: string
 			modelId: string
 			taskKey: string
+			autoSummaryEnabled: boolean
 		} | null,
 	}
 	return {
@@ -127,6 +128,7 @@ const audioImportStoreMock = vi.hoisted(() => ({
 				workspaceId: string
 				modelId: string
 				taskKey: string
+				autoSummaryEnabled: boolean
 			},
 		) => {
 			importTestState.queuedFiles = files
@@ -647,6 +649,9 @@ describe("useRecordingEntryFacade", () => {
 		})
 
 		expect(importTestState.queuedFiles).toHaveLength(1)
+		expect(importTestState.pendingImportContext).toMatchObject({
+			autoSummaryEnabled: true,
+		})
 
 		await act(async () => {
 			await completeImportUpload({
@@ -686,6 +691,60 @@ describe("useRecordingEntryFacade", () => {
 			task_key: expect.stringContaining("session-web-"),
 			card_status: "summarizing",
 		})
+	})
+
+	it("passes disabled auto summary into imported upload context", async () => {
+		seedRecordingSettingsCacheForTests(
+			{
+				model: { model_id: "model-alpha" },
+				extra: {
+					model: { model_id: "model-alpha" },
+					auto_summary_enabled: false,
+				},
+			},
+			{
+				transcription_enabled: true,
+				auto_summary_enabled: false,
+				model_id: "model-alpha",
+			},
+		)
+
+		superMagicApiMock.getWorkspaces.mockResolvedValue({
+			list: [{ id: "workspace-import", name: "Workspace Import" }],
+		})
+		superMagicApiMock.createAudioProject.mockResolvedValue({
+			project: {
+				id: "project-import-manual",
+				project_name: "Imported Project Manual",
+			},
+			topic: {
+				id: "topic-import-manual",
+				topic_name: "Imported Topic Manual",
+			},
+		})
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.importAudioFiles(
+				createFileList([new File(["voice"], "manual.wav", { type: "audio/wav" })]),
+			)
+		})
+
+		expect(superMagicApiMock.createAudioProject).toHaveBeenCalledWith(
+			expect.objectContaining({
+				audio_source: "imported",
+				auto_summary: false,
+			}),
+		)
+		expect(audioImportStoreMock.startAudioImport).toHaveBeenCalledWith(
+			expect.any(Array),
+			expect.objectContaining({
+				projectId: "project-import-manual",
+				topicId: "topic-import-manual",
+				autoSummaryEnabled: false,
+			}),
+		)
 	})
 
 	it("seeds finished recordings with local session duration while backend duration is still pending", async () => {

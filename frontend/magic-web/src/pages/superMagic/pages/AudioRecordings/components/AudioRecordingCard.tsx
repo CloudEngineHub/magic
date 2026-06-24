@@ -63,6 +63,10 @@ interface LinearProgressProps {
 	height?: number
 }
 
+const UPLOAD_PROGRESS_NEUTRAL_TRACK = "rgba(24, 24, 27, 0.08)"
+const UPLOAD_PROGRESS_NEUTRAL_FILL = "rgb(24, 24, 27)"
+const UPLOAD_PROGRESS_DESTRUCTIVE = "rgb(239, 68, 68)"
+
 /** Linear progress bar component for visual file uploads */
 function LinearProgress({
 	value,
@@ -71,14 +75,16 @@ function LinearProgress({
 	height = 6,
 }: LinearProgressProps) {
 	const pct = Math.max(0, Math.min(1, value)) * 100
-	const fg = tone === "destructive" ? "rgb(239, 68, 68)" : "rgb(59, 130, 246)"
+	// The prototype uses a neutral ink-like upload fill instead of a product-blue progress bar.
+	const fg = tone === "destructive" ? UPLOAD_PROGRESS_DESTRUCTIVE : UPLOAD_PROGRESS_NEUTRAL_FILL
 
 	return (
 		<div
 			className="w-full overflow-hidden rounded-full"
 			style={{
 				height,
-				background: "rgba(100, 116, 139, 0.18)",
+				// Keep the track very light so the dark fill remains the only strong upload emphasis.
+				background: UPLOAD_PROGRESS_NEUTRAL_TRACK,
 			}}
 			role="progressbar"
 			aria-valuemin={0}
@@ -91,7 +97,7 @@ function LinearProgress({
 					width: `${pct}%`,
 					backgroundColor: fg,
 					backgroundImage: indeterminate
-						? `repeating-linear-gradient(45deg, ${fg} 0 8px, rgba(255, 255, 255, 0.15) 8px 16px)`
+						? `repeating-linear-gradient(45deg, ${fg} 0 8px, rgba(255, 255, 255, 0.08) 8px 16px)`
 						: undefined,
 					backgroundSize: indeterminate ? "32px 32px" : undefined,
 					animation: indeterminate
@@ -113,16 +119,20 @@ function ProgressMeta({ isTransferFailed, pctText }: ProgressMetaProps) {
 	const { t } = useTranslation("super")
 
 	let label = ""
-	let color = ""
+	let labelColor = ""
+	let pctColor = ""
 	let Icon = CloudUpload
 
 	if (isTransferFailed) {
 		label = t("mobile.recordingEntry.progress.transferFailed")
-		color = "rgb(239, 68, 68)"
+		labelColor = UPLOAD_PROGRESS_DESTRUCTIVE
+		pctColor = UPLOAD_PROGRESS_DESTRUCTIVE
 		Icon = AlertTriangle
 	} else {
 		label = t("mobile.recordingEntry.progress.uploading")
-		color = "rgb(59, 130, 246)"
+		// The prototype keeps the upload percentage at the same emphasis level as the label.
+		labelColor = UPLOAD_PROGRESS_NEUTRAL_FILL
+		pctColor = UPLOAD_PROGRESS_NEUTRAL_FILL
 		Icon = CloudUpload
 	}
 
@@ -130,12 +140,12 @@ function ProgressMeta({ isTransferFailed, pctText }: ProgressMetaProps) {
 		<div className="flex items-center justify-between gap-2 text-[13px] leading-5">
 			<span
 				className="inline-flex min-w-0 items-center gap-1.5 font-medium"
-				style={{ color }}
+				style={{ color: labelColor }}
 			>
 				<Icon className="size-3.5 shrink-0" strokeWidth={1.8} />
 				<span className="truncate">{label}</span>
 			</span>
-			<span className="shrink-0 font-semibold tabular-nums" style={{ color }}>
+			<span className="shrink-0 font-medium tabular-nums" style={{ color: pctColor }}>
 				{pctText}%
 			</span>
 		</div>
@@ -791,7 +801,7 @@ function AudioRecordingCard({
 							onRename={handleRename}
 							onDelete={handleDelete}
 							onMoveToGroup={handleMoveToGroup}
-							regenerateSummaryLabel={t("card.retrySummary")}
+							regenerateSummaryLabel={t("card.regenerateSummary")}
 							onRegenerateSummary={
 								item.card_status === "summarized" && onSummarize
 									? () => onSummarize(item)

@@ -351,9 +351,18 @@ export class AudioRecordingsStore {
 
 			runInAction(() => {
 				const index = this.list.findIndex((entry) => entry.id === item.id)
-				if (index < 0) return
+				if (index >= 0) {
+					this.list[index] = buildOptimisticSummarizingProject(this.list[index])
+				}
 
-				this.list[index] = buildOptimisticSummarizingProject(this.list[index])
+				const optimisticIndex = this.optimisticItems.findIndex(
+					(entry) => entry.id === item.id,
+				)
+				if (optimisticIndex >= 0) {
+					this.optimisticItems[optimisticIndex] = buildOptimisticSummarizingProject(
+						this.optimisticItems[optimisticIndex],
+					)
+				}
 			})
 
 			summaryProgressPoller.addTask(taskKey)

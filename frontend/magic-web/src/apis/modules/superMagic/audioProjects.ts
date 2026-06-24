@@ -20,6 +20,25 @@ export interface CreateAudioProjectParams {
 	audio_source: "recorded" | "imported"
 }
 
+export interface ImportAudioProjectFilePayload {
+	file_key: string
+	file_name: string
+	file_size: number
+	/** Audio duration in seconds; when the browser cannot read metadata yet, send 0 and let backend backfill later. */
+	duration: number
+}
+
+export interface ImportAudioProjectFilesParams {
+	project_id: string
+	parent_id: string
+	files: ImportAudioProjectFilePayload[]
+}
+
+export interface ImportAudioProjectFilesResponse {
+	file_ids: string[]
+	total: number
+}
+
 /** Builds REST helpers for PC audio recording project list queries */
 export const generateAudioProjectsApi = (fetch: HttpClient) => ({
 	/**
@@ -54,6 +73,14 @@ export const generateAudioProjectsApi = (fetch: HttpClient) => ({
 	createAudioProject(params: CreateAudioProjectParams) {
 		return fetch.post<CreatedProject>(
 			genRequestUrl("/api/v1/super-agent/audio-projects"),
+			params,
+		)
+	},
+
+	/** Imports uploaded raw audio objects into an audio project so backend can hydrate audio_file_id. */
+	importAudioProjectFiles(params: ImportAudioProjectFilesParams) {
+		return fetch.post<ImportAudioProjectFilesResponse>(
+			genRequestUrl("/api/v1/super-agent/audio-projects/import-files"),
 			params,
 		)
 	},
