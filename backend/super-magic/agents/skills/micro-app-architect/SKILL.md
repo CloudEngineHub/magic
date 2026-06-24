@@ -170,7 +170,7 @@ The HTML layer has access to `window.Magic.*` APIs (pre-injected, no imports nee
 
 | Namespace                     | Key Methods                                                                              | Purpose                                            |
 | ----------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `window.Magic.fs`             | `readFile`, `writeFile`, `listFiles`, `watchFile`                                        | File read/write/watch (paths relative to app root) |
+| `window.Magic.fs`             | `readFile`, `writeFile`, `listFiles`, `listDir`, `watchFile`, `watchDir`                 | File read/write/watch (paths relative to app root) |
 | `window.Magic.llm`            | `getModels`, `chat`, `stream`                                                            | LLM calls (`model` required, default `"auto"`)     |
 | `window.Magic.agent`          | `getAgents`                                                                              | Discover available agents                          |
 | `window.Magic.project`        | `createTopicAndSend`, `sendMessage`, `uploadFiles`, `downloadFiles`, `addFilesToMessage` | Cross-topic messaging, file transfer               |
@@ -198,7 +198,11 @@ The HTML layer has access to `window.Magic.*` APIs (pre-injected, no imports nee
 8. **Provide agent selector + model selector UI when dispatching skills** — when the app triggers companion skills via `createTopicAndSend`, provide UI for users to select agent (员工) and model. Defaults: general mode (不选员工) + model `"auto"`. Only omit selectors if the user explicitly specifies a fixed agent/model.
 9. **Use `getAppBasePath()` for workspace-relative paths in mentions** — `window.Magic.fs.*` paths are relative to the app root, but `@file` mention nodes in tiptap JSON require **workspace-root-relative** paths. Always call `const basePath = await window.Magic.getAppBasePath()` and prefix data file paths: `file_path: basePath + "data/file.json"`. The `.magic/` directory is already at workspace root, so `.magic/` paths need no prefix.
 10. **Data storage: files first, localStorage only for preferences** — app data (records, state, user content) must be stored in workspace files via `window.Magic.fs` (JSON/MD). `localStorage` is only for UI preferences (theme, language, collapsed state, etc.) that don't need to be shared or persisted across workspaces.
-11. **File-based AI analysis: prefer topic + skill pattern for complex tasks** — when the app requires users to upload/select files and perform AI analysis on file contents, evaluate task complexity to choose the right approach:
+11. **CRUD records use incremental files by default** — assume generated micro-apps may be shared by multiple users. Config and single-state files may be overwritten, but user-created business records must default to one file per record under a directory, such as `data/tasks/<record-file>.json`. List pages use `listDir()` and file-name projection; read record JSON only when opening, editing, or analyzing details. Do not generate `data/items.json` as a single array for shared CRUD collections.
+12. **Record file names are bounded list projections** — generated CRUD apps must include `buildRecordFileName(record)`, `parseRecordFileName(name)`, `slugifyTitle(title)`, and `truncateUtf8Bytes(input, maxBytes)`. Use `<sortKey>__<status>__<shortId>__<titleSlug>.json`; keep the full file name under 120 UTF-8 bytes, `titleSlug` under 40 bytes, hard-limit 255 bytes, and never put private fields or long text into names. Always include stable `shortId`.
+13. **Directory change notifications are snapshot-based** — use `watchDir()` for direct child additions/removals after host attachment refresh, and `watchFile()` for content changes. Treat `renameFile()` projection changes as `removed + added` and match the same record by `shortId`.
+14. **Escalate complex query needs** — file-name projection is only for list display, sorting, status filters, and simple title search. If the app needs complex filtering across more than two detail fields, amount ranges, tag combinations, owners, or more than 500 expected records, design an index-file strategy, backend query capability, or bucketed directories with pagination/virtual scrolling.
+15. **File-based AI analysis: prefer topic + skill pattern for complex tasks** — when the app requires users to upload/select files and perform AI analysis on file contents, evaluate task complexity to choose the right approach:
     - **Simple tasks** (short text extraction, single-field parsing, brief summarization where file content fits in a few thousand tokens): acceptable to `readFile` + `window.Magic.llm.chat/stream` directly in HTML.
     - **Complex tasks** (long documents, multi-step analysis, cross-file reasoning, structured report generation, tasks needing tool use): strongly prefer the topic + skill pattern — (1) save file to workspace via `writeFile`/`uploadFiles`, (2) `createTopicAndSend` with `@file` mentions + `@skill` or `@file .magic/skills/SKILL.md`. The agent has longer context, file parsing tools, and can orchestrate multi-step workflows. HTML app handles UI only (file picker, progress, result display) and watches output via `watchFile`.
 
@@ -226,6 +230,8 @@ The companion skill is **not** auto-loaded. At runtime, the HTML app triggers it
 ```javascript
 // Get workspace-relative base path for file mentions
 const basePath = await window.Magic.getAppBasePath(); // e.g. "个人财务记账/"
+const selectedRecordPath = "data/records/20260624153000__open__a8f3k2__record.json";
+const selectedRecordName = selectedRecordPath.split("/").pop();
 
 // Trigger companion skill via new topic with @file mentions
 const { topicId } = await window.Magic.project.createTopicAndSend(
@@ -258,8 +264,8 @@ const { topicId } = await window.Magic.project.createTopicAndSend(
               type: "project_file",
               data: {
                 file_id: "data_ref",
-                file_name: "records.json",
-                file_path: basePath + "data/records.json",
+                file_name: selectedRecordName,
+                file_path: basePath + selectedRecordPath,
                 file_extension: "json",
               },
             },
@@ -377,46 +383,64 @@ const { topicId } = await window.Magic.project.createTopicAndSend(
 
 Files serve as the database. Follow these patterns:
 
-### Single-Entity Storage
+### Single-Entity Storage (Allowed To Overwrite)
 
 ```
 data/config.json          — app configuration
 data/state.json           — current app state
 ```
 
-### Collection Storage
+### Record Collection Storage (Default For CRUD)
 
 ```
-data/items.json           — array of items [{id, ...}, ...]
-data/users.json           — array of user records
+data/tasks/
+├── 20260624153000__open__a8f3k2__follow-up-acme.json
+└── 20260625100000__done__p9x7m1__record.json
 ```
+
+- One user-created business record = one JSON file.
+- List pages use `listDir("data/tasks/")` and parse file names. Do not batch `readFile()` every detail record just to render a list.
+- Detail JSON is authoritative and stores the stable `id`, full title, private fields, notes, and all business fields.
+- File names are only limited list projections: `<sortKey>__<status>__<shortId>__<titleSlug>.json`.
+- Generated apps must provide `buildRecordFileName`, `parseRecordFileName`, `slugifyTitle`, and `truncateUtf8Bytes`.
+- File-name generation target: max 120 UTF-8 bytes including `.json`; hard limit 255 bytes; `titleSlug` max 40 bytes. Forbidden: `/`, `\`, `<`, `>`, `:`, `"`, `|`, `?`, `*`, control chars, `..`, leading/trailing spaces.
+- If title may contain sensitive information or cannot be safely slugified, use `record` as `titleSlug`.
+- Always include stable `shortId`; never derive the file name from title alone.
+- Sort by parsed `sortKey`, not backend return order.
 
 ### Event Log / Append-Only
 
 ```
-data/history.json         — ordered array of events [{timestamp, action, ...}]
+data/events/
+├── 20260624153001__evt_a8f3k2.json
+└── 20260624153620__evt_b7p9q4.json
 ```
 
-### Multi-File Organization (for complex apps)
+### Derived Output / Cache (Allowed To Overwrite)
 
 ```
-data/
-├── meta.json             — app metadata and indices
-├── users/
-│   ├── user_001.json
-│   └── user_002.json
-└── reports/
-    ├── 2024-01-report.md
-    └── 2024-02-report.md
+data/reports/latest.json
+data/cache/summary.json
+```
+
+### Large Or Complex Collections
+
+```
+data/tasks/2026-06/
+data/tasks/open/
+data/index/tasks.json
 ```
 
 **Rules:**
 
 - Always use JSON for structured data (parseable by both HTML and skill)
 - Use Markdown for generated content (reports, articles)
-- Include `id` fields for collection items
+- Include stable `id` and `shortId` fields in each record JSON
 - Include `updatedAt` timestamps for watched files
-- Initialize data files with sensible defaults when creating the app
+- Initialize config files and empty record directories with sensible defaults when creating the app
+- Before projection rename, call `listDir()` and reject if the target name exists with a different `shortId`
+- If file-name projection and JSON disagree, list uses the file name, detail uses JSON, and a background rename repair may run only when it cannot overwrite another file
+- Use an index file or backend query capability when filters require multiple detail fields, amount ranges, tags, owners, or other database-like queries
 
 ---
 

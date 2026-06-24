@@ -22,13 +22,13 @@
     {
       "id": 4,
       "prompt": "做一个 todolist 应用",
-      "expected_output": "Triggers the html-api-sdk skill and generates a complete HTML todo-list application using window.Magic.fs API for persistence (readFile/writeFile to store todos in a JSON file). Uses addEventListener for all event bindings. Includes add, toggle complete, and delete functionality.",
+      "expected_output": "Triggers the html-api-sdk skill and generates a complete HTML todo-list application using one file per todo under data/todos/. Uses listDir/watchDir for the list, file-name projection helpers (buildRecordFileName, parseRecordFileName, slugifyTitle, truncateUtf8Bytes), readFile only when opening/editing a todo, and writeFile/deleteFile/renameFile for CRUD. Uses addEventListener for all event bindings.",
       "files": []
     },
     {
       "id": 5,
       "prompt": "做一个访客管理系统",
-      "expected_output": "Triggers the html-api-sdk skill and generates an HTML visitor management system. Uses window.Magic.fs.readFile/writeFile for data persistence, includes visitor registration form, visitor list display, search/filter, and check-in/check-out functionality. Events bound with addEventListener.",
+      "expected_output": "Triggers the html-api-sdk skill and generates an HTML visitor management system. Uses one file per visitor or visit record under data/visitors/ or data/visits/, listDir/watchDir for list rendering, file-name projection for sort/status/shortId/titleSlug, and readFile only on detail/check-in/check-out. Blocks unsafe rename collisions by comparing shortId. Events bound with addEventListener.",
       "files": []
     },
     {

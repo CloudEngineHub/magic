@@ -1,6 +1,6 @@
 ---
 name: html-api-sdk
-description: "Complete API reference for window.Magic.* in SuperMagic HTML micro-apps (HTML 微应用). Read this skill when you need exact method signatures, parameters, return types, or usage examples for: fs (readFile/writeFile/listFiles/deleteFile/deleteDir/moveFile/renameFile/watchFile), llm (chat/stream/getModels), agent (getAgents/selectAgent), project (createTopicAndSend/sendMessage/uploadFiles/downloadFiles), user (getInfo with app.json userInfo scopes), getAppBasePath, setInputMessage, reload. Also covers tiptap JSON message format, @file and @skill mention structures, model selector UI rules, user info authorization, error handling patterns, and backward compatibility table. Trigger phrases: 'window.Magic API', 'readFile writeFile', 'deleteFile deleteDir', 'moveFile renameFile', 'watchFile callback', 'llm.stream', 'llm.chat', 'createTopicAndSend format', 'tiptap JSON mention', '@file mention structure', '@skill mention', 'getAppBasePath usage', 'model selector UI', 'user.getInfo', 'get user info', 'user avatar', 'userInfo scopes', 'app.json permissions', 'Magic API 用法', 'fs 读写文件 API', 'fs 删除文件', 'fs 移动重命名', '流式调用参数', '文件监听回调', '话题消息格式', 'mention 结构', '模型选择器', '用户信息', '用户授权', '获取头像'."
+description: "Complete API reference for window.Magic.* in SuperMagic HTML micro-apps (HTML 微应用). Read this skill when you need exact method signatures, parameters, return types, or usage examples for: fs (readFile/writeFile/listFiles/listDir/deleteFile/deleteDir/moveFile/renameFile/watchFile/watchDir), llm (chat/stream/getModels), agent (getAgents/selectAgent), project (createTopicAndSend/sendMessage/uploadFiles/downloadFiles), user (getInfo with app.json userInfo scopes), getAppBasePath, setInputMessage, reload. Also covers file-per-record data storage, list projection file names, tiptap JSON message format, @file and @skill mention structures, model selector UI rules, user info authorization, error handling patterns, and backward compatibility table. Trigger phrases: 'window.Magic API', 'readFile writeFile', 'listDir watchDir', 'deleteFile deleteDir', 'moveFile renameFile', 'watchFile callback', 'watchDir callback', 'llm.stream', 'llm.chat', 'createTopicAndSend format', 'tiptap JSON mention', '@file mention structure', '@skill mention', 'getAppBasePath usage', 'model selector UI', 'user.getInfo', 'get user info', 'user avatar', 'userInfo scopes', 'app.json permissions', 'Magic API 用法', 'fs 读写文件 API', 'fs 删除文件', 'fs 移动重命名', '目录监听', '文件监听回调', '话题消息格式', 'mention 结构', '模型选择器', '用户信息', '用户授权', '获取头像'."
 ---
 
 # window.Magic API — HTML Micro-App Guide
@@ -45,8 +45,8 @@ description: "Complete API reference for window.Magic.* in SuperMagic HTML micro
 ### `readFile(path)` → `Promise<string>`
 
 ```javascript
-const raw = await window.Magic.fs.readFile("data/users.json");
-const users = JSON.parse(raw);
+const raw = await window.Magic.fs.readFile("data/tasks/20260624153000__open__a8f3k2__follow-up.json");
+const task = JSON.parse(raw);
 ```
 
 - `path: string` — relative to app root. Max 5 MB; rejects if not found.
@@ -55,8 +55,8 @@ const users = JSON.parse(raw);
 
 ```javascript
 await window.Magic.fs.writeFile(
-  "data/users.json",
-  JSON.stringify(data, null, 2),
+  "data/tasks/20260624153000__open__a8f3k2__follow-up.json",
+  JSON.stringify(record, null, 2),
 );
 // Binary (up to 500 MB):
 await window.Magic.fs.writeFile("data/large.bin", blob);
@@ -78,13 +78,29 @@ Path rules:
 - `../` remains blocked in all scopes.
 - Reading project-root file contents or temporary URLs requires `fs.project.read`.
 - Writing, deleting, moving, or renaming files outside the app root requires `fs.project.write`, then triggers host path confirmation and may be rejected by the user.
-- `listFiles("/")` is not gated in the current version, but do not depend on that for sensitive directory discovery.
+- `listFiles("/")` and `listDir("/")` are not gated in the current version, but do not depend on them for sensitive directory discovery.
 
 ### `listFiles(dir?)` → `Promise<string[]>`
 
 ```javascript
 const files = await window.Magic.fs.listFiles("data/");
 ```
+
+- Compatibility API. It returns direct child names only. Prefer `listDir()` for new list UIs.
+
+### `listDir(dir?)` → `Promise<Array<{name,path,isDirectory,updatedAt?}>>`
+
+```javascript
+const entries = await window.Magic.fs.listDir("data/tasks/");
+entries
+  .map((entry) => parseRecordFileName(entry.name))
+  .filter(Boolean)
+  .sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+```
+
+- Returns direct children only. It does not read file contents.
+- Use it for list pages. Read the JSON detail only when the user opens, edits, or analyzes one record.
+- `path` is usable with `readFile`, `writeFile`, `deleteFile`, `moveFile`, and `renameFile`.
 
 ### `deleteFile(path)` → `Promise<void>`
 
@@ -129,14 +145,71 @@ const unwatch = window.Magic.fs.watchFile("data/orders.json", async (e) => {
 
 - Polls ~3s; max 10 watched paths per app. Call returned fn to stop.
 
+### `watchDir(dir, cb)` → `() => void`
+
+```javascript
+const unwatch = window.Magic.fs.watchDir("data/tasks/", (event) => {
+  // renameFile that changes projection appears as removed + added.
+  // Use parseRecordFileName(name).shortId to match the same record.
+  renderList(event.entries);
+});
+```
+
+- Not a real-time filesystem watcher. It compares refreshed host attachment snapshots after the existing attachment polling or `Update_Attachments` refresh.
+- Watches direct child additions and removals only. File content changes continue to use `watchFile()`.
+- Callback payload: `{ dir, timestamp, added, removed, entries }`.
+
 ### Concurrent Reads
 
 ```javascript
-const [users, orders] = await Promise.all([
-  window.Magic.fs.readFile("data/users.json").then(JSON.parse),
-  window.Magic.fs.readFile("data/orders.json").then(JSON.parse),
+const [config, selectedTask] = await Promise.all([
+  window.Magic.fs.readFile("data/config.json").then(JSON.parse),
+  window.Magic.fs.readFile(selectedEntry.path).then(JSON.parse),
 ]);
 ```
+
+### Shared Data Storage Rules
+
+For generated CRUD micro-apps, assume multiple users may share the same app.
+
+- Config or single current state may use one overwritable file, such as `data/config.json`.
+- User-created business records must default to one file per record, such as `data/tasks/<record-file>.json`.
+- List pages must render from `listDir()` entries and file-name projection; do not batch `readFile()` every record just to draw a list.
+- Event logs and history should be append-only multi-file records, such as `data/events/<timestamp>__<id>.json`.
+- Reports, analysis output, and caches may be overwritten because they are derived artifacts.
+- For more than 500 expected records, bucket by month or business status, such as `data/tasks/2026-06/` or `data/tasks/open/`, and use pagination or virtual scrolling.
+
+Record file names are list projections only:
+
+```text
+<sortKey>__<status>__<shortId>__<titleSlug>.json
+```
+
+Required helpers in generated apps:
+
+- `buildRecordFileName(record)`
+- `parseRecordFileName(name)`
+- `slugifyTitle(title)` — lowercase English letters, digits, hyphens only; return `record` when unsafe or not representable.
+- `truncateUtf8Bytes(input, maxBytes)`
+
+File-name limits:
+
+- Hard limit: 255 bytes.
+- Generation target: 120 bytes including `.json`.
+- `titleSlug`: max 40 bytes by default.
+- Forbidden: `/`, `\`, `<`, `>`, `:`, `"`, `|`, `?`, `*`, control chars, `..`, leading/trailing spaces.
+- Never put phone numbers, addresses, notes, detailed amounts, private fields, or long text in file names.
+- Always include stable `shortId`. Never use only the title.
+- Sort lists by parsed `sortKey`, not by backend return order.
+
+Update safety:
+
+- Create: generate stable `id/shortId`, build the file name, then create the record file. If the target file exists in the same dir, regenerate `shortId`.
+- Update non-projection fields: write JSON only.
+- Update title/status/date projection fields: write JSON first, then `renameFile()`, preserving `shortId`.
+- Before rename, call `listDir()` and block the rename if the target name already exists with a different `shortId`.
+- If JSON and file-name projection disagree, list uses file name, detail uses JSON. Try a background rename repair only when it cannot overwrite another file.
+- Complex filters across more than two detail fields, amount ranges, tag combinations, owners, or similar query needs require an index file or backend query capability.
 
 ---
 
@@ -473,11 +546,13 @@ window.Magic.llm.stream(
 | `window.Magic.fs.readFile(path)` | `Promise<string>` |
 | `window.Magic.fs.writeFile(path, content)` | `Promise<void>` |
 | `window.Magic.fs.listFiles(dir?)` | `Promise<string[]>` |
+| `window.Magic.fs.listDir(dir?)` | `Promise<DirEntry[]>` |
 | `window.Magic.fs.deleteFile(path)` | `Promise<void>` |
 | `window.Magic.fs.deleteDir(path)` | `Promise<void>` |
 | `window.Magic.fs.moveFile(path, targetDir)` | `Promise<void>` |
 | `window.Magic.fs.renameFile(path, newName)` | `Promise<void>` |
 | `window.Magic.fs.watchFile(path, cb)` | `() => void` |
+| `window.Magic.fs.watchDir(dir, cb)` | `() => void` |
 | `window.Magic.llm.getModels()` | `Promise<Model[]>` |
 | `window.Magic.llm.chat(msgs, opts?)` | `Promise<string>` |
 | `window.Magic.llm.stream(msgs, onChunk, opts?)` | `() => void` |

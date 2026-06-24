@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "做一个 todolist 应用",
-      "expected_output": "Generates a Simple architecture: single index.html with window.Magic.fs.readFile/writeFile for persistence. Uses addEventListener for events. Includes add, toggle, delete functionality. Creates initial data/todos.json as empty array. No companion skill needed.",
+      "expected_output": "Generates a Simple architecture: single index.html with window.Magic.fs listDir/watchDir plus readFile/writeFile/renameFile/deleteFile for persistence. Uses one file per todo under data/todos/ with file-name projection helpers (buildRecordFileName, parseRecordFileName, slugifyTitle, truncateUtf8Bytes). Lists render from directory entries and read details on demand. Uses addEventListener for events. Includes add, toggle, delete functionality. No companion skill needed.",
       "files": []
     },
     {
@@ -28,7 +28,7 @@
     {
       "id": 5,
       "prompt": "做一个客户管理系统，能录入客户信息、自动生成跟进建议、定期提醒跟进",
-      "expected_output": "Generates a Medium architecture: index.html for CRUD UI and display with agent/model selector, companion skill in workspace-root .magic/suggestion_writer/ for generating follow-up suggestions using LLM (generated via skill-creator). Data layer includes data/customers.json and data/reminders.json. HTML uses fs APIs for CRUD, createTopicAndSend with @file mention of .magic/suggestion_writer/SKILL.md to trigger AI-powered suggestion generation in a new topic.",
+      "expected_output": "Generates a Medium architecture: index.html for CRUD UI and display with agent/model selector, companion skill in workspace-root .magic/suggestion_writer/ for generating follow-up suggestions using LLM (generated via skill-creator). Data layer uses one file per customer under data/customers/ and one file per reminder/event under data/reminders/ or data/events/, with file-name projection helpers and listDir/watchDir for list rendering. HTML reads customer JSON only on detail/edit/AI suggestion, blocks rename collisions by shortId, and uses createTopicAndSend with @file mention of .magic/suggestion_writer/SKILL.md to trigger AI-powered suggestion generation in a new topic.",
       "files": []
     },
     {

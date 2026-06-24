@@ -541,6 +541,14 @@ declare global {
 				readFile: (path: string) => Promise<string>
 				writeFile: (path: string, content: string) => Promise<void>
 				listFiles: (dir?: string) => Promise<string[]>
+				listDir: (dir?: string) => Promise<
+					Array<{
+						name: string
+						path: string
+						isDirectory: boolean
+						updatedAt?: string
+					}>
+				>
 				getFileUrl: (path: string) => Promise<string>
 				deleteFile: (path: string) => Promise<void>
 				deleteDir: (path: string) => Promise<void>
@@ -549,6 +557,21 @@ declare global {
 				watchFile: (
 					path: string,
 					callback: (e: { path: string; timestamp: number }) => void,
+				) => () => void
+				watchDir: (
+					dir: string,
+					callback: (event: {
+						dir: string
+						timestamp: number
+						added: string[]
+						removed: string[]
+						entries: Array<{
+							name: string
+							path: string
+							isDirectory: boolean
+							updatedAt?: string
+						}>
+					}) => void,
 				) => () => void
 			}
 			llm?: {

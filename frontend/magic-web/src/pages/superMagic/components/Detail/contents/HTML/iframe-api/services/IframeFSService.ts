@@ -13,6 +13,7 @@ import {
 	type FSWriteRequest,
 	type FSWriteBlobRequest,
 	type FSListRequest,
+	type FSListDirRequest,
 	type FSGetFileUrlRequest,
 	type FSDeleteFileRequest,
 	type FSDeleteDirRequest,
@@ -20,9 +21,13 @@ import {
 	type FSRenameFileRequest,
 	type FSWatchRegister,
 	type FSWatchUnregister,
+	type FSWatchDirRegister,
+	type FSWatchDirUnregister,
+	type FSDirEntry,
 	type HTMLAppConfig,
 	type HtmlPermissionScope,
 } from "../types"
+import { IframeFSWatchService } from "./IframeFSWatchService"
 
 /** workspace 文件项（来自 attachmentList 扁平化后） */
 export interface FSFileItem {
@@ -166,12 +171,7 @@ export class IframeFSService {
 	readonly appRootDir: string
 	/** 文件别名映射（来自 appConfig.files） */
 	private readonly aliasMap: Record<string, string>
-	/** watch 注册表：resolvedPath → { watchers, originalPath } */
-	private watchRegistry = new Map<string, { watchers: Set<string>; originalPath: string }>()
-	/** 文件 updated_at 快照（用于轮询变更检测） */
-	private watchSnapshot = new Map<string, string | undefined>()
-	/** 轮询定时器 */
-	private pollTimerId: ReturnType<typeof setInterval> | null = null
+	private readonly watchService: IframeFSWatchService
 	/**
 	 * 本次会话中通过 mkdirFn 新建的目录缓存：resolvedPath → file_id
 	 * 避免重复创建同一目录（fileList 刷新前的中间态）
@@ -188,6 +188,13 @@ export class IframeFSService {
 
 		// 别名映射
 		this.aliasMap = cfg.appConfig?.files ?? {}
+
+		this.watchService = new IframeFSWatchService({
+			postToIframe: (message) => this.send(message),
+			getFileUpdatedAt: (resolvedPath) => this.findFile(resolvedPath)?.updated_at,
+			getDirEntries: (resolvedDir, originalDir) =>
+				this.buildDirEntries(resolvedDir, originalDir),
+		})
 	}
 
 	/**
@@ -207,6 +214,9 @@ export class IframeFSService {
 				return true
 			case FS_MESSAGE_TYPES.LIST_REQUEST:
 				this.handleList(payload as FSListRequest)
+				return true
+			case FS_MESSAGE_TYPES.LIST_DIR_REQUEST:
+				this.handleListDir(payload as FSListDirRequest)
 				return true
 			case FS_MESSAGE_TYPES.GET_FILE_URL_REQUEST:
 				await this.handleGetFileUrl(payload as FSGetFileUrlRequest)
@@ -229,6 +239,12 @@ export class IframeFSService {
 			case FS_MESSAGE_TYPES.WATCH_UNREGISTER:
 				this.handleWatchUnregister(payload as FSWatchUnregister)
 				return true
+			case FS_MESSAGE_TYPES.WATCH_DIR_REGISTER:
+				this.handleWatchDirRegister(payload as FSWatchDirRegister)
+				return true
+			case FS_MESSAGE_TYPES.WATCH_DIR_UNREGISTER:
+				this.handleWatchDirUnregister(payload as FSWatchDirUnregister)
+				return true
 			case FS_MESSAGE_TYPES.GET_APP_BASE_PATH_REQUEST:
 				this.handleGetAppBasePath(payload as { requestId: string })
 				return true
@@ -238,9 +254,7 @@ export class IframeFSService {
 	}
 
 	destroy() {
-		this.stopPolling()
-		this.watchRegistry.clear()
-		this.watchSnapshot.clear()
+		this.watchService.destroy()
 		this.dirCache.clear()
 	}
 
@@ -482,6 +496,28 @@ export class IframeFSService {
 			.map((p) => p.split("/").pop() || p)
 
 		this.send({ type: FS_MESSAGE_TYPES.LIST_RESPONSE, requestId, success: true, files })
+	}
+
+	private handleListDir(req: FSListDirRequest) {
+		const { requestId, dir } = req
+		const requestDir = dir ?? "./"
+		const resolvedDir = this.resolveDir(requestDir)
+
+		if (resolvedDir === null) {
+			return this.send({
+				type: FS_MESSAGE_TYPES.LIST_DIR_RESPONSE,
+				requestId,
+				success: false,
+				error: `Access denied or invalid directory: ${dir}`,
+			})
+		}
+
+		this.send({
+			type: FS_MESSAGE_TYPES.LIST_DIR_RESPONSE,
+			requestId,
+			success: true,
+			entries: this.buildDirEntries(resolvedDir, requestDir),
+		})
 	}
 
 	private async handleGetFileUrl(req: FSGetFileUrlRequest) {
@@ -907,18 +943,7 @@ export class IframeFSService {
 		const resolved = this.resolvePath(path)
 		if (!resolved) return
 
-		// 最多同时监听 10 个文件
-		if (this.watchRegistry.size >= 10 && !this.watchRegistry.has(resolved)) return
-
-		if (!this.watchRegistry.has(resolved)) {
-			this.watchRegistry.set(resolved, { watchers: new Set(), originalPath: path })
-			this.watchSnapshot.set(resolved, this.findFile(resolved)?.updated_at)
-		}
-		const entry = this.watchRegistry.get(resolved)
-		if (!entry) return
-		entry.watchers.add(requestId)
-
-		if (this.pollTimerId === null) this.startPolling()
+		this.watchService.registerFile(requestId, path, resolved)
 	}
 
 	private handleWatchUnregister(req: FSWatchUnregister) {
@@ -926,42 +951,23 @@ export class IframeFSService {
 		const resolved = this.resolvePath(path)
 		if (!resolved) return
 
-		const entry = this.watchRegistry.get(resolved)
-		if (entry) {
-			entry.watchers.delete(requestId)
-			if (entry.watchers.size === 0) {
-				this.watchRegistry.delete(resolved)
-				this.watchSnapshot.delete(resolved)
-			}
-		}
-
-		if (this.watchRegistry.size === 0) this.stopPolling()
+		this.watchService.unregisterFile(requestId, resolved)
 	}
 
-	private startPolling() {
-		this.pollTimerId = setInterval(() => {
-			this.watchRegistry.forEach(({ originalPath }, resolved) => {
-				const item = this.findFile(resolved)
-				const prev = this.watchSnapshot.get(resolved)
-				const curr = item?.updated_at
-				if (curr && curr !== prev) {
-					this.watchSnapshot.set(resolved, curr)
-					// 发回 iframe 注册时使用的原始路径，确保 iframe 侧过滤条件匹配
-					this.send({
-						type: FS_MESSAGE_TYPES.FILE_CHANGED,
-						path: originalPath,
-						timestamp: Date.now(),
-					})
-				}
-			})
-		}, 3000)
+	private handleWatchDirRegister(req: FSWatchDirRegister) {
+		const { requestId, dir } = req
+		const resolved = this.resolveDir(dir)
+		if (resolved === null) return
+
+		this.watchService.registerDir(requestId, dir, resolved)
 	}
 
-	private stopPolling() {
-		if (this.pollTimerId !== null) {
-			clearInterval(this.pollTimerId)
-			this.pollTimerId = null
-		}
+	private handleWatchDirUnregister(req: FSWatchDirUnregister) {
+		const { requestId, dir } = req
+		const resolved = this.resolveDir(dir)
+		if (resolved === null) return
+
+		this.watchService.unregisterDir(requestId, resolved)
 	}
 
 	// ─── 路径工具 ────────────────────────────────────────────────────────────────
@@ -1015,6 +1021,43 @@ export class IframeFSService {
 		return this.cfg.fileList.find(
 			(f) => this.normalizeWorkspacePath(f.relative_file_path) === normalizedPath,
 		)
+	}
+
+	private buildDirEntries(resolvedDir: string, originalDir: string): FSDirEntry[] {
+		return this.cfg.fileList
+			.map((item) => ({ item, path: this.normalizeWorkspacePath(item.relative_file_path) }))
+			.filter(({ path }) => {
+				if (resolvedDir === "") {
+					return path.length > 0 && !path.includes("/")
+				}
+				if (!path.startsWith(resolvedDir)) return false
+				const rest = path.slice(resolvedDir.length)
+				return rest.length > 0 && !rest.includes("/")
+			})
+			.map(({ item, path }) => {
+				const name = item.file_name || path.split("/").pop() || path
+				const entry: FSDirEntry = {
+					name,
+					path: this.toIframeVisiblePath(path, originalDir),
+					isDirectory: item.is_directory ?? false,
+				}
+				if (item.updated_at) entry.updatedAt = item.updated_at
+				return entry
+			})
+	}
+
+	private toIframeVisiblePath(resolvedPath: string, originalDir: string): string {
+		if (this.isProjectRootRequestPath(originalDir)) {
+			return `/${resolvedPath}`
+		}
+
+		const appRoot = this.normalizeWorkspacePath(this.appRootDir)
+		if (!appRoot) return resolvedPath
+		if (resolvedPath === appRoot) return ""
+		if (resolvedPath.startsWith(`${appRoot}/`)) {
+			return resolvedPath.slice(appRoot.length + 1)
+		}
+		return resolvedPath
 	}
 
 	private normalizeWorkspacePath(path: string): string {
