@@ -352,11 +352,13 @@ class Agent(BaseAgent):
                 system_skills=[SystemSkillEntry(name=self._ALWAYS_MOUNT_SKILL)]
             )
         system_skill_names = skills_config.get_system_skill_names()
+        preload_skill_names = [entry.name for entry in skills_config.preload]
         self.loaded_skills = system_skill_names
         self.agent_context.set_loaded_skills(system_skill_names)
         self.agent_context.set_excluded_skills(skills_config.excluded_skills)
+        # 委派能力来源既可能是 system_skills，也可能是 preload；两处任一包含 subagents 即视为启用
         self.agent_context.set_subagent_delegation_enabled(
-            SUBAGENTS_SKILL in system_skill_names
+            SUBAGENTS_SKILL in system_skill_names or SUBAGENTS_SKILL in preload_skill_names
         )
         skills_prompt_content = generate_skills_prompt(
             skills_config,

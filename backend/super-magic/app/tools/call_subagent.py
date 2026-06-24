@@ -78,6 +78,8 @@ class CallSubagentParams(BaseToolParams):
 class CallSubagent(BaseTool[CallSubagentParams]):
     """Call another agent to complete a task. Each sub-agent runs with an isolated context and its own chat history."""
 
+    code_mode_only = True
+
     async def execute(self, tool_context: ToolContext, params: CallSubagentParams) -> ToolResult:
         new_agent_context: Optional["AgentContext"] = None
         agent: Optional["Agent"] = None

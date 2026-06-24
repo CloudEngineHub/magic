@@ -22,10 +22,9 @@ tools:
   - multi_edit_file_range
   - delete_files
   - ask_user
-  - agent_list
-  - call_subagent
-  - wait_for_subagents
 skills:
+  preload:
+    - name: subagents
   system_skills:
     - name: skill-vetter
     - name: using-mcp
@@ -36,7 +35,6 @@ skills:
     - name: deep-research
     - name: using-llm
     - name: using-cron
-    - name: subagents
     - name: user-info
     - name: lark-cli
     - name: dingtalk-cli

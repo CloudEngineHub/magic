@@ -5,24 +5,29 @@ description: Use when multiple independent subtasks can run in parallel, when a 
 
 # Subagent Dispatch Skill
 
-Use `call_subagent` to delegate tasks to other agents, `wait_for_subagents` to collect results from background runs, and `agent_list` to discover available Crew agents when the user wants employee-style delegation.
+You can delegate work to other agents instead of doing everything yourself. Use `call_subagent` to dispatch a task, `wait_for_subagents` to collect results from background runs, and `agent_list` to discover available Crew agents.
 
-## When To Use
+## Routing Precedence
 
-Delegate when at least one is true:
+This skill is preloaded and owns routing for delegation requests. When a request matches any delegation signal below, route it through delegation first — before the generic capability-source (skill/MCP) selection. Do not use `find_skills` or `read_skills` to look for a matching "assistant" or "expert": a named employee, assistant, role, or Crew agent is a delegation target reached via `agent_list` and `call_subagent`, not a skill to acquire.
 
-- The task is large enough to benefit from an isolated execution context
-- Multiple independent tasks can run in parallel
-- You need a specialized agent type (read-only explore, shell-heavy work)
-- The user asks what employees, agents, or Crew agents are available
-- The user asks to assign work to a named or specialized Crew agent
+## Recognize Delegation Opportunities
+
+Do not wait to be told to delegate. Actively watch for these signals while planning your own work, and prefer delegation whenever one of them appears:
+
+- The user refers to an employee, assistant, expert, role, or named Crew agent (e.g. "use your travel assistant", "have the data analyst handle this", "ask the legal expert"). This is a delegation request: call `agent_list` to find the matching Crew agent by keyword, then `call_subagent` with the returned `code`. Never treat the named assistant as a skill to look up.
+- The work splits into two or more independent parts that do not depend on each other's intermediate results — dispatch them in parallel instead of doing them one by one.
+- A research, exploration, or reading task is large enough that doing it inline would flood your own context — hand it to a sub-agent and keep only the summary.
+- The task is a natural fit for a specialized agent: read-only codebase exploration (`explore`), shell-heavy or environment work (`shell`), or web research (`search`).
+- The user asks what employees, agents, or Crew agents are available.
+
+Default bias: when a task is large, parallelizable, specialized, or names an employee/assistant, delegating is usually the better choice than doing it inline. Treat delegation as a first-class option in every plan, not a last resort.
 
 Do not delegate when:
 
-- The task is small and can be done directly
-- The work requires constant access to the current conversation state
-- Multiple sub-agents would write to the same file with no merge plan
-- You cannot summarize the full context into a self-contained prompt
+- The task is small and you can finish it directly in a step or two.
+- The work requires constant access to the current conversation state and cannot be captured in a self-contained prompt.
+- Multiple sub-agents would write to the same file with no merge plan.
 
 **Depth limit**: sub-agents cannot call `call_subagent`. Only the root agent may dispatch.
 

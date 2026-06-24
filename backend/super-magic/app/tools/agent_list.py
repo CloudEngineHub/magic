@@ -50,6 +50,8 @@ class AgentListParams(BaseToolParams):
 class AgentList(BaseTool[AgentListParams]):
     """List Crew agents available to the current user."""
 
+    code_mode_only = True
+
     async def execute(self, tool_context: ToolContext, params: AgentListParams) -> ToolResult:
         agent_context = tool_context.get_extension("agent_context") if tool_context else None
         if not is_subagent_delegation_enabled(agent_context):
