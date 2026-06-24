@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Literal, Optional
+import re
+from typing import Any, Dict, Optional
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
@@ -8,14 +9,14 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
 from app.i18n import i18n
 from app.infrastructure.sdk.magic_service.factory import get_magic_service_sdk
-from app.infrastructure.sdk.magic_service.parameter.list_agents_parameter import ListAgentsParameter
+from app.infrastructure.sdk.magic_service.parameter.available_agents_parameter import AvailableAgentsParameter
 from app.core.subagent_delegation import (
     build_crew_delegation_disabled_message,
     is_subagent_delegation_enabled,
 )
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
-from pydantic import Field, field_validator
+from pydantic import Field
 
 logger = get_logger(__name__)
 
@@ -23,11 +24,8 @@ logger = get_logger(__name__)
 class AgentListParams(BaseToolParams):
     name_filter: Optional[str] = Field(
         None,
-        description="Optional case-insensitive keyword used to filter Crew code, name, or description.",
-    )
-    type_filter: Optional[Literal["official", "custom", "public"]] = Field(
-        None,
-        description="Optional Crew type filter. Use one of: official, custom, public.",
+        description="""<!--zh: 可选。一个或多个关键词，用用户当前使用的语言书写，用空格或逗号分隔；服务端按员工名称和描述做模糊匹配，任一关键词命中即返回。留空则返回全部可用员工。关键词匹配不到任何员工时会自动返回全部员工，便于你按名称和描述自行挑选。-->
+Optional. One or more keywords in the user's current language, separated by spaces or commas; the server fuzzy-matches them against agent names and descriptions and returns an agent if any keyword hits. Leave empty to return all available agents. If the keywords match nothing, all agents are returned so you can still choose by name and description.""",
     )
     limit: int = Field(
         30,
@@ -35,15 +33,6 @@ class AgentListParams(BaseToolParams):
         le=100,
         description="Maximum number of Crew agents to return. Default is 30, maximum is 100.",
     )
-
-    @field_validator("type_filter", mode="before")
-    @classmethod
-    def normalize_type_filter(cls, value: Any) -> Any:
-        if isinstance(value, str):
-            value = value.strip()
-            if not value:
-                return None
-        return value
 
 
 @tool()
@@ -63,18 +52,29 @@ class AgentList(BaseTool[AgentListParams]):
 
         try:
             sdk = get_magic_service_sdk()
-            result = await sdk.agent.list_agents_async(ListAgentsParameter())
-            agents = [agent.to_dict() for agent in result.get_agents() if getattr(agent, "code", "")]
-            agents = _filter_agents(
-                agents,
-                name_filter=params.name_filter,
-                type_filter=params.type_filter,
-                current_agent_code=_get_current_agent_code(agent_context),
-            )
-            agents = agents[: params.limit]
+            current_code = _get_current_agent_code(agent_context)
+            keywords = _parse_keywords(params.name_filter)
+
+            agents = await _list_available_agents(sdk, keywords=keywords, page_size=params.limit)
+            agents = _exclude_current(agents, current_code)
+
+            keyword_miss = False
+            if keywords and not agents:
+                # Server-side search returned nothing — usually a too-narrow or off-language
+                # keyword. Re-query without keywords so the caller still gets the full list to
+                # choose from instead of an empty result.
+                fallback = await _list_available_agents(sdk, keywords=[], page_size=params.limit)
+                agents = _exclude_current(fallback, current_code)
+                keyword_miss = True
+
+            shown = agents[: params.limit]
             return ToolResult(
-                content=_build_agent_list_content(agents),
-                data={"agents": agents, "total": len(agents)},
+                content=_build_agent_list_content(
+                    shown,
+                    keywords=keywords,
+                    keyword_miss=keyword_miss,
+                ),
+                data={"agents": shown, "total": len(shown)},
             )
         except Exception as e:
             logger.exception(f"Failed to list Crew agents: {e}")
@@ -115,11 +115,8 @@ class AgentList(BaseTool[AgentListParams]):
             for index, agent in enumerate(agents, 1):
                 name = agent.get("name") or agent.get("code", "")
                 code = agent.get("code", "")
-                agent_type = agent.get("type", "")
                 description = agent.get("description", "")
                 lines.append(f"{index}. {name} ({code})")
-                if agent_type:
-                    lines.append(f"   type: {agent_type}")
                 if description:
                     lines.append(f"   description: {description}")
             output = "\n".join(lines)
@@ -148,6 +145,18 @@ class AgentList(BaseTool[AgentListParams]):
         }
 
 
+async def _list_available_agents(
+    sdk: Any,
+    keywords: list[str],
+    page_size: int,
+) -> list[dict[str, Any]]:
+    """Fetch the current user's available agents via the available-agents API."""
+    result = await sdk.agent.list_available_agents_async(
+        AvailableAgentsParameter(keywords=keywords, page=1, page_size=page_size)
+    )
+    return [agent.to_dict() for agent in result.get_agents() if getattr(agent, "code", "")]
+
+
 def _get_current_agent_code(agent_context: Any) -> str:
     getter = getattr(agent_context, "get_agent_code", None)
     if not callable(getter):
@@ -158,45 +167,57 @@ def _get_current_agent_code(agent_context: Any) -> str:
         return ""
 
 
-def _filter_agents(
-    agents: list[dict[str, Any]],
-    name_filter: Optional[str],
-    type_filter: Optional[str],
-    current_agent_code: str,
-) -> list[dict[str, Any]]:
-    keyword = (name_filter or "").strip().lower()
-    current_code = current_agent_code.strip()
-    filtered: list[dict[str, Any]] = []
+def _parse_keywords(name_filter: Optional[str]) -> list[str]:
+    """Split the name filter into keywords on whitespace and common separators (deduplicated)."""
+    if not name_filter:
+        return []
+    parts = re.split(r"[\s,，、;；/|]+", name_filter.strip())
+    keywords: list[str] = []
+    for part in parts:
+        part = part.strip()
+        if part and part not in keywords:
+            keywords.append(part)
+    return keywords
+
+
+def _exclude_current(agents: list[dict[str, Any]], current_agent_code: str) -> list[dict[str, Any]]:
+    """Drop agents without a code and the current parent agent (avoid self-dispatch)."""
+    current = (current_agent_code or "").strip()
+    result: list[dict[str, Any]] = []
     for agent in agents:
         code = str(agent.get("code") or "").strip()
         if not code:
             continue
-        if current_code and code == current_code:
+        if current and code == current:
             continue
-        if type_filter and agent.get("type") != type_filter:
-            continue
-        if keyword:
-            haystack = " ".join(
-                str(agent.get(field) or "")
-                for field in ("code", "name", "description")
-            ).lower()
-            if keyword not in haystack:
-                continue
-        filtered.append(agent)
-    return filtered
+        result.append(agent)
+    return result
 
 
-def _build_agent_list_content(agents: list[dict[str, Any]]) -> str:
+def _build_agent_list_content(
+    agents: list[dict[str, Any]],
+    keywords: list[str],
+    keyword_miss: bool,
+) -> str:
     if not agents:
-        return "No available Crew agents matched the filters."
+        return "No Crew agents are available to the current user."
 
-    lines = ["Available Crew agents:"]
+    lines: list[str] = []
+    if keyword_miss:
+        lines.append(
+            f"No Crew agent matched the keyword(s): {', '.join(keywords)}. "
+            "Showing all available agents instead — choose the most suitable by name and description."
+        )
+    elif keywords:
+        lines.append(f"Available Crew agents matching: {', '.join(keywords)}")
+    else:
+        lines.append("Available Crew agents:")
+
     for index, agent in enumerate(agents, 1):
         code = agent.get("code", "")
         name = agent.get("name", "")
-        agent_type = agent.get("type", "")
         description = agent.get("description", "")
-        lines.append(f"{index}. code={code}, name={name}, type={agent_type}")
+        lines.append(f"{index}. code={code}, name={name}")
         if description:
             lines.append(f"   description={description}")
     return "\n".join(lines)

@@ -9,6 +9,7 @@ from urllib.parse import quote
 from ..kernel.magic_service_api import MagicServiceAbstractApi
 from ..parameter.add_agent_skills_parameter import AddAgentSkillsParameter
 from ..parameter.agent_execute_parameter import AgentExecuteParameter
+from ..parameter.available_agents_parameter import AvailableAgentsParameter
 from ..parameter.delete_agent_skills_parameter import DeleteAgentSkillsParameter
 from ..parameter.get_agent_details_parameter import GetAgentDetailsParameter
 from ..parameter.get_agent_openapi_parameter import GetAgentOpenApiParameter
@@ -21,6 +22,7 @@ from ..parameter.tool_execute_parameter import ToolExecuteParameter
 from ..parameter.update_agent_parameter import UpdateAgentParameter
 from ..result.agent_details_result import AgentDetailsResult
 from ..result.agent_execute_result import AgentExecuteResult
+from ..result.available_agents_result import AvailableAgentsResult
 from ..result.agent_openapi_result import AgentOpenApiResult
 from ..result.import_skill_result import ImportSkillResult
 from ..result.ingest_third_party_message_result import IngestThirdPartyMessageResult
@@ -320,6 +322,27 @@ class AgentApi(MagicServiceAbstractApi):
         endpoint_path = "/api/v1/super-agents/featured"
         data = await self.request_by_parameter_async(parameter, 'GET', endpoint_path)
         return ListAgentsResult(data)
+
+    async def list_available_agents_async(
+        self,
+        parameter: AvailableAgentsParameter
+    ) -> AvailableAgentsResult:
+        """
+        List the current user's available agents (async).
+
+        Uses the /api/v1/open-api/sandbox/agents/me/available endpoint, which
+        supports server-side keyword search and returns names/descriptions
+        localized by the request `language` header.
+
+        Args:
+            parameter: AvailableAgentsParameter instance
+
+        Returns:
+            AvailableAgentsResult containing matched agents (code, name, description)
+        """
+        endpoint_path = "/api/v1/open-api/sandbox/agents/me/available"
+        data = await self.request_by_parameter_async(parameter, 'POST', endpoint_path)
+        return AvailableAgentsResult(data)
 
     def list_agents(
         self,

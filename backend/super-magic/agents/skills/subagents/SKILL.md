@@ -70,11 +70,12 @@ Use `agent_list` before dispatching when:
 from sdk.tool import tool
 
 result = tool.call("agent_list", {
-    "name_filter": None,   # optional keyword for code, name, or description
-    "type_filter": None,   # optional: official, custom, or public
+    "name_filter": None,   # optional: one or more keywords in the user's language; the server fuzzy-matches name and description
     "limit": 30,
 })
 ```
+
+Pass `name_filter` keywords in the same language the user used: the server searches the localized name and description and returns names/descriptions in that language. Use one or more keywords separated by spaces or commas; any keyword can match. Leave `name_filter` empty to get the full list. If keywords match nothing, the full list is returned so you can still choose by name and description.
 
 Use the returned Crew `code` as `agent_name` in `call_subagent`.
 For `SMA-*` Crew agents, `call_subagent` prepares the local Crew runtime automatically before dispatching.
