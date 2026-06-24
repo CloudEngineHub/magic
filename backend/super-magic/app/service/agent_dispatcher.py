@@ -9,6 +9,15 @@ import importlib.metadata
 import inspect
 
 from app.core.context.agent_context import AgentContext
+from app.core.context.execution_source import (
+    ASK_USER_POLICY_HORIZON_SOURCE,
+    EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY,
+    build_ask_user_policy_horizon_message,
+    is_ask_user_allowed_source,
+    remove_execution_source_from_dynamic_config,
+    resolve_execution_source,
+    stamp_execution_source,
+)
 from app.core.entity.final_task_state import FinalTaskStateCode, build_final_task_state
 from app.core.models.media_model import ImageModelSpec, VideoModelSpec
 from app.core.models.model_selection_policy import ModelSelectionInput, ModelSelectionPolicy
@@ -561,6 +570,7 @@ class AgentDispatcher(Base):
         last_dc = dict(last.get("dynamic_config") or {})
         last_dc.pop("image_model", None)
         last_dc.pop("video_model", None)
+        last_dc = remove_execution_source_from_dynamic_config(last_dc)
         current_dc = message.dynamic_config or {}
         if last_dc:
             message.dynamic_config = {**last_dc, **current_dc}
@@ -590,6 +600,23 @@ class AgentDispatcher(Base):
             await async_write_json(self._last_dispatch_message_file(), merged, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f"[AgentDispatcher] 保存 dispatch 消息快照失败，忽略: {e}")
+
+    def _apply_execution_source(self, message: ChatClientMessage) -> None:
+        """Resolve and publish the current run source to AgentContext and horizon."""
+        source = resolve_execution_source(message)
+        stamp_execution_source(message, source)
+        self.agent_context.set_execution_source(source)
+
+        if is_ask_user_allowed_source(source):
+            return
+
+        try:
+            self.agent_context.horizon.push_notification(
+                ASK_USER_POLICY_HORIZON_SOURCE,
+                build_ask_user_policy_horizon_message(source),
+            )
+        except Exception as e:
+            logger.warning(f"[AgentDispatcher] 推送 ask_user 来源策略到 horizon 失败: {e}")
 
     @staticmethod
     def _remove_model_selection_fields(snapshot: Dict) -> Dict:
@@ -743,6 +770,7 @@ class AgentDispatcher(Base):
         if message.agent_mode is None:
             message.agent_mode = AgentMode.GENERAL
 
+        self._apply_execution_source(message)
         self.agent_context.set_chat_client_message(message)
 
         # Extract agent_code for crew agent dispatching

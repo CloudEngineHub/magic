@@ -38,6 +38,8 @@ use App\Interfaces\Chat\DTO\UserTaskDTO;
 use App\Interfaces\Chat\DTO\UserTaskValueDTO;
 use DateTime;
 use Dtyq\FlowExprEngine\ComponentFactory;
+use Dtyq\SuperMagic\Domain\SuperAgent\Constant\AgentConstant;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\SuperMagicExecutionSource;
 use Dtyq\TaskScheduler\Entity\Query\Page;
 use Dtyq\TaskScheduler\Entity\Query\TaskSchedulerCrontabQuery;
 use Dtyq\TaskScheduler\Entity\TaskScheduler;
@@ -342,6 +344,16 @@ class MagicUserTaskAppService extends AbstractAppService
             $content = '任务名称: ' . $user_task['name'] . ', 任务描述: ' . $user_task['description'];
         }
         $messageContent->setContent($content);
+        if ($flow_code === AgentConstant::SUPER_MAGIC_CODE) {
+            $messageContent->setExtra([
+                'super_agent' => [
+                    'dynamic_params' => SuperMagicExecutionSource::stampDynamicParams(
+                        null,
+                        SuperMagicExecutionSource::Cron
+                    ),
+                ],
+            ]);
+        }
         $receiveSeqDTO->setContent($messageContent);
         $receiveSeqDTO->setSeqType(ChatMessageType::Text);
         $receiveSeqDTO->setReferMessageId('');

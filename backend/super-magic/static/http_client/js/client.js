@@ -4,6 +4,7 @@ let currentTaskMode = "plan"; // 当前任务模式，默认为 plan（保留兼
 let currentAgentMode = "magic"; // 当前Agent模式，默认为 magic
 let currentLanguage = "zh_CN"; // 当前语言，默认中文
 let currentMessageVersion = "v2"; // 消息版本，默认 v2
+let currentExecutionSource = "human_chat"; // 当前执行来源，默认人工对话
 let currentFileName = ""; // 存储当前上传的文件名
 let isAdvancedMode = false; // 高级模式开关，开启后直接发送原始 JSON
 let isImMode = false; // IM 渠道模拟模式
@@ -107,6 +108,7 @@ function getSystemMessageKey(text) {
     if (text.startsWith('切换到 ')) return 'agent-mode-toggle';
     if (text.startsWith('语言已切换为:')) return 'language-toggle';
     if (text.startsWith('消息版本已切换为:')) return 'message-version-toggle';
+    if (text.startsWith('执行来源已切换为:')) return 'execution-source-toggle';
     if (text.startsWith('模型列表已刷新')) return 'model-list-refresh';
     if (text.startsWith('工作区文件读取权限')) return 'workspace-permission';
     if (text.startsWith('点击此处或刷新按钮')) return 'workspace-permission';
@@ -342,11 +344,13 @@ function renderClientEntry(entry, options = {}) {
     if (entry.imChannel) {
         const channelLabel = { dingtalk: '钉钉', wechat: '微信', wecom: '企业微信', lark: '飞书' }[entry.imChannel] || entry.imChannel;
         const userIdPart = entry.imUserId ? ` / user=${entry.imUserId}` : '';
-        headerText = `客户端消息 (${entry.time}) - IM渠道: ${channelLabel}${userIdPart}`;
+        const sourcePart = entry.executionSource ? ` - 来源: ${entry.executionSource}` : '';
+        headerText = `客户端消息 (${entry.time}) - IM渠道: ${channelLabel}${userIdPart}${sourcePart}`;
     } else {
         const agentMode = entry.agentMode ? entry.agentMode.toUpperCase() : 'N/A';
         const modelId = entry.modelId ? ` - Model: ${entry.modelId}` : '';
-        headerText = `客户端消息 (${entry.time}) - Agent模式: ${agentMode}${modelId}`;
+        const sourcePart = entry.executionSource ? ` - 来源: ${entry.executionSource}` : '';
+        headerText = `客户端消息 (${entry.time}) - Agent模式: ${agentMode}${modelId}${sourcePart}`;
     }
     const headerLabel = document.createElement('span');
     headerLabel.textContent = headerText;
@@ -392,6 +396,7 @@ const clientContextModalClearBtn = document.getElementById('clientContextModalCl
 const clientContextModalCloseBtn = document.getElementById('clientContextModalCloseBtn');
 const languageSelect = document.getElementById('languageSelect');
 const messageVersionSelect = document.getElementById('messageVersionSelect');
+const executionSourceSelect = document.getElementById('executionSourceSelect');
 const imModeToggle = document.getElementById('imModeToggle');
 const rawEventsToggle = document.getElementById('rawEventsToggle');
 const imChannelSelect = document.getElementById('imChannelSelect');
@@ -1400,6 +1405,22 @@ document.addEventListener('DOMContentLoaded', () => {
         messageVersionSelect.addEventListener('change', changeMessageVersion);
     }
 
+    // 执行来源切换事件
+    if (executionSourceSelect) {
+        const savedSource = localStorage.getItem('selectedExecutionSource');
+        const sourceOptions = Array.from(executionSourceSelect.options).map(option => option.value);
+        if (savedSource !== null && sourceOptions.includes(savedSource)) {
+            currentExecutionSource = savedSource;
+            executionSourceSelect.value = savedSource;
+        } else {
+            currentExecutionSource = executionSourceSelect.value || 'human_chat';
+            executionSourceSelect.value = currentExecutionSource;
+        }
+        currentExecutionSource = executionSourceSelect.value || currentExecutionSource;
+        refreshCustomSelect(executionSourceSelect);
+        executionSourceSelect.addEventListener('change', changeExecutionSource);
+    }
+
     // 保留任务模式切换事件（兼容性）
     if (modeToggle) {
         modeToggle.addEventListener('click', toggleTaskMode);
@@ -1760,6 +1781,7 @@ function applyLocalDebugOptions(messageData) {
     messageData.dynamic_config = Object.assign({}, messageData.dynamic_config, {
         enable_debug_tool_result_content: true,
         client_context: buildLocalDebugClientContext(),
+        super_magic_execution_source: currentExecutionSource || 'human_chat',
     });
     if (currentMessageVersion) {
         messageData.dynamic_config.message_version = currentMessageVersion;
@@ -2250,11 +2272,17 @@ function showClientMessage(message) {
     const time = new Date().toLocaleTimeString();
     const imChannel = message.metadata && !message.agent_mode ? currentImChannel : '';
     const imUserId = imChannel && message.metadata ? (message.metadata.agent_user_id || '') : '';
+    const executionSource = (
+        message.dynamic_config &&
+        typeof message.dynamic_config === 'object' &&
+        message.dynamic_config.super_magic_execution_source
+    ) || currentExecutionSource || '';
     pushLog({
         type: 'client',
         prompt: message.prompt || '',
         agentMode: message.agent_mode || '',
         modelId: message.model_id || '',
+        executionSource,
         imChannel,
         imUserId,
         time,
@@ -2264,6 +2292,7 @@ function showClientMessage(message) {
         prompt: message.prompt || '',
         agentMode: message.agent_mode || '',
         modelId: message.model_id || '',
+        executionSource,
         imChannel,
         imUserId,
         time,
@@ -2821,6 +2850,13 @@ function changeMessageVersion() {
     localStorage.setItem('selectedMessageVersion', currentMessageVersion);
     const versionLabel = currentMessageVersion || '不传版本';
     showSystemMessage(`消息版本已切换为: ${versionLabel}`);
+}
+
+// 切换执行来源
+function changeExecutionSource() {
+    currentExecutionSource = executionSourceSelect.value || 'human_chat';
+    localStorage.setItem('selectedExecutionSource', currentExecutionSource);
+    showSystemMessage(`执行来源已切换为: ${currentExecutionSource}`);
 }
 
 // 切换Agent模式
