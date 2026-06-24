@@ -4859,10 +4859,13 @@ function formatToolDetail(detail) {
     if (detail.type === 'text' && detail.data && detail.data.content) return detail.data.content;
     if (detail.type === 'text' && detail.data && detail.data.message) return detail.data.message;
     if (detail.type === 'terminal' && detail.data) {
-        return [
-            detail.data.command ? `$ ${detail.data.command}` : '',
+        const terminalOutput = detail.data.output || [
             detail.data.stdout || '',
             detail.data.stderr || '',
+        ].filter(Boolean).join('\n');
+        return [
+            detail.data.command ? `$ ${detail.data.command}` : '',
+            terminalOutput,
             typeof detail.data.exit_code === 'number' ? `exit_code: ${detail.data.exit_code}` : '',
         ].filter(Boolean).join('\n');
     }

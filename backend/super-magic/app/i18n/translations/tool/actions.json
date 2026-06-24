@@ -491,6 +491,34 @@
         "zh_CN": "移除服务",
         "en_US": "Remove Service"
     },
+    "oauth2_list_apps": {
+        "zh_CN": "查看 OAuth2 应用",
+        "en_US": "List OAuth2 apps"
+    },
+    "oauth2_upsert_app": {
+        "zh_CN": "保存 OAuth2 应用",
+        "en_US": "Save OAuth2 app"
+    },
+    "oauth2_get_redirect_uri": {
+        "zh_CN": "获取 OAuth2 重定向 URI",
+        "en_US": "Get OAuth2 redirect URI"
+    },
+    "oauth2_request": {
+        "zh_CN": "调用 OAuth2 API",
+        "en_US": "Call OAuth2 API"
+    },
+    "oauth2_remove_app": {
+        "zh_CN": "删除 OAuth2 应用",
+        "en_US": "Remove OAuth2 app"
+    },
+    "oauth2_start_authorization": {
+        "zh_CN": "发起 OAuth2 授权",
+        "en_US": "Start OAuth2 authorization"
+    },
+    "oauth2_check_authorization": {
+        "zh_CN": "检查 OAuth2 授权",
+        "en_US": "Check OAuth2 authorization"
+    },
     "call_simple_tool": {
         "zh_CN": "调用工具",
         "en_US": "Use Tool"
