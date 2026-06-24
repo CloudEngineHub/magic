@@ -6,6 +6,7 @@ export const AI_CARD_DEEP_LINK_QUERY_PARAM = "ai_card"
 
 interface AICardDeepLinkAttachmentNode {
 	file_id?: string | number
+	file_name?: string
 	is_directory?: boolean
 	display_config?: {
 		type?: unknown
@@ -43,22 +44,47 @@ export function generateAICardDeepLink(
 	return url.toString()
 }
 
+function normalizeAICardId(value: unknown): string {
+	if (typeof value === "string") return value.trim()
+	if (typeof value === "number" && Number.isFinite(value)) return String(value)
+	return ""
+}
+
 function findAICardFolderById(
 	items: AICardDeepLinkAttachmentNode[] | undefined,
 	cardId: string,
+	nearestAICardRoot?: AICardDeepLinkAttachmentNode | null,
+	nearestDirectory?: AICardDeepLinkAttachmentNode | null,
 ): AICardDeepLinkAttachmentNode | null {
 	if (!items?.length) return null
 
 	for (const item of items) {
+		const isAICardRoot =
+			item?.is_directory === true && item.display_config?.type === "ai-card"
+		const currentAICardRoot = isAICardRoot ? item : nearestAICardRoot
+		const currentDirectory = item?.is_directory === true ? item : nearestDirectory
+		const isMagicProjectConfig = item.file_name === "magic.project.js"
+
 		if (
-			item?.is_directory === true &&
 			item.display_config?.type === "ai-card" &&
-			item.display_config?.card_id === cardId
+			normalizeAICardId(item.display_config?.card_id) === cardId
 		) {
-			return item
+			if (item.is_directory === true) return item
+			const rootFolder =
+				currentAICardRoot || (isMagicProjectConfig ? currentDirectory : null)
+			if (!rootFolder) return null
+			return {
+				...rootFolder,
+				display_config: rootFolder.display_config || item.display_config,
+			}
 		}
 
-		const matched = findAICardFolderById(item.children, cardId)
+		const matched = findAICardFolderById(
+			item.children,
+			cardId,
+			currentAICardRoot,
+			currentDirectory,
+		)
 		if (matched) return matched
 	}
 

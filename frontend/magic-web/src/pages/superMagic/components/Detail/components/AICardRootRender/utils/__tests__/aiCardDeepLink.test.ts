@@ -66,4 +66,115 @@ describe("aiCardDeepLink", () => {
 			}),
 		)
 	})
+
+	it("matches folder display_config.card_id with the URL string value", () => {
+		const tree = [
+			{
+				file_id: "folder-1",
+				is_directory: true,
+				file_name: "运营日报",
+				display_config: {
+					type: "ai-card",
+					card_id: 123,
+				},
+				children: [],
+			},
+		]
+
+		const target = resolveAICardDeepLinkTarget(tree, "123")
+
+		expect(target?.file.file_id).toBe("folder-1")
+	})
+
+	it("resolves the ai-card root when card_id is mirrored on magic.project.js", () => {
+		const tree = [
+			{
+				file_id: "folder-1",
+				is_directory: true,
+				file_name: "运营日报",
+				display_config: {
+					type: "ai-card",
+				},
+				children: [
+					{
+						file_id: "config-1",
+						is_directory: false,
+						file_name: "magic.project.js",
+						display_config: {
+							type: "ai-card",
+							card_id: "card-123",
+						},
+					},
+					{
+						file_id: "latest-folder",
+						is_directory: true,
+						file_name: "latest",
+						children: [
+							{
+								file_id: "latest-html",
+								is_directory: false,
+								file_name: "index.html",
+							},
+						],
+					},
+				],
+			},
+		]
+
+		const target = resolveAICardDeepLinkTarget(tree, "card-123")
+
+		expect(target?.file).toEqual(
+			expect.objectContaining({
+				file_id: "folder-1",
+				file_name: "运营日报",
+				initialNavigation: {
+					activeCardId: "folder-1",
+					initialView: "detail",
+				},
+			}),
+		)
+		expect(target?.file.file_id).not.toBe("config-1")
+	})
+
+	it("keeps ai-card display_config when only magic.project.js carries metadata", () => {
+		const tree = [
+			{
+				file_id: "folder-1",
+				is_directory: true,
+				file_name: "运营日报",
+				children: [
+					{
+						file_id: "config-1",
+						is_directory: false,
+						file_name: "magic.project.js",
+						display_config: {
+							type: "ai-card",
+							card_id: "card-123",
+						},
+					},
+					{
+						file_id: "latest-html",
+						is_directory: false,
+						file_name: "latest.html",
+					},
+				],
+			},
+		]
+
+		const target = resolveAICardDeepLinkTarget(tree, "card-123")
+
+		expect(target?.file).toEqual(
+			expect.objectContaining({
+				file_id: "folder-1",
+				display_config: {
+					type: "ai-card",
+					card_id: "card-123",
+				},
+				initialNavigation: {
+					activeCardId: "folder-1",
+					initialView: "detail",
+				},
+			}),
+		)
+	})
 })
