@@ -9,6 +9,8 @@ import { buildShareRecordingCapabilities } from "../../utils/share-recording-det
 import { collectExportableFileIds } from "../../utils/download-recording-batch"
 import { downloadRecordingAudioFile } from "../../utils/download-recording-audio"
 import { downloadRecordingAttachmentFile } from "../../utils/download-recording-attachment"
+import { collectSpeakerIdsFromText } from "../../utils/markdownTimeLinks"
+import { normalizeSpeakerSelection } from "../../utils/speaker-filter"
 import { getAttachmentFileName } from "../../utils/recording-detail-files"
 import { RecordingDetailProvider } from "./RecordingDetailProvider"
 import { RecordingDetailHeader } from "./RecordingDetailHeader"
@@ -52,6 +54,7 @@ export function RecordingDetailShareDesktop({
 		player.currentTime,
 	)
 	const summaryReady = Boolean(fileMap?.summaryFiles.length)
+	const [selectedSpeakerIds, setSelectedSpeakerIds] = useState<string[]>([])
 	const summaryContent = useMemo(
 		() =>
 			Object.fromEntries(
@@ -60,6 +63,21 @@ export function RecordingDetailShareDesktop({
 		[texts.summary],
 	)
 	const speakerNameMap = fileMap?.magicProjectConfig?.metadata?.speakers ?? {}
+	const transcriptSpeakerIds = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					texts.transcript?.content
+						? collectSpeakerIdsFromText(texts.transcript.content)
+						: [],
+				),
+			),
+		[texts.transcript?.content],
+	)
+	const effectiveSelectedSpeakerIds = useMemo(
+		() => normalizeSpeakerSelection(transcriptSpeakerIds, selectedSpeakerIds),
+		[selectedSpeakerIds, transcriptSpeakerIds],
+	)
 	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
 
 	/** Sends summary time chips to the shared audio bar without enabling any owner mutations. */
@@ -189,6 +207,9 @@ export function RecordingDetailShareDesktop({
 								playbackRate={player.playbackRate}
 								colorSegments={colorSegments}
 								speakerNameMap={speakerNameMap}
+								selectedSpeakerIds={effectiveSelectedSpeakerIds}
+								onSelectedSpeakerIdsChange={setSelectedSpeakerIds}
+								showSpeakerFilter
 								onToggle={player.toggle}
 								onSeek={player.seekTo}
 								onPlaySegment={handlePlaySegment}

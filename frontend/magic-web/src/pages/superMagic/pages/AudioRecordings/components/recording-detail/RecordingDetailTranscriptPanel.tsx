@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from "react"
-import { ListFilter } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import type { RecordingTranscriptSegment } from "../../types/recording-detail"
@@ -14,26 +13,36 @@ import {
 	getTranscriptSegmentTimeClassName,
 	getTranscriptSpeakerChipToneClassName,
 } from "./transcript-segment-styles"
+import { RecordingSpeakerFilterControl } from "./RecordingSpeakerFilterControl"
 
 const TRANSCRIPT_HEADER_ACTION_BASE_CLASS =
 	"inline-flex shrink-0 items-center justify-center border border-black/10 bg-white text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:bg-muted/30"
 const TRANSCRIPT_HEADER_PILL_ACTION_CLASS = `${TRANSCRIPT_HEADER_ACTION_BASE_CLASS} h-8 rounded-full px-3 text-[12px] font-medium leading-none`
-const TRANSCRIPT_HEADER_ICON_ACTION_CLASS = `${TRANSCRIPT_HEADER_ACTION_BASE_CLASS} size-8 rounded-full`
 
 interface RecordingDetailTranscriptPanelProps {
 	segments: RecordingTranscriptSegment[]
+	availableSpeakerIds: string[]
 	currentTime: number
+	selectedSpeakerIds: string[]
 	speakerNameMap: Record<string, string>
+	showSpeakerFilter?: boolean
+	totalSegmentsCount?: number
 	onSegmentClick: (segment: RecordingTranscriptSegment) => void
+	onSelectedSpeakerIdsChange: (speakerIds: string[]) => void
 	onOpenSpeakerSettings: () => void
 }
 
 /** Renders seekable transcript segments with playback highlight and speaker pills. */
 export function RecordingDetailTranscriptPanel({
 	segments,
+	availableSpeakerIds,
 	currentTime,
+	selectedSpeakerIds,
 	speakerNameMap,
+	showSpeakerFilter = true,
+	totalSegmentsCount,
 	onSegmentClick,
+	onSelectedSpeakerIdsChange,
 	onOpenSpeakerSettings,
 }: RecordingDetailTranscriptPanelProps) {
 	const { t } = useTranslation("audioRecordings")
@@ -51,6 +60,23 @@ export function RecordingDetailTranscriptPanel({
 			node.scrollIntoView({ block: "center", behavior: "smooth" })
 		}
 	}, [activeSegmentId])
+	const speakerLabels = useMemo(
+		() =>
+			Object.fromEntries(
+				availableSpeakerIds.map((speakerId) => [
+					speakerId,
+					speakerNameMap[speakerId] ?? speakerId,
+				]),
+			),
+		[availableSpeakerIds, speakerNameMap],
+	)
+	const countLabel =
+		totalSegmentsCount != null && totalSegmentsCount !== segments.length
+			? t("detail.transcriptVisibleCount", {
+					visibleCount: segments.length,
+					totalCount: totalSegmentsCount,
+				})
+			: t("detail.transcriptSegmentCountSuffix", { count: segments.length })
 
 	return (
 		<div
@@ -69,7 +95,7 @@ export function RecordingDetailTranscriptPanel({
 						className="truncate text-sm font-normal leading-5 text-muted-foreground"
 						data-testid="recording-detail-transcript-count"
 					>
-						{t("detail.transcriptSegmentCountSuffix", { count: segments.length })}
+						{countLabel}
 					</span>
 				</div>
 				<div className="flex shrink-0 items-center gap-2">
@@ -81,19 +107,22 @@ export function RecordingDetailTranscriptPanel({
 								"disabled:cursor-not-allowed disabled:opacity-50",
 							)}
 							onClick={onOpenSpeakerSettings}
-							disabled={segments.length === 0}
+							disabled={availableSpeakerIds.length === 0}
 							data-testid="recording-detail-open-speaker-settings"
 						>
 							{t("detail.openSpeakerSettings")}
 						</button>
 					) : null}
-					<span
-						aria-hidden="true"
-						className={TRANSCRIPT_HEADER_ICON_ACTION_CLASS}
-						data-testid="recording-detail-transcript-header-accessory"
-					>
-						<ListFilter className="size-4" strokeWidth={2} />
-					</span>
+					{showSpeakerFilter ? (
+						<RecordingSpeakerFilterControl
+							speakerIds={availableSpeakerIds}
+							selectedIds={selectedSpeakerIds}
+							onChange={onSelectedSpeakerIdsChange}
+							labels={speakerLabels}
+							title={t("detail.speakerFilterTitle")}
+							presentation="menu"
+						/>
+					) : null}
 				</div>
 			</div>
 
@@ -106,7 +135,16 @@ export function RecordingDetailTranscriptPanel({
 			>
 				{segments.length === 0 ? (
 					<RecordingDetailRegionEmptySlot>
-						<RecordingDetailEmptyState variant="noTranscript" compact />
+						{totalSegmentsCount != null && totalSegmentsCount > 0 ? (
+							<p
+								className="text-center text-sm text-muted-foreground"
+								data-testid="recording-detail-transcript-filter-empty"
+							>
+								{t("detail.emptyTranscriptFiltered")}
+							</p>
+						) : (
+							<RecordingDetailEmptyState variant="noTranscript" compact />
+						)}
 					</RecordingDetailRegionEmptySlot>
 				) : (
 					<div ref={listRef} className="flex flex-col gap-3 pb-4">

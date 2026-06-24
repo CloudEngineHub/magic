@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { cn } from "@/lib/utils"
+import { RecordingSpeakerFilterControl } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingSpeakerFilterControl"
 import { RecordingDetailRegionEmptySlot } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailRegionEmptySlot"
 import {
 	getTranscriptSegmentRowClassName,
@@ -9,6 +10,7 @@ import {
 	getTranscriptSegmentTimeClassName,
 	getTranscriptSpeakerChipToneClassName,
 } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/transcript-segment-styles"
+import { filterTranscriptSegmentsBySpeakerIds } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
 import type { MobileRecordingSourceTab, RecordingTranscriptSegment } from "../types"
 import { parseTranscriptMarkdown } from "../utils/transcript-parser"
 import { formatRecordingTime } from "../utils/time"
@@ -19,7 +21,10 @@ interface MobileRecordingSourcePanelProps {
 	notesContent?: string
 	currentTime: number
 	scrollPaddingBottom: number
+	availableSpeakerIds?: string[]
+	selectedSpeakerIds?: string[]
 	speakerNameMap: Record<string, string>
+	onSelectedSpeakerIdsChange?: (speakerIds: string[]) => void
 	onOpenSpeakerSettings: () => void
 	onSeek: (seconds: number) => void
 	onContentScroll?: () => void
@@ -31,7 +36,10 @@ export function MobileRecordingSourcePanel({
 	notesContent,
 	currentTime,
 	scrollPaddingBottom,
+	availableSpeakerIds,
+	selectedSpeakerIds,
 	speakerNameMap,
+	onSelectedSpeakerIdsChange,
 	onOpenSpeakerSettings,
 	onSeek,
 	onContentScroll,
@@ -42,23 +50,55 @@ export function MobileRecordingSourcePanel({
 		() => parseTranscriptMarkdown(transcriptContent ?? ""),
 		[transcriptContent],
 	)
+	const visibleSegments = useMemo(
+		() =>
+			selectedSpeakerIds
+				? filterTranscriptSegmentsBySpeakerIds(segments, selectedSpeakerIds)
+				: segments,
+		[segments, selectedSpeakerIds],
+	)
 	const hasTranscriptContent = segments.length > 0
 	const hasNotesContent = Boolean(notesContent?.trim())
 	const activeTabHasContent = activeTab === "transcript" ? hasTranscriptContent : hasNotesContent
+	const speakerLabels = useMemo(
+		() =>
+			Object.fromEntries(
+				(availableSpeakerIds ?? []).map((speakerId) => [
+					speakerId,
+					speakerNameMap[speakerId] ?? speakerId,
+				]),
+			),
+		[availableSpeakerIds, speakerNameMap],
+	)
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-recording-source-panel">
-			<div className="sticky top-0 z-10 flex bg-[#f7f7f8] px-4 py-3">
-				<SourceTabButton
-					active={activeTab === "transcript"}
-					label={t("detail.tabs.transcript")}
-					onClick={() => setActiveTab("transcript")}
-				/>
-				<SourceTabButton
-					active={activeTab === "notes"}
-					label={t("detail.tabs.notes")}
-					onClick={() => setActiveTab("notes")}
-				/>
+			<div className="sticky top-0 z-10 flex items-center gap-2 bg-[#f7f7f8] px-4 py-3">
+				<div className="flex min-w-0 flex-1">
+					<SourceTabButton
+						active={activeTab === "transcript"}
+						label={t("detail.tabs.transcript")}
+						onClick={() => setActiveTab("transcript")}
+					/>
+					<SourceTabButton
+						active={activeTab === "notes"}
+						label={t("detail.tabs.notes")}
+						onClick={() => setActiveTab("notes")}
+					/>
+				</div>
+				{activeTab === "transcript" &&
+				availableSpeakerIds &&
+				selectedSpeakerIds &&
+				onSelectedSpeakerIdsChange ? (
+					<RecordingSpeakerFilterControl
+						speakerIds={availableSpeakerIds}
+						selectedIds={selectedSpeakerIds}
+						onChange={onSelectedSpeakerIdsChange}
+						labels={speakerLabels}
+						title={t("detail.speakerFilterTitle")}
+						presentation="sheet"
+					/>
+				) : null}
 			</div>
 
 			{/* 来源正文统一收敛为唯一滚动口，避免外层 main 与内层内容区同时滚动导致阴影错位。 */}
@@ -80,10 +120,14 @@ export function MobileRecordingSourcePanel({
 				>
 					{activeTab === "transcript" ? (
 						<TranscriptList
-							segments={segments}
+							segments={visibleSegments}
 							currentTime={currentTime}
 							speakerNameMap={speakerNameMap}
-							emptyText={t("detail.emptyTranscript")}
+							emptyText={
+								hasTranscriptContent
+									? t("detail.emptyTranscriptFiltered")
+									: t("detail.emptyTranscript")
+							}
 							onOpenSpeakerSettings={onOpenSpeakerSettings}
 							onSeek={onSeek}
 						/>

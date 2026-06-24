@@ -72,6 +72,9 @@
 		"notSummarizedHint": "This recording has not generated a summary yet. You can review the source first.",
 		"openProject": "View project",
 		"openSpeakerSettings": "Set speakers",
+		"speakerFilterAll": "All",
+		"speakerFilterReset": "Reset speakers",
+		"speakerFilterTitle": "Filter speakers",
 		"openingProject": "Opening project...",
 		"packSuccess": "Download ready",
 		"packing": "Packing files...",
@@ -119,7 +122,9 @@
 		},
 		"topicSummary": "Key points",
 		"transcriptCount": "Transcript · {{count}} segments",
+		"transcriptVisibleCount": "{{visibleCount}}/{{totalCount}} segments",
 		"transcriptSegmentCountSuffix": "{{count}} segments",
+		"emptyTranscriptFiltered": "No transcript matches this filter",
 		"untitled": "Untitled recording"
 	},
 	"empty": {

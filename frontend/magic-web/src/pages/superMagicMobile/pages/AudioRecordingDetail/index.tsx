@@ -47,6 +47,7 @@ import { MobileRecordingSourcePanel } from "./components/MobileRecordingSourcePa
 import { MobileRecordingSummaryPanel } from "./components/MobileRecordingSummaryPanel"
 import { MobileRecordingShareExportSheet } from "./components/MobileRecordingShareExportSheet"
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
+import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
 import { MobileRecordingMoreSheet } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingMoreSheet"
 import { MobileRecordingMoveGroupSheet } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingMoveGroupSheet"
 import type { MobileRecordingGroup } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingGroupSheet"
@@ -79,7 +80,6 @@ export default function MobileAudioRecordingDetailPage() {
 		texts,
 		audioUrl,
 		title,
-		attachmentTree,
 		attachmentList,
 		mutateAudioProjectItem,
 	} = useMobileRecordingDetailData({
@@ -104,6 +104,8 @@ export default function MobileAudioRecordingDetailPage() {
 	const [titleInput, setTitleInput] = useState("")
 	const [speakerDraft, setSpeakerDraft] = useState<Record<string, string>>({})
 	const [speakerNameOverrides, setSpeakerNameOverrides] = useState<Record<string, string>>({})
+	const [speakerFilterProjectId, setSpeakerFilterProjectId] = useState(projectId)
+	const [selectedSpeakerIds, setSelectedSpeakerIds] = useState<string[]>([])
 	const [renaming, setRenaming] = useState(false)
 	const [actionSubmitting, setActionSubmitting] = useState(false)
 	const [summarySubmitting, setSummarySubmitting] = useState(false)
@@ -163,6 +165,10 @@ export default function MobileAudioRecordingDetailPage() {
 			projectItem,
 		],
 	)
+	const transcriptSpeakerIds = useMemo(
+		() => collectRecordingSpeakerIds([texts.transcript?.content]),
+		[texts.transcript?.content],
+	)
 	const activeSpeakerIds = useMemo(
 		() =>
 			collectRecordingSpeakerIds([
@@ -171,6 +177,13 @@ export default function MobileAudioRecordingDetailPage() {
 				...Object.values(texts.summary).map((file) => file?.content),
 			]),
 		[texts.notes?.content, texts.summary, texts.transcript?.content],
+	)
+	const effectiveSelectedSpeakerIds = useMemo(
+		() =>
+			speakerFilterProjectId === projectId
+				? normalizeSpeakerSelection(transcriptSpeakerIds, selectedSpeakerIds)
+				: transcriptSpeakerIds,
+		[projectId, selectedSpeakerIds, speakerFilterProjectId, transcriptSpeakerIds],
 	)
 	const speakerNameMap = useMemo(
 		() =>
@@ -204,6 +217,12 @@ export default function MobileAudioRecordingDetailPage() {
 		setShareExportSheetOpen(false)
 		setProjectShareSheetOpen(false)
 	}, [projectId])
+
+	useEffect(() => {
+		if (speakerFilterProjectId === projectId) return
+		setSpeakerFilterProjectId(projectId)
+		setSelectedSpeakerIds([])
+	}, [projectId, speakerFilterProjectId])
 
 	useEffect(() => {
 		if (!renameDialogOpen) return
@@ -251,6 +270,12 @@ export default function MobileAudioRecordingDetailPage() {
 		)
 		setSpeakerSettingsOpen(true)
 		setPlayerExpanded(false)
+	}
+
+	/** Keeps transcript filtering session-local while leaving rename/display speaker discovery sourced from all content files. */
+	function handleSelectedSpeakerIdsChange(speakerIdsToSelect: string[]) {
+		setSpeakerFilterProjectId(projectId)
+		setSelectedSpeakerIds(speakerIdsToSelect)
 	}
 
 	/** Opens the prototype-aligned share/export sheet instead of routing share through the more-actions menu. */
@@ -510,7 +535,10 @@ export default function MobileAudioRecordingDetailPage() {
 						notesContent={texts.notes?.content}
 						currentTime={player.currentTime}
 						scrollPaddingBottom={scrollPaddingBottom}
+						availableSpeakerIds={transcriptSpeakerIds}
+						selectedSpeakerIds={effectiveSelectedSpeakerIds}
 						speakerNameMap={speakerNameMap}
+						onSelectedSpeakerIdsChange={handleSelectedSpeakerIdsChange}
 						onOpenSpeakerSettings={openSpeakerSettings}
 						onSeek={(seconds) => player.seekTo(seconds, { autoplay: true })}
 						onContentScroll={handlePlayerContentScroll}

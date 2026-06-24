@@ -470,7 +470,9 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(screen.queryByTestId("mobile-recording-summary-panel")).toBeNull()
 		expect(sourcePanelPropsMock).toHaveBeenCalledWith(
 			expect.objectContaining({
+				availableSpeakerIds: ["Speaker-1"],
 				scrollPaddingBottom: expect.any(Number),
+				selectedSpeakerIds: ["Speaker-1"],
 				transcriptContent: "Transcript mock",
 				notesContent: "Notes mock",
 			}),

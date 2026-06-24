@@ -20,6 +20,30 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
+const speakerFilterPropsMock = vi.fn()
+
+vi.mock(
+	"@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingSpeakerFilterControl",
+	() => ({
+		RecordingSpeakerFilterControl: (props: Record<string, unknown>) => {
+			speakerFilterPropsMock(props)
+			return (
+				<button
+					type="button"
+					data-testid="mobile-recording-open-speaker-filter"
+					onClick={() =>
+						(props.onChange as ((speakerIds: string[]) => void) | undefined)?.([
+							"Speaker-1",
+						])
+					}
+				>
+					Filter speakers
+				</button>
+			)
+		},
+	}),
+)
+
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
 	ScrollEdgeFadeContainer: ({
 		children,
@@ -61,7 +85,10 @@ describe("MobileRecordingSourcePanel", () => {
 				notesContent="Mock notes"
 				currentTime={0}
 				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{}}
+				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
 				onSeek={vi.fn()}
 			/>,
@@ -85,7 +112,10 @@ describe("MobileRecordingSourcePanel", () => {
 				notesContent="Mock notes"
 				currentTime={0}
 				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{}}
+				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
 				onSeek={vi.fn()}
 			/>,
@@ -109,7 +139,10 @@ describe("MobileRecordingSourcePanel", () => {
 				notesContent="Mock notes"
 				currentTime={0}
 				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{ "Speaker-1": "Speaker-1" }}
+				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
 				onSeek={vi.fn()}
 			/>,
@@ -131,7 +164,10 @@ describe("MobileRecordingSourcePanel", () => {
 				notesContent="Mock notes"
 				currentTime={10}
 				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{ "Speaker-1": "Speaker-1" }}
+				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
 				onSeek={vi.fn()}
 			/>,
@@ -155,10 +191,10 @@ describe("MobileRecordingSourcePanel", () => {
 
 		expect(inactiveTime).toHaveClass("text-foreground/35")
 		expect(activeTime).toHaveClass("text-foreground")
-		expect(inactiveText).toHaveClass("text-foreground/55")
+		expect(inactiveText).toHaveClass("text-foreground/65")
 		expect(activeText).toHaveClass("text-foreground")
-		expect(inactiveSpeakerChip).toHaveClass("opacity-55")
-		expect(activeSpeakerChip).not.toHaveClass("opacity-55")
+		expect(inactiveSpeakerChip).toHaveClass("opacity-70")
+		expect(activeSpeakerChip).not.toHaveClass("opacity-70")
 	})
 
 	it("centers the transcript empty state inside the shared empty slot", () => {
@@ -168,7 +204,10 @@ describe("MobileRecordingSourcePanel", () => {
 				notesContent="Mock notes"
 				currentTime={0}
 				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{}}
+				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
 				onSeek={vi.fn()}
 			/>,
@@ -187,7 +226,10 @@ describe("MobileRecordingSourcePanel", () => {
 				notesContent=""
 				currentTime={0}
 				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{}}
+				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
 				onSeek={vi.fn()}
 			/>,
@@ -208,7 +250,10 @@ describe("MobileRecordingSourcePanel", () => {
 				notesContent=""
 				currentTime={0}
 				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{}}
+				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
 				onSeek={vi.fn()}
 			/>,
@@ -225,7 +270,10 @@ describe("MobileRecordingSourcePanel", () => {
 				notesContent=""
 				currentTime={0}
 				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{}}
+				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
 				onSeek={vi.fn()}
 			/>,
@@ -238,5 +286,31 @@ describe("MobileRecordingSourcePanel", () => {
 		).parentElement
 		expect(notesEmptyWrapper).toHaveClass("flex", "min-h-full", "flex-col", "flex-1")
 		expect(notesEmptyWrapper?.className).toBe(transcriptEmptyWrapper?.className)
+	})
+
+	it("shows the speaker filter only on the transcript tab and forwards selection changes", () => {
+		const onSelectedSpeakerIdsChange = vi.fn()
+
+		render(
+			<MobileRecordingSourcePanel
+				transcriptContent="[00:05] Speaker-1: Mock transcript"
+				notesContent="Mock notes"
+				currentTime={0}
+				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1", "Speaker-2"]}
+				selectedSpeakerIds={["Speaker-1", "Speaker-2"]}
+				speakerNameMap={{ "Speaker-1": "Speaker-1", "Speaker-2": "Speaker-2" }}
+				onSelectedSpeakerIdsChange={onSelectedSpeakerIdsChange}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("mobile-recording-open-speaker-filter")).toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("mobile-recording-open-speaker-filter"))
+		expect(onSelectedSpeakerIdsChange).toHaveBeenCalledWith(["Speaker-1"])
+
+		fireEvent.click(screen.getByText("Notes"))
+		expect(screen.queryByTestId("mobile-recording-open-speaker-filter")).toBeNull()
 	})
 })

@@ -6,12 +6,14 @@ import { useShareRecordingDetailData } from "@/pages/superMagic/pages/AudioRecor
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
 import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { downloadRecordingAudioFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-audio"
+import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
 import { MobileRecordingAudioPlayer } from "./components/MobileRecordingAudioPlayer"
 import { MobileRecordingSourcePanel } from "./components/MobileRecordingSourcePanel"
 import { MobileRecordingSummaryPanel } from "./components/MobileRecordingSummaryPanel"
 import { MobileRecordingShareExportSheet } from "./components/MobileRecordingShareExportSheet"
 import { useMobileRecordingAudioPlayer } from "./hooks/useMobileRecordingAudioPlayer"
 import type { MobileRecordingTopTab } from "./types"
+import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
 
 const COLLAPSED_PLAYER_HEIGHT = 40
 const EXPANDED_PLAYER_HEIGHT = 182
@@ -53,6 +55,7 @@ export default function ShareMobileAudioRecordingDetailPage({
 	const [activeTab, setActiveTab] = useState<MobileRecordingTopTab>("summary")
 	const [playerExpanded, setPlayerExpanded] = useState(false)
 	const [shareExportSheetOpen, setShareExportSheetOpen] = useState(false)
+	const [selectedSpeakerIds, setSelectedSpeakerIds] = useState<string[]>([])
 	const summaryReady = Boolean(fileMap?.summaryFiles.length)
 	const displayTitle = title || resourceName || t("detail.untitled")
 	const summaryContent = useMemo(
@@ -63,11 +66,31 @@ export default function ShareMobileAudioRecordingDetailPage({
 		[texts.summary],
 	)
 	const speakerNameMap = fileMap?.magicProjectConfig?.metadata?.speakers ?? {}
+	const transcriptSpeakerIds = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					texts.transcript?.content
+						? collectSpeakerIdsFromText(texts.transcript.content)
+						: [],
+				),
+			),
+		[texts.transcript?.content],
+	)
+	const effectiveSelectedSpeakerIds = useMemo(
+		() => normalizeSpeakerSelection(transcriptSpeakerIds, selectedSpeakerIds),
+		[selectedSpeakerIds, transcriptSpeakerIds],
+	)
 	const scrollPaddingBottom =
 		FLOATING_PLAYER_BOTTOM +
 		(playerExpanded ? EXPANDED_PLAYER_HEIGHT : COLLAPSED_PLAYER_HEIGHT) +
 		20
 	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
+
+	/** Keeps readonly share filtering session-local while still allowing transcript inspection controls. */
+	function handleSelectedSpeakerIdsChange(speakerIdsToSelect: string[]) {
+		setSelectedSpeakerIds(speakerIdsToSelect)
+	}
 
 	/** Sends mobile summary time chips to the shared player without leaving the current top-level tab. */
 	function handleSummaryTimeClick(start: number, end?: number) {
@@ -138,7 +161,10 @@ export default function ShareMobileAudioRecordingDetailPage({
 						notesContent={texts.notes?.content}
 						currentTime={playerCurrentSec}
 						scrollPaddingBottom={scrollPaddingBottom}
+						availableSpeakerIds={transcriptSpeakerIds}
+						selectedSpeakerIds={effectiveSelectedSpeakerIds}
 						speakerNameMap={speakerNameMap}
+						onSelectedSpeakerIdsChange={handleSelectedSpeakerIdsChange}
 						onOpenSpeakerSettings={() => undefined}
 						onSeek={(seconds) => player.seekTo(seconds)}
 					/>

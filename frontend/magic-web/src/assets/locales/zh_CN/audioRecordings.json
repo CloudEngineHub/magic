@@ -72,6 +72,9 @@
 		"notSummarizedHint": "当前录音还没有生成总结，可先查看来源内容。",
 		"openProject": "查看项目详情",
 		"openSpeakerSettings": "设置说话人",
+		"speakerFilterAll": "全部",
+		"speakerFilterReset": "还原",
+		"speakerFilterTitle": "筛选说话人",
 		"openingProject": "正在进入项目...",
 		"packSuccess": "打包下载成功",
 		"packing": "正在打包中...",
@@ -119,7 +122,9 @@
 		},
 		"topicSummary": "要点总结",
 		"transcriptCount": "转写 {{count}} 段",
+		"transcriptVisibleCount": "{{visibleCount}}/{{totalCount}} 段",
 		"transcriptSegmentCountSuffix": "{{count}} 段",
+		"emptyTranscriptFiltered": "当前筛选下暂无转写内容",
 		"untitled": "未命名录音"
 	},
 	"empty": {

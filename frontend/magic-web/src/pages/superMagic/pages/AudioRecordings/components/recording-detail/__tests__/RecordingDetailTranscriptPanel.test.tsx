@@ -10,6 +10,10 @@ vi.mock("react-i18next", () => ({
 			const labels: Record<string, string> = {
 				"detail.tabs.transcript": "Transcript",
 				"detail.transcriptSegmentCountSuffix": `${params?.count ?? 0} segments`,
+				"detail.transcriptVisibleCount": `${params?.visibleCount ?? 0}/${params?.totalCount ?? 0} segments`,
+				"detail.emptyTranscriptFiltered": "No transcript in this filter",
+				"detail.speakerFilterAll": "All speakers",
+				"detail.speakerFilterTitle": "Filter speakers",
 				"detail.openSpeakerSettings": "Open speaker settings",
 			}
 			return labels[key] ?? key
@@ -41,9 +45,29 @@ vi.mock("../RecordingDetailRegionEmptySlot", () => ({
 	),
 }))
 
+vi.mock("../RecordingSpeakerFilterControl", () => ({
+	RecordingSpeakerFilterControl: ({
+		onChange,
+		selectedIds,
+	}: {
+		onChange: (speakerIds: string[]) => void
+		selectedIds: string[]
+	}) => (
+		<button
+			type="button"
+			data-testid="recording-detail-open-speaker-filter"
+			className="size-8 rounded-full border bg-white"
+			onClick={() => onChange(selectedIds[0] ? [selectedIds[0]] : [])}
+		>
+			Filter speakers
+		</button>
+	),
+}))
+
 /** Wraps the transcript panel with owner capabilities so tests match the desktop runtime contract. */
 function renderTranscriptPanel(currentTime: number, onOpenSpeakerSettings = vi.fn()) {
 	const onSegmentClick = vi.fn()
+	const onSelectedSpeakerIdsChange = vi.fn()
 
 	render(
 		<RecordingDetailProvider
@@ -78,14 +102,17 @@ function renderTranscriptPanel(currentTime: number, onOpenSpeakerSettings = vi.f
 					},
 				]}
 				currentTime={currentTime}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{ "Speaker-1": "Speaker-1" }}
 				onSegmentClick={onSegmentClick}
+				onSelectedSpeakerIdsChange={onSelectedSpeakerIdsChange}
 				onOpenSpeakerSettings={onOpenSpeakerSettings}
 			/>
 		</RecordingDetailProvider>,
 	)
 
-	return { onSegmentClick }
+	return { onSegmentClick, onSelectedSpeakerIdsChange }
 }
 
 describe("RecordingDetailTranscriptPanel", () => {
@@ -114,7 +141,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 		const title = screen.getByTestId("recording-detail-transcript-title")
 		const count = screen.getByTestId("recording-detail-transcript-count")
 		const settingsButton = screen.getByTestId("recording-detail-open-speaker-settings")
-		const accessory = screen.getByTestId("recording-detail-transcript-header-accessory")
+		const accessory = screen.getByTestId("recording-detail-open-speaker-filter")
 
 		expect(panel).not.toHaveClass("border", "bg-card")
 		expect(title).toHaveTextContent("Transcript")
@@ -153,5 +180,81 @@ describe("RecordingDetailTranscriptPanel", () => {
 		fireEvent.click(screen.getAllByTestId("recording-detail-transcript-speaker-chip")[1])
 		expect(onOpenSpeakerSettings).toHaveBeenCalledTimes(1)
 		expect(onSegmentClick).toHaveBeenCalledTimes(1)
+	})
+
+	it("forwards speaker filter changes through the shared filter control", () => {
+		const { onSelectedSpeakerIdsChange } = renderTranscriptPanel(10)
+
+		fireEvent.click(screen.getByTestId("recording-detail-open-speaker-filter"))
+
+		expect(onSelectedSpeakerIdsChange).toHaveBeenCalledWith(["Speaker-1"])
+	})
+
+	it("shows the filtered empty state when transcript exists but the selection hides every row", () => {
+		render(
+			<RecordingDetailProvider
+				capabilities={{
+					canEditSpeakers: true,
+					canRenameProject: true,
+					canDeleteProject: true,
+					canMoveProject: true,
+					canExportAudio: true,
+					canExportTranscript: true,
+					canExportNotes: true,
+					canExportSummary: true,
+					canShareProject: true,
+					canTriggerSummary: true,
+				}}
+			>
+				<RecordingDetailTranscriptPanel
+					segments={[]}
+					availableSpeakerIds={["Speaker-1"]}
+					currentTime={0}
+					selectedSpeakerIds={["Speaker-1"]}
+					speakerNameMap={{ "Speaker-1": "Speaker-1" }}
+					totalSegmentsCount={2}
+					onSegmentClick={vi.fn()}
+					onSelectedSpeakerIdsChange={vi.fn()}
+					onOpenSpeakerSettings={vi.fn()}
+				/>
+			</RecordingDetailProvider>,
+		)
+
+		expect(screen.getByTestId("recording-detail-transcript-filter-empty")).toHaveTextContent(
+			"No transcript in this filter",
+		)
+	})
+
+	it("keeps speaker settings available when filtering hides every transcript row", () => {
+		render(
+			<RecordingDetailProvider
+				capabilities={{
+					canEditSpeakers: true,
+					canRenameProject: true,
+					canDeleteProject: true,
+					canMoveProject: true,
+					canExportAudio: true,
+					canExportTranscript: true,
+					canExportNotes: true,
+					canExportSummary: true,
+					canShareProject: true,
+					canTriggerSummary: true,
+				}}
+			>
+				<RecordingDetailTranscriptPanel
+					segments={[]}
+					availableSpeakerIds={["Speaker-1"]}
+					currentTime={0}
+					selectedSpeakerIds={["Speaker-1"]}
+					speakerNameMap={{ "Speaker-1": "Speaker-1" }}
+					totalSegmentsCount={2}
+					onSegmentClick={vi.fn()}
+					onSelectedSpeakerIdsChange={vi.fn()}
+					onOpenSpeakerSettings={vi.fn()}
+				/>
+			</RecordingDetailProvider>,
+		)
+
+		expect(screen.getByTestId("recording-detail-open-speaker-settings")).not.toBeDisabled()
 	})
 })

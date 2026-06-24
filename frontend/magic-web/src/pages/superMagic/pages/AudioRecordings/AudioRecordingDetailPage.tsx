@@ -23,6 +23,7 @@ import {
 } from "@/services/audioRecordings"
 import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
+import { normalizeSpeakerSelection } from "./utils/speaker-filter"
 import { useRecordingDetailData } from "./hooks/useRecordingDetailData"
 import { useRecordingAudioPlayer } from "./hooks/useRecordingAudioPlayer"
 import { useRecordingPlayerCurrentSec } from "./hooks/useRecordingPlayerCurrentSec"
@@ -77,7 +78,6 @@ function AudioRecordingDetailPageDesktop() {
 		texts,
 		audioUrl,
 		title,
-		attachmentTree,
 		attachmentList,
 		refresh,
 		mutateAudioProjectItem,
@@ -99,6 +99,8 @@ function AudioRecordingDetailPageDesktop() {
 	const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false)
 	const [speakerDraft, setSpeakerDraft] = useState<Record<string, string>>({})
 	const [speakerNameOverrides, setSpeakerNameOverrides] = useState<Record<string, string>>({})
+	const [speakerFilterProjectId, setSpeakerFilterProjectId] = useState(projectId)
+	const [selectedSpeakerIds, setSelectedSpeakerIds] = useState<string[]>([])
 	const [moveGroupOpen, setMoveGroupOpen] = useState(false)
 	const [deleteOpen, setDeleteOpen] = useState(false)
 	const [groups, setGroups] = useState<AudioRecordingGroup[]>([])
@@ -201,6 +203,19 @@ function AudioRecordingDetailPageDesktop() {
 			]),
 		[texts],
 	)
+	const effectiveSelectedSpeakerIds = useMemo(
+		() =>
+			speakerFilterProjectId === projectId
+				? normalizeSpeakerSelection(speakerIds, selectedSpeakerIds)
+				: speakerIds,
+		[projectId, selectedSpeakerIds, speakerFilterProjectId, speakerIds],
+	)
+
+	useEffect(() => {
+		if (speakerFilterProjectId === projectId) return
+		setSpeakerFilterProjectId(projectId)
+		setSelectedSpeakerIds([])
+	}, [projectId, speakerFilterProjectId])
 
 	const summaryContent = useMemo(
 		() =>
@@ -243,6 +258,15 @@ function AudioRecordingDetailPageDesktop() {
 			playSegment({ start: segment.start, end: segment.end })
 		},
 		[playSegment],
+	)
+
+	/** Binds speaker-filter changes to the current project so the selection resets only across detail-page boundaries. */
+	const handleSelectedSpeakerIdsChange = useCallback(
+		(speakerIdsToSelect: string[]) => {
+			setSpeakerFilterProjectId(projectId)
+			setSelectedSpeakerIds(speakerIdsToSelect)
+		},
+		[projectId],
 	)
 
 	async function handleSaveSpeakers() {
@@ -318,6 +342,8 @@ function AudioRecordingDetailPageDesktop() {
 								playbackRate={player.playbackRate}
 								colorSegments={colorSegments}
 								speakerNameMap={speakerNameMap}
+								selectedSpeakerIds={effectiveSelectedSpeakerIds}
+								onSelectedSpeakerIdsChange={handleSelectedSpeakerIdsChange}
 								onToggle={player.toggle}
 								onSeek={player.seekTo}
 								onPlaySegment={handlePlaySegment}

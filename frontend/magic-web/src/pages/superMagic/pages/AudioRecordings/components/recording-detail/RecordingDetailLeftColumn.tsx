@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import type { RefObject } from "react"
 import type { FlatColorSegment } from "../../utils/chapter-color-segments"
+import { filterTranscriptSegmentsBySpeakerIds } from "../../utils/speaker-filter"
 import { parseTranscriptMarkdown } from "../../utils/transcript-parser"
 import type { RecordingTranscriptSegment } from "../../types/recording-detail"
 import { RecordingDetailAudioPlayer } from "./RecordingDetailAudioPlayer"
@@ -18,6 +19,9 @@ interface RecordingDetailLeftColumnProps {
 	playbackRate: number
 	colorSegments?: FlatColorSegment[]
 	speakerNameMap: Record<string, string>
+	selectedSpeakerIds: string[]
+	onSelectedSpeakerIdsChange: (speakerIds: string[]) => void
+	showSpeakerFilter?: boolean
 	onToggle: () => void
 	onSeek: (seconds: number) => void
 	onPlaySegment: (segment: RecordingTranscriptSegment) => void
@@ -39,6 +43,9 @@ export function RecordingDetailLeftColumn({
 	playbackRate,
 	colorSegments,
 	speakerNameMap,
+	selectedSpeakerIds,
+	onSelectedSpeakerIdsChange,
+	showSpeakerFilter = true,
 	onToggle,
 	onSeek,
 	onPlaySegment,
@@ -49,6 +56,17 @@ export function RecordingDetailLeftColumn({
 	const segments = useMemo(
 		() => (transcriptMarkdown ? parseTranscriptMarkdown(transcriptMarkdown) : []),
 		[transcriptMarkdown],
+	)
+	const availableSpeakerIds = useMemo(
+		() =>
+			Array.from(
+				new Set(segments.flatMap((segment) => (segment.speaker ? [segment.speaker] : []))),
+			),
+		[segments],
+	)
+	const visibleSegments = useMemo(
+		() => filterTranscriptSegmentsBySpeakerIds(segments, selectedSpeakerIds),
+		[segments, selectedSpeakerIds],
 	)
 
 	return (
@@ -68,14 +86,19 @@ export function RecordingDetailLeftColumn({
 				onPlaybackRateChange={onPlaybackRateChange}
 			/>
 			<RecordingDetailTranscriptPanel
-				segments={segments}
+				segments={visibleSegments}
+				availableSpeakerIds={availableSpeakerIds}
 				currentTime={currentTime}
+				selectedSpeakerIds={selectedSpeakerIds}
 				speakerNameMap={speakerNameMap}
+				showSpeakerFilter={showSpeakerFilter}
+				totalSegmentsCount={segments.length}
 				onSegmentClick={(segment) =>
 					onPlaySegment({
 						...segment,
 					})
 				}
+				onSelectedSpeakerIdsChange={onSelectedSpeakerIdsChange}
 				onOpenSpeakerSettings={onOpenSpeakerSettings}
 			/>
 		</>

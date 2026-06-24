@@ -204,6 +204,13 @@ describe("ShareMobileAudioRecordingDetailPage", () => {
 		expect(screen.getByTestId("mock-summary-panel")).toBeInTheDocument()
 		fireEvent.click(screen.getByRole("button", { name: "Source" }))
 		expect(screen.getByTestId("mock-source-panel")).toBeInTheDocument()
+		expect(sourcePanelPropsMock).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				availableSpeakerIds: [],
+				selectedSpeakerIds: [],
+				onSelectedSpeakerIdsChange: expect.any(Function),
+			}),
+		)
 	})
 
 	it("hides the more button when download permission is unavailable", () => {
