@@ -42,6 +42,11 @@ const requiredPermissionAuthorizationKeys = [
 	"ttl.10m",
 	"ttl.15m",
 	"ttl.30m",
+	"ttl.60m",
+	"ttl.2h",
+	"ttl.4h",
+	"ttl.8h",
+	"ttl.12h",
 ]
 
 function getPathValue(source: unknown, path: string): unknown {

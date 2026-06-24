@@ -102,6 +102,18 @@ describe("IframePermissionService", () => {
 				expiresAt: 1_900_000,
 			}),
 		)
+		expect(confirmPermission.mock.calls[0][0].ttlOptions.map((option) => option.ttlMs)).toEqual(
+			[
+				5 * 60 * 1000,
+				15 * 60 * 1000,
+				30 * 60 * 1000,
+				60 * 60 * 1000,
+				2 * 60 * 60 * 1000,
+				4 * 60 * 60 * 1000,
+				8 * 60 * 60 * 1000,
+				12 * 60 * 60 * 1000,
+			],
+		)
 	})
 
 	it("does not save reusable grant when user selects current request only", async () => {
@@ -151,7 +163,36 @@ describe("IframePermissionService", () => {
 		expect(request.ttlOptions.map((option) => option.ttlMs)).toEqual([
 			5 * 60 * 1000,
 			15 * 60 * 1000,
+			30 * 60 * 1000,
 		])
+	})
+
+	it("offers longer but still bounded ttl options for manifest project writes", async () => {
+		const { service, confirmPermission } = createService({
+			appConfigState: {
+				status: "loaded",
+				config: {
+					name: "Writer",
+					permissions: { scopes: ["fs.project.write"] },
+				},
+			},
+		})
+
+		await service.authorize("fs.project.write")
+
+		expect(confirmPermission.mock.calls[0][0].ttlOptions.map((option) => option.ttlMs)).toEqual(
+			[
+				0,
+				5 * 60 * 1000,
+				10 * 60 * 1000,
+				30 * 60 * 1000,
+				60 * 60 * 1000,
+				2 * 60 * 60 * 1000,
+				4 * 60 * 60 * 1000,
+				8 * 60 * 60 * 1000,
+				12 * 60 * 60 * 1000,
+			],
+		)
 	})
 
 	it("rejects while app config is loading without prompting", async () => {

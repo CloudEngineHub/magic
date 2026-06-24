@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import MagicModal from "@/components/base/MagicModal"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/shadcn-ui/select"
 import { userStore } from "@/models/user"
 import { logger } from "@/utils/log"
 import { getIframeDownloadUrl } from "../iframe-api/iframeApi"
@@ -111,24 +118,28 @@ export function useHtmlAppPermissions({
 									reason,
 								})}
 							</p>
-							<div>
-								{ttlOptions.map((option: { labelKey: string; ttlMs: number }) => (
-									<label
-										key={option.ttlMs}
-										style={{ display: "block", marginTop: 8 }}
-									>
-										<input
-											type="radio"
-											name="html-permission-ttl"
-											defaultChecked={option.ttlMs === defaultTtlMs}
-											onChange={() => {
-												selectedTtlMs = option.ttlMs
-											}}
-										/>
-										<span style={{ marginLeft: 8 }}>{t(option.labelKey)}</span>
-									</label>
-								))}
-							</div>
+							<Select
+								defaultValue={String(defaultTtlMs)}
+								onValueChange={(value) => {
+									selectedTtlMs = Number(value)
+								}}
+							>
+								<SelectTrigger className="mt-3 w-full">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{ttlOptions.map(
+										(option: { labelKey: string; ttlMs: number }) => (
+											<SelectItem
+												key={option.ttlMs}
+												value={String(option.ttlMs)}
+											>
+												{t(option.labelKey)}
+											</SelectItem>
+										),
+									)}
+								</SelectContent>
+							</Select>
 						</div>
 					),
 					okText: t("htmlEditor.permissionAuthorizationConfirm.allow"),
@@ -208,9 +219,14 @@ export function useHtmlAppPermissions({
 					instanceKey: htmlAppInstanceKey,
 					configState: { status: "error", error: errorMessage },
 				})
-				logger.warn("加载 HTML 微应用 app.json 失败", {
-					appConfigPath,
-					errorMessage,
+				logger.warn({
+					data: [
+						"加载 HTML 微应用 app.json 失败",
+						{
+							appConfigPath,
+							errorMessage,
+						},
+					],
 				})
 			})
 
