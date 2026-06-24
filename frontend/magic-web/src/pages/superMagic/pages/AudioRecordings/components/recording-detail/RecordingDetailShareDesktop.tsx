@@ -18,6 +18,7 @@ import { RecordingDetailWorkbench } from "./RecordingDetailWorkbench"
 import { RecordingDetailLeftColumn } from "./RecordingDetailLeftColumn"
 import { RecordingDetailRightPanel } from "./RecordingDetailRightPanel"
 import { RecordingDetailEmptyState, RecordingDetailPageSkeleton } from "./RecordingDetailEmptyState"
+import { AUDIO_RECORDINGS_SHARE_PAGE_SHELL_CLASS } from "../../constants/page-shell"
 
 interface RecordingDetailShareDesktopProps {
 	projectId: string
@@ -157,7 +158,9 @@ export function RecordingDetailShareDesktop({
 	return (
 		<RecordingDetailProvider capabilities={capabilities}>
 			<div
-				className="flex h-full min-h-0 flex-1 flex-col"
+				// The share route already provides the outer frame, so this shell only restores the
+				// white recording-detail background and avoids adding a second rounded border card.
+				className={AUDIO_RECORDINGS_SHARE_PAGE_SHELL_CLASS}
 				data-testid="recording-detail-share-desktop"
 			>
 				<RecordingDetailHeader
