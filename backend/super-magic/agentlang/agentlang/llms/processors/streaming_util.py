@@ -90,7 +90,7 @@ class StreamingState:
         return self.received_chunk_count
 
     # 空 chunk 最大数量阈值
-    MAX_EMPTY_CHUNK_COUNT: int = 3
+    MAX_EMPTY_CHUNK_COUNT: int = 10
 
     # 无效 chunk 最大数量阈值
     MAX_INVALID_CHUNK_COUNT: int = 10
