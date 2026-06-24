@@ -30,6 +30,7 @@ import ImageExtendPanel from "./components/ImageExtendPanel"
 import ImageEraserPanel from "./components/ImageEraserPanel"
 import ElementRenameOverlay from "./components/ElementRenameOverlay"
 export { prewarmCanvasDesignImageWorker } from "./prewarm"
+import PluginPanel from "./components/PluginPanel"
 
 import styles from "./index.module.css"
 
@@ -113,6 +114,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 				scopeElement instanceof HTMLElement ? scopeElement : canvasContainerRef.current,
 			id: designProjectId,
 			defaultReadyonly: readonly,
+			plugins: props.plugins,
 			magic: {
 				methods: methods,
 				permissions: permissions,
@@ -213,6 +215,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			) : null}
 			<Layers />
 			{!readonly && <Tools />}
+			{!readonly && <PluginPanel />}
 			{!readonly && <CanvasTips />}
 			<Zoom shareHostBottomChrome={shareHostBottomChrome} />
 		</FloatingUIProvider>
