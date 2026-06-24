@@ -299,7 +299,6 @@ registerMagicCanvasPlugin({
 						"upload.modelImage.help",
 						"建议上传清晰的单人模特图，便于保持人脸、服饰与场景一致。",
 					),
-					deps: ["poseMode", "poseReferenceImages", "modelId", "modelOptions"],
 					beforePick: ({ state, helpers }) => {
 						if (state.modelImage) return null
 						const maxReferenceImages = getMaxReferenceImages(state, helpers)
