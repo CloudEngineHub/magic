@@ -349,7 +349,8 @@ Update scheduled task configuration. Only pass fields to be modified; unspecifie
 |---|---|---|---|
 |`--id <schedule_id>`|string|是|任务 ID|
 |`--task-name <name>`|string|否|新任务名称|
-|`--message-content <content>`|string|否|消息内容（与详情 message_content/task_describe 对应）|
+|`--message-content <content>`|string|否|消息内容（与详情 message_content/task_describe 对应）。与 `--message-content-file` 二选一|
+|`--message-content-file <path>`|string|否|从文件读取消息内容。长文本、中文标点、引号、括号较多时优先使用此方式|
 |`--type <type>`|string|否|调度类型（需与 `--time` 同时提供）|
 |`--time <HH:MM>`|string|否|执行时间（需与 `--type` 同时提供）|
 |`--day <value>`|string|否|日期/星期/日号，含义随 `--type` 不同|
@@ -361,7 +362,8 @@ Update scheduled task configuration. Only pass fields to be modified; unspecifie
 | ---------------------------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
 | `--id <schedule_id>`               | string  | Yes      | Task ID                                                                             |
 | `--task-name <name>`               | string  | No       | New task name                                                                       |
-| `--message-content <content>`      | string  | No       | Message content (same as detail message_content/task_describe)                      |
+| `--message-content <content>`      | string  | No       | Message content (same as detail message_content/task_describe). Mutually exclusive with `--message-content-file` |
+| `--message-content-file <path>`    | string  | No       | Read message content from a file. Prefer this for long text or content with Chinese punctuation, quotes, or brackets |
 | `--type <type>`                    | string  | No       | Schedule type (must be provided with `--time`)                                      |
 | `--time <HH:MM>`                   | string  | No       | Execution time (must be provided with `--type`)                                     |
 | `--day <value>`                    | string  | No       | Date/weekday/day-of-month, depends on `--type`                                      |
@@ -384,6 +386,9 @@ python scripts/update.py --id "<schedule_id>" --task-name "新名称"
 
 # 修改任务详情
 python scripts/update.py --id "<schedule_id>" --message-content "新的任务详情内容"
+
+# 从文件修改任务详情
+python scripts/update.py --id "<schedule_id>" --message-content-file /tmp/cron-message.txt
 
 # 修改调度时间
 python scripts/update.py --id "<schedule_id>" --type daily_repeat --time "10:00"
