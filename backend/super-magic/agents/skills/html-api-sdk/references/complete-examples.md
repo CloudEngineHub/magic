@@ -189,3 +189,23 @@ document.getElementById("cancel").addEventListener("click", () => { cancelFn?.()
 </script>
 </body></html>
 ```
+
+## D: File URL Preview
+```html
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Preview</title></head>
+<body>
+<img id="preview" alt="Chart preview" style="max-width:100%;height:auto;">
+<a id="open" target="_blank" rel="noopener">Open file</a>
+<script>
+async function loadPreview() {
+  const url = await window.Magic.fs.getFileUrl("assets/chart.png");
+  document.getElementById("preview").src = url;
+  document.getElementById("open").href = url;
+}
+loadPreview().catch(err => {
+  document.body.textContent = "Failed to load preview: " + err.message;
+});
+</script>
+</body></html>
+```
