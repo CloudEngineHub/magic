@@ -1,3 +1,4 @@
+import { htmlMicroAppPreviewLogger } from "../../utils/htmlMicroAppPreviewLogger"
 import type { HTMLAppConfig, HtmlPermissionScope } from "../types"
 import type { HtmlPermissionGrant, HtmlPermissionGrantStore } from "./HtmlPermissionGrantStore"
 
@@ -135,7 +136,12 @@ export class IframePermissionService {
 		this.cfg.grantStore.prune(now)
 
 		const appConfigState = this.cfg.appConfigState
-		if (appConfigState.status === "loading" || appConfigState.status === "error") {
+		if (appConfigState.status === "loading") return false
+		if (appConfigState.status === "error") {
+			htmlMicroAppPreviewLogger.warn("Permission blocked: app.json unavailable", {
+				scope,
+				error: appConfigState.error,
+			})
 			return false
 		}
 

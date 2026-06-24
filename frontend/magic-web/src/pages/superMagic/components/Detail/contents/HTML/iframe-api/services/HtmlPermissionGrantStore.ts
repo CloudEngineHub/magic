@@ -1,3 +1,4 @@
+import { htmlMicroAppPreviewLogger } from "../../utils/htmlMicroAppPreviewLogger"
 import type { HtmlPermissionScope } from "../types"
 
 export const SESSION_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY = "magic:html-app-permissions:v1"
@@ -63,9 +64,20 @@ export class SessionStorageHtmlPermissionGrantStore implements HtmlPermissionGra
 			const raw = globalThis.sessionStorage?.getItem(this.storageKey)
 			if (!raw) return []
 			const parsed = JSON.parse(raw)
-			if (!Array.isArray(parsed)) return []
+			if (!Array.isArray(parsed)) {
+				htmlMicroAppPreviewLogger.error("Corrupted permission grants in sessionStorage", {
+					storageKey: this.storageKey,
+				})
+				return []
+			}
 			return parsed.filter(isValidGrant)
-		} catch {
+		} catch (error) {
+			htmlMicroAppPreviewLogger.error(
+				"Failed to read permission grants from sessionStorage",
+				{
+					error: error instanceof Error ? error.message : String(error),
+				},
+			)
 			return []
 		}
 	}
@@ -89,8 +101,14 @@ export class SessionStorageHtmlPermissionGrantStore implements HtmlPermissionGra
 	private write(grants: HtmlPermissionGrant[]): void {
 		try {
 			globalThis.sessionStorage?.setItem(this.storageKey, JSON.stringify(grants))
-		} catch {
+		} catch (error) {
 			// Storage is an optimization only. Authorization still falls back to prompting.
+			htmlMicroAppPreviewLogger.warn(
+				"Failed to persist permission grants to sessionStorage",
+				{
+					error: error instanceof Error ? error.message : String(error),
+				},
+			)
 		}
 	}
 }

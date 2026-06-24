@@ -10,8 +10,8 @@ import {
 	SelectValue,
 } from "@/components/shadcn-ui/select"
 import { userStore } from "@/models/user"
-import { logger } from "@/utils/log"
 import { getIframeDownloadUrl } from "../iframe-api/iframeApi"
+import { htmlMicroAppPreviewLogger } from "../utils/htmlMicroAppPreviewLogger"
 import { SessionStorageHtmlPermissionGrantStore } from "../iframe-api/services/HtmlPermissionGrantStore"
 import {
 	IframePermissionService,
@@ -203,14 +203,19 @@ export function useHtmlAppPermissions({
 				const response = await fetch(url)
 				if (!response.ok) throw new Error(`HTTP ${response.status}`)
 				const config = (await response.json()) as HTMLAppConfig
-				if (!cancelled)
+				if (cancelled) return
+				if (config && typeof config === "object") {
 					setHtmlAppConfigStateWithKey({
 						instanceKey: htmlAppInstanceKey,
-						configState:
-							config && typeof config === "object"
-								? { status: "loaded", config }
-								: { status: "error", error: "Invalid app.json" },
+						configState: { status: "loaded", config },
 					})
+					return
+				}
+				setHtmlAppConfigStateWithKey({
+					instanceKey: htmlAppInstanceKey,
+					configState: { status: "error", error: "Invalid app.json" },
+				})
+				htmlMicroAppPreviewLogger.error("Invalid app.json", { appConfigPath })
 			})
 			.catch((error) => {
 				if (cancelled) return
@@ -219,14 +224,9 @@ export function useHtmlAppPermissions({
 					instanceKey: htmlAppInstanceKey,
 					configState: { status: "error", error: errorMessage },
 				})
-				logger.warn({
-					data: [
-						"加载 HTML 微应用 app.json 失败",
-						{
-							appConfigPath,
-							errorMessage,
-						},
-					],
+				htmlMicroAppPreviewLogger.error("Failed to load app.json", {
+					appConfigPath,
+					errorMessage,
 				})
 			})
 
