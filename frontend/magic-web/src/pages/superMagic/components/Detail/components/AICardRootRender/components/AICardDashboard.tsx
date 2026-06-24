@@ -97,6 +97,7 @@ interface AICardDashboardProps {
 	historyEntries: AICardHistoryEntry[]
 	projectConfig?: AICardProjectConfig | null
 	attachmentList?: AICardAttachmentNode[]
+	selectedProject?: { id?: string; name?: string } | null
 	onOpenCard: (cardId: string) => void
 	onOpenConfig?: () => void
 	onRunNow?: () => void
@@ -109,6 +110,7 @@ function AICardDashboard({
 	historyEntries,
 	projectConfig,
 	attachmentList,
+	selectedProject,
 	onOpenCard,
 	onOpenConfig,
 	onRunNow,
@@ -207,6 +209,7 @@ function AICardDashboard({
 							card={card}
 							headerMetaItems={headerMetaItems}
 							attachmentList={stableAttachmentList}
+							selectedProject={selectedProject}
 							onOpenCard={onOpenCard}
 							onOpenConfig={onOpenConfig}
 							onRunNow={onRunNow}
@@ -234,6 +237,7 @@ function AICardDashboard({
 interface DashboardSectionProps {
 	items: AICardDashboardItem[]
 	attachmentList?: AICardAttachmentNode[]
+	selectedProject?: { id?: string; name?: string } | null
 	onOpenCard: (cardId: string) => void
 	onOpenHistoryEntry?: (entry: AICardHistoryEntry) => void
 }
@@ -257,6 +261,7 @@ function LatestSection({
 	card,
 	headerMetaItems,
 	attachmentList,
+	selectedProject,
 	onOpenCard,
 	onOpenConfig,
 	onRunNow,
@@ -317,6 +322,7 @@ function LatestSection({
 							index={0}
 							variant="featured"
 							attachmentList={attachmentList}
+							selectedProject={selectedProject}
 							onOpenCard={onOpenCard}
 							onOpenHistoryEntry={onOpenHistoryEntry}
 						/>

@@ -9,10 +9,17 @@ interface AICardDetailProps {
 	/** Override file to display (e.g. history entry). Falls back to card.latestHtmlFileId */
 	htmlFileId?: string
 	attachmentList?: any[]
+	selectedProject?: { id?: string; name?: string } | null
 	onBack: () => void
 }
 
-function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetailProps) {
+function AICardDetail({
+	card,
+	htmlFileId,
+	attachmentList,
+	selectedProject,
+	onBack,
+}: AICardDetailProps) {
 	const { t } = useTranslation("super")
 	const fileId = htmlFileId || card.latestHtmlFileId
 
@@ -77,6 +84,7 @@ function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetail
 					<AICardIframe
 						fileId={fileId}
 						attachmentList={attachmentList}
+						selectedProject={selectedProject}
 						className="h-full w-full"
 						style={{ height: "100%" }}
 					/>

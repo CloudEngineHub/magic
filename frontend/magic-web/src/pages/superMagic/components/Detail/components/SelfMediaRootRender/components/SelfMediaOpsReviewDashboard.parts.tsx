@@ -406,11 +406,11 @@ export function ReportPreview({
 
 export function OpsReviewHtmlPreview({
 	content,
-	relativeFilePath,
+	htmlRelativeFolderPath,
 	isFullscreen = false,
 }: {
 	content: string
-	relativeFilePath: string
+	htmlRelativeFolderPath: string
 	isFullscreen?: boolean
 }) {
 	return (
@@ -429,7 +429,7 @@ export function OpsReviewHtmlPreview({
 				sandboxType="iframe"
 				filePathMapping={EMPTY_FILE_PATH_MAPPING}
 				openNewTab={NOOP_OPEN_NEW_TAB}
-				relative_file_path={relativeFilePath}
+				htmlRelativeFolderPath={htmlRelativeFolderPath}
 				isVisible
 				isFullscreen={isFullscreen}
 				containIframeOverscroll

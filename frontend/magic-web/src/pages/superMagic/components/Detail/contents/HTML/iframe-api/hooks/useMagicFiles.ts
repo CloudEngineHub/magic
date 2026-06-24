@@ -50,7 +50,7 @@ interface UseMagicFilesOptions {
 	targetOrigin: string
 	selectedProject?: any
 	attachmentList?: any[]
-	relative_file_path?: string
+	htmlRelativeFolderPath?: string
 	uploadImageFileToProject: (params: {
 		file: File
 		path: string
@@ -96,7 +96,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 		targetOrigin,
 		selectedProject,
 		attachmentList,
-		relative_file_path,
+		htmlRelativeFolderPath,
 		uploadImageFileToProject,
 		authorizePermission,
 	} = options
@@ -270,7 +270,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				const currentAttachmentList = attachmentListRef.current
 
 				for (const filePath of filePaths) {
-					const resolvedPath = resolveUploadPath(filePath, relative_file_path)
+					const resolvedPath = resolveUploadPath(filePath, htmlRelativeFolderPath)
 					const fileItem = currentAttachmentList
 						? findFileInAttachments(currentAttachmentList, resolvedPath)
 						: null
@@ -383,7 +383,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 			const currentAttachmentList = attachmentListRef.current
 
 			for (const filePath of filePaths) {
-				const resolvedPath = resolveUploadPath(filePath, relative_file_path)
+				const resolvedPath = resolveUploadPath(filePath, htmlRelativeFolderPath)
 				const fileItem = currentAttachmentList
 					? findFileInAttachments(currentAttachmentList, resolvedPath)
 					: null

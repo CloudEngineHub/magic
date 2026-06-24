@@ -119,6 +119,10 @@ function SelfMediaOpsReviewDashboard({
 		() => resolveReviewHtmlRelativePath(target?.entry.entry),
 		[target?.entry.entry],
 	)
+	const reviewHtmlFolderPath = useMemo(
+		() => reviewHtmlRelativePath.replace(/[^/]*$/, "") || "/",
+		[reviewHtmlRelativePath],
+	)
 
 	const handleSync = async () => {
 		if (!target || !onSyncData) return
@@ -135,7 +139,7 @@ function SelfMediaOpsReviewDashboard({
 			return (
 				<OpsReviewHtmlPreview
 					content={reviewHtml}
-					relativeFilePath={reviewHtmlRelativePath}
+					htmlRelativeFolderPath={reviewHtmlFolderPath}
 					isFullscreen={isFullscreen}
 				/>
 			)

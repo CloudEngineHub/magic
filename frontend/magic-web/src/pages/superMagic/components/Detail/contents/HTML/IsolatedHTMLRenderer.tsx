@@ -38,6 +38,7 @@ import { StylePanelStoreProvider } from "./iframe-bridge/contexts/StylePanelCont
 import { TAILWIND_Z_INDEX_CLASSES } from "./constants/z-index"
 import { DevConsolePanel } from "./components/DevConsole"
 import { useDevConsole } from "./hooks/useDevConsole"
+import { useCurrentHtmlFileInfo } from "./hooks/useCurrentHtmlFileInfo"
 import { useInspectorToolbarMode } from "./hooks/useInspectorToolbarMode"
 import {
 	useElementInspector,
@@ -129,7 +130,8 @@ interface IsolatedHTMLRendererProps {
 	onSaveReady?: (triggerSave: () => Promise<SaveResult | undefined>) => void
 	fileId?: string
 	filePathMapping: Map<string, string>
-	relative_file_path?: string //当前html的相对路径
+	/** 当前 HTML 所在目录，用于相对资源解析、上传默认目录等历史逻辑。 */
+	htmlRelativeFolderPath?: string
 	openNewTab: (fileId: string, path: string, autoEdit?: boolean) => void
 	selectedProject?: any
 	attachmentList?: any[]
@@ -234,7 +236,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			fileId,
 			filePathMapping,
 			openNewTab,
-			relative_file_path,
+			htmlRelativeFolderPath,
 			selectedProject,
 			attachmentList,
 			isPlaybackMode,
@@ -414,16 +416,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		const { t, i18n } = useTranslation("super")
 
-		const currentHtmlFile = useMemo(
-			() =>
-				findAttachmentByFileId(
-					attachmentList as ProjectAttachmentNode[] | undefined,
-					fileId,
-				),
-			[attachmentList, fileId],
-		)
+		const currentHtmlFileInfo = useCurrentHtmlFileInfo({
+			attachmentList: attachmentList as ProjectAttachmentNode[] | undefined,
+			fileId,
+		})
 		// DevTools console — resolve the full file path (with filename) for the current HTML file
-		const currentHtmlFilePath = currentHtmlFile?.relative_file_path ?? relative_file_path
+		const currentHtmlFilePath = currentHtmlFileInfo.relativeFilePath
+		const htmlEntryFilePath = currentHtmlFilePath || ""
 		const devConsoleFilePath = currentHtmlFilePath
 		const devConsole = useDevConsole({
 			iframeRef,
@@ -488,7 +487,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 			const res = await createIframeFile({
 				project_id: selectedProject.id,
-				parent_id: currentHtmlFile?.parent_id || htmlDirectory?.file_id || "",
+				parent_id: currentHtmlFileInfo.parentId || htmlDirectory?.file_id || "",
 				file_name: "images",
 				is_directory: true,
 				ignore_duplicate: true,
@@ -569,7 +568,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			iframeRef,
 			isEditMode,
 			scaleRatio,
-			relative_file_path,
+			relative_file_path: htmlRelativeFolderPath,
 			attachmentList,
 			filePathMapping,
 			uploadImageFileToProject,
@@ -606,7 +605,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			useHtmlAppPermissions({
 				content,
 				rawSourceCode,
-				relativeFilePath: relative_file_path,
+				relativeFilePath: htmlEntryFilePath,
 				projectId: selectedProject?.id,
 				fileList: flatFileList,
 			})
@@ -614,7 +613,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const { handleFSMessage } = useIframeFS({
 			iframeRef,
 			targetOrigin: iframeTargetOrigin,
-			entryPath: relative_file_path || "",
+			entryPath: htmlEntryFilePath,
 			fileList: flatFileList,
 			appConfig: htmlAppConfig,
 			projectId: selectedProject?.id,
@@ -777,7 +776,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				targetOrigin: iframeTargetOrigin,
 				selectedProject,
 				attachmentList,
-				relative_file_path,
+				htmlRelativeFolderPath,
 				uploadImageFileToProject,
 				authorizePermission: authorizeHtmlPermission,
 			})
@@ -1242,7 +1241,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					autoEdit,
 					origin: event.origin,
 					fileId: fileId || "",
-					relativeFilePath: relative_file_path || "",
+					relativeFilePath: htmlEntryFilePath,
 					isPlaybackMode: Boolean(isPlaybackMode),
 					userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
 					...extra,

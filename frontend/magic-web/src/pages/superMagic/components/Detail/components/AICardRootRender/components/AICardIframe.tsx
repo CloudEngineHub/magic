@@ -10,6 +10,7 @@ import IsolatedHTMLRenderer from "../../../contents/HTML/IsolatedHTMLRenderer"
 interface AICardIframeProps {
 	fileId?: string
 	attachmentList?: any[]
+	selectedProject?: { id?: string; name?: string } | null
 	className?: string
 	style?: React.CSSProperties
 	/** When true, the component shows a skeleton loader */
@@ -29,6 +30,7 @@ const NOOP_OPEN_NEW_TAB = () => {}
 function AICardIframe({
 	fileId,
 	attachmentList,
+	selectedProject,
 	className,
 	style,
 	showSkeleton = true,
@@ -160,7 +162,8 @@ function AICardIframe({
 					filePathMapping={filePathMapping}
 					openNewTab={NOOP_OPEN_NEW_TAB}
 					attachmentList={attachmentList}
-					relative_file_path={relativeFolderPath}
+					htmlRelativeFolderPath={relativeFolderPath}
+					selectedProject={selectedProject}
 					isVisible
 					containIframeOverscroll
 					hideVerticalScroll={hideVerticalScroll}

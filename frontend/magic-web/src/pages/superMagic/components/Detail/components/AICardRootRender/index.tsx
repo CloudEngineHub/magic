@@ -42,6 +42,9 @@ function AICardRootRender(props: AICardRootRenderProps) {
 	// Create store instance per mount
 	const [store] = useState(() => new AICardStore())
 	const [isRunNowLoading, setIsRunNowLoading] = useState(false)
+	const selectedProject =
+		props.selectedProject ??
+		(props.projectId ? { id: props.projectId } : projectStore.selectedProject)
 
 	// Permission check: only users with edit access can configure / run
 	const canEdit = !isReadOnlyProject(projectStore.selectedProject?.user_role)
@@ -153,6 +156,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 						historyEntries={store.historyEntries}
 						projectConfig={store.projectConfig}
 						attachmentList={stableAttachmentList}
+						selectedProject={selectedProject}
 						onOpenCard={handleOpenCard}
 						onOpenConfig={canEdit ? handleOpenConfig : undefined}
 						onRunNow={
@@ -168,6 +172,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 						card={store.activeCard}
 						htmlFileId={store.detailFileId}
 						attachmentList={stableAttachmentList}
+						selectedProject={selectedProject}
 						onBack={handleBack}
 					/>
 				)}
