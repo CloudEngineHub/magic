@@ -4,8 +4,7 @@ import { PlatformPackage } from "@admin/types/platformPackage"
 import type { AiManage } from "@admin/types/aiManage"
 import { AiModel } from "@admin/const/aiModel"
 import type { GroupItem as GroupItemType } from "./types"
-
-const defaultIcon = ""
+import defaultIcon from "@admin/assets/logos/dynamic-icon.png"
 
 const newDynamicModelIds = new Set<string>()
 
