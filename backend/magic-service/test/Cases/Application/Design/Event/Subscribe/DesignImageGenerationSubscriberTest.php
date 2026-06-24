@@ -16,13 +16,25 @@ use ReflectionClass;
  */
 class DesignImageGenerationSubscriberTest extends TestCase
 {
-    public function testBuildMultiImageCompletionPayloadUsesPerImagePathAndEmptyTaskFileName(): void
+    public function testBuildImageCompletionPayloadStoresSingleImageAndEmptyTaskFileName(): void
     {
-        $reflection = new ReflectionClass(DesignImageGenerationSubscriber::class);
-        $subscriber = $reflection->newInstanceWithoutConstructor();
-        $method = $reflection->getMethod('buildMultiImageCompletionPayload');
+        $payload = $this->buildImageCompletionPayload('poster', [
+            'https://example.test/generated/first.png',
+        ], '/workspace/design');
 
-        $payload = $method->invoke($subscriber, 'poster', [
+        $this->assertSame('', $payload['file_name']);
+        $this->assertSame([
+            [
+                'index' => 1,
+                'file_name' => 'poster.png',
+                'file_path' => '/workspace/design/poster.png',
+            ],
+        ], $payload['output_images']);
+    }
+
+    public function testBuildImageCompletionPayloadUsesPerImagePathAndEmptyTaskFileName(): void
+    {
+        $payload = $this->buildImageCompletionPayload('poster', [
             'https://example.test/generated/first.png',
             'https://example.test/generated/second.webp',
         ], '/workspace/design');
@@ -40,5 +52,14 @@ class DesignImageGenerationSubscriberTest extends TestCase
                 'file_path' => '/workspace/design/poster_2.webp',
             ],
         ], $payload['output_images']);
+    }
+
+    private function buildImageCompletionPayload(string $baseName, array $imageUrls, string $fileDir): array
+    {
+        $reflection = new ReflectionClass(DesignImageGenerationSubscriber::class);
+        $subscriber = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('buildImageCompletionPayload');
+
+        return $method->invoke($subscriber, $baseName, $imageUrls, $fileDir);
     }
 }

@@ -232,6 +232,12 @@ class ImageGenerationAppService extends DesignAppService
                 'file_path' => $entity->getFilePath(),
             ];
         }
+        if ($outputImages === []) {
+            $entity->setStatus(ImageGenerationStatus::FAILED);
+            $entity->setErrorMessage('Generated image output is empty');
+            $entity->setImages([]);
+            return $entity;
+        }
 
         $addWatermark = $this->userAiWatermarkPolicy->shouldApplyVisibleAiWatermark($authenticatable);
         $images = [];

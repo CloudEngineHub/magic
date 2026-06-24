@@ -93,31 +93,7 @@ class DesignImageGenerationSubscriber implements ListenerInterface
                 }
                 ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_generation.generate_image_failed_with_message', ['message' => $errorMessage]);
             }
-            if ($imageGenerationEntity->getGenerateNum() > 1) {
-                $this->completeMultiImageTask($dataIsolation, $imageGenerationEntity, $response);
-                return;
-            }
-
-            $imageUrl = $this->parseResponseUrl($response);
-            if (empty($imageUrl)) {
-                ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_generation.generate_image_failed');
-            }
-
-            $fileName = $this->resolveAndAssignGeneratedFileName($dataIsolation, $imageGenerationEntity, $imageUrl);
-
-            Db::transaction(function () use ($dataIsolation, $imageGenerationEntity, $imageUrl, $fileName): void {
-                $this->imageGenerationDomainService->markAsCompleted($dataIsolation, $imageGenerationEntity->getId(), $fileName);
-
-                $fullPrefix = $this->fileDomainService->getFullPrefix($dataIsolation->getCurrentOrganizationCode());
-                $fullFileDir = $imageGenerationEntity->getFullFileDir($fullPrefix);
-
-                $uploadPath = substr($fullFileDir, strlen($fullPrefix));
-                $uploadFile = new UploadFile($imageUrl, $uploadPath, $fileName, false);
-
-                $this->createProjectFile($dataIsolation, $imageGenerationEntity, $uploadFile);
-
-                $this->fileDomainService->uploadByCredential($dataIsolation->getCurrentOrganizationCode(), $uploadFile, StorageBucketType::SandBox, false);
-            });
+            $this->completeImageTask($dataIsolation, $imageGenerationEntity, $response);
         } catch (Throwable $throwable) {
             $this->imageGenerationDomainService->markAsFailed($dataIsolation, $imageGenerationEntity->getId(), $throwable->getMessage());
         }
@@ -145,7 +121,7 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         $this->taskFileDomainService->saveProjectFile(dataIsolation: $contactDataIsolation, projectEntity: $project, taskFileEntity: $taskFileEntity, isUpdated: false);
     }
 
-    private function completeMultiImageTask(
+    private function completeImageTask(
         DesignDataIsolation $dataIsolation,
         ImageGenerationEntity $imageGenerationEntity,
         OpenAIFormatResponse $response
@@ -165,7 +141,7 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         $fullFileDir = $imageGenerationEntity->getFullFileDir($fullPrefix);
         $uploadPath = substr($fullFileDir, strlen($fullPrefix));
 
-        $completionPayload = $this->buildMultiImageCompletionPayload($baseName, $imageUrls, $imageGenerationEntity->getFileDir());
+        $completionPayload = $this->buildImageCompletionPayload($baseName, $imageUrls, $imageGenerationEntity->getFileDir());
         $outputImages = $completionPayload['output_images'];
         $uploadFiles = [];
         foreach ($imageUrls as $index => $imageUrl) {
@@ -211,36 +187,6 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         return $response;
     }
 
-    /**
-     * 根据结果图 URL 解析扩展名、生成目标文件名并写入实体，返回带扩展名的完整文件名。
-     */
-    private function resolveAndAssignGeneratedFileName(
-        DesignDataIsolation $dataIsolation,
-        ImageGenerationEntity $entity,
-        string $imageUrl,
-    ): string {
-        $extension = pathinfo((string) parse_url($imageUrl, PHP_URL_PATH), PATHINFO_EXTENSION);
-        $fileNameWithoutExtension = $this->generatedImageFileNameTool->resolveBaseNameWithoutExtension(
-            $dataIsolation,
-            $entity,
-            $entity->getPrompt(),
-        );
-        $fileName = $fileNameWithoutExtension . '.' . $extension;
-        $entity->setFileName($fileName);
-
-        return $fileName;
-    }
-
-    private function parseResponseUrl(OpenAIFormatResponse $response): string
-    {
-        // 目前我们只会生成一个，所以这里直接取第一个
-        $data = $response->getData();
-        if (isset($data[0]['url'])) {
-            return $data[0]['url'];
-        }
-        return '';
-    }
-
     private function parseResponseUrls(OpenAIFormatResponse $response): array
     {
         $urls = [];
@@ -268,7 +214,7 @@ class DesignImageGenerationSubscriber implements ListenerInterface
      * @param array<int, string> $imageUrls
      * @return array{file_name: string, output_images: array<int, array{index: int, file_name: string, file_path: string}>}
      */
-    private function buildMultiImageCompletionPayload(string $baseName, array $imageUrls, string $fileDir): array
+    private function buildImageCompletionPayload(string $baseName, array $imageUrls, string $fileDir): array
     {
         $outputImages = [];
         foreach ($imageUrls as $index => $imageUrl) {
