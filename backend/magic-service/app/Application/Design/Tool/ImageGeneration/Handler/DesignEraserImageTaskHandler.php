@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\ImageGeneration\Handler;
 
+use App\Application\Design\Service\DesignImageOperationInputNormalizer;
 use App\Application\ModelGateway\Service\ImageEraserAppService;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
@@ -37,6 +38,7 @@ final class DesignEraserImageTaskHandler extends AbstractDesignImageGenerationTa
         FileDomainService $fileDomainService,
         TaskFileDomainService $taskFileDomainService,
         private readonly ImageEraserAppService $imageEraserAppService,
+        private readonly DesignImageOperationInputNormalizer $inputNormalizer,
     ) {
         parent::__construct($fileDomainService, $taskFileDomainService);
     }
@@ -53,11 +55,17 @@ final class DesignEraserImageTaskHandler extends AbstractDesignImageGenerationTa
             return null;
         }
 
-        $imageUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $imagePath);
-        $maskUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $maskPath);
-        if ($imageUrl === null || $imageUrl === '' || $maskUrl === null || $maskUrl === '') {
+        $inputUrls = $this->resolveEraserExpandProviderInputUrls(
+            $dataIsolation,
+            $entity,
+            $imagePath,
+            $maskPath,
+            $this->inputNormalizer,
+        );
+        if ($inputUrls === null) {
             return null;
         }
+        [$imageUrl, $maskUrl] = $inputUrls;
 
         $dto = new ImageEraserRequestDTO([
             'image_url' => $imageUrl,

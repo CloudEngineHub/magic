@@ -8,9 +8,10 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\Design\Service;
 
 use App\Application\Design\Service\DesignImageOperationConcurrencyService;
-use App\Application\Design\Service\DesignImageOperationLease;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
+use App\Infrastructure\Util\Concurrency\ConcurrencyLease;
+use App\Infrastructure\Util\Concurrency\RedisConcurrencyLimiter;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Redis\Redis;
 use PHPUnit\Framework\TestCase;
@@ -26,7 +27,7 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $redis = new RecordingRedis();
         $config = $this->createConfig(2, 600);
 
-        $service = new DesignImageOperationConcurrencyService($redis, $config);
+        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
 
         $lease = $service->tryAcquire($entity);
 
@@ -53,7 +54,7 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $redis = new RecordingRedis();
         $config = $this->createConfig(0, 600);
 
-        $service = new DesignImageOperationConcurrencyService($redis, $config);
+        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
 
         $lease = $service->tryAcquire($entity);
 
@@ -69,7 +70,7 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $redis->evalResult = [2, ''];
         $config = $this->createConfig(2, 600);
 
-        $service = new DesignImageOperationConcurrencyService($redis, $config);
+        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
 
         $lease = $service->tryAcquire($entity);
 
@@ -79,12 +80,12 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
 
     public function testReleaseOnlyDeletesMatchingLeaseToken(): void
     {
-        $lease = DesignImageOperationLease::acquired(123456, 'lease-token');
+        $lease = ConcurrencyLease::acquired('123456', 'lease-token');
         $redis = new RecordingRedis();
         $redis->evalResult = 1;
         $config = $this->createConfig(2, 600);
 
-        $service = new DesignImageOperationConcurrencyService($redis, $config);
+        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
         $this->assertTrue($service->release($lease));
 
         $this->assertSame(1, $redis->evalCalls);
@@ -93,23 +94,6 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $this->assertSame(2, $redis->evalKeyCount);
         $this->assertSame('design:image-operation:running:eraser-expand', $redis->evalArguments[0]);
         $this->assertSame('design:image-operation:running:eraser-expand:tokens', $redis->evalArguments[1]);
-        $this->assertSame('123456', $redis->evalArguments[2]);
-        $this->assertSame('lease-token', $redis->evalArguments[3]);
-    }
-
-    public function testRenewTouchesMatchingLeaseToken(): void
-    {
-        $lease = DesignImageOperationLease::acquired(123456, 'lease-token');
-        $redis = new RecordingRedis();
-        $redis->evalResult = 1;
-        $config = $this->createConfig(2, 600);
-
-        $service = new DesignImageOperationConcurrencyService($redis, $config);
-
-        $this->assertTrue($service->renew($lease));
-
-        $this->assertSame(1, $redis->evalCalls);
-        $this->assertStringContainsString('zadd', $redis->evalScript);
         $this->assertSame('123456', $redis->evalArguments[2]);
         $this->assertSame('lease-token', $redis->evalArguments[3]);
     }

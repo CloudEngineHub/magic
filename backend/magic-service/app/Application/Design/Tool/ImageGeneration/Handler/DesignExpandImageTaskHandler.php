@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\ImageGeneration\Handler;
 
+use App\Application\Design\Service\DesignImageOperationInputNormalizer;
 use App\Application\ModelGateway\Service\ImageExpandAppService;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
@@ -38,6 +39,7 @@ final class DesignExpandImageTaskHandler extends AbstractDesignImageGenerationTa
         FileDomainService $fileDomainService,
         TaskFileDomainService $taskFileDomainService,
         private readonly ImageExpandAppService $imageExpandAppService,
+        private readonly DesignImageOperationInputNormalizer $inputNormalizer,
     ) {
         parent::__construct($fileDomainService, $taskFileDomainService);
     }
@@ -54,11 +56,17 @@ final class DesignExpandImageTaskHandler extends AbstractDesignImageGenerationTa
             return null;
         }
 
-        $canvasUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $canvasPath);
-        $maskUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $maskPath);
-        if ($canvasUrl === null || $canvasUrl === '' || $maskUrl === null || $maskUrl === '') {
+        $inputUrls = $this->resolveEraserExpandProviderInputUrls(
+            $dataIsolation,
+            $entity,
+            $canvasPath,
+            $maskPath,
+            $this->inputNormalizer,
+        );
+        if ($inputUrls === null) {
             return null;
         }
+        [$canvasUrl, $maskUrl] = $inputUrls;
 
         $dto = new ImageExpandRequestDTO([
             'image_url' => $canvasUrl,

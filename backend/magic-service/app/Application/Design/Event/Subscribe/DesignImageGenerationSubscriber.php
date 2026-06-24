@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Event\Subscribe;
 
+use App\Application\Design\Service\DesignImageOperationConcurrencyService;
 use App\Application\Design\Tool\ImageGeneration\DesignGeneratedImageFileNameTool;
 use App\Application\Design\Tool\ImageGeneration\DesignImageGenerationTaskHandlerFactory;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
@@ -20,6 +21,7 @@ use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
+use App\Infrastructure\Util\Concurrency\ConcurrencyLease;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
@@ -49,6 +51,8 @@ class DesignImageGenerationSubscriber implements ListenerInterface
 
     private DesignGeneratedImageFileNameTool $generatedImageFileNameTool;
 
+    private DesignImageOperationConcurrencyService $concurrencyService;
+
     public function __construct(ContainerInterface $container)
     {
         $this->imageGenerationDomainService = $container->get(ImageGenerationDomainService::class);
@@ -56,6 +60,7 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         $this->fileDomainService = $container->get(FileDomainService::class);
         $this->projectDomainService = $container->get(ProjectDomainService::class);
         $this->generatedImageFileNameTool = $container->get(DesignGeneratedImageFileNameTool::class);
+        $this->concurrencyService = $container->get(DesignImageOperationConcurrencyService::class);
     }
 
     public function listen(): array
@@ -74,9 +79,23 @@ class DesignImageGenerationSubscriber implements ListenerInterface
 
         $dataIsolation = DesignDataIsolation::create($imageGenerationEntity->getOrganizationCode(), $imageGenerationEntity->getUserId());
 
-        $this->imageGenerationDomainService->markAsProcessing($dataIsolation, $imageGenerationEntity->getId());
-
+        $lease = ConcurrencyLease::unlimited((string) $imageGenerationEntity->getId());
         try {
+            if ($this->concurrencyService->supports($imageGenerationEntity)) {
+                // 擦除/扩图先抢并发槽；抢不到则保持 pending，等待定时任务重新投递。
+                $lease = $this->concurrencyService->tryAcquire($imageGenerationEntity);
+                if (! $lease->canProceed()) {
+                    return;
+                }
+
+                // 后续 return/异常都会进入 finally，已抢到的槽会在那里统一释放。
+                if (! $this->imageGenerationDomainService->tryMarkAsProcessing($dataIsolation, $imageGenerationEntity->getId())) {
+                    return;
+                }
+            } else {
+                $this->imageGenerationDomainService->markAsProcessing($dataIsolation, $imageGenerationEntity->getId());
+            }
+
             $response = $this->invokeImageGenerationHandler($dataIsolation, $imageGenerationEntity);
             if (! $response) {
                 ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_generation.generate_image_failed');
@@ -115,6 +134,10 @@ class DesignImageGenerationSubscriber implements ListenerInterface
             });
         } catch (Throwable $throwable) {
             $this->imageGenerationDomainService->markAsFailed($dataIsolation, $imageGenerationEntity->getId(), $throwable->getMessage());
+        } finally {
+            if ($lease->ownsSlot()) {
+                $this->concurrencyService->release($lease);
+            }
         }
     }
 

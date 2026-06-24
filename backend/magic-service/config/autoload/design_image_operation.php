@@ -17,12 +17,9 @@ return [
     // 下游擦除/扩图接口允许的单张输入图片最大字节数。
     'input_max_bytes' => (int) env('DESIGN_IMAGE_OPERATION_INPUT_MAX_BYTES', 5 * 1024 * 1024),
 
-    // 普通图片归一化长边候选档位，按顺序尝试，直到处理后大小不超过 input_max_bytes。
-    'normalized_max_edges' => (string) env('DESIGN_IMAGE_OPERATION_NORMALIZED_MAX_EDGES', '2048,1536,1024'),
+    // 通过云存储图片处理参数按需压缩/转码时，普通图片和 mask 的长边上限。
+    'normalized_max_edge' => (int) env('DESIGN_IMAGE_OPERATION_NORMALIZED_MAX_EDGE', 2048),
 
-    // 普通图片压缩质量候选档位，与 normalized_max_edges 按索引对应。
-    'normalized_qualities' => (string) env('DESIGN_IMAGE_OPERATION_NORMALIZED_QUALITIES', '85,75,65'),
-
-    // 通过 Range 请求探测归一化 URL 实际 Content-Length 的超时时间。
-    'remote_size_probe_timeout_seconds' => (int) env('DESIGN_IMAGE_OPERATION_REMOTE_SIZE_PROBE_TIMEOUT_SECONDS', 3),
+    // 普通图片转 jpg 后的质量；mask 固定转 png，不设置有损质量参数。
+    'normalized_quality' => (int) env('DESIGN_IMAGE_OPERATION_NORMALIZED_QUALITY', 85),
 ];

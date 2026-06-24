@@ -10,6 +10,7 @@ namespace App\Domain\Design\Repository\Persistence;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationStatus;
+use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
 use App\Domain\Design\Factory\ImageGenerationFactory;
 use App\Domain\Design\Repository\Facade\ImageGenerationRepositoryInterface;
 use App\Domain\Design\Repository\Persistence\Model\ImageGenerationModel;
@@ -81,6 +82,47 @@ class ImageGenerationRepository extends DesignAbstractRepository implements Imag
 
         $builder = $this->createBuilder($dataIsolation, ImageGenerationModel::query());
         $builder->where('id', $id)->update($data);
+    }
+
+    public function tryMarkAsProcessing(DesignDataIsolation $dataIsolation, int $id): bool
+    {
+        $builder = $this->createBuilder($dataIsolation, ImageGenerationModel::query());
+        $affected = $builder
+            ->where('id', $id)
+            ->where('status', ImageGenerationStatus::PENDING->value)
+            ->update([
+                'status' => ImageGenerationStatus::PROCESSING->value,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+
+        return $affected > 0;
+    }
+
+    public function findPendingByTypes(array $types, int $limit): array
+    {
+        if ($limit <= 0 || $types === []) {
+            return [];
+        }
+
+        $typeValues = array_values(array_unique(array_map(
+            static fn (ImageGenerationType|int $type): int => $type instanceof ImageGenerationType ? $type->value : $type,
+            $types
+        )));
+
+        $models = ImageGenerationModel::query()
+            ->where('status', ImageGenerationStatus::PENDING->value)
+            ->whereIn('type', $typeValues)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->limit($limit)
+            ->get();
+
+        $entities = [];
+        foreach ($models as $model) {
+            $entities[] = ImageGenerationFactory::modelToEntity($model);
+        }
+
+        return $entities;
     }
 
     public function completed(DesignDataIsolation $dataIsolation, int $id, string $fileName): void
