@@ -590,6 +590,11 @@
 			"description": "网络恢复后可继续编辑并保存画布内容",
 			"title": "网络已断开，画布已切换为只读"
 		},
+		"conflict": {
+			"elementResolveFailed": "处理元素冲突失败",
+			"syncPausedDescription": "当前变更没有继续自动覆盖远端，请等待同步恢复或刷新后继续编辑。",
+			"syncPausedTitle": "同步已暂停"
+		},
 		"saved": "保存成功",
 		"saving": "正在保存",
 		"upgrade": {

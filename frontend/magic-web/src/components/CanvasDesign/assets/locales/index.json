@@ -21,6 +21,16 @@
 		"unsupportedDropContent": "当前拖拽内容不支持添加为参考图",
 		"unsupportedReferenceImageType": "当前仅支持添加图片类型的参考图"
 	},
+	"elementConflict": {
+		"deleteElement": "删除这个元素",
+		"description": "这个元素有新的同步内容，也有你当前的修改。",
+		"keepDeleted": "保持删除",
+		"keepElement": "保留这个元素",
+		"restoreNew": "恢复新版",
+		"title": "请选择保留的版本",
+		"useLocal": "保留我的",
+		"useRemote": "使用新的"
+	},
 	"elementTools": {
 		"elementAlign": {
 			"bottom": "底部对齐",
@@ -181,6 +191,15 @@
 		},
 		"title": "图层"
 	},
+	"mediaResourceFullscreenPreview": {
+		"audioLoadFailed": "音频加载失败",
+		"close": "关闭全屏预览",
+		"croppedImage": "裁剪图",
+		"imageLoadFailed": "图片加载失败",
+		"originalImage": "原图",
+		"videoLoadFailed": "视频加载失败，请稍后重试",
+		"viewMode": "图片显示模式"
+	},
 	"menu": {
 		"addFrame": "添加画框",
 		"addToCurrentConversation": "添加至当前对话",
@@ -219,15 +238,6 @@
 		"referenceVideo": "参考视频",
 		"size": "尺寸",
 		"title": "生成记录"
-	},
-	"mediaResourceFullscreenPreview": {
-		"audioLoadFailed": "音频加载失败",
-		"close": "关闭全屏预览",
-		"croppedImage": "裁剪图",
-		"imageLoadFailed": "图片加载失败",
-		"originalImage": "原图",
-		"videoLoadFailed": "视频加载失败，请稍后重试",
-		"viewMode": "图片显示模式"
 	},
 	"rectangle": {
 		"defaultName": "矩形"

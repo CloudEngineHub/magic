@@ -84,6 +84,7 @@ export class DesignLoadManager {
 			if (result?.fileId) {
 				this.stateBag.setters.setMagicProjectJsFileId(result.fileId)
 
+				let didApplyDesignData = false
 				if (result.content) {
 					const parsedData = parseMagicProjectJsContent(result.content)
 					if (parsedData) {
@@ -119,11 +120,12 @@ export class DesignLoadManager {
 						this.stateBag.setPrevDesignDataFingerprint(
 							hashDesignDataComparable(parsedData),
 						)
+						didApplyDesignData = true
 						this.lastLoadedFileId = actualCurrentFileId
 					}
 				}
 
-				if (!isShareRoute) {
+				if (!isShareRoute && didApplyDesignData) {
 					try {
 						const fileInfo = await SuperMagicApi.getFileInfo({
 							file_id: result.fileId,

@@ -1,41 +1,52 @@
-import type { CanvasDesignDataPatch } from "@/components/CanvasDesign/types"
+import type { CanvasDocument, LayerElement } from "../canvas/types"
 import {
-	ElementTypeEnum,
-	type CanvasDocument,
-	type FrameElement,
-	type GroupElement,
-	type LayerElement,
-} from "@/components/CanvasDesign/canvas/types"
+	cloneCanvasElement,
+	cloneCanvasElements,
+	isCanvasContainerElement,
+	sortCanvasElementsByZIndexStable,
+	type CanvasDocumentContainerElement,
+} from "./elementIndex"
 
-type ContainerLayerElement = FrameElement | GroupElement
-
-function cloneElement(element: LayerElement): LayerElement {
-	return JSON.parse(JSON.stringify(element)) as LayerElement
+export interface CanvasDocumentElementNameChange {
+	elementId: string
+	elementType: LayerElement["type"]
+	oldName?: string
+	newName?: string
+	oldSrc?: string
+	newSrc?: string
 }
 
-function cloneElements(elements: LayerElement[] | undefined): LayerElement[] {
-	return (elements ?? []).map(cloneElement)
+export interface CanvasDocumentPatch {
+	upserts: Array<{
+		element: LayerElement
+		parentId: string | null
+	}>
+	deletedElementIds: string[]
+	changedElementIds: string[]
+	elementNameChanges?: CanvasDocumentElementNameChange[]
 }
 
-function isContainerElement(element: LayerElement): element is ContainerLayerElement {
-	return element.type === ElementTypeEnum.Frame || element.type === ElementTypeEnum.Group
+export interface CanvasDocumentPatchApplyOptions {
+	strictParent?: boolean
 }
 
-function hasChildren(element: LayerElement): element is ContainerLayerElement & {
+export type CanvasDocumentPatchApplyResult =
+	| {
+			ok: true
+			canvas: CanvasDocument
+	  }
+	| {
+			ok: false
+			reason: "missing-parent"
+			canvas: CanvasDocument
+			elementId: string
+			parentId: string | null
+	  }
+
+function hasChildren(element: LayerElement): element is CanvasDocumentContainerElement & {
 	children: LayerElement[]
 } {
-	return isContainerElement(element) && Array.isArray(element.children)
-}
-
-function sortByZIndexStable(elements: LayerElement[]): LayerElement[] {
-	return elements
-		.map((element, index) => ({ element, index }))
-		.sort((a, b) => {
-			const zIndexDiff = (a.element.zIndex ?? 0) - (b.element.zIndex ?? 0)
-			if (zIndexDiff !== 0) return zIndexDiff
-			return a.index - b.index
-		})
-		.map((entry) => entry.element)
+	return isCanvasContainerElement(element) && Array.isArray(element.children)
 }
 
 function removeElementById(
@@ -84,7 +95,7 @@ function insertIntoSiblings(
 		return next
 	}
 
-	return sortByZIndexStable([...siblings, element])
+	return sortCanvasElementsByZIndexStable([...siblings, element])
 }
 
 function upsertElementIntoParent(
@@ -103,7 +114,7 @@ function upsertElementIntoParent(
 	let inserted = false
 	const nextElements = elements.map((candidate) => {
 		if (candidate.id === parentId) {
-			if (!isContainerElement(candidate)) {
+			if (!isCanvasContainerElement(candidate)) {
 				return candidate
 			}
 			inserted = true
@@ -133,18 +144,27 @@ function upsertElementIntoParent(
 	return { elements: nextElements, inserted }
 }
 
-export function applyCanvasDesignDataPatch(
+export function applyCanvasDocumentPatch(
 	canvasData: CanvasDocument | undefined,
-	patch: CanvasDesignDataPatch,
+	patch: CanvasDocumentPatch,
+	options: CanvasDocumentPatchApplyOptions = {},
 ): CanvasDocument {
-	let elements = cloneElements(canvasData?.elements)
+	return tryApplyCanvasDocumentPatch(canvasData, patch, options).canvas
+}
+
+export function tryApplyCanvasDocumentPatch(
+	canvasData: CanvasDocument | undefined,
+	patch: CanvasDocumentPatch,
+	options: CanvasDocumentPatchApplyOptions = {},
+): CanvasDocumentPatchApplyResult {
+	let elements = cloneCanvasElements(canvasData?.elements)
 
 	patch.deletedElementIds.forEach((elementId) => {
 		elements = removeElementById(elements, elementId).elements
 	})
 
-	patch.upserts.forEach((upsert) => {
-		const element = cloneElement(upsert.element)
+	for (const upsert of patch.upserts) {
+		const element = cloneCanvasElement(upsert.element)
 		const removeResult = removeElementById(elements, element.id)
 		const preferredIndex =
 			removeResult.removed?.parentId === upsert.parentId
@@ -156,13 +176,28 @@ export function applyCanvasDesignDataPatch(
 			upsert.parentId,
 			preferredIndex,
 		)
+		if (!upsertResult.inserted && options.strictParent) {
+			return {
+				ok: false,
+				reason: "missing-parent",
+				canvas: {
+					...(canvasData ?? {}),
+					elements: removeResult.elements,
+				},
+				elementId: element.id,
+				parentId: upsert.parentId,
+			}
+		}
 		elements = upsertResult.inserted
 			? upsertResult.elements
 			: insertIntoSiblings(removeResult.elements, element)
-	})
+	}
 
 	return {
-		...(canvasData ?? {}),
-		elements,
+		ok: true,
+		canvas: {
+			...(canvasData ?? {}),
+			elements,
+		},
 	}
 }

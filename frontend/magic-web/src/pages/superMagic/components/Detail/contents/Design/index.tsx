@@ -46,11 +46,11 @@ import type { DesignRemoteUpdateListenerMode } from "./managers/types"
 import { useCanvasResourceRefresh } from "./hooks/useCanvasResourceRefresh"
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useNetwork } from "ahooks"
-import { CloudOff } from "lucide-react"
+import { AlertTriangle, CloudOff } from "lucide-react"
 import { needsUpgrade, upgradeCanvasToV2, type UpgradeProgress } from "./utils/canvasVersionUpgrade"
 import { CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
 import { toast } from "sonner"
-import { applyCanvasDesignDataPatch } from "./utils/canvasDesignDataPatch"
+import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/model"
 import { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign/prewarm"
 import { designBuiltinPlugins } from "./plugins/options"
 import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
@@ -58,6 +58,8 @@ import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
 const CanvasDesign = lazy(() => import("@/components/CanvasDesign"))
+
+const REMOTE_CANVAS_UPDATE_SUPPRESS_MS = 500
 
 // 懒加载协议弹窗
 const loadWaterMarkFreeModal = async () => {
@@ -145,6 +147,44 @@ const useStyles = createStyles(({ token }) => ({
 		lineHeight: "16px",
 		color: token.colorTextSecondary,
 		whiteSpace: "nowrap",
+	},
+	conflictNotice: {
+		position: "absolute",
+		top: "16px",
+		left: "50%",
+		zIndex: 70,
+		display: "flex",
+		alignItems: "center",
+		gap: "12px",
+		width: "min(760px, calc(100% - 32px))",
+		padding: "12px 14px",
+		borderRadius: "8px",
+		border: `1px solid ${token.colorWarningBorder}`,
+		backgroundColor: token.colorWarningBg,
+		boxShadow: token.boxShadowSecondary,
+		color: token.colorText,
+		transform: "translateX(-50%)",
+	},
+	conflictIcon: {
+		flex: "none",
+		color: token.colorWarning,
+	},
+	conflictContent: {
+		display: "flex",
+		flex: 1,
+		flexDirection: "column",
+		gap: "3px",
+		minWidth: 0,
+	},
+	conflictTitle: {
+		fontSize: "13px",
+		fontWeight: 600,
+		lineHeight: "18px",
+	},
+	conflictDescription: {
+		fontSize: "12px",
+		lineHeight: "16px",
+		color: token.colorTextSecondary,
 	},
 }))
 
@@ -311,6 +351,7 @@ function DesignViewer(props: DesignViewerProps) {
 	// CanvasDesign ref（需在 designProjectManager 之前，onRemoteDesignDataUpdate 回调中使用）
 	const canvasDesignRef = useRef<CanvasDesignRef | null>(null)
 	const isApplyingRemoteCanvasUpdateRef = useRef(false)
+	const remoteCanvasUpdateReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	// 用于跟踪是否已经执行过初始加载，确保只加载一次
 	// 这样可以避免 attachments 数组引用变化导致的重复加载
@@ -336,11 +377,18 @@ function DesignViewer(props: DesignViewerProps) {
 		onRemoteDesignDataUpdate: useCallback(
 			(_oldDesignData: DesignData, newDesignData: DesignData) => {
 				if (newDesignData.canvas) {
+					if (remoteCanvasUpdateReleaseTimerRef.current) {
+						clearTimeout(remoteCanvasUpdateReleaseTimerRef.current)
+						remoteCanvasUpdateReleaseTimerRef.current = null
+					}
 					isApplyingRemoteCanvasUpdateRef.current = true
 					try {
 						canvasDesignRef.current?.updateData(newDesignData.canvas)
 					} finally {
-						isApplyingRemoteCanvasUpdateRef.current = false
+						remoteCanvasUpdateReleaseTimerRef.current = setTimeout(() => {
+							isApplyingRemoteCanvasUpdateRef.current = false
+							remoteCanvasUpdateReleaseTimerRef.current = null
+						}, REMOTE_CANVAS_UPDATE_SUPPRESS_MS)
 					}
 				}
 			},
@@ -374,6 +422,10 @@ function DesignViewer(props: DesignViewerProps) {
 		handleReturnLatest,
 		handleVersionRollback,
 		fetchFileVersions,
+		conflictState,
+		resolveElementConflictWithLocal,
+		resolveElementConflictWithRemote,
+		resolveEditedElementConflictsWithLocal,
 	} = designProjectManager
 
 	const { isProcessingRevoke, revokeType } = designProjectManager
@@ -638,6 +690,16 @@ function DesignViewer(props: DesignViewerProps) {
 			t,
 		})
 
+	useEffect(
+		() => () => {
+			if (remoteCanvasUpdateReleaseTimerRef.current) {
+				clearTimeout(remoteCanvasUpdateReleaseTimerRef.current)
+				remoteCanvasUpdateReleaseTimerRef.current = null
+			}
+		},
+		[],
+	)
+
 	// 事件处理
 	useDesignFocusElement({
 		designProjectId,
@@ -692,6 +754,10 @@ function DesignViewer(props: DesignViewerProps) {
 			updateDesignDataAndScheduleSave((draft) => {
 				draft.canvas = canvasData
 			})
+			latestDesignDataRef.current = {
+				...latestDesignDataRef.current,
+				canvas: canvasData,
+			}
 		},
 		[updateDesignDataAndScheduleSave],
 	)
@@ -700,9 +766,15 @@ function DesignViewer(props: DesignViewerProps) {
 		(patch: CanvasDesignDataPatch): CanvasDocument | undefined => {
 			let nextCanvasData: CanvasDocument | undefined
 			updateDesignDataAndScheduleSave((draft) => {
-				nextCanvasData = applyCanvasDesignDataPatch(draft.canvas, patch)
+				nextCanvasData = applyCanvasDocumentPatch(draft.canvas, patch)
 				draft.canvas = nextCanvasData
 			})
+			if (nextCanvasData) {
+				latestDesignDataRef.current = {
+					...latestDesignDataRef.current,
+					canvas: nextCanvasData,
+				}
+			}
 			return nextCanvasData
 		},
 		[updateDesignDataAndScheduleSave],
@@ -726,7 +798,7 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const persistCanvasPatchLocally = useCallback(
 		(patch: CanvasDesignDataPatch): CanvasDocument | undefined => {
-			const nextCanvasData = applyCanvasDesignDataPatch(
+			const nextCanvasData = applyCanvasDocumentPatch(
 				latestDesignDataRef.current.canvas,
 				patch,
 			)
@@ -734,6 +806,23 @@ function DesignViewer(props: DesignViewerProps) {
 			return nextCanvasData
 		},
 		[persistCanvasDataLocally],
+	)
+
+	const resolveEditedElementConflictsFromPatch = useCallback(
+		(patch: CanvasDesignDataPatch, nextCanvasData: CanvasDocument | undefined) => {
+			if (!nextCanvasData) return
+			const editedElementIds = Array.from(
+				new Set([...patch.changedElementIds, ...patch.deletedElementIds]),
+			)
+			if (editedElementIds.length === 0) return
+
+			const nextDesignData: DesignData = {
+				...latestDesignDataRef.current,
+				canvas: nextCanvasData,
+			}
+			resolveEditedElementConflictsWithLocal(editedElementIds, nextDesignData)
+		},
+		[resolveEditedElementConflictsWithLocal],
 	)
 
 	const persistCurrentCanvasDraftImmediately = useCallback(() => {
@@ -772,32 +861,58 @@ function DesignViewer(props: DesignViewerProps) {
 	// 处理画布数据变化（用户编辑，触发自动保存）
 	const handleCanvasDesignDataChange = useCallback(
 		(canvasData: CanvasDocument, meta?: CanvasDesignDataChangeMeta) => {
-			if (isApplyingRemoteCanvasUpdateRef.current) return
+			if (isApplyingRemoteCanvasUpdateRef.current) {
+				return
+			}
 			if (isOffline) {
 				persistCanvasDataLocally(canvasData)
+				resolveEditedElementConflictsWithLocal(meta?.changedElementIds ?? [], {
+					...latestDesignDataRef.current,
+					canvas: canvasData,
+				})
 				return
 			}
 
 			persistCanvasData(canvasData)
+			resolveEditedElementConflictsWithLocal(meta?.changedElementIds ?? [], {
+				...latestDesignDataRef.current,
+				canvas: canvasData,
+			})
 			syncCanvasImageFileRename(canvasData, meta)
 		},
-		[isOffline, persistCanvasData, persistCanvasDataLocally, syncCanvasImageFileRename],
+		[
+			isOffline,
+			persistCanvasData,
+			persistCanvasDataLocally,
+			resolveEditedElementConflictsWithLocal,
+			syncCanvasImageFileRename,
+		],
 	)
 
 	const handleCanvasDesignDataPatchChange = useCallback(
 		(patch: CanvasDesignDataPatch, meta?: CanvasDesignDataChangeMeta) => {
-			if (isApplyingRemoteCanvasUpdateRef.current) return
+			if (isApplyingRemoteCanvasUpdateRef.current) {
+				return
+			}
 			if (isOffline) {
-				persistCanvasPatchLocally(patch)
+				const nextCanvasData = persistCanvasPatchLocally(patch)
+				resolveEditedElementConflictsFromPatch(patch, nextCanvasData)
 				return
 			}
 
 			const nextCanvasData = persistCanvasDataPatch(patch)
+			resolveEditedElementConflictsFromPatch(patch, nextCanvasData)
 			if (nextCanvasData) {
 				syncCanvasImageFileRename(nextCanvasData, meta)
 			}
 		},
-		[isOffline, persistCanvasDataPatch, persistCanvasPatchLocally, syncCanvasImageFileRename],
+		[
+			isOffline,
+			persistCanvasDataPatch,
+			persistCanvasPatchLocally,
+			resolveEditedElementConflictsFromPatch,
+			syncCanvasImageFileRename,
+		],
 	)
 
 	useEffect(() => {
@@ -951,6 +1066,103 @@ function DesignViewer(props: DesignViewerProps) {
 		refreshCanvasDesign,
 	])
 
+	const conflictNoticeText = useMemo(() => {
+		if (!conflictState) return null
+		if (conflictState.elementConflicts?.some(({ status }) => status === "unresolved")) {
+			return null
+		}
+		return {
+			title: t("design.conflict.syncPausedTitle"),
+			description: t("design.conflict.syncPausedDescription"),
+		}
+	}, [conflictState, t])
+
+	const unresolvedElementConflictIds = useMemo(
+		() =>
+			(conflictState?.elementConflicts ?? [])
+				.filter(({ status }) => status === "unresolved")
+				.map(({ elementId }) => elementId),
+		[conflictState?.elementConflicts],
+	)
+	const [locallyResolvedElementConflictIds, setLocallyResolvedElementConflictIds] = useState<
+		Set<string>
+	>(() => new Set())
+
+	useEffect(() => {
+		setLocallyResolvedElementConflictIds((prev) => {
+			if (prev.size === 0) return prev
+
+			const unresolvedElementIds = new Set(unresolvedElementConflictIds)
+			const next = new Set(
+				Array.from(prev).filter((elementId) => unresolvedElementIds.has(elementId)),
+			)
+			return next.size === prev.size ? prev : next
+		})
+	}, [unresolvedElementConflictIds])
+
+	const hasUnresolvedElementConflicts = unresolvedElementConflictIds.length > 0
+	const visibleElementConflicts = useMemo(
+		() =>
+			(conflictState?.elementConflicts ?? []).filter(
+				({ elementId, status }) =>
+					status === "unresolved" && !locallyResolvedElementConflictIds.has(elementId),
+			),
+		[conflictState?.elementConflicts, locallyResolvedElementConflictIds],
+	)
+	const elementActionHints = useMemo(
+		() =>
+			visibleElementConflicts.map(
+				({ elementId, reason, status, localElement, remoteElement }) => ({
+					elementId,
+					reason,
+					status,
+					tone: "warning" as const,
+					localExists: !!localElement,
+					remoteExists: !!remoteElement,
+				}),
+			),
+		[visibleElementConflicts],
+	)
+	const shouldBlockCanvasForConflict = !!conflictState && !hasUnresolvedElementConflicts
+	const shouldShowCanvasConflictNotice = shouldBlockCanvasForConflict && !!conflictNoticeText
+
+	const handleUseLocalElementConflict = useCallback(
+		(elementId: string) => {
+			const didResolve = resolveElementConflictWithLocal(elementId)
+			if (!didResolve) {
+				toast.error(t("design.conflict.elementResolveFailed"))
+				return
+			}
+			setLocallyResolvedElementConflictIds((prev) => new Set(prev).add(elementId))
+		},
+		[resolveElementConflictWithLocal, t],
+	)
+
+	const handleUseRemoteElementConflict = useCallback(
+		(elementId: string) => {
+			const didResolve = resolveElementConflictWithRemote(elementId)
+			if (!didResolve) {
+				toast.error(t("design.conflict.elementResolveFailed"))
+				return
+			}
+			setLocallyResolvedElementConflictIds((prev) => new Set(prev).add(elementId))
+		},
+		[resolveElementConflictWithRemote, t],
+	)
+
+	const handleElementActionHintAction = useCallback(
+		(elementId: string, actionKey: string) => {
+			if (actionKey === "use-local") {
+				handleUseLocalElementConflict(elementId)
+				return
+			}
+			if (actionKey === "use-remote") {
+				handleUseRemoteElementConflict(elementId)
+			}
+		},
+		[handleUseLocalElementConflict, handleUseRemoteElementConflict],
+	)
+
 	// 显示历史版本 banner 时预留顶部空间，避免遮挡画布（与 HISTORY_VERSION_BANNER_LAYOUT_HEIGHT_PX 一致）
 	const showVersionBanner = !isNewestVersion && !isMobile && !!fileVersionsList?.length
 	const shouldShowInitialLoading = isInitialLoading || isBasePathSwitching
@@ -1001,9 +1213,31 @@ function DesignViewer(props: DesignViewerProps) {
 							</>
 						)}
 						<div className={styles.designCanvasContainer}>
+							{shouldShowCanvasConflictNotice && (
+								<div
+									className={styles.conflictNotice}
+									role="status"
+									aria-live="polite"
+								>
+									<AlertTriangle className={styles.conflictIcon} size={20} />
+									<div className={styles.conflictContent}>
+										<div className={styles.conflictTitle}>
+											{conflictNoticeText.title}
+										</div>
+										<div className={styles.conflictDescription}>
+											{conflictNoticeText.description}
+										</div>
+									</div>
+								</div>
+							)}
 							{isOffline && (
 								<div
 									className={styles.offlineNotice}
+									style={
+										shouldShowCanvasConflictNotice
+											? { top: "104px" }
+											: undefined
+									}
 									role="status"
 									aria-live="polite"
 								>
@@ -1041,7 +1275,11 @@ function DesignViewer(props: DesignViewerProps) {
 									key={`${designProjectId}:${canvasDesignKey}:${designProjectBasePath}`}
 									id={designProjectId}
 									ref={canvasDesignRef}
-									readonly={isReadOnlyState || isUpgradeBlockingCanvas}
+									readonly={
+										isReadOnlyState ||
+										isUpgradeBlockingCanvas ||
+										shouldBlockCanvasForConflict
+									}
 									magic={{
 										methods,
 										permissions: designCanvasMagicPermissions,
@@ -1056,6 +1294,8 @@ function DesignViewer(props: DesignViewerProps) {
 										onCanvasDesignDataChange: handleCanvasDesignDataChange,
 										onCanvasDesignDataPatchChange:
 											handleCanvasDesignDataPatchChange,
+										elementActionHints,
+										onElementActionHintAction: handleElementActionHintAction,
 										projectAttachmentMentionTree,
 										defaultProjectAttachmentFolderId,
 										defaultProjectAttachmentFolderName,

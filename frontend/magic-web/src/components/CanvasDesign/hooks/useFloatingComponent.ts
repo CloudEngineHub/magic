@@ -1,7 +1,18 @@
 import { useEffect, useRef } from "react"
 import { useFloatingUI } from "../context/FloatingUIContext"
+import { useCanvas } from "../context/CanvasContext"
 
 const OVERFLOW_SCROLL_VALUES = new Set(["auto", "scroll", "overlay"])
+const POINTER_INTERACTIVE_SELECTOR = [
+	"button",
+	"a",
+	"input",
+	"textarea",
+	"select",
+	"[role='button']",
+	"[contenteditable='true']",
+	"[data-floating-pan-trap='true']",
+].join(",")
 
 function isAxisScrollable(overflow: string, scrollSize: number, clientSize: number): boolean {
 	return OVERFLOW_SCROLL_VALUES.has(overflow) && scrollSize > clientSize + 1
@@ -63,11 +74,27 @@ function wheelShouldDeferToDomScroll(container: HTMLElement, e: WheelEvent): boo
 	return false
 }
 
+function pointerShouldDeferToDomInteraction(container: HTMLElement, e: PointerEvent): boolean {
+	const path = typeof e.composedPath === "function" ? (e.composedPath() as EventTarget[]) : []
+	for (const node of path) {
+		if (!(node instanceof HTMLElement)) continue
+		if (node.matches(POINTER_INTERACTIVE_SELECTOR)) {
+			return true
+		}
+		if (node === container) {
+			break
+		}
+	}
+	return false
+}
+
 interface UseFloatingComponentOptions {
 	// 组件唯一标识
 	id: string
 	// 是否启用 wheel 事件转发（默认 true）
 	enableWheelForwarding?: boolean
+	// 是否启用 PanTool 下的拖拽平移转发（默认 false）
+	enablePointerPanForwarding?: boolean
 }
 
 /**
@@ -75,11 +102,26 @@ interface UseFloatingComponentOptions {
  * 自动注册组件并处理 wheel 事件转发
  */
 export function useFloatingComponent(options: UseFloatingComponentOptions) {
-	const { id, enableWheelForwarding = true } = options
+	const { id, enableWheelForwarding = true, enablePointerPanForwarding = false } = options
 	const { registerFloatingComponent, unregisterFloatingComponent, handleWheel } = useFloatingUI()
+	const { canvas } = useCanvas()
 
 	const containerRef = useRef<HTMLDivElement | null>(null)
 	const wheelHandlerRef = useRef<((e: WheelEvent) => void) | null>(null)
+	const pointerPanMoveHandlerRef = useRef<((e: PointerEvent) => void) | null>(null)
+	const pointerPanUpHandlerRef = useRef<((e: PointerEvent) => void) | null>(null)
+
+	const clearPointerPanSession = () => {
+		if (pointerPanMoveHandlerRef.current) {
+			window.removeEventListener("pointermove", pointerPanMoveHandlerRef.current)
+			pointerPanMoveHandlerRef.current = null
+		}
+		if (pointerPanUpHandlerRef.current) {
+			window.removeEventListener("pointerup", pointerPanUpHandlerRef.current)
+			window.removeEventListener("pointercancel", pointerPanUpHandlerRef.current)
+			pointerPanUpHandlerRef.current = null
+		}
+	}
 
 	useEffect(() => {
 		const container = containerRef.current
@@ -105,19 +147,68 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 			container.addEventListener("wheel", wheelHandler, { passive: false })
 		}
 
+		const pointerPanDownHandler = (e: PointerEvent) => {
+			if (
+				!enablePointerPanForwarding ||
+				!canvas ||
+				e.button !== 0 ||
+				!canvas.stage.draggable() ||
+				pointerPanMoveHandlerRef.current ||
+				pointerShouldDeferToDomInteraction(container, e)
+			) {
+				return
+			}
+
+			e.preventDefault()
+
+			const stage = canvas.stage
+			const startClient = { x: e.clientX, y: e.clientY }
+			const stageStart = { x: stage.x(), y: stage.y() }
+
+			pointerPanMoveHandlerRef.current = (ev: PointerEvent) => {
+				if (ev.pointerId !== e.pointerId) return
+				const position = {
+					x: stageStart.x + ev.clientX - startClient.x,
+					y: stageStart.y + ev.clientY - startClient.y,
+				}
+				stage.position(position)
+				stage.batchDraw()
+				canvas.eventEmitter.emit({ type: "viewport:pan", data: position })
+			}
+
+			pointerPanUpHandlerRef.current = (ev: PointerEvent) => {
+				if (ev.pointerId !== e.pointerId) return
+				clearPointerPanSession()
+			}
+
+			window.addEventListener("pointermove", pointerPanMoveHandlerRef.current)
+			window.addEventListener("pointerup", pointerPanUpHandlerRef.current)
+			window.addEventListener("pointercancel", pointerPanUpHandlerRef.current)
+		}
+
+		if (enablePointerPanForwarding) {
+			container.addEventListener("pointerdown", pointerPanDownHandler)
+		}
+
 		return () => {
 			// 注销组件
 			unregisterFloatingComponent(id)
+			clearPointerPanSession()
 
 			// 移除事件监听
 			if (wheelHandlerRef.current && container) {
 				container.removeEventListener("wheel", wheelHandlerRef.current)
 				wheelHandlerRef.current = null
 			}
+			if (enablePointerPanForwarding) {
+				container.removeEventListener("pointerdown", pointerPanDownHandler)
+			}
 		}
 	}, [
+		canvas,
 		id,
 		enableWheelForwarding,
+		enablePointerPanForwarding,
 		registerFloatingComponent,
 		unregisterFloatingComponent,
 		handleWheel,

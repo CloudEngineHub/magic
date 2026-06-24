@@ -30,6 +30,7 @@ import ImageExtendPanel from "./components/ImageExtendPanel"
 import ImageEraserPanel from "./components/ImageEraserPanel"
 import ElementRenameOverlay from "./components/ElementRenameOverlay"
 export { prewarmCanvasDesignImageWorker } from "./prewarm"
+import ElementActionHints from "./components/ElementActionHints"
 import PluginPanel from "./components/PluginPanel"
 
 import styles from "./index.module.css"
@@ -46,7 +47,13 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		shareHostBottomChrome = false,
 	} = props
 
-	const { defaultData, onCanvasDesignDataChange, onCanvasDesignDataPatchChange } = data
+	const {
+		defaultData,
+		onCanvasDesignDataChange,
+		onCanvasDesignDataPatchChange,
+		elementActionHints,
+		onElementActionHintAction,
+	} = data
 
 	const {
 		defaultMarkers,
@@ -193,6 +200,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	return (
 		<FloatingUIProvider canvas={canvas}>
 			<div ref={canvasContainerRef} className={styles.canvasContainer} />
+			<ElementActionHints hints={elementActionHints} onAction={onElementActionHintAction} />
 			{!readonly && <ElementRenameOverlay />}
 			{!readonly && <ElementTools />}
 			{!readonly && <ImageMessageEditor />}

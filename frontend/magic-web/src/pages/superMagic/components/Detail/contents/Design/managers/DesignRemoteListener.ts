@@ -148,6 +148,7 @@ export type FetchRemoteDesignDataFn = () => Promise<DesignData | null>
 export type ApplyRemoteDesignDataFn = (
 	data: DesignData,
 	updateType: "message" | "revoke" | "restore",
+	options?: { remoteVersion?: number | null },
 ) => boolean
 
 export type CheckRemoteUpdateFn = () => Promise<{
@@ -190,8 +191,6 @@ export class DesignRemoteListener {
 	private lastKnownMagicProjectJsUpdatedAtMs: number | null = null
 	private localSaveUpdatedAtMs: number | null = null
 	private projectKey: string
-	private remoteApplyFlightKey: string | null = null
-	private remoteApplyFlightPromise: Promise<void> | null = null
 	private latestRemoteApplyToken = 0
 
 	constructor(options: DesignRemoteListenerOptions) {
@@ -241,8 +240,6 @@ export class DesignRemoteListener {
 		this.pendingDebouncedFileChangeUpdatedAtMs = null
 		this.pendingDebouncedFileChangeVersion = null
 		this.localSaveUpdatedAtMs = null
-		this.remoteApplyFlightKey = null
-		this.remoteApplyFlightPromise = null
 		this.latestRemoteApplyToken += 1
 	}
 
@@ -352,8 +349,12 @@ export class DesignRemoteListener {
 
 		const fileUpdatedAtMs = parseUpdatedAt(designProjectFileChange.file?.updated_at)
 		const fileVersion = normalizeFileVersion(designProjectFileChange.file?.version)
-		if (this.shouldIgnoreLocalSaveEcho(fileUpdatedAtMs, fileVersion)) return
-		if (this.deferRemoteRefreshDuringSave(fileUpdatedAtMs, fileVersion)) return
+		if (this.shouldIgnoreLocalSaveEcho(fileUpdatedAtMs, fileVersion)) {
+			return
+		}
+		if (this.deferRemoteRefreshDuringSave(fileUpdatedAtMs, fileVersion)) {
+			return
+		}
 
 		void this.handleConfirmedFileChange(fileUpdatedAtMs, fileVersion)
 	}
@@ -548,7 +549,9 @@ export class DesignRemoteListener {
 				this.debouncedLoadAndApply(fileUpdatedAtMs, resolvedFileVersion)
 				return
 			}
-			if (resolvedFileVersion !== null) return
+			if (resolvedFileVersion !== null) {
+				return
+			}
 		}
 
 		try {
@@ -723,6 +726,7 @@ export class DesignRemoteListener {
 		const didApplyRemote = await this.options.loadAndApplyRemote(updateType)
 		if (didApplyRemote) {
 			this.markMagicProjectJsUpdatedAtApplied(options?.fileUpdatedAtMs)
+			await this.markRemoteVersionApplied(null)
 		}
 
 		if (!options?.refreshVersionsAfterApply || this.options.isShareRoute) return
@@ -807,39 +811,34 @@ export class DesignRemoteListener {
 					this.isMounted && this.latestRemoteApplyToken === applyToken
 
 				const run = (async () => {
-					try {
-						const resolvedFileVersion =
-							pendingFileVersion ?? (await this.fetchLatestMagicProjectJsVersion())
-						if (!isLatestApply()) return
+					const resolvedFileVersion =
+						pendingFileVersion ?? (await this.fetchLatestMagicProjectJsVersion())
+					if (!isLatestApply()) return
 
-						const preloaded =
-							await this.maybePrepareRemoteDesignDataFromMagicProjectFile()
-						if (!isLatestApply()) return
-						if (preloaded) {
-							const applied = this.options.applyRemoteDesignData(preloaded, "message")
-							if (applied) {
-								this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
-								await this.markRemoteVersionApplied(resolvedFileVersion)
-							}
-							return
-						}
-						const newData = await this.options.fetchRemoteDesignData()
-						if (!isLatestApply()) return
-						if (!newData) return
-						const applied = this.options.applyRemoteDesignData(newData, "message")
+					const preloaded = await this.maybePrepareRemoteDesignDataFromMagicProjectFile()
+					if (!isLatestApply()) return
+					if (preloaded) {
+						const applied = this.options.applyRemoteDesignData(preloaded, "message", {
+							remoteVersion: resolvedFileVersion,
+						})
 						if (applied) {
 							this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
+							await this.markRemoteVersionApplied(resolvedFileVersion)
 						}
-					} finally {
-						if (this.latestRemoteApplyToken === applyToken) {
-							this.remoteApplyFlightKey = null
-							this.remoteApplyFlightPromise = null
-						}
+						return
+					}
+					const newData = await this.options.fetchRemoteDesignData()
+					if (!isLatestApply()) return
+					if (!newData) return
+					const applied = this.options.applyRemoteDesignData(newData, "message", {
+						remoteVersion: resolvedFileVersion,
+					})
+					if (applied) {
+						this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
+						await this.markRemoteVersionApplied(resolvedFileVersion)
 					}
 				})()
 
-				this.remoteApplyFlightKey = `${this.options.getMagicProjectJsFileId() ?? ""}:${applyToken}`
-				this.remoteApplyFlightPromise = run
 				void run
 			} else {
 				void this.handleRemoteRefresh("message", {

@@ -2,9 +2,16 @@ import type { Node as TiptapNode } from "@tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "./canvas/interaction/shortcuts/types"
 import type { MagicConfig } from "./types.magic"
-import type { CanvasDesignPluginModuleConfig, CanvasDocument, LayerElement, Marker, PaddingInsetConfig } from "./canvas/types"
+import type {
+	CanvasDesignPluginModuleConfig,
+	CanvasDocument,
+	LayerElement,
+	Marker,
+	PaddingInsetConfig,
+} from "./canvas/types"
 import type { CanvasElementNameChange } from "./canvas/EventEmitter"
 import type { TFunction } from "./context/I18nContext"
+import type { CanvasDocumentMergeElementConflictReason } from "./model"
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
@@ -331,6 +338,16 @@ export interface CanvasDesignRef {
 	} | null>
 }
 
+export interface CanvasDesignElementActionHint {
+	id?: string
+	elementId: string
+	reason?: CanvasDocumentMergeElementConflictReason
+	status?: "unresolved" | "resolved"
+	tone?: "warning" | "info" | "error"
+	localExists?: boolean
+	remoteExists?: boolean
+}
+
 export interface CanvasDesignProps {
 	/** 设计项目 ID，用于隔离画布级缓存、SW 离线资源与跨画布粘贴校验 */
 	id: string
@@ -366,6 +383,9 @@ export interface CanvasDesignProps {
 		mentionExtension?: MentionExtensionCtor
 		/** 项目侧资源选择面板渲染器（通过依赖注入传入，实现组件隔离） */
 		referenceResourcePanelRenderer?: ReferenceResourcePanelRenderer
+		/** 元素锚点动作提示；仅展示和回调，不改变元素交互能力 */
+		elementActionHints?: CanvasDesignElementActionHint[]
+		onElementActionHintAction?: (elementId: string, actionKey: string) => void
 	}
 	/** marker 配置 */
 	marker?: {

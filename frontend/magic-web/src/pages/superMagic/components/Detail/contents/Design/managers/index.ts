@@ -2,6 +2,12 @@ export { DesignProjectManager } from "./DesignProjectManager"
 export type { DesignProjectManagerFactoryParams } from "./DesignProjectManager"
 export { DesignLoadManager } from "./DesignLoadManager"
 export { DesignSaveManager } from "./DesignSaveManager"
+export type {
+	DesignSaveFailureReason,
+	DesignSaveLifecycleHandlers,
+	DesignSaveResult,
+	RemoteUpdateCheckResult,
+} from "./DesignSaveManager"
 export { DesignVersionManager } from "./DesignVersionManager"
 export {
 	DesignRemoteListener,
@@ -12,6 +18,11 @@ export {
 } from "./DesignRemoteListener"
 export {
 	type DesignRemoteUpdateListenerMode,
+	type DesignConflict,
+	type DesignConflictReason,
+	type DesignElementConflict,
+	type DesignElementConflictReason,
+	type DesignElementConflictStatus,
 	type DesignProjectManagerOptions,
 	type DesignProjectStateBag,
 	type DesignProjectStateBagSetters,

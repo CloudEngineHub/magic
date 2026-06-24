@@ -589,6 +589,11 @@
 			"description": "You can continue editing and saving the canvas after the network reconnects.",
 			"title": "Network disconnected. Canvas is read-only"
 		},
+		"conflict": {
+			"elementResolveFailed": "Failed to resolve element conflict",
+			"syncPausedDescription": "Your current changes are not automatically overwriting remote content. Wait for sync to recover or refresh before continuing.",
+			"syncPausedTitle": "Sync paused"
+		},
 		"saved": "Saved",
 		"saving": "Saving",
 		"upgrade": {
