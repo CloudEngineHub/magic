@@ -83,6 +83,7 @@ describe("MobileRecordingSourcePanel", () => {
 			<MobileRecordingSourcePanel
 				transcriptContent="[00:05] Mock transcript"
 				notesContent="Mock notes"
+				playing={false}
 				currentTime={0}
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
@@ -110,6 +111,7 @@ describe("MobileRecordingSourcePanel", () => {
 			<MobileRecordingSourcePanel
 				transcriptContent="[00:05] Mock transcript"
 				notesContent="Mock notes"
+				playing={false}
 				currentTime={0}
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
@@ -137,6 +139,7 @@ describe("MobileRecordingSourcePanel", () => {
 			<MobileRecordingSourcePanel
 				transcriptContent="[00:05] Speaker-1: Mock transcript"
 				notesContent="Mock notes"
+				playing={false}
 				currentTime={0}
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
@@ -162,6 +165,7 @@ describe("MobileRecordingSourcePanel", () => {
 					"[00:05] Speaker-1: Earlier line\n[00:10] Speaker-1: Active line"
 				}
 				notesContent="Mock notes"
+				playing={true}
 				currentTime={10}
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
@@ -197,11 +201,47 @@ describe("MobileRecordingSourcePanel", () => {
 		expect(activeSpeakerChip).not.toHaveClass("opacity-70")
 	})
 
+	it("does not highlight the matched transcript segment when audio is paused", () => {
+		render(
+			<MobileRecordingSourcePanel
+				transcriptContent={
+					"[00:05] Speaker-1: Earlier line\n[00:10] Speaker-1: Active line"
+				}
+				notesContent="Mock notes"
+				playing={false}
+				currentTime={10}
+				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
+				speakerNameMap={{ "Speaker-1": "Speaker-1" }}
+				onSelectedSpeakerIdsChange={vi.fn()}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		const inactiveTime = screen.getByText("0:05")
+		const pausedTime = screen.getByText("0:10")
+		const inactiveText = screen.getByText("Earlier line")
+		const pausedText = screen.getByText("Active line")
+		const [inactiveSpeakerChip, pausedSpeakerChip] = screen.getAllByRole("button", {
+			name: "Open speaker settings",
+		})
+
+		expect(inactiveTime).toHaveClass("text-foreground")
+		expect(pausedTime).toHaveClass("text-foreground")
+		expect(inactiveText).toHaveClass("text-foreground")
+		expect(pausedText).toHaveClass("text-foreground")
+		expect(inactiveSpeakerChip).not.toHaveClass("opacity-70")
+		expect(pausedSpeakerChip).not.toHaveClass("opacity-70")
+	})
+
 	it("centers the transcript empty state inside the shared empty slot", () => {
 		render(
 			<MobileRecordingSourcePanel
 				transcriptContent=""
 				notesContent="Mock notes"
+				playing={false}
 				currentTime={0}
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
@@ -224,6 +264,7 @@ describe("MobileRecordingSourcePanel", () => {
 			<MobileRecordingSourcePanel
 				transcriptContent="[00:05] Mock transcript"
 				notesContent=""
+				playing={false}
 				currentTime={0}
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
@@ -248,6 +289,7 @@ describe("MobileRecordingSourcePanel", () => {
 			<MobileRecordingSourcePanel
 				transcriptContent=""
 				notesContent=""
+				playing={false}
 				currentTime={0}
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
@@ -268,6 +310,7 @@ describe("MobileRecordingSourcePanel", () => {
 			<MobileRecordingSourcePanel
 				transcriptContent="[00:05] Mock transcript"
 				notesContent=""
+				playing={false}
 				currentTime={0}
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
@@ -295,6 +338,7 @@ describe("MobileRecordingSourcePanel", () => {
 			<MobileRecordingSourcePanel
 				transcriptContent="[00:05] Speaker-1: Mock transcript"
 				notesContent="Mock notes"
+				playing={false}
 				currentTime={0}
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1", "Speaker-2"]}

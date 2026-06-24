@@ -33,6 +33,7 @@ import {
 	isAudioProjectSummarizing,
 	isAudioProjectSummaryReady,
 } from "./utils/audio-recordings-utils"
+import { playTranscriptFromSegment } from "./utils/transcript-playback"
 import { OWNER_RECORDING_DETAIL_CAPABILITIES } from "./types/recording-detail-capabilities"
 import type { RecordingTranscriptSegment } from "./types/recording-detail"
 import { RecordingDetailProvider } from "./components/recording-detail/RecordingDetailProvider"
@@ -255,9 +256,10 @@ function AudioRecordingDetailPageDesktop() {
 
 	const handlePlaySegment = useCallback(
 		(segment: RecordingTranscriptSegment) => {
-			playSegment({ start: segment.start, end: segment.end })
+			// Desktop transcript clicks should jump into the full recording and continue playback from that sentence.
+			playTranscriptFromSegment({ seekTo }, segment.start)
 		},
-		[playSegment],
+		[seekTo],
 	)
 
 	/** Binds speaker-filter changes to the current project so the selection resets only across detail-page boundaries. */

@@ -88,6 +88,7 @@ export function RecordingDetailLeftColumn({
 			<RecordingDetailTranscriptPanel
 				segments={visibleSegments}
 				availableSpeakerIds={availableSpeakerIds}
+				playing={playing}
 				currentTime={currentTime}
 				selectedSpeakerIds={selectedSpeakerIds}
 				speakerNameMap={speakerNameMap}

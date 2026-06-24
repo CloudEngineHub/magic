@@ -9,6 +9,7 @@ import { RecordingDetailRegionEmptySlot } from "./RecordingDetailRegionEmptySlot
 import { useRecordingDetailCapabilities } from "./RecordingDetailProvider"
 import {
 	getTranscriptSegmentRowClassName,
+	type TranscriptPlaybackVisualState,
 	getTranscriptSegmentTextClassName,
 	getTranscriptSegmentTimeClassName,
 	getTranscriptSpeakerChipToneClassName,
@@ -22,6 +23,7 @@ const TRANSCRIPT_HEADER_PILL_ACTION_CLASS = `${TRANSCRIPT_HEADER_ACTION_BASE_CLA
 interface RecordingDetailTranscriptPanelProps {
 	segments: RecordingTranscriptSegment[]
 	availableSpeakerIds: string[]
+	playing: boolean
 	currentTime: number
 	selectedSpeakerIds: string[]
 	speakerNameMap: Record<string, string>
@@ -36,6 +38,7 @@ interface RecordingDetailTranscriptPanelProps {
 export function RecordingDetailTranscriptPanel({
 	segments,
 	availableSpeakerIds,
+	playing,
 	currentTime,
 	selectedSpeakerIds,
 	speakerNameMap,
@@ -48,8 +51,9 @@ export function RecordingDetailTranscriptPanel({
 	const { t } = useTranslation("audioRecordings")
 	const capabilities = useRecordingDetailCapabilities()
 	const activeSegmentId = useMemo(
-		() => findActiveSegmentId(segments, currentTime),
-		[segments, currentTime],
+		// Playback highlight only represents live playback, not a paused seek position.
+		() => (playing ? findActiveSegmentId(segments, currentTime) : null),
+		[segments, currentTime, playing],
 	)
 	const listRef = useRef<HTMLDivElement>(null)
 
@@ -150,6 +154,12 @@ export function RecordingDetailTranscriptPanel({
 					<div ref={listRef} className="flex flex-col gap-3 pb-4">
 						{segments.map((segment) => {
 							const isActive = segment.id === activeSegmentId
+							// Non-playing transcript rows should render at full reading contrast; dimming is reserved for live playback context.
+							const visualState: TranscriptPlaybackVisualState = !playing
+								? "idle"
+								: isActive
+									? "active"
+									: "dimmed"
 							return (
 								<div
 									key={segment.id}
@@ -172,7 +182,9 @@ export function RecordingDetailTranscriptPanel({
 								>
 									<div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-medium">
 										<span
-											className={getTranscriptSegmentTimeClassName(isActive)}
+											className={getTranscriptSegmentTimeClassName(
+												visualState,
+											)}
 										>
 											{formatRecordingTime(segment.start)}
 										</span>
@@ -183,7 +195,7 @@ export function RecordingDetailTranscriptPanel({
 													speakerNameMap[segment.speaker] ??
 													segment.speaker
 												}
-												active={isActive}
+												visualState={visualState}
 												canEdit={capabilities.canEditSpeakers}
 												onOpenSpeakerSettings={onOpenSpeakerSettings}
 											/>
@@ -191,7 +203,7 @@ export function RecordingDetailTranscriptPanel({
 									</div>
 									<p
 										className={getTranscriptSegmentTextClassName(
-											isActive,
+											visualState,
 											"desktop",
 										)}
 									>
@@ -213,13 +225,13 @@ import { resolveSpeakerChipStyle } from "../../utils/resolve-speaker-chip-style"
 function TranscriptSpeakerChip({
 	speakerId,
 	label,
-	active,
+	visualState,
 	canEdit,
 	onOpenSpeakerSettings,
 }: {
 	speakerId: string
 	label: string
-	active: boolean
+	visualState: TranscriptPlaybackVisualState
 	canEdit: boolean
 	onOpenSpeakerSettings: () => void
 }) {
@@ -227,7 +239,7 @@ function TranscriptSpeakerChip({
 	const chipClassName = cn(
 		"inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-4 text-foreground",
 		chipStyle.chip,
-		getTranscriptSpeakerChipToneClassName(active),
+		getTranscriptSpeakerChipToneClassName(visualState),
 		canEdit ? "transition-opacity hover:opacity-80" : undefined,
 	)
 	const chipContent = (

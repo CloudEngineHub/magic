@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils"
 
 type TranscriptSegmentDensity = "desktop" | "mobile"
+export type TranscriptPlaybackVisualState = "idle" | "active" | "dimmed"
 
 /** Keeps transcript rows on a fixed box model so playback highlighting never shifts surrounding content. */
 export function getTranscriptSegmentRowClassName(density: TranscriptSegmentDensity) {
@@ -11,27 +12,27 @@ export function getTranscriptSegmentRowClassName(density: TranscriptSegmentDensi
 	)
 }
 
-/** Emphasizes only the active timestamp instead of adding a larger selection card around the whole row. */
-export function getTranscriptSegmentTimeClassName(active: boolean) {
+/** Keeps non-playing transcript rows readable and reserves dimming for live playback context only. */
+export function getTranscriptSegmentTimeClassName(state: TranscriptPlaybackVisualState) {
 	return cn(
 		"shrink-0 tabular-nums transition-colors",
-		active ? "text-foreground" : "text-foreground/35",
+		state === "dimmed" ? "text-foreground/35" : "text-foreground",
 	)
 }
 
-/** Uses text contrast, not layout changes, to mirror the prototype's current-sentence focus. */
+/** Uses dimming only during playback so paused transcripts keep the prototype's normal reading baseline. */
 export function getTranscriptSegmentTextClassName(
-	active: boolean,
+	state: TranscriptPlaybackVisualState,
 	density: TranscriptSegmentDensity,
 ) {
 	return cn(
 		density === "desktop" ? "whitespace-pre-wrap text-sm leading-6" : "text-[16px] leading-7",
 		"transition-colors",
-		active ? "text-foreground" : "text-foreground/65",
+		state === "dimmed" ? "text-foreground/65" : "text-foreground",
 	)
 }
 
-/** Softens inactive speaker chips so the current sentence chip remains the primary focus cue. */
-export function getTranscriptSpeakerChipToneClassName(active: boolean) {
-	return cn("transition-opacity", !active && "opacity-70")
+/** Speaker chips stay fully readable while idle and only soften on non-active rows during playback. */
+export function getTranscriptSpeakerChipToneClassName(state: TranscriptPlaybackVisualState) {
+	return cn("transition-opacity", state === "dimmed" && "opacity-70")
 }

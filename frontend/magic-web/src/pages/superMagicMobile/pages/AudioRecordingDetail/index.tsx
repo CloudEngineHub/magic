@@ -533,6 +533,7 @@ export default function MobileAudioRecordingDetailPage() {
 					<MobileRecordingSourcePanel
 						transcriptContent={texts.transcript?.content}
 						notesContent={texts.notes?.content}
+						playing={player.playing}
 						currentTime={player.currentTime}
 						scrollPaddingBottom={scrollPaddingBottom}
 						availableSpeakerIds={transcriptSpeakerIds}

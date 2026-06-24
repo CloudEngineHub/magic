@@ -12,6 +12,7 @@ import { downloadRecordingAttachmentFile } from "../../utils/download-recording-
 import { collectSpeakerIdsFromText } from "../../utils/markdownTimeLinks"
 import { normalizeSpeakerSelection } from "../../utils/speaker-filter"
 import { getAttachmentFileName } from "../../utils/recording-detail-files"
+import { playTranscriptFromSegment } from "../../utils/transcript-playback"
 import { RecordingDetailProvider } from "./RecordingDetailProvider"
 import { RecordingDetailHeader } from "./RecordingDetailHeader"
 import { RecordingDetailWorkbench } from "./RecordingDetailWorkbench"
@@ -96,7 +97,8 @@ export function RecordingDetailShareDesktop({
 	/** Reuses transcript segment playback from the owner page while keeping the share shell read-only. */
 	const handlePlaySegment = useCallback(
 		(segment: RecordingTranscriptSegment) => {
-			player.playSegment({ start: segment.start, end: segment.end })
+			// Share detail should mirror the owner detail transcript behavior and continue playback after the jump.
+			playTranscriptFromSegment(player, segment.start)
 		},
 		[player],
 	)

@@ -65,7 +65,11 @@ vi.mock("../RecordingSpeakerFilterControl", () => ({
 }))
 
 /** Wraps the transcript panel with owner capabilities so tests match the desktop runtime contract. */
-function renderTranscriptPanel(currentTime: number, onOpenSpeakerSettings = vi.fn()) {
+function renderTranscriptPanel(
+	currentTime: number,
+	playing = true,
+	onOpenSpeakerSettings = vi.fn(),
+) {
 	const onSegmentClick = vi.fn()
 	const onSelectedSpeakerIdsChange = vi.fn()
 
@@ -101,6 +105,7 @@ function renderTranscriptPanel(currentTime: number, onOpenSpeakerSettings = vi.f
 						text: "Active line",
 					},
 				]}
+				playing={playing}
 				currentTime={currentTime}
 				availableSpeakerIds={["Speaker-1"]}
 				selectedSpeakerIds={["Speaker-1"]}
@@ -168,9 +173,40 @@ describe("RecordingDetailTranscriptPanel", () => {
 		}
 	})
 
+	it("does not highlight or auto-scroll when playback is paused at a segment time", () => {
+		const scrollIntoViewMock = vi.fn()
+		const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+			HTMLElement.prototype,
+			"scrollIntoView",
+		)
+		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+			configurable: true,
+			value: scrollIntoViewMock,
+		})
+
+		renderTranscriptPanel(10, false)
+
+		const [inactiveTime, pausedTime] = screen.getAllByText(/0:(05|10)/)
+		const inactiveText = screen.getByText("Earlier line")
+		const pausedText = screen.getByText("Active line")
+		const speakerChips = screen.getAllByTestId("recording-detail-transcript-speaker-chip")
+
+		expect(inactiveTime).toHaveClass("text-foreground")
+		expect(pausedTime).toHaveClass("text-foreground")
+		expect(inactiveText).toHaveClass("text-foreground")
+		expect(pausedText).toHaveClass("text-foreground")
+		expect(speakerChips[0]).not.toHaveClass("opacity-70")
+		expect(speakerChips[1]).not.toHaveClass("opacity-70")
+		expect(scrollIntoViewMock).not.toHaveBeenCalled()
+
+		if (originalScrollIntoView) {
+			Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView)
+		}
+	})
+
 	it("keeps row seek and speaker settings interactions separate", () => {
 		const onOpenSpeakerSettings = vi.fn()
-		const { onSegmentClick } = renderTranscriptPanel(10, onOpenSpeakerSettings)
+		const { onSegmentClick } = renderTranscriptPanel(10, true, onOpenSpeakerSettings)
 
 		fireEvent.click(screen.getByText("Earlier line"))
 		expect(onSegmentClick).toHaveBeenCalledWith(
@@ -209,6 +245,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 				<RecordingDetailTranscriptPanel
 					segments={[]}
 					availableSpeakerIds={["Speaker-1"]}
+					playing={false}
 					currentTime={0}
 					selectedSpeakerIds={["Speaker-1"]}
 					speakerNameMap={{ "Speaker-1": "Speaker-1" }}
@@ -244,6 +281,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 				<RecordingDetailTranscriptPanel
 					segments={[]}
 					availableSpeakerIds={["Speaker-1"]}
+					playing={false}
 					currentTime={0}
 					selectedSpeakerIds={["Speaker-1"]}
 					speakerNameMap={{ "Speaker-1": "Speaker-1" }}

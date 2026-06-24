@@ -162,6 +162,7 @@ export default function ShareMobileAudioRecordingDetailPage({
 					<MobileRecordingSourcePanel
 						transcriptContent={texts.transcript?.content}
 						notesContent={texts.notes?.content}
+						playing={player.playing}
 						currentTime={playerCurrentSec}
 						scrollPaddingBottom={scrollPaddingBottom}
 						availableSpeakerIds={transcriptSpeakerIds}

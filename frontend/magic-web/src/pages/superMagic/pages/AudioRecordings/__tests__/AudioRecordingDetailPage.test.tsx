@@ -5,11 +5,36 @@ import { RouteName } from "@/routes/constants"
 import { AUDIO_RECORDINGS_PAGE_SHELL_CLASS } from "../constants/page-shell"
 
 const navigateMock = vi.fn()
+const storageMock = vi.hoisted(() => ({
+	getItem: vi.fn(() => null),
+	setItem: vi.fn(),
+	removeItem: vi.fn(),
+	clear: vi.fn(),
+	key: vi.fn(() => null),
+	length: 0,
+}))
+const audioPlayerMock = vi.hoisted(() => ({
+	seekTo: vi.fn(),
+	playSegment: vi.fn(),
+	toggle: vi.fn(),
+	setPlaybackRate: vi.fn(),
+}))
 const locationStateMock = vi.hoisted(() => ({
 	projectName: "Weekly sync",
 	cardStatus: "summarized" as "summarized" | "not_summarized" | "summarizing",
 	audioFileId: undefined as string | undefined,
 }))
+
+vi.hoisted(() => {
+	Object.defineProperty(globalThis, "localStorage", {
+		value: storageMock,
+		configurable: true,
+	})
+	Object.defineProperty(globalThis, "sessionStorage", {
+		value: storageMock,
+		configurable: true,
+	})
+})
 
 vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: () => false,
@@ -28,6 +53,22 @@ vi.mock("react-router", async () => {
 
 vi.mock("@/routes/hooks/useNavigate", () => ({
 	default: () => navigateMock,
+}))
+
+vi.mock("@/stores/interface", () => ({
+	interfaceStore: {},
+}))
+
+vi.mock("@/apis/clients/chatWebSocket", () => ({
+	default: {},
+}))
+
+vi.mock("@/models/config/stores/theme.store", () => ({
+	themeStore: {
+		theme: "light",
+		setTheme: vi.fn(),
+		syncDocumentDarkClass: vi.fn(),
+	},
 }))
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -103,10 +144,10 @@ vi.mock("../hooks/useRecordingAudioPlayer", () => ({
 		playing: false,
 		progress: 0,
 		playbackRate: 1,
-		setPlaybackRate: vi.fn(),
-		seekTo: vi.fn(),
-		playSegment: vi.fn(),
-		toggle: vi.fn(),
+		setPlaybackRate: audioPlayerMock.setPlaybackRate,
+		seekTo: audioPlayerMock.seekTo,
+		playSegment: audioPlayerMock.playSegment,
+		toggle: audioPlayerMock.toggle,
 	}),
 }))
 
@@ -186,6 +227,38 @@ vi.mock("../components/recording-detail/RecordingDetailHeader", () => ({
 	),
 }))
 
+vi.mock("../components/recording-detail/RecordingDetailLeftColumn", () => ({
+	RecordingDetailLeftColumn: ({
+		onPlaySegment,
+	}: {
+		onPlaySegment: (segment: { id: string; start: number; end?: number; text: string }) => void
+	}) => (
+		<div data-testid="recording-detail-left-column">
+			<div data-testid="recording-detail-audio-player" />
+			<div
+				className="flex h-full min-h-full w-full flex-1 items-center justify-center"
+				data-testid="recording-detail-region-empty-slot"
+			>
+				<div data-testid="recording-detail-empty-noTranscript">No transcript</div>
+			</div>
+			<button
+				type="button"
+				data-testid="recording-detail-trigger-transcript-play"
+				onClick={() =>
+					onPlaySegment({
+						id: "segment-1",
+						start: 55,
+						end: 73,
+						text: "Mock transcript line",
+					})
+				}
+			>
+				Play transcript segment
+			</button>
+		</div>
+	),
+}))
+
 vi.mock("@/services/audioRecordings", () => ({
 	recordingGroupsService: {
 		listGroups: vi.fn().mockResolvedValue({ groups: [], totalCount: 0, ungroupedCount: 0 }),
@@ -196,6 +269,10 @@ vi.mock("@/services/audioRecordings", () => ({
 describe("AudioRecordingDetailPage", () => {
 	beforeEach(() => {
 		navigateMock.mockReset()
+		audioPlayerMock.seekTo.mockReset()
+		audioPlayerMock.playSegment.mockReset()
+		audioPlayerMock.toggle.mockReset()
+		audioPlayerMock.setPlaybackRate.mockReset()
 		mockDetailData.loading = false
 		mockDetailData.error = false
 	})
@@ -256,5 +333,14 @@ describe("AudioRecordingDetailPage", () => {
 			"2024/03/09 16:00 的录音",
 		)
 		expect(screen.queryByText("Untitled")).toBeNull()
+	})
+
+	it("seeks with autoplay instead of previewing a single transcript segment", () => {
+		render(<AudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByTestId("recording-detail-trigger-transcript-play"))
+
+		expect(audioPlayerMock.seekTo).toHaveBeenCalledWith(55, { autoplay: true })
+		expect(audioPlayerMock.playSegment).not.toHaveBeenCalled()
 	})
 })

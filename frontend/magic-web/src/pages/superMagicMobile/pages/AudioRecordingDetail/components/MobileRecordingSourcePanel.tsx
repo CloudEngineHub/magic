@@ -6,6 +6,7 @@ import { RecordingSpeakerFilterControl } from "@/pages/superMagic/pages/AudioRec
 import { RecordingDetailRegionEmptySlot } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailRegionEmptySlot"
 import {
 	getTranscriptSegmentRowClassName,
+	type TranscriptPlaybackVisualState,
 	getTranscriptSegmentTextClassName,
 	getTranscriptSegmentTimeClassName,
 	getTranscriptSpeakerChipToneClassName,
@@ -19,6 +20,7 @@ import { MobileRecordingMarkdownContent } from "./MobileRecordingMarkdownContent
 interface MobileRecordingSourcePanelProps {
 	transcriptContent?: string
 	notesContent?: string
+	playing: boolean
 	currentTime: number
 	scrollPaddingBottom: number
 	availableSpeakerIds?: string[]
@@ -34,6 +36,7 @@ interface MobileRecordingSourcePanelProps {
 export function MobileRecordingSourcePanel({
 	transcriptContent,
 	notesContent,
+	playing,
 	currentTime,
 	scrollPaddingBottom,
 	availableSpeakerIds,
@@ -121,6 +124,7 @@ export function MobileRecordingSourcePanel({
 					{activeTab === "transcript" ? (
 						<TranscriptList
 							segments={visibleSegments}
+							playing={playing}
 							currentTime={currentTime}
 							speakerNameMap={speakerNameMap}
 							emptyText={
@@ -185,6 +189,7 @@ function SourceTabButton({
 /** Renders transcript segments and highlights the row matching the current playback time. */
 function TranscriptList({
 	segments,
+	playing,
 	currentTime,
 	speakerNameMap,
 	emptyText,
@@ -192,6 +197,7 @@ function TranscriptList({
 	onSeek,
 }: {
 	segments: RecordingTranscriptSegment[]
+	playing: boolean
 	currentTime: number
 	speakerNameMap: Record<string, string>
 	emptyText: string
@@ -214,8 +220,14 @@ function TranscriptList({
 		<div className="flex flex-col gap-7">
 			{segments.map((segment) => {
 				const active =
+					playing &&
 					currentTime >= segment.start &&
 					(segment.end == null || currentTime < segment.end)
+				const visualState: TranscriptPlaybackVisualState = !playing
+					? "idle"
+					: active
+						? "active"
+						: "dimmed"
 				// Use a keyboard-accessible div instead of a button so the nested speaker action
 				// can remain interactive without triggering invalid button-in-button DOM.
 				const handleSeek = () => onSeek(segment.start)
@@ -240,7 +252,7 @@ function TranscriptList({
 						data-testid="mobile-recording-transcript-item"
 					>
 						<div className="mb-2 flex items-center gap-2 text-[12px] font-medium">
-							<span className={getTranscriptSegmentTimeClassName(active)}>
+							<span className={getTranscriptSegmentTimeClassName(visualState)}>
 								{formatRecordingTime(segment.start)}
 							</span>
 							{segment.speaker ? (
@@ -249,7 +261,7 @@ function TranscriptList({
 									// Highlight the current sentence through chip contrast instead of inserting a new card.
 									className={cn(
 										"inline-flex items-center rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[12px] leading-4 text-foreground active:opacity-70",
-										getTranscriptSpeakerChipToneClassName(active),
+										getTranscriptSpeakerChipToneClassName(visualState),
 									)}
 									onClick={(event) => {
 										event.stopPropagation()
@@ -262,7 +274,7 @@ function TranscriptList({
 								</button>
 							) : null}
 						</div>
-						<p className={getTranscriptSegmentTextClassName(active, "mobile")}>
+						<p className={getTranscriptSegmentTextClassName(visualState, "mobile")}>
 							{segment.text}
 						</p>
 					</div>
