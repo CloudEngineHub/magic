@@ -7,7 +7,6 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\ImageGeneration\Handler;
 
-use App\Application\Design\Service\DesignImageOperationInputNormalizer;
 use App\Application\ModelGateway\Service\ImageExpandAppService;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
@@ -15,6 +14,7 @@ use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\ImageExpandRequestDTO;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
+use Hyperf\Contract\ConfigInterface;
 
 /**
  * 设计侧「扩图」.
@@ -39,7 +39,7 @@ final class DesignExpandImageTaskHandler extends AbstractDesignImageGenerationTa
         FileDomainService $fileDomainService,
         TaskFileDomainService $taskFileDomainService,
         private readonly ImageExpandAppService $imageExpandAppService,
-        private readonly DesignImageOperationInputNormalizer $inputNormalizer,
+        private readonly ConfigInterface $config,
     ) {
         parent::__construct($fileDomainService, $taskFileDomainService);
     }
@@ -61,7 +61,7 @@ final class DesignExpandImageTaskHandler extends AbstractDesignImageGenerationTa
             $entity,
             $canvasPath,
             $maskPath,
-            $this->inputNormalizer,
+            $this->config,
         );
         if ($inputUrls === null) {
             return null;

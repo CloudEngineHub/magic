@@ -7,7 +7,6 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\ImageGeneration\Handler;
 
-use App\Application\Design\Service\DesignImageOperationInputNormalizer;
 use App\Application\Design\Tool\ImageGeneration\Contract\DesignImageGenerationTaskHandlerInterface;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
@@ -18,6 +17,7 @@ use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatRespons
 use Dtyq\CloudFile\Kernel\Struct\ImageProcessOptions;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
+use Hyperf\Contract\ConfigInterface;
 use Throwable;
 
 /**
@@ -25,6 +25,10 @@ use Throwable;
  */
 abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGenerationTaskHandlerInterface
 {
+    private const string ERASER_EXPAND_NORMALIZED_FORMAT = 'webp';
+
+    private const int ERASER_EXPAND_NORMALIZED_QUALITY = 85;
+
     public function __construct(
         protected readonly FileDomainService $fileDomainService,
         protected readonly TaskFileDomainService $taskFileDomainService,
@@ -177,7 +181,7 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
 
     /**
      * 解析擦除/扩图实际传给模型网关的 image/mask URL。
-     * 当原图或 mask 元数据超过下游限制时，只通过云存储图片处理参数做一次按需压缩/转码。
+     * 只对原图/canvas 判断大小并按需追加云存储压缩/转码参数，mask 始终原样传递。
      *
      * @return null|array{0: string, 1: string}
      */
@@ -186,22 +190,17 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         ImageGenerationEntity $entity,
         string $imagePath,
         string $maskPath,
-        DesignImageOperationInputNormalizer $inputNormalizer,
+        ConfigInterface $config,
     ): ?array {
         $imageLinkOptions = $this->buildEraserExpandReferenceImageLinkOptions($entity, $imagePath);
-        $maskLinkOptions = $this->buildEraserExpandReferenceImageLinkOptions($entity, $maskPath);
 
-        $normalizeInputs = $inputNormalizer->shouldNormalizeBySizes([
-            $this->resolveEraserExpandReferenceImageSize($dataIsolation, $entity, $imagePath),
-            $this->resolveEraserExpandReferenceImageSize($dataIsolation, $entity, $maskPath),
-        ]);
-        if ($normalizeInputs) {
-            $imageLinkOptions = $inputNormalizer->appendImageProcessOptions($imageLinkOptions);
-            $maskLinkOptions = $inputNormalizer->appendImageProcessOptions($maskLinkOptions, true);
+        // 只按原始文件元数据判断是否追加云存储处理参数，不下载或探测处理后的实际大小。
+        if ($this->shouldNormalizeEraserExpandImage($config, $this->resolveEraserExpandReferenceImageSize($dataIsolation, $entity, $imagePath))) {
+            $imageLinkOptions = $this->appendEraserExpandImageProcessOptions($imageLinkOptions);
         }
 
         $imageUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $imagePath, $imageLinkOptions);
-        $maskUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $maskPath, $maskLinkOptions);
+        $maskUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $maskPath);
 
         return $this->nonEmptyUrlPair($imageUrl, $maskUrl);
     }
@@ -223,7 +222,7 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
     }
 
     /**
-     * 读取擦除/扩图输入文件大小，用于判断是否需要追加云存储压缩/转码参数。
+     * 读取擦除原图或扩图 canvas 的文件大小，用于判断是否需要追加云存储压缩/转码参数。
      * 工作区文件使用数据库中的 file_size，design-mark 私有文件只读取云存储 metadata，不下载文件本体。
      */
     protected function resolveEraserExpandReferenceImageSize(
@@ -271,6 +270,39 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         }
 
         return [$imageUrl, $maskUrl];
+    }
+
+    /**
+     * 擦除/扩图只在原图或 canvas 超过下游限制时追加云存储 format/quality 参数。
+     * 不做 resize，避免 4K 输入被主动降到 2K。
+     */
+    private function shouldNormalizeEraserExpandImage(ConfigInterface $config, ?int $fileSize): bool
+    {
+        return $fileSize !== null && $fileSize > (int) $config->get('design_image_operation.input_max_bytes', 5 * 1024 * 1024);
+    }
+
+    /**
+     * 保留已有 crop 等图片处理参数，只追加擦除/扩图输入归一化需要的 format/quality。
+     *
+     * @param array<string, mixed> $linkOptions
+     * @return array<string, mixed>
+     */
+    private function appendEraserExpandImageProcessOptions(array $linkOptions): array
+    {
+        $imageOptions = $linkOptions['image'] ?? null;
+        if ($imageOptions instanceof ImageProcessOptions) {
+            $imageOptions = clone $imageOptions;
+        } else {
+            $imageOptions = new ImageProcessOptions();
+        }
+
+        $imageOptions->format(self::ERASER_EXPAND_NORMALIZED_FORMAT);
+
+        $imageOptions->quality(self::ERASER_EXPAND_NORMALIZED_QUALITY);
+
+        $linkOptions['image'] = $imageOptions;
+
+        return $linkOptions;
     }
 
     private function resolvePrivateReferenceImageSize(DesignDataIsolation $dataIsolation, string $referenceImage): ?int

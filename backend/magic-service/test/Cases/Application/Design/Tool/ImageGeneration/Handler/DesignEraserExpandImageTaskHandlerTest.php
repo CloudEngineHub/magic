@@ -7,7 +7,6 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\Design\Tool\ImageGeneration\Handler;
 
-use App\Application\Design\Service\DesignImageOperationInputNormalizer;
 use App\Application\Design\Tool\ImageGeneration\Handler\DesignEraserImageTaskHandler;
 use App\Application\Design\Tool\ImageGeneration\Handler\DesignExpandImageTaskHandler;
 use App\Application\ModelGateway\Service\ImageEraserAppService;
@@ -163,7 +162,7 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
             $this->createFileDomainService(),
             $this->createTaskFileDomainService(),
             $imageEraserAppService,
-            $this->createInputNormalizer(),
+            $this->createConfig(),
         );
 
         $response = $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
@@ -207,7 +206,7 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
             $this->createFileDomainService(),
             $this->createTaskFileDomainService(),
             $imageExpandAppService,
-            $this->createInputNormalizer(),
+            $this->createConfig(),
         );
 
         $response = $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
@@ -215,7 +214,7 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
         $this->assertSame('https://result.example.com/expanded.png', $response?->getData()[0]['url'] ?? null);
     }
 
-    public function testEraserHandlerNormalizesImageAndMaskWhenOriginalExceedsProviderLimit(): void
+    public function testEraserHandlerNormalizesOnlyImageWhenOriginalExceedsProviderLimit(): void
     {
         $dataIsolation = DesignDataIsolation::create('ORG001', '10001');
         $entity = $this->createEntity([
@@ -227,8 +226,8 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
         $imageEraserAppService->expects($this->once())
             ->method('erase')
             ->with($this->callback(function (ImageEraserRequestDTO $dto): bool {
-                return $dto->getImageUrl() === 'https://sandbox.example.com/input.png?normalized=1&limit=2048&format=jpg&quality=85'
-                    && $dto->getMaskUrl() === 'https://private.example.com/eraser-mask.png?normalized=1&limit=2048&format=png';
+                return $dto->getImageUrl() === 'https://sandbox.example.com/input.png?normalized=1&format=webp&quality=85'
+                    && $dto->getMaskUrl() === 'https://private.example.com/eraser-mask.png';
             }))
             ->willReturn($this->createGatewayResponse('https://result.example.com/erased.png'));
 
@@ -236,13 +235,13 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
             $this->createFileDomainService(),
             $this->createTaskFileDomainService(6 * 1024 * 1024),
             $imageEraserAppService,
-            $this->createInputNormalizer(),
+            $this->createConfig(),
         );
 
         $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
     }
 
-    public function testExpandHandlerNormalizesCanvasAndMaskTogetherWhenCanvasExceedsProviderLimit(): void
+    public function testExpandHandlerNormalizesOnlyCanvasWhenCanvasExceedsProviderLimit(): void
     {
         $dataIsolation = DesignDataIsolation::create('ORG001', '10001');
         $entity = $this->createEntity([
@@ -255,8 +254,8 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
         $imageExpandAppService->expects($this->once())
             ->method('expand')
             ->with($this->callback(function (ImageExpandRequestDTO $dto): bool {
-                return $dto->getImageUrl() === 'https://private.example.com/expand-canvas.png?normalized=1&limit=2048&format=jpg&quality=85'
-                    && $dto->getMaskUrl() === 'https://private.example.com/expand-mask.png?normalized=1&limit=2048&format=png';
+                return $dto->getImageUrl() === 'https://private.example.com/expand-canvas.png?normalized=1&format=webp&quality=85'
+                    && $dto->getMaskUrl() === 'https://private.example.com/expand-mask.png';
             }))
             ->willReturn($this->createGatewayResponse('https://result.example.com/expanded.png'));
 
@@ -267,40 +266,13 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
             ]),
             $this->createTaskFileDomainService(),
             $imageExpandAppService,
-            $this->createInputNormalizer(),
+            $this->createConfig(),
         );
 
         $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
     }
 
-    public function testEraserHandlerUsesSingleCloudStorageNormalizationProfile(): void
-    {
-        $dataIsolation = DesignDataIsolation::create('ORG001', '10001');
-        $entity = $this->createEntity([
-            '/images/input.png',
-            'design-mark/eraser-mask.png',
-        ], []);
-
-        $imageEraserAppService = $this->createMock(ImageEraserAppService::class);
-        $imageEraserAppService->expects($this->once())
-            ->method('erase')
-            ->with($this->callback(function (ImageEraserRequestDTO $dto): bool {
-                return $dto->getImageUrl() === 'https://sandbox.example.com/input.png?normalized=1&limit=2048&format=jpg&quality=85'
-                    && $dto->getMaskUrl() === 'https://private.example.com/eraser-mask.png?normalized=1&limit=2048&format=png';
-            }))
-            ->willReturn($this->createGatewayResponse('https://result.example.com/erased.png'));
-
-        $handler = new DesignEraserImageTaskHandler(
-            $this->createFileDomainService(),
-            $this->createTaskFileDomainService(6 * 1024 * 1024),
-            $imageEraserAppService,
-            $this->createInputNormalizer(),
-        );
-
-        $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
-    }
-
-    public function testMaskNormalizationUsesPngWithoutLossyQuality(): void
+    public function testMaskIsNotNormalizedWhenImageExceedsProviderLimit(): void
     {
         $dataIsolation = DesignDataIsolation::create('ORG001', '10001');
         $entity = $this->createEntity([
@@ -318,14 +290,15 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
             $this->createFileDomainService(recordedImageOptions: $recordedImageOptions),
             $this->createTaskFileDomainService(6 * 1024 * 1024),
             $imageEraserAppService,
-            $this->createInputNormalizer(),
+            $this->createConfig(),
         );
 
         $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
 
-        $maskOptions = $recordedImageOptions['design-mark/eraser-mask.png'] ?? [];
-        $this->assertSame('png', $maskOptions['format'] ?? null);
-        $this->assertArrayNotHasKey('quality', $maskOptions);
+        $imageOptions = $recordedImageOptions['ORG001/project_123/workspace/images/input.png'] ?? [];
+        $this->assertSame('webp', $imageOptions['format'] ?? null);
+        $this->assertArrayNotHasKey('resize', $imageOptions);
+        $this->assertArrayNotHasKey('design-mark/eraser-mask.png', $recordedImageOptions);
     }
 
     /**
@@ -394,9 +367,11 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
                 $normalizedSuffix = '';
                 if (isset($options['image']) && $options['image'] instanceof ImageProcessOptions) {
                     $optionData = $options['image']->toArray();
-                    $normalizedSuffix = '?normalized=1'
-                        . '&limit=' . (string) ($optionData['resize']['limit'] ?? 0)
-                        . '&format=' . (string) ($optionData['format'] ?? '')
+                    $normalizedSuffix = '?normalized=1';
+                    if (isset($optionData['resize']['limit'])) {
+                        $normalizedSuffix .= '&limit=' . (string) $optionData['resize']['limit'];
+                    }
+                    $normalizedSuffix .= '&format=' . (string) ($optionData['format'] ?? '')
                         . (isset($optionData['quality']) ? '&quality=' . (string) $optionData['quality'] : '');
                 }
 
@@ -444,19 +419,17 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
         return new FileDomainService($repository);
     }
 
-    private function createInputNormalizer(): DesignImageOperationInputNormalizer
+    private function createConfig(): ConfigInterface
     {
         $config = $this->createMock(ConfigInterface::class);
         $config->method('get')
             ->willReturnCallback(static function (string $key, mixed $default = null): mixed {
                 return match ($key) {
                     'design_image_operation.input_max_bytes' => 5 * 1024 * 1024,
-                    'design_image_operation.normalized_max_edge' => 2048,
-                    'design_image_operation.normalized_quality' => 85,
                     default => $default,
                 };
             });
 
-        return new DesignImageOperationInputNormalizer($config);
+        return $config;
     }
 }

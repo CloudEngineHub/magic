@@ -7,7 +7,6 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\ImageGeneration\Handler;
 
-use App\Application\Design\Service\DesignImageOperationInputNormalizer;
 use App\Application\ModelGateway\Service\ImageEraserAppService;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
@@ -15,6 +14,7 @@ use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\ImageEraserRequestDTO;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
+use Hyperf\Contract\ConfigInterface;
 
 /**
  * 设计侧「橡皮擦」.
@@ -38,7 +38,7 @@ final class DesignEraserImageTaskHandler extends AbstractDesignImageGenerationTa
         FileDomainService $fileDomainService,
         TaskFileDomainService $taskFileDomainService,
         private readonly ImageEraserAppService $imageEraserAppService,
-        private readonly DesignImageOperationInputNormalizer $inputNormalizer,
+        private readonly ConfigInterface $config,
     ) {
         parent::__construct($fileDomainService, $taskFileDomainService);
     }
@@ -60,7 +60,7 @@ final class DesignEraserImageTaskHandler extends AbstractDesignImageGenerationTa
             $entity,
             $imagePath,
             $maskPath,
-            $this->inputNormalizer,
+            $this->config,
         );
         if ($inputUrls === null) {
             return null;
