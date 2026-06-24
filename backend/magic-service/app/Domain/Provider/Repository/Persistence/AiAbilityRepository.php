@@ -40,6 +40,25 @@ class AiAbilityRepository extends AbstractModelRepository implements AiAbilityRe
     }
 
     /**
+     * 批量获取已存在的AI能力代码.
+     */
+    public function getExistingCodes(ProviderDataIsolation $dataIsolation, array $codes): array
+    {
+        $codeValues = array_values(array_unique(array_map(
+            static fn (AiAbilityCode $code): string => $code->value,
+            $codes
+        )));
+        if (empty($codeValues)) {
+            return [];
+        }
+
+        $builder = $this->createBuilder($dataIsolation, AiAbilityModel::query());
+        return $builder->whereIn('code', $codeValues)
+            ->pluck('code')
+            ->all();
+    }
+
+    /**
      * 获取所有AI能力列表.
      */
     public function getAll(ProviderDataIsolation $dataIsolation): array
