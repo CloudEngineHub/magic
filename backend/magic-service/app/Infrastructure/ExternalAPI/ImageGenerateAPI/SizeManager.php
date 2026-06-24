@@ -213,7 +213,7 @@ class SizeManager
      * 根据模型版本、名称和 model_id 匹配配置.
      * @param string $modelVersion 模型版本
      * @param null|string $modelId 模型ID
-     * @return null|array 返回配置数组，包含 sizes 和 max_reference_images，如果未匹配到则返回 null
+     * @return null|array 返回配置数组，包含 sizes、max_reference_images、max_output_images 等；如果未匹配到则返回 null
      */
     public static function matchConfig(string $modelVersion, ?string $modelId = null): ?array
     {
@@ -241,6 +241,14 @@ class SizeManager
         }
 
         return null;
+    }
+
+    public static function getMaxOutputImages(string $modelVersion, ?string $modelId = null): int
+    {
+        $config = self::matchConfig($modelVersion, $modelId);
+        $maxOutputImages = (int) ($config['max_output_images'] ?? 1);
+
+        return max(1, $maxOutputImages);
     }
 
     /**

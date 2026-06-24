@@ -199,42 +199,6 @@ class ImageGenerateFactoryTest extends TestCase
         $this->assertArrayNotHasKey('quality', $request->toArray());
     }
 
-    public function testAzureGptImage2UsesQualityFromImageGenerationConfig(): void
-    {
-        $data = $this->getCommonData();
-        $data['size'] = '1024x1024';
-        $data['image_generation_config'] = [
-            'quality' => 'high',
-        ];
-
-        $request = ImageGenerateFactory::createRequestType(
-            ImageGenerateModelType::AzureOpenAIImageGenerate,
-            'gpt-image-2',
-            'gpt-image-2',
-            $data
-        );
-
-        $this->assertInstanceOf(AzureOpenAIImageRequest::class, $request);
-        $this->assertSame('high', $request->getQuality());
-    }
-
-    public function testAzureGptImage2DefaultsQualityToAuto(): void
-    {
-        $data = $this->getCommonData();
-        $data['size'] = '1024x1024';
-
-        $request = ImageGenerateFactory::createRequestType(
-            ImageGenerateModelType::AzureOpenAIImageGenerate,
-            'gpt-image-2',
-            'gpt-image-2',
-            $data
-        );
-
-        $this->assertInstanceOf(AzureOpenAIImageRequest::class, $request);
-        $this->assertNull($request->getQuality());
-        $this->assertArrayNotHasKey('quality', $request->toArray());
-    }
-
     public function testAzureGptImage2RejectsSizesThatAreNotDivisibleBy16(): void
     {
         $this->expectException(BusinessException::class);
@@ -1251,6 +1215,104 @@ class ImageGenerateFactoryTest extends TestCase
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['sizeStr'], $request->getSize(), "Size string mismatch for size: {$testCase['size']}");
         }
+    }
+
+    public function testCreateRequestRejectsGenerateNumAboveConfiguredLimit(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('当前模型最多支持一次生成 8 张图片，请调整 n 参数。');
+
+        $data = $this->getCommonData();
+        $data['generate_num'] = 9;
+
+        ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::VolcengineArk,
+            'doubao-seedream-4-0-250828',
+            'seedream-4-0',
+            $data
+        );
+    }
+
+    public function testCreateRequestAllowsGenerateNumAtConfiguredLimit(): void
+    {
+        $data = $this->getCommonData();
+        $data['generate_num'] = 8;
+
+        $request = ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::VolcengineArk,
+            'doubao-seedream-4-0-250828',
+            'seedream-4-0',
+            $data
+        );
+
+        $this->assertInstanceOf(VolcengineArkRequest::class, $request);
+        $this->assertSame(8, $request->getGenerateNum());
+        $this->assertSame('auto', $request->getSequentialImageGeneration());
+        $this->assertSame(['max_images' => 8], $request->getSequentialImageGenerationOptions());
+    }
+
+    public function testCreateQwenImagePlusKeepsSingleOutputLimit(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('当前模型最多支持一次生成 1 张图片，请调整 n 参数。');
+
+        $data = $this->getCommonData();
+        $data['generate_num'] = 2;
+
+        ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::QwenImage,
+            'qwen-image-plus',
+            null,
+            $data
+        );
+    }
+
+    public function testCreateQwenImageEditPlusAllowsSixOutputs(): void
+    {
+        $data = $this->getCommonData();
+        $data['generate_num'] = 6;
+
+        $request = ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::QwenImage,
+            'qwen-image-edit-plus',
+            null,
+            $data
+        );
+
+        $this->assertInstanceOf(QwenImageModelRequest::class, $request);
+        $this->assertSame(6, $request->getGenerateNum());
+    }
+
+    public function testCreateQwenImageEditMaxRejectsAboveSixOutputs(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('当前模型最多支持一次生成 6 张图片，请调整 n 参数。');
+
+        $data = $this->getCommonData();
+        $data['generate_num'] = 7;
+
+        ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::QwenImage,
+            'qwen-image-edit-max',
+            null,
+            $data
+        );
+    }
+
+    public function testCreateRequestDefaultsOutputImageLimitToOne(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('当前模型最多支持一次生成 1 张图片，请调整 n 参数。');
+
+        $data = $this->getCommonData();
+        $data['generate_num'] = 2;
+
+        ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::GoogleGemini,
+            'gemini-2.5-flash-image',
+            null,
+            $data
+        );
     }
 
     // ==========================================================

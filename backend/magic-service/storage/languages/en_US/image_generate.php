@@ -40,6 +40,7 @@ return [
     'prompt_required' => 'Image generation prompt is required',
     'reference_images_required' => 'Reference images are required for image editing',
     'invalid_image_count' => 'Image generation count must be between 1 and 10',
+    'output_image_count_exceeds_limit' => 'The current model supports generating at most :limit image(s) per request. Please adjust the n parameter.',
     'invalid_image_url' => 'Invalid reference image URL format',
     'invalid_mask_url' => 'Invalid mask image URL format',
     'no_image_generated' => 'No images were generated',

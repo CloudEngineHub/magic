@@ -13,6 +13,7 @@ use App\Domain\Design\Entity\ValueObject\ImageGenerationStatus;
 use App\Domain\Design\Factory\ImageGenerationFactory;
 use App\Domain\Design\Repository\Facade\ImageGenerationRepositoryInterface;
 use App\Domain\Design\Repository\Persistence\Model\ImageGenerationModel;
+use Hyperf\Codec\Json;
 
 /**
  * 图片生成任务仓储实现.
@@ -88,6 +89,19 @@ class ImageGenerationRepository extends DesignAbstractRepository implements Imag
         $data = [
             'status' => ImageGenerationStatus::COMPLETED->value,
             'file_name' => $fileName,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        $builder = $this->createBuilder($dataIsolation, ImageGenerationModel::query());
+        $builder->where('id', $id)->update($data);
+    }
+
+    public function completedWithImages(DesignDataIsolation $dataIsolation, int $id, string $fileName, array $outputImages): void
+    {
+        $data = [
+            'status' => ImageGenerationStatus::COMPLETED->value,
+            'file_name' => $fileName,
+            'output_images' => Json::encode($outputImages),
             'updated_at' => date('Y-m-d H:i:s'),
         ];
 

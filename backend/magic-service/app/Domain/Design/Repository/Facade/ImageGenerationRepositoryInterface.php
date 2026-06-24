@@ -36,4 +36,6 @@ interface ImageGenerationRepositoryInterface
     public function updateStatus(DesignDataIsolation $dataIsolation, int $id, string $status, ?string $errorMessage = null): void;
 
     public function completed(DesignDataIsolation $dataIsolation, int $id, string $fileName): void;
+
+    public function completedWithImages(DesignDataIsolation $dataIsolation, int $id, string $fileName, array $outputImages): void;
 }
