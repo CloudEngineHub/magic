@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { processHtmlContent } from "../../../contents/HTML/htmlProcessor"
@@ -6,6 +7,7 @@ import { flattenAttachments } from "../../../contents/HTML/utils"
 import { injectFetchInterceptorScript } from "../../../contents/HTML/utils/fetchInterceptor"
 import type { FileItem } from "../../../contents/HTML/utils/fetchInterceptor"
 import IsolatedHTMLRenderer from "../../../contents/HTML/IsolatedHTMLRenderer"
+import { AICardIframeLoadingState } from "./AICardIframeLoadingState"
 
 interface AICardIframeProps {
 	fileId?: string
@@ -20,7 +22,7 @@ interface AICardIframeProps {
 }
 
 const EMPTY_FILE_PATH_MAPPING = new Map<string, string>()
-const NOOP_OPEN_NEW_TAB = () => {}
+const NOOP_OPEN_NEW_TAB = () => undefined
 
 /**
  * Lightweight iframe renderer for AI Cards.
@@ -35,6 +37,7 @@ function AICardIframe({
 	hideVerticalScroll = false,
 	onLoad,
 }: AICardIframeProps) {
+	const { t } = useTranslation("super")
 	const [processedContent, setProcessedContent] = useState<string | null>(null)
 	const [filePathMapping, setFilePathMapping] =
 		useState<Map<string, string>>(EMPTY_FILE_PATH_MAPPING)
@@ -141,6 +144,7 @@ function AICardIframe({
 	}, [fileId, currentFile?.file_name, currentFileFingerprint, relativeFolderPath])
 
 	const handleRenderReady = useCallback(() => {
+		setLoading(false)
 		onLoad?.()
 	}, [onLoad])
 
@@ -161,7 +165,7 @@ function AICardIframe({
 	return (
 		<div className={cn("relative h-full w-full overflow-hidden", className)} style={style}>
 			{loading && showSkeleton && (
-				<div className="absolute inset-0 z-10 animate-pulse rounded-lg bg-muted/40" />
+				<AICardIframeLoadingState label={t("detail.aiCard.detail.loadingCard")} />
 			)}
 			{processedContent && (
 				<IsolatedHTMLRenderer

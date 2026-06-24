@@ -1,8 +1,19 @@
-import { render, waitFor } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import type { ComponentProps } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import AICardIframe from "../AICardIframe"
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => {
+			const labels: Record<string, string> = {
+				"detail.aiCard.detail.loadingCard": "Loading card",
+			}
+			return labels[key] || key
+		},
+	}),
+}))
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
 	getTemporaryDownloadUrl: vi.fn(),
@@ -19,13 +30,33 @@ vi.mock("../../../../contents/HTML/utils/fetchInterceptor", () => ({
 	injectFetchInterceptorScript: (content: string) => content,
 }))
 
-vi.mock("../../../../contents/HTML/IsolatedHTMLRenderer", () => ({
-	default: ({ content, fileId }: { content: string; fileId?: string }) => (
-		<div data-testid="isolated-html-renderer" data-file-id={fileId}>
-			{content}
-		</div>
-	),
-}))
+vi.mock("../../../../contents/HTML/IsolatedHTMLRenderer", async () => {
+	const React = await vi.importActual<typeof import("react")>("react")
+
+	function MockIsolatedHTMLRenderer({
+		content,
+		fileId,
+		onRenderReady,
+	}: {
+		content: string
+		fileId?: string
+		onRenderReady?: () => void
+	}) {
+		React.useEffect(() => {
+			onRenderReady?.()
+		}, [onRenderReady])
+
+		return (
+			<div data-testid="isolated-html-renderer" data-file-id={fileId}>
+				{content}
+			</div>
+		)
+	}
+
+	return {
+		default: MockIsolatedHTMLRenderer,
+	}
+})
 
 const mockFetch = vi.fn()
 
@@ -121,5 +152,23 @@ describe("AICardIframe", () => {
 		await waitFor(() => {
 			expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(2)
 		})
+	})
+
+	it("shows a centered loading state while the card html is loading", async () => {
+		mockFetch.mockResolvedValue({
+			ok: true,
+			text: () =>
+				new Promise<string>(() => {
+					// Keep the card in loading state for this assertion.
+				}),
+		})
+
+		renderIframe({ showSkeleton: true })
+
+		const loadingState = await screen.findByTestId("ai-card-iframe-loading")
+		expect(loadingState).toHaveTextContent("Loading card")
+		expect(screen.getByTestId("ai-card-loading-icon")).toBeInTheDocument()
+		expect(screen.getAllByTestId("ai-card-loading-sparkle")).toHaveLength(3)
+		expect(screen.queryByText("🃏")).not.toBeInTheDocument()
 	})
 })

@@ -163,6 +163,14 @@ function AICardRootRender(props: AICardRootRenderProps) {
 		[store],
 	)
 
+	const handleOpenPreviousVersion = useCallback(() => {
+		store.openPreviousDetailVersion()
+	}, [store])
+
+	const handleOpenNextVersion = useCallback(() => {
+		store.openNextDetailVersion()
+	}, [store])
+
 	if (store.loading) {
 		return (
 			<Flex
@@ -210,6 +218,14 @@ function AICardRootRender(props: AICardRootRenderProps) {
 						card={store.activeCard}
 						htmlFileId={store.detailFileId}
 						attachmentList={stableAttachmentList}
+						canGoToPreviousVersion={store.canOpenPreviousDetailVersion}
+						canGoToNextVersion={store.canOpenNextDetailVersion}
+						onOpenPreviousVersion={
+							store.detailVersionCount > 1 ? handleOpenPreviousVersion : undefined
+						}
+						onOpenNextVersion={
+							store.detailVersionCount > 1 ? handleOpenNextVersion : undefined
+						}
 						onBack={handleBack}
 					/>
 				)}

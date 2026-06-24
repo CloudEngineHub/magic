@@ -40,6 +40,44 @@ export class AICardStore {
 		return this.activeHistoryFileId || this.activeCard?.latestHtmlFileId
 	}
 
+	get detailVersionFileIds(): string[] {
+		const latestHtmlFileId = this.activeCard?.latestHtmlFileId
+		const fileIds: string[] = []
+		const seen = new Set<string>()
+
+		if (latestHtmlFileId) {
+			fileIds.push(latestHtmlFileId)
+			seen.add(latestHtmlFileId)
+		}
+
+		for (const entry of this.historyEntries) {
+			if (!entry.fileId || seen.has(entry.fileId)) continue
+			fileIds.push(entry.fileId)
+			seen.add(entry.fileId)
+		}
+
+		return fileIds
+	}
+
+	get detailVersionCount(): number {
+		return this.detailVersionFileIds.length
+	}
+
+	get detailVersionIndex(): number {
+		const fileId = this.detailFileId
+		if (!fileId) return -1
+		return this.detailVersionFileIds.indexOf(fileId)
+	}
+
+	get canOpenPreviousDetailVersion(): boolean {
+		return this.detailVersionIndex > 0
+	}
+
+	get canOpenNextDetailVersion(): boolean {
+		const index = this.detailVersionIndex
+		return index >= 0 && index < this.detailVersionFileIds.length - 1
+	}
+
 	get hasConfig(): boolean {
 		return !!this.projectConfig?.schedule_id
 	}
@@ -70,6 +108,14 @@ export class AICardStore {
 		}
 		this.activeHistoryFileId = historyFileId
 		this.viewMode = "detail"
+	}
+
+	openPreviousDetailVersion() {
+		this.openDetailVersionByOffset(-1)
+	}
+
+	openNextDetailVersion() {
+		this.openDetailVersionByOffset(1)
 	}
 
 	goBack() {
@@ -222,6 +268,18 @@ export class AICardStore {
 
 		// Or the attachmentList IS the children
 		return this.attachmentList
+	}
+
+	private openDetailVersionByOffset(offset: number) {
+		const currentIndex = this.detailVersionIndex
+		if (currentIndex < 0) return
+
+		const nextFileId = this.detailVersionFileIds[currentIndex + offset]
+		if (!nextFileId) return
+
+		this.activeHistoryFileId =
+			nextFileId === this.activeCard?.latestHtmlFileId ? null : nextFileId
+		this.viewMode = "detail"
 	}
 
 	private async fetchProjectConfig(fileId: string): Promise<AICardProjectConfig | null> {

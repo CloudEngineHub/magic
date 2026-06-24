@@ -12,6 +12,7 @@ function createAttachmentTree(overrides?: {
 	latestUpdatedAt?: string
 	configUpdatedAt?: string
 	assetUpdatedAt?: string
+	withHistory?: boolean
 }) {
 	return [
 		{
@@ -44,6 +45,41 @@ function createAttachmentTree(overrides?: {
 						},
 					],
 				},
+				...(overrides?.withHistory
+					? [
+							{
+								file_id: "history",
+								file_name: "history",
+								is_directory: true,
+								children: [
+									{
+										file_id: "history-old-folder",
+										file_name: "2026-06-18_09-00",
+										is_directory: true,
+										children: [
+											{
+												file_id: "history-old-html",
+												file_name: "index.html",
+												is_directory: false,
+											},
+										],
+									},
+									{
+										file_id: "history-new-folder",
+										file_name: "2026-06-19_09-00",
+										is_directory: true,
+										children: [
+											{
+												file_id: "history-new-html",
+												file_name: "index.html",
+												is_directory: false,
+											},
+										],
+									},
+								],
+							},
+						]
+					: []),
 			],
 		},
 	]
@@ -105,5 +141,28 @@ line two\`,
 		expect(store.projectConfig?.schedule_id).toBe("schedule-1")
 		expect(store.projectConfig?.prompt).toBe("line one\nline two")
 		expect(store.hasConfig).toBe(true)
+	})
+
+	it("switches detail versions from latest to older history and back", async () => {
+		const store = new AICardStore()
+
+		await store.sync("folder", createAttachmentTree({ withHistory: true }))
+		store.openCardDetail("folder")
+
+		expect(store.detailFileId).toBe("latest-html")
+		expect(store.canOpenPreviousDetailVersion).toBe(false)
+		expect(store.canOpenNextDetailVersion).toBe(true)
+
+		store.openNextDetailVersion()
+		expect(store.detailFileId).toBe("history-new-html")
+		expect(store.canOpenPreviousDetailVersion).toBe(true)
+		expect(store.canOpenNextDetailVersion).toBe(true)
+
+		store.openNextDetailVersion()
+		expect(store.detailFileId).toBe("history-old-html")
+		expect(store.canOpenNextDetailVersion).toBe(false)
+
+		store.openPreviousDetailVersion()
+		expect(store.detailFileId).toBe("history-new-html")
 	})
 })

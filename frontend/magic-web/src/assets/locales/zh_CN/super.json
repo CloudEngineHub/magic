@@ -676,7 +676,12 @@
 			},
 			"detail": {
 				"back": "返回",
-				"noContent": "暂无卡片内容，等待下次定时任务生成"
+				"loadingCard": "正在加载卡片",
+				"nextVersion": "较早版本",
+				"nextVersionDisabled": "已是最早版本",
+				"noContent": "暂无卡片内容，等待下次定时任务生成",
+				"previousVersion": "较新版本",
+				"previousVersionDisabled": "已是最新版本"
 			},
 			"form": {
 				"advancedSettings": "高级设置",

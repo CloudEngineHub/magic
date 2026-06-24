@@ -675,7 +675,12 @@
 			},
 			"detail": {
 				"back": "Back",
-				"noContent": "No card content yet, waiting for next scheduled task"
+				"loadingCard": "Loading card",
+				"nextVersion": "Older version",
+				"nextVersionDisabled": "Already at earliest version",
+				"noContent": "No card content yet, waiting for next scheduled task",
+				"previousVersion": "Newer version",
+				"previousVersionDisabled": "Already at latest version"
 			},
 			"form": {
 				"advancedSettings": "Advanced Settings",
