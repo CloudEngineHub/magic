@@ -165,29 +165,19 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         $fullFileDir = $imageGenerationEntity->getFullFileDir($fullPrefix);
         $uploadPath = substr($fullFileDir, strlen($fullPrefix));
 
-        $outputImages = [];
+        $completionPayload = $this->buildMultiImageCompletionPayload($baseName, $imageUrls, $imageGenerationEntity->getFileDir());
+        $outputImages = $completionPayload['output_images'];
         $uploadFiles = [];
         foreach ($imageUrls as $index => $imageUrl) {
-            $fileName = $this->buildIndexedFileName($baseName, $imageUrl, $index + 1);
-            $imageGenerationEntity->setFileName($fileName);
-
-            $uploadFile = new UploadFile($imageUrl, $uploadPath, $fileName, false);
+            $uploadFile = new UploadFile($imageUrl, $uploadPath, $outputImages[$index]['file_name'], false);
             $uploadFiles[] = $uploadFile;
-            $outputImages[] = [
-                'index' => $index + 1,
-                'file_name' => $fileName,
-                'file_path' => $imageGenerationEntity->getFilePath(),
-            ];
         }
 
-        $firstFileName = $outputImages[0]['file_name'];
-        $imageGenerationEntity->setFileName($firstFileName);
-
-        Db::transaction(function () use ($dataIsolation, $imageGenerationEntity, $outputImages, $uploadFiles, $firstFileName): void {
+        Db::transaction(function () use ($dataIsolation, $imageGenerationEntity, $outputImages, $uploadFiles, $completionPayload): void {
             $this->imageGenerationDomainService->markAsCompletedWithImages(
                 $dataIsolation,
                 $imageGenerationEntity->getId(),
-                $firstFileName,
+                $completionPayload['file_name'],
                 $outputImages
             );
 
@@ -196,6 +186,7 @@ class DesignImageGenerationSubscriber implements ListenerInterface
                 $this->createProjectFile($dataIsolation, $imageGenerationEntity, $uploadFile);
                 $this->fileDomainService->uploadByCredential($dataIsolation->getCurrentOrganizationCode(), $uploadFile, StorageBucketType::SandBox, false);
             }
+            $imageGenerationEntity->setFileName($completionPayload['file_name']);
         });
     }
 
@@ -271,5 +262,27 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         }
 
         return sprintf('%s_%d.%s', $baseName, $index, $extension);
+    }
+
+    /**
+     * @param array<int, string> $imageUrls
+     * @return array{file_name: string, output_images: array<int, array{index: int, file_name: string, file_path: string}>}
+     */
+    private function buildMultiImageCompletionPayload(string $baseName, array $imageUrls, string $fileDir): array
+    {
+        $outputImages = [];
+        foreach ($imageUrls as $index => $imageUrl) {
+            $fileName = $this->buildIndexedFileName($baseName, (string) $imageUrl, $index + 1);
+            $outputImages[] = [
+                'index' => $index + 1,
+                'file_name' => $fileName,
+                'file_path' => rtrim($fileDir, '/') . '/' . $fileName,
+            ];
+        }
+
+        return [
+            'file_name' => '',
+            'output_images' => $outputImages,
+        ];
     }
 }
