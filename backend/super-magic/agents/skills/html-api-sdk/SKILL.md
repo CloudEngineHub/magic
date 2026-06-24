@@ -20,8 +20,9 @@ description: "Complete API reference for window.Magic.* in SuperMagic HTML micro
 4. **No inline event handlers** — use `addEventListener`.
 5. **LLM calls must include model selector UI** unless user specifies model. Default `"auto"`.
 6. **Complex file-based AI** → use `createTopicAndSend` + `@file` + companion skill. Simple → `readFile` + `llm.chat/stream`.
-7. **User info is privacy-gated** — `window.Magic.user.getInfo()` returns only `name` and `avatar` by default. Sensitive fields require `app.json.permissions.userInfo.scopes`, a matching runtime `getInfo({ scopes, reason })` request, and user confirmation.
-8. **Use `app.json` as the micro-app manifest** — every new HTML micro-app folder should include `app.json` next to `index.html`. Put `type`, `name`, `entry`, file aliases, watch hints, and permissions there. Do not generate `magic.project.js` for new HTML micro-apps.
+7. **High-risk APIs are permission-gated** — new HTML micro-apps must declare requested scopes in `app.json.permissions.scopes`. The host asks the user to approve high-risk runtime calls for a limited duration.
+8. **User info is privacy-gated** — `window.Magic.user.getInfo()` returns only `name` and `avatar` by default. Sensitive fields require a matching permission declaration, a runtime `getInfo({ scopes, reason })` request, and user confirmation.
+9. **Use `app.json` as the micro-app manifest** — every new HTML micro-app folder should include `app.json` next to `index.html`. Put `type`, `name`, `entry`, file aliases, watch hints, and permissions there. Do not generate `magic.project.js` for new HTML micro-apps.
    ```json
    {
      "version": "1.0.0",
@@ -30,7 +31,10 @@ description: "Complete API reference for window.Magic.* in SuperMagic HTML micro
      "entry": "index.html",
      "files": {},
      "watch": [],
-     "permissions": {}
+     "permissions": {
+       "scopes": [],
+       "reason": ""
+     }
    }
    ```
 
@@ -64,7 +68,7 @@ await window.Magic.fs.writeFile("data/large.bin", blob);
 
 ### File Paths and Project-Root Access
 
-By default, relative `window.Magic.fs.*` paths resolve inside the app folder next to `index.html`. Use a leading slash for project-root paths. Do not add a file-scope permission block to `app.json`; file access scope is controlled by path syntax and host confirmation for writes outside the app root.
+By default, relative `window.Magic.fs.*` paths resolve inside the app folder next to `index.html`. Use a leading slash for project-root paths. Project-root reads require `fs.project.read`; project-root writes/deletes/moves/renames require `fs.project.write` plus a host path confirmation for each destructive operation.
 
 Path rules:
 
@@ -72,8 +76,9 @@ Path rules:
 - `"/shared/config.json"` -> project root.
 - `"/"` lists project-root entries.
 - `../` remains blocked in all scopes.
-- Writing, deleting, moving, or renaming files outside the app root triggers host confirmation and may be rejected by the user.
-- Reading and listing project-root files do not require an `app.json` file-scope declaration.
+- Reading project-root file contents or temporary URLs requires `fs.project.read`.
+- Writing, deleting, moving, or renaming files outside the app root requires `fs.project.write`, then triggers host path confirmation and may be rejected by the user.
+- `listFiles("/")` is not gated in the current version, but do not depend on that for sensitive directory discovery.
 
 ### `listFiles(dir?)` → `Promise<string[]>`
 
@@ -187,6 +192,8 @@ const cancel = window.Magic.llm.stream(
 
 `onChunk: (delta: string, done: boolean) => void`. Returns cancel fn.
 
+`chat` and `stream` require `llm.use` in `app.json.permissions.scopes`.
+
 ---
 
 ## 3. Agent Interaction
@@ -230,17 +237,23 @@ await window.Magic.project.uploadFiles(
 
 Max 500 MB per file.
 
+Requires `project.files.upload` in `app.json.permissions.scopes`.
+
 ### 5.2 `downloadFiles(paths)` → `Promise<unknown>`
 
 ```javascript
 await window.Magic.project.downloadFiles(["output/report.pdf"]);
 ```
 
+Requires `project.files.download` in `app.json.permissions.scopes`.
+
 ### 5.3 `addFilesToMessage(filePaths, agentMode?)` → `Promise<unknown>`
 
 ```javascript
 await window.Magic.project.addFilesToMessage(["data/report.csv"]);
 ```
+
+Requires `project.message.write` in `app.json.permissions.scopes`.
 
 ### 5.4 `createTopicAndSend(message, options?)` → `Promise<{topicId}>`
 
@@ -285,6 +298,8 @@ const { topicId: t2 } = await window.Magic.project.createTopicAndSend(
 
 Options: `agentId?` (defaults general mode), `model?` (default `"auto"`). Timeout: 30s.
 
+Requires `project.message.write` in `app.json.permissions.scopes`.
+
 ### 5.5 `sendMessage(message, options?)` → `Promise<void>`
 
 ```javascript
@@ -292,6 +307,8 @@ await window.Magic.project.sendMessage("Continue analyzing", { model: "auto" });
 ```
 
 Options: `model?`. Timeout: 15s.
+
+Requires `project.message.write` in `app.json.permissions.scopes`.
 
 ---
 
@@ -313,10 +330,8 @@ Sensitive fields require permission declaration in `app.json` in the same folder
 {
   "name": "Profile Card",
   "permissions": {
-    "userInfo": {
-      "scopes": ["user.profile.name", "user.profile.identity"],
-      "reason": "Display the current user's profile"
-    }
+    "scopes": ["user.profile.name", "user.profile.identity"],
+    "reason": "Display the current user's profile"
   }
 }
 ```
@@ -354,13 +369,54 @@ try {
 
 Notes:
 
-- Sensitive scopes must be present in both `app.json.permissions.userInfo.scopes` and the runtime `getInfo({ scopes })` call.
+- Sensitive scopes must be present in both `app.json.permissions.scopes` and the runtime `getInfo({ scopes })` call.
 - `magic.project.js` is legacy for older HTML micro-apps and still used by other project types such as slides/design/media. It is not the HTML micro-app manifest.
 - `reason` should explain why the app needs these fields; runtime `reason` overrides the `app.json` reason in the confirmation dialog.
 - Approved sensitive scopes are cached only for the current iframe session.
 - Never assume identity or organization fields are available from a bare `getInfo()` call.
 
 Timeout: 15s.
+
+---
+
+## 6.5 Permission Declaration
+
+New HTML micro-apps must declare every high-risk scope they may request:
+
+```json
+{
+  "version": "1.0.0",
+  "type": "micro-app",
+  "name": "Report Assistant",
+  "entry": "index.html",
+  "permissions": {
+    "scopes": [
+      "llm.use",
+      "fs.project.read",
+      "fs.project.write",
+      "project.files.download",
+      "project.message.write"
+    ],
+    "reason": "Read selected project files, call AI, and write generated reports back to the project"
+  }
+}
+```
+
+High-risk scopes:
+
+| Scope | Required for |
+| --- | --- |
+| `llm.use` | `window.Magic.llm.chat`, `window.Magic.llm.stream` |
+| `fs.project.read` | Project-root `fs.readFile("/...")`, `fs.getFileUrl("/...")` |
+| `fs.project.write` | Project-root `fs.writeFile`, `deleteFile`, `deleteDir`, `moveFile`, `renameFile` |
+| `project.files.upload` | `window.Magic.project.uploadFiles` |
+| `project.files.download` | `window.Magic.project.downloadFiles` |
+| `project.message.write` | `addFilesToMessage`, `createTopicAndSend`, `sendMessage` |
+| `user.profile.name` | `user.getInfo({ scopes: ["user.profile.name"] })` |
+| `user.profile.identity` | `user.getInfo({ scopes: ["user.profile.identity"] })` |
+| `user.profile.organization` | `user.getInfo({ scopes: ["user.profile.organization"] })` |
+
+Historical apps without `app.json` can still request high-risk APIs, but the host treats them as legacy apps: the user must approve the request, the approval duration is shorter, and the dialog warns that the app has no permission declaration. New apps should not rely on legacy behavior.
 
 ---
 

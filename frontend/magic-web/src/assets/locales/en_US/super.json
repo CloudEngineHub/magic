@@ -2156,6 +2156,32 @@
 			"deny": "Deny",
 			"fieldSeparator": ", ",
 			"title": "Authorize User Info Access"
+		},
+		"permissionAuthorizationConfirm": {
+			"allow": "Allow",
+			"content": "\"{{appName}}\" requests permission to use: {{scope}}. Purpose: {{reason}}",
+			"contentWithoutReason": "\"{{appName}}\" requests permission to use: {{scope}}. This app did not provide a purpose.",
+			"deny": "Deny",
+			"legacyContent": "This HTML micro-app has no permission declaration and requests permission to use: {{scope}}. This only applies briefly in the current tab.",
+			"scopes": {
+				"fsProjectRead": "Read project files outside the app directory",
+				"fsProjectWrite": "Modify project files outside the app directory",
+				"llmUse": "Call AI models",
+				"projectFilesDownload": "Download project files",
+				"projectFilesUpload": "Upload project files",
+				"projectMessageWrite": "Create topics or send messages",
+				"userProfileIdentity": "Read user identity info",
+				"userProfileName": "Read user name info",
+				"userProfileOrganization": "Read user organization info"
+			},
+			"title": "Authorize HTML Micro-App Capability",
+			"ttl": {
+				"once": "This operation",
+				"5m": "5 minutes",
+				"10m": "10 minutes",
+				"15m": "15 minutes",
+				"30m": "30 minutes"
+			}
 		}
 	},
 	"knowledgeBase": {

@@ -62,6 +62,84 @@ describe("IframeFSService", () => {
 		})
 	})
 
+	it("requires fs.project.read before reading a project-root file", async () => {
+		const authorizePermission = vi.fn().mockResolvedValue(false)
+		const { service, postToIframe } = createService({
+			fileList: [file("root-id", "shared.txt", "shared.txt")],
+			authorizePermission,
+		})
+
+		await service.handleMessage(FS_MESSAGE_TYPES.READ_REQUEST, {
+			type: FS_MESSAGE_TYPES.READ_REQUEST,
+			requestId: "req-read-project-denied",
+			path: "/shared.txt",
+		})
+
+		expect(authorizePermission).toHaveBeenCalledWith("fs.project.read")
+		expect(getIframeDownloadUrl).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: FS_MESSAGE_TYPES.READ_RESPONSE,
+				requestId: "req-read-project-denied",
+				success: false,
+			}),
+		)
+	})
+
+	it("requires fs.project.write before writing a project-root file", async () => {
+		const saveContentFn = vi.fn().mockResolvedValue(undefined)
+		const confirmProjectDeleteFn = vi.fn().mockResolvedValue(true)
+		const authorizePermission = vi.fn().mockResolvedValue(false)
+		const { service, postToIframe } = createService({
+			fileList: [file("root-id", "shared.txt", "shared.txt")],
+			saveContentFn,
+			confirmProjectDeleteFn,
+			authorizePermission,
+		})
+
+		await service.handleMessage(FS_MESSAGE_TYPES.WRITE_REQUEST, {
+			type: FS_MESSAGE_TYPES.WRITE_REQUEST,
+			requestId: "req-write-project-denied",
+			path: "/shared.txt",
+			content: "updated",
+		})
+
+		expect(authorizePermission).toHaveBeenCalledWith("fs.project.write")
+		expect(confirmProjectDeleteFn).not.toHaveBeenCalled()
+		expect(saveContentFn).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: FS_MESSAGE_TYPES.WRITE_RESPONSE,
+				requestId: "req-write-project-denied",
+				success: false,
+			}),
+		)
+	})
+
+	it("requires fs.project.write before checking whether a project-root delete target exists", async () => {
+		const deleteFn = vi.fn().mockResolvedValue(undefined)
+		const authorizePermission = vi.fn().mockResolvedValue(false)
+		const { service, postToIframe } = createService({
+			deleteFn,
+			authorizePermission,
+		})
+
+		await service.handleMessage(FS_MESSAGE_TYPES.DELETE_FILE_REQUEST, {
+			type: FS_MESSAGE_TYPES.DELETE_FILE_REQUEST,
+			requestId: "req-delete-project-missing-denied",
+			path: "/missing.txt",
+		})
+
+		expect(authorizePermission).toHaveBeenCalledWith("fs.project.write")
+		expect(deleteFn).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith({
+			type: FS_MESSAGE_TYPES.DELETE_FILE_RESPONSE,
+			requestId: "req-delete-project-missing-denied",
+			success: false,
+			error: "Permission denied: fs.project.write",
+		})
+	})
+
 	it("rejects getFileUrl when the file is missing", async () => {
 		const { service, postToIframe } = createService()
 

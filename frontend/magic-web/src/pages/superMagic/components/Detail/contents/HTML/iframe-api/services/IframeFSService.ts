@@ -21,6 +21,7 @@ import {
 	type FSWatchRegister,
 	type FSWatchUnregister,
 	type HTMLAppConfig,
+	type HtmlPermissionScope,
 } from "../types"
 
 /** workspace 文件项（来自 attachmentList 扁平化后） */
@@ -148,6 +149,8 @@ export interface IframeFSConfig {
 	 * 删除 appRoot 外的 project-scope 文件/目录前，让宿主弹出二次确认。
 	 */
 	confirmProjectDeleteFn?: ConfirmProjectDeleteFn
+	/** 执行高风险能力前的授权检查。未提供时保持旧行为。 */
+	authorizePermission?: (scope: HtmlPermissionScope) => Promise<boolean>
 }
 
 /** 读取文件大小限制：5 MB */
@@ -262,6 +265,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.read")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.READ_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.read",
+					})
+				}
+			}
+
 			const item = this.findFile(resolved)
 			if (!item) {
 				return this.send({
@@ -321,6 +336,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.WRITE_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			await this.confirmProjectOperationIfNeeded(resolved, false, "write")
 			const existingFile = this.findFile(resolved)
 
@@ -386,6 +413,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: replyType,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			await this.confirmProjectOperationIfNeeded(resolved, false, "write")
 			const existingFile = this.findFile(resolved)
 
@@ -460,6 +499,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.read")
+				if (!allowed) {
+					return this.send({
+						type: replyType,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.read",
+					})
+				}
+			}
+
 			const item = this.findFile(resolved)
 			if (!item) {
 				return this.send({
@@ -508,6 +559,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.DELETE_FILE_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			const item = this.findFile(resolved)
 			if (!item) {
 				return this.send({
@@ -576,6 +639,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.DELETE_DIR_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			// 收集目录本身 + 目录下所有文件的 file_id
 			const dirPath = this.normalizeWorkspacePath(
 				resolvedDir.endsWith("/") ? resolvedDir.slice(0, -1) : resolvedDir,
@@ -661,6 +736,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path) || this.isProjectRootRequestPath(targetDir)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.MOVE_FILE_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			const item = this.findFile(resolved)
 			if (!item) {
 				return this.send({
@@ -761,6 +848,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.RENAME_FILE_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			const item = this.findFile(resolved)
 			if (!item) {
 				return this.send({
@@ -938,6 +1037,10 @@ export class IframeFSService {
 
 	private hasProjectFileScope(): boolean {
 		return true
+	}
+
+	private isProjectRootRequestPath(path: string): boolean {
+		return typeof path === "string" && path.startsWith("/")
 	}
 
 	private isPathInAppRoot(path: string): boolean {
@@ -1123,5 +1226,10 @@ export class IframeFSService {
 
 	private send(message: object) {
 		this.cfg.postToIframe(message)
+	}
+
+	private async ensurePermission(scope: HtmlPermissionScope): Promise<boolean> {
+		if (!this.cfg.authorizePermission) return true
+		return this.cfg.authorizePermission(scope)
 	}
 }

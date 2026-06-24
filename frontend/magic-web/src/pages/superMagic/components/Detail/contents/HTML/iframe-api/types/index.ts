@@ -390,6 +390,21 @@ export const USER_INFO_SCOPES = {
 
 export type UserInfoScope = (typeof USER_INFO_SCOPES)[keyof typeof USER_INFO_SCOPES]
 
+export const HTML_PERMISSION_SCOPES = {
+	LLM_USE: "llm.use",
+	PROJECT_MESSAGE_WRITE: "project.message.write",
+	PROJECT_FILES_UPLOAD: "project.files.upload",
+	PROJECT_FILES_DOWNLOAD: "project.files.download",
+	FS_PROJECT_READ: "fs.project.read",
+	FS_PROJECT_WRITE: "fs.project.write",
+	USER_PROFILE_NAME: USER_INFO_SCOPES.NAME,
+	USER_PROFILE_IDENTITY: USER_INFO_SCOPES.IDENTITY,
+	USER_PROFILE_ORGANIZATION: USER_INFO_SCOPES.ORGANIZATION,
+} as const
+
+export type HtmlPermissionScope =
+	(typeof HTML_PERMISSION_SCOPES)[keyof typeof HTML_PERMISSION_SCOPES]
+
 // ─── UserInfo 消息报文 ───────────────────────────────────────────────────────
 
 export interface UserInfo {
@@ -458,6 +473,11 @@ export interface HTMLAppConfig {
 	watch?: string[]
 	/** 微应用权限声明。敏感能力必须先声明，再由用户确认授权。 */
 	permissions?: {
+		/** 新版统一权限声明。未声明的敏感能力不能申请。 */
+		scopes?: HtmlPermissionScope[]
+		/** 展示给用户的用途说明 */
+		reason?: string
+		/** 旧版用户信息权限声明，保留兼容。 */
 		userInfo?: {
 			/** 允许请求的用户信息范围 */
 			scopes?: UserInfoScope[]

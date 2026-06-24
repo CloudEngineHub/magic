@@ -13,6 +13,7 @@ import { topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import type { HtmlPermissionScope } from "../types"
 
 interface MagicUploadFileData {
 	/** File 对象（优先使用，通过 postMessage 结构化克隆直接传输） */
@@ -55,6 +56,8 @@ interface UseMagicFilesOptions {
 		path: string
 		fileSize?: number
 	}) => Promise<{ uploadedRelativeFilePath: string; storedRelativeFilePath?: string }>
+	/** 执行高风险能力前的授权检查。未提供时保持旧行为。 */
+	authorizePermission?: (scope: HtmlPermissionScope) => Promise<boolean>
 }
 
 interface UseMagicFilesReturn {
@@ -95,6 +98,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 		attachmentList,
 		relative_file_path,
 		uploadImageFileToProject,
+		authorizePermission,
 	} = options
 	const { t } = useTranslation("super")
 
@@ -119,6 +123,14 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 
 		if (!selectedProject?.id) {
 			replyToIframe(replyType, requestId, { success: false, error: "No project selected" })
+			return
+		}
+
+		if (!(await ensurePermission("project.files.upload"))) {
+			replyToIframe(replyType, requestId, {
+				success: false,
+				error: "Permission denied: project.files.upload",
+			})
 			return
 		}
 
@@ -244,6 +256,14 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				return
 			}
 
+			if (!(await ensurePermission("project.message.write"))) {
+				replyToIframe(replyType, requestId, {
+					success: false,
+					error: "Permission denied: project.message.write",
+				})
+				return
+			}
+
 			try {
 				const foundFiles: any[] = []
 				const notFoundPaths: string[] = []
@@ -350,6 +370,14 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 		}
 
 		try {
+			if (!(await ensurePermission("project.files.download"))) {
+				replyToIframe(replyType, requestId, {
+					success: false,
+					error: "Permission denied: project.files.download",
+				})
+				return
+			}
+
 			const foundFiles: Array<{ fileItem: any; originalPath: string }> = []
 			const notFoundPaths: string[] = []
 			const currentAttachmentList = attachmentListRef.current
@@ -433,4 +461,9 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 	})
 
 	return { handleMagicUploadFiles, handleMagicAddFilesToMessage, handleMagicDownloadFiles }
+
+	async function ensurePermission(scope: HtmlPermissionScope): Promise<boolean> {
+		if (!authorizePermission) return true
+		return authorizePermission(scope)
+	}
 }

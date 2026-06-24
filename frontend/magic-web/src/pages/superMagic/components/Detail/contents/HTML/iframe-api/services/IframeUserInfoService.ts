@@ -105,7 +105,9 @@ export class IframeUserInfoService {
 				return
 			}
 
-			const unauthorizedScopes = sensitiveScopes.filter((scope) => !authorizedScopes?.has(scope))
+			const unauthorizedScopes = sensitiveScopes.filter(
+				(scope) => !authorizedScopes?.has(scope),
+			)
 			if (unauthorizedScopes.length > 0) {
 				const allowed = await this.requestAuthorization(unauthorizedScopes, req.reason)
 				if (!allowed) {
@@ -222,9 +224,14 @@ export class IframeUserInfoService {
 	}
 
 	private getDeclaredScopes(): Set<UserInfoScope> {
-		const scopes = this.cfg.appConfig?.permissions?.userInfo?.scopes ?? [
-			USER_INFO_SCOPES.DISPLAY,
-		]
+		const unifiedScopes = (this.cfg.appConfig?.permissions?.scopes ?? []).filter(
+			(scope): scope is UserInfoScope =>
+				scope === USER_INFO_SCOPES.NAME ||
+				scope === USER_INFO_SCOPES.IDENTITY ||
+				scope === USER_INFO_SCOPES.ORGANIZATION,
+		)
+		const legacyScopes = this.cfg.appConfig?.permissions?.userInfo?.scopes ?? []
+		const scopes = [...unifiedScopes, ...legacyScopes]
 		return new Set<UserInfoScope>([USER_INFO_SCOPES.DISPLAY, ...scopes])
 	}
 
@@ -242,7 +249,11 @@ export class IframeUserInfoService {
 			appName: this.cfg.appConfig?.name || "HTML 微应用",
 			scopes,
 			fields: this.getFieldLabels(scopes),
-			reason: requestReason || this.cfg.appConfig?.permissions?.userInfo?.reason || "",
+			reason:
+				requestReason ||
+				this.cfg.appConfig?.permissions?.reason ||
+				this.cfg.appConfig?.permissions?.userInfo?.reason ||
+				"",
 		})
 	}
 

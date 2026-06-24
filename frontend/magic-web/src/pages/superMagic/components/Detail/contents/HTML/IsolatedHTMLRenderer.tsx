@@ -94,6 +94,7 @@ import { useIframeAgent } from "./iframe-api/hooks/useIframeAgent"
 import { useIframeUserInfo } from "./iframe-api/hooks/useIframeUserInfo"
 import { useMagicFiles } from "./iframe-api/hooks/useMagicFiles"
 import { useIframeAgentActions } from "./hooks/useIframeAgentActions"
+import { useHtmlAppPermissions } from "./hooks/useHtmlAppPermissions"
 import {
 	saveIframeFileContent,
 	createIframeFile,
@@ -101,10 +102,8 @@ import {
 	deleteIframeFiles,
 	moveIframeFile,
 	renameIframeFile,
-	getIframeDownloadUrl,
 	getIframeFileInfo,
 } from "./iframe-api/iframeApi"
-import type { HTMLAppConfig } from "./iframe-api/types"
 
 import { env } from "@/utils/env"
 import { userStore } from "@/models/user"
@@ -603,57 +602,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			return result
 		}, [attachmentList])
 
-		const [htmlAppConfig, setHtmlAppConfig] = useState<HTMLAppConfig | null>(null)
-
-		const htmlAppInstanceKey = useMemo(() => {
-			const cleanedEntryPath = (relative_file_path || "").replace(/^\/+/, "")
-			const lastSlash = cleanedEntryPath.lastIndexOf("/")
-			const appRootDir = lastSlash >= 0 ? cleanedEntryPath.slice(0, lastSlash + 1) : ""
-			return JSON.stringify({
-				projectId: selectedProject?.id || "",
-				appRootDir,
-				entryPath: cleanedEntryPath,
+		const { htmlAppConfig, htmlAppInstanceKey, authorizeHtmlPermission } =
+			useHtmlAppPermissions({
+				content,
+				rawSourceCode,
+				relativeFilePath: relative_file_path,
+				projectId: selectedProject?.id,
+				fileList: flatFileList,
 			})
-		}, [relative_file_path, selectedProject?.id])
-
-		useEffect(() => {
-			let cancelled = false
-			const cleanedEntryPath = (relative_file_path || "").replace(/^\/+/, "")
-			const lastSlash = cleanedEntryPath.lastIndexOf("/")
-			const appRootDir = lastSlash >= 0 ? cleanedEntryPath.slice(0, lastSlash + 1) : ""
-			const appConfigPath = `${appRootDir}app.json`
-			const appConfigFile = flatFileList.find(
-				(file) => file.relative_file_path.replace(/^\/+/, "") === appConfigPath,
-			)
-
-			if (!appConfigFile) {
-				setHtmlAppConfig(null)
-				return
-			}
-
-			getIframeDownloadUrl([appConfigFile.file_id])
-				.then(async (urls) => {
-					const url = urls?.[0]?.url
-					if (!url) throw new Error("Failed to get app.json download URL")
-					const response = await fetch(url)
-					if (!response.ok) throw new Error(`HTTP ${response.status}`)
-					const config = (await response.json()) as HTMLAppConfig
-					if (!cancelled)
-						setHtmlAppConfig(config && typeof config === "object" ? config : null)
-				})
-				.catch((error) => {
-					if (cancelled) return
-					setHtmlAppConfig(null)
-					logger.warn("加载 HTML 微应用 app.json 失败", {
-						appConfigPath,
-						errorMessage: error instanceof Error ? error.message : String(error),
-					})
-				})
-
-			return () => {
-				cancelled = true
-			}
-		}, [flatFileList, relative_file_path])
 
 		const { handleFSMessage } = useIframeFS({
 			iframeRef,
@@ -691,6 +647,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			verifyFileFn: useMemoizedFn(async ({ file_id, project_id }) =>
 				getIframeFileInfo(file_id, project_id),
 			),
+			authorizePermission: authorizeHtmlPermission,
 			confirmProjectDeleteFn: useMemoizedFn(
 				({ path, isDirectory, appRootDir, operation }) =>
 					new Promise<boolean>((resolve) => {
@@ -736,6 +693,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			baseUrl: (env("MAGIC_SERVICE_BASE_URL") as string) || "",
 			getAuthorization: () => userStore.user.authorization?.trim() || "",
 			getOrganizationCode: () => userStore.user.organizationCode?.trim() || "",
+			authorizePermission: authorizeHtmlPermission,
 		})
 
 		const { getAgentList, createTopicAndSend, sendMessage } = useIframeAgentActions()
@@ -747,6 +705,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			createTopicAndSend,
 			sendMessage,
 			enableWriteOperations: true,
+			authorizePermission: authorizeHtmlPermission,
 		})
 
 		const { handleUserInfoMessage } = useIframeUserInfo({
@@ -820,6 +779,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				attachmentList,
 				relative_file_path,
 				uploadImageFileToProject,
+				authorizePermission: authorizeHtmlPermission,
 			})
 
 		// 监听 iframe 准备就绪并初始化内容
@@ -1713,7 +1673,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							className={cn(
 								"w-full flex-shrink-0",
 								isPptRender &&
-								`absolute left-1/2 ${TAILWIND_Z_INDEX_CLASSES.TOOLBAR.STYLE_PANEL} top-[10px] w-[98%] -translate-x-1/2 rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/60`,
+									`absolute left-1/2 ${TAILWIND_Z_INDEX_CLASSES.TOOLBAR.STYLE_PANEL} top-[10px] w-[98%] -translate-x-1/2 rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/60`,
 								toolbarClassName,
 							)}
 						/>

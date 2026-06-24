@@ -24,6 +24,26 @@ const requiredUserInfoAuthorizationKeys = [
 	"deny",
 ]
 
+const requiredPermissionAuthorizationKeys = [
+	"title",
+	"content",
+	"contentWithoutReason",
+	"legacyContent",
+	"allow",
+	"deny",
+	"scopes.llmUse",
+	"scopes.projectMessageWrite",
+	"scopes.projectFilesUpload",
+	"scopes.projectFilesDownload",
+	"scopes.fsProjectRead",
+	"scopes.fsProjectWrite",
+	"ttl.once",
+	"ttl.5m",
+	"ttl.10m",
+	"ttl.15m",
+	"ttl.30m",
+]
+
 function getPathValue(source: unknown, path: string): unknown {
 	return path.split(".").reduce<unknown>((current, segment) => {
 		if (!current || typeof current !== "object") return undefined
@@ -52,6 +72,19 @@ describe("user info authorization confirmation i18n", () => {
 		for (const key of requiredUserInfoAuthorizationKeys) {
 			expect(
 				getPathValue(messages, `htmlEditor.userInfoAuthorizationConfirm.${key}`),
+			).toEqual(expect.any(String))
+		}
+	})
+})
+
+describe("HTML micro-app permission authorization confirmation i18n", () => {
+	it.each([
+		["zh_CN", zhCN],
+		["en_US", enUS],
+	])("defines all modal copy keys for %s", (_locale, messages) => {
+		for (const key of requiredPermissionAuthorizationKeys) {
+			expect(
+				getPathValue(messages, `htmlEditor.permissionAuthorizationConfirm.${key}`),
 			).toEqual(expect.any(String))
 		}
 	})
