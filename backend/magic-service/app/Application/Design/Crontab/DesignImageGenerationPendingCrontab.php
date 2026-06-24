@@ -11,7 +11,6 @@ use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
 use App\Domain\Design\Event\ImageGenerationTaskCreatedEvent;
 use App\Domain\Design\Service\ImageGenerationDomainService;
 use Dtyq\AsyncEvent\AsyncEventUtil;
-use Hyperf\Contract\ConfigInterface;
 use Hyperf\Crontab\Annotation\Crontab;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -27,9 +26,10 @@ use Throwable;
 )]
 readonly class DesignImageGenerationPendingCrontab
 {
+    private const int PENDING_SCAN_LIMIT = 20;
+
     public function __construct(
         private ImageGenerationDomainService $imageGenerationDomainService,
-        private ConfigInterface $config,
         private LoggerInterface $logger,
     ) {
     }
@@ -37,11 +37,10 @@ readonly class DesignImageGenerationPendingCrontab
     public function execute(): void
     {
         try {
-            $limit = (int) $this->config->get('design_image_operation.pending_scan_limit', 20);
             $tasks = $this->imageGenerationDomainService->findPendingByTypes([
                 ImageGenerationType::ERASER,
                 ImageGenerationType::EXPAND,
-            ], $limit);
+            ], self::PENDING_SCAN_LIMIT);
 
             foreach ($tasks as $task) {
                 AsyncEventUtil::dispatch(new ImageGenerationTaskCreatedEvent($task));
