@@ -143,12 +143,22 @@ Must follow this format strictly — both frontend and backend depend on it for 
 ```javascript
 window.magicProjectConfig = {
   type: "ai-card",
+  card_id: "stable_id_from_creation_message",
   name: "Card name",
   description: "Card description",
   prompt: "Full user prompt",
+  card_path_or_link: "https://example.com/global/super/{project_id}/{topic_id}?ai_card=stable_id_from_creation_message",
   cards: [{ file: "latest/index.html", label: "Latest" }],
   template: "template/index.html",
   schedule_id: "", // Will be filled after cron task creation
+  notification: {
+    channels: [
+      {
+        channel: "dingtalk", // dingtalk | lark
+        targetDescription: "Send to the Ops Daily group",
+      },
+    ],
+  }, // Optional. Omit or leave channels empty when notification delivery is not needed.
   last_generated: "", // ISO 8601 timestamp, updated each generation
   generation_count: 0, // Incremented each generation
   status: "active", // active | paused | error
@@ -157,6 +167,65 @@ window.magicProjectConfig = {
 // Legacy compatible example:
 // cards: [{ file: "latest.html", label: "Latest" }],
 // template: "template.html",
+```
+
+If the creation message includes a card id and card link, copy both values into `magic.project.js` as `card_id` and `card_path_or_link`. The frontend owns URL generation. This skill stores and uses the provided URL; it must not guess the frontend domain or route base.
+
+Creation messages may provide these values as friendly text instead of raw JSON:
+
+```text
+卡片编号：stable_id_from_creation_message
+卡片链接：https://example.com/global/super/{project_id}/{topic_id}?ai_card=stable_id_from_creation_message
+```
+
+Field rules:
+
+1. `卡片编号` is the stable frontend deep-link identifier for this AI Card. Write it to top-level `magic.project.js.card_id`.
+2. `卡片链接` is the full frontend URL that opens the topic and targets this card. Write it to top-level `magic.project.js.card_path_or_link`.
+3. Do not require the creation message to explain why these fields exist or to use JSON. This skill owns the mapping and usage rules.
+4. Use `card_path_or_link` in notification content when present.
+
+Creation messages intentionally keep execution details concise. Treat sections such as `创建需求`, `创建位置`, `模板`, `更新方式`, `定时`, and `分析指令` as inputs. Apply this skill's Creation Workflow, Template Specification, Scheduled Update Workflow, and Notification Dispatch rules to decide the actual file structure, template behavior, scheduled task setup, and update process. Do not require the message itself to repeat these execution steps.
+
+
+### Notification Dispatch
+
+AI Cards can optionally deliver a short update notice after a card is created or refreshed. The v1 configuration only stores notification channel and target description. Do not ask the frontend or user to provide platform credentials, webhook secrets, SMTP settings, message templates, target IDs, or channel-specific delivery options in `magic.project.js`.
+
+Supported shape:
+
+```javascript
+notification: {
+  channels: [
+    {
+      channel: "dingtalk",
+      targetDescription: "Send to the Ops Daily group",
+    },
+    {
+      channel: "lark",
+      targetDescription: "Send to Zhang San",
+    },
+  ],
+}
+```
+
+Rules:
+
+1. Treat missing `notification`, missing `channels`, or an empty `channels` array as notification disabled.
+2. Supported `channel` values are `dingtalk` and `lark` only. Ignore unknown channels and explain the skipped channel in the current topic.
+3. `targetDescription` is natural-language user intent. It may describe a person, group, chat, or another platform-specific target. Do not invent a target when it is ambiguous.
+4. Send notifications only after the card output has been written successfully, history has been archived when needed, and `magic.project.js` has been updated.
+5. For `dingtalk`, load `dingtalk-cli` and use its normal routing and authentication flow to resolve and send the message.
+6. For `lark`, load `lark-cli` and use its normal routing and authentication flow to resolve and send the message.
+7. Do not put channel routing rules, skill names, credentials, or fallback execution details into the scheduled task message. The scheduled task should instruct the agent to update the card; this skill owns notification behavior.
+8. If authentication, target resolution, or delivery fails, report the concrete missing information in the current topic. Do not claim the notification was sent.
+
+Recommended notification content:
+
+```text
+AI card updated: {card_name}
+Updated at: {generated_at}
+Latest card: {magic.project.js.card_path_or_link}
 ```
 
 
@@ -238,6 +307,7 @@ When a scheduled task triggers, execute the following:
 6. Copy template: copy all files under `template/` to `latest/` (overwrite) as the base for this generation
 7. Modify data zones only: update content between `<!-- DATA_SECTION_START -->` and `<!-- DATA_SECTION_END -->`, or named DATA zones, in `latest/index.html`; usually leave `styles.css` / `scripts.js` unchanged unless the template structure must evolve
 8. Update `last_generated` and `generation_count` in `magic.project.js`
+9. If `notification.channels` is configured, deliver the update notice according to the Notification Dispatch rules in this skill
 ```
 
 ## Source Link and Web Preview Requirements

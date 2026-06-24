@@ -17,6 +17,7 @@ import { MagicSwitch } from "@/components/base/MagicSwitch"
 import AICardFormFields from "../../AICardRootRender/components/AICardFormFields"
 import type { AICardFormFieldsValues } from "../../AICardRootRender/components/AICardFormFields"
 import { getPromptPlainText } from "../../AICardRootRender/hooks/aiCardScheduleMessage"
+import { compactAICardNotification } from "../../AICardRootRender/utils/aiCardNotification"
 import { createAICardViaTopic } from "../services/aiCardCreate"
 import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 import type { JSONContent } from "@tiptap/react"
@@ -28,6 +29,7 @@ const DEFAULT_AI_CARD_FORM_VALUES: AICardFormFieldsValues = {
 	prompt: "",
 	template: "hotspot-tracker",
 	enabled: true,
+	notification: { channels: [] },
 }
 
 function parsePromptJSONContent(prompt: string): JSONContent | undefined {
@@ -124,6 +126,7 @@ function AICardCreateDialog({
 				model: formValues.model,
 				imageModel: formValues.imageModel,
 				videoModel: formValues.videoModel,
+				notification: compactAICardNotification(formValues.notification),
 			})
 			// Close dialog after successful submission
 			onOpenChange(false)

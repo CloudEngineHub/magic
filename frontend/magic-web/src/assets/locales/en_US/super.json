@@ -622,6 +622,24 @@
 				"schedule": "Schedule",
 				"videoModel": "Video Model"
 			},
+			"notification": {
+				"title": "Notification delivery",
+				"description": "After a card is generated or updated successfully, send it to the described targets. This only stores targets, not platform credentials.",
+				"channels": {
+					"dingtalk": "DingTalk",
+					"lark": "Lark"
+				},
+				"placeholders": {
+					"dingtalk": "e.g. Send to the Ops Daily group, or send to Zhang San",
+					"lark": "e.g. Send to the Growth Daily group, or send to Li Si"
+				},
+				"templates": {
+					"dingtalkGroup": "Send to the Ops Daily group",
+					"dingtalkUser": "Send to Zhang San",
+					"larkGroup": "Send to the Growth Daily group",
+					"larkUser": "Send to Li Si"
+				}
+			},
 			"createDialog": {
 				"cancel": "Cancel",
 				"cardName": "Card Name",
@@ -634,6 +652,42 @@
 				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends and present with list + trend markers.",
 				"template": "Card Template",
 				"title": "Create AI Card"
+			},
+			"createMessage": {
+				"cardId": "Card ID: {{cardId}}",
+				"cardLink": "Card link: {{cardLink}}",
+				"customTemplate": "Custom template: {{customTemplate}}",
+				"location": "Location: {{cardDir}}/",
+				"notificationChannels": {
+					"dingtalk": "DingTalk",
+					"lark": "Lark"
+				},
+				"notificationTargetLine": "{{channel}}: {{targetDescription}}",
+				"schedule": {
+					"daily": "daily at {{time}}",
+					"default": "at {{time}}",
+					"disabled": " (disabled)",
+					"enabled": " (enabled)",
+					"monthly": "monthly on day {{day}} at {{time}}",
+					"noRepeat": "once at {{time}}",
+					"weekly": "weekly on {{day}} at {{time}}",
+					"weeklyDay": "{{day}}"
+				},
+				"sectionTitle": "━━━ {{title}} ━━━",
+				"sections": {
+					"analysisInstruction": "Analysis instructions",
+					"cardData": "Card data",
+					"createRequirement": "Creation requirements",
+					"notificationTargets": "Notification targets"
+				},
+				"template": "Template: {{template}}",
+				"title": "Create an AI Card named \"{{cardName}}\".",
+				"topicName": "[AI Card] {{cardName}}",
+				"update": {
+					"defaultScheduled": "Update mode: default scheduled updates",
+					"once": "Update mode: one-time generation",
+					"scheduled": "Schedule: {{schedule}}{{enabledText}}"
+				}
 			},
 			"dashboard": {
 				"archived": "Archived",

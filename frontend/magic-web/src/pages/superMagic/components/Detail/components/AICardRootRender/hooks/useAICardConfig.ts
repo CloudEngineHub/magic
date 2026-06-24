@@ -12,6 +12,12 @@ import type { JSONContent } from "@tiptap/react"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import type { AICardStore } from "../stores/AICardStore"
 import { buildScheduleMessageJSONContent, getPromptPlainText } from "./aiCardScheduleMessage"
+import {
+	compactAICardNotification,
+	EMPTY_AI_CARD_NOTIFICATION,
+	normalizeAICardNotification,
+	type AICardNotificationConfig,
+} from "../utils/aiCardNotification"
 
 const AI_CARD_TOPIC_PATTERN = "ip-manager"
 
@@ -36,6 +42,7 @@ export interface AICardConfigFormValues {
 	videoModel: ModelItem | null
 	template: CardTemplateType
 	customTemplatePrompt?: string
+	notification: AICardNotificationConfig
 }
 
 const DEFAULT_FORM_VALUES: AICardConfigFormValues = {
@@ -48,6 +55,7 @@ const DEFAULT_FORM_VALUES: AICardConfigFormValues = {
 	videoModel: null,
 	template: "hotspot-tracker",
 	customTemplatePrompt: "",
+	notification: EMPTY_AI_CARD_NOTIFICATION,
 }
 
 export function useAICardConfig(store: AICardStore) {
@@ -112,6 +120,7 @@ export function useAICardConfig(store: AICardStore) {
 			videoModel: topicModelStore.selectedVideoModel || null,
 			template: (config.template as CardTemplateType) || "hotspot-tracker",
 			customTemplatePrompt: config.custom_template_prompt || "",
+			notification: normalizeAICardNotification(config.notification),
 		}
 
 		// Restore models from config if saved
@@ -174,6 +183,75 @@ export function useAICardConfig(store: AICardStore) {
 	}, [store.projectConfig, modelList, imageModelList, videoModelList])
 
 	const hasScheduleId = !!store.projectConfig?.schedule_id
+
+	const buildProjectConfig = useCallback(
+		(values: AICardConfigFormValues) => {
+			const notification = compactAICardNotification(values.notification)
+			return {
+				type: "ai-card",
+				name: values.taskName.trim(),
+				prompt: values.prompt.trim(),
+				template: values.template,
+				...(values.customTemplatePrompt
+					? { custom_template_prompt: values.customTemplatePrompt.trim() }
+					: {}),
+				enabled: values.enabled ? 1 : 0,
+				...(values.timeConfig ? { time_config: values.timeConfig } : {}),
+				...(notification ? { notification } : {}),
+				...(values.model
+					? {
+							model: {
+								model_id: values.model.model_id,
+								model_name: values.model.model_name,
+							},
+						}
+					: {}),
+				...(values.imageModel
+					? {
+							image_model: {
+								model_id: values.imageModel.model_id,
+								model_name: values.imageModel.model_name,
+							},
+						}
+					: {}),
+				...(values.videoModel
+					? {
+							video_model: {
+								model_id: values.videoModel.model_id,
+								model_name: values.videoModel.model_name,
+							},
+						}
+					: {}),
+				// Preserve runtime fields owned by generated card updates.
+				...(store.projectConfig?.card_id ? { card_id: store.projectConfig.card_id } : {}),
+				...(store.projectConfig?.card_path_or_link
+					? { card_path_or_link: store.projectConfig.card_path_or_link }
+					: {}),
+				...(store.projectConfig?.schedule_id
+					? { schedule_id: store.projectConfig.schedule_id }
+					: {}),
+				...(store.projectConfig?.last_generated
+					? { last_generated: store.projectConfig.last_generated }
+					: {}),
+				...(store.projectConfig?.generation_count
+					? { generation_count: store.projectConfig.generation_count }
+					: {}),
+				cards: store.projectConfig?.cards || [{ file: "latest.html", label: "latest" }],
+			}
+		},
+		[store.projectConfig],
+	)
+
+	const saveProjectConfig = useMemoizedFn(async (values: AICardConfigFormValues) => {
+		const configFileId = store.configFileId
+		if (!configFileId) return
+
+		const config = buildProjectConfig(values)
+		const content = `window.magicProjectConfig = ${JSON.stringify(config, null, 2)}`
+		await SuperMagicApi.saveFileContent([
+			{ file_id: configFileId, content, enable_shadow: true },
+		])
+	})
 
 	const saveConfig = useMemoizedFn(async (values: AICardConfigFormValues) => {
 		if (!values.timeConfig) return
@@ -245,6 +323,7 @@ export function useAICardConfig(store: AICardStore) {
 				await ScheduledTaskApi.createScheduledTask(taskData)
 			}
 
+			await saveProjectConfig(values)
 			// Switch back to dashboard after save
 			store.setViewMode("dashboard")
 		} finally {
@@ -276,6 +355,7 @@ export function useAICardConfig(store: AICardStore) {
 				model: values.model,
 				imageModel: values.imageModel,
 				videoModel: values.videoModel,
+				notification: compactAICardNotification(values.notification),
 			})
 		} finally {
 			setSaving(false)
@@ -289,62 +369,9 @@ export function useAICardConfig(store: AICardStore) {
 
 	/** Save form values to magic.project.js without triggering card generation */
 	const saveDraft = useMemoizedFn(async (values: AICardConfigFormValues) => {
-		const configFileId = store.configFileId
-		if (!configFileId) return
-
 		setSavingDraft(true)
 		try {
-			const config = {
-				type: "ai-card",
-				name: values.taskName.trim(),
-				prompt: values.prompt.trim(),
-				template: values.template,
-				...(values.customTemplatePrompt
-					? { custom_template_prompt: values.customTemplatePrompt.trim() }
-					: {}),
-				enabled: values.enabled ? 1 : 0,
-				...(values.timeConfig ? { time_config: values.timeConfig } : {}),
-				...(values.model
-					? {
-							model: {
-								model_id: values.model.model_id,
-								model_name: values.model.model_name,
-							},
-						}
-					: {}),
-				...(values.imageModel
-					? {
-							image_model: {
-								model_id: values.imageModel.model_id,
-								model_name: values.imageModel.model_name,
-							},
-						}
-					: {}),
-				...(values.videoModel
-					? {
-							video_model: {
-								model_id: values.videoModel.model_id,
-								model_name: values.videoModel.model_name,
-							},
-						}
-					: {}),
-				// Preserve existing fields
-				...(store.projectConfig?.schedule_id
-					? { schedule_id: store.projectConfig.schedule_id }
-					: {}),
-				...(store.projectConfig?.last_generated
-					? { last_generated: store.projectConfig.last_generated }
-					: {}),
-				...(store.projectConfig?.generation_count
-					? { generation_count: store.projectConfig.generation_count }
-					: {}),
-				cards: store.projectConfig?.cards || [{ file: "latest.html", label: "latest" }],
-			}
-
-			const content = `window.magicProjectConfig = ${JSON.stringify(config, null, 2)}`
-			await SuperMagicApi.saveFileContent([
-				{ file_id: configFileId, content, enable_shadow: true },
-			])
+			await saveProjectConfig(values)
 		} finally {
 			setSavingDraft(false)
 		}

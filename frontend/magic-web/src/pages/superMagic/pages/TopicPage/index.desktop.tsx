@@ -46,6 +46,7 @@ import {
 	useTopicHistoryLayoutState,
 } from "./hooks/useTopicHistoryLayoutState"
 import { useMessageHeaderTopicActions } from "./hooks/useMessageHeaderTopicActions"
+import { useAICardDeepLinkOpen } from "./hooks/useAICardDeepLinkOpen"
 import type { AttachmentItem } from "../../components/TopicFilesButton/hooks"
 import { TaskStatus } from "../Workspace/types"
 import { resolveMessageSendContext } from "../../services/messageSendPreparation"
@@ -153,6 +154,9 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const [userSelectDetail, setUserSelectDetail] = useState<any>()
 	const [isShowLoadingInit, setIsShowLoadingInit] = useState(false)
 	const [isDetailPanelFullscreen, setIsDetailPanelFullscreen] = useState(false)
+	const clearUserSelectDetail = useMemoizedFn(() => {
+		setUserSelectDetail(null)
+	})
 	// Calculate read-only status based on user role
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
 	const hideProjectCard = isSingleTopicChat || isAudioProjectMode(selectedProject?.project_mode)
@@ -195,6 +199,14 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const { onFileTabsCacheLoaded, scheduleWhenTabsCacheReady } = useDeferUntilFileTabsCacheLoaded(
 		selectedProject?.id,
 	)
+
+	useAICardDeepLinkOpen({
+		topicId: selectedTopic?.id,
+		attachments,
+		scheduleWhenTabsCacheReady,
+		handleFileClickWithPanel,
+		clearUserSelectDetail,
+	})
 
 	const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
 		useTopicHistoryLayoutState({

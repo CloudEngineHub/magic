@@ -623,6 +623,24 @@
 				"schedule": "执行频率",
 				"videoModel": "视频模型"
 			},
+			"notification": {
+				"title": "通知分发",
+				"description": "卡片生成或更新成功后，按描述发送到指定渠道。这里只配置目标，不保存平台凭据。",
+				"channels": {
+					"dingtalk": "钉钉",
+					"lark": "飞书"
+				},
+				"placeholders": {
+					"dingtalk": "例如：发到「运营日报群」，或发给张三",
+					"lark": "例如：发到「增长日报群」，或发给李四"
+				},
+				"templates": {
+					"dingtalkGroup": "发到「运营日报群」",
+					"dingtalkUser": "发给张三",
+					"larkGroup": "发到「增长日报群」",
+					"larkUser": "发给李四"
+				}
+			},
 			"createDialog": {
 				"cancel": "取消",
 				"cardName": "卡片名称",
@@ -635,6 +653,42 @@
 				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
 				"template": "卡片模板",
 				"title": "创建 AI 卡片"
+			},
+			"createMessage": {
+				"cardId": "卡片编号：{{cardId}}",
+				"cardLink": "卡片链接：{{cardLink}}",
+				"customTemplate": "自定义模板要求：{{customTemplate}}",
+				"location": "创建位置：{{cardDir}}/",
+				"notificationChannels": {
+					"dingtalk": "钉钉",
+					"lark": "飞书"
+				},
+				"notificationTargetLine": "{{channel}}：{{targetDescription}}",
+				"schedule": {
+					"daily": "每天 {{time}} 执行",
+					"default": "{{time}} 执行",
+					"disabled": "（暂不启用）",
+					"enabled": "（已启用）",
+					"monthly": "每月{{day}} {{time}} 执行",
+					"noRepeat": "单次执行，时间：{{time}}",
+					"weekly": "每周{{day}} {{time}} 执行",
+					"weeklyDay": "周{{day}}"
+				},
+				"sectionTitle": "━━━ {{title}} ━━━",
+				"sections": {
+					"analysisInstruction": "分析指令",
+					"cardData": "卡片数据",
+					"createRequirement": "创建需求",
+					"notificationTargets": "通知目标"
+				},
+				"template": "模板：{{template}}",
+				"title": "请创建一个 AI 卡片「{{cardName}}」。",
+				"topicName": "[AI卡片] {{cardName}}",
+				"update": {
+					"defaultScheduled": "更新方式：默认定时更新",
+					"once": "更新方式：一次性生成",
+					"scheduled": "定时：{{schedule}}{{enabledText}}"
+				}
 			},
 			"dashboard": {
 				"archived": "归档",
