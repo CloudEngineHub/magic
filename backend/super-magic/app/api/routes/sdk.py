@@ -51,7 +51,6 @@ class SdkOAuth2AccessTokenRequest(BaseModel):
     """SDK OAuth2 access token 请求。"""
 
     app_name: str = Field(..., description="OAuth2 app name")
-    subject: Optional[str] = Field(None, description="Optional credential subject")
     agent_context_id: str = Field(
         ...,
         description="调用方 AgentContext 的唯一标识符，由 run_sdk_snippet 注入子进程环境变量",
@@ -186,7 +185,7 @@ async def sdk_oauth2_access_token(request: SdkOAuth2AccessTokenRequest):
         logger.error(error_msg)
         return create_error_response(message=error_msg, data={"status": "failed", "content": error_msg})
 
-    subject = (request.subject or "").strip() or agent_context.get_agent_id() or agent_context.context_id
+    subject = agent_context.get_user_id() or "user"
     timezone_name = (
         agent_context.get_user_timezone()
         if hasattr(agent_context, "get_user_timezone")

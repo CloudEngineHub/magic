@@ -7,7 +7,6 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from typing import Optional
 
 
 class OAuth2Error(RuntimeError):
@@ -36,7 +35,7 @@ class OAuth2DependencyMissing(OAuth2Error):
     """服务端 OAuth2 依赖不可用时抛出。"""
 
 
-def get_access_token(app_name: str, subject: Optional[str] = None) -> str:
+def get_access_token(app_name: str) -> str:
     """返回 OAuth2 app 的有效 access token。"""
     agent_context_id = os.getenv("SUPER_MAGIC_AGENT_CONTEXT_ID", "")
     if not agent_context_id:
@@ -49,7 +48,6 @@ def get_access_token(app_name: str, subject: Optional[str] = None) -> str:
     url = f"http://127.0.0.1:{api_port}/api/sdk/oauth2/access-token"
     request_data = {
         "app_name": app_name,
-        "subject": subject,
         "agent_context_id": agent_context_id,
     }
     try:

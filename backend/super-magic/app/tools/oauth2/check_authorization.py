@@ -19,8 +19,6 @@ class OAuth2CheckAuthorizationParams(BaseToolParams):
 
     app_name: str = Field(..., description="""<!--zh: 要检查授权状态的 OAuth2 app_name。-->
 OAuth2 app_name to check.""")
-    subject: Optional[str] = Field(None, description="""<!--zh: 可选凭证 subject，不填使用当前会话。-->
-Optional credential subject. Defaults to the current session subject.""")
     state: Optional[str] = Field(
         None,
         description="""<!--zh: 可选原始 state，仅调试时使用；通常不要传。-->
@@ -74,7 +72,6 @@ class OAuth2CheckAuthorization(BaseOAuth2Tool[OAuth2CheckAuthorizationParams]):
         args = arguments or {}
         info = result.extra_info or {}
         app_name = info.get("app_name") or args.get("app_name", "")
-        subject = info.get("subject") or args.get("subject") or ""
         status = info.get("status") or ("failed" if not result.ok else "")
         lines = [
             "# OAuth2 授权状态",
@@ -82,8 +79,6 @@ class OAuth2CheckAuthorization(BaseOAuth2Tool[OAuth2CheckAuthorizationParams]):
             f"- 状态: {self._status_label(status)}",
             f"- app_name: `{app_name}`",
         ]
-        if subject:
-            lines.append(f"- 凭证主体: `{subject}`")
         if result.ok:
             lines.extend(["", self._user_next_step(status)])
         else:
@@ -135,7 +130,7 @@ class OAuth2CheckAuthorization(BaseOAuth2Tool[OAuth2CheckAuthorizationParams]):
 
     async def execute(self, tool_context: ToolContext, params: OAuth2CheckAuthorizationParams) -> ToolResult:
         """检查授权完成状态，并在可能时完成 token exchange。"""
-        subject = self.resolve_subject(tool_context, params.subject)
+        subject = self.resolve_subject(tool_context)
         timezone_name = self.resolve_timezone(tool_context)
         try:
             result = await self.token_service().check_authorization(
@@ -149,7 +144,6 @@ class OAuth2CheckAuthorization(BaseOAuth2Tool[OAuth2CheckAuthorizationParams]):
                 f"OAuth2 authorization check failed: {exc}",
                 extra_info={
                     "app_name": params.app_name,
-                    "subject": subject,
                     "status": "failed",
                     "user_error": str(exc),
                 },
@@ -158,7 +152,6 @@ class OAuth2CheckAuthorization(BaseOAuth2Tool[OAuth2CheckAuthorizationParams]):
         data = {
             "status": result.status,
             "app_name": result.app_name,
-            "subject": result.subject,
             "message": result.message,
         }
         next_steps = {

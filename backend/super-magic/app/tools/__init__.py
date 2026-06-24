@@ -134,11 +134,15 @@ from app.tools.mcp import (
 # OAuth2 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
 from app.tools.oauth2 import (
     OAuth2CheckAuthorization,
+    OAuth2GetApiDoc,
     OAuth2GetRedirectUri,
+    OAuth2ListApiDocs,
     OAuth2ListApps,
+    OAuth2RemoveApiDoc,
     OAuth2RemoveApp,
     OAuth2Request,
     OAuth2StartAuthorization,
+    OAuth2UpsertApiDoc,
     OAuth2UpsertApp,
 )
 
@@ -286,11 +290,15 @@ __all__ = [
 
     # OAuth2 工具集
     "OAuth2CheckAuthorization",
+    "OAuth2GetApiDoc",
     "OAuth2GetRedirectUri",
+    "OAuth2ListApiDocs",
     "OAuth2ListApps",
+    "OAuth2RemoveApiDoc",
     "OAuth2RemoveApp",
     "OAuth2Request",
     "OAuth2StartAuthorization",
+    "OAuth2UpsertApiDoc",
     "OAuth2UpsertApp",
 
     # Remote 工具集

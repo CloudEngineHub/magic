@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
@@ -20,8 +18,6 @@ class OAuth2StartAuthorizationParams(BaseToolParams):
 
     app_name: str = Field(..., description="""<!--zh: 要授权的 OAuth2 app_name。-->
 OAuth2 app_name to authorize.""")
-    subject: Optional[str] = Field(None, description="""<!--zh: 可选凭证 subject，不填使用当前会话。-->
-Optional credential subject. Defaults to the current session subject.""")
 
 
 @tool(name="oauth2_start_authorization")
@@ -98,14 +94,14 @@ class OAuth2StartAuthorization(BaseOAuth2Tool[OAuth2StartAuthorizationParams]):
 
     async def execute(self, tool_context: ToolContext, params: OAuth2StartAuthorizationParams) -> ToolResult:
         """发起 OAuth2 授权流程。"""
-        subject = self.resolve_subject(tool_context, params.subject)
+        subject = self.resolve_subject(tool_context)
         timezone_name = self.resolve_timezone(tool_context)
         try:
             result = await self.token_service().start_authorization(params.app_name, subject, timezone_name)
         except Exception as exc:
             return ToolResult.error(
                 f"OAuth2 authorization could not be started: {exc}",
-                extra_info={"app_name": params.app_name, "subject": subject, "user_error": str(exc)},
+                extra_info={"app_name": params.app_name, "user_error": str(exc)},
             )
 
         expires_at = format_timestamp(result.expires_at, timezone_name)
@@ -115,7 +111,6 @@ class OAuth2StartAuthorization(BaseOAuth2Tool[OAuth2StartAuthorizationParams]):
             "state_hash": result.state_hash,
             "expires_at": expires_at,
             "redirect_uri": result.redirect_uri,
-            "subject": subject,
             "auto_checking": result.auto_checking,
             "auto_check_interval_seconds": result.auto_check_interval_seconds,
         }

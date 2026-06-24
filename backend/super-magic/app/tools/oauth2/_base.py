@@ -22,18 +22,17 @@ class BaseOAuth2Tool(BaseTool[P], Generic[P], ABC):
     code_mode_only: ClassVar[bool] = True
 
     @staticmethod
-    def resolve_subject(tool_context: ToolContext, subject: str | None = None) -> str:
-        """从显式入参或 AgentContext 解析 credential subject。"""
-        explicit = (subject or "").strip()
-        if explicit:
-            return explicit
+    def resolve_subject(tool_context: ToolContext) -> str:
+        """从 AgentContext 解析当前用户 ID 作为 credential subject。"""
         try:
             agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
         except Exception:
             agent_context = None
         if agent_context is not None:
-            return agent_context.get_agent_id() or agent_context.context_id
-        return "default"
+            user_id = agent_context.get_user_id() if hasattr(agent_context, "get_user_id") else None
+            if user_id:
+                return str(user_id)
+        return "user"
 
     @staticmethod
     def app_registry() -> OAuth2AppRegistry:

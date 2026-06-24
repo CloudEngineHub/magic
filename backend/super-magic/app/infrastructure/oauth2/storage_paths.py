@@ -47,6 +47,14 @@ class OAuth2StoragePaths:
         """返回单个 state hash 对应的授权 session 文件路径。"""
         return self.app_dir(app_name) / "sessions" / f"{state_hash}.json"
 
+    def api_docs_dir(self, app_name: str) -> Path:
+        """返回单个 app 的接口文档存储目录。"""
+        return self.app_dir(app_name) / "api_docs"
+
+    def openapi_file(self, app_name: str) -> Path:
+        """返回单个 app 的 OpenAPI 接口文档文件路径。"""
+        return self.api_docs_dir(app_name) / "openapi.json"
+
     @staticmethod
     def _resolve_base_path(value: str) -> Path:
         """将相对 OAuth2 存储路径解析到 project root 下。"""

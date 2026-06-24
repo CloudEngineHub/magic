@@ -87,11 +87,6 @@ Form request body. Mutually exclusive with json_body.""",
         description="""<!--zh: OAuth2 access token 的注入方式。不填默认 Authorization: Bearer <token>。-->
 OAuth2 access token injection settings. Defaults to Authorization: Bearer <token>.""",
     )
-    subject: Optional[str] = Field(
-        None,
-        description="""<!--zh: 可选凭证 subject，不填使用当前会话。-->
-Optional credential subject. Defaults to the current session subject.""",
-    )
     timeout: int = Field(
         _DEFAULT_TIMEOUT_SECONDS,
         description="""<!--zh: 请求超时秒数，最大 120。-->
@@ -200,7 +195,7 @@ class OAuth2Request(BaseOAuth2Tool[OAuth2RequestParams]):
                 return ToolResult.error("json_body and form_body cannot both be set.")
             timeout_seconds = self._normalize_timeout(params.timeout)
             headers = self._prepare_headers(params.headers or {}, params.auth)
-            subject = self.resolve_subject(tool_context, params.subject)
+            subject = self.resolve_subject(tool_context)
             timezone_name = self.resolve_timezone(tool_context)
             access_token = await self.token_service().resolve_access_token(params.app_name, subject, timezone_name)
             self._inject_auth_header(headers, access_token, params.auth)

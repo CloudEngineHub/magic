@@ -519,6 +519,22 @@
         "zh_CN": "检查 OAuth2 授权",
         "en_US": "Check OAuth2 authorization"
     },
+    "oauth2_list_api_docs": {
+        "zh_CN": "查询 OAuth2 接口文档",
+        "en_US": "List OAuth2 API docs"
+    },
+    "oauth2_get_api_doc": {
+        "zh_CN": "获取 OAuth2 接口文档",
+        "en_US": "Get OAuth2 API doc"
+    },
+    "oauth2_upsert_api_doc": {
+        "zh_CN": "保存 OAuth2 接口文档",
+        "en_US": "Save OAuth2 API doc"
+    },
+    "oauth2_remove_api_doc": {
+        "zh_CN": "移除 OAuth2 接口文档",
+        "en_US": "Remove OAuth2 API doc"
+    },
     "call_simple_tool": {
         "zh_CN": "调用工具",
         "en_US": "Use Tool"

@@ -61,7 +61,6 @@ This creates a visible API request card for the user.
 | `json_body` | No | JSON request body. Mutually exclusive with `form_body`. |
 | `form_body` | No | Form request body. Mutually exclusive with `json_body`. |
 | `auth` | No | Access token injection settings. Defaults to `Authorization: Bearer <access_token>`. |
-| `subject` | No | Credential subject. Omit unless a non-default subject is required. |
 | `timeout` | No | HTTP timeout in seconds. Defaults to `30`, maximum `120`. |
 
 `oauth2_request` returns structured data in `result.data`. Important fields include:
@@ -115,9 +114,6 @@ result = tool.call("oauth2_request", {
         "prefix": "Bearer ",
     },
 
-    # Optional: credential subject. Omit it unless the user explicitly needs a non-default subject.
-    "subject": None,
-
     # Optional: HTTP timeout in seconds. Maximum 120. Defaults to 30.
     "timeout": 30,
 })
@@ -165,10 +161,14 @@ If `oauth2_request` cannot express the provider-specific request, use `run_pytho
 | `oauth2_list_apps` | List registered OAuth2 apps and current authorization status. Start here. |
 | `oauth2_upsert_app` | Register or update a user-provided OAuth2 app definition. |
 | `oauth2_get_redirect_uri` | Get the redirect URI only when the user explicitly asks for it. |
-| `oauth2_remove_app` | Remove an OAuth2 app and its stored authorization data. |
+| `oauth2_remove_app` | Remove one or more OAuth2 apps and their stored authorization data. |
 | `oauth2_start_authorization` | Generate an authorization URL, create a pending session, and start background authorization checking. |
 | `oauth2_check_authorization` | Idempotently check authorization status when confirmation or recovery is needed. |
 | `oauth2_request` | Send a visible OAuth2 HTTP request for business APIs. Prefer this when supported. |
+| `oauth2_list_api_docs` | Search the recorded API documentation library for this OAuth2 app. |
+| `oauth2_get_api_doc` | Load one recorded OpenAPI operation by `operation_id`. |
+| `oauth2_upsert_api_doc` | Create or update one recorded OpenAPI operation after user confirmation. |
+| `oauth2_remove_api_doc` | Remove one or more recorded OpenAPI operations under one app by `operation_ids`. |
 
 ## Standard workflow
 
@@ -251,6 +251,41 @@ status update.
 
 5. Call the business API.
 
+Before making a business API request, search the recorded interface documentation library for the target app and capability:
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+docs = tool.call("oauth2_list_api_docs", {
+    "app_name": "<stable_app_name>",
+    "query": "<capability_or_endpoint_keyword>",
+    "method": "GET",
+    "limit": 10,
+})
+print(docs.content)
+""")
+```
+
+If a matching document exists, load it before building the request:
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+doc = tool.call("oauth2_get_api_doc", {
+    "app_name": "<stable_app_name>",
+    "operation_id": "<operation_id_from_list>",
+})
+print(doc.content)
+print(doc.data)
+""")
+```
+
+If no matching document exists, use the user's provider docs for the current request. After the request succeeds,
+call `ask_user` as a normal tool outside Code Mode and ask whether to record this interface documentation for future
+calls. Only call `oauth2_upsert_api_doc` if the user agrees.
+
 For a simple GET request:
 
 ```python
@@ -270,7 +305,7 @@ print("request_duration_ms:", result.data.get("request_duration_ms"))
 """)
 ```
 
-For requests with query parameters, body, custom token header, subject, or timeout:
+For requests with query parameters, body, custom token header, or timeout:
 
 ```python
 run_sdk_snippet(python_code="""
@@ -295,7 +330,6 @@ result = tool.call("oauth2_request", {
         "header_name": "Authorization",
         "prefix": "Bearer ",
     },
-    "subject": None,
     "timeout": 30,
 })
 print(result.content)
@@ -335,6 +369,100 @@ print(json.dumps(payload, ensure_ascii=False, indent=2))
 )
 ```
 
+6. Record the interface documentation only after the user agrees.
+
+Do not store tokens, authorization codes, client secrets, raw personal response bodies, or raw sensitive user data.
+Store stable API shape, request rules, response schema, source references, and reusable `oauth2_request` parameters.
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+saved = tool.call("oauth2_upsert_api_doc", {
+    "app_name": "<stable_app_name>",
+    "method": "GET",
+    "url": "<api_url_from_provider_docs>",
+    "path": "<openapi_path>",
+    "operation_id": "<stable_operation_id>",
+    "summary": "<short_capability_summary>",
+    "description": "<when_to_use_this_endpoint>",
+    "tags": ["<provider_or_domain_tag>"],
+    "headers": {
+        "Accept": {
+            "description": "Expected response content type.",
+            "schema": {
+                "type": "string"
+            }
+        }
+    },
+    "query_schema": {
+        "<query_name>": {
+            "description": "<query_description>",
+            "required": False,
+            "schema": {
+                "type": "string"
+            }
+        }
+    },
+    "request_body_schema": {
+        "type": "object",
+        "properties": {}
+    },
+    "response_status_code": "200",
+    "response_description": "Successful response.",
+    "response_schema": {
+        "type": "object",
+        "properties": {}
+    },
+    "source_refs": ["<provider_doc_url_or_user_doc_reference>"],
+    "example_tool_call": {
+        "app_name": "<stable_app_name>",
+        "method": "GET",
+        "url": "<api_url_from_provider_docs>",
+        "headers": {
+            "Accept": "application/json"
+        },
+        "timeout": 30
+    },
+    "notes": "<provider_specific_notes_without_sensitive_values>",
+    "verified": True,
+})
+print(saved.content)
+""")
+```
+
+Batch delete recorded API documentation:
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+removed = tool.call("oauth2_remove_api_doc", {
+    "app_name": "<stable_app_name>",
+    "operation_ids": ["<operation_id_1>", "<operation_id_2>"],
+})
+print(removed.content)
+""")
+```
+
+`oauth2_remove_api_doc` only removes API documentation under one OAuth2 app per call.
+If you need to delete API documentation from multiple apps, call it once per app.
+
+Batch remove OAuth2 apps:
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+removed = tool.call("oauth2_remove_app", {
+    "app_names": ["<stable_app_name_1>", "<stable_app_name_2>"],
+})
+print(removed.content)
+""")
+```
+
+Batch fields must be arrays. Do not pass JSON array strings or comma-separated strings.
+
 ## Rules
 
 1. Never invent OAuth2 endpoints, scopes, header names, or business API parameters. Use the user's app docs or ask for the missing field.
@@ -353,6 +481,12 @@ print(json.dumps(payload, ensure_ascii=False, indent=2))
     it injects the access token itself.
 11. Use `run_python_snippet` for fallback business API requests that call `sdk.oauth2.get_access_token()`, because
     its terminal detail is visible to the user. Do not use `sdk.tool.call` inside `run_python_snippet`.
+12. Before each business API call, search `oauth2_list_api_docs` for the target app and endpoint/capability. Use
+    `oauth2_get_api_doc` when there is a matching recorded operation.
+13. If a business API call succeeds and the interface documentation was not already recorded, call `ask_user` outside
+    Code Mode to ask whether to save it for future use. Only save it with `oauth2_upsert_api_doc` after the user agrees.
+14. Interface documentation is stored as OpenAPI operation data. Record API shape and reusable call rules, not raw
+    tokens, authorization codes, client secrets, or raw personal response bodies.
 
 ## Explicit Redirect URI Lookup
 

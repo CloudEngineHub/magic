@@ -2275,6 +2275,54 @@
         "zh_CN": "检查「{{app_name}}」授权状态失败",
         "en_US": "Failed to check authorization status for \"{{app_name}}\""
     },
+    "oauth2.api_docs.listing": {
+        "zh_CN": "正在查询「{{app_name}}」接口文档",
+        "en_US": "Listing API docs for \"{{app_name}}\""
+    },
+    "oauth2.api_docs.listed": {
+        "zh_CN": "已查询「{{app_name}}」接口文档",
+        "en_US": "API docs for \"{{app_name}}\" listed"
+    },
+    "oauth2.api_docs.list_failed": {
+        "zh_CN": "查询「{{app_name}}」接口文档失败",
+        "en_US": "Failed to list API docs for \"{{app_name}}\""
+    },
+    "oauth2.api_docs.getting": {
+        "zh_CN": "正在获取接口文档「{{operation_id}}」",
+        "en_US": "Getting API doc \"{{operation_id}}\""
+    },
+    "oauth2.api_docs.got": {
+        "zh_CN": "已获取接口文档「{{operation_id}}」",
+        "en_US": "API doc \"{{operation_id}}\" loaded"
+    },
+    "oauth2.api_docs.get_failed": {
+        "zh_CN": "获取接口文档「{{operation_id}}」失败",
+        "en_US": "Failed to get API doc \"{{operation_id}}\""
+    },
+    "oauth2.api_docs.upserting": {
+        "zh_CN": "正在保存接口文档「{{target}}」",
+        "en_US": "Saving API doc \"{{target}}\""
+    },
+    "oauth2.api_docs.upserted": {
+        "zh_CN": "接口文档「{{target}}」已保存",
+        "en_US": "API doc \"{{target}}\" saved"
+    },
+    "oauth2.api_docs.upsert_failed": {
+        "zh_CN": "保存接口文档「{{target}}」失败",
+        "en_US": "Failed to save API doc \"{{target}}\""
+    },
+    "oauth2.api_docs.removing": {
+        "zh_CN": "正在移除接口文档「{{operation_id}}」",
+        "en_US": "Removing API doc \"{{operation_id}}\""
+    },
+    "oauth2.api_docs.removed": {
+        "zh_CN": "接口文档「{{operation_id}}」已移除",
+        "en_US": "API doc \"{{operation_id}}\" removed"
+    },
+    "oauth2.api_docs.remove_failed": {
+        "zh_CN": "移除接口文档「{{operation_id}}」失败",
+        "en_US": "Failed to remove API doc \"{{operation_id}}\""
+    },
     "call_simple_tool.calling": {
         "zh_CN": "正在调用工具流",
         "en_US": "Calling tool flow"

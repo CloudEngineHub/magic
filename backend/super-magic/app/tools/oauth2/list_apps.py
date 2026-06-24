@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
-from pydantic import Field
-
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
@@ -19,14 +15,11 @@ from app.tools.oauth2._base import BaseOAuth2Tool
 class OAuth2ListAppsParams(BaseToolParams):
     """列出 OAuth2 app 的参数。"""
 
-    subject: Optional[str] = Field(None, description="""<!--zh: 可选凭证 subject，不填使用当前会话。-->
-Optional credential subject. Defaults to the current session subject.""")
-
 
 @tool(name="oauth2_list_apps")
 class OAuth2ListApps(BaseOAuth2Tool[OAuth2ListAppsParams]):
-    """<!--zh: 列出当前已注册 OAuth2 app 及当前 subject 的授权状态。-->
-    List registered OAuth2 apps and their authorization status for the current subject."""
+    """<!--zh: 列出当前已注册 OAuth2 app 及当前用户的授权状态。-->
+    List registered OAuth2 apps and their authorization status for the current user."""
 
     name = "oauth2_list_apps"
 
@@ -69,14 +62,12 @@ class OAuth2ListApps(BaseOAuth2Tool[OAuth2ListAppsParams]):
                     "- 状态: 查看失败",
                     f"- 错误: {self.user_error(result)}",
                 ],
-            )
+        )
         apps = (result.extra_info or {}).get("apps") or []
-        subject = (result.extra_info or {}).get("subject", "")
         timezone_name = (result.extra_info or {}).get("timezone", "")
         lines = [
             "# OAuth2 应用列表",
             "",
-            f"- 凭证主体: `{subject}`",
             f"- 时区: `{timezone_name or '-'}`",
             f"- 应用数量: {len(apps)}",
             "",
@@ -86,15 +77,17 @@ class OAuth2ListApps(BaseOAuth2Tool[OAuth2ListAppsParams]):
             return self.markdown_file("oauth2_apps.md", lines)
 
         lines.extend([
-            "| 应用 | app_name | 授权状态 | access token 过期时间 | scope |",
-            "| --- | --- | --- | --- | --- |",
+            "| 应用 | app_name | 授权状态 | 应用添加时间 | 授权时间 | access token 过期时间 | scope |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
         ])
         for app in apps:
             lines.append(
-                "| {label} | `{app_name}` | {status} | {expires_at} | `{scope}` |".format(
+                "| {label} | `{app_name}` | {status} | {app_created_at} | {authorized_at} | {expires_at} | `{scope}` |".format(
                     label=app.get("label_name") or app.get("app_name", ""),
                     app_name=app.get("app_name", ""),
                     status=self._status_label(app.get("status", "")),
+                    app_created_at=app.get("app_created_at") or app.get("created_at") or "-",
+                    authorized_at=app.get("authorized_at") or "-",
                     expires_at=app.get("expires_at") or "-",
                     scope=app.get("scope") or "-",
                 )
@@ -118,6 +111,7 @@ class OAuth2ListApps(BaseOAuth2Tool[OAuth2ListAppsParams]):
             return {
                 "status": "not_authorized",
                 "has_refresh_token": False,
+                "authorized_at": "",
                 "expires_at": "",
                 "expires_at_timestamp": 0,
                 "timezone": timezone_name,
@@ -126,6 +120,7 @@ class OAuth2ListApps(BaseOAuth2Tool[OAuth2ListAppsParams]):
         return {
             "status": status,
             "has_refresh_token": bool(credential.refresh_token),
+            "authorized_at": credential.created_at or credential.updated_at,
             "expires_at": format_timestamp(credential.expires_at, timezone_name),
             "expires_at_timestamp": credential.expires_at,
             "timezone": timezone_name,
@@ -133,11 +128,11 @@ class OAuth2ListApps(BaseOAuth2Tool[OAuth2ListAppsParams]):
 
     async def execute(self, tool_context: ToolContext, params: OAuth2ListAppsParams) -> ToolResult:
         """列出 app 注册信息和脱敏 credential 状态。"""
-        subject = self.resolve_subject(tool_context, params.subject)
+        subject = self.resolve_subject(tool_context)
         timezone_name = self.resolve_timezone(tool_context)
         apps = await self.app_registry().list_apps()
         if not apps:
-            data = {"apps": [], "subject": subject, "timezone": timezone_name}
+            data = {"apps": [], "timezone": timezone_name}
             return ToolResult(
                 content=(
                     "No OAuth2 app is registered. Ask the user for an OAuth2 app's client_id, "
@@ -156,14 +151,17 @@ class OAuth2ListApps(BaseOAuth2Tool[OAuth2ListAppsParams]):
             status = credential_public["status"]
             expires_at = credential_public["expires_at"] or "-"
             rows.append(
-                f"- {app.label_name} (app_name={app.app_name}, status={status}, expires_at={expires_at})"
+                f"- {app.label_name} (app_name={app.app_name}, status={status}, "
+                f"app_created_at={app.created_at or '-'}, authorized_at={credential_public.get('authorized_at') or '-'}, "
+                f"expires_at={expires_at})"
             )
             public = app.to_public_dict()
+            public["app_created_at"] = app.created_at
             public.update(credential_public)
             data_apps.append(public)
 
         return ToolResult(
             content="Registered OAuth2 app(s):\n" + "\n".join(rows),
-            data={"apps": data_apps, "subject": subject, "timezone": timezone_name},
-            extra_info={"apps": data_apps, "subject": subject, "timezone": timezone_name},
+            data={"apps": data_apps, "timezone": timezone_name},
+            extra_info={"apps": data_apps, "timezone": timezone_name},
         )
