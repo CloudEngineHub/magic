@@ -15,10 +15,7 @@ use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\ImageGenerateRequest
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\ImageGenerateResponse;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\ImageUsage;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
-use App\Infrastructure\Util\Context\CoContext;
 use Exception;
-use Hyperf\Coroutine\Parallel;
-use Hyperf\Engine\Coroutine;
 use Hyperf\Retry\Annotation\Retry;
 
 class VolcengineArkModel extends AbstractImageGenerate
@@ -88,40 +85,25 @@ class VolcengineArkModel extends AbstractImageGenerate
             return $response; // 返回空数据响应
         }
 
-        // 3. 并发处理 - 直接操作响应对象
+        // 3. 单次请求使用厂商组图能力返回多张图片
         $count = $imageGenerateRequest->getGenerateNum();
-        $parallel = new Parallel();
-        $fromCoroutineId = Coroutine::id();
+        try {
+            $result = $this->requestImageGenerationV2($imageGenerateRequest);
+            $this->validateVolcengineArkResponse($result);
+            $this->addImageDataToResponse($response, $result, $imageGenerateRequest);
+        } catch (Exception $e) {
+            $response->setProviderErrorCode($e->getCode());
+            $response->setProviderErrorMessage($e->getMessage());
 
-        for ($i = 0; $i < $count; ++$i) {
-            $parallel->add(function () use ($imageGenerateRequest, $response, $fromCoroutineId) {
-                CoContext::copy($fromCoroutineId);
-                try {
-                    $result = $this->requestImageGenerationV2($imageGenerateRequest);
-                    $this->validateVolcengineArkResponse($result);
-
-                    // 成功：设置图片数据到响应对象
-                    $this->addImageDataToResponse($response, $result, $imageGenerateRequest);
-                } catch (Exception $e) {
-                    // 失败：设置错误信息到响应对象（只设置第一个错误）
-                    if (! $response->hasError()) {
-                        $response->setProviderErrorCode($e->getCode());
-                        $response->setProviderErrorMessage($e->getMessage());
-                    }
-
-                    $this->logger->error('VolcengineArk OpenAI格式生图：单个请求失败', [
-                        'error_code' => $e->getCode(),
-                        'error_message' => $e->getMessage(),
-                    ]);
-                }
-            });
+            $this->logger->error('VolcengineArk OpenAI格式生图：请求失败', [
+                'error_code' => $e->getCode(),
+                'error_message' => $e->getMessage(),
+            ]);
         }
 
-        $parallel->wait();
-
         // 4. 记录最终结果
-        $this->logger->info('VolcengineArk OpenAI格式生图：并发处理完成', [
-            '总请求数' => $count,
+        $this->logger->info('VolcengineArk OpenAI格式生图：处理完成', [
+            '请求图片数' => $count,
             '成功图片数' => count($response->getData()),
             '是否有错误' => $response->hasError(),
             '错误码' => $response->getProviderErrorCode(),
@@ -142,10 +124,17 @@ class VolcengineArkModel extends AbstractImageGenerate
 
         // 从原生结果中提取图片URL
         $imageData = [];
-        foreach ($rawResults as $index => $result) {
-            // 检查嵌套的数据结构：result['data']['data'][0]['url']
-            if (! empty($result['data']['data']) && ! empty($result['data']['data'][0]['url'])) {
-                $imageData[$index] = $result['data']['data'][0]['url'];
+        $index = 0;
+        foreach ($rawResults as $result) {
+            // 检查嵌套的数据结构：result['data']['data'][*]['url']
+            if (empty($result['data']['data']) || ! is_array($result['data']['data'])) {
+                continue;
+            }
+            foreach ($result['data']['data'] as $item) {
+                if (! empty($item['url'])) {
+                    $imageData[$index] = $item['url'];
+                    ++$index;
+                }
             }
         }
 
@@ -177,7 +166,7 @@ class VolcengineArkModel extends AbstractImageGenerate
     )]
     protected function requestImageGeneration(VolcengineArkRequest $imageGenerateRequest): array
     {
-        $prompt = $imageGenerateRequest->getPrompt();
+        $prompt = $this->buildPromptForRequest($imageGenerateRequest);
         $referImages = $imageGenerateRequest->getReferImages();
 
         // 构建API payload
@@ -224,7 +213,7 @@ class VolcengineArkModel extends AbstractImageGenerate
      */
     protected function requestImageGenerationV2(VolcengineArkRequest $imageGenerateRequest): array
     {
-        $prompt = $imageGenerateRequest->getPrompt();
+        $prompt = $this->buildPromptForRequest($imageGenerateRequest);
         $referImages = $imageGenerateRequest->getReferImages();
 
         // 构建API payload
@@ -261,6 +250,22 @@ class VolcengineArkModel extends AbstractImageGenerate
 
         // 直接调用API，异常自然向上抛
         return $this->api->generateImage($payload);
+    }
+
+    private function buildPromptForRequest(VolcengineArkRequest $imageGenerateRequest): string
+    {
+        $prompt = trim($imageGenerateRequest->getPrompt());
+        $generateNum = $imageGenerateRequest->getGenerateNum();
+        if ($generateNum <= 1) {
+            return $prompt;
+        }
+
+        $countInstruction = sprintf('要求返回%d张图', $generateNum);
+        if ($prompt === '') {
+            return $countInstruction;
+        }
+
+        return $prompt . "\n" . $countInstruction;
     }
 
     /**
@@ -382,57 +387,21 @@ class VolcengineArkModel extends AbstractImageGenerate
             ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR);
         }
 
-        // VolcengineArk API每次只能生成一张图，通过并发调用实现多图生成
-        $count = $imageGenerateRequest->getGenerateNum();
-        $rawResults = [];
-        $errors = [];
-
-        $parallel = new Parallel();
-        $fromCoroutineId = Coroutine::id();
-
-        for ($i = 0; $i < $count; ++$i) {
-            $parallel->add(function () use ($imageGenerateRequest, $i, $fromCoroutineId) {
-                CoContext::copy($fromCoroutineId);
-                try {
-                    $result = $this->requestImageGeneration($imageGenerateRequest);
-
-                    return [
-                        'success' => true,
-                        'data' => $result,
-                        'index' => $i,
-                    ];
-                } catch (Exception $e) {
-                    $this->logger->error('VolcengineArk文生图：图片生成失败', [
-                        'error' => $e->getMessage(),
-                        'index' => $i,
-                    ]);
-                    return [
-                        'success' => false,
-                        'error' => $e->getMessage(),
-                        'index' => $i,
-                    ];
-                }
-            });
+        try {
+            $result = $this->requestImageGeneration($imageGenerateRequest);
+            $this->validateVolcengineArkResponse($result);
+        } catch (Exception $e) {
+            $this->logger->error('VolcengineArk文生图：图片生成失败', [
+                'error' => $e->getMessage(),
+            ]);
+            ExceptionBuilder::throw(ImageGenerateErrorCode::NO_VALID_IMAGE, $e->getMessage());
         }
 
-        $results = $parallel->wait();
-
-        foreach ($results as $result) {
-            if ($result['success']) {
-                $rawResults[$result['index']] = $result;
-            } else {
-                $errors[] = $result['error'] ?? '未知错误';
-            }
-        }
-
-        if (empty($rawResults)) {
-            $errorMessage = implode('; ', $errors);
-            $this->logger->error('VolcengineArk文生图：所有图片生成均失败', ['errors' => $errors]);
-            ExceptionBuilder::throw(ImageGenerateErrorCode::NO_VALID_IMAGE, $errorMessage);
-        }
-
-        ksort($rawResults);
-        return array_values($rawResults);
+        return [
+            [
+                'data' => $result,
+            ],
+        ];
     }
 
     /**

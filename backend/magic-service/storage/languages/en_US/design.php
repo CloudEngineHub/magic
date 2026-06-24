@@ -17,6 +17,7 @@ return [
         'project_not_exists' => 'Project does not exist: :project_id',
         'feature_unavailable' => 'This feature is currently unavailable',
         'image_to_image_reference_required' => 'Image-to-image requires at least one reference image',
+        'generate_num_exceeds_limit' => 'The current model supports generating at most :limit image(s), but :requested were requested',
     ],
     'image_mark_identify' => [
         'project_not_exists' => 'Project does not exist: :project_id',
@@ -59,6 +60,7 @@ return [
         'prompt' => 'Prompt',
         'user_prompt' => 'User Prompt',
         'size' => 'Image Size',
+        'generate_num' => 'Image Count',
         'file_dir' => 'File Directory',
         'file_name' => 'File Name',
         'reference_images' => 'Reference Images',

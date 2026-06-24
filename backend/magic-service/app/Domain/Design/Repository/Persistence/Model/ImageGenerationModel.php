@@ -27,6 +27,8 @@ use Hyperf\Snowflake\Concern\Snowflake;
  * @property ?array $reference_images
  * @property ?array $reference_image_options
  * @property ?array $image_generation_config
+ * @property int $generate_num
+ * @property ?array $output_images
  * @property int $type
  * @property string $status
  * @property ?string $error_message
@@ -54,6 +56,8 @@ class ImageGenerationModel extends Model
         'reference_images',
         'reference_image_options',
         'image_generation_config',
+        'generate_num',
+        'output_images',
         'type',
         'status',
         'error_message',
@@ -76,6 +80,8 @@ class ImageGenerationModel extends Model
         'reference_images' => 'array',
         'reference_image_options' => 'array',
         'image_generation_config' => 'array',
+        'generate_num' => 'int',
+        'output_images' => 'array',
         'type' => 'int',
         'status' => 'string',
         'error_message' => 'string',
