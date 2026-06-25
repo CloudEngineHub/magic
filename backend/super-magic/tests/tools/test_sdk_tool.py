@@ -18,37 +18,13 @@ class _FakeResponse:
         return False
 
 
-def test_tool_sdk_uses_default_timeout_when_not_provided():
+def test_tool_sdk_does_not_set_http_timeout(monkeypatch):
+    monkeypatch.setenv("SUPER_MAGIC_AGENT_CONTEXT_ID", "agent-context-1")
     sdk = ToolSDK()
-    recorded = {}
+    recorded = {"called": False}
 
-    def _fake_urlopen(req, timeout):
-        recorded["timeout"] = timeout
-        return _FakeResponse(
-            {
-                "code": 1000,
-                "data": {
-                    "ok": True,
-                    "content": "ok",
-                    "tool_call_id": "call_123",
-                    "name": "generate_video",
-                },
-            }
-        )
-
-    with patch("sdk.tool.urllib.request.urlopen", side_effect=_fake_urlopen):
-        result = sdk.call("generate_video", {"prompt": "demo"})
-
-    assert result.ok is True
-    assert recorded["timeout"] == 3600.0
-
-
-def test_tool_sdk_keeps_non_video_default_timeout_when_not_provided():
-    sdk = ToolSDK()
-    recorded = {}
-
-    def _fake_urlopen(req, timeout):
-        recorded["timeout"] = timeout
+    def _fake_urlopen(req):
+        recorded["called"] = True
         return _FakeResponse(
             {
                 "code": 1000,
@@ -65,29 +41,15 @@ def test_tool_sdk_keeps_non_video_default_timeout_when_not_provided():
         result = sdk.call("create_canvas", {"project_path": "demo"})
 
     assert result.ok is True
-    assert recorded["timeout"] == 60.0
+    assert recorded["called"] is True
 
 
-def test_tool_sdk_uses_explicit_timeout_when_provided():
+def test_tool_sdk_requires_agent_context_id(monkeypatch):
+    monkeypatch.delenv("SUPER_MAGIC_AGENT_CONTEXT_ID", raising=False)
     sdk = ToolSDK()
-    recorded = {}
 
-    def _fake_urlopen(req, timeout):
-        recorded["timeout"] = timeout
-        return _FakeResponse(
-            {
-                "code": 1000,
-                "data": {
-                    "ok": True,
-                    "content": "ok",
-                    "tool_call_id": "call_123",
-                    "name": "generate_video",
-                },
-            }
-        )
+    with patch("sdk.tool.urllib.request.urlopen", side_effect=AssertionError("urlopen should not be called")):
+        result = sdk.call("create_canvas", {"project_path": "demo"})
 
-    with patch("sdk.tool.urllib.request.urlopen", side_effect=_fake_urlopen):
-        result = sdk.call("generate_video", {"prompt": "demo"}, timeout=3600)
-
-    assert result.ok is True
-    assert recorded["timeout"] == 3600
+    assert result.ok is False
+    assert "SUPER_MAGIC_AGENT_CONTEXT_ID is not set" in result.content

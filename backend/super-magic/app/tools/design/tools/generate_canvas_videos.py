@@ -31,18 +31,18 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskExecutionResult,
     TaskPlaceholderInfo,
 )
-from app.tools.generate_video import (
-    DEFAULT_POLL_INTERVAL_SECONDS,
-    DEFAULT_POLL_TIMEOUT_SECONDS,
-    GenerateVideo,
-    LLM_VISIBLE_MAGIC_SERVICE_ERROR_CODES,
-    normalize_video_input_mode_value,
-    normalize_video_task_value,
-)
 from app.utils.async_file_utils import async_exists, async_mkdir
 from app.utils.video_logger import get_video_logger
 
 logger = get_video_logger(__name__)
+
+VIDEO_TASK_ALIASES = {
+    "generater": "generate",
+    "generator": "generate",
+}
+VIDEO_INPUT_MODE_ALIASES = {
+    "video_editing": "video_edit",
+}
 
 
 def _parse_dimension_size(value: str) -> tuple[int, int] | None:
@@ -61,6 +61,22 @@ def _format_tool_context_for_log(tool_context: Optional[ToolContext]) -> str:
         f"tool_name={getattr(tool_context, 'tool_name', '') or ''} "
         f"tool_call_id={getattr(tool_context, 'tool_call_id', '') or ''}"
     )
+
+
+def _normalize_video_task_value(value: Any, default: str = "generate") -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return default
+    normalized = normalized.lower()
+    return VIDEO_TASK_ALIASES.get(normalized, normalized)
+
+
+def _normalize_video_input_mode_value(value: Any) -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return ""
+    normalized = normalized.lower()
+    return VIDEO_INPUT_MODE_ALIASES.get(normalized, normalized)
 
 
 @dataclass
@@ -248,12 +264,12 @@ Optional. When provided, the tool reuses an existing canvas element (e.g. a fail
     @field_validator("input_mode", mode="before")
     @classmethod
     def normalize_input_mode(cls, value: Any) -> str:
-        return normalize_video_input_mode_value(value)
+        return _normalize_video_input_mode_value(value)
 
     @field_validator("task", mode="before")
     @classmethod
     def normalize_task(cls, value: Any) -> str:
-        return normalize_video_task_value(value)
+        return _normalize_video_task_value(value)
 
     @model_validator(mode="after")
     def validate_reference_tokens(self) -> "VideoTaskSpec":
@@ -304,8 +320,6 @@ Video generation task list. Each task produces one video. Maximum 4 tasks per ca
     )
     model_id: str = Field("", description="<!--zh: 可选视频模型 ID，所有任务共用-->Optional video model ID, shared across all tasks")
     override: bool = Field(False, description="<!--zh: 是否覆盖已有文件-->Whether to override existing files")
-    poll_interval_seconds: int = Field(DEFAULT_POLL_INTERVAL_SECONDS, description="Polling interval in seconds")
-    poll_timeout_seconds: int = Field(DEFAULT_POLL_TIMEOUT_SECONDS, description="Polling timeout in seconds")
 
     @model_validator(mode="before")
     @classmethod
@@ -379,8 +393,6 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         # 全局参数缓存，在 execute() 中写入，供 _prepare_task_kwargs / _execute_task_item 读取
         self._model_id: str = ""
         self._override: bool = False
-        self._poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS
-        self._poll_timeout_seconds: int = DEFAULT_POLL_TIMEOUT_SECONDS
 
     async def execute(self, tool_context: ToolContext, params: GenerateCanvasVideosParams) -> ToolResult:
         try:
@@ -391,8 +403,6 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             # 缓存全局参数（单事件循环语义下安全）
             self._model_id = params.model_id
             self._override = params.override
-            self._poll_interval_seconds = params.poll_interval_seconds
-            self._poll_timeout_seconds = params.poll_timeout_seconds
             self._task_video_ids = {}
             workspace_root = Path(self.base_dir)
             project_prefix = params.project_path.strip("/")
@@ -443,7 +453,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
 
         video_id = self._ensure_task_video_id(idx)
         try:
-            model_id = GenerateVideo._resolve_model(self._model_id, tool_context)
+            model_id = self._resolve_video_model(self._model_id, tool_context)
             payload = self._build_design_video_request(
                 task=task,
                 project_id=project_id,
@@ -644,8 +654,8 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         if pending_results:
             lines.extend([
                 "",
-                "These video tasks have been submitted to backend managed polling.",
-                "The canvas placeholders contain video_id, and the frontend will poll the design video result.",
+                "These video tasks have been submitted as backend async design video tasks.",
+                "The canvas placeholders contain video_id for frontend status polling.",
                 "Pending Videos:",
             ])
             for r in pending_results:
@@ -721,6 +731,21 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         if isinstance(project_id, (str, int)) and str(project_id).strip():
             return str(project_id).strip()
         raise ValueError("缺少 project_id，无法创建后台托管的视频任务")
+
+    @staticmethod
+    def _resolve_video_model(requested_model: str, tool_context: Optional[ToolContext] = None) -> str:
+        if requested_model and requested_model.strip():
+            return requested_model.strip()
+
+        if tool_context is not None:
+            agent_context = tool_context.get_extension("agent_context")
+            model_context = getattr(agent_context, "model_context", None) if agent_context else None
+            video_model_id = getattr(model_context, "video_model_id", "") if model_context else ""
+            if video_model_id:
+                logger.info(f"从 AgentContext.model_context 获取视频模型: {video_model_id}")
+                return video_model_id
+
+        raise ValueError("未指定视频模型，且当前会话没有可用的视频模型")
 
     def _build_initial_design_video_request(
         self,
@@ -857,18 +882,6 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             for key, value in payload.items()
             if value is not None and value != "" and value != [] and value != {}
         }
-
-    @staticmethod
-    def _extract_generate_error_message(result: ToolResult) -> str:
-        extra_info = result.extra_info or {}
-        raw_error = extra_info.get("raw_error")
-        if isinstance(raw_error, str) and raw_error.strip():
-            return raw_error.strip()
-        error = extra_info.get("error")
-        error_code = str(extra_info.get("error_code") or "").strip()
-        if isinstance(error, str) and error.strip() and error_code in LLM_VISIBLE_MAGIC_SERVICE_ERROR_CODES:
-            return error.strip()
-        return (result.content or "视频生成失败").strip()
 
     def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:
         extra_info = result.extra_info or {}

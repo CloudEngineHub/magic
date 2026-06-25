@@ -199,17 +199,9 @@
         "zh_CN": "正在生成图像",
         "en_US": "Generating images"
     },
-    "generate_video": {
-        "zh_CN": "生成视频",
-        "en_US": "Generate video"
-    },
     "video_generation_progress": {
         "zh_CN": "视频生成进度通知",
         "en_US": "Video generation progress"
-    },
-    "query_video_generation": {
-        "zh_CN": "查询视频任务",
-        "en_US": "Query video task"
     },
     "task_progress": {
         "zh_CN": "查询任务进度",
