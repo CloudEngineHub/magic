@@ -232,7 +232,7 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
     ) -> Dict[str, Any]:
         """生成子类专属的额外信息，会被合并到最终 ToolResult.extra_info 中。
 
-        默认返回空字典；子类可覆盖以传出 pending_operations 等特定状态数据。
+        默认返回空字典；子类可覆盖以传出 pending_videos 等特定状态数据。
         返回的 key 若与基类已有 key 重名，子类值优先（基类先写，子类覆盖）。
         """
         return {}

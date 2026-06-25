@@ -8,8 +8,13 @@ from app.core.models.media_model import VideoModelSpec
 from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.exceptions import ApiError
-from app.tools.design.tools.generate_canvas_videos import GenerateCanvasVideos, GenerateCanvasVideosParams, VideoTaskSpec
-from app.tools.design.tools.base_generate_canvas_elements import ElementDetail
+from app.tools.design.tools.generate_canvas_videos import (
+    GenerateCanvasVideos,
+    GenerateCanvasVideosParams,
+    VideoPlaceholderUpdate,
+    VideoTaskSpec,
+)
+from app.tools.design.tools.base_generate_canvas_elements import ElementDetail, TaskExecutionResult
 
 
 class _FakeMagicServiceResponse:
@@ -86,7 +91,9 @@ def test_video_task_spec_normalizes_input_mode_aliases_from_llm():
     task = VideoTaskSpec(
         prompt="把参考视频改成水彩风格",
         name="水彩视频编辑",
-        size="1280x720",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
         inputMode="video_editing",
         task="edit",
     )
@@ -100,7 +107,9 @@ def test_video_task_spec_requires_reference_image_tokens():
         VideoTaskSpec(
             prompt="两只猫依次从箱子里跳出来",
             name="箱子跳猫",
-            size="1280x720",
+            aspect_ratio="16:9",
+            duration_seconds=4,
+            resolution="720p",
             reference_image_paths=["images/white-cat.jpg", "images/black-cat.jpg"],
         )
 
@@ -109,7 +118,9 @@ def test_video_task_spec_allows_reference_image_tokens():
     task = VideoTaskSpec(
         prompt="白色小猫 [image1] 从黑色箱子探头，黑色小猫 [image2] 从白色箱子跳出",
         name="箱子跳猫",
-        size="1280x720",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
         reference_image_paths=["images/white-cat.jpg", "images/black-cat.jpg"],
     )
 
@@ -136,7 +147,9 @@ async def test_generate_canvas_videos_normalizes_project_relative_reference_path
             "并配合音频 [audio1]，从起始帧过渡到结束帧"
         ),
         name="项目相对参考素材",
-        size="1280x720",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
         reference_image_paths=["images/ref.jpg", "https://cdn.example.com/ref.jpg"],
         reference_video_paths=["videos/ref.mp4"],
         reference_audio_paths=["audios/ref.mp3"],
@@ -161,7 +174,9 @@ def test_video_task_spec_requires_video_and_audio_tokens():
         VideoTaskSpec(
             prompt="参考视频节奏和音频氛围生成广告片",
             name="广告片",
-            size="1280x720",
+            aspect_ratio="16:9",
+            duration_seconds=4,
+            resolution="720p",
             reference_video_paths=["videos/ref.mp4"],
             reference_audio_paths=["audios/ref.mp3"],
         )
@@ -197,8 +212,9 @@ async def test_generate_canvas_videos_does_not_create_placeholder_when_prepare_f
                 VideoTaskSpec(
                     prompt="一只橘猫坐在老式电车窗边看雨夜霓虹",
                     name="雨夜电车橘猫",
-                    size="1280x720",
+                    aspect_ratio="16:9",
                     duration_seconds=4,
+                    resolution="720p",
                 )
             ],
         ),
@@ -209,14 +225,16 @@ async def test_generate_canvas_videos_does_not_create_placeholder_when_prepare_f
     assert "雨夜电车橘猫" not in project_file.read_text(encoding="utf-8")
 
 
-def test_generate_canvas_videos_params_uses_size_for_canvas_dimensions():
+def test_generate_canvas_videos_params_uses_resolution_and_aspect_ratio_for_canvas_dimensions():
     params = GenerateCanvasVideosParams(
         project_path="demo-project",
         tasks=[
             {
                 "prompt": "生成一个 16:9 的 720p 广告短片",
                 "name": "广告短片",
-                "size": "1280x720",
+                "aspect_ratio": "16:9",
+                "duration_seconds": 4,
+                "resolution": "720p",
             }
         ],
     )
@@ -226,14 +244,47 @@ def test_generate_canvas_videos_params_uses_size_for_canvas_dimensions():
     assert "height" not in params.tasks[0].model_fields_set
 
 
-def test_generate_canvas_videos_params_ignores_legacy_canvas_dimensions_when_size_exists():
+@pytest.mark.parametrize(
+        ("resolution", "aspect_ratio", "expected_dimensions"),
+        [
+            ("1080p", "9:16", (1080, 1920)),
+            ("2k", "16:9", (2560, 1440)),
+            ("4k", "16:9", (3840, 2160)),
+            ("8k", "16:9", (7680, 4320)),
+            ("720p", "1:1", (960, 960)),
+    ],
+)
+def test_generate_canvas_videos_params_derives_canvas_dimensions_without_size(
+    resolution,
+    aspect_ratio,
+    expected_dimensions,
+):
+    params = GenerateCanvasVideosParams(
+        project_path="demo-project",
+        tasks=[
+            {
+                "prompt": "生成一个视频",
+                "name": "动态尺寸视频",
+                "aspect_ratio": aspect_ratio,
+                "duration_seconds": 4,
+                "resolution": resolution,
+            }
+        ],
+    )
+
+    assert params.tasks[0].canvas_dimensions == expected_dimensions
+
+
+def test_generate_canvas_videos_params_ignores_legacy_canvas_dimensions():
     params = GenerateCanvasVideosParams(
         project_path="demo-project",
         tasks=[
             {
                 "prompt": "生成一个 16:9 的 720p 广告短片",
                 "name": "广告短片",
-                "size": "1280x720",
+                "aspect_ratio": "16:9",
+                "duration_seconds": 4,
+                "resolution": "720p",
                 "width": 640,
                 "height": 360,
             }
@@ -243,24 +294,36 @@ def test_generate_canvas_videos_params_ignores_legacy_canvas_dimensions_when_siz
     assert params.tasks[0].canvas_dimensions == (1280, 720)
 
 
-def test_generate_canvas_videos_params_requires_size():
-    with pytest.raises(ValidationError) as exc:
-        GenerateCanvasVideosParams(
-            project_path="demo-project",
-            tasks=[
-                {
-                    "prompt": "生成一个 16:9 的 720p 广告短片",
-                    "name": "广告短片",
-                }
-            ],
-        )
+def test_generate_canvas_videos_params_allow_omitting_generation_fields():
+    params = GenerateCanvasVideosParams(
+        project_path="demo-project",
+        tasks=[
+            {
+                "prompt": "生成一个广告短片",
+                "name": "广告短片",
+            }
+        ],
+    )
 
-    message = str(exc.value)
-    assert "requires size" in message
-    assert "tasks.0.size" in message
+    task = params.tasks[0]
+    assert task.aspect_ratio is None
+    assert task.duration_seconds is None
+    assert task.resolution is None
+    assert task.canvas_dimensions == (1280, 720)
 
 
-def test_generate_canvas_videos_params_rejects_invalid_size_with_english_message():
+def test_generate_canvas_videos_builds_generation_without_layout_defaults():
+    task = VideoTaskSpec(
+        prompt="森林中的小路。",
+        name="默认参数视频",
+    )
+
+    generation = GenerateCanvasVideos._build_design_generation(task)
+
+    assert generation == {}
+
+
+def test_generate_canvas_videos_params_rejects_size():
     with pytest.raises(ValidationError) as exc:
         GenerateCanvasVideosParams(
             project_path="demo-project",
@@ -274,9 +337,12 @@ def test_generate_canvas_videos_params_rejects_invalid_size_with_english_message
         )
 
     message = str(exc.value)
-    assert "Invalid size format" in message
-    assert "WIDTHxHEIGHT" in message
-    assert "格式无效" not in message
+    assert "size" in message
+    assert "Extra inputs are not permitted" in message
+
+
+def test_generate_canvas_videos_params_do_not_expose_unused_override():
+    assert "override" not in GenerateCanvasVideosParams.model_fields
 
 
 def test_generate_canvas_videos_reads_runtime_video_model_context():
@@ -318,7 +384,9 @@ async def test_execute_video_task_carries_error_message_to_result(tmp_path):
     task = VideoTaskSpec(
         prompt="森林中的小路。",
         name="错误信息测试",
-        size="1280x720",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
     )
     placeholder = ElementDetail(
         id="element-1",
@@ -366,7 +434,7 @@ async def test_execute_video_task_submits_design_task_without_agent_polling(monk
     task = VideoTaskSpec(
         prompt="森林中的小路。",
         name="后台托管视频",
-        size="1280x720",
+        aspect_ratio="16:9",
         duration_seconds=4,
         resolution="720p",
         seed=7,
@@ -405,13 +473,51 @@ async def test_execute_video_task_submits_design_task_without_agent_polling(monk
     assert payload["prompt"] == "森林中的小路。"
     assert payload["task"] == "generate"
     assert payload["file_dir"] == "/demo-project/videos/"
+    assert payload["inputs"] == {
+        "reference_images": [],
+        "reference_videos": [],
+        "reference_audios": [],
+        "frames": [],
+    }
     assert payload["generation"] == {
-        "size": "1280x720",
+        "aspect_ratio": "16:9",
         "duration_seconds": 4,
         "resolution": "720p",
         "seed": 7,
     }
     assert result.placeholder_update.generateVideoRequest == payload
+
+
+def test_generate_canvas_videos_extra_info_uses_video_names():
+    tool = GenerateCanvasVideos()
+    extra_info = tool._collect_extra_info(
+        tasks=[],
+        placeholders=[],
+        task_results=[
+            TaskExecutionResult(
+                index=0,
+                success=True,
+                placeholder_update=VideoPlaceholderUpdate(status="processing"),
+                metadata={
+                    "is_processing": True,
+                    "element_id": "element-1",
+                    "element_name": "后台托管视频",
+                    "video_id": "video-test-1",
+                    "pending_status": "running",
+                },
+            )
+        ],
+    )
+
+    assert extra_info["pending_videos"] == [
+        {
+            "element_id": "element-1",
+            "element_name": "后台托管视频",
+            "video_id": "video-test-1",
+            "status": "running",
+        }
+    ]
+    assert "pending_operations" not in extra_info
 
 
 def test_generate_canvas_videos_initial_placeholder_contains_video_id(monkeypatch):
@@ -420,7 +526,9 @@ def test_generate_canvas_videos_initial_placeholder_contains_video_id(monkeypatc
     task = VideoTaskSpec(
         prompt="森林中的小路。",
         name="占位阶段视频",
-        size="1280x720",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
     )
 
     update = tool._build_initial_placeholder_update(task, 0, "element-1")
@@ -428,3 +536,9 @@ def test_generate_canvas_videos_initial_placeholder_contains_video_id(monkeypatc
     assert update["generateVideoRequest"]["video_id"] == "video-placeholder-1"
     assert update["generateVideoRequest"]["prompt"] == "森林中的小路。"
     assert update["generateVideoRequest"]["task"] == "generate"
+    assert update["generateVideoRequest"]["inputs"] == {
+        "reference_images": [],
+        "reference_videos": [],
+        "reference_audios": [],
+        "frames": [],
+    }

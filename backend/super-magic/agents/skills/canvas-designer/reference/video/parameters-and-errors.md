@@ -4,12 +4,13 @@
 - Step 1: inspect the runtime video-model capability config already injected into the conversation
 - Step 2: fill priority inputs first
   - the generation goal itself
-  - canvas placement: `project_path`, `name`, `width`, `height`
-  - user-requested size/resolution intent
+  - canvas placement: `project_path`, `name`
+  - user-requested `resolution` / `aspect_ratio` intent
   - user-requested duration intent
   - reference inputs such as reference images or start/end frames
-- Step 3: leave non-priority parameters empty by default; when uncertain about a parameter, prefer omitting it rather than guessing
-- `width` / `height` are canvas layout dimensions and may differ from real generation resolution
+- Step 3: `duration_seconds`, `resolution`, and `aspect_ratio` are optional; when the user did not specify them, infer legal values from the current video model rules only when the choice is clear for the user's request
+- Step 4: when uncertain about an optional parameter, prefer omitting it rather than guessing
+- Canvas layout dimensions are derived internally; do not invent generation parameters only for layout
 - Let the default handling take care of the rest when the user did not explicitly ask for more controls
 
 ## Error Handling
@@ -19,6 +20,6 @@
 - Do not silently create a new video job "to try again" unless the user explicitly asks for regeneration
 
 ## Reading Results
-- `pending_operations`: source of truth for future follow-up after the creation flow timed out
+- `pending_videos`: source of truth for videos still being processed
 - `created_elements`: elements created in this run
 - `elements`: updated element details
