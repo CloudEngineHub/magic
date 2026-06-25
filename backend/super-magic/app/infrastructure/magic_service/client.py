@@ -29,14 +29,14 @@ logger = get_logger(__name__)
 class MagicServiceClient:
     """Client for interacting with Magic Service APIs"""
 
-    def __init__(self, config: MagicServiceConfig):
+    def __init__(self, config: Optional[MagicServiceConfig] = None):
         """
         Initialize Magic Service client
 
         Args:
             config: Magic Service configuration
         """
-        self.config = config
+        self.config = config or MagicServiceConfigLoader.load_with_fallback()
         self.session: Optional[aiohttp.ClientSession] = None
 
     async def __aenter__(self):
@@ -215,6 +215,104 @@ class MagicServiceClient:
         except Exception as e:
             logger.warning(f"Magic Service health check failed: {e}")
             return False
+
+    async def generate_design_video(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Submit a design video generation task."""
+        return await self._request_json(
+            "POST",
+            "/api/v1/design/generate-video",
+            payload,
+            operation_name="设计视频生成",
+        )
+
+    async def _request_json(
+        self,
+        method: str,
+        path: str,
+        payload: Optional[Dict[str, Any]] = None,
+        operation_name: str = "Magic Service API",
+    ) -> Dict[str, Any]:
+        url = f"{self._api_base_url()}{path}"
+        headers = self._build_json_headers()
+        session_to_use = self.session or aiohttp.ClientSession()
+        should_close_session = self.session is None
+
+        try:
+            async with session_to_use.request(
+                method,
+                url,
+                json=payload,
+                headers=headers,
+            ) as response:
+                response_text = await response.text()
+                try:
+                    body = json.loads(response_text) if response_text else {}
+                except json.JSONDecodeError as exc:
+                    raise ApiError(f"Invalid JSON response: {response_text[:200]}...") from exc
+
+                if response.status < 200 or response.status >= 300:
+                    raise self._build_api_error(body, f"{operation_name} HTTP {response.status}")
+
+                return self._extract_response_data(body, operation_name)
+        except aiohttp.ClientError as exc:
+            raise ConnectionError(f"Failed to connect to Magic Service: {exc}") from exc
+        finally:
+            if should_close_session:
+                await session_to_use.close()
+
+    def _api_base_url(self) -> str:
+        base_url = self.config.api_base_url.rstrip("/")
+        for suffix in ("/api/v1", "/v1"):
+            if base_url.endswith(suffix):
+                return base_url[: -len(suffix)]
+        return base_url
+
+    def _build_json_headers(self) -> Dict[str, str]:
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "MagicServiceClient/1.0",
+        }
+        if self.config.api_key:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+        MetadataUtil.add_magic_and_user_authorization_headers(headers)
+        headers.update(MetadataUtil.get_llm_request_headers())
+
+        try:
+            metadata = MetadataUtil.get_metadata()
+        except Exception:
+            metadata = {}
+        organization_code = metadata.get("organization_code")
+        if organization_code:
+            headers["organization-code"] = str(organization_code)
+        return headers
+
+    def _extract_response_data(self, body: Dict[str, Any], operation_name: str) -> Dict[str, Any]:
+        if "code" not in body:
+            return body
+
+        code = str(body.get("code") or "")
+        if code in {"0", "1000"}:
+            data = body.get("data")
+            return data if isinstance(data, dict) else {}
+
+        raise self._build_api_error(body, f"{operation_name}业务错误")
+
+    @staticmethod
+    def _build_api_error(body: Dict[str, Any], fallback_message: str) -> ApiError:
+        error = body.get("error") if isinstance(body.get("error"), dict) else {}
+        code = str(error.get("code") or body.get("code") or "")
+        message = str(error.get("message") or body.get("message") or fallback_message)
+        request_id = str(error.get("request_id") or body.get("request_id") or "")
+        suffix_parts = []
+        if code:
+            suffix_parts.append(f"code={code}")
+        if request_id:
+            suffix_parts.append(f"request_id={request_id}")
+        if suffix_parts:
+            message = f"{message} ({', '.join(suffix_parts)})"
+        api_error = ApiError(message, response_data=body)
+        api_error.response_data = body
+        return api_error
 
     async def get_file_tree(
         self,

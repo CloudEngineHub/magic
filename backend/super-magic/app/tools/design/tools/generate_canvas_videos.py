@@ -18,10 +18,8 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.metadata import MetadataUtil
 from app.core.entity.message.server_message import DisplayType, ToolDetail
-from app.infrastructure.magic_service.design_video_client import (
-    DesignVideoClient,
-    DesignVideoServiceError,
-)
+from app.infrastructure.magic_service.client import MagicServiceClient
+from app.infrastructure.magic_service.exceptions import ApiError
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.tools.base_generate_canvas_elements import (
@@ -388,7 +386,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
 
     def __init__(self, **data):
         super().__init__(**data)
-        self._design_video_client: Optional[DesignVideoClient] = None
+        self._magic_service_client: Optional[MagicServiceClient] = None
         self._task_video_ids: Dict[int, str] = {}
         # 全局参数缓存，在 execute() 中写入，供 _prepare_task_kwargs / _execute_task_item 读取
         self._model_id: str = ""
@@ -471,8 +469,8 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 f"task={payload.get('task') or ''} input_mode={payload.get('input_mode') or ''} "
                 f"size={payload.get('generation', {}).get('size') or ''}"
             )
-            response = await self._get_design_video_client().generate_video(payload)
-        except (DesignVideoServiceError, ValueError) as error:
+            response = await self._get_magic_service_client().generate_design_video(payload)
+        except (ApiError, ValueError) as error:
             error_message = str(error)
             payload = self._build_initial_design_video_request(task, video_id)
             logger.warning(
@@ -567,7 +565,6 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         design_file_dir = self._format_design_file_dir(str(relative_project_path / "videos"))
         project_id = self._resolve_project_id()
         await async_mkdir(project_path / "videos", parents=True, exist_ok=True)
-        await self._get_design_video_client().ensure_project_directory(project_id, design_file_dir)
         return {
             "resolved_output_path": resolved_output_path,
             "design_file_dir": design_file_dir,
@@ -705,10 +702,10 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
     # 私有辅助
     # ------------------------------------------------------------------
 
-    def _get_design_video_client(self) -> DesignVideoClient:
-        if self._design_video_client is None:
-            self._design_video_client = DesignVideoClient()
-        return self._design_video_client
+    def _get_magic_service_client(self) -> MagicServiceClient:
+        if self._magic_service_client is None:
+            self._magic_service_client = MagicServiceClient()
+        return self._magic_service_client
 
     def _ensure_task_video_id(self, idx: int) -> str:
         video_id = self._task_video_ids.get(idx)

@@ -6,35 +6,77 @@ from app.core.models.agent_model_context import AgentModelContext
 from app.core.models.agent_model_selection import AgentModelSelection
 from app.core.models.media_model import VideoModelSpec
 from app.infrastructure.magic_service.config import MagicServiceConfig
-from app.infrastructure.magic_service.design_video_client import DesignVideoClient, DesignVideoServiceError
+from app.infrastructure.magic_service.client import MagicServiceClient
+from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.design.tools.generate_canvas_videos import GenerateCanvasVideos, GenerateCanvasVideosParams, VideoTaskSpec
 from app.tools.design.tools.base_generate_canvas_elements import ElementDetail
 
 
-def test_design_video_client_forwards_user_auth_and_organization(monkeypatch):
+class _FakeMagicServiceResponse:
+    def __init__(self, payload, status=200):
+        self.payload = payload
+        self.status = status
+
+    async def text(self):
+        import json
+
+        return json.dumps(self.payload)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeMagicServiceSession:
+    def __init__(self, response):
+        self.response = response
+        self.requests = []
+
+    def request(self, method, url, json=None, headers=None):
+        self.requests.append({
+            "method": method,
+            "url": url,
+            "json": json,
+            "headers": headers or {},
+        })
+        return self.response
+
+
+@pytest.mark.asyncio
+async def test_magic_service_client_generate_design_video_forwards_user_auth_and_metadata(monkeypatch):
     metadata = {
-        "authorization": "test-user-token",
         "organization_code": "test-org",
-        "super_magic_task_id": "task-1",
     }
 
     monkeypatch.setattr(
-        "app.infrastructure.magic_service.design_video_client.MetadataUtil.add_magic_and_user_authorization_headers",
-        lambda headers: None,
+        "app.infrastructure.magic_service.client.MetadataUtil.add_magic_and_user_authorization_headers",
+        lambda headers: headers.update({"User-Authorization": "test-user-token"}),
     )
     monkeypatch.setattr(
-        "app.infrastructure.magic_service.design_video_client.MetadataUtil.is_initialized",
-        lambda: True,
+        "app.infrastructure.magic_service.client.MetadataUtil.get_llm_request_headers",
+        lambda: {"Magic-Task-Id": "task-1"},
     )
     monkeypatch.setattr(
-        "app.infrastructure.magic_service.design_video_client.MetadataUtil.get_metadata",
+        "app.infrastructure.magic_service.client.MetadataUtil.get_metadata",
         lambda: metadata,
     )
 
-    client = DesignVideoClient(config=MagicServiceConfig(api_base_url="http://magic-service.test"))
+    client = MagicServiceClient(config=MagicServiceConfig(api_base_url="http://magic-service.test"))
+    client.session = _FakeMagicServiceSession(
+        _FakeMagicServiceResponse({"code": 1000, "data": {"video_id": "vid-1"}})
+    )
 
-    headers = client._build_headers()
+    result = await client.generate_design_video({"video_id": "vid-1"})
 
+    assert result == {"video_id": "vid-1"}
+    request = client.session.requests[0]
+    assert request["method"] == "POST"
+    assert request["url"] == "http://magic-service.test/api/v1/design/generate-video"
+    assert request["json"] == {"video_id": "vid-1"}
+
+    headers = request["headers"]
     assert headers["User-Authorization"] == "test-user-token"
     assert headers["organization-code"] == "test-org"
     assert headers["Magic-Task-Id"] == "task-1"
@@ -268,11 +310,11 @@ async def test_execute_video_task_carries_error_message_to_result(tmp_path):
     tool = GenerateCanvasVideos()
     tool._model_id = "mock-video-model"
 
-    class FakeDesignVideoClient:
-        async def generate_video(self, payload):
-            raise DesignVideoServiceError(explicit_error, code="4018")
+    class FakeMagicServiceClient:
+        async def generate_design_video(self, payload):
+            raise ApiError(explicit_error)
 
-    tool._design_video_client = FakeDesignVideoClient()
+    tool._magic_service_client = FakeMagicServiceClient()
     task = VideoTaskSpec(
         prompt="森林中的小路。",
         name="错误信息测试",
@@ -309,8 +351,8 @@ async def test_execute_video_task_submits_design_task_without_agent_polling(monk
     tool._model_id = "mock-video-model"
     submitted_payloads = []
 
-    class FakeDesignVideoClient:
-        async def generate_video(self, payload):
+    class FakeMagicServiceClient:
+        async def generate_design_video(self, payload):
             submitted_payloads.append(payload)
             return {
                 "project_id": payload["project_id"],
@@ -318,7 +360,7 @@ async def test_execute_video_task_submits_design_task_without_agent_polling(monk
                 "status": "running",
             }
 
-    tool._design_video_client = FakeDesignVideoClient()
+    tool._magic_service_client = FakeMagicServiceClient()
     monkeypatch.setattr(tool, "_generate_design_video_id", lambda: "video-test-1", raising=False)
 
     task = VideoTaskSpec(
