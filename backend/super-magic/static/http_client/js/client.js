@@ -7594,6 +7594,13 @@ async function renderApiFilePreviewTab(tab) {
                 pre.textContent = text;
                 filePreviewBody.appendChild(pre);
             }
+
+            if (isMagicProjectJs(filePath)) {
+                const config = await parseMagicProjectConfig(text);
+                if (config?.canvas) {
+                    await addApiCanvasRightPanel(config, filePath);
+                }
+            }
         }
         setFilePreviewWorkbenchVisible(true);
     } catch (e) {
@@ -7965,6 +7972,12 @@ async function resolveCanvasFileBlobUrl(projectDirHandle, relPath) {
     }
 }
 
+function joinWorkspacePath(basePath, relPath) {
+    const baseParts = String(basePath || '').split('/').filter(Boolean);
+    const relParts = String(relPath || '').split('/').filter(p => p && p !== '.');
+    return [...baseParts, ...relParts].join('/');
+}
+
 /**
  * 从视频 blob URL 中抓取第一帧，返回 data URL（失败时返回 null）。
  */
@@ -8092,7 +8105,7 @@ function openCanvasMediaModal(type, blobUrl, posterBlobUrl, name) {
  * 在 containerEl 内渲染画布内容。
  * containerEl 本身需具备 overflow:auto + 固定高度（来自 CSS），函数不修改其样式。
  */
-async function renderCanvasView(config, projectDirHandle, containerEl) {
+async function renderCanvasView(config, resolveMediaUrl, containerEl) {
     const elements = config?.canvas?.elements ?? [];
     if (!elements.length) {
         appendPreviewMessage(containerEl, '画布中没有元素。');
@@ -8210,8 +8223,8 @@ async function renderCanvasView(config, projectDirHandle, containerEl) {
             elDiv.appendChild(makeLabel(el.name || ''));
         } else if (el.type === 'video') {
             // 视频：封面优先，无封面则从视频抓第一帧；点击弹窗播放
-            const posterBlobUrl = el.poster ? await resolveCanvasFileBlobUrl(projectDirHandle, el.poster) : null;
-            const videoBlobUrl = el.src ? await resolveCanvasFileBlobUrl(projectDirHandle, el.src) : null;
+            const posterBlobUrl = el.poster ? await resolveMediaUrl(el.poster) : null;
+            const videoBlobUrl = el.src ? await resolveMediaUrl(el.src) : null;
             // 没有 poster 时从视频文件抓帧作为封面
             let thumbnailUrl = posterBlobUrl;
             if (!thumbnailUrl && videoBlobUrl) {
@@ -8223,7 +8236,7 @@ async function renderCanvasView(config, projectDirHandle, containerEl) {
                 elDiv.addEventListener('click', () => openCanvasMediaModal('video', videoBlobUrl, thumbnailUrl, el.name || ''));
             }
         } else if (el.src) {
-            const blobUrl = await resolveCanvasFileBlobUrl(projectDirHandle, el.src);
+            const blobUrl = await resolveMediaUrl(el.src);
             if (blobUrl) {
                 const img = document.createElement('img');
                 img.src = blobUrl;
@@ -8282,7 +8295,41 @@ async function addCanvasRightPanel(config, filePath) {
         appendPreviewMessage(viewport, '无法访问项目目录，请检查文件系统权限。');
         return;
     }
-    await renderCanvasView(config, projectDirHandle, viewport);
+    const resolveMediaUrl = (relPath) => resolveCanvasFileBlobUrl(projectDirHandle, relPath);
+    await renderCanvasView(config, resolveMediaUrl, viewport);
+}
+
+async function addApiCanvasRightPanel(config, filePath) {
+    if (!filePreviewMain) return;
+    filePreviewMain.classList.add('has-canvas-panel');
+
+    const oldPanel = document.getElementById('canvasRightPanel');
+    if (oldPanel) oldPanel.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'canvasRightPanel';
+    panel.className = 'canvas-right-panel';
+
+    const panelHeader = document.createElement('div');
+    panelHeader.className = 'canvas-panel-header';
+    const titleEl = document.createElement('span');
+    titleEl.className = 'canvas-panel-title';
+    titleEl.textContent = config.name || filePath;
+    const countEl = document.createElement('span');
+    countEl.className = 'canvas-panel-count';
+    countEl.textContent = `${config.canvas?.elements?.length ?? 0} 个元素`;
+    panelHeader.appendChild(titleEl);
+    panelHeader.appendChild(countEl);
+    panel.appendChild(panelHeader);
+
+    const viewport = document.createElement('div');
+    viewport.className = 'canvas-right-viewport';
+    panel.appendChild(viewport);
+    filePreviewMain.appendChild(panel);
+
+    const projectDirPath = String(filePath || '').split('/').filter(Boolean).slice(0, -1).join('/');
+    const resolveMediaUrl = async (relPath) => debugWorkspaceApi.rawUrl(joinWorkspacePath(projectDirPath, relPath));
+    await renderCanvasView(config, resolveMediaUrl, viewport);
 }
 
 // 预览文件内容：图片/音视频/PDF 用 blob URL，文本读入 pre，其余提示不可预览

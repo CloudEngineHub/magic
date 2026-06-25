@@ -1207,6 +1207,18 @@
         "zh_CN": "视频结果：完成 {{completed}} 个，处理中 {{processing}} 个，失败 {{failed}} 个",
         "en_US": "Video result: {{completed}} completed, {{processing}} processing, {{failed}} failed"
     },
+    "restore_canvas_media.preview": {
+        "zh_CN": "发现 {{missing_count}} 个可恢复媒体，等待确认",
+        "en_US": "Found {{missing_count}} recoverable media item(s), waiting for confirmation"
+    },
+    "restore_canvas_media.restored": {
+        "zh_CN": "已恢复 {{restored_count}} 个媒体图层",
+        "en_US": "Restored {{restored_count}} media layer(s)"
+    },
+    "restore_canvas_media.exception": {
+        "zh_CN": "恢复画布媒体失败",
+        "en_US": "Failed to restore canvas media"
+    },
     "thinking.start_deep_thinking": {
         "zh_CN": "开始深入思考问题：{{problem}}",
         "en_US": "Starting deep thinking on problem: {{problem}}"

@@ -303,6 +303,14 @@
         "zh_CN": "生成视频",
         "en_US": "Generate videos"
     },
+    "restore_canvas_media.preview": {
+        "zh_CN": "扫描可恢复媒体",
+        "en_US": "Scan recoverable media"
+    },
+    "restore_canvas_media.restore": {
+        "zh_CN": "恢复画布媒体",
+        "en_US": "Restore canvas media"
+    },
     "thinking": {
         "zh_CN": "深度思考",
         "en_US": "Thinking process"

@@ -51,6 +51,7 @@ Design projects are uniquely identified by `project_path`. All canvas tools requ
 - Image content changes → `generate_canvas_images` (creates new element; keep original)
 - Web image search for canvas → read [reference/image/image-search.md](reference/image/image-search.md) first, then `search_canvas_images`
 - Video generation → `generate_canvas_videos` (see Video Generation section below)
+- Recover missing canvas layers from local project media files → only use `restore_canvas_media` when the user explicitly asks to restore/rebuild canvas layers or `magic.project.js` from existing `images/` / `videos/` files
 - Original elements and media files must remain unchanged
 
 **Tool priority:**
@@ -88,6 +89,45 @@ Returns: `{ project_path, project_name }`
 | `element_id` | No | Existing element ID to overwrite (for retrying a failed placeholder) |
 
 Returns: succeeded element names via `result.content`; when a task fails, `result.content` includes the `element_id` of the failed placeholder for retry.
+
+### restore_canvas_media
+
+Recover missing image/video canvas elements by scanning the current canvas project's local `images/` and `videos/` folders and adding media files that are not already referenced in `magic.project.js`.
+
+**Strict trigger boundary:** Only call this tool when the user clearly and specifically asks to restore/recover/rebuild canvas layers or `magic.project.js` from existing local media files, such as:
+- "magic.project.js was overwritten; scan images/videos and add the layers back"
+- "restore canvas media from the images folder"
+- "recover missing canvas layers from local images/videos"
+
+Do not call `restore_canvas_media` for normal image generation, video generation, image search, canvas editing, layout changes, missing-file debugging, or vague requests like "fix the canvas" unless the user explicitly identifies this local-media recovery need.
+
+**Confirmation rule:** The tool defaults to `dry_run=true`. First call it in dry-run mode and show the user what would be restored. Only call it with `dry_run=false` after the user confirms the recovery.
+
+**Do not operate the canvas during recovery:** From the dry-run preview through the confirmed restore completion, do not call other canvas-modifying tools or edit the canvas project. Recovery compares local media files against the latest `magic.project.js`; concurrent canvas changes can make the preview stale or cause unexpected layer ordering.
+
+| Parameter | Required | Description |
+|---|---|---|
+| `project_path` | Yes | Canvas project path |
+| `dry_run` | No | Defaults to `true`. Keep `true` for preview; set to `false` only after user confirmation |
+
+Example preview:
+
+```python
+result = tool.call('restore_canvas_media', {
+    "project_path": "my-design"
+})
+print(result.content)
+```
+
+Example confirmed restore:
+
+```python
+result = tool.call('restore_canvas_media', {
+    "project_path": "my-design",
+    "dry_run": False
+})
+print(result.content)
+```
 
 ---
 
