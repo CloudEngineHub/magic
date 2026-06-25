@@ -39,6 +39,7 @@ final class RedisConcurrencyLimiterTest extends TestCase
         $this->assertSame('30', $redis->evalArguments[5]);
         $this->assertIsNumeric($redis->evalArguments[6]);
         $this->assertSame($redis->evalArguments[3], $lease->getToken());
+        $this->assertSame('test:operation:running', $lease->getPoolName());
     }
 
     public function testTryAcquireSkipsRedisWhenLimitDisabled(): void
@@ -70,9 +71,9 @@ final class RedisConcurrencyLimiterTest extends TestCase
         $redis = new RecordingRedisForConcurrency();
         $redis->evalResult = 1;
         $limiter = new RedisConcurrencyLimiter($redis);
-        $lease = ConcurrencyLease::acquired('task-1', 'lease-token');
+        $lease = ConcurrencyLease::acquired('test:operation:running', 'task-1', 'lease-token');
 
-        $this->assertTrue($limiter->release($lease, 'test:operation:running'));
+        $this->assertTrue($limiter->release($lease));
 
         $this->assertSame(1, $redis->evalCalls);
         $this->assertStringContainsString('hget', $redis->evalScript);

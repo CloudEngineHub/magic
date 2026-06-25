@@ -9,19 +9,21 @@ namespace App\Application\Design\Service;
 
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
+use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
+use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\Infrastructure\Util\Concurrency\ConcurrencyLease;
 use App\Infrastructure\Util\Concurrency\RedisConcurrencyLimiter;
-use Hyperf\Contract\ConfigInterface;
 
 readonly class DesignImageOperationConcurrencyService
 {
-    private const POOL_NAME = 'design:image-operation:running:eraser-expand';
+    private const POOL_NAME_PREFIX = 'design:image-operation:running:';
 
-    private const int SLOT_TTL_SECONDS = 600;
+    private const int SLOT_TTL_SECONDS = 60;
 
     public function __construct(
         private RedisConcurrencyLimiter $limiter,
-        private ConfigInterface $config,
+        private AiAbilityDomainService $aiAbilityDomainService,
     ) {
     }
 
@@ -33,20 +35,55 @@ readonly class DesignImageOperationConcurrencyService
     public function tryAcquire(ImageGenerationEntity $entity): ConcurrencyLease
     {
         return $this->limiter->tryAcquire(
-            self::POOL_NAME,
+            $this->poolName($entity),
             (string) $entity->getId(),
-            $this->maxConcurrency(),
+            $this->maxConcurrency($entity),
             self::SLOT_TTL_SECONDS
         );
     }
 
     public function release(ConcurrencyLease $lease): bool
     {
-        return $this->limiter->release($lease, self::POOL_NAME);
+        return $this->limiter->release($lease);
     }
 
-    private function maxConcurrency(): int
+    private function maxConcurrency(ImageGenerationEntity $entity): int
     {
-        return (int) $this->config->get('design_generation.image_operation.max_concurrency', 2);
+        $abilityCode = $this->resolveAbilityCode($entity);
+        if ($abilityCode === null) {
+            return 0;
+        }
+
+        // 并发数由 AI 能力管理配置维护；未配置 concurrent 时不做应用层并发限制。
+        $ability = $this->aiAbilityDomainService->getByCode(ProviderDataIsolation::create('')->disabled(), $abilityCode);
+        $config = $ability?->getConfig() ?? [];
+        $concurrent = $config['concurrent'] ?? null;
+        if (is_string($concurrent)) {
+            $concurrent = trim($concurrent);
+        }
+        if ($concurrent === null || $concurrent === '' || ! is_numeric($concurrent)) {
+            return 0;
+        }
+
+        return max(0, (int) $concurrent);
+    }
+
+    private function poolName(ImageGenerationEntity $entity): string
+    {
+        $abilityCode = $this->resolveAbilityCode($entity);
+        if ($abilityCode === null) {
+            return self::POOL_NAME_PREFIX . 'unknown';
+        }
+
+        return self::POOL_NAME_PREFIX . $abilityCode->value;
+    }
+
+    private function resolveAbilityCode(ImageGenerationEntity $entity): ?AiAbilityCode
+    {
+        return match ($entity->getType()) {
+            ImageGenerationType::ERASER => AiAbilityCode::ImageEraser,
+            ImageGenerationType::EXPAND => AiAbilityCode::ImageExpand,
+            default => null,
+        };
     }
 }

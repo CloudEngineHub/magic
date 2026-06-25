@@ -411,8 +411,8 @@ return [
         'image_eraser' => [
             'code' => 'image_eraser',
             'name' => [
-                'zh_CN' => '橡皮擦',
-                'en_US' => 'Image Eraser',
+                'zh_CN' => '即梦AI-交互编辑',
+                'en_US' => 'Jimeng AI - Interactive Editing',
             ],
             'description' => [
                 'zh_CN' => '本能力覆盖平台所有图片橡皮擦的应用场景，通过AI技术根据标记区域擦除图片内容，并以自然背景无缝填充。',
@@ -459,8 +459,8 @@ return [
         'image_expand' => [
             'code' => 'image_expand',
             'name' => [
-                'zh_CN' => '扩图',
-                'en_US' => 'Image Expand',
+                'zh_CN' => '即梦AI-智能扩图',
+                'en_US' => 'Jimeng AI - Smart Expand',
             ],
             'description' => [
                 'zh_CN' => '本能力覆盖平台所有图片扩图的应用场景，通过AI技术将图片向外延伸，以符合原图风格、光照和透视的内容填充扩展区域。',

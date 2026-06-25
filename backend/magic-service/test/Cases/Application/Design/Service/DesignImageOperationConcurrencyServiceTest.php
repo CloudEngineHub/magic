@@ -10,9 +10,12 @@ namespace HyperfTest\Cases\Application\Design\Service;
 use App\Application\Design\Service\DesignImageOperationConcurrencyService;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
+use App\Domain\Provider\Entity\AiAbilityEntity;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
+use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
+use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\Infrastructure\Util\Concurrency\ConcurrencyLease;
 use App\Infrastructure\Util\Concurrency\RedisConcurrencyLimiter;
-use Hyperf\Contract\ConfigInterface;
 use Hyperf\Redis\Redis;
 use PHPUnit\Framework\TestCase;
 
@@ -21,13 +24,16 @@ use PHPUnit\Framework\TestCase;
  */
 final class DesignImageOperationConcurrencyServiceTest extends TestCase
 {
-    public function testTryAcquireUsesSharedEraserExpandRunningPool(): void
+    public function testTryAcquireUsesAbilityConcurrentAndAbilityRunningPool(): void
     {
         $entity = $this->createEntity(123456, ImageGenerationType::ERASER);
         $redis = new RecordingRedis();
-        $config = $this->createConfig(2);
+        $aiAbilityDomainService = $this->createAiAbilityDomainService(
+            $this->createAiAbility(AiAbilityCode::ImageEraser, ['concurrent' => 2]),
+            AiAbilityCode::ImageEraser,
+        );
 
-        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
+        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $aiAbilityDomainService);
 
         $lease = $service->tryAcquire($entity);
 
@@ -38,23 +44,27 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $this->assertStringContainsString('hset', $redis->evalScript);
         $this->assertStringContainsString('zcard', $redis->evalScript);
         $this->assertSame(2, $redis->evalKeyCount);
-        $this->assertSame('design:image-operation:running:eraser-expand', $redis->evalArguments[0]);
-        $this->assertSame('design:image-operation:running:eraser-expand:tokens', $redis->evalArguments[1]);
+        $this->assertSame('design:image-operation:running:image_eraser', $redis->evalArguments[0]);
+        $this->assertSame('design:image-operation:running:image_eraser:tokens', $redis->evalArguments[1]);
         $this->assertSame((string) $entity->getId(), $redis->evalArguments[2]);
         $this->assertStringStartsWith($entity->getId() . ':', $redis->evalArguments[3]);
         $this->assertSame('2', $redis->evalArguments[4]);
-        $this->assertSame('600', $redis->evalArguments[5]);
+        $this->assertSame('60', $redis->evalArguments[5]);
         $this->assertIsNumeric($redis->evalArguments[6]);
         $this->assertSame($redis->evalArguments[3], $lease->getToken());
+        $this->assertSame('design:image-operation:running:image_eraser', $lease->getPoolName());
     }
 
-    public function testTryAcquireSkipsRedisWhenLimitDisabled(): void
+    public function testTryAcquireSkipsRedisWhenAbilityConcurrentIsEmpty(): void
     {
         $entity = $this->createEntity(123456, ImageGenerationType::EXPAND);
         $redis = new RecordingRedis();
-        $config = $this->createConfig(0);
+        $aiAbilityDomainService = $this->createAiAbilityDomainService(
+            $this->createAiAbility(AiAbilityCode::ImageExpand, ['concurrent' => '']),
+            AiAbilityCode::ImageExpand,
+        );
 
-        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
+        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $aiAbilityDomainService);
 
         $lease = $service->tryAcquire($entity);
 
@@ -68,9 +78,12 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $entity = $this->createEntity(123456, ImageGenerationType::ERASER);
         $redis = new RecordingRedis();
         $redis->evalResult = [2, ''];
-        $config = $this->createConfig(2);
+        $aiAbilityDomainService = $this->createAiAbilityDomainService(
+            $this->createAiAbility(AiAbilityCode::ImageEraser, ['concurrent' => 2]),
+            AiAbilityCode::ImageEraser,
+        );
 
-        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
+        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $aiAbilityDomainService);
 
         $lease = $service->tryAcquire($entity);
 
@@ -80,20 +93,20 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
 
     public function testReleaseOnlyDeletesMatchingLeaseToken(): void
     {
-        $lease = ConcurrencyLease::acquired('123456', 'lease-token');
+        $lease = ConcurrencyLease::acquired('design:image-operation:running:image_expand', '123456', 'lease-token');
         $redis = new RecordingRedis();
         $redis->evalResult = 1;
-        $config = $this->createConfig(2, 0);
+        $aiAbilityDomainService = $this->createAiAbilityDomainService(null, AiAbilityCode::ImageExpand, 0);
 
-        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $config);
+        $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $aiAbilityDomainService);
         $this->assertTrue($service->release($lease));
 
         $this->assertSame(1, $redis->evalCalls);
         $this->assertStringContainsString('hget', $redis->evalScript);
         $this->assertStringContainsString('zrem', $redis->evalScript);
         $this->assertSame(2, $redis->evalKeyCount);
-        $this->assertSame('design:image-operation:running:eraser-expand', $redis->evalArguments[0]);
-        $this->assertSame('design:image-operation:running:eraser-expand:tokens', $redis->evalArguments[1]);
+        $this->assertSame('design:image-operation:running:image_expand', $redis->evalArguments[0]);
+        $this->assertSame('design:image-operation:running:image_expand:tokens', $redis->evalArguments[1]);
         $this->assertSame('123456', $redis->evalArguments[2]);
         $this->assertSame('lease-token', $redis->evalArguments[3]);
     }
@@ -107,17 +120,28 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         return $entity;
     }
 
-    private function createConfig(int $limit, int $expectedReads = 1): ConfigInterface
+    private function createAiAbility(AiAbilityCode $code, array $config): AiAbilityEntity
     {
-        $config = $this->createMock(ConfigInterface::class);
-        $expectation = $config->expects($this->exactly($expectedReads))
-            ->method('get');
+        $entity = new AiAbilityEntity();
+        $entity->setCode($code);
+        $entity->setConfig($config);
+
+        return $entity;
+    }
+
+    private function createAiAbilityDomainService(?AiAbilityEntity $entity, AiAbilityCode $expectedCode, int $expectedReads = 1): AiAbilityDomainService
+    {
+        $aiAbilityDomainService = $this->createMock(AiAbilityDomainService::class);
+        $expectation = $aiAbilityDomainService->expects($this->exactly($expectedReads))
+            ->method('getByCode');
         if ($expectedReads > 0) {
-            $expectation->with('design_generation.image_operation.max_concurrency', 2)
-                ->willReturn($limit);
+            $expectation->with(
+                $this->callback(static fn (ProviderDataIsolation $dataIsolation): bool => ! $dataIsolation->isEnable()),
+                $this->identicalTo($expectedCode),
+            )->willReturn($entity);
         }
 
-        return $config;
+        return $aiAbilityDomainService;
     }
 }
 

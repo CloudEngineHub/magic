@@ -10,6 +10,7 @@ namespace App\Infrastructure\Util\Concurrency;
 readonly class ConcurrencyLease
 {
     private function __construct(
+        private string $poolName,
         private string $resourceId,
         private string $token,
         private bool $canProceed,
@@ -17,19 +18,19 @@ readonly class ConcurrencyLease
     ) {
     }
 
-    public static function acquired(string $resourceId, string $token): self
+    public static function acquired(string $poolName, string $resourceId, string $token): self
     {
-        return new self($resourceId, $token, true, true);
+        return new self($poolName, $resourceId, $token, true, true);
     }
 
     public static function blocked(string $resourceId): self
     {
-        return new self($resourceId, '', false, false);
+        return new self('', $resourceId, '', false, false);
     }
 
     public static function unlimited(string $resourceId): self
     {
-        return new self($resourceId, '', true, false);
+        return new self('', $resourceId, '', true, false);
     }
 
     public function canProceed(): bool
@@ -50,5 +51,10 @@ readonly class ConcurrencyLease
     public function getToken(): string
     {
         return $this->token;
+    }
+
+    public function getPoolName(): string
+    {
+        return $this->poolName;
     }
 }

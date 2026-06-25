@@ -24,24 +24,33 @@ readonly class RedisConcurrencyLimiter
 
         $token = $this->newLeaseToken($resourceId);
         $lua = <<<'LUA'
-        local expired_resource_ids = redis.call("zrangebyscore", KEYS[1], "-inf", tonumber(ARGV[5]) - tonumber(ARGV[4]))
-        for _, resource_id in ipairs(expired_resource_ids) do
-            redis.call("hdel", KEYS[2], resource_id)
-        end
-        redis.call("zremrangebyscore", KEYS[1], "-inf", tonumber(ARGV[5]) - tonumber(ARGV[4]))
+        local running_key = KEYS[1]
+        local token_key = KEYS[2]
+        local resource_id = ARGV[1]
+        local token = ARGV[2]
+        local max_concurrency = tonumber(ARGV[3])
+        local ttl_seconds = tonumber(ARGV[4])
+        local now = tonumber(ARGV[5])
+        local expires_at = now + ttl_seconds
 
-        if redis.call("hexists", KEYS[2], ARGV[1]) == 1 then
-            return {2, ""}
+        local expired_resource_ids = redis.call("zrangebyscore", running_key, "-inf", now)
+        for _, expired_resource_id in ipairs(expired_resource_ids) do
+            redis.call("hdel", token_key, expired_resource_id)
         end
-        if redis.call("zcard", KEYS[1]) >= tonumber(ARGV[3]) then
+        redis.call("zremrangebyscore", running_key, "-inf", now)
+
+        if redis.call("hexists", token_key, resource_id) == 1 then
+            return {0, ""}
+        end
+        if redis.call("zcard", running_key) >= max_concurrency then
             return {0, ""}
         end
 
-        redis.call("hset", KEYS[2], ARGV[1], ARGV[2])
-        redis.call("zadd", KEYS[1], ARGV[5], ARGV[1])
-        redis.call("expire", KEYS[1], ARGV[4])
-        redis.call("expire", KEYS[2], ARGV[4])
-        return {1, ARGV[2]}
+        redis.call("hset", token_key, resource_id, token)
+        redis.call("zadd", running_key, expires_at, resource_id)
+        redis.call("expire", running_key, ttl_seconds)
+        redis.call("expire", token_key, ttl_seconds)
+        return {1, token}
         LUA;
 
         $result = $this->redis->eval(
@@ -60,23 +69,33 @@ readonly class RedisConcurrencyLimiter
 
         $status = (int) (is_array($result) ? ($result[0] ?? 0) : $result);
         return match ($status) {
-            1 => ConcurrencyLease::acquired($resourceId, (string) (is_array($result) ? ($result[1] ?? $token) : $token)),
+            1 => ConcurrencyLease::acquired($poolName, $resourceId, (string) (is_array($result) ? ($result[1] ?? $token) : $token)),
             default => ConcurrencyLease::blocked($resourceId),
         };
     }
 
-    public function release(ConcurrencyLease $lease, string $poolName): bool
+    public function release(ConcurrencyLease $lease): bool
     {
         if (! $lease->ownsSlot()) {
             return false;
         }
 
+        $poolName = $lease->getPoolName();
+        if ($poolName === '') {
+            return false;
+        }
+
         $lua = <<<'LUA'
-        if redis.call("hget", KEYS[2], ARGV[1]) ~= ARGV[2] then
+        local running_key = KEYS[1]
+        local token_key = KEYS[2]
+        local resource_id = ARGV[1]
+        local token = ARGV[2]
+
+        if redis.call("hget", token_key, resource_id) ~= token then
             return 0
         end
-        redis.call("hdel", KEYS[2], ARGV[1])
-        redis.call("zrem", KEYS[1], ARGV[1])
+        redis.call("hdel", token_key, resource_id)
+        redis.call("zrem", running_key, resource_id)
         return 1
         LUA;
 
