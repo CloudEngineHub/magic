@@ -102,6 +102,28 @@ describe("DesignSaveManager remote checks", () => {
 		expect(saveManager.hasRemoteConflict()).toBe(true)
 	})
 
+	it("skips the remote version check only when explicitly requested", async () => {
+		const saveManager = createSaveManager()
+		const checkRemoteUpdate = vi.spyOn(saveManager, "checkRemoteUpdate").mockResolvedValue({
+			hasUpdate: true,
+			currentVersion: 3,
+			isCheckReliable: true,
+		})
+		vi.mocked(SuperMagicApi.getFileInfo).mockResolvedValue({ version: 4 } as never)
+
+		const result = await saveManager.commitSave({ skipRemoteUpdateCheck: true })
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				ok: true,
+				savedVersion: 4,
+			}),
+		)
+		expect(checkRemoteUpdate).not.toHaveBeenCalled()
+		expect(SuperMagicApi.saveFileContent).toHaveBeenCalledTimes(1)
+		expect(saveManager.hasRemoteConflict()).toBe(false)
+	})
+
 	it("stops before writing when the remote version check is unreliable", async () => {
 		const saveManager = createSaveManager()
 		vi.spyOn(saveManager, "checkRemoteUpdate").mockResolvedValue({

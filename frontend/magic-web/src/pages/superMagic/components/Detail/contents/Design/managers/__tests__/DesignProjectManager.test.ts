@@ -211,6 +211,287 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(saveManager.hasRemoteConflict()).toBe(true)
 	})
 
+	it("resolves a blocking conflict by applying pending remote data", () => {
+		const localData = createDesignData("local")
+		const remoteData = createDesignData("remote")
+		const pendingRemoteData = createDesignData("pending-remote")
+		const onRemoteDesignDataUpdate = vi.fn()
+		const { manager, stateBag, getState } = createManager(localData, {
+			onRemoteDesignDataUpdate,
+		})
+		stateBag.setters.setConflictState(createConflict(localData, remoteData))
+		const managerInternals = manager as unknown as {
+			pendingRemoteDesignData: {
+				data: DesignData
+				updateType: "message"
+				remoteVersion: number
+			} | null
+			saveManager: {
+				markRemoteConflict: () => void
+				hasRemoteConflict: () => boolean
+			}
+		}
+		managerInternals.pendingRemoteDesignData = {
+			data: pendingRemoteData,
+			updateType: "message",
+			remoteVersion: 4,
+		}
+		managerInternals.saveManager.markRemoteConflict()
+
+		const didResolve = manager.resolveBlockingConflictWithRemote()
+
+		expect(didResolve).toBe(true)
+		expect(getState().designData).toEqual(pendingRemoteData)
+		expect(getState().conflictState).toBeNull()
+		expect(getState().magicProjectJsVersion).toBe(4)
+		expect(getState().prevDesignDataFingerprint).toBe(
+			hashDesignDataComparable(pendingRemoteData),
+		)
+		expect(getBaseDesignData(manager)).toEqual(pendingRemoteData)
+		expect(managerInternals.pendingRemoteDesignData).toBeNull()
+		expect(managerInternals.saveManager.hasRemoteConflict()).toBe(false)
+		expect(deleteDesignDraft).toHaveBeenCalledTimes(1)
+		expect(onRemoteDesignDataUpdate).toHaveBeenCalledWith(
+			localData,
+			pendingRemoteData,
+			"message",
+		)
+	})
+
+	it("resolves a draft conflict by using remote data and deleting the local draft", () => {
+		const localDraftData = createDesignData("local-draft")
+		const remoteData = createDesignData("remote")
+		const { manager, stateBag, getState } = createManager(localDraftData)
+		stateBag.setters.setConflictState(createConflict(localDraftData, remoteData))
+		const managerInternals = manager as unknown as {
+			pendingRemoteDesignData: unknown
+			saveManager: {
+				markRemoteConflict: () => void
+				hasRemoteConflict: () => boolean
+			}
+		}
+		managerInternals.saveManager.markRemoteConflict()
+
+		const didResolve = manager.resolveBlockingConflictWithRemote()
+
+		expect(didResolve).toBe(true)
+		expect(getState().designData).toEqual(remoteData)
+		expect(getState().conflictState).toBeNull()
+		expect(getState().magicProjectJsVersion).toBe(3)
+		expect(getState().prevDesignDataFingerprint).toBe(hashDesignDataComparable(remoteData))
+		expect(getBaseDesignData(manager)).toEqual(remoteData)
+		expect(managerInternals.pendingRemoteDesignData).toBeNull()
+		expect(managerInternals.saveManager.hasRemoteConflict()).toBe(false)
+		expect(deleteDesignDraft).toHaveBeenCalledTimes(1)
+	})
+
+	it("resolves a draft conflict by applying local draft data and force-saving once", async () => {
+		const currentRemoteData = createDesignData("current-remote")
+		const localData = createDesignData("local")
+		const remoteData = createDesignData("remote")
+		const onRemoteDesignDataUpdate = vi.fn()
+		const { manager, stateBag, getState } = createManager(currentRemoteData, {
+			onRemoteDesignDataUpdate,
+		})
+		stateBag.setters.setConflictState(createConflict(localData, remoteData))
+		const managerInternals = manager as unknown as {
+			pendingRemoteDesignData: { data: DesignData; remoteVersion: number } | null
+			saveManager: {
+				commitSave: (options?: unknown) => Promise<unknown>
+				markRemoteConflict: () => void
+				hasRemoteConflict: () => boolean
+				wasLastSaveFullyPersisted: () => boolean
+			}
+		}
+		managerInternals.pendingRemoteDesignData = { data: remoteData, remoteVersion: 3 }
+		managerInternals.saveManager.markRemoteConflict()
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: true,
+			savedVersion: 5,
+			savedUpdatedAt: "2026-01-01 00:00:00",
+			fullyPersisted: true,
+			savedDesignData: localData,
+			savedFingerprint: hashDesignDataComparable(localData),
+		})
+		managerInternals.saveManager.wasLastSaveFullyPersisted = vi.fn(() => true)
+
+		const didResolve = await manager.resolveBlockingConflictWithLocal()
+
+		expect(didResolve).toBe(true)
+		expect(getState().designData).toEqual(localData)
+		expect(getState().conflictState).toBeNull()
+		expect(getState().prevDesignDataFingerprint).toBe(hashDesignDataComparable(localData))
+		expect(getBaseDesignData(manager)).toEqual(localData)
+		expect(managerInternals.pendingRemoteDesignData).toBeNull()
+		expect(managerInternals.saveManager.hasRemoteConflict()).toBe(false)
+		expect(managerInternals.saveManager.commitSave).toHaveBeenCalledWith({
+			allowRemoteConflict: true,
+			designData: localData,
+			updateCurrentDesignData: true,
+			skipRemoteUpdateCheck: true,
+		})
+		expect(writeDesignDraft).toHaveBeenCalledTimes(1)
+		expect(deleteDesignDraft).toHaveBeenCalledTimes(1)
+		expect(onRemoteDesignDataUpdate).toHaveBeenCalledWith(currentRemoteData, localData, "draft")
+	})
+
+	it("keeps a blocking conflict recoverable when local force-save fails", async () => {
+		const currentRemoteData = createDesignData("current-remote")
+		const localData = createDesignData("local")
+		const remoteData = createDesignData("remote")
+		const onRemoteDesignDataUpdate = vi.fn()
+		const { manager, stateBag, getState } = createManager(currentRemoteData, {
+			onRemoteDesignDataUpdate,
+		})
+		const conflict = createConflict(localData, remoteData)
+		const pendingRemoteDesignData = {
+			data: remoteData,
+			updateType: "message" as const,
+			remoteVersion: 3,
+		}
+		stateBag.setters.setConflictState(conflict)
+		const managerInternals = manager as unknown as {
+			pendingRemoteDesignData: typeof pendingRemoteDesignData | null
+			saveManager: {
+				commitSave: (options?: unknown) => Promise<unknown>
+				markRemoteConflict: () => void
+				hasRemoteConflict: () => boolean
+			}
+		}
+		managerInternals.pendingRemoteDesignData = pendingRemoteDesignData
+		managerInternals.saveManager.markRemoteConflict()
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: false,
+			reason: "error",
+			error: "save failed",
+		})
+
+		const didResolve = await manager.resolveBlockingConflictWithLocal()
+
+		expect(didResolve).toBe(false)
+		expect(getState().designData).toEqual(localData)
+		expect(getState().conflictState).toBe(conflict)
+		expect(managerInternals.pendingRemoteDesignData).toBe(pendingRemoteDesignData)
+		expect(managerInternals.saveManager.hasRemoteConflict()).toBe(true)
+		expect(writeDesignDraft).toHaveBeenCalledTimes(1)
+		expect(deleteDesignDraft).not.toHaveBeenCalled()
+		expect(onRemoteDesignDataUpdate).toHaveBeenCalledWith(currentRemoteData, localData, "draft")
+	})
+
+	it("clears a blocking conflict but keeps the local draft when sidecar persistence fails", async () => {
+		const currentRemoteData = createDesignData("current-remote")
+		const localData = createDesignData("local")
+		const remoteData = createDesignData("remote")
+		const { manager, stateBag, getState } = createManager(currentRemoteData)
+		stateBag.setters.setConflictState(createConflict(localData, remoteData))
+		const managerInternals = manager as unknown as {
+			pendingRemoteDesignData: {
+				data: DesignData
+				updateType: "message"
+				remoteVersion: number
+			} | null
+			saveManager: {
+				commitSave: (options?: unknown) => Promise<unknown>
+				markRemoteConflict: () => void
+				hasRemoteConflict: () => boolean
+				wasLastSaveFullyPersisted: () => boolean
+			}
+		}
+		managerInternals.pendingRemoteDesignData = {
+			data: remoteData,
+			updateType: "message",
+			remoteVersion: 3,
+		}
+		managerInternals.saveManager.markRemoteConflict()
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: true,
+			savedVersion: 5,
+			savedUpdatedAt: "2026-01-01 00:00:00",
+			fullyPersisted: false,
+			savedDesignData: localData,
+			savedFingerprint: hashDesignDataComparable(localData),
+		})
+		managerInternals.saveManager.wasLastSaveFullyPersisted = vi.fn(() => false)
+
+		const didResolve = await manager.resolveBlockingConflictWithLocal()
+
+		expect(didResolve).toBe(true)
+		expect(getState().designData).toEqual(localData)
+		expect(getState().conflictState).toBeNull()
+		expect(managerInternals.pendingRemoteDesignData).toBeNull()
+		expect(managerInternals.saveManager.hasRemoteConflict()).toBe(false)
+		expect(writeDesignDraft).toHaveBeenCalledTimes(1)
+		expect(deleteDesignDraft).not.toHaveBeenCalled()
+	})
+
+	it("keeps the blocking conflict visible while local force-save is still running", async () => {
+		const currentRemoteData = createDesignData("current-remote")
+		const localData = createDesignData("local")
+		const remoteData = createDesignData("remote")
+		const { manager, stateBag, getState } = createManager(currentRemoteData)
+		const conflict = createConflict(localData, remoteData)
+		const pendingRemoteDesignData = {
+			data: remoteData,
+			updateType: "message" as const,
+			remoteVersion: 3,
+		}
+		stateBag.setters.setConflictState(conflict)
+		const managerInternals = manager as unknown as {
+			pendingRemoteDesignData: typeof pendingRemoteDesignData | null
+			saveManager: {
+				commitSave: (options?: unknown) => Promise<unknown>
+				markRemoteConflict: () => void
+				hasRemoteConflict: () => boolean
+				wasLastSaveFullyPersisted: () => boolean
+			}
+		}
+		managerInternals.pendingRemoteDesignData = pendingRemoteDesignData
+		managerInternals.saveManager.markRemoteConflict()
+		let resolveSave!: (value: unknown) => void
+		managerInternals.saveManager.commitSave = vi.fn(
+			() =>
+				new Promise((resolve) => {
+					resolveSave = resolve
+				}),
+		)
+		managerInternals.saveManager.wasLastSaveFullyPersisted = vi.fn(() => true)
+
+		const resolvePromise = manager.resolveBlockingConflictWithLocal()
+
+		expect(getState().designData).toEqual(localData)
+		expect(getState().conflictState).toBe(conflict)
+		expect(managerInternals.pendingRemoteDesignData).toBe(pendingRemoteDesignData)
+		expect(managerInternals.saveManager.hasRemoteConflict()).toBe(true)
+
+		resolveSave({
+			ok: true,
+			savedVersion: 5,
+			savedUpdatedAt: "2026-01-01 00:00:00",
+			fullyPersisted: true,
+			savedDesignData: localData,
+			savedFingerprint: hashDesignDataComparable(localData),
+		})
+		await expect(resolvePromise).resolves.toBe(true)
+		expect(getState().conflictState).toBeNull()
+		expect(managerInternals.pendingRemoteDesignData).toBeNull()
+	})
+
+	it("keeps normal save entrypoints blocked while a blocking conflict is active", async () => {
+		const localData = createDesignData("local")
+		const remoteData = createDesignData("remote")
+		const { manager, stateBag } = createManager(localData)
+		stateBag.setters.setConflictState(createConflict(localData, remoteData))
+		const managerInternals = manager as unknown as {
+			saveManager: { commitSave: () => Promise<unknown> }
+		}
+		managerInternals.saveManager.commitSave = vi.fn()
+
+		await manager.manualSave()
+		await manager.saveToRemote()
+
+		expect(managerInternals.saveManager.commitSave).not.toHaveBeenCalled()
+	})
+
 	it("merges incoming remote data when local and remote changed different elements", () => {
 		const baseData = createDesignData("design", [rect("remote-element"), rect("local-element")])
 		const localData = createDesignData("design", [

@@ -591,9 +591,20 @@
 			"title": "网络已断开，画布已切换为只读"
 		},
 		"conflict": {
+			"blockingResolveFailed": "恢复同步失败，请刷新后重试",
+			"draftConflictDescription": "远端内容已更新，本地草稿不会自动覆盖远端。请选择继续使用远端或恢复草稿并保存。",
+			"draftConflictTitle": "检测到本地草稿与远端更新冲突",
 			"elementResolveFailed": "处理元素冲突失败",
+			"keepLocalAndSave": "保留我的并保存",
+			"keepLocalConfirmDescription": "这会把当前本地变更保存到远端，远端已有更新会被覆盖。",
+			"keepLocalConfirmTitle": "保留我的并覆盖远端？",
+			"restoreDraftAndSave": "恢复草稿并保存",
+			"restoreDraftConfirmDescription": "这会恢复本地草稿并保存到远端，远端已有更新会被覆盖。",
+			"restoreDraftConfirmTitle": "恢复草稿并覆盖远端？",
 			"syncPausedDescription": "当前变更没有继续自动覆盖远端，请等待同步恢复或刷新后继续编辑。",
-			"syncPausedTitle": "同步已暂停"
+			"syncPausedTitle": "同步已暂停",
+			"useRemote": "使用远端",
+			"useRemoteContinue": "使用远端继续"
 		},
 		"saved": "保存成功",
 		"saving": "正在保存",

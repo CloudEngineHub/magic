@@ -590,9 +590,20 @@
 			"title": "Network disconnected. Canvas is read-only"
 		},
 		"conflict": {
+			"blockingResolveFailed": "Failed to recover sync. Refresh and try again.",
+			"draftConflictDescription": "Remote content has changed. Your local draft will not overwrite it automatically. Choose whether to keep using remote content or restore and save the draft.",
+			"draftConflictTitle": "Local draft conflicts with remote updates",
 			"elementResolveFailed": "Failed to resolve element conflict",
+			"keepLocalAndSave": "Keep mine and save",
+			"keepLocalConfirmDescription": "This will save your current local changes to remote and overwrite the remote updates.",
+			"keepLocalConfirmTitle": "Keep your changes and overwrite remote?",
+			"restoreDraftAndSave": "Restore draft and save",
+			"restoreDraftConfirmDescription": "This will restore the local draft, save it to remote, and overwrite the remote updates.",
+			"restoreDraftConfirmTitle": "Restore draft and overwrite remote?",
 			"syncPausedDescription": "Your current changes are not automatically overwriting remote content. Wait for sync to recover or refresh before continuing.",
-			"syncPausedTitle": "Sync paused"
+			"syncPausedTitle": "Sync paused",
+			"useRemote": "Use remote",
+			"useRemoteContinue": "Use remote"
 		},
 		"saved": "Saved",
 		"saving": "Saving",

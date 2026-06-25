@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect, lazy, Suspense, useMemo } fro
 import { DesignData } from "./types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { Topic, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import MagicModal from "@/components/base/MagicModal"
 import MagicSpin from "@/components/base/MagicSpin"
 import { useTranslation } from "react-i18next"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
@@ -156,7 +157,8 @@ const useStyles = createStyles(({ token }) => ({
 		display: "flex",
 		alignItems: "center",
 		gap: "12px",
-		width: "min(760px, calc(100% - 32px))",
+		flexWrap: "wrap",
+		width: "min(920px, calc(100% - 32px))",
 		padding: "12px 14px",
 		borderRadius: "8px",
 		border: `1px solid ${token.colorWarningBorder}`,
@@ -185,6 +187,35 @@ const useStyles = createStyles(({ token }) => ({
 		fontSize: "12px",
 		lineHeight: "16px",
 		color: token.colorTextSecondary,
+	},
+	conflictActions: {
+		display: "flex",
+		flex: "none",
+		alignItems: "center",
+		gap: "8px",
+		flexWrap: "wrap",
+	},
+	conflictActionButton: {
+		height: "28px",
+		padding: "0 10px",
+		borderRadius: "6px",
+		border: `1px solid ${token.colorBorder}`,
+		backgroundColor: token.colorBgContainer,
+		color: token.colorText,
+		fontSize: "12px",
+		fontWeight: 500,
+		lineHeight: "26px",
+		cursor: "pointer",
+		whiteSpace: "nowrap",
+		"&[data-variant='primary']": {
+			borderColor: token.colorPrimary,
+			backgroundColor: token.colorPrimary,
+			color: token.colorWhite,
+		},
+		"&:disabled": {
+			cursor: "not-allowed",
+			opacity: 0.6,
+		},
 	},
 }))
 
@@ -425,6 +456,8 @@ function DesignViewer(props: DesignViewerProps) {
 		conflictState,
 		resolveElementConflictWithLocal,
 		resolveElementConflictWithRemote,
+		resolveBlockingConflictWithRemote,
+		resolveBlockingConflictWithLocal,
 		resolveEditedElementConflictsWithLocal,
 	} = designProjectManager
 
@@ -1071,9 +1104,41 @@ function DesignViewer(props: DesignViewerProps) {
 		if (conflictState.elementConflicts?.some(({ status }) => status === "unresolved")) {
 			return null
 		}
+		const isDraftConflict = conflictState.reason === "draft-remote-advanced"
 		return {
-			title: t("design.conflict.syncPausedTitle"),
-			description: t("design.conflict.syncPausedDescription"),
+			title: t(
+				isDraftConflict
+					? "design.conflict.draftConflictTitle"
+					: "design.conflict.syncPausedTitle",
+			),
+			description: t(
+				isDraftConflict
+					? "design.conflict.draftConflictDescription"
+					: "design.conflict.syncPausedDescription",
+			),
+			remoteActionLabel: t(
+				isDraftConflict ? "design.conflict.useRemote" : "design.conflict.useRemoteContinue",
+			),
+			localActionLabel: t(
+				isDraftConflict
+					? "design.conflict.restoreDraftAndSave"
+					: "design.conflict.keepLocalAndSave",
+			),
+			localConfirmTitle: t(
+				isDraftConflict
+					? "design.conflict.restoreDraftConfirmTitle"
+					: "design.conflict.keepLocalConfirmTitle",
+			),
+			localConfirmDescription: t(
+				isDraftConflict
+					? "design.conflict.restoreDraftConfirmDescription"
+					: "design.conflict.keepLocalConfirmDescription",
+			),
+			localConfirmOkText: t(
+				isDraftConflict
+					? "design.conflict.restoreDraftAndSave"
+					: "design.conflict.keepLocalAndSave",
+			),
 		}
 	}, [conflictState, t])
 
@@ -1125,6 +1190,51 @@ function DesignViewer(props: DesignViewerProps) {
 	)
 	const shouldBlockCanvasForConflict = !!conflictState && !hasUnresolvedElementConflicts
 	const shouldShowCanvasConflictNotice = shouldBlockCanvasForConflict && !!conflictNoticeText
+	const [blockingConflictResolveAction, setBlockingConflictResolveAction] = useState<
+		"remote" | "local" | null
+	>(null)
+
+	const handleUseRemoteBlockingConflict = useCallback(() => {
+		if (blockingConflictResolveAction) return
+		setBlockingConflictResolveAction("remote")
+		try {
+			const didResolve = resolveBlockingConflictWithRemote()
+			if (!didResolve) {
+				toast.error(t("design.conflict.blockingResolveFailed"))
+			}
+		} finally {
+			setBlockingConflictResolveAction(null)
+		}
+	}, [blockingConflictResolveAction, resolveBlockingConflictWithRemote, t])
+
+	const handleUseLocalBlockingConflict = useCallback(() => {
+		if (blockingConflictResolveAction || !conflictNoticeText) return
+
+		MagicModal.confirm({
+			title: conflictNoticeText.localConfirmTitle,
+			content: conflictNoticeText.localConfirmDescription,
+			okText: conflictNoticeText.localConfirmOkText,
+			cancelText: t("common.cancel"),
+			variant: "destructive",
+			showIcon: true,
+			closable: false,
+			maskClosable: false,
+			centered: true,
+			onOk: () => {
+				void (async () => {
+					setBlockingConflictResolveAction("local")
+					try {
+						const didResolve = await resolveBlockingConflictWithLocal()
+						if (!didResolve) {
+							toast.error(t("design.conflict.blockingResolveFailed"))
+						}
+					} finally {
+						setBlockingConflictResolveAction(null)
+					}
+				})()
+			},
+		})
+	}, [blockingConflictResolveAction, conflictNoticeText, resolveBlockingConflictWithLocal, t])
 
 	const handleUseLocalElementConflict = useCallback(
 		(elementId: string) => {
@@ -1227,6 +1337,25 @@ function DesignViewer(props: DesignViewerProps) {
 										<div className={styles.conflictDescription}>
 											{conflictNoticeText.description}
 										</div>
+									</div>
+									<div className={styles.conflictActions}>
+										<button
+											type="button"
+											className={styles.conflictActionButton}
+											onClick={handleUseRemoteBlockingConflict}
+											disabled={!!blockingConflictResolveAction}
+										>
+											{conflictNoticeText.remoteActionLabel}
+										</button>
+										<button
+											type="button"
+											className={styles.conflictActionButton}
+											data-variant="primary"
+											onClick={handleUseLocalBlockingConflict}
+											disabled={!!blockingConflictResolveAction}
+										>
+											{conflictNoticeText.localActionLabel}
+										</button>
 									</div>
 								</div>
 							)}

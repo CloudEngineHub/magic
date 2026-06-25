@@ -93,6 +93,8 @@ export interface DesignProjectManagerAPI {
 	isReadOnly: boolean
 	setIsReadOnly: (value: boolean) => void
 	clearConflictState: () => void
+	resolveBlockingConflictWithRemote: () => boolean
+	resolveBlockingConflictWithLocal: () => Promise<boolean>
 	resolveElementConflictWithLocal: (elementId: string) => boolean
 	resolveElementConflictWithRemote: (elementId: string) => boolean
 	resolveEditedElementConflictsWithLocal: (
@@ -1315,6 +1317,62 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	clearConflictState(): void {
 		this.conflictState = null
 		this.stateBag.setters.setConflictState(null)
+	}
+
+	resolveBlockingConflictWithRemote(): boolean {
+		const conflict = this.stateBag.getConflictState()
+		if (!conflict || this.hasUnresolvedElementConflicts(conflict)) return false
+
+		const pending = this.pendingRemoteDesignData
+		const remoteData = cloneDeep(pending?.data ?? conflict.remoteData) as DesignData
+		const updateType = pending?.updateType ?? "message"
+		const remoteVersion = pending?.remoteVersion ?? conflict.remoteVersion
+		const applied = this.applyRemoteDesignDataNow(remoteData, updateType)
+		if (!applied) return false
+
+		if (remoteVersion !== null) {
+			this.updateLocalVersionIfNewer(remoteVersion)
+		}
+		this.clearLocalDraft()
+		return true
+	}
+
+	async resolveBlockingConflictWithLocal(): Promise<boolean> {
+		const conflict = this.stateBag.getConflictState()
+		if (!conflict || this.hasUnresolvedElementConflicts(conflict)) return false
+
+		const localData = cloneDeep(conflict.localData) as DesignData
+		const oldData = this.stateBag.getDesignData()
+		this.saveManager.cancelAutoSave()
+		this.stateBag.setters.setDesignData(localData)
+		this.options.onRemoteDesignDataUpdate?.(oldData, localData, "draft")
+		this.persistLocalDraft(localData, { immediate: true })
+
+		this.stateBag.setters.setIsSaving(true)
+		const saveResult = await this.saveManager.commitSave({
+			allowRemoteConflict: true,
+			designData: localData,
+			updateCurrentDesignData: true,
+			skipRemoteUpdateCheck: true,
+		})
+		if (saveResult.ok) {
+			this.pendingRemoteDesignData = null
+			this.saveManager.clearRemoteConflict()
+			if (saveResult.fullyPersisted) {
+				this.handleSuccessfulSaveResult(saveResult)
+			} else {
+				this.clearConflictState()
+			}
+			if (
+				this.saveManager.wasLastSaveFullyPersisted() &&
+				!this.hasUnresolvedElementConflicts()
+			) {
+				this.clearLocalDraft()
+			}
+			return true
+		}
+
+		return false
 	}
 
 	resolveElementConflictWithLocal(elementId: string): boolean {

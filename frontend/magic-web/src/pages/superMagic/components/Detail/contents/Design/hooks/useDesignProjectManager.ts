@@ -57,6 +57,8 @@ export interface UseDesignProjectManagerReturn {
 	revokeType: "revoke" | "restore" | null
 	conflictState: DesignConflict | null
 	clearConflictState: () => void
+	resolveBlockingConflictWithRemote: () => boolean
+	resolveBlockingConflictWithLocal: () => Promise<boolean>
 	resolveElementConflictWithLocal: (elementId: string) => boolean
 	resolveElementConflictWithRemote: (elementId: string) => boolean
 	resolveEditedElementConflictsWithLocal: (
@@ -243,6 +245,8 @@ export function useDesignProjectManager(
 		revokeType,
 		conflictState,
 		clearConflictState: () => manager.clearConflictState(),
+		resolveBlockingConflictWithRemote: () => manager.resolveBlockingConflictWithRemote(),
+		resolveBlockingConflictWithLocal: () => manager.resolveBlockingConflictWithLocal(),
 		resolveElementConflictWithLocal: (elementId) =>
 			manager.resolveElementConflictWithLocal(elementId),
 		resolveElementConflictWithRemote: (elementId) =>

@@ -196,6 +196,7 @@ export class DesignSaveManager {
 		allowRemoteConflict?: boolean
 		designData?: DesignData
 		updateCurrentDesignData?: boolean
+		skipRemoteUpdateCheck?: boolean
 	}): Promise<DesignSaveResult> {
 		this.lastSaveFullyPersisted = false
 		if (this.stateBag.getIsReadOnly()) {
@@ -218,25 +219,27 @@ export class DesignSaveManager {
 		let savedVersion: number | null = null
 		try {
 			saveToken = this.saveLifecycleHandlers.onSaveStart?.()
-			const remoteUpdateCheck = await this.checkRemoteUpdate()
-			const { hasUpdate, isCheckReliable, currentVersion } = remoteUpdateCheck
-			if (hasUpdate) {
-				this.markRemoteConflict()
-				this.stateBag.setters.setIsSaving(false)
-				return {
-					ok: false,
-					reason: "remote-updated",
-					remoteVersion: currentVersion,
-					isCheckReliable,
+			if (!options?.skipRemoteUpdateCheck) {
+				const remoteUpdateCheck = await this.checkRemoteUpdate()
+				const { hasUpdate, isCheckReliable, currentVersion } = remoteUpdateCheck
+				if (hasUpdate) {
+					this.markRemoteConflict()
+					this.stateBag.setters.setIsSaving(false)
+					return {
+						ok: false,
+						reason: "remote-updated",
+						remoteVersion: currentVersion,
+						isCheckReliable,
+					}
 				}
-			}
-			if (!isCheckReliable) {
-				this.stateBag.setters.setIsSaving(false)
-				return {
-					ok: false,
-					reason: "remote-check-unreliable",
-					remoteVersion: currentVersion,
-					isCheckReliable,
+				if (!isCheckReliable) {
+					this.stateBag.setters.setIsSaving(false)
+					return {
+						ok: false,
+						reason: "remote-check-unreliable",
+						remoteVersion: currentVersion,
+						isCheckReliable,
+					}
 				}
 			}
 
