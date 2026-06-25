@@ -9,11 +9,12 @@ from app.infrastructure.oauth2.callback_relay.drivers.magic_service import Magic
 from app.infrastructure.oauth2.callback_relay.interface import OAuth2CallbackRelay
 
 ENV_CALLBACK_RELAY_DRIVER = "OAUTH2_CALLBACK_RELAY_DRIVER"
+DEFAULT_CALLBACK_RELAY_DRIVER = "magic_service"
 
 
 def create_callback_relay() -> OAuth2CallbackRelay:
     """创建当前配置的 OAuth2 callback relay driver。"""
-    driver = (os.getenv(ENV_CALLBACK_RELAY_DRIVER) or "local").strip().lower()
+    driver = (os.getenv(ENV_CALLBACK_RELAY_DRIVER) or DEFAULT_CALLBACK_RELAY_DRIVER).strip().lower()
     if driver == "local":
         return LocalOAuth2CallbackRelay()
     if driver == "magic_service":
