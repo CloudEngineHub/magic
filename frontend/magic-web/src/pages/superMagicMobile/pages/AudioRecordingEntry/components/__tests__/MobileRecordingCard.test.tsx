@@ -140,7 +140,8 @@ describe("MobileRecordingCard", () => {
 		const summarizeIndicator = screen.getByTestId(
 			"mobile-recording-card-summarize-proj-beta-002",
 		)
-		expect(summarizeIndicator.tagName).toBe("SPAN")
+		expect(summarizeIndicator.tagName).toBe("BUTTON")
+		expect(summarizeIndicator).toBeDisabled()
 		expect(summarizeIndicator).toHaveTextContent("Summarizing now")
 	})
 

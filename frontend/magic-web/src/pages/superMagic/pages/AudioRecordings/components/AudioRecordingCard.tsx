@@ -8,6 +8,7 @@ import {
 	Ellipsis,
 	FileAudio,
 	FolderOpen,
+	Loader,
 	Loader2,
 	PenLine,
 	Timer,
@@ -212,6 +213,27 @@ function ChipDestructive({
 			<Icon className="size-3.5" strokeWidth={1.8} />
 			{children}
 		</span>
+	)
+}
+
+/** Disabled loading action that matches the prototype's dark pill for active summary generation. */
+function SummaryLoadingButton({
+	label,
+	"data-testid": testId,
+}: {
+	label: string
+	"data-testid"?: string
+}) {
+	return (
+		<button
+			type="button"
+			disabled
+			className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-foreground px-3 text-[13px] font-medium leading-5 text-background opacity-50"
+			data-testid={testId}
+		>
+			<Loader className="h-3.5 w-3.5 animate-spin" aria-hidden />
+			<span>{label}</span>
+		</button>
 	)
 }
 
@@ -494,12 +516,18 @@ function AudioRecordingCard({
 			<div className="flex min-w-0 items-center gap-2.5">
 				<div
 					className={cn(
-						"flex shrink-0 items-center justify-center rounded-lg bg-muted text-foreground",
+						"flex shrink-0 items-center justify-center rounded-lg bg-muted",
 						isMobile ? "size-8" : "size-9",
 					)}
 					aria-hidden
 				>
-					<FileAudio className={isMobile ? "size-[18px]" : "size-5"} />
+					<FileAudio
+						className={cn(
+							// Match the prototype by muting only the leading audio glyph, not the title row.
+							"text-muted-foreground",
+							isMobile ? "size-[18px]" : "size-5",
+						)}
+					/>
 				</div>
 				<h3 className="min-w-0 flex-1 truncate text-[16px] font-medium leading-5 text-foreground">
 					{displayName}
@@ -664,17 +692,14 @@ function AudioRecordingCard({
 					) : null}
 
 					{!isProgressMode && showSummarizingSpinner ? (
-						<span
-							className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground"
+						<SummaryLoadingButton
+							label={t("card.summarizing")}
 							data-testid={
 								isMobile
 									? `mobile-recording-card-summarize-${item.id}`
 									: `audio-recording-card-${item.id}-status-summarizing`
 							}
-						>
-							<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-							{t("card.summarizing")}
-						</span>
+						/>
 					) : null}
 
 					{!isProgressMode && showProcessingIndicator ? (
