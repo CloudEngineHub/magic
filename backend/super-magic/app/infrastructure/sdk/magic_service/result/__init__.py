@@ -6,6 +6,7 @@ Result classes for Magic Service API responses.
 
 from .agent_details_result import AgentDetailsResult, Tool
 from .message_schedule_result import MessageScheduleResult
+from .oauth2_callback_relay_result import OAuth2CallbackRelayResult
 from .agent_openapi_result import AgentOpenApiResult, AgentSkillInfo
 from .update_agent_result import UpdateAgentResult
 from .skill_file_urls_result import SkillFileUrlsResult, SkillFileUrlItem
@@ -21,6 +22,7 @@ __all__ = [
     'AgentDetailsResult',
     'Tool',
     'MessageScheduleResult',
+    'OAuth2CallbackRelayResult',
     'AgentOpenApiResult',
     'AgentSkillInfo',
     'UpdateAgentResult',
