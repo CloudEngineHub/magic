@@ -10,9 +10,7 @@ namespace HyperfTest\Cases\Application\Design\Service;
 use App\Application\Design\Service\DesignImageOperationConcurrencyService;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
-use App\Domain\Provider\Entity\AiAbilityEntity;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
-use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\Infrastructure\Util\Concurrency\ConcurrencyLease;
 use App\Infrastructure\Util\Concurrency\RedisConcurrencyLimiter;
@@ -29,8 +27,8 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $entity = $this->createEntity(123456, ImageGenerationType::ERASER);
         $redis = new RecordingRedis();
         $aiAbilityDomainService = $this->createAiAbilityDomainService(
-            $this->createAiAbility(AiAbilityCode::ImageEraser, ['concurrent' => 2]),
             AiAbilityCode::ImageEraser,
+            $this->createProviderConfig(['concurrent' => 2]),
         );
 
         $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $aiAbilityDomainService);
@@ -60,8 +58,8 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $entity = $this->createEntity(123456, ImageGenerationType::EXPAND);
         $redis = new RecordingRedis();
         $aiAbilityDomainService = $this->createAiAbilityDomainService(
-            $this->createAiAbility(AiAbilityCode::ImageExpand, ['concurrent' => '']),
             AiAbilityCode::ImageExpand,
+            $this->createProviderConfig(['concurrent' => '']),
         );
 
         $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $aiAbilityDomainService);
@@ -79,8 +77,8 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $redis = new RecordingRedis();
         $redis->evalResult = [2, ''];
         $aiAbilityDomainService = $this->createAiAbilityDomainService(
-            $this->createAiAbility(AiAbilityCode::ImageEraser, ['concurrent' => 2]),
             AiAbilityCode::ImageEraser,
+            $this->createProviderConfig(['concurrent' => 2]),
         );
 
         $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $aiAbilityDomainService);
@@ -96,7 +94,7 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         $lease = ConcurrencyLease::acquired('design:image-operation:running:image_expand', '123456', 'lease-token');
         $redis = new RecordingRedis();
         $redis->evalResult = 1;
-        $aiAbilityDomainService = $this->createAiAbilityDomainService(null, AiAbilityCode::ImageExpand, 0);
+        $aiAbilityDomainService = $this->createAiAbilityDomainService(AiAbilityCode::ImageExpand, [], 0);
 
         $service = new DesignImageOperationConcurrencyService(new RedisConcurrencyLimiter($redis), $aiAbilityDomainService);
         $this->assertTrue($service->release($lease));
@@ -120,25 +118,32 @@ final class DesignImageOperationConcurrencyServiceTest extends TestCase
         return $entity;
     }
 
-    private function createAiAbility(AiAbilityCode $code, array $config): AiAbilityEntity
+    private function createProviderConfig(array $providerConfig): array
     {
-        $entity = new AiAbilityEntity();
-        $entity->setCode($code);
-        $entity->setConfig($config);
-
-        return $entity;
+        return [
+            'providers' => [
+                [
+                    'provider' => 'jimeng',
+                    'enable' => true,
+                ] + $providerConfig,
+                [
+                    'provider' => 'official_proxy',
+                    'enable' => false,
+                    'concurrent' => 99,
+                ],
+            ],
+        ];
     }
 
-    private function createAiAbilityDomainService(?AiAbilityEntity $entity, AiAbilityCode $expectedCode, int $expectedReads = 1): AiAbilityDomainService
+    private function createAiAbilityDomainService(AiAbilityCode $expectedCode, array $config, int $expectedReads = 1): AiAbilityDomainService
     {
         $aiAbilityDomainService = $this->createMock(AiAbilityDomainService::class);
         $expectation = $aiAbilityDomainService->expects($this->exactly($expectedReads))
-            ->method('getByCode');
+            ->method('getProviderConfig');
         if ($expectedReads > 0) {
             $expectation->with(
-                $this->callback(static fn (ProviderDataIsolation $dataIsolation): bool => ! $dataIsolation->isEnable()),
                 $this->identicalTo($expectedCode),
-            )->willReturn($entity);
+            )->willReturn($config);
         }
 
         return $aiAbilityDomainService;

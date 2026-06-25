@@ -10,7 +10,6 @@ namespace App\Application\Design\Service;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
-use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\Infrastructure\Util\Concurrency\ConcurrencyLease;
 use App\Infrastructure\Util\Concurrency\RedisConcurrencyLimiter;
@@ -54,10 +53,9 @@ readonly class DesignImageOperationConcurrencyService
             return 0;
         }
 
-        // 并发数由 AI 能力管理配置维护；未配置 concurrent 时不做应用层并发限制。
-        $ability = $this->aiAbilityDomainService->getByCode(ProviderDataIsolation::create('')->disabled(), $abilityCode);
-        $config = $ability?->getConfig() ?? [];
-        $concurrent = $config['concurrent'] ?? null;
+        // 并发数跟随实际启用的 provider 配置；未配置 concurrent 时不做应用层并发限制。
+        $providerConfig = $this->resolveEnabledProviderConfig($abilityCode);
+        $concurrent = $providerConfig['concurrent'] ?? null;
         if (is_string($concurrent)) {
             $concurrent = trim($concurrent);
         }
@@ -66,6 +64,26 @@ readonly class DesignImageOperationConcurrencyService
         }
 
         return max(0, (int) $concurrent);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolveEnabledProviderConfig(AiAbilityCode $abilityCode): array
+    {
+        $config = $this->aiAbilityDomainService->getProviderConfig($abilityCode);
+        $providers = $config['providers'] ?? [];
+        if (! is_array($providers)) {
+            return [];
+        }
+
+        foreach ($providers as $provider) {
+            if (is_array($provider) && ($provider['enable'] ?? false) === true) {
+                return $provider;
+            }
+        }
+
+        return [];
     }
 
     private function poolName(ImageGenerationEntity $entity): string

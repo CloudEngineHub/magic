@@ -16,11 +16,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 #[Crontab(
-    rule: '* * * * *',
+    rule: '*/5 * * * * *',
     name: 'DesignImageGenerationPendingCrontab',
     singleton: true,
     onOneServer: true,
-    mutexExpires: 55,
+    mutexExpires: 10,
     callback: 'execute',
     memo: '恢复设计擦除/扩图 pending 任务'
 )]

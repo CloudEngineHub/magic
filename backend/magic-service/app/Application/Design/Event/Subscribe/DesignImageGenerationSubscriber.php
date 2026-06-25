@@ -32,7 +32,9 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Hyperf\DbConnection\Db;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
+use Hyperf\Logger\LoggerFactory;
 use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
 use Throwable;
 
 use function Hyperf\Support\retry;
@@ -53,6 +55,8 @@ class DesignImageGenerationSubscriber implements ListenerInterface
 
     private DesignImageOperationConcurrencyService $concurrencyService;
 
+    private LoggerInterface $logger;
+
     public function __construct(ContainerInterface $container)
     {
         $this->imageGenerationDomainService = $container->get(ImageGenerationDomainService::class);
@@ -61,6 +65,7 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         $this->projectDomainService = $container->get(ProjectDomainService::class);
         $this->generatedImageFileNameTool = $container->get(DesignGeneratedImageFileNameTool::class);
         $this->concurrencyService = $container->get(DesignImageOperationConcurrencyService::class);
+        $this->logger = $container->get(LoggerFactory::class)->get(static::class);
     }
 
     public function listen(): array
@@ -82,8 +87,11 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         $lease = ConcurrencyLease::unlimited((string) $imageGenerationEntity->getId());
         try {
             if ($this->concurrencyService->supports($imageGenerationEntity)) {
+                $this->logger->info('design image operation concurrency acquire start', $this->buildConcurrencyLogContext($imageGenerationEntity));
+
                 // 擦除/扩图先抢并发槽；抢不到则保持 pending，等待定时任务重新投递。
                 $lease = $this->concurrencyService->tryAcquire($imageGenerationEntity);
+                $this->logger->info('design image operation concurrency acquire end', $this->buildConcurrencyLogContext($imageGenerationEntity, $lease));
                 if (! $lease->canProceed()) {
                     return;
                 }
@@ -136,7 +144,11 @@ class DesignImageGenerationSubscriber implements ListenerInterface
             $this->imageGenerationDomainService->markAsFailed($dataIsolation, $imageGenerationEntity->getId(), $throwable->getMessage());
         } finally {
             if ($lease->ownsSlot()) {
-                $this->concurrencyService->release($lease);
+                $this->logger->info('design image operation concurrency release start', $this->buildConcurrencyLogContext($imageGenerationEntity, $lease));
+                $released = $this->concurrencyService->release($lease);
+                $this->logger->info('design image operation concurrency release end', $this->buildConcurrencyLogContext($imageGenerationEntity, $lease, [
+                    'released' => $released,
+                ]));
             }
         }
     }
@@ -212,5 +224,33 @@ class DesignImageGenerationSubscriber implements ListenerInterface
             return $data[0]['url'];
         }
         return '';
+    }
+
+    /**
+     * 并发限制日志只记录排查必需字段，避免输出图片地址、prompt 等业务内容。
+     *
+     * @param array<string, mixed> $extra
+     * @return array<string, mixed>
+     */
+    private function buildConcurrencyLogContext(ImageGenerationEntity $entity, ?ConcurrencyLease $lease = null, array $extra = []): array
+    {
+        $context = [
+            'task_id' => $entity->getId(),
+            'type' => $entity->getType()->value,
+            'project_id' => $entity->getProjectId(),
+            'organization_code' => $entity->getOrganizationCode(),
+            'user_id' => $entity->getUserId(),
+        ];
+
+        if ($lease !== null) {
+            $context += [
+                'pool_name' => $lease->getPoolName(),
+                'resource_id' => $lease->getResourceId(),
+                'can_proceed' => $lease->canProceed(),
+                'owns_slot' => $lease->ownsSlot(),
+            ];
+        }
+
+        return $context + $extra;
     }
 }
