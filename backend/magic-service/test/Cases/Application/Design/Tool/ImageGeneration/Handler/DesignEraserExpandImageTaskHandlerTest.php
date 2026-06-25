@@ -27,17 +27,13 @@ use App\Infrastructure\Core\DataIsolation\ThirdPlatformDataIsolationManagerInter
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
-use ArrayObject;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
-use Dtyq\CloudFile\Kernel\Struct\FileMetadata;
-use Dtyq\CloudFile\Kernel\Struct\ImageProcessOptions;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Contract\TranslatorInterface;
-use League\Flysystem\FileAttributes;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use RuntimeException;
@@ -162,7 +158,6 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
             $this->createFileDomainService(),
             $this->createTaskFileDomainService(),
             $imageEraserAppService,
-            $this->createConfig(),
         );
 
         $response = $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
@@ -206,99 +201,11 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
             $this->createFileDomainService(),
             $this->createTaskFileDomainService(),
             $imageExpandAppService,
-            $this->createConfig(),
         );
 
         $response = $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
 
         $this->assertSame('https://result.example.com/expanded.png', $response?->getData()[0]['url'] ?? null);
-    }
-
-    public function testEraserHandlerNormalizesOnlyImageWhenOriginalExceedsProviderLimit(): void
-    {
-        $dataIsolation = DesignDataIsolation::create('ORG001', '10001');
-        $entity = $this->createEntity([
-            '/images/input.png',
-            'design-mark/eraser-mask.png',
-        ], []);
-
-        $imageEraserAppService = $this->createMock(ImageEraserAppService::class);
-        $imageEraserAppService->expects($this->once())
-            ->method('erase')
-            ->with($this->callback(function (ImageEraserRequestDTO $dto): bool {
-                return $dto->getImageUrl() === 'https://sandbox.example.com/input.png?normalized=1&format=webp&quality=85'
-                    && $dto->getMaskUrl() === 'https://private.example.com/eraser-mask.png';
-            }))
-            ->willReturn($this->createGatewayResponse('https://result.example.com/erased.png'));
-
-        $handler = new DesignEraserImageTaskHandler(
-            $this->createFileDomainService(),
-            $this->createTaskFileDomainService(6 * 1024 * 1024),
-            $imageEraserAppService,
-            $this->createConfig(),
-        );
-
-        $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
-    }
-
-    public function testExpandHandlerNormalizesOnlyCanvasWhenCanvasExceedsProviderLimit(): void
-    {
-        $dataIsolation = DesignDataIsolation::create('ORG001', '10001');
-        $entity = $this->createEntity([
-            '/images/source.png',
-            'design-mark/expand-canvas.png',
-            'design-mark/expand-mask.png',
-        ], [], 'expand naturally');
-
-        $imageExpandAppService = $this->createMock(ImageExpandAppService::class);
-        $imageExpandAppService->expects($this->once())
-            ->method('expand')
-            ->with($this->callback(function (ImageExpandRequestDTO $dto): bool {
-                return $dto->getImageUrl() === 'https://private.example.com/expand-canvas.png?normalized=1&format=webp&quality=85'
-                    && $dto->getMaskUrl() === 'https://private.example.com/expand-mask.png';
-            }))
-            ->willReturn($this->createGatewayResponse('https://result.example.com/expanded.png'));
-
-        $handler = new DesignExpandImageTaskHandler(
-            $this->createFileDomainService([
-                'design-mark/expand-canvas.png' => 6 * 1024 * 1024,
-                'design-mark/expand-mask.png' => 1024,
-            ]),
-            $this->createTaskFileDomainService(),
-            $imageExpandAppService,
-            $this->createConfig(),
-        );
-
-        $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
-    }
-
-    public function testMaskIsNotNormalizedWhenImageExceedsProviderLimit(): void
-    {
-        $dataIsolation = DesignDataIsolation::create('ORG001', '10001');
-        $entity = $this->createEntity([
-            '/images/input.png',
-            'design-mark/eraser-mask.png',
-        ], []);
-        $recordedImageOptions = new ArrayObject();
-
-        $imageEraserAppService = $this->createMock(ImageEraserAppService::class);
-        $imageEraserAppService->expects($this->once())
-            ->method('erase')
-            ->willReturn($this->createGatewayResponse('https://result.example.com/erased.png'));
-
-        $handler = new DesignEraserImageTaskHandler(
-            $this->createFileDomainService(recordedImageOptions: $recordedImageOptions),
-            $this->createTaskFileDomainService(6 * 1024 * 1024),
-            $imageEraserAppService,
-            $this->createConfig(),
-        );
-
-        $handler->handle($dataIsolation, $entity, '/ORG001/project_123/workspace');
-
-        $imageOptions = $recordedImageOptions['ORG001/project_123/workspace/images/input.png'] ?? [];
-        $this->assertSame('webp', $imageOptions['format'] ?? null);
-        $this->assertArrayNotHasKey('resize', $imageOptions);
-        $this->assertArrayNotHasKey('design-mark/eraser-mask.png', $recordedImageOptions);
     }
 
     /**
@@ -326,11 +233,11 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
         ]);
     }
 
-    private function createTaskFileDomainService(int $inputFileSize = 0): TaskFileDomainService
+    private function createTaskFileDomainService(): TaskFileDomainService
     {
         $service = $this->createMock(TaskFileDomainService::class);
         $service->method('findEntityByRelativePath')
-            ->willReturnCallback(static function (int $projectId, string $relativePath) use ($inputFileSize): ?TaskFileEntity {
+            ->willReturnCallback(static function (int $projectId, string $relativePath): ?TaskFileEntity {
                 if ($projectId !== 123 || ! in_array($relativePath, ['/images/input.png', '/images/source.png'], true)) {
                     return null;
                 }
@@ -338,7 +245,7 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
                 $taskFile = new TaskFileEntity();
                 $fileName = basename($relativePath);
                 $taskFile->setFileKey('ORG001/project_123/workspace/images/' . $fileName);
-                $taskFile->setFileSize($inputFileSize);
+                $taskFile->setFileSize(0);
 
                 return $taskFile;
             });
@@ -346,11 +253,7 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
         return $service;
     }
 
-    /**
-     * @param array<string, int> $privateFileSizes
-     * @param null|ArrayObject<string, mixed> $recordedImageOptions
-     */
-    private function createFileDomainService(array $privateFileSizes = [], ?ArrayObject $recordedImageOptions = null): FileDomainService
+    private function createFileDomainService(): FileDomainService
     {
         $repository = $this->createMock(CloudFileRepositoryInterface::class);
         $repository->method('getLinks')
@@ -360,32 +263,19 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
                 ?StorageBucketType $bucketType = null,
                 array $downloadNames = [],
                 array $options = [],
-            ) use ($recordedImageOptions): array {
+            ): array {
                 if ($organizationCode !== 'ORG001') {
                     return [];
-                }
-                $normalizedSuffix = '';
-                if (isset($options['image']) && $options['image'] instanceof ImageProcessOptions) {
-                    $optionData = $options['image']->toArray();
-                    $normalizedSuffix = '?normalized=1';
-                    if (isset($optionData['resize']['limit'])) {
-                        $normalizedSuffix .= '&limit=' . (string) $optionData['resize']['limit'];
-                    }
-                    $normalizedSuffix .= '&format=' . (string) ($optionData['format'] ?? '')
-                        . (isset($optionData['quality']) ? '&quality=' . (string) $optionData['quality'] : '');
                 }
 
                 $links = [];
                 foreach ($filePaths as $filePath) {
-                    if ($recordedImageOptions !== null && isset($options['image']) && $options['image'] instanceof ImageProcessOptions) {
-                        $recordedImageOptions[$filePath] = $options['image']->toArray();
-                    }
                     $link = match ([$bucketType?->value, $filePath]) {
-                        [StorageBucketType::SandBox->value, 'ORG001/project_123/workspace/images/input.png'] => new FileLink($filePath, 'https://sandbox.example.com/input.png' . $normalizedSuffix, 3600),
-                        [StorageBucketType::SandBox->value, 'ORG001/project_123/workspace/images/source.png'] => new FileLink($filePath, 'https://sandbox.example.com/source.png' . $normalizedSuffix, 3600),
-                        [StorageBucketType::Private->value, 'design-mark/eraser-mask.png'] => new FileLink($filePath, 'https://private.example.com/eraser-mask.png' . $normalizedSuffix, 3600),
-                        [StorageBucketType::Private->value, 'design-mark/expand-canvas.png'] => new FileLink($filePath, 'https://private.example.com/expand-canvas.png' . $normalizedSuffix, 3600),
-                        [StorageBucketType::Private->value, 'design-mark/expand-mask.png'] => new FileLink($filePath, 'https://private.example.com/expand-mask.png' . $normalizedSuffix, 3600),
+                        [StorageBucketType::SandBox->value, 'ORG001/project_123/workspace/images/input.png'] => new FileLink($filePath, 'https://sandbox.example.com/input.png', 3600),
+                        [StorageBucketType::SandBox->value, 'ORG001/project_123/workspace/images/source.png'] => new FileLink($filePath, 'https://sandbox.example.com/source.png', 3600),
+                        [StorageBucketType::Private->value, 'design-mark/eraser-mask.png'] => new FileLink($filePath, 'https://private.example.com/eraser-mask.png', 3600),
+                        [StorageBucketType::Private->value, 'design-mark/expand-canvas.png'] => new FileLink($filePath, 'https://private.example.com/expand-canvas.png', 3600),
+                        [StorageBucketType::Private->value, 'design-mark/expand-mask.png'] => new FileLink($filePath, 'https://private.example.com/expand-mask.png', 3600),
                         default => null,
                     };
                     if ($link !== null) {
@@ -395,41 +285,7 @@ final class DesignEraserExpandImageTaskHandlerTest extends TestCase
 
                 return $links;
             });
-        $repository->method('getMetas')
-            ->willReturnCallback(static function (array $paths, string $organizationCode) use ($privateFileSizes): array {
-                if ($organizationCode !== 'ORG001') {
-                    return [];
-                }
-
-                $metas = [];
-                foreach ($paths as $path) {
-                    if (! array_key_exists($path, $privateFileSizes)) {
-                        continue;
-                    }
-                    $metas[$path] = new FileMetadata(
-                        basename((string) $path),
-                        (string) $path,
-                        new FileAttributes((string) $path, $privateFileSizes[$path])
-                    );
-                }
-
-                return $metas;
-            });
 
         return new FileDomainService($repository);
-    }
-
-    private function createConfig(): ConfigInterface
-    {
-        $config = $this->createMock(ConfigInterface::class);
-        $config->method('get')
-            ->willReturnCallback(static function (string $key, mixed $default = null): mixed {
-                return match ($key) {
-                    'design_generation.image_operation.input_max_bytes' => 5 * 1024 * 1024,
-                    default => $default,
-                };
-            });
-
-        return $config;
     }
 }

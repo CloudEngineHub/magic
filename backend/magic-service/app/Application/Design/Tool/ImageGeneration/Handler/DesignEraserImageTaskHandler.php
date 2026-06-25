@@ -14,7 +14,6 @@ use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\ImageEraserRequestDTO;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
-use Hyperf\Contract\ConfigInterface;
 
 /**
  * 设计侧「橡皮擦」.
@@ -38,7 +37,6 @@ final class DesignEraserImageTaskHandler extends AbstractDesignImageGenerationTa
         FileDomainService $fileDomainService,
         TaskFileDomainService $taskFileDomainService,
         private readonly ImageEraserAppService $imageEraserAppService,
-        private readonly ConfigInterface $config,
     ) {
         parent::__construct($fileDomainService, $taskFileDomainService);
     }
@@ -60,7 +58,6 @@ final class DesignEraserImageTaskHandler extends AbstractDesignImageGenerationTa
             $entity,
             $imagePath,
             $maskPath,
-            $this->config,
         );
         if ($inputUrls === null) {
             return null;

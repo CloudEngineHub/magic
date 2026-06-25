@@ -15,7 +15,7 @@ use Throwable;
 
 class VolcengineVisualAsyncClient
 {
-    private const MAX_RETRY_COUNT = 30;
+    private const MAX_RETRY_COUNT = 60;
 
     private const RETRY_INTERVAL = 2;
 

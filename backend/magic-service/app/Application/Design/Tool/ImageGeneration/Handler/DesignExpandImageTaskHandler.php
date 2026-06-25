@@ -14,7 +14,6 @@ use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\ImageExpandRequestDTO;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
-use Hyperf\Contract\ConfigInterface;
 
 /**
  * 设计侧「扩图」.
@@ -39,7 +38,6 @@ final class DesignExpandImageTaskHandler extends AbstractDesignImageGenerationTa
         FileDomainService $fileDomainService,
         TaskFileDomainService $taskFileDomainService,
         private readonly ImageExpandAppService $imageExpandAppService,
-        private readonly ConfigInterface $config,
     ) {
         parent::__construct($fileDomainService, $taskFileDomainService);
     }
@@ -61,7 +59,6 @@ final class DesignExpandImageTaskHandler extends AbstractDesignImageGenerationTa
             $entity,
             $canvasPath,
             $maskPath,
-            $this->config,
         );
         if ($inputUrls === null) {
             return null;

@@ -17,18 +17,12 @@ use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatRespons
 use Dtyq\CloudFile\Kernel\Struct\ImageProcessOptions;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
-use Hyperf\Contract\ConfigInterface;
-use Throwable;
 
 /**
  * 设计异步生图 Handler 公共逻辑：业务参数、访问令牌、参考图链接（SandBox / Private、crop）。
  */
 abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGenerationTaskHandlerInterface
 {
-    private const string IMAGE_COMPRESSION_FORMAT = 'webp';
-
-    private const int IMAGE_COMPRESSION_QUALITY = 85;
-
     public function __construct(
         protected readonly FileDomainService $fileDomainService,
         protected readonly TaskFileDomainService $taskFileDomainService,
@@ -181,7 +175,6 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
 
     /**
      * 解析擦除/扩图实际传给模型网关的 image/mask URL。
-     * 只对原图/canvas 判断大小并按需追加云存储压缩/转码参数，mask 始终原样传递。
      *
      * @return null|array{0: string, 1: string}
      */
@@ -190,15 +183,8 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         ImageGenerationEntity $entity,
         string $imagePath,
         string $maskPath,
-        ConfigInterface $config,
     ): ?array {
         $imageLinkOptions = $this->buildEraserExpandReferenceImageLinkOptions($entity, $imagePath);
-
-        // 只按原始文件元数据判断是否追加云存储处理参数，不下载或探测处理后的实际大小。
-        if ($this->shouldCompressImageBySize($config, $this->resolveEraserExpandReferenceImageSize($dataIsolation, $entity, $imagePath))) {
-            $imageLinkOptions = $this->appendImageCompressionLinkOptions($imageLinkOptions);
-        }
-
         $imageUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $imagePath, $imageLinkOptions);
         $maskUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $maskPath);
 
@@ -219,22 +205,6 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
 
         $referenceImageOptions = $entity->getReferenceImageOptions() ?? [];
         return $this->buildLinkOptionsFromImageOptions($this->findImageOptions($referenceImageOptions, $referenceImage));
-    }
-
-    /**
-     * 读取擦除原图或扩图 canvas 的文件大小，用于判断是否需要追加云存储压缩/转码参数。
-     * 工作区文件使用数据库中的 file_size，design-mark 私有文件只读取云存储 metadata，不下载文件本体。
-     */
-    protected function resolveEraserExpandReferenceImageSize(
-        DesignDataIsolation $dataIsolation,
-        ImageGenerationEntity $entity,
-        string $referenceImage,
-    ): ?int {
-        if (str_contains($referenceImage, 'design-mark/')) {
-            return $this->resolvePrivateFileSizeFromMetadata($dataIsolation, $referenceImage);
-        }
-
-        return $this->getWorkspaceSandboxFileEntity($entity->getProjectId(), $referenceImage)?->getFileSize();
     }
 
     /**
@@ -261,30 +231,6 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
     }
 
     /**
-     * 为原图/canvas 链接追加云存储图片压缩参数。
-     *
-     * @param array<string, mixed> $linkOptions
-     * @return array<string, mixed>
-     */
-    protected function appendImageCompressionLinkOptions(array $linkOptions): array
-    {
-        $imageOptions = $linkOptions['image'] ?? null;
-        if ($imageOptions instanceof ImageProcessOptions) {
-            $imageOptions = clone $imageOptions;
-        } else {
-            $imageOptions = new ImageProcessOptions();
-        }
-
-        $imageOptions->format(self::IMAGE_COMPRESSION_FORMAT);
-
-        $imageOptions->quality(self::IMAGE_COMPRESSION_QUALITY);
-
-        $linkOptions['image'] = $imageOptions;
-
-        return $linkOptions;
-    }
-
-    /**
      * @return null|array{0: string, 1: string}
      */
     private function nonEmptyUrlPair(?string $imageUrl, ?string $maskUrl): ?array
@@ -294,35 +240,6 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         }
 
         return [$imageUrl, $maskUrl];
-    }
-
-    /**
-     * 只在原图或 canvas 超过下游限制时追加云存储 format/quality 参数。
-     */
-    private function shouldCompressImageBySize(ConfigInterface $config, ?int $fileSize): bool
-    {
-        return $fileSize !== null && $fileSize > (int) $config->get('design_generation.image_operation.input_max_bytes', 5 * 1024 * 1024);
-    }
-
-    /**
-     * 读取 design-mark 私有桶图片的文件大小，用于判断扩图 canvas 是否需要追加云存储压缩/转码参数。
-     * 这里只查云存储 metadata，不下载图片本体；读取失败时返回 null，按“不主动处理”继续走原链路。
-     */
-    private function resolvePrivateFileSizeFromMetadata(DesignDataIsolation $dataIsolation, string $referenceImage): ?int
-    {
-        try {
-            $privateFileKey = ltrim($referenceImage, '/');
-            $metas = $this->fileDomainService->getMetas([$privateFileKey], $dataIsolation->getCurrentOrganizationCode());
-            $metadata = $metas[$privateFileKey] ?? null;
-            if ($metadata === null) {
-                return null;
-            }
-
-            $fileSize = $metadata->getFileAttributes()->fileSize();
-            return is_int($fileSize) ? $fileSize : null;
-        } catch (Throwable) {
-            return null;
-        }
     }
 
     /**
