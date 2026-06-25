@@ -5,7 +5,12 @@ import {
 	resolveReferenceBindingState,
 	unprotectPromptBoundReferencePaths,
 } from "../../MessageEditor/reference-assets/referenceBinding"
-import { resolvePromptPlaceholderTokenConfig } from "../../MessageEditor/reference-assets/promptPlaceholderTokenConfig"
+import {
+	decodePromptPlaceholdersWithLabels,
+	parsePromptPlaceholderTokenMatches,
+	resolvePromptPlaceholderDecodeLabels,
+	resolvePromptPlaceholderTokenConfig,
+} from "../../MessageEditor/reference-assets/promptPlaceholderTokenConfig"
 
 const tokenConfig = resolvePromptPlaceholderTokenConfig((key, defaultValue) =>
 	typeof defaultValue === "string" ? defaultValue : key,
@@ -30,6 +35,42 @@ describe("imageReferenceBinding", () => {
 			"/design/images/b.png",
 		])
 		expect(binding.protectedReferencePaths).toEqual([])
+	})
+
+	it("treats lowercase english placeholder labels as prompt-linked", () => {
+		const binding = resolveReferenceBindingState({
+			prompt: "请参考[image1]和[image2]继续绘制",
+			referenceFileInfos,
+			tokenConfig,
+		})
+
+		expect(binding.mode).toBe("prompt-linked")
+		expect(binding.explicitPromptReferencePaths).toEqual([
+			"/design/images/a.png",
+			"/design/images/b.png",
+		])
+		expect(binding.protectedReferencePaths).toEqual([])
+	})
+
+	it("parses lowercase english media placeholder labels", () => {
+		expect(
+			parsePromptPlaceholderTokenMatches("[image1] [video2] [audio3]", tokenConfig),
+		).toEqual([
+			expect.objectContaining({ kind: "image", label: "image", index: 1 }),
+			expect.objectContaining({ kind: "video", label: "video", index: 2 }),
+			expect.objectContaining({ kind: "audio", label: "audio", index: 3 }),
+		])
+	})
+
+	it("decodes lowercase english image placeholders to mentions", () => {
+		expect(
+			decodePromptPlaceholdersWithLabels(
+				"请参考[image1]继续绘制",
+				[{ path: "/design/images/a.png", fileName: "a.png" }],
+				resolvePromptPlaceholderDecodeLabels("image", tokenConfig),
+				tokenConfig,
+			),
+		).toBe("请参考@a.png继续绘制")
 	})
 
 	it("keeps legacy references protected when prompt has no explicit binding", () => {
