@@ -49,7 +49,9 @@ describe("useKeyboardNav", () => {
 		onSelectNext: ReturnType<typeof vi.fn>
 		onConfirm: ReturnType<typeof vi.fn>
 		onNavigateBack: ReturnType<typeof vi.fn>
+		onBeforeNavigateBack?: ReturnType<typeof vi.fn>
 		onEnterFolder: ReturnType<typeof vi.fn>
+		onBeforeEnterFolder?: ReturnType<typeof vi.fn>
 		onExit: ReturnType<typeof vi.fn>
 	}
 
@@ -187,6 +189,25 @@ describe("useKeyboardNav", () => {
 			expect(mockHandlers.onNavigateBack).toHaveBeenCalledTimes(1)
 		})
 
+		it("should run the pre-navigation hook before ArrowLeft navigates back", () => {
+			const onBeforeNavigateBack = vi.fn()
+			const { result } = renderHook(() =>
+				useKeyboardNav({ ...mockHandlers, onBeforeNavigateBack }),
+			)
+
+			const event = new KeyboardEvent("keydown", { key: "ArrowLeft" })
+
+			act(() => {
+				result.current.handleKeyDown(event)
+			})
+
+			expect(onBeforeNavigateBack).toHaveBeenCalledTimes(1)
+			expect(mockHandlers.onNavigateBack).toHaveBeenCalledTimes(1)
+			expect(onBeforeNavigateBack.mock.invocationCallOrder[0]).toBeLessThan(
+				mockHandlers.onNavigateBack.mock.invocationCallOrder[0],
+			)
+		})
+
 		it("should handle ArrowRight key", () => {
 			const { result } = renderHook(() => useKeyboardNav(mockHandlers))
 
@@ -205,6 +226,28 @@ describe("useKeyboardNav", () => {
 			})
 
 			expect(mockHandlers.onEnterFolder).toHaveBeenCalledTimes(1)
+		})
+
+		it("should allow intercepting ArrowRight key before entering folder", () => {
+			mockHandlers.onBeforeEnterFolder = vi.fn(() => true)
+			const { result } = renderHook(() => useKeyboardNav(mockHandlers))
+
+			const event = new KeyboardEvent("keydown", { key: "ArrowRight" })
+			Object.defineProperty(event, "preventDefault", {
+				value: vi.fn(),
+				writable: true,
+			})
+			Object.defineProperty(event, "stopPropagation", {
+				value: vi.fn(),
+				writable: true,
+			})
+
+			act(() => {
+				result.current.handleKeyDown(event)
+			})
+
+			expect(mockHandlers.onBeforeEnterFolder).toHaveBeenCalledTimes(1)
+			expect(mockHandlers.onEnterFolder).not.toHaveBeenCalled()
 		})
 
 		it("should handle Escape key", () => {
@@ -255,6 +298,117 @@ describe("useKeyboardNav", () => {
 			})
 
 			expect(mockHandlers.onSelectPrevious).not.toHaveBeenCalled()
+		})
+
+		it("should handle Meta+Enter with the meta enter handler", () => {
+			const onMetaEnter = vi.fn()
+			const { result } = renderHook(() => useKeyboardNav({ ...mockHandlers, onMetaEnter }))
+
+			const event = new KeyboardEvent("keydown", { key: "Enter", metaKey: true })
+			const preventDefaultSpy = vi.fn()
+			const stopPropagationSpy = vi.fn()
+
+			Object.defineProperty(event, "preventDefault", {
+				value: preventDefaultSpy,
+				writable: true,
+			})
+			Object.defineProperty(event, "stopPropagation", {
+				value: stopPropagationSpy,
+				writable: true,
+			})
+
+			act(() => {
+				result.current.handleKeyDown(event)
+			})
+
+			expect(onMetaEnter).toHaveBeenCalledTimes(1)
+			expect(mockHandlers.onConfirm).not.toHaveBeenCalled()
+			expect(preventDefaultSpy).toHaveBeenCalled()
+			expect(stopPropagationSpy).toHaveBeenCalled()
+		})
+
+		it("should handle Ctrl+Enter with the meta enter handler", () => {
+			const onMetaEnter = vi.fn()
+			const { result } = renderHook(() => useKeyboardNav({ ...mockHandlers, onMetaEnter }))
+
+			const event = new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true })
+
+			act(() => {
+				result.current.handleKeyDown(event)
+			})
+
+			expect(onMetaEnter).toHaveBeenCalledTimes(1)
+			expect(mockHandlers.onConfirm).not.toHaveBeenCalled()
+		})
+
+		it("should debounce Enter and Meta+Enter independently", () => {
+			vi.useFakeTimers()
+			try {
+				vi.setSystemTime(new Date(1000))
+				const onMetaEnter = vi.fn()
+				const { result } = renderHook(() =>
+					useKeyboardNav({ ...mockHandlers, onMetaEnter }),
+				)
+
+				act(() => {
+					result.current.handleKeyDown(new KeyboardEvent("keydown", { key: "Enter" }))
+				})
+
+				vi.setSystemTime(new Date(1010))
+				act(() => {
+					result.current.handleKeyDown(
+						new KeyboardEvent("keydown", { key: "Enter", metaKey: true }),
+					)
+				})
+
+				expect(mockHandlers.onConfirm).toHaveBeenCalledTimes(1)
+				expect(onMetaEnter).toHaveBeenCalledTimes(1)
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
+		it("should not prevent Meta+Enter when the meta enter handler returns false", () => {
+			const onMetaEnter = vi.fn(() => false)
+			const { result } = renderHook(() => useKeyboardNav({ ...mockHandlers, onMetaEnter }))
+
+			const event = new KeyboardEvent("keydown", { key: "Enter", metaKey: true })
+			const preventDefaultSpy = vi.fn()
+			const stopPropagationSpy = vi.fn()
+
+			Object.defineProperty(event, "preventDefault", {
+				value: preventDefaultSpy,
+				writable: true,
+			})
+			Object.defineProperty(event, "stopPropagation", {
+				value: stopPropagationSpy,
+				writable: true,
+			})
+
+			act(() => {
+				result.current.handleKeyDown(event)
+			})
+
+			expect(onMetaEnter).toHaveBeenCalledTimes(1)
+			expect(mockHandlers.onConfirm).not.toHaveBeenCalled()
+			expect(preventDefaultSpy).not.toHaveBeenCalled()
+			expect(stopPropagationSpy).not.toHaveBeenCalled()
+		})
+
+		it("should allow Enter to be intercepted before confirm", () => {
+			const onBeforeConfirm = vi.fn(() => true)
+			const { result } = renderHook(() =>
+				useKeyboardNav({ ...mockHandlers, onBeforeConfirm }),
+			)
+
+			const event = new KeyboardEvent("keydown", { key: "Enter" })
+
+			act(() => {
+				result.current.handleKeyDown(event)
+			})
+
+			expect(onBeforeConfirm).toHaveBeenCalledTimes(1)
+			expect(mockHandlers.onConfirm).not.toHaveBeenCalled()
 		})
 
 		it("should prevent default when preventDefault is true", () => {
