@@ -189,6 +189,17 @@ Summary body.
 		expect(collectSpeakerIdsFromText(markdown)).toEqual(["Speaker-1", "Speaker-2"])
 	})
 
+	it("does not leak preserved placeholders when legacy markdown injectors are chained", () => {
+		const markdown = "—— **Speaker-1** `00:22`"
+		const result = injectMarkdownSpeakerLinks(injectMarkdownTimeLinks(markdown), {
+			"Speaker-1": "Narrator",
+		})
+
+		expect(result).not.toContain("MAGIC_PRESERVED_FRAGMENT")
+		expect(result).toContain("[Narrator](magic-speaker://Speaker-1)")
+		expect(result).toContain("[00:22](magic-time://22)")
+	})
+
 	it("parses recording time text into seconds for both minute and hour formats", () => {
 		expect(parseRecordingTimeToSeconds("05:12")).toBe(312)
 		expect(parseRecordingTimeToSeconds("1:05:12")).toBe(3912)

@@ -1,13 +1,20 @@
 import type { AnchorHTMLAttributes, ComponentProps } from "react"
 import { cn } from "@/lib/utils"
-import { parseMarkdownSpeakerLink, parseMarkdownTimeLink } from "../../utils/markdown-time-links"
+import {
+	isRecordingTimeText,
+	parseMarkdownSpeakerLink,
+	parseMarkdownTimeLink,
+	parseRecordingInlineCodeTimeLink,
+} from "../../utils/markdown-time-links"
 import { resolveSpeakerChipStyle } from "../../utils/resolve-speaker-chip-style"
+import { parseRecordingTimeToSeconds } from "../../utils/time"
 
 export type RecordingMarkdownLayout = "desktop" | "mobile"
 
 export interface RecordingMarkdownComponentOptions {
 	onSpeakerClick?: (speakerId: string) => void
 	onTimeClick?: (seconds: number) => void
+	speakerNameMap?: Record<string, string>
 	timeLinkTestId?: string
 	speakerLinkTestId?: string
 }
@@ -19,6 +26,7 @@ export const RECORDING_TIME_CHIP_CLASS = "recording-time-chip"
 export function createRecordingMarkdownComponents({
 	onSpeakerClick,
 	onTimeClick,
+	speakerNameMap = {},
 	timeLinkTestId = "recording-detail-time-link",
 	speakerLinkTestId = "recording-detail-speaker-link",
 }: RecordingMarkdownComponentOptions = {}) {
@@ -37,6 +45,7 @@ export function createRecordingMarkdownComponents({
 				{...props}
 				onSpeakerClick={onSpeakerClick}
 				onTimeClick={onTimeClick}
+				speakerNameMap={speakerNameMap}
 				timeLinkTestId={timeLinkTestId}
 				speakerLinkTestId={speakerLinkTestId}
 			/>
@@ -59,26 +68,38 @@ function MarkdownCode({
 	children,
 	onSpeakerClick,
 	onTimeClick,
+	speakerNameMap = {},
 	timeLinkTestId,
 	speakerLinkTestId,
 }: {
 	children?: React.ReactNode
 	onSpeakerClick?: (speakerId: string) => void
 	onTimeClick?: (seconds: number) => void
+	speakerNameMap: Record<string, string>
 	timeLinkTestId: string
 	speakerLinkTestId: string
 }) {
 	const text = String(children ?? "").trim()
-	const match = text.match(/^\[([^\]]+)]\(magic-time:\/\/\/?([^)]+)\)$/)
-	const seconds = match ? Number(match[2]) : null
+	const magicTimeLink = parseRecordingInlineCodeTimeLink(text)
 	const speakerId = text.match(/^(Speaker-[\w-]+)$/)?.[1] ?? null
 	const speakerGroup = text.match(/^\[((?:Speaker-[\w-]+)(?:\s*,\s*Speaker-[\w-]+)+)]$/)?.[1]
 
-	if (match && Number.isFinite(seconds)) {
+	if (magicTimeLink) {
 		return (
 			<RecordingTimeChip
-				label={match[1]}
-				seconds={seconds as number}
+				label={magicTimeLink.label}
+				seconds={magicTimeLink.seconds}
+				onTimeClick={onTimeClick}
+				testId={timeLinkTestId}
+			/>
+		)
+	}
+
+	if (isRecordingTimeText(text)) {
+		return (
+			<RecordingTimeChip
+				label={text}
+				seconds={parseRecordingTimeToSeconds(text)}
 				onTimeClick={onTimeClick}
 				testId={timeLinkTestId}
 			/>
@@ -94,7 +115,7 @@ function MarkdownCode({
 					<span key={item}>
 						{index > 0 ? " " : null}
 						<RecordingSpeakerChip
-							label={item}
+							label={resolveSpeakerLabel(item, speakerNameMap)}
 							speakerId={item}
 							onSpeakerClick={onSpeakerClick}
 							testId={speakerLinkTestId}
@@ -108,7 +129,7 @@ function MarkdownCode({
 	if (speakerId) {
 		return (
 			<RecordingSpeakerChip
-				label={speakerId}
+				label={resolveSpeakerLabel(speakerId, speakerNameMap)}
 				speakerId={speakerId}
 				onSpeakerClick={onSpeakerClick}
 				testId={speakerLinkTestId}
@@ -192,6 +213,11 @@ function RecordingSpeakerChip({
 			{label}
 		</button>
 	)
+}
+
+/** Resolves the user-edited speaker label without mutating the stored speaker id. */
+function resolveSpeakerLabel(speakerId: string, speakerNameMap: Record<string, string>): string {
+	return speakerNameMap[speakerId]?.trim() || speakerId
 }
 
 /** Renders a prototype-style time chip that seeks playback on click. */

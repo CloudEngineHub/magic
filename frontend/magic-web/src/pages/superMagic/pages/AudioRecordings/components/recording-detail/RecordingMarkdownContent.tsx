@@ -3,10 +3,7 @@ import { useLatest } from "ahooks"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { cn } from "@/lib/utils"
-import {
-	injectMarkdownSpeakerLinks,
-	injectMarkdownTimeLinks,
-} from "../../utils/markdown-time-links"
+import { createRecordingMarkdownRemarkPlugin } from "../../utils/markdown-time-links"
 import {
 	createRecordingMarkdownComponents,
 	type RecordingMarkdownLayout,
@@ -35,19 +32,23 @@ export function RecordingMarkdownContent({
 	timeLinkTestId = "recording-detail-time-link",
 	speakerLinkTestId = "recording-detail-speaker-link",
 }: RecordingMarkdownContentProps) {
-	const markdown = injectMarkdownSpeakerLinks(injectMarkdownTimeLinks(content), speakerNameMap)
 	// Keep ReactMarkdown component overrides stable during playback RAF re-renders so chip clicks are not lost mid-press.
 	const onSpeakerClickRef = useLatest(onSpeakerClick)
 	const onTimeClickRef = useLatest(onTimeClick)
+	const recordingMarkdownRemarkPlugin = useMemo(
+		() => createRecordingMarkdownRemarkPlugin(speakerNameMap),
+		[speakerNameMap],
+	)
 	const components = useMemo(
 		() =>
 			createRecordingMarkdownComponents({
 				onSpeakerClick: (speakerId) => onSpeakerClickRef.current?.(speakerId),
 				onTimeClick: (seconds) => onTimeClickRef.current?.(seconds),
+				speakerNameMap,
 				timeLinkTestId,
 				speakerLinkTestId,
 			}),
-		[onSpeakerClickRef, onTimeClickRef, speakerLinkTestId, timeLinkTestId],
+		[onSpeakerClickRef, onTimeClickRef, speakerLinkTestId, speakerNameMap, timeLinkTestId],
 	)
 
 	return (
@@ -61,12 +62,12 @@ export function RecordingMarkdownContent({
 			data-layout={layout}
 		>
 			<ReactMarkdown
-				remarkPlugins={[remarkGfm]}
+				remarkPlugins={[remarkGfm, recordingMarkdownRemarkPlugin]}
 				rehypePlugins={RECORDING_MARKDOWN_REHYPE_PLUGINS}
 				urlTransform={(url) => url}
 				components={components}
 			>
-				{markdown}
+				{content}
 			</ReactMarkdown>
 		</div>
 	)

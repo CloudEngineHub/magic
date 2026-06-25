@@ -96,6 +96,74 @@ describe("RecordingMarkdownContent", () => {
 		expect(onSpeakerClick).toHaveBeenCalledWith("Speaker-2")
 	})
 
+	it("renders quote attribution speaker and code-wrapped time without leaking placeholders", () => {
+		const onTimeClick = vi.fn()
+		const onSpeakerClick = vi.fn()
+
+		const { container } = render(
+			<RecordingMarkdownContent
+				content={"—— **Speaker-1** `00:22`"}
+				speakerNameMap={{ "Speaker-1": "Narrator" }}
+				onTimeClick={onTimeClick}
+				onSpeakerClick={onSpeakerClick}
+			/>,
+		)
+
+		expect(container.textContent).not.toContain("MAGIC_PRESERVED_FRAGMENT")
+		expect(screen.getByText("Narrator")).toHaveAttribute("data-speaker-id", "Speaker-1")
+		expect(screen.getByText("00:22")).toHaveClass(RECORDING_TIME_CHIP_CLASS)
+
+		fireEvent.click(screen.getByText("Narrator"))
+		expect(onSpeakerClick).toHaveBeenCalledWith("Speaker-1")
+
+		fireEvent.click(screen.getByText("00:22"))
+		expect(onTimeClick).toHaveBeenCalledWith(22)
+	})
+
+	it("renders escaped code-wrapped magic-time links as clickable time chips", () => {
+		const onTimeClick = vi.fn()
+
+		render(
+			<RecordingMarkdownContent
+				content={"—— Speaker-1 `\\[00:05\\]\\(magic-time:///5\\)`"}
+				onTimeClick={onTimeClick}
+			/>,
+		)
+
+		const timeChip = screen.getByText("00:05")
+		expect(timeChip).toHaveClass(RECORDING_TIME_CHIP_CLASS)
+
+		fireEvent.click(timeChip)
+		expect(onTimeClick).toHaveBeenCalledWith(5)
+	})
+
+	it("does not inject recording chips inside external links, fenced code, or raw html", () => {
+		const { container } = render(
+			<RecordingMarkdownContent
+				content={[
+					"[Speaker-1 00:22](https://example.invalid)",
+					"",
+					"```",
+					"Speaker-2 00:33",
+					"```",
+					"",
+					"<span>Speaker-3</span>",
+				].join("\n")}
+				onSpeakerClick={() => undefined}
+				onTimeClick={() => undefined}
+			/>,
+		)
+
+		expect(screen.getByRole("link", { name: "Speaker-1 00:22" })).toHaveAttribute(
+			"href",
+			"https://example.invalid",
+		)
+		expect(container.querySelector("pre code")).toHaveTextContent("Speaker-2 00:33")
+		expect(container.querySelector("span")).toHaveTextContent("Speaker-3")
+		expect(screen.queryByTestId("recording-detail-speaker-link")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("recording-detail-time-link")).not.toBeInTheDocument()
+	})
+
 	it("forwards time and speaker click handlers", () => {
 		const onTimeClick = vi.fn()
 		const onSpeakerClick = vi.fn()
