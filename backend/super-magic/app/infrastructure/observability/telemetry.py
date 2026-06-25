@@ -5,10 +5,12 @@ Provides non-intrusive telemetry setup with automatic instrumentation
 """
 import os
 import logging
+import random
 import time
 from typing import Optional
 from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.trace import StatusCode
+from opentelemetry.sdk.trace import TracerProvider, SpanProcessor
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SpanExporter, SpanExportResult
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, ConsoleMetricExporter
@@ -137,6 +139,43 @@ class _CredentialAwareSpanExporter(SpanExporter):
         if force_flush is None:
             return True
         return bool(force_flush(timeout_millis))
+
+
+class _ErrorFirstSamplingProcessor(SpanProcessor):
+    """Tail-based sampler: export error/exception spans at 100%, normal spans at sample_ratio.
+
+    The sampling decision is deferred to on_end() so that the final span status (ERROR vs OK)
+    is known before deciding whether to export.  This means every span is recorded in memory
+    but only a fraction are forwarded to the inner BatchSpanProcessor for export.
+
+    OTEL_SAMPLING_RATIO (env, default 0.1): fraction of non-error spans to keep.
+    """
+
+    def __init__(self, inner_processor: SpanProcessor, sample_ratio: float = 0.1) -> None:
+        self._inner = inner_processor
+        self._sample_ratio = sample_ratio
+
+    def on_start(self, span, parent_context=None):
+        self._inner.on_start(span, parent_context)
+
+    def on_end(self, span):
+        # Always export spans whose status was explicitly set to ERROR
+        if span.status and span.status.status_code == StatusCode.ERROR:
+            self._inner.on_end(span)
+            return
+        # Always export spans that recorded an exception event
+        if span.events and any(e.name == "exception" for e in span.events):
+            self._inner.on_end(span)
+            return
+        # Probabilistically sample the remaining normal spans
+        if random.random() < self._sample_ratio:
+            self._inner.on_end(span)
+
+    def shutdown(self, timeout_millis: int = 30000) -> bool:
+        return self._inner.shutdown(timeout_millis)
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return self._inner.force_flush(timeout_millis)
 
 
 def is_telemetry_enabled() -> bool:
@@ -277,7 +316,10 @@ def setup_telemetry(
         logger.warning("[OpenTelemetry] No traces endpoint configured, using console exporter")
         span_exporter = ConsoleSpanExporter()
 
-    _tracer_provider.add_span_processor(BatchSpanProcessor(_SafeSpanExporter(span_exporter)))
+    sample_ratio = float(os.getenv("OTEL_SAMPLING_RATIO", "0.1"))
+    batch_processor = BatchSpanProcessor(_SafeSpanExporter(span_exporter))
+    _tracer_provider.add_span_processor(_ErrorFirstSamplingProcessor(batch_processor, sample_ratio))
+    logger.info(f"[OpenTelemetry] Sampling: errors=100%, normal={sample_ratio * 100:.0f}% (OTEL_SAMPLING_RATIO={sample_ratio})")
     trace.set_tracer_provider(_tracer_provider)
 
     # Install non-invasive LLM cost tracking (best-effort)

@@ -112,88 +112,20 @@ def _server_request_hook(span, scope):
         span.set_attribute("external.trace_id", external_trace_id)
         span.set_attribute("request.correlation_id", external_trace_id)
 
-    # Get HTTP method
     method = scope.get("method", "HTTP")
 
-    # Get query string first (we'll need it for the span name)
-    query_string_bytes = scope.get("query_string")
-    query_string = ""
-    if query_string_bytes:
-        query_string = query_string_bytes.decode("utf-8")
-        span.set_attribute("http.query_string", query_string)
-
-    # Build full URL for http.request attribute
-    # Get scheme (http/https)
-    scheme = scope.get("scheme", "http")
-    # Get host and port from headers
-    headers = dict(scope.get("headers", []))
-    host_header = None
-    for key, value in headers.items():
-        if isinstance(key, bytes) and key.lower() == b"host":
-            host_header = value.decode("utf-8") if isinstance(value, bytes) else value
-            break
-    # Get path
-    path = scope.get("path", "")
-    # Construct full URL
-    if host_header:
-        full_url = f"{scheme}://{host_header}{path}"
-        if query_string:
-            full_url += f"?{query_string}"
-        # Add combined attribute: "POST https://api.example.com/path"
-        span.set_attribute("http.request", f"{method} {full_url}")
-
-    # Try to get route template first (for parametrized routes)
+    # Prefer route template for consistent span grouping; fall back to actual path
     route = scope.get("route")
     if route and hasattr(route, "path"):
-        # Add the route path template for better span grouping
         route_path = route.path
         span.set_attribute("http.route", route_path)
-        span.set_attribute("http.route_name", route.name if hasattr(route, "name") else "")
-
-        # Build full path with query string
-        if query_string:
-            full_path = f"{route_path}?{query_string}"
-        else:
-            full_path = route_path
-
-        # Build span name: METHOD PATH
-        span_name = f"{method} {full_path}"
-
-        # Update span name
-        span.update_name(span_name)
-
-        # Set Langfuse name attribute for better display
-        span.set_attribute(LangfuseAttributes.NAME, span_name)
-
+        span_name = f"{method} {route_path}"
     else:
-        # Fallback: use the actual path if route is not available
-        # This handles static files, WebSocket upgrades, and unmatched routes
         path = scope.get("path", "")
-        if path:
-            # Build full path with query string
-            if query_string:
-                full_path = f"{path}?{query_string}"
-            else:
-                full_path = path
+        span_name = f"{method} {path}" if path else method
 
-            # Build span name: METHOD PATH
-            span_name = f"{method} {full_path}"
-
-            # Update span name
-            span.update_name(span_name)
-
-            # Set Langfuse name attribute for better display
-            span.set_attribute(LangfuseAttributes.NAME, span_name)
-        else:
-            # Last resort: at least update with method
-            span.update_name(method)
-            span.set_attribute(LangfuseAttributes.NAME, method)
-
-    # Add path parameters if available
-    path_params = scope.get("path_params", {})
-    if path_params:
-        for key, value in path_params.items():
-            span.set_attribute(f"http.path_param.{key}", str(value))
+    span.update_name(span_name)
+    span.set_attribute(LangfuseAttributes.NAME, span_name)
 
 
 class HTTPErrorTrackingMiddleware:
@@ -278,26 +210,8 @@ class HTTPErrorTrackingMiddleware:
             # Add success status if 2xx/3xx
             if status_code and status_code < 400 and span and span.is_recording():
                 span.set_status(Status(StatusCode.OK))
-                span.set_attribute("http.success", True)
                 response_time = (time.time() - start_time) * 1000
                 span.set_attribute("http.response_time_ms", round(response_time, 2))
-
-                # Re-confirm span name after request completes
-                # (FastAPI instrumentor might have overwritten it)
-                method = scope.get("method", "HTTP")
-                route = scope.get("route")
-                path = scope.get("path", "")
-
-                if route and hasattr(route, "path"):
-                    span_name = f"{method} {route.path}"
-                elif path:
-                    span_name = f"{method} {path}"
-                else:
-                    span_name = method
-
-                span.update_name(span_name)
-                span.set_attribute(LangfuseAttributes.NAME, span_name)
-                _logger.debug(f"Re-confirmed span name after completion: {span_name}")
 
         except Exception as e:
             # Exception occurred
@@ -316,24 +230,6 @@ class HTTPErrorTrackingMiddleware:
         """Process error response and add span attributes"""
         if not span or not span.is_recording():
             return
-
-        # Ensure span name is still set correctly even in error cases
-        # FastAPI instrumentor might have overwritten it
-        if scope:
-            method = scope.get("method", "HTTP")
-            path = scope.get("path", "")
-            route = scope.get("route")
-
-            if route and hasattr(route, "path"):
-                route_path = route.path
-                span_name = f"{method} {route_path}"
-            elif path:
-                span_name = f"{method} {path}"
-            else:
-                span_name = method
-
-            span.update_name(span_name)
-            span.set_attribute(LangfuseAttributes.NAME, span_name)
 
         # Calculate response time
         response_time = (time.time() - start_time) * 1000

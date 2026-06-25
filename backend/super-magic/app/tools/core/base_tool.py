@@ -289,19 +289,11 @@ class BaseTool(Generic[T], ABC):
             span = tracer.start_span(f"tool.{tool_name}")
 
             # Langfuse-specific: Mark as tool observation type
-            # This enables Langfuse to identify this span as a tool call
             span.set_attribute("observation.type", "tool")
             span.set_attribute("langfuse.observation.type", "tool")
 
-            # Set basic tool attributes
+            # Minimal identifying attributes only — full diagnostics deferred to error path
             span.set_attribute("tool.name", tool_name)
-            span.set_attribute("tool.class", self.__class__.__name__)
-            span.set_attribute("tool.module", self.__module__)
-
-            # Add tool description for better visibility in Langfuse
-            tool_description = self.get_effective_description()
-            if tool_description:
-                span.set_attribute("tool.description", tool_description[:500])  # Limit length
 
             # Add tool context information
             if tool_context:
@@ -309,33 +301,17 @@ class BaseTool(Generic[T], ABC):
                     span.set_attribute("tool.call_id", str(tool_context.tool_call_id))
                 if hasattr(tool_context, 'tool_name') and tool_context.tool_name:
                     span.set_attribute("tool.context_name", tool_context.tool_name)
-                # Add user/session context if available
                 if hasattr(tool_context, 'user_id') and tool_context.user_id:
                     span.set_attribute("user.id", str(tool_context.user_id))
                 if hasattr(tool_context, 'session_id') and tool_context.session_id:
                     span.set_attribute("session.id", str(tool_context.session_id))
 
-            # Add parameter information
-            if kwargs:
-                # Add parameter keys for tracking which params are used
-                span.set_attribute("tool.params.keys", ", ".join(kwargs.keys()))
-                span.set_attribute("tool.params.count", len(kwargs))
-
-                # Add sanitized parameter values for debugging (limit size)
-                for key, value in kwargs.items():
-                    try:
-                        # Convert to string and limit length to avoid large attributes
-                        value_str = str(value)
-                        if len(value_str) > 200:
-                            value_str = value_str[:200] + "..."
-                        span.set_attribute(f"tool.params.{key}", value_str)
-                    except Exception:
-                        # Skip parameters that can't be converted to string
-                        pass
-
-            # Initialize metadata for success/failure tracking
-            span.set_attribute("tool.status", "running")
-            span.set_attribute("tool.started", True)
+            # Store diagnostic context as Python attributes for use in error path only
+            tool_description = self.get_effective_description()
+            span._otel_tool_description = tool_description[:500] if tool_description else ""
+            span._otel_tool_class = self.__class__.__name__
+            span._otel_tool_module = self.__module__
+            span._otel_pending_params = dict(kwargs) if kwargs else {}
 
             return span
         except Exception as e:
@@ -363,10 +339,34 @@ class BaseTool(Generic[T], ABC):
             return
 
         try:
-            # Set execution time
+            is_error = bool(error) or not (result and getattr(result, 'ok', False))
+
+            # Always record execution time
             if OpenTelemetryAttributes:
                 span.set_attribute(OpenTelemetryAttributes.TOOL_EXECUTION_TIME, execution_time)
                 span.set_attribute(OpenTelemetryAttributes.TOOL_EXECUTION_TIME_MS, int(execution_time * 1000))
+
+            if is_error:
+                # Attach full diagnostic context so errors are self-contained
+                pending_params = getattr(span, '_otel_pending_params', {})
+                for key, value in pending_params.items():
+                    try:
+                        value_str = str(value)
+                        if len(value_str) > 500:
+                            value_str = value_str[:500] + "..."
+                        span.set_attribute(f"tool.params.{key}", value_str)
+                    except Exception:
+                        pass
+
+                tool_description = getattr(span, '_otel_tool_description', '')
+                if tool_description:
+                    span.set_attribute("tool.description", tool_description)
+                tool_class = getattr(span, '_otel_tool_class', '')
+                if tool_class:
+                    span.set_attribute("tool.class", tool_class)
+                tool_module = getattr(span, '_otel_tool_module', '')
+                if tool_module:
+                    span.set_attribute("tool.module", tool_module)
 
             # Set result status and metadata
             if result:
@@ -375,35 +375,24 @@ class BaseTool(Generic[T], ABC):
                     span.set_attribute(OpenTelemetryAttributes.TOOL_RESULT_OK, success)
                     span.set_attribute(OpenTelemetryAttributes.TOOL_SUCCESS, success)
 
-                # Langfuse-specific: Set level for filtering
-                # Level can be used to filter success/failure in Langfuse dashboard
                 if success:
                     if LogLevel and OpenTelemetryAttributes:
                         span.set_attribute(OpenTelemetryAttributes.LEVEL, LogLevel.INFO.value)
                     if ToolStatus and OpenTelemetryAttributes:
                         span.set_attribute(OpenTelemetryAttributes.TOOL_STATUS, ToolStatus.SUCCESS.value)
                     span.set_status(Status(StatusCode.OK))
-
-                    # Add result summary if available
-                    if hasattr(result, 'content') and result.content and OpenTelemetryAttributes:
-                        content_preview = str(result.content)[:500]  # Limit length
-                        span.set_attribute(OpenTelemetryAttributes.TOOL_RESULT_PREVIEW, content_preview)
                 else:
-                    # Tool execution failed
                     if LogLevel and OpenTelemetryAttributes:
                         span.set_attribute(OpenTelemetryAttributes.LEVEL, LogLevel.ERROR.value)
                     if ToolStatus and OpenTelemetryAttributes:
                         span.set_attribute(OpenTelemetryAttributes.TOOL_STATUS, ToolStatus.FAILED.value)
 
-                    # Extract error message
                     error_msg = getattr(result, 'content', '') or getattr(result, 'error', '') or "工具执行失败"
                     span.set_status(Status(StatusCode.ERROR, str(error_msg)))
                     if OpenTelemetryAttributes:
                         span.set_attribute(OpenTelemetryAttributes.ERROR, True)
                         span.set_attribute(OpenTelemetryAttributes.ERROR_MESSAGE, str(error_msg))
                         span.set_attribute(OpenTelemetryAttributes.ERROR_TYPE, "tool_execution_failed")
-
-                        # Add detailed error information for debugging
                         span.set_attribute(OpenTelemetryAttributes.TOOL_ERROR_DETAILS, str(error_msg)[:1000])
             else:
                 # No result returned
@@ -434,11 +423,6 @@ class BaseTool(Generic[T], ABC):
                     span.set_attribute(OpenTelemetryAttributes.ERROR_TYPE, type(error).__name__)
                     span.set_attribute(OpenTelemetryAttributes.ERROR_MESSAGE, str(error))
                 span.record_exception(error)
-
-            # Add completion timestamp
-            import time
-            if OpenTelemetryAttributes:
-                span.set_attribute(OpenTelemetryAttributes.TOOL_COMPLETED_AT, int(time.time() * 1000))
 
             span.end()
         except Exception as e:
