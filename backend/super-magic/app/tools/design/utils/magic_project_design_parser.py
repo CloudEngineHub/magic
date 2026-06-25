@@ -20,6 +20,11 @@ import aiofiles.os
 from agentlang.path_manager import PathManager
 from agentlang.logger import get_logger
 from app.tools.design.constants import DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT
+from app.tools.design.utils.magic_project_compression import (
+    compress_canvas_data,
+    decompress_canvas_data,
+    is_compressed_canvas,
+)
 from app.utils.async_file_utils import async_exists, async_mkdir
 
 logger = get_logger(__name__)
@@ -35,6 +40,13 @@ ALLOWED_ELEMENT_TYPES = {
 
 # 项目配置必需字段
 REQUIRED_PROJECT_FIELDS = {"version", "type", "name"}
+
+# magic.project.js 格式版本（信封 version 字段，作为格式契约）
+# v1：canvas 明文对象、重字段内联
+# v2：canvas 为 MAGICPROJECTDESIGNDATA:// 压缩串、重字段拆到 element-details sidecar
+# 注意：物理解压由 canvas 字段类型驱动（读取层自描述、稳健）；version 用于决定写哪种格式、路由哪个 manager
+MAGIC_PROJECT_VERSION_V1 = "1.0.0"
+MAGIC_PROJECT_VERSION_V2 = "2.0.0"
 
 # 画布元素必需字段
 # 注意：name 字段是可选的，如果缺失会在解析时自动生成默认名称
@@ -891,6 +903,66 @@ async def write_magic_project_js(
     # 包装为 JSONP 格式（不加分号，匹配模板格式）
     content = f"window.magicProjectConfig = {json_str}\n"
 
+    return await _write_and_verify_project_file(project_path, file_path, content, content_verifier)
+
+
+async def write_magic_project_js_v2(
+    project_path: str,
+    config: MagicProjectConfig,
+    content_verifier: Optional[Callable[[MagicProjectConfig], bool]] = None
+) -> bool:
+    """将配置写入 magic.project.js（v2 格式：信封明文 + canvas 压缩）。
+
+    与 v1 的 write_magic_project_js 差异：
+    - canvas 字段值序列化为 MAGICPROJECTDESIGNDATA:// 压缩字符串
+    - 信封字段（version / type / name）保持明文 JSON
+
+    调用方应在写入前完成重字段拆分（strip_heavy_fields），本函数不感知 sidecar。
+
+    Args:
+        project_path: 相对于工作区的项目目录路径
+        config: 要写入的配置对象
+        content_verifier: 写后校验器，只能断言主文件中的轻字段
+
+    Returns:
+        写入成功返回 True
+
+    Raises:
+        ValueError: 如果配置验证失败
+        IOError: 如果写入操作失败
+    """
+    # 在对象形态下转换并校验（复用现有逻辑，canvas 此时仍是对象）
+    config_dict = _config_to_dict(config)
+
+    validation = validate_project_config(config_dict)
+    if not validation.is_valid:
+        raise ValueError(
+            "Cannot write invalid configuration:\n" + "\n".join(f"  - {err}" for err in validation.errors)
+        )
+
+    # 仅压缩 canvas 字段，信封保持明文
+    if config_dict.get("canvas") is not None:
+        config_dict["canvas"] = compress_canvas_data(config_dict["canvas"])
+
+    file_path = get_project_file_path(project_path)
+
+    try:
+        json_str = json.dumps(config_dict, ensure_ascii=False, indent=2)
+    except Exception as e:
+        raise ValueError(f"Failed to serialize configuration to JSON: {str(e)}")
+
+    content = f"window.magicProjectConfig = {json_str}\n"
+
+    return await _write_and_verify_project_file(project_path, file_path, content, content_verifier)
+
+
+async def _write_and_verify_project_file(
+    project_path: str,
+    file_path: str,
+    content: str,
+    content_verifier: Optional[Callable[[MagicProjectConfig], bool]],
+) -> bool:
+    """加排他锁写入文件并 fsync，写后重新读取校验。v1/v2 共用。"""
     file_handle = None
     try:
         # 确保父目录存在
@@ -1012,6 +1084,14 @@ def _parse_magic_project_content(content: str, file_path: str) -> MagicProjectCo
             e.pos,
         )
 
+    # v2 格式：canvas 为 MAGICPROJECTDESIGNDATA:// 压缩字符串时，解压回对象后再走原有校验与解析
+    if is_compressed_canvas(data.get("canvas")):
+        try:
+            data["canvas"] = decompress_canvas_data(data["canvas"])
+        except ValueError as e:
+            logger.error(f"Failed to decompress canvas in magic.project.js at: {file_path}: {e}")
+            raise ValueError(f"Failed to decompress canvas in magic.project.js: {e}") from e
+
     validation = validate_project_config(data, validate_elements=False)
     if not validation.is_valid:
         raise ValueError(
@@ -1022,6 +1102,32 @@ def _parse_magic_project_content(content: str, file_path: str) -> MagicProjectCo
     config = _parse_config_dict(data)
     _compute_element_hierarchy_and_absolute_coords(config)
     return config
+
+
+_MAGIC_PROJECT_PATTERNS = [
+    r"window\.magicProjectConfig\s*=\s*({[\s\S]*})(?:\s*;|\s*$)",
+    r"magicProjectConfig\s*=\s*({[\s\S]*})(?:\s*;|\s*$)",
+    r"window\.magicProjectConfig\s*=\s*({[\s\S]*?});",
+    r"magicProjectConfig\s*=\s*({[\s\S]*?});",
+]
+
+
+def is_v2_project_content(content: str) -> bool:
+    """判断 magic.project.js 文本是否为 v2 格式（信封 version == 2.0.0）。
+
+    格式契约以信封 version 字段为准：version 为 2.0.0 即 v2，否则按 v1 处理。
+    仅解析信封读取 version，不解压 canvas；解析失败时保守返回 False。
+    """
+    for pattern in _MAGIC_PROJECT_PATTERNS:
+        match = re.search(pattern, content)
+        if not match:
+            continue
+        try:
+            data = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return False
+        return isinstance(data, dict) and data.get("version") == MAGIC_PROJECT_VERSION_V2
+    return False
 
 
 def validate_project_config(config: Dict[str, Any], validate_elements: bool = True) -> ValidationResult:

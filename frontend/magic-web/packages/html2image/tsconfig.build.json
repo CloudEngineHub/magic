@@ -1,0 +1,10 @@
+{
+	"compilerOptions": {
+		"outDir": "./dist",
+		"rootDir": "./src",
+		"types": ["node"]
+	},
+	"exclude": ["dist", "node_modules", "tests", "vitest.config.ts", "vite.config.ts"],
+	"extends": "./tsconfig.json",
+	"include": ["src/**/*"]
+}

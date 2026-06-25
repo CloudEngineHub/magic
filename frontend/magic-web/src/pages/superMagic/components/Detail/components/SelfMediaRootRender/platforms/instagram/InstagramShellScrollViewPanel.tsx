@@ -54,6 +54,9 @@ export const InstagramShellScrollViewPanel = observer(function InstagramShellScr
 								cardRefs={cardRefs}
 								postIndex={activePostIndex}
 								onAddCardToCurrentChat={onAddCardToCurrentChat}
+								onAddActivePostDirectoryToCurrentChat={
+									onAddActivePostDirectoryToCurrentChat
+								}
 							/>
 						) : null}
 					</InstagramShellContentGate>

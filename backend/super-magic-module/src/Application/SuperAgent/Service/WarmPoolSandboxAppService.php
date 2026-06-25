@@ -84,6 +84,45 @@ class WarmPoolSandboxAppService extends AbstractAppService
      */
     private const REFILL_BURST = 5;
 
+    /**
+     * Circuit-breaker defaults. Each is overridable via config so ops can
+     * retune the brake without a deploy. The breaker is derived entirely
+     * from the `error` row count in the table, so it needs no extra storage
+     * and self-heals as failures age out of the window.
+     *
+     *   - FAILURE_WINDOW_MINUTES: look-back window for counting failures.
+     *   - FAILURE_THRESHOLD: failures within the window that trip the breaker.
+     *   - BREAKER_COOLDOWN_SECONDS: once tripped, how long with ZERO new
+     *     failures before a single half-open probe create is allowed.
+     *   - MAX_CONSECUTIVE_FAILURES: abort the current burst after this many
+     *     back-to-back failures, so one bad tick can't fire the whole burst
+     *     into an unhealthy cluster.
+     *   - ERROR_RETENTION_MINUTES: how long an `error` tombstone is kept
+     *     before the cleanup pass GCs it. MUST exceed FAILURE_WINDOW_MINUTES,
+     *     otherwise tombstones would be reaped before the breaker counts them.
+     */
+    private const FAILURE_WINDOW_MINUTES = 5;
+
+    private const FAILURE_THRESHOLD = 10;
+
+    private const BREAKER_COOLDOWN_SECONDS = 60;
+
+    private const MAX_CONSECUTIVE_FAILURES = 3;
+
+    private const ERROR_RETENTION_MINUTES = 15;
+
+    /**
+     * Circuit-breaker state labels. Named once here rather than repeated as
+     * inline strings across refill() / evaluateCircuitBreaker(), so the state
+     * machine reads identically everywhere and a typo can't silently
+     * mis-route a tick.
+     */
+    private const BREAKER_STATE_CLOSED = 'closed';
+
+    private const BREAKER_STATE_OPEN = 'open';
+
+    private const BREAKER_STATE_HALF_OPEN = 'half_open';
+
     private LoggerInterface $logger;
 
     public function __construct(
@@ -100,28 +139,75 @@ class WarmPoolSandboxAppService extends AbstractAppService
      */
     public function refill(int $targetSize): array
     {
+        // Circuit breaker: if the cluster has been failing to bring pods up
+        // (e.g. nodes out of disk), STOP creating more. Each failed create
+        // leaks a pod and worsens the very condition that caused it, so
+        // hammering on would feed the death spiral the warm pool is meant to
+        // avoid. The breaker reopens itself once failures stop.
+        $breaker = $this->evaluateCircuitBreaker();
+        if ($breaker['state'] === self::BREAKER_STATE_OPEN) {
+            $this->logger->warning('[WarmPoolSandbox] Refill skipped: circuit breaker open', [
+                'recent_errors' => $breaker['recent_errors'],
+                'threshold' => $breaker['threshold'],
+                'window_minutes' => $breaker['window_minutes'],
+            ]);
+            return [
+                'skipped' => 'circuit_open',
+                'created' => 0,
+                'recent_errors' => $breaker['recent_errors'],
+            ];
+        }
+
         $images = $this->gateway->getLatestImages();
-        $latestImage = $images['agent_image'];
+        $latestAgentImage = $images['agent_image'];
         $latestAgfsImage = $images['agfs_image'];
-        if ($latestImage === '' || $latestAgfsImage === '') {
+        if ($latestAgentImage === '' || $latestAgfsImage === '') {
             $this->logger->warning('[WarmPoolSandbox] Refill skipped: unable to resolve latest agent/agfs image', [
-                'agent_image' => $latestImage,
+                'agent_image' => $latestAgentImage,
                 'agfs_image' => $latestAgfsImage,
             ]);
             return ['skipped' => 'no_latest_image', 'created' => 0];
         }
 
-        $available = $this->domain->countAvailableForImage($latestImage, $latestAgfsImage);
+        $available = $this->domain->countAvailableForImage($latestAgentImage, $latestAgfsImage);
         $deficit = max(0, $targetSize - $available);
         $burst = min($deficit, self::REFILL_BURST);
+        // Half-open: allow exactly ONE probe create. If it succeeds the breaker
+        // naturally closes (no new error rows); if it fails it re-trips for
+        // another cooldown, so we never resume full-rate creation blindly.
+        if ($breaker['state'] === self::BREAKER_STATE_HALF_OPEN) {
+            $burst = min($burst, 1);
+        }
+
+        $maxConsecutiveFailures = (int) config('super-magic.warm_pool.max_consecutive_failures', self::MAX_CONSECUTIVE_FAILURES);
         $created = 0;
         $errors = [];
+        $consecutiveFailures = 0;
 
         for ($i = 0; $i < $burst; ++$i) {
             // Generate sandbox_id locally so the gateway-side pod name is
             // predictable and so a future reconciler can map orphan pods
             // back to a PHP-known id.
             $sandboxId = (string) IdGenerator::getSnowId();
+
+            // Record-ahead: persist a `creating` row BEFORE the gateway call.
+            // If the gateway brings a pod up but its response is lost (timeout
+            // / crash), the pod would otherwise be an untraceable orphan with
+            // no DB row — invisible to every reconcile pass. With the row
+            // written first, every pod we ask for is always traceable by
+            // sandbox_id, so the cleanup pass can always reap it.
+            try {
+                $entity = $this->domain->recordCreating($sandboxId, '', $latestAgentImage, $latestAgfsImage, self::POOL_TTL_MINUTES);
+            } catch (Throwable $e) {
+                $this->logger->error('[WarmPoolSandbox] Failed to record creating row, aborting burst', [
+                    'sandbox_id' => $sandboxId,
+                    'error' => $e->getMessage(),
+                ]);
+                $errors[] = $e->getMessage();
+                break;
+            }
+            $entityId = $entity->getId();
+
             $startedAt = microtime(true);
             $result = $this->gateway->createWarmPoolSandbox($sandboxId);
             if (! $result->isSuccess()) {
@@ -131,19 +217,37 @@ class WarmPoolSandboxAppService extends AbstractAppService
                     'code' => $result->getCode(),
                     'message' => $result->getMessage(),
                 ]);
+                // Flip the row to `error` (keeps it traceable + feeds the
+                // breaker) and immediately tear down any pod the gateway may
+                // have leaked, so a failed create never adds dead weight to an
+                // already-struggling cluster.
+                if ($entityId !== null) {
+                    $this->domain->markError($entityId, 'create_failed:' . $result->getMessage());
+                }
+                $this->bestEffortDeletePod($sandboxId, 'create_failed');
+
+                if (++$consecutiveFailures >= $maxConsecutiveFailures) {
+                    $this->logger->warning('[WarmPoolSandbox] Aborting refill burst after consecutive failures', [
+                        'consecutive_failures' => $consecutiveFailures,
+                        'max' => $maxConsecutiveFailures,
+                    ]);
+                    break;
+                }
                 continue;
             }
+
+            $consecutiveFailures = 0;
             $sandboxName = (string) ($result->getDataValue('sandbox_name') ?? '');
-            $image = (string) ($result->getDataValue('agent_image') ?? $latestImage);
+            $agentImage = (string) ($result->getDataValue('agent_image') ?? $latestAgentImage);
             $agfsImage = (string) ($result->getDataValue('agfs_image') ?? $latestAgfsImage);
 
             try {
                 // sandbox-gateway returns once the agfs-server inside the pod
-                // is responsive, so we can fast-forward straight to ready.
-                $entity = $this->domain->recordCreating($sandboxId, $sandboxName, $image, $agfsImage, self::POOL_TTL_MINUTES);
-                if ($entity->getId() !== null) {
+                // is responsive, so we can fast-forward straight to ready and
+                // back-fill the gateway-issued name/image onto the row.
+                if ($entityId !== null) {
                     $provisionDurationMs = (int) round((microtime(true) - $startedAt) * 1000);
-                    $this->domain->markReady($entity->getId(), $provisionDurationMs);
+                    $this->domain->markReady($entityId, $provisionDurationMs, $sandboxName, $agentImage, $agfsImage);
                 }
                 ++$created;
             } catch (Throwable $e) {
@@ -156,22 +260,93 @@ class WarmPoolSandboxAppService extends AbstractAppService
         }
 
         $this->logger->info('[WarmPoolSandbox] Refill summary', [
-            'image' => $latestImage,
+            'image' => $latestAgentImage,
             'agfs_image' => $latestAgfsImage,
             'available_before' => $available,
             'target' => $targetSize,
             'created' => $created,
+            'breaker_state' => $breaker['state'],
             'errors' => $errors,
         ]);
 
         return [
-            'image' => $latestImage,
+            'image' => $latestAgentImage,
             'agfs_image' => $latestAgfsImage,
             'available_before' => $available,
             'target' => $targetSize,
             'created' => $created,
+            'breaker_state' => $breaker['state'],
             'errors' => $errors,
         ];
+    }
+
+    /**
+     * Reap `error` tombstone rows (and any pod they may have leaked) once they
+     * have aged past the retention window. Run periodically by the reconcile
+     * crontab — this is the safety net for the rare case where the immediate
+     * teardown in {@see refill()} could not reach the gateway, and the GC that
+     * keeps the `error` rows from growing the table without bound.
+     *
+     * The DB row is the ONLY record that ties us back to a possibly-leaked
+     * cluster sandbox, so it is dropped strictly AFTER the cluster sandbox is
+     * confirmed gone — either the gateway batch-status reports it as
+     * NotFound/Exited, or deleteSandbox returns success. A row whose sandbox
+     * we cannot confirm deleted is left in place to be retried on a later
+     * pass, so a delete failure can never orphan a still-running sandbox.
+     *
+     * Retention MUST exceed the circuit-breaker window so a tombstone is only
+     * dropped after the breaker has had its full chance to count it.
+     *
+     * @param int $retentionMinutes rows older than this are reaped; <= 0 disables the pass
+     */
+    public function cleanupErrorPods(?int $retentionMinutes = null, int $limit = 100): array
+    {
+        $retentionMinutes ??= (int) config('super-magic.warm_pool.error_retention_minutes', self::ERROR_RETENTION_MINUTES);
+        if ($retentionMinutes <= 0) {
+            return ['scanned' => 0, 'deleted' => 0, 'skipped' => 'disabled'];
+        }
+
+        $cutoff = date('Y-m-d H:i:s', time() - $retentionMinutes * 60);
+        $rows = $this->domain->listErrorForCleanup($cutoff, $limit);
+        if ($rows === []) {
+            return ['scanned' => 0, 'deleted' => 0];
+        }
+
+        // Best-effort batch status lookup: lets us drop rows whose sandbox the
+        // cluster already reports gone WITHOUT a delete round-trip. If the
+        // lookup fails the map is empty, so every row falls through to an
+        // explicit deleteSandbox that must succeed before the row is removed.
+        $statusMap = $this->safeBatchSandboxStatus(
+            array_map(fn (WarmPoolSandboxEntity $row) => $row->getSandboxId(), $rows)
+        );
+
+        $deleted = 0;
+        $failed = 0;
+        foreach ($rows as $row) {
+            $id = $row->getId();
+            if ($id === null) {
+                continue;
+            }
+            // Only drop the row once the cluster sandbox is confirmed gone.
+            if (! $this->ensureSandboxDeleted($row->getSandboxId(), $statusMap[$row->getSandboxId()] ?? null, 'error_cleanup')) {
+                ++$failed;
+                continue;
+            }
+            $this->domain->deleteEntry($id);
+            ++$deleted;
+        }
+
+        if ($deleted > 0 || $failed > 0) {
+            $this->logger->info('[WarmPoolSandbox] Cleaned up error warm-pool sandboxes', [
+                'retention_minutes' => $retentionMinutes,
+                'cutoff' => $cutoff,
+                'scanned' => count($rows),
+                'deleted' => $deleted,
+                'failed' => $failed,
+            ]);
+        }
+
+        return ['scanned' => count($rows), 'deleted' => $deleted, 'failed' => $failed];
     }
 
     /**
@@ -498,6 +673,144 @@ class WarmPoolSandboxAppService extends AbstractAppService
             'deleted' => $deleted,
             'errors' => $errors,
         ];
+    }
+
+    /**
+     * Best-effort batch status lookup that never throws. Returns a
+     * sandbox_id => status map, or an empty map when the gateway call fails or
+     * reports an error — callers must treat an absent entry as "unknown /
+     * possibly still alive", never as "gone".
+     *
+     * @param array<string> $sandboxIds
+     * @return array<string, string>
+     */
+    private function safeBatchSandboxStatus(array $sandboxIds): array
+    {
+        if ($sandboxIds === []) {
+            return [];
+        }
+        try {
+            $batch = $this->gateway->getBatchSandboxStatus($sandboxIds);
+        } catch (Throwable $e) {
+            $this->logger->warning('[WarmPoolSandbox] error-cleanup batch-status threw', [
+                'error' => $e->getMessage(),
+                'count' => count($sandboxIds),
+            ]);
+            return [];
+        }
+        if (! $batch->isSuccess()) {
+            $this->logger->warning('[WarmPoolSandbox] error-cleanup batch-status returned error', [
+                'code' => $batch->getCode(),
+                'message' => $batch->getMessage(),
+                'count' => count($sandboxIds),
+            ]);
+            return [];
+        }
+        return $batch->getStatusMap();
+    }
+
+    /**
+     * Confirm a cluster sandbox is gone, deleting it if necessary. Returns
+     * TRUE only when we are certain the cluster no longer hosts it:
+     *
+     *   - the latest known status is NotFound/Exited (already gone), OR
+     *   - deleteSandbox returns success (the gateway confirmed the teardown).
+     *
+     * Returns FALSE when deletion could not be confirmed (gateway error /
+     * exception), so the caller keeps the DB row and retries on a later pass
+     * rather than orphaning a sandbox that may still be running.
+     */
+    private function ensureSandboxDeleted(string $sandboxId, ?string $status, string $reason): bool
+    {
+        // Already gone from the cluster — nothing to tear down, safe to drop.
+        if ($status === SandboxStatus::NOT_FOUND || $status === SandboxStatus::EXITED) {
+            return true;
+        }
+
+        try {
+            $result = $this->gateway->deleteSandbox($sandboxId);
+            if ($result->isSuccess()) {
+                return true;
+            }
+            $this->logger->warning('[WarmPoolSandbox] deleteSandbox returned error; keeping row for retry', [
+                'sandbox_id' => $sandboxId,
+                'reason' => $reason,
+                'code' => $result->getCode(),
+                'message' => $result->getMessage(),
+            ]);
+        } catch (Throwable $e) {
+            $this->logger->warning('[WarmPoolSandbox] deleteSandbox threw; keeping row for retry', [
+                'sandbox_id' => $sandboxId,
+                'reason' => $reason,
+                'error' => $e->getMessage(),
+            ]);
+        }
+        return false;
+    }
+
+    /**
+     * Evaluate the refill circuit breaker purely from the recent `error` row
+     * count, so it needs no out-of-band state and self-heals as failures age
+     * out of the window.
+     *
+     *   - closed:    failures within the window are below threshold — create
+     *                at the normal burst rate.
+     *   - open:      threshold tripped AND at least one failure within the
+     *                cooldown window — skip this tick entirely.
+     *   - half_open: threshold tripped BUT no failure within the cooldown
+     *                window — let a single probe create through; its outcome
+     *                decides whether the breaker closes or re-trips.
+     *
+     * @return array{state: string, recent_errors: int, threshold: int, window_minutes: int}
+     */
+    private function evaluateCircuitBreaker(): array
+    {
+        $windowMinutes = (int) config('super-magic.warm_pool.failure_window_minutes', self::FAILURE_WINDOW_MINUTES);
+        $threshold = (int) config('super-magic.warm_pool.failure_threshold', self::FAILURE_THRESHOLD);
+        $cooldownSeconds = (int) config('super-magic.warm_pool.breaker_cooldown_seconds', self::BREAKER_COOLDOWN_SECONDS);
+
+        // Threshold <= 0 disables the breaker entirely (always closed).
+        if ($threshold <= 0 || $windowMinutes <= 0) {
+            return ['state' => self::BREAKER_STATE_CLOSED, 'recent_errors' => 0, 'threshold' => $threshold, 'window_minutes' => $windowMinutes];
+        }
+
+        $recentErrors = $this->domain->countRecentErrors($windowMinutes * 60);
+        if ($recentErrors < $threshold) {
+            return ['state' => self::BREAKER_STATE_CLOSED, 'recent_errors' => $recentErrors, 'threshold' => $threshold, 'window_minutes' => $windowMinutes];
+        }
+
+        // Tripped. Allow a single probe only if no failure landed within the
+        // cooldown window; otherwise stay fully open.
+        $errorsInCooldown = $cooldownSeconds > 0 ? $this->domain->countRecentErrors($cooldownSeconds) : $recentErrors;
+        $state = $errorsInCooldown === 0 ? self::BREAKER_STATE_HALF_OPEN : self::BREAKER_STATE_OPEN;
+
+        return ['state' => $state, 'recent_errors' => $recentErrors, 'threshold' => $threshold, 'window_minutes' => $windowMinutes];
+    }
+
+    /**
+     * Tear down a pod by sandbox_id, swallowing all failures. Used on the
+     * create-failure and error-cleanup paths where the DB row is handled
+     * separately and a gateway hiccup must not abort the surrounding loop.
+     */
+    private function bestEffortDeletePod(string $sandboxId, string $reason): void
+    {
+        try {
+            $result = $this->gateway->deleteSandbox($sandboxId);
+            if (! $result->isSuccess()) {
+                $this->logger->warning('[WarmPoolSandbox] deleteSandbox returned error during failed-create cleanup', [
+                    'sandbox_id' => $sandboxId,
+                    'reason' => $reason,
+                    'code' => $result->getCode(),
+                    'message' => $result->getMessage(),
+                ]);
+            }
+        } catch (Throwable $e) {
+            $this->logger->warning('[WarmPoolSandbox] deleteSandbox threw during failed-create cleanup', [
+                'sandbox_id' => $sandboxId,
+                'reason' => $reason,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function forceDelete(WarmPoolSandboxEntity $row, string $reason): bool

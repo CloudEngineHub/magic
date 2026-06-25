@@ -35,6 +35,14 @@ export class MarkerManager {
 		this.setupEventListeners()
 	}
 
+	private requestMarkersDraw(reason: string): void {
+		this.canvas.runtimeScheduler.requestLayerDraw("markers", {
+			source: "MarkerManager",
+			reason,
+			priority: "input",
+		})
+	}
+
 	/**
 	 * 设置事件监听
 	 */
@@ -352,7 +360,7 @@ export class MarkerManager {
 			}
 		})
 
-		this.canvas.markersLayer.batchDraw()
+		this.requestMarkersDraw("marker-position-realtime")
 	}
 
 	/**
@@ -393,7 +401,7 @@ export class MarkerManager {
 		// 保存实例
 		this.markerInstances.set(marker.id, instance)
 
-		this.canvas.markersLayer.batchDraw()
+		this.requestMarkersDraw("marker-render")
 	}
 
 	/**
@@ -647,7 +655,7 @@ export class MarkerManager {
 			this.renderMarker(marker)
 		})
 
-		this.canvas.markersLayer.batchDraw()
+		this.requestMarkersDraw("marker-rerender-all")
 	}
 
 	/**
@@ -810,7 +818,7 @@ export class MarkerManager {
 		this.markerInstances.forEach((instance) => {
 			instance.updateScale()
 		})
-		this.canvas.markersLayer.batchDraw()
+		this.requestMarkersDraw("marker-scale")
 	}
 
 	/**
@@ -923,7 +931,7 @@ export class MarkerManager {
 						this.renderMarker(marker)
 					}
 				})
-				this.canvas.markersLayer.batchDraw()
+				this.requestMarkersDraw("marker-resource-sync")
 			})
 		}
 	}
@@ -967,7 +975,7 @@ export class MarkerManager {
 			instance.destroy()
 		})
 		this.markerInstances.clear()
-		this.canvas.markersLayer.batchDraw()
+		this.requestMarkersDraw("marker-clear")
 	}
 
 	/**

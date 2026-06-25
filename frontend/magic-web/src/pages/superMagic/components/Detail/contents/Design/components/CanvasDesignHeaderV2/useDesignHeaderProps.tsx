@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { RefreshCw, Fullscreen } from "lucide-react"
+import { BadgeCent, RefreshCw, Fullscreen } from "lucide-react"
 import type {
 	CommonHeaderV2Props,
 	ActionContext,
@@ -26,6 +26,11 @@ import ActionButton from "@/pages/superMagic/components/Detail/components/Common
 import { IconShare3 } from "@tabler/icons-react"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { useAiWatermarkPreference } from "@/hooks/useAiWatermarkPreference"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
+import {
+	getShouldSkipVideoPointsConfirm,
+	setShouldSkipVideoPointsConfirm,
+} from "@/components/CanvasDesign/components/VideoGenerateEditor/video-points-confirm.storage"
 
 interface UseDesignHeaderPropsOptions {
 	/** 定位到文件时使用的文件 ID，Design 场景下传 magic.project.js 的 fileId */
@@ -81,6 +86,30 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 
 	// 刷新状态
 	const [isRefreshing, setIsRefreshing] = useState(false)
+	const [isVideoPointsPromptEnabled, setIsVideoPointsPromptEnabled] = useState(
+		() => !getShouldSkipVideoPointsConfirm(),
+	)
+
+	const designDownloadDirectoryInfo = useMemo(() => {
+		if (!currentFile?.id || !attachments?.length) {
+			return null
+		}
+
+		return getDesignDirectoryInfo(currentFile, attachments)
+	}, [attachments, currentFile])
+
+	const canShowDesignDownload = useMemo(() => {
+		if (allowDownload === false) {
+			return false
+		}
+
+		const isAllowedByAttachmentActions = allowEdit === true || allowDownload === true
+		if (!isAllowedByAttachmentActions) {
+			return false
+		}
+
+		return Boolean(designDownloadDirectoryInfo?.path && designDownloadDirectoryInfo.id)
+	}, [allowDownload, allowEdit, designDownloadDirectoryInfo])
 
 	// 全屏处理函数
 	const handleFullscreen = useCallback(async () => {
@@ -114,16 +143,26 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 		}
 	}, [containerRef])
 
+	const handleMoreMenuOpenChange = useCallback((open: boolean) => {
+		if (open) {
+			setIsVideoPointsPromptEnabled(!getShouldSkipVideoPointsConfirm())
+		}
+	}, [])
+
 	// Design 特定的下载逻辑：打包目录下所有图片
 	const handleDesignDownload = useCallback(async () => {
+		if (!canShowDesignDownload) {
+			return
+		}
+
 		if (!attachments || attachments.length === 0) {
 			magicToast.warning(t("design.errors.noFileList"))
 			return
 		}
 
 		// 获取 design 文件的目录路径和目录名称
-		const directoryInfo = getDesignDirectoryInfo(currentFile, attachments)
-		if (!directoryInfo.path) {
+		const directoryInfo = designDownloadDirectoryInfo
+		if (!directoryInfo?.path || !directoryInfo.id) {
 			magicToast.warning(t("design.errors.cannotDetermineDirectory"))
 			return
 		}
@@ -166,7 +205,14 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 				key: loadingKey,
 			})
 		}
-	}, [attachments, currentFile, hasGlobalAgreement, t])
+	}, [
+		attachments,
+		canShowDesignDownload,
+		currentFile,
+		designDownloadDirectoryInfo,
+		hasGlobalAgreement,
+		t,
+	])
 
 	// 适配 CommonHeaderV2 的 changeFileVersion 接口
 	const handleChangeFileVersionForHeader = useCallback(
@@ -338,6 +384,39 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 		}
 	}, [locateFileId])
 
+	const handleToggleVideoPointsPrompt = useCallback(() => {
+		const nextEnabled = !isVideoPointsPromptEnabled
+		setIsVideoPointsPromptEnabled(nextEnabled)
+		setShouldSkipVideoPointsConfirm(!nextEnabled)
+	}, [isVideoPointsPromptEnabled])
+
+	const extraMoreMenuItems = useMemo<CommonHeaderV2Props["extraMoreMenuItems"]>(() => {
+		if (isShareRoute) return []
+
+		const videoPointsPromptItem = {
+			key: "video-points-prompt-toggle",
+			keepOpenOnClick: true,
+			label: (
+				<div className="flex min-w-[160px] items-center justify-between gap-4 text-sm">
+					<span className="flex min-w-0 items-center gap-1.5">
+						<BadgeCent size={16} />
+						<span>{t("design.actions.videoPointsPrompt")}</span>
+					</span>
+					<Checkbox
+						checked={isVideoPointsPromptEnabled}
+						aria-hidden
+						className="pointer-events-none"
+					/>
+				</div>
+			),
+			onClick: handleToggleVideoPointsPrompt,
+		} as NonNullable<CommonHeaderV2Props["extraMoreMenuItems"]>[number] & {
+			keepOpenOnClick: true
+		}
+
+		return [videoPointsPromptItem]
+	}, [handleToggleVideoPointsPrompt, isShareRoute, isVideoPointsPromptEnabled, t])
+
 	return {
 		type: DetailType.Design,
 		currentFile: currentFileForHeader,
@@ -349,7 +428,9 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 		handleVersionRollback,
 		onLocateFile: locateFileId ? onLocateFile : undefined,
 		allowEdit,
-		showDownload: allowDownload,
+		extraMoreMenuItems,
+		onMoreMenuOpenChange: handleMoreMenuOpenChange,
+		showDownload: canShowDesignDownload,
 		showRefreshButton: true,
 		isFullscreen,
 		detailMode: "files", // 设置为 "files" 以显示刷新和更多按钮

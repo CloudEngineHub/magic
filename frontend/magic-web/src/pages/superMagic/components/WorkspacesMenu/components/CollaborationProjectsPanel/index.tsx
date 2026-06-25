@@ -104,60 +104,80 @@ const ProjectList = memo(function ProjectList({
 
 	return (
 		<MagicSpin section spinning={loading}>
-			{/* Control bar */}
-			<div className="bg-gray-50 px-5 pb-2.5 pt-5 dark:bg-white/5">
-				<div className="flex items-center justify-between gap-2.5">
-					<div className="text-sm font-semibold leading-5 text-foreground/80 opacity-80">
-						{t("workspace.projects")} · {projects.length}
-					</div>
-					<div className="flex items-center gap-2.5">
-						{tabType === CollaborationProjectType.Received &&
-							currentTab === CollaborationProjectType.Received &&
-							joinType === CollaborationJoinMethod.Internal && (
-								<CreatorFilter
-									value={creatorFilter}
-									onChange={onCreatorFilterChange}
-								/>
-							)}
-						<SortSelector value={sortType} onChange={onSortTypeChange} />
-						<ViewToggle value={viewMode} onChange={onViewModeChange} />
+			<div data-testid="shared-workspace-dialog-project-list" data-tab-type={tabType}>
+				{/* Control bar */}
+				<div className="bg-gray-50 px-5 pb-2.5 pt-5 dark:bg-white/5">
+					<div className="flex items-center justify-between gap-2.5">
+						<div className="text-sm font-semibold leading-5 text-foreground/80 opacity-80">
+							{t("workspace.projects")} · {projects.length}
+						</div>
+						<div className="flex items-center gap-2.5">
+							{tabType === CollaborationProjectType.Received &&
+								currentTab === CollaborationProjectType.Received &&
+								joinType === CollaborationJoinMethod.Internal && (
+									<CreatorFilter
+										value={creatorFilter}
+										onChange={onCreatorFilterChange}
+									/>
+								)}
+							<SortSelector value={sortType} onChange={onSortTypeChange} />
+							<ViewToggle value={viewMode} onChange={onViewModeChange} />
+						</div>
 					</div>
 				</div>
-			</div>
 
-			{/* Project list */}
-			<div className={contentClassName}>
-				<div className={gridClassName}>
-					{projects.map((item, index) => {
-						const projectItemKey = [
-							item.id,
-							item.updated_at,
-							item.last_active_at || "",
-							item.is_pinned ? "1" : "0",
-							item.bind_workspace_id || "",
-							viewMode,
-						].join("-")
+				{/* Project list */}
+				<div className={contentClassName}>
+					<div className={gridClassName}>
+						{projects.map((item, index) => {
+							const projectItemKey = [
+								item.id,
+								item.updated_at,
+								item.last_active_at || "",
+								item.is_pinned ? "1" : "0",
+								item.bind_workspace_id || "",
+								viewMode,
+							].join("-")
 
-						return (
-							<ProjectItem<CollaborationProjectListItem>
-								key={projectItemKey}
-								index={index}
-								project={item}
-								onClick={onProjectClick}
-								onPinProject={onPinProject}
-								onAddCollaborators={onAddCollaborators}
-								onAddWorkspaceShortcut={onAddWorkspaceShortcut}
-								onCancelWorkspaceShortcut={onCancelWorkspaceShortcut}
-								onShortcutNavigateToWorkspace={onShortcutNavigateToWorkspace}
-								refetchProjects={refetchProjects}
-								viewMode={viewMode}
-								sortType={sortType}
-								inCollaborationPanel
-							/>
-						)
-					})}
+							return (
+								<div
+									key={projectItemKey}
+									data-testid="shared-workspace-dialog-project-item"
+									data-tab-type={tabType}
+									data-project-id={item.id}
+									data-project-name={
+										item.project_name || t("project.unnamedProject")
+									}
+								>
+									<ProjectItem<CollaborationProjectListItem>
+										index={index}
+										project={item}
+										onClick={onProjectClick}
+										onPinProject={onPinProject}
+										onAddCollaborators={onAddCollaborators}
+										onAddWorkspaceShortcut={onAddWorkspaceShortcut}
+										onCancelWorkspaceShortcut={onCancelWorkspaceShortcut}
+										onShortcutNavigateToWorkspace={
+											onShortcutNavigateToWorkspace
+										}
+										refetchProjects={refetchProjects}
+										viewMode={viewMode}
+										sortType={sortType}
+										inCollaborationPanel
+									/>
+								</div>
+							)
+						})}
+					</div>
+					{projects.length <= 0 && (
+						<div
+							data-testid="shared-workspace-dialog-project-empty"
+							data-tab-type={tabType}
+						>
+							<MagicEmpty description={t("project.noProjects")} />
+						</div>
+					)}
 				</div>
-				{projects.length <= 0 && <MagicEmpty description={t("project.noProjects")} />}
 			</div>
 		</MagicSpin>
 	)
@@ -221,8 +241,8 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 				sort_direction: "desc",
 				creator_user_ids:
 					tab === CollaborationProjectType.Received &&
-						joinType === CollaborationJoinMethod.Internal &&
-						creatorFilter.length > 0
+					joinType === CollaborationJoinMethod.Internal &&
+					creatorFilter.length > 0
 						? creatorFilter.map((item) => item.user_id)
 						: undefined,
 				join_method: joinType,
@@ -407,19 +427,35 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 					className="!w-[80vw] !max-w-[2000px] gap-0 overflow-hidden p-0"
 					onInteractOutside={(e) => e.preventDefault()}
 					onEscapeKeyDown={handleClose}
+					data-testid="shared-workspace-dialog"
 				>
 					{/* Dialog header */}
-					<div className="flex items-center justify-between gap-2.5 px-5 pb-0 pt-5">
+					<div
+						className="flex items-center justify-between gap-2.5 px-5 pb-0 pt-5"
+						data-testid="shared-workspace-dialog-header"
+					>
 						<div className="flex min-w-0 flex-col gap-1">
-							<div className="overflow-hidden text-ellipsis whitespace-nowrap text-base font-semibold leading-[22px] text-foreground/80">
+							<div
+								className="overflow-hidden text-ellipsis whitespace-nowrap text-base font-semibold leading-[22px] text-foreground/80"
+								data-testid="shared-workspace-dialog-title"
+							>
 								{t("workspace.collaborationProjectsTitle")}
 							</div>
-							<div className="overflow-hidden text-ellipsis whitespace-nowrap text-xs font-normal leading-4 text-foreground/35">
+							<div
+								className="overflow-hidden text-ellipsis whitespace-nowrap text-xs font-normal leading-4 text-foreground/35"
+								data-testid="shared-workspace-dialog-description"
+							>
 								{t("workspace.collaborationProjectsDesc")}
 							</div>
 						</div>
-						<div className="flex items-center gap-2.5">
-							<div className="relative w-[220px]">
+						<div
+							className="flex items-center gap-2.5"
+							data-testid="shared-workspace-dialog-actions"
+						>
+							<div
+								className="relative w-[220px]"
+								data-testid="shared-workspace-dialog-search"
+							>
 								<IconSearch
 									size={16}
 									className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -429,10 +465,12 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 									placeholder={t("project.searchProject")}
 									onChange={onSearchValueChange}
 									value={searchValue}
+									data-testid="shared-workspace-dialog-search-input"
 								/>
 							</div>
 							<div
 								className="flex cursor-pointer items-center justify-center rounded-[6px] p-1.5 hover:bg-fill active:bg-fill-secondary"
+								data-testid="shared-workspace-dialog-close-button"
 								onClick={(e) => {
 									e.stopPropagation()
 									handleClose()
@@ -449,12 +487,16 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 						onChange={(key) => setCurrentTab(key as CollaborationProjectType)}
 						className="[&_.magic-tabs-nav]:!mb-0 [&_.magic-tabs-nav]:!pl-5"
 						destroyOnHidden={false}
+						data-testid="shared-workspace-dialog-tabs"
 						items={[
 							{
-								label:
-									joinType === CollaborationJoinMethod.Internal
-										? t("workspace.teamSharedWithMe")
-										: t("workspace.externalSharedWithMe"),
+								label: (
+									<span data-testid="shared-workspace-dialog-tab-received">
+										{joinType === CollaborationJoinMethod.Internal
+											? t("workspace.teamSharedWithMe")
+											: t("workspace.externalSharedWithMe")}
+									</span>
+								),
 								key: CollaborationProjectType.Received,
 								children: (
 									<ProjectList
@@ -467,7 +509,11 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 								),
 							},
 							{
-								label: t("workspace.sharedByMe"),
+								label: (
+									<span data-testid="shared-workspace-dialog-tab-shared">
+										{t("workspace.sharedByMe")}
+									</span>
+								),
 								key: CollaborationProjectType.Shared,
 								children: (
 									<ProjectList

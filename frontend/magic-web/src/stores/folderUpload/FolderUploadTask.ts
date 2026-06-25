@@ -74,6 +74,8 @@ export class FolderUploadTask implements IFolderUploadTask {
 	private folderIdMap: Map<string, string> = new Map()
 	// file_key 到 folderPath 的映射，用于实时保存时确定正确的 parent_id
 	private fileKeyToFolderPath: Map<string, string> = new Map()
+	// 保存项目文件失败后只向上游报错一次，避免定时保存和最终保存重复 reject
+	private projectSaveFailureNotified = false
 
 	constructor(
 		files: File[] | UploadFileWithKey[],
@@ -297,6 +299,10 @@ export class FolderUploadTask implements IFolderUploadTask {
 
 			// 完成 - 确保所有待保存的文件都被保存
 			await this.finalizeRemainingFiles()
+
+			if (this.state.isError) {
+				return
+			}
 
 			// 最终校正文件计数，确保准确性
 			this.correctFileCountsAfterBatch()
@@ -861,8 +867,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 			}
 		} catch (error) {
 			console.error("Failed to save batch to project:", error)
-			// 如果保存失败，可以选择重新添加到队列或其他错误处理策略
-			// 这里选择记录错误但不重试，避免无限循环
+			this.handleProjectSaveFailure(filesToSave, error, "executePendingSave")
 		}
 
 		// 清除定时器引用
@@ -1080,6 +1085,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 				}
 			} catch (error) {
 				console.error("Failed to finalize batch save:", error)
+				this.handleProjectSaveFailure(unsavedFiles, error, "finalizeRemainingFiles")
 			}
 		} else if (this.pendingSaveFiles.length > 0) {
 			console.log(
@@ -1089,6 +1095,60 @@ export class FolderUploadTask implements IFolderUploadTask {
 
 		// 清空待保存队列
 		this.pendingSaveFiles = []
+	}
+
+	private handleProjectSaveFailure(
+		files: UploadResult[],
+		error: unknown,
+		source: "executePendingSave" | "finalizeRemainingFiles",
+	): void {
+		const saveError = error instanceof Error ? error : new Error(String(error))
+		const errorMessage = saveError.message || "Save file to project failed"
+
+		files.forEach((file) => {
+			const relativePath =
+				this.fileKeyToRelativePath.get(file.file_key) ?? file.relative_file_path ?? ""
+			const fileId = `${this.id}_${relativePath}_${file.file_name}`
+			if (this.failedFilesMap.has(fileId)) {
+				return
+			}
+			this.failedFilesMap.set(fileId, {
+				fileName: file.file_name,
+				filePath: relativePath,
+				fileSize: file.file_size,
+				error: errorMessage,
+				failedAt: Date.now(),
+				batchNumber: this.state.currentBatch,
+			})
+		})
+
+		this.updateState({
+			isUploading: false,
+			isError: true,
+			currentPhase: "error",
+			errorMessage,
+			errorFiles: this.failedFilesMap.size,
+		})
+		this.stopCompletionMonitoring()
+
+		logger.error("[handleProjectSaveFailure] Project save failed", {
+			source,
+			error: errorMessage,
+			taskId: this.id,
+			projectId: this.projectId,
+			fileCount: files.length,
+		})
+
+		if (this.projectSaveFailureNotified) {
+			return
+		}
+		this.projectSaveFailureNotified = true
+
+		try {
+			this.callbacks.onError?.(this.id, saveError)
+		} catch (callbackError) {
+			console.error(`Failed to call onError callback for task ${this.id}:`, callbackError)
+		}
 	}
 
 	/**
@@ -1324,7 +1384,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 	 */
 	private async checkCompletionStatus(): Promise<void> {
 		// 如果任务已经完成或被暂停，停止监控
-		if (this.state.isCompleted || this.state.isPaused) {
+		if (this.state.isCompleted || this.state.isPaused || this.state.isError) {
 			this.stopCompletionMonitoring()
 			return
 		}
@@ -1347,6 +1407,10 @@ export class FolderUploadTask implements IFolderUploadTask {
 
 					// 确保所有待保存的文件都被保存
 					await this.finalizeRemainingFiles()
+
+					if (this.state.isError) {
+						return
+					}
 
 					// 最终校正文件计数
 					this.correctFileCountsAfterBatch()

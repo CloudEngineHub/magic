@@ -13,10 +13,15 @@ function action(key: ProjectActionKey) {
 }
 
 describe("mobileProjectActionOrder", () => {
-	it("MOBILE_CHAT_DETAIL_ACTION_KEYS omits pin while chat pin is disabled", () => {
-		expect(MOBILE_CHAT_PIN_ENABLED).toBe(false)
-		expect(MOBILE_CHAT_DETAIL_ACTION_KEYS).toEqual(["rename", "saveAsProject", "delete"])
-		expect(MOBILE_CHAT_DETAIL_ACTION_KEYS).not.toContain("pinProject")
+	it("MOBILE_CHAT_DETAIL_ACTION_KEYS includes pin when chat pin is enabled", () => {
+		expect(MOBILE_CHAT_PIN_ENABLED).toBe(true)
+		expect(MOBILE_CHAT_DETAIL_ACTION_KEYS).toEqual([
+			"pinProject",
+			"rename",
+			"saveAsProject",
+			"delete",
+		])
+		expect(MOBILE_CHAT_DETAIL_ACTION_KEYS).toContain("pinProject")
 	})
 
 	it("MOBILE_PROJECT_ACTION_ORDER matches prototype six items", () => {

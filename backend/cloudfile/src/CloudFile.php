@@ -13,6 +13,7 @@ use Dtyq\CloudFile\Kernel\Driver\Local\LocalDriver;
 use Dtyq\CloudFile\Kernel\Exceptions\CloudFileException;
 use Dtyq\CloudFile\Kernel\FilesystemProxy;
 use Dtyq\CloudFile\Kernel\Utils\EasyFileTools;
+use Dtyq\CloudFile\Kernel\Utils\RemoteDownloadSecurityConfig;
 use Dtyq\SdkBase\SdkBase;
 use League\Flysystem\FilesystemAdapter;
 use Xxtime\Flysystem\Aliyun\OssAdapter;
@@ -30,6 +31,7 @@ class CloudFile
         $this->container = $container;
         $this->configs = $container->getConfig()->get('cloudfile', []);
         EasyFileTools::setCheckImageFormat((bool) ($this->configs['check_image_format'] ?? true));
+        RemoteDownloadSecurityConfig::configure($this->configs['remote_download_security'] ?? []);
     }
 
     public function get(string $storage): FilesystemProxy

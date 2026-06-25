@@ -173,6 +173,11 @@
 			"description": "Let AI help you easily generate various creative images!",
 			"title": "Canvas is empty"
 		},
+		"search": {
+			"clear": "Clear search",
+			"empty": "No matching layers found",
+			"placeholder": "Search layers"
+		},
 		"title": "Layers"
 	},
 	"menu": {
@@ -214,6 +219,15 @@
 		"referenceVideo": "Reference Video",
 		"size": "Size",
 		"title": "Generation History"
+	},
+	"mediaResourceFullscreenPreview": {
+		"audioLoadFailed": "Failed to load audio",
+		"close": "Close fullscreen preview",
+		"croppedImage": "Cropped",
+		"imageLoadFailed": "Failed to load image",
+		"originalImage": "Original",
+		"videoLoadFailed": "Failed to load video. Please try again later.",
+		"viewMode": "Image display mode"
 	},
 	"rectangle": {
 		"defaultName": "Rectangle"
@@ -400,6 +414,7 @@
 		"hand": "Hand Tool",
 		"imageGenerator": "Image Generator",
 		"marker": "Marker",
+		"plugins": "Plugins",
 		"selection": "Selection Tool",
 		"space": "Space",
 		"text": "Text",
@@ -447,10 +462,10 @@
 		"resolution": "Resolution",
 		"sendButtonEstimatedPoints": "Estimated {{points}}",
 		"sendConfirmDescription": "This task is estimated to consume approximately {{points}} points. Confirm execution?",
-
 		"sendConfirmOk": "Confirm",
 		"sendConfirmSkip": "Don't ask again",
 		"sendConfirmTitle": "Consumption notice",
+		"sendConfirmUnknownPointsDescription": "This task will consume points. Confirm execution?",
 		"size": "Size",
 		"slotLabelFirstFrame": "Start",
 		"slotLabelLastFrame": "End",

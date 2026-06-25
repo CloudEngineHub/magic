@@ -272,7 +272,7 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 					}));
 				}
 				url = cachedUrl;
-			} 
+			}
 			// 2. 检查是否有正在进行的请求
 			else if (pendingRequests.has(url)) {
 				try {
@@ -287,7 +287,7 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 						headers: { 'Content-Type': 'text/plain' }
 					}));
 				}
-			} 
+			}
 			// 3. 发起新的请求
 			else {
 				try {
@@ -555,7 +555,7 @@ export function createParentMessageHandler(
 					}
 
 					// 发送成功响应，包含 expires_at
-					;(event.source as Window)?.postMessage(
+					; (event.source as Window)?.postMessage(
 						{
 							type: FETCH_MESSAGE_TYPES.RESPONSE,
 							requestId,
@@ -570,7 +570,7 @@ export function createParentMessageHandler(
 			}
 
 			// 发送失败响应
-			;(event.source as Window)?.postMessage(
+			; (event.source as Window)?.postMessage(
 				{
 					type: FETCH_MESSAGE_TYPES.RESPONSE,
 					requestId,
@@ -581,7 +581,7 @@ export function createParentMessageHandler(
 			)
 		} catch (error) {
 			// 发送错误响应
-			;(event.source as Window)?.postMessage(
+			; (event.source as Window)?.postMessage(
 				{
 					type: FETCH_MESSAGE_TYPES.RESPONSE,
 					requestId,

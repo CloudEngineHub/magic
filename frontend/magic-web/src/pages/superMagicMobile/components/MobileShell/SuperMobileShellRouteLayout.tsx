@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
-import { Bot, Box, LayoutGrid, MessageCircle, Mic, Trash2 } from "lucide-react"
+import { Bot, Box, House, LayoutGrid, MessageCircle, Mic, Trash2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 
@@ -104,13 +104,6 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 		}
 	}, [])
 
-	useEffect(() => {
-		if (!isSidebarOpen) return
-
-		// Shell 常驻挂载，侧栏再次打开不会重新触发 hook 初始化；这里补一次静默刷新，保证“最近使用”状态及时更新。
-		void reloadRecentItems()
-	}, [isSidebarOpen, reloadRecentItems])
-
 	const shellOutletContext = useMemo<SuperMobileShellOutletContext>(
 		() => ({
 			isSidebarOpen,
@@ -122,6 +115,7 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 
 	const navItems = useMemo<MobileShellMenuNavItem[]>(
 		() => [
+			{ key: "home", icon: House, label: t("mobile.shell.navSuper") },
 			{ key: "chats", icon: MessageCircle, label: t("mobile.shell.navChats") },
 			{ key: "workspaces", icon: Box, label: t("mobile.shell.navWorkspaces") },
 			...(isMagicApp
@@ -173,6 +167,10 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 			if (key === "trash") {
 				// 回收站已是独立路由，侧栏点击应与其他正式导航项保持一致。
 				navigateWithoutViewTransition(RouteName.RecycleBin)
+				return
+			}
+			if (key === "home") {
+				navigateWithoutViewTransition(RouteName.MobileHome)
 				return
 			}
 			if (key === "chats") {
@@ -282,6 +280,7 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 					testIdPrefix={testIdPrefix}
 					closeSidebarAriaLabel={closeSidebarAriaLabel}
 					isSidebarOpen={isSidebarOpen}
+					onOpenSidebar={() => setIsSidebarOpen(true)}
 					onCloseSidebar={() => setIsSidebarOpen(false)}
 					menuValue={menuValue}
 					sidebar={resolvedSidebar}

@@ -1,5 +1,6 @@
 import type { ReferenceImageOptions } from "../../types.magic"
 import type { CropConfig } from "../types"
+import type { CSSProperties } from "react"
 
 interface ImageDimensions {
 	width: number
@@ -154,16 +155,11 @@ export function getReferenceImageCrop(params: {
 	return referenceImageOptions.find((entry) => entry.path === filePath)?.crop
 }
 
-/** 缩略图 / popover 内将整图缩放平移，使源图坐标系中的 crop 矩形铺满目标 box（与画布 drawImage 可视一致） */
-export interface ReferenceImageCroppedDisplayLayout {
-	position: "absolute"
-	left: number
-	top: number
-	width: number
-	height: number
-	maxWidth: "none"
-	maxHeight: "none"
-}
+/** 预览 / popover 内将整图缩放平移，使源图坐标系中的 crop 矩形铺满目标 box（与画布 drawImage 可视一致） */
+export type ReferenceImageCroppedDisplayLayout = Pick<
+	CSSProperties,
+	"position" | "left" | "top" | "width" | "height" | "maxWidth" | "maxHeight"
+>
 
 export function computeReferenceImageCroppedDisplayLayout(
 	boxW: number,

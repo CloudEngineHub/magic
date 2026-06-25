@@ -99,7 +99,7 @@ export interface ImageEditorConfig {
 	isPopoverOpen: boolean
 	referenceResourceType: ReferenceResourceType
 	fileInputAccept: string
-	/** 画布图片的源图裁剪，用于参考列表「当前图片」缩略图与画布可视区域一致 */
+	/** 画布图片的源图裁剪，用于参考列表「当前图片」预览与画布可视区域一致 */
 	referenceSourceCrop: CropConfig | undefined
 	hasRestoredRef: React.RefObject<boolean>
 	isRestoringRef: React.RefObject<boolean>

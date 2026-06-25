@@ -10,6 +10,7 @@ namespace Dtyq\CloudFile\Kernel\Struct;
 use Dtyq\CloudFile\Kernel\Exceptions\CloudFileException;
 use Dtyq\CloudFile\Kernel\Utils\EasyFileTools;
 use Dtyq\CloudFile\Kernel\Utils\MimeTypes;
+use Dtyq\CloudFile\Kernel\Utils\SafeRemoteFileDownloader;
 
 class AppendUploadFile
 {
@@ -41,6 +42,7 @@ class AppendUploadFile
             $this->remoteUrl = $realPath;
             return;
         }
+        $this->assertPlainLocalPath($realPath);
         if (! is_file($realPath)) {
             throw new CloudFileException(sprintf('File not exists: %s', $realPath));
         }
@@ -148,32 +150,28 @@ class AppendUploadFile
             return;
         }
 
-        // 创建一个临时文件
-        $tempFile = tempnam(sys_get_temp_dir(), 'cloud—file-tmp-');
-        // 打开 URL 以便读取，然后打开临时文件以便写入
-        $inputStream = fopen($this->remoteUrl, 'r');
-        if (! $inputStream) {
-            throw new CloudFileException(sprintf('Download remote file failed: %s', $this->remoteUrl));
-        }
-        $outputStream = fopen($tempFile, 'w');
-        // 读取输入流并写入到输出流
-        while ($data = fread($inputStream, 1024)) {
-            fwrite($outputStream, $data);
-        }
-        // 关闭输入流和输出流
-        fclose($inputStream);
-        fclose($outputStream);
+        $downloadedFile = (new SafeRemoteFileDownloader())->download($this->remoteUrl);
+        $this->realPath = $downloadedFile->getRealPath();
+        $this->size = $downloadedFile->getSize();
+        $this->mimeType = $downloadedFile->getMimeType();
 
-        $this->realPath = $tempFile;
-        $this->size = filesize($this->realPath);
-        $this->mimeType = mime_content_type($this->realPath);
-
-        $path = parse_url($this->remoteUrl, PHP_URL_PATH);
-        $this->name = pathinfo($path, PATHINFO_BASENAME);
+        if (empty($this->name)) {
+            $this->name = $downloadedFile->getName();
+        }
 
         // 判断 name 中是否具有文件后缀，如果没有，则使用 mime_type 生成一个
         if (empty(pathinfo($this->name, PATHINFO_EXTENSION))) {
             $this->name = $this->name . '.' . MimeTypes::getExtension($this->mimeType);
+        }
+    }
+
+    /**
+     * 校验本地文件路径不能携带流包装器，避免 file://、php:// 等绕过远程下载安全边界。
+     */
+    private function assertPlainLocalPath(string $realPath): void
+    {
+        if (preg_match('/^[a-z][a-z0-9+.-]*:\/\//i', $realPath) === 1) {
+            throw new CloudFileException(sprintf('Unsupported file path wrapper: %s', $realPath));
         }
     }
 }

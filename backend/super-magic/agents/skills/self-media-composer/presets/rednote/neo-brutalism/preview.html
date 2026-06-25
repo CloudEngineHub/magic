@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Neo Brutalism — Preview</title>
+    <link rel="stylesheet" href="neo-brutalism.css">
+    <style>
+        /* Preview layout: show multiple cards side by side */
+        html,
+        body {
+            width: auto;
+            height: auto;
+            overflow: auto;
+            background: #e5e5e5;
+        }
+
+        .preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 32px;
+            padding: 40px;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .preview-card-wrapper {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="preview-container">
+
+        <!-- Card 1: Cover -->
+        <div class="preview-card-wrapper">
+            <div class="xhs-card is-cover">
+                <div class="xhs-memo-cover">
+                    <div class="xhs-memo-body">
+                        <p class="q-line">In the AI era<br><span class="hl">how to efficiently</span><br>learn programming?</p>
+                        <div class="rule"></div>
+                        <p class="ans-line">A complete roadmap from zero to one</p>
+                    </div>
+                    <div class="slogan-xhs">
+                        <div class="slogan-inner-xhs">
+                            <span class="xhs-s-token">Double efficiency</span>
+                            <span class="xhs-s-bill">Save-worthy</span>
+                        </div>
+                    </div>
+                    <span class="xhs-author">@SuperMagic</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 2: Content with data cards -->
+        <div class="preview-card-wrapper">
+            <div class="xhs-card is-content">
+                <div class="header-area">
+                    <span class="page-tag">Core idea</span>
+                    <h2 class="main-title">AI coding tools<span class="hl">efficiency comparison</span></h2>
+                </div>
+                <div class="body-area">
+                    <div class="grid-2">
+                        <div class="data-card highlight">
+                            <p class="dc-title">Code completion speed</p>
+                            <p class="dc-value" style="font-size:42px;font-weight:900;color:#111;">3x</p>
+                            <p class="dc-sub" style="font-size:13px;color:#555;">compared with manual coding</p>
+                        </div>
+                        <div class="data-card">
+                            <p class="dc-title">Bug reduction rate</p>
+                            <p class="dc-value" style="font-size:42px;font-weight:900;color:#FF2442;">47%</p>
+                            <p class="dc-sub" style="font-size:13px;color:#555;">using AI review</p>
+                        </div>
+                    </div>
+                    <div class="data-card">
+                        <p class="dc-title">Learning curve shortened</p>
+                        <p class="dc-value" style="font-size:42px;font-weight:900;color:#3B82F6;">60%</p>
+                        <p class="dc-sub" style="font-size:13px;color:#555;">with AI-assisted code understanding</p>
+                    </div>
+                    <div class="rank-row"
+                        style="background:#fff;border:3px solid #111;padding:12px 16px;display:flex;align-items:center;gap:12px;">
+                        <span class="rank-num"
+                            style="font-size:24px;font-weight:900;color:#FFE566;background:#111;width:36px;height:36px;display:flex;align-items:center;justify-content:center;">1</span>
+                        <div>
+                            <p class="rank-name" style="font-weight:800;font-size:15px;">Cursor</p>
+                            <p class="rank-desc" style="font-size:12px;color:#555;">Most popular AI IDE</p>
+                        </div>
+                        <span class="rank-val" style="margin-left:auto;font-weight:900;font-size:18px;">⭐ 9.2</span>
+                    </div>
+                </div>
+                <div class="footer-bubble"
+                    style="background:#FFE566;border:3px solid #111;padding:14px 20px;box-shadow:4px 4px 0 #111;">
+                    <p class="bubble-text" style="font-weight:800;font-size:14px;">Save this post -> start your AI coding journey.</p>
+                    <p class="bubble-tag" style="font-size:12px;color:#555;margin-top:4px;">#AICoding #ProductivityTools #DeveloperEssentials</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 3: Content with bar chart -->
+        <div class="preview-card-wrapper">
+            <div class="xhs-card is-content">
+                <div class="header-area">
+                    <span class="page-tag-dark">Top ranking</span>
+                    <h2 class="main-title-sm">Most popular AI coding tools in 2024</h2>
+                </div>
+                <div class="body-area">
+                    <div class="bar-row" style="display:flex;flex-direction:column;gap:8px;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-weight:800;font-size:13px;width:80px;">Cursor</span>
+                            <div style="flex:1;height:22px;background:#e5e5e5;border:2px solid #111;">
+                                <div style="width:92%;height:100%;background:#FFE566;"></div>
+                            </div>
+                            <span style="font-weight:900;font-size:13px;">92%</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-weight:800;font-size:13px;width:80px;">Copilot</span>
+                            <div style="flex:1;height:22px;background:#e5e5e5;border:2px solid #111;">
+                                <div style="width:85%;height:100%;background:#3B82F6;"></div>
+                            </div>
+                            <span style="font-weight:900;font-size:13px;">85%</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-weight:800;font-size:13px;width:80px;">Windsurf</span>
+                            <div style="flex:1;height:22px;background:#e5e5e5;border:2px solid #111;">
+                                <div style="width:78%;height:100%;background:#10B981;"></div>
+                            </div>
+                            <span style="font-weight:900;font-size:13px;">78%</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-weight:800;font-size:13px;width:80px;">Cline</span>
+                            <div style="flex:1;height:22px;background:#e5e5e5;border:2px solid #111;">
+                                <div style="width:71%;height:100%;background:#EC4899;"></div>
+                            </div>
+                            <span style="font-weight:900;font-size:13px;">71%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="footer-bubble dark"
+                    style="background:#111;border:3px solid #111;padding:14px 20px;box-shadow:4px 4px 0 #FF2442;">
+                    <p class="bubble-text" style="font-weight:800;font-size:14px;color:#fff;">Which one do you use most? Tell me in the comments.</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <script src="neo-brutalism.js"></script>
+</body>
+
+</html>

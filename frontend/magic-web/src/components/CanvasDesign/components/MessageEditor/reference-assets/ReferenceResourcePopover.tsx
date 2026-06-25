@@ -119,6 +119,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 			suppressNextTriggerCloseRef.current = false
 			suppressNextContentDismissRef.current = false
 			userChoseClickModeRef.current = false
+			setIsProjectSelectVisible(false)
 		}
 	}, [open])
 

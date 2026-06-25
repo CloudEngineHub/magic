@@ -172,7 +172,7 @@
 
 .item .item-content .image-content .image > img,
 .item .item-content .image-content .image > canvas,
-.item .item-content .image-content .image .imageThumbnail {
+.item .item-content .image-content .image .imagePreview {
 	width: 100%;
 	height: 100%;
 	object-fit: contain;

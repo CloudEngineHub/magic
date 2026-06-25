@@ -263,10 +263,19 @@ function CrewEditPanels({
 
 	const isDrawerTopicHistory = topicHistoryMode === "drawer"
 	const isFixedTopicHistory = topicHistoryMode === "fixed" || topicHistoryMode === "full-right"
+	// Collapse should dismiss the history panel first so the shared desktop pattern matches
+	// TopicPage and SkillEdit instead of leaving the history rail stranded on the right.
+	const handleToggleConversationPanel = useCallback(() => {
+		if (!isConversationPanelCollapsed && historyLayout?.isOpen) {
+			historyLayout.onClose()
+		}
+		onToggleConversationPanel?.()
+	}, [historyLayout, isConversationPanelCollapsed, onToggleConversationPanel])
 	const renderedMessagePanel = isValidElement(messagePanel)
 		? cloneElement(messagePanel as ReactElement<MessagePanelProps>, {
 				historyTriggerMode: historyLayout ? "layout" : "dropdown",
 				isHistoryPanelOpen: historyLayout?.isOpen ?? false,
+				onToggleConversationPanel: handleToggleConversationPanel,
 				onToggleHistoryPanel: historyLayout?.onToggle,
 			})
 		: messagePanel

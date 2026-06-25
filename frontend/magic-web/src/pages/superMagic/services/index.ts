@@ -52,6 +52,16 @@ class SuperMagicService {
 
 	shouldShowErrorMessagePrompt = false
 
+	/** Monotonic token so stale desktop chat switch async work cannot overwrite newer navigation. */
+	private desktopChatSwitchGeneration = 0
+
+	private desktopChatSwitchInFlight = false
+
+	/** Exposed for ChatProjectPageDesktop to skip refreshState during optimistic chat switches. */
+	isDesktopChatSwitchInProgress(): boolean {
+		return this.desktopChatSwitchInFlight
+	}
+
 	private flushCurrentTopicReadProgress(
 		reason: "switch-topic" | "switch-project" | "switch-workspace" | "route-leave",
 	) {
@@ -139,8 +149,10 @@ class SuperMagicService {
 	 * 静默刷新侧栏已加载的工作区列表与各工作区项目缓存（含当前工作区扁平 projects），不改变选中项。
 	 */
 	silentRefreshSidebarLoadedCaches = async (): Promise<void> => {
+		// Normalize the loaded workspace cache ids so manual refresh only touches
+		// concrete personal workspaces and never duplicates requests for invalid entries.
 		const loadedIds = Array.from(projectStore.loadedWorkspaces).filter(
-			(id) => id !== SHARE_WORKSPACE_ID,
+			(id): id is string => Boolean(id) && id !== SHARE_WORKSPACE_ID,
 		)
 		const selectedId = workspaceStore.selectedWorkspace?.id
 		const needsFlatSync = Boolean(selectedId && selectedId !== SHARE_WORKSPACE_ID)
@@ -371,26 +383,118 @@ class SuperMagicService {
 		return this.switchChatProject(project)
 	}
 
-	async switchChatProject(project: ProjectListItem, initialTopic?: Topic | null) {
+	async switchChatProject(
+		project: ProjectListItem,
+		initialTopic?: Topic | null,
+		options?: {
+			/** Caller-provided chat workspace keeps service layer independent from React hooks. */
+			chatWorkspace?: Workspace | null
+		},
+	) {
 		if (interfaceStore.isMobile) {
-			projectStore.setSelectedProject(project)
+			return this.switchChatProjectInMobile(project, initialTopic)
+		}
 
-			if (isOtherCollaborationProject(project)) {
-				workspaceStore.setSelectedWorkspace(SHARE_WORKSPACE_DATA(t))
-			}
+		return this.switchChatProjectInDesktop(project, {
+			topicId: initialTopic?.id ?? project.current_topic_id ?? undefined,
+			initialTopic,
+			chatWorkspace: options?.chatWorkspace,
+		})
+	}
 
+	/**
+	 * Mobile chat project switch (blocking topic fetch before navigation).
+	 */
+	async switchChatProjectInMobile(project: ProjectListItem, initialTopic?: Topic | null) {
+		projectStore.setSelectedProject(project)
+
+		if (isOtherCollaborationProject(project)) {
+			workspaceStore.setSelectedWorkspace(SHARE_WORKSPACE_DATA(t))
+		}
+
+		if (isReadOnlyProject(project.user_role)) {
+			this.topicStore.setSelectedTopic(null)
+			this.route.navigateToChatProject(project)
+			return
+		}
+
+		const selectedTopic =
+			initialTopic ||
+			(await this.getTopicDataByProject(project, project.current_topic_id || undefined))
+
+		this.topicStore.setSelectedTopic(selectedTopic)
+		this.route.navigateToChatProject(project, selectedTopic?.id)
+
+		requestIdleCallback(() => {
+			this.topic.fetchTopics({
+				projectId: project.id,
+				isAutoSelect: false,
+				page: 1,
+			})
+		})
+	}
+
+	/**
+	 * Desktop chat switch mirrors switchProjectInDesktop: optimistic store/route first, reconcile in background.
+	 */
+	async switchChatProjectInDesktop(
+		project: ProjectListItem,
+		options?: {
+			topicId?: string
+			initialTopic?: Topic | null
+			/** Provided by UI callers that already resolved the dedicated chat workspace. */
+			chatWorkspace?: Workspace | null
+		},
+	) {
+		this.flushCurrentTopicReadProgress("switch-project")
+		const switchToken = ++this.desktopChatSwitchGeneration
+		this.desktopChatSwitchInFlight = true
+
+		try {
 			if (isReadOnlyProject(project.user_role)) {
+				projectStore.setSelectedProject(project)
+				if (isOtherCollaborationProject(project)) {
+					workspaceStore.setSelectedWorkspace(SHARE_WORKSPACE_DATA(t))
+				}
 				this.topicStore.setSelectedTopic(null)
 				this.route.navigateToChatProject(project)
 				return
 			}
 
-			const selectedTopic =
-				initialTopic ||
-				(await this.getTopicDataByProject(project, project.current_topic_id || undefined))
+			let chatWorkspace: Workspace | null = options?.chatWorkspace ?? null
+			if (isOtherCollaborationProject(project)) {
+				chatWorkspace = SHARE_WORKSPACE_DATA(t)
+			}
 
-			this.topicStore.setSelectedTopic(selectedTopic)
-			this.route.navigateToChatProject(project, selectedTopic?.id)
+			if (switchToken !== this.desktopChatSwitchGeneration) return
+
+			projectStore.setSelectedProject(project)
+			if (chatWorkspace) {
+				workspaceStore.setSelectedWorkspace(chatWorkspace)
+			}
+
+			// Cut the previous conversation context before navigation so detail UI cannot render stale messages.
+			this.topicStore.setSelectedTopic(null)
+
+			const optimisticTopicId = options?.topicId ?? project.current_topic_id ?? undefined
+			this.route.navigateToChatProject(project, optimisticTopicId)
+
+			let actualTopic: Topic | null = options?.initialTopic ?? null
+			if (!actualTopic) {
+				actualTopic = await this.getTopicDataByProject(project, optimisticTopicId)
+			}
+
+			if (switchToken !== this.desktopChatSwitchGeneration) return
+
+			if (!actualTopic) {
+				return
+			}
+
+			this.topicStore.setSelectedTopic(actualTopic)
+
+			if (optimisticTopicId && actualTopic.id !== optimisticTopicId) {
+				this.route.navigateToChatProject(project, actualTopic.id, true)
+			}
 
 			requestIdleCallback(() => {
 				this.topic.fetchTopics({
@@ -399,29 +503,11 @@ class SuperMagicService {
 					page: 1,
 				})
 			})
-			return
-		}
-
-		if (isReadOnlyProject(project.user_role)) {
-			if (interfaceStore.isMobile) {
-				this.switchProjectInMobile(project)
-			} else {
-				this.switchProjectInDesktop(project)
+		} finally {
+			if (switchToken === this.desktopChatSwitchGeneration) {
+				this.desktopChatSwitchInFlight = false
 			}
-			return
 		}
-
-		const selectedTopic =
-			initialTopic ||
-			(await this.getTopicDataByProject(project, project.current_topic_id || undefined))
-
-		const topicId = selectedTopic?.id
-		if (interfaceStore.isMobile) {
-			this.switchProjectInMobile(project, topicId)
-			return
-		}
-
-		this.switchProjectInDesktop(project, topicId)
 	}
 
 	/**
@@ -780,7 +866,12 @@ class SuperMagicService {
 		}
 
 		let workspaceId = workspaceStore.selectedWorkspace?.id
-		if (!workspaceId || isCollaborationWorkspace(workspaceStore.selectedWorkspace)) {
+		const shouldResolveHomeWorkspace =
+			!workspaceId ||
+			isCollaborationWorkspace(workspaceStore.selectedWorkspace) ||
+			workspaceStore.selectedWorkspace?.workspace_type === "chat"
+
+		if (shouldResolveHomeWorkspace) {
 			const workspaces =
 				workspaceStore.workspaces.length > 0
 					? workspaceStore.workspaces
@@ -788,13 +879,19 @@ class SuperMagicService {
 							isAutoSelect: false,
 							page: 1,
 						})
+			const homeWorkspaces = workspaces.filter(
+				(workspace) =>
+					workspace.id !== SHARE_WORKSPACE_ID && workspace.workspace_type !== "chat",
+			)
 
-			// 如果传入了最后一个使用的工作区ID，则使用最后一个使用的工作区ID
-			const targetWorkspace =
-				// 如果传入了最后一个使用的工作区ID，且不是共享工作区，则使用最后一个使用的工作区ID
+			// Chat route writes the chat workspace id into the cache, so "last used"
+			// may not belong to the normal home workspace list. In that case we must
+			// fall back to the first normal workspace instead of creating a new one.
+			const lastUsedHomeWorkspace =
 				lastUsedWorkspaceId && lastUsedWorkspaceId !== SHARE_WORKSPACE_ID
-					? workspaces.find((ws) => ws.id === lastUsedWorkspaceId)
-					: workspaces?.[0]
+					? homeWorkspaces.find((ws) => ws.id === lastUsedWorkspaceId)
+					: null
+			const targetWorkspace = lastUsedHomeWorkspace || homeWorkspaces?.[0]
 
 			if (targetWorkspace) {
 				workspaceId = targetWorkspace.id
@@ -940,33 +1037,37 @@ class SuperMagicService {
 		projectId?: string
 		topicId?: string
 	}) {
+		const initialRouteProjectId = this.route.getCurrentRouteParams().projectId
 		const fallbackWorkspaceId = UserWorkspaceMapCache.get(userStore.user.userInfo) || undefined
 
-		// 0. 立即根据 projectId 参数更新 selectedProject，避免闪烁
 		if (!projectId) {
+			if (this.route.isStaleScopedRefresh(initialRouteProjectId, projectId)) {
+				return
+			}
 			projectStore.setSelectedProject(null)
-		}
-
-		// 新路由 path 不含 workspaceId，通过 projectId 反查
-		let resolvedWorkspaceId = workspaceId
-		if (!resolvedWorkspaceId && projectId) {
-			const project = await this.project
-				.getProjectDetail(projectId, { enableErrorMessagePrompt: false })
-				.catch(() => null)
-			if (project) {
-				resolvedWorkspaceId = project.workspace_id
-				projectStore.setSelectedProject(project)
+			if (!workspaceId) {
+				return
 			}
 		}
 
-		// 1. 总是拉取 workspace 数据
+		// Resolve workspace id and project payload without mutating store yet.
+		let resolvedWorkspaceId = workspaceId
+		let projectFromLookup: ProjectListItem | null = null
+		if (!resolvedWorkspaceId && projectId) {
+			projectFromLookup = await this.project
+				.getProjectDetail(projectId, { enableErrorMessagePrompt: false })
+				.catch(() => null)
+			if (projectFromLookup) {
+				resolvedWorkspaceId = projectFromLookup.workspace_id
+			}
+		}
+
 		let workspace: Workspace | null = null
 		if (resolvedWorkspaceId && resolvedWorkspaceId !== SHARE_WORKSPACE_ID) {
 			workspace = await this.workspace
 				.getWorkspaceDetail(resolvedWorkspaceId, { enableErrorMessagePrompt: false })
 				.catch(() => null)
 
-			// 如果获取失败，尝试使用 fallbackWorkspaceId
 			if (!workspace && fallbackWorkspaceId) {
 				workspace = await this.workspace
 					.getWorkspaceDetail(fallbackWorkspaceId, { enableErrorMessagePrompt: false })
@@ -976,14 +1077,35 @@ class SuperMagicService {
 			workspace = SHARE_WORKSPACE_DATA(t)
 		}
 
+		let project: ProjectListItem | null = projectFromLookup
+		if (projectId && !project) {
+			project = await this.project
+				.getProjectDetail(projectId, { enableErrorMessagePrompt: false })
+				.catch(() => null)
+		}
+
+		let selectedTopic: Topic | null = null
+		if (project && project.id === projectId && !isReadOnlyProject(project.user_role)) {
+			const shouldEnsureTopic =
+				Boolean(topicId) ||
+				!interfaceStore.isMobile ||
+				this.route.isCurrentChatProjectRoute()
+
+			if (shouldEnsureTopic) {
+				selectedTopic = await this.getTopicDataByProject(project, topicId)
+			}
+		}
+
+		if (this.route.isStaleScopedRefresh(initialRouteProjectId, projectId)) {
+			return
+		}
+
 		if (workspace) {
 			const current = workspaceStore.selectedWorkspace
-			// 深度比较：只在数据真正变化时更新
 			if (!isEqual(current, workspace)) {
 				workspaceStore.setSelectedWorkspace(workspace)
 			}
 
-			// 静默刷新工作区列表
 			requestIdleCallback(() => {
 				this.workspace.fetchWorkspaces({
 					isAutoSelect: false,
@@ -991,7 +1113,6 @@ class SuperMagicService {
 				})
 			})
 
-			// 静默刷新项目列表
 			this.project.fetchProjects(
 				{
 					workspaceId: workspace.id,
@@ -1001,26 +1122,12 @@ class SuperMagicService {
 			)
 		}
 
-		// 2. 总是拉取 project 数据
-		let project: ProjectListItem | null = null
-		if (projectId) {
-			project = await this.project
-				.getProjectDetail(projectId, { enableErrorMessagePrompt: false })
-				.catch(() => null)
-		}
-
-		// 根据 projectId 参数决定是否设置项目
-		// 如果没有 projectId，已经在函数开始时清空了 selectedProject
-		// 如果有 projectId 且成功获取到项目数据，则设置项目
-		// 检查 project.id === projectId 确保是当前请求的项目，避免旧的异步请求覆盖
 		if (projectId && project && project.id === projectId) {
 			const current = projectStore.selectedProject
-			// 深度比较：只在数据真正变化时更新
 			if (!isEqual(current, project)) {
 				projectStore.setSelectedProject(project)
 			}
 
-			// 静默刷新话题列表
 			if (!isReadOnlyProject(project.user_role)) {
 				this.topic.fetchTopics({
 					projectId: project.id,
@@ -1028,37 +1135,15 @@ class SuperMagicService {
 					page: 1,
 				})
 			}
-		} else if (!projectId) {
-			// 确保当 projectId 不存在时，selectedProject 一定是 null
-			// 防止旧的异步请求在设置 null 之后又设置了项目
-			if (projectStore.selectedProject !== null) {
-				projectStore.setSelectedProject(null)
+		}
+
+		if (selectedTopic) {
+			const current = topicStore.selectedTopic
+			if (!isEqual(current, selectedTopic)) {
+				topicStore.setSelectedTopic(selectedTopic)
 			}
 		}
 
-		// 3. 总是拉取 topic 数据
-		// 移动端：只有传了 topicId 才拉取
-		// PC端：无 topicId 时也进行 topic 自动初始化（自动选择或创建）
-		if (project && !isReadOnlyProject(project.user_role)) {
-			const shouldEnsureTopic =
-				Boolean(topicId) ||
-				!interfaceStore.isMobile ||
-				this.route.isCurrentChatProjectRoute()
-
-			if (shouldEnsureTopic) {
-				const selectedTopic = await this.getTopicDataByProject(project, topicId)
-
-				if (selectedTopic) {
-					const current = topicStore.selectedTopic
-					// 深度比较：只在数据真正变化时更新
-					if (!isEqual(current, selectedTopic)) {
-						topicStore.setSelectedTopic(selectedTopic)
-					}
-				}
-			}
-		}
-
-		// PC端：修正路由，确保 URL 与最终数据状态一致
 		if (!interfaceStore.isMobile) {
 			this.route.fixRouteParams()
 		}
@@ -1172,6 +1257,7 @@ class SuperMagicService {
 		onSuccess,
 		onNavigated,
 		sourceTopic,
+		topicName,
 	}: {
 		selectedProject: ProjectListItem | null | undefined
 		targetProject?: ProjectListItem
@@ -1180,7 +1266,8 @@ class SuperMagicService {
 		/** Called after navigateToState — safe moment to insert content into the new topic's editor */
 		onNavigated?: (topic: Topic) => void
 		/** 新话题后端空创建；该字段只用于前端选中态继承员工/mode */
-		sourceTopic?: Topic | null
+		sourceTopic?: Pick<Topic, "project_id" | "topic_mode" | "agent_code"> | null
+		topicName?: string
 	}): Promise<Topic | null> {
 		const project = targetProject ?? selectedProject
 
@@ -1191,7 +1278,7 @@ class SuperMagicService {
 		try {
 			const newTopic = await this.topic.createTopic({
 				projectId: project.id,
-				topicName: "",
+				topicName: topicName || "",
 				sourceTopic,
 			})
 

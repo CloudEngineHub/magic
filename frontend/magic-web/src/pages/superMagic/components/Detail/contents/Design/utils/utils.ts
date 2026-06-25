@@ -23,6 +23,14 @@ import {
 import { getDesignProjectCurrentFileByProjectPath } from "./toolDesignProjectInfo"
 import type { DesignAttachmentIndex } from "./designAttachmentIndex"
 import { cloneDeep } from "lodash-es"
+import {
+	MAGIC_PROJECT_VERSION_V1,
+	compressCanvasData,
+	decompressCanvasData,
+	isCompressedCanvas,
+	isV2Version,
+} from "./magicProjectCompression"
+import { stripHeavyFields } from "./elementDetailsStore"
 
 function layerTreeHasImageOrVideo(elements: LayerElement[] | undefined): boolean {
 	if (!elements?.length) return false
@@ -104,21 +112,32 @@ export function generateMagicProjectJsContent(
 	options?: { projectBasePath?: string },
 ): string {
 	const rawElements = designData.canvas?.elements || []
-	let elements = rawElements
 	const basePath = options?.projectBasePath?.trim()
-	if (basePath) {
-		if (layerTreeHasImageOrVideo(rawElements)) {
-			elements = cloneDeep(rawElements)
-			rewriteLayerElementsPathsForMagicProjectSave(elements, basePath)
-		}
+	const isV2 = isV2Version(designData.version)
+	const needPathRewrite = !!basePath && layerTreeHasImageOrVideo(rawElements)
+
+	// v2 需先克隆再剥离重字段，避免污染内存态；路径改写同样需要克隆
+	let elements = rawElements
+	if (isV2 || needPathRewrite) {
+		elements = cloneDeep(rawElements)
 	}
+	if (needPathRewrite) {
+		rewriteLayerElementsPathsForMagicProjectSave(elements, basePath as string)
+	}
+
+	let canvasField: unknown
+	if (isV2) {
+		stripHeavyFields(elements)
+		canvasField = compressCanvasData({ elements })
+	} else {
+		canvasField = { elements }
+	}
+
 	const config = {
 		version: designData.version || "1.0.0",
 		type: designData.type || "design",
 		name: designData.name || "",
-		canvas: {
-			elements,
-		},
+		canvas: canvasField,
 	}
 
 	// 将对象转换为格式化的 JSON 字符串，然后包装成 JavaScript 代码
@@ -145,14 +164,25 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 			return null
 		}
 
-		// 转换为 DesignData 格式
+		// 物理解压由 canvas 字段类型驱动（自描述、稳健）：压缩串则解压，对象则直接用
+		const canvasField = (config as { canvas?: unknown }).canvas
+		let elements: LayerElement[] = []
+		if (isCompressedCanvas(canvasField)) {
+			const canvasObj = decompressCanvasData(canvasField) as {
+				elements?: LayerElement[]
+			} | null
+			elements = canvasObj?.elements || []
+		} else {
+			elements = (canvasField as { elements?: LayerElement[] } | undefined)?.elements || []
+		}
+
+		// 转换为 DesignData 格式；version 即格式契约（2.0.0 = v2），保存时据此决定写法
 		const designData: DesignData = {
 			type: (config as { type?: string }).type || "design",
 			name: (config as { name?: string }).name || "",
-			version: (config as { version?: string }).version || "1.0.0",
+			version: (config as { version?: string }).version || MAGIC_PROJECT_VERSION_V1,
 			canvas: {
-				elements:
-					(config as { canvas?: { elements?: LayerElement[] } }).canvas?.elements || [],
+				elements,
 			},
 		}
 
@@ -602,9 +632,7 @@ export function replaceNameInMagicProjectJsContent(
 	try {
 		const config = parseMagicProjectConfigContent(content) as {
 			name?: string
-			canvas?: {
-				elements?: LayerElement[]
-			}
+			canvas?: unknown
 		} | null
 		if (!config || typeof config !== "object") {
 			return content
@@ -618,10 +646,17 @@ export function replaceNameInMagicProjectJsContent(
 			hasReplaced = true
 		}
 
-		// 2. 递归替换 canvas.elements 中所有 ImageElement 的路径字段
-		if (config.canvas?.elements && Array.isArray(config.canvas.elements)) {
-			for (let i = 0; i < config.canvas.elements.length; i++) {
-				const element = config.canvas.elements[i]
+		// 2. 兼容 v2：canvas 为压缩串时先解压，改完路径再压回
+		const rawCanvas = config.canvas
+		const canvasCompressed = isCompressedCanvas(rawCanvas)
+		const canvasObj = (canvasCompressed ? decompressCanvasData(rawCanvas) : rawCanvas) as
+			| { elements?: LayerElement[] }
+			| null
+			| undefined
+
+		if (canvasObj?.elements && Array.isArray(canvasObj.elements)) {
+			for (let i = 0; i < canvasObj.elements.length; i++) {
+				const element = canvasObj.elements[i]
 				const elementRecord = element as unknown as Record<string, unknown>
 
 				if (replacePathsInElement(elementRecord, oldName, newName)) {
@@ -632,6 +667,10 @@ export function replaceNameInMagicProjectJsContent(
 
 		if (!hasReplaced) {
 			return content
+		}
+
+		if (canvasCompressed) {
+			config.canvas = compressCanvasData(canvasObj)
 		}
 
 		// 重新生成文件内容，保持格式一致
@@ -1537,9 +1576,10 @@ export async function packAndDownloadFiles(
 			throw new Error(t("design.errors.cannotGetDownloadUrl"))
 		}
 
-		downloadUrls.forEach((item: { url?: string }, index: number) => {
-			if (item?.url && fileIds[index]) {
-				urlMap.set(fileIds[index], item.url)
+		downloadUrls.forEach((item: { file_id?: string; url?: string }, index: number) => {
+			const fileId = item?.file_id || fileIds[index]
+			if (item?.url && fileId) {
+				urlMap.set(fileId, item.url)
 			}
 		})
 	}

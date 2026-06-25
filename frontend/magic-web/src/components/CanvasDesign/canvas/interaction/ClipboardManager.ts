@@ -5,15 +5,16 @@ import { GenerationStatus, type UploadFileResponse } from "../../types.magic"
 import { toast } from "sonner"
 import {
 	getMediaDimensions,
-	calculateHorizontalImageLayout,
+	calculateGridImageLayout,
 	calculateElementsRect,
 	calculateNodesRect,
+	generateElementId,
+	generateUniqueElementName,
 	isVideoFile,
 	validateFile,
 } from "../utils/utils"
 import {
 	getAllExistingNames,
-	regenerateIdsWithUniqueNames,
 	filterRedundantElements,
 	getCanvasCenter,
 } from "../utils/elementUtils"
@@ -28,7 +29,6 @@ import {
 	type CanvasElementClipboardPayload,
 	type CanvasElementClipboardFileMetadata,
 } from "../utils/CanvasElementClipboard"
-import { logCanvasElementClipboard } from "../utils/CanvasElementClipboardLogger"
 import canvasSize from "canvas-size"
 
 const PNG_MIME_TYPE = "image/png"
@@ -87,6 +87,32 @@ interface CollectedClipboardFiles {
 	metadata: CanvasElementClipboardFileMetadata[]
 	files: CanvasElementClipboardWriteFile[]
 	native?: CanvasElementClipboardNativeExposure
+}
+
+type CanvasContainerElement = Extract<LayerElement, { children?: LayerElement[] }>
+
+interface PreparedClipboardTreeElement {
+	element: LayerElement | null
+	sourceReferenceFailureCount: number
+	pendingUploads: ClipboardTreeFileUpload[]
+}
+
+interface PreparedClipboardTreeFileElement {
+	element: CanvasFileElement | null
+	sourceReferenceFailureCount: number
+	pendingUpload?: ClipboardTreeFileUpload
+}
+
+interface ClipboardTreeFileUpload {
+	sourceElementId: string
+	targetElementId: string
+	sourceCanvasId?: string
+	file?: File
+	metadata?: CanvasElementClipboardFileMetadata
+}
+
+function isCanvasContainerElement(element: LayerElement): element is CanvasContainerElement {
+	return "children" in element
 }
 
 /**
@@ -660,49 +686,13 @@ export class ClipboardManager {
 			files,
 			native: options.native,
 		})
-		logCanvasElementClipboard("clipboard-protocol-write:start", {
-			operation,
-			payload,
-			hasNativeExposure: Boolean(native),
-			nativeMimeType: native?.mimeType,
-			files: files.map((file) => ({
-				metadata: file.metadata,
-				blobContent: file.blob,
-			})),
-		})
 
-		try {
-			await CanvasElementClipboard.write({
-				payload,
-				files,
-				native,
-				clipboard: this.getClipboardBrowserOptions(),
-			})
-			logCanvasElementClipboard("clipboard-protocol-write:success", {
-				operation,
-				payload,
-				hasNativeExposure: Boolean(native),
-				nativeMimeType: native?.mimeType,
-				files: files.map((file) => ({
-					metadata: file.metadata,
-					blobContent: file.blob,
-				})),
-			})
-		} catch (error) {
-			logCanvasElementClipboard("clipboard-protocol-write:error", {
-				operation,
-				message: error instanceof Error ? error.message : String(error),
-				error,
-				payload,
-				hasNativeExposure: Boolean(native),
-				nativeMimeType: native?.mimeType,
-				files: files.map((file) => ({
-					metadata: file.metadata,
-					blobContent: file.blob,
-				})),
-			})
-			throw error
-		}
+		await CanvasElementClipboard.write({
+			payload,
+			files,
+			native,
+			clipboard: this.getClipboardBrowserOptions(),
+		})
 	}
 
 	/**
@@ -832,10 +822,16 @@ export class ClipboardManager {
 	}
 
 	private shouldExposeNativeFileForElementCopy(options: {
-		elementCount: number
+		rootElements: LayerElement[]
+		mediaElement: CanvasFileElement
+		mediaElementCount: number
 		metadata: CanvasElementClipboardFileMetadata
 	}): boolean {
-		if (options.elementCount !== 1) {
+		if (
+			options.rootElements.length !== 1 ||
+			options.mediaElementCount !== 1 ||
+			options.rootElements[0]?.id !== options.mediaElement.id
+		) {
 			return false
 		}
 
@@ -852,14 +848,6 @@ export class ClipboardManager {
 		try {
 			const response = await fetch(metadata.sourceRef.ossUrl, { cache: "default" })
 			if (!response.ok) {
-				logCanvasElementClipboard("copy:native-fetch-failed", {
-					elementId: metadata.elementId,
-					filename: metadata.filename,
-					mimeType: metadata.mimeType,
-					status: response.status,
-					statusText: response.statusText,
-					sourceRef: metadata.sourceRef,
-				})
 				return null
 			}
 
@@ -883,13 +871,6 @@ export class ClipboardManager {
 				},
 			}
 		} catch (error) {
-			logCanvasElementClipboard("copy:native-fetch-error", {
-				elementId: metadata.elementId,
-				filename: metadata.filename,
-				mimeType: metadata.mimeType,
-				message: error instanceof Error ? error.message : String(error),
-				sourceRef: metadata.sourceRef,
-			})
 			return null
 		}
 	}
@@ -897,7 +878,7 @@ export class ClipboardManager {
 	private async collectClipboardFiles(
 		elements: LayerElement[],
 	): Promise<CollectedClipboardFiles> {
-		const mediaElements = elements.filter(CanvasElementClipboard.isCanvasFileElement)
+		const mediaElements = this.getClipboardMediaElements(elements)
 		const metadataList: CanvasElementClipboardFileMetadata[] = []
 		const files: CanvasElementClipboardWriteFile[] = []
 		let native: CanvasElementClipboardNativeExposure | undefined
@@ -921,7 +902,9 @@ export class ClipboardManager {
 
 			if (
 				this.shouldExposeNativeFileForElementCopy({
-					elementCount: elements.length,
+					rootElements: elements,
+					mediaElement: element,
+					mediaElementCount: mediaElements.length,
 					metadata,
 				})
 			) {
@@ -934,6 +917,25 @@ export class ClipboardManager {
 		}
 
 		return { metadata: metadataList, files, native }
+	}
+
+	private getClipboardMediaElements(elements: LayerElement[]): CanvasFileElement[] {
+		const mediaElements: CanvasFileElement[] = []
+
+		const collect = (element: LayerElement): void => {
+			if (CanvasElementClipboard.isCanvasFileElement(element)) {
+				mediaElements.push(element)
+			}
+
+			if (!isCanvasContainerElement(element) || !Array.isArray(element.children)) {
+				return
+			}
+
+			element.children.forEach(collect)
+		}
+
+		elements.forEach(collect)
+		return mediaElements
 	}
 
 	/**
@@ -1025,30 +1027,11 @@ export class ClipboardManager {
 		pasteSource: CanvasElementClipboardPasteSource = clipboardEvent ? "keyboard" : "menu",
 	): Promise<void> {
 		try {
-			logCanvasElementClipboard("paste:start", {
-				pasteSource,
-				hasClipboardEvent: Boolean(clipboardEvent),
-				hasPosition: Boolean(position),
-				position,
-			})
 			// 解析细节统一收敛在 CanvasElementClipboard：
 			// Ctrl/Cmd+V 会传 clipboardEvent；菜单粘贴传 undefined。
 			const parseResult = await CanvasElementClipboard.parseClipboardContent(clipboardEvent, {
 				...this.getClipboardBrowserOptions(),
 				pasteSource,
-			})
-			logCanvasElementClipboard("paste:parse-result", {
-				pasteSource,
-				type: parseResult.type,
-				elementCount:
-					parseResult.type === "canvas-elements" ? parseResult.elements.length : 0,
-				fileCount:
-					parseResult.type === "canvas-elements"
-						? parseResult.files.length
-						: parseResult.type === "files"
-							? parseResult.files.length
-							: 0,
-				reason: parseResult.type === "invalid" ? parseResult.reason : undefined,
 			})
 
 			// 根据解析结果执行相应操作
@@ -1072,16 +1055,6 @@ export class ClipboardManager {
 			}
 
 			if (parseResult.type === "canvas-elements") {
-				logCanvasElementClipboard("paste:canvas-elements:start", {
-					pasteSource,
-					elementCount: parseResult.elements.length,
-					fileCount: parseResult.files.length,
-					canvasId: parseResult.canvasId,
-					targetPosition: position,
-					elementIds: parseResult.elements.map((element) => element.id),
-					fileElementIds: parseResult.files.map(({ metadata }) => metadata.elementId),
-					fileMimeTypes: parseResult.files.map(({ file }) => file.type),
-				})
 				await this.pasteCanvasElementsFromRichClipboard(
 					parseResult.elements,
 					parseResult.files,
@@ -1093,22 +1066,11 @@ export class ClipboardManager {
 			}
 
 			if (parseResult.type === "files") {
-				logCanvasElementClipboard("paste:files:start", {
-					pasteSource,
-					fileCount: parseResult.files.length,
-					fileNames: parseResult.files.map((file) => file.name),
-					fileMimeTypes: parseResult.files.map((file) => file.type),
-					targetPosition: position,
-				})
 				await this.pasteFilesFromClipboard(parseResult.files, position)
 				return
 			}
-		} catch (error) {
-			logCanvasElementClipboard("paste:error", {
-				pasteSource,
-				message: error instanceof Error ? error.message : String(error),
-				error,
-			})
+		} catch {
+			return
 		}
 	}
 
@@ -1116,25 +1078,27 @@ export class ClipboardManager {
 		element: CanvasFileElement,
 		finalElement: LayerElement,
 	): Partial<ImageElement> | Partial<VideoElement> {
-		const persistedElementData = omitKeys(cloneSerializable(element), [
-			"id",
-			"type",
-			"src",
-			"status",
-			"errorMessage",
-			"name",
-			"x",
-			"y",
-			"width",
-			"height",
-			"zIndex",
-			"visible",
-			"locked",
-			"opacity",
-			"scaleX",
-			"scaleY",
-			"interactionConfig",
-		] as const)
+		const persistedElementData = this.stripMediaGenerationTaskIdentity(
+			omitKeys(cloneSerializable(element), [
+				"id",
+				"type",
+				"src",
+				"status",
+				"errorMessage",
+				"name",
+				"x",
+				"y",
+				"width",
+				"height",
+				"zIndex",
+				"visible",
+				"locked",
+				"opacity",
+				"scaleX",
+				"scaleY",
+				"interactionConfig",
+			] as const),
+		)
 
 		const commonData = {
 			name: finalElement.name,
@@ -1161,11 +1125,52 @@ export class ClipboardManager {
 		finalElement: CanvasFileElement,
 		uploadResult: UploadFileResponse,
 	): CanvasFileElement {
-		return {
+		return this.stripMediaGenerationTaskIdentity({
 			...finalElement,
 			src: uploadResult.path,
 			status: GenerationStatus.Completed,
+		})
+	}
+
+	private getFileElementUploadingPlaceholder(finalElement: CanvasFileElement): CanvasFileElement {
+		return this.stripMediaGenerationTaskIdentity({
+			...finalElement,
+			src: undefined,
+			status: GenerationStatus.Processing,
+			errorMessage: undefined,
+		})
+	}
+
+	private stripMediaGenerationTaskIdentity<
+		T extends CanvasFileElement | Partial<ImageElement> | Partial<VideoElement>,
+	>(element: T): T {
+		const sanitized = { ...element } as T & Partial<ImageElement> & Partial<VideoElement>
+
+		if (sanitized.generateImageRequest?.image_id) {
+			const generateImageRequest = { ...sanitized.generateImageRequest }
+			delete generateImageRequest.image_id
+			sanitized.generateImageRequest = generateImageRequest
 		}
+
+		if (sanitized.imageGenerationTaskMeta?.image_id) {
+			const imageGenerationTaskMeta = { ...sanitized.imageGenerationTaskMeta }
+			delete imageGenerationTaskMeta.image_id
+			sanitized.imageGenerationTaskMeta = imageGenerationTaskMeta
+		}
+
+		if (sanitized.generateHightImageRequest?.image_id) {
+			const generateHightImageRequest = { ...sanitized.generateHightImageRequest }
+			delete generateHightImageRequest.image_id
+			sanitized.generateHightImageRequest = generateHightImageRequest
+		}
+
+		if (sanitized.generateVideoRequest?.video_id) {
+			const generateVideoRequest = { ...sanitized.generateVideoRequest }
+			delete generateVideoRequest.video_id
+			sanitized.generateVideoRequest = generateVideoRequest
+		}
+
+		return sanitized
 	}
 
 	private primeFileElementResourceCache(
@@ -1177,16 +1182,319 @@ export class ClipboardManager {
 		}
 
 		if (element.type === ElementTypeEnum.Image) {
-			this.canvas.imageResourceManager.primeCache(uploadResult.path, {
-				src: uploadResult.src,
-				expires_at: uploadResult.expires_at,
-			})
+			this.canvas.imageResourceManager.primeCache(uploadResult.path, uploadResult)
 			return
 		}
 
-		this.canvas.videoResourceManager.primeCache(uploadResult.path, {
-			src: uploadResult.src,
-			expires_at: uploadResult.expires_at,
+		this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
+	}
+
+	private cloneElementForPaste(element: LayerElement, currentNames: Set<string>): LayerElement {
+		const clonedElement = { ...element, id: generateElementId() } as LayerElement
+
+		if (clonedElement.name) {
+			clonedElement.name = generateUniqueElementName(clonedElement.name, currentNames)
+			currentNames.add(clonedElement.name)
+		}
+
+		return clonedElement
+	}
+
+	private async resolveCrossCanvasTreeFileElement(options: {
+		sourceElement: CanvasFileElement
+		finalElement: CanvasFileElement
+		fileByElementId: Map<string, File>
+		metadataByElementId: Map<string, CanvasElementClipboardFileMetadata>
+		sourceCanvasId?: string
+	}): Promise<PreparedClipboardTreeFileElement> {
+		const {
+			sourceElement,
+			finalElement,
+			fileByElementId,
+			metadataByElementId,
+			sourceCanvasId,
+		} = options
+		const metadata = metadataByElementId.get(sourceElement.id)
+
+		if (metadata) {
+			const completedTransfer =
+				await this.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer(
+					{
+						sourceCanvasId,
+						metadata,
+					},
+				)
+			if (completedTransfer) {
+				const cachedElement = this.getFileElementDataWithUploadResult(
+					finalElement,
+					completedTransfer,
+				)
+				this.primeFileElementResourceCache(cachedElement, completedTransfer)
+				return {
+					element: cachedElement,
+					sourceReferenceFailureCount: 0,
+				}
+			}
+		}
+
+		const file = fileByElementId.get(sourceElement.id)
+		if (file) {
+			return {
+				element: this.getFileElementUploadingPlaceholder(finalElement),
+				sourceReferenceFailureCount: 0,
+				pendingUpload: {
+					sourceElementId: sourceElement.id,
+					targetElementId: finalElement.id,
+					sourceCanvasId,
+					file,
+				},
+			}
+		}
+
+		if (metadata?.sourceRef?.ossUrl) {
+			return {
+				element: this.getFileElementUploadingPlaceholder(finalElement),
+				sourceReferenceFailureCount: 0,
+				pendingUpload: {
+					sourceElementId: sourceElement.id,
+					targetElementId: finalElement.id,
+					sourceCanvasId,
+					metadata,
+				},
+			}
+		}
+
+		return {
+			element: null,
+			sourceReferenceFailureCount: 1,
+		}
+	}
+
+	private async prepareClipboardTreeElement(options: {
+		sourceElement: LayerElement
+		currentNames: Set<string>
+		isRoot: boolean
+		offsetX: number
+		offsetY: number
+		rootZIndex?: number
+		canReuseElementSrc: boolean
+		fileByElementId: Map<string, File>
+		metadataByElementId: Map<string, CanvasElementClipboardFileMetadata>
+		sourceCanvasId?: string
+	}): Promise<PreparedClipboardTreeElement> {
+		const {
+			sourceElement,
+			currentNames,
+			isRoot,
+			offsetX,
+			offsetY,
+			rootZIndex,
+			canReuseElementSrc,
+			fileByElementId,
+			metadataByElementId,
+			sourceCanvasId,
+		} = options
+		let sourceReferenceFailureCount = 0
+		const pendingUploads: ClipboardTreeFileUpload[] = []
+		let finalElement = this.cloneElementForPaste(sourceElement, currentNames)
+
+		if (isRoot) {
+			finalElement = {
+				...finalElement,
+				x: (sourceElement.x ?? 0) + offsetX,
+				y: (sourceElement.y ?? 0) + offsetY,
+				zIndex: rootZIndex,
+			} as LayerElement
+		}
+
+		if (isCanvasContainerElement(sourceElement) && Array.isArray(sourceElement.children)) {
+			const preparedChildren: LayerElement[] = []
+
+			for (const child of sourceElement.children) {
+				const preparedChild = await this.prepareClipboardTreeElement({
+					sourceElement: child,
+					currentNames,
+					isRoot: false,
+					offsetX,
+					offsetY,
+					canReuseElementSrc,
+					fileByElementId,
+					metadataByElementId,
+					sourceCanvasId,
+				})
+				sourceReferenceFailureCount += preparedChild.sourceReferenceFailureCount
+				pendingUploads.push(...preparedChild.pendingUploads)
+				if (preparedChild.element) {
+					preparedChildren.push(preparedChild.element)
+				}
+			}
+
+			;(finalElement as CanvasContainerElement).children = preparedChildren
+		}
+
+		if (!CanvasElementClipboard.isCanvasFileElement(sourceElement)) {
+			return { element: finalElement, sourceReferenceFailureCount, pendingUploads }
+		}
+
+		if (canReuseElementSrc) {
+			return { element: finalElement, sourceReferenceFailureCount, pendingUploads }
+		}
+
+		const resolvedFileElement = await this.resolveCrossCanvasTreeFileElement({
+			sourceElement,
+			finalElement: finalElement as CanvasFileElement,
+			fileByElementId,
+			metadataByElementId,
+			sourceCanvasId,
+		})
+
+		sourceReferenceFailureCount += resolvedFileElement.sourceReferenceFailureCount
+		if (resolvedFileElement.pendingUpload) {
+			pendingUploads.push(resolvedFileElement.pendingUpload)
+		}
+
+		return {
+			element: resolvedFileElement.element,
+			sourceReferenceFailureCount,
+			pendingUploads,
+		}
+	}
+
+	private async resolveClipboardTreeUploadResult(
+		upload: ClipboardTreeFileUpload,
+	): Promise<UploadFileResponse | null> {
+		if (upload.file) {
+			try {
+				const [uploadResult] = await this.canvas.canvasFileUploadManager.uploadDirect([
+					upload.file,
+				])
+				if (!uploadResult) {
+					return null
+				}
+				return uploadResult
+			} catch {
+				return null
+			}
+		}
+
+		if (!upload.metadata) {
+			return null
+		}
+
+		return this.canvas.canvasFileUploadManager.transferRemoteResource({
+			sourceCanvasId: upload.sourceCanvasId,
+			metadata: upload.metadata,
+		})
+	}
+
+	private applyClipboardTreeUploadResult(
+		upload: ClipboardTreeFileUpload,
+		uploadResult: UploadFileResponse,
+	): boolean {
+		if (!this.canvas.elementManager.hasElement(upload.targetElementId)) {
+			return false
+		}
+
+		const currentElement = this.canvas.elementManager.getElementData(upload.targetElementId)
+		if (!currentElement || !CanvasElementClipboard.isCanvasFileElement(currentElement)) {
+			return false
+		}
+
+		const uploadedElement = this.getFileElementDataWithUploadResult(
+			currentElement,
+			uploadResult,
+		)
+		this.primeFileElementResourceCache(uploadedElement, uploadResult)
+
+		if (this.canvas.elementManager.isTemporary(upload.targetElementId)) {
+			this.canvas.elementManager.convertToPermament(upload.targetElementId, uploadedElement, {
+				silent: true,
+			})
+		} else {
+			this.canvas.elementManager.update(upload.targetElementId, uploadedElement, {
+				silent: false,
+			})
+		}
+		this.activateUploadedFileElementResource(uploadedElement, uploadResult)
+
+		return true
+	}
+
+	private activateUploadedFileElementResource(
+		element: CanvasFileElement,
+		uploadResult: UploadFileResponse,
+	): void {
+		const elementInstance = this.canvas.elementManager.getElementInstance(element.id)
+
+		if (
+			element.type === ElementTypeEnum.Image &&
+			uploadResult.src &&
+			elementInstance &&
+			"setOssSrc" in elementInstance &&
+			typeof elementInstance.setOssSrc === "function"
+		) {
+			elementInstance.setOssSrc(uploadResult.src)
+		}
+
+		if (
+			element.type === ElementTypeEnum.Video &&
+			elementInstance &&
+			"requestPreviewLoad" in elementInstance &&
+			typeof elementInstance.requestPreviewLoad === "function"
+		) {
+			elementInstance.requestPreviewLoad({ force: true })
+		}
+
+		this.canvas.visibilityManager.requestImmediateMediaLoadForElements([element.id], {
+			reason: "clipboard-tree-upload",
+			priority: "critical",
+		})
+	}
+
+	private applyClipboardTreeUploadFailure(upload: ClipboardTreeFileUpload): void {
+		if (!this.canvas.elementManager.hasElement(upload.targetElementId)) {
+			return
+		}
+
+		this.canvas.elementManager.update(
+			upload.targetElementId,
+			{
+				status: GenerationStatus.Failed,
+				errorMessage:
+					this.canvas.t?.(
+						"menu.clipboardSourceUnavailable",
+						"原文件链接已失效或无法访问，请重新复制后再粘贴",
+					) || "原文件链接已失效或无法访问，请重新复制后再粘贴",
+			},
+			{ silent: true },
+		)
+	}
+
+	private runClipboardTreeFileUploads(uploads: ClipboardTreeFileUpload[]): void {
+		if (uploads.length === 0) {
+			return
+		}
+
+		void Promise.all(
+			uploads.map(async (upload) => {
+				const uploadResult = await this.resolveClipboardTreeUploadResult(upload)
+				if (!uploadResult) {
+					this.applyClipboardTreeUploadFailure(upload)
+					return false
+				}
+				return this.applyClipboardTreeUploadResult(upload, uploadResult)
+			}),
+		).then((results) => {
+			const successCount = results.filter(Boolean).length
+			const failureCount = uploads.length - successCount
+
+			if (successCount > 0) {
+				this.canvas.historyManager.recordHistoryImmediate()
+			}
+
+			if (failureCount > 0) {
+				this.showClipboardSourceUnavailableHint()
+			}
 		})
 	}
 
@@ -1211,43 +1519,10 @@ export class ClipboardManager {
 				: this.getElementsCenterOffset(sortedElements, targetPosition)
 		const canReuseElementSrc = this.canPasteFromClipboardCanvas(canvasId)
 		const createdElementIds: string[] = []
+		const pendingTreeFileUploads: ClipboardTreeFileUpload[] = []
 		let sourceReferenceFailureCount = 0
 		let hasShownSourceUnavailableHint = false
 		let hasPendingFileUploadElements = false
-
-		logCanvasElementClipboard("paste-canvas-elements:start", {
-			sourceCanvasId: canvasId,
-			currentCanvasId: this.canvas.id,
-			elementCount: sortedElements.length,
-			fileCount: files.length,
-			fileMetadataCount: fileMetadata.length,
-			canReuseElementSrc,
-			targetPosition,
-			offsetX,
-			offsetY,
-			elements: sortedElements.map((element) => ({
-				id: element.id,
-				type: element.type,
-				name: element.name,
-				x: element.x,
-				y: element.y,
-				width: element.width,
-				height: element.height,
-				zIndex: element.zIndex,
-			})),
-			files: files.map(({ metadata, file }) => ({
-				metadata,
-				fileName: file.name,
-				fileType: file.type,
-				fileSize: file.size,
-			})),
-			referenceFiles: fileMetadata
-				.filter((metadata) => metadata.sourceRef)
-				.map((metadata) => ({
-					elementId: metadata.elementId,
-					sourceRef: metadata.sourceRef,
-				})),
-		})
 
 		this.canvas.historyManager.disable()
 
@@ -1259,15 +1534,49 @@ export class ClipboardManager {
 					let nextZIndex = maxZIndex + 1
 
 					for (const element of sortedElements) {
-						const elementWithNewIds = regenerateIdsWithUniqueNames(
-							element,
-							currentNames,
-						)
+						const rootZIndex = nextZIndex++
+
+						if (isCanvasContainerElement(element) && Array.isArray(element.children)) {
+							const preparedTree = await this.prepareClipboardTreeElement({
+								sourceElement: element,
+								currentNames,
+								isRoot: true,
+								offsetX,
+								offsetY,
+								rootZIndex,
+								canReuseElementSrc,
+								fileByElementId,
+								metadataByElementId,
+								sourceCanvasId: canvasId,
+							})
+							sourceReferenceFailureCount += preparedTree.sourceReferenceFailureCount
+
+							if (preparedTree.element) {
+								preparedTree.pendingUploads.forEach((upload) => {
+									this.canvas.elementManager.markElementTemporary(
+										upload.targetElementId,
+									)
+								})
+								this.canvas.elementManager.create(preparedTree.element)
+								this.canvas.visibilityManager.requestImmediateMediaLoadForElements(
+									[preparedTree.element.id],
+									{
+										reason: "clipboard-container-tree",
+										priority: "critical",
+									},
+								)
+								pendingTreeFileUploads.push(...preparedTree.pendingUploads)
+								createdElementIds.push(preparedTree.element.id)
+							}
+							continue
+						}
+
+						const elementWithNewIds = this.cloneElementForPaste(element, currentNames)
 						const finalElement = {
 							...elementWithNewIds,
 							x: (element.x ?? 0) + offsetX,
 							y: (element.y ?? 0) + offsetY,
-							zIndex: nextZIndex++,
+							zIndex: rootZIndex,
 						}
 
 						if (CanvasElementClipboard.isCanvasFileElement(element)) {
@@ -1275,22 +1584,13 @@ export class ClipboardManager {
 							if (canReuseElementSrc) {
 								this.canvas.elementManager.create(finalElement)
 								createdElementIds.push(finalElement.id)
-								logCanvasElementClipboard(
-									"paste-canvas-elements:create-same-canvas-file",
-									{
-										sourceElementId: element.id,
-										createdElementId: finalElement.id,
-										elementType: finalElement.type,
-										reusedSrc: true,
-									},
-								)
 								continue
 							}
 
 							const metadata = metadataByElementId.get(element.id)
 							if (metadata) {
 								const completedTransfer =
-									this.canvas.canvasFileUploadManager.getCompletedRemoteResourceTransfer(
+									await this.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer(
 										{
 											sourceCanvasId: canvasId,
 											metadata,
@@ -1309,43 +1609,12 @@ export class ClipboardManager {
 									)
 									this.canvas.elementManager.create(cachedFileElement)
 									createdElementIds.push(cachedFileElement.id)
-									logCanvasElementClipboard(
-										"paste-canvas-elements:create-cached-file",
-										{
-											sourceElementId: element.id,
-											createdElementId: cachedFileElement.id,
-											elementType: cachedFileElement.type,
-											result: {
-												path: completedTransfer.path,
-												fileName: completedTransfer.fileName,
-												expiresAt: completedTransfer.expires_at,
-												source: completedTransfer.source,
-												hasSrc: Boolean(completedTransfer.src),
-											},
-										},
-									)
 									continue
 								}
 							}
 
 							const file = fileByElementId.get(element.id)
 							if (file) {
-								logCanvasElementClipboard("paste-canvas-elements:upload-start", {
-									sourceElementId: element.id,
-									sourceElementType: element.type,
-									targetElementId: finalElement.id,
-									fileName: file.name,
-									fileType: file.type,
-									fileSize: file.size,
-									position: {
-										x: (finalElement.x ?? 0) + (finalElement.width ?? 0) / 2,
-										y: (finalElement.y ?? 0) + (finalElement.height ?? 0) / 2,
-									},
-									elementData: this.getFileElementInitialData(
-										element,
-										finalElement,
-									),
-								})
 								const elementId =
 									await this.canvas.canvasFileUploadManager.uploadFileElement({
 										file,
@@ -1366,53 +1635,11 @@ export class ClipboardManager {
 								if (elementId) {
 									hasPendingFileUploadElements = true
 									createdElementIds.push(elementId)
-									logCanvasElementClipboard(
-										"paste-canvas-elements:upload-created",
-										{
-											sourceElementId: element.id,
-											createdElementId: elementId,
-											fileName: file.name,
-											fileType: file.type,
-											fileSize: file.size,
-										},
-									)
-								} else {
-									logCanvasElementClipboard(
-										"paste-canvas-elements:upload-create-failed",
-										{
-											sourceElementId: element.id,
-											targetElementId: finalElement.id,
-											fileName: file.name,
-											fileType: file.type,
-											fileSize: file.size,
-										},
-									)
 								}
 								continue
 							}
 
 							if (metadata?.sourceRef?.ossUrl) {
-								logCanvasElementClipboard(
-									"paste-canvas-elements:remote-upload-create",
-									{
-										sourceElementId: element.id,
-										sourceElementType: element.type,
-										targetElementId: finalElement.id,
-										metadata,
-										position: {
-											x:
-												(finalElement.x ?? 0) +
-												(finalElement.width ?? 0) / 2,
-											y:
-												(finalElement.y ?? 0) +
-												(finalElement.height ?? 0) / 2,
-										},
-										elementData: this.getFileElementInitialData(
-											element,
-											finalElement,
-										),
-									},
-								)
 								const elementId =
 									await this.canvas.canvasFileUploadManager.uploadRemoteFileElement(
 										{
@@ -1443,52 +1670,19 @@ export class ClipboardManager {
 								if (elementId) {
 									hasPendingFileUploadElements = true
 									createdElementIds.push(elementId)
-									logCanvasElementClipboard(
-										"paste-canvas-elements:remote-upload-created",
-										{
-											sourceElementId: element.id,
-											createdElementId: elementId,
-											metadata,
-										},
-									)
 								} else {
 									sourceReferenceFailureCount += 1
-									logCanvasElementClipboard(
-										"paste-canvas-elements:remote-upload-create-failed",
-										{
-											sourceElementId: element.id,
-											targetElementId: finalElement.id,
-											metadata,
-										},
-									)
 								}
 								continue
 							}
 
 							if (!canReuseElementSrc) {
-								logCanvasElementClipboard(
-									"paste-canvas-elements:skip-file-element",
-									{
-										sourceElementId: element.id,
-										sourceElementType: element.type,
-										reason: "missing-file-and-cross-canvas-src-reuse-disabled",
-										hasSourceRef: Boolean(
-											metadataByElementId.get(element.id)?.sourceRef?.ossUrl,
-										),
-									},
-								)
 								continue
 							}
 						}
 
 						this.canvas.elementManager.create(finalElement)
 						createdElementIds.push(finalElement.id)
-						logCanvasElementClipboard("paste-canvas-elements:create-direct", {
-							sourceElementId: element.id,
-							createdElementId: finalElement.id,
-							elementType: finalElement.type,
-							reusedSrc: CanvasElementClipboard.isCanvasFileElement(element),
-						})
 					}
 
 					return { pendingBatchId }
@@ -1501,7 +1695,8 @@ export class ClipboardManager {
 				this.focusOnElements(createdElementIds)
 				this.canvas.historyManager.recordHistoryImmediate()
 			}
-			if (sourceReferenceFailureCount > 0) {
+			if (sourceReferenceFailureCount > 0 && !hasShownSourceUnavailableHint) {
+				hasShownSourceUnavailableHint = true
 				this.showClipboardSourceUnavailableHint()
 			}
 			if (
@@ -1511,22 +1706,9 @@ export class ClipboardManager {
 			) {
 				this.canvas.canvasFileUploadManager.commitPendingUploadBatch(pendingBatchId)
 			}
-			logCanvasElementClipboard("paste-canvas-elements:done", {
-				createdElementIds,
-				pendingBatchId,
-				sourceReferenceFailureCount,
-				hasPendingFileUploadElements,
-				hasPendingUploadBatch: pendingBatchId
-					? this.canvas.canvasFileUploadManager.hasPendingUploadBatch(pendingBatchId)
-					: false,
-			})
+			this.runClipboardTreeFileUploads(pendingTreeFileUploads)
 		} catch (error) {
 			this.canvas.historyManager.enable()
-			logCanvasElementClipboard("paste-canvas-elements:error", {
-				message: error instanceof Error ? error.message : String(error),
-				error,
-				createdElementIds,
-			})
 			throw error
 		}
 	}
@@ -1538,19 +1720,24 @@ export class ClipboardManager {
 		files: File[],
 		position?: { x: number; y: number },
 	): Promise<void> {
-		logCanvasElementClipboard("paste-files:dispatch", {
-			fileCount: files.length,
-			fileNames: files.map((file) => file.name),
-			fileMimeTypes: files.map((file) => file.type),
-			position,
-		})
 		if (files.length === 1) {
 			await this.pasteCanvasFile(files[0], position)
 			return
 		}
 
 		const targetPosition = this.getTargetPosition(position)
-		await this.pasteMultipleCanvasFiles(files, targetPosition)
+		const total = files.length
+		const dropOverlay = this.canvas.dropOverlayManager
+		dropOverlay.showProgressOverlay(0, total)
+		try {
+			await this.pasteMultipleCanvasFiles(files, targetPosition, {
+				onProgress: (current) => {
+					dropOverlay.updateProgressOverlay(current, total)
+				},
+			})
+		} finally {
+			dropOverlay.hideProgressOverlay()
+		}
 	}
 
 	/**
@@ -1563,16 +1750,8 @@ export class ClipboardManager {
 	public async pasteMultipleCanvasFiles(
 		files: File[],
 		anchorPosition: { x: number; y: number },
-		options?: { skipFocus?: boolean },
+		options?: { skipFocus?: boolean; onProgress?: (current: number) => void },
 	): Promise<string[]> {
-		logCanvasElementClipboard("paste-multiple-files:start", {
-			fileCount: files.length,
-			fileNames: files.map((file) => file.name),
-			fileMimeTypes: files.map((file) => file.type),
-			fileSizes: files.map((file) => file.size),
-			anchorPosition,
-			skipFocus: options?.skipFocus,
-		})
 		this.canvas.historyManager.disable()
 
 		try {
@@ -1583,24 +1762,19 @@ export class ClipboardManager {
 					const mediaDimensions = await Promise.all(
 						files.map((file) => getMediaDimensions(file)),
 					)
-					const positions = calculateHorizontalImageLayout(
-						mediaDimensions,
-						anchorPosition,
-						0,
-					)
+					const positions = calculateGridImageLayout(mediaDimensions, anchorPosition)
 
 					const createdElementIds: string[] = []
 					for (let i = 0; i < files.length; i++) {
 						const file = files[i]
 						const position = positions[i]
 
-						logCanvasElementClipboard("paste-multiple-files:upload-start", {
-							index: i,
-							fileName: file.name,
-							fileType: file.type,
-							fileSize: file.size,
-							position,
-						})
+						if (options?.onProgress) {
+							options.onProgress(i + 1)
+							// 让出一帧让浏览器渲染进度更新
+							await new Promise((r) => requestAnimationFrame(r))
+						}
+
 						const elementId =
 							await this.canvas.canvasFileUploadManager.uploadFileElement({
 								file,
@@ -1609,20 +1783,6 @@ export class ClipboardManager {
 							})
 						if (elementId) {
 							createdElementIds.push(elementId)
-							logCanvasElementClipboard("paste-multiple-files:upload-created", {
-								index: i,
-								elementId,
-								fileName: file.name,
-								fileType: file.type,
-								fileSize: file.size,
-							})
-						} else {
-							logCanvasElementClipboard("paste-multiple-files:upload-create-failed", {
-								index: i,
-								fileName: file.name,
-								fileType: file.type,
-								fileSize: file.size,
-							})
 						}
 					}
 
@@ -1648,13 +1808,6 @@ export class ClipboardManager {
 			)
 		} catch (error) {
 			this.canvas.historyManager.enable()
-			logCanvasElementClipboard("paste-multiple-files:error", {
-				message: error instanceof Error ? error.message : String(error),
-				error,
-				fileCount: files.length,
-				fileNames: files.map((file) => file.name),
-				fileMimeTypes: files.map((file) => file.type),
-			})
 			throw error
 		}
 	}
@@ -1671,45 +1824,18 @@ export class ClipboardManager {
 		position?: { x: number; y: number },
 		options?: { skipFocus?: boolean },
 	): Promise<string | null> {
-		logCanvasElementClipboard("paste-file:start", {
-			fileName: file.name,
-			fileType: file.type,
-			fileSize: file.size,
-			position,
-			skipFocus: options?.skipFocus,
-			readonly: this.canvas.readonly,
-		})
 		if (this.canvas.readonly) {
-			logCanvasElementClipboard("paste-file:skip", {
-				reason: "readonly",
-				fileName: file.name,
-				fileType: file.type,
-				fileSize: file.size,
-			})
 			return null
 		}
 
 		const validation = validateFile(file)
 		if (!validation.valid) {
-			logCanvasElementClipboard("paste-file:skip", {
-				reason: "invalid-file",
-				fileName: file.name,
-				fileType: file.type,
-				fileSize: file.size,
-				validation,
-			})
 			return null
 		}
 
 		const targetPosition = this.getTargetPosition(position)
 		const elementIds = await this.pasteMultipleCanvasFiles([file], targetPosition, options)
 
-		logCanvasElementClipboard("paste-file:done", {
-			fileName: file.name,
-			fileType: file.type,
-			fileSize: file.size,
-			elementIds,
-		})
 		return elementIds.length > 0 ? elementIds[0] : null
 	}
 

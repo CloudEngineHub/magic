@@ -37,6 +37,10 @@ class IdleMonitorService:
 
     def start(self):
         """启动监控服务"""
+        if not Environment.is_agent_idle_monitor_enabled():
+            logger.info("空闲监控服务已通过 ENABLE_AGENT_IDLE_MONITOR 禁用")
+            return
+
         if self._running:
             logger.warning("监控服务已经在运行")
             return

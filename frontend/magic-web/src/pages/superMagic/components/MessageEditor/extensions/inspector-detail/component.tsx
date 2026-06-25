@@ -4,7 +4,12 @@ import type { NodeViewProps } from "@tiptap/react"
 import { ChevronRight, ChevronDown, Crosshair } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import {
+	MentionItemType,
+	type ProjectFileMentionData,
+} from "@/components/business/MentionPanel/types"
 import type { InspectorDetailAttrs } from "./types"
+import { getInspectorDetailHeaderLabel } from "./display"
 
 export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node, selected }) => {
 	const attrs = node.attrs as InspectorDetailAttrs
@@ -20,21 +25,21 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node, select
 	})()
 	const styleEntries = Object.entries(parsedStyles)
 
-	// Build summary: tagName | size | N styles
-	const summaryParts: string[] = []
-	if (attrs.tagName) summaryParts.push(attrs.tagName)
-	if (attrs.size) summaryParts.push(attrs.size)
-	if (attrs.styleCount > 0)
-		summaryParts.push(
-			`${attrs.styleCount} ${t("stylePanel.inspector.computedStyles").toLowerCase()}`,
-		)
+	const headerLabel = getInspectorDetailHeaderLabel(t)
+	const fileData =
+		attrs.fileMention?.type === MentionItemType.PROJECT_FILE
+			? (attrs.fileMention.data as ProjectFileMentionData)
+			: null
 
 	return (
 		<NodeViewWrapper
-			as="div"
+			as="span"
 			data-type="inspector-detail"
 			className={cn(
-				"my-0.5 select-none rounded-md border transition-colors",
+				"select-none rounded-md border transition-colors",
+				expanded
+					? "my-1 block w-full"
+					: "mx-0.5 inline-flex max-w-[min(360px,100%)] align-baseline",
 				selected
 					? "border-primary/50 bg-primary/5"
 					: "border-border/60 bg-muted/30 hover:border-border",
@@ -44,7 +49,8 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node, select
 			<button
 				type="button"
 				className={cn(
-					"flex w-full cursor-pointer items-center gap-1 px-2 py-1 text-left text-xs",
+					"flex max-w-full cursor-pointer items-center gap-1 px-2 py-1 text-left text-xs",
+					expanded ? "w-full" : "w-auto",
 					expanded && "border-b border-border/40",
 				)}
 				onClick={() => setExpanded((v) => !v)}
@@ -52,7 +58,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node, select
 			>
 				<Crosshair size={12} className="flex-shrink-0 text-muted-foreground/70" />
 				<span className="min-w-0 flex-1 truncate font-medium text-foreground/80">
-					{summaryParts.join(" · ")}
+					{headerLabel}
 				</span>
 				{expanded ? (
 					<ChevronDown size={12} className="flex-shrink-0 text-muted-foreground/50" />
@@ -63,39 +69,50 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node, select
 
 			{/* Expanded detail panel */}
 			{expanded && (
-				<div
-					className="space-y-1 px-2 py-1.5 text-[11px] text-foreground/70"
+				<span
+					className="block space-y-1 px-2 py-1.5 text-[11px] text-foreground/70"
 					contentEditable={false}
 				>
+					{fileData && (
+						<span className="flex gap-1.5">
+							<span className="flex-shrink-0 text-foreground/50">
+								{t("stylePanel.inspector.file")}
+							</span>
+							<span className="min-w-0 break-all text-primary">
+								@{fileData.file_name}
+							</span>
+						</span>
+					)}
+
 					{/* Selector */}
 					{attrs.selector && (
-						<div className="flex gap-1.5">
+						<span className="flex gap-1.5">
 							<span className="flex-shrink-0 text-foreground/50">
 								{t("stylePanel.inspector.selector")}
 							</span>
 							<code className="min-w-0 break-all font-mono text-foreground/70">
 								{attrs.selector}
 							</code>
-						</div>
+						</span>
 					)}
 
 					{/* Size */}
 					{attrs.size && (
-						<div className="flex gap-1.5">
+						<span className="flex gap-1.5">
 							<span className="flex-shrink-0 text-foreground/50">
 								{t("stylePanel.inspector.size")}
 							</span>
 							<span>{attrs.size}</span>
-						</div>
+						</span>
 					)}
 
 					{/* Computed styles */}
 					{styleEntries.length > 0 && (
-						<div>
+						<span className="block">
 							<span className="text-foreground/50">
 								{t("stylePanel.inspector.computedStyles")}
 							</span>
-							<div className="mt-0.5 grid grid-cols-[auto_1fr] gap-x-1.5 gap-y-px rounded bg-muted/50 px-1.5 py-1 font-mono text-[11px]">
+							<span className="mt-0.5 grid grid-cols-[auto_1fr] gap-x-1.5 gap-y-px rounded bg-muted/50 px-1.5 py-1 font-mono text-[11px]">
 								{styleEntries.map(([prop, value]) => (
 									<Fragment key={prop}>
 										<span className="text-foreground/50">{prop}:</span>
@@ -104,22 +121,22 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node, select
 										</span>
 									</Fragment>
 								))}
-							</div>
-						</div>
+							</span>
+						</span>
 					)}
 
 					{/* Text content */}
 					{attrs.textContent && (
-						<div className="flex gap-1.5">
+						<span className="flex gap-1.5">
 							<span className="flex-shrink-0 text-foreground/50">
 								{t("stylePanel.inspector.textContent")}
 							</span>
 							<span className="min-w-0 break-all italic">
 								&ldquo;{attrs.textContent}&rdquo;
 							</span>
-						</div>
+						</span>
 					)}
-				</div>
+				</span>
 			)}
 		</NodeViewWrapper>
 	)

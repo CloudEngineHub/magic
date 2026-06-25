@@ -32,6 +32,8 @@ const routeNameToPathMap: Record<RouteName, RoutePath> = {
 	[RouteName.AdminAIInternalEmployeeSkill]: RoutePath.AIInternalEmployeeSkill,
 	[RouteName.AdminAIEmployeeReview]: RoutePath.AIEmployeeReview,
 	[RouteName.AdminAISkillReview]: RoutePath.AISkillReview,
+	[RouteName.AdminAIManage]: RoutePath.AIManage,
+	[RouteName.AdminAIAppMenu]: RoutePath.AIAppMenu,
 
 	[RouteName.AdminPlatformLayout]: RoutePath.Platform,
 	[RouteName.AdminPlatformModel]: RoutePath.PlatformModel,

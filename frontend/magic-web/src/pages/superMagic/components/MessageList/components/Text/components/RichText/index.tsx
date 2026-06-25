@@ -53,7 +53,7 @@ const RichText = memo(
 					}
 				},
 				[INSPECTOR_DETAIL_TYPE]: (node: Node) => {
-					const dom = document.createElement("div")
+					const dom = document.createElement("span")
 					dom.className = "inspector-detail-node-view"
 
 					const root = createRoot(dom)
@@ -162,13 +162,16 @@ const RichText = memo(
 				// Extract mentions and build rich text JSON from the fragment
 				const mentions: TiptapMentionAttributes[] = []
 				const richTextJson: JSONContent = { type: "doc", content: [] }
+				const richTextContent = richTextJson.content ?? []
 				fragment.content.forEach((node) => {
 					const nodeJson = node.toJSON()
-					richTextJson.content!.push(nodeJson)
+					richTextContent.push(nodeJson)
 					// Collect mention nodes recursively
 					const collectMentions = (n: Node) => {
 						if (n.type.name === "mention" && n.attrs) {
 							mentions.push(n.attrs as TiptapMentionAttributes)
+						} else if (n.type.name === INSPECTOR_DETAIL_TYPE && n.attrs.fileMention) {
+							mentions.push(n.attrs.fileMention as TiptapMentionAttributes)
 						}
 						n.forEach((child) => collectMentions(child))
 					}

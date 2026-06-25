@@ -60,6 +60,11 @@ export const PERMISSION_KEY_MAP: Record<string, string> = {
 	/** AI管理 - 技能发布审核-编辑 */
 	SKILL_REVIEW_EDIT: "workspace.ai.skill_management.edit",
 
+	/** AI管理 - 应用菜单-查询 */
+	AI_APP_MENU_QUERY: "admin.ai.application.menu.query",
+	/** AI管理 - 应用菜单-编辑 */
+	AI_APP_MENU_EDIT: "admin.ai.application.edit",
+
 	/* -- 平台管理 -- */
 	/** 平台管理 - 模型管理-查询 */
 	PLATFORM_MODEL_MANAGEMENT_QUERY: "platform.model.text.query",
@@ -190,6 +195,12 @@ export const AI_SKILL_REVIEW = [
 /** AI管理 - 内部员工及技能 */
 export const AI_INTERNAL_EMPLOYEE_SKILL = [...AI_EMPLOYEE_REVIEW, ...AI_SKILL_REVIEW]
 
+/** AI管理 - 应用菜单 */
+export const AI_APP_MENU = [
+	PERMISSION_KEY_MAP.AI_APP_MENU_QUERY,
+	PERMISSION_KEY_MAP.AI_APP_MENU_EDIT,
+]
+
 /** AI管理 - 总权限 */
 export const AI_MANAGEMENT = [
 	PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS,
@@ -197,4 +208,5 @@ export const AI_MANAGEMENT = [
 	PERMISSION_KEY_MAP.MAGIC_PERSON_PERMISSIONS,
 	...AI_CUSTOM_MODEL,
 	...AI_INTERNAL_EMPLOYEE_SKILL,
+	...AI_APP_MENU,
 ]

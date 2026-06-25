@@ -1062,8 +1062,8 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
 
         return [
             'Content-Type' => 'application/json',
+            'Sandbox-Gateway-Token' => $this->getToken(),
             'request-id' => $requestId,
-            'X-Request-ID' => $requestId,
         ];
     }
 
@@ -1110,7 +1110,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
 
     /**
      * Override parent getAuthHeaders to include request tracing headers.
-     * Reuses getCommonHeaders() so request-id and X-Request-ID are always consistent.
+     * Reuses getCommonHeaders() so request-id is always consistent.
      */
     protected function getAuthHeaders(): array
     {

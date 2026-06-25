@@ -11,6 +11,7 @@
 	},
 	"dropOverlay": {
 		"loading": "加载中",
+		"processing": "正在处理 {{current}}/{{total}}",
 		"referenceImageLimitReached": "参考图数量已达上限",
 		"referenceImageUnavailable": "当前不支持添加参考图",
 		"releaseToAddAttachment": "松开以添加附件",
@@ -173,6 +174,11 @@
 			"description": "让智能体帮你轻松生成各种创意图像!",
 			"title": "画布内容为空"
 		},
+		"search": {
+			"clear": "清空搜索",
+			"empty": "未找到匹配图层",
+			"placeholder": "搜索图层"
+		},
 		"title": "图层"
 	},
 	"menu": {
@@ -213,6 +219,15 @@
 		"referenceVideo": "参考视频",
 		"size": "尺寸",
 		"title": "生成记录"
+	},
+	"mediaResourceFullscreenPreview": {
+		"audioLoadFailed": "音频加载失败",
+		"close": "关闭全屏预览",
+		"croppedImage": "裁剪图",
+		"imageLoadFailed": "图片加载失败",
+		"originalImage": "原图",
+		"videoLoadFailed": "视频加载失败，请稍后重试",
+		"viewMode": "图片显示模式"
 	},
 	"rectangle": {
 		"defaultName": "矩形"
@@ -399,6 +414,15 @@
 		"hand": "抓手工具",
 		"imageGenerator": "图像生成",
 		"marker": "标记",
+		"pluginCategories": {
+			"aiToolbox": "AI工具箱",
+			"fashionDesign": "服装设计",
+			"model": "模特图",
+			"other": "其他",
+			"product": "商品图"
+		},
+		"pluginCategoryEmpty": "该分类下暂无插件",
+		"plugins": "插件",
 		"selection": "选择工具",
 		"space": "空格",
 		"text": "文本",
@@ -449,6 +473,7 @@
 		"sendConfirmOk": "确认执行",
 		"sendConfirmSkip": "下次不再提示",
 		"sendConfirmTitle": "消耗提示",
+		"sendConfirmUnknownPointsDescription": "本次任务将产生积分消耗，是否确认执行？",
 		"size": "尺寸",
 		"slotLabelFirstFrame": "首帧",
 		"slotLabelLastFrame": "尾帧",

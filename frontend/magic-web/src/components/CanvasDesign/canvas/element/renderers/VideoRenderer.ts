@@ -13,7 +13,6 @@ import { VideoPlaybackController } from "./VideoPlaybackController"
 
 interface CreatePlayerNodeOptions {
 	showLoadingOverlay?: boolean
-	onFullscreenClick?: () => void
 	onPlayButtonClick?: () => void
 	onContentDoubleClick?: () => void
 }
@@ -33,9 +32,6 @@ interface PlayerNodeRefs {
 	progressGroup: Konva.Group
 	progressBackground: Konva.Rect
 	progressText: Konva.Text
-	fullscreenButtonGroup: Konva.Group
-	fullscreenButtonBg: Konva.Rect
-	fullscreenIcon: Konva.Group
 	isHovering: boolean
 	bufferingOverlay: Konva.Group
 	bufferingSpinnerRoot: Konva.Group
@@ -323,23 +319,7 @@ export class VideoRenderer {
 		progressGroup.add(progressBackground)
 		progressGroup.add(progressText)
 
-		const fullscreenButtonGroup = new Konva.Group({
-			listening: true,
-			name: "video-player-fullscreen-button",
-		})
-		const fullscreenButtonBg = new Konva.Rect({
-			width: VIDEO_CONFIG.CONTROL_BUTTON_SIZE,
-			height: VIDEO_CONFIG.CONTROL_BUTTON_SIZE,
-			cornerRadius: VIDEO_CONFIG.CORNER_RADIUS,
-			fill: VIDEO_CONFIG.CONTROL_BUTTON_BG,
-			listening: true,
-		})
-		const fullscreenIcon = this.createFullscreenIcon()
-		fullscreenButtonGroup.add(fullscreenButtonBg)
-		fullscreenButtonGroup.add(fullscreenIcon)
-
 		controlsGroup.add(progressGroup)
-		controlsGroup.add(fullscreenButtonGroup)
 
 		const showControls = () => {
 			if (!this.playerRefs || !canvas.permissionManager.canShowTransientElementAffordance()) {
@@ -382,41 +362,6 @@ export class VideoRenderer {
 			}
 		}
 
-		const handleFullscreenMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-			e.cancelBubble = true
-			if (e.evt) {
-				e.evt.stopPropagation()
-				e.evt.stopImmediatePropagation()
-			}
-			if (!canvas.permissionManager.canUseSelectionToolAffordance()) {
-				return
-			}
-			options?.onFullscreenClick?.()
-		}
-
-		fullscreenButtonBg.on("mousedown", handleFullscreenMouseDown)
-		fullscreenButtonBg.on("click tap", (e) => {
-			e.cancelBubble = true
-			if (e.evt) {
-				e.evt.stopPropagation()
-			}
-		})
-		fullscreenButtonBg.on("mouseenter", () => {
-			if (!canvas.permissionManager.canUseSelectionToolAffordance()) {
-				return
-			}
-			fullscreenButtonBg.fill(VIDEO_CONFIG.CONTROL_BUTTON_BG_HOVER)
-			canvas.cursorManager.setTemporary("pointer")
-			group.getLayer()?.batchDraw()
-		})
-		fullscreenButtonBg.on("mouseleave", () => {
-			if (!canvas.permissionManager.canUseSelectionToolAffordance()) {
-				return
-			}
-			fullscreenButtonBg.fill(VIDEO_CONFIG.CONTROL_BUTTON_BG)
-			canvas.cursorManager.restoreToolCursor()
-			group.getLayer()?.batchDraw()
-		})
 		playButtonGroup.on("mouseenter", () => {
 			if (
 				!canvas.permissionManager.canUseSelectionToolAffordance() ||
@@ -472,9 +417,6 @@ export class VideoRenderer {
 			progressGroup,
 			progressBackground,
 			progressText,
-			fullscreenButtonGroup,
-			fullscreenButtonBg,
-			fullscreenIcon,
 			isHovering: false,
 			bufferingOverlay,
 			bufferingSpinnerRoot,
@@ -591,8 +533,6 @@ export class VideoRenderer {
 			pauseBarRight,
 			progressGroup,
 			progressBackground,
-			fullscreenButtonGroup,
-			fullscreenIcon,
 			bufferingOverlay,
 			bufferingSpinnerShape,
 		} = this.playerRefs
@@ -618,28 +558,14 @@ export class VideoRenderer {
 		playButtonBg.radius(this.getPlayButtonRadius(iconSize))
 		layoutLucideSolidPlayPath(playTriangle, 0, 0, iconSize)
 		this.updatePauseBarsLayout(pauseBarLeft, pauseBarRight, iconSize)
-		const buttonSize = VIDEO_CONFIG.CONTROL_BUTTON_SIZE
 		const paddingX = VIDEO_CONFIG.CONTROL_PADDING * inverseScale.x
 		const paddingY = VIDEO_CONFIG.CONTROL_PADDING * inverseScale.y
-		const scaledButtonWidth = buttonSize * inverseScale.x
-		const scaledButtonHeight = buttonSize * inverseScale.y
 
 		progressGroup.scale(inverseScale)
 		const progressHeight = progressBackground.height() * inverseScale.y
 		progressGroup.position({
 			x: paddingX,
 			y: height - progressHeight - paddingY,
-		})
-
-		fullscreenButtonGroup.scale(inverseScale)
-		fullscreenButtonGroup.position({
-			x: width - scaledButtonWidth - paddingX,
-			y: height - scaledButtonHeight - paddingY,
-		})
-
-		fullscreenIcon.position({
-			x: (buttonSize - fullscreenIcon.width()) / 2,
-			y: (buttonSize - fullscreenIcon.height()) / 2,
 		})
 	}
 
@@ -696,40 +622,6 @@ export class VideoRenderer {
 			.padStart(2, "0")}`
 	}
 
-	private createFullscreenIcon(): Konva.Group {
-		const size = 14
-		const corner = 4
-		const stroke = 1.5
-		const icon = new Konva.Group({
-			width: size,
-			height: size,
-			listening: false,
-		})
-		const color = VIDEO_CONFIG.CONTROL_TEXT_COLOR
-
-		const lines = [
-			[corner, 0, 0, 0, 0, corner],
-			[size - corner, 0, size, 0, size, corner],
-			[0, size - corner, 0, size, corner, size],
-			[size, size - corner, size, size, size - corner, size],
-		]
-
-		lines.forEach((points) => {
-			icon.add(
-				new Konva.Line({
-					points,
-					stroke: color,
-					strokeWidth: stroke,
-					lineCap: "round",
-					lineJoin: "round",
-					listening: false,
-				}),
-			)
-		})
-
-		return icon
-	}
-
 	private updatePlayButtonHoverState(
 		playButtonBg: Konva.Circle,
 		playTriangle: Konva.Path,
@@ -742,10 +634,7 @@ export class VideoRenderer {
 	}
 
 	private resetControlHoverStyles(
-		refs: Pick<
-			PlayerNodeRefs,
-			"playButtonBg" | "playTriangle" | "pauseBarsGroup" | "fullscreenButtonBg"
-		>,
+		refs: Pick<PlayerNodeRefs, "playButtonBg" | "playTriangle" | "pauseBarsGroup">,
 	): void {
 		this.updatePlayButtonHoverState(
 			refs.playButtonBg,
@@ -753,7 +642,6 @@ export class VideoRenderer {
 			refs.pauseBarsGroup,
 			false,
 		)
-		refs.fullscreenButtonBg.fill(VIDEO_CONFIG.CONTROL_BUTTON_BG)
 	}
 
 	private updatePauseBarsLayout(

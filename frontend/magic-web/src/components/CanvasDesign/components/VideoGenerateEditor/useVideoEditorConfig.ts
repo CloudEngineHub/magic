@@ -117,7 +117,12 @@ function mergeVideoGenerationConstraints(
 }
 
 export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): VideoEditorConfig {
-	const { videoElement, messageEditorRef, restoreOnMount = "preferDraft" } = options
+	const {
+		videoElement,
+		messageEditorRef,
+		restoreOnMount = "preferDraft",
+		syncElementSize = true,
+	} = options
 	const { t } = useCanvasDesignI18n()
 	const { videoModelList, methods } = useMagic()
 	const { canvas } = useCanvas()
@@ -613,6 +618,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 	const updateVideoElementSize = useCallback(
 		(size?: { width: number; height: number } | null) => {
+			if (!syncElementSize) return
 			if (!canvas || !size) return
 			if (!Number.isFinite(size.width) || !Number.isFinite(size.height)) return
 			canvas.elementManager.update(videoElement.id, {
@@ -620,7 +626,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				height: size.height,
 			})
 		},
-		[canvas, videoElement.id],
+		[canvas, syncElementSize, videoElement.id],
 	)
 
 	useEffect(() => {

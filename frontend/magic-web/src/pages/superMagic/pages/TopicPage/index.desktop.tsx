@@ -36,7 +36,9 @@ import { useTopicMessages } from "../../hooks/useTopicMessages"
 import { useCreateTopicListener } from "../../components/TopicMode/useCreateTopicListener"
 import { useTopicFiles } from "./hooks/useTopicFiles"
 import TopicSidebar from "./components/TopicSidebar"
+import { isAudioProjectMode } from "../AudioRecordings/utils/is-audio-project-mode"
 import TopicMessagePanel from "./components/TopicMessagePanel"
+import { ChatConversationActionsSlot } from "@/pages/superMagic/pages/ChatProjectPage/components/ChatConversationActionsSlot"
 import TopicDesktopPanels from "./components/TopicDesktopPanels"
 import { useTopicDetailPanelController } from "./hooks/useTopicDetailPanelController"
 import {
@@ -118,8 +120,13 @@ function resolveReadProgressPayloadFromMessage(message?: {
 	}
 }
 
+interface TopicPageDesktopProps {
+	pageVariant?: "default" | "singleTopicChat"
+}
+
 // 工作区组件
-function TopicPage() {
+function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
+	const isSingleTopicChat = pageVariant === "singleTopicChat"
 	// Get workspace and project state from stores
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const selectedProject = projectStore.selectedProject
@@ -148,6 +155,7 @@ function TopicPage() {
 	const [isDetailPanelFullscreen, setIsDetailPanelFullscreen] = useState(false)
 	// Calculate read-only status based on user role
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
+	const hideProjectCard = isSingleTopicChat || isAudioProjectMode(selectedProject?.project_mode)
 	const topicActions = useMessageHeaderTopicActions({
 		selectedProject,
 		selectedTopic,
@@ -191,7 +199,7 @@ function TopicPage() {
 	const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
 		useTopicHistoryLayoutState({
 			storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.topicPage,
-			isEnabled: !isReadOnly,
+			isEnabled: !isReadOnly && !isSingleTopicChat,
 		})
 
 	const activeFileIdRef = useRef<string | null>(activeFileId)
@@ -581,7 +589,7 @@ function TopicPage() {
 				GlobalMentionPanelStore.clearInitLoadAttachmentsPromise(projectId)
 			}
 		}
-	}, [selectedProject])
+	}, [selectedProject?.id])
 
 	const disPlayDetail = useMemo(() => {
 		return userSelectDetail || autoDetail
@@ -617,8 +625,8 @@ function TopicPage() {
 		}
 	}, [])
 
-	// Listen for Create_New_Topic event and handle topic creation
-	useCreateTopicListener()
+	// Chat detail creates a new conversation on expert switch instead of sibling topics.
+	useCreateTopicListener({ enabled: !isSingleTopicChat })
 
 	// 封装消息发送处理函数
 	const handleSendMsg = useMemoizedFn(
@@ -707,6 +715,7 @@ function TopicPage() {
 				historyTriggerMode={historyTriggerMode}
 				isHistoryPanelOpen={isHistoryPanelOpen}
 				onToggleHistoryPanel={onToggleHistoryPanel}
+				trailingActions={isSingleTopicChat ? <ChatConversationActionsSlot /> : undefined}
 			/>
 		),
 	)
@@ -723,6 +732,8 @@ function TopicPage() {
 					selectedTopic={selectedTopic}
 					isReadOnly={isReadOnly}
 					topicFilesProps={topicFilesPropsWithPanel}
+					hideProjectCard={hideProjectCard}
+					siderVariant={isSingleTopicChat ? "chat" : "default"}
 				/>
 			}
 			detailPanel={
@@ -750,27 +761,31 @@ function TopicPage() {
 			}
 			isReadOnly={isReadOnly}
 			keepDetailMountedWhenHidden
-			historyLayout={{
-				isOpen: isTopicHistoryPanelOpen,
-				onClose: closeTopicHistoryPanel,
-				onToggle: toggleTopicHistoryPanel,
-				renderPanel: ({
-					isConversationPanelCollapsed,
-					onExpandConversationPanel,
-					onClose,
-					closeButtonRef,
-				}) => (
-					<MessageHeaderTopicHistoryPanel
-						selectedProject={selectedProject}
-						topicStore={topicStore}
-						topicActions={topicActions}
-						isConversationPanelCollapsed={isConversationPanelCollapsed}
-						onExpandConversationPanel={onExpandConversationPanel}
-						onClose={onClose}
-						closeButtonRef={closeButtonRef}
-					/>
-				),
-			}}
+			historyLayout={
+				isSingleTopicChat
+					? undefined
+					: {
+							isOpen: isTopicHistoryPanelOpen,
+							onClose: closeTopicHistoryPanel,
+							onToggle: toggleTopicHistoryPanel,
+							renderPanel: ({
+								isConversationPanelCollapsed,
+								onExpandConversationPanel,
+								onClose,
+								closeButtonRef,
+							}) => (
+								<MessageHeaderTopicHistoryPanel
+									selectedProject={selectedProject}
+									topicStore={topicStore}
+									topicActions={topicActions}
+									isConversationPanelCollapsed={isConversationPanelCollapsed}
+									onExpandConversationPanel={onExpandConversationPanel}
+									onClose={onClose}
+									closeButtonRef={closeButtonRef}
+								/>
+							),
+						}
+			}
 			shouldShowDetailPanel={shouldShowDetailPanel}
 			renderMessagePanel={renderMessagePanel}
 		/>

@@ -245,9 +245,9 @@ export function withAssistantCard<
 			() =>
 				!isShareRoute &&
 				!isMagicShareRoute &&
-				messageNode.status === "finished" &&
+				messageNode?.status === "finished" &&
 				!isRevokedMessage,
-			[isRevokedMessage, messageNode.status, isShareRoute, isMagicShareRoute],
+			[isRevokedMessage, messageNode?.status, isShareRoute, isMagicShareRoute],
 		)
 
 		const showSuggestList = useMemo(

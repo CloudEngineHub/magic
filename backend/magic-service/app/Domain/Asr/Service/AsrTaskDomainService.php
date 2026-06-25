@@ -8,10 +8,13 @@ declare(strict_types=1);
 namespace App\Domain\Asr\Service;
 
 use App\Application\Speech\DTO\AsrTaskStatusDTO;
+use App\Application\Speech\Enum\AsrRecordingStatusEnum;
+use App\Application\Speech\Enum\AsrTaskStatusEnum;
 use App\Domain\Asr\Constants\AsrRedisKeys;
 use App\Domain\Asr\Repository\AsrTaskRepository;
 use App\ErrorCode\AsrErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\AudioProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\AudioProjectRepositoryInterface;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Redis\Redis;
@@ -249,22 +252,7 @@ readonly class AsrTaskDomainService
                 return null;
             }
 
-            return new AsrTaskStatusDTO([
-                'task_key' => $taskKey,
-                'user_id' => $userId,
-                'project_id' => (string) $audioProject->getProjectId(),
-                'topic_id' => (string) $audioProject->getTopicId(),
-                'model_id' => $audioProject->getModelId(),
-                'status' => 'completed',
-                'recording_status' => 'completed',
-                'current_phase' => $audioProject->getCurrentPhase(),
-                'phase_status' => $audioProject->getPhaseStatus(),
-                'phase_percent' => $audioProject->getPhasePercent(),
-                'phase_error' => $audioProject->getPhaseError(),
-                'audio_file_id' => $audioProject->getAudioFileId()
-                    ? (string) $audioProject->getAudioFileId()
-                    : null,
-            ]);
+            return $this->buildTaskStatusFromAudioProject($audioProject, $taskKey, $userId);
         } catch (Throwable $e) {
             $this->logger->error('Failed to rebuild task status from database', [
                 'task_key' => $taskKey,
@@ -453,23 +441,7 @@ readonly class AsrTaskDomainService
                 }
 
                 // Rebuild DTO from database
-                $results[$taskKey] = new AsrTaskStatusDTO([
-                    'task_key' => $taskKey,
-                    'user_id' => $userId,
-                    'organization_code' => $orgCode,
-                    'project_id' => (string) $audioProject->getProjectId(),
-                    'topic_id' => (string) $audioProject->getTopicId(),
-                    'model_id' => $audioProject->getModelId(),
-                    'status' => 'completed',
-                    'recording_status' => 'completed',
-                    'current_phase' => $audioProject->getCurrentPhase(),
-                    'phase_status' => $audioProject->getPhaseStatus(),
-                    'phase_percent' => $audioProject->getPhasePercent(),
-                    'phase_error' => $audioProject->getPhaseError(),
-                    'audio_file_id' => $audioProject->getAudioFileId()
-                        ? (string) $audioProject->getAudioFileId()
-                        : null,
-                ]);
+                $results[$taskKey] = $this->buildTaskStatusFromAudioProject($audioProject, $taskKey, $userId, $orgCode);
             }
 
             return $results;
@@ -484,5 +456,65 @@ readonly class AsrTaskDomainService
             // Return null for all tasks on error
             return array_fill_keys($taskKeys, null);
         }
+    }
+
+    private function buildTaskStatusFromAudioProject(
+        AudioProjectEntity $audioProject,
+        string $taskKey,
+        string $userId,
+        ?string $orgCode = null
+    ): AsrTaskStatusDTO {
+        $audioFileId = $audioProject->getAudioFileId();
+
+        return new AsrTaskStatusDTO([
+            'task_key' => $taskKey,
+            'user_id' => $userId,
+            'organization_code' => $orgCode,
+            'project_id' => (string) $audioProject->getProjectId(),
+            'topic_id' => (string) $audioProject->getTopicId(),
+            'model_id' => $audioProject->getModelId(),
+            'status' => $this->resolveTaskStatusFromAudioProject($audioProject)->value,
+            'recording_status' => $this->resolveRecordingStatusFromAudioProject($audioProject),
+            'current_phase' => $audioProject->getCurrentPhase(),
+            'phase_status' => $audioProject->getPhaseStatus(),
+            'phase_percent' => $audioProject->getPhasePercent(),
+            'phase_error' => $audioProject->getPhaseError(),
+            'audio_file_id' => $audioFileId === null ? null : (string) $audioFileId,
+        ]);
+    }
+
+    private function resolveTaskStatusFromAudioProject(AudioProjectEntity $audioProject): AsrTaskStatusEnum
+    {
+        $currentPhase = $audioProject->getCurrentPhase();
+        $phaseStatus = $audioProject->getPhaseStatus();
+
+        if ($phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_FAILED) {
+            return AsrTaskStatusEnum::FAILED;
+        }
+
+        if ($currentPhase === AsrTaskStatusDTO::PHASE_SUMMARIZING) {
+            return $phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_COMPLETED
+                ? AsrTaskStatusEnum::COMPLETED
+                : AsrTaskStatusEnum::PROCESSING;
+        }
+
+        if ($audioProject->getAudioFileId() !== null) {
+            return AsrTaskStatusEnum::AUDIO_PROCESSED;
+        }
+
+        if ($phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS) {
+            return AsrTaskStatusEnum::PROCESSING;
+        }
+
+        return AsrTaskStatusEnum::CREATED;
+    }
+
+    private function resolveRecordingStatusFromAudioProject(AudioProjectEntity $audioProject): ?string
+    {
+        if ($audioProject->getAudioFileId() !== null) {
+            return AsrRecordingStatusEnum::STOPPED->value;
+        }
+
+        return null;
     }
 }

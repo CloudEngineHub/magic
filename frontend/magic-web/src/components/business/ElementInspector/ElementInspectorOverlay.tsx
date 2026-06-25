@@ -13,10 +13,8 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from "react"
 import type { JSONContent } from "@tiptap/react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
 import { Crosshair, X, Copy, MousePointer, Send } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import { SUPER_PLACEHOLDER_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/super-placeholder/const"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { InspectedElementInfo, InspectedElementRect } from "./types"
@@ -77,7 +75,7 @@ export function ElementInspectorOverlay({
 	const overlayRef = useRef<HTMLDivElement>(null)
 	const [iframeRect, setIframeRect] = useState<DOMRect | null>(null)
 
-	// Track iframe position for coordinate conversion
+	// Track iframe position for coordinate conversion (ResizeObserver for selected-element case)
 	useEffect(() => {
 		const iframe = iframeRef.current
 		if (!iframe) return
@@ -108,30 +106,57 @@ export function ElementInspectorOverlay({
 			ro.disconnect()
 			window.removeEventListener("scroll", updateRect, true)
 		}
-	}, [iframeRef, active])
+	}, [iframeRef, active, hoveredElement])
 
-	/** Convert an iframe-viewport-relative rect to overlay-relative coordinates */
+	/**
+	 * Convert an iframe-viewport-relative rect to overlay-relative coordinates.
+	 * Uses live DOM measurements to handle:
+	 * - Dynamic iframe ref changes (multi-iframe inspectors)
+	 * - CSS transforms / scaling on the iframe
+	 */
 	const toOverlayRect = useCallback(
 		(rect: InspectedElementRect) => {
-			if (!iframeRect) return null
+			const iframe = iframeRef.current
+			const parent = overlayRef.current?.parentElement
+			if (!iframe || !parent) return null
+			const parentRect = parent.getBoundingClientRect()
+			const ifRect = iframe.getBoundingClientRect()
+			// Auto-detect effective scale from visual vs layout dimensions
+			const effectiveScale =
+				scaleRatio !== 1
+					? scaleRatio
+					: iframe.clientWidth > 0
+						? ifRect.width / iframe.clientWidth
+						: 1
 			return {
-				left: iframeRect.left + rect.left * scaleRatio,
-				top: iframeRect.top + rect.top * scaleRatio,
-				width: rect.width * scaleRatio,
-				height: rect.height * scaleRatio,
+				left: ifRect.left - parentRect.left + rect.left * effectiveScale,
+				top: ifRect.top - parentRect.top + rect.top * effectiveScale,
+				width: rect.width * effectiveScale,
+				height: rect.height * effectiveScale,
 			}
 		},
-		[iframeRect, scaleRatio],
+		[iframeRef, scaleRatio],
 	)
+
+	/** Get the current effective scale ratio (auto-detected or from prop) */
+	const getEffectiveScale = useCallback(() => {
+		const iframe = iframeRef.current
+		if (!iframe) return scaleRatio
+		const ifRect = iframe.getBoundingClientRect()
+		if (scaleRatio !== 1) return scaleRatio
+		return iframe.clientWidth > 0 ? ifRect.width / iframe.clientWidth : 1
+	}, [iframeRef, scaleRatio])
 
 	const hoverBox = useMemo(
 		() => (hoveredElement ? toOverlayRect(hoveredElement.rect) : null),
-		[hoveredElement, toOverlayRect],
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[hoveredElement, toOverlayRect, iframeRect],
 	)
 
 	const selectBox = useMemo(
 		() => (selectedElement ? toOverlayRect(selectedElement.rect) : null),
-		[selectedElement, toOverlayRect],
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[selectedElement, toOverlayRect, iframeRect],
 	)
 
 	// Don't render anything if not active and no selection
@@ -172,16 +197,19 @@ export function ElementInspectorOverlay({
 						<div
 							className="pointer-events-none absolute"
 							style={{
-								left: hoverBox.left - hoveredElement.padding.left * scaleRatio,
-								top: hoverBox.top - hoveredElement.padding.top * scaleRatio,
+								left:
+									hoverBox.left -
+									hoveredElement.padding.left * getEffectiveScale(),
+								top:
+									hoverBox.top - hoveredElement.padding.top * getEffectiveScale(),
 								width:
 									hoverBox.width +
 									(hoveredElement.padding.left + hoveredElement.padding.right) *
-										scaleRatio,
+										getEffectiveScale(),
 								height:
 									hoverBox.height +
 									(hoveredElement.padding.top + hoveredElement.padding.bottom) *
-										scaleRatio,
+										getEffectiveScale(),
 								backgroundColor: "rgba(147, 196, 125, 0.3)",
 								transition: "all 50ms ease-out",
 								zIndex: -1,
@@ -284,45 +312,20 @@ export function buildAgentPromptContent(
 	t: (key: string) => string,
 	fileInfo?: { fileId: string; fileName: string; filePath: string },
 ): JSONContent {
-	const text = (s: string): JSONContent => ({ type: "text", text: s })
-	const para = (...content: JSONContent[]): JSONContent => ({
-		type: "paragraph",
-		content,
-	})
-	const emptyPara = (): JSONContent => ({ type: "paragraph" })
-	const placeholder = (placeholderText: string): JSONContent => ({
-		type: SUPER_PLACEHOLDER_TYPE,
-		attrs: {
-			type: "input",
-			props: { placeholder: placeholderText },
-		},
-	})
-
 	const paragraphs: JSONContent[] = []
-
-	// If we have a file, add an @mention of it at the top
-	if (fileInfo) {
-		const ext = fileInfo.fileName.includes(".")
-			? (fileInfo.fileName.split(".").pop() ?? "")
-			: ""
-		paragraphs.push({
-			type: "paragraph",
-			content: [
-				{
-					type: "mention",
-					attrs: {
-						type: MentionItemType.PROJECT_FILE,
-						data: {
-							file_id: fileInfo.fileId,
-							file_name: fileInfo.fileName,
-							file_path: fileInfo.filePath,
-							file_extension: ext,
-						},
-					},
+	const fileMention = fileInfo
+		? {
+				type: MentionItemType.PROJECT_FILE,
+				data: {
+					file_id: fileInfo.fileId,
+					file_name: fileInfo.fileName,
+					file_path: fileInfo.filePath,
+					file_extension: fileInfo.fileName.includes(".")
+						? (fileInfo.fileName.split(".").pop() ?? "")
+						: "",
 				},
-			],
-		})
-	}
+			}
+		: null
 
 	// Intro — insert an inspector-detail node that the editor will render as a collapsible panel
 	const KEY_STYLE_PROPS = [
@@ -375,26 +378,23 @@ export function buildAgentPromptContent(
 
 	// Inspector detail node (title is stored in attrs for serialization/rendering)
 	paragraphs.push({
-		type: INSPECTOR_DETAIL_TYPE,
-		attrs: {
-			title: t("stylePanel.inspector.agentPromptTitle"),
-			selector: info.selector,
-			tagName: info.tagName,
-			size: sizeStr,
-			computedStyles: JSON.stringify(computedStylesObj),
-			styleCount: styleLines.length,
-			textContent: textPreview,
-		},
+		type: "paragraph",
+		content: [
+			{
+				type: INSPECTOR_DETAIL_TYPE,
+				attrs: {
+					title: t("stylePanel.inspector.agentPromptTitle"),
+					selector: info.selector,
+					tagName: info.tagName,
+					size: sizeStr,
+					computedStyles: JSON.stringify(computedStylesObj),
+					styleCount: styleLines.length,
+					textContent: textPreview,
+					fileMention,
+				},
+			},
+		],
 	})
-
-	// User-fillable placeholder
-	paragraphs.push(emptyPara())
-	paragraphs.push(
-		para(
-			text(`${t("stylePanel.inspector.agentPromptSuffix")}`),
-			// placeholder(t("stylePanel.inspector.agentPromptPlaceholder")),
-		),
-	)
 
 	return { type: "doc", content: paragraphs }
 }

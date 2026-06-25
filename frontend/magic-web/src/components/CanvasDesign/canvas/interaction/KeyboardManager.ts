@@ -19,6 +19,18 @@ export class KeyboardManager {
 	/** 捕获阶段的键盘事件处理函数引用 */
 	private captureKeyDownHandler?: (e: KeyboardEvent) => void
 
+	/** 窗口失焦时需要清理修饰键状态，避免 keyup 丢失后元素拖拽状态卡住 */
+	private readonly handleWindowBlur = (): void => {
+		this.canvas.resetKeepRatioModifier()
+	}
+
+	/** 页面隐藏时浏览器可能不再派发 keyup，同样需要复位修饰键状态 */
+	private readonly handleVisibilityChange = (): void => {
+		if (document.visibilityState !== "visible") {
+			this.canvas.resetKeepRatioModifier()
+		}
+	}
+
 	/** 工具快捷键列表（临时工具） */
 	private readonly TEMPORARY_TOOL_KEYS: ToolKey[] = ["h", "t", "f", "a", "m", "space"]
 
@@ -198,6 +210,8 @@ export class KeyboardManager {
 		window.addEventListener("keydown", this.captureKeyDownHandler, true) // 捕获阶段
 		window.addEventListener("keydown", this.handleKeyDown)
 		window.addEventListener("keyup", this.handleKeyUp)
+		window.addEventListener("blur", this.handleWindowBlur)
+		document.addEventListener("visibilitychange", this.handleVisibilityChange)
 	}
 
 	/**
@@ -210,6 +224,8 @@ export class KeyboardManager {
 		}
 		window.removeEventListener("keydown", this.handleKeyDown)
 		window.removeEventListener("keyup", this.handleKeyUp)
+		window.removeEventListener("blur", this.handleWindowBlur)
+		document.removeEventListener("visibilitychange", this.handleVisibilityChange)
 	}
 
 	/**
@@ -445,6 +461,12 @@ export class KeyboardManager {
 	private handleKeyUp(e: KeyboardEvent): void {
 		if (!this.isEnabled) return
 
+		// 修饰键状态不能完全依赖焦点区域：keydown 发生在画布内后，
+		// keyup 可能因为输入框、浮层、窗口失焦等原因落到画布外。
+		if (this.isKeepRatioModifierKey(e)) {
+			this.canvas.setKeepRatioModifier(e.shiftKey || e.metaKey)
+		}
+
 		// 如果用户在输入框中，不处理快捷键
 		if (this.isInputElement(e.target)) {
 			return
@@ -470,13 +492,17 @@ export class KeyboardManager {
 
 		// 处理 Shift 键
 		if (e.key === "Shift") {
-			this.canvas.eventEmitter.emit({ type: "keyboard:shift:up", data: undefined })
+			if (!e.metaKey) {
+				this.canvas.eventEmitter.emit({ type: "keyboard:shift:up", data: undefined })
+			}
 			return
 		}
 
 		// 处理 Meta/Command 键释放
 		if (e.key === "Meta") {
-			this.canvas.eventEmitter.emit({ type: "keyboard:meta:up", data: undefined })
+			if (!e.shiftKey) {
+				this.canvas.eventEmitter.emit({ type: "keyboard:meta:up", data: undefined })
+			}
 			return
 		}
 
@@ -557,6 +583,10 @@ export class KeyboardManager {
 			modifiers.push("alt")
 		}
 		return modifiers
+	}
+
+	private isKeepRatioModifierKey(e: KeyboardEvent): boolean {
+		return e.key === "Shift" || e.key === "Meta"
 	}
 
 	/**

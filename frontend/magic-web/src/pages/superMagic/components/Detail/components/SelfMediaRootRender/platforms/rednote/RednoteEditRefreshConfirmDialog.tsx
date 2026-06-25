@@ -9,6 +9,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
+import { selfMediaOverlayStyles } from "../../components/selfMediaOverlayStyles"
 
 interface RednoteEditRefreshConfirmDialogProps {
 	open: boolean
@@ -27,27 +28,39 @@ export function RednoteEditRefreshConfirmDialog({
 
 	return (
 		<AlertDialog open={open}>
-			<AlertDialogContent data-testid="red-edit-refresh-confirm-dialog">
+			<AlertDialogContent
+				className={selfMediaOverlayStyles.alertSurface}
+				data-testid="red-edit-refresh-confirm-dialog"
+			>
 				<AlertDialogHeader>
-					<AlertDialogTitle>
+					<AlertDialogTitle className="text-[#18181b]">
 						{t("detail.selfMedia.edit.refreshConfirmTitle")}
 					</AlertDialogTitle>
-					<AlertDialogDescription>
+					<AlertDialogDescription className="text-[#71717a]">
 						{t("detail.selfMedia.edit.refreshConfirmDescription")}
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
-					<AlertDialogCancel onClick={onCancel} data-testid="red-edit-refresh-cancel-btn">
+					<AlertDialogCancel
+						className={selfMediaOverlayStyles.secondaryButton}
+						onClick={onCancel}
+						data-testid="red-edit-refresh-cancel-btn"
+					>
 						{t("detail.selfMedia.edit.cancel")}
 					</AlertDialogCancel>
 					<AlertDialogAction
 						variant="outline"
+						className={selfMediaOverlayStyles.secondaryButton}
 						onClick={onDiscard}
 						data-testid="red-edit-refresh-discard-btn"
 					>
 						{t("detail.selfMedia.edit.discard")}
 					</AlertDialogAction>
-					<AlertDialogAction onClick={onSave} data-testid="red-edit-refresh-save-btn">
+					<AlertDialogAction
+						className={selfMediaOverlayStyles.primaryButton}
+						onClick={onSave}
+						data-testid="red-edit-refresh-save-btn"
+					>
 						{t("detail.selfMedia.edit.save")}
 					</AlertDialogAction>
 				</AlertDialogFooter>

@@ -3,7 +3,7 @@
  * Renders element selection and hover highlights in the parent window (not inside iframe)
  */
 
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
@@ -13,7 +13,7 @@ import { useSelectionMessages } from "./hooks/useSelectionMessages"
 import { useScrollSync } from "./hooks/useScrollSync"
 import { useScaleSync } from "./hooks/useScaleSync"
 import { useSelectionHandles } from "./hooks/useSelectionHandles"
-import { transformRect, getSelectionBoxTransform } from "./utils/transform"
+import { offsetRect, transformRect, getSelectionBoxTransform } from "./utils/transform"
 import { SelectionBox } from "./components/SelectionBox"
 import { HoverBox } from "./components/HoverBox"
 
@@ -43,6 +43,7 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 	const [selectedInfoList, setSelectedInfoList] = useState<SelectedInfo[]>([])
 	const [hoveredRect, setHoveredRect] = useState<ElementRect | null>(null)
 	const [isSelectionMode, setIsSelectionMode] = useState(false)
+	const [overlayViewportOrigin, setOverlayViewportOrigin] = useState({ top: 0, left: 0 })
 	const overlayRef = useRef<HTMLDivElement>(null)
 
 	// For backward compatibility - single selected element (memoized)
@@ -98,6 +99,40 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 	// Hide selection boxes during scrolling or scaling
 	const shouldHide = isScrolling || isScaling
 
+	useLayoutEffect(() => {
+		const updateOverlayViewportOrigin = () => {
+			const overlayElement = overlayRef.current
+			if (!overlayElement) return
+			const overlayRect = overlayElement.getBoundingClientRect()
+			setOverlayViewportOrigin((prev) => {
+				if (prev.top === overlayRect.top && prev.left === overlayRect.left) return prev
+				return { top: overlayRect.top, left: overlayRect.left }
+			})
+		}
+
+		updateOverlayViewportOrigin()
+		window.addEventListener("resize", updateOverlayViewportOrigin)
+		window.addEventListener("scroll", updateOverlayViewportOrigin, true)
+
+		let resizeObserver: ResizeObserver | null = null
+		if (typeof ResizeObserver !== "undefined") {
+			resizeObserver = new ResizeObserver(updateOverlayViewportOrigin)
+			if (overlayRef.current) {
+				resizeObserver.observe(overlayRef.current)
+			}
+			const offsetParent = overlayRef.current?.offsetParent
+			if (offsetParent instanceof Element) {
+				resizeObserver.observe(offsetParent)
+			}
+		}
+
+		return () => {
+			window.removeEventListener("resize", updateOverlayViewportOrigin)
+			window.removeEventListener("scroll", updateOverlayViewportOrigin, true)
+			resizeObserver?.disconnect()
+		}
+	}, [])
+
 	// All selection handles (move, rotate, resize, delete, duplicate)
 	const {
 		onHandleMouseDown,
@@ -124,6 +159,13 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 		() => (hoveredRect ? transformRect(hoveredRect, iframeRef, isPptRender, scaleRatio) : null),
 		[hoveredRect, iframeRef, isPptRender, scaleRatio],
 	)
+	const overlayHoveredRect = useMemo(
+		() =>
+			transformedHoveredRect
+				? offsetRect(transformedHoveredRect, overlayViewportOrigin)
+				: null,
+		[overlayViewportOrigin, transformedHoveredRect],
+	)
 
 	// Calculate live rotation for display (memoized)
 	const displayRotation = useMemo(() => selectedInfo?.rotation ?? 0, [selectedInfo])
@@ -131,7 +173,13 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 	// Pre-compute all transformed data to avoid calculations during render (memoized)
 	const transformedSelections = useMemo(() => {
 		return selectedInfoList.map((info) => {
-			const transformedRect = transformRect(info.rect, iframeRef, isPptRender, scaleRatio)
+			const transformedRect = transformRect(
+				info.rect,
+				iframeRef,
+				isPptRender,
+				scaleRatio,
+				info.selector,
+			)
 			const transform = getSelectionBoxTransform(
 				info.rotation ?? 0,
 				isMultiSelect,
@@ -141,7 +189,8 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 			return {
 				selector: info.selector,
 				info,
-				transformedRect,
+				viewportRect: transformedRect,
+				transformedRect: offsetRect(transformedRect, overlayViewportOrigin),
 				transform,
 			}
 		})
@@ -151,6 +200,7 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 		isPptRender,
 		scaleRatio,
 		isMultiSelect,
+		overlayViewportOrigin,
 		rotation,
 		displayRotation,
 	])
@@ -180,30 +230,33 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 		>
 			{/* Selected elements highlights */}
 			<AnimatePresence mode="sync">
-				{transformedSelections.map(({ selector, info, transformedRect, transform }) => (
-					<SelectionBox
-						key={selector}
-						info={info}
-						transformedRect={transformedRect}
-						isMultiSelect={isMultiSelect}
-						isSelectionMode={isSelectionMode}
-						transform={transform}
-						containerElement={containerElement}
-						isMoving={isMoving}
-						rotation={rotation}
-						resizeHandles={resizeHandles}
-						onMoveHandleMouseDown={onMoveHandleMouseDown}
-						onRotateHandleMouseDown={onRotateHandleMouseDown}
-						onResizeHandleMouseDown={onHandleMouseDown}
-						onDelete={handleDelete}
-						onDuplicate={handleDuplicate}
-					/>
-				))}
+				{transformedSelections.map(
+					({ selector, info, viewportRect, transformedRect, transform }) => (
+						<SelectionBox
+							key={selector}
+							info={info}
+							transformedRect={transformedRect}
+							viewportRect={viewportRect}
+							isMultiSelect={isMultiSelect}
+							isSelectionMode={isSelectionMode}
+							transform={transform}
+							containerElement={containerElement}
+							isMoving={isMoving}
+							rotation={rotation}
+							resizeHandles={resizeHandles}
+							onMoveHandleMouseDown={onMoveHandleMouseDown}
+							onRotateHandleMouseDown={onRotateHandleMouseDown}
+							onResizeHandleMouseDown={onHandleMouseDown}
+							onDelete={handleDelete}
+							onDuplicate={handleDuplicate}
+						/>
+					),
+				)}
 			</AnimatePresence>
 
 			{/* Hovered element highlight */}
-			{transformedHoveredRect && (
-				<HoverBox rect={transformedHoveredRect} isSelectionMode={isSelectionMode} />
+			{overlayHoveredRect && (
+				<HoverBox rect={overlayHoveredRect} isSelectionMode={isSelectionMode} />
 			)}
 		</div>
 	)

@@ -33,6 +33,7 @@ export class BorderDecorator {
 	private borderUpdateHandler?: () => void
 	private backgroundNode?: Konva.Image
 	private currentBackgroundType?: "selected" | "unselected"
+	private backgroundSwitchRequestId = 0
 
 	constructor(group: Konva.Group, width: number, height: number, config: BorderDecoratorConfig) {
 		this.group = group
@@ -220,27 +221,57 @@ export class BorderDecorator {
 	}
 
 	/**
+	 * 开始背景切换并返回请求 ID 和背景节点
+	 * @returns 请求 ID 和背景节点
+	 */
+	private beginBackgroundSwitch(): { requestId: number; backgroundNode?: Konva.Image } {
+		const backgroundNode = this.backgroundNode
+		const requestId = ++this.backgroundSwitchRequestId
+		return { requestId, backgroundNode }
+	}
+
+	/**
+	 * 检查当前背景切换是否有效
+	 * @param requestId 请求 ID
+	 * @param backgroundNode 背景节点
+	 * @returns 是否有效
+	 */
+	private isCurrentBackgroundSwitch(requestId: number, backgroundNode?: Konva.Image): boolean {
+		return (
+			requestId === this.backgroundSwitchRequestId &&
+			Boolean(backgroundNode) &&
+			this.backgroundNode === backgroundNode
+		)
+	}
+
+	/**
 	 * 切换到选中状态背景
 	 */
 	private async switchToSelectedBackground(): Promise<void> {
-		if (!this.backgroundNode) return
+		const { requestId, backgroundNode } = this.beginBackgroundSwitch()
+		if (!backgroundNode) return
 
 		const selectedImage = await this.imageLoader.loadImage(imageBackgroundSelected)
-		this.backgroundNode.image(selectedImage)
+		if (!this.isCurrentBackgroundSwitch(requestId, backgroundNode)) return
+
+		backgroundNode.image(selectedImage)
 		this.currentBackgroundType = "selected"
-		this.backgroundNode.getLayer()?.batchDraw()
+		backgroundNode.getLayer()?.batchDraw()
 	}
 
 	/**
 	 * 切换到未选中状态背景
 	 */
 	private async switchToUnselectedBackground(): Promise<void> {
-		if (!this.backgroundNode) return
+		const { requestId, backgroundNode } = this.beginBackgroundSwitch()
+		if (!backgroundNode) return
 
 		const unselectedImage = await this.imageLoader.loadImage(imageBackgroundUnselected)
-		this.backgroundNode.image(unselectedImage)
+		if (!this.isCurrentBackgroundSwitch(requestId, backgroundNode)) return
+
+		backgroundNode.image(unselectedImage)
 		this.currentBackgroundType = "unselected"
-		this.backgroundNode.getLayer()?.batchDraw()
+		backgroundNode.getLayer()?.batchDraw()
 	}
 
 	/**
@@ -337,6 +368,7 @@ export class BorderDecorator {
 		}
 
 		// 清理引用
+		this.backgroundSwitchRequestId += 1
 		this.backgroundNode = undefined
 		this.currentBackgroundType = undefined
 	}

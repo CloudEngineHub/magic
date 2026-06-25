@@ -15,6 +15,7 @@ use App\Domain\Provider\Repository\Facade\AiAbilityRepositoryInterface;
 use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Infrastructure\Util\Locker\LockerInterface;
 use Exception;
 use Hyperf\Contract\ConfigInterface;
 
@@ -23,9 +24,14 @@ use Hyperf\Contract\ConfigInterface;
  */
 class AiAbilityDomainService
 {
+    private const int INITIALIZE_LOCK_EXPIRE_SECONDS = 60;
+
+    private const int INITIALIZE_LOCK_WAIT_SECONDS = 60;
+
     public function __construct(
         private AiAbilityRepositoryInterface $aiAbilityRepository,
         private ConfigInterface $config,
+        private LockerInterface $locker,
     ) {
     }
 
@@ -101,22 +107,84 @@ class AiAbilityDomainService
      */
     public function initializeAbilities(ProviderDataIsolation $dataIsolation, ?array $abilities = null): int
     {
+        $lockName = $this->buildInitializeLockName($dataIsolation);
+        $lockOwner = uniqid('ai_abilities_init_', true);
+        if (! $this->locker->spinLock(
+            $lockName,
+            $lockOwner,
+            self::INITIALIZE_LOCK_EXPIRE_SECONDS,
+            self::INITIALIZE_LOCK_WAIT_SECONDS
+        )) {
+            ExceptionBuilder::throw(ServiceProviderErrorCode::ModelOperationLocked);
+        }
+
+        try {
+            return $this->initializeAbilitiesWithLock($dataIsolation, $abilities);
+        } finally {
+            $this->locker->release($lockName, $lockOwner);
+        }
+    }
+
+    /**
+     * 获取指定能力的完整配置.
+     *
+     * @param AiAbilityCode $abilityCode 能力代码
+     * @return array 配置数组
+     */
+    public function getProviderConfig(AiAbilityCode $abilityCode): array
+    {
+        $dataIsolation = ProviderDataIsolation::create('');
+        $entity = $this->getByCode($dataIsolation, $abilityCode);
+        if (! $entity->isEnabled()) {
+            return [];
+        }
+        return $entity->getConfig();
+    }
+
+    /**
+     * 在初始化锁保护下写入缺失的AI能力数据.
+     *
+     * @param ProviderDataIsolation $dataIsolation 数据隔离信息
+     * @param null|array $abilities AI 能力初始化配置
+     * @return int 初始化的数量
+     */
+    private function initializeAbilitiesWithLock(ProviderDataIsolation $dataIsolation, ?array $abilities = null): int
+    {
         if ($abilities === null) {
             $configuredAbilities = $this->config->get('ai_abilities.abilities', []);
             $abilities = is_array($configuredAbilities) ? $configuredAbilities : [];
         }
 
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
-        $count = 0;
+        $abilityItems = [];
+        $codes = [];
 
         foreach ($abilities as $abilityConfig) {
             if (! is_array($abilityConfig)) {
                 continue;
             }
 
-            // 检查数据库中是否已存在
             $code = AiAbilityCode::from($abilityConfig['code']);
-            $existingEntity = $this->aiAbilityRepository->getByCode($dataIsolation, $code);
+            $abilityItems[] = [
+                'code' => $code,
+                'config' => $abilityConfig,
+            ];
+            $codes[] = $code;
+        }
+
+        $existingCodeMap = array_fill_keys(
+            $this->aiAbilityRepository->getExistingCodes($dataIsolation, $codes),
+            true
+        );
+        $count = 0;
+
+        foreach ($abilityItems as $abilityItem) {
+            /** @var AiAbilityCode $code */
+            $code = $abilityItem['code'];
+            $abilityConfig = $abilityItem['config'];
+            if (isset($existingCodeMap[$code->value])) {
+                continue;
+            }
 
             // 构建名称和描述（确保是多语言格式）
             $name = $abilityConfig['name'];
@@ -135,39 +203,33 @@ class AiAbilityDomainService
                 ];
             }
 
-            if ($existingEntity === null) {
-                // 不存在则创建
-                $entity = new AiAbilityEntity();
-                $entity->setCode($abilityConfig['code']);
-                $entity->setOrganizationCode($organizationCode);
-                $entity->setName($name);
-                $entity->setDescription($description);
-                $entity->setIcon($abilityConfig['icon'] ?? '');
-                $entity->setSortOrder($abilityConfig['sort_order'] ?? 0);
-                $entity->setStatus($abilityConfig['status'] ?? true);
-                $entity->setConfig($abilityConfig['config'] ?? []);
+            // 不存在则创建
+            $entity = new AiAbilityEntity();
+            $entity->setCode($abilityConfig['code']);
+            $entity->setOrganizationCode($organizationCode);
+            $entity->setName($name);
+            $entity->setDescription($description);
+            $entity->setIcon($abilityConfig['icon'] ?? '');
+            $entity->setSortOrder($abilityConfig['sort_order'] ?? 0);
+            $entity->setStatus($abilityConfig['status'] ?? true);
+            $entity->setConfig($abilityConfig['config'] ?? []);
 
-                $this->aiAbilityRepository->save($entity);
-                ++$count;
-            }
+            $this->aiAbilityRepository->save($entity);
+            $existingCodeMap[$code->value] = true;
+            ++$count;
         }
 
         return $count;
     }
 
     /**
-     * 获取指定能力的完整配置.
+     * 构建AI能力初始化锁名称.
      *
-     * @param AiAbilityCode $abilityCode 能力代码
-     * @return array 配置数组
+     * @param ProviderDataIsolation $dataIsolation 数据隔离信息
+     * @return string 锁名称
      */
-    public function getProviderConfig(AiAbilityCode $abilityCode): array
+    private function buildInitializeLockName(ProviderDataIsolation $dataIsolation): string
     {
-        $dataIsolation = ProviderDataIsolation::create('');
-        $entity = $this->getByCode($dataIsolation, $abilityCode);
-        if (! $entity->isEnabled()) {
-            return [];
-        }
-        return $entity->getConfig();
+        return sprintf('ai_abilities_initialize_%s', $dataIsolation->getCurrentOrganizationCode());
     }
 }

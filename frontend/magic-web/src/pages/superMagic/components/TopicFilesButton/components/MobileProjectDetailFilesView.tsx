@@ -68,6 +68,7 @@ interface MobileProjectDetailFilesViewProps {
 	onBatchZipDownload?: () => void
 	batchDownloadLoading?: boolean
 	onBatchShare?: (selectedKeys: Set<string>) => void
+	onBatchCopy?: (selectedKeys: Set<string>) => void
 	onBatchMove?: (selectedKeys: Set<string>) => void
 	onBatchDelete?: (selectedKeys: Set<string>) => void
 }
@@ -300,6 +301,7 @@ function MobileProjectDetailFilesView({
 	onBatchZipDownload,
 	batchDownloadLoading = false,
 	onBatchShare,
+	onBatchCopy,
 	onBatchMove,
 	onBatchDelete,
 }: MobileProjectDetailFilesViewProps) {
@@ -915,6 +917,8 @@ function MobileProjectDetailFilesView({
 					onGoHome={() => handleNavigateTo(-1)}
 					backLabel={t("back")}
 					homeLabel={t("home")}
+					backButtonTestId="project-detail-mobile-back-button"
+					homeButtonTestId="project-detail-mobile-home-button"
 					homeIconClassName="h-4.5 w-4.5"
 					separatorClassName="h-4 w-4 text-muted-foreground/60"
 					segmentButtonClassName="px-2 text-base leading-6"
@@ -1010,6 +1014,7 @@ function MobileProjectDetailFilesView({
 						onToggleAll={handleToggleAll}
 						onDownload={canSelectionDownload ? handleSelectionDownload : undefined}
 						onShare={() => onBatchShare?.(selectedIds)}
+						onCopy={() => onBatchCopy?.(selectedIds)}
 						onMove={() => onBatchMove?.(selectedIds)}
 						onDelete={() => onBatchDelete?.(selectedIds)}
 					/>

@@ -1169,6 +1169,58 @@ class MagicServiceClient:
             if should_close_session:
                 await session_to_use.close()
 
+    async def get_file_latest_version(self, file_id: str) -> Dict[str, Any]:
+        """
+        Get the latest content version number for a file.
+
+        Args:
+            file_id: The file ID (magic_super_agent_task_files.file_id), must be a positive integer string.
+
+        Returns:
+            Dict with keys: file_id (str), latest_version (int)
+
+        Raises:
+            ApiError: If the API request fails or returns a business error
+            ConnectionError: If connection fails
+        """
+        if not file_id:
+            raise ApiError("file_id is required")
+
+        url = f"{self.config.api_base_url.rstrip('/')}/open/internal-api/super-agent/file/{file_id}/versions/latest"
+
+        session_to_use = self.session or aiohttp.ClientSession()
+        should_close_session = self.session is None
+
+        try:
+            headers = {
+                "User-Agent": "MagicServiceClient/1.0"
+            }
+            if self.config.api_key:
+                headers["Authorization"] = f"Bearer {self.config.api_key}"
+            MetadataUtil.add_magic_and_user_authorization_headers(headers)
+
+            logger.info(f"Getting latest file version: file_id={file_id}")
+
+            async with session_to_use.get(url, headers=headers, timeout=30) as response:
+                response_text = await response.text()
+                logger.debug(f"Get latest file version API response status: {response.status}")
+                logger.debug(f"Get latest file version API response: {response_text}")
+
+                if response.status == 200:
+                    try:
+                        result = json.loads(response_text)
+                        data = self._process_api_response(result, f"获取文件最新版本({file_id})")
+                        return data
+                    except json.JSONDecodeError:
+                        raise ApiError(f"Invalid JSON response: {response_text[:200]}...", response.status)
+                    except ApiError:
+                        raise
+                else:
+                    raise ApiError(f"HTTP error: {response.status}", response.status, {"response": response_text})
+        finally:
+            if should_close_session:
+                await session_to_use.close()
+
     async def _process_memory_api_response(self, response, operation_name: str) -> Dict[str, Any]:
         """
         处理记忆API响应的通用方法

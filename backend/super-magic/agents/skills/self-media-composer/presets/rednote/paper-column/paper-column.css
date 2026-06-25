@@ -1,0 +1,535 @@
+/*
+ * paper-column.css
+ * Paper Column — Rednote 3:4 card preset
+ *
+ * A quiet magazine system for essay, analysis, field-note, and image-led posts.
+ * The preset is intentionally local and generic: paper texture, serif display,
+ * marginal notes, pull quotes, ledgers, and evidence frames.
+ */
+
+:root {
+  --em-paper: #f5f1ea;
+  --em-paper-soft: #e8dfd2;
+  --em-paper-deep: #d2c2ad;
+  --em-ink: #2b2925;
+  --em-muted: #746d63;
+  --em-faint: #a89d8d;
+  --em-line: rgba(92, 82, 68, 0.2);
+  --em-accent: #567493;
+  --em-accent-soft: #dbe7f0;
+  --em-positive: #7d8f68;
+  --em-negative: #b8756a;
+  --em-font-display: "Noto Serif SC", "Songti SC", "STSong", serif;
+  --em-font-body:
+    "Noto Sans SC", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  --em-font-mono: "IBM Plex Mono", "SF Mono", Consolas, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+}
+
+body {
+  background: var(--em-paper);
+  color: var(--em-ink);
+  font-family: var(--em-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.em-card {
+  position: relative;
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 12% 10%,
+      rgba(86, 116, 147, 0.17),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 88% 18%,
+      rgba(210, 194, 173, 0.46),
+      transparent 28%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(92, 82, 68, 0.06)),
+    var(--em-paper);
+  color: var(--em-ink);
+  display: flex;
+  flex-direction: column;
+}
+
+.em-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.62;
+  background-image:
+    linear-gradient(90deg, rgba(92, 82, 68, 0.045) 1px, transparent 1px),
+    linear-gradient(rgba(92, 82, 68, 0.04) 1px, transparent 1px),
+    radial-gradient(rgba(92, 82, 68, 0.05) 1px, transparent 1px);
+  background-size:
+    22px 22px,
+    22px 22px,
+    5px 5px;
+  mix-blend-mode: multiply;
+}
+
+.em-card::after {
+  content: "";
+  position: absolute;
+  inset: 22px;
+  pointer-events: none;
+  border: 1px solid rgba(86, 116, 147, 0.18);
+  border-radius: 18px;
+}
+
+.em-content {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  padding: 48px 44px 38px;
+  display: flex;
+  flex-direction: column;
+}
+
+.em-cover .em-content {
+  padding: 56px 44px 42px;
+}
+
+.em-kicker {
+  font-family: var(--em-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--em-muted);
+}
+
+.em-title {
+  font-family: var(--em-font-display);
+  font-size: 48px;
+  font-weight: 500;
+  line-height: 1.12;
+  letter-spacing: 0.02em;
+  color: var(--em-ink);
+}
+
+.em-title-xl {
+  font-family: var(--em-font-display);
+  font-size: 62px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: 0.03em;
+}
+
+.em-subtitle {
+  font-family: var(--em-font-display);
+  font-size: 19px;
+  font-weight: 400;
+  line-height: 1.58;
+  color: rgba(17, 17, 15, 0.76);
+}
+
+.em-body {
+  font-family: var(--em-font-display);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.68;
+  color: rgba(17, 17, 15, 0.8);
+}
+
+.em-meta {
+  font-family: var(--em-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--em-muted);
+  text-transform: uppercase;
+}
+
+.em-issue-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--em-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  padding: 9px 14px;
+}
+
+.em-issue-strip {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--em-line);
+}
+
+.em-photo-well {
+  position: relative;
+  overflow: hidden;
+  background: var(--em-paper-deep);
+  border: 6px solid rgba(255, 255, 255, 0.64);
+  border-radius: 18px 18px 7px 7px;
+  box-shadow: 0 18px 34px rgba(71, 65, 55, 0.13);
+}
+
+.em-photo-well::before {
+  content: "FIELD SNAP";
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(245, 241, 234, 0.84);
+  color: var(--em-accent);
+  font-family: var(--em-font-mono);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  backdrop-filter: blur(6px);
+}
+
+.em-photo-well img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.em-photo-caption {
+  font-family: var(--em-font-mono);
+  font-size: 10px;
+  line-height: 1.55;
+  letter-spacing: 0.08em;
+  color: var(--em-muted);
+}
+
+.em-pull-quote {
+  position: relative;
+  padding: 24px 24px 24px 28px;
+  border-left: 3px solid var(--em-accent);
+  border-radius: 0 18px 18px 0;
+  background: rgba(255, 255, 255, 0.34);
+  font-family: var(--em-font-display);
+  font-size: 31px;
+  font-weight: 500;
+  line-height: 1.28;
+  letter-spacing: 0.02em;
+}
+
+.em-pull-quote small {
+  display: block;
+  margin-top: 14px;
+  font-family: var(--em-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--em-muted);
+  text-transform: uppercase;
+}
+
+.em-ledger {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--em-line);
+}
+
+.em-ledger-row {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--em-line);
+}
+
+.em-ledger-num {
+  font-family: var(--em-font-mono);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--em-accent);
+}
+
+.em-ledger-title {
+  font-family: var(--em-font-display);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.32;
+}
+
+.em-ledger-desc {
+  margin-top: 7px;
+  font-size: 13px;
+  line-height: 1.58;
+  color: var(--em-muted);
+}
+
+.em-marginalia {
+  display: grid;
+  grid-template-columns: 1fr 126px;
+  gap: 22px;
+  align-items: stretch;
+}
+
+.em-margin-box {
+  padding-left: 16px;
+  border-left: 1px solid var(--em-line);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.em-note {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(86, 116, 147, 0.21);
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--em-muted);
+}
+
+.em-section-mark {
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  gap: 18px;
+  align-items: end;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--em-line);
+}
+
+.em-section-no {
+  font-family: var(--em-font-display);
+  font-size: 60px;
+  font-weight: 500;
+  line-height: 0.9;
+  color: var(--em-accent);
+}
+
+.em-evidence-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.em-evidence-card {
+  min-height: 118px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.46);
+  border: 1px solid rgba(86, 116, 147, 0.19);
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(71, 65, 55, 0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.em-evidence-label {
+  font-family: var(--em-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--em-accent);
+}
+
+.em-evidence-title {
+  margin-top: 16px;
+  font-family: var(--em-font-display);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.32;
+}
+
+.em-timeline {
+  display: grid;
+  gap: 16px;
+}
+
+.em-timeline-item {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.em-timeline-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--em-accent);
+  box-shadow: 0 0 0 7px var(--em-accent-soft);
+}
+
+.em-timeline-title {
+  font-family: var(--em-font-display);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.32;
+}
+
+.em-timeline-desc {
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--em-muted);
+}
+
+.em-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.em-compare-panel {
+  min-height: 168px;
+  padding: 18px;
+  border: 1px solid var(--em-line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.em-compare-panel.is-accent {
+  background: var(--em-accent-soft);
+  border-color: rgba(86, 116, 147, 0.33);
+}
+
+.em-compare-title {
+  font-family: var(--em-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--em-muted);
+}
+
+.em-compare-copy {
+  margin-top: 16px;
+  font-family: var(--em-font-display);
+  font-size: 19px;
+  line-height: 1.42;
+}
+
+.em-closing-note {
+  margin-top: auto;
+  padding: 22px 24px;
+  background:
+    radial-gradient(
+      circle at 92% 20%,
+      rgba(221, 230, 238, 0.22),
+      transparent 30%
+    ),
+    linear-gradient(135deg, var(--em-ink), #3f5267);
+  color: var(--em-paper);
+  border-radius: 20px;
+}
+
+.em-closing-note .em-meta {
+  color: rgba(243, 240, 232, 0.62);
+}
+
+.em-closing-title {
+  margin-top: 12px;
+  font-family: var(--em-font-display);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.28;
+}
+
+.em-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.em-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 9px;
+  border: 1px solid var(--em-line);
+  border-radius: 999px;
+  font-family: var(--em-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--em-muted);
+  text-transform: uppercase;
+}
+
+.em-chip.is-accent {
+  background: var(--em-accent);
+  border-color: var(--em-accent);
+  color: #fff;
+}
+
+.em-highlight {
+  color: var(--em-accent);
+}
+
+.em-rule {
+  height: 1px;
+  background: var(--em-line);
+}
+
+.em-stack {
+  display: flex;
+  flex-direction: column;
+}
+.em-row {
+  display: flex;
+  align-items: center;
+}
+.em-between {
+  justify-content: space-between;
+}
+.em-center {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+.em-gap-sm {
+  gap: 10px;
+}
+.em-gap-md {
+  gap: 18px;
+}
+.em-gap-lg {
+  gap: 28px;
+}
+.em-mt-sm {
+  margin-top: 12px;
+}
+.em-mt-md {
+  margin-top: 22px;
+}
+.em-mt-lg {
+  margin-top: 34px;
+}
+.em-fill {
+  flex: 1;
+}
+.em-muted {
+  color: var(--em-muted);
+}
+.em-accent {
+  color: var(--em-accent);
+}
+.em-paper-box {
+  background: var(--em-paper-soft);
+}

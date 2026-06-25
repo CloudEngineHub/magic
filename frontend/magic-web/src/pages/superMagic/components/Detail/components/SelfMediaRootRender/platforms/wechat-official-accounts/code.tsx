@@ -19,6 +19,7 @@ import { flattenAttachments } from "../../../../contents/HTML/utils"
 import type { FileItem } from "../../../../contents/HTML/utils/fetchInterceptor"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import type { PlatformComponentProps, SelfMediaPost, SelfMediaView } from "../../types"
+import { selfMediaOverlayStyles } from "../../components/selfMediaOverlayStyles"
 
 interface WechatCodeViewProps {
 	post: SelfMediaPost
@@ -270,7 +271,9 @@ function WechatCodeView({
 		<div className="relative h-full w-full" data-testid="wechat-code-view">
 			{/* Floating save/cancel — only visible when there are unsaved changes */}
 			{hasUnsavedChanges ? (
-				<div className="absolute right-4 top-1 z-50 flex items-center gap-1 rounded-lg px-2 py-1">
+				<div
+					className={`absolute right-4 top-1 z-50 flex items-center gap-1 px-2 py-1 ${selfMediaOverlayStyles.floatingPanel}`}
+				>
 					<FileEditButtons
 						isEditMode
 						isSaving={saving}
@@ -306,7 +309,10 @@ function WechatCodeView({
 
 			{/* Unsaved changes dialog */}
 			<AlertDialog open={showUnsavedNavDialog}>
-				<AlertDialogContent data-testid="wechat-code-unsaved-nav-dialog">
+				<AlertDialogContent
+					className={selfMediaOverlayStyles.alertSurface}
+					data-testid="wechat-code-unsaved-nav-dialog"
+				>
 					<AlertDialogHeader>
 						<AlertDialogTitle>
 							{t("detail.selfMedia.edit.unsavedTitle")}
@@ -317,6 +323,7 @@ function WechatCodeView({
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel
+							className={selfMediaOverlayStyles.secondaryButton}
 							onClick={handleCancelNav}
 							data-testid="wechat-code-unsaved-nav-cancel-btn"
 						>
@@ -324,12 +331,14 @@ function WechatCodeView({
 						</AlertDialogCancel>
 						<AlertDialogAction
 							variant="outline"
+							className={selfMediaOverlayStyles.secondaryButton}
 							onClick={handleDiscardBeforeNav}
 							data-testid="wechat-code-unsaved-nav-discard-btn"
 						>
 							{t("detail.selfMedia.edit.discard")}
 						</AlertDialogAction>
 						<AlertDialogAction
+							className={selfMediaOverlayStyles.primaryButton}
 							onClick={handleSaveBeforeNav}
 							data-testid="wechat-code-unsaved-nav-save-btn"
 						>
@@ -341,7 +350,10 @@ function WechatCodeView({
 
 			{/* Save retry dialog */}
 			<AlertDialog open={showSaveRetryDialog}>
-				<AlertDialogContent data-testid="wechat-code-save-retry-dialog">
+				<AlertDialogContent
+					className={selfMediaOverlayStyles.alertSurface}
+					data-testid="wechat-code-save-retry-dialog"
+				>
 					<AlertDialogHeader>
 						<AlertDialogTitle>{t("detail.selfMedia.edit.saveFailed")}</AlertDialogTitle>
 						<AlertDialogDescription>
@@ -351,12 +363,14 @@ function WechatCodeView({
 					<AlertDialogFooter>
 						<AlertDialogAction
 							variant="outline"
+							className={selfMediaOverlayStyles.secondaryButton}
 							onClick={handleDiscardAfterFailedSave}
 							data-testid="wechat-code-failed-discard-btn"
 						>
 							{t("detail.selfMedia.edit.discard")}
 						</AlertDialogAction>
 						<AlertDialogAction
+							className={selfMediaOverlayStyles.primaryButton}
 							onClick={handleRetryFailedSave}
 							data-testid="wechat-code-failed-retry-btn"
 						>

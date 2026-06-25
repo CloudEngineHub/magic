@@ -12,7 +12,10 @@
 	"crewMarket": {
 		"title": "Digital Crew"
 	},
-	"docAssistant": {
+	"audioRecordings": {
+		"title": "Recordings & summaries"
+	},
+	"officialDocumentWriting": {
 		"title": "Document Writing Assistant"
 	},
 	"footer": {
@@ -30,6 +33,12 @@
 	},
 	"home": {
 		"title": "Home"
+	},
+	"chats": {
+		"title": "Chats",
+		"newChat": "New chat",
+		"refresh": "Refresh conversations",
+		"empty": "No conversations"
 	},
 	"mobileShell": {
 		"themeToggle": {

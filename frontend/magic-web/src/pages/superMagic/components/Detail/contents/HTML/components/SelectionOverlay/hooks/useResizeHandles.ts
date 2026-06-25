@@ -18,6 +18,59 @@ interface PointerCaptureState {
 	target: HTMLElement
 }
 
+function isFlexParentDisplay(display?: string): boolean {
+	return display === "flex" || display === "inline-flex"
+}
+
+function isFlexRowDirection(direction?: string): boolean {
+	return !direction || direction === "row" || direction === "row-reverse"
+}
+
+function isFlexColumnDirection(direction?: string): boolean {
+	return direction === "column" || direction === "column-reverse"
+}
+
+export function buildResizeStyles(
+	selectedInfo: SelectedInfo,
+	handle: ResizeHandleConfig,
+	nextWidth: number,
+	nextHeight: number,
+): Record<string, string> {
+	const width = `${Math.round(nextWidth)}px`
+	const height = `${Math.round(nextHeight)}px`
+	const styles: Record<string, string> = {
+		width,
+		height,
+	}
+	const { computedStyles } = selectedInfo
+
+	if (!isFlexParentDisplay(computedStyles.parentDisplay)) {
+		return styles
+	}
+
+	if (handle.directionX > 0 && isFlexRowDirection(computedStyles.parentFlexDirection)) {
+		return {
+			...styles,
+			flexBasis: width,
+			flexGrow: "0",
+			flexShrink: "0",
+			minWidth: "0px",
+		}
+	}
+
+	if (handle.directionY > 0 && isFlexColumnDirection(computedStyles.parentFlexDirection)) {
+		return {
+			...styles,
+			flexBasis: height,
+			flexGrow: "0",
+			flexShrink: "0",
+			minHeight: "0px",
+		}
+	}
+
+	return styles
+}
+
 export function useResizeHandles({
 	editorRef,
 	isPptRender,
@@ -232,10 +285,15 @@ export function useResizeHandles({
 			})
 
 			// Schedule batch style update to iframe
-			scheduleResizeUpdate(selectedInfoRef.current.selector, {
-				width: `${Math.round(nextWidth)}px`,
-				height: `${Math.round(nextHeight)}px`,
-			})
+			scheduleResizeUpdate(
+				selectedInfoRef.current.selector,
+				buildResizeStyles(
+					selectedInfoRef.current,
+					resizeHandleRef.current,
+					nextWidth,
+					nextHeight,
+				),
+			)
 		},
 		[getScaleFactor, scheduleResizeUpdate, setSelectedInfo, stopResize],
 	)
@@ -270,10 +328,15 @@ export function useResizeHandles({
 			// Begin batch operation - save initial state
 			if (editorRef?.current) {
 				try {
-					await editorRef.current.beginBatchOperation(selectedInfoRef.current.selector, {
-						width: `${Math.round(selectedInfoRef.current.rect.width)}px`,
-						height: `${Math.round(selectedInfoRef.current.rect.height)}px`,
-					})
+					await editorRef.current.beginBatchOperation(
+						selectedInfoRef.current.selector,
+						buildResizeStyles(
+							selectedInfoRef.current,
+							handle,
+							selectedInfoRef.current.rect.width,
+							selectedInfoRef.current.rect.height,
+						),
+					)
 				} catch (error) {
 					console.error("[useResizeHandles] Failed to begin batch operation:", error)
 				}

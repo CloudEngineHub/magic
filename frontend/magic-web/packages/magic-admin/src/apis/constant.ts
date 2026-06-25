@@ -1,7 +1,6 @@
 /* eslint-disable no-template-curly-in-string */
 
 export const RequestUrl = {
-
 	/** 获取组织架构 */
 	getOrganization: "/api/v1/contact/departments/${id}/children",
 	/** 【新版本】获取部门用户列表 */
@@ -176,12 +175,24 @@ export const RequestUrl = {
 	/** 应用菜单 */
 	/** 分页查询应用菜单列表 */
 	getAppMenuList: "/api/v1/admin/applications/queries",
+	/** 获取应用菜单详情 */
+	getAppMenuDetail: "/api/v1/admin/applications/${id}",
 	/** 保存应用菜单（新增/编辑，有 id 则编辑，无 id 则新增） */
 	saveAppMenu: "/api/v1/admin/applications/save",
 	/** 删除应用菜单 */
 	deleteAppMenu: "/api/v1/admin/applications/delete",
 	/** 设置应用菜单状态（启用/禁用） */
 	updateAppMenuStatus: "/api/v1/admin/applications/status",
+	/** 非官方组织后台 - 分页查询应用菜单列表 */
+	getOrganizationAppMenuList: "/api/v1/organization/admin/applications/queries",
+	/** 非官方组织后台 - 获取应用菜单详情 */
+	getOrganizationAppMenuDetail: "/api/v1/organization/admin/applications/${id}",
+	/** 非官方组织后台 - 保存应用菜单 */
+	saveOrganizationAppMenu: "/api/v1/organization/admin/applications/save",
+	/** 非官方组织后台 - 删除应用菜单 */
+	deleteOrganizationAppMenu: "/api/v1/organization/admin/applications/delete",
+	/** 非官方组织后台 - 设置应用菜单状态 */
+	updateOrganizationAppMenuStatus: "/api/v1/organization/admin/applications/status",
 
 	/** File */
 	/** 检查文件上传状态 */

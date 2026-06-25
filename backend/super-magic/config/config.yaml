@@ -865,6 +865,8 @@ sandbox:
   mainland: "${MAINLAND:-false}"
   magic_authorization: "${MAGIC_AUTHORIZATION}"
   fetch_workspace: "${FETCH_WORKSPACE:-True}"
+  # 是否启用 Agent 空闲监控。默认开启；本地可通过 ENABLE_AGENT_IDLE_MONITOR=false 关闭。
+  idle_monitor_enabled: "${ENABLE_AGENT_IDLE_MONITOR:-true}"
   agent_idle_timeout: "${AGENT_IDLE_TIMEOUT:-1200}"
   idle_monitor_interval: "${IDLE_MONITOR_INTERVAL:-60}"
   # 是否将 init_client_message 中的 authorization 转发为额外的 USER-Authorization header

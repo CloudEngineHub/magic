@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { LoaderCircle, RotateCcw, SquarePen } from "lucide-react"
 import { useCanvasUI } from "../../context/CanvasUIContext"
 import { useCanvas } from "../../context/CanvasContext"
+import { useMagic } from "../../context/MagicContext"
 import useElementPositionEffect from "../../hooks/useElementPositionEffect"
 import { useFloatingComponent } from "../../hooks/useFloatingComponent"
 import { ElementTypeEnum, type VideoElement } from "../../canvas/types"
@@ -13,6 +14,10 @@ import { useCanvasDesignI18n } from "../../context/I18nContext"
 import VideoGenerateEditorRender from "./VideoGenerateEditorRender"
 import styles from "./index.module.css"
 import { createAndSubmitVideoGeneration } from "./createAndSubmitVideoGeneration"
+import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
+import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
+import { resolveVideoGenerationSelection } from "./video-editor-config.generation"
+import { buildVideoPointsEstimateSignature } from "./video-points-estimate.utils"
 
 interface VideoSecondEditProps {
 	videoElement: VideoElement
@@ -25,9 +30,26 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const { videoElement } = props
 	const { selectedElements } = useCanvasUI()
 	const { canvas } = useCanvas()
+	const { videoModelList } = useMagic()
 	const { t } = useCanvasDesignI18n()
 	const [isEditing, setIsEditing] = useState(false)
 	const [isGeneratingAgain, setIsGeneratingAgain] = useState(false)
+	const confirmVideoGeneration = useVideoPointsConfirm()
+	const estimateRequest = videoElement.generateVideoRequest ?? null
+	const estimateSignature = useMemo(() => {
+		if (!estimateRequest) return null
+		return buildVideoPointsEstimateSignature(estimateRequest)
+	}, [estimateRequest])
+	const { points: estimatedPoints, isLoading: isEstimateLoading } = useVideoPointsEstimate({
+		request: estimateRequest,
+		signature: estimateSignature,
+		enabled: Boolean(estimateRequest?.model_id),
+	})
+	const generateAgainElementSize = useMemo(() => {
+		if (!estimateRequest?.generation) return null
+		const model = videoModelList.find((item) => item.model_id === estimateRequest.model_id)
+		return resolveVideoGenerationSelection(model, estimateRequest.generation).size
+	}, [estimateRequest, videoModelList])
 
 	const { containerRef: positionRef } = useElementPositionEffect({
 		position: "bottom",
@@ -60,23 +82,39 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	}, [canvas, videoElement.id, videoElement.generateVideoRequest])
 
 	const handleGenerateAgain = useCallback(async () => {
-		if (!canvas || !videoElement.generateVideoRequest || isGeneratingAgain) return
-		setIsGeneratingAgain(true)
-		try {
-			await createAndSubmitVideoGeneration({
-				canvas,
-				sourceVideoElement: videoElement,
-				request: {
-					...videoElement.generateVideoRequest,
-					video_id: generateUUID(),
-				},
-			})
-		} finally {
-			setIsGeneratingAgain(false)
-		}
-	}, [canvas, isGeneratingAgain, videoElement])
+		const generateVideoRequest = videoElement.generateVideoRequest
+		if (!canvas || !generateVideoRequest || isGeneratingAgain || isEstimateLoading) return
+		await confirmVideoGeneration({
+			points: estimatedPoints,
+			onConfirm: async () => {
+				setIsGeneratingAgain(true)
+				try {
+					await createAndSubmitVideoGeneration({
+						canvas,
+						sourceVideoElement: videoElement,
+						newElementSize: generateAgainElementSize,
+						request: {
+							...generateVideoRequest,
+							video_id: generateUUID(),
+						},
+					})
+				} finally {
+					setIsGeneratingAgain(false)
+				}
+			},
+		})
+	}, [
+		canvas,
+		confirmVideoGeneration,
+		estimatedPoints,
+		generateAgainElementSize,
+		isEstimateLoading,
+		isGeneratingAgain,
+		videoElement,
+	])
 
 	const canRestore = Boolean(videoElement.generateVideoRequest?.model_id)
+	const generateAgainBusy = isGeneratingAgain || isEstimateLoading
 
 	if (!isEditing) {
 		if (!canRestore) {
@@ -103,9 +141,10 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 						<IconButton
 							className={styles.secondEditButton}
 							onClick={handleGenerateAgain}
+							disabled={generateAgainBusy}
 							key="generate-again"
 						>
-							{isGeneratingAgain ? (
+							{generateAgainBusy ? (
 								<LoaderCircle size={14} className="animate-spin" />
 							) : (
 								<RotateCcw size={14} />
@@ -125,6 +164,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			autoFocus
 			restoreOnMount="originalRequestOnly"
 			submitTarget="new-element"
+			syncElementSize={false}
 		/>
 	)
 }

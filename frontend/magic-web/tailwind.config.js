@@ -16,6 +16,7 @@ const config = {
 			"./dingtalk.html",
 			"./src/**/*.{ts,tsx,jsx}",
 			"!./src/**/node_modules/**",
+			"./node_modules/@dtyq/user-selector/dist/**/*.js",
 		],
 	},
 	theme: {

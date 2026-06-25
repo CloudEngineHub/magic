@@ -16,7 +16,6 @@ import {
 	SidebarGroupLabel,
 	SidebarMenu,
 } from "@/components/shadcn-ui/sidebar"
-import statusPollingService from "@/pages/superMagic/services/statusPollingService"
 
 function WorkspaceList() {
 	const { t } = useTranslation()
@@ -45,7 +44,9 @@ function WorkspaceList() {
 		if (isRefreshing) return
 		setIsRefreshing(true)
 		try {
-			await statusPollingService.refreshResourceStatus()
+			// Keep manual refresh focused on sidebar data caches so the action
+			// updates visible workspace/project lists without issuing extra status-only requests.
+			await superMagicService.silentRefreshSidebarLoadedCaches()
 		} finally {
 			setIsRefreshing(false)
 		}

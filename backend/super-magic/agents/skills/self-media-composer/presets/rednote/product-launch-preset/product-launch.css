@@ -1,0 +1,459 @@
+/*
+ * product-launch.css
+ * Product Launch — Product feature launch Rednote card preset
+ *
+ * Design principles:
+ *   · Minimal white base with a 6px red top line for brand anchoring
+ *   · Black primary text plus red accents for high-contrast dual-color styling
+ *   · 2px badge radius for deliberately sharp emphasis
+ *   · 10px rounded image containers with borders, ready for screenshots
+ *   · No shadows or gradients, suitable for screenshot export and resharing
+ *
+ * Color palette:
+ *   --pl-bg           #FFFFFF   Primary background
+ *   --pl-surface      #F5F5F7   Secondary panel / image-container background
+ *   --pl-surface2     #EBEBEB   Divider / border
+ *   --pl-accent       #E63946   Accent red (top line, badges, title highlights)
+ *   --pl-accent-light #FF6B74   Light red (hover states, highlight marks)
+ *   --pl-text         #111111   Primary text
+ *   --pl-text-muted   #666666   Secondary text
+ *   --pl-text-faint   #999999   Faint text (source, copyright)
+ *   --pl-border       #EBEBEB   Default border
+ *   --pl-positive     #2DC653   Positive metric green
+ *   --pl-negative     #E63946   Negative metric red (same as accent)
+ *   --pl-font-display 'Noto Sans SC', sans-serif
+ *   --pl-font-body    'Noto Sans SC', sans-serif
+ *
+ * ─────────────────────────────────────────────────────────────
+ * Table of Contents
+ *
+ * §0  CSS Variables & Base Reset
+ * §1  Card Shell (.pl-card)
+ *     §1.1  Cover type (.pl-cover)
+ *     §1.2  Content type (.pl-content)
+ * §2  Content Components
+ *     §2.1  Top accent bar (.pl-topbar)
+ *     §2.2  Page header (.pl-header)
+ *     §2.3  Section label / badge (.pl-badge, .pl-badge-red)
+ *     §2.4  Data cards (.pl-data-card)
+ *     §2.5  Stats row (.pl-stats-row)
+ *     §2.6  Image box (.pl-img-box)
+ *     §2.7  List / feature rows (.pl-list-row)
+ *     §2.8  CTA box (.pl-cta-box)
+ *     §2.9  Divider (.pl-divider)
+ *     §2.10 Footer / note (.pl-note)
+ * §3  Utility Classes (pl-*)
+ *     §3.1  Tags & badges
+ *     §3.2  Text colors
+ *     §3.3  Background fills
+ *     §3.4  Inline highlights
+ * §4  Layout Helpers
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   §0  CSS Variables & Base Reset
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --pl-bg:           #FFFFFF;
+  --pl-surface:      #F5F5F7;
+  --pl-surface2:     #EBEBEB;
+  --pl-accent:       #E63946;
+  --pl-accent-light: #FF6B74;
+  --pl-text:         #111111;
+  --pl-text-muted:   #666666;
+  --pl-text-faint:   #999999;
+  --pl-border:       #EBEBEB;
+  --pl-positive:     #2DC653;
+  --pl-negative:     #E63946;
+  --pl-font-display: 'Noto Sans SC', sans-serif;
+  --pl-font-body:    'Noto Sans SC', sans-serif;
+  --pl-badge-radius: 2px;
+  --pl-img-radius:   10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+html, body {
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--pl-font-body);
+  background: var(--pl-bg);
+  color: var(--pl-text);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §1  Card Shell
+   ═══════════════════════════════════════════════════════════ */
+
+/* §1 Base shell — Shared by all cards */
+.pl-card {
+  width: 540px;
+  height: 720px;
+  position: relative;
+  overflow: hidden;
+  background: var(--pl-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* §1.1 Cover — Cover card with extra breathing room at the top */
+.pl-cover {
+  background: var(--pl-bg);
+}
+
+/* §1.2 Content — Content card with standard padding */
+.pl-content {
+  background: var(--pl-bg);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §2  Content Components
+   ═══════════════════════════════════════════════════════════ */
+
+/* §2.1 Top accent bar — Top 6px brand red line, required on every card */
+.pl-topbar {
+  width: 100%;
+  height: 6px;
+  background: var(--pl-accent);
+  flex-shrink: 0;
+}
+
+/* §2.2 Page header — Main content container */
+.pl-header {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 36px 48px 28px;
+}
+
+/* Cover-specific padding with larger top space for decorative imagery */
+.pl-cover .pl-header {
+  padding: 100px 48px 80px;
+  justify-content: space-between;
+}
+
+/* §2.3 Section label / badge */
+
+/* Black badge with white text for steps, numbers, and regular labels */
+.pl-badge {
+  display: inline-block;
+  background: var(--pl-text);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 6px 14px;
+  border-radius: var(--pl-badge-radius);
+  align-self: flex-start;
+  margin-bottom: 20px;
+  line-height: 1.4;
+}
+
+/* Red badge with white text for core capability, bonus note, and emphasis */
+.pl-badge-red {
+  background: var(--pl-accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 6px 14px;
+  border-radius: var(--pl-badge-radius);
+  align-self: flex-start;
+  margin-bottom: 20px;
+  line-height: 1.4;
+  display: inline-block;
+}
+
+/* Main card title */
+.pl-title {
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1.2;
+  color: var(--pl-text);
+  margin-bottom: 4px;
+}
+
+/* Large cover title */
+.pl-title-xl {
+  font-size: 46px;
+  font-weight: 900;
+  line-height: 1.15;
+  color: var(--pl-text);
+  margin-bottom: 24px;
+}
+
+/* Red accent text for title spans */
+.pl-title .pl-accent,
+.pl-title-xl .pl-accent {
+  color: var(--pl-accent);
+}
+
+/* Subtitle / explanatory text */
+.pl-lead {
+  font-size: 16px;
+  color: var(--pl-text-muted);
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+
+/* Cover subtitle */
+.pl-lead-sm {
+  font-size: 15px;
+  color: var(--pl-text-muted);
+  line-height: 1.7;
+}
+
+/* §2.4 Data card — Single metric block */
+.pl-data-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px 8px;
+}
+
+.pl-data-card .pl-data-num {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--pl-accent);
+  line-height: 1.2;
+}
+
+.pl-data-card .pl-data-label {
+  font-size: 12px;
+  color: var(--pl-text-faint);
+  margin-top: 2px;
+}
+
+/* §2.5 Stats row — Three-column metric row */
+.pl-stats-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.pl-stats-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--pl-border);
+  flex-shrink: 0;
+}
+
+/* §2.6 Image box — Screenshot / image container */
+.pl-img-box {
+  border-radius: var(--pl-img-radius);
+  overflow: hidden;
+  border: 1px solid var(--pl-border);
+  background: var(--pl-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Automatically fill remaining height */
+.pl-img-box.is-flex {
+  flex: 1;
+}
+
+/* Fixed-height variant */
+.pl-img-box.is-fixed {
+  height: 340px;
+}
+
+.pl-img-box img {
+  width: 100%;
+  object-fit: contain;
+}
+
+/* §2.7 List / feature row — Feature list row */
+.pl-list-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--pl-border);
+}
+
+.pl-list-row:last-child {
+  border-bottom: none;
+}
+
+.pl-list-row .pl-list-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--pl-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.pl-list-row .pl-list-body {
+  flex: 1;
+}
+
+.pl-list-row .pl-list-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pl-text);
+  line-height: 1.4;
+}
+
+.pl-list-row .pl-list-desc {
+  font-size: 13px;
+  color: var(--pl-text-muted);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+/* Highlighted row (top feature / core selling point) */
+.pl-list-row.is-highlight .pl-list-icon {
+  background: var(--pl-accent);
+  color: #fff;
+}
+
+.pl-list-row.is-highlight .pl-list-title {
+  color: var(--pl-accent);
+}
+
+/* §2.8 CTA box — Ending interaction CTA area */
+.pl-cta-box {
+  background: var(--pl-surface);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 16px;
+}
+
+.pl-cta-box .pl-cta-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pl-text);
+  margin-bottom: 4px;
+}
+
+.pl-cta-box .pl-cta-sub {
+  font-size: 13px;
+  color: var(--pl-text-muted);
+}
+
+/* §2.9 Divider */
+.pl-divider {
+  width: 100%;
+  height: 1px;
+  background: var(--pl-border);
+  margin: 12px 0;
+}
+
+/* §2.10 Footer / note — Bottom brand bar */
+.pl-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--pl-border);
+  padding-top: 16px;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.pl-note.no-border {
+  border-top: none;
+  padding-top: 12px;
+}
+
+.pl-note .pl-note-domain {
+  font-size: 12px;
+  color: var(--pl-text-faint);
+}
+
+.pl-note .pl-note-logo {
+  height: 24px;
+  width: auto;
+}
+
+/* Cover bottom brand bar (slightly larger logo) */
+.pl-cover .pl-note .pl-note-logo {
+  height: 28px;
+}
+
+/* Decorative image (mascot/product image at cover top-right) */
+.pl-mascot {
+  position: absolute;
+  top: 106px;
+  left: 201px;
+  width: 264px;
+  height: 242px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  transform: rotate(-28deg);
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §3  Utility Classes
+   ═══════════════════════════════════════════════════════════ */
+
+/* §3.1 Tags & badges */
+.pl-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--pl-surface);
+  color: var(--pl-text-muted);
+  border: 1px solid var(--pl-border);
+}
+
+.pl-tag-accent {
+  background: var(--pl-accent);
+  color: #fff;
+  border-color: var(--pl-accent);
+}
+
+/* §3.2 Text colors */
+.pl-text-accent   { color: var(--pl-accent); }
+.pl-text-muted    { color: var(--pl-text-muted); }
+.pl-text-faint    { color: var(--pl-text-faint); }
+.pl-text-positive { color: var(--pl-positive); }
+.pl-text-negative { color: var(--pl-negative); }
+.pl-text-bold     { font-weight: 900; }
+
+/* §3.3 Background fills */
+.pl-bg-accent   { background: var(--pl-accent); color: #fff; }
+.pl-bg-surface  { background: var(--pl-surface); }
+.pl-bg-surface2 { background: var(--pl-surface2); }
+
+/* §3.4 Inline highlights */
+.pl-hl {
+  background: linear-gradient(180deg, transparent 55%, rgba(230, 57, 70, 0.18) 55%);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §4  Layout Helpers
+   ═══════════════════════════════════════════════════════════ */
+
+.pl-row    { display: flex; align-items: center; }
+.pl-col    { display: flex; flex-direction: column; }
+.pl-spacer { flex: 1; }
+.pl-center { display: flex; align-items: center; justify-content: center; }
+
+.pl-gap-xs { gap: 6px; }
+.pl-gap-sm { gap: 12px; }
+.pl-gap-md { gap: 20px; }
+.pl-gap-lg { gap: 32px; }
+
+.pl-px-card  { padding-left: 48px; padding-right: 48px; }
+.pl-pt-card  { padding-top: 36px; }
+.pl-pb-card  { padding-bottom: 28px; }
+.pl-p-card   { padding: 36px 48px 28px; }

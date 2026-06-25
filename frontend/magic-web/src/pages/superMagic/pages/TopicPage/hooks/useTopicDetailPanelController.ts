@@ -2,11 +2,10 @@ import { useMemoizedFn } from "ahooks"
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DetailRef } from "../../../components/Detail"
+import type { ActiveDetailTabType } from "../../../components/Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "../../../components/TopicFilesButton/hooks/types"
 import { getTemporaryDownloadUrl } from "../../../utils/api"
 import { downloadFileWithAnchor } from "../../../utils/handleFIle"
-
-type DetailTabType = "playback" | "file" | null
 
 interface UseTopicDetailPanelControllerOptions {
 	detailRef: RefObject<DetailRef>
@@ -33,6 +32,8 @@ interface UseTopicDetailPanelControllerReturn {
 	clearActiveDetailTabType: () => void
 }
 
+type DetailTabType = ActiveDetailTabType
+
 const DETAIL_OPEN_DELAY_MS = 100
 const FILE_OPEN_FALLBACK_DELAY_MS = 300
 
@@ -48,30 +49,31 @@ export function useTopicDetailPanelController({
 	const [activeDetailTabType, setActiveDetailTabType] = useState<DetailTabType>(null)
 	const fileOpenFallbackTimerRef = useRef<number | null>(null)
 	const activeFileIdRef = useRef<string | null>(activeFileId)
+	const activeDetailTabTypeRef = useRef<DetailTabType>(null)
 
 	const shouldShowDetailPanel = useMemo(() => {
 		if (isReadOnly) {
 			return true
 		}
-		return (
-			Boolean(activeFileId) ||
-			activeDetailTabType === "playback" ||
-			activeDetailTabType === "file"
-		)
+		return Boolean(activeFileId) || Boolean(activeDetailTabType)
 	}, [activeDetailTabType, activeFileId, isReadOnly])
 
 	useEffect(() => {
 		activeFileIdRef.current = activeFileId
 	}, [activeFileId])
 
-	const scheduleFileOpenFallback = useMemoizedFn(() => {
+	useEffect(() => {
+		activeDetailTabTypeRef.current = activeDetailTabType
+	}, [activeDetailTabType])
+
+	const scheduleFileOpenFallback = useMemoizedFn((fallbackTabType: DetailTabType = null) => {
 		if (fileOpenFallbackTimerRef.current) {
 			window.clearTimeout(fileOpenFallbackTimerRef.current)
 		}
 
 		fileOpenFallbackTimerRef.current = window.setTimeout(() => {
 			if (!activeFileIdRef.current) {
-				setActiveDetailTabType((prev) => (prev === "file" ? null : prev))
+				setActiveDetailTabType((prev) => (prev === "file" ? fallbackTabType : prev))
 			}
 			fileOpenFallbackTimerRef.current = null
 		}, FILE_OPEN_FALLBACK_DELAY_MS)
@@ -86,10 +88,10 @@ export function useTopicDetailPanelController({
 	}, [])
 
 	const handleFileClickWithPanel = useMemoizedFn((fileItem?: unknown) => {
-		// setActiveFileId(null)
-		// setActiveDetailTabType("file")
+		const fallbackTabType = activeDetailTabTypeRef.current
+		setActiveDetailTabType("file")
 		handleFileClick(fileItem)
-		scheduleFileOpenFallback()
+		scheduleFileOpenFallback(fallbackTabType)
 	})
 
 	const topicFilesPropsWithPanel = useMemo(
@@ -147,14 +149,31 @@ export function useTopicDetailPanelController({
 			}
 		}
 
+		const handleOpenKnowledgeBaseTab = (data: unknown) => {
+			const payload = data as {
+				knowledgeBaseId: string
+				documentCode?: string
+				fileKey?: string
+				title: string
+				knowledgeBaseName?: string
+				fileExtension?: string
+			}
+			setActiveDetailTabType("knowledge_base")
+			window.setTimeout(() => {
+				detailRef.current?.openKnowledgeBaseTab?.(payload)
+			}, DETAIL_OPEN_DELAY_MS)
+		}
+
 		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 		pubsub.subscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 		pubsub.subscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
+		pubsub.subscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
 
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 			pubsub.unsubscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
+			pubsub.unsubscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
 		}
 	}, [detailRef, scheduleFileOpenFallback, setActiveFileId, attachmentList])
 

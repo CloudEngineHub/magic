@@ -32,6 +32,7 @@ export interface CurrentFileInfo {
 	source?: AttachmentSource
 	projectId?: string
 	projectName?: string
+	relativeFilePath?: string
 }
 
 export interface ActionContext {
@@ -63,6 +64,8 @@ export interface ActionContext {
 	onLocateFile?: () => void
 	onShare?: () => void
 	changeFileVersion?: (version: number, isNewestVersion: boolean) => void
+	/** 触发历史版本对比的回调（仅对非最新版本生效） */
+	onCompareVersion?: (version: number) => void
 	/** 全屏等场景下将 Tooltip/Dropdown 挂载到指定容器内，避免被裁切 */
 	getPopupContainer?: () => HTMLElement | null
 }
@@ -156,4 +159,8 @@ export interface CommonHeaderV2Props {
 	onLocateFile?: () => void
 	/** 额外的「更多」菜单项，追加在默认菜单项之后 */
 	extraMoreMenuItems?: MenuProps["items"]
+	/** 触发历史版本对比的回调（选中非最新版本时调用，替代直接切换） */
+	onCompareVersion?: (version: number) => void
+	/** 「更多」菜单开关状态变化 */
+	onMoreMenuOpenChange?: (open: boolean) => void
 }

@@ -1,25 +1,30 @@
 import { render, screen } from "@testing-library/react"
+import type { ReactNode } from "react"
 import { describe, it, expect, vi } from "vitest"
 import TabCache from "../components/TabCache"
 
-// Mock dependencies
-vi.mock("../../../Render", () => ({
-	default: ({ children, ...props }: any) => (
-		<div data-testid="render-component" {...props}>
-			{children}
-		</div>
-	),
+vi.mock("antd", () => ({
+	Tooltip: ({ children }: { children: ReactNode }) => children,
+	Flex: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 
-vi.mock("../styles", () => ({
-	useStyles: () => ({
-		styles: {
-			tabCacheContainer: "tab-cache-container",
-			tabCacheActive: "tab-cache-active",
-			tabCacheInactive: "tab-cache-inactive",
-		},
-		cx: (...classes: string[]) => classes.filter(Boolean).join(" "),
+vi.mock("@/hooks/useFullscreenMode", () => ({
+	default: () => false,
+}))
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => key,
 	}),
+}))
+
+vi.mock("../components/PlaybackTabContent", () => ({
+	default: () => <div data-testid="playback-tab-content" />,
+}))
+
+// Mock dependencies
+vi.mock("../../../Render", () => ({
+	default: () => <div data-testid="render-component" />,
 }))
 
 describe("TabCache", () => {
@@ -40,16 +45,20 @@ describe("TabCache", () => {
 		render(<TabCache tab={mockTab} isActive={true} renderProps={mockRenderProps} />)
 
 		const container = screen.getByTestId("render-component").parentElement
-		expect(container).toHaveClass("tab-cache-container tab-cache-active")
-		expect(container).not.toHaveClass("tab-cache-inactive")
+		expect(container).toHaveClass("pointer-events-auto")
+		expect(container).toHaveClass("visible")
+		expect(container).toHaveClass("opacity-100")
+		expect(container).not.toHaveClass("pointer-events-none")
 	})
 
 	it("renders inactive tab correctly", () => {
 		render(<TabCache tab={mockTab} isActive={false} renderProps={mockRenderProps} />)
 
 		const container = screen.getByTestId("render-component").parentElement
-		expect(container).toHaveClass("tab-cache-container tab-cache-inactive")
-		expect(container).not.toHaveClass("tab-cache-active")
+		expect(container).toHaveClass("pointer-events-none")
+		expect(container).toHaveClass("invisible")
+		expect(container).toHaveClass("opacity-0")
+		expect(container).not.toHaveClass("pointer-events-auto")
 	})
 
 	it("passes render props to Render component", () => {
@@ -100,5 +109,33 @@ describe("TabCache", () => {
 
 		const renderComponent = screen.getByTestId("render-component")
 		expect(renderComponent).toBeInTheDocument()
+	})
+
+	it("renders website tabs through iframe content instead of the file Render component", () => {
+		render(
+			<TabCache
+				tab={
+					{
+						id: "website:unsplash",
+						title: "Unsplash",
+						fileData: {
+							file_id: "website:unsplash",
+							file_name: "Unsplash",
+							url: "https://unsplash.com",
+							display_config: {
+								type: "website",
+								name: "Unsplash",
+								description: "Image references",
+							},
+						},
+					} as any
+				}
+				isActive={true}
+				renderProps={mockRenderProps}
+			/>,
+		)
+
+		expect(screen.queryByTestId("render-component")).not.toBeInTheDocument()
+		expect(screen.getByTitle("Unsplash")).toHaveAttribute("src", "https://unsplash.com")
 	})
 })
