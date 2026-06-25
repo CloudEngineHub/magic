@@ -6,11 +6,11 @@ type TablerIconComponent = React.ComponentType<IconProps> | React.ExoticComponen
 
 const iconCache = new Map<string, TablerIconComponent>()
 const iconModules = import.meta.glob<{ default: TablerIconComponent }>(
-	"/node_modules/@tabler/icons-react/dist/esm/icons/*.mjs",
+	"../../node_modules/@tabler/icons-react/dist/esm/icons/*.mjs",
 )
 
 function getIconModulePath(name: string): string {
-	return `/node_modules/@tabler/icons-react/dist/esm/icons/${name}.mjs`
+	return `../../node_modules/@tabler/icons-react/dist/esm/icons/${name}.mjs`
 }
 
 function isTablerIconComponent(value: unknown): value is TablerIconComponent {
