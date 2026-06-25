@@ -89,6 +89,56 @@ class _SafeSpanExporter(SpanExporter):
         return bool(force_flush(timeout_millis))
 
 
+class _CredentialAwareSpanExporter(SpanExporter):
+    """Rebuild the underlying OTLP exporter when auth headers change.
+
+    In warm-pool sandboxes the Magic-Authorization token is written into
+    .credentials/ by the gateway after telemetry has already been initialized,
+    so headers captured at construction time stay empty and every export gets a
+    401. Re-resolve headers on each export and rebuild the exporter only when the
+    resolved header set actually changes (e.g. token finally mounted or rotated).
+
+    export() runs in the BatchSpanProcessor worker thread, not the asyncio event
+    loop, so the synchronous credential file read inside get_otlp_headers() is
+    safe here and does not block the loop.
+    """
+
+    def __init__(self, build_exporter) -> None:
+        self._build_exporter = build_exporter
+        self._exporter = None
+        self._headers_key = None
+
+    def _resolve(self):
+        headers = get_otlp_headers()
+        headers_key = tuple(sorted(headers.items()))
+        if self._exporter is None or headers_key != self._headers_key:
+            new_exporter = self._build_exporter(headers)
+            old_exporter = self._exporter
+            self._exporter = new_exporter
+            self._headers_key = headers_key
+            if old_exporter is not None:
+                try:
+                    old_exporter.shutdown()
+                except Exception:
+                    pass
+        return self._exporter
+
+    def export(self, spans):
+        return self._resolve().export(spans)
+
+    def shutdown(self):
+        if self._exporter is not None:
+            return self._exporter.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        if self._exporter is None:
+            return True
+        force_flush = getattr(self._exporter, "force_flush", None)
+        if force_flush is None:
+            return True
+        return bool(force_flush(timeout_millis))
+
+
 def is_telemetry_enabled() -> bool:
     """Check if telemetry is enabled via environment variable"""
     return os.getenv("ENABLE_TELEMETRY", "false").lower() in ("true", "1", "yes")
@@ -206,9 +256,12 @@ def setup_telemetry(
             if OTLP_HTTP_TRACE_EXPORTER_AVAILABLE and HttpOTLPSpanExporter is not None:
                 if otlp_headers:
                     logger.info(f"[OpenTelemetry] Custom headers: {list(otlp_headers.keys())}")
-                span_exporter = HttpOTLPSpanExporter(
-                    endpoint=otlp_traces_endpoint,
-                    headers=otlp_headers if otlp_headers else None
+                logger.info("[OpenTelemetry] HTTP trace exporter with dynamic auth headers enabled")
+                span_exporter = _CredentialAwareSpanExporter(
+                    build_exporter=lambda headers: HttpOTLPSpanExporter(
+                        endpoint=otlp_traces_endpoint,
+                        headers=headers or None,
+                    ),
                 )
             else:
                 logger.warning("[OpenTelemetry] HTTP exporter not available, falling back to console")
