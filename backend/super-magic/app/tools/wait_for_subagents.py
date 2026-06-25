@@ -211,23 +211,31 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
             if len(results) == 1 and results[0].get("agent_name"):
                 item = results[0]
                 agent_name = item["agent_name"]
-                action = i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
+                agent_id = item.get("agent_id", "")
                 status = item.get("status", "")
+                is_crew = is_crew_agent_code(agent_name)
+                if is_crew:
+                    action = i18n.translate("wait_for_subagents.crew", category="tool.actions")
+                    state = await SubagentRuntimeStore.load_state(agent_name, agent_id)
+                    display_name = state.crew_display_name or agent_name
+                else:
+                    action = i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
+                    display_name = agent_name
                 if status in {SubagentStatus.PENDING, SubagentStatus.RUNNING}:
-                    summary = i18n.translate("call_subagent.running", category="tool.messages", agent_name=agent_name)
+                    summary = i18n.translate("call_subagent.running", category="tool.messages", agent_name=display_name)
                 elif status == SubagentStatus.DONE:
-                    summary = i18n.translate("call_subagent.done", category="tool.messages", agent_name=agent_name)
+                    summary = i18n.translate("call_subagent.done", category="tool.messages", agent_name=display_name)
                 elif status == SubagentStatus.ERROR:
                     summary = i18n.translate(
                         "call_subagent.failed",
                         category="tool.messages",
-                        agent_name=agent_name,
+                        agent_name=display_name,
                         error=item.get("error", i18n.translate("unknown.message", category="tool.messages")),
                     )
                 elif status == SubagentStatus.INTERRUPTED:
-                    summary = i18n.translate("call_subagent.interrupted", category="tool.messages", agent_name=agent_name)
+                    summary = i18n.translate("call_subagent.interrupted", category="tool.messages", agent_name=display_name)
                 else:
-                    summary = f"{agent_name}: {status}"
+                    summary = f"{display_name}: {status}"
             else:
                 summary = ", ".join(f"{item['agent_id']}: {item['status']}" for item in results)
             return {"action": action, "remark": summary}

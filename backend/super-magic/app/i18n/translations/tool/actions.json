@@ -319,13 +319,21 @@
         "zh_CN": "调用子智能体",
         "en_US": "Call sub-agent"
     },
+    "call_subagent.crew": {
+        "zh_CN": "调用数字员工",
+        "en_US": "Call digital employee"
+    },
     "agent_list": {
-        "zh_CN": "查找员工",
-        "en_US": "Find Crew agents"
+        "zh_CN": "查找数字员工",
+        "en_US": "Find digital employees"
     },
     "wait_for_subagents": {
-        "zh_CN": "等待子智能体完成",
+        "zh_CN": "等待数字员工完成",
         "en_US": "Wait for sub-agents"
+    },
+    "wait_for_subagents.crew": {
+        "zh_CN": "等待数字员工完成",
+        "en_US": "Waiting for digital employee result"
     },
     "compact_chat_history": {
         "zh_CN": "整理对话内容",

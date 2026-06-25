@@ -92,6 +92,7 @@ class CallSubagent(BaseTool[CallSubagentParams]):
             parent: Optional[AgentContext] = tool_context.get_extension("agent_context")
             current_depth = parent.get_subagent_depth() if parent else 0
             tool_call_id = tool_context.tool_call_id or ""
+            _crew_display_name = ""
             if current_depth >= _MAX_AGENT_DEPTH:
                 return ToolResult.error((
                     f"Sub-agent spawn depth limit reached ({current_depth}/{_MAX_AGENT_DEPTH}). "
@@ -130,7 +131,8 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 try:
                     from app.service.crew_agent_runtime_service import CrewAgentRuntimeService
 
-                    await CrewAgentRuntimeService().ensure_compiled(params.agent_name)
+                    crew_info = await CrewAgentRuntimeService().ensure_compiled(params.agent_name)
+                    _crew_display_name = crew_info.name or ""
                 except Exception as e:
                     logger.exception(f"Crew agent preparation failed: {params.agent_name}: {e}")
                     user_error = "The Crew agent could not be prepared. Please try again later."
@@ -153,6 +155,8 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 state = await SubagentRuntimeStore.load_state(params.agent_name, params.agent_id)
                 state.agent_name = params.agent_name
                 state.agent_id = params.agent_id
+                if _crew_display_name:
+                    state.crew_display_name = _crew_display_name
                 if state.status == SubagentStatus.RUNNING and not handle.is_running():
                     _mark_missing_running_as_interrupted(state)
                     async with handle.state_lock:
@@ -289,6 +293,12 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
+        if is_crew_agent_code(agent_name):
+            action = i18n.translate("call_subagent.crew", category="tool.actions")
+            state = await SubagentRuntimeStore.load_state(agent_name, agent_id)
+            display_name = state.crew_display_name or agent_name
+            status_text = i18n.translate("call_subagent.status.accepted", category="tool.messages")
+            return {"action": action, "remark": _build_status_remark(display_name, status_text)}
         action = (
             i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
             if agent_name
@@ -410,18 +420,6 @@ Example: Research report is ready: [@file_path:reports/market-research.md]
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
-        action = (
-            i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
-            if agent_name
-            else i18n.translate("call_subagent", category="tool.actions")
-        )
-
-        if not result.ok:
-            status_text = i18n.translate("call_subagent.status.failed", category="tool.messages")
-            return {"action": action, "remark": _build_status_remark(agent_id, status_text)}
-
-        payload = result.data if isinstance(result.data, dict) else {}
-        status = payload.get("status", "")
 
         _status_key_map = {
             SubagentStatus.PENDING: "call_subagent.status.running",
@@ -430,6 +428,31 @@ Example: Research report is ready: [@file_path:reports/market-research.md]
             SubagentStatus.ERROR: "call_subagent.status.failed",
             SubagentStatus.INTERRUPTED: "call_subagent.status.interrupted",
         }
+
+        if is_crew_agent_code(agent_name):
+            action = i18n.translate("call_subagent.crew", category="tool.actions")
+            state = await SubagentRuntimeStore.load_state(agent_name, agent_id)
+            display_name = state.crew_display_name or agent_name
+            if not result.ok:
+                status_text = i18n.translate("call_subagent.status.failed", category="tool.messages")
+            else:
+                payload = result.data if isinstance(result.data, dict) else {}
+                status = payload.get("status", "")
+                status_key = _status_key_map.get(status, "call_subagent.status.accepted")
+                status_text = i18n.translate(status_key, category="tool.messages")
+            return {"action": action, "remark": _build_status_remark(display_name, status_text)}
+
+        action = (
+            i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
+            if agent_name
+            else i18n.translate("call_subagent", category="tool.actions")
+        )
+        if not result.ok:
+            status_text = i18n.translate("call_subagent.status.failed", category="tool.messages")
+            return {"action": action, "remark": _build_status_remark(agent_id, status_text)}
+
+        payload = result.data if isinstance(result.data, dict) else {}
+        status = payload.get("status", "")
         status_key = _status_key_map.get(status, "call_subagent.status.accepted")
         status_text = i18n.translate(status_key, category="tool.messages")
         return {"action": action, "remark": _build_status_remark(agent_id, status_text)}

@@ -1336,20 +1336,20 @@
         "en_US": "Next step"
     },
     "agent_list.searching": {
-        "zh_CN": "正在查找可用员工",
-        "en_US": "Looking for available Crew agents"
+        "zh_CN": "正在查找数字员工",
+        "en_US": "Looking for available digital employees"
     },
     "agent_list.done": {
-        "zh_CN": "已找到 {{count}} 个员工",
-        "en_US": "Found {{count}} Crew agents"
+        "zh_CN": "已找到 {{count}} 个数字员工",
+        "en_US": "Found {{count}} digital employees"
     },
     "agent_list.empty": {
-        "zh_CN": "没有找到匹配的员工",
-        "en_US": "No matching Crew agents were found"
+        "zh_CN": "没有找到匹配的数字员工",
+        "en_US": "No matching digital employees were found"
     },
     "agent_list.error": {
-        "zh_CN": "员工列表获取失败，请稍后重试",
-        "en_US": "Unable to load the Crew agent list. Please try again later."
+        "zh_CN": "数字员工列表获取失败，请稍后重试",
+        "en_US": "Unable to load the digital employee list. Please try again later."
     },
     "wait_for_subagents.error": {
         "zh_CN": "等待子智能体失败: {{error}}",
