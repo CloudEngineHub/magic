@@ -542,3 +542,50 @@ def test_generate_canvas_videos_initial_placeholder_contains_video_id(monkeypatc
         "reference_audios": [],
         "frames": [],
     }
+
+
+def test_generate_canvas_videos_initial_placeholder_infers_omni_reference(monkeypatch):
+    tool = GenerateCanvasVideos()
+    monkeypatch.setattr(tool, "_generate_design_video_id", lambda: "video-placeholder-1", raising=False)
+    task = VideoTaskSpec(
+        prompt="参考图片 [image1] 生成小猫游泳视频。",
+        name="参考图小猫游泳",
+        reference_image_paths=["cat-swimming-video/images/cat.png"],
+    )
+
+    update = tool._build_initial_placeholder_update(task, 0, "element-1")
+
+    assert update["generateVideoRequest"]["input_mode"] == "omni_reference"
+    assert update["generateVideoRequest"]["inputs"] == {
+        "reference_images": [{"uri": "/cat-swimming-video/images/cat.png"}],
+        "reference_videos": [],
+        "reference_audios": [],
+        "frames": [],
+    }
+
+
+def test_generate_canvas_videos_request_infers_omni_reference_for_references():
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="参考图片 [image1] 和视频 [video1] 生成小猫游泳视频。",
+        name="参考素材小猫游泳",
+        reference_image_paths=["cat-swimming-video/images/cat.png"],
+        reference_video_paths=["cat-swimming-video/videos/motion.mp4"],
+    )
+
+    payload = tool._build_design_video_request(
+        task=task,
+        project_id="123",
+        video_id="video-test-1",
+        model_id="mock-video-model",
+        file_dir="/cat-swimming-video/videos/",
+        relative_project_path="cat-swimming-video",
+    )
+
+    assert payload["input_mode"] == "omni_reference"
+    assert payload["inputs"] == {
+        "reference_images": [{"uri": "/cat-swimming-video/images/cat.png"}],
+        "reference_videos": [{"uri": "/cat-swimming-video/videos/motion.mp4"}],
+        "reference_audios": [],
+        "frames": [],
+    }

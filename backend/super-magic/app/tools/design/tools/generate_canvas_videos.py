@@ -170,8 +170,8 @@ class VideoTaskSpec(BaseModel):
 
     prompt: str = Field(
         ...,
-        description="""<!--zh: 视频生成提示词。素材路径不要写在这里；有参考素材时，在 prompt 中按数组顺序写 [image1] / [video1] / [audio1]。-->
-Video generation prompt. Do not put asset paths here. When using reference assets, cite them by list order with [image1] / [video1] / [audio1]."""
+        description="""<!--zh: 视频生成提示词。只描述视频内容、动作、风格和镜头；如果传入参考素材，必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_video_paths[0] 用 [video1]，reference_audio_paths[0] 用 [audio1]。例如：基于黑猫肖像 [image1] 制作动画，黑猫缓缓眨眼。-->
+Video generation prompt. Describe only the video content, motion, style, and camera. When passing reference assets, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_video_paths[0] as [video1], and reference_audio_paths[0] as [audio1]. Example: Animate the black cat portrait [image1] with slow blinking."""
     )
     name: str = Field(
         ...,
@@ -195,28 +195,28 @@ Video task type, default generate. Use edit with video_edit mode. Do not use gen
     )
     reference_image_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 参考图路径或 URL 列表。字段名必须是 reference_image_paths。prompt 中按顺序用 [image1]、[image2] 引用。-->
-Reference image path or URL list. Must be reference_image_paths. Cite by list order in prompt as [image1], [image2], etc."""
+        description="""<!--zh: 项目文件树内的参考图相对路径列表，例如 images/cat.png。传入后必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_image_paths[1] 用 [image2]。-->
+Project-relative reference image paths, e.g. images/cat.png. When provided, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_image_paths[1] as [image2]."""
     )
     reference_video_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 参考视频路径或 URL 列表。字段名必须是 reference_video_paths。prompt 中按顺序用 [video1]、[video2] 引用。-->
-Reference video path or URL list. Must be reference_video_paths. Cite by list order in prompt as [video1], [video2], etc."""
+        description="""<!--zh: 项目文件树内的参考视频相对路径列表，例如 videos/source.mp4。传入后必须在 prompt 中按数组顺序引用：reference_video_paths[0] 用 [video1]，reference_video_paths[1] 用 [video2]。-->
+Project-relative reference video paths, e.g. videos/source.mp4. When provided, the prompt must cite them by list order: reference_video_paths[0] as [video1], reference_video_paths[1] as [video2]."""
     )
     reference_audio_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 参考音频路径或 URL 列表。字段名必须是 reference_audio_paths。prompt 中按顺序用 [audio1]、[audio2] 引用。-->
-Reference audio path or URL list. Must be reference_audio_paths. Cite by list order in prompt as [audio1], [audio2], etc."""
+        description="""<!--zh: 项目文件树内的参考音频相对路径列表，例如 audios/source.mp3。传入后必须在 prompt 中按数组顺序引用：reference_audio_paths[0] 用 [audio1]，reference_audio_paths[1] 用 [audio2]。-->
+Project-relative reference audio paths, e.g. audios/source.mp3. When provided, the prompt must cite them by list order: reference_audio_paths[0] as [audio1], reference_audio_paths[1] as [audio2]."""
     )
     frame_start_path: str = Field(
         "",
-        description="""<!--zh: 起始帧图片路径或 URL。字段名必须是 frame_start_path。不要使用 start_frame。-->
-Start frame image path or URL. The parameter name must be frame_start_path. Do not use start_frame."""
+        description="""<!--zh: 项目文件树内的起始帧图片相对路径，例如 images/start.png。字段名必须是 frame_start_path。不要使用 start_frame。-->
+Project-relative start frame image path, e.g. images/start.png. The parameter name must be frame_start_path. Do not use start_frame."""
     )
     frame_end_path: str = Field(
         "",
-        description="""<!--zh: 结束帧图片路径或 URL。字段名必须是 frame_end_path。不要使用 end_frame。-->
-End frame image path or URL. The parameter name must be frame_end_path. Do not use end_frame."""
+        description="""<!--zh: 项目文件树内的结束帧图片相对路径，例如 images/end.png。字段名必须是 frame_end_path。不要使用 end_frame。-->
+Project-relative end frame image path, e.g. images/end.png. The parameter name must be frame_end_path. Do not use end_frame."""
     )
     duration_seconds: Optional[int] = Field(
         None,
@@ -781,11 +781,12 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         task: VideoTaskSpec,
         video_id: str,
     ) -> Dict[str, Any]:
+        input_mode = self._resolve_design_input_mode(task)
         payload: Dict[str, Any] = {
             "video_id": video_id,
             "model_id": self._model_id or None,
             "prompt": task.prompt,
-            "input_mode": task.input_mode or None,
+            "input_mode": input_mode,
             "task": task.task or "generate",
         }
         generation = self._build_design_generation(task)
@@ -805,12 +806,13 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         file_dir: str,
         relative_project_path: str = "",
     ) -> Dict[str, Any]:
+        input_mode = self._resolve_design_input_mode(task)
         payload: Dict[str, Any] = {
             "project_id": project_id,
             "video_id": video_id,
             "model_id": model_id,
             "prompt": task.prompt,
-            "input_mode": task.input_mode or None,
+            "input_mode": input_mode,
             "task": task.task or "generate",
             "file_dir": self._format_design_file_dir(file_dir),
         }
@@ -861,6 +863,22 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         inputs["frames"] = frames
 
         return inputs
+
+    @staticmethod
+    def _resolve_design_input_mode(task: VideoTaskSpec) -> str:
+        if task.input_mode:
+            return task.input_mode
+        if task.task == "edit":
+            return "video_edit"
+        if task.frame_start_path or task.frame_end_path:
+            return "keyframe_guided"
+        if (
+            task.reference_image_paths
+            or task.reference_video_paths
+            or task.reference_audio_paths
+        ):
+            return "omni_reference"
+        return "standard"
 
     @staticmethod
     def _build_design_generation(task: VideoTaskSpec) -> Dict[str, Any]:
