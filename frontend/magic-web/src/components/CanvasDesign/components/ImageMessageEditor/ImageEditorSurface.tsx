@@ -119,13 +119,12 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handleSelectSource = useCallback(
 		(source: ReferenceResourceSourceType) => {
+			if (source !== "local-upload") return
 			handlers.setPopoverOpen(false)
-			if (source === "local-upload") {
-				if (config.isReferenceFileLimitReached) {
-					return
-				}
-				handlers.triggerFileSelect()
+			if (config.isReferenceFileLimitReached) {
+				return
 			}
+			handlers.triggerFileSelect()
 		},
 		[config.isReferenceFileLimitReached, handlers],
 	)

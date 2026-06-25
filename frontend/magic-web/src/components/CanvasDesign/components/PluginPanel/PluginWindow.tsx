@@ -36,6 +36,12 @@ import type { PluginFileAsset, PluginFilePickerRequest, PluginWindowPosition } f
 import { usePluginRuntimeBridge } from "./usePluginRuntimeBridge"
 import { usePluginView } from "./usePluginView"
 
+function isReferenceResourcePanelItem(
+	item: ReferenceResourcePanelItem | undefined,
+): item is ReferenceResourcePanelItem {
+	return Boolean(item)
+}
+
 export const PluginWindow = memo(function PluginWindow({
 	canvas,
 	locale,
@@ -61,6 +67,7 @@ export const PluginWindow = memo(function PluginWindow({
 	const awaitingLocalFileDialogRef = useRef(false)
 	const [filePickerRequest, setFilePickerRequest] = useState<PluginFilePickerRequest | null>(null)
 	const filePickerRequestRef = useRef<PluginFilePickerRequest | null>(null)
+	const projectFileBatchItemsRef = useRef<Array<ReferenceResourcePanelItem | undefined>>([])
 	const pluginView = usePluginView(plugin, locale, channelToken, canvas.readonly)
 
 	useLayoutEffect(() => {
@@ -154,14 +161,15 @@ export const PluginWindow = memo(function PluginWindow({
 		(open: boolean) => {
 			if (open) return
 			if (awaitingLocalFileDialogRef.current) return
-			const request = filePickerRequest
+			const request = filePickerRequestRef.current
+			projectFileBatchItemsRef.current = []
 			filePickerRequestRef.current = null
 			setFilePickerRequest(null)
 			if (request) {
 				respondToPickFiles(request.requestId, { files: [] })
 			}
 		},
-		[filePickerRequest, respondToPickFiles],
+		[respondToPickFiles],
 	)
 
 	const handleLocalFileInputChange = useCallback(
@@ -170,6 +178,7 @@ export const PluginWindow = memo(function PluginWindow({
 			const request = filePickerRequest
 			const files = Array.from(event.target.files || [])
 			event.target.value = ""
+			projectFileBatchItemsRef.current = []
 			filePickerRequestRef.current = null
 			setFilePickerRequest(null)
 			if (!request) return
@@ -187,6 +196,7 @@ export const PluginWindow = memo(function PluginWindow({
 
 	const handleFilePickerSourceSelect = useCallback((source: ReferenceResourceSourceType) => {
 		awaitingLocalFileDialogRef.current = false
+		projectFileBatchItemsRef.current = []
 		if (source === REFERENCE_RESOURCE_SOURCE_TYPES.localUpload) {
 			awaitingLocalFileDialogRef.current = true
 			localFileInputRef.current?.click()
@@ -198,6 +208,29 @@ export const PluginWindow = memo(function PluginWindow({
 			awaitingLocalFileDialogRef.current = false
 			const request = filePickerRequest
 			if (!request) return
+			if (context?.batch) {
+				const { index, total } = context.batch
+				projectFileBatchItemsRef.current[index] = item
+				if (index < total - 1) return
+				const items = projectFileBatchItemsRef.current
+					.slice(0, total)
+					.filter(isReferenceResourcePanelItem)
+				projectFileBatchItemsRef.current = []
+				filePickerRequestRef.current = null
+				setFilePickerRequest(null)
+				context.reset?.()
+				void Promise.all(
+					items.map((selectedItem) =>
+						resolveProjectPluginFile(canvas, selectedItem, request.options),
+					),
+				).then(
+					(files) => respondToPickFiles(request.requestId, { files }),
+					(error) =>
+						respondToPickFiles(request.requestId, { error: getErrorMessage(error) }),
+				)
+				return
+			}
+			projectFileBatchItemsRef.current = []
 			filePickerRequestRef.current = null
 			setFilePickerRequest(null)
 			context?.reset?.()
@@ -283,6 +316,9 @@ export const PluginWindow = memo(function PluginWindow({
 				onSelectSource={handleFilePickerSourceSelect}
 				onProjectSelect={handleProjectFileSelect}
 				maxReferenceFiles={filePickerRequest?.options?.maxCount}
+				maxProjectSelectBatchCount={
+					filePickerRequest?.options?.multiple ? filePickerRequest.options.maxCount : 1
+				}
 				referenceResourceType={getPluginReferenceResourceType(filePickerRequest?.options)}
 				anchorPosition={filePickerRequest?.anchorPosition}
 			/>

@@ -225,8 +225,8 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const handleSelectSource = useCallback(
 		(source: ReferenceResourceSourceType) => {
 			if (config.isUploading) return
-			handlers.setPopoverOpen(false)
 			if (source !== "local-upload") return
+			handlers.setPopoverOpen(false)
 			handlers.triggerFileSelect()
 		},
 		[config.isUploading, handlers],

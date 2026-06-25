@@ -7,6 +7,7 @@ import {
 import type {
 	ReferenceResourcePanelItem,
 	ReferenceResourcePanelRendererProps,
+	ReferenceResourcePanelSelectContext,
 } from "@/components/CanvasDesign/types"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "@/components/CanvasDesign/components/MessageEditor/reference-assets/canvasReferenceMention.constants"
 import type { ComponentType } from "react"
@@ -23,8 +24,9 @@ interface CanvasMentionPanelProps {
 	initialLoadOptions?: ReferenceResourcePanelRendererProps["initialLoadOptions"]
 	initialNavigationStack?: ReferenceResourcePanelRendererProps["initialNavigationStack"]
 	lockDismissToExplicitClose?: boolean
-	onSelect: (item: MentionItem, context?: { reset?: () => void }) => void
+	onSelect: (item: MentionItem, context?: ReferenceResourcePanelSelectContext) => void
 	onClose: () => void
+	canToggleMultiSelectItem?: (item: MentionItem) => boolean
 	dataService?: ReferenceResourcePanelRendererProps["dataService"]
 	catalogBehavior?: ReferenceResourcePanelRendererProps["catalogBehavior"]
 }
@@ -94,6 +96,9 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 				if (!panelItem) return
 				onSelect(panelItem, context)
 			}}
+			canToggleMultiSelectItem={(item) =>
+				isProjectFileMentionItem(item) && !item.unSelectable
+			}
 			onClose={onClose}
 			dataService={dataService}
 			catalogBehavior={catalogBehavior}

@@ -481,6 +481,7 @@ export interface MentionPanelProps<TCatalogId extends string = string> extends B
 	 * 仍可通过 onClose / 键盘退出等显式关闭。
 	 */
 	lockDismissToExplicitClose?: boolean
+	canToggleMultiSelectItem?: (item: MentionItem) => boolean
 	lastHistoryIndex?: number
 	runtime?: MentionPanelRuntime<TCatalogId>
 	/**

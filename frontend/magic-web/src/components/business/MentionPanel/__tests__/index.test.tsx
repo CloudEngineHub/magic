@@ -1,11 +1,11 @@
 import { forwardRef, useImperativeHandle } from "react"
 import type { MouseEvent, ReactNode } from "react"
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import MentionPanel from "../index"
 import { defaultMentionPanelCatalogBehavior } from "../catalogBehavior"
 import { MentionItemType, PanelState } from "../types"
-import type { MentionItem } from "../types"
+import type { MentionItem, MentionPanelCatalogBehavior } from "../types"
 
 const { mockPrepareMentionItemForPending } = vi.hoisted(() => ({
 	mockPrepareMentionItemForPending: vi.fn(),
@@ -373,6 +373,68 @@ describe("MentionPanel", () => {
 			expect(screen.getByTestId("menu-item-checkbox")).toHaveAttribute("data-checked", "true")
 		})
 		expect(mockConfirmSelection).not.toHaveBeenCalled()
+	})
+
+	it("should allow custom multi-select predicate while keeping folders navigable", async () => {
+		vi.useFakeTimers()
+		try {
+			setCatalogState([
+				{
+					id: "folder-1",
+					name: "Folder 1",
+					type: MentionItemType.FOLDER,
+					hasChildren: true,
+					isFolder: true,
+				},
+				{
+					id: "file-1",
+					name: "File 1",
+					type: MentionItemType.PROJECT_FILE,
+				},
+			])
+			const canvasLikeCatalogBehavior: MentionPanelCatalogBehavior = {
+				shouldEnterFolderDirectly: ({ selectedItem, enterFolder }) =>
+					!enterFolder && selectedItem.type === MentionItemType.FOLDER,
+				getDynamicTransition: ({ selectedItem, enterFolder }) =>
+					selectedItem.type === MentionItemType.FOLDER &&
+					selectedItem.isFolder &&
+					enterFolder
+						? { state: PanelState.FOLDER }
+						: null,
+			}
+
+			render(
+				<MentionPanel
+					visible={true}
+					catalogBehavior={canvasLikeCatalogBehavior}
+					canToggleMultiSelectItem={(item) => item.type === MentionItemType.PROJECT_FILE}
+				/>,
+			)
+
+			enterMultiSelectMode()
+
+			const items = screen.getAllByTestId("menu-item")
+			expect(within(items[0]).queryByTestId("menu-item-checkbox")).not.toBeInTheDocument()
+			expect(within(items[1]).getByTestId("menu-item-checkbox")).toHaveAttribute(
+				"data-checked",
+				"false",
+			)
+
+			fireEvent.click(items[0])
+			vi.runAllTimers()
+			expect(mockConfirmSelection).toHaveBeenCalledWith({ enterFolder: false })
+			vi.useRealTimers()
+
+			fireEvent.click(items[1])
+			await waitFor(() => {
+				expect(within(items[1]).getByTestId("menu-item-checkbox")).toHaveAttribute(
+					"data-checked",
+					"true",
+				)
+			})
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	it("should toggle highlighted item with ArrowRight while in multi-select mode", async () => {

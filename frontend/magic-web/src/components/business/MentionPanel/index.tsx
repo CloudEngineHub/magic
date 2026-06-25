@@ -73,6 +73,7 @@ const MentionPanel = observer(
 			style,
 			disableKeyboardShortcuts = false,
 			lockDismissToExplicitClose = false,
+			canToggleMultiSelectItem,
 			runtime,
 			dataService,
 			catalogBehavior,
@@ -210,11 +211,18 @@ const MentionPanel = observer(
 
 		// Use state.items directly as history is now integrated in useMentionPanel
 		const displayItems = state.items
+		const canToggleMultiSelectItemForItem = useCallback(
+			(item: MentionItem) => {
+				if (!canTogglePendingItem(item)) return false
+				return canToggleMultiSelectItem ? canToggleMultiSelectItem(item) : true
+			},
+			[canToggleMultiSelectItem],
+		)
 
 		const canUseMultiSelectInCurrentList = useMemo(() => {
 			if (isRootDefaultCategoryScreen(state)) return false
-			return displayItems.some((item) => canTogglePendingItem(item))
-		}, [displayItems, state])
+			return displayItems.some((item) => canToggleMultiSelectItemForItem(item))
+		}, [canToggleMultiSelectItemForItem, displayItems, state])
 
 		const navigationSignature = useMemo(
 			() =>
@@ -279,7 +287,7 @@ const MentionPanel = observer(
 
 		const togglePendingForItem = useCallback(
 			async (item: MentionItem) => {
-				if (!canTogglePendingItem(item)) return false
+				if (!canToggleMultiSelectItemForItem(item)) return false
 
 				const key = getMentionItemSelectionKey(item)
 				if (pendingByKey.has(key)) {
@@ -311,7 +319,12 @@ const MentionPanel = observer(
 				})
 				return true
 			},
-			[pendingByKey, resolvedRuntime.dataService, state.navigationStack],
+			[
+				canToggleMultiSelectItemForItem,
+				pendingByKey,
+				resolvedRuntime.dataService,
+				state.navigationStack,
+			],
 		)
 
 		const handleClosePanel = useCallback(() => {
@@ -420,7 +433,7 @@ const MentionPanel = observer(
 					return true
 				}
 
-				if (canTogglePendingItem(selectedItem)) {
+				if (canToggleMultiSelectItemForItem(selectedItem)) {
 					void togglePendingForItem(selectedItem)
 					return true
 				}
@@ -430,6 +443,7 @@ const MentionPanel = observer(
 			[
 				actions,
 				canEnterFolderForItem,
+				canToggleMultiSelectItemForItem,
 				displayItems,
 				multiSelectMode,
 				state.selectedIndex,
@@ -548,7 +562,7 @@ const MentionPanel = observer(
 						return
 					}
 
-					if (canTogglePendingItem(selectedItem)) {
+					if (canToggleMultiSelectItemForItem(selectedItem)) {
 						void togglePendingForItem(selectedItem)
 						return
 					}
@@ -567,6 +581,7 @@ const MentionPanel = observer(
 			[
 				actions,
 				canEnterFolderForItem,
+				canToggleMultiSelectItemForItem,
 				displayItems,
 				multiSelectMode,
 				resolvedRuntime.catalogBehavior,
@@ -616,7 +631,7 @@ const MentionPanel = observer(
 				const key = getMentionItemSelectionKey(item)
 				const showCheckbox =
 					multiSelectMode &&
-					canTogglePendingItem(item) &&
+					canToggleMultiSelectItemForItem(item) &&
 					!isRootDefaultCategoryScreen(state)
 
 				return (
@@ -635,6 +650,7 @@ const MentionPanel = observer(
 			},
 			[
 				displayItems,
+				canToggleMultiSelectItemForItem,
 				multiSelectMode,
 				pendingByKey,
 				state,

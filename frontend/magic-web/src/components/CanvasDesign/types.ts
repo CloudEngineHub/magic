@@ -133,6 +133,10 @@ export type MentionDataServiceCtor = new (
 
 export interface ReferenceResourcePanelSelectContext {
 	reset?: () => void
+	batch?: {
+		index: number
+		total: number
+	}
 }
 
 export interface ReferenceResourcePanelInitialLoadOptions {

@@ -25,6 +25,7 @@ import type {
 	ReferenceResourcePanelSelectContext,
 } from "../../../types"
 import { useCanvasReferenceMentionRuntime } from "./useCanvasReferenceMentionRuntime"
+import { filterReferenceResourcePanelBatchItems } from "./referenceResourceSelection"
 import { FolderOpen, Upload } from "lucide-react"
 
 function defaultIconForSourceType(source: ReferenceResourceSourceType) {
@@ -40,6 +41,12 @@ function defaultIconForSourceType(source: ReferenceResourceSourceType) {
 			/>
 		)
 	return null
+}
+
+function isReferenceResourcePanelItem(
+	item: ReferenceResourcePanelItem | undefined,
+): item is ReferenceResourcePanelItem {
+	return Boolean(item)
 }
 
 interface ReferenceResourcePopoverProps {
@@ -71,6 +78,8 @@ interface ReferenceResourcePopoverProps {
 	sourceActionClassName?: string
 	/** 项目文件选择面板（ReferenceResourcePanel）展开/收起时通知宿主，用于保持外层布局（如 SourceList keepOpen） */
 	onProjectSelectPanelOpenChange?: (visible: boolean) => void
+	/** 当前入口一次项目多选最多提交多少项；如单 slot 替换场景传 1 */
+	maxProjectSelectBatchCount?: number
 }
 
 export default function ReferenceResourcePopover(props: ReferenceResourcePopoverProps) {
@@ -98,6 +107,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		sourceActionsClassName,
 		sourceActionClassName,
 		onProjectSelectPanelOpenChange,
+		maxProjectSelectBatchCount,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const { referenceResourcePanelRenderer: ReferenceResourcePanelRenderer } = useMagic()
@@ -110,12 +120,14 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 	const suppressNextContentDismissRef = useRef(false)
 	/** 用户已在 trigger 上 pointerdown 进入「本地上传/项目选择」态；此时不应因浮层 mouseenter 退回 hover 列表 */
 	const userChoseClickModeRef = useRef(false)
+	const projectSelectBatchItemsRef = useRef<Array<ReferenceResourcePanelItem | undefined>>([])
 
 	useEffect(() => {
 		if (!open) {
 			suppressNextTriggerCloseRef.current = false
 			suppressNextContentDismissRef.current = false
 			userChoseClickModeRef.current = false
+			projectSelectBatchItemsRef.current = []
 			setIsProjectSelectVisible(false)
 		}
 	}, [open])
@@ -165,8 +177,10 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 	const shouldRenderSourceActions = displayMode === "click" && sourceOptions.length > 0
 
 	const handleProjectSelectClose = useCallback(() => {
+		projectSelectBatchItemsRef.current = []
 		setIsProjectSelectVisible(false)
-	}, [])
+		onOpenChange(false)
+	}, [onOpenChange])
 
 	const handleRootOpenChange = useCallback(
 		(nextOpen: boolean) => {
@@ -221,12 +235,61 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 
 	const handleProjectSelect = useCallback(
 		(item: ReferenceResourcePanelItem, context?: ReferenceResourcePanelSelectContext) => {
-			onProjectSelect?.(item, context)
-			if (context?.reset) {
-				handleProjectSelectClose()
+			if (!context?.batch) {
+				onProjectSelect?.(item, context)
+				if (context?.reset) {
+					handleProjectSelectClose()
+				}
+				return
 			}
+
+			const { index, total } = context.batch
+			projectSelectBatchItemsRef.current[index] = item
+			if (index < total - 1) return
+
+			const batchItems = projectSelectBatchItemsRef.current
+				.slice(0, total)
+				.filter(isReferenceResourcePanelItem)
+			projectSelectBatchItemsRef.current = []
+			const selectedItems = filterReferenceResourcePanelBatchItems({
+				items: batchItems,
+				maxReferenceFiles,
+				currentReferenceFiles,
+				assetLimits,
+				currentAssetCounts,
+				maxBatchItems: maxProjectSelectBatchCount,
+			})
+
+			let didReset = false
+			const resetOnce = () => {
+				if (didReset) return
+				didReset = true
+				context.reset?.()
+			}
+
+			selectedItems.forEach((selectedItem, selectedIndex) => {
+				const isLastSelected = selectedIndex === selectedItems.length - 1
+				onProjectSelect?.(selectedItem, {
+					batch: {
+						index: selectedIndex,
+						total: selectedItems.length,
+					},
+					...(isLastSelected && context.reset ? { reset: resetOnce } : undefined),
+				})
+			})
+
+			resetOnce()
+			handleProjectSelectClose()
 		},
-		[handleProjectSelectClose, onProjectSelect],
+		[
+			assetLimits,
+			currentAssetCounts,
+			currentReferenceFiles,
+			handleProjectSelectClose,
+			maxProjectSelectBatchCount,
+			maxReferenceFiles,
+			onProjectSelect,
+		],
 	)
 
 	return (
@@ -254,69 +317,74 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 						{trigger}
 					</div>
 				</PopoverTrigger>
-				<PopoverContent
-					data-canvas-ui-component
-					align="start"
-					onInteractOutside={handleReferencePopoverInteractOutside}
-					onOpenAutoFocus={(event) => {
-						// 阻止打开时焦点落到第一个 button，避免出现「默认选中」的高亮
-						event.preventDefault()
-					}}
-					onCloseAutoFocus={(event) => {
-						event.preventDefault()
-					}}
-					onMouseEnter={() => {
-						onMouseEnter()
-						// trigger leave → 延迟关窗 → 再被 content enter 打开时，不会经过 trigger 的 mouseenter；
-						// 若曾在关窗时把 displayMode 打成 click，会误显示「点击菜单」。未主动选 click 时恢复为 hover。
-						if (hoverContent && !userChoseClickModeRef.current) {
-							setDisplayMode("hover")
-						}
-					}}
-					onMouseLeave={handlePopoverHostMouseLeave}
-					className={cn(
-						contentClassName,
-						/* 来源菜单：窄宽 + 4px 内边距；参考图列表：固定 320px + 10px 内边距 */
-						shouldRenderSourceActions
-							? "!w-max min-w-[150px] max-w-[min(100vw-2rem,20rem)] !p-1"
-							: "!w-[320px] !p-2.5",
-					)}
-				>
-					<div className={bodyClassName}>
-						{shouldRenderSourceActions && (
-							<div
-								className={cn("flex w-full flex-col gap-0", sourceActionsClassName)}
-							>
-								{sourceOptions.map((option) => (
-									<button
-										key={option.value}
-										type="button"
-										className={cn(
-											"relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm font-normal text-popover-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
-											sourceActionClassName,
-										)}
-										disabled={option.disabled}
-										{...(option.value ===
-										REFERENCE_RESOURCE_SOURCE_TYPES.projectSelect
-											? {
-													onPointerDownCapture:
-														handleProjectSelectPointerDownCapture,
-												}
-											: {})}
-										onMouseDown={(event) => {
-											event.preventDefault()
-										}}
-										onClick={() => handleSourceSelect(option.value)}
-									>
-										{option.icon ?? defaultIconForSourceType(option.value)}
-										<span className="min-w-0 flex-1">{option.label}</span>
-									</button>
-								))}
-							</div>
+				{!isProjectSelectVisible && (
+					<PopoverContent
+						data-canvas-ui-component
+						align="start"
+						onInteractOutside={handleReferencePopoverInteractOutside}
+						onOpenAutoFocus={(event) => {
+							// 阻止打开时焦点落到第一个 button，避免出现「默认选中」的高亮
+							event.preventDefault()
+						}}
+						onCloseAutoFocus={(event) => {
+							event.preventDefault()
+						}}
+						onMouseEnter={() => {
+							onMouseEnter()
+							// trigger leave → 延迟关窗 → 再被 content enter 打开时，不会经过 trigger 的 mouseenter；
+							// 若曾在关窗时把 displayMode 打成 click，会误显示「点击菜单」。未主动选 click 时恢复为 hover。
+							if (hoverContent && !userChoseClickModeRef.current) {
+								setDisplayMode("hover")
+							}
+						}}
+						onMouseLeave={handlePopoverHostMouseLeave}
+						className={cn(
+							contentClassName,
+							/* 来源菜单：窄宽 + 4px 内边距；参考图列表：固定 320px + 10px 内边距 */
+							shouldRenderSourceActions
+								? "!w-max min-w-[150px] max-w-[min(100vw-2rem,20rem)] !p-1"
+								: "!w-[320px] !p-2.5",
 						)}
-						{currentContent}
-					</div>
-				</PopoverContent>
+					>
+						<div className={bodyClassName}>
+							{shouldRenderSourceActions && (
+								<div
+									className={cn(
+										"flex w-full flex-col gap-0",
+										sourceActionsClassName,
+									)}
+								>
+									{sourceOptions.map((option) => (
+										<button
+											key={option.value}
+											type="button"
+											className={cn(
+												"relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm font-normal text-popover-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
+												sourceActionClassName,
+											)}
+											disabled={option.disabled}
+											{...(option.value ===
+											REFERENCE_RESOURCE_SOURCE_TYPES.projectSelect
+												? {
+														onPointerDownCapture:
+															handleProjectSelectPointerDownCapture,
+													}
+												: {})}
+											onMouseDown={(event) => {
+												event.preventDefault()
+											}}
+											onClick={() => handleSourceSelect(option.value)}
+										>
+											{option.icon ?? defaultIconForSourceType(option.value)}
+											<span className="min-w-0 flex-1">{option.label}</span>
+										</button>
+									))}
+								</div>
+							)}
+							{currentContent}
+						</div>
+					</PopoverContent>
+				)}
 			</Popover>
 			{ReferenceResourcePanelRenderer && projectSelectRuntime.dataService && (
 				<ReferenceResourcePanelRenderer

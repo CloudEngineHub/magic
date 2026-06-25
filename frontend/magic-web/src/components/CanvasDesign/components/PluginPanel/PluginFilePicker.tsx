@@ -18,6 +18,7 @@ import styles from "./index.module.css"
 export const PluginFilePicker = memo(function PluginFilePicker({
 	anchorPosition,
 	maxReferenceFiles,
+	maxProjectSelectBatchCount,
 	onOpenChange,
 	onProjectSelect,
 	onSelectSource,
@@ -26,6 +27,7 @@ export const PluginFilePicker = memo(function PluginFilePicker({
 }: {
 	anchorPosition?: PluginPoint
 	maxReferenceFiles?: number
+	maxProjectSelectBatchCount?: number
 	onOpenChange: (open: boolean) => void
 	onProjectSelect: (
 		item: ReferenceResourcePanelItem,
@@ -57,6 +59,7 @@ export const PluginFilePicker = memo(function PluginFilePicker({
 				referenceResourceType={referenceResourceType}
 				referenceFileInfos={[]}
 				onProjectSelect={onProjectSelect}
+				maxProjectSelectBatchCount={maxProjectSelectBatchCount}
 				triggerClassName={styles.pluginFilePickerAnchor}
 				trigger={<span aria-hidden />}
 			/>
