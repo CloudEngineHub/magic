@@ -126,6 +126,8 @@ class DesignImageGenerationSubscriber implements ListenerInterface
             }
 
             $fileName = $this->resolveAndAssignGeneratedFileName($dataIsolation, $imageGenerationEntity, $imageUrl);
+            $outputDirectory = $this->resolveOutputDirectory($imageGenerationEntity);
+            $imageGenerationEntity->setFileDirId($outputDirectory->getFileId());
 
             Db::transaction(function () use ($dataIsolation, $imageGenerationEntity, $imageUrl, $fileName): void {
                 $this->imageGenerationDomainService->markAsCompleted($dataIsolation, $imageGenerationEntity->getId(), $fileName);
@@ -173,6 +175,40 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         $taskFileEntity->setParentId($imageGenerationEntity->getFileDirId());
 
         $this->taskFileDomainService->saveProjectFile(dataIsolation: $contactDataIsolation, projectEntity: $project, taskFileEntity: $taskFileEntity, isUpdated: false);
+    }
+
+    /**
+     * 队列恢复的任务来自数据库，创建时的 fileDirId 不会随实体持久化，这里按 file_dir 重新解析真实输出目录。
+     */
+    private function resolveOutputDirectory(ImageGenerationEntity $imageGenerationEntity): TaskFileEntity
+    {
+        $taskFileDir = null;
+        $fileDirId = $imageGenerationEntity->getFileDirId();
+        if ($fileDirId > 0) {
+            $taskFileDir = $this->taskFileDomainService->getById($fileDirId);
+        }
+
+        if (! $this->isValidOutputDirectory($imageGenerationEntity, $taskFileDir)) {
+            $taskFileDir = $this->taskFileDomainService->findEntityByRelativePath(
+                $imageGenerationEntity->getProjectId(),
+                $imageGenerationEntity->getFileDir()
+            );
+        }
+
+        if (! $this->isValidOutputDirectory($imageGenerationEntity, $taskFileDir)) {
+            ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'design.image_generation.file_dir_not_exists', [
+                'file_dir' => $imageGenerationEntity->getFileDir(),
+            ]);
+        }
+
+        return $taskFileDir;
+    }
+
+    private function isValidOutputDirectory(ImageGenerationEntity $imageGenerationEntity, ?TaskFileEntity $taskFileDir): bool
+    {
+        return $taskFileDir instanceof TaskFileEntity
+            && $taskFileDir->getIsDirectory()
+            && $taskFileDir->getProjectId() === $imageGenerationEntity->getProjectId();
     }
 
     /**
