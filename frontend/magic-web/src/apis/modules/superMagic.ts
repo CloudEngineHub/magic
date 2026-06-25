@@ -2541,10 +2541,16 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param params 视频生成请求参数
 	 * @returns 视频积分预估响应数据
 	 */
-	estimateVideoPoints(params: GenerateVideoRequest) {
+	estimateVideoPoints(
+		params: GenerateVideoRequest,
+		options?: { enableErrorMessagePrompt?: boolean },
+	) {
 		return fetch.post<EstimateVideoPointsResponse>(
 			"/api/v1/design/estimate-video-points",
 			params,
+			options?.enableErrorMessagePrompt === undefined
+				? undefined
+				: { enableErrorMessagePrompt: options.enableErrorMessagePrompt },
 		)
 	},
 

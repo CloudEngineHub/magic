@@ -57,6 +57,8 @@ function calculatePreviewSize(
 export interface UseReferenceImageUrlsOptions {
 	/** 挂载后即拉取原图 URL（ossSrc），用于槽位内直接展示原图 */
 	eagerFullUrl?: boolean
+	/** 是否启用图片资源加载；非图片参考资源应关闭，避免误触发图片链路 */
+	enabled?: boolean
 }
 
 /**
@@ -68,6 +70,7 @@ export function useReferenceImageUrls(
 	options?: UseReferenceImageUrlsOptions,
 ): ReferenceImageUrlInfo {
 	const eagerFullUrl = options?.eagerFullUrl ?? false
+	const enabled = options?.enabled ?? true
 	const { canvas } = useCanvas()
 	const [open, setOpen] = useState(false)
 	const lowImageReleaseRef = useRef<(() => void) | null>(null)
@@ -95,16 +98,18 @@ export function useReferenceImageUrls(
 	const previewSize = useMemo(() => calculatePreviewSize(urlInfo.imageInfo), [urlInfo.imageInfo])
 
 	// 是否正在加载：eager 时 low 档位或原图任一可用即可结束 loading
-	const isLoading = eagerFullUrl
-		? !urlInfo.hasError && !urlInfo.lowUrl && !urlInfo.fullUrl
-		: !urlInfo.hasError && !urlInfo.lowUrl
+	const isLoading =
+		enabled &&
+		(eagerFullUrl
+			? !urlInfo.hasError && !urlInfo.lowUrl && !urlInfo.fullUrl
+			: !urlInfo.hasError && !urlInfo.lowUrl)
 
 	// 是否正在加载大图（当弹窗打开且 fullUrl 未加载时）
-	const isFullUrlLoading = open && !urlInfo.hasError && !urlInfo.fullUrl
+	const isFullUrlLoading = enabled && open && !urlInfo.hasError && !urlInfo.fullUrl
 
 	// 按需加载 tooltip 预览图（直接使用 ossSrc）
 	const loadTooltip = useCallback(async () => {
-		if (!canvas) return
+		if (!canvas || !enabled) return
 
 		const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(path)
 		const failureReason = canvas.imageResourceManager.getFailureReason(path)
@@ -120,7 +125,7 @@ export function useReferenceImageUrls(
 				hasError: !ossInfo?.ossSrc && !!failureReason,
 			}
 		})
-	}, [canvas, path])
+	}, [canvas, enabled, path])
 
 	// 处理弹窗打开/关闭事件
 	const handleOpenChange = useCallback(
@@ -140,7 +145,7 @@ export function useReferenceImageUrls(
 
 	// 更新路径的展示 URL（明确请求 low 档位）
 	const updatePathUrl = useCallback(async () => {
-		if (!canvas) return
+		if (!canvas || !enabled) return
 
 		const requestId = lowImageRequestIdRef.current + 1
 		lowImageRequestIdRef.current = requestId
@@ -177,11 +182,11 @@ export function useReferenceImageUrls(
 
 			return newInfo
 		})
-	}, [canvas, path, loadTooltip, releaseLowImageUrl])
+	}, [canvas, enabled, path, loadTooltip, releaseLowImageUrl])
 
 	// 初始化 low 档位 URL
 	useEffect(() => {
-		if (!canvas) {
+		if (!canvas || !enabled) {
 			lowImageRequestIdRef.current += 1
 			releaseLowImageUrl()
 			setUrlInfo({
@@ -196,13 +201,13 @@ export function useReferenceImageUrls(
 
 		// 立即尝试更新一次 URL 映射（如果资源已缓存，可以立即显示）
 		updatePathUrl()
-	}, [canvas, path, releaseLowImageUrl, updatePathUrl])
+	}, [canvas, enabled, path, releaseLowImageUrl, updatePathUrl])
 
 	useEffect(() => releaseLowImageUrl, [releaseLowImageUrl])
 
 	// 槽位内直接展示原图：与 low 档位并行拉取 ossSrc
 	useEffect(() => {
-		if (!eagerFullUrl || !canvas) return
+		if (!eagerFullUrl || !canvas || !enabled) return
 		let cancelled = false
 		;(async () => {
 			const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(path)
@@ -217,14 +222,14 @@ export function useReferenceImageUrls(
 		return () => {
 			cancelled = true
 		}
-	}, [canvas, path, eagerFullUrl])
+	}, [canvas, enabled, path, eagerFullUrl])
 
 	// 监听图片资源加载完成事件，确保 ossSrc 可用后更新 tooltip URL
 	useCanvasEvent(
 		"resource:image:loaded",
 		useCallback(
 			({ data }) => {
-				if (!canvas) return
+				if (!canvas || !enabled) return
 				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 				if (
 					resolveCanonicalResourcePath(path, resolveAbs) !==
@@ -237,7 +242,7 @@ export function useReferenceImageUrls(
 					loadTooltip()
 				}
 			},
-			[canvas, path, loadTooltip, open, urlInfo.fullUrl, eagerFullUrl],
+			[canvas, enabled, path, loadTooltip, open, urlInfo.fullUrl, eagerFullUrl],
 		),
 	)
 
@@ -245,7 +250,7 @@ export function useReferenceImageUrls(
 		"resource:image:load-failed",
 		useCallback(
 			({ data }) => {
-				if (!canvas) return
+				if (!canvas || !enabled) return
 				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 				if (
 					resolveCanonicalResourcePath(path, resolveAbs) !==
@@ -265,7 +270,7 @@ export function useReferenceImageUrls(
 					}
 				})
 			},
-			[canvas, path],
+			[canvas, enabled, path],
 		),
 	)
 
@@ -274,7 +279,7 @@ export function useReferenceImageUrls(
 		"resource:image:loaded",
 		useCallback(
 			({ data }) => {
-				if (!canvas) return
+				if (!canvas || !enabled) return
 				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 				if (
 					resolveCanonicalResourcePath(path, resolveAbs) !==
@@ -284,8 +289,33 @@ export function useReferenceImageUrls(
 				}
 				updatePathUrl()
 			},
-			[canvas, path, updatePathUrl],
+			[canvas, enabled, path, updatePathUrl],
 		),
+	)
+
+	useCanvasEvent(
+		"resource:remote-load-deferral-released",
+		useCallback(
+			({ data }) => {
+				if (!canvas || !enabled) return
+				const pathKey =
+					canvas.canvasFileUploadManager.getRemoteResourceLoadDeferralKey(path)
+				if (!pathKey || pathKey !== data.key) {
+					return
+				}
+
+				setUrlInfo((prev) => ({
+					...prev,
+					hasError: false,
+				}))
+				void updatePathUrl()
+				if (open || eagerFullUrl) {
+					void loadTooltip()
+				}
+			},
+			[canvas, enabled, path, updatePathUrl, open, eagerFullUrl, loadTooltip],
+		),
+		[canvas, enabled, path, updatePathUrl, open, eagerFullUrl, loadTooltip],
 	)
 
 	return {

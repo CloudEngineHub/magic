@@ -137,7 +137,9 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 				ensureVideosDir: false,
 				pathUnresolvedMessage: t("design.errors.designResourcePathUnresolved"),
 			})
-			const result = await SuperMagicApi.estimateVideoPoints(requestParams)
+			const result = await SuperMagicApi.estimateVideoPoints(requestParams, {
+				enableErrorMessagePrompt: false,
+			})
 			return normalizeEstimateVideoPointsResponse(result)
 		},
 		[projectId, currentFile, flatAttachments, designProjectBasePath, updateAttachments, t],

@@ -75,7 +75,193 @@ describe("CanvasFileUploadManager upload sub directories", () => {
 	})
 })
 
+describe("CanvasFileUploadManager remote resource load deferrals", () => {
+	it("defers resource loads until all registrations for the same path are released", () => {
+		const emit = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as {
+			canvas: {
+				id: string
+				eventEmitter: { emit: ReturnType<typeof vi.fn> }
+			}
+			pendingRemoteResourceLoadDeferrals: Map<string, number>
+			registerPendingRemoteResourceLoadDeferral: CanvasFileUploadManager["registerPendingRemoteResourceLoadDeferral"]
+			shouldDeferRemoteResourceLoad: CanvasFileUploadManager["shouldDeferRemoteResourceLoad"]
+			getRemoteResourceLoadDeferralKey: CanvasFileUploadManager["getRemoteResourceLoadDeferralKey"]
+		}
+		manager.canvas = {
+			id: "target-canvas",
+			eventEmitter: { emit },
+		}
+		manager.pendingRemoteResourceLoadDeferrals = new Map()
+
+		const releaseA = manager.registerPendingRemoteResourceLoadDeferral("./videos/reference.mp4")
+		const releaseB = manager.registerPendingRemoteResourceLoadDeferral("videos/reference.mp4")
+
+		expect(manager.shouldDeferRemoteResourceLoad("./videos/reference.mp4")).toBe(true)
+		expect(manager.shouldDeferRemoteResourceLoad("videos/reference.mp4")).toBe(true)
+		expect(manager.shouldDeferRemoteResourceLoad("https://example.test/reference.mp4")).toBe(
+			false,
+		)
+
+		releaseA()
+		expect(manager.shouldDeferRemoteResourceLoad("./videos/reference.mp4")).toBe(true)
+		expect(emit).not.toHaveBeenCalled()
+
+		releaseB()
+		expect(manager.shouldDeferRemoteResourceLoad("./videos/reference.mp4")).toBe(false)
+		expect(emit).toHaveBeenCalledTimes(1)
+		expect(emit).toHaveBeenCalledWith({
+			type: "resource:remote-load-deferral-released",
+			data: {
+				path: "videos/reference.mp4",
+				key: "videos/reference.mp4",
+			},
+		})
+
+		releaseB()
+		expect(emit).toHaveBeenCalledTimes(1)
+	})
+})
+
 describe("CanvasFileUploadManager remote resource transfer cache", () => {
+	it("skips completed transfer probing for element media uploads", async () => {
+		const result: UploadFileResponse = {
+			path: "target/videos/video.mp4",
+			src: "https://target.test/video.mp4",
+			fileName: "video.mp4",
+			expires_at: "2030-01-01 00:00:00",
+		}
+		const manager = Object.create(CanvasFileUploadManager.prototype) as {
+			canvas: {
+				id: string
+				magicConfigManager: {
+					config: {
+						methods: {
+							uploadFiles: ReturnType<typeof vi.fn>
+						}
+					}
+				}
+			}
+			currentPendingBatchId: string | null
+			remoteResourceTransfers: Map<string, unknown>
+			getReusableCompletedRemoteResourceTransfer: ReturnType<typeof vi.fn>
+			getRemoteResourceTransferKey: ReturnType<typeof vi.fn>
+			createRemoteResourceTransferPromise: ReturnType<typeof vi.fn>
+			persistCompletedRemoteResourceTransfer: ReturnType<typeof vi.fn>
+			transferRemoteResource: CanvasFileUploadManager["transferRemoteResource"]
+		}
+		manager.canvas = {
+			id: "target-canvas",
+			magicConfigManager: {
+				config: {
+					methods: {
+						uploadFiles: vi.fn(),
+					},
+				},
+			},
+		}
+		manager.currentPendingBatchId = null
+		manager.remoteResourceTransfers = new Map()
+		manager.getReusableCompletedRemoteResourceTransfer = vi.fn()
+		manager.getRemoteResourceTransferKey = vi.fn(() => "transfer-key")
+		manager.createRemoteResourceTransferPromise = vi.fn(async () => result)
+		manager.persistCompletedRemoteResourceTransfer = vi.fn()
+
+		await expect(
+			manager.transferRemoteResource({
+				sourceCanvasId: "source-canvas",
+				metadata: {
+					id: "file-1",
+					elementId: "source-video",
+					filename: "video.mp4",
+					mimeType: "video/mp4",
+					fileSize: 0,
+					role: "element-media",
+					sourceRef: {
+						src: "./videos/video.mp4",
+						ossUrl: "https://source.test/video.mp4",
+					},
+				},
+			}),
+		).resolves.toBe(result)
+
+		expect(manager.getReusableCompletedRemoteResourceTransfer).not.toHaveBeenCalled()
+		expect(manager.createRemoteResourceTransferPromise).toHaveBeenCalled()
+	})
+
+	it("reuses completed generation resource transfers without creating another upload", async () => {
+		const result: UploadFileResponse = {
+			path: "target/videos/reference.mp4",
+			src: "https://target.test/reference.mp4",
+			fileName: "reference.mp4",
+			expires_at: "2030-01-01 00:00:00",
+		}
+		const manager = Object.create(CanvasFileUploadManager.prototype) as {
+			canvas: {
+				id: string
+				magicConfigManager: {
+					config: {
+						methods: {
+							uploadFiles: ReturnType<typeof vi.fn>
+						}
+					}
+				}
+			}
+			currentPendingBatchId: string | null
+			remoteResourceTransfers: Map<string, unknown>
+			getReusableCompletedRemoteResourceTransfer: ReturnType<typeof vi.fn>
+			getRemoteResourceTransferKey: ReturnType<typeof vi.fn>
+			createRemoteResourceTransferPromise: ReturnType<typeof vi.fn>
+			persistCompletedRemoteResourceTransfer: ReturnType<typeof vi.fn>
+			transferRemoteResource: CanvasFileUploadManager["transferRemoteResource"]
+		}
+		manager.canvas = {
+			id: "target-canvas",
+			magicConfigManager: {
+				config: {
+					methods: {
+						uploadFiles: vi.fn(),
+					},
+				},
+			},
+		}
+		manager.currentPendingBatchId = null
+		manager.remoteResourceTransfers = new Map()
+		manager.getReusableCompletedRemoteResourceTransfer = vi.fn(async () => result)
+		manager.getRemoteResourceTransferKey = vi.fn(() => "transfer-key")
+		manager.createRemoteResourceTransferPromise = vi.fn(async () => result)
+		manager.persistCompletedRemoteResourceTransfer = vi.fn()
+
+		await expect(
+			manager.transferRemoteResource({
+				sourceCanvasId: "source-canvas",
+				metadata: {
+					id: "generation-resource:0",
+					elementId: "generation-resource:0",
+					filename: "reference.mp4",
+					mimeType: "video/mp4",
+					fileSize: 0,
+					role: "generation-resource",
+					resourcePath: "./videos/reference.mp4",
+					sourceRef: {
+						src: "./videos/reference.mp4",
+						ossUrl: "https://source.test/reference.mp4",
+					},
+				},
+			}),
+		).resolves.toBe(result)
+
+		expect(manager.getReusableCompletedRemoteResourceTransfer).toHaveBeenCalledWith({
+			sourceCanvasId: "source-canvas",
+			metadata: expect.objectContaining({
+				role: "generation-resource",
+				resourcePath: "./videos/reference.mp4",
+			}),
+			allowFileInfoFallback: false,
+		})
+		expect(manager.createRemoteResourceTransferPromise).not.toHaveBeenCalled()
+	})
+
 	it("drops stale completed transfers so paste can re-upload deleted target files", async () => {
 		const metadata: CanvasElementClipboardFileMetadata = {
 			id: "file-1",
@@ -93,8 +279,7 @@ describe("CanvasFileUploadManager remote resource transfer cache", () => {
 			path: "target/images/image.png",
 			src: "https://target.test/image.png",
 			fileName: "image.png",
-			expires_at: 0,
-			source: "clipboard",
+			expires_at: "2030-01-01 00:00:00",
 		}
 		const getFileInfo = vi.fn(async () => {
 			throw new Error("file not found")
@@ -141,8 +326,7 @@ describe("CanvasFileUploadManager remote resource transfer cache", () => {
 			path: "target/images/image.png",
 			src: "https://target.test/image.png",
 			fileName: "image.png",
-			expires_at: 0,
-			source: "clipboard",
+			expires_at: "2030-01-01 00:00:00",
 		}
 		const getFileInfo = vi.fn(async () => ({
 			...result,
@@ -190,8 +374,7 @@ describe("CanvasFileUploadManager remote resource transfer cache", () => {
 			path: "target/images/image.png",
 			src: "https://target.test/image.png",
 			fileName: "image.png",
-			expires_at: 0,
-			source: "clipboard",
+			expires_at: "2030-01-01 00:00:00",
 		}
 		const getFileInfo = vi.fn(async () => ({
 			...result,
@@ -215,5 +398,93 @@ describe("CanvasFileUploadManager remote resource transfer cache", () => {
 			useImageProcess: false,
 			forceRefresh: true,
 		})
+	})
+
+	it("trusts completed transfers without getFileInfo when fallback is disabled", async () => {
+		const metadata: CanvasElementClipboardFileMetadata = {
+			id: "generation-resource:0",
+			elementId: "generation-resource:0",
+			filename: "reference.mp4",
+			mimeType: "video/mp4",
+			fileSize: 0,
+			role: "generation-resource",
+			resourcePath: "./videos/reference.mp4",
+			sourceRef: {
+				src: "./videos/reference.mp4",
+				ossUrl: "https://source.test/reference.mp4",
+			},
+		}
+		const result: UploadFileResponse = {
+			path: "target/videos/reference.mp4",
+			src: "https://target.test/reference.mp4",
+			fileName: "reference.mp4",
+			expires_at: "2030-01-01 00:00:00",
+		}
+		const getFileInfo = vi.fn(async () => {
+			throw new Error("file not found")
+		})
+		const manager = createRemoteTransferManager({
+			getFileInfo,
+			result,
+			metadata,
+			sourceCanvasId: "source-canvas",
+		})
+
+		await expect(
+			manager.getReusableCompletedRemoteResourceTransfer({
+				sourceCanvasId: "source-canvas",
+				metadata,
+				allowFileInfoFallback: false,
+			}),
+		).resolves.toBe(result)
+
+		expect(getFileInfo).not.toHaveBeenCalled()
+	})
+
+	it("trusts generation resource cache when file info fallback is disabled", async () => {
+		const metadata: CanvasElementClipboardFileMetadata = {
+			id: "generation-resource:0",
+			elementId: "generation-resource:0",
+			filename: "reference.mp4",
+			mimeType: "video/mp4",
+			fileSize: 0,
+			role: "generation-resource",
+			resourcePath: "./videos/reference.mp4",
+			sourceRef: {
+				src: "./videos/reference.mp4",
+				ossUrl: "https://source.test/reference.mp4",
+			},
+		}
+		const result: UploadFileResponse = {
+			path: "target/videos/reference.mp4",
+			src: "https://target.test/reference.mp4",
+			fileName: "reference.mp4",
+			expires_at: "2030-01-01 00:00:00",
+		}
+		const getFileInfo = vi.fn(async () => {
+			throw new Error("file not found")
+		})
+		const getFileResourceMeta = vi.fn(async () => ({
+			status: "deleted" as const,
+		}))
+		const manager = createRemoteTransferManager({
+			getFileInfo,
+			getFileResourceMeta,
+			result,
+			metadata,
+			sourceCanvasId: "source-canvas",
+		})
+
+		await expect(
+			manager.getReusableCompletedRemoteResourceTransfer({
+				sourceCanvasId: "source-canvas",
+				metadata,
+				allowFileInfoFallback: false,
+			}),
+		).resolves.toBe(result)
+
+		expect(getFileResourceMeta).not.toHaveBeenCalled()
+		expect(getFileInfo).not.toHaveBeenCalled()
+		expect(manager.remoteResourceTransfers.size).toBe(1)
 	})
 })

@@ -275,8 +275,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 						path: "target/ref.png",
 						src: "https://target.test/ref.png",
 						fileName: "ref.png",
-						expires_at: 0,
-						source: "clipboard",
+						expires_at: "2030-01-01 00:00:00",
 					},
 		)
 		manager.canvas.canvasFileUploadManager.transferRemoteResource = transferRemoteResource
@@ -341,6 +340,87 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(transferRemoteResource).toHaveBeenCalledTimes(2)
 	})
 
+	it("transfers distinct generation resources concurrently", async () => {
+		const manager = createClipboardManager()
+		let resolveFirst: (value: UploadFileResponse) => void = () => undefined
+		const firstTransfer = new Promise<UploadFileResponse>((resolve) => {
+			resolveFirst = resolve
+		})
+		const transferRemoteResource = vi.fn(
+			({ metadata }: { metadata: { id: string; filename: string } }) => {
+				if (metadata.id === "ref-a") {
+					return firstTransfer
+				}
+				return Promise.resolve({
+					path: "target/ref-b.png",
+					src: "https://target.test/ref-b.png",
+					fileName: metadata.filename,
+					expires_at: "2030-01-01 00:00:00",
+				})
+			},
+		)
+		manager.canvas.canvasFileUploadManager.transferRemoteResource = transferRemoteResource
+
+		const resultPromise = (
+			manager as unknown as {
+				resolveGenerationResourcePathMap: (
+					fileMetadata: Array<{
+						id: string
+						elementId: string
+						filename: string
+						mimeType: string
+						fileSize: number
+						role: string
+						resourcePath?: string
+						sourceRef?: { src?: string; ossUrl?: string }
+					}>,
+					sourceCanvasId?: string,
+				) => Promise<{ pathMap: Map<string, string>; failureCount: number }>
+			}
+		).resolveGenerationResourcePathMap(
+			[
+				{
+					id: "ref-a",
+					elementId: "ref-a",
+					filename: "ref-a.png",
+					mimeType: "image/png",
+					fileSize: 0,
+					role: "generation-resource",
+					resourcePath: "source/ref-a.png",
+					sourceRef: { src: "source/ref-a.png", ossUrl: "https://source.test/ref-a.png" },
+				},
+				{
+					id: "ref-b",
+					elementId: "ref-b",
+					filename: "ref-b.png",
+					mimeType: "image/png",
+					fileSize: 0,
+					role: "generation-resource",
+					resourcePath: "source/ref-b.png",
+					sourceRef: { src: "source/ref-b.png", ossUrl: "https://source.test/ref-b.png" },
+				},
+			],
+			"source-canvas",
+		)
+
+		await Promise.resolve()
+		expect(transferRemoteResource).toHaveBeenCalledTimes(2)
+
+		resolveFirst({
+			path: "target/ref-a.png",
+			src: "https://target.test/ref-a.png",
+			fileName: "ref-a.png",
+			expires_at: "2030-01-01 00:00:00",
+		})
+		const result = await resultPromise
+
+		expect(Array.from(result.pathMap.entries())).toEqual([
+			["source/ref-a.png", "target/ref-a.png"],
+			["source/ref-b.png", "target/ref-b.png"],
+		])
+		expect(result.failureCount).toBe(0)
+	})
+
 	it("rewrites frame child media src when pasting across canvases", async () => {
 		const child: ImageElement = {
 			id: "image-child",
@@ -384,8 +464,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			path: "target/image.png",
 			src: "https://target.test/image.png",
 			fileName: "image.png",
-			expires_at: 0,
-			source: "clipboard",
+			expires_at: "2030-01-01 00:00:00",
 		}
 		const manager = createClipboardManager()
 		manager.canvas = {
@@ -431,7 +510,12 @@ describe("ClipboardManager frame clipboard trees", () => {
 		})
 
 		expect(result.sourceReferenceFailureCount).toBe(0)
-		expect(result.pendingUploads).toEqual([])
+		expect(result.pendingUploads).toEqual([
+			expect.objectContaining({
+				sourceElementId: "image-child",
+				sourceCanvasId: "source-canvas",
+			}),
+		])
 		expect(result.element).toEqual(
 			expect.objectContaining({
 				type: "frame",
@@ -446,19 +530,19 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(pastedFrame.children?.[0]).toEqual(
 			expect.objectContaining({
 				type: "image",
-				src: "target/image.png",
-				status: GenerationStatus.Completed,
+				src: undefined,
+				status: GenerationStatus.Processing,
 				generateImageRequest: expect.objectContaining({
 					model_id: "image-model",
 					prompt: "a friendly creature",
 				}),
 				imageGenerationTaskMeta: expect.objectContaining({
 					type: ImageGenerationTaskTypeMap.High,
-					file_path: "target/image.png",
+					file_path: "images/image.png",
 					size: "2048x2048",
 				}),
 				generateHightImageRequest: expect.objectContaining({
-					file_path: "target/image.png",
+					file_path: "images/image.png",
 					size: "2048x2048",
 				}),
 			}),
@@ -468,10 +552,11 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(pastedChild.generateImageRequest?.image_id).toBeUndefined()
 		expect(pastedChild.imageGenerationTaskMeta?.image_id).toBeUndefined()
 		expect(pastedChild.generateHightImageRequest?.image_id).toBeUndefined()
-		expect(manager.canvas.imageResourceManager.primeCache).toHaveBeenCalledWith(
-			"target/image.png",
-			uploadResult,
-		)
+		expect(pastedChild.id).toBe(result.pendingUploads[0]?.targetElementId)
+		expect(
+			manager.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer,
+		).not.toHaveBeenCalled()
+		expect(manager.canvas.imageResourceManager.primeCache).not.toHaveBeenCalled()
 	})
 
 	it("rewrites image generation references when pasting across canvases", async () => {
@@ -511,8 +596,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			path: "target/image.png",
 			src: "https://target.test/image.png",
 			fileName: "image.png",
-			expires_at: 0,
-			source: "clipboard",
+			expires_at: "2030-01-01 00:00:00",
 		}
 		const manager = createClipboardManager()
 		manager.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer = vi.fn(
@@ -552,12 +636,18 @@ describe("ClipboardManager frame clipboard trees", () => {
 		})
 
 		const pastedChild = result.element as ImageElement
-		expect(pastedChild.src).toBe("target/image.png")
+		expect(result.pendingUploads).toEqual([
+			expect.objectContaining({
+				sourceElementId: "image-child",
+				sourceCanvasId: "source-canvas",
+			}),
+		])
+		expect(pastedChild.src).toBeUndefined()
 		expect(pastedChild.generateImageRequest).toEqual(
 			expect.objectContaining({
 				model_id: "image-model",
 				prompt: "use source/ref.png as a reference",
-				reference_images: ["target/ref.png", "target/image.png"],
+				reference_images: ["target/ref.png", "source/image.png"],
 				reference_image_options: [expect.objectContaining({ path: "target/ref.png" })],
 			}),
 		)
@@ -566,7 +656,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(pastedChild.generateImageRequest?.file_dir).toBeUndefined()
 		expect(pastedChild.imageGenerationTaskMeta).toEqual(
 			expect.objectContaining({
-				file_path: "target/image.png",
+				file_path: "source/image.png",
 				mask_path: "target/mask.png",
 				mark_path: "target/mark.png",
 				reference_image_options: [expect.objectContaining({ path: "target/ref.png" })],
@@ -578,6 +668,9 @@ describe("ClipboardManager frame clipboard trees", () => {
 				reference_image_options: [expect.objectContaining({ path: "target/ref.png" })],
 			}),
 		)
+		expect(
+			manager.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer,
+		).not.toHaveBeenCalled()
 	})
 
 	it("rewrites video generation input resources when pasting across canvases", async () => {
@@ -612,8 +705,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			path: "target/video.mp4",
 			src: "https://target.test/video.mp4",
 			fileName: "video.mp4",
-			expires_at: 0,
-			source: "clipboard",
+			expires_at: "2030-01-01 00:00:00",
 		}
 		const manager = createClipboardManager()
 		manager.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer = vi.fn(
@@ -656,7 +748,13 @@ describe("ClipboardManager frame clipboard trees", () => {
 		})
 
 		const pastedChild = result.element as VideoElement
-		expect(pastedChild.src).toBe("target/video.mp4")
+		expect(result.pendingUploads).toEqual([
+			expect.objectContaining({
+				sourceElementId: "video-child",
+				sourceCanvasId: "source-canvas",
+			}),
+		])
+		expect(pastedChild.src).toBeUndefined()
 		expect(pastedChild.generateVideoRequest?.video_id).toBeUndefined()
 		expect(pastedChild.generateVideoRequest?.project_id).toBeUndefined()
 		expect(pastedChild.generateVideoRequest?.file_dir).toBeUndefined()
@@ -666,10 +764,13 @@ describe("ClipboardManager frame clipboard trees", () => {
 			reference_images: [expect.objectContaining({ uri: "target/ref.png" })],
 			reference_videos: [expect.objectContaining({ uri: "target/ref.mp4" })],
 			reference_audios: [expect.objectContaining({ uri: "target/ref.mp3" })],
-			video: expect.objectContaining({ uri: "target/video.mp4" }),
+			video: expect.objectContaining({ uri: "source/video.mp4" }),
 			mask: expect.objectContaining({ uri: "target/mask.png" }),
 			audio: [expect.objectContaining({ uri: "target/audio.wav" })],
 		})
+		expect(
+			manager.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer,
+		).not.toHaveBeenCalled()
 	})
 
 	it("returns an uploading frame child placeholder before remote transfer finishes", async () => {
@@ -982,5 +1083,115 @@ describe("ClipboardManager frame clipboard trees", () => {
 			reason: "clipboard-tree-upload",
 			priority: "critical",
 		})
+	})
+
+	it("runs background generation resource transfers after creating pasted elements", async () => {
+		const uploadResult: UploadFileResponse = {
+			path: "./videos/reference-copy.mp4",
+			src: "https://target.test/reference-copy.mp4",
+			fileName: "reference-copy.mp4",
+			expires_at: "2030-01-01 00:00:00",
+		}
+		const currentElement: VideoElement = {
+			id: "pasted-video",
+			type: "video",
+			name: "Pasted video",
+			x: 12,
+			y: 16,
+			width: 160,
+			height: 90,
+			generateVideoRequest: {
+				model_id: "video-model",
+				prompt: "merge clips",
+				inputs: {
+					reference_videos: [{ uri: "./videos/reference.mp4" }],
+				},
+			},
+		}
+		const transferRemoteResource = vi.fn(async () => uploadResult)
+		const update = vi.fn()
+		const recordHistoryImmediate = vi.fn()
+		const releaseLoadDeferral = vi.fn()
+		const manager = createClipboardManager()
+		manager.canvas = {
+			id: "target-canvas",
+			canvasFileUploadManager: {
+				getCompletedRemoteResourceTransfer: vi.fn(),
+				getReusableCompletedRemoteResourceTransfer: vi.fn(),
+				transferRemoteResource,
+			},
+			elementManager: {
+				getElementData: vi.fn(() => currentElement),
+				update,
+			},
+			historyManager: {
+				recordHistoryImmediate,
+			},
+			imageResourceManager: {
+				primeCache: vi.fn(),
+			},
+			videoResourceManager: {
+				primeCache: vi.fn(),
+			},
+		} as unknown as ClipboardManagerTestHarness["canvas"]
+		;(
+			manager as unknown as {
+				runClipboardGenerationResourceTransfers: (options: {
+					fileMetadata: Array<{
+						elementId: string
+						filename: string
+						mimeType: string
+						fileSize: number
+						role: string
+						resourcePath?: string
+						sourceRef?: { src?: string; ossUrl?: string }
+					}>
+					sourceCanvasId?: string
+					targetElementIds: string[]
+					releaseLoadDeferrals?: Array<() => void>
+				}) => void
+			}
+		).runClipboardGenerationResourceTransfers({
+			fileMetadata: [
+				{
+					elementId: "generation-resource:0",
+					filename: "reference.mp4",
+					mimeType: "video/mp4",
+					fileSize: 0,
+					role: "generation-resource",
+					resourcePath: "./videos/reference.mp4",
+					sourceRef: {
+						src: "./videos/reference.mp4",
+						ossUrl: "https://source.test/reference.mp4",
+					},
+				},
+			],
+			sourceCanvasId: "source-canvas",
+			targetElementIds: ["pasted-video"],
+			releaseLoadDeferrals: [releaseLoadDeferral],
+		})
+
+		await vi.waitFor(() => {
+			expect(transferRemoteResource).toHaveBeenCalledTimes(1)
+			expect(update).toHaveBeenCalledTimes(1)
+		})
+
+		expect(update).toHaveBeenCalledWith(
+			"pasted-video",
+			expect.objectContaining({
+				generateVideoRequest: expect.objectContaining({
+					inputs: expect.objectContaining({
+						reference_videos: [{ uri: "./videos/reference-copy.mp4" }],
+					}),
+				}),
+			}),
+			{ silent: false },
+		)
+		expect(manager.canvas.videoResourceManager.primeCache).toHaveBeenCalledWith(
+			"./videos/reference-copy.mp4",
+			uploadResult,
+		)
+		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+		expect(releaseLoadDeferral).toHaveBeenCalledTimes(1)
 	})
 })

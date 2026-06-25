@@ -928,6 +928,9 @@ export class ImageResourceManager {
 			this.markStaleRequestDrop()
 			return null
 		}
+		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
+			return null
+		}
 		const normalizedSrc = this.canonicalResourcePath(path)
 		const entry = this.getOrCreateEntry(normalizedSrc)
 		const shouldRefreshCached = options?.refreshCached !== false
@@ -1294,6 +1297,9 @@ export class ImageResourceManager {
 		},
 	): Promise<ResolvedImageOssInfo | null> {
 		if (this.destroyed) {
+			return null
+		}
+		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
 			return null
 		}
 		const normalizedSrc = this.canonicalResourcePath(path)

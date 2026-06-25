@@ -342,7 +342,7 @@ export class ClipboardManager {
 					expiresAt: fileInfo.expires_at,
 				},
 			}
-		} catch {
+		} catch (error) {
 			return null
 		}
 	}
@@ -1186,6 +1186,33 @@ export class ClipboardManager {
 		this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
 	}
 
+	private primeGenerationResourceCache(
+		resourcePath: string,
+		uploadResult: UploadFileResponse,
+		metadata: CanvasElementClipboardFileMetadata,
+	): void {
+		if (!uploadResult.src) {
+			return
+		}
+
+		const mimeType = metadata.mimeType?.toLowerCase() || ""
+		const filename = metadata.filename?.toLowerCase() || resourcePath.toLowerCase()
+		const isImage =
+			mimeType.startsWith("image/") ||
+			/\.(png|jpe?g|webp|gif|bmp|avif|heic|heif)$/i.test(filename)
+		const isVideo =
+			mimeType.startsWith("video/") || /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(filename)
+
+		if (isImage) {
+			this.canvas.imageResourceManager.primeCache(uploadResult.path, uploadResult)
+			return
+		}
+
+		if (isVideo) {
+			this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
+		}
+	}
+
 	private cloneElementForPaste(element: LayerElement, currentNames: Set<string>): LayerElement {
 		const clonedElement = { ...element, id: generateElementId() } as LayerElement
 
@@ -1195,6 +1222,10 @@ export class ClipboardManager {
 		}
 
 		return clonedElement
+	}
+
+	private cloneLayerElementData(element: LayerElement): LayerElement {
+		return JSON.parse(JSON.stringify(element)) as LayerElement
 	}
 
 	private withSourceElementPathMapping(
@@ -1232,37 +1263,135 @@ export class ClipboardManager {
 		sourceCanvasId?: string,
 	): Promise<{ pathMap: Map<string, string>; failureCount: number }> {
 		const pathMap = new Map<string, string>()
-		let failureCount = 0
+		const transferItems: Array<{
+			metadata: CanvasElementClipboardFileMetadata
+			resourcePath: string
+		}> = []
+		const seenResourceKeys = new Set<string>()
 		const generationResources = fileMetadata.filter(
 			(metadata) => metadata.role === "generation-resource" && metadata.resourcePath,
 		)
-
 		for (const metadata of generationResources) {
 			const resourcePath = metadata.resourcePath
 			const resourcePathKey = getClipboardResourcePathKey(resourcePath)
-			if (
-				!resourcePath ||
-				!resourcePathKey ||
-				Array.from(pathMap.keys()).some(
-					(path) => getClipboardResourcePathKey(path) === resourcePathKey,
-				)
-			) {
+			if (!resourcePath || !resourcePathKey || seenResourceKeys.has(resourcePathKey)) {
 				continue
 			}
 
-			const uploadResult = await this.canvas.canvasFileUploadManager.transferRemoteResource({
-				sourceCanvasId,
-				metadata,
-			})
-			if (uploadResult?.path) {
-				pathMap.set(resourcePath, uploadResult.path)
-				continue
-			}
-
-			failureCount += 1
+			seenResourceKeys.add(resourcePathKey)
+			transferItems.push({ metadata, resourcePath })
 		}
 
+		const transferResults = await Promise.all(
+			transferItems.map(async ({ metadata, resourcePath }) => {
+				const uploadResult =
+					await this.canvas.canvasFileUploadManager.transferRemoteResource({
+						sourceCanvasId,
+						metadata,
+					})
+				if (uploadResult?.path) {
+					this.primeGenerationResourceCache(resourcePath, uploadResult, metadata)
+					return { resourcePath, uploadResult, failed: false }
+				}
+				return { resourcePath, uploadResult: null, failed: true }
+			}),
+		)
+
+		let failureCount = 0
+		for (const result of transferResults) {
+			if (result.uploadResult?.path) {
+				pathMap.set(result.resourcePath, result.uploadResult.path)
+				continue
+			}
+			if (result.failed) {
+				failureCount += 1
+			}
+		}
 		return { pathMap, failureCount }
+	}
+
+	private registerGenerationResourceLoadDeferrals(
+		fileMetadata: CanvasElementClipboardFileMetadata[],
+	): Array<() => void> {
+		const releases: Array<() => void> = []
+		const seenKeys = new Set<string>()
+
+		for (const metadata of fileMetadata) {
+			if (metadata.role !== "generation-resource" || !metadata.resourcePath) {
+				continue
+			}
+
+			const resourceKey = getClipboardResourcePathKey(metadata.resourcePath)
+			if (!resourceKey || seenKeys.has(resourceKey)) {
+				continue
+			}
+
+			seenKeys.add(resourceKey)
+			releases.push(
+				this.canvas.canvasFileUploadManager.registerPendingRemoteResourceLoadDeferral(
+					metadata.resourcePath,
+				),
+			)
+		}
+		return releases
+	}
+
+	private runClipboardGenerationResourceTransfers(options: {
+		fileMetadata: CanvasElementClipboardFileMetadata[]
+		sourceCanvasId?: string
+		targetElementIds: string[]
+		releaseLoadDeferrals?: Array<() => void>
+	}): void {
+		const {
+			fileMetadata,
+			sourceCanvasId,
+			targetElementIds,
+			releaseLoadDeferrals = [],
+		} = options
+		if (targetElementIds.length === 0) {
+			releaseLoadDeferrals.forEach((release) => release())
+			return
+		}
+		void (async () => {
+			try {
+				const result = await this.resolveGenerationResourcePathMap(
+					fileMetadata,
+					sourceCanvasId,
+				)
+				let rewriteCount = 0
+
+				for (const elementId of targetElementIds) {
+					const currentElement = this.canvas.elementManager.getElementData(elementId)
+					if (!currentElement) {
+						continue
+					}
+
+					const nextElement = this.cloneLayerElementData(currentElement)
+					const hasRewritten = rewriteElementResourceReferences(
+						nextElement,
+						result.pathMap,
+					)
+					if (!hasRewritten) {
+						continue
+					}
+
+					this.canvas.elementManager.update(elementId, nextElement, { silent: false })
+					rewriteCount += 1
+				}
+
+				if (rewriteCount > 0) {
+					this.canvas.historyManager.recordHistoryImmediate()
+				}
+
+				if (result.failureCount > 0) {
+					this.showClipboardSourceUnavailableHint()
+				}
+			} catch {
+				this.showClipboardSourceUnavailableHint()
+			} finally {
+				releaseLoadDeferrals.forEach((release) => release())
+			}
+		})()
 	}
 
 	private async resolveCrossCanvasTreeFileElement(options: {
@@ -1283,7 +1412,7 @@ export class ClipboardManager {
 		} = options
 		const metadata = metadataByElementId.get(sourceElement.id)
 
-		if (metadata) {
+		if (metadata?.role === "generation-resource") {
 			const completedTransfer =
 				await this.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer(
 					{
@@ -1610,11 +1739,15 @@ export class ClipboardManager {
 				? this.getElementCenterOffset(sortedElements[0], targetPosition)
 				: this.getElementsCenterOffset(sortedElements, targetPosition)
 		const canReuseElementSrc = this.canPasteFromClipboardCanvas(canvasId)
+		const shouldTransferGenerationResourcesAfterCreate = !canReuseElementSrc
+		const generationResourceLoadDeferralReleases = shouldTransferGenerationResourcesAfterCreate
+			? this.registerGenerationResourceLoadDeferrals(fileMetadata)
+			: []
 		const createdElementIds: string[] = []
 		const pendingTreeFileUploads: ClipboardTreeFileUpload[] = []
 		let sourceReferenceFailureCount = 0
 		let hasShownSourceUnavailableHint = false
-
+		let generationResourceTransferScheduled = false
 		this.canvas.historyManager.disable()
 
 		try {
@@ -1622,9 +1755,10 @@ export class ClipboardManager {
 				async () => {
 					const pendingBatchId =
 						this.canvas.canvasFileUploadManager.getCurrentPendingBatchId()
-					const generationResourceResult = canReuseElementSrc
-						? { pathMap: new Map<string, string>(), failureCount: 0 }
-						: await this.resolveGenerationResourcePathMap(fileMetadata, canvasId)
+					const generationResourceResult = {
+						pathMap: new Map<string, string>(),
+						failureCount: 0,
+					}
 					sourceReferenceFailureCount += generationResourceResult.failureCount
 					const resourcePathMap = generationResourceResult.pathMap
 					let nextZIndex = maxZIndex + 1
@@ -1688,8 +1822,20 @@ export class ClipboardManager {
 				this.canvas.canvasFileUploadManager.commitPendingUploadBatch(pendingBatchId)
 			}
 			this.runClipboardTreeFileUploads(pendingTreeFileUploads)
+			if (shouldTransferGenerationResourcesAfterCreate) {
+				generationResourceTransferScheduled = true
+				this.runClipboardGenerationResourceTransfers({
+					fileMetadata,
+					sourceCanvasId: canvasId,
+					targetElementIds: createdElementIds,
+					releaseLoadDeferrals: generationResourceLoadDeferralReleases,
+				})
+			}
 		} catch (error) {
 			this.canvas.historyManager.enable()
+			if (!generationResourceTransferScheduled) {
+				generationResourceLoadDeferralReleases.forEach((release) => release())
+			}
 			throw error
 		}
 	}

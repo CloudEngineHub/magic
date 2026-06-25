@@ -14,7 +14,12 @@ import {
 	isVideoFile,
 	isAudioFile,
 } from "./utils"
-import { normalizeUploadFileResponse } from "./pathUtils"
+import {
+	isRemoteOrSpecialPath,
+	normalizePathLocal,
+	normalizeUploadFileResponse,
+	stripCurrentDirectoryPrefix,
+} from "./pathUtils"
 import { getAllExistingNames } from "./elementUtils"
 import { ImageElement as ImageElementClass } from "../element/elements/ImageElement"
 import { VideoElement as VideoElementClass } from "../element/elements/VideoElement"
@@ -177,6 +182,9 @@ export class CanvasFileUploadManager {
 	 */
 	private readonly remoteResourceTransfers = new Map<string, RemoteResourceTransfer>()
 
+	/** 跨画布粘贴时，生成请求里的隐藏参考资源正在后台迁移；此期间资源预览应保持 loading，不触发 not-found toast */
+	private readonly pendingRemoteResourceLoadDeferrals = new Map<string, number>()
+
 	/** 临时元素删除监听（用于同步移除待完成上传） */
 	private readonly handleTemporaryDeleted = (event: { data: { elementId: string } }) => {
 		this.unregisterPendingUploadElement(event.data.elementId)
@@ -268,6 +276,53 @@ export class CanvasFileUploadManager {
 		return this.currentPendingBatchId
 	}
 
+	public getRemoteResourceLoadDeferralKey(path?: string | null): string | null {
+		const rawPath = path?.trim()
+		if (!rawPath || isRemoteOrSpecialPath(rawPath)) {
+			return null
+		}
+
+		const key = stripCurrentDirectoryPrefix(normalizePathLocal(rawPath))
+		if (!key || key === ".") {
+			return null
+		}
+		return key
+	}
+
+	public shouldDeferRemoteResourceLoad(path: string): boolean {
+		const key = this.getRemoteResourceLoadDeferralKey(path)
+		return !!key && (this.pendingRemoteResourceLoadDeferrals.get(key) ?? 0) > 0
+	}
+
+	public registerPendingRemoteResourceLoadDeferral(path: string): () => void {
+		const key = this.getRemoteResourceLoadDeferralKey(path)
+		if (!key) {
+			return () => undefined
+		}
+
+		const currentCount = this.pendingRemoteResourceLoadDeferrals.get(key) ?? 0
+		this.pendingRemoteResourceLoadDeferrals.set(key, currentCount + 1)
+		let released = false
+		return () => {
+			if (released) {
+				return
+			}
+			released = true
+
+			const nextCount = (this.pendingRemoteResourceLoadDeferrals.get(key) ?? 0) - 1
+			if (nextCount > 0) {
+				this.pendingRemoteResourceLoadDeferrals.set(key, nextCount)
+				return
+			}
+
+			this.pendingRemoteResourceLoadDeferrals.delete(key)
+			this.canvas.eventEmitter.emit({
+				type: "resource:remote-load-deferral-released",
+				data: { path, key },
+			})
+		}
+	}
+
 	public getCompletedRemoteResourceTransfer(options: {
 		sourceCanvasId?: string
 		metadata: CanvasElementClipboardFileMetadata
@@ -297,6 +352,7 @@ export class CanvasFileUploadManager {
 	public async getReusableCompletedRemoteResourceTransfer(options: {
 		sourceCanvasId?: string
 		metadata: CanvasElementClipboardFileMetadata
+		allowFileInfoFallback?: boolean
 	}): Promise<UploadFileResponse | null> {
 		const key = this.getRemoteResourceTransferKey(options)
 		if (!key) {
@@ -307,8 +363,9 @@ export class CanvasFileUploadManager {
 		if (!completedTransfer) {
 			return null
 		}
-
-		const isUsable = await this.isCompletedRemoteResourceTransferUsable(completedTransfer)
+		const isUsable = await this.isCompletedRemoteResourceTransferUsable(completedTransfer, {
+			allowFileInfoFallback: options.allowFileInfoFallback ?? true,
+		})
 		if (isUsable) {
 			return completedTransfer
 		}
@@ -334,12 +391,15 @@ export class CanvasFileUploadManager {
 			return null
 		}
 
-		const completedTransfer = await this.getReusableCompletedRemoteResourceTransfer({
-			sourceCanvasId,
-			metadata,
-		})
-		if (completedTransfer) {
-			return completedTransfer
+		if (metadata.role !== "element-media") {
+			const completedTransfer = await this.getReusableCompletedRemoteResourceTransfer({
+				sourceCanvasId,
+				metadata,
+				allowFileInfoFallback: metadata.role !== "generation-resource",
+			})
+			if (completedTransfer) {
+				return completedTransfer
+			}
 		}
 
 		const transferKey = this.getRemoteResourceTransferKey({ sourceCanvasId, metadata })
@@ -953,7 +1013,12 @@ export class CanvasFileUploadManager {
 
 	private async isCompletedRemoteResourceTransferUsable(
 		result: UploadFileResponse,
+		options: { allowFileInfoFallback: boolean },
 	): Promise<boolean> {
+		if (!options.allowFileInfoFallback) {
+			return true
+		}
+
 		const getFileResourceMeta =
 			this.canvas.magicConfigManager.config?.methods?.getFileResourceMeta
 		if (getFileResourceMeta) {
