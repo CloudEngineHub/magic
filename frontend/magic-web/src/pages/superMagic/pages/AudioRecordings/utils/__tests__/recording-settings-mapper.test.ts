@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { DEFAULT_AUDIO_SETTING_TOPIC_ID } from "../../constants/recording-settings"
-import { apiResponseToSettings, resolveAutoSummaryEnabled, settingsToApiPayload } from "../recording-settings-mapper"
+import {
+	apiResponseToSettings,
+	resolveAutoSummaryEnabled,
+	resolveTranscriptionEnabled,
+	settingsToApiPayload,
+} from "../recording-settings-mapper"
 
 const MOCK_FALLBACK_MODEL = "mock-fallback-model"
 
@@ -68,5 +73,22 @@ describe("recording-settings-mapper", () => {
 				{ extra: { auto_summary_enabled: true } },
 			),
 		).toBe(false)
+	})
+
+	it("resolves transcription from cached settings before API extra", () => {
+		expect(
+			resolveTranscriptionEnabled(
+				{
+					transcription_enabled: false,
+					auto_summary_enabled: true,
+					model_id: "mock-model",
+				},
+				{ extra: { transcription_enabled: true } },
+			),
+		).toBe(false)
+	})
+
+	it("falls back to enabled transcription when no preference exists", () => {
+		expect(resolveTranscriptionEnabled(null, {})).toBe(true)
 	})
 })

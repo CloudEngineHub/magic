@@ -2961,6 +2961,11 @@
 				"permissionDenied": "Microphone permission was denied. Please allow microphone access and try again.",
 				"browserNotSupported": "This browser does not support recording yet. Please switch to a browser with microphone support.",
 				"audioSourceUnavailable": "No usable audio input is available. Please check your microphone device and try again.",
+				"transcriptionDisabledTitle": "Realtime transcription",
+				"transcriptionDisabledDescription": "Turn it on to transcribe the recording in real time.",
+				"enableTranscription": "Enable transcription",
+				"enablingTranscription": "Enabling",
+				"enableTranscriptionFailed": "Failed to enable transcription. Please try again later.",
 				"cancel": "Cancel recording",
 				"pause": "Pause",
 				"resume": "Resume"

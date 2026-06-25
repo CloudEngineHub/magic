@@ -47,13 +47,13 @@ describe("RecordingDetailEmptyState", () => {
 		expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0)
 	})
 
-	it("renders left column skeleton aligned with player and transcript layout", () => {
+	it("renders left column skeleton aligned with the borderless player and transcript layout", () => {
 		render(<RecordingDetailPageSkeleton />)
 
 		expect(screen.getByTestId("recording-detail-player-skeleton")).toBeInTheDocument()
 		expect(screen.getByTestId("recording-detail-transcript-skeleton")).toBeInTheDocument()
 		expect(
 			screen.getByTestId("recording-detail-transcript-skeleton").querySelector(".border-b"),
-		).toBeTruthy()
+		).toBeNull()
 	})
 })

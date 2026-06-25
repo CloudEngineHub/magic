@@ -42,6 +42,15 @@ export function getCachedRecordingSettings() {
 	return cachedSettings
 }
 
+/** Updates cached settings outside the settings panel after inline recording actions. */
+export function patchCachedRecordingSettings(partialSettings: Partial<RecordingSettings>) {
+	if (!cachedSettings) return
+	cachedSettings = {
+		...cachedSettings,
+		...partialSettings,
+	}
+}
+
 /** Clears module cache — test-only helper to avoid cross-test leakage */
 export function resetRecordingSettingsCacheForTests() {
 	cachedApiResponse = null

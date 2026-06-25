@@ -58,6 +58,8 @@ export interface RecordingEditorStartParams {
 	model: ModelItem
 	audioSource: AudioSourceType
 	sessionId?: string
+	/** Whether realtime transcription should start with this recording session */
+	transcriptionEnabled?: boolean
 }
 
 export interface RecordingEditorFinishOptions {

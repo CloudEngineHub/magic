@@ -57,6 +57,7 @@ const {
 			pauseRecording: vi.fn(),
 			continueRecording: vi.fn(),
 			updateNote: vi.fn(),
+			enableTranscriptionForCurrentSession: vi.fn(),
 			on: vi.fn(() => () => undefined),
 		},
 		recordSummaryStoreMock: {
@@ -77,6 +78,7 @@ const {
 				topic: null,
 				model: null,
 				audioSource: undefined,
+				transcriptionEnabled: true,
 			},
 		},
 		workspaceStoreMock: {
@@ -98,6 +100,7 @@ const {
 		},
 		recordingTopicModelApiMock: {
 			getRecordingTopicModel: vi.fn(),
+			saveRecordingTopicModel: vi.fn(),
 		},
 		summaryModelListMock: {
 			fetchSummaryModelGroups: vi.fn(),
@@ -284,6 +287,7 @@ describe("useRecordingEntryFacade", () => {
 		recordSummaryServiceMock.pauseRecording.mockReset()
 		recordSummaryServiceMock.continueRecording.mockReset()
 		recordSummaryServiceMock.updateNote.mockReset()
+		recordSummaryServiceMock.enableTranscriptionForCurrentSession.mockReset()
 		recordSummaryServiceMock.on.mockReset()
 		recordSummaryServiceMock.on.mockImplementation(() => () => undefined)
 		recordSummaryStoreMock.status = "init"
@@ -296,9 +300,11 @@ describe("useRecordingEntryFacade", () => {
 		recordSummaryStoreMock.businessData.project = null
 		recordSummaryStoreMock.businessData.topic = null
 		recordSummaryStoreMock.businessData.model = null
+		recordSummaryStoreMock.businessData.transcriptionEnabled = true
 		workspaceStoreMock.selectedWorkspace = { id: "workspace-1", name: "Workspace One" }
 		workspaceStoreMock.firstWorkspace = { id: "workspace-1", name: "Workspace One" }
 		recordingTopicModelApiMock.getRecordingTopicModel.mockReset()
+		recordingTopicModelApiMock.saveRecordingTopicModel.mockReset()
 		summaryModelListMock.fetchSummaryModelGroups.mockReset()
 		summaryModelListMock.resolveDefaultSummaryModelId.mockReset()
 		audioRecordingsServiceMock.submitSummary.mockReset()
@@ -361,8 +367,10 @@ describe("useRecordingEntryFacade", () => {
 			extra: {
 				model: { model_id: "model-alpha" },
 				auto_summary_enabled: true,
+				transcription_enabled: true,
 			},
 		})
+		recordingTopicModelApiMock.saveRecordingTopicModel.mockResolvedValue(undefined)
 	})
 
 	it("keeps list presentation on desktop when a shared session is already active", async () => {
@@ -392,6 +400,7 @@ describe("useRecordingEntryFacade", () => {
 				workspace_id: "workspace-audio-001",
 				audio_source: "recorded",
 				source: "pc",
+				transcription_enabled: true,
 			}),
 		)
 		expect(runtimeMock.actions.startRecording).toHaveBeenCalledWith(
@@ -400,9 +409,45 @@ describe("useRecordingEntryFacade", () => {
 				project: expect.objectContaining({ id: "project-audio-001" }),
 				topic: expect.objectContaining({ id: "topic-audio-001" }),
 				model: expect.objectContaining({ model_id: "model-alpha" }),
+				transcriptionEnabled: true,
 			}),
 		)
 		expect(result.current.presentation).toBe("list")
+	})
+
+	it("starts recording without realtime transcription when the recording setting is disabled", async () => {
+		seedRecordingSettingsCacheForTests(
+			{
+				model: { model_id: "model-alpha" },
+				extra: {
+					model: { model_id: "model-alpha" },
+					transcription_enabled: false,
+					auto_summary_enabled: true,
+				},
+			},
+			{
+				transcription_enabled: false,
+				auto_summary_enabled: true,
+				model_id: "model-alpha",
+			},
+		)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(superMagicApiMock.createAudioProject).toHaveBeenCalledWith(
+			expect.objectContaining({
+				transcription_enabled: false,
+			}),
+		)
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledWith(
+			expect.objectContaining({
+				transcriptionEnabled: false,
+			}),
+		)
 	})
 
 	it("reveals the desktop FloatPanel while recorder startup is still pending", async () => {
@@ -745,6 +790,44 @@ describe("useRecordingEntryFacade", () => {
 				autoSummaryEnabled: false,
 			}),
 		)
+	})
+
+	it("enables realtime transcription for the active recording and persists the global setting", async () => {
+		seedRecordingSettingsCacheForTests(
+			{
+				model: { model_id: "model-alpha" },
+				extra: {
+					model: { model_id: "model-alpha" },
+					transcription_enabled: false,
+					auto_summary_enabled: true,
+				},
+			},
+			{
+				transcription_enabled: false,
+				auto_summary_enabled: true,
+				model_id: "model-alpha",
+			},
+		)
+
+		recordSummaryStoreMock.businessData.transcriptionEnabled = false
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.enableTranscription()
+		})
+
+		expect(recordingTopicModelApiMock.saveRecordingTopicModel).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cache_id: "default_audio",
+				extra: expect.objectContaining({
+					transcription_enabled: true,
+				}),
+			}),
+		)
+		expect(recordSummaryServiceMock.enableTranscriptionForCurrentSession).toHaveBeenCalled()
+		expect(result.current.transcriptionEnabled).toBe(true)
+		expect(result.current.isEnablingTranscription).toBe(false)
 	})
 
 	it("seeds finished recordings with local session duration while backend duration is still pending", async () => {

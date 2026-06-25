@@ -24,6 +24,21 @@ export function resolveAutoSummaryEnabled(
 }
 
 /**
+ * Resolves whether realtime transcription should start for the next recording.
+ * Cached UI settings win so the start button honors the latest toggle immediately.
+ */
+export function resolveTranscriptionEnabled(
+	settings: RecordingSettings | null,
+	apiResponse?: RecordingTopicModelResponse | null,
+): boolean {
+	return (
+		settings?.transcription_enabled ??
+		apiResponse?.extra?.transcription_enabled ??
+		DEFAULT_RECORDING_SETTINGS.transcription_enabled
+	)
+}
+
+/**
  * Maps API response to UI settings, applying defaults and fallback model id.
  */
 export function apiResponseToSettings(

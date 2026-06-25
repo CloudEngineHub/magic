@@ -160,6 +160,10 @@ class RecordingSummaryStore {
 		 * 音频源配置
 		 */
 		audioSource: undefined as import("@/types/recordSummary").AudioSourceConfig | undefined,
+		/**
+		 * Whether realtime transcription is enabled for the active session.
+		 */
+		transcriptionEnabled: true,
 	}
 
 	/**
@@ -431,6 +435,9 @@ class RecordingSummaryStore {
 					if (state.audioSource) {
 						this.businessData.audioSource = state.audioSource
 					}
+					if (typeof state.transcriptionEnabled === "boolean") {
+						this.businessData.transcriptionEnabled = state.transcriptionEnabled
+					}
 				}
 			} catch (error) {
 				console.warn("Failed to load recording summary state:", error)
@@ -460,6 +467,7 @@ class RecordingSummaryStore {
 					topic: this.businessData.topic,
 					chatTopic: this.businessData.chatTopic,
 					audioSource: this.businessData.audioSource,
+					transcriptionEnabled: this.businessData.transcriptionEnabled,
 				}
 				localStorage.setItem(this.storageKey, JSON.stringify(state))
 			} catch (error) {
@@ -485,6 +493,7 @@ class RecordingSummaryStore {
 		model,
 		userId,
 		audioSource,
+		transcriptionEnabled = true,
 	}: {
 		workspace: Workspace | null
 		model: ModelItem
@@ -493,6 +502,7 @@ class RecordingSummaryStore {
 		topic?: Topic | null
 		chatTopic?: Topic | null
 		audioSource?: AudioSourceConfig
+		transcriptionEnabled?: boolean
 	}) {
 		this.businessData = {
 			workspace,
@@ -502,6 +512,7 @@ class RecordingSummaryStore {
 			model,
 			userId,
 			audioSource,
+			transcriptionEnabled,
 		}
 		this.isVisible = true
 		this.status = "recording"
@@ -593,6 +604,7 @@ class RecordingSummaryStore {
 					this.businessData.model = session.model
 					this.businessData.userId = session.userId
 					this.businessData.audioSource = session.audioSource
+					this.businessData.transcriptionEnabled = session.transcriptionEnabled ?? true
 
 					const lastMessage = last(session.textContent)
 					if (lastMessage) {
@@ -650,6 +662,7 @@ class RecordingSummaryStore {
 		this.businessData.chatTopic = null
 		this.businessData.model = null
 		this.businessData.audioSource = undefined
+		this.businessData.transcriptionEnabled = true
 		this.message = []
 		this.note = {
 			content: "",
@@ -912,6 +925,14 @@ class RecordingSummaryStore {
 	 */
 	setAudioSource(audioSource: import("@/types/recordSummary").AudioSourceConfig | undefined) {
 		this.businessData.audioSource = audioSource
+		this.saveToStorage()
+	}
+
+	/**
+	 * Updates the active session transcription flag after users enable it mid-recording.
+	 */
+	setTranscriptionEnabled(transcriptionEnabled: boolean) {
+		this.businessData.transcriptionEnabled = transcriptionEnabled
 		this.saveToStorage()
 	}
 

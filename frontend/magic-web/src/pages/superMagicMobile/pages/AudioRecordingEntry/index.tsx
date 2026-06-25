@@ -46,6 +46,8 @@ function AudioRecordingEntryPanel() {
 				startupErrorDetail={facade.startupErrorDetail}
 				transcriptMessages={facade.transcriptMessages}
 				noteContent={facade.noteContent}
+				transcriptionEnabled={facade.transcriptionEnabled}
+				isEnablingTranscription={facade.isEnablingTranscription}
 				onBack={facade.showList}
 				onPause={() => void facade.pauseRecording()}
 				onResume={() => void facade.resumeRecording()}
@@ -53,6 +55,7 @@ function AudioRecordingEntryPanel() {
 				onFinish={() => void facade.finishRecording()}
 				onCancel={() => void facade.cancelRecording()}
 				onNoteChange={facade.updateNote}
+				onEnableTranscription={() => void facade.enableTranscription()}
 				onRenameTitle={facade.renameRecordingTitle}
 				WaveformComponent={facade.WaveformComponent}
 				MessageListComponent={facade.MessageListComponent}

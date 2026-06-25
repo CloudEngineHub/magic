@@ -16,6 +16,8 @@ export interface CreateAudioProjectParams {
 	is_hidden?: boolean
 	task_key: string
 	auto_summary?: boolean
+	/** Captures whether realtime transcription is enabled for this recording task */
+	transcription_enabled?: boolean
 	model_id?: string
 	audio_source: "recorded" | "imported"
 }

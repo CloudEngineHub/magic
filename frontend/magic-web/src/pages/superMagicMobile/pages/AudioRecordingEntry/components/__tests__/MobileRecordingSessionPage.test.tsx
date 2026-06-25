@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { MobileRecordingSessionPage } from "../MobileRecordingSessionPage"
 
@@ -30,7 +30,14 @@ vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils",
 	},
 }))
 
-function renderSessionPage(duration: string) {
+function renderSessionPage(
+	duration: string,
+	options: {
+		transcriptionEnabled?: boolean
+		isEnablingTranscription?: boolean
+		onEnableTranscription?: () => void
+	} = {},
+) {
 	render(
 		<MobileRecordingSessionPage
 			title="Mock Recording"
@@ -39,12 +46,15 @@ function renderSessionPage(duration: string) {
 			isBusy={false}
 			transcriptMessages={[]}
 			noteContent=""
+			transcriptionEnabled={options.transcriptionEnabled ?? true}
+			isEnablingTranscription={options.isEnablingTranscription ?? false}
 			onBack={vi.fn()}
 			onPause={vi.fn()}
 			onResume={vi.fn()}
 			onFinish={vi.fn()}
 			onCancel={vi.fn()}
 			onNoteChange={vi.fn()}
+			onEnableTranscription={options.onEnableTranscription ?? vi.fn()}
 			WaveformComponent={() => <div data-testid="waveform" />}
 			MessageListComponent={() => <div data-testid="message-list" />}
 		/>,
@@ -68,5 +78,30 @@ describe("MobileRecordingSessionPage duration display", () => {
 		renderSessionPage("bad-duration")
 
 		expect(screen.getByText("00:00")).toBeInTheDocument()
+	})
+
+	it("shows enable transcription CTA when realtime transcription is disabled", () => {
+		const onEnableTranscription = vi.fn()
+
+		renderSessionPage("00:00:01", {
+			transcriptionEnabled: false,
+			onEnableTranscription,
+		})
+
+		expect(screen.getByTestId("mobile-recording-transcription-disabled")).toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("mobile-recording-enable-transcription"))
+		expect(onEnableTranscription).toHaveBeenCalled()
+	})
+
+	it("keeps enable transcription button disabled while initializing", () => {
+		renderSessionPage("00:00:01", {
+			transcriptionEnabled: false,
+			isEnablingTranscription: true,
+		})
+
+		expect(screen.getByTestId("mobile-recording-enable-transcription")).toBeDisabled()
+		expect(
+			screen.getByText("mobile.recordingEntry.active.enablingTranscription"),
+		).toBeInTheDocument()
 	})
 })

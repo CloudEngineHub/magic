@@ -104,6 +104,9 @@ export interface PcFloatPanelProps {
 	editorRef?: React.RefObject<SimpleEditorRef>
 	onSave?: (editor: Editor | null) => void
 	resolveImagesFolderParentId?: (folderPath: string) => Promise<string | undefined>
+	transcriptionEnabled?: boolean
+	isEnablingTranscription?: boolean
+	onEnableTranscription?: () => void | Promise<void>
 }
 
 const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
@@ -150,9 +153,13 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 		editorRef,
 		onSave,
 		resolveImagesFolderParentId,
+		transcriptionEnabled = true,
+		isEnablingTranscription = false,
+		onEnableTranscription,
 	} = props
 
 	const isEditMode = mode === "edit"
+	const shouldShowTranscriptionDisabledState = isEditMode && transcriptionEnabled === false
 
 	const [enableAnimation, setEnableAnimation] = useState(false)
 	// 用于存储动画定时器引用，便于清理
@@ -344,6 +351,14 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 		} finally {
 			setIsSwitchingAudioSource(false)
 		}
+	})
+
+	/**
+	 * Delegates the PC CTA click to the container so the view only owns button
+	 * state and keeps default_audio persistence in the shared orchestration layer.
+	 */
+	const handleEnableTranscription = useMemoizedFn(() => {
+		void onEnableTranscription?.()
 	})
 
 	// 获取展开样式（支持全屏状态）
@@ -592,16 +607,65 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 										data-testid="record-summary-pc-float-panel-messages"
 										style={{ position: "relative", height: "100%" }}
 									>
-										{isEditMode && hasVoiceError && (
-											<RetrySection
-												onRetryVoiceService={onRetryVoiceService}
-											/>
+										{shouldShowTranscriptionDisabledState ? (
+											<div
+												className={styles.transcriptionDisabledState}
+												data-testid="record-summary-pc-float-panel-transcription-disabled"
+											>
+												<div className={styles.transcriptionDisabledLogo}>
+													<MagicIcon
+														component={IconMicrophone}
+														size={24}
+														color="currentColor"
+													/>
+												</div>
+												<div className={styles.transcriptionDisabledTitle}>
+													{t(
+														"mobile.recordingEntry.active.transcriptionDisabledTitle",
+													)}
+												</div>
+												<div
+													className={
+														styles.transcriptionDisabledDescription
+													}
+												>
+													{t(
+														"mobile.recordingEntry.active.transcriptionDisabledDescription",
+													)}
+												</div>
+												<button
+													type="button"
+													className={styles.transcriptionEnableButton}
+													disabled={
+														isEnablingTranscription ||
+														!onEnableTranscription
+													}
+													onClick={handleEnableTranscription}
+													data-testid="record-summary-pc-float-panel-enable-transcription"
+												>
+													{isEnablingTranscription
+														? t(
+																"mobile.recordingEntry.active.enablingTranscription",
+															)
+														: t(
+																"mobile.recordingEntry.active.enableTranscription",
+															)}
+												</button>
+											</div>
+										) : (
+											<>
+												{isEditMode && hasVoiceError && (
+													<RetrySection
+														onRetryVoiceService={onRetryVoiceService}
+													/>
+												)}
+												<MessageList
+													ref={messagesRef}
+													message={messages}
+													isExpanded={isExpanded}
+												/>
+											</>
 										)}
-										<MessageList
-											ref={messagesRef}
-											message={messages}
-											isExpanded={isExpanded}
-										/>
 									</div>
 								</MagicSplitter.Panel>
 								{isEditMode && (

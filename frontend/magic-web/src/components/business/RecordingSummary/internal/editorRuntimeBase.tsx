@@ -54,6 +54,7 @@ export function useWebRecordingEditorRuntime(): RecordingEditorRuntime {
 			model,
 			audioSource,
 			sessionId,
+			transcriptionEnabled,
 		}: RecordingEditorStartParams) => {
 			await recordSummaryService.startRecording({
 				workspace,
@@ -64,6 +65,7 @@ export function useWebRecordingEditorRuntime(): RecordingEditorRuntime {
 					source: audioSource,
 				},
 				sessionId,
+				transcriptionEnabled,
 			})
 		},
 	)

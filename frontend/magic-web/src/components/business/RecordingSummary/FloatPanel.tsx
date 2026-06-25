@@ -1,5 +1,6 @@
 import { observer } from "mobx-react-lite"
 import { useEffect, useCallback, useMemo, useState, useRef } from "react"
+import { useTranslation } from "react-i18next"
 import { reaction } from "mobx"
 import { matchPath, useLocation } from "react-router"
 import recordingSummaryStore from "@/stores/recordingSummary"
@@ -32,6 +33,19 @@ import useNavigate from "@/routes/hooks/useNavigate"
 import { shouldHideRecordingFloatPanel } from "./utils/float-panel-visibility-policy"
 import { isAudioProjectMode } from "@/services/audioRecordings"
 import { MobileActiveRecordingIndicator } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileActiveRecordingIndicator"
+import {
+	getRecordingTopicModel,
+	saveRecordingTopicModel,
+} from "@/pages/superMagic/pages/AudioRecordings/apis/recording-settings-api"
+import {
+	resolveAutoSummaryEnabled,
+	settingsToApiPayload,
+} from "@/pages/superMagic/pages/AudioRecordings/utils/recording-settings-mapper"
+import {
+	getCachedRecordingSettings,
+	patchCachedRecordingSettings,
+} from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingSettings"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 /**
  * 录音纪要浮动面板
@@ -39,6 +53,7 @@ import { MobileActiveRecordingIndicator } from "@/pages/superMagicMobile/pages/A
 export interface RecordingSummaryFloatPanelProps {}
 
 export function RecordingSummaryFloatPanel() {
+	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const location = useLocation()
 	const navigate = useNavigate()
@@ -62,6 +77,7 @@ export function RecordingSummaryFloatPanel() {
 	// Attachment state management
 	const [attachments, _setAttachments] = useState<any[]>([])
 	const [attachmentList, _setAttachmentList] = useState<any[]>([])
+	const [isEnablingTranscription, setIsEnablingTranscription] = useState(false)
 
 	// Sync attachments with projectFilesStore
 	const setAttachments = useMemoizedFn((newAttachments: any[]) => {
@@ -384,6 +400,38 @@ export function RecordingSummaryFloatPanel() {
 		recordSummaryService.flushNoteUpdate()
 	})
 
+	/**
+	 * Enables realtime transcription for the active PC session and persists the
+	 * default_audio setting so future recordings start with ASR enabled.
+	 */
+	const handleEnableTranscription = useMemoizedFn(async () => {
+		if (isEnablingTranscription) return
+
+		setIsEnablingTranscription(true)
+		try {
+			const apiResponse = await getRecordingTopicModel()
+			const cachedSettings = getCachedRecordingSettings()
+			const nextSettings = {
+				transcription_enabled: true,
+				auto_summary_enabled: resolveAutoSummaryEnabled(cachedSettings, apiResponse),
+				model_id:
+					cachedSettings?.model_id ||
+					apiResponse.extra?.model?.model_id ||
+					apiResponse.model?.model_id ||
+					recordingSummaryStore.businessData.model?.model_id ||
+					"",
+			}
+
+			await saveRecordingTopicModel(settingsToApiPayload(nextSettings, apiResponse))
+			patchCachedRecordingSettings({ transcription_enabled: true })
+			await recordSummaryService.enableTranscriptionForCurrentSession()
+		} catch {
+			magicToast.error(t("mobile.recordingEntry.active.enableTranscriptionFailed"))
+		} finally {
+			setIsEnablingTranscription(false)
+		}
+	})
+
 	useSandboxPreWarm({
 		selectedTopic: recordingSummaryStore.businessData.chatTopic,
 		projectId: recordingSummaryStore.businessData.project?.id,
@@ -528,6 +576,9 @@ export function RecordingSummaryFloatPanel() {
 				onSave={handleSave}
 				resolveImagesFolderParentId={resolveImagesFolderParentId}
 				isAudioProjectMode={isAudioRecordingProject}
+				transcriptionEnabled={recordingSummaryStore.businessData.transcriptionEnabled}
+				isEnablingTranscription={isEnablingTranscription}
+				onEnableTranscription={handleEnableTranscription}
 			/>
 		</>
 	)

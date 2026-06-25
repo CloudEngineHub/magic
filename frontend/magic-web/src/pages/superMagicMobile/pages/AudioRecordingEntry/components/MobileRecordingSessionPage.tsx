@@ -1,5 +1,5 @@
 import type { ComponentType } from "react"
-import { Check, ChevronLeft, FileAudio, Pencil } from "lucide-react"
+import { Check, ChevronLeft, FileAudio, Loader2, MicVocal, Pencil } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
@@ -19,6 +19,8 @@ interface MobileRecordingSessionPageProps {
 	startupErrorDetail?: string
 	transcriptMessages: TranscriptMessage[]
 	noteContent: string
+	transcriptionEnabled: boolean
+	isEnablingTranscription: boolean
 	onBack: () => void
 	onPause: () => void
 	onResume: () => void
@@ -27,6 +29,7 @@ interface MobileRecordingSessionPageProps {
 	onCancel: () => void
 	onRenameTitle?: (title: string) => Promise<boolean>
 	onNoteChange: (content: string) => void
+	onEnableTranscription: () => void
 	WaveformComponent: ComponentType<{ isRecording: boolean; isPaused: boolean }>
 	MessageListComponent: ComponentType<{
 		message: TranscriptMessage[]
@@ -74,6 +77,8 @@ export function MobileRecordingSessionPage({
 	startupErrorDetail = "",
 	transcriptMessages,
 	noteContent,
+	transcriptionEnabled,
+	isEnablingTranscription,
 	onBack,
 	onPause,
 	onResume,
@@ -81,6 +86,7 @@ export function MobileRecordingSessionPage({
 	onFinish,
 	onRenameTitle,
 	onNoteChange,
+	onEnableTranscription,
 	MessageListComponent,
 }: MobileRecordingSessionPageProps) {
 	const { t } = useTranslation("super")
@@ -331,11 +337,18 @@ export function MobileRecordingSessionPage({
 								) : null}
 							</div>
 						) : activeTab === "transcript" ? (
-							<MessageListComponent
-								message={transcriptMessages}
-								isExpanded
-								className="h-full"
-							/>
+							transcriptionEnabled ? (
+								<MessageListComponent
+									message={transcriptMessages}
+									isExpanded
+									className="h-full"
+								/>
+							) : (
+								<TranscriptionDisabledState
+									loading={isEnablingTranscription}
+									onEnable={onEnableTranscription}
+								/>
+							)
 						) : (
 							<div className="flex h-full flex-col px-4 py-4">
 								<textarea
@@ -411,6 +424,48 @@ export function MobileRecordingSessionPage({
 					50% { transform: scale(1.4); opacity: 0.5; }
 				}
 			`}</style>
+		</div>
+	)
+}
+
+/** Empty state shown when the current recording started with realtime transcription disabled. */
+function TranscriptionDisabledState({
+	loading,
+	onEnable,
+}: {
+	loading: boolean
+	onEnable: () => void
+}) {
+	const { t } = useTranslation("super")
+
+	return (
+		<div
+			className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center"
+			data-testid="mobile-recording-transcription-disabled"
+		>
+			<div className="flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+				<MicVocal className="size-7" strokeWidth={1.8} />
+			</div>
+			<div className="space-y-1">
+				<p className="text-[16px] font-semibold leading-6 text-foreground">
+					{t("mobile.recordingEntry.active.transcriptionDisabledTitle")}
+				</p>
+				<p className="text-[13px] leading-5 text-muted-foreground">
+					{t("mobile.recordingEntry.active.transcriptionDisabledDescription")}
+				</p>
+			</div>
+			<button
+				type="button"
+				onClick={onEnable}
+				disabled={loading}
+				className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-foreground px-5 text-[14px] font-medium leading-5 text-background transition-opacity active:opacity-80 disabled:opacity-60"
+				data-testid="mobile-recording-enable-transcription"
+			>
+				{loading ? <Loader2 className="size-4 animate-spin" /> : null}
+				{loading
+					? t("mobile.recordingEntry.active.enablingTranscription")
+					: t("mobile.recordingEntry.active.enableTranscription")}
+			</button>
 		</div>
 	)
 }

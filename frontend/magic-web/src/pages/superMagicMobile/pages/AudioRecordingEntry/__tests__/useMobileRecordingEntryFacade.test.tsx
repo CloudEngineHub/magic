@@ -32,6 +32,7 @@ const recordSummaryServiceMock = {
 	pauseRecording: vi.fn(),
 	continueRecording: vi.fn(),
 	updateNote: vi.fn(),
+	enableTranscriptionForCurrentSession: vi.fn(),
 	on: vi.fn(() => () => undefined),
 }
 
@@ -49,6 +50,7 @@ const recordSummaryStoreMock = {
 		topic: null,
 		model: null,
 		audioSource: undefined,
+		transcriptionEnabled: true,
 	},
 }
 
@@ -73,6 +75,7 @@ const topicModelStoreMock = {
 
 const recordingTopicModelApiMock = {
 	getRecordingTopicModel: vi.fn(),
+	saveRecordingTopicModel: vi.fn(),
 }
 
 const summaryModelListMock = {
@@ -165,6 +168,8 @@ vi.mock("@/stores/superMagic/topicModelStore", () => ({
 vi.mock("@/pages/superMagic/pages/AudioRecordings/apis/recording-settings-api", () => ({
 	getRecordingTopicModel: (...args: unknown[]) =>
 		recordingTopicModelApiMock.getRecordingTopicModel(...args),
+	saveRecordingTopicModel: (...args: unknown[]) =>
+		recordingTopicModelApiMock.saveRecordingTopicModel(...args),
 }))
 
 vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/summary-model-list", () => ({
@@ -226,6 +231,7 @@ describe("useMobileRecordingEntryFacade", () => {
 		recordSummaryServiceMock.pauseRecording.mockReset()
 		recordSummaryServiceMock.continueRecording.mockReset()
 		recordSummaryServiceMock.updateNote.mockReset()
+		recordSummaryServiceMock.enableTranscriptionForCurrentSession.mockReset()
 		recordSummaryServiceMock.on.mockReset()
 		recordSummaryServiceMock.on.mockImplementation(() => () => undefined)
 		recordSummaryStoreMock.status = "init"
@@ -236,9 +242,11 @@ describe("useMobileRecordingEntryFacade", () => {
 		recordSummaryStoreMock.businessData.project = null
 		recordSummaryStoreMock.businessData.topic = null
 		recordSummaryStoreMock.businessData.model = null
+		recordSummaryStoreMock.businessData.transcriptionEnabled = true
 		workspaceStoreMock.selectedWorkspace = { id: "workspace-1", name: "Workspace One" }
 		workspaceStoreMock.firstWorkspace = { id: "workspace-1", name: "Workspace One" }
 		recordingTopicModelApiMock.getRecordingTopicModel.mockReset()
+		recordingTopicModelApiMock.saveRecordingTopicModel.mockReset()
 		summaryModelListMock.fetchSummaryModelGroups.mockReset()
 		summaryModelListMock.resolveDefaultSummaryModelId.mockReset()
 		audioRecordingsServiceMock.submitSummary.mockReset()
@@ -299,8 +307,10 @@ describe("useMobileRecordingEntryFacade", () => {
 			extra: {
 				model: { model_id: "model-alpha" },
 				auto_summary_enabled: true,
+				transcription_enabled: true,
 			},
 		})
+		recordingTopicModelApiMock.saveRecordingTopicModel.mockResolvedValue(undefined)
 	})
 
 	it("passes disabled auto summary into imported mobile upload context", async () => {

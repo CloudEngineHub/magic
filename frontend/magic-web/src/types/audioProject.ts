@@ -55,6 +55,8 @@ export interface AudioProjectExtra {
 	audio_file_id?: string | number
 	file_size?: number
 	auto_summary?: boolean
+	/** Whether this recording task should run realtime transcription */
+	transcription_enabled?: boolean
 	task_key?: string
 	/** Backend returns integer; parsed as string when parseJsonLargeIntAsString is enabled */
 	topic_id?: string | number
@@ -114,6 +116,8 @@ export interface AudioProjectListItem {
 	topic_id?: string
 	audio_file_id?: string
 	model_id?: string
+	/** Frozen recording preference captured when the task was created */
+	transcription_enabled?: boolean
 	/**
 	 * Recording source from extra.source:
 	 * - 'app': recorded via mobile app (Smartphone icon, shows device name)

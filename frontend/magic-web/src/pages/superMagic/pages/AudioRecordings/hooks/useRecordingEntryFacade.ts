@@ -16,10 +16,14 @@ import recordSummaryStore from "@/stores/recordingSummary"
 import topicModelStore from "@/stores/superMagic/topicModelStore"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { getRecordingTopicModel } from "../apis/recording-settings-api"
-import { resolveAutoSummaryEnabled } from "../utils/recording-settings-mapper"
+import { getRecordingTopicModel, saveRecordingTopicModel } from "../apis/recording-settings-api"
+import {
+	resolveAutoSummaryEnabled,
+	resolveTranscriptionEnabled,
+	settingsToApiPayload,
+} from "../utils/recording-settings-mapper"
 import { fetchSummaryModelGroups, resolveDefaultSummaryModelId } from "../utils/summary-model-list"
-import { getCachedRecordingSettings } from "./useRecordingSettings"
+import { getCachedRecordingSettings, patchCachedRecordingSettings } from "./useRecordingSettings"
 import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordingsService"
 import { audioRecordingsStore } from "../stores/audio-recordings-store"
 import { SuperMagicApi } from "@/apis"
@@ -193,6 +197,8 @@ export interface UseRecordingEntryFacadeResult {
 	recordingTitle: string
 	transcriptMessages: TranscriptMessage[]
 	noteContent: string
+	transcriptionEnabled: boolean
+	isEnablingTranscription: boolean
 	optimisticItems: AudioProjectListItem[]
 	refreshToken: number
 	startRecording: () => Promise<void>
@@ -203,6 +209,7 @@ export interface UseRecordingEntryFacadeResult {
 	cancelRecording: () => Promise<void>
 	finishRecording: () => Promise<void>
 	updateNote: (nextContent: string) => void
+	enableTranscription: () => Promise<void>
 	renameRecordingTitle: (nextTitle: string) => Promise<boolean>
 	importAudioFiles: (files: FileList) => Promise<void>
 	retryImport: (projectId: string) => Promise<void>
@@ -252,6 +259,10 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	const [startupState, setStartupState] = useState<RecordingStartupState>("idle")
 	const [startupErrorMessage, setStartupErrorMessage] = useState("")
 	const [startupErrorDetail, setStartupErrorDetail] = useState("")
+	const [transcriptionEnabled, setTranscriptionEnabled] = useState(
+		recordSummaryStore.businessData.transcriptionEnabled,
+	)
+	const [isEnablingTranscription, setIsEnablingTranscription] = useState(false)
 	const optimisticItems = audioRecordingsStore.optimisticItems
 	const [refreshToken, setRefreshToken] = useState(0)
 
@@ -297,6 +308,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			audioSource: "recorded" | "imported"
 			modelId?: string
 			autoSummaryEnabled?: boolean
+			transcriptionEnabled?: boolean
 		}): Promise<AudioProjectContext | null> => {
 			const workspacesResponse = (await SuperMagicApi.getWorkspaces({
 				page: 1,
@@ -315,12 +327,19 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 					getCachedRecordingSettings(),
 					await getRecordingTopicModel().catch(() => null),
 				)
+			const nextTranscriptionEnabled =
+				options.transcriptionEnabled ??
+				resolveTranscriptionEnabled(
+					getCachedRecordingSettings(),
+					await getRecordingTopicModel().catch(() => null),
+				)
 
 			const createdProject = await SuperMagicApi.createAudioProject({
 				workspace_id: audioWorkspace.id,
 				project_name: options.projectName ?? "",
 				task_key: options.taskKey,
 				auto_summary: autoSummary,
+				transcription_enabled: nextTranscriptionEnabled,
 				model_id: options.modelId,
 				// Distinguish H5 vs PC web origin so list cards can render the right source icon/label
 				source: recordingSource,
@@ -436,12 +455,18 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			await ensureMicrophoneReady()
 
 			const taskKey = "session-web-" + createRandomUuidV4()
+			const settingsResponse = await getRecordingTopicModel().catch(() => null)
+			const nextTranscriptionEnabled = resolveTranscriptionEnabled(
+				getCachedRecordingSettings(),
+				settingsResponse,
+			)
 
 			const audioProjectContext = await createAudioProjectContext({
 				projectName: "",
 				taskKey,
 				audioSource: "recorded",
 				modelId: model.model_id,
+				transcriptionEnabled: nextTranscriptionEnabled,
 			})
 			if (!audioProjectContext) {
 				const nextMessage = t("mobile.recordingEntry.startMissingWorkspace")
@@ -470,6 +495,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 						model,
 						audioSource: "microphone",
 						sessionId: taskKey,
+						transcriptionEnabled: nextTranscriptionEnabled,
 					}),
 				),
 				new Promise((_, reject) => {
@@ -486,6 +512,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			setStartupState("idle")
 			setStartupErrorMessage("")
 			setStartupErrorDetail("")
+			setTranscriptionEnabled(nextTranscriptionEnabled)
 		} catch (error) {
 			const hasActiveRecording = recordSummaryStore.isRecording || runtime.state.isRecording
 			if (createdProjectId && !hasActiveRecording) {
@@ -624,6 +651,38 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	)
 
 	/**
+	 * Enables realtime transcription for the current session and persists the preference for future recordings.
+	 */
+	const enableTranscription = useCallback(async () => {
+		if (transcriptionEnabled || isEnablingTranscription) return
+
+		setIsEnablingTranscription(true)
+		try {
+			const apiResponse = await getRecordingTopicModel()
+			const cachedSettings = getCachedRecordingSettings()
+			const nextSettings = {
+				transcription_enabled: true,
+				auto_summary_enabled: resolveAutoSummaryEnabled(cachedSettings, apiResponse),
+				model_id:
+					cachedSettings?.model_id ||
+					apiResponse.extra?.model?.model_id ||
+					apiResponse.model?.model_id ||
+					recordSummaryStore.businessData.model?.model_id ||
+					"",
+			}
+
+			await saveRecordingTopicModel(settingsToApiPayload(nextSettings, apiResponse))
+			patchCachedRecordingSettings({ transcription_enabled: true })
+			await recordSummaryService.enableTranscriptionForCurrentSession()
+			setTranscriptionEnabled(true)
+		} catch {
+			toast.error(t("mobile.recordingEntry.active.enableTranscriptionFailed"))
+		} finally {
+			setIsEnablingTranscription(false)
+		}
+	}, [isEnablingTranscription, recordSummaryService, t, transcriptionEnabled])
+
+	/**
 	 * Persists title edits to the shared audio-recordings backend.
 	 */
 	const renameRecordingTitle = useCallback(
@@ -744,6 +803,8 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			t("mobile.recordingEntry.active.defaultTitle"),
 		transcriptMessages: recordSummaryStore.message,
 		noteContent: recordSummaryStore.note.content,
+		transcriptionEnabled,
+		isEnablingTranscription,
 		optimisticItems,
 		refreshToken,
 		startRecording,
@@ -754,6 +815,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		cancelRecording,
 		finishRecording,
 		updateNote,
+		enableTranscription,
 		renameRecordingTitle,
 		importAudioFiles,
 		retryImport,
