@@ -4,6 +4,7 @@ import {
 	canGenerateSummaryFromDetail,
 	canSubmitSummary,
 	getSummaryButtonVariant,
+	resolveDetailSummaryVisualState,
 	resolveSummaryModelId,
 	shouldPollSummaryProgress,
 	shouldShowSummaryButton,
@@ -121,6 +122,64 @@ describe("summary-action-utils", () => {
 		expect(resolveSummaryModelId("item-model", "auto-model-from-api")).toBe("item-model")
 		expect(resolveSummaryModelId(undefined, "auto-model-from-api")).toBe("auto-model-from-api")
 		expect(resolveSummaryModelId(undefined, undefined)).toBeUndefined()
+	})
+
+	it("resolves detail summary visual states without promoting non-preview list states", () => {
+		const baseExtra = {
+			task_key: "task-detail-001",
+			topic_id: "topic-detail-001",
+			audio_source: "recorded" as const,
+		}
+
+		expect(
+			resolveDetailSummaryVisualState({
+				summaryReady: true,
+				phase: "summarizing",
+				status: "completed",
+				cardStatus: "summarized",
+				extra: baseExtra,
+			}),
+		).toMatchObject({ status: "ready", canGenerate: false })
+
+		expect(
+			resolveDetailSummaryVisualState({
+				summaryReady: false,
+				phase: "merging",
+				status: "completed",
+				cardStatus: "not_summarized",
+				extra: baseExtra,
+			}),
+		).toMatchObject({ status: "pending", canGenerate: true, buttonVariant: "generate" })
+
+		expect(
+			resolveDetailSummaryVisualState({
+				summaryReady: false,
+				phase: "summarizing",
+				status: "in_progress",
+				cardStatus: "summarizing",
+				extra: baseExtra,
+			}),
+		).toMatchObject({ status: "generating", canGenerate: false })
+
+		expect(
+			resolveDetailSummaryVisualState({
+				summaryReady: false,
+				phase: "summarizing",
+				status: "failed",
+				cardStatus: "summary_failed",
+				extra: baseExtra,
+			}),
+		).toMatchObject({ status: "failed", canGenerate: true, buttonVariant: "retry" })
+
+		expect(
+			resolveDetailSummaryVisualState({
+				summaryReady: false,
+				phase: "waiting",
+				status: "in_progress",
+				cardStatus: "waiting",
+				extra: baseExtra,
+			}),
+		).toMatchObject({ status: "unavailable", canGenerate: false })
 	})
 
 	it("registers polling for active phases, skips terminal states", () => {

@@ -70,7 +70,11 @@ export function RecordingDetailEmptyState({
 				) : null}
 			</div>
 			{onAction && actionLabel ? (
-				<Button size="sm" onClick={onAction}>
+				<Button
+					size="sm"
+					onClick={onAction}
+					className="h-10 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90"
+				>
 					{actionLabel}
 				</Button>
 			) : null}

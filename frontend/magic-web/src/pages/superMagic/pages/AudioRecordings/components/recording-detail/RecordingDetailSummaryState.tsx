@@ -18,7 +18,10 @@ export function RecordingDetailSummaryState({
 
 	if (status === "generating") {
 		return (
-			<div className="flex h-full flex-col items-center justify-center gap-3">
+			<div
+				className="flex h-full flex-col items-center justify-center"
+				data-testid="recording-detail-summary-state-generating"
+			>
 				<RecordingDetailEmptyState variant="summaryGenerating" />
 			</div>
 		)
@@ -26,21 +29,31 @@ export function RecordingDetailSummaryState({
 
 	if (status === "failed") {
 		return (
-			<div className="flex h-full flex-col items-center justify-center gap-3">
+			<div
+				className="flex h-full flex-col items-center justify-center"
+				data-testid="recording-detail-summary-state-failed"
+			>
 				<RecordingDetailEmptyState
 					variant="summaryFailed"
 					onAction={onGenerateSummary}
-					actionLabel={t("card.retrySummary")}
+					actionLabel={t("card.regenerateSummary")}
 				/>
 			</div>
 		)
 	}
 
 	return (
-		<div className="flex h-full flex-col items-center justify-center gap-3">
-			<RecordingDetailEmptyState variant="summaryPending" />
+		<div
+			className="flex h-full flex-col items-center justify-center gap-5"
+			data-testid="recording-detail-summary-state-pending"
+		>
+			<RecordingDetailEmptyState variant="summaryPending" className="pb-0" />
 			{onGenerateSummary ? (
-				<Button onClick={onGenerateSummary} disabled={generating}>
+				<Button
+					onClick={onGenerateSummary}
+					disabled={generating}
+					className="h-10 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90"
+				>
 					{generating ? t("detail.summarizing") : t("card.generateSummary")}
 				</Button>
 			) : null}

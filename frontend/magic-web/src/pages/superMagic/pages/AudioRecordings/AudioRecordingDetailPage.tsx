@@ -29,10 +29,8 @@ import { useRecordingAudioPlayer } from "./hooks/useRecordingAudioPlayer"
 import { useRecordingPlayerCurrentSec } from "./hooks/useRecordingPlayerCurrentSec"
 import { useRecordingColorSegments } from "./hooks/useRecordingColorSegments"
 import { useRecordingDetailActions } from "./hooks/useRecordingDetailActions"
-import {
-	isAudioProjectSummarizing,
-	isAudioProjectSummaryReady,
-} from "./utils/audio-recordings-utils"
+import { isAudioProjectSummaryReady } from "./utils/audio-recordings-utils"
+import { resolveDetailSummaryVisualState } from "./utils/summary-action-utils"
 import { playTranscriptFromSegment } from "./utils/transcript-playback"
 import { OWNER_RECORDING_DETAIL_CAPABILITIES } from "./types/recording-detail-capabilities"
 import type { RecordingTranscriptSegment } from "./types/recording-detail"
@@ -180,12 +178,38 @@ function AudioRecordingDetailPageDesktop() {
 		return locationState?.cardStatus === "summarized"
 	}, [locationState?.cardStatus, resolvedItem])
 
-	const summarizing = useMemo(() => {
-		if (resolvedItem) return isAudioProjectSummarizing(resolvedItem)
-		return locationState?.cardStatus === "summarizing"
-	}, [locationState?.cardStatus, resolvedItem])
-
-	const summaryFailed = resolvedItem?.phase_status === "failed"
+	const detailSummaryState = useMemo(
+		() =>
+			resolveDetailSummaryVisualState({
+				summaryReady,
+				phase: resolvedItem?.current_phase ?? null,
+				status: resolvedItem?.phase_status ?? null,
+				cardStatus: resolvedItem?.card_status ?? locationState?.cardStatus,
+				isSubmitting: actions.summarySubmitting,
+				extra: {
+					task_key: resolvedItem?.task_key,
+					topic_id: resolvedItem?.topic_id,
+					audio_file_id: resolvedItem?.audio_file_id,
+					audio_source: resolvedItem?.audio_source,
+					model_id: resolvedItem?.model_id,
+				},
+			}),
+		[
+			actions.summarySubmitting,
+			locationState?.cardStatus,
+			resolvedItem?.audio_file_id,
+			resolvedItem?.audio_source,
+			resolvedItem?.card_status,
+			resolvedItem?.current_phase,
+			resolvedItem?.model_id,
+			resolvedItem?.phase_status,
+			resolvedItem?.task_key,
+			resolvedItem?.topic_id,
+			summaryReady,
+		],
+	)
+	const detailUnavailable =
+		!summaryReady && detailSummaryState.status === "unavailable" && Boolean(resolvedItem)
 
 	const speakerNameMap = useMemo(() => {
 		const merged = {
@@ -329,7 +353,16 @@ function AudioRecordingDetailPageDesktop() {
 					/>
 				) : null}
 
-				{!loading && !error ? (
+				{!loading && !error && detailUnavailable ? (
+					<RecordingDetailEmptyState
+						variant="pageError"
+						className="flex-1"
+						onAction={handleBack}
+						actionLabel={t("detail.back")}
+					/>
+				) : null}
+
+				{!loading && !error && !detailUnavailable ? (
 					<RecordingDetailWorkbench
 						left={
 							<RecordingDetailLeftColumn
@@ -361,8 +394,8 @@ function AudioRecordingDetailPageDesktop() {
 								notesContent={texts.notes?.content}
 								attachmentList={attachmentList}
 								summaryReady={summaryReady}
-								summarizing={summarizing}
-								summaryFailed={summaryFailed}
+								summarizing={detailSummaryState.status === "generating"}
+								summaryFailed={detailSummaryState.status === "failed"}
 								speakerNameMap={speakerNameMap}
 								onOpenSpeakerSettings={openSpeakerSettings}
 								onTimeClick={handleSummaryTimeClick}

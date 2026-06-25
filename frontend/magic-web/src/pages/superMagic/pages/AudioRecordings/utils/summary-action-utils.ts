@@ -1,4 +1,4 @@
-import type { AudioProjectAudioSource } from "@/types/audioProject"
+import type { AudioProjectAudioSource, AudioRecordingCardStatus } from "@/types/audioProject"
 
 export type SummaryButtonVariant = "generate" | "retry"
 
@@ -15,6 +15,24 @@ export interface DetailSummaryActionEligibilityInput {
 	status: string | null
 	isSubmitting?: boolean
 	extra: SummarySubmitExtra
+}
+
+export type DetailSummaryVisualStatus =
+	| "ready"
+	| "pending"
+	| "generating"
+	| "failed"
+	| "unavailable"
+
+export interface DetailSummaryVisualStateInput extends DetailSummaryActionEligibilityInput {
+	summaryReady: boolean
+	cardStatus?: AudioRecordingCardStatus | null
+}
+
+export interface DetailSummaryVisualState {
+	status: DetailSummaryVisualStatus
+	canGenerate: boolean
+	buttonVariant: SummaryButtonVariant | null
 }
 
 /**
@@ -76,6 +94,42 @@ export function canGenerateSummaryFromDetail(input: DetailSummaryActionEligibili
 	if (!canSubmitSummary(extra)) return false
 	if (!shouldShowSummaryButton(phase, status)) return false
 	return canClickSummaryButton(phase, status, isSubmitting)
+}
+
+/** Resolves the owner detail summary placeholder state without allowing list-only processing states into detail UI. */
+export function resolveDetailSummaryVisualState(
+	input: DetailSummaryVisualStateInput,
+): DetailSummaryVisualState {
+	const { summaryReady, phase, status, cardStatus, isSubmitting = false, extra } = input
+	const canGenerate = canGenerateSummaryFromDetail({ phase, status, isSubmitting, extra })
+	const buttonVariant = canGenerate ? getSummaryButtonVariant(phase, status) : null
+
+	if (summaryReady || cardStatus === "summarized") {
+		return { status: "ready", canGenerate: false, buttonVariant: null }
+	}
+
+	if (
+		cardStatus === "waiting" ||
+		cardStatus === "processing" ||
+		cardStatus === "merge_failed" ||
+		phase === "waiting" ||
+		(phase === "merging" && status !== "completed")
+	) {
+		return { status: "unavailable", canGenerate: false, buttonVariant: null }
+	}
+
+	if (cardStatus === "summary_failed" || (phase === "summarizing" && status === "failed")) {
+		return { status: "failed", canGenerate, buttonVariant }
+	}
+
+	if (
+		cardStatus === "summarizing" ||
+		(phase === "summarizing" && status !== "completed" && status !== "failed")
+	) {
+		return { status: "generating", canGenerate: false, buttonVariant: null }
+	}
+
+	return { status: "pending", canGenerate, buttonVariant }
 }
 
 /** Picks model_id from list item extra first, else API-resolved auto model */

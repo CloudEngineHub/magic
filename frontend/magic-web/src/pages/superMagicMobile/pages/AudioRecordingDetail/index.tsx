@@ -1,16 +1,6 @@
 import type { ReactNode } from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import {
-	ChevronLeft,
-	Check,
-	Ellipsis,
-	FileAudio,
-	Loader2,
-	Pencil,
-	Share2,
-	Sparkles,
-	X,
-} from "lucide-react"
+import { ChevronLeft, Check, Ellipsis, FileAudio, Loader2, Pencil, Share2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useParams } from "react-router"
 import { toast } from "sonner"
@@ -32,10 +22,10 @@ import {
 	submitAudioRecordingSummary,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions"
 import {
-	isAudioProjectSummarizing,
 	isAudioProjectSummaryReady,
 	resolveRecordingDisplayName,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
+import { resolveDetailSummaryVisualState } from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
 import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
 import type { MobileRecordingTopTab } from "./types"
 import { useMobileRecordingAudioPlayer } from "./hooks/useMobileRecordingAudioPlayer"
@@ -45,6 +35,7 @@ import { useMobileRecordingDetailData } from "./hooks/useMobileRecordingDetailDa
 import { MobileRecordingAudioPlayer } from "./components/MobileRecordingAudioPlayer"
 import { MobileRecordingSourcePanel } from "./components/MobileRecordingSourcePanel"
 import { MobileRecordingSummaryPanel } from "./components/MobileRecordingSummaryPanel"
+import { MobileRecordingSummaryPlaceholder } from "./components/MobileRecordingSummaryPlaceholder"
 import { MobileRecordingShareExportSheet } from "./components/MobileRecordingShareExportSheet"
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
 import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
@@ -140,11 +131,6 @@ export default function MobileAudioRecordingDetailPage() {
 		return locationState?.cardStatus === "summarized"
 	}, [detailItem, locationState?.cardStatus, projectItem])
 
-	const summarizing = useMemo(() => {
-		const item = detailItem ?? projectItem
-		if (item) return isAudioProjectSummarizing(item)
-		return locationState?.cardStatus === "summarizing"
-	}, [detailItem, locationState?.cardStatus, projectItem])
 	const displayTitle = titleOverride || title || t("detail.untitled")
 	const resolvedActionItem = useMemo(
 		() =>
@@ -165,6 +151,38 @@ export default function MobileAudioRecordingDetailPage() {
 			projectItem,
 		],
 	)
+	const summaryVisualState = useMemo(
+		() =>
+			resolveDetailSummaryVisualState({
+				summaryReady,
+				phase: resolvedActionItem?.current_phase ?? null,
+				status: resolvedActionItem?.phase_status ?? null,
+				cardStatus: resolvedActionItem?.card_status ?? locationState?.cardStatus,
+				isSubmitting: summarySubmitting,
+				extra: {
+					task_key: resolvedActionItem?.task_key,
+					topic_id: resolvedActionItem?.topic_id,
+					audio_file_id: resolvedActionItem?.audio_file_id,
+					audio_source: resolvedActionItem?.audio_source,
+					model_id: resolvedActionItem?.model_id,
+				},
+			}),
+		[
+			locationState?.cardStatus,
+			resolvedActionItem?.audio_file_id,
+			resolvedActionItem?.audio_source,
+			resolvedActionItem?.card_status,
+			resolvedActionItem?.current_phase,
+			resolvedActionItem?.model_id,
+			resolvedActionItem?.phase_status,
+			resolvedActionItem?.task_key,
+			resolvedActionItem?.topic_id,
+			summaryReady,
+			summarySubmitting,
+		],
+	)
+	const detailUnavailable =
+		!summaryReady && summaryVisualState.status === "unavailable" && Boolean(resolvedActionItem)
 	const transcriptSpeakerIds = useMemo(
 		() => collectRecordingSpeakerIds([texts.transcript?.content]),
 		[texts.transcript?.content],
@@ -529,7 +547,16 @@ export default function MobileAudioRecordingDetailPage() {
 					</div>
 				) : null}
 
-				{!loading && !error && activeTab === "source" ? (
+				{!loading && !error && detailUnavailable ? (
+					<div
+						className="flex h-full items-center justify-center px-8 text-center text-sm text-muted-foreground"
+						data-testid="mobile-recording-detail-unavailable"
+					>
+						{t("detail.loadFailed")}
+					</div>
+				) : null}
+
+				{!loading && !error && !detailUnavailable && activeTab === "source" ? (
 					<MobileRecordingSourcePanel
 						transcriptContent={texts.transcript?.content}
 						notesContent={texts.notes?.content}
@@ -546,7 +573,7 @@ export default function MobileAudioRecordingDetailPage() {
 					/>
 				) : null}
 
-				{!loading && !error && activeTab === "summary" ? (
+				{!loading && !error && !detailUnavailable && activeTab === "summary" ? (
 					summaryReady ? (
 						<MobileRecordingSummaryPanel
 							summaryFiles={fileMap?.summaryFiles ?? []}
@@ -564,7 +591,15 @@ export default function MobileAudioRecordingDetailPage() {
 							onContentScroll={handlePlayerContentScroll}
 						/>
 					) : (
-						<SummaryPlaceholder summarizing={summarizing} />
+						<MobileRecordingSummaryPlaceholder
+							status={summaryVisualState.status}
+							canGenerate={summaryVisualState.canGenerate}
+							submitting={summarySubmitting}
+							onGenerate={() => {
+								if (!resolvedActionItem) return
+								void handleSummarize(resolvedActionItem)
+							}}
+						/>
 					)
 				) : null}
 			</main>
@@ -935,41 +970,5 @@ function buildSpeakerAlphaLabel(index: number) {
 function collectRecordingSpeakerIds(contents: Array<string | undefined>) {
 	return Array.from(
 		new Set(contents.flatMap((content) => (content ? collectSpeakerIdsFromText(content) : []))),
-	)
-}
-
-/** Shows summary state before the completed summary files become available. */
-function SummaryPlaceholder({ summarizing }: { summarizing: boolean }) {
-	const { t } = useTranslation("audioRecordings")
-
-	return (
-		<div
-			className="flex h-full items-center justify-center px-8 text-center"
-			role="status"
-			data-testid="mobile-recording-summary-placeholder"
-		>
-			<div className="flex flex-col items-center gap-3">
-				<div
-					className={cn(
-						"flex items-center justify-center",
-						summarizing
-							? "rounded-full bg-muted p-4 text-muted-foreground"
-							: "size-12 rounded-2xl bg-card",
-					)}
-				>
-					{summarizing ? (
-						<Loader2 className="size-8 animate-spin" strokeWidth={1.5} />
-					) : (
-						<Sparkles className="size-5" />
-					)}
-				</div>
-				<p className="text-[16px] font-medium text-foreground">
-					{summarizing ? t("detail.summarizing") : t("detail.notSummarized")}
-				</p>
-				<p className="max-w-[280px] text-[14px] leading-6 text-muted-foreground">
-					{summarizing ? t("detail.summarizingHint") : t("detail.notSummarizedHint")}
-				</p>
-			</div>
-		</div>
 	)
 }
