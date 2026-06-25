@@ -29,7 +29,6 @@ from app.tools.get_js_cdn_address import GetJsCdnAddress
 from app.tools.grep_search import GrepSearch
 
 from app.tools.generate_images import GenerateImages
-from app.tools.generate_video import GenerateVideo, QueryVideoGeneration
 from app.tools.image_search import ImageSearch
 from app.tools.list_dir import ListDir
 from app.tools.purify import Purify
@@ -197,8 +196,6 @@ __all__ = [
     "GrepSearch",
     "ImageSearch",
     "GenerateImages",
-    "GenerateVideo",
-    "QueryVideoGeneration",
     "GetIMChannelStatus",
     "FindSkillsTool",
     "GetUserInfo",

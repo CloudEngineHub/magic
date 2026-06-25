@@ -15,7 +15,7 @@ logger = get_video_logger(__name__)
 class VideoModelConfigService:
     """视频模型配置服务类"""
 
-    _GENERATION_CONSTRAINT_KEYS = ("durations", "resolutions", "aspect_ratios", "sizes")
+    _GENERATION_CONSTRAINT_KEYS = ("durations", "resolutions", "aspect_ratios")
 
     _INPUT_FIELD_MAP = {
         "reference_images": "reference_image_paths",
@@ -23,19 +23,6 @@ class VideoModelConfigService:
         "reference_audios": "reference_audio_paths",
         "frames": "frame_start_path,frame_end_path",
     }
-
-    @staticmethod
-    def _extract_supported_sizes(video_generation_config: Dict[str, Any]) -> list[dict[str, Any]]:
-        """从顶层配置中取出 generation.sizes 列表，过滤掉非 dict 条目。"""
-        generation = video_generation_config.get("generation")
-        if not isinstance(generation, dict):
-            return []
-
-        sizes = generation.get("sizes")
-        if not isinstance(sizes, list):
-            return []
-
-        return [size for size in sizes if isinstance(size, dict)]
 
     @staticmethod
     def _get_generation_config(video_generation_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -59,66 +46,6 @@ class VideoModelConfigService:
     def _xml_attr(value: str) -> str:
         """转义 XML 属性值，避免配置中的特殊字符破坏注入结构。"""
         return escape(value, quote=True)
-
-    @staticmethod
-    def _build_supported_sizes_attr(video_generation_config: Dict[str, Any]) -> str:
-        """构建 `size` 属性值：每个尺寸编码为 `{value}@{aspect_ratio}@{resolution}`，条目间用 `|` 分隔。
-        示例：`1920x1080@16:9@1080p|720x1280@9:16@720p`
-        """
-        supported_sizes = VideoModelConfigService._extract_supported_sizes(video_generation_config)
-        formatted_sizes: list[str] = []
-        for size in supported_sizes:
-            value = size.get("value")
-            if not isinstance(value, str) or not value.strip():
-                continue
-
-            # `size` 同时承载真实尺寸、画幅和分辨率，保持这三个维度并排，
-            # 可以让模型在少 token 前提下直接完成工具参数选择。
-            parts = [value.strip()]
-            label = size.get("label")
-            resolution = size.get("resolution")
-            if isinstance(label, str) and label.strip():
-                parts.append(label.strip())
-            if isinstance(resolution, str) and resolution.strip():
-                parts.append(resolution.strip())
-            formatted_sizes.append("@".join(parts))
-        return "|".join(formatted_sizes)
-
-    @staticmethod
-    def _pick_default_size(video_generation_config: Dict[str, Any]) -> str:
-        """从支持的尺寸中选出工具调用的首选默认尺寸（即 `default_size` 属性值）。
-        优先级：1080p > provider 配置的 default_resolution > 列表第一项。
-        """
-        supported_sizes = VideoModelConfigService._extract_supported_sizes(video_generation_config)
-        if not supported_sizes:
-            return ""
-
-        # 这里产出的 `default_size` 是"给工具调用时优先选什么"，
-        # 不是单纯回放 provider 原始默认值；因此优先挑 1080p，再回退到配置默认。
-        def _find_by_resolution(target_resolution: str) -> str:
-            for size in supported_sizes:
-                resolution = size.get("resolution")
-                value = size.get("value")
-                if resolution == target_resolution and isinstance(value, str) and value.strip():
-                    return value.strip()
-            return ""
-
-        preferred_1080p = _find_by_resolution("1080p")
-        if preferred_1080p:
-            return preferred_1080p
-
-        generation = VideoModelConfigService._get_generation_config(video_generation_config)
-        default_resolution = generation.get("default_resolution")
-        if isinstance(default_resolution, str) and default_resolution.strip():
-            matched_default = _find_by_resolution(default_resolution.strip())
-            if matched_default:
-                return matched_default
-
-        for size in supported_sizes:
-            value = size.get("value")
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return ""
 
     @staticmethod
     def _build_duration_attr(video_generation_config: Dict[str, Any]) -> str:
@@ -245,8 +172,6 @@ class VideoModelConfigService:
             return {}
 
         attrs: dict[str, str] = {}
-        if unsupported.get("sizes") is True:
-            attrs["no_size"] = "true"
         if unsupported.get("aspect_ratios") is True:
             attrs["no_aspect_ratio"] = "true"
 
@@ -290,7 +215,6 @@ class VideoModelConfigService:
             "durations": ("duration", "no_duration"),
             "resolutions": ("resolution", "no_resolution"),
             "aspect_ratios": ("aspect_ratio", "no_aspect_ratio"),
-            "sizes": ("size", "no_size"),
         }
         for config_key, (attr_key, disabled_key) in mapping.items():
             if config_key not in constraints:
@@ -342,12 +266,6 @@ class VideoModelConfigService:
 
         sizes = generation.get("sizes")
         if isinstance(sizes, list):
-            constraints["sizes"] = [
-                size.get("value")
-                for size in sizes
-                if isinstance(size, dict) and isinstance(size.get("value"), str)
-            ]
-
             if "resolutions" not in constraints:
                 constraints["resolutions"] = [
                     size.get("resolution")
@@ -491,8 +409,6 @@ class VideoModelConfigService:
                 lines.append(f'    {name}="{VideoModelConfigService._xml_attr(value)}"')
 
         _attr("input", VideoModelConfigService._join_string_list(video_generation_config.get("supported_inputs")))
-        _attr("size", VideoModelConfigService._build_supported_sizes_attr(video_generation_config))
-        _attr("default_size", VideoModelConfigService._pick_default_size(video_generation_config))
         _attr("default_duration", VideoModelConfigService._get_default_duration(video_generation_config))
         _attr("duration", VideoModelConfigService._build_duration_attr(video_generation_config))
         _attr("ref", VideoModelConfigService._build_reference_attr(video_generation_config))
@@ -522,11 +438,10 @@ class VideoModelConfigService:
         if has_video:
             if has_video_config:
                 lines.extend([
-                    "Prefer video `size`.",
-                    "If video size or resolution is missing, use `default_size`.",
+                    "Use video resolution, aspect_ratio, and duration only from declared values; if unspecified by the user, infer legal values when the model rules make the choice clear, otherwise omit them.",
                     "Use video modes to choose reference fields and avoid unsupported combinations.",
                     "Before passing reference_*_paths, prompt MUST bind assets by list order: reference_image_paths[0]->[image1], reference_video_paths[0]->[video1], reference_audio_paths[0]->[audio1]. Do not submit references without tokens.",
-                    "Canvas width/height are layout size, not real video size.",
+                    "Canvas width/height are layout size, not generation parameters.",
                 ])
             else:
                 lines.append("Video model is selected, but capability config is unavailable; use tool schema and defaults.")
