@@ -91,6 +91,7 @@ class GenericMarkItDownDriver(DocumentDriver):
         parse_result = await get_file_parser().parse(
             path,
             temp_output,
+            ranges=ranges,
             extract_images=kwargs.get("extract_images", True),
             enable_visual_understanding=False,
         )

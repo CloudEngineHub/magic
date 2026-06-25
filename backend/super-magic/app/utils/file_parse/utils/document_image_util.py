@@ -1,12 +1,11 @@
 """Document image management utilities."""
 
-import asyncio
 import re
-import shutil
 from pathlib import Path
 from typing import List, Dict
 
 from agentlang.logger import get_logger
+from app.utils.async_file_utils import async_copy2, async_exists, async_mkdir
 
 logger = get_logger(__name__)
 
@@ -51,8 +50,7 @@ class DocumentImageUtil:
 
         # Create images directory with format: {filename}-images
         images_dir = DocumentImageUtil.get_images_directory_path(output_file_path)
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, lambda: images_dir.mkdir(exist_ok=True))
+        await async_mkdir(images_dir, exist_ok=True)
 
         logger.info(f"Saving {len(temp_image_paths)} images to directory: {images_dir}")
 
@@ -61,7 +59,7 @@ class DocumentImageUtil:
                 temp_file = Path(temp_path)
 
                 # Check file existence asynchronously
-                file_exists = await loop.run_in_executor(None, temp_file.exists)
+                file_exists = await async_exists(temp_file)
                 if not file_exists:
                     logger.warning(f"Temporary image file not found: {temp_path}")
                     continue
@@ -72,7 +70,7 @@ class DocumentImageUtil:
                 new_path = images_dir / new_filename
 
                 # Copy file from temp location to permanent location asynchronously
-                await loop.run_in_executor(None, shutil.copy2, temp_file, new_path)
+                await async_copy2(temp_file, new_path)
                 saved_images_mapping[temp_path] = str(new_path)
 
                 logger.debug(f"Saved image: {temp_path} -> {new_path}")
