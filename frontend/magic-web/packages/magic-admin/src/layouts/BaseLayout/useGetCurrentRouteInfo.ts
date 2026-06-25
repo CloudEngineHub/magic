@@ -1,15 +1,13 @@
 import { useLocation } from "react-router-dom"
 import { useMemo } from "react"
-import { findRouteByPathname } from "@admin/utils/routeUtils"
+import { getMatchedRouteChain } from "@admin/utils/routeMeta"
 import { routes } from "@admin/routes"
 
 export const useGetCurrentRouteInfo = () => {
 	const { pathname } = useLocation()
 	/* 根据路由项的 hidden 属性，判断是否隐藏顶部菜单 */
-	const currentRouteItems = useMemo(() => {
-		const pathSegments = pathname.split("/").filter(Boolean)
-		return findRouteByPathname(pathSegments, routes)
-	}, [pathname])
+	const routeChain = useMemo(() => getMatchedRouteChain(routes, pathname), [pathname])
+	const currentRouteItems = useMemo(() => routeChain[routeChain.length - 1] ?? null, [routeChain])
 
 	/* 根据路由项的 hidden 属性，判断是否隐藏顶部菜单 */
 	const hiddenMenu = useMemo(() => {
@@ -18,6 +16,7 @@ export const useGetCurrentRouteInfo = () => {
 
 	return {
 		currentRouteItems,
+		routeChain,
 		hiddenMenu,
 	}
 }
