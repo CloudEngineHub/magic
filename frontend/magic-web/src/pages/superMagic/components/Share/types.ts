@@ -57,6 +57,8 @@ export interface FileShareUiConfig {
 	lockShareProject?: boolean
 	/** Use the recording share sheet title ("Share") instead of generic file-share copy. */
 	useRecordingShareCreateTitle?: boolean
+	/** Hide generic share-management shortcuts when a scene owns a specialized manager. */
+	hideManageShareLinks?: boolean
 }
 
 /** Share extra data */

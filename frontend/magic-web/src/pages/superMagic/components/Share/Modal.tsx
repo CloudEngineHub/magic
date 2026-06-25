@@ -312,18 +312,20 @@ export default memo(function ShareModel(props: ShareModalProps) {
 	const mobileActions = useMemo<ActionsPopup.ActionButtonConfig[]>(() => {
 		const actions: ActionsPopup.ActionButtonConfig[] = []
 
-		// 管理分享链接（移动端始终显示）
-		actions.push({
-			key: "manageShare",
-			label: t("share.manageShareLinks"),
-			"data-testid": "mobile-share-manage-links-button",
-			onClick: () => {
-				setActionsPopupVisible(false)
-				// 打开分享管理面板
-				openShareManagementModal()
-				handleCancel()
-			},
-		})
+		// Some product scenes own a specialized share manager, so the generic shortcut is optional.
+		if (!fileShareUiConfig?.hideManageShareLinks) {
+			actions.push({
+				key: "manageShare",
+				label: t("share.manageShareLinks"),
+				"data-testid": "mobile-share-manage-links-button",
+				onClick: () => {
+					setActionsPopupVisible(false)
+					// 打开分享管理面板
+					openShareManagementModal()
+					handleCancel()
+				},
+			})
+		}
 
 		// 取消分享（只有编辑模式才显示）
 		if (shouldShowCancelButton) {
@@ -340,7 +342,13 @@ export default memo(function ShareModel(props: ShareModalProps) {
 		}
 
 		return actions
-	}, [shouldShowCancelButton, t, handleCancelShare, handleCancel])
+	}, [
+		fileShareUiConfig?.hideManageShareLinks,
+		shouldShowCancelButton,
+		t,
+		handleCancelShare,
+		handleCancel,
+	])
 
 	const handleOpenActionsPopup = useCallback(() => {
 		setActionsPopupVisible(true)
@@ -518,6 +526,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 								? () => finalCancelShare(shareSuccessData.resourceId || "")
 								: undefined
 						}
+						hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 						{...shareSuccessData}
 					/>
 				)}

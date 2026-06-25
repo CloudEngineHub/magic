@@ -24,6 +24,11 @@ const locationStateMock = vi.hoisted(() => ({
 	cardStatus: "summarized" as "summarized" | "not_summarized" | "summarizing",
 	audioFileId: undefined as string | undefined,
 }))
+const shareControlsMock = vi.hoisted(() => ({
+	shareManagementOpen: false,
+	openManageShare: vi.fn(),
+	closeManageShare: vi.fn(),
+}))
 
 vi.hoisted(() => {
 	Object.defineProperty(globalThis, "localStorage", {
@@ -61,6 +66,13 @@ vi.mock("@/stores/interface", () => ({
 
 vi.mock("@/apis/clients/chatWebSocket", () => ({
 	default: {},
+}))
+
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getLocaleModules: () => ({}),
+	getAdminLocaleModules: () => ({}),
+	loadFallbackLocale: vi.fn(),
+	loadMagicFlowLocale: vi.fn(),
 }))
 
 vi.mock("@/models/config/stores/theme.store", () => ({
@@ -185,14 +197,38 @@ vi.mock("../hooks/useRecordingDetailActions", () => ({
 vi.mock("../components/recording-detail/useRecordingDetailShareControls", () => ({
 	useRecordingDetailShareControls: () => ({
 		shareModalOpen: false,
+		shareManagementOpen: shareControlsMock.shareManagementOpen,
 		attachments: [],
 		attachmentList: [],
 		defaultSelectedFileIds: [],
 		requiredFileIds: [],
 		openCreateShare: vi.fn(),
-		openManageShare: vi.fn(),
+		openManageShare: shareControlsMock.openManageShare,
+		closeManageShare: shareControlsMock.closeManageShare,
 		closeShareModal: vi.fn(),
 	}),
+}))
+
+vi.mock("../components/recording-detail/RecordingShareManagementDialog", () => ({
+	default: ({
+		open,
+		projectId,
+		onClose,
+	}: {
+		open: boolean
+		projectId: string
+		onClose: () => void
+	}) =>
+		open ? (
+			<button
+				type="button"
+				data-testid="recording-share-management-dialog"
+				data-project-id={projectId}
+				onClick={onClose}
+			>
+				Recording share management
+			</button>
+		) : null,
 }))
 
 vi.mock("../components/AudioRecordingGroupDialogs", () => ({
@@ -273,6 +309,9 @@ describe("AudioRecordingDetailPage", () => {
 		audioPlayerMock.playSegment.mockReset()
 		audioPlayerMock.toggle.mockReset()
 		audioPlayerMock.setPlaybackRate.mockReset()
+		shareControlsMock.shareManagementOpen = false
+		shareControlsMock.openManageShare.mockReset()
+		shareControlsMock.closeManageShare.mockReset()
 		mockDetailData.loading = false
 		mockDetailData.error = false
 	})
@@ -342,5 +381,19 @@ describe("AudioRecordingDetailPage", () => {
 
 		expect(audioPlayerMock.seekTo).toHaveBeenCalledWith(55, { autoplay: true })
 		expect(audioPlayerMock.playSegment).not.toHaveBeenCalled()
+	})
+
+	it("mounts local recording share management dialog for the current project", () => {
+		shareControlsMock.shareManagementOpen = true
+
+		render(<AudioRecordingDetailPage />)
+
+		expect(screen.getByTestId("recording-share-management-dialog")).toHaveAttribute(
+			"data-project-id",
+			"project-alpha",
+		)
+
+		fireEvent.click(screen.getByTestId("recording-share-management-dialog"))
+		expect(shareControlsMock.closeManageShare).toHaveBeenCalled()
 	})
 })

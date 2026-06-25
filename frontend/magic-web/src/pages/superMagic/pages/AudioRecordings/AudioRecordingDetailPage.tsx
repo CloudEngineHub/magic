@@ -45,6 +45,7 @@ import {
 } from "./components/recording-detail/RecordingDetailEmptyState"
 import { RecordingDetailSpeakerDialog } from "./components/recording-detail/RecordingDetailSpeakerDialog"
 import { useRecordingDetailShareControls } from "./components/recording-detail/useRecordingDetailShareControls"
+import RecordingShareManagementDialog from "./components/recording-detail/RecordingShareManagementDialog"
 import { AudioRecordingMoveGroupDialog } from "./components/AudioRecordingGroupDialogs"
 import ShareModal from "@/pages/superMagic/components/Share/Modal"
 import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
@@ -462,6 +463,12 @@ function AudioRecordingDetailPageDesktop() {
 					requiredFileIds={shareControls.requiredFileIds}
 					types={[ShareType.PasswordProtected, ShareType.Organization, ShareType.Public]}
 					fileShareUiConfig={createRecordingShareUiConfig()}
+				/>
+
+				<RecordingShareManagementDialog
+					open={shareControls.shareManagementOpen}
+					projectId={projectId}
+					onClose={shareControls.closeManageShare}
 				/>
 			</div>
 		</RecordingDetailProvider>

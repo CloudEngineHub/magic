@@ -933,6 +933,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 						onCancelShare={handleCancelShare}
 						isSaving={isSaving}
 						isDisabled={selectedFileIds.length === 0}
+						hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 					/>
 				</div>
 
@@ -1084,6 +1085,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				onCancelShare={handleCancelShare}
 				isSaving={isSaving}
 				isDisabled={selectedFileIds.length === 0 && !effectiveShareProject}
+				hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 			/>
 		</div>
 	)

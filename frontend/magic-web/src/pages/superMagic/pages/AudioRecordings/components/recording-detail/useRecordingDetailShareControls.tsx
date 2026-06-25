@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react"
-import { openShareManagementModal } from "@/pages/superMagic/components/ShareManagement/openShareManagementModal"
 import type { RecordingDetailFileMap } from "../../types/recording-detail"
 import {
 	buildRecordingShareSelection,
@@ -15,6 +14,7 @@ interface RecordingDetailShareControlsInput {
 export function useRecordingDetailShareControls(input: RecordingDetailShareControlsInput) {
 	const { projectId, fileMap } = input
 	const [shareModalOpen, setShareModalOpen] = useState(false)
+	const [shareManagementOpen, setShareManagementOpen] = useState(false)
 
 	const shareSelection = useMemo(() => buildRecordingShareSelection(fileMap), [fileMap])
 	const requiredFileIds = useMemo(() => collectRecordingRequiredShareFileIds(fileMap), [fileMap])
@@ -24,20 +24,29 @@ export function useRecordingDetailShareControls(input: RecordingDetailShareContr
 	const defaultSelectedFileIds = shareSelection.defaultSelectedFileIds
 	const hasShareableFiles = defaultSelectedFileIds.length > 0
 
+	/** Opens the existing recording file-share creation dialog. */
 	function openCreateShare() {
 		setShareModalOpen(true)
 	}
 
+	/** Opens the PC recording-local share manager instead of the global share-management modal. */
 	function openManageShare() {
-		openShareManagementModal(projectId)
+		setShareManagementOpen(true)
 	}
 
+	/** Closes the existing recording file-share creation dialog. */
 	function closeShareModal() {
 		setShareModalOpen(false)
 	}
 
+	/** Closes the recording-local share-management dialog. */
+	function closeManageShare() {
+		setShareManagementOpen(false)
+	}
+
 	return {
 		shareModalOpen,
+		shareManagementOpen,
 		attachments,
 		attachmentList,
 		defaultSelectedFileIds,
@@ -45,6 +54,7 @@ export function useRecordingDetailShareControls(input: RecordingDetailShareContr
 		hasShareableFiles,
 		openCreateShare,
 		openManageShare,
+		closeManageShare,
 		closeShareModal,
 	}
 }

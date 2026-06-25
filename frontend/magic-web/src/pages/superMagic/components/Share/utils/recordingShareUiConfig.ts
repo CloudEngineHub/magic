@@ -13,5 +13,6 @@ export function createRecordingShareUiConfig(): FileShareUiConfig {
 		showSelectAll: false,
 		lockShareProject: true,
 		useRecordingShareCreateTitle: true,
+		hideManageShareLinks: true,
 	}
 }

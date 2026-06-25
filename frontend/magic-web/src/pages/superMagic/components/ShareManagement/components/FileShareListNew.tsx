@@ -6,7 +6,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Badge } from "@/components/shadcn-ui/badge"
 import type { FileShareItem, ProjectShareItem } from "../types"
 import ProjectNameBadge from "./ProjectNameBadge"
-import { ShareMode, ShareType } from "../../Share/types"
+import { ShareMode, ShareType, type FileShareUiConfig } from "../../Share/types"
 import ShareModal from "../../Share/Modal"
 import ShareSuccessModal from "../../Share/FileShareModal/ShareSuccessModal"
 import {
@@ -44,9 +44,16 @@ interface FileShareListNewProps {
 	loading: boolean
 	onCancelShare: (resourceId: string) => void
 	onRefresh: () => void
+	fileShareUiConfig?: FileShareUiConfig
 }
 
-function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShareListNewProps) {
+function FileShareListNew({
+	data,
+	loading,
+	onCancelShare,
+	onRefresh,
+	fileShareUiConfig,
+}: FileShareListNewProps) {
 	const { t } = useTranslation("super")
 	const [shareModalOpen, setShareModalOpen] = useState(false)
 	const [selectedItem, setSelectedItem] = useState<FileShareItem | ProjectShareItem | null>(null)
@@ -243,7 +250,9 @@ function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShare
 					shareMode={ShareMode.File}
 					resourceId={selectedItem.resource_id}
 					projectId={selectedItem.project_id}
+					projectName={selectedItem.project_name}
 					types={[ShareType.PasswordProtected, ShareType.Public, ShareType.Organization]}
+					fileShareUiConfig={fileShareUiConfig}
 				/>
 			)}
 
@@ -272,6 +281,7 @@ function FileShareListNew({ data, loading, onCancelShare, onRefresh }: FileShare
 						shareSuccessModal.currentItem.main_file_name || t("share.untitled")
 					}
 					fileIds={(shareSuccessModal.currentItem as any).file_ids}
+					hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 					onEditShare={() => {
 						const item = shareSuccessModal.currentItem
 						shareSuccessModal.close()
