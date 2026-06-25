@@ -4393,7 +4393,7 @@
 		"shadowSpread": "扩散",
 		"size": "尺寸",
 		"sizeSettings": "尺寸设置",
-		"smallSelectionHint": "选择框过小,请前往工具栏进行复制/删除操作,或调整缩放比例",
+		"smallSelectionHint": "选择框过小，可前往工具栏进行复制/删除，或使用快捷键：Delete/Backspace 删除、Ctrl/Cmd+D 复制，也可调整缩放比例后操作",
 		"solidColor": "纯色",
 		"strikethrough": "删除线",
 		"templateColumns": "模板列",

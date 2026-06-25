@@ -1,6 +1,6 @@
 import { useCallback, useRef } from "react"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
-import type { SelectedInfo } from "../types"
+import type { ElementRect, SelectedInfo } from "../types"
 import { useResizeHandles } from "./useResizeHandles"
 import { useRotateHandle } from "./useRotateHandle"
 import { useMoveHandle } from "./useMoveHandle"
@@ -12,7 +12,7 @@ interface UseSelectionHandlesProps {
 	selectedInfo: SelectedInfo | null
 	iframeRef: React.RefObject<HTMLIFrameElement>
 	setSelectedInfoList: React.Dispatch<React.SetStateAction<SelectedInfo[]>>
-	setHoveredRect: React.Dispatch<React.SetStateAction<any>>
+	setHoveredRect: React.Dispatch<React.SetStateAction<ElementRect | null>>
 	setIsSelectionMode: React.Dispatch<React.SetStateAction<boolean>>
 }
 
@@ -87,102 +87,110 @@ export function useSelectionHandles({
 	const isDeleteInProgressRef = useRef(false)
 	const isDuplicateInProgressRef = useRef(false)
 
-	// Handle delete button click
+	// Execute deletion from either toolbar buttons or keyboard fallback.
+	const executeDelete = useCallback(async () => {
+		// Prevent duplicate delete operations from button and keyboard fallback.
+		if (isDeleteInProgressRef.current) {
+			console.log("[SelectionOverlay] Delete already in progress, ignoring")
+			return
+		}
+
+		console.log("[SelectionOverlay] Delete action triggered", {
+			hasSelectedInfo: !!selectedInfo,
+			selector: selectedInfo?.selector,
+			hasEditorRef: !!editorRef?.current,
+		})
+
+		if (!selectedInfo?.selector) {
+			console.warn("[SelectionOverlay] No selected element")
+			return
+		}
+
+		if (!editorRef?.current) {
+			console.warn("[SelectionOverlay] No editor ref")
+			return
+		}
+
+		try {
+			isDeleteInProgressRef.current = true
+			console.log(
+				"[SelectionOverlay] Calling deleteElement with selector:",
+				selectedInfo.selector,
+			)
+			await editorRef.current.deleteElement(selectedInfo.selector)
+			console.log("[SelectionOverlay] Element deleted successfully")
+			// Selection will be cleared automatically by the runtime.
+		} catch (error) {
+			console.error("[SelectionOverlay] Failed to delete element:", error)
+		} finally {
+			// Reset the guard after the runtime has finished dispatching selection updates.
+			setTimeout(() => {
+				isDeleteInProgressRef.current = false
+			}, 300)
+		}
+	}, [selectedInfo, editorRef])
+
+	// Execute duplication from either toolbar buttons or keyboard fallback.
+	const executeDuplicate = useCallback(async () => {
+		// Prevent duplicate operations from button and keyboard fallback.
+		if (isDuplicateInProgressRef.current) {
+			console.log("[SelectionOverlay] Duplicate already in progress, ignoring")
+			return
+		}
+
+		console.log("[SelectionOverlay] Duplicate action triggered", {
+			hasSelectedInfo: !!selectedInfo,
+			selector: selectedInfo?.selector,
+			hasEditorRef: !!editorRef?.current,
+		})
+
+		if (!selectedInfo?.selector) {
+			console.warn("[SelectionOverlay] No selected element")
+			return
+		}
+
+		if (!editorRef?.current) {
+			console.warn("[SelectionOverlay] No editor ref")
+			return
+		}
+
+		try {
+			isDuplicateInProgressRef.current = true
+			console.log(
+				"[SelectionOverlay] Calling duplicateElement with selector:",
+				selectedInfo.selector,
+			)
+			await editorRef.current.duplicateElement(selectedInfo.selector)
+			console.log("[SelectionOverlay] Element duplicated successfully")
+			// New element will be automatically selected by the runtime.
+		} catch (error) {
+			console.error("[SelectionOverlay] Failed to duplicate element:", error)
+		} finally {
+			// Reset the guard after the runtime has finished dispatching selection updates.
+			setTimeout(() => {
+				isDuplicateInProgressRef.current = false
+			}, 300)
+		}
+	}, [selectedInfo, editorRef])
+
+	// Handle delete button click.
 	const handleDelete = useCallback(
 		async (event: React.PointerEvent) => {
 			event.stopPropagation()
 			event.preventDefault()
-
-			// Prevent duplicate delete operations
-			if (isDeleteInProgressRef.current) {
-				console.log("[SelectionOverlay] Delete already in progress, ignoring")
-				return
-			}
-
-			console.log("[SelectionOverlay] Delete button clicked", {
-				hasSelectedInfo: !!selectedInfo,
-				selector: selectedInfo?.selector,
-				hasEditorRef: !!editorRef?.current,
-			})
-
-			if (!selectedInfo?.selector) {
-				console.warn("[SelectionOverlay] No selected element")
-				return
-			}
-
-			if (!editorRef?.current) {
-				console.warn("[SelectionOverlay] No editor ref")
-				return
-			}
-
-			try {
-				isDeleteInProgressRef.current = true
-				console.log(
-					"[SelectionOverlay] Calling deleteElement with selector:",
-					selectedInfo.selector,
-				)
-				await editorRef.current.deleteElement(selectedInfo.selector)
-				console.log("[SelectionOverlay] Element deleted successfully")
-				// Selection will be cleared automatically by the runtime
-			} catch (error) {
-				console.error("[SelectionOverlay] Failed to delete element:", error)
-			} finally {
-				// Reset flag after operation completes
-				setTimeout(() => {
-					isDeleteInProgressRef.current = false
-				}, 300)
-			}
+			await executeDelete()
 		},
-		[selectedInfo, editorRef],
+		[executeDelete],
 	)
 
-	// Handle duplicate button click
+	// Handle duplicate button click.
 	const handleDuplicate = useCallback(
 		async (event: React.PointerEvent) => {
 			event.stopPropagation()
 			event.preventDefault()
-
-			// Prevent duplicate duplicate operations
-			if (isDuplicateInProgressRef.current) {
-				console.log("[SelectionOverlay] Duplicate already in progress, ignoring")
-				return
-			}
-
-			console.log("[SelectionOverlay] Duplicate button clicked", {
-				hasSelectedInfo: !!selectedInfo,
-				selector: selectedInfo?.selector,
-				hasEditorRef: !!editorRef?.current,
-			})
-
-			if (!selectedInfo?.selector) {
-				console.warn("[SelectionOverlay] No selected element")
-				return
-			}
-
-			if (!editorRef?.current) {
-				console.warn("[SelectionOverlay] No editor ref")
-				return
-			}
-
-			try {
-				isDuplicateInProgressRef.current = true
-				console.log(
-					"[SelectionOverlay] Calling duplicateElement with selector:",
-					selectedInfo.selector,
-				)
-				await editorRef.current.duplicateElement(selectedInfo.selector)
-				console.log("[SelectionOverlay] Element duplicated successfully")
-				// New element will be automatically selected by the runtime
-			} catch (error) {
-				console.error("[SelectionOverlay] Failed to duplicate element:", error)
-			} finally {
-				// Reset flag after operation completes
-				setTimeout(() => {
-					isDuplicateInProgressRef.current = false
-				}, 300)
-			}
+			await executeDuplicate()
 		},
-		[selectedInfo, editorRef],
+		[executeDuplicate],
 	)
 
 	return {
@@ -198,5 +206,7 @@ export function useSelectionHandles({
 		// Operations
 		handleDelete,
 		handleDuplicate,
+		executeDelete,
+		executeDuplicate,
 	}
 }

@@ -153,21 +153,23 @@ export class EditorRuntime {
 	}
 
 	/**
-	 * Setup keyboard shortcuts for undo/redo
+	 * Setup keyboard shortcuts for editor-only commands.
 	 */
 	private setupKeyboardShortcuts(): void {
 		this.keyboardShortcutHandler = async (event: KeyboardEvent) => {
-			// Ignore if user is typing in an input/textarea/contenteditable
-			if (
-				event.target instanceof HTMLInputElement ||
-				event.target instanceof HTMLTextAreaElement ||
-				(event.target instanceof HTMLElement && event.target.isContentEditable)
-			) {
+			const isMac = navigator.platform.toUpperCase().includes("MAC")
+			// Support both Ctrl and Cmd so shortcuts stay consistent with the host editor.
+			const ctrlOrCmd = event.metaKey || event.ctrlKey
+
+			// Keep browser/page shortcuts untouched until the editor is explicitly active.
+			if (!this.isEditMode) {
 				return
 			}
 
-			const isMac = navigator.platform.toUpperCase().includes("MAC")
-			const ctrlOrCmd = isMac ? event.metaKey : event.ctrlKey
+			// Let native inputs and active text editing keep their own keyboard behavior.
+			if (isEditableShortcutTarget(event.target)) {
+				return
+			}
 
 			// Cmd/Ctrl + Z for undo
 			if (ctrlOrCmd && event.key === "z" && !event.shiftKey) {
@@ -190,11 +192,37 @@ export class EditorRuntime {
 					const result = await this.styleManager.redo()
 					EditorLogger.info("Redo triggered by keyboard shortcut", { success: result })
 				}
+				return
+			}
+
+			// Delete / Backspace removes the currently selected element in edit mode.
+			if (event.key === "Delete" || event.key === "Backspace") {
+				const [selectedSelector] = this.elementSelector.getSelectedSelectors()
+				if (selectedSelector) {
+					event.preventDefault()
+					await this.styleManager.deleteElement(selectedSelector)
+					EditorLogger.info("Delete triggered by keyboard shortcut", {
+						selector: selectedSelector,
+					})
+				}
+				return
+			}
+
+			// Cmd/Ctrl + D duplicates the selected element and suppresses browser bookmarks.
+			if (ctrlOrCmd && event.key.toLowerCase() === "d" && !event.shiftKey && !event.altKey) {
+				const [selectedSelector] = this.elementSelector.getSelectedSelectors()
+				if (selectedSelector) {
+					event.preventDefault()
+					await this.styleManager.duplicateElement(selectedSelector)
+					EditorLogger.info("Duplicate triggered by keyboard shortcut", {
+						selector: selectedSelector,
+					})
+				}
 			}
 		}
 
 		window.addEventListener("keydown", this.keyboardShortcutHandler)
-		EditorLogger.info("Keyboard shortcuts registered for undo/redo")
+		EditorLogger.info("Keyboard shortcuts registered for undo/redo/delete/duplicate")
 	}
 
 	/**
@@ -474,4 +502,21 @@ function getUploadedRelativePath(uploadResult: unknown): string | undefined {
 		return storedRelativeFilePath
 	}
 	return typeof relativeFilePath === "string" && relativeFilePath ? relativeFilePath : undefined
+}
+
+/**
+ * Detects targets that should keep native typing and editing shortcuts.
+ */
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+	// Host-level shortcuts must not override typing or inline text editing.
+	if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return true
+	if (!(target instanceof HTMLElement)) return false
+
+	const isRuntimeTextEditing =
+		target.getAttribute("data-text-editing") === "true" ||
+		target.closest('[data-text-editing="true"]') !== null
+	const isNativeEditable =
+		target.isContentEditable || target.closest('[contenteditable="true"]') !== null
+
+	return isRuntimeTextEditing || isNativeEditable
 }

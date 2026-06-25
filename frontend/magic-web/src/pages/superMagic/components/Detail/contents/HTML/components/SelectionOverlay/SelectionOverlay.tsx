@@ -143,6 +143,8 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 		isMoving,
 		handleDelete,
 		handleDuplicate,
+		executeDelete,
+		executeDuplicate,
 	} = useSelectionHandles({
 		editorRef,
 		isPptRender,
@@ -204,6 +206,72 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 		rotation,
 		displayRotation,
 	])
+
+	useEffect(() => {
+		if (!isSelectionMode || !selectedInfo || disabled) {
+			return
+		}
+
+		const isEditableTarget = (target: EventTarget | null): boolean => {
+			// Parent fallback shortcuts should never steal keystrokes from form or text editing fields.
+			if (!(target instanceof HTMLElement)) {
+				return false
+			}
+
+			const tagName = target.tagName.toLowerCase()
+			const isFormField =
+				tagName === "input" || tagName === "textarea" || tagName === "select"
+			const isRuntimeTextEditing =
+				target.getAttribute("data-text-editing") === "true" ||
+				target.closest('[data-text-editing="true"]') !== null
+			const isNativeEditable =
+				target.isContentEditable || target.closest('[contenteditable="true"]') !== null
+
+			return isFormField || isRuntimeTextEditing || isNativeEditable
+		}
+
+		const handleShortcut = (event: KeyboardEvent) => {
+			// Scope fallback shortcuts to the editor container so global page shortcuts stay intact.
+			if (
+				event.target instanceof HTMLElement &&
+				containerRef?.current &&
+				!containerRef.current.contains(event.target)
+			) {
+				return
+			}
+
+			if (isEditableTarget(event.target)) {
+				return
+			}
+
+			const isDeleteKey = event.key === "Delete" || event.key === "Backspace"
+			const isDuplicateKey =
+				(event.metaKey || event.ctrlKey) &&
+				event.key.toLowerCase() === "d" &&
+				!event.altKey &&
+				!event.shiftKey
+
+			if (!isDeleteKey && !isDuplicateKey) {
+				return
+			}
+
+			event.preventDefault()
+			event.stopPropagation()
+
+			if (isDeleteKey) {
+				void executeDelete()
+				return
+			}
+
+			void executeDuplicate()
+		}
+
+		window.addEventListener("keydown", handleShortcut, true)
+
+		return () => {
+			window.removeEventListener("keydown", handleShortcut, true)
+		}
+	}, [containerRef, disabled, executeDelete, executeDuplicate, isSelectionMode, selectedInfo])
 
 	// Don't render when disabled (saving)
 	if (disabled) {
