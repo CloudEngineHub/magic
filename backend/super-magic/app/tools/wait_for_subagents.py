@@ -46,8 +46,6 @@ class WaitForSubagentsParams(BaseToolParams):
 class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
     """Wait for specified background sub-agents to finish."""
 
-    code_mode_only = True
-
     async def execute(self, tool_context: ToolContext, params: WaitForSubagentsParams) -> ToolResult:
         # Phase 1: resolve agent_ids to handles or immediate error results
         resolved: list[tuple[str, str | None, SubagentSessionHandle | None, SubagentQueryResult | None]] = []
