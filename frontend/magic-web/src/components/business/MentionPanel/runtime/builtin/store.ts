@@ -34,6 +34,7 @@ import {
 } from "./store-helpers/history"
 import { matchesQuery, searchBuiltinMentionItems } from "./store-helpers/search"
 import type { MentionFilePreviewSourceRow } from "./domains/file-preview/preview-utils"
+import { resolveFolderWorkspaceEntryFromTab } from "../../utils/projectReferenceMention"
 
 export type { WorkspaceFile, WorkspaceFolder }
 
@@ -321,56 +322,14 @@ export class MentionPanelStore {
 	}
 
 	private getFolderMentionItemFromTab(tab: TabItem): MentionItem | null {
-		if (
-			tab.fileData.display_config?.type !== "slide" &&
-			tab.fileData.display_config?.type !== "design"
-		) {
-			return null
-		}
+		const folderData = resolveFolderWorkspaceEntryFromTab(tab, {
+			getFolderData: (parentId) => this.projectFilesStore.getFolderData(parentId),
+			workspaceFilesList: this.projectFilesStore.workspaceFilesList,
+		})
 
-		if (tab.fileData.is_directory) {
-			const fileId = tab.fileData.file_id || tab.id
-			const fileName =
-				tab.fileData.file_name ||
-				tab.fileData.display_filename ||
-				tab.fileData.filename ||
-				tab.title ||
-				fileId
-			const relativeFilePath = tab.fileData.relative_file_path || tab.filePath || ""
+		if (!folderData) return null
 
-			if (!fileId || !relativeFilePath) return null
-
-			const tabDirectory: WorkspaceFolder = {
-				...tab.fileData,
-				file_id: fileId,
-				file_name: fileName,
-				relative_file_path: relativeFilePath,
-				type: "directory",
-				is_directory: true,
-				is_hidden: Boolean(tab.fileData.is_hidden),
-				parent_id:
-					tab.fileData.parent_id == null ? undefined : String(tab.fileData.parent_id),
-				children: (tab.fileData.children ?? []) as WorkspaceFolder["children"],
-			}
-
-			return this.workspaceFilesStore.workspaceFilesToMentionItems([tabDirectory])[0] ?? null
-		}
-
-		let parentData = this.projectFilesStore.getFolderData(tab.fileData.parent_id)
-		if (!parentData && tab.fileData.relative_file_path) {
-			const filePath = tab.fileData.relative_file_path
-			const lastSlashIndex = filePath.lastIndexOf("/")
-			if (lastSlashIndex >= 0) {
-				const parentPath = filePath.substring(0, lastSlashIndex + 1)
-				parentData = this.projectFilesStore.workspaceFilesList.find(
-					(file) => file.type === "directory" && file.relative_file_path === parentPath,
-				) as WorkspaceFolder | undefined
-			}
-		}
-
-		if (!parentData) return null
-
-		return this.workspaceFilesStore.workspaceFilesToMentionItems([parentData])[0] ?? null
+		return this.workspaceFilesStore.workspaceFilesToMentionItems([folderData])[0] ?? null
 	}
 }
 

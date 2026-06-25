@@ -1,7 +1,7 @@
 import { makeAutoObservable } from "mobx"
 import { getFileTreeIconType } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import type { I18nTexts } from "../../../../i18n"
-import { MentionItemType, type MentionItem, type ProjectFileMentionData } from "../../../../types"
+import { MentionItemType, type MentionItem } from "../../../../types"
 import { MentionPanelItemType } from "../../panel-item-types"
 import {
 	getMentionDescription,
@@ -13,6 +13,7 @@ import type { MentionTabsStoreDependencies } from "./types"
 import { isPlaybackTab } from "./types"
 import type { TabItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { MentionFilePreviewSourceRow } from "../file-preview/preview-utils"
+import { createProjectFileMentionData } from "../../../../utils/projectReferenceMention"
 
 export class MentionPanelTabsStore {
 	currentTabs: TabItem[] = []
@@ -37,13 +38,11 @@ export class MentionPanelTabsStore {
 	tabToMentionItem(tab: TabItem): MentionItem {
 		const data = {
 			type: MentionItemType.PROJECT_FILE,
-			data: {
-				file_id: tab.fileData.file_id,
-				file_name: tab.fileData.file_name,
-				file_path: tab.fileData.relative_file_path,
-				file_extension: tab.fileData.file_extension,
-				file_size: tab.fileData.file_size,
-			} as ProjectFileMentionData,
+			data: createProjectFileMentionData(tab.fileData, {
+				fileId: tab.id,
+				fileName: tab.title,
+				filePath: tab.filePath,
+			}),
 		}
 
 		const id = getMentionUniqueId(data)

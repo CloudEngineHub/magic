@@ -711,6 +711,124 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 			expect(validation.isValid).toBe(true)
 		})
 
+		it("should resolve an open dashboard entry tab to its parent folder mention", async () => {
+			projectFilesStore.setSelectedProject(createTestProject("test-project"))
+
+			const dashboardMetadata = {
+				type: "dashboard",
+				name: "销售数据分析看板",
+			}
+			const dashboardEntry = {
+				type: "file" as const,
+				file_id: "dashboard-entry",
+				file_name: "index.html",
+				file_extension: "html",
+				file_key: "/销售数据分析看板/index.html",
+				relative_file_path: "/销售数据分析看板/index.html",
+				file_size: 1024,
+				file_url: "",
+				task_id: "",
+				project_id: "test-project",
+				file_type: "html",
+				is_hidden: false,
+				parent_id: "dashboard-dir",
+				source: AttachmentSource.PROJECT_DIRECTORY,
+				display_config: dashboardMetadata,
+				children: [],
+			}
+			const dashboardDirectory = {
+				type: "directory" as const,
+				file_id: "dashboard-dir",
+				file_name: "销售数据分析看板",
+				file_extension: "",
+				file_key: "/销售数据分析看板",
+				relative_file_path: "/销售数据分析看板",
+				file_size: 0,
+				file_url: "",
+				task_id: "",
+				project_id: "test-project",
+				file_type: "",
+				is_hidden: false,
+				source: AttachmentSource.PROJECT_DIRECTORY,
+				display_config: dashboardMetadata,
+				children: [dashboardEntry],
+			}
+
+			projectFilesStore.setWorkspaceFileTree([dashboardDirectory])
+			mentionPanelStore.setCurrentTabs([
+				{
+					id: "dashboard-entry",
+					title: "销售数据分析看板",
+					filePath: "/销售数据分析看板/index.html",
+					fileData: dashboardEntry,
+					active: true,
+					closeable: true,
+				},
+			])
+
+			const [tabMention] = mentionPanelStore.getCurrentTabs()
+
+			expect(tabMention).toMatchObject({
+				id: "/销售数据分析看板",
+				name: "销售数据分析看板",
+				type: MentionItemType.FOLDER,
+				hasChildren: true,
+				isFolder: true,
+				tags: ["tab"],
+				data: {
+					directory_id: "dashboard-dir",
+					directory_name: "销售数据分析看板",
+					directory_path: "销售数据分析看板",
+					directory_metadata: dashboardMetadata,
+				},
+			})
+
+			const validation = await mentionPanelStore.dispatch({
+				kind: "validate",
+				item: {
+					type: MentionItemType.FOLDER,
+					data: tabMention.data,
+				},
+			})
+
+			expect(validation.isValid).toBe(true)
+		})
+
+		it("should normalize open project file tab paths", () => {
+			projectFilesStore.setSelectedProject(createTestProject("test-project"))
+
+			mentionPanelStore.setCurrentTabs([
+				{
+					id: "file-tab",
+					title: "home.html",
+					filePath: "/src/home.html",
+					fileData: {
+						file_id: "file-tab",
+						file_name: "home.html",
+						file_extension: "html",
+						relative_file_path: "/src/home.html",
+					},
+					active: true,
+					closeable: true,
+				},
+			])
+
+			const [tabMention] = mentionPanelStore.getCurrentTabs()
+
+			expect(tabMention).toMatchObject({
+				id: "project:file-tab/src/home.html",
+				name: "home.html",
+				type: MentionItemType.PROJECT_FILE,
+				data: {
+					file_id: "file-tab",
+					file_name: "home.html",
+					file_path: "src/home.html",
+					file_extension: "html",
+				},
+			})
+			expect(tabMention.id).not.toContain("//")
+		})
+
 		it("should find files in different data sources based on context", async () => {
 			await mentionPanelStore.preLoadList()
 
