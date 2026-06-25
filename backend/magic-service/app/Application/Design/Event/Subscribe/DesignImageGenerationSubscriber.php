@@ -126,8 +126,7 @@ class DesignImageGenerationSubscriber implements ListenerInterface
             }
 
             $fileName = $this->resolveAndAssignGeneratedFileName($dataIsolation, $imageGenerationEntity, $imageUrl);
-            $outputDirectory = $this->resolveOutputDirectory($imageGenerationEntity);
-            $imageGenerationEntity->setFileDirId($outputDirectory->getFileId());
+            $this->ensureOutputDirectoryId($imageGenerationEntity);
 
             Db::transaction(function () use ($dataIsolation, $imageGenerationEntity, $imageUrl, $fileName): void {
                 $this->imageGenerationDomainService->markAsCompleted($dataIsolation, $imageGenerationEntity->getId(), $fileName);
@@ -178,30 +177,26 @@ class DesignImageGenerationSubscriber implements ListenerInterface
     }
 
     /**
-     * 队列恢复的任务来自数据库，创建时的 fileDirId 不会随实体持久化，这里按 file_dir 重新解析真实输出目录。
+     * 队列恢复的任务来自数据库，创建时的 fileDirId 不会随实体持久化，缺失时按 file_dir 重新解析真实输出目录。
      */
-    private function resolveOutputDirectory(ImageGenerationEntity $imageGenerationEntity): TaskFileEntity
+    private function ensureOutputDirectoryId(ImageGenerationEntity $imageGenerationEntity): void
     {
-        $taskFileDir = null;
         $fileDirId = $imageGenerationEntity->getFileDirId();
         if ($fileDirId > 0) {
-            $taskFileDir = $this->taskFileDomainService->getById($fileDirId);
+            return;
         }
 
-        if (! $this->isValidOutputDirectory($imageGenerationEntity, $taskFileDir)) {
-            $taskFileDir = $this->taskFileDomainService->findEntityByRelativePath(
-                $imageGenerationEntity->getProjectId(),
-                $imageGenerationEntity->getFileDir()
-            );
-        }
-
+        $taskFileDir = $this->taskFileDomainService->findEntityByRelativePath(
+            $imageGenerationEntity->getProjectId(),
+            $imageGenerationEntity->getFileDir()
+        );
         if (! $this->isValidOutputDirectory($imageGenerationEntity, $taskFileDir)) {
             ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'design.image_generation.file_dir_not_exists', [
                 'file_dir' => $imageGenerationEntity->getFileDir(),
             ]);
         }
 
-        return $taskFileDir;
+        $imageGenerationEntity->setFileDirId($taskFileDir->getFileId());
     }
 
     private function isValidOutputDirectory(ImageGenerationEntity $imageGenerationEntity, ?TaskFileEntity $taskFileDir): bool

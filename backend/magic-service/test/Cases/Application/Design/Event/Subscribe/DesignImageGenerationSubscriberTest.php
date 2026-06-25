@@ -19,7 +19,7 @@ use ReflectionClass;
  */
 final class DesignImageGenerationSubscriberTest extends TestCase
 {
-    public function testResolveOutputDirectoryFallsBackToFileDirWhenQueuedEntityLostFileDirId(): void
+    public function testEnsureOutputDirectoryIdFallsBackToFileDirWhenQueuedEntityLostFileDirId(): void
     {
         $entity = new ImageGenerationEntity();
         $entity->setProjectId(123);
@@ -32,28 +32,39 @@ final class DesignImageGenerationSubscriberTest extends TestCase
             ->with(123, '/cat-swimming/images')
             ->willReturn($this->createDirectory(7001));
 
-        $directory = $this->invokeResolveOutputDirectory($taskFileDomainService, $entity);
+        $this->invokeEnsureOutputDirectoryId($taskFileDomainService, $entity);
 
-        $this->assertSame(7001, $directory->getFileId());
+        $this->assertSame(7001, $entity->getFileDirId());
     }
 
-    private function invokeResolveOutputDirectory(
+    public function testEnsureOutputDirectoryIdSkipsLookupWhenFileDirIdExists(): void
+    {
+        $entity = new ImageGenerationEntity();
+        $entity->setProjectId(123);
+        $entity->setFileDir('/cat-swimming/images');
+        $entity->setFileDirId(7001);
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->never())->method('getById');
+        $taskFileDomainService->expects($this->never())->method('findEntityByRelativePath');
+
+        $this->invokeEnsureOutputDirectoryId($taskFileDomainService, $entity);
+
+        $this->assertSame(7001, $entity->getFileDirId());
+    }
+
+    private function invokeEnsureOutputDirectoryId(
         TaskFileDomainService $taskFileDomainService,
         ImageGenerationEntity $entity,
-    ): TaskFileEntity {
+    ): void {
         $reflection = new ReflectionClass(DesignImageGenerationSubscriber::class);
         $subscriber = $reflection->newInstanceWithoutConstructor();
 
         $property = $reflection->getProperty('taskFileDomainService');
         $property->setValue($subscriber, $taskFileDomainService);
 
-        $method = $reflection->getMethod('resolveOutputDirectory');
-        $directory = $method->invoke($subscriber, $entity);
-        if (! $directory instanceof TaskFileEntity) {
-            self::fail('Expected output directory entity.');
-        }
-
-        return $directory;
+        $method = $reflection->getMethod('ensureOutputDirectoryId');
+        $method->invoke($subscriber, $entity);
     }
 
     private function createDirectory(int $fileId): TaskFileEntity
