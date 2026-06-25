@@ -14,6 +14,7 @@ import {
 	createUploadFileMentionAttributes,
 	transformUploadFileToProjectFile,
 } from "../utils/mention"
+import { INSPECTOR_DETAIL_TYPE } from "../extensions/inspector-detail/const"
 
 interface LoggerLike {
 	error: (message: string, error?: unknown) => void
@@ -40,6 +41,11 @@ export function collectMentionItemsFromContent(content?: JSONContent): MentionLi
 				type: "mention",
 				attrs: node.attrs as TiptapMentionAttributes,
 			})
+		} else if (node.type === INSPECTOR_DETAIL_TYPE && node.attrs?.fileMention) {
+			items.push({
+				type: "mention",
+				attrs: node.attrs.fileMention as TiptapMentionAttributes,
+			})
 		}
 		if (Array.isArray(node.content)) {
 			node.content.forEach((child) => walk(child as JSONContent))
@@ -59,6 +65,11 @@ export function collectMentionItemsFromEditor(editor: Editor | null): MentionLis
 			items.push({
 				type: "mention",
 				attrs: node.attrs as TiptapMentionAttributes,
+			})
+		} else if (node.type.name === INSPECTOR_DETAIL_TYPE && node.attrs.fileMention) {
+			items.push({
+				type: "mention",
+				attrs: node.attrs.fileMention as TiptapMentionAttributes,
 			})
 		}
 		return true

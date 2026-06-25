@@ -10,7 +10,10 @@ import { BaseElement } from "../BaseElement"
 import { RenderUtils } from "../../utils/RenderUtils"
 import { generateUUID, type Rect } from "../../utils/utils"
 import { BorderDecorator } from "../decorators/BorderDecorator"
-import { InfoButtonDecorator } from "../decorators/InfoButtonDecorator"
+import {
+	ElementCornerActionsDecorator,
+	type ElementCornerActionConfig,
+} from "../decorators/ElementCornerActionsDecorator"
 import { TransformBehavior } from "../../interaction/TransformManager"
 import type { TransformContext } from "../BaseElement"
 import { VideoRenderer } from "../renderers/VideoRenderer"
@@ -44,7 +47,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private renderer = new VideoRenderer()
 	private pollingManager: VideoPollingManager
 	private borderDecorator?: BorderDecorator
-	private infoButtonDecorator?: InfoButtonDecorator
+	private cornerActionsDecorator?: ElementCornerActionsDecorator
 	public isGenerating = false
 	private isLoadingState = false
 	private isInlinePlaybackPending = false
@@ -55,6 +58,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private modeInputDrafts?: StoredVideoModeDraftsMap
 	private referenceImageInfos: UploadFileResponse[] = []
 	private previewLoadToken = 0
+	private previewLoadInFlightPath?: string
 	private inlinePlaybackRequestToken = 0
 	private inlinePlaybackPromise?: Promise<boolean>
 	private inlinePlaybackStateUnsubscribe?: () => void
@@ -103,17 +107,17 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			}
 		}
 
-		if (this.data.src) {
-			this.loadPreviewFromPath(this.data.src)
-		} else if (this.data.generateVideoRequest?.video_id) {
+		if (!this.data.src && this.data.generateVideoRequest?.video_id) {
 			this.pollingManager.start()
 		}
 	}
 
 	override destroy(): void {
 		this.isDestroyed = true
+		this.canvas.visibilityManager.unregisterVideoElement(this.data.id)
 		this.cancelScheduledPreviewRefresh()
 		this.inlinePlaybackRequestToken += 1
+		this.previewLoadInFlightPath = undefined
 		this.inlinePlaybackPromise = undefined
 		this.isInlinePlaybackPending = false
 		this.isInlinePlaybackRefreshing = false
@@ -122,7 +126,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.pollingManager.destroy()
 		this.renderer.destroy()
 		this.borderDecorator?.destroy()
-		this.infoButtonDecorator?.destroy()
+		this.cornerActionsDecorator?.destroy()
 		this.removeContentUpdateListener()
 		this.removeRetryEditingListeners()
 		this.removeVideoResourceRefreshedListener()
@@ -135,8 +139,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.resetTransientContent()
 		this.borderDecorator?.destroy()
 		this.borderDecorator = undefined
-		this.infoButtonDecorator?.destroy()
-		this.infoButtonDecorator = undefined
+		this.cornerActionsDecorator?.destroy()
+		this.cornerActionsDecorator = undefined
 		return super.rerender()
 	}
 
@@ -227,6 +231,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	private async loadPreviewFromPath(path: string): Promise<void> {
 		const loadToken = ++this.previewLoadToken
+		this.previewLoadInFlightPath = path
 		this.isLoadingState = true
 		this.isErrorState = false
 
@@ -258,12 +263,26 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.isLoadingState = false
 			this.isErrorState = true
 			this.schedulePreviewRefresh()
+		} finally {
+			if (this.previewLoadInFlightPath === path) {
+				this.previewLoadInFlightPath = undefined
+			}
 		}
+	}
+
+	public requestPreviewLoad(options?: { force?: boolean }): void {
+		const path = this.data.src
+		if (!path || this.isDestroyed) return
+		if (!options?.force) {
+			if (this.renderer.hasPreview()) return
+			if (this.previewLoadInFlightPath && this.previewLoadInFlightPath === path) return
+		}
+		void this.loadPreviewFromPath(path)
 	}
 
 	private handlePollingIssue(): void {
 		this.isErrorState = true
-		this.rerender()
+		this.rerenderWhenTransformIdle()
 	}
 
 	private schedulePreviewRefresh(): void {
@@ -291,7 +310,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			return
 		}
 
-		this.rerender()
+		this.rerenderWhenTransformIdle()
 	}
 
 	private cancelScheduledPreviewRefresh(): void {
@@ -331,7 +350,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.renderer.loadPoster(data.resource.poster, data.resource.metadata)
 			this.isLoadingState = false
 			this.isErrorState = false
-			this.rerender()
+			this.rerenderWhenTransformIdle()
 		}
 		this.canvas.eventEmitter.on("resource:video:refreshed", this.videoResourceRefreshedHandler)
 	}
@@ -406,7 +425,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		if (options?.rerender !== false) {
-			this.rerender()
+			this.rerenderWhenTransformIdle()
 		}
 	}
 
@@ -425,7 +444,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				})
 				if (!session) {
 					this.isErrorState = true
-					this.rerender()
+					this.rerenderWhenTransformIdle()
 					return false
 				}
 				this.syncPlaybackAttachment({ rerender: false })
@@ -440,7 +459,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		const requestToken = ++this.inlinePlaybackRequestToken
 		this.isErrorState = false
 		this.isInlinePlaybackPending = true
-		this.rerender()
+		this.rerenderWhenTransformIdle()
 
 		const playbackPromise = (async () => {
 			try {
@@ -457,13 +476,13 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				this.isInlinePlaybackPending = false
 				if (!session) {
 					this.isErrorState = true
-					this.rerender()
+					this.rerenderWhenTransformIdle()
 					return false
 				}
 
 				this.renderer.attachPlayback(session.video)
 				this.isErrorState = false
-				this.rerender()
+				this.rerenderWhenTransformIdle()
 				return true
 			} catch {
 				if (requestToken !== this.inlinePlaybackRequestToken || this.data.src !== path) {
@@ -471,7 +490,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				}
 				this.isInlinePlaybackPending = false
 				this.isErrorState = true
-				this.rerender()
+				this.rerenderWhenTransformIdle()
 				return false
 			}
 		})()
@@ -534,11 +553,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private isVideoGenerationPending(): boolean {
 		if (this.isGenerating) return true
 
-		const hasGenerateRequest = !!this.data.generateVideoRequest
+		const hasActiveGenerationTask = this.hasActiveVideoGenerationTask()
 		const hasSrc = !!this.data.src
 		const status = this.data.status
 
-		if (hasGenerateRequest && !hasSrc) return true
+		if (hasActiveGenerationTask && !hasSrc) return true
 		if (
 			hasSrc &&
 			(status === GenerationStatus.Pending || status === GenerationStatus.Processing)
@@ -590,11 +609,15 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	override onMounted(): void {
+		super.onMounted()
 		if (!(this.node instanceof Konva.Group) || !this.data.width || !this.data.height) {
 			return
 		}
 
 		this.syncRenderLayout(this.data.width, this.data.height)
+		if (this.data.src) {
+			this.canvas.visibilityManager.registerVideoElement(this.data.id, this.data.src)
+		}
 	}
 
 	update(newData: VideoElementData): boolean {
@@ -610,6 +633,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		if (srcChanged) {
 			this.cancelScheduledPreviewRefresh()
 			this.previewLoadToken += 1
+			this.previewLoadInFlightPath = undefined
 			this.inlinePlaybackRequestToken += 1
 			this.inlinePlaybackPromise = undefined
 			this.isLoadingState = false
@@ -618,7 +642,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.releasePlaybackConsumers()
 			this.renderer.resetPreview()
 			if (newData.src) {
-				this.loadPreviewFromPath(newData.src)
+				this.canvas.visibilityManager.updateVideoElement(this.data.id, newData.src)
+			} else {
+				this.canvas.visibilityManager.unregisterVideoElement(this.data.id)
 			}
 		}
 
@@ -642,12 +668,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		const playerGroup = this.renderer.createPlayerNode(width, height, this.canvas, {
 			showLoadingOverlay: this.isInlinePlaybackPending || this.isInlinePlaybackRefreshing,
-			onFullscreenClick: () => {
-				this.canvas.eventEmitter.emit({
-					type: "element:video:fullscreenClick",
-					data: { elementId: this.data.id },
-				})
-			},
 			onPlayButtonClick: () => {
 				this.canvas.videoPlaybackInteractionManager.toggleElementPlayback(
 					this.data.id,
@@ -666,9 +686,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		this.createBorder(group, width, height, false)
-		if (this.shouldShowInfoButton()) {
-			this.createInfoButton(group, width, height)
-		}
+		this.createCornerActions(group, width, height, { fullscreen: true })
 		this.setupContentUpdateListener(group)
 	}
 
@@ -726,9 +744,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 					)
 				}
 
-				if (this.shouldShowInfoButton()) {
-					this.createInfoButton(group, width, height)
-				}
+				this.createCornerActions(group, width, height)
 			},
 		})
 		this.setupContentUpdateListener(group)
@@ -779,15 +795,49 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 	}
 
-	private createInfoButton(group: Konva.Group, width: number, height: number): void {
-		this.infoButtonDecorator = new InfoButtonDecorator(group, {
+	private createCornerActions(
+		group: Konva.Group,
+		width: number,
+		height: number,
+		options?: { fullscreen?: boolean },
+	): void {
+		const actions: ElementCornerActionConfig[] = []
+		if (this.shouldShowInfoButton()) {
+			actions.push({
+				key: "info",
+				placement: "top-right",
+				icon: "info",
+				onClick: () => {
+					this.canvas.eventEmitter.emit({
+						type: "element:video:infoButtonClick",
+						data: { elementId: this.data.id },
+					})
+				},
+			})
+		}
+		if (options?.fullscreen && this.shouldShowFullscreenButton()) {
+			actions.push({
+				key: "fullscreen",
+				placement: "bottom-right",
+				icon: "fullscreen",
+				onClick: () => {
+					this.canvas.eventEmitter.emit({
+						type: "element:video:fullscreenClick",
+						data: { elementId: this.data.id },
+					})
+				},
+			})
+		}
+		if (!actions.length) return
+
+		this.cornerActionsDecorator = new ElementCornerActionsDecorator(group, {
 			elementId: this.data.id,
 			canvas: this.canvas,
 			width,
 			height,
-			infoClickEventType: "element:video:infoButtonClick",
+			actions,
 		})
-		this.infoButtonDecorator.create()
+		this.cornerActionsDecorator.create()
 	}
 
 	private createRenderGroup(width: number, height: number): Konva.Group {
@@ -864,11 +914,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			status === GenerationStatus.Processing ||
 			this.isVideoGenerationPending()
 		) {
-			const isGenerating =
-				!!this.data.generateVideoRequest ||
-				this.isGenerating ||
-				(status === GenerationStatus.Processing &&
-					!this.canvas.elementManager.isTemporary(this.data.id))
+			const isGenerating = this.isActiveGenerationPlaceholder()
 
 			return {
 				stage: isGenerating ? "generating" : "uploading",
@@ -884,6 +930,21 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			placeholderMode: "empty",
 			text: this.getText("video.empty", "请发送生成视频的指令"),
 		}
+	}
+
+	private hasActiveVideoGenerationTask(): boolean {
+		return !!this.data.generateVideoRequest?.video_id
+	}
+
+	private isActiveGenerationPlaceholder(): boolean {
+		if (this.hasActiveVideoGenerationTask() || this.isGenerating) {
+			return true
+		}
+
+		return (
+			this.data.status === GenerationStatus.Processing &&
+			!this.canvas.elementManager.isTemporary(this.data.id)
+		)
 	}
 
 	private syncInlinePlaybackStateSubscription(): void {
@@ -908,6 +969,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	private shouldShowInfoButton(): boolean {
 		return !!this.data.generateVideoRequest
+	}
+
+	private shouldShowFullscreenButton(): boolean {
+		return !!this.data.src
 	}
 
 	private setupContentUpdateListener(group: Konva.Group): void {
@@ -951,9 +1016,13 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				child.cornerRadius(VIDEO_CONFIG.CORNER_RADIUS)
 			}
 
-			if (child instanceof Konva.Image && !child.name()) {
-				child.width(width)
-				child.height(height)
+			if (child instanceof Konva.Image) {
+				if (child.name() === "background") {
+					RenderUtils.updateBackgroundImageLayout(child, width, height)
+				} else if (!child.name()) {
+					child.width(width)
+					child.height(height)
+				}
 			}
 		})
 
@@ -964,8 +1033,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.updatePlaceholderContentLayout(this.node, width, height)
 		this.renderer.updatePlayerLayout(this.node, width, height)
 		this.borderDecorator?.updateSize(width, height)
-		this.infoButtonDecorator?.updateConfig({ width, height })
+		this.cornerActionsDecorator?.updateConfig({ width, height })
 		this.node.getLayer()?.batchDraw()
+	}
+
+	public override onTransformResize(width: number, height: number): void {
+		this.syncRenderLayout(width, height)
 	}
 
 	/** 新建元素时的默认宽高（可被工具传入的预览尺寸覆盖） */

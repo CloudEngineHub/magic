@@ -37,6 +37,7 @@ enum AiAbilityCode: string
     case ImageRemoveBackground = 'image_remove_background'; // 去背景
     case ImageEraser = 'image_eraser';                     // 橡皮擦
     case ImageExpand = 'image_expand';                     // 扩图
+    case ImagePromptCompletion = 'image_prompt_completion'; // 生图提示词补全
 
     /**
      * 获取能力名称.
@@ -68,6 +69,7 @@ enum AiAbilityCode: string
             self::ImageRemoveBackground => '去背景',
             self::ImageEraser => '橡皮擦',
             self::ImageExpand => '扩图',
+            self::ImagePromptCompletion => '生图提示词补全',
             default => 'Unknown',
         };
     }
@@ -102,6 +104,7 @@ enum AiAbilityCode: string
             self::ImageRemoveBackground => '本能力覆盖平台所有图片去背景的应用场景，通过AI技术自动识别主体并去除图片背景，保留主体完整边缘。',
             self::ImageEraser => '本能力覆盖平台所有图片橡皮擦的应用场景，通过AI技术根据标记区域擦除图片内容，并以自然背景无缝填充。',
             self::ImageExpand => '本能力覆盖平台所有图片扩图的应用场景，通过AI技术将图片向外延伸，以符合原图风格、光照和透视的内容填充扩展区域。',
+            self::ImagePromptCompletion => '本能力覆盖平台所有生图提示词补全场景，根据用户文本和可选参考图生成可直接用于生图的提示词。',
             default => 'Unknown',
         };
     }

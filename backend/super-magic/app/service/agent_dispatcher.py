@@ -9,6 +9,15 @@ import importlib.metadata
 import inspect
 
 from app.core.context.agent_context import AgentContext
+from app.core.context.execution_source import (
+    ASK_USER_POLICY_HORIZON_SOURCE,
+    EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY,
+    build_ask_user_policy_horizon_message,
+    is_ask_user_allowed_source,
+    remove_execution_source_from_dynamic_config,
+    resolve_execution_source,
+    stamp_execution_source,
+)
 from app.core.entity.final_task_state import FinalTaskStateCode, build_final_task_state
 from app.core.models.media_model import ImageModelSpec, VideoModelSpec
 from app.core.models.model_selection_policy import ModelSelectionInput, ModelSelectionPolicy
@@ -153,6 +162,7 @@ class AgentDispatcher(Base):
         """
         if self.agent_context.get_init_client_message() is not None:
             logger.info("agent_context 已存在客户端初始化消息，跳过文件加载")
+            self._schedule_initial_cli_status_detection()
             return True
 
         try:
@@ -176,12 +186,7 @@ class AgentDispatcher(Base):
         logger.info("开始工作区初始化流程")
 
         await HomePersistenceService.initialize_from_environment()
-        try:
-            from app.service.cli_status import CliStatusFactory
-
-            CliStatusFactory.schedule_initial_detection(self.agent_context)
-        except Exception as e:
-            logger.warning(f"CLI 状态后台检测启动失败，继续初始化流程: {e}")
+        self._schedule_initial_cli_status_detection()
 
         # ========== 配置更新阶段 - 每次都执行 ==========
         # 保存初始化消息到文件
@@ -218,6 +223,7 @@ class AgentDispatcher(Base):
                 logger.info(f"从 metadata 设置组织编码: {init_message.metadata.organization_code}")
 
             logger.info(f"init_message.metadata.language: {init_message.metadata.language}")
+
             # 设置用户语言
             if init_message.metadata.language:
                 i18n.set_language(init_message.metadata.language)
@@ -283,6 +289,15 @@ class AgentDispatcher(Base):
                 logger.info("工作区初始化完成，标记 init 事件已发送（非预启动场景）")
             else:
                 logger.info("工作区初始化完成")
+
+    def _schedule_initial_cli_status_detection(self) -> None:
+        """调度 CLI 状态探测，失败不影响主流程。"""
+        try:
+            from app.service.cli_status import CliStatusFactory
+
+            CliStatusFactory.schedule_initial_detection(self.agent_context)
+        except Exception as e:
+            logger.warning(f"CLI 状态后台检测启动失败，继续初始化流程: {e}")
 
     async def switch_agent(self, agent_mode: Union[AgentMode, str], agent_code: str = None):
         """
@@ -359,11 +374,23 @@ class AgentDispatcher(Base):
         """
         await self.agent_service.run_agent(agent=agent)
 
+    def _invalidate_cached_crew_agent(self, agent_code: str, reason: str) -> None:
+        """Drop runtime caches that depend on the compiled crew agent file."""
+        from app.core.skill_utils.manager import GlobalSkillManager
+
+        removed = self.agents.pop(agent_code, None) is not None
+        GlobalSkillManager.reset()
+        logger.info(
+            f"Invalidated crew runtime cache: agent_code={agent_code}, "
+            f"reason={reason}, removed_agent={removed}"
+        )
+
     async def _prepare_crew_agent(self, agent_code: str) -> None:
         """Crew 运行时准备：按需下载定义文件、编译 .agent、设置当前会话的 AgentProfile。"""
         from app.path_manager import PathManager
         from app.service.crew_downloader import CrewDownloader
         from app.service.crew_agent_compiler import CrewAgentCompiler
+        from app.service.crew_agent_cache_manager import CrewAgentCacheManager
         from app.core.entity.agent_profile import AgentProfile
         from app.utils.async_file_utils import async_read_markdown, async_exists
 
@@ -371,19 +398,33 @@ class AgentDispatcher(Base):
         output_agent_file = PathManager.get_compiled_agent_file(agent_code)
         identity_file = PathManager.get_crew_identity_file(agent_code)
         compiler = CrewAgentCompiler()
+        cache_manager = CrewAgentCacheManager()
 
         if await async_exists(output_agent_file):
-            logger.info(f"Crew .agent already exists, skip download/compile: {output_agent_file}")
             if not await async_exists(identity_file):
                 logger.warning(f"IDENTITY.md not found for existing crew agent, skip profile setup: {identity_file}")
                 return
-            identity_meta = (await async_read_markdown(identity_file)).meta
+            cache_state = await cache_manager.evaluate_cache(agent_code, crew_dir)
+            if cache_state.stale:
+                logger.info(
+                    f"Crew source cache stale, recompile: agent_code={agent_code}, "
+                    f"reason={cache_state.reason}, file_count={cache_state.source.file_count}"
+                )
+                await cache_manager.clear_compiled_cache(agent_code)
+                self._invalidate_cached_crew_agent(agent_code, cache_state.reason)
+                identity_meta = await compiler.compile(agent_code, crew_dir)
+                await cache_manager.write_manifest(agent_code, crew_dir, cache_state.source)
+            else:
+                logger.info(f"Crew .agent cache fresh, skip download/compile: {output_agent_file}")
+                identity_meta = (await async_read_markdown(identity_file)).meta
         else:
             if not await async_exists(identity_file):
                 logger.info(f"Crew files not found locally, downloading: {agent_code}")
                 downloader = CrewDownloader()
                 await downloader.download_and_extract(agent_code, crew_dir)
+            self._invalidate_cached_crew_agent(agent_code, "compiled_cache_missing")
             identity_meta = await compiler.compile(agent_code, crew_dir)
+            await cache_manager.write_manifest(agent_code, crew_dir)
 
         name        = identity_meta.get("name", "")
         role        = identity_meta.get("role", "")
@@ -529,6 +570,7 @@ class AgentDispatcher(Base):
         last_dc = dict(last.get("dynamic_config") or {})
         last_dc.pop("image_model", None)
         last_dc.pop("video_model", None)
+        last_dc = remove_execution_source_from_dynamic_config(last_dc)
         current_dc = message.dynamic_config or {}
         if last_dc:
             message.dynamic_config = {**last_dc, **current_dc}
@@ -558,6 +600,23 @@ class AgentDispatcher(Base):
             await async_write_json(self._last_dispatch_message_file(), merged, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f"[AgentDispatcher] 保存 dispatch 消息快照失败，忽略: {e}")
+
+    def _apply_execution_source(self, message: ChatClientMessage) -> None:
+        """Resolve and publish the current run source to AgentContext and horizon."""
+        source = resolve_execution_source(message)
+        stamp_execution_source(message, source)
+        self.agent_context.set_execution_source(source)
+
+        if is_ask_user_allowed_source(source):
+            return
+
+        try:
+            self.agent_context.horizon.push_notification(
+                ASK_USER_POLICY_HORIZON_SOURCE,
+                build_ask_user_policy_horizon_message(source),
+            )
+        except Exception as e:
+            logger.warning(f"[AgentDispatcher] 推送 ask_user 来源策略到 horizon 失败: {e}")
 
     @staticmethod
     def _remove_model_selection_fields(snapshot: Dict) -> Dict:
@@ -711,6 +770,7 @@ class AgentDispatcher(Base):
         if message.agent_mode is None:
             message.agent_mode = AgentMode.GENERAL
 
+        self._apply_execution_source(message)
         self.agent_context.set_chat_client_message(message)
 
         # Extract agent_code for crew agent dispatching

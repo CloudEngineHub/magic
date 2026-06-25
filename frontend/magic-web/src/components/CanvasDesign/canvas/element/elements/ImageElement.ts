@@ -21,14 +21,22 @@ import { resolveCanonicalResourcePath } from "../../utils/pathUtils"
 import type { ResourceLoadFailureReason } from "../../utils/resourceLoadFailure"
 import { TransformBehavior } from "../../interaction/TransformManager"
 import type { Canvas } from "../../Canvas"
-import type { ImageSource, ImageInfo, LoadedResource } from "../../utils/ImageResourceManager"
+import type {
+	ImageSource,
+	ImageInfo,
+	LoadedResource,
+	ImageResourceVariant,
+} from "../../utils/ImageResourceManager"
 import { getPersistedSourceCrop } from "../../utils/imageCropUtils"
 import { getImageSourceDimensions } from "../../utils/imageSourceUtils"
 import { IMAGE_CONFIG, COLORS } from "./ImageElement.config"
 import { ImageStaticLoader } from "../../utils/ImageStaticLoader"
 import { RenderUtils } from "../../utils/RenderUtils"
 import { BorderDecorator } from "../decorators/BorderDecorator"
-import { InfoButtonDecorator } from "../decorators/InfoButtonDecorator"
+import {
+	ElementCornerActionsDecorator,
+	type ElementCornerActionConfig,
+} from "../decorators/ElementCornerActionsDecorator"
 import { ImagePollingManager } from "../../utils/ImagePollingManager"
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
 import type { TransformContext } from "../BaseElement"
@@ -38,7 +46,10 @@ import {
 	createHighImageTaskMeta,
 	createRemoveBackgroundTaskMeta,
 	getImageGenerationTaskMeta,
+	isBatchImageGenerationTaskMeta,
 } from "../../utils/imageGenerationTaskMeta"
+
+const IMAGE_CONTENT_NODE_NAME = "image-content"
 
 /**
  * 图片元素类
@@ -48,13 +59,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private imageLoader = new ImageStaticLoader()
 	private pollingManager: ImagePollingManager
 	private borderDecorator?: BorderDecorator
-	private infoButtonDecorator?: InfoButtonDecorator
+	private cornerActionsDecorator?: ElementCornerActionsDecorator
 
 	// 生成相关
 	private isGenerating: boolean = false
 
 	// 渲染相关
-	private backgroundNode?: Konva.Image
 	private isLoadingState: boolean = false // 加载中状态（图片已生成，等待 ossSrc）
 	private isErrorState: boolean = false
 	private contentGroup?: Konva.Group
@@ -62,6 +72,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	// 缓存已加载的图片对象（ImageBitmap | HTMLImageElement，由 ImageResourceManager 统一管理）
 	private loadedImage?: ImageSource
+	private loadedImageVariant?: ImageResourceVariant
+	private loadedImageSourceWidth?: number
+	private loadedImageSourceHeight?: number
+	/** 当前视口调度希望这个元素显示的资源等级；用于允许缩小时主动降级 */
+	private targetDisplayResourceVariant?: ImageResourceVariant
 	/** 从 resource:image:loaded 事件获取的 ossSrc */
 	private storedOssSrc: string | null = null
 	/** 从 resource:image:loaded 事件获取的 imageInfo */
@@ -77,6 +92,30 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	// resource:image:loaded / resource:image:load-failed 监听器
 	private resourceLoadedHandler?: (event: {
 		data: { path: string; resource: LoadedResource }
+	}) => void
+	private resourceDisplayTargetHandler?: (event: {
+		data: {
+			elementId: string
+			path: string
+			variant: ImageResourceVariant
+			reason: string
+		}
+	}) => void
+	private resourceDisplayLoadedHandler?: (event: {
+		data: {
+			elementId: string
+			path: string
+			resource: LoadedResource
+			reason: string
+		}
+	}) => void
+	private resourceWillCloseHandler?: (event: {
+		data: {
+			path?: string
+			variant: ImageResourceVariant
+			image: ImageSource
+			reason: string
+		}
 	}) => void
 	private resourceLoadFailedHandler?: (event: {
 		data: { path: string; reason?: ResourceLoadFailureReason }
@@ -144,18 +183,23 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			}
 		}
 
-		// 有 src：直接通过 ImageResourceManager 加载
+		// 有 src：先监听资源事件，实际加载交给 CanvasVisibilityManager 调度
 		if (this.data.src) {
-			this.loadImageFromPath(this.data.src)
 			this.setupResourceLoadedListener()
 		}
 		// 没有 src 但有 generateImageRequest：启动轮询检查生成结果
 		else if (this.data.generateImageRequest?.image_id) {
 			this.createOssSrcPromise()
 			this.pollingManager.start()
-		} else if (this.getImageGenerationTaskMeta()?.image_id) {
-			this.createOssSrcPromise()
-			this.pollingManager.start()
+		} else {
+			const imageGenerationTaskMeta = this.getImageGenerationTaskMeta()
+			if (
+				imageGenerationTaskMeta?.image_id &&
+				!isBatchImageGenerationTaskMeta(imageGenerationTaskMeta)
+			) {
+				this.createOssSrcPromise()
+				this.pollingManager.start()
+			}
 		}
 	}
 
@@ -167,8 +211,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.removeContentUpdateListener()
 		this.borderDecorator?.destroy()
 		this.borderDecorator = undefined
-		this.infoButtonDecorator?.destroy()
-		this.infoButtonDecorator = undefined
+		this.cornerActionsDecorator?.destroy()
+		this.cornerActionsDecorator = undefined
 
 		// 调用父类的 rerender
 		return super.rerender()
@@ -178,20 +222,146 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 销毁元素时清理资源
 	 */
 	override destroy(): void {
+		this.canvas.visibilityManager.unregisterImageElement(this.data.id)
 		this.removeResourceLoadedListener()
 		this.removeCropEventListeners()
 		this.removeRetryEditingListeners()
 		this.pollingManager.destroy()
 		this.borderDecorator?.destroy()
-		this.infoButtonDecorator?.destroy()
+		this.cornerActionsDecorator?.destroy()
 		this.removeContentUpdateListener()
 		// 清理缓存的图片对象
-		this.loadedImage = undefined
+		this.clearLoadedImageReference()
 		// 清理 ossSrc Promise
 		this.ossSrcPromise = undefined
 		this.ossSrcResolve = undefined
 		this.ossSrcReject = undefined
 		super.destroy()
+	}
+
+	private clearLoadedImageReference(): void {
+		this.loadedImage = undefined
+		this.loadedImageVariant = undefined
+		this.loadedImageSourceWidth = undefined
+		this.loadedImageSourceHeight = undefined
+	}
+
+	private applyResourceMetadata(resource: LoadedResource): void {
+		this.storedOssSrc = resource.ossSrc
+		this.storedImageInfo = resource.imageInfo
+		this.isResourceLoading = false
+	}
+
+	private applyResourceToView(resource: LoadedResource): void {
+		this.loadedImage = resource.image
+		this.loadedImageVariant = resource.variant
+		this.loadedImageSourceWidth = resource.sourceWidth
+		this.loadedImageSourceHeight = resource.sourceHeight
+		this.applyResourceMetadata(resource)
+	}
+
+	private getMountedImageContentNode(): Konva.Image | null {
+		if (!(this.node instanceof Konva.Group)) return null
+
+		const namedNode = this.node.findOne(`.${IMAGE_CONTENT_NODE_NAME}`)
+		if (namedNode instanceof Konva.Image) {
+			return namedNode
+		}
+
+		return (
+			this.node.children?.find((child): child is Konva.Image => {
+				if (!(child instanceof Konva.Image)) return false
+				const name = child.name()
+				return !name || name === IMAGE_CONTENT_NODE_NAME
+			}) ?? null
+		)
+	}
+
+	private syncMountedImageContentNodeWithLoadedResource(): void {
+		const imageNode = this.getMountedImageContentNode()
+		if (!imageNode) return
+
+		if (!this.loadedImage) {
+			imageNode.destroy()
+			this.node?.getLayer()?.batchDraw()
+			return
+		}
+
+		imageNode.image(this.loadedImage)
+		imageNode.width(this.data.width ?? imageNode.width())
+		imageNode.height(this.data.height ?? imageNode.height())
+		imageNode.crop(
+			this.canvas.cropManager.getCroppingElementId() === this.data.id
+				? undefined
+				: this.getSourceCrop(this.loadedImage),
+		)
+		imageNode.getLayer()?.batchDraw()
+	}
+
+	private getVariantViewRank(variant: ImageResourceVariant | undefined): number {
+		if (variant === "full") return 2
+		if (variant === "preview") return 1
+		if (variant === "low") return 0
+		return 0
+	}
+
+	private shouldApplyResourceToView(resource: LoadedResource): boolean {
+		if (!this.loadedImage) return true
+		if (this.loadedImageVariant === "full" && resource.variant !== "full") return false
+		const targetVariant = this.targetDisplayResourceVariant
+		if (targetVariant) {
+			const resourceRank = this.getVariantViewRank(resource.variant)
+			const targetRank = this.getVariantViewRank(targetVariant)
+			if (resource.variant === targetVariant) return true
+			if (resourceRank > targetRank) return false
+		}
+		return (
+			this.getVariantViewRank(resource.variant) >=
+			this.getVariantViewRank(this.loadedImageVariant)
+		)
+	}
+
+	public getDisplayResourceVariant(): ImageResourceVariant | undefined {
+		return this.loadedImageVariant
+	}
+
+	private getDisplayTargetFallbackVariants(
+		targetVariant: ImageResourceVariant,
+	): ImageResourceVariant[] {
+		if (targetVariant === "low") return ["low", "preview"]
+		if (targetVariant === "preview") return ["preview", "low"]
+		return ["preview", "low"]
+	}
+
+	private peekExactResourceVariant(variant: ImageResourceVariant): LoadedResource | null {
+		const src = this.data.src
+		if (!src) return null
+		const resource = this.canvas.imageResourceManager.peekResource(src, { variant })
+		return resource?.variant === variant ? resource : null
+	}
+
+	private applyDisplayTargetVariant(variant: ImageResourceVariant): void {
+		this.targetDisplayResourceVariant = variant
+		if (this.loadedImageVariant === "full") return
+
+		const targetResource = this.peekExactResourceVariant(variant)
+		if (!targetResource) return
+		if (this.loadedImageVariant === targetResource.variant) {
+			return
+		}
+
+		this.applyResourceToView(targetResource)
+		this.isResourceLoading = false
+		this.isErrorState = false
+		this.syncMountedImageContentNodeWithLoadedResource()
+		this.rerenderWhenTransformIdle()
+	}
+
+	override onMounted(): void {
+		super.onMounted()
+		if (this.data.src) {
+			this.canvas.visibilityManager.registerImageElement(this.data.id, this.data.src)
+		}
 	}
 
 	/**
@@ -540,46 +710,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return getImageGenerationTaskMeta(this.data)
 	}
 
-	private retryImageGenerationTask(taskMeta: ImageGenerationTaskMeta): void {
-		if (taskMeta.type === ImageGenerationTaskTypeMap.High) {
-			this.generateHightImage({
-				file_path: taskMeta.file_path,
-				size: taskMeta.size,
-				reference_image_options: taskMeta.reference_image_options,
-			})
-			return
-		}
-
-		if (taskMeta.type === ImageGenerationTaskTypeMap.RemoveBackground) {
-			this.removeBackground({
-				file_path: taskMeta.file_path,
-				size: taskMeta.size,
-				reference_image_options: taskMeta.reference_image_options,
-			})
-			return
-		}
-
-		if (taskMeta.type === ImageGenerationTaskTypeMap.Eraser) {
-			this.eraser({
-				file_path: taskMeta.file_path,
-				mark_path: taskMeta.mark_path,
-				size: taskMeta.size,
-				reference_image_options: taskMeta.reference_image_options,
-			})
-			return
-		}
-
-		if (taskMeta.type === ImageGenerationTaskTypeMap.Expand) {
-			this.expandImage({
-				file_path: taskMeta.file_path,
-				canvas_path: taskMeta.canvas_path,
-				mask_path: taskMeta.mask_path,
-				size: taskMeta.size,
-				reference_image_options: taskMeta.reference_image_options,
-			})
-		}
-	}
-
 	/**
 	 * 获取图片生成状态
 	 */
@@ -607,6 +737,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 会触发 ossSrcResolve 并启动预加载
 	 */
 	public setOssSrc(ossSrc: string): void {
+		this.storedOssSrc = ossSrc
+		this.imageLoadFailureReason = null
+		this.isErrorState = false
+		this.lastAppliedLoadFailureSignature = null
+
 		// resolve ossSrc Promise
 		if (this.ossSrcResolve) {
 			this.ossSrcResolve(ossSrc)
@@ -624,31 +759,43 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			type: "element:image:ossSrcReady",
 			data: { elementId: this.data.id },
 		})
+		this.rerenderWhenTransformIdle()
 	}
 
 	/**
 	 * 从 resource:image:loaded 事件应用资源
 	 */
 	private applyResourceFromEvent(resource: LoadedResource): void {
-		this.loadedImage = resource.image
-		this.storedOssSrc = resource.ossSrc
-		this.storedImageInfo = resource.imageInfo
-		this.isResourceLoading = false
-		this.lastAppliedLoadFailureSignature = null
+		if (resource.variant === "full" && !resource.isFullSize) {
+			this.applyResourceMetadata(resource)
+			return
+		}
 
-		if (this.ossSrcResolve) {
+		const shouldApply = this.shouldApplyResourceToView(resource)
+		if (!shouldApply) {
+			this.applyResourceMetadata(resource)
+			return
+		}
+
+		this.applyResourceToView(resource)
+		this.lastAppliedLoadFailureSignature = null
+		this.syncMountedImageContentNodeWithLoadedResource()
+
+		if ((resource.variant === "preview" || resource.variant === "full") && this.ossSrcResolve) {
 			this.ossSrcResolve(resource.ossSrc)
 			this.ossSrcResolve = undefined
 			this.ossSrcReject = undefined
 			this.ossSrcPromise = undefined
 		}
 
-		this.canvas.eventEmitter.emit({
-			type: "element:image:ossSrcReady",
-			data: { elementId: this.data.id },
-		})
+		if (resource.variant === "preview" || resource.variant === "full") {
+			this.canvas.eventEmitter.emit({
+				type: "element:image:ossSrcReady",
+				data: { elementId: this.data.id },
+			})
+		}
 
-		this.rerender()
+		this.rerenderWhenTransformIdle()
 	}
 
 	/**
@@ -662,16 +809,69 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.lastAppliedLoadFailureSignature === currentFailureSignature
 		const isStableErrorState = this.isErrorState && !this.isResourceLoading
 
-		this.loadedImage = undefined
+		this.clearLoadedImageReference()
 		this.isResourceLoading = false
 		this.isErrorState = true
 		this.lastAppliedLoadFailureSignature = currentFailureSignature
+		this.syncMountedImageContentNodeWithLoadedResource()
 
 		if (isSameFailureAsLastApplied && isStableErrorState) {
 			return
 		}
 
-		this.rerender()
+		this.rerenderWhenTransformIdle()
+	}
+
+	private getResourceReplacementBeforeClose(
+		closingImage: ImageSource,
+		closingVariant: ImageResourceVariant,
+	): LoadedResource | null {
+		if (!this.data.src) return null
+
+		const targetVariant =
+			this.targetDisplayResourceVariant ??
+			(closingVariant === "full" ? "preview" : closingVariant)
+		const candidates = [
+			targetVariant,
+			closingVariant,
+			...this.getDisplayTargetFallbackVariants(targetVariant),
+			"preview",
+			"low",
+		] satisfies ImageResourceVariant[]
+		const visited = new Set<ImageResourceVariant>()
+
+		for (const variant of candidates) {
+			if (variant === "full" || visited.has(variant)) continue
+			visited.add(variant)
+			const resource = this.peekExactResourceVariant(variant)
+			if (resource && resource.image !== closingImage) {
+				return resource
+			}
+		}
+
+		return null
+	}
+
+	private handleImageSourceWillClose(
+		closingImage: ImageSource,
+		closingVariant: ImageResourceVariant,
+	): void {
+		if (this.loadedImage !== closingImage) return
+
+		const replacementResource = this.getResourceReplacementBeforeClose(
+			closingImage,
+			closingVariant,
+		)
+		if (replacementResource) {
+			this.applyResourceToView(replacementResource)
+		} else {
+			this.clearLoadedImageReference()
+		}
+
+		this.isResourceLoading = false
+		this.isErrorState = false
+		this.syncMountedImageContentNodeWithLoadedResource()
+		this.rerenderWhenTransformIdle()
 	}
 
 	private getImageLoadErrorText(): string {
@@ -689,23 +889,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	/**
-	 * 触发 path 的图片加载（通过 resource:image:loaded 事件获取完成通知）
-	 */
-	private loadImageFromPath(path: string): void {
-		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
-		if (!getFileInfo) {
-			this.isErrorState = true
-			this.rerender()
-			return
-		}
-
-		this.lastAppliedLoadFailureSignature = null
-		this.isResourceLoading = true
-		this.canvas.imageResourceManager.loadResource(path)
-	}
-
-	/**
-	 * 监听 resource:image:loaded / resource:image:load-failed 事件
+	 * 监听 resource:image:loaded / resource:image:display-loaded / resource:image:load-failed 事件
 	 */
 	private setupResourceLoadedListener(): void {
 		this.removeResourceLoadedListener()
@@ -723,6 +907,25 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.applyResourceFromEvent(data.resource)
 			}
 		}
+		this.resourceDisplayTargetHandler = ({ data }) => {
+			if (
+				data.elementId === this.data.id &&
+				resolveCanonicalResourcePath(data.path, resolveAbs) ===
+					resolveCanonicalResourcePath(path, resolveAbs)
+			) {
+				this.applyDisplayTargetVariant(data.variant)
+			}
+		}
+		this.resourceDisplayLoadedHandler = ({ data }) => {
+			if (
+				data.elementId === this.data.id &&
+				resolveCanonicalResourcePath(data.path, resolveAbs) ===
+					resolveCanonicalResourcePath(path, resolveAbs)
+			) {
+				this.imageLoadFailureReason = null
+				this.applyResourceFromEvent(data.resource)
+			}
+		}
 		this.resourceLoadFailedHandler = ({ data }) => {
 			if (
 				resolveCanonicalResourcePath(data.path, resolveAbs) ===
@@ -732,29 +935,60 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.handleImageLoadFailure()
 			}
 		}
+		this.resourceWillCloseHandler = ({ data }) => {
+			this.handleImageSourceWillClose(data.image, data.variant)
+		}
 		this.canvas.eventEmitter.on("resource:image:loaded", this.resourceLoadedHandler)
+		this.canvas.eventEmitter.on(
+			"resource:image:display-target",
+			this.resourceDisplayTargetHandler,
+		)
+		this.canvas.eventEmitter.on(
+			"resource:image:display-loaded",
+			this.resourceDisplayLoadedHandler,
+		)
+		this.canvas.eventEmitter.on("resource:image:will-close", this.resourceWillCloseHandler)
 		this.canvas.eventEmitter.on("resource:image:load-failed", this.resourceLoadFailedHandler)
 
-		// 同步可能已缓存的资源（如其他消费者已加载，或 memorized 事件尚未匹配）
-		void this.canvas.imageResourceManager.getResource(path).then((resource) => {
-			if (
-				resource &&
-				!this.loadedImage &&
-				resolveCanonicalResourcePath(path, resolveAbs) ===
-					resolveCanonicalResourcePath(this.data.src || "", resolveAbs)
-			) {
-				this.applyResourceFromEvent(resource)
-			}
-		})
+		// 同步可能已缓存的资源；不要在监听阶段触发新加载，否则会绕过可见性调度。
+		const resource =
+			this.canvas.imageResourceManager.peekResource(path, {
+				variant: "preview",
+			}) ??
+			this.canvas.imageResourceManager.peekResource(path, {
+				variant: "low",
+			})
+		if (
+			resource &&
+			!this.loadedImage &&
+			resolveCanonicalResourcePath(path, resolveAbs) ===
+				resolveCanonicalResourcePath(this.data.src || "", resolveAbs)
+		) {
+			this.applyResourceFromEvent(resource)
+		}
 	}
 
 	/**
-	 * 移除 resource:image:loaded / resource:image:load-failed 监听
+	 * 移除 resource:image:loaded / resource:image:display-loaded / resource:image:load-failed 监听
 	 */
 	private removeResourceLoadedListener(): void {
 		if (this.resourceLoadedHandler) {
 			this.canvas.eventEmitter.off("resource:image:loaded", this.resourceLoadedHandler)
 			this.resourceLoadedHandler = undefined
+		}
+		if (this.resourceDisplayTargetHandler) {
+			this.canvas.eventEmitter.off(
+				"resource:image:display-target",
+				this.resourceDisplayTargetHandler,
+			)
+			this.resourceDisplayTargetHandler = undefined
+		}
+		if (this.resourceDisplayLoadedHandler) {
+			this.canvas.eventEmitter.off(
+				"resource:image:display-loaded",
+				this.resourceDisplayLoadedHandler,
+			)
+			this.resourceDisplayLoadedHandler = undefined
 		}
 		if (this.resourceLoadFailedHandler) {
 			this.canvas.eventEmitter.off(
@@ -762,6 +996,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.resourceLoadFailedHandler,
 			)
 			this.resourceLoadFailedHandler = undefined
+		}
+		if (this.resourceWillCloseHandler) {
+			this.canvas.eventEmitter.off("resource:image:will-close", this.resourceWillCloseHandler)
+			this.resourceWillCloseHandler = undefined
 		}
 	}
 
@@ -795,7 +1033,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 使用 ImageResourceManager 加载图片（通过 resource:image:loaded 事件获取完成通知）
 		this.isResourceLoading = true
-		this.canvas.imageResourceManager.loadResource(this.data.src)
+		this.canvas.imageResourceManager.loadResource(this.data.src, {
+			variant: "preview",
+			priority: "critical",
+		})
 	}
 
 	/**
@@ -846,6 +1087,30 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.preloadImageInternal()
 	}
 
+	private isLoadedImageFullSize(): boolean {
+		if (!this.loadedImage || !this.storedImageInfo) return false
+		const sourceWidth = this.loadedImageSourceWidth
+		const sourceHeight = this.loadedImageSourceHeight
+		if (!sourceWidth || !sourceHeight) return false
+		return (
+			Math.abs(sourceWidth - this.storedImageInfo.naturalWidth) <= 1 &&
+			Math.abs(sourceHeight - this.storedImageInfo.naturalHeight) <= 1
+		)
+	}
+
+	private canUseLoadedImageForVariant(variant: ImageResourceVariant): boolean {
+		if (!this.loadedImage) return false
+		if (variant === "low") return true
+		if (variant === "preview") {
+			return (
+				this.loadedImageVariant === "preview" ||
+				this.loadedImageVariant === "full" ||
+				this.isLoadedImageFullSize()
+			)
+		}
+		return this.loadedImageVariant === "full" || this.isLoadedImageFullSize()
+	}
+
 	/**
 	 * 检查图片是否满足生成条件（正在生成中或等待生成结果）
 	 */
@@ -854,14 +1119,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			return true
 		}
 
-		// 有生成请求但还没有 src，说明正在生成中
-		const hasGenerateRequest =
-			!!this.data.generateImageRequest || !!this.getImageGenerationTaskMeta()
+		// 只有仍带任务 id 的请求才代表当前有生成轮询；无 id 的请求仅用于信息展示。
+		const hasActiveGenerationTask = this.hasActiveImageGenerationTask()
 		const hasSrc = !!this.data.src
 		const status = this.data.status
 
-		// 情况1: 有生成请求但还没有 src
-		if (hasGenerateRequest && !hasSrc) {
+		// 情况1: 有生成任务但还没有 src
+		if ((hasActiveGenerationTask || this.isActiveGenerationPlaceholder()) && !hasSrc) {
 			return true
 		}
 
@@ -887,9 +1151,15 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 如果图片正在生成中，会等待生成完成 + ossSrc 换取完成 + 图片加载完成
 	 * @returns Promise<ImageSource | null> - 成功返回图片对象，失败返回 null
 	 */
-	public async getHTMLImageElement(): Promise<ImageSource | null> {
+	public async getHTMLImageElement(options?: {
+		variant?: ImageResourceVariant
+		applyToView?: boolean
+	}): Promise<ImageSource | null> {
+		const variant = options?.variant ?? "full"
+		const applyToView = options?.applyToView ?? variant !== "full"
+
 		// 如果 loadedImage 已加载，直接返回
-		if (this.loadedImage) {
+		if (this.canUseLoadedImageForVariant(variant) && this.loadedImage) {
 			return this.loadedImage
 		}
 
@@ -904,7 +1174,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			try {
 				await this.ossSrcPromise
 				// 如果图片已经加载完成
-				if (this.loadedImage) {
+				if (this.canUseLoadedImageForVariant(variant) && this.loadedImage) {
 					return this.loadedImage
 				}
 			} catch (error) {
@@ -918,15 +1188,68 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (!src) return null
 
 		try {
-			const resource = await this.canvas.imageResourceManager.getResource(src)
+			const resource = await this.canvas.imageResourceManager.getResource(src, { variant })
 			if (resource) {
-				this.loadedImage = resource.image
-				this.storedOssSrc = resource.ossSrc
-				this.storedImageInfo = resource.imageInfo
-				this.isResourceLoading = false
+				if (applyToView) {
+					this.applyResourceToView(resource)
+				} else {
+					this.applyResourceMetadata(resource)
+				}
 				return resource.image
 			}
 			return null
+		} catch (error) {
+			return null
+		}
+	}
+
+	public async getFullHTMLImageElement(options?: {
+		variant?: ImageResourceVariant
+		applyToView?: boolean
+	}): Promise<{ image: ImageSource } | null> {
+		const variant = options?.variant ?? "full"
+		const applyToView = options?.applyToView ?? variant !== "full"
+
+		if (variant !== "full") {
+			const image = await this.getHTMLImageElement({ variant, applyToView })
+			return image ? { image } : null
+		}
+
+		if (this.canUseLoadedImageForVariant(variant) && this.loadedImage) {
+			return { image: this.loadedImage }
+		}
+
+		if (this.isImageGenerationPending()) {
+			if (!this.ossSrcPromise) {
+				this.createOssSrcPromise()
+			}
+
+			try {
+				await this.ossSrcPromise
+				if (this.canUseLoadedImageForVariant(variant) && this.loadedImage) {
+					return { image: this.loadedImage }
+				}
+			} catch (error) {
+				return null
+			}
+		}
+
+		const src = this.data.src
+		if (!src) return null
+
+		try {
+			const resource = await this.canvas.imageResourceManager.getResource(src, { variant })
+			if (!resource) return null
+
+			if (applyToView) {
+				this.applyResourceToView(resource)
+			} else {
+				this.applyResourceMetadata(resource)
+			}
+
+			return {
+				image: resource.image,
+			}
 		} catch (error) {
 			return null
 		}
@@ -966,7 +1289,33 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (crop.width <= 0 || crop.height <= 0) {
 			return undefined
 		}
-		return crop
+
+		if (!image) {
+			return crop
+		}
+
+		const actualDimensions = getImageSourceDimensions(image)
+		if (
+			sourceDimensions.width <= 0 ||
+			sourceDimensions.height <= 0 ||
+			actualDimensions.width <= 0 ||
+			actualDimensions.height <= 0
+		) {
+			return crop
+		}
+
+		const scaleX = actualDimensions.width / sourceDimensions.width
+		const scaleY = actualDimensions.height / sourceDimensions.height
+		if (Math.abs(scaleX - 1) <= 0.001 && Math.abs(scaleY - 1) <= 0.001) {
+			return crop
+		}
+
+		return {
+			x: crop.x * scaleX,
+			y: crop.y * scaleY,
+			width: crop.width * scaleX,
+			height: crop.height * scaleY,
+		}
 	}
 
 	/** 比较持久化 crop 是否一致（用于判断是否需要整节点重渲染） */
@@ -1005,7 +1354,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	): Promise<boolean> {
 		try {
 			// 获取图片元素
-			const img = await this.getHTMLImageElement()
+			const fullImage = await this.getFullHTMLImageElement({ variant: "full" })
+			const img = fullImage?.image
 			if (!img) {
 				return false
 			}
@@ -1165,14 +1515,14 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 有结果且状态是 pending 或 processing
 		if (status === GenerationStatus.Pending || status === GenerationStatus.Processing) {
-			// 区分上传中和生成中
-			if (hasRequest) {
+			// 区分上传中和生成中：历史请求信息不等同于当前任务。
+			if (this.isActiveGenerationPlaceholder()) {
 				const suffix = this.getGeneratingNameSuffix()
 				return `${baseName}${suffix}`
-			} else {
-				const suffix = this.getText("image.nameSuffix.uploading", "(上传中)")
-				return `${baseName}${suffix}`
 			}
+
+			const suffix = this.getText("image.nameSuffix.uploading", "(上传中)")
+			return `${baseName}${suffix}`
 		}
 
 		// 检查是否正在加载图片（ossSrc 存在但图片还在异步加载）
@@ -1306,14 +1656,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 */
 	private getImageLoadState(): {
 		ossSrc: string | null
-		thumbnailAvailable: boolean
 		imageLoaded: boolean
 		isLoading: boolean
 	} {
 		if (!this.data.src) {
 			return {
 				ossSrc: null,
-				thumbnailAvailable: false,
 				imageLoaded: false,
 				isLoading: false,
 			}
@@ -1321,7 +1669,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		return {
 			ossSrc: this.storedOssSrc,
-			thumbnailAvailable: !!this.storedImageInfo, // 主图加载后 thumbnail 一并返回
 			imageLoaded: !!this.loadedImage,
 			isLoading: this.isResourceLoading,
 		}
@@ -1342,12 +1689,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 从 ImageResourceManager 实时查询状态
 			const loadState = this.getImageLoadState()
 
-			// 主图已加载，直接渲染主图
-			if (loadState.imageLoaded && loadState.ossSrc && this.data.src) {
+			// 主图已加载，直接渲染主图。缩放切档期间会继续显示已有图，
+			// 此时即使 oss 元数据暂时不在当前 slot 上，也不能回退到 loading 占位。
+			if (loadState.imageLoaded && this.data.src) {
 				return this.renderImage()
 			}
-
-			// 其他情况（ossSrc 未换取、图片加载中、缩略图可用但主图未加载）都显示加载中
 			return this.renderLoadingPlaceholder()
 		}
 
@@ -1405,16 +1751,17 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 如果 src 变化，重新加载图片并设置/移除监听
 		if (srcChanged) {
-			this.loadedImage = undefined
+			this.clearLoadedImageReference()
 			this.storedOssSrc = null
 			this.storedImageInfo = undefined
 			this.isResourceLoading = false
 			this.lastAppliedLoadFailureSignature = null
 			if (newData.src) {
-				this.loadImageFromPath(newData.src)
 				this.setupResourceLoadedListener()
+				this.canvas.visibilityManager.updateImageElement(this.data.id, newData.src)
 			} else {
 				this.removeResourceLoadedListener()
+				this.canvas.visibilityManager.unregisterImageElement(this.data.id)
 			}
 		}
 
@@ -1436,58 +1783,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			// 更新内部节点的尺寸
 			if (newData.width !== undefined && newData.height !== undefined) {
-				const newWidth = newData.width
-				const newHeight = newData.height
-
-				// 更新所有子节点的尺寸
-				this.node.children?.forEach((child) => {
-					const childName = child.name()
-
-					if (child instanceof Konva.Image) {
-						if (!childName) {
-							child.width(newWidth)
-							child.height(newHeight)
-						}
-					} else if (child instanceof Konva.Rect) {
-						if (
-							childName === "hit-area" ||
-							childName === "background" ||
-							childName === "decorator-border"
-						) {
-							child.width(newWidth)
-							child.height(newHeight)
-						}
-					}
-				})
-
-				// 更新背景节点
-				if (this.backgroundNode) {
-					this.backgroundNode.width(newWidth)
-					this.backgroundNode.height(newHeight)
-				}
-
-				// 更新内容组的缩放
-				if (this.contentGroup) {
-					this.updateContentScale()
-				}
-
-				// 更新边框
-				if (this.borderDecorator) {
-					this.borderDecorator.updateSize(newWidth, newHeight)
-				}
-
-				// 更新 info 按钮
-				if (this.infoButtonDecorator) {
-					this.infoButtonDecorator.updateConfig({ width: newWidth, height: newHeight })
-				}
-
-				// 更新裁剪区域
-				this.node.clipFunc((ctx) => {
-					ctx.rect(0, 0, newWidth, newHeight)
-				})
-
-				// 触发重绘
-				this.node.getLayer()?.batchDraw()
+				this.syncImageLayout(newData.width, newData.height)
 			}
 		}
 
@@ -1531,9 +1827,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				backgroundImage,
 			)
 
-			// 保存背景节点引用
-			this.backgroundNode = backgroundNode
-
 			// 创建居中的图标和文本
 			RenderUtils.createCenteredIconText(group, width, height, {
 				text: this.getText("image.empty", "请发送生成图像的指令"),
@@ -1547,10 +1840,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			})
 
 			// 创建边框
-			this.createBorder(group, width, height, false)
-			if (this.shouldShowInfoButton()) {
-				this.createInfoButton(group, width, height)
-			}
+			this.createBorder(group, width, height, false, backgroundNode)
+			this.createCornerActions(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -1584,14 +1875,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		// 创建事件代理 hit 节点
 		RenderUtils.createHitNode(group, width, height)
 
-		// 区分上传中和不同任务类型的生成中
-		const hasRequest = !!this.data.generateImageRequest || !!this.getImageGenerationTaskMeta()
-		// 如果是 processing 状态且不是临时元素，视为生成中（即使没有生成请求信息）
-		const isGenerating =
-			hasRequest ||
-			this.isGenerating ||
-			(this.data.status === GenerationStatus.Processing &&
-				!this.canvas.elementManager.isTemporary(this.data.id))
+		// 区分上传中和不同任务类型的生成中：历史请求信息不等同于当前任务。
+		const isGenerating = this.isActiveGenerationPlaceholder()
 		const displayText = isGenerating
 			? this.getGeneratingPlaceholderText()
 			: this.getText("image.uploading", "正在上传中...")
@@ -1613,15 +1898,30 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.setupContentUpdateListener(group)
 			})
 
-			// 创建边框
 			this.createBorder(group, width, height, true)
-			if (this.shouldShowInfoButton()) {
-				this.createInfoButton(group, width, height)
-			}
+			this.createCornerActions(group, width, height)
 		})
 
 		this.finalizeNode(group)
 		return group
+	}
+
+	private hasActiveImageGenerationTask(): boolean {
+		return (
+			!!this.data.generateImageRequest?.image_id ||
+			!!this.getImageGenerationTaskMeta()?.image_id
+		)
+	}
+
+	private isActiveGenerationPlaceholder(): boolean {
+		if (this.hasActiveImageGenerationTask() || this.isGenerating) {
+			return true
+		}
+
+		return (
+			this.data.status === GenerationStatus.Processing &&
+			!this.canvas.elementManager.isTemporary(this.data.id)
+		)
 	}
 
 	private getGeneratingPlaceholderText(): string {
@@ -1710,11 +2010,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.setupContentUpdateListener(group)
 			})
 
-			// 创建边框
 			this.createBorder(group, width, height, true)
-			if (this.shouldShowInfoButton()) {
-				this.createInfoButton(group, width, height)
-			}
+			this.createCornerActions(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -1764,6 +2061,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			height: height,
 			x: 0,
 			y: 0,
+			name: IMAGE_CONTENT_NODE_NAME,
 			listening: false,
 			crop: isCropping ? undefined : crop,
 		})
@@ -1773,10 +2071,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		// 创建边框
 		this.createBorder(group, width, height, false)
 
-		// 只有在有生成请求时才创建 info 按钮
-		if (this.shouldShowInfoButton()) {
-			this.createInfoButton(group, width, height)
-		}
+		this.createCornerActions(group, width, height, { fullscreen: true })
 
 		this.finalizeNode(group)
 		return group
@@ -1819,9 +2114,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				backgroundImage,
 			)
 
-			// 保存背景节点引用
-			this.backgroundNode = backgroundNode
-
 			// 创建居中的图标和错误文本
 			RenderUtils.createCenteredIconText(group, width, height, {
 				text: this.isRetryEditing ? this.getRetryEditingPlaceholderText() : errorMessage,
@@ -1848,10 +2140,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			})
 
 			// 创建边框
-			this.createBorder(group, width, height, false)
-			if (this.shouldShowInfoButton()) {
-				this.createInfoButton(group, width, height)
-			}
+			this.createBorder(group, width, height, false, backgroundNode)
+			this.createCornerActions(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -1866,47 +2156,110 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		width: number,
 		height: number,
 		isAnimated: boolean,
+		backgroundNode?: Konva.Image,
 	): void {
 		this.borderDecorator = new BorderDecorator(group, width, height, {
 			isAnimated,
 			elementId: this.data.id,
 			canvas: this.canvas,
 		})
-		this.borderDecorator.create(this.backgroundNode)
+		this.borderDecorator.create(backgroundNode)
 	}
 
-	/**
-	 * 创建 Info 按钮
-	 */
-	private createInfoButton(group: Konva.Group, width: number, height: number): void {
-		this.infoButtonDecorator = new InfoButtonDecorator(group, {
+	private createCornerActions(
+		group: Konva.Group,
+		width: number,
+		height: number,
+		options?: { fullscreen?: boolean },
+	): void {
+		const actions: ElementCornerActionConfig[] = []
+		if (this.shouldShowInfoButton()) {
+			actions.push({
+				key: "info",
+				placement: "top-right",
+				icon: "info",
+				onClick: () => {
+					this.canvas.eventEmitter.emit({
+						type: "element:image:infoButtonClick",
+						data: { elementId: this.data.id },
+					})
+				},
+			})
+		}
+		if (options?.fullscreen && this.shouldShowFullscreenButton()) {
+			actions.push({
+				key: "fullscreen",
+				placement: "bottom-right",
+				icon: "fullscreen",
+				onClick: () => {
+					this.canvas.eventEmitter.emit({
+						type: "element:image:fullscreenClick",
+						data: { elementId: this.data.id },
+					})
+				},
+			})
+		}
+		if (!actions.length) return
+
+		this.cornerActionsDecorator = new ElementCornerActionsDecorator(group, {
 			elementId: this.data.id,
 			canvas: this.canvas,
 			width,
 			height,
-			infoClickEventType: "element:image:infoButtonClick",
+			actions,
 		})
-		this.infoButtonDecorator.create()
+		this.cornerActionsDecorator.create()
 	}
 
 	private shouldShowInfoButton(): boolean {
 		return !!this.data.generateImageRequest
 	}
 
+	private shouldShowFullscreenButton(): boolean {
+		return !!this.data.src
+	}
+
 	/**
 	 * 更新内容的反向缩放
 	 */
-	private updateContentScale(): void {
+	private updateContentScale(width = this.data.width || 0, height = this.data.height || 0): void {
 		if (!this.contentGroup || !(this.node instanceof Konva.Group)) {
 			return
 		}
 
-		RenderUtils.updateContentScale(
-			this.contentGroup,
-			this.node,
-			this.data.width || 0,
-			this.data.height || 0,
-		)
+		RenderUtils.updateContentScale(this.contentGroup, this.node, width, height)
+	}
+
+	private syncImageLayout(width: number, height: number): void {
+		if (!(this.node instanceof Konva.Group)) return
+
+		this.node.children?.forEach((child) => {
+			const childName = child.name()
+
+			if (child instanceof Konva.Image) {
+				if (childName === "background") {
+					RenderUtils.updateBackgroundImageLayout(child, width, height)
+				} else if (!childName || childName === IMAGE_CONTENT_NODE_NAME) {
+					child.width(width)
+					child.height(height)
+				}
+			} else if (child instanceof Konva.Rect) {
+				if (
+					childName === "hit-area" ||
+					childName === "background" ||
+					childName === "decorator-border"
+				) {
+					child.width(width)
+					child.height(height)
+				}
+			}
+		})
+
+		this.updateContentScale(width, height)
+		this.borderDecorator?.updateSize(width, height)
+		this.cornerActionsDecorator?.updateConfig({ width, height })
+		this.updateClipRegion(width, height)
+		this.node.getLayer()?.batchDraw()
 	}
 
 	/**
@@ -2046,7 +2399,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	/**
 	 * 保存参考图信息（单个）
-	 * 与 saveReferenceImageInfos 一致：对新项预加载资源，供 Popover 缩略图立即展示
+	 * 与 saveReferenceImageInfos 一致：对新项预加载资源，供 Popover 预览立即展示
 	 */
 	saveReferenceImageInfo(fileInfo: UploadFileResponse): void {
 		const exists = this.referenceImageInfos.some((info) => info.path === fileInfo.path)
@@ -2207,6 +2560,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * @deprecated 使用 applyTransform 替代
 	 */
 	public override onTransformResize(width: number, height: number): void {
-		this.updateClipRegion(width, height)
+		this.syncImageLayout(width, height)
 	}
 }

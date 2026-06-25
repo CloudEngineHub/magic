@@ -8,6 +8,15 @@ export interface ParsedMagicProjectConfig {
 export function parseMagicProjectJsContent(content: string): ParsedMagicProjectConfig | null {
 	if (!content) return null
 
+	const trimmedContent = content.trim()
+	if (
+		!trimmedContent ||
+		trimmedContent.startsWith("<") ||
+		!/magicProjectConfig|magicProjectConfigure/.test(trimmedContent)
+	) {
+		return null
+	}
+
 	const config = parseMagicProjectConfigContent(content) as Record<string, any> | null
 	if (!config) return null
 

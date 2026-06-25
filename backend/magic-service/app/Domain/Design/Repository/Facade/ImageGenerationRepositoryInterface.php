@@ -50,4 +50,6 @@ interface ImageGenerationRepositoryInterface
     public function findPendingByTypes(array $types, int $limit): array;
 
     public function completed(DesignDataIsolation $dataIsolation, int $id, string $fileName): void;
+
+    public function completedWithImages(DesignDataIsolation $dataIsolation, int $id, string $fileName, array $outputImages): void;
 }

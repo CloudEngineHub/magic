@@ -67,6 +67,7 @@ export interface ModelSwitchProps {
 	onVideoModelChange?: (model: ModelItem | null) => void
 	openAddModelMenuSignal?: number
 	showName?: boolean
+	showSelectedModelName?: boolean
 	showBorder?: boolean
 	isLoading?: boolean
 	className?: string

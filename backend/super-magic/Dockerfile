@@ -188,12 +188,13 @@ ARG NPM_REGISTRY=https://registry.npmjs.org/
 ARG GITHUB_URL_MIRROR=
 ARG CLI_CACHE_DATE=19700101
 
-# 安装 lark-cli 及飞书 skills，安装 dws（钉钉 Workspace CLI）及钉钉 skills
+# 安装 lark-cli、dws、teamshare-cli 及对应 skills
 RUN --mount=type=cache,id=debian-${DEBIAN_VERSION}-npm-${TARGETARCH},target=/root/.npm \
     . ~/.bashrc && \
     if [[ -n "${GITHUB_URL_MIRROR}" ]]; then \
         git config --global url."${GITHUB_URL_MIRROR}".insteadOf "https://github.com/"; \
     fi && \
+    export NPM_CONFIG_REGISTRY="${NPM_REGISTRY}" && \
     echo "========== CLI 缓存日期: ${CLI_CACHE_DATE} ==========" && \
     pnpm --registry="${NPM_REGISTRY}" \
         --cache=/root/.npm \
@@ -205,7 +206,13 @@ RUN --mount=type=cache,id=debian-${DEBIAN_VERSION}-npm-${TARGETARCH},target=/roo
         install -g dingtalk-workspace-cli@latest && \
     echo "========== dws 版本信息 ==========" && \
     dws version && \
-    rm -rf /root/.dws/cache /root/.lark-cli/cache
+    npm --registry="${NPM_REGISTRY}" \
+        --cache=/root/.npm \
+        install -g @dtyq/teamshare-cli@latest && \
+    teamshare-cli install && \
+    echo "========== teamshare-cli 版本信息 ==========" && \
+    teamshare-cli --version && \
+    rm -rf /root/.dws/cache /root/.lark-cli/cache /root/.magic/teamshare-cli/cache
 
 # ========= 最终镜像 =========
 FROM prebuilt_cli

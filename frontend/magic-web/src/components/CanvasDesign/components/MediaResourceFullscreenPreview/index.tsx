@@ -30,7 +30,7 @@ export default function MediaResourceFullscreenPreview(props: MediaResourceFulls
 		return (
 			<ImageFullscreenOverlay
 				path={resource.path}
-				title={resource.fileName}
+				fileName={resource.fileName}
 				isOpen
 				onClose={onClose}
 			/>
@@ -40,7 +40,7 @@ export default function MediaResourceFullscreenPreview(props: MediaResourceFulls
 	return (
 		<AudioFullscreenOverlay
 			path={resource.path}
-			title={resource.fileName}
+			fileName={resource.fileName}
 			isOpen
 			onClose={onClose}
 		/>

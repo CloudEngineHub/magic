@@ -67,6 +67,38 @@ export function shouldRefreshChatProjectState({
 	return !isTopicBoundToProject(selectedTopic, projectId)
 }
 
+interface ShouldRefreshChatProjectStateOnDesktopParams {
+	projectId: string | undefined
+	routeTopicId: string | undefined
+	selectedProjectId: string | undefined
+	selectedWorkspaceId: string | undefined
+	selectedTopic: Topic | null | undefined
+	loadedProjects?: ProjectListItem[]
+	/** True while switchChatProjectInDesktop optimistic navigation is in flight. */
+	isDesktopChatSwitchInProgress?: boolean
+}
+
+/**
+ * Desktop chat detail refresh: skip URL recovery while the service is actively switching
+ * to another project/topic, but keep cold-start and hard-refresh recovery via refreshState.
+ */
+export function shouldRefreshChatProjectStateOnDesktop({
+	isDesktopChatSwitchInProgress = false,
+	selectedProjectId,
+	projectId,
+	...rest
+}: ShouldRefreshChatProjectStateOnDesktopParams): boolean {
+	if (isDesktopChatSwitchInProgress) {
+		return false
+	}
+
+	return shouldRefreshChatProjectState({
+		projectId,
+		selectedProjectId,
+		...rest,
+	})
+}
+
 /**
  * 发送前若发现当前话题不属于选中项目，需要先补齐正确的话题上下文再继续发送。
  */

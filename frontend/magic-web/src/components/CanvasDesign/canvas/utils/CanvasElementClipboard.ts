@@ -5,7 +5,6 @@ import {
 	type CanvasDesignClipboardNativeExposure,
 	type CanvasDesignClipboardOptions,
 } from "./CanvasDesignClipboard"
-import { logCanvasElementClipboard } from "./CanvasElementClipboardLogger"
 import { getFileExtensionFromMimeType, validateAndFilterCanvasFiles } from "./utils"
 import { isValidElementData } from "./validateElement"
 
@@ -34,10 +33,6 @@ export type CanvasElementClipboardOperation = "copy-elements" | "copy-as-png"
 export type CanvasElementClipboardPasteSource = "keyboard" | "menu"
 export type CanvasElementClipboardBrowserOptions = CanvasDesignClipboardOptions
 export type CanvasElementClipboardNativeExposure = CanvasDesignClipboardNativeExposure
-
-function getClipboardItemTypes(items: ClipboardItem[]): string[][] {
-	return items.map((item) => Array.from(item.types))
-}
 
 export interface CanvasElementClipboardFileMetadata {
 	/** 单次剪贴板 payload 内的文件索引 ID，不要求跨复制稳定 */
@@ -292,17 +287,6 @@ export class CanvasElementClipboard {
 			files: options.files,
 		}
 
-		logCanvasElementClipboard("create-payload", {
-			canvasId: options.canvasId,
-			operation: options.operation,
-			elementCount: options.elements.length,
-			fileCount: options.files.length,
-			elementTypes: options.elements.map((element) => element.type),
-			fileElementIds: options.files.map((file) => file.elementId),
-			fileMimeTypes: options.files.map((file) => file.mimeType),
-			payload,
-		})
-
 		return payload
 	}
 
@@ -319,18 +303,6 @@ export class CanvasElementClipboard {
 		fileSize: number
 		sourceRef?: CanvasElementClipboardFileMetadata["sourceRef"]
 	}): CanvasElementClipboardFileMetadata {
-		logCanvasElementClipboard("create-file-metadata", {
-			fileId: options.fileId,
-			elementId: options.element.id,
-			elementType: options.element.type,
-			filename: options.filename,
-			mimeType: options.mimeType,
-			fileSize: options.fileSize,
-			elementJson: options.element,
-			operation: "copy-elements",
-			sourceRef: options.sourceRef,
-		})
-
 		return {
 			id: options.fileId,
 			elementId: options.element.id,
@@ -356,16 +328,6 @@ export class CanvasElementClipboard {
 		sourceElements: LayerElement[]
 		sourceRef?: CanvasElementClipboardFileMetadata["sourceRef"]
 	}): CanvasElementClipboardFileMetadata {
-		logCanvasElementClipboard("create-canvas-export-file-metadata", {
-			fileId: options.fileId,
-			filename: options.filename,
-			mimeType: options.mimeType,
-			fileSize: options.fileSize,
-			operation: "copy-as-png",
-			sourceElementsJson: options.sourceElements,
-			sourceRef: options.sourceRef,
-		})
-
 		return {
 			id: options.fileId,
 			elementId: options.fileId,
@@ -389,18 +351,6 @@ export class CanvasElementClipboard {
 		payload: CanvasElementClipboardPayload
 		files: CanvasElementClipboardWriteFile[]
 	}): ClipboardItem[] {
-		logCanvasElementClipboard("create-clipboard-items:start", {
-			canvasId: options.payload.sourceCanvasId,
-			elementCount: options.payload.elements.length,
-			fileCount: options.files.length,
-			fileMimeTypes: options.files.map((file) => file.metadata.mimeType),
-			payload: options.payload,
-			files: options.files.map((file) => ({
-				metadata: file.metadata,
-				blobContent: file.blob,
-			})),
-		})
-
 		const payloadText = JSON.stringify(options.payload)
 		const payloadItem = new ClipboardItem({
 			[CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE]: new Blob([payloadText], {
@@ -410,11 +360,6 @@ export class CanvasElementClipboard {
 
 		const fileItems = options.files.map((file) => {
 			const clipboardFile = buildFileFromBlob(file.blob, file.metadata)
-			logCanvasElementClipboard("create-clipboard-items:file", {
-				metadata: file.metadata,
-				sourceBlobContent: file.blob,
-				clipboardFileContent: clipboardFile,
-			})
 			const itemData: Record<string, Blob> = {
 				[CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE]: clipboardFile,
 			}
@@ -430,10 +375,6 @@ export class CanvasElementClipboard {
 		})
 
 		const clipboardItems = [payloadItem, ...fileItems]
-		logCanvasElementClipboard("create-clipboard-items:done", {
-			itemCount: clipboardItems.length,
-			itemTypes: getClipboardItemTypes(clipboardItems),
-		})
 
 		return clipboardItems
 	}
@@ -444,47 +385,12 @@ export class CanvasElementClipboard {
 		native?: CanvasElementClipboardNativeExposure
 		clipboard?: CanvasElementClipboardBrowserOptions
 	}): Promise<void> {
-		logCanvasElementClipboard("protocol-write:start", {
-			operation: options.payload.operation,
-			canvasId: options.payload.sourceCanvasId,
-			elementCount: options.payload.elements.length,
-			fileCount: options.files.length,
-			fileMimeTypes: options.files.map(({ metadata }) => metadata.mimeType),
-			hasNativeExposure: Boolean(options.native),
-			nativeMimeType: options.native?.mimeType,
+		await CanvasDesignClipboard.writeBundle({
 			payload: options.payload,
-			files: options.files.map((file) => ({
-				metadata: file.metadata,
-				blobContent: file.blob,
-			})),
+			files: options.files,
+			native: options.native,
+			clipboard: options.clipboard,
 		})
-
-		try {
-			await CanvasDesignClipboard.writeBundle({
-				payload: options.payload,
-				files: options.files,
-				native: options.native,
-				clipboard: options.clipboard,
-			})
-			logCanvasElementClipboard("protocol-write:success", {
-				operation: options.payload.operation,
-				elementCount: options.payload.elements.length,
-				fileCount: options.files.length,
-				fileMimeTypes: options.files.map(({ metadata }) => metadata.mimeType),
-			})
-		} catch (error) {
-			logCanvasElementClipboard("protocol-write:error", {
-				operation: options.payload.operation,
-				message: error instanceof Error ? error.message : String(error),
-				error,
-				payload: options.payload,
-				files: options.files.map((file) => ({
-					metadata: file.metadata,
-					blobContent: file.blob,
-				})),
-			})
-			throw error
-		}
 	}
 
 	/**
@@ -498,27 +404,15 @@ export class CanvasElementClipboard {
 	}): Promise<CanvasElementClipboardReadResult | null> {
 		const bundleResult = await CanvasDesignClipboard.readBundle(options)
 		if (bundleResult) {
-			logCanvasElementClipboard("read:bundle-result", {
-				hasPayload: true,
-				elementCount: bundleResult.payload.elements.length,
-				fileMetadataCount: bundleResult.payload.files.length,
-				fileCount: bundleResult.files.length,
-			})
 			return bundleResult
 		}
 
-		const items = await CanvasDesignClipboard.read(options, "read")
+		const items = await CanvasDesignClipboard.read(options)
 		if (!items) {
 			return null
 		}
 
 		const result = await this.readFromClipboardItems(items)
-		logCanvasElementClipboard("read:result", {
-			hasPayload: Boolean(result),
-			elementCount: result?.payload.elements.length ?? 0,
-			fileMetadataCount: result?.payload.files.length ?? 0,
-			fileCount: result?.files.length ?? 0,
-		})
 		return result
 	}
 
@@ -538,114 +432,48 @@ export class CanvasElementClipboard {
 		options?: CanvasElementClipboardParseOptions,
 	): Promise<CanvasElementClipboardParseResult> {
 		try {
-			logCanvasElementClipboard("parse:start", {
-				hasClipboardEvent: Boolean(clipboardEvent),
-				hasInjectedRead: Boolean(options?.read),
-				pasteSource: options?.pasteSource,
-			})
-
-			const eventFilesSnapshot = CanvasDesignClipboard.readEventFilesSnapshot(
-				clipboardEvent,
-				"parse-event",
-			)
+			const eventFilesSnapshot = CanvasDesignClipboard.readEventFilesSnapshot(clipboardEvent)
 
 			const bundleResult = await CanvasDesignClipboard.readBundle(options)
 			if (bundleResult) {
 				const canvasElementResult = this.parseCanvasElementClipboardReadResult(bundleResult)
 				if (canvasElementResult) {
-					logCanvasElementClipboard("parse:bundle-result", {
-						pasteSource: options?.pasteSource,
-						type: canvasElementResult.type,
-						elementCount:
-							canvasElementResult.type === "canvas-elements"
-								? canvasElementResult.elements.length
-								: 0,
-						fileCount:
-							canvasElementResult.type === "canvas-elements"
-								? canvasElementResult.files.length
-								: canvasElementResult.files.length,
-					})
 					return canvasElementResult
 				}
 			}
 
-			const clipboardItems = await CanvasDesignClipboard.read(options, "parse-read")
+			const clipboardItems = await CanvasDesignClipboard.read(options)
 			const canvasElementResult = await this.parseCanvasElementClipboardItems(clipboardItems)
 			if (canvasElementResult) {
 				if (canvasElementResult.type === "files") {
-					logCanvasElementClipboard("parse:canvas-export-files", {
-						pasteSource: options?.pasteSource,
-						fileCount: canvasElementResult.files.length,
-						fileMimeTypes: canvasElementResult.files.map((file) => file.type),
-						files: canvasElementResult.files.map((file) => ({ fileContent: file })),
-					})
 					return canvasElementResult
 				}
 
 				if (eventFilesSnapshot.length > 0 && canvasElementResult.files.length === 0) {
-					logCanvasElementClipboard("parse:hydrate-files-from-event", {
-						pasteSource: options?.pasteSource,
-						eventFileCount: eventFilesSnapshot.length,
-						fileMetadataCount: canvasElementResult.fileMetadata.length,
-						eventFiles: eventFilesSnapshot.map((file) => ({ fileContent: file })),
-						fileMetadata: canvasElementResult.fileMetadata,
-					})
 					canvasElementResult.files = this.createFilesFromEventFiles(
 						eventFilesSnapshot,
 						canvasElementResult.fileMetadata,
 					)
 				}
-				logCanvasElementClipboard("parse:canvas-elements", {
-					pasteSource: options?.pasteSource,
-					elementCount: canvasElementResult.elements.length,
-					fileMetadataCount: canvasElementResult.fileMetadata.length,
-					fileCount: canvasElementResult.files.length,
-					elementsJson: canvasElementResult.elements,
-					fileMetadata: canvasElementResult.fileMetadata,
-					files: canvasElementResult.files.map(({ metadata, file }) => ({
-						metadata,
-						fileContent: file,
-					})),
-				})
 				return canvasElementResult
 			}
 
 			if (eventFilesSnapshot.length > 0) {
-				logCanvasElementClipboard("parse:event-files", {
-					pasteSource: options?.pasteSource,
-					fileCount: eventFilesSnapshot.length,
-					fileMimeTypes: eventFilesSnapshot.map((file) => file.type),
-					files: eventFilesSnapshot.map((file) => ({ fileContent: file })),
-				})
 				return { type: "files", files: eventFilesSnapshot }
 			}
 
 			const apiResult = await this.parseFilesFromClipboardItems(clipboardItems)
 			if (apiResult) {
-				logCanvasElementClipboard("parse:api-result", {
-					pasteSource: options?.pasteSource,
-					type: apiResult.type,
-					fileCount: apiResult.type === "files" ? apiResult.files.length : 0,
-					reason: apiResult.type === "invalid" ? apiResult.reason : undefined,
-				})
 				return apiResult
 			}
 
-			const filenameOnlyText = await CanvasDesignClipboard.readFilenameOnlyText(
-				options,
-				"parse-text",
-			)
+			const filenameOnlyText = await CanvasDesignClipboard.readFilenameOnlyText(options)
 			if (filenameOnlyText) {
 				return { type: "invalid", reason: "clipboard-filename-text-only" }
 			}
 
-			logCanvasElementClipboard("parse:empty", { pasteSource: options?.pasteSource })
 			return { type: "empty" }
 		} catch (error) {
-			logCanvasElementClipboard("parse:error", {
-				pasteSource: options?.pasteSource,
-				message: error instanceof Error ? error.message : String(error),
-			})
 			return { type: "invalid", reason: error instanceof Error ? error.message : "未知错误" }
 		}
 	}
@@ -658,9 +486,6 @@ export class CanvasElementClipboard {
 		| null {
 		const payload = normalizePayload(clipboard.payload)
 		if (!payload) {
-			logCanvasElementClipboard("parse-canvas-element:invalid-payload", {
-				payload: clipboard.payload,
-			})
 			return null
 		}
 		const files = clipboard.files
@@ -669,17 +494,6 @@ export class CanvasElementClipboard {
 				return normalizedMetadata ? { metadata: normalizedMetadata, file } : null
 			})
 			.filter((file): file is CanvasElementClipboardFile => Boolean(file))
-
-		logCanvasElementClipboard("parse-canvas-element:hit", {
-			elementCount: payload.elements.length,
-			fileMetadataCount: payload.files.length,
-			fileCount: files.length,
-			payload,
-			files: files.map(({ metadata, file }) => ({
-				metadata,
-				fileContent: file,
-			})),
-		})
 
 		if (payload.elements.length > 0) {
 			return {
@@ -691,15 +505,6 @@ export class CanvasElementClipboard {
 			}
 		}
 
-		logCanvasElementClipboard("parse-canvas-element:files-only", {
-			fileCount: files.length,
-			fileMimeTypes: files.map(({ file }) => file.type),
-			operation: payload.operation,
-			files: files.map(({ metadata, file }) => ({
-				metadata,
-				fileContent: file,
-			})),
-		})
 		return files.length > 0
 			? {
 					type: "files",
@@ -731,17 +536,6 @@ export class CanvasElementClipboard {
 						: normalizedFile,
 			}
 		})
-		logCanvasElementClipboard("create-files-from-event", {
-			inputFileCount: files.length,
-			metadataCount: metadataList.length,
-			outputFileCount: canvasFiles.length,
-			fileMimeTypes: canvasFiles.map(({ file }) => file.type),
-			inputFiles: files.map((file) => ({ fileContent: file })),
-			outputFiles: canvasFiles.map(({ metadata, file }) => ({
-				metadata,
-				fileContent: file,
-			})),
-		})
 		return canvasFiles
 	}
 
@@ -766,19 +560,8 @@ export class CanvasElementClipboard {
 				}),
 			)
 			const validFiles = validateAndFilterCanvasFiles([file])
-			logCanvasElementClipboard("read-external-file-item", {
-				mediaType,
-				isValid: validFiles.length > 0,
-				size: file.size,
-				blobContent: blob,
-				fileContent: file,
-			})
 			return validFiles[0] ?? null
 		} catch (error) {
-			logCanvasElementClipboard("read-external-file-item:error", {
-				mediaType,
-				message: error instanceof Error ? error.message : String(error),
-			})
 			return null
 		}
 	}
@@ -794,13 +577,11 @@ export class CanvasElementClipboard {
 		| null
 	> {
 		if (!items) {
-			logCanvasElementClipboard("parse-canvas-element:skip-no-items")
 			return null
 		}
 
 		const clipboard = await this.readFromClipboardItems(items)
 		if (!clipboard) {
-			logCanvasElementClipboard("parse-canvas-element:miss")
 			return null
 		}
 
@@ -816,15 +597,10 @@ export class CanvasElementClipboard {
 		items: ClipboardItem[] | null,
 	): Promise<Extract<CanvasElementClipboardParseResult, { type: "files" | "invalid" }> | null> {
 		if (!items) {
-			logCanvasElementClipboard("parse-api:skip-no-items")
 			return null
 		}
 
 		try {
-			logCanvasElementClipboard("parse-api:items", {
-				itemCount: items.length,
-				itemTypes: getClipboardItemTypes(items),
-			})
 			const files: File[] = []
 
 			for (const item of items) {
@@ -836,25 +612,15 @@ export class CanvasElementClipboard {
 
 			const validFiles = validateAndFilterCanvasFiles(files)
 			if (validFiles.length > 0) {
-				logCanvasElementClipboard("parse-api:files", {
-					fileCount: validFiles.length,
-					fileMimeTypes: validFiles.map((file) => file.type),
-					files: validFiles.map((file) => ({ fileContent: file })),
-				})
 				return { type: "files", files: validFiles }
 			}
 
 			if (items.some((item) => item.types.length === 0)) {
-				logCanvasElementClipboard("parse-api:unreadable-items")
 				return { type: "invalid", reason: "clipboard-api-unreadable-items" }
 			}
 
-			logCanvasElementClipboard("parse-api:empty")
 			return null
 		} catch (error) {
-			logCanvasElementClipboard("parse-api:error", {
-				message: error instanceof Error ? error.message : String(error),
-			})
 			return null
 		}
 	}
@@ -867,24 +633,10 @@ export class CanvasElementClipboard {
 	): Promise<CanvasElementClipboardReadResult | null> {
 		const payload = await this.readPayload(items)
 		if (!payload) {
-			logCanvasElementClipboard("read-items:no-payload", {
-				itemCount: items.length,
-				itemTypes: getClipboardItemTypes(items),
-			})
 			return null
 		}
 
 		const files = await this.readFiles(items, payload.files)
-		logCanvasElementClipboard("read-items:done", {
-			elementCount: payload.elements.length,
-			fileMetadataCount: payload.files.length,
-			fileCount: files.length,
-			payload,
-			files: files.map(({ metadata, file }) => ({
-				metadata,
-				fileContent: file,
-			})),
-		})
 		return { payload, files }
 	}
 
@@ -904,25 +656,13 @@ export class CanvasElementClipboard {
 				const text = await blob.text()
 				const payload = normalizePayload(JSON.parse(text))
 				if (payload) {
-					logCanvasElementClipboard("read-payload:hit", {
-						elementCount: payload.elements.length,
-						fileMetadataCount: payload.files.length,
-						canvasId: payload.sourceCanvasId,
-						rawJson: text,
-						payload,
-					})
 					return payload
 				}
-				logCanvasElementClipboard("read-payload:invalid-shape")
 			} catch (error) {
-				logCanvasElementClipboard("read-payload:error", {
-					message: error instanceof Error ? error.message : String(error),
-				})
 				// Ignore malformed CanvasDesign metadata and keep scanning other items.
 			}
 		}
 
-		logCanvasElementClipboard("read-payload:miss")
 		return null
 	}
 
@@ -949,11 +689,6 @@ export class CanvasElementClipboard {
 					type.startsWith("video/"),
 			),
 		)
-		logCanvasElementClipboard("read-files:start", {
-			metadataCount: metadataList.length,
-			fileItemCount: fileItems.length,
-			fileItemTypes: getClipboardItemTypes(fileItems),
-		})
 
 		for (let i = 0; i < metadataList.length; i++) {
 			const metadata = metadataList[i]
@@ -968,15 +703,6 @@ export class CanvasElementClipboard {
 			}
 		}
 
-		logCanvasElementClipboard("read-files:done", {
-			fileCount: files.length,
-			fileMimeTypes: files.map(({ file }) => file.type),
-			fileElementIds: files.map(({ metadata }) => metadata.elementId),
-			files: files.map(({ metadata, file }) => ({
-				metadata,
-				fileContent: file,
-			})),
-		})
 		return files
 	}
 
@@ -1008,24 +734,8 @@ export class CanvasElementClipboard {
 						})
 					: buildFileFromBlob(blob, metadata)
 			const validFiles = validateAndFilterCanvasFiles([file])
-			logCanvasElementClipboard("read-file-item", {
-				elementId: metadata.elementId,
-				requestedMimeType: metadata.mimeType,
-				selectedMimeType: mediaType,
-				isPrivateBlob: mediaType === CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE,
-				isValid: validFiles.length > 0,
-				size: file.size,
-				metadata,
-				blobContent: blob,
-				fileContent: file,
-			})
 			return validFiles[0] ?? null
 		} catch (error) {
-			logCanvasElementClipboard("read-file-item:error", {
-				elementId: metadata.elementId,
-				requestedMimeType: metadata.mimeType,
-				message: error instanceof Error ? error.message : String(error),
-			})
 			return null
 		}
 	}

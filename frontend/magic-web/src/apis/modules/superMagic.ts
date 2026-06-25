@@ -269,6 +269,99 @@ export interface GenerateImageResponse {
 	id: string
 }
 
+export interface GeneratedImageResultItem {
+	/** 结果序号，从 1 开始 */
+	index: number
+	/** 文件名 */
+	file_name: string
+	/** 文件 URL */
+	file_url: string | null
+}
+
+/**
+ * 发起多图生成请求参数
+ */
+export interface GenerateImagesRequest extends Omit<GenerateImageRequest, "image_id"> {
+	/** 图片任务 id（客户端生成 uuid） */
+	image_id?: string
+	/** 分辨率（对应 scale 值） */
+	resolution?: string
+	/** 本次请求生成图片数量 */
+	generate_num: number
+	/** 图片生成配置 */
+	image_generation_config?: {
+		[key: string]: string
+	}
+}
+
+/**
+ * 发起多图生成响应数据
+ */
+export interface GenerateImagesResponse {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+	/** 模型 id */
+	model_id: string
+	/** 提示词 */
+	prompt: string
+	/** 大小 */
+	size: string
+	/** 分辨率 */
+	resolution?: string
+	/** 文件目录 */
+	file_dir: string
+	/** 生成数量 */
+	generate_num: number
+	/** 状态 */
+	status: "pending" | "processing" | "completed" | "failed"
+	/** 错误信息 */
+	error_message: string | null
+	/** 已返回的图片列表 */
+	images: GeneratedImageResultItem[]
+}
+
+/**
+ * AI 补全图片提示词请求参数
+ */
+export interface CompleteImagePromptRequest {
+	/** 项目 id */
+	project_id?: string
+	/**
+	 * 当前场景拼装后的用户提示词。
+	 *
+	 * 推荐使用后端建议的 5 段结构：
+	 * 1. 任务目标：说明要生成、补全或优化哪类生图提示词
+	 * 2. 当前输入：用户输入框已有内容；为空时写“用户当前未填写”
+	 * 3. 参考图角色：说明参考图用于主体 / 风格 / 背景 / 构图 / 材质 / 分别套用等
+	 * 4. 业务限制：当前场景必须遵守的限制，保持简短
+	 * 5. 补全方向：希望补充的画面维度
+	 *
+	 * 示例：
+	 * 任务目标：为商品换背景的文生背景输入框生成或补全一段背景提示词。
+	 * 当前输入：用户当前未填写
+	 * 参考图角色：共有 1 张商品图，用于理解商品类别、材质、颜色、软硬属性和商业气质；这些商品会分别生成图片，不会放进同一张图。
+	 * 业务限制：背景应适合“自动摆放”；不要描述商品之间的搭配、并排或同框关系；不要改变商品本身颜色、款式、logo、图案或材质。
+	 * 补全方向：补充一个具体可拍摄的商业摄影背景，包括空间、材质、少量道具、光线、色彩氛围、构图留白和物理承托关系。
+	 */
+	user_prompt: string
+	/** 可选模型 id */
+	model_id?: string
+	/** 参考图 */
+	reference_images?: string[]
+	/** 参考图参数 */
+	reference_image_options?: ReferenceImageOptions
+}
+
+/**
+ * AI 补全图片提示词响应
+ */
+export interface CompleteImagePromptResponse {
+	/** 最终可直接写入输入框的提示词 */
+	prompt: string
+}
+
 /**
  * 查询图片生成结果请求参数
  */
@@ -311,6 +404,44 @@ export interface ImageGenerationResultResponse {
 	file_url: string
 	/** ID */
 	id: string
+}
+
+/**
+ * 查询多图生成结果请求参数
+ */
+export interface GetImageGenerationResultsParams {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+}
+
+/**
+ * 查询多图生成结果响应数据
+ */
+export interface ImageGenerationResultsResponse {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+	/** 模型 id */
+	model_id: string
+	/** 提示词 */
+	prompt: string
+	/** 大小 */
+	size: string
+	/** 分辨率 */
+	resolution?: string
+	/** 文件目录 */
+	file_dir: string
+	/** 生成数量 */
+	generate_num: number
+	/** 状态 */
+	status: "pending" | "processing" | "completed" | "failed"
+	/** 错误信息 */
+	error_message: string | null
+	/** 已返回的图片列表 */
+	images: GeneratedImageResultItem[]
 }
 
 /**
@@ -2188,8 +2319,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param file_id 文件id
 	 * @returns 文件信息
 	 */
-	getFileInfo({ file_id }: { file_id: string }) {
-		return fetch.get<FileInfo>(`/api/v1/super-agent/file/${file_id}`)
+	getFileInfo(
+		{ file_id }: { file_id: string },
+		options?: { enableErrorMessagePrompt?: boolean },
+	) {
+		const config =
+			options?.enableErrorMessagePrompt === undefined
+				? undefined
+				: { enableErrorMessagePrompt: options.enableErrorMessagePrompt }
+		return fetch.get<FileInfo>(`/api/v1/super-agent/file/${file_id}`, config)
 	},
 
 	/**
@@ -2296,11 +2434,33 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	/**
 	 * @description 发起图片生成
+	 * @deprecated 后端将废弃 /api/v1/design/generate-image，请使用 generateImages({ generate_num: 1 }) 替代。
 	 * @param params 图片生成请求参数
 	 * @returns 图片生成响应数据
 	 */
 	generateImage(params: GenerateImageRequest) {
 		return fetch.post<GenerateImageResponse>("/api/v1/design/generate-image", params)
+	},
+
+	/**
+	 * @description 发起多图生成
+	 * @param params 多图生成请求参数
+	 * @returns 多图生成响应数据
+	 */
+	generateImages(params: GenerateImagesRequest) {
+		return fetch.post<GenerateImagesResponse>("/api/v1/design/generate-images", params)
+	},
+
+	/**
+	 * @description AI 补全图片提示词
+	 * @param params 提示词补全请求参数
+	 * @returns 提示词补全响应数据
+	 */
+	completeImagePrompt(params: CompleteImagePromptRequest) {
+		return fetch.post<CompleteImagePromptResponse>(
+			"/api/v1/design/image-prompt/complete",
+			params,
+		)
 	},
 
 	/**
@@ -2332,6 +2492,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	/**
 	 * @description 查询图片生成结果
+	 * @deprecated 后端将废弃 /api/v1/design/image-generation-result，请使用 getImageGenerationResults 替代。
 	 * @param params 查询参数
 	 * @returns 图片生成结果响应数据
 	 */
@@ -2339,6 +2500,24 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		return fetch.get<ImageGenerationResultResponse>(
 			genRequestUrl(
 				"/api/v1/design/image-generation-result",
+				{},
+				{
+					project_id: params.project_id,
+					image_id: params.image_id,
+				},
+			),
+		)
+	},
+
+	/**
+	 * @description 查询多图生成结果
+	 * @param params 查询参数
+	 * @returns 多图生成结果响应数据
+	 */
+	getImageGenerationResults(params: GetImageGenerationResultsParams) {
+		return fetch.get<ImageGenerationResultsResponse>(
+			genRequestUrl(
+				"/api/v1/design/image-generation-results",
 				{},
 				{
 					project_id: params.project_id,

@@ -23,7 +23,7 @@ export interface DesignProjectManagerOptions {
 	onRemoteDesignDataUpdate?: (
 		oldDesignData: DesignData,
 		newDesignData: DesignData,
-		updateType: "message" | "revoke" | "restore",
+		updateType: "message" | "revoke" | "restore" | "draft",
 	) => void
 	updateListenerDebounceMs?: number
 	remoteUpdateListenerMode?: DesignRemoteUpdateListenerMode

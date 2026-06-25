@@ -13,6 +13,7 @@ import {
 	WorkspaceStateCache,
 	UserWorkspaceMapCache,
 	ProjectTopicMapCache,
+	ChatWorkspaceIdCache,
 } from "../utils/superMagicCache"
 import { RoutePathMobile } from "@/constants/routes"
 import { configStore } from "@/models/config"
@@ -180,6 +181,61 @@ class RouteManageService {
 		return this.getCurrentMatchedRouteName() === RouteName.SuperChatProjectState
 	}
 
+	/** Read the persisted chat workspace id locally to avoid pulling service/hook dependencies into routing. */
+	private getCachedChatWorkspaceId(): string | null {
+		return ChatWorkspaceIdCache.get(userStore.user.userInfo)
+	}
+
+	/**
+	 * Save-as-project keeps the same project id after moving out of the hidden chat workspace.
+	 * We must confirm the current project still belongs to chat workspace before preserving `/super/chat`.
+	 */
+	private isChatWorkspaceProjectForRoute(projectId?: string | null): boolean {
+		if (!projectId) return false
+
+		const selectedProject = projectStore.selectedProject
+		if (selectedProject?.id === projectId) {
+			const chatWorkspaceId = this.getCachedChatWorkspaceId()
+			return Boolean(chatWorkspaceId && selectedProject.workspace_id === chatWorkspaceId)
+		}
+
+		return false
+	}
+
+	/**
+	 * Chat route should only be preserved when the URL and target project still refer to the same chat.
+	 * Using pathname alone caused leave-navigation races to snap back to the previous chat URL.
+	 */
+	shouldPreserveChatRoute(projectId?: string | null): boolean {
+		if (!this.isCurrentChatProjectRoute()) return false
+
+		const routeProjectId = this.getCurrentRouteParams().projectId
+		if (!routeProjectId) return false
+		if (!projectId) return true
+
+		return projectId === routeProjectId && this.isChatWorkspaceProjectForRoute(projectId)
+	}
+
+	/** Detect async refreshState that started on one route but finished after the user already left. */
+	isStaleScopedRefresh(
+		initialRouteProjectId: string | undefined,
+		requestedProjectId?: string,
+	): boolean {
+		const currentRouteProjectId = this.getCurrentRouteParams().projectId
+
+		if (initialRouteProjectId !== currentRouteProjectId) return true
+
+		if (!requestedProjectId) {
+			return Boolean(currentRouteProjectId)
+		}
+
+		if (!currentRouteProjectId) {
+			return !this.isCurrentChatProjectRoute()
+		}
+
+		return currentRouteProjectId !== requestedProjectId
+	}
+
 	/**
 	 * Detect mobile Super homepage entry routes where fixRouteParams must not rewrite URL.
 	 * Covers the new /mobile-home route, bare /super index, and legacy mobile-tabs home.
@@ -268,24 +324,34 @@ class RouteManageService {
 
 			// 移动端，话题通过 popup 显示，不需要跳转，更新 store 即可
 			if (!interfaceStore.isMobile) {
-				// 5.1.2 更新路由参数
+				// Keep chat URL only while updating the same chat project, not when switching contexts.
+				const chatRouteName = this.shouldPreserveChatRoute(
+					superMagicWorkspaceState.projectId,
+				)
+					? RouteName.SuperChatProjectState
+					: RouteName.SuperWorkspaceProjectTopicState
+
 				this.safeNavigate({
-					name: this.getRouteName(RouteName.SuperWorkspaceProjectTopicState),
+					name: this.getRouteName(chatRouteName),
 					params: {
 						projectId: superMagicWorkspaceState.projectId,
 						topicId: superMagicWorkspaceState.topicId,
 					},
-					// 如果是在聊天中新增的话题，则不进行视图过渡
 					viewTransition: param_topicId ? false : viewTransition,
-					// 如果是在聊天中新增的话题，则进行路由替换
 					replace: !!param_topicId,
 				})
 			}
 
 			// 5.2 工作区存在，项目存在，话题不存在
 		} else if (superMagicWorkspaceState.workspaceId && superMagicWorkspaceState.projectId) {
+			const projectRouteName = this.shouldPreserveChatRoute(
+				superMagicWorkspaceState.projectId,
+			)
+				? RouteName.SuperChatProjectState
+				: RouteName.SuperWorkspaceProjectState
+
 			this.safeNavigate({
-				name: this.getRouteName(RouteName.SuperWorkspaceProjectState),
+				name: this.getRouteName(projectRouteName),
 				params: {
 					projectId: superMagicWorkspaceState.projectId,
 				},
@@ -578,11 +644,6 @@ class RouteManageService {
 	}
 
 	navigateToChatProject(project: ProjectListItem, topicId?: string, replace?: boolean) {
-		if (!interfaceStore.isMobile) {
-			this.navigateToProject(project, replace)
-			return
-		}
-
 		const targetTopicId = topicId || undefined
 		const currentParams = this.getCurrentRouteParams()
 		const currentRouteName = this.getCurrentMatchedRouteName()
@@ -601,7 +662,8 @@ class RouteManageService {
 		let viewTransition: boolean | ViewTransitionConfig = {
 			direction: "left",
 		}
-		if (param_projectId && interfaceStore.isMobile) {
+		// Desktop and in-project mobile transitions stay static.
+		if (!interfaceStore.isMobile || (param_projectId && interfaceStore.isMobile)) {
 			viewTransition = false
 		}
 
@@ -782,6 +844,21 @@ class RouteManageService {
 				},
 				replace,
 			})
+		} else if (this.shouldPreserveChatRoute(projectId)) {
+			const currentProject = projectStore.selectedProject
+			if (currentProject?.id === projectId) {
+				this.navigateToChatProject(currentProject, topicId, replace)
+				return
+			}
+
+			this.safeNavigate({
+				name: this.getRouteName(RouteName.SuperChatProjectState),
+				params: {
+					projectId,
+					topicId,
+				},
+				replace,
+			})
 		} else {
 			this.safeNavigate({
 				name: this.getRouteName(RouteName.SuperWorkspaceProjectTopicState),
@@ -811,9 +888,23 @@ class RouteManageService {
 		const currentProject = projectStore.selectedProject
 		const currentTopic = topicStore.selectedTopic
 
-		if (interfaceStore.isMobile && this.isCurrentChatProjectRoute() && currentProject) {
-			this.navigateToChatProject(currentProject, currentTopic?.id, true)
-		} else if (currentWorkspace && currentProject && currentTopic) {
+		if (this.isCurrentChatProjectRoute()) {
+			const routeProjectId = this.getCurrentRouteParams().projectId
+			if (currentProject && routeProjectId && currentProject.id === routeProjectId) {
+				this.navigateToChatProject(currentProject, currentTopic?.id, true)
+				return
+			}
+
+			if (currentWorkspace) {
+				this.navigateToWorkspace(currentWorkspace.id, true)
+				return
+			}
+
+			this.navigateToHome(true)
+			return
+		}
+
+		if (currentWorkspace && currentProject && currentTopic) {
 			this.navigateToTopic({
 				workspaceId: currentWorkspace.id,
 				projectId: currentProject.id,

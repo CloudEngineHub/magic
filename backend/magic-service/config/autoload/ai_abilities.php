@@ -503,6 +503,25 @@ return [
             ],
         ],
 
+        // 生图提示词补全
+        'image_prompt_completion' => [
+            'code' => 'image_prompt_completion',
+            'name' => [
+                'zh_CN' => '生图提示词补全',
+                'en_US' => 'Image Prompt Completion',
+            ],
+            'description' => [
+                'zh_CN' => '本能力覆盖平台所有生图提示词补全场景，根据用户文本和可选参考图生成可直接用于生图的提示词。',
+                'en_US' => 'This capability covers image prompt completion scenarios on the platform, generating image prompts from user text and optional reference images.',
+            ],
+            'icon' => 'image-prompt-completion-icon',
+            'sort_order' => 22,
+            'status' => env('AI_ABILITY_IMAGE_PROMPT_COMPLETION_STATUS', true),
+            'config' => [
+                'model_id' => env('AI_ABILITY_IMAGE_PROMPT_COMPLETION_MODEL_ID', null),
+            ],
+        ],
+
         // 图片搜索
         'image_search' => [
             'code' => 'image_search',

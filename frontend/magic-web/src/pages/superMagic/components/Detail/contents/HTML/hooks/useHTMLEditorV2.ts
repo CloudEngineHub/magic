@@ -11,7 +11,6 @@ import {
 } from "../iframe-bridge/types/messages"
 import type { HTMLEditorV2Ref } from "../iframe-bridge/types/props"
 import { filterInjectedTags } from "../utils"
-import { env } from "@/utils/env"
 
 interface UseHTMLEditorV2Options {
 	/** iframe 元素引用 */
@@ -24,8 +23,6 @@ interface UseHTMLEditorV2Options {
 	iframeLoaded: boolean
 	/** 内容是否已注入 */
 	contentInjected: boolean
-	/** 渲染站地址 */
-	renderSiteUrl?: string
 	/** 回发 iframe 的严格目标源 */
 	targetOrigin: string
 	/** 缩放比例 */
@@ -61,7 +58,6 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		sandboxType = "iframe",
 		iframeLoaded,
 		contentInjected,
-		renderSiteUrl,
 		targetOrigin,
 		scaleRatio,
 		saveEditContent,
@@ -86,8 +82,6 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 	const onZoomRequestRef = useRef(onZoomRequest)
 	const editTransitionIdRef = useRef(0)
 	const editLifecycleRef = useRef<"idle" | "activating" | "active" | "deactivating">("idle")
-	const iframeRuntimeUrlRef = useRef(env("MAGIC_IFRAME_RUNTIME_URL"))
-	const isCrossDomain = Boolean(renderSiteUrl)
 
 	stylePanelStoreRef.current = stylePanelStore
 	onZoomRequestRef.current = onZoomRequest
@@ -299,7 +293,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 
 					console.log("[useHTMLEditorV2] save result", result)
 
-					const htmlForClean = result?.html || result?.cleanHtml
+					const htmlForClean = result?.cleanHtml
 					if (!htmlForClean) {
 						console.error("[useHTMLEditorV2] save failed: no html in result")
 						return defaultResult
@@ -316,7 +310,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 
 					return {
 						cleanContent,
-						rawContent: htmlForClean,
+						rawContent: result?.html || result?.cleanHtml,
 						fileId: fileId,
 						success: true,
 					}
@@ -648,21 +642,11 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		const nextIsEditMode = Boolean(isEditMode)
 		prevIsEditModeRef.current = nextIsEditMode
 
-		// 当 contentInjected 从 false 变为 true 时，重置注入标记和 runtime 状态
-		// 这允许在内容更新后重新注入脚本（因为 setContent 会清除所有脚本）
+		// 当 contentInjected 从 false 变为 true 时，重置激活标记和 runtime 状态。
+		// setContent 会替换 iframe 文档，shell 内联 runtime 会重新安装，需要再次发送激活消息。
 		if (contentInjected && !prevContentInjectedRef.current) {
-			if (isCrossDomain) {
-				if (hasPendingRuntimeReadyRef.current) {
-					// runtime 已报告 ready 时，保留 ready 状态
-					hasPendingRuntimeReadyRef.current = false
-				} else {
-					// 跨域 runtime 可能先于 contentInjected 恢复发出 ready
-					setIsRuntimeReady(false)
-				}
-			} else if (hasInjectedScriptRef.current) {
-				hasInjectedScriptRef.current = false
-				setIsRuntimeReady(false)
-			}
+			hasInjectedScriptRef.current = false
+			setIsRuntimeReady(false)
 		}
 		// 更新 prevContentInjectedRef
 		prevContentInjectedRef.current = contentInjected
@@ -679,10 +663,6 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			return
 		}
 
-		if (isCrossDomain) {
-			return
-		}
-
 		if (
 			sandboxType === "iframe" &&
 			iframeRef.current?.contentWindow &&
@@ -690,31 +670,17 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			contentInjected
 		) {
 			try {
-				// Only inject script once per iframe load
+				// The shell already contains the runtime; activate it once per content document.
 				if (!hasInjectedScriptRef.current) {
-					const runtimeUrl = iframeRuntimeUrlRef.current
-
-					// 优先使用渲染站静态资源（跨域模式）
-					if (runtimeUrl) {
-						iframeRef.current.contentWindow.postMessage(
-							{
-								type: "loadEditRuntime",
-								runtimeUrl,
-								scaleRatio: scaleRatio || 1,
-							},
-							targetOrigin,
-						)
-					} else {
-						// iframe-runtime.js 已经通过 getFullContent 内联在 HTML 中，
-						// 只需发送激活消息即可。
-						iframeRef.current.contentWindow.postMessage(
-							{
-								type: "activateEditorRuntime",
-								scaleRatio: scaleRatio || 1,
-							},
-							targetOrigin,
-						)
-					}
+					// iframe-runtime.js 已经通过 shell 内联在 HTML 中，
+					// 这里只需发送激活消息触发 Phase 2 编辑器运行时。
+					iframeRef.current.contentWindow.postMessage(
+						{
+							type: "activateEditorRuntime",
+							scaleRatio: scaleRatio || 1,
+						},
+						targetOrigin,
+					)
 					hasInjectedScriptRef.current = true
 					console.log("[useHTMLEditorV2] 已发送编辑器激活消息")
 				}
@@ -727,7 +693,6 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		sandboxType,
 		iframeLoaded,
 		contentInjected,
-		renderSiteUrl,
 		iframeRef,
 		scaleRatio,
 		runExitEditFlow,

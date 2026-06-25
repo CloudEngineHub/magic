@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Instagram Minimal - Preview</title>
+    <link rel="stylesheet" href="ins-minimal.css" />
+    <style>
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e8e8e8;
+      }
+      .preview-container {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        padding: 40px;
+        align-items: center;
+      }
+      .preview-card-wrapper {
+        width: 1080px;
+        height: 1350px;
+        transform: scale(0.5);
+        transform-origin: top center;
+        margin-bottom: -675px;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-card-wrapper">
+        <section class="imn-card imn-cover">
+          <div class="imn-cover-kicker">Instagram Minimal</div>
+          <div class="imn-hero-panel">
+            <h1 class="imn-cover-title">Less Noise<br />More Signal</h1>
+          </div>
+          <p class="imn-cover-subtitle">
+            A clean system for swipeable decisions
+          </p>
+          <div class="imn-tag-row">
+            <span class="imn-badge">Swipe</span
+            ><span class="imn-badge-muted">strategic summaries</span>
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="imn-card imn-content">
+          <header class="imn-header">
+            <div>
+              <div class="imn-eyebrow">Performance map</div>
+              <h2 class="imn-title">What makes this post saveable?</h2>
+            </div>
+            <div class="imn-page">02</div>
+          </header>
+          <div class="imn-section-label">Content signals</div>
+          <div class="imn-signature">
+            <div class="imn-signature-row">
+              <span class="imn-signature-index">I</span
+              ><span class="imn-signature-label">Reader promise</span
+              ><span class="imn-signature-note">clear</span>
+            </div>
+            <div class="imn-signature-row">
+              <span class="imn-signature-index">II</span
+              ><span class="imn-signature-label">Evidence path</span
+              ><span class="imn-signature-note">tight</span>
+            </div>
+            <div class="imn-signature-row">
+              <span class="imn-signature-index">III</span
+              ><span class="imn-signature-label">Save reason</span
+              ><span class="imn-signature-note">useful</span>
+            </div>
+          </div>
+          <div class="imn-data-grid">
+            <div class="imn-data-card">
+              <div class="label">Hook clarity</div>
+              <div class="value">82<span class="unit">%</span></div>
+            </div>
+            <div class="imn-data-card">
+              <div class="label">Save intent</div>
+              <div class="value">91<span class="unit">%</span></div>
+            </div>
+          </div>
+          <div class="imn-compare-grid">
+            <div class="imn-compare-card">
+              <span class="imn-badge">Before</span>
+              <p class="imn-item-title">Pretty layout, weak promise</p>
+            </div>
+            <div class="imn-compare-card">
+              <span class="imn-badge-muted">After</span>
+              <p class="imn-item-title">Specific route, stronger payoff</p>
+            </div>
+          </div>
+          <div class="imn-note">
+            Use this preset when the reader needs a clear reason to swipe, save,
+            and act.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="imn-card imn-content">
+          <header class="imn-header">
+            <div>
+              <div class="imn-eyebrow">Chart card</div>
+              <h2 class="imn-title">Data without dashboard noise</h2>
+            </div>
+            <div class="imn-page">03</div>
+          </header>
+          <div class="imn-section-label">Weekly signal</div>
+          <div id="ins-minimal-preview-chart" class="imn-chart"></div>
+          <div class="imn-quote-block">
+            A good carousel turns scattered notes into one clean decision path.
+          </div>
+          <div class="imn-note">
+            <span class="imn-text-positive">Positive:</span> chart has one job.
+            <span class="imn-text-negative">Avoid:</span> decorative numbers
+            with no reader action.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="imn-card imn-content">
+          <header class="imn-header">
+            <div>
+              <div class="imn-eyebrow">Swipe plan</div>
+              <h2 class="imn-title">A stronger four-card arc</h2>
+            </div>
+            <div class="imn-page">04</div>
+          </header>
+          <div class="imn-list">
+            <div class="imn-list-row is-highlight">
+              <div class="imn-rank">01</div>
+              <div>
+                <div class="imn-item-title">Name the pain fast</div>
+                <div class="imn-item-meta">
+                  Make the reader feel seen in three seconds.
+                </div>
+              </div>
+              <span class="imn-badge">Hook</span>
+            </div>
+            <div class="imn-list-row">
+              <div class="imn-rank">02</div>
+              <div>
+                <div class="imn-item-title">Show the operating model</div>
+                <div class="imn-item-meta">
+                  Use diagrams, rules, and crisp labels.
+                </div>
+              </div>
+              <span class="imn-badge-muted">Body</span>
+            </div>
+            <div class="imn-list-row">
+              <div class="imn-rank">03</div>
+              <div>
+                <div class="imn-item-title">Add a decision cue</div>
+                <div class="imn-item-meta">
+                  Help readers pick the next step.
+                </div>
+              </div>
+              <span class="imn-badge-muted">CTA</span>
+            </div>
+          </div>
+          <div class="imn-divider"></div>
+          <div class="imn-timeline-row">
+            <strong class="imn-text-accent">Day 1</strong
+            ><span class="imn-text-muted"
+              >Draft the reader promise and card rhythm.</span
+            >
+          </div>
+          <div class="imn-progress-bar"><span style="width: 76%"></span></div>
+          <p class="imn-note">
+            <span class="imn-hl">Reusable structure:</span> cover, proof, chart,
+            checklist.
+          </p>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="ins-minimal.js"></script>
+    <script>
+      (function () {
+        var el = document.getElementById("ins-minimal-preview-chart");
+        if (el && window.echarts && window.InsMinimalPresets) {
+          var chart = echarts.init(el);
+          chart.setOption(
+            window.InsMinimalPresets.get("ins-minimal-bar", {
+              categories: ["Hook", "Proof", "Save", "Share"],
+              values: [82, 68, 91, 57],
+            }),
+          );
+        }
+      })();
+    </script>
+  </body>
+</html>

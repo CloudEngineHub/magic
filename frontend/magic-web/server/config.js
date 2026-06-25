@@ -52,6 +52,7 @@ const envVarWhitelist = [
 	"MAGIC_DEPLOYMENT_ID",
 	"MAGIC_ENABLE_API_CACHE",
 	"MAGIC_SW_MODE",
+	"MAGIC_HTML_SANDBOX_URL",
 ]
 
 /**
@@ -70,4 +71,3 @@ function getSafeEnvVars() {
 
 module.exports.envVarWhitelist = envVarWhitelist
 module.exports.getSafeEnvVars = getSafeEnvVars
-

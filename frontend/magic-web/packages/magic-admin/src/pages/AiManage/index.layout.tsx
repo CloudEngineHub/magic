@@ -8,8 +8,10 @@ import {
 	IconVideo,
 	IconUsers,
 	IconSettingsAi,
+	IconMenu2,
 } from "@tabler/icons-react"
 import {
+	AI_APP_MENU,
 	AI_CUSTOM_MODEL,
 	AI_INTERNAL_EMPLOYEE_SKILL,
 	PERMISSION_KEY_MAP,
@@ -115,10 +117,36 @@ function AIManagerLayout() {
 					},
 				],
 			},
+			{
+				key: RoutePath.AIManage,
+				label: t("nav.aiSubMenu.manage"),
+				hidden: isOfficialOrg,
+				validate: (permissions: string[], isSuperAdmin?: boolean) => {
+					return (
+						isSuperAdmin ||
+						AI_APP_MENU.some((permission) => permissions.includes(permission))
+					)
+				},
+				children: [
+					{
+						key: RoutePath.AIAppMenu,
+						label: t("nav.aiSubMenu.applicationMenu"),
+						icon: <IconMenu2 size={20} />,
+						validate: (permissions: string[], isSuperAdmin?: boolean) => {
+							return (
+								isSuperAdmin ||
+								AI_APP_MENU.some((permission) => permissions.includes(permission))
+							)
+						},
+					},
+				],
+			},
 		]
 	}, [t, isOfficialOrg, isPersonalOrganization])
 
-	return <SecondaryLayout items={items} openKeys={[RoutePath.AICustomModel]} />
+	return (
+		<SecondaryLayout items={items} openKeys={[RoutePath.AICustomModel, RoutePath.AIManage]} />
+	)
 }
 
 export default AIManagerLayout

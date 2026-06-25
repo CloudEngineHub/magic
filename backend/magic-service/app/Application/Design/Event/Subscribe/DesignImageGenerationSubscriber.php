@@ -120,27 +120,7 @@ class DesignImageGenerationSubscriber implements ListenerInterface
                 }
                 ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_generation.generate_image_failed_with_message', ['message' => $errorMessage]);
             }
-            $imageUrl = $this->parseResponseUrl($response);
-            if (empty($imageUrl)) {
-                ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_generation.generate_image_failed');
-            }
-
-            $fileName = $this->resolveAndAssignGeneratedFileName($dataIsolation, $imageGenerationEntity, $imageUrl);
-            $this->ensureOutputDirectoryId($imageGenerationEntity);
-
-            Db::transaction(function () use ($dataIsolation, $imageGenerationEntity, $imageUrl, $fileName): void {
-                $this->imageGenerationDomainService->markAsCompleted($dataIsolation, $imageGenerationEntity->getId(), $fileName);
-
-                $fullPrefix = $this->fileDomainService->getFullPrefix($dataIsolation->getCurrentOrganizationCode());
-                $fullFileDir = $imageGenerationEntity->getFullFileDir($fullPrefix);
-
-                $uploadPath = substr($fullFileDir, strlen($fullPrefix));
-                $uploadFile = new UploadFile($imageUrl, $uploadPath, $fileName, false);
-
-                $this->createProjectFile($dataIsolation, $imageGenerationEntity, $uploadFile);
-
-                $this->fileDomainService->uploadByCredential($dataIsolation->getCurrentOrganizationCode(), $uploadFile, StorageBucketType::SandBox, false);
-            });
+            $this->completeImageTask($dataIsolation, $imageGenerationEntity, $response);
         } catch (Throwable $throwable) {
             $this->imageGenerationDomainService->markAsFailed($dataIsolation, $imageGenerationEntity->getId(), $throwable->getMessage());
         } finally {
@@ -174,6 +154,53 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         $taskFileEntity->setParentId($imageGenerationEntity->getFileDirId());
 
         $this->taskFileDomainService->saveProjectFile(dataIsolation: $contactDataIsolation, projectEntity: $project, taskFileEntity: $taskFileEntity, isUpdated: false);
+    }
+
+    private function completeImageTask(
+        DesignDataIsolation $dataIsolation,
+        ImageGenerationEntity $imageGenerationEntity,
+        OpenAIFormatResponse $response
+    ): void {
+        $imageUrls = $this->parseResponseUrls($response);
+        if ($imageUrls === []) {
+            ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_generation.generate_image_failed');
+        }
+
+        $baseName = $this->generatedImageFileNameTool->resolveBaseNameWithoutExtension(
+            $dataIsolation,
+            $imageGenerationEntity,
+            $imageGenerationEntity->getPrompt(),
+        );
+
+        $this->ensureOutputDirectoryId($imageGenerationEntity);
+
+        $fullPrefix = $this->fileDomainService->getFullPrefix($dataIsolation->getCurrentOrganizationCode());
+        $fullFileDir = $imageGenerationEntity->getFullFileDir($fullPrefix);
+        $uploadPath = substr($fullFileDir, strlen($fullPrefix));
+
+        $completionPayload = $this->buildImageCompletionPayload($baseName, $imageUrls, $imageGenerationEntity->getFileDir());
+        $outputImages = $completionPayload['output_images'];
+        $uploadFiles = [];
+        foreach ($imageUrls as $index => $imageUrl) {
+            $uploadFile = new UploadFile($imageUrl, $uploadPath, $outputImages[$index]['file_name'], false);
+            $uploadFiles[] = $uploadFile;
+        }
+
+        Db::transaction(function () use ($dataIsolation, $imageGenerationEntity, $outputImages, $uploadFiles, $completionPayload): void {
+            $this->imageGenerationDomainService->markAsCompletedWithImages(
+                $dataIsolation,
+                $imageGenerationEntity->getId(),
+                $completionPayload['file_name'],
+                $outputImages
+            );
+
+            foreach ($uploadFiles as $index => $uploadFile) {
+                $imageGenerationEntity->setFileName($outputImages[$index]['file_name']);
+                $this->createProjectFile($dataIsolation, $imageGenerationEntity, $uploadFile);
+                $this->fileDomainService->uploadByCredential($dataIsolation->getCurrentOrganizationCode(), $uploadFile, StorageBucketType::SandBox, false);
+            }
+            $imageGenerationEntity->setFileName($completionPayload['file_name']);
+        });
     }
 
     /**
@@ -227,34 +254,49 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         return $response;
     }
 
-    /**
-     * 根据结果图 URL 解析扩展名、生成目标文件名并写入实体，返回带扩展名的完整文件名。
-     */
-    private function resolveAndAssignGeneratedFileName(
-        DesignDataIsolation $dataIsolation,
-        ImageGenerationEntity $entity,
-        string $imageUrl,
-    ): string {
-        $extension = pathinfo((string) parse_url($imageUrl, PHP_URL_PATH), PATHINFO_EXTENSION);
-        $fileNameWithoutExtension = $this->generatedImageFileNameTool->resolveBaseNameWithoutExtension(
-            $dataIsolation,
-            $entity,
-            $entity->getPrompt(),
-        );
-        $fileName = $fileNameWithoutExtension . '.' . $extension;
-        $entity->setFileName($fileName);
+    private function parseResponseUrls(OpenAIFormatResponse $response): array
+    {
+        $urls = [];
+        foreach ($response->getData() as $item) {
+            $url = is_array($item) ? (string) ($item['url'] ?? '') : '';
+            if ($url !== '') {
+                $urls[] = $url;
+            }
+        }
 
-        return $fileName;
+        return $urls;
     }
 
-    private function parseResponseUrl(OpenAIFormatResponse $response): string
+    private function buildIndexedFileName(string $baseName, string $imageUrl, int $index): string
     {
-        // 目前我们只会生成一个，所以这里直接取第一个
-        $data = $response->getData();
-        if (isset($data[0]['url'])) {
-            return $data[0]['url'];
+        $extension = pathinfo((string) parse_url($imageUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'png';
+        if ($index === 1) {
+            return $baseName . '.' . $extension;
         }
-        return '';
+
+        return sprintf('%s_%d.%s', $baseName, $index, $extension);
+    }
+
+    /**
+     * @param array<int, string> $imageUrls
+     * @return array{file_name: string, output_images: array<int, array{index: int, file_name: string, file_path: string}>}
+     */
+    private function buildImageCompletionPayload(string $baseName, array $imageUrls, string $fileDir): array
+    {
+        $outputImages = [];
+        foreach ($imageUrls as $index => $imageUrl) {
+            $fileName = $this->buildIndexedFileName($baseName, (string) $imageUrl, $index + 1);
+            $outputImages[] = [
+                'index' => $index + 1,
+                'file_name' => $fileName,
+                'file_path' => rtrim($fileDir, '/') . '/' . $fileName,
+            ];
+        }
+
+        return [
+            'file_name' => '',
+            'output_images' => $outputImages,
+        ];
     }
 
     /**

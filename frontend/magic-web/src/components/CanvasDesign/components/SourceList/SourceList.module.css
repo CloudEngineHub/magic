@@ -69,7 +69,7 @@
 	box-shadow: none;
 }
 
-/* 已选图：无内边距，缩略图铺满格子 */
+/* 已选图：无内边距，预览铺满格子 */
 .sourceItemHasResource {
 	gap: 0;
 	padding: 0;

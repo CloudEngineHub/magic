@@ -1,4 +1,4 @@
-import { Download, FolderSymlink, Share2, Trash2 } from "lucide-react"
+import { Copy, Download, FolderSymlink, Share2, Trash2 } from "lucide-react"
 import { memo } from "react"
 import { useTranslation } from "react-i18next"
 import MobileFileSelectionCheckbox from "./MobileFileSelectionCheckbox"
@@ -12,6 +12,7 @@ interface MobileFilesSelectionBarProps {
 	onToggleAll: () => void
 	onDownload?: () => void
 	onShare?: () => void
+	onCopy?: () => void
 	onMove?: () => void
 	onDelete?: () => void
 }
@@ -59,6 +60,7 @@ function MobileFilesSelectionBar({
 	onToggleAll,
 	onDownload,
 	onShare,
+	onCopy,
 	onMove,
 	onDelete,
 }: MobileFilesSelectionBarProps) {
@@ -104,6 +106,12 @@ function MobileFilesSelectionBar({
 						icon={Share2}
 						label={t("topicFiles.contextMenu.shareFile")}
 						onClick={onShare}
+					/>
+					<div className="h-5 w-px shrink-0 bg-border" />
+					<ActionIconButton
+						icon={Copy}
+						label={t("topicFiles.contextMenu.copyTo")}
+						onClick={onCopy}
 					/>
 					<div className="h-5 w-px shrink-0 bg-border" />
 					<ActionIconButton

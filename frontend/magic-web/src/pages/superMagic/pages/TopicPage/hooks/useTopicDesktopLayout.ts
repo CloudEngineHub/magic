@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react"
 import { useMemoizedFn } from "ahooks"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { TopicLayoutStore } from "../stores/TopicLayoutStore"
 
 interface UseTopicDesktopLayoutOptions {
@@ -56,6 +57,16 @@ export function useTopicDesktopLayout({
 	const ensureExpandedWhenDetailVisible = useMemoizedFn((shouldShowDetailPanel: boolean) => {
 		store.ensureExpandedWhenDetailVisible(shouldShowDetailPanel)
 	})
+
+	useEffect(() => {
+		pubsub.subscribe(PubSubEvents.Expand_Topic_Conversation_Panel, expandConversationPanel)
+		return () => {
+			pubsub.unsubscribe(
+				PubSubEvents.Expand_Topic_Conversation_Panel,
+				expandConversationPanel,
+			)
+		}
+	}, [expandConversationPanel])
 
 	useEffect(() => {
 		const container = containerRef.current

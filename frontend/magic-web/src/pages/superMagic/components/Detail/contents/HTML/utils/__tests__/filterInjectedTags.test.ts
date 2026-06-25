@@ -110,4 +110,30 @@ describe("filterInjectedTags", () => {
 		expect(styleAttribute).not.toContain("linear-gradient")
 		expect(styleAttribute).not.toContain("background: ")
 	})
+
+	it("should restore original google fonts import url in style tags", () => {
+		const html = `
+			<!DOCTYPE html>
+			<html>
+				<head>
+					<style>
+						/*__ORIGINAL_GOOGLE_IMPORT_URL__:https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap__*/
+						@import url('https://cdn.example.com/google-fonts/css/woff2/Noto_Sans_SC_woff2.css');
+						body { font-family: 'Noto Sans SC', sans-serif; }
+					</style>
+				</head>
+				<body></body>
+			</html>
+		`
+
+		const result = filterInjectedTags(html, new Map())
+		const document = new DOMParser().parseFromString(result, "text/html")
+		const styleContent = document.querySelector("style")?.textContent || ""
+
+		expect(styleContent).toContain(
+			"@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');",
+		)
+		expect(styleContent).not.toContain("cdn.example.com/google-fonts")
+		expect(styleContent).not.toContain("__ORIGINAL_GOOGLE_IMPORT_URL__")
+	})
 })

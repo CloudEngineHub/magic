@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Instagram Creator Studio - Preview</title>
+    <link rel="stylesheet" href="ins-creator-studio.css" />
+    <style>
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e8e8e8;
+      }
+      .preview-container {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        padding: 40px;
+        align-items: center;
+      }
+      .preview-card-wrapper {
+        width: 1080px;
+        height: 1350px;
+        transform: scale(0.5);
+        transform-origin: top center;
+        margin-bottom: -675px;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-card-wrapper">
+        <section class="ics-card ics-cover">
+          <div class="ics-cover-kicker">Instagram Creator Studio</div>
+          <div class="ics-hero-panel">
+            <h1 class="ics-cover-title">Creator<br />Operating Notes</h1>
+          </div>
+          <p class="ics-cover-subtitle">
+            Profile-led cards for lessons that feel lived-in
+          </p>
+          <div class="ics-tag-row">
+            <span class="ics-badge">Swipe</span
+            ><span class="ics-badge-muted"
+              >personal insight and creator education</span
+            >
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="ics-card ics-content">
+          <header class="ics-header">
+            <div>
+              <div class="ics-eyebrow">Performance map</div>
+              <h2 class="ics-title">What makes this post saveable?</h2>
+            </div>
+            <div class="ics-page">02</div>
+          </header>
+          <div class="ics-section-label">Content signals</div>
+          <div class="ics-signature">
+            <div class="ics-signature-avatar">AI</div>
+            <div class="ics-signature-bio">
+              <div class="ics-signature-name">Creator note</div>
+              <div class="ics-signature-proof">
+                A lived-in lesson, a useful rule, and one action the reader can
+                try today.
+              </div>
+            </div>
+          </div>
+          <div class="ics-data-grid">
+            <div class="ics-data-card">
+              <div class="label">Hook clarity</div>
+              <div class="value">82<span class="unit">%</span></div>
+            </div>
+            <div class="ics-data-card">
+              <div class="label">Save intent</div>
+              <div class="value">91<span class="unit">%</span></div>
+            </div>
+          </div>
+          <div class="ics-compare-grid">
+            <div class="ics-compare-card">
+              <span class="ics-badge">Before</span>
+              <p class="ics-item-title">Pretty layout, weak promise</p>
+            </div>
+            <div class="ics-compare-card">
+              <span class="ics-badge-muted">After</span>
+              <p class="ics-item-title">Specific route, stronger payoff</p>
+            </div>
+          </div>
+          <div class="ics-note">
+            Use this preset when the reader needs a clear reason to swipe, save,
+            and act.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="ics-card ics-content">
+          <header class="ics-header">
+            <div>
+              <div class="ics-eyebrow">Chart card</div>
+              <h2 class="ics-title">Data without dashboard noise</h2>
+            </div>
+            <div class="ics-page">03</div>
+          </header>
+          <div class="ics-section-label">Weekly signal</div>
+          <div id="ins-creator-studio-preview-chart" class="ics-chart"></div>
+          <div class="ics-quote-block">
+            A good carousel turns scattered notes into one clean decision path.
+          </div>
+          <div class="ics-note">
+            <span class="ics-text-positive">Positive:</span> chart has one job.
+            <span class="ics-text-negative">Avoid:</span> decorative numbers
+            with no reader action.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="ics-card ics-content">
+          <header class="ics-header">
+            <div>
+              <div class="ics-eyebrow">Swipe plan</div>
+              <h2 class="ics-title">A stronger four-card arc</h2>
+            </div>
+            <div class="ics-page">04</div>
+          </header>
+          <div class="ics-list">
+            <div class="ics-list-row is-highlight">
+              <div class="ics-rank">01</div>
+              <div>
+                <div class="ics-item-title">Name the pain fast</div>
+                <div class="ics-item-meta">
+                  Make the reader feel seen in three seconds.
+                </div>
+              </div>
+              <span class="ics-badge">Hook</span>
+            </div>
+            <div class="ics-list-row">
+              <div class="ics-rank">02</div>
+              <div>
+                <div class="ics-item-title">Show the operating model</div>
+                <div class="ics-item-meta">
+                  Use diagrams, rules, and crisp labels.
+                </div>
+              </div>
+              <span class="ics-badge-muted">Body</span>
+            </div>
+            <div class="ics-list-row">
+              <div class="ics-rank">03</div>
+              <div>
+                <div class="ics-item-title">Add a decision cue</div>
+                <div class="ics-item-meta">
+                  Help readers pick the next step.
+                </div>
+              </div>
+              <span class="ics-badge-muted">CTA</span>
+            </div>
+          </div>
+          <div class="ics-divider"></div>
+          <div class="ics-timeline-row">
+            <strong class="ics-text-accent">Day 1</strong
+            ><span class="ics-text-muted"
+              >Draft the reader promise and card rhythm.</span
+            >
+          </div>
+          <div class="ics-progress-bar"><span style="width: 76%"></span></div>
+          <p class="ics-note">
+            <span class="ics-hl">Reusable structure:</span> cover, proof, chart,
+            checklist.
+          </p>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="ins-creator-studio.js"></script>
+    <script>
+      (function () {
+        var el = document.getElementById("ins-creator-studio-preview-chart");
+        if (el && window.echarts && window.InsCreatorStudioPresets) {
+          var chart = echarts.init(el);
+          chart.setOption(
+            window.InsCreatorStudioPresets.get("ins-creator-studio-bar", {
+              categories: ["Hook", "Proof", "Save", "Share"],
+              values: [82, 68, 91, 57],
+            }),
+          );
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -1,11 +1,46 @@
 // Schema configuration for ProseMirror RichText rendering
 // Based on the reference implementation in chatNew
 
-import { getMentionDisplayName } from "@/components/business/MentionPanel/tiptap-plugin/types"
+import {
+	getMentionDisplayName,
+	type TiptapMentionAttributes,
+} from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { SuperPlaceholderExtension } from "@/pages/superMagic/components/MessageEditor/extensions"
 import { getDisplayText } from "@/pages/superMagic/components/MessageEditor/extensions/super-placeholder/utils"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
+
+function safeParseJsonAttr(value: string | null) {
+	if (!value) return null
+	try {
+		return JSON.parse(value)
+	} catch {
+		return null
+	}
+}
+
+interface SchemaNodeWithAttrs<TAttrs> {
+	attrs: TAttrs
+}
+
+interface SuperPlaceholderSchemaAttrs extends Record<string, unknown> {
+	type?: string
+	props?: {
+		placeholder?: string
+		defaultValue?: string
+		value?: string
+	}
+}
+
+interface InspectorDetailSchemaAttrs extends Record<string, unknown> {
+	selector?: string
+	tagName?: string
+	size?: string
+	computedStyles?: string
+	styleCount?: number
+	textContent?: string
+	fileMention?: TiptapMentionAttributes | null
+}
 
 export default {
 	nodes: {
@@ -41,7 +76,7 @@ export default {
 					}),
 				},
 			],
-			toDOM: (node: any) => {
+			toDOM: (node: SchemaNodeWithAttrs<TiptapMentionAttributes>) => {
 				const { type } = node.attrs
 				let label = getMentionDisplayName(node.attrs)
 
@@ -148,7 +183,7 @@ export default {
 					},
 				},
 			],
-			toDOM: (node: any) => {
+			toDOM: (node: SchemaNodeWithAttrs<SuperPlaceholderSchemaAttrs>) => {
 				const { type, props } = node.attrs
 
 				const safeProps = {
@@ -173,7 +208,8 @@ export default {
 			},
 		},
 		[INSPECTOR_DETAIL_TYPE]: {
-			group: "block",
+			inline: true,
+			group: "inline",
 			atom: true,
 			selectable: true,
 			attrs: {
@@ -183,10 +219,11 @@ export default {
 				computedStyles: { default: "{}" },
 				styleCount: { default: 0 },
 				textContent: { default: "" },
+				fileMention: { default: null },
 			},
 			parseDOM: [
 				{
-					tag: `div[data-type="${INSPECTOR_DETAIL_TYPE}"]`,
+					tag: `[data-type="${INSPECTOR_DETAIL_TYPE}"]`,
 					getAttrs: (dom: HTMLElement) => ({
 						selector: dom.getAttribute("data-selector") || "",
 						tagName: dom.getAttribute("data-tag-name") || "",
@@ -194,12 +231,13 @@ export default {
 						computedStyles: dom.getAttribute("data-computed-styles") || "{}",
 						styleCount: Number(dom.getAttribute("data-style-count")) || 0,
 						textContent: dom.getAttribute("data-text-content") || "",
+						fileMention: safeParseJsonAttr(dom.getAttribute("data-file-mention")),
 					}),
 				},
 			],
-			toDOM: (node: any) => {
+			toDOM: (node: SchemaNodeWithAttrs<InspectorDetailSchemaAttrs>) => {
 				return [
-					"div",
+					"span",
 					{
 						"data-type": INSPECTOR_DETAIL_TYPE,
 						"data-selector": node.attrs.selector,
@@ -208,6 +246,9 @@ export default {
 						"data-computed-styles": node.attrs.computedStyles,
 						"data-style-count": String(node.attrs.styleCount),
 						"data-text-content": node.attrs.textContent,
+						"data-file-mention": node.attrs.fileMention
+							? JSON.stringify(node.attrs.fileMention)
+							: undefined,
 						class: "inspector-detail-node",
 					},
 					"[Element Inspector Detail]",

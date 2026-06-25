@@ -14,6 +14,7 @@ import ImageMessageEditor from "./components/ImageMessageEditor"
 import VideoGenerateEditor from "./components/VideoGenerateEditor"
 import MessageHistory from "./components/MessageHistory"
 import VideoFullscreenOverlay from "./components/VideoFullscreenOverlay"
+import ImageElementFullscreenOverlay from "./components/ImageElementFullscreenOverlay"
 import { MagicProvider, useMagic } from "./context/MagicContext"
 import { toPlainObject } from "./canvas/utils/utils"
 import { PortalContainerProvider } from "./components/ui/custom/PortalContainerContext"
@@ -28,6 +29,8 @@ import ImageCropPanel from "./components/ImageCropPanel"
 import ImageExtendPanel from "./components/ImageExtendPanel"
 import ImageEraserPanel from "./components/ImageEraserPanel"
 import ElementRenameOverlay from "./components/ElementRenameOverlay"
+export { prewarmCanvasDesignImageWorker } from "./prewarm"
+import PluginPanel from "./components/PluginPanel"
 
 import styles from "./index.module.css"
 
@@ -43,7 +46,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		shareHostBottomChrome = false,
 	} = props
 
-	const { defaultData, onCanvasDesignDataChange } = data
+	const { defaultData, onCanvasDesignDataChange, onCanvasDesignDataPatchChange } = data
 
 	const {
 		defaultMarkers,
@@ -62,7 +65,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	const { methods, permissions } = useMagic()
 
-	const { fullscreenVideoElementId } = useCanvasPanelUI()
+	const { fullscreenMediaElement, setFullscreenMediaElement } = useCanvasPanelUI()
 
 	const canvasContainerRef = useRef<HTMLDivElement>(null)
 
@@ -80,6 +83,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		onMarkerDeleted,
 		onMarkerUpdated,
 		onCanvasDesignDataChange,
+		onCanvasDesignDataPatchChange,
 	})
 
 	// 更新视口偏移量
@@ -110,6 +114,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 				scopeElement instanceof HTMLElement ? scopeElement : canvasContainerRef.current,
 			id: designProjectId,
 			defaultReadyonly: readonly,
+			plugins: props.plugins,
 			magic: {
 				methods: methods,
 				permissions: permissions,
@@ -196,21 +201,31 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			{!readonly && <ImageExtendPanel />}
 			{!readonly && <ImageEraserPanel />}
 			<MessageHistory />
-			{fullscreenVideoElementId ? <VideoFullscreenOverlay /> : null}
+			{fullscreenMediaElement?.type === "video" ? (
+				<VideoFullscreenOverlay
+					elementId={fullscreenMediaElement.elementId}
+					onClose={() => setFullscreenMediaElement(null)}
+				/>
+			) : null}
+			{fullscreenMediaElement?.type === "image" ? (
+				<ImageElementFullscreenOverlay
+					elementId={fullscreenMediaElement.elementId}
+					onClose={() => setFullscreenMediaElement(null)}
+				/>
+			) : null}
 			<Layers />
 			{!readonly && <Tools />}
+			{!readonly && <PluginPanel />}
 			{!readonly && <CanvasTips />}
 			<Zoom shareHostBottomChrome={shareHostBottomChrome} />
 		</FloatingUIProvider>
 	)
 })
 
-CanvasDesignContent.displayName = "CanvasDesignContent"
-
 const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref) => {
 	const { getIsMobile } = props
 
-	const appContainerRef = useRef<HTMLDivElement>(null)
+	const appContainerRef = useRef<HTMLDivElement | null>(null)
 
 	const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
 
@@ -260,7 +275,5 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 		</MagicProvider>
 	)
 })
-
-CanvasDesign.displayName = "CanvasDesign"
 
 export default CanvasDesign

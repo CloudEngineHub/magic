@@ -1,0 +1,675 @@
+/*
+ * gradient-editorial.css
+ * Gradient Editorial — Image-cover tech-article style card CSS library
+ *
+ * Design principles:
+ *   Cover uses a hero/theme image (set via inline background-image) with a
+ *   gradient overlay for text readability. Content pages are clean white with
+ *   bold sans-serif headings, quote blocks with left border accent,
+ *   generous whitespace, subtle shadows, rounded corners on cards.
+ *   Suited for AI/tech insight articles, product launches, tutorial shares.
+ *
+ * Color palette:
+ *   Primary-1  #6C63FF   Purple accent
+ *   Primary-2  #8B7FFF   Light purple
+ *   Primary-3  #B8B0FF   Muted purple
+ *   White      #FFFFFF
+ *   Gray-1     #F8F9FA   Background light
+ *   Gray-2     #E9ECEF   Border/divider
+ *   Gray-3     #6C757D   Secondary text
+ *   Gray-4     #343A40   Heading text
+ *   Black      #1A1A2E   Deep dark text
+ *   Accent     #FF6B6B   Warm accent (for highlights)
+ *
+ * ─────────────────────────────────────────────────────────────
+ * Table of Contents
+ *
+ * §0  Base Reset & Fonts
+ * §1  Card Shell (.ge-card)
+ *     §1.1  Cover type (.ge-cover)
+ *     §1.2  Content type (.ge-content)
+ * §2  Cover Components
+ *     §2.1  Brand badge (.ge-brand)
+ *     §2.2  Cover title (.ge-cover-title)
+ *     §2.3  Cover subtitle / quote (.ge-cover-quote)
+ *     §2.4  Tag row (.ge-cover-tags)
+ *     §2.5  Meta info (.ge-cover-meta)
+ * §3  Content Components
+ *     §3.1  Page header (.ge-header)
+ *     §3.2  Section heading (.ge-section)
+ *     §3.3  Paragraph (.ge-para)
+ *     §3.4  Quote block (.ge-quote)
+ *     §3.5  Bullet list (.ge-list)
+ *     §3.6  Highlight card (.ge-highlight-card)
+ *     §3.7  Step block (.ge-step)
+ *     §3.8  Divider (.ge-divider)
+ *     §3.9  Footer (.ge-footer)
+ *     §3.10 CTA block (.ge-cta)
+ * §4  Utility Classes (ge-*)
+ * §5  Layout Helpers
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/* ════════════════════════════════════════
+   §0  Base Reset & Fonts
+   ════════════════════════════════════════ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+}
+
+body {
+  font-family:
+    "Noto Sans SC",
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  background: #fff;
+  color: #1a1a2e;
+  line-height: 1.6;
+}
+
+/* ════════════════════════════════════════
+   §1  Card Shell
+   ════════════════════════════════════════ */
+
+.ge-card {
+  width: 540px;
+  height: 720px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ────────────────────────────────────────
+   §1.1  Cover type (.ge-cover)
+   Hero image background with gradient overlay for text readability.
+   Set background-image inline on .ge-cover or on .ge-cover-bg.
+   ──────────────────────────────────────── */
+
+.ge-cover {
+  background: #1a1a2e;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 48px 44px;
+  position: relative;
+}
+
+/* Background image layer (use inline style: background-image) */
+.ge-cover-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+
+/* Bottom gradient overlay — ensures text readability over any image */
+.ge-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.02) 30%,
+    rgba(0, 0, 0, 0.4) 65%,
+    rgba(0, 0, 0, 0.75) 100%
+  );
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Top vignette for brand area */
+.ge-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.3) 0%,
+    transparent 25%
+  );
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* All cover content sits above overlays */
+.ge-cover > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* ────────────────────────────────────────
+   §1.2  Content type (.ge-content)
+   Light background, flex column
+   ──────────────────────────────────────── */
+
+.ge-content {
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  padding: 40px 36px 32px;
+  gap: 18px;
+}
+
+/* Content variant: soft gray background */
+.ge-content.gray-bg {
+  background: #f8f9fa;
+}
+
+/* ════════════════════════════════════════
+   §2  Cover Components
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §2.1  Brand badge (.ge-brand)
+   Top-left brand/product name on cover
+   ──────────────────────────────────────── */
+
+.ge-brand {
+  position: absolute;
+  top: 24px;
+  left: 44px;
+  font-size: 18px;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.15em;
+  z-index: 3;
+}
+
+/* ────────────────────────────────────────
+   §2.2  Cover title (.ge-cover-title)
+   Large bold white text, bottom-aligned
+   ──────────────────────────────────────── */
+
+.ge-cover-title {
+  font-size: 34px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.3;
+  text-align: left;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Smaller cover title variant */
+.ge-cover-title.sm {
+  font-size: 26px;
+}
+
+/* ────────────────────────────────────────
+   §2.3  Cover subtitle / quote (.ge-cover-quote)
+   Semi-transparent white text with left border
+   ──────────────────────────────────────── */
+
+.ge-cover-quote {
+  font-size: 13px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.7;
+  border-left: 3px solid rgba(255, 255, 255, 0.5);
+  padding-left: 14px;
+  max-width: 420px;
+  text-align: left;
+}
+
+/* ────────────────────────────────────────
+   §2.4  Tag row (.ge-cover-tags)
+   Tag chips on cover
+   ──────────────────────────────────────── */
+
+.ge-cover-tags {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.ge-cover-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(4px);
+  padding: 5px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* ────────────────────────────────────────
+   §2.5  Meta info (.ge-cover-meta)
+   Author / date info on cover (bottom-right or inline)
+   ──────────────────────────────────────── */
+
+.ge-cover-meta {
+  margin-top: 20px;
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.03em;
+}
+
+/* ════════════════════════════════════════
+   §3  Content Components
+   ════════════════════════════════════════ */
+
+/* ────────────────────────────────────────
+   §3.1  Page header (.ge-header)
+   Top area with page indicator and mini title
+   ──────────────────────────────────────── */
+
+.ge-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ge-page-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6c63ff;
+  background: #f0eeff;
+  padding: 4px 12px;
+  border-radius: 12px;
+}
+
+.ge-header-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6c757d;
+}
+
+/* ────────────────────────────────────────
+   §3.2  Section heading (.ge-section)
+   Bold heading with optional accent indicator
+   ──────────────────────────────────────── */
+
+.ge-section {
+  font-size: 22px;
+  font-weight: 800;
+  color: #1a1a2e;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+/* Section with purple left accent */
+.ge-section.accented {
+  border-left: 4px solid #6c63ff;
+  padding-left: 14px;
+}
+
+/* Smaller section heading */
+.ge-section.sm {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* ────────────────────────────────────────
+   §3.3  Paragraph (.ge-para)
+   Standard body text
+   ──────────────────────────────────────── */
+
+.ge-para {
+  font-size: 14px;
+  font-weight: 400;
+  color: #4a4a5a;
+  line-height: 1.8;
+}
+
+/* Smaller paragraph */
+.ge-para.sm {
+  font-size: 13px;
+  color: #6c757d;
+}
+
+/* ────────────────────────────────────────
+   §3.4  Quote block (.ge-quote)
+   Left-bordered quote with background
+   ──────────────────────────────────────── */
+
+.ge-quote {
+  background: #f8f9fa;
+  border-left: 4px solid #6c63ff;
+  padding: 16px 20px;
+  border-radius: 0 8px 8px 0;
+}
+
+.ge-quote-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #343a40;
+  line-height: 1.7;
+}
+
+/* Highlight variant (warm) */
+.ge-quote.warm {
+  border-left-color: #ff6b6b;
+  background: #fff5f5;
+}
+
+/* Highlight variant (success) */
+.ge-quote.success {
+  border-left-color: #51cf66;
+  background: #f0fff4;
+}
+
+/* ────────────────────────────────────────
+   §3.5  Bullet list (.ge-list)
+   Clean bullet list with custom markers
+   ──────────────────────────────────────── */
+
+.ge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.ge-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+  color: #4a4a5a;
+  line-height: 1.7;
+}
+
+/* Purple dot marker */
+.ge-list-item::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: #6c63ff;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 7px;
+}
+
+/* ────────────────────────────────────────
+   §3.6  Highlight card (.ge-highlight-card)
+   Rounded card with subtle border and shadow
+   ──────────────────────────────────────── */
+
+.ge-highlight-card {
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  padding: 20px 22px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Purple top accent bar */
+.ge-highlight-card.accented {
+  border-top: 3px solid #6c63ff;
+}
+
+.ge-highlight-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.ge-highlight-card-body {
+  font-size: 13px;
+  font-weight: 400;
+  color: #6c757d;
+  line-height: 1.7;
+}
+
+/* Card with warm gradient bg */
+.ge-highlight-card.gradient {
+  background: linear-gradient(135deg, #f8f0ff 0%, #f0eeff 100%);
+  border: none;
+}
+
+/* ────────────────────────────────────────
+   §3.7  Step block (.ge-step)
+   Numbered step with content
+   ──────────────────────────────────────── */
+
+.ge-step {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.ge-step-num {
+  width: 32px;
+  height: 32px;
+  background: #6c63ff;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ge-step-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ge-step-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.ge-step-desc {
+  font-size: 13px;
+  color: #6c757d;
+  line-height: 1.6;
+}
+
+/* ────────────────────────────────────────
+   §3.8  Divider (.ge-divider)
+   Thin horizontal divider
+   ──────────────────────────────────────── */
+
+.ge-divider {
+  height: 1px;
+  background: #e9ecef;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* Gradient divider variant */
+.ge-divider.gradient {
+  background: linear-gradient(90deg, #6c63ff, #a78bfa, transparent);
+  height: 2px;
+}
+
+/* ────────────────────────────────────────
+   §3.9  Footer (.ge-footer)
+   Bottom area with author/brand
+   ──────────────────────────────────────── */
+
+.ge-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid #e9ecef;
+}
+
+.ge-footer-left {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6c757d;
+}
+
+.ge-footer-right {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6c63ff;
+}
+
+/* ────────────────────────────────────────
+   §3.10  CTA block (.ge-cta)
+   Call-to-action ending block
+   ──────────────────────────────────────── */
+
+.ge-cta {
+  background: linear-gradient(135deg, #6c63ff 0%, #a78bfa 100%);
+  border-radius: 12px;
+  padding: 24px 28px;
+  text-align: center;
+}
+
+.ge-cta-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.ge-cta-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* ════════════════════════════════════════
+   §4  Utility Classes
+   ════════════════════════════════════════ */
+
+/* Text colors */
+.ge-text-purple {
+  color: #6c63ff;
+}
+.ge-text-muted {
+  color: #6c757d;
+}
+.ge-text-dark {
+  color: #1a1a2e;
+}
+.ge-text-accent {
+  color: #ff6b6b;
+}
+.ge-text-success {
+  color: #51cf66;
+}
+.ge-text-white {
+  color: #ffffff;
+}
+
+/* Background highlights */
+.ge-bg-purple {
+  background: #f0eeff;
+}
+.ge-bg-warm {
+  background: #fff5f5;
+}
+.ge-bg-success {
+  background: #f0fff4;
+}
+
+/* Inline highlight */
+.ge-hl {
+  background: linear-gradient(transparent 60%, #c4b5fd 60%);
+  padding: 0 2px;
+}
+
+.ge-hl-warm {
+  background: linear-gradient(transparent 60%, #ffc9c9 60%);
+  padding: 0 2px;
+}
+
+/* Badge */
+.ge-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: #f0eeff;
+  color: #6c63ff;
+}
+
+.ge-badge.dark {
+  background: #1a1a2e;
+  color: #fff;
+}
+
+/* Tag */
+.ge-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: #f8f9fa;
+  color: #4a4a5a;
+  border: 1px solid #e9ecef;
+}
+
+/* Bold emphasis */
+.ge-bold {
+  font-weight: 700;
+}
+.ge-em {
+  font-style: italic;
+  color: #6c63ff;
+}
+
+/* ════════════════════════════════════════
+   §5  Layout Helpers
+   ════════════════════════════════════════ */
+
+.ge-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.ge-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.ge-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ge-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ge-spacer {
+  flex: 1;
+}
+
+.ge-center {
+  text-align: center;
+  align-items: center;
+}

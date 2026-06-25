@@ -19,7 +19,6 @@ import { useTranslation } from "react-i18next"
 import { addContentToChat } from "@/pages/superMagic/components/Detail/components/AIOptimization/utils"
 import { decodeHTMLEntities, getFullContent } from "./utils/full-content"
 import { extractStaticDependencies } from "./utils/extractDependencies"
-import { getHTMLMessengerContent } from "./utils/messenger-content"
 import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
 import { cn } from "@/lib/utils"
@@ -37,7 +36,6 @@ import { DropOverlay } from "./components/DropOverlay"
 import { useZoomControls } from "./hooks/useZoomControls"
 import { StylePanelStoreProvider } from "./iframe-bridge/contexts/StylePanelContext"
 import { TAILWIND_Z_INDEX_CLASSES } from "./constants/z-index"
-import { LogPanel } from "./components/LogPanel"
 import { DevConsolePanel } from "./components/DevConsole"
 import { useDevConsole } from "./hooks/useDevConsole"
 import { useInspectorToolbarMode } from "./hooks/useInspectorToolbarMode"
@@ -61,6 +59,8 @@ export interface IsolatedHTMLRendererRef {
 	toggleDevConsole: () => void
 	/** Start element inspector in toolbar mode (no info card; selection creates new topic) */
 	startInspector: () => void
+	/** Stop element inspector mode */
+	stopInspector: () => void
 	/** Start element inspector in append mode (selection appends element info to current editor) */
 	startInspectorAppend: () => void
 }
@@ -158,6 +158,10 @@ interface IsolatedHTMLRendererProps {
 	onDevConsoleClose?: () => void
 	/** AI 选取（appendToEditor）状态变化回调 */
 	onAppendPickingChange?: (picking: boolean) => void
+	/** 元素选取状态变化回调 */
+	onInspectorActiveChange?: (active: boolean) => void
+	/** Enable content-level inspector fallback for renderers without runtime support. */
+	enableInlineInspectorFallback?: boolean
 }
 
 function isHtmlImagesUploadPath(path: string): boolean {
@@ -251,27 +255,35 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			onContentMetrics,
 			onDevConsoleClose,
 			onAppendPickingChange,
+			onInspectorActiveChange,
+			enableInlineInspectorFallback = false,
 		} = props
-		const renderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
-		const renderSiteOrigin = useMemo(() => {
-			if (!renderSiteUrl) return ""
+		const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
+		const htmlSandboxShellUrl = useMemo(
+			() => externalRenderSiteUrl || "/husky.html",
+			[externalRenderSiteUrl],
+		)
+		const externalRenderSiteOrigin = useMemo(() => {
+			if (!externalRenderSiteUrl) return ""
 
 			try {
-				return new URL(renderSiteUrl).origin
+				return new URL(externalRenderSiteUrl).origin
 			} catch {
 				return ""
 			}
-		}, [renderSiteUrl])
+		}, [externalRenderSiteUrl])
+
 		const iframeTargetOrigin = useMemo(
-			() => renderSiteOrigin || window.location.origin,
-			[renderSiteOrigin],
+			() => externalRenderSiteOrigin || window.location.origin,
+			[externalRenderSiteOrigin],
 		)
+
 		const postMessageTargetStrategy = useMemo(
 			() =>
-				renderSiteUrl
+				externalRenderSiteUrl
 					? POST_MESSAGE_TARGET_STRATEGIES.CROSS_ORIGIN_PARENT
 					: POST_MESSAGE_TARGET_STRATEGIES.SAME_ORIGIN_ANCESTOR,
-			[renderSiteUrl],
+			[externalRenderSiteUrl],
 		)
 
 		const { styles, cx } = useStyles()
@@ -380,7 +392,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			sandboxType,
 			iframeLoaded,
 			contentInjected,
-			renderSiteUrl,
 			targetOrigin: iframeTargetOrigin,
 			scaleRatio,
 			saveEditContent,
@@ -442,6 +453,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		useEffect(() => {
 			onAppendPickingChange?.(isAppendPicking)
 		}, [isAppendPicking, onAppendPickingChange])
+
+		useEffect(() => {
+			onInspectorActiveChange?.(elementInspector.active)
+		}, [elementInspector.active, onInspectorActiveChange])
 
 		const { upload } = useUpload<any>({
 			url: superMagicUploadTokenService.getUploadTokenUrl,
@@ -807,42 +822,23 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				uploadImageFileToProject,
 			})
 
-		// 初始化 iframe 内容
-		const initializeIframe = () => {
+		// 监听 iframe 准备就绪并初始化内容
+		useEffect(() => {
 			try {
-				if (renderSiteUrl) {
-					if (iframeRef.current && iframeRef.current.src !== renderSiteUrl) {
-						iframeRef.current.src = renderSiteUrl
-					}
-					// 跨域渲染站由自身发送 iframeReady
-					setContentInjected(false)
-					return
-				}
+				const iframe = iframeRef.current
+				if (!iframe) return
 
-				if (!iframeRef.current?.contentDocument) return
-
-				const htmlContent = getHTMLMessengerContent()
-				console.log("[IsolatedHTMLRenderer] 同域 messenger 内容", htmlContent)
-				const doc = iframeRef.current.contentDocument
-				// 直接写入HTML内容
-				console.log("[IsolatedHTMLRenderer] 同域 messenger 注入中")
-				doc.open()
-				doc.write(htmlContent)
-				doc.close()
-
-				setIframeLoaded(true)
-				// 重置内容注入状态，等待新内容注入
+				setIframeLoaded(false)
 				setContentInjected(false)
+
+				// 同源和跨域统一通过 URL shell 自举，避免维护两套 shell 初始化流程。
+				if (iframe.getAttribute("src") !== htmlSandboxShellUrl) {
+					iframe.src = htmlSandboxShellUrl
+				}
 			} catch (error) {
 				console.error("初始化iframe内容时出错:", error)
 			}
-		}
-
-		// 监听 iframe 准备就绪并初始化内容
-		useEffect(() => {
-			if (!iframeRef.current) return
-			initializeIframe()
-		}, [renderSiteUrl])
+		}, [htmlSandboxShellUrl])
 
 		const getMarkerId = useMemoizedFn(() => {
 			if (!attachmentList || !fileId) return fileId
@@ -905,8 +901,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				containOverscroll: containIframeOverscroll,
 				hideVerticalScroll,
 				disableParentClickBridge: disableIframeDocumentClickBridge,
+				enableInlineInspectorFallback,
 				postMessageTargetStrategy,
 			})
+
 			// 发送内容到iframe
 			try {
 				if (iframeRef.current && iframeRef.current.contentWindow) {
@@ -1014,6 +1012,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						containOverscroll: containIframeOverscroll,
 						hideVerticalScroll,
 						disableParentClickBridge: disableIframeDocumentClickBridge,
+						enableInlineInspectorFallback,
 						postMessageTargetStrategy,
 					})
 					// 发送内容到iframe
@@ -1063,6 +1062,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				startInspector: () => {
 					startInToolbarMode()
 				},
+				stopInspector: () => {
+					elementInspector.stop()
+				},
 				startInspectorAppend: () => {
 					startInAppendMode()
 				},
@@ -1071,6 +1073,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				containIframeOverscroll,
 				disableIframeDocumentClickBridge,
 				dynamicResourceInterceptionConfig,
+				externalRenderSiteOrigin,
 				getMarkerId,
 				hideVerticalScroll,
 				injectMediaScript,
@@ -1081,6 +1084,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				handleFetchIntercepted,
 				postMessageTargetStrategy,
 				devConsole.toggle,
+				startInAppendMode,
+				startInToolbarMode,
 			],
 		)
 
@@ -1354,10 +1359,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				} else if (
 					event.data &&
 					event.data.type === "pageLoaded" &&
-					renderSiteOrigin &&
-					event.origin === renderSiteOrigin
+					(externalRenderSiteOrigin
+						? event.origin === externalRenderSiteOrigin
+						: isExpectedSource)
 				) {
-					// 跨域渲染站 load 后再次兜底置为 ready，避免早期 iframeReady 丢失
+					// Shell load 后再次兜底置为 ready，避免早期 iframeReady 丢失。
 					setIframeLoaded(true)
 				} else if (event.data && event.data.type === "contentLoaded") {
 					// 内容已写入iframe，但可能还未完成渲染
@@ -1593,12 +1599,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				)
 			}
 		})
-		// 处理 iframe 内容更新
-		// 跨域模式：必须等 iframe 加载完成并收到 iframeReady 后再发 setContent，否则消息会丢失
+		// 处理 iframe 内容更新：同源 /husky.html 和跨域渲染站都必须等 shell ready。
 		useDeepCompareEffect(() => {
 			if (sandboxType !== "iframe" || !iframeRef.current || !content) return
-			const canSendContent = !renderSiteUrl || iframeLoaded
-			if (!canSendContent) return
+			if (!iframeLoaded) return
 
 			hasRenderedOnceRef.current = false
 			try {
@@ -1608,7 +1612,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				console.error("处理iframe内容时出错:", error)
 				setContentInjected(false)
 			}
-		}, [content, iframeLoaded, renderSiteUrl])
+		}, [content, iframeLoaded, htmlSandboxShellUrl])
 
 		useEffect(() => {
 			if (!isPptRender) return
@@ -1623,7 +1627,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				},
 				iframeTargetOrigin,
 			)
-		}, [contentInjected, isPptRender, isVisible, sandboxType])
+		}, [contentInjected, externalRenderSiteOrigin, isPptRender, isVisible, sandboxType])
 
 		useEffect(() => {
 			if (sandboxType !== "iframe") return
@@ -1709,7 +1713,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							className={cn(
 								"w-full flex-shrink-0",
 								isPptRender &&
-									`absolute left-1/2 ${TAILWIND_Z_INDEX_CLASSES.TOOLBAR.STYLE_PANEL} top-[10px] w-[98%] -translate-x-1/2 rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/60`,
+								`absolute left-1/2 ${TAILWIND_Z_INDEX_CLASSES.TOOLBAR.STYLE_PANEL} top-[10px] w-[98%] -translate-x-1/2 rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/60`,
 								toolbarClassName,
 							)}
 						/>
@@ -1765,8 +1769,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 										iframeClassName,
 									)}
 									title="Isolated HTML Content"
-									src={renderSiteUrl || undefined}
-									sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups"
+									src={htmlSandboxShellUrl}
+									sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
 									allow="fullscreen"
 									allowFullScreen
 									translate="no"
@@ -1794,10 +1798,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 										onDragLeave={dragOverHandlers.onDragLeave}
 										onDrop={dragOverHandlers.onDrop}
 									/>
-								)}
-								{/* 日志面板 - 用于查看运行时日志的开发工具 */}
-								{isEditMode && process.env.NODE_ENV === "development" && (
-									<LogPanel iframeRef={iframeRef} />
 								)}
 								{/* 元素检查覆盖层 - 独立于编辑模式 */}
 								<ElementInspectorOverlay

@@ -41,6 +41,7 @@ return [
     'prompt_required' => '图像生成提示词不能为空',
     'reference_images_required' => '图像编辑需要提供参考图像',
     'invalid_image_count' => '图像生成数量必须在1-10之间',
+    'output_image_count_exceeds_limit' => '当前模型最多支持一次生成 :limit 张图片，请调整 n 参数。',
     'invalid_image_url' => '参考图像URL格式无效',
     'invalid_mask_url' => '遮罩图像URL格式无效',
     'no_image_generated' => '未生成任何图像',

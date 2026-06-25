@@ -1,0 +1,23 @@
+.ai-tryon .category-group {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 8px;
+}
+.ai-tryon .category-group .mpk-option-item,
+.ai-tryon .category-group .mpk-option {
+	width: 100%;
+}
+
+.ai-tryon .mpk-image-slot-preview {
+	max-height: 240px;
+}
+
+.ai-tryon .generation-mode-group {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ai-tryon .generation-mode-group .mpk-option-item,
+.ai-tryon .generation-mode-group .mpk-option {
+	width: 100%;
+}

@@ -3,7 +3,6 @@ import type {
 	CanvasElementClipboardFileMetadata,
 	CanvasElementClipboardPayload,
 } from "./CanvasElementClipboard"
-import { logCanvasElementClipboard } from "./CanvasElementClipboardLogger"
 import { validateAndFilterCanvasFiles } from "./utils"
 
 export const CANVAS_DESIGN_CLIPBOARD_BUNDLE_MIME_TYPE =
@@ -61,10 +60,6 @@ interface CanvasDesignClipboardBundleHeader {
 	version: typeof CANVAS_DESIGN_CLIPBOARD_BUNDLE_VERSION
 	payload: CanvasElementClipboardPayload
 	files: CanvasDesignClipboardBundleFileHeader[]
-}
-
-function getClipboardItemTypes(items: ClipboardItem[]): string[][] {
-	return items.map((item) => Array.from(item.types))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -130,7 +125,6 @@ export class CanvasDesignClipboard {
 
 	public static async read(
 		options?: CanvasDesignClipboardOptions,
-		logScope = "clipboard-read",
 	): Promise<ClipboardItem[] | null> {
 		const read =
 			options?.read ??
@@ -138,55 +132,30 @@ export class CanvasDesignClipboard {
 				? navigator.clipboard.read.bind(navigator.clipboard)
 				: undefined)
 		if (!read) {
-			logCanvasElementClipboard(`${logScope}:skip-no-read-api`)
 			return null
 		}
 
 		try {
 			const items = await read()
-			logCanvasElementClipboard(`${logScope}:items`, {
-				itemCount: items.length,
-				itemTypes: getClipboardItemTypes(items),
-			})
 			return items
-		} catch (error) {
-			logCanvasElementClipboard(`${logScope}:error`, {
-				message: error instanceof Error ? error.message : String(error),
-			})
+		} catch {
 			return null
 		}
 	}
 
-	public static readEventFilesSnapshot(
-		clipboardEvent?: ClipboardEvent,
-		logScope = "clipboard-event",
-	): File[] {
+	public static readEventFilesSnapshot(clipboardEvent?: ClipboardEvent): File[] {
 		if (!clipboardEvent?.clipboardData) {
-			logCanvasElementClipboard(`${logScope}:skip-no-event`)
 			return []
 		}
 
-		const clipboardTypes = Array.from(clipboardEvent.clipboardData.types ?? [])
 		const clipboardItems = Array.from(clipboardEvent.clipboardData.items ?? [])
 		const files = Array.from(clipboardEvent.clipboardData.files ?? [])
 		const validFiles = validateAndFilterCanvasFiles(files)
 		if (validFiles.length > 0) {
-			logCanvasElementClipboard(`${logScope}:files-list`, {
-				clipboardTypes,
-				rawFileCount: files.length,
-				fileCount: validFiles.length,
-				fileMimeTypes: validFiles.map((file) => file.type),
-				rawFiles: files.map((file) => ({ fileContent: file })),
-				files: validFiles.map((file) => ({ fileContent: file })),
-			})
 			return validFiles
 		}
 
 		if (!clipboardEvent.clipboardData.items) {
-			logCanvasElementClipboard(`${logScope}:empty-no-items`, {
-				clipboardTypes,
-				rawFileCount: files.length,
-			})
 			return []
 		}
 
@@ -203,71 +172,41 @@ export class CanvasDesignClipboard {
 		}
 
 		const validItemFiles = validateAndFilterCanvasFiles(itemFiles)
-		logCanvasElementClipboard(`${logScope}:items`, {
-			clipboardTypes,
-			clipboardItems: clipboardItems.map((item) => ({
-				kind: item.kind,
-				type: item.type,
-			})),
-			rawFileCount: files.length,
-			rawItemFileCount: itemFiles.length,
-			validFileCount: validItemFiles.length,
-			fileMimeTypes: validItemFiles.map((file) => file.type),
-			rawFiles: itemFiles.map((file) => ({ fileContent: file })),
-			files: validItemFiles.map((file) => ({ fileContent: file })),
-		})
 		return validItemFiles
 	}
 
-	public static async readText(
-		options?: CanvasDesignClipboardOptions,
-		logScope = "clipboard-text",
-	): Promise<string> {
+	public static async readText(options?: CanvasDesignClipboardOptions): Promise<string> {
 		const readText =
 			options?.readText ??
 			(typeof navigator !== "undefined" && navigator.clipboard?.readText
 				? navigator.clipboard.readText.bind(navigator.clipboard)
 				: undefined)
 		if (!readText) {
-			logCanvasElementClipboard(`${logScope}:skip-no-read-text-api`)
 			return ""
 		}
 
 		try {
 			const text = await readText()
-			logCanvasElementClipboard(`${logScope}:read`, {
-				textLength: text.length,
-				preview: text.trim().slice(0, 80),
-			})
 			return text
-		} catch (error) {
-			logCanvasElementClipboard(`${logScope}:error`, {
-				message: error instanceof Error ? error.message : String(error),
-			})
+		} catch {
 			return ""
 		}
 	}
 
 	public static async readFilenameOnlyText(
 		options?: CanvasDesignClipboardOptions,
-		logScope = "clipboard-filename-text",
 	): Promise<string | null> {
-		const text = await this.readText(options, logScope)
+		const text = await this.readText(options)
 		if (!looksLikeClipboardFileNameOnlyText(text)) {
 			return null
 		}
 
-		logCanvasElementClipboard(`${logScope}:hit`, {
-			textLength: text.length,
-			preview: text.trim().slice(0, 80),
-		})
 		return text
 	}
 
 	public static async write(
 		items: ClipboardItem[],
 		options?: CanvasDesignClipboardOptions,
-		logScope = "clipboard-write",
 	): Promise<void> {
 		const write =
 			options?.write ??
@@ -276,34 +215,10 @@ export class CanvasDesignClipboard {
 				: undefined)
 		if (!write) {
 			const error = new Error("Clipboard write API is unavailable")
-			logCanvasElementClipboard(`${logScope}:skip-no-write-api`, {
-				message: error.message,
-				itemCount: items.length,
-				itemTypes: getClipboardItemTypes(items),
-			})
 			throw error
 		}
 
-		logCanvasElementClipboard(`${logScope}:start`, {
-			itemCount: items.length,
-			itemTypes: getClipboardItemTypes(items),
-		})
-
-		try {
-			await write(items)
-			logCanvasElementClipboard(`${logScope}:success`, {
-				itemCount: items.length,
-				itemTypes: getClipboardItemTypes(items),
-			})
-		} catch (error) {
-			logCanvasElementClipboard(`${logScope}:error`, {
-				message: error instanceof Error ? error.message : String(error),
-				error,
-				itemCount: items.length,
-				itemTypes: getClipboardItemTypes(items),
-			})
-			throw error
-		}
+		await write(items)
 	}
 
 	public static createBundleBlob(options: {
@@ -338,13 +253,6 @@ export class CanvasDesignClipboard {
 				type: CANVAS_DESIGN_CLIPBOARD_BUNDLE_MIME_TYPE,
 			},
 		)
-		logCanvasElementClipboard("bundle:create", {
-			elementCount: options.payload.elements.length,
-			fileCount: options.files.length,
-			fileMimeTypes: options.files.map(({ metadata }) => metadata.mimeType),
-			headerByteLength: headerBytes.byteLength,
-			bundleSize: bundleBlob.size,
-		})
 		return bundleBlob
 	}
 
@@ -408,12 +316,6 @@ export class CanvasDesignClipboard {
 			}
 		})
 
-		logCanvasElementClipboard("bundle:parse", {
-			elementCount: header.payload.elements.length,
-			fileCount: files.length,
-			fileMimeTypes: files.map(({ metadata }) => metadata.mimeType),
-			bundleSize: blob.size,
-		})
 		return {
 			payload: header.payload,
 			files,
@@ -434,10 +336,6 @@ export class CanvasDesignClipboard {
 		if (options.native) {
 			if (this.supports(options.native.mimeType)) {
 				itemData[options.native.mimeType] = options.native.blob
-			} else {
-				logCanvasElementClipboard("bundle:native-skip-unsupported", {
-					nativeMimeType: options.native.mimeType,
-				})
 			}
 		}
 
@@ -455,49 +353,23 @@ export class CanvasDesignClipboard {
 			bundleBlob,
 			native: options.native,
 		})
-		logCanvasElementClipboard("write-bundle:start", {
-			itemTypes: Array.from(item.types),
-			elementCount: options.payload.elements.length,
-			fileCount: options.files.length,
-			fileMimeTypes: options.files.map(({ metadata }) => metadata.mimeType),
-			hasNativeExposure: Boolean(options.native),
-			nativeMimeType: options.native?.mimeType,
-			bundleSize: bundleBlob.size,
-		})
 
-		await this.write([item], options.clipboard, "write-bundle")
+		await this.write([item], options.clipboard)
 	}
 
 	public static async readBundle(
 		options?: CanvasDesignClipboardOptions,
 	): Promise<CanvasDesignClipboardReadBundleResult | null> {
-		const items = await this.read(options, "read-bundle")
+		const items = await this.read(options)
 		const bundleItem = items?.find((item) =>
 			item.types.includes(CANVAS_DESIGN_CLIPBOARD_BUNDLE_MIME_TYPE),
 		)
 		if (!bundleItem) {
-			logCanvasElementClipboard("read-bundle:miss", {
-				itemCount: items?.length ?? 0,
-				itemTypes: items ? getClipboardItemTypes(items) : [],
-			})
 			return null
 		}
 
-		try {
-			const bundleBlob = await bundleItem.getType(CANVAS_DESIGN_CLIPBOARD_BUNDLE_MIME_TYPE)
-			const result = await this.parseBundleBlob(bundleBlob)
-			logCanvasElementClipboard("read-bundle:success", {
-				elementCount: result.payload.elements.length,
-				fileCount: result.files.length,
-				fileMimeTypes: result.files.map(({ metadata }) => metadata.mimeType),
-			})
-			return result
-		} catch (error) {
-			logCanvasElementClipboard("read-bundle:error", {
-				message: error instanceof Error ? error.message : String(error),
-				error,
-			})
-			throw error
-		}
+		const bundleBlob = await bundleItem.getType(CANVAS_DESIGN_CLIPBOARD_BUNDLE_MIME_TYPE)
+		const result = await this.parseBundleBlob(bundleBlob)
+		return result
 	}
 }

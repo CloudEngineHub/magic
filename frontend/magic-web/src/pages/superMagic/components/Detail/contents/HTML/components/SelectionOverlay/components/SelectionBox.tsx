@@ -8,7 +8,10 @@ import { shouldShowActionHandles } from "../utils/size-detection"
 
 interface SelectionBoxProps {
 	info: SelectedInfo
+	/** Overlay-local rect used for drawing absolute-positioned UI. */
 	transformedRect: ElementRect
+	/** Viewport rect used by pointer interactions such as rotation. */
+	viewportRect: ElementRect
 	isMultiSelect: boolean
 	isSelectionMode: boolean
 	transform: string | undefined
@@ -34,6 +37,7 @@ interface SelectionBoxProps {
 export const SelectionBox = memo(function SelectionBox({
 	info,
 	transformedRect,
+	viewportRect,
 	isMultiSelect,
 	isSelectionMode,
 	transform,
@@ -92,7 +96,7 @@ export const SelectionBox = memo(function SelectionBox({
 						onResizeHandleMouseDown={onResizeHandleMouseDown}
 						rotation={rotation}
 						onRotateHandleMouseDown={onRotateHandleMouseDown}
-						transformedRect={transformedRect}
+						transformedRect={viewportRect}
 						containerElement={containerElement}
 						showActionHandles={showActions}
 					/>

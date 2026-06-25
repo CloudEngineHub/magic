@@ -1,0 +1,13 @@
+.clothing-repair {
+	width: 100%;
+}
+
+.clothing-repair .repair-type-group {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.clothing-repair .repair-type-group .mpk-option-item,
+.clothing-repair .repair-type-group .mpk-option {
+	width: 100%;
+}

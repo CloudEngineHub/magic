@@ -1,0 +1,558 @@
+/*
+ * warm-journal.css
+ * Warm Journal — literary journal / lifestyle record style
+ *
+ * Design principles:
+ *   · Handwritten-feeling titles plus scattered layouts, mimicking the spontaneity of real journals and diaries
+ *   · Multiple page types: cinematic cover, dark story page, khaki scatter page, and photo-frame page
+ *   · Photos as the hero: full-bleed strips, scattered tilted images, and white photo frames
+ *   · Handwritten fonts add warmth, while thin sans-serif body text keeps it readable
+ *   · Palette is built from khaki, beige, and black with no high-saturation accent color
+ *   · Best for photo journals, product notes, lifestyle, and city-walk content
+ *
+ * Color palette:
+ *   --wj-cream       #F5F0E6   Cream text band
+ *   --wj-khaki       #C5BBA5   Khaki / olive beige (scatter-page background)
+ *   --wj-beige       #D8D0C2   Light grey beige (photo-frame page background)
+ *   --wj-dark        #0a0a0a   Dark page background
+ *   --wj-text        #2C2418   Primary text (deep warm brown)
+ *   --wj-text-light  #F5F0E6   Light text (for dark pages)
+ *   --wj-muted       #8C7B68   Secondary text
+ *   --wj-accent      #5C6B54   Olive green accent
+ *   --wj-star        #D4A820   Star-rating color
+ *
+ * ─────────────────────────────────────────────────────────────
+ * §0 Variables & Reset
+ * §1 Card Shell
+ * §2 Photo Components
+ * §3 Typography
+ * §4 Layout Components
+ * §5 Utilities
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/* §0  CSS Variables & Base Reset */
+@import url("https://fonts.googleapis.com/css2?family=Long+Cang&display=swap");
+
+:root {
+  --wj-cream: #f5f0e6;
+  --wj-khaki: #c5bba5;
+  --wj-beige: #d8d0c2;
+  --wj-dark: #0a0a0a;
+  --wj-text: #2c2418;
+  --wj-text-light: #f5f0e6;
+  --wj-muted: #8c7b68;
+  --wj-accent: #5c6b54;
+  --wj-star: #d4a820;
+
+  --wj-font-hand: "Long Cang", "ZCOOL XiaoWei", "STKaiti", "KaiTi", serif;
+  --wj-font-body: "Noto Sans SC", "PingFang SC", "Helvetica Neue", sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--wj-font-body);
+  color: var(--wj-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §1  Card Shell
+   ═══════════════════════════════════════════════════════════ */
+
+.wj-card {
+  position: relative;
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* §1.1 Cover — Photo strip + text band */
+.wj-card.wj-cover {
+  background: var(--wj-dark);
+}
+
+/* §1.2 Dark page — Dark cinematic mood */
+.wj-card.wj-dark-page {
+  background: var(--wj-dark);
+  color: var(--wj-text-light);
+}
+
+/* §1.3 Khaki page — Khaki scatter page */
+.wj-card.wj-khaki-page {
+  background: var(--wj-khaki);
+  /* Add paper texture with a grid background */
+  background-image: radial-gradient(
+    rgba(0, 0, 0, 0.06) 1.5px,
+    transparent 1.5px
+  );
+  background-size: 16px 16px;
+  color: var(--wj-text);
+  padding: 40px 36px;
+}
+
+/* §1.4 Photo page — Photo-frame showcase page */
+.wj-card.wj-photo-page {
+  background: var(--wj-beige);
+  /* Add grain/noise texture */
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
+  color: var(--wj-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 44px;
+  gap: 28px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §2  Photo Components
+   ═══════════════════════════════════════════════════════════ */
+
+/* §2.1 Photo strip — Full-bleed horizontal photo */
+.wj-strip {
+  width: 100%;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.wj-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.wj-strip.wj-strip-fixed {
+  flex: none;
+}
+
+/* Dim overlay for readability */
+.wj-strip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+}
+
+.wj-strip.wj-no-dim::after {
+  display: none;
+}
+
+/* Border between strips */
+.wj-strip + .wj-strip {
+  border-top: 3px solid var(--wj-dark);
+}
+
+/* §2.2 Photo frame — White photo frame (polaroid feel) */
+.wj-frame {
+  background: #fff;
+  padding: 10px 10px 32px 10px; /* Extra bottom padding for a stronger polaroid feel */
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.06),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  max-width: 420px;
+  position: relative;
+}
+
+.wj-frame img {
+  width: 100%;
+  display: block;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+/* §2.3 Product photo — Scattered product image (requires cutout transparent-background PNG) */
+.wj-product-photo {
+  position: absolute;
+  object-fit: contain;
+  filter: drop-shadow(2px 4px 10px rgba(0, 0, 0, 0.18));
+  z-index: 2;
+}
+
+/* When a transparent PNG is unavailable, multiply blending softens white backgrounds */
+.wj-product-photo.wj-blend {
+  mix-blend-mode: multiply;
+}
+
+.wj-rotate-l {
+  transform: rotate(-4deg);
+}
+.wj-rotate-r {
+  transform: rotate(3.5deg);
+}
+.wj-rotate-sl {
+  transform: rotate(-2deg);
+}
+.wj-rotate-sr {
+  transform: rotate(2deg);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §3  Typography
+   ═══════════════════════════════════════════════════════════ */
+
+/* §3.1 Handwritten — Handwritten-style title */
+.wj-hand {
+  font-family: var(--wj-font-hand);
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.wj-hand-xl {
+  font-size: 44px;
+  line-height: 1.15;
+}
+.wj-hand-lg {
+  font-size: 34px;
+  line-height: 1.2;
+}
+.wj-hand-md {
+  font-size: 24px;
+}
+.wj-hand-sm {
+  font-size: 18px;
+}
+
+.wj-dark-page .wj-hand,
+.wj-cover .wj-hand {
+  color: var(--wj-text-light);
+}
+
+/* §3.2 Body text */
+.wj-body-text {
+  font-family: var(--wj-font-body);
+  font-size: 13px;
+  line-height: 1.85;
+  color: var(--wj-text);
+}
+
+.wj-dark-page .wj-body-text {
+  color: rgba(245, 240, 230, 0.88);
+}
+
+/* §3.3 Page number — Handwritten page number / index */
+.wj-page-num {
+  font-family: var(--wj-font-hand);
+  font-size: 28px;
+}
+
+.wj-dark-page .wj-page-num {
+  color: var(--wj-text-light);
+}
+
+/* §3.4 Star rating */
+.wj-stars {
+  display: inline-flex;
+  gap: 1px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.wj-stars .filled {
+  color: var(--wj-star);
+}
+.wj-stars .empty {
+  color: #c8c0b4;
+}
+
+/* §3.5 Numbered marker ❶❷❸ */
+.wj-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--wj-text);
+  color: var(--wj-cream);
+  font-family: var(--wj-font-body);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §4  Layout Components
+   ═══════════════════════════════════════════════════════════ */
+
+/* §4.1 Text band — Cream text band for cover */
+.wj-text-band {
+  background: var(--wj-cream);
+  padding: 28px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  flex: none;
+}
+
+.wj-text-band .wj-hand {
+  color: var(--wj-text);
+}
+
+.wj-text-band .wj-sub {
+  font-family: var(--wj-font-body);
+  font-size: 12px;
+  color: var(--wj-muted);
+  margin-top: 10px;
+  text-align: right;
+  letter-spacing: 0.04em;
+}
+
+/* §4.2 Product info block — Product review block */
+.wj-product-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wj-product-title {
+  font-family: var(--wj-font-body);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--wj-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.wj-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--wj-text);
+  line-height: 1.8;
+}
+
+.wj-rating-row .label {
+  min-width: 80px;
+  font-weight: 500;
+  color: var(--wj-text);
+}
+
+.wj-product-scene {
+  font-size: 12px;
+  color: var(--wj-text);
+  line-height: 1.8;
+}
+
+.wj-product-exp {
+  font-size: 12px;
+  color: var(--wj-muted);
+  line-height: 1.7;
+  margin-top: 2px;
+}
+
+/* §4.3 Overlay text — Overlay text area on dark page */
+.wj-overlay-text {
+  position: relative;
+  z-index: 3;
+  padding: 16px 32px;
+}
+
+.wj-overlay-text p {
+  font-family: var(--wj-font-body);
+  font-size: 13px;
+  line-height: 2;
+  color: rgba(245, 240, 230, 0.9);
+}
+
+/* §4.4 Scatter header — Khaki-page header area */
+.wj-scatter-header {
+  margin-bottom: 20px;
+}
+
+.wj-scatter-header .wj-intro {
+  font-family: var(--wj-font-body);
+  font-size: 13px;
+  color: var(--wj-text);
+  line-height: 1.85;
+  margin-top: 12px;
+}
+
+/* §4.5 Product scattered item (positioned) */
+.wj-scatter-item {
+  position: absolute;
+}
+
+.wj-scatter-item .wj-product-info {
+  position: relative;
+  z-index: 3;
+}
+
+/* §4.6 Photo frame caption */
+.wj-frame-caption {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* §4.7 Brand bar (dark page bottom) */
+.wj-brand-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--wj-font-body);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: rgba(245, 240, 230, 0.4);
+  z-index: 5;
+}
+
+/* §4.8 Dark heading area */
+.wj-dark-heading {
+  position: absolute;
+  z-index: 5;
+}
+
+/* §4.9 Tape & Decorative Elements */
+.wj-tape {
+  position: absolute;
+  width: 90px;
+  height: 24px;
+  background-color: rgba(230, 225, 215, 0.7); /* Translucent tape */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(2px) contrast(1.1);
+  z-index: 3;
+}
+/* Feathered tape-edge effect */
+.wj-tape::before,
+.wj-tape::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(230, 225, 215, 0.8) 50%),
+    linear-gradient(-45deg, transparent 50%, rgba(230, 225, 215, 0.8) 50%);
+  background-size: 4px 4px;
+}
+.wj-tape::before {
+  left: -4px;
+}
+.wj-tape::after {
+  right: -4px;
+  transform: scaleX(-1);
+}
+
+.wj-tape-1 {
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-3deg);
+}
+.wj-tape-2 {
+  top: 20px;
+  right: -20px;
+  transform: rotate(45deg);
+  width: 80px;
+}
+
+/* Hand-drawn red/yellow circle annotation */
+.wj-circle-mark {
+  position: relative;
+  display: inline-block;
+}
+.wj-circle-mark::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -6px;
+  right: -6px;
+  bottom: -4px;
+  border: 2px solid var(--wj-star);
+  border-radius: 50% 40% 60% 50% / 60% 50% 40% 50%;
+  pointer-events: none;
+  transform: rotate(-2deg);
+  opacity: 0.8;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   §5  Utilities
+   ═══════════════════════════════════════════════════════════ */
+
+.wj-abs {
+  position: absolute;
+}
+.wj-rel {
+  position: relative;
+}
+.wj-z1 {
+  z-index: 1;
+}
+.wj-z5 {
+  z-index: 5;
+}
+.wj-flex {
+  display: flex;
+}
+.wj-flex-col {
+  display: flex;
+  flex-direction: column;
+}
+.wj-flex-1 {
+  flex: 1;
+}
+.wj-items-center {
+  align-items: center;
+}
+.wj-justify-center {
+  justify-content: center;
+}
+.wj-gap-4 {
+  gap: 4px;
+}
+.wj-gap-8 {
+  gap: 8px;
+}
+.wj-gap-12 {
+  gap: 12px;
+}
+.wj-gap-16 {
+  gap: 16px;
+}
+.wj-w-full {
+  width: 100%;
+}
+.wj-text-center {
+  text-align: center;
+}
+.wj-text-right {
+  text-align: right;
+}
+.wj-color-light {
+  color: var(--wj-text-light);
+}
+.wj-color-muted {
+  color: var(--wj-muted);
+}

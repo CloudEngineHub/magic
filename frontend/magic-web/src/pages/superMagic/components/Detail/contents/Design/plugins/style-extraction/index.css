@@ -1,0 +1,28 @@
+.style-extraction .style-extraction-two-grid,
+.style-extraction .style-extraction-three-grid,
+.style-extraction .style-extraction-category-grid {
+	display: grid;
+	gap: 8px;
+}
+
+.style-extraction .style-extraction-two-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.style-extraction .style-extraction-three-grid {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.style-extraction .style-extraction-category-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.style-extraction .style-extraction-two-grid .mpk-option-item,
+.style-extraction .style-extraction-two-grid .mpk-option,
+.style-extraction .style-extraction-three-grid .mpk-option-item,
+.style-extraction .style-extraction-three-grid .mpk-option,
+.style-extraction .style-extraction-category-grid .mpk-option-item,
+.style-extraction .style-extraction-category-grid .mpk-option {
+	width: 100%;
+	min-width: 0;
+}

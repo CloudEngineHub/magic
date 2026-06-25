@@ -1,5 +1,6 @@
 import { getMediaResourcePathKind } from "../../canvas/utils/mediaResourcePathKind"
 import type { MediaResourceFullscreenPreviewItem } from "../MediaResourceFullscreenPreview"
+import { getFullscreenMediaFileLabel } from "../FullscreenMediaShell/getFullscreenMediaFileLabel"
 
 export function buildPreviewMediaResourceItem(
 	path: string,
@@ -8,7 +9,7 @@ export function buildPreviewMediaResourceItem(
 	if (kind === "other") return null
 	return {
 		path,
-		fileName: path.split("/").pop() ?? path,
+		fileName: getFullscreenMediaFileLabel(path),
 		kind,
 	}
 }

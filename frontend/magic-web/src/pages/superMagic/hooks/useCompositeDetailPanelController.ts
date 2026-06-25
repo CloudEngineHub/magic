@@ -1,6 +1,7 @@
 import { type RefObject } from "react"
 import { useDeepCompareEffect, useMemoizedFn } from "ahooks"
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
+import type { ActiveDetailTabType } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { useTopicDetailPanelController } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicDetailPanelController"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
@@ -27,7 +28,7 @@ interface UseCompositeDetailPanelControllerResult {
 	shouldShowDetailPanel: boolean
 	topicFilesPropsWithPanel: TopicFilesProps
 	handleFileClickWithPanel: (fileItem?: unknown) => void
-	handleActiveDetailTabChange: (tabType: "playback" | "file" | null) => void
+	handleActiveDetailTabChange: (tabType: ActiveDetailTabType) => void
 	clearActiveDetailTabType: () => void
 }
 

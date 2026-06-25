@@ -11,6 +11,8 @@ import useRights from "@admin/hooks/useRights"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
 import ocr from "@admin/assets/logos/ocr.svg"
 import webSearch from "@admin/assets/logos/web-search.svg"
+import webScrape from "@admin/assets/logos/web-scrape.svg"
+import imageSearch from "@admin/assets/logos/image-search.svg"
 import speechRecognition from "@admin/assets/logos/speech-recognition.svg"
 import audioFileRecognition from "@admin/assets/logos/audio-file-recognition.svg"
 import autoCompletion from "@admin/assets/logos/auto-completion.svg"
@@ -18,6 +20,20 @@ import contentSummary from "@admin/assets/logos/content-summary.svg"
 import visualUnderstanding from "@admin/assets/logos/visual-understanding.svg"
 import smartRename from "@admin/assets/logos/smart-rename.svg"
 import aiOptimization from "@admin/assets/logos/ai-optimization.svg"
+import imageConvertHigh from "@admin/assets/logos/image-convert-high.svg"
+import imageRemoveBackground from "@admin/assets/logos/image-remove-background.svg"
+import imageEraser from "@admin/assets/logos/image-eraser.svg"
+import imageExpand from "@admin/assets/logos/image-expand.svg"
+import weatherForecast from "@admin/assets/logos/weather-forecast.svg"
+import superMagicDeepWrite from "@admin/assets/logos/super-magic-deep-write.svg"
+import superMagicPurify from "@admin/assets/logos/super-magic-purify.svg"
+import superMagicSmartFilename from "@admin/assets/logos/super-magic-smart-filename.svg"
+import superMagicCompact from "@admin/assets/logos/super-magic-compact.svg"
+import superMagicAnalysisAudio from "@admin/assets/logos/super-magic-analysis-audio.svg"
+import videoUnderstanding from "@admin/assets/logos/video-understanding.svg"
+import followUpQuestions from "@admin/assets/logos/follow-up-questions.svg"
+import knowledgeBaseEmbeddingModel from "@admin/assets/logos/knowledge-base-embedding-model.svg"
+import knowledgeBaseVisualUnderstanding from "@admin/assets/logos/knowledge-base-visual-understanding.svg"
 import PageLoading from "../components/PageLoading"
 import { useStyles } from "../components/ServiceProviderList/styles"
 import CommonList from "../components/CommonList"
@@ -25,6 +41,8 @@ import CommonList from "../components/CommonList"
 export const AiPowerLogoMap = {
 	[PlatformPackage.PowerCode.OCR]: ocr,
 	[PlatformPackage.PowerCode.WEB_SEARCH]: webSearch,
+	[PlatformPackage.PowerCode.WEB_SCRAPE]: webScrape,
+	[PlatformPackage.PowerCode.IMAGE_SEARCH]: imageSearch,
 	[PlatformPackage.PowerCode.REALTIME_SPEECH_RECOGNITION]: speechRecognition,
 	[PlatformPackage.PowerCode.AUDIO_FILE_RECOGNITION]: audioFileRecognition,
 	[PlatformPackage.PowerCode.AUTO_COMPLETION]: autoCompletion,
@@ -32,6 +50,22 @@ export const AiPowerLogoMap = {
 	[PlatformPackage.PowerCode.VISUAL_UNDERSTANDING]: visualUnderstanding,
 	[PlatformPackage.PowerCode.SMART_RENAME]: smartRename,
 	[PlatformPackage.PowerCode.AI_OPTIMIZATION]: aiOptimization,
+	[PlatformPackage.PowerCode.IMAGE_CONVERT_HIGH]: imageConvertHigh,
+	[PlatformPackage.PowerCode.IMAGE_REMOVE_BACKGROUND]: imageRemoveBackground,
+	[PlatformPackage.PowerCode.IMAGE_ERASER]: imageEraser,
+	[PlatformPackage.PowerCode.IMAGE_EXPAND]: imageExpand,
+	[PlatformPackage.PowerCode.WEATHER_FORECAST]: weatherForecast,
+	[PlatformPackage.PowerCode.KNOWLEDGE_BASE_EMBEDDING_MODEL]: knowledgeBaseEmbeddingModel,
+	[PlatformPackage.PowerCode.KNOWLEDGE_BASE_VISUAL_UNDERSTANDING]:
+		knowledgeBaseVisualUnderstanding,
+	[PlatformPackage.PowerCode.FOLLOW_UP_QUESTIONS]: followUpQuestions,
+	[PlatformPackage.PowerCode.VIDEO_UNDERSTANDING]: videoUnderstanding,
+	[PlatformPackage.PowerCode.SUPER_MAGIC_DEEP_WRITE]: superMagicDeepWrite,
+	[PlatformPackage.PowerCode.SUPER_MAGIC_PURIFY]: superMagicPurify,
+	[PlatformPackage.PowerCode.SUPER_MAGIC_SMART_FILENAME]: superMagicSmartFilename,
+	[PlatformPackage.PowerCode.SUPER_MAGIC_COMPACT]: superMagicCompact,
+	[PlatformPackage.PowerCode.SUPER_MAGIC_ANALYSIS_AUDIO]: superMagicAnalysisAudio,
+	[PlatformPackage.PowerCode.IMAGE_PROMPT_COMPLETION]: autoCompletion,
 }
 
 export const hasLogoMap = Object.keys(AiPowerLogoMap)

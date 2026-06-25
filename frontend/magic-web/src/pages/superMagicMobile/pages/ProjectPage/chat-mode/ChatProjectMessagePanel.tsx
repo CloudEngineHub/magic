@@ -1,6 +1,6 @@
 import { observer } from "mobx-react-lite"
 import { ChevronLeft, Ellipsis } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -14,13 +14,8 @@ import {
 	getMobileTopicPageCapabilities,
 	MobileTopicPageKind,
 } from "@/pages/superMagicMobile/pages/shared/topicPageCapabilities"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { useChatWorkspace } from "@/pages/superMagic/hooks/useChatWorkspace"
-import SuperMagicService from "@/pages/superMagic/services"
 import { useMemoizedFn } from "ahooks"
-import type { SuperMagicCreateNewTopicPayload } from "@/pages/superMagic/events/message"
-import type { TopicMode } from "@/pages/superMagic/pages/Workspace/types"
-import ProjectTopicService from "@/services/superMagic/ProjectTopicService"
+import { useChatExpertSwitch } from "@/pages/superMagic/hooks/useChatExpertSwitch"
 
 interface ChatProjectHeroHeaderProps {
 	title: string
@@ -151,47 +146,7 @@ export const ChatProjectMessagePanel = observer(function ChatProjectMessagePanel
 		setMessagesReadyTopicId(topicId)
 	})
 
-	const { createProjectInChatWorkspace } = useChatWorkspace({ projectPageSize: 1 })
-
-	/**
-	 * 对话页切换专家时，不在当前项目内创建兄弟话题（单话题设计），
-	 * 而是以目标专家模式创建一个全新对话并跳转，与首页「新建对话」行为一致。
-	 * topicMode 由 Create_New_Topic payload 携带，不应为 undefined。
-	 */
-	const handleCreateNewChatOnExpertSwitch = useMemoizedFn(
-		async (payload?: SuperMagicCreateNewTopicPayload) => {
-			const targetMode = payload?.topicMode as TopicMode | undefined
-			if (!targetMode) return
-			const createdProject = await createProjectInChatWorkspace({ projectMode: targetMode })
-			if (!createdProject?.project || !createdProject.topic) return
-
-			// 服务端返回的新 topic 可能 topic_mode 为空，导致 useTopicMode 的 useDeepCompareEffect
-			// 在切换后回落到全局"第一个模式"而非用户选中的专家。提前将目标模式写入本地缓存，
-			// 确保 getProjectDefaultTopicMode(newProject) 能命中正确值。
-			ProjectTopicService.setProjectDefaultTopicMode(
-				createdProject.project.workspace_id,
-				createdProject.project.id,
-				targetMode,
-			)
-
-			// 不调用 switchChatProject（它会先更新 MobX store 再导航）：
-			// switchChatProject 的更新顺序会让 ChatProjectPage.useEffect 在 URL 还未更新时
-			// 检测到 "store=newProjectId ≠ url=oldProjectId"，触发错误的 refreshState(oldProjectId)，
-			// 进而产生"空态 → 旧对话 → 新空态"三次闪动。
-			// 改为仅导航，由 ChatProjectPage.useEffect → refreshState(newProjectId) 单次正确恢复状态。
-			SuperMagicService.route.navigateToChatProject(
-				createdProject.project,
-				createdProject.topic.id,
-			)
-		},
-	)
-
-	useEffect(() => {
-		pubsub.subscribe(PubSubEvents.Create_New_Topic, handleCreateNewChatOnExpertSwitch)
-		return () => {
-			pubsub.unsubscribe(PubSubEvents.Create_New_Topic, handleCreateNewChatOnExpertSwitch)
-		}
-	}, [handleCreateNewChatOnExpertSwitch])
+	useChatExpertSwitch()
 
 	/**
 	 * Chat 详情页顶部优先展示当前会话名；仅当会话名缺失时才回退到项目名和未命名文案。

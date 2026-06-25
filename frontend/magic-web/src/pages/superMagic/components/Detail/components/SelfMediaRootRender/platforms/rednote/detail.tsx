@@ -12,6 +12,35 @@ import { useSelfMediaStore } from "../../stores"
 import type { PlatformComponentProps, SelfMediaPost } from "../../types"
 import { rednoteTokens } from "./tokens"
 
+const REDNOTE_STRUCTURED_TAG_KEYS = ["core", "mid", "longtail", "trend"] as const
+
+function splitRednoteTagText(value: unknown): string[] {
+	if (typeof value !== "string" && typeof value !== "number") {
+		return []
+	}
+
+	return String(value)
+		.split(/[\s,，、#]+/)
+		.map((tag) => tag.trim().replace(/^#+/, ""))
+		.filter(Boolean)
+}
+
+function normalizeRednoteTags(tagsRaw: SelfMediaPost["meta"]["tags"]): string[] {
+	const tags =
+		tagsRaw && typeof tagsRaw === "object" && !Array.isArray(tagsRaw)
+			? REDNOTE_STRUCTURED_TAG_KEYS.flatMap((key) => {
+					const value = tagsRaw[key]
+					return Array.isArray(value)
+						? value.flatMap(splitRednoteTagText)
+						: splitRednoteTagText(value)
+				})
+			: Array.isArray(tagsRaw)
+				? tagsRaw.flatMap(splitRednoteTagText)
+				: splitRednoteTagText(tagsRaw)
+
+	return Array.from(new Set(tags))
+}
+
 interface DetailViewProps {
 	attachmentList?: PlatformComponentProps["attachmentList"]
 	cardRefs: React.MutableRefObject<Array<Array<CardFrameRef | null>>>
@@ -21,6 +50,9 @@ interface DetailViewProps {
 	onAddCardToCurrentChat?: (idx: number) => void
 	/** Increment this value to force-refresh the currently active card */
 	activeCardExternalRefreshVersion?: number
+	onPreviewFocus?: (
+		event?: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>,
+	) => void
 }
 
 interface ScrollViewProps {
@@ -47,11 +79,10 @@ function RednoteDetailHeader({
 		post.meta.title ||
 		post.meta.feedTitle ||
 		t("detail.selfMedia.common.unknownAuthor")
-	const subtitle = post.meta.feedTitle || post.meta.title
 
 	return (
 		<div
-			className="sticky -top-0.5 z-[100] flex items-center gap-3 border-b border-black/5 bg-white px-3 py-2"
+			className="sticky -top-0.5 z-[100] flex items-center gap-3 bg-white px-3 py-2"
 			data-testid="red-detail-header"
 		>
 			<button
@@ -92,10 +123,10 @@ function RednoteDetailHeader({
 function RednoteDetailContent({ post }: { post: SelfMediaPost }) {
 	const title = post.meta.title || post.meta.feedTitle
 	const subtitle = post.meta.subtitle
-	const tags = post.meta.tags
+	const tags = normalizeRednoteTags(post.meta.tags)
 	const metaLine = [post.meta.time, post.meta.location].filter(Boolean).join(" ")
 
-	if (!title && !subtitle && !tags && !metaLine) {
+	if (!title && !subtitle && !tags.length && !metaLine) {
 		return null
 	}
 
@@ -107,8 +138,12 @@ function RednoteDetailContent({ post }: { post: SelfMediaPost }) {
 			{subtitle ? (
 				<div className="mt-2 text-[14px] leading-6 text-black/80">{subtitle}</div>
 			) : null}
-			{tags ? (
-				<div className="mt-2 text-[15px] font-medium leading-6 text-[#1f6fff]">{tags}</div>
+			{tags.length ? (
+				<div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[15px] font-medium leading-6 text-[#1f6fff]">
+					{tags.map((tag, idx) => (
+						<span key={`${tag}-${idx}`}>#{tag}</span>
+					))}
+				</div>
 			) : null}
 			{metaLine ? (
 				<div className="mt-3 text-[12px] leading-5 text-[#86909c]">{metaLine}</div>
@@ -123,8 +158,8 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 	onBackHome,
 	backLabel,
 	onChangeCard,
-	onAddCardToCurrentChat,
 	activeCardExternalRefreshVersion,
+	onPreviewFocus,
 }: DetailViewProps) {
 	const store = useSelfMediaStore()
 	const { activePost: post, activeCardIndex: cardIndex, activePostIndex: postIndex } = store
@@ -147,6 +182,9 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 	const handleControlPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
 		event.stopPropagation()
 	}
+	const handlePreviewPointerDown: React.PointerEventHandler<HTMLDivElement> = (event) => {
+		onPreviewFocus?.(event)
+	}
 	const handleDetailWheel = (event: React.WheelEvent<HTMLDivElement>) => {
 		event.stopPropagation()
 	}
@@ -164,6 +202,18 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 		enableDrag: false,
 		enableWheel: false,
 	})
+	const handlePrevCard = (event: React.MouseEvent<HTMLButtonElement>) => {
+		prev()
+		onPreviewFocus?.(event)
+	}
+	const handleNextCard = (event: React.MouseEvent<HTMLButtonElement>) => {
+		next()
+		onPreviewFocus?.(event)
+	}
+	const handleGoToCard = (idx: number, event: React.MouseEvent<HTMLButtonElement>) => {
+		goTo(idx)
+		onPreviewFocus?.(event)
+	}
 
 	// 水平方向滑动切换卡片；垂直方向透传给外层容器做页面滚动
 	// 必须用原生 addEventListener({ passive: false }) 才能调用 preventDefault()
@@ -217,6 +267,7 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 					ref={bind.ref}
 					className="group relative aspect-[393/526] overflow-hidden bg-white shadow-sm"
 					data-testid="red-detail-stage"
+					onPointerDown={handlePreviewPointerDown}
 				>
 					<div
 						className="flex h-full w-full transition-transform"
@@ -235,7 +286,7 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 									fileId={card.fileId}
 									version={card.version}
 									attachmentList={attachmentList}
-									className="h-full w-full"
+									className="pointer-events-none h-full w-full"
 									imageProcessOptions={CARD_IMAGE_PROCESS}
 									ref={(node) => {
 										cardRefs.current[postIndex] =
@@ -256,7 +307,7 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 									currentIndex === 0 && "pointer-events-none opacity-0",
 								)}
 								onPointerDown={handleControlPointerDown}
-								onClick={prev}
+								onClick={handlePrevCard}
 								data-testid="red-detail-prev-button"
 								aria-label="Previous card"
 							>
@@ -271,7 +322,7 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 										"pointer-events-none opacity-0",
 								)}
 								onPointerDown={handleControlPointerDown}
-								onClick={next}
+								onClick={handleNextCard}
 								data-testid="red-detail-next-button"
 								aria-label="Next card"
 							>
@@ -286,7 +337,7 @@ export const RednoteDetailView = observer(function RednoteDetailView({
 							key={idx}
 							type="button"
 							onPointerDown={handleControlPointerDown}
-							onClick={() => goTo(idx)}
+							onClick={(event) => handleGoToCard(idx, event)}
 							className={cn(
 								"h-1.5 rounded-full transition-all",
 								idx === currentIndex

@@ -53,6 +53,44 @@ final class DesignImageGenerationSubscriberTest extends TestCase
         $this->assertSame(7001, $entity->getFileDirId());
     }
 
+    public function testBuildImageCompletionPayloadStoresSingleImageAndEmptyTaskFileName(): void
+    {
+        $payload = $this->buildImageCompletionPayload('poster', [
+            'https://example.test/generated/first.png',
+        ], '/workspace/design');
+
+        $this->assertSame('', $payload['file_name']);
+        $this->assertSame([
+            [
+                'index' => 1,
+                'file_name' => 'poster.png',
+                'file_path' => '/workspace/design/poster.png',
+            ],
+        ], $payload['output_images']);
+    }
+
+    public function testBuildImageCompletionPayloadUsesPerImagePathAndEmptyTaskFileName(): void
+    {
+        $payload = $this->buildImageCompletionPayload('poster', [
+            'https://example.test/generated/first.png',
+            'https://example.test/generated/second.webp',
+        ], '/workspace/design');
+
+        $this->assertSame('', $payload['file_name']);
+        $this->assertSame([
+            [
+                'index' => 1,
+                'file_name' => 'poster.png',
+                'file_path' => '/workspace/design/poster.png',
+            ],
+            [
+                'index' => 2,
+                'file_name' => 'poster_2.webp',
+                'file_path' => '/workspace/design/poster_2.webp',
+            ],
+        ], $payload['output_images']);
+    }
+
     private function invokeEnsureOutputDirectoryId(
         TaskFileDomainService $taskFileDomainService,
         ImageGenerationEntity $entity,
@@ -65,6 +103,19 @@ final class DesignImageGenerationSubscriberTest extends TestCase
 
         $method = $reflection->getMethod('ensureOutputDirectoryId');
         $method->invoke($subscriber, $entity);
+    }
+
+    /**
+     * @param array<int, string> $imageUrls
+     * @return array{file_name: string, output_images: array<int, array{index: int, file_name: string, file_path: string}>}
+     */
+    private function buildImageCompletionPayload(string $baseName, array $imageUrls, string $fileDir): array
+    {
+        $reflection = new ReflectionClass(DesignImageGenerationSubscriber::class);
+        $subscriber = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('buildImageCompletionPayload');
+
+        return $method->invoke($subscriber, $baseName, $imageUrls, $fileDir);
     }
 
     private function createDirectory(int $fileId): TaskFileEntity

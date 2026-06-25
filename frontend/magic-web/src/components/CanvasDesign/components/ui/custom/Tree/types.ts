@@ -29,6 +29,12 @@ export interface TreeProps<T extends TreeData = TreeData> {
 	onToggle?: (id: string) => void
 	className?: string
 	treeNodeContentClassName?: string
+	virtualize?: boolean
+	virtualThreshold?: number
+	virtualRowHeight?: number
+	virtualOverscan?: number
+	initialScrollTop?: number
+	onScrollTopChange?: (scrollTop: number) => void
 	renderNode?: (node: TreeNode<T>, context: RenderNodeContext) => React.ReactNode
 	onContextMenu?: (event: React.MouseEvent, node: TreeNode<T>) => void
 	onDoubleClick?: (event: React.MouseEvent, node: TreeNode<T>) => void
@@ -43,6 +49,7 @@ export interface TreeNodeItemProps<T extends TreeData = TreeData> {
 	hoveredIds?: string[]
 	expandedIds: Set<string>
 	treeNodeContentClassName?: string
+	renderChildren?: boolean
 	onToggle: (id: string) => void
 	onSelect?: (node: TreeNode<T>, isMultiSelect: boolean) => void
 	renderNode?: (node: TreeNode<T>, context: RenderNodeContext) => React.ReactNode

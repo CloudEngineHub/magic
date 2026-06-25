@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gradient Editorial — Preview</title>
+<link rel="stylesheet" href="gradient-editorial.css">
+<style>
+  html, body { width: auto; height: auto; overflow: auto; background: #e5e5e5; }
+  .preview-container {
+    display: flex; flex-wrap: wrap; gap: 32px; padding: 40px;
+    justify-content: center; align-items: flex-start;
+  }
+  .preview-card-wrapper {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    border-radius: 4px; overflow: hidden;
+  }
+</style>
+</head>
+<body>
+<div class="preview-container">
+
+  <!-- Card 1: Cover with hero image -->
+  <div class="preview-card-wrapper">
+    <div class="ge-card ge-cover" style="background-image: url('https://images.unsplash.com/photo-1676299081847-824916de030a?w=600&q=80');">
+      <span class="ge-brand">Codex</span>
+      <h1 class="ge-cover-title">A prompt that distills your workflow automatically<br>Automate recurring daily work</h1>
+      <p class="ge-cover-quote">Codex can automate recurring workflows by reviewing past conversations to identify and improve repeated tasks.</p>
+      <div class="ge-cover-tags">
+        <span class="ge-cover-tag">AI automation</span>
+        <span class="ge-cover-tag">Codex</span>
+        <span class="ge-cover-tag">Workflow</span>
+      </div>
+      <span class="ge-cover-meta">@SuperMagic · 2024.05</span>
+    </div>
+  </div>
+
+  <!-- Card 2: Content Page -->
+  <div class="preview-card-wrapper">
+    <div class="ge-card ge-content">
+      <div class="ge-header">
+        <span class="ge-page-num">02 / 05</span>
+        <span class="ge-header-title">Core method</span>
+      </div>
+      <h2 class="ge-section accented">How can Codex distill workflows automatically?</h2>
+      <p class="ge-para">The core idea is to have Codex review your conversations, Memories, and Chronicle, identify patterns, reuse existing content, and create only the smallest useful skill, subagent, or automation.</p>
+      <div class="ge-quote">
+        <p class="ge-quote-text">Act only when a candidate meets these conditions: it happened at least twice, or is clearly likely to recur with meaningful repeated cost.</p>
+      </div>
+      <div class="ge-list">
+        <div class="ge-list-item">Inputs are stable, the process is repeatable, and outputs or stopping conditions are clear</div>
+        <div class="ge-list-item">It clearly improves speed, quality, consistency, or reliability</div>
+        <div class="ge-list-item">It is not already covered well enough by existing content</div>
+      </div>
+      <div class="ge-footer">
+        <span class="ge-footer-left">@SuperMagic</span>
+        <span class="ge-footer-right">Save + follow</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 3: Content with steps -->
+  <div class="preview-card-wrapper">
+    <div class="ge-card ge-content gray-bg">
+      <div class="ge-header">
+        <span class="ge-page-num">03 / 05</span>
+        <span class="ge-header-title">Steps</span>
+      </div>
+      <h2 class="ge-section">Use available evidence in priority order</h2>
+      <div class="ge-step">
+        <span class="ge-step-num">1</span>
+        <div class="ge-step-content">
+          <h4 class="ge-step-title">Review Codex conversations and task summaries</h4>
+          <p class="ge-step-desc">Find task patterns repeated in the last 30 days</p>
+        </div>
+      </div>
+      <div class="ge-step">
+        <span class="ge-step-num">2</span>
+        <div class="ge-step-content">
+          <h4 class="ge-step-title">Analyze Memories and rollout summaries</h4>
+          <p class="ge-step-desc">Find patterns recurring across sessions</p>
+        </div>
+      </div>
+      <div class="ge-step">
+        <span class="ge-step-num">3</span>
+        <div class="ge-step-content">
+          <h4 class="ge-step-title">Choose the smallest suitable form</h4>
+          <p class="ge-step-desc">Use a skill for reusable workflows and a subagent for tasks that need independent reasoning</p>
+        </div>
+      </div>
+      <div class="ge-divider gradient"></div>
+      <div class="ge-highlight-card gradient">
+        <h4 class="ge-highlight-card-title">Key principle</h4>
+        <p class="ge-highlight-card-body">Prefer reusing or extending existing content to avoid duplicate creation. Use Chronicle only for discovery, and confirm important details in the relevant source system whenever possible.</p>
+      </div>
+      <div class="ge-footer">
+        <span class="ge-footer-left">@SuperMagic</span>
+        <span class="ge-footer-right">Next page -></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="gradient-editorial.js"></script>
+</body>
+</html>

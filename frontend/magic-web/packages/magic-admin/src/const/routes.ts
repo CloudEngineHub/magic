@@ -16,6 +16,8 @@ export enum RoutePath {
 	AIInternalEmployeeSkill = "/admin/ai/internal-employee-skill",
 	AIEmployeeReview = "/admin/ai/internal-employee-skill/employee-review",
 	AISkillReview = "/admin/ai/internal-employee-skill/skill-review",
+	AIManage = "/admin/ai/manage",
+	AIAppMenu = "/admin/ai/manage/app-menu",
 
 	// Platform Package paths
 	Platform = "/admin/platform",
@@ -71,6 +73,10 @@ export enum RouteName {
 	AdminAIEmployeeReview = "AdminAIEmployeeReview",
 	/** 内部员工及技能 - 技能发布审核 */
 	AdminAISkillReview = "AdminAISkillReview",
+	/** 平台管理 - 应用菜单 */
+	AdminAIManage = "AdminAIManage",
+	/** 应用菜单 */
+	AdminAIAppMenu = "AdminAIAppMenu",
 
 	/** ====== 平台管理模块 ====== */
 	/** 平台套餐布局 */

@@ -2,8 +2,10 @@
 
 from app.service.cli_status.providers.dws import DwsCliStatusProbe
 from app.service.cli_status.providers.lark import LarkCliStatusProbe
+from app.service.cli_status.providers.teamshare import TeamshareCliStatusProbe
 
 __all__ = [
     "DwsCliStatusProbe",
     "LarkCliStatusProbe",
+    "TeamshareCliStatusProbe",
 ]

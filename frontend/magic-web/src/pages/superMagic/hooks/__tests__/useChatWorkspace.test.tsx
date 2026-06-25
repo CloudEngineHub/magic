@@ -74,7 +74,7 @@ describe("useChatWorkspace", () => {
 		ChatWorkspaceIdCache.clear(userStore.user.userInfo)
 	})
 
-	it("loads chat projects with workspace_id and project_name from queries api", async () => {
+	it("loads chat projects with workspace_id and project_name from participated api", async () => {
 		const { result } = renderHook(() => useChatWorkspace())
 
 		await waitFor(() => {

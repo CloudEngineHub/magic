@@ -2,7 +2,7 @@ import Konva from "konva"
 import { BaseTool, type ToolOptions, type ToolMetadata } from "./BaseTool"
 import { ElementTypeEnum, type ImageElement } from "../../types"
 import { ElementFactory } from "../../element/ElementFactory"
-import { generateElementId } from "../../utils/utils"
+import { calculateHorizontalImageLayout, generateElementId } from "../../utils/utils"
 import {
 	collectObstacleRects,
 	findNextImageVideoPlaceholderPositionNearViewport,
@@ -54,7 +54,7 @@ export class ImageGeneratorTool extends BaseTool {
 		this.loadImageModelList()
 
 		// 监听画布点击事件
-		this.clickHandler = (e: Konva.KonvaEventObject<MouseEvent>) => {
+		this.clickHandler = () => {
 			// 获取点击位置（画布坐标）
 			const pos = this.canvas.stage.getPointerPosition()
 			if (!pos) return
@@ -218,6 +218,81 @@ export class ImageGeneratorTool extends BaseTool {
 		this.createImageElementAt(position.x, position.y, imageSize.width, imageSize.height)
 	}
 
+	public createImageElementNearViewport(width?: number, height?: number): string {
+		const imageSize = this.getImageElementSize(width, height)
+		const mediaPlacementConfig = getResolvedMediaPlacementConfig(this.canvas)
+		const obstacles = collectObstacleRects(
+			this.canvas.elementManager.getAllElements(),
+			(el) => {
+				return (
+					this.canvas.permissionManager.isVisible(el) &&
+					!this.canvas.permissionManager.isLocked(el)
+				)
+			},
+		)
+		const position = findNextImageVideoPlaceholderPositionNearViewport(obstacles, {
+			elementWidth: imageSize.width,
+			elementHeight: imageSize.height,
+			viewportRect: getViewportCanvasRect(this.canvas),
+			anchor: getCanvasCenter(this.canvas),
+			spacing: mediaPlacementConfig.spacing,
+			maxPerRow: mediaPlacementConfig.maxPerRow,
+			maxSearchRings: mediaPlacementConfig.maxSearchRings,
+		})
+
+		return this.createImageElementAt(position.x, position.y, imageSize.width, imageSize.height)
+	}
+
+	public createImageElementsNearViewport(
+		count: number,
+		width?: number,
+		height?: number,
+	): string[] {
+		const nextCount = Math.max(1, count)
+		const imageSize = this.getImageElementSize(width, height)
+		const mediaPlacementConfig = getResolvedMediaPlacementConfig(this.canvas)
+		const obstacles = collectObstacleRects(
+			this.canvas.elementManager.getAllElements(),
+			(el) => {
+				return (
+					this.canvas.permissionManager.isVisible(el) &&
+					!this.canvas.permissionManager.isLocked(el)
+				)
+			},
+		)
+		const firstPosition = findNextImageVideoPlaceholderPositionNearViewport(obstacles, {
+			elementWidth: imageSize.width,
+			elementHeight: imageSize.height,
+			viewportRect: getViewportCanvasRect(this.canvas),
+			anchor: getCanvasCenter(this.canvas),
+			spacing: mediaPlacementConfig.spacing,
+			maxPerRow: mediaPlacementConfig.maxPerRow,
+			maxSearchRings: mediaPlacementConfig.maxSearchRings,
+		})
+		const positions = calculateHorizontalImageLayout(
+			Array.from({ length: nextCount }, () => imageSize),
+			{
+				x: firstPosition.x + imageSize.width / 2,
+				y: firstPosition.y + imageSize.height / 2,
+			},
+			0,
+		)
+
+		return positions.map((position) =>
+			this.createImageElementAt(
+				position.x - imageSize.width / 2,
+				position.y - imageSize.height / 2,
+				imageSize.width,
+				imageSize.height,
+				{
+					select: false,
+					ensureInViewport: false,
+					completeTask: false,
+				},
+			),
+		)
+	}
+
 	private getImageElementSize(
 		width?: number,
 		height?: number,
@@ -254,7 +329,17 @@ export class ImageGeneratorTool extends BaseTool {
 	 * @param width 可选的宽度，如果不提供则使用默认值
 	 * @param height 可选的高度，如果不提供则使用默认值
 	 */
-	private createImageElementAt(x: number, y: number, width?: number, height?: number): void {
+	private createImageElementAt(
+		x: number,
+		y: number,
+		width?: number,
+		height?: number,
+		options?: {
+			select?: boolean
+			ensureInViewport?: boolean
+			completeTask?: boolean
+		},
+	): string {
 		const size = this.getImageElementSize(width, height)
 
 		// 生成唯一 ID
@@ -282,21 +367,29 @@ export class ImageGeneratorTool extends BaseTool {
 
 		// 创建元素
 		this.canvas.elementManager.create(imageElement)
-		this.canvas.selectionManager?.select(elementId)
+		if (options?.select !== false) {
+			this.canvas.selectionManager?.select(elementId)
+		}
 
 		// 在下一帧检查可视性；行为与图层列表点击定位保持一致
-		requestAnimationFrame(() => {
-			const isInViewport = this.canvas.viewportController.isElementInViewport([elementId])
-			if (!isInViewport) {
-				this.canvas.viewportController.moveElementToViewport([elementId], {
-					animated: true,
-					padding: { top: 50, right: 50, bottom: 50, left: 100 },
-				})
-			}
-		})
+		if (options?.ensureInViewport !== false) {
+			requestAnimationFrame(() => {
+				const isInViewport = this.canvas.viewportController.isElementInViewport([elementId])
+				if (!isInViewport) {
+					this.canvas.viewportController.moveElementToViewport([elementId], {
+						animated: true,
+						padding: { top: 50, right: 50, bottom: 50, left: 100 },
+					})
+				}
+			})
+		}
 
 		// 创建完成后切回选择工具
-		this.onTaskComplete()
+		if (options?.completeTask !== false) {
+			this.onTaskComplete()
+		}
+
+		return elementId
 	}
 
 	/**

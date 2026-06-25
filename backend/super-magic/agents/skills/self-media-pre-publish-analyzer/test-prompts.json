@@ -1,0 +1,66 @@
+[
+  {
+    "id": "rednote-ip-growth",
+    "platform": "rednote",
+    "analysisGoal": "IP增长",
+    "prompt": "请对我 @ 的小红书图文做发布前诊断，重点看这篇内容能不能增强人设、信任感和关注理由。",
+    "expected": "读取 post 文件夹和 cards；加载 rednote-rubrics.md；按小红书五维和二级分项评分；同类内容对比聚焦人设一致、系列化和长期内容资产；输出可交给 self-media-composer 的改稿指令。",
+    "mustInclude": ["证据清单", "二级分项", "目标场景判断", "IP增长", "信心等级"]
+  },
+  {
+    "id": "rednote-conversion",
+    "platform": "rednote",
+    "analysisGoal": "产品转化",
+    "prompt": "帮我诊断这个小红书帖子发布前还有什么影响转化的问题，目标是让读者愿意咨询或购买。",
+    "expected": "加载 rednote-rubrics.md；按小红书基础维度和二级分项评分；建议排序优先痛点匹配、卖点证据、异议处理和 CTA；不能把第三方资料当硬规则。",
+    "mustInclude": ["产品转化", "痛点", "证据", "异议处理", "CTA"]
+  },
+  {
+    "id": "rednote-viral-traffic",
+    "platform": "rednote",
+    "analysisGoal": "爆文流量",
+    "prompt": "这篇小红书能不能爆？请联网看同类内容，给发布前诊断和修改优先级。",
+    "expected": "加载 rednote-rubrics.md 和 comparison-protocol.md；按小红书基础维度和二级分项评分；同类对比聚焦封面首屏、标题钩子、搜索关键词、互动诱因和传播潜力。",
+    "mustInclude": ["爆文流量", "封面", "标题", "搜索关键词", "互动诱因", "联网对标证据"]
+  },
+  {
+    "id": "wechat-ip-growth",
+    "platform": "wechat-official-accounts",
+    "analysisGoal": "IP增长",
+    "prompt": "请诊断我 @ 的公众号文章，重点看它对 IP 增长、信任建立和关注理由有没有帮助。",
+    "expected": "读取 article HTML 和 post.json；加载 wechat-official-rubrics.md；按公众号五维和二级分项评分；建议优先人设可信度、观点稳定性、关注理由和品牌关系。",
+    "mustInclude": ["证据清单", "公众号", "人设", "可信度", "关注理由"]
+  },
+  {
+    "id": "wechat-conversion",
+    "platform": "wechat-official-accounts",
+    "analysisGoal": "产品转化",
+    "prompt": "帮我看这篇公众号文章发布前的转化问题，目标是引导读者了解产品并产生咨询动机。",
+    "expected": "加载 wechat-official-rubrics.md；按公众号基础维度和二级分项评分；优先检查痛点、案例证据、卖点表达、异议处理、行动引导和阅读负担。",
+    "mustInclude": ["产品转化", "案例", "卖点", "异议处理", "行动引导", "阅读负担"]
+  },
+  {
+    "id": "wechat-viral-traffic",
+    "platform": "wechat-official-accounts",
+    "analysisGoal": "爆文流量",
+    "prompt": "这篇公众号文章想冲阅读量，请发布前诊断：标题、封面、摘要、结构和同类内容差距。",
+    "expected": "加载 wechat-official-rubrics.md 和 comparison-protocol.md；按公众号基础维度和二级分项评分；同类对比聚焦打开率、摘要承诺、完读体验、转发理由和社交传播点。",
+    "mustInclude": ["爆文流量", "标题", "封面", "摘要", "完读体验", "转发理由"]
+  },
+  {
+    "id": "missing-post-folder",
+    "platform": "rednote",
+    "analysisGoal": "IP增长",
+    "prompt": "帮我给刚才那篇小红书做发布前诊断，但是我没有 @ 文件夹。",
+    "expected": "触发 STOP；要求用户补充当前 post 文件夹 mention；不能根据聊天记忆、标题或泛泛经验打分。",
+    "mustInclude": ["STOP", "post 文件夹", "不能打分"]
+  },
+  {
+    "id": "web-search-limited",
+    "platform": "wechat-official-accounts",
+    "analysisGoal": "爆文流量",
+    "prompt": "请给这篇公众号发布前评分并对比同类内容。如果联网搜索不可用，也要告诉我当前文章本身的问题。",
+    "expected": "若联网搜索失败，继续文件内诊断；同类内容对比标记为受限；信心等级降低；总分不得高于 80。",
+    "mustInclude": ["同类内容对比", "受限", "信心等级", "不得高于 80"]
+  }
+]

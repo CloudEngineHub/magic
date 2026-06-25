@@ -11,9 +11,8 @@ import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
 import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
 import { useUploadWithModal } from "./useUploadWithModal"
 import { useMoveFile } from "./useMoveFile"
-import { collectFileIds } from "../utils/collectFileIds"
+import { useCopyFileSelector } from "./useCopyFileSelector"
 import { getAttachmentKey } from "../utils/getAttachmentKey"
-import { collectSelectedItemIds } from "../utils/collectSelectedItemIds"
 import { normalizeSelectionIdsForShare } from "../utils/normalizeSelectionIdsForShare"
 import { buildDeleteConfirmHierarchyFromAttachments } from "../utils/mobileAttachmentTreeSelection"
 import { resolveMagicDeleteWarningVariant } from "../utils/magic-system-folder"
@@ -74,6 +73,16 @@ export function useProjectDetailFilesController({
 		},
 	})
 
+	const copyFileSelector = useCopyFileSelector({
+		projectId,
+		attachments,
+		onCopySuccess: async () => {
+			await refreshAttachments?.()
+			setIsSelectMode(false)
+			setSelectionResetKey((prev) => prev + 1)
+		},
+	})
+
 	const resolveParentIdFromPath = (parentPath?: string) => {
 		return getParentIdFromPath(attachments, parentPath)
 	}
@@ -91,17 +100,12 @@ export function useProjectDetailFilesController({
 		return candidate
 	}
 
-	const collectSelectedFileIds = (selectedKeys: Set<string>) => {
-		return collectFileIds({
-			items: attachments,
-			selectedItems: selectedKeys,
-			getItemId: getAttachmentKey,
-			includeFolderIds: true,
-		})
-	}
-
-	const collectDirectSelectedFileIds = (selectedKeys: Set<string>) => {
-		return collectSelectedItemIds(attachments, selectedKeys, getAttachmentKey)
+	/**
+	 * Mobile multi-select stores descendant file keys only; collapse fully selected
+	 * folder subtrees into folder IDs (same as share/copy/move).
+	 */
+	const collectOperationFileIds = (selectedKeys: Set<string>) => {
+		return normalizeSelectionIdsForShare(attachments, selectedKeys)
 	}
 
 	const createFile = async (
@@ -184,7 +188,7 @@ export function useProjectDetailFilesController({
 	}
 
 	const batchDelete = (selectedKeys: Set<string>) => {
-		const fileIds = collectSelectedFileIds(selectedKeys)
+		const fileIds = collectOperationFileIds(selectedKeys)
 		if (fileIds.length === 0) return
 
 		const selectedHierarchy = buildDeleteConfirmHierarchyFromAttachments(
@@ -226,7 +230,7 @@ export function useProjectDetailFilesController({
 	}
 
 	const batchMove = (selectedKeys: Set<string>) => {
-		const fileIds = collectDirectSelectedFileIds(selectedKeys)
+		const fileIds = collectOperationFileIds(selectedKeys)
 		if (fileIds.length === 0) return
 		moveFileHook.openBatchMoveByFileIds(fileIds)
 	}
@@ -234,6 +238,12 @@ export function useProjectDetailFilesController({
 	const batchMoveByFileIds = (fileIds: string[]) => {
 		if (fileIds.length === 0) return
 		moveFileHook.openBatchMoveByFileIds(fileIds)
+	}
+
+	const batchCopy = (selectedKeys: Set<string>) => {
+		const fileIds = collectOperationFileIds(selectedKeys)
+		if (fileIds.length === 0) return
+		copyFileSelector.openBatchCopyByFileIds(fileIds)
 	}
 
 	return {
@@ -246,6 +256,9 @@ export function useProjectDetailFilesController({
 			setShareFileIds([])
 		},
 		moveSelectorProps: moveFileHook.selectorConfig,
+		copySelectorProps: copyFileSelector.selectorConfig,
+		pendingCopyFileIds: copyFileSelector.pendingCopyFileIds,
+		notifyCopySuccess: copyFileSelector.notifyCopySuccess,
 		sharedDuplicateHandler,
 		uploadModalVisible,
 		selectedUploadFiles,
@@ -260,6 +273,7 @@ export function useProjectDetailFilesController({
 		batchShare,
 		batchMove,
 		batchMoveByFileIds,
+		batchCopy,
 		batchDelete,
 	}
 }

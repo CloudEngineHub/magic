@@ -61,6 +61,8 @@ class ImageGenerateFactory
 
     public static function createRequestType(ImageGenerateModelType $imageGenerateType, string $modelVersion, ?string $modelId, array $data): ImageGenerateRequest
     {
+        self::assertGenerateNumWithinLimit($modelVersion, $modelId, $data);
+
         $request = match ($imageGenerateType) {
             ImageGenerateModelType::Official => self::createOfficialProxyRequest($modelVersion, $modelId, $data),
             ImageGenerateModelType::Volcengine => self::createVolcengineRequest($modelVersion, $modelId, $data),
@@ -79,6 +81,20 @@ class ImageGenerateFactory
 
         self::ensureResolution($request);
         return $request;
+    }
+
+    private static function assertGenerateNumWithinLimit(string $modelVersion, ?string $modelId, array $data): void
+    {
+        $generateNum = (int) ($data['generate_num'] ?? $data['n'] ?? 1);
+        $maxOutputImages = SizeManager::getMaxOutputImages($modelVersion, $modelId);
+
+        if ($generateNum < 1 || $generateNum > $maxOutputImages) {
+            ExceptionBuilder::throw(
+                ImageGenerateErrorCode::GENERAL_ERROR,
+                'image_generate.output_image_count_exceeds_limit',
+                ['limit' => $maxOutputImages]
+            );
+        }
     }
 
     private static function createOfficialProxyRequest(string $modelVersion, ?string $modelId, array $data): OfficialProxyRequest
@@ -229,8 +245,9 @@ class ImageGenerateFactory
             $data['model'] ?? 'qwen-image'
         );
 
+        $generateNum = (int) ($data['generate_num'] ?? 1);
         if (isset($data['generate_num'])) {
-            $request->setGenerateNum($data['generate_num']);
+            $request->setGenerateNum($generateNum);
         }
 
         $request->setPromptExtend(true);
@@ -272,8 +289,9 @@ class ImageGenerateFactory
         $request->setResolution($scale);
 
         // 生成图片数量
+        $generateNum = (int) ($data['generate_num'] ?? 1);
         if (isset($data['generate_num'])) {
-            $request->setGenerateNum($data['generate_num']);
+            $request->setGenerateNum($generateNum);
         }
 
         // 引用图片
@@ -299,8 +317,9 @@ class ImageGenerateFactory
             $data['user_prompt'],
         );
 
+        $generateNum = (int) ($data['generate_num'] ?? 1);
         if (isset($data['generate_num'])) {
-            $request->setGenerateNum($data['generate_num']);
+            $request->setGenerateNum($generateNum);
         }
 
         $referenceImages = self::resolveReferenceImages($data, $imageConfig);
@@ -322,8 +341,16 @@ class ImageGenerateFactory
         }
 
         // 处理图片生成附加配置；当前火山组图选项仍复用这一映射。
+        $sequentialOptions = [];
         if (isset($data['image_generation_config']) && is_array($data['image_generation_config'])) {
-            $request->setSequentialImageGenerationOptions($data['image_generation_config']);
+            $sequentialOptions = $data['image_generation_config'];
+        }
+        if ($generateNum > 1) {
+            $request->setSequentialImageGeneration('auto');
+            $sequentialOptions['max_images'] = $generateNum;
+        }
+        if ($sequentialOptions !== []) {
+            $request->setSequentialImageGenerationOptions($sequentialOptions);
         }
 
         // 处理输出图片格式：根据模型配置校验并解析

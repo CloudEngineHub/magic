@@ -62,7 +62,7 @@ let cachedChatWorkspace: Workspace | null = null
 let cachedChatWorkspaceId: string | null = null
 let sharedChatWorkspaceRequest: Promise<Workspace | null> | null = null
 
-/** Chat 对话列表按项目更新时间倒序；API order_by 仅支持 updated_at / id。 */
+/** Chat conversation list uses workspace-scoped projects/queries with server-side updated_at ordering. */
 const CHAT_PROJECT_LIST_ORDER_BY = "updated_at"
 const CHAT_PROJECT_LIST_SORT = "desc"
 
@@ -114,26 +114,33 @@ export function getCachedChatWorkspaceId(): string | null {
  * 请求并缓存 chat workspace，供映射层在需要时主动确保 ID 可用。
  * 多次调用会复用同一个运行中的请求，不重复发起网络请求。
  */
-export async function ensureChatWorkspaceId(): Promise<string | null> {
-	const cachedWorkspaceId = getPersistedChatWorkspaceId()
-	if (cachedWorkspaceId) return cachedWorkspaceId
+/**
+ * Resolve and cache the chat workspace entity for service-layer navigation (non-hook callers).
+ */
+export async function ensureChatWorkspace(): Promise<Workspace | null> {
+	if (cachedChatWorkspace?.id) return cachedChatWorkspace
+
 	if (sharedChatWorkspaceRequest) {
-		const ws = await sharedChatWorkspaceRequest
-		return ws?.id ?? null
+		return sharedChatWorkspaceRequest
 	}
 
 	const request = SuperMagicApi.getChatWorkspace()
-		.then((workspace) => {
-			return persistChatWorkspace(workspace)
-		})
+		.then((workspace) => persistChatWorkspace(workspace))
 		.catch(() => null)
 		.finally(() => {
 			sharedChatWorkspaceRequest = null
 		})
 
 	sharedChatWorkspaceRequest = request
-	const ws = await request
-	return ws?.id ?? null
+	return request
+}
+
+export async function ensureChatWorkspaceId(): Promise<string | null> {
+	const cachedWorkspaceId = getPersistedChatWorkspaceId()
+	if (cachedWorkspaceId) return cachedWorkspaceId
+
+	const workspace = await ensureChatWorkspace()
+	return workspace?.id ?? null
 }
 
 export function useChatWorkspace(options: UseChatWorkspaceOptions = {}): UseChatWorkspaceResult {

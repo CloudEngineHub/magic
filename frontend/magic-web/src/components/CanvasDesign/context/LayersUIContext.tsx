@@ -21,6 +21,8 @@ interface LayersUIContextValue {
 	setCollapsed: (collapsed: boolean) => void
 	setWidth: (width: number) => void
 	setResizing: (resizing: boolean) => void
+	getLayersScrollTop: () => number
+	setLayersScrollTop: (scrollTop: number) => void
 	handleResizeStart: (e: React.MouseEvent) => void
 }
 
@@ -38,6 +40,7 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 
 	const startXRef = useRef(0)
 	const startWidthRef = useRef(0)
+	const layersScrollTopRef = useRef(0)
 
 	const [width, setWidth] = useState(() => {
 		if (getIsMobile()) {
@@ -107,6 +110,14 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 		},
 		[getIsMobile],
 	)
+
+	const getLayersScrollTop = useCallback(() => {
+		return layersScrollTopRef.current
+	}, [])
+
+	const setLayersScrollTop = useCallback((scrollTop: number) => {
+		layersScrollTopRef.current = Math.max(0, scrollTop)
+	}, [])
 
 	const handleResizeStart = useCallback(
 		(e: React.MouseEvent) => {
@@ -185,12 +196,16 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 			setCollapsed: handleSetCollapsed,
 			setWidth: handleSetWidth,
 			setResizing,
+			getLayersScrollTop,
+			setLayersScrollTop,
 			handleResizeStart,
 		}
 	}, [
 		collapsed,
+		getLayersScrollTop,
 		handleResizeStart,
 		resizing,
+		setLayersScrollTop,
 		transitionAnimation,
 		width,
 		handleSetCollapsed,

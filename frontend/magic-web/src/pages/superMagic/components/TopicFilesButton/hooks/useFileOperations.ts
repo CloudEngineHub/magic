@@ -23,7 +23,6 @@ import { SuperMagicApi } from "@/apis"
 import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
 import { useMemoizedFn } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { uploadLogger } from "../utils/uploadLogger"
 import { exportPPTX } from "../../../../../../packages/html2pptx/src"
 import { exportHtmlToPdf } from "../../../../../../packages/pdf-export/src"
 import {
@@ -35,6 +34,9 @@ import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/ut
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import { hasPPTMetadata } from "@/pages/superMagic/components/Detail/utils/file"
 import { getAppEntryFile } from "../../MessageList/components/MessageAttachment/utils"
+import { createDesignProjectFiles } from "../../Detail/contents/Design/utils/designProjectCreation"
+import { createSelfMediaProject as createSelfMediaProjectAction } from "./projectCreators/createSelfMediaProject"
+import { createAICardProject as createAICardProjectAction } from "./projectCreators/createAICardProject"
 
 // 工具函数：从attachments中递归删除指定ID的文件/文件夹
 const removeItemFromAttachments = (
@@ -318,33 +320,14 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// 通用的文件上传处理函数（实际执行上传）- 用于普通文件上传（每个文件一个任务）
 	const processFilesUpload = useCallback(
-		async (files: File[], suffixDir?: string, parentIdOverride?: string) => {
+		async (files: File[], suffixDir?: string) => {
 			// 获取父文件夹路径
 			const parentPath = suffixDir ? `/${suffixDir}` : undefined
 			// 获取父文件夹ID
-			const parentId = parentIdOverride ?? (getParentIdFromPath(parentPath) as string)
-			const parentIdSource = parentIdOverride ? "targetItem.file_id" : "pathLookup"
-			let createdTaskCount = 0
-			let failedTaskCount = 0
-
-			uploadLogger.log("resolveUploadParent", {
-				uploadType: "file",
-				suffixDir,
-				parentPath,
-				parentId,
-				parentIdSource,
-				filesCount: files.length,
-			})
-
+			const parentId = getParentIdFromPath(parentPath) as string
 			// 为每个文件创建单独的任务
 			for (const file of files) {
 				try {
-					uploadLogger.log("createUploadTaskStart", {
-						uploadType: "file",
-						fileName: file.name,
-						parentId,
-						parentIdSource,
-					})
 					// 为单个文件创建任务
 					await multiFolderUploadStore.createUploadTask([file], parentId, {
 						projectId: projectId || "",
@@ -384,32 +367,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						},
 					})
 
-					createdTaskCount += 1
-					uploadLogger.log("createUploadTaskSuccess", {
-						uploadType: "file",
-						fileName: file.name,
-						parentId,
-					})
 					console.log(`✅ Successfully created upload task for file: ${file.name}`)
 				} catch (error) {
-					failedTaskCount += 1
-					uploadLogger.logError("createUploadTask", error, {
-						uploadType: "file",
-						fileName: file.name,
-						parentId,
-					})
 					console.error(`❌ Failed to create upload task for file ${file.name}:`, error)
 				}
 			}
-
-			uploadLogger.finishSession({
-				uploadType: "file",
-				status: failedTaskCount > 0 ? "partial_failed" : "task_created",
-				createdTaskCount,
-				failedTaskCount,
-				parentId,
-				parentIdSource,
-			})
 		},
 		[
 			projectId,
@@ -424,27 +386,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// 文件夹上传处理函数（所有文件作为一个任务）
 	const processFolderUpload = useCallback(
-		async (files: File[], suffixDir?: string, parentIdOverride?: string) => {
+		async (files: File[], suffixDir?: string) => {
 			// 获取父文件夹ID
 			const parentPath = suffixDir ? `/${suffixDir}` : undefined
-			const parentId = parentIdOverride ?? (getParentIdFromPath(parentPath) as string)
-			const parentIdSource = parentIdOverride ? "targetItem.file_id" : "pathLookup"
-			uploadLogger.log("resolveUploadParent", {
-				uploadType: "folder",
-				suffixDir,
-				parentPath,
-				parentId,
-				parentIdSource,
-				filesCount: files.length,
-			})
-
+			const parentId = getParentIdFromPath(parentPath) as string
 			try {
-				uploadLogger.log("createUploadTaskStart", {
-					uploadType: "folder",
-					filesCount: files.length,
-					parentId,
-					parentIdSource,
-				})
 				// 所有文件作为一个任务
 				await multiFolderUploadStore.createUploadTask(files, parentId, {
 					projectId: projectId || "",
@@ -484,32 +430,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					},
 				})
 
-				uploadLogger.log("createUploadTaskSuccess", {
-					uploadType: "folder",
-					filesCount: files.length,
-					parentId,
-				})
-				uploadLogger.finishSession({
-					uploadType: "folder",
-					status: "task_created",
-					filesCount: files.length,
-					parentId,
-					parentIdSource,
-				})
 				console.log(`✅ Successfully created folder upload task with ${files.length} files`)
 			} catch (error) {
-				uploadLogger.logError("createUploadTask", error, {
-					uploadType: "folder",
-					filesCount: files.length,
-					parentId,
-				})
-				uploadLogger.finishSession({
-					uploadType: "folder",
-					status: "failed",
-					filesCount: files.length,
-					parentId,
-					parentIdSource,
-				})
 				console.error(`❌ Failed to create folder upload task:`, error)
 			}
 		},
@@ -647,7 +569,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		}
 	}
 
-	// 创建画布项目 - 创建文件夹并在其中创建 magic.project.js 文件
 	const createDesignProject = async (folderName: string, parentPath?: string) => {
 		if (!projectId) {
 			throw new Error("项目ID不能为空")
@@ -660,45 +581,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			// 获取父文件夹ID
 			const parent_id = getParentIdFromPath(parentPath)
 
-			// 直接调用 API 创建文件夹（不触发刷新）
-			const folderResponse = await SuperMagicApi.createFile({
-				project_id: projectId,
-				parent_id,
-				file_name: folderName,
-				is_directory: true,
+			const { folder } = await createDesignProjectFiles({
+				projectId,
+				parentId: parent_id,
+				folderName,
 			})
-
-			if (!folderResponse?.file_id) {
-				throw new Error("文件夹创建失败")
-			}
-
-			// 在文件夹中创建 magic.project.js 文件
-			const fileContent = `window.magicProjectConfig = {
-	"version": "1.0.0",
-	"type": "design",
-	"name": "${folderName}"
-}`
-			const fileName = "magic.project.js"
-
-			// 直接使用文件夹的 file_id 作为 parent_id 创建文件
-			const fileResponse = await SuperMagicApi.createFile({
-				project_id: projectId,
-				parent_id: folderResponse.file_id,
-				file_name: fileName,
-				is_directory: false,
-			})
-
-			if (!fileResponse?.file_id) {
-				throw new Error("文件创建失败")
-			}
-
-			// 保存文件内容
-			await SuperMagicApi.saveFileContent([
-				{
-					file_id: fileResponse.file_id,
-					content: fileContent,
-				},
-			])
 
 			// 所有操作完成后，统一触发文件列表更新（只刷新一次）
 			pubsub.publish(PubSubEvents.Update_Attachments)
@@ -706,7 +593,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 			magicToast.success(t("topicFiles.contextMenu.createDesignSuccess"))
 
-			return folderResponse
+			return folder
 		} catch (error) {
 			magicToast.error(t("topicFiles.contextMenu.createDesignFailed"))
 			throw error
@@ -719,23 +606,33 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		}
 	}
 
+	const createSelfMediaProject = (folderName: string, parentPath?: string) =>
+		createSelfMediaProjectAction({
+			projectId,
+			folderName,
+			parentPath,
+			getParentIdFromPath,
+			setCreatingFiles,
+			onUpdateAttachments,
+			t,
+		})
+
+	const createAICardProject = (folderName: string, parentPath?: string) =>
+		createAICardProjectAction({
+			projectId,
+			folderName,
+			parentPath,
+			getParentIdFromPath,
+			setCreatingFiles,
+			onUpdateAttachments,
+			t,
+		})
+
 	const handleUploadFile = (item?: AttachmentItem) => {
 		// 获取上传目标文件夹路径
 		const targetPath = item?.is_directory ? item.relative_file_path || item.name : undefined
 		// 清理路径：移除前导和尾随斜杠，确保路径格式统一
 		const targetSuffixDir = targetPath ? targetPath.replace(/^\/+|\/+$/g, "") : ""
-		const targetParentId = item?.is_directory && item.file_id ? item.file_id : undefined
-
-		uploadLogger.startSession({
-			uploadType: "file",
-			trigger: item?.is_directory ? "folderContextMenu" : "rootContextMenu",
-			targetItemId: item?.file_id,
-			targetItemName: item?.name || item?.file_name,
-			targetPath,
-			targetSuffixDir,
-			targetParentId,
-			parentIdSource: targetParentId ? "targetItem.file_id" : "pathLookup",
-		})
 
 		// 创建隐藏的文件输入框
 		const input = document.createElement("input")
@@ -752,28 +649,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				console.log("选择的文件:", files)
 				console.log("上传目标路径:", targetPath)
 				console.log("计算的suffixDir:", targetSuffixDir)
-				uploadLogger.log("fileInputSelected", {
-					uploadType: "file",
-					filesCount: files.length,
-					fileNames: files.map((file) => file.name),
-					targetPath,
-					targetSuffixDir,
-					targetParentId,
-				})
 
 				// 通过同名检测处理文件上传
 				await duplicateFileHandler.handleFilesWithDuplicateCheck(
 					files,
 					targetSuffixDir,
-					(processedFiles, uploadPath) =>
-						processFilesUpload(processedFiles, uploadPath, targetParentId),
+					processFilesUpload,
 				)
-			} else {
-				uploadLogger.finishSession({
-					uploadType: "file",
-					status: "cancelled",
-					reason: "noFilesSelected",
-				})
 			}
 
 			// 清理DOM
@@ -791,18 +673,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		const targetPath = item?.is_directory ? item.relative_file_path || item.name : undefined
 		// 清理路径：移除前导和尾随斜杠，确保路径格式统一
 		const targetSuffixDir = targetPath ? targetPath.replace(/^\/+|\/+$/g, "") : ""
-		const targetParentId = item?.is_directory && item.file_id ? item.file_id : undefined
-
-		uploadLogger.startSession({
-			uploadType: "folder",
-			trigger: item?.is_directory ? "folderContextMenu" : "rootContextMenu",
-			targetItemId: item?.file_id,
-			targetItemName: item?.name || item?.file_name,
-			targetPath,
-			targetSuffixDir,
-			targetParentId,
-			parentIdSource: targetParentId ? "targetItem.file_id" : "pathLookup",
-		})
 
 		// 创建隐藏的文件输入框
 		const input = document.createElement("input")
@@ -816,28 +686,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const fileList = (e.target as HTMLInputElement).files
 			if (fileList && fileList.length > 0) {
 				const files = Array.from(fileList)
-				uploadLogger.log("fileInputSelected", {
-					uploadType: "folder",
-					filesCount: files.length,
-					fileNames: files.map((file) => file.name),
-					targetPath,
-					targetSuffixDir,
-					targetParentId,
-				})
 
 				// 通过同名检测处理文件夹上传（使用 processFolderUpload 创建单个任务）
 				await duplicateFileHandler.handleFilesWithDuplicateCheck(
 					files,
 					targetSuffixDir,
-					(processedFiles, uploadPath) =>
-						processFolderUpload(processedFiles, uploadPath, targetParentId),
+					processFolderUpload,
 				)
-			} else {
-				uploadLogger.finishSession({
-					uploadType: "folder",
-					status: "cancelled",
-					reason: "noFilesSelected",
-				})
 			}
 
 			// 清理DOM
@@ -1384,8 +1239,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					attachmentList: attachments ?? [],
 				})
 
-				const { exportHtmlToImage } =
-					await import("../../../../../../packages/pdf-export/src")
+				const { exportHtmlToImage } = await import("@magic-web/html2image")
 				await exportHtmlToImage({
 					pages: preparedHtmlSlides,
 					format,
@@ -1760,6 +1614,10 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		createFolderAndUpload,
 		// 新增：画布项目创建回调
 		createDesignProject,
+		// 新增：自媒体项目创建回调
+		createSelfMediaProject,
+		// 新增：AI 卡片项目创建回调
+		createAICardProject,
 		// 新增：文件创建loading状态
 		creatingFiles,
 		// 新增：文件列表更新回调

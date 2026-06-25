@@ -240,6 +240,7 @@
 		"deleteChat": "Delete",
 		"deleteChatConfirm": "Are you sure you want to delete the conversation \"{{name}}\"?",
 		"deleteChatDescription": "will be moved to Trash. You can restore it or delete it permanently from Trash.",
+		"deleteChatFailed": "Delete failed",
 		"deleteChatSuccess": "Deleted successfully",
 		"friend": "My friend",
 		"greet": "Hi! {{name}}",
@@ -254,6 +255,7 @@
 		"renameChatSuccess": "Renamed successfully",
 		"saveAsNewProjectTitle": "Save as New Project",
 		"saveAsProject": "Save as Project",
+		"saveAsProjectFailed": "Save as project failed",
 		"saveAsProjectSuccess": "Conversation saved as a project",
 		"saveAsProjectTo": "Save as project to...",
 		"unnamedChat": "Unnamed conversation",
@@ -281,6 +283,11 @@
 		"swipePin": "Pin",
 		"swipeUnpin": "Unpin",
 		"title": "Chats"
+	},
+	"citations": {
+		"badgeAria": "Citation {{index}}",
+		"openSource": "Open source",
+		"sourceCount": "{{count}} knowledge base citations"
 	},
 	"clawPlayground": {
 		"stopTaskBeforeToolbarAction": "Stop the current task before using this",
@@ -514,6 +521,9 @@
 		"status": "Deleted"
 	},
 	"design": {
+		"actions": {
+			"videoPointsPrompt": "Points prompt"
+		},
 		"errors": {
 			"cannotDetermineDirectory": "Cannot determine design file directory",
 			"cannotFindOrLoadFile": "Cannot find or load magic.project.js file",
@@ -580,9 +590,129 @@
 			"title": "Network disconnected. Canvas is read-only"
 		},
 		"saved": "Saved",
-		"saving": "Saving"
+		"saving": "Saving",
+		"upgrade": {
+			"autoUpgradingSubtitle": "Do not close or refresh this page.",
+			"autoUpgradingTitle": "Upgrading Canvas v2.0",
+			"failed": "Upgrade failed, please try again later",
+			"failedSubtitle": "Check your network and try again. Canvas editing is unavailable until the upgrade completes.",
+			"failedTitle": "Canvas upgrade failed",
+			"retry": "Retry Upgrade",
+			"success": "Upgrade successful"
+		}
 	},
 	"detail": {
+		"aiCard": {
+			"config": {
+				"cancel": "Cancel",
+				"createTitle": "Configure AI Card",
+				"defaultImageModel": "Default image model",
+				"defaultModel": "Default model",
+				"defaultVideoModel": "Default video model",
+				"editTitle": "Edit Configuration",
+				"enableSchedule": "Enable Scheduled Execution",
+				"enableScheduleHint": "Card will auto-update at the set frequency",
+				"generate": "Generate Card",
+				"imageModel": "Image Model",
+				"languageModel": "Language Model",
+				"modelSection": "Model Configuration",
+				"save": "Save Configuration",
+				"saveDraft": "Save Draft",
+				"saving": "Saving...",
+				"schedule": "Schedule",
+				"videoModel": "Video Model"
+			},
+			"createDialog": {
+				"cancel": "Cancel",
+				"cardName": "Card Name",
+				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
+				"confirm": "Create Card",
+				"creating": "Creating...",
+				"description": "AI will automatically create a visual card and set up a scheduled task to fetch and update latest data periodically.",
+				"prompt": "Analysis Instructions",
+				"promptHint": "AI will periodically fetch latest data based on this instruction, analyze it, and generate an updated visual card.",
+				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends and present with list + trend markers.",
+				"template": "Card Template",
+				"title": "Create AI Card"
+			},
+			"dashboard": {
+				"archived": "Archived",
+				"configure": "Configure",
+				"current": "Current",
+				"empty": "No card content yet, waiting for scheduled task to generate",
+				"historyCount": "{{count}} versions",
+				"historyEmpty": "No history versions yet. Future automated updates will appear here.",
+				"historyPreviewDescription": "The dashboard shows only a summary; open it to load the full card.",
+				"historyPreviewTitle": "History snapshot",
+				"historySectionDescription": "Review archived versions by generation time.",
+				"historySectionTitle": "Version timeline",
+				"historyVersion": "🕰 History",
+				"latestSectionDescription": "The active card version. Open it to inspect the full result.",
+				"latestSectionTitle": "Latest version",
+				"latestVersion": "✨ Latest",
+				"loading": "Loading AI Cards...",
+				"loadingDescription": "Parsing card data",
+				"modelSummary": "Model {{model}}",
+				"openHistoryVersion": "Open full version",
+				"runNow": "Run Now",
+				"running": "Running...",
+				"scheduleCustom": "{{time}}",
+				"scheduleDaily": "Daily {{time}}",
+				"scheduleMonthly": "Monthly on day {{day}} {{time}}",
+				"scheduleOnce": "{{date}} {{time}}",
+				"scheduleOnceTime": "Once at {{time}}",
+				"scheduleWeekly": "Every {{day}} {{time}}",
+				"updatedAt": "Updated {{time}}",
+				"weekdays": {
+					"friday": "Fri",
+					"monday": "Mon",
+					"saturday": "Sat",
+					"sunday": "Sun",
+					"thursday": "Thu",
+					"tuesday": "Tue",
+					"wednesday": "Wed"
+				}
+			},
+			"detail": {
+				"back": "Back",
+				"noContent": "No card content yet, waiting for next scheduled task"
+			},
+			"form": {
+				"advancedSettings": "Advanced Settings",
+				"aiPolish": "AI Polish",
+				"cardName": "Card Name",
+				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
+				"customTemplatePlaceholder": "Describe the card style and layout you want.\ne.g., Show a trend line chart on the left, a top-10 list on the right, with a dark theme.",
+				"polishModel": "Polish Model",
+				"prompt": "Analysis Instructions",
+				"promptHint": "AI will periodically fetch latest data, analyze it, and update the visual card.",
+				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends.",
+				"template": "Card Template",
+				"templateHint": "Choose a visual template, or select \"Custom\" and describe your requirements",
+				"templateOptions": {
+					"analyticsPanel": "Analytics Panel",
+					"custom": "Custom",
+					"dailyDigest": "Daily Digest",
+					"hotspotTracker": "Hotspot Tracker"
+				},
+				"voiceInput": "Voice Input"
+			},
+			"history": {
+				"back": "Back",
+				"empty": "No history records",
+				"selectHint": "← Select a history version to view",
+				"title": "History"
+			},
+			"runNow": {
+				"error": "Failed to run, please try again later",
+				"success": "Task triggered successfully",
+				"successSwitched": "Task triggered, switched to the corresponding topic"
+			},
+			"tile": {
+				"history": "History",
+				"viewDetail": "View Detail"
+			}
+		},
 		"backToLatest": "Back to Latest",
 		"clickToJumpPage": "Click to jump to page",
 		"closeEditingFileContent": "This file is currently being edited. Closing will exit edit mode. Continue?",
@@ -603,6 +733,44 @@
 		"refreshSlides": "Refresh",
 		"saveAndClose": "Save and Close",
 		"selfMedia": {
+			"analysis": {
+				"action": "AI diagnosis",
+				"cancel": "Cancel",
+				"confirm": "Start diagnosis",
+				"description": "Choose the diagnosis goal. The IP operations expert will compare similar content online, score this work, and suggest edits.",
+				"goalDescriptions": {
+					"conversion": "Evaluate pain-point fit, value proposition, action guidance, and consultation or purchase motivation.",
+					"ipGrowth": "Evaluate persona consistency, trust, follow reasons, and long-term content assets.",
+					"viralTraffic": "Evaluate click potential, trend/search fit, interaction triggers, and shareability."
+				},
+				"goals": {
+					"conversion": "Product Conversion",
+					"ipGrowth": "IP Growth",
+					"viralTraffic": "Viral Traffic"
+				},
+				"modelLabel": "Text model",
+				"prompt": {
+					"instruction": "Search online for comparable content. Output evidence, score, key issues, comparison gaps, prioritized edits, and rewrite instructions. Treat external references as operational experience.",
+					"metadata": "Platform: {{platform}}\nGoal: {{goal}}\nTitle: {{title}}\nAuthor/IP: {{author}}\nTags: {{tags}}",
+					"missingValue": "Not provided",
+					"opening": "Diagnose {{mention}} before publishing.",
+					"topicName": "[Pre-publish diagnosis] {{title}}",
+					"untitled": "Self-media post"
+				},
+				"startFailed": "Failed to start pre-publish diagnosis. Please try again later.",
+				"startFailedWithReason": "Failed to start pre-publish diagnosis: {{reason}}",
+				"starting": "Creating diagnosis...",
+				"title": "Pre-publish Diagnosis"
+			},
+			"brandConfig": {
+				"cancel": "Cancel",
+				"description": "Configure the shared account, brand positioning, and brand assets for this project.",
+				"loading": "Loading brand config...",
+				"save": "Save config",
+				"saveError": "Failed to save brand config. Please try again later.",
+				"saving": "Saving...",
+				"title": "Brand config"
+			},
 			"codeView": {
 				"htmlSource": "HTML Source",
 				"save": "Save",
@@ -610,6 +778,7 @@
 			},
 			"common": {
 				"clockTime": "9:41",
+				"inspectElement": "Inspect Element",
 				"loading": "Loading...",
 				"noPosts": "No posts",
 				"postFallbackTitle": "Post {{index}}",
@@ -644,9 +813,14 @@
 				"loadCardError": "Failed to load card",
 				"magicProjectNotFound": "magic.project.js not found",
 				"noCardUrl": "Card URL is unavailable",
+				"noProjectSelected": "Current project information is missing. Refresh the page and try again.",
+				"postDirectoryMissing": "Could not find the current post folder. Refresh the file list and try again.",
 				"postManifestInvalid": "post.json is invalid",
 				"postManifestMissing": "post.json not found",
-				"selfMediaConfigMissing": "self-media config missing"
+				"projectContextMissing": "Project or workspace information is missing. Refresh the page and try again.",
+				"publishedUrlMissing": "The published article URL is missing. Bind the link again first.",
+				"selfMediaConfigMissing": "self-media config missing",
+				"taskIdMissing": "The scheduled task did not return a task ID."
 			},
 			"export": {
 				"action": "Export",
@@ -667,9 +841,717 @@
 				"selectCards": "Cards",
 				"selectNone": "Clear",
 				"selectedSummary": "{{count}}/{{total}} selected",
-				"success": "Export complete"
+				"success": "Export complete",
+				"type": {
+					"cardsZip": {
+						"description": "Export selected cards as separate PNG files in a ZIP.",
+						"title": "Individual cards"
+					},
+					"longImage": {
+						"description": "Stitch selected cards vertically from top to bottom, then export one PNG.",
+						"title": "Long image"
+					}
+				},
+				"typeLabel": "Export item",
+				"wechat": {
+					"copyFailed": "Failed to copy HTML. Try again later.",
+					"copyHtml": "Copy HTML",
+					"copySuccess": "HTML copied",
+					"coverDescription": "Stitch the square cover and horizontal cover into one image for WeChat Official Account assets.",
+					"coverTitle": "Cover image",
+					"exportCover": "Export cover",
+					"horizontalCover": "Horizontal cover",
+					"htmlCopied": "Copied",
+					"htmlDescription": "Copy the processed article HTML and paste it into the WeChat Official Account editor.",
+					"htmlTitle": "WeChat HTML",
+					"squareCover": "Square cover"
+				}
+			},
+			"home": {
+				"aiCard": "AI Card",
+				"aiCardCount": "{{count}} AI card(s)",
+				"archivePost": "Pause publishing",
+				"archivePostSuccess": "Article paused for publishing",
+				"article": "Article",
+				"articleCount": "{{count}} article(s)",
+				"autoSync": "Auto sync",
+				"autoSyncDaily": "Daily",
+				"autoSyncDescription": "Keep this article's ops files fresh on a schedule.",
+				"autoSyncDisabled": "Off",
+				"autoSyncEnabled": "On",
+				"autoSyncMonthDayPlaceholder": "Day of month, e.g. 1",
+				"autoSyncMonthly": "Monthly",
+				"autoSyncSave": "Save auto sync",
+				"autoSyncStatus": "Status",
+				"autoSyncTurnOff": "Turn off auto sync",
+				"autoSyncWeekdayPlaceholder": "Weekday, e.g. 1",
+				"autoSyncWeekly": "Weekly",
+				"backHome": "Back home",
+				"badge": "Self Media",
+				"bindAndFetchPublishedData": "Save and fetch article data",
+				"bindPublishedLink": "Connect published link",
+				"bindPublishedLinkAction": "Save link",
+				"brandConfig": "Brand config",
+				"create": "New article",
+				"dataOverview": "Data overview",
+				"dataSyncNow": "Sync now",
+				"deletePost": "Delete article",
+				"deletePostCancel": "Cancel",
+				"deletePostConfirm": "Delete permanently",
+				"deletePostDescription": "This article and its operations files will be permanently deleted. This cannot be undone.",
+				"deletePostFailed": "Failed to delete article. Please try again later.",
+				"deletePostSuccess": "Article deleted",
+				"deletePostTitle": "Delete this article?",
+				"editPublishedLink": "Change published link",
+				"emptyDesc": "Create a new article to open the setup wizard.",
+				"emptyTitle": "No articles yet",
+				"engagement": {
+					"comments": "Comments",
+					"likes": "Likes",
+					"reads": "Reads"
+				},
+				"lifecycle": {
+					"archived": "Paused",
+					"draft": "To publish",
+					"planned": "Planned",
+					"published": "Published",
+					"reviewed": "Reviewed",
+					"synced": "Data synced"
+				},
+				"loadingAutoSync": "Loading auto sync settings...",
+				"loadingPublishedLink": "Loading link...",
+				"mentionPost": "Mention this article",
+				"openOpsReview": "View review",
+				"openPlatform": "Open platform content",
+				"opsArtifacts": {
+					"commentsMissing": "Feedback not organized",
+					"commentsReady": "Feedback ready",
+					"metricsMissing": "Data not fetched",
+					"metricsReady": "Metrics ready",
+					"reviewMissing": "Review not created",
+					"reviewReady": "Review ready",
+					"sourceMissing": "Link missing",
+					"sourceReady": "Link bound"
+				},
+				"opsData": "Data",
+				"opsOverview": {
+					"comments": "Feedback",
+					"content": "Content",
+					"metrics": "Metrics",
+					"progress": "{{done}}/{{total}}",
+					"review": "Review",
+					"source": "Published link",
+					"title": "Operations loop"
+				},
+				"postReviewCard": "Create review",
+				"postReviewCardName": "Review: {{title}}",
+				"publishedLinkInput": "Published content link",
+				"publishedLinkPlaceholder": "Paste the published content link",
+				"renamePost": "Rename article",
+				"renamePostCancel": "Cancel",
+				"renamePostConfirm": "Save name",
+				"renamePostDescription": "Update the article name shown on the home page.",
+				"renamePostFailed": "Failed to rename article. Please try again later.",
+				"renamePostInput": "Article name",
+				"renamePostSuccess": "Article name updated",
+				"renamePostTitle": "Rename article",
+				"restorePostPublish": "Restore to publish",
+				"restorePostPublishSuccess": "Article restored to publish queue",
+				"setPostPublishStatusFailed": "Failed to save article publish status. Please try again later.",
+				"subtitle": "Open details from the list. Data updates keep you on the current page.",
+				"title": "Article home"
+			},
+			"initPanel": {
+				"clearConfirm": {
+					"cancel": "Keep editing",
+					"clearing": "Clearing...",
+					"confirm": "Clear anyway",
+					"description": "This clears the current brand, topics, article plan, and local draft.",
+					"title": "Clear current article setup?"
+				},
+				"composerConfig": {
+					"cardCountValue": "{{count}} cards",
+					"clear": "Clear",
+					"currentConfig": "Current configuration: {{value}}",
+					"custom": "Custom",
+					"empty": "Template settings",
+					"emptyPresets": "No templates available for this platform",
+					"fields": {
+						"cardCount": "Card count",
+						"platform": "Platform",
+						"visualPreset": "Template"
+					}
+				},
+				"draft": {
+					"backHome": "Back home",
+					"clear": "Clear draft",
+					"clearError": "Failed to clear draft. Please try again later.",
+					"clearing": "Clearing...",
+					"confirmDescription": "An unfinished creation draft was found. Continue editing, clear it and start over, or return to the article home first.",
+					"detected": "Unfinished edit detected",
+					"discard": "Discard",
+					"load": "Load draft",
+					"loading": "Loading draft...",
+					"restore": "Restore draft",
+					"resumeHint": "You were on step {{step}} last time. Resume?",
+					"saveError": "Failed to save draft. Please try again later."
+				},
+				"materialAttachment": {
+					"addCompact": "Add attachment",
+					"addFull": "Upload, drag, or paste materials",
+					"descriptionPlaceholder": "Add a short note...",
+					"emptyHint": "Images, videos, PDFs, and documents are supported"
+				},
+				"modelSelector": {
+					"switchModel": "Switch model"
+				},
+				"nav": {
+					"backHome": "Back home",
+					"clear": "Clear data",
+					"hints": {
+						"articleReady": "Article structure is ready. Continue to review.",
+						"brandReady": "Brand info is ready. You can continue.",
+						"brandUploading": "Continue after brand assets finish uploading.",
+						"missingPlatform": "Choose a publishing platform to continue.",
+						"missingTitle": "Add a title to each article to continue.",
+						"noArticle": "Add an article, or let AI plan topics first."
+					},
+					"jumpTo": "Jump to {{title}}",
+					"next": "Next",
+					"nextWithHint": "Next: {{hint}}",
+					"prev": "Previous",
+					"stepCompleted": "Completed: {{title}}",
+					"stepCurrent": "Current step: {{title}}",
+					"stepPosition": "Step {{index}} of {{total}}",
+					"stepShortBrand": "Brand",
+					"stepShortConfirm": "Confirm",
+					"stepShortTopics": "Topics",
+					"stepUpcoming": "Upcoming: {{title}}"
+				},
+				"platforms": {
+					"facebook": "Facebook",
+					"instagram": "Instagram",
+					"rednote": "Rednote (Xiaohongshu)",
+					"tiktok": "TikTok (Douyin)",
+					"wechatChannels": "WeChat Channels",
+					"wechatOfficialAccounts": "WeChat Official Account",
+					"x": "X (Twitter)"
+				},
+				"referenceFilePicker": {
+					"addedCount": "{{count}} reference added",
+					"alreadySelected": "Selected",
+					"confirmAdd": "Add selected",
+					"confirmSelection": "Add selected ({{count}})",
+					"dropHere": "Drop files here",
+					"emptyProjectFiles": "No project files yet",
+					"hint": "Optional. All file formats supported",
+					"localUpload": "Upload local file",
+					"multiSelectHint": "Select multiple files to confirm, or drag to the target area.",
+					"noMatches": "No matching files",
+					"noProjectFiles": "No files in this project",
+					"pasteOrDrag": "or paste / drag",
+					"pendingSelection": "{{count}} selected",
+					"pickProjectTitle": "Select project file",
+					"projectFile": "Project file",
+					"readLocalError": "Failed to read local file. Please retry",
+					"readProjectError": "Failed to read project file. Please retry",
+					"removeFile": "Remove {{name}}",
+					"searchPlaceholder": "Search files...",
+					"unnamedFile": "Untitled file",
+					"uploadLabel": "Upload references"
+				},
+				"stepBrand": {
+					"accountName": "Account Name",
+					"accountPlaceholder": "e.g. @SuperMagic",
+					"autoSaveFailed": "Auto-save failed",
+					"autoSavePending": "Auto-saving soon",
+					"autoSaveSaved": "Auto-saved",
+					"autoSaveSaving": "Saving",
+					"brandImages": "Brand Image Assets",
+					"brandImagesDescPlaceholder": "Description (e.g. brand mascot)",
+					"brandImagesDropHint": "Drag, paste, or pick from project files",
+					"brandImagesFromProject": "Project files",
+					"brandImagesHint": "Upload brand IP images, logos, or style references. AI will incorporate these elements when generating images",
+					"brandImagesUpload": "Click to upload images or files",
+					"brandImagesUploadFailed": "Failed to upload \"{{name}}\". Please try again.",
+					"brandImagesUploadHint": "Files are saved under project __drafts/brand-images/",
+					"brandPosition": "Brand / IP Positioning",
+					"brandPositionHint": "A clear positioning helps AI generate more accurate content strategies",
+					"brandPositionPlaceholder": "Describe your brand positioning in one sentence, e.g. AI productivity tools",
+					"closeHistoryRecords": "Close brand records",
+					"collapse": "Collapse brand info",
+					"deleteRecord": "Delete {{name}}",
+					"expand": "Expand brand info",
+					"historyRecords": "One-click fill",
+					"optional": "Optional",
+					"platformFetchLoading": "Fetching account info from the platform. The form will auto-fill when ready…",
+					"platformFetchTimeout": "Account fetch timed out. Retry later or check the conversation for progress.",
+					"platformFetching": "Fetching…",
+					"profileSection": "Account profile",
+					"profileSectionHint": "Configure the identity, positioning, and audience AI uses by default.",
+					"quickFillHint": "Tip: The more detail you provide, the more accurate AI-generated topics will be",
+					"readyStatus": "Brand info ready",
+					"readySummary": "{{author}} · {{brandPosition}}",
+					"required": "Required",
+					"reusableRecordsTitle": "Reusable brand info",
+					"saveAsNew": "Save as new record",
+					"saveConfirmDesc": "Save it once, then reuse it in new articles.",
+					"saveConfirmSave": "Save, continue",
+					"saveConfirmSkip": "Do not save, continue",
+					"saveConfirmTitle": "Reuse this brand info next time?",
+					"saveSuccess": "Saved",
+					"selectRecordHint": "Select a record to auto-fill",
+					"skippableHint": "You can fill this in later from brand settings.",
+					"skippableStatus": "Skippable",
+					"subtitle": "Set up your brand positioning so AI can understand your content direction and generate matching topics",
+					"targetAudience": "Target Audience",
+					"targetAudienceHint": "Helps AI adjust tone and topic direction",
+					"targetAudiencePlaceholder": "e.g. 25-35 year old professionals, students, new parents",
+					"title": "Account & Brand Info",
+					"useRecord": "Fill from {{name}}"
+				},
+				"stepConfirm": {
+					"accountLabel": "Account",
+					"articleListAutomationHint": "After you start, topics, materials, and the first article open automatically.",
+					"articleListAutomationHintWithoutMaterials": "After you start, topics and the first article open automatically.",
+					"articleListTitle": "Articles ready: {{count}}",
+					"articleReadyHint": "{{outlineCount}} outline point(s) and {{materialCount}} reference(s) organized",
+					"articleReadyHintMaterials": "{{materialCount}} reference(s) organized",
+					"articleReadyHintOutline": "{{outlineCount}} outline point(s) organized",
+					"articleUnit": "articles",
+					"audienceLabel": "Audience",
+					"backHome": "Back home",
+					"brandAssetCount": "{{count}} brand asset(s) uploaded",
+					"cancel": "Cancel",
+					"cardCount": "{{count}} cards",
+					"cardOutlineLabel": "Card outline",
+					"completeSummaryDesc": "The content creation Agent has taken over, and the current topic opens automatically.",
+					"completeSummaryTitle": "Creation topics ready: {{count}}",
+					"completeTopicListHint": "The first article is open. Click another title to switch.",
+					"creatingTopic": "Creating topic…",
+					"doneDesc": "{{count}} topics created. The content creation Agent is handling each article.",
+					"doneTitle": "Generation started",
+					"generatingBtn": "Generating…",
+					"generatingDesc": "Creating topics for the content creation Agent ({{done}}/{{total}})",
+					"generatingTitle": "Starting generation",
+					"globalSummary": "Global settings",
+					"imageModel": "Image",
+					"modelSettings": "Model settings",
+					"modelSettingsHint": "Defaults are fine, or tune them before starting.",
+					"modelSettingsTitle": "Generation settings",
+					"opened": "Opened",
+					"outlinePoints": "{{count}} outline points",
+					"phase": {
+						"archiving": "Archiving the current plan so the agent can read the full context.",
+						"creating-topic": "Creating the first creation topic and preparing the agent workspace.",
+						"idle": "Preparing the creation task. Please wait.",
+						"sending-message": "Sending creation instructions and model settings.",
+						"uploading-materials": "Uploading reference materials and outline attachments."
+					},
+					"phaseLabels": {
+						"archiving": "Archiving plan",
+						"creating-topic": "Creating topic",
+						"idle": "Preparing task",
+						"sending-message": "Sending instructions",
+						"uploading-materials": "Uploading materials"
+					},
+					"phaseStatus": "Current phase: {{phase}}",
+					"positionLabel": "Positioning",
+					"preparingDesc": "Preparing the creation task. Please wait.",
+					"preparingHint": "Archiving the plan, preparing materials, and creating the first topic",
+					"preparingTitle": "Preparing creation task",
+					"projectPendingHint": "You can start once the project is ready.",
+					"refCount": "{{count}} references",
+					"saveAsTemplate": "Save as template",
+					"saveTemplate": "Save",
+					"startBtn": "Start AI creation ({{count}} articles)",
+					"statusReady": "Ready to generate",
+					"subtitle": "After you confirm, creation topics are created automatically and the first article opens.",
+					"templateNameLabel": "Template name",
+					"templateNamePlaceholder": "Template name",
+					"templateSaved": "Template saved",
+					"textModel": "Text",
+					"title": "Confirm & generate",
+					"topicListHint": "Click a topic to switch and view content creation Agent progress",
+					"videoModel": "Video",
+					"viewing": "Viewing"
+				},
+				"stepDetail": {
+					"aiAutoFillBtn": "AI Auto-fill Configuration",
+					"aiAutoFillHint": "Auto-recommend style, template, outline based on description",
+					"aiAutoFilling": "Auto-filling...",
+					"articleFallback": "Article {{index}}",
+					"cardContentCanGenerateStatus": "Ready to generate cards",
+					"cardContentEmpty": "Please set the card count first",
+					"cardContentGenerateBtn": "AI Generate Cards",
+					"cardContentLabel": "Card Content Plan",
+					"cardContentOptimizeBtn": "AI Optimize",
+					"cardContentOptimizePlaceholder": "Describe how to adjust card content, e.g. make cover more engaging, add CTA...",
+					"cardContentPlaceholder": "Content for card {{index}}…",
+					"cardContentReadyStatus": "Cards ready: {{count}}",
+					"cardContentRequiresTitleHint": "Add a title first so AI can generate card content.",
+					"cardContentRequiresTitleStatus": "Title first",
+					"cardCountHint": "6-9 cards recommended for Rednote/Instagram",
+					"cardCountLabel": "Card Count",
+					"cardCountReduceConfirm": "Reducing the card count removes filled cards at the end. Continue?",
+					"cardCountUnit": "cards",
+					"cardRemoveBtn": "Remove this card",
+					"currentArticle": "Current Article",
+					"descriptionLabel": "Content Description",
+					"descriptionPlaceholder": "Describe what this article is about in your own words, AI will help polish it...",
+					"expandConfig": "Expand advanced config (style, template, outline)",
+					"folderLabel": "Archive folder",
+					"materialsLabel": "Materials",
+					"notesLabel": "Additional Notes",
+					"notesPlaceholder": "Any extra requirements or instructions...",
+					"outlineAddChildBtn": "Add child (Tab)",
+					"outlineAddRootBtn": "Add point",
+					"outlineAttachBtn": "Attach file",
+					"outlineAttachPlaceholder": "Describe how this file relates to the point…",
+					"outlineCanGenerateStatus": "Ready to generate outline",
+					"outlineEmpty": "No outline yet. Add points below or use AI generate",
+					"outlineGenerateBtn": "AI Generate Outline",
+					"outlineGenerating": "Generating...",
+					"outlineLabel": "Article Outline",
+					"outlineNodePlaceholder": "Enter key point…",
+					"outlineOptimizeBtn": "AI Optimize",
+					"outlineOptimizePlaceholder": "Describe how to adjust the outline, e.g. add examples, shorten, reorder...",
+					"outlineOptimizeSubmit": "Generate",
+					"outlineOptimizing": "Optimizing...",
+					"outlineReadyStatus": "Outline ready: {{count}} points",
+					"outlineRemoveBtn": "Remove",
+					"outlineRequiresTitleHint": "Add a title first so AI can generate the outline.",
+					"outlineRequiresTitleStatus": "Title first",
+					"platformLabel": "Platform",
+					"platformRequired": "Please select a platform for this article",
+					"referencesFilePlaceholder": "Describe how to use this file…",
+					"referencesHint": "Optional notes and/or reference attachments",
+					"referencesLabel": "References",
+					"referencesTextPlaceholder": "Extra requirements, context, or instructions…",
+					"referencesUploadHint": "Images, videos, PDF, Office docs, etc.",
+					"referencesUploadLabel": "Click or drag to upload references",
+					"removeCancel": "Cancel",
+					"removeConfirm": "Delete",
+					"styleLabel": "Content Style",
+					"stylePlaceholder": "Describe the content style you want...",
+					"subtitle": "Configure style, outline, and structure for each article. AI can help generate outline drafts",
+					"title": "Content Planning",
+					"untitled": "Untitled",
+					"visualCustomPlaceholder": "Describe the visual style you want (colors, fonts, decorations, mood)...",
+					"visualHint": "Choose a visual style preset for cards. AI will use the corresponding CSS/JS template",
+					"visualLabel": "Visual Template",
+					"visualReferenceLabel": "Add visual reference",
+					"wechatArticleContentLabel": "Full Content",
+					"wechatContentEditorView": "Edit",
+					"wechatContentPhoneView": "Phone preview",
+					"wechatContentViewToggle": "Full content view switch",
+					"wechatPreviewAccount": "Official Account Draft",
+					"wechatPreviewBack": "Back",
+					"wechatPreviewEmpty": "Add full-content points and the mobile reading preview will update here.",
+					"wechatPreviewMore": "More",
+					"wechatPreviewNavTitle": "Official Account Preview",
+					"wechatPreviewUntitled": "Untitled article"
+				},
+				"stepTopic": {
+					"activeStatus": "Keep refining the current article",
+					"activeTopicStatus": "Editing",
+					"addManual": "Add topic manually",
+					"addTopic": "Add topic",
+					"aiAssistantTitle": "Let AI Plan My Topics & Outlines",
+					"aiGenerateBtn": "AI Generate Topics",
+					"articleCountLabel": "Articles: {{count}}",
+					"articleCountUnit": "articles",
+					"autoFolder": "Auto",
+					"autoFolderHint": "The title can auto-generate the archive folder. You can still edit it.",
+					"collapseDetail": "Collapse details",
+					"collapseNavigator": "Collapse board",
+					"createFirstTopic": "Add first topic",
+					"directionPlaceholder": "Enter direction or keywords (optional), e.g.: productivity, AI tool reviews...",
+					"errorEmpty": "Generation failed, please retry or add topics manually",
+					"errorNetwork": "Network error, please try again later",
+					"expandDetail": "Expand details",
+					"expandNavigator": "Expand topic board",
+					"folderInputAutoLabel": "Archive folder, currently auto-generated",
+					"folderInputLabel": "Archive folder",
+					"folderInputPlaceholder": "Archive folder",
+					"folderPlaceholder": "Folder name (optional, auto-generated if empty)",
+					"folderSynced": "Folder synced",
+					"generateBtn": "Generate",
+					"generateCount": "Generate",
+					"generateCountHint": "3-5 topics at a time is easier to review",
+					"generateCountInputLabel": "Generate count",
+					"generateCountUnit": "topics",
+					"generateWithDetails": "Also generate content plan",
+					"generatedStatus": "{{count}} topics generated",
+					"generating": "Planning",
+					"generatingStep1": "Thinking through the domain...",
+					"generatingStep2": "Finding high-potential angles...",
+					"generatingStep3": "Drafting the core outline...",
+					"generatingStep4": "Polishing the final details...",
+					"kicker": "New article",
+					"manualFolderHint": "Manual folders stay in place. Later title changes will not overwrite them.",
+					"navigatorTitle": "Topic board",
+					"nextArticle": "Next article",
+					"prevArticle": "Previous article",
+					"ready": "Ready",
+					"removeCancel": "Cancel",
+					"removeConfirm": "Delete",
+					"removeTopic": "Delete topic",
+					"removeTopicLabel": "Delete {{title}}",
+					"selectTopicLabel": "Select {{title}}",
+					"stopBtn": "Stop",
+					"subtitle": "Generate candidate directions first, then add titles, materials, and outlines.",
+					"title": "Topics & outlines",
+					"titleInputHint": "After you enter a title, the archive folder syncs automatically.",
+					"titleInputLabel": "Topic title",
+					"titleInputManualFolderHint": "The folder was edited manually. Title changes will not overwrite it.",
+					"titlePlaceholder": "Article title (required)",
+					"topicFallback": "Topic {{index}}",
+					"totalTopics": "{{count}} topics",
+					"untitledTopic": "Untitled topic"
+				},
+				"steps": {
+					"brand": "Welcome & Brand",
+					"confirm": "Confirm",
+					"detail": "Content Planning",
+					"topics": "Topics & Planning"
+				},
+				"styles": {
+					"casual": "Casual & Lively",
+					"custom": "Custom",
+					"emotional": "Emotional",
+					"professional": "Professional",
+					"storytelling": "Storytelling",
+					"tutorial": "Tutorial"
+				},
+				"template": {
+					"articleCount": "{{count}} articles",
+					"blank": "Start blank",
+					"blankDesc": "Create a new content plan from scratch",
+					"selectSubtitle": "Start quickly from a saved template, or create a new plan from scratch",
+					"selectTitle": "Choose how to start"
+				},
+				"visuals": {
+					"codeDispatch": {
+						"description": "Monochrome technical layout with a status bar, monospace tags, and structured blocks for AI, coding, and tool explainers",
+						"label": "Tech Brief"
+					},
+					"custom": {
+						"description": "Describe your visual language, AI will generate a custom preset for you",
+						"label": "Custom Style"
+					},
+					"darkTech": {
+						"description": "Dark background, gold accents, thin borders, strong font-weight contrast. Great for product/gear reviews",
+						"label": "Dark Review"
+					},
+					"filmVintage": {
+						"description": "Dark cinematic covers, polaroid frames, grain texture, and red accents. Great for photography, gear reviews, and city walks",
+						"label": "Film Story"
+					},
+					"gradientEditorial": {
+						"description": "Hero image covers, gradient overlays, clean content pages, and card hierarchy for news explainers, POV collections, and image-led posts",
+						"label": "Cover Story"
+					},
+					"insCreatorStudio": {
+						"description": "Profile-led openings, numbered lessons, credibility blocks, and personal voice cues for creator education, retrospectives, and POV posts",
+						"label": "Creator Studio"
+					},
+					"insDark": {
+						"description": "Dark tech styling, neon accents, and high-contrast layouts for tools, productivity, and technical topics",
+						"label": "Dark Tech"
+					},
+					"insFilmFrame": {
+						"description": "Cinematic black frames, contact-sheet rhythm, warm highlights, and review panels for photography, gear reviews, and city walks",
+						"label": "Film Frame"
+					},
+					"insFluentDepth": {
+						"description": "Soft layered surfaces, restrained depth, light cards, and clear product storytelling for workflow explainers and high-trust product stories",
+						"label": "Fluent Depth"
+					},
+					"insMinimal": {
+						"description": "Restrained whitespace, fine dividers, and minimal hierarchy for digests, summaries, and point-of-view posts",
+						"label": "Minimal"
+					},
+					"insModern": {
+						"description": "White background, generous whitespace, minimal typography",
+						"label": "Modern Minimal"
+					},
+					"insRetro": {
+						"description": "Retro headlines, warm paper tones, and ornamental marks for storytelling content and visual guides",
+						"label": "Retro Story"
+					},
+					"insSignalGrid": {
+						"description": "Strict grid rhythm, KPI cells, matrix rows, and decision-oriented comparison blocks for product comparisons and structured decisions",
+						"label": "Signal Grid"
+					},
+					"insTokenSystem": {
+						"description": "Neutral surfaces, semantic color roles, compact lozenges, and enterprise grid rhythm for product comparisons and structured decisions",
+						"label": "Token System"
+					},
+					"insWarmJournal": {
+						"description": "Soft journal pages, taped-note modules, warm accents, and lifestyle grids for product diaries, cozy notes, and recommendations",
+						"label": "Warm Journal"
+					},
+					"neoBrutalism": {
+						"description": "Ruled-paper background, heavy headlines, yellow/red tags, and hard-shadow data blocks for turning complex ideas into punchy cards",
+						"label": "Bold Cards"
+					},
+					"none": {
+						"description": "Design freely following platform defaults",
+						"label": "No Template"
+					},
+					"paperColumn": {
+						"description": "Paper texture, serif titles, marginal notes, pull quotes, and ledger rows for essays, knowledge columns, and field notes",
+						"label": "Longform Column"
+					},
+					"personalInsight": {
+						"description": "Clean white canvas, profile byline, numbered sections, and note cards for viewpoints, reading notes, and knowledge posts",
+						"label": "Opinion Notes"
+					},
+					"productLaunch": {
+						"description": "White background, red top accent bar, sharp badges, minimal dual-color. Great for product feature announcements and release notes",
+						"label": "Launch Note"
+					},
+					"scrollHint": "Scroll preview",
+					"signalGrid": {
+						"description": "Strict grid rhythm, one accent color, KPI blocks, matrix rows, and ranking bars for product notes, comparisons, and decisions",
+						"label": "Data Checklist"
+					},
+					"warmJournal": {
+						"description": "Photo-led layouts, handwritten titles, warm journal paper, and scattered composition for lifestyle, product notes, and city records",
+						"label": "Life Journal"
+					}
+				},
+				"voiceInput": {
+					"start": "Voice input",
+					"stop": "Stop voice input"
+				}
+			},
+			"mentionPost": {
+				"startFailed": "Failed to mention the article. Please try again later.",
+				"startFailedWithReason": "Failed to mention the article: {{reason}}",
+				"success": "Mention added to the input box"
+			},
+			"opsMetrics": {
+				"cancel": "Cancel",
+				"commentsRawPlaceholder": "One per line: author｜comment｜intent, e.g. Alice｜Need a real case｜Topic idea",
+				"commentsSummaryPlaceholder": "Summarize concerns, objections, consulting/buying signals, and reusable wording",
+				"description": "Bind the published URL for \"{{title}}\" and maintain post-publication metrics, feedback, and review files.",
+				"edit": "Edit",
+				"fetchPublishedData": "Fetch published data",
+				"fetchingPublishedData": "Fetching...",
+				"fields": {
+					"commentSamples": "Comment samples",
+					"comments": "Comments",
+					"conversions": "Conversions",
+					"feedbackSummary": "Feedback summary",
+					"follows": "Follows",
+					"likes": "Likes",
+					"notes": "Review notes",
+					"reads": "Exposure / reads",
+					"review": "Review",
+					"saves": "Saves",
+					"shares": "Shares",
+					"sourceUrl": "Article URL"
+				},
+				"loading": "Loading ops data...",
+				"metricPlaceholder": "Enter the real value or platform display value",
+				"notesPlaceholder": "Record data source, publish time, abnormal changes, comment observations...",
+				"optionalToggle": "Manual data (optional)",
+				"preview": {
+					"empty": "No data yet"
+				},
+				"reviewPlaceholder": "Write the performance judgment, causes, next post topics, title/cover A/B, distribution, and comment-area actions",
+				"save": "Save ops files",
+				"saving": "Saving...",
+				"sections": {
+					"feedback": "Audience feedback",
+					"metrics": "Core metrics",
+					"review": "Review actions",
+					"source": "Published link binding"
+				},
+				"sourceFailureReason": "Reason: {{reason}}",
+				"sourceLastFetched": "Last fetched {{time}}",
+				"sourceStatus": {
+					"failed": "Fetch failed",
+					"fetched": "Real data fetched",
+					"pending": "Pending real-data fetch",
+					"unknown": "Not fetched"
+				},
+				"sourceUrlPlaceholder": "Paste the published article URL for later real-data collection",
+				"summary": "{{count}} metric(s) filled. Saving writes ops/source.json, ops/metrics.json, ops/comments.json, and ops/review.html.",
+				"title": "Operations workspace"
+			},
+			"opsRefresh": {
+				"missingSourceUrl": "Bind the published article URL first.",
+				"prompt": {
+					"instruction": "Run the Skill's post-publication operations workflow using the fixed ops schema. Read and update ops/source.json, ops/metrics.json, ops/comments.json, and ops/review.html in the current post folder. Use the published URL above only as the fallback target, keep history snapshots, set fetchStatus, and do not create AI Card artifacts.",
+					"metadata": "Platform: {{platform}}\nTitle: {{title}}\nPublished URL: {{publishedUrl}}",
+					"opening": "Load and execute the self-media-composer Skill for 发布入盘 / 发布后数据同步 on {{mention}}.",
+					"topicName": "[Real data refresh] {{title}}",
+					"untitled": "Self-media post"
+				},
+				"startFailed": "Failed to start data sync. Please try again later.",
+				"startFailedWithReason": "Failed to start data sync: {{reason}}"
+			},
+			"opsReview": {
+				"actionsTitle": "Next actions",
+				"brief": {
+					"consulting": "{{count}} consulting signal(s)",
+					"efficiency": "Engagement efficiency",
+					"intent": "Conversion signal",
+					"reachTrend": "Reads change"
+				},
+				"close": "Close review",
+				"commentsTitle": "Audience feedback",
+				"conversionSignal": "Comment intent",
+				"deltaReads": "Reads change",
+				"edit": "Edit data",
+				"empty": "No data yet",
+				"engagementRate": "Engagement rate",
+				"exitFullscreen": "Exit fullscreen",
+				"fullscreen": "Fullscreen",
+				"funnel": {
+					"engagement": "Effective engagement",
+					"intent": "Saves / comments / shares",
+					"reach": "Reach / reads"
+				},
+				"funnelTitle": "Traffic efficiency",
+				"impactTitle": "Impact map",
+				"kpiHints": {
+					"efficiency": "Blended post-read response",
+					"intent": "Potential conversion intent",
+					"preference": "Audience preference signal",
+					"reach": "Content reach scale",
+					"spread": "Secondary distribution potential"
+				},
+				"markdownTitle": "Markdown review report",
+				"metricsTitle": "Core metrics",
+				"qualityTitle": "Quality mix",
+				"refreshReport": "Refresh report",
+				"reviewHtmlTitle": "HTML review report",
+				"reviewTitle": "Review report",
+				"sourceStatus": {
+					"completed": "Completed",
+					"failed": "Fetch failed",
+					"fetched": "Real data fetched",
+					"partial": "Partially synced",
+					"pending": "Pending",
+					"success": "Completed",
+					"unknown": "Not fetched"
+				},
+				"summaryTitle": "Review summary",
+				"summaryTrendEmpty": "Sync data twice or more to build the reading trend.",
+				"summaryTrendTitle": "Reading trend",
+				"sync": "Sync data",
+				"title": "Operations review",
+				"trendTitle": "Sync trend"
 			},
 			"platform": {
+				"actions": {
+					"back": "Back to content",
+					"create": "New article"
+				},
 				"instagram": {
 					"commentsTotal": "{{count}} comments",
 					"footer": {
@@ -716,6 +1598,13 @@
 					"label": "Platform"
 				},
 				"wechat-official-accounts": {
+					"articleModes": {
+						"desktop": "Original",
+						"label": "Full content view switch",
+						"phone": "Phone preview"
+					},
+					"commentsFromPost": "From comments",
+					"commentsTotal": "Selected comments {{count}}",
 					"cover": {
 						"navTitle": "Official Accounts",
 						"timeHint": "Just now"
@@ -733,6 +1622,21 @@
 				"label": "Post"
 			},
 			"refreshAllData": "Refresh all data",
+			"splash": {
+				"description": "Capture ideas · publish content · compound feedback",
+				"headingFirstLine": "Turn every spark",
+				"headingSecondLine": "into a lasting echo",
+				"startCreating": "Start creating",
+				"subtitle": "Magic · Self Media"
+			},
+			"titleEdit": {
+				"cancel": "Cancel editing",
+				"edit": "Edit title",
+				"empty": "Title cannot be empty",
+				"failed": "Failed to save the title. Please try again later.",
+				"input": "Article title",
+				"save": "Save title"
+			},
 			"unsupported": {
 				"description": "The previewer for {{platform}} is not implemented yet.",
 				"title": "Coming soon"
@@ -906,6 +1810,7 @@
 		"sortSlidesSuccess": "Page order updated",
 		"sortSlidesTitle": "Sort Pages",
 		"tabs": {
+			"addWebsiteToCommon": "Set as common",
 			"close": "Close",
 			"closeAll": "Close All",
 			"closeOthers": "Close Others",
@@ -914,7 +1819,64 @@
 			"refresh": "Refresh"
 		},
 		"unknownFile": "Unknown File",
-		"waitForPreviousOperation": "Please wait for the previous operation to complete"
+		"waitForPreviousOperation": "Please wait for the previous operation to complete",
+		"website": {
+			"add": "Open website",
+			"closeLoadFallback": "Close loading notice",
+			"commonAddTitle": "Save common link",
+			"commonAlreadyExists": "This link is already saved",
+			"commonCancel": "Cancel",
+			"commonConfirm": "Save",
+			"commonDialogDescription": "Confirm the name and link for this shortcut. It will appear in Common links after saving.",
+			"commonEditTitle": "Edit common link",
+			"commonLimitReached": "You can save up to {{count}} common links. Delete unused links first.",
+			"commonSaveFailed": "Could not save as a common website",
+			"commonSaved": "Saved as a common website",
+			"commonTitle": "Common links",
+			"commonTitleLabel": "Name",
+			"commonUrlLabel": "Link",
+			"customDescription": "Custom website",
+			"customPlaceholder": "Enter URL",
+			"deleteCommon": "Delete",
+			"editCommon": "Edit",
+			"loadFallbackDescription": "If the page is not fully visible, the site may restrict iframe embedding or the network may be loading slowly.",
+			"loadFallbackTitle": "This page is taking longer to load",
+			"menuTitle": "Common websites",
+			"openCustom": "Open",
+			"openExternal": "Open externally",
+			"presets": {
+				"baiduImages": {
+					"description": "Image search and visual references",
+					"title": "Baidu Images"
+				},
+				"bingImages": {
+					"description": "Multi-source image search and visual references",
+					"title": "Bing Images"
+				},
+				"gptImage2": {
+					"description": "Prompt examples for GPT Image 2",
+					"title": "GPT Image 2 Prompts"
+				},
+				"nanoBananaPro": {
+					"description": "Prompt examples for Nano Banana Pro",
+					"title": "Nano Banana Pro Prompts"
+				},
+				"pexels": {
+					"description": "Free photos and video assets",
+					"title": "Pexels"
+				},
+				"xiaohongshu": {
+					"description": "Lifestyle content and post inspiration",
+					"title": "Xiaohongshu"
+				},
+				"zcool": {
+					"description": "Design work, creative inspiration, and asset community",
+					"title": "ZCOOL"
+				}
+			},
+			"refresh": "Refresh",
+			"removeCommon": "Remove common link"
+		}
 	},
 	"filenameValidator": {
 		"error": {
@@ -1195,6 +2157,44 @@
 			"fieldSeparator": ", ",
 			"title": "Authorize User Info Access"
 		}
+	},
+	"knowledgeBase": {
+		"fetchFailed": "Unable to fetch knowledge base file",
+		"loadError": "Failed to load knowledge base file",
+		"openInNewWindow": "Open in new window",
+		"sourceLabel": "Source knowledge base",
+		"sourceUnavailable": "Source unavailable",
+		"unsupportedPreview": "Preview is not supported for this knowledge source file. Open it in a new window."
+	},
+	"knowledgeSearch": {
+		"action": "Search knowledge",
+		"detailEmpty": "No knowledge search details",
+		"detailEmptyFallback": "No matching knowledge content found",
+		"detailErrorFallback": "Knowledge search failed",
+		"detailTitle": "Knowledge Search Details",
+		"detailTruncated": "Results were truncated. Only part of the recalled content is shown.",
+		"documentCodeLabel": "document_code: {{code}}",
+		"documentCount": "Documents {{shown}}/{{total}}",
+		"empty": "No relevant entries found",
+		"error": "Search failed: knowledge base is unavailable.",
+		"fileKeyLabel": "file_key: {{fileKey}}",
+		"hits": "hits",
+		"noSnippet": "This document did not return snippet details",
+		"openSourceAria": "Open source {{title}}",
+		"queryLabel": "Query: {{query}}",
+		"running": "Searching…",
+		"scoreLabel": "Score {{score}}",
+		"snippetCount": "Snippets {{shown}}/{{total}}",
+		"snippetRank": "Snippet #{{rank}}",
+		"statusEmpty": "No results",
+		"statusError": "Search failed",
+		"statusFallback": "Details",
+		"statusSuccess": "Search succeeded",
+		"title": "Knowledge Search",
+		"toggleResults": "Expand or collapse search results",
+		"truncatedTag": "Truncated",
+		"untitledDocument": "Untitled document",
+		"wordCount": "{{count}} words"
 	},
 	"messageEditor": {
 		"addAttachment": "Add Attachment",
@@ -1745,6 +2745,35 @@
 		"submitSuccess": "Submit successfully",
 		"uploadImageCountLimit": "It supports adding up to 10 JPG or PNG images.",
 		"uploadImageSizeLimit": "The file size should be less than 2MB."
+	},
+	"personalPet": {
+		"collapse": "Collapse pet",
+		"contextMenu": {
+			"close": "Remove"
+		},
+		"createProjectFailed": "Could not create the pet project. Please try again later.",
+		"expand": "Expand pet",
+		"generate": "Generate my pet",
+		"generationFailed": "Could not start pet generation. Please try again later.",
+		"generationStarted": "Pet generation project created",
+		"invalidManifest": "Invalid pet manifest",
+		"noWorkspace": "Select a workspace first",
+		"projectName": "My Codex Pet",
+		"regenerate": "Regenerate pet",
+		"resize": "Resize pet",
+		"setCurrent": "Set as pet",
+		"setCurrentFailed": "Could not set the pet. Please try again later.",
+		"setCurrentSuccess": "Current pet updated",
+		"spritesheetMissing": "Pet spritesheet not found",
+		"topicRadar": {
+			"collapse": "Collapse topic updates",
+			"dismiss": "Dismiss topic update",
+			"expand": "Expand topic updates",
+			"latest": "Latest",
+			"untitledTopic": "New chat",
+			"waitingForUser": "Awaiting your reply",
+			"waitingForUserHint": "Awaiting reply"
+		}
 	},
 	"playbackControl": {
 		"alreadyAtLatest": "Already at Latest",
@@ -3124,10 +4153,12 @@
 		"inspector": {
 			"agentPromptPlaceholder": "Describe the problem here",
 			"agentPromptSuffix": "Please handle the selected element:",
-			"agentPromptTitle": "[HTML Element Inspection] I selected an element on the page. Here are its details:",
+			"agentPromptTitle": "I selected an element on the page. Here are its details:",
 			"computedStyles": "Computed Styles",
 			"copySelector": "Copy Selector",
+			"file": "File",
 			"insertToConsole": "Query in Console",
+			"selectedElement": "Selected element",
 			"selector": "Selector",
 			"sendToAgent": "Send to Agent",
 			"size": "Size",
@@ -3373,13 +4404,18 @@
 			"confirmBatchDeleteWithFolders": "Selection includes folders, subfiles not selected will also be deleted",
 			"confirmBatchDeleteWithMagicSystemFolder": "Your selection includes the .magic system folder. After deletion, some capabilities may stop working and this cannot be undone. Proceed with caution.",
 			"copyTo": "Copy to",
+			"createAICardFailed": "Failed to create AI card project",
+			"createAICardSuccess": "AI card project created successfully",
 			"createDesignFailed": "Failed to create design project",
 			"createDesignSuccess": "Design project created successfully",
 			"createFile": "New File",
 			"createFileSuccess": "File created successfully",
 			"createFolder": "New Folder",
 			"createFolderSuccess": "Folder created successfully",
+			"createSelfMediaFailed": "Failed to create self-media project",
+			"createSelfMediaSuccess": "Self-media project created successfully",
 			"createSubMenu": {
+				"aiCardFile": "AI Card",
 				"customFile": "Custom Format",
 				"designFile": "Design",
 				"goFile": "Golang",
@@ -3387,6 +4423,7 @@
 				"mdFile": "Markdown",
 				"phpFile": "PHP",
 				"pythonFile": "Python",
+				"selfMediaFile": "Self-Media Project",
 				"txtFile": "TXT"
 			},
 			"createUploadTaskFailed": "Failed to create upload task",
@@ -3434,6 +4471,9 @@
 			"importFromOtherProject": "Import from other",
 			"move": "Move",
 			"moveTo": "Move to",
+			"newAICard": {
+				"defaultName": "New AI Card"
+			},
 			"newDesign": {
 				"defaultName": "New Design"
 			},
@@ -3444,6 +4484,9 @@
 			"newFolder": {
 				"defaultName": "New Folder",
 				"duplicateError": "A folder with this name already exists in the current directory, please use a different name"
+			},
+			"newSelfMedia": {
+				"defaultName": "New Self-Media Project"
 			},
 			"noEditPermission": "No edit permission",
 			"noFilesSelected": "No files selected",
@@ -3709,7 +4752,6 @@
 		"aiGeneratedTip": "AI-generated content. Please verify.",
 		"attachments": "Attachments({{count}})",
 		"collapseUserMessage": "Collapse",
-		"consumptionPoints": "Used {{points}} points this round",
 		"consumptionPoints1": "This round used",
 		"consumptionPoints2": "points",
 		"copyTopic": "Create a new topic from here",

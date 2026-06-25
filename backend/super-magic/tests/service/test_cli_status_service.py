@@ -2,11 +2,12 @@ import asyncio
 
 import pytest
 
-from app.service.cli_status.providers.dws import DWS_HORIZON_TEXT, DwsCliStatusProbe
-from app.service.cli_status.factory import CliStatusFactory
 from app.service.cli_status.common import CliCommandResult, CliStatusProbe, CliStatusSnapshot
 from app.service.cli_status.common.redaction import sanitize_text
+from app.service.cli_status.factory import CliStatusFactory
+from app.service.cli_status.providers.dws import DWS_HORIZON_TEXT, DwsCliStatusProbe
 from app.service.cli_status.providers.lark import LARK_HORIZON_TEXT, LarkCliStatusProbe
+from app.service.cli_status.providers.teamshare import TEAMSHARE_HORIZON_TEXT, TeamshareCliStatusProbe
 
 
 class FakeRunner:
@@ -145,6 +146,53 @@ async def test_lark_probe_authenticated_summary_uses_identity_state_only():
     assert "mock-scope" not in status.horizon
     assert "token" not in status.horizon.lower()
     assert runner.calls == [("lark-cli", "auth", "status")]
+
+
+@pytest.mark.asyncio
+async def test_teamshare_probe_returns_empty_horizon_when_not_authenticated():
+    runner = FakeRunner({
+        ("teamshare-cli", "auth", "status"): CliCommandResult(
+            ("teamshare-cli", "auth", "status"),
+            1,
+            stderr='{"ok": false, "error": {"type": "auth", "message": "credential file not found"}}',
+        ),
+    })
+    probe = TeamshareCliStatusProbe(runner=runner)
+
+    status = await probe.detect()
+
+    assert status.cli == "teamshare-cli"
+    assert status.horizon == ""
+    assert status.has_horizon is False
+    assert runner.calls == [("teamshare-cli", "auth", "status")]
+
+
+@pytest.mark.asyncio
+async def test_teamshare_probe_authenticated_summary_uses_status_only():
+    runner = FakeRunner({
+        ("teamshare-cli", "auth", "status"): CliCommandResult(
+            ("teamshare-cli", "auth", "status"),
+            0,
+            stdout=(
+                '{"ok": true, "data": {"credentialStatus": "valid", '
+                '"hasAccessToken": true, "hasOrganizationCode": true, '
+                '"accessToken": "mock-token", "organizationCode": "mock-org"}}'
+            ),
+        ),
+    })
+    probe = TeamshareCliStatusProbe(runner=runner)
+
+    status = await probe.detect()
+
+    assert status.cli == "teamshare-cli"
+    assert status.horizon == TEAMSHARE_HORIZON_TEXT
+    assert status.has_horizon is True
+    assert "Teamshare/天书" in status.horizon
+    assert "read_skills(['teamshare-cli'])" in status.horizon
+    assert "mock-token" not in status.horizon
+    assert "mock-org" not in status.horizon
+    assert "token" not in status.horizon.lower()
+    assert runner.calls == [("teamshare-cli", "auth", "status")]
 
 
 class FakeHorizon:

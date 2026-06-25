@@ -17,6 +17,8 @@ export const FS_MESSAGE_TYPES = {
 	WRITE_BLOB_RESPONSE: "MAGIC_FS_WRITE_BLOB_RESPONSE",
 	LIST_REQUEST: "MAGIC_FS_LIST_REQUEST",
 	LIST_RESPONSE: "MAGIC_FS_LIST_RESPONSE",
+	GET_FILE_URL_REQUEST: "MAGIC_FS_GET_FILE_URL_REQUEST",
+	GET_FILE_URL_RESPONSE: "MAGIC_FS_GET_FILE_URL_RESPONSE",
 	DELETE_FILE_REQUEST: "MAGIC_FS_DELETE_FILE_REQUEST",
 	DELETE_FILE_RESPONSE: "MAGIC_FS_DELETE_FILE_RESPONSE",
 	DELETE_DIR_REQUEST: "MAGIC_FS_DELETE_DIR_REQUEST",
@@ -110,6 +112,20 @@ export interface FSListResponse {
 	requestId: string
 	success: boolean
 	files?: string[]
+	error?: string
+}
+
+export interface FSGetFileUrlRequest {
+	type: typeof FS_MESSAGE_TYPES.GET_FILE_URL_REQUEST
+	requestId: string
+	path: string
+}
+
+export interface FSGetFileUrlResponse {
+	type: typeof FS_MESSAGE_TYPES.GET_FILE_URL_RESPONSE
+	requestId: string
+	success: boolean
+	url?: string
 	error?: string
 }
 

@@ -244,119 +244,121 @@ describe("MobileShellSidebar", () => {
 			vi.useRealTimers()
 		})
 
-	it("navigates on short tap of a recent item title", () => {
-		const onRecentNavigate = vi.fn()
-		const project = {
-			id: "project-1",
-			project_name: "Recent",
-			workspace_id: "ws-1",
-		} as any
+		it("navigates on short tap of a recent item title", () => {
+			const onRecentNavigate = vi.fn()
+			const project = {
+				id: "project-1",
+				project_name: "Recent",
+				workspace_id: "ws-1",
+			} as any
 
-		renderSidebar({
-			activeView: "chats",
-			navItems: [],
-			recentItems: [
-				{
-					id: project.id,
-					title: project.project_name,
-					project,
-					inProgress: false,
-					isShared: false,
-					isLinked: false,
-					isChatProject: false,
-				},
-			],
-			onNavigate: vi.fn(),
-			onGoHome: vi.fn(),
-			onRecentNavigate,
-			reloadRecentItems: vi.fn(),
-			hasMore: false,
-			loadMoreRecentItems: vi.fn(),
+			renderSidebar({
+				activeView: "chats",
+				navItems: [],
+				recentItems: [
+					{
+						id: project.id,
+						title: project.project_name,
+						project,
+						inProgress: false,
+						isShared: false,
+						isLinked: false,
+						isChatProject: false,
+					},
+				],
+				onNavigate: vi.fn(),
+				onGoHome: vi.fn(),
+				onRecentNavigate,
+				reloadRecentItems: vi.fn(),
+				hasMore: false,
+				loadMoreRecentItems: vi.fn(),
+			})
+
+			const titleButton = screen.getByTestId("mobile-super-shell-recent-project-1")
+			touchStart(titleButton)
+			touchEnd(titleButton)
+
+			expect(onRecentNavigate).toHaveBeenCalledWith(
+				expect.objectContaining({ id: "project-1" }),
+			)
+			expect(defaultOpenActionsPopup).not.toHaveBeenCalled()
 		})
 
-		const titleButton = screen.getByTestId("mobile-super-shell-recent-project-1")
-		touchStart(titleButton)
-		touchEnd(titleButton)
+		it("opens floating menu on long press of a recent item title", () => {
+			const project = {
+				id: "project-1",
+				project_name: "Recent",
+				workspace_id: "ws-1",
+			} as any
 
-		expect(onRecentNavigate).toHaveBeenCalledWith(
-			expect.objectContaining({ id: "project-1" }),
-		)
-		expect(defaultOpenActionsPopup).not.toHaveBeenCalled()
-	})
+			renderSidebar({
+				activeView: "chats",
+				navItems: [],
+				recentItems: [
+					{
+						id: project.id,
+						title: project.project_name,
+						project,
+						inProgress: false,
+						isShared: false,
+						isLinked: false,
+						isChatProject: false,
+					},
+				],
+				onNavigate: vi.fn(),
+				onGoHome: vi.fn(),
+				onRecentNavigate: vi.fn(),
+				reloadRecentItems: vi.fn(),
+				hasMore: false,
+				loadMoreRecentItems: vi.fn(),
+			})
 
-	it("opens floating menu on long press of a recent item title", () => {
-		const project = {
-			id: "project-1",
-			project_name: "Recent",
-			workspace_id: "ws-1",
-		} as any
+			const titleButton = screen.getByTestId("mobile-super-shell-recent-project-1")
+			act(() => {
+				touchStart(titleButton)
+				vi.advanceTimersByTime(500)
+				touchEnd(titleButton)
+			})
 
-		renderSidebar({
-			activeView: "chats",
-			navItems: [],
-			recentItems: [
-				{
-					id: project.id,
-					title: project.project_name,
-					project,
-					inProgress: false,
-					isShared: false,
-					isLinked: false,
-					isChatProject: false,
-				},
-			],
-			onNavigate: vi.fn(),
-			onGoHome: vi.fn(),
-			onRecentNavigate: vi.fn(),
-			reloadRecentItems: vi.fn(),
-			hasMore: false,
-			loadMoreRecentItems: vi.fn(),
+			expect(defaultUpdateCurrentActionItem).toHaveBeenCalledWith(project)
+			expect(defaultOpenActionsPopup).not.toHaveBeenCalled()
+			expect(
+				screen.getByTestId("mobile-super-shell-recent-floating-menu"),
+			).toBeInTheDocument()
+			expect(screen.getByText("Rename")).toBeInTheDocument()
+			expect(screen.getByText("Delete")).toBeInTheDocument()
 		})
 
-		const titleButton = screen.getByTestId("mobile-super-shell-recent-project-1")
-		act(() => {
+		it("does not open actions on long press when recent item has no project", () => {
+			renderSidebar({
+				activeView: "chats",
+				navItems: [],
+				recentItems: [
+					{
+						id: "recent-no-project",
+						title: "Recent",
+						inProgress: false,
+						isShared: false,
+						isLinked: false,
+						isChatProject: false,
+					},
+				],
+				onNavigate: vi.fn(),
+				onGoHome: vi.fn(),
+				onRecentNavigate: vi.fn(),
+				reloadRecentItems: vi.fn(),
+				hasMore: false,
+				loadMoreRecentItems: vi.fn(),
+			})
+
+			const titleButton = screen.getByTestId("mobile-super-shell-recent-recent-no-project")
 			touchStart(titleButton)
 			vi.advanceTimersByTime(500)
 			touchEnd(titleButton)
+
+			expect(defaultOpenActionsPopup).not.toHaveBeenCalled()
+			expect(chatOpenActionsPopup).not.toHaveBeenCalled()
 		})
-
-		expect(defaultUpdateCurrentActionItem).toHaveBeenCalledWith(project)
-		expect(defaultOpenActionsPopup).not.toHaveBeenCalled()
-		expect(screen.getByTestId("mobile-super-shell-recent-floating-menu")).toBeInTheDocument()
-		expect(screen.getByText("Rename")).toBeInTheDocument()
-		expect(screen.getByText("Delete")).toBeInTheDocument()
-	})
-
-	it("does not open actions on long press when recent item has no project", () => {
-		renderSidebar({
-			activeView: "chats",
-			navItems: [],
-			recentItems: [
-				{
-					id: "recent-no-project",
-					title: "Recent",
-					inProgress: false,
-					isShared: false,
-					isLinked: false,
-					isChatProject: false,
-				},
-			],
-			onNavigate: vi.fn(),
-			onGoHome: vi.fn(),
-			onRecentNavigate: vi.fn(),
-			reloadRecentItems: vi.fn(),
-			hasMore: false,
-			loadMoreRecentItems: vi.fn(),
-		})
-
-		const titleButton = screen.getByTestId("mobile-super-shell-recent-recent-no-project")
-		touchStart(titleButton)
-		vi.advanceTimersByTime(500)
-		touchEnd(titleButton)
-
-		expect(defaultOpenActionsPopup).not.toHaveBeenCalled()
-		expect(chatOpenActionsPopup).not.toHaveBeenCalled()
-	})
 	})
 
 	it("opens chat actions for recent chat items instead of default project actions", () => {
@@ -398,6 +400,7 @@ describe("MobileShellSidebar", () => {
 		renderSidebar({
 			activeView: "chats",
 			navItems: [
+				{ key: "home", icon: TestIcon, label: "首页" },
 				{ key: "chats", icon: TestIcon, label: "对话" },
 				{ key: "workspaces", icon: TestIcon, label: "工作空间" },
 				{ key: "recording", icon: TestIcon, label: "录音与纪要" },
@@ -412,14 +415,45 @@ describe("MobileShellSidebar", () => {
 			loadMoreRecentItems: vi.fn(),
 		})
 
+		const homeButton = screen.getByTestId("mobile-super-shell-nav-home")
 		const chatsButton = screen.getByTestId("mobile-super-shell-nav-chats")
 		const workspacesButton = screen.getByTestId("mobile-super-shell-nav-workspaces")
 		const recordingButton = screen.getByTestId("mobile-super-shell-nav-recording")
 		const myCrewButton = screen.getByTestId("mobile-super-shell-nav-myCrew")
 
+		expect(homeButton.parentElement).toBe(chatsButton.parentElement)
 		expect(chatsButton.parentElement).toBe(workspacesButton.parentElement)
 		expect(recordingButton.parentElement).toBe(chatsButton.parentElement)
 		expect(myCrewButton.parentElement).not.toBe(chatsButton.parentElement)
+	})
+
+	it("renders the home nav item above chats in the primary menu group", () => {
+		renderSidebar({
+			activeView: "chats",
+			navItems: [
+				{ key: "home", icon: TestIcon, label: "首页" },
+				{ key: "chats", icon: TestIcon, label: "对话" },
+				{ key: "workspaces", icon: TestIcon, label: "工作空间" },
+			],
+			recentItems: [],
+			onNavigate: vi.fn(),
+			onGoHome: vi.fn(),
+			onRecentNavigate: vi.fn(),
+			reloadRecentItems: vi.fn(),
+			hasMore: false,
+			loadMoreRecentItems: vi.fn(),
+		})
+
+		const homeButton = screen.getByTestId("mobile-super-shell-nav-home")
+		const chatsButton = screen.getByTestId("mobile-super-shell-nav-chats")
+		const primaryNavGroup = homeButton.parentElement
+
+		expect(primaryNavGroup).toBe(chatsButton.parentElement)
+		expect(Array.from(primaryNavGroup?.children ?? [])).toEqual([
+			homeButton,
+			chatsButton,
+			screen.getByTestId("mobile-super-shell-nav-workspaces"),
+		])
 	})
 
 	it("keeps my crew in the secondary menu group instead of the chats and workspaces group", () => {

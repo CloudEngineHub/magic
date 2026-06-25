@@ -12,6 +12,7 @@ from dingtalk_stream.card_instance import AIMarkdownCardInstance
 
 from agentlang.logger import get_logger
 from app.channel.base.channel import BaseChannel
+from app.core.context.execution_source import EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY, SuperMagicExecutionSource
 from app.core.entity.message.client_message import ChatClientMessage, Metadata
 from app.channel.base.third_party_message import dispatch_third_party_message
 from app.channel.dingtalk.stream import DingTalkStream
@@ -295,6 +296,9 @@ class DingTalkChannel(BaseChannel):
             message_id=local_id,
             prompt=content,
             metadata=Metadata(agent_user_id=user_id, channel_name=self.key),
+            dynamic_config={
+                EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY: SuperMagicExecutionSource.THIRD_PARTY_IM.value,
+            },
         )
         logger.info(f"[DingTalkChannel] 分发消息: user_id={user_id}, len={len(content)}")
         await dispatch_third_party_message(

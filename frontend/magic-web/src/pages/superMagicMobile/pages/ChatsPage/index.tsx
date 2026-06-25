@@ -41,6 +41,7 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 		reload,
 		loadMore,
 		optimisticRemove,
+		optimisticUpdatePin,
 	} = useChatConversationList()
 	const currentRole = roleStore.currentRole
 	const [isCreatingChat, setIsCreatingChat] = useState(false)
@@ -212,16 +213,14 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 	})
 
 	/**
-	 * 左滑置顶/取消置顶：调用 pin 链路（pinProjectAndRefresh 内部已处理乐观更新与刷新）。
-	 * 刷新后通过 reload 同步本地列表状态。
+	 * 左滑置顶/取消置顶：成功后先做一次本地乐观重排，再由列表自己的 reload 对齐服务端顺序。
+	 * 这里避免调用 pinProjectAndRefresh，防止同时触发 participated 列表刷新和 chat queries 刷新。
 	 */
 	const handlePinConversation = useMemoizedFn(async (item: ChatConversationListItem) => {
 		try {
-			await SuperMagicService.project.pinProjectAndRefresh(
-				item.project,
-				!item.isPinned,
-				item.project.workspace_id,
-			)
+			await SuperMagicService.project.pinProject(item.project, !item.isPinned)
+			// 仅在操作成功后短暂重排本地列表；下一次 reload 仍完全以服务端顺序为准。
+			optimisticUpdatePin(item.id, !item.isPinned)
 			await reload({ silent: true })
 		} catch {
 			magicToast.error(

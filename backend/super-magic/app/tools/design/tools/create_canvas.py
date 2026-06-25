@@ -12,14 +12,17 @@ from pydantic import Field
 from agentlang.context.tool_context import ToolContext
 from agentlang.event.event import EventType
 from agentlang.logger import get_logger
-from agentlang.path_manager import PathManager
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail, DisplayType, FileContent
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.tools.base_design_tool import BaseDesignTool
+from app.tools.design.utils.magic_project_design_parser import (
+    MAGIC_PROJECT_VERSION_V2,
+    CanvasConfig,
+    MagicProjectConfig,
+    write_magic_project_js_v2,
+)
 from app.utils.async_file_utils import (
-    async_read_text,
-    async_write_text_with_retry,
     async_mkdir,
     async_exists,
 )
@@ -124,34 +127,24 @@ class CreateCanvas(BaseDesignTool[CreateCanvasParams]):
             if config_file_exists:
                 logger.info(f"Project config file already exists, skipping write: {project_js_path}")
             else:
-                # 从模板生成 magic.project.js 配置文件
-                # 使用 PathManager 获取项目根目录，确保在任何环境下都能正确找到模板文件
-                project_root = PathManager.get_project_root()
-                template_path = project_root / "app" / "tools" / "magic_design" / "magic.project.template.js"
-
-                if not await async_exists(template_path):
-                    raise FileNotFoundError(f"找不到模板文件: {template_path}")
-
-                # 读取模板内容
-                template_content = await async_read_text(template_path)
-
-                # 替换模板占位符
-                project_js_content = template_content.replace("{{PROJECT_NAME}}", project_name)
+                # 新建画布使用 v2 格式（信封 version=2.0.0 + canvas 压缩），空 elements
+                initial_config = MagicProjectConfig(
+                    version=MAGIC_PROJECT_VERSION_V2,
+                    type="design",
+                    name=project_name,
+                    canvas=CanvasConfig(elements=[]),
+                )
 
                 # 写入 magic.project.js 配置文件（异步）
                 try:
                     await self._dispatch_file_event(tool_context, str(project_js_path), EventType.BEFORE_FILE_CREATED)
 
-                    # 写入文件并验证（带重试，适应 TOS 同步延迟）
-                    await async_write_text_with_retry(
-                        project_js_path,
-                        project_js_content,
-                        content_validator=lambda c: "magicProjectConfig" in c,
-                    )
+                    # 写入 v2 压缩格式并校验（write_magic_project_js_v2 内部带重试，适应 TOS 同步延迟）
+                    await write_magic_project_js_v2(params.project_path, initial_config)
 
                     await self._dispatch_file_event(tool_context, str(project_js_path), EventType.FILE_CREATED)
 
-                    logger.info(f"Created project config file: {project_js_path}")
+                    logger.info(f"Created project config file (v2): {project_js_path}")
                 except Exception as e:
                     logger.error(f"Failed to create magic.project.js file: {e}")
                     return ToolResult.error(

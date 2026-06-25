@@ -2,12 +2,18 @@ import {
 	useCallback,
 	useEffect,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 	type CSSProperties,
 } from "react"
 import { createPortal } from "react-dom"
 import { X } from "lucide-react"
+import type { CropConfig } from "../../canvas/types"
+import {
+	computeReferenceImageCroppedDisplayLayout,
+	getPersistedSourceCrop,
+} from "../../canvas/utils/imageCropUtils"
 import { useCanvasDesignI18n } from "../../context/I18nContext"
 import { useReferenceImageUrls } from "../../hooks/useReferenceImageUrls"
 import chromeStyles from "../FullscreenMediaShell/chrome.module.css"
@@ -17,9 +23,12 @@ import styles from "../FullscreenMediaShell/shell.module.css"
 const IMAGE_FULLSCREEN_LAYOUT = {
 	insetPx: 80,
 	panelMaxWidthPx: 1200,
-} as const satisfies { insetPx: number; panelMaxWidthPx: number }
+	modeSwitcherReservePx: 52,
+} as const satisfies { insetPx: number; panelMaxWidthPx: number; modeSwitcherReservePx: number }
 
 const CHROME_IDLE_HIDE_MS = 3000
+
+type ImageFullscreenViewMode = "original" | "cropped"
 
 const overlayInsetStyle: CSSProperties = {
 	padding: IMAGE_FULLSCREEN_LAYOUT.insetPx,
@@ -28,6 +37,7 @@ const overlayInsetStyle: CSSProperties = {
 function computeImagePanelPixelSize(
 	aspectWidth: number,
 	aspectHeight: number,
+	reservedHeight = 0,
 ): {
 	width: number
 	height: number
@@ -39,21 +49,34 @@ function computeImagePanelPixelSize(
 		IMAGE_FULLSCREEN_LAYOUT.panelMaxWidthPx,
 		Math.max(200, window.innerWidth - viewportGutter),
 	)
-	const maxH = Math.max(200, window.innerHeight - viewportGutter)
+	const maxH = Math.max(200, window.innerHeight - viewportGutter - reservedHeight)
 	const scale = Math.min(maxW / aw, maxH / ah)
 	return { width: aw * scale, height: ah * scale }
 }
 
+function getCropSignature(crop: CropConfig | undefined): string {
+	if (!crop) return ""
+	return [
+		crop.x,
+		crop.y,
+		crop.width,
+		crop.height,
+		crop.displayWidth ?? "",
+		crop.displayHeight ?? "",
+	].join(":")
+}
+
 interface ImageFullscreenOverlayProps {
 	path: string
-	title: string
+	fileName?: string
+	crop?: CropConfig
 	isOpen: boolean
 	onClose: () => void
 	closeAriaLabel?: string
 }
 
 export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProps) {
-	const { path, title, isOpen, onClose, closeAriaLabel } = props
+	const { path, fileName, crop, isOpen, onClose, closeAriaLabel } = props
 	const { t } = useCanvasDesignI18n()
 
 	const hideChromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -67,18 +90,34 @@ export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProp
 		width: number
 		height: number
 	} | null>(null)
+	const [viewMode, setViewMode] = useState<ImageFullscreenViewMode>(crop ? "cropped" : "original")
 
 	const imgRef = useRef<HTMLImageElement | null>(null)
+	const cropSignature = useMemo(() => getCropSignature(crop), [crop])
+	const hasCrop = Boolean(crop)
 
-	const { fullUrl, thumbnailUrl, isLoading } = useReferenceImageUrls(path, {
+	const { fullUrl, lowUrl, imageInfo, isLoading } = useReferenceImageUrls(path, {
 		eagerFullUrl: true,
 	})
-	const src = fullUrl ?? thumbnailUrl
+	const src = fullUrl ?? lowUrl
+	const sourceSize = useMemo(() => {
+		if (imageInfo?.naturalWidth && imageInfo.naturalHeight) {
+			return {
+				width: imageInfo.naturalWidth,
+				height: imageInfo.naturalHeight,
+			}
+		}
+		return naturalSize
+	}, [imageInfo, naturalSize])
 
 	useEffect(() => {
 		setNaturalSize(null)
 		setHasError(false)
 	}, [path])
+
+	useEffect(() => {
+		setViewMode(hasCrop ? "cropped" : "original")
+	}, [cropSignature, hasCrop, path])
 
 	useEffect(() => {
 		if (!isOpen) {
@@ -152,22 +191,43 @@ export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProp
 		if (w > 0 && h > 0) setNaturalSize({ width: w, height: h })
 	}, [])
 
+	const effectiveCrop = useMemo(() => {
+		if (!crop || !sourceSize) return null
+		const persistedCrop = getPersistedSourceCrop(crop, sourceSize)
+		if (persistedCrop.width <= 0 || persistedCrop.height <= 0) return null
+
+		const isFullImageCrop =
+			Math.abs(persistedCrop.x) < 0.5 &&
+			Math.abs(persistedCrop.y) < 0.5 &&
+			Math.abs(persistedCrop.width - sourceSize.width) < 0.5 &&
+			Math.abs(persistedCrop.height - sourceSize.height) < 0.5
+
+		return isFullImageCrop ? null : persistedCrop
+	}, [crop, sourceSize])
+
+	const activeViewMode: ImageFullscreenViewMode = effectiveCrop ? viewMode : "original"
+
 	useLayoutEffect(() => {
-		if (!isOpen || !naturalSize) {
+		if (!isOpen || !sourceSize) {
 			setPanelSize(null)
 			return
 		}
 
-		const aw = naturalSize.width
-		const ah = naturalSize.height
+		const displaySize =
+			activeViewMode === "cropped" && effectiveCrop
+				? { width: effectiveCrop.width, height: effectiveCrop.height }
+				: sourceSize
+		const reserveHeight = effectiveCrop ? IMAGE_FULLSCREEN_LAYOUT.modeSwitcherReservePx : 0
 		const updatePanelSize = () => {
-			setPanelSize(computeImagePanelPixelSize(aw, ah))
+			setPanelSize(
+				computeImagePanelPixelSize(displaySize.width, displaySize.height, reserveHeight),
+			)
 		}
 
 		updatePanelSize()
 		window.addEventListener("resize", updatePanelSize)
 		return () => window.removeEventListener("resize", updatePanelSize)
-	}, [isOpen, naturalSize])
+	}, [activeViewMode, effectiveCrop, isOpen, sourceSize])
 
 	useLayoutEffect(() => {
 		const img = imgRef.current
@@ -176,9 +236,32 @@ export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProp
 		applyNaturalSizeFromImage(img)
 	}, [applyNaturalSizeFromImage, hasError, src])
 
-	const isImageDecodePending = Boolean(src && !hasError && !naturalSize)
-	const showLoading = (!src && isLoading) || isImageDecodePending
+	const croppedImageLayout = useMemo<CSSProperties | null>(() => {
+		if (activeViewMode !== "cropped" || !effectiveCrop || !sourceSize || !panelSize) {
+			return null
+		}
+		return computeReferenceImageCroppedDisplayLayout(
+			panelSize.width,
+			panelSize.height,
+			sourceSize.width,
+			sourceSize.height,
+			effectiveCrop,
+		)
+	}, [activeViewMode, effectiveCrop, sourceSize, panelSize])
+
+	const isImageLayoutPending = Boolean(
+		src &&
+		!hasError &&
+		(!naturalSize ||
+			!sourceSize ||
+			!panelSize ||
+			(activeViewMode === "cropped" && effectiveCrop && !croppedImageLayout)),
+	)
+	const showLoading = (!src && isLoading) || isImageLayoutPending
 	const showError = hasError || (!src && !isLoading)
+	const showCropModeSwitcher = Boolean(effectiveCrop)
+	const originalImageLabel = t("mediaResourceFullscreenPreview.originalImage", "原图")
+	const croppedImageLabel = t("mediaResourceFullscreenPreview.croppedImage", "裁剪图")
 
 	const topChromeClassName = [
 		chromeStyles.layer,
@@ -186,7 +269,7 @@ export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProp
 		chromeVisible ? chromeStyles.layerVisible : chromeStyles.layerHidden,
 	].join(" ")
 
-	const fileLabel = getFullscreenMediaFileLabel(path, title)
+	const fileLabel = getFullscreenMediaFileLabel(path, fileName)
 
 	if (!isClient || !isOpen) {
 		return null
@@ -201,98 +284,158 @@ export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProp
 				aria-hidden
 			/>
 			<div className={styles.overlayContent}>
-				<div
-					className={styles.panel}
-					style={
-						panelSize
-							? { width: panelSize.width, height: panelSize.height }
-							: {
-									width: "auto",
-									height: "auto",
-									minWidth: 280,
-									minHeight: 160,
-									background: "transparent",
-									boxShadow: "none",
-								}
-					}
-					onClick={(event) => event.stopPropagation()}
-				>
-					<div
-						className={styles.player}
-						style={isImageDecodePending ? { minWidth: 280, minHeight: 160 } : undefined}
-						onMouseEnter={handlePlayerMouseEnter}
-						onMouseMove={handlePlayerMouseMove}
-						onMouseLeave={handlePlayerMouseLeave}
-					>
-						<div
-							className={topChromeClassName}
-							onClick={(event) => event.stopPropagation()}
-							onPointerDown={(event) => event.stopPropagation()}
-						>
-							<div className={chromeStyles.topBarLeft}>
-								{fileLabel ? (
-									<span className={chromeStyles.fileName} title={fileLabel}>
-										{fileLabel}
-									</span>
-								) : null}
-							</div>
-							<button
-								type="button"
-								className={styles.closeButton}
-								onClick={(event) => {
-									event.stopPropagation()
-									onClose()
-								}}
-								aria-label={
-									closeAriaLabel ??
-									t("mediaResourceFullscreenPreview.close", "关闭全屏预览")
-								}
-							>
-								<X size={20} />
-							</button>
-						</div>
-
+				{showLoading ? (
+					<div className={styles.loadingOnly}>
 						{src && !hasError ? (
 							<img
 								ref={imgRef}
 								className={styles.video}
 								src={src}
-								alt={title}
+								alt={fileLabel}
 								draggable={false}
-								style={
-									isImageDecodePending
-										? {
-												position: "absolute",
-												width: 1,
-												height: 1,
-												opacity: 0,
-												pointerEvents: "none",
-											}
-										: undefined
-								}
+								style={{
+									position: "absolute",
+									width: 1,
+									height: 1,
+									opacity: 0,
+									pointerEvents: "none",
+								}}
 								onLoad={(event) => {
 									applyNaturalSizeFromImage(event.currentTarget)
 								}}
 								onError={() => setHasError(true)}
 							/>
 						) : null}
-
-						{(showLoading || showError) && (
-							<div className={styles.centerOverlay}>
-								{showError ? (
-									<div className={styles.errorState}>
-										{t(
-											"mediaResourceFullscreenPreview.imageLoadFailed",
-											"图片加载失败",
-										)}
-									</div>
-								) : (
-									<div className={styles.spinner} />
-								)}
-							</div>
-						)}
+						<div className={styles.spinner} />
 					</div>
-				</div>
+				) : showError ? (
+					<div className={styles.errorState}>
+						{t("mediaResourceFullscreenPreview.imageLoadFailed", "图片加载失败")}
+					</div>
+				) : panelSize ? (
+					<div className={styles.readyStack}>
+						{showCropModeSwitcher ? (
+							<div
+								className={styles.cropModeTabs}
+								role="tablist"
+								aria-label={t(
+									"mediaResourceFullscreenPreview.viewMode",
+									"图片显示模式",
+								)}
+								onClick={(event) => event.stopPropagation()}
+								onPointerDown={(event) => event.stopPropagation()}
+							>
+								<span
+									className={[
+										styles.cropModeIndicator,
+										activeViewMode === "cropped"
+											? styles.cropModeIndicatorCropped
+											: "",
+									]
+										.filter(Boolean)
+										.join(" ")}
+								/>
+								<button
+									type="button"
+									role="tab"
+									aria-selected={activeViewMode === "original"}
+									className={[
+										styles.cropModeButton,
+										activeViewMode === "original"
+											? styles.cropModeButtonActive
+											: "",
+									]
+										.filter(Boolean)
+										.join(" ")}
+									onClick={() => setViewMode("original")}
+								>
+									{originalImageLabel}
+								</button>
+								<button
+									type="button"
+									role="tab"
+									aria-selected={activeViewMode === "cropped"}
+									className={[
+										styles.cropModeButton,
+										activeViewMode === "cropped"
+											? styles.cropModeButtonActive
+											: "",
+									]
+										.filter(Boolean)
+										.join(" ")}
+									onClick={() => setViewMode("cropped")}
+								>
+									{croppedImageLabel}
+								</button>
+							</div>
+						) : null}
+						<div
+							className={styles.panel}
+							style={{ width: panelSize.width, height: panelSize.height }}
+							onClick={(event) => event.stopPropagation()}
+						>
+							<div
+								className={styles.player}
+								onMouseEnter={handlePlayerMouseEnter}
+								onMouseMove={handlePlayerMouseMove}
+								onMouseLeave={handlePlayerMouseLeave}
+							>
+								<div
+									className={topChromeClassName}
+									onClick={(event) => event.stopPropagation()}
+									onPointerDown={(event) => event.stopPropagation()}
+								>
+									<div className={chromeStyles.topBarLeft}>
+										{fileLabel ? (
+											<span
+												className={chromeStyles.fileName}
+												title={fileLabel}
+											>
+												{fileLabel}
+											</span>
+										) : null}
+									</div>
+									<button
+										type="button"
+										className={styles.closeButton}
+										onClick={(event) => {
+											event.stopPropagation()
+											onClose()
+										}}
+										aria-label={
+											closeAriaLabel ??
+											t(
+												"mediaResourceFullscreenPreview.close",
+												"关闭全屏预览",
+											)
+										}
+									>
+										<X size={20} />
+									</button>
+								</div>
+
+								{src && !hasError ? (
+									<img
+										ref={imgRef}
+										className={styles.video}
+										src={src}
+										alt={fileLabel}
+										draggable={false}
+										style={
+											activeViewMode === "cropped"
+												? (croppedImageLayout ?? undefined)
+												: undefined
+										}
+										onLoad={(event) => {
+											applyNaturalSizeFromImage(event.currentTarget)
+										}}
+										onError={() => setHasError(true)}
+									/>
+								) : null}
+							</div>
+						</div>
+					</div>
+				) : null}
 			</div>
 		</div>,
 		document.body,

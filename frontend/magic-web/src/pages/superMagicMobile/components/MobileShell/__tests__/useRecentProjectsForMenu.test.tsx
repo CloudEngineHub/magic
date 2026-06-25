@@ -306,6 +306,137 @@ describe("useRecentProjectsForMenu", () => {
 		expect(result.current.hasMore).toBe(false)
 	})
 
+	it("stops pagination when next page is empty but total still reports more data", async () => {
+		const page1Projects = Array.from({ length: 20 }, (_, index) =>
+			createProject({
+				id: `stale-total-${index}`,
+				project_mode: TopicMode.General,
+			}),
+		)
+
+		getProjectsMock.mockImplementation(({ page }: { page: number }) => {
+			if (page === 1) {
+				return Promise.resolve({ list: page1Projects, total: 200 })
+			}
+			return Promise.resolve({ list: [], total: 200 })
+		})
+
+		const { result } = renderHook(() => useRecentProjectsForMenu())
+
+		await waitFor(() => {
+			expect(result.current.recentItems).toHaveLength(20)
+		})
+		expect(result.current.hasMore).toBe(true)
+
+		await act(async () => {
+			await result.current.loadMoreRecentItems()
+		})
+
+		await waitFor(() => {
+			expect(result.current.hasMore).toBe(false)
+		})
+
+		expect(result.current.recentItems).toHaveLength(20)
+		expect(getProjectsMock).toHaveBeenCalledTimes(2)
+	})
+
+	it("sets hasMore false when current page reaches max page even if deduped count is below total", async () => {
+		const page1Projects = Array.from({ length: 20 }, (_, index) =>
+			createProject({
+				id: `max-page-p1-${index}`,
+				project_mode: TopicMode.General,
+			}),
+		)
+		const page2Projects = Array.from({ length: 20 }, (_, index) =>
+			createProject({
+				id: `max-page-p2-${index}`,
+				project_mode: TopicMode.General,
+			}),
+		)
+		// 10 duplicates from page 1, 10 new rows → 30 unique items after 2 full pages.
+		const page3Projects = [
+			...page1Projects.slice(0, 10),
+			...Array.from({ length: 10 }, (_, index) =>
+				createProject({
+					id: `max-page-p3-${index}`,
+					project_mode: TopicMode.General,
+				}),
+			),
+		]
+
+		getProjectsMock.mockImplementation(({ page }: { page: number }) => {
+			if (page === 1) {
+				return Promise.resolve({ list: page1Projects, total: 60 })
+			}
+			if (page === 2) {
+				return Promise.resolve({ list: page2Projects, total: 60 })
+			}
+			if (page === 3) {
+				return Promise.resolve({ list: page3Projects, total: 60 })
+			}
+			return Promise.resolve({ list: [], total: 60 })
+		})
+
+		const { result } = renderHook(() => useRecentProjectsForMenu())
+
+		await waitFor(() => {
+			expect(result.current.recentItems).toHaveLength(20)
+		})
+
+		await act(async () => {
+			await result.current.loadMoreRecentItems()
+		})
+		await waitFor(() => {
+			expect(result.current.recentItems).toHaveLength(40)
+		})
+
+		await act(async () => {
+			await result.current.loadMoreRecentItems()
+		})
+		await waitFor(() => {
+			expect(result.current.recentItems).toHaveLength(50)
+		})
+
+		expect(result.current.hasMore).toBe(false)
+		expect(getProjectsMock).toHaveBeenCalledTimes(3)
+	})
+
+	it("stops pagination when next page only returns duplicate ids", async () => {
+		const page1Projects = Array.from({ length: 20 }, (_, index) =>
+			createProject({
+				id: `dup-page-${index}`,
+				project_mode: TopicMode.General,
+			}),
+		)
+
+		getProjectsMock.mockImplementation(({ page }: { page: number }) => {
+			if (page === 1) {
+				return Promise.resolve({ list: page1Projects, total: 200 })
+			}
+			if (page === 2) {
+				return Promise.resolve({ list: page1Projects, total: 200 })
+			}
+			return Promise.resolve({ list: [], total: 200 })
+		})
+
+		const { result } = renderHook(() => useRecentProjectsForMenu())
+
+		await waitFor(() => {
+			expect(result.current.recentItems).toHaveLength(20)
+		})
+
+		await act(async () => {
+			await result.current.loadMoreRecentItems()
+		})
+
+		await waitFor(() => {
+			expect(result.current.hasMore).toBe(false)
+		})
+
+		expect(result.current.recentItems).toHaveLength(20)
+		expect(getProjectsMock).toHaveBeenCalledTimes(2)
+	})
+
 	it("reloadRecentItems resets pagination to page 1", async () => {
 		getProjectsMock
 			.mockResolvedValueOnce({

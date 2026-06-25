@@ -36,6 +36,7 @@
 		"retrySummary": "重新总结",
 		"moreTags": "+{{count}}",
 		"moreActions": "更多操作",
+		"openProject": "查看项目详情",
 		"rename": "重命名",
 		"delete": "删除"
 	},

@@ -3,17 +3,19 @@ import { VideoElement as VideoElementClass } from "../../canvas/element/elements
 import { ElementTypeEnum, type VideoElement } from "../../canvas/types"
 import { calculateNewElementPosition, generateElementId } from "../../canvas/utils/utils"
 import type { GenerateVideoRequest } from "../../types.magic"
+import { calculateCanvasSizeFromAspectRatio } from "./video-editor-config.generation"
 
 interface CreateAndSubmitVideoGenerationOptions {
 	canvas: Canvas | null | undefined
 	sourceVideoElement: VideoElement
 	request: GenerateVideoRequest
+	newElementSize?: { width: number; height: number } | null
 }
 
 export async function createAndSubmitVideoGeneration(
 	options: CreateAndSubmitVideoGenerationOptions,
 ): Promise<boolean> {
-	const { canvas, sourceVideoElement, request } = options
+	const { canvas, sourceVideoElement, request, newElementSize } = options
 	if (!canvas || !request.model_id || !request.prompt?.trim()) {
 		return false
 	}
@@ -34,9 +36,13 @@ export async function createAndSubmitVideoGeneration(
 
 	const newElementId = generateElementId()
 	const newZIndex = canvas.elementManager.getNextZIndexInLevel()
+	const resolvedNewElementSize =
+		normalizeVideoElementSize(newElementSize) ??
+		calculateCanvasSizeFromAspectRatio(request.generation?.aspect_ratio) ??
+		normalizeVideoElementSize(sourceVideoElement)
 	const size = VideoElementClass.getDefaultConfig(
-		sourceVideoElement.width,
-		sourceVideoElement.height,
+		resolvedNewElementSize?.width,
+		resolvedNewElementSize?.height,
 	)
 
 	const newVideoElement: VideoElement = {
@@ -63,4 +69,17 @@ export async function createAndSubmitVideoGeneration(
 	newElementInstance.saveTempGenerateVideoRequest(requestToSubmit)
 
 	return newElementInstance.generateVideo(requestToSubmit)
+}
+
+function normalizeVideoElementSize(
+	size?: { width?: number; height?: number } | null,
+): { width: number; height: number } | null {
+	if (!size) return null
+	const { width, height } = size
+	if (!Number.isFinite(width) || !Number.isFinite(height)) return null
+	if (!width || !height || width <= 0 || height <= 0) return null
+	return {
+		width,
+		height,
+	}
 }

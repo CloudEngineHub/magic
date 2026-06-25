@@ -25,7 +25,7 @@ export interface VideoPlaybackConsumerState {
 type VideoPlaybackIssueReason = "timer" | "waiting" | "error" | "acquire"
 type VideoPlaybackConsumerStateListener = (state: VideoPlaybackConsumerState) => void
 
-/** 同一 path 上所有会话的只读快照，便于调试与策略判断 */
+/** 同一 path 上所有会话的只读快照，便于播放策略判断 */
 export interface PathPlaybackGroupSnapshot {
 	path: string
 	consumerIds: string[]
@@ -160,67 +160,87 @@ export class VideoPlaybackManager {
 			this.release(consumerId)
 		}
 
-		let ossInfo = await this.canvas.videoResourceManager.ensureFreshOssInfo(path)
+		const ossInfo = await this.canvas.videoResourceManager.ensureFreshOssInfo(path, {
+			allowCachedFallback: true,
+		})
 		if (!ossInfo) {
 			return null
 		}
 
-		const video = document.createElement("video")
-		video.crossOrigin = "anonymous"
-		video.preload = "auto"
-		video.playsInline = true
-		video.src = ossInfo.ossSrc
-		this.applyPlaybackOptions(video, options)
+		return this.canvas.resourceScheduler.run(
+			"video:playback-acquire",
+			async () => {
+				let currentOssInfo = ossInfo
+				const video = document.createElement("video")
+				video.crossOrigin = "anonymous"
+				video.preload = "auto"
+				video.playsInline = true
+				video.src = currentOssInfo.ossSrc
+				this.applyPlaybackOptions(video, options)
 
-		let isReady = await this.waitUntilReady(video, options?.currentTime)
-		if (!isReady && this.isCanvasVirtualResourceUrl(ossInfo.ossSrc)) {
-			const fallbackOssInfo =
-				await this.canvas.videoResourceManager.resolveVirtualPlaybackFallbackOssInfo(
-					path,
-					ossInfo.ossSrc,
+				let isReady = await this.waitUntilReady(video, options?.currentTime)
+				if (!isReady && this.isCanvasVirtualResourceUrl(currentOssInfo.ossSrc)) {
+					const fallbackOssInfo =
+						await this.canvas.videoResourceManager.resolveVirtualPlaybackFallbackOssInfo(
+							path,
+							currentOssInfo.ossSrc,
+						)
+					if (fallbackOssInfo) {
+						currentOssInfo = fallbackOssInfo
+						video.src = currentOssInfo.ossSrc
+						isReady = await this.waitUntilReady(video, options?.currentTime)
+					}
+				}
+				if (!isReady) {
+					this.disposeVideo(video)
+					return null
+				}
+
+				const group = this.getOrCreateGroup(normalizedPath)
+				group.lastResolvedOssSrc = currentOssInfo.ossSrc
+				group.lastWarmupAt = Date.now()
+				await this.cachePlaybackResource(
+					normalizedPath,
+					currentOssInfo.ossSrc,
+					currentOssInfo.expiresAt,
 				)
-			if (fallbackOssInfo) {
-				ossInfo = fallbackOssInfo
-				video.src = ossInfo.ossSrc
-				isReady = await this.waitUntilReady(video, options?.currentTime)
-			}
-		}
-		if (!isReady) {
-			this.disposeVideo(video)
-			return null
-		}
 
-		const group = this.getOrCreateGroup(normalizedPath)
-		group.lastResolvedOssSrc = ossInfo.ossSrc
-		group.lastWarmupAt = Date.now()
-		await this.cachePlaybackResource(normalizedPath, ossInfo.ossSrc, ossInfo.expiresAt)
+				const now = Date.now()
+				const session: InternalVideoPlaybackSession = {
+					consumerId,
+					path: normalizedPath,
+					video,
+					createdAt: now,
+					lastActiveAt: now,
+					ownerKind: this.inferOwnerKind(consumerId),
+					isActive: !video.paused && !video.ended,
+					resolvedOssSrc: currentOssInfo.ossSrc,
+					expiresAt: currentOssInfo.expiresAt,
+					isRefreshing: false,
+					refreshTimer: null,
+					refreshPromise: null,
+				}
+				session.disposeBindings = this.bindSessionActivity(session)
+				this.sessionsByConsumer.set(consumerId, session)
+				group.consumers.set(consumerId, session)
+				this.syncSessionActiveState(session, session.isActive)
+				this.scheduleSessionRefresh(session)
 
-		const now = Date.now()
-		const session: InternalVideoPlaybackSession = {
-			consumerId,
-			path: normalizedPath,
-			video,
-			createdAt: now,
-			lastActiveAt: now,
-			ownerKind: this.inferOwnerKind(consumerId),
-			isActive: !video.paused && !video.ended,
-			resolvedOssSrc: ossInfo.ossSrc,
-			expiresAt: ossInfo.expiresAt,
-			isRefreshing: false,
-			refreshTimer: null,
-			refreshPromise: null,
-		}
-		session.disposeBindings = this.bindSessionActivity(session)
-		this.sessionsByConsumer.set(consumerId, session)
-		group.consumers.set(consumerId, session)
-		this.syncSessionActiveState(session, session.isActive)
-		this.scheduleSessionRefresh(session)
+				if (options?.autoPlay) {
+					await video.play().catch(() => undefined)
+				}
 
-		if (options?.autoPlay) {
-			await video.play().catch(() => undefined)
-		}
-
-		return session
+				return session
+			},
+			{
+				source: "video-playback:acquire",
+				canvasId: this.canvas.id,
+				ownerId: consumerId,
+				path: normalizedPath,
+				url: ossInfo.ossSrc,
+				priority: options?.autoPlay ? "critical" : "visible",
+			},
+		)
 	}
 
 	public handoff(fromConsumerId: string, toConsumerId: string): VideoPlaybackSession | null {
@@ -516,7 +536,7 @@ export class VideoPlaybackManager {
 	): Promise<void> {
 		if (this.isCanvasVirtualResourceUrl(ossSrc)) return
 
-		await this.canvas.mediaResourceOfflineCacheManager.rememberResolvedResource({
+		void this.canvas.mediaResourceOfflineCacheManager.rememberResolvedResource({
 			path,
 			url: ossSrc,
 			mediaType: "video",

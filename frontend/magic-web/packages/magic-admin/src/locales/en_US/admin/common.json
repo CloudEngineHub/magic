@@ -8,9 +8,16 @@
 			"openMethod": "Open Method",
 			"path": "Link To",
 			"sortOrder": "Sort",
+			"sourceType": "Source",
 			"status": "Status"
 		},
+		"displaySetting": "Display Settings",
 		"editMenu": "Edit Menu",
+		"entryVisibility": "Entry Visibility",
+		"entryVisibilityOptions": {
+			"allMembers": "All organization members",
+			"specified": "Specified members/departments"
+		},
 		"icon": "Icon",
 		"iconType": {
 			"icon": "Select Icon",
@@ -25,17 +32,28 @@
 		"pathPlaceholder": "Enter the link to open",
 		"pleaseInputEnglishName": "Please enter the English name",
 		"pleaseSelectIcon": "Please select an icon",
+		"pleaseSelectVisibilityTarget": "Please select members or departments",
 		"pleaseUploadImage": "Please upload an image",
+		"searchName": "Menu",
 		"sortOrder": "Display Priority",
 		"sortOrderPlaceholder": "Enter priority value",
 		"sortOrderTip": "Higher value means higher priority",
+		"sourceType": {
+			"official": "Official",
+			"organization": "Custom"
+		},
 		"status": "Status",
+		"statusOptions": {
+			"disabled": "Disabled",
+			"enabled": "Enabled"
+		},
 		"visibilityOptions": {
 			"all": "All Visible",
 			"org": "Organization/Team Only",
 			"personal": "Personal Only"
 		},
-		"visibilityScope": "Visibility"
+		"visibilityScope": "Visibility",
+		"visibilityTarget": "Members/Departments"
 	},
 	"button": {
 		"cancel": "Cancel",
@@ -91,6 +109,7 @@
 			"dataStatistics": "Data Statistics",
 			"employeePublishReview": "Employee Publish Review",
 			"internalEmployeeSkill": "Internal Employees & Skills",
+			"manage": "Application Configuration",
 			"modelControl": "Model Control",
 			"modelLogMonitor": "Model Log Monitor",
 			"modelManagement": "Model Management",
