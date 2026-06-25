@@ -124,7 +124,7 @@ describe("CanvasFileUploadManager remote resource load deferrals", () => {
 })
 
 describe("CanvasFileUploadManager remote resource transfer cache", () => {
-	it("skips completed transfer probing for element media uploads", async () => {
+	it("reuses completed element media transfers without creating another upload", async () => {
 		const result: UploadFileResponse = {
 			path: "target/videos/video.mp4",
 			src: "https://target.test/video.mp4",
@@ -162,7 +162,7 @@ describe("CanvasFileUploadManager remote resource transfer cache", () => {
 		}
 		manager.currentPendingBatchId = null
 		manager.remoteResourceTransfers = new Map()
-		manager.getReusableCompletedRemoteResourceTransfer = vi.fn()
+		manager.getReusableCompletedRemoteResourceTransfer = vi.fn(async () => result)
 		manager.getRemoteResourceTransferKey = vi.fn(() => "transfer-key")
 		manager.createRemoteResourceTransferPromise = vi.fn(async () => result)
 		manager.persistCompletedRemoteResourceTransfer = vi.fn()
@@ -185,7 +185,90 @@ describe("CanvasFileUploadManager remote resource transfer cache", () => {
 			}),
 		).resolves.toBe(result)
 
-		expect(manager.getReusableCompletedRemoteResourceTransfer).not.toHaveBeenCalled()
+		expect(manager.getReusableCompletedRemoteResourceTransfer).toHaveBeenCalledWith({
+			sourceCanvasId: "source-canvas",
+			metadata: expect.objectContaining({
+				role: "element-media",
+				sourceRef: expect.objectContaining({
+					src: "./videos/video.mp4",
+				}),
+			}),
+			allowFileInfoFallback: true,
+		})
+		expect(manager.createRemoteResourceTransferPromise).not.toHaveBeenCalled()
+	})
+
+	it("uploads element media when no completed transfer is reusable", async () => {
+		const result: UploadFileResponse = {
+			path: "target/videos/video.mp4",
+			src: "https://target.test/video.mp4",
+			fileName: "video.mp4",
+			expires_at: "2030-01-01 00:00:00",
+		}
+		const manager = Object.create(CanvasFileUploadManager.prototype) as {
+			canvas: {
+				id: string
+				magicConfigManager: {
+					config: {
+						methods: {
+							uploadFiles: ReturnType<typeof vi.fn>
+						}
+					}
+				}
+			}
+			currentPendingBatchId: string | null
+			remoteResourceTransfers: Map<string, unknown>
+			getReusableCompletedRemoteResourceTransfer: ReturnType<typeof vi.fn>
+			getRemoteResourceTransferKey: ReturnType<typeof vi.fn>
+			createRemoteResourceTransferPromise: ReturnType<typeof vi.fn>
+			persistCompletedRemoteResourceTransfer: ReturnType<typeof vi.fn>
+			transferRemoteResource: CanvasFileUploadManager["transferRemoteResource"]
+		}
+		manager.canvas = {
+			id: "target-canvas",
+			magicConfigManager: {
+				config: {
+					methods: {
+						uploadFiles: vi.fn(),
+					},
+				},
+			},
+		}
+		manager.currentPendingBatchId = null
+		manager.remoteResourceTransfers = new Map()
+		manager.getReusableCompletedRemoteResourceTransfer = vi.fn(async () => null)
+		manager.getRemoteResourceTransferKey = vi.fn(() => "transfer-key")
+		manager.createRemoteResourceTransferPromise = vi.fn(async () => result)
+		manager.persistCompletedRemoteResourceTransfer = vi.fn()
+
+		await expect(
+			manager.transferRemoteResource({
+				sourceCanvasId: "source-canvas",
+				metadata: {
+					id: "file-1",
+					elementId: "source-video",
+					filename: "video.mp4",
+					mimeType: "video/mp4",
+					fileSize: 0,
+					role: "element-media",
+					sourceRef: {
+						src: "./videos/video.mp4",
+						ossUrl: "https://source.test/video.mp4",
+					},
+				},
+			}),
+		).resolves.toBe(result)
+
+		expect(manager.getReusableCompletedRemoteResourceTransfer).toHaveBeenCalledWith({
+			sourceCanvasId: "source-canvas",
+			metadata: expect.objectContaining({
+				role: "element-media",
+				sourceRef: expect.objectContaining({
+					src: "./videos/video.mp4",
+				}),
+			}),
+			allowFileInfoFallback: true,
+		})
 		expect(manager.createRemoteResourceTransferPromise).toHaveBeenCalled()
 	})
 

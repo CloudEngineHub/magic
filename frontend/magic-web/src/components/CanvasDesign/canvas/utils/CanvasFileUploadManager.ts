@@ -391,15 +391,13 @@ export class CanvasFileUploadManager {
 			return null
 		}
 
-		if (metadata.role !== "element-media") {
-			const completedTransfer = await this.getReusableCompletedRemoteResourceTransfer({
-				sourceCanvasId,
-				metadata,
-				allowFileInfoFallback: metadata.role !== "generation-resource",
-			})
-			if (completedTransfer) {
-				return completedTransfer
-			}
+		const completedTransfer = await this.getReusableCompletedRemoteResourceTransfer({
+			sourceCanvasId,
+			metadata,
+			allowFileInfoFallback: metadata.role !== "generation-resource",
+		})
+		if (completedTransfer) {
+			return completedTransfer
 		}
 
 		const transferKey = this.getRemoteResourceTransferKey({ sourceCanvasId, metadata })
