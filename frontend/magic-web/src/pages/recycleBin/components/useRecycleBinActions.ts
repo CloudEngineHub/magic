@@ -592,6 +592,7 @@ export function useRecycleBinActions({
 		if (restoreCheckResult?.status === "invalid" || restoreCheckResult?.status === "error")
 			return
 		const resourceType = getRestoreTargetResourceType({ target: restoreTarget, items })
+		const allResourceIds = getRestoreResourceIds({ target: restoreTarget, items })
 		const canRestoreResourceIds = restoreCheckResult?.itemsNoNeedMove ?? []
 		const directResourceIds = restoreCheckResult?.directResourceIds ?? canRestoreResourceIds
 		const conflictResolutions = restoreCheckResult?.conflictResolutions ?? {}

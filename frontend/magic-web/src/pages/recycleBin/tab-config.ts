@@ -41,7 +41,7 @@ const RECYCLE_BIN_TABS_CONFIG = [
 	// },
 ] as const
 
-type RecycleBinTabId = (typeof RECYCLE_BIN_TABS_CONFIG)[number]["id"]
+type RecycleBinTabId = (typeof RECYCLE_BIN_TABS_CONFIG)[number]["id"] | "files"
 
 const RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID: Record<number, RecycleBinTabId> = {
 	1: "workspaces",
@@ -89,13 +89,13 @@ function setRecycleBinTabQuery(tabId: RecycleBinTabId) {
 }
 
 function createRecycleBinTabCounts(): Record<RecycleBinTabId, number> {
-	return RECYCLE_BIN_TABS_CONFIG.reduce(
-		(acc, tab) => {
-			acc[tab.id] = 0
-			return acc
-		},
-		{} as Record<RecycleBinTabId, number>,
-	)
+	return {
+		all: 0,
+		workspaces: 0,
+		projects: 0,
+		topics: 0,
+		files: 0,
+	}
 }
 
 function getRecycleBinTabs(props: {
