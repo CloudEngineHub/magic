@@ -35,7 +35,8 @@ export interface UseDesignProjectManagerReturn {
 	syncDesignData: (newDesignData: DesignData) => void
 
 	loadFromRemote: () => Promise<void>
-	resetAndReload: () => Promise<void>
+	reloadPreservingLocalDraft: () => Promise<void>
+	reloadDiscardingLocalDraft: () => Promise<void>
 
 	saveToRemote: () => Promise<void>
 	generateContent: (data?: DesignData) => string
@@ -227,7 +228,8 @@ export function useDesignProjectManager(
 		syncDesignData: (data) => manager.syncDesignData(data),
 
 		loadFromRemote: () => manager.loadFromRemote(),
-		resetAndReload: () => manager.resetAndReload(),
+		reloadPreservingLocalDraft: () => manager.reloadPreservingLocalDraft(),
+		reloadDiscardingLocalDraft: () => manager.reloadDiscardingLocalDraft(),
 
 		saveToRemote: () => manager.saveToRemote(),
 		generateContent: (data) => manager.generateContent(data),

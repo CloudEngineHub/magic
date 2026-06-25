@@ -55,6 +55,7 @@ import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/model"
 import { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign/prewarm"
 import { designBuiltinPlugins } from "./plugins/options"
 import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
+import type { DesignDraftReason } from "./utils/designDraftStorage"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
@@ -443,7 +444,8 @@ function DesignViewer(props: DesignViewerProps) {
 		isInitialLoading,
 		// isSaving - 迁移后不再用于头部保存状态指示器，暂时注释掉，如需使用可取消注释
 		loadFromRemote,
-		resetAndReload,
+		reloadPreservingLocalDraft,
+		reloadDiscardingLocalDraft,
 		isReadOnly: isReadOnlyState,
 		setIsReadOnly: setIsReadOnlyState,
 		fileVersionsList,
@@ -587,7 +589,7 @@ function DesignViewer(props: DesignViewerProps) {
 					})
 					if (basePathSwitchTaskIdRef.current !== taskId) return
 
-					await resetAndReload()
+					await reloadDiscardingLocalDraft()
 					if (basePathSwitchTaskIdRef.current !== taskId) return
 
 					refreshCanvasDesign()
@@ -598,7 +600,7 @@ function DesignViewer(props: DesignViewerProps) {
 				}
 			})()
 		}
-	}, [designProjectBasePath, projectId, refreshCanvasDesign, resetAndReload])
+	}, [designProjectBasePath, projectId, refreshCanvasDesign, reloadDiscardingLocalDraft])
 
 	// 设计容器 ref
 	const containerRef = useRef<HTMLDivElement>(null)
@@ -741,42 +743,6 @@ function DesignViewer(props: DesignViewerProps) {
 		isPlaybackMode,
 	})
 
-	// 重新初始化页面（用于刷新按钮）
-	const handleReinitialize = useCallback(async () => {
-		// 先更新 markersForCanvas
-		setMarkersForCanvas(markerManager.getMarkers(designProjectId ?? ""))
-		await resetAndReload()
-		if (magicProjectJsFileId && fetchFileVersions && !isShareRoute) {
-			await fetchFileVersions()
-		}
-	}, [
-		resetAndReload,
-		magicProjectJsFileId,
-		fetchFileVersions,
-		isShareRoute,
-		markerManager,
-		designProjectId,
-	])
-
-	// 获取 CommonHeaderV2 的 props（定位到文件时定位到 magic.project.js）
-	const headerProps = useDesignHeaderProps({
-		locateFileId: magicProjectJsFileId ?? undefined,
-		currentFile,
-		projectId,
-		selectedProject,
-		attachments,
-		fileVersion,
-		isNewestVersion,
-		fileVersionsList,
-		allowEdit,
-		allowDownload,
-		containerRef,
-		handleReinitialize,
-		handleChangeFileVersion,
-		handleReturnLatest,
-		handleVersionRollback,
-	})
-
 	// 获取是否是移动端
 	const getIsMobile = useCallback(() => {
 		return isMobile
@@ -816,7 +782,7 @@ function DesignViewer(props: DesignViewerProps) {
 	const persistCanvasDataLocally = useCallback(
 		(
 			canvasData: CanvasDocument,
-			options?: { immediate?: boolean; reason?: "local-edit" | "pagehide" },
+			options?: { immediate?: boolean; reason?: DesignDraftReason },
 		) => {
 			const nextDesignData: DesignData = {
 				...latestDesignDataRef.current,
@@ -858,26 +824,69 @@ function DesignViewer(props: DesignViewerProps) {
 		[resolveEditedElementConflictsWithLocal],
 	)
 
-	const persistCurrentCanvasDraftImmediately = useCallback(() => {
-		const currentCanvasData = canvasDesignRef.current?.exportCurrentDocument?.()
-		if (currentCanvasData) {
-			persistCanvasDataLocally(currentCanvasData, {
+	const persistCurrentCanvasDraftImmediately = useCallback(
+		(reason: DesignDraftReason = "pagehide") => {
+			const currentCanvasData = canvasDesignRef.current?.exportCurrentDocument?.()
+			if (currentCanvasData) {
+				persistCanvasDataLocally(currentCanvasData, {
+					immediate: true,
+					reason,
+				})
+				return
+			}
+			persistLocalDraft(latestDesignDataRef.current, {
 				immediate: true,
-				reason: "pagehide",
+				reason,
 			})
-			return
-		}
-		persistLocalDraft(latestDesignDataRef.current, {
-			immediate: true,
-			reason: "pagehide",
-		})
-	}, [persistCanvasDataLocally, persistLocalDraft])
+		},
+		[persistCanvasDataLocally, persistLocalDraft],
+	)
 
 	const persistCurrentCanvasDraftImmediatelyRef = useRef(persistCurrentCanvasDraftImmediately)
 
 	useEffect(() => {
 		persistCurrentCanvasDraftImmediatelyRef.current = persistCurrentCanvasDraftImmediately
 	}, [persistCurrentCanvasDraftImmediately])
+
+	// 重新初始化页面（用于刷新按钮）
+	const handleReinitialize = useCallback(async () => {
+		// 先更新 markersForCanvas，并保留当前画布内尚未落远端的编辑。
+		setMarkersForCanvas(markerManager.getMarkers(designProjectId ?? ""))
+		persistCurrentCanvasDraftImmediately("manual-refresh")
+		await reloadPreservingLocalDraft()
+		refreshCanvasDesign()
+		if (magicProjectJsFileId && fetchFileVersions && !isShareRoute) {
+			await fetchFileVersions()
+		}
+	}, [
+		reloadPreservingLocalDraft,
+		refreshCanvasDesign,
+		magicProjectJsFileId,
+		fetchFileVersions,
+		isShareRoute,
+		markerManager,
+		designProjectId,
+		persistCurrentCanvasDraftImmediately,
+	])
+
+	// 获取 CommonHeaderV2 的 props（定位到文件时定位到 magic.project.js）
+	const headerProps = useDesignHeaderProps({
+		locateFileId: magicProjectJsFileId ?? undefined,
+		currentFile,
+		projectId,
+		selectedProject,
+		attachments,
+		fileVersion,
+		isNewestVersion,
+		fileVersionsList,
+		allowEdit,
+		allowDownload,
+		containerRef,
+		handleReinitialize,
+		handleChangeFileVersion,
+		handleReturnLatest,
+		handleVersionRollback,
+	})
 
 	const { handleCanvasDesignDataChange: syncCanvasImageFileRename } =
 		useCanvasImageFileRenameSync({

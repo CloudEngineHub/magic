@@ -75,7 +75,8 @@ export interface DesignProjectManagerAPI {
 	syncDesignData: (newDesignData: DesignData) => void
 
 	loadFromRemote: () => Promise<void>
-	resetAndReload: () => Promise<void>
+	reloadPreservingLocalDraft: () => Promise<void>
+	reloadDiscardingLocalDraft: () => Promise<void>
 
 	saveToRemote: () => Promise<void>
 	generateContent: (data?: DesignData) => string
@@ -198,7 +199,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 					this.saveManager.wasLastSaveFullyPersisted() &&
 					!this.hasUnresolvedElementConflicts()
 				) {
-					this.clearLocalDraft()
+					this.clearLocalDraftAfterFullyPersistedSave()
 				}
 			},
 			onAutoSaveResult: async (saveResult) => {
@@ -843,9 +844,11 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		const localFingerprint = hashDesignDataComparable(designData)
 		const identity = this.getDraftIdentity()
 		if (localFingerprint === baseRemoteFingerprint) {
-			void deleteDesignDraft(identity)
+			this.clearLocalDraftBecauseAlreadySynced()
 			return
 		}
+
+		const shouldWriteEmergencyDraft = reason === "pagehide" || reason === "manual-refresh"
 
 		void writeDesignDraft(
 			{
@@ -858,7 +861,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				reason,
 				designData,
 			},
-			{ emergency: reason === "pagehide" },
+			{ emergency: shouldWriteEmergencyDraft },
 		).then((result) => this.handleLocalDraftWriteResult(result, reason))
 	}
 
@@ -930,6 +933,22 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		void deleteDesignDraft(this.getDraftIdentity())
 	}
 
+	private clearLocalDraftAfterFullyPersistedSave(): void {
+		this.clearLocalDraft()
+	}
+
+	private clearLocalDraftBecauseAlreadySynced(): void {
+		this.clearLocalDraft()
+	}
+
+	private clearLocalDraftBecauseRemoteAccepted(): void {
+		this.clearLocalDraft()
+	}
+
+	private clearLocalDraftBecauseVersionSwitched(): void {
+		this.clearLocalDraft()
+	}
+
 	private async tryRestoreLocalDraftAfterRemoteLoad(): Promise<void> {
 		if (!this.canUseLocalDraft()) {
 			return
@@ -947,7 +966,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}
 		this.syncBaseDesignDataFromCurrent()
 		if (draft.localFingerprint === remoteFingerprint) {
-			this.clearLocalDraft()
+			this.clearLocalDraftBecauseAlreadySynced()
 			return
 		}
 
@@ -1111,7 +1130,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedElementConflicts()
 			) {
-				this.clearLocalDraft()
+				this.clearLocalDraftAfterFullyPersistedSave()
 			}
 			this.pendingRemoteDesignData = null
 			return
@@ -1136,9 +1155,16 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		await this.tryRestoreLocalDraftAfterRemoteLoad()
 	}
 
-	async resetAndReload(): Promise<void> {
+	async reloadPreservingLocalDraft(): Promise<void> {
 		this.clearPendingRemoteDesignData()
-		this.clearLocalDraft()
+		await this.loadManager.resetAndReload()
+		this.syncBaseDesignDataFromCurrent()
+		await this.tryRestoreLocalDraftAfterRemoteLoad()
+	}
+
+	async reloadDiscardingLocalDraft(): Promise<void> {
+		this.clearPendingRemoteDesignData()
+		this.clearLocalDraftBecauseVersionSwitched()
 		await this.loadManager.resetAndReload()
 		this.syncBaseDesignDataFromCurrent()
 	}
@@ -1177,7 +1203,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedElementConflicts()
 			) {
-				this.clearLocalDraft()
+				this.clearLocalDraftAfterFullyPersistedSave()
 			}
 			this.pendingRemoteDesignData = null
 			return
@@ -1220,14 +1246,14 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	async handleChangeFileVersion(version: number, isNewestVersion: boolean): Promise<void> {
 		this.clearPendingRemoteDesignData()
-		this.clearLocalDraft()
+		this.clearLocalDraftBecauseVersionSwitched()
 		await this.versionManager.handleChangeFileVersion(version, isNewestVersion)
 		this.syncBaseDesignDataFromCurrent()
 	}
 
 	handleReturnLatest(): void {
 		this.clearPendingRemoteDesignData()
-		this.clearLocalDraft()
+		this.clearLocalDraftBecauseVersionSwitched()
 		void this.versionManager
 			.handleReturnLatest()
 			.then(() => this.syncBaseDesignDataFromCurrent())
@@ -1235,7 +1261,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	async handleVersionRollback(version?: number): Promise<void> {
 		this.clearPendingRemoteDesignData()
-		this.clearLocalDraft()
+		this.clearLocalDraftBecauseVersionSwitched()
 		await this.versionManager.handleVersionRollback(version)
 		this.syncBaseDesignDataFromCurrent()
 	}
@@ -1307,7 +1333,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		if (
 			hashDesignDataComparable(currentData) === this.stateBag.getPrevDesignDataFingerprint()
 		) {
-			this.clearLocalDraft()
+			this.clearLocalDraftBecauseAlreadySynced()
 		} else {
 			this.persistLocalDraft(currentData)
 		}
@@ -1333,7 +1359,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		if (remoteVersion !== null) {
 			this.updateLocalVersionIfNewer(remoteVersion)
 		}
-		this.clearLocalDraft()
+		this.clearLocalDraftBecauseRemoteAccepted()
 		return true
 	}
 
@@ -1367,7 +1393,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedElementConflicts()
 			) {
-				this.clearLocalDraft()
+				this.clearLocalDraftAfterFullyPersistedSave()
 			}
 			return true
 		}

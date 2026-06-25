@@ -176,6 +176,141 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(baseDesignData?.name).toBe("remote")
 	})
 
+	it("writes manual refresh drafts through the emergency fallback", () => {
+		const draftData = createDesignData("manual-refresh", [rect("moved", { x: 120 })])
+		const { manager } = createManager()
+
+		manager.persistLocalDraft(draftData, { immediate: true, reason: "manual-refresh" })
+
+		expect(writeDesignDraft).toHaveBeenCalledWith(
+			expect.objectContaining({
+				designData: draftData,
+				reason: "manual-refresh",
+			}),
+			{ emergency: true },
+		)
+	})
+
+	it("force reloads remote data while preserving local draft recovery", async () => {
+		const { manager } = createManager()
+		const managerInternals = manager as unknown as {
+			loadManager: { resetAndReload: () => Promise<void> }
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+		}
+		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(undefined)
+		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
+
+		await manager.reloadPreservingLocalDraft()
+
+		expect(managerInternals.loadManager.resetAndReload).toHaveBeenCalledTimes(1)
+		expect(deleteDesignDraft).not.toHaveBeenCalled()
+		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).toHaveBeenCalledTimes(1)
+	})
+
+	it("force reloads remote data while discarding local drafts for data source switches", async () => {
+		const { manager } = createManager()
+		const managerInternals = manager as unknown as {
+			loadManager: { resetAndReload: () => Promise<void> }
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+		}
+		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(undefined)
+		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
+
+		await manager.reloadDiscardingLocalDraft()
+
+		expect(managerInternals.loadManager.resetAndReload).toHaveBeenCalledTimes(1)
+		expect(deleteDesignDraft).toHaveBeenCalledTimes(1)
+		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).not.toHaveBeenCalled()
+	})
+
+	it("clears local draft after a fully persisted save", async () => {
+		const localData = createDesignData("local")
+		const { manager } = createManager(localData)
+		const managerInternals = manager as unknown as {
+			saveManager: {
+				commitSave: () => Promise<unknown>
+				wasLastSaveFullyPersisted: () => boolean
+			}
+		}
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: true,
+			savedVersion: 3,
+			savedUpdatedAt: "2026-01-01 00:00:00",
+			fullyPersisted: true,
+			savedDesignData: localData,
+			savedFingerprint: hashDesignDataComparable(localData),
+		})
+		managerInternals.saveManager.wasLastSaveFullyPersisted = vi.fn(() => true)
+
+		await manager.saveToRemote()
+
+		expect(deleteDesignDraft).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps local draft when save succeeds without full persistence", async () => {
+		const localData = createDesignData("local")
+		const { manager } = createManager(localData)
+		const managerInternals = manager as unknown as {
+			saveManager: {
+				commitSave: () => Promise<unknown>
+				wasLastSaveFullyPersisted: () => boolean
+			}
+		}
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: true,
+			savedVersion: 3,
+			savedUpdatedAt: "2026-01-01 00:00:00",
+			fullyPersisted: false,
+			savedDesignData: localData,
+			savedFingerprint: hashDesignDataComparable(localData),
+		})
+		managerInternals.saveManager.wasLastSaveFullyPersisted = vi.fn(() => false)
+
+		await manager.saveToRemote()
+
+		expect(deleteDesignDraft).not.toHaveBeenCalled()
+	})
+
+	it("keeps local draft when save fails", async () => {
+		const localData = createDesignData("local")
+		const { manager } = createManager(localData)
+		const managerInternals = manager as unknown as {
+			saveManager: { commitSave: () => Promise<unknown> }
+		}
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: false,
+			reason: "error",
+			error: "save failed",
+		})
+
+		await manager.saveToRemote()
+
+		expect(deleteDesignDraft).not.toHaveBeenCalled()
+	})
+
+	it("clears local draft for version data source switches", async () => {
+		const { manager } = createManager()
+		const managerInternals = manager as unknown as {
+			versionManager: {
+				handleChangeFileVersion: () => Promise<void>
+				handleReturnLatest: () => Promise<void>
+				handleVersionRollback: () => Promise<void>
+			}
+		}
+		managerInternals.versionManager.handleChangeFileVersion = vi
+			.fn()
+			.mockResolvedValue(undefined)
+		managerInternals.versionManager.handleReturnLatest = vi.fn().mockResolvedValue(undefined)
+		managerInternals.versionManager.handleVersionRollback = vi.fn().mockResolvedValue(undefined)
+
+		await manager.handleChangeFileVersion(2, false)
+		manager.handleReturnLatest()
+		await Promise.resolve()
+		await manager.handleVersionRollback(1)
+
+		expect(deleteDesignDraft).toHaveBeenCalledTimes(3)
+	})
+
 	it("defers incoming remote data while a conflict is active", () => {
 		const localData = createDesignData("local")
 		const remoteData = createDesignData("remote")
