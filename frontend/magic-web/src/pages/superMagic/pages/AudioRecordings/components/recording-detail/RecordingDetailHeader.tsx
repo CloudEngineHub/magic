@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react"
 import {
+	AlertTriangle,
+	CheckCircle2,
 	ChevronLeft,
 	Download,
 	Ellipsis,
+	Loader,
 	Pencil,
 	Share2,
 	Sparkles,
 	FolderInput,
 	Trash2,
+	type LucideIcon,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -71,6 +75,54 @@ interface RecordingDetailHeaderProps {
 	onDelete: () => void
 }
 
+interface RecordingDetailSummaryBadge {
+	label: string
+	icon: LucideIcon
+	iconClassName?: string
+	toneClassName: string
+}
+
+/** Resolves the detail-title summary badge without modeling list-only pipeline states. */
+function resolveDetailSummaryBadge(
+	projectItem: AudioProjectListItem,
+	t: (key: string) => string,
+): RecordingDetailSummaryBadge {
+	if (isAudioProjectSummaryReady(projectItem)) {
+		return {
+			label: t("card.summarized"),
+			icon: CheckCircle2,
+			toneClassName:
+				"border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+		}
+	}
+
+	if (
+		projectItem.card_status === "summary_failed" ||
+		(projectItem.current_phase === "summarizing" && projectItem.phase_status === "failed")
+	) {
+		return {
+			label: t("card.summaryFailed"),
+			icon: AlertTriangle,
+			toneClassName: "border-destructive/25 bg-destructive/10 text-destructive",
+		}
+	}
+
+	if (isAudioProjectSummarizing(projectItem)) {
+		return {
+			label: t("card.summarizing"),
+			icon: Loader,
+			iconClassName: "animate-spin",
+			toneClassName: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+		}
+	}
+
+	return {
+		label: t("card.notSummarized"),
+		icon: Sparkles,
+		toneClassName: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+	}
+}
+
 /** Desktop detail header with inline rename, status badges, and owner action menus. */
 export function RecordingDetailHeader({
 	title,
@@ -106,10 +158,9 @@ export function RecordingDetailHeader({
 
 	const statusBadge = useMemo(() => {
 		if (!projectItem) return null
-		if (isAudioProjectSummaryReady(projectItem)) return t("card.summarized")
-		if (isAudioProjectSummarizing(projectItem)) return t("card.summarizing")
-		return t("card.notSummarized")
+		return resolveDetailSummaryBadge(projectItem, t)
 	}, [projectItem, t])
+	const StatusBadgeIcon = statusBadge?.icon
 
 	/** i18n labels for recording source resolution — mirrors AudioRecordingCard usage */
 	const sourceLabels = useMemo(
@@ -122,6 +173,7 @@ export function RecordingDetailHeader({
 		[t],
 	)
 
+	/** Commits an inline title edit only when the user changed the trimmed value. */
 	async function commitTitleEdit() {
 		if (renaming) return
 		const next = titleDraft.trim()
@@ -159,7 +211,7 @@ export function RecordingDetailHeader({
 										if (event.key === "Enter") void commitTitleEdit()
 										if (event.key === "Escape") setEditingTitle(false)
 									}}
-									className="h-9 max-w-xl min-w-[300px] text-lg font-semibold"
+									className="h-9 min-w-[300px] max-w-xl text-lg font-semibold"
 									data-testid="recording-detail-title-input"
 								/>
 							) : (
@@ -194,8 +246,19 @@ export function RecordingDetailHeader({
 									{resolveRecordingSourceLabel(projectItem, sourceLabels)}
 								</span>
 								{statusBadge ? (
-									<span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
-										{statusBadge}
+									<span
+										className={`inline-flex h-5 items-center gap-1 rounded-full border px-1.5 text-[11px] font-medium leading-[14px] ${statusBadge.toneClassName}`}
+										data-testid="recording-detail-summary-status"
+									>
+										{StatusBadgeIcon ? (
+											<span className="inline-flex size-3 shrink-0 items-center justify-center">
+												<StatusBadgeIcon
+													className={`block size-3 ${statusBadge.iconClassName ?? ""}`}
+													aria-hidden
+												/>
+											</span>
+										) : null}
+										<span className="leading-[14px]">{statusBadge.label}</span>
 									</span>
 								) : null}
 							</div>

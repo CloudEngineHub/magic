@@ -63,7 +63,10 @@ vi.mock("react-i18next", async (importOriginal) => {
 					"card.generateSummary": "Generate summary",
 					"card.moveToGroup": "Move to group",
 					"card.moreActions": "More actions",
+					"card.notSummarized": "Not summarized",
 					"card.summarized": "Summarized",
+					"card.summarizing": "Summarizing now",
+					"card.summaryFailed": "Summary failed",
 					"card.sourceRecorded": "Recorded",
 					"actions.deleteTitle": "Delete",
 				}
@@ -180,6 +183,14 @@ describe("RecordingDetailHeader action styling", () => {
 		)
 	})
 
+	it("renders the summarized title badge with the prototype success tone", () => {
+		render(<RecordingDetailHeader {...baseProps} />)
+
+		const badge = screen.getByTestId("recording-detail-summary-status")
+		expect(badge).toHaveTextContent("Summarized")
+		expect(badge).toHaveClass("border-emerald-500/25", "bg-emerald-500/10")
+	})
+
 	it("hides generate summary CTA while summary generation is in progress", () => {
 		render(
 			<RecordingDetailHeader
@@ -195,6 +206,10 @@ describe("RecordingDetailHeader action styling", () => {
 		)
 
 		expect(screen.queryByTestId("recording-detail-generate-summary")).not.toBeInTheDocument()
+		const badge = screen.getByTestId("recording-detail-summary-status")
+		expect(badge).toHaveTextContent("Summarizing now")
+		expect(badge).toHaveClass("border-sky-500/25", "bg-sky-500/10")
+		expect(badge.querySelector("svg")).toHaveClass("animate-spin")
 	})
 
 	it("shows generate summary CTA when manual summary can be submitted", () => {
@@ -214,6 +229,9 @@ describe("RecordingDetailHeader action styling", () => {
 		expect(screen.getByTestId("recording-detail-generate-summary")).toHaveTextContent(
 			"Generate summary",
 		)
+		const badge = screen.getByTestId("recording-detail-summary-status")
+		expect(badge).toHaveTextContent("Not summarized")
+		expect(badge).toHaveClass("border-amber-500/25", "bg-amber-500/10")
 	})
 
 	it("shows summary CTA again when summary generation failed", () => {
@@ -231,6 +249,9 @@ describe("RecordingDetailHeader action styling", () => {
 		)
 
 		expect(screen.getByTestId("recording-detail-generate-summary")).toBeInTheDocument()
+		const badge = screen.getByTestId("recording-detail-summary-status")
+		expect(badge).toHaveTextContent("Summary failed")
+		expect(badge).toHaveClass("border-destructive/25", "bg-destructive/10")
 	})
 
 	it("passes export callbacks to the header contract", () => {
