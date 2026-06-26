@@ -8,11 +8,6 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.i18n import i18n
 from app.path_manager import PathManager
-from app.core.subagent_delegation import (
-    build_crew_delegation_disabled_message,
-    is_crew_agent_code,
-    is_subagent_delegation_enabled,
-)
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 from app.tools.subagent_runtime_models import (
@@ -38,7 +33,7 @@ class WaitForSubagentsParams(BaseToolParams):
     )
     timeout: float = Field(
         30.0,
-        description="Max seconds to wait for all agents to finish. Default: 30 seconds. Use -1 to wait until all agents finish or the parent agent is interrupted."
+        description="Max seconds to wait for all agents to finish. Default: 30 seconds."
     )
 
 
@@ -68,19 +63,6 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
             state = states[0]
             handle = await subagent_session_manager.get_handle(state.agent_name, agent_id)
             resolved.append((agent_id, state.agent_name, handle, None))
-
-        agent_context = tool_context.get_extension("agent_context") if tool_context else None
-        waits_for_crew_agent = any(
-            agent_name is not None and is_crew_agent_code(agent_name)
-            for _, agent_name, _, err in resolved
-            if err is None
-        )
-        if waits_for_crew_agent and not is_subagent_delegation_enabled(agent_context):
-            message = build_crew_delegation_disabled_message()
-            return ToolResult.error(
-                message,
-                extra_info={"error": "crew_agent_delegation_disabled", "user_error": message},
-            )
 
         # Phase 2: wait for all still-running tasks
         running_task_refs: dict[asyncio.Task, tuple[str, str]] = {
@@ -129,20 +111,7 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
         self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None
     ) -> Optional[ToolDetail]:
         if not result.ok:
-            extra = result.extra_info or {}
-            output = extra.get("user_error") or result.content or i18n.translate(
-                "wait_for_subagents.error",
-                category="tool.messages",
-                error="",
-            )
-            return ToolDetail(
-                type=DisplayType.TERMINAL,
-                data=TerminalContent(
-                    command="wait_for_subagents",
-                    output=output,
-                    exit_code=1,
-                ),
-            )
+            return None
 
         data = result.data if isinstance(result.data, dict) else {}
         items = data.get("results", [])
@@ -211,31 +180,23 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
             if len(results) == 1 and results[0].get("agent_name"):
                 item = results[0]
                 agent_name = item["agent_name"]
-                agent_id = item.get("agent_id", "")
+                action = i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
                 status = item.get("status", "")
-                is_crew = is_crew_agent_code(agent_name)
-                if is_crew:
-                    action = i18n.translate("wait_for_subagents.crew", category="tool.actions")
-                    state = await SubagentRuntimeStore.load_state(agent_name, agent_id)
-                    display_name = state.crew_display_name or agent_name
-                else:
-                    action = i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
-                    display_name = agent_name
                 if status in {SubagentStatus.PENDING, SubagentStatus.RUNNING}:
-                    summary = i18n.translate("call_subagent.running", category="tool.messages", agent_name=display_name)
+                    summary = i18n.translate("call_subagent.running", category="tool.messages", agent_name=agent_name)
                 elif status == SubagentStatus.DONE:
-                    summary = i18n.translate("call_subagent.done", category="tool.messages", agent_name=display_name)
+                    summary = i18n.translate("call_subagent.done", category="tool.messages", agent_name=agent_name)
                 elif status == SubagentStatus.ERROR:
                     summary = i18n.translate(
                         "call_subagent.failed",
                         category="tool.messages",
-                        agent_name=display_name,
+                        agent_name=agent_name,
                         error=item.get("error", i18n.translate("unknown.message", category="tool.messages")),
                     )
                 elif status == SubagentStatus.INTERRUPTED:
-                    summary = i18n.translate("call_subagent.interrupted", category="tool.messages", agent_name=display_name)
+                    summary = i18n.translate("call_subagent.interrupted", category="tool.messages", agent_name=agent_name)
                 else:
-                    summary = f"{display_name}: {status}"
+                    summary = f"{agent_name}: {status}"
             else:
                 summary = ", ".join(f"{item['agent_id']}: {item['status']}" for item in results)
             return {"action": action, "remark": summary}

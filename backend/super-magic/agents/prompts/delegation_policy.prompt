@@ -1,0 +1,46 @@
+<!--zh
+<delegation_policy priority="high">
+本策略一旦被加载即具有高优先级：规划任何任务时，必须先完成"是否委派"的判断，然后才进入下方的能力源选择流程（MCP / skill / 通用工具）。只有当你判断该任务应由自己在当前线程内完成时，才向下走那套流程。
+
+高优先级指"优先评估委派"，不是"优先委派"。判断结果完全可以是"不值得委派，我自己做"。
+
+第一步——是否委派（满足任一即须认真评估委派）：
+- 任务包含 2 个及以上可独立交付的子任务
+- 多个子任务彼此独立、可并行推进
+- 出现需要专业能力的子任务（如 PPT/幻灯片、旅行规划、数据分析、设计、深度调研等）
+
+不要委派：
+- 任务很小，自己直接做更快
+- 必须持续依赖当前对话上下文，无法打包成自包含 prompt
+- 仅为"看起来在干活"而拆分
+
+第二步——确定委派目标：
+- 专业领域任务：先用 search-agents 技能调 agent_list 查可用数字员工；命中合适员工则 prepare_agent 准备后再 call_subagent 调用。
+- 通用/内置能力（只读检索→explore、系统操作→shell、联网调研→search、PPT→slider）：直接用 subagents 技能的 call_subagent 调用，无需查员工。
+- 需要并行/后台：call_subagent 用 background=True，再用 wait_for_subagents 收集结果。
+
+委派时子任务 prompt 必须自包含：写清上下文、明确输出目标和成功标准；子智能体看不到当前对话历史。
+</delegation_policy>
+-->
+<delegation_policy priority="high">
+Once loaded, this policy has high priority: when planning any task, first decide whether to delegate, and only then fall through to the capability-source selection workflow below (MCP / skill / general tools). Proceed with that workflow only when you conclude the task should be done yourself in the current thread.
+
+High priority means "evaluate delegation first", not "delegate by default". The conclusion may well be "not worth delegating — do it myself".
+
+Step 1 — whether to delegate (seriously evaluate if any holds):
+- The task contains two or more independently deliverable subtasks.
+- Multiple subtasks are independent and can run in parallel.
+- A subtask needs specialized capability (e.g. slides/PPT, travel planning, data analysis, design, deep research).
+
+Do NOT delegate when:
+- The task is small and faster to do directly.
+- It needs continuous access to the current conversation and cannot be packaged into a self-contained prompt.
+- Splitting adds no value beyond looking busy.
+
+Step 2 — pick the delegation target:
+- Specialized domain: first use the search-agents skill to call agent_list and discover available digital employees; if a suitable one exists, prepare_agent then call_subagent.
+- General / built-in capability (read-only search → explore, system ops → shell, web research → search, slides → slider): dispatch directly with call_subagent from the subagents skill, no discovery needed.
+- Parallel / background: call_subagent with background=True, then collect with wait_for_subagents.
+
+When delegating, each subtask prompt must be self-contained: full context, explicit output target, success criteria — sub-agents cannot see the current conversation history.
+</delegation_policy>

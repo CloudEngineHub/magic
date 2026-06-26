@@ -327,6 +327,10 @@
         "zh_CN": "查找数字员工",
         "en_US": "Find digital employees"
     },
+    "prepare_agent": {
+        "zh_CN": "准备数字员工",
+        "en_US": "Prepare digital employee"
+    },
     "wait_for_subagents": {
         "zh_CN": "等待数字员工完成",
         "en_US": "Wait for sub-agents"

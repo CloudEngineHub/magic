@@ -470,8 +470,16 @@ class AgentContext(BaseAgentContext):
         logger.debug(f"已更新 subagent_delegation_enabled: {enabled}")
 
     def is_subagent_delegation_enabled(self) -> bool:
-        """当前 Agent 是否启用 subagents 委派能力。"""
-        return bool(self.shared_context.get_field("subagent_delegation_enabled"))
+        """Return whether sub-agent delegation is enabled for this agent.
+
+        Delegation is enabled when either:
+        - the explicit flag was set via set_subagent_delegation_enabled(True), OR
+        - the 'subagents' skill is present in the agent's loaded skill list
+          (i.e. it is listed under system_skills in the .agent config).
+        """
+        if bool(self.shared_context.get_field("subagent_delegation_enabled")):
+            return True
+        return self.has_skill("subagents")
 
     def set_excluded_skills(self, skills: List[str]) -> None:
         """设置当前 agent 排除的 system skill 名称列表

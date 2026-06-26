@@ -10,11 +10,7 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.i18n import i18n
 from app.path_manager import PathManager
-from app.core.subagent_delegation import (
-    build_crew_delegation_disabled_message,
-    is_crew_agent_code,
-    is_subagent_delegation_enabled,
-)
+from app.service.agent_runner import _inherit_parent_context, apply_isolated_agent_model_selection
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 from app.tools.subagent_runtime_models import (
@@ -46,8 +42,7 @@ class CallSubagentParams(BaseToolParams):
             "- 'magic': General-purpose agent with full tool access (web search, file ops, code execution, etc.). Use for complex multi-step tasks.\n"
             "- 'explore': Read-only codebase exploration. Searches files, reads code, answers structural questions. Cannot modify anything.\n"
             "- 'shell': Shell command execution specialist. Runs scripts, installs deps, performs system operations.\n"
-            "Other agent files (e.g. 'data-analyst') can also be used by name. "
-            "Crew agents use codes such as 'SMA-xxxx'."
+            "Other agent files (e.g. 'data-analyst') can also be used by name."
         )
     )
     agent_id: str = Field(
@@ -84,70 +79,22 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         task: Optional[asyncio.Task] = None
         try:
             from app.core.context.agent_context import AgentContext
+            from app.core.entity.message.client_message import AgentMode
             from app.magic.agent import Agent
 
-            params.agent_name = params.agent_name.strip()
+            # 别名容错：复用 chat 派发链路的同一份映射（ppt -> slider 等），
+            # 归一为本地 .agent 名后再贯穿 session key / 状态 / Agent 加载，避免出现两套匹配逻辑。
+            params.agent_name = AgentMode.resolve_agent_type(params.agent_name)
 
             # 深度检查：子 Agent 不允许再派发子 Agent
             parent: Optional[AgentContext] = tool_context.get_extension("agent_context")
             current_depth = parent.get_subagent_depth() if parent else 0
             tool_call_id = tool_context.tool_call_id or ""
-            _crew_display_name = ""
             if current_depth >= _MAX_AGENT_DEPTH:
                 return ToolResult.error((
                     f"Sub-agent spawn depth limit reached ({current_depth}/{_MAX_AGENT_DEPTH}). "
                     "Sub-agents are not allowed to call call_subagent."
                 ))
-
-            if is_crew_agent_code(params.agent_name):
-                disabled_message = build_crew_delegation_disabled_message()
-                if not is_subagent_delegation_enabled(parent):
-                    return ToolResult.error(
-                        disabled_message,
-                        extra_info={
-                            "agent_name": params.agent_name,
-                            "agent_id": params.agent_id,
-                            "error": "crew_agent_delegation_disabled",
-                            "user_error": disabled_message,
-                        },
-                    )
-
-                parent_agent_code = parent.get_agent_code() if parent else None
-                if parent_agent_code and parent_agent_code.strip() == params.agent_name:
-                    user_error = "The current Crew agent cannot assign work to itself."
-                    return ToolResult.error(
-                        (
-                            f"Unable to assign the task to Crew agent `{params.agent_name}` "
-                            "because it is the current parent agent."
-                        ),
-                        extra_info={
-                            "agent_name": params.agent_name,
-                            "agent_id": params.agent_id,
-                            "error": "crew_agent_self_call",
-                            "user_error": user_error,
-                        },
-                    )
-
-                try:
-                    from app.service.crew_agent_runtime_service import CrewAgentRuntimeService
-
-                    crew_info = await CrewAgentRuntimeService().ensure_compiled(params.agent_name)
-                    _crew_display_name = crew_info.name or ""
-                except Exception as e:
-                    logger.exception(f"Crew agent preparation failed: {params.agent_name}: {e}")
-                    user_error = "The Crew agent could not be prepared. Please try again later."
-                    return ToolResult.error(
-                        (
-                            f"Unable to prepare Crew agent `{params.agent_name}` before assignment. "
-                            f"Runtime error: {e}"
-                        ),
-                        extra_info={
-                            "agent_name": params.agent_name,
-                            "agent_id": params.agent_id,
-                            "error": str(e),
-                            "user_error": user_error,
-                        },
-                    )
 
             handle = await subagent_session_manager.get_handle(params.agent_name, params.agent_id)
             async with handle.lock:
@@ -155,8 +102,6 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 state = await SubagentRuntimeStore.load_state(params.agent_name, params.agent_id)
                 state.agent_name = params.agent_name
                 state.agent_id = params.agent_id
-                if _crew_display_name:
-                    state.crew_display_name = _crew_display_name
                 if state.status == SubagentStatus.RUNNING and not handle.is_running():
                     _mark_missing_running_as_interrupted(state)
                     async with handle.state_lock:
@@ -190,8 +135,6 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                         ))
 
                 new_agent_context = AgentContext(isolated=True)
-                from app.service.agent_runner import _inherit_parent_context, apply_isolated_agent_model_selection
-
                 _inherit_parent_context(new_agent_context, parent, depth=current_depth + 1)
                 new_agent_context.set_chat_history_dir(str(PathManager.get_subagents_chat_history_dir()))
 
@@ -293,12 +236,6 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
-        if is_crew_agent_code(agent_name):
-            action = i18n.translate("call_subagent.crew", category="tool.actions")
-            state = await SubagentRuntimeStore.load_state(agent_name, agent_id)
-            display_name = state.crew_display_name or agent_name
-            status_text = i18n.translate("call_subagent.status.accepted", category="tool.messages")
-            return {"action": action, "remark": _build_status_remark(display_name, status_text)}
         action = (
             i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
             if agent_name
@@ -360,7 +297,7 @@ class CallSubagent(BaseTool[CallSubagentParams]):
             extra = result.extra_info or {}
             status = "error"
             agent_result = ""
-            error = extra.get("user_error") or result.content or ""
+            error = extra.get("error") or result.content or ""
             resume_hint = ""
 
         return _build_subagent_tool_detail(agent_name, agent_id, status, agent_result, error, resume_hint)
@@ -420,6 +357,18 @@ Example: Research report is ready: [@file_path:reports/market-research.md]
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
+        action = (
+            i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
+            if agent_name
+            else i18n.translate("call_subagent", category="tool.actions")
+        )
+
+        if not result.ok:
+            status_text = i18n.translate("call_subagent.status.failed", category="tool.messages")
+            return {"action": action, "remark": _build_status_remark(agent_id, status_text)}
+
+        payload = result.data if isinstance(result.data, dict) else {}
+        status = payload.get("status", "")
 
         _status_key_map = {
             SubagentStatus.PENDING: "call_subagent.status.running",
@@ -428,31 +377,6 @@ Example: Research report is ready: [@file_path:reports/market-research.md]
             SubagentStatus.ERROR: "call_subagent.status.failed",
             SubagentStatus.INTERRUPTED: "call_subagent.status.interrupted",
         }
-
-        if is_crew_agent_code(agent_name):
-            action = i18n.translate("call_subagent.crew", category="tool.actions")
-            state = await SubagentRuntimeStore.load_state(agent_name, agent_id)
-            display_name = state.crew_display_name or agent_name
-            if not result.ok:
-                status_text = i18n.translate("call_subagent.status.failed", category="tool.messages")
-            else:
-                payload = result.data if isinstance(result.data, dict) else {}
-                status = payload.get("status", "")
-                status_key = _status_key_map.get(status, "call_subagent.status.accepted")
-                status_text = i18n.translate(status_key, category="tool.messages")
-            return {"action": action, "remark": _build_status_remark(display_name, status_text)}
-
-        action = (
-            i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
-            if agent_name
-            else i18n.translate("call_subagent", category="tool.actions")
-        )
-        if not result.ok:
-            status_text = i18n.translate("call_subagent.status.failed", category="tool.messages")
-            return {"action": action, "remark": _build_status_remark(agent_id, status_text)}
-
-        payload = result.data if isinstance(result.data, dict) else {}
-        status = payload.get("status", "")
         status_key = _status_key_map.get(status, "call_subagent.status.accepted")
         status_text = i18n.translate(status_key, category="tool.messages")
         return {"action": action, "remark": _build_status_remark(agent_id, status_text)}

@@ -1351,6 +1351,22 @@
         "zh_CN": "数字员工列表获取失败，请稍后重试",
         "en_US": "Unable to load the digital employee list. Please try again later."
     },
+    "prepare_agent.preparing": {
+        "zh_CN": "正在准备数字员工",
+        "en_US": "Preparing the digital employee"
+    },
+    "prepare_agent.ready": {
+        "zh_CN": "数字员工 {{agent}} 已就绪",
+        "en_US": "Digital employee {{agent}} is ready"
+    },
+    "prepare_agent.done": {
+        "zh_CN": "数字员工已准备完成",
+        "en_US": "The digital employee is ready"
+    },
+    "prepare_agent.error": {
+        "zh_CN": "数字员工准备失败，请稍后重试",
+        "en_US": "Unable to prepare the digital employee. Please try again later."
+    },
     "wait_for_subagents.error": {
         "zh_CN": "等待子智能体失败: {{error}}",
         "en_US": "Failed while waiting for sub-agents: {{error}}"

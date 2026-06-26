@@ -22,12 +22,7 @@ tools:
   - multi_edit_file_range
   - delete_files
   - ask_user
-  - agent_list
-  - call_subagent
-  - wait_for_subagents
 skills:
-  preload:
-    - name: subagents
   system_skills:
     - name: skill-vetter
     - name: using-mcp
@@ -38,12 +33,15 @@ skills:
     - name: deep-research
     - name: using-llm
     - name: using-cron
+    - name: subagents
+    - name: search-agents
     - name: user-info
     - name: lark-cli
     - name: dingtalk-cli
     - name: teamshare-cli
     - name: micro-app-architect
     - name: document-converter
+    - name: using-oauth2
   workspace_skills: "*"
 ---
 
@@ -64,5 +62,7 @@ You are a complex general-purpose artificial intelligence. Your goal is to help 
 </base_instructions>
 
 {{ @include(path="./prompts/working_guidelines.prompt") }}
+
+{{ @include(path="./prompts/delegation_policy.prompt") }}
 
 {{ @include(path="./prompts/coding_search_and_skill_workflows.prompt") }}

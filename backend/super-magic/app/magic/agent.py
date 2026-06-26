@@ -71,7 +71,6 @@ from app.utils.file_utils import convert_file_tree_to_string, extract_paths_from
 from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
 from app.core.skill_utils.skill_sources import get_system_skills_dir, get_workspace_skills_dir
-from app.core.subagent_delegation import SUBAGENTS_SKILL
 from agentlang.agent.define import SkillsConfig, SystemSkillEntry
 
 logger = get_logger(__name__)
@@ -352,14 +351,9 @@ class Agent(BaseAgent):
                 system_skills=[SystemSkillEntry(name=self._ALWAYS_MOUNT_SKILL)]
             )
         system_skill_names = skills_config.get_system_skill_names()
-        preload_skill_names = [entry.name for entry in skills_config.preload]
         self.loaded_skills = system_skill_names
         self.agent_context.set_loaded_skills(system_skill_names)
         self.agent_context.set_excluded_skills(skills_config.excluded_skills)
-        # 委派能力来源既可能是 system_skills，也可能是 preload；两处任一包含 subagents 即视为启用
-        self.agent_context.set_subagent_delegation_enabled(
-            SUBAGENTS_SKILL in system_skill_names or SUBAGENTS_SKILL in preload_skill_names
-        )
         skills_prompt_content = generate_skills_prompt(
             skills_config,
             agent_name=self.agent_name,
