@@ -60,6 +60,13 @@ const getVitestBaseConfig = () => {
 					replacement: resolve(__dirname, "packages/html-sandbox/src/runtime/index.ts"),
 				},
 				{
+					find: "@dtyq/html-sandbox/utils/parentOrigin",
+					replacement: resolve(
+						__dirname,
+						"packages/html-sandbox/src/utils/parentOrigin.ts",
+					),
+				},
+				{
 					find: "@dtyq/html-sandbox",
 					replacement: resolve(__dirname, "packages/html-sandbox/src/index.ts"),
 				},

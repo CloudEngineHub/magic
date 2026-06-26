@@ -60,6 +60,7 @@ export interface AICardRootRenderProps {
 	allowEdit?: boolean
 	saveEditContent?: (...args: any[]) => Promise<void>
 	selectedProject?: { id: string; name?: string }
+	projectId?: string
 }
 
 export type AICardViewMode = "dashboard" | "detail" | "config"

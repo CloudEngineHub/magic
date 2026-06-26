@@ -42,13 +42,18 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import useExportMenuItems from "./useExportMenuItems"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
+import { useCurrentHtmlFileInfo } from "./hooks/useCurrentHtmlFileInfo"
 import useShareButtonVisibility from "../../hooks/useShareButtonVisibility"
 import type { HeaderActionConfig } from "../../components/CommonHeaderV2/types"
 import useServerUpdate from "../../hooks/useServerUpdate"
 import CodeVersionCompareDialog from "../../components/versioning/CodeVersionCompareDialog"
 import VersionCompareDialog from "../../components/versioning/VersionCompareDialog"
 import HistoryVersionCompareDialog from "../../components/PPTRender/components/HistoryVersionCompareDialog"
-import { getFileContentById, getTemporaryDownloadUrl, downloadFileContent } from "@/pages/superMagic/utils/api"
+import {
+	getFileContentById,
+	getTemporaryDownloadUrl,
+	downloadFileContent,
+} from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -346,10 +351,11 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 	}, [handleDetailHeaderRefresh])
 
-	const currentAttachmentItem = useMemo(
-		() => allAttachmentItems.find((item: any) => item.file_id === displayData?.file_id),
-		[allAttachmentItems, displayData?.file_id],
-	)
+	const currentHtmlFileInfo = useCurrentHtmlFileInfo({
+		attachmentList: allAttachmentItems,
+		fileId: displayData?.file_id,
+		fallbackFileName: data?.file_name || displayData?.file_name,
+	})
 
 	/**
 	 * 仅可视化预览：dashboard / audio / video 入口 HTML 走构建内 templates；dashboard 另换壳 CSS/JS。
@@ -359,13 +365,13 @@ export default memo(function HTML(props: HTMLProps) {
 		if (viewMode === "code" || isPlaybackMode || isInPPTMode) return undefined
 		if (isEditMode && !isDataAnalysis) return undefined
 		return resolveHtmlPreviewBundledTemplate({
-			fileName: currentAttachmentItem?.file_name || data?.file_name,
-			relativeFilePath: currentAttachmentItem?.relative_file_path,
+			fileName: currentHtmlFileInfo.fileName || data?.file_name,
+			relativeFilePath: currentHtmlFileInfo.relativeFilePath,
 			displayConfigType: displayConfig?.type,
 		})
 	}, [
-		currentAttachmentItem?.file_name,
-		currentAttachmentItem?.relative_file_path,
+		currentHtmlFileInfo,
+		data?.file_name,
 		displayConfig?.type,
 		isDataAnalysis,
 		isEditMode,
@@ -475,31 +481,35 @@ export default memo(function HTML(props: HTMLProps) {
 
 	// ==================== 历史版本对比 ====================
 	const [showHistoryCompareDialog, setShowHistoryCompareDialog] = useState(false)
-	const [compareHistoryVersion, setCompareHistoryVersion] = useState<number | undefined>(undefined)
+	const [compareHistoryVersion, setCompareHistoryVersion] = useState<number | undefined>(
+		undefined,
+	)
 	const [compareHistoryContent, setCompareHistoryContent] = useState<string>("")
 	/** Ignore stale history version fetch responses when user switches versions quickly */
 	const compareHistorySwitchSeqRef = useRef(0)
 
 	/** 获取指定版本内容用于对比（不改变当前显示版本） */
-	const getVersionContentForCompare = useMemoizedFn(async (targetVersion: number): Promise<string | null> => {
-		if (!fileId) return null
-		try {
-			const urlRes = await getTemporaryDownloadUrl({
-				file_ids: [fileId],
-				file_versions: { [fileId]: targetVersion },
-			})
-			if (!urlRes[0]?.url) {
-				magicToast.error(t("common.fileUrlFetchFailed"))
+	const getVersionContentForCompare = useMemoizedFn(
+		async (targetVersion: number): Promise<string | null> => {
+			if (!fileId) return null
+			try {
+				const urlRes = await getTemporaryDownloadUrl({
+					file_ids: [fileId],
+					file_versions: { [fileId]: targetVersion },
+				})
+				if (!urlRes[0]?.url) {
+					magicToast.error(t("common.fileUrlFetchFailed"))
+					return null
+				}
+				const content = await downloadFileContent(urlRes[0].url, { responseType: "text" })
+				return content as string
+			} catch (error) {
+				console.error("Failed to download version content for compare:", error)
+				magicToast.error(t("common.fileDownloadFailed"))
 				return null
 			}
-			const content = await downloadFileContent(urlRes[0].url, { responseType: "text" })
-			return content as string
-		} catch (error) {
-			console.error("Failed to download version content for compare:", error)
-			magicToast.error(t("common.fileDownloadFailed"))
-			return null
-		}
-	})
+		},
+	)
 
 	/** 处理历史版本内容（路径替换） */
 	const processHistoricalContent = useMemoizedFn(async (rawHtml: string): Promise<string> => {
@@ -1047,14 +1057,6 @@ export default memo(function HTML(props: HTMLProps) {
 		exportImage?.(displayData?.file_id, format)
 	})
 
-	const relative_file_path = useMemo(() => {
-		const path = attachmentList?.find(
-			(item: any) => item.file_id === displayData?.file_id,
-		)?.relative_file_path
-
-		return path?.replace(displayData?.file_name, "")
-	}, [attachmentList, displayData])
-
 	const handleDownload = useMemoizedFn(() => {
 		onDownload?.(displayData?.file_id, htmlFileVersion)
 	})
@@ -1210,7 +1212,7 @@ export default memo(function HTML(props: HTMLProps) {
 									showText
 									className={cn(
 										isAppendPicking &&
-										"bg-primary/10 text-primary ring-1 ring-primary/30",
+											"bg-primary/10 text-primary ring-1 ring-primary/30",
 									)}
 								/>
 							)}
@@ -1300,21 +1302,21 @@ export default memo(function HTML(props: HTMLProps) {
 		extraMoreMenuItems:
 			!isDataAnalysis && !isCodeViewMode
 				? [
-					{
-						key: "dev-console-toggle",
-						label: (
-							<div className="flex items-center gap-1.5 text-sm">
-								<Terminal size={16} />
-								<span>
-									{devConsoleEnabled
-										? t("stylePanel.closeDevConsole")
-										: t("stylePanel.openDevConsole")}
-								</span>
-							</div>
-						),
-						onClick: handleDevConsoleToggle,
-					},
-				]
+						{
+							key: "dev-console-toggle",
+							label: (
+								<div className="flex items-center gap-1.5 text-sm">
+									<Terminal size={16} />
+									<span>
+										{devConsoleEnabled
+											? t("stylePanel.closeDevConsole")
+											: t("stylePanel.openDevConsole")}
+									</span>
+								</div>
+							),
+							onClick: handleDevConsoleToggle,
+						},
+					]
 				: [],
 	}
 
@@ -1395,7 +1397,7 @@ export default memo(function HTML(props: HTMLProps) {
 								fileId={displayData?.file_id}
 								filePathMapping={filePathMapping}
 								openNewTab={openNewTab}
-								relative_file_path={relative_file_path}
+								htmlRelativeFolderPath={currentHtmlFileInfo.htmlRelativeFolderPath}
 								selectedProject={selectedProject}
 								attachmentList={attachmentList}
 								isPlaybackMode={isPlaybackMode}

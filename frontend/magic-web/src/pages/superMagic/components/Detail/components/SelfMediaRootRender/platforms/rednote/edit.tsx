@@ -592,7 +592,7 @@ const RednoteEditView = observer(function RednoteEditView({
 							onSaveReady={handleSaveReady}
 							filePathMapping={filePathMapping}
 							openNewTab={openNewTab}
-							relative_file_path={currentFile?.relative_file_path}
+							htmlRelativeFolderPath={relativeFolderPath}
 							selectedProject={selectedProject}
 							attachmentList={attachmentList}
 							isVisible

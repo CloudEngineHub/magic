@@ -13,6 +13,7 @@ interface DashboardCardProps {
 	variant: "featured" | "timeline"
 	isActive?: boolean
 	attachmentList?: AICardAttachmentNode[]
+	selectedProject?: { id?: string; name?: string } | null
 	onOpenCard: (cardId: string) => void
 	onOpenHistoryEntry?: (entry: AICardHistoryEntry) => void
 }
@@ -23,6 +24,7 @@ function AICardDashboardCard({
 	variant,
 	isActive = false,
 	attachmentList,
+	selectedProject,
 	onOpenCard,
 	onOpenHistoryEntry,
 }: DashboardCardProps) {
@@ -60,7 +62,11 @@ function AICardDashboardCard({
 			data-active={isActive ? "true" : "false"}
 			data-card-id={item.fileId}
 		>
-			<LatestCardPreview item={item} attachmentList={attachmentList} />
+			<LatestCardPreview
+				item={item}
+				attachmentList={attachmentList}
+				selectedProject={selectedProject}
+			/>
 
 			<div className="absolute inset-x-3 top-3 z-20 flex justify-end">
 				<div className="rounded-full border border-white/20 bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white/90 shadow-sm backdrop-blur-md">
@@ -119,9 +125,11 @@ function AICardDashboardCard({
 function LatestCardPreview({
 	item,
 	attachmentList,
+	selectedProject,
 }: {
 	item: AICardDashboardItem
 	attachmentList?: AICardAttachmentNode[]
+	selectedProject?: { id?: string; name?: string } | null
 }) {
 	return (
 		<>
@@ -129,6 +137,7 @@ function LatestCardPreview({
 				<AICardIframe
 					fileId={item.fileId}
 					attachmentList={attachmentList}
+					selectedProject={selectedProject}
 					className="pointer-events-none h-full w-full [&_iframe]:h-full [&_iframe]:w-full"
 					hideVerticalScroll
 					showSkeleton
