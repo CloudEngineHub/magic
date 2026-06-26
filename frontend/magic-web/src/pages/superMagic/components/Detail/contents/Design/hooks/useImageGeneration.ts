@@ -150,9 +150,8 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 			return cached.models
 		}
 
-		await superMagicModeService.fetchDefaultModeModelList({ force: false })
-		const officialGroups =
-			superMagicModeService.getImageModelGroupsByMode(TopicMode.Design) || []
+		await superMagicModeService.fetchModeList({ force: false })
+		const officialGroups = superMagicModeService.getAllImageModelGroups() || []
 		const officialModels: ImageModelItem[] = officialGroups.flatMap(
 			(groupItem: {
 				group: { id: string; name: string; icon: string; sort: number }
