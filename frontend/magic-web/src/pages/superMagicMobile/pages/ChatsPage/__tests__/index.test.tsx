@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const {
 	switchChatProjectMock,
@@ -9,6 +9,7 @@ const {
 	reloadMock,
 	optimisticRemoveMock,
 	optimisticUpdatePinMock,
+	locationStateMock,
 } = vi.hoisted(() => ({
 	switchChatProjectMock: vi.fn(),
 	deleteProjectMock: vi.fn(),
@@ -16,6 +17,11 @@ const {
 	reloadMock: vi.fn(),
 	optimisticRemoveMock: vi.fn(),
 	optimisticUpdatePinMock: vi.fn(),
+	locationStateMock: {
+		current: null as null | {
+			pendingDeletedProjectId?: string
+		},
+	},
 }))
 
 import ChatsPage from "../index"
@@ -34,6 +40,20 @@ vi.mock("react-i18next", () => ({
 vi.mock("@/routes/components/ViewportRouteGuard", () => ({
 	MobileOnlyRoute: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))
+
+vi.mock("react-router", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("react-router")>()
+	return {
+		...actual,
+		useLocation: () => ({
+			pathname: "/super/chats",
+			search: "",
+			hash: "",
+			key: "test-location",
+			state: locationStateMock.current,
+		}),
+	}
+})
 
 vi.mock("@/pages/superMagic/services", () => ({
 	default: {
@@ -199,6 +219,11 @@ vi.mock("@/pages/superMagicMobile/components/MobileShell/MobileShellAppLayout", 
 }))
 
 describe("ChatsPage", () => {
+	beforeEach(() => {
+		locationStateMock.current = null
+		vi.clearAllMocks()
+	})
+
 	it("pins a chat with optimistic reorder before reloading the chat queries list", async () => {
 		pinProjectMock.mockResolvedValue(undefined)
 		reloadMock.mockResolvedValue(undefined)
@@ -216,6 +241,18 @@ describe("ChatsPage", () => {
 				true,
 			)
 			expect(optimisticUpdatePinMock).toHaveBeenCalledWith("chat-project-1", true)
+			expect(reloadMock).toHaveBeenCalledWith({ silent: true })
+		})
+	})
+
+	it("reuses list deletion handling when returning from deleted chat detail", async () => {
+		locationStateMock.current = { pendingDeletedProjectId: "chat-project-1" }
+		reloadMock.mockResolvedValue(undefined)
+
+		render(<ChatsPage />)
+
+		await waitFor(() => {
+			expect(optimisticRemoveMock).toHaveBeenCalledWith("chat-project-1")
 			expect(reloadMock).toHaveBeenCalledWith({ silent: true })
 		})
 	})
