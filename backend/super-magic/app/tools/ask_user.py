@@ -76,6 +76,15 @@ class AskUserTool(BaseUserToolCallTool[AskUserParams]):
 - 数量多（>10 项）时先给一句话汇总，再列明细
 - 选项式提问（select/multi_select）时，每个选项附一句描述帮助用户理解区别
 
+交互类型选择优先级：
+- 优先使用 confirm / select / multi_select，让用户通过点击完成回答，减少打字
+- 是/否、继续/取消、允许/不允许这类问题，使用 confirm，不要使用 input
+- 如果可以列出 2~8 个常见答案，使用 select；即使不确定是否覆盖全部情况，也使用 select，因为系统会自动追加"其他"自由输入选项
+- 如果用户可能同时需要多个答案，使用 multi_select，并设置合理的 min/max
+- 只有当答案必须是用户自定义文本，且无法合理提供候选项时，才使用 input
+- 路径、文件名、项目名、账号、密钥、自然语言要求等确实需要用户精确填写的信息，才使用 input
+- 当用户需要回答某个具体问题时，question 是要回答的问题，option 是这个问题的候选答案；不要把多个不同问题放进 option 让用户选择要回答哪个问题
+
 不应调用：
 - 可用合理默认值的偏好问题
 - 用户已在上文提供过的信息
@@ -124,6 +133,15 @@ How to write good questions (applies to ALL question types, not only destructive
 - State scope and consequences: how many items are affected, will data be lost, is it reversible.
 - For large sets (>10 items), give a one-line summary first, then the detailed list.
 - For select/multi_select, add a short description to each option to help the user tell them apart.
+
+Interaction type priority:
+- Prefer confirm / select / multi_select so the user can answer by clicking with minimal typing.
+- Use confirm for yes/no, continue/cancel, allow/deny questions; do not use input for these.
+- If you can list 2-8 common answers, use select. Use select even when the list may not cover every case, because the system auto-appends an "Other" free-input option.
+- If the user may need more than one answer, use multi_select with reasonable min/max limits.
+- Only use input when the answer must be custom free text and no useful candidate options can be provided.
+- Use input for exact custom values such as paths, filenames, project names, accounts, secrets, or natural-language requirements that the user must write precisely.
+- When the user needs to answer a specific question, the question text is the question to answer and option elements are candidate answers to that question; do not put multiple different questions in option elements for the user to choose which question to answer.
 
 Do NOT call when:
 - A sensible default exists and the choice is a trivial preference
