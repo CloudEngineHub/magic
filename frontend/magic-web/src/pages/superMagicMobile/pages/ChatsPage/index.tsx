@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useBoolean, useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { useLocation } from "react-router"
+import useNavigate from "@/routes/hooks/useNavigate"
+import { RouteName } from "@/routes/constants"
 import {
 	SuperMobileShellRouteLayout,
 	useOptionalSuperMobileShellOutlet,
@@ -31,6 +33,7 @@ import {
 const ChatsPagePanel = observer(function ChatsPagePanel() {
 	const { t } = useTranslation(["super", "common", "sidebar"])
 	const location = useLocation()
+	const navigate = useNavigate()
 	const { createProjectInChatWorkspace } = useChatWorkspace()
 	const {
 		items,
@@ -61,16 +64,28 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 	}, [])
 
 	useEffect(() => {
-		const pendingDeletedProjectId = (location.state as {
-			pendingDeletedProjectId?: string
-		} | null)?.pendingDeletedProjectId
+		const routeState = location.state as Record<string, unknown> | null
+		const pendingDeletedProjectId =
+			typeof routeState?.pendingDeletedProjectId === "string"
+				? routeState.pendingDeletedProjectId
+				: undefined
 		if (!pendingDeletedProjectId) return
 		if (pendingDeletedProjectId === lastHandledDeletedProjectIdRef.current) return
 
 		lastHandledDeletedProjectIdRef.current = pendingDeletedProjectId
 		optimisticRemove(pendingDeletedProjectId)
 		void reload({ silent: true })
-	}, [location.state, optimisticRemove, reload])
+
+		const nextState = { ...routeState }
+		delete nextState.pendingDeletedProjectId
+		// Consume the one-shot route message so history restores do not replay deletion handling.
+		navigate({
+			name: RouteName.SuperChatsList,
+			replace: true,
+			state: Object.keys(nextState).length ? nextState : undefined,
+			viewTransition: false,
+		})
+	}, [location.state, navigate, optimisticRemove, reload])
 
 	/**
 	 * 与对话详情页使用完全相同的参数调用 useProjectListActions，确保操作项（label/行为）严格一致。

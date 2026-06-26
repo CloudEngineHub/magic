@@ -10,6 +10,7 @@ const {
 	optimisticRemoveMock,
 	optimisticUpdatePinMock,
 	locationStateMock,
+	navigateMock,
 } = vi.hoisted(() => ({
 	switchChatProjectMock: vi.fn(),
 	deleteProjectMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
 			pendingDeletedProjectId?: string
 		},
 	},
+	navigateMock: vi.fn(),
 }))
 
 import ChatsPage from "../index"
@@ -190,7 +192,7 @@ vi.mock("@/pages/superMagicMobile/components/icons/MagiClawNavIcon", () => ({
 }))
 
 vi.mock("@/routes/hooks/useNavigate", () => ({
-	default: () => vi.fn(),
+	default: () => navigateMock,
 }))
 
 vi.mock("@/layouts/BaseLayoutMobile/components/MobileSettings", () => ({
@@ -254,6 +256,12 @@ describe("ChatsPage", () => {
 		await waitFor(() => {
 			expect(optimisticRemoveMock).toHaveBeenCalledWith("chat-project-1")
 			expect(reloadMock).toHaveBeenCalledWith({ silent: true })
+			expect(navigateMock).toHaveBeenCalledWith({
+				name: "SuperChatsList",
+				replace: true,
+				state: undefined,
+				viewTransition: false,
+			})
 		})
 	})
 
