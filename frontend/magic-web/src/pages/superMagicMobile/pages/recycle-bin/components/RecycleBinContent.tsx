@@ -174,7 +174,9 @@ function parseCheckResult(data: {
 	})
 
 	const noConflictResourceIds =
-		fromOldNoNeedMove.length > 0 ? toResourceIds(fromOldNoNeedMove) : toResourceIds(fromNewNoConflict)
+		fromOldNoNeedMove.length > 0
+			? toResourceIds(fromOldNoNeedMove)
+			: toResourceIds(fromNewNoConflict)
 	directResourceIds.push(...noConflictResourceIds)
 
 	const needMoveResourceIds =
@@ -281,14 +283,6 @@ function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): Recycle
 				? "folder"
 				: "file"
 			: (TAB_KEY_TO_TYPE[tabKey] ?? "file")
-	const deletedBy =
-		item.deleted_by_user?.nickname ?? item.deleted_by_name ?? item.deleted_by ?? ""
-	const deletedByUser = item.deleted_by_user
-		? {
-				nickname: item.deleted_by_user.nickname,
-				avatar: item.deleted_by_user.avatar || item.deleted_by_user.avatar_url || "",
-			}
-		: undefined
 	return {
 		id: item.id,
 		type,
@@ -297,8 +291,6 @@ function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): Recycle
 			resourceType,
 			t,
 		}),
-		deletedBy,
-		deletedByUser,
 		validDays: item.remaining_days ?? 0,
 		resourceId: item.resource_id,
 		resourceType,
@@ -617,17 +609,17 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 					projectMissingFileNames.length > MAX_CONFLICT_NAME_PREVIEW_COUNT
 						? t("recycleBin.restoreCheck.fileNamesWithEtc", {
 								names: visibleFileNames,
-						  })
+							})
 						: visibleFileNames
 				magicToast.info(
 					fileNames
 						? t("recycleBin.restoreCheck.projectMissingTipWithNames", {
 								count: projectMissingCount,
 								fileNames,
-						  })
+							})
 						: t("recycleBin.restoreCheck.projectMissingTip", {
 								count: projectMissingCount,
-						  }),
+							}),
 				)
 			}
 			if (duplicateRestoreTargetCount > 0) {
@@ -760,17 +752,17 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 						projectMissingFileNames.length > MAX_CONFLICT_NAME_PREVIEW_COUNT
 							? t("recycleBin.restoreCheck.fileNamesWithEtc", {
 									names: visibleFileNames,
-							  })
+								})
 							: visibleFileNames
 					magicToast.info(
 						fileNames
 							? t("recycleBin.restoreCheck.projectMissingTipWithNames", {
 									count: projectMissingCount,
 									fileNames,
-							  })
+								})
 							: t("recycleBin.restoreCheck.projectMissingTip", {
 									count: projectMissingCount,
-							  }),
+								}),
 					)
 				}
 				if (duplicateRestoreTargetCount > 0) {
@@ -1157,9 +1149,9 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 					currentPendingNameConflict
 						? `${t("recycleBin.restoreCheck.nameConflictDialogTitle", {
 								fileName: currentPendingNameConflict.fileName,
-						  })}\n${t("topicFiles.duplicateFile.message", {
+							})}\n${t("topicFiles.duplicateFile.message", {
 								fileName: currentPendingNameConflict.fileName,
-						  })}`
+							})}`
 						: ""
 				}
 				actionGroups={[

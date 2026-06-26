@@ -35,11 +35,6 @@ export function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): 
 				? "folder"
 				: "file"
 			: (TAB_KEY_TO_TYPE[tabKey] ?? "file")
-	const deletedBy =
-		item.deleted_by_user?.nickname ?? item.deleted_by_name ?? item.deleted_by ?? ""
-	const deletedByUser = item.deleted_by_user
-		? { nickname: item.deleted_by_user.nickname, avatar: item.deleted_by_user.avatar }
-		: undefined
 	const parentInfo = {
 		...item.extra_data?.parent_info,
 		workspace_name:
@@ -61,8 +56,6 @@ export function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): 
 			resourceType,
 			t,
 		}),
-		deletedBy,
-		deletedByUser,
 		deletedAt: item.deleted_at,
 		validDays: item.remaining_days ?? 0,
 		resourceId: item.resource_id,
@@ -110,8 +103,6 @@ export function mobileItemDataToDomain(item: RecycleBinItemData): RecycleBinItem
 		resourceType: item.resourceType as ResourceType,
 		category: TYPE_TO_CATEGORY[item.type],
 		title: item.title,
-		deletedBy: item.deletedBy,
-		deletedByUser: item.deletedByUser,
 		path: item.path,
 		deletedOn: "",
 		remainingDays: item.validDays,
