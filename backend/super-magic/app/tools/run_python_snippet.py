@@ -13,6 +13,7 @@ from app.core.entity.tool.tool_result_types import TerminalToolResult
 from app.tools.core import BaseToolParams, tool
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.python_snippet_repair import prepare_python_code
+from app.tools.snippet_environment import SnippetEnvironment
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.process_executor import ProcessExecutor
 from app.utils.terminal_tool_detail_generator import TerminalToolDetailGenerator
@@ -117,6 +118,7 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams], WorkspaceTool[R
             agent_ctx = None
         if agent_ctx is not None:
             extra_env["SUPER_MAGIC_AGENT_CONTEXT_ID"] = agent_ctx.context_id
+            SnippetEnvironment.apply_current_model(extra_env, agent_ctx)
         return extra_env
 
     async def execute(self, tool_context: ToolContext, params: RunPythonSnippetParams) -> TerminalToolResult:
