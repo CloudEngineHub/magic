@@ -58,6 +58,7 @@ export function buildRecordingDetailFileMap(input: {
 	const files = flattenRecordingAttachments(input.tree, input.list)
 	const scopedFiles = scopeFilesToBundle(files, input.bundleRootPath)
 	const magicProject = scopedFiles.find(isMagicProjectFile) || files.find(isMagicProjectFile)
+	const indexHtml = findIndexHtmlInBundle(files, resolveIndexHtmlBundleRoot(input, magicProject))
 	const configFiles = input.magicProjectConfig?.files ?? {}
 
 	function findByConfiguredName(type: string) {
@@ -78,6 +79,7 @@ export function buildRecordingDetailFileMap(input: {
 		transcript,
 		notes,
 		magicProject,
+		indexHtml,
 		magicProjectConfig: input.magicProjectConfig ?? undefined,
 		summaryFiles: resolveSummaryFiles(scopedFiles, configFiles),
 	}
@@ -183,8 +185,20 @@ function getFileLookupCandidates(file: AttachmentItem): string[] {
 	)
 }
 
+function getFilePathLookupCandidates(file: AttachmentItem): string[] {
+	return [file.path, file.relative_file_path, file.file_key, file.file_name].filter(
+		(candidate): candidate is string => Boolean(candidate),
+	)
+}
+
 function trimSlashes(value: string): string {
 	return value.replace(/^\/+|\/+$/g, "")
+}
+
+function getDirectoryPath(path: string): string {
+	const normalizedPath = trimSlashes(normalizeFileLookupText(path))
+	const lastSlashIndex = normalizedPath.lastIndexOf("/")
+	return lastSlashIndex >= 0 ? normalizedPath.slice(0, lastSlashIndex) : ""
 }
 
 function isMagicProjectFile(file: AttachmentItem): boolean {
@@ -193,4 +207,44 @@ function isMagicProjectFile(file: AttachmentItem): boolean {
 	)
 		? true
 		: normalizeFileLookupText(getAttachmentFileName(file)) === "magic.project.js"
+}
+
+/** Resolves the bundle root that makes index.html safe to include as a hidden runtime file. */
+function resolveIndexHtmlBundleRoot(
+	input: { bundleRootPath?: string },
+	magicProject?: AttachmentItem,
+): string | undefined {
+	if (input.bundleRootPath !== undefined) {
+		return trimSlashes(normalizeFileLookupText(input.bundleRootPath))
+	}
+
+	const magicProjectPath = getFilePathLookupCandidates(magicProject ?? {}).find((candidate) =>
+		normalizeFileLookupText(candidate).endsWith("magic.project.js"),
+	)
+	if (!magicProjectPath) return undefined
+
+	return getDirectoryPath(magicProjectPath)
+}
+
+/** Finds index.html only after a concrete bundle root is known, preventing sibling bundle leakage. */
+function findIndexHtmlInBundle(
+	files: AttachmentItem[],
+	bundleRootPath: string | undefined,
+): AttachmentItem | undefined {
+	if (bundleRootPath === undefined) return undefined
+
+	const normalizedRoot = trimSlashes(normalizeFileLookupText(bundleRootPath))
+	return files.find((file) => {
+		return getFilePathLookupCandidates(file).some((candidate) => {
+			const normalizedCandidate = trimSlashes(normalizeFileLookupText(candidate))
+			if (
+				normalizedCandidate !== "index.html" &&
+				!normalizedCandidate.endsWith("/index.html")
+			) {
+				return false
+			}
+
+			return getDirectoryPath(normalizedCandidate) === normalizedRoot
+		})
+	})
 }

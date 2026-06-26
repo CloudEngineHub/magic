@@ -41,6 +41,7 @@ const mockFileMap: RecordingDetailFileMap = {
 	transcript: { file_id: "file-transcript", file_name: "session-transcript.md" },
 	notes: { file_id: "file-notes", file_name: "session-notes.md" },
 	magicProject: { file_id: "file-magic-project", file_name: "magic.project.js" },
+	indexHtml: { file_id: "file-index-html", file_name: "index.html" },
 	summaryFiles: [
 		{
 			type: "summary",
@@ -64,7 +65,7 @@ describe("buildRecordingShareSelection", () => {
 		})
 	})
 
-	it("includes audio, transcript, notes, and summary files but excludes magic.project.js", () => {
+	it("includes audio, transcript, notes, and summary files but excludes hidden runtime files", () => {
 		const selection = buildRecordingShareSelection(mockFileMap)
 
 		expect(selection.defaultSelectedFileIds).toEqual([
@@ -83,6 +84,7 @@ describe("buildRecordingShareSelection", () => {
 		expect(selection.groupedItems.some((item) => item.fileId === "file-magic-project")).toBe(
 			false,
 		)
+		expect(selection.groupedItems.some((item) => item.fileId === "file-index-html")).toBe(false)
 	})
 
 	it("preserves summary type metadata for grouped summary children", () => {
@@ -108,8 +110,23 @@ describe("buildRecordingShareSelection", () => {
 		expect(selection.groupedItems[0]?.groupKey).toBe("audio")
 	})
 
-	it("collects only magic.project.js as the hidden required file without forcing audio into the final share payload", () => {
-		expect(collectRecordingRequiredShareFileIds(mockFileMap)).toEqual(["file-magic-project"])
+	it("collects runtime files as hidden required files without forcing audio into the final share payload", () => {
+		expect(collectRecordingRequiredShareFileIds(mockFileMap)).toEqual([
+			"file-magic-project",
+			"file-index-html",
+		])
+	})
+
+	it("does not add index.html when the recording bundle does not contain one", () => {
+		const fileMapWithoutIndexHtml: RecordingDetailFileMap = {
+			audio: { file_id: "file-audio", file_name: "session.wav" },
+			magicProject: { file_id: "file-magic-project", file_name: "magic.project.js" },
+			summaryFiles: [],
+		}
+
+		expect(collectRecordingRequiredShareFileIds(fileMapWithoutIndexHtml)).toEqual([
+			"file-magic-project",
+		])
 	})
 
 	it("merges user selection with required recording share file ids without duplicates", () => {

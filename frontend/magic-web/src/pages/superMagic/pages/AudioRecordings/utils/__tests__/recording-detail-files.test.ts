@@ -134,6 +134,13 @@ describe("recording detail files", () => {
 				file_extension: "js",
 				path: "/magic.project.js",
 			}),
+			createAttachment({
+				file_id: "file-index-html-001",
+				file_name: "index.html",
+				filename: "index.html",
+				file_extension: "html",
+				path: "/index.html",
+			}),
 		]
 
 		const result = buildRecordingDetailFileMap({
@@ -155,6 +162,7 @@ describe("recording detail files", () => {
 		expect(result.transcript?.file_id).toBe("file-transcript-001")
 		expect(result.notes?.file_id).toBe("file-notes-001")
 		expect(result.magicProject?.file_id).toBe("file-project-001")
+		expect(result.indexHtml?.file_id).toBe("file-index-html-001")
 		expect(result.summaryFiles.map((file) => file.type)).toEqual([
 			"summary",
 			"topics",
@@ -227,8 +235,24 @@ describe("recording detail files", () => {
 				path: "/recording-a/transcript.md",
 				relative_file_path: "recording-a/transcript.md",
 			}),
+			createAttachment({
+				file_id: "current-index-html",
+				file_name: "recording-a/index.html",
+				filename: "index.html",
+				file_extension: "html",
+				path: "/recording-a/index.html",
+				relative_file_path: "recording-a/index.html",
+			}),
 		]
 		const siblingBundleFiles = [
+			createAttachment({
+				file_id: "sibling-index-html",
+				file_name: "recording-b/index.html",
+				filename: "index.html",
+				file_extension: "html",
+				path: "/recording-b/index.html",
+				relative_file_path: "recording-b/index.html",
+			}),
 			createAttachment({
 				file_id: "sibling-audio",
 				file_name: "recording-b/session.wav",
@@ -257,7 +281,66 @@ describe("recording detail files", () => {
 		})
 
 		expect(result.magicProject?.file_id).toBe("current-project-config")
+		expect(result.indexHtml?.file_id).toBe("current-index-html")
 		expect(result.audio?.file_id).toBe("current-audio")
 		expect(result.transcript?.file_id).toBe("current-transcript")
+	})
+
+	it("infers index.html from the magic.project.js bundle when explicit bundle root is absent", () => {
+		const files = [
+			createAttachment({
+				file_id: "sibling-index-html",
+				file_name: "recording-b/index.html",
+				filename: "index.html",
+				file_extension: "html",
+				path: "/recording-b/index.html",
+				relative_file_path: "recording-b/index.html",
+			}),
+			createAttachment({
+				file_id: "current-project-config",
+				file_name: "recording-a/magic.project.js",
+				filename: "magic.project.js",
+				file_extension: "js",
+				path: "/recording-a/magic.project.js",
+				relative_file_path: "recording-a/magic.project.js",
+			}),
+			createAttachment({
+				file_id: "current-index-html",
+				file_name: "recording-a/index.html",
+				filename: "index.html",
+				file_extension: "html",
+				path: "/recording-a/index.html",
+				relative_file_path: "recording-a/index.html",
+			}),
+		]
+
+		const result = buildRecordingDetailFileMap({
+			tree: [createFolder("root", files)],
+			list: [],
+		})
+
+		expect(result.magicProject?.file_id).toBe("current-project-config")
+		expect(result.indexHtml?.file_id).toBe("current-index-html")
+	})
+
+	it("does not select index.html when no bundle root can be determined", () => {
+		const files = [
+			createAttachment({
+				file_id: "orphan-index-html",
+				file_name: "recording-a/index.html",
+				filename: "index.html",
+				file_extension: "html",
+				path: "/recording-a/index.html",
+				relative_file_path: "recording-a/index.html",
+			}),
+		]
+
+		const result = buildRecordingDetailFileMap({
+			tree: [createFolder("root", files)],
+			list: [],
+		})
+
+		expect(result.magicProject).toBeUndefined()
+		expect(result.indexHtml).toBeUndefined()
 	})
 })

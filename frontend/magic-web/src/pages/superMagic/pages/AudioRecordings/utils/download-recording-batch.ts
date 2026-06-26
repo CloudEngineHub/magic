@@ -5,6 +5,7 @@ import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import type { RecordingDetailFileMap } from "../types/recording-detail"
 import { getAttachmentFileName } from "./recording-detail-files"
 import { downloadRecordingAttachmentFile } from "./download-recording-attachment"
+export { collectExportableFileIds } from "./build-recording-share-selection"
 
 const BATCH_POLL_INTERVAL_MS = 2000
 const BATCH_POLL_MAX_ATTEMPTS = 60
@@ -18,29 +19,6 @@ interface DownloadRecordingFilesBatchParams {
 	fileIds: string[]
 	projectId?: string
 	fileNameById?: Record<string, string>
-}
-
-/**
- * Collects every exportable attachment id from the recording detail file map.
- */
-export function collectExportableFileIds(fileMap: RecordingDetailFileMap | null): string[] {
-	if (!fileMap) return []
-
-	const ids: string[] = []
-	const seen = new Set<string>()
-
-	function pushId(fileId?: string) {
-		if (!fileId || seen.has(fileId)) return
-		seen.add(fileId)
-		ids.push(fileId)
-	}
-
-	pushId(fileMap.audio?.file_id)
-	pushId(fileMap.transcript?.file_id)
-	pushId(fileMap.notes?.file_id)
-	fileMap.summaryFiles.forEach((ref) => pushId(ref.file?.file_id))
-
-	return ids
 }
 
 /**

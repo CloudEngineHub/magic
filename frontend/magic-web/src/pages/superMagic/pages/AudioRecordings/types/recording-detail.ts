@@ -38,6 +38,7 @@ export interface RecordingDetailFileMap {
 	notes?: AttachmentItem
 	summaryFiles: RecordingDetailFileRef[]
 	magicProject?: AttachmentItem
+	indexHtml?: AttachmentItem
 	magicProjectConfig?: MagicProjectConfig
 }
 
