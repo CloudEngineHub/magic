@@ -1,30 +1,38 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { sendSelfMediaPrePublishAnalysis } from "../services/selfMediaPrePublishAnalysis"
 
-const { mockChat, mockCreateTopic, mockNavigateToBatchTopic, mockPublish, mockT } = vi.hoisted(
-	() => ({
+const {
+	mockChat,
+	mockCreateTopic,
+	mockNavigateToBatchTopic,
+	mockPublish,
+	mockT,
+	mockTranslations,
+} = vi.hoisted(() => {
+	const translations: Record<string, string> = {
+		"detail.selfMedia.analysis.prompt.topicName": "[发布前诊断] {{title}}",
+		"detail.selfMedia.analysis.prompt.untitled": "自媒体文章",
+		"detail.selfMedia.analysis.prompt.missingValue": "未提供",
+		"detail.selfMedia.analysis.prompt.opening": "请对 {{mention}} 做发布前诊断。",
+		"detail.selfMedia.analysis.prompt.metadata":
+			"平台：{{platform}}\n目标：{{goal}}\n标题：{{title}}\n作者/IP：{{author}}\n标签：{{tags}}",
+		"detail.selfMedia.analysis.prompt.instruction":
+			"请联网对比同类内容，输出证据清单、评分、关键问题、同类内容差距、优先修改清单和改稿指令。外部资料只作为运营经验参考。",
+		"detail.selfMedia.analysis.goals.ipGrowth": "IP增长",
+		"detail.selfMedia.initPanel.platforms.rednote": "小红书",
+	}
+	return {
 		mockChat: vi.fn(),
 		mockCreateTopic: vi.fn(),
 		mockNavigateToBatchTopic: vi.fn(),
 		mockPublish: vi.fn(),
+		mockTranslations: translations,
 		mockT: vi.fn((key: string, options?: Record<string, unknown>) => {
-			const translations: Record<string, string> = {
-				"detail.selfMedia.analysis.prompt.topicName": "[发布前诊断] {{title}}",
-				"detail.selfMedia.analysis.prompt.untitled": "自媒体文章",
-				"detail.selfMedia.analysis.prompt.missingValue": "未提供",
-				"detail.selfMedia.analysis.prompt.opening": "请对 {{mention}} 做发布前诊断。",
-				"detail.selfMedia.analysis.prompt.metadata":
-					"平台：{{platform}}\n目标：{{goal}}\n标题：{{title}}\n作者/IP：{{author}}\n标签：{{tags}}",
-				"detail.selfMedia.analysis.prompt.instruction":
-					"请联网对比同类内容，输出证据清单、评分、关键问题、同类内容差距、优先修改清单和改稿指令。外部资料只作为运营经验参考。",
-				"detail.selfMedia.analysis.goals.ipGrowth": "IP增长",
-				"detail.selfMedia.initPanel.platforms.rednote": "小红书",
-			}
 			const template = translations[key] || String(options?.defaultValue || key)
 			return template.replace(/\{\{(\w+)\}\}/g, (_, name) => String(options?.[name] ?? ""))
 		}),
-	}),
-)
+	}
+})
 
 const selectedModel = {
 	id: "model-1",
@@ -82,6 +90,18 @@ vi.mock("../services/selfMediaBatchSend", () => ({
 
 describe("selfMediaPrePublishAnalysis", () => {
 	beforeEach(() => {
+		Object.assign(mockTranslations, {
+			"detail.selfMedia.analysis.prompt.topicName": "[发布前诊断] {{title}}",
+			"detail.selfMedia.analysis.prompt.untitled": "自媒体文章",
+			"detail.selfMedia.analysis.prompt.missingValue": "未提供",
+			"detail.selfMedia.analysis.prompt.opening": "请对 {{mention}} 做发布前诊断。",
+			"detail.selfMedia.analysis.prompt.metadata":
+				"平台：{{platform}}\n目标：{{goal}}\n标题：{{title}}\n作者/IP：{{author}}\n标签：{{tags}}",
+			"detail.selfMedia.analysis.prompt.instruction":
+				"请联网对比同类内容，输出证据清单、评分、关键问题、同类内容差距、优先修改清单和改稿指令。外部资料只作为运营经验参考。",
+			"detail.selfMedia.analysis.goals.ipGrowth": "IP增长",
+			"detail.selfMedia.initPanel.platforms.rednote": "小红书",
+		})
 		mockChat.mockReset().mockResolvedValue(undefined)
 		mockCreateTopic.mockReset().mockResolvedValue({
 			id: "topic-1",
@@ -162,16 +182,7 @@ describe("selfMediaPrePublishAnalysis", () => {
 				enable_web_search: true,
 			}),
 		)
-		expect(richText.extra.super_agent.mentions).toEqual([
-			{
-				type: "project_directory",
-				data: expect.objectContaining({
-					directory_id: "post-dir",
-					directory_name: "post-1",
-					directory_path: "posts/post-1/",
-				}),
-			},
-		])
+		expect(richText.extra.super_agent.mentions).toBeUndefined()
 		const content = JSON.parse(richText.content)
 		const contentText = JSON.stringify(content)
 		expect(contentText).toContain("IP增长")
@@ -197,5 +208,51 @@ describe("selfMediaPrePublishAnalysis", () => {
 				}),
 			]),
 		)
+	})
+
+	it("uses the active locale when building the diagnosis topic and message", async () => {
+		Object.assign(mockTranslations, {
+			"detail.selfMedia.analysis.prompt.topicName": "[Pre-publish diagnosis] {{title}}",
+			"detail.selfMedia.analysis.prompt.opening": "Diagnose {{mention}} before publishing.",
+			"detail.selfMedia.analysis.prompt.metadata":
+				"Platform: {{platform}}\nGoal: {{goal}}\nTitle: {{title}}\nAuthor/IP: {{author}}\nTags: {{tags}}",
+			"detail.selfMedia.analysis.prompt.instruction":
+				"Search online for comparable content. Output evidence, score, key issues, comparison gaps, prioritized edits, and rewrite instructions.",
+			"detail.selfMedia.analysis.goals.ipGrowth": "IP Growth",
+			"detail.selfMedia.initPanel.platforms.rednote": "RedNote",
+		})
+
+		await sendSelfMediaPrePublishAnalysis({
+			selectedProject: { id: "project-1" },
+			platform: "rednote",
+			analysisGoal: "ip-growth",
+			selectedModel,
+			post: {
+				meta: {
+					id: "post-1",
+					title: "AI Tools",
+					author: "Magic Lab",
+					tags: "#AI #Tools",
+				},
+				cards: [{ path: "cards/01.html", fileId: "card-1" }],
+			},
+			postDirectoryItem: {
+				file_id: "post-dir",
+				file_name: "post-1",
+				relative_file_path: "posts/post-1/",
+				is_directory: true,
+			} as never,
+		})
+
+		const createPayload = mockPublish.mock.calls[0]?.[1]
+		expect(createPayload.topicName).toBe("[Pre-publish diagnosis] AI Tools")
+
+		const contentText = JSON.stringify(createPayload.afterCreate.content)
+		expect(contentText).toContain("Diagnose")
+		expect(contentText).toContain("Platform: RedNote")
+		expect(contentText).toContain("Goal: IP Growth")
+		expect(contentText).toContain("Search online for comparable content")
+		expect(contentText).not.toContain("发布前诊断")
+		expect(contentText).not.toContain("证据清单")
 	})
 })

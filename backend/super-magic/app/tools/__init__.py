@@ -107,6 +107,7 @@ from app.tools.design.tools import (
     CreateCanvas,
     GenerateCanvasImages,
     GenerateCanvasVideos,
+    RestoreCanvasMedia,
     SearchCanvasImages,
     SearchImagePrompts,
 )
@@ -129,6 +130,21 @@ from app.tools.mcp import (
     McpGetToolSchema,
     McpListServers,
     McpListTools,
+)
+
+# OAuth2 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
+from app.tools.oauth2 import (
+    OAuth2CheckAuthorization,
+    OAuth2GetApiDoc,
+    OAuth2GetRedirectUri,
+    OAuth2ListApiDocs,
+    OAuth2ListApps,
+    OAuth2RemoveApiDoc,
+    OAuth2RemoveApp,
+    OAuth2Request,
+    OAuth2StartAuthorization,
+    OAuth2UpsertApiDoc,
+    OAuth2UpsertApp,
 )
 
 # Remote 工具集（将 magic-service mention 中的 tool / agent 以本地工具形态转发）
@@ -262,6 +278,7 @@ __all__ = [
     "CreateCanvas",
     "GenerateCanvasImages",
     "GenerateCanvasVideos",
+    "RestoreCanvasMedia",
     "SearchCanvasImages",
     "SearchImagePrompts",
 
@@ -272,6 +289,19 @@ __all__ = [
     "McpGetToolSchema",
     "McpListServers",
     "McpListTools",
+
+    # OAuth2 工具集
+    "OAuth2CheckAuthorization",
+    "OAuth2GetApiDoc",
+    "OAuth2GetRedirectUri",
+    "OAuth2ListApiDocs",
+    "OAuth2ListApps",
+    "OAuth2RemoveApiDoc",
+    "OAuth2RemoveApp",
+    "OAuth2Request",
+    "OAuth2StartAuthorization",
+    "OAuth2UpsertApiDoc",
+    "OAuth2UpsertApp",
 
     # Remote 工具集
     "CallSimpleAgent",

@@ -53,7 +53,7 @@ interface PPTSlideProps {
 	projectId?: string
 	filePathMapping: Map<string, string>
 	openNewTab: (fileId: string, path: string) => void
-	relative_file_path?: string
+	htmlRelativeFolderPath?: string
 	selectedProject?: any
 	attachmentList?: any[]
 	updateSlideContents: (newContents: Map<number, string>) => void
@@ -105,7 +105,7 @@ const PPTSlide = observer(function PPTSlide({
 	projectId,
 	filePathMapping,
 	openNewTab,
-	relative_file_path,
+	htmlRelativeFolderPath,
 	selectedProject,
 	attachmentList,
 	updateSlideContents,
@@ -188,7 +188,7 @@ const PPTSlide = observer(function PPTSlide({
 				fileId: fileId,
 				fileName: `slide_${index}.html`,
 				attachmentList: attachmentList,
-				html_relative_path: relative_file_path,
+				html_relative_path: htmlRelativeFolderPath,
 			}
 
 			const result = await processHtmlContent(input)
@@ -665,12 +665,9 @@ const PPTSlide = observer(function PPTSlide({
 		// Fallback to individual slide if main file info is not available
 		if (!fileId) return undefined
 
-		// Extract file name from relative path or use default
-		const fileName = relative_file_path?.split("/").pop() || `slide_${index + 1}.html`
-
 		return {
 			id: fileId,
-			name: fileName,
+			name: `slide_${index + 1}.html`,
 			type: "html",
 			projectId: selectedProject?.id || projectId,
 			projectName: selectedProject?.project_name,
@@ -679,7 +676,6 @@ const PPTSlide = observer(function PPTSlide({
 		mainFileId,
 		mainFileName,
 		fileId,
-		relative_file_path,
 		index,
 		selectedProject?.id,
 		selectedProject?.project_name,
@@ -785,7 +781,7 @@ const PPTSlide = observer(function PPTSlide({
 				onSaveReady={handleSaveReady}
 				filePathMapping={filePathMapping}
 				openNewTab={openNewTab}
-				relative_file_path={relative_file_path}
+				htmlRelativeFolderPath={htmlRelativeFolderPath}
 				selectedProject={selectedProject}
 				attachmentList={attachmentList}
 				setSlideContents={updateSlideContents}

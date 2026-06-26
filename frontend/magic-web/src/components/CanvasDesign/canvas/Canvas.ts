@@ -31,6 +31,7 @@ import { BackgroundManager } from "./interaction/BackgroundManager"
 import { CanvasFileUploadManager } from "./utils/CanvasFileUploadManager"
 import { GeometryCacheManager } from "./utils/GeometryCacheManager"
 import { ImageResourceManager } from "./utils/ImageResourceManager"
+import { ImageBatchPollingRegistry } from "./utils/ImageBatchPollingRegistry"
 import { SubmitImageWorkerManager } from "./utils/SubmitImageWorkerManager"
 import { VideoPlaybackManager } from "./utils/VideoPlaybackManager"
 import { VideoResourceManager } from "./utils/VideoResourceManager"
@@ -42,6 +43,7 @@ import { CanvasRuntimeScheduler } from "./runtime/CanvasRuntimeScheduler"
 import { CropManager } from "./interaction/CropManager"
 import { ExtendManager } from "./interaction/ExtendManager"
 import { EraserManager } from "./interaction/EraserManager"
+import { PluginManager } from "./plugins/PluginManager"
 import { ElementRenameManager } from "./interaction/ElementRenameManager"
 import { TextEditingManager } from "./interaction/TextEditingManager"
 import { TextFormattingManager } from "./interaction/TextFormattingManager"
@@ -104,6 +106,7 @@ export class Canvas {
 	public canvasFileUploadManager: CanvasFileUploadManager
 	public geometryCacheManager: GeometryCacheManager
 	public imageResourceManager: ImageResourceManager
+	public imageBatchPollingRegistry: ImageBatchPollingRegistry
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
 	public videoPlaybackManager: VideoPlaybackManager
@@ -117,6 +120,7 @@ export class Canvas {
 	public eraserManager: EraserManager
 	public textEditingManager: TextEditingManager
 	public textFormattingManager: TextFormattingManager
+	public pluginManager: PluginManager
 
 	public readonly: boolean
 	public isMobileDevice: boolean
@@ -184,6 +188,15 @@ export class Canvas {
 		// 创建事件发射器
 		this.eventEmitter = new EventEmitter()
 
+		this.pluginManager = new PluginManager()
+		this.pluginManager.registerMany(options.plugins?.builtin ?? [])
+		void this.pluginManager.loadUserPluginsFromCanvasResources({
+			rootPath: options.plugins?.user?.rootPath,
+			directories: options.plugins?.user?.directories,
+			getFileInfo: options.magic?.methods?.getFileInfo,
+			resolveAbsolutePath: options.magic?.methods?.resolveAbsolutePath,
+		})
+
 		// 初始化 MagicConfigManager
 		this.magicConfigManager = new MagicConfigManager({
 			canvas: this,
@@ -214,6 +227,8 @@ export class Canvas {
 		this.imageResourceManager = new ImageResourceManager({
 			canvas: this,
 		})
+
+		this.imageBatchPollingRegistry = new ImageBatchPollingRegistry()
 
 		this.submitImageWorkerManager = new SubmitImageWorkerManager({
 			canvas: this,
@@ -1088,6 +1103,7 @@ export class Canvas {
 		this.dropOverlayManager.destroy()
 		this.cursorManager.destroy()
 		this.permissionManager.destroy()
+		this.imageBatchPollingRegistry.destroy()
 		this.elementManager.destroy()
 		this.geometryCacheManager.destroy()
 		this.viewportController.destroy()
@@ -1120,6 +1136,7 @@ export class Canvas {
 		this.videoPlaybackManager.destroy()
 		this.videoResourceManager.destroy()
 		this.mediaResourceOfflineCacheManager.destroy()
+		this.pluginManager.destroy()
 		this.stage.destroy()
 	}
 }

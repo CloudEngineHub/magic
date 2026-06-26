@@ -66,9 +66,10 @@ export class HoverManager {
 			}),
 		)
 
-		// 监听视口缩放事件，更新 hover 边框宽度
+		// 监听视口缩放事件，鼠标未移动时也要重新命中当前指针下的元素
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("viewport:scale", () => {
+				this.refreshHoverAtCurrentPointer()
 				this.updateHoverStrokeWidth()
 			}),
 		)

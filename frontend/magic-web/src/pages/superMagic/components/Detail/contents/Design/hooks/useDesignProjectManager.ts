@@ -7,6 +7,7 @@ import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/type
 import { DesignData } from "../types"
 import {
 	DesignProjectManager,
+	type DesignConflict,
 	type DesignProjectManagerOptions,
 	type DesignProjectStateBag,
 } from "../managers"
@@ -34,7 +35,8 @@ export interface UseDesignProjectManagerReturn {
 	syncDesignData: (newDesignData: DesignData) => void
 
 	loadFromRemote: () => Promise<void>
-	resetAndReload: () => Promise<void>
+	reloadPreservingLocalDraft: () => Promise<void>
+	reloadDiscardingLocalDraft: () => Promise<void>
 
 	saveToRemote: () => Promise<void>
 	generateContent: (data?: DesignData) => string
@@ -54,6 +56,16 @@ export interface UseDesignProjectManagerReturn {
 
 	isProcessingRevoke: boolean
 	revokeType: "revoke" | "restore" | null
+	conflictState: DesignConflict | null
+	clearConflictState: () => void
+	resolveBlockingConflictWithRemote: () => boolean
+	resolveBlockingConflictWithLocal: () => Promise<boolean>
+	resolveElementConflictWithLocal: (elementId: string) => boolean
+	resolveElementConflictWithRemote: (elementId: string) => boolean
+	resolveEditedElementConflictsWithLocal: (
+		elementIds: string[],
+		nextDesignData: DesignData,
+	) => boolean
 
 	fileVersionsList: FileHistoryVersion[]
 	fileVersion: number | undefined
@@ -87,8 +99,10 @@ export function useDesignProjectManager(
 	const [fileVersion, setFileVersion] = useState<number | undefined>(undefined)
 	const [isProcessingRevoke, setIsProcessingRevoke] = useState(false)
 	const [revokeType, setRevokeType] = useState<"revoke" | "restore" | null>(null)
+	const [conflictState, setConflictState] = useState<DesignConflict | null>(null)
 
 	const designDataRef = useRef(designData)
+	const conflictStateRef = useRef<DesignConflict | null>(conflictState)
 	const magicProjectJsFileIdRef = useRef<string | null>(null)
 	const isReadOnlyRef = useRef(isReadOnly)
 	const magicProjectJsVersionRef = useRef<number | null>(null)
@@ -97,6 +111,7 @@ export function useDesignProjectManager(
 	const fileVersionRef = useRef<number | undefined>(undefined)
 
 	designDataRef.current = designData
+	conflictStateRef.current = conflictState
 	magicProjectJsFileIdRef.current = magicProjectJsFileId
 	isReadOnlyRef.current = isReadOnly
 	fileVersionsListRef.current = fileVersionsList
@@ -114,6 +129,7 @@ export function useDesignProjectManager(
 	const stateBag: DesignProjectStateBag = useMemo(
 		() => ({
 			getDesignData: () => designDataRef.current,
+			getConflictState: () => conflictStateRef.current,
 			getMagicProjectJsFileId: () => magicProjectJsFileIdRef.current,
 			getMagicProjectJsVersion: () => magicProjectJsVersionRef.current,
 			setMagicProjectJsVersion: (v) => {
@@ -140,6 +156,10 @@ export function useDesignProjectManager(
 				setFileVersion,
 				setIsProcessingRevoke,
 				setRevokeType,
+				setConflictState: (v) => {
+					conflictStateRef.current = v
+					setConflictState(v)
+				},
 			},
 		}),
 		[updateDesignData],
@@ -208,7 +228,8 @@ export function useDesignProjectManager(
 		syncDesignData: (data) => manager.syncDesignData(data),
 
 		loadFromRemote: () => manager.loadFromRemote(),
-		resetAndReload: () => manager.resetAndReload(),
+		reloadPreservingLocalDraft: () => manager.reloadPreservingLocalDraft(),
+		reloadDiscardingLocalDraft: () => manager.reloadDiscardingLocalDraft(),
 
 		saveToRemote: () => manager.saveToRemote(),
 		generateContent: (data) => manager.generateContent(data),
@@ -224,6 +245,16 @@ export function useDesignProjectManager(
 
 		isProcessingRevoke,
 		revokeType,
+		conflictState,
+		clearConflictState: () => manager.clearConflictState(),
+		resolveBlockingConflictWithRemote: () => manager.resolveBlockingConflictWithRemote(),
+		resolveBlockingConflictWithLocal: () => manager.resolveBlockingConflictWithLocal(),
+		resolveElementConflictWithLocal: (elementId) =>
+			manager.resolveElementConflictWithLocal(elementId),
+		resolveElementConflictWithRemote: (elementId) =>
+			manager.resolveElementConflictWithRemote(elementId),
+		resolveEditedElementConflictsWithLocal: (elementIds, nextDesignData) =>
+			manager.resolveEditedElementConflictsWithLocal(elementIds, nextDesignData),
 
 		fileVersionsList,
 		fileVersion,

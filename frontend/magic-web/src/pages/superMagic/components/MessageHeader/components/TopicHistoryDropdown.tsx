@@ -9,6 +9,10 @@ interface TopicHistoryDropdownProps {
 	topics: Topic[]
 	projectId: string
 	selectedTopicId?: string
+	/** Expands the conversation panel before switching topics when the sliver-only layout is active. */
+	isConversationPanelCollapsed?: boolean
+	/** Restores the conversation panel so the selected topic becomes immediately visible. */
+	onExpandConversationPanel?: () => void
 	editingTopicId: string | null
 	editingValue: string
 	onEditingValueChange: (value: string) => void
@@ -42,6 +46,8 @@ function TopicHistoryDropdown({
 	topics,
 	projectId,
 	selectedTopicId,
+	isConversationPanelCollapsed = false,
+	onExpandConversationPanel,
 	editingTopicId,
 	editingValue,
 	onEditingValueChange,
@@ -127,6 +133,8 @@ function TopicHistoryDropdown({
 						topics={topics}
 						projectId={projectId}
 						selectedTopicId={selectedTopicId}
+						isConversationPanelCollapsed={isConversationPanelCollapsed}
+						onExpandConversationPanel={onExpandConversationPanel}
 						editingTopicId={editingTopicId}
 						editingValue={editingValue}
 						onEditingValueChange={onEditingValueChange}

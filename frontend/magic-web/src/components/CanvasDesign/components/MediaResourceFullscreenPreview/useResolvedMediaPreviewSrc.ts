@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { useCanvas } from "../../context/CanvasContext"
-
+import { useCanvasEvent } from "../../hooks/useCanvasEvent"
 interface ResolvedMediaPreviewSrcResult {
 	src: string | undefined
 	isLoading: boolean
@@ -12,6 +12,22 @@ export function useResolvedVideoPreviewSrc(path: string): ResolvedMediaPreviewSr
 	const [src, setSrc] = useState<string | undefined>(undefined)
 	const [isLoading, setIsLoading] = useState(false)
 	const [hasError, setHasError] = useState(false)
+	const [retryToken, setRetryToken] = useState(0)
+
+	useCanvasEvent(
+		"resource:remote-load-deferral-released",
+		useCallback(
+			({ data }) => {
+				if (!canvas) return
+				const pathKey =
+					canvas.canvasFileUploadManager.getRemoteResourceLoadDeferralKey(path)
+				if (!pathKey || pathKey !== data.key) return
+				setRetryToken((value) => value + 1)
+			},
+			[canvas, path],
+		),
+		[canvas, path],
+	)
 
 	useEffect(() => {
 		if (!canvas || !path) {
@@ -24,11 +40,26 @@ export function useResolvedVideoPreviewSrc(path: string): ResolvedMediaPreviewSr
 		let cancelled = false
 		setIsLoading(true)
 		setHasError(false)
+		if (canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
+			return () => {
+				cancelled = true
+			}
+		}
 
 		void (async () => {
+			let deferredAfterResource = false
 			try {
 				const resource = await canvas.videoResourceManager.getResource(path)
 				if (cancelled) return
+				if (
+					!resource &&
+					canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)
+				) {
+					deferredAfterResource = true
+					setSrc(undefined)
+					setHasError(false)
+					return
+				}
 				setSrc(resource?.ossSrc ?? undefined)
 				setHasError(!resource?.ossSrc)
 			} catch {
@@ -36,7 +67,7 @@ export function useResolvedVideoPreviewSrc(path: string): ResolvedMediaPreviewSr
 				setSrc(undefined)
 				setHasError(true)
 			} finally {
-				if (!cancelled) {
+				if (!cancelled && !deferredAfterResource) {
 					setIsLoading(false)
 				}
 			}
@@ -45,7 +76,7 @@ export function useResolvedVideoPreviewSrc(path: string): ResolvedMediaPreviewSr
 		return () => {
 			cancelled = true
 		}
-	}, [canvas, path])
+	}, [canvas, path, retryToken])
 
 	return {
 		src,
@@ -59,8 +90,25 @@ export function useResolvedFilePreviewSrc(path: string): ResolvedMediaPreviewSrc
 	const [src, setSrc] = useState<string | undefined>(undefined)
 	const [isLoading, setIsLoading] = useState(false)
 	const [hasError, setHasError] = useState(false)
+	const [retryToken, setRetryToken] = useState(0)
+
+	useCanvasEvent(
+		"resource:remote-load-deferral-released",
+		useCallback(
+			({ data }) => {
+				if (!canvas) return
+				const pathKey =
+					canvas.canvasFileUploadManager.getRemoteResourceLoadDeferralKey(path)
+				if (!pathKey || pathKey !== data.key) return
+				setRetryToken((value) => value + 1)
+			},
+			[canvas, path],
+		),
+		[canvas, path],
+	)
 
 	const resolveSrc = useCallback(async () => {
+		void retryToken
 		if (!path) {
 			setSrc(undefined)
 			setIsLoading(false)
@@ -69,6 +117,13 @@ export function useResolvedFilePreviewSrc(path: string): ResolvedMediaPreviewSrc
 		}
 
 		const getFileInfo = canvas?.magicConfigManager.config?.methods?.getFileInfo
+		if (canvas?.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
+			setSrc(undefined)
+			setIsLoading(true)
+			setHasError(false)
+			return
+		}
+
 		if (!getFileInfo) {
 			setSrc(path)
 			setIsLoading(false)
@@ -82,13 +137,13 @@ export function useResolvedFilePreviewSrc(path: string): ResolvedMediaPreviewSrc
 			const fileInfo = await getFileInfo(path, { useImageProcess: false })
 			setSrc(fileInfo?.src || undefined)
 			setHasError(!fileInfo?.src)
-		} catch {
+		} catch (error) {
 			setSrc(undefined)
 			setHasError(true)
 		} finally {
 			setIsLoading(false)
 		}
-	}, [canvas, path])
+	}, [canvas, path, retryToken])
 
 	useEffect(() => {
 		void resolveSrc()

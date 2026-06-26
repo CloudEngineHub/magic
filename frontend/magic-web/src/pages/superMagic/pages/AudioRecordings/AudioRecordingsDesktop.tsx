@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
+import SuperMagicService from "@/pages/superMagic/services"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import AudioRecordingCard from "./components/AudioRecordingCard"
@@ -90,6 +91,20 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 				cardStatus: item.card_status,
 				audioFileId: item.audio_file_id,
 			},
+		})
+	}
+
+	/** Initializes Super state before leaving the recordings shell for the backing project page */
+	async function handleOpenProjectDetail(item: AudioProjectListItem) {
+		try {
+			await SuperMagicService.initializeState({ projectId: item.id })
+		} catch (error) {
+			console.error("Failed to initialize project state before navigation:", error)
+		}
+
+		navigate({
+			name: RouteName.SuperWorkspaceProjectState,
+			params: { projectId: item.id },
 		})
 	}
 
@@ -208,6 +223,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 							item={item}
 							onOpen={handleOpenDetail}
 							onSummarize={(entry) => void handleSummarize(entry)}
+							onOpenProject={(entry) => void handleOpenProjectDetail(entry)}
 							onRename={handleRenameRequest}
 							onDelete={handleDeleteRequest}
 							isSubmitting={store.isSubmittingSummary(item.id)}

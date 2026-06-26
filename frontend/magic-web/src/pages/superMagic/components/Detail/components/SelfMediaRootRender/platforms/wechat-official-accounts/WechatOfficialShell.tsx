@@ -42,7 +42,7 @@ function WechatOfficialShell(props: PlatformComponentProps) {
 	if (store) return <WechatOfficialShellContent {...props} />
 
 	return (
-		<SelfMediaStoreProvider attachments={props.attachmentList}>
+		<SelfMediaStoreProvider attachments={props.attachments ?? props.attachmentList}>
 			<WechatOfficialShellContent {...props} />
 		</SelfMediaStoreProvider>
 	)
@@ -54,6 +54,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 	const { t } = useTranslation("super")
 	const {
 		platform,
+		attachments,
 		attachmentList,
 		allowEdit,
 		saveEditContent,
@@ -263,7 +264,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 				const target = await store.ensurePostLoaded(activePostIndex)
 				const fileId = target?.article?.fileId
 				if (!fileId) throw new Error("noArticleUrl")
-				const result = await loadWechatArticleHtml({ fileId, attachmentList })
+				const result = await loadWechatArticleHtml({ fileId, attachmentList, attachments })
 				html = buildWechatClipboardHtmlFromSource(result.content)
 			}
 			await writeWechatHtmlToClipboard(html)
@@ -274,7 +275,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 		} finally {
 			setIsCopyingWechatHtml(false)
 		}
-	}, [activePostIndex, attachmentList, isCopyingWechatHtml, store, t])
+	}, [activePostIndex, attachmentList, attachments, isCopyingWechatHtml, store, t])
 
 	const handleSaveTitle = useCallback(
 		async (nextTitle: string) => {
@@ -364,6 +365,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 								<WechatArticleView
 									ref={articleViewRef}
 									post={activePost}
+									attachments={attachments}
 									attachmentList={attachmentList}
 									selectedProject={selectedProject}
 									onAddToCurrentChat={handleAddArticleToCurrentChat}

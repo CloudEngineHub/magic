@@ -2,14 +2,25 @@ import type { Node as TiptapNode } from "@tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "./canvas/interaction/shortcuts/types"
 import type { MagicConfig } from "./types.magic"
-import type { CanvasDocument, LayerElement, Marker, PaddingInsetConfig } from "./canvas/types"
+import type {
+	CanvasDesignPluginModuleConfig,
+	CanvasDocument,
+	LayerElement,
+	Marker,
+	PaddingInsetConfig,
+} from "./canvas/types"
 import type { CanvasElementNameChange } from "./canvas/EventEmitter"
 import type { TFunction } from "./context/I18nContext"
+import type { CanvasDocumentMergeElementConflictReason } from "./model"
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
 	ReferenceResourceTypeFilter,
 } from "./components/MessageEditor/reference-assets/reference-resource.types"
+import type {
+	CanvasReferenceMentionPanelState,
+	CanvasReferenceMentionProjectFileType,
+} from "./components/MessageEditor/reference-assets/canvasReferenceMention.constants"
 
 /**
  * Mention 面板语言入参（与宿主 MentionPanel LocaleInput 约定一致，避免依赖业务包）
@@ -68,7 +79,7 @@ export interface ReferenceResourcePanelFileData {
 }
 
 export interface ReferenceResourcePanelItem {
-	type: "project_file"
+	type: CanvasReferenceMentionProjectFileType
 	data: ReferenceResourcePanelFileData
 }
 
@@ -122,13 +133,66 @@ export type MentionDataServiceCtor = new (
 
 export interface ReferenceResourcePanelSelectContext {
 	reset?: () => void
+	batch?: {
+		index: number
+		total: number
+	}
 }
 
+export interface ReferenceResourcePanelInitialLoadOptions {
+	itemId: string
+}
+
+export type ReferenceResourcePanelStateValue = CanvasReferenceMentionPanelState
+
+export interface ReferenceResourcePanelNavigationItem {
+	id: string
+	name: string
+	state: ReferenceResourcePanelStateValue
+	catalogId?: string
+	parentId?: string
+}
+
+export interface ReferenceResourcePanelSelectableItem {
+	type?: string
+	isFolder?: boolean
+}
+
+export interface ReferenceResourcePanelCatalogBehaviorArgs {
+	currentState?: ReferenceResourcePanelStateValue
+	currentCatalogId?: string
+	selectedItem: ReferenceResourcePanelSelectableItem
+	enterFolder: boolean
+}
+
+export interface ReferenceResourcePanelCatalogBehavior {
+	getStaticTransition?: (args: {
+		currentState?: ReferenceResourcePanelStateValue
+		itemId: string
+	}) => { state: ReferenceResourcePanelStateValue; catalogId?: string } | null
+	getDynamicTransition?: (
+		args: ReferenceResourcePanelCatalogBehaviorArgs,
+	) => { state: ReferenceResourcePanelStateValue; catalogId?: string } | null
+	shouldEnterFolderDirectly?: (args: ReferenceResourcePanelCatalogBehaviorArgs) => boolean
+	shouldSelectItemDirectly?: (args: ReferenceResourcePanelCatalogBehaviorArgs) => boolean
+}
+
+/**
+ * Host renderer boundary for Canvas reference-resource panels.
+ *
+ * CanvasDesign owns the shared runtime for inline "@" mentions and "select from
+ * project". Host adapters should consume these props as-is and stay
+ * presentation-only; do not rebuild default-directory, filtering, limit, or
+ * folder-navigation logic inside the adapter.
+ */
 export interface ReferenceResourcePanelRendererProps {
 	visible: boolean
 	triggerRef?: RefObject<HTMLElement | null>
 	language?: string
 	dataService?: MentionDataServicePort
+	initialLoadOptions?: ReferenceResourcePanelInitialLoadOptions
+	initialNavigationStack?: ReferenceResourcePanelNavigationItem[]
+	catalogBehavior?: ReferenceResourcePanelCatalogBehavior
 	onSelect: (
 		item: ReferenceResourcePanelItem,
 		context?: ReferenceResourcePanelSelectContext,
@@ -278,6 +342,16 @@ export interface CanvasDesignRef {
 	} | null>
 }
 
+export interface CanvasDesignElementActionHint {
+	id?: string
+	elementId: string
+	reason?: CanvasDocumentMergeElementConflictReason
+	status?: "unresolved" | "resolved"
+	tone?: "warning" | "info" | "error"
+	localExists?: boolean
+	remoteExists?: boolean
+}
+
 export interface CanvasDesignProps {
 	/** 设计项目 ID，用于隔离画布级缓存、SW 离线资源与跨画布粘贴校验 */
 	id: string
@@ -285,6 +359,8 @@ export interface CanvasDesignProps {
 	readonly?: boolean
 	/** Magic 配置 */
 	magic?: MagicConfig
+	/** 插件配置，由宿主注入系统内置插件，并可声明用户插件资源目录 */
+	plugins?: CanvasDesignPluginModuleConfig
 	/** 数据 配置 */
 	data?: {
 		/** 默认画布数据，用于初始化画布 */
@@ -311,6 +387,9 @@ export interface CanvasDesignProps {
 		mentionExtension?: MentionExtensionCtor
 		/** 项目侧资源选择面板渲染器（通过依赖注入传入，实现组件隔离） */
 		referenceResourcePanelRenderer?: ReferenceResourcePanelRenderer
+		/** 元素锚点动作提示；仅展示和回调，不改变元素交互能力 */
+		elementActionHints?: CanvasDesignElementActionHint[]
+		onElementActionHintAction?: (elementId: string, actionKey: string) => void
 	}
 	/** marker 配置 */
 	marker?: {

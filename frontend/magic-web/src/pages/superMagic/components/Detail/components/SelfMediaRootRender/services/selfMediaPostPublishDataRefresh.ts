@@ -182,7 +182,6 @@ export async function sendSelfMediaPostPublishDataRefresh({
 		post,
 		postDirectoryItem,
 	})
-	const folderMention = buildFolderMention(postDirectoryItem)
 	const folderMentionItem = buildFolderMentionItem(postDirectoryItem)
 
 	pubsub.publish(PubSubEvents.Create_New_Topic, {
@@ -192,14 +191,13 @@ export async function sendSelfMediaPostPublishDataRefresh({
 			content,
 			send: true,
 			topicMode,
-			selectedModel: selectedModel ?? null,
 			mentionItems: [folderMentionItem],
 			extra: {
 				super_agent: {
 					topic_pattern: SELF_MEDIA_POST_PUBLISH_DATA_TOPIC_PATTERN,
 					chat_mode: "normal",
-					mentions: [folderMention],
 					enable_web_search: true,
+					...(selectedModel ? { model: selectedModel } : {}),
 					dynamic_params: {
 						message_version: "v2",
 					},

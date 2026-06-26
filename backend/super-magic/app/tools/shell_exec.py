@@ -20,6 +20,7 @@ from app.tools.shell_exec_utils.tool_detail_marker import (
     get_after_override,
     get_tool_detail_override,
 )
+from app.tools.snippet_environment import SnippetEnvironment
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.process_executor import ProcessExecutor, truncate_output_for_llm
 
@@ -93,6 +94,24 @@ Background mode rules (allow_background=True):
 - NEVER refuse a command on grounds of "interactive not supported" or "environment limitation" — with allow_background=True, interactive commands are fully supported; the system handles stdin automatically.
 """
 
+    @staticmethod
+    def _build_shell_extra_env(tool_context: ToolContext | None) -> dict[str, str] | None:
+        """构建 shell 子进程需要的附加环境变量。"""
+        if tool_context is None:
+            return None
+
+        try:
+            agent_ctx = tool_context.get_extension("agent_context")
+        except Exception:
+            agent_ctx = None
+
+        if agent_ctx is None:
+            return None
+
+        extra_env: dict[str, str] = {}
+        SnippetEnvironment.apply_current_model(extra_env, agent_ctx)
+        return extra_env or None
+
     async def execute(self, tool_context: ToolContext, params: ShellExecParams) -> TerminalToolResult:
         """
         Execute shell command
@@ -130,6 +149,8 @@ Background mode rules (allow_background=True):
                 except Exception as e:
                     logger.warning(f"Failed to dispatch before-execution event: {e}")
 
+            extra_env = self._build_shell_extra_env(tool_context)
+
             # ── 后台模式 ──────────────────────────────────────────────────────
             if params.allow_background:
                 raw = await ProcessExecutor.execute_command(
@@ -137,6 +158,7 @@ Background mode rules (allow_background=True):
                     cwd=work_dir,
                     timeout=params.timeout,
                     background_on_timeout=True,
+                    extra_env=extra_env,
                 )
 
                 if isinstance(raw, BackgroundStartResult):
@@ -150,6 +172,7 @@ Background mode rules (allow_background=True):
                     command=params.command,
                     cwd=work_dir,
                     timeout=params.timeout,
+                    extra_env=extra_env,
                 )
 
             # 有 horizon_hint 时通过 horizon 推送引导提示，不写入 tool result content

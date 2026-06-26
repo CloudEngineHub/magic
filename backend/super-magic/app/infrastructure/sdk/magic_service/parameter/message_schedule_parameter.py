@@ -124,15 +124,9 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
         Returns:
             请求体字典
         """
-        # message_content 必须是字符串；若传入 dict，自动 JSON 序列化
-        content = self.message_content
-        if isinstance(content, dict):
-            import json as _json
-            content = _json.dumps(content, ensure_ascii=False)
-
         body: Dict[str, Any] = {
             'task_name': self.task_name,
-            'message_content': content,
+            'message_content': self.message_content,
             'message_type': self.message_type,
             'time_config': self.time_config.to_dict(),
             'topic_id': self.topic_id,
@@ -351,12 +345,7 @@ class UpdateMessageScheduleParameter(MagicServiceAbstractParameter):
         if self.task_name is not None:
             body['task_name'] = self.task_name
         if self.message_content is not None:
-            # message_content 必须是字符串；若传入 dict，自动 JSON 序列化
-            content = self.message_content
-            if isinstance(content, dict):
-                import json as _json
-                content = _json.dumps(content, ensure_ascii=False)
-            body['message_content'] = content
+            body['message_content'] = self.message_content
         if self.message_type is not None:
             body['message_type'] = self.message_type
         if self.time_config is not None:

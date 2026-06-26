@@ -231,6 +231,64 @@ describe("SelfMediaPostCard", () => {
 		}
 	})
 
+	it("treats loaded ops metrics as published evidence when the source artifact is stale", () => {
+		const onLoadPublishedUrl = vi.fn()
+
+		renderCard({
+			opsArtifacts: { source: false, metrics: false, comments: false, review: false },
+			opsMetrics: {
+				version: 1,
+				updatedAt: "2026-06-14T10:00:00.000Z",
+				source: "real-platform",
+				metrics: {
+					reads: 4747,
+					likes: 30,
+					comments: 3,
+				},
+			},
+			onLoadPublishedUrl,
+			onBindPublishedUrl: vi.fn(),
+		})
+
+		expect(screen.getByTestId("self-media-home-post-engagement-post-1")).toHaveTextContent(
+			"Reads 4747",
+		)
+		expect(
+			screen.queryByTestId("self-media-home-post-bind-link-post-1"),
+		).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-post-lifecycle-post-1")).toHaveAttribute(
+			"data-lifecycle",
+			"synced",
+		)
+		expect(
+			screen.getByTestId("self-media-home-post-ops-artifact-post-1-source"),
+		).toHaveAttribute("data-ready", "true")
+		expect(
+			screen.getByTestId("self-media-home-post-ops-artifact-post-1-metrics"),
+		).toHaveAttribute("data-ready", "true")
+		expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toBeInTheDocument()
+		expect(onLoadPublishedUrl).not.toHaveBeenCalled()
+	})
+
+	it("treats review artifacts as published evidence when the source artifact is stale", () => {
+		renderCard({
+			opsArtifacts: { source: false, metrics: false, comments: false, review: true },
+			onBindPublishedUrl: vi.fn(),
+			onLoadPublishedUrl: vi.fn(),
+		})
+
+		expect(
+			screen.queryByTestId("self-media-home-post-bind-link-post-1"),
+		).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-post-lifecycle-post-1")).toHaveAttribute(
+			"data-lifecycle",
+			"reviewed",
+		)
+		expect(
+			screen.getByTestId("self-media-home-post-ops-artifact-post-1-source"),
+		).toHaveAttribute("data-ready", "true")
+	})
+
 	it("passes the card geometry when opening a post", () => {
 		const onOpenPost = vi.fn()
 		const getBoundingClientRect = vi
@@ -556,7 +614,7 @@ describe("SelfMediaPostCard", () => {
 	})
 
 	it("opens the bind link form directly when the card is already in the no-link state", async () => {
-		const onLoadPublishedUrl = vi.fn().mockResolvedValue("https://example.com/existing")
+		const onLoadPublishedUrl = vi.fn().mockResolvedValue(undefined)
 		renderCard({
 			opsArtifacts: { source: false, metrics: false, comments: false, review: false },
 			onLoadPublishedUrl,
@@ -571,6 +629,27 @@ describe("SelfMediaPostCard", () => {
 		expect(
 			screen.queryByTestId("self-media-home-post-bind-link-loading-post-1"),
 		).not.toBeInTheDocument()
+		expect(onLoadPublishedUrl).not.toHaveBeenCalled()
+	})
+
+	it("uses a hydrated published link from the parent when source.json is not exposed yet", () => {
+		const onLoadPublishedUrl = vi.fn()
+
+		renderCard({
+			opsArtifacts: { source: false, metrics: false, comments: false, review: false },
+			publishedUrl: "https://www.xiaohongshu.com/explore/already-bound",
+			onLoadPublishedUrl,
+			onBindPublishedUrl: vi.fn(),
+		})
+
+		expect(
+			screen.queryByTestId("self-media-home-post-bind-link-post-1"),
+		).not.toBeInTheDocument()
+		expect(screen.getByTestId("self-media-home-post-lifecycle-post-1")).toHaveAttribute(
+			"data-lifecycle",
+			"published",
+		)
+		expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toBeInTheDocument()
 		expect(onLoadPublishedUrl).not.toHaveBeenCalled()
 	})
 

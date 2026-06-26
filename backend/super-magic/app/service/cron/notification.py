@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from agentlang.logger import get_logger
+from app.core.context.execution_source import EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY, SuperMagicExecutionSource
 from app.path_manager import PathManager
 from app.service.cron.models import CronJob, CronRunResult
 from app.utils.async_file_utils import (
@@ -197,6 +198,9 @@ async def try_notify_main_agent() -> None:
     chat_msg = ChatClientMessage(
         message_id=f"cron_{uuid.uuid4().hex[:16]}",
         prompt=prompt,
+        dynamic_config={
+            EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY: SuperMagicExecutionSource.CRON.value,
+        },
     )
     # submit_message 内部会先 stop_run 再 reset_run_state，完成后 run_cleanup_registry 已清空。
     # 必须在 submit_message 返回后再调用 register_run_cleanup（即 create_proactive_streams），

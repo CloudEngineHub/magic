@@ -32,6 +32,7 @@ export class ElementCornerActionsDecorator {
 	private actionGroups = new Map<string, Konva.Group>()
 	private viewportScaleHandler?: () => void
 	private elementTransformHandler?: () => void
+	private hoverChangeHandler?: (event: { data: { elementId: string | null } }) => void
 	private deselectHandler?: () => void
 	private mouseEnterHandler?: () => void
 	private mouseLeaveHandler?: () => void
@@ -71,6 +72,7 @@ export class ElementCornerActionsDecorator {
 		this.setupViewportScaleListener()
 		this.setupElementTransformListener()
 		this.setupHoverBehavior()
+		this.syncHoverStateFromCanvas()
 		this.group.getLayer()?.batchDraw()
 	}
 
@@ -294,6 +296,7 @@ export class ElementCornerActionsDecorator {
 	private setupViewportScaleListener(): void {
 		if (this.viewportScaleHandler) return
 		this.viewportScaleHandler = () => {
+			this.syncHoverStateFromCanvas()
 			this.updateButtonScale()
 			this.rootGroup?.getLayer()?.batchDraw()
 		}
@@ -322,6 +325,13 @@ export class ElementCornerActionsDecorator {
 	}
 
 	private setupHoverBehavior(): void {
+		if (!this.hoverChangeHandler) {
+			this.hoverChangeHandler = () => {
+				this.syncHoverStateFromCanvas()
+			}
+			this.config.canvas.eventEmitter.on("element:hover", this.hoverChangeHandler)
+		}
+
 		if (!this.mouseEnterHandler) {
 			this.mouseEnterHandler = () => {
 				if (!this.config.canvas.permissionManager.canUseSelectionToolAffordance()) {
@@ -379,6 +389,10 @@ export class ElementCornerActionsDecorator {
 	}
 
 	private removeHoverBehavior(): void {
+		if (this.hoverChangeHandler) {
+			this.config.canvas.eventEmitter.off("element:hover", this.hoverChangeHandler)
+			this.hoverChangeHandler = undefined
+		}
 		if (this.mouseEnterHandler) {
 			this.group.off("mouseenter", this.mouseEnterHandler)
 			this.mouseEnterHandler = undefined
@@ -398,6 +412,22 @@ export class ElementCornerActionsDecorator {
 		if (this.dragEndHandler) {
 			this.group.off("dragend", this.dragEndHandler)
 			this.dragEndHandler = undefined
+		}
+	}
+
+	private syncHoverStateFromCanvas(): void {
+		if (!this.config.canvas.permissionManager.canUseSelectionToolAffordance()) {
+			this.hide()
+			return
+		}
+
+		if (this.config.canvas.hoverManager.getHoveredElementId() === this.config.elementId) {
+			this.show()
+			return
+		}
+
+		if (!this.config.canvas.selectionManager.isSelected(this.config.elementId)) {
+			this.hide()
 		}
 	}
 

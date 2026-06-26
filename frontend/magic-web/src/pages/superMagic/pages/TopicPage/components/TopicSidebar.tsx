@@ -18,6 +18,8 @@ interface TopicSidebarProps {
 	topicFilesProps: any
 	/** When true, hides the project header card in the sidebar */
 	hideProjectCard?: boolean
+	/** Chat detail pages only expose files and share tabs in ProjectSider */
+	siderVariant?: "default" | "chat"
 }
 
 function TopicSidebar({
@@ -27,36 +29,45 @@ function TopicSidebar({
 	isReadOnly,
 	topicFilesProps,
 	hideProjectCard = false,
+	siderVariant = "default",
 }: TopicSidebarProps) {
 	const { t } = useTranslation("super")
 	const { t: tLongMemory } = useTranslation("super/longMemory")
+	const isChatSider = siderVariant === "chat"
+	// Chat sidebars use a shorter label to avoid implying the list is project-scoped metadata.
+	const topicFilesTitle = isChatSider ? t("topicFiles.fileTitle") : t("topicFiles.title")
 	const items = useMemo(
 		() => [
 			{
 				key: "topicFiles",
-				title: t("topicFiles.title"),
+				title: topicFilesTitle,
 				icon: <Files size={16} />,
-				content: <TopicFilesButton {...topicFilesProps} />,
+				// Keep the panel header aligned with the active sidebar label in chat scenes.
+				content: <TopicFilesButton {...topicFilesProps} title={topicFilesTitle} />,
 			},
-			{
-				key: "task",
-				title: t("scheduleTask.title"),
-				icon: <Timer size={16} />,
-				content: (
-					<SiderTask
-						selectWorkspaceId={selectedWorkspace?.id}
-						selectProjectId={selectedProject?.id}
-						selectTopicId={selectedTopic?.id}
-					/>
-				),
-				visible: !isReadOnly,
-			},
-			{
-				key: "longMemory",
-				title: tLongMemory("longMemory"),
-				icon: <Brain size={16} />,
-				content: <LongTremMemorySider projectId={selectedProject?.id} />,
-			},
+			...(isChatSider
+				? []
+				: [
+						{
+							key: "task",
+							title: t("scheduleTask.title"),
+							icon: <Timer size={16} />,
+							content: (
+								<SiderTask
+									selectWorkspaceId={selectedWorkspace?.id}
+									selectProjectId={selectedProject?.id}
+									selectTopicId={selectedTopic?.id}
+								/>
+							),
+							visible: !isReadOnly,
+						},
+						{
+							key: "longMemory",
+							title: tLongMemory("longMemory"),
+							icon: <Brain size={16} />,
+							content: <LongTremMemorySider projectId={selectedProject?.id} />,
+						},
+					]),
 			{
 				key: "share",
 				title: t("shareManagement.title"),
@@ -65,12 +76,14 @@ function TopicSidebar({
 			},
 		],
 		[
+			isChatSider,
 			isReadOnly,
 			selectedProject?.id,
 			selectedTopic?.id,
 			selectedWorkspace?.id,
 			t,
 			tLongMemory,
+			topicFilesTitle,
 			topicFilesProps,
 		],
 	)

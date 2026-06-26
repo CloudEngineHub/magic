@@ -16,6 +16,13 @@ export { AiModel } from "@admin/const/aiModel"
 export { withAuthMiddleware } from "@admin/layouts/BaseLayout/components/AuthMiddleware"
 
 export { findRouteByPathname, checkItemPermission } from "@admin/utils/routeUtils"
+export {
+	getMatchedRouteChain,
+	getMatchedRouteEntries,
+	getPermissionSourceByPath,
+	getRoutePermissionSource,
+} from "@admin/utils/routeMeta"
+export type { MatchedRouteEntry, PermissionSource, RouteWithMeta } from "@admin/utils/routeMeta"
 
 // 9. 导出类型
 export { PlatformPackage } from "@admin/types/platformPackage"

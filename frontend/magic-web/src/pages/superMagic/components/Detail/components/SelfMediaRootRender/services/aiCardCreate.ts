@@ -4,9 +4,13 @@ import routeManageService from "@/pages/superMagic/services/routeManageService"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { buildPlainTextJSONContent } from "../../../../MessageEditor/utils"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
+import i18n from "i18next"
 import type { JSONContent } from "@tiptap/react"
 import type { ScheduledTask } from "@/types/scheduledTask"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
+import type { AICardNotificationConfig } from "../../AICardRootRender/utils/aiCardNotification"
+import { compactAICardNotification } from "../../AICardRootRender/utils/aiCardNotification"
+import { createAICardId, generateAICardDeepLink } from "../../AICardRootRender/utils/aiCardDeepLink"
 
 export interface AICardCreateParams {
 	/** User's analysis prompt (plain text, used for template text) */
@@ -33,9 +37,61 @@ export interface AICardCreateParams {
 	imageModel?: ModelItem | null
 	/** Selected video model */
 	videoModel?: ModelItem | null
+	/** Notification targets to save into magic.project.js */
+	notification?: AICardNotificationConfig
+	/** Stable AI card id used by frontend deep links */
+	cardId?: string
+	/** Full frontend URL that opens the generated AI card */
+	cardPathOrLink?: string
 }
 
 const SEND_MESSAGE_DELAY_MS = 300
+const I18N_NS = "super"
+const NOTIFICATION_CHANNEL_LABELS: Record<
+	AICardNotificationConfig["channels"][number]["channel"],
+	{ key: string; defaultValue: string }
+> = {
+	dingtalk: {
+		key: "detail.aiCard.createMessage.notificationChannels.dingtalk",
+		defaultValue: "DingTalk",
+	},
+	wecom: {
+		key: "detail.aiCard.createMessage.notificationChannels.wecom",
+		defaultValue: "WeCom",
+	},
+	lark: {
+		key: "detail.aiCard.createMessage.notificationChannels.lark",
+		defaultValue: "Lark",
+	},
+}
+
+function t(key: string, defaultValue: string, values?: Record<string, unknown>): string {
+	return String(
+		i18n.t(key, {
+			ns: I18N_NS,
+			defaultValue,
+			...values,
+		}),
+	)
+}
+
+function sectionTitle(title: string): string {
+	return t("detail.aiCard.createMessage.sectionTitle", "━━━ {{title}} ━━━", { title })
+}
+
+function formatNotificationTargetLines(notification: AICardNotificationConfig): string[] {
+	return notification.channels.map(({ channel, targetDescription }) => {
+		const channelLabel = NOTIFICATION_CHANNEL_LABELS[channel]
+		return t(
+			"detail.aiCard.createMessage.notificationTargetLine",
+			"{{channel}}: {{targetDescription}}",
+			{
+				channel: t(channelLabel.key, channelLabel.defaultValue),
+				targetDescription,
+			},
+		)
+	})
+}
 
 /**
  * Format a TimeConfig into a human-readable schedule description.
@@ -44,15 +100,33 @@ function formatScheduleDescription(timeConfig: ScheduledTask.TimeConfig): string
 	const { type, time, day } = timeConfig
 	switch (type) {
 		case "no_repeat":
-			return `单次执行，时间: ${time}`
+			return t("detail.aiCard.createMessage.schedule.noRepeat", "once at {{time}}", {
+				time,
+			})
 		case "daily_repeat":
-			return `每天 ${time} 执行`
+			return t("detail.aiCard.createMessage.schedule.daily", "daily at {{time}}", { time })
 		case "weekly_repeat":
-			return `每周${day ? `周${day}` : ""} ${time} 执行`
+			return t(
+				"detail.aiCard.createMessage.schedule.weekly",
+				"weekly on {{day}} at {{time}}",
+				{
+					day: day
+						? t("detail.aiCard.createMessage.schedule.weeklyDay", "{{day}}", { day })
+						: "",
+					time,
+				},
+			)
 		case "monthly_repeat":
-			return `每月${day ? `${day}日` : ""} ${time} 执行`
+			return t(
+				"detail.aiCard.createMessage.schedule.monthly",
+				"monthly on day {{day}} at {{time}}",
+				{
+					day: day || "",
+					time,
+				},
+			)
 		default:
-			return `${time} 执行`
+			return t("detail.aiCard.createMessage.schedule.default", "at {{time}}", { time })
 	}
 }
 
@@ -61,47 +135,99 @@ function formatScheduleDescription(timeConfig: ScheduledTask.TimeConfig): string
  * Returns the prefix lines (everything before the user's prompt).
  */
 function buildAICardCreatePrefixLines(params: AICardCreateParams): string[] {
-	const { cardName, template, customTemplatePrompt, folderPath, timeConfig, enabled } = params
+	const {
+		cardName,
+		template,
+		customTemplatePrompt,
+		folderPath,
+		timeConfig,
+		enabled,
+		cardId,
+		cardPathOrLink,
+	} = params
 
-	const templateInstruction =
-		template === "custom"
-			? customTemplatePrompt
-				? `根据以下自定义需求设计模板布局: ${customTemplatePrompt}`
-				: `根据分析指令的内容自行设计模板布局。`
-			: `参考预设模板 ${template} 的结构和样式来设计卡片。`
+	const cardDir = [folderPath, cardName].filter(Boolean).join("/")
 
-	// Determine where the card directory should be created
-	const cardDir = folderPath ? `${folderPath}/${cardName}` : `${cardName}`
-	const locationInstruction = folderPath
-		? `在项目目录 ${folderPath}/ 下创建卡片目录「${cardName}」`
-		: `在项目根目录下创建卡片目录「${cardName}」`
-
-	// Build schedule section
-	let scheduleInstruction: string
+	let updateModeLine: string
 	if (timeConfig) {
 		const scheduleDesc = formatScheduleDescription(timeConfig)
-		const enabledText = enabled !== false ? "（已启用）" : "（暂不启用）"
-		scheduleInstruction = `定时规则: ${scheduleDesc} ${enabledText}\n请按此规则设置定时任务，定期自动获取最新数据并更新卡片。`
+		const enabledText = t(
+			enabled !== false
+				? "detail.aiCard.createMessage.schedule.enabled"
+				: "detail.aiCard.createMessage.schedule.disabled",
+			enabled !== false ? " (enabled)" : " (disabled)",
+		)
+		updateModeLine = t(
+			"detail.aiCard.createMessage.update.scheduled",
+			"Schedule: {{schedule}}{{enabledText}}",
+			{
+				schedule: scheduleDesc,
+				enabledText,
+			},
+		)
 	} else if (enabled === false) {
-		scheduleInstruction = `本卡片用于一次性分析/复盘，不创建定时任务。请生成可后续手动打开、编辑和复用的最新看板文件。`
+		updateModeLine = t(
+			"detail.aiCard.createMessage.update.once",
+			"Update mode: one-time generation",
+		)
 	} else {
-		scheduleInstruction = `创建完成后请设置每日定时任务，每天自动获取最新数据并更新卡片。`
+		updateModeLine = t(
+			"detail.aiCard.createMessage.update.defaultScheduled",
+			"Update mode: default scheduled updates",
+		)
 	}
 
+	const lines = [
+		t("detail.aiCard.createMessage.title", 'Create an AI Card named "{{cardName}}".', {
+			cardName,
+		}),
+		``,
+		sectionTitle(t("detail.aiCard.createMessage.sections.cardData", "Card data")),
+		...(cardId
+			? [t("detail.aiCard.createMessage.cardId", "Card ID: {{cardId}}", { cardId })]
+			: []),
+		...(cardPathOrLink
+			? [
+					t("detail.aiCard.createMessage.cardLink", "Card link: {{cardLink}}", {
+						cardLink: cardPathOrLink,
+					}),
+				]
+			: []),
+		``,
+		sectionTitle(
+			t("detail.aiCard.createMessage.sections.createRequirement", "Creation requirements"),
+		),
+		t("detail.aiCard.createMessage.location", "Location: {{cardDir}}/", { cardDir }),
+		t("detail.aiCard.createMessage.template", "Template: {{template}}", { template }),
+		...(template === "custom" && customTemplatePrompt
+			? [
+					t(
+						"detail.aiCard.createMessage.customTemplate",
+						"Custom template: {{customTemplate}}",
+						{
+							customTemplate: customTemplatePrompt,
+						},
+					),
+				]
+			: []),
+		updateModeLine,
+		``,
+		sectionTitle(
+			t("detail.aiCard.createMessage.sections.analysisInstruction", "Analysis instructions"),
+		),
+	]
+
+	const notification = compactAICardNotification(params.notification)
+	if (!notification) return lines
+
 	return [
-		`请创建一个 AI 卡片「${cardName}」。`,
+		...lines.slice(0, -2),
+		sectionTitle(
+			t("detail.aiCard.createMessage.sections.notificationTargets", "Notification targets"),
+		),
+		...formatNotificationTargetLines(notification),
 		``,
-		`━━━ 创建位置 ━━━`,
-		`${locationInstruction}`,
-		`完整路径: ${cardDir}/`,
-		``,
-		`━━━ 卡片模板 ━━━`,
-		templateInstruction,
-		``,
-		`━━━ 定时更新 ━━━`,
-		scheduleInstruction,
-		``,
-		`━━━ 分析指令 ━━━`,
+		...lines.slice(-2),
 	]
 }
 
@@ -146,7 +272,9 @@ export async function createAICardViaTopic(
 	const selectedProject = projectStore.selectedProject
 
 	// Create a dedicated topic for this AI card creation
-	const topicName = `[AI卡片] ${cardName}`
+	const topicName = t("detail.aiCard.createMessage.topicName", "[AI Card] {{cardName}}", {
+		cardName,
+	})
 	const newTopic = await SuperMagicApi.createTopic({
 		project_id: projectId,
 		topic_name: topicName,
@@ -155,6 +283,15 @@ export async function createAICardViaTopic(
 	if (!newTopic?.id) {
 		console.error("[aiCardCreate] Failed to create topic")
 		return null
+	}
+
+	const cardId = params.cardId || createAICardId()
+	const cardPathOrLink =
+		params.cardPathOrLink || generateAICardDeepLink(projectId, newTopic.id, cardId)
+	const createParams: AICardCreateParams = {
+		...params,
+		cardId,
+		cardPathOrLink,
 	}
 
 	// Pre-warm sandbox for faster execution
@@ -193,7 +330,7 @@ export async function createAICardViaTopic(
 	}
 
 	// Build and send message after a short delay (allow topic switch to settle)
-	const jsonContent = buildAICardCreateJSONContent(params)
+	const jsonContent = buildAICardCreateJSONContent(createParams)
 	const payload = {
 		jsonContent,
 		extra: {

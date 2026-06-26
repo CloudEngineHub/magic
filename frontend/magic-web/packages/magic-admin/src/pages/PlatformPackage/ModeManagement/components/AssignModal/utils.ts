@@ -4,8 +4,17 @@ import { PlatformPackage } from "@admin/types/platformPackage"
 import type { AiManage } from "@admin/types/aiManage"
 import { AiModel } from "@admin/const/aiModel"
 import type { GroupItem as GroupItemType } from "./types"
+import defaultIcon from "@admin/assets/logos/dynamic-icon.png"
 
-const defaultIcon = ""
+const newDynamicModelIds = new Set<string>()
+
+export const isNewDynamicModelId = (id: string) => {
+	return newDynamicModelIds.has(id)
+}
+
+export const clearNewDynamicModelIds = () => {
+	newDynamicModelIds.clear()
+}
 
 // 数组转 Map
 export const listToMap = (
@@ -94,8 +103,11 @@ export const createDynamicModel = (
 	insertIndex: number,
 	overContainer: string,
 ) => {
+	const id = `${PlatformPackage.ModelType.Dynamic}-${nanoid()}`
+	newDynamicModelIds.add(id)
+
 	return {
-		id: `${PlatformPackage.ModelType.Dynamic}-${nanoid()}`,
+		id,
 		provider_model_id: "0",
 		group_id: overContainer,
 		model_id: draggedModel.model_id,

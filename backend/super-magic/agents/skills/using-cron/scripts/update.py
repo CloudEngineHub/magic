@@ -6,6 +6,7 @@
     --id            定时任务 ID（必填）
     --task-name     任务名称（可选）
     --message-content   消息内容（可选）
+    --message-content-file 从文件读取消息内容。用于长文本或含特殊字符的内容（可选）
     --type          调度类型：no_repeat | daily_repeat | weekly_repeat | monthly_repeat（可选，与 --time 一起使用）
     --time          执行时间，格式 HH:MM（可选，与 --type 一起使用）
     --day           日期/星期/日号，含义随 --type 不同（可选）
@@ -18,6 +19,7 @@ import json
 import re
 import argparse
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import _context  # 初始化项目根路径
@@ -60,7 +62,19 @@ def parse_message_content(raw: str):
 parser = argparse.ArgumentParser(description="更新定时消息任务")
 parser.add_argument("--id", required=True, help="定时任务 ID")
 parser.add_argument("--task-name", default=None, help="任务名称")
-parser.add_argument("--message-content", dest="message_content", default=None, help="消息内容（与详情中的 message_content/task_describe 对应）")
+message_group = parser.add_mutually_exclusive_group()
+message_group.add_argument(
+    "--message-content",
+    dest="message_content",
+    default=None,
+    help="消息内容（与详情中的 message_content/task_describe 对应）",
+)
+message_group.add_argument(
+    "--message-content-file",
+    dest="message_content_file",
+    default=None,
+    help="从文件读取消息内容，适合长文本或含特殊字符的内容",
+)
 parser.add_argument(
     "--type",
     default=None,
@@ -106,6 +120,18 @@ def normalize_deadline(value: Optional[str]) -> Optional[str]:
     return None
 
 
+def resolve_message_content(
+    message_content: Optional[str],
+    message_content_file: Optional[str],
+) -> Optional[str]:
+    """读取最终任务指令内容。未传消息内容时返回 None，表示不更新该字段。"""
+    if message_content is not None:
+        return message_content
+    if message_content_file:
+        return Path(message_content_file).read_text(encoding="utf-8").strip()
+    return None
+
+
 try:
     # 只有同时提供了 --type 和 --time 才构造 time_config
     time_config = None
@@ -121,8 +147,9 @@ try:
     # 解析 message_content 为 rich_text 格式
     message_content = None
     message_type = None
-    if args.message_content is not None:
-        message_content, message_type = parse_message_content(args.message_content)
+    raw_content = resolve_message_content(args.message_content, args.message_content_file)
+    if raw_content is not None:
+        message_content, message_type = parse_message_content(raw_content)
 
     sdk = create_magic_service_sdk_with_defaults()
 

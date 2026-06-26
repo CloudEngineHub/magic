@@ -30,7 +30,7 @@ import inspect
 import random
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
 from agentlang.logger import get_logger
 from app.tools.design.manager.canvas_lock_manager import canvas_lock_manager
@@ -151,12 +151,12 @@ class CanvasManager:
 
     async def run_write_transaction(
         self,
-        mutator: Callable[[MagicProjectConfig], TransactionResultT],
+        mutator: Callable[[MagicProjectConfig], TransactionResultT | Awaitable[TransactionResultT]],
         verify_content: Optional[
             Callable[[MagicProjectConfig, TransactionResultT], bool]
         ] = None,
-        before_write: Optional[Callable[[], Any]] = None,
-        after_write: Optional[Callable[[TransactionResultT], Any]] = None,
+        before_write: Optional[Callable[[], Any | Awaitable[Any]]] = None,
+        after_write: Optional[Callable[[TransactionResultT], Any | Awaitable[Any]]] = None,
     ) -> TransactionResultT:
         """
         在同一把项目锁内完成一次原子写事务：IO 读 -> 内存改 -> IO 写。

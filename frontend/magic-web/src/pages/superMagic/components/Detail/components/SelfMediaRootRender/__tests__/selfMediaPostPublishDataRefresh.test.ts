@@ -90,25 +90,30 @@ describe("selfMediaPostPublishDataRefresh", () => {
 			expect.objectContaining({
 				send: true,
 				topicMode: "ip-manager",
-				selectedModel,
 			}),
 		)
+		expect(sendPayload).not.toHaveProperty("selectedModel")
 		expect(sendPayload.extra.super_agent).toEqual(
 			expect.objectContaining({
 				topic_pattern: "ip-manager",
 				chat_mode: "normal",
 				enable_web_search: true,
+				model: selectedModel,
 			}),
 		)
 		expect(sendPayload.extra.super_agent).not.toHaveProperty("agent_code")
-		expect(sendPayload.extra.super_agent.mentions).toEqual([
+		expect(sendPayload.extra.super_agent).not.toHaveProperty("mentions")
+		expect(sendPayload.mentionItems).toEqual([
 			{
-				type: "project_directory",
-				data: expect.objectContaining({
-					directory_id: "post-dir",
-					directory_name: "post-1",
-					directory_path: "posts/post-1/",
-				}),
+				type: "mention",
+				attrs: {
+					type: "project_directory",
+					data: expect.objectContaining({
+						directory_id: "post-dir",
+						directory_name: "post-1",
+						directory_path: "posts/post-1/",
+					}),
+				},
 			},
 		])
 

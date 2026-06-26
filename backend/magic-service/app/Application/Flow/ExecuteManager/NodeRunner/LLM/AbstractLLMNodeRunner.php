@@ -129,6 +129,7 @@ abstract class AbstractLLMNodeRunner extends NodeRunner
                 originConversationId: $executionData->getOriginConversationId(),
                 topicId: $executionData->getTopicId(),
                 limit: $modelConfig->getMaxRecord(),
+                readerUserId: $executionData->getDataIsolation()->getCurrentUserId(),
             );
             // 如果来源的是第三方聊天工具，仅获取最近 3 小时的记忆
             if ($executionData->isThirdPlatformChat()) {

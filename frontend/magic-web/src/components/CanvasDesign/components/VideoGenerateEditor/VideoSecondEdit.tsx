@@ -5,6 +5,7 @@ import { useCanvas } from "../../context/CanvasContext"
 import { useMagic } from "../../context/MagicContext"
 import useElementPositionEffect from "../../hooks/useElementPositionEffect"
 import { useFloatingComponent } from "../../hooks/useFloatingComponent"
+import type { Canvas } from "../../canvas/Canvas"
 import { ElementTypeEnum, type VideoElement } from "../../canvas/types"
 import { VideoElement as VideoElementClass } from "../../canvas/element/elements/VideoElement"
 import { generateUUID } from "../../canvas/utils/utils"
@@ -15,12 +16,49 @@ import VideoGenerateEditorRender from "./VideoGenerateEditorRender"
 import styles from "./index.module.css"
 import { createAndSubmitVideoGeneration } from "./createAndSubmitVideoGeneration"
 import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
-import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
 import { resolveVideoGenerationSelection } from "./video-editor-config.generation"
 import { buildVideoPointsEstimateSignature } from "./video-points-estimate.utils"
+import { collectPendingVideoGenerationRequestResourcePaths } from "./video-points-estimate.resources"
+import type { GenerateVideoRequest } from "../../types.magic"
 
 interface VideoSecondEditProps {
 	videoElement: VideoElement
+}
+
+async function waitForPendingVideoGenerationResources(
+	canvas: Canvas,
+	request: Partial<GenerateVideoRequest>,
+): Promise<void> {
+	const uploadManager = canvas.canvasFileUploadManager
+	const collectPendingPaths = () =>
+		collectPendingVideoGenerationRequestResourcePaths(request, (path) =>
+			uploadManager.shouldDeferRemoteResourceLoad(path),
+		)
+
+	const pendingPaths = collectPendingPaths()
+	if (pendingPaths.length === 0) return
+
+	return new Promise<void>((resolve) => {
+		let resolved = false
+		const finish = () => {
+			if (resolved) return
+			resolved = true
+			unsubscribe()
+			resolve()
+		}
+		const unsubscribe = canvas.eventEmitter.on("resource:remote-load-deferral-released", () => {
+			const nextPendingPaths = collectPendingPaths()
+			if (nextPendingPaths.length > 0) {
+				return
+			}
+
+			finish()
+		})
+
+		if (collectPendingPaths().length === 0) {
+			finish()
+		}
+	})
 }
 
 /**
@@ -30,21 +68,14 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const { videoElement } = props
 	const { selectedElements } = useCanvasUI()
 	const { canvas } = useCanvas()
-	const { videoModelList } = useMagic()
+	const { videoModelList, methods, getCachedVideoPointsEstimate, getVideoPointsEstimate } =
+		useMagic()
 	const { t } = useCanvasDesignI18n()
 	const [isEditing, setIsEditing] = useState(false)
 	const [isGeneratingAgain, setIsGeneratingAgain] = useState(false)
+	const [isPreparingGenerateAgain, setIsPreparingGenerateAgain] = useState(false)
 	const confirmVideoGeneration = useVideoPointsConfirm()
 	const estimateRequest = videoElement.generateVideoRequest ?? null
-	const estimateSignature = useMemo(() => {
-		if (!estimateRequest) return null
-		return buildVideoPointsEstimateSignature(estimateRequest)
-	}, [estimateRequest])
-	const { points: estimatedPoints, isLoading: isEstimateLoading } = useVideoPointsEstimate({
-		request: estimateRequest,
-		signature: estimateSignature,
-		enabled: Boolean(estimateRequest?.model_id),
-	})
 	const generateAgainElementSize = useMemo(() => {
 		if (!estimateRequest?.generation) return null
 		const model = videoModelList.find((item) => item.model_id === estimateRequest.model_id)
@@ -83,7 +114,36 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 
 	const handleGenerateAgain = useCallback(async () => {
 		const generateVideoRequest = videoElement.generateVideoRequest
-		if (!canvas || !generateVideoRequest || isGeneratingAgain || isEstimateLoading) return
+		if (!canvas || !generateVideoRequest || isGeneratingAgain || isPreparingGenerateAgain)
+			return
+
+		setIsPreparingGenerateAgain(true)
+		let estimatedPoints: number | null = null
+		try {
+			await waitForPendingVideoGenerationResources(canvas, generateVideoRequest)
+			const estimateSignature = buildVideoPointsEstimateSignature(generateVideoRequest)
+			if (
+				estimateSignature &&
+				generateVideoRequest.model_id &&
+				methods?.estimateVideoPoints
+			) {
+				try {
+					const cachedEstimate = getCachedVideoPointsEstimate(estimateSignature)
+					const estimate =
+						cachedEstimate ??
+						(await getVideoPointsEstimate({
+							signature: estimateSignature,
+							request: generateVideoRequest,
+						}))
+					estimatedPoints = typeof estimate.points === "number" ? estimate.points : null
+				} catch {
+					estimatedPoints = null
+				}
+			}
+		} finally {
+			setIsPreparingGenerateAgain(false)
+		}
+
 		await confirmVideoGeneration({
 			points: estimatedPoints,
 			onConfirm: async () => {
@@ -106,15 +166,17 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	}, [
 		canvas,
 		confirmVideoGeneration,
-		estimatedPoints,
 		generateAgainElementSize,
-		isEstimateLoading,
+		getCachedVideoPointsEstimate,
+		getVideoPointsEstimate,
 		isGeneratingAgain,
+		isPreparingGenerateAgain,
+		methods?.estimateVideoPoints,
 		videoElement,
 	])
 
 	const canRestore = Boolean(videoElement.generateVideoRequest?.model_id)
-	const generateAgainBusy = isGeneratingAgain || isEstimateLoading
+	const generateAgainBusy = isGeneratingAgain || isPreparingGenerateAgain
 
 	if (!isEditing) {
 		if (!canRestore) {

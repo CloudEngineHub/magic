@@ -14,26 +14,22 @@ import { SafeArea } from "antd-mobile"
 import { Check, ChevronDown, ChevronLeft, Eraser, Search, X } from "lucide-react"
 
 // Types
-import type {
-	CloudFileMentionData,
-	McpMentionData,
-	MentionItem,
-	MentionPanelProps,
-	MentionPanelRef,
-	NavigationItem,
-} from "./types"
-import { MentionItemType, PanelState } from "./types"
-import { MentionPanelBuiltinItemId as BuiltinRootId } from "./runtime/builtin/catalog-ids"
+import type { MentionItem, MentionPanelProps, MentionPanelRef } from "./types"
 
 // Components
 import MagicPopup from "../../base-mobile/MagicPopup"
 import MobileMenuItem from "./components/MobileMenuItem"
-import {
-	checkMCPOAuth,
-	MCPOAuthType,
-} from "@/components/Agent/MCP/AgentSettings/AgentPanel/MCPPanel/helpers"
 import { cn } from "@/lib/utils"
-import { isSelectableBuiltinItemId } from "./runtime/builtin/default-items"
+import {
+	canTogglePendingLeafItem,
+	getMentionItemSelectionKey,
+	getPendingSourceRootId,
+	getSubmittablePendingEntries,
+	inferRootEntryIdFromItem,
+	isRootDefaultCategoryScreen,
+	type PendingMentionEntry,
+} from "./utils/multiSelect"
+import { prepareMentionItemForPending } from "./utils/multiSelectValidation"
 
 // Styles
 import { getMobileItemIconStyle, useMobileStyles } from "./mobileStyles"
@@ -49,65 +45,6 @@ import { resolveMentionPanelRuntime } from "./runtime/default-runtime"
 import { useMemoizedFn } from "ahooks"
 
 type MobileSheetView = "browse" | "selected"
-
-function getMentionItemSelectionKey(item: MentionItem): string {
-	return `${item.type}:${item.id}`
-}
-
-function canTogglePendingItem(item: MentionItem): boolean {
-	if (item.type === MentionItemType.TITLE || item.type === MentionItemType.DIVIDER) return false
-	if (item.unSelectable) return false
-	if (item.hasChildren || item.children?.length) return false
-	return isSelectableBuiltinItemId(item.id)
-}
-
-/** 一级类目入口页：仅下钻，不展示多选、不写入暂存 */
-function isRootDefaultCategoryScreen(state: {
-	currentState: PanelState
-	navigationStack: { length: number }
-	searchQuery: string
-}): boolean {
-	return (
-		state.currentState === PanelState.DEFAULT &&
-		state.navigationStack.length === 0 &&
-		!state.searchQuery.trim()
-	)
-}
-
-interface PendingMentionEntry {
-	item: MentionItem
-	/** 归属的一级入口行 id（如 project-files），用于根列表角标 */
-	sourceRootId: string | null
-	mcpValidated?: boolean
-}
-
-/** 无导航栈时按条目类型归因到一级入口 */
-function inferRootEntryIdFromItem(item: MentionItem): string | null {
-	switch (item.type) {
-		case MentionItemType.PROJECT_FILE:
-			return BuiltinRootId.PROJECT_FILES
-		case MentionItemType.MCP:
-			return BuiltinRootId.MCP_EXTENSIONS
-		case MentionItemType.AGENT:
-			return BuiltinRootId.AGENTS
-		case MentionItemType.SKILL:
-			return BuiltinRootId.SKILLS
-		case MentionItemType.TOOL:
-			return BuiltinRootId.TOOLS
-		case MentionItemType.UPLOAD_FILE:
-			return BuiltinRootId.UPLOAD_FILES
-		case MentionItemType.CLOUD_FILE: {
-			const p = (item.data as CloudFileMentionData | undefined)?.cloud_provider
-			if (p === "enterprise") return BuiltinRootId.ENTERPRISE_DRIVE
-			if (p === "personal") return BuiltinRootId.PERSONAL_DRIVE
-			return BuiltinRootId.PERSONAL_DRIVE
-		}
-		case MentionItemType.FOLDER:
-			return BuiltinRootId.PROJECT_FILES
-		default:
-			return null
-	}
-}
 
 interface SelectedPendingListItemProps {
 	item: MentionItem
@@ -149,24 +86,6 @@ const SelectedPendingListItem = memo(function SelectedPendingListItem({
 })
 
 SelectedPendingListItem.displayName = "SelectedPendingListItem"
-
-function getPendingSourceRootId(
-	navigationStack: NavigationItem[],
-	item: MentionItem,
-): string | null {
-	if (navigationStack.length > 0) {
-		const first = navigationStack[0]
-		if (first.id === "search-results") {
-			if (navigationStack.length > 1) {
-				const second = navigationStack[1]
-				return second.catalogId ?? second.id
-			}
-			return inferRootEntryIdFromItem(item)
-		}
-		return first.catalogId ?? first.id
-	}
-	return inferRootEntryIdFromItem(item)
-}
 
 /**
  * MentionPanelMobile - Mobile version of MentionPanel using MagicPopup
@@ -284,7 +203,7 @@ const MentionPanelMobile = observer(
 
 		const togglePendingForItem = useMemoizedFn(
 			(item: MentionItem, options?: { mcpValidated?: boolean }) => {
-				if (!canTogglePendingItem(item)) return
+				if (!canTogglePendingLeafItem(item)) return
 				const key = getMentionItemSelectionKey(item)
 				const sourceRootId = getPendingSourceRootId(state.navigationStack, item)
 				setPendingByKey((prev) => {
@@ -309,25 +228,9 @@ const MentionPanelMobile = observer(
 			})
 		})
 
-		const ensureMcpItemReadyForPending = useMemoizedFn(async (item: MentionItem) => {
-			if (item.type !== MentionItemType.MCP) return { canSelect: true, mcpValidated: false }
-
-			const mcpData = item.data as McpMentionData | undefined
-			if (!mcpData) return { canSelect: true, mcpValidated: false }
-
-			const result = await checkMCPOAuth(mcpData)
-			if (result === MCPOAuthType.validationFailed) {
-				return { canSelect: false, mcpValidated: false }
-			}
-
-			await Promise.resolve(
-				resolvedRuntime.dataService?.dispatch({
-					kind: "effect",
-					effect: "refresh-mcp",
-				}),
-			)
-			return { canSelect: true, mcpValidated: true }
-		})
+		const ensureMcpItemReadyForPending = useMemoizedFn((item: MentionItem) =>
+			prepareMentionItemForPending(item, resolvedRuntime.dataService),
+		)
 
 		const handleItemClick = useCallback(
 			async (index: number, event?: React.MouseEvent) => {
@@ -380,7 +283,7 @@ const MentionPanelMobile = observer(
 					return
 				}
 
-				if (!canTogglePendingItem(selectedItem)) {
+				if (!canTogglePendingLeafItem(selectedItem)) {
 					const canDrillDown =
 						Boolean(selectedItem.hasChildren || selectedItem.children?.length) &&
 						!selectedItem.tags?.includes("history")
@@ -425,9 +328,8 @@ const MentionPanelMobile = observer(
 		})
 
 		const handleConfirmApply = useMemoizedFn(async () => {
-			const items = Array.from(pendingByKey.values())
-				.map((e) => e.item)
-				.filter((item) => isSelectableBuiltinItemId(item.id))
+			const entries = getSubmittablePendingEntries(pendingByKey)
+			const items = entries.map((e) => e.item)
 			if (items.length === 0) {
 				handleClose()
 				return
@@ -512,7 +414,7 @@ const MentionPanelMobile = observer(
 
 				const isHistoryItem = item.tags?.includes("history")
 				const key = getMentionItemSelectionKey(item)
-				const showCb = canTogglePendingItem(item) && !isRootDefaultCategoryScreen(state)
+				const showCb = canTogglePendingLeafItem(item) && !isRootDefaultCategoryScreen(state)
 				const rootBadge =
 					isRootDefaultCategoryScreen(state) && totalPending > 0
 						? (rootPendingCounts.get(item.id) ?? 0)

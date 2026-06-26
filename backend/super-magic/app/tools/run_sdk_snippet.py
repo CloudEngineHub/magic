@@ -37,6 +37,7 @@ from app.path_manager import PathManager
 from app.tools.core import BaseToolParams, tool
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.python_snippet_repair import prepare_python_code
+from app.tools.snippet_environment import SnippetEnvironment
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
 from app.utils.process_executor import ProcessExecutor
 
@@ -263,6 +264,7 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
 
     @staticmethod
     def _build_snippet_extra_env(project_root: Path) -> dict[str, str]:
+        """构建 SDK 代码片段子进程的基础环境变量。"""
         import os
 
         project_root_str = str(project_root)
@@ -353,6 +355,7 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
                     "无法确定调用方 Agent 标识"
                 )
             extra_env["SUPER_MAGIC_AGENT_CONTEXT_ID"] = agent_ctx.context_id
+            SnippetEnvironment.apply_current_model(extra_env, agent_ctx)
 
             # 每次 Code Mode 执行生成唯一标识，用于精确取消本轮发起的服务端请求
             sdk_execution_id = uuid.uuid4().hex

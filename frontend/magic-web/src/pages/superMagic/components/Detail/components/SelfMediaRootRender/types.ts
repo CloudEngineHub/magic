@@ -133,6 +133,7 @@ export type SelfMediaView = "feed" | "detail" | "scroll" | "edit" | "code"
 export interface PlatformComponentProps {
 	platform: SelfMediaPlatform
 	attachmentList?: SelfMediaAttachmentNode[]
+	attachments?: SelfMediaAttachmentNode[]
 	/** Whether the user has permission to edit content */
 	allowEdit?: boolean
 	/** Save content callback from the parent Render component */

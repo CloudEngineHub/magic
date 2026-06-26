@@ -6,6 +6,7 @@ import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
 import {
 	createDomainEventRegistry,
 	createTopicMessageListenerRegistry,
+	RegisterTopicMessageListenerParams,
 	resolveCrewDomainEvent,
 	resolveTaskDomainEvent,
 } from "./listener-registry"
@@ -404,13 +405,6 @@ export class SuperMagicStore {
 		const messageNode = getRawMessageNode(message?.message)
 
 		const appMessageId = message?.message?.app_message_id as string
-		if (topicId === this.activeTopicId) {
-			notifyAskUserV2BrowserNotificationFromMessageNode({
-				topicId,
-				messageNode,
-				messageSendTime: nextMessage?.send_time,
-			})
-		}
 
 		const correlationId = messageNode?.correlation_id as string
 
@@ -507,7 +501,9 @@ export class SuperMagicStore {
 	}
 
 	/** 注册指定话题的新消息到达监听，仅响应增量 arrived 事件。 */
-	registerTopicMessageListener(params: RegisterTopicMessageListenerParams) {
+	registerTopicMessageListener(
+		params: RegisterTopicMessageListenerParams<MessageItem, TopicMessageNode>,
+	) {
 		return this.topicMessageListenerRegistry.register(params)
 	}
 
@@ -566,7 +562,7 @@ export class SuperMagicStore {
 			if (streamControlledKeys.has(key)) return
 			if (value === undefined) return
 			if ((cache as Record<string, unknown>)[key] === value) return
-				; (cache as Record<string, unknown>)[key] = value
+			;(cache as Record<string, unknown>)[key] = value
 			mutated = true
 		})
 
@@ -613,7 +609,7 @@ export class SuperMagicStore {
 			const next = (finalCard as Record<string, unknown>)[key]
 			if (next === undefined || next === null || next === "") return
 			if ((merged as Record<string, unknown>)[key] === next) return
-				; (merged as Record<string, unknown>)[key] = next
+			;(merged as Record<string, unknown>)[key] = next
 			mutated = true
 		})
 
@@ -885,7 +881,7 @@ export class SuperMagicStore {
 
 			const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode | undefined
 			if (cache) {
-				; (cache as any).tool_calls = validToolCalls.length > 0 ? validToolCalls : []
+				;(cache as any).tool_calls = validToolCalls.length > 0 ? validToolCalls : []
 				this.messageMap.set(correlationId, cache)
 			}
 
@@ -1083,8 +1079,8 @@ export class SuperMagicStore {
 			const finalToolResponse = finalTool?.tool
 			const currentArgs = get(messageMap, ["tool_calls", i, "function", "arguments"], "")
 
-			if (!messageMap.tool_calls[i]) {
-				messageMap.tool_calls[i] = {
+			if (!messageMap.tool_calls?.[i]) {
+				messageMap.tool_calls![i] = {
 					id: toolId,
 					type: toolType,
 					index: i,
@@ -1113,12 +1109,12 @@ export class SuperMagicStore {
 				const nextChunk = finalArgs.slice(currentArgs.length, safeEnd)
 				set(messageMap, ["tool_calls", i, "function", "arguments"], currentArgs + nextChunk)
 				streamState.currentToolIndex = i
-				messageMap.tool_calls = messageMap.tool_calls.slice(0, i + 1)
+				messageMap.tool_calls = messageMap.tool_calls?.slice(0, i + 1)
 				return { progressed: true, done: false }
 			}
 
 			streamState.currentToolIndex = i + 1
-			messageMap.tool_calls = messageMap.tool_calls.slice(0, i + 1)
+			messageMap.tool_calls = messageMap.tool_calls?.slice(0, i + 1)
 			return {
 				progressed: true,
 				done: streamState.currentToolIndex >= finalTools.length,
@@ -1253,7 +1249,7 @@ export class SuperMagicStore {
 	 * @description 处理超麦流式消息
 	 * @param message 消息
 	 */
-	handleSuperMagicChunkMessage(message: SuperMagicChunkMessage) { }
+	handleSuperMagicChunkMessage(message: SuperMagicChunkMessage) {}
 
 	/**
 	 * @description 设置测试消息(DEBUG 专用)
@@ -1274,7 +1270,7 @@ export class SuperMagicStore {
 				role: "user",
 				seq_id: "876836510905307136",
 				refer_message_id: "",
-			},
+			} as unknown as MessageItem,
 		])
 		this.messageMap.set("ml4spbx3-r3j3lwr6mjh", {
 			instructs: [
@@ -1321,6 +1317,7 @@ window.base = () => {
 // @ts-ignore
 window.superMagicStore = superMagicStore
 
+// @ts-ignore
 pubsub.subscribe("super_magic_chunk_message", (message: SuperMagicChunkMessage) => {
 	superMagicStore.receiveChunk(message)
 })

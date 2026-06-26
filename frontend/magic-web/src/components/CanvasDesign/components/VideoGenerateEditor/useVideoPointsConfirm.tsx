@@ -72,13 +72,14 @@ export function useVideoPointsConfirm() {
 				cancelButtonProps: {
 					"data-testid": "video-points-confirm-cancel-button",
 				},
-				onOk: async () => {
+				onOk: () => {
 					setShouldSkipVideoPointsConfirm(shouldSkipNextConfirm)
-					try {
-						await onConfirm()
-					} finally {
-						resetConfirming()
-					}
+					void Promise.resolve()
+						.then(onConfirm)
+						.finally(() => {
+							resetConfirming()
+						})
+						.catch(() => undefined)
 				},
 				onCancel: () => {
 					resetConfirming()

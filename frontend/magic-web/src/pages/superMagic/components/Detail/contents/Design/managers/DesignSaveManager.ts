@@ -1,3 +1,4 @@
+import { cloneDeep } from "lodash-es"
 import type { DesignData } from "../types"
 import {
 	generateMagicProjectJsContent,
@@ -19,6 +20,32 @@ export interface RemoteUpdateCheckResult {
 	isCheckReliable: boolean
 }
 
+export type DesignSaveFailureReason =
+	| "readonly"
+	| "no-file"
+	| "remote-conflict"
+	| "remote-updated"
+	| "remote-check-unreliable"
+	| "empty-content"
+	| "error"
+
+export type DesignSaveResult =
+	| {
+			ok: true
+			savedVersion: number | null
+			savedUpdatedAt: string | null
+			fullyPersisted: boolean
+			savedDesignData: DesignData
+			savedFingerprint: string
+	  }
+	| {
+			ok: false
+			reason: DesignSaveFailureReason
+			remoteVersion?: number | null
+			isCheckReliable?: boolean
+			error?: string
+	  }
+
 export interface DesignSaveLifecycleHandlers {
 	onSaveStart?: () => number | null
 	onSaveEnd?: (
@@ -26,6 +53,7 @@ export interface DesignSaveLifecycleHandlers {
 		didSave: boolean,
 		savedUpdatedAt?: string | null,
 	) => Promise<void> | void
+	onAutoSaveResult?: (result: DesignSaveResult) => Promise<void> | void
 }
 
 export class DesignSaveManager {
@@ -35,6 +63,7 @@ export class DesignSaveManager {
 	private saveLifecycleHandlers: DesignSaveLifecycleHandlers
 
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null
+	private pendingAutoSaveDesignData: DesignData | null = null
 	private hasRemoteConflictPending = false
 	private lastSaveFullyPersisted = false
 
@@ -75,7 +104,8 @@ export class DesignSaveManager {
 		}
 	}
 
-	scheduleAutoSave(): void {
+	scheduleAutoSave(designData?: DesignData): void {
+		this.pendingAutoSaveDesignData = designData ? (cloneDeep(designData) as DesignData) : null
 		this.runDebouncedSave()
 	}
 
@@ -84,10 +114,11 @@ export class DesignSaveManager {
 			clearTimeout(this.debounceTimer)
 			this.debounceTimer = null
 		}
+		this.pendingAutoSaveDesignData = null
 		this.stateBag.setters.setIsSaving(false)
 	}
 
-	async manualSave(): Promise<boolean> {
+	async manualSave(): Promise<DesignSaveResult> {
 		this.cancelAutoSave()
 		this.stateBag.setters.setIsSaving(true)
 		return this.commitSave({ allowRemoteConflict: true })
@@ -127,7 +158,9 @@ export class DesignSaveManager {
 
 	private runDebouncedSave(): void {
 		const fileId = this.stateBag.getMagicProjectJsFileId()
-		if (!fileId) return
+		if (!fileId) {
+			return
+		}
 
 		if (this.debounceTimer) {
 			clearTimeout(this.debounceTimer)
@@ -135,52 +168,82 @@ export class DesignSaveManager {
 
 		this.debounceTimer = setTimeout(() => {
 			this.debounceTimer = null
-			const currentData = this.stateBag.getDesignData()
-			const fp = hashDesignDataComparable(currentData)
+			const explicitSaveData = this.pendingAutoSaveDesignData
+			this.pendingAutoSaveDesignData = null
+			const currentData = explicitSaveData ?? this.stateBag.getDesignData()
+			const designDataToSave = this.getDesignDataForSave(currentData)
+			const fp = hashDesignDataComparable(designDataToSave)
+			const prevFp = this.stateBag.getPrevDesignDataFingerprint()
 
-			if (!this.stateBag.getPrevDesignDataFingerprint()) {
+			if (!prevFp) {
 				this.stateBag.setPrevDesignDataFingerprint(fp)
 				return
 			}
-			if (this.stateBag.getPrevDesignDataFingerprint() === fp) {
+			if (prevFp === fp) {
 				this.stateBag.setters.setIsSaving(false)
 				return
 			}
 
 			this.stateBag.setters.setIsSaving(true)
-			void this.commitSave()
+			void this.commitSave({
+				designData: explicitSaveData ?? undefined,
+				updateCurrentDesignData: !explicitSaveData,
+			}).then((result) => this.saveLifecycleHandlers.onAutoSaveResult?.(result))
 		}, AUTO_SAVE_DEBOUNCE_MS)
 	}
 
-	async commitSave(options?: { allowRemoteConflict?: boolean }): Promise<boolean> {
+	async commitSave(options?: {
+		allowRemoteConflict?: boolean
+		designData?: DesignData
+		updateCurrentDesignData?: boolean
+		skipRemoteUpdateCheck?: boolean
+	}): Promise<DesignSaveResult> {
 		this.lastSaveFullyPersisted = false
 		if (this.stateBag.getIsReadOnly()) {
 			this.stateBag.setters.setIsSaving(false)
-			return false
+			return { ok: false, reason: "readonly" }
 		}
 		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
 		if (!magicProjectJsFileId) {
 			this.stateBag.setters.setIsSaving(false)
-			return false
+			return { ok: false, reason: "no-file" }
 		}
 		if (this.hasRemoteConflict() && !options?.allowRemoteConflict) {
 			this.stateBag.setters.setIsSaving(false)
-			return false
+			return { ok: false, reason: "remote-conflict" }
 		}
 
 		let saveToken: number | null | undefined
 		let didSave = false
 		let savedUpdatedAt: string | null = null
+		let savedVersion: number | null = null
 		try {
 			saveToken = this.saveLifecycleHandlers.onSaveStart?.()
-			const { hasUpdate } = await this.checkRemoteUpdate()
-			if (hasUpdate) {
-				this.markRemoteConflict()
-				this.stateBag.setters.setIsSaving(false)
-				return false
+			if (!options?.skipRemoteUpdateCheck) {
+				const remoteUpdateCheck = await this.checkRemoteUpdate()
+				const { hasUpdate, isCheckReliable, currentVersion } = remoteUpdateCheck
+				if (hasUpdate) {
+					this.markRemoteConflict()
+					this.stateBag.setters.setIsSaving(false)
+					return {
+						ok: false,
+						reason: "remote-updated",
+						remoteVersion: currentVersion,
+						isCheckReliable,
+					}
+				}
+				if (!isCheckReliable) {
+					this.stateBag.setters.setIsSaving(false)
+					return {
+						ok: false,
+						reason: "remote-check-unreliable",
+						remoteVersion: currentVersion,
+						isCheckReliable,
+					}
+				}
 			}
 
-			const currentDesignData = this.stateBag.getDesignData()
+			const currentDesignData = options?.designData ?? this.stateBag.getDesignData()
 			const designDataToSave = this.getDesignDataForSave(currentDesignData)
 			const fp = hashDesignDataComparable(designDataToSave)
 			const content = generateMagicProjectJsContent(designDataToSave, {
@@ -188,7 +251,7 @@ export class DesignSaveManager {
 			})
 			if (!content?.trim()) {
 				this.stateBag.setters.setIsSaving(false)
-				return false
+				return { ok: false, reason: "empty-content" }
 			}
 
 			const saveResponse = await SuperMagicApi.saveFileContent([
@@ -208,7 +271,8 @@ export class DesignSaveManager {
 				})
 			}
 			this.lastSaveFullyPersisted = didPersistDetails
-			if (designDataToSave !== currentDesignData) {
+			const shouldUpdateCurrentDesignData = options?.updateCurrentDesignData ?? true
+			if (shouldUpdateCurrentDesignData && designDataToSave !== currentDesignData) {
 				this.stateBag.setters.setDesignData(designDataToSave)
 			}
 			if (didPersistDetails) {
@@ -222,6 +286,7 @@ export class DesignSaveManager {
 						file_id: magicProjectJsFileId,
 					})
 					if (fileInfo?.version !== undefined) {
+						savedVersion = fileInfo.version
 						this.stateBag.setMagicProjectJsVersion(fileInfo.version)
 					}
 				} catch {
@@ -229,7 +294,17 @@ export class DesignSaveManager {
 				}
 				await this.fetchAndSetVersions()
 			}
-			return true
+			return {
+				ok: true,
+				savedVersion,
+				savedUpdatedAt,
+				fullyPersisted: didPersistDetails,
+				savedDesignData: designDataToSave,
+				savedFingerprint: fp,
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			return { ok: false, reason: "error", error: errorMessage }
 		} finally {
 			await this.saveLifecycleHandlers.onSaveEnd?.(saveToken, didSave, savedUpdatedAt)
 			this.stateBag.setters.setIsSaving(false)
@@ -255,7 +330,6 @@ export class DesignSaveManager {
 			const prevVersion = this.stateBag.getMagicProjectJsVersion()
 
 			if (prevVersion === null) {
-				this.stateBag.setMagicProjectJsVersion(currentVersion)
 				return { hasUpdate: false, currentVersion, isCheckReliable: false }
 			}
 

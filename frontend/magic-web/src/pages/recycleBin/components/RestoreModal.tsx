@@ -20,6 +20,10 @@ export function RestoreModal({
 	onConfirm,
 }: RestoreModalProps) {
 	const { t } = useTranslation("super")
+	const statusLines = statusMessage
+		?.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean)
 
 	return (
 		<AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -36,7 +40,15 @@ export function RestoreModal({
 							className="text-sm font-normal leading-normal text-muted-foreground"
 							data-testid="recycle-bin-restore-status"
 						>
-							{statusMessage}
+							{statusLines && statusLines.length > 1 ? (
+								<ul className="list-disc space-y-1.5 pl-5">
+									{statusLines.map((line) => (
+										<li key={line}>{line}</li>
+									))}
+								</ul>
+							) : (
+								<span>{statusMessage}</span>
+							)}
 						</div>
 					) : null}
 				</AlertDialogHeader>

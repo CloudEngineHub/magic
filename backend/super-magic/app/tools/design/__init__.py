@@ -12,6 +12,7 @@ from app.tools.design.tools import (
     CreateCanvas,
     GenerateCanvasImages,
     GenerateCanvasVideos,
+    RestoreCanvasMedia,
     SearchCanvasImages,
     SearchImagePrompts,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "CreateCanvas",
     "GenerateCanvasImages",
     "GenerateCanvasVideos",
+    "RestoreCanvasMedia",
     "SearchCanvasImages",
     "SearchImagePrompts",
 ]

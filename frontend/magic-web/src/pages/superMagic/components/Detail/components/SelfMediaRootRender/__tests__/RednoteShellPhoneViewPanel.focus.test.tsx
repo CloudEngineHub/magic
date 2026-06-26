@@ -6,6 +6,14 @@ import type { SelfMediaView } from "../types"
 
 let mockView: SelfMediaView = "detail"
 
+const { mockUseIsMobile } = vi.hoisted(() => ({
+	mockUseIsMobile: vi.fn(() => false),
+}))
+
+vi.mock("@/hooks/use-mobile", () => ({
+	useIsMobile: mockUseIsMobile,
+}))
+
 vi.mock("../stores", () => ({
 	useSelfMediaStore: () => ({
 		loading: false,
@@ -64,7 +72,13 @@ vi.mock("../platforms/rednote/RednoteShellContentGate", () => ({
 	),
 }))
 
-function FocusHarness({ view = "detail" }: { view?: SelfMediaView }) {
+function FocusHarness({
+	view = "detail",
+	focusDisabled = false,
+}: {
+	view?: SelfMediaView
+	focusDisabled?: boolean
+}) {
 	const [phoneFocused, setPhoneFocused] = useState(false)
 	const isDetailView = view === "detail"
 
@@ -88,6 +102,7 @@ function FocusHarness({ view = "detail" }: { view?: SelfMediaView }) {
 				onSelectFeedPost={vi.fn()}
 				onChangeDetailCard={vi.fn()}
 				phoneFocused={phoneFocused}
+				focusDisabled={focusDisabled}
 				onPhoneFocus={() => setPhoneFocused(true)}
 			/>
 		</div>
@@ -112,6 +127,7 @@ function firePointerDownWithClientPoint(
 describe("RednoteShellPhoneViewPanel focus interaction", () => {
 	afterEach(() => {
 		mockView = "detail"
+		mockUseIsMobile.mockReturnValue(false)
 		vi.restoreAllMocks()
 	})
 
@@ -184,6 +200,39 @@ describe("RednoteShellPhoneViewPanel focus interaction", () => {
 	it("does not zoom the phone outside the detail note view", () => {
 		mockView = "feed"
 		render(<FocusHarness view="feed" />)
+
+		const panel = screen.getByTestId("rednote-phone-view-panel")
+		expect(panel).toHaveAttribute("data-focused", "false")
+
+		firePointerDownWithClientPoint(screen.getByTestId("rednote-phone-focus-surface"), {
+			clientX: 300,
+			clientY: 520,
+		})
+
+		expect(panel).toHaveAttribute("data-focused", "false")
+		expect(panel).toHaveAttribute("data-focus-x", "50.00")
+		expect(panel).toHaveAttribute("data-focus-y", "38.00")
+	})
+
+	it("does not zoom the phone when focus is disabled", () => {
+		render(<FocusHarness focusDisabled />)
+
+		const panel = screen.getByTestId("rednote-phone-view-panel")
+		expect(panel).toHaveAttribute("data-focused", "false")
+
+		firePointerDownWithClientPoint(screen.getByTestId("rednote-phone-focus-surface"), {
+			clientX: 300,
+			clientY: 520,
+		})
+
+		expect(panel).toHaveAttribute("data-focused", "false")
+		expect(panel).toHaveAttribute("data-focus-x", "50.00")
+		expect(panel).toHaveAttribute("data-focus-y", "38.00")
+	})
+
+	it("does not zoom the phone on mobile", () => {
+		mockUseIsMobile.mockReturnValue(true)
+		render(<FocusHarness />)
 
 		const panel = screen.getByTestId("rednote-phone-view-panel")
 		expect(panel).toHaveAttribute("data-focused", "false")

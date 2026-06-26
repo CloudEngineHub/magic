@@ -17,6 +17,8 @@ export const FS_MESSAGE_TYPES = {
 	WRITE_BLOB_RESPONSE: "MAGIC_FS_WRITE_BLOB_RESPONSE",
 	LIST_REQUEST: "MAGIC_FS_LIST_REQUEST",
 	LIST_RESPONSE: "MAGIC_FS_LIST_RESPONSE",
+	LIST_DIR_REQUEST: "MAGIC_FS_LIST_DIR_REQUEST",
+	LIST_DIR_RESPONSE: "MAGIC_FS_LIST_DIR_RESPONSE",
 	GET_FILE_URL_REQUEST: "MAGIC_FS_GET_FILE_URL_REQUEST",
 	GET_FILE_URL_RESPONSE: "MAGIC_FS_GET_FILE_URL_RESPONSE",
 	DELETE_FILE_REQUEST: "MAGIC_FS_DELETE_FILE_REQUEST",
@@ -30,6 +32,9 @@ export const FS_MESSAGE_TYPES = {
 	WATCH_REGISTER: "MAGIC_FS_WATCH_REGISTER",
 	WATCH_UNREGISTER: "MAGIC_FS_WATCH_UNREGISTER",
 	FILE_CHANGED: "MAGIC_FS_FILE_CHANGED",
+	WATCH_DIR_REGISTER: "MAGIC_FS_WATCH_DIR_REGISTER",
+	WATCH_DIR_UNREGISTER: "MAGIC_FS_WATCH_DIR_UNREGISTER",
+	DIR_CHANGED: "MAGIC_FS_DIR_CHANGED",
 	GET_APP_BASE_PATH_REQUEST: "MAGIC_FS_GET_APP_BASE_PATH_REQUEST",
 	GET_APP_BASE_PATH_RESPONSE: "MAGIC_FS_GET_APP_BASE_PATH_RESPONSE",
 } as const
@@ -112,6 +117,27 @@ export interface FSListResponse {
 	requestId: string
 	success: boolean
 	files?: string[]
+	error?: string
+}
+
+export interface FSDirEntry {
+	name: string
+	path: string
+	isDirectory: boolean
+	updatedAt?: string
+}
+
+export interface FSListDirRequest {
+	type: typeof FS_MESSAGE_TYPES.LIST_DIR_REQUEST
+	requestId: string
+	dir?: string
+}
+
+export interface FSListDirResponse {
+	type: typeof FS_MESSAGE_TYPES.LIST_DIR_RESPONSE
+	requestId: string
+	success: boolean
+	entries?: FSDirEntry[]
 	error?: string
 }
 
@@ -203,6 +229,27 @@ export interface FSFileChanged {
 	type: typeof FS_MESSAGE_TYPES.FILE_CHANGED
 	path: string
 	timestamp: number
+}
+
+export interface FSWatchDirRegister {
+	type: typeof FS_MESSAGE_TYPES.WATCH_DIR_REGISTER
+	requestId: string
+	dir: string
+}
+
+export interface FSWatchDirUnregister {
+	type: typeof FS_MESSAGE_TYPES.WATCH_DIR_UNREGISTER
+	requestId: string
+	dir: string
+}
+
+export interface FSDirChanged {
+	type: typeof FS_MESSAGE_TYPES.DIR_CHANGED
+	dir: string
+	timestamp: number
+	added: string[]
+	removed: string[]
+	entries: FSDirEntry[]
 }
 
 // ─── LLM 消息报文 ────────────────────────────────────────────────────────────
@@ -390,6 +437,21 @@ export const USER_INFO_SCOPES = {
 
 export type UserInfoScope = (typeof USER_INFO_SCOPES)[keyof typeof USER_INFO_SCOPES]
 
+export const HTML_PERMISSION_SCOPES = {
+	LLM_USE: "llm.use",
+	PROJECT_MESSAGE_WRITE: "project.message.write",
+	PROJECT_FILES_UPLOAD: "project.files.upload",
+	PROJECT_FILES_DOWNLOAD: "project.files.download",
+	FS_PROJECT_READ: "fs.project.read",
+	FS_PROJECT_WRITE: "fs.project.write",
+	USER_PROFILE_NAME: USER_INFO_SCOPES.NAME,
+	USER_PROFILE_IDENTITY: USER_INFO_SCOPES.IDENTITY,
+	USER_PROFILE_ORGANIZATION: USER_INFO_SCOPES.ORGANIZATION,
+} as const
+
+export type HtmlPermissionScope =
+	(typeof HTML_PERMISSION_SCOPES)[keyof typeof HTML_PERMISSION_SCOPES]
+
 // ─── UserInfo 消息报文 ───────────────────────────────────────────────────────
 
 export interface UserInfo {
@@ -458,6 +520,11 @@ export interface HTMLAppConfig {
 	watch?: string[]
 	/** 微应用权限声明。敏感能力必须先声明，再由用户确认授权。 */
 	permissions?: {
+		/** 新版统一权限声明。未声明的敏感能力不能申请。 */
+		scopes?: HtmlPermissionScope[]
+		/** 展示给用户的用途说明 */
+		reason?: string
+		/** 旧版用户信息权限声明，保留兼容。 */
 		userInfo?: {
 			/** 允许请求的用户信息范围 */
 			scopes?: UserInfoScope[]

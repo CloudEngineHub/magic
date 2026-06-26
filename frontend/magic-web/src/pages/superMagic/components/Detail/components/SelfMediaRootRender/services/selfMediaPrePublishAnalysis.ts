@@ -2,7 +2,6 @@ import type { JSONContent } from "@tiptap/react"
 import i18n from "i18next"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { getFolderMentionData } from "@/components/business/MentionPanel/utils/directoryMention"
-import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -77,7 +76,7 @@ function paraWithMentionTemplate(template: string, mention: JSONContent): JSONCo
 	const placeholder = "{{mention}}"
 	const index = template.indexOf(placeholder)
 	if (index === -1) {
-		return paraNodes([{ type: "text", text: `${template} ` }, mention])
+		return paraNodes([{ type: "text", text: template }, { type: "text", text: " " }, mention])
 	}
 
 	const before = template.slice(0, index)
@@ -176,17 +175,6 @@ function buildFolderMention(item: AttachmentItem) {
 			directoryPath: item.relative_file_path,
 			directoryMetadata: item.display_config,
 		}),
-	}
-}
-
-function buildFolderMentionItem(item: AttachmentItem): MentionListItem {
-	const mention = buildFolderMention(item)
-	return {
-		type: "mention",
-		attrs: {
-			type: mention.type,
-			data: mention.data,
-		},
 	}
 }
 

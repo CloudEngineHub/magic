@@ -41,6 +41,10 @@ function escapeRegex(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
+function normalizeLabelKey(value: string): string {
+	return value.toLowerCase()
+}
+
 export function resolvePromptPlaceholderTokenConfig(t: TFunction): PromptPlaceholderTokenConfig {
 	return {
 		imageLabel: normalize(
@@ -100,6 +104,9 @@ export function parsePromptPlaceholderTokenMatches(
 	const sortedEntries = Array.from(
 		new Map(labelEntries.map((entry) => [`${entry.kind}:${entry.label}`, entry])).values(),
 	).sort((left, right) => right.label.length - left.label.length)
+	const entryByLabel = new Map(
+		sortedEntries.map((entry) => [normalizeLabelKey(entry.label), entry]),
+	)
 	const leftWrapper = escapeRegex(normalize(config.leftWrapper, "["))
 	const rightWrapper = escapeRegex(normalize(config.rightWrapper, "]"))
 	const labelPattern = sortedEntries.map((entry) => escapeRegex(entry.label)).join("|")
@@ -107,14 +114,14 @@ export function parsePromptPlaceholderTokenMatches(
 
 	const placeholderPattern = new RegExp(
 		`${leftWrapper}(${labelPattern})(\\d+)${rightWrapper}`,
-		"g",
+		"gi",
 	)
 	const matches: PromptPlaceholderTokenMatch[] = []
 	let match: RegExpExecArray | null = placeholderPattern.exec(prompt)
 
 	while (match) {
 		const label = match[1]
-		const kind = sortedEntries.find((entry) => entry.label === label)?.kind
+		const kind = entryByLabel.get(normalizeLabelKey(label))?.kind
 		const index = Number(match[2])
 		if (kind && Number.isInteger(index) && index > 0) {
 			matches.push({

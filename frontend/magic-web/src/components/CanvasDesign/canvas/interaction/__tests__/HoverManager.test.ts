@@ -233,4 +233,17 @@ describe("HoverManager", () => {
 		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
 		manager.destroy()
 	})
+
+	it("sets hover from geometry when viewport scales an element under a stationary pointer", () => {
+		const { eventHandlers, getIntersection, manager, requestLayerDraw } = createHoverManager({
+			geometryHitIds: ["element-1"],
+		})
+		getIntersection.mockReturnValue(null)
+
+		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(requestLayerDraw).toHaveBeenCalled()
+		manager.destroy()
+	})
 })

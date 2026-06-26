@@ -45,6 +45,9 @@ export const routeSketchMap: RouteSketchMap = {
 		),
 	},
 	[RouteName.SuperChatProjectState]: {
+		desktop: lazy(
+			() => import("@/pages/superMagic/lazy/skeleton/ChatProjectPageDesktopSkeleton"),
+		),
 		mobile: lazy(
 			() => import("@/pages/superMagic/lazy/skeleton/ChatProjectPageMobileSkeleton"),
 		),

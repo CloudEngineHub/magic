@@ -74,12 +74,21 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 		return videoModelList.find((model) => model.model_id === request.model_id)
 	}, [videoModelList, request?.model_id])
 
-	const frameInputs = request?.inputs?.frames || []
+	const frameInputs = useMemo(() => request?.inputs?.frames ?? [], [request?.inputs?.frames])
 	const startFrame = frameInputs.find((frame) => frame.role === "start")
 	const endFrame = frameInputs.find((frame) => frame.role === "end")
-	const referenceImages = request?.inputs?.reference_images || []
-	const referenceVideos = request?.inputs?.reference_videos || []
-	const referenceAudios = request?.inputs?.reference_audios || []
+	const referenceImages = useMemo(
+		() => request?.inputs?.reference_images ?? [],
+		[request?.inputs?.reference_images],
+	)
+	const referenceVideos = useMemo(
+		() => request?.inputs?.reference_videos ?? [],
+		[request?.inputs?.reference_videos],
+	)
+	const referenceAudios = useMemo(
+		() => request?.inputs?.reference_audios ?? [],
+		[request?.inputs?.reference_audios],
+	)
 	const promptPlaceholderPaths = useMemo(
 		() => ({
 			image: referenceImages.map((item) => item.uri),

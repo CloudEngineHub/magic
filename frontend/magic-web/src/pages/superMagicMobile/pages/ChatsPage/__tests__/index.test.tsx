@@ -1,11 +1,31 @@
 import type { ReactNode } from "react"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
+
+const {
+	switchChatProjectMock,
+	deleteProjectMock,
+	pinProjectMock,
+	reloadMock,
+	optimisticRemoveMock,
+	optimisticUpdatePinMock,
+} = vi.hoisted(() => ({
+	switchChatProjectMock: vi.fn(),
+	deleteProjectMock: vi.fn(),
+	pinProjectMock: vi.fn(),
+	reloadMock: vi.fn(),
+	optimisticRemoveMock: vi.fn(),
+	optimisticUpdatePinMock: vi.fn(),
+}))
 
 import ChatsPage from "../index"
 import { SuperMobileShellRouteLayout } from "@/pages/superMagicMobile/components/MobileShell/SuperMobileShellRouteLayout"
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: {
+		type: "3rdParty",
+		init: () => {},
+	},
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
@@ -17,10 +37,10 @@ vi.mock("@/routes/components/ViewportRouteGuard", () => ({
 
 vi.mock("@/pages/superMagic/services", () => ({
 	default: {
-		switchChatProject: vi.fn(),
-		deleteProject: vi.fn(),
+		switchChatProject: switchChatProjectMock,
+		deleteProject: deleteProjectMock,
 		project: {
-			pinProjectAndRefresh: vi.fn(),
+			pinProject: pinProjectMock,
 		},
 	},
 }))
@@ -59,25 +79,65 @@ vi.mock("@/pages/superMagicMobile/components/ProjectList/hooks/useProjectActions
 
 vi.mock("../hooks/useChatConversationList", () => ({
 	useChatConversationList: () => ({
-		items: [],
+		items: [
+			{
+				id: "chat-project-1",
+				title: "Mock Chat",
+				timeLabel: "just now",
+				isPinned: false,
+				isRunning: false,
+				project: {
+					id: "chat-project-1",
+					project_name: "Mock Chat",
+					workspace_id: "chat-workspace-1",
+				},
+			},
+		],
 		isLoading: false,
 		searchValue: "",
 		setSearchValue: vi.fn(),
 		debouncedSearchValue: "",
-		isEmpty: true,
+		isEmpty: false,
 		isSearchEmpty: false,
 		hasMore: false,
-		reload: vi.fn(),
+		reload: reloadMock,
 		loadMore: vi.fn(),
-		optimisticRemove: vi.fn(),
+		optimisticRemove: optimisticRemoveMock,
+		optimisticUpdatePin: optimisticUpdatePinMock,
 	}),
 }))
 
 vi.mock("../components/ChatConversationListView", () => ({
-	ChatConversationListView: ({ onOpenSidebar }: { onOpenSidebar: () => void }) => (
-		<button type="button" data-testid="chat-list" onClick={onOpenSidebar}>
-			list
-		</button>
+	ChatConversationListView: ({
+		items,
+		onOpenSidebar,
+		onPin,
+	}: {
+		items: Array<{
+			id: string
+			title: string
+			isPinned: boolean
+			project: { id: string; project_name: string; workspace_id: string }
+		}>
+		onOpenSidebar: () => void
+		onPin?: (item: (typeof items)[number]) => void
+	}) => (
+		<div>
+			<button type="button" data-testid="chat-list" onClick={onOpenSidebar}>
+				list
+			</button>
+			<button
+				type="button"
+				data-testid="chat-list-pin"
+				onClick={() => {
+					if (onPin) {
+						onPin(items[0]!)
+					}
+				}}
+			>
+				pin
+			</button>
+		</div>
 	),
 }))
 
@@ -139,6 +199,27 @@ vi.mock("@/pages/superMagicMobile/components/MobileShell/MobileShellAppLayout", 
 }))
 
 describe("ChatsPage", () => {
+	it("pins a chat with optimistic reorder before reloading the chat queries list", async () => {
+		pinProjectMock.mockResolvedValue(undefined)
+		reloadMock.mockResolvedValue(undefined)
+
+		render(<ChatsPage />)
+
+		fireEvent.click(screen.getByTestId("chat-list-pin"))
+
+		await waitFor(() => {
+			expect(pinProjectMock).toHaveBeenCalledWith(
+				expect.objectContaining({
+					id: "chat-project-1",
+					workspace_id: "chat-workspace-1",
+				}),
+				true,
+			)
+			expect(optimisticUpdatePinMock).toHaveBeenCalledWith("chat-project-1", true)
+			expect(reloadMock).toHaveBeenCalledWith({ silent: true })
+		})
+	})
+
 	it("falls back to its own shell when rendered without route shell context", () => {
 		render(<ChatsPage />)
 

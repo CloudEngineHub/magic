@@ -4,6 +4,7 @@ let currentTaskMode = "plan"; // 当前任务模式，默认为 plan（保留兼
 let currentAgentMode = "magic"; // 当前Agent模式，默认为 magic
 let currentLanguage = "zh_CN"; // 当前语言，默认中文
 let currentMessageVersion = "v2"; // 消息版本，默认 v2
+let currentExecutionSource = "human_chat"; // 当前执行来源，默认人工对话
 let currentFileName = ""; // 存储当前上传的文件名
 let isAdvancedMode = false; // 高级模式开关，开启后直接发送原始 JSON
 let isImMode = false; // IM 渠道模拟模式
@@ -107,6 +108,7 @@ function getSystemMessageKey(text) {
     if (text.startsWith('切换到 ')) return 'agent-mode-toggle';
     if (text.startsWith('语言已切换为:')) return 'language-toggle';
     if (text.startsWith('消息版本已切换为:')) return 'message-version-toggle';
+    if (text.startsWith('执行来源已切换为:')) return 'execution-source-toggle';
     if (text.startsWith('模型列表已刷新')) return 'model-list-refresh';
     if (text.startsWith('工作区文件读取权限')) return 'workspace-permission';
     if (text.startsWith('点击此处或刷新按钮')) return 'workspace-permission';
@@ -342,11 +344,13 @@ function renderClientEntry(entry, options = {}) {
     if (entry.imChannel) {
         const channelLabel = { dingtalk: '钉钉', wechat: '微信', wecom: '企业微信', lark: '飞书' }[entry.imChannel] || entry.imChannel;
         const userIdPart = entry.imUserId ? ` / user=${entry.imUserId}` : '';
-        headerText = `客户端消息 (${entry.time}) - IM渠道: ${channelLabel}${userIdPart}`;
+        const sourcePart = entry.executionSource ? ` - 来源: ${entry.executionSource}` : '';
+        headerText = `客户端消息 (${entry.time}) - IM渠道: ${channelLabel}${userIdPart}${sourcePart}`;
     } else {
         const agentMode = entry.agentMode ? entry.agentMode.toUpperCase() : 'N/A';
         const modelId = entry.modelId ? ` - Model: ${entry.modelId}` : '';
-        headerText = `客户端消息 (${entry.time}) - Agent模式: ${agentMode}${modelId}`;
+        const sourcePart = entry.executionSource ? ` - 来源: ${entry.executionSource}` : '';
+        headerText = `客户端消息 (${entry.time}) - Agent模式: ${agentMode}${modelId}${sourcePart}`;
     }
     const headerLabel = document.createElement('span');
     headerLabel.textContent = headerText;
@@ -392,6 +396,7 @@ const clientContextModalClearBtn = document.getElementById('clientContextModalCl
 const clientContextModalCloseBtn = document.getElementById('clientContextModalCloseBtn');
 const languageSelect = document.getElementById('languageSelect');
 const messageVersionSelect = document.getElementById('messageVersionSelect');
+const executionSourceSelect = document.getElementById('executionSourceSelect');
 const imModeToggle = document.getElementById('imModeToggle');
 const rawEventsToggle = document.getElementById('rawEventsToggle');
 const imChannelSelect = document.getElementById('imChannelSelect');
@@ -1400,6 +1405,22 @@ document.addEventListener('DOMContentLoaded', () => {
         messageVersionSelect.addEventListener('change', changeMessageVersion);
     }
 
+    // 执行来源切换事件
+    if (executionSourceSelect) {
+        const savedSource = localStorage.getItem('selectedExecutionSource');
+        const sourceOptions = Array.from(executionSourceSelect.options).map(option => option.value);
+        if (savedSource !== null && sourceOptions.includes(savedSource)) {
+            currentExecutionSource = savedSource;
+            executionSourceSelect.value = savedSource;
+        } else {
+            currentExecutionSource = executionSourceSelect.value || 'human_chat';
+            executionSourceSelect.value = currentExecutionSource;
+        }
+        currentExecutionSource = executionSourceSelect.value || currentExecutionSource;
+        refreshCustomSelect(executionSourceSelect);
+        executionSourceSelect.addEventListener('change', changeExecutionSource);
+    }
+
     // 保留任务模式切换事件（兼容性）
     if (modeToggle) {
         modeToggle.addEventListener('click', toggleTaskMode);
@@ -1760,6 +1781,7 @@ function applyLocalDebugOptions(messageData) {
     messageData.dynamic_config = Object.assign({}, messageData.dynamic_config, {
         enable_debug_tool_result_content: true,
         client_context: buildLocalDebugClientContext(),
+        super_magic_execution_source: currentExecutionSource || 'human_chat',
     });
     if (currentMessageVersion) {
         messageData.dynamic_config.message_version = currentMessageVersion;
@@ -2250,11 +2272,17 @@ function showClientMessage(message) {
     const time = new Date().toLocaleTimeString();
     const imChannel = message.metadata && !message.agent_mode ? currentImChannel : '';
     const imUserId = imChannel && message.metadata ? (message.metadata.agent_user_id || '') : '';
+    const executionSource = (
+        message.dynamic_config &&
+        typeof message.dynamic_config === 'object' &&
+        message.dynamic_config.super_magic_execution_source
+    ) || currentExecutionSource || '';
     pushLog({
         type: 'client',
         prompt: message.prompt || '',
         agentMode: message.agent_mode || '',
         modelId: message.model_id || '',
+        executionSource,
         imChannel,
         imUserId,
         time,
@@ -2264,6 +2292,7 @@ function showClientMessage(message) {
         prompt: message.prompt || '',
         agentMode: message.agent_mode || '',
         modelId: message.model_id || '',
+        executionSource,
         imChannel,
         imUserId,
         time,
@@ -2821,6 +2850,13 @@ function changeMessageVersion() {
     localStorage.setItem('selectedMessageVersion', currentMessageVersion);
     const versionLabel = currentMessageVersion || '不传版本';
     showSystemMessage(`消息版本已切换为: ${versionLabel}`);
+}
+
+// 切换执行来源
+function changeExecutionSource() {
+    currentExecutionSource = executionSourceSelect.value || 'human_chat';
+    localStorage.setItem('selectedExecutionSource', currentExecutionSource);
+    showSystemMessage(`执行来源已切换为: ${currentExecutionSource}`);
 }
 
 // 切换Agent模式
@@ -4823,10 +4859,13 @@ function formatToolDetail(detail) {
     if (detail.type === 'text' && detail.data && detail.data.content) return detail.data.content;
     if (detail.type === 'text' && detail.data && detail.data.message) return detail.data.message;
     if (detail.type === 'terminal' && detail.data) {
-        return [
-            detail.data.command ? `$ ${detail.data.command}` : '',
+        const terminalOutput = detail.data.output || [
             detail.data.stdout || '',
             detail.data.stderr || '',
+        ].filter(Boolean).join('\n');
+        return [
+            detail.data.command ? `$ ${detail.data.command}` : '',
+            terminalOutput,
             typeof detail.data.exit_code === 'number' ? `exit_code: ${detail.data.exit_code}` : '',
         ].filter(Boolean).join('\n');
     }
@@ -7558,6 +7597,13 @@ async function renderApiFilePreviewTab(tab) {
                 pre.textContent = text;
                 filePreviewBody.appendChild(pre);
             }
+
+            if (isMagicProjectJs(filePath)) {
+                const config = await parseMagicProjectConfig(text);
+                if (config?.canvas) {
+                    await addApiCanvasRightPanel(config, filePath);
+                }
+            }
         }
         setFilePreviewWorkbenchVisible(true);
     } catch (e) {
@@ -7929,6 +7975,12 @@ async function resolveCanvasFileBlobUrl(projectDirHandle, relPath) {
     }
 }
 
+function joinWorkspacePath(basePath, relPath) {
+    const baseParts = String(basePath || '').split('/').filter(Boolean);
+    const relParts = String(relPath || '').split('/').filter(p => p && p !== '.');
+    return [...baseParts, ...relParts].join('/');
+}
+
 /**
  * 从视频 blob URL 中抓取第一帧，返回 data URL（失败时返回 null）。
  */
@@ -8056,7 +8108,7 @@ function openCanvasMediaModal(type, blobUrl, posterBlobUrl, name) {
  * 在 containerEl 内渲染画布内容。
  * containerEl 本身需具备 overflow:auto + 固定高度（来自 CSS），函数不修改其样式。
  */
-async function renderCanvasView(config, projectDirHandle, containerEl) {
+async function renderCanvasView(config, resolveMediaUrl, containerEl) {
     const elements = config?.canvas?.elements ?? [];
     if (!elements.length) {
         appendPreviewMessage(containerEl, '画布中没有元素。');
@@ -8174,8 +8226,8 @@ async function renderCanvasView(config, projectDirHandle, containerEl) {
             elDiv.appendChild(makeLabel(el.name || ''));
         } else if (el.type === 'video') {
             // 视频：封面优先，无封面则从视频抓第一帧；点击弹窗播放
-            const posterBlobUrl = el.poster ? await resolveCanvasFileBlobUrl(projectDirHandle, el.poster) : null;
-            const videoBlobUrl = el.src ? await resolveCanvasFileBlobUrl(projectDirHandle, el.src) : null;
+            const posterBlobUrl = el.poster ? await resolveMediaUrl(el.poster) : null;
+            const videoBlobUrl = el.src ? await resolveMediaUrl(el.src) : null;
             // 没有 poster 时从视频文件抓帧作为封面
             let thumbnailUrl = posterBlobUrl;
             if (!thumbnailUrl && videoBlobUrl) {
@@ -8187,7 +8239,7 @@ async function renderCanvasView(config, projectDirHandle, containerEl) {
                 elDiv.addEventListener('click', () => openCanvasMediaModal('video', videoBlobUrl, thumbnailUrl, el.name || ''));
             }
         } else if (el.src) {
-            const blobUrl = await resolveCanvasFileBlobUrl(projectDirHandle, el.src);
+            const blobUrl = await resolveMediaUrl(el.src);
             if (blobUrl) {
                 const img = document.createElement('img');
                 img.src = blobUrl;
@@ -8246,7 +8298,41 @@ async function addCanvasRightPanel(config, filePath) {
         appendPreviewMessage(viewport, '无法访问项目目录，请检查文件系统权限。');
         return;
     }
-    await renderCanvasView(config, projectDirHandle, viewport);
+    const resolveMediaUrl = (relPath) => resolveCanvasFileBlobUrl(projectDirHandle, relPath);
+    await renderCanvasView(config, resolveMediaUrl, viewport);
+}
+
+async function addApiCanvasRightPanel(config, filePath) {
+    if (!filePreviewMain) return;
+    filePreviewMain.classList.add('has-canvas-panel');
+
+    const oldPanel = document.getElementById('canvasRightPanel');
+    if (oldPanel) oldPanel.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'canvasRightPanel';
+    panel.className = 'canvas-right-panel';
+
+    const panelHeader = document.createElement('div');
+    panelHeader.className = 'canvas-panel-header';
+    const titleEl = document.createElement('span');
+    titleEl.className = 'canvas-panel-title';
+    titleEl.textContent = config.name || filePath;
+    const countEl = document.createElement('span');
+    countEl.className = 'canvas-panel-count';
+    countEl.textContent = `${config.canvas?.elements?.length ?? 0} 个元素`;
+    panelHeader.appendChild(titleEl);
+    panelHeader.appendChild(countEl);
+    panel.appendChild(panelHeader);
+
+    const viewport = document.createElement('div');
+    viewport.className = 'canvas-right-viewport';
+    panel.appendChild(viewport);
+    filePreviewMain.appendChild(panel);
+
+    const projectDirPath = String(filePath || '').split('/').filter(Boolean).slice(0, -1).join('/');
+    const resolveMediaUrl = async (relPath) => debugWorkspaceApi.rawUrl(joinWorkspacePath(projectDirPath, relPath));
+    await renderCanvasView(config, resolveMediaUrl, viewport);
 }
 
 // 预览文件内容：图片/音视频/PDF 用 blob URL，文本读入 pre，其余提示不可预览

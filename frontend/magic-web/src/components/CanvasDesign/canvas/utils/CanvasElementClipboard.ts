@@ -45,8 +45,10 @@ export interface CanvasElementClipboardFileMetadata {
 	mimeType: string
 	/** 文件大小；未下载 Blob 时允许为 0，作为 unknown 处理 */
 	fileSize: number
-	/** 文件来源角色：元素媒体文件用于恢复元素，画布导出文件用于按普通文件粘贴 */
-	role: "element-media" | "canvas-export"
+	/** 文件来源角色：元素媒体文件用于恢复元素，画布导出文件用于按普通文件粘贴，生成资源用于跨画布重建请求依赖 */
+	role: "element-media" | "canvas-export" | "generation-resource"
+	/** 生成请求中的原始资源路径；仅 generation-resource 使用 */
+	resourcePath?: string
 	/** 原资源引用。Blob 不可用或后续做大文件降级时，可按该引用重新下载再上传。 */
 	sourceRef?: {
 		src?: string
@@ -115,6 +117,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isCanvasFileElement(element: LayerElement): element is CanvasFileElement {
 	return element.type === ElementTypeEnum.Image || element.type === ElementTypeEnum.Video
+}
+
+function isClipboardBlobBackedMetadata(metadata: CanvasElementClipboardFileMetadata): boolean {
+	return metadata.role === "element-media" || metadata.role === "canvas-export"
 }
 
 function sanitizeFilename(filename: string, mimeType: string): string {
@@ -230,7 +236,7 @@ function normalizeFileMetadata(file: unknown): CanvasElementClipboardFileMetadat
 	}
 
 	const role = file.role ?? file.fileRole
-	if (role !== "element-media" && role !== "canvas-export") {
+	if (role !== "element-media" && role !== "canvas-export" && role !== "generation-resource") {
 		return null
 	}
 
@@ -241,6 +247,7 @@ function normalizeFileMetadata(file: unknown): CanvasElementClipboardFileMetadat
 		mimeType: file.mimeType,
 		fileSize: file.fileSize,
 		role,
+		resourcePath: typeof file.resourcePath === "string" ? file.resourcePath : undefined,
 		sourceRef: normalizeSourceRef(file.sourceRef),
 	}
 }
@@ -335,6 +342,31 @@ export class CanvasElementClipboard {
 			mimeType: options.mimeType,
 			fileSize: options.fileSize,
 			role: "canvas-export",
+			sourceRef: options.sourceRef,
+		}
+	}
+
+	/**
+	 * 创建生成请求依赖资源索引元数据。
+	 *
+	 * 这类资源不对应可见元素，只用于跨画布粘贴时把隐藏依赖迁移到目标画布并重写请求路径。
+	 */
+	public static createGenerationResourceMetadata(options: {
+		fileId: string
+		resourcePath: string
+		filename: string
+		mimeType: string
+		fileSize: number
+		sourceRef?: CanvasElementClipboardFileMetadata["sourceRef"]
+	}): CanvasElementClipboardFileMetadata {
+		return {
+			id: options.fileId,
+			elementId: options.fileId,
+			filename: sanitizeFilename(options.filename, options.mimeType),
+			mimeType: options.mimeType,
+			fileSize: options.fileSize,
+			role: "generation-resource",
+			resourcePath: options.resourcePath,
 			sourceRef: options.sourceRef,
 		}
 	}
@@ -523,8 +555,9 @@ export class CanvasElementClipboard {
 		files: File[],
 		metadataList: CanvasElementClipboardFileMetadata[],
 	): CanvasElementClipboardFile[] {
-		const canvasFiles = files.slice(0, metadataList.length).map((file, index) => {
-			const metadata = metadataList[index]
+		const blobBackedMetadata = metadataList.filter(isClipboardBlobBackedMetadata)
+		const canvasFiles = files.slice(0, blobBackedMetadata.length).map((file, index) => {
+			const metadata = blobBackedMetadata[index]
 			const normalizedFile = new File([file], metadata.filename, {
 				type: file.type || metadata.mimeType,
 			})
@@ -676,7 +709,8 @@ export class CanvasElementClipboard {
 		items: ClipboardItem[],
 		metadataList: CanvasElementClipboardFileMetadata[],
 	): Promise<CanvasElementClipboardFile[]> {
-		if (metadataList.length === 0) {
+		const blobBackedMetadata = metadataList.filter(isClipboardBlobBackedMetadata)
+		if (blobBackedMetadata.length === 0) {
 			return []
 		}
 
@@ -690,8 +724,8 @@ export class CanvasElementClipboard {
 			),
 		)
 
-		for (let i = 0; i < metadataList.length; i++) {
-			const metadata = metadataList[i]
+		for (let i = 0; i < blobBackedMetadata.length; i++) {
+			const metadata = blobBackedMetadata[i]
 			const item = fileItems[i]
 			if (!item) {
 				continue

@@ -152,11 +152,21 @@ export const DefaultRemoveBackgroundProviderList = [
 // 擦图/扩图 - 默认服务商列表
 export const DefaultImageEditProviderList = [
 	{
+		provider: "jimeng",
+		name: "即梦",
+		ak: "",
+		sk: "",
+		timeout: 300,
+		concurrent: 1,
+		enable: false,
+	},
+	{
 		provider: "official_proxy",
 		name: "官方代理服务",
 		request_url: "",
 		api_key: "",
 		timeout: 300,
+		concurrent: 1,
 		enable: false,
 	},
 	{
@@ -165,6 +175,7 @@ export const DefaultImageEditProviderList = [
 		access_key: "",
 		secret_key: "",
 		timeout: 300,
+		concurrent: 1,
 		enable: false,
 	},
 ]

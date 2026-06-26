@@ -70,7 +70,11 @@ function resolveRequestedModeSourceTopic({
  * Uses object payload contract ({ topicMode, afterCreate }) for all callers.
  */
 export function useCreateTopicListener(options: UseCreateTopicListenerOptions = {}) {
-	const { enabled = true, selectedProject: selectedProjectFromOptions, topicStore } = options
+	const {
+		enabled = true,
+		selectedProject: selectedProjectFromOptions,
+		topicStore: scopedTopicStore,
+	} = options
 	const selectedProject = selectedProjectFromOptions ?? projectStore.selectedProject
 
 	useEffect(() => {
@@ -104,11 +108,11 @@ export function useCreateTopicListener(options: UseCreateTopicListenerOptions = 
 				topicMode,
 			})
 
-			if (topicStore) {
+			if (scopedTopicStore) {
 				const projectId = selectedProject?.id
 				if (!projectId) return
 
-				new TopicService({ store: topicStore })
+				new TopicService({ store: scopedTopicStore })
 					.createTopic({
 						projectId,
 						topicName: topicName || "",
@@ -132,5 +136,5 @@ export function useCreateTopicListener(options: UseCreateTopicListenerOptions = 
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Create_New_Topic, handleCreateTopic)
 		}
-	}, [enabled, selectedProject, topicStore])
+	}, [enabled, selectedProject, scopedTopicStore])
 }

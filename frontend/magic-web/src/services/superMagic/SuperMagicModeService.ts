@@ -2,7 +2,11 @@ import { BUSINESS_API_ERROR_CODE } from "@/constants/api"
 import { MODEL_TYPE_IMAGE, MODEL_TYPE_LLM } from "@/apis/modules/org-ai-model-provider"
 import { userStore } from "@/models/user"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
-import { ModeItem, ModeModelGroupItemResponse } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	ModeItem,
+	type ModeModelGroupItem,
+	ModeModelGroupItemResponse,
+} from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import superMagicCustomModelService from "./SuperMagicCustomModelService"
 import superMagicModeListRepository, {
@@ -38,6 +42,14 @@ function resolveFeaturedModeMapKey(item: ModeItem): string {
 
 function buildModeMapFromModeList(list: ModeItem[]): Map<string, ModeItem> {
 	return new Map(list.map((item) => [resolveFeaturedModeMapKey(item), item]))
+}
+
+function normalizeAllModelGroupName(
+	groupName: string,
+	modelType: Extract<ModeModelType, "image" | "video">,
+) {
+	const suffixPattern = modelType === "image" ? /[-_\s]image$/i : /[-_\s]video$/i
+	return groupName.replace(suffixPattern, "").trim().toLowerCase()
 }
 
 // Configuration constants
@@ -447,6 +459,68 @@ class SuperMagicModeService {
 		return this._modeMap.get(key)?.groups.flatMap((item) => item.video_models || []) ?? []
 	}
 
+	/**
+	 * 获取当前用户所有模式下可用的生图模型分组列表
+	 * @returns
+	 */
+	getAllImageModelGroups() {
+		return this.getAllModelGroupsByType("image")
+	}
+
+	/**
+	 * 获取当前用户所有模式下可用的视频模型分组列表
+	 * @returns
+	 */
+	getAllVideoModelGroups() {
+		return this.getAllModelGroupsByType("video")
+	}
+
+	/**
+	 * 获取当前用户所有模式下可用的模型分组列表
+	 * @param modelType 模型类型
+	 * @returns 按组名分组，组内模型按模型ID去重
+	 */
+	private getAllModelGroupsByType(modelType: Extract<ModeModelType, "image" | "video">) {
+		const modelIdSet = new Set<string>()
+		const groupMap = new Map<string, ModeModelGroupItem>()
+		const groups: ModeModelGroupItem[] = []
+
+		this._modeList.forEach((modeItem) => {
+			modeItem.groups.forEach((groupItem) => {
+				const models =
+					modelType === "image"
+						? groupItem.image_models || []
+						: groupItem.video_models || []
+				const uniqueModels = models.filter((model) => {
+					if (!model?.model_id) return false
+					if (modelIdSet.has(model.model_id)) return false
+					modelIdSet.add(model.model_id)
+					return true
+				})
+
+				if (uniqueModels.length === 0) return
+
+				const groupKey =
+					normalizeAllModelGroupName(groupItem.group.name, modelType) ||
+					groupItem.group.id
+				const existingGroup = groupMap.get(groupKey)
+				if (existingGroup) {
+					existingGroup.models.push(...uniqueModels)
+					return
+				}
+
+				const nextGroup = {
+					...groupItem,
+					models: uniqueModels,
+				}
+				groupMap.set(groupKey, nextGroup)
+				groups.push(nextGroup)
+			})
+		})
+
+		return groups
+	}
+
 	private getOfficialModelListByType(
 		mode: string,
 		modelType: ModeModelType,
@@ -815,12 +889,12 @@ class SuperMagicModeService {
 					models: (group.model_ids ?? [])
 						.map((modelId) => res.models[modelId])
 						.filter(Boolean),
-					image_models: (group.image_model_ids ?? []).map(
-						(modelId) => res.models[modelId],
-					),
-					video_models: (group.video_model_ids ?? []).map(
-						(modelId) => res.models[modelId],
-					),
+					image_models: (group.image_model_ids ?? [])
+						.map((modelId) => res.models[modelId])
+						.filter(Boolean),
+					video_models: (group.video_model_ids ?? [])
+						.map((modelId) => res.models[modelId])
+						.filter(Boolean),
 				}))
 
 				this._defaultModeModelList = groups

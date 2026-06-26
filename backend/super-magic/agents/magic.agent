@@ -41,6 +41,7 @@ skills:
     - name: micro-app-architect
     - name: agent-info
     - name: document-converter
+    - name: using-oauth2
   workspace_skills: "*"
 ---
 

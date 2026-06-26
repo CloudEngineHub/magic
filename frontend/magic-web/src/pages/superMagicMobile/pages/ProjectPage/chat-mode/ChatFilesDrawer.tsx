@@ -107,6 +107,7 @@ function ChatFilesDrawerComponent({ open, onOpenChange }: ChatFilesDrawerProps) 
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
 				ref={previewDetailPopupRef}
+				allowEdit={!isReadonly}
 				setUserSelectDetail={setUserSelectDetail}
 				onClose={() => {
 					setUserSelectDetail(null)
@@ -119,6 +120,7 @@ function ChatFilesDrawerComponent({ open, onOpenChange }: ChatFilesDrawerProps) 
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
 				ref={linkPreviewPopupRef}
+				allowEdit={!isReadonly}
 				setUserSelectDetail={setUserSelectDetail}
 				onClose={() => {
 					// Close link popup without any action

@@ -7,6 +7,8 @@ import {
 } from "../html-preview-bundled-shell"
 import HTML from "../index"
 
+const mockIsolatedHTMLRendererProps = vi.hoisted(() => vi.fn())
+
 const mockGetFileContentById = vi.fn()
 const mockProcessHtmlContent = vi.fn(async ({ content }: { content?: string }) => ({
 	processedContent: content || "",
@@ -421,6 +423,8 @@ vi.mock("../IsolatedHTMLRenderer", async () => {
 				getFetchInterceptedCallback: () => () => void
 			}>,
 		) {
+			mockIsolatedHTMLRendererProps(props)
+
 			React.useImperativeHandle(ref, () => ({
 				getContent: async () => "<html><body>local-visual</body></html>",
 				updateContent: () => undefined,
@@ -526,6 +530,7 @@ describe("HTML", () => {
 	beforeEach(() => {
 		mockGetFileContentById.mockReset()
 		mockProcessHtmlContent.mockClear()
+		mockIsolatedHTMLRendererProps.mockClear()
 	})
 
 	it("should use bundled dashboard template for dashboard index entry html", async () => {
@@ -584,6 +589,32 @@ describe("HTML", () => {
 		expect(mockProcessHtmlContent).toHaveBeenCalledWith(
 			expect.objectContaining({
 				htmlPreviewBundledTemplate: undefined,
+			}),
+		)
+	})
+
+	it("should pass html base directory with an explicit prop name", async () => {
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				attachmentList={[
+					{
+						file_id: "file-1",
+						file_name: "index.html",
+						relative_file_path: "magic-api-devtools/index.html",
+					},
+				]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled()
+		})
+
+		expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				htmlRelativeFolderPath: "magic-api-devtools/",
 			}),
 		)
 	})

@@ -43,6 +43,7 @@ pydantic_core==2.33.2
 # 网络请求与工具
 requests>=2.32.2
 httpx>=0.27.1,<1.0.0  # Async HTTP client for audio_understanding tool and SDK
+authlib>=1.6.2,<2.0.0  # super-magic OAuth2 应用接入使用的底层 OAuth2 客户端
 tenacity==8.2.3
 aiofiles~=24.1.0
 aiohttp_retry>=2.9.1  # aiohttp 重试功能库

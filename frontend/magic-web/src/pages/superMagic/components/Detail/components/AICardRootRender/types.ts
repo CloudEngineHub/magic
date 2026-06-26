@@ -1,6 +1,9 @@
+import type { AICardNotificationConfig } from "./utils/aiCardNotification"
+
 /** AI Card project config from magic.project.js */
 export interface AICardProjectConfig {
 	type: "ai-card"
+	card_id?: string
 	name: string
 	description?: string
 	cards: Array<{ file: string; label: string }>
@@ -13,6 +16,8 @@ export interface AICardProjectConfig {
 	model?: { model_id: string; model_name?: string }
 	image_model?: { model_id: string; model_name?: string }
 	video_model?: { model_id: string; model_name?: string }
+	notification?: AICardNotificationConfig
+	card_path_or_link?: string
 	data_source?: string
 	last_generated?: string
 	generation_count?: number
@@ -55,6 +60,7 @@ export interface AICardRootRenderProps {
 	allowEdit?: boolean
 	saveEditContent?: (...args: any[]) => Promise<void>
 	selectedProject?: { id: string; name?: string }
+	projectId?: string
 }
 
 export type AICardViewMode = "dashboard" | "detail" | "config"

@@ -14,6 +14,7 @@ import type {
 	SelfMediaPostOpsArtifactAnimations,
 	SelfMediaPostOpsArtifacts,
 } from "../services/selfMediaOpsArtifactStates"
+import { deriveOpsArtifacts } from "../services/selfMediaPostOpsEvidence"
 import { isCardPlatform } from "../services/selfMediaAiNormalize"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 import type { SelfMediaAttachmentNode, SelfMediaPostPublishStatus } from "../types"
@@ -46,6 +47,7 @@ interface SelfMediaPostCardProps {
 	subtitle: string
 	postId: string
 	opsArtifacts: SelfMediaPostOpsArtifacts
+	publishedUrl?: string
 	opsArtifactAnimations?: SelfMediaPostOpsArtifactAnimations
 	opsMetrics?: SelfMediaPostOpsMetricsPayload | null
 	attachmentList?: SelfMediaAttachmentNode[]
@@ -95,6 +97,7 @@ function SelfMediaPostCard({
 	subtitle,
 	postId,
 	opsArtifacts,
+	publishedUrl,
 	opsArtifactAnimations,
 	opsMetrics,
 	attachmentList,
@@ -119,9 +122,11 @@ function SelfMediaPostCard({
 	const { platform, index } = item
 	const engagementItems = getEngagementItems(opsMetrics)
 	const { containerRef: cardRef, width: cardWidth } = useMeasuredContainerWidth<HTMLDivElement>()
-	const [localPublishedUrl, setLocalPublishedUrl] = useState("")
+	const normalizedPublishedUrl = publishedUrl?.trim() || ""
+	const [localPublishedUrl, setLocalPublishedUrl] = useState(normalizedPublishedUrl)
 	const publishStatus = item.entry.publishStatus || item.post.meta.publishStatus
-	const sourceReady = opsArtifacts.source || localPublishedUrl.trim().length > 0
+	const displayedOpsArtifacts = deriveOpsArtifacts(opsArtifacts, opsMetrics, localPublishedUrl)
+	const sourceReady = displayedOpsArtifacts.source
 	const canManagePublishedUrl = Boolean(onBindPublishedUrl || onLoadPublishedUrl)
 	const canOpenDataPopover = Boolean(
 		onPostPublishRefresh || onConfigureAutoSync || onLoadOpsSource,
@@ -154,12 +159,16 @@ function SelfMediaPostCard({
 		cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
 	}, [cardRef, publishedLinkAutoOpenSignal])
 
+	useEffect(() => {
+		if (normalizedPublishedUrl) setLocalPublishedUrl(normalizedPublishedUrl)
+	}, [normalizedPublishedUrl])
+
 	const opsArtifactControls = (
 		<div
 			className="self-media-post-card-artifacts pointer-events-auto relative z-20 mt-3 flex items-center gap-2"
 			data-testid={`self-media-home-post-ops-artifacts-${postId}`}
 		>
-			{getOpsArtifactItems(opsArtifacts).map((artifact) =>
+			{getOpsArtifactItems(displayedOpsArtifacts).map((artifact) =>
 				artifact.key === "source" && canManagePublishedUrl ? (
 					<SelfMediaPostPublishedLinkPopover
 						key={artifact.key}
@@ -257,7 +266,7 @@ function SelfMediaPostCard({
 								{title}
 							</h3>
 							<SelfMediaPostLifecycleStatus
-								opsArtifacts={opsArtifacts}
+								opsArtifacts={displayedOpsArtifacts}
 								postId={postId}
 								publishStatus={publishStatus}
 							/>

@@ -33,6 +33,10 @@
 			"types": "./src/runtime/RuntimePlugin.ts",
 			"import": "./dist/runtime/RuntimePlugin.js"
 		},
+		"./utils/parentOrigin": {
+			"types": "./src/utils/parentOrigin.ts",
+			"import": "./dist/utils/parentOrigin.js"
+		},
 		"./index.html": "./dist/index.html"
 	},
 	"main": "./dist/index.js",

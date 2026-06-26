@@ -24,7 +24,7 @@ import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { Flex } from "antd"
 import ToolIcon from "@/pages/superMagic/components/MessageList/components/Tool/components/ToolIcon"
 import { getAttachmentExtension } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
-import { BookOpen } from "lucide-react"
+import { BookOpen, X } from "lucide-react"
 import IconTerminal from "@/pages/superMagic/assets/svg/terminal.svg"
 import PDFIcon from "@/pages/superMagic/assets/file_icon/pdf.svg"
 import CommonFileIcon from "@/pages/superMagic/assets/svg/file.svg"
@@ -33,7 +33,6 @@ import type { Topic, ProjectListItem } from "@/pages/superMagic/pages/Workspace/
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicModal from "@/components/base/MagicModal"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /** Mobile preview sheet: near full viewport; overrides MagicPopup default mt-24 top band. */
@@ -83,6 +82,7 @@ interface PreviewDetailPopupProps {
 	projectId?: string
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	allowEdit?: boolean
 	onPreviewFileChange?: (fileId: string | null) => void
 	onPreviewFullscreenChange?: (isFullscreen: boolean) => void
 }
@@ -97,6 +97,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		onOpenNewPopup,
 		projectId = "",
 		allowDownload,
+		allowEdit,
 		onPreviewFileChange,
 		onPreviewFullscreenChange,
 	} = props
@@ -329,6 +330,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 				projectId={selectedProject?.id || projectId}
 				isPlaybackMode={!!previewDetail?.isFromNode || false}
 				allowDownload={allowDownload}
+				allowEdit={allowEdit}
 				showFileHeader={!isImmersiveFullscreen}
 				// Mobile sheet: MagicPopup shows title; toolbar-only header avoids duplicate chrome.
 				headerRenderMode={isMobile ? "actions" : "full"}
@@ -346,6 +348,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 	}, [
 		allFiles.length,
 		allowDownload,
+		allowEdit,
 		attachmentList,
 		currentIndex,
 		effectiveAttachments,

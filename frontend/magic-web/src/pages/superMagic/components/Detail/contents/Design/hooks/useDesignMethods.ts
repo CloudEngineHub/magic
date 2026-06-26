@@ -15,6 +15,7 @@ import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { SuperMagicApi } from "@/apis"
 import { useGetOrCreateImagesDir } from "./useGetOrCreateImagesDir"
 import { useImageGeneration } from "./useImageGeneration"
+import { useImagePromptCompletion } from "./useImagePromptCompletion"
 import { useVideoGeneration } from "./useVideoGeneration"
 import { useFileUpload } from "./useFileUpload"
 import { useFileInfoProvider } from "./useFileInfoProvider"
@@ -132,7 +133,13 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		updateAttachments,
 	})
 
-	const { getImageModelList, generateImage, getImageGenerationResult } = useImageGeneration({
+	const {
+		getImageModelList,
+		generateImage,
+		generateImages,
+		getImageGenerationResult,
+		getImageGenerationResults,
+	} = useImageGeneration({
 		projectId,
 		currentFile,
 		flatAttachments,
@@ -140,6 +147,12 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		setFileInfoCache,
 		updateAttachments,
 		getOrCreateImagesDir,
+	})
+
+	const { completeImagePrompt } = useImagePromptCompletion({
+		projectId,
+		flatAttachments,
+		designProjectBasePath,
 	})
 
 	const { getVideoModelList, generateVideo, estimateVideoPoints, getVideoGenerationResult } =
@@ -592,16 +605,19 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	const methods = useMemo<CanvasDesignMethods>(() => {
 		return {
 			getImageModelList,
+			completeImagePrompt,
 			getVideoModelList,
 			generateVideo,
 			estimateVideoPoints,
 			generateImage,
+			generateImages,
 			removeBackground,
 			eraser,
 			expandImage,
 			generateHightImage: generateCanvasHightImage,
 			getConvertHightConfig,
 			getImageGenerationResult,
+			getImageGenerationResults,
 			getVideoGenerationResult,
 			locateProjectFile,
 			uploadFiles,
@@ -631,16 +647,19 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		}
 	}, [
 		getImageModelList,
+		completeImagePrompt,
 		getVideoModelList,
 		generateVideo,
 		estimateVideoPoints,
 		generateImage,
+		generateImages,
 		removeBackground,
 		eraser,
 		expandImage,
 		generateCanvasHightImage,
 		getConvertHightConfig,
 		getImageGenerationResult,
+		getImageGenerationResults,
 		getVideoGenerationResult,
 		locateProjectFile,
 		uploadFiles,

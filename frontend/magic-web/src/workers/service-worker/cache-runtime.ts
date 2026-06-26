@@ -27,7 +27,11 @@ import {
 	WORKBOX_CDN_QUERY_PARAM,
 	APP_API_CACHE_NAME,
 	API_CACHE_EXPIRATION_OPTIONS,
+	WARMUP_MEDIUM_BATCH_SIZE,
+	WARMUP_MEDIUM_INTERVAL_MS,
 } from "./sw-constants"
+import type { WarmUpOptions } from "./types"
+import { normalizeWarmUpOptions } from "./warmup-tuning"
 
 // Injected at production build by vite-plugin-app-service-worker (empty in dev).
 declare const __SW_PRECACHE_ASSETS__: string[]
@@ -116,10 +120,7 @@ export function loadWorkboxRuntime(runtimeUrl: string): boolean {
 	}
 }
 
-export function getWorkboxModulePathPrefix(
-	runtimeUrl: string,
-	baseUrl?: string,
-): string | null {
+export function getWorkboxModulePathPrefix(runtimeUrl: string, baseUrl?: string): string | null {
 	const normalizedRuntimeUrl = runtimeUrl.trim()
 	if (!normalizedRuntimeUrl) return null
 
@@ -164,11 +165,7 @@ export function bootstrapWorkboxCacheRuntime(sw: ServiceWorkerGlobalScope): Work
 	}
 
 	const vendorCacheableHosts = getConfiguredVendorCacheableHosts(sw)
-	const registration = registerAppCacheRoutes(
-		sw,
-		vendorCacheableHosts,
-		resolvedWorkboxRuntimeUrl,
-	)
+	const registration = registerAppCacheRoutes(sw, vendorCacheableHosts, resolvedWorkboxRuntimeUrl)
 	return {
 		configuredWorkboxRuntimeUrl,
 		resolvedWorkboxRuntimeUrl,
@@ -305,7 +302,7 @@ function registerAppCacheRoutes(
 				// Fallback
 			}
 			return request
-		}
+		},
 	}
 
 	registerRoute(
@@ -377,17 +374,35 @@ function toWarmUpCacheKey(assetPath: string): string {
 }
 
 /**
- * Populates static assets list during browser idle phase.
- * Uses concurrent batches of 10 and 200ms delay between intervals.
+ * Builds a dedupe key that includes tuning so concurrent warm-ups with different options do not collapse.
  */
-export async function warmUpStaticAssetsOnIdle(assets?: string[]): Promise<void> {
+function toWarmUpInFlightSerializedKey(
+	assetsToWarm: readonly string[],
+	options: WarmUpOptions,
+): string {
+	return `${assetsToWarm.join(",")}|${options.batchSize}|${options.intervalMs}`
+}
+
+/**
+ * Populates static assets list during browser idle phase.
+ * Batch size and interval are supplied by the main thread via postMessage.
+ */
+export async function warmUpStaticAssetsOnIdle(
+	assets?: string[],
+	options?: WarmUpOptions,
+): Promise<void> {
 	const assetsToWarm = normalizeWarmUpAssets(assets)
 	if (!assetsToWarm.length) return
 
-	const serialized = assetsToWarm.join(",")
-	if (lastWarmedUpAssetsSerialized === serialized) return
+	const warmUpOptions = options
+		? normalizeWarmUpOptions(options.intervalMs, options.batchSize)
+		: normalizeWarmUpOptions(WARMUP_MEDIUM_INTERVAL_MS, WARMUP_MEDIUM_BATCH_SIZE)
 
-	if (inFlightWarmUpPromise && inFlightWarmUpSerialized === serialized) {
+	const assetsSerialized = assetsToWarm.join(",")
+	if (lastWarmedUpAssetsSerialized === assetsSerialized) return
+
+	const inFlightSerialized = toWarmUpInFlightSerializedKey(assetsToWarm, warmUpOptions)
+	if (inFlightWarmUpPromise && inFlightWarmUpSerialized === inFlightSerialized) {
 		try {
 			await inFlightWarmUpPromise
 		} catch {
@@ -396,11 +411,10 @@ export async function warmUpStaticAssetsOnIdle(assets?: string[]): Promise<void>
 		return
 	}
 
-	inFlightWarmUpSerialized = serialized
+	inFlightWarmUpSerialized = inFlightSerialized
 	inFlightWarmUpPromise = (async () => {
 		const cache = await caches.open(APP_STATIC_CACHE_NAME)
-		const batchSize = 10
-		const intervalMs = 200
+		const { batchSize, intervalMs } = warmUpOptions
 
 		for (let index = 0; index < assetsToWarm.length; index += batchSize) {
 			const batch = assetsToWarm.slice(index, index + batchSize)
@@ -437,7 +451,7 @@ export async function warmUpStaticAssetsOnIdle(assets?: string[]): Promise<void>
 		}
 
 		// Mark as completed only after all batches are processed.
-		lastWarmedUpAssetsSerialized = serialized
+		lastWarmedUpAssetsSerialized = assetsSerialized
 	})()
 
 	try {
@@ -445,7 +459,7 @@ export async function warmUpStaticAssetsOnIdle(assets?: string[]): Promise<void>
 	} catch (error) {
 		console.warn("[sw] Warm-up overall failure", { error })
 	} finally {
-		if (inFlightWarmUpSerialized === serialized) {
+		if (inFlightWarmUpSerialized === inFlightSerialized) {
 			inFlightWarmUpSerialized = ""
 			inFlightWarmUpPromise = null
 		}

@@ -68,6 +68,11 @@ readonly class ImageGenerationDomainService
         $this->repository->completed($dataIsolation, $taskId, $fileName);
     }
 
+    public function markAsCompletedWithImages(DesignDataIsolation $dataIsolation, int $taskId, string $fileName, array $outputImages): void
+    {
+        $this->repository->completedWithImages($dataIsolation, $taskId, $fileName, $outputImages);
+    }
+
     /**
      * 更新任务状态为失败.
      */

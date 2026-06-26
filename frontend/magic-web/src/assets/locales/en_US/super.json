@@ -240,6 +240,7 @@
 		"deleteChat": "Delete",
 		"deleteChatConfirm": "Are you sure you want to delete the conversation \"{{name}}\"?",
 		"deleteChatDescription": "will be moved to Trash. You can restore it or delete it permanently from Trash.",
+		"deleteChatFailed": "Delete failed",
 		"deleteChatSuccess": "Deleted successfully",
 		"friend": "My friend",
 		"greet": "Hi! {{name}}",
@@ -254,6 +255,7 @@
 		"renameChatSuccess": "Renamed successfully",
 		"saveAsNewProjectTitle": "Save as New Project",
 		"saveAsProject": "Save as Project",
+		"saveAsProjectFailed": "Save as project failed",
 		"saveAsProjectSuccess": "Conversation saved as a project",
 		"saveAsProjectTo": "Save as project to...",
 		"unnamedChat": "Unnamed conversation",
@@ -587,6 +589,22 @@
 			"description": "You can continue editing and saving the canvas after the network reconnects.",
 			"title": "Network disconnected. Canvas is read-only"
 		},
+		"conflict": {
+			"blockingResolveFailed": "Failed to recover sync. Refresh and try again.",
+			"draftConflictDescription": "Remote content has changed. Your local draft will not overwrite it automatically. Choose whether to keep using remote content or restore and save the draft.",
+			"draftConflictTitle": "Local draft conflicts with remote updates",
+			"elementResolveFailed": "Failed to resolve element conflict",
+			"keepLocalAndSave": "Keep mine and save",
+			"keepLocalConfirmDescription": "This will save your current local changes to remote and overwrite the remote updates.",
+			"keepLocalConfirmTitle": "Keep your changes and overwrite remote?",
+			"restoreDraftAndSave": "Restore draft and save",
+			"restoreDraftConfirmDescription": "This will restore the local draft, save it to remote, and overwrite the remote updates.",
+			"restoreDraftConfirmTitle": "Restore draft and overwrite remote?",
+			"syncPausedDescription": "Your current changes are not automatically overwriting remote content. Wait for sync to recover or refresh before continuing.",
+			"syncPausedTitle": "Sync paused",
+			"useRemote": "Use remote",
+			"useRemoteContinue": "Use remote"
+		},
 		"saved": "Saved",
 		"saving": "Saving",
 		"upgrade": {
@@ -620,6 +638,31 @@
 				"schedule": "Schedule",
 				"videoModel": "Video Model"
 			},
+			"notification": {
+				"title": "Notification delivery",
+				"description": "After a card is generated or updated successfully, send it to the described targets. This only stores targets, not platform credentials.",
+				"channels": {
+					"dingtalk": "DingTalk",
+					"wecom": "WeCom",
+					"lark": "Lark"
+				},
+				"placeholders": {
+					"dingtalk": "e.g. Send to the Ops Daily group, or send to someone",
+					"wecom": "e.g. Send to the WeCom Ops group, or send to someone",
+					"lark": "e.g. Send to the Growth Daily group, or send to someone"
+				},
+				"templates": {
+					"dingtalkGroup": "Send to the Ops Daily group",
+					"dingtalkUser": "Send to someone",
+					"wecomGroup": "Send to the WeCom Ops group",
+					"wecomUser": "Send to someone",
+					"larkGroup": "Send to the Growth Daily group",
+					"larkUser": "Send to someone"
+				},
+				"templateValues": {
+					"user": "Send to:"
+				}
+			},
 			"createDialog": {
 				"cancel": "Cancel",
 				"cardName": "Card Name",
@@ -632,6 +675,43 @@
 				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends and present with list + trend markers.",
 				"template": "Card Template",
 				"title": "Create AI Card"
+			},
+			"createMessage": {
+				"cardId": "Card ID: {{cardId}}",
+				"cardLink": "Card link: {{cardLink}}",
+				"customTemplate": "Custom template: {{customTemplate}}",
+				"location": "Location: {{cardDir}}/",
+				"notificationChannels": {
+					"dingtalk": "DingTalk",
+					"wecom": "WeCom",
+					"lark": "Lark"
+				},
+				"notificationTargetLine": "{{channel}}: {{targetDescription}}",
+				"schedule": {
+					"daily": "daily at {{time}}",
+					"default": "at {{time}}",
+					"disabled": " (disabled)",
+					"enabled": " (enabled)",
+					"monthly": "monthly on day {{day}} at {{time}}",
+					"noRepeat": "once at {{time}}",
+					"weekly": "weekly on {{day}} at {{time}}",
+					"weeklyDay": "{{day}}"
+				},
+				"sectionTitle": "━━━ {{title}} ━━━",
+				"sections": {
+					"analysisInstruction": "Analysis instructions",
+					"cardData": "Card data",
+					"createRequirement": "Creation requirements",
+					"notificationTargets": "Notification targets"
+				},
+				"template": "Template: {{template}}",
+				"title": "Create an AI Card named \"{{cardName}}\".",
+				"topicName": "[AI Card] {{cardName}}",
+				"update": {
+					"defaultScheduled": "Update mode: default scheduled updates",
+					"once": "Update mode: one-time generation",
+					"scheduled": "Schedule: {{schedule}}{{enabledText}}"
+				}
 			},
 			"dashboard": {
 				"archived": "Archived",
@@ -673,7 +753,12 @@
 			},
 			"detail": {
 				"back": "Back",
-				"noContent": "No card content yet, waiting for next scheduled task"
+				"loadingCard": "Loading card",
+				"nextVersion": "Older version",
+				"nextVersionDisabled": "Already at earliest version",
+				"noContent": "No card content yet, waiting for next scheduled task",
+				"previousVersion": "Newer version",
+				"previousVersionDisabled": "Already at latest version"
 			},
 			"form": {
 				"advancedSettings": "Advanced Settings",
@@ -2154,6 +2239,37 @@
 			"deny": "Deny",
 			"fieldSeparator": ", ",
 			"title": "Authorize User Info Access"
+		},
+		"permissionAuthorizationConfirm": {
+			"allow": "Allow",
+			"content": "\"{{appName}}\" requests permission to use: {{scope}}. Purpose: {{reason}}",
+			"contentWithoutReason": "\"{{appName}}\" requests permission to use: {{scope}}. This app did not provide a purpose.",
+			"deny": "Deny",
+			"legacyContent": "This HTML micro-app has no permission declaration and requests permission to use: {{scope}}. This only applies briefly in the current tab.",
+			"scopes": {
+				"fsProjectRead": "Read project files outside the app directory",
+				"fsProjectWrite": "Modify project files outside the app directory",
+				"llmUse": "Call AI models",
+				"projectFilesDownload": "Download project files",
+				"projectFilesUpload": "Upload project files",
+				"projectMessageWrite": "Create topics or send messages",
+				"userProfileIdentity": "Read user identity info",
+				"userProfileName": "Read user name info",
+				"userProfileOrganization": "Read user organization info"
+			},
+			"title": "Authorize HTML Micro-App Capability",
+			"ttl": {
+				"once": "This operation",
+				"5m": "5 minutes",
+				"10m": "10 minutes",
+				"15m": "15 minutes",
+				"30m": "30 minutes",
+				"60m": "1 hour",
+				"2h": "2 hours",
+				"4h": "4 hours",
+				"8h": "8 hours",
+				"12h": "12 hours"
+			}
 		}
 	},
 	"knowledgeBase": {
@@ -2584,6 +2700,7 @@
 				"remainingShort": "{{days}} days left",
 				"selectRow": "Select this item",
 				"type": {
+					"folder": "Folder",
 					"file": "File",
 					"project": "Project",
 					"topic": "Topic",
@@ -2593,6 +2710,9 @@
 			},
 			"loader": {
 				"noMoreData": "You've seen everything!"
+			},
+			"nameConflictResolve": {
+				"cancelAria": "Cancel"
 			},
 			"orphanWarn": {
 				"cancel": "Cancel restore",
@@ -3461,6 +3581,7 @@
 			"more": "More actions",
 			"pathPrefix": "Path: ",
 			"type": {
+				"folder": "Folder",
 				"file": "File",
 				"project": "Project",
 				"topic": "Topic",
@@ -3473,11 +3594,29 @@
 		},
 		"restoreCheck": {
 			"confirmMessage": "Restore {{type}}「{{name}}」to its original location?",
+			"projectMissing": "The file's project does not exist or has been deleted. Please restore the project first.",
+			"duplicateRestoreTarget": "There are files with the same target path and name in this restore batch. By default, only the most recently deleted one will be restored.",
+			"projectMissingTip": "{{count}} file(s) belong to projects that do not exist or were deleted. Please restore those projects first.",
+			"projectMissingTipWithNames": "{{count}} file(s) belong to projects that do not exist or were deleted ({{fileNames}}). Please restore those projects first.",
+			"fileNamesWithEtc": "{{names}} and more files",
+			"duplicateRestoreTargetTip": "There are {{count}} file(s) with duplicate target path and name in this batch. By default, only the most recently deleted one will be restored.",
 			"errorMessage": "Parent check failed, please retry later",
+			"fileConflictConfirmMessage": "{{parentMissingCount}} file(s) whose original folder no longer exists will be restored to the original project's root directory. The original project root already contains {{conflictNames}}, and {{nameConflictCount}} file(s) with the same name will need confirmation one by one. Continue?",
+			"fileConflictCountConfirmMessage": "{{parentMissingCount}} file(s) whose original folder no longer exists will be restored to the original project's root directory; another {{nameConflictCount}} conflicting file(s) will need confirmation one by one. Continue?",
+			"nameConflictConfirmMessage": "The original project root already contains {{conflictNames}}, and {{count}} file(s) with the same name will need confirmation one by one. Continue?",
+			"nameConflictCountConfirmMessage": "The original project root already contains {{count}} file(s) with the same name. These files will need confirmation one by one. Continue?",
+			"nameConflictDialogTitle": "Overwrite file \"{{fileName}}\"?",
+			"conflictNamesWithEtc": "{{names}}, and more",
+			"parentMissingConfirmMessage": "{{count}} file(s) whose original folder no longer exists will be restored to the original project's root directory. Continue?",
 			"invalidMessage": "Pre-restore check did not pass",
 			"locationLabel": "location",
 			"missingParentMessage": "The original {{parentLabel}} no longer exists. Please select a new {{locationLabel}} to restore 「{{name}}」.",
 			"mixedTypes": "Selected resources have mixed types",
+			"skipNameConflict": "Skip",
+			"applySameActionToRemaining": "Apply the same action to the remaining {{count}} conflicting file(s)",
+			"processingAllNameConflicts": "Processing...",
+			"pendingNameConflictCount": "{{count}} conflicting file(s) remaining",
+			"nameConflictSkipped": "{{count}} file(s) with a name conflict were skipped",
 			"needMoveFiles": "Original projects no longer exist for some items. Please select a project for these {{count}} Files.",
 			"needMoveProjects": "Original workspaces no longer exist for some items. Please select a workspace for these {{count}} projects.",
 			"needMoveTopics": "Original projects no longer exist for some items. Please select a project for these {{count}} Topics.",

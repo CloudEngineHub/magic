@@ -4,7 +4,7 @@ import { IconX } from "@tabler/icons-react"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import FlexBox from "@/components/base/FlexBox"
 import { Button } from "@/components/shadcn-ui/button"
-import { ChevronRight } from "lucide-react"
+import { Check, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import useGeistFont from "@/styles/fonts/geist"
 import { MenuItemProps, MentionItemType } from "../../types"
@@ -24,6 +24,8 @@ const MenuItem = memo(function MenuItem(props: MenuItemProps) {
 		style,
 		isSearch,
 		t,
+		showCheckbox,
+		checkboxChecked,
 		...restProps
 	} = props
 
@@ -170,6 +172,21 @@ const MenuItem = memo(function MenuItem(props: MenuItemProps) {
 			data-testid="mention-panel-menu-item"
 			{...restProps}
 		>
+			{showCheckbox && (
+				<span
+					className={cn(
+						"flex size-4 shrink-0 items-center justify-center rounded border transition-colors",
+						checkboxChecked
+							? "border-primary bg-primary text-primary-foreground"
+							: "border-border bg-background text-transparent",
+					)}
+					aria-hidden
+					data-testid="mention-panel-menu-item-checkbox"
+					data-checked={checkboxChecked ? "true" : "false"}
+				>
+					<Check className="size-3" strokeWidth={2.5} />
+				</span>
+			)}
 			<div className="flex min-w-0 flex-1 items-center gap-1">
 				<span className="inline-flex shrink-0 items-center justify-center">
 					{renderer.renderIcon?.(rendererContext)}

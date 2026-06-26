@@ -1,3 +1,4 @@
+import type { UIEvent } from "react"
 import type { TFunction } from "i18next"
 import { CheckLine, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react"
 import { Badge } from "@/components/shadcn-ui/badge"
@@ -22,8 +23,11 @@ interface RecycleBinListProps {
 	items: RecycleBinItem[]
 	selectedIds: string[]
 	loading: boolean
+	loadingMore: boolean
+	hasMore: boolean
 	hasError: boolean
 	shouldShowEmpty: boolean
+	onLoadMore: () => void
 	onToggleItem: (payload: { id: string; checked: boolean }) => void
 	onRetry: () => void
 	onOpenRestore: (target: RestoreTarget) => void
@@ -35,15 +39,18 @@ export function RecycleBinList({
 	items,
 	selectedIds,
 	loading,
+	loadingMore,
+	hasMore,
 	hasError,
 	shouldShowEmpty,
+	onLoadMore,
 	onToggleItem,
 	onRetry,
 	onOpenRestore,
 	onOpenDelete,
 	t,
 }: RecycleBinListProps) {
-	if (loading) {
+	if (loading && items.length === 0) {
 		return (
 			<div
 				className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-muted-foreground"
@@ -97,10 +104,18 @@ export function RecycleBinList({
 		)
 	}
 
+	function handleScroll(event: UIEvent<HTMLDivElement>) {
+		if (!hasMore || loadingMore) return
+		const target = event.currentTarget
+		const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+		if (distanceToBottom <= 80) onLoadMore()
+	}
+
 	return (
 		<div
 			className="flex min-h-0 flex-1 flex-col overflow-y-auto"
 			data-testid="recycle-bin-list"
+			onScroll={handleScroll}
 		>
 			{items.map((item, index) => (
 				<div key={item.id} data-testid={`recycle-bin-row-${item.id}`}>
@@ -119,7 +134,7 @@ export function RecycleBinList({
 									data-testid={`recycle-bin-row-select-${item.id}`}
 								/>
 								<Badge variant="outline" className="rounded-lg px-2 py-0.5">
-									{getCategoryLabel(item.category, t)}
+									{getCategoryLabel(item.category, t, item.fileKind)}
 								</Badge>
 								<div className="truncate text-sm font-medium leading-normal text-foreground">
 									{getDisplayTitle(item, t)}
@@ -198,14 +213,24 @@ export function RecycleBinList({
 					{index < items.length - 1 ? <Separator /> : null}
 				</div>
 			))}
-			<Separator />
-			<div
-				className="flex items-center justify-center gap-1.5 py-3 text-xs font-normal leading-normal text-muted-foreground"
-				data-testid="recycle-bin-end"
-			>
-				<CheckLine className="size-4 text-muted-foreground" />
-				<span>{t("recycleBin.loader.noMoreData")}</span>
-			</div>
+			{loadingMore ? (
+				<div className="flex items-center justify-center gap-2 px-7 py-4 text-xs text-muted-foreground">
+					<Spinner className="size-4" />
+					<span>{t("common.loading")}</span>
+				</div>
+			) : null}
+			{!hasMore && items.length > 0 ? (
+				<>
+					<Separator />
+					<div
+						className="flex items-center justify-center gap-1.5 py-3 text-xs font-normal leading-normal text-muted-foreground"
+						data-testid="recycle-bin-end"
+					>
+						<CheckLine className="size-4 text-muted-foreground" />
+						<span>{t("recycleBin.loader.noMoreData")}</span>
+					</div>
+				</>
+			) : null}
 		</div>
 	)
 }

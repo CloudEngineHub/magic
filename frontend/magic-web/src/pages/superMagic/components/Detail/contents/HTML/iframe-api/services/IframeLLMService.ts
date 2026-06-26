@@ -13,6 +13,7 @@ import {
 	LLM_MESSAGE_TYPES,
 	type LLMChatRequest,
 	type LLMGetModelsRequest,
+	type HtmlPermissionScope,
 	type LLMStreamRequest,
 	type LLMStreamAbort,
 	type LLMOptions,
@@ -37,6 +38,8 @@ export interface IframeLLMConfig {
 	getAuthorization: () => string
 	/** 获取当前组织代码的函数 */
 	getOrganizationCode: () => string
+	/** 执行高风险能力前的授权检查。未提供时保持旧行为。 */
+	authorizePermission?: (scope: HtmlPermissionScope) => Promise<boolean>
 }
 
 /** token 过期前提前刷新的缓冲时间（毫秒） */
@@ -273,6 +276,17 @@ export class IframeLLMService {
 		const { requestId, messages, options } = req
 
 		try {
+			const allowed = await this.ensurePermission("llm.use")
+			if (!allowed) {
+				this.send({
+					type: LLM_MESSAGE_TYPES.CHAT_RESPONSE,
+					requestId,
+					success: false,
+					error: "Permission denied: llm.use",
+				})
+				return
+			}
+
 			const controller = new AbortController()
 			const timer = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS)
 
@@ -320,10 +334,20 @@ export class IframeLLMService {
 	private async handleStream(req: LLMStreamRequest) {
 		const { requestId, messages, options } = req
 
-		const controller = new AbortController()
-		this.activeStreams.set(requestId, controller)
-
 		try {
+			const allowed = await this.ensurePermission("llm.use")
+			if (!allowed) {
+				this.send({
+					type: LLM_MESSAGE_TYPES.STREAM_ERROR,
+					requestId,
+					error: "Permission denied: llm.use",
+				})
+				return
+			}
+
+			const controller = new AbortController()
+			this.activeStreams.set(requestId, controller)
+
 			const body = this.buildChatBody(messages, options, true)
 			const res = await this.fetchWithToken(
 				`${this.cfg.baseUrl}/v1/chat/completions`,
@@ -368,6 +392,11 @@ export class IframeLLMService {
 			controller.abort()
 			this.activeStreams.delete(req.requestId)
 		}
+	}
+
+	private async ensurePermission(scope: HtmlPermissionScope): Promise<boolean> {
+		if (!this.cfg.authorizePermission) return true
+		return this.cfg.authorizePermission(scope)
 	}
 
 	// ─── SSE 解析 ────────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ import {
 	getManagedCacheNamePrefix,
 	MANAGED_APP_CACHE_NAMES,
 } from "./sw-constants"
+import { normalizeWarmUpOptions } from "./warmup-tuning"
 
 export interface SwContext {
 	sw: ServiceWorkerGlobalScope
@@ -70,10 +71,14 @@ function createAppCacheFeature(
 				return true
 			}
 			if (event.data?.type === "START_WARMUP") {
-					const assets = Array.isArray(event.data?.assets)
-						? event.data.assets.filter((item): item is string => typeof item === "string")
-						: undefined
-					event.waitUntil(warmUpStaticAssetsOnIdle(assets))
+				const assets = Array.isArray(event.data?.assets)
+					? event.data.assets.filter((item): item is string => typeof item === "string")
+					: undefined
+				const options = normalizeWarmUpOptions(
+					event.data?.intervalMs,
+					event.data?.batchSize,
+				)
+				event.waitUntil(warmUpStaticAssetsOnIdle(assets, options))
 				return true
 			}
 			return false

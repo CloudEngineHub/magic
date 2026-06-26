@@ -36,6 +36,7 @@
 		"retrySummary": "Retry summary",
 		"moreTags": "+{{count}}",
 		"moreActions": "More actions",
+		"openProject": "View project details",
 		"rename": "Rename",
 		"delete": "Delete"
 	},

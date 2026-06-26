@@ -7,7 +7,7 @@ const LOCAL_STORAGE_KEY_PREFIX = "MAGIC:supermagic-design:draft:"
 const DRAFT_WRITE_DEBOUNCE_MS = 300
 const MAX_DRAFTS_PER_PROJECT = 20
 
-export type DesignDraftReason = "local-edit" | "pagehide"
+export type DesignDraftReason = "local-edit" | "pagehide" | "manual-refresh"
 export type DesignDraftWriteTarget = "indexeddb" | "localStorage" | "memory" | "none"
 
 export interface DesignDraftWriteResult {

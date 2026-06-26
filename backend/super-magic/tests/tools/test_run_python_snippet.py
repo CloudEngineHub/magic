@@ -1,4 +1,5 @@
 import ast
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -6,6 +7,19 @@ import pytest
 from app.core.entity.tool.tool_result_types import TerminalToolResult
 from app.tools.run_python_snippet import RunPythonSnippet, RunPythonSnippetParams
 from app.tools.run_sdk_snippet import RunSdkSnippet
+
+
+class _FakeToolContext:
+    def __init__(self, current_model_id: str | None = None) -> None:
+        self._agent_context = SimpleNamespace(
+            context_id="ctx_test_123",
+            model_context=SimpleNamespace(current_text_model_id=current_model_id),
+        )
+
+    def get_extension_typed(self, name: str, _type):
+        if name == "agent_context":
+            return self._agent_context
+        return None
 
 
 def test_run_python_snippet_repairs_unescaped_quotes_in_prose_call_argument():
@@ -74,6 +88,37 @@ async def test_run_python_snippet_injects_project_root_env(tmp_path):
 
     assert result.ok is True
     assert mock_execute.await_args.kwargs["cwd"] == workspace
-    assert mock_execute.await_args.kwargs["extra_env"] == {
-        "SUPER_MAGIC_PROJECT_ROOT": str(project_root),
-    }
+    assert mock_execute.await_args.kwargs["extra_env"]["SUPER_MAGIC_PROJECT_ROOT"] == str(project_root)
+
+
+@pytest.mark.asyncio
+async def test_run_python_snippet_injects_current_model_env(tmp_path):
+    project_root = tmp_path / "mock_app"
+    workspace = tmp_path / "mock_workspace"
+    project_root.mkdir()
+    workspace.mkdir()
+
+    tool = RunPythonSnippet()
+    tool.base_dir = workspace
+
+    with patch(
+        "app.tools.run_python_snippet.PathManager.get_project_root",
+        return_value=project_root,
+    ), patch(
+        "app.tools.run_python_snippet.ProcessExecutor.execute_command",
+        new_callable=AsyncMock,
+    ) as mock_execute:
+        mock_execute.return_value = TerminalToolResult(ok=True, content="ok")
+
+        result = await tool.execute_purely(
+            RunPythonSnippetParams(
+                python_code="print('mock result')",
+                script_path="temp_mock_snippet.py",
+            ),
+            tool_context=_FakeToolContext(current_model_id="mock-current-model"),
+        )
+
+    assert result.ok is True
+    extra_env = mock_execute.await_args.kwargs["extra_env"]
+    assert extra_env["SUPER_MAGIC_AGENT_CONTEXT_ID"] == "ctx_test_123"
+    assert extra_env["SUPER_MAGIC_CURRENT_MODEL_ID"] == "mock-current-model"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { AnimatePresence } from "framer-motion"
@@ -19,6 +19,46 @@ import {
 	switchToTopicByChatTopicId,
 } from "./utils/aiCardRunNow"
 
+interface AICardAttachmentNode {
+	file_id?: string
+	children?: AICardAttachmentNode[]
+}
+
+function findNodeWithChildrenByFileId(
+	items: AICardAttachmentNode[] | undefined,
+	fileId?: string,
+): AICardAttachmentNode | null {
+	if (!items?.length || !fileId) return null
+
+	for (const item of items) {
+		if (item?.file_id === fileId && Array.isArray(item.children) && item.children.length > 0) {
+			return item
+		}
+		const matched = findNodeWithChildrenByFileId(item?.children, fileId)
+		if (matched) return matched
+	}
+
+	return null
+}
+
+function resolveAICardAttachmentSource({
+	data,
+	attachments,
+	attachmentList,
+}: Pick<AICardRootRenderProps, "data" | "attachments" | "attachmentList">):
+	| AICardRootRenderProps["attachments"]
+	| undefined {
+	const folderFileId = data?.file_id
+	const attachmentTree = attachments as AICardAttachmentNode[] | undefined
+	const flatAttachments = attachmentList as AICardAttachmentNode[] | undefined
+	const matchedAttachmentFolder = findNodeWithChildrenByFileId(attachmentTree, folderFileId)
+	if (matchedAttachmentFolder) return [matchedAttachmentFolder]
+	if (Array.isArray(data?.children) && data.children.length > 0) return [data]
+	const matchedFlatFolder = findNodeWithChildrenByFileId(flatAttachments, folderFileId)
+	if (matchedFlatFolder) return [matchedFlatFolder]
+	return attachmentList || attachments
+}
+
 /**
  * AICardRootRender
  *
@@ -36,12 +76,17 @@ function AICardRootRender(props: AICardRootRenderProps) {
 	const folderFileId = data?.file_id
 	const initialNavigation = data?.initialNavigation
 
-	// Stabilize attachment list reference
-	const stableAttachmentList = attachmentList || attachments
+	const stableAttachmentList = useMemo(
+		() => resolveAICardAttachmentSource({ data, attachments, attachmentList }),
+		[data, attachments, attachmentList],
+	)
 
 	// Create store instance per mount
 	const [store] = useState(() => new AICardStore())
 	const [isRunNowLoading, setIsRunNowLoading] = useState(false)
+	const selectedProject =
+		props.selectedProject ??
+		(props.projectId ? { id: props.projectId } : projectStore.selectedProject)
 
 	// Permission check: only users with edit access can configure / run
 	const canEdit = !isReadOnlyProject(projectStore.selectedProject?.user_role)
@@ -68,7 +113,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 		if (initialNavigation?.activeCardId) {
 			store.openCardDetail(initialNavigation.activeCardId)
 		}
-	}, [store, store.loading, initialNavigation])
+	}, [store, store.loading, initialNavigation, canEdit, folderFileId])
 
 	const handleOpenConfig = useCallback(() => {
 		store.setViewMode("config")
@@ -112,7 +157,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 		} finally {
 			setIsRunNowLoading(false)
 		}
-	}, [store, isRunNowLoading])
+	}, [store, isRunNowLoading, t])
 
 	const handleOpenHistoryEntry = useCallback(
 		(entry: AICardHistoryEntry) => {
@@ -120,6 +165,14 @@ function AICardRootRender(props: AICardRootRenderProps) {
 		},
 		[store],
 	)
+
+	const handleOpenPreviousVersion = useCallback(() => {
+		store.openPreviousDetailVersion()
+	}, [store])
+
+	const handleOpenNextVersion = useCallback(() => {
+		store.openNextDetailVersion()
+	}, [store])
 
 	if (store.loading) {
 		return (
@@ -153,6 +206,7 @@ function AICardRootRender(props: AICardRootRenderProps) {
 						historyEntries={store.historyEntries}
 						projectConfig={store.projectConfig}
 						attachmentList={stableAttachmentList}
+						selectedProject={selectedProject}
 						onOpenCard={handleOpenCard}
 						onOpenConfig={canEdit ? handleOpenConfig : undefined}
 						onRunNow={
@@ -168,6 +222,15 @@ function AICardRootRender(props: AICardRootRenderProps) {
 						card={store.activeCard}
 						htmlFileId={store.detailFileId}
 						attachmentList={stableAttachmentList}
+						canGoToPreviousVersion={store.canOpenPreviousDetailVersion}
+						canGoToNextVersion={store.canOpenNextDetailVersion}
+						onOpenPreviousVersion={
+							store.detailVersionCount > 1 ? handleOpenPreviousVersion : undefined
+						}
+						onOpenNextVersion={
+							store.detailVersionCount > 1 ? handleOpenNextVersion : undefined
+						}
+						selectedProject={selectedProject}
 						onBack={handleBack}
 					/>
 				)}

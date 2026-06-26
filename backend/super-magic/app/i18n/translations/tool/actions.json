@@ -303,6 +303,14 @@
         "zh_CN": "生成视频",
         "en_US": "Generate videos"
     },
+    "restore_canvas_media.preview": {
+        "zh_CN": "扫描可恢复媒体",
+        "en_US": "Scan recoverable media"
+    },
+    "restore_canvas_media.restore": {
+        "zh_CN": "恢复画布媒体",
+        "en_US": "Restore canvas media"
+    },
     "thinking": {
         "zh_CN": "深度思考",
         "en_US": "Thinking process"
@@ -490,6 +498,50 @@
     "remove_server": {
         "zh_CN": "移除服务",
         "en_US": "Remove Service"
+    },
+    "oauth2_list_apps": {
+        "zh_CN": "查看 OAuth2 应用",
+        "en_US": "List OAuth2 apps"
+    },
+    "oauth2_upsert_app": {
+        "zh_CN": "保存 OAuth2 应用",
+        "en_US": "Save OAuth2 app"
+    },
+    "oauth2_get_redirect_uri": {
+        "zh_CN": "获取 OAuth2 重定向 URI",
+        "en_US": "Get OAuth2 redirect URI"
+    },
+    "oauth2_request": {
+        "zh_CN": "调用 OAuth2 API",
+        "en_US": "Call OAuth2 API"
+    },
+    "oauth2_remove_app": {
+        "zh_CN": "删除 OAuth2 应用",
+        "en_US": "Remove OAuth2 app"
+    },
+    "oauth2_start_authorization": {
+        "zh_CN": "发起 OAuth2 授权",
+        "en_US": "Start OAuth2 authorization"
+    },
+    "oauth2_check_authorization": {
+        "zh_CN": "检查 OAuth2 授权",
+        "en_US": "Check OAuth2 authorization"
+    },
+    "oauth2_list_api_docs": {
+        "zh_CN": "查询 OAuth2 接口文档",
+        "en_US": "List OAuth2 API docs"
+    },
+    "oauth2_get_api_doc": {
+        "zh_CN": "获取 OAuth2 接口文档",
+        "en_US": "Get OAuth2 API doc"
+    },
+    "oauth2_upsert_api_doc": {
+        "zh_CN": "保存 OAuth2 接口文档",
+        "en_US": "Save OAuth2 API doc"
+    },
+    "oauth2_remove_api_doc": {
+        "zh_CN": "移除 OAuth2 接口文档",
+        "en_US": "Remove OAuth2 API doc"
     },
     "call_simple_tool": {
         "zh_CN": "调用工具",

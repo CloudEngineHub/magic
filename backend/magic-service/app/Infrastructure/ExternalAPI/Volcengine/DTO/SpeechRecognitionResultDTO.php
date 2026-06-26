@@ -18,15 +18,15 @@ use App\Infrastructure\ExternalAPI\Volcengine\ValueObject\VolcengineStatusCode;
  */
 class SpeechRecognitionResultDTO extends AbstractDTO
 {
-    protected ?AudioInfoDTO $audioInfo;
+    protected ?AudioInfoDTO $audioInfo = null;
 
-    protected ?ResultDTO $result;
+    protected ?ResultDTO $result = null;
 
-    protected string $volcengineLogId;
+    protected string $volcengineLogId = '';
 
-    protected ?VolcengineStatusCode $volcengineStatusCode;
+    protected ?VolcengineStatusCode $volcengineStatusCode = null;
 
-    protected string $volcengineMessage;
+    protected string $volcengineMessage = '';
 
     public function __construct(array $data = [])
     {
@@ -170,7 +170,7 @@ class SpeechRecognitionResultDTO extends AbstractDTO
      */
     public function getDuration(): int
     {
-        return $this->audioInfo?->getDuration() ?? 0;
+        return $this->getAudioInfo()?->getDuration() ?? 0;
     }
 
     /**

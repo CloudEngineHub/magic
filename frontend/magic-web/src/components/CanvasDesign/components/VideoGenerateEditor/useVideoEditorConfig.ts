@@ -536,7 +536,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 	const modelOptions = useMemo<VideoModelOption[]>(() => {
 		return videoModelList.map((model) => ({
-			label: model.model_name,
+			label: model.model_name || model.model_id,
 			value: model.model_id,
 			model,
 		}))

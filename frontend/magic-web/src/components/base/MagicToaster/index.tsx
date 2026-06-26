@@ -24,7 +24,7 @@ export default function MagicToaster({
 				centered && [
 					"!left-0 !right-0 !top-[calc(var(--safe-area-inset-top)+40px)] !w-auto !translate-x-0",
 					"[&_[data-sonner-toast]]:!left-0 [&_[data-sonner-toast]]:!right-0 [&_[data-sonner-toast]]:!mx-auto",
-					"[&_[data-sonner-toast]]:!w-fit [&_[data-sonner-toast]]:!whitespace-nowrap [&_[data-sonner-toast]]:!py-2",
+					"[&_[data-sonner-toast]]:!w-fit [&_[data-sonner-toast]]:!max-w-[calc(100vw-32px)] [&_[data-sonner-toast]]:!whitespace-normal [&_[data-sonner-toast]]:!break-words [&_[data-sonner-toast]]:!py-2 sm:[&_[data-sonner-toast]]:!whitespace-nowrap",
 				],
 				className,
 			)}

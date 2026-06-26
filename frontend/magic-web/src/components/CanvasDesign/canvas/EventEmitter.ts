@@ -144,6 +144,7 @@ export interface CanvasEventMap {
 		path: string
 		reason?: ResourceLoadFailureReason
 	} // 视频换链/刷新失败（如附件已删除）
+	"resource:remote-load-deferral-released": { path: string; key: string } // 跨画布粘贴远程参考资源迁移完成/结束，允许预览重试
 	"resource:released": { path: string } // 资源生命周期清理事件（供资源 URL 缓存同步）
 
 	// 元素拖拽相关事件（单元素）

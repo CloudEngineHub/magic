@@ -47,7 +47,16 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
         } else {
             $builder->where('model_id', $modelId);
         }
-        $checkStatus && $builder->where('status', Status::Enabled->value);
+        if ($checkStatus) {
+            $builder->where('status', Status::Enabled->value);
+            // 开启的服务商
+            $enabledProviderConfigIds = $this->createBuilder($dataIsolation, ProviderConfigModel::query())
+                ->where('status', Status::Enabled->value)
+                ->whereNull('deleted_at')
+                ->pluck('id')
+                ->toArray();
+            $builder->whereIn('service_provider_config_id', $enabledProviderConfigIds);
+        }
         $result = Db::select($builder->toSql(), $builder->getBindings());
         if (! isset($result[0])) {
             return null;

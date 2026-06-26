@@ -239,6 +239,7 @@
 		"deleteChat": "删除",
 		"deleteChatConfirm": "确定要删除对话「{{name}}」吗？",
 		"deleteChatDescription": "将移入回收站。你可以在回收站中恢复或彻底删除。",
+		"deleteChatFailed": "删除失败",
 		"deleteChatSuccess": "删除成功",
 		"friend": "朋友",
 		"greet": "嗨, {{name}}",
@@ -253,6 +254,7 @@
 		"renameChatSuccess": "重命名成功",
 		"saveAsNewProjectTitle": "另存为新项目",
 		"saveAsProject": "另存为项目",
+		"saveAsProjectFailed": "另存为项目失败",
 		"saveAsProjectSuccess": "对话已另存为项目",
 		"saveAsProjectTo": "另存为项目至...",
 		"unnamedChat": "未命名对话",
@@ -588,6 +590,22 @@
 			"description": "网络恢复后可继续编辑并保存画布内容",
 			"title": "网络已断开，画布已切换为只读"
 		},
+		"conflict": {
+			"blockingResolveFailed": "恢复同步失败，请刷新后重试",
+			"draftConflictDescription": "远端内容已更新，本地草稿不会自动覆盖远端。请选择继续使用远端或恢复草稿并保存。",
+			"draftConflictTitle": "检测到本地草稿与远端更新冲突",
+			"elementResolveFailed": "处理元素冲突失败",
+			"keepLocalAndSave": "保留我的并保存",
+			"keepLocalConfirmDescription": "这会把当前本地变更保存到远端，远端已有更新会被覆盖。",
+			"keepLocalConfirmTitle": "保留我的并覆盖远端？",
+			"restoreDraftAndSave": "恢复草稿并保存",
+			"restoreDraftConfirmDescription": "这会恢复本地草稿并保存到远端，远端已有更新会被覆盖。",
+			"restoreDraftConfirmTitle": "恢复草稿并覆盖远端？",
+			"syncPausedDescription": "当前变更没有继续自动覆盖远端，请等待同步恢复或刷新后继续编辑。",
+			"syncPausedTitle": "同步已暂停",
+			"useRemote": "使用远端",
+			"useRemoteContinue": "使用远端继续"
+		},
 		"saved": "保存成功",
 		"saving": "正在保存",
 		"upgrade": {
@@ -621,6 +639,31 @@
 				"schedule": "执行频率",
 				"videoModel": "视频模型"
 			},
+			"notification": {
+				"title": "通知分发",
+				"description": "卡片生成或更新成功后，按描述发送到指定渠道。这里只配置目标，不保存平台凭据。",
+				"channels": {
+					"dingtalk": "钉钉",
+					"wecom": "企业微信",
+					"lark": "飞书"
+				},
+				"placeholders": {
+					"dingtalk": "例如：发到「运营日报群」，或发给某个人",
+					"wecom": "例如：发到「企业微信运营群」，或发给某个人",
+					"lark": "例如：发到「增长日报群」，或发给某个人"
+				},
+				"templates": {
+					"dingtalkGroup": "发到「运营日报群」",
+					"dingtalkUser": "发给某个人",
+					"wecomGroup": "发到「企业微信运营群」",
+					"wecomUser": "发给某个人",
+					"larkGroup": "发到「增长日报群」",
+					"larkUser": "发给某个人"
+				},
+				"templateValues": {
+					"user": "发给："
+				}
+			},
 			"createDialog": {
 				"cancel": "取消",
 				"cardName": "卡片名称",
@@ -633,6 +676,43 @@
 				"promptPlaceholder": "告诉 AI 需要追踪和分析什么内容。\n例如：搜索今日抖音、微博、小红书热搜榜 Top 20，分析趋势变化并以列表+趋势标记形式呈现。",
 				"template": "卡片模板",
 				"title": "创建 AI 卡片"
+			},
+			"createMessage": {
+				"cardId": "卡片编号：{{cardId}}",
+				"cardLink": "卡片链接：{{cardLink}}",
+				"customTemplate": "自定义模板要求：{{customTemplate}}",
+				"location": "创建位置：{{cardDir}}/",
+				"notificationChannels": {
+					"dingtalk": "钉钉",
+					"wecom": "企业微信",
+					"lark": "飞书"
+				},
+				"notificationTargetLine": "{{channel}}：{{targetDescription}}",
+				"schedule": {
+					"daily": "每天 {{time}} 执行",
+					"default": "{{time}} 执行",
+					"disabled": "（暂不启用）",
+					"enabled": "（已启用）",
+					"monthly": "每月{{day}} {{time}} 执行",
+					"noRepeat": "单次执行，时间：{{time}}",
+					"weekly": "每周{{day}} {{time}} 执行",
+					"weeklyDay": "周{{day}}"
+				},
+				"sectionTitle": "━━━ {{title}} ━━━",
+				"sections": {
+					"analysisInstruction": "分析指令",
+					"cardData": "卡片数据",
+					"createRequirement": "创建需求",
+					"notificationTargets": "通知目标"
+				},
+				"template": "模板：{{template}}",
+				"title": "请创建一个 AI 卡片「{{cardName}}」。",
+				"topicName": "[AI卡片] {{cardName}}",
+				"update": {
+					"defaultScheduled": "更新方式：默认定时更新",
+					"once": "更新方式：一次性生成",
+					"scheduled": "定时：{{schedule}}{{enabledText}}"
+				}
 			},
 			"dashboard": {
 				"archived": "归档",
@@ -674,7 +754,12 @@
 			},
 			"detail": {
 				"back": "返回",
-				"noContent": "暂无卡片内容，等待下次定时任务生成"
+				"loadingCard": "正在加载卡片",
+				"nextVersion": "较早版本",
+				"nextVersionDisabled": "已是最早版本",
+				"noContent": "暂无卡片内容，等待下次定时任务生成",
+				"previousVersion": "较新版本",
+				"previousVersionDisabled": "已是最新版本"
 			},
 			"form": {
 				"advancedSettings": "高级设置",
@@ -2155,6 +2240,37 @@
 			"deny": "拒绝",
 			"fieldSeparator": "、",
 			"title": "授权用户信息访问"
+		},
+		"permissionAuthorizationConfirm": {
+			"allow": "允许",
+			"content": "「{{appName}}」请求使用：{{scope}}。用途：{{reason}}",
+			"contentWithoutReason": "「{{appName}}」请求使用：{{scope}}。该应用未提供用途说明。",
+			"deny": "拒绝",
+			"legacyContent": "该 HTML 微应用未声明权限，正在请求使用：{{scope}}。只在当前标签页短时生效。",
+			"scopes": {
+				"fsProjectRead": "读取应用目录外的项目文件",
+				"fsProjectWrite": "修改应用目录外的项目文件",
+				"llmUse": "调用 AI 模型",
+				"projectFilesDownload": "下载项目文件",
+				"projectFilesUpload": "上传项目文件",
+				"projectMessageWrite": "创建话题或发送消息",
+				"userProfileIdentity": "读取用户身份信息",
+				"userProfileName": "读取用户姓名信息",
+				"userProfileOrganization": "读取用户组织信息"
+			},
+			"title": "授权 HTML 微应用能力",
+			"ttl": {
+				"once": "本次操作",
+				"5m": "5 分钟",
+				"10m": "10 分钟",
+				"15m": "15 分钟",
+				"30m": "30 分钟",
+				"60m": "1 小时",
+				"2h": "2 小时",
+				"4h": "4 小时",
+				"8h": "8 小时",
+				"12h": "半天"
+			}
 		}
 	},
 	"knowledgeBase": {
@@ -2584,6 +2700,7 @@
 				"remainingShort": "剩 {{days}} 天",
 				"selectRow": "选择此项",
 				"type": {
+					"folder": "文件夹",
 					"file": "文件",
 					"project": "项目",
 					"topic": "话题",
@@ -2593,6 +2710,9 @@
 			},
 			"loader": {
 				"noMoreData": "没有更多数据了"
+			},
+			"nameConflictResolve": {
+				"cancelAria": "取消"
 			},
 			"orphanWarn": {
 				"cancel": "取消还原",
@@ -3463,6 +3583,7 @@
 			"more": "更多操作",
 			"pathPrefix": "路径：",
 			"type": {
+				"folder": "文件夹",
 				"file": "文件",
 				"project": "项目",
 				"topic": "话题",
@@ -3475,11 +3596,29 @@
 		},
 		"restoreCheck": {
 			"confirmMessage": "将{{type}}「{{name}}」恢复至原位置？",
+			"projectMissing": "文件所属项目不存在或已删除，请先恢复项目",
+			"duplicateRestoreTarget": "同批恢复里有同目标同名文件，系统默认仅恢复最新删除的那个",
+			"projectMissingTip": "有 {{count}} 个文件所属项目不存在或已删除，请先恢复项目。",
+			"projectMissingTipWithNames": "有 {{count}} 个文件所属项目不存在或已删除（{{fileNames}}），请先恢复项目。",
+			"fileNamesWithEtc": "{{names}} 等文件",
+			"duplicateRestoreTargetTip": "选择中的文件有 {{count}} 个同目标同名文件，系统默认仅恢复最新删除的那个",
 			"errorMessage": "父级检查失败，请稍后重试",
+			"fileConflictConfirmMessage": "有 {{parentMissingCount}} 个文件原目录已不存在，将恢复到原项目根目录；原项目根目录已存在同名文件 {{conflictNames}}，这 {{nameConflictCount}} 个文件需要逐个确认。确认继续？",
+			"fileConflictCountConfirmMessage": "有 {{parentMissingCount}} 个文件原目录已不存在，将恢复到原项目根目录；另有 {{nameConflictCount}} 个同名文件需要逐个确认。确认继续？",
+			"nameConflictConfirmMessage": "原项目根目录已存在同名文件 {{conflictNames}}，这 {{count}} 个文件需要逐个确认。确认继续？",
+			"nameConflictCountConfirmMessage": "原项目根目录已存在 {{count}} 个同名文件，这些文件需要逐个确认。确认继续？",
+			"nameConflictDialogTitle": "是否覆盖文件「{{fileName}}」？",
+			"conflictNamesWithEtc": "{{names}} 等文件",
+			"parentMissingConfirmMessage": "有 {{count}} 个文件原目录已不存在，将恢复到原项目根目录。确认恢复？",
 			"invalidMessage": "恢复前检查未通过",
 			"locationLabel": "位置",
 			"missingParentMessage": "原{{parentLabel}}已不存在，请选择新的{{locationLabel}}以恢复「{{name}}」。",
 			"mixedTypes": "所选资源类型不一致",
+			"skipNameConflict": "跳过",
+			"applySameActionToRemaining": "后续 {{count}} 个冲突文件都执行相同操作",
+			"processingAllNameConflicts": "处理中...",
+			"pendingNameConflictCount": "还有 {{count}} 个冲突文件待处理",
+			"nameConflictSkipped": "{{count}} 个同名文件已跳过",
 			"needMoveFiles": "部分项的原项目已不存在，请为这 {{count}} 个文件选择目标项目。",
 			"needMoveProjects": "部分项的原工作区已不存在，请为这 {{count}} 个项目选择目标工作区。",
 			"needMoveTopics": "部分项的原项目已不存在，请为这 {{count}} 个话题选择目标项目。",

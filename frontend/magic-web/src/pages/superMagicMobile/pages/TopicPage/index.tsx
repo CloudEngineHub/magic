@@ -34,6 +34,7 @@ import { useInterruptAndUndoMessage } from "@/pages/superMagic/hooks/useInterrup
 import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
 import { useNoPermissionCollaborationProject } from "@/pages/superMagic/hooks/useNoPermissionCollaborationProject"
 import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import ChatHeader from "./components/ChatHeader"
 import { TopicFilesPopup } from "./components/TopicFilesPopup"
@@ -580,6 +581,7 @@ function TopicPage({
 
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
+	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
 
 	// 移动端统一订阅消息节点中的文件预览 / 路径打开事件
 	useMobileFilePreviewPubSub({
@@ -722,6 +724,7 @@ function TopicPage({
 				setUserSelectDetail={setUserSelectDetail}
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
+				allowEdit={!isReadonly}
 				onOpenNewPopup={(detail, attachmentTree, attachmentList) => {
 					linkPreviewPopupRef.current?.open(detail, attachmentTree, attachmentList)
 				}}
@@ -731,7 +734,9 @@ function TopicPage({
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
 				ref={linkPreviewPopupRef}
-				setUserSelectDetail={(detail: any) => {
+				allowEdit={!isReadonly}
+				setUserSelectDetail={(detail: PreviewDetail | null) => {
+					if (!detail) return
 					linkPreviewPopupRef.current?.open(detail, attachments, attachmentList)
 				}}
 				onClose={() => {

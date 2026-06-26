@@ -20,6 +20,16 @@
 		"unsupportedDropContent": "This dragged content cannot be added as a reference image",
 		"unsupportedReferenceImageType": "Only image files can be added as reference images"
 	},
+	"elementConflict": {
+		"deleteElement": "Delete element",
+		"description": "This element has new synced content and your current changes.",
+		"keepDeleted": "Keep deleted",
+		"keepElement": "Keep element",
+		"restoreNew": "Restore new",
+		"title": "Choose a version to keep",
+		"useLocal": "Keep mine",
+		"useRemote": "Use new"
+	},
 	"elementTools": {
 		"elementAlign": {
 			"bottom": "Bottom",
@@ -180,6 +190,15 @@
 		},
 		"title": "Layers"
 	},
+	"mediaResourceFullscreenPreview": {
+		"audioLoadFailed": "Failed to load audio",
+		"close": "Close fullscreen preview",
+		"croppedImage": "Cropped",
+		"imageLoadFailed": "Failed to load image",
+		"originalImage": "Original",
+		"videoLoadFailed": "Failed to load video. Please try again later.",
+		"viewMode": "Image display mode"
+	},
 	"menu": {
 		"addFrame": "Add Frame",
 		"addToCurrentConversation": "Add to Current Conversation",
@@ -219,15 +238,6 @@
 		"referenceVideo": "Reference Video",
 		"size": "Size",
 		"title": "Generation History"
-	},
-	"mediaResourceFullscreenPreview": {
-		"audioLoadFailed": "Failed to load audio",
-		"close": "Close fullscreen preview",
-		"croppedImage": "Cropped",
-		"imageLoadFailed": "Failed to load image",
-		"originalImage": "Original",
-		"videoLoadFailed": "Failed to load video. Please try again later.",
-		"viewMode": "Image display mode"
 	},
 	"rectangle": {
 		"defaultName": "Rectangle"
@@ -414,6 +424,7 @@
 		"hand": "Hand Tool",
 		"imageGenerator": "Image Generator",
 		"marker": "Marker",
+		"plugins": "Plugins",
 		"selection": "Selection Tool",
 		"space": "Space",
 		"text": "Text",

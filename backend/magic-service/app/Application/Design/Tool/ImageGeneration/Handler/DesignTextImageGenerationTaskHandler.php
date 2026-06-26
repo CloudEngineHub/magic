@@ -41,7 +41,7 @@ class DesignTextImageGenerationTaskHandler extends AbstractDesignImageGeneration
         $dto->setModel($entity->getModelId());
         $dto->setBusinessParams($this->designImageGenerationBusinessParams($dataIsolation));
         $dto->setPrompt($this->resolvePromptForGeneration($entity));
-        $dto->setN(1);
+        $dto->setN($entity->getGenerateNum());
 
         $imageUrls = $this->collectReferenceImageUrls($dataIsolation, $entity, $workspacePrefix);
         if ($imageUrls !== []) {

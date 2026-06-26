@@ -3,7 +3,10 @@ import type { ImageElement as ImageElementData } from "../types"
 import type { GetImageGenerationResultParams } from "../../types.magic"
 import { IMAGE_CONFIG } from "../element/elements/ImageElement.config"
 import { joinUploadStoragePath } from "./pathUtils"
-import { getImageGenerationTaskMeta } from "./imageGenerationTaskMeta"
+import {
+	getImageGenerationTaskMeta,
+	isBatchImageGenerationTaskMeta,
+} from "./imageGenerationTaskMeta"
 import {
 	extractSmartNameFromFileName,
 	shouldContinueGenerationPolling,
@@ -95,7 +98,12 @@ export class ImagePollingManager {
 			return elementData.generateImageRequest.image_id
 		}
 
-		return getImageGenerationTaskMeta(elementData)?.image_id
+		const taskMeta = getImageGenerationTaskMeta(elementData)
+		if (isBatchImageGenerationTaskMeta(taskMeta)) {
+			return undefined
+		}
+
+		return taskMeta?.image_id
 	}
 
 	private shouldPollCurrentElement(): boolean {

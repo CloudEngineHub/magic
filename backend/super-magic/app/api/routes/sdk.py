@@ -47,6 +47,16 @@ class SdkToolCallRequest(BaseModel):
     )
 
 
+class SdkOAuth2AccessTokenRequest(BaseModel):
+    """SDK OAuth2 access token 请求。"""
+
+    app_name: str = Field(..., description="OAuth2 app name")
+    agent_context_id: str = Field(
+        ...,
+        description="调用方 AgentContext 的唯一标识符，由 run_sdk_snippet 注入子进程环境变量",
+    )
+
+
 @router.post("/tool/call", response_model=BaseResponse)
 async def sdk_tool_call(request: SdkToolCallRequest):
     """
@@ -151,6 +161,70 @@ async def sdk_tool_call(request: SdkToolCallRequest):
     finally:
         if request.sdk_execution_id:
             registry.unregister(request.agent_context_id, request.sdk_execution_id, tool_call_id)
+
+
+@router.post("/oauth2/access-token", response_model=BaseResponse)
+async def sdk_oauth2_access_token(request: SdkOAuth2AccessTokenRequest):
+    """向 SDK 子进程返回 OAuth2 access token，不创建 ToolResult。"""
+    from app.core.context.agent_context_registry import AgentContextRegistry
+    from app.infrastructure.oauth2.exceptions import (
+        OAuth2AppNotFoundError,
+        OAuth2AuthorizationRequiredError,
+        OAuth2DependencyError,
+        OAuth2TokenRefreshError,
+    )
+    from app.infrastructure.oauth2.token_service import OAuth2TokenService
+    from app.infrastructure.oauth2.time_utils import format_timestamp
+
+    agent_context = AgentContextRegistry.get_instance().get(request.agent_context_id)
+    if agent_context is None:
+        error_msg = (
+            f"agent_context_id '{request.agent_context_id}' was not found in the registry. "
+            "Unable to route this request to the correct AgentContext."
+        )
+        logger.error(error_msg)
+        return create_error_response(message=error_msg, data={"status": "failed", "content": error_msg})
+
+    subject = agent_context.get_user_id() or "user"
+    timezone_name = (
+        agent_context.get_user_timezone()
+        if hasattr(agent_context, "get_user_timezone")
+        else "UTC"
+    )
+    service = OAuth2TokenService()
+    try:
+        access_token = await service.resolve_access_token(request.app_name, subject, timezone_name)
+        return create_success_response(
+            message="OAuth2 access token resolved",
+            data={"status": "authorized", "access_token": access_token},
+        )
+    except OAuth2AuthorizationRequiredError as exc:
+        try:
+            auth = await service.start_authorization(request.app_name, subject, timezone_name)
+            return create_success_response(
+                message="OAuth2 authorization required",
+                data={
+                    "status": "authorization_required",
+                    "content": str(exc),
+                    "auth_url": auth.auth_url,
+                    "expires_at": format_timestamp(auth.expires_at, timezone_name),
+                    "state_hash": auth.state_hash,
+                },
+            )
+        except Exception as start_exc:
+            return create_error_response(
+                message=f"OAuth2 authorization could not be started: {start_exc}",
+                data={"status": "authorization_required", "content": str(start_exc)},
+            )
+    except OAuth2AppNotFoundError as exc:
+        return create_error_response(message=str(exc), data={"status": "app_not_found", "content": str(exc)})
+    except OAuth2TokenRefreshError as exc:
+        return create_error_response(message=str(exc), data={"status": "token_refresh_failed", "content": str(exc)})
+    except OAuth2DependencyError as exc:
+        return create_error_response(message=str(exc), data={"status": "dependency_missing", "content": str(exc)})
+    except Exception as exc:
+        logger.error(f"OAuth2 access token resolve failed: {exc}", exc_info=True)
+        return create_error_response(message=str(exc), data={"status": "failed", "content": str(exc)})
 
 
 class SdkDebugToolCallRequest(BaseModel):

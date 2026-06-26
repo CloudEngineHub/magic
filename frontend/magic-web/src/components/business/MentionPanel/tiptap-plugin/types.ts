@@ -95,6 +95,8 @@ export interface MentionPanelPluginOptions {
 	getParentContainer?: () => HTMLElement | null
 	initialLoadOptions?: MentionPanelLoadStateOptions
 	initialNavigationStack?: NavigationItem[]
+	getInitialLoadOptions?: () => MentionPanelLoadStateOptions | undefined
+	getInitialNavigationStack?: () => NavigationItem[] | undefined
 	catalogBehavior?: MentionPanelCatalogBehavior
 	onInsert?: (item: MentionItem) => void
 	onInsertItems?: (items: MentionItem[]) => void

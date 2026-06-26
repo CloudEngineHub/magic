@@ -73,12 +73,7 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 	const { t } = useTranslation("super")
 
 	const getVideoModelList = useCallback(async (): Promise<VideoModelItem[]> => {
-		const officialGroups = JSON.parse(
-			JSON.stringify(superMagicModeService.getVideoModelGroupsByMode("general") || []),
-		) as Array<{
-			group: { id: string; name: string; icon: string; sort: number }
-			models: VideoModelItem[]
-		}>
+		const officialGroups = superMagicModeService.getAllVideoModelGroups()
 		const result = officialGroups.flatMap((groupItem) =>
 			(groupItem.models || []).map(
 				(model): VideoModelItem => ({
@@ -136,7 +131,9 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 				ensureVideosDir: false,
 				pathUnresolvedMessage: t("design.errors.designResourcePathUnresolved"),
 			})
-			const result = await SuperMagicApi.estimateVideoPoints(requestParams)
+			const result = await SuperMagicApi.estimateVideoPoints(requestParams, {
+				enableErrorMessagePrompt: false,
+			})
 			return normalizeEstimateVideoPointsResponse(result)
 		},
 		[projectId, currentFile, flatAttachments, designProjectBasePath, updateAttachments, t],

@@ -103,10 +103,25 @@ function TopicDesktopPanels({
 	const visibleConversationPanelCollapsed = shouldShowDetailPanel
 		? isConversationPanelCollapsed
 		: false
+	// Collapse should dismiss the history panel first so the right rail does not stay open
+	// after the conversation pane shrinks into the collapsed sliver state.
+	const handleToggleConversationPanel = useMemo(() => {
+		return () => {
+			if (!visibleConversationPanelCollapsed && isTopicHistoryPanelOpen) {
+				onCloseTopicHistoryPanel?.()
+			}
+			toggleConversationPanel()
+		}
+	}, [
+		isTopicHistoryPanelOpen,
+		onCloseTopicHistoryPanel,
+		toggleConversationPanel,
+		visibleConversationPanelCollapsed,
+	])
 	const messagePanel = renderMessagePanel({
 		isConversationPanelCollapsed: visibleConversationPanelCollapsed,
 		isDraggingPanel: isDraggingProjectSider || isDraggingMessagePanel,
-		onToggleConversationPanel: toggleConversationPanel,
+		onToggleConversationPanel: handleToggleConversationPanel,
 		onExpandConversationPanel: expandConversationPanel,
 		historyTriggerMode: historyLayout ? "layout" : "dropdown",
 		isHistoryPanelOpen: isTopicHistoryPanelOpen,

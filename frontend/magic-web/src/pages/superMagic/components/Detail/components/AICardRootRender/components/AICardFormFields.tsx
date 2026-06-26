@@ -12,6 +12,8 @@ import { MagicPromptEditor } from "@/components/base/MagicPromptEditor"
 import type { JSONContent } from "@tiptap/react"
 import { CARD_TEMPLATES } from "../hooks/useAICardConfig"
 import type { CardTemplateType } from "../hooks/useAICardConfig"
+import AICardNotificationFields from "./AICardNotificationFields"
+import type { AICardNotificationConfig } from "../utils/aiCardNotification"
 
 export interface AICardFormFieldsValues {
 	taskName: string
@@ -23,6 +25,7 @@ export interface AICardFormFieldsValues {
 	model?: ModelItem | null
 	imageModel?: ModelItem | null
 	videoModel?: ModelItem | null
+	notification?: AICardNotificationConfig
 }
 
 interface AICardFormFieldsProps {
@@ -218,6 +221,12 @@ function AICardFormFields({
 					disabled={disabled}
 				/>
 			</div>
+
+			<AICardNotificationFields
+				value={values.notification}
+				onChange={(notification) => onChange({ notification })}
+				disabled={disabled}
+			/>
 
 			{/* Model selections — 3 column grid */}
 			{hasModelOptions && (
