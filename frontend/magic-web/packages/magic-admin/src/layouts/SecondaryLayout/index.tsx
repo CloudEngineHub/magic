@@ -10,8 +10,7 @@ import { routes } from "@admin/routes"
 import { useAdminStore } from "@admin/stores/admin"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
 import { useAdminAuth } from "@admin/hooks/useAdminAuth"
-import { checkItemPermission } from "@admin/utils/routeUtils"
-import { getMatchedRouteEntries } from "@admin/utils/routeMeta"
+import { findRouteByPathname, checkItemPermission } from "@admin/utils/routeUtils"
 import NotAuthPage from "@admin/pages/NotAuthPage"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
 import { useStyles } from "./styles"
@@ -38,32 +37,30 @@ const SecondaryLayoutPc = (props: SecondaryLayoutProps) => {
 	// 根据当前路径生成面包屑项目
 	const bdItem = useMemo(() => {
 		const breadcrumbItems: ItemType[] = []
+		const pathSegments = pathname.split("/").filter(Boolean)
 
 		if (routes?.[0]?.children) {
-			const matchedRoutes = getMatchedRouteEntries(routes, pathname).filter(
-				(match) => match.route.title,
-			)
-			matchedRoutes.forEach((match, index) => {
-				const { route } = match
-				const title = route.title
-				if (!title) return
-
-				const isLast = index === matchedRoutes.length - 1
-				breadcrumbItems.push({
-					title: isLast ? (
-						t(title)
-					) : (
-						<div
-							className={styles.clickable}
-							onClick={() => {
-								navigate(match.pathname)
-							}}
-						>
-							{t(title)}
-						</div>
-					),
-					key: route.name || match.pathname,
-				})
+			findRouteByPathname(pathSegments, routes, {
+				onRouteMatch: (route) => {
+					if (route.title) {
+						const isLast = breadcrumbItems.length === pathSegments.length - 1
+						breadcrumbItems.push({
+							title: isLast ? (
+								t(route.title)
+							) : (
+								<div
+									className={styles.clickable}
+									onClick={() => {
+										navigate(route?.path || route.name || "")
+									}}
+								>
+									{t(route.title)}
+								</div>
+							),
+							key: route.name || route.path,
+						})
+					}
+				},
 			})
 		}
 

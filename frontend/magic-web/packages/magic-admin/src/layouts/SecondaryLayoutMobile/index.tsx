@@ -11,7 +11,7 @@ import { routes } from "@admin/routes"
 import { useAdmin } from "@admin/provider/AdminProvider"
 import { useStyles } from "./styles"
 import { useAdminAuth } from "../../hooks/useAdminAuth"
-import { getMatchedRouteEntries } from "../../utils/routeMeta"
+import { findRouteByPathname } from "../../utils/routeUtils"
 import type { SecondaryLayoutProps } from "../SecondaryLayout"
 
 const SecondaryLayoutMobile = (props: SecondaryLayoutProps) => {
@@ -46,11 +46,20 @@ const SecondaryLayoutMobile = (props: SecondaryLayoutProps) => {
 
 	// 获取当前页面标题
 	const currentPageTitle = useMemo(() => {
-		const matchedRoute = getMatchedRouteEntries(routes, pathname)
-			.filter((match) => match.route.title)
-			.pop()
+		const pathSegments = pathname.split("/").filter(Boolean)
+		let title = ""
 
-		return matchedRoute?.route.title ? t(matchedRoute.route.title) : ""
+		if (routes?.[0]?.children) {
+			findRouteByPathname(pathSegments, routes, {
+				onRouteMatch: (route) => {
+					if (route.title) {
+						title = t(route.title)
+					}
+				},
+			})
+		}
+
+		return title
 	}, [pathname, t])
 
 	// 是否可以返回上一页
