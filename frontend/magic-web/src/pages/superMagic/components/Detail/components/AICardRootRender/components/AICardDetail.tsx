@@ -14,6 +14,7 @@ interface AICardDetailProps {
 	canGoToNextVersion?: boolean
 	onOpenPreviousVersion?: () => void
 	onOpenNextVersion?: () => void
+	selectedProject?: { id?: string; name?: string } | null
 	onBack: () => void
 }
 
@@ -25,6 +26,7 @@ function AICardDetail({
 	canGoToNextVersion = false,
 	onOpenPreviousVersion,
 	onOpenNextVersion,
+	selectedProject,
 	onBack,
 }: AICardDetailProps) {
 	const { t } = useTranslation("super")
@@ -129,6 +131,7 @@ function AICardDetail({
 					<AICardIframe
 						fileId={fileId}
 						attachmentList={attachmentList}
+						selectedProject={selectedProject}
 						className="h-full w-full"
 						style={{ height: "100%" }}
 					/>

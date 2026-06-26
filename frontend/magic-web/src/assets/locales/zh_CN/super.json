@@ -2240,6 +2240,37 @@
 			"deny": "拒绝",
 			"fieldSeparator": "、",
 			"title": "授权用户信息访问"
+		},
+		"permissionAuthorizationConfirm": {
+			"allow": "允许",
+			"content": "「{{appName}}」请求使用：{{scope}}。用途：{{reason}}",
+			"contentWithoutReason": "「{{appName}}」请求使用：{{scope}}。该应用未提供用途说明。",
+			"deny": "拒绝",
+			"legacyContent": "该 HTML 微应用未声明权限，正在请求使用：{{scope}}。只在当前标签页短时生效。",
+			"scopes": {
+				"fsProjectRead": "读取应用目录外的项目文件",
+				"fsProjectWrite": "修改应用目录外的项目文件",
+				"llmUse": "调用 AI 模型",
+				"projectFilesDownload": "下载项目文件",
+				"projectFilesUpload": "上传项目文件",
+				"projectMessageWrite": "创建话题或发送消息",
+				"userProfileIdentity": "读取用户身份信息",
+				"userProfileName": "读取用户姓名信息",
+				"userProfileOrganization": "读取用户组织信息"
+			},
+			"title": "授权 HTML 微应用能力",
+			"ttl": {
+				"once": "本次操作",
+				"5m": "5 分钟",
+				"10m": "10 分钟",
+				"15m": "15 分钟",
+				"30m": "30 分钟",
+				"60m": "1 小时",
+				"2h": "2 小时",
+				"4h": "4 小时",
+				"8h": "8 小时",
+				"12h": "半天"
+			}
 		}
 	},
 	"knowledgeBase": {

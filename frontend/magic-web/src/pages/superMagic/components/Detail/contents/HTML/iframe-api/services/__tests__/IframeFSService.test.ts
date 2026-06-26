@@ -27,8 +27,13 @@ function createService(overrides?: Partial<IframeFSConfig>) {
 	return { service, postToIframe, cfg }
 }
 
-function file(file_id: string, relative_file_path: string, file_name?: string): FSFileItem {
-	return { file_id, relative_file_path, file_name }
+function file(
+	file_id: string,
+	relative_file_path: string,
+	file_name?: string,
+	options?: Pick<FSFileItem, "is_directory" | "updated_at">,
+): FSFileItem {
+	return { file_id, relative_file_path, file_name, ...options }
 }
 
 describe("IframeFSService", () => {
@@ -59,6 +64,84 @@ describe("IframeFSService", () => {
 			requestId: "req-get-url",
 			success: true,
 			url: "https://example.com/app/assets/image.png",
+		})
+	})
+
+	it("requires fs.project.read before reading a project-root file", async () => {
+		const authorizePermission = vi.fn().mockResolvedValue(false)
+		const { service, postToIframe } = createService({
+			fileList: [file("root-id", "shared.txt", "shared.txt")],
+			authorizePermission,
+		})
+
+		await service.handleMessage(FS_MESSAGE_TYPES.READ_REQUEST, {
+			type: FS_MESSAGE_TYPES.READ_REQUEST,
+			requestId: "req-read-project-denied",
+			path: "/shared.txt",
+		})
+
+		expect(authorizePermission).toHaveBeenCalledWith("fs.project.read")
+		expect(getIframeDownloadUrl).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: FS_MESSAGE_TYPES.READ_RESPONSE,
+				requestId: "req-read-project-denied",
+				success: false,
+			}),
+		)
+	})
+
+	it("requires fs.project.write before writing a project-root file", async () => {
+		const saveContentFn = vi.fn().mockResolvedValue(undefined)
+		const confirmProjectDeleteFn = vi.fn().mockResolvedValue(true)
+		const authorizePermission = vi.fn().mockResolvedValue(false)
+		const { service, postToIframe } = createService({
+			fileList: [file("root-id", "shared.txt", "shared.txt")],
+			saveContentFn,
+			confirmProjectDeleteFn,
+			authorizePermission,
+		})
+
+		await service.handleMessage(FS_MESSAGE_TYPES.WRITE_REQUEST, {
+			type: FS_MESSAGE_TYPES.WRITE_REQUEST,
+			requestId: "req-write-project-denied",
+			path: "/shared.txt",
+			content: "updated",
+		})
+
+		expect(authorizePermission).toHaveBeenCalledWith("fs.project.write")
+		expect(confirmProjectDeleteFn).not.toHaveBeenCalled()
+		expect(saveContentFn).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: FS_MESSAGE_TYPES.WRITE_RESPONSE,
+				requestId: "req-write-project-denied",
+				success: false,
+			}),
+		)
+	})
+
+	it("requires fs.project.write before checking whether a project-root delete target exists", async () => {
+		const deleteFn = vi.fn().mockResolvedValue(undefined)
+		const authorizePermission = vi.fn().mockResolvedValue(false)
+		const { service, postToIframe } = createService({
+			deleteFn,
+			authorizePermission,
+		})
+
+		await service.handleMessage(FS_MESSAGE_TYPES.DELETE_FILE_REQUEST, {
+			type: FS_MESSAGE_TYPES.DELETE_FILE_REQUEST,
+			requestId: "req-delete-project-missing-denied",
+			path: "/missing.txt",
+		})
+
+		expect(authorizePermission).toHaveBeenCalledWith("fs.project.write")
+		expect(deleteFn).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith({
+			type: FS_MESSAGE_TYPES.DELETE_FILE_RESPONSE,
+			requestId: "req-delete-project-missing-denied",
+			success: false,
+			error: "Permission denied: fs.project.write",
 		})
 	})
 
@@ -339,6 +422,235 @@ describe("IframeFSService", () => {
 				files: ["shared.txt", "archive"],
 			}),
 		)
+	})
+
+	it("listDir returns direct structured entries without reading file content", async () => {
+		const { service, postToIframe } = createService({
+			fileList: [
+				file(
+					"task-id",
+					"app/data/tasks/20260624153000__open__a8f3k2__follow-up.json",
+					"20260624153000__open__a8f3k2__follow-up.json",
+					{ updated_at: "2026-06-24T15:30:00Z" },
+				),
+				file("archive-id", "app/data/tasks/archive", "archive", { is_directory: true }),
+				file("nested-id", "app/data/tasks/archive/old.json", "old.json"),
+				file("other-id", "app/data/events/event.json", "event.json"),
+			],
+		})
+
+		await service.handleMessage(FS_MESSAGE_TYPES.LIST_DIR_REQUEST, {
+			type: FS_MESSAGE_TYPES.LIST_DIR_REQUEST,
+			requestId: "req-list-dir",
+			dir: "data/tasks/",
+		})
+
+		expect(postToIframe).toHaveBeenCalledWith({
+			type: FS_MESSAGE_TYPES.LIST_DIR_RESPONSE,
+			requestId: "req-list-dir",
+			success: true,
+			entries: [
+				{
+					name: "20260624153000__open__a8f3k2__follow-up.json",
+					path: "data/tasks/20260624153000__open__a8f3k2__follow-up.json",
+					isDirectory: false,
+					updatedAt: "2026-06-24T15:30:00Z",
+				},
+				{
+					name: "archive",
+					path: "data/tasks/archive",
+					isDirectory: true,
+				},
+			],
+		})
+	})
+
+	it("watchDir reports added and removed direct entries from refreshed fileList snapshots", () => {
+		vi.useFakeTimers()
+		const { service, postToIframe } = createService({
+			fileList: [
+				file("old-id", "app/data/tasks/old.json", "old.json", {
+					updated_at: "2026-06-24T10:00:00Z",
+				}),
+			],
+		})
+
+		service.handleMessage(FS_MESSAGE_TYPES.WATCH_DIR_REGISTER, {
+			type: FS_MESSAGE_TYPES.WATCH_DIR_REGISTER,
+			requestId: "watch-dir-1",
+			dir: "data/tasks/",
+		})
+		postToIframe.mockClear()
+
+		service.updateFileList([
+			file("new-id", "app/data/tasks/new.json", "new.json", {
+				updated_at: "2026-06-24T11:00:00Z",
+			}),
+		])
+		vi.advanceTimersByTime(3000)
+
+		expect(postToIframe).toHaveBeenCalledWith({
+			type: FS_MESSAGE_TYPES.DIR_CHANGED,
+			dir: "data/tasks/",
+			timestamp: expect.any(Number),
+			added: ["new.json"],
+			removed: ["old.json"],
+			entries: [
+				{
+					name: "new.json",
+					path: "data/tasks/new.json",
+					isDirectory: false,
+					updatedAt: "2026-06-24T11:00:00Z",
+				},
+			],
+		})
+
+		service.destroy()
+		vi.useRealTimers()
+	})
+
+	it("watchDir does not fire when only a direct entry updated_at changes", () => {
+		vi.useFakeTimers()
+		const { service, postToIframe } = createService({
+			fileList: [
+				file("task-id", "app/data/tasks/task.json", "task.json", {
+					updated_at: "2026-06-24T10:00:00Z",
+				}),
+			],
+		})
+
+		service.handleMessage(FS_MESSAGE_TYPES.WATCH_DIR_REGISTER, {
+			type: FS_MESSAGE_TYPES.WATCH_DIR_REGISTER,
+			requestId: "watch-dir-1",
+			dir: "data/tasks/",
+		})
+		postToIframe.mockClear()
+
+		service.updateFileList([
+			file("task-id", "app/data/tasks/task.json", "task.json", {
+				updated_at: "2026-06-24T11:00:00Z",
+			}),
+		])
+		vi.advanceTimersByTime(3000)
+
+		expect(postToIframe).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: FS_MESSAGE_TYPES.DIR_CHANGED }),
+		)
+
+		service.destroy()
+		vi.useRealTimers()
+	})
+
+	it("watchDir reports rename as removed plus added so apps can match by shortId", () => {
+		vi.useFakeTimers()
+		const { service, postToIframe } = createService({
+			fileList: [
+				file(
+					"task-id",
+					"app/data/tasks/20260624100000__open__a8f3k2__old-title.json",
+					"20260624100000__open__a8f3k2__old-title.json",
+				),
+			],
+		})
+
+		service.handleMessage(FS_MESSAGE_TYPES.WATCH_DIR_REGISTER, {
+			type: FS_MESSAGE_TYPES.WATCH_DIR_REGISTER,
+			requestId: "watch-dir-1",
+			dir: "data/tasks/",
+		})
+		postToIframe.mockClear()
+
+		service.updateFileList([
+			file(
+				"task-id",
+				"app/data/tasks/20260624100000__done__a8f3k2__new-title.json",
+				"20260624100000__done__a8f3k2__new-title.json",
+			),
+		])
+		vi.advanceTimersByTime(3000)
+
+		expect(postToIframe).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: FS_MESSAGE_TYPES.DIR_CHANGED,
+				dir: "data/tasks/",
+				added: ["20260624100000__done__a8f3k2__new-title.json"],
+				removed: ["20260624100000__open__a8f3k2__old-title.json"],
+			}),
+		)
+
+		service.destroy()
+		vi.useRealTimers()
+	})
+
+	it("watchFile reports file changes after refreshed fileList updates updated_at", () => {
+		vi.useFakeTimers()
+		const { service, postToIframe } = createService({
+			fileList: [
+				file("task-id", "app/data/tasks/task.json", "task.json", {
+					updated_at: "2026-06-24T10:00:00Z",
+				}),
+			],
+		})
+
+		service.handleMessage(FS_MESSAGE_TYPES.WATCH_REGISTER, {
+			type: FS_MESSAGE_TYPES.WATCH_REGISTER,
+			requestId: "watch-file-1",
+			path: "./data/tasks/task.json",
+		})
+		postToIframe.mockClear()
+
+		service.updateFileList([
+			file("task-id", "app/data/tasks/task.json", "task.json", {
+				updated_at: "2026-06-24T11:00:00Z",
+			}),
+		])
+		vi.advanceTimersByTime(3000)
+
+		expect(postToIframe).toHaveBeenCalledWith({
+			type: FS_MESSAGE_TYPES.FILE_CHANGED,
+			path: "./data/tasks/task.json",
+			timestamp: expect.any(Number),
+		})
+
+		service.destroy()
+		vi.useRealTimers()
+	})
+
+	it("watchFile unregister stops file change notifications", () => {
+		vi.useFakeTimers()
+		const { service, postToIframe } = createService({
+			fileList: [
+				file("task-id", "app/data/tasks/task.json", "task.json", {
+					updated_at: "2026-06-24T10:00:00Z",
+				}),
+			],
+		})
+
+		service.handleMessage(FS_MESSAGE_TYPES.WATCH_REGISTER, {
+			type: FS_MESSAGE_TYPES.WATCH_REGISTER,
+			requestId: "watch-file-1",
+			path: "./data/tasks/task.json",
+		})
+		service.handleMessage(FS_MESSAGE_TYPES.WATCH_UNREGISTER, {
+			type: FS_MESSAGE_TYPES.WATCH_UNREGISTER,
+			requestId: "watch-file-1",
+			path: "./data/tasks/task.json",
+		})
+		postToIframe.mockClear()
+
+		service.updateFileList([
+			file("task-id", "app/data/tasks/task.json", "task.json", {
+				updated_at: "2026-06-24T11:00:00Z",
+			}),
+		])
+		vi.advanceTimersByTime(3000)
+
+		expect(postToIframe).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: FS_MESSAGE_TYPES.FILE_CHANGED }),
+		)
+
+		service.destroy()
+		vi.useRealTimers()
 	})
 
 	it("requires confirmation before writing a project-root file outside the app root", async () => {

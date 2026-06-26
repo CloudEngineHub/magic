@@ -47,6 +47,16 @@ interface ManualSaveResult {
 	cleanContent?: string
 }
 
+function getHtmlRelativeFolderPath(fileItem?: { relative_file_path?: string; file_name?: string }) {
+	const path = fileItem?.relative_file_path
+	if (!path) return undefined
+	if (fileItem?.file_name && path.endsWith(fileItem.file_name)) {
+		return path.slice(0, -fileItem.file_name.length)
+	}
+
+	return path.replace(/[^/]*$/, "") || undefined
+}
+
 interface PPTRenderProps {
 	// ========== 外部依赖（必需） ==========
 	slidePaths: string[]
@@ -388,14 +398,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	// 仅在真正初始化完成且无可用页面时展示空态
 	const isNoSlidesFallbackVisible = store.isReady && !isPendingInit && !hasSlides
 
-	// 计算当前幻灯片的相对文件路径（供 PPTSlide 使用）
-	const relative_file_path = useMemo(() => {
-		const currentPath = store.slidePaths[store.activeIndex]
-		const fileId = store.getFileIdByPath(currentPath)
-		const file_item = attachmentList?.find((item) => item.file_id === fileId)
-		return file_item?.relative_file_path.replace(file_item?.file_name, "")
-	}, [attachmentList, store])
-
 	// 手动保存处理函数 - 使用 useMemoizedFn 避免每次渲染重新创建
 	const handleManualSave = useMemoizedFn(async (saveResult: ManualSaveResult, index: number) => {
 		if (!saveResult) return
@@ -679,6 +681,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 								{visibleSlides.map(({ slide, index }) => {
 									const slideFileId = store.getFileIdByPath(slide.path) || ""
+									const slideFileItem = attachmentList?.find(
+										(item) => item.file_id === slideFileId,
+									)
+									const slideHtmlRelativeFolderPath =
+										getHtmlRelativeFolderPath(slideFileItem)
 									return (
 										<PPTSlide
 											key={slide.id}
@@ -700,7 +707,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 													// 空操作回退
 												})
 											}
-											relative_file_path={relative_file_path}
+											htmlRelativeFolderPath={slideHtmlRelativeFolderPath}
 											selectedProject={selectedProject}
 											attachmentList={attachmentList}
 											attachments={attachments}

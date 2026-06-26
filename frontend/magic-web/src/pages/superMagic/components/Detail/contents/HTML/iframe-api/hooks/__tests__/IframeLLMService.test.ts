@@ -113,6 +113,62 @@ describe("IframeLLMService", () => {
 			expect(handled).toBe(true)
 		})
 
+		it("未授权时拒绝 MAGIC_LLM_CHAT_REQUEST 且不创建 token", async () => {
+			const authorizePermission = vi.fn().mockResolvedValue(false)
+			const { service, postToIframe } = createService({ authorizePermission })
+			const fetchMock = vi.fn()
+			globalThis.fetch = fetchMock
+
+			const handled = await service.handleMessage("MAGIC_LLM_CHAT_REQUEST", {
+				type: "MAGIC_LLM_CHAT_REQUEST",
+				requestId: "req-denied-chat",
+				messages: [{ role: "user", content: "Hi" }],
+			})
+
+			expect(handled).toBe(true)
+			expect(authorizePermission).toHaveBeenCalledWith("llm.use")
+			expect(fetchMock).not.toHaveBeenCalled()
+			expect(postToIframe).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_LLM_CHAT_RESPONSE",
+					requestId: "req-denied-chat",
+					success: false,
+				}),
+			)
+		})
+
+		it("未授权时拒绝 MAGIC_LLM_STREAM_REQUEST 且不留下活跃 stream", async () => {
+			const authorizePermission = vi.fn().mockResolvedValue(false)
+			const abortSpy = vi.spyOn(AbortController.prototype, "abort")
+			const { service, postToIframe } = createService({ authorizePermission })
+			const fetchMock = vi.fn()
+			globalThis.fetch = fetchMock
+
+			const handled = await service.handleMessage("MAGIC_LLM_STREAM_REQUEST", {
+				type: "MAGIC_LLM_STREAM_REQUEST",
+				requestId: "req-denied-stream",
+				messages: [{ role: "user", content: "Hi" }],
+			})
+			await new Promise((resolve) => setTimeout(resolve, 0))
+			await service.handleMessage("MAGIC_LLM_STREAM_ABORT", {
+				type: "MAGIC_LLM_STREAM_ABORT",
+				requestId: "req-denied-stream",
+			})
+
+			expect(handled).toBe(true)
+			expect(authorizePermission).toHaveBeenCalledWith("llm.use")
+			expect(fetchMock).not.toHaveBeenCalled()
+			expect(abortSpy).not.toHaveBeenCalled()
+			expect(postToIframe).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_LLM_STREAM_ERROR",
+					requestId: "req-denied-stream",
+					error: "Permission denied: llm.use",
+				}),
+			)
+			abortSpy.mockRestore()
+		})
+
 		it("处理 MAGIC_LLM_STREAM_ABORT 并返回 true", async () => {
 			const { service } = createService()
 			const handled = await service.handleMessage("MAGIC_LLM_STREAM_ABORT", {
@@ -133,7 +189,7 @@ describe("IframeLLMService", () => {
 
 	describe("token management", () => {
 		it("首次请求时自动创建 token", async () => {
-			const { service, postToIframe } = createService()
+			const { service } = createService()
 			const fetchMock = vi
 				.fn()
 				.mockResolvedValueOnce({

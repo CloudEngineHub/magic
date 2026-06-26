@@ -148,6 +148,57 @@ describe("MagicFSApi", () => {
 		await expect(promise).resolves.toEqual([])
 	})
 
+	// ─── listDir ────────────────────────────────────────────────────────────────
+
+	it("listDir() 发送 MAGIC_FS_LIST_DIR_REQUEST 并返回结构化目录项", async () => {
+		const promise = (window as any).Magic.fs.listDir("./data/")
+
+		const [req] = postMessageSpy.mock.calls[0]
+		expect(req.type).toBe("MAGIC_FS_LIST_DIR_REQUEST")
+		expect(req.dir).toBe("./data/")
+
+		const entries = [
+			{
+				name: "20260624153000__open__a8f3k2__follow-up.json",
+				path: "data/20260624153000__open__a8f3k2__follow-up.json",
+				isDirectory: false,
+				updatedAt: "2026-06-24T15:30:00Z",
+			},
+			{ name: "archive", path: "data/archive", isDirectory: true },
+		]
+
+		simulateResponse({
+			type: "MAGIC_FS_LIST_DIR_RESPONSE",
+			requestId: req.requestId,
+			success: true,
+			entries,
+		})
+
+		await expect(promise).resolves.toEqual(entries)
+	})
+
+	it("listDir() 不传目录时使用默认路径 ./", async () => {
+		const promise = (window as any).Magic.fs.listDir()
+		const [req] = postMessageSpy.mock.calls[0]
+		expect(req.dir).toBe("./")
+
+		simulateResponse({
+			type: "MAGIC_FS_LIST_DIR_RESPONSE",
+			requestId: req.requestId,
+			success: true,
+			entries: [],
+		})
+
+		await expect(promise).resolves.toEqual([])
+	})
+
+	it("listDir() 传入非字符串目录时立即 reject", async () => {
+		await expect((window as any).Magic.fs.listDir(123)).rejects.toThrow(
+			"listDir: dir must be a string",
+		)
+		expect(postMessageSpy).not.toHaveBeenCalled()
+	})
+
 	// ─── getFileUrl ─────────────────────────────────────────────────────────────
 
 	it("getFileUrl() 发送 MAGIC_FS_GET_FILE_URL_REQUEST 并在响应成功时 resolve 文件 URL", async () => {
@@ -317,6 +368,95 @@ describe("MagicFSApi", () => {
 		expect(() => {
 			;(window as any).Magic.fs.watchFile("./data.json", "not-a-function")
 		}).toThrow("watchFile: callback must be a function")
+	})
+
+	// ─── watchDir ───────────────────────────────────────────────────────────────
+
+	it("watchDir() 发送 MAGIC_FS_WATCH_DIR_REGISTER 并在目录变更时触发回调", () => {
+		const cb = vi.fn()
+		;(window as any).Magic.fs.watchDir("./data/tasks/", cb)
+
+		const [req] = postMessageSpy.mock.calls[0]
+		expect(req.type).toBe("MAGIC_FS_WATCH_DIR_REGISTER")
+		expect(req.dir).toBe("./data/tasks/")
+
+		const entries = [
+			{
+				name: "20260624153000__open__a8f3k2__follow-up.json",
+				path: "data/tasks/20260624153000__open__a8f3k2__follow-up.json",
+				isDirectory: false,
+				updatedAt: "2026-06-24T15:30:00Z",
+			},
+		]
+
+		simulateResponse({
+			type: "MAGIC_FS_DIR_CHANGED",
+			dir: "./data/tasks/",
+			timestamp: 12345,
+			added: ["20260624153000__open__a8f3k2__follow-up.json"],
+			removed: [],
+			entries,
+		})
+
+		expect(cb).toHaveBeenCalledOnce()
+		expect(cb.mock.calls[0][0]).toEqual({
+			dir: "./data/tasks/",
+			timestamp: 12345,
+			added: ["20260624153000__open__a8f3k2__follow-up.json"],
+			removed: [],
+			entries,
+		})
+	})
+
+	it("watchDir() 只响应匹配目录的 MAGIC_FS_DIR_CHANGED 消息", () => {
+		const cb = vi.fn()
+		;(window as any).Magic.fs.watchDir("./data/tasks/", cb)
+
+		simulateResponse({
+			type: "MAGIC_FS_DIR_CHANGED",
+			dir: "./data/events/",
+			timestamp: 12345,
+			added: ["event.json"],
+			removed: [],
+			entries: [],
+		})
+
+		expect(cb).not.toHaveBeenCalled()
+	})
+
+	it("watchDir() 返回的取消函数调用后发送 MAGIC_FS_WATCH_DIR_UNREGISTER 并停止回调", () => {
+		const cb = vi.fn()
+		const unwatch = (window as any).Magic.fs.watchDir("./data/tasks/", cb)
+		postMessageSpy.mockClear()
+
+		unwatch()
+
+		expect(postMessageSpy).toHaveBeenCalledOnce()
+		const [req] = postMessageSpy.mock.calls[0]
+		expect(req.type).toBe("MAGIC_FS_WATCH_DIR_UNREGISTER")
+		expect(req.dir).toBe("./data/tasks/")
+
+		simulateResponse({
+			type: "MAGIC_FS_DIR_CHANGED",
+			dir: "./data/tasks/",
+			timestamp: 99999,
+			added: ["a.json"],
+			removed: [],
+			entries: [],
+		})
+		expect(cb).not.toHaveBeenCalled()
+	})
+
+	it("watchDir() 传入非字符串目录时抛出错误", () => {
+		expect(() => {
+			;(window as any).Magic.fs.watchDir(123, vi.fn())
+		}).toThrow("watchDir: dir must be a string")
+	})
+
+	it("watchDir() 传入非函数回调时抛出错误", () => {
+		expect(() => {
+			;(window as any).Magic.fs.watchDir("./data/tasks/", "not-a-function")
+		}).toThrow("watchDir: callback must be a function")
 	})
 
 	// ─── 超时 ───────────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@
  * 纯 class，不依赖 React，由 useIframeUserInfo hook 持有实例。
  */
 
+import { htmlMicroAppPreviewLogger } from "../../utils/htmlMicroAppPreviewLogger"
 import {
 	USER_INFO_MESSAGE_TYPES,
 	USER_INFO_SCOPES,
@@ -105,7 +106,9 @@ export class IframeUserInfoService {
 				return
 			}
 
-			const unauthorizedScopes = sensitiveScopes.filter((scope) => !authorizedScopes?.has(scope))
+			const unauthorizedScopes = sensitiveScopes.filter(
+				(scope) => !authorizedScopes?.has(scope),
+			)
 			if (unauthorizedScopes.length > 0) {
 				const allowed = await this.requestAuthorization(unauthorizedScopes, req.reason)
 				if (!allowed) {
@@ -150,6 +153,10 @@ export class IframeUserInfoService {
 				userInfo: safeUserInfo,
 			})
 		} catch (error) {
+			htmlMicroAppPreviewLogger.error("Failed to handle user info request", {
+				requestId: req.requestId,
+				error: error instanceof Error ? error.message : String(error),
+			})
 			this.cfg.postToIframe({
 				type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
 				requestId: req.requestId,
@@ -222,9 +229,14 @@ export class IframeUserInfoService {
 	}
 
 	private getDeclaredScopes(): Set<UserInfoScope> {
-		const scopes = this.cfg.appConfig?.permissions?.userInfo?.scopes ?? [
-			USER_INFO_SCOPES.DISPLAY,
-		]
+		const unifiedScopes = (this.cfg.appConfig?.permissions?.scopes ?? []).filter(
+			(scope): scope is UserInfoScope =>
+				scope === USER_INFO_SCOPES.NAME ||
+				scope === USER_INFO_SCOPES.IDENTITY ||
+				scope === USER_INFO_SCOPES.ORGANIZATION,
+		)
+		const legacyScopes = this.cfg.appConfig?.permissions?.userInfo?.scopes ?? []
+		const scopes = [...unifiedScopes, ...legacyScopes]
 		return new Set<UserInfoScope>([USER_INFO_SCOPES.DISPLAY, ...scopes])
 	}
 
@@ -242,7 +254,11 @@ export class IframeUserInfoService {
 			appName: this.cfg.appConfig?.name || "HTML 微应用",
 			scopes,
 			fields: this.getFieldLabels(scopes),
-			reason: requestReason || this.cfg.appConfig?.permissions?.userInfo?.reason || "",
+			reason:
+				requestReason ||
+				this.cfg.appConfig?.permissions?.reason ||
+				this.cfg.appConfig?.permissions?.userInfo?.reason ||
+				"",
 		})
 	}
 

@@ -28,6 +28,21 @@ function isSingleFileName(name: string): boolean {
 	)
 }
 
+interface FSDirEntry {
+	name: string
+	path: string
+	isDirectory: boolean
+	updatedAt?: string
+}
+
+interface FSDirChangedEvent {
+	dir: string
+	timestamp: number
+	added: string[]
+	removed: string[]
+	entries: FSDirEntry[]
+}
+
 export class MagicFSApi extends BaseRuntimeBridgeApiPlugin {
 	constructor() {
 		super("MagicFSApi")
@@ -92,6 +107,24 @@ export class MagicFSApi extends BaseRuntimeBridgeApiPlugin {
 						Array.isArray((data as { files?: string[] }).files)
 					) {
 						return (data as { files: string[] }).files
+					}
+					return []
+				})
+			},
+
+			listDir: (dir?: string): Promise<FSDirEntry[]> => {
+				if (dir !== undefined && typeof dir !== "string") {
+					return Promise.reject(new Error("listDir: dir must be a string"))
+				}
+				return this.request<{ entries?: FSDirEntry[] }>("MAGIC_FS_LIST_DIR_REQUEST", {
+					dir: dir ?? "./",
+				}).then((data) => {
+					if (
+						data &&
+						typeof data === "object" &&
+						Array.isArray((data as { entries?: FSDirEntry[] }).entries)
+					) {
+						return (data as { entries: FSDirEntry[] }).entries
 					}
 					return []
 				})
@@ -183,6 +216,56 @@ export class MagicFSApi extends BaseRuntimeBridgeApiPlugin {
 					window.removeEventListener("message", handler)
 					window.parent.postMessage(
 						{ type: "MAGIC_FS_WATCH_UNREGISTER", requestId: watchId, path },
+						getParentOrigin(),
+					)
+				}
+			},
+
+			watchDir: (
+				dir: string,
+				callback: (event: FSDirChangedEvent) => void,
+			): (() => void) => {
+				if (typeof dir !== "string") throw new Error("watchDir: dir must be a string")
+				if (typeof callback !== "function")
+					throw new Error("watchDir: callback must be a function")
+
+				const watchId = `watch_dir_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+
+				const handler = (
+					event: MessageEvent<{
+						type?: string
+						dir?: string
+						timestamp?: number
+						added?: string[]
+						removed?: string[]
+						entries?: FSDirEntry[]
+					}>,
+				) => {
+					if (isStaleDocument(installedVersion)) return
+					if (!event.data || event.data.type !== "MAGIC_FS_DIR_CHANGED") return
+					if (event.data.dir !== dir) return
+					try {
+						callback({
+							dir: event.data.dir!,
+							timestamp: event.data.timestamp ?? Date.now(),
+							added: Array.isArray(event.data.added) ? event.data.added : [],
+							removed: Array.isArray(event.data.removed) ? event.data.removed : [],
+							entries: Array.isArray(event.data.entries) ? event.data.entries : [],
+						})
+					} catch {
+						// ignore callback errors
+					}
+				}
+				window.addEventListener("message", handler)
+				window.parent.postMessage(
+					{ type: "MAGIC_FS_WATCH_DIR_REGISTER", requestId: watchId, dir },
+					getParentOrigin(),
+				)
+
+				return () => {
+					window.removeEventListener("message", handler)
+					window.parent.postMessage(
+						{ type: "MAGIC_FS_WATCH_DIR_UNREGISTER", requestId: watchId, dir },
 						getParentOrigin(),
 					)
 				}

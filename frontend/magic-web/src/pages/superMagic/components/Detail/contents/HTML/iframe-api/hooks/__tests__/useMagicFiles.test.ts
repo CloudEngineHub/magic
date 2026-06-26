@@ -106,6 +106,46 @@ describe("useMagicFiles", () => {
 	// ─── handleMagicUploadFiles ────────────────────────────────────────────────
 
 	describe("handleMagicUploadFiles()", () => {
+		it("未授权时不上传文件", async () => {
+			const authorizePermission = vi.fn().mockResolvedValue(false)
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: { id: "proj-1" },
+					uploadImageFileToProject,
+					authorizePermission,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicUploadFiles({
+					type: "MAGIC_UPLOAD_FILES_REQUEST",
+					requestId: "req-upload-denied",
+					files: [
+						{
+							base64: "data",
+							filename: "a.txt",
+							path: "./a.txt",
+							fileSize: 4,
+							fileType: "text/plain",
+						},
+					],
+				})
+			})
+
+			expect(authorizePermission).toHaveBeenCalledWith("project.files.upload")
+			expect(uploadImageFileToProject).not.toHaveBeenCalled()
+			expect(iframePostMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_UPLOAD_FILES_RESPONSE",
+					requestId: "req-upload-denied",
+					success: false,
+				}),
+				targetOrigin,
+			)
+		})
+
 		it("selectedProject 为 null 时回复 No project selected", async () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
@@ -305,6 +345,40 @@ describe("useMagicFiles", () => {
 	// ─── handleMagicAddFilesToMessage ──────────────────────────────────────────
 
 	describe("handleMagicAddFilesToMessage()", () => {
+		it("未授权时不创建 topic", async () => {
+			const { SuperMagicApi } = await import("@/apis")
+			const authorizePermission = vi.fn().mockResolvedValue(false)
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
+					attachmentList: [{ relative_file_path: "a.csv", file_id: "f-1" }],
+					uploadImageFileToProject,
+					authorizePermission,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicAddFilesToMessage({
+					type: "MAGIC_ADD_FILES_TO_MESSAGE_REQUEST",
+					requestId: "req-add-denied",
+					filePaths: ["a.csv"],
+				})
+			})
+
+			expect(authorizePermission).toHaveBeenCalledWith("project.message.write")
+			expect(SuperMagicApi.createTopic).not.toHaveBeenCalled()
+			expect(iframePostMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_ADD_FILES_TO_MESSAGE_RESPONSE",
+					requestId: "req-add-denied",
+					success: false,
+				}),
+				targetOrigin,
+			)
+		})
+
 		it("selectedProject 为 null 时回复 No project selected", async () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
@@ -453,6 +527,40 @@ describe("useMagicFiles", () => {
 	// ─── handleMagicDownloadFiles ──────────────────────────────────────────────
 
 	describe("handleMagicDownloadFiles()", () => {
+		it("未授权时不获取下载链接", async () => {
+			const { getTemporaryDownloadUrl } = await import("@/pages/superMagic/utils/api")
+			const authorizePermission = vi.fn().mockResolvedValue(false)
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
+					attachmentList: [{ relative_file_path: "a.pdf", file_id: "f-1" }],
+					uploadImageFileToProject,
+					authorizePermission,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicDownloadFiles({
+					type: "MAGIC_DOWNLOAD_FILES_REQUEST",
+					requestId: "req-download-denied",
+					filePaths: ["a.pdf"],
+				})
+			})
+
+			expect(authorizePermission).toHaveBeenCalledWith("project.files.download")
+			expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
+			expect(iframePostMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_DOWNLOAD_FILES_RESPONSE",
+					requestId: "req-download-denied",
+					success: false,
+				}),
+				targetOrigin,
+			)
+		})
+
 		it("attachmentList 中找不到 file_id 时回复 No files found", async () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
