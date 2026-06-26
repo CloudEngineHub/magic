@@ -1,4 +1,4 @@
-import type { AnchorHTMLAttributes, ComponentProps } from "react"
+import type { AnchorHTMLAttributes, ComponentProps, MouseEvent } from "react"
 import { cn } from "@/lib/utils"
 import {
 	isRecordingTimeText,
@@ -21,6 +21,22 @@ export interface RecordingMarkdownComponentOptions {
 
 /** Test hook for time chip class — styles live in `.recording-time-chip` (index.css). */
 export const RECORDING_TIME_CHIP_CLASS = "recording-time-chip"
+
+export interface RecordingSpeakerChipProps {
+	label: string
+	speakerId: string
+	onSpeakerClick?: (speakerId: string) => void
+	testId: string
+	stopPropagation?: boolean
+}
+
+export interface RecordingTimeChipProps {
+	label: string
+	seconds: number
+	onTimeClick?: (seconds: number) => void
+	testId: string
+	stopPropagation?: boolean
+}
 
 /** Builds ReactMarkdown overrides that require parsing, interaction, or extra DOM structure. */
 export function createRecordingMarkdownComponents({
@@ -188,24 +204,26 @@ function MarkdownAnchor({
 }
 
 /** Reuses the shared speaker chip look-and-feel for both markdown links and code-wrapped speaker ids. */
-function RecordingSpeakerChip({
+export function RecordingSpeakerChip({
 	label,
 	speakerId,
 	onSpeakerClick,
 	testId,
-}: {
-	label: string
-	speakerId: string
-	onSpeakerClick?: (speakerId: string) => void
-	testId: string
-}) {
+	stopPropagation = false,
+}: RecordingSpeakerChipProps) {
 	const chipStyle = resolveSpeakerChipStyle(speakerId)
+
+	/** Keeps nested interactive contexts from also triggering the parent seek card. */
+	function handleClick(event: MouseEvent<HTMLButtonElement>) {
+		if (stopPropagation) event.stopPropagation()
+		onSpeakerClick?.(speakerId)
+	}
 
 	return (
 		<button
 			type="button"
 			className={cn("recording-speaker-chip", chipStyle.chip)}
-			onClick={() => onSpeakerClick?.(speakerId)}
+			onClick={handleClick}
 			data-testid={testId}
 			data-speaker-id={speakerId}
 		>
@@ -216,27 +234,32 @@ function RecordingSpeakerChip({
 }
 
 /** Resolves the user-edited speaker label without mutating the stored speaker id. */
-function resolveSpeakerLabel(speakerId: string, speakerNameMap: Record<string, string>): string {
+export function resolveSpeakerLabel(
+	speakerId: string,
+	speakerNameMap: Record<string, string>,
+): string {
 	return speakerNameMap[speakerId]?.trim() || speakerId
 }
 
 /** Renders a prototype-style time chip that seeks playback on click. */
-function RecordingTimeChip({
+export function RecordingTimeChip({
 	label,
 	seconds,
 	onTimeClick,
 	testId,
-}: {
-	label: string
-	seconds: number
-	onTimeClick?: (seconds: number) => void
-	testId: string
-}) {
+	stopPropagation = false,
+}: RecordingTimeChipProps) {
+	/** Keeps inline time chips independent from parent topic-card seek handlers. */
+	function handleClick(event: MouseEvent<HTMLButtonElement>) {
+		if (stopPropagation) event.stopPropagation()
+		onTimeClick?.(seconds)
+	}
+
 	return (
 		<button
 			type="button"
 			className={RECORDING_TIME_CHIP_CLASS}
-			onClick={() => onTimeClick?.(seconds)}
+			onClick={handleClick}
 			data-testid={testId}
 		>
 			{label}

@@ -284,6 +284,23 @@ export function injectMarkdownSpeakerLinks(
 	return preservedContent.restoreText(withSpeakerLinks)
 }
 
+/** Rewrites plain speaker ids to display labels for non-interactive markdown renderers such as mind maps. */
+export function resolveMarkdownSpeakerLabels(
+	markdown: string,
+	speakerNameMap: Record<string, string>,
+): string {
+	const preservedContent = preserveMarkdownFragments(markdown, "MAGIC_PRESERVED_FRAGMENT", [
+		MARKDOWN_LINK_REGEX,
+		HTML_TAG_REGEX,
+	])
+
+	const withSpeakerLabels = preservedContent.text.replace(SPEAKER_ID_REGEX, (speakerId) => {
+		return speakerNameMap[speakerId]?.trim() || speakerId
+	})
+
+	return preservedContent.restoreText(withSpeakerLabels)
+}
+
 /** Reads the speaker id from an internal markdown speaker link href. */
 export function parseMarkdownSpeakerLink(href: string | undefined): string | null {
 	if (!href?.startsWith("magic-speaker://")) return null

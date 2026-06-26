@@ -7,9 +7,11 @@ import { cn } from "@/lib/utils"
 import MagicMarkmap from "@/components/base/MagicMarkmap"
 import IsolatedHTMLRenderer from "@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer"
 import { processHtmlContent } from "@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor"
+import { RecordingTokenText } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingTokenText"
 import type { RecordingDetailFileRef, RecordingTopicSection } from "../types"
 import { parseTopicsMarkdown } from "../utils/topics-parser"
 import { formatRecordingTime } from "../utils/time"
+import { resolveMarkdownSpeakerLabels } from "../utils/markdown-time-links"
 import { MobileRecordingMarkdownContent } from "./MobileRecordingMarkdownContent"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
@@ -275,6 +277,10 @@ function MindmapContent({
 	onTimeClick: (seconds: number, end?: number) => void
 }) {
 	const [viewMode, setViewMode] = useState<"map" | "markdown">("map")
+	const mindmapCanvasContent = useMemo(
+		() => resolveMarkdownSpeakerLabels(content, speakerNameMap),
+		[content, speakerNameMap],
+	)
 	// Keep the mobile recording detail mindmap background aligned with the prototype:
 	// this page needs a clean solid canvas, while other markmap scenes can keep their dotted default.
 	const mobileMindmapCanvasClassName =
@@ -288,7 +294,7 @@ function MindmapContent({
 			{viewMode === "map" ? (
 				<div className="relative h-[calc(100dvh-300px)] min-h-[520px] overflow-hidden bg-[#f7f7f8]">
 					<MagicMarkmap
-						data={content}
+						data={mindmapCanvasContent}
 						fullScreen
 						showTitle={false}
 						showToolBar={false}
@@ -445,11 +451,18 @@ function TopicsContent({
 						</h3>
 						<div className="flex flex-col gap-2">
 							{activeTopic.items.map((item) => (
-								<button
+								<div
 									key={`${item.time}-${item.text}`}
-									type="button"
+									role="button"
+									tabIndex={0}
 									className="rounded-xl bg-card/80 px-3 py-2.5 text-left shadow-[0_4px_16px_rgba(0,0,0,0.03)] active:bg-muted"
 									onClick={() => onTimeClick(item.time, item.timeEnd)}
+									onKeyDown={(event) => {
+										if (event.key === "Enter" || event.key === " ") {
+											event.preventDefault()
+											onTimeClick(item.time, item.timeEnd)
+										}
+									}}
 									data-testid="mobile-recording-topic-time-card"
 								>
 									<div className="mb-1 flex flex-wrap items-center gap-1.5">
@@ -469,9 +482,14 @@ function TopicsContent({
 										))}
 									</div>
 									<p className="text-[13px] leading-5 text-foreground">
-										{item.text}
+										<RecordingTokenText
+											text={item.text}
+											speakerNameMap={speakerNameMap}
+											onSpeakerClick={onOpenSpeakerSettings}
+											onTimeClick={(time) => onTimeClick(time)}
+										/>
 									</p>
-								</button>
+								</div>
 							))}
 						</div>
 					</section>

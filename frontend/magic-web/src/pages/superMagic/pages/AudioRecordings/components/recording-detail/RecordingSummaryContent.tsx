@@ -8,6 +8,7 @@ import { processHtmlContent } from "@/pages/superMagic/components/Detail/content
 import type { RecordingDetailFileRef, RecordingTopicSection } from "../../types/recording-detail"
 import { parseTopicsMarkdown } from "../../utils/topics-parser"
 import { formatRecordingTime } from "../../utils/time"
+import { resolveMarkdownSpeakerLabels } from "../../utils/markdownTimeLinks"
 import {
 	RECORDING_DESKTOP_CONTENT_INSET_CLASS,
 	RECORDING_DESKTOP_MD_CONTENT_CLASS,
@@ -17,6 +18,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
 import { RecordingDetailRegionEmptySlot } from "./RecordingDetailRegionEmptySlot"
 import { useHorizontalScrollWithFade } from "../../hooks/useHorizontalScrollWithFade"
+import { RecordingTokenText } from "./RecordingTokenText"
 
 export interface RecordingSummaryContentProps {
 	file: RecordingDetailFileRef
@@ -160,6 +162,10 @@ function MindmapContent({
 }) {
 	const [viewMode, setViewMode] = useState<"map" | "markdown">("map")
 	const isDesktop = layout === "desktop"
+	const mindmapCanvasContent = useMemo(
+		() => resolveMarkdownSpeakerLabels(content, speakerNameMap),
+		[content, speakerNameMap],
+	)
 	const canvasClassName = isDesktop
 		? "!h-full min-h-0 bg-muted [&_svg]:bg-muted [&_svg]:[background-image:none]"
 		: "h-full min-h-[480px] bg-muted [&_svg]:bg-muted [&_svg]:[background-image:none]"
@@ -170,7 +176,7 @@ function MindmapContent({
 				{viewMode === "map" ? (
 					<div className="absolute inset-0 overflow-hidden rounded-xl bg-muted">
 						<MagicMarkmap
-							data={content}
+							data={mindmapCanvasContent}
 							fullScreen
 							showTitle={false}
 							showToolBar={false}
@@ -198,7 +204,7 @@ function MindmapContent({
 			{viewMode === "map" ? (
 				<div className="relative h-[min(560px,calc(100vh-280px))] min-h-[480px] overflow-hidden rounded-xl bg-muted">
 					<MagicMarkmap
-						data={content}
+						data={mindmapCanvasContent}
 						fullScreen
 						showTitle={false}
 						showToolBar={false}
@@ -407,11 +413,18 @@ function TopicsContent({
 						</h3>
 						<div className="flex flex-col gap-2">
 							{activeTopic.items.map((item) => (
-								<button
+								<div
 									key={`${item.time}-${item.text}`}
-									type="button"
+									role="button"
+									tabIndex={0}
 									className="rounded-xl bg-card/80 px-3 py-2.5 text-left shadow-[0_4px_16px_rgba(0,0,0,0.03)] hover:bg-muted"
 									onClick={() => onTimeClick(item.time, item.timeEnd)}
+									onKeyDown={(event) => {
+										if (event.key === "Enter" || event.key === " ") {
+											event.preventDefault()
+											onTimeClick(item.time, item.timeEnd)
+										}
+									}}
 									data-testid="recording-detail-topic-time-card"
 								>
 									<div className="mb-1 flex flex-wrap items-center gap-1.5">
@@ -431,9 +444,14 @@ function TopicsContent({
 										))}
 									</div>
 									<p className="text-[13px] leading-5 text-foreground">
-										{item.text}
+										<RecordingTokenText
+											text={item.text}
+											speakerNameMap={speakerNameMap}
+											onSpeakerClick={onOpenSpeakerSettings}
+											onTimeClick={(time) => onTimeClick(time)}
+										/>
 									</p>
-								</button>
+								</div>
 							))}
 						</div>
 					</section>

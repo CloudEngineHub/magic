@@ -222,6 +222,47 @@ describe("MobileRecordingSummaryPanel", () => {
 		expect(screen.getByText("Intent")).toBeInTheDocument()
 	})
 
+	it("renders inline speaker tokens inside topic dialogue body without triggering seek", () => {
+		resetSharedMocks()
+		const onOpenSpeakerSettings = vi.fn()
+		const onTimeClick = vi.fn()
+
+		render(
+			<MobileRecordingSummaryPanel
+				summaryFiles={[createSummaryFileRef("topics", "topics.md")]}
+				summaryContent={{
+					topics: `## Topics
+
+### 📌 demo_topic | Demo Topic | #000000
+
+#### Key Points
+[Speaker-1]
+Important discussion.
+
+#### Related Dialogue
+- \`00:10-00:20\` Speaker-1: Speaker-1 confirmed the plan and Speaker-2 took follow-up.`,
+				}}
+				attachmentList={[]}
+				scrollPaddingBottom={72}
+				speakerNameMap={{ "Speaker-1": "Host", "Speaker-2": "Guest" }}
+				onOpenSpeakerSettings={onOpenSpeakerSettings}
+				onTimeClick={onTimeClick}
+			/>,
+		)
+
+		const timeCard = screen.getByTestId("mobile-recording-topic-time-card")
+		const speakerChips = screen.getAllByTestId("recording-detail-token-speaker")
+		expect(speakerChips).toHaveLength(2)
+		expect(speakerChips[0]).toHaveTextContent("Host")
+		expect(speakerChips[1]).toHaveTextContent("Guest")
+		expect(timeCard).not.toHaveTextContent("Speaker-1 confirmed")
+
+		fireEvent.click(speakerChips[0])
+
+		expect(onOpenSpeakerSettings).toHaveBeenCalledTimes(1)
+		expect(onTimeClick).not.toHaveBeenCalled()
+	})
+
 	it("renders the empty summary state when no summary files are available", () => {
 		resetSharedMocks()
 
@@ -261,6 +302,28 @@ describe("MobileRecordingSummaryPanel", () => {
 			expect.objectContaining({
 				className:
 					"h-full min-h-[520px] bg-[#f7f7f8] [&_svg]:bg-[#f7f7f8] [&_svg]:[background-image:none]",
+			}),
+		)
+	})
+
+	it("passes speaker labels to the mobile mindmap canvas data", () => {
+		resetSharedMocks()
+
+		render(
+			<MobileRecordingSummaryPanel
+				summaryFiles={[createSummaryFileRef("mindmap", "mindmap.md")]}
+				summaryContent={{ mindmap: "# Root\n\n## Speaker-1 discussed with Speaker-2" }}
+				attachmentList={[]}
+				scrollPaddingBottom={72}
+				speakerNameMap={{ "Speaker-1": "Host", "Speaker-2": "Guest" }}
+				onOpenSpeakerSettings={vi.fn()}
+				onTimeClick={vi.fn()}
+			/>,
+		)
+
+		expect(magicMarkmapPropsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: "# Root\n\n## Host discussed with Guest",
 			}),
 		)
 	})

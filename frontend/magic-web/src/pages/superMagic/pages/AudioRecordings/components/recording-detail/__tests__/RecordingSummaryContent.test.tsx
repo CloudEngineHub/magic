@@ -87,6 +87,19 @@ Important discussion.
 - \`00:10-00:20\` Speaker-1: Discussed the plan
 `
 
+const topicsMarkdownWithInlineSpeakerTokens = `
+## Topics
+
+### 📌 demo_topic | Demo Topic | #000000
+
+#### Key Points
+[Speaker-1]
+Important discussion.
+
+#### Related Dialogue
+- \`00:10-00:20\` Speaker-1: Speaker-1 confirmed the plan and Speaker-2 took follow-up.
+`
+
 /** Builds topics markdown with many pills to exercise horizontal overflow in tests. */
 function buildManyTopicsMarkdown(count: number): string {
 	const topicBlocks = Array.from({ length: count }, (_, index) => {
@@ -143,6 +156,35 @@ describe("RecordingSummaryContent desktop markdown layout", () => {
 		expect(topicsRoot).toContainElement(markdownMocks[0] as HTMLElement)
 		expect(screen.getByText("Key Points")).toBeTruthy()
 		expect(screen.getByRole("button", { name: "Demo Topic" })).toBeTruthy()
+	})
+
+	it("renders inline speaker tokens inside topic dialogue body without triggering seek", () => {
+		const onOpenSpeakerSettings = vi.fn()
+		const onTimeClick = vi.fn()
+
+		render(
+			<RecordingSummaryContent
+				file={topicsFile}
+				content={topicsMarkdownWithInlineSpeakerTokens}
+				attachmentList={[]}
+				speakerNameMap={{ "Speaker-1": "Host", "Speaker-2": "Guest" }}
+				onOpenSpeakerSettings={onOpenSpeakerSettings}
+				onTimeClick={onTimeClick}
+				layout="desktop"
+			/>,
+		)
+
+		const timeCard = screen.getByTestId("recording-detail-topic-time-card")
+		const speakerChips = screen.getAllByTestId("recording-detail-token-speaker")
+		expect(speakerChips).toHaveLength(2)
+		expect(speakerChips[0]).toHaveTextContent("Host")
+		expect(speakerChips[1]).toHaveTextContent("Guest")
+		expect(timeCard).not.toHaveTextContent("Speaker-1 confirmed")
+
+		fireEvent.click(speakerChips[0])
+
+		expect(onOpenSpeakerSettings).toHaveBeenCalledTimes(1)
+		expect(onTimeClick).not.toHaveBeenCalled()
 	})
 })
 
@@ -345,6 +387,28 @@ describe("RecordingSummaryContent mindmap desktop layout", () => {
 			expect.objectContaining({
 				showToolBar: false,
 				className: expect.stringContaining("!h-full"),
+			}),
+		)
+	})
+
+	it("passes speaker labels to the mindmap canvas data", () => {
+		magicMarkmapPropsMock.mockClear()
+
+		render(
+			<RecordingSummaryContent
+				file={mindmapFile}
+				content={"# Root\n\n## Speaker-1 discussed with Speaker-2"}
+				attachmentList={[]}
+				speakerNameMap={{ "Speaker-1": "Host", "Speaker-2": "Guest" }}
+				onOpenSpeakerSettings={() => undefined}
+				onTimeClick={() => undefined}
+				layout="desktop"
+			/>,
+		)
+
+		expect(magicMarkmapPropsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: "# Root\n\n## Host discussed with Guest",
 			}),
 		)
 	})
