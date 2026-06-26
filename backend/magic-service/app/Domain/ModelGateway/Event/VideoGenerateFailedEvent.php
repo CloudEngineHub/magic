@@ -19,6 +19,8 @@ class VideoGenerateFailedEvent extends AbstractEvent
 
     protected string $providerModelId = '';
 
+    protected ?string $videoId = null;
+
     protected array $businessParams = [];
 
     public function getOrganizationCode(): string
@@ -59,6 +61,17 @@ class VideoGenerateFailedEvent extends AbstractEvent
     public function setProviderModelId(string $providerModelId): void
     {
         $this->providerModelId = $providerModelId;
+    }
+
+    public function getVideoId(): ?string
+    {
+        return $this->videoId;
+    }
+
+    public function setVideoId(?string $videoId): void
+    {
+        $videoId = is_string($videoId) ? trim($videoId) : '';
+        $this->videoId = $videoId === '' ? null : $videoId;
     }
 
     public function getBusinessParams(): array

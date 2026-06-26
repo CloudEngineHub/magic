@@ -37,6 +37,8 @@ class VideoGeneratedEvent extends AbstractEvent
 
     protected ?int $projectId = null;
 
+    protected ?string $videoId = null;
+
     protected DateTime $createdAt;
 
     protected ?string $sourceId = null;
@@ -190,6 +192,17 @@ class VideoGeneratedEvent extends AbstractEvent
     public function setProjectId(?int $projectId): void
     {
         $this->projectId = $projectId;
+    }
+
+    public function getVideoId(): ?string
+    {
+        return $this->videoId;
+    }
+
+    public function setVideoId(?string $videoId): void
+    {
+        $videoId = is_string($videoId) ? trim($videoId) : '';
+        $this->videoId = $videoId === '' ? null : $videoId;
     }
 
     public function getCreatedAt(): DateTime
