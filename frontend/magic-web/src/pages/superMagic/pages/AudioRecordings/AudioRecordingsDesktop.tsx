@@ -35,6 +35,10 @@ import {
 import { AudioRecordingSettingsDialog } from "./components/AudioRecordingSettingsDialog"
 import { AudioRecordingsPrimaryActions } from "./components/AudioRecordingsPrimaryActions"
 import { registerAudioRecordingsShellRefreshHandler } from "./utils/request-audio-recordings-shell-refresh"
+import {
+	patchAudioRecordingsFilterSession,
+	readAudioRecordingsFilterSession,
+} from "./utils/audio-recordings-filter-session"
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -48,10 +52,14 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	const navigate = useNavigate()
 	const store = audioRecordingsStore
 	const facade = useRecordingEntryFacade()
+	const [initialFilterSession] = useState(() => readAudioRecordingsFilterSession())
 
-	const [searchKeyword, setSearchKeyword] = useState("")
+	const [searchKeyword, setSearchKeyword] = useState(initialFilterSession.searchKeyword)
 	const [isSearchComposing, setIsSearchComposing] = useState(false)
-	const [datePreset, setDatePreset] = useState<AudioRecordingsDatePreset>("all")
+	const [datePreset, setDatePreset] = useState<AudioRecordingsDatePreset>(
+		initialFilterSession.datePreset,
+	)
+	const [hasHydratedFilters, setHasHydratedFilters] = useState(false)
 	const [renameTarget, setRenameTarget] = useState<AudioProjectListItem | null>(null)
 	const [deleteTargetIds, setDeleteTargetIds] = useState<string[] | null>(null)
 	const debouncedKeyword = useDebounce(searchKeyword, { wait: SEARCH_DEBOUNCE_MS })
@@ -60,7 +68,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	const [groups, setGroups] = useState<AudioRecordingGroup[]>([])
 	const [totalGroupCount, setTotalGroupCount] = useState(0)
 	const [ungroupedCount, setUngroupedCount] = useState(0)
-	const [currentGroupId, setCurrentGroupId] = useState(ALL_RECORDING_GROUP_ID)
+	const [currentGroupId, setCurrentGroupId] = useState(initialFilterSession.groupId)
 	const [groupLoading, setGroupLoading] = useState(false)
 	const [isManageGroupsOpen, setIsManageGroupsOpen] = useState(false)
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -82,11 +90,12 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	}, [])
 
 	const handleRefresh = useCallback(async () => {
+		if (!hasHydratedFilters) return
 		await Promise.all([
 			store.fetchList({ page: 1, keyword: debouncedKeyword.trim() }),
 			refreshGroups(),
 		])
-	}, [store, debouncedKeyword, refreshGroups])
+	}, [store, debouncedKeyword, refreshGroups, hasHydratedFilters])
 
 	// Sync local optimistic items and handle background polling
 	const mergedList = useAudioRecordingsOptimisticSync({
@@ -115,16 +124,24 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		}
 	}, [store, refreshGroups])
 
+	// Restore query filters before the first fetch so refresh/re-entry uses the saved session state.
+	useEffect(() => {
+		store.hydrateFiltersFromSession(initialFilterSession)
+		setHasHydratedFilters(true)
+	}, [store, initialFilterSession])
+
 	// Keep list + group metadata in sync when a recording finishes on this page.
 	useEffect(() => {
 		return registerAudioRecordingsShellRefreshHandler(handleRefresh)
 	}, [handleRefresh])
 
 	useEffect(() => {
+		if (!hasHydratedFilters) return
 		if (isSearchComposing) return
 		void store.fetchList({ page: 1, keyword: debouncedKeyword.trim() })
 	}, [
 		store,
+		hasHydratedFilters,
 		debouncedKeyword,
 		isSearchComposing,
 		store.summaryFilter,
@@ -135,19 +152,37 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		currentGroupId, // Re-query list on group switcher change
 	])
 
+	/** Applies the selected summary tab and mirrors it into the session filter snapshot. */
 	function handleSummaryFilterChange(value: typeof store.summaryFilter) {
 		store.setSummaryFilter(value)
+		patchAudioRecordingsFilterSession({ summaryFilter: value })
 	}
 
+	/** Recomputes rolling date ranges while storing only the stable preset key. */
 	function handleDatePresetChange(value: AudioRecordingsDatePreset) {
 		setDatePreset(value)
 		const range = resolveDatePresetRange(value)
 		store.setDateRange(range.start, range.end)
+		patchAudioRecordingsFilterSession({ datePreset: value })
 	}
 
+	/** Keeps the active group filter aligned across UI state, store queries, and session cache. */
 	function handleGroupChange(groupId: string) {
 		setCurrentGroupId(groupId)
 		store.setWorkspaceId(groupId)
+		patchAudioRecordingsFilterSession({ groupId })
+	}
+
+	/** Persists search text without changing the existing debounce-based request cadence. */
+	function handleSearchKeywordChange(value: string) {
+		setSearchKeyword(value)
+		patchAudioRecordingsFilterSession({ searchKeyword: value })
+	}
+
+	/** Persists the combined sort dropdown as the API-level sort field and direction. */
+	function handleSortChange(sortBy: typeof store.sortBy, sortOrder: typeof store.sortOrder) {
+		store.setSort(sortBy, sortOrder)
+		patchAudioRecordingsFilterSession({ sortBy, sortOrder })
 	}
 
 	// Group Manage callbacks — manage dialog switches list filter after create
@@ -310,9 +345,9 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 				onManageGroups={() => setIsManageGroupsOpen(true)}
 				onSummaryFilterChange={handleSummaryFilterChange}
 				onDatePresetChange={handleDatePresetChange}
-				onSortByChange={(value) => store.setSort(value, store.sortOrder)}
-				onSortOrderChange={(value) => store.setSort(store.sortBy, value)}
-				onSearchKeywordChange={setSearchKeyword}
+				onSortByChange={(value) => handleSortChange(value, store.sortOrder)}
+				onSortOrderChange={(value) => handleSortChange(store.sortBy, value)}
+				onSearchKeywordChange={handleSearchKeywordChange}
 				onSearchCompositionStart={() => setIsSearchComposing(true)}
 				onSearchCompositionEnd={() => setIsSearchComposing(false)}
 				onRefresh={handleRefresh}

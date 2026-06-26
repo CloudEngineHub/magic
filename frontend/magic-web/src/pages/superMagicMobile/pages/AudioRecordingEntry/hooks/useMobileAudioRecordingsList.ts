@@ -19,6 +19,11 @@ import {
 	type MobileAudioRecordingsFilterState,
 } from "../types"
 import { registerAudioRecordingsShellRefreshHandler } from "@/pages/superMagic/pages/AudioRecordings/utils/request-audio-recordings-shell-refresh"
+import {
+	patchAudioRecordingsFilterSession,
+	readAudioRecordingsFilterSession,
+	resolveMobileAudioRecordingsSortOption,
+} from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-filter-session"
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -28,13 +33,18 @@ const SEARCH_DEBOUNCE_MS = 300
  */
 export function useMobileAudioRecordingsList() {
 	const store = audioRecordingsStore
+	const [initialFilterSession] = useState(() => readAudioRecordingsFilterSession())
 
-	const [searchKeyword, setSearchKeyword] = useState("")
+	const [searchKeyword, setSearchKeywordState] = useState(initialFilterSession.searchKeyword)
 	const [isSearchComposing, setIsSearchComposing] = useState(false)
-	const [searchOpen, setSearchOpen] = useState(false)
-	const [filterState, setFilterState] = useState<MobileAudioRecordingsFilterState>(
-		MOBILE_AUDIO_RECORDINGS_FILTER_DEFAULT,
+	const [searchOpen, setSearchOpen] = useState(
+		() => initialFilterSession.searchKeyword.trim().length > 0,
 	)
+	const [filterState, setFilterState] = useState<MobileAudioRecordingsFilterState>(() => ({
+		datePreset: initialFilterSession.datePreset,
+		sortOption: resolveMobileAudioRecordingsSortOption(initialFilterSession),
+	}))
+	const [hasHydratedFilters, setHasHydratedFilters] = useState(false)
 	const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 	const [importSheetOpen, setImportSheetOpen] = useState(false)
 	const [moreTarget, setMoreTarget] = useState<AudioProjectListItem | null>(null)
@@ -44,7 +54,7 @@ export function useMobileAudioRecordingsList() {
 	const [groups, setGroups] = useState<AudioRecordingGroup[]>([])
 	const [totalGroupCount, setTotalGroupCount] = useState(0)
 	const [ungroupedCount, setUngroupedCount] = useState(0)
-	const [currentGroupId, setCurrentGroupId] = useState(ALL_RECORDING_GROUP_ID)
+	const [currentGroupId, setCurrentGroupId] = useState(initialFilterSession.groupId)
 	const [groupsLoading, setGroupsLoading] = useState(false)
 	const [groupActionSubmitting, setGroupActionSubmitting] = useState(false)
 
@@ -80,13 +90,20 @@ export function useMobileAudioRecordingsList() {
 		}
 	}, [])
 
+	// Restore shared query filters before the first mobile list fetch is allowed to run.
+	useEffect(() => {
+		store.hydrateFiltersFromSession(initialFilterSession)
+		setHasHydratedFilters(true)
+	}, [store, initialFilterSession])
+
 	/** Apply secondary filters (date + sort) to the store whenever sheet state changes */
 	useEffect(() => {
+		if (!hasHydratedFilters) return
 		const range = resolveMobileDatePresetRange(filterState.datePreset)
 		store.setDateRange(range.start, range.end)
 		const { sortBy, sortOrder } = parseMobileSortOption(filterState.sortOption)
 		store.setSort(sortBy, sortOrder)
-	}, [store, filterState])
+	}, [store, filterState, hasHydratedFilters])
 
 	/** Register poller on mount; tear down on unmount (fetch is driven by filter effect) */
 	useEffect(() => {
@@ -100,10 +117,12 @@ export function useMobileAudioRecordingsList() {
 
 	/** Re-fetch page 1 when filters or debounced keyword change */
 	useEffect(() => {
+		if (!hasHydratedFilters) return
 		if (isSearchComposing) return
 		void store.fetchList({ page: 1, keyword: debouncedKeyword.trim() })
 	}, [
 		store,
+		hasHydratedFilters,
 		debouncedKeyword,
 		isSearchComposing,
 		store.summaryFilter,
@@ -115,12 +134,13 @@ export function useMobileAudioRecordingsList() {
 	])
 
 	const handleRefresh = useCallback(async () => {
+		if (!hasHydratedFilters) return
 		// Pull-to-refresh should keep the list rows and group counters in sync for cross-entry changes.
 		await Promise.all([
 			store.fetchList({ page: 1, keyword: debouncedKeyword.trim() }),
 			refreshGroups(),
 		])
-	}, [store, debouncedKeyword, refreshGroups])
+	}, [store, debouncedKeyword, refreshGroups, hasHydratedFilters])
 
 	useEffect(() => {
 		return registerAudioRecordingsShellRefreshHandler(handleRefresh)
@@ -130,19 +150,43 @@ export function useMobileAudioRecordingsList() {
 		await store.loadMore()
 	}, [store])
 
+	/** Applies the mobile summary tab and keeps the shared session snapshot in sync. */
 	const handleSummaryFilterChange = useCallback(
 		(value: AudioRecordingSummaryFilter) => {
 			store.setSummaryFilter(value)
+			patchAudioRecordingsFilterSession({ summaryFilter: value })
 		},
 		[store],
 	)
 
+	/** Converts mobile sheet state into shared API filter fields before persisting. */
 	const handleFilterStateChange = useCallback((next: MobileAudioRecordingsFilterState) => {
 		setFilterState(next)
+		const { sortBy, sortOrder } = parseMobileSortOption(next.sortOption)
+		patchAudioRecordingsFilterSession({
+			datePreset: next.datePreset,
+			sortBy,
+			sortOrder,
+		})
 	}, [])
 
+	/** Resets only query filters owned by the mobile filter sheet, leaving transient UI state alone. */
 	const handleFilterReset = useCallback(() => {
 		setFilterState(MOBILE_AUDIO_RECORDINGS_FILTER_DEFAULT)
+		const { sortBy, sortOrder } = parseMobileSortOption(
+			MOBILE_AUDIO_RECORDINGS_FILTER_DEFAULT.sortOption,
+		)
+		patchAudioRecordingsFilterSession({
+			datePreset: MOBILE_AUDIO_RECORDINGS_FILTER_DEFAULT.datePreset,
+			sortBy,
+			sortOrder,
+		})
+	}, [])
+
+	/** Persists search text while leaving the existing debounced request timing unchanged. */
+	const handleSearchKeywordChange = useCallback((value: string) => {
+		setSearchKeywordState(value)
+		patchAudioRecordingsFilterSession({ searchKeyword: value })
 	}, [])
 
 	const handleOpenSearch = useCallback(() => {
@@ -151,9 +195,9 @@ export function useMobileAudioRecordingsList() {
 
 	const handleDismissSearch = useCallback(() => {
 		setSearchOpen(false)
-		setSearchKeyword("")
+		handleSearchKeywordChange("")
 		setIsSearchComposing(false)
-	}, [])
+	}, [handleSearchKeywordChange])
 
 	const handleOpenMore = useCallback((item: AudioProjectListItem) => {
 		setMoreTarget(item)
@@ -163,10 +207,12 @@ export function useMobileAudioRecordingsList() {
 		setMoreTarget(null)
 	}, [])
 
+	/** Persists group selection so PC and H5 reopen with the same workspace filter. */
 	const handleGroupChange = useCallback(
 		(groupId: string) => {
 			setCurrentGroupId(groupId)
 			store.setWorkspaceId(groupId)
+			patchAudioRecordingsFilterSession({ groupId })
 		},
 		[store],
 	)
@@ -240,7 +286,7 @@ export function useMobileAudioRecordingsList() {
 	return {
 		store,
 		searchKeyword,
-		setSearchKeyword,
+		setSearchKeyword: handleSearchKeywordChange,
 		isSearchComposing,
 		setIsSearchComposing,
 		searchOpen,

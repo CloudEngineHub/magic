@@ -27,6 +27,8 @@ import {
 	renameAudioRecordingProject,
 	submitAudioRecordingSummary,
 } from "../utils/audio-recording-actions"
+import { resolveDatePresetRange } from "../utils/resolve-date-preset-range"
+import type { AudioRecordingsFilterSessionSnapshot } from "../utils/audio-recordings-filter-session"
 
 const DEFAULT_PAGE_SIZE = 20
 
@@ -165,6 +167,17 @@ export class AudioRecordingsStore {
 	setSort(sortBy: AudioProjectSortBy, sortOrder: AudioProjectSortOrder) {
 		this.sortBy = sortBy
 		this.sortOrder = sortOrder
+	}
+
+	/** Restores persisted query filters in one pass before the first list request is built. */
+	hydrateFiltersFromSession(snapshot: AudioRecordingsFilterSessionSnapshot) {
+		const range = resolveDatePresetRange(snapshot.datePreset)
+		this.summaryFilter = snapshot.summaryFilter
+		this.createdAtStart = range.start
+		this.createdAtEnd = range.end
+		this.workspaceId = snapshot.groupId
+		this.sortBy = snapshot.sortBy
+		this.sortOrder = snapshot.sortOrder
 	}
 
 	/** Updates the workspace group used by subsequent list queries */

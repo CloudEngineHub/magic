@@ -66,10 +66,15 @@ vi.mock("@/pages/superMagic/pages/AudioRecordings/services/summary-progress-poll
 }))
 
 import { useMobileAudioRecordingsList } from "../hooks/useMobileAudioRecordingsList"
+import {
+	AUDIO_RECORDINGS_FILTER_SESSION_KEY,
+	DEFAULT_AUDIO_RECORDINGS_FILTER_SESSION,
+} from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-filter-session"
 
 describe("useMobileAudioRecordingsList", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		sessionStorage.clear()
 		serviceMocks.queryProjects.mockResolvedValue({ list: [], total: 0, page: 1, pageSize: 20 })
 		serviceMocks.listGroups.mockResolvedValue({
 			groups: [
@@ -88,6 +93,94 @@ describe("useMobileAudioRecordingsList", () => {
 	afterEach(() => {
 		audioRecordingsStore.disposePoller()
 		audioRecordingsStore.reset()
+		sessionStorage.clear()
+	})
+
+	it("restores persisted mobile list filters before the first query", async () => {
+		sessionStorage.setItem(
+			AUDIO_RECORDINGS_FILTER_SESSION_KEY,
+			JSON.stringify({
+				summaryFilter: "summarized",
+				datePreset: "month",
+				sortBy: "created_at",
+				sortOrder: "desc",
+				searchKeyword: "mock mobile keyword",
+				groupId: "workspace-audio-001",
+			}),
+		)
+
+		const { result } = renderHook(() => useMobileAudioRecordingsList())
+
+		await waitFor(() => {
+			expect(serviceMocks.queryProjects).toHaveBeenCalledWith(
+				expect.objectContaining({
+					summaryFilter: "summarized",
+					sortBy: "created_at",
+					sortOrder: "desc",
+					workspaceId: "workspace-audio-001",
+					keyword: "mock mobile keyword",
+				}),
+			)
+		})
+		expect(result.current.searchKeyword).toBe("mock mobile keyword")
+		expect(result.current.searchOpen).toBe(true)
+		expect(result.current.filterState).toEqual({
+			datePreset: "month",
+			sortOption: "created_at_desc",
+		})
+		expect(result.current.currentGroupId).toBe("workspace-audio-001")
+	})
+
+	it("persists mobile filter and group changes to the shared session snapshot", async () => {
+		const { result } = renderHook(() => useMobileAudioRecordingsList())
+
+		await waitFor(() => {
+			expect(serviceMocks.listGroups).toHaveBeenCalled()
+		})
+
+		act(() => {
+			result.current.handleSummaryFilterChange("not_summarized")
+			result.current.handleFilterStateChange({
+				datePreset: "week",
+				sortOption: "created_at_desc",
+			})
+			result.current.handleGroupChange("workspace-audio-001")
+		})
+
+		const saved = JSON.parse(
+			sessionStorage.getItem(AUDIO_RECORDINGS_FILTER_SESSION_KEY) ?? "{}",
+		)
+		expect(saved).toMatchObject({
+			summaryFilter: "not_summarized",
+			datePreset: "week",
+			sortBy: "created_at",
+			sortOrder: "desc",
+			groupId: "workspace-audio-001",
+		})
+	})
+
+	it("persists clearing the mobile search keyword when dismissing search", async () => {
+		sessionStorage.setItem(
+			AUDIO_RECORDINGS_FILTER_SESSION_KEY,
+			JSON.stringify({
+				...DEFAULT_AUDIO_RECORDINGS_FILTER_SESSION,
+				searchKeyword: "mock stale search",
+			}),
+		)
+		const { result } = renderHook(() => useMobileAudioRecordingsList())
+
+		await waitFor(() => {
+			expect(serviceMocks.listGroups).toHaveBeenCalled()
+		})
+
+		act(() => {
+			result.current.handleDismissSearch()
+		})
+
+		const saved = JSON.parse(
+			sessionStorage.getItem(AUDIO_RECORDINGS_FILTER_SESSION_KEY) ?? "{}",
+		)
+		expect(saved.searchKeyword).toBe("")
 	})
 
 	it("loads groups and refetches list for the selected group", async () => {

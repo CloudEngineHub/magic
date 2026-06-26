@@ -60,7 +60,7 @@ function createApiItem(
 		project_mode: "audio",
 		extra: {
 			duration: 120,
-			device_id: "Redmi K70 Ultra",
+			device_id: "mock-recorder-device",
 			audio_source: "recorded",
 			current_phase: "summarizing",
 			phase_status: "completed",
@@ -92,6 +92,37 @@ describe("AudioRecordingsStore", () => {
 			expect.objectContaining({
 				sort_by: "updated_at",
 				sort_order: "desc",
+			}),
+		)
+	})
+
+	it("hydrates persisted list filters before building the first query", async () => {
+		const store = new AudioRecordingsStore()
+		store.hydrateFiltersFromSession({
+			summaryFilter: "not_summarized",
+			datePreset: "week",
+			sortBy: "created_at",
+			sortOrder: "desc",
+			searchKeyword: "mock persisted keyword",
+			groupId: "mock-group-id",
+		})
+
+		vi.mocked(SuperMagicApi.queryAudioProjects).mockResolvedValue({
+			list: [],
+			total: 0,
+		})
+
+		await store.fetchList({ page: 1, keyword: "mock persisted keyword" })
+
+		expect(SuperMagicApi.queryAudioProjects).toHaveBeenCalledWith(
+			expect.objectContaining({
+				current_phase: ["waiting", "merging"],
+				created_at_start: expect.any(Number),
+				created_at_end: expect.any(Number),
+				sort_by: "created_at",
+				sort_order: "desc",
+				workspace_id: "mock-group-id",
+				keyword: "mock persisted keyword",
 			}),
 		)
 	})
@@ -160,7 +191,7 @@ describe("AudioRecordingsStore", () => {
 						current_phase: "merging",
 						phase_status: "completed",
 						audio_source: "imported",
-						device_id: "Redmi K70 Ultra",
+						device_id: "mock-recorder-device",
 						tags: [],
 					},
 				}),
