@@ -186,8 +186,8 @@ class ModeAppService extends AbstractModeAppService
             $list[] = [
                 'mode' => [
                     'id' => $agent->getCode(),
-                    'name' => $agent->getName(),
-                    'description' => $agent->getDescription(),
+                    'name' => $agent->getI18nName($language),
+                    'description' => $agent->getI18nDescription($language),
                     'placeholder' => $modeAggregateDTO->getMode()->getPlaceholder(),
                     'identifier' => $agent->getCode(),
                     'icon_type' => $agent->getIconType(),
