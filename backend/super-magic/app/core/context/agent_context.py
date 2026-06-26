@@ -302,7 +302,6 @@ class AgentContext(BaseAgentContext):
             # Skills 管理
             "loaded_skills": ([], List[str]),  # 已加载的 skills 列表
             "excluded_skills": ([], List[str]),  # 当前 agent 排除的 system skill 名称列表
-            "subagent_delegation_enabled": (False, bool),  # 是否允许使用 subagents 委派能力
             # 额外流式推送目标（各渠道的 StreamingInterface，处理消息期间注册，完成后清除）
             "streaming_sinks": ([], List),
             # Human in the Loop：前端工具调用等待用户完成时的暂停标记
@@ -463,23 +462,6 @@ class AgentContext(BaseAgentContext):
         """
         loaded_skills = self.get_loaded_skills()
         return skill_name in loaded_skills
-
-    def set_subagent_delegation_enabled(self, enabled: bool) -> None:
-        """设置当前 Agent 是否启用 subagents 委派能力。"""
-        self.shared_context.update_field("subagent_delegation_enabled", bool(enabled))
-        logger.debug(f"已更新 subagent_delegation_enabled: {enabled}")
-
-    def is_subagent_delegation_enabled(self) -> bool:
-        """Return whether sub-agent delegation is enabled for this agent.
-
-        Delegation is enabled when either:
-        - the explicit flag was set via set_subagent_delegation_enabled(True), OR
-        - the 'subagents' skill is present in the agent's loaded skill list
-          (i.e. it is listed under system_skills in the .agent config).
-        """
-        if bool(self.shared_context.get_field("subagent_delegation_enabled")):
-            return True
-        return self.has_skill("subagents")
 
     def set_excluded_skills(self, skills: List[str]) -> None:
         """设置当前 agent 排除的 system skill 名称列表

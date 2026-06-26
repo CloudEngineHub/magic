@@ -23,6 +23,7 @@ from app.tools.subagent_runtime_models import (
 from app.tools.subagent_runtime_store import SubagentRuntimeStore
 from app.tools.subagent_session_manager import subagent_session_manager
 from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
+from app.core.subagent_delegation import is_crew_agent_code
 
 logger = get_logger(__name__)
 
@@ -42,7 +43,7 @@ class CallSubagentParams(BaseToolParams):
             "- 'magic': General-purpose agent with full tool access (web search, file ops, code execution, etc.). Use for complex multi-step tasks.\n"
             "- 'explore': Read-only codebase exploration. Searches files, reads code, answers structural questions. Cannot modify anything.\n"
             "- 'shell': Shell command execution specialist. Runs scripts, installs deps, performs system operations.\n"
-            "Other agent files (e.g. 'data-analyst') can also be used by name."
+            "Other agent files (e.g. 'data-analyst') can also be used by name. For Crew employees, use the local agent_name returned by prepare_agent."
         )
     )
     agent_id: str = Field(
@@ -52,6 +53,10 @@ class CallSubagentParams(BaseToolParams):
     prompt: str = Field(
         ...,
         description="Complete task description. The sub-agent has NO access to the parent's conversation history — include everything it needs: context, task, success criteria, relevant file paths."
+    )
+    display_name: Optional[str] = Field(
+        None,
+        description="Human-readable display name shown in the UI. For Crew employees, pass the name field from prepare_agent result (e.g. '旅行助手'). Leave empty for built-in agents."
     )
     model_id: Optional[str] = Field(
         None,
@@ -218,11 +223,19 @@ class CallSubagent(BaseTool[CallSubagentParams]):
             if agent is not None and task is None:
                 agent.close()
             logger.exception(f"调用智能体失败: {e!s}")
-            return ToolResult.error(
-                _build_call_subagent_error_text(
+            # A missing .agent file means the target was never prepared locally — most often a Crew
+            # employee dispatched by display name/code without the prepare_agent step. Return a
+            # recovery-oriented message so the model re-runs agent_list + prepare_agent instead of
+            # giving up and doing the work itself.
+            if isinstance(e, FileNotFoundError):
+                error_text = _build_subagent_not_prepared_text(params.agent_name)
+            else:
+                error_text = _build_call_subagent_error_text(
                     agent_name=params.agent_name,
                     agent_id=params.agent_id,
-                ),
+                )
+            return ToolResult.error(
+                error_text,
                 extra_info={
                     "agent_name": params.agent_name,
                     "agent_id": params.agent_id,
@@ -236,13 +249,11 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
-        action = (
-            i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
-            if agent_name
-            else i18n.translate("call_subagent", category="tool.actions")
-        )
+        display_name = args.get("display_name") or ""
+        action = _build_subagent_action(agent_name, display_name)
         status_text = i18n.translate("call_subagent.status.accepted", category="tool.messages")
-        return {"action": action, "remark": _build_status_remark(agent_id, status_text)}
+        label = display_name or agent_name
+        return {"action": action, "remark": _build_status_remark(label or agent_id, status_text)}
 
     async def get_before_tool_detail(
         self, tool_context: ToolContext, arguments: Dict[str, Any] = None
@@ -250,6 +261,7 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
+        display_name = args.get("display_name") or ""
         prompt = args.get("prompt", "")
         background = args.get("background", False)
         model_id = _resolve_subagent_display_model_id(tool_context, args.get("model_id"))
@@ -259,8 +271,8 @@ class CallSubagent(BaseTool[CallSubagentParams]):
 
         t = lambda key: i18n.translate(f"call_subagent.detail.{key}", category="tool.messages")
         lines = []
-        if agent_name:
-            lines.append(f"{t('sub_agent')}: {agent_name}")
+        if display_name or agent_name:
+            lines.append(f"{t('sub_agent')}: {display_name or agent_name}")
         if agent_id:
             lines.append(f"{t('session_id')}: {agent_id}")
         mode_text = t("mode_background") if background else t("mode_sync")
@@ -357,15 +369,13 @@ Example: Research report is ready: [@file_path:reports/market-research.md]
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
-        action = (
-            i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
-            if agent_name
-            else i18n.translate("call_subagent", category="tool.actions")
-        )
+        display_name = args.get("display_name") or ""
+        action = _build_subagent_action(agent_name, display_name)
+        label = display_name or agent_name
 
         if not result.ok:
             status_text = i18n.translate("call_subagent.status.failed", category="tool.messages")
-            return {"action": action, "remark": _build_status_remark(agent_id, status_text)}
+            return {"action": action, "remark": _build_status_remark(label or agent_id, status_text)}
 
         payload = result.data if isinstance(result.data, dict) else {}
         status = payload.get("status", "")
@@ -379,7 +389,7 @@ Example: Research report is ready: [@file_path:reports/market-research.md]
         }
         status_key = _status_key_map.get(status, "call_subagent.status.accepted")
         status_text = i18n.translate(status_key, category="tool.messages")
-        return {"action": action, "remark": _build_status_remark(agent_id, status_text)}
+        return {"action": action, "remark": _build_status_remark(label or agent_id, status_text)}
 
 
 def _mode_from_background(background: bool) -> SubagentExecutionMode:
@@ -505,6 +515,17 @@ def _build_call_subagent_error_text(agent_name: str, agent_id: str) -> str:
     return (
         f"Unable to assign the task to sub-agent `{agent_name}` with agent_id `{agent_id}`. "
         "Check the agent configuration and runtime state, then try again."
+    )
+
+
+def _build_subagent_not_prepared_text(agent_name: str) -> str:
+    return (
+        f"Sub-agent `{agent_name}` is not available locally, so it cannot be dispatched yet. "
+        "Built-in agents you can call directly: magic, explore, shell, search, slider. "
+        "For a digital employee, first call agent_list to find it, then call "
+        "prepare_agent(agent_code='<SMA-... code from agent_list>') to download and compile it — "
+        "prepare_agent returns the local agent_name to pass here. "
+        "Do not pass the employee's display name or raw code directly to call_subagent."
     )
 
 
@@ -644,6 +665,19 @@ def _build_status_remark(agent_id: str, status_text: str) -> str:
     if agent_id:
         return f"{agent_id} · {status_text}"
     return status_text
+
+
+def _build_subagent_action(agent_name: str, display_name: str) -> str:
+    """Return the action label for a call_subagent invocation.
+
+    Crew employees (display_name provided, or SMA- code) use the "调用数字员工" action.
+    Built-in agents fall back to the generic "{{agent_name}} 子智能体" style.
+    """
+    if display_name or is_crew_agent_code(agent_name):
+        return i18n.translate("call_subagent.crew", category="tool.actions")
+    if agent_name:
+        return i18n.translate("call_subagent.assign", category="tool.messages", agent_name=agent_name)
+    return i18n.translate("call_subagent", category="tool.actions")
 
 
 _STATUS_EMOJI: Dict[str, str] = {

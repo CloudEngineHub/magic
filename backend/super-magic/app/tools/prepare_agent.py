@@ -7,11 +7,7 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.client_message import AgentMode
 from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
-from app.core.subagent_delegation import (
-    build_crew_delegation_disabled_message,
-    is_crew_agent_code,
-    is_subagent_delegation_enabled,
-)
+from app.core.subagent_delegation import is_crew_agent_code
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -34,13 +30,6 @@ class PrepareAgent(BaseTool[PrepareAgentParams]):
 
     async def execute(self, tool_context: ToolContext, params: PrepareAgentParams) -> ToolResult:
         agent_context = tool_context.get_extension("agent_context") if tool_context else None
-        if not is_subagent_delegation_enabled(agent_context):
-            message = build_crew_delegation_disabled_message()
-            return ToolResult.error(
-                message,
-                extra_info={"error": "crew_agent_delegation_disabled", "user_error": message},
-            )
-
         raw = (params.agent_code or "").strip()
         if not raw:
             return ToolResult.error(
@@ -54,7 +43,7 @@ class PrepareAgent(BaseTool[PrepareAgentParams]):
                 local_name = info.agent_code
                 content = (
                     f"Crew agent `{local_name}` is ready as a local .agent file. "
-                    f"Now call call_subagent with agent_name='{local_name}' to dispatch the task."
+                    f"Now call call_subagent with agent_name='{local_name}' and display_name='{info.name}' to dispatch the task."
                 )
                 data = {
                     "agent_name": local_name,

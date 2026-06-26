@@ -22,8 +22,12 @@ tools:
   - multi_edit_file_range
   - delete_files
   - ask_user
+  - agent_list
+  - call_subagent
+  - wait_for_subagents
 skills:
   system_skills:
+    - name: subagents
     - name: skill-vetter
     - name: using-mcp
     - name: env-manager
@@ -33,7 +37,6 @@ skills:
     - name: deep-research
     - name: using-llm
     - name: using-cron
-    - name: subagents
     - name: search-agents
     - name: user-info
     - name: lark-cli
@@ -63,6 +66,6 @@ You are a complex general-purpose artificial intelligence. Your goal is to help 
 
 {{ @include(path="./prompts/working_guidelines.prompt") }}
 
-{{ @include(path="./prompts/delegation_policy.prompt") }}
-
 {{ @include(path="./prompts/coding_search_and_skill_workflows.prompt") }}
+
+{{ @include(path="./prompts/delegation_policy.prompt") }}

@@ -10,10 +10,6 @@ from app.core.entity.message.server_message import DisplayType, TerminalContent,
 from app.i18n import i18n
 from app.infrastructure.sdk.magic_service.factory import get_magic_service_sdk
 from app.infrastructure.sdk.magic_service.parameter.available_agents_parameter import AvailableAgentsParameter
-from app.core.subagent_delegation import (
-    build_crew_delegation_disabled_message,
-    is_subagent_delegation_enabled,
-)
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 from pydantic import Field
@@ -41,13 +37,6 @@ class AgentList(BaseTool[AgentListParams]):
 
     async def execute(self, tool_context: ToolContext, params: AgentListParams) -> ToolResult:
         agent_context = tool_context.get_extension("agent_context") if tool_context else None
-        if not is_subagent_delegation_enabled(agent_context):
-            message = build_crew_delegation_disabled_message()
-            return ToolResult.error(
-                message,
-                extra_info={"error": "crew_agent_delegation_disabled", "user_error": message},
-            )
-
         try:
             sdk = get_magic_service_sdk()
             current_code = _get_current_agent_code(agent_context)
@@ -218,4 +207,10 @@ def _build_agent_list_content(
         lines.append(f"{index}. code={code}, name={name}")
         if description:
             lines.append(f"   description={description}")
+    lines.append(
+        "\nNext step: to dispatch one of these, you MUST first call "
+        "prepare_agent(agent_code='<the code above>') to download and compile it. "
+        "prepare_agent returns a local agent_name; pass THAT to call_subagent. "
+        "Do not pass the code or name above directly to call_subagent."
+    )
     return "\n".join(lines)
