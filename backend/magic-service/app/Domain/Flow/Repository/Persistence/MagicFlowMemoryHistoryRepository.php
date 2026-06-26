@@ -26,6 +26,21 @@ class MagicFlowMemoryHistoryRepository extends MagicFlowAbstractRepository imple
         return $magicFlowMemoryHistoryEntity;
     }
 
+    /**
+     * 查询指定会话的流程记忆创建人.
+     */
+    public function getCreatedUidByConversationId(FlowDataIsolation $dataIsolation, string $conversationId, int $type): ?string
+    {
+        /** @var null|MagicFlowMemoryHistoryModel $model */
+        $model = $this->createBuilder($dataIsolation, MagicFlowMemoryHistoryModel::query())
+            ->where('conversation_id', $conversationId)
+            ->where('type', $type)
+            ->select(['created_uid'])
+            ->first();
+
+        return $model?->created_uid;
+    }
+
     public function queries(FlowDataIsolation $dataIsolation, MagicFlowMemoryHistoryQuery $query, Page $page): array
     {
         $builder = $this->createBuilder($dataIsolation, MagicFlowMemoryHistoryModel::query());

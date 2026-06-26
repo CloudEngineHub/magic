@@ -15,6 +15,8 @@ use App\Domain\Flow\Entity\ValueObject\FlowDataIsolation;
 use App\Domain\Flow\Entity\ValueObject\MemoryType;
 use App\Domain\Flow\Entity\ValueObject\Query\MagicFlowMemoryHistoryQuery;
 use App\Domain\Flow\Service\MagicFlowMemoryHistoryDomainService;
+use App\ErrorCode\FlowErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use DateTime;
 
@@ -27,6 +29,8 @@ class FlowMemory implements MemoryPersistenceInterface
 
     public function queries(MemoryQuery $memoryQuery, array $ignoreMessageIds = []): array
     {
+        $this->validateConversationOwner($memoryQuery->getConversationId(), $memoryQuery->getReaderUserId());
+
         $query = new MagicFlowMemoryHistoryQuery();
         $query->setConversationId($memoryQuery->getConversationId());
         $query->setTopicId($memoryQuery->getTopicId());
@@ -60,6 +64,8 @@ class FlowMemory implements MemoryPersistenceInterface
 
     public function store(LLMMemoryMessage $LLMMemoryMessage): void
     {
+        $this->validateConversationOwner($LLMMemoryMessage->getConversationId(), $LLMMemoryMessage->getUid());
+
         $history = new MagicFlowMemoryHistoryEntity();
         $history->setType(MemoryType::Chat);
         $history->setConversationId($LLMMemoryMessage->getConversationId());
@@ -76,5 +82,23 @@ class FlowMemory implements MemoryPersistenceInterface
         $history->setCreatedAt(new DateTime());
         $flowDataIsolation = FlowDataIsolation::create(userId: $LLMMemoryMessage->getUid());
         $this->magicFlowMemoryHistoryDomainService->create($flowDataIsolation, $history);
+    }
+
+    /**
+     * 校验流程记忆会话创建人与当前操作人一致.
+     */
+    private function validateConversationOwner(string $conversationId, string $userId): void
+    {
+        $createdUid = $this->magicFlowMemoryHistoryDomainService->getCreatedUidByConversationId(
+            FlowDataIsolation::create()->disabled(),
+            $conversationId,
+            MemoryType::Chat
+        );
+        if ($createdUid === null) {
+            return;
+        }
+        if ($createdUid !== $userId) {
+            ExceptionBuilder::throw(FlowErrorCode::AccessDenied);
+        }
     }
 }

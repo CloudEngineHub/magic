@@ -9,6 +9,7 @@ namespace App\Domain\Flow\Service;
 
 use App\Domain\Flow\Entity\MagicFlowMemoryHistoryEntity;
 use App\Domain\Flow\Entity\ValueObject\FlowDataIsolation;
+use App\Domain\Flow\Entity\ValueObject\MemoryType;
 use App\Domain\Flow\Entity\ValueObject\Query\MagicFlowMemoryHistoryQuery;
 use App\Domain\Flow\Repository\Facade\MagicFlowMemoryHistoryRepositoryInterface;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -25,6 +26,14 @@ class MagicFlowMemoryHistoryDomainService extends AbstractDomainService
         $magicFlowMemoryHistoryEntity->prepareForCreation();
 
         return $this->magicFlowMemoryHistoryRepository->create($dataIsolation, $magicFlowMemoryHistoryEntity);
+    }
+
+    /**
+     * 查询指定会话的流程记忆创建人.
+     */
+    public function getCreatedUidByConversationId(FlowDataIsolation $dataIsolation, string $conversationId, MemoryType $type): ?string
+    {
+        return $this->magicFlowMemoryHistoryRepository->getCreatedUidByConversationId($dataIsolation, $conversationId, $type->value);
     }
 
     /**

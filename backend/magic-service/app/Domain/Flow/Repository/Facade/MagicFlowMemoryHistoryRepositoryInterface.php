@@ -17,6 +17,11 @@ interface MagicFlowMemoryHistoryRepositoryInterface
     public function create(FlowDataIsolation $dataIsolation, MagicFlowMemoryHistoryEntity $magicFlowMemoryHistoryEntity): MagicFlowMemoryHistoryEntity;
 
     /**
+     * 查询指定会话的流程记忆创建人.
+     */
+    public function getCreatedUidByConversationId(FlowDataIsolation $dataIsolation, string $conversationId, int $type): ?string;
+
+    /**
      * @return array{total: int, list: array<MagicFlowMemoryHistoryEntity>}
      */
     public function queries(FlowDataIsolation $dataIsolation, MagicFlowMemoryHistoryQuery $query, Page $page): array;
