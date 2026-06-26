@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react"
+import { UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import type { RecordingTranscriptSegment } from "../../types/recording-detail"
@@ -108,12 +109,19 @@ export function RecordingDetailTranscriptPanel({
 							type="button"
 							className={cn(
 								TRANSCRIPT_HEADER_PILL_ACTION_CLASS,
-								"disabled:cursor-not-allowed disabled:opacity-50",
+								"gap-1.5 disabled:cursor-not-allowed disabled:opacity-50",
 							)}
 							onClick={onOpenSpeakerSettings}
 							disabled={availableSpeakerIds.length === 0}
 							data-testid="recording-detail-open-speaker-settings"
 						>
+							{/* Keep this decorative icon aligned with the prototype while the button text remains the accessible label. */}
+							<UsersRound
+								className="size-4 shrink-0"
+								strokeWidth={2}
+								aria-hidden="true"
+								data-testid="recording-detail-speaker-settings-icon"
+							/>
 							{t("detail.openSpeakerSettings")}
 						</button>
 					) : null}

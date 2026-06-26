@@ -14,7 +14,7 @@ vi.mock("react-i18next", () => ({
 				"detail.emptyTranscriptFiltered": "No transcript in this filter",
 				"detail.speakerFilterAll": "All speakers",
 				"detail.speakerFilterTitle": "Filter speakers",
-				"detail.openSpeakerSettings": "Open speaker settings",
+				"detail.openSpeakerSettings": "Speakers",
 			}
 			return labels[key] ?? key
 		},
@@ -146,13 +146,17 @@ describe("RecordingDetailTranscriptPanel", () => {
 		const title = screen.getByTestId("recording-detail-transcript-title")
 		const count = screen.getByTestId("recording-detail-transcript-count")
 		const settingsButton = screen.getByTestId("recording-detail-open-speaker-settings")
+		const settingsIcon = screen.getByTestId("recording-detail-speaker-settings-icon")
 		const accessory = screen.getByTestId("recording-detail-open-speaker-filter")
 
 		expect(panel).not.toHaveClass("border", "bg-card")
 		expect(title).toHaveTextContent("Transcript")
 		expect(count).toHaveTextContent("2 segments")
-		expect(settingsButton).toHaveClass("h-8", "px-3", "text-[12px]", "rounded-full")
+		expect(settingsButton).toHaveTextContent("Speakers")
+		expect(settingsButton).toHaveClass("h-8", "px-3", "text-[12px]", "rounded-full", "gap-1.5")
 		expect(settingsButton).not.toHaveClass("h-10", "px-4", "text-[14px]")
+		expect(settingsIcon).toHaveClass("size-4", "shrink-0")
+		expect(settingsIcon).toHaveAttribute("aria-hidden", "true")
 		expect(accessory).toHaveClass("size-8", "rounded-full", "border", "bg-white")
 		expect(inactiveSegment).toHaveClass("rounded-xl", "px-2", "py-2.5")
 		expect(activeSegment).toHaveClass("rounded-xl", "px-2", "py-2.5")
