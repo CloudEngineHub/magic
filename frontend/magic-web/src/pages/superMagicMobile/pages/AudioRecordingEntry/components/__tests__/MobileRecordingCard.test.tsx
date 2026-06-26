@@ -164,7 +164,8 @@ describe("MobileRecordingCard", () => {
 		const processingIndicator = screen.getByTestId(
 			"mobile-recording-card-summarize-proj-beta-002",
 		)
-		expect(processingIndicator.tagName).toBe("SPAN")
+		expect(processingIndicator.tagName).toBe("BUTTON")
+		expect(processingIndicator).toBeDisabled()
 		expect(processingIndicator).toHaveTextContent("Processing")
 	})
 

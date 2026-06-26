@@ -703,17 +703,14 @@ function AudioRecordingCard({
 					) : null}
 
 					{!isProgressMode && showProcessingIndicator ? (
-						<span
-							className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground"
+						<SummaryLoadingButton
+							label={t("card.processing")}
 							data-testid={
 								isMobile
 									? `mobile-recording-card-summarize-${item.id}`
 									: `audio-recording-card-${item.id}-status-processing`
 							}
-						>
-							<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-							{t("card.processing")}
-						</span>
+						/>
 					) : null}
 
 					{!isProgressMode && showWaitingIndicator ? (

@@ -180,6 +180,9 @@ describe("AudioRecordingCard", () => {
 			screen.getByTestId("audio-recording-card-project-1-status-processing"),
 		).toHaveTextContent("Processing")
 		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-processing"),
+		).toBeDisabled()
+		expect(
 			screen.queryByTestId("audio-recording-card-project-1-summary-button"),
 		).not.toBeInTheDocument()
 	})
