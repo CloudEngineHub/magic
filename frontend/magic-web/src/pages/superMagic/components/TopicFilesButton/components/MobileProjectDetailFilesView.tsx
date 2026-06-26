@@ -797,6 +797,9 @@ function MobileProjectDetailFilesView({
 		return (
 			<div
 				key={key}
+				data-file-id={item.file_id || undefined}
+				data-file-kind="folder"
+				data-testid="project-detail-mobile-file-row"
 				className={cn(
 					"overflow-hidden bg-card",
 					isChatSheetVariant ? "rounded-xl" : "rounded-xl",
@@ -849,6 +852,9 @@ function MobileProjectDetailFilesView({
 		return (
 			<div
 				key={key}
+				data-file-id={item.file_id || undefined}
+				data-file-kind="file"
+				data-testid="project-detail-mobile-file-row"
 				className={cn(
 					"overflow-hidden bg-card",
 					isChatSheetVariant ? "rounded-xl" : "rounded-xl",
