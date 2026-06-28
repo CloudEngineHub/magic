@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from "react"
 import { NodeViewWrapper, ReactNodeViewProps } from "@tiptap/react"
 import { useStyles } from "./styles"
 import type { SuperPlaceholderAttrs } from "./types"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 // Super Placeholder React 组件
 export const SuperPlaceholderComponent: React.FC<ReactNodeViewProps> = ({
@@ -138,8 +139,10 @@ export const SuperPlaceholderComponent: React.FC<ReactNodeViewProps> = ({
 					window.getSelection()?.removeAllRanges()
 
 					setTimeout(() => {
-						editor?.commands.focus()
-						editor?.commands.selectAll()
+						runActiveEditor(editor, (activeEditor) => {
+							activeEditor.commands.focus()
+							activeEditor.commands.selectAll()
+						})
 					}, 0)
 					return
 				}
@@ -166,14 +169,16 @@ export const SuperPlaceholderComponent: React.FC<ReactNodeViewProps> = ({
 				// Check for modifier keys - if present, let editor handle (for line breaks)
 				if (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) {
 					// Manually trigger editor's hard break command
-					editor.commands.setHardBreak()
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.commands.setHardBreak()
+					})
 					return
 				}
 
 				// For normal Enter, manually trigger the editor's send logic
 				// We need to simulate the editor's handleKeyDown logic
-				const editorView = editor.view
-				if (editorView) {
+				runActiveEditor(editor, (activeEditor) => {
+					const editorView = activeEditor.view
 					// Create a synthetic keyboard event for the editor
 					const syntheticEvent = new KeyboardEvent("keydown", {
 						key: "Enter",
@@ -184,7 +189,7 @@ export const SuperPlaceholderComponent: React.FC<ReactNodeViewProps> = ({
 
 					// Dispatch to editor's DOM element to trigger editor's handleKeyDown
 					editorView.dom.dispatchEvent(syntheticEvent)
-				}
+				})
 				return
 			}
 
@@ -204,50 +209,52 @@ export const SuperPlaceholderComponent: React.FC<ReactNodeViewProps> = ({
 	// Handle focus when node becomes selected via keyboard navigation
 	useEffect(() => {
 		if (selected && inputRef.current) {
-			// Only focus if this is a single node selection (not part of a range selection like select all)
-			const { selection } = editor.state
-			const isNodeSelection =
-				selection.from === selection.to - 1 &&
-				editor.state.doc.nodeAt(selection.from)?.type.name === "super-placeholder"
+			runActiveEditor(editor, (activeEditor) => {
+				// Only focus if this is a single node selection (not part of a range selection like select all)
+				const { selection } = activeEditor.state
+				const isNodeSelection =
+					selection.from === selection.to - 1 &&
+					activeEditor.state.doc.nodeAt(selection.from)?.type.name === "super-placeholder"
 
-			if (isNodeSelection) {
-				// Get navigation direction from node attributes
-				const isFromLeft = _direction === "from-left"
+				if (isNodeSelection) {
+					// Get navigation direction from node attributes
+					const isFromLeft = _direction === "from-left"
 
-				// Use setTimeout to ensure DOM is ready and avoid conflicts with editor operations
-				setTimeout(() => {
-					if (inputRef.current && document.activeElement !== inputRef.current) {
-						inputRef.current.focus()
+					// Use setTimeout to ensure DOM is ready and avoid conflicts with editor operations
+					setTimeout(() => {
+						if (inputRef.current && document.activeElement !== inputRef.current) {
+							inputRef.current.focus()
 
-						const range = document.createRange()
-						const sel = window.getSelection()
+							const range = document.createRange()
+							const sel = window.getSelection()
 
-						if (sel) {
-							if (isFromLeft && currentValue) {
-								// Coming from left: select all content for easy replacement
-								range.selectNodeContents(inputRef.current)
-								sel.removeAllRanges()
-								sel.addRange(range)
-							} else if (inputRef.current.firstChild) {
-								// Coming from right or no direction info: set cursor to the end
-								range.setStart(
-									inputRef.current.firstChild,
-									inputRef.current.textContent?.length || 0,
-								)
-								range.collapse(true)
-								sel.removeAllRanges()
-								sel.addRange(range)
-							} else {
-								// No text content, set cursor in the empty element
-								range.selectNodeContents(inputRef.current)
-								range.collapse(false)
-								sel.removeAllRanges()
-								sel.addRange(range)
+							if (sel) {
+								if (isFromLeft && currentValue) {
+									// Coming from left: select all content for easy replacement
+									range.selectNodeContents(inputRef.current)
+									sel.removeAllRanges()
+									sel.addRange(range)
+								} else if (inputRef.current.firstChild) {
+									// Coming from right or no direction info: set cursor to the end
+									range.setStart(
+										inputRef.current.firstChild,
+										inputRef.current.textContent?.length || 0,
+									)
+									range.collapse(true)
+									sel.removeAllRanges()
+									sel.addRange(range)
+								} else {
+									// No text content, set cursor in the empty element
+									range.selectNodeContents(inputRef.current)
+									range.collapse(false)
+									sel.removeAllRanges()
+									sel.addRange(range)
+								}
 							}
 						}
-					}
-				}, 10)
-			}
+					}, 10)
+				}
+			})
 		}
 	}, [selected, editor, currentValue, _direction])
 

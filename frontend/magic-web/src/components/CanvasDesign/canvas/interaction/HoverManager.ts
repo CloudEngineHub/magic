@@ -98,6 +98,8 @@ export class HoverManager {
 
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("extend:enter", () => {
+				this.pendingHoverTarget = null
+				this.cancelHoverFlush()
 				this.clearHover()
 			}),
 		)
@@ -114,6 +116,13 @@ export class HoverManager {
 	 * 处理鼠标移动事件
 	 */
 	private handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>): void => {
+		if (this.isExtendModeActive()) {
+			this.pendingHoverTarget = null
+			this.cancelHoverFlush()
+			this.clearHover()
+			return
+		}
+
 		this.pendingHoverTarget = e.target
 		this.scheduleHoverFlush()
 	}
@@ -148,6 +157,11 @@ export class HoverManager {
 	}
 
 	private refreshHoverAtCurrentPointer(): void {
+		if (this.isExtendModeActive()) {
+			this.clearHover()
+			return
+		}
+
 		const pointerPosition = this.canvas.stage.getPointerPosition()
 		if (!pointerPosition) {
 			this.clearHover()
@@ -168,6 +182,11 @@ export class HoverManager {
 	}
 
 	private resolveHoverTarget(target: Konva.Node | null): void {
+		if (this.isExtendModeActive()) {
+			this.clearHover()
+			return
+		}
+
 		if (!target || this.canvas.transformManager.isTransformInteractionActive()) {
 			this.clearHover()
 			return
@@ -208,6 +227,11 @@ export class HoverManager {
 	 * 设置 hover 状态
 	 */
 	private setHover(elementId: string): void {
+		if (this.isExtendModeActive()) {
+			this.clearHover()
+			return
+		}
+
 		// 如果元素已被选中，不显示 hover 效果
 		if (this.canvas.selectionManager.isSelected(elementId)) {
 			this.clearHover()
@@ -441,6 +465,10 @@ export class HoverManager {
 		})
 
 		return topElementId
+	}
+
+	private isExtendModeActive(): boolean {
+		return Boolean(this.canvas.extendManager?.getExtendingElementId?.())
 	}
 
 	/**

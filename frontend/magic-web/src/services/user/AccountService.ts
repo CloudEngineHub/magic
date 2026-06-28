@@ -18,8 +18,10 @@ const logger = Logger.createLogger("AccountService")
 
 export class AccountService {
 	private readonly service: Container
+	private readonly authApi: typeof apis.AuthApi
 
-	constructor(_dependencies: typeof apis, service: Container) {
+	constructor(dependencies: typeof apis, service: Container) {
+		this.authApi = dependencies.AuthApi
 		this.service = service
 	}
 
@@ -60,10 +62,30 @@ export class AccountService {
 		logger.report("switchAccount", unionId, magicOrganizationCode, new Error())
 		const accounts = toJS(userStore.account.accounts)
 		const account = accounts.find((o) => o.magic_id === unionId)
+
 		if (account) {
 			this.service.get<UserService>("userService").setAuthorization(account?.access_token)
 
 			if (magicOrganizationCode) {
+				/**
+				 * 优先处理集群变更的问题，集群一旦变更后所有 baseURL 都需要变更防止账号、组织、用户信息等初始化会依赖旧的 baseURL 导致请求异常。
+				 * 但大前提是确保当前账号的 token 是可用的，所以必须优先调用 API 确认 token 的实效性。
+				 */
+				// Step 1: 校验 Token 是否可用（停止 401 处理，交由业务层处理）
+				await this.authApi.bindMagicAuthorization(
+					account?.access_token,
+					account.deployCode,
+					magicOrganizationCode,
+				)
+				// Step 2: 集群环境同步
+				await this.service
+					.get<LoginService>("loginService")
+					.getClusterConfig(account.deployCode)
+
+				await this.service
+					.get<ConfigService>("configService")
+					.setClusterCode(account.deployCode)
+
 				// 优先同步新账号的所有组织
 				this.service
 					.get<OrganizationService>("organizationService")
@@ -74,25 +96,18 @@ export class AccountService {
 							"magic_organization_code",
 						),
 					})
+
 				// 同步用户对应组织
 				this.service
 					.get<UserService>("userService")
 					.setMagicOrganizationCode(magicOrganizationCode)
-				// Step 1: 环境同步
-				await this.service
-					.get<LoginService>("loginService")
-					.getClusterConfig(account.deployCode)
 
-				await this.service
-					.get<ConfigService>("configService")
-					.setClusterCode(account.deployCode)
-
-				// Step 2: 同步用户信息
+				// Step 3: 同步用户信息
 				await this.service.get<UserService>("userService").fetchUserInfo()
-				// Step 3: magic中组织体系获取
 				const magicOrganizationMap = await this.service
 					.get<LoginService>("loginService")
 					.magicOrganizationSync(account?.deployCode || "", account.access_token)
+
 				/**
 				 * 组织同步(先获取在同步)
 				 */

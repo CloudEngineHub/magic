@@ -95,7 +95,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 				mainFileId: storeConfig.mainFileId,
 				mainFileName: storeConfig.mainFileName,
 			}
-			store.updateConfig({
+			void store.updateConfig({
 				attachments: storeConfig.attachments,
 				attachmentList: storeConfig.attachmentList,
 				mainFileId: storeConfig.mainFileId,
@@ -103,7 +103,14 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 				displayConfig: storeConfig.displayConfig,
 			})
 		}
-	})
+	}, [
+		store,
+		storeConfig.attachments,
+		storeConfig.attachmentList,
+		storeConfig.displayConfig,
+		storeConfig.mainFileId,
+		storeConfig.mainFileName,
+	])
 
 	// Update cache config when organizationCode or selectedProjectId changes
 	useEffect(() => {

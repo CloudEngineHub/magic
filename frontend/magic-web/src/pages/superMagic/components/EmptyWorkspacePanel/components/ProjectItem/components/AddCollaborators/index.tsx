@@ -50,6 +50,7 @@ function AddCollaborators<T extends ProjectListItem | CollaborationProjectListIt
 				)}
 				style={style}
 				onClick={canManage ? handleAddCollaborators : undefined}
+				data-testid="add-collaborators"
 			>
 				{isSelfCollaborationProjectStatus && (
 					<MagicIcon component={IconUsersPlus} size={14} />

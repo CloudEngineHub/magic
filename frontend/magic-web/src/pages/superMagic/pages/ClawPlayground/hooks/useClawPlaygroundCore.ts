@@ -2,13 +2,16 @@ import { useCallback, useEffect } from "react"
 import { useDeepCompareEffect, useDebounceFn, useMemoizedFn } from "ahooks"
 import { useParams } from "react-router"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { SuperMagicApi } from "@/apis"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
+import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
+	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
+	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useClawPlaygroundStore } from "../context"
@@ -56,13 +59,12 @@ export function useClawPlaygroundCore() {
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 			withAttachmentsRefreshWaitersResolved(
 				projectId,
-				SuperMagicApi.getAttachmentsByProjectId({
+				loadProjectAttachments({
 					projectId,
 					temporaryToken,
 				})
 					.then((res) => {
-						const processedData = AttachmentDataProcessor.processAttachmentData(res)
-						store.projectFilesStore.setWorkspaceFileTree(processedData.tree)
+						store.projectFilesStore.setWorkspaceFileTree(res.tree)
 						store.mentionPanelStore.finishLoadAttachmentsPromise(projectId)
 					})
 					.catch((error) => {
@@ -81,6 +83,7 @@ export function useClawPlaygroundCore() {
 	// -- attachment polling --
 	useAttachmentsPolling({
 		projectId: selectedProject?.id,
+		autoStart: false,
 		onAttachmentsChange: useCallback(
 			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
 				const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
@@ -90,6 +93,14 @@ export function useClawPlaygroundCore() {
 		),
 		onError: useMemoizedFn((error: unknown) => {
 			console.error("Failed to poll claw playground attachments:", error)
+		}),
+	})
+
+	useProjectAttachmentsChangeRealtime({
+		projectId: selectedProject?.id,
+		store: store.projectFilesStore,
+		onFallbackError: useMemoizedFn((error: unknown) => {
+			console.error("Failed to refresh realtime claw playground attachments:", error)
 		}),
 	})
 
@@ -108,14 +119,17 @@ export function useClawPlaygroundCore() {
 
 	// -- subscribe to attachment updates via pubsub --
 	useEffect(() => {
-		const handleUpdateAttachments = (callback?: () => void) => {
+		const handleUpdateAttachments = (
+			payloadOrCallback?: SuperMagicUpdateAttachmentsRequest,
+		) => {
+			const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
 			const pid = selectedProject?.id
 			if (!pid) {
-				callback?.()
+				payload?.callback?.()
 				releaseAttachmentsRefreshWaitersWithoutFetch()
 				return
 			}
-			updateAttachments(pid, callback)
+			updateAttachments(pid, payload?.callback)
 		}
 
 		pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)

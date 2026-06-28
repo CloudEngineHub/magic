@@ -985,7 +985,7 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 			return (
 				<div className={cn("h-full w-full", className)}>
 					<UnsupportedPlatform platform={platform} />
-					<button type="button" className="sr-only" onClick={handleShowPlatform}>
+					<button type="button" className="sr-only" onClick={handleShowPlatform} data-testid="handle-show-platform">
 						{t("detail.selfMedia.home.openPlatform")}
 					</button>
 				</div>

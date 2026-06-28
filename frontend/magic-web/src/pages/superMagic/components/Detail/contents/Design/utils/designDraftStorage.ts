@@ -31,6 +31,7 @@ export interface DesignDraftEntry extends DesignDraftIdentity {
 	localUpdatedAt: number
 	reason: DesignDraftReason
 	designData: DesignData
+	baseRemoteData?: DesignData
 }
 
 class DesignDraftDatabase extends Dexie {
@@ -103,12 +104,16 @@ function cloneDraftEntry(entry: DesignDraftEntry): DesignDraftEntry {
 	return {
 		...entry,
 		designData: cloneDesignData(entry.designData),
+		baseRemoteData: entry.baseRemoteData
+			? cloneDesignData(entry.baseRemoteData)
+			: undefined,
 	}
 }
 
 function tryBuildDraftEntry(
-	entry: Omit<DesignDraftEntry, "key" | "schemaVersion" | "designData"> & {
+	entry: Omit<DesignDraftEntry, "key" | "schemaVersion" | "designData" | "baseRemoteData"> & {
 		designData: DesignData
+		baseRemoteData?: DesignData
 	},
 ): DesignDraftEntry | null {
 	try {
@@ -117,6 +122,9 @@ function tryBuildDraftEntry(
 			key: buildDesignDraftKey(entry),
 			schemaVersion: DESIGN_DRAFT_SCHEMA_VERSION,
 			designData: cloneDesignData(entry.designData),
+			baseRemoteData: entry.baseRemoteData
+				? cloneDesignData(entry.baseRemoteData)
+				: undefined,
 		}
 	} catch {
 		return null
@@ -268,6 +276,21 @@ function writeLocalStorageDraft(entry: DesignDraftEntry, options?: { prune?: boo
 	}
 }
 
+function withoutDraftBaseRemoteData(entry: DesignDraftEntry): DesignDraftEntry {
+	const draft = { ...entry }
+	delete draft.baseRemoteData
+	return draft
+}
+
+function writeLocalStorageDraftWithFallback(
+	entry: DesignDraftEntry,
+	options?: { prune?: boolean },
+): boolean {
+	if (writeLocalStorageDraft(entry, options)) return true
+	if (!entry.baseRemoteData) return false
+	return writeLocalStorageDraft(withoutDraftBaseRemoteData(entry), options)
+}
+
 function deleteLocalStorageDrafts(keys: Set<string>): void {
 	const storage = getLocalStorage()
 	if (!storage) return
@@ -318,8 +341,9 @@ function deleteMemoryDrafts(keys: Set<string>): void {
 }
 
 export function writeDesignDraft(
-	entry: Omit<DesignDraftEntry, "key" | "schemaVersion" | "designData"> & {
+	entry: Omit<DesignDraftEntry, "key" | "schemaVersion" | "designData" | "baseRemoteData"> & {
 		designData: DesignData
+		baseRemoteData?: DesignData
 	},
 	options: { emergency?: boolean } = {},
 ): Promise<DesignDraftWriteResult> {
@@ -333,7 +357,7 @@ export function writeDesignDraft(
 			: { target: "none", durable: false }
 
 	if (options.emergency) {
-		const localStorageOk = writeLocalStorageDraft(draft, { prune: false })
+		const localStorageOk = writeLocalStorageDraftWithFallback(draft, { prune: false })
 		const memoryOk = writeMemoryDraft(draft)
 		const fallbackResult: DesignDraftWriteResult = localStorageOk
 			? { target: "localStorage", durable: true }
@@ -354,7 +378,7 @@ export function writeDesignDraft(
 				await writeIndexedDbDraft(draft)
 				return { target: "indexeddb", durable: true }
 			} catch {
-				if (writeLocalStorageDraft(draft)) {
+				if (writeLocalStorageDraftWithFallback(draft)) {
 					return { target: "localStorage", durable: true }
 				}
 				return memoryResult()

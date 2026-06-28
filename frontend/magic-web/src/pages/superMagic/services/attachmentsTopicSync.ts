@@ -1,16 +1,37 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import type { SuperMagicUpdateAttachmentsPayload } from "../events/files"
 
 /**
- * 与 Update_Attachments → getAttachmentsByProjectId 主链路配合：
+ * Works with the main Update_Attachments -> loadProjectAttachments flow:
  * - 等待方：waitForNext… / registerWaitForNext… 入队
  * - 完成方：拉附件的 Promise 应用 {@link withAttachmentsRefreshWaitersResolved}，在 settled 后统一 resolve
  * 避免各页在 finally/catch 重复调用 resolve，也避免依赖 Update_Attachments_Loading 边沿。
  */
 
+export type SuperMagicUpdateAttachmentsRequest =
+	| SuperMagicUpdateAttachmentsPayload
+	| (() => void)
+	| undefined
+
 interface WaitEntry {
 	projectId: string
 	resolve: () => void
 	timeoutId: ReturnType<typeof setTimeout>
+}
+
+export function requestProjectAttachmentsFullRefresh(payload: SuperMagicUpdateAttachmentsPayload) {
+	// Keep the name as "request one full attachment refresh"; the event stays unified.
+	pubsub.publish(PubSubEvents.Update_Attachments, payload)
+}
+
+export function normalizeUpdateAttachmentsPayload(
+	payloadOrCallback: SuperMagicUpdateAttachmentsRequest,
+): SuperMagicUpdateAttachmentsPayload {
+	// Support legacy pubsub.publish(Update_Attachments, callback) and object payloads.
+	if (typeof payloadOrCallback === "function") {
+		return { callback: payloadOrCallback }
+	}
+	return payloadOrCallback ?? {}
 }
 
 const waitQueue: WaitEntry[] = []
@@ -46,16 +67,15 @@ function enqueueAttachmentsRefreshWait(
 		}
 		waitQueue.push(entry)
 		if (publishRefresh) {
-			pubsub.publish(PubSubEvents.Update_Attachments)
+			requestProjectAttachmentsFullRefresh({
+				projectId,
+				reason: "attachments-topic-sync-wait",
+			})
 		}
 	})
 }
 
-/**
- * 登记对「下一次」附件树拉取完成的等待，并立即发布 Update_Attachments。
- * 与 fetchRemoteDesignData 等可安全并行；resolve 发生在目标 project 的 getAttachments.finally。
- */
-export function waitForNextAttachmentsRefreshForProject(
+export function waitForNextFullAttachmentsRefreshForProject(
 	projectId: string | undefined,
 	options?: { timeoutMs?: number },
 ): Promise<void> {
@@ -65,7 +85,18 @@ export function waitForNextAttachmentsRefreshForProject(
 }
 
 /**
- * 仅登记等待、不发布 Update_Attachments。适用于外部已触发刷新（如消息撤回），只需等该 project
+ * Wait for the next attachment-tree load and publish an explicit full refresh.
+ * 与 fetchRemoteDesignData 等可安全并行；resolve 发生在目标 project 的 getAttachments.finally。
+ */
+export function waitForNextAttachmentsRefreshForProject(
+	projectId: string | undefined,
+	options?: { timeoutMs?: number },
+): Promise<void> {
+	return waitForNextFullAttachmentsRefreshForProject(projectId, options)
+}
+
+/**
+ * Only wait without publishing a full refresh. Use when another flow already triggered it
  * 的下一次 getAttachments.finally。
  */
 export function registerWaitForNextAttachmentsRefreshForProject(
@@ -91,7 +122,7 @@ export function resolveAttachmentsRefreshWaitersForProject(projectId: string) {
 
 /**
  * 在整条「拉附件 + 写 store」Promise 链 settled 之后 resolve 等待项。
- * 请传入 **完整链**（例如 `getAttachmentsByProjectId(...).then(...).catch(...).finally(...)`），
+ * Pass the **full chain** such as `loadProjectAttachments(...).then(...).catch(...).finally(...)`,
  * 勿只包裸 API Promise，否则会在 `.then` 更新树之前 resolve，产生竞态。
  */
 export function withAttachmentsRefreshWaitersResolved<T>(

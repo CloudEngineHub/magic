@@ -244,5 +244,9 @@ export const getAppEntryFile = (treeNode: Array<any>, displayConfig?: any): any 
 		return resolveFileByRelativePath(treeNode, indexPath)
 	}
 
-	return treeNode?.find((item) => item?.name === "index.html")
+	// 分享页等场景节点名可能落在 file_name/filename/display_filename 而非 name 上，逐一兜底匹配
+	return treeNode?.find((item) => {
+		const name = item?.name || item?.file_name || item?.filename || item?.display_filename
+		return name === "index.html"
+	})
 }

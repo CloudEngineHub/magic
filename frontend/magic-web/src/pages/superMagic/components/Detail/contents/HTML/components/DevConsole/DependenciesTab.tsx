@@ -165,6 +165,7 @@ export function DependenciesTab({ entries }: DependenciesTabProps) {
 										: "bg-muted text-muted-foreground hover:bg-accent",
 								)}
 								onClick={() => setFilter(ft.key)}
+								data-testid="set-filter"
 							>
 								{ft.label}
 								{count > 0 && <span className="ml-0.5 opacity-70">({count})</span>}
@@ -197,6 +198,7 @@ export function DependenciesTab({ entries }: DependenciesTabProps) {
 									<div
 										className="flex cursor-pointer items-center gap-1.5"
 										onClick={() => toggleExpand(entry.id)}
+										data-testid="toggle-expand"
 									>
 										{expanded ? (
 											<ChevronDown

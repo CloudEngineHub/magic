@@ -20,6 +20,7 @@ import {
 	checkMCPOAuth,
 	MCPOAuthType,
 } from "@/components/Agent/MCP/AgentSettings/AgentPanel/MCPPanel/helpers"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 // 仅在用户刚输入 "@" 的短时间窗口内，允许空查询触发面板
 const MENTION_INPUT_ACTIVATION_WINDOW_MS = 1200
@@ -167,7 +168,9 @@ export function createMentionPanelSuggestion(
 
 				if (item.type === MentionItemType.MCP && !context?.mcpValidated) {
 					// 先 blur 一下，避免在 OAuth 过程中，键盘还能输入
-					editor.chain().blur().run()
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.chain().blur().run()
+					})
 
 					// Temporarily disable keyboard shortcuts during OAuth
 					if (component) {
@@ -182,7 +185,9 @@ export function createMentionPanelSuggestion(
 
 						if (res === MCPOAuthType.validationFailed) {
 							// Remove the @ character and query text when validation fails
-							editor.chain().focus().deleteRange(range).run()
+							runActiveEditor(editor, (activeEditor) => {
+								activeEditor.chain().focus().deleteRange(range).run()
+							})
 							// Close the panel
 							handleExit?.()
 							return
@@ -204,7 +209,11 @@ export function createMentionPanelSuggestion(
 				}
 
 				const insertContent = getInsertedContent(item)
-				editor.chain().focus().insertContentAt(range, insertContent).run()
+				const inserted = runActiveEditor(editor, (activeEditor) => {
+					activeEditor.chain().focus().insertContentAt(range, insertContent).run()
+					return true
+				}, false)
+				if (!inserted) return
 
 				const insertedSize = getInsertedContentSize(editor, insertContent)
 				const nextPosition = range.from + insertedSize
@@ -244,7 +253,9 @@ export function createMentionPanelSuggestion(
 				component?.destroy()
 				component = null
 				cleanupSelectionContext()
-				editor?.commands.focus()
+				runActiveEditor(editor, (activeEditor) => {
+					activeEditor.commands.focus()
+				})
 			}
 
 			return {
@@ -272,7 +283,9 @@ export function createMentionPanelSuggestion(
 
 					if (isMobile) {
 						// 失焦编辑器以收起键盘
-						props.editor.commands.blur()
+						runActiveEditor(props.editor, (editor) => {
+							editor.commands.blur()
+						})
 					}
 
 					// Create and mount the renderer component

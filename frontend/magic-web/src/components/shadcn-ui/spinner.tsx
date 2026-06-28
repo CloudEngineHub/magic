@@ -12,7 +12,7 @@ function SpinnerComponent({
 		<Loader2Icon
 			role="status"
 			aria-label="Loading"
-			className={cn("size-animate-spin", className)}
+			className={cn("animate-spin", className)}
 			size={size}
 			{...props}
 		/>

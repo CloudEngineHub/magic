@@ -491,11 +491,13 @@ function MobileVoiceEdgeGlow({ active, audioLevel }: MobileVoiceEdgeGlowProps) {
 					isDark ? "blur-[8px] opacity-[0.85]" : "blur-[5px]",
 				)}
 				style={{ willChange: "filter, opacity" }}
+				data-testid="mobile-voice-edge-glow-canvas"
 			/>
 			<canvas
 				ref={coreCanvasRef}
 				className="absolute inset-0 size-full blur-[0.8px]"
 				style={{ willChange: "filter, opacity" }}
+				data-testid="mobile-voice-edge-glow-canvas-2"
 			/>
 		</div>,
 		document.body,

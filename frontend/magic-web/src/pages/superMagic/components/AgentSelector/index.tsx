@@ -214,6 +214,7 @@ function DraggableAllAgent({
 						return
 					onAgentClick(agent)
 				}}
+				data-testid="on-agent-click"
 			>
 				<div className={styles.agentListContent}>
 					<div className={styles.agentListDragHandle}>
@@ -820,12 +821,14 @@ export default function AgentSelector(props: {
 										e.stopPropagation()
 										handleAgentClick(createCustomAgent(t))
 									}}
+									data-testid="handle-agent-click"
 								>
 									<div className={styles.agentListContent}>
 										<div className={styles.addAgentIconContainer}>
 											<img
 												src={AddAgentIcon}
 												className={styles.addAgentIcon}
+												data-testid="agent-selector-image"
 											/>
 										</div>
 										<div className={styles.agentListInfo}>

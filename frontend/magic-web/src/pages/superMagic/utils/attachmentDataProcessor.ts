@@ -9,10 +9,25 @@ import {
 	resolveFileByRelativePath,
 } from "../components/MessageList/components/MessageAttachment/utils"
 import { AttachmentItem } from "../components/TopicFilesButton/hooks"
+import { AttachmentDataProcessorPerf } from "./attachmentDataProcessorPerf"
 
 export interface ProcessedAttachmentData {
 	tree: any[]
 	list: any[]
+}
+
+interface ProcessAttachmentDataOptions {
+	preserveList?: boolean
+}
+
+interface AttachmentProcessIndexes {
+	itemsByFileId: Map<string, AttachmentItem>
+	customEntryConfigByFileId: Map<string, CustomAncestorResult>
+}
+
+type CustomAncestorResult = {
+	display_config: Record<string, unknown>
+	customFolderId: string
 }
 
 export class AttachmentDataProcessor {
@@ -22,28 +37,32 @@ export class AttachmentDataProcessor {
 	 * @param rawData API返回的原始数据
 	 * @returns 处理后的附件数据，如果处理失败则返回原始数据
 	 */
-	static processAttachmentData(rawData: {
-		tree: AttachmentItem[]
-		list: AttachmentItem[]
-	}): ProcessedAttachmentData {
+	static processAttachmentData(
+		rawData: {
+			tree: AttachmentItem[]
+			list: AttachmentItem[]
+		},
+		options: ProcessAttachmentDataOptions = {},
+	): ProcessedAttachmentData {
 		if (!rawData) {
 			return { tree: [], list: [] }
 		}
 
-		const { tree = [] } = rawData
+		const { tree = [], list: rawList = [] } = rawData
+		const perf = AttachmentDataProcessorPerf.create(tree)
 
 		// 从 tree 生成 list（扁平化）
-		const list = this.flattenAttachments(tree)
+		const list = options.preserveList
+			? rawList
+			: perf.measureFlatten(() => this.flattenAttachments(tree))
 
 		try {
-			// 扁平化所有项目以便查找父目录
-			const flatItems = this.flattenAttachments([...tree, ...list])
-
-			// 处理树形结构
-			const processedTree = this.processDisplayConfigForItems(tree, flatItems)
-
-			// 处理扁平列表
-			const processedList = this.processDisplayConfigForItems(list, flatItems)
+			const indexes = perf.measureIndexBuild(list.length, () =>
+				this.buildAttachmentIndexes(list, tree),
+			)
+			const { processedTree, processedList } = perf.measureDisplayConfig(() =>
+				this.processDisplayConfigForTreeAndList(tree, list, indexes, perf),
+			)
 
 			const processedData = {
 				tree: processedTree,
@@ -52,13 +71,16 @@ export class AttachmentDataProcessor {
 
 			// 内部验证处理后的数据
 			if (this.validateProcessedData(processedData)) {
+				perf.finishSuccess(processedList.length)
 				return processedData
 			} else {
 				console.warn("🔶 AttachmentDataProcessor: 处理后的数据验证失败，返回原始数据")
+				perf.finishValidationFailed(list.length)
 				return { tree, list }
 			}
 		} catch (error) {
 			console.error("🔴 AttachmentDataProcessor: 处理数据时发生错误，返回原始数据:", error)
+			perf.finishError(error, list.length)
 			return { tree, list }
 		}
 	}
@@ -69,118 +91,134 @@ export class AttachmentDataProcessor {
 	 * @param allItems 所有项目的扁平列表（用于查找父目录）
 	 * @returns 处理后的项目列表
 	 */
-	private static processDisplayConfigForItems(
-		items: AttachmentItem[],
-		allItems: AttachmentItem[],
-	): AttachmentItem[] {
-		return items.map((item) => {
-			// custom 入口文件：使用祖先文件夹 metadata（与 index.html 类似）
-			const customAncestorResult = this.findCustomAncestorDisplayConfig(item, allItems)
-			if (customAncestorResult) {
-				return {
-					...item,
-					display_config: {
-						...customAncestorResult.display_config,
-						_customFolderId: customAncestorResult.customFolderId,
-					},
-					_originalDisplayConfig: item.display_config,
-				}
-			}
+	private static processDisplayConfigForTreeAndList(
+		tree: AttachmentItem[],
+		list: AttachmentItem[],
+		indexes: AttachmentProcessIndexes,
+		perf?: AttachmentDataProcessorPerf,
+	) {
+		const processedTree = this.processDisplayConfigForItems(
+			tree,
+			indexes,
+			perf,
+			new Map<string, AttachmentItem>(),
+		)
+		const processedList = this.processDisplayConfigForItems(
+			list,
+			indexes,
+			perf,
+			new Map<string, AttachmentItem>(),
+		)
 
-			// index.html 特殊处理逻辑
-			if (this.isIndexHtmlFile(item) && item.parent_id) {
-				const parentDisplayConfig = this.findParentDisplayConfig(item.parent_id, allItems)
-				if (parentDisplayConfig) {
-					console.log(
-						"🎯 数据源头处理：检测到index.html文件，使用父目录display_config:",
-						parentDisplayConfig,
-					)
-					return {
-						...item,
-						display_config: parentDisplayConfig,
-						_originalDisplayConfig: item.display_config, // 保留原始 display_config 以备后用
-					}
-				}
-			}
-
-			// 递归处理子项
-			if (item.children && Array.isArray(item.children)) {
-				const result = {
-					...item,
-					children: this.processDisplayConfigForItems(item.children, allItems),
-				}
-
-				// 如果 item.display_config 的 type 是 slide，按照 slices 排序
-				if (
-					item.display_config?.type === "slide" &&
-					Array.isArray(item.display_config?.slides)
-				) {
-					// slides 中部分是相对路径，部分是名称，统一截取成名称
-					const slidesOrder = (item.display_config.slides as string[]).map((slide) =>
-						slide.split("/").pop(),
-					)
-
-					result.children = result.children.sort((a, b) => {
-						const aName = a.file_name || a.filename || ""
-						const bName = b.file_name || b.filename || ""
-						const aIndex = slidesOrder.indexOf(aName)
-						const bIndex = slidesOrder.indexOf(bName)
-
-						// 如果都在 slides 中，按照 slides 的顺序排序
-						if (aIndex !== -1 && bIndex !== -1) {
-							return aIndex - bIndex
-						}
-						// 如果只有 a 在 slides 中，a 排在前面
-						if (aIndex !== -1) {
-							return -1
-						}
-						// 如果只有 b 在 slides 中，b 排在前面
-						if (bIndex !== -1) {
-							return 1
-						}
-						// 如果都不在 slides 中，保持原顺序
-						return 0
-					})
-				}
-
-				return result
-			}
-
-			return item
-		})
+		return { processedTree, processedList }
 	}
 
-	/**
-	 * 自底向上查找：若当前文件是某 custom 文件夹 index 解析出的入口文件，则返回该文件夹 display_config
-	 */
-	private static findCustomAncestorDisplayConfig(
+	private static processDisplayConfigForItems(
+		items: AttachmentItem[],
+		indexes: AttachmentProcessIndexes,
+		perf?: AttachmentDataProcessorPerf,
+		processedItemByFileId?: Map<string, AttachmentItem>,
+	): AttachmentItem[] {
+		return items.map((item) =>
+			this.processDisplayConfigForItem(item, indexes, perf, processedItemByFileId),
+		)
+	}
+
+	private static processDisplayConfigForItem(
 		item: AttachmentItem,
-		allItems: AttachmentItem[],
-	): { display_config: Record<string, unknown>; customFolderId: string } | null {
-		if (!item.file_id || item.is_directory) return null
-
-		let parentId: string | number | null | undefined = item.parent_id
-		while (parentId !== undefined && parentId !== null) {
-			const ancestor = allItems.find((x) => String(x.file_id) === String(parentId))
-			if (!ancestor) break
-
-			const meta = ancestor.display_config as Record<string, unknown> | undefined
-			const indexPath = getCustomIndexPath(meta)
-			if (ancestor.is_directory && meta?.type === "custom" && indexPath) {
-				const resolved = resolveFileByRelativePath(
-					ancestor.children as unknown[] | undefined,
-					indexPath,
-				) as { file_id?: string } | null
-				if (resolved?.file_id && resolved.file_id === item.file_id) {
-					return {
-						display_config: meta as Record<string, unknown>,
-						customFolderId: String(ancestor.file_id),
-					}
-				}
-			}
-			parentId = ancestor.parent_id
+		indexes: AttachmentProcessIndexes,
+		perf?: AttachmentDataProcessorPerf,
+		processedItemByFileId?: Map<string, AttachmentItem>,
+	): AttachmentItem {
+		const fileId = this.getFileIdKey(item)
+		if (fileId) {
+			const cached = processedItemByFileId?.get(fileId)
+			if (cached) return cached
 		}
-		return null
+
+		let result: AttachmentItem = item
+		const customAncestorResult = fileId
+			? indexes.customEntryConfigByFileId.get(fileId)
+			: undefined
+		if (customAncestorResult) {
+			result = {
+				...item,
+				display_config: {
+					...customAncestorResult.display_config,
+					_customFolderId: customAncestorResult.customFolderId,
+				},
+				_originalDisplayConfig: item.display_config,
+			}
+			if (fileId) processedItemByFileId?.set(fileId, result)
+			return result
+		}
+
+		// Special handling for index.html.
+		if (this.isIndexHtmlFile(item) && item.parent_id) {
+			const parentDisplayConfig = this.findParentDisplayConfig(item.parent_id, indexes, perf)
+			if (parentDisplayConfig) {
+				result = {
+					...item,
+					display_config: parentDisplayConfig,
+					_originalDisplayConfig: item.display_config, // Keep original display_config for later use.
+				}
+				if (fileId) processedItemByFileId?.set(fileId, result)
+				return result
+			}
+		}
+
+		// Process children recursively.
+		if (item.children && Array.isArray(item.children)) {
+			result = {
+				...item,
+				children: this.processDisplayConfigForItems(
+					item.children,
+					indexes,
+					perf,
+					processedItemByFileId,
+				),
+			}
+
+			// Sort slide items by slices when display_config.type is slide.
+			if (
+				item.display_config?.type === "slide" &&
+				Array.isArray(item.display_config?.slides)
+			) {
+				// Slides may be paths or names; normalize them to names.
+				const slidesOrder = new Map(
+					(item.display_config.slides as string[]).map((slide, index) => [
+						slide.split("/").pop(),
+						index,
+					]),
+				)
+
+				const sortedChildren = result.children?.sort((a, b) => {
+					const aName = a.file_name || a.filename || ""
+					const bName = b.file_name || b.filename || ""
+					const aIndex = slidesOrder.get(aName) ?? -1
+					const bIndex = slidesOrder.get(bName) ?? -1
+
+					// If both are in slides, keep slide order.
+					if (aIndex !== -1 && bIndex !== -1) {
+						return aIndex - bIndex
+					}
+					// If only a is in slides, put a first.
+					if (aIndex !== -1) {
+						return -1
+					}
+					// If only b is in slides, put b first.
+					if (bIndex !== -1) {
+						return 1
+					}
+					// If neither is in slides, keep the original order.
+					return 0
+				})
+				result = { ...result, children: sortedChildren }
+			}
+		}
+
+		if (fileId) processedItemByFileId?.set(fileId, result)
+		return result
 	}
 
 	/**
@@ -199,9 +237,76 @@ export class AttachmentDataProcessor {
 	 * @param allItems 所有项目列表
 	 * @returns 父目录的 display_config
 	 */
-	private static findParentDisplayConfig(parentId: string | number, allItems: any[]): any {
-		const parent = allItems.find((item) => item.file_id === String(parentId))
+	private static findParentDisplayConfig(
+		parentId: string | number,
+		indexes: AttachmentProcessIndexes,
+		perf?: AttachmentDataProcessorPerf,
+	): any {
+		const parent = this.findItemByFileId(parentId, indexes, perf)
 		return parent?.display_config
+	}
+
+	private static buildAttachmentIndexes(
+		items: AttachmentItem[],
+		tree: AttachmentItem[],
+	): AttachmentProcessIndexes {
+		const itemsByFileId = new Map<string, AttachmentItem>()
+		const customEntryConfigByFileId = new Map<string, CustomAncestorResult>()
+
+		items.forEach((item) => {
+			if (item.file_id !== undefined && item.file_id !== null) {
+				itemsByFileId.set(String(item.file_id), item)
+			}
+		})
+
+		const stack = [...tree].reverse()
+		while (stack.length > 0) {
+			const item = stack.pop()
+			if (!item) continue
+
+			const fileId = this.getFileIdKey(item)
+			if (fileId && !itemsByFileId.has(fileId)) {
+				itemsByFileId.set(fileId, item)
+			}
+
+			const meta = item.display_config as Record<string, unknown> | undefined
+			const indexPath = getCustomIndexPath(meta)
+			if (item.is_directory && meta?.type === "custom" && indexPath) {
+				const resolved = resolveFileByRelativePath(
+					item.children as unknown[] | undefined,
+					indexPath,
+				) as { file_id?: string } | null
+				if (resolved?.file_id && item.file_id !== undefined && item.file_id !== null) {
+					customEntryConfigByFileId.set(String(resolved.file_id), {
+						display_config: meta,
+						customFolderId: String(item.file_id),
+					})
+				}
+			}
+
+			if (item.children?.length) {
+				for (let index = item.children.length - 1; index >= 0; index -= 1) {
+					stack.push(item.children[index])
+				}
+			}
+		}
+
+		return { itemsByFileId, customEntryConfigByFileId }
+	}
+
+	private static getFileIdKey(item: AttachmentItem): string | undefined {
+		if (item.file_id === undefined || item.file_id === null) return undefined
+		return String(item.file_id)
+	}
+
+	private static findItemByFileId(
+		fileId: string | number,
+		indexes: AttachmentProcessIndexes,
+		perf?: AttachmentDataProcessorPerf,
+	): AttachmentItem | undefined {
+		return perf
+			? perf.measureMapLookup(() => indexes.itemsByFileId.get(String(fileId)))
+			: indexes.itemsByFileId.get(String(fileId))
 	}
 
 	/**

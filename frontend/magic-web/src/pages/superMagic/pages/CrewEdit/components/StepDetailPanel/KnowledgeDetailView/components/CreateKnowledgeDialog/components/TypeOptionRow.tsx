@@ -24,6 +24,7 @@ export function TypeOptionRow(props: TypeOptionRowProps) {
 				disabled && "cursor-not-allowed opacity-50",
 			)}
 			onClick={() => !disabled && onSelect()}
+			data-testid="on-select"
 		>
 			<div className="flex flex-1 items-center gap-1.5">
 				<Icon className={cn("h-4 w-4", disabled && "opacity-50")} />

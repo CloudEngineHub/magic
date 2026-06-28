@@ -518,7 +518,7 @@ function ModeToggle({
 				className="relative w-fit min-w-0"
 				data-testid="super-message-editor-mode-toggle-root"
 			>
-				<div className="w-fit min-w-0 rounded-md" onClick={() => setOpen(true)}>
+				<div className="w-fit min-w-0 rounded-md" onClick={() => setOpen(true)} data-testid="set-open">
 					{currentModeItem}
 				</div>
 				<MagicPopup

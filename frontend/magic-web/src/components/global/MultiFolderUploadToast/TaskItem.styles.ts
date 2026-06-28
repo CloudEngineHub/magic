@@ -23,6 +23,7 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 		align-items: center;
 		gap: 10px;
 		flex: 1;
+		min-width: 0;
 	`,
 
 	// 文件夹图标容器 - 32x32
@@ -44,6 +45,7 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 		justify-content: center;
 		gap: 2px;
 		flex: 1;
+		min-width: 0;
 	`,
 
 	// 任务名称 - 14px，PingFang SC，400，黑色
@@ -68,6 +70,8 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 		display: flex;
 		align-items: center;
 		gap: 20px;
+		min-width: 0;
+		max-width: 100%;
 	`,
 
 	// 进度文本
@@ -79,11 +83,22 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 		flex-shrink: 0;
 	`,
 
+	currentDirectoryText: css`
+		min-width: 0;
+		max-width: 220px;
+		flex-shrink: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	`,
+
 	// 上传目标链接容器 - 灰色背景，圆角4px，内边距2px 4px
 	uploadTarget: css`
 		display: flex;
 		align-items: center;
 		gap: 2px;
+		min-width: 0;
+		flex-shrink: 1;
 		padding: 2px 4px;
 		background: ${token.magicColorUsages.fill[0]};
 		border-radius: 4px;
@@ -102,6 +117,7 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 		font-weight: 400;
 		line-height: 1.33;
 		color: ${token.magicColorUsages.text[2]};
+		min-width: 0;
 		max-width: 250px;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -124,6 +140,7 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 		justify-content: flex-end;
 		align-items: center;
 		gap: 20px;
+		flex-shrink: 0;
 	`,
 
 	// 进度百分比文本

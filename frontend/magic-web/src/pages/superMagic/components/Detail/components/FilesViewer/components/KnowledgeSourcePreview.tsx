@@ -81,6 +81,7 @@ function SourceHeader({
 					type="button"
 					className="shrink-0 rounded-md px-2 py-1 text-xs text-primary hover:bg-primary/10"
 					onClick={() => openSourceUrl(url)}
+					data-testid="open-source-url"
 				>
 					{t("knowledgeBase.openInNewWindow", "新窗口打开")}
 				</button>
@@ -280,6 +281,7 @@ function UnsupportedPreview({ safeUrl, reason }: { safeUrl?: string | null; reas
 					type="button"
 					className="rounded-md px-3 py-1.5 text-sm text-primary hover:bg-primary/10"
 					onClick={() => openSourceUrl(safeUrl)}
+					data-testid="open-source-url-2"
 				>
 					{t("knowledgeBase.openInNewWindow", "新窗口打开")}
 				</button>
@@ -314,6 +316,7 @@ function KnowledgeSourcePreview({ source, knowledgeBaseName, title }: KnowledgeS
 					src={safePreviewUrl}
 					title={title}
 					referrerPolicy="no-referrer"
+					data-testid="knowledge-source-preview-iframe"
 				/>
 			)
 		}
@@ -330,6 +333,7 @@ function KnowledgeSourcePreview({ source, knowledgeBaseName, title }: KnowledgeS
 						alt={source.fileName}
 						draggable={false}
 						className="h-full w-full object-contain"
+						data-testid="knowledge-source-preview-image"
 					/>
 				</MagicImagePreview>
 			)

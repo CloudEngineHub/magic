@@ -49,6 +49,7 @@ export interface FileData {
 	cancel?: () => void
 	parentId?: string // 记录文件的父目录ID
 	defaultRelativePath?: string // 默认相对路径（当 parentId 为空时使用）
+	isHidden?: boolean
 }
 
 /**
@@ -158,6 +159,8 @@ export interface MessageEditorProps {
 	isEditingQueueItem?: boolean
 	/** Create topic callback */
 	onCreateTopic?: () => void
+	/** Ensure a project exists before uploads that require project context */
+	onEnsureProject?: () => Promise<ProjectListItem | null>
 	/** Show loading */
 	showLoading?: boolean
 	editorModeSwitch?: ({ disabled }: { disabled: boolean }) => React.ReactNode

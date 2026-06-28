@@ -7,6 +7,7 @@ import { PORTAL_IDS } from "@/constants/portal"
 import TopicExampleCards from "../components/MessageList/components/MessageListFallback/TopicExampleCards"
 import { TopicMode } from "../pages/Workspace/TopicMode"
 import type { MessageEditorRef } from "../components/MessageEditor/MessageEditor"
+import { runActiveEditor } from "../components/MessageEditor/utils/editorLifecycle"
 
 interface UseTopicExamplesPortalParams {
 	topicMode: TopicMode
@@ -23,14 +24,15 @@ function createDefaultSetExampleContentHandler(
 	editorRef: RefObject<MessageEditorRef | null>,
 ): (content: string | object) => void {
 	return (content: string | object) => {
-		const editor = editorRef.current?.editor
-		if (!editor) return
-
-		editor.commands.setContent(content, { emitUpdate: true })
+		runActiveEditor(editorRef.current?.editor, (editor) => {
+			editor.commands.setContent(content, { emitUpdate: true })
+		})
 		setTimeout(() => {
-			if (!editor.commands.focusFirstSuperPlaceholder()) {
-				editor.commands.focus()
-			}
+			runActiveEditor(editorRef.current?.editor, (editor) => {
+				if (!editor.commands.focusFirstSuperPlaceholder()) {
+					editor.commands.focus()
+				}
+			})
 		}, 100)
 	}
 }

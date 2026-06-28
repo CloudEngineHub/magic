@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useRef } from "react"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { flattenAttachmentsList } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
@@ -58,7 +57,7 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
 	 * 触发文件列表更新
 	 */
 	const updateAttachments = useCallback(() => {
-		pubsub.publish(PubSubEvents.Update_Attachments)
+        // Remove the full-refresh event.
 	}, [])
 
 	return {

@@ -176,6 +176,7 @@ function AtItem({
 				<div
 					className="flex shrink-0 cursor-pointer items-center justify-center"
 					onClick={handleRemove}
+					data-testid="handle-remove"
 				>
 					<TSIcon type="ts-close-line" size={iconSize.toString()} />
 				</div>
@@ -195,6 +196,7 @@ function AtItem({
 							height: iconSize,
 							borderRadius: iconRadius,
 						}}
+						data-testid="at-item-image"
 					/>
 				) : (
 					<PlugIcon size={iconSize} />
@@ -210,6 +212,7 @@ function AtItem({
 							height: iconSize,
 							borderRadius: iconRadius,
 						}}
+						data-testid="at-item-image-2"
 					/>
 				) : (
 					<BotIcon size={iconSize} />
@@ -225,6 +228,7 @@ function AtItem({
 							height: iconSize,
 							borderRadius: iconRadius,
 						}}
+						data-testid="at-item-image-3"
 					/>
 				) : (
 					<SkillIcon size={iconSize} />
@@ -302,6 +306,7 @@ function AtItem({
 							height: iconSize,
 							borderRadius: iconRadius,
 						}}
+						data-testid="at-item-image-4"
 					/>
 				) : (
 					<ToolIcon size={iconSize} />
@@ -365,6 +370,7 @@ function AtItem({
 						src={FoldIcon}
 						alt="file-folder"
 						style={{ width: iconSize, height: iconSize }}
+						data-testid="at-item-image-5"
 					/>
 				)
 			case MentionItemType.CLOUD_FILE:
@@ -400,6 +406,7 @@ function AtItem({
 			onMouseLeave={() => setIsHovered(false)}
 			onClick={() => handleClick?.(data)}
 			data-mention-item={flag}
+			data-testid="set-is-hovered"
 		>
 			{/* Progress bar background */}
 			{hasProgress && (
@@ -443,6 +450,7 @@ function AtItem({
 					<div
 						className="flex shrink-0 cursor-pointer items-center justify-center"
 						onClick={handleRemove}
+						data-testid="handle-remove-2"
 					>
 						<TSIcon type="ts-close-line" size="16" onClick={handleRemove} />
 					</div>

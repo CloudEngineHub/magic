@@ -273,6 +273,7 @@ function MarkerTooltip(props: PropsWithChildren<MarkerTooltipProps>) {
 			onMouseLeave={handleMouseLeave}
 			onClick={handleClick}
 			onClickCapture={handleClickCapture}
+			data-testid="handle-mouse-enter"
 		>
 			{children}
 		</div>

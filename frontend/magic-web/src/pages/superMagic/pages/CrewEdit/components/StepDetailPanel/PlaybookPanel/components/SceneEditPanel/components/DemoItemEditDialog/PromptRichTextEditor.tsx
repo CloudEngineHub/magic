@@ -15,6 +15,7 @@ import {
 	serializePromptRichTextLocaleValue,
 } from "@/pages/superMagic/components/MainInputContainer/panels/promptRichText"
 import { PromptPresetValueExtension } from "./PromptPresetValueExtension"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 const PRESET_TOKEN_CLASS_NAME =
 	"inline-flex h-5 items-center gap-1 rounded-md border border-foreground-indigo bg-background px-2 align-baseline text-xs font-medium text-foreground-indigo"
@@ -160,8 +161,15 @@ export const PromptRichTextEditor = forwardRef<
 
 	useEffect(() => {
 		if (!editor) return
-		if (serializePromptRichTextLocaleValue(editor.getJSON()) === normalizedValue) return
-		editor.commands.setContent(parsePromptRichText(value) as JSONContent, false)
+		const currentValue = runActiveEditor(
+			editor,
+			(activeEditor) => serializePromptRichTextLocaleValue(activeEditor.getJSON()),
+			undefined,
+		)
+		if (currentValue === normalizedValue) return
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.setContent(parsePromptRichText(value) as JSONContent, false)
+		})
 		setIsEmpty(isPromptRichTextEmpty(value))
 	}, [editor, normalizedValue, value])
 
@@ -169,11 +177,14 @@ export const PromptRichTextEditor = forwardRef<
 		ref,
 		() => ({
 			focus: () => {
-				editor?.commands.focus("end")
+				runActiveEditor(editor, (activeEditor) => {
+					activeEditor.commands.focus("end")
+				})
 			},
 			insertPresetValue: () => {
-				if (!editor) return
-				editor.chain().focus().insertPromptPresetValue().run()
+				runActiveEditor(editor, (activeEditor) => {
+					activeEditor.chain().focus().insertPromptPresetValue().run()
+				})
 			},
 		}),
 		[editor],
@@ -194,7 +205,12 @@ export const PromptRichTextEditor = forwardRef<
 					PROMPT_EDITOR_SEPARATOR_CLASS_NAME,
 					className,
 				)}
-				onClick={() => editor?.commands.focus("end")}
+				onClick={() => {
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.commands.focus("end")
+					})
+				}}
+				data-testid="run-active-editor"
 			>
 				<EditorContent editor={editor} data-testid={testId} />
 			</div>

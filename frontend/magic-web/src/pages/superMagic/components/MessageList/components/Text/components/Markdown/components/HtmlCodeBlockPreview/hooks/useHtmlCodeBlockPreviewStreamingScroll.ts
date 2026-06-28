@@ -20,9 +20,7 @@ export function useHtmlCodeBlockPreviewStreamingScroll(
 ) {
 	const { isStreaming, hasCompletedFence, codeContent, streamingScrollStateRef } = options
 	const scrollAreaElementRef = useRef<HTMLDivElement | null>(null)
-	const isProgrammaticScrollRef = useRef(false)
-	const lastProgrammaticScrollTopRef = useRef<number | null>(null)
-	const animationFrameRef = useRef<number | null>(null)
+	const followUpScrollRafRef = useRef<number | null>(null)
 
 	const setScrollAreaElement = useCallback((scrollAreaElement: HTMLDivElement | null) => {
 		scrollAreaElementRef.current = scrollAreaElement
@@ -37,18 +35,8 @@ export function useHtmlCodeBlockPreviewStreamingScroll(
 		if (!viewportElement) return
 
 		function markUserInteracted() {
-			const distanceToBottom =
-				viewportElement.scrollHeight -
-				viewportElement.scrollTop -
-				viewportElement.clientHeight
-
-			if (
-				isProgrammaticScrollRef.current &&
-				viewportElement.scrollTop === lastProgrammaticScrollTopRef.current
-			) {
-				// 忽略我们自己触发的滚动，避免把“自动贴底”误判成用户手动操作。
-				return
-			}
+			const el = viewportElement as HTMLElement
+			const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
 
 			streamingScrollStateRef.current.hasUserInteracted =
 				distanceToBottom > HTML_CODE_BLOCK_PREVIEW_STREAMING_SCROLL_BOTTOM_THRESHOLD
@@ -67,30 +55,14 @@ export function useHtmlCodeBlockPreviewStreamingScroll(
 		}
 	}, [streamingScrollStateRef, isStreaming, hasCompletedFence, codeContent])
 
-	const scheduleScrollToBottom = useCallback((viewportElement: HTMLElement) => {
-		const targetScrollTop = viewportElement.scrollHeight
-		// 标记本次滚动为程序触发，供 scroll 监听器过滤。
-		isProgrammaticScrollRef.current = true
-		lastProgrammaticScrollTopRef.current = targetScrollTop
-		viewportElement.scrollTop = targetScrollTop
-
-		if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current)
-
-		animationFrameRef.current = window.requestAnimationFrame(() => {
-			// 下一帧后认为这次程序滚动已经结束，恢复正常用户交互检测。
-			isProgrammaticScrollRef.current = false
-		})
-	}, [])
-
 	useLayoutEffect(() => {
 		if (!isStreaming || hasCompletedFence) {
 			// 一旦流式结束，就重置交互状态，避免影响下一次新的流式内容。
 			streamingScrollStateRef.current.hasUserInteracted = false
-			lastProgrammaticScrollTopRef.current = null
 
-			if (animationFrameRef.current) {
-				window.cancelAnimationFrame(animationFrameRef.current)
-				animationFrameRef.current = null
+			if (followUpScrollRafRef.current) {
+				window.cancelAnimationFrame(followUpScrollRafRef.current)
+				followUpScrollRafRef.current = null
 			}
 
 			return
@@ -103,20 +75,27 @@ export function useHtmlCodeBlockPreviewStreamingScroll(
 		// 用户已经主动滚离底部时，不再强制把视图拉回去。
 		if (!viewportElement || streamingScrollStateRef.current.hasUserInteracted) return
 
-		scheduleScrollToBottom(viewportElement)
-	}, [
-		codeContent,
-		hasCompletedFence,
-		isStreaming,
-		scheduleScrollToBottom,
-		streamingScrollStateRef,
-	])
+		viewportElement.scrollTop = viewportElement.scrollHeight
 
-	useLayoutEffect(() => {
+		// XMarkdown 解析/分块可能在同一次 commit 的下一帧才撑高 scrollHeight，补一次贴底。
+		if (followUpScrollRafRef.current) window.cancelAnimationFrame(followUpScrollRafRef.current)
+		followUpScrollRafRef.current = window.requestAnimationFrame(() => {
+			if (streamingScrollStateRef.current.hasUserInteracted) return
+			viewportElement.scrollTop = viewportElement.scrollHeight
+			followUpScrollRafRef.current = window.requestAnimationFrame(() => {
+				followUpScrollRafRef.current = null
+				if (streamingScrollStateRef.current.hasUserInteracted) return
+				viewportElement.scrollTop = viewportElement.scrollHeight
+			})
+		})
+
 		return () => {
-			if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current)
+			if (followUpScrollRafRef.current) {
+				window.cancelAnimationFrame(followUpScrollRafRef.current)
+				followUpScrollRafRef.current = null
+			}
 		}
-	}, [])
+	}, [codeContent, hasCompletedFence, isStreaming, streamingScrollStateRef])
 
 	return {
 		setScrollAreaElement,

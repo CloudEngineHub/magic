@@ -81,6 +81,7 @@ function ActionButton(props: ActionsPopup.ActionButtonProps) {
 			onClick={handleClick}
 			disabled={disabled}
 			type="button"
+			data-testid="handle-click"
 		>
 			<span className={textClassName}>{label}</span>
 		</button>

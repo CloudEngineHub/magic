@@ -14,6 +14,7 @@ export function HtmlCodeBlockPreviewHtmlIcon(props: HtmlCodeBlockPreviewHtmlIcon
 			xmlns="http://www.w3.org/2000/svg"
 			aria-hidden="true"
 			className="size-4"
+			data-testid="html-code-block-preview-html-icon-svg"
 		>
 			<g clipPath={`url(#${htmlIconId}-clip-root)`}>
 				<path d="M0 0H16V16H0V0Z" fill="#4B62FC" />

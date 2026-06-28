@@ -798,6 +798,13 @@ export class DesignRemoteListener {
 				this.debounceTimer = null
 				return
 			}
+			if (this.options.getIsViewingHistory()) {
+				if (!this.options.isShareRoute) {
+					void this.options.fetchAndSetVersions().catch(() => undefined)
+				}
+				this.debounceTimer = null
+				return
+			}
 			if (this.deferRemoteRefreshDuringSave(pendingFileUpdatedAtMs, pendingFileVersion)) {
 				this.debounceTimer = null
 				return

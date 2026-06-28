@@ -198,7 +198,8 @@
 			"status": "查询 MCP 插件 状态",
 			"title": "MCP 插件",
 			"tool": "载入工具",
-			"url": "修改 MCP 插件 信息"
+			"url": "修改 MCP 插件 信息",
+			"manageAuth": "管理权限"
 		}
 	}
 }

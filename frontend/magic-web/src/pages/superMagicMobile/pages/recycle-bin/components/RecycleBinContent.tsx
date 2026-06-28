@@ -51,9 +51,7 @@ type ActionTarget = ItemTarget | SelectionTarget
 
 type RestoreTarget = ActionTarget
 
-type SelectPathTarget =
-	| { type: "topic"; target: RestoreTarget }
-	| { type: "file"; target: RestoreTarget }
+type SelectPathTarget = { type: "topic"; target: RestoreTarget }
 
 interface SelectPathSubmitPayload {
 	targetProjectId: string
@@ -286,7 +284,10 @@ function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): Recycle
 	const deletedBy =
 		item.deleted_by_user?.nickname ?? item.deleted_by_name ?? item.deleted_by ?? ""
 	const deletedByUser = item.deleted_by_user
-		? { nickname: item.deleted_by_user.nickname, avatar: item.deleted_by_user.avatar }
+		? {
+				nickname: item.deleted_by_user.nickname,
+				avatar: item.deleted_by_user.avatar || item.deleted_by_user.avatar_url || "",
+			}
 		: undefined
 	return {
 		id: item.id,
@@ -357,7 +358,7 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 			keyword: trimmedSearchValue || undefined,
 			order: "desc" as const,
 			page: 1,
-			page_size: 100,
+			page_size: 20,
 		}),
 		[activeTab, trimmedSearchValue],
 	)
@@ -591,10 +592,6 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 			magicToast.error(t("recycleBin.restoreCheck.mixedTypes"))
 			return
 		}
-		if (resourceType === RESOURCE_TYPE.FILE) {
-			magicToast.info(t("mobile.recycleBin.restoreFileTip"))
-			return
-		}
 		try {
 			const check = await RecycleBinApi.checkRecycleBinParent({
 				resource_ids: selectedItems.map((i) => i.resourceId),
@@ -701,13 +698,6 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 					setSelectPathModalOpen(true)
 					return
 				}
-				if (resourceType === RESOURCE_TYPE.FILE) {
-					setSelectPathTarget({ type: "file", target: moveTarget })
-					setSelectPathWorkspaceId("")
-					setSelectPathProjectId("")
-					setSelectPathModalOpen(true)
-					return
-				}
 				return
 			}
 			if (noNeedMoveResourceIds.length === 0) return
@@ -745,10 +735,6 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 			const selectedItems = items.filter((item) => item.id === itemId)
 			if (selectedItems.length === 0) return
 			const item = selectedItems[0]
-			if (item.resourceType === RESOURCE_TYPE.FILE) {
-				magicToast.info(t("mobile.recycleBin.restoreFileTip"))
-				return
-			}
 			try {
 				const check = await RecycleBinApi.checkRecycleBinParent({
 					resource_ids: [item.resourceId],
@@ -830,13 +816,6 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 					}
 					if (item.resourceType === RESOURCE_TYPE.TOPIC) {
 						setSelectPathTarget({ type: "topic", target: restoreTarget })
-						setSelectPathWorkspaceId("")
-						setSelectPathProjectId("")
-						setSelectPathModalOpen(true)
-						return
-					}
-					if (item.resourceType === RESOURCE_TYPE.FILE) {
-						setSelectPathTarget({ type: "file", target: restoreTarget })
 						setSelectPathWorkspaceId("")
 						setSelectPathProjectId("")
 						setSelectPathModalOpen(true)
@@ -1076,6 +1055,7 @@ function RecycleBinContent(props: RecycleBinContentProps) {
 						alt=""
 						aria-hidden
 						src={emptyStateIcon}
+						data-testid="recycle-bin-content-image"
 					/>
 					<div className="flex w-full flex-col items-center gap-2">
 						<div className="text-lg font-medium leading-7 text-foreground">

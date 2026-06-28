@@ -63,6 +63,7 @@ function AICardDetail({
 						type="button"
 						onClick={onBack}
 						className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						data-testid="on-back"
 					>
 						<svg
 							width="16"
@@ -107,6 +108,7 @@ function AICardDetail({
 								disabled={!canGoToPreviousVersion}
 								onClick={onOpenPreviousVersion}
 								className={versionButtonClassName}
+								data-testid="on-open-previous-version"
 							>
 								<ChevronLeft size={16} aria-hidden="true" />
 							</button>
@@ -117,6 +119,7 @@ function AICardDetail({
 								disabled={!canGoToNextVersion}
 								onClick={onOpenNextVersion}
 								className={versionButtonClassName}
+								data-testid="on-open-next-version"
 							>
 								<ChevronRight size={16} aria-hidden="true" />
 							</button>

@@ -103,6 +103,7 @@ export default observer(function ModelSelector({
 							: t("detail.selfMedia.initPanel.modelSelector.switchModel", "切换模型")
 					}
 					disabled={disabled}
+					data-testid="model-selector-switch-model-button"
 				>
 					{label && <span className="shrink-0 text-muted-foreground/70">{label}</span>}
 					{selected?.model_icon && (
@@ -113,6 +114,7 @@ export default observer(function ModelSelector({
 								mode === "icon" ? "h-4 w-4" : "h-3.5 w-3.5",
 								"shrink-0 rounded-md shadow-sm",
 							)}
+							data-testid="model-selector-image"
 						/>
 					)}
 					{mode === "full" && (
@@ -164,6 +166,7 @@ export default observer(function ModelSelector({
 								src={m.model_icon}
 								alt=""
 								className="h-4 w-4 shrink-0 rounded-md shadow-sm"
+								data-testid="model-selector-image-2"
 							/>
 						)}
 						<span className="truncate">{m.model_name}</span>

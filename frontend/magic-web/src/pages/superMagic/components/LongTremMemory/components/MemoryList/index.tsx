@@ -64,7 +64,7 @@ export default function MemoryList({
 			{isMobile && (
 				<div className={styles.header}>
 					<div className={styles.title}>{t("longMemory")}</div>
-					<div className={styles.close} onClick={onClose}>
+					<div className={styles.close} onClick={onClose} data-testid="on-close">
 						<IconX size={24} />
 					</div>
 				</div>
@@ -90,6 +90,7 @@ export default function MemoryList({
 								<div
 									className={styles.handlerButton}
 									onClick={() => setPage(LongTremMemoryPage.Suggestion)}
+									data-testid="set-page"
 								>
 									{t("memorySuggestionCount", { count: pendingMemoryLength })}
 									<IconChevronRight size={16} />
@@ -110,6 +111,7 @@ export default function MemoryList({
 						<div
 							className={styles.addMemory}
 							onClick={() => setPage(LongTremMemoryPage.CreateOrEdit)}
+							data-testid="set-page-2"
 						>
 							<IconPlus size={20} />
 							<div>{t("addMemory")}</div>

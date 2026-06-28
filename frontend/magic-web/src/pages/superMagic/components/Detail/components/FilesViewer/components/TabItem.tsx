@@ -4,6 +4,7 @@ import { IconX, IconLock } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import MagicIcon from "@/components/base/MagicIcon"
+import { MagicLoadingIcon } from "@/components/base/MagicLoadingIcon"
 import { isMagicProjectConfigFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { calculateCalvedRelativePath } from "../utils/tabUtils"
 import type { FileItem, TabItem as TabItemType } from "../types"
@@ -84,6 +85,7 @@ const TabItem = memo<TabItemProps>(
 			tab?.fileData as { display_config?: Record<string, unknown> } | undefined
 		)?.display_config
 		const isDeleted = tab.isDeleted
+		const isLoading = tab.isLoading
 
 		// 当右键菜单显示且是当前 tab 时，隐藏 Tooltip
 		const tooltipOpen = useMemo(() => {
@@ -214,6 +216,7 @@ const TabItem = memo<TabItemProps>(
 					onDragEnd={!isPlayback ? handleDragEnd : undefined}
 					onDragOver={handleDragOver}
 					onDrop={handleDrop}
+					data-testid="handle-click"
 				>
 					<FileTabMagicIcon
 						tab={tab}
@@ -226,10 +229,12 @@ const TabItem = memo<TabItemProps>(
 						className={cn(
 							"max-w-[160px] truncate font-sans text-xs font-normal leading-4 text-foreground",
 							isDeleted && "text-destructive line-through",
+							isLoading && "text-muted-foreground",
 						)}
 					>
 						{getDisplayFileName(tab)}
 					</span>
+					{isLoading && <MagicLoadingIcon size={12} />}
 					<span
 						className={cn(
 							"max-w-[140px] truncate font-sans text-xs font-light leading-4 text-muted-foreground",
@@ -250,6 +255,7 @@ const TabItem = memo<TabItemProps>(
 							isActive && "text-foreground/80",
 						)}
 						onClick={handleClose}
+						data-testid="handle-close"
 					>
 						<IconX size={12} />
 					</div>

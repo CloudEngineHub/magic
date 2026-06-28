@@ -404,7 +404,7 @@ export default function CanvasDesignHeader(props: CanvasDesignHeaderProps) {
 				<div className={styles.left}>
 					{!isMobile && (
 						<>
-							<img className={styles.canvasIcon} src={canvasIcon} alt="canvas icon" />
+							<img className={styles.canvasIcon} src={canvasIcon} alt="canvas icon"  data-testid="canvas-design-header-image"/>
 							<DesignNameEditor
 								name={displayName}
 								onNameChange={handleNameChange}

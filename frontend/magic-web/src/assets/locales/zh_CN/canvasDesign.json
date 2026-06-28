@@ -135,6 +135,7 @@
 		"defaultName": "分组"
 	},
 	"image": {
+		"batchUploadFailed": "有 {{failed}}/{{total}} 个文件上传失败",
 		"defaultName": "图片生成器",
 		"empty": "请发送生成图像的指令",
 		"errorPrefix": "图像生成失败, ",

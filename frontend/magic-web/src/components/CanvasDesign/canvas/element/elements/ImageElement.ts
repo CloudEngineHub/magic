@@ -778,6 +778,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		this.applyResourceToView(resource)
+		this.imageLoadFailureReason = null
+		this.isErrorState = false
 		this.lastAppliedLoadFailureSignature = null
 		this.syncMountedImageContentNodeWithLoadedResource()
 

@@ -192,6 +192,7 @@ export default function ProjectItemMobile({
 				onTouchMove={touchHandlers.onTouchMove}
 				onTouchEnd={touchHandlers.onTouchEnd}
 				onClick={handleOpenProject}
+				data-testid="on-touch-start"
 			>
 				{/* 文件夹图标容器 */}
 				<div className="flex size-8 shrink-0 items-center justify-center">

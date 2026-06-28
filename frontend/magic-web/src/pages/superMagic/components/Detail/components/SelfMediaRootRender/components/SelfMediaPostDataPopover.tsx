@@ -230,10 +230,10 @@ function SelfMediaPostDataPopover({
 								className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
 								data-testid={`self-media-home-post-auto-sync-enabled-${postId}`}
 							>
-								<option value="1">
+								<option value="1" data-testid="self-media-post-data-popover-option">
 									{t("detail.selfMedia.home.autoSyncEnabled")}
 								</option>
-								<option value="0">
+								<option value="0" data-testid="self-media-post-data-popover-option-2">
 									{t("detail.selfMedia.home.autoSyncDisabled")}
 								</option>
 							</select>
@@ -248,13 +248,13 @@ function SelfMediaPostDataPopover({
 								className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
 								data-testid={`self-media-home-post-auto-sync-frequency-${postId}`}
 							>
-								<option value={ScheduledTask.ScheduleType.Daily}>
+								<option value={ScheduledTask.ScheduleType.Daily} data-testid="self-media-post-data-popover-option-3">
 									{t("detail.selfMedia.home.autoSyncDaily")}
 								</option>
-								<option value={ScheduledTask.ScheduleType.Weekly}>
+								<option value={ScheduledTask.ScheduleType.Weekly} data-testid="self-media-post-data-popover-option-4">
 									{t("detail.selfMedia.home.autoSyncWeekly")}
 								</option>
-								<option value={ScheduledTask.ScheduleType.Monthly}>
+								<option value={ScheduledTask.ScheduleType.Monthly} data-testid="self-media-post-data-popover-option-5">
 									{t("detail.selfMedia.home.autoSyncMonthly")}
 								</option>
 							</select>

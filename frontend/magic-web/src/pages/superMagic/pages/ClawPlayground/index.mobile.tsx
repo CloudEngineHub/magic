@@ -59,7 +59,6 @@ import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import {
 	CLAW_MOBILE_BACK_TO_LATEST_BUTTON_CLASS,
 	CLAW_MOBILE_MESSAGE_LIST_RESERVE_PX,
-	CLAW_MOBILE_VIEWPORT_MIN_HEIGHT_CLASS,
 } from "./claw-playground-layout"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
@@ -732,7 +731,7 @@ function ClawPlaygroundMobile() {
 	if (store.loading) {
 		return (
 			<div
-				className={`flex h-full w-full items-center justify-center ${CLAW_MOBILE_VIEWPORT_MIN_HEIGHT_CLASS}`}
+				className="flex h-full w-full items-center justify-center"
 				data-testid="claw-playground-loading"
 			>
 				<Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -743,7 +742,7 @@ function ClawPlaygroundMobile() {
 	if (store.error || !selectedProject) {
 		return (
 			<div
-				className={`flex h-full w-full flex-col items-center justify-center gap-4 bg-mobile-background ${CLAW_MOBILE_VIEWPORT_MIN_HEIGHT_CLASS}`}
+				className="flex h-full w-full flex-col items-center justify-center gap-4 bg-mobile-background"
 				data-testid="claw-playground-error"
 			>
 				<p className="text-sm text-muted-foreground">
@@ -763,7 +762,7 @@ function ClawPlaygroundMobile() {
 
 	const content = (
 		<div
-			className={`flex h-full min-h-0 w-full flex-col bg-mobile-background ${CLAW_MOBILE_VIEWPORT_MIN_HEIGHT_CLASS}`}
+			className="flex h-full min-h-0 w-full flex-col bg-mobile-background"
 			data-testid="claw-playground-mobile-root"
 		>
 			{dialog}

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import LanguageSwitch from "@/components/settings/LanguageSwitch"
 import FollowUpSuggestionItems from "@/components/settings/FollowUpSuggestionItems"
 import SettingItem from "@/components/settings/SettingItem"
+import BrowserNotificationItem from "@/components/settings/BrowserNotificationItem"
 function PreferencesPage() {
 	const { t } = useTranslation("interface")
 
@@ -15,6 +16,7 @@ function PreferencesPage() {
 				adaptMobile
 			/>
 			<FollowUpSuggestionItems />
+			<BrowserNotificationItem />
 		</div>
 	)
 }

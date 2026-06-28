@@ -41,6 +41,10 @@ interface FSDirChangedEvent {
 	added: string[]
 	removed: string[]
 	entries: FSDirEntry[]
+	success?: boolean
+	reason?: "too_many_entries"
+	entryCount?: number
+	maxEntryCount?: number
 }
 
 export class MagicFSApi extends BaseRuntimeBridgeApiPlugin {
@@ -221,10 +225,7 @@ export class MagicFSApi extends BaseRuntimeBridgeApiPlugin {
 				}
 			},
 
-			watchDir: (
-				dir: string,
-				callback: (event: FSDirChangedEvent) => void,
-			): (() => void) => {
+			watchDir: (dir: string, callback: (event: FSDirChangedEvent) => void): (() => void) => {
 				if (typeof dir !== "string") throw new Error("watchDir: dir must be a string")
 				if (typeof callback !== "function")
 					throw new Error("watchDir: callback must be a function")
@@ -239,10 +240,19 @@ export class MagicFSApi extends BaseRuntimeBridgeApiPlugin {
 						added?: string[]
 						removed?: string[]
 						entries?: FSDirEntry[]
+						success?: boolean
+						reason?: "too_many_entries"
+						entryCount?: number
+						maxEntryCount?: number
 					}>,
 				) => {
 					if (isStaleDocument(installedVersion)) return
-					if (!event.data || event.data.type !== "MAGIC_FS_DIR_CHANGED") return
+					if (
+						!event.data ||
+						(event.data.type !== "MAGIC_FS_DIR_CHANGED" &&
+							event.data.type !== "MAGIC_FS_DIR_WATCH_STATUS")
+					)
+						return
 					if (event.data.dir !== dir) return
 					try {
 						callback({
@@ -251,6 +261,14 @@ export class MagicFSApi extends BaseRuntimeBridgeApiPlugin {
 							added: Array.isArray(event.data.added) ? event.data.added : [],
 							removed: Array.isArray(event.data.removed) ? event.data.removed : [],
 							entries: Array.isArray(event.data.entries) ? event.data.entries : [],
+							...(event.data.type === "MAGIC_FS_DIR_WATCH_STATUS"
+								? {
+										success: event.data.success ?? false,
+										reason: event.data.reason,
+										entryCount: event.data.entryCount,
+										maxEntryCount: event.data.maxEntryCount,
+									}
+								: {}),
 						})
 					} catch {
 						// ignore callback errors

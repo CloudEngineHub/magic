@@ -4,7 +4,6 @@ import { useUpdateEffect } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { InputRef } from "antd"
 import type { AttachmentItem } from "./types"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { validateFilename } from "@/utils/filename-validator"
 import { checkDuplicateFileName } from "../utils/checkDuplicateFileName"
 import { SuperMagicApi } from "@/apis"
@@ -293,9 +292,9 @@ export function useRename(options: UseRenameOptions = {}) {
 		// 获取父路径
 		const parentPath = currentItem?.relative_file_path
 			? currentItem.relative_file_path.substring(
-				0,
-				currentItem.relative_file_path.lastIndexOf("/"),
-			)
+					0,
+					currentItem.relative_file_path.lastIndexOf("/"),
+				)
 			: undefined
 
 		// 检查是否重复
@@ -346,8 +345,6 @@ export function useRename(options: UseRenameOptions = {}) {
 				)
 				onAttachmentsChange(updatedAttachments)
 			} else {
-				// 回退到原有的pubsub方式
-				pubsub.publish(PubSubEvents.Update_Attachments)
 				onUpdateAttachments?.()
 			}
 

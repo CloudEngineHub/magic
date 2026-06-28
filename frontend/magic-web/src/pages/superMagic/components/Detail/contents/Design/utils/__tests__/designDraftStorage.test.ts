@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { DesignData } from "../../types"
 import {
 	buildDesignDraftKey,
@@ -48,6 +48,10 @@ describe("designDraftStorage fallback", () => {
 		await deleteDesignDraft(identity)
 	})
 
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
 	it("falls back to localStorage when IndexedDB is unavailable", async () => {
 		vi.stubGlobal("indexedDB", undefined)
 
@@ -70,6 +74,35 @@ describe("designDraftStorage fallback", () => {
 
 		expect(stored).toContain('"name":"pagehide"')
 		expect(await writePromise).toEqual({ target: "localStorage", durable: true })
+	})
+
+	it("strips base remote data when emergency localStorage draft is too large", async () => {
+		vi.stubGlobal("indexedDB", undefined)
+		const originalSetItem = Storage.prototype.setItem
+		vi.spyOn(Storage.prototype, "setItem").mockImplementation(function setItemFallback(
+			key,
+			value,
+		) {
+			if (value.includes("baseRemoteData")) {
+				throw new Error("quota exceeded")
+			}
+			return originalSetItem.call(this, key, value)
+		})
+
+		const result = await writeDesignDraft(
+			{
+				...draftInput("pagehide-light", 250, "pagehide"),
+				baseRemoteData: designData("base-remote"),
+			},
+			{ emergency: true },
+		)
+		const stored = localStorage.getItem(
+			`MAGIC:supermagic-design:draft:${buildDesignDraftKey(identity)}`,
+		)
+
+		expect(result).toEqual({ target: "localStorage", durable: true })
+		expect(stored).toContain('"name":"pagehide-light"')
+		expect(stored).not.toContain("baseRemoteData")
 	})
 
 	it("restores the newest draft across storage layers", async () => {

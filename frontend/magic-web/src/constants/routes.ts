@@ -107,6 +107,7 @@ export const enum RoutePath {
 	ClawPlayground = "/claw/:code",
 	MySkills = "/my-skills",
 	MyCrew = "/my-crew",
+	CrewConversation = "/super/crew/:code",
 	MagiClaw = "/claw",
 	AudioRecordings = "/recordings",
 	AudioRecordingDetail = "/recordings/:projectId",

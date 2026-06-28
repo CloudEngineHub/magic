@@ -72,9 +72,15 @@ vi.mock("@/utils/pubsub", () => ({
 		publish: vi.fn(),
 	},
 	PubSubEvents: {
-		Update_Attachments: "Update_Attachments",
 		Super_Magic_Topic_Mode_Changed: "Super_Magic_Topic_Mode_Changed",
 	},
+}))
+
+vi.mock("@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter", () => ({
+	waitForProjectAttachmentChange: vi.fn((_projectId: string | undefined, options?: any) => {
+		options?.callback?.()
+		return Promise.resolve()
+	}),
 }))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -474,7 +480,7 @@ describe("useMagicFiles", () => {
 			)
 
 			await act(async () => {
-				vi.advanceTimersByTime(500)
+				await vi.advanceTimersByTimeAsync(500)
 			})
 
 			expect(addMultipleFilesToCurrentChat).toHaveBeenCalledOnce()

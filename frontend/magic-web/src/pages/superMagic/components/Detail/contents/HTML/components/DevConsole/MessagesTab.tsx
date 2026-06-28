@@ -127,6 +127,7 @@ export function MessagesTab({ entries }: MessagesTabProps) {
 									? "bg-accent text-accent-foreground"
 									: "text-muted-foreground opacity-50",
 							)}
+							data-testid="toggle-direction"
 						>
 							<DirIcon size={12} className={active ? cfg.color : ""} />
 							<span>{cfg.label}</span>
@@ -146,6 +147,7 @@ export function MessagesTab({ entries }: MessagesTabProps) {
 					onChange={(e) => setFilterText(e.target.value)}
 					placeholder={t("stylePanel.devConsole.messageFilterPlaceholder")}
 					className="h-5 w-32 rounded border border-border bg-transparent px-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
+					data-testid="set-filter-text"
 				/>
 			</div>
 
@@ -154,6 +156,7 @@ export function MessagesTab({ entries }: MessagesTabProps) {
 				ref={scrollRef}
 				className="min-h-0 flex-1 overflow-y-auto text-xs"
 				onScroll={handleScroll}
+				data-testid="handle-scroll"
 			>
 				<div
 					style={{
@@ -187,6 +190,7 @@ export function MessagesTab({ entries }: MessagesTabProps) {
 								<div
 									className="flex cursor-pointer items-center gap-2 px-2 py-1.5 hover:bg-accent/50"
 									onClick={() => toggleExpand(entry.id)}
+									data-testid="toggle-expand"
 								>
 									<ChevronRight
 										size={10}

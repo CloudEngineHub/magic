@@ -155,12 +155,21 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		const deletedElementIds = Array.from(pendingDeletedElementIdsRef.current)
 		pendingDeletedElementIdsRef.current.clear()
 		if (!canvas || readonlyRef.current) return
+		const metaWithDeletedElementIds: CanvasDesignDataChangeMeta | undefined =
+			meta || deletedElementIds.length > 0
+				? {
+						source: meta?.source ?? "element:change",
+						changedElementIds: meta?.changedElementIds,
+						deletedElementIds,
+						elementNameChanges: meta?.elementNameChanges,
+					}
+				: undefined
 
 		const patchHandler = onCanvasDesignDataPatchChangeRef.current
-		const changedElementIds = meta?.changedElementIds
+		const changedElementIds = metaWithDeletedElementIds?.changedElementIds
 		if (
 			patchHandler &&
-			meta?.source === "element:change" &&
+			metaWithDeletedElementIds?.source === "element:change" &&
 			changedElementIds &&
 			changedElementIds.length > 0
 		) {
@@ -168,10 +177,10 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 				const patch = canvas.elementManager.exportDocumentPatch({
 					changedElementIds,
 					deletedElementIds,
-					elementNameChanges: meta.elementNameChanges,
+					elementNameChanges: metaWithDeletedElementIds.elementNameChanges,
 					includeTemporary: false,
 				})
-				patchHandler(patch, meta)
+				patchHandler(patch, metaWithDeletedElementIds)
 				return
 			} catch {
 				// Patch export is an optimization path; fall back to the legacy full export below.
@@ -182,7 +191,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 
 		// 导出时不包含临时元素，避免保存上传中的图片到外部
 		const canvasData = canvas.exportDocument({ includeTemporary: false })
-		onCanvasDesignDataChangeRef.current(canvasData, meta ?? undefined)
+		onCanvasDesignDataChangeRef.current(canvasData, metaWithDeletedElementIds)
 	}, [canvas, onCanvasDesignDataChangeRef, onCanvasDesignDataPatchChangeRef, readonlyRef])
 
 	const scheduleCanvasDesignDataChange = useCallback(

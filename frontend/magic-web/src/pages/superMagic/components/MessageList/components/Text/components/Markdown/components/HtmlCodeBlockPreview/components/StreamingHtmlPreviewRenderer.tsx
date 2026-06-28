@@ -728,7 +728,7 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 			ref={iframeRef}
 			className="h-full w-full border-none bg-transparent"
 			title="Streaming HTML Preview"
-			sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups"
+			sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
 			allow="fullscreen"
 			allowFullScreen
 			srcDoc={STREAMING_HTML_PREVIEW_RUNTIME}

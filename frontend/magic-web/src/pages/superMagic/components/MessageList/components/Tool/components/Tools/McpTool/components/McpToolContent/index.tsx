@@ -181,7 +181,7 @@ const McpToolContent = memo(({ detail, className }: McpToolContentProps) => {
 				{/* Parameters Section */}
 				<Flex vertical gap={4} className={styles.section}>
 					<span className={styles.sectionTitle}>{t("mcpTool.parameters")}</span>
-					<div className={styles.codeBlock} onCopy={handleCopy}>
+					<div className={styles.codeBlock} onCopy={handleCopy} data-testid="handle-copy">
 						<SyntaxHighlighter
 							language="json"
 							style={customTheme}
@@ -210,7 +210,7 @@ const McpToolContent = memo(({ detail, className }: McpToolContentProps) => {
 				{/* Result Section */}
 				<Flex vertical gap={4} className={cx(styles.section, styles.resultSection)}>
 					<span className={styles.sectionTitle}>{t("mcpTool.result")}</span>
-					<div className={styles.codeBlock} onCopy={handleCopy}>
+					<div className={styles.codeBlock} onCopy={handleCopy} data-testid="handle-copy-2">
 						<SyntaxHighlighter
 							language="json"
 							style={customTheme}

@@ -44,7 +44,6 @@ export class ImageBatchPollingManager {
 		this.elementOutputIndexes = []
 		this.aliveElementIds = new Set()
 		this.syncElementIds(config.elementIds, config.outputIndexes)
-		
 	}
 
 	/**
@@ -103,8 +102,7 @@ export class ImageBatchPollingManager {
 
 	public syncElementIds(elementIds: string[], outputIndexes?: number[]): void {
 		this.elementIds = elementIds
-		this.elementOutputIndexes =
-			outputIndexes ?? elementIds.map((_, index) => index + 1)
+		this.elementOutputIndexes = outputIndexes ?? elementIds.map((_, index) => index + 1)
 		this.outputIndexToElementId = new Map<number, string>()
 		this.aliveElementIds.clear()
 		elementIds.forEach((elementId, index) => {
@@ -156,6 +154,12 @@ export class ImageBatchPollingManager {
 			const updateData = this.buildCompletedElementUpdate(result, image)
 			// 更新元素数据
 			this.canvas.elementManager.update(elementId, updateData, { silent: false })
+			if (updateData.src && image.file_url) {
+				this.canvas.imageResourceManager.loadResource(updateData.src, {
+					variant: "preview",
+					priority: "critical",
+				})
+			}
 			// 发出图片结果更新事件
 			this.canvas.eventEmitter.emit({
 				type: "element:image:resultUpdated",
@@ -226,9 +230,23 @@ export class ImageBatchPollingManager {
 		if (result.file_dir && image.file_name) {
 			updateData.src = joinUploadStoragePath(result.file_dir, image.file_name)
 			updateData.name = extractSmartNameFromFileName(image.file_name)
+			this.primeGeneratedImageResource(updateData.src, image.file_url, image.file_name)
 		}
 
 		return updateData
+	}
+
+	private primeGeneratedImageResource(
+		path: string,
+		fileUrl: string | null | undefined,
+		fileName: string,
+	): void {
+		if (!fileUrl) return
+
+		this.canvas.imageResourceManager.primeCache(path, {
+			src: fileUrl,
+			fileName,
+		})
 	}
 
 	/**
@@ -248,7 +266,9 @@ export class ImageBatchPollingManager {
 	}
 
 	private shouldSyncElement(elementId: string): boolean {
-		return this.aliveElementIds.has(elementId) && this.canvas.elementManager.hasElement(elementId)
+		return (
+			this.aliveElementIds.has(elementId) && this.canvas.elementManager.hasElement(elementId)
+		)
 	}
 
 	private handleDeletedElementIds(elementIds: string[]) {
@@ -267,9 +287,12 @@ export class ImageBatchPollingManager {
 		this.unsubscribeElementDeleted = this.canvas.eventEmitter.on("element:deleted", (event) => {
 			this.handleDeletedElementIds([event.data.elementId])
 		})
-		this.unsubscribeBatchDeleted = this.canvas.eventEmitter.on("element:batchdeleted", (event) => {
-			this.handleDeletedElementIds(event.data.elementIds)
-		})
+		this.unsubscribeBatchDeleted = this.canvas.eventEmitter.on(
+			"element:batchdeleted",
+			(event) => {
+				this.handleDeletedElementIds(event.data.elementIds)
+			},
+		)
 	}
 
 	private cleanupTimer() {

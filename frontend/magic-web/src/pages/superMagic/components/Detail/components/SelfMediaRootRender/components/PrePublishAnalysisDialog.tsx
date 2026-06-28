@@ -100,6 +100,7 @@ export function PrePublishAnalysisDialog({
 								? "text-[#18181b] shadow-[inset_0_0_0_2px_rgba(24,24,27,0.18)]"
 								: "hover:bg-white",
 						)}
+						data-testid="pre-publish-analysis-dialog-label"
 					>
 						<RadioGroupItem value={item.value} className="mt-0.5" />
 						<span className="min-w-0 flex-1 space-y-1">

@@ -14,6 +14,14 @@ import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./
 
 const AUTO_SAVE_DEBOUNCE_MS = 3000
 
+function getTopLevelElementCount(data: DesignData | null | undefined): number {
+	return data?.canvas?.elements?.length ?? 0
+}
+
+function normalizeElementIds(ids?: string[]): string[] {
+	return ids?.length ? Array.from(new Set(ids)) : []
+}
+
 export interface RemoteUpdateCheckResult {
 	hasUpdate: boolean
 	currentVersion: number | null
@@ -27,7 +35,43 @@ export type DesignSaveFailureReason =
 	| "remote-updated"
 	| "remote-check-unreliable"
 	| "empty-content"
+	| "unsafe-empty-canvas"
 	| "error"
+
+export type DesignSaveSource =
+	| "canvas-patch"
+	| "canvas-full-export"
+	| "draft-restore"
+	| "manual-refresh-draft"
+	| "version-upgrade"
+	| "version-switch"
+	| "remote-apply"
+	| "remote-merge"
+	| "conflict-resolution"
+	| "manual-save"
+	| "unknown-auto"
+
+export interface DesignSaveMetadata {
+	source?: DesignSaveSource
+	deletedElementIds?: string[]
+	beforeElementCount?: number
+	nextElementCount?: number
+	isRemoteApplying?: boolean
+	fromDraft?: boolean
+	fromUpgrade?: boolean
+}
+
+export interface DesignSaveContext {
+	designData: DesignData
+	source: DesignSaveSource
+	beforeElementCount: number
+	nextElementCount: number
+	deletedElementIds: string[]
+	magicProjectJsVersion: number | null
+	isRemoteApplying: boolean
+	fromDraft: boolean
+	fromUpgrade: boolean
+}
 
 export type DesignSaveResult =
 	| {
@@ -54,6 +98,7 @@ export interface DesignSaveLifecycleHandlers {
 		savedUpdatedAt?: string | null,
 	) => Promise<void> | void
 	onAutoSaveResult?: (result: DesignSaveResult) => Promise<void> | void
+	shouldBlockEmptyCanvasSave?: (context: DesignSaveContext) => boolean
 }
 
 export class DesignSaveManager {
@@ -64,6 +109,7 @@ export class DesignSaveManager {
 
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null
 	private pendingAutoSaveDesignData: DesignData | null = null
+	private pendingAutoSaveMetadata: DesignSaveMetadata | null = null
 	private hasRemoteConflictPending = false
 	private lastSaveFullyPersisted = false
 
@@ -104,8 +150,17 @@ export class DesignSaveManager {
 		}
 	}
 
-	scheduleAutoSave(designData?: DesignData): void {
+	private normalizeSaveMetadata(metadata?: DesignSaveMetadata): DesignSaveMetadata | null {
+		if (!metadata) return null
+		return {
+			...metadata,
+			deletedElementIds: normalizeElementIds(metadata.deletedElementIds),
+		}
+	}
+
+	scheduleAutoSave(designData?: DesignData, metadata?: DesignSaveMetadata): void {
 		this.pendingAutoSaveDesignData = designData ? (cloneDeep(designData) as DesignData) : null
+		this.pendingAutoSaveMetadata = this.normalizeSaveMetadata(metadata)
 		this.runDebouncedSave()
 	}
 
@@ -115,13 +170,14 @@ export class DesignSaveManager {
 			this.debounceTimer = null
 		}
 		this.pendingAutoSaveDesignData = null
+		this.pendingAutoSaveMetadata = null
 		this.stateBag.setters.setIsSaving(false)
 	}
 
 	async manualSave(): Promise<DesignSaveResult> {
 		this.cancelAutoSave()
 		this.stateBag.setters.setIsSaving(true)
-		return this.commitSave({ allowRemoteConflict: true })
+		return this.commitSave({ allowRemoteConflict: true, source: "manual-save" })
 	}
 
 	syncDesignData(newDesignData: DesignData): void {
@@ -169,7 +225,9 @@ export class DesignSaveManager {
 		this.debounceTimer = setTimeout(() => {
 			this.debounceTimer = null
 			const explicitSaveData = this.pendingAutoSaveDesignData
+			const metadata = this.pendingAutoSaveMetadata
 			this.pendingAutoSaveDesignData = null
+			this.pendingAutoSaveMetadata = null
 			const currentData = explicitSaveData ?? this.stateBag.getDesignData()
 			const designDataToSave = this.getDesignDataForSave(currentData)
 			const fp = hashDesignDataComparable(designDataToSave)
@@ -188,8 +246,39 @@ export class DesignSaveManager {
 			void this.commitSave({
 				designData: explicitSaveData ?? undefined,
 				updateCurrentDesignData: !explicitSaveData,
+				source: metadata?.source,
+				deletedElementIds: metadata?.deletedElementIds,
+				beforeElementCount: metadata?.beforeElementCount,
+				nextElementCount: metadata?.nextElementCount,
+				isRemoteApplying: metadata?.isRemoteApplying,
+				fromDraft: metadata?.fromDraft,
+				fromUpgrade: metadata?.fromUpgrade,
 			}).then((result) => this.saveLifecycleHandlers.onAutoSaveResult?.(result))
 		}, AUTO_SAVE_DEBOUNCE_MS)
+	}
+
+	private buildSaveContext(
+		designDataToSave: DesignData,
+		source: DesignSaveSource,
+		options?: DesignSaveMetadata,
+	): DesignSaveContext {
+		const deletedElementIds = normalizeElementIds(options?.deletedElementIds)
+		const beforeElementCount =
+			options?.beforeElementCount ?? getTopLevelElementCount(this.stateBag.getDesignData())
+		const nextElementCount =
+			options?.nextElementCount ?? getTopLevelElementCount(designDataToSave)
+
+		return {
+			designData: designDataToSave,
+			source,
+			beforeElementCount,
+			nextElementCount,
+			deletedElementIds,
+			magicProjectJsVersion: this.stateBag.getMagicProjectJsVersion(),
+			isRemoteApplying: options?.isRemoteApplying ?? false,
+			fromDraft: options?.fromDraft ?? source === "draft-restore",
+			fromUpgrade: options?.fromUpgrade ?? source === "version-upgrade",
+		}
 	}
 
 	async commitSave(options?: {
@@ -197,6 +286,13 @@ export class DesignSaveManager {
 		designData?: DesignData
 		updateCurrentDesignData?: boolean
 		skipRemoteUpdateCheck?: boolean
+		source?: DesignSaveSource
+		deletedElementIds?: string[]
+		beforeElementCount?: number
+		nextElementCount?: number
+		isRemoteApplying?: boolean
+		fromDraft?: boolean
+		fromUpgrade?: boolean
 	}): Promise<DesignSaveResult> {
 		this.lastSaveFullyPersisted = false
 		if (this.stateBag.getIsReadOnly()) {
@@ -245,6 +341,12 @@ export class DesignSaveManager {
 
 			const currentDesignData = options?.designData ?? this.stateBag.getDesignData()
 			const designDataToSave = this.getDesignDataForSave(currentDesignData)
+			const saveSource = options?.source ?? "unknown-auto"
+			const saveContext = this.buildSaveContext(designDataToSave, saveSource, options)
+			if (this.saveLifecycleHandlers.shouldBlockEmptyCanvasSave?.(saveContext)) {
+				this.stateBag.setters.setIsSaving(false)
+				return { ok: false, reason: "unsafe-empty-canvas" }
+			}
 			const fp = hashDesignDataComparable(designDataToSave)
 			const content = generateMagicProjectJsContent(designDataToSave, {
 				projectBasePath: this.getProjectBasePathForDsl(),

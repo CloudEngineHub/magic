@@ -2,11 +2,18 @@ import { useState, useRef, useMemo, useEffect } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "../../../../TopicFilesButton/hooks"
-import type { BreadcrumbItem, ViewMode } from "../../../types"
+import type { ViewMode } from "../../../types"
 import type { Workspace, ProjectListItem } from "../../../../../pages/Workspace/types"
 import { getItemName, getItemId } from "../../../utils/attachmentUtils"
-import { calculateBreadcrumbDisplayItems } from "../../../utils/breadcrumbUtils"
-import { SHARE_WORKSPACE_ID } from "../../../../../constants"
+import {
+	calculateBreadcrumbDisplayItems,
+	type BreadcrumbItem,
+} from "../../../utils/breadcrumbUtils"
+import {
+	SHARE_WORKSPACE_ID,
+	MY_AUDIO_RECORDINGS_WORKSPACE_ID,
+	MY_CLAW_WORKSPACE_ID,
+} from "../../../../../constants"
 
 interface UseBreadcrumbOptions {
 	viewMode: ViewMode
@@ -48,7 +55,11 @@ export function useBreadcrumb(options: UseBreadcrumbOptions) {
 			const workspaceName =
 				currentWorkspace.id === SHARE_WORKSPACE_ID
 					? t("workspace.shareWorkspaceName")
-					: currentWorkspace.name || t("workspace.unnamedWorkspace")
+					: currentWorkspace.id === MY_AUDIO_RECORDINGS_WORKSPACE_ID
+						? t("workspace.myAudioRecordingsWorkspaceName")
+						: currentWorkspace.id === MY_CLAW_WORKSPACE_ID
+							? t("workspace.myClawWorkspaceName")
+							: currentWorkspace.name || t("workspace.unnamedWorkspace")
 			output.push({
 				name: workspaceName,
 				id: currentWorkspace.id,

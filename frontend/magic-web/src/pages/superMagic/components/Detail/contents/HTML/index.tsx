@@ -10,6 +10,7 @@ import {
 	type FileItem,
 } from "./utils/fetchInterceptor"
 import { createNestedIframeContentHandler } from "./utils/nested-iframe-content"
+import { createVirtualStorageMessageHandler } from "./utils/virtual-storage"
 import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
@@ -725,6 +726,9 @@ export default memo(function HTML(props: HTMLProps) {
 			attachmentList || [],
 			{
 				postMessageTargetStrategy,
+				projectId: selectedProject?.id,
+				topicId: selectedProject?.current_topic_id,
+				parentTargetOrigin: window.location.origin,
 			},
 		)
 
@@ -734,15 +738,18 @@ export default memo(function HTML(props: HTMLProps) {
 			onSaveAndExit: handleSaveAndExit,
 			onCancel: handleCancel,
 		})
+		const virtualStorageMessageHandler = createVirtualStorageMessageHandler()
 
 		window.addEventListener("message", messageHandler)
 		window.addEventListener("message", nestedIframeHandler)
 		window.addEventListener("message", keyboardMessageHandler)
+		window.addEventListener("message", virtualStorageMessageHandler)
 
 		return () => {
 			window.removeEventListener("message", messageHandler)
 			window.removeEventListener("message", nestedIframeHandler)
 			window.removeEventListener("message", keyboardMessageHandler)
+			window.removeEventListener("message", virtualStorageMessageHandler)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [attachmentList, displayData?.file_id])
@@ -1378,6 +1385,8 @@ export default memo(function HTML(props: HTMLProps) {
 								attachmentList={attachmentList}
 								currentFileId={displayData?.file_id}
 								currentFileName={data?.file_name}
+								projectId={selectedProject?.id}
+								topicId={selectedProject?.current_topic_id}
 							/>
 						) : htmlIsDeleted ? (
 							<Deleted data={displayData} showHeader={false} />

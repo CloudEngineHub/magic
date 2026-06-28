@@ -197,6 +197,7 @@ function SelfMediaPostContextMenu({
 							event.preventDefault()
 							void handleConfirmRename()
 						}}
+						data-testid="handle-confirm-rename"
 					>
 						<DialogHeader className="place-items-start gap-2 px-6 pb-5 pt-6 text-left">
 							<DialogTitle className="text-[18px] font-[780] leading-tight text-[#18181b]">

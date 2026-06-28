@@ -94,6 +94,7 @@ export const Attachment = ({
 						toggleExpanded(e)
 					}
 				}}
+				data-testid="toggle-expanded"
 			>
 				<div className="mr-1 text-sm font-medium text-foreground">
 					{t("ui.attachments", { count: attachments.length })}
@@ -121,6 +122,7 @@ export const Attachment = ({
 									e.stopPropagation()
 									handleOpenFile(item)
 								}}
+								data-testid="handle-open-file"
 							>
 								<div
 									className={cn(
@@ -130,7 +132,7 @@ export const Attachment = ({
 									)}
 								>
 									{isFolder && !display_config ? (
-										<img src={FolderIcon} alt="folder" width={24} height={24} />
+										<img src={FolderIcon} alt="folder" width={24} height={24}  data-testid="message-attachment-image"/>
 									) : (
 										<MagicFileIcon
 											type={getAttachmentType(item) || item.file_extension}
@@ -184,6 +186,7 @@ export const Attachment = ({
 								"hover:bg-blue-50 dark:hover:bg-blue-500/10",
 							)}
 							onClick={toggleExpanded}
+							data-testid="toggle-expanded-2"
 						>
 							{t("ui.expandAllFiles")} ({attachments.length})
 						</div>

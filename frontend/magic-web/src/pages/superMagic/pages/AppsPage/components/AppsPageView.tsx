@@ -72,6 +72,7 @@ function AppsPageItemIcon({
 				alt={entry.title}
 				className="size-6 rounded-md object-cover"
 				draggable={false}
+				data-testid="apps-page-view-image"
 			/>
 		)
 	}

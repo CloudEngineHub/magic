@@ -40,7 +40,7 @@ function ListDir(props: NodeProps) {
 
 		return (
 			<Tooltip title={t("playbackControl.viewProcess")}>
-				<div className={cx(styles.button)} onClick={onClick}>
+				<div className={cx(styles.button)} onClick={onClick} data-testid="list-dir">
 					<MonitorPlay size={16} className="text-foreground" />
 				</div>
 			</Tooltip>
@@ -53,6 +53,7 @@ function ListDir(props: NodeProps) {
 			data-id={props?.node?.app_message_id}
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
 		>
 			<div className={styles.container}>
 				<Flex className={cx(styles.tag)} onClick={onClick}>

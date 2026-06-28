@@ -1,15 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { SuperMagicApi } from "@/apis"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
-import TopicService from "../topicService"
-import { SuperMagicApi } from "@/apis"
+import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { interfaceStore } from "@/stores/interface"
+import { platformKey } from "@/utils/storage"
+import TopicService from "../topicService"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
+		createTopic: vi.fn(),
 		getTopicsByProjectId: vi.fn(),
 		getSidebarTopicsByProjectId: vi.fn(),
-		createTopic: vi.fn(),
+		getTopicDetail: vi.fn(),
+	},
+}))
+
+vi.mock("@/models/user", () => ({
+	userStore: {
+		user: {
+			organizationCode: "org-1",
+			userInfo: {
+				user_id: "user-1",
+			},
+		},
 	},
 }))
 
@@ -21,36 +36,44 @@ vi.mock("@/stores/interface", () => ({
 
 function createTopic(overrides: Partial<Topic> = {}): Topic {
 	return {
-		id: overrides.id ?? "topic-1",
-		user_id: overrides.user_id ?? "user-1",
-		chat_topic_id: overrides.chat_topic_id ?? "chat-topic-1",
-		chat_conversation_id: overrides.chat_conversation_id ?? "conversation-1",
-		topic_name: overrides.topic_name ?? "Topic",
-		task_status: overrides.task_status ?? "finished",
-		status: overrides.status ?? "finished",
-		task_mode: overrides.task_mode ?? "ppt",
-		project_id: overrides.project_id ?? "project-1",
-		topic_mode: overrides.topic_mode ?? "ppt",
-		updated_at: overrides.updated_at ?? "2026-05-12 12:34:24",
-		workspace_id: overrides.workspace_id ?? "workspace-1",
-		is_pinned: overrides.is_pinned ?? false,
-		pinned_at: overrides.pinned_at ?? null,
-		is_archived: overrides.is_archived ?? false,
-		last_read_at: overrides.last_read_at ?? null,
-		last_read_message_id: overrides.last_read_message_id ?? null,
-		has_unread: overrides.has_unread ?? false,
-		token_used: overrides.token_used ?? null,
+		id: "topic-1",
+		user_id: "user-1",
+		chat_topic_id: "chat-topic-1",
+		chat_conversation_id: "conversation-1",
+		topic_name: "Topic",
+		task_status: TaskStatus.FINISHED,
+		status: TaskStatus.FINISHED,
+		task_mode: "chat",
+		project_id: "project-1",
+		topic_mode: TopicMode.General,
+		updated_at: "2026-04-08T00:00:00Z",
+		workspace_id: "workspace-1",
+		is_pinned: false,
+		pinned_at: null,
+		is_archived: false,
+		last_read_at: null,
+		last_read_message_id: null,
+		has_unread: false,
+		token_used: null,
+		...overrides,
 	}
 }
 
 function createProject(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
 	return {
-		id: overrides.id ?? "project-1",
-		project_name: overrides.project_name ?? "Project",
-		workspace_id: overrides.workspace_id ?? "workspace-1",
-		workspace_name: overrides.workspace_name ?? "Workspace",
+		id: "project-1",
+		project_name: "Project",
+		workspace_id: "workspace-1",
+		workspace_name: "Workspace",
 		...overrides,
 	} as ProjectListItem
+}
+
+function createEmptyModeTopic(id: string, topicName: string): Topic {
+	return {
+		...createTopic({ id, topic_name: topicName }),
+		topic_mode: TopicMode.Empty,
+	}
 }
 
 describe("TopicService interface-aware topic source", () => {
@@ -59,6 +82,8 @@ describe("TopicService interface-aware topic source", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.useRealTimers()
+		window.sessionStorage.clear()
 		topicStore = new TopicStore()
 		topicService = new TopicService({ store: topicStore })
 		interfaceStore.isMobile = false
@@ -133,5 +158,458 @@ describe("TopicService interface-aware topic source", () => {
 			q: undefined,
 		})
 		expect(topicStore.selectedTopic?.id).toBe("topic-selected")
+	})
+})
+
+describe("TopicService frontend mode patch", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		vi.useRealTimers()
+		window.sessionStorage.clear()
+		interfaceStore.isMobile = false
+	})
+
+	it("creates an empty backend topic and keeps the previous employee selection in frontend state", async () => {
+		const sourceTopic = createTopic({
+			id: "topic-1",
+			topic_name: "Existing Topic",
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		const setTopics = vi.fn()
+		const setSelectedTopic = vi.fn()
+		const service = new TopicService({
+			store: {
+				setTopics,
+				setSelectedTopic,
+			} as never,
+		})
+
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(newTopic)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [newTopic, sourceTopic],
+			total: 2,
+		})
+
+		await service.createTopic({
+			projectId: "project-1",
+			topicName: "",
+			sourceTopic,
+		})
+
+		expect(SuperMagicApi.createTopic).toHaveBeenCalledWith({
+			project_id: "project-1",
+			topic_name: "",
+		})
+		expect(setSelectedTopic).toHaveBeenCalledWith({
+			...newTopic,
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+		expect(setTopics).toHaveBeenCalledWith([
+			{
+				...newTopic,
+				topic_mode: TopicMode.CustomAgent,
+				agent_code: "employee-code-1",
+			},
+			sourceTopic,
+		])
+	})
+
+	it("preserves inherited employee selection when the created topic is reloaded by id", async () => {
+		const sourceTopic = createTopic({
+			id: "topic-1",
+			topic_name: "Existing Topic",
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(newTopic)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [newTopic],
+			total: 1,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(newTopic)
+
+		await service.createTopic({
+			projectId: "project-1",
+			topicName: "",
+			sourceTopic,
+		})
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual({
+			...newTopic,
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+	})
+
+	it("preserves inherited employee selection in the sidebar topic list", async () => {
+		const sourceTopic = createTopic({
+			id: "topic-1",
+			topic_name: "Existing Topic",
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(newTopic)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [newTopic],
+			total: 1,
+		})
+		vi.mocked(SuperMagicApi.getSidebarTopicsByProjectId).mockResolvedValue({
+			list: [newTopic],
+			total: 1,
+		})
+
+		await service.createTopic({
+			projectId: "project-1",
+			topicName: "",
+			sourceTopic,
+		})
+
+		await expect(
+			service.getSidebarTopicsByProjectId({
+				projectId: "project-1",
+				page: 1,
+				pageSize: 20,
+			}),
+		).resolves.toEqual({
+			list: [
+				{
+					...newTopic,
+					status: TaskStatus.FINISHED,
+					is_pinned: false,
+					is_archived: false,
+					has_unread: false,
+					pinned_at: null,
+					last_read_at: null,
+					last_read_message_id: null,
+					topic_mode: TopicMode.CustomAgent,
+					agent_code: "employee-code-1",
+				},
+			],
+			total: 1,
+		})
+	})
+
+	it("keeps backend employee selection when the reloaded topic already has an agent code", async () => {
+		const sourceTopic = createTopic({
+			id: "topic-1",
+			topic_name: "Existing Topic",
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		const backendTopic = createTopic({
+			...newTopic,
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "backend-employee-code",
+		})
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(newTopic)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [newTopic],
+			total: 1,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(backendTopic)
+
+		await service.createTopic({
+			projectId: "project-1",
+			topicName: "",
+			sourceTopic,
+		})
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual(backendTopic)
+	})
+
+	it("keeps backend built-in topic mode even when updated_at has not advanced past the patch", async () => {
+		const storageKey = platformKey("super_magic/topic_frontend_mode_patch/org-1/user-1")
+		const sourceTopic = createTopic({
+			id: "topic-1",
+			topic_name: "Existing Topic",
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+		const emptyNewTopic = createEmptyModeTopic("topic-2", "New Topic")
+		const backendTopic = createTopic({ id: "topic-2", topic_name: "New Topic" })
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(emptyNewTopic)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [emptyNewTopic],
+			total: 1,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(backendTopic)
+
+		await service.createTopic({
+			projectId: "project-1",
+			topicName: "",
+			sourceTopic,
+		})
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual(backendTopic)
+		expect(window.sessionStorage.getItem(storageKey)).toBe("{}")
+	})
+
+	it("restores inherited employee selection from session storage after service recreation", async () => {
+		const sourceTopic = createTopic({
+			id: "topic-1",
+			topic_name: "Existing Topic",
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(newTopic)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [newTopic],
+			total: 1,
+		})
+
+		await service.createTopic({
+			projectId: "project-1",
+			topicName: "",
+			sourceTopic,
+		})
+
+		const recreatedService = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(newTopic)
+
+		await expect(recreatedService.getTopicDetail("topic-2")).resolves.toEqual({
+			...newTopic,
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+	})
+
+	it("does not restore expired inherited employee selection from session storage", async () => {
+		const storageKey = platformKey("super_magic/topic_frontend_mode_patch/org-1/user-1")
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		window.sessionStorage.setItem(
+			storageKey,
+			JSON.stringify({
+				"topic-2": {
+					project_id: "project-1",
+					topic_mode: TopicMode.CustomAgent,
+					agent_code: "employee-code-1",
+					expiresAt: Date.now() - 1,
+				},
+			}),
+		)
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(newTopic)
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual(newTopic)
+		expect(window.sessionStorage.getItem(storageKey)).toBe("{}")
+	})
+
+	it("updates the frontend employee patch when the user manually switches employee", async () => {
+		const sourceTopic = createTopic({
+			id: "topic-1",
+			topic_name: "Existing Topic",
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+				mergeTopic: vi.fn(),
+			} as never,
+		})
+
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(newTopic)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [newTopic],
+			total: 1,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(newTopic)
+
+		await service.createTopic({
+			projectId: "project-1",
+			topicName: "",
+			sourceTopic,
+		})
+		service.syncTopicFrontendModePatch({
+			topic: {
+				...newTopic,
+				topic_mode: TopicMode.CustomAgent,
+				agent_code: "SMA-employee-code-1",
+			},
+			mode: "SMA-employee-code-2" as TopicMode,
+		})
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual({
+			...newTopic,
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "SMA-employee-code-2",
+		})
+	})
+
+	it("clears the frontend employee patch agent code when the user manually switches to a built-in mode", async () => {
+		const newTopic = createTopic({ id: "topic-2", topic_name: "New Topic" })
+		const mergeTopic = vi.fn()
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+				mergeTopic,
+			} as never,
+		})
+
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(newTopic)
+
+		service.syncTopicFrontendModePatch({
+			topic: {
+				...newTopic,
+				topic_mode: TopicMode.CustomAgent,
+				agent_code: "employee-code-1",
+			},
+			mode: TopicMode.General,
+		})
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual({
+			...newTopic,
+			topic_mode: TopicMode.General,
+			agent_code: undefined,
+		})
+		expect(mergeTopic).toHaveBeenCalledWith("topic-2", {
+			topic_mode: TopicMode.General,
+			agent_code: undefined,
+		})
+	})
+
+	it("drops the frontend patch after backend updates the topic without an agent code", async () => {
+		const storageKey = platformKey("super_magic/topic_frontend_mode_patch/org-1/user-1")
+		const sourceTopic = createTopic({
+			id: "topic-1",
+			topic_name: "Existing Topic",
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+		const newTopic = createTopic({
+			...createEmptyModeTopic("topic-2", "New Topic"),
+			updated_at: "2026-04-08T00:00:00.000Z",
+		})
+		const backendUpdatedTopic = createTopic({
+			...newTopic,
+			topic_mode: TopicMode.General,
+			agent_code: undefined,
+			updated_at: "2026-04-08T00:02:00.000Z",
+		})
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+
+		vi.useFakeTimers()
+		vi.setSystemTime(new Date("2026-04-08T00:01:00.000Z"))
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(newTopic)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [newTopic],
+			total: 1,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(backendUpdatedTopic)
+
+		await service.createTopic({
+			projectId: "project-1",
+			topicName: "",
+			sourceTopic,
+		})
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual(backendUpdatedTopic)
+		expect(window.sessionStorage.getItem(storageKey)).toBe("{}")
+	})
+
+	it("keeps the frontend patch when backend updates the topic without a mode value", async () => {
+		const sourceTopic = createTopic({
+			id: "topic-1",
+			topic_name: "Existing Topic",
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
+		const newTopic = createTopic({
+			...createEmptyModeTopic("topic-2", "New Topic"),
+			updated_at: "2026-04-08T00:00:00.000Z",
+		})
+		const backendUpdatedTopic = createTopic({
+			...newTopic,
+			topic_mode: TopicMode.Empty,
+			agent_code: undefined,
+			updated_at: "2026-04-08T00:02:00.000Z",
+		})
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+
+		vi.useFakeTimers()
+		vi.setSystemTime(new Date("2026-04-08T00:01:00.000Z"))
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(newTopic)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [newTopic],
+			total: 1,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(backendUpdatedTopic)
+
+		await service.createTopic({
+			projectId: "project-1",
+			topicName: "",
+			sourceTopic,
+		})
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual({
+			...backendUpdatedTopic,
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "employee-code-1",
+		})
 	})
 })

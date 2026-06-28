@@ -19,7 +19,9 @@
 			"@/*": ["./src/*"],
 			"@enterprise/*": ["./enterprise/src/*"],
 			"@admin/*": ["./packages/magic-admin/src/*"],
+			"@customer/*": ["./customer/src/*"],
 			"@admin-components": ["./packages/magic-admin/components/index.ts"],
+			"@admin-enterprise/*": ["./packages/magic-admin/enterprise/src/*"],
 			"@dtyq/html-sandbox": ["./packages/html-sandbox/src/index.ts"],
 			"@dtyq/html-sandbox/index.html": ["./packages/html-sandbox/index.html"],
 			"@dtyq/html-sandbox/runtime": ["./packages/html-sandbox/src/runtime/index.ts"],
@@ -42,6 +44,8 @@
 			"@dtyq/magic-admin/locales": ["./packages/magic-admin/src/locales/index.ts"],
 			"@magic/html2pptx": ["./packages/html2pptx/src/index.ts"],
 			"@magic-web/html2image": ["./packages/html2image/src/index.ts"],
+			"@dtyq/x-markdown": ["./packages/x-markdown/src/index.ts"],
+			"@magic-web/html2pdf": ["./packages/html2pdf/src/index.ts"]
 		},
 		"resolveJsonModule": true,
 		"skipLibCheck": true,
@@ -59,13 +63,20 @@
 		"src/pages/superMagic/components/Detail/contents/HTML/templates/**/*",
 		"src/**/__tests__/**/*.ts",
 		"src/**/__tests__/**/*.tsx",
+		"enterprise/src/**/__tests__/**/*.ts",
+		"enterprise/src/**/__tests__/**/*.tsx",
+		"customer/src/**/__tests__/**/*.ts",
+		"customer/src/**/__tests__/**/*.tsx"
 	],
 	"include": [
 		"src/**/*",
+		"enterprise/src/**/*",
+		"customer/src/**/*",
 		"types/**/*",
 		"mock/**/*",
 		"test",
 		"vite/**/*.ts",
+		"enterprise/src/Demo.tsx"
 	],
 	"references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.test.json" }]
 }

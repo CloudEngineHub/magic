@@ -187,13 +187,17 @@ export default function PasswordVerification({
 		: t("share.passwordVerification.replayDescription")
 
 	return (
-		<div className={styles.container}>
-			<div className={styles.icon}>
+		<div className={styles.container} data-testid="password-verification">
+			<div className={styles.icon} data-testid="password-verification-icon">
 				<img src={ShareIcon} alt="" />
 			</div>
-			<div className={styles.title}>{title}</div>
-			<div className={styles.description}>{description}</div>
-			<div className={styles.inputContainer}>
+			<div className={styles.title} data-testid="password-verification-title">
+				{title}
+			</div>
+			<div className={styles.description} data-testid="password-verification-description">
+				{description}
+			</div>
+			<div className={styles.inputContainer} data-testid="password-form">
 				<Input
 					className={styles.input}
 					placeholder={t("share.accessPassword")}
@@ -202,12 +206,14 @@ export default function PasswordVerification({
 					onKeyDown={handleKeyDown}
 					maxLength={6}
 					autoFocus
+					data-testid="password-input"
 				/>
 				<Button
 					type="primary"
 					className={styles.button}
 					onClick={handleVerify}
 					loading={loading}
+					data-testid="password-confirm-button"
 				>
 					{t("common.confirm")}
 				</Button>

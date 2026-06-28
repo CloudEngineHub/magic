@@ -7,6 +7,7 @@ import {
 	SuggestionItem,
 } from "@/components/tiptap-ui-primitive/SlashDropdownMenu"
 import { SlashDropdownRenderer } from "@/components/tiptap-ui-primitive/SlashDropdownMenu/components"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 interface SlashCommandTriggerButtonProps {
 	editor: Editor
@@ -24,24 +25,26 @@ export const SlashCommandTriggerButton = React.memo<SlashCommandTriggerButtonPro
 
 		const handleSelect = (item: SuggestionItem) => {
 			try {
-				if (targetPos !== null && targetNode) {
-					// Calculate the position after current node
-					const afterPos = targetPos + targetNode.nodeSize
+				runActiveEditor(editor, (activeEditor) => {
+					if (targetPos !== null && targetNode) {
+						// Calculate the position after current node
+						const afterPos = targetPos + targetNode.nodeSize
 
-					// Force insert new paragraph after current node
-					editor
-						.chain()
-						.insertContentAt(afterPos, {
-							type: "paragraph",
-							content: [],
-						})
-						.setTextSelection(afterPos + 1)
-						.run()
-				}
+						// Force insert new paragraph after current node
+						activeEditor
+							.chain()
+							.insertContentAt(afterPos, {
+								type: "paragraph",
+								content: [],
+							})
+							.setTextSelection(afterPos + 1)
+							.run()
+					}
 
-				// Execute item action at current cursor position
-				item.onSelect({
-					editor,
+					// Execute item action at current cursor position
+					item.onSelect({
+						editor: activeEditor,
+					})
 				})
 			} catch (error) {
 				console.error("[SlashCommand] Error executing item action:", error)

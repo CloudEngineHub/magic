@@ -32,6 +32,7 @@ export interface RecycleBinParentInfo {
 	workspace_name?: string
 	project_id?: number
 	project_name?: string
+	relative_file_path?: string
 }
 
 export interface RecycleBinDeletedByUser {
@@ -68,9 +69,7 @@ export type ActionTarget = ItemTarget | SelectionTarget
 export type RestoreTarget = ActionTarget
 export type DeleteTarget = ActionTarget
 
-export type SelectPathTarget =
-	| { type: "topic"; target: RestoreTarget }
-	| { type: "file"; target: RestoreTarget }
+export type SelectPathTarget = { type: "topic"; target: RestoreTarget }
 
 export interface RestoreCheckResult {
 	/** 需移动的 resource_id（父级不存在） */
@@ -124,7 +123,6 @@ export interface RestoreCheckPlanPayload {
 
 export type RestoreCheckPlan =
 	| { status: "ready"; payload: RestoreCheckPlanPayload }
-	| { status: "skip" }
 	| { status: "invalid"; messageKey: string }
 
 export interface UpdateTabCountsPayload {
@@ -163,13 +161,24 @@ export function toResourceType(value?: number): ResourceType {
 
 export function mapRecycleBinItem(item: RecycleBinListItemDto, t: TFunction): RecycleBinItem {
 	const parentInfo = item.extra_data?.parent_info
-	const workspaceName = parentInfo?.workspace_name?.trim() || ""
-	const projectName = parentInfo?.project_name?.trim() || ""
-	const path = [workspaceName, projectName].filter(Boolean).join("/") || "/"
+	const workspaceName =
+		parentInfo?.workspace_name?.trim() || item.extra_data?.workspace_name?.trim() || ""
+	const projectName =
+		parentInfo?.project_name?.trim() || item.extra_data?.project_name?.trim() || ""
+	const relativeFilePath = item.extra_data?.relative_file_path?.trim() || ""
+	const path = buildRecycleBinItemPath({
+		workspaceName,
+		projectName,
+		relativeFilePath,
+		resourceName: item.resource_name,
+	})
 	const deletedBy =
 		item.deleted_by_user?.nickname ?? item.deleted_by_name ?? item.deleted_by ?? ""
 	const deletedByUser = item.deleted_by_user
-		? { nickname: item.deleted_by_user.nickname, avatar: item.deleted_by_user.avatar }
+		? {
+				nickname: item.deleted_by_user.nickname,
+				avatar: item.deleted_by_user.avatar || item.deleted_by_user.avatar_url || "",
+			}
 		: undefined
 	const resourceType = toResourceType(item.resource_type)
 	const fileKind =
@@ -231,13 +240,50 @@ export function resolveRecycleBinSegmentName(props: {
 	return props.t("common.untitledProject")
 }
 
+export function buildRecycleBinItemPath(props: {
+	workspaceName?: string
+	projectName?: string
+	relativeFilePath?: string
+	resourceName?: string
+}) {
+	const basePath = [props.workspaceName?.trim(), props.projectName?.trim()]
+		.filter(Boolean)
+		.join("/")
+	const relativeFilePath = resolveRecycleBinParentPath({
+		relativeFilePath: props.relativeFilePath,
+		resourceName: props.resourceName,
+	})
+	if (!relativeFilePath) return basePath || "/"
+	if (relativeFilePath === "/") return basePath ? `${basePath}/` : "/"
+	return [basePath, relativeFilePath.replace(/^\/+|\/+$/g, "")].filter(Boolean).join("/")
+}
+
+export function resolveRecycleBinParentPath(props: {
+	relativeFilePath?: string
+	resourceName?: string
+}) {
+	const relativeFilePath = props.relativeFilePath?.trim()
+	if (!relativeFilePath) return ""
+
+	const normalizedPath = relativeFilePath.replace(/\\/g, "/")
+	const normalizedResourceName = props.resourceName?.trim()
+	if (!normalizedResourceName) return normalizedPath
+
+	const pathParts = normalizedPath.split("/").filter(Boolean)
+	if (pathParts.at(-1) !== normalizedResourceName) return normalizedPath
+
+	pathParts.pop()
+	return pathParts.length > 0 ? pathParts.join("/") : "/"
+}
+
 /** Build path segments under the workspaces scope (excludes scope head). */
 export function buildRecycleBinPathParts(props: {
 	resourceType: ResourceType
 	parentInfo?: RecycleBinParentInfo
+	resourceName?: string
 	t: TFunction
 }) {
-	const { resourceType, parentInfo, t } = props
+	const { resourceType, parentInfo, resourceName, t } = props
 	if (resourceType === RESOURCE_TYPE.WORKSPACE) return []
 	if (resourceType === RESOURCE_TYPE.PROJECT) {
 		return [
@@ -262,6 +308,27 @@ export function buildRecycleBinPathParts(props: {
 			}),
 		]
 	}
+	if (resourceType === RESOURCE_TYPE.FILE) {
+		const parentParts = [
+			resolveRecycleBinSegmentName({
+				segment: "workspace",
+				rawName: parentInfo?.workspace_name,
+				t,
+			}),
+			resolveRecycleBinSegmentName({
+				segment: "project",
+				rawName: parentInfo?.project_name,
+				t,
+			}),
+		]
+		const relativeFilePath = resolveRecycleBinParentPath({
+			relativeFilePath: parentInfo?.relative_file_path,
+			resourceName,
+		})
+		if (!relativeFilePath) return parentParts
+		if (relativeFilePath === "/") return [...parentParts, ""]
+		return [...parentParts, relativeFilePath.replace(/^\/+|\/+$/g, "")]
+	}
 	return []
 }
 
@@ -269,12 +336,14 @@ export function buildRecycleBinPathParts(props: {
 export function buildRecycleBinPathLabel(props: {
 	resourceType: ResourceType
 	parentInfo?: RecycleBinParentInfo
+	resourceName?: string
 	t: TFunction
 }) {
 	const head = props.t("mobile.recycleBin.pathScopes.workspaces")
 	const parts = buildRecycleBinPathParts({
 		resourceType: props.resourceType,
 		parentInfo: props.parentInfo,
+		resourceName: props.resourceName,
 		t: props.t,
 	})
 	return [head, ...parts].join(" / ")
@@ -352,7 +421,6 @@ export function buildRestoreCheckPlan({
 	items: RecycleBinItem[]
 }): RestoreCheckPlan {
 	if (target.kind === "item") {
-		if (target.item.resourceType === RESOURCE_TYPE.FILE) return { status: "skip" }
 		return {
 			status: "ready",
 			payload: {
@@ -370,7 +438,6 @@ export function buildRestoreCheckPlan({
 	const hasMixedTypes = selectedItems.some((item) => item.resourceType !== resourceType)
 	if (hasMixedTypes)
 		return { status: "invalid", messageKey: "recycleBin.restoreCheck.mixedTypes" }
-	if (resourceType === RESOURCE_TYPE.FILE) return { status: "skip" }
 
 	return {
 		status: "ready",
@@ -412,7 +479,7 @@ export function getRestoreStatusMessage(
 		conflictNameList.length > MAX_CONFLICT_NAME_PREVIEW_COUNT
 			? t("recycleBin.restoreCheck.conflictNamesWithEtc", {
 					names: visibleConflictNames,
-			  })
+				})
 			: visibleConflictNames
 	const terminalConflictMessages: string[] = []
 	if (projectMissingCount > 0) {
@@ -424,14 +491,14 @@ export function getRestoreStatusMessage(
 			projectMissingFileNames.length > MAX_CONFLICT_NAME_PREVIEW_COUNT
 				? t("recycleBin.restoreCheck.fileNamesWithEtc", {
 						names: visibleFileNames,
-				  })
+					})
 				: visibleFileNames
 		terminalConflictMessages.push(
 			fileNames
 				? t("recycleBin.restoreCheck.projectMissingTipWithNames", {
 						count: projectMissingCount,
 						fileNames,
-				  })
+					})
 				: t("recycleBin.restoreCheck.projectMissingTip", { count: projectMissingCount }),
 		)
 	}
@@ -476,7 +543,9 @@ export function getRestoreStatusMessage(
 			return [baseMessage, ...terminalConflictMessages].filter(Boolean).join("\n")
 		}
 		if (conflictCount > 0) {
-			baseMessage = t("recycleBin.restoreCheck.parentMissingConfirmMessage", { count: conflictCount })
+			baseMessage = t("recycleBin.restoreCheck.parentMissingConfirmMessage", {
+				count: conflictCount,
+			})
 			return [baseMessage, ...terminalConflictMessages].filter(Boolean).join("\n")
 		}
 		return terminalConflictMessages.join("\n")
@@ -484,8 +553,13 @@ export function getRestoreStatusMessage(
 
 	if (result.itemsNeedMove.length > 0) {
 		if (target?.kind !== "selection") return getMissingParentMessage(target, t)
-		const resourceType = getRestoreTargetResourceType({ target, items })
-		return getNeedMoveStatusMessage(target, result.itemsNeedMove.length, t, resourceType)
+		const selectionResourceType = getRestoreTargetResourceType({ target, items })
+		return getNeedMoveStatusMessage(
+			target,
+			result.itemsNeedMove.length,
+			t,
+			selectionResourceType,
+		)
 	}
 
 	const typeLabel = getRestoreTargetTypeLabel(target, t, items)
@@ -554,9 +628,6 @@ export function getNeedMoveStatusMessage(
 			count: needMoveCount,
 		}),
 		[RESOURCE_TYPE.TOPIC]: t("recycleBin.restoreCheck.needMoveTopics", {
-			count: needMoveCount,
-		}),
-		[RESOURCE_TYPE.FILE]: t("recycleBin.restoreCheck.needMoveFiles", {
 			count: needMoveCount,
 		}),
 	}
@@ -640,7 +711,8 @@ export function isRestorableResourceType(
 	return (
 		resourceType === RESOURCE_TYPE.WORKSPACE ||
 		resourceType === RESOURCE_TYPE.PROJECT ||
-		resourceType === RESOURCE_TYPE.TOPIC
+		resourceType === RESOURCE_TYPE.TOPIC ||
+		resourceType === RESOURCE_TYPE.FILE
 	)
 }
 
@@ -681,8 +753,8 @@ export function getRestoreFailureMessage(
 				? "recycleBin.restoreResult.partialWithReason"
 				: "recycleBin.restoreResult.partial"
 			: reason
-			  ? "recycleBin.restoreResult.failedWithReason"
-			  : "recycleBin.restoreResult.failed"
+				? "recycleBin.restoreResult.failedWithReason"
+				: "recycleBin.restoreResult.failed"
 
 	return t(messageKey, {
 		successCount: data.success_count,

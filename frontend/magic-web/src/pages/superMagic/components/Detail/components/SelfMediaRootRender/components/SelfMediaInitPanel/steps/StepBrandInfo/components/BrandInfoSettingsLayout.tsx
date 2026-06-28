@@ -76,7 +76,7 @@ export function BrandInfoSettingsLayout({
 
 				<div className="space-y-4">
 					<div className="space-y-1.5">
-						<label className={getFieldLabelClass("author")}>
+						<label className={getFieldLabelClass("author")} data-testid="brand-info-settings-layout-label">
 							{t("detail.selfMedia.initPanel.stepBrand.accountName", "账号名称")}
 						</label>
 						<div className="group relative">
@@ -100,7 +100,7 @@ export function BrandInfoSettingsLayout({
 					</div>
 
 					<div className="space-y-1.5">
-						<label className={getFieldLabelClass("brandPosition")}>
+						<label className={getFieldLabelClass("brandPosition")} data-testid="brand-info-settings-layout-label-2">
 							{t(
 								"detail.selfMedia.initPanel.stepBrand.brandPosition",
 								"品牌/IP 定位",
@@ -146,7 +146,7 @@ export function BrandInfoSettingsLayout({
 
 					<div className="space-y-1.5">
 						<div className="flex items-center gap-1.5">
-							<label className={getFieldLabelClass("targetAudience")}>
+							<label className={getFieldLabelClass("targetAudience")} data-testid="brand-info-settings-layout-label-3">
 								{t(
 									"detail.selfMedia.initPanel.stepBrand.targetAudience",
 									"目标受众",
@@ -208,6 +208,7 @@ export function BrandInfoSettingsLayout({
 					className="space-y-3"
 					onFocus={() => onActiveBrandFieldChange("brandAssets")}
 					onBlur={() => onActiveBrandFieldChange(null)}
+					data-testid="on-active-brand-field-change"
 				>
 					<BrandAssetUpload
 						brandImages={brandImages}

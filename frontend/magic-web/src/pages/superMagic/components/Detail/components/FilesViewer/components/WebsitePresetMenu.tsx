@@ -168,6 +168,7 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 						type="button"
 						className="relative mx-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md text-foreground transition-all duration-200 hover:bg-black/10"
 						aria-label={t("fileViewer.website.add")}
+						data-testid="website-preset-menu-add-button"
 					>
 						<Plus className="size-4" aria-hidden="true" />
 					</button>
@@ -190,6 +191,7 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 							event.preventDefault()
 							handleOpenCustomWebsite()
 						}}
+						data-testid="handle-open-custom-website"
 					>
 						<input
 							value={customUrl}
@@ -197,11 +199,13 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 							onKeyDown={(event) => event.stopPropagation()}
 							placeholder={t("fileViewer.website.customPlaceholder")}
 							className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+							data-testid="set-custom-url"
 						/>
 						<button
 							type="submit"
 							disabled={!customPreset}
 							className="h-8 shrink-0 rounded-md px-2 text-xs text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+							data-testid="submit-button"
 						>
 							{t("fileViewer.website.openCustom")}
 						</button>
@@ -276,6 +280,7 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 																preset.id,
 															)
 														}
+														data-testid="on-pointer-down"
 													>
 														<X
 															className="size-3.5"

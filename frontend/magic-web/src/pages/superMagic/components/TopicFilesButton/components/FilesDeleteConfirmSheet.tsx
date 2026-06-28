@@ -42,6 +42,7 @@ function DeleteConfirmScrollList({ children }: { children: React.ReactNode }) {
 				maskImage: `linear-gradient(to bottom, ${isAtTop ? "black" : "transparent"}, black ${isAtTop ? "0px" : "24px"}, black ${isAtBottom ? "100%" : "calc(100% - 24px)"}, ${isAtBottom ? "black" : "transparent"})`,
 				WebkitMaskImage: `linear-gradient(to bottom, ${isAtTop ? "black" : "transparent"}, black ${isAtTop ? "0px" : "24px"}, black ${isAtBottom ? "100%" : "calc(100% - 24px)"}, ${isAtBottom ? "black" : "transparent"})`,
 			}}
+			data-testid="check-scroll-edges"
 		>
 			{children}
 		</div>

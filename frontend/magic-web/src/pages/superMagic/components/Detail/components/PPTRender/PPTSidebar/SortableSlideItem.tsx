@@ -221,6 +221,7 @@ function SortableSlideItem({
 						e.stopPropagation()
 						manualRetry()
 					}}
+					data-testid="manual-retry"
 				>
 					<Image className="size-4" />
 				</div>
@@ -243,6 +244,7 @@ function SortableSlideItem({
 							// Image loaded successfully, clear any error state
 							setImageLoadError(false)
 						}}
+						data-testid="set-image-load-error"
 					/>
 				</div>
 			)

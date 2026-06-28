@@ -35,6 +35,7 @@ export const FS_MESSAGE_TYPES = {
 	WATCH_DIR_REGISTER: "MAGIC_FS_WATCH_DIR_REGISTER",
 	WATCH_DIR_UNREGISTER: "MAGIC_FS_WATCH_DIR_UNREGISTER",
 	DIR_CHANGED: "MAGIC_FS_DIR_CHANGED",
+	DIR_WATCH_STATUS: "MAGIC_FS_DIR_WATCH_STATUS",
 	GET_APP_BASE_PATH_REQUEST: "MAGIC_FS_GET_APP_BASE_PATH_REQUEST",
 	GET_APP_BASE_PATH_RESPONSE: "MAGIC_FS_GET_APP_BASE_PATH_RESPONSE",
 } as const
@@ -250,6 +251,16 @@ export interface FSDirChanged {
 	added: string[]
 	removed: string[]
 	entries: FSDirEntry[]
+}
+
+export interface FSDirWatchStatus {
+	type: typeof FS_MESSAGE_TYPES.DIR_WATCH_STATUS
+	dir: string
+	success: boolean
+	reason?: "too_many_entries"
+	entryCount?: number
+	maxEntryCount?: number
+	timestamp: number
 }
 
 // ─── LLM 消息报文 ────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import type {
 	ImageGenerationTaskMeta,
 	IdentifyImageMarkResponse,
 	GenerateVideoRequest,
+	VideoGenerationResultMeta,
 	GenerationStatus,
 } from "../types.magic"
 import type { TFunction } from "../context/I18nContext"
@@ -329,6 +330,8 @@ export interface VideoElement extends BaseElementProps {
 	// poster?: string
 	/** 视频生成请求参数（请求成功后保存） */
 	generateVideoRequest?: GenerateVideoRequest
+	/** 视频生成结果元信息（计费、生成参数与运行时间） */
+	videoGenerationResultMeta?: VideoGenerationResultMeta
 }
 
 /** 可上传/下载的文件类元素（图片、视频等），用于 uploadFiles / downloadFiles 等接口 */

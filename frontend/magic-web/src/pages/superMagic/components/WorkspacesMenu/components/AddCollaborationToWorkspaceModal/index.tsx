@@ -168,7 +168,7 @@ export function AddCollaborationToWorkspaceModal({
 		<>
 			<div className={styles.header}>
 				<div>{t("project.addWorkspaceShortcut")}</div>
-				<div className={styles.headerClose} onClick={onClose}>
+				<div className={styles.headerClose} onClick={onClose} data-testid="on-close">
 					<IconX size={24} />
 				</div>
 			</div>
@@ -209,6 +209,7 @@ export function AddCollaborationToWorkspaceModal({
 								selectedWorkspaceId === workspace.id && styles.contentItemSelected,
 							)}
 							onClick={() => setSelectedWorkspaceId(workspace.id)}
+							data-testid="set-selected-workspace-id"
 						>
 							<div className={styles.contentItemName}>
 								<div className={styles.contentItemIcon}>

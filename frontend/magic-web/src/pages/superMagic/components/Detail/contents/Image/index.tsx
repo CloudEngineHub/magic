@@ -77,6 +77,7 @@ function Img(props: any) {
 					alt=""
 					draggable={false}
 					style={{ width: "100%", height: "100%", objectFit: "contain" }}
+					data-testid="contents-image-preview-image"
 				/>
 			</MagicImagePreview>
 		)

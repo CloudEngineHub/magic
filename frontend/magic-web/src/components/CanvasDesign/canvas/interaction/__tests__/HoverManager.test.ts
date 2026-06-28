@@ -35,6 +35,7 @@ function createHoverManager(
 		selected?: boolean
 		geometryHitIds?: string[]
 		viewportHitTarget?: Konva.Node | null
+		extendingElementId?: string | null
 	} = {},
 ) {
 	const stage = new Konva.Group()
@@ -99,6 +100,9 @@ function createHoverManager(
 					: (options.transformActive ?? false),
 			isTransforming: () => false,
 			isDraggingElement: () => false,
+		},
+		extendManager: {
+			getExtendingElementId: () => options.extendingElementId ?? null,
 		},
 	}
 
@@ -244,6 +248,33 @@ describe("HoverManager", () => {
 
 		expect(manager.hoveredElementId).toBe("element-1")
 		expect(requestLayerDraw).toHaveBeenCalled()
+		manager.destroy()
+	})
+
+	it("does not set hover while extend mode is active", () => {
+		const raf = installRafMock()
+		const { manager, requestLayerDraw, target } = createHoverManager({
+			extendingElementId: "element-1",
+		})
+
+		manager.handleMouseMove({ target })
+
+		expect(raf.count()).toBe(0)
+		expect(manager.hoveredElementId).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+		manager.destroy()
+	})
+
+	it("does not refresh hover from geometry while extend mode is active", () => {
+		const { eventHandlers, manager, requestLayerDraw } = createHoverManager({
+			extendingElementId: "element-1",
+			geometryHitIds: ["element-1"],
+		})
+
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+
+		expect(manager.hoveredElementId).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
 		manager.destroy()
 	})
 })

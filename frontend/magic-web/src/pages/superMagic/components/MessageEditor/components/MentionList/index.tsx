@@ -392,6 +392,7 @@ const MentionList = ({
 				"moreButton",
 			)}
 			onClick={isMobile ? () => setPopoverOpen(true) : undefined}
+			data-testid="mention-list"
 		>
 			+{hiddenItems.length}
 		</button>
@@ -418,6 +419,7 @@ const MentionList = ({
 							className="ml-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 							onClick={() => setPopoverOpen(false)}
 							aria-label={mobilePopupCloseLabel}
+							data-testid="set-popover-open"
 						>
 							<IconX size={18} />
 						</button>

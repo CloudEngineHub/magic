@@ -92,7 +92,7 @@ export default observer(function LongTremMemory(props: LongTremMemoryProps) {
 					<div className={styles.header}>
 						<Flex gap={8} align="center">
 							{showBack && (
-								<div className={styles.back} onClick={handleBack}>
+								<div className={styles.back} onClick={handleBack} data-testid="handle-back">
 									<IconChevronLeft size={24} stroke={1.5} />
 								</div>
 							)}
@@ -111,7 +111,7 @@ export default observer(function LongTremMemory(props: LongTremMemoryProps) {
 								))}
 							</Flex>
 						</Flex>
-						<div className={styles.close} onClick={handleClose}>
+						<div className={styles.close} onClick={handleClose} data-testid="handle-close">
 							<IconX size={24} />
 						</div>
 					</div>

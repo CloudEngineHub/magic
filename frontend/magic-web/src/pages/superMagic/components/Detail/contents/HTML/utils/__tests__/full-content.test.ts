@@ -4,6 +4,8 @@ vi.mock("../nested-iframe-content", () => ({
 	getNestedIframeInterceptorScript: () => "",
 }))
 
+vi.mock("virtual:magic-api", () => ({ default: "" }))
+
 vi.mock("@/models/config", () => ({
 	configStore: {
 		cluster: {
@@ -64,7 +66,7 @@ describe("getFullContent", () => {
 		expect(result).toContain("serviceWorkerMockMode")
 	})
 
-	it("places magic-api prelude before environment prelude and original head scripts", async () => {
+	it("places environment prelude before magic-api prelude and original head scripts", async () => {
 		const { getFullContent } = await import("../full-content")
 		const result = getFullContent(
 			"<!DOCTYPE html><html><head><script>window.__USER_HEAD_SCRIPT__ = true</script></head><body><div>Preview</div></body></html>",
@@ -75,7 +77,40 @@ describe("getFullContent", () => {
 		const userIndex = result.indexOf("window.__USER_HEAD_SCRIPT__")
 
 		expect(magicIndex).toBeGreaterThanOrEqual(0)
-		expect(envIndex).toBeGreaterThan(magicIndex)
-		expect(userIndex).toBeGreaterThan(envIndex)
+		expect(envIndex).toBeGreaterThanOrEqual(0)
+		expect(magicIndex).toBeGreaterThan(envIndex)
+		expect(userIndex).toBeGreaterThan(magicIndex)
+	})
+
+	it("injects virtual storage snapshot before original head scripts", async () => {
+		const { getFullContent } = await import("../full-content")
+		const result = getFullContent(
+			"<!DOCTYPE html><html><head><script>window.__USER_HEAD_SCRIPT__ = localStorage.getItem('theme')</script></head><body><div>Preview</div></body></html>",
+			"",
+			{
+				virtualStorage: {
+					protocol: "magic-html-virtual-storage/v1",
+					renderId: "render-1",
+					token: "token-1",
+					namespace: "namespace-1",
+					targetOrigin: "https://app.example.test",
+					snapshot: {
+						localStorage: { theme: "dark" },
+						sessionStorage: { step: "2" },
+						cookies: { locale: "zh_CN" },
+						indexedDB: {},
+					},
+				},
+			},
+		)
+
+		const storageIndex = result.indexOf("setupMagicVirtualStorage")
+		const userIndex = result.indexOf("window.__USER_HEAD_SCRIPT__")
+
+		expect(storageIndex).toBeGreaterThanOrEqual(0)
+		expect(storageIndex).toBeLessThan(userIndex)
+		expect(result).toContain('"namespace":"namespace-1"')
+		expect(result).toContain('"theme":"dark"')
+		expect(result).not.toContain("MAGIC:iframe:storage:")
 	})
 })

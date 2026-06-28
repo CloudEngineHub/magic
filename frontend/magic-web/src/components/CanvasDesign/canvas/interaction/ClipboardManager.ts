@@ -194,6 +194,18 @@ export class ClipboardManager {
 		)
 	}
 
+	private showBatchUploadFailedToast(failedCount: number, total: number): void {
+		if (failedCount <= 0) return
+		const fallback =
+			failedCount >= total
+				? `文件上传失败，共 ${total} 个`
+				: `有 ${failedCount}/${total} 个文件上传失败`
+		const template = this.canvas.t?.("image.batchUploadFailed", fallback) || fallback
+		toast.error(
+			template.replace("{{failed}}", String(failedCount)).replace("{{total}}", String(total)),
+		)
+	}
+
 	/**
 	 * 复制链路需要异步获取图片 / 视频来源信息，耗时期间给用户明确反馈。
 	 * 这里统一使用 toast.loading，不再走宿主弹窗，避免复制动作阻塞当前画布交互。
@@ -1880,6 +1892,18 @@ export class ClipboardManager {
 		options?: { skipFocus?: boolean; onProgress?: (current: number) => void },
 	): Promise<string[]> {
 		this.canvas.historyManager.disable()
+		let processedUploadCount = 0
+		let failedUploadCount = 0
+		const processedUploadIndexes = new Set<number>()
+		const markUploadProcessed = (index: number, status: "success" | "failed") => {
+			if (processedUploadIndexes.has(index)) return
+			processedUploadIndexes.add(index)
+			processedUploadCount += 1
+			if (status === "failed") {
+				failedUploadCount += 1
+			}
+			options?.onProgress?.(processedUploadCount)
+		}
 
 		try {
 			const { createdElementIds, pendingBatchId } =
@@ -1896,21 +1920,26 @@ export class ClipboardManager {
 						const file = files[i]
 						const position = positions[i]
 
-						if (options?.onProgress) {
-							options.onProgress(i + 1)
-							// 让出一帧让浏览器渲染进度更新
-							await new Promise((r) => requestAnimationFrame(r))
-						}
-
 						const elementId =
 							await this.canvas.canvasFileUploadManager.uploadFileElement({
 								file,
 								position,
 								manageHistory: false,
+								onUploadComplete: () => {
+									markUploadProcessed(i, "success")
+								},
+								onUploadFailed: () => {
+									markUploadProcessed(i, "failed")
+								},
 							})
+						if (!elementId) {
+							markUploadProcessed(i, "failed")
+						}
 						if (elementId) {
 							createdElementIds.push(elementId)
 						}
+						// 让出一帧让浏览器渲染已创建的临时元素
+						await new Promise((r) => requestAnimationFrame(r))
 					}
 
 					if (createdElementIds.length > 0 && !options?.skipFocus) {
@@ -1930,11 +1959,16 @@ export class ClipboardManager {
 				this.canvas.canvasFileUploadManager.commitPendingUploadBatch(pendingBatchId)
 			}
 
-			return createdElementIds.filter((elementId) =>
+			const existingElementIds = createdElementIds.filter((elementId) =>
 				this.canvas.elementManager.hasElement(elementId),
 			)
+			this.showBatchUploadFailedToast(failedUploadCount, files.length)
+			return existingElementIds
 		} catch (error) {
 			this.canvas.historyManager.enable()
+			if (failedUploadCount === 0) {
+				this.showBatchUploadFailedToast(files.length, files.length)
+			}
 			throw error
 		}
 	}

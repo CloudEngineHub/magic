@@ -132,6 +132,7 @@ const TopicExamples = ({
 							alt=""
 							className={styles.summaryExampleItemIcon}
 							draggable={false}
+							data-testid="topic-examples-image"
 						/>
 					</motion.div>
 					<motion.div
@@ -163,6 +164,7 @@ const TopicExamples = ({
 							alt=""
 							className={styles.summaryExampleItemIcon}
 							draggable={false}
+							data-testid="topic-examples-image-2"
 						/>
 					</motion.div>
 					<motion.div
@@ -194,6 +196,7 @@ const TopicExamples = ({
 							alt=""
 							className={styles.summaryExampleItemIcon}
 							draggable={false}
+							data-testid="topic-examples-image-3"
 						/>
 					</motion.div>
 				</div>
@@ -265,7 +268,7 @@ const TopicExamples = ({
 					<div className={styles.exampleHeader}>
 						<div>{t("ui.quickStart")}</div>
 						{topicMode !== TopicMode.RecordSummary && (
-							<div className={styles.exampleItemRefresh} onClick={handleRefreshClick}>
+							<div className={styles.exampleItemRefresh} onClick={handleRefreshClick} data-testid="handle-refresh-click">
 								<IconRefresh
 									size={20}
 									style={{

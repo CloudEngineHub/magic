@@ -1,7 +1,6 @@
 import { Input, Alert } from "antd"
 import { forwardRef, useRef } from "react"
 import type { InputRef, InputProps } from "antd"
-import { useStyles } from "../style"
 
 export interface InputWithErrorProps extends InputProps {
 	errorMessage?: string
@@ -13,8 +12,8 @@ const InputWithError = forwardRef<InputRef, InputWithErrorProps>(function InputW
 	{ errorMessage, showError = false, style, height = 20, ...props },
 	ref,
 ) {
-	const { styles } = useStyles({ isExpanded: true })
 	const isComposingRef = useRef(false)
+	const shouldShowError = showError && Boolean(errorMessage)
 
 	const handleDrop = (e: React.DragEvent) => {
 		e.preventDefault()
@@ -46,7 +45,15 @@ const InputWithError = forwardRef<InputRef, InputWithErrorProps>(function InputW
 	}
 
 	return (
-		<div style={{ flex: 1, position: "relative" }}>
+		<div
+			style={{
+				flex: 1,
+				minWidth: 0,
+				position: "relative",
+				display: "flex",
+				flexDirection: "column",
+			}}
+		>
 			<Input
 				ref={ref}
 				{...props}
@@ -63,9 +70,23 @@ const InputWithError = forwardRef<InputRef, InputWithErrorProps>(function InputW
 				onKeyDown={handleKeyDown}
 				draggable={false}
 			/>
-			{showError && errorMessage && (
-				<div className={styles.errorMessage} style={{ top: `${height}px` }}>
-					<Alert message={errorMessage} type="error" />
+			{shouldShowError && (
+				<div
+					style={{
+						marginTop: "2px",
+						fontSize: "12px",
+						lineHeight: "16px",
+						zIndex: 1,
+					}}
+				>
+					<Alert
+						message={errorMessage}
+						type="error"
+						style={{
+							padding: "2px 6px",
+							borderRadius: "4px",
+						}}
+					/>
 				</div>
 			)}
 		</div>

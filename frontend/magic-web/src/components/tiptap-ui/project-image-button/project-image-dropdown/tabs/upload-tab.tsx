@@ -6,6 +6,7 @@ import type { Editor } from "@tiptap/react"
 import { useStyles } from "../styles"
 import FlexBox from "@/components/base/FlexBox"
 import { MAX_FILE_SIZE } from "@/lib/tiptap-utils"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 const { Dragger } = Upload
 
@@ -53,15 +54,27 @@ export function UploadTab({ editor, projectId, onSuccess }: UploadTabProps) {
 		setUploading(true)
 
 		try {
+			const inserted = runActiveEditor(editor, (activeEditor) => {
+				// Use the insertProjectImageFromFile command if available
+				if (projectId && activeEditor.commands.insertProjectImageFromFile) {
+					activeEditor.commands.insertProjectImageFromFile(file)
+					return true
+				}
+				// Use the insertStorageImageFromFile command if available
+				if (!projectId && activeEditor.commands.insertStorageImageFromFile) {
+					activeEditor.commands.insertStorageImageFromFile(file)
+					return true
+				}
+				return false
+			}, false)
+
 			// Use the insertProjectImageFromFile command if available
-			if (projectId && editor.commands.insertProjectImageFromFile) {
-				editor.commands.insertProjectImageFromFile(file)
+			if (inserted && projectId) {
 				magicToast.success(t("projectImage.upload.success"))
 				onSuccess?.()
 			}
 			// Use the insertStorageImageFromFile command if available
-			else if (!projectId && editor.commands.insertStorageImageFromFile) {
-				editor.commands.insertStorageImageFromFile(file)
+			else if (inserted && !projectId) {
 				onSuccess?.()
 			}
 		} catch (error) {

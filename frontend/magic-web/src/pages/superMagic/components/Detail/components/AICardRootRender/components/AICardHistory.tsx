@@ -31,6 +31,7 @@ function AICardHistory({ entries, cardName, attachmentList, onBack }: AICardHist
 						type="button"
 						onClick={onBack}
 						className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						data-testid="on-back"
 					>
 						<svg
 							width="16"

@@ -39,6 +39,7 @@ function RoleSelector({ role, onActionClick }: RoleSelectorProps) {
 					width={ICON_SIZE}
 					height={ICON_SIZE}
 					className="shrink-0"
+					data-testid="role-selector-image"
 				/>
 			)
 		}

@@ -192,6 +192,7 @@ const IconSelectContent = ({ selectedIcon, onSelect, iconType }: IconSelectModal
 							}}
 							onClick={() => onInnerSelect({ color: currentColor })}
 							title={color}
+							data-testid="on-inner-select"
 						/>
 					)
 				})}

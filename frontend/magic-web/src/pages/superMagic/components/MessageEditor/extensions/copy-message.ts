@@ -11,6 +11,7 @@ import {
 	isMagicClipboard,
 	type MagicClipboardMetadata,
 } from "@/utils/clipboard-helpers"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 function prepareMentionAttrs(
 	attrs: TiptapMentionAttributes,
@@ -126,8 +127,12 @@ const CopyMessageExtension = Extension.create({
 									metadata,
 									this.options.dataService ?? null,
 								)
-								this.editor.commands.insertContent(content)
-								return true
+								return (
+									runActiveEditor(this.editor, (editor) => {
+										editor.commands.insertContent(content)
+										return true
+									}, false) ?? false
+								)
 							} catch (err) {
 								console.error("❌ Failed to parse rich text content:", err)
 							}

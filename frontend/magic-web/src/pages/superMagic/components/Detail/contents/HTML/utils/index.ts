@@ -172,12 +172,24 @@ export function resolveRelativePath(basePath: string, relativePath: string): str
 }
 
 export function flattenAttachments(items: any[]): any[] {
-	return items.reduce((acc: any[], item) => {
+	const flattenedItems: any[] = []
+	const stack = [...items].reverse()
+
+	while (stack.length > 0) {
+		const item = stack.pop()
+		if (!item) continue
+
 		if (item.is_directory && item.children) {
-			return [...acc, ...flattenAttachments(item.children)]
+			for (let index = item.children.length - 1; index >= 0; index -= 1) {
+				stack.push(item.children[index])
+			}
+			continue
 		}
-		return [...acc, item]
-	}, [])
+
+		flattenedItems.push(item)
+	}
+
+	return flattenedItems
 }
 
 // Helper function to check if a URL is a relative path

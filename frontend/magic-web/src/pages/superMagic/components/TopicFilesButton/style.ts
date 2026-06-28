@@ -213,6 +213,10 @@ export const useStyles = createStyles(({ token }) => ({
 		cursor: "pointer",
 		userSelect: "none",
 		position: "relative",
+		"&:hover .file-item-action": {
+			opacity: 1,
+			pointerEvents: "auto",
+		},
 		"@media (max-width: 768px)": {
 			height: 40,
 			fontSize: 14,
@@ -344,6 +348,12 @@ export const useStyles = createStyles(({ token }) => ({
 		},
 		gap: 6,
 	},
+	fileTitleTopAligned: {
+		alignItems: "flex-start",
+		"& $iconWrapper": {
+			marginTop: 2,
+		},
+	},
 	rowTitleText: {
 		display: "flex",
 		alignItems: "center",
@@ -409,6 +419,14 @@ export const useStyles = createStyles(({ token }) => ({
 	attachmentAction: {
 		color: "#747f8d",
 		fontSize: "16px",
+		flexShrink: 0,
+		opacity: 0,
+		pointerEvents: "none",
+		transition: "opacity 0.15s ease, background-color 0.2s ease",
+		"&.file-item-action-visible": {
+			opacity: 1,
+			pointerEvents: "auto",
+		},
 		"&:hover": {
 			color: "rgba(28, 29, 35, 0.8)",
 			backgroundColor: token.magicColorUsages.fill[0],

@@ -46,6 +46,30 @@ export interface PendingUserMessageEnvelope {
 	conversation_id: string
 }
 
+export interface ServerMessagesConfirmedPayload {
+	chat_topic_id: string
+	app_message_ids: string[]
+}
+
+export interface SuperMagicStoreCollaborators {
+	/** Retrieves local user messages that still need to be re-inserted into the main list on refresh recovery. */
+	getRestorableUserMessages(chat_topic_id?: string): Array<{
+		app_message_id: string
+		created_at?: number
+		anchor_message_id?: string
+		anchor_seq_id?: string
+		pending_message: PendingUserMessageEnvelope
+	}>
+	/** Queries whether a main message still has an optimistic sidecar status attached. */
+	getMessageOptimisticStatus(chat_topic_id?: string, app_message_id?: string): string | undefined
+}
+
+export interface SuperMagicStoreCallbackRegistrar {
+	registerOnServerMessagesConfirmed(
+		callback: (payload: ServerMessagesConfirmedPayload) => void,
+	): () => void
+}
+
 export interface SharedMessageItem {
 	message_id?: string
 	type?: string

@@ -4,7 +4,6 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { useDebounceFn, useUpdateEffect } from "ahooks"
 import type { InputRef } from "antd"
 import { AttachmentSource, type AttachmentItem } from "./types"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { validateFilename } from "@/utils/filename-validator"
 import { checkDuplicateFileName } from "../utils/checkDuplicateFileName"
 import type { PresetFileType } from "../constant"
@@ -276,9 +275,6 @@ export function useVirtualFile(options: UseVirtualFileOptions) {
 
 					// 更新本地状态
 					options.onAttachmentsChange(updatedAttachments)
-				} else {
-					// 回退到原有的pubsub方式
-					pubsub.publish(PubSubEvents.Update_Attachments)
 				}
 
 				// 创建成功后清理虚拟文件

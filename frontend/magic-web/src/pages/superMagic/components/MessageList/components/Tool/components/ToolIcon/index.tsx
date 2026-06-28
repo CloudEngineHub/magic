@@ -49,6 +49,7 @@ function ToolIcon({ type, className, style }: ToolIconProps) {
 			alt={type}
 			className={`${styles.icon} ${className || ""}`}
 			style={style}
+			data-testid="tool-icon-image"
 		/>
 	)
 }

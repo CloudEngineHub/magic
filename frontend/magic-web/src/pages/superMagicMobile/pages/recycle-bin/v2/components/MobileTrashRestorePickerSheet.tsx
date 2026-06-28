@@ -45,6 +45,7 @@ function PickerRow(props: PickerRowProps) {
 			type="button"
 			onClick={onClick}
 			className="flex min-h-[60px] w-full items-center gap-3 bg-transparent px-[14px] py-3 transition-colors active:bg-foreground/[0.04]"
+			data-testid="mobile-trash-restore-picker-sheet"
 		>
 			<div
 				className={`flex size-9 shrink-0 items-center justify-center rounded-[10px] ${boxClass}`}
@@ -97,7 +98,7 @@ function MobileTrashRestorePickerSheet(props: MobileTrashRestorePickerSheetProps
 	} = props
 	const { t } = useTranslation("super")
 
-	const needsProject = resourceType === RESOURCE_TYPE.TOPIC || resourceType === RESOURCE_TYPE.FILE
+	const needsProject = resourceType === RESOURCE_TYPE.TOPIC
 
 	const [step, setStep] = useState<"workspace" | "project">("workspace")
 	const [workspaceId, setWorkspaceId] = useState<string | null>(null)
@@ -206,6 +207,7 @@ function MobileTrashRestorePickerSheet(props: MobileTrashRestorePickerSheetProps
 							onClick={handleBack}
 							className="absolute left-[10px] top-1/2 flex size-12 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-[0px_8px_25px_0px_rgba(0,0,0,0.10)]"
 							aria-label={t("mobile.recycleBin.restorePicker.backAria")}
+							data-testid="handle-back"
 						>
 							<ChevronLeft className="size-[22px] text-foreground" />
 						</button>
@@ -216,6 +218,7 @@ function MobileTrashRestorePickerSheet(props: MobileTrashRestorePickerSheetProps
 							className="absolute left-[10px] top-1/2 flex size-12 -translate-y-1/2 items-center justify-center rounded-full bg-card"
 							style={{ boxShadow: HDR_SHADOW }}
 							aria-label={t("mobile.recycleBin.restorePicker.cancelAria")}
+							data-testid="on-close"
 						>
 							<X className="size-[22px] text-foreground" />
 						</button>
@@ -232,6 +235,7 @@ function MobileTrashRestorePickerSheet(props: MobileTrashRestorePickerSheetProps
 						className="absolute right-[10px] top-1/2 flex size-12 -translate-y-1/2 items-center justify-center rounded-full bg-primary disabled:opacity-40"
 						style={{ boxShadow: HDR_SHADOW }}
 						aria-label={t("mobile.recycleBin.restorePicker.confirmAria")}
+						data-testid="handle-confirm"
 					>
 						<Check className="size-[22px] text-primary-foreground" />
 					</button>

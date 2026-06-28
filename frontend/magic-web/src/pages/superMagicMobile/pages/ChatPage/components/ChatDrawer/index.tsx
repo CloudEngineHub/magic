@@ -397,6 +397,7 @@ function ChatDrawer({
 					<div
 						className="flex min-h-0 flex-1 flex-col overflow-y-auto"
 						onClickCapture={handleContentClickCapture}
+						data-testid="handle-content-click-capture"
 					>
 						{activeTab === ChatDrawerTab.Chats && (
 							<div

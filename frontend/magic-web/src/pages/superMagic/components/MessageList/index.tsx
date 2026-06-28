@@ -29,6 +29,7 @@ import { Node } from "./components/Nodes"
 import { observer } from "mobx-react-lite"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { superMagicStore } from "../../stores"
+import { optimisticMessageStore } from "../../stores/optimisticMessageStore"
 import { SuperMagicApi } from "@/apis"
 import { messagesConverter, getMessageNodeKey, createCheckIsLastMessage } from "./helpers"
 import { buildMessageKeysAndTurnGroups } from "./message-turn-groups"
@@ -45,8 +46,24 @@ import { Spinner } from "@/components/shadcn-ui/spinner"
 import { useAutoScroll } from "./hooks/useAutoScroll"
 import RevokedEditableUserMessage from "./components/RevokedEditableUserMessage"
 import type { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
+import {
+	useExportSelectionStore,
+	MAX_EXPORT_COUNT,
+	getSelectableTurnKeys,
+} from "./hooks/useExportSelection"
+import { ExportToolbar } from "./components/ExportToolbar"
+import { ExportPreviewModal } from "./components/ExportPreviewModal"
+import { extractTurns } from "./export/extractMessageContent"
 
-export { MessageListProvider } from "./context"
+import { MessageListProvider, useMessageListContext } from "./context"
+
+export { MessageListProvider }
+
+export interface MessageListExportApi {
+	enter: () => void
+	exit: () => void
+	isActive: () => boolean
+}
 
 interface MessageListProps {
 	data: Array<SuperMagicMessageItem>
@@ -70,6 +87,12 @@ interface MessageListProps {
 	backToLatestButtonClassName?: string
 	enableRevokedUserMessageReedit?: boolean
 	topicModelStore?: ReturnType<typeof createSuperMagicTopicModelStore>
+	/** Enable message-export selection mode. Caller drives entry via exportApiRef. */
+	enableExport?: boolean
+	/** Receives an imperative handle to drive export selection mode. */
+	exportApiRef?: (api: MessageListExportApi | null) => void
+	/** Title used as export document header / default file name. */
+	exportTitle?: string
 	/** Optional ref to the ScrollArea viewport (mobile TopicPage scroll coordination). */
 	viewportRef?: Ref<HTMLDivElement | null>
 	/**
@@ -126,12 +149,17 @@ const MessageList = observer(
 		backToLatestButtonClassName,
 		enableRevokedUserMessageReedit = false,
 		topicModelStore,
+		enableExport = false,
+		exportApiRef,
+		exportTitle,
 		viewportRef,
 		scrollEdgeFade,
 		isMessagesLoading,
 	}: MessageListProps) => {
 		const { t } = useTranslation("super")
 		const isMobile = useIsMobile()
+
+		const exportStore = useExportSelectionStore()
 
 		const nodesPanelRef = useRef<HTMLDivElement | null>(null)
 		/** Scroll edge fade is mobile-only; desktop TopicMessagePanel / share pages stay unchanged. */
@@ -176,11 +204,70 @@ const MessageList = observer(
 
 		const isStreamLoading = superMagicStore.isTopicStreaming(selectedTopic?.chat_topic_id || "")
 
+		// When entering revoked-edit mode, read the set of failed messages recorded at undo success.
+		// These messages are hidden from display first; actual deletion happens after user confirms sending the new message.
+		const hiddenRevokedOptimisticMessageIds =
+			optimisticMessageStore.getHiddenRevokedOptimisticMessageIds(
+				selectedTopic?.chat_topic_id,
+			)
+		const hiddenRevokedOptimisticMessageIdSet = useMemo(
+			() => new Set(hiddenRevokedOptimisticMessageIds),
+			[hiddenRevokedOptimisticMessageIds],
+		)
+
+		// Locate the starting index of revoked messages
+		const revokedSegmentStartIndex = useMemo(
+			() =>
+				data.findIndex(
+					(node: SuperMagicMessageItem) => node?.status === MessageStatus.REVOKED,
+				),
+			[data],
+		)
+
+		// After all revoked messages are restored (revokedSegmentStartIndex becomes -1), clear the hidden set,
+		// ensuring failed messages and revoked messages restore in the same render cycle.
+		useEffect(() => {
+			if (revokedSegmentStartIndex < 0 && selectedTopic?.chat_topic_id) {
+				optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(
+					selectedTopic.chat_topic_id,
+				)
+			}
+		}, [revokedSegmentStartIndex, selectedTopic?.chat_topic_id])
+
+		const mainDisplayData = useMemo(() => {
+			if (revokedSegmentStartIndex < 0) return data
+
+			// After entering revoked-edit mode, hide subsequent failed optimistic messages recorded at undo;
+			// the main message stream only keeps stable messages before the revoke point.
+			return data.filter((node, index) => {
+				if (hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || "")) {
+					return false
+				}
+				return index < revokedSegmentStartIndex
+			})
+		}, [data, hiddenRevokedOptimisticMessageIdSet, revokedSegmentStartIndex])
+
+		const revokedBranchData = useMemo(() => {
+			if (revokedSegmentStartIndex < 0) {
+				return data.filter((node) => node?.status === MessageStatus.REVOKED)
+			}
+
+			// The revoked-edit preview area still shows normal messages from the old branch in current list order;
+			// failed optimistic messages stay hidden until user confirms send, then cleaned up in background.
+			return data.filter((node, index) => {
+				if (hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || "")) {
+					return false
+				}
+				if (index >= revokedSegmentStartIndex) return true
+				return false
+			})
+		}, [data, hiddenRevokedOptimisticMessageIdSet, revokedSegmentStartIndex])
+
 		const { messages, messageKeys, messageTurnGroups } = useMemo(() => {
-			const messages = messagesConverter(data)
+			const messages = messagesConverter(mainDisplayData)
 			const { messageKeys, messageTurnGroups } = buildMessageKeysAndTurnGroups(messages)
 			return { messages, messageKeys, messageTurnGroups }
-		}, [data])
+		}, [mainDisplayData])
 
 		const currentTopicKey = selectedTopic?.chat_topic_id || ""
 		if (currentTopicKeyRef.current !== currentTopicKey) {
@@ -227,43 +314,46 @@ const MessageList = observer(
 		})
 
 		const isLastMessageError = useMemo(() => {
-			const lastNode = data?.[data?.length - 1]
+			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.app_message_id)
 			return n?.status === TaskStatus.ERROR
-		}, [data])
+		}, [mainDisplayData])
 
 		const showAiGeneratedTip =
-			(data.length > 0 && !showLoading && currentTopicStatus !== TaskStatus.RUNNING) ||
+			(mainDisplayData.length > 0 &&
+				!showLoading &&
+				currentTopicStatus !== TaskStatus.RUNNING) ||
 			isLastMessageError
 
-		const revokedMessages = useMemo(
-			() => data.filter((node: any) => node?.status === MessageStatus.REVOKED),
-			[data],
-		)
-
 		const revokedDisplayMessages = useMemo<Array<SuperMagicMessageItem>>(
-			() => messagesConverter(revokedMessages, false) as Array<SuperMagicMessageItem>,
-			[revokedMessages],
+			() => messagesConverter(revokedBranchData, false) as Array<SuperMagicMessageItem>,
+			[revokedBranchData],
 		)
 
-		const firstRevokedUserMessageIndex = useMemo(
-			() => revokedDisplayMessages.findIndex((node) => node?.role === "user"),
-			[revokedDisplayMessages],
-		)
-
+		// 撤回编辑区只保留第一条用户消息作为可编辑主体，其余 revoked 消息继续留在下面的预览区。
 		const firstRevokedUserMessage =
-			firstRevokedUserMessageIndex >= 0
-				? revokedDisplayMessages[firstRevokedUserMessageIndex]
-				: null
+			revokedDisplayMessages.find((node) => node?.role === "user") || null
+		const firstRevokedUserMessageIndex = useMemo(
+			() =>
+				firstRevokedUserMessage
+					? revokedDisplayMessages.findIndex(
+							(node) =>
+								node?.app_message_id === firstRevokedUserMessage.app_message_id,
+						)
+					: -1,
+			[firstRevokedUserMessage, revokedDisplayMessages],
+		)
 
 		const maskedRevokedMessages = useMemo(() => {
-			if (firstRevokedUserMessageIndex < 0)
+			if (!firstRevokedUserMessage)
 				return revokedDisplayMessages.map((node, index) => ({ node, index }))
 
 			return revokedDisplayMessages
 				.map((node, index) => ({ node, index }))
-				.filter(({ index }) => index !== firstRevokedUserMessageIndex)
-		}, [firstRevokedUserMessageIndex, revokedDisplayMessages])
+				.filter(
+					({ node }) => node?.app_message_id !== firstRevokedUserMessage.app_message_id,
+				)
+		}, [firstRevokedUserMessage, revokedDisplayMessages])
 
 		const firstRevokedUserMessageKey = firstRevokedUserMessage
 			? getMessageNodeKey(firstRevokedUserMessage) ||
@@ -271,6 +361,100 @@ const MessageList = observer(
 			: null
 
 		const checkIsLastMessage = useMemoizedFn(createCheckIsLastMessage(messages))
+
+		const selectableTurnKeys = useMemo(
+			() => (enableExport ? getSelectableTurnKeys(messageTurnGroups) : []),
+			[enableExport, messageTurnGroups],
+		)
+
+		useEffect(() => {
+			exportStore.onWarn = (warning) => {
+				if (warning.type === "limit") {
+					magicToast.warning(
+						t("export.limitReached", {
+							defaultValue: "最多选择 {{max}} 条对话",
+							max: warning.limit,
+						}) as string,
+					)
+				} else {
+					magicToast.info(
+						t("export.truncated", {
+							defaultValue: "已选中前 {{max}} 条对话",
+							max: warning.limit,
+						}) as string,
+					)
+				}
+			}
+		}, [exportStore, t])
+
+		useEffect(() => {
+			if (!enableExport) return
+			const api: MessageListExportApi = {
+				enter: () => exportStore.enter(),
+				exit: () => exportStore.exit(),
+				isActive: () => exportStore.exportMode,
+			}
+			exportApiRef?.(api)
+			return () => exportApiRef?.(null)
+		}, [enableExport, exportApiRef, exportStore])
+
+		// Exit export mode when topic changes
+		useEffect(() => {
+			exportStore.exit()
+		}, [currentTopicKey, exportStore])
+
+		const handleToggleSelect = useMemoizedFn((key: string) => exportStore.toggle(key))
+		const handleOpenPreview = useMemoizedFn(() => {
+			if (exportStore.count === 0) return
+			exportStore.openPreview()
+		})
+
+		const parentCtx = useMessageListContext()
+		const workspaceFilesList = parentCtx.projectFilesStore?.workspaceFilesList
+
+		const exportTurns = useMemo(() => {
+			if (!exportStore.previewOpen) return []
+			return extractTurns(messageTurnGroups, new Set(exportStore.selectedKeys), {
+				includeToolCall: exportStore.includeToolCall,
+				resolveNode: (id) => superMagicStore.getMessageNode(id),
+				workspaceFilesList,
+			})
+		}, [
+			exportStore.previewOpen,
+			exportStore.selectedKeys,
+			exportStore.includeToolCall,
+			messageTurnGroups,
+			workspaceFilesList,
+		])
+
+		const exportLimitReached = exportStore.count >= MAX_EXPORT_COUNT
+		const exportModeActive = enableExport && exportStore.exportMode
+
+		const exportEnterRequest = useMemoizedFn(() => exportStore.enter())
+		const augmentedMessageListContext = useMemo(
+			() => ({
+				...parentCtx,
+				allowExport: enableExport,
+				exportModeActive,
+				onExportRequest: enableExport ? exportEnterRequest : undefined,
+			}),
+			// eslint-disable-next-line react-hooks/exhaustive-deps
+			[
+				parentCtx.allowRevoke,
+				parentCtx.allowUserMessageCopy,
+				parentCtx.allowScheduleTaskCreate,
+				parentCtx.allowMessageTooltip,
+				parentCtx.allowConversationCopy,
+				parentCtx.allowCreateNewTopic,
+				parentCtx.exportModeActive,
+				parentCtx.onTopicSwitch,
+				parentCtx.renderAssistantAvatar,
+				parentCtx.showTaskCompletedBadge,
+				enableExport,
+				exportModeActive,
+				exportEnterRequest,
+			],
+		)
 
 		/** 是否展开已撤销消息 */
 		const [isRevokedMessagesExpanded, setIsRevokedMessagesExpanded] = useState(false)
@@ -297,7 +481,6 @@ const MessageList = observer(
 				await SuperMagicApi.cancelUndoMessage({ topic_id: selectedTopic.id })
 				magicToast.success(t("warningCard.cancelUndoMessageSuccess"))
 				pubsub.publish(PubSubEvents.Show_Revoked_Messages)
-				pubsub.publish(PubSubEvents.Update_Attachments)
 				pubsub.publish(PubSubEvents.Refresh_Topic_Messages)
 			} catch (error) {
 				console.error("handleCancelRevokedMessages error:", error)
@@ -392,67 +575,95 @@ const MessageList = observer(
 		}
 
 		return (
-			<div
-				className={cn(
-					"relative flex h-full w-full flex-1 flex-col overflow-hidden",
-					"message-list-container",
-					className,
-				)}
-			>
-				<ScrollArea
+			<MessageListProvider value={augmentedMessageListContext}>
+				<div
 					className={cn(
-						"h-full w-full",
-						isMobile
-							? "[&>[data-slot='scroll-area-viewport']>div]:px-4"
-							: "[&>[data-slot='scroll-area-viewport']>div]:pl-2 [&>[data-slot='scroll-area-viewport']>div]:pr-3",
-						"[&>[data-slot='scroll-area-viewport']>div]:pt-0",
-						"[&>[data-slot='scroll-area-viewport']>div]:pb-2",
-						"[&>[data-slot='scroll-area-viewport']>div]:!flex",
-						"[&>[data-slot='scroll-area-viewport']>div]:!flex-col",
-						"[&>[data-slot='scroll-area-viewport']>div]:!gap-2",
-						"[&>[data-slot='scroll-area-viewport']>div]:!max-w-3xl",
-						"[&>[data-slot='scroll-area-viewport']>div]:!min-w-[unset]",
-						"[&>[data-slot='scroll-area-viewport']>div]:!mx-auto",
-						isMobile
-							? "[&>[data-slot='scroll-area-viewport']>div:first-child]:mt-[10px]"
-							: "[&>[data-slot='scroll-area-viewport']>div:first-child]:mt-[50px]",
+						"relative flex h-full w-full flex-1 flex-col overflow-hidden",
+						"message-list-container",
+						className,
 					)}
-					viewportRef={setScrollViewportRef}
 				>
-					{data.length > 0 || !isEmptyStatus ? (
-						<>
-							<MessageTurnGroupList
-								groups={messageTurnGroups}
-								isMobile={isMobile}
-								stickyMessageClassName={stickyMessageClassName}
-								renderNode={({ node, index }) => renderNodeContent(node, index)}
+					{enableExport && exportStore.exportMode && (
+						<div className="px-2 pt-2">
+							<ExportToolbar
+								store={exportStore}
+								selectableKeys={selectableTurnKeys}
+								onNext={handleOpenPreview}
 							/>
-							{revokedDisplayMessages.length > 0 && !forceHideRevokedMessages && (
-								<section className="relative flex flex-col gap-2">
-									{firstRevokedUserMessage &&
-										(() => {
-											const firstRevokedUserMessageKey =
-												getMessageNodeKey(firstRevokedUserMessage) ||
-												`${firstRevokedUserMessage?.role || "message"}-${firstRevokedUserMessageIndex}`
-											const firstRevokedPreviousNode =
-												firstRevokedUserMessageIndex > 0
-													? revokedDisplayMessages[
-															firstRevokedUserMessageIndex - 1
-														]
-													: undefined
-											const firstRevokedUserMessageContent =
-												enableRevokedUserMessageReedit && !isMobile ? (
-													<RevokedEditableUserMessage
-														node={firstRevokedUserMessage}
-														selectedTopic={selectedTopic}
-														showLoading={showLoading}
-														messagesLength={data.length}
-														onFileClick={onFileClick}
-														topicModelStore={topicModelStore}
-														onPendingSendChange={
-															setIsFirstRevokedUserMessagePendingSend
-														}
-														fallbackContent={renderNodeContent(
+						</div>
+					)}
+					<ScrollArea
+						className={cn(
+							"h-full w-full",
+							isMobile
+								? "[&>[data-slot='scroll-area-viewport']>div]:px-4"
+								: "[&>[data-slot='scroll-area-viewport']>div]:pl-2 [&>[data-slot='scroll-area-viewport']>div]:pr-3",
+							"[&>[data-slot='scroll-area-viewport']>div]:pt-0",
+							"[&>[data-slot='scroll-area-viewport']>div]:pb-2",
+							"[&>[data-slot='scroll-area-viewport']>div]:!flex",
+							"[&>[data-slot='scroll-area-viewport']>div]:!flex-col",
+							"[&>[data-slot='scroll-area-viewport']>div]:!gap-2",
+							"[&>[data-slot='scroll-area-viewport']>div]:!max-w-3xl",
+							"[&>[data-slot='scroll-area-viewport']>div]:!min-w-[unset]",
+							"[&>[data-slot='scroll-area-viewport']>div]:!mx-auto",
+							isMobile
+								? "[&>[data-slot='scroll-area-viewport']>div:first-child]:mt-[10px]"
+								: "[&>[data-slot='scroll-area-viewport']>div:first-child]:mt-[50px]",
+						)}
+						viewportRef={setScrollViewportRef}
+					>
+						{data.length > 0 || !isEmptyStatus ? (
+							<>
+								<MessageTurnGroupList
+									groups={messageTurnGroups}
+									isMobile={isMobile}
+									stickyMessageClassName={stickyMessageClassName}
+									renderNode={({ node, index }) => renderNodeContent(node, index)}
+									exportMode={enableExport && exportStore.exportMode}
+									selectedKeys={exportStore.selectedKeys}
+									onToggleSelect={handleToggleSelect}
+									limitReached={exportLimitReached}
+								/>
+								{revokedDisplayMessages.length > 0 && !forceHideRevokedMessages && (
+									<section className="relative flex flex-col gap-2">
+										{firstRevokedUserMessage &&
+											(() => {
+												const firstRevokedUserMessageKey =
+													getMessageNodeKey(firstRevokedUserMessage) ||
+													`${firstRevokedUserMessage?.role || "message"}-${firstRevokedUserMessageIndex}`
+												const firstRevokedPreviousNode =
+													firstRevokedUserMessageIndex > 0
+														? revokedDisplayMessages[
+																firstRevokedUserMessageIndex - 1
+															]
+														: undefined
+												const firstRevokedUserMessageContent =
+													enableRevokedUserMessageReedit && !isMobile ? (
+														<RevokedEditableUserMessage
+															node={firstRevokedUserMessage}
+															selectedTopic={selectedTopic}
+															showLoading={showLoading}
+															messagesLength={data.length}
+															hiddenOptimisticMessageIds={
+																hiddenRevokedOptimisticMessageIds
+															}
+															onFileClick={onFileClick}
+															topicModelStore={topicModelStore}
+															onPendingSendChange={
+																setIsFirstRevokedUserMessagePendingSend
+															}
+															fallbackContent={renderNodeContent(
+																firstRevokedUserMessage,
+																firstRevokedUserMessageIndex,
+																{
+																	disableEntryAnimation: true,
+																	previousNode:
+																		firstRevokedPreviousNode,
+																},
+															)}
+														/>
+													) : (
+														renderNodeContent(
 															firstRevokedUserMessage,
 															firstRevokedUserMessageIndex,
 															{
@@ -460,196 +671,208 @@ const MessageList = observer(
 																previousNode:
 																	firstRevokedPreviousNode,
 															},
-														)}
-													/>
-												) : (
-													renderNodeContent(
-														firstRevokedUserMessage,
-														firstRevokedUserMessageIndex,
-														{
-															disableEntryAnimation: true,
-															previousNode: firstRevokedPreviousNode,
-														},
-													)
-												)
-
-											const revokedUserMessageWrapperClassName = isMobile
-												? "relative mb-2"
-												: cn(
-														USER_MESSAGE_STICKY_OVERLAY_CLASS,
-														userMessageStickyTopClass,
-														stickyMessageClassName,
+														)
 													)
 
-											return (
-												<div
-													{...(isMobile
-														? {}
-														: {
-																"data-sticky-message-id":
-																	firstRevokedUserMessageKey,
-															})}
-													className={revokedUserMessageWrapperClassName}
-												>
+												const revokedUserMessageWrapperClassName = isMobile
+													? "relative mb-2"
+													: cn(
+															USER_MESSAGE_STICKY_OVERLAY_CLASS,
+															userMessageStickyTopClass,
+															stickyMessageClassName,
+														)
+
+												return (
 													<div
-														data-message-id={firstRevokedUserMessageKey}
-														data-message-role={
-															firstRevokedUserMessage?.role || "user"
+														{...(isMobile
+															? {}
+															: {
+																	"data-sticky-message-id":
+																		firstRevokedUserMessageKey,
+																})}
+														className={
+															revokedUserMessageWrapperClassName
 														}
-														className="relative"
 													>
-														{firstRevokedUserMessageContent}
+														<div
+															data-message-id={
+																firstRevokedUserMessageKey
+															}
+															data-message-role={
+																firstRevokedUserMessage?.role ||
+																"user"
+															}
+															className="relative"
+														>
+															{firstRevokedUserMessageContent}
+														</div>
 													</div>
-												</div>
-											)
-										})()}
-									{!isFirstRevokedUserMessagePendingSend &&
-									maskedRevokedMessages.length > 0 ? (
-										<div
-											className={cn(
-												"relative max-h-[600px] flex-shrink-0 overflow-hidden",
-												isRevokedMessagesExpanded &&
-													"max-h-none overflow-visible",
-											)}
-										>
+												)
+											})()}
+										{!isFirstRevokedUserMessagePendingSend &&
+										maskedRevokedMessages.length > 0 ? (
 											<div
 												className={cn(
-													"relative overflow-hidden rounded-lg p-4",
-													"[&::after]:absolute [&::after]:inset-0 [&::after]:z-[1] [&::after]:content-['']",
-													"[&::after]:pointer-events-none [&::after]:bg-white/50 dark:[&::after]:bg-black/30",
-												)}
-											>
-												{maskedRevokedMessages.map(({ node, index }) =>
-													renderNodes(node, index, {
-														disableEntryAnimation: true,
-														disableUserSticky: true,
-														previousNode:
-															index > 0
-																? revokedDisplayMessages[index - 1]
-																: undefined,
-													}),
-												)}
-											</div>
-											<div
-												className={cn(
-													"pointer-events-none absolute inset-0 z-[2] flex items-end",
-													"bg-[linear-gradient(to_bottom,transparent_0%,transparent_50%,rgb(var(--sidebar-rgb))_100%)]",
-													isRevokedMessagesExpanded && "static bg-none",
+													"relative max-h-[600px] flex-shrink-0 overflow-hidden",
+													isRevokedMessagesExpanded &&
+														"max-h-none overflow-visible",
 												)}
 											>
 												<div
 													className={cn(
-														"pointer-events-auto flex w-full gap-1 pb-2.5 pt-2.5",
-														"bg-sidebar",
+														"relative overflow-hidden rounded-lg p-4",
+														"[&::after]:absolute [&::after]:inset-0 [&::after]:z-[1] [&::after]:content-['']",
+														"[&::after]:pointer-events-none [&::after]:bg-white/50 dark:[&::after]:bg-black/30",
 													)}
 												>
-													<IconArrowBackUp size={22} />
-													<div className="flex flex-col gap-2.5">
-														<div className="text-sm leading-5 text-foreground">
-															{t("warningCard.undoMessageContentTip")}
-														</div>
-														<div className="flex gap-2.5">
-															<Button
-																className={revokedActionButton}
-																onClick={
-																	handleRevokedMessagesExpanded
-																}
-															>
-																<div>
-																	{isRevokedMessagesExpanded
-																		? t(
-																				"warningCard.collapseContent",
-																			)
-																		: t(
-																				"warningCard.expandContent",
-																			)}
-																</div>
-																{isRevokedMessagesExpanded ? (
-																	<IconChevronsUp size={16} />
-																) : (
-																	<IconChevronsDown size={16} />
+													{maskedRevokedMessages.map(({ node, index }) =>
+														renderNodes(node, index, {
+															disableEntryAnimation: true,
+															disableUserSticky: true,
+															previousNode:
+																index > 0
+																	? revokedDisplayMessages[
+																			index - 1
+																		]
+																	: undefined,
+														}),
+													)}
+												</div>
+												<div
+													className={cn(
+														"pointer-events-none absolute inset-0 z-[2] flex items-end",
+														"bg-[linear-gradient(to_bottom,transparent_0%,transparent_50%,rgb(var(--sidebar-rgb))_100%)]",
+														isRevokedMessagesExpanded &&
+															"static bg-none",
+													)}
+												>
+													<div
+														className={cn(
+															"pointer-events-auto flex w-full gap-1 pb-2.5 pt-2.5",
+															"bg-sidebar",
+														)}
+													>
+														<IconArrowBackUp size={22} />
+														<div className="flex flex-col gap-2.5">
+															<div className="text-sm leading-5 text-foreground">
+																{t(
+																	"warningCard.undoMessageContentTip",
 																)}
-															</Button>
-															<Button
-																className={revokedActionButton}
-																onClick={
-																	handleCancelRevokedMessages
-																}
-															>
-																{isCancelRevokedLoading ? (
-																	<Spinner
-																		className="animate-spin"
-																		size={16}
-																	/>
-																) : null}
-																{t("warningCard.restoreContent")}
-															</Button>
+															</div>
+															<div className="flex gap-2.5">
+																<Button
+																	className={revokedActionButton}
+																	onClick={
+																		handleRevokedMessagesExpanded
+																	}
+																>
+																	<div>
+																		{isRevokedMessagesExpanded
+																			? t(
+																					"warningCard.collapseContent",
+																				)
+																			: t(
+																					"warningCard.expandContent",
+																				)}
+																	</div>
+																	{isRevokedMessagesExpanded ? (
+																		<IconChevronsUp size={16} />
+																	) : (
+																		<IconChevronsDown
+																			size={16}
+																		/>
+																	)}
+																</Button>
+																<Button
+																	className={revokedActionButton}
+																	onClick={
+																		handleCancelRevokedMessages
+																	}
+																>
+																	{isCancelRevokedLoading ? (
+																		<Spinner
+																			className="animate-spin"
+																			size={16}
+																		/>
+																	) : null}
+																	{t(
+																		"warningCard.restoreContent",
+																	)}
+																</Button>
+															</div>
 														</div>
 													</div>
 												</div>
 											</div>
-										</div>
-									) : null}
-									{!isFirstRevokedUserMessagePendingSend &&
-									maskedRevokedMessages.length === 0 ? (
-										<div className="flex items-start gap-1 rounded-lg bg-sidebar pb-2.5 pt-2.5">
-											<IconArrowBackUp size={22} />
-											<div className="flex flex-col gap-2.5">
-												<div className="text-sm leading-5 text-foreground">
-													{t("warningCard.undoMessageContentTip")}
+										) : null}
+										{!isFirstRevokedUserMessagePendingSend &&
+										maskedRevokedMessages.length === 0 ? (
+											<div className="flex items-start gap-1 rounded-lg bg-sidebar pb-2.5 pt-2.5">
+												<IconArrowBackUp size={22} />
+												<div className="flex flex-col gap-2.5">
+													<div className="text-sm leading-5 text-foreground">
+														{t("warningCard.undoMessageContentTip")}
+													</div>
+													<Button
+														className={revokedActionButton}
+														onClick={handleCancelRevokedMessages}
+													>
+														{isCancelRevokedLoading ? (
+															<Spinner
+																className="animate-spin"
+																size={16}
+															/>
+														) : null}
+														{t("warningCard.restoreContent")}
+													</Button>
 												</div>
-												<Button
-													className={revokedActionButton}
-													onClick={handleCancelRevokedMessages}
-												>
-													{isCancelRevokedLoading ? (
-														<Spinner
-															className="animate-spin"
-															size={16}
-														/>
-													) : null}
-													{t("warningCard.restoreContent")}
-												</Button>
 											</div>
-										</div>
-									) : null}
-								</section>
-							)}
-						</>
-					) : (
-						<Empty />
-					)}
-					{(data?.length === 1 || (showLoading && !isStreamLoading)) && (
-						<LoadingMessage
-							messages={data}
-							showLoading={showLoading}
-							selectedTopic={selectedTopic}
+										) : null}
+									</section>
+								)}
+							</>
+						) : (
+							<Empty />
+						)}
+						{showLoading && !isStreamLoading && (
+							<LoadingMessage
+								messages={data}
+								showLoading={showLoading}
+								selectedTopic={selectedTopic}
+							/>
+						)}
+						{showAiGeneratedTip && (
+							<div
+								className={cn(
+									"mx-auto mb-2.5 mt-2.5 text-center text-xs leading-4",
+									"text-muted-foreground",
+								)}
+							>
+								{t("ui.aiGeneratedTip")}
+							</div>
+						)}
+					</ScrollArea>
+					{scrollEdgeFadeConfig ? (
+						<ScrollEdgeFadeOverlays
+							fadeColor={scrollEdgeFadeConfig.fadeColor}
+							showTopMask={showTopMask}
+							showBottomMask={showBottomMask}
+						/>
+					) : null}
+					<BackToLatestButton
+						visible={showBackToLatest}
+						className={backToLatestButtonClassName}
+						onClick={() => scrollToBottom("smooth")}
+					/>
+					{enableExport && (
+						<ExportPreviewModal
+							store={exportStore}
+							turns={exportTurns}
+							title={exportTitle || selectedTopic?.topic_name || "conversation"}
 						/>
 					)}
-					{showAiGeneratedTip && (
-						<div
-							className={cn(
-								"mx-auto mb-2.5 mt-2.5 text-center text-xs leading-4",
-								"text-muted-foreground",
-							)}
-						>
-							{t("ui.aiGeneratedTip")}
-						</div>
-					)}
-				</ScrollArea>
-				{scrollEdgeFadeConfig ? (
-					<ScrollEdgeFadeOverlays
-						fadeColor={scrollEdgeFadeConfig.fadeColor}
-						showTopMask={showTopMask}
-						showBottomMask={showBottomMask}
-					/>
-				) : null}
-				<BackToLatestButton
-					visible={showBackToLatest}
-					className={backToLatestButtonClassName}
-					onClick={() => scrollToBottom("smooth")}
-				/>
-			</div>
+				</div>
+			</MessageListProvider>
 		)
 	},
 )

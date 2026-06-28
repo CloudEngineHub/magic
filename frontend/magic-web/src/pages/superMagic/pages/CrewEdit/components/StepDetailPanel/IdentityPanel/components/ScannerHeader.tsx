@@ -15,7 +15,7 @@ export function ScannerHeader({ logoUrl }: ScannerHeaderProps) {
 			<div className="absolute left-1/2 top-[120px] h-[60px] w-[100px] -translate-x-1/2 rounded-md bg-gradient-to-b from-gray-200 to-gray-400" />
 			<div className="absolute left-1/2 top-[125px] h-[50px] w-[50px] -translate-x-1/2 overflow-hidden rounded-[14px]">
 				{logoUrl ? (
-					<img src={logoUrl} alt="" className="h-full w-full object-cover" />
+					<img src={logoUrl} alt="" className="h-full w-full object-cover"  data-testid="scanner-header-image"/>
 				) : null}
 			</div>
 		</div>

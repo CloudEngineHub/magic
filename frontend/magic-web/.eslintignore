@@ -80,3 +80,6 @@ types/
 
 # Specific files that should be ignored
 src/vite-env.d.ts
+
+# Mock directory
+mock/

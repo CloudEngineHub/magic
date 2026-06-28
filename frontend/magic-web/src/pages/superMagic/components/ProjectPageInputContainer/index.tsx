@@ -47,6 +47,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	setSelectedProject,
 	onEditorBlur,
 	onEditorFocus,
+	onMessageSendReady,
 	onFileClick,
 	selectedWorkspace,
 	attachments,
@@ -224,6 +225,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 				onEditorBlur?.()
 			},
 			onSendComplete,
+			onMessageSendReady,
 			queueContext: {
 				editingQueueItem: messageQueue.editingQueueItem,
 				addToQueue: messageQueue.addToQueue,
@@ -256,6 +258,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		attachments,
 		mentionPanelStore,
 		onFileClick,
+		onMessageSendReady,
 		messageQueue.editingQueueItem,
 		messageQueue.addToQueue,
 		messageQueue.finishEditQueueItem,

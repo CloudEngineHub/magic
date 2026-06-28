@@ -27,6 +27,7 @@ export function SourceTypeOptionRow(props: SourceTypeOptionRowProps) {
 				disabled && "cursor-not-allowed opacity-50",
 			)}
 			onClick={() => !disabled && onSelect()}
+			data-testid="on-select"
 		>
 			<div className="flex flex-1 flex-col gap-1">
 				<div className="flex items-center gap-1.5">

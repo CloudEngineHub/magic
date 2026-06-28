@@ -5,7 +5,7 @@ import { createStyles, useResponsive } from "antd-style"
 import IconInfo from "./icons/IconInfo"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
 
-interface DuplicateFileModalProps {
+export interface DuplicateFileModalProps {
 	visible: boolean
 	fileName: string
 	totalDuplicates?: number

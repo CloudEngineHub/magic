@@ -76,17 +76,48 @@ export const isOnlyText = (content?: JSONContent) => {
 }
 
 /**
+ * ProseMirror 不允许 text 节点为空字符串；TipTap 序列化空段落时常带 `text: ""`。
+ */
+function sanitizeEmptyTextNodes(content: JSONContent, depth = 0): JSONContent | null {
+	if (depth >= MAX_RECURSION_DEPTH) return content
+	if (!content || typeof content !== "object") return content
+
+	if (content.type === "text") {
+		return content.text ? content : null
+	}
+
+	const sanitized: JSONContent = { ...content }
+
+	if (Array.isArray(content.content)) {
+		const nextContent = content.content
+			.map((child) => sanitizeEmptyTextNodes(child, depth + 1))
+			.filter((child): child is JSONContent => child != null)
+
+		if (nextContent.length > 0) {
+			sanitized.content = nextContent
+		} else {
+			delete sanitized.content
+		}
+	}
+
+	return sanitized
+}
+
+/**
  * 安全地解析JSON内容
  * @param content 内容字符串或对象
  * @returns 解析后的JSONContent
  */
 export const parseContent = (content: JSONContent | string): JSONContent | null => {
+	let parsed: JSONContent | null = null
+
 	if (typeof content === "string") {
 		try {
-			return JSON.parse(content) as JSONContent
+			parsed = JSON.parse(content) as JSONContent
 		} catch {
 			// If JSON parsing fails, treat as plain text
-			return {
+			if (!content) return null
+			parsed = {
 				type: "doc",
 				content: [
 					{
@@ -96,8 +127,11 @@ export const parseContent = (content: JSONContent | string): JSONContent | null 
 				],
 			}
 		}
+	} else {
+		parsed = content as JSONContent
 	}
-	return content as JSONContent
+
+	return parsed ? sanitizeEmptyTextNodes(parsed) : null
 }
 
 /**

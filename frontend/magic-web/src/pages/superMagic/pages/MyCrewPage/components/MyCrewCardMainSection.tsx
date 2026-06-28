@@ -53,6 +53,7 @@ export const MyCrewCardMainSection = memo(function MyCrewCardMainSection({
 						loading="lazy"
 						decoding="async"
 						onError={() => setAvatarLoadFailed(true)}
+						data-testid="set-avatar-load-failed"
 					/>
 				) : (
 					<div className="flex size-full items-center justify-center bg-muted text-foreground">

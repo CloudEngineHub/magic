@@ -72,6 +72,7 @@ export function SwipeActionButtons({
 							willChange: "transform, width",
 						}}
 						onClick={btn.disabled ? undefined : btn.onClick}
+						data-testid="swipe-action-buttons"
 					>
 						{btn.icon}
 						<div className={`text-xs font-normal leading-none ${btn.labelClassName}`}>

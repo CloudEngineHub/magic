@@ -16,6 +16,11 @@ import { getFileContentById } from "@/pages/superMagic/utils/api"
 import { processHtmlContent } from "../htmlProcessor"
 import { getFullContent, decodeHTMLEntities } from "./full-content"
 import {
+	buildHtmlVirtualStorageNamespace,
+	createVirtualStorageContext,
+	virtualStorageRegistry,
+} from "./virtual-storage"
+import {
 	MAGIC_FETCH_POST_MESSAGE_TARGET_HELPER,
 	POST_MESSAGE_TARGET_STRATEGIES,
 	findMatchingFile,
@@ -36,6 +41,9 @@ export const NESTED_IFRAME_MESSAGE_TYPES = {
 
 interface NestedIframeContentHandlerOptions {
 	postMessageTargetStrategy?: PostMessageTargetStrategy
+	projectId?: string
+	topicId?: string
+	parentTargetOrigin?: string
 }
 
 // 规范化链路文件 ID：去重并补齐当前请求发起文件
@@ -361,8 +369,12 @@ export function createNestedIframeContentHandler(
 	attachmentList: unknown[],
 	options: NestedIframeContentHandlerOptions = {},
 ) {
-	const { postMessageTargetStrategy = POST_MESSAGE_TARGET_STRATEGIES.SAME_ORIGIN_ANCESTOR } =
-		options
+	const {
+		postMessageTargetStrategy = POST_MESSAGE_TARGET_STRATEGIES.SAME_ORIGIN_ANCESTOR,
+		projectId,
+		topicId,
+		parentTargetOrigin,
+	} = options
 
 	return async (event: MessageEvent) => {
 		if (!event.data || event.data.type !== NESTED_IFRAME_MESSAGE_TYPES.REQUEST) return
@@ -380,7 +392,7 @@ export function createNestedIframeContentHandler(
 			skipProcessing?: boolean,
 			skipReason?: string,
 		) => {
-			; (event.source as Window)?.postMessage(
+			;(event.source as Window)?.postMessage(
 				{
 					type: NESTED_IFRAME_MESSAGE_TYPES.RESPONSE,
 					requestId,
@@ -453,7 +465,20 @@ export function createNestedIframeContentHandler(
 				html_relative_path: nestedFileFolderPath,
 			})
 
-			// 5. Inject all required runtime scripts (Magic methods, storage mocks, etc.)
+			const virtualStorageContext = await createVirtualStorageContext({
+				namespace: buildHtmlVirtualStorageNamespace({
+					projectId,
+					topicId,
+					fileId: matchedFile.file_id,
+				}),
+				origin: event.origin || undefined,
+				targetOrigin:
+					parentTargetOrigin ||
+					(typeof window !== "undefined" ? window.location.origin : "*"),
+			})
+			virtualStorageRegistry.register(virtualStorageContext)
+
+			// 5. Inject all required runtime scripts (Magic methods, virtual storage, etc.)
 			const fullContent = getFullContent(
 				decodeHTMLEntities(processedResult.processedContent),
 				matchedFile.file_id,
@@ -464,6 +489,7 @@ export function createNestedIframeContentHandler(
 						postMessageTargetStrategy,
 					},
 					postMessageTargetStrategy,
+					virtualStorage: virtualStorageContext,
 				},
 			)
 

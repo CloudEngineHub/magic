@@ -1,20 +1,20 @@
-#!/usr/bin/env sh
-set -e
+# Resolve the magic-web project root from this hook's location.
+# Works both in the monorepo (git root != project root) and when
+# magic-web is distributed as a standalone repository.
+MAGIC_WEB_DIR="$(cd "$(dirname -- "$0")/.." && pwd)"
+cd "$MAGIC_WEB_DIR"
 
-hook_dir="$(CDPATH= cd "$(dirname "$0")" && pwd -P)"
-project_dir="$(CDPATH= cd "$hook_dir/.." && pwd -P)"
-root="$(git -C "$project_dir" rev-parse --show-toplevel)"
-root_hook="$root/.husky/pre-commit"
-current_hook="$hook_dir/pre-commit"
-
-# A repo-level hook is optional in this monorepo; run it when present without
-# making magic-web depend on a root .husky directory.
-if [ -f "$root_hook" ] && [ "$root_hook" != "$current_hook" ] && [ "$MAGIC_WEB_SKIP_ROOT_HOOK" != "1" ]; then
-	MAGIC_WEB_SKIP_ROOT_HOOK=1 sh "$root_hook" "$@"
+# Check for hardcoded tokens
+echo "🔍 Checking for hardcoded tokens..."
+if ! node scripts/git-hooks/check-hardcoded-tokens.cjs; then
+	exit 1
 fi
 
-cd "$project_dir" || exit 1
+# Block commits when OKLCH and RGB tokens drift.
+echo "🎨 Checking theme RGB tokens..."
+if ! pnpm generate:theme-rgb-tokens:check; then
+	exit 1
+fi
 
-echo "Checking for hardcoded tokens..."
-node scripts/git-hooks/check-hardcoded-tokens.cjs
-NODE_OPTIONS="--max-old-space-size=8192" pnpm exec lint-staged
+# Run lint-staged for code formatting
+NODE_OPTIONS="--max-old-space-size=8192" npx lint-staged

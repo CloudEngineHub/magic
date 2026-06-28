@@ -299,6 +299,7 @@ export function BrandAssetUpload({
 			)}
 			onPaste={handlePaste}
 			tabIndex={-1}
+			data-testid="handle-paste"
 			{...dropZoneProps}
 		>
 			{isDragging ? (
@@ -315,6 +316,7 @@ export function BrandAssetUpload({
 				accept={ACCEPT_TYPES}
 				onChange={handleInputChange}
 				disabled={disabled}
+				data-testid="handle-input-change"
 			/>
 
 			<div className={cn("flex gap-2", isStacked && "flex-col")}>
@@ -416,6 +418,7 @@ export function BrandAssetUpload({
 												src={item.previewUrl}
 												alt={item.description || item.file.name}
 												className="h-full w-full object-contain transition-transform duration-300 group-hover/item:scale-105"
+												data-testid="brand-asset-upload-image"
 											/>
 										) : isHydratingPreview ? (
 											<div className="flex h-full w-full items-center justify-center bg-muted/40">

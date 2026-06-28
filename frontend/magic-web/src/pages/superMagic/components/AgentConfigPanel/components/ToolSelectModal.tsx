@@ -112,6 +112,7 @@ export default function ToolSelectModal({
 					cursor: isDisabledFromRemoving ? "not-allowed" : "pointer",
 					opacity: isDisabledFromRemoving ? 0.7 : 1,
 				}}
+				data-testid="handle-toggle-tool-with-type"
 			>
 				<div className={`${styles.toolIcon} ${isAdded ? styles.addedButtonIcon : ""}`}>
 					<IconTools stroke={1.5} size={24} style={{ color: isAdded ? "#315CEC" : "" }} />
@@ -205,7 +206,7 @@ export default function ToolSelectModal({
 						key: category.id,
 						label: (
 							<div className={styles.collapseHeader}>
-								<img src={CustomIcon} className={styles.collapseIcon} />
+								<img src={CustomIcon} className={styles.collapseIcon}  data-testid="tool-select-modal-image"/>
 								<span className={styles.collapseName}>{category.name}</span>
 							</div>
 						),

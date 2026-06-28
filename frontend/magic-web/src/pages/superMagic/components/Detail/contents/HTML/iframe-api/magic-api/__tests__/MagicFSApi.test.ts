@@ -424,6 +424,33 @@ describe("MagicFSApi", () => {
 		expect(cb).not.toHaveBeenCalled()
 	})
 
+	it("watchDir() forwards MAGIC_FS_DIR_WATCH_STATUS to the matching callback", () => {
+		const cb = vi.fn()
+		;(window as any).Magic.fs.watchDir("./data/tasks/", cb)
+
+		simulateResponse({
+			type: "MAGIC_FS_DIR_WATCH_STATUS",
+			dir: "./data/tasks/",
+			success: false,
+			reason: "too_many_entries",
+			entryCount: 1001,
+			maxEntryCount: 1000,
+			timestamp: 12345,
+		})
+
+		expect(cb).toHaveBeenCalledWith({
+			dir: "./data/tasks/",
+			timestamp: 12345,
+			added: [],
+			removed: [],
+			entries: [],
+			success: false,
+			reason: "too_many_entries",
+			entryCount: 1001,
+			maxEntryCount: 1000,
+		})
+	})
+
 	it("watchDir() 返回的取消函数调用后发送 MAGIC_FS_WATCH_DIR_UNREGISTER 并停止回调", () => {
 		const cb = vi.fn()
 		const unwatch = (window as any).Magic.fs.watchDir("./data/tasks/", cb)

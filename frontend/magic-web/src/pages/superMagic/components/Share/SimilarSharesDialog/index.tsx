@@ -45,8 +45,9 @@ function SimilarSharesDialog({
 				onPointerDownOutside={(e) => e.preventDefault()}
 				onEscapeKeyDown={(e) => e.preventDefault()}
 				style={{ zIndex: 1200 }}
+				data-testid="on-pointer-down-outside"
 			>
-				<DialogHeader className="border-b border-border px-3 py-3">
+				<DialogHeader className="border-b border-border px-3 py-3" data-testid="similar-shares-dialog-header">
 					<DialogTitle className="text-base font-semibold">
 						{t("share.useSimilarShare")}
 					</DialogTitle>
@@ -63,12 +64,12 @@ function SimilarSharesDialog({
 					))}
 				</div>
 
-				<DialogFooter className="border-t border-border px-3 py-3">
+				<DialogFooter className="border-t border-border px-3 py-3" data-testid="similar-shares-dialog-footer">
 					<div className="flex items-center gap-1.5">
-						<Button variant="outline" onClick={onClose} className="h-9">
+						<Button variant="outline" onClick={onClose} className="h-9" data-testid="on-close">
 							{t("common.cancel")}
 						</Button>
-						<Button onClick={handleCreateNew} className="h-9">
+						<Button onClick={handleCreateNew} className="h-9" data-testid="handle-create-new">
 							{t("share.createNewShare")}
 						</Button>
 					</div>

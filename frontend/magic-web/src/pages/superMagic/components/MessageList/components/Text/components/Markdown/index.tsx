@@ -170,12 +170,14 @@ export interface UseMarkdownComponentResult {
 export function useMarkdownComponent({
 	streamingScrollStateRef,
 	isStreaming = false,
+	enableHtmlCodeBlockPreview = true,
 	citations,
 	highlightedCitation,
 	onCitationClick,
 }: {
 	streamingScrollStateRef: MutableRefObject<HtmlCodeBlockPreviewStreamingScrollState>
 	isStreaming: boolean
+	enableHtmlCodeBlockPreview?: boolean
 	citations?: CitationSource[]
 	highlightedCitation?: number | null
 	onCitationClick?: (index: number | null) => void
@@ -198,7 +200,9 @@ export function useMarkdownComponent({
 					domNode?: unknown
 				}
 				const codeBlockInfo = extractCodeBlockDomInfoFromDomNode(domNode)
-				const previewCode = resolveHtmlPreviewCode(codeBlockInfo)
+				const previewCode = enableHtmlCodeBlockPreview
+					? resolveHtmlPreviewCode(codeBlockInfo)
+					: undefined
 				const qrCodeValue = resolveQRCodeValue({
 					codeBlockInfo,
 					isStreaming,
@@ -278,7 +282,7 @@ export function useMarkdownComponent({
 		// citation 相关值通过 ref 读取，不加入 deps，保证 streaming 期间 components
 		// 对象引用稳定，防止 HtmlCodeBlockPreview 因 pre 函数引用变化而重新挂载。
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[isStreaming, streamingScrollStateRef],
+		[enableHtmlCodeBlockPreview, isStreaming, streamingScrollStateRef],
 	)
 }
 
@@ -287,6 +291,7 @@ function MarkdownComponent({
 	className,
 	isStreaming = false,
 	allowRawHtml = true,
+	enableHtmlCodeBlockPreview = true,
 	citations,
 	highlightedCitation,
 	onCitationClick,
@@ -326,6 +331,7 @@ function MarkdownComponent({
 	})
 
 	const components = useMarkdownComponent({
+		enableHtmlCodeBlockPreview,
 		isStreaming,
 		streamingScrollStateRef: streamingScrollStateRef,
 		citations,
@@ -334,7 +340,7 @@ function MarkdownComponent({
 	})
 
 	return (
-		<div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+		<div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
 			<XMarkdown
 				className={cn(
 					"!dark:text-white !text-sidebar-foreground",

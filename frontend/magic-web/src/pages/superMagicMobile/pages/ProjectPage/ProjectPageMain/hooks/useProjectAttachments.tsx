@@ -5,7 +5,11 @@ import { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Work
 import { TopicFilesCoreRef } from "@/pages/superMagic/components/TopicFilesButton/TopicFilesCore"
 import type { PreviewDetail } from "../../../../components/PreviewDetailPopup"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { releaseAttachmentsRefreshWaitersWithoutFetch } from "@/pages/superMagic/services/attachmentsTopicSync"
+import {
+	normalizeUpdateAttachmentsPayload,
+	releaseAttachmentsRefreshWaitersWithoutFetch,
+	type SuperMagicUpdateAttachmentsRequest,
+} from "@/pages/superMagic/services/attachmentsTopicSync"
 
 interface UseProjectAttachmentsParams {
 	selectedProject?: ProjectListItem | null
@@ -26,12 +30,16 @@ export function useProjectAttachments({ selectedProject }: UseProjectAttachments
 		useAttachments()
 
 	useEffect(() => {
-		const handleUpdateAttachments = (callback: any) => {
+		const handleUpdateAttachments = (
+			payloadOrCallback?: SuperMagicUpdateAttachmentsRequest,
+		) => {
+			const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
+
 			if (selectedProject) {
-				updateAttachments(selectedProject, callback)
+				updateAttachments(selectedProject, payload?.callback)
 				return
 			}
-			callback?.()
+			payload?.callback?.()
 			releaseAttachmentsRefreshWaitersWithoutFetch()
 		}
 

@@ -74,6 +74,7 @@ export default function MyCrewAvatar({
 					loading="lazy"
 					decoding="async"
 					onError={() => setAvatarLoadFailed(true)}
+					data-testid="set-avatar-load-failed"
 				/>
 			) : (
 				<div

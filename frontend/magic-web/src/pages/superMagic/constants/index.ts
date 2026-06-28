@@ -11,6 +11,7 @@ import { TFunction } from "i18next"
 import { isOwner } from "../utils/permission"
 
 export const SHARE_WORKSPACE_ID = "collaboration"
+export const MY_AUDIO_RECORDINGS_WORKSPACE_ID = "my-audio-recordings"
 export const MY_CLAW_WORKSPACE_ID = "my-claw"
 
 export const SHARE_WORKSPACE_DATA = (t: TFunction): Workspace => {
@@ -22,6 +23,7 @@ export const SHARE_WORKSPACE_DATA = (t: TFunction): Workspace => {
 		current_topic_id: "",
 		current_project_id: "",
 		project_count: 0,
+		workspace_type: "default",
 	}
 }
 
@@ -34,6 +36,20 @@ export const MY_CLAW_WORKSPACE_DATA = (t: TFunction): Workspace => {
 		current_topic_id: "",
 		current_project_id: "",
 		project_count: 0,
+		workspace_type: "default",
+	}
+}
+
+export const MY_AUDIO_RECORDINGS_WORKSPACE_DATA = (t: TFunction): Workspace => {
+	return {
+		id: MY_AUDIO_RECORDINGS_WORKSPACE_ID,
+		name: t("workspace.myAudioRecordingsWorkspaceName", { ns: "super" }),
+		workspace_status: WorkspaceStatus.WAITING,
+		is_archived: 0 as const,
+		current_topic_id: "",
+		current_project_id: "",
+		project_count: 0,
+		workspace_type: "default",
 	}
 }
 

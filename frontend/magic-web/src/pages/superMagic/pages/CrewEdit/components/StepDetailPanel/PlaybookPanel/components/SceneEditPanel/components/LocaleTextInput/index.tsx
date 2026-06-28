@@ -145,7 +145,7 @@ export function LocaleTextInput({
 		const { label, value, onChange, placeholder, testId, required } = params
 		return (
 			<div className="flex flex-col gap-2">
-				<label className="text-sm font-medium leading-none text-foreground">{label}</label>
+				<label className="text-sm font-medium leading-none text-foreground" data-testid="locale-text-input-label">{label}</label>
 				{multiline ? (
 					<Textarea
 						value={value}

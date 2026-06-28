@@ -10,6 +10,7 @@ import {
 } from "@/types/chat/intermediate_message"
 import ConversationService from "@/services/chat/conversation/ConversationService"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { projectAttachmentsChangeLog } from "@/pages/superMagic/utils/projectAttachments/changeLogReporter"
 
 class IntermediateMessageApplyService {
 	/**
@@ -96,7 +97,9 @@ class IntermediateMessageApplyService {
 	}
 
 	applySuperMagicFileChange(seq: SeqResponse<SuperMagicFileChangeMessage>) {
+		projectAttachmentsChangeLog.intermediateReceived(seq)
 		pubsub.publish(PubSubEvents.Super_Magic_File_Change_Intermediate, seq)
+		projectAttachmentsChangeLog.intermediatePublished(seq)
 	}
 }
 

@@ -32,13 +32,13 @@ const RECYCLE_BIN_TABS_CONFIG = [
 			mobile: "mobile.recycleBin.tabs.topics",
 		},
 	},
-	// {
-	// 	id: "files",
-	// 	labelKey: {
-	// 		pc: "recycleBin.tabs.files",
-	// 		mobile: "mobile.recycleBin.tabs.files",
-	// 	},
-	// },
+	{
+		id: "files",
+		labelKey: {
+			pc: "recycleBin.tabs.files",
+			mobile: "mobile.recycleBin.tabs.files",
+		},
+	},
 ] as const
 
 type RecycleBinTabId = (typeof RECYCLE_BIN_TABS_CONFIG)[number]["id"] | "files"

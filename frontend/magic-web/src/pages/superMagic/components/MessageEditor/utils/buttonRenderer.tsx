@@ -26,6 +26,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import type { TokenUsage } from "@/pages/superMagic/stores/types"
 import { getButtonPaddingClass } from "../constants/BUTTON_PADDING_CLASS_MAP"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { MagicTooltip } from "@/components/base"
 import ModelSwitchContainer from "../components/ModelSwitch/ModelSwitchContainer"
 import { Spinner } from "@/components/shadcn-ui/spinner"
@@ -108,7 +109,11 @@ export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 			<At
 				onSelect={ctx.handleSelectMentionItem}
 				iconSize={ctx.topBarIconSize}
-				onClose={() => ctx.tiptapEditor?.commands.focus()}
+				onClose={() => {
+					runActiveEditor(ctx.tiptapEditor, (editor) => {
+						editor.commands.focus()
+					})
+				}}
 				mentionPanelStore={ctx.mentionPanelStore}
 				showText={false}
 				mobileClassName={cn(

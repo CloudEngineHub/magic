@@ -19,6 +19,9 @@ export class UserStore {
 	/** teamshare 组织 Code */
 	teamshareOrganizationCode: string = ""
 
+	/** 组织列表是否已完成获取 */
+	organizationListReady: boolean = false
+
 	/** 组织订阅的套餐信息 */
 	organizationSubscriptionInfo: Admin.SubscriptionInfo | null = null
 
@@ -27,7 +30,11 @@ export class UserStore {
 
 	/** 组织订阅的套餐积分（仅总数，向后兼容） */
 	get organizationPoints(): number {
-		return this.organizationPointsInfo?.total_points ?? 0
+		return (
+			this.organizationPointsInfo?.organization_total_points ??
+			this.organizationPointsInfo?.total_points ??
+			0
+		)
 	}
 
 	/** 组织订阅的套餐积分是否加载中 */
@@ -103,6 +110,10 @@ export class UserStore {
 		this.teamshareOrganizationCode = teamshareOrganizationCode
 	}
 
+	setOrganizationListReady = (ready: boolean) => {
+		this.organizationListReady = ready
+	}
+
 	setOrganizations = (organizations: Record<string, User.MagicOrganization>) => {
 		this.magicOrganizationMap = organizations
 	}
@@ -137,11 +148,17 @@ export class UserStore {
 				this.organizationPointsInfo = {
 					...this.organizationPointsInfo,
 					total_points: organizationPoints,
+					organization_remaining_points: organizationPoints,
 				}
 			} else {
 				// 如果没有完整信息，创建一个最小对象
 				this.organizationPointsInfo = {
 					total_points: organizationPoints,
+					organization_total_points: organizationPoints,
+					organization_remaining_points: null,
+					organization_limit_points: null,
+					user_limit_points: null,
+					user_remaining_points: null,
 					expiring_quota_details: [],
 					next_cycle_grant: {
 						scheduled_at: "",
@@ -202,7 +219,7 @@ export class UserStore {
 		if (organizationCode) {
 			org =
 				orgMap?.[
-				magicOrganizationMap?.[organizationCode]?.third_platform_organization_code ?? ""
+					magicOrganizationMap?.[organizationCode]?.third_platform_organization_code ?? ""
 				]
 		}
 		if (!org && teamshareOrganizationCode) {

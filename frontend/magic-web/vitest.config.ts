@@ -52,6 +52,10 @@ const getVitestBaseConfig = () => {
 					replacement: `${resolve(__dirname, "./src/")}/`,
 				},
 				{
+					find: "virtual:magic-api",
+					replacement: resolve(__dirname, "test/mocks/magic-api-prelude.ts"),
+				},
+				{
 					find: /^@dtyq\/html-sandbox\/index\.html(\?raw)?$/,
 					replacement: `${resolve(__dirname, "packages/html-sandbox/index.html")}$1`,
 				},

@@ -460,6 +460,7 @@ const SelectDirectoryModal = forwardRef<SelectDirectoryModalRef, SelectDirectory
 																: undefined,
 													}}
 													onClick={() => onBreadcrumbClick(item)}
+													data-testid="on-breadcrumb-click"
 												>
 													{!item.operation && (
 														<IconLock
@@ -497,6 +498,7 @@ const SelectDirectoryModal = forwardRef<SelectDirectoryModalRef, SelectDirectory
 																				alt="folder"
 																				width={14}
 																				height={14}
+																				data-testid="select-directory-modal-image"
 																			/>
 																		</div>
 																		{!subitem.operation && (
@@ -592,6 +594,7 @@ const SelectDirectoryModal = forwardRef<SelectDirectoryModalRef, SelectDirectory
 													alt="folder"
 													width={14}
 													height={14}
+													data-testid="select-directory-modal-image-2"
 												/>
 											</div>
 											<InputWithError
@@ -663,6 +666,7 @@ const SelectDirectoryModal = forwardRef<SelectDirectoryModalRef, SelectDirectory
 											onClick={() =>
 												!isDisabled && onDirectoryClick(directory)
 											}
+											data-testid="on-directory-click"
 										>
 											<div className="flex w-full flex-1 items-center justify-between gap-2.5">
 												<div className="flex flex-1 items-center gap-1">
@@ -673,6 +677,7 @@ const SelectDirectoryModal = forwardRef<SelectDirectoryModalRef, SelectDirectory
 																alt="folder"
 																width={14}
 																height={14}
+																data-testid="select-directory-modal-image-3"
 															/>
 														) : (
 															<MagicFileIcon

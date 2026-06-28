@@ -36,11 +36,11 @@ function ChatHeader({
 	const currentTopic = selectedTopic || lastSelectedTopic.current
 
 	return (
-		<header className="border-b border-border bg-mobile-background">
+		<header className="border-b border-border bg-mobile-background" data-testid="topic-chat-header">
 			{/* Navigation Bar */}
-			<div className="flex h-12 items-center justify-between gap-2 p-2.5">
+			<div className="flex h-12 items-center justify-between gap-2 p-2.5" data-testid="topic-chat-header-bar">
 				{/* Left: Back Button + Topic Info */}
-				<div className="flex min-w-0 flex-1 items-center gap-1">
+				<div className="flex min-w-0 flex-1 items-center gap-1" data-testid="topic-chat-header-info">
 					<div className="flex min-w-0 flex-1 items-center gap-1">
 						<StatusIcon
 							status={currentTopic?.task_status}
@@ -62,6 +62,7 @@ function ChatHeader({
 							onClick={onNewTopicClick}
 							className="size-7 p-1.5"
 							aria-label="New topic"
+							data-testid="topic-chat-new-topic-button"
 						>
 							<MessageCirclePlus className="size-4" />
 						</Button>
@@ -73,6 +74,7 @@ function ChatHeader({
 						onClick={onHistoryClick}
 						className="size-7 p-1.5"
 						aria-label="History"
+						data-testid="topic-chat-history-button"
 					>
 						<History className="size-4" />
 					</Button>
@@ -83,6 +85,7 @@ function ChatHeader({
 						onClick={onFilesClick}
 						className="size-7 p-1.5"
 						aria-label={t("topicFiles.title")}
+						data-testid="topic-chat-files-button"
 					>
 						<Files className="size-4" />
 					</Button>
@@ -93,6 +96,7 @@ function ChatHeader({
 						onClick={onShareClick}
 						className="size-7 p-1.5"
 						aria-label="Share"
+						data-testid="topic-chat-share-button"
 					>
 						<Share2 className="size-4" />
 					</Button>
@@ -103,6 +107,7 @@ function ChatHeader({
 						onClick={() => selectedTopic && openActionsPopup(selectedTopic)}
 						className="size-7 p-1.5"
 						aria-label="More options"
+						data-testid="topic-chat-more-button"
 					>
 						<MoreHorizontal className="size-4" />
 					</Button>

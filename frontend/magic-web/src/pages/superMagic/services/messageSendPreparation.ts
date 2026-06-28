@@ -71,6 +71,11 @@ export interface PreparedPanelSendResult {
 	currentTopic: Topic | null
 }
 
+export interface EnsuredMessageProjectResult {
+	currentProject: ProjectListItem
+	currentTopic: Topic | null
+}
+
 export function resolveMessageSendContext(
 	context?: MessageSendPreparationContext,
 ): ResolvedPreparationContext {
@@ -251,6 +256,50 @@ export async function preparePanelSend({
 			value: nextContent,
 			mentionItems: nextMentionItems,
 		},
+		currentProject,
+		currentTopic,
+	}
+}
+
+export async function ensureProjectForMessageContext({
+	context,
+	tabPattern,
+}: {
+	context?: MessageSendPreparationContext
+	tabPattern: TopicMode
+}): Promise<EnsuredMessageProjectResult | null> {
+	const resolvedContext = resolveMessageSendContext(context)
+	let currentProject = resolvedContext.selectedProject
+	let currentTopic = resolvedContext.selectedTopic
+
+	if (currentProject?.id) {
+		return {
+			currentProject,
+			currentTopic,
+		}
+	}
+
+	const createdProject = await resolvedContext.createProject({
+		projectMode: tabPattern,
+		workdir: superMagicUploadTokenService.getLastWorkDir(),
+	})
+
+	if (!createdProject?.project || !createdProject.topic) {
+		return null
+	}
+
+	currentProject = createdProject.project
+	currentTopic = {
+		...createdProject.topic,
+		topic_mode: tabPattern,
+	}
+
+	resolvedContext.setSelectedProject(currentProject)
+	resolvedContext.setSelectedTopic(currentTopic)
+
+	await migrateMcpCache(currentProject.id)
+
+	return {
 		currentProject,
 		currentTopic,
 	}

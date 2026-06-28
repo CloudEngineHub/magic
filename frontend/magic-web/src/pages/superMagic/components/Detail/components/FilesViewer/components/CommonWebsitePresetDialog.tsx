@@ -56,7 +56,7 @@ function CommonWebsitePresetDialog({
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="max-w-[420px]" data-testid="common-website-preset-dialog">
-				<form className="space-y-4" onSubmit={handleSubmit}>
+				<form className="space-y-4" onSubmit={handleSubmit} data-testid="handle-submit">
 					<DialogHeader>
 						<DialogTitle>
 							{mode === "edit"
@@ -69,7 +69,7 @@ function CommonWebsitePresetDialog({
 					</DialogHeader>
 
 					<div className="space-y-3">
-						<label className="block space-y-1.5">
+						<label className="block space-y-1.5" data-testid="common-website-preset-dialog-label">
 							<span className="text-xs font-medium text-muted-foreground">
 								{t("fileViewer.website.commonTitleLabel")}
 							</span>
@@ -83,9 +83,10 @@ function CommonWebsitePresetDialog({
 									}))
 								}
 								className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
+								data-testid="set-values"
 							/>
 						</label>
-						<label className="block space-y-1.5">
+						<label className="block space-y-1.5" data-testid="common-website-preset-dialog-label-2">
 							<span className="text-xs font-medium text-muted-foreground">
 								{t("fileViewer.website.commonUrlLabel")}
 							</span>
@@ -99,6 +100,7 @@ function CommonWebsitePresetDialog({
 									}))
 								}
 								className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
+								data-testid="set-values-2"
 							/>
 						</label>
 					</div>
@@ -108,6 +110,7 @@ function CommonWebsitePresetDialog({
 							type="button"
 							className="h-8 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
 							onClick={() => onOpenChange(false)}
+							data-testid="on-open-change"
 						>
 							{t("fileViewer.website.commonCancel")}
 						</button>
@@ -115,6 +118,7 @@ function CommonWebsitePresetDialog({
 							type="submit"
 							className="h-8 rounded-md bg-primary px-3 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
 							disabled={!values.url.trim()}
+							data-testid="submit-button"
 						>
 							{t("fileViewer.website.commonConfirm")}
 						</button>

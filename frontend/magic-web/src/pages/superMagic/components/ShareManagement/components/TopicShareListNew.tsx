@@ -109,6 +109,7 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 							onMouseEnter={() => setHoveredId(item.resource_id)}
 							onMouseLeave={() => setHoveredId(null)}
 							onClick={() => handleItemClick(item)}
+							data-testid="set-hovered-id"
 						>
 							{/* 话题模式图标 */}
 							<div className="flex h-5 w-5 flex-shrink-0 items-center justify-center">

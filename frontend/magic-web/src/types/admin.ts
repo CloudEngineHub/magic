@@ -292,6 +292,11 @@ export namespace Admin {
 	/** 获取组织当前积分总数的响应 */
 	export interface OrganizationPoints {
 		total_points: number
+		organization_total_points: number
+		organization_limit_points: number | null
+		organization_remaining_points: number | null
+		user_limit_points: number | null
+		user_remaining_points: number | null
 		expiring_quota_details: ExpiringQuotaDetail[]
 		next_cycle_grant: NextCycleGrant
 	}

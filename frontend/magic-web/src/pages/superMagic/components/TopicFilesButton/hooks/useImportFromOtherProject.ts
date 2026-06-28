@@ -4,7 +4,9 @@ import type { AttachmentItem } from "./index"
 import type { ProjectListItem, Workspace } from "../../../pages/Workspace/types"
 import { SuperMagicApi } from "@/apis"
 import { detectDuplicateFilesForMove } from "../utils/moveOrCopyDuplicateHandler"
+import { detectFolderConflictsForMove } from "../utils/folderConflictHandler"
 import { useMoveOrCopyDuplicateHandler } from "./useMoveOrCopyDuplicateHandler"
+import { useFolderConflictHandler } from "./useFolderConflictHandler"
 import magicToast from "@/components/base/MagicToaster/utils"
 
 interface UseImportFromOtherProjectOptions {
@@ -27,6 +29,7 @@ export function useImportFromOtherProject(options: UseImportFromOtherProjectOpti
 
 	// 集成同名检测 Hook
 	const duplicateHandler = useMoveOrCopyDuplicateHandler()
+	const folderConflictHandler = useFolderConflictHandler()
 
 	const openImportModal = useCallback((path?: AttachmentItem[]) => {
 		setTargetPath(path || [])
@@ -117,63 +120,51 @@ export function useImportFromOtherProject(options: UseImportFromOtherProjectOpti
 				const targetParentId =
 					targetPath.length > 0 ? targetPath[targetPath.length - 1].file_id || "" : ""
 
-				// 辅助函数：在文件树中查找指定 ID 的项目
-				const findItemById = (
-					id: string,
-					items: AttachmentItem[],
-				): AttachmentItem | null => {
-					for (const item of items) {
-						if (item.file_id === id) return item
-						if (item.children) {
-							const found = findItemById(id, item.children)
-							if (found) return found
-						}
-					}
-					return null
-				}
-
 				const totalProjects = data.filesByProject.length
 				let completedProjects = 0
 				const batchKeys: string[] = []
 
 				// 按项目分组处理
 				for (const projectGroup of data.filesByProject) {
-					// 1. 检测同名文件
-					const areAllFolders = projectGroup.selectedFileIds.every((id) => {
-						const item = findItemById(id, projectGroup.selectedFiles)
-						return item?.is_directory === true
-					})
-
 					let keepBothIds: string[] = []
-					if (!areAllFolders) {
-						const duplicates = detectDuplicateFilesForMove(
-							projectGroup.selectedFileIds,
-							projectGroup.selectedFiles,
-							attachments,
-							targetPath,
-						)
-
-						if (duplicates.size > 0) {
-							const userChoice = await duplicateHandler.checkDuplicates(duplicates)
-							if (!userChoice.shouldProceed) {
-								setIsOperating(false)
-								setOperationProgress(0)
-								return
-							}
-							keepBothIds = userChoice.keepBothIds
+					const folderConflicts = detectFolderConflictsForMove(
+						projectGroup.selectedFileIds,
+						projectGroup.selectedFiles,
+						attachments,
+						targetPath,
+					)
+					if (folderConflicts.size > 0) {
+						const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
+						if (!folderChoice.shouldProceed) {
+							setIsOperating(false)
+							setOperationProgress(0)
+							return
 						}
+						keepBothIds = folderChoice.keepBothIds
 					}
 
-					// 2. 文件夹处理
-					const folderIds = projectGroup.selectedFileIds.filter((id) => {
-						const item = findItemById(id, projectGroup.selectedFiles)
-						return item?.is_directory === true
-					})
-					if (folderIds.length > 0) {
-						keepBothIds = [...keepBothIds, ...folderIds]
+					// 1. Check duplicates. "Keep both" renames the top folder, so skip inner paths.
+					const duplicateDetectionIds = projectGroup.selectedFileIds.filter(
+						(id) => !keepBothIds.includes(id),
+					)
+					const duplicates = detectDuplicateFilesForMove(
+						duplicateDetectionIds,
+						projectGroup.selectedFiles,
+						attachments,
+						targetPath,
+					)
+
+					if (duplicates.size > 0) {
+						const userChoice = await duplicateHandler.checkDuplicates(duplicates)
+						if (!userChoice.shouldProceed) {
+							setIsOperating(false)
+							setOperationProgress(0)
+							return
+						}
+						keepBothIds = [...keepBothIds, ...userChoice.keepBothIds]
 					}
 
-					// 3. 调用 batch-copy API
+					// 2. Call the batch-copy API.
 					const result = await SuperMagicApi.copyFiles({
 						file_ids: projectGroup.selectedFileIds,
 						project_id: projectGroup.sourceProjectId,
@@ -219,6 +210,7 @@ export function useImportFromOtherProject(options: UseImportFromOtherProjectOpti
 			onSuccess,
 			t,
 			duplicateHandler,
+			folderConflictHandler,
 			handleMultipleBatchOperationPolling,
 		],
 	)
@@ -238,5 +230,12 @@ export function useImportFromOtherProject(options: UseImportFromOtherProjectOpti
 		handleDuplicateReplace: duplicateHandler.handleReplace,
 		handleDuplicateKeepBoth: duplicateHandler.handleKeepBoth,
 		handleDuplicateCancel: duplicateHandler.handleCancel,
+		folderConflictModalVisible: folderConflictHandler.modalVisible,
+		currentFolderConflictName: folderConflictHandler.currentFolderName,
+		totalFolderConflicts: folderConflictHandler.totalConflicts,
+		canMergeFolderConflict: folderConflictHandler.canMerge,
+		handleFolderConflictKeepBoth: folderConflictHandler.handleKeepBoth,
+		handleFolderConflictMerge: folderConflictHandler.handleMerge,
+		handleFolderConflictCancel: folderConflictHandler.handleCancel,
 	}
 }

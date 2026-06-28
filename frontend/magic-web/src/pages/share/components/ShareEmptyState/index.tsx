@@ -39,9 +39,9 @@ export default function ShareEmptyState({
 	const icon = isFileShare ? FolderIcon : ReplayIcon
 
 	return (
-		<div className={styles.container}>
+		<div className={styles.container} data-testid="share-empty-state">
 			{/* 头部 */}
-			<Flex className={styles.header}>
+			<Flex className={styles.header} data-testid="share-empty-state-header">
 				<Logo className={styles.logo} />
 				<Flex gap={8}>
 					{isLogined ? (
@@ -55,6 +55,7 @@ export default function ShareEmptyState({
 							onClick={() => {
 								history.replace({ name: RouteName.Login })
 							}}
+							data-testid="share-empty-login-button"
 						>
 							{t("share.login")}
 						</Button>
@@ -63,24 +64,31 @@ export default function ShareEmptyState({
 			</Flex>
 
 			{/* 主体内容 */}
-			<div className={styles.content}>
+			<div className={styles.content} data-testid="share-empty-state-content">
 				<div className={styles.main}>
 					{/* 图标 */}
-					<img src={icon} alt="" className={styles.icon} />
+					<img
+						src={icon}
+						alt=""
+						className={styles.icon}
+						data-testid="share-empty-state-icon"
+					/>
 
 					{/* 标题 */}
-					<div className={styles.title}>{t("share.emptyState.title")}</div>
+					<div className={styles.title} data-testid="share-empty-state-title">
+						{t("share.emptyState.title")}
+					</div>
 
 					{/* 提示卡片 */}
-					<div className={styles.card}>
+					<div className={styles.card} data-testid="share-empty-state-card">
 						<div className={styles.cardContent}>
 							{/* 提示文本 */}
-							<div className={styles.tip}>
+							<div className={styles.tip} data-testid="share-empty-state-tip">
 								{t("share.emptyState.switchTip", { orgName: targetOrgName })}
 							</div>
 
 							{/* 用户信息 */}
-							<div className={styles.userInfo}>
+							<div className={styles.userInfo} data-testid="share-empty-state-user">
 								<div className={styles.avatarContainer}>
 									<UserAvatarRender
 										userInfo={userInfoProp}
@@ -101,6 +109,7 @@ export default function ShareEmptyState({
 							disabled={isLoading}
 							className={styles.button}
 							loading={isLoading}
+							data-testid="share-empty-switch-button"
 						>
 							{isLoading
 								? t("share.emptyState.switching")

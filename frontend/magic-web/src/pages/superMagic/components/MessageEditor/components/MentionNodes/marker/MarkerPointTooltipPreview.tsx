@@ -168,6 +168,7 @@ function MarkerPointTooltipPreview({
 					})
 				}
 			}}
+			data-testid="show-mobile-image-preview"
 		>
 			<div className={styles.imageWrapper}>
 				<img
@@ -176,11 +177,12 @@ function MarkerPointTooltipPreview({
 					alt={suggestion?.label}
 					style={markerImageStyle.style}
 					onLoad={() => setImageLoaded(true)}
+					data-testid="set-image-loaded"
 				/>
 			</div>
 			{markerPositionStyle && (
 				<div className={styles.markerContainer} style={markerPositionStyle}>
-					<img src={CanvasMarkerIcon} alt="marker" className={styles.markerIcon} />
+					<img src={CanvasMarkerIcon} alt="marker" className={styles.markerIcon}  data-testid="marker-point-tooltip-preview-image"/>
 					{markerData.mark_number !== undefined && (
 						<span className={styles.markerNumber}>{markerData.mark_number}</span>
 					)}

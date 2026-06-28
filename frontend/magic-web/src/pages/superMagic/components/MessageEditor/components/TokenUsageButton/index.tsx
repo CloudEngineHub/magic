@@ -70,6 +70,7 @@ function TokenUsageRing({ ratio, size, isHighUsage }: TokenUsageRingProps) {
 			viewBox={`0 0 ${normalizedSize} ${normalizedSize}`}
 			className="shrink-0"
 			aria-hidden="true"
+			data-testid="token-usage-button-svg"
 		>
 			<circle
 				cx={center}

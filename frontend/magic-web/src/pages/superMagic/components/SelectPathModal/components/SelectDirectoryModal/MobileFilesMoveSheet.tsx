@@ -372,6 +372,7 @@ function DirectoryRow({
 					height={18}
 					className="h-[18px] w-[22px] shrink-0 object-contain"
 					aria-hidden
+					data-testid="mobile-files-move-sheet-image"
 				/>
 				<div className="min-w-0 flex-1">
 					<p className="truncate text-[16px] font-medium leading-5 text-foreground">

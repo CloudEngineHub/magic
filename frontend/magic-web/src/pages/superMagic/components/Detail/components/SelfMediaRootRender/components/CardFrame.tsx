@@ -492,6 +492,7 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 						onLoaded?.()
 					}}
 					sandbox="allow-scripts allow-same-origin"
+					data-testid="disconnect"
 				/>
 			)}
 		</div>

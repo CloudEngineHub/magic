@@ -127,7 +127,7 @@ export default function AiInputBox({
 
 	return (
 		<div className={cn("space-y-1.5", className)}>
-			{label && <label className="mb-1 block text-xs font-semibold">{label}</label>}
+			{label && <label className="mb-1 block text-xs font-semibold" data-testid="ai-input-box-label">{label}</label>}
 
 			{/* Unified field: textarea + toolbar */}
 			<div className="overflow-hidden rounded-lg border bg-card shadow-xs transition-all focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">

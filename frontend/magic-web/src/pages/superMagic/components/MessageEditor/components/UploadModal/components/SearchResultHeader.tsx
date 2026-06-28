@@ -21,7 +21,7 @@ function SearchResultHeader({ onExitSearch, isMobile = false }: SearchResultHead
 				<span className={styles.searchHeaderTitle}>
 					{t("selectPathModal.searchResult")}
 				</span>
-				<div onClick={onExitSearch} className={styles.searchHeaderReturn}>
+				<div onClick={onExitSearch} className={styles.searchHeaderReturn} data-testid="on-exit-search">
 					{returnSearchTitle}
 				</div>
 			</div>

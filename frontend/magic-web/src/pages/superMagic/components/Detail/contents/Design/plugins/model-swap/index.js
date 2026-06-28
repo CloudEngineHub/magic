@@ -627,7 +627,6 @@ registerMagicCanvasPlugin({
 			state: instance.state,
 			modelConfig: {
 				autoLoad: true,
-				defaultModelId: "gemini-3-pro-image-preview",
 				showLoadErrors: true,
 				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
 			},

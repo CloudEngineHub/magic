@@ -292,6 +292,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 						type="primary"
 						className={styles.cancelShareButton}
 						onClick={handleCancelShare}
+						data-testid="handle-cancel-share"
 					>
 						{t("share.cancelShare")}
 					</Button>
@@ -310,6 +311,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 		actions.push({
 			key: "manageShare",
 			label: t("share.manageShareLinks"),
+			"data-testid": "mobile-share-manage-links-button",
 			onClick: () => {
 				setActionsPopupVisible(false)
 				// 打开分享管理面板
@@ -323,6 +325,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 			actions.push({
 				key: "cancelShare",
 				label: t("share.cancelShare"),
+				"data-testid": "mobile-share-cancel-button",
 				onClick: () => {
 					setActionsPopupVisible(false)
 					handleCancelShare()
@@ -405,6 +408,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 								borderDisabled={open}
 								className={styles.headerDotsButton}
 								onClick={handleOpenActionsPopup}
+								data-testid="mobile-file-share-more-button"
 							>
 								<MagicIcon size={22} stroke={2} component={IconDots} />
 							</MobileButton>
@@ -564,8 +568,11 @@ export default memo(function ShareModel(props: ShareModalProps) {
 				height: "auto",
 			}}
 		>
-			<div className="flex max-h-[92dvh] flex-col overflow-hidden bg-[#F7F7F6]">
-				<div className="min-h-0 flex-1 overflow-y-auto">
+			<div
+				className="flex max-h-[92dvh] flex-col overflow-hidden bg-[#F7F7F6]"
+				data-testid="mobile-topic-share-sheet"
+			>
+				<div className="min-h-0 flex-1 overflow-y-auto" data-testid="mobile-topic-share-content">
 					<MobileTopicShare
 						shareContext={shareContext}
 						extraData={extraData}

@@ -65,6 +65,7 @@ export const SceneRow = observer(function SceneRow({
 			<div
 				className="flex min-w-0 flex-1 items-start gap-2"
 				onClick={() => onAction(scene.id, "edit")}
+				data-testid="on-action"
 			>
 				<div
 					className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-transparent bg-sidebar-accent"

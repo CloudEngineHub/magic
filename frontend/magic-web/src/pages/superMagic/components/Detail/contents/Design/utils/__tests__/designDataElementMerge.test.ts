@@ -121,10 +121,24 @@ describe("mergeDesignDataByElement", () => {
 		)
 	})
 
-	it("reports a conflict when both sides update the same element", () => {
+	it("merges different field updates on the same element", () => {
 		const baseData = design([rect("same")])
 		const remoteData = design([rect("same", { x: 100 })])
 		const localData = design([rect("same", { y: 200 })])
+
+		const result = mergeDesignDataByElement({ baseData, localData, remoteData })
+
+		expect(result.ok).toBe(true)
+		if (!result.ok) return
+		expect(result.mergedData.canvas?.elements).toEqual([
+			expect.objectContaining({ id: "same", x: 100, y: 200 }),
+		])
+	})
+
+	it("reports a conflict when both sides update the same field", () => {
+		const baseData = design([rect("same")])
+		const remoteData = design([rect("same", { x: 100 })])
+		const localData = design([rect("same", { x: 200 })])
 
 		const result = mergeDesignDataByElement({ baseData, localData, remoteData })
 
@@ -142,7 +156,7 @@ describe("mergeDesignDataByElement", () => {
 				elementId: "same",
 				reason: "same-element-changed",
 				baseElement: expect.objectContaining({ id: "same", x: 0, y: 0 }),
-				localElement: expect.objectContaining({ id: "same", x: 0, y: 200 }),
+				localElement: expect.objectContaining({ id: "same", x: 200, y: 0 }),
 				remoteElement: expect.objectContaining({ id: "same", x: 100, y: 0 }),
 			}),
 		])
@@ -154,7 +168,7 @@ describe("mergeDesignDataByElement", () => {
 	it("keeps non-conflicting local element changes when the same element conflicts", () => {
 		const baseData = design([rect("same"), rect("local-element")])
 		const remoteData = design([rect("same", { x: 100 }), rect("local-element")])
-		const localData = design([rect("same", { y: 200 }), rect("local-element", { y: 300 })])
+		const localData = design([rect("same", { x: 200 }), rect("local-element", { y: 300 })])
 
 		const result = mergeDesignDataByElement({ baseData, localData, remoteData })
 
@@ -199,10 +213,23 @@ describe("mergeDesignDataByElement", () => {
 		])
 	})
 
-	it("reports a conflict when both sides change the same parent structure", () => {
+	it("merges pure additions under the same parent", () => {
 		const baseData = design([frame("frame", [])])
 		const remoteData = design([frame("frame", [rect("remote-new")])])
 		const localData = design([frame("frame", [rect("local-new")])])
+
+		const result = mergeDesignDataByElement({ baseData, localData, remoteData })
+
+		expect(result.ok).toBe(true)
+		if (!result.ok) return
+		const mergedFrame = result.mergedData.canvas?.elements?.[0] as LayerElement
+		expect(childIds(mergedFrame).sort()).toEqual(["local-new", "remote-new"])
+	})
+
+	it("reports a conflict when parent structure changes include a move", () => {
+		const baseData = design([frame("frame", [rect("child")])])
+		const remoteData = design([frame("frame", [rect("child"), rect("remote-new")])])
+		const localData = design([frame("frame", []), rect("child")])
 
 		const result = mergeDesignDataByElement({ baseData, localData, remoteData })
 
@@ -211,16 +238,16 @@ describe("mergeDesignDataByElement", () => {
 				ok: false,
 				isElementLevelConflict: true,
 				reason: "parent-structure-conflict",
-				conflictElementIds: ["local-new", "remote-new"],
+				conflictElementIds: ["child", "remote-new"],
 			}),
 		)
 		if (result.ok || !result.isElementLevelConflict) return
 		expect(result.elementConflicts).toEqual([
 			expect.objectContaining({
-				elementId: "local-new",
+				elementId: "child",
 				reason: "parent-structure-conflict",
-				localElement: expect.objectContaining({ id: "local-new" }),
-				remoteElement: null,
+				localParentId: null,
+				remoteParentId: "frame",
 			}),
 			expect.objectContaining({
 				elementId: "remote-new",
@@ -229,6 +256,24 @@ describe("mergeDesignDataByElement", () => {
 				remoteElement: expect.objectContaining({ id: "remote-new" }),
 			}),
 		])
+	})
+
+	it("keeps document-level meta conflicts conservative", () => {
+		const baseData = design([rect("same")], { name: "base" })
+		const remoteData = design([rect("same", { x: 100 })], { name: "remote" })
+		const localData = design([rect("same", { y: 200 })], { name: "local" })
+
+		const result = mergeDesignDataByElement({ baseData, localData, remoteData })
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				ok: false,
+				reason: "document-level-change",
+				conflictElementIds: [],
+				localChangedElementIds: ["same"],
+				remoteChangedElementIds: ["same"],
+			}),
+		)
 	})
 
 	it("reports duplicate element ids as a conflict", () => {

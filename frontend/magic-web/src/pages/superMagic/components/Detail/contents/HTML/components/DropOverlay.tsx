@@ -69,6 +69,7 @@ export function DropOverlay({
 			onDragOver={onDragOver}
 			onDragLeave={onDragLeave}
 			onDrop={onDrop}
+			data-testid="on-drag-enter"
 		>
 			{visible && <span className={styles.hint}>{t("htmlEditor.dropOverlay.hint")}</span>}
 		</div>

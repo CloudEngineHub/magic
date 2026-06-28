@@ -14,10 +14,11 @@
 		"jsx": "react-jsx",
 		"lib": ["es2015", "es2016", "es2017", "dom"],
 		"module": "esnext",
-		"moduleResolution": "node",
+		"moduleResolution": "bundler",
 		"outDir": "dist/lib",
 		"paths": {
 			"@/*": ["./src/*"],
+			"@customer/*": ["./customer/src/*"],
 			"@enterprise/*": ["./enterprise/src/*"]
 		},
 		"resolveJsonModule": true,
@@ -42,6 +43,10 @@
 		"src/**/__tests__/**/*.tsx",
 		"enterprise/src/**/*.ts",
 		"enterprise/src/**/*.tsx",
-		"enterprise/src/**/*.json"
+		"enterprise/src/**/*.json",
+		"customer/src/**/*.ts",
+		"customer/src/**/*.tsx",
+		"customer/src/**/*.json",
+		"enterprise/src/Demo.tsx"
 	]
 }

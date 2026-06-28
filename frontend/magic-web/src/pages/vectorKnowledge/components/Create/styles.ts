@@ -55,6 +55,9 @@ export const useVectorKnowledgeCreateStyles = createStyles(
 				}
 			`,
 			uploadIcon: css`
+				display: flex;
+				align-items: center;
+				justify-content: center;
 				color: rgba(28, 29, 35);
 				margin-bottom: 5px;
 			`,

@@ -45,6 +45,7 @@ export function EditableGridCard({
 							alt={label}
 							className="pointer-events-none absolute inset-0 size-full max-w-none object-cover"
 							loading="lazy"
+							data-testid="editable-grid-card-image"
 						/>
 					</div>
 				) : (
@@ -94,6 +95,7 @@ export function EditableGridCard({
 								alt={label}
 								className="size-full object-contain"
 								loading="lazy"
+								data-testid="editable-grid-card-image-2"
 							/>
 						) : (
 							<LucideLazyIcon icon={item.icon_url} size={16} />

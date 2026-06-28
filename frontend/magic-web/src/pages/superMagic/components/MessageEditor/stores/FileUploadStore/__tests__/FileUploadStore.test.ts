@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const apiMocks = vi.hoisted(() => ({
+	createFile: vi.fn(),
+	batchSaveFiles: vi.fn(),
+}))
+
+const uploadTokenServiceMocks = vi.hoisted(() => ({
+	getUploadToken: vi.fn(),
+	changeDir: vi.fn(),
+}))
+
 vi.mock("@/opensource/utils/log", () => ({
 	logger: {
 		createLogger: () => ({
@@ -16,6 +26,23 @@ vi.mock("@/opensource/stores/projectFiles", () => ({
 	},
 }))
 
+vi.mock("@/stores/projectFiles", () => ({
+	default: {
+		workspaceFilesList: [],
+		getFileNamesInFolder: vi.fn(() => []),
+	},
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		createFile: apiMocks.createFile,
+		batchSaveFiles: apiMocks.batchSaveFiles,
+	},
+	FileApi: {
+		reportFileUploads: vi.fn(),
+	},
+}))
+
 vi.mock("../../../services/UploadService", () => ({
 	UploadService: class {
 		upload() {
@@ -26,7 +53,8 @@ vi.mock("../../../services/UploadService", () => ({
 
 vi.mock("../../../services/UploadTokenService", () => ({
 	superMagicUploadTokenService: {
-		getUploadToken: vi.fn().mockResolvedValue(undefined),
+		getUploadToken: uploadTokenServiceMocks.getUploadToken,
+		changeDir: uploadTokenServiceMocks.changeDir,
 		getUploadTokenUrl: "/mock-upload-token",
 	},
 }))
@@ -52,6 +80,15 @@ describe("FileUploadStore", () => {
 	let onChange: ReturnType<typeof vi.fn>
 
 	beforeEach(() => {
+		vi.clearAllMocks()
+		uploadTokenServiceMocks.getUploadToken.mockResolvedValue(undefined)
+		uploadTokenServiceMocks.changeDir.mockImplementation((credentials, suffixDir) => ({
+			...credentials,
+			temporary_credential: {
+				...credentials.temporary_credential,
+				dir: `${credentials.temporary_credential.dir}/${suffixDir}/`,
+			},
+		}))
 		onFileRemoved = vi.fn()
 		onFileUpload = vi.fn()
 		onChange = vi.fn()
@@ -140,6 +177,50 @@ describe("FileUploadStore", () => {
 
 			expect(addedFiles).toHaveLength(1)
 			expect(store.isCurrentSessionUploadFile(addedFiles?.[0].id || "")).toBe(true)
+		})
+
+		it("should create and use hidden temp directory for pasted text files", async () => {
+			apiMocks.createFile.mockResolvedValue({ file_id: "tmp-dir-id" })
+			uploadTokenServiceMocks.getUploadToken.mockResolvedValue({
+				temporary_credential: { dir: "project/workspace" },
+			})
+			const projectFilesStore = {
+				workspaceFilesList: [],
+				getFileNamesInFolder: vi.fn(() => []),
+			}
+			store = new FileUploadStore({
+				projectId: "project-1",
+				projectFilesStore: projectFilesStore as any,
+			})
+
+			const file = new File(["long text"], "pasted.txt", { type: "text/plain" })
+			const addedFiles = await store.addFiles([file], undefined, {
+				usePastedTextTempDirectory: true,
+			})
+
+			expect(apiMocks.createFile).toHaveBeenCalledWith({
+				project_id: "project-1",
+				file_name: ".tmp",
+				is_directory: true,
+				ignore_duplicate: true,
+			})
+			expect(uploadTokenServiceMocks.getUploadToken).toHaveBeenCalledWith(
+				"project-1",
+				"tmp-dir-id",
+			)
+			expect(uploadTokenServiceMocks.changeDir).toHaveBeenCalledWith(
+				expect.objectContaining({ temporary_credential: { dir: "project/workspace" } }),
+				".tmp",
+			)
+			expect(projectFilesStore.getFileNamesInFolder).toHaveBeenCalledWith(
+				"project/workspace/.tmp/",
+			)
+			expect(addedFiles?.[0]).toMatchObject({
+				name: "pasted.txt",
+				parentId: "tmp-dir-id",
+				defaultRelativePath: ".tmp/pasted.txt",
+				isHidden: true,
+			})
 		})
 
 		it("should mark pasted pending project file as virtual reference", () => {

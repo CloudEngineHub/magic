@@ -38,7 +38,7 @@ export function OpsMetricsSourceSection({
 			<h3 className="text-sm font-medium text-foreground">
 				{t("detail.selfMedia.opsMetrics.sections.source")}
 			</h3>
-			<label className="space-y-1.5">
+			<label className="space-y-1.5" data-testid="self-media-ops-metrics-dialog-parts-label">
 				<span className="text-xs font-medium text-foreground">
 					{t("detail.selfMedia.opsMetrics.fields.sourceUrl")}
 				</span>
@@ -156,7 +156,7 @@ export function OpsMetricsManualDataSection({
 						</h3>
 						<div className="grid gap-3 sm:grid-cols-2">
 							{METRIC_FIELDS.map(({ key, labelKey }) => (
-								<label key={key} className="space-y-1.5">
+								<label key={key} className="space-y-1.5" data-testid="self-media-ops-metrics-dialog-parts-label-2">
 									<span className="text-xs font-medium text-foreground">
 										{t(labelKey)}
 									</span>
@@ -172,7 +172,7 @@ export function OpsMetricsManualDataSection({
 								</label>
 							))}
 						</div>
-						<label className="block space-y-1.5">
+						<label className="block space-y-1.5" data-testid="self-media-ops-metrics-dialog-parts-label-3">
 							<span className="text-xs font-medium text-foreground">
 								{t("detail.selfMedia.opsMetrics.fields.notes")}
 							</span>
@@ -191,7 +191,7 @@ export function OpsMetricsManualDataSection({
 						<h3 className="text-sm font-medium text-foreground">
 							{t("detail.selfMedia.opsMetrics.sections.feedback")}
 						</h3>
-						<label className="block space-y-1.5">
+						<label className="block space-y-1.5" data-testid="self-media-ops-metrics-dialog-parts-label-4">
 							<span className="text-xs font-medium text-foreground">
 								{t("detail.selfMedia.opsMetrics.fields.feedbackSummary")}
 							</span>
@@ -209,7 +209,7 @@ export function OpsMetricsManualDataSection({
 								data-testid="self-media-ops-comments-summary"
 							/>
 						</label>
-						<label className="block space-y-1.5">
+						<label className="block space-y-1.5" data-testid="self-media-ops-metrics-dialog-parts-label-5">
 							<span className="text-xs font-medium text-foreground">
 								{t("detail.selfMedia.opsMetrics.fields.commentSamples")}
 							</span>
@@ -232,7 +232,7 @@ export function OpsMetricsManualDataSection({
 						<h3 className="text-sm font-medium text-foreground">
 							{t("detail.selfMedia.opsMetrics.sections.review")}
 						</h3>
-						<label className="block space-y-1.5">
+						<label className="block space-y-1.5" data-testid="self-media-ops-metrics-dialog-parts-label-6">
 							<span className="text-xs font-medium text-foreground">
 								{t("detail.selfMedia.opsMetrics.fields.review")}
 							</span>

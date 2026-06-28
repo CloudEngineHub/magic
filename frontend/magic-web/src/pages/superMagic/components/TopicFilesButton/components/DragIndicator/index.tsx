@@ -83,6 +83,7 @@ function DragIndicator({
 							alt="folder"
 							width={14}
 							height={14}
+							data-testid="drag-indicator-image"
 						/>
 					) : (
 						<MagicFileIcon type={getFileExtension(primaryFileName)} size={14} />

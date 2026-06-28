@@ -4,6 +4,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -13,7 +14,6 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/shadcn-ui/radio-group"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { Button } from "@/components/shadcn-ui/button"
-import { Textarea } from "@/components/shadcn-ui/textarea"
 import { cn } from "@/lib/utils"
 import {
 	ASK_USER_CONFIRM_VALUE,
@@ -65,10 +65,15 @@ interface AskUserFormProps {
 const EMPTY_ARRAY: readonly string[] = Object.freeze([])
 const askUserQuestionPanelClass = "mt-1.5 min-w-0 rounded-md border border-border bg-muted p-2.5"
 const askUserBreakTextClass = "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+const askUserBodyTextClass = "text-sm leading-5"
+const askUserQuestionTextClass = `${askUserBodyTextClass} font-normal text-foreground`
+const askUserMutedTextClass = `${askUserBodyTextClass} text-muted-foreground`
 const askUserScrollAreaClass =
 	"[scrollbar-width:thin] [scrollbar-color:rgb(var(--muted-foreground-rgb)_/_0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20"
+const ASK_USER_INPUT_MAX_HEIGHT = 200
+const askUserInputClass = `min-h-16 w-full max-h-[200px] min-w-0 resize-none overflow-hidden rounded-md border border-border bg-background px-2 py-1 text-left text-sm font-normal leading-5 text-foreground shadow-none outline-none placeholder:text-sm placeholder:text-muted-foreground focus-visible:border-border focus-visible:!ring-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm ${askUserScrollAreaClass}`
 const askUserOptionControlBase =
-	"size-4 shrink-0 border border-input bg-background shadow-xs focus-visible:ring-1 focus-visible:ring-ring/50"
+	"mt-0.5 size-4 shrink-0 border border-input bg-background shadow-xs focus-visible:ring-1 focus-visible:ring-ring/50"
 const askUserOptionRowClass = "flex min-h-6 cursor-pointer items-start gap-2 py-0.5"
 
 function formatAnswerForDisplay(value?: AnswerValue | null) {
@@ -277,7 +282,7 @@ function AskUserFormImpl({
 	return (
 		<AnswersContext.Provider value={ctxValue}>
 			<div
-				className={cn("flex max-h-[320px] min-h-0 w-full flex-col gap-1.5", className)}
+				className={cn("flex max-h-[500px] min-h-0 w-full flex-col gap-1.5", className)}
 				data-testid="ask-user-v2-card-form"
 			>
 				<div
@@ -286,7 +291,7 @@ function AskUserFormImpl({
 				>
 					<div
 						className={cn(
-							"-mr-1.5 min-h-0 flex-1 space-y-2.5 overflow-y-auto overflow-x-hidden pr-3",
+							"-mr-1.5 min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden pr-3",
 							askUserScrollAreaClass,
 						)}
 						data-testid="ask-user-v2-card-questions"
@@ -311,7 +316,12 @@ function AskUserFormImpl({
 					<div className="shrink-0 pt-0.5" data-testid="ask-user-v2-card-footer">
 						<div className="flex flex-wrap items-center justify-between gap-1.5">
 							{showCountdown ? (
-								<div className="flex min-w-0 items-center gap-1 text-xs font-medium leading-4 text-muted-foreground">
+								<div
+									className={cn(
+										"flex min-w-0 items-center gap-1 font-medium",
+										askUserMutedTextClass,
+									)}
+								>
 									<span
 										className={cn(
 											"min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
@@ -334,7 +344,7 @@ function AskUserFormImpl({
 									disabled={actionsDisabled}
 									onClick={handleSkip}
 									data-testid="ask-user-v2-card-skip-button"
-									className="h-6 rounded-md border border-border px-3 text-xs font-medium text-foreground shadow-none"
+									className="h-7 rounded-md border border-border px-3 text-sm font-medium leading-5 text-foreground shadow-none"
 								>
 									{getAskUserSkipActionText(locale)}
 								</Button>
@@ -344,7 +354,7 @@ function AskUserFormImpl({
 									disabled={actionsDisabled}
 									onClick={() => handleSubmit()}
 									data-testid="ask-user-v2-card-submit-button"
-									className="h-6 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-none hover:bg-primary/90"
+									className="h-7 rounded-md bg-primary px-3 text-sm font-medium leading-5 text-primary-foreground shadow-none hover:bg-primary/90"
 								>
 									{getAskUserSubmitActionText(locale)}
 								</Button>
@@ -382,14 +392,11 @@ const QuestionItem = memo(function QuestionItem({
 
 	return (
 		<div
-			className={cn("space-y-1 transition-opacity", !question.isComplete && "opacity-70")}
+			className={cn("space-y-1.5 transition-opacity", !question.isComplete && "opacity-70")}
 			data-testid={`ask-user-v2-card-question-item-${question.id}`}
 		>
 			<p
-				className={cn(
-					"text-xs font-medium leading-4 text-foreground",
-					askUserBreakTextClass,
-				)}
+				className={cn(askUserQuestionTextClass, askUserBreakTextClass)}
 				data-testid={`ask-user-v2-card-question-text-${question.id}`}
 			>
 				{question.label ? (
@@ -443,7 +450,7 @@ const QuestionItem = memo(function QuestionItem({
 			</div>
 			{showDefaultHint && question.defaultValue !== undefined && (
 				<p
-					className="text-xs leading-4 text-muted-foreground"
+					className={askUserMutedTextClass}
 					data-testid={`ask-user-v2-card-default-value-hint-${question.id}`}
 				>
 					<span className={askUserBreakTextClass}>
@@ -495,7 +502,7 @@ const ConfirmField = memo(function ConfirmField({
 					onClick={() => handleSelect(ASK_USER_CONFIRM_VALUE.yes)}
 					data-testid={`ask-user-v2-card-confirm-yes-button-${questionId}`}
 					className={cn(
-						"h-6 rounded-full border border-border px-3 text-xs font-normal text-foreground shadow-none transition-colors hover:bg-accent hover:text-accent-foreground",
+						"h-7 rounded-full border border-border px-3 text-sm font-normal leading-5 text-foreground shadow-none transition-colors hover:bg-accent hover:text-accent-foreground",
 						displayValue === ASK_USER_CONFIRM_VALUE.yes &&
 							"border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground disabled:border-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100",
 					)}
@@ -510,7 +517,7 @@ const ConfirmField = memo(function ConfirmField({
 					onClick={() => handleSelect(ASK_USER_CONFIRM_VALUE.no)}
 					data-testid={`ask-user-v2-card-confirm-no-button-${questionId}`}
 					className={cn(
-						"h-6 rounded-full border border-border px-3 text-xs font-normal text-foreground shadow-none transition-colors hover:bg-accent hover:text-accent-foreground",
+						"h-7 rounded-full border border-border px-3 text-sm font-normal leading-5 text-foreground shadow-none transition-colors hover:bg-accent hover:text-accent-foreground",
 						displayValue === ASK_USER_CONFIRM_VALUE.no &&
 							"border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground disabled:border-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100",
 					)}
@@ -537,8 +544,19 @@ const InputField = memo(function InputField({
 }: InputFieldProps) {
 	const writeAnswer = useWriteAnswer()
 	const [value, setValue] = useState("")
+	const textareaRef = useRef<HTMLTextAreaElement>(null)
 
 	const displayValue = typeof submittedAnswer === "string" ? submittedAnswer : value
+
+	useLayoutEffect(() => {
+		const textarea = textareaRef.current
+		if (!textarea) return
+		textarea.style.height = "auto"
+		const nextHeight = Math.min(textarea.scrollHeight, ASK_USER_INPUT_MAX_HEIGHT)
+		textarea.style.height = `${nextHeight}px`
+		textarea.style.overflowY =
+			textarea.scrollHeight > ASK_USER_INPUT_MAX_HEIGHT ? "auto" : "hidden"
+	}, [displayValue, placeholder])
 
 	const handleChange = useCallback(
 		(e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -550,13 +568,15 @@ const InputField = memo(function InputField({
 	)
 
 	return (
-		<Textarea
+		<textarea
+			ref={textareaRef}
 			value={displayValue}
 			placeholder={placeholder}
 			disabled={disabled}
 			onChange={handleChange}
+			rows={1}
 			data-testid={`ask-user-v2-card-input-${questionId}`}
-			className="h-16 min-h-16 min-w-0 resize-none overflow-y-auto rounded-md border border-border bg-background px-2 py-1 text-left text-[13px] font-normal leading-4 text-foreground shadow-none [scrollbar-width:none] placeholder:text-[13px] placeholder:text-muted-foreground focus-visible:border-border focus-visible:!ring-0 md:text-[13px] [&::-webkit-scrollbar]:hidden"
+			className={askUserInputClass}
 		/>
 	)
 })
@@ -598,7 +618,7 @@ const SelectField = memo(function SelectField({
 	)
 
 	const handleOtherTextChange = useCallback(
-		(e: ChangeEvent<HTMLInputElement>) => {
+		(e: ChangeEvent<HTMLTextAreaElement>) => {
 			const next = e.target.value
 			setOtherText(next)
 			writeAnswer(questionId, next)
@@ -652,12 +672,7 @@ const SelectField = memo(function SelectField({
 								questionId={questionId}
 							/>
 						) : (
-							<span
-								className={cn(
-									"text-xs font-normal leading-4 text-foreground",
-									askUserBreakTextClass,
-								)}
-							>
+							<span className={cn(askUserQuestionTextClass, askUserBreakTextClass)}>
 								{opt}
 							</span>
 						)}
@@ -738,7 +753,7 @@ const MultiSelectField = memo(function MultiSelectField({
 	)
 
 	const handleOtherTextChange = useCallback(
-		(e: ChangeEvent<HTMLInputElement>) => {
+		(e: ChangeEvent<HTMLTextAreaElement>) => {
 			const next = e.target.value
 			setOtherText(next)
 			writeAnswer(questionId, mapMultiSelectAnswer(valueRef.current, next))
@@ -792,10 +807,7 @@ const MultiSelectField = memo(function MultiSelectField({
 								/>
 							) : (
 								<span
-									className={cn(
-										"text-xs font-normal leading-4 text-foreground",
-										askUserBreakTextClass,
-									)}
+									className={cn(askUserQuestionTextClass, askUserBreakTextClass)}
 								>
 									{opt}
 								</span>
@@ -806,7 +818,7 @@ const MultiSelectField = memo(function MultiSelectField({
 			</div>
 			{(min !== undefined || max !== undefined) && (
 				<p
-					className="text-xs leading-4 text-muted-foreground"
+					className={askUserMutedTextClass}
 					data-testid={`ask-user-v2-card-multi-select-hint-${questionId}`}
 				>
 					{getAskUserMultiSelectRangeText({

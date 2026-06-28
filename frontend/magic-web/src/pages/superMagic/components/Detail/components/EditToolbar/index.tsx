@@ -20,12 +20,15 @@ import useFileExport from "../../hooks/useFileExport"
 import { projectStore } from "@/pages/superMagic/stores/core"
 import usePPTStoreOptional from "./usePPTStoreOptional"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { pptFontResolver } from "@/pages/superMagic/services/pptFontService"
-import { exportPPTX } from "../../../../../../../packages/html2pptx/src"
-import { exportHtmlToPdf } from "../../../../../../../packages/pdf-export/src"
+import { exportPPTX } from "@magic/html2pptx"
 import { exportHtmlToImage } from "@magic-web/html2image"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
+import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
+import {
+	documentExportService,
+	type DocumentExport,
+} from "@/pages/superMagic/services/documentExport"
 
 interface EditToolbarProps {
 	style?: React.CSSProperties
@@ -192,10 +195,16 @@ function EditToolbar({
 			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
 			return
 		}
+		const documentExporter = documentExportService.get()
+		if (!documentExporter) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.unsupportedInCurrentVersion"))
+			return
+		}
 
 		const { slidePaths } = input
 		const storeConfig = pptStore.getConfigForExport()
-		const defaultName = storeConfig?.attachments?.[0]?.file_name || "slides"
+		const defaultName =
+			storeConfig?.displayConfig?.name || storeConfig?.mainFileName || "slides"
 
 		const targetSlides = slidePaths?.length
 			? pptStore.slides.filter((slide) => slidePaths.includes(slide.path))
@@ -208,7 +217,8 @@ function EditToolbar({
 
 		const htmlSlides = targetSlides.map((slide) => slide.content ?? "")
 		const toastId = createRandomUuidV4()
-		let pdfHandle: ReturnType<typeof exportHtmlToPdf> | null = null
+		const resourceErrors = documentExporter.createResourceErrorCollector(t)
+		let pdfHandle: DocumentExport.Handle | null = null
 
 		function getPdfExportToastContent(progressText: string) {
 			return (
@@ -219,7 +229,7 @@ function EditToolbar({
 						variant="secondary"
 						size="sm"
 						className="h-6 bg-destructive-custom px-2 text-xs text-destructive hover:opacity-90"
-						onClick={() => pdfHandle?.cancel()}
+						onClick={() => pdfHandle?.cancel?.()}
 					>
 						{t("topicFiles.exportCancel")}
 					</Button>
@@ -233,21 +243,19 @@ function EditToolbar({
 			duration: 0,
 		})
 
-		pdfHandle = exportHtmlToPdf({
-			pages: htmlSlides,
-			pagination: "none",
+		pdfHandle = documentExporter.exportPages(htmlSlides, {
 			fileName: defaultName.replace(/\.html?$/i, "") + ".pdf",
-			onProgress: ({ phase, current, total }) => {
-				if (phase === "capture" && total > 0) {
-					const progress = total > 1 ? ` (${current}/${total})` : ""
-					magicToast.loading({
-						key: toastId,
-						content: getPdfExportToastContent(
-							`${t("topicFiles.exporting")}${progress}`,
-						),
-						duration: 0,
-					})
-				}
+			skipFailedPages: true,
+			pptMode: true,
+			onResourceLoadError: resourceErrors.onResourceLoadError,
+			onPageProgress: (ctx) => {
+				const { index, total } = ctx as DocumentExport.PageProgressContext
+				const progress = total > 1 ? ` (${index + 1}/${total})` : ""
+				magicToast.loading({
+					key: toastId,
+					content: getPdfExportToastContent(`${t("topicFiles.exporting")}${progress}`),
+					duration: 0,
+				})
 			},
 		})
 
@@ -275,7 +283,7 @@ function EditToolbar({
 						content: t("topicFiles.contextMenu.fileExport.exportFailed"),
 						duration: 1000,
 					})
-					console.error("[exportHtmlToPdf] failed:", error)
+					console.error("[exportPDF] failed:", error)
 				}
 			})
 			.finally(() => {
@@ -291,7 +299,8 @@ function EditToolbar({
 
 		const { slidePaths, imageFormat } = input
 		const storeConfig = pptStore.getConfigForExport()
-		const defaultName = storeConfig?.attachments?.[0]?.file_name || "slides"
+		const defaultName =
+			storeConfig?.displayConfig?.name || storeConfig?.mainFileName || "slides"
 
 		const targetSlides = slidePaths?.length
 			? pptStore.slides.filter((slide) => slidePaths.includes(slide.path))
@@ -387,7 +396,8 @@ function EditToolbar({
 
 		const { slidePaths } = input
 		const storeConfig = pptStore.getConfigForExport()
-		const defaultName = storeConfig?.attachments?.[0]?.file_name || "slides"
+		const defaultName =
+			storeConfig?.displayConfig?.name || storeConfig?.mainFileName || "slides"
 
 		const targetSlides = slidePaths?.length
 			? pptStore.slides.filter((slide) => slidePaths.includes(slide.path))
@@ -401,6 +411,7 @@ function EditToolbar({
 		const htmlSlides = targetSlides.map((slide) => slide.content ?? "")
 		const toastId = createRandomUuidV4()
 		let exportHandle: ReturnType<typeof exportPPTX> | null = null
+		const resourceErrors = createPptxResourceErrorCollector(t)
 
 		function getExportToastContent(progressText: string) {
 			return (
@@ -419,12 +430,15 @@ function EditToolbar({
 			)
 		}
 
+		const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
+
 		exportHandle = exportPPTX(htmlSlides, {
 			fileName: defaultName,
 			skipFailedPages: true,
 			fontResolver: pptFontResolver,
 			logger: pptxExternalLogger,
 			logLevel: "warn",
+			onResourceLoadError: resourceErrors.onResourceLoadError,
 			onSlideProgress: ({ index, total }) => {
 				const progress = total > 1 ? ` (${index + 1}/${total})` : ""
 				magicToast.loading({

@@ -192,6 +192,7 @@ export class IframeFSService {
 		this.watchService = new IframeFSWatchService({
 			postToIframe: (message) => this.send(message),
 			getFileUpdatedAt: (resolvedPath) => this.findFile(resolvedPath)?.updated_at,
+			getDirEntryNames: (resolvedDir) => this.buildDirEntryNames(resolvedDir),
 			getDirEntries: (resolvedDir, originalDir) =>
 				this.buildDirEntries(resolvedDir, originalDir),
 		})
@@ -1023,7 +1024,7 @@ export class IframeFSService {
 		)
 	}
 
-	private buildDirEntries(resolvedDir: string, originalDir: string): FSDirEntry[] {
+	private listDirectDirItems(resolvedDir: string) {
 		return this.cfg.fileList
 			.map((item) => ({ item, path: this.normalizeWorkspacePath(item.relative_file_path) }))
 			.filter(({ path }) => {
@@ -1034,6 +1035,16 @@ export class IframeFSService {
 				const rest = path.slice(resolvedDir.length)
 				return rest.length > 0 && !rest.includes("/")
 			})
+	}
+
+	private buildDirEntryNames(resolvedDir: string): string[] {
+		return this.listDirectDirItems(resolvedDir).map(
+			({ item, path }) => item.file_name || path.split("/").pop() || path,
+		)
+	}
+
+	private buildDirEntries(resolvedDir: string, originalDir: string): FSDirEntry[] {
+		return this.listDirectDirItems(resolvedDir)
 			.map(({ item, path }) => {
 				const name = item.file_name || path.split("/").pop() || path
 				const entry: FSDirEntry = {

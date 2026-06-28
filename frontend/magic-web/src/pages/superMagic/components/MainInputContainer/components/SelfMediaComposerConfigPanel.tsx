@@ -289,6 +289,7 @@ function SelfMediaComposerConfigPanel({ className }: { className?: string }) {
 											? "border-primary bg-primary text-primary-foreground"
 											: "border-border bg-background text-foreground hover:bg-sidebar-accent",
 									)}
+									data-testid="handle-platform-select"
 								>
 									{option.label}
 									<span className="sr-only"> {option.value}</span>
@@ -327,6 +328,7 @@ function SelfMediaComposerConfigPanel({ className }: { className?: string }) {
 													? "border-primary bg-sidebar-accent ring-1 ring-primary"
 													: "border-border",
 											)}
+											data-testid="handle-visual-preset-select"
 										>
 											<PresetLayoutMark
 												className="size-8 shrink-0"
@@ -377,6 +379,7 @@ function SelfMediaComposerConfigPanel({ className }: { className?: string }) {
 												? "border-primary bg-primary text-primary-foreground"
 												: "border-border bg-background text-foreground hover:bg-sidebar-accent",
 										)}
+										data-testid="handle-card-count-mode-select"
 									>
 										{count}
 									</button>
@@ -399,6 +402,7 @@ function SelfMediaComposerConfigPanel({ className }: { className?: string }) {
 											? "border-primary bg-primary text-primary-foreground"
 											: "border-border bg-background text-foreground hover:bg-sidebar-accent",
 									)}
+									data-testid="handle-card-count-mode-select-2"
 								>
 									{t("detail.selfMedia.initPanel.composerConfig.custom")}
 								</button>

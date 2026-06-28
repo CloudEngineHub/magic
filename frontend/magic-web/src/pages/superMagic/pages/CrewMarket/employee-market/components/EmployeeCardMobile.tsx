@@ -71,6 +71,7 @@ function CapabilitiesRow({ playbooks }: { playbooks: StoreAgentView["playbooks"]
 				onScroll={updateMasks}
 				// overscroll-x-contain 阻止水平滚动冒泡到父级页面，防止 iOS Safari 意外触发页面后退
 				className="no-scrollbar flex w-full touch-pan-x flex-row gap-1.5 overflow-x-auto overflow-y-visible overscroll-x-contain px-4 [-webkit-overflow-scrolling:touch]"
+				data-testid="update-masks"
 			>
 				{playbooks.map((p, i) => (
 					<CapChip key={`${p.name}-${i}`} name={p.name} themeColor={p.themeColor} />
@@ -157,6 +158,7 @@ function EmployeeCardMobile({
 								src={avatarSrc}
 								alt={displayName}
 								className="size-full object-cover"
+								data-testid="employee-card-mobile-image"
 							/>
 						) : (
 							<div className="flex size-full items-center justify-center rounded-full bg-muted text-foreground">

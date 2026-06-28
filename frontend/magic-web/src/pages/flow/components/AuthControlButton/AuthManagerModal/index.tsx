@@ -29,7 +29,7 @@ const AuthManagerModal = <T extends AuthExtraData>({
 	onClose,
 	onOk,
 }: AuthManagerModalProps<T>) => {
-	const { t } = useTranslation()
+	const { t } = useTranslation("flow")
 
 	// 获取当前用户信息
 	const { userInfo } = useUserInfo()
@@ -121,7 +121,7 @@ const AuthManagerModal = <T extends AuthExtraData>({
 				}),
 			})
 				.then(() => {
-					magicToast.success(t("common.updateSuccess", { ns: "flow" }))
+					magicToast.success(t("common.updateSuccess"))
 				})
 				.catch((error) => {
 					throw new Error(error)
@@ -138,7 +138,7 @@ const AuthManagerModal = <T extends AuthExtraData>({
 
 	return (
 		<MemberDepartmentSelector
-			title={title ?? t("common.manageRights", { ns: "flow" })}
+			title={title ?? t("common.manageRights")}
 			open={open}
 			onlyDepartment={type === ManagerModalType.Department}
 			useAuthPanel={type === ManagerModalType.Auth}

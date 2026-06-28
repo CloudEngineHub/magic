@@ -57,6 +57,7 @@ export const withNode = (WrapperComponent: ComponentType<WithNodeProps>) => {
 						"z-[10] flex size-6 items-center justify-center rounded-full",
 						classNames?.icon,
 					)}
+					data-testid="with-node-image"
 				/>
 			)
 			return (

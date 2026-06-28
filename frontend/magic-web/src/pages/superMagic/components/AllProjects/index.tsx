@@ -103,10 +103,12 @@ function AllProjects({
 								setWasHoveredProjects((prev) => new Set(prev).add(item.id))
 							}}
 							onMouseLeave={() => setHoveredProjectId(null)}
+							data-testid="set-hovered-project-id"
 						>
 							<div
 								className={styles.projectItemContentWrapper}
 								onClick={() => handleProjectClick(item)}
+								data-testid="handle-project-click"
 							>
 								<div className={styles.projectItemIcon}>
 									<IconWorkspaceProjectFolder
@@ -133,6 +135,7 @@ function AllProjects({
 								<div
 									className={styles.projectItemFooterContent}
 									onClick={() => handleWorkspaceClick(item.workspace_id)}
+									data-testid="handle-workspace-click"
 								>
 									<div>{item.workspace_name || t("common.unknown")}</div>
 									<IconArrowUpRight size={12} />

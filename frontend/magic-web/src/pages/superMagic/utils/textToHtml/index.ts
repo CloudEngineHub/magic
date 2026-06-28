@@ -54,9 +54,9 @@ const PLAINTEXT_LANGUAGES = new Set(["plaintext", "text", "txt", "log", ""])
 
 /**
  * 统一入口：根据 language 自动选择渲染方式，将文本内容转为带样式的 HTML。
- * - markdown -> marked 解析
- * - plaintext -> <pre> 包裹
- * - 其他 -> prismjs 语法高亮
+ * - markdown → marked 解析
+ * - plaintext → <pre> 包裹
+ * - 其他 → prismjs 语法高亮
  */
 export function textToHtml(content: string, options: TextToHtmlOptions = {}): string {
 	const { language: rawLang = "plaintext", showLineNumbers = true, ...templateOpts } = options

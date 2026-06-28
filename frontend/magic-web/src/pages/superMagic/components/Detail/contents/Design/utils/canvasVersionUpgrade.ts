@@ -1,12 +1,12 @@
 import { SuperMagicApi } from "@/apis"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignData } from "../types"
+import { MAGIC_PROJECT_VERSION_V1, MAGIC_PROJECT_VERSION_V2 } from "./magicProjectCompression"
 import {
-	MAGIC_PROJECT_VERSION_V1,
-	MAGIC_PROJECT_VERSION_V2,
-	isV2Version,
-} from "./magicProjectCompression"
-import { generateMagicProjectJsContent } from "./utils"
+	generateMagicProjectJsContent,
+	loadMagicProjectJsContent,
+	parseMagicProjectJsContentWithDiagnostics,
+} from "./utils"
 import { writeUserElementDetails } from "./elementDetailsIo"
 
 /**
@@ -27,6 +27,12 @@ export interface UpgradeContext {
 export interface UpgradeProgress {
 	step: "backup" | "convert" | "save-main" | "save-details" | "done"
 	percent: number
+}
+
+const DESIGN_UPGRADE_LOG_PREFIX = "[DesignVersionUpgrade]"
+
+function isSafeCanvasStatusForUpgrade(canvasStatus: string): boolean {
+	return canvasStatus === "valid-empty" || canvasStatus === "valid-non-empty"
 }
 
 /**
@@ -50,6 +56,26 @@ export async function upgradeCanvasToV2(
 	// Step 1: 备份 — 将原始内容保存为 magic.project.v1.js
 	onProgress?.({ step: "backup", percent: 10 })
 
+	const originalContent = await loadMagicProjectJsContent(magicProjectJsFileId)
+	const originalParse = parseMagicProjectJsContentWithDiagnostics(originalContent)
+	if (!isSafeCanvasStatusForUpgrade(originalParse.canvasStatus)) {
+		console.warn(
+			DESIGN_UPGRADE_LOG_PREFIX,
+			JSON.stringify({
+				event: "blocked-unsafe-v1-upgrade",
+				canvasStatus: originalParse.canvasStatus,
+				error: originalParse.error,
+				magicProjectJsFileId,
+				designElementCount: designData.canvas?.elements?.length ?? 0,
+			}),
+		)
+		throw new Error(`Unsafe canvas status for v1 upgrade: ${originalParse.canvasStatus}`)
+	}
+	const originalDesignData = originalParse.data
+	if (!originalDesignData?.canvas) {
+		throw new Error(`Unsafe canvas status for v1 upgrade: ${originalParse.canvasStatus}`)
+	}
+
 	// 获取原文件的 parent_id
 	const allFiles = [...(flatAttachments ?? []), ...(attachments ?? [])]
 	const mainFile = allFiles.find((f) => f.file_id === magicProjectJsFileId) as
@@ -69,12 +95,8 @@ export async function upgradeCanvasToV2(
 			})
 			const backupFileId = (backupFile as { file_id?: string })?.file_id
 			if (backupFileId) {
-				// 生成 v1 格式内容写入备份
-				const v1Content = generateMagicProjectJsContent(designData, {
-					projectBasePath: designProjectBasePath,
-				})
 				await SuperMagicApi.saveFileContent([
-					{ file_id: backupFileId, content: v1Content },
+					{ file_id: backupFileId, content: originalContent },
 				])
 			}
 		} catch {
@@ -88,7 +110,7 @@ export async function upgradeCanvasToV2(
 	const upgradedDesignData: DesignData = {
 		...designData,
 		version: MAGIC_PROJECT_VERSION_V2,
-		canvas: designData.canvas ? { ...designData.canvas } : { elements: [] },
+		canvas: { ...originalDesignData.canvas },
 	}
 
 	// Step 3: 保存主文件（v2 格式：canvas 压缩 + 重字段剥离）

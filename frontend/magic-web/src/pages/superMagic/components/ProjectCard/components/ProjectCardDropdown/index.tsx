@@ -391,6 +391,7 @@ function ProjectCardDropdown({
 								e.stopPropagation()
 								onClose()
 							}}
+							data-testid="on-close"
 						/>
 						<motion.div
 							initial={{ height: 0, opacity: 0 }}
@@ -505,6 +506,7 @@ function WorkspaceNavigationItem({ workspace, isActive, onSelect }: WorkspaceNav
 					)}
 					onMouseEnter={() => setIsHovered(true)}
 					onMouseLeave={() => setIsHovered(false)}
+					data-testid="set-is-hovered"
 				>
 					<button
 						type="button"

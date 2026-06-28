@@ -35,6 +35,7 @@ function DragPreview({ item, screenshot }: DragPreviewProps) {
 					alt={`Slide ${item.index + 1}`}
 					className="h-full w-full object-cover"
 					draggable={false}
+					data-testid="drag-preview-image"
 				/>
 			)
 		}

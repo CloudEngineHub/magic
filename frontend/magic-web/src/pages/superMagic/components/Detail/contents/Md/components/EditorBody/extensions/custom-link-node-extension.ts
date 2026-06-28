@@ -8,6 +8,7 @@ import {
 } from "@/pages/superMagic/components/MessageEditor/utils/drag"
 import { calculateRelativePath } from "@/utils/path"
 import { parseAnchorLink } from "@/utils/slug"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export interface CustomLinkNodeOptions extends LinkNodeOptions {
 	/**
@@ -214,49 +215,47 @@ export const CustomLinkNode = LinkNode.extend<CustomLinkNodeOptions>({
 								return false
 							}
 
-							// Insert links into editor
-							const editor = this.editor
-							if (!editor) {
-								return false
-							}
+							return (
+								runActiveEditor(this.editor, (editor) => {
+									// Insert links sequentially
+									links.forEach((link, index) => {
+										if (index > 0) {
+											// Add space between multiple links
+											editor.chain().insertContent(" ").run()
+										}
 
-							// Insert links sequentially
-							links.forEach((link, index) => {
-								if (index > 0) {
-									// Add space between multiple links
-									editor.chain().insertContent(" ").run()
-								}
+										// Encode URL if it contains spaces to ensure markdown parsing works correctly
+										// According to Markdown spec, URLs with spaces should be URL-encoded
+										// We use encodeURI to preserve path structure while encoding spaces
+										let encodedHref = link.href
+										if (link.href && /[\s<>]/.test(link.href)) {
+											// Use encodeURI to encode spaces while preserving path separators and other valid characters
+											// This ensures markdown parsing works while maintaining valid URLs for HTML rendering
+											encodedHref = encodeURI(link.href)
+										}
 
-								// Encode URL if it contains spaces to ensure markdown parsing works correctly
-								// According to Markdown spec, URLs with spaces should be URL-encoded
-								// We use encodeURI to preserve path structure while encoding spaces
-								let encodedHref = link.href
-								if (link.href && /[\s<>]/.test(link.href)) {
-									// Use encodeURI to encode spaces while preserving path separators and other valid characters
-									// This ensures markdown parsing works while maintaining valid URLs for HTML rendering
-									encodedHref = encodeURI(link.href)
-								}
-
-								// Insert link with title
-								editor
-									.chain()
-									.insertContent({
-										type: "text",
-										text: link.title,
-										marks: [
-											{
-												type: "link",
-												attrs: {
-													href: encodedHref,
-													title: link.title,
-												},
-											},
-										],
+										// Insert link with title
+										editor
+											.chain()
+											.insertContent({
+												type: "text",
+												text: link.title,
+												marks: [
+													{
+														type: "link",
+														attrs: {
+															href: encodedHref,
+															title: link.title,
+														},
+													},
+												],
+											})
+											.run()
 									})
-									.run()
-							})
 
-							return true
+									return true
+								}, false) ?? false
+							)
 						} catch (error) {
 							console.error("Error parsing drag data:", error)
 							return false

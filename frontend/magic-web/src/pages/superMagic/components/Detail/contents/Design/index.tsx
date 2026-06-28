@@ -56,6 +56,7 @@ import { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign/prewar
 import { designBuiltinPlugins } from "./plugins/options"
 import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
 import type { DesignDraftReason } from "./utils/designDraftStorage"
+import type { DesignSaveMetadata } from "./managers"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
@@ -384,6 +385,21 @@ function DesignViewer(props: DesignViewerProps) {
 	const canvasDesignRef = useRef<CanvasDesignRef | null>(null)
 	const isApplyingRemoteCanvasUpdateRef = useRef(false)
 	const remoteCanvasUpdateReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const suppressCanvasDesignChangeEvents = useCallback((applyUpdate: () => void) => {
+		if (remoteCanvasUpdateReleaseTimerRef.current) {
+			clearTimeout(remoteCanvasUpdateReleaseTimerRef.current)
+			remoteCanvasUpdateReleaseTimerRef.current = null
+		}
+		isApplyingRemoteCanvasUpdateRef.current = true
+		try {
+			applyUpdate()
+		} finally {
+			remoteCanvasUpdateReleaseTimerRef.current = setTimeout(() => {
+				isApplyingRemoteCanvasUpdateRef.current = false
+				remoteCanvasUpdateReleaseTimerRef.current = null
+			}, REMOTE_CANVAS_UPDATE_SUPPRESS_MS)
+		}
+	}, [])
 
 	// 用于跟踪是否已经执行过初始加载，确保只加载一次
 	// 这样可以避免 attachments 数组引用变化导致的重复加载
@@ -409,29 +425,21 @@ function DesignViewer(props: DesignViewerProps) {
 		onRemoteDesignDataUpdate: useCallback(
 			(_oldDesignData: DesignData, newDesignData: DesignData) => {
 				if (newDesignData.canvas) {
-					if (remoteCanvasUpdateReleaseTimerRef.current) {
-						clearTimeout(remoteCanvasUpdateReleaseTimerRef.current)
-						remoteCanvasUpdateReleaseTimerRef.current = null
-					}
-					isApplyingRemoteCanvasUpdateRef.current = true
-					try {
+					suppressCanvasDesignChangeEvents(() => {
 						canvasDesignRef.current?.updateData(newDesignData.canvas)
-					} finally {
-						remoteCanvasUpdateReleaseTimerRef.current = setTimeout(() => {
-							isApplyingRemoteCanvasUpdateRef.current = false
-							remoteCanvasUpdateReleaseTimerRef.current = null
-						}, REMOTE_CANVAS_UPDATE_SUPPRESS_MS)
-					}
+					})
 				}
 			},
-			[],
+			[suppressCanvasDesignChangeEvents],
 		),
 		onVersionChange: useCallback(
 			(_designData: DesignData, isViewingHistory: boolean) => {
-				refreshCanvasDesign()
-				if (isViewingHistory) refreshCanvasDesign()
+				suppressCanvasDesignChangeEvents(() => {
+					refreshCanvasDesign()
+					if (isViewingHistory) refreshCanvasDesign()
+				})
 			},
-			[refreshCanvasDesign],
+			[refreshCanvasDesign, suppressCanvasDesignChangeEvents],
 		),
 	})
 
@@ -440,6 +448,7 @@ function DesignViewer(props: DesignViewerProps) {
 		updateDesignData,
 		updateDesignDataAndScheduleSave,
 		persistLocalDraft,
+		syncDesignData,
 		magicProjectJsFileId,
 		isInitialLoading,
 		// isSaving - 迁移后不再用于头部保存状态指示器，暂时注释掉，如需使用可取消注释
@@ -465,6 +474,7 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const { isProcessingRevoke, revokeType } = designProjectManager
 	const latestDesignDataRef = useRef(designData)
+	const [isVersionActionLoading, setIsVersionActionLoading] = useState(false)
 
 	useEffect(() => {
 		latestDesignDataRef.current = designData
@@ -527,11 +537,15 @@ function DesignViewer(props: DesignViewerProps) {
 				},
 				(progress) => setUpgradeProgress(progress),
 			)
-			// 更新内存中的 designData 为 v2
-			updateDesignDataAndScheduleSave((draft) => {
-				draft.version = upgradedData.version
-				draft.canvas = upgradedData.canvas
-			})
+			// 升级函数已经写入远端；这里只同步内存态和可信基线，避免二次自动保存。
+			const nextDesignData: DesignData = {
+				...latestDesignDataRef.current,
+				version: upgradedData.version,
+				canvas: upgradedData.canvas,
+			}
+			latestDesignDataRef.current = nextDesignData
+			updateDesignData(() => nextDesignData)
+			syncDesignData(nextDesignData)
 			updateAttachments()
 			toast.success(t("design.upgrade.success"))
 		} catch (error) {
@@ -548,7 +562,8 @@ function DesignViewer(props: DesignViewerProps) {
 		attachments,
 		flatAttachments,
 		designProjectBasePath,
-		updateDesignDataAndScheduleSave,
+		updateDesignData,
+		syncDesignData,
 		updateAttachments,
 		isUpgrading,
 		t,
@@ -749,10 +764,10 @@ function DesignViewer(props: DesignViewerProps) {
 	}, [isMobile])
 
 	const persistCanvasData = useCallback(
-		(canvasData: CanvasDocument) => {
+		(canvasData: CanvasDocument, metadata?: DesignSaveMetadata) => {
 			updateDesignDataAndScheduleSave((draft) => {
 				draft.canvas = canvasData
-			})
+			}, metadata)
 			latestDesignDataRef.current = {
 				...latestDesignDataRef.current,
 				canvas: canvasData,
@@ -764,10 +779,16 @@ function DesignViewer(props: DesignViewerProps) {
 	const persistCanvasDataPatch = useCallback(
 		(patch: CanvasDesignDataPatch): CanvasDocument | undefined => {
 			let nextCanvasData: CanvasDocument | undefined
-			updateDesignDataAndScheduleSave((draft) => {
-				nextCanvasData = applyCanvasDocumentPatch(draft.canvas, patch)
-				draft.canvas = nextCanvasData
-			})
+			updateDesignDataAndScheduleSave(
+				(draft) => {
+					nextCanvasData = applyCanvasDocumentPatch(draft.canvas, patch)
+					draft.canvas = nextCanvasData
+				},
+				{
+					source: "canvas-patch",
+					deletedElementIds: patch.deletedElementIds,
+				},
+			)
 			if (nextCanvasData) {
 				latestDesignDataRef.current = {
 					...latestDesignDataRef.current,
@@ -819,13 +840,19 @@ function DesignViewer(props: DesignViewerProps) {
 				...latestDesignDataRef.current,
 				canvas: nextCanvasData,
 			}
-			resolveEditedElementConflictsWithLocal(editedElementIds, nextDesignData)
+			resolveEditedElementConflictsWithLocal(editedElementIds, nextDesignData, {
+				source: "canvas-patch",
+				deletedElementIds: patch.deletedElementIds,
+			})
 		},
 		[resolveEditedElementConflictsWithLocal],
 	)
 
 	const persistCurrentCanvasDraftImmediately = useCallback(
 		(reason: DesignDraftReason = "pagehide") => {
+			if (fileVersion !== undefined || isVersionActionLoading) {
+				return
+			}
 			const currentCanvasData = canvasDesignRef.current?.exportCurrentDocument?.()
 			if (currentCanvasData) {
 				persistCanvasDataLocally(currentCanvasData, {
@@ -839,7 +866,7 @@ function DesignViewer(props: DesignViewerProps) {
 				reason,
 			})
 		},
-		[persistCanvasDataLocally, persistLocalDraft],
+		[fileVersion, isVersionActionLoading, persistCanvasDataLocally, persistLocalDraft],
 	)
 
 	const persistCurrentCanvasDraftImmediatelyRef = useRef(persistCurrentCanvasDraftImmediately)
@@ -869,6 +896,37 @@ function DesignViewer(props: DesignViewerProps) {
 		persistCurrentCanvasDraftImmediately,
 	])
 
+	const runVersionActionWithLoading = useCallback(
+		async (action: () => Promise<void>) => {
+			if (isVersionActionLoading) return
+			setIsVersionActionLoading(true)
+			try {
+				await action()
+			} finally {
+				setIsVersionActionLoading(false)
+			}
+		},
+		[isVersionActionLoading],
+	)
+
+	const handleChangeFileVersionWithLoading = useCallback(
+		(version: number, isNewestVersionTarget: boolean) =>
+			runVersionActionWithLoading(() =>
+				handleChangeFileVersion(version, isNewestVersionTarget),
+			),
+		[handleChangeFileVersion, runVersionActionWithLoading],
+	)
+
+	const handleReturnLatestWithLoading = useCallback(
+		() => runVersionActionWithLoading(() => handleReturnLatest()),
+		[handleReturnLatest, runVersionActionWithLoading],
+	)
+
+	const handleVersionRollbackWithLoading = useCallback(
+		(version?: number) => runVersionActionWithLoading(() => handleVersionRollback(version)),
+		[handleVersionRollback, runVersionActionWithLoading],
+	)
+
 	// 获取 CommonHeaderV2 的 props（定位到文件时定位到 magic.project.js）
 	const headerProps = useDesignHeaderProps({
 		locateFileId: magicProjectJsFileId ?? undefined,
@@ -883,9 +941,9 @@ function DesignViewer(props: DesignViewerProps) {
 		allowDownload,
 		containerRef,
 		handleReinitialize,
-		handleChangeFileVersion,
-		handleReturnLatest,
-		handleVersionRollback,
+		handleChangeFileVersion: handleChangeFileVersionWithLoading,
+		handleReturnLatest: handleReturnLatestWithLoading,
+		handleVersionRollback: handleVersionRollbackWithLoading,
 	})
 
 	const { handleCanvasDesignDataChange: syncCanvasImageFileRename } =
@@ -906,6 +964,10 @@ function DesignViewer(props: DesignViewerProps) {
 			if (isApplyingRemoteCanvasUpdateRef.current) {
 				return
 			}
+			const metadata: DesignSaveMetadata = {
+				source: "canvas-full-export",
+				deletedElementIds: meta?.deletedElementIds,
+			}
 			if (isOffline) {
 				persistCanvasDataLocally(canvasData)
 				resolveEditedElementConflictsWithLocal(meta?.changedElementIds ?? [], {
@@ -915,7 +977,7 @@ function DesignViewer(props: DesignViewerProps) {
 				return
 			}
 
-			persistCanvasData(canvasData)
+			persistCanvasData(canvasData, metadata)
 			resolveEditedElementConflictsWithLocal(meta?.changedElementIds ?? [], {
 				...latestDesignDataRef.current,
 				canvas: canvasData,
@@ -1284,7 +1346,8 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 显示历史版本 banner 时预留顶部空间，避免遮挡画布（与 HISTORY_VERSION_BANNER_LAYOUT_HEIGHT_PX 一致）
 	const showVersionBanner = !isNewestVersion && !isMobile && !!fileVersionsList?.length
-	const shouldShowInitialLoading = isInitialLoading || isBasePathSwitching
+	const shouldShowInitialLoading =
+		isInitialLoading || isBasePathSwitching || isVersionActionLoading
 
 	return (
 		<>

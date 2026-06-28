@@ -41,7 +41,7 @@ function ReadWebAsMarkdown(props: NodeProps) {
 			<>
 				<VerticalLine height={28} className="text-input" />
 				<Tooltip title={t("playbackControl.viewProcess")}>
-					<div className={cx(styles.button)} onClick={onClick}>
+					<div className={cx(styles.button)} onClick={onClick} data-testid="read-web-as-markdown">
 						<MonitorPlay size={16} className="text-foreground" />
 					</div>
 				</Tooltip>
@@ -55,6 +55,7 @@ function ReadWebAsMarkdown(props: NodeProps) {
 			data-id={props?.node?.app_message_id}
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
 		>
 			<div className={styles.container}>
 				<Flex

@@ -11,6 +11,7 @@ import { isNodeTypeSelected } from "@/lib/tiptap-utils"
 // --- Icons ---
 import { Redo2Icon } from "@/components/tiptap-icons/redo2-icon"
 import { Undo2Icon } from "@/components/tiptap-icons/undo2-icon"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export type UndoRedoAction = "undo" | "redo"
 
@@ -56,21 +57,28 @@ export const historyIcons = {
  * Checks if a history action can be executed
  */
 export function canExecuteUndoRedoAction(editor: Editor | null, action: UndoRedoAction): boolean {
-	if (!editor || !editor.isEditable) return false
-	if (isNodeTypeSelected(editor, ["image"])) return false
+	return (
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
+			if (isNodeTypeSelected(activeEditor, ["image"])) return false
 
-	return action === "undo" ? editor.can().undo() : editor.can().redo()
+			return action === "undo" ? activeEditor.can().undo() : activeEditor.can().redo()
+		}, false) ?? false
+	)
 }
 
 /**
  * Executes a history action on the editor
  */
 export function executeUndoRedoAction(editor: Editor | null, action: UndoRedoAction): boolean {
-	if (!editor || !editor.isEditable) return false
 	if (!canExecuteUndoRedoAction(editor, action)) return false
 
-	const chain = editor.chain().focus()
-	return action === "undo" ? chain.undo().run() : chain.redo().run()
+	return (
+		runActiveEditor(editor, (activeEditor) => {
+			const chain = activeEditor.chain().focus()
+			return action === "undo" ? chain.undo().run() : chain.redo().run()
+		}, false) ?? false
+	)
 }
 
 /**
@@ -83,13 +91,18 @@ export function shouldShowButton(props: {
 }): boolean {
 	const { editor, hideWhenUnavailable, action } = props
 
-	if (!editor || !editor.isEditable) return false
+	const isVisible =
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
 
-	if (hideWhenUnavailable && !editor.isActive("code")) {
-		return canExecuteUndoRedoAction(editor, action)
-	}
+			if (hideWhenUnavailable && !activeEditor.isActive("code")) {
+				return canExecuteUndoRedoAction(activeEditor, action)
+			}
 
-	return true
+			return true
+		}, false) ?? false
+
+	return isVisible
 }
 
 /**

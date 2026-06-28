@@ -112,6 +112,7 @@ function AICardTile({ card, attachmentList, onOpen, onOpenHistory }: AICardTileP
 						type="button"
 						onClick={handleHistoryClick}
 						className="rounded px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						data-testid="handle-history-click"
 					>
 						{t("detail.aiCard.tile.history")}
 					</button>

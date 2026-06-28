@@ -62,6 +62,7 @@ export function InstagramPresetPreviewCard({
 						variant === "cover" ? "ins-card im-cover" : "ins-card im-content",
 						"rounded-[8px] bg-[#fbfaf7] p-[12%] text-[#111]",
 					)}
+
 					{...previewAttrs}
 				>
 					{variant === "cover" ? (
@@ -101,6 +102,7 @@ export function InstagramPresetPreviewCard({
 						variant === "cover" ? "ins-card id-cover" : "ins-card id-content",
 						"rounded-[10px] bg-[#070a13] p-[11%] text-white",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_25%,rgba(109,40,217,0.75),transparent_35%)]" />
@@ -135,6 +137,7 @@ export function InstagramPresetPreviewCard({
 						variant === "cover" ? "ins-card ig-cover" : "ins-card ig-content",
 						"rounded-[12px] bg-gradient-to-br from-[#ff7ab6] via-[#7c3aed] to-[#22d3ee] p-[11%] text-white",
 					)}
+
 					{...previewAttrs}
 				>
 					<span className="ig-badge rounded-full bg-white/25 px-[7%] py-[3%] font-black backdrop-blur-sm">
@@ -163,6 +166,7 @@ export function InstagramPresetPreviewCard({
 						variant === "cover" ? "ins-card ir-cover" : "ins-card ir-content",
 						"rounded-[8px] bg-[#f7d08a] p-[11%] text-[#2f1b12]",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="absolute inset-[5%] rounded border border-[#2f1b12]" />

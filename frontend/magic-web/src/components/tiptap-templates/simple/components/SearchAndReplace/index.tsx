@@ -59,33 +59,23 @@ export function SearchAndReplace({ editor, visible, onClose }: SearchAndReplaceP
 		onClose()
 	})
 
-	React.useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			// Cmd/Ctrl+F
-			if (e.key === "f" && (e.metaKey || e.ctrlKey) && !e.altKey) {
-				e.preventDefault()
-				e.stopPropagation()
-				if (!visible) {
-					// The parent will handle opening
-					return
-				}
-				// If already visible, focus and select the search input
-				searchInputRef.current?.focus()
-				searchInputRef.current?.select()
-			}
-
-			// Escape to close — stop propagation so the editor's own Escape handler
-			// (e.g. exiting edit mode) is not triggered after the panel closes
-			if (e.key === "Escape" && visible) {
-				e.preventDefault()
-				e.stopPropagation()
-				handleClose()
-			}
+	const handlePanelKeyDown = useMemoizedFn((e: React.KeyboardEvent) => {
+		// Cmd/Ctrl+F while the panel is focused should keep focus inside the panel.
+		if (e.key === "f" && (e.metaKey || e.ctrlKey) && !e.altKey) {
+			e.preventDefault()
+			e.stopPropagation()
+			searchInputRef.current?.focus()
+			searchInputRef.current?.select()
 		}
 
-		window.addEventListener("keydown", handleKeyDown, true)
-		return () => window.removeEventListener("keydown", handleKeyDown, true)
-	}, [visible, handleClose])
+		// Escape to close — stop propagation so the editor's own Escape handler
+		// (e.g. exiting edit mode) is not triggered after the panel closes
+		if (e.key === "Escape") {
+			e.preventDefault()
+			e.stopPropagation()
+			handleClose()
+		}
+	})
 
 	const handleSearchKeyDown = useMemoizedFn((e: React.KeyboardEvent) => {
 		if (e.key === "Enter") {
@@ -123,6 +113,7 @@ export function SearchAndReplace({ editor, visible, onClose }: SearchAndReplaceP
 			className="search-and-replace-panel"
 			role="dialog"
 			aria-label={t("toolbar.searchReplace.search")}
+			onKeyDown={handlePanelKeyDown}
 		>
 			{/* Toggle expand/collapse for replace row (only in editable mode) */}
 			{isEditable && (

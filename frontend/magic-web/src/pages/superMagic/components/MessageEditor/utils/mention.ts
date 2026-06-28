@@ -75,8 +75,10 @@ export function transformUploadFileToProjectFile(
 		file_id: saveResult?.file_id || "",
 		file_name: saveResult?.file_name || "",
 		file_path: saveResult?.relative_file_path || "",
+		relative_file_path: saveResult?.relative_file_path || "",
 		file_extension: uploadFileData.file_extension,
 		file_size: saveResult?.file_size,
+		is_hidden: saveResult?.is_hidden,
 	}
 }
 
@@ -471,6 +473,10 @@ export const isAllowedMention = (
 	dataService?: DataService | null,
 ) => {
 	if (isPendingProjectReferenceMention(attrs)) return true
+	if (attrs.type === MentionItemType.PROJECT_FILE) {
+		const data = attrs.data as ProjectFileMentionData | undefined
+		if (data?.is_hidden) return true
+	}
 
 	return validateMentionWithDataService(dataService, {
 		type: attrs.type as MentionItemType,

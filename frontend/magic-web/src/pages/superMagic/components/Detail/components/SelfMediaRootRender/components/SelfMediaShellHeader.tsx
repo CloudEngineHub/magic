@@ -182,6 +182,7 @@ function SelfMediaShellHeader({
 						<form
 							className="mt-1 flex min-w-0 items-center gap-2"
 							onSubmit={handleSubmitTitle}
+							data-testid="handle-submit-title"
 						>
 							<div className="min-w-0 flex-1">
 								<Input

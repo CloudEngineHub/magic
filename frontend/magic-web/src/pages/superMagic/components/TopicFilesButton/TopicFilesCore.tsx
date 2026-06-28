@@ -2,7 +2,7 @@ import { IconChevronDown, IconChevronRight, IconDots } from "@tabler/icons-react
 import { Loader2, ChevronDown } from "lucide-react"
 import { Flex, message } from "antd"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { useMemo, useImperativeHandle, forwardRef } from "react"
+import { useMemo, useImperativeHandle, forwardRef, useRef } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
@@ -17,6 +17,7 @@ import {
 	useRename,
 	useFileOperations,
 	useContextMenu,
+	useFileInfoPanel,
 	useFileSelection,
 	useBatchDownload,
 	useFileFilter,
@@ -27,15 +28,19 @@ import {
 	useVirtualAICardProject,
 	useTreeUI,
 	useDragMove,
-	useTreeData,
-	useDropHandler,
+	useTopicFilesTreeDerivation,
 	useFileListAreaDrag,
 	useMoveFile,
 	useSelectedFilesManager,
+	useTopicFilesPerfSession,
+	measureMergedFilesBuild,
 	isInRootDirectory,
 	useAutoExpandFolder,
 	createFileDragHandlers,
 	useShareFile,
+	useStableTreeNodeDragHandlers,
+	useTopicFileRowRenderVersion,
+	useCrossProjectMoveCompensation,
 } from "./hooks"
 import { useFileShortcuts } from "./hooks/useFileShortcuts"
 import { useCrossProjectFileOperation } from "./hooks/useCrossProjectFileOperation"
@@ -43,6 +48,7 @@ import { useImportFromOtherProject } from "./hooks/useImportFromOtherProject"
 import CrossProjectFileOperationModal from "../SelectPathModal/components/CrossProjectFileOperationModal"
 import ImportFromOtherProjectModal from "../SelectPathModal/components/ImportFromOtherProjectModal"
 import { useDragUpload } from "./hooks/useDragUpload"
+import { getDuplicateFileModalProps } from "./components/duplicateFileModalProps"
 import { type PresetFileType } from "./constant"
 import { useDuplicateFileHandler } from "./hooks/useDuplicateFileHandler"
 
@@ -57,8 +63,9 @@ import SimilarSharesDrawer from "../Share/SimilarSharesDrawer"
 import { generateShareUrl } from "../ShareManagement/utils/shareTypeHelpers"
 import { ShareMode, ShareType } from "../Share/types"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
-import { findTreeNodeByKey, type TreeNodeData } from "./utils/treeDataConverter"
+import type { TreeNodeData } from "./utils/treeDataConverter"
 import { DuplicateFileModal } from "./components/DuplicateFileModal"
+import { FolderConflictModal } from "./components/FolderConflictModal"
 import { CustomFolderMagicIcon } from "./components/CustomFolderMagicIcon"
 import { MagicSystemFolderIcon } from "./components/MagicSystemFolderIcon"
 import { InputWithError } from "./components"
@@ -74,11 +81,9 @@ import { Button } from "@/components/shadcn-ui/button"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
 import MagicProgressToast from "@/components/base/MagicProgressToast"
 import { SelectDirectoryModal } from "../SelectPathModal"
-import { getParentPathFromFileId } from "../SelectPathModal/utils/attachmentUtils"
 import { handleAttachmentDragEnd } from "../MessageEditor/utils/drag"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import SmartTooltip from "@/components/other/SmartTooltip"
-import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 
 import { useDownloadImageMenu } from "../Detail/contents/Image/hooks/useDownloadImageMenu"
@@ -86,6 +91,7 @@ import { DownloadImageMode } from "../../pages/Workspace/types"
 import { userStore } from "@/models/user"
 import { MagicDropdown } from "@/components/base"
 import { detectContentTypeRender } from "../Detail/components/FilesViewer/utils/preview"
+import { markProjectFileListScrollActivity } from "@/pages/superMagic/utils/fileListScrollActivity"
 import type { FileItem } from "../Detail/components/FilesViewer/types"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
 import { DetailType } from "../Detail/types"
@@ -198,11 +204,14 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const { t, i18n } = useTranslation("super")
 	const { styles, cx } = useStyles({ isExpanded: true })
 	const isMobile = useResponsive().md === false
+	const fileListAreaRef = useRef<HTMLDivElement>(null)
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
 	const hasLogin = userStore.user?.userInfo?.user_id
+	const selectionEnabled = Boolean(isSelectMode || (!allowEdit && hasLogin && allowDownload))
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const canUseDesktopCrossProjectMove = projects.length > 0 && !isChatProject && !isMobile
+	const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
 
 	// AI 卡片创建弹窗 hook
 	const { open: openAICardDialog, dialogElement: aiCardDialogElement } = useAICardCreateDialog({
@@ -210,6 +219,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	})
 
 	const workspaceId = selectedProject?.workspace_id
+	useTopicFilesPerfSession({
+		attachments,
+		projectId,
+		selectedProjectId: selectedProject?.id,
+	})
 
 	// 创建共享的同名文件处理 handler（单例）
 	// 优先使用外部传入的 handler，否则创建内部 handler
@@ -348,14 +362,13 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		matchedItemPaths,
 	})
 	const {
-		hoveredItem,
+		hoveredItemRef,
 		setHoveredItem,
 		contextMenuItemId,
 		setContextMenuItemId,
 		expandedKeys,
 		setExpandedKeys,
 		selectedKeys,
-		handleExpand,
 		handleSelect: handleTreeSelect,
 		resetUI,
 		cacheLoaded,
@@ -463,12 +476,14 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 	// 合并虚拟文件和虚拟文件夹和虚拟画布项目和虚拟自媒体项目和虚拟AI卡片项目和真实文件
 	const mergedFiles = useMemo(() => {
-		const withVirtualFiles = mergeVirtualFiles(filteredFiles)
-		const withVirtualFolders = mergeVirtualFolders(withVirtualFiles)
-		const withVirtualDesignProjects = mergeVirtualDesignProjects(withVirtualFolders)
-		const withVirtualSelfMediaProjects =
-			mergeVirtualSelfMediaProjects(withVirtualDesignProjects)
-		return mergeVirtualAICardProjects(withVirtualSelfMediaProjects)
+		return measureMergedFilesBuild(filteredFiles.length, () => {
+			const withVirtualFiles = mergeVirtualFiles(filteredFiles)
+			const withVirtualFolders = mergeVirtualFolders(withVirtualFiles)
+			const withVirtualDesignProjects = mergeVirtualDesignProjects(withVirtualFolders)
+			const withVirtualSelfMediaProjects =
+				mergeVirtualSelfMediaProjects(withVirtualDesignProjects)
+			return mergeVirtualAICardProjects(withVirtualSelfMediaProjects)
+		})
 	}, [
 		filteredFiles,
 		mergeVirtualFiles,
@@ -477,25 +492,23 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		mergeVirtualSelfMediaProjects,
 		mergeVirtualAICardProjects,
 	])
-
-	// 树形数据 hook
-	const { treeData, getAllFileIds, getTotalCount } = useTreeData({
-		mergedFiles,
-		renamingItemId,
-	})
+	const { treeIndex, expandedKeySet, visibleRows, visibleNodes, visibleNodeIndexByKey } =
+		useTopicFilesTreeDerivation({
+			attachments,
+			mergedFiles,
+			expandedKeys,
+			externalSearchValue,
+			renamingItemId,
+			refreshLoading,
+			selectedProjectId: selectedProject?.id || projectId,
+		})
 
 	// 文件定位 hook
 	const { locatingFileId } = useLocateFile({
-		treeData,
+		treeIndex,
 		expandedKeys,
 		setExpandedKeys,
 		selectedProjectId: selectedProject?.id || projectId,
-	})
-
-	// 拖拽处理 hook
-	const { handleDrop } = useDropHandler({
-		treeData,
-		handleMoveFile,
 	})
 
 	// 文件选择 hook (需要先声明，因为 moveFileHook 需要使用 selectedItems)
@@ -511,12 +524,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	} = useFileSelection({
 		projectId,
 		getItemId,
-		treeData,
+		treeIndex,
 		isSelectMode,
+		selectionEnabled,
 		onSelectionChange,
 		onSelectModeChange,
-		getAllFileIds,
-		getTotalCount,
 	})
 
 	// 文件分享 hook
@@ -544,8 +556,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const moveFileHook = useMoveFile({
 		projectId,
 		attachments,
+		attachmentIndex: treeIndex,
 		onMoveSuccess: () => {
-			pubsub.publish(PubSubEvents.Update_Attachments)
 			onUpdateAttachments?.()
 		},
 		handleMoveFile,
@@ -556,6 +568,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 	// 解构移动进度状态
 	const { isMoving, moveProgress } = moveFileHook
+
+	const handleCrossProjectOperationSuccess = useCrossProjectMoveCompensation({
+		attachments,
+		onAttachmentsChange,
+		onUpdateAttachments,
+	})
 
 	const {
 		dragState,
@@ -573,12 +591,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	} = useDragMove({
 		allowMove: allowEdit,
 		onMoveFiles: async (fileIds: string[], targetFolderId: string | null) => {
-			// 复用现有的批量移动逻辑
 			if (fileIds.length === 0) return
 
-			await moveFileHook.batchMoveFiles({
+			await moveFileHook.batchMoveFilesWithDuplicateCheck({
 				fileIds,
-				projectId: selectedProject?.id || "",
+				projectId: selectedProject?.id || projectId || "",
 				targetParentId: targetFolderId || "",
 			})
 		},
@@ -619,8 +636,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	// 文件列表区域拖拽 hook
 	const {
 		isDragOverFileListArea,
-		handleTreeDragStart,
-		handleTreeDragEnd,
 		handleFileListAreaDragEnter,
 		handleFileListAreaDragOver,
 		handleFileListAreaDragLeave,
@@ -628,7 +643,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleFileListAreaDrop,
 	} = useFileListAreaDrag({
 		allowEdit,
-		handleDrop,
 		// 传递新的拖拽移动处理器
 		handleFileDragEnter: handleDragEnter,
 		handleFileDragLeave: handleDragLeave,
@@ -646,6 +660,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		const item = node.item
 		if (!item) return false
 		return isDropTarget(item)
+	})
+	const treeNodeDragHandlers = useStableTreeNodeDragHandlers({
+		onDragEnter: handleTreeNodeDragEnter,
+		onDragLeave: handleTreeNodeDragLeave,
+		onDragOver: handleTreeNodeDragOver,
+		onDrop: handleTreeNodeDrop,
 	})
 
 	// 使用选中文件管理 hook
@@ -689,10 +709,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		selectedWorkspace: selectedWorkspace || null,
 		selectedProject: selectedProject || null,
 		projects,
-		onSuccess: () => {
-			pubsub.publish(PubSubEvents.Update_Attachments)
-			onUpdateAttachments?.()
-		},
+		onSuccess: handleCrossProjectOperationSuccess,
 	})
 
 	// 导入操作 Hook
@@ -703,10 +720,68 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		workspaces: workspaces || [],
 		attachments,
 		onSuccess: () => {
-			pubsub.publish(PubSubEvents.Update_Attachments)
 			onUpdateAttachments?.()
 		},
 	})
+
+	const duplicateFileModalProps = getDuplicateFileModalProps({
+		externalDuplicateHandler,
+		sharedDuplicateHandler,
+		moveDuplicateHandler: moveFileHook,
+		crossProjectDuplicateHandler: crossProjectOperation,
+		importDuplicateHandler: importOperation,
+	})
+	const noopFolderConflictHandler = () => undefined
+	const folderConflictModalProps =
+		!externalDuplicateHandler && sharedDuplicateHandler.folderConflictModalVisible
+			? {
+					visible: true,
+					folderName: sharedDuplicateHandler.currentFolderName,
+					totalConflicts: sharedDuplicateHandler.totalFolderConflicts,
+					canMerge: sharedDuplicateHandler.canMergeFolderConflict,
+					onCancel: sharedDuplicateHandler.handleFolderConflictCancel,
+					onMerge: sharedDuplicateHandler.handleFolderConflictMerge,
+					onKeepBoth: sharedDuplicateHandler.handleFolderConflictKeepBoth,
+				}
+			: moveFileHook.folderConflictModalVisible
+				? {
+						visible: true,
+						folderName: moveFileHook.currentFolderConflictName,
+						totalConflicts: moveFileHook.totalFolderConflicts,
+						canMerge: moveFileHook.canMergeFolderConflict,
+						onCancel: moveFileHook.handleFolderConflictCancel,
+						onMerge: moveFileHook.handleFolderConflictMerge,
+						onKeepBoth: moveFileHook.handleFolderConflictKeepBoth,
+					}
+				: crossProjectOperation.folderConflictModalVisible
+					? {
+							visible: true,
+							folderName: crossProjectOperation.currentFolderConflictName,
+							totalConflicts: crossProjectOperation.totalFolderConflicts,
+							canMerge: crossProjectOperation.canMergeFolderConflict,
+							onCancel: crossProjectOperation.handleFolderConflictCancel,
+							onMerge: crossProjectOperation.handleFolderConflictMerge,
+							onKeepBoth: crossProjectOperation.handleFolderConflictKeepBoth,
+						}
+					: importOperation.folderConflictModalVisible
+						? {
+								visible: true,
+								folderName: importOperation.currentFolderConflictName,
+								totalConflicts: importOperation.totalFolderConflicts,
+								canMerge: importOperation.canMergeFolderConflict,
+								onCancel: importOperation.handleFolderConflictCancel,
+								onMerge: importOperation.handleFolderConflictMerge,
+								onKeepBoth: importOperation.handleFolderConflictKeepBoth,
+							}
+						: {
+								visible: false,
+								folderName: "",
+								totalConflicts: 0,
+								canMerge: false,
+								onCancel: noopFolderConflictHandler,
+								onMerge: noopFolderConflictHandler,
+								onKeepBoth: noopFolderConflictHandler,
+							}
 
 	// 创建移动文件处理函数的适配器
 	const handleMoveFileAdapter = useMemoizedFn((item: AttachmentItem) => {
@@ -714,7 +789,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		if (canUseDesktopCrossProjectMove) {
 			if (item.file_id) {
 				// 获取文件的父目录路径
-				const parentPath = getParentPathFromFileId(item.file_id, attachments)
+				const parentPath = getParentPathByFileId(item.file_id)
 				crossProjectOperation.openMoveModal([item.file_id], parentPath)
 			}
 		} else {
@@ -728,7 +803,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		// 获取第一个文件的父目录路径作为默认路径
 		const firstFileId = fileIds[0]
 		if (firstFileId) {
-			const parentPath = getParentPathFromFileId(firstFileId, attachments)
+			const parentPath = getParentPathByFileId(firstFileId)
 			crossProjectOperation.openCopyModal(fileIds, parentPath)
 		} else {
 			crossProjectOperation.openCopyModal(fileIds)
@@ -739,7 +814,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const handleImportFromOtherProject = useMemoizedFn((item?: AttachmentItem) => {
 		if (item && item.is_directory && item.file_id) {
 			// 如果是文件夹，导入到该文件夹
-			const parentPath = getParentPathFromFileId(item.file_id, attachments)
+			const parentPath = getParentPathByFileId(item.file_id)
 			const targetPath = [...parentPath, item]
 			importOperation.openImportModal(targetPath)
 		} else {
@@ -750,9 +825,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 	// 文件快捷键 hook（需要在 useContextMenu 之前调用）
 	const { getShortcutHint } = useFileShortcuts({
-		hoveredItem,
+		hoveredItemRef,
 		contextMenuItemId,
-		treeData,
+		treeIndex,
 		editingVirtualFileId,
 		editingVirtualFolderId,
 		editingVirtualDesignProjectId,
@@ -777,6 +852,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleDownloadImage,
 		handleOpenFile,
 		handleStartRename,
+		handleShowInfo,
 		handleAddToCurrentChat,
 		handleAddToNewChat,
 		handleMoveFile: handleMoveFileAdapter,
@@ -802,7 +878,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		isSelectMode,
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
-		treeData,
+		treeIndex,
 		attachments,
 	})
 
@@ -844,21 +920,75 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	}))
 
 	// 选择处理
-	const handleSelect = (selectedKeys: React.Key[]) => {
+	const handleSelect = useMemoizedFn((selectedKeys: React.Key[]) => {
 		handleTreeSelect(selectedKeys)
 		// 处理文件选择逻辑
 		if (selectedKeys.length > 0) {
-			const node = findTreeNodeByKey(treeData, selectedKeys[0] as string)
-			if (node) {
-				handleItemSelect(node.item)
+			const item = treeIndex.getItemByKey(selectedKeys[0] as string)
+			if (item) {
+				handleItemSelect(item)
 			}
 		}
-	}
+	})
+
+	const activeFile = activeFileId ? treeIndex.getItemById(activeFileId) : undefined
+	const isActiveFileIndexHtml =
+		activeFile?.file_name === "index.html" ||
+		activeFile?.filename === "index.html" ||
+		activeFile?.display_filename === "index.html"
+
+	const { getRowRenderVersion, rowRenderContextVersion } = useTopicFileRowRenderVersion({
+		expandedKeySet,
+		selection: {
+			enabled: selectionEnabled,
+			isSelectMode,
+			selectedItemsSize: selectedItems.size,
+			getFolderSelectionState,
+			isItemSelected,
+		},
+		active: {
+			activeFileId,
+			isActiveFileIndexHtml,
+			locatingFileId,
+			contextMenuItemId,
+		},
+		rename: {
+			renamingItemId,
+			renameValue,
+			renameErrorMessage,
+			isFileRenaming,
+		},
+		virtualEdit: {
+			editingVirtualFileId,
+			virtualFileName,
+			fileErrorMessage,
+			editingVirtualFolderId,
+			virtualFolderName,
+			folderErrorMessage,
+			editingVirtualDesignProjectId,
+			virtualDesignProjectName,
+			designProjectErrorMessage,
+		},
+		busy: {
+			movingFiles,
+			exportingFiles,
+			downloadingFoldersSize: downloadingFolders.size,
+			isFolderDownloading,
+		},
+		drag: {
+			isDragging: dragState.isDragging,
+			isExternalDrag: dragState.isExternalDrag,
+			draggingItemsCount: dragState.draggingItems?.length || 0,
+		},
+	})
 
 	// 在树形数据中查找文件的辅助函数
+	// 在树形数据中查找文件的辅助函数
 	const findFileInTree = useMemoizedFn((fileId: string): AttachmentItem | undefined => {
-		const node = findTreeNodeByKey(treeData, fileId)
-		return node?.item
+		return treeIndex.getItemById(fileId)
+	})
+	const getParentPathByFileId = useMemoizedFn((fileId: string): AttachmentItem[] => {
+		return treeIndex.getParentItemsById(fileId)
 	})
 
 	const selfMediaNavigation = useSelfMediaTreeNavigation({
@@ -893,18 +1023,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		const item = node.item || {}
 		const itemId = node.key
 		const { display_config } = item
-		const isSelected = isItemSelected(itemId)
 		const isActiveFile = activeFileId === item?.file_id
-		const hasChildren = node.children && node.children.length > 0
-		const isExpanded = expandedKeys.includes(node.key)
+		const hasChildren = !node.isLeaf
+		const isExpanded = expandedKeySet.has(String(node.key))
 
-		const showCheckbox = isSelectMode || (!allowEdit && hasLogin && allowDownload)
-
-		// 检查文件是否在已打开的tabs中
-		const currentTabs = mentionPanelStore.getCurrentTabs()
-		const isFileOpened =
-			!item.is_directory &&
-			currentTabs.some((tab: any) => tab?.data?.file_id === item.file_id)
+		const showCheckbox = selectionEnabled
+		const isSelected = showCheckbox ? isItemSelected(itemId) : false
 
 		// 检查是否正在定位此文件
 		const isLocating = locatingFileId === item.file_id
@@ -964,6 +1088,16 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				!isVirtualDesignProject &&
 				!isVirtualSelfMediaProject &&
 				!isVirtualAICardProject
+			const virtualErrorMessage = isVirtualDesignProject
+				? designProjectErrorMessage
+				: isVirtualSelfMediaProject
+					? selfMediaProjectErrorMessage
+					: isVirtualAICardProject
+						? aiCardProjectErrorMessage
+						: isVirtualNormalFolder
+							? folderErrorMessage
+							: fileErrorMessage
+			const showVirtualError = !!virtualErrorMessage
 
 			return (
 				<div
@@ -983,15 +1117,22 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					}}
 				>
 					<div
-						className={styles.fileTitle}
+						className={cx(
+							styles.fileTitle,
+							showVirtualError && styles.fileTitleTopAligned,
+						)}
 						style={{
 							paddingLeft: indentWidth + "px",
+							alignItems:
+								designProjectErrorMessage || folderErrorMessage || fileErrorMessage
+									? "flex-start"
+									: undefined,
 						}}
 					>
 						{/* 展开/折叠图标 */}
 						<div className={styles.iconWrapper}>{renderExpandIcon()}</div>
 
-						<div className={styles.iconWrapper}>
+						<div className={styles.iconWrapper} data-testid="file-virtual-row-icon">
 							{decoration?.icon ? (
 								decoration.icon
 							) : isVirtualDesignProject ? (
@@ -1006,6 +1147,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									alt="folder"
 									width={16}
 									height={16}
+									data-testid="file-virtual-folder-icon-image"
 								/>
 							) : (
 								<MagicFileIcon type={item?.file_extension} size={16} />
@@ -1087,28 +1229,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 													: handleVirtualFileKeyDown
 								}
 								onClick={(e: any) => e.stopPropagation()}
-								errorMessage={
-									isVirtualDesignProject
-										? designProjectErrorMessage
-										: isVirtualSelfMediaProject
-											? selfMediaProjectErrorMessage
-											: isVirtualAICardProject
-												? aiCardProjectErrorMessage
-												: isVirtualNormalFolder
-													? folderErrorMessage
-													: fileErrorMessage
-								}
-								showError={
-									isVirtualDesignProject
-										? !!designProjectErrorMessage
-										: isVirtualSelfMediaProject
-											? !!selfMediaProjectErrorMessage
-											: isVirtualAICardProject
-												? !!aiCardProjectErrorMessage
-												: isVirtualNormalFolder
-													? !!folderErrorMessage
-													: !!fileErrorMessage
-								}
+								errorMessage={virtualErrorMessage}
+								showError={showVirtualError}
 							/>
 						</div>
 						{renderDecorationTag()}
@@ -1116,6 +1238,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						{showCheckbox && (
 							<div className={styles.iconWrapper}>
 								<Checkbox
+									data-testid="file-virtual-row-checkbox"
 									checked={isSelected}
 									onCheckedChange={() => {
 										handleItemSelect(item)
@@ -1131,18 +1254,13 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 		// 文件夹渲染
 		if (item?.is_directory) {
-			const folderSelectionState = getFolderSelectionState(item)
+			const folderSelectionState = showCheckbox ? getFolderSelectionState(item) : "none"
 			const isFolderSelected = folderSelectionState === "all"
 			const isFolderIndeterminate = folderSelectionState === "partial"
 
 			// 检查是否应该高亮文件夹：
 			// 1. 如果打开的文件是 index.html，并且该文件夹有 display_config，且该文件在文件夹的子项中
 			// 2. 或者文件夹本身是 activeFileId
-			const activeFile = activeFileId ? findFileInTree(activeFileId) : undefined
-			const isActiveFileIndexHtml =
-				activeFile?.file_name === "index.html" ||
-				activeFile?.filename === "index.html" ||
-				activeFile?.display_filename === "index.html"
 			const appEntryResolvedForHighlight =
 				display_config?.type === "custom"
 					? getAppEntryFile(item?.children || [], display_config)
@@ -1196,7 +1314,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						shouldHighlightFolder && styles.activeFileItemWrapper,
 						contextMenuItemId === itemId && styles.contextMenuActiveItem,
 					)}
-					data-testid={`file-item-folder${item?.file_id ? `-${item.file_id}` : ""}`}
+					data-testid="folder-item"
 					onClick={(e) => {
 						e.stopPropagation()
 						if (isSelectMode) {
@@ -1280,10 +1398,17 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					onContextMenu={(e) => delegateProps.onDropdownContextMenuClick?.(e, item)}
 				>
 					<div
-						className={styles.fileTitle}
+						className={cx(
+							styles.fileTitle,
+							renamingItemId === itemId &&
+								!!renameErrorMessage &&
+								styles.fileTitleTopAligned,
+						)}
 						style={{
 							paddingLeft: indentWidth + "px",
+							alignItems: renameErrorMessage ? "flex-start" : undefined,
 						}}
+						data-testid="folder-content"
 					>
 						{/* 展开/折叠图标 */}
 						<div
@@ -1297,11 +1422,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									setExpandedKeys(newExpandedKeys)
 								}
 							}}
+							data-testid="folder-expand-trigger"
 						>
 							{renderExpandIcon()}
 						</div>
 
-						<div className={styles.iconWrapper}>
+						<div className={styles.iconWrapper} data-testid="folder-icon">
 							{isFileRenaming(item) ? (
 								<Loader2 className="mr-1 animate-spin" size={16} />
 							) : movingFiles.has(item?.file_id || "") ? (
@@ -1319,7 +1445,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								<MagicSystemFolderIcon size={16} />
 							) : display_config?.type ? (
 								["custom", "micro-app"].includes(display_config?.type) &&
-								(display_config?.type === "custom" || item?.is_directory) ? (
+									(display_config?.type === "custom" || item?.is_directory) ? (
 									<CustomFolderMagicIcon
 										displayConfig={item?.display_config}
 										childrenItems={getChildrenForCustomMetadataIconPath(
@@ -1341,12 +1467,13 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									alt="folder"
 									width={16}
 									height={16}
+									data-testid="folder-icon-image"
 								/>
 							)}
 						</div>
 
 						{/* 文件夹名称或重命名输入框 */}
-						<div className={styles.rowTitleText}>
+						<div className={styles.rowTitleText} data-testid="folder-name">
 							{renamingItemId === itemId ? (
 								<InputWithError
 									ref={renameInputRef}
@@ -1379,12 +1506,16 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 					{/* 更多按钮 */}
 					{!showCheckbox &&
-						(hoveredItem === itemId || isMobile) &&
 						renamingItemId !== itemId &&
 						allowEdit &&
 						!(filterMenuItems && allowDownload === false) && (
 							<MagicIcon
-								className={styles.attachmentAction}
+								className={cx(
+									styles.attachmentAction,
+									"file-item-action",
+									(contextMenuItemId === itemId || isMobile) &&
+										"file-item-action-visible",
+								)}
 								data-testid="file-more-actions-button"
 								onClick={(e: any) => {
 									e.stopPropagation()
@@ -1400,6 +1531,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					{showCheckbox && (
 						<div className={styles.iconWrapper}>
 							<Checkbox
+								data-testid="folder-checkbox"
 								checked={isFolderIndeterminate ? "indeterminate" : isFolderSelected}
 								disabled={isItemDisabled()}
 								onCheckedChange={() => {
@@ -1445,7 +1577,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					contextMenuItemId === itemId && styles.contextMenuActiveItem,
 				)}
 				data-file-id={item.file_id}
-				data-testid={`file-item-file${item?.file_id ? `-${item.file_id}` : ""}`}
+				data-testid="file-item"
 				onClick={(e) => {
 					e.stopPropagation()
 					if (isSelectMode) {
@@ -1510,15 +1642,22 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				onContextMenu={(e) => delegateProps.onDropdownContextMenuClick?.(e, item)}
 			>
 				<div
-					className={cx(styles.fileTitle)}
+					className={cx(
+						styles.fileTitle,
+						renamingItemId === itemId &&
+							!!renameErrorMessage &&
+							styles.fileTitleTopAligned,
+					)}
 					style={{
 						paddingLeft: indentWidth + "px",
+						alignItems: renameErrorMessage ? "flex-start" : undefined,
 					}}
+					data-testid="file-content"
 				>
 					{/* 展开/折叠图标 */}
 					<div className={styles.iconWrapper}>{renderExpandIcon()}</div>
 
-					<div className={styles.iconWrapper}>
+					<div className={styles.iconWrapper} data-testid="file-icon">
 						{exportingFiles.has(item?.file_id || "") ? (
 							<Loader2 className="mr-1 flex-shrink-0 animate-spin" size={16} />
 						) : isFileRenaming(item) ? (
@@ -1529,7 +1668,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						{decoration?.icon && !isFileBusy ? (
 							decoration.icon
 						) : item?.display_config?.type === "custom" ||
-						  (item?.display_config?.type === "micro-app" && item?.is_directory) ? (
+							(item?.display_config?.type === "micro-app" && item?.is_directory) ? (
 							<CustomFolderMagicIcon
 								displayConfig={item?.display_config}
 								childrenItems={getChildrenForCustomMetadataIconPath(item, (id) =>
@@ -1551,7 +1690,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					</div>
 
 					{/* 文件名称或重命名输入框 */}
-					<div className={styles.rowTitleText}>
+					<div className={styles.rowTitleText} data-testid="file-name">
 						{renamingItemId === itemId ? (
 							<InputWithError
 								ref={renameInputRef}
@@ -1571,14 +1710,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : (
 							<SmartTooltip
 								placement="right"
-								className={cx(
-									styles.ellipsis,
-									isActiveFile && "font-medium",
-									// isFileOpened && styles.openedFileItem
-								)}
+								className={cx(styles.ellipsis, isActiveFile && "font-medium")}
 								sideOffset={20}
 							>
-								{item?.file_name}
+							{item?.file_name}
 							</SmartTooltip>
 						)}
 					</div>
@@ -1587,11 +1722,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 				{/* 更多按钮 */}
 				{!showCheckbox &&
-					(hoveredItem === itemId || contextMenuItemId === itemId || isMobile) &&
 					renamingItemId !== itemId &&
 					(allowEdit || (filterMenuItems && allowDownload !== false)) && (
 						<MagicIcon
-							className={styles.attachmentAction}
+							className={cx(
+								styles.attachmentAction,
+								"file-item-action",
+								(contextMenuItemId === itemId || isMobile) &&
+									"file-item-action-visible",
+							)}
 							data-testid="file-more-actions-button"
 							onClick={(e: any) => {
 								e.stopPropagation()
@@ -1607,6 +1746,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				{showCheckbox && (
 					<div className={styles.iconWrapper}>
 						<Checkbox
+							data-testid="file-checkbox"
 							checked={isSelected}
 							disabled={isItemDisabled()}
 							onCheckedChange={() => {
@@ -1619,7 +1759,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			</div>
 		)
 	})
-
 	const {
 		batchLoading,
 		showBatchDownload,
@@ -1634,6 +1773,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		onSelectModeChange,
 		// 批量移动和复制所需的依赖
 		attachments,
+		getParentPathByFileId,
 		selectedWorkspace,
 		selectedProject,
 		projects,
@@ -1705,21 +1845,30 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			title: t("super:topicFiles.batchOperation"),
 		},
 	})
+	const handleFileListScroll = useMemoizedFn(() => {
+		markProjectFileListScrollActivity()
+	})
 
 	return (
-		<div className={cx(className, "flex h-[calc(100%-32px)] overflow-auto flex-col")}>
+		<div
+			className={cx(className, "flex h-[calc(100%-32px)] overflow-auto flex-col")}
+			data-testid="topic-files-core"
+		>
 			{/* 右键菜单内容 */}
 			{(allowEdit || filterMenuItems) && dropdownContent}
 			{allowEdit && batchDownloadDropdownContent}
+			{fileInfoPanel}
 			{deleteConfirmNode}
 			{batchDeleteConfirmNode}
 			{/* Content area */}
 			{/* <div className={styles.contentArea}> */}
 			{/* File tree */}
 			<div
+				ref={fileListAreaRef}
 				className={cx(styles.fileListArea, "px-2 pb-2", {
 					[styles.dragTargetFolder]: isDragOverFileListArea || dragState.isDragOverRoot, // 添加拖拽悬停样式
 				})}
+				onScroll={handleFileListScroll}
 				onContextMenu={(e) =>
 					fileListAreaDelegateProps.onDropdownContextMenuClick?.(e, null)
 				}
@@ -1728,10 +1877,13 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				onDragLeave={handleFileListAreaDragLeave}
 				onDragEnd={handleFileListAreaDragEnd}
 				onDrop={handleFileListAreaDrop}
+				data-testid="topic-files-list-area"
 			>
-				{treeData.length > 0 ? (
+				{visibleRows.length > 0 ? (
 					<CustomTree
-						treeData={treeData}
+						visibleRows={visibleRows}
+						visibleNodes={visibleNodes}
+						visibleNodeIndexByKey={visibleNodeIndexByKey}
 						// draggable={
 						// 	allowEdit
 						// 		? {
@@ -1739,28 +1891,28 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						// 		  }
 						// 		: false
 						// }
-						switcherIcon={() => null}
-						// onDragStart={handleTreeDragStart}
-						// onDragEnd={handleTreeDragEnd}
-						// onDrop={handleDrop}
-						onExpand={handleExpand}
 						onSelect={handleSelect}
 						expandedKeys={expandedKeys}
 						selectedKeys={selectedKeys}
 						titleRender={titleRender}
+						getRowRenderVersion={getRowRenderVersion}
+						rowRenderContextVersion={rowRenderContextVersion}
 						showIcon={false}
 						blockNode
-						className={styles.fileListArea}
+						scrollElementRef={fileListAreaRef}
+						scrollToKey={locatingFileId}
+						isMobile={isMobile}
 						// height={treeHeight}
 						dragTargetNodeClass={styles.dragTargetFolder}
+						dragTargetKey={dragState.dropTargetFolderId}
 						isDragTargetNode={isDropTargetNode}
-						onDragEnter={handleTreeNodeDragEnter}
-						onDragLeave={handleTreeNodeDragLeave}
-						onDragOver={handleTreeNodeDragOver}
-						onDrop={handleTreeNodeDrop}
+						{...treeNodeDragHandlers}
 					/>
 				) : refreshLoading ? (
-					<div className="flex h-full w-full items-center justify-center">
+					<div
+						className="flex h-full w-full items-center justify-center"
+						data-testid="topic-files-list-loading"
+					>
 						<div className="flex flex-col items-center gap-3">
 							<Loader2 size={20} className="animate-spin text-muted-foreground" />
 							<p className="text-sm text-muted-foreground">
@@ -1950,17 +2102,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						onCreateNew={handleCreateNewShare}
 					/>
 				))}
-			{/* 同名文件处理 Modal - 只在使用内部 handler 时渲染 */}
-			{!externalDuplicateHandler && (
-				<DuplicateFileModal
-					visible={sharedDuplicateHandler.modalVisible}
-					fileName={sharedDuplicateHandler.currentFileName}
-					totalDuplicates={sharedDuplicateHandler.totalDuplicates}
-					onCancel={sharedDuplicateHandler.handleCancel}
-					onReplace={sharedDuplicateHandler.handleReplace}
-					onKeepBoth={sharedDuplicateHandler.handleKeepBoth}
-				/>
-			)}
 			{/* 移动文件选择器 */}
 			{
 				<SelectDirectoryModal
@@ -1970,17 +2111,16 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						mobileCrossProjectConfig:
 							isMobile && selectedProject
 								? {
-									currentProject: selectedProject,
-									currentWorkspace: selectedWorkspace,
-									sourceAttachments: attachments,
-									isChatProject,
-								}
+										currentProject: selectedProject,
+										currentWorkspace: selectedWorkspace,
+										sourceAttachments: attachments,
+										isChatProject,
+									}
 								: undefined,
 						onSubmit: handleBatchMoveConfirm,
 					}}
 				/>
 			}
-			{/* 跨项目文件操作 Modal */}
 			<CrossProjectFileOperationModal
 				visible={crossProjectOperation.visible}
 				title={
@@ -2002,15 +2142,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						: crossProjectOperation.executeCopyOperation
 				}
 			/>
-			{/* 跨项目移动/复制同名文件处理 Modal */}
-			<DuplicateFileModal
-				visible={crossProjectOperation.duplicateModalVisible}
-				fileName={crossProjectOperation.currentDuplicateFileName}
-				totalDuplicates={crossProjectOperation.totalDuplicates}
-				onCancel={crossProjectOperation.handleDuplicateCancel}
-				onReplace={crossProjectOperation.handleDuplicateReplace}
-				onKeepBoth={crossProjectOperation.handleDuplicateKeepBoth}
-			/>
 			{/* 从其他项目导入 Modal */}
 			{workspaces && projectId && (
 				<ImportFromOtherProjectModal
@@ -2024,15 +2155,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					onSubmit={importOperation.executeImportOperation}
 				/>
 			)}
-			{/* 导入同名文件处理 Modal */}
-			<DuplicateFileModal
-				visible={importOperation.duplicateModalVisible}
-				fileName={importOperation.currentDuplicateFileName}
-				totalDuplicates={importOperation.totalDuplicates}
-				onCancel={importOperation.handleDuplicateCancel}
-				onReplace={importOperation.handleDuplicateReplace}
-				onKeepBoth={importOperation.handleDuplicateKeepBoth}
-			/>
+			{/* Duplicate file modal */}
+			<FolderConflictModal {...folderConflictModalProps} />
+			<DuplicateFileModal {...duplicateFileModalProps} />
 			{/* 移动/复制进度提示 - 使用 Portal 渲染到 body */}
 			{createPortal(
 				<MagicProgressToast
@@ -2048,7 +2173,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					}
 					text={
 						crossProjectOperation.isOperating &&
-						crossProjectOperation.operationType === "copy"
+							crossProjectOperation.operationType === "copy"
 							? t("topicFiles.copying")
 							: importOperation.isOperating
 								? t("topicFiles.copying")

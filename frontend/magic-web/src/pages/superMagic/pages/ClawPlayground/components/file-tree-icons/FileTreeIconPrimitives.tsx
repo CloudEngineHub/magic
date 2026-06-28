@@ -37,7 +37,7 @@ export function CompositeFolderIcon({
 			data-testid={`claw-playground-file-tree-icon-${name}`}
 		>
 			<div className={`absolute ${topWrapperClassName}`}>
-				<img alt="" aria-hidden className="block size-full max-w-none" src={topSrc} />
+				<img alt="" aria-hidden className="block size-full max-w-none" src={topSrc}  data-testid="file-tree-icon-primitives-image"/>
 			</div>
 			<div className={`absolute flex items-center justify-center ${glyphWrapperClassName}`}>
 				<img
@@ -45,6 +45,7 @@ export function CompositeFolderIcon({
 					aria-hidden
 					className={`block max-w-none ${glyphClassName}`}
 					src={glyphSrc}
+					data-testid="file-tree-icon-primitives-image-2"
 				/>
 			</div>
 			<div className="absolute inset-[48.33%_0_4.17%_0]">
@@ -54,6 +55,7 @@ export function CompositeFolderIcon({
 						aria-hidden
 						className="block size-full max-w-none"
 						src={bottomSrc}
+						data-testid="file-tree-icon-primitives-image-3"
 					/>
 				</div>
 			</div>
@@ -72,9 +74,9 @@ export function LayeredIcon({
 			className="relative size-4 shrink-0"
 			data-testid={`claw-playground-file-tree-icon-${name}`}
 		>
-			<img alt="" aria-hidden className="block size-full max-w-none" src={baseSrc} />
+			<img alt="" aria-hidden className="block size-full max-w-none" src={baseSrc}  data-testid="file-tree-icon-primitives-image-4"/>
 			<div className={`absolute ${overlayWrapperClassName}`}>
-				<img alt="" aria-hidden className="block size-full max-w-none" src={overlaySrc} />
+				<img alt="" aria-hidden className="block size-full max-w-none" src={overlaySrc}  data-testid="file-tree-icon-primitives-image-5"/>
 			</div>
 		</div>
 	)
@@ -86,7 +88,7 @@ export function SimpleFileIcon({ name, src }: SimpleFileIconProps) {
 			className="relative size-4 shrink-0"
 			data-testid={`claw-playground-file-tree-icon-${name}`}
 		>
-			<img alt="" aria-hidden className="block size-full max-w-none" src={src} />
+			<img alt="" aria-hidden className="block size-full max-w-none" src={src}  data-testid="file-tree-icon-primitives-image-6"/>
 		</div>
 	)
 }

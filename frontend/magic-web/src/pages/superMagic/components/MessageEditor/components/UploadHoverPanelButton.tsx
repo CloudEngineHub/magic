@@ -144,6 +144,7 @@ function UploadHoverPanelButtonComponent({
 													onRemoveFile(file)
 												}}
 												aria-label="Remove file"
+												data-testid="on-remove-file"
 											>
 												<MagicIcon component={IconX} size={24} />
 											</button>

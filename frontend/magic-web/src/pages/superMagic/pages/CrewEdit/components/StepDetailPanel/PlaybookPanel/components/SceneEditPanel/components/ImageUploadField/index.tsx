@@ -138,7 +138,7 @@ export function ImageUploadField({
 				)}
 			>
 				{localPreview ? (
-					<img src={localPreview} alt="preview" className="size-full object-cover" />
+					<img src={localPreview} alt="preview" className="size-full object-cover"  data-testid="image-upload-field-image"/>
 				) : (
 					<div className="flex flex-col items-center gap-1 text-center">
 						<Image className="h-6 w-6 text-muted-foreground" />

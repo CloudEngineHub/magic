@@ -179,6 +179,7 @@ function CardItem({
 												event.stopPropagation()
 												handleCancelRemove()
 											}}
+											data-testid="handle-cancel-remove"
 										>
 											<Button
 												ref={cancelRemoveButtonRef}

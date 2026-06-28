@@ -186,6 +186,7 @@ function MobileRecycleBinPanel() {
 						type="button"
 						onClick={() => setOrder("desc")}
 						className="flex h-[52px] items-center justify-between bg-card px-4 active:bg-muted/50"
+						data-testid="set-order"
 					>
 						<span className="text-[16px] text-foreground">
 							{t("mobile.recycleBin.filterSheet.newToOld")}
@@ -199,6 +200,7 @@ function MobileRecycleBinPanel() {
 						type="button"
 						onClick={() => setOrder("asc")}
 						className="flex h-[52px] items-center justify-between bg-card px-4 active:bg-muted/50"
+						data-testid="set-order-2"
 					>
 						<span className="text-[16px] text-foreground">
 							{t("mobile.recycleBin.filterSheet.oldToNew")}

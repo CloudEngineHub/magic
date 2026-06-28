@@ -142,7 +142,6 @@ export function RecycleBinList({
 							</div>
 
 							<div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-normal leading-normal text-muted-foreground">
-								{/* 仅文件类型显示删除人信息（头像、昵称） */}
 								{item.category === "files" && (
 									<>
 										<span className="flex items-center gap-1">
@@ -214,7 +213,10 @@ export function RecycleBinList({
 				</div>
 			))}
 			{loadingMore ? (
-				<div className="flex items-center justify-center gap-2 px-7 py-4 text-xs text-muted-foreground">
+				<div
+					className="flex items-center justify-center gap-2 px-7 py-4 text-xs text-muted-foreground"
+					data-testid="recycle-bin-more"
+				>
 					<Spinner className="size-4" />
 					<span>{t("common.loading")}</span>
 				</div>

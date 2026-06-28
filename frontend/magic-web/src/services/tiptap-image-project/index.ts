@@ -7,7 +7,6 @@ import type {
 	UploadImageResult,
 	UploadImageOptions,
 } from "./interface"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { normalizeImageName } from "@/services/tiptap-image-storage"
 
 /**
@@ -143,8 +142,6 @@ class ProjectImageStorageService implements ProjectImageStorageInterface {
 				storage_type: "workspace",
 				source: UploadSource.ProjectFile,
 			})
-
-			pubsub.publish(PubSubEvents.Update_Attachments)
 
 			// Step 4: Return result with file_id and metadata
 			return {

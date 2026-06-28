@@ -13,7 +13,7 @@ function MenuItem({ icon, title, onClick }: MenuItemProps) {
 	const { styles } = useStyles()
 
 	return (
-		<div className={styles.menuItem} onClick={onClick}>
+		<div className={styles.menuItem} onClick={onClick} data-testid="management-section">
 			<FlexBox gap={8} align="center">
 				<div className={styles.iconWrapper}>{icon}</div>
 				<div className={styles.menuTitle}>{title}</div>

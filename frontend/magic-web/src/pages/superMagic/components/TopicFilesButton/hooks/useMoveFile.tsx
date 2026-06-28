@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "./types"
@@ -7,11 +7,20 @@ import MagicModal from "@/components/base/MagicModal"
 import { IconAlertTriangleFilled } from "@tabler/icons-react"
 import { SuperMagicApi } from "@/apis"
 import { collectSelectedFolderIds } from "../../SelectPathModal/utils/attachmentUtils"
+import { detectDuplicateFilesForMove } from "../utils/moveOrCopyDuplicateHandler"
+import {
+	collectSameParentOperationIds,
+	detectFolderConflictsForMove,
+} from "../utils/folderConflictHandler"
+import { useMoveOrCopyDuplicateHandler } from "./useMoveOrCopyDuplicateHandler"
+import { useFolderConflictHandler } from "./useFolderConflictHandler"
+import { getAttachmentPathByLookupKey, type AttachmentIndex } from "../utils/attachmentIndex"
 import { collectSelectedItemIds } from "../utils/collectSelectedItemIds"
 
 interface UseMoveFileOptions {
 	projectId?: string
 	attachments?: AttachmentItem[]
+	attachmentIndex?: AttachmentIndex
 	onMoveSuccess?: () => void
 	handleMoveFile?: (fileId: string, targetParentId: string) => Promise<boolean>
 	// 批量移动相关
@@ -22,11 +31,14 @@ interface UseMoveFileOptions {
 	onSelectModeChange?: (isSelectMode: boolean) => void
 }
 
+const MOVE_TASK_TIMEOUT_MS = 120000
+
 export function useMoveFile(options: UseMoveFileOptions = {}) {
 	const { t } = useTranslation("super")
 	const {
 		projectId,
 		attachments = [],
+		attachmentIndex,
 		onMoveSuccess,
 		handleMoveFile,
 		selectedItems,
@@ -46,6 +58,11 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	// 移动进度状态
 	const [moveProgress, setMoveProgress] = useState(0)
 	const [isMoving, setIsMovingFn] = useState(false)
+	const movePollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+	const moveWatchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const activeMoveTaskIdRef = useRef(0)
+	const moveDuplicateHandler = useMoveOrCopyDuplicateHandler()
+	const folderConflictHandler = useFolderConflictHandler()
 	// 默认路径（被移动文件所在的目录）
 	const [defaultPath, setDefaultPath] = useState<AttachmentItem[]>([])
 
@@ -54,20 +71,81 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		setIsMovingFn(moving)
 	}
 
-	// 显示移动选择器
-	const showMoveSelector = useCallback(
-		(item: AttachmentItem) => {
-			setCurrentMoveItem(item)
-			setIsBatchMode(false)
-			// 单个文件移动时，禁用其父文件夹（如果是文件夹的话）
-			const disabled = item.is_directory && item.file_id ? [item.file_id] : []
-			setDisabledFolderIds(disabled)
-			// 点击移动时始终从当前项目根目录开始选择目标位置。
-			setDefaultPath([])
-			setVisible(true)
+	const clearMoveTimers = useCallback(() => {
+		if (movePollingTimerRef.current) {
+			clearInterval(movePollingTimerRef.current)
+			movePollingTimerRef.current = null
+		}
+
+		if (moveWatchdogTimerRef.current) {
+			clearTimeout(moveWatchdogTimerRef.current)
+			moveWatchdogTimerRef.current = null
+		}
+	}, [])
+
+	const resetMoveTask = useCallback(
+		(taskId: number) => {
+			if (activeMoveTaskIdRef.current !== taskId) return
+
+			clearMoveTimers()
+			setIsMoving(false)
+			setMoveProgress(0)
 		},
-		[],
+		[clearMoveTimers],
 	)
+
+	const beginMoveTask = useCallback(() => {
+		clearMoveTimers()
+		activeMoveTaskIdRef.current += 1
+		const taskId = activeMoveTaskIdRef.current
+
+		setIsMoving(true)
+		setMoveProgress(0)
+
+		moveWatchdogTimerRef.current = setTimeout(() => {
+			if (activeMoveTaskIdRef.current !== taskId) return
+
+			console.warn("批量移动超时，自动清理移动状态", { taskId })
+			magicToast.error(t("topicFiles.error.moveFileFailed"))
+			resetMoveTask(taskId)
+		}, MOVE_TASK_TIMEOUT_MS)
+
+		return taskId
+	}, [clearMoveTimers, resetMoveTask, t])
+
+	const finishMoveTask = useCallback(
+		(taskId: number, delay = 0) => {
+			if (activeMoveTaskIdRef.current !== taskId) return
+
+			clearMoveTimers()
+
+			const reset = () => {
+				resetMoveTask(taskId)
+			}
+
+			if (delay > 0) {
+				setTimeout(reset, delay)
+				return
+			}
+
+			reset()
+		},
+		[clearMoveTimers, resetMoveTask],
+	)
+
+	useEffect(() => clearMoveTimers, [clearMoveTimers])
+
+	// 显示移动选择器
+	const showMoveSelector = useCallback((item: AttachmentItem) => {
+		setCurrentMoveItem(item)
+		setIsBatchMode(false)
+		// 单个文件移动时，禁用其父文件夹（如果是文件夹的话）
+		const disabled = item.is_directory && item.file_id ? [item.file_id] : []
+		setDisabledFolderIds(disabled)
+		// 点击移动时始终从当前项目根目录开始选择目标位置。
+		setDefaultPath([])
+		setVisible(true)
+	}, [])
 
 	// 显示批量移动选择器
 	const showBatchMoveSelector = useCallback(
@@ -251,22 +329,37 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			fileIds,
 			projectId,
 			targetParentId,
+			targetProjectId,
+			keepBothFileIds = [],
 		}: {
 			fileIds: string[]
 			projectId: string
 			targetParentId: string
+			targetProjectId?: string
+			keepBothFileIds?: string[]
 		}) => {
-			try {
-				setIsMoving(true)
-				setMoveProgress(0)
+			if (fileIds.length === 0 || !projectId) return
 
-				// 调用后端创建批量移动任务
-				const data = await SuperMagicApi.moveFiles({
-					file_ids: fileIds,
-					project_id: projectId,
-					target_parent_id: targetParentId,
-					pre_file_id: "",
-				})
+			const moveTaskId = beginMoveTask()
+
+			try {
+				const data =
+					fileIds.length === 1
+						? await SuperMagicApi.moveFile({
+								file_id: fileIds[0],
+								target_parent_id: targetParentId,
+								project_id: projectId,
+								target_project_id: targetProjectId,
+								keep_both_file_ids: keepBothFileIds,
+							})
+						: await SuperMagicApi.moveFiles({
+								file_ids: fileIds,
+								project_id: projectId,
+								target_project_id: targetProjectId,
+								target_parent_id: targetParentId,
+								pre_file_id: "",
+								keep_both_file_ids: keepBothFileIds,
+							})
 
 				// 如果直接完成
 				if (data.status === "success") {
@@ -274,10 +367,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					magicToast.success(t("topicFiles.success.fileMoved"))
 					hideMoveSelector()
 					onMoveSuccess?.()
-					setTimeout(() => {
-						setIsMoving(false)
-						setMoveProgress(0)
-					}, 500)
+					finishMoveTask(moveTaskId, 500)
 					return
 				}
 
@@ -286,9 +376,13 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					// 每2秒轮询批量状态
 					const timer = setInterval(async () => {
 						try {
+							if (activeMoveTaskIdRef.current !== moveTaskId) return
+
 							const checkData = await SuperMagicApi.checkBatchOperationStatus(
 								data.batch_key,
 							)
+
+							if (activeMoveTaskIdRef.current !== moveTaskId) return
 
 							// 更新进度显示
 							if (checkData.status === "processing") {
@@ -301,40 +395,122 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 								magicToast.success(t("topicFiles.success.fileMoved"))
 								hideMoveSelector()
 								onMoveSuccess?.()
-								clearInterval(timer)
-								setTimeout(() => {
-									setIsMoving(false)
-									setMoveProgress(0)
-								}, 500)
+								finishMoveTask(moveTaskId, 500)
 							} else if (checkData.status === "failed") {
 								magicToast.error(
 									checkData.message || t("topicFiles.error.moveFileFailed"),
 								)
-								clearInterval(timer)
-								setIsMoving(false)
-								setMoveProgress(0)
+								finishMoveTask(moveTaskId)
 							} else {
-								clearInterval(timer)
-								setIsMoving(false)
-								setMoveProgress(0)
+								finishMoveTask(moveTaskId)
 							}
 						} catch (error) {
 							console.error("检查批量移动状态失败:", error)
 							magicToast.error(t("topicFiles.error.moveFileFailed"))
-							clearInterval(timer)
-							setIsMoving(false)
-							setMoveProgress(0)
+							finishMoveTask(moveTaskId)
 						}
 					}, 2000)
+					movePollingTimerRef.current = timer
+					return
 				}
+
+				magicToast.error(data.message || t("topicFiles.error.moveFileFailed"))
+				finishMoveTask(moveTaskId)
 			} catch (error) {
 				console.error("批量移动失败:", error)
 				magicToast.error(t("topicFiles.error.moveFileFailed"))
-				setIsMoving(false)
-				setMoveProgress(0)
+				finishMoveTask(moveTaskId)
 			}
 		},
-		[hideMoveSelector, onMoveSuccess, t],
+		[beginMoveTask, finishMoveTask, hideMoveSelector, onMoveSuccess, t],
+	)
+
+	const batchMoveFilesWithDuplicateCheck = useCallback(
+		async ({
+			fileIds,
+			projectId,
+			targetParentId,
+			targetPath,
+			targetProjectId,
+			sourceAttachments = attachments,
+			targetAttachments = attachments,
+		}: {
+			fileIds: string[]
+			projectId: string
+			targetParentId: string
+			targetPath?: AttachmentItem[]
+			targetProjectId?: string
+			sourceAttachments?: AttachmentItem[]
+			targetAttachments?: AttachmentItem[]
+		}) => {
+			if (!projectId || fileIds.length === 0) return
+			const resolvedTargetPath =
+				targetPath ??
+				(attachmentIndex
+					? getAttachmentPathByLookupKey(attachmentIndex, targetParentId)
+					: [])
+			const sharedSourceIndex =
+				sourceAttachments === attachments ? attachmentIndex : undefined
+			const sharedTargetIndex =
+				targetAttachments === attachments ? attachmentIndex : undefined
+
+			let keepBothFileIds = collectSameParentOperationIds(
+				fileIds,
+				sourceAttachments,
+				resolvedTargetPath,
+				sharedSourceIndex,
+			)
+			const conflictDetectionIds = fileIds.filter(
+				(fileId) => !keepBothFileIds.includes(fileId),
+			)
+			const folderConflicts =
+				conflictDetectionIds.length > 0
+					? detectFolderConflictsForMove(
+							conflictDetectionIds,
+							sourceAttachments,
+							targetAttachments,
+							resolvedTargetPath,
+							{
+								source: sharedSourceIndex,
+								target: sharedTargetIndex,
+							},
+						)
+					: new Map()
+
+			if (folderConflicts.size > 0) {
+				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
+				if (!folderChoice.shouldProceed) return
+				keepBothFileIds = [...keepBothFileIds, ...folderChoice.keepBothIds]
+			}
+
+			const duplicateDetectionIds = fileIds.filter(
+				(fileId) => !keepBothFileIds.includes(fileId),
+			)
+			const duplicates =
+				duplicateDetectionIds.length > 0
+					? detectDuplicateFilesForMove(
+							duplicateDetectionIds,
+							sourceAttachments,
+							targetAttachments,
+							resolvedTargetPath,
+						)
+					: new Map()
+
+			if (duplicates.size > 0) {
+				const userChoice = await moveDuplicateHandler.checkDuplicates(duplicates)
+				if (!userChoice.shouldProceed) return
+				keepBothFileIds = [...keepBothFileIds, ...userChoice.keepBothIds]
+			}
+
+			await batchMoveFiles({
+				fileIds,
+				projectId,
+				targetParentId,
+				targetProjectId,
+				keepBothFileIds,
+			})
+		},
+		[attachmentIndex, attachments, batchMoveFiles, folderConflictHandler, moveDuplicateHandler],
 	)
 
 	// 确认移动文件
@@ -344,7 +520,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				data.path.length > 0 ? data.path[data.path.length - 1].file_id || "" : ""
 			const targetFolderPath = getTargetFolderPath(data.path)
 
-			const executeBatchMove = () => {
+			const executeBatchMove = (keepBothFileIds: string[] = []) => {
 				// 立即退出多选模式
 				setSelectedItems && setSelectedItems(new Set())
 				onSelectModeChange && onSelectModeChange(false)
@@ -353,6 +529,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					fileIds: batchFileIds,
 					projectId: projectId || "",
 					targetParentId: targetParentId,
+					keepBothFileIds,
 				})
 			}
 
@@ -360,9 +537,23 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			if (isBatchMode) {
 				if (!projectId || batchFileIds.length === 0) return
 
+				const sameParentKeepBothIds = collectSameParentOperationIds(
+					batchFileIds,
+					attachments,
+					data.path,
+					attachmentIndex,
+				)
+				if (sameParentKeepBothIds.length === batchFileIds.length) {
+					executeBatchMove(sameParentKeepBothIds)
+					return
+				}
+				const conflictCheckIds = batchFileIds.filter(
+					(fileId) => !sameParentKeepBothIds.includes(fileId),
+				)
+
 				// 检查批量移动是否存在同名冲突
 				const { hasConflict, conflictItems } = checkBatchFilesConflict(
-					batchFileIds,
+					conflictCheckIds,
 					targetFolderPath,
 				)
 
@@ -370,13 +561,13 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					// 显示覆盖确认对话框
 					showOverwriteConfirm(conflictItems, () => {
 						// 用户确认后执行批量移动
-						executeBatchMove()
+						executeBatchMove(sameParentKeepBothIds)
 					})
 					return
 				}
 
 				// 没有冲突，直接执行批量移动
-				executeBatchMove()
+				executeBatchMove(sameParentKeepBothIds)
 				return
 			}
 
@@ -435,6 +626,22 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 			if (!currentMoveItem?.file_id) return
 
+			const sameParentKeepBothIds = collectSameParentOperationIds(
+				[currentMoveItem.file_id],
+				attachments,
+				data.path,
+				attachmentIndex,
+			)
+			if (sameParentKeepBothIds.length > 0 && projectId) {
+				await batchMoveFiles({
+					fileIds: [currentMoveItem.file_id],
+					projectId,
+					targetParentId,
+					keepBothFileIds: sameParentKeepBothIds,
+				})
+				return
+			}
+
 			// 检查单个文件移动是否存在同名冲突
 			const hasConflict = checkSingleFileConflict(currentMoveItem, targetFolderPath)
 
@@ -451,8 +658,14 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			executeSingleMove()
 		},
 		[
+			attachmentIndex,
+			attachments,
 			batchFileIds,
+			batchMoveFiles,
+			checkBatchFilesConflict,
+			checkSingleFileConflict,
 			currentMoveItem,
+			getTargetFolderPath,
 			handleMoveFile,
 			hideMoveSelector,
 			isBatchMode,
@@ -460,12 +673,8 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			onSelectModeChange,
 			projectId,
 			setSelectedItems,
-			t,
-			batchMoveFiles,
-			getTargetFolderPath,
-			checkBatchFilesConflict,
-			checkSingleFileConflict,
 			showOverwriteConfirm,
+			t,
 		],
 	)
 
@@ -486,6 +695,20 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		hideMoveSelector,
 		confirmMove,
 		batchMoveFiles, // 暴露批量移动方法
+		batchMoveFilesWithDuplicateCheck,
+		duplicateModalVisible: moveDuplicateHandler.modalVisible,
+		currentDuplicateFileName: moveDuplicateHandler.currentFileName,
+		totalDuplicates: moveDuplicateHandler.totalDuplicates,
+		handleDuplicateReplace: moveDuplicateHandler.handleReplace,
+		handleDuplicateKeepBoth: moveDuplicateHandler.handleKeepBoth,
+		handleDuplicateCancel: moveDuplicateHandler.handleCancel,
+		folderConflictModalVisible: folderConflictHandler.modalVisible,
+		currentFolderConflictName: folderConflictHandler.currentFolderName,
+		totalFolderConflicts: folderConflictHandler.totalConflicts,
+		canMergeFolderConflict: folderConflictHandler.canMerge,
+		handleFolderConflictKeepBoth: folderConflictHandler.handleKeepBoth,
+		handleFolderConflictMerge: folderConflictHandler.handleMerge,
+		handleFolderConflictCancel: folderConflictHandler.handleCancel,
 
 		// 选择器配置
 		selectorConfig: {
@@ -494,12 +717,11 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			tips: t("topicFiles.moveModal.tips"),
 			projectId: projectId || "",
 			attachments,
-			pendingMoveFileIds:
-				isBatchMode
-					? batchFileIds
-					: currentMoveItem?.file_id
-						? [currentMoveItem.file_id]
-						: [],
+			pendingMoveFileIds: isBatchMode
+				? batchFileIds
+				: currentMoveItem?.file_id
+					? [currentMoveItem.file_id]
+					: [],
 			onSubmit: confirmMove,
 			onClose: hideMoveSelector,
 			okText: t("topicFiles.moveModal.confirm"),

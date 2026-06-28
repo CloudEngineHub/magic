@@ -54,7 +54,7 @@ interface UseDesignHeaderPropsOptions {
 	containerRef: React.RefObject<HTMLDivElement>
 	handleReinitialize: () => Promise<void>
 	handleChangeFileVersion: (version: number, isNewestVersion: boolean) => Promise<void>
-	handleReturnLatest: () => void
+	handleReturnLatest: () => Promise<void>
 	handleVersionRollback: (version?: number) => Promise<void>
 }
 
@@ -223,7 +223,7 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 				if (latestVersion !== undefined) {
 					void handleChangeFileVersion(latestVersion, true)
 				} else {
-					handleReturnLatest()
+					void handleReturnLatest()
 				}
 			} else {
 				// 切换到指定版本

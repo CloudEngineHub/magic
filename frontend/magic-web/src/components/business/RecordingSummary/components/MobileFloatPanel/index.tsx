@@ -31,6 +31,7 @@ import EditorBody from "@/pages/superMagic/components/Detail/contents/Md/compone
 import { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { observer } from "mobx-react-lite"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export interface MobileFloatPanelProps {
 	isWaitingSummarize: boolean
@@ -150,7 +151,9 @@ function MobileFloatPanel(props: MobileFloatPanelProps) {
 
 	const handleTakeNotes = useCallback(() => {
 		setEditorPopup(true)
-		editorRef?.current?.editor?.commands.focus()
+		runActiveEditor(editorRef?.current?.editor, (editor) => {
+			editor.commands.focus()
+		})
 	}, [editorRef])
 
 	// Determine expand direction based on position

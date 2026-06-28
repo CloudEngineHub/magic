@@ -1,8 +1,9 @@
-import { useRef, useState, useCallback } from "react"
-import { useMemoizedFn, useDeepCompareEffect } from "ahooks"
+import { useEffect, useMemo, useRef, useState, useCallback } from "react"
+import { useMemoizedFn } from "ahooks"
 import type { OnFetchIntercepted } from "../utils/fetchInterceptor"
 import type { DependencyEntry } from "../components/DevConsole/types"
 import { logger as Logger } from "@/utils/log"
+import { measureManualPerfOperation } from "@/utils/manualPerfLogger"
 
 const logger = Logger.createLogger("useFetchInterceptionCache")
 
@@ -77,29 +78,43 @@ export function useFetchInterceptionCache(options: {
 		dynamicDepsSeenRef.current.clear()
 	}, [])
 
-	// 监听 attachmentList 变化，检查拦截的文件是否有更新
-	useDeepCompareEffect(() => {
-		if (!attachmentList || attachmentList.length === 0) return
-		if (sandboxType !== "iframe" || !iframeRef.current || !content) return
+	const attachmentUpdatedAtIndex = useMemo(() => {
+		return measureManualPerfOperation(
+			"html_fetch_cache_attachment_index_ms",
+			() => {
+				const fileUpdatedAtMap = new Map<string, string>()
+				let fileCount = 0
 
-		// 构建文件 ID 到 updated_at 的映射
-		const fileUpdatedAtMap = new Map<string, string>()
-		const flattenAttachments = (items: any[]): void => {
-			for (const item of items) {
-				if (item.file_id && item.updated_at) {
-					fileUpdatedAtMap.set(item.file_id, item.updated_at)
+				function collect(items: any[]) {
+					for (const item of items) {
+						if (item.file_id && item.updated_at) {
+							fileUpdatedAtMap.set(item.file_id, item.updated_at)
+							fileCount += 1
+						}
+						if (item.children?.length) {
+							collect(item.children)
+						}
+					}
 				}
-				if (item.children && item.children.length > 0) {
-					flattenAttachments(item.children)
-				}
-			}
-		}
-		flattenAttachments(attachmentList)
+
+				if (attachmentList?.length) collect(attachmentList)
+				return { fileUpdatedAtMap, fileCount }
+			},
+			(result) => ({ file_count: result.fileCount }),
+		)
+	}, [attachmentList])
+
+	// 监听 attachmentList 变化，检查拦截的文件是否有更新
+	useEffect(() => {
+		if (attachmentUpdatedAtIndex.fileCount === 0) return
+		if (sandboxType !== "iframe" || !iframeRef.current || !content) return
 
 		// 检查拦截缓存中的文件是否有更新
 		let hasUpdatedFile = false
-		for (const [relativePath, cacheItem] of interceptedFetchCacheRef.current.entries()) {
-			const currentUpdatedAt = fileUpdatedAtMap.get(cacheItem.file_id)
+		interceptedFetchCacheRef.current.forEach((cacheItem, relativePath) => {
+			const currentUpdatedAt = attachmentUpdatedAtIndex.fileUpdatedAtMap.get(
+				cacheItem.file_id,
+			)
 			// 如果文件的 updated_at 已更新，需要刷新 iframe 内容
 			if (
 				currentUpdatedAt &&
@@ -120,7 +135,7 @@ export function useFetchInterceptionCache(options: {
 				// 如果缓存中没有 updated_at，但当前有，也更新缓存
 				cacheItem.updated_at = currentUpdatedAt
 			}
-		}
+		})
 
 		// 如果有文件更新，触发 iframe 内容刷新
 		if (hasUpdatedFile) {
@@ -139,7 +154,9 @@ export function useFetchInterceptionCache(options: {
 				setContentInjected(false)
 			}
 		}
-	}, [attachmentList, sandboxType, isEditMode, content, refreshIframeContent, setContentInjected])
+	}, [
+		attachmentUpdatedAtIndex, sandboxType, isEditMode, content,  refreshIframeContent, setContentInjected,
+	])
 
 	return {
 		handleFetchIntercepted,

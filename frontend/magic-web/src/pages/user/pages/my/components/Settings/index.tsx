@@ -12,6 +12,7 @@ import { useTimezone, useTimezoneList } from "@/providers/TimezoneProvider/hooks
 import SettingItem from "../common/SettingItem"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { useGlobalSuggestion } from "@/components/settings/FollowUpSuggestionItems/hooks"
+import BrowserNotificationItem from "@/components/settings/BrowserNotificationItem"
 
 function Settings() {
 	const { t } = useTranslation("interface")
@@ -149,6 +150,11 @@ function Settings() {
 							/>
 						}
 					/>
+				</div>
+
+				{/* 浏览器通知 */}
+				<div className="flex w-full flex-col overflow-hidden rounded-md bg-popover">
+					<BrowserNotificationItem mobile />
 				</div>
 			</div>
 		</div>

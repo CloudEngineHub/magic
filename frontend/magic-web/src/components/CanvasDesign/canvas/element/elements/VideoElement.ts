@@ -195,6 +195,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				this.data.id,
 				{
 					generateVideoRequest: requestWithId,
+					videoGenerationResultMeta: undefined,
 					status: undefined,
 					errorMessage: undefined,
 					src: undefined,

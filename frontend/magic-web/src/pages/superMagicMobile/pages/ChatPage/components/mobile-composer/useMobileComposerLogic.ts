@@ -57,6 +57,7 @@ import type { SceneEditorContext } from "@/pages/superMagic/components/MainInput
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { resetDocumentScrollPosition } from "@/utils/scroll"
+import { runActiveEditor } from "@/pages/superMagic/components/MessageEditor/utils/editorLifecycle"
 
 interface ReEditPayload {
 	content?: JSONContent | string
@@ -301,7 +302,9 @@ export default function useMobileComposerLogic({
 	const clearContent = useMemoizedFn(() => {
 		pubsub.publish(PubSubEvents.Super_Magic_Clear_Canvas_Markers, {})
 		setValue(undefined)
-		tiptapCoreRef.current?.commands.clearContent()
+		runActiveEditor(tiptapCoreRef.current, (editor) => {
+			editor.commands.clearContent()
+		})
 		clearFiles()
 	})
 
@@ -310,7 +313,9 @@ export default function useMobileComposerLogic({
 		try {
 			pubsub.publish(PubSubEvents.Super_Magic_Clear_Canvas_Markers, {})
 			setValue(undefined)
-			tiptapCoreRef.current?.commands.clearContent()
+			runActiveEditor(tiptapCoreRef.current, (editor) => {
+				editor.commands.clearContent()
+			})
 			clearFilesLocalOnly()
 		} finally {
 			shouldSkipMentionRemoveSyncRef.current = false
@@ -529,15 +534,42 @@ export default function useMobileComposerLogic({
 
 	const updateContent = useMemoizedFn((content: JSONContent | undefined) => {
 		store.editorStore.updateContent(content)
-		if (tiptapCoreRef.current && content) {
-			tiptapCoreRef.current.commands.setContent(content)
+		if (content) {
+			runActiveEditor(tiptapCoreRef.current, (editor) => {
+				editor.commands.setContent(content)
+			})
 		}
 	})
 
 	const focusEditor = useMemoizedFn(() => {
-		tiptapCoreRef.current?.commands.focus()
-		if (isMobile) tiptapCoreRef.current?.commands.scrollIntoView()
+		runActiveEditor(tiptapCoreRef.current, (editor) => {
+			editor.commands.focus()
+			if (isMobile) editor.commands.scrollIntoView()
+		})
 	})
+
+	const prevEditingQueueItemRef = useRef(editorContext.queueContext?.editingQueueItem ?? null)
+
+	useEffect(() => {
+		const currentEditingItem = editorContext.queueContext?.editingQueueItem ?? null
+		const prevEditingItem = prevEditingQueueItemRef.current
+		const currentEditingId = currentEditingItem?.id
+		const prevEditingId = prevEditingItem?.id
+
+		if (currentEditingItem) {
+			if (!prevEditingId || currentEditingId !== prevEditingId) {
+				window.setTimeout(() => {
+					updateContent(currentEditingItem.content)
+					focusEditor()
+				}, 100)
+			}
+		} else if (!currentEditingItem && prevEditingItem) {
+			clearContent()
+			setIsComposerFocused(false)
+		}
+
+		prevEditingQueueItemRef.current = currentEditingItem
+	}, [clearContent, editorContext.queueContext?.editingQueueItem, focusEditor, updateContent])
 
 	useEffect(() => {
 		tiptapCoreRef.current = tiptapEditor
@@ -589,7 +621,6 @@ export default function useMobileComposerLogic({
 			restoreMentionItems: () => undefined,
 			restoreContent: (content) => {
 				updateContent(content)
-				if (content) tiptapCoreRef.current?.commands.setContent(content)
 			},
 			focus: () => {
 				focusEditor()
@@ -703,10 +734,10 @@ export default function useMobileComposerLogic({
 
 				updateContent(parsedContent)
 				window.setTimeout(() => {
-					if (tiptapCoreRef.current && !tiptapCoreRef.current.isDestroyed) {
-						tiptapCoreRef.current.commands.setContent(parsedContent)
+					runActiveEditor(tiptapCoreRef.current, (editor) => {
+						editor.commands.setContent(parsedContent)
 						focusEditor()
-					}
+					})
 				}, 0)
 			} catch (error) {
 				console.error("Failed to parse re-edit content:", error)
@@ -775,9 +806,11 @@ export default function useMobileComposerLogic({
 				}
 			}
 
-			tiptapCoreRef.current?.commands.insertContent({
-				type: "mention",
-				attrs: item,
+			runActiveEditor(tiptapCoreRef.current, (editor) => {
+				editor.commands.insertContent({
+					type: "mention",
+					attrs: item,
+				})
 			})
 		},
 	)

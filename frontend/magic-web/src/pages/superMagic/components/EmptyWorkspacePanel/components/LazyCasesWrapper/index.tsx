@@ -117,6 +117,7 @@ export default function LazyCasesWrapper({ className }: LazyCasesWrapperProps) {
 							onClick={() => {
 								setActiveGroupKey(item.key)
 							}}
+							data-testid="set-active-group-key"
 						>
 							<div>{item.name}</div>
 							{isActive && <div className={styles.caseTypeItemActiveLine} />}
@@ -134,6 +135,7 @@ export default function LazyCasesWrapper({ className }: LazyCasesWrapperProps) {
 							onClick={() => {
 								openInNewTab(item.url)
 							}}
+							data-testid="open-in-new-tab"
 						>
 							<div className={styles.caseItemContent}>
 								<div className={styles.caseItemTitle}>{item.title}</div>
@@ -149,7 +151,7 @@ export default function LazyCasesWrapper({ className }: LazyCasesWrapperProps) {
 								<div className={styles.caseItemImage} />
 							)}
 							<div className={styles.caseItemPlay} data-play-button="true">
-								<img src={IconPlay} alt="" draggable="false" />
+								<img src={IconPlay} alt="" draggable="false"  data-testid="lazy-cases-wrapper-image"/>
 								<div>{t("common.watchReplay")}</div>
 							</div>
 						</div>

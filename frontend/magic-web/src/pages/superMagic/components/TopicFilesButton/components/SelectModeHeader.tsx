@@ -39,7 +39,7 @@ function SelectModeHeader({
 		<div
 			className={cn("flex h-8 w-full shrink-0 items-center justify-between px-2", className)}
 		>
-			<label className="flex cursor-pointer items-center gap-2 p-0">
+			<label className="flex cursor-pointer items-center gap-2 p-0" data-testid="select-mode-header-label">
 				<Checkbox
 					checked={isIndeterminate ? "indeterminate" : isAllSelected}
 					data-testid="file-select-all-checkbox"

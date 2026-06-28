@@ -6,7 +6,6 @@ import { useDeepCompareEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { exportSingleFileToPpt } from "@/pages/superMagic/components/TopicFilesButton/utils/exportSingleFile"
 import { getExportAllFileIds } from "./contents/HTML/utils"
-import { exportHtmlToPdf } from "../../../../../packages/pdf-export/src"
 import MagicProgressToast from "@/components/base/MagicProgressToast"
 import useEditMode from "./hooks/useEditMode"
 import useCheckBeforeCloseWithSave from "./hooks/useCheckBeforeCloseWithSave"
@@ -18,13 +17,19 @@ import { MagicSpin } from "@/components/base"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { prepareSingleSlideExport } from "@/pages/superMagic/services/pptService"
-import { pptFontResolver } from "@/pages/superMagic/services/pptFontService"
-import { exportPPTX } from "../../../../../packages/html2pptx/src"
+import { exportPPTX } from "@magic/html2pptx"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
+import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
 import { isFileInPPTMode } from "./utils/file"
+import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
+import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
+import {
+	documentExportService,
+	type DocumentExport,
+} from "@/pages/superMagic/services/documentExport"
 
 export default function Render(props: any) {
 	const {
@@ -275,11 +280,39 @@ export default function Render(props: any) {
 
 	const exportPdf = async (fileId: string) => {
 		if (!fileId) return
-		const file = attachments?.find((a: any) => a.file_id === fileId)
-		const fileName = file?.file_name || file?.display_filename || "export.pdf"
 
-		startExport()
+		const documentExporter = documentExportService.get()
+		if (!documentExporter) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.unsupportedInCurrentVersion"))
+			return
+		}
+
+		const toastId = createRandomUuidV4()
+		const resourceErrors = documentExporter.createResourceErrorCollector(t)
+		let pdfHandle: DocumentExport.Handle | null = null
+
+		const getPdfExportToastContent = (progressText: string) => (
+			<div className="flex items-center gap-2">
+				<span>{progressText}</span>
+				<Button
+					type="button"
+					variant="secondary"
+					size="sm"
+					className="h-6 bg-destructive-custom px-2 text-xs text-destructive hover:opacity-90"
+					onClick={() => pdfHandle?.cancel?.()}
+				>
+					{t("topicFiles.exportCancel")}
+				</Button>
+			</div>
+		)
+
 		try {
+			magicToast.loading({
+				key: toastId,
+				content: getPdfExportToastContent(t("topicFiles.exporting")),
+				duration: 0,
+			})
+
 			const fileItem = attachmentList?.find((item: any) => item.file_id === fileId)
 			const result = await prepareSingleSlideExport({
 				fileId,
@@ -291,21 +324,138 @@ export default function Render(props: any) {
 				throw new Error("Failed to fetch HTML file content")
 			}
 
-			await exportHtmlToPdf({
+			const inPptMode =
+				displayConfig?.type === "slide" || isFileInPPTMode(fileId, attachmentList ?? [])
+
+			const preparedHtmlSlides = await prepareHtmlPagesForExport({
 				pages: result.htmlSlides,
-				pagination: "slice",
+				attachments: attachments ?? [],
+				fileId,
+				fileName: fileItem?.file_name || data?.file_name,
+				attachmentList: attachments ?? [],
+				displayConfig,
+			})
+
+			pdfHandle = documentExporter.exportPages(preparedHtmlSlides, {
 				fileName: (result.fileName || "export") + ".pdf",
-				output: "download",
-				onProgress: ({ phase, current, total }) => {
-					if (phase === "capture" && total > 0) {
-						onProgress(Math.round((current / total) * 100))
-					}
+				skipFailedPages: true,
+				pptMode: inPptMode,
+				vector: {
+					fitContentWidth: !inPptMode,
 				},
-			}).promise
-			endExport()
+				onResourceLoadError: resourceErrors.onResourceLoadError,
+				onPageProgress: (ctx) => {
+					const { index, total } = ctx as DocumentExport.PageProgressContext
+					if (total <= 1) return
+					magicToast.loading({
+						key: toastId,
+						content: getPdfExportToastContent(
+							`${t("topicFiles.exporting")} (${index + 1}/${total})`,
+						),
+						duration: 0,
+					})
+				},
+			})
+			await pdfHandle.promise
+			magicToast.success({
+				key: toastId,
+				content: t("topicFiles.exportSuccess"),
+				duration: 1000,
+			})
 		} catch (error) {
 			console.error("[filePdfExport] export failed:", error)
-			onError()
+			const isAbort = (error as { name?: string } | null)?.name === "AbortError"
+			magicToast[isAbort ? "info" : "error"]({
+				key: toastId,
+				content: isAbort
+					? t("topicFiles.exportCancel")
+					: t("topicFiles.contextMenu.fileExport.exportFailed"),
+				duration: 1000,
+			})
+		}
+	}
+
+	const exportRasterPdf = async (fileId: string, pageMode: "fit" | "paginate") => {
+		if (!fileId) return
+
+		const documentExporter = documentExportService.get()
+		if (!documentExporter) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.unsupportedInCurrentVersion"))
+			return
+		}
+
+		const toastId = createRandomUuidV4()
+		const resourceErrors = documentExporter.createResourceErrorCollector(t)
+		let pdfHandle: DocumentExport.Handle | null = null
+
+		const getPdfExportToastContent = (progressText: string) => (
+			<div className="flex items-center gap-2">
+				<span>{progressText}</span>
+				<Button
+					type="button"
+					variant="secondary"
+					size="sm"
+					className="h-6 bg-destructive-custom px-2 text-xs text-destructive hover:opacity-90"
+					onClick={() => pdfHandle?.cancel?.()}
+				>
+					{t("topicFiles.exportCancel")}
+				</Button>
+			</div>
+		)
+
+		try {
+			magicToast.loading({
+				key: toastId,
+				content: getPdfExportToastContent(t("topicFiles.exporting")),
+				duration: 0,
+			})
+
+			const fileItem = attachmentList?.find((item: any) => item.file_id === fileId)
+			const result = await prepareSingleSlideExport({
+				fileId,
+				fileName: fileItem?.file_name || data?.file_name,
+				attachmentList: attachments ?? [],
+			})
+
+			if (!result.htmlSlides.some(Boolean)) {
+				throw new Error("Failed to fetch HTML file content")
+			}
+
+			const inPptMode =
+				displayConfig?.type === "slide" || isFileInPPTMode(fileId, attachmentList ?? [])
+
+			const preparedHtmlSlides = await prepareHtmlPagesForExport({
+				pages: result.htmlSlides,
+				attachments: attachments ?? [],
+				fileId,
+				fileName: fileItem?.file_name || data?.file_name,
+				attachmentList: attachments ?? [],
+				displayConfig,
+			})
+
+			pdfHandle = documentExporter.exportRasterPages(preparedHtmlSlides, {
+				fileName: (result.fileName || "export") + ".pdf",
+				skipFailedPages: true,
+				pptMode: inPptMode,
+				pageMode,
+				onResourceLoadError: resourceErrors.onResourceLoadError,
+			})
+			await pdfHandle.promise
+			magicToast.success({
+				key: toastId,
+				content: t("topicFiles.exportSuccess"),
+				duration: 1000,
+			})
+		} catch (error) {
+			console.error("[fileRasterPdfExport] export failed:", error)
+			const isAbort = (error as { name?: string } | null)?.name === "AbortError"
+			magicToast[isAbort ? "info" : "error"]({
+				key: toastId,
+				content: isAbort
+					? t("topicFiles.exportCancel")
+					: t("topicFiles.contextMenu.fileExport.exportFailed"),
+				duration: 1000,
+			})
 		}
 	}
 	const exportPpt = async (fileId: string) => {
@@ -327,6 +477,7 @@ export default function Render(props: any) {
 
 		const toastId = createRandomUuidV4()
 		let exportHandle: ReturnType<typeof exportPPTX> | null = null
+		const resourceErrors = createPptxResourceErrorCollector(t)
 
 		function getExportToastContent(progressText: string) {
 			return (
@@ -368,15 +519,26 @@ export default function Render(props: any) {
 				return
 			}
 
-			const autoSize = !isFileInPPTMode(fileId, attachmentList ?? [])
+			const preparedHtmlSlides = await prepareHtmlPagesForExport({
+				pages: result.htmlSlides,
+				attachments: attachments ?? [],
+				fileId,
+				fileName: fileItem?.file_name || data?.file_name,
+				attachmentList: attachments ?? [],
+				displayConfig,
+			})
 
-			exportHandle = exportPPTX(result.htmlSlides, {
+			const autoSize = !isFileInPPTMode(fileId, attachmentList ?? [])
+			const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
+
+			exportHandle = exportPPTX(preparedHtmlSlides, {
 				fileName: result.fileName,
 				skipFailedPages: true,
 				autoSize,
 				fontResolver: pptFontResolver,
 				logger: pptxExternalLogger,
 				logLevel: "warn",
+				onResourceLoadError: resourceErrors.onResourceLoadError,
 			})
 
 			await exportHandle.promise
@@ -402,6 +564,65 @@ export default function Render(props: any) {
 				})
 				reportPptxExportError(error, { fileId, source: "Render" })
 			}
+		}
+	}
+
+	const exportImage = async (fileId: string, format: ImageExportFormat = "png") => {
+		if (!fileId) return
+
+		const toastId = createRandomUuidV4()
+		try {
+			magicToast.loading({
+				key: toastId,
+				content: t("topicFiles.exporting"),
+				duration: 0,
+			})
+
+			const fileItem = attachmentList?.find((item: any) => item.file_id === fileId)
+			const result = await prepareSingleSlideExport({
+				fileId,
+				fileName: fileItem?.file_name || data?.file_name,
+				attachmentList: attachments ?? [],
+			})
+
+			if (!result.htmlSlides.some(Boolean)) {
+				throw new Error("Failed to fetch HTML file content")
+			}
+
+			const preparedHtmlSlides = await prepareHtmlPagesForExport({
+				pages: result.htmlSlides,
+				attachments: attachments ?? [],
+				fileId,
+				fileName: fileItem?.file_name || data?.file_name,
+				attachmentList: attachments ?? [],
+				displayConfig,
+			})
+
+			await exportHtmlToImage({
+				pages: preparedHtmlSlides,
+				format,
+				fileName: (result.fileName || "export").replace(/\.html?$/i, ""),
+				onProgress: ({ phase, current, total }) => {
+					if (phase !== "capture" || total <= 1) return
+					magicToast.loading({
+						key: toastId,
+						content: `${t("topicFiles.exporting")} (${current}/${total})`,
+						duration: 0,
+					})
+				},
+			}).promise
+			magicToast.success({
+				key: toastId,
+				content: t("topicFiles.exportSuccess"),
+				duration: 1000,
+			})
+		} catch (error) {
+			console.error("[fileImageExport] export failed:", error)
+			magicToast.error({
+				key: toastId,
+				content: t("topicFiles.contextMenu.fileExport.exportFailed"),
+				duration: 1000,
+			})
 		}
 	}
 
@@ -448,8 +669,10 @@ export default function Render(props: any) {
 		openFileTab,
 		exportFile,
 		exportPdf,
+		exportRasterPdf,
 		exportPpt,
 		exportPptx,
+		exportImage,
 		isExporting,
 		selectedProject,
 		selectedTopic,

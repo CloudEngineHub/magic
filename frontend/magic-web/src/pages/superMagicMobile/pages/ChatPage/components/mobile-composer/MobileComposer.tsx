@@ -187,7 +187,7 @@ function MobileVoiceRecordingWaveform({ levels }: { levels: number[] }) {
 			data-testid="mobile-composer-voice-waveform"
 			aria-hidden
 		>
-			<canvas ref={canvasRef} className="block text-inherit" />
+			<canvas ref={canvasRef} className="block text-inherit"  data-testid="mobile-composer-canvas"/>
 
 			<div
 				className="pointer-events-none absolute inset-y-0 left-0 bg-gradient-to-r from-card to-transparent"
@@ -503,6 +503,7 @@ function MobileComposerComponent({
 					onPaste={logic.handlePaste}
 					onCompositionStart={logic.handleCompositionStart}
 					onCompositionEnd={logic.handleCompositionEnd}
+					data-testid="handle-paste"
 				>
 					<div
 						ref={logic.domRef}

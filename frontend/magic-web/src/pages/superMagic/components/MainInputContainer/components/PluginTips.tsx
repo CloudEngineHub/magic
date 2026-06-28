@@ -35,6 +35,7 @@ function PluginTips({ onConnectClick }: PluginTipsProps) {
 		<button
 			className="flex w-full items-center gap-3 rounded-lg px-1 py-1 transition-colors hover:bg-accent/50"
 			onClick={onConnectClick}
+			data-testid="on-connect-click"
 		>
 			<div className="flex grow items-center gap-2">
 				<Plug className="size-4 text-foreground" />
@@ -57,6 +58,7 @@ function PluginTips({ onConnectClick }: PluginTipsProps) {
 								alt={tool.name}
 								className="size-3.5 rounded-xs object-contain"
 								draggable={false}
+								data-testid="plugin-tips-image"
 							/>
 						</div>
 					))}

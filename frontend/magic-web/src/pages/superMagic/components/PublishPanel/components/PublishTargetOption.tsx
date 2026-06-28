@@ -13,6 +13,7 @@ interface PublishTargetOptionProps {
 	selected: boolean
 	onToggle: (target: PublishInternalTarget) => void
 	disabled?: boolean
+	description?: string
 	children?: ReactNode
 }
 
@@ -27,6 +28,7 @@ export default function PublishTargetOption({
 	selected,
 	onToggle,
 	disabled = false,
+	description,
 	children,
 }: PublishTargetOptionProps) {
 	const { t } = useTranslation("crew/market")
@@ -68,7 +70,8 @@ export default function PublishTargetOption({
 					<span>{t(`skillEditPage.publishPanel.targets.${targetUiKey}.label`)}</span>
 				</div>
 				<p className="text-xs leading-4 text-muted-foreground">
-					{t(`skillEditPage.publishPanel.targets.${targetUiKey}.description`)}
+					{description ??
+						t(`skillEditPage.publishPanel.targets.${targetUiKey}.description`)}
 				</p>
 				{hasExpandedContent ? (
 					<>
@@ -76,6 +79,7 @@ export default function PublishTargetOption({
 						<div
 							onClick={(event) => event.stopPropagation()}
 							onKeyDown={(event) => event.stopPropagation()}
+							data-testid="publish-target-option"
 						>
 							{children}
 						</div>

@@ -136,6 +136,7 @@
 		"defaultName": "分组"
 	},
 	"image": {
+		"batchUploadFailed": "有 {{failed}}/{{total}} 个文件上传失败",
 		"defaultName": "图片生成器",
 		"empty": "请发送生成图像的指令",
 		"errorPrefix": "图像生成失败, ",
@@ -227,17 +228,32 @@
 		"unlock": "解锁"
 	},
 	"messageHistory": {
+		"billingPoints": "积分消耗",
 		"copyPrompt": "复制",
+		"elapsed": "已耗时",
 		"expandPrompt": "展开",
+		"finishedAt": "完成时间",
+		"generationElapsed": "生成耗时",
+		"generationMode": "生成模式",
+		"generationSpec": "生成规格",
 		"inputMode": "输入模式",
 		"model": "模型",
 		"noPrompt": "暂无提示词",
+		"pointsValue": "{{points}}积分",
 		"prompt": "提示词",
 		"referenceAudio": "参考音频",
 		"referenceImage": "参考图",
 		"referenceVideo": "参考视频",
 		"size": "尺寸",
-		"title": "生成记录"
+		"startedAt": "开始时间",
+		"title": "生成记录",
+		"videoInputModes": {
+			"imageReference": "参考图",
+			"keyframeGuided": "首尾帧",
+			"omniReference": "全能模式",
+			"standard": "标准模式",
+			"videoEdit": "视频编辑"
+		}
 	},
 	"rectangle": {
 		"defaultName": "矩形"

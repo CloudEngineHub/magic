@@ -31,10 +31,12 @@ function MyCrewCardMobile({ employee, onCardClick, onChat }: MyCrewCardMobilePro
 	const displayDescription = employee.description?.trim() || t("interface:appList.noDescription")
 	const isUnpublished = isUnpublishedCreatedCrew(employee)
 
+	/** Open detail sheet when the card body is tapped. */
 	function handleCardClick() {
 		onCardClick?.(employee.agentCode)
 	}
 
+	/** Start chat without bubbling the card click handler. */
 	function handleChatClick(event: React.MouseEvent<HTMLButtonElement>) {
 		event.stopPropagation()
 		if (isUnpublished) return

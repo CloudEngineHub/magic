@@ -196,6 +196,32 @@ export interface SuperAgentTopicReadProgressResponse {
 	has_unread: boolean
 }
 
+export interface GetProjectAttachmentsCountResponse {
+	total: number
+}
+
+export interface ProjectAttachmentsV2NextParentState {
+	parent_id: string
+	after_sort: number | null
+	after_file_id: string | null
+	[key: string]: unknown
+}
+
+export interface GetProjectAttachmentsV2Response {
+	list: AttachmentItem[]
+	next_parent_ids: ProjectAttachmentsV2NextParentState[] | null
+	has_more: boolean
+}
+
+export interface GetProjectAttachmentsV2Params {
+	projectId: string
+	nextParentIds?: ProjectAttachmentsV2NextParentState[] | null
+	parentId?: string | number
+	pageSize?: number
+	fileType?: string[]
+	temporaryToken?: string
+}
+
 export interface BatchSavePayload {
 	project_id: string
 	parent_id?: string // 父目录ID，为空表示根目录
@@ -210,7 +236,20 @@ export interface BatchSavePayload {
 		storage_type: string
 		source: number
 		relative_file_path?: string
+		is_hidden?: boolean
 	}>
+}
+
+function getShareModeRequestConfig(temporaryToken?: string): RequestConfig | undefined {
+	if (!temporaryToken) return undefined
+	return {
+		enableAuthorization: false,
+		enableAuthorizationVerification: false,
+	}
+}
+
+function getAttachmentProjectId(projectId: string, temporaryToken?: string) {
+	return temporaryToken ? "0" : projectId
 }
 
 /**
@@ -566,6 +605,24 @@ export interface VideoGenerationResultResponse {
 	poster_file_id: string
 	/** 海报文件 URL */
 	poster_file_url: string
+	/** 计费信息 */
+	billing?: {
+		points?: number | null
+	} | null
+	/** 生成参数信息 */
+	generation_info?: {
+		task?: string
+		input_mode?: string
+		aspect_ratio?: string
+		resolution?: string
+		duration_seconds?: number | null
+	} | null
+	/** 运行时间信息 */
+	runtime?: {
+		started_at?: string | null
+		finished_at?: string | null
+		elapsed_seconds?: number | null
+	} | null
 }
 
 /**
@@ -908,14 +965,65 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	},
 
 	// 通过项目id获取附件列表
-	getAttachmentsByProjectId(params: { projectId: string; temporaryToken: string }) {
+	getAttachmentsByProjectId(
+		params: { projectId: string; temporaryToken?: string },
+		requestConfig?: Omit<RequestConfig, "url" | "body">,
+	) {
+		const projectId = getAttachmentProjectId(params.projectId, params.temporaryToken)
 		return fetch.post<{ tree: AttachmentItem[]; list: AttachmentItem[]; total: number }>(
-			`/api/v1/super-agent/projects/${params?.projectId}/attachments`,
+			`/api/v1/super-agent/projects/${projectId}/attachments`,
 			{
 				page: 1,
 				page_size: 999,
 				file_type: ["user_upload", "process", "system_auto_upload", "directory"],
-				token: params?.temporaryToken || "",
+				...(params?.temporaryToken ? { token: params.temporaryToken } : {}),
+			},
+			{
+				...getShareModeRequestConfig(params?.temporaryToken),
+				...requestConfig,
+			},
+		)
+	},
+
+	getProjectAttachmentsCount(
+		params: { projectId: string; temporaryToken?: string },
+		requestConfig?: Omit<RequestConfig, "url" | "body">,
+	) {
+		const projectId = getAttachmentProjectId(params.projectId, params.temporaryToken)
+		return fetch.post<GetProjectAttachmentsCountResponse>(
+			`/api/v1/super-agent/projects/${projectId}/attachments/count`,
+			{
+				...(params.temporaryToken ? { token: params.temporaryToken } : {}),
+			},
+			{
+				...getShareModeRequestConfig(params.temporaryToken),
+				...requestConfig,
+			},
+		)
+	},
+
+	getProjectAttachmentsV2Page(
+		params: GetProjectAttachmentsV2Params,
+		requestConfig?: Omit<RequestConfig, "url" | "body">,
+	) {
+		const projectId = getAttachmentProjectId(params.projectId, params.temporaryToken)
+		return fetch.post<GetProjectAttachmentsV2Response>(
+			`/api/v2/super-agent/projects/${projectId}/attachments`,
+			{
+				page_size: params.pageSize ?? 1000,
+				...(params.fileType ? { file_type: params.fileType } : {}),
+				...(params.parentId !== undefined && params.parentId !== null
+					? { parent_id: params.parentId }
+					: {}),
+				...(params.nextParentIds !== undefined && params.nextParentIds !== null
+					? { next_parent_ids: params.nextParentIds }
+					: {}),
+				...(params.temporaryToken ? { token: params.temporaryToken } : {}),
+			},
+			{
+				enableRequestUnion: false,
+				...getShareModeRequestConfig(params.temporaryToken),
+				...requestConfig,
 			},
 		)
 	},
@@ -1928,6 +2036,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		storage_type: "workspace" | "topic"
 		source: UploadSource
 		relative_file_path?: string
+		is_hidden?: boolean
 	}) {
 		return fetch.post<SaveUploadFileToProjectResponse>(
 			"/api/v1/super-agent/file/project/save",
@@ -2005,8 +2114,14 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @description 通过项目id获取上一次文件更新时间
 	 * @param project_id
 	 */
-	getLastFileUpdateTime({ project_id }: { project_id: string }) {
-		return fetch.get(`/api/v1/super-agent/projects/${project_id}/last-file-updated-time`)
+	getLastFileUpdateTime(
+		{ project_id }: { project_id: string },
+		requestConfig?: Omit<RequestConfig, "url">,
+	) {
+		return fetch.get(
+			`/api/v1/super-agent/projects/${project_id}/last-file-updated-time`,
+			requestConfig,
+		)
 	},
 
 	/**
