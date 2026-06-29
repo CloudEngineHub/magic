@@ -69,8 +69,12 @@ class SlidesTemplateAssembler
 
     public static function createAdminDetailDTO(SlidesTemplateEntity $template): AdminSlidesTemplateDetailDTO
     {
-        /** @var AdminSlidesTemplateDetailDTO $dto */
-        return self::createAdminItemDTO($template, true);
+        $dto = self::createAdminItemDTO($template, true);
+        if ($dto instanceof AdminSlidesTemplateDetailDTO) {
+            return $dto;
+        }
+
+        return new AdminSlidesTemplateDetailDTO();
     }
 
     public static function createPublicItemDTO(SlidesTemplateEntity $template): SlidesTemplatePublicItemDTO
