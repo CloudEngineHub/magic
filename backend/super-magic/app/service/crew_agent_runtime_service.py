@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Optional
 
 from agentlang.logger import get_logger
+from app.core.subagent_delegation import is_crew_agent_code
 from app.path_manager import PathManager
 from app.service.crew_agent_cache_manager import CrewAgentCacheManager
 from app.service.crew_agent_compiler import CrewAgentCompiler
@@ -21,8 +21,6 @@ from app.utils.async_file_utils import (
 )
 
 logger = get_logger(__name__)
-
-_AGENT_CODE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
 @dataclass(frozen=True)
@@ -134,6 +132,7 @@ class CrewAgentRuntimeService:
         code = (agent_code or "").strip()
         if not code:
             raise ValueError("agent_code is required")
-        if not _AGENT_CODE_PATTERN.fullmatch(code) or code in {".", ".."}:
+        # 复用 Crew code 的唯一校验口径：要求 SMA-/SMA_ 前缀，天然排除 "." / ".." 等路径穿越输入。
+        if not is_crew_agent_code(code):
             raise ValueError(f"Invalid agent_code: {agent_code}")
         return code
