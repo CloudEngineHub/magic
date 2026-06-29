@@ -69,7 +69,7 @@ class SlidesTemplateAssembler
 
     public static function createAdminDetailDTO(SlidesTemplateEntity $template): AdminSlidesTemplateDetailDTO
     {
-        /** @var AdminSlidesTemplateDetailDTO $dto */
+        /* @var AdminSlidesTemplateDetailDTO $dto */
         return self::createAdminItemDTO($template, true);
     }
 
