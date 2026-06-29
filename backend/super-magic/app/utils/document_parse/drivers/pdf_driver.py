@@ -1,30 +1,38 @@
-"""PDF structured parsing driver.
+"""PDF 混合解析驱动。
 
-PDF extraction keeps page boundaries when using local text mode. This lets the
-index, outline, and summary point to precise chunk page ranges for large files.
+PDF 抽取会保留页面边界，并把文本层、内嵌图片、可选整页快照组合成统一的结构化输出。
 """
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Iterable, List, Optional
 
-from app.utils.async_file_utils import async_mkdir, async_stat, async_write_bytes, async_write_text
+from app.utils.async_file_utils import async_stat, async_write_bytes
 
 from ..constants import (
     DEFAULT_VIRTUAL_PAGE_GROUP_SIZE,
-    DEFAULT_VISUAL_MAX_PAGES,
     PDF_EXTENSIONS,
-    VISUAL_RESULTS_DIRNAME,
 )
-from ..models import DocumentAsset, DocumentChunk, DocumentNode, DocumentProfile, ExtractionResult, stable_document_id
+from ..models import (
+    DocumentAsset,
+    DocumentAssetType,
+    DocumentChunk,
+    DocumentNode,
+    DocumentProfile,
+    ExtractionResult,
+    stable_document_id,
+)
+from ..pdf.pdf_file_validator import PdfFileValidator
 from ..pdf.pdf_metadata import PdfMetadata
 from ..pdf.pdf_outline_reader import PdfOutlineReader
+from ..pdf.pdf_page_snapshot_extractor import PdfPageSnapshotExtractor
+from ..pdf.pdf_strategy import PdfExtractionStrategy
 from ..pdf.pdf_text_extractor import PdfTextExtractor
-from ..pdf.pdf_visual_extractor import PdfVisualExtractor
+from ..service.reading_state import ReadingStateStore
 from ..structure.asset_store import AssetStore
 from ..structure.chunk_store import ChunkStore
-from ..structure.chunker import DocumentChunker
 from ..structure.image_feature_analyzer import ImageFeatureAnalyzer
 from ..structure.image_watermark_detector import ImageWatermarkDetector
 from ..structure.outline_builder import OutlineBuilder
@@ -39,14 +47,17 @@ class PdfDocumentDriver(DocumentDriver):
     supported_extensions = PDF_EXTENSIONS
 
     async def inspect(self, path: Path) -> DocumentProfile:
+        validation = await PdfFileValidator().validate(path)
+        if not validation.ok:
+            raise ValueError(validation.error_message)
         metadata = await PdfMetadata.inspect(path)
         outline = OutlineBuilder.build_tree(await PdfOutlineReader.read(path))
         if not outline:
             outline = VirtualOutlineBuilder.by_units("page", metadata["page_count"])
         if metadata.get("is_scanned_like"):
-            strategy = "sample first, extract image assets, then use understand_document_images in batches of at most 10 pages"
+            strategy = "sample first; use hybrid extraction with page snapshots and understand_document_images in batches of at most 10 assets"
         else:
-            strategy = "sample first; use local_text for readable ranges and image understanding only when needed"
+            strategy = "sample first; use hybrid extraction, adding page snapshots only for pages that need visual evidence"
         file_stat = await async_stat(path)
         return DocumentProfile(
             source_path=str(path),
@@ -68,35 +79,65 @@ class PdfDocumentDriver(DocumentDriver):
         path: Path,
         output_dir: Path,
         ranges: Optional[str] = None,
-        mode: str = "local_text",
+        mode: str = "auto",
         max_chars: int = 12000,
         **kwargs,
     ) -> ExtractionResult:
+        validation = await PdfFileValidator().validate(path)
+        if not validation.ok:
+            raise ValueError(validation.error_message)
         metadata = await PdfMetadata.inspect(path)
         total_pages = metadata["page_count"]
         pages = RangeParser.parse_numeric(ranges, total_pages) or list(range(1, total_pages + 1))
-        if mode == "visual" and len(pages) > kwargs.get("visual_max_pages", DEFAULT_VISUAL_MAX_PAGES):
-            raise ValueError(f"visual mode supports at most {DEFAULT_VISUAL_MAX_PAGES} pages per call; requested {len(pages)}")
         source_range = compact_numeric_ranges(pages)
+        decision = PdfExtractionStrategy().decide(
+            pages=pages,
+            metadata=metadata,
+            extract_embedded_images=bool(kwargs.get("extract_images", True)),
+            page_snapshot_policy=kwargs.get("page_snapshot_policy", "auto"),
+            visual_hint=kwargs.get("visual_hint", "auto"),
+            page_snapshot_max_pages=int(kwargs.get("page_snapshot_max_pages", 20)),
+        )
+
         skipped_images: list[dict[str, Any]] = []
-        if kwargs.get("extract_images", False):
-            assets, skipped_images = await self._extract_image_assets(
+        assets: list[DocumentAsset] = []
+        if decision.extract_embedded_images:
+            embedded_assets, skipped_images = await self._extract_image_assets(
                 path,
                 output_dir,
                 pages,
                 exclude_watermark_images=kwargs.get("exclude_watermark_images", True),
                 deduplicate_repeated_images=kwargs.get("deduplicate_repeated_images", True),
             )
-        else:
-            assets = []
-        if mode == "visual":
-            content = await PdfVisualExtractor.extract_pages(path, pages, kwargs.get("visual_query"))
-            visual_result_path = await self._write_visual_result(output_dir, source_range, content)
-            chunks = DocumentChunker.chunk_text(content, path.name, f"pages:{source_range}", max_chars=max_chars)
-        else:
-            visual_result_path = None
-            segments = await PdfTextExtractor.extract_page_segments(path, pages)
-            chunks = self._chunk_page_segments(segments, path.name, max_chars, assets, skipped_images)
+            assets.extend(embedded_assets)
+        if decision.extract_page_snapshots:
+            snapshot_assets = await PdfPageSnapshotExtractor().extract(
+                path,
+                output_dir,
+                decision.page_snapshot_pages,
+                dpi=int(kwargs.get("page_snapshot_dpi", 120)),
+                image_format=str(kwargs.get("page_snapshot_format", "jpg")),
+                render_reason=decision.reason,
+                start_index=len(assets) + 1,
+            )
+            assets.extend(snapshot_assets)
+            await ReadingStateStore().mark_page_snapshots_rendered(
+                output_dir,
+                snapshots=[
+                    {
+                        "asset_path": asset.path,
+                        "source_range": asset.source_range or "",
+                        "page": asset.metadata.get("page"),
+                        "render_reason": asset.metadata.get("render_reason") or "",
+                    }
+                    for asset in snapshot_assets
+                ],
+                recommendations=["Run understand_document_images for rendered page snapshots that require layout-level reading."],
+            )
+        assets = self._renumber_assets(assets)
+
+        segments = await PdfTextExtractor.extract_page_segments(path, pages)
+        chunks = self._chunk_page_segments(segments, path.name, max_chars, assets, skipped_images)
         chunks = await ChunkStore.write_chunks(output_dir, chunks)
         outline = OutlineBuilder.build_tree(await PdfOutlineReader.read(path)) or VirtualOutlineBuilder.by_units("page", total_pages)
         self._attach_chunks_to_outline(outline, chunks)
@@ -112,14 +153,26 @@ class PdfDocumentDriver(DocumentDriver):
             total_units=total_pages,
             next_range=compact_numeric_ranges(remaining[:10]) or None,
             metadata={
-                "mode": mode,
+                "mode": "hybrid",
+                "requested_mode": mode,
                 "source_range": source_range,
+                "extraction_decision": asdict(decision),
+                "validation": {
+                    "page_count": validation.page_count,
+                },
                 "skipped_images": skipped_images,
                 "skipped_watermark_images": [item for item in skipped_images if "watermark" in str(item.get("reason", ""))],
-                **({"visual_result_path": visual_result_path} if visual_result_path else {}),
                 **metadata,
             },
         )
+
+    @staticmethod
+    def _renumber_assets(assets: list[DocumentAsset]) -> list[DocumentAsset]:
+        """在组合多层抽取结果后重新分配稳定的资产编号。"""
+
+        for index, asset in enumerate(assets, start=1):
+            asset.asset_id = f"asset_{index:04d}"
+        return assets
 
     @staticmethod
     async def _extract_image_assets(
@@ -153,7 +206,7 @@ class PdfDocumentDriver(DocumentDriver):
             await async_write_bytes(asset_path, image["bytes"])
             assets.append(DocumentAsset(
                 asset_id=f"asset_{index:04d}",
-                asset_type="image",
+                asset_type=DocumentAssetType.EMBEDDED_IMAGE.value,
                 path=str(asset_path.relative_to(output_dir)),
                 title=f"PDF page {page_no} image {image_no}",
                 source_range=f"pages:{page_no}",
@@ -250,15 +303,6 @@ class PdfDocumentDriver(DocumentDriver):
         return rects
 
     @staticmethod
-    async def _write_visual_result(output_dir: Path, source_range: str, content: str) -> str:
-        visual_dir = output_dir / VISUAL_RESULTS_DIRNAME
-        await async_mkdir(visual_dir, parents=True, exist_ok=True)
-        safe_range = source_range.replace(",", "_").replace("-", "_")
-        result_path = visual_dir / f"pdf_pages_{safe_range}.md"
-        await async_write_text(result_path, content)
-        return str(result_path.relative_to(output_dir))
-
-    @staticmethod
     def _chunk_page_segments(
         segments: Iterable[tuple[int, str]],
         title: str,
@@ -327,9 +371,15 @@ class PdfDocumentDriver(DocumentDriver):
     @staticmethod
     def _page_markdown(page_no: int, page_text: str, assets: List[DocumentAsset], skipped_solid_images: Optional[list[dict[str, Any]]] = None) -> str:
         parts = [f"## 第 {page_no} 页", "", page_text.strip()]
-        if assets:
-            parts.extend(["", "### Images"])
-            for asset in assets:
+        snapshot_assets = [asset for asset in assets if asset.asset_type == DocumentAssetType.PAGE_SNAPSHOT.value]
+        embedded_assets = [asset for asset in assets if asset.asset_type == DocumentAssetType.EMBEDDED_IMAGE.value]
+        if snapshot_assets:
+            parts.extend(["", "### Page Snapshot"])
+            for asset in snapshot_assets:
+                parts.append(f"![{asset.title}]({asset.path})")
+        if embedded_assets:
+            parts.extend(["", "### Embedded Images"])
+            for asset in embedded_assets:
                 parts.append(f"![{asset.title}]({asset.path})")
         if skipped_solid_images:
             parts.extend(["", "### Filtered Images"])
