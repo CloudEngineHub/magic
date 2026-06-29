@@ -671,6 +671,7 @@ readonly class VideoOperationAppService
         $event->setHeight($billingDetails['height']);
         $event->setHasAudioOutput($this->resolveHasAudioOutput($operation));
         $event->setProjectId($operation->getProjectId());
+        $event->setVideoId($operation->getVideoId());
         $event->setTopicId($operation->getTopicId());
         $event->setTaskId($operation->getTaskId());
         $event->setSourceId($operation->getSourceId());
@@ -696,6 +697,7 @@ readonly class VideoOperationAppService
             'height' => $event->getHeight(),
             'has_audio_output' => $event->hasAudioOutput(),
             'project_id' => $event->getProjectId(),
+            'video_id' => $event->getVideoId(),
             'topic_id' => $event->getTopicId(),
             'task_id' => $event->getTaskId(),
             'source_id' => $event->getSourceId(),
@@ -738,6 +740,7 @@ readonly class VideoOperationAppService
         $event->setUserId($operation->getUserId());
         $event->setModel($operation->getModel());
         $event->setProviderModelId($operation->getProviderModelId());
+        $event->setVideoId($operation->getVideoId());
         $event->setBusinessParams($businessParams);
 
         AsyncEventUtil::dispatch($event);
@@ -747,6 +750,7 @@ readonly class VideoOperationAppService
             'user_id' => $event->getUserId(),
             'model' => $event->getModel(),
             'provider_model_id' => $event->getProviderModelId(),
+            'video_id' => $event->getVideoId(),
         ]);
     }
 
@@ -785,6 +789,7 @@ readonly class VideoOperationAppService
             'user_name' => $dataIsolation->getUserName() !== '' ? $dataIsolation->getUserName() : (string) ($requestBusinessParams['user_name'] ?? ''),
             'app_id' => $dataIsolation->getAppId() !== '' ? $dataIsolation->getAppId() : (string) ($requestBusinessParams['app_id'] ?? ''),
             'source_id' => $sourceId,
+            'video_id' => (string) ($operation->getVideoId() ?? ''),
             'request_id' => $requestId,
             'magic_topic_id' => $magicTopicId,
             'ak' => $accessToken,

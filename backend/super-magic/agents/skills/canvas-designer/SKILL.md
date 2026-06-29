@@ -575,17 +575,15 @@ Processing steps:
 > For full video generation workflow, read the matching reference before proceeding:
 >
 > - **Generation** → [reference/video/generation.md](reference/video/generation.md)
-> - **Follow-up / status sync** → [reference/video/follow-up.md](reference/video/follow-up.md)
 > - **Parameter selection / error handling** → [reference/video/parameters-and-errors.md](reference/video/parameters-and-errors.md)
 
 **Use video tools when:**
 - User wants dynamic output on canvas: video, animation, shot, clip, short film, motion poster
-- User is following up on an existing canvas video task ("is it done / continue / refresh / check progress")
 - User provides reference images or start/end frames and wants a video element on canvas
 
 **Do not use video tools for:**
 - Static output such as poster, cover, screenshot, or illustration → use image workflow above
-- General non-canvas video generation → use the video tools directly
+- Follow-up/status sync for an existing canvas video task → frontend tracks status by video_id
 - Only adjusting element position, size, or layer → use canvas element editing tools
 
 ---
@@ -606,7 +604,7 @@ Generate AI images?
 
 Generate video?
 ├─ Yes → read reference/video/generation.md first, then generate_canvas_videos
-│   └─ Follow up? → read reference/video/follow-up.md, then query_video_generation
+│   └─ Follow up? → do not call another video tool; video status is tracked by the frontend using video_id
 └─ No → continue
 
 Search web images?

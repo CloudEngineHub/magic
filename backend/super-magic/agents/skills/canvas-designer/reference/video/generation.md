@@ -14,17 +14,18 @@ Video tool calls automatically use long timeouts. Do not reason about or pass ti
 
 ## Required Parameters
 - `project_path`: design project path
-- `tasks`: task list, each task needs `name`, `prompt`, `width`, `height`; max 4 per call
+- `tasks`: task list, each task needs `name` and `prompt`; max 4 per call
 
 ## Model Context
 
 When `<media_model_info>` contains a `<video ...>` entry:
 - pass its `model` value as `model_id`
-- use declared `size` values only; if the user does not specify a size, use `default_size`
-- use declared `duration` values only; if the user does not specify duration, use `default_duration`
+- `duration_seconds`, `resolution`, and `aspect_ratio` are optional
+- when the user specifies duration, resolution, or aspect ratio, use declared values only
+- when the user does not specify them, you may reasonably infer legal values from the user's intent and the current model rules; if uncertain, omit them and let the model defaults apply
 - use `<mode>` / `<rule>` nodes to choose reference fields and avoid unsupported combinations
 - when using a `<mode>`, pass its `name` as `input_mode` and its `task` as `task`; for example `name="video_edit"` means `input_mode="video_edit"`, not `inputMode` or `video_editing`
-- `width` and `height` are canvas layout size, not the real generation size; keep them consistent with `size`
+- canvas layout dimensions are derived internally; do not invent generation parameters only for layout
 
 ## Reference Tokens
 
@@ -37,13 +38,13 @@ Use these tokens next to the subject, action, or source media they control. Do n
 
 ## Priority Parameters
 - the generation goal itself
-- user-requested size/resolution intent
+- user-requested resolution/aspect-ratio intent
 - user-requested duration intent
 - reference inputs such as reference images or start/end frames
 
 ## Non-Priority Parameters
 - leave them empty by default when the user did not explicitly ask for them
-- do not fill every optional field "just in case"
+- infer optional generation parameters only when the current model rules make a legal choice clear for the user's request
 
 ## Recommended Prompt Content
 - subject
@@ -61,9 +62,8 @@ result = tool.call('generate_canvas_videos', {
     "tasks": [{
         "name": "launch_video",
         "prompt": "A phone slowly rotates on a minimal stage, push-in camera, soft rim light, commercial ad look",
-        "width": 1280,
-        "height": 720,
-        "size": "1280x720",
+        "aspect_ratio": "16:9",
+        "resolution": "720p",
         "duration_seconds": 5
     }]
 })
@@ -80,8 +80,8 @@ result = tool.call('generate_canvas_videos', {
     "tasks": [{
         "name": "edited_video",
         "prompt": "Turn the reference video [video1] into a watercolor animation while keeping the original motion",
-        "width": 1280,
-        "height": 720,
+        "aspect_ratio": "16:9",
+        "resolution": "720p",
         "input_mode": "video_edit",
         "task": "edit",
         "reference_video_paths": ["videos/source.mp4"],
@@ -101,9 +101,8 @@ result = tool.call('generate_canvas_videos', {
     "tasks": [{
         "name": "launch_video",
         "prompt": "A phone [image1] slowly rotates on a minimal stage, push-in camera, soft rim light, commercial ad look",
-        "width": 1280,
-        "height": 720,
-        "size": "1920x1080",
+        "aspect_ratio": "16:9",
+        "resolution": "1080p",
         "duration_seconds": 5,
         "reference_image_paths": ["images/reference.png"]
     }]

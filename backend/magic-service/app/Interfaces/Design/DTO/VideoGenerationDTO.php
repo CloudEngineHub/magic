@@ -42,6 +42,12 @@ class VideoGenerationDTO extends AbstractDTO
 
     protected ?string $posterUrl = null;
 
+    protected array $billing = [];
+
+    protected array $generationInfo = [];
+
+    protected array $runtime = [];
+
     public function setProjectId(null|int|string $projectId): void
     {
         if (is_int($projectId)) {
@@ -199,5 +205,35 @@ class VideoGenerationDTO extends AbstractDTO
             $posterFileId = (string) $posterFileId;
         }
         $this->posterFileId = $posterFileId;
+    }
+
+    public function getBilling(): array
+    {
+        return $this->billing;
+    }
+
+    public function setBilling(array $billing): void
+    {
+        $this->billing = $billing;
+    }
+
+    public function getGenerationInfo(): array
+    {
+        return $this->generationInfo;
+    }
+
+    public function setGenerationInfo(array $generationInfo): void
+    {
+        $this->generationInfo = $generationInfo;
+    }
+
+    public function getRuntime(): array
+    {
+        return $this->runtime;
+    }
+
+    public function setRuntime(array $runtime): void
+    {
+        $this->runtime = $runtime;
     }
 }
