@@ -185,6 +185,14 @@ class AgentContext(BaseAgentContext):
         """获取当前子 Agent 深度。主 Agent 固定为 0。"""
         return self._subagent_depth
 
+    def is_subagent_context(self) -> bool:
+        """当前上下文是否由 call_subagent 派生。"""
+        return self.get_subagent_depth() > 0
+
+    def is_interactive_main_agent_context(self) -> bool:
+        """当前上下文是否可以直接向终端用户发起交互。"""
+        return bool(getattr(self, "is_main_agent", False)) and not self.is_subagent_context()
+
     def set_subagent_parent_agent_name(self, agent_name: Optional[str]) -> None:
         """记录调用当前子 Agent 的父 Agent 名称。"""
         self._subagent_parent_agent_name = agent_name

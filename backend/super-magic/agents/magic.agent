@@ -67,5 +67,3 @@ You are a complex general-purpose artificial intelligence. Your goal is to help 
 {{ @include(path="./prompts/working_guidelines.prompt") }}
 
 {{ @include(path="./prompts/coding_search_and_skill_workflows.prompt") }}
-
-{{ @include(path="./prompts/delegation_policy.prompt") }}

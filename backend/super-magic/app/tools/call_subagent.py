@@ -78,6 +78,22 @@ class CallSubagentParams(BaseToolParams):
 class CallSubagent(BaseTool[CallSubagentParams]):
     """Call another agent to complete a task. Each sub-agent runs with an isolated context and its own chat history."""
 
+    def is_visible_in_context(self, agent_context: "AgentContext") -> bool:
+        return not agent_context.is_subagent_context()
+
+    async def check_execution_permission(
+        self,
+        tool_context: ToolContext,
+        params: CallSubagentParams,
+    ) -> Optional[ToolResult]:
+        parent = tool_context.get_extension("agent_context")
+        if parent is not None and parent.is_subagent_context():
+            return ToolResult.error(
+                "Sub-agents cannot spawn other sub-agents. Complete the delegated task directly, "
+                "or explain to the parent agent what additional delegation is needed."
+            )
+        return None
+
     async def execute(self, tool_context: ToolContext, params: CallSubagentParams) -> ToolResult:
         new_agent_context: Optional["AgentContext"] = None
         agent: Optional["Agent"] = None
