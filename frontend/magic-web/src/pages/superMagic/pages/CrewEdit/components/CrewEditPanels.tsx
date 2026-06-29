@@ -21,6 +21,11 @@ const RESIZE_HANDLE_WIDTH = 8
 const DETAIL_PANEL_MIN_WIDTH = 400
 const COLLAPSE_TRIGGER_DRAG_DISTANCE_RATIO = 0.5
 const COLLAPSE_TRIGGER_SIZE_EPSILON = 0.2
+// Portal layers bypass BaseLayoutPc padding, so they must consume safe-area variables directly.
+const topicHistorySafeAreaPortalClassName =
+	"pointer-events-none fixed bottom-[var(--safe-area-inset-bottom)] right-[var(--safe-area-inset-right)] top-[var(--safe-area-inset-top)] z-40"
+const topicHistorySafeAreaDrawerClassName =
+	"pointer-events-auto absolute bottom-[var(--safe-area-inset-bottom)] right-[var(--safe-area-inset-right)] top-[var(--safe-area-inset-top)]"
 
 type TopicHistoryMode = "hidden" | "full-right" | "fixed" | "drawer"
 
@@ -471,9 +476,11 @@ function CrewEditPanels({
 							aria-hidden="true"
 						/>
 						{createPortal(
-							<div className="pointer-events-none fixed inset-y-0 right-0 z-40">
+							<div className={topicHistorySafeAreaPortalClassName}>
 								<div className="pointer-events-auto h-full">
-									{renderTopicHistoryShell(topicHistoryMode as any)}
+									{renderTopicHistoryShell(
+										topicHistoryMode as Exclude<TopicHistoryMode, "hidden">,
+									)}
 								</div>
 							</div>,
 							document.body,
@@ -489,7 +496,7 @@ function CrewEditPanels({
 									data-testid="crew-topic-history-panel-backdrop"
 									onClick={historyLayout?.onClose}
 								/>
-								<div className="pointer-events-auto absolute inset-y-0 right-0">
+								<div className={topicHistorySafeAreaDrawerClassName}>
 									{renderTopicHistoryShell("drawer")}
 								</div>
 							</div>,
