@@ -22,6 +22,7 @@ from ..constants import (
     INDEX_FILENAME,
     VISUAL_RESULTS_DIRNAME,
 )
+from ..models import DocumentAssetType
 from ..structure.range_parser import RangeParser
 from .reading_state import ReadingStateStore
 
@@ -36,6 +37,11 @@ class DocumentImageUnderstander:
         "write_back": WRITE_MODE_APPEND,
         "metadata_only": WRITE_MODE_METADATA_ONLY,
         "index_only": WRITE_MODE_METADATA_ONLY,
+    }
+    VISUAL_ASSET_TYPES = {
+        DocumentAssetType.EMBEDDED_IMAGE.value,
+        DocumentAssetType.PAGE_SNAPSHOT.value,
+        "image",
     }
 
     async def understand(
@@ -129,7 +135,11 @@ class DocumentImageUnderstander:
         chunk_ids: list[str] | None,
         force: bool,
     ) -> list[dict[str, Any]]:
-        assets = [asset for asset in index.get("assets", []) if asset.get("asset_type") == "image" and asset.get("path")]
+        assets = [
+            asset
+            for asset in index.get("assets", [])
+            if asset.get("asset_type") in DocumentImageUnderstander.VISUAL_ASSET_TYPES and asset.get("path")
+        ]
         if not force:
             assets = [asset for asset in assets if not DocumentImageUnderstander._asset_written_to_chunk(asset)]
         if images:
@@ -193,6 +203,7 @@ class DocumentImageUnderstander:
                 return {
                     "ok": visual_metadata.get("status") != "failed",
                     "asset_path": asset["path"],
+                    "asset_type": asset.get("asset_type") or "",
                     "asset_title": asset.get("title") or "",
                     "source_range": asset.get("source_range") or "",
                     "result_path": str(existing_result_path),
@@ -209,10 +220,7 @@ class DocumentImageUnderstander:
         asset_path = output_dir / asset["path"]
         visual_dir = output_dir / VISUAL_RESULTS_DIRNAME
         await async_mkdir(visual_dir, parents=True, exist_ok=True)
-        prompt = query or (
-            "Convert this document image into structured Markdown. Preserve visible text, headings, "
-            "tables, stamps, signatures, charts, and layout cues that are important for later document reading."
-        )
+        prompt = query or DocumentImageUnderstander._default_prompt(str(asset.get("asset_type") or ""))
         result = await VisualUnderstanding().execute_purely(
             VisualUnderstandingParams(images=[str(asset_path)], query=prompt),
             include_download_info_in_content=False,
@@ -225,6 +233,7 @@ class DocumentImageUnderstander:
                 f"# Visual Understanding: {asset.get('title') or asset_path.name}",
                 "",
                 f"- Image: `{asset.get('path')}`",
+                f"- Asset type: `{asset.get('asset_type') or ''}`",
                 f"- Source range: `{asset.get('source_range') or ''}`",
                 "",
                 result.content.strip(),
@@ -235,6 +244,7 @@ class DocumentImageUnderstander:
                 f"# Visual Understanding Failed: {asset.get('title') or asset_path.name}",
                 "",
                 f"- Image: `{asset.get('path')}`",
+                f"- Asset type: `{asset.get('asset_type') or ''}`",
                 f"- Error: {result.content}",
                 "",
             ])
@@ -242,12 +252,28 @@ class DocumentImageUnderstander:
         return {
             "ok": bool(result.ok),
             "asset_path": asset["path"],
+            "asset_type": asset.get("asset_type") or "",
             "asset_title": asset.get("title") or "",
             "source_range": asset.get("source_range") or "",
             "result_path": str(result_path.relative_to(output_dir)),
             "content": result.content.strip() if result.ok else "",
             "error": "" if result.ok else result.content,
         }
+
+    @staticmethod
+    def _default_prompt(asset_type: str) -> str:
+        """根据资产类型返回默认视觉理解提示词。"""
+
+        if asset_type == DocumentAssetType.PAGE_SNAPSHOT.value:
+            return (
+                "Convert this PDF page snapshot into structured Markdown. Preserve visible text, "
+                "tables, headers, footers, stamps, signatures, charts, reading order, and layout cues "
+                "that are important for later document reading."
+            )
+        return (
+            "Convert this document image into structured Markdown. Preserve visible text, headings, "
+            "tables, stamps, signatures, charts, and layout cues that are important for later document reading."
+        )
 
     @staticmethod
     async def _write_one_back(
@@ -321,6 +347,7 @@ class DocumentImageUnderstander:
                     "written_to_chunk": bool(written_to_chunk),
                     "chunk_path": chunk_path,
                     "asset_path": result.get("asset_path") or "",
+                    "asset_type": result.get("asset_type") or "",
                     "updated_at": now,
                     **({"error": result["error"]} if result.get("error") else {}),
                 }

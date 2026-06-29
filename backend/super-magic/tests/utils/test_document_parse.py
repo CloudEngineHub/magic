@@ -12,7 +12,17 @@ from app.utils.document_parse.drivers.powerpoint_driver import PowerPointDocumen
 from app.utils.document_parse.drivers.registry import get_document_driver_registry
 from app.utils.document_parse.drivers.spreadsheet_driver import SpreadsheetDocumentDriver
 from app.utils.document_parse.drivers.word_driver import WordDocumentDriver
-from app.utils.document_parse.models import DocumentAsset, DocumentChunk, DocumentProfile, ExtractionResult
+from app.utils.document_parse.models import (
+    DocumentAsset,
+    DocumentAssetType,
+    DocumentChunk,
+    DocumentProfile,
+    ExtractionResult,
+)
+from app.utils.document_parse.pdf.pdf_file_validator import PdfFileValidator, PdfValidationErrorCode
+from app.utils.document_parse.pdf.pdf_page_snapshot_extractor import PdfPageSnapshotExtractor
+from app.utils.document_parse.pdf.pdf_render_backend import PdfRenderedPage
+from app.utils.document_parse.pdf.pdf_strategy import PdfExtractionStrategy
 from app.utils.document_parse.service.document_artifact_mode import DocumentArtifactModeSelector
 from app.utils.document_parse.service.document_extractor import DocumentExtractor
 from app.utils.document_parse.service.document_format_converter import DocumentFormatConverter
@@ -76,6 +86,102 @@ def test_image_watermark_detector_filters_solid_images_without_blank_name(tmp_pa
 
     assert kept == []
     assert skipped[0]["reason"] == "invalid solid or blank image"
+
+
+@pytest.mark.asyncio
+async def test_pdf_validator_rejects_invalid_header(tmp_path: Path):
+    source = tmp_path / "invalid.pdf"
+    source.write_text("<html>not pdf</html>", encoding="utf-8")
+
+    result = await PdfFileValidator().validate(source)
+
+    assert result.ok is False
+    assert result.error_code == PdfValidationErrorCode.INVALID_HEADER
+
+
+def test_pdf_strategy_adds_snapshots_for_scanned_like_pdf():
+    decision = PdfExtractionStrategy().decide(
+        pages=[1, 2],
+        metadata={"is_scanned_like": True},
+        extract_embedded_images=True,
+    )
+
+    assert decision.extract_text_layer is True
+    assert decision.extract_embedded_images is True
+    assert decision.extract_page_snapshots is True
+    assert decision.page_snapshot_pages == [1, 2]
+    assert decision.reason == "scanned_like_pdf"
+
+
+@pytest.mark.asyncio
+async def test_pdf_page_snapshot_extractor_wraps_rendered_pages(tmp_path: Path):
+    class FakeRenderBackend:
+        """测试用 PDF 渲染后端。"""
+
+        async def render_pages(self, path, pages, output_dir, *, dpi=120, image_format="jpg"):
+            """写入伪造图片并返回渲染结果。"""
+
+            rendered = []
+            for page in pages:
+                output_path = output_dir / f"page_{page}.jpg"
+                output_path.write_bytes(b"mock image bytes")
+                rendered.append(
+                    PdfRenderedPage(
+                        page=page,
+                        path=output_path,
+                        width=100,
+                        height=200,
+                        format="JPG",
+                        content_hash=f"hash-{page}",
+                        backend="fake",
+                    )
+                )
+            return rendered
+
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"%PDF-1.7")
+    output_dir = tmp_path / "source.document"
+
+    assets = await PdfPageSnapshotExtractor(FakeRenderBackend()).extract(
+        source,
+        output_dir,
+        [2],
+        render_reason="layout_required",
+        start_index=3,
+    )
+
+    assert len(assets) == 1
+    assert assets[0].asset_id == "asset_0003"
+    assert assets[0].asset_type == DocumentAssetType.PAGE_SNAPSHOT.value
+    assert assets[0].path == "assets/page_2.jpg"
+    assert assets[0].metadata["page"] == 2
+    assert assets[0].metadata["render_reason"] == "layout_required"
+
+
+def test_document_image_understander_selects_page_snapshot_assets(tmp_path: Path):
+    index = {
+        "total_units": 3,
+        "chunks": [],
+        "assets": [
+            {
+                "asset_type": DocumentAssetType.PAGE_SNAPSHOT.value,
+                "path": "assets/page_002.jpg",
+                "source_range": "pages:2",
+                "metadata": {"page": 2},
+            },
+            {
+                "asset_type": "attachment",
+                "path": "assets/raw.bin",
+                "source_range": "pages:2",
+                "metadata": {"page": 2},
+            },
+        ],
+    }
+
+    assets = DocumentImageUnderstander._select_assets(index, tmp_path, [], "2", None, force=True)
+
+    assert len(assets) == 1
+    assert assets[0]["asset_type"] == DocumentAssetType.PAGE_SNAPSHOT.value
 
 
 def test_image_watermark_detector_preserves_protected_solid_images(tmp_path: Path):
@@ -879,34 +985,32 @@ async def test_document_image_understander_keeps_failed_result_out_of_chunk(tmp_
 
 
 @pytest.mark.asyncio
-async def test_pdf_visual_mode_persists_recognition_result(tmp_path: Path, monkeypatch):
+async def test_pdf_visual_hint_persists_page_snapshot_asset(tmp_path: Path):
+    import fitz
+
     source = tmp_path / "sample.pdf"
     output_dir = tmp_path / "sample-pdf.document"
-    source.write_bytes(b"%PDF test placeholder")
 
-    async def fake_metadata(path: Path):
-        return {
-            "page_count": 2,
-            "sample_pages": 2,
-            "avg_chars_per_sample_page": 0,
-            "text_density": "low",
-            "has_images_in_sample": True,
-        }
+    doc = fitz.open()
+    page = doc.new_page(width=200, height=160)
+    page.insert_text((20, 30), "Mock chart recognition source.")
+    doc.save(str(source))
+    doc.close()
 
-    async def fake_outline(path: Path):
-        return []
+    extraction = await PdfDocumentDriver().extract(
+        source,
+        output_dir,
+        ranges="1",
+        mode="visual",
+        extract_images=False,
+        visual_hint="page_snapshot",
+    )
 
-    async def fake_visual(path: Path, pages, query=None):
-        return "## Page 1\n\nMock chart recognition result."
-
-    monkeypatch.setattr("app.utils.document_parse.drivers.pdf_driver.PdfMetadata.inspect", fake_metadata)
-    monkeypatch.setattr("app.utils.document_parse.drivers.pdf_driver.PdfOutlineReader.read", fake_outline)
-    monkeypatch.setattr("app.utils.document_parse.drivers.pdf_driver.PdfVisualExtractor.extract_pages", fake_visual)
-
-    extraction = await PdfDocumentDriver().extract(source, output_dir, ranges="1", mode="visual")
-
-    assert extraction.metadata["visual_result_path"] == "visual-results/pdf_pages_1.md"
-    assert (output_dir / "visual-results" / "pdf_pages_1.md").read_text(encoding="utf-8") == "## Page 1\n\nMock chart recognition result."
+    assert extraction.metadata["mode"] == "hybrid"
+    assert extraction.metadata["requested_mode"] == "visual"
+    assert extraction.assets[0].asset_type == DocumentAssetType.PAGE_SNAPSHOT.value
+    assert (output_dir / extraction.assets[0].path).exists()
+    assert "### Page Snapshot" in extraction.chunks[0].content
     assert extraction.chunks[0].path == "chunks/chunk_0001.md"
 
 
@@ -959,7 +1063,10 @@ async def test_pdf_local_text_filters_solid_image_assets(tmp_path: Path):
     output_dir = tmp_path / "with-solid-image.document"
     extraction = await PdfDocumentDriver().extract(source, output_dir, mode="local_text", extract_images=True)
 
-    assert len(extraction.assets) == 1
+    embedded_assets = [asset for asset in extraction.assets if asset.asset_type == DocumentAssetType.EMBEDDED_IMAGE.value]
+    snapshot_assets = [asset for asset in extraction.assets if asset.asset_type == DocumentAssetType.PAGE_SNAPSHOT.value]
+    assert len(embedded_assets) == 1
+    assert len(snapshot_assets) == 1
     assert extraction.metadata["skipped_images"][0]["reason"] == "invalid solid or blank image"
     assert "Filtered solid/blank image 1" in extraction.chunks[0].content
     assert "image 2" in extraction.chunks[0].content
@@ -1237,10 +1344,13 @@ async def test_pdf_skips_watermark_images_and_keeps_one_repeated_logo(tmp_path: 
     output_dir = tmp_path / "with-watermark.document"
     extraction = await PdfDocumentDriver().extract(source, output_dir, mode="local_text", extract_images=True)
 
-    assert len(extraction.assets) == 2
+    embedded_assets = [asset for asset in extraction.assets if asset.asset_type == DocumentAssetType.EMBEDDED_IMAGE.value]
+    snapshot_assets = [asset for asset in extraction.assets if asset.asset_type == DocumentAssetType.PAGE_SNAPSHOT.value]
+    assert len(embedded_assets) == 2
+    assert len(snapshot_assets) == 3
     assert len([item for item in extraction.metadata["skipped_images"] if "watermark" in item["reason"]]) == 3
     assert len([item for item in extraction.metadata["skipped_images"] if "duplicate repeated image" in item["reason"]]) == 2
-    assert extraction.chunks[0].content.count("![") == 2
+    assert extraction.chunks[0].content.count("![") == 5
 
 
 @pytest.mark.asyncio

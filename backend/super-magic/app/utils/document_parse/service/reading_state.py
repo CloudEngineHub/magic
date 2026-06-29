@@ -55,6 +55,7 @@ class ReadingStateStore:
             "sampled_ranges": existing.get("sampled_ranges") or [],
             "extracted_ranges": existing.get("extracted_ranges") or [],
             "visually_understood_images": existing.get("visually_understood_images") or [],
+            "rendered_page_snapshots": existing.get("rendered_page_snapshots") or [],
             "unread_ranges": existing.get("unread_ranges") or [],
             "discovered_sections": existing.get("discovered_sections") or [],
             "recommended_next_actions": existing.get("recommended_next_actions") or [],
@@ -111,6 +112,29 @@ class ReadingStateStore:
         )
         state["extracted_ranges"] = self._append_unique(state.get("extracted_ranges"), extracted_range)
         state["unread_ranges"] = self._compute_unread_ranges(state)
+        return await self.save(output_dir, state)
+
+    async def mark_page_snapshots_rendered(
+        self,
+        output_dir: Path,
+        *,
+        snapshots: list[dict[str, Any]],
+        recommendations: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """在阅读状态中记录已经渲染的 PDF 整页快照。"""
+
+        state = await self.load(output_dir)
+        rendered = list(state.get("rendered_page_snapshots") or [])
+        seen = {str(item.get("asset_path") or "") for item in rendered}
+        for snapshot in snapshots:
+            asset_path = str(snapshot.get("asset_path") or "")
+            if not asset_path or asset_path in seen:
+                continue
+            rendered.append(snapshot)
+            seen.add(asset_path)
+        state["rendered_page_snapshots"] = rendered
+        if recommendations is not None:
+            state["recommended_next_actions"] = recommendations
         return await self.save(output_dir, state)
 
     async def mark_images_understood(
