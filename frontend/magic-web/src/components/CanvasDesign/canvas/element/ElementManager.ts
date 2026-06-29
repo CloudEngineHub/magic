@@ -65,6 +65,8 @@ export class ElementManager {
 	private canvas: Canvas
 
 	private elements: Map<string, BaseElement> = new Map()
+	private elementDraggingDisabled = false
+	private elementListeningDisabled = false
 	private batchMode = false
 	private isBatchDeleting = false
 	private pendingBatchDeleteChangeIds: Set<string> = new Set()
@@ -1854,6 +1856,8 @@ export class ElementManager {
 	 * 禁用所有元素的拖拽和交互功能
 	 */
 	public disableElementDragging(): void {
+		this.elementDraggingDisabled = true
+		this.elementListeningDisabled = true
 		this.elements.forEach((element) => {
 			element.setDraggable(false)
 			element.setListening(false)
@@ -1864,9 +1868,14 @@ export class ElementManager {
 	 * 只禁用所有元素的拖拽功能，保持交互功能（listening）
 	 */
 	public disableElementDraggingOnly(): void {
+		this.elementDraggingDisabled = true
 		this.elements.forEach((element) => {
 			element.setDraggable(false)
 		})
+	}
+
+	public canListenElement(): boolean {
+		return !this.elementListeningDisabled
 	}
 
 	/**
@@ -1879,6 +1888,10 @@ export class ElementManager {
 	 * 必须关闭原生拖拽，否则命中真实节点时会绕过 proxy，只拖动单个元素。
 	 */
 	public canDragElement(elementData: LayerElement): boolean {
+		if (this.elementDraggingDisabled) {
+			return false
+		}
+
 		const selectionManager = this.canvas.selectionManager
 		const isSelected = selectionManager?.isSelected(elementData.id) ?? false
 		const selectionCount = selectionManager?.getSelectionCount() ?? 0
@@ -1897,6 +1910,8 @@ export class ElementManager {
 	 * 恢复所有元素的拖拽和交互功能（根据权限管理器判断）
 	 */
 	public enableElementDragging(): void {
+		this.elementDraggingDisabled = false
+		this.elementListeningDisabled = false
 		this.elements.forEach((element) => {
 			const elementData = element.getData()
 			element.setDraggable(this.canDragElement(elementData))

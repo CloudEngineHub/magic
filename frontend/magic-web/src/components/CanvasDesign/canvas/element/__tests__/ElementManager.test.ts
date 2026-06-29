@@ -15,7 +15,19 @@ interface DragManagerHarness {
 		}
 		isKeepRatioModifierPressed: () => boolean
 	}
+	elements?: Map<
+		string,
+		{
+			getData: () => LayerElement
+			setDraggable: ReturnType<typeof vi.fn>
+			setListening: ReturnType<typeof vi.fn>
+		}
+	>
 	canDragElement: (element: LayerElement) => boolean
+	canListenElement: () => boolean
+	disableElementDragging: () => void
+	disableElementDraggingOnly: () => void
+	enableElementDragging: () => void
 }
 
 function createManager(options: { selectedIds?: string[]; canTransform?: boolean } = {}) {
@@ -63,6 +75,49 @@ describe("ElementManager drag eligibility", () => {
 		const manager = createManager({ selectedIds: ["element-1", "element-2"] })
 
 		expect(manager.canDragElement(createElement("element-3"))).toBe(true)
+	})
+
+	it("keeps rerendered nodes non-interactive while element dragging is disabled", () => {
+		const manager = createManager()
+		const elementData = createElement("element-1")
+		const element = {
+			getData: () => elementData,
+			setDraggable: vi.fn(),
+			setListening: vi.fn(),
+		}
+		manager.elements = new Map([["element-1", element]])
+
+		manager.disableElementDragging()
+
+		expect(manager.canDragElement(elementData)).toBe(false)
+		expect(manager.canListenElement()).toBe(false)
+		expect(element.setDraggable).toHaveBeenLastCalledWith(false)
+		expect(element.setListening).toHaveBeenLastCalledWith(false)
+
+		manager.enableElementDragging()
+
+		expect(manager.canDragElement(elementData)).toBe(true)
+		expect(manager.canListenElement()).toBe(true)
+		expect(element.setDraggable).toHaveBeenLastCalledWith(true)
+		expect(element.setListening).toHaveBeenLastCalledWith(true)
+	})
+
+	it("keeps listening enabled when only element dragging is disabled", () => {
+		const manager = createManager()
+		const elementData = createElement("element-1")
+		const element = {
+			getData: () => elementData,
+			setDraggable: vi.fn(),
+			setListening: vi.fn(),
+		}
+		manager.elements = new Map([["element-1", element]])
+
+		manager.disableElementDraggingOnly()
+
+		expect(manager.canDragElement(elementData)).toBe(false)
+		expect(manager.canListenElement()).toBe(true)
+		expect(element.setDraggable).toHaveBeenLastCalledWith(false)
+		expect(element.setListening).not.toHaveBeenCalled()
 	})
 })
 
