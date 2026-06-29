@@ -93,6 +93,10 @@ export interface SceneEditorContext {
 	onFileClick?: (fileItem: unknown) => void
 	onEditorFocus?: () => void
 	onEditorBlur?: () => void
+	onMessageSendReady?: (
+		sendMessage?: (params: HandleSendParams) => Promise<boolean>,
+		prevSendMessage?: (params: HandleSendParams) => Promise<boolean>,
+	) => void
 	handleInterrupt?: () => void
 	mergeSendParams?: (params: {
 		defaultParams: HandleSendParams

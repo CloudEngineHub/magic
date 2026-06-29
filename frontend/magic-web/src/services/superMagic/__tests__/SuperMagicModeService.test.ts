@@ -147,13 +147,20 @@ function createDeferred<T>() {
 	}
 }
 
+async function flushPendingBootstrap() {
+	await Promise.resolve()
+	await Promise.resolve()
+}
+
 describe("SuperMagicModeService", () => {
 	afterEach(() => {
 		vi.useRealTimers()
 	})
 
-	beforeEach(() => {
+	beforeEach(async () => {
+		await flushPendingBootstrap()
 		vi.clearAllMocks()
+		window.history.replaceState({}, "", "/")
 		window.localStorage.clear()
 		mockModeListStore.clear()
 		;(superMagicModeService as any)._legacyMigrationPromise = null
@@ -417,6 +424,7 @@ describe("SuperMagicModeService", () => {
 	})
 
 	it("does not auto-fetch default mode models after featured list refresh", async () => {
+		window.history.replaceState({}, "", "/?__smModeDiag=skip-default-model")
 		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue(createCrewList("general"))
 		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
 			groups: [],
@@ -426,6 +434,63 @@ describe("SuperMagicModeService", () => {
 		await superMagicModeService.fetchModeList()
 
 		expect(SuperMagicApi.getDefaultModeModelList).not.toHaveBeenCalled()
+	})
+
+	it("temporary skip-storage diagnostic bypasses mode cache hydration", async () => {
+		window.history.replaceState({}, "", "/?__smModeDiag=skip-storage")
+		window.localStorage.setItem(
+			createModeListStorageKey("zh_CN"),
+			JSON.stringify([{ mode: { identifier: "cached-zh" }, groups: [] }]),
+		)
+
+		await superMagicModeService.hydrateFromStorage()
+
+		expect(superMagicModeService.modeList).toEqual([])
+		expect(mockModeListStore.has(createModeListStorageKey("zh_CN"))).toBe(false)
+		expect(window.localStorage.getItem(createModeListStorageKey("zh_CN"))).not.toBeNull()
+	})
+
+	it("temporary skip-persist diagnostic keeps fetched mode list out of storage", async () => {
+		window.history.replaceState({}, "", "/?__smModeDiag=skip-persist")
+		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue(createCrewList("general"))
+		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+			groups: [],
+			models: {},
+		} as any)
+
+		await superMagicModeService.fetchModeList()
+
+		expect(superMagicModeService.modeList[0]?.mode.identifier).toBe("general")
+		expect(mockModeListStore.has(createModeListStorageKey("zh_CN"))).toBe(false)
+	})
+
+	it("temporary skip-bootstrap diagnostic bypasses mode bootstrap IO", async () => {
+		window.history.replaceState({}, "", "/?__smModeDiag=skip-bootstrap")
+		window.localStorage.setItem(
+			createModeListStorageKey("zh_CN"),
+			JSON.stringify([{ mode: { identifier: "cached-zh" }, groups: [] }]),
+		)
+		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue(createCrewList("general"))
+		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+			groups: [],
+			models: {},
+		} as any)
+
+		await superMagicModeService.hydrateFromStorage()
+		const result = await superMagicModeService.fetchModeList()
+		await superMagicModeService.fetchDefaultModeModelList({ force: true })
+		await superMagicModeService.migrateLegacyLocalStorage()
+		await superMagicModeService.persistToStorage(
+			createCrewList("general").list,
+			createModeListStorageKey("zh_CN"),
+		)
+
+		expect(result).toEqual([])
+		expect(superMagicModeService.modeList).toEqual([])
+		expect(SuperMagicApi.getCrewList).not.toHaveBeenCalled()
+		expect(SuperMagicApi.getDefaultModeModelList).not.toHaveBeenCalled()
+		expect(mockModeListStore.has(createModeListStorageKey("zh_CN"))).toBe(false)
+		expect(window.localStorage.getItem(createModeListStorageKey("zh_CN"))).not.toBeNull()
 	})
 
 	it("treats empty crew list as successful refresh and clears cached state", async () => {
@@ -508,10 +573,12 @@ describe("SuperMagicModeService", () => {
 		} as any)
 
 		const firstFetchPromise = superMagicModeService.fetchModeList()
-
+		await flushPendingBootstrap()
+		expect(SuperMagicApi.getCrewList).toHaveBeenCalledTimes(1)
 		;(configStore.i18n as any).displayLanguage = "en_US"
 
 		const secondFetchPromise = superMagicModeService.fetchModeList()
+		await flushPendingBootstrap()
 		expect(SuperMagicApi.getCrewList).toHaveBeenCalledTimes(2)
 
 		await secondFetchPromise

@@ -12,6 +12,8 @@ import { Spinner } from "@/components/shadcn-ui/spinner"
 import { observer } from "mobx-react-lite"
 import { MCPItem } from "./MCPItem"
 import { MCPUserGroup, useMCPPanelController } from "./useMCPPanelController"
+import AuthManagerModal from "@/pages/flow/components/AuthControlButton/AuthManagerModal/index"
+import { ResourceTypes } from "@/pages/flow/components/AuthControlButton/types"
 
 const segmentedClassName = cn(
 	"rounded-md border border-border p-1",
@@ -57,6 +59,9 @@ export const MCPPanel = observer(function MCPPanel(props: MCPPanelProps) {
 		openEditForm,
 		onStatusChange,
 		usableCache,
+		authModalState,
+		openManageAuth,
+		closeManageAuth,
 	} = controller
 
 	const options = useMemo(() => {
@@ -123,6 +128,7 @@ export const MCPPanel = observer(function MCPPanel(props: MCPPanelProps) {
 									selected={usableCache.has(item.id)}
 									onStatusChange={onStatusChange}
 									onClick={openEditForm}
+									onManageAuth={openManageAuth}
 								/>
 							))}
 							{data && data?.length < 1 && (
@@ -147,6 +153,7 @@ export const MCPPanel = observer(function MCPPanel(props: MCPPanelProps) {
 			onStatusChange,
 			openCreateForm,
 			openEditForm,
+			openManageAuth,
 			options,
 			setType,
 			t,
@@ -154,6 +161,18 @@ export const MCPPanel = observer(function MCPPanel(props: MCPPanelProps) {
 			usableCache,
 		],
 	)
+
+	const authModalDom = useMemo(() => {
+		if (!authModalState.open) return null
+		return (
+			<AuthManagerModal
+				title={t("agent:mcp.panel.manageAuth")}
+				open={authModalState.open}
+				extraConfig={{ resourceType: ResourceTypes.Mcp, resourceId: authModalState.resourceId }}
+				onClose={closeManageAuth}
+			/>
+		)
+	}, [authModalState.open, authModalState.resourceId, closeManageAuth])
 
 	if (isMobile) {
 		return (
@@ -194,6 +213,7 @@ export const MCPPanel = observer(function MCPPanel(props: MCPPanelProps) {
 					</div>
 				</div>
 				{scrollDom}
+				{authModalDom}
 			</div>
 		)
 	}
@@ -248,6 +268,7 @@ export const MCPPanel = observer(function MCPPanel(props: MCPPanelProps) {
 				</div>
 			</div>
 			{scrollDom}
+			{authModalDom}
 		</div>
 	)
 })

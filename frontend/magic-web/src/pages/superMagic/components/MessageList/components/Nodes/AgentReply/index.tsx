@@ -57,6 +57,7 @@ function AgentReply(props: NodeProps) {
 			)}
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
 		>
 			{/*<Text data={node} isUser={false} hideHeader onSelectDetail={() => {}} />*/}
 			<div

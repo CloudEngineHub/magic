@@ -1,51 +1,36 @@
 import { useState, useEffect, useMemo } from "react"
 import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { findTreeNodeByKey, getNodePath, type TreeNodeData } from "../utils/treeDataConverter"
+import type { AttachmentItem } from "./types"
+import {
+	getAttachmentByLookupKey,
+	getParentItemByLookupKey,
+	getPathKeysByLookupKey,
+	resolveAttachmentKey,
+	type AttachmentIndex,
+} from "../utils/attachmentIndex"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
 import { ProjectStateRepository } from "@/models/config/repositories/SuperProjectStateRepository"
 
 interface UseLocateFileOptions {
-	treeData: TreeNodeData[]
+	treeIndex: AttachmentIndex
 	expandedKeys: React.Key[]
 	setExpandedKeys: (keys: React.Key[]) => void
 	selectedProjectId?: string
 }
 
 /**
- * 查找树节点的父节点
- */
-export function findParentNode(treeData: TreeNodeData[], targetKey: string): TreeNodeData | null {
-	function search(nodes: TreeNodeData[]): TreeNodeData | null {
-		for (const node of nodes) {
-			if (node.children) {
-				// 检查当前节点的直接子节点中是否包含目标节点
-				const hasChild = node.children.some((child) => child.key === targetKey)
-				if (hasChild) {
-					return node
-				}
-				// 递归查找子节点
-				const found = search(node.children)
-				if (found) return found
-			}
-		}
-		return null
-	}
-	return search(treeData)
-}
-
-/**
  * 在 PPT 节点的直接子节点中查找页面文件节点（只查找第一层）
  */
-export function findSlidePageNodeByName(
-	pptNode: TreeNodeData,
+export function findSlidePageItemByName(
+	pptItem: AttachmentItem,
 	pageFileName: string,
-): TreeNodeData | null {
+): AttachmentItem | null {
 	// 只查找第一层子节点，不递归
-	if (!pptNode.children) return null
+	if (!pptItem.children) return null
 
-	for (const child of pptNode.children) {
-		if (child.item?.file_name === pageFileName) {
+	for (const child of pptItem.children) {
+		if (child.file_name === pageFileName) {
 			return child
 		}
 	}
@@ -58,7 +43,7 @@ export function findSlidePageNodeByName(
  * 支持 PPT 文件的智能定位（定位到当前激活的页面）
  */
 export function useLocateFile(options: UseLocateFileOptions) {
-	const { treeData, expandedKeys, setExpandedKeys, selectedProjectId } = options
+	const { treeIndex, expandedKeys, setExpandedKeys, selectedProjectId } = options
 	const { organizationCode } = useOrganization()
 	const projectStateRepository = useMemo(() => new ProjectStateRepository(), [])
 
@@ -69,8 +54,8 @@ export function useLocateFile(options: UseLocateFileOptions) {
 	const handleLocateNormalFile = useMemoizedFn((fileId: string) => {
 		console.log("📍 Locating normal file:", fileId)
 
-		// 获取文件的路径（包括所有父文件夹）
-		const path = getNodePath(treeData, fileId)
+		// Read the path from treeIndex to avoid scanning the full tree.
+		const path = getPathKeysByLookupKey(treeIndex, fileId)
 		console.log("📂 File path:", path)
 
 		// 展开所有父文件夹（排除最后一个，因为那是文件本身）
@@ -96,7 +81,7 @@ export function useLocateFile(options: UseLocateFileOptions) {
 	})
 
 	// 处理 PPT 文件定位
-	const handleLocatePPTFile = useMemoizedFn(async (pptFileId: string, pptNode: TreeNodeData) => {
+	const handleLocatePPTFile = useMemoizedFn(async (pptFileId: string, pptItem: AttachmentItem) => {
 		console.log("📊 Locating PPT file:", pptFileId)
 
 		// 1. 从缓存获取当前激活的页面索引
@@ -115,7 +100,7 @@ export function useLocateFile(options: UseLocateFileOptions) {
 		}
 
 		// 2. 从 display_config.slides 获取页面文件名
-		const slides = pptNode.item.display_config.slides
+		const slides = pptItem.display_config?.slides
 		if (!slides || !Array.isArray(slides)) {
 			console.warn("⚠️ PPT slides array not found, fallback to entry file")
 			handleLocateNormalFile(pptFileId)
@@ -126,12 +111,13 @@ export function useLocateFile(options: UseLocateFileOptions) {
 		console.log("📄 Target page file:", pageFileName, "at index:", activeIndex)
 
 		// 3. 查找对应的页面文件节点（只在当前 PPT 的第一层子节点中查找）
-		const pageNode = findSlidePageNodeByName(pptNode, pageFileName)
+		const pageItem = findSlidePageItemByName(pptItem, pageFileName)
 
-		if (pageNode) {
-			console.log("✅ Found page file node, locating to:", pageNode.key)
+		if (pageItem) {
+			const pageKey = resolveAttachmentKey(pageItem, pageFileName)
+			console.log("✅ Found page file item, locating to:", pageKey)
 			// 定位到页面文件
-			handleLocateNormalFile(pageNode.key as string)
+			handleLocateNormalFile(pageKey)
 		} else {
 			// 降级：定位到 PPT 入口文件
 			console.warn("⚠️ Page file not found, fallback to entry file")
@@ -143,22 +129,22 @@ export function useLocateFile(options: UseLocateFileOptions) {
 	const handleLocateFileInTree = useMemoizedFn(async (fileId: string) => {
 		console.log("🎯 Locating file in tree:", fileId)
 
-		// 查找文件节点
-		const node = findTreeNodeByKey(treeData, fileId)
-		if (!node) {
-			console.warn("⚠️ File node not found in tree:", fileId)
+		// Find the file.
+		const item = getAttachmentByLookupKey(treeIndex, fileId)
+		if (!item) {
+			console.warn("⚠️ File item not found in tree:", fileId)
 			return
 		}
 
 		// 检查是否是 PPT 入口文件
-		if (node.item?.display_config?.type === "slide" && node.item?.display_config?.slides) {
-			const parentNode = findParentNode(treeData, fileId)
-			if (!parentNode) {
-				console.warn("⚠️ Parent node not found for PPT entry file:", fileId)
+		if (item.display_config?.type === "slide" && item.display_config?.slides) {
+			const parentItem = getParentItemByLookupKey(treeIndex, fileId)
+			if (!parentItem) {
+				console.warn("⚠️ Parent item not found for PPT entry file:", fileId)
 				return
 			}
 			console.log("🎬 Detected PPT entry file, handling PPT location")
-			await handleLocatePPTFile(fileId, parentNode as TreeNodeData)
+			await handleLocatePPTFile(fileId, parentItem)
 			return
 		}
 		// 普通文件定位

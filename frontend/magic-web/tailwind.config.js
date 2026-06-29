@@ -15,7 +15,9 @@ const config = {
 			"./search.html",
 			"./dingtalk.html",
 			"./src/**/*.{ts,tsx,jsx}",
+			"./enterprise/src/**/*.{ts,tsx,jsx}",
 			"!./src/**/node_modules/**",
+			"!./enterprise/src/**/node_modules/**",
 			"./node_modules/@dtyq/user-selector/dist/**/*.js",
 		],
 	},
@@ -169,6 +171,14 @@ const config = {
 					from: { transform: "translateX(100%)", opacity: "0" },
 					to: { transform: "translateX(0)", opacity: "1" },
 				},
+				"drawer-slide-in-left": {
+					from: { transform: "translateX(-100%)" },
+					to: { transform: "translateX(0)" },
+				},
+				"drawer-slide-in-right": {
+					from: { transform: "translateX(100%)" },
+					to: { transform: "translateX(0)" },
+				},
 				"voice-wave": {
 					"0%, 100%": { transform: "scaleY(1)" },
 					"50%": { transform: "scaleY(0.5)" },
@@ -255,6 +265,8 @@ const config = {
 			animation: {
 				"slide-in-from-left": "slide-in-from-left 0.3s ease-out",
 				"slide-in-from-right": "slide-in-from-right 0.3s ease-out",
+				"drawer-slide-in-left": "drawer-slide-in-left 0.2s ease-out",
+				"drawer-slide-in-right": "drawer-slide-in-right 0.2s ease-out",
 				"voice-wave": "voice-wave 1.2s ease-in-out infinite",
 				skeleton: "skeleton-loading 1.5s ease-in-out infinite",
 				fadeInUp: "fadeInUp 0.5s ease-out",

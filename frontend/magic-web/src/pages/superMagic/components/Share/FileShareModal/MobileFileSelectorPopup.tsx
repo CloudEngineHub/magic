@@ -73,6 +73,7 @@ function MobileFileSelectorPopup({
 						onCheckedChange={(checked) => {
 							onShareProjectChange?.(checked)
 						}}
+						data-testid="on-share-project-change"
 					/>
 					<div className="flex flex-1 flex-col gap-2">
 						<div className="pt-[3px] text-sm font-medium leading-none text-foreground">

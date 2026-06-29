@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import MagicModal from "@/components/base/MagicModal"
+import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	Select,
 	SelectContent,
@@ -17,6 +18,7 @@ import {
 	IframePermissionService,
 	type HtmlAppConfigState,
 	type HtmlPermissionConfirmRequest,
+	type HtmlPermissionMissingDeclarationRequest,
 } from "../iframe-api/services/IframePermissionService"
 import type { HTMLAppConfig, HtmlPermissionScope } from "../iframe-api/types"
 
@@ -94,6 +96,7 @@ export function useHtmlAppPermissions({
 		({
 			appName,
 			isLegacy,
+			appConfigLoadError,
 			scopeLabelKey,
 			reason,
 			ttlOptions,
@@ -103,7 +106,9 @@ export function useHtmlAppPermissions({
 				let selectedTtlMs = defaultTtlMs
 				const scopeLabel = t(scopeLabelKey)
 				const contentKey = isLegacy
-					? "htmlEditor.permissionAuthorizationConfirm.legacyContent"
+					? appConfigLoadError
+						? "htmlEditor.permissionAuthorizationConfirm.appConfigUnavailableContent"
+						: "htmlEditor.permissionAuthorizationConfirm.legacyContent"
 					: reason
 						? "htmlEditor.permissionAuthorizationConfirm.content"
 						: "htmlEditor.permissionAuthorizationConfirm.contentWithoutReason"
@@ -116,6 +121,7 @@ export function useHtmlAppPermissions({
 									appName,
 									scope: scopeLabel,
 									reason,
+									error: appConfigLoadError,
 								})}
 							</p>
 							<Select
@@ -159,15 +165,36 @@ export function useHtmlAppPermissions({
 			}),
 	)
 
+	const notifyMissingPermissionDeclaration = useMemoizedFn(
+		({ appName, scope, scopeLabelKey }: HtmlPermissionMissingDeclarationRequest) => {
+			magicToast.warning({
+				key: `html-permission-missing-${scope}`,
+				content: t("htmlEditor.permissionAuthorizationConfirm.missingScope", {
+					appName,
+					scope: t(scopeLabelKey),
+					rawScope: scope,
+				}),
+				duration: 4000,
+			})
+		},
+	)
+
 	const htmlPermissionService = useMemo(
 		() =>
 			new IframePermissionService({
 				grantStore: htmlPermissionGrantStore,
 				confirmPermission: confirmHtmlPermission,
+				onMissingDeclaration: notifyMissingPermissionDeclaration,
 				appConfigState: htmlAppConfigState,
 				appInstance: htmlAppInstance,
 			}),
-		[confirmHtmlPermission, htmlAppConfigState, htmlAppInstance, htmlPermissionGrantStore],
+		[
+			confirmHtmlPermission,
+			htmlAppConfigState,
+			htmlAppInstance,
+			htmlPermissionGrantStore,
+			notifyMissingPermissionDeclaration,
+		],
 	)
 
 	const authorizeHtmlPermission = useMemoizedFn((scope: HtmlPermissionScope) =>
@@ -237,6 +264,7 @@ export function useHtmlAppPermissions({
 
 	return {
 		htmlAppConfig,
+		htmlAppConfigState,
 		htmlAppInstanceKey,
 		authorizeHtmlPermission,
 	}

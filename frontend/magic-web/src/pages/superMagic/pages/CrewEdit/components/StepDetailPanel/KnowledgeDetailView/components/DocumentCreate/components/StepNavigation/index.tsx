@@ -23,6 +23,7 @@ const LoadingButton = React.forwardRef<
 			data-slot="button"
 			className={cn(buttonVariants({ variant, size, className }))}
 			disabled={loading || props.disabled}
+			data-testid="step-navigation-button"
 			{...props}
 		>
 			{loading && <Loader2 className="size-4 animate-spin" />}

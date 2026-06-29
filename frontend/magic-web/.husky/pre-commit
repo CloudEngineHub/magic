@@ -1,11 +1,19 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
+# Resolve the magic-web project root from this hook's location.
+# Works both in the monorepo (git root != project root) and when
+# magic-web is distributed as a standalone repository.
+MAGIC_WEB_DIR="$(cd "$(dirname -- "$0")/.." && pwd)"
+cd "$MAGIC_WEB_DIR"
 
 # Check for hardcoded tokens
 echo "🔍 Checking for hardcoded tokens..."
-node scripts/git-hooks/check-hardcoded-tokens.cjs
-if [ $? -ne 0 ]; then
-  exit 1
+if ! node scripts/git-hooks/check-hardcoded-tokens.cjs; then
+	exit 1
+fi
+
+# Block commits when OKLCH and RGB tokens drift.
+echo "🎨 Checking theme RGB tokens..."
+if ! pnpm generate:theme-rgb-tokens:check; then
+	exit 1
 fi
 
 # Run lint-staged for code formatting

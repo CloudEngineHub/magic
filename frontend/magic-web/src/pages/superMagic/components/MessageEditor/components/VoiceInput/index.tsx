@@ -7,6 +7,7 @@ import { Editor, JSONContent } from "@tiptap/core"
 import { logger as Logger } from "@/utils/log"
 import { useMemoizedFn } from "ahooks"
 import { forwardRef, Ref, useRef, useImperativeHandle, useEffect, type ReactNode } from "react"
+import { runActiveEditor } from "../../utils/editorLifecycle"
 
 type VoiceInputCommitMode = "live" | "deferred"
 
@@ -107,18 +108,21 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 			if (!tiptapEditor) return
 
 			try {
-				if (!isMobile && !tiptapEditor.isFocused) {
-					tiptapEditor.commands.focus()
-				}
+				runActiveEditor(tiptapEditor, (editor) => {
+					if (!isMobile && !editor.isFocused) {
+						editor.commands.focus()
+					}
 
-				// Process each utterance segment incrementally
-				processUtterances(response.utterances, tiptapEditor)
+					// Process each utterance segment incrementally
+					processUtterances(response.utterances, editor)
+				})
 
 				// Update value after DOM updates
 				requestAnimationFrame(() => {
-					if (tiptapEditor.isDestroyed) return
-					const newContent = tiptapEditor.getJSON()
-					updateValue?.(newContent)
+					runActiveEditor(tiptapEditor, (editor) => {
+						const newContent = editor.getJSON()
+						updateValue?.(newContent)
+					})
 				})
 			} catch (error) {
 				logger.error("Voice input processing failed", error)
@@ -331,33 +335,36 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 			}
 
 			if (isRecording && tiptapEditor) {
-				enableScrollIntoViewRef.current = true
-				shouldIgnoreNonDefiniteRef.current = false
-				lastDefinitePositionRef.current = null
-				lastTextSelectionRef.current = null
+				runActiveEditor(tiptapEditor, (editor) => {
+					enableScrollIntoViewRef.current = true
+					shouldIgnoreNonDefiniteRef.current = false
+					lastDefinitePositionRef.current = null
+					lastTextSelectionRef.current = null
 
-				// Calculate and save base insertion position
-				const currentSelection = tiptapEditor.state.selection
-				const endPosition = tiptapEditor.state.doc.content.size - 1
-				const startPos = currentSelection.head > 1 ? currentSelection.head : endPosition
-				lastTextSelectionRef.current = startPos
+					// Calculate and save base insertion position
+					const currentSelection = editor.state.selection
+					const endPosition = editor.state.doc.content.size - 1
+					const startPos = currentSelection.head > 1 ? currentSelection.head : endPosition
+					lastTextSelectionRef.current = startPos
 
-				console.log("初始化光标位置", startPos)
+					console.log("初始化光标位置", startPos)
 
-				if (!tiptapEditor.isFocused && !isMobile) {
-					console.log("初始化光标位置，聚焦编辑器")
-					tiptapEditor.commands.focus()
-				}
+					if (!editor.isFocused && !isMobile) {
+						console.log("初始化光标位置，聚焦编辑器")
+						editor.commands.focus()
+					}
+				})
 			} else if (!isRecording && tiptapEditor && !isMobile) {
 				lastDefinitePositionRef.current = null
 				shouldIgnoreNonDefiniteRef.current = false
 				// Fix cursor position at recording end
 				requestAnimationFrame(() => {
-					if (tiptapEditor.isDestroyed) return
-					if (lastTextSelectionRef.current !== null) {
-						tiptapEditor.commands.setTextSelection(lastTextSelectionRef.current)
-						lastTextSelectionRef.current = null
-					}
+					runActiveEditor(tiptapEditor, (editor) => {
+						if (lastTextSelectionRef.current !== null) {
+							editor.commands.setTextSelection(lastTextSelectionRef.current)
+							lastTextSelectionRef.current = null
+						}
+					})
 				})
 			}
 		})

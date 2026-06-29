@@ -10,6 +10,7 @@ import {
 	type DesignConflict,
 	type DesignProjectManagerOptions,
 	type DesignProjectStateBag,
+	type DesignSaveMetadata,
 } from "../managers"
 import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
 import type { DesignDraftReason } from "../utils/designDraftStorage"
@@ -20,12 +21,15 @@ export interface UseDesignProjectManagerReturn {
 	magicProjectJsFileId: string | null
 	designData: DesignData
 	updateDesignData: (updater: (draft: DesignData) => void) => void
-	updateDesignDataAndScheduleSave: (updater: (draft: DesignData) => void) => void
+	updateDesignDataAndScheduleSave: (
+		updater: (draft: DesignData) => void,
+		metadata?: DesignSaveMetadata,
+	) => void
 
 	isInitialLoading: boolean
 	isSaving: boolean
 
-	scheduleAutoSave: () => void
+	scheduleAutoSave: (metadata?: DesignSaveMetadata) => void
 	cancelAutoSave: () => void
 	persistLocalDraft: (
 		designData: DesignData,
@@ -65,13 +69,14 @@ export interface UseDesignProjectManagerReturn {
 	resolveEditedElementConflictsWithLocal: (
 		elementIds: string[],
 		nextDesignData: DesignData,
+		metadata?: DesignSaveMetadata,
 	) => boolean
 
 	fileVersionsList: FileHistoryVersion[]
 	fileVersion: number | undefined
 	isNewestVersion: boolean
 	handleChangeFileVersion: (version: number, isNewestVersion: boolean) => Promise<void>
-	handleReturnLatest: () => void
+	handleReturnLatest: () => Promise<void>
 	handleVersionRollback: (version?: number) => Promise<void>
 	fetchFileVersions: () => Promise<FileHistoryVersion[]>
 }
@@ -81,6 +86,10 @@ const INITIAL_DESIGN_DATA: DesignData = {
 	name: "",
 	version: MAGIC_PROJECT_VERSION_V2,
 	canvas: { elements: [] },
+}
+
+function getTopLevelElementCount(data: DesignData | null | undefined): number {
+	return data?.canvas?.elements?.length ?? 0
 }
 
 export function useDesignProjectManager(
@@ -195,12 +204,21 @@ export function useDesignProjectManager(
 	})
 
 	const updateDesignDataAndScheduleSave = useCallback(
-		(updater: (draft: DesignData) => void) => {
-			const nextData = produce(designDataRef.current, updater)
+		(updater: (draft: DesignData) => void, metadata?: DesignSaveMetadata) => {
+			if (!manager.canUpdateCurrentDesignData()) {
+				return
+			}
+			const previousData = designDataRef.current
+			const nextData = produce(previousData, updater)
 			designDataRef.current = nextData
 			updateDesignData(() => nextData)
 			manager.persistLocalDraft(nextData)
-			manager.scheduleAutoSave()
+			manager.scheduleAutoSave({
+				...metadata,
+				beforeElementCount:
+					metadata?.beforeElementCount ?? getTopLevelElementCount(previousData),
+				nextElementCount: metadata?.nextElementCount ?? getTopLevelElementCount(nextData),
+			})
 		},
 		[updateDesignData, manager],
 	)
@@ -220,7 +238,7 @@ export function useDesignProjectManager(
 		isInitialLoading,
 		isSaving,
 
-		scheduleAutoSave: () => manager.scheduleAutoSave(),
+		scheduleAutoSave: (metadata) => manager.scheduleAutoSave(metadata),
 		cancelAutoSave: () => manager.cancelAutoSave(),
 		persistLocalDraft: (data, persistOptions) =>
 			manager.persistLocalDraft(data, persistOptions),
@@ -253,8 +271,8 @@ export function useDesignProjectManager(
 			manager.resolveElementConflictWithLocal(elementId),
 		resolveElementConflictWithRemote: (elementId) =>
 			manager.resolveElementConflictWithRemote(elementId),
-		resolveEditedElementConflictsWithLocal: (elementIds, nextDesignData) =>
-			manager.resolveEditedElementConflictsWithLocal(elementIds, nextDesignData),
+		resolveEditedElementConflictsWithLocal: (elementIds, nextDesignData, metadata) =>
+			manager.resolveEditedElementConflictsWithLocal(elementIds, nextDesignData, metadata),
 
 		fileVersionsList,
 		fileVersion,

@@ -62,8 +62,9 @@ const FileManager: React.FC = () => {
 						)}
 						onClick={() => handleTabChange(item.key)}
 						type="button"
+						data-testid="handle-tab-change"
 					>
-						<img src={item.icon} className={styles.tabIcon} alt="" />
+						<img src={item.icon} className={styles.tabIcon} alt=""  data-testid="file-manager-image"/>
 						{item.label}
 					</button>
 				))}

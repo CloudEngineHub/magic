@@ -55,7 +55,7 @@
 			"title": "Notice"
 		},
 		"confirm": "Go to International Site",
-		"content": "Your invitation code is for the Super Magic International site. You will be automatically redirected to the international site..."
+		"content": "Your invitation code is for the $t(common:platform.name) international site. You will be automatically redirected to the international site..."
 	},
 	"larkLogin": "FeiShu",
 	"larkRedirectLogin": "FeiShu Redirect",

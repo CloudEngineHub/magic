@@ -209,6 +209,7 @@ export function SourcesTab({ sourceCode, rawSourceCode, processedSourceCode }: S
 										? "bg-background text-foreground shadow-sm"
 										: "text-muted-foreground hover:text-foreground",
 								)}
+								data-testid="set-sources-view"
 							>
 								{t("stylePanel.devConsole.sourcesRaw")}
 							</button>
@@ -220,6 +221,7 @@ export function SourcesTab({ sourceCode, rawSourceCode, processedSourceCode }: S
 										? "bg-background text-foreground shadow-sm"
 										: "text-muted-foreground hover:text-foreground",
 								)}
+								data-testid="set-sources-view-2"
 							>
 								{t("stylePanel.devConsole.sourcesProcessed")}
 							</button>
@@ -236,12 +238,14 @@ export function SourcesTab({ sourceCode, rawSourceCode, processedSourceCode }: S
 							: "text-muted-foreground hover:bg-accent/50",
 					)}
 					title={t("stylePanel.devConsole.wordWrap")}
+					data-testid="set-word-wrap"
 				>
 					<WrapText size={12} />
 				</button>
 				<button
 					onClick={handleCopy}
 					className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50"
+					data-testid="handle-copy"
 				>
 					{copied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
 				</button>
@@ -258,6 +262,7 @@ export function SourcesTab({ sourceCode, rawSourceCode, processedSourceCode }: S
 							? "bg-accent text-accent-foreground"
 							: "text-muted-foreground hover:bg-accent/50",
 					)}
+					data-testid="set-show-search"
 				>
 					<Search size={12} />
 				</button>
@@ -273,6 +278,7 @@ export function SourcesTab({ sourceCode, rawSourceCode, processedSourceCode }: S
 							}}
 							placeholder={t("stylePanel.devConsole.searchPlaceholder")}
 							className="h-5 w-28 rounded border border-border bg-transparent px-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
+							data-testid="set-search-text"
 						/>
 						{searchText && (
 							<span className="text-[10px] text-muted-foreground">

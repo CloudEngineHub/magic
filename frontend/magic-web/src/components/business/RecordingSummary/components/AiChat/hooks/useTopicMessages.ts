@@ -96,9 +96,6 @@ export function useTopicMessages({
 					(item: any) =>
 						item?.attachments?.length > 0 || item?.tool?.attachments?.length > 0,
 				)
-				if (hasAttachments) {
-					checkNowDebounced()
-				}
 				if (updatePageToken && res?.page_token) {
 					topicPageTokenMap.current[chat_topic_id] = res?.page_token
 				}

@@ -178,6 +178,8 @@ const PPTSlide = observer(function PPTSlide({
 		undefined,
 	)
 	const [compareHistoryContent, setCompareHistoryContent] = useState<string>("")
+	/** Ignore stale history version fetch responses when user switches versions quickly */
+	const compareHistorySwitchSeqRef = useRef(0)
 
 	// 处理历史版本内容 - 进行路径替换
 	const processHistoricalContent = useMemoizedFn(async (rawContent: string) => {
@@ -382,17 +384,20 @@ const PPTSlide = observer(function PPTSlide({
 
 	// 在对比面板中切换历史版本
 	const handleSwitchHistoryVersion = useMemoizedFn(async (version: number) => {
+		const switchId = ++compareHistorySwitchSeqRef.current
 		try {
-			setCompareHistoryVersion(version)
-			// 获取新版本的内容
 			const historyContent = await getVersionContentForCompare(version)
-			if (historyContent) {
-				// 处理历史版本内容
-				const processedContent = await processHistoricalContent(historyContent)
-				setCompareHistoryContent(processedContent)
+			if (switchId !== compareHistorySwitchSeqRef.current) return
+			if (!historyContent) {
+				throw new Error(`Failed to load history version ${version}`)
 			}
+			const processedContent = await processHistoricalContent(historyContent)
+			if (switchId !== compareHistorySwitchSeqRef.current) return
+			setCompareHistoryContent(processedContent)
+			setCompareHistoryVersion(version)
 		} catch (error) {
 			console.error("Failed to switch history version:", error)
+			throw error
 		}
 	})
 

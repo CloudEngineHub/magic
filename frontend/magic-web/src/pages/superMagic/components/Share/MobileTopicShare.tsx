@@ -78,7 +78,7 @@ function TopicSettingsRow({
 			data-testid={testId}
 		>
 			<div className="flex-1 text-left text-base leading-5 text-foreground">{label}</div>
-			<Switch checked={checked} className="pointer-events-none shrink-0" />
+			<Switch checked={checked} className="pointer-events-none shrink-0"  data-testid="mobile-topic-share-switch"/>
 		</div>
 	)
 }
@@ -295,7 +295,7 @@ export default memo(function MobileTopicShare(props: MobileTopicShareProps) {
 					<div className="flex-1 text-base leading-5 text-foreground">
 						{t("share.enableShareLink")}
 					</div>
-					<Switch checked={shareEnabled} className="pointer-events-none shrink-0" />
+					<Switch checked={shareEnabled} className="pointer-events-none shrink-0"  data-testid="mobile-topic-share-switch-2"/>
 				</div>
 			</CardGroup>
 

@@ -505,6 +505,7 @@ export default memo(function WikiFileSelector({
 								handleFileToggle(node.node_ref)
 							}
 						}}
+						data-testid="toggle-folder"
 					>
 						<div
 							className="flex h-7 w-full items-center gap-2 py-1.5 pl-1 pr-2"
@@ -554,6 +555,7 @@ export default memo(function WikiFileSelector({
 										alt="folder"
 										width={16}
 										height={16}
+										data-testid="wiki-file-selector-image"
 									/>
 								) : (
 									<MagicFileIcon type={node.meta?.extension} size={16} />

@@ -46,6 +46,7 @@ export function useClawPlaygroundMessageListContextValue(
 								"flex size-6 items-center justify-center rounded-full",
 								className,
 							)}
+							data-testid="claw-playground-assistant-avatar-image"
 						/>
 					)
 				: undefined,

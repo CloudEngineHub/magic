@@ -21,6 +21,11 @@ export interface MarkdownComponentProps {
 	highlightedCitation?: number | null
 	/** 引用 badge 点击回调 */
 	onCitationClick?: (index: number | null) => void
+	/**
+	 * 是否启用 html fenced code block 的预览组件。
+	 * 默认开启，正文消息保留 HTML 预览；思考内容可关闭，仅按普通代码块展示。
+	 */
+	enableHtmlCodeBlockPreview?: boolean
 	onMouseEnter?: (event: React.MouseEvent<HTMLDivElement>) => void
 	onMouseLeave?: (event: React.MouseEvent<HTMLDivElement>) => void
 }

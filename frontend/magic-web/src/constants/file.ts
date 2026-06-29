@@ -19,7 +19,7 @@ export const DRIVE_SPACE_KEY_MAP = {
 /**
  * 可预览文件扩展名
  */
-export const PREVIEW_EXTENSIONS = ["pdf", "xls", "xlsx", "doc", "docx"]
+export const PREVIEW_EXTENSIONS = ["pdf", "xls", "xlsx", "doc", "docx", "docm"]
 
 /** 图片扩展名 */
 export const IMAGE_EXTENSIONS = [
@@ -54,6 +54,8 @@ export const EXTENSION_ICON_MAP: Record<string, IconParkIconElement["name"]> = {
 	DOC: "ts-word-file",
 	docx: "ts-word-file",
 	DOCX: "ts-word-file",
+	docm: "ts-word-file",
+	DOCM: "ts-word-file",
 	ppt: "ts-ppt-file",
 	PPT: "ts-ppt-file",
 	pptx: "ts-ppt-file",

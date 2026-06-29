@@ -6,10 +6,7 @@ import { RecycleBinApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import SuperMagicService from "@/pages/superMagic/services"
-import type {
-	ProjectListItem,
-	Workspace,
-} from "@/pages/superMagic/pages/Workspace/types"
+import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import {
 	buildRestoreCheckPlan,
 	excludeRestoreResourceIds,
@@ -282,8 +279,8 @@ export function useRecycleBinActions({
 	const selectPathSelectedProject: ProjectListItem | undefined =
 		selectPathWorkspaceId && selectPathProjectId
 			? projectStore
-				.getProjectsByWorkspace(selectPathWorkspaceId)
-				.find((p) => p.id === selectPathProjectId)
+					.getProjectsByWorkspace(selectPathWorkspaceId)
+					.find((p) => p.id === selectPathProjectId)
 			: undefined
 
 	function removeItemsByProjectIds(projectIds: string[]) {
@@ -361,11 +358,6 @@ export function useRecycleBinActions({
 			setSelectPathTarget({ type: "topic", target: moveTarget })
 			setSelectPathWorkspaceId("")
 			setSelectPathProjectId("")
-			setSelectPathModalOpen(true)
-			return
-		}
-		if (resourceType === RESOURCE_TYPE.FILE) {
-			setSelectPathTarget({ type: "file", target: moveTarget })
 			setSelectPathModalOpen(true)
 		}
 	}
@@ -592,7 +584,6 @@ export function useRecycleBinActions({
 		if (restoreCheckResult?.status === "invalid" || restoreCheckResult?.status === "error")
 			return
 		const resourceType = getRestoreTargetResourceType({ target: restoreTarget, items })
-		const allResourceIds = getRestoreResourceIds({ target: restoreTarget, items })
 		const canRestoreResourceIds = restoreCheckResult?.itemsNoNeedMove ?? []
 		const directResourceIds = restoreCheckResult?.directResourceIds ?? canRestoreResourceIds
 		const conflictResolutions = restoreCheckResult?.conflictResolutions ?? {}
@@ -833,17 +824,6 @@ export function useRecycleBinActions({
 				messageKey: plan.messageKey,
 				shouldBlockRestore: true,
 				status: "invalid",
-			})
-			setRestoreTarget(target)
-			return
-		}
-
-		if (plan.status === "skip") {
-			setRestoreCheckResult({
-				itemsNeedMove: [],
-				itemsNoNeedMove: [],
-				shouldBlockRestore: false,
-				status: "skipped",
 			})
 			setRestoreTarget(target)
 			return

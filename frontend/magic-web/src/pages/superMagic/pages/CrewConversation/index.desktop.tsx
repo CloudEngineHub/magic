@@ -1,0 +1,246 @@
+import { useMemo, useRef, useState } from "react"
+import { useMemoizedFn } from "ahooks"
+import { observer } from "mobx-react-lite"
+import { useTranslation } from "react-i18next"
+import Detail, { type DetailRef } from "@/pages/superMagic/components/Detail"
+import TopicDesktopPanels from "@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels"
+import TopicSidebar from "@/pages/superMagic/pages/TopicPage/components/TopicSidebar"
+import { useTopicFiles } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicFiles"
+import { useTopicDetailPanelController } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicDetailPanelController"
+import {
+	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
+	useTopicHistoryLayoutState,
+} from "@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
+import { useNamedPageTitle } from "@/pages/superMagic/hooks/useNamedPageTitle"
+import useStyles from "@/pages/superMagic/pages/Workspace/style"
+import { MessageHeaderTopicHistoryPanel } from "@/pages/superMagic/components/MessageHeader"
+import type { MessageHeaderTopicActions } from "@/pages/superMagic/components/MessageHeader"
+import { SuperMagicApi } from "@/apis"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
+import { useCrewConversationStore } from "./context"
+import CrewConversationPanel from "./components/CrewConversationPanel"
+import CrewStateView from "./components/CrewStateView"
+
+function CrewConversationDesktop() {
+	const { t } = useTranslation("crew/market")
+	const { styles } = useStyles()
+	const store = useCrewConversationStore()
+	const detailRef = useRef<DetailRef>(null)
+	const [userSelectDetail, setUserSelectDetail] = useState<unknown>()
+	const [isDetailPanelFullscreen, setIsDetailPanelFullscreen] = useState(false)
+	const selectedProject = store.selectedProject
+	const selectedTopic = store.selectedTopic
+	const selectedWorkspace = store.selectedWorkspace
+	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
+
+	useNamedPageTitle({
+		entityName: store.agent?.name,
+		fallbackName: t("crew/market:crewConversation.unknownCrew"),
+		isReady: store.status === "ready" && !!selectedProject,
+	})
+
+	const setAttachments = useMemoizedFn((attachments) => {
+		store.setAttachments(attachments, store.attachmentList)
+	})
+
+	const { activeFileId, handleFileClick, topicFilesProps, setActiveFileId } = useTopicFiles({
+		selectedProject,
+		selectedWorkspace,
+		selectedTopic,
+		projects: selectedProject ? [selectedProject] : [],
+		workspaces: selectedWorkspace ? [selectedWorkspace] : [],
+		attachments: store.attachments,
+		setAttachments,
+		setUserSelectDetail,
+		detailRef,
+		isReadOnly,
+	})
+
+	const {
+		shouldShowDetailPanel,
+		handleFileClickWithPanel,
+		topicFilesPropsWithPanel,
+		handleActiveDetailTabChange,
+		clearActiveDetailTabType,
+	} = useTopicDetailPanelController({
+		detailRef,
+		isReadOnly,
+		activeFileId,
+		setActiveFileId,
+		handleFileClick,
+		topicFilesProps,
+		attachmentList: store.attachmentList,
+	})
+
+	const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
+		useTopicHistoryLayoutState({
+			storageKey: `${TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.topicPage}.crew-conversation`,
+			isEnabled: !isReadOnly,
+		})
+
+	const mergeCrewTopic = useMemoizedFn((topicId: string, topic: Partial<Topic>) => {
+		store.topicStore.mergeTopic(topicId, {
+			...topic,
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: store.agentCode,
+		})
+	})
+
+	const topicActions = useMemo<MessageHeaderTopicActions>(
+		() => ({
+			createTopic: async () => {
+				await store.createAndSelectNewTopic()
+			},
+			selectTopic: (topic) => {
+				store.setSelectedTopic(topic)
+				setUserSelectDetail(undefined)
+				clearActiveDetailTabType()
+			},
+			renameTopic: async ({ topicId, topicName }) => {
+				if (!selectedProject?.id) return
+				await SuperMagicApi.editTopic({
+					id: topicId,
+					topic_name: topicName,
+					project_id: selectedProject.id,
+				})
+				store.topicStore.updateTopicName(topicId, topicName)
+			},
+			deleteTopic: async (topicId) => {
+				await SuperMagicApi.deleteTopic({ id: topicId })
+				const nextTopics = store.topicList.filter((topic) => topic.id !== topicId)
+				store.topicStore.removeTopic(topicId)
+				if (store.selectedTopic == null) {
+					store.setSelectedTopic(nextTopics[0] ?? null)
+				}
+			},
+			updateTopicName: async (topicId, topicName) => {
+				store.topicStore.updateTopicName(topicId, topicName)
+			},
+			pinTopic: async (topicId) => {
+				const response = await SuperMagicApi.pinTopic(topicId)
+				mergeCrewTopic(topicId, normalizeTopicHistoryItem(response.topic))
+			},
+			unpinTopic: async (topicId) => {
+				const response = await SuperMagicApi.unpinTopic(topicId)
+				mergeCrewTopic(topicId, normalizeTopicHistoryItem(response.topic))
+			},
+			archiveTopic: async (topicId) => {
+				const response = await SuperMagicApi.archiveTopic(topicId)
+				mergeCrewTopic(topicId, normalizeTopicHistoryItem(response.topic))
+			},
+			unarchiveTopic: async (topicId) => {
+				const response = await SuperMagicApi.unarchiveTopic(topicId)
+				mergeCrewTopic(topicId, normalizeTopicHistoryItem(response.topic))
+			},
+		}),
+		[
+			clearActiveDetailTabType,
+			mergeCrewTopic,
+			selectedProject?.id,
+			store,
+			store.selectedTopic,
+			store.topicList,
+		],
+	)
+
+	if (store.status !== "ready" || !selectedProject) {
+		return (
+			<CrewStateView
+				status={store.status}
+				onRetry={() => void store.bootstrap(store.agentCode)}
+			/>
+		)
+	}
+
+	return (
+		<TopicDesktopPanels
+			containerClassName={styles.container}
+			detailPanelClassName={styles.detailPanel}
+			isDetailPanelFullscreen={isDetailPanelFullscreen}
+			sidebar={
+				<TopicSidebar
+					selectedProject={selectedProject}
+					selectedWorkspace={selectedWorkspace}
+					selectedTopic={selectedTopic}
+					isReadOnly={isReadOnly}
+					topicFilesProps={topicFilesPropsWithPanel}
+					hideProjectCard
+				/>
+			}
+			detailPanel={
+				<Detail
+					ref={detailRef}
+					disPlayDetail={userSelectDetail}
+					userSelectDetail={userSelectDetail}
+					setUserSelectDetail={setUserSelectDetail}
+					attachments={store.attachments}
+					attachmentList={store.attachmentList}
+					topicId={selectedTopic?.id}
+					baseShareUrl={`${window.location.origin}/share`}
+					currentTopicStatus={selectedTopic?.task_status}
+					messages={[]}
+					allowEdit={!isReadOnly}
+					selectedTopic={selectedTopic}
+					selectedProject={selectedProject}
+					activeFileId={activeFileId}
+					onActiveFileChange={setActiveFileId}
+					onActiveTabChange={handleActiveDetailTabChange}
+					onFullscreenChange={setIsDetailPanelFullscreen}
+					projectId={selectedProject.id}
+					showFallbackWhenEmpty
+					allowDownload
+				/>
+			}
+			isReadOnly={isReadOnly}
+			keepDetailMountedWhenHidden
+			historyLayout={{
+				isOpen: isTopicHistoryPanelOpen,
+				onClose: closeTopicHistoryPanel,
+				onToggle: toggleTopicHistoryPanel,
+				renderPanel: ({
+					isConversationPanelCollapsed,
+					onExpandConversationPanel,
+					onClose,
+					closeButtonRef,
+				}) => (
+					<MessageHeaderTopicHistoryPanel
+						selectedProject={selectedProject}
+						topicStore={store.topicStore}
+						topicActions={topicActions}
+						isConversationPanelCollapsed={isConversationPanelCollapsed}
+						onExpandConversationPanel={onExpandConversationPanel}
+						onClose={onClose}
+						closeButtonRef={closeButtonRef}
+					/>
+				),
+			}}
+			shouldShowDetailPanel={shouldShowDetailPanel}
+			renderMessagePanel={({
+				isConversationPanelCollapsed,
+				onToggleConversationPanel,
+				onExpandConversationPanel,
+				historyTriggerMode,
+				isHistoryPanelOpen,
+				onToggleHistoryPanel,
+			}) => (
+				<CrewConversationPanel
+					variant="desktop"
+					isConversationPanelCollapsed={isConversationPanelCollapsed}
+					onToggleConversationPanel={onToggleConversationPanel}
+					onExpandConversationPanel={onExpandConversationPanel}
+					detailPanelVisible={shouldShowDetailPanel}
+					historyTriggerMode={historyTriggerMode}
+					isHistoryPanelOpen={isHistoryPanelOpen}
+					onToggleHistoryPanel={onToggleHistoryPanel}
+					topicActions={topicActions}
+					onFileClick={handleFileClickWithPanel}
+				/>
+			)}
+		/>
+	)
+}
+
+export default observer(CrewConversationDesktop)

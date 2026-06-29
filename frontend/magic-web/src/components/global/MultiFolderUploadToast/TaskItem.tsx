@@ -41,11 +41,18 @@ export const TaskItem: React.FC<TaskItemProps> = ({
 
 	// 判断是否为单个文件任务
 	const isSingleFileTask = () => {
-		return task.files.length === 1 && !task.files[0].webkitRelativePath
+		return (
+			task.isSingleFileUploadTask ||
+			(task.files.length === 1 && !task.files[0].webkitRelativePath)
+		)
 	}
 
 	// 获取任务名称（文件夹名称或文件名称）
 	const getTaskName = () => {
+		if (task.displayName) {
+			return task.displayName
+		}
+
 		if (isSingleFileTask()) {
 			// 单个文件任务显示文件名
 			return task.files[0].name
@@ -58,13 +65,16 @@ export const TaskItem: React.FC<TaskItemProps> = ({
 			return pathParts[0] || firstFile.name // 第一层目录名
 		}
 		// 如果没有文件，从baseSuffixDir中提取
-		const pathParts = task.baseSuffixDir.split("/").filter(Boolean)
+		const pathParts = (task.baseSuffixDir || "").split("/").filter(Boolean)
 		return pathParts[pathParts.length - 1] || "文件夹"
 	}
 
 	// 获取文件扩展名（用于文件图标）
 	const getFileExtension = () => {
+		if (task.displayFileExtension) return task.displayFileExtension
+
 		if (isSingleFileTask()) {
+			if (!task.files[0]) return ""
 			const fileName = task.files[0].name
 			const lastDotIndex = fileName.lastIndexOf(".")
 			return lastDotIndex > 0 ? fileName.substring(lastDotIndex) : ""
@@ -87,9 +97,25 @@ export const TaskItem: React.FC<TaskItemProps> = ({
 
 	// 格式化文件大小
 	const formatSizeProgress = () => {
+		if (task.state.currentPhase === "creating_folders") {
+			return t("folderUpload.progress.directories", {
+				created: task.state.directoryCreated || 0,
+				total: task.state.directoryTotal || 0,
+			})
+		}
+
 		const uploadedSize = formatFileSize(task.state.uploadedBytes || 0)
 		const totalSize = formatFileSize(task.state.totalBytes || 0)
 		return `${uploadedSize} / ${totalSize}`
+	}
+
+	const formatCurrentDirectory = () => {
+		if (task.state.currentPhase !== "creating_folders" || !task.state.currentDirectoryPath) {
+			return ""
+		}
+		return t("folderUpload.progress.currentDirectory", {
+			path: task.state.currentDirectoryPath,
+		})
 	}
 
 	// 处理点击上传目标
@@ -114,6 +140,31 @@ export const TaskItem: React.FC<TaskItemProps> = ({
 
 		// 上传中 / 暂停状态
 		if ((state.isUploading || state.isPaused) && !state.isCompleted && !state.isError) {
+			if (state.currentPhase === "creating_folders") {
+				const directoryPercent = state.directoryTotal
+					? Math.round(((state.directoryCreated || 0) / state.directoryTotal) * 100)
+					: 0
+
+				return (
+					<div className={styles.statusSection}>
+						<Flex align="center" gap={5}>
+							<Progress
+								type="circle"
+								percent={directoryPercent}
+								size={18}
+								strokeColor="#315CEC"
+								trailColor="rgba(46, 47, 56, 0.13)"
+								strokeWidth={20}
+								showInfo={false}
+							/>
+							<span className={styles.progressPercentText}>
+								{t("folderUpload.status.creating_folders")}
+							</span>
+						</Flex>
+					</div>
+				)
+			}
+
 			return (
 				<div className={styles.statusSection}>
 					<Flex align="center" gap={5}>
@@ -184,9 +235,9 @@ export const TaskItem: React.FC<TaskItemProps> = ({
 			const errorMessage =
 				errorCount > 0
 					? t("folderUpload.messages.partialFailed", {
-						uploaded: uploadedCount,
-						count: errorCount,
-					})
+							uploaded: uploadedCount,
+							count: errorCount,
+						})
 					: t("folderUpload.messages.retryPrompt")
 
 			return (
@@ -256,6 +307,15 @@ export const TaskItem: React.FC<TaskItemProps> = ({
 						<SmartTooltip className={styles.progressText}>
 							{formatSizeProgress()}
 						</SmartTooltip>
+
+						{task.state.currentPhase === "creating_folders" &&
+							task.state.currentDirectoryPath && (
+								<SmartTooltip
+									className={cx(styles.progressText, styles.currentDirectoryText)}
+								>
+									{formatCurrentDirectory()}
+								</SmartTooltip>
+							)}
 
 						{/* 上传目标 - 移动端不显示 */}
 						{!isMobile && (

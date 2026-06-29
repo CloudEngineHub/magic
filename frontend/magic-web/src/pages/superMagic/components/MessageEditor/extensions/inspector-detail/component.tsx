@@ -55,6 +55,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node, select
 				)}
 				onClick={() => setExpanded((v) => !v)}
 				contentEditable={false}
+				data-testid="set-expanded"
 			>
 				<Crosshair size={12} className="flex-shrink-0 text-muted-foreground/70" />
 				<span className="min-w-0 flex-1 truncate font-medium text-foreground/80">

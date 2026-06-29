@@ -55,6 +55,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 			target={normalizedTarget}
 			className="cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 !text-[#315cec] hover:bg-[#e0ecff]"
 			title={normalizedTitle ?? `File does not exist @${normalizedHref}`}
+			data-testid="markdown-link-anchor"
 			{...(props.domNode?.attribs as AnchorHTMLAttributes<HTMLAnchorElement>)}
 		>
 			{children}

@@ -409,6 +409,7 @@ function SummaryGuide({ type, onClose, onFinish }: SummaryGuideProps) {
 							alt=""
 							className={styles.guideCursor}
 							draggable={false}
+							data-testid="summary-guide-image"
 						/>
 
 						{/* Popover内容 */}
@@ -438,6 +439,7 @@ function SummaryGuide({ type, onClose, onFinish }: SummaryGuideProps) {
 											styles.guidePopoverButtonText,
 										)}
 										onClick={handleClose}
+										data-testid="handle-close"
 									>
 										{t("guide.close")}
 									</button>
@@ -450,6 +452,7 @@ function SummaryGuide({ type, onClose, onFinish }: SummaryGuideProps) {
 											styles.guidePopoverButtonOutline,
 										)}
 										onClick={handleNext}
+										data-testid="handle-next"
 									>
 										{t("guide.next")}
 									</button>
@@ -463,6 +466,7 @@ function SummaryGuide({ type, onClose, onFinish }: SummaryGuideProps) {
 											styles.guidePopoverButtonFull,
 										)}
 										onClick={handleFinish}
+										data-testid="handle-finish"
 									>
 										{t("guide.finish")}
 									</button>

@@ -21,6 +21,7 @@ import {
 	transformQuickInstruction,
 } from "@/pages/chatNew/components/quick-instruction/utils"
 import { ChatApi } from "@/apis"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export interface InstructConfigUpdateParams {
 	instructs?: Record<string, unknown>
@@ -164,18 +165,16 @@ class ConversationBotDataService {
 	 * 初始化时，插入常驻快捷指令
 	 */
 	insertResidencyQuickInstructionWhenInit() {
-		const jsonContent = this.editorRef?.editor?.getText()
-		// 如果内容不为空，则不插入
-		if (jsonContent) return
+		runActiveEditor(this.editorRef?.editor, (editor) => {
+			const jsonContent = editor.getText()
+			// 如果内容不为空，则不插入
+			if (jsonContent) return
 
-		// 检查编辑器是否已挂载
-		if (!this.editorRef?.editor?.view) return
+			// 检查编辑器是否已挂载
+			if (!editor.view) return
 
-		this.editorRef?.editor?.chain().insertContent(this.residencyContent).run()
-		// 安全地调用 focus，只在视图存在时执行
-		if (this.editorRef?.editor?.view) {
-			this.editorRef?.editor?.chain().focus().run()
-		}
+			editor.chain().insertContent(this.residencyContent).focus().run()
+		})
 	}
 
 	/**
@@ -404,44 +403,38 @@ class ConversationBotDataService {
 	insertContentByLocation(insertContent: JSONContent[], insertLocation?: InsertLocationMap) {
 		if (!insertContent.length) return
 
-		switch (insertLocation) {
-			case InsertLocationMap.Before:
-				// 插入到第一个位置，0 会导致换行
-				this.editorRef?.editor?.chain().focus().insertContentAt(1, insertContent).run()
-				break
-			case InsertLocationMap.Behind:
-				// 获取文档末尾位置，而不是选择范围的结束位置
-				const docSize = this.editorRef?.editor?.state.doc.content.size
-				if (docSize === undefined) {
-					// 如果无法获取文档大小，直接插入内容
-					this.editorRef?.editor?.chain().focus().insertContent(insertContent).run()
-				} else {
-					// 根据文档大小计算末尾位置，确保位置有效
-					const docEndPosition = Math.max(0, docSize - 1)
-					this.editorRef?.editor
-						?.chain()
-						.focus()
-						.insertContentAt(docEndPosition, insertContent)
-						.run()
-				}
-				break
-			case InsertLocationMap.Cursor:
-				const currentPos = this.editorRef?.editor?.state.selection.$anchor
-				if (!currentPos) {
-					this.editorRef?.editor?.chain().focus().insertContent(insertContent).run()
-				} else {
-					this.editorRef?.editor
-						?.chain()
-						.focus()
-						.insertContentAt(currentPos.pos, insertContent)
-						.run()
-				}
-				break
-			default:
-				// 默认情况下直接在当前位置插入
-				this.editorRef?.editor?.chain().focus().insertContent(insertContent).run()
-				break
-		}
+		runActiveEditor(this.editorRef?.editor, (editor) => {
+			switch (insertLocation) {
+				case InsertLocationMap.Before:
+					// 插入到第一个位置，0 会导致换行
+					editor.chain().focus().insertContentAt(1, insertContent).run()
+					break
+				case InsertLocationMap.Behind:
+					// 获取文档末尾位置，而不是选择范围的结束位置
+					const docSize = editor.state.doc.content.size
+					if (docSize === undefined) {
+						// 如果无法获取文档大小，直接插入内容
+						editor.chain().focus().insertContent(insertContent).run()
+					} else {
+						// 根据文档大小计算末尾位置，确保位置有效
+						const docEndPosition = Math.max(0, docSize - 1)
+						editor.chain().focus().insertContentAt(docEndPosition, insertContent).run()
+					}
+					break
+				case InsertLocationMap.Cursor:
+					const currentPos = editor.state.selection.$anchor
+					if (!currentPos) {
+						editor.chain().focus().insertContent(insertContent).run()
+					} else {
+						editor.chain().focus().insertContentAt(currentPos.pos, insertContent).run()
+					}
+					break
+				default:
+					// 默认情况下直接在当前位置插入
+					editor.chain().focus().insertContent(insertContent).run()
+					break
+			}
+		})
 	}
 
 	/**
@@ -489,7 +482,7 @@ class ConversationBotDataService {
 		}
 
 		// 替换存在指令
-		const jsonContent = this.editorRef?.editor?.getJSON() ?? {}
+		const jsonContent = runActiveEditor(this.editorRef?.editor, (editor) => editor.getJSON(), {})
 		const replaceStatus = replaceExistQuickInstruction(
 			jsonContent,
 			(attrs) => {
@@ -501,8 +494,9 @@ class ConversationBotDataService {
 
 		// 替换成功,更新内容
 		if (replaceStatus) {
-			this.editorRef?.editor?.chain().clearContent().run()
-			this.editorRef?.editor?.chain().focus().insertContent(jsonContent).run()
+			runActiveEditor(this.editorRef?.editor, (editor) => {
+				editor.chain().clearContent().focus().insertContent(jsonContent).run()
+			})
 		} else {
 			let insertContent = transformQuickInstruction(
 				JSON.parse(instruction.content ?? "[]"),

@@ -2,9 +2,8 @@ import { useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { TaskStatus } from "../pages/Workspace/types"
-import { filterClickableMessageWithoutRevoked } from "../utils/handleMessage"
+import { filterMessagesWithAttachments } from "../utils/handleMessage"
 import { superMagicStore } from "../stores"
-import type { SuperMagicMessageItem } from "../components/MessageList/type"
 import { topicStore } from "../stores/core"
 import { buildFilePathAttachments } from "../components/MessageList/utils/attachmentByFilePath"
 import type { FilePathAttachment } from "../components/MessageList/utils/attachmentByFilePath"
@@ -89,7 +88,7 @@ export function useAutoOpenFile() {
 			const isTaskFinished =
 				lastMessageNode?.status === TaskStatus.FINISHED ||
 				lastMessageNode?.status === TaskStatus.ERROR ||
-                lastMessageNode?.status === TaskStatus.SUSPENDED
+				lastMessageNode?.status === TaskStatus.SUSPENDED
 
 			if (!isTaskFinished) return
 
@@ -101,7 +100,7 @@ export function useAutoOpenFile() {
 				if (!isNewMessage) return
 			}
 
-			// 优先：检查前一条消息 content 中是否有 @file_path 引用
+			// Prefer @file_path references from the previous message content.
 			const filePathAttachments = getPrevMessageFilePathAttachments(
 				selectedTopic?.chat_topic_id || "",
 				lastDetailMessage,
@@ -129,10 +128,10 @@ export function useAutoOpenFile() {
 				return
 			}
 
-			// 兜底：使用原始 attachments 中的第一个文件
+			// Fallback to the first file from the original attachments.
 			const attachments = lastDetailMessageNode?.attachments || []
 
-			const firstFileId = attachments.find(
+			const firstFileAttachment = attachments.find(
 				(attachment: { file_id?: string; file_extension?: string }) => {
 					const fileId = attachment?.file_id
 					if (!fileId) return false
@@ -141,7 +140,8 @@ export function useAutoOpenFile() {
 					const isFolder = attachment.file_extension === ""
 					return !isFolder
 				},
-			)?.file_id
+			)
+			const firstFileId = firstFileAttachment?.file_id
 
 			if (!firstFileId) return
 
@@ -154,7 +154,10 @@ export function useAutoOpenFile() {
 			setTimeout(() => {
 				const id = getActiveFileId?.() ?? activeFileId ?? null
 				if (id != null) return
-				pubsub.publish(PubSubEvents.Open_File_Tab, { fileId: firstFileId })
+				pubsub.publish(PubSubEvents.Open_File_Tab, {
+					fileId: firstFileId,
+					fileData: firstFileAttachment,
+				})
 			}, 100)
 
 			lastOpenedMessageIdRef.current = lastDetailMessageNode.message_id
@@ -188,13 +191,11 @@ export function useAutoOpenFile() {
 
 			const lastDetailMessageWithAttachments = topicMessages.findLast((m) => {
 				const node = superMagicStore.getMessageNode(m?.app_message_id)
-				return filterClickableMessageWithoutRevoked(node) && node?.attachments?.length > 0
+				return filterMessagesWithAttachments(node) && node?.attachments?.length > 0
 			})
 			const lastDetailMessageNode = superMagicStore.getMessageNode(
 				lastDetailMessageWithAttachments?.app_message_id,
 			)
-
-			if (!filterClickableMessageWithoutRevoked(lastDetailMessageNode)) return
 
 			attemptOpenFromNodes({
 				lastMessageNode,

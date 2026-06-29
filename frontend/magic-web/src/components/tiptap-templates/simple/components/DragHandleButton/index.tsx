@@ -5,6 +5,7 @@ import { IconGripVertical } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import MagicDropdown from "@/components/base/MagicDropdown"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 interface DragHandleButtonProps {
 	editor: Editor
@@ -19,14 +20,16 @@ export const DragHandleButton = React.memo<DragHandleButtonProps>(
 		const { t } = useTranslation("tiptap")
 		const deleteNode = useMemoizedFn(() => {
 			if (targetPos !== null && targetNode) {
-				editor
-					.chain()
-					.deleteRange({
-						from: targetPos,
-						to: targetPos + targetNode.nodeSize,
-					})
-					.focus()
-					.run()
+				runActiveEditor(editor, (activeEditor) => {
+					activeEditor
+						.chain()
+						.deleteRange({
+							from: targetPos,
+							to: targetPos + targetNode.nodeSize,
+						})
+						.focus()
+						.run()
+				})
 			}
 		})
 

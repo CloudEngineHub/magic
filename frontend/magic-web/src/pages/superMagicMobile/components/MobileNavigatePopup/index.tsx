@@ -60,6 +60,7 @@ export default memo(function MobileNavigatePopup(props: MobileNavigatePopupProps
 											style={item.style}
 											key={item.key}
 											onClick={item.onClick}
+											data-testid="mobile-navigate-popup"
 										>
 											<div className={styles.iconWrapper}>{item.icon}</div>
 											<div className={styles.name}>{item.label}</div>

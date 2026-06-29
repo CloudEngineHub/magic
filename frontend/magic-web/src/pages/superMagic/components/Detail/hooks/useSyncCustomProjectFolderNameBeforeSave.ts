@@ -1,11 +1,11 @@
 import { useMemoizedFn } from "ahooks"
 import { SuperMagicApi } from "@/apis"
 import { parseMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/utils/magicProjectUpdater"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { unshadow } from "@/utils/shadow"
 
 interface AttachmentLike {
 	file_id?: string
+	project_id?: string
 	parent_id?: string | number | null
 	name?: string
 	file_name?: string
@@ -81,7 +81,6 @@ export function useSyncCustomProjectFolderNameBeforeSave({
 				file_id: String(parentFolder.file_id),
 				target_name: nextFolderName,
 			})
-			pubsub.publish(PubSubEvents.Update_Attachments)
 		},
 	)
 

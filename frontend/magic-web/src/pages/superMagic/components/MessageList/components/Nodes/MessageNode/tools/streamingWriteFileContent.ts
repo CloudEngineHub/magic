@@ -1,4 +1,6 @@
 import MarkdownIt from "markdown-it"
+import { getLanguage } from "@/pages/superMagic/utils/handleFIle"
+import { fileExtFromPath } from "@/pages/superMagic/components/MessageList/utils/attachmentByFilePath"
 
 export type WriteFileContentBlockType =
 	| "heading"
@@ -40,6 +42,7 @@ export interface CreateStableBlocksOptions {
 
 export const WRITE_FILE_OVERSIZED_BLOCK_BYTES = 50 * 1024
 export const WRITE_FILE_OVERSIZED_BLOCK_LINES = 3000
+const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"])
 
 const OVERSIZED_CHUNK_BYTES = 16 * 1024
 const OVERSIZED_CHUNK_LINES = 300
@@ -179,6 +182,23 @@ export function parseWriteFileContentSource(
 			extractClosedJsonStringField(rawArgs, "path"),
 		content: extractPartialJsonStringField(rawArgs, "content"),
 	}
+}
+
+// WriteFile must continue to render through XMarkdown, but the written content is not always markdown.
+// If raw html/css/js/json source is passed through directly, XMarkdown will still parse it with markdown rules,
+// which can split a single source file into mixed paragraph / heading / code block nodes.
+// That is what causes the visual break where one part looks like plain text and a later part looks like a code block.
+// Normalize non-markdown files into a fenced code block first so XMarkdown treats the whole payload as one code block.
+export function normalizeWriteFileMarkdownInput(source: WriteFileContentSource): string {
+	const { content, filePath } = source
+	if (!content) return ""
+
+	const fileExtension = fileExtFromPath(filePath || "")
+	if (MARKDOWN_EXTENSIONS.has(fileExtension)) return content
+
+	const language = getLanguage(filePath || "")
+	const normalizedContent = content.endsWith("\n") ? content : `${content}\n`
+	return `\`\`\`${language}\n${normalizedContent}\`\`\``
 }
 
 function splitLinesPreservingNewline(content: string): string[] {

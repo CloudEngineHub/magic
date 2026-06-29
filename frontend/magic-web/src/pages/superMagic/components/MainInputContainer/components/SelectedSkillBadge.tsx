@@ -36,6 +36,7 @@ function getSkillIcon(skill: SceneItem): ReactNode {
 			width={DESKTOP_ICON_SIZE}
 			height={DESKTOP_ICON_SIZE}
 			className="rounded"
+			data-testid="selected-skill-badge-image"
 		/>
 	) : (
 		<LucideLazyIcon icon={skill.icon} size={DESKTOP_ICON_SIZE} />
@@ -72,6 +73,7 @@ function PrefixedBadgeSelectedSkillBadge({
 					{skill.name || t("playbook.untitled")}
 				</span>
 				<button
+					data-testid="selected-skill-badge-button"
 					{...closeButtonProps}
 					className="size-4 shrink-0 transition-opacity hover:opacity-70"
 				>
@@ -110,7 +112,8 @@ function OutlineButtonSelectedSkillBadge({
 				>
 					{skill.name || t("playbook.untitled")}
 				</span>
-				<button
+				<button				data-testid="selected-skill-badge-button-2"
+
 					{...closeButtonProps}
 					className="flex size-4 shrink-0 items-center justify-center rounded-sm transition-opacity hover:bg-black/10 hover:opacity-70"
 					style={{ color: themeColor }}

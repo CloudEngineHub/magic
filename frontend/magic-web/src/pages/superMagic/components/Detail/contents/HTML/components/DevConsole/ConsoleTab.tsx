@@ -453,6 +453,7 @@ export function ConsoleTab({
 												? "text-primary"
 												: "text-muted-foreground hover:text-foreground",
 										)}
+										data-testid="toggle-select-all"
 									>
 										{allFilteredSelected ? (
 											<CheckSquare size={14} />
@@ -483,6 +484,7 @@ export function ConsoleTab({
 											? "bg-accent text-accent-foreground"
 											: "text-muted-foreground opacity-50",
 									)}
+									data-testid="toggle-filter"
 								>
 									<config.icon size={12} className={active ? config.color : ""} />
 									<span className="capitalize">{level}</span>
@@ -506,6 +508,7 @@ export function ConsoleTab({
 							onChange={(e) => setFilterText(e.target.value)}
 							placeholder={t("stylePanel.devConsole.filterPlaceholder")}
 							className="h-5 w-24 rounded border border-border bg-transparent px-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
+							data-testid="set-filter-text"
 						/>
 						{/* Search toggle button */}
 						<button
@@ -523,6 +526,7 @@ export function ConsoleTab({
 									? "bg-accent text-accent-foreground"
 									: "text-muted-foreground hover:text-foreground",
 							)}
+							data-testid="set-show-search"
 						>
 							<Search size={14} />
 						</button>
@@ -552,6 +556,7 @@ export function ConsoleTab({
 								}}
 								placeholder={t("stylePanel.devConsole.searchPlaceholder")}
 								className="h-5 min-w-0 flex-1 rounded border-none bg-transparent px-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+								data-testid="set-search-text"
 							/>
 							<span className="flex-shrink-0 text-[10px] text-muted-foreground">
 								{searchText
@@ -567,6 +572,7 @@ export function ConsoleTab({
 								onClick={() => navigateSearch("prev")}
 								disabled={searchMatches.length === 0}
 								className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+								data-testid="navigate-search"
 							>
 								<ChevronUp size={14} />
 							</button>
@@ -574,6 +580,7 @@ export function ConsoleTab({
 								onClick={() => navigateSearch("next")}
 								disabled={searchMatches.length === 0}
 								className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+								data-testid="navigate-search-2"
 							>
 								<ChevronDown size={14} />
 							</button>
@@ -583,6 +590,7 @@ export function ConsoleTab({
 									setSearchText("")
 								}}
 								className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+								data-testid="set-show-search-2"
 							>
 								<X size={14} />
 							</button>
@@ -603,6 +611,7 @@ export function ConsoleTab({
 					ref={scrollRef}
 					className="min-h-0 flex-1 overflow-y-auto text-xs"
 					onScroll={handleScroll}
+					data-testid="handle-scroll"
 				>
 					<div
 						style={{
@@ -657,6 +666,7 @@ export function ConsoleTab({
 												e.stopPropagation()
 												toggleSelect(entry.id)
 											}}
+											data-testid="toggle-select"
 										>
 											{selectedIds.has(entry.id) ? (
 												<CheckSquare size={12} className="text-primary" />
@@ -671,6 +681,7 @@ export function ConsoleTab({
 									<button
 										className="mr-1 flex-shrink-0 p-0.5 text-muted-foreground hover:text-foreground"
 										onClick={() => toggleExpand(entry.id)}
+										data-testid="toggle-expand"
 									>
 										<ChevronRight
 											size={10}
@@ -750,6 +761,7 @@ export function ConsoleTab({
 															e.stopPropagation()
 															onSendErrorToAgent(entry)
 														}}
+														data-testid="on-send-error-to-agent"
 													>
 														<Send size={12} />
 													</button>
@@ -780,6 +792,7 @@ export function ConsoleTab({
 								<button
 									onClick={handleInsertToInput}
 									className="flex items-center gap-1 rounded px-2 py-1 text-xs text-foreground transition-colors hover:bg-accent"
+									data-testid="handle-insert-to-input"
 								>
 									<MessageSquarePlus size={14} />
 									{t("stylePanel.devConsole.insertToInput")}
@@ -796,6 +809,7 @@ export function ConsoleTab({
 								<button
 									onClick={handleExportAsText}
 									className="flex items-center gap-1 rounded px-2 py-1 text-xs text-foreground transition-colors hover:bg-accent"
+									data-testid="handle-export-as-text"
 								>
 									<Download size={14} />
 									{t("stylePanel.devConsole.exportAsText")}
@@ -827,11 +841,13 @@ export function ConsoleTab({
 						className="h-5 min-w-0 flex-1 bg-transparent font-mono text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
 						autoComplete="off"
 						spellCheck={false}
+						data-testid="handle-eval-input-change"
 					/>
 					<button
 						onClick={handleEvalSubmit}
 						disabled={!evalInput.trim()}
 						className="ml-1 flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+						data-testid="handle-eval-submit"
 					>
 						<Play size={12} />
 					</button>
@@ -856,6 +872,7 @@ export function ConsoleTab({
 										applyCompletion(item)
 									}}
 									onMouseEnter={() => setCompletionIndex(i)}
+									data-testid="apply-completion"
 								>
 									{item}
 								</button>

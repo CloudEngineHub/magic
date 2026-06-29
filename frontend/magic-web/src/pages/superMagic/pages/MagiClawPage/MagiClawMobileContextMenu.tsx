@@ -171,7 +171,7 @@ export function MagiClawMobileContextMenu({
 
 	return createPortal(
 		<>
-			<div className="fixed inset-0 z-[1200]" aria-hidden="true" onClick={onClose} />
+			<div className="fixed inset-0 z-[1200]" aria-hidden="true" onClick={onClose}  data-testid="on-close"/>
 			<div
 				className="fixed z-[1201] overflow-hidden rounded-2xl border border-border/80 bg-background/95 backdrop-blur-sm"
 				style={{

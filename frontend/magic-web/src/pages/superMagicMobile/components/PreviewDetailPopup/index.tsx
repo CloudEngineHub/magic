@@ -48,6 +48,13 @@ const MOBILE_PREVIEW_BODY_CLASSNAME =
 	"flex min-h-0 flex-1 flex-col overflow-hidden !overflow-hidden bg-background p-0"
 import { getPreviewDetailDisplayName, isKnowledgeSearchPreviewDetail } from "./headerMeta"
 
+const OFFICE_DETAIL_TYPES: DetailType[] = [
+	DetailType.Docx,
+	DetailType.Doc,
+	DetailType.Excel,
+	DetailType.PowerPoint,
+]
+
 export interface PreviewDetail<T extends keyof DetailData = keyof DetailData> {
 	type: T
 	data: DetailData[T]
@@ -283,6 +290,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		const previewFilePath = meta?.relative_file_path || ""
 		return (
 			<Render
+				key={previewDetail?.currentFileId}
 				type={correctedPreviewDetail?.type}
 				data={correctedPreviewDetail?.data}
 				attachments={effectiveAttachments}
@@ -385,6 +393,15 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		return getPreviewDetailDisplayName(correctedPreviewDetail, t)
 	}, [attachmentList, previewDetail, t])
 
+	const isOfficePreview = useMemo(() => {
+		const correctedPreviewDetail = correctDetailType(previewDetail, {
+			attachmentList,
+		})
+		return correctedPreviewDetail
+			? OFFICE_DETAIL_TYPES.includes(correctedPreviewDetail.type as DetailType)
+			: false
+	}, [attachmentList, previewDetail])
+
 	if (isFileShare) {
 		return (
 			<div
@@ -442,6 +459,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 			onCancel={() => {
 				setVisible(false)
 			}}
+			destroyOnClose={isOfficePreview}
 			closable
 			footer={null}
 			title="文件预览"

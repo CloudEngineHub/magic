@@ -52,6 +52,7 @@ function ImageInProjectFileComp({
 			alt={fileName}
 			style={size ? { width: size, height: size } : {}}
 			onClick={handleClick}
+			data-testid="handle-click"
 		/>
 	)
 }
@@ -86,6 +87,7 @@ function ImageInUploadFileComp({ file, fileName, size, fallback = null }: ImageI
 			alt={fileName}
 			style={size ? { width: size, height: size } : {}}
 			onClick={handleClick}
+			data-testid="handle-click-2"
 		/>
 	)
 }

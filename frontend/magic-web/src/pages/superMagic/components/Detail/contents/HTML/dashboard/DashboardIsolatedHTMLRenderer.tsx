@@ -14,6 +14,13 @@ import {
 	type DataJsFileInfo,
 } from "./utils"
 import { decodeHTMLEntities } from "../utils/full-content"
+import {
+	buildHtmlVirtualStorageNamespace,
+	createVirtualStorageContext,
+	getVirtualStorageBridgeScript,
+	virtualStorageRegistry,
+	type VirtualStorageRuntimeContext,
+} from "../utils/virtual-storage"
 
 /** 与 iframe 内 dashboard 的 configManager.setRenderMode 对齐：mobile / desktop / auto（默认由页面自身决定） */
 export type DashboardIframeRenderMode = "mobile" | "desktop" | "auto"
@@ -30,6 +37,8 @@ interface IsolatedHTMLRendererProps {
 	attachmentList?: FileItem[]
 	currentFileId?: string
 	currentFileName?: string
+	projectId?: string
+	topicId?: string
 }
 
 const useStyles = createStyles(({ css }) => ({
@@ -63,6 +72,8 @@ function IsolatedHTMLRenderer({
 	attachmentList,
 	currentFileId,
 	currentFileName,
+	projectId,
+	topicId,
 }: IsolatedHTMLRendererProps) {
 	const { styles, cx } = useStyles()
 	const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
@@ -85,6 +96,8 @@ function IsolatedHTMLRenderer({
 	const hasDashboardCardsSnapshot = useRef(false)
 	const dataJsFileInfo = useRef<DataJsFileInfo | null>(null)
 	const [iframeLoaded, setIframeLoaded] = useState(false)
+	const [virtualStorageContext, setVirtualStorageContext] =
+		useState<VirtualStorageRuntimeContext | null>(null)
 
 	useEffect(() => {
 		const iframe = iframeRef.current
@@ -100,8 +113,59 @@ function IsolatedHTMLRenderer({
 	}, [content])
 
 	const dashboardContent = useMemo(() => {
-		return decodeHTMLEntities(injectDashboardHTMLScript(contentTrim))
-	}, [contentTrim])
+		const decodedDashboardHtml = decodeHTMLEntities(injectDashboardHTMLScript(contentTrim))
+		if (!virtualStorageContext) return ""
+
+		const parser = new DOMParser()
+		const doc = parser.parseFromString(decodedDashboardHtml, "text/html")
+		if (!doc.head) {
+			const head = doc.createElement("head")
+			doc.documentElement.insertBefore(head, doc.body)
+		}
+
+		const script = doc.createElement("script")
+		script.setAttribute("data-injected", "magic-virtual-storage")
+		script.textContent = getVirtualStorageBridgeScript(virtualStorageContext)
+		doc.head.insertBefore(script, doc.head.firstChild)
+
+		return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`
+	}, [contentTrim, virtualStorageContext])
+
+	useEffect(() => {
+		let cancelled = false
+		const namespace = buildHtmlVirtualStorageNamespace({
+			projectId,
+			topicId,
+			fileId: currentFileId,
+		})
+
+		setVirtualStorageContext(null)
+		void createVirtualStorageContext({
+			namespace,
+			targetOrigin: window.location.origin,
+		}).then((context) => {
+			if (!cancelled) setVirtualStorageContext(context)
+		})
+
+		return () => {
+			cancelled = true
+		}
+	}, [currentFileId, projectId, topicId])
+
+	useEffect(() => {
+		if (!virtualStorageContext) return
+		const iframeWindow = iframeRef.current?.contentWindow
+		if (!iframeWindow) return
+
+		const registeredContext = {
+			...virtualStorageContext,
+			source: iframeWindow,
+			origin: externalRenderSiteOrigin || window.location.origin,
+			expiresAt: undefined,
+		}
+		virtualStorageRegistry.register(registeredContext)
+		return () => virtualStorageRegistry.unregister(registeredContext)
+	}, [externalRenderSiteOrigin, iframeLoaded, virtualStorageContext])
 
 	// 加载data.js文件
 	const loadDataJsFile = async () => {
@@ -272,6 +336,7 @@ function IsolatedHTMLRenderer({
 				sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
 				allow="fullscreen"
 				allowFullScreen
+				data-testid="html-content-iframe"
 			/>
 		</div>
 	)

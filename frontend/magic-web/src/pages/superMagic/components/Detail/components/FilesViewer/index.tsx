@@ -34,6 +34,7 @@ import TabItem from "./components/TabItem"
 import { TabContextMenu } from "./components/TabContextMenu"
 import { useTranslation } from "react-i18next"
 import MagicIcon from "@/components/base/MagicIcon"
+import MagicSpin from "@/components/base/MagicSpin"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import DetailEmpty from "../DetailEmpty"
 import { FileTabMagicIcon } from "./components/FileTabMagicIcon"
@@ -92,6 +93,7 @@ const FilesViewer = memo(
 			const {
 				tabs,
 				activeTab,
+				isRestoringFileTabs,
 				openFileTab,
 				openWebsiteTab,
 				closeFileTab,
@@ -362,6 +364,7 @@ const FilesViewer = memo(
 								switchToTab(tab.id)
 								setExpandPanelVisible(false)
 							}}
+							data-testid="switch-to-tab"
 						>
 							<FileTabMagicIcon
 								tab={tab}
@@ -378,6 +381,7 @@ const FilesViewer = memo(
 									e.stopPropagation()
 									handleTabClose(tab.id)
 								}}
+								data-testid="handle-tab-close"
 							>
 								<IconX />
 							</div>
@@ -388,16 +392,45 @@ const FilesViewer = memo(
 
 			const currentTab = activeTab
 			const { isFullscreen, ...otherProps } = getRenderProps(currentTab)
+			const currentRenderProps = useMemo(
+				() => ({ isFullscreen, ...otherProps }),
+				[isFullscreen, otherProps],
+			)
+			const currentRenderPropsRef = useRef(currentRenderProps)
+			currentRenderPropsRef.current = currentRenderProps
+			const currentTabId = currentTab?.id
+			const currentRenderCacheKey = useMemo(() => {
+				if (!currentTab) return ""
+
+				return [
+					currentTab.id,
+					currentTab.refreshKey || "",
+					currentTab.fileData.file_id || "",
+					currentTab.fileData.updated_at || "",
+					String(isFullscreen),
+					String(otherProps.type || ""),
+					String(otherProps.updatedAt || ""),
+					props.activeFileId || "",
+					props.showFileFooter ? "1" : "0",
+				].join("|")
+			}, [
+				currentTab,
+				isFullscreen,
+				otherProps.type,
+				otherProps.updatedAt,
+				props.activeFileId,
+				props.showFileFooter,
+			])
 			const shouldShowDetailEmpty =
 				props.showFallbackWhenEmpty ||
 				(!currentTab && (tabs.length > 0 || Boolean(props.activeFileId)))
 
 			// 缓存当前 tab 的渲染属性
 			useEffect(() => {
-				if (currentTab) {
-					addToCache(currentTab.id, { isFullscreen, ...otherProps })
+				if (currentTabId) {
+					addToCache(currentTabId, currentRenderPropsRef.current)
 				}
-			}, [currentTab?.id, isFullscreen, JSON.stringify(otherProps), addToCache])
+			}, [currentTabId, currentRenderCacheKey, addToCache])
 
 			// 判断是否应该渲染某个 tab
 			const shouldRenderTab = useCallback(
@@ -420,7 +453,9 @@ const FilesViewer = memo(
 					const cachedProps = getFromCache(tab.id)
 
 					// 如果没有缓存，使用当前 tab 的属性
-					const renderProps = cachedProps || { isFullscreen, ...otherProps }
+					const renderProps = isActive
+						? currentRenderProps
+						: cachedProps || currentRenderProps
 
 					// 判断是否是演示模式tab，如果是则构建playbackProps
 					const isPlayback = isPlaybackTab(tab.id)
@@ -443,7 +478,13 @@ const FilesViewer = memo(
 								isFileShare: props.isFileShare,
 								activeFileId: props.activeFileId,
 								onActiveFileChange: props.onActiveFileChange,
-								openFileTab: props.openFileTab,
+								openFileTab: props.openFileTab
+									? (fileId: string, path: string) =>
+											props.openFileTab?.({
+												file_id: fileId,
+												relative_file_path: path,
+											})
+									: undefined,
 								getFileViewMode: props.getFileViewMode,
 								handleViewModeChange: props.handleViewModeChange,
 								onDownload: props.onDownload,
@@ -483,7 +524,7 @@ const FilesViewer = memo(
 				activeTab?.id,
 				getFromCache,
 				isFullscreen,
-				otherProps,
+				currentRenderProps,
 				props?.onActiveFileChange,
 				shouldRenderTab,
 				cachedTabIds,
@@ -544,6 +585,7 @@ const FilesViewer = memo(
 								<div
 									className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
 									onClick={handleClearAllTabs}
+									data-testid="handle-clear-all-tabs"
 								>
 									<MagicIcon component={IconX} size={16} />
 								</div>
@@ -568,10 +610,16 @@ const FilesViewer = memo(
 					{/* Content Area */}
 					<div className="flex flex-1 flex-col overflow-hidden">
 						{currentTab ? (
-							<>
-								{/* 渲染所有缓存的 tabs */}
-								{renderCachedTabs}
-							</>
+							isRestoringFileTabs ? (
+								<div className="flex h-full items-center justify-center">
+									<MagicSpin spinning />
+								</div>
+							) : (
+								<>
+										{/* Render all cached tabs */}
+									{renderCachedTabs}
+								</>
+							)
 						) : shouldShowDetailEmpty ? (
 							<DetailEmpty />
 						) : null}

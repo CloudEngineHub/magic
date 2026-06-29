@@ -45,6 +45,7 @@ import {
 } from "@/components/Agent/MCP/AgentSettings/AgentPanel/MCPPanel/helpers"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { insertMentionFromDroppedData } from "./utils/drag"
+import { runActiveEditor, useLatestActiveEditor } from "./utils/editorLifecycle"
 import useChooseUploadDirModal from "./hooks/useChooseUploadDirModal"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
 import type { Topic } from "../../pages/Workspace/types"
@@ -56,6 +57,10 @@ import { resolveMessageEditorModules } from "./utils/moduleConfig"
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "../../hooks/useTaskInterrupt"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
+import {
+	createPastedTextFile,
+	shouldConvertPastedTextToAttachment,
+} from "./utils/pastedTextAttachment"
 
 export type MessageEditorRef = MessageEditorRefType & {
 	/**
@@ -94,6 +99,7 @@ export const MessageEditorContainer = observer(
 				onBlur,
 				onMentionInsertItems,
 				onFileClick,
+				onEnsureProject,
 				showLoading = false,
 				attachments,
 				isEditingQueueItem = false,
@@ -316,10 +322,10 @@ export const MessageEditorContainer = observer(
 				isMountedRef,
 			})
 
-			const { tiptapEditor, domRef } = useMessageEditor({
-				value: store.editorStore.value,
-				onSend: handleSend,
-				placeholder,
+				const { tiptapEditor, domRef } = useMessageEditor({
+					value: store.editorStore.value,
+					onSend: handleSend,
+					placeholder,
 				onMentionInsertItems: (items) => {
 					syncInsertedMarkersToManager(items)
 					if (!selectedProject?.id) {
@@ -343,12 +349,13 @@ export const MessageEditorContainer = observer(
 				mentionPanelStore,
 				isAllowedMention,
 				shouldSkipRemoveSync: () => shouldSkipMentionRemoveSyncRef.current,
-				shouldRestoreRemovedMention,
-			})
+					shouldRestoreRemovedMention,
+				})
+				const activeEditorRef = useLatestActiveEditor(tiptapEditor)
 
-			useEffect(() => {
-				tiptapEditorRef.current = tiptapEditor
-				store.editorStore.setEditor(tiptapEditor)
+				useEffect(() => {
+					tiptapEditorRef.current = tiptapEditor
+					store.editorStore.setEditor(tiptapEditor)
 				return () => {
 					tiptapEditorRef.current = null
 				}
@@ -407,26 +414,26 @@ export const MessageEditorContainer = observer(
 			})
 
 			const clearContent = useMemoizedFn(() => {
-				clearAllMarkers()
+					clearAllMarkers()
 
-				setValue(undefined)
-				if (tiptapEditor) {
-					tiptapEditor.commands.clearContent()
-				}
-				clearFiles()
-			})
+					setValue(undefined)
+					runActiveEditor(activeEditorRef.current, (editor) => {
+						editor.commands.clearContent()
+					})
+					clearFiles()
+				})
 
 			const clearContentAfterSend = useMemoizedFn(() => {
 				shouldSkipMentionRemoveSyncRef.current = true
 				try {
 					clearAllMarkers()
 
-					setValue(undefined)
-					if (tiptapEditor) {
-						tiptapEditor.commands.clearContent()
-					}
-					clearFilesLocalOnly()
-				} finally {
+						setValue(undefined)
+						runActiveEditor(activeEditorRef.current, (editor) => {
+							editor.commands.clearContent()
+						})
+						clearFilesLocalOnly()
+					} finally {
 					shouldSkipMentionRemoveSyncRef.current = false
 				}
 			})
@@ -466,20 +473,17 @@ export const MessageEditorContainer = observer(
 
 			const focus = useMemoizedFn(
 				({ enableWhenIsMobile = false }: { enableWhenIsMobile?: boolean } = {}) => {
-					if (!enableWhenIsMobile && isMobile) {
-						return
-					}
-					if (!tiptapEditor || tiptapEditor.isDestroyed) return
-					try {
-						tiptapEditor.commands.focus()
-						if (isMobile) {
-							tiptapEditor.commands.scrollIntoView()
+						if (!enableWhenIsMobile && isMobile) {
+							return
 						}
-					} catch {
-						// Silently ignore — view may not be mounted yet during rapid state transitions
-					}
-				},
-			)
+						runActiveEditor(activeEditorRef.current, (editor) => {
+							editor.commands.focus()
+							if (isMobile) {
+								editor.commands.scrollIntoView()
+							}
+						})
+					},
+				)
 
 			const loadDraftReady = useMemoizedFn(() => {
 				return store.draftStore.waitForLoadDraft()
@@ -561,6 +565,19 @@ export const MessageEditorContainer = observer(
 				[addFiles],
 			)
 
+			const ensureProjectContextForPastedText = useMemoizedFn(async () => {
+				if (selectedProject?.id) {
+					return selectedProject
+				}
+
+				const ensuredProject = await onEnsureProject?.()
+				if (ensuredProject?.id) {
+					fileUploadStore.updateOptions({ projectId: ensuredProject.id })
+				}
+
+				return ensuredProject ?? null
+			})
+
 			const handlePaste = useCallback(
 				(e: React.ClipboardEvent) => {
 					const clipboardData = e.clipboardData
@@ -570,10 +587,31 @@ export const MessageEditorContainer = observer(
 
 					if (uploadEnabled && files.length > 0) {
 						e.preventDefault()
+						e.stopPropagation()
 						addFiles(files)
+						return
 					}
+
+					if (!uploadEnabled || !shouldEnableMention) return
+					if (!shouldConvertPastedTextToAttachment(clipboardData)) return
+
+					const text = clipboardData.getData("text/plain")
+					const textFile = createPastedTextFile({ text })
+					e.preventDefault()
+					e.stopPropagation()
+					// Keep long-text paste automatic; the upload flow inserts the file mention immediately.
+					void (async () => {
+						await ensureProjectContextForPastedText()
+						await _addFiles([textFile], undefined, { usePastedTextTempDirectory: true })
+					})()
 				},
-				[addFiles, uploadEnabled],
+				[
+					_addFiles,
+					addFiles,
+					ensureProjectContextForPastedText,
+					shouldEnableMention,
+					uploadEnabled,
+				],
 			)
 
 			const handleSelectMentionItem = useMemoizedFn(
@@ -595,12 +633,14 @@ export const MessageEditorContainer = observer(
 						}
 					}
 
-					tiptapEditor?.commands.insertContent({
-						type: "mention",
-						attrs: item,
-					})
-				},
-			)
+						runActiveEditor(activeEditorRef.current, (editor) => {
+							editor.commands.insertContent({
+								type: "mention",
+								attrs: item,
+							})
+						})
+					},
+				)
 
 			const handleProjectFileMentionClick = useMemoizedFn((target: EventTarget | null) => {
 				const targetElement =

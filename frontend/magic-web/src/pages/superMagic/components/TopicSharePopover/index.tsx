@@ -295,6 +295,7 @@ function TopicSharePopoverContent({
 									rel="noopener noreferrer"
 									className="inline break-all text-primary underline"
 									onClick={(e) => e.stopPropagation()}
+									data-testid="topic-share-popover"
 								>
 									{urlMatch[0]}
 								</a>
@@ -307,6 +308,7 @@ function TopicSharePopoverContent({
 										magicToast.success(t("share.copySuccess"))
 									}}
 									title={t("share.copyLink")}
+									data-testid="write-text"
 								>
 									<Copy className="h-3.5 w-3.5" />
 								</button>
@@ -516,6 +518,7 @@ function TopicSharePopoverContent({
 						<div
 							className={styles.advancedHeader}
 							onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+							data-testid="set-is-advanced-open"
 						>
 							<span className={styles.advancedTitle}>
 								{t("share.advancedOptions")}

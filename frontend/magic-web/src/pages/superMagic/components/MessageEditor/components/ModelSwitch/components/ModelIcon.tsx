@@ -49,6 +49,7 @@ function ModelIcon({ model, className, size = 16, defaultColor }: ModelIconProps
 				width: size,
 				height: size,
 			}}
+			data-testid="handle-image-error"
 		/>
 	)
 }

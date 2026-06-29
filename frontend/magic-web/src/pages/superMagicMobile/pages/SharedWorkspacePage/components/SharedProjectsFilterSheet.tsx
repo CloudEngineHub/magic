@@ -88,6 +88,7 @@ function CreatorAvatar({ creator }: { creator: SharedWorkspaceCreatorOption }) {
 				alt=""
 				className="size-7 shrink-0 rounded-full object-cover"
 				aria-hidden
+				data-testid="shared-projects-filter-sheet-image"
 			/>
 		)
 	}

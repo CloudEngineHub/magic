@@ -59,6 +59,7 @@ function RecycleBinTabTrigger(props: { value: RecycleBinTabValue; label: string 
 				aria-hidden
 				src={tabsActiveIndicator}
 				className="absolute bottom-0 left-1/2 hidden h-[2px] w-[43px] -translate-x-1/2 group-data-[state=active]:block"
+				data-testid="recycle-bin-tabs-image"
 			/>
 		</TabsTrigger>
 	)

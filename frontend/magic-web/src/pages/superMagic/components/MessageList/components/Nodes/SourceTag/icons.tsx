@@ -26,6 +26,7 @@ export function DingtalkSourceIcon(props: SVGProps<SVGSVGElement>) {
 			height="12"
 			viewBox="0 0 12 12"
 			fill="none"
+
 			{...props}
 		>
 			<path
@@ -44,6 +45,7 @@ export function LarkSourceIcon(props: SVGProps<SVGSVGElement>) {
 			height="12"
 			viewBox="0 0 12 12"
 			fill="none"
+
 			{...props}
 		>
 			<path
@@ -70,6 +72,7 @@ export function WecomSourceIcon(props: SVGProps<SVGSVGElement>) {
 			height="12"
 			viewBox="0 0 12 12"
 			fill="none"
+
 			{...props}
 		>
 			<g clipPath="url(#clip0_17485_46716)">

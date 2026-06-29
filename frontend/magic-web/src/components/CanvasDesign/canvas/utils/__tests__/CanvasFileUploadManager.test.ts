@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
-import { CanvasFileUploadManager } from "../CanvasFileUploadManager"
-import { UploadSubDir, type UploadFileResponse, type UploadSubDirType } from "../../../types.magic"
+import { CanvasFileUploadManager, type UploadRequest } from "../CanvasFileUploadManager"
+import {
+	UploadSubDir,
+	type UploadFile,
+	type UploadFileResponse,
+	type UploadSubDirType,
+} from "../../../types.magic"
 import type { CanvasElementClipboardFileMetadata } from "../CanvasElementClipboard"
 
 interface RemoteTransferHarness {
@@ -72,6 +77,64 @@ describe("CanvasFileUploadManager upload sub directories", () => {
 		expect(
 			manager.getUploadSubDir(new File(["image"], "photo.png", { type: "image/png" })),
 		).toBe(UploadSubDir.Images)
+	})
+})
+
+describe("CanvasFileUploadManager upload queue", () => {
+	it("settles each queued upload request only once when batch upload rejects after per-file callbacks", async () => {
+		const firstFailure = new Error("first failed")
+		const batchFailure = new Error("batch failed")
+		const uploadFiles = vi.fn(async (files: UploadFile[]) => {
+			files[0]?.onUploadFailed(firstFailure)
+			throw batchFailure
+		})
+		const firstRequest: UploadRequest = {
+			file: new File(["first"], "first.png", { type: "image/png" }),
+			onUploadComplete: vi.fn(),
+			onUploadFailed: vi.fn(),
+		}
+		const secondRequest: UploadRequest = {
+			file: new File(["second"], "second.png", { type: "image/png" }),
+			onUploadComplete: vi.fn(),
+			onUploadFailed: vi.fn(),
+		}
+		const manager = Object.create(CanvasFileUploadManager.prototype) as {
+			canvas: {
+				magicConfigManager: {
+					config: {
+						methods: {
+							uploadFiles: typeof uploadFiles
+						}
+					}
+				}
+			}
+			uploadQueue: UploadRequest[]
+			isProcessingQueue: boolean
+			currentReferenceImages?: string[]
+			processQueue: () => Promise<void>
+		}
+		manager.canvas = {
+			magicConfigManager: {
+				config: {
+					methods: { uploadFiles },
+				},
+			},
+		}
+		manager.uploadQueue = [firstRequest, secondRequest]
+		manager.isProcessingQueue = false
+
+		await manager.processQueue()
+
+		expect(firstRequest.onUploadFailed).toHaveBeenCalledTimes(1)
+		expect(firstRequest.onUploadFailed).toHaveBeenCalledWith(firstFailure)
+		expect(secondRequest.onUploadFailed).toHaveBeenCalledTimes(1)
+		expect(secondRequest.onUploadFailed).toHaveBeenCalledWith(expect.any(Error))
+		expect(vi.mocked(secondRequest.onUploadFailed).mock.calls[0]?.[0].message).toBe(
+			"batch failed",
+		)
+		expect(firstRequest.onUploadComplete).not.toHaveBeenCalled()
+		expect(secondRequest.onUploadComplete).not.toHaveBeenCalled()
+		expect(manager.isProcessingQueue).toBe(false)
 	})
 })
 

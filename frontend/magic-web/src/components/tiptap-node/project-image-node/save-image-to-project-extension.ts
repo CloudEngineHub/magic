@@ -38,6 +38,7 @@ import { handleCustomDragData } from "./drag-handlers"
 import { calculateRelativePath } from "@/utils/path"
 import { generateTempSrc, isTempPath } from "./temp-path-utils"
 import { normalizeImagePath } from "./utils/url-utils"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 // Global cache for files being uploaded
 const uploadingFiles = new Map<string, File>()
@@ -518,7 +519,11 @@ export const SaveImageToProjectExtension = Extension.create<SaveImageToProjectOp
 								// Use editor commands to insert content, which will trigger Markdown extension
 								if (editor) {
 									// Use chain API to ensure the operation is added to history
-									editor.chain().focus().insertContent(textToPaste).run()
+									const inserted = runActiveEditor(editor, (activeEditor) => {
+										activeEditor.chain().focus().insertContent(textToPaste).run()
+										return true
+									}, false)
+									if (!inserted) view.pasteText(textToPaste)
 								} else {
 									// Fallback to pasteText if editor instance is not available
 									view.pasteText(textToPaste)

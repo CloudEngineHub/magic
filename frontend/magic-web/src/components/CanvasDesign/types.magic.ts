@@ -429,6 +429,43 @@ export interface GenerateVideoGeneration {
 	sample_count?: number
 }
 
+/** 视频生成结果计费信息 */
+export interface VideoGenerationBillingInfo {
+	/** 本次生成消耗积分；null 表示后端未返回/无需展示 */
+	points?: number | null
+}
+
+/** 视频生成结果参数信息 */
+export interface VideoGenerationInfo {
+	/** 任务类型 */
+	task?: GenerateVideoTask | string
+	/** 输入模式 */
+	input_mode?: VideoInputMode | string
+	/** 宽高比，如 16:9 */
+	aspect_ratio?: string
+	/** 分辨率，如 480p */
+	resolution?: string
+	/** 时长（秒） */
+	duration_seconds?: number | null
+}
+
+/** 视频生成运行时间信息 */
+export interface VideoGenerationRuntimeInfo {
+	/** 开始时间，格式如 2026-06-25 14:32:08 */
+	started_at?: string | null
+	/** 完成时间，格式如 2026-06-25 14:36:20 */
+	finished_at?: string | null
+	/** 生成耗时（秒） */
+	elapsed_seconds?: number | null
+}
+
+/** 画布保存的视频生成结果元信息 */
+export interface VideoGenerationResultMeta {
+	billing?: VideoGenerationBillingInfo | null
+	generation_info?: VideoGenerationInfo | null
+	runtime?: VideoGenerationRuntimeInfo | null
+}
+
 /**
  * 根存储中持久化的默认生视频偏好（非完整 API 请求体）
  */
@@ -517,8 +554,7 @@ export interface GeneratedImageResultItem {
 /**
  * 发起多图生成请求参数
  */
-export interface GenerateImagesRequest
-	extends GenerateImageRequest {
+export interface GenerateImagesRequest extends GenerateImageRequest {
 	/** 本次请求生成图片数量 */
 	generate_num: number
 }
@@ -977,6 +1013,12 @@ export interface VideoGenerationResultResponse {
 	poster_file_id: string
 	/** 海报文件 URL */
 	poster_file_url: string
+	/** 计费信息 */
+	billing?: VideoGenerationBillingInfo | null
+	/** 生成参数信息 */
+	generation_info?: VideoGenerationInfo | null
+	/** 运行时间信息 */
+	runtime?: VideoGenerationRuntimeInfo | null
 }
 
 /**

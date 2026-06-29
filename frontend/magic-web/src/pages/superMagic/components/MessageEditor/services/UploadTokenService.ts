@@ -209,6 +209,7 @@ class UploadTokenService {
 		storage_type: "workspace" | "topic"
 		source: UploadSource
 		relative_file_path?: string
+		is_hidden?: boolean
 	}) {
 		return SuperMagicApi.saveUploadFileToProject(data)
 	}

@@ -18,6 +18,14 @@ vi.mock("../../utils/designDraftStorage", () => ({
 	deleteDesignDraft: vi.fn(),
 }))
 
+vi.mock("sonner", () => ({
+	toast: {
+		error: vi.fn(),
+		info: vi.fn(),
+		success: vi.fn(),
+	},
+}))
+
 function rect(id: string, options: Partial<LayerElement> = {}): LayerElement {
 	return {
 		id,
@@ -304,11 +312,194 @@ describe("DesignProjectManager conflict boundaries", () => {
 		managerInternals.versionManager.handleVersionRollback = vi.fn().mockResolvedValue(undefined)
 
 		await manager.handleChangeFileVersion(2, false)
-		manager.handleReturnLatest()
-		await Promise.resolve()
+		await manager.handleReturnLatest()
 		await manager.handleVersionRollback(1)
 
 		expect(deleteDesignDraft).toHaveBeenCalledTimes(3)
+	})
+
+	it("keeps the version data source locked until overlapping version switches finish", async () => {
+		const remoteData = createDesignData("remote")
+		const { manager, getState } = createManager()
+		let resolveChangeVersion: (() => void) | undefined
+		const managerInternals = manager as unknown as {
+			versionDataSourceLockCount: number
+			loadAndApplyRemoteFn: (updateType?: "message") => Promise<boolean>
+			versionManager: {
+				handleChangeFileVersion: () => Promise<void>
+				handleReturnLatest: () => Promise<void>
+				loadLatest: () => Promise<{ data: DesignData | null; version: number | null }>
+			}
+		}
+		managerInternals.versionManager.handleChangeFileVersion = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					resolveChangeVersion = resolve
+				}),
+		)
+		managerInternals.versionManager.handleReturnLatest = vi.fn().mockResolvedValue(undefined)
+		managerInternals.versionManager.loadLatest = vi.fn().mockResolvedValue({
+			data: remoteData,
+			version: 4,
+		})
+
+		const changeVersionPromise = manager.handleChangeFileVersion(2, false)
+		const returnLatestPromise = manager.handleReturnLatest()
+		await returnLatestPromise
+
+		expect(managerInternals.versionDataSourceLockCount).toBe(1)
+		const applied = await managerInternals.loadAndApplyRemoteFn("message")
+		expect(applied).toBe(false)
+		expect(managerInternals.versionManager.loadLatest).not.toHaveBeenCalled()
+		expect(getState().designData.name).toBe("local")
+
+		resolveChangeVersion?.()
+		await changeVersionPromise
+
+		expect(managerInternals.versionDataSourceLockCount).toBe(0)
+	})
+
+	it("blocks incoming remote data while the version data source is locked", () => {
+		const localData = createDesignData("local")
+		const incomingRemoteData = createDesignData("incoming-remote")
+		const { manager, getState } = createManager(localData)
+		const managerInternals = manager as unknown as {
+			versionDataSourceLockCount: number
+			pendingRemoteDesignData: { data: DesignData; remoteVersion: number } | null
+			applyRemoteDesignDataSafely: (
+				data: DesignData,
+				updateType: "message",
+				options: { remoteVersion: number },
+			) => boolean
+		}
+		managerInternals.versionDataSourceLockCount = 1
+
+		const applied = managerInternals.applyRemoteDesignDataSafely(
+			incomingRemoteData,
+			"message",
+			{ remoteVersion: 4 },
+		)
+
+		expect(applied).toBe(false)
+		expect(getState().designData).toBe(localData)
+		expect(getState().conflictState).toBeNull()
+		expect(managerInternals.pendingRemoteDesignData).toBeNull()
+	})
+
+	it("does not schedule auto-save while the version data source is locked", () => {
+		const { manager } = createManager()
+		const managerInternals = manager as unknown as {
+			versionDataSourceLockCount: number
+			saveManager: { scheduleAutoSave: () => void }
+		}
+		managerInternals.versionDataSourceLockCount = 1
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+
+		manager.scheduleAutoSave()
+
+		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
+	})
+
+	it("blocks save and sync entrypoints while the version data source is locked", async () => {
+		const localData = createDesignData("local")
+		const remoteData = createDesignData("remote")
+		const { manager, getState } = createManager(localData)
+		const managerInternals = manager as unknown as {
+			versionDataSourceLockCount: number
+			saveManager: {
+				syncDesignData: (data: DesignData) => void
+				manualSave: () => Promise<unknown>
+				commitSave: () => Promise<unknown>
+			}
+		}
+		managerInternals.versionDataSourceLockCount = 1
+		managerInternals.saveManager.syncDesignData = vi.fn()
+		managerInternals.saveManager.manualSave = vi.fn()
+		managerInternals.saveManager.commitSave = vi.fn()
+
+		expect(manager.canUpdateCurrentDesignData()).toBe(false)
+
+		manager.syncDesignData(remoteData)
+		await manager.manualSave()
+		await manager.saveToRemote()
+
+		expect(managerInternals.saveManager.syncDesignData).not.toHaveBeenCalled()
+		expect(managerInternals.saveManager.manualSave).not.toHaveBeenCalled()
+		expect(managerInternals.saveManager.commitSave).not.toHaveBeenCalled()
+		expect(getState().prevDesignDataFingerprint).toBe("initial-fingerprint")
+		expect(getBaseDesignData(manager)).toBeNull()
+	})
+
+	it("does not queue or write local drafts while the version data source is locked", () => {
+		vi.useFakeTimers()
+		try {
+			const { manager } = createManager()
+			const managerInternals = manager as unknown as {
+				versionDataSourceLockCount: number
+				draftSaveTimer: ReturnType<typeof setTimeout> | null
+				pendingDraftSave: unknown
+			}
+			manager.persistLocalDraft(createDesignData("pending-draft"))
+			expect(managerInternals.draftSaveTimer).not.toBeNull()
+
+			managerInternals.versionDataSourceLockCount = 1
+			manager.persistLocalDraft(createDesignData("blocked-draft"))
+			vi.runOnlyPendingTimers()
+
+			expect(managerInternals.draftSaveTimer).toBeNull()
+			expect(managerInternals.pendingDraftSave).toBeNull()
+			expect(writeDesignDraft).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("does not apply remote data if version switching starts before remote load", async () => {
+		const remoteData = createDesignData("remote")
+		const { manager, getState } = createManager()
+		const managerInternals = manager as unknown as {
+			versionDataSourceLockCount: number
+			loadAndApplyRemoteFn: (updateType?: "message") => Promise<boolean>
+			versionManager: {
+				loadLatest: () => Promise<{ data: DesignData | null; version: number | null }>
+			}
+		}
+		managerInternals.versionManager.loadLatest = vi.fn().mockResolvedValue({
+			data: remoteData,
+			version: 4,
+		})
+		managerInternals.versionDataSourceLockCount = 1
+
+		const applied = await managerInternals.loadAndApplyRemoteFn("message")
+
+		expect(applied).toBe(false)
+		expect(managerInternals.versionManager.loadLatest).not.toHaveBeenCalled()
+		expect(getState().designData.name).toBe("local")
+	})
+
+	it("does not apply remote data if version switching starts after remote load", async () => {
+		const remoteData = createDesignData("remote")
+		const { manager, getState } = createManager()
+		const managerInternals = manager as unknown as {
+			versionDataSourceLockCount: number
+			loadAndApplyRemoteFn: (updateType?: "message") => Promise<boolean>
+			versionManager: {
+				loadLatest: () => Promise<{ data: DesignData | null; version: number | null }>
+			}
+		}
+		managerInternals.versionManager.loadLatest = vi.fn().mockImplementation(async () => {
+			managerInternals.versionDataSourceLockCount = 1
+			return {
+				data: remoteData,
+				version: 4,
+			}
+		})
+
+		const applied = await managerInternals.loadAndApplyRemoteFn("message")
+
+		expect(applied).toBe(false)
+		expect(managerInternals.versionManager.loadLatest).toHaveBeenCalledTimes(1)
+		expect(getState().designData.name).toBe("local")
 	})
 
 	it("defers incoming remote data while a conflict is active", () => {
@@ -464,6 +655,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 			designData: localData,
 			updateCurrentDesignData: true,
 			skipRemoteUpdateCheck: true,
+			source: "conflict-resolution",
 		})
 		expect(writeDesignDraft).toHaveBeenCalledTimes(1)
 		expect(deleteDesignDraft).toHaveBeenCalledTimes(1)
@@ -686,7 +878,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 		)
 	})
 
-	it("creates an element-level conflict while keeping the conflicting element local on canvas", () => {
+	it("auto-merges incoming remote data when local and remote changed different fields on the same element", () => {
 		const baseData = createDesignData("design", [rect("same"), rect("local-element")])
 		const localData = createDesignData("design", [
 			rect("same", { y: 200 }),
@@ -718,8 +910,54 @@ describe("DesignProjectManager conflict boundaries", () => {
 		})
 
 		expect(applied).toBe(true)
+		expect(getState().conflictState).toBeNull()
+		expect(getState().designData.canvas?.elements).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ id: "same", x: 100, y: 200 }),
+				expect.objectContaining({ id: "local-element", x: 0, y: 300 }),
+			]),
+		)
+		expect(getState().prevDesignDataFingerprint).toBe(hashDesignDataComparable(remoteData))
+		expect(getBaseDesignData(manager)).toEqual(remoteData)
+		expect(managerInternals.pendingRemoteDesignData).toBeNull()
+		expect(managerInternals.saveManager.hasRemoteConflict()).toBe(false)
+		expect(managerInternals.saveManager.scheduleAutoSave).toHaveBeenCalledTimes(1)
+	})
+
+	it("creates an element-level conflict when both sides change the same field", () => {
+		const baseData = createDesignData("design", [rect("same"), rect("local-element")])
+		const localData = createDesignData("design", [
+			rect("same", { x: 200 }),
+			rect("local-element", { y: 300 }),
+		])
+		const remoteData = createDesignData("design", [
+			rect("same", { x: 100 }),
+			rect("local-element"),
+		])
+		const { manager, stateBag, getState } = createManager(baseData)
+		manager.syncDesignData(baseData)
+		stateBag.setters.setDesignData(localData)
+		const managerInternals = manager as unknown as {
+			applyRemoteDesignDataSafely: (
+				data: DesignData,
+				updateType: "message",
+				options: { remoteVersion: number },
+			) => boolean
+			pendingRemoteDesignData: { data: DesignData; remoteVersion: number } | null
+			saveManager: {
+				hasRemoteConflict: () => boolean
+				scheduleAutoSave: () => void
+			}
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+
+		const applied = managerInternals.applyRemoteDesignDataSafely(remoteData, "message", {
+			remoteVersion: 3,
+		})
+
+		expect(applied).toBe(true)
 		expect(getState().designData.canvas?.elements).toEqual([
-			expect.objectContaining({ id: "same", x: 0, y: 200 }),
+			expect.objectContaining({ id: "same", x: 200, y: 0 }),
 			expect.objectContaining({ id: "local-element", x: 0, y: 300 }),
 		])
 		expect(getState().conflictState?.reason).toBe("element-level-conflict")
@@ -735,7 +973,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 				reason: "same-element-changed",
 				status: "unresolved",
 				baseElement: expect.objectContaining({ id: "same", x: 0, y: 0 }),
-				localElement: expect.objectContaining({ id: "same", x: 0, y: 200 }),
+				localElement: expect.objectContaining({ id: "same", x: 200, y: 0 }),
 				remoteElement: expect.objectContaining({ id: "same", x: 100, y: 0 }),
 			}),
 		])
@@ -746,6 +984,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
 		expect(writeDesignDraft).toHaveBeenCalledWith(
 			expect.objectContaining({
+				baseRemoteData: baseData,
 				designData: localData,
 				reason: "local-edit",
 			}),
@@ -753,9 +992,15 @@ describe("DesignProjectManager conflict boundaries", () => {
 	})
 
 	it("saves non-conflicting changes remotely while unresolved element conflicts keep remote candidates", async () => {
-		const baseData = createDesignData("design", [rect("same")])
-		const localData = createDesignData("design", [rect("same", { y: 200 })])
-		const remoteData = createDesignData("design", [rect("same", { x: 100 })])
+		const baseData = createDesignData("design", [rect("same"), rect("local-element")])
+		const localData = createDesignData("design", [
+			rect("same", { x: 200 }),
+			rect("local-element", { y: 300 }),
+		])
+		const remoteData = createDesignData("design", [
+			rect("same", { x: 100 }),
+			rect("local-element"),
+		])
 		const { manager, stateBag, getState } = createManager(baseData)
 		manager.syncDesignData(baseData)
 		stateBag.setters.setDesignData(localData)
@@ -795,9 +1040,13 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.saveManager.scheduleAutoSave).toHaveBeenCalledWith(
 			expect.objectContaining({
 				canvas: expect.objectContaining({
-					elements: [expect.objectContaining({ id: "same", x: 100, y: 0 })],
+					elements: [
+						expect.objectContaining({ id: "same", x: 100, y: 0 }),
+						expect.objectContaining({ id: "local-element", x: 0, y: 300 }),
+					],
 				}),
 			}),
+			expect.objectContaining({ source: "conflict-resolution" }),
 		)
 		expect(managerInternals.saveManager.commitSave).toHaveBeenCalledTimes(2)
 		expect(managerInternals.saveManager.commitSave).toHaveBeenNthCalledWith(
@@ -805,7 +1054,10 @@ describe("DesignProjectManager conflict boundaries", () => {
 			expect.objectContaining({
 				designData: expect.objectContaining({
 					canvas: expect.objectContaining({
-						elements: [expect.objectContaining({ id: "same", x: 100, y: 0 })],
+						elements: [
+							expect.objectContaining({ id: "same", x: 100, y: 0 }),
+							expect.objectContaining({ id: "local-element", x: 0, y: 300 }),
+						],
 					}),
 				}),
 				updateCurrentDesignData: false,
@@ -817,20 +1069,27 @@ describe("DesignProjectManager conflict boundaries", () => {
 				allowRemoteConflict: true,
 				designData: expect.objectContaining({
 					canvas: expect.objectContaining({
-						elements: [expect.objectContaining({ id: "same", x: 100, y: 0 })],
+						elements: [
+							expect.objectContaining({ id: "same", x: 100, y: 0 }),
+							expect.objectContaining({ id: "local-element", x: 0, y: 300 }),
+						],
 					}),
 				}),
 				updateCurrentDesignData: false,
 			}),
 		)
 		expect(getState().designData.canvas?.elements).toEqual([
-			expect.objectContaining({ id: "same", x: 0, y: 200 }),
+			expect.objectContaining({ id: "same", x: 200, y: 0 }),
+			expect.objectContaining({ id: "local-element", x: 0, y: 300 }),
 		])
 		expect(writeDesignDraft).toHaveBeenCalledWith(
 			expect.objectContaining({
 				designData: expect.objectContaining({
 					canvas: expect.objectContaining({
-						elements: [expect.objectContaining({ id: "same", x: 0, y: 200 })],
+						elements: [
+							expect.objectContaining({ id: "same", x: 200, y: 0 }),
+							expect.objectContaining({ id: "local-element", x: 0, y: 300 }),
+						],
 					}),
 				}),
 				reason: "local-edit",
@@ -839,9 +1098,67 @@ describe("DesignProjectManager conflict boundaries", () => {
 		)
 	})
 
-	it("refreshes an unresolved element conflict when a later remote update changes that element", () => {
+	it("auto-clears an existing element conflict when a later remote merge can reconcile it by field", () => {
 		const baseData = createDesignData("design", [rect("same")])
 		const localData = createDesignData("design", [rect("same", { y: 200 })])
+		const remoteData = createDesignData("design", [rect("same", { x: 100 })])
+		const { manager, stateBag, getState } = createManager(baseData)
+		manager.syncDesignData(baseData)
+		stateBag.setters.setDesignData(localData)
+		stateBag.setters.setConflictState({
+			reason: "element-level-conflict",
+			baseVersion: 2,
+			localVersion: 2,
+			remoteVersion: 3,
+			baseFingerprint: hashDesignDataComparable(baseData),
+			localFingerprint: hashDesignDataComparable(localData),
+			remoteFingerprint: hashDesignDataComparable(remoteData),
+			localData,
+			remoteData,
+			mergedData: remoteData,
+			createdAt: 1,
+			elementConflicts: [
+				{
+					elementId: "same",
+					reason: "same-element-changed",
+					status: "unresolved",
+					baseElement: rect("same"),
+					localElement: rect("same", { y: 200 }),
+					remoteElement: rect("same", { x: 100 }),
+					baseParentId: null,
+					localParentId: null,
+					remoteParentId: null,
+					createdAt: 1,
+				},
+			],
+		})
+		const managerInternals = manager as unknown as {
+			applyRemoteDesignDataSafely: (
+				data: DesignData,
+				updateType: "message",
+				options: { remoteVersion: number },
+			) => boolean
+			saveManager: {
+				scheduleAutoSave: () => void
+			}
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+
+		const applied = managerInternals.applyRemoteDesignDataSafely(remoteData, "message", {
+			remoteVersion: 3,
+		})
+
+		expect(applied).toBe(true)
+		expect(getState().conflictState).toBeNull()
+		expect(getState().designData.canvas?.elements).toEqual([
+			expect.objectContaining({ id: "same", x: 100, y: 200 }),
+		])
+		expect(managerInternals.saveManager.scheduleAutoSave).toHaveBeenCalledTimes(1)
+	})
+
+	it("refreshes an unresolved element conflict when a later remote update changes that element", () => {
+		const baseData = createDesignData("design", [rect("same")])
+		const localData = createDesignData("design", [rect("same", { x: 200 })])
 		const remoteData = createDesignData("design", [rect("same", { x: 100 })])
 		const newerRemoteData = createDesignData("design", [rect("same", { x: 180 })])
 		const { manager, stateBag, getState } = createManager(baseData)
@@ -869,7 +1186,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 
 		expect(applied).toBe(true)
 		expect(getState().designData.canvas?.elements).toEqual([
-			expect.objectContaining({ id: "same", x: 0, y: 200 }),
+			expect.objectContaining({ id: "same", x: 200, y: 0 }),
 		])
 		expect(getState().conflictState?.remoteData).toEqual(newerRemoteData)
 		expect(getState().conflictState?.remoteVersion).toBe(4)
@@ -877,18 +1194,18 @@ describe("DesignProjectManager conflict boundaries", () => {
 			expect.objectContaining({
 				elementId: "same",
 				status: "unresolved",
-				localElement: expect.objectContaining({ id: "same", x: 0, y: 200 }),
+				localElement: expect.objectContaining({ id: "same", x: 200, y: 0 }),
 				remoteElement: expect.objectContaining({ id: "same", x: 180, y: 0 }),
 			}),
 		])
 		expect(getState().conflictState?.localData.canvas?.elements).toEqual([
-			expect.objectContaining({ id: "same", x: 0, y: 200 }),
+			expect.objectContaining({ id: "same", x: 200, y: 0 }),
 		])
 		expect(writeDesignDraft).toHaveBeenCalledWith(
 			expect.objectContaining({
 				designData: expect.objectContaining({
 					canvas: expect.objectContaining({
-						elements: [expect.objectContaining({ id: "same", x: 0, y: 200 })],
+						elements: [expect.objectContaining({ id: "same", x: 200, y: 0 })],
 					}),
 				}),
 				reason: "local-edit",
@@ -899,8 +1216,8 @@ describe("DesignProjectManager conflict boundaries", () => {
 	it("keeps existing unresolved element conflicts when a newer remote update adds another element conflict", () => {
 		const baseData = createDesignData("design", [rect("same-a"), rect("same-b")])
 		const localData = createDesignData("design", [
-			rect("same-a", { y: 200 }),
-			rect("same-b", { y: 300 }),
+			rect("same-a", { x: 200 }),
+			rect("same-b", { x: 300 }),
 		])
 		const remoteData = createDesignData("design", [rect("same-a", { x: 100 }), rect("same-b")])
 		const newerRemoteData = createDesignData("design", [
@@ -931,8 +1248,8 @@ describe("DesignProjectManager conflict boundaries", () => {
 
 		expect(applied).toBe(true)
 		expect(getState().designData.canvas?.elements).toEqual([
-			expect.objectContaining({ id: "same-a", x: 0, y: 200 }),
-			expect.objectContaining({ id: "same-b", x: 0, y: 300 }),
+			expect.objectContaining({ id: "same-a", x: 200, y: 0 }),
+			expect.objectContaining({ id: "same-b", x: 300, y: 0 }),
 		])
 		const conflictsById = new Map(
 			getState().conflictState?.elementConflicts?.map((elementConflict) => [
@@ -943,20 +1260,20 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(conflictsById.get("same-a")).toEqual(
 			expect.objectContaining({
 				status: "unresolved",
-				localElement: expect.objectContaining({ id: "same-a", x: 0, y: 200 }),
+				localElement: expect.objectContaining({ id: "same-a", x: 200, y: 0 }),
 				remoteElement: expect.objectContaining({ id: "same-a", x: 150, y: 0 }),
 			}),
 		)
 		expect(conflictsById.get("same-b")).toEqual(
 			expect.objectContaining({
 				status: "unresolved",
-				localElement: expect.objectContaining({ id: "same-b", x: 0, y: 300 }),
+				localElement: expect.objectContaining({ id: "same-b", x: 300, y: 0 }),
 				remoteElement: expect.objectContaining({ id: "same-b", x: 120, y: 0 }),
 			}),
 		)
 		expect(getState().conflictState?.localData.canvas?.elements).toEqual([
-			expect.objectContaining({ id: "same-a", x: 0, y: 200 }),
-			expect.objectContaining({ id: "same-b", x: 0, y: 300 }),
+			expect.objectContaining({ id: "same-a", x: 200, y: 0 }),
+			expect.objectContaining({ id: "same-b", x: 300, y: 0 }),
 		])
 	})
 
@@ -995,7 +1312,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 
 	it("resolves an element-level conflict as local when the conflicted element is edited", () => {
 		const baseData = createDesignData("design", [rect("same")])
-		const localData = createDesignData("design", [rect("same", { y: 200 })])
+		const localData = createDesignData("design", [rect("same", { x: 200 })])
 		const remoteData = createDesignData("design", [rect("same", { x: 100 })])
 		const editedData = createDesignData("design", [rect("same", { x: 160, y: 240 })])
 		const { manager, stateBag, getState } = createManager(baseData)
@@ -1030,8 +1347,8 @@ describe("DesignProjectManager conflict boundaries", () => {
 	it("reschedules selective remote save when one edited conflict is resolved locally and others remain unresolved", () => {
 		const baseData = createDesignData("design", [rect("same-a"), rect("same-b")])
 		const localData = createDesignData("design", [
-			rect("same-a", { y: 200 }),
-			rect("same-b", { y: 300 }),
+			rect("same-a", { x: 200 }),
+			rect("same-b", { x: 300 }),
 		])
 		const remoteData = createDesignData("design", [
 			rect("same-a", { x: 100 }),
@@ -1039,7 +1356,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 		])
 		const editedData = createDesignData("design", [
 			rect("same-a", { x: 160, y: 240 }),
-			rect("same-b", { y: 300 }),
+			rect("same-b", { x: 300 }),
 		])
 		const { manager, stateBag, getState } = createManager(baseData)
 		manager.syncDesignData(baseData)
@@ -1051,7 +1368,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 				options: { remoteVersion: number },
 			) => boolean
 			saveManager: {
-				scheduleAutoSave: (designData?: DesignData) => void
+				scheduleAutoSave: (designData?: DesignData, metadata?: unknown) => void
 			}
 		}
 		managerInternals.saveManager.scheduleAutoSave = vi.fn()
@@ -1061,7 +1378,10 @@ describe("DesignProjectManager conflict boundaries", () => {
 		vi.mocked(managerInternals.saveManager.scheduleAutoSave).mockClear()
 		stateBag.setters.setDesignData(editedData)
 
-		const didResolve = manager.resolveEditedElementConflictsWithLocal(["same-a"], editedData)
+		const didResolve = manager.resolveEditedElementConflictsWithLocal(["same-a"], editedData, {
+			source: "canvas-patch",
+			deletedElementIds: ["same-a"],
+		})
 
 		expect(didResolve).toBe(true)
 		expect(getState().conflictState?.elementConflicts).toEqual([
@@ -1084,6 +1404,10 @@ describe("DesignProjectManager conflict boundaries", () => {
 						expect.objectContaining({ id: "same-b", x: 120, y: 0 }),
 					],
 				}),
+			}),
+			expect.objectContaining({
+				source: "canvas-patch",
+				deletedElementIds: ["same-a"],
 			}),
 		)
 	})
@@ -1130,9 +1454,59 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
 	})
 
-	it("resolves an element-level conflict as local when the local element is chosen", () => {
+	it("auto-merges a stale single element conflict before applying a local choice", () => {
 		const baseData = createDesignData("design", [rect("same")])
 		const localData = createDesignData("design", [rect("same", { y: 200 })])
+		const remoteData = createDesignData("design", [rect("same", { x: 100 })])
+		const { manager, stateBag, getState } = createManager(localData)
+		stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(remoteData))
+		stateBag.setters.setConflictState({
+			reason: "element-level-conflict",
+			baseVersion: 2,
+			localVersion: 2,
+			remoteVersion: 3,
+			baseFingerprint: hashDesignDataComparable(baseData),
+			localFingerprint: hashDesignDataComparable(localData),
+			remoteFingerprint: hashDesignDataComparable(remoteData),
+			localData,
+			remoteData,
+			mergedData: remoteData,
+			createdAt: 1,
+			elementConflicts: [
+				{
+					elementId: "same",
+					reason: "same-element-changed",
+					status: "unresolved",
+					baseElement: rect("same"),
+					localElement: rect("same", { y: 200 }),
+					remoteElement: rect("same", { x: 100 }),
+					baseParentId: null,
+					localParentId: null,
+					remoteParentId: null,
+					createdAt: 1,
+				},
+			],
+		})
+		const managerInternals = manager as unknown as {
+			saveManager: {
+				scheduleAutoSave: () => void
+			}
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+
+		const didResolve = manager.resolveElementConflictWithLocal("same")
+
+		expect(didResolve).toBe(true)
+		expect(getState().conflictState).toBeNull()
+		expect(getState().designData.canvas?.elements).toEqual([
+			expect.objectContaining({ id: "same", x: 100, y: 200 }),
+		])
+		expect(managerInternals.saveManager.scheduleAutoSave).toHaveBeenCalledTimes(1)
+	})
+
+	it("resolves an element-level conflict as local when the local element is chosen", () => {
+		const baseData = createDesignData("design", [rect("same")])
+		const localData = createDesignData("design", [rect("same", { x: 200 })])
 		const remoteData = createDesignData("design", [rect("same", { x: 100 })])
 		const { manager, stateBag, getState } = createManager(baseData)
 		manager.syncDesignData(baseData)
@@ -1157,13 +1531,13 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(didResolve).toBe(true)
 		expect(getState().conflictState).toBeNull()
 		expect(getState().designData.canvas?.elements).toEqual([
-			expect.objectContaining({ id: "same", x: 0, y: 200 }),
+			expect.objectContaining({ id: "same", x: 200, y: 0 }),
 		])
 	})
 
 	it("resolves an element-level conflict as remote when the remote element is chosen", () => {
 		const baseData = createDesignData("design", [rect("same")])
-		const localData = createDesignData("design", [rect("same", { y: 200 })])
+		const localData = createDesignData("design", [rect("same", { x: 200 })])
 		const remoteData = createDesignData("design", [rect("same", { x: 100 })])
 		const { manager, stateBag, getState } = createManager(baseData)
 		manager.syncDesignData(baseData)
@@ -1309,7 +1683,57 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.versionManager.loadLatest).not.toHaveBeenCalled()
 	})
 
-	it("keeps a remote-advanced local draft as a conflict without applying it", async () => {
+	it("auto-merges a remote-advanced local draft when base remote data is available", async () => {
+		const baseData = createDesignData("design", [rect("same")])
+		const remoteData = createDesignData("design", [rect("same", { x: 100 })])
+		const draftData = createDesignData("design", [rect("same", { y: 200 })])
+		const { manager, stateBag, getState } = createManager(remoteData)
+		stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(remoteData))
+		const draft: DesignDraftEntry = {
+			key: "draft-key",
+			schemaVersion: 1,
+			projectId: "project-1",
+			designProjectId: "design-1",
+			magicProjectJsFileId: "file-1",
+			baseRemoteVersion: 1,
+			baseRemoteFingerprint: hashDesignDataComparable(baseData),
+			localFingerprint: hashDesignDataComparable(draftData),
+			localUpdatedAt: 1,
+			reason: "local-edit",
+			designData: draftData,
+			baseRemoteData: baseData,
+		}
+		vi.mocked(readDesignDraft).mockResolvedValue(draft)
+		const managerInternals = manager as unknown as {
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+			saveManager: { scheduleAutoSave: () => void }
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+
+		await managerInternals.tryRestoreLocalDraftAfterRemoteLoad()
+
+		expect(getState().conflictState).toBeNull()
+		expect(getState().designData.canvas?.elements).toEqual([
+			expect.objectContaining({ id: "same", x: 100, y: 200 }),
+		])
+		expect(getState().prevDesignDataFingerprint).toBe(hashDesignDataComparable(remoteData))
+		expect(getBaseDesignData(manager)).toEqual(remoteData)
+		expect(managerInternals.saveManager.scheduleAutoSave).toHaveBeenCalledTimes(1)
+		expect(writeDesignDraft).toHaveBeenCalledWith(
+			expect.objectContaining({
+				designData: expect.objectContaining({
+					canvas: expect.objectContaining({
+						elements: [expect.objectContaining({ id: "same", x: 100, y: 200 })],
+					}),
+				}),
+				baseRemoteData: remoteData,
+				reason: "local-edit",
+			}),
+			expect.any(Object),
+		)
+	})
+
+	it("keeps a legacy remote-advanced local draft as a blocking conflict", async () => {
 		const remoteData = createDesignData("remote")
 		const draftData = createDesignData("local-draft")
 		const { manager, getState } = createManager(remoteData)
@@ -1339,6 +1763,49 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(getState().conflictState?.reason).toBe("draft-remote-advanced")
 		expect(getState().conflictState?.localData).toEqual(draftData)
 		expect(getState().conflictState?.remoteData).toEqual(remoteData)
+		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
+	})
+
+	it("keeps only element-level conflicts when a remote-advanced draft cannot merge one field", async () => {
+		const baseData = createDesignData("design", [rect("same")])
+		const remoteData = createDesignData("design", [rect("same", { x: 100 })])
+		const draftData = createDesignData("design", [rect("same", { x: 200 })])
+		const { manager, stateBag, getState } = createManager(remoteData)
+		stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(remoteData))
+		const draft: DesignDraftEntry = {
+			key: "draft-key",
+			schemaVersion: 1,
+			projectId: "project-1",
+			designProjectId: "design-1",
+			magicProjectJsFileId: "file-1",
+			baseRemoteVersion: 1,
+			baseRemoteFingerprint: hashDesignDataComparable(baseData),
+			localFingerprint: hashDesignDataComparable(draftData),
+			localUpdatedAt: 1,
+			reason: "local-edit",
+			designData: draftData,
+			baseRemoteData: baseData,
+		}
+		vi.mocked(readDesignDraft).mockResolvedValue(draft)
+		const managerInternals = manager as unknown as {
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+			saveManager: { scheduleAutoSave: () => void }
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+
+		await managerInternals.tryRestoreLocalDraftAfterRemoteLoad()
+
+		expect(getState().designData.canvas?.elements).toEqual([
+			expect.objectContaining({ id: "same", x: 200 }),
+		])
+		expect(getState().conflictState?.reason).toBe("element-level-conflict")
+		expect(getState().conflictState?.elementConflicts).toEqual([
+			expect.objectContaining({
+				elementId: "same",
+				reason: "same-element-changed",
+				status: "unresolved",
+			}),
+		])
 		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
 	})
 
@@ -1376,5 +1843,50 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(baseDesignData).toEqual(remoteData)
 		expect(baseDesignData).not.toBe(remoteData)
 		expect(managerInternals.saveManager.scheduleAutoSave).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps an empty restored draft local when the trusted remote base is non-empty", async () => {
+		const remoteData = createDesignData("remote", [rect("remote")])
+		const draftData = createDesignData("empty-draft")
+		const { manager, getState } = createManager(remoteData)
+		manager.syncDesignData(remoteData)
+		const remoteFingerprint = hashDesignDataComparable(remoteData)
+		const draft: DesignDraftEntry = {
+			key: "draft-key",
+			schemaVersion: 1,
+			projectId: "project-1",
+			designProjectId: "design-1",
+			magicProjectJsFileId: "file-1",
+			baseRemoteVersion: 2,
+			baseRemoteFingerprint: remoteFingerprint,
+			localFingerprint: hashDesignDataComparable(draftData),
+			localUpdatedAt: 1,
+			reason: "local-edit",
+			designData: draftData,
+		}
+		vi.mocked(readDesignDraft).mockResolvedValue(draft)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const managerInternals = manager as unknown as {
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+			saveManager: { scheduleAutoSave: () => void }
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+
+		await managerInternals.tryRestoreLocalDraftAfterRemoteLoad()
+
+		expect(getState().designData).toEqual(draftData)
+		expect(getState().conflictState).toEqual(
+			expect.objectContaining({
+				reason: "draft-remote-advanced",
+				localData: draftData,
+				remoteData,
+			}),
+		)
+		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
+		expect(warnSpy).toHaveBeenCalledWith(
+			"[DesignSaveGuard]",
+			expect.stringContaining("blocked-empty-draft-restore-autosave"),
+		)
+		warnSpy.mockRestore()
 	})
 })

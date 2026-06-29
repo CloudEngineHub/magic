@@ -154,13 +154,13 @@ export default function MemoryCreate({
 		<>
 			{isMobile && (
 				<div className={styles.header}>
-					<div className={styles.back} onClick={handleBack}>
+					<div className={styles.back} onClick={handleBack} data-testid="handle-back">
 						<IconChevronLeft size={24} stroke={1.5} />
 					</div>
 					<div className={styles.title}>
 						{editMemory ? t("editMemory") : t("createMemory")}
 					</div>
-					<div className={styles.close} onClick={onClose}>
+					<div className={styles.close} onClick={onClose} data-testid="on-close">
 						<IconX size={24} />
 					</div>
 				</div>

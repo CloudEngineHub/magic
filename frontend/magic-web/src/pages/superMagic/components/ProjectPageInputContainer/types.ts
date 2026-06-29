@@ -1,4 +1,5 @@
 import { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
+import type { HandleSendParams } from "../../services/messageSendFlowService"
 import type { SceneEditorContext } from "../MainInputContainer/components/editors/types"
 import { ProjectListItem, Topic, Workspace } from "../../pages/Workspace/types"
 import { MessageEditorLayoutConfig } from "../MessageEditor"
@@ -21,6 +22,10 @@ export interface ProjectPageInputContainerProps {
 	containerRef?: React.RefObject<HTMLDivElement>
 	onEditorBlur?: () => void
 	onEditorFocus?: () => void
+	onMessageSendReady?: (
+		sendMessage?: (params: HandleSendParams) => Promise<boolean>,
+		prevSendMessage?: (params: HandleSendParams) => Promise<boolean>,
+	) => void
 	showLoading?: boolean
 	selectedTopic: Topic | null
 	setSelectedTopic: (topic: Topic | null) => void

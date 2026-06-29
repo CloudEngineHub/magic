@@ -1,11 +1,11 @@
 import { message } from "antd"
-import { isConvertibleFile } from "@/pages/superMagic/components/Detail/utils/file"
+import type { TFunction } from "i18next"
 import { IMAGE_EXTENSIONS } from "@/pages/superMagic/components/Detail/hooks/useDetailActions"
+import { isConvertibleFile } from "@/pages/superMagic/components/Detail/utils/file"
 import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
-import type { AttachmentItem } from "../hooks/types"
-import type { TFunction } from "i18next"
 import { AttachmentSource } from "../hooks/types"
+import type { AttachmentItem } from "../hooks/types"
 
 export interface MobileDownloadMenuItem {
 	key: string
@@ -28,11 +28,7 @@ export function menuItemsIncludeNoWaterMarkDownload(items: MobileDownloadMenuIte
 
 export interface SingleFileDownloadHandlers {
 	handleDownloadOriginal: (item: AttachmentItem, mode?: DownloadImageMode) => void
-	handleDownloadPdf: (
-		item: AttachmentItem,
-		folderChildren?: AttachmentItem[],
-		pagination?: "slice" | "none",
-	) => void
+	handleDownloadPdf: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadPpt: (item: AttachmentItem) => void
 	handleDownloadPptx: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadImage?: (item: AttachmentItem, format: "png" | "jpeg") => void
@@ -178,18 +174,7 @@ export function buildSingleFileDownloadMenu({
 			items.push({
 				key: "downloadPdf",
 				label: t("topicFiles.contextMenu.downloadPdf"),
-				children: [
-					{
-						key: "downloadPdfPaginated",
-						label: t("topicFiles.exportPdfPaginated"),
-						onClick: () => handleDownloadPdf(item, undefined, "slice"),
-					},
-					{
-						key: "downloadPdfFullPage",
-						label: t("topicFiles.exportPdfFullPage"),
-						onClick: () => handleDownloadPdf(item, undefined, "none"),
-					},
-				],
+				onClick: () => handleDownloadPdf(item),
 			})
 		}
 

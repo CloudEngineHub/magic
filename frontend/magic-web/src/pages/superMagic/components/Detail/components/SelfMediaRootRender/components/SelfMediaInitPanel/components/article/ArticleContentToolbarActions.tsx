@@ -64,6 +64,7 @@ export default function ArticleContentToolbarActions({
 								: "text-[#71717a] hover:text-[#18181b]",
 						)}
 						onClick={() => onWechatContentViewChange("editor")}
+						data-testid="on-wechat-content-view-change"
 					>
 						<FileText size={12} />
 						{t("detail.selfMedia.initPanel.stepDetail.wechatContentEditorView", "编辑")}
@@ -78,6 +79,7 @@ export default function ArticleContentToolbarActions({
 								: "text-[#71717a] hover:text-[#18181b]",
 						)}
 						onClick={() => onWechatContentViewChange("phone")}
+						data-testid="on-wechat-content-view-change-2"
 					>
 						<Smartphone size={12} />
 						{t(
@@ -146,6 +148,7 @@ export default function ArticleContentToolbarActions({
 							value={optimizeInstruction}
 							onChange={(e) => onOptimizeInstructionChange(e.target.value)}
 							autoFocus
+							data-testid="on-optimize-instruction-change"
 						/>
 						<div className="mt-2 flex justify-end">
 							<button
@@ -156,6 +159,7 @@ export default function ArticleContentToolbarActions({
 								)}
 								disabled={!optimizeInstruction.trim()}
 								onClick={() => onAiOptimize(optimizeInstruction)}
+								data-testid="on-ai-optimize"
 							>
 								{t("detail.selfMedia.initPanel.stepDetail.outlineOptimizeSubmit")}
 							</button>

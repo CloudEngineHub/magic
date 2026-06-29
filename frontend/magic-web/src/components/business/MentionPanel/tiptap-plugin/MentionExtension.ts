@@ -24,6 +24,7 @@ import {
 import { createMentionPanelSuggestion } from "./suggestion"
 import { MentionItemType } from "../types"
 import MentionNodeView from "./MentionNodeView"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 /** Meta key for keyboard-driven mention deletion (appendTransaction reads this) */
 export const mentionDeletionInputKey = new PluginKey<MentionDeletionInput | undefined>(
@@ -385,13 +386,20 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 			},
 			openMentionPanel:
 				() =>
-					({ editor }) => {
-						if (!this.storage.enabled) return false
-						const from = editor.state.selection.from
-						this.storage.lastAtInputAt = Date.now()
-						this.storage.lastAtInputPos = from
-						return editor.chain().focus().insertContent("@").run()
-					},
+				({ editor }) => {
+					if (!this.storage.enabled) return false
+					const from = editor.state.selection.from
+					this.storage.lastAtInputAt = Date.now()
+					this.storage.lastAtInputPos = from
+					return (
+						runActiveEditor(
+							editor,
+							(activeEditor) =>
+								activeEditor.chain().focus().insertContent("@").run(),
+							false,
+						) ?? false
+					)
+				},
 		}
 	},
 

@@ -30,6 +30,7 @@ function SloganSketch() {
 							src={getAvatarUrl(globalConfig.minimal_logo, 100)}
 							alt={globalConfig.name_i18n?.[i18n.language as SupportLocales]}
 							draggable={false}
+							data-testid="slogan-sketch-image"
 						/>
 					</div>
 				)

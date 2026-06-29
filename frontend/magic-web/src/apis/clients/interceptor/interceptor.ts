@@ -4,6 +4,7 @@ import type { Container } from "@/services/ServiceContainer"
 import { RoutePath } from "@/constants/routes"
 import type { InterceptorContext } from "../../core/HttpClient"
 import { LoginValueKey } from "@/pages/login/constants"
+import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
 import type { AccountService } from "@/services/user/AccountService"
 import { UrlUtils } from "@/apis/utils"
 import { BUSINESS_API_ERROR_CODE } from "@/constants/api"
@@ -47,11 +48,11 @@ export const genLoginRedirectUrl = () => {
 			LoginValueKey.REDIRECT_URL,
 		)
 
-		// 获取当前页面地址
-		redirectUrl.searchParams.set(
-			LoginValueKey.REDIRECT_URL,
-			redirectTarget ?? window.location.href,
-		)
+		// Keep login-related query state when API auth expires inside embedded routes.
+		redirectUrl.search = buildLoginRedirectSearchParams({
+			currentHref: window.location.href,
+			redirectTarget: redirectTarget ?? window.location.href,
+		}).toString()
 	}
 	return redirectUrl.toString()
 }

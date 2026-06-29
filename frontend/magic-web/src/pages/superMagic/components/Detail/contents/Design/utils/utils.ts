@@ -147,6 +147,94 @@ export function generateMagicProjectJsContent(
 	return result
 }
 
+export type MagicProjectCanvasStatus =
+	| "valid-empty"
+	| "valid-non-empty"
+	| "missing"
+	| "invalid"
+	| "decompress-failed"
+
+export interface MagicProjectJsParseDiagnostics {
+	data: DesignData | null
+	canvasStatus: MagicProjectCanvasStatus
+	error?: string
+}
+
+function buildDesignDataFromMagicProjectConfig(
+	config: Record<string, unknown>,
+	elements: LayerElement[],
+): DesignData {
+	return {
+		type: (config as { type?: string }).type || "design",
+		name: (config as { name?: string }).name || "",
+		version: (config as { version?: string }).version || MAGIC_PROJECT_VERSION_V1,
+		canvas: {
+			elements,
+		},
+	}
+}
+
+/**
+ * 从 magic.project.js 内容中解析设计数据，并保留 canvas 字段诊断信息。
+ *
+ * 这样上游可以区分「明确的合法空画布」和「缺失/异常/解压失败后不确定」，
+ * 避免把不确定状态当成用户主动清空。
+ */
+export function parseMagicProjectJsContentWithDiagnostics(
+	content: string,
+): MagicProjectJsParseDiagnostics {
+	if (!content) {
+		return { data: null, canvasStatus: "invalid", error: "empty-content" }
+	}
+
+	try {
+		const config = parseMagicProjectConfigContent(content)
+
+		if (!config || typeof config !== "object") {
+			return { data: null, canvasStatus: "invalid", error: "invalid-config" }
+		}
+
+		if (!Object.prototype.hasOwnProperty.call(config, "canvas")) {
+			return { data: null, canvasStatus: "missing" }
+		}
+
+		const canvasField = (config as { canvas?: unknown }).canvas
+		let canvasObj: { elements?: unknown } | null = null
+
+		if (isCompressedCanvas(canvasField)) {
+			try {
+				canvasObj = decompressCanvasData(canvasField) as { elements?: unknown } | null
+			} catch (error) {
+				return {
+					data: null,
+					canvasStatus: "decompress-failed",
+					error: error instanceof Error ? error.message : String(error),
+				}
+			}
+		} else if (canvasField && typeof canvasField === "object" && !Array.isArray(canvasField)) {
+			canvasObj = canvasField as { elements?: unknown }
+		} else {
+			return { data: null, canvasStatus: "invalid" }
+		}
+
+		if (!Array.isArray(canvasObj?.elements)) {
+			return { data: null, canvasStatus: "invalid" }
+		}
+
+		const elements = canvasObj.elements as LayerElement[]
+		return {
+			data: buildDesignDataFromMagicProjectConfig(config, elements),
+			canvasStatus: elements.length > 0 ? "valid-non-empty" : "valid-empty",
+		}
+	} catch (error) {
+		return {
+			data: null,
+			canvasStatus: "invalid",
+			error: error instanceof Error ? error.message : String(error),
+		}
+	}
+}
+
 /**
  * 从 magic.project.js 文件内容中解析出 designData
  * @param content magic.project.js 文件的内容
@@ -164,7 +252,8 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 			return null
 		}
 
-		// 物理解压由 canvas 字段类型驱动（自描述、稳健）：压缩串则解压，对象则直接用
+		// 保持普通加载链路的历史兼容：缺失或异常 canvas 仍按空画布兜底。
+		// 严格区分 missing/invalid/decompress-failed 的逻辑只给 upgrade diagnostics 使用。
 		const canvasField = (config as { canvas?: unknown }).canvas
 		let elements: LayerElement[] = []
 		if (isCompressedCanvas(canvasField)) {
@@ -176,18 +265,8 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 			elements = (canvasField as { elements?: LayerElement[] } | undefined)?.elements || []
 		}
 
-		// 转换为 DesignData 格式；version 即格式契约（2.0.0 = v2），保存时据此决定写法
-		const designData: DesignData = {
-			type: (config as { type?: string }).type || "design",
-			name: (config as { name?: string }).name || "",
-			version: (config as { version?: string }).version || MAGIC_PROJECT_VERSION_V1,
-			canvas: {
-				elements,
-			},
-		}
-
-		return designData
-	} catch (error) {
+		return buildDesignDataFromMagicProjectConfig(config, elements)
+	} catch {
 		return null
 	}
 }

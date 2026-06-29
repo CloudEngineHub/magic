@@ -318,6 +318,7 @@ export function DevConsolePanel({
 					ref={dragHandleRef}
 					className="absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize touch-none"
 					onPointerDown={handleDragStart}
+					data-testid="handle-drag-start"
 				/>
 			)}
 

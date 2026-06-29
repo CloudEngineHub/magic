@@ -144,6 +144,7 @@ function TaskList({ taskData, className, style, mode }: TaskListProps) {
 						expanded && "px-2.5 pb-1.5 pt-2.5",
 					)}
 					onClick={toggleExpanded}
+					data-testid="toggle-expanded"
 				>
 					<div
 						className={cn(

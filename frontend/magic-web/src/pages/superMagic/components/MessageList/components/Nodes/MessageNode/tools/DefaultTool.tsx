@@ -134,6 +134,7 @@ function DefaultTool(props: DefaultToolProps) {
 					<div
 						className="inline-flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-r-[4px] bg-white hover:bg-fill active:bg-fill-secondary dark:bg-card"
 						onClick={handleOpenPlaybackTab}
+						data-testid="handle-open-playback-tab"
 					>
 						<CircleAlert size={16} className="text-foreground" />
 					</div>
@@ -142,6 +143,7 @@ function DefaultTool(props: DefaultToolProps) {
 						<div
 							className="inline-flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-r-[4px] bg-white hover:bg-fill active:bg-fill-secondary dark:bg-card"
 							onClick={handleOpenPlaybackTab}
+							data-testid="handle-open-playback-tab-2"
 						>
 							<MonitorPlay size={16} className="text-foreground" />
 						</div>
@@ -157,6 +159,7 @@ function DefaultTool(props: DefaultToolProps) {
 			data-tool={tool?.id}
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
 		>
 			<div
 				className={cn(
@@ -170,6 +173,7 @@ function DefaultTool(props: DefaultToolProps) {
 						isEmpty(fileData) && "cursor-not-allowed",
 					)}
 					onClick={onClick}
+					data-testid="default-tool"
 				>
 					<ToolIconBadge toolName={tool?.name} />
 					{tool?.action && (

@@ -131,6 +131,7 @@ function HeroImage({
 					alt={feedTitle || ""}
 					className="h-full w-full object-cover"
 					draggable={false}
+					data-testid="cover-image"
 				/>
 			) : (
 				<div
@@ -172,7 +173,7 @@ function ThumbnailImage({ fileId, enabled }: { fileId?: string; enabled: boolean
 	return (
 		<div className="aspect-square w-[72px] flex-shrink-0 overflow-hidden rounded-sm bg-[#f0f0f0]">
 			{url ? (
-				<img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
+				<img src={url} alt="" className="h-full w-full object-cover" draggable={false}  data-testid="cover-image-2"/>
 			) : (
 				<div
 					className={cn(

@@ -6,6 +6,7 @@ import { useLazyImage } from "../hooks/use-lazy-image"
 import { useStyles } from "../styles"
 import type { ImageAttachment } from "../types"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 interface ProjectTabProps {
 	editor: Editor | null
@@ -47,8 +48,11 @@ export function ProjectTab({ editor, projectId, onSuccess }: ProjectTabProps) {
 		try {
 			if (image.relative_file_path) {
 				// Insert the image directly using the URL
-				editor.commands.insertProjectImageFromPath(image.relative_file_path)
-				onSuccess?.()
+				const inserted = runActiveEditor(editor, (activeEditor) => {
+					activeEditor.commands.insertProjectImageFromPath(image.relative_file_path)
+					return true
+				}, false)
+				if (inserted) onSuccess?.()
 			} else {
 				magicToast.error(t("projectImage.errors.pathNotFound"))
 			}

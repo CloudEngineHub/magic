@@ -203,6 +203,7 @@ export function ClawPlaygroundEditDialog({
 							<label
 								htmlFor="claw-playground-edit-dialog-name-input"
 								className="text-sm font-medium text-foreground"
+								data-testid="claw-playground-edit-dialog-label"
 							>
 								{t("superLobster.editDialog.nameLabel")}
 							</label>

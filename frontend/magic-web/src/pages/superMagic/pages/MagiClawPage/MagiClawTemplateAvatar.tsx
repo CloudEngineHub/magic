@@ -62,6 +62,7 @@ export function MagiClawTemplateAvatar({
 				aria-hidden
 				className={cn("pointer-events-none size-full object-cover", imageClassName)}
 				src={avatarSrc}
+				data-testid="magi-claw-template-avatar-image"
 			/>
 		</div>
 	)

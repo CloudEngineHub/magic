@@ -256,7 +256,7 @@ function KnowledgeCard({
 				)}
 			</div>
 
-			<div onClick={(e) => e.stopPropagation()} className="self-center">
+			<div onClick={(e) => e.stopPropagation()} className="self-center" data-testid="knowledge-card">
 				<MagicDropdown menu={{ items: menuItems }} placement="bottomRight">
 					<div>
 						<Button

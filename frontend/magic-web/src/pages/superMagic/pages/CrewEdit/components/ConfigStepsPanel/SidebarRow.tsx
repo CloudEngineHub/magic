@@ -47,6 +47,7 @@ export function SidebarRow({
 				<div
 					className="flex shrink-0 items-center gap-1"
 					onClick={(event) => event.stopPropagation()}
+					data-testid="sidebar-row"
 				>
 					{trailing}
 				</div>

@@ -14,6 +14,17 @@
 		"techDev": "Tech & Dev"
 	},
 	"createCrew": "Create Crew",
+	"crewConversation": {
+		"back": "Back",
+		"closeTopics": "Close topics",
+		"emptyHint": "Start a dedicated crew conversation.",
+		"invalidCode": "This crew member is unavailable.",
+		"loadFailed": "Failed to load this crew conversation. Please try again.",
+		"newConversation": "New conversation",
+		"retry": "Retry",
+		"topics": "Topics",
+		"unknownCrew": "Digital Crew"
+	},
 	"detailDialog": {
 		"emptyName": "Untitled Crew",
 		"emptyPlaybook": "No playbooks available",
@@ -458,6 +469,7 @@
 				},
 				"private": {
 					"description": "Only visible to you",
+					"descriptionWithCollaborators": "Only visible to collaborators",
 					"label": "Private"
 				},
 				"skills_library": {

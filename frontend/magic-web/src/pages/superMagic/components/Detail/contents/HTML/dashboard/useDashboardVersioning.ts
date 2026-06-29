@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { findMatchingFile, flattenAttachments } from "../utils"
 import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { measureManualPerfOperation } from "@/utils/manualPerfLogger"
 
 interface DashboardVersioningState {
 	fileVersion?: number
@@ -27,11 +28,22 @@ interface UseDashboardVersioningParams {
 }
 
 function flattenAttachmentTree(items: any[] = []): any[] {
-	return items.reduce((acc: any[], item) => {
-		const nextItems =
-			item.is_directory && item.children ? flattenAttachmentTree(item.children) : []
-		return [...acc, item, ...nextItems]
-	}, [])
+	const flattenedItems: any[] = []
+	const stack = [...items].reverse()
+
+	while (stack.length > 0) {
+		const item = stack.pop()
+		if (!item) continue
+
+		flattenedItems.push(item)
+		if (item.children?.length) {
+			for (let index = item.children.length - 1; index >= 0; index -= 1) {
+				stack.push(item.children[index])
+			}
+		}
+	}
+
+	return flattenedItems
 }
 
 export function useDashboardVersioning({
@@ -43,11 +55,21 @@ export function useDashboardVersioning({
 	htmlVersioning,
 }: UseDashboardVersioningParams) {
 	const flattenedAttachmentList = useMemo(
-		() => (attachmentList ? flattenAttachments(attachmentList) : []),
+		() =>
+			measureManualPerfOperation(
+				"html_dashboard_flatten_files_ms",
+				() => (attachmentList ? flattenAttachments(attachmentList) : []),
+				(result) => ({ file_count: result.length }),
+			),
 		[attachmentList],
 	)
 	const allAttachmentItems = useMemo(
-		() => flattenAttachmentTree(attachmentList),
+		() =>
+			measureManualPerfOperation(
+				"html_dashboard_flatten_tree_ms",
+				() => flattenAttachmentTree(attachmentList),
+				(result) => ({ item_count: result.length }),
+			),
 		[attachmentList],
 	)
 

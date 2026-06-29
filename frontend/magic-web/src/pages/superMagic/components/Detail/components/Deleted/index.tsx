@@ -51,7 +51,7 @@ const Deleted: React.FC<DeletedProps> = ({ data, showHeader = true }) => {
 			>
 				{/* Error Icon */}
 				<div className="mb-1">
-					<img src={FileError} alt="" />
+					<img src={FileError} alt=""  data-testid="deleted-image"/>
 				</div>
 
 				{/* Message */}

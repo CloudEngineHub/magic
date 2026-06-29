@@ -64,6 +64,7 @@ export default function StepPlatformSelect({
 								platform.disabled && "cursor-not-allowed opacity-40",
 							)}
 							onClick={() => !platform.disabled && togglePlatform(platform.value)}
+							data-testid="toggle-platform"
 						>
 							{/* Selection indicator */}
 							{isSelected && (
@@ -77,6 +78,7 @@ export default function StepPlatformSelect({
 										strokeWidth="3"
 										strokeLinecap="round"
 										strokeLinejoin="round"
+										data-testid="step-platform-select-svg"
 									>
 										<polyline points="20 6 9 17 4 12" />
 									</svg>
@@ -119,6 +121,7 @@ export default function StepPlatformSelect({
 						strokeLinecap="round"
 						strokeLinejoin="round"
 						className="text-primary"
+						data-testid="step-platform-select-svg-2"
 					>
 						<path d="M12 2v4M16.2 7.8l2.9-2.9M18 12h4M16.2 16.2l2.9 2.9M12 18v4M4.9 19.1l2.9-2.9M2 12h4M4.9 4.9l2.9 2.9" />
 					</svg>

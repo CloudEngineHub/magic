@@ -123,6 +123,7 @@ function DefaultTool(props: DefaultToolProps) {
 					<div
 						className="inline-flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-r-[4px] bg-white hover:bg-fill active:bg-fill-secondary dark:bg-card"
 						onClick={handleOpenPlaybackTab}
+						data-testid="handle-open-playback-tab"
 					>
 						<MonitorPlay size={16} className="text-foreground" />
 					</div>
@@ -137,6 +138,7 @@ function DefaultTool(props: DefaultToolProps) {
 			data-tool={tool?.id}
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
 		>
 			<div className="inline-flex w-fit max-w-full items-center overflow-hidden rounded-md border border-border shadow-sm">
 				<div
@@ -146,6 +148,7 @@ function DefaultTool(props: DefaultToolProps) {
 						renderSuffixIcon && "rounded-r-none",
 					)}
 					onClick={onClick}
+					data-testid="default-tool"
 				>
 					<ToolIconBadge toolName={tool?.name} />
 					<span className="w-fit flex-none text-xs font-normal leading-4 text-foreground">

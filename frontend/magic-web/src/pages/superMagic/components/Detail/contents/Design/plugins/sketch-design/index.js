@@ -307,6 +307,79 @@ function buildMaterialClause(materialDescription, locale) {
 		: `Material and color description: ${normalizedText}. `
 }
 
+function buildCurrentTextBlock(currentText) {
+	const normalizedCurrentText = String(currentText ?? "").trim()
+	if (!normalizedCurrentText) return "用户当前未填写。"
+	return normalizedCurrentText
+}
+
+function getSketchModeLabel(mode) {
+	if (mode === MODE.SKETCH_TO_IMAGE) return "线稿转图"
+	if (mode === MODE.EXTEND) return "线稿延伸"
+	return "图转线稿"
+}
+
+function buildSketchReferenceRole(state) {
+	if (state.mode === MODE.IMAGE_TO_SKETCH) {
+		return "参考图角色：参考图 1 是服装实拍款式图或 look 图，用于转换为标准服装线稿。"
+	}
+	if (state.mode === MODE.SKETCH_TO_IMAGE) {
+		return state.referenceImage
+			? "参考图角色：参考图 1 是服装线稿/草图，参考图 2 是材质、颜色、纹理或风格辅助参考图。"
+			: "参考图角色：参考图 1 是服装线稿/草图，当前未上传辅助参考图。"
+	}
+	return state.referenceImage
+		? "参考图角色：参考图 1 是已有线稿图，参考图 2 是设计元素、局部结构或风格辅助参考图。"
+		: "参考图角色：参考图 1 是已有线稿图，当前未上传辅助参考图。"
+}
+
+function buildMaterialDescriptionCompletionUserPrompt({ state }) {
+	const renderStyle = getSelectedOption(GARMENT_RENDER_STYLE_OPTIONS, state.renderStyle)
+
+	return [
+		"任务目标：为线稿设计插件的“材质/颜色描述”输入框生成或补全一段短提示词。",
+		`当前输入：${buildCurrentTextBlock(state.materialDescription)}`,
+		`当前模式：${getSketchModeLabel(state.mode)}。`,
+		buildSketchReferenceRole(state),
+		`当前成衣展示类型：${renderStyle.promptText.zh}。`,
+		"补全方向：可补充服装颜色、主面料、纹理质感、厚薄、光泽、辅料颜色、拉链纽扣金属件、印花或局部工艺质感。",
+		"业务限制：不要要求改变线稿中的核心版型、比例或关键结构；不要输出完整生成任务说明，只输出适合填入“材质/颜色描述”的短提示词。",
+	].join("\n")
+}
+
+function buildExtraCompletionUserPrompt({ state }) {
+	const lines = [
+		"任务目标：为线稿设计插件的“额外要求”输入框生成或补全一段短提示词。",
+		`当前输入：${buildCurrentTextBlock(state.extra)}`,
+		`当前模式：${getSketchModeLabel(state.mode)}。`,
+		buildSketchReferenceRole(state),
+	]
+
+	if (state.mode === MODE.SKETCH_TO_IMAGE) {
+		const renderStyle = getSelectedOption(GARMENT_RENDER_STYLE_OPTIONS, state.renderStyle)
+		lines.push(
+			`当前成衣展示类型：${renderStyle.promptText.zh}。`,
+			"补全方向：可补充需要强调或避免的成衣呈现效果、保留的结构细节、面料表达、模特/人台/平铺限制和商业展示要求。",
+		)
+	} else {
+		const sketchType = getSelectedOption(SKETCH_TYPE_OPTIONS, state.sketchType)
+		const detailLevel = getSelectedOption(DETAIL_LEVEL_OPTIONS, state.detailLevel)
+		lines.push(
+			`当前线稿类型：${sketchType.promptText.zh}。`,
+			`当前细节程度：${detailLevel.promptText.zh}。`,
+			state.mode === MODE.EXTEND
+				? `当前延伸方向：${getSelectedOption(EXTENSION_DIRECTION_OPTIONS, state.extensionDirection).promptText.zh}。`
+				: "当前任务是将服装实拍或 look 图转换为标准服装技术线稿。",
+			"补全方向：可补充需要重点表现的服装结构、领口袖型、口袋、拼接线、工艺线、正背面要求、线条干净程度和需要避免的照片元素。",
+		)
+	}
+
+	lines.push(
+		"业务限制：不要输出完整生成任务说明，不要要求新增文字、水印、logo 或无关道具；只输出适合填入“额外要求”的短提示词。",
+	)
+	return lines.join("\n")
+}
+
 function buildSketchToImagePrompt({ state, locale }) {
 	const isChinese = MagicPromptLocale.isChinese(locale)
 	const sketchReference = MagicPromptLocale.getReferenceLabel(1, locale)
@@ -477,6 +550,20 @@ registerMagicCanvasPlugin({
 										"如：黑色羊毛呢，哑光质感，银色拉链",
 									),
 									rows: 2,
+									deps: ["sketchImage", "referenceImage", "renderStyle"],
+									aiGenerate: {
+										label: t("button.aiPlaceholder", "AI 生成"),
+										loadingLabel: t("button.generating", "生成中…"),
+										disabled: ({ state }) => !state.sketchImage,
+										completeImagePrompt: {
+											referenceImages: ({ state }) => getReferenceImages(state),
+											referencesMessage: t("empty.sketchImage", "请先上传线稿图"),
+											userPrompt: ({ state }) =>
+												buildMaterialDescriptionCompletionUserPrompt({
+													state,
+												}),
+										},
+									},
 								},
 							],
 						},
@@ -578,7 +665,32 @@ registerMagicCanvasPlugin({
 					stateKey: "extra",
 					title: t("section.extra", "额外要求"),
 					placeholder: t("placeholder.extra", "如：突出领口和口袋结构，保持干净黑白线稿"),
-					rows: 2,
+					deps: [
+						"mode",
+						"styleImage",
+						"sketchImage",
+						"referenceImage",
+						"renderStyle",
+						"sketchType",
+						"detailLevel",
+						"extensionDirection",
+					],
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) =>
+							state.mode === MODE.IMAGE_TO_SKETCH
+								? !state.styleImage
+								: !state.sketchImage,
+						completeImagePrompt: {
+							referenceImages: ({ state }) => getReferenceImages(state),
+							referencesMessage: ({ state }) =>
+								state.mode === MODE.IMAGE_TO_SKETCH
+									? t("empty.styleImage", "请先上传款式图")
+									: t("empty.sketchImage", "请先上传线稿图"),
+							userPrompt: ({ state }) => buildExtraCompletionUserPrompt({ state }),
+						},
+					},
 				},
 				{
 					id: "modelSelect",

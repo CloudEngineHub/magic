@@ -524,6 +524,23 @@
 		"actions": {
 			"videoPointsPrompt": "Points prompt"
 		},
+		"conflict": {
+			"autoMerged": "Merged latest canvas updates",
+			"blockingResolveFailed": "Failed to recover sync. Refresh and try again.",
+			"draftConflictDescription": "Remote content has changed. Your local draft will not overwrite it automatically. Choose whether to keep using remote content or restore and save the draft.",
+			"draftConflictTitle": "Local draft conflicts with remote updates",
+			"elementResolveFailed": "Failed to resolve element conflict",
+			"keepLocalAndSave": "Keep my edits",
+			"keepLocalConfirmDescription": "This will save your current local changes to remote and overwrite the remote updates.",
+			"keepLocalConfirmTitle": "Keep your changes and overwrite remote?",
+			"restoreDraftAndSave": "Keep my edits",
+			"restoreDraftConfirmDescription": "This will restore the local draft, save it to remote, and overwrite the remote updates.",
+			"restoreDraftConfirmTitle": "Restore draft and overwrite remote?",
+			"syncPausedDescription": "Your current changes are not automatically overwriting remote content. Wait for sync to recover or refresh before continuing.",
+			"syncPausedTitle": "Sync paused",
+			"useRemote": "Use latest version",
+			"useRemoteContinue": "Use latest version"
+		},
 		"errors": {
 			"cannotDetermineDirectory": "Cannot determine design file directory",
 			"cannotFindOrLoadFile": "Cannot find or load magic.project.js file",
@@ -589,22 +606,6 @@
 			"description": "You can continue editing and saving the canvas after the network reconnects.",
 			"title": "Network disconnected. Canvas is read-only"
 		},
-		"conflict": {
-			"blockingResolveFailed": "Failed to recover sync. Refresh and try again.",
-			"draftConflictDescription": "Remote content has changed. Your local draft will not overwrite it automatically. Choose whether to keep using remote content or restore and save the draft.",
-			"draftConflictTitle": "Local draft conflicts with remote updates",
-			"elementResolveFailed": "Failed to resolve element conflict",
-			"keepLocalAndSave": "Keep mine and save",
-			"keepLocalConfirmDescription": "This will save your current local changes to remote and overwrite the remote updates.",
-			"keepLocalConfirmTitle": "Keep your changes and overwrite remote?",
-			"restoreDraftAndSave": "Restore draft and save",
-			"restoreDraftConfirmDescription": "This will restore the local draft, save it to remote, and overwrite the remote updates.",
-			"restoreDraftConfirmTitle": "Restore draft and overwrite remote?",
-			"syncPausedDescription": "Your current changes are not automatically overwriting remote content. Wait for sync to recover or refresh before continuing.",
-			"syncPausedTitle": "Sync paused",
-			"useRemote": "Use remote",
-			"useRemoteContinue": "Use remote"
-		},
 		"saved": "Saved",
 		"saving": "Saving",
 		"upgrade": {
@@ -638,31 +639,6 @@
 				"schedule": "Schedule",
 				"videoModel": "Video Model"
 			},
-			"notification": {
-				"title": "Notification delivery",
-				"description": "After a card is generated or updated successfully, send it to the described targets. This only stores targets, not platform credentials.",
-				"channels": {
-					"dingtalk": "DingTalk",
-					"wecom": "WeCom",
-					"lark": "Lark"
-				},
-				"placeholders": {
-					"dingtalk": "e.g. Send to the Ops Daily group, or send to someone",
-					"wecom": "e.g. Send to the WeCom Ops group, or send to someone",
-					"lark": "e.g. Send to the Growth Daily group, or send to someone"
-				},
-				"templates": {
-					"dingtalkGroup": "Send to the Ops Daily group",
-					"dingtalkUser": "Send to someone",
-					"wecomGroup": "Send to the WeCom Ops group",
-					"wecomUser": "Send to someone",
-					"larkGroup": "Send to the Growth Daily group",
-					"larkUser": "Send to someone"
-				},
-				"templateValues": {
-					"user": "Send to:"
-				}
-			},
 			"createDialog": {
 				"cancel": "Cancel",
 				"cardName": "Card Name",
@@ -683,8 +659,8 @@
 				"location": "Location: {{cardDir}}/",
 				"notificationChannels": {
 					"dingtalk": "DingTalk",
-					"wecom": "WeCom",
-					"lark": "Lark"
+					"lark": "Lark",
+					"wecom": "WeCom"
 				},
 				"notificationTargetLine": "{{channel}}: {{targetDescription}}",
 				"schedule": {
@@ -785,6 +761,31 @@
 				"empty": "No history records",
 				"selectHint": "← Select a history version to view",
 				"title": "History"
+			},
+			"notification": {
+				"channels": {
+					"dingtalk": "DingTalk",
+					"lark": "Lark",
+					"wecom": "WeCom"
+				},
+				"description": "After a card is generated or updated successfully, send it to the described targets. This only stores targets, not platform credentials.",
+				"placeholders": {
+					"dingtalk": "e.g. Send to the Ops Daily group, or send to someone",
+					"lark": "e.g. Send to the Growth Daily group, or send to someone",
+					"wecom": "e.g. Send to the WeCom Ops group, or send to someone"
+				},
+				"templateValues": {
+					"user": "Send to:"
+				},
+				"templates": {
+					"dingtalkGroup": "Send to the Ops Daily group",
+					"dingtalkUser": "Send to someone",
+					"larkGroup": "Send to the Growth Daily group",
+					"larkUser": "Send to someone",
+					"wecomGroup": "Send to the WeCom Ops group",
+					"wecomUser": "Send to someone"
+				},
+				"title": "Notification delivery"
 			},
 			"runNow": {
 				"error": "Failed to run, please try again later",
@@ -1999,6 +2000,7 @@
 		"collapsed": {
 			"completed": "Upload Completed",
 			"completedWithErrors": "Upload Completed, {{count}} Failed",
+			"creatingFolders": "Creating folders",
 			"paused": "Paused",
 			"uploading": "Uploading"
 		},
@@ -2052,7 +2054,9 @@
 			"fileSizeExceeded": "{{count}} files exceed {{maxSize}} size limit: {{fileNames}}, please reselect files",
 			"fileSizeFiltered": "Filtered {{filteredCount}} files exceeding {{maxSize}} limit, will upload remaining {{validCount}} valid files",
 			"invalidFilenameError": "Filename contains special characters or does not comply with naming conventions",
+			"largeFolderSplit": "Large folder detected. Split into {{tasks}} upload tasks automatically.",
 			"maxTasksReached": "Maximum number of tasks reached, please wait for some tasks to complete",
+			"maxTotalFilesExceeded": "Selected {{count}} files, exceeding the per-upload limit of {{max}}. Please upload in batches.",
 			"networkOffline": "Network disconnected, upload tasks paused automatically",
 			"networkRecovered": "Network restored, upload tasks resumed",
 			"noFilesSelected": "No files selected",
@@ -2078,6 +2082,8 @@
 		"noTasks": "No upload tasks",
 		"progress": {
 			"batch": "Batch {{current}} / {{total}}",
+			"currentDirectory": "Current folder: {{path}}",
+			"directories": "Folders {{created}} / {{total}}",
 			"estimatedTime": {
 				"hours": "{{count}} hours",
 				"minutes": "{{count}} minutes",
@@ -2091,6 +2097,7 @@
 		},
 		"stats": {
 			"completedTasks": "Completed: {{count}}",
+			"creatingFolders": "{{count}} tasks creating folders",
 			"errorTasks": "Failed: {{count}}",
 			"pausedTasks": "Paused: {{count}}",
 			"processedFiles": "Processed: {{count}}",
@@ -2101,6 +2108,7 @@
 		"status": {
 			"cancelled": "Cancelled",
 			"completed": "Success",
+			"creating_folders": "Creating folders",
 			"error": "Upload Failed",
 			"paused": "Paused",
 			"pending": "Pending",
@@ -2216,6 +2224,39 @@
 		"dropOverlay": {
 			"hint": "Release to insert image"
 		},
+		"permissionAuthorizationConfirm": {
+			"allow": "Allow",
+			"appConfigUnavailableContent": "This HTML micro-app's app.json is temporarily unavailable and is requesting permission to use: {{scope}} through the legacy flow. This only applies briefly in the current tab.",
+			"content": "\"{{appName}}\" requests permission to use: {{scope}}. Purpose: {{reason}}",
+			"contentWithoutReason": "\"{{appName}}\" requests permission to use: {{scope}}. This app did not provide a purpose.",
+			"deny": "Deny",
+			"legacyContent": "This HTML micro-app has no permission declaration and requests permission to use: {{scope}}. This only applies briefly in the current tab.",
+			"missingScope": "\"{{appName}}\" did not declare \"{{scope}}\" ({{rawScope}}) in app.json permissions.scopes. The request was denied.",
+			"scopes": {
+				"fsProjectRead": "Read project files outside the app directory",
+				"fsProjectWrite": "Modify project files outside the app directory",
+				"llmUse": "Call AI models",
+				"projectFilesDownload": "Download project files",
+				"projectFilesUpload": "Upload project files",
+				"projectMessageWrite": "Create topics or send messages",
+				"userProfileIdentity": "Read user identity info",
+				"userProfileName": "Read user name info",
+				"userProfileOrganization": "Read user organization info"
+			},
+			"title": "Authorize HTML Micro-App Capability",
+			"ttl": {
+				"10m": "10 minutes",
+				"12h": "12 hours",
+				"15m": "15 minutes",
+				"2h": "2 hours",
+				"30m": "30 minutes",
+				"4h": "4 hours",
+				"5m": "5 minutes",
+				"60m": "1 hour",
+				"8h": "8 hours",
+				"once": "This operation"
+			}
+		},
 		"projectFileOperationConfirm": {
 			"cancel": "Cancel",
 			"content": "The HTML micro-app wants to {{operation}} a {{targetType}} outside the app directory: {{path}}. App directory: {{appRootDir}}.",
@@ -2234,42 +2275,12 @@
 		},
 		"userInfoAuthorizationConfirm": {
 			"allow": "Allow",
+			"appConfigUnavailableContent": "This HTML micro-app's app.json is temporarily unavailable and is requesting access to: {{fields}} through the legacy flow.",
 			"content": "\"{{appName}}\" requests access to: {{fields}}. Purpose: {{reason}}",
 			"contentWithoutReason": "\"{{appName}}\" requests access to: {{fields}}. This app did not provide a purpose.",
 			"deny": "Deny",
 			"fieldSeparator": ", ",
 			"title": "Authorize User Info Access"
-		},
-		"permissionAuthorizationConfirm": {
-			"allow": "Allow",
-			"content": "\"{{appName}}\" requests permission to use: {{scope}}. Purpose: {{reason}}",
-			"contentWithoutReason": "\"{{appName}}\" requests permission to use: {{scope}}. This app did not provide a purpose.",
-			"deny": "Deny",
-			"legacyContent": "This HTML micro-app has no permission declaration and requests permission to use: {{scope}}. This only applies briefly in the current tab.",
-			"scopes": {
-				"fsProjectRead": "Read project files outside the app directory",
-				"fsProjectWrite": "Modify project files outside the app directory",
-				"llmUse": "Call AI models",
-				"projectFilesDownload": "Download project files",
-				"projectFilesUpload": "Upload project files",
-				"projectMessageWrite": "Create topics or send messages",
-				"userProfileIdentity": "Read user identity info",
-				"userProfileName": "Read user name info",
-				"userProfileOrganization": "Read user organization info"
-			},
-			"title": "Authorize HTML Micro-App Capability",
-			"ttl": {
-				"once": "This operation",
-				"5m": "5 minutes",
-				"10m": "10 minutes",
-				"15m": "15 minutes",
-				"30m": "30 minutes",
-				"60m": "1 hour",
-				"2h": "2 hours",
-				"4h": "4 hours",
-				"8h": "8 hours",
-				"12h": "12 hours"
-			}
 		}
 	},
 	"knowledgeBase": {
@@ -2679,6 +2690,11 @@
 				"selectAllVisible": "Select all in list ({{count}})",
 				"title": "Bulk Actions"
 			},
+			"conflict": {
+				"restoreNoConflictOnly": "Restore only non-conflicting items",
+				"restoreWithResolution": "Restore conflicts with suggested strategy",
+				"title": "Restore conflicts detected"
+			},
 			"deleteSuccess": {
 				"content": "Permanently deleted {{count}} items."
 			},
@@ -2700,8 +2716,8 @@
 				"remainingShort": "{{days}} days left",
 				"selectRow": "Select this item",
 				"type": {
-					"folder": "Folder",
 					"file": "File",
+					"folder": "Folder",
 					"project": "Project",
 					"topic": "Topic",
 					"workspace": "Workspace"
@@ -3581,8 +3597,8 @@
 			"more": "More actions",
 			"pathPrefix": "Path: ",
 			"type": {
-				"folder": "Folder",
 				"file": "File",
+				"folder": "Folder",
 				"project": "Project",
 				"topic": "Topic",
 				"workspace": "Workspace"
@@ -3593,9 +3609,11 @@
 			"noMoreData": "You've seen everything!"
 		},
 		"restoreCheck": {
+			"applySameActionToRemaining": "Apply the same action to the remaining {{count}} conflicting file(s)",
 			"confirmMessage": "Restore {{type}}「{{name}}」to its original location?",
-			"projectMissing": "The file's project does not exist or has been deleted. Please restore the project first.",
+			"conflictNamesWithEtc": "{{names}}, and more",
 			"duplicateRestoreTarget": "There are files with the same target path and name in this restore batch. By default, only the most recently deleted one will be restored.",
+			"projectMissing": "The file's project does not exist or has been deleted. Please restore the project first.",
 			"projectMissingTip": "{{count}} file(s) belong to projects that do not exist or were deleted. Please restore those projects first.",
 			"projectMissingTipWithNames": "{{count}} file(s) belong to projects that do not exist or were deleted ({{fileNames}}). Please restore those projects first.",
 			"fileNamesWithEtc": "{{names}} and more files",
@@ -3606,14 +3624,12 @@
 			"nameConflictConfirmMessage": "The original project root already contains {{conflictNames}}, and {{count}} file(s) with the same name will need confirmation one by one. Continue?",
 			"nameConflictCountConfirmMessage": "The original project root already contains {{count}} file(s) with the same name. These files will need confirmation one by one. Continue?",
 			"nameConflictDialogTitle": "Overwrite file \"{{fileName}}\"?",
-			"conflictNamesWithEtc": "{{names}}, and more",
 			"parentMissingConfirmMessage": "{{count}} file(s) whose original folder no longer exists will be restored to the original project's root directory. Continue?",
 			"invalidMessage": "Pre-restore check did not pass",
 			"locationLabel": "location",
 			"missingParentMessage": "The original {{parentLabel}} no longer exists. Please select a new {{locationLabel}} to restore 「{{name}}」.",
 			"mixedTypes": "Selected resources have mixed types",
 			"skipNameConflict": "Skip",
-			"applySameActionToRemaining": "Apply the same action to the remaining {{count}} conflicting file(s)",
 			"processingAllNameConflicts": "Processing...",
 			"pendingNameConflictCount": "{{count}} conflicting file(s) remaining",
 			"nameConflictSkipped": "{{count}} file(s) with a name conflict were skipped",
@@ -3629,8 +3645,15 @@
 		"restoreModal": {
 			"cancel": "Cancel",
 			"confirm": "Confirm",
+			"restoreNoConflictOnly": "Restore only non-conflicting items",
 			"titleItem": "Restore {{title}}",
 			"titleMulti": "Restore {{count}} items"
+		},
+		"restoreResult": {
+			"failed": "{{failedCount}} item(s) failed to restore",
+			"failedWithReason": "{{failedCount}} item(s) failed to restore: {{reason}}",
+			"partial": "Restored {{successCount}} item(s); {{failedCount}} failed item(s) remain in the recycle bin",
+			"partialWithReason": "Restored {{successCount}} item(s); {{failedCount}} failed item(s) remain in the recycle bin: {{reason}}"
 		},
 		"restoreSuccess": {
 			"content": "Restored {{count}} items.",
@@ -3663,6 +3686,32 @@
 		},
 		"title": "Recycle Bin"
 	},
+	"saasKK": {
+		"bottomHint": "If you still need to use the current service, you can temporarily close this window.",
+		"closeButton": "Close Temporarily",
+		"closeGuide": "Close",
+		"copyFailed": "Copy failed",
+		"copySuccess": "Copied successfully",
+		"deployCodeGuide": {
+			"step1Description": "Open 「https://www.letsmagic.cn/login」 in your browser, click 「Private Deployment」",
+			"step2Description": "Enter 「KK」 in the 「Private Deployment Code」",
+			"title": "Private Deployment Code Guide"
+		},
+		"dialogTitle": "$t(common:platform.name) Login Guide",
+		"dingtalkGuide": {
+			"description": "After opening 「DingTalk」, navigate to 「Workbench」 through the left sidebar, find 「$t(common:platform.name)」 in the workbench and open it.",
+			"title": "DingTalk Workbench Guide"
+		},
+		"loginMethod": "Login Methods",
+		"method1Desc": "Open and auto-login from 「DingTalk Workbench - All Staff」",
+		"method1Title": "Method 1: DingTalk Workbench",
+		"method2Desc": "Copy the link and open it in your browser",
+		"method2Title": "Method 2: Login via URL",
+		"method3Desc": "Enter \"KK\" in the 「Private Deployment」 configuration on the login page",
+		"method3Title": "Method 3: Private Deployment Code",
+		"viewGuide": "View Guide",
+		"warningMessage": "This SaaS environment is only for 「KK Group」 organization to use 「Sinan」 and other applications. To use $t(common:platform.name), please follow the methods below."
+	},
 	"scheduleTask": {
 		"clearSearch": "Clear search",
 		"configTask": "Task Config",
@@ -3679,6 +3728,7 @@
 		"pauseTask": "Pause Task",
 		"playTask": "Play Task",
 		"runLogs": "Run Logs",
+		"runTask": "Run Task",
 		"runningRecord": "Running Record",
 		"searchTasks": "Search tasks",
 		"searchTasksEmpty": "No scheduled tasks match your search",
@@ -3705,6 +3755,7 @@
 		"emptyStorageTitle": "Store in current folder",
 		"enterSubfolderName": "Enter Folder Name",
 		"fetchAttachmentsFailed": "Failed to fetch file list",
+		"fetchAudioRecordingsFailed": "Failed to fetch recording notes list",
 		"fetchClawsFailed": "Failed to fetch claws list",
 		"fetchProjectsFailed": "Failed to fetch project list",
 		"file": "File",
@@ -4593,6 +4644,7 @@
 			"downloadImageNoWaterMark": "Download Unwatermarked Image",
 			"downloadOriginal": "Download Original File",
 			"downloadPdf": "Download PDF Format",
+			"downloadPdfRaster": "Download PDF Format (Screenshot)",
 			"downloadPpt": "Download PPT Format",
 			"downloadPptx": "Download PPTX Format (Editable)",
 			"fileExport": {
@@ -4603,7 +4655,8 @@
 				"pdfExportFailed": "PDF export failed",
 				"pdfExportTimeoutMessage": "PDF export timeout, please try again",
 				"pptExportFailed": "PPT export failed",
-				"pptExportTimeoutMessage": "PPT export timeout, please try again"
+				"pptExportTimeoutMessage": "PPT export timeout, please try again",
+				"unsupportedInCurrentVersion": "Not supported in the current version"
 			},
 			"importFromOtherProject": "Import from other",
 			"move": "Move",
@@ -4639,6 +4692,7 @@
 			"replaceFileTypeMismatch": "File type mismatch, original file type is {{originalType}}, new file type is {{newType}}",
 			"selectMultiple": "Select Multiple",
 			"shareFile": "Share",
+			"showInfo": "Show Info",
 			"upload": "Upload",
 			"uploadError": "File upload failed",
 			"uploadFile": "Upload File",
@@ -4696,6 +4750,15 @@
 			"replace": "Overwrite",
 			"title": "Do you want to overwrite the file?"
 		},
+		"duplicateFolder": {
+			"applyToAll": "Apply to All",
+			"cancel": "Cancel",
+			"cannotMergeMessage": "An item named “{{folderName}}” already exists here and can't be merged as a folder. You can keep both and create a copy.",
+			"keepBoth": "Keep Both",
+			"merge": "Merge",
+			"message": "A folder named “{{folderName}}” already exists here. Do you want to merge the contents or keep both folders?",
+			"title": "Folder Already Exists"
+		},
 		"elementSelector": "Element Selector",
 		"elementText": "Element Text",
 		"emptyState": {
@@ -4704,6 +4767,7 @@
 			"title": "No Project Files",
 			"uploadFile": "Upload Files"
 		},
+		"entryFileNotFound": "No exportable entry file (index.html) found. Check that this folder contains an index.html.",
 		"error": {
 			"copyFileFailed": "Failed to copy file",
 			"createDesignFailed": "Failed to create design project",
@@ -4744,6 +4808,7 @@
 		"exportPdfFullPage": "Full Page",
 		"exportPdfPaginated": "Paginated",
 		"exportPdfPaginationTitle": "Choose PDF Export Mode",
+		"exportPdfRaster": "Download PDF Format (Screenshot)",
 		"exportPpt": "Download PPTX Format",
 		"exportPptx": "Download PPT Format (Editable)",
 		"exportSource": "Download Original File",
@@ -4759,6 +4824,79 @@
 		"fileContentTranslationPrompt": "then directly translate the content in the source file into",
 		"fileDataCorrectionPrompt": "Then perform data correction, the data must come from a reliable data source and be cross-verified through multiple sources. Ensure the data is accurate and reliable.",
 		"fileFactCheckPrompt": "Then perform fact checking. Verification must be completed through multiple cross-references, such as from authoritative institutions, media or other trustworthy sources. Ensure the information is accurate and reliable.",
+		"fileInfo": {
+			"copy": "Copy",
+			"copyFailed": "Copy failed",
+			"copySuccess": "Copied",
+			"copyTechnicalInfo": "Copy technical info",
+			"labels": {
+				"createdAt": "Created",
+				"dataResources": "Data Resources",
+				"directChildren": "Direct Items",
+				"entryFile": "Entry File",
+				"entryPath": "Entry Path",
+				"extension": "Extension",
+				"fileCount": "Files",
+				"fileId": "File ID",
+				"fileKey": "Storage Key",
+				"folderCount": "Folders",
+				"hiddenCount": "Hidden Items",
+				"iconSource": "Icon Source",
+				"imageResources": "Image Resources",
+				"kind": "Kind",
+				"latestUpdatedAt": "Latest Updated",
+				"matchedSlides": "Matched Slides",
+				"mediaResources": "Media Resources",
+				"missingSlides": "Missing Slides",
+				"parentId": "Parent ID",
+				"path": "Location",
+				"platformCount": "Platforms",
+				"preview": "Preview",
+				"projectId": "Project ID",
+				"projectName": "Project Name",
+				"rawType": "Raw Type",
+				"resourceCount": "Resource Items",
+				"resourceDirs": "Resource Folders",
+				"size": "Size",
+				"slideCount": "Slides",
+				"source": "Source",
+				"updatedAt": "Modified"
+			},
+			"metrics": {
+				"files": "Files",
+				"folders": "Folders",
+				"size": "Size",
+				"slides": "Slides"
+			},
+			"sections": {
+				"content": "Content",
+				"general": "General",
+				"special": "Special Project",
+				"technical": "Technical Info"
+			},
+			"source": {
+				"agent": "Generated by Agent",
+				"ai": "Generated by AI",
+				"copy": "Copied",
+				"default": "Default",
+				"uploaded": "Uploaded"
+			},
+			"title": "Info",
+			"type": {
+				"audio": "Audio Summary",
+				"custom": "Custom App",
+				"dashboard": "Dashboard",
+				"design": "Design Project",
+				"file": "File",
+				"folder": "Folder",
+				"micro-app": "Micro App",
+				"self-media": "Self-media Project",
+				"slide": "PPT Project",
+				"special": "Special Project",
+				"video": "Video Project"
+			},
+			"unknownSize": "Unknown size"
+		},
 		"fileLayoutCorrectionPrompt": "Then perform layout correction, please check if the layout is reasonable, if it is unreasonable, please provide suggestions and modify it.",
 		"fileModify": "\nI need to modify this element in the file",
 		"fileModifyElements": ":",
@@ -4789,6 +4927,7 @@
 		"ppt": "PPT File",
 		"questPlaceholder": "Please input the description of the problem",
 		"refreshList": "Refresh List",
+		"resourceLoadFailed": "{{count}} resource(s) timed out and downloads were skipped",
 		"search": "Search Files",
 		"selectAll": "Select All",
 		"selectElement": "Select Element to Edit",
@@ -4889,6 +5028,7 @@
 		"aiGeneratedTip": "AI-generated content. Please verify.",
 		"attachments": "Attachments({{count}})",
 		"collapseUserMessage": "Collapse",
+		"consumptionPoints": "This round used {{points}} points",
 		"consumptionPoints1": "This round used",
 		"consumptionPoints2": "points",
 		"copyTopic": "Create a new topic from here",
@@ -4909,6 +5049,7 @@
 		"followUpSuggestionsClose": "Turn off follow-up suggestions",
 		"followUpSuggestionsDisabledStatus": "Follow-up suggestions are off",
 		"followUpSuggestionsReenable": "Turn back on",
+		"internetSearch": "Enable Internet Search",
 		"internetSearchClose": "Internet Search: Disabled",
 		"internetSearchOpen": "Internet Search: Enabled",
 		"logoutAccount": "Logout Account",
@@ -5030,6 +5171,7 @@
 		"externalSharedWithMe": "External Shared",
 		"fileNotSupported": "File preview not supported, please download the file",
 		"home": "Workspace Home",
+		"myAudioRecordingsWorkspaceName": "My Recording Notes",
 		"myClawWorkspaceName": "My Claws",
 		"newWorkspace": "New Workspace",
 		"noOtherWorkspace": "No other workspaces available",

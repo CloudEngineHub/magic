@@ -159,6 +159,29 @@ function buildTargetDescriptionClause(targetDescription, locale) {
 		: `User-specified target garment: ${normalizedText}. `
 }
 
+function buildCurrentTextBlock(currentText) {
+	const normalizedCurrentText = String(currentText ?? "").trim()
+	if (!normalizedCurrentText) return "用户当前未填写。"
+	return normalizedCurrentText
+}
+
+function buildTargetDescriptionCompletionUserPrompt({ state }) {
+	const extractionType = getSelectedOption(EXTRACTION_TYPE_OPTIONS, state.extractionType)
+	const garmentCategory = getSelectedOption(GARMENT_CATEGORY_OPTIONS, state.garmentCategory)
+	const background = getSelectedOption(BACKGROUND_OPTIONS, state.backgroundMode)
+
+	return [
+		"任务目标：为款式提取插件的“目标服装描述”输入框生成或补全一段短提示词。",
+		`当前输入：${buildCurrentTextBlock(state.targetDescription)}`,
+		"参考图角色：参考图 1 是待提取服装的款式图、look 图、手机随拍图、局部截图或已裁剪服装图。",
+		`当前提取类型：${MagicPromptLocale.pickText(extractionType.promptText, "zh")}。`,
+		`当前服装品类：${MagicPromptLocale.pickText(garmentCategory.promptText, "zh")}。`,
+		`当前输出背景：${MagicPromptLocale.pickText(background.promptText, "zh")}。`,
+		"补全方向：明确要提取哪一件目标服装、要忽略哪些内搭/外套/裤装/裙装/配饰/背景元素，以及需要保留的颜色、图案、廓形、局部设计点。",
+		"业务限制：不要输出完整生成任务说明，不要要求改变图片风格或生成模特；只输出适合填入“目标服装描述”的短提示词。",
+	].join("\n")
+}
+
 function buildPrompt({ state, locale }) {
 	const isChinese = MagicPromptLocale.isChinese(locale)
 	const reference = MagicPromptLocale.getReferenceLabel(1, locale)
@@ -238,7 +261,18 @@ registerMagicCanvasPlugin({
 						"placeholder.targetDescription",
 						"如：只提取黑色短外套，不要内搭和裤子",
 					),
-					rows: 2,
+					deps: ["styleImage", "extractionType", "garmentCategory", "backgroundMode"],
+					aiGenerate: {
+						label: t("button.aiPlaceholder", "AI 生成"),
+						loadingLabel: t("button.generating", "生成中…"),
+						disabled: ({ state }) => !state.styleImage,
+						completeImagePrompt: {
+							referenceImages: ({ state }) => [state.styleImage].filter(Boolean),
+							referencesMessage: t("empty.styleImage", "请先上传款式图"),
+							userPrompt: ({ state }) =>
+								buildTargetDescriptionCompletionUserPrompt({ state }),
+						},
+					},
 				},
 				{
 					id: "extractionType",

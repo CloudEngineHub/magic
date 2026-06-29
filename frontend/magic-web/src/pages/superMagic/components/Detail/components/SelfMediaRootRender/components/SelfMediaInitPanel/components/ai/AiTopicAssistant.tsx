@@ -266,7 +266,7 @@ export default observer(function AiTopicAssistant({ disabled, onGenerate }: AiTo
 							</p>
 						</div>
 						<div className="flex flex-wrap items-center gap-3">
-							<label className="flex cursor-pointer select-none items-center gap-2 rounded-full bg-[#f4f4f5] px-3 py-2 text-xs font-semibold text-[#52525b] transition-all duration-200 hover:bg-[#eeeeef] hover:text-[#18181b]">
+							<label className="flex cursor-pointer select-none items-center gap-2 rounded-full bg-[#f4f4f5] px-3 py-2 text-xs font-semibold text-[#52525b] transition-all duration-200 hover:bg-[#eeeeef] hover:text-[#18181b]" data-testid="ai-topic-assistant-label">
 								<Checkbox
 									checked={generateWithDetails}
 									className="size-4 rounded-full border-[#d4d4d8] bg-white shadow-none transition-all focus-visible:ring-[#18181b]/10 data-[state=checked]:border-[#18181b] data-[state=checked]:bg-[#18181b] data-[state=checked]:text-white"

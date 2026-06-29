@@ -109,6 +109,7 @@ export default function InlineVoiceButton({
 					: t("detail.selfMedia.initPanel.voiceInput.start", "语音输入")
 			}
 			onClick={handleToggle}
+			data-testid="handle-toggle"
 		>
 			{isActive ? (
 				<span className="flex items-center gap-px">

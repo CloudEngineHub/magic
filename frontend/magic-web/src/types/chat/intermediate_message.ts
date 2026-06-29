@@ -129,9 +129,9 @@ export interface SuperMagicChunkMessage extends SeqMessageBase {
 }
 
 export interface SuperMagicFileChangeItem {
-	file: FileItem
+	file?: FileItem
 	file_id: string
-	operation: string
+	operation: "add" | "delete" | "update" | (string & {})
 }
 
 export interface SuperMagicFileChangeMessage extends Partial<SeqMessageBase> {
@@ -141,6 +141,7 @@ export interface SuperMagicFileChangeMessage extends Partial<SeqMessageBase> {
 	topic_id: string
 	timestamp: string
 	changes: SuperMagicFileChangeItem[]
+	refresh_parent_ids?: string[]
 }
 
 /**

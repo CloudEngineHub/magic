@@ -140,9 +140,6 @@ export async function processBatchSavedFiles(params: {
 	const batchUploadResponses: UploadFileResponse[] = []
 	const batchErrors: Error[] = []
 
-	// 等待一段时间，确保文件已完全保存
-	await new Promise((resolve) => setTimeout(resolve, 1000))
-
 	// 为每个保存的文件获取文件信息
 	for (const savedFile of batchSaveInfo.savedFiles) {
 		// 查找对应的 UploadFile（用于回调）

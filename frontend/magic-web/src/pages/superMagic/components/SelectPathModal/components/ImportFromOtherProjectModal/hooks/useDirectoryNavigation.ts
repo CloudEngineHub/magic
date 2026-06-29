@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { last } from "lodash-es"
 import { useTranslation } from "react-i18next"
-import { SuperMagicApi } from "@/apis"
+import { loadProjectAttachments as loadProjectAttachmentsData } from "@/pages/superMagic/services"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { AttachmentItem } from "../../../../TopicFilesButton/hooks"
 import { getItemId, getDirectoriesFromPath } from "../../../utils/attachmentUtils"
@@ -46,7 +46,7 @@ export function useDirectoryNavigation(options: UseDirectoryNavigationOptions = 
 	const loadProjectAttachments = useMemoizedFn(async (projectId: string) => {
 		setLoading(true)
 		try {
-			const res = await SuperMagicApi.getAttachmentsByProjectId({
+			const res = await loadProjectAttachmentsData({
 				projectId,
 				temporaryToken:
 					(window as Window & { temporary_token?: string }).temporary_token || "",

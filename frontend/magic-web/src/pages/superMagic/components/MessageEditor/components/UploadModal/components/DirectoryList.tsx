@@ -90,6 +90,7 @@ function DirectoryList({
 									disable: !directory.is_directory,
 								})}
 								onClick={() => onDirectoryClick(directory)}
+								data-testid="on-directory-click"
 							>
 								<Flex className={styles.fileItemContainer} gap={10}>
 									<Flex
@@ -105,6 +106,7 @@ function DirectoryList({
 													alt="folder"
 													width={14}
 													height={14}
+													data-testid="directory-list-image"
 												/>
 											) : (
 												<MagicFileIcon
@@ -161,6 +163,7 @@ function DirectoryList({
 							<button
 								className={styles.createDirectoryButtonLink}
 								onClick={showCreateDirectory}
+								data-testid="show-create-directory"
 							>
 								{t("uploadModal.createNewSubfolder")}
 							</button>

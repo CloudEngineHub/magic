@@ -260,6 +260,7 @@ export function MagiClawEditDialog({
 								<label
 									className="shrink-0 text-[16px] text-muted-foreground"
 									htmlFor="magi-claw-edit-name-input"
+									data-testid="magi-claw-edit-dialog-label"
 								>
 									{t("superLobster.editDialog.nameLabel")}
 								</label>

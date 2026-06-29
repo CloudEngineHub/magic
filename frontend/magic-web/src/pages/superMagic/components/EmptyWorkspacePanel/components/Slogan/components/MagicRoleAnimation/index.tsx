@@ -63,6 +63,7 @@ const MagicRoleAnimation = memo(() => {
 			style={{
 				WebkitTapHighlightColor: "transparent",
 			}}
+			data-testid="on-context-menu"
 		>
 			<source src={outputWebm} type="video/webm" />
 			<source src={outputMp4} type="video/mp4" />
@@ -73,7 +74,7 @@ const MagicRoleAnimation = memo(() => {
 
 export default () => {
 	if (isIos) {
-		return <img className="h-[120px] w-auto" src={outputPoster} alt="MagicRoleAnimation" />
+		return <img className="h-[120px] w-auto" src={outputPoster} alt="MagicRoleAnimation"  data-testid="magic-role-animation-image"/>
 	}
 
 	return <MagicRoleAnimation />

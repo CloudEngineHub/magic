@@ -122,6 +122,7 @@ function VersionCompareDialog({
 								: "border-transparent hover:border-border"
 						}`}
 						onClick={() => setSelectedVersion("my")}
+						data-testid="set-selected-version"
 					>
 						<div className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-1.5">
 							<div className="flex items-center gap-2">
@@ -169,6 +170,7 @@ function VersionCompareDialog({
 								: "border-transparent hover:border-border"
 						}`}
 						onClick={() => setSelectedVersion("server")}
+						data-testid="set-selected-version-2"
 					>
 						<div className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-1.5">
 							<div className="flex items-center gap-2">

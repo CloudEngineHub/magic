@@ -111,8 +111,188 @@ function createModel() {
 	}
 }
 
+function installMaskPainterDomMocks() {
+	const originalImage = window.Image
+	const originalGlobalImage = globalThis.Image
+	const originalWindowURL = window.URL
+	const originalGlobalURL = globalThis.URL
+	const originalGetContext = HTMLCanvasElement.prototype.getContext
+	const originalToBlob = HTMLCanvasElement.prototype.toBlob
+	const originalToDataURL = HTMLCanvasElement.prototype.toDataURL
+	const canvasStates = new WeakMap<HTMLCanvasElement, { context: any; hasMask: boolean }>()
+	const contexts: any[] = []
+
+	class MockImage {
+		onload: null | (() => void) = null
+		onerror: null | (() => void) = null
+		naturalWidth = 100
+		naturalHeight = 100
+		private source = ""
+
+		set src(value: string) {
+			this.source = value
+			queueMicrotask(() => this.onload?.())
+		}
+
+		get src() {
+			return this.source
+		}
+	}
+
+	class MockURL extends originalGlobalURL {}
+	Object.defineProperty(MockURL, "createObjectURL", {
+		configurable: true,
+		value: vi.fn(() => "blob:mock"),
+	})
+	Object.defineProperty(MockURL, "revokeObjectURL", {
+		configurable: true,
+		value: vi.fn(),
+	})
+
+	function getCanvasState(canvas: HTMLCanvasElement) {
+		let state = canvasStates.get(canvas)
+		if (state) return state
+
+		state = {
+			hasMask: false,
+			context: null,
+		}
+		const context = {
+			fillStyle: "",
+			strokeStyle: "",
+			lineWidth: 0,
+			globalCompositeOperation: "source-over",
+			clearRect: vi.fn(),
+			drawImage: vi.fn((source: unknown) => {
+				if (source instanceof HTMLCanvasElement) {
+					const sourceState = canvasStates.get(source)
+					if (sourceState?.hasMask) state.hasMask = true
+				}
+			}),
+			save: vi.fn(),
+			restore: vi.fn(),
+			beginPath: vi.fn(),
+			arc: vi.fn(),
+			stroke: vi.fn(),
+			putImageData: vi.fn(),
+			fillRect: vi.fn(function (this: { fillStyle: string }) {
+				if (this.fillStyle === "#000000") state.hasMask = false
+				if (this.fillStyle === "#ffffff") state.hasMask = true
+			}),
+			fill: vi.fn(function (this: { fillStyle: string }) {
+				if (this.fillStyle === "#ffffff") state.hasMask = true
+			}),
+			createImageData: vi.fn((width: number, height: number) => ({
+				data: new Uint8ClampedArray(width * height * 4),
+			})),
+			getImageData: vi.fn((_x: number, _y: number, width: number, height: number) => {
+				const data = new Uint8ClampedArray(width * height * 4)
+				if (state.hasMask) {
+					data[0] = 255
+					data[3] = 255
+				}
+				return { data }
+			}),
+		}
+		state.context = context
+		canvasStates.set(canvas, state)
+		contexts.push(context)
+		return state
+	}
+
+	Object.defineProperty(window, "Image", {
+		configurable: true,
+		writable: true,
+		value: MockImage,
+	})
+	Object.defineProperty(globalThis, "Image", {
+		configurable: true,
+		writable: true,
+		value: MockImage,
+	})
+	Object.defineProperty(window, "URL", {
+		configurable: true,
+		writable: true,
+		value: MockURL,
+	})
+	Object.defineProperty(globalThis, "URL", {
+		configurable: true,
+		writable: true,
+		value: MockURL,
+	})
+	Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+		configurable: true,
+		value: function (this: HTMLCanvasElement) {
+			return getCanvasState(this).context
+		},
+	})
+	Object.defineProperty(HTMLCanvasElement.prototype, "toBlob", {
+		configurable: true,
+		value: function (callback: BlobCallback) {
+			callback(new Blob(["crop"], { type: "image/png" }))
+		},
+	})
+	Object.defineProperty(HTMLCanvasElement.prototype, "toDataURL", {
+		configurable: true,
+		value: vi.fn(() => "data:image/png;base64,mask-preview"),
+	})
+
+	return Object.assign(() => {
+		Object.defineProperty(window, "Image", {
+			configurable: true,
+			writable: true,
+			value: originalImage,
+		})
+		Object.defineProperty(globalThis, "Image", {
+			configurable: true,
+			writable: true,
+			value: originalGlobalImage,
+		})
+		Object.defineProperty(window, "URL", {
+			configurable: true,
+			writable: true,
+			value: originalWindowURL,
+		})
+		Object.defineProperty(globalThis, "URL", {
+			configurable: true,
+			writable: true,
+			value: originalGlobalURL,
+		})
+		Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+			configurable: true,
+			value: originalGetContext,
+		})
+		Object.defineProperty(HTMLCanvasElement.prototype, "toBlob", {
+			configurable: true,
+			value: originalToBlob,
+		})
+		Object.defineProperty(HTMLCanvasElement.prototype, "toDataURL", {
+			configurable: true,
+			value: originalToDataURL,
+		})
+	}, { contexts })
+}
+
+function setCanvasClientRect(canvas: HTMLCanvasElement, width = 100, height = 100) {
+	Object.defineProperty(canvas, "getBoundingClientRect", {
+		configurable: true,
+		value: () => ({
+			x: 0,
+			y: 0,
+			left: 0,
+			top: 0,
+			right: width,
+			bottom: height,
+			width,
+			height,
+			toJSON: () => ({}),
+		}),
+	})
+}
+
 describe("magic-plugin-kit", () => {
 	beforeEach(() => {
+		vi.restoreAllMocks()
 		document.body.innerHTML = ""
 	})
 
@@ -937,6 +1117,462 @@ describe("magic-plugin-kit", () => {
 		expect(generateAndPlace).toHaveBeenNthCalledWith(2, { prompt: "second-request" })
 	})
 
+	it("commits a dirty mask before generate and does not re-upload an unchanged mask", async () => {
+		const cleanup = installMaskPainterDomMocks()
+		try {
+			const kit = loadMagicPluginKit()
+			const root = createRoot()
+			const ctx = createCtx() as any
+			const cropAsset = { uploadId: "crop-1", url: "crop-url" }
+			const buildRequest = vi.fn(({ state }) => ({ cropImage: state.cropImage }))
+			ctx.assets.fetchBlob = vi
+				.fn()
+				.mockResolvedValue(new Blob(["source"], { type: "image/png" }))
+			ctx.assets.uploadFile = vi.fn().mockResolvedValue(cropAsset)
+			ctx.ai = {
+				generateAndPlace: vi.fn().mockResolvedValue({ elementIds: ["result"] }),
+			}
+
+			kit.mount(ctx, root, {
+				initialState: {
+					sourceImage: {
+						uploadId: "source-1",
+						url: "source-url",
+						name: "source photo.jpg",
+					},
+				},
+				sections: [
+					{
+						id: "maskPainter",
+						kind: "mask-painter",
+						stateKey: "cropImage",
+						sourceStateKey: "sourceImage",
+						title: "Mask",
+						deps: ["sourceImage"],
+					},
+				],
+				generate: {
+					...createGenerateConfig(),
+					buildRequest,
+				},
+			})
+
+			const canvas = root.querySelector<HTMLCanvasElement>(".mpk-mask-canvas")
+			expect(canvas).toBeTruthy()
+			setCanvasClientRect(canvas as HTMLCanvasElement)
+
+				await vi.waitFor(() => {
+					expect(canvas?.width).toBe(100)
+				})
+
+				canvas?.dispatchEvent(
+					new MouseEvent("mousedown", {
+						clientX: 20,
+						clientY: 20,
+					}),
+				)
+				canvas?.dispatchEvent(new MouseEvent("mouseup"))
+
+				const preview = root.querySelector<HTMLDivElement>(".mpk-mask-preview")
+				expect(preview).toBeTruthy()
+			await vi.waitFor(() => {
+				expect(preview?.classList.contains("is-visible")).toBe(true)
+			})
+				expect(preview?.querySelector("img")?.getAttribute("src")).toBe(
+					"data:image/png;base64,mask-preview",
+				)
+
+				root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+			await vi.waitFor(() => {
+				expect(buildRequest).toHaveBeenCalledTimes(1)
+			})
+			expect(ctx.assets.uploadFile).toHaveBeenCalledTimes(1)
+			expect(buildRequest.mock.calls[0][0].state.cropImage).toBe(cropAsset)
+			expect(ctx.ai.generateAndPlace).toHaveBeenLastCalledWith({ cropImage: cropAsset })
+
+			root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+			await vi.waitFor(() => {
+				expect(buildRequest).toHaveBeenCalledTimes(2)
+			})
+				expect(ctx.assets.uploadFile).toHaveBeenCalledTimes(1)
+				expect(buildRequest.mock.calls[1][0].state.cropImage).toBe(cropAsset)
+		} finally {
+			cleanup()
+		}
+	})
+
+	it("exposes pending mask state to generate callbacks before the mask is confirmed", async () => {
+		const cleanup = installMaskPainterDomMocks()
+		try {
+			const kit = loadMagicPluginKit()
+			const root = createRoot()
+			const ctx = createCtx() as any
+			const cropAsset = { uploadId: "crop-1", url: "crop-url" }
+			const buildRequest = vi.fn(({ state }) => ({ cropImage: state.cropImage }))
+			const hasTarget = ({ state, helpers }: any) =>
+				Boolean(state.cropImage) || helpers.hasPendingMask("maskPainter")
+
+			ctx.assets.fetchBlob = vi
+				.fn()
+				.mockResolvedValue(new Blob(["source"], { type: "image/png" }))
+			ctx.assets.uploadFile = vi.fn().mockResolvedValue(cropAsset)
+			ctx.ai = {
+				generateAndPlace: vi.fn().mockResolvedValue({ elementIds: ["result"] }),
+			}
+
+			kit.mount(ctx, root, {
+				initialState: {
+					sourceImage: {
+						uploadId: "source-1",
+						url: "source-url",
+						name: "source photo.jpg",
+					},
+				},
+				sections: [
+					{
+						id: "maskPainter",
+						kind: "mask-painter",
+						stateKey: "cropImage",
+						sourceStateKey: "sourceImage",
+						title: "Mask",
+						deps: ["sourceImage"],
+					},
+				],
+				generate: {
+					...createGenerateConfig(),
+					getIdleHint: (context: any) => (hasTarget(context) ? "" : "Missing target"),
+					isDisabled: (context: any) => !hasTarget(context),
+					buildRequest,
+				},
+			})
+
+			let generateButton = root.querySelector<HTMLButtonElement>(".mpk-generate")
+			expect(generateButton?.disabled).toBe(true)
+			expect(root.querySelector(".mpk-empty")?.textContent).toBe("Missing target")
+
+			const canvas = root.querySelector<HTMLCanvasElement>(".mpk-mask-canvas")
+			expect(canvas).toBeTruthy()
+			setCanvasClientRect(canvas as HTMLCanvasElement)
+
+			await vi.waitFor(() => {
+				expect(canvas?.width).toBe(100)
+			})
+
+			canvas?.dispatchEvent(
+				new MouseEvent("mousedown", {
+					clientX: 20,
+					clientY: 20,
+				}),
+			)
+			canvas?.dispatchEvent(new MouseEvent("mouseup"))
+
+			await vi.waitFor(() => {
+				generateButton = root.querySelector<HTMLButtonElement>(".mpk-generate")
+				expect(generateButton?.disabled).toBe(false)
+			})
+			expect(root.querySelector(".mpk-empty")).toBeNull()
+
+			generateButton?.click()
+
+			await vi.waitFor(() => {
+				expect(buildRequest).toHaveBeenCalledTimes(1)
+			})
+			expect(ctx.assets.uploadFile).toHaveBeenCalledTimes(1)
+			expect(buildRequest.mock.calls[0][0].state.cropImage).toBe(cropAsset)
+		} finally {
+			cleanup()
+		}
+	})
+
+	it("applies the painted shape as alpha when mask crop mode is masked", async () => {
+		const cleanup = installMaskPainterDomMocks()
+		try {
+			const kit = loadMagicPluginKit()
+			const root = createRoot()
+			const ctx = createCtx() as any
+			const cropAsset = { uploadId: "crop-1", url: "crop-url" }
+			const buildRequest = vi.fn(({ state }) => ({ cropImage: state.cropImage }))
+			ctx.assets.fetchBlob = vi
+				.fn()
+				.mockResolvedValue(new Blob(["source"], { type: "image/png" }))
+			ctx.assets.uploadFile = vi.fn().mockResolvedValue(cropAsset)
+			ctx.ai = {
+				generateAndPlace: vi.fn().mockResolvedValue({ elementIds: ["result"] }),
+			}
+
+			kit.mount(ctx, root, {
+				initialState: {
+					sourceImage: {
+						uploadId: "source-1",
+						url: "source-url",
+						name: "source photo.jpg",
+					},
+				},
+				sections: [
+					{
+						id: "maskPainter",
+						kind: "mask-painter",
+						stateKey: "cropImage",
+						sourceStateKey: "sourceImage",
+						title: "Mask",
+						maskCropMode: "masked",
+						cropPadding: 1,
+						deps: ["sourceImage"],
+					},
+				],
+				generate: {
+					...createGenerateConfig(),
+					buildRequest,
+				},
+			})
+
+			const canvas = root.querySelector<HTMLCanvasElement>(".mpk-mask-canvas")
+			expect(canvas).toBeTruthy()
+			setCanvasClientRect(canvas as HTMLCanvasElement)
+
+			await vi.waitFor(() => {
+				expect(canvas?.width).toBe(100)
+			})
+
+			canvas?.dispatchEvent(
+				new MouseEvent("mousedown", {
+					clientX: 20,
+					clientY: 20,
+				}),
+			)
+			canvas?.dispatchEvent(new MouseEvent("mouseup"))
+			root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+			await vi.waitFor(() => {
+				expect(buildRequest).toHaveBeenCalledTimes(1)
+			})
+
+			const alphaContext = cleanup.contexts.find(
+				(context) => context.putImageData.mock.calls.length > 0,
+			)
+			expect(alphaContext).toBeTruthy()
+			const alphaData = alphaContext.putImageData.mock.calls[0][0].data
+			expect(alphaData[3]).toBe(255)
+			expect(alphaData[7]).toBe(0)
+			expect(
+				cleanup.contexts.some(
+					(context) => context.globalCompositeOperation === "destination-in",
+				),
+			).toBe(true)
+			expect(ctx.assets.uploadFile).toHaveBeenCalledWith(
+				expect.any(Blob),
+				expect.stringMatching(/^source-photo-crop-\d+-\d+\.png$/),
+				"image/png",
+			)
+
+			const preview = root.querySelector<HTMLDivElement>(".mpk-mask-preview")
+			root.querySelector<HTMLButtonElement>(".mpk-mask-clear-btn")?.click()
+			expect(preview?.classList.contains("is-visible")).toBe(false)
+			expect(preview?.querySelector("img")?.hasAttribute("src")).toBe(false)
+		} finally {
+			cleanup()
+		}
+	})
+
+	it("uses unique upload names for multiple pending mask painters", async () => {
+		const cleanup = installMaskPainterDomMocks()
+		try {
+			const kit = loadMagicPluginKit()
+			const root = createRoot()
+			const ctx = createCtx() as any
+			const buildRequest = vi.fn(({ state }) => ({
+				cropImage: state.cropImage,
+				refCropImage: state.refCropImage,
+			}))
+			ctx.assets.fetchBlob = vi
+				.fn()
+				.mockResolvedValue(new Blob(["source"], { type: "image/png" }))
+			ctx.assets.uploadFile = vi.fn(async (_blob: Blob, fileName: string) => ({
+				uploadId: fileName,
+				url: `uploaded:${fileName}`,
+			}))
+			ctx.ai = {
+				generateAndPlace: vi.fn().mockResolvedValue({ elementIds: ["result"] }),
+			}
+
+			kit.mount(ctx, root, {
+				initialState: {
+					sourceImage: {
+						uploadId: "source-1",
+						url: "source-url",
+						name: "source photo.jpg",
+					},
+					referenceProductImage: {
+						uploadId: "reference-1",
+						url: "reference-url",
+						name: "reference product.png",
+					},
+				},
+				sections: [
+					{
+						id: "maskPainter",
+						kind: "mask-painter",
+						stateKey: "cropImage",
+						sourceStateKey: "sourceImage",
+						title: "Source Mask",
+						deps: ["sourceImage"],
+					},
+					{
+						id: "refMaskPainter",
+						kind: "mask-painter",
+						stateKey: "refCropImage",
+						sourceStateKey: "referenceProductImage",
+						title: "Reference Mask",
+						deps: ["referenceProductImage"],
+					},
+				],
+				generate: {
+					...createGenerateConfig(),
+					buildRequest,
+				},
+			})
+
+			const canvases = root.querySelectorAll<HTMLCanvasElement>(".mpk-mask-canvas")
+			expect(canvases).toHaveLength(2)
+			canvases.forEach((canvas) => setCanvasClientRect(canvas))
+
+			await vi.waitFor(() => {
+				expect(canvases[0]?.width).toBe(100)
+				expect(canvases[1]?.width).toBe(100)
+			})
+
+			canvases[0]?.dispatchEvent(
+				new MouseEvent("mousedown", {
+					clientX: 20,
+					clientY: 20,
+				}),
+			)
+			canvases[0]?.dispatchEvent(new MouseEvent("mouseup"))
+			canvases[1]?.dispatchEvent(
+				new MouseEvent("mousedown", {
+					clientX: 40,
+					clientY: 40,
+				}),
+			)
+			canvases[1]?.dispatchEvent(new MouseEvent("mouseup"))
+			root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+
+			await vi.waitFor(() => {
+				expect(buildRequest).toHaveBeenCalledTimes(1)
+			})
+
+			const uploadedNames = ctx.assets.uploadFile.mock.calls.map(
+				(call: unknown[]) => call[1],
+			)
+			expect(uploadedNames).toHaveLength(2)
+			expect(new Set(uploadedNames).size).toBe(2)
+			expect(uploadedNames).toEqual(
+				expect.arrayContaining([
+					expect.stringMatching(/^source-photo-crop-\d+-\d+\.png$/),
+					expect.stringMatching(/^reference-product-crop-\d+-\d+\.png$/),
+				]),
+			)
+			const requestState = buildRequest.mock.calls[0][0].state
+			expect(requestState.cropImage).not.toEqual(requestState.refCropImage)
+			expect(requestState.cropImage.uploadId).toMatch(/^source-photo-crop-/)
+			expect(requestState.refCropImage.uploadId).toMatch(/^reference-product-crop-/)
+		} finally {
+			cleanup()
+		}
+	})
+
+	it("keeps mask painter brush size stable in screen pixels", async () => {
+		const cleanup = installMaskPainterDomMocks()
+		try {
+			const kit = loadMagicPluginKit()
+			const root = createRoot()
+			const ctx = createCtx()
+
+			kit.mount(ctx, root, {
+				initialState: {
+					sourceImage: { uploadId: "source-1", url: "source-url" },
+				},
+				sections: [
+					{
+						id: "maskPainter",
+						kind: "mask-painter",
+						stateKey: "cropImage",
+						sourceStateKey: "sourceImage",
+						title: "Mask",
+						brushSize: 40,
+						deps: ["sourceImage"],
+					},
+				],
+				generate: createGenerateConfig(),
+			})
+
+			const canvas = root.querySelector<HTMLCanvasElement>(".mpk-mask-canvas")
+			expect(canvas).toBeTruthy()
+			setCanvasClientRect(canvas as HTMLCanvasElement, 50, 50)
+
+			await vi.waitFor(() => {
+				expect(canvas?.width).toBe(100)
+			})
+
+			const modeButtons = root.querySelectorAll<HTMLButtonElement>(".mpk-mask-mode-btn")
+			expect(modeButtons).toHaveLength(2)
+			expect(modeButtons[0]?.textContent).toBe("涂抹")
+			expect(modeButtons[0]?.classList.contains("is-active")).toBe(true)
+			expect(modeButtons[1]?.textContent).toBe("擦除")
+			expect(modeButtons[1]?.classList.contains("is-active")).toBe(false)
+
+			const displayContext = canvas?.getContext("2d") as any
+			displayContext.arc.mockClear()
+			cleanup.contexts.forEach((context) => {
+				context.getImageData.mockClear()
+			})
+			canvas?.dispatchEvent(
+				new MouseEvent("mousedown", {
+					clientX: 10,
+					clientY: 10,
+				}),
+			)
+			canvas?.dispatchEvent(
+				new MouseEvent("mousemove", {
+					clientX: 20,
+					clientY: 20,
+				}),
+			)
+
+			expect(displayContext.arc.mock.calls.some((call: unknown[]) => call[2] === 40)).toBe(
+				true,
+			)
+			expect(
+				cleanup.contexts.every((context) => context.getImageData.mock.calls.length === 0),
+			).toBe(true)
+
+			modeButtons[1]?.click()
+			expect(modeButtons[0]?.classList.contains("is-active")).toBe(false)
+			expect(modeButtons[1]?.classList.contains("is-active")).toBe(true)
+
+			const brushSlider = root.querySelector<HTMLInputElement>(".mpk-mask-brush-slider")
+			expect(brushSlider).toBeTruthy()
+			if (brushSlider) {
+				brushSlider.value = "60"
+				brushSlider.dispatchEvent(new Event("input"))
+			}
+			displayContext.arc.mockClear()
+			canvas?.dispatchEvent(
+				new MouseEvent("mousemove", {
+					clientX: 25,
+					clientY: 25,
+				}),
+			)
+			expect(displayContext.arc.mock.calls.some((call: unknown[]) => call[2] === 60)).toBe(
+				true,
+			)
+		} finally {
+			cleanup()
+		}
+	})
+
 	it("shows a start toast after validation passes and before generation runs", async () => {
 		const kit = loadMagicPluginKit()
 		const root = createRoot()
@@ -994,7 +1630,7 @@ describe("magic-plugin-kit", () => {
 		expect(ctx.ui.toast).toHaveBeenCalledWith("Generation started", "info")
 	})
 
-	it("does not show a start toast when validation fails", () => {
+	it("does not show a start toast when validation fails", async () => {
 		const kit = loadMagicPluginKit()
 		const root = createRoot()
 		const ctx = createCtx()
@@ -1010,8 +1646,10 @@ describe("magic-plugin-kit", () => {
 
 		root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
 
+		await vi.waitFor(() => {
+			expect(root.querySelector(".mpk-error")?.textContent).toBe("Missing input")
+		})
 		expect(ctx.ui.toast).not.toHaveBeenCalled()
-		expect(root.querySelector(".mpk-error")?.textContent).toBe("Missing input")
 	})
 
 	it("renders a required marker for standard sections", () => {

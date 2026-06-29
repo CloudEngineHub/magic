@@ -258,6 +258,7 @@ export const DataProcessingStep = observer(function DataProcessingStep({
 							type="button"
 							onClick={createDocument}
 							className="mt-4 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
+							data-testid="create-document"
 						>
 							{t("documentCreate.processing.retry")}
 						</button>

@@ -17,6 +17,9 @@ export function RestoreModal({
 	title,
 	statusMessage,
 	confirmDisabled,
+	secondaryActionText,
+	onSecondaryAction,
+	secondaryActionDisabled,
 	onConfirm,
 }: RestoreModalProps) {
 	const { t } = useTranslation("super")
@@ -60,6 +63,17 @@ export function RestoreModal({
 					>
 						{t("recycleBin.restoreModal.cancel")}
 					</AlertDialogCancel>
+					{secondaryActionText && onSecondaryAction ? (
+						<button
+							type="button"
+							className="h-9 rounded-lg border border-border px-4 text-sm text-foreground shadow-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+							onClick={onSecondaryAction}
+							disabled={secondaryActionDisabled}
+							data-testid="recycle-bin-restore-secondary"
+						>
+							{secondaryActionText}
+						</button>
+					) : null}
 					<AlertDialogAction
 						className="h-9 rounded-lg bg-primary px-4 text-primary-foreground shadow-sm hover:bg-primary/90"
 						onClick={onConfirm}
@@ -80,5 +94,8 @@ interface RestoreModalProps {
 	title: string
 	statusMessage?: string
 	confirmDisabled?: boolean
+	secondaryActionText?: string
+	onSecondaryAction?: () => void
+	secondaryActionDisabled?: boolean
 	onConfirm: () => void
 }

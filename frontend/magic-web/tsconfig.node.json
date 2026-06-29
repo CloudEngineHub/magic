@@ -16,6 +16,7 @@
 		".stylelintrc.cjs",
 		"./plugins/**/*.ts",
 		"./vite/**/*.ts",
+		"./packages/magic-admin/**/*.ts",
 		"tailwind.config.js",
 		"postcss.config.ts"
 	]

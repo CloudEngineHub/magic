@@ -136,7 +136,7 @@ function ShortcutKeysList() {
 						</div>
 						<div className={styles.title}>{t("shortcut.shortcutKeys")}</div>
 					</div>
-					<div className={styles.headerRight} onClick={handleClose}>
+					<div className={styles.headerRight} onClick={handleClose} data-testid="handle-close">
 						<IconX size={24} stroke={1.5} />
 					</div>
 				</div>

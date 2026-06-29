@@ -208,6 +208,7 @@ export const QuickStartPanel = observer(function QuickStartPanel() {
 					<label
 						className="cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
 						onClick={handleSelectAll}
+						data-testid="handle-select-all"
 					>
 						{t("playbook.edit.filter.selectAll")}
 					</label>
@@ -490,7 +491,7 @@ function GuideItemRow({
 				{/* Icon container */}
 				<div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-sidebar-accent">
 					{item.icon ? (
-						<img src={item.icon} alt={title} className="size-5 object-cover" />
+						<img src={item.icon} alt={title} className="size-5 object-cover"  data-testid="quick-start-panel-image"/>
 					) : (
 						<MousePointerClick className="h-4 w-4 text-muted-foreground" />
 					)}

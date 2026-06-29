@@ -579,6 +579,7 @@ function CrewRowCard({
 					isDragging || isOverlay ? "cursor-grabbing text-foreground" : "cursor-grab",
 				)}
 				aria-label={item.name}
+				data-testid="crew-sorting-drag-handle-button"
 				{...(dragHandleProps ?? {})}
 			>
 				<GripVertical className="size-4" />
@@ -593,7 +594,7 @@ function CrewSortingAvatar({ item }: { item: Pick<SortableCrewAgent, "icon"> }) 
 	if (avatarUrl)
 		return (
 			<div className="size-[34px] shrink-0 overflow-hidden rounded-full border-[3px] border-popover shadow-sm">
-				<img src={avatarUrl} alt="" className="size-full object-cover" draggable={false} />
+				<img src={avatarUrl} alt="" className="size-full object-cover" draggable={false}  data-testid="my-crew-manage-sorting-dialog-image"/>
 			</div>
 		)
 

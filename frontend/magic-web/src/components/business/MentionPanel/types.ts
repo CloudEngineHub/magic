@@ -94,8 +94,10 @@ export interface ProjectFileMentionData {
 	file_id: string
 	file_name: string
 	file_path: string
+	relative_file_path?: string
 	file_extension: string
 	file_size?: number
+	is_hidden?: boolean
 	/** Internal: source project for project-file mentions pasted outside their original project. */
 	source_project_id?: string
 	/** Internal: source file id before copying into the target project. */

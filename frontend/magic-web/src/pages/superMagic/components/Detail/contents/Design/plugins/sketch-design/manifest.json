@@ -8,7 +8,8 @@
 		"assets.uploadFile",
 		"assets.fetchBlob",
 		"ai.getImageModels",
-		"ai.generateAndPlace"
+		"ai.generateAndPlace",
+		"ai.completeImagePrompt"
 	],
 	"category": {
 		"key": "fashion-design"
@@ -19,6 +20,7 @@
 	"label": "{{label}}",
 	"locales": {
 		"en-US": {
+			"button.aiPlaceholder": "AI Generate",
 			"button.generate": "Generate Fashion Sketch",
 			"button.generating": "Generating…",
 			"description": "Upload a garment product photo, fashion sketch, or line drawing to generate clean line art or finished garment visuals.",
@@ -27,6 +29,8 @@
 			"detailLevel.standard": "Standard flat sketch",
 			"empty.sketchImage": "Upload a sketch image first",
 			"empty.styleImage": "Upload a style image first",
+			"error.aiPromptEmpty": "AI did not return a valid description. Please try again.",
+			"error.aiPromptUnavailable": "AI prompt completion is temporarily unavailable",
 			"error.noModels": "No AI models available",
 			"error.noSize": "The current model has no available size configuration",
 			"error.referenceLimit": "Reference image limit reached for the current model",
@@ -71,6 +75,7 @@
 			"upload.styleImage.help": "Upload one garment product photo or look photo. AI will remove the model, background, lighting, and fabric photo texture to generate a standard apparel line drawing."
 		},
 		"zh-CN": {
+			"button.aiPlaceholder": "AI 生成",
 			"button.generate": "生成服装线稿",
 			"button.generating": "生成中…",
 			"description": "上传服装实拍款式图、草图或线稿图，一键生成标准线稿或成衣效果图。",
@@ -79,6 +84,8 @@
 			"detailLevel.standard": "标准款式图",
 			"empty.sketchImage": "请先上传线稿图",
 			"empty.styleImage": "请先上传款式图",
+			"error.aiPromptEmpty": "AI 未生成有效描述，请重试",
+			"error.aiPromptUnavailable": "AI 提示词补全能力暂不可用",
 			"error.noModels": "暂无可用 AI 模型",
 			"error.noSize": "当前模型缺少可用尺寸配置",
 			"error.referenceLimit": "参考图数量已达当前模型上限",

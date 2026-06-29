@@ -5,6 +5,7 @@ import {
 	type IframePermissionServiceConfig,
 } from "../IframePermissionService"
 import type { HtmlPermissionGrant, HtmlPermissionGrantStore } from "../HtmlPermissionGrantStore"
+import { htmlMicroAppPreviewLogger } from "../../../utils/htmlMicroAppPreviewLogger"
 
 class MemoryGrantStore implements HtmlPermissionGrantStore {
 	grants: HtmlPermissionGrant[] = []
@@ -69,16 +70,34 @@ function createService(overrides: Partial<IframePermissionServiceConfig> = {}) {
 describe("IframePermissionService", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.spyOn(htmlMicroAppPreviewLogger, "warn").mockImplementation(() => undefined)
 	})
 
-	it("rejects undeclared manifest scopes without prompting", async () => {
-		const { service, grantStore, confirmPermission } = createService()
+	it("rejects undeclared manifest scopes with diagnostics and without prompting", async () => {
+		const onMissingDeclaration = vi.fn()
+		const { service, grantStore, confirmPermission } = createService({
+			onMissingDeclaration,
+		})
 
 		const allowed = await service.authorize("project.message.write")
 
 		expect(allowed).toBe(false)
 		expect(confirmPermission).not.toHaveBeenCalled()
 		expect(grantStore.save).not.toHaveBeenCalled()
+		expect(htmlMicroAppPreviewLogger.warn).toHaveBeenCalledWith(
+			"Permission blocked: scope not declared in app.json",
+			{
+				appName: "Manifest App",
+				declaredScopes: ["llm.use"],
+				scope: "project.message.write",
+			},
+		)
+		expect(onMissingDeclaration).toHaveBeenCalledWith({
+			appName: "Manifest App",
+			declaredScopes: ["llm.use"],
+			scope: "project.message.write",
+			scopeLabelKey: "htmlEditor.permissionAuthorizationConfirm.scopes.projectMessageWrite",
+		})
 	})
 
 	it("saves a grant using the selected ttl for declared manifest scopes", async () => {
@@ -207,16 +226,35 @@ describe("IframePermissionService", () => {
 		expect(grantStore.save).not.toHaveBeenCalled()
 	})
 
-	it("rejects when app config failed to load without falling back to legacy", async () => {
+	it("falls back to legacy confirmation when app config failed to load", async () => {
 		const { service, grantStore, confirmPermission } = createService({
 			appConfigState: { status: "error", error: "HTTP 500" },
 		})
 
 		const allowed = await service.authorize("llm.use")
 
-		expect(allowed).toBe(false)
-		expect(confirmPermission).not.toHaveBeenCalled()
-		expect(grantStore.save).not.toHaveBeenCalled()
+		expect(allowed).toBe(true)
+		expect(confirmPermission).toHaveBeenCalledWith(
+			expect.objectContaining<Partial<HtmlPermissionConfirmRequest>>({
+				mode: "legacy",
+				isLegacy: true,
+				appConfigLoadError: "HTTP 500",
+				scope: "llm.use",
+			}),
+		)
+		expect(grantStore.save).toHaveBeenCalledWith(
+			expect.objectContaining({
+				mode: "legacy",
+				scope: "llm.use",
+			}),
+		)
+		expect(htmlMicroAppPreviewLogger.warn).toHaveBeenCalledWith(
+			"Permission fallback: app.json unavailable, using legacy confirmation",
+			{
+				scope: "llm.use",
+				error: "HTTP 500",
+			},
+		)
 	})
 
 	it("does not reuse grants when the app fingerprint changes", async () => {

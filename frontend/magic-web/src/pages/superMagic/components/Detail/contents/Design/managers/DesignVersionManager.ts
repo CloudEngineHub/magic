@@ -108,6 +108,7 @@ export class DesignVersionManager {
 	applyVersionData(parsedDesignData: DesignData, isViewingHistory: boolean): void {
 		this.saveManager.cancelAutoSave()
 		this.saveManager.clearRemoteConflict()
+		this.stateBag.setters.setConflictState(null)
 		this.stateBag.setters.setIsSaving(false)
 		this.stateBag.setters.setDesignData(parsedDesignData)
 		this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedDesignData))

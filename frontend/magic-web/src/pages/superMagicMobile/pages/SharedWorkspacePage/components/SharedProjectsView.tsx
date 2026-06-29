@@ -154,7 +154,10 @@ function SharedProjectRow({ project, tab, subtitle, onOpen }: SharedProjectRowPr
 			data-testid={`shared-projects-row-${project.id}`}
 		>
 			<ProjectIcon />
-			<div className="ml-2 flex min-w-0 flex-1 flex-col items-start">
+			<div
+				className="ml-2 flex min-w-0 flex-1 flex-col items-start"
+				data-testid="shared-projects-row-content"
+			>
 				<p className="w-full truncate text-[16px] font-medium leading-6 text-foreground">
 					{project.project_name?.trim() || t("project.unnamedProject")}
 				</p>

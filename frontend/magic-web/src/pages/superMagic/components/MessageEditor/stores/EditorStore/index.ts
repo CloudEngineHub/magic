@@ -1,5 +1,6 @@
 import { makeAutoObservable } from "mobx"
 import { Editor, JSONContent } from "@tiptap/react"
+import { isEditorActive, runActiveEditor } from "../../utils/editorLifecycle"
 
 /**
  * Check if JSONContent is empty
@@ -64,11 +65,13 @@ export class EditorStore {
 	 * Set TipTap editor instance
 	 */
 	setEditor(editor: Editor | null) {
-		this.tiptapEditor = editor
-		if (editor && this.value !== undefined) {
+		this.tiptapEditor = isEditorActive(editor) ? editor : null
+		if (this.tiptapEditor && this.value !== undefined) {
 			// If content was restored before TipTap finished mounting,
 			// replay the buffered value into the live editor instance.
-			editor.commands.setContent(this.value, { emitUpdate: false })
+			runActiveEditor(this.tiptapEditor, (activeEditor) => {
+				activeEditor.commands.setContent(this.value, { emitUpdate: false })
+			})
 		}
 	}
 
@@ -84,14 +87,18 @@ export class EditorStore {
 	 */
 	clearContent() {
 		this.value = undefined
-		this.tiptapEditor?.commands.clearContent()
+		runActiveEditor(this.tiptapEditor, (editor) => {
+			editor.commands.clearContent()
+		})
 	}
 
 	/**
 	 * Focus on editor
 	 */
 	focus() {
-		this.tiptapEditor?.commands.focus()
+		runActiveEditor(this.tiptapEditor, (editor) => {
+			editor.commands.focus()
+		})
 	}
 
 	/**
@@ -99,8 +106,10 @@ export class EditorStore {
 	 */
 	updateContent(content: JSONContent | undefined) {
 		this.value = content
-		if (content && this.tiptapEditor) {
-			this.tiptapEditor.commands.setContent(content)
+		if (content) {
+			runActiveEditor(this.tiptapEditor, (editor) => {
+				editor.commands.setContent(content)
+			})
 		}
 	}
 

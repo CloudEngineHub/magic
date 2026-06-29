@@ -38,7 +38,7 @@ export default function SiderTaskItem({
 	}
 
 	return (
-		<div className={cx(styles.item)} onContextMenu={handleContextMenuClick}>
+		<div className={cx(styles.item)} onContextMenu={handleContextMenuClick} data-testid="handle-context-menu-click">
 			<div className={styles.arrowIcon}></div>
 			<Switch size="small" checked={data?.enabled === 1} onChange={handleSwitchChange} />
 			<div className={styles.name}>{data?.task_name || "-"}</div>

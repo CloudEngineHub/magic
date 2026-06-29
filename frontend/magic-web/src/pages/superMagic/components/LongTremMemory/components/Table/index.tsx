@@ -177,10 +177,10 @@ export default function Table({
 					isLastProjectMemory && styles.itemLastProject,
 				)}
 			>
-				<div className={styles.button} onClick={() => handleMemoryEdit(memory)}>
+				<div className={styles.button} onClick={() => handleMemoryEdit(memory)} data-testid="handle-memory-edit">
 					<IconPencil size={20} strokeWidth={1.5} />
 				</div>
-				<div className={styles.button} onClick={() => handleMemoryDeleteConfirm(memory)}>
+				<div className={styles.button} onClick={() => handleMemoryDeleteConfirm(memory)} data-testid="handle-memory-delete-confirm">
 					<IconTrash size={20} strokeWidth={1.5} />
 				</div>
 			</div>
@@ -258,7 +258,7 @@ export default function Table({
 	if (currentMemoryList.length === 0) {
 		return (
 			<div className={styles.empty}>
-				<img src={NoDataImage} draggable={false} alt="" />
+				<img src={NoDataImage} draggable={false} alt=""  data-testid="table-image"/>
 				<div>{t("noData")}</div>
 			</div>
 		)
@@ -270,7 +270,7 @@ export default function Table({
 		if (projectGroups.length === 0) {
 			return (
 				<div className={styles.empty}>
-					<img src={NoDataImage} draggable={false} alt="" />
+					<img src={NoDataImage} draggable={false} alt=""  data-testid="table-image-2"/>
 					<div>{t("noData")}</div>
 				</div>
 			)

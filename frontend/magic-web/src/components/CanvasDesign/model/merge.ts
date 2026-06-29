@@ -73,6 +73,11 @@ interface ConflictCheckResult {
 	mergedCanvas?: CanvasDocument
 }
 
+interface ElementConflictAnalysis {
+	conflict: ConflictCheckResult | null
+	mergedElementsById: Map<string, LayerElement>
+}
+
 type LocalDiffApplyResult =
 	| {
 			ok: true
@@ -98,6 +103,121 @@ function createChangeSummary(
 	}
 }
 
+function areCanvasJsonValuesEqual(left: unknown, right: unknown): boolean {
+	return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+	return (
+		!!value &&
+		typeof value === "object" &&
+		!Array.isArray(value) &&
+		Object.getPrototypeOf(value) === Object.prototype
+	)
+}
+
+function getRecordValue(record: Record<string, unknown>, key: string): unknown {
+	return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined
+}
+
+const FIELD_LEVEL_MERGE_EXCLUDED_KEYS = new Set(["id", "type", "children"])
+
+function cloneCanvasFieldValue<T>(value: T): T {
+	return value === undefined ? value : cloneCanvasJson(value)
+}
+
+function mergeCanvasElementRecordsByField(
+	baseRecord: Record<string, unknown>,
+	localRecord: Record<string, unknown>,
+	remoteRecord: Record<string, unknown>,
+	depth = 0,
+): { ok: true; value: Record<string, unknown> } | { ok: false } {
+	const merged: Record<string, unknown> = {}
+	const keys = new Set([
+		...Object.keys(baseRecord),
+		...Object.keys(localRecord),
+		...Object.keys(remoteRecord),
+	])
+
+	keys.forEach((key) => {
+		if (depth === 0 && FIELD_LEVEL_MERGE_EXCLUDED_KEYS.has(key)) return
+		const baseValue = getRecordValue(baseRecord, key)
+		const localValue = getRecordValue(localRecord, key)
+		const remoteValue = getRecordValue(remoteRecord, key)
+		const localChanged = !areCanvasJsonValuesEqual(baseValue, localValue)
+		const remoteChanged = !areCanvasJsonValuesEqual(baseValue, remoteValue)
+
+		if (areCanvasJsonValuesEqual(localValue, remoteValue)) {
+			merged[key] = cloneCanvasFieldValue(localValue)
+			return
+		}
+		if (localChanged && !remoteChanged) {
+			merged[key] = cloneCanvasFieldValue(localValue)
+			return
+		}
+		if (!localChanged && remoteChanged) {
+			merged[key] = cloneCanvasFieldValue(remoteValue)
+			return
+		}
+		if (!localChanged && !remoteChanged) {
+			merged[key] = cloneCanvasFieldValue(baseValue)
+			return
+		}
+
+		if (
+			(isPlainRecord(baseValue) || baseValue === undefined) &&
+			isPlainRecord(localValue) &&
+			isPlainRecord(remoteValue)
+		) {
+			const nestedMerge = mergeCanvasElementRecordsByField(
+				isPlainRecord(baseValue) ? baseValue : {},
+				localValue,
+				remoteValue,
+				depth + 1,
+			)
+			if (nestedMerge.ok) {
+				merged[key] = nestedMerge.value
+				return
+			}
+		}
+
+		throw new Error("field-conflict")
+	})
+
+	return { ok: true, value: merged }
+}
+
+export function tryMergeCanvasElementsByField(
+	baseElement: LayerElement,
+	localElement: LayerElement,
+	remoteElement: LayerElement,
+): LayerElement | null {
+	if (baseElement.type !== localElement.type || baseElement.type !== remoteElement.type) {
+		return null
+	}
+
+	try {
+		const mergeResult = mergeCanvasElementRecordsByField(
+			baseElement as unknown as Record<string, unknown>,
+			localElement as unknown as Record<string, unknown>,
+			remoteElement as unknown as Record<string, unknown>,
+		)
+		if (!mergeResult.ok) return null
+		const remoteChildren =
+			isCanvasContainerElement(remoteElement) && Array.isArray(remoteElement.children)
+				? { children: cloneCanvasElements(remoteElement.children) }
+				: {}
+		return {
+			...mergeResult.value,
+			id: remoteElement.id,
+			type: remoteElement.type,
+			...remoteChildren,
+		} as LayerElement
+	} catch {
+		return null
+	}
+}
+
 function findDuplicateConflict(
 	...indexes: CanvasDocumentElementIndex[]
 ): ConflictCheckResult | null {
@@ -110,10 +230,15 @@ function findDuplicateConflict(
 	}
 }
 
-function findElementConflict(
+function analyzeElementConflicts(
+	baseIndex: CanvasDocumentElementIndex,
+	localIndex: CanvasDocumentElementIndex,
+	remoteIndex: CanvasDocumentElementIndex,
 	localDiff: CanvasDocumentElementDiff,
 	remoteDiff: CanvasDocumentElementDiff,
-): ConflictCheckResult | null {
+): ElementConflictAnalysis {
+	const conflictElementIds: string[] = []
+	const mergedElementsById = new Map<string, LayerElement>()
 	const sameChangedIds = intersectCanvasElementIdSets(
 		localDiff.changed,
 		remoteDiff.changed,
@@ -121,15 +246,61 @@ function findElementConflict(
 		return !(localDiff.deleted.has(id) && remoteDiff.deleted.has(id))
 	})
 
-	if (sameChangedIds.length === 0) return null
+	if (sameChangedIds.length === 0) {
+		return { conflict: null, mergedElementsById }
+	}
 
-	const hasDeleteUpdateConflict = sameChangedIds.some(
+	sameChangedIds.forEach((elementId) => {
+		if (localDiff.deleted.has(elementId) || remoteDiff.deleted.has(elementId)) {
+			conflictElementIds.push(elementId)
+			return
+		}
+		if (localDiff.moved.has(elementId) || remoteDiff.moved.has(elementId)) {
+			conflictElementIds.push(elementId)
+			return
+		}
+
+		const baseElement = baseIndex.records.get(elementId)?.element
+		const localElement = localIndex.records.get(elementId)?.element
+		const remoteElement = remoteIndex.records.get(elementId)?.element
+		if (!baseElement || !localElement || !remoteElement) {
+			conflictElementIds.push(elementId)
+			return
+		}
+
+		const mergedElement = tryMergeCanvasElementsByField(
+			baseElement,
+			localElement,
+			remoteElement,
+		)
+		if (!mergedElement) {
+			conflictElementIds.push(elementId)
+			return
+		}
+		mergedElementsById.set(elementId, mergedElement)
+	})
+
+	if (conflictElementIds.length === 0) {
+		return { conflict: null, mergedElementsById }
+	}
+
+	const hasDeleteUpdateConflict = conflictElementIds.some(
 		(id) => localDiff.deleted.has(id) || remoteDiff.deleted.has(id),
 	)
 	return {
-		reason: hasDeleteUpdateConflict ? "delete-update-conflict" : "same-element-changed",
-		conflictElementIds: sameChangedIds,
+		conflict: {
+			reason: hasDeleteUpdateConflict ? "delete-update-conflict" : "same-element-changed",
+			conflictElementIds,
+		},
+		mergedElementsById,
 	}
+}
+
+function isPureParentAddition(
+	elementIds: Set<string>,
+	diff: CanvasDocumentElementDiff,
+): boolean {
+	return Array.from(elementIds).every((elementId) => diff.added.has(elementId))
 }
 
 function findParentStructureConflict(
@@ -140,6 +311,12 @@ function findParentStructureConflict(
 	localDiff.parentStructureChangedByParent.forEach((localElementIds, key) => {
 		const remoteElementIds = remoteDiff.parentStructureChangedByParent.get(key)
 		if (!remoteElementIds) return
+		if (
+			isPureParentAddition(localElementIds, localDiff) &&
+			isPureParentAddition(remoteElementIds, remoteDiff)
+		) {
+			return
+		}
 		addCanvasElementIds(conflictElementIds, localElementIds)
 		addCanvasElementIds(conflictElementIds, remoteElementIds)
 	})
@@ -391,11 +568,12 @@ function prepareLocalElementForMerge(
 	localIndex: CanvasDocumentElementIndex,
 	mergedIndex: CanvasDocumentElementIndex,
 	localDiff: CanvasDocumentElementDiff,
+	mergedElementsById?: Map<string, LayerElement>,
 ): LayerElement | null {
 	const localRecord = localIndex.records.get(elementId)
 	if (!localRecord) return null
 
-	const element = cloneCanvasElement(localRecord.element)
+	const element = cloneCanvasElement(mergedElementsById?.get(elementId) ?? localRecord.element)
 	if (localDiff.added.has(elementId) || !isCanvasContainerElement(element)) return element
 
 	const mergedRecord = mergedIndex.records.get(elementId)
@@ -411,6 +589,7 @@ function applyLocalDiffToRemote(
 	remoteCanvas: CanvasDocument | undefined,
 	localIndex: CanvasDocumentElementIndex,
 	localDiff: CanvasDocumentElementDiff,
+	mergedElementsById?: Map<string, LayerElement>,
 ): LocalDiffApplyResult {
 	const mergedCanvas = cloneCanvasJson(remoteCanvas ?? {})
 	let elements = cloneCanvasElements(mergedCanvas.elements)
@@ -442,7 +621,13 @@ function applyLocalDiffToRemote(
 			}
 		}
 
-		const element = prepareLocalElementForMerge(elementId, localIndex, mergedIndex, localDiff)
+		const element = prepareLocalElementForMerge(
+			elementId,
+			localIndex,
+			mergedIndex,
+			localDiff,
+			mergedElementsById,
+		)
 		if (!element) continue
 
 		const upsertResult = upsertElementIntoParent(elements, element, localRecord.parentId)
@@ -488,6 +673,7 @@ function createElementLevelMergeResult(options: {
 	baseIndex: CanvasDocumentElementIndex
 	localIndex: CanvasDocumentElementIndex
 	remoteIndex: CanvasDocumentElementIndex
+	mergedElementsById?: Map<string, LayerElement>
 }): CanvasDocumentMergeResult {
 	const {
 		reason,
@@ -498,6 +684,7 @@ function createElementLevelMergeResult(options: {
 		baseIndex,
 		localIndex,
 		remoteIndex,
+		mergedElementsById,
 	} = options
 	const reasonByElementId = new Map<string, CanvasDocumentMergeElementConflictReason>()
 	addElementConflictIds({ reasonByElementId, conflictElementIds, reason })
@@ -534,6 +721,7 @@ function createElementLevelMergeResult(options: {
 			remoteCanvas,
 			localIndex,
 			mergeableLocalDiff,
+			mergedElementsById,
 		)
 		if (isLocalDiffApplySuccess(partialMergeResult)) {
 			return createElementLevelConflictResult(
@@ -602,7 +790,15 @@ export function mergeCanvasDocumentsByElement(options: {
 		)
 	}
 
-	const elementConflict = findElementConflict(localDiff, remoteDiff)
+	const elementConflictAnalysis = analyzeElementConflicts(
+		baseIndex,
+		localIndex,
+		remoteIndex,
+		localDiff,
+		remoteDiff,
+	)
+	const { mergedElementsById } = elementConflictAnalysis
+	const elementConflict = elementConflictAnalysis.conflict
 	if (elementConflict) {
 		if (isElementLevelConflictReason(elementConflict.reason)) {
 			return createElementLevelMergeResult({
@@ -614,6 +810,7 @@ export function mergeCanvasDocumentsByElement(options: {
 				baseIndex,
 				localIndex,
 				remoteIndex,
+				mergedElementsById,
 			})
 		}
 
@@ -637,6 +834,7 @@ export function mergeCanvasDocumentsByElement(options: {
 				baseIndex,
 				localIndex,
 				remoteIndex,
+				mergedElementsById,
 			})
 		}
 
@@ -648,7 +846,12 @@ export function mergeCanvasDocumentsByElement(options: {
 		)
 	}
 
-	const mergeResult = applyLocalDiffToRemote(remoteCanvas, localIndex, localDiff)
+	const mergeResult = applyLocalDiffToRemote(
+		remoteCanvas,
+		localIndex,
+		localDiff,
+		mergedElementsById,
+	)
 	if (!isLocalDiffApplySuccess(mergeResult)) {
 		if (isElementLevelConflictReason(mergeResult.reason)) {
 			return createElementLevelMergeResult({
@@ -660,6 +863,7 @@ export function mergeCanvasDocumentsByElement(options: {
 				baseIndex,
 				localIndex,
 				remoteIndex,
+				mergedElementsById,
 			})
 		}
 

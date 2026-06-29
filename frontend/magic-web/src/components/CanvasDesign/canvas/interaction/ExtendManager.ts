@@ -70,7 +70,7 @@ export class ExtendManager {
 		}
 		this.elementRerenderedHandler = ({ data }) => {
 			if (data.elementId === this.extendingElementId) {
-				this.exitExtendMode(true)
+				this.rebuildRenderer()
 			}
 		}
 
@@ -128,6 +128,22 @@ export class ExtendManager {
 		return calculateNodesRect(nodes, this.canvas.stage, this.canvas.elementManager)
 	}
 
+	private rebuildRenderer(): void {
+		if (!this.extendingElementId) return
+
+		if (this.extendRenderer) {
+			this.extendRenderer.destroy()
+			this.extendRenderer = null
+		}
+
+		this.extendRenderer = new ExtendRenderer({
+			canvas: this.canvas,
+			elementId: this.extendingElementId,
+		})
+		this.extendRenderer.render()
+		this.emitExtendPosition()
+	}
+
 	private createInitialSession(imageElement: ImageElement): ExtendSession {
 		return {
 			frame: {
@@ -180,14 +196,8 @@ export class ExtendManager {
 
 		this.canvas.container.focus()
 
-		this.extendRenderer = new ExtendRenderer({
-			canvas: this.canvas,
-			elementId,
-		})
-		this.extendRenderer.render()
-
 		this.setupPositionListeners()
-		this.emitExtendPosition()
+		this.rebuildRenderer()
 	}
 
 	public exitExtendMode(shouldRestore: boolean): void {

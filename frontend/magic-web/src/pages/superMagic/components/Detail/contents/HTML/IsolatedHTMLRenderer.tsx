@@ -19,6 +19,12 @@ import { useTranslation } from "react-i18next"
 import { addContentToChat } from "@/pages/superMagic/components/Detail/components/AIOptimization/utils"
 import { decodeHTMLEntities, getFullContent } from "./utils/full-content"
 import { extractStaticDependencies } from "./utils/extractDependencies"
+import {
+	buildHtmlVirtualStorageNamespace,
+	createVirtualStorageContext,
+	virtualStorageRegistry,
+	type VirtualStorageRuntimeContext,
+} from "./utils/virtual-storage"
 import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
 import { cn } from "@/lib/utils"
@@ -38,6 +44,7 @@ import { StylePanelStoreProvider } from "./iframe-bridge/contexts/StylePanelCont
 import { TAILWIND_Z_INDEX_CLASSES } from "./constants/z-index"
 import { DevConsolePanel } from "./components/DevConsole"
 import { useDevConsole } from "./hooks/useDevConsole"
+import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import { useCurrentHtmlFileInfo } from "./hooks/useCurrentHtmlFileInfo"
 import { useInspectorToolbarMode } from "./hooks/useInspectorToolbarMode"
 import {
@@ -306,6 +313,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const [processedSourceCode, setProcessedSourceCode] = useState<string | undefined>(
 			undefined,
 		) // 预处理后的 HTML 源码（供 DevConsole Sources 面板展示）
+		const [virtualStorageContext, setVirtualStorageContext] =
+			useState<VirtualStorageRuntimeContext | null>(null)
 		const hasRenderedOnceRef = useRef(false) // 跟踪 iframe 是否至少已渲染一次
 		const hasNotifiedRenderReadyRef = useRef(false)
 		const hasIframeI18nSubscriberRef = useRef(false)
@@ -601,7 +610,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			return result
 		}, [attachmentList])
 
-		const { htmlAppConfig, htmlAppInstanceKey, authorizeHtmlPermission } =
+		const { htmlAppConfig, htmlAppConfigState, htmlAppInstanceKey, authorizeHtmlPermission } =
 			useHtmlAppPermissions({
 				content,
 				rawSourceCode,
@@ -726,22 +735,26 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				}
 			}),
 			appConfig: htmlAppConfig,
+			appConfigState: htmlAppConfigState,
 			appInstanceKey: htmlAppInstanceKey,
 			authorizeUserInfo: useMemoizedFn(
-				({ appName, fields, reason }) =>
+				({ appName, fields, reason, appConfigLoadError }) =>
 					new Promise<boolean>((resolve) => {
 						const fieldText = fields.join(
 							t("htmlEditor.userInfoAuthorizationConfirm.fieldSeparator"),
 						)
-						const contentKey = reason
-							? "htmlEditor.userInfoAuthorizationConfirm.content"
-							: "htmlEditor.userInfoAuthorizationConfirm.contentWithoutReason"
+						const contentKey = appConfigLoadError
+							? "htmlEditor.userInfoAuthorizationConfirm.appConfigUnavailableContent"
+							: reason
+								? "htmlEditor.userInfoAuthorizationConfirm.content"
+								: "htmlEditor.userInfoAuthorizationConfirm.contentWithoutReason"
 						const modal = MagicModal.confirm({
 							title: t("htmlEditor.userInfoAuthorizationConfirm.title"),
 							content: t(contentKey, {
 								appName,
 								fields: fieldText,
 								reason,
+								error: appConfigLoadError,
 							}),
 							okText: t("htmlEditor.userInfoAuthorizationConfirm.allow"),
 							cancelText: t("htmlEditor.userInfoAuthorizationConfirm.deny"),
@@ -818,6 +831,51 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			return fileId
 		})
 
+		useEffect(() => {
+			let cancelled = false
+			const markerId = getMarkerId()
+			const namespace = buildHtmlVirtualStorageNamespace({
+				projectId: selectedProject?.id,
+				topicId: selectedProject?.current_topic_id,
+				fileId: markerId || fileId,
+			})
+
+			setVirtualStorageContext(null)
+			void createVirtualStorageContext({
+				namespace,
+				targetOrigin: window.location.origin,
+			}).then((context) => {
+				if (!cancelled) setVirtualStorageContext(context)
+			})
+
+			return () => {
+				cancelled = true
+			}
+		}, [
+			attachmentList,
+			fileId,
+			getMarkerId,
+			selectedProject?.current_topic_id,
+			selectedProject?.id,
+		])
+
+		useEffect(() => {
+			if (!virtualStorageContext) return
+			const iframeWindow = iframeRef.current?.contentWindow
+			if (!iframeWindow) return
+
+			const registeredContext = {
+				...virtualStorageContext,
+				source: iframeWindow,
+				origin: iframeTargetOrigin,
+				expiresAt: undefined,
+			}
+			virtualStorageRegistry.register(registeredContext)
+			return () => {
+				virtualStorageRegistry.unregister(registeredContext)
+			}
+		}, [iframeLoaded, iframeTargetOrigin, virtualStorageContext])
+
 		const reloadIframeContent = () => {
 			pubsub.publish(PubSubEvents.Super_Magic_Detail_Refresh)
 		}
@@ -843,6 +901,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		)
 
 		const refreshIframeContent = useMemoizedFn(() => {
+			if (!virtualStorageContext) return
 			hasIframeI18nSubscriberRef.current = false
 			// 解码HTML实体
 			let decodedContent = decodeHTMLEntities(content)
@@ -862,6 +921,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				disableParentClickBridge: disableIframeDocumentClickBridge,
 				enableInlineInspectorFallback,
 				postMessageTargetStrategy,
+				virtualStorage: virtualStorageContext,
 			})
 
 			// 发送内容到iframe
@@ -965,6 +1025,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 					// 根据HTML文件上下文确定标记ID
 					const markerId = getMarkerId()
+					if (!virtualStorageContext) return
 					// 创建完整HTML内容
 					const fullContent = getFullContent(decodedContent, markerId, {
 						dynamicInterception: dynamicResourceInterceptionConfig,
@@ -973,6 +1034,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						disableParentClickBridge: disableIframeDocumentClickBridge,
 						enableInlineInspectorFallback,
 						postMessageTargetStrategy,
+						virtualStorage: virtualStorageContext,
 					})
 					// 发送内容到iframe
 					try {
@@ -1032,7 +1094,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				containIframeOverscroll,
 				disableIframeDocumentClickBridge,
 				dynamicResourceInterceptionConfig,
-				externalRenderSiteOrigin,
 				getMarkerId,
 				hideVerticalScroll,
 				injectMediaScript,
@@ -1041,10 +1102,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				refreshIframeContent,
 				editorRef,
 				handleFetchIntercepted,
+				iframeTargetOrigin,
 				postMessageTargetStrategy,
 				devConsole.toggle,
+				elementInspector,
+				enableInlineInspectorFallback,
 				startInAppendMode,
 				startInToolbarMode,
+				virtualStorageContext,
 			],
 		)
 
@@ -1129,9 +1194,15 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						)
 					}
 
-					pubsub.publish(PubSubEvents.Update_Attachments, () => {
-						magicToast.destroy()
-						magicToast.success(t("topicFiles.fileUploadSuccess"))
+					void waitForProjectAttachmentChange(selectedProject?.id, {
+						operations: ["add"],
+						matchMode: "project-any-apply",
+						fallback: "full-refresh",
+						reason: "html-isolated-image-upload",
+						callback: () => {
+							magicToast.destroy()
+							magicToast.success(t("topicFiles.fileUploadSuccess"))
+						},
 					})
 					console.log(
 						"图片已转换为base64并发送给iframe",
@@ -1562,6 +1633,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		useDeepCompareEffect(() => {
 			if (sandboxType !== "iframe" || !iframeRef.current || !content) return
 			if (!iframeLoaded) return
+			if (!virtualStorageContext) return
 
 			hasRenderedOnceRef.current = false
 			try {
@@ -1571,7 +1643,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				console.error("处理iframe内容时出错:", error)
 				setContentInjected(false)
 			}
-		}, [content, iframeLoaded, htmlSandboxShellUrl])
+		}, [content, iframeLoaded, htmlSandboxShellUrl, virtualStorageContext])
 
 		useEffect(() => {
 			if (!isPptRender) return
@@ -1586,7 +1658,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				},
 				iframeTargetOrigin,
 			)
-		}, [contentInjected, externalRenderSiteOrigin, isPptRender, isVisible, sandboxType])
+		}, [contentInjected, iframeTargetOrigin, isPptRender, isVisible, sandboxType])
 
 		useEffect(() => {
 			if (sandboxType !== "iframe") return
@@ -1734,6 +1806,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									allowFullScreen
 									translate="no"
 									style={getIframeStyle(hasRenderedOnceRef.current)}
+									data-testid="isolated-html-content-iframe"
 								/>
 								{/* 选择覆盖层 - 在父窗口中渲染元素高亮 */}
 								{isEditMode && (

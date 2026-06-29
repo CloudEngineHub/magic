@@ -1,3 +1,6 @@
+MAGIC_WEB_DIR="$(cd "$(dirname -- "$0")/.." && pwd)"
+cd "$MAGIC_WEB_DIR"
+
 # add emoji to your commit
 filepath="$1"
 tmp_file=$(mktemp /tmp/emoji-commitzen.XXXX)
@@ -29,7 +32,4 @@ mv $tmp_file $filepath
 
 # your custom logic
 
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
-npx --no-install commitlint --edit $1
+pnpm exec commitlint --edit $1

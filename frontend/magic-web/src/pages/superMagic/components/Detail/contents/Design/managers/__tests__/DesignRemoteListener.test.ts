@@ -118,6 +118,33 @@ describe("DesignRemoteListener file-change freshness", () => {
 		expect(updateLocalVersion).not.toHaveBeenCalled()
 	})
 
+	it("does not apply file-change data while viewing history", async () => {
+		vi.useFakeTimers()
+		const fetchAndSetVersions = vi.fn().mockResolvedValue([])
+		const applyRemoteDesignData = vi.fn().mockReturnValue(true)
+		const updateLocalVersion = vi.fn()
+		const listener = createListener({
+			getIsViewingHistory: () => true,
+			fetchAndSetVersions,
+			applyRemoteDesignData,
+			updateLocalVersion,
+		})
+		const listenerInternals = listener as unknown as {
+			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignData>
+			debouncedLoadAndApply: (ms: null, version: number) => void
+		}
+		listenerInternals.maybePrepareRemoteDesignDataFromMagicProjectFile = vi
+			.fn()
+			.mockResolvedValue(DESIGN_DATA)
+
+		listenerInternals.debouncedLoadAndApply(null, 4)
+		await vi.runOnlyPendingTimersAsync()
+
+		expect(fetchAndSetVersions).toHaveBeenCalledTimes(1)
+		expect(applyRemoteDesignData).not.toHaveBeenCalled()
+		expect(updateLocalVersion).not.toHaveBeenCalled()
+	})
+
 	it("marks the remote version applied after preloaded remote data is applied", async () => {
 		vi.useFakeTimers()
 		const updateLocalVersion = vi.fn()

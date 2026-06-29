@@ -105,6 +105,7 @@ export function ClawMobileMoreSheet({
 							onOpenChange(false)
 							onViewFiles()
 						}}
+						data-testid="on-open-change"
 					>
 						{filesLabel}
 					</button>
@@ -120,6 +121,7 @@ export function ClawMobileMoreSheet({
 							onOpenChange(false)
 							onEditInfo()
 						}}
+						data-testid="on-open-change-2"
 					>
 						{editLabel}
 					</button>
@@ -133,6 +135,7 @@ export function ClawMobileMoreSheet({
 								onOpenChange(false)
 								onUpgradeSandbox?.()
 							}}
+							data-testid="on-open-change-3"
 						>
 							{upgradeLabel}
 						</button>
@@ -147,6 +150,7 @@ export function ClawMobileMoreSheet({
 								onOpenChange(false)
 								onRestart()
 							}}
+							data-testid="on-open-change-4"
 						>
 							{restartLabel}
 						</button>
@@ -161,6 +165,7 @@ export function ClawMobileMoreSheet({
 								onOpenChange(false)
 								onStop()
 							}}
+							data-testid="on-open-change-5"
 						>
 							{stopLabel}
 						</button>
@@ -175,6 +180,7 @@ export function ClawMobileMoreSheet({
 								onOpenChange(false)
 								onStart()
 							}}
+							data-testid="on-open-change-6"
 						>
 							{startLabel}
 						</button>
@@ -189,6 +195,7 @@ export function ClawMobileMoreSheet({
 							onOpenChange(false)
 							onFeedback?.()
 						}}
+						data-testid="on-open-change-7"
 					>
 						{feedbackLabel}
 					</button>

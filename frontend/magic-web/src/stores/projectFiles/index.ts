@@ -1,11 +1,34 @@
-import { makeAutoObservable } from "mobx"
+import { makeAutoObservable, observable } from "mobx"
 import { WorkspaceFolder } from "./types"
 import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import { createFileTreePerfScope } from "@/pages/superMagic/utils/fileTreePerf"
+import {
+	applyProjectAttachmentsChangesToTree,
+	type ApplyProjectAttachmentsChangesResult,
+} from "@/pages/superMagic/utils/projectAttachments/changeReducer"
+import {
+	projectAttachmentsChangeLog,
+	type ProjectAttachmentsChangeTraceContext,
+} from "@/pages/superMagic/utils/projectAttachments/changeLogReporter"
+import type { SuperMagicFileChangeItem } from "@/types/chat/intermediate_message"
+
+interface SetWorkspaceFileTreeOptions {
+	list?: AttachmentItem[]
+	source?: string
+}
 
 export class ProjectFilesStore {
 	constructor() {
-		makeAutoObservable(this, {}, { autoBind: true })
+		makeAutoObservable(
+			this,
+			{
+				workspaceFileTree: observable.ref,
+				workspaceFilesList: observable.ref,
+				currentSelectedProject: observable.ref,
+			},
+			{ autoBind: true },
+		)
 	}
 
 	workspaceFileTree: AttachmentItem[] = []
@@ -82,9 +105,139 @@ export class ProjectFilesStore {
 		) as WorkspaceFolder | undefined
 	}
 
-	setWorkspaceFileTree(tree: AttachmentItem[]) {
+	setWorkspaceFileTree(tree: AttachmentItem[], options: SetWorkspaceFileTreeOptions = {}) {
+		const perf = createFileTreePerfScope(tree)
+		const commitStartedAt = perf.start()
+		const source = options.source || "unknown"
+		const hasReusableList = Array.isArray(options.list)
+		const workspaceFilesList = hasReusableList
+			? this.createWorkspaceFilesListFromReusableList(tree, options.list || [], perf, source)
+			: perf.measure(
+					"store_flatten_ms",
+					() => this.flattenWorkspaceFileTree(tree),
+					(result) => ({
+						flattened_count: result.length,
+						list_reused: false,
+						source,
+					}),
+				)
+
 		this.workspaceFileTree = this.excludeHiddenItems(tree)
-		this.workspaceFilesList = this.excludeHiddenItems(this.flattenWorkspaceFileTree(tree))
+		this.workspaceFilesList = this.excludeHiddenItems(workspaceFilesList)
+		perf.recordDuration("store_commit_ms", commitStartedAt, {
+			workspace_file_tree_count: this.workspaceFileTree.length,
+			workspace_files_list_count: this.workspaceFilesList.length,
+			list_reused: hasReusableList,
+			source,
+		})
+		perf.snapshotHeap("after_setWorkspaceFileTree")
+	}
+
+	private createWorkspaceFilesListFromReusableList(
+		tree: AttachmentItem[],
+		list: AttachmentItem[],
+		perf: ReturnType<typeof createFileTreePerfScope>,
+		source: string,
+	) {
+		const treeItemByFileId = perf.measure(
+			"store_tree_id_index_ms",
+			() => this.indexWorkspaceFileTreeByFileId(tree),
+			(result) => ({
+				tree_id_index_count: result.size,
+				provided_list_count: list.length,
+				list_reused: true,
+				source,
+			}),
+		)
+
+		return perf.measure(
+			"store_list_reuse_ms",
+			() => this.reuseWorkspaceFilesList(list, treeItemByFileId),
+			(result) => ({
+				reused_list_count: result.length,
+				provided_list_count: list.length,
+				list_reused: true,
+				source,
+			}),
+		)
+	}
+
+	private indexWorkspaceFileTreeByFileId(tree: AttachmentItem[]) {
+		const itemByFileId = new Map<string, AttachmentItem>()
+		const stack = [...tree].reverse()
+
+		while (stack.length > 0) {
+			const item = stack.pop()
+			if (!item) continue
+
+			if (item.file_id !== undefined && item.file_id !== null) {
+				itemByFileId.set(String(item.file_id), item)
+			}
+
+			if (item.children?.length) {
+				for (let index = item.children.length - 1; index >= 0; index -= 1) {
+					stack.push(item.children[index])
+				}
+			}
+		}
+
+		return itemByFileId
+	}
+
+	private reuseWorkspaceFilesList(
+		list: AttachmentItem[],
+		treeItemByFileId: ReadonlyMap<string, AttachmentItem>,
+	) {
+		return list.map((item) => {
+			const fileId = item.file_id
+			if (fileId === undefined || fileId === null) return item
+			return treeItemByFileId.get(String(fileId)) || item
+		})
+	}
+
+	applyFileChanges(
+		changes: SuperMagicFileChangeItem[],
+		options: { locale?: string; trace?: ProjectAttachmentsChangeTraceContext } = {},
+	): ApplyProjectAttachmentsChangesResult {
+		const perf = createFileTreePerfScope(this.workspaceFileTree)
+		const commitStartedAt = perf.start()
+		projectAttachmentsChangeLog.storeApplyStart({
+			trace: options.trace,
+			changeCount: changes.length,
+			beforeTreeCount: this.workspaceFileTree.length,
+			beforeListCount: this.workspaceFilesList.length,
+		})
+		const result = perf.measure("store_apply_file_changes_ms", () =>
+			applyProjectAttachmentsChangesToTree(this.workspaceFileTree, changes, options),
+		)
+
+		if (!result.fallbackRequired) {
+			this.workspaceFileTree = result.tree
+			this.workspaceFilesList = result.list
+		}
+
+		perf.recordDuration("store_apply_file_changes_commit_ms", commitStartedAt, {
+			trace_id: options.trace?.traceId,
+			project_id: options.trace?.projectId,
+			change_count: changes.length,
+			applied_count: result.appliedCount,
+			skipped_count: result.skippedCount,
+			fallback_required: result.fallbackRequired,
+			fallback_reason: result.fallbackReason || "",
+			operation_add_count: result.operationCounts.add,
+			operation_delete_count: result.operationCounts.delete,
+			operation_update_count: result.operationCounts.update,
+			operation_unknown_count: result.operationCounts.unknown,
+		})
+		projectAttachmentsChangeLog.storeApplyFinish({
+			trace: options.trace,
+			changeCount: changes.length,
+			result,
+			afterTreeCount: this.workspaceFileTree.length,
+			afterListCount: this.workspaceFilesList.length,
+		})
+
+		return result
 	}
 
 	addWorkspaceFile(file: AttachmentItem) {
@@ -97,48 +250,73 @@ export class ProjectFilesStore {
 		}
 
 		// Add to list
-		this.workspaceFilesList.push(normalizedFile)
+		this.workspaceFilesList = [...this.workspaceFilesList, normalizedFile]
 
 		// Add to tree
 		if (normalizedFile.parent_id) {
-			// Find parent in tree and add to its children
-			const parent = this.findNodeInTree(this.workspaceFileTree, normalizedFile.parent_id)
-			if (parent) {
-				if (!parent.children) {
-					parent.children = []
-				}
-				parent.children.push(normalizedFile)
-			}
+			this.workspaceFileTree = this.insertFileIntoTree(
+				this.workspaceFileTree,
+				normalizedFile.parent_id,
+				normalizedFile,
+			)
 		} else {
 			// Add to root level
-			this.workspaceFileTree.push(normalizedFile)
+			this.workspaceFileTree = [...this.workspaceFileTree, normalizedFile]
 		}
 	}
 
 	/**
-	 * Find node in tree by file_id
+	 * Insert a node without mutating the existing tree. This keeps observable.ref updates visible.
 	 */
-	private findNodeInTree(tree: AttachmentItem[], fileId: string): AttachmentItem | null {
-		for (const node of tree) {
-			if (node.file_id === fileId) {
-				return node
+	private insertFileIntoTree(
+		tree: AttachmentItem[],
+		parentId: string,
+		file: AttachmentItem,
+	): AttachmentItem[] {
+		let inserted = false
+
+		const nextTree = tree.map((node) => {
+			if (node.file_id === parentId) {
+				inserted = true
+				return {
+					...node,
+					children: [...(node.children || []), file],
+				}
 			}
-			if (node.children) {
-				const found = this.findNodeInTree(node.children, fileId)
-				if (found) return found
+
+			if (!node.children?.length) return node
+
+			const nextChildren = this.insertFileIntoTree(node.children, parentId, file)
+			if (nextChildren === node.children) return node
+
+			inserted = true
+			return {
+				...node,
+				children: nextChildren,
 			}
-		}
-		return null
+		})
+
+		return inserted ? nextTree : tree
 	}
 
 	flattenWorkspaceFileTree(tree: AttachmentItem[]) {
-		return tree.reduce((acc, item) => {
-			acc.push(item)
-			if (item.children) {
-				acc.push(...this.flattenWorkspaceFileTree(item.children))
+		const flattenedTree: AttachmentItem[] = []
+		const stack = [...tree].reverse()
+
+		while (stack.length > 0) {
+			const item = stack.pop()
+			if (!item) continue
+
+			flattenedTree.push(item)
+
+			if (item.children?.length) {
+				for (let index = item.children.length - 1; index >= 0; index -= 1) {
+					stack.push(item.children[index])
+				}
 			}
-			return acc
-		}, [] as AttachmentItem[])
+		}
+
+		return flattenedTree
 	}
 
 	excludeHiddenItems(items: AttachmentItem[]): AttachmentItem[] {

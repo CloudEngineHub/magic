@@ -183,6 +183,7 @@ function MarkerAreaTooltipPreview({
 					})
 				}
 			}}
+			data-testid="show-mobile-image-preview"
 		>
 			<div className={styles.imageWrapper}>
 				<img
@@ -190,6 +191,7 @@ function MarkerAreaTooltipPreview({
 					src={imageUrl}
 					alt={suggestion?.label}
 					style={imageStyle.style}
+					data-testid="marker-area-tooltip-preview-image"
 				/>
 			</div>
 			<div className={styles.areaMarkerContainer} style={areaMarkerStyle}>

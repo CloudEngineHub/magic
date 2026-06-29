@@ -95,7 +95,7 @@ export default memo(function Browser(props: BrowserProps) {
 				allowEdit={allowEdit}
 			/>
 			<div className={styles.content}>
-				{imgSrc && <img className={styles.screenshot} src={imgSrc as any} alt={title} />}
+				{imgSrc && <img className={styles.screenshot} src={imgSrc as any} alt={title}  data-testid="browser-image"/>}
 			</div>
 		</div>
 	)

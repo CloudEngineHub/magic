@@ -134,6 +134,7 @@ function MobileImagePreviewComponent(
 				visible: isVisible && !isClosing,
 			})}
 			onClick={handleOverlayClick}
+			data-testid="handle-overlay-click"
 		>
 			<div className={styles.container}>
 				<div
@@ -142,6 +143,7 @@ function MobileImagePreviewComponent(
 					onTouchStart={handleTouchStart}
 					onTouchMove={handleTouchMove}
 					onTouchEnd={handleTouchEnd}
+					data-testid="handle-touch-start"
 				>
 					{(src || imageSrc || fileUrl || fileUrl2) && (
 						<img
@@ -151,6 +153,7 @@ function MobileImagePreviewComponent(
 							className={cx(styles.image, { interactive: isInteractive })}
 							draggable={false}
 							onLoad={handleImageLoad}
+							data-testid="handle-image-load"
 						/>
 					)}
 				</div>

@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { Badge } from "@/components/shadcn-ui/badge"
-import { Separator } from "@/components/shadcn-ui/separator"
 
 export interface RecycleBinItemData {
 	id: string
@@ -85,31 +84,6 @@ function RecycleBinItem(props: RecycleBinItemProps) {
 					</div>
 
 					<div className="flex items-center gap-2">
-						{/* 仅文件类型显示删除人信息（头像、昵称） */}
-						{item.type === "file" && (
-							<>
-								<div
-									className="flex items-center gap-1.5 text-xs font-normal leading-4 text-[#737373]"
-									data-testid={`mobile-recycle-bin-item-deleted-by-${item.id}`}
-								>
-									{item.deletedByUser?.avatar ? (
-										<img
-											src={item.deletedByUser.avatar}
-											alt=""
-											className="size-4 shrink-0 rounded-full object-cover"
-											referrerPolicy="no-referrer"
-										/>
-									) : null}
-									{t("mobile.recycleBin.item.deletedBy", {
-										username: item.deletedBy,
-									})}
-								</div>
-								<Separator
-									orientation="vertical"
-									className="h-3 w-px bg-[#E5E5E5]"
-								/>
-							</>
-						)}
 						<div
 							className="text-xs font-normal leading-3 text-[#737373]"
 							data-testid={`mobile-recycle-bin-item-valid-days-${item.id}`}

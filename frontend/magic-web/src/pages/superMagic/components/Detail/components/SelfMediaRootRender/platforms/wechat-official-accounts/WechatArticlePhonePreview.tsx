@@ -137,6 +137,7 @@ export default function WechatArticlePhonePreview({
 								"detail.selfMedia.platform.wechat-official-accounts.phonePreview.close",
 								"关闭预览",
 							)}
+							data-testid="wechat-article-phone-preview-close-button"
 						>
 							<X size={27} strokeWidth={1.9} />
 						</button>
@@ -147,6 +148,7 @@ export default function WechatArticlePhonePreview({
 								"detail.selfMedia.platform.wechat-official-accounts.phonePreview.more",
 								"更多",
 							)}
+							data-testid="wechat-article-phone-preview-more-button"
 						>
 							<MoreHorizontal size={28} strokeWidth={2.3} />
 						</button>

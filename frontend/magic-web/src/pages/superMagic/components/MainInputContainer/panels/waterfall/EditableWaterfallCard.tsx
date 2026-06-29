@@ -48,6 +48,7 @@ export function EditableWaterfallCard({
 							alt={label}
 							className="pointer-events-none size-full object-cover"
 							loading="lazy"
+							data-testid="editable-waterfall-card-image"
 						/>
 						{/* Label/description on thumbnail (overlay content) */}
 						<div

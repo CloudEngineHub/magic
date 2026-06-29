@@ -133,7 +133,7 @@ export default function ArticleCardWorkspace({
 		>
 			{hideHeader && showFolderField && (
 				<div className="space-y-1.5">
-					<label className="block text-xs font-medium text-muted-foreground">
+					<label className="block text-xs font-medium text-muted-foreground" data-testid="article-card-workspace-label">
 						{t("detail.selfMedia.initPanel.stepDetail.folderLabel", "归档文件夹")}
 					</label>
 					<div className="relative">
@@ -158,7 +158,7 @@ export default function ArticleCardWorkspace({
 
 			<div className="grid grid-cols-1 gap-5 md:grid-cols-12">
 				<div className="space-y-2 md:col-span-8">
-					<label className="block text-xs font-medium text-muted-foreground">
+					<label className="block text-xs font-medium text-muted-foreground" data-testid="article-card-workspace-label-2">
 						{t("detail.selfMedia.initPanel.stepDetail.platformLabel", "目标自媒体平台")}
 					</label>
 					<div className="flex flex-wrap gap-1.5">
@@ -176,6 +176,7 @@ export default function ArticleCardWorkspace({
 								onClick={() =>
 									onFieldChange("platform", p.value as SelfMediaPlatform)
 								}
+								data-testid="on-field-change"
 							>
 								<PlatformBrandIcon platform={p.value} className="size-3.5" />
 								{t(p.labelKey)}
@@ -186,7 +187,7 @@ export default function ArticleCardWorkspace({
 
 				{article.platform !== "wechat-official-accounts" && (
 					<div className="space-y-2 md:col-span-4">
-						<label className="block text-xs font-medium text-muted-foreground">
+						<label className="block text-xs font-medium text-muted-foreground" data-testid="article-card-workspace-label-3">
 							{cardCountLabel}
 						</label>
 						<div className="flex items-center gap-2">
@@ -213,7 +214,7 @@ export default function ArticleCardWorkspace({
 			</div>
 
 			<div className="space-y-2">
-				<label className="block text-xs font-medium text-muted-foreground">
+				<label className="block text-xs font-medium text-muted-foreground" data-testid="article-card-workspace-label-4">
 					{t("detail.selfMedia.initPanel.stepDetail.styleLabel", "文案口吻预设")}
 				</label>
 				<div className="flex flex-wrap gap-1.5">
@@ -234,6 +235,7 @@ export default function ArticleCardWorkspace({
 										: "border-transparent bg-[#f4f4f5] text-[#71717a] hover:bg-[#e4e4e7] hover:text-[#18181b]",
 								)}
 								onClick={() => onFieldChange("style", preset.value)}
+								data-testid="on-field-change-2"
 							>
 								{t(preset.labelKey)}
 							</button>
@@ -261,7 +263,7 @@ export default function ArticleCardWorkspace({
 			</div>
 
 			<div className="space-y-2">
-				<label className="block text-xs font-medium text-muted-foreground">
+				<label className="block text-xs font-medium text-muted-foreground" data-testid="article-card-workspace-label-5">
 					{t("detail.selfMedia.initPanel.stepDetail.visualLabel", "配图视觉基调")}
 				</label>
 				<VisualPresetPicker
@@ -295,7 +297,7 @@ export default function ArticleCardWorkspace({
 			</div>
 
 			<div className="space-y-1.5">
-				<label className="mb-1 block text-xs font-semibold">
+				<label className="mb-1 block text-xs font-semibold" data-testid="article-card-workspace-label-6">
 					{t(
 						"detail.selfMedia.initPanel.stepDetail.descriptionLabel",
 						"内容描述与核心观点",
@@ -329,7 +331,7 @@ export default function ArticleCardWorkspace({
 			<div className="space-y-3">
 				<div className="flex flex-col gap-2 border-b border-[#e4e4e7] pb-2 sm:flex-row sm:items-center sm:justify-between">
 					<div className="flex min-w-0 flex-wrap items-center gap-2">
-						<label className="text-xs font-medium text-muted-foreground">
+						<label className="text-xs font-medium text-muted-foreground" data-testid="article-card-workspace-label-7">
 							{t(
 								isWechatOfficialAccount
 									? "detail.selfMedia.initPanel.stepDetail.wechatArticleContentLabel"

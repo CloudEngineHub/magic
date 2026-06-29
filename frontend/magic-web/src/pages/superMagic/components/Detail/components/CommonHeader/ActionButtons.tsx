@@ -408,7 +408,7 @@ function ActionButtons(props: ActionButtonsProps) {
 									isNewestFileVersion &&
 									showRefreshButton && (
 										<ActionButton
-											element={<img src={RotateIcon} />}
+											element={<img src={RotateIcon}  data-testid="action-buttons-image"/>}
 											onClick={handleRefresh}
 											title={t("fileViewer.refresh")}
 											text={t("fileViewer.refresh")}

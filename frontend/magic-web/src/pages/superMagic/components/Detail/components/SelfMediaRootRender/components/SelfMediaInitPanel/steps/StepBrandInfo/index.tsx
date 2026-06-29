@@ -316,6 +316,7 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 						type="button"
 						className="min-w-0 flex-1 cursor-pointer rounded-[20px] px-1 py-1 text-left transition-colors hover:bg-[#f8f8f9] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15"
 						onClick={() => setIsBrandFormOpen((open) => !open)}
+						data-testid="set-is-brand-form-open"
 					>
 						<div className="space-y-1">
 							<div className="space-y-1">
@@ -358,6 +359,7 @@ const StepBrandInfo = forwardRef<StepBrandInfoRef, StepBrandInfoProps>(function 
 								: t("detail.selfMedia.initPanel.stepBrand.expand", "展开品牌信息")
 						}
 						onClick={() => setIsBrandFormOpen((open) => !open)}
+						data-testid="set-is-brand-form-open-2"
 					>
 						<ChevronDown
 							size={18}

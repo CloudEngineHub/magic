@@ -15,6 +15,7 @@ import QuickInstructionExtension from "@/pages/chatNew/components/quick-instruct
 import { type FileError } from "@/components/base/MagicRichEditor/utils"
 import { useImageExtensions } from "@/components/base/MagicRichEditor/hooks"
 import EditorService from "@/services/chat/editor/EditorService"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 interface UseMessageEditorProps {
 	value?: JSONContent | string | null
@@ -122,8 +123,10 @@ export const useMessageEditor = ({
 
 	// Handle dynamic placeholder updates
 	useEffect(() => {
-		if (tiptapEditor && placeholder) {
-			tiptapEditor.commands.updatePlaceholder(placeholder)
+		if (placeholder) {
+			runActiveEditor(tiptapEditor, (editor) => {
+				editor.commands.updatePlaceholder(placeholder)
+			})
 		}
 	}, [tiptapEditor, placeholder])
 

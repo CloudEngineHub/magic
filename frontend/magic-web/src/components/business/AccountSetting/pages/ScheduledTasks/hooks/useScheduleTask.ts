@@ -8,6 +8,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ScheduledTask } from "@/types/scheduledTask"
 import mcpTempStorage from "../store/MCPTempStorage"
 import { useScheduledTasksModifyModal } from "./useScheduledTasksModifyModal"
+import { JSONContent } from "@tiptap/react"
 
 interface UseScheduleTaskProps {
 	options?: Partial<ScheduledTask.GetListParams>
@@ -126,7 +127,7 @@ export function useScheduleTask({ options, isScroll = false, siderTaskRef }: Use
 			...task,
 			enabled: checked ? 1 : 0,
 		}).then(() => {
-			run(params)
+			setTasks((prevTasks) => prevTasks.map((item) => (item.id === task.id ? { ...item, enabled: checked ? 1 : 0 } : item)))
 			magicToast.success(
 				checked
 					? t("accountPanel.timedTasks.taskEnabled")
@@ -134,6 +135,20 @@ export function useScheduleTask({ options, isScroll = false, siderTaskRef }: Use
 			)
 		})
 	})
+
+	const runNow = async (task: ScheduledTask.Task) => {
+		const detail = await ScheduledTaskApi.getScheduledTaskDetails(task.id)
+		if(!detail) return
+
+		const { message_content } = detail
+		const content = JSON.parse(message_content.content) as JSONContent
+
+		pubsub.publish(PubSubEvents.Create_New_Topic, {
+			afterCreate: {
+				content,
+			},
+		})
+	}
 
 	useMount(() => {
 		if (!isScroll) {
@@ -170,5 +185,6 @@ export function useScheduleTask({ options, isScroll = false, siderTaskRef }: Use
 		setTasks,
 		preloadDeleteDangerModal,
 		preloadRunningRecordModal,
+		runNow,
 	}
 }

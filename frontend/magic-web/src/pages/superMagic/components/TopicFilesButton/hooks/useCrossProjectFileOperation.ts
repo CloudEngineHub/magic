@@ -4,7 +4,12 @@ import type { AttachmentItem } from "./index"
 import type { ProjectListItem, Workspace } from "../../../pages/Workspace/types"
 import { SuperMagicApi } from "@/apis"
 import { detectDuplicateFilesForMove } from "../utils/moveOrCopyDuplicateHandler"
+import {
+	collectSameParentOperationIds,
+	detectFolderConflictsForMove,
+} from "../utils/folderConflictHandler"
 import { useMoveOrCopyDuplicateHandler } from "./useMoveOrCopyDuplicateHandler"
+import { useFolderConflictHandler } from "./useFolderConflictHandler"
 import magicToast from "@/components/base/MagicToaster/utils"
 
 interface UseCrossProjectFileOperationOptions {
@@ -12,7 +17,7 @@ interface UseCrossProjectFileOperationOptions {
 	selectedWorkspace: Workspace | null
 	selectedProject: ProjectListItem | null
 	projects: ProjectListItem[]
-	onSuccess?: () => void
+	onSuccess?: (result?: { operationType: "move" | "copy"; fileIds: string[] }) => void
 }
 
 export function useCrossProjectFileOperation(options: UseCrossProjectFileOperationOptions) {
@@ -28,6 +33,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 
 	// 集成同名检测 Hook
 	const duplicateHandler = useMoveOrCopyDuplicateHandler()
+	const folderConflictHandler = useFolderConflictHandler()
 
 	const openMoveModal = useCallback((ids: string[], path?: AttachmentItem[]) => {
 		setFileIds(ids)
@@ -50,7 +56,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 	}, [])
 
 	const handleOperationPolling = useCallback(
-		(batchKey: string, operationType: "move" | "copy") => {
+		(batchKey: string, operationType: "move" | "copy", completedFileIds: string[]) => {
 			const timer = setInterval(async () => {
 				try {
 					const checkData = await SuperMagicApi.checkBatchOperationStatus(batchKey)
@@ -70,7 +76,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 							setIsOperating(false)
 							setOperationProgress(0)
 							closeModal()
-							onSuccess?.()
+							onSuccess?.({ operationType, fileIds: completedFileIds })
 						}, 500)
 					} else if (checkData.status === "failed") {
 						magicToast.error(
@@ -114,22 +120,51 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			const effectiveFileIds = data.fileIds || fileIds
 			if (!projectId || effectiveFileIds.length === 0) return
 
+			let keepBothIds =
+				data.targetProjectId === projectId
+					? collectSameParentOperationIds(
+							effectiveFileIds,
+							data.sourceAttachments,
+							data.targetPath,
+						)
+					: []
+			const conflictDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
+
 			// 1. 检测同名文件（递归检测文件夹内所有子文件）
-			const duplicates = detectDuplicateFilesForMove(
-				effectiveFileIds,
-				data.sourceAttachments,
-				data.targetAttachments,
-				data.targetPath,
-			)
+			const folderConflicts =
+				conflictDetectionIds.length > 0
+					? detectFolderConflictsForMove(
+							conflictDetectionIds,
+							data.sourceAttachments,
+							data.targetAttachments,
+							data.targetPath,
+						)
+					: new Map()
+			if (folderConflicts.size > 0) {
+				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
+				if (!folderChoice.shouldProceed) return
+				keepBothIds = [...keepBothIds, ...folderChoice.keepBothIds]
+			}
+
+			// 1. 检测同名文件（递归检测文件夹内所有子文件）
+			const duplicateDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
+			const duplicates =
+				duplicateDetectionIds.length > 0
+					? detectDuplicateFilesForMove(
+							duplicateDetectionIds,
+							data.sourceAttachments,
+							data.targetAttachments,
+							data.targetPath,
+						)
+					: new Map()
 
 			// 2. 如果有同名，显示 Modal 并等待用户选择
-			let keepBothIds: string[] = []
 			if (duplicates.size > 0) {
 				const userChoice = await duplicateHandler.checkDuplicates(duplicates)
 				if (!userChoice.shouldProceed) {
 					return // 用户取消
 				}
-				keepBothIds = userChoice.keepBothIds
+				keepBothIds = [...keepBothIds, ...userChoice.keepBothIds]
 			}
 
 			// 3. 执行移动操作
@@ -173,13 +208,13 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						setIsOperating(false)
 						setOperationProgress(0)
 						closeModal()
-						onSuccess?.()
+						onSuccess?.({ operationType: "move", fileIds: effectiveFileIds })
 					}, 500)
 					return
 				}
 
 				if (result.status === "processing" && result.batch_key) {
-					handleOperationPolling(result.batch_key, "move")
+					handleOperationPolling(result.batch_key, "move", effectiveFileIds)
 				}
 			} catch (error) {
 				console.error("移动文件失败:", error)
@@ -188,7 +223,16 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				setOperationProgress(0)
 			}
 		},
-		[fileIds, projectId, closeModal, onSuccess, t, handleOperationPolling, duplicateHandler],
+		[
+			fileIds,
+			projectId,
+			closeModal,
+			onSuccess,
+			t,
+			handleOperationPolling,
+			duplicateHandler,
+			folderConflictHandler,
+		],
 	)
 
 	const executeCopyOperation = useCallback(
@@ -202,56 +246,53 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			const effectiveFileIds = data.fileIds ?? fileIds
 			if (!projectId || effectiveFileIds.length === 0) return
 
-			// 辅助函数：在文件树中查找指定 ID 的项目
-			const findItemById = (
-				id: string,
-				attachments: AttachmentItem[],
-			): AttachmentItem | null => {
-				for (const item of attachments) {
-					if (item.file_id === id) return item
-					if (item.children) {
-						const found = findItemById(id, item.children)
-						if (found) return found
-					}
+			let keepBothIds =
+				data.targetProjectId === projectId
+					? collectSameParentOperationIds(
+							fileIds,
+							data.sourceAttachments,
+							data.targetPath,
+						)
+					: []
+			const conflictDetectionIds = fileIds.filter((id) => !keepBothIds.includes(id))
+
+			const folderConflicts =
+				conflictDetectionIds.length > 0
+					? detectFolderConflictsForMove(
+							conflictDetectionIds,
+							data.sourceAttachments,
+							data.targetAttachments,
+							data.targetPath,
+						)
+					: new Map()
+
+			if (folderConflicts.size > 0) {
+				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
+				if (!folderChoice.shouldProceed) {
+					return
 				}
-				return null
+				keepBothIds = [...keepBothIds, ...folderChoice.keepBothIds]
 			}
 
-			// 检查 effectiveFileIds 中是否都是文件夹
-			const areAllFolders = effectiveFileIds.every((id) => {
-				const item = findItemById(id, data.sourceAttachments)
-				return item?.is_directory === true
-			})
-
-			// 1. 检测同名文件（如果是文件夹，跳过冲突检测）
-			let duplicates = new Map<string, { fileName: string; relativePath: string }>()
-			if (!areAllFolders) {
-				// 只有包含文件时才进行冲突检测
-				duplicates = detectDuplicateFilesForMove(
-					effectiveFileIds,
-					data.sourceAttachments,
-					data.targetAttachments,
-					data.targetPath,
-				)
-			}
+			// 1. Check duplicates. "Keep both" renames the top folder, so skip inner paths.
+			const duplicateDetectionIds = fileIds.filter((id) => !keepBothIds.includes(id))
+			const duplicates =
+				duplicateDetectionIds.length > 0
+					? detectDuplicateFilesForMove(
+							duplicateDetectionIds,
+							data.sourceAttachments,
+							data.targetAttachments,
+							data.targetPath,
+						)
+					: new Map()
 
 			// 2. 如果有同名，显示 Modal 并等待用户选择
-			let keepBothIds: string[] = []
 			if (duplicates.size > 0) {
 				const userChoice = await duplicateHandler.checkDuplicates(duplicates)
 				if (!userChoice.shouldProceed) {
 					return // 用户取消
 				}
-				keepBothIds = userChoice.keepBothIds
-			}
-
-			// 3. 如果是文件夹，将文件夹ID添加到 keepBothIds 中
-			const folderIds = effectiveFileIds.filter((id) => {
-				const item = findItemById(id, data.sourceAttachments)
-				return item?.is_directory === true
-			})
-			if (folderIds.length > 0) {
-				keepBothIds = [...keepBothIds, ...folderIds]
+				keepBothIds = [...keepBothIds, ...userChoice.keepBothIds]
 			}
 
 			// 4. 执行复制操作
@@ -280,13 +321,13 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						setIsOperating(false)
 						setOperationProgress(0)
 						closeModal()
-						onSuccess?.()
+						onSuccess?.({ operationType: "copy", fileIds })
 					}, 500)
 					return
 				}
 
 				if (result.status === "processing" && result.batch_key) {
-					handleOperationPolling(result.batch_key, "copy")
+					handleOperationPolling(result.batch_key, "copy", fileIds)
 				}
 			} catch (error) {
 				console.error("复制文件失败:", error)
@@ -295,7 +336,16 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				setOperationProgress(0)
 			}
 		},
-		[fileIds, projectId, closeModal, onSuccess, t, handleOperationPolling, duplicateHandler],
+		[
+			fileIds,
+			projectId,
+			closeModal,
+			onSuccess,
+			t,
+			handleOperationPolling,
+			duplicateHandler,
+			folderConflictHandler,
+		],
 	)
 
 	return {
@@ -317,5 +367,12 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 		handleDuplicateReplace: duplicateHandler.handleReplace,
 		handleDuplicateKeepBoth: duplicateHandler.handleKeepBoth,
 		handleDuplicateCancel: duplicateHandler.handleCancel,
+		folderConflictModalVisible: folderConflictHandler.modalVisible,
+		currentFolderConflictName: folderConflictHandler.currentFolderName,
+		totalFolderConflicts: folderConflictHandler.totalConflicts,
+		canMergeFolderConflict: folderConflictHandler.canMerge,
+		handleFolderConflictKeepBoth: folderConflictHandler.handleKeepBoth,
+		handleFolderConflictMerge: folderConflictHandler.handleMerge,
+		handleFolderConflictCancel: folderConflictHandler.handleCancel,
 	}
 }

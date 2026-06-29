@@ -69,6 +69,7 @@ function SlidesPresetPreviewDialog({
 							aria-label="Close"
 							onClick={() => onOpenChange(false)}
 							className="rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+							data-testid="on-open-change"
 						>
 							<X className="size-5" />
 						</button>

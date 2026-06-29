@@ -7,6 +7,7 @@ import type { SVGProps } from "react"
 export function MagiClawNavIcon(props: SVGProps<SVGSVGElement>) {
 	return (
 		<svg
+			data-testid="magi-claw-nav-icon-svg"
 			{...props}
 			viewBox="0 0 16 16"
 			fill="none"

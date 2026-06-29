@@ -7,7 +7,7 @@
 	"aiWatermark": "AI-Generated Watermark Settings",
 	"aiWatermarkActionFailed": "Action failed. Please try again later.",
 	"aiWatermarkAgreementBody": "Upon your application, the Platform may provide you with AI-generated content without explicit labels. If you subsequently use online information dissemination services to publish AI-generated content, please note that you must proactively declare and use the labeling features provided by the distribution platform. You understand and agree that if you fail to add explicit labels to AI-generated content as required by laws and regulations, resulting in public confusion or misidentification, you shall bear all consequences and responsibilities arising therefrom.",
-	"aiWatermarkAgreementIntro": "In accordance with legal and regulatory requirements, the Super Magic AI Platform (\"Platform\") provides AI generation and synthesis services that may cause public confusion or misidentification. The Platform shall add explicit labels to AI-generated content to inform the public.",
+	"aiWatermarkAgreementIntro": "In accordance with legal and regulatory requirements, $t(common:platform.name) AI Platform (\"Platform\") provides AI generation and synthesis services that may cause public confusion or misidentification. The Platform shall add explicit labels to AI-generated content to inform the public.",
 	"aiWatermarkDisabled": "Not Globally Agreed",
 	"aiWatermarkDisabledDescription": "The download menu keeps its current two-option structure. Clicking \"Download Unwatermarked Image\" will continue using the original behavior, with agreement confirmation performed in that flow.",
 	"aiWatermarkEnabled": "Globally Agreed",

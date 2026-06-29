@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import {
 	Dialog,
@@ -67,12 +67,18 @@ function SlideSelectionDialog({
 		return () => cancelAnimationFrame(rafId)
 	}, [open])
 
-	// 弹窗每次打开（false → true）默认全选当前所有幻灯片；
-	// 之后用户的取消勾选不会被覆盖
+	// 弹窗每次打开（false → true）默认只选中已加载完成的幻灯片；
+	// 未加载完成（loading/error/idle）的不默认选中
 	const prevOpenRef = useRef(false)
 	useEffect(() => {
 		if (open && !prevOpenRef.current) {
-			setSelectedIds(new Set(slides.map((slide) => slide.path)))
+			setSelectedIds(
+				new Set(
+					slides
+						.filter((slide) => slide.loadingState === "loaded")
+						.map((slide) => slide.path),
+				),
+			)
 		}
 		prevOpenRef.current = open
 	}, [open, slides])
@@ -99,11 +105,12 @@ function SlideSelectionDialog({
 		})
 	}, [open, contentReady, slides, onGenerateScreenshot])
 
-	// 计算是否全选
-	const isAllSelected = useMemo(() => {
-		if (slides.length === 0) return false
-		return slides.every((slide) => selectedIds.has(slide.path))
-	}, [slides, selectedIds])
+	// 已加载完成的幻灯片（不使用 useMemo，让 MobX observer 能追踪 observable 属性变化）
+	const loadedSlides = slides.filter((slide) => slide.loadingState === "loaded")
+
+	// 计算是否全选（基于已加载的幻灯片）
+	const isAllSelected =
+		loadedSlides.length > 0 && loadedSlides.every((slide) => selectedIds.has(slide.path))
 
 	// 切换单个幻灯片选择状态
 	function toggleSlide(slideId: string) {
@@ -118,12 +125,12 @@ function SlideSelectionDialog({
 		})
 	}
 
-	// 全选/取消全选
+	// 全选/取消全选（只操作已加载完成的幻灯片）
 	function toggleSelectAll() {
 		if (isAllSelected) {
 			setSelectedIds(new Set())
 		} else {
-			setSelectedIds(new Set(slides.map((slide) => slide.path)))
+			setSelectedIds(new Set(loadedSlides.map((slide) => slide.path)))
 		}
 	}
 
@@ -164,7 +171,7 @@ function SlideSelectionDialog({
 						onClick={toggleSelectAll}
 						className="h-8 text-sm"
 					>
-						<Checkbox checked={isAllSelected} className="bg-white shadow-sm" />
+						<Checkbox checked={isAllSelected} className="pointer-events-none data-[state=unchecked]:bg-white shadow-sm" />
 						{isAllSelected ? t("ppt.deselectAll") : t("ppt.selectAll")}
 					</Button>
 					<span className="text-sm text-muted-foreground">
@@ -196,23 +203,31 @@ function SlideSelectionDialog({
 						<div className="3xl:grid-cols-5 grid grid-cols-2 gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
 							{slides.map((slide, index) => {
 								const isSelected = selectedIds.has(slide.path)
+								const isLoaded = slide.loadingState === "loaded"
 								return (
 									<div
 										key={slide.id}
-										onClick={() => toggleSlide(slide.path)}
+										onClick={() => isLoaded && toggleSlide(slide.path)}
 										className={cn(
-											"w-30 relative cursor-pointer rounded-lg border-2 transition-all hover:shadow-md",
+											"w-30 relative rounded-lg border-2 transition-all",
+											!isLoaded
+												? "cursor-not-allowed opacity-50"
+												: "cursor-pointer hover:shadow-md",
 											isSelected
 												? "border-primary bg-primary/5 shadow-sm"
 												: "border-border hover:border-primary/50",
 										)}
+										data-testid="toggle-slide"
 									>
 										{/* 选择框 */}
 										<div className="absolute left-2 top-2 z-10">
 											<Checkbox
 												checked={isSelected}
-												onCheckedChange={() => toggleSlide(slide.path)}
-												className="bg-white shadow-sm"
+												disabled={!isLoaded}
+												onCheckedChange={() =>
+													isLoaded && toggleSlide(slide.path)
+												}
+												className="data-[state=unchecked]:bg-white shadow-sm"
 											/>
 										</div>
 
@@ -223,6 +238,7 @@ function SlideSelectionDialog({
 													src={slide.thumbnailUrl}
 													alt={slide.title || `Slide ${index + 1}`}
 													className="h-full w-full object-cover"
+													data-testid="slide-selection-dialog-image"
 												/>
 											) : (
 												<div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">

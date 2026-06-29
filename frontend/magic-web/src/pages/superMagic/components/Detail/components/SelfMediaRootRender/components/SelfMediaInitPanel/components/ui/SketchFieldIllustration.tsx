@@ -33,6 +33,7 @@ export function SketchFieldIllustration({
 					imageClassName,
 				)}
 				draggable={false}
+				data-testid="sketch-field-illustration-image"
 			/>
 		</div>
 	)

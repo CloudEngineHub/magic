@@ -63,6 +63,7 @@ function MarkerMentionChip({
 			)}
 			onClick={onClick}
 			data-mention-item={dataMentionItem}
+			data-testid="marker-mention-chip"
 		>
 			<div className="relative flex size-[14px] flex-none shrink-0 items-center justify-center">
 				<div
@@ -72,6 +73,7 @@ function MarkerMentionChip({
 						removeClassName,
 					)}
 					onClick={onRemove}
+					data-testid="on-remove"
 				>
 					<TSIcon type="ts-close-line" size="14" />
 				</div>
@@ -83,6 +85,7 @@ function MarkerMentionChip({
 							"absolute inset-0 size-[14px] rounded object-cover transition-opacity",
 							previewClassName,
 						)}
+						data-testid="marker-mention-chip-image"
 					/>
 				) : (
 					<div

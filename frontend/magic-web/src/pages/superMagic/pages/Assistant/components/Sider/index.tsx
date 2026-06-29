@@ -201,7 +201,7 @@ const Sider = ({ onSelectAgent }: { onSelectAgent: (agent: UserAvailableAgentInf
 				</FlexBox>
 			)}
 
-			<div className={styles.list} onScroll={onScroll}>
+			<div className={styles.list} onScroll={onScroll} data-testid="on-scroll">
 				<VirtualList data={state.list} itemHeight={ASSISTANT_ITEM_HEIGHT} itemKey="id">
 					{(item: UserAvailableAgentInfo) => {
 						return (

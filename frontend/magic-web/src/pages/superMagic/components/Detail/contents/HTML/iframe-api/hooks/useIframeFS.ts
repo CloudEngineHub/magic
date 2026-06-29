@@ -5,7 +5,7 @@
  * handleMessage 分发链中。依赖变化时自动重建 service 实例。
  */
 
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
 import { useMemoizedFn, useDeepCompareEffect } from "ahooks"
 import {
 	IframeFSService,
@@ -147,7 +147,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 	])
 
 	// fileList 变化时仅更新内部引用，避免重建 service（会中断 watch 轮询）
-	useDeepCompareEffect(() => {
+	useEffect(() => {
 		serviceRef.current?.updateFileList(fileList)
 	}, [fileList])
 

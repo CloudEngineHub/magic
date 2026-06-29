@@ -88,6 +88,8 @@ export enum RouteName {
 	MySkills = "MySkills",
 	/** My Crew - 我的员工 */
 	MyCrew = "MyCrew",
+	/** Crew Conversation - 员工专属对话 */
+	CrewConversation = "CrewConversation",
 	/** MagiClaw - 超级龙虾 */
 	MagiClaw = "MagiClaw",
 	/** Audio Recordings - 录音与纪要列表 */

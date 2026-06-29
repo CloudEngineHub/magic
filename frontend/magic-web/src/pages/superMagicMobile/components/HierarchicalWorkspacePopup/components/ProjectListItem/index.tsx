@@ -34,6 +34,7 @@ function ProjectListItem({
 				isSelected && "bg-primary-10",
 			)}
 			onClick={() => onSelect(project)}
+			data-testid="on-select"
 		>
 			<div className="flex w-full flex-1 items-center justify-between">
 				<div className="flex w-full min-w-0 items-center gap-2">

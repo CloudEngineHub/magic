@@ -1,6 +1,6 @@
 {
-  "name": "@magic-web/html2pptx",
-  "version": "0.1.0",
+  "name": "@magic/html2pptx",
+  "version": "1.0.1",
   "private": false,
   "description": "Convert HTML content to PPTX slides",
   "license": "MIT",

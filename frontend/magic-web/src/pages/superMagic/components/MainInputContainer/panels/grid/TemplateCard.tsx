@@ -22,6 +22,7 @@ function TemplateCard({ template, isSelected, onClick }: TemplateCardProps) {
 				isSelected && "bg-blue-600/20",
 			)}
 			onClick={() => onClick?.(template)}
+			data-testid="template-card"
 		>
 			<div className="flex h-28 w-full flex-col overflow-hidden rounded-lg border border-border bg-background">
 				{template.thumbnail_url ? (
@@ -31,6 +32,7 @@ function TemplateCard({ template, isSelected, onClick }: TemplateCardProps) {
 							alt={label}
 							className="pointer-events-none absolute inset-0 size-full max-w-none object-cover"
 							loading="lazy"
+							data-testid="template-card-image"
 						/>
 					</div>
 				) : (
@@ -48,6 +50,7 @@ function TemplateCard({ template, isSelected, onClick }: TemplateCardProps) {
 								alt={label}
 								className="size-full object-contain"
 								loading="lazy"
+								data-testid="template-card-image-2"
 							/>
 						) : (
 							<LucideLazyIcon icon={template.icon_url} size={16} />

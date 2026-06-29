@@ -55,6 +55,7 @@ export default memo(function WorkspaceCase({ className, style }: WorkspaceCasePr
 							onClick={() => {
 								setActiveGroupKey(item.key)
 							}}
+							data-testid="set-active-group-key"
 						>
 							{item.name}
 						</div>
@@ -70,11 +71,12 @@ export default memo(function WorkspaceCase({ className, style }: WorkspaceCasePr
 							onClick={() => {
 								openInNewTab(item.url)
 							}}
+							data-testid="open-in-new-tab"
 						>
 							<div className={styles.caseItemTitle}>{item.title}</div>
 							<div className={styles.caseItemSubTitle}>{item.subTitle}</div>
 							{item.image ? (
-								<img src={item.image} className={styles.caseItemImage} />
+								<img src={item.image} className={styles.caseItemImage}  data-testid="workspace-case-image"/>
 							) : (
 								<div className={styles.caseItemImage} />
 							)}

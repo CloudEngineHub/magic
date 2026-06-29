@@ -175,7 +175,10 @@ function SelfMediaPostPublishedLinkPopover({
 		</div>
 	) : (
 		<>
-			<label className="block space-y-1.5">
+			<label
+				className="block space-y-1.5"
+				data-testid="self-media-post-published-link-popover-label"
+			>
 				<span className="text-xs font-medium text-foreground">
 					{t("detail.selfMedia.home.publishedLinkInput")}
 				</span>

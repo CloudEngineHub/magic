@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
-import { DesignSaveManager } from "../DesignSaveManager"
+import { DesignSaveManager, type DesignSaveLifecycleHandlers } from "../DesignSaveManager"
 import type { DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
 import type { DesignData } from "../../types"
 import { hashDesignDataComparable } from "../../utils/designContentHash"
+import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
@@ -12,16 +13,19 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
-function createDesignData(name: string): DesignData {
+function createDesignData(name: string, elements: LayerElement[] = []): DesignData {
 	return {
 		type: "design",
 		name,
 		version: "2.0.0",
-		canvas: { elements: [] },
+		canvas: { elements },
 	}
 }
 
-function createSaveManager(initialData = createDesignData("local")) {
+function createSaveManager(
+	initialData = createDesignData("local"),
+	handlers?: DesignSaveLifecycleHandlers,
+) {
 	let designData = initialData
 	let magicProjectJsFileId: string | null = "file-1"
 	let magicProjectJsVersion: number | null = 2
@@ -73,7 +77,7 @@ function createSaveManager(initialData = createDesignData("local")) {
 		flatAttachments: [],
 	}
 
-	return new DesignSaveManager(stateBag, options, vi.fn().mockResolvedValue([]))
+	return new DesignSaveManager(stateBag, options, vi.fn().mockResolvedValue([]), handlers)
 }
 
 describe("DesignSaveManager remote checks", () => {
@@ -175,5 +179,36 @@ describe("DesignSaveManager remote checks", () => {
 			hashDesignDataComparable(remoteSaveData),
 		)
 		expect(SuperMagicApi.saveFileContent).toHaveBeenCalledTimes(1)
+	})
+
+	it("stops before writing when the empty canvas save guard blocks the payload", async () => {
+		const shouldBlockEmptyCanvasSave = vi.fn(() => true)
+		const saveManager = createSaveManager(createDesignData("local"), {
+			shouldBlockEmptyCanvasSave,
+		})
+		vi.spyOn(saveManager, "checkRemoteUpdate").mockResolvedValue({
+			hasUpdate: false,
+			currentVersion: 2,
+			isCheckReliable: true,
+		})
+
+		const result = await saveManager.commitSave({
+			source: "draft-restore",
+			beforeElementCount: 2,
+			deletedElementIds: ["a", "a"],
+		})
+
+		expect(result).toEqual({ ok: false, reason: "unsafe-empty-canvas" })
+		expect(shouldBlockEmptyCanvasSave).toHaveBeenCalledWith(
+			expect.objectContaining({
+				source: "draft-restore",
+				beforeElementCount: 2,
+				nextElementCount: 0,
+				deletedElementIds: ["a"],
+				magicProjectJsVersion: 2,
+				fromDraft: true,
+			}),
+		)
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
 	})
 })

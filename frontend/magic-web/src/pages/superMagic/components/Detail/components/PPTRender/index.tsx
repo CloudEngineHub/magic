@@ -621,6 +621,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									? `Slide ${store.activeIndex + 1} of ${store.slideUrls.length}`
 									: t("ppt.noSlidesAvailable")
 							}
+							data-testid="ppt-render-div"
 						>
 							<div className="relative h-full w-full overflow-hidden">
 								{/* 调整宽度时覆盖层防止 iframe 拦截鼠标事件 */}

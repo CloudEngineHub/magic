@@ -58,10 +58,10 @@ function SimilarSharesDrawer({
 
 			{/* 底部按钮 */}
 			<div className="absolute bottom-0 left-0 right-0 flex gap-1.5 border-t border-border bg-background p-3">
-				<Button variant="secondary" onClick={onClose} className="h-9 flex-1 px-8">
+				<Button variant="secondary" onClick={onClose} className="h-9 flex-1 px-8" data-testid="on-close">
 					{t("common.cancel")}
 				</Button>
-				<Button onClick={handleCreateNew} className="h-9 flex-1">
+				<Button onClick={handleCreateNew} className="h-9 flex-1" data-testid="handle-create-new">
 					{t("share.createNewShare")}
 				</Button>
 			</div>

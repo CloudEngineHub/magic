@@ -19,15 +19,22 @@ import { useMessageChanges } from "@/pages/superMagic/hooks/useMessageChanges"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { topicStore, projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import { useTaskData } from "@/pages/superMagic/hooks/useTaskData"
-import SuperMagicService from "@/pages/superMagic/services"
+import SuperMagicService, { loadProjectAttachments } from "@/pages/superMagic/services"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { LongMemoryApi, SuperMagicApi } from "@/apis"
+import { LongMemoryApi } from "@/apis"
+import {
+	measureAttachmentFetch,
+	recordAttachmentsStaleResponseDropped,
+} from "@/pages/superMagic/utils/attachmentPerf"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
+import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import projectFilesStore from "@/stores/projectFiles"
 import {
+	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
 	resolveAttachmentsRefreshWaitersForProject,
+	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useInterruptAndUndoMessage } from "@/pages/superMagic/hooks/useInterruptAndUndoMessage"
@@ -79,6 +86,11 @@ import { useConversationFeedbackSheet } from "@/pages/superMagicMobile/hooks/use
 import { useMobileProjectTopicSwitch } from "@/pages/superMagicMobile/hooks/useMobileProjectTopicSwitch"
 import { useProjectTopicConversationActions } from "./hooks/useProjectTopicConversationActions"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
+import {
+	isAbortError,
+	useLatestAbortableRequest,
+} from "@/pages/superMagic/hooks/useLatestAbortableRequest"
+import { useProjectFirstAttachmentRender } from "@/pages/superMagic/hooks/useProjectFirstAttachmentRender"
 import { resolveTopicPageMessageListFallback } from "./components/TopicPageMessageListFallback"
 import KnowledgeBasePreviewPopup from "@/pages/superMagic/components/KnowledgeBasePreviewPopup"
 
@@ -177,6 +189,10 @@ function TopicPage({
 	const [isProgrammaticScroll, setIsProgrammaticScroll] = useState(false)
 	const scrollHeightRef = useRef<number>(0)
 	const scrollTopRef = useRef<number>(0)
+	const { shouldRenderProjectFirstRequest, resetProjectFirstRequestRender } =
+		useProjectFirstAttachmentRender()
+	const { startRequest: startAttachmentsRequest, cancelCurrent: cancelAttachmentsRequest } =
+		useLatestAbortableRequest()
 	const [isShowLoadingInit, setIsShowLoadingInit] = useState(false)
 	const [filesPopupOpen, setFilesPopupOpen] = useState(false)
 
@@ -232,15 +248,33 @@ function TopicPage({
 	// Attachment polling
 	const { checkNowDebounced } = useAttachmentsPolling({
 		projectId: selectedProject?.id,
-		onAttachmentsChange: useCallback(({ tree, list }: { tree: any[]; list: never[] }) => {
-			const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
-			projectFilesStore.setWorkspaceFileTree(processedData.tree)
+		autoStart: false,
+		onAttachmentsChange: useCallback(({ tree, list }: { tree: any[]; list: any[] }) => {
+			const processedData = AttachmentDataProcessor.processAttachmentData(
+				{ tree, list },
+				{ preserveList: true },
+			)
+			projectFilesStore.setWorkspaceFileTree(processedData.tree, {
+				list: processedData.list,
+				source: "MobileTopicPage.polling",
+			})
 		}, []),
 		onError: useMemoizedFn((error: any) => {
 			if (isCollaborationWorkspace(selectedWorkspace)) {
 				handleNoPermissionCollaborationProject(error)
 				return
 			}
+		}),
+	})
+
+	useProjectAttachmentsChangeRealtime({
+		projectId: selectedProject?.id,
+		onFallbackError: useMemoizedFn((error: unknown) => {
+			if (isCollaborationWorkspace(selectedWorkspace)) {
+				handleNoPermissionCollaborationProject(error)
+				return
+			}
+			console.error("Failed to refresh realtime attachments:", error)
 		}),
 	})
 
@@ -272,30 +306,88 @@ function TopicPage({
 	const updateAttachments = useMemoizedFn((selectedProject: any, callback?: () => void) => {
 		const projectId = selectedProject?.id as string | undefined
 		if (!projectId) {
+			cancelAttachmentsRequest()
+			resetProjectFirstRequestRender()
 			projectFilesStore.setWorkspaceFileTree([])
 			releaseAttachmentsRefreshWaitersWithoutFetch()
 			return
 		}
+		const request = startAttachmentsRequest()
+		let didCommitFinalSnapshot = false
+
 		try {
+			const shouldRenderIncrementally = shouldRenderProjectFirstRequest(projectId)
+
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 			withAttachmentsRefreshWaitersResolved(
 				projectId,
-				SuperMagicApi.getAttachmentsByProjectId({
-					projectId,
-					// @ts-ignore 使用window添加临时的token
-					temporaryToken: window.temporary_token || "",
-				})
-					.then((res: any) => {
-						const processedData = AttachmentDataProcessor.processAttachmentData(res)
-						projectFilesStore.setWorkspaceFileTree(processedData.tree)
+				measureAttachmentFetch("MobileTopicPage.updateAttachments", () =>
+					loadProjectAttachments({
+						projectId,
+						signal: request.signal,
+						onBatchSnapshot: shouldRenderIncrementally
+							? ({ tree, list, phase, isFinal }) => {
+									if (!request.isCurrent()) {
+										recordAttachmentsStaleResponseDropped(
+											"MobileTopicPage.updateAttachments",
+											{ stage: "batch_snapshot", phase },
+										)
+										return
+									}
+									const processedData =
+										AttachmentDataProcessor.processAttachmentData(
+											{ tree, list },
+											{ preserveList: true },
+										)
+									projectFilesStore.setWorkspaceFileTree(processedData.tree, {
+										list: processedData.list,
+										source: `MobileTopicPage.batch.${phase}`,
+									})
+									if (isFinal) {
+										didCommitFinalSnapshot = true
+									}
+								}
+							: undefined,
+					}),
+				)
+					.then((res: Awaited<ReturnType<typeof loadProjectAttachments>>) => {
+						if (!request.isCurrent()) {
+							recordAttachmentsStaleResponseDropped(
+								"MobileTopicPage.updateAttachments",
+								{ stage: "load_result" },
+							)
+							return
+						}
+						if (!didCommitFinalSnapshot) {
+							projectFilesStore.setWorkspaceFileTree(res.tree, {
+								list: res.list,
+								source: "MobileTopicPage.load_result",
+							})
+						}
 						GlobalMentionPanelStore.finishLoadAttachmentsPromise(projectId)
 					})
+					.catch((error: unknown) => {
+						if (isAbortError(error)) return
+						if (!request.isCurrent()) {
+							recordAttachmentsStaleResponseDropped(
+								"MobileTopicPage.updateAttachments",
+								{ stage: "load_error" },
+							)
+							return
+						}
+						console.error("Failed to fetch attachments:", error)
+						projectFilesStore.setWorkspaceFileTree([])
+					})
 					.finally(() => {
-						pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
+						if (request.isCurrent()) {
+							pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
+						}
+						request.release()
 						callback?.()
 					}),
 			)
 		} catch (error) {
+			if (isAbortError(error)) return
 			console.error("Failed to fetch attachments:", error)
 			projectFilesStore.setWorkspaceFileTree([])
 			resolveAttachmentsRefreshWaitersForProject(projectId)
@@ -303,20 +395,25 @@ function TopicPage({
 		}
 	})
 
-	useEffect(() => {
-		pubsub.subscribe(PubSubEvents.Update_Attachments, (callback) => {
+	const handleUpdateAttachments = useMemoizedFn(
+		(payloadOrCallback?: SuperMagicUpdateAttachmentsRequest) => {
+			const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
+
 			if (selectedProject && selectedTopic) {
-				updateAttachments(selectedProject, callback)
+				updateAttachments(selectedProject, payload?.callback)
 				return
 			}
-			callback?.()
+			payload?.callback?.()
 			releaseAttachmentsRefreshWaitersWithoutFetch()
-		})
+		},
+	)
+
+	useEffect(() => {
+		pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
 		return () => {
-			pubsub.unsubscribe(PubSubEvents.Update_Attachments)
+			pubsub.unsubscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- 与桌面 TopicPage 一致：仅依赖 project/topic 引用
-	}, [selectedProject, selectedTopic])
+	}, [handleUpdateAttachments])
 
 	// Update attachments when project changes
 	useUpdateEffect(() => {
@@ -326,6 +423,7 @@ function TopicPage({
 			updateAttachments(selectedProject)
 		}
 		return () => {
+			cancelAttachmentsRequest()
 			if (projectId) {
 				GlobalMentionPanelStore.clearInitLoadAttachmentsPromise(projectId)
 			}
@@ -559,6 +657,7 @@ function TopicPage({
 			// single-topic Chat 不允许从消息卡片复制出兄弟话题，避免出现多话题能力穿透。
 			allowConversationCopy: capabilities.canCreateSiblingTopic,
 			onTopicSwitch: switchToProjectTopic,
+			projectFilesStore,
 			renderAssistantAvatar: topicModeConfig?.mode
 				? ({ className } = {}) => (
 						<ModeAvatar
@@ -620,7 +719,7 @@ function TopicPage({
 					onShareClick={onShareClick}
 				/>
 			)}
-			<div className={cn(styles.body, bodyClassName)}>
+			<div className={cn(styles.body, bodyClassName)} data-testid="topic-page-message-panel">
 				<MessageListProvider value={value}>
 					<MessageList
 						data={messages as any}
@@ -636,8 +735,8 @@ function TopicPage({
 					/>
 				</MessageListProvider>
 			</div>
-			<div ref={footerRef} className={cn(styles.footer, footerClassName)}>
-				<div className={cn("flex flex-col gap-2", footerInnerClassName)}>
+			<div ref={footerRef} className={cn(styles.footer, footerClassName)} data-testid="topic-page-footer">
+				<div className={cn("flex flex-col gap-2", footerInnerClassName)} data-testid="topic-page-input-panel">
 					{!hideChatActions && (
 						<ChatActions
 							onNewTopicClick={

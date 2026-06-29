@@ -17,6 +17,7 @@ const AttachmentIcon = ({ compact }: { compact: boolean }) => (
 		strokeWidth={compact ? 2 : 1.5}
 		className={compact ? undefined : "text-primary"}
 		aria-hidden="true"
+		data-testid="material-upload-trigger-svg"
 	>
 		{compact ? (
 			<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
@@ -41,6 +42,7 @@ const MaterialUploadTrigger = forwardRef<HTMLButtonElement, MaterialUploadTrigge
 						"inline-flex items-center gap-1 border-b border-dashed border-border/70 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary",
 						className,
 					)}
+					data-testid="material-upload-trigger-button"
 					{...props}
 				>
 					<AttachmentIcon compact />
@@ -56,7 +58,8 @@ const MaterialUploadTrigger = forwardRef<HTMLButtonElement, MaterialUploadTrigge
 				className={cn(
 					"flex w-full cursor-pointer items-center justify-center border-b border-dashed border-zinc-950/15 bg-zinc-50/40 px-4 py-5 text-left transition-colors hover:bg-primary/[0.03] focus:border-primary/40 focus:outline-none",
 					className,
-				)}
+				)}				data-testid="material-upload-trigger-button-2"
+
 				{...props}
 			>
 				<span className="flex flex-col items-center gap-1.5 text-center">

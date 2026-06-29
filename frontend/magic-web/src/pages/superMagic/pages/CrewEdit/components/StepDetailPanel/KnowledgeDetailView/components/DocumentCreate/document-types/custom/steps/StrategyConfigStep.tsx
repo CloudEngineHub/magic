@@ -193,6 +193,7 @@ export const StrategyConfigStep = observer(function StrategyConfigStep({
 						<button
 							className="flex w-full items-center justify-between p-3 text-left transition-colors hover:bg-accent/50"
 							onClick={() => setChunkingExpanded(!chunkingExpanded)}
+							data-testid="set-chunking-expanded"
 						>
 							<span className="text-sm font-medium">
 								{t("documentCreate.strategy.chunkingStrategy")}
@@ -217,6 +218,7 @@ export const StrategyConfigStep = observer(function StrategyConfigStep({
 									onClick={() =>
 										handleChunkingStrategyClick(CHUNKING_STRATEGIES.AUTO)
 									}
+									data-testid="handle-chunking-strategy-click"
 								>
 									<div className="flex items-start gap-3">
 										<div className="flex-1">
@@ -248,6 +250,7 @@ export const StrategyConfigStep = observer(function StrategyConfigStep({
 									onClick={() =>
 										handleChunkingStrategyClick(CHUNKING_STRATEGIES.CUSTOM)
 									}
+									data-testid="handle-chunking-strategy-click-2"
 								>
 									<div className="flex items-start gap-3">
 										<div className="flex-1">
@@ -278,6 +281,7 @@ export const StrategyConfigStep = observer(function StrategyConfigStep({
 												<div
 													className="space-y-3"
 													onClick={(e) => e.stopPropagation()}
+													data-testid="strategy-config-step"
 												>
 													{/* Chunk Separator、Max Chunk Length、Chunk Overlap 同一行 */}
 													<div className="grid grid-cols-3 gap-3">
@@ -439,6 +443,7 @@ export const StrategyConfigStep = observer(function StrategyConfigStep({
 											CHUNKING_STRATEGIES.HIERARCHICAL,
 										)
 									}
+									data-testid="handle-chunking-strategy-click-3"
 								>
 									<div className="flex items-start gap-3">
 										<div className="flex-1">
@@ -477,6 +482,7 @@ export const StrategyConfigStep = observer(function StrategyConfigStep({
 												<div
 													className="space-y-3"
 													onClick={(e) => e.stopPropagation()}
+													data-testid="strategy-config-step-2"
 												>
 													{/* Chunk Hierarchy */}
 													<div className="space-y-2">

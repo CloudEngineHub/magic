@@ -525,6 +525,23 @@
 		"actions": {
 			"videoPointsPrompt": "积分提示"
 		},
+		"conflict": {
+			"autoMerged": "已自动合并最新画布更新",
+			"blockingResolveFailed": "恢复同步失败，请刷新后重试",
+			"draftConflictDescription": "远端内容已更新，本地草稿不会自动覆盖远端。请选择继续使用远端或恢复草稿并保存。",
+			"draftConflictTitle": "检测到本地草稿与远端更新冲突",
+			"elementResolveFailed": "处理元素冲突失败",
+			"keepLocalAndSave": "保留我的编辑",
+			"keepLocalConfirmDescription": "这会把当前本地变更保存到远端，远端已有更新会被覆盖。",
+			"keepLocalConfirmTitle": "保留我的并覆盖远端？",
+			"restoreDraftAndSave": "保留我的编辑",
+			"restoreDraftConfirmDescription": "这会恢复本地草稿并保存到远端，远端已有更新会被覆盖。",
+			"restoreDraftConfirmTitle": "恢复草稿并覆盖远端？",
+			"syncPausedDescription": "当前变更没有继续自动覆盖远端，请等待同步恢复或刷新后继续编辑。",
+			"syncPausedTitle": "同步已暂停",
+			"useRemote": "使用最新版本",
+			"useRemoteContinue": "使用最新版本"
+		},
 		"errors": {
 			"cannotDetermineDirectory": "无法确定设计文件目录",
 			"cannotFindOrLoadFile": "无法找到或加载 magic.project.js 文件",
@@ -590,22 +607,6 @@
 			"description": "网络恢复后可继续编辑并保存画布内容",
 			"title": "网络已断开，画布已切换为只读"
 		},
-		"conflict": {
-			"blockingResolveFailed": "恢复同步失败，请刷新后重试",
-			"draftConflictDescription": "远端内容已更新，本地草稿不会自动覆盖远端。请选择继续使用远端或恢复草稿并保存。",
-			"draftConflictTitle": "检测到本地草稿与远端更新冲突",
-			"elementResolveFailed": "处理元素冲突失败",
-			"keepLocalAndSave": "保留我的并保存",
-			"keepLocalConfirmDescription": "这会把当前本地变更保存到远端，远端已有更新会被覆盖。",
-			"keepLocalConfirmTitle": "保留我的并覆盖远端？",
-			"restoreDraftAndSave": "恢复草稿并保存",
-			"restoreDraftConfirmDescription": "这会恢复本地草稿并保存到远端，远端已有更新会被覆盖。",
-			"restoreDraftConfirmTitle": "恢复草稿并覆盖远端？",
-			"syncPausedDescription": "当前变更没有继续自动覆盖远端，请等待同步恢复或刷新后继续编辑。",
-			"syncPausedTitle": "同步已暂停",
-			"useRemote": "使用远端",
-			"useRemoteContinue": "使用远端继续"
-		},
 		"saved": "保存成功",
 		"saving": "正在保存",
 		"upgrade": {
@@ -639,31 +640,6 @@
 				"schedule": "执行频率",
 				"videoModel": "视频模型"
 			},
-			"notification": {
-				"title": "通知分发",
-				"description": "卡片生成或更新成功后，按描述发送到指定渠道。这里只配置目标，不保存平台凭据。",
-				"channels": {
-					"dingtalk": "钉钉",
-					"wecom": "企业微信",
-					"lark": "飞书"
-				},
-				"placeholders": {
-					"dingtalk": "例如：发到「运营日报群」，或发给某个人",
-					"wecom": "例如：发到「企业微信运营群」，或发给某个人",
-					"lark": "例如：发到「增长日报群」，或发给某个人"
-				},
-				"templates": {
-					"dingtalkGroup": "发到「运营日报群」",
-					"dingtalkUser": "发给某个人",
-					"wecomGroup": "发到「企业微信运营群」",
-					"wecomUser": "发给某个人",
-					"larkGroup": "发到「增长日报群」",
-					"larkUser": "发给某个人"
-				},
-				"templateValues": {
-					"user": "发给："
-				}
-			},
 			"createDialog": {
 				"cancel": "取消",
 				"cardName": "卡片名称",
@@ -684,8 +660,8 @@
 				"location": "创建位置：{{cardDir}}/",
 				"notificationChannels": {
 					"dingtalk": "钉钉",
-					"wecom": "企业微信",
-					"lark": "飞书"
+					"lark": "飞书",
+					"wecom": "企业微信"
 				},
 				"notificationTargetLine": "{{channel}}：{{targetDescription}}",
 				"schedule": {
@@ -786,6 +762,31 @@
 				"empty": "暂无历史记录",
 				"selectHint": "← 选择一个历史版本查看",
 				"title": "历史版本"
+			},
+			"notification": {
+				"channels": {
+					"dingtalk": "钉钉",
+					"lark": "飞书",
+					"wecom": "企业微信"
+				},
+				"description": "卡片生成或更新成功后，按描述发送到指定渠道。这里只配置目标，不保存平台凭据。",
+				"placeholders": {
+					"dingtalk": "例如：发到「运营日报群」，或发给某个人",
+					"lark": "例如：发到「增长日报群」，或发给某个人",
+					"wecom": "例如：发到「企业微信运营群」，或发给某个人"
+				},
+				"templateValues": {
+					"user": "发给："
+				},
+				"templates": {
+					"dingtalkGroup": "发到「运营日报群」",
+					"dingtalkUser": "发给某个人",
+					"larkGroup": "发到「增长日报群」",
+					"larkUser": "发给某个人",
+					"wecomGroup": "发到「企业微信运营群」",
+					"wecomUser": "发给某个人"
+				},
+				"title": "通知分发"
 			},
 			"runNow": {
 				"error": "运行失败，请稍后重试",
@@ -2000,6 +2001,7 @@
 		"collapsed": {
 			"completed": "上传完成",
 			"completedWithErrors": "上传完成，{{count}} 个失败",
+			"creatingFolders": "正在创建目录结构",
 			"paused": "已暂停",
 			"uploading": "上传中"
 		},
@@ -2053,7 +2055,9 @@
 			"fileSizeExceeded": "有 {{count}} 个文件超过 {{maxSize}} 大小限制：{{fileNames}}，请重新选择文件",
 			"fileSizeFiltered": "已过滤 {{filteredCount}} 个超过 {{maxSize}} 限制的文件，将上传剩余 {{validCount}} 个有效文件",
 			"invalidFilenameError": "文件名包含特殊字符或不符合命名规范",
+			"largeFolderSplit": "文件数量较多，已自动拆分为 {{tasks}} 个上传任务",
 			"maxTasksReached": "当前任务数量已达上限，请等待部分任务完成后再试",
+			"maxTotalFilesExceeded": "本次选择 {{count}} 个文件，超过单次上限 {{max}} 个，请分批上传",
 			"networkOffline": "网络已断开，上传任务已自动暂停",
 			"networkRecovered": "网络已恢复，上传任务继续进行",
 			"noFilesSelected": "未选择任何文件",
@@ -2079,6 +2083,8 @@
 		"noTasks": "暂无上传任务",
 		"progress": {
 			"batch": "批次 {{current}} / {{total}}",
+			"currentDirectory": "当前目录: {{path}}",
+			"directories": "目录 {{created}} / {{total}}",
 			"estimatedTime": {
 				"hours": "{{count}} 小时",
 				"minutes": "{{count}} 分钟",
@@ -2092,6 +2098,7 @@
 		},
 		"stats": {
 			"completedTasks": "已完成: {{count}}",
+			"creatingFolders": "{{count}} 个任务正在创建目录结构",
 			"errorTasks": "失败: {{count}}",
 			"pausedTasks": "已暂停: {{count}}",
 			"processedFiles": "已处理: {{count}}",
@@ -2102,6 +2109,7 @@
 		"status": {
 			"cancelled": "已取消",
 			"completed": "成功",
+			"creating_folders": "创建目录结构",
 			"error": "上传失败",
 			"paused": "已暂停",
 			"pending": "等待上传",
@@ -2217,6 +2225,39 @@
 		"dropOverlay": {
 			"hint": "释放以插入图片"
 		},
+		"permissionAuthorizationConfirm": {
+			"allow": "允许",
+			"appConfigUnavailableContent": "该 HTML 微应用的 app.json 暂不可用，正在按旧版方式请求使用：{{scope}}。只在当前标签页短时生效。",
+			"content": "「{{appName}}」请求使用：{{scope}}。用途：{{reason}}",
+			"contentWithoutReason": "「{{appName}}」请求使用：{{scope}}。该应用未提供用途说明。",
+			"deny": "拒绝",
+			"legacyContent": "该 HTML 微应用未声明权限，正在请求使用：{{scope}}。只在当前标签页短时生效。",
+			"missingScope": "「{{appName}}」未在 app.json 的 permissions.scopes 中声明「{{scope}}」（{{rawScope}}），请求已拒绝。",
+			"scopes": {
+				"fsProjectRead": "读取应用目录外的项目文件",
+				"fsProjectWrite": "修改应用目录外的项目文件",
+				"llmUse": "调用 AI 模型",
+				"projectFilesDownload": "下载项目文件",
+				"projectFilesUpload": "上传项目文件",
+				"projectMessageWrite": "创建话题或发送消息",
+				"userProfileIdentity": "读取用户身份信息",
+				"userProfileName": "读取用户姓名信息",
+				"userProfileOrganization": "读取用户组织信息"
+			},
+			"title": "授权 HTML 微应用能力",
+			"ttl": {
+				"10m": "10 分钟",
+				"12h": "半天",
+				"15m": "15 分钟",
+				"2h": "2 小时",
+				"30m": "30 分钟",
+				"4h": "4 小时",
+				"5m": "5 分钟",
+				"60m": "1 小时",
+				"8h": "8 小时",
+				"once": "本次操作"
+			}
+		},
 		"projectFileOperationConfirm": {
 			"cancel": "取消",
 			"content": "HTML 微应用请求{{operation}}应用目录外的{{targetType}}：{{path}}。应用目录：{{appRootDir}}。",
@@ -2235,42 +2276,12 @@
 		},
 		"userInfoAuthorizationConfirm": {
 			"allow": "允许",
+			"appConfigUnavailableContent": "该 HTML 微应用的 app.json 暂不可用，正在按旧版方式请求读取：{{fields}}。",
 			"content": "「{{appName}}」请求读取：{{fields}}。用途：{{reason}}",
 			"contentWithoutReason": "「{{appName}}」请求读取：{{fields}}。该应用未提供用途说明。",
 			"deny": "拒绝",
 			"fieldSeparator": "、",
 			"title": "授权用户信息访问"
-		},
-		"permissionAuthorizationConfirm": {
-			"allow": "允许",
-			"content": "「{{appName}}」请求使用：{{scope}}。用途：{{reason}}",
-			"contentWithoutReason": "「{{appName}}」请求使用：{{scope}}。该应用未提供用途说明。",
-			"deny": "拒绝",
-			"legacyContent": "该 HTML 微应用未声明权限，正在请求使用：{{scope}}。只在当前标签页短时生效。",
-			"scopes": {
-				"fsProjectRead": "读取应用目录外的项目文件",
-				"fsProjectWrite": "修改应用目录外的项目文件",
-				"llmUse": "调用 AI 模型",
-				"projectFilesDownload": "下载项目文件",
-				"projectFilesUpload": "上传项目文件",
-				"projectMessageWrite": "创建话题或发送消息",
-				"userProfileIdentity": "读取用户身份信息",
-				"userProfileName": "读取用户姓名信息",
-				"userProfileOrganization": "读取用户组织信息"
-			},
-			"title": "授权 HTML 微应用能力",
-			"ttl": {
-				"once": "本次操作",
-				"5m": "5 分钟",
-				"10m": "10 分钟",
-				"15m": "15 分钟",
-				"30m": "30 分钟",
-				"60m": "1 小时",
-				"2h": "2 小时",
-				"4h": "4 小时",
-				"8h": "8 小时",
-				"12h": "半天"
-			}
 		}
 	},
 	"knowledgeBase": {
@@ -2679,6 +2690,11 @@
 				"selectAllVisible": "全选当前列表（{{count}}）",
 				"title": "批量操作"
 			},
+			"conflict": {
+				"restoreNoConflictOnly": "仅恢复无冲突项",
+				"restoreWithResolution": "按推荐策略恢复冲突项",
+				"title": "检测到恢复冲突"
+			},
 			"deleteSuccess": {
 				"content": "已彻底删除 {{count}} 个资源"
 			},
@@ -2700,8 +2716,8 @@
 				"remainingShort": "剩 {{days}} 天",
 				"selectRow": "选择此项",
 				"type": {
-					"folder": "文件夹",
 					"file": "文件",
+					"folder": "文件夹",
 					"project": "项目",
 					"topic": "话题",
 					"workspace": "工作区"
@@ -2842,8 +2858,8 @@
 		"officialCommunication": "官方交流",
 		"officialEmail": "您也可通过邮箱联系我们",
 		"officialWechat": "麦吉官方微信公众号",
-		"officialWechatDescription": "欢迎扫码关注「超级麦吉」官方公众号，获取官方动态及更多精彩",
-		"officialWechatGroup": "超级麦吉微信交流群",
+		"officialWechatDescription": "欢迎扫码关注「$t(common:platform.name)」官方公众号，获取官方动态及更多精彩",
+		"officialWechatGroup": "$t(common:platform.name)微信交流群",
 		"officialWechatGroupDescription": "欢迎加入官方微信群交流",
 		"onlineFeedback": "在线反馈",
 		"orderFeedbackTitle": "订单 {{orderNo}} 相关问题",
@@ -3583,8 +3599,8 @@
 			"more": "更多操作",
 			"pathPrefix": "路径：",
 			"type": {
-				"folder": "文件夹",
 				"file": "文件",
+				"folder": "文件夹",
 				"project": "项目",
 				"topic": "话题",
 				"workspace": "工作区"
@@ -3595,9 +3611,11 @@
 			"noMoreData": "没有更多数据了"
 		},
 		"restoreCheck": {
+			"applySameActionToRemaining": "后续 {{count}} 个冲突文件都执行相同操作",
 			"confirmMessage": "将{{type}}「{{name}}」恢复至原位置？",
-			"projectMissing": "文件所属项目不存在或已删除，请先恢复项目",
+			"conflictNamesWithEtc": "{{names}} 等文件",
 			"duplicateRestoreTarget": "同批恢复里有同目标同名文件，系统默认仅恢复最新删除的那个",
+			"projectMissing": "文件所属项目不存在或已删除，请先恢复项目",
 			"projectMissingTip": "有 {{count}} 个文件所属项目不存在或已删除，请先恢复项目。",
 			"projectMissingTipWithNames": "有 {{count}} 个文件所属项目不存在或已删除（{{fileNames}}），请先恢复项目。",
 			"fileNamesWithEtc": "{{names}} 等文件",
@@ -3608,14 +3626,12 @@
 			"nameConflictConfirmMessage": "原项目根目录已存在同名文件 {{conflictNames}}，这 {{count}} 个文件需要逐个确认。确认继续？",
 			"nameConflictCountConfirmMessage": "原项目根目录已存在 {{count}} 个同名文件，这些文件需要逐个确认。确认继续？",
 			"nameConflictDialogTitle": "是否覆盖文件「{{fileName}}」？",
-			"conflictNamesWithEtc": "{{names}} 等文件",
 			"parentMissingConfirmMessage": "有 {{count}} 个文件原目录已不存在，将恢复到原项目根目录。确认恢复？",
 			"invalidMessage": "恢复前检查未通过",
 			"locationLabel": "位置",
 			"missingParentMessage": "原{{parentLabel}}已不存在，请选择新的{{locationLabel}}以恢复「{{name}}」。",
 			"mixedTypes": "所选资源类型不一致",
 			"skipNameConflict": "跳过",
-			"applySameActionToRemaining": "后续 {{count}} 个冲突文件都执行相同操作",
 			"processingAllNameConflicts": "处理中...",
 			"pendingNameConflictCount": "还有 {{count}} 个冲突文件待处理",
 			"nameConflictSkipped": "{{count}} 个同名文件已跳过",
@@ -3631,8 +3647,15 @@
 		"restoreModal": {
 			"cancel": "取消",
 			"confirm": "确定",
+			"restoreNoConflictOnly": "仅恢复无冲突项",
 			"titleItem": "恢复 {{title}}",
 			"titleMulti": "恢复 {{count}} 项"
+		},
+		"restoreResult": {
+			"failed": "{{failedCount}} 个资源恢复失败",
+			"failedWithReason": "{{failedCount}} 个资源恢复失败：{{reason}}",
+			"partial": "{{failedCount}}个恢复失败并保留在回收站",
+			"partialWithReason": "{{failedCount}}个恢复失败并保留在回收站：{{reason}}"
 		},
 		"restoreSuccess": {
 			"content": "已恢复 {{count}} 个资源",
@@ -3665,6 +3688,32 @@
 		},
 		"title": "回收站"
 	},
+	"saasKK": {
+		"bottomHint": "如您仍需使用当前服务，可暂时关闭当前窗口。",
+		"closeButton": "暂时关闭提示",
+		"closeGuide": "关闭提示",
+		"copyFailed": "复制失败",
+		"copySuccess": "复制成功",
+		"deployCodeGuide": {
+			"step1Description": "在浏览器中打开 「https://www.letsmagic.cn/login」,点击 「私有部署」",
+			"step2Description": "在 「私有部署识别码」 中输入 「KK」 即可",
+			"title": "填写私有部署识别码指引"
+		},
+		"dialogTitle": "$t(common:platform.name)登录指引",
+		"dingtalkGuide": {
+			"description": "打开 「钉钉」 后,通过左侧栏进入 「工作台」,在工作台中找到 「$t(common:platform.name)」 打开即可。",
+			"title": "钉钉工作台指引"
+		},
+		"loginMethod": "登录方式",
+		"method1Desc": "在 「钉钉工作台 - 全员」 中打开并自动登录",
+		"method1Title": "方式 1 : 钉钉工作台",
+		"method2Desc": "复制链接并在浏览器打开",
+		"method2Title": "方式 2 : 通过链接登录",
+		"method3Desc": "在登录页面「私有部署」配置中输入\"KK\"",
+		"method3Title": "方式 3 : 填写私有部署识别码",
+		"viewGuide": "查看指引",
+		"warningMessage": "当前 SaaS 环境仅供 「KK集团」 组织使用 「司南」 等应用\n如需使用$t(common:platform.name)，请根据下方方式进入使用。"
+	},
 	"scheduleTask": {
 		"clearSearch": "清空搜索",
 		"configTask": "任务配置",
@@ -3681,6 +3730,7 @@
 		"pauseTask": "停用任务",
 		"playTask": "启用任务",
 		"runLogs": "运行记录",
+		"runTask": "直接运行",
 		"runningRecord": "运行记录",
 		"searchTasks": "搜索任务",
 		"searchTasksEmpty": "没有匹配的定时任务",
@@ -3707,6 +3757,7 @@
 		"emptyStorageTitle": "可储存到当前文件夹",
 		"enterSubfolderName": "请输入文件夹名称",
 		"fetchAttachmentsFailed": "获取文件列表失败",
+		"fetchAudioRecordingsFailed": "获取录音纪要列表失败",
 		"fetchClawsFailed": "获取龙虾列表失败",
 		"fetchProjectsFailed": "获取项目列表失败",
 		"file": "文件",
@@ -4606,6 +4657,7 @@
 			"downloadImageNoWaterMark": "下载无水印图片",
 			"downloadOriginal": "下载原始文件",
 			"downloadPdf": "下载 PDF 格式",
+			"downloadPdfRaster": "下载 PDF 格式（截图版）",
 			"downloadPpt": "下载 PPT 格式",
 			"downloadPptx": "下载 PPTX 格式（可编辑）",
 			"fileExport": {
@@ -4616,7 +4668,8 @@
 				"pdfExportFailed": "导出PDF失败",
 				"pdfExportTimeoutMessage": "导出PDF超时，请重试",
 				"pptExportFailed": "导出PPT失败",
-				"pptExportTimeoutMessage": "导出PPT超时，请重试"
+				"pptExportTimeoutMessage": "导出PPT超时，请重试",
+				"unsupportedInCurrentVersion": "当前版本不支持"
 			},
 			"importFromOtherProject": "从其他项目导入",
 			"move": "移动",
@@ -4652,6 +4705,7 @@
 			"replaceFileTypeMismatch": "文件类型不匹配，原文件类型为 {{originalType}}，新文件类型为 {{newType}}",
 			"selectMultiple": "多选",
 			"shareFile": "分享",
+			"showInfo": "显示简介",
 			"uploadError": "文件上传失败",
 			"uploadFile": "上传文件",
 			"uploadFolder": "上传文件夹",
@@ -4710,6 +4764,15 @@
 			"replace": "覆盖",
 			"title": "是否覆盖文件？"
 		},
+		"duplicateFolder": {
+			"applyToAll": "全部应用",
+			"cancel": "取消",
+			"cannotMergeMessage": "此位置已经存在名为 “{{folderName}}” 的项目，无法合并为文件夹。您可以保留两者并创建一个副本。",
+			"keepBoth": "保留两者",
+			"merge": "合并",
+			"message": "此位置已经存在名为 “{{folderName}}” 的文件夹。您想合并内容，还是保留两个文件夹？",
+			"title": "已存在同名文件夹"
+		},
 		"elementSelector": "元素选择器：",
 		"elementText": "元素文本：",
 		"emptyState": {
@@ -4718,6 +4781,7 @@
 			"title": "暂无项目文件",
 			"uploadFile": "上传文件"
 		},
+		"entryFileNotFound": "未找到可导出的入口文件（index.html），请检查该文件夹内是否包含 index.html",
 		"error": {
 			"copyFileFailed": "复制文件失败",
 			"createFileSuccess": "文件创建成功",
@@ -4756,6 +4820,7 @@
 		"exportPdfFullPage": "整页导出",
 		"exportPdfPaginated": "分页导出",
 		"exportPdfPaginationTitle": "选择 PDF 导出方式",
+		"exportPdfRaster": "下载 PDF 格式（截图版）",
 		"exportPpt": "下载 PPT 格式",
 		"exportPptx": "下载 PPT 格式（可编辑）",
 		"exportSource": "下载原始文件",
@@ -4771,6 +4836,79 @@
 		"fileContentTranslationPrompt": "然后在源文件中直接进行内容翻译，目标语言是",
 		"fileDataCorrectionPrompt": "然后进行数据校准，数据必须有明确的参考来源、引用出处，避免杜撰、虚构，若为加工数据，则必须通过 Python 脚本运算得出，不得直接得出结论。如果你确认文件里的数据符合上述要求，则向我澄清数据的参考来源、引用出处和计算过程，无需修改；如果你不确定，则你需要在项目中检索是否有相关数据或进行联网搜索来进行确认，校验、修正数据、并在在必要的情况下通过脚本验算后再向我澄清。",
 		"fileFactCheckPrompt": "然后进行事实核查。文件中的内容必须有明确的参考来源、引用出处，避免杜撰、虚构，如果你确认内容符合上述要求，则向我澄清内容的参考来源、引用出处；如果你不确定，则你需要在项目中检索是否有相关数据或进行联网搜索来进行确认，校验、修正数据后再向我澄清。",
+		"fileInfo": {
+			"copy": "复制",
+			"copyFailed": "复制失败",
+			"copySuccess": "复制成功",
+			"copyTechnicalInfo": "复制技术信息",
+			"labels": {
+				"createdAt": "创建时间",
+				"dataResources": "数据资源",
+				"directChildren": "直接子项",
+				"entryFile": "入口文件",
+				"entryPath": "入口路径",
+				"extension": "扩展名",
+				"fileCount": "文件数量",
+				"fileId": "文件 ID",
+				"fileKey": "存储 Key",
+				"folderCount": "文件夹数量",
+				"hiddenCount": "隐藏项",
+				"iconSource": "图标来源",
+				"imageResources": "图片资源",
+				"kind": "种类",
+				"latestUpdatedAt": "最近更新时间",
+				"matchedSlides": "匹配幻灯片",
+				"mediaResources": "媒体资源",
+				"missingSlides": "缺失幻灯片",
+				"parentId": "父级 ID",
+				"path": "位置",
+				"platformCount": "平台数量",
+				"preview": "预览",
+				"projectId": "项目 ID",
+				"projectName": "项目名称",
+				"rawType": "原始类型",
+				"resourceCount": "资源子项",
+				"resourceDirs": "资源目录",
+				"size": "大小",
+				"slideCount": "幻灯片数量",
+				"source": "来源",
+				"updatedAt": "修改时间"
+			},
+			"metrics": {
+				"files": "文件",
+				"folders": "文件夹",
+				"size": "大小",
+				"slides": "幻灯片"
+			},
+			"sections": {
+				"content": "内容",
+				"general": "通用",
+				"special": "特殊项目信息",
+				"technical": "技术信息"
+			},
+			"source": {
+				"agent": "Agent 生成",
+				"ai": "AI 生成",
+				"copy": "复制生成",
+				"default": "默认",
+				"uploaded": "用户上传"
+			},
+			"title": "简介",
+			"type": {
+				"audio": "录音总结",
+				"custom": "自定义应用",
+				"dashboard": "数据看板",
+				"design": "画布项目",
+				"file": "文件",
+				"folder": "文件夹",
+				"micro-app": "微应用",
+				"self-media": "自媒体项目",
+				"slide": "PPT 项目",
+				"special": "特殊项目",
+				"video": "视频项目"
+			},
+			"unknownSize": "未知大小"
+		},
 		"fileLayoutCorrectionPrompt": "现在这里面的内容有布局问题，请帮我进行修正，我所观察到的问题是：",
 		"fileModify": "我需要修改文件",
 		"fileModifyElements": "里的这个元素：",
@@ -4801,6 +4939,7 @@
 		"ppt": "PPT 文件",
 		"questPlaceholder": "请输入问题描述",
 		"refreshList": "刷新列表",
+		"resourceLoadFailed": "{{count}} 个资源加载超时，已跳过资源下载",
 		"search": "搜索文件",
 		"selectAll": "全选",
 		"selectElement": "选取元素进行编辑",
@@ -4901,6 +5040,7 @@
 		"aiGeneratedTip": "上述内容由 AI 生成，请仔细甄别",
 		"attachments": "附件（{{count}}）",
 		"collapseUserMessage": "收起",
+		"consumptionPoints": "本轮使用 {{points}} 积分",
 		"consumptionPoints1": "本轮使用",
 		"consumptionPoints2": "积分",
 		"copyTopic": "从此处创建新话题",
@@ -4921,6 +5061,7 @@
 		"followUpSuggestionsClose": "关闭追问建议",
 		"followUpSuggestionsDisabledStatus": "追问建议已关闭",
 		"followUpSuggestionsReenable": "重新启用",
+		"internetSearch": "启用互联网搜索",
 		"internetSearchClose": "互联网搜索：关闭",
 		"internetSearchOpen": "互联网搜索：开启",
 		"logoutAccount": "退出账号",
@@ -5044,6 +5185,7 @@
 		"externalSharedWithMe": "外部共享的",
 		"fileNotSupported": "暂不支持预览该文件,请下载该文件",
 		"home": "工作区主页",
+		"myAudioRecordingsWorkspaceName": "我的录音纪要",
 		"myClawWorkspaceName": "我的龙虾",
 		"newWorkspace": "新建工作区",
 		"noOtherWorkspace": "暂无其它可用工作区",

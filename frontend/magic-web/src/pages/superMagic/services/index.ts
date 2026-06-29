@@ -1463,4 +1463,6 @@ class SuperMagicService {
 	}
 }
 
+export { loadProjectAttachments } from "./projectAttachmentsLoader"
+
 export default new SuperMagicService()

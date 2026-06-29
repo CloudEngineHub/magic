@@ -3,6 +3,7 @@ import { type Editor, type JSONContent } from "@tiptap/react"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { isEmptyJSONContent } from "../utils"
 import AiCompletionService from "@/services/chat/editor/AiCompletionService"
+import { runActiveEditor, useLatestActiveEditor } from "../utils/editorLifecycle"
 
 interface UseSlideContentSyncParams {
 	tiptapEditor: Editor | null
@@ -19,6 +20,8 @@ export function useSlideContentSync({
 	value,
 	updateContent,
 }: UseSlideContentSyncParams) {
+	const activeEditorRef = useLatestActiveEditor(tiptapEditor)
+
 	useEffect(() => {
 		const handleSetContentWhenSlideAdded = (data: { content: JSONContent }) => {
 			// If editor already has content, don't set it
@@ -34,7 +37,9 @@ export function useSlideContentSync({
 
 			// Focus on the first SuperPlaceholder after content is set
 			setTimeout(() => {
-				tiptapEditor?.commands?.focusFirstSuperPlaceholder?.()
+				runActiveEditor(activeEditorRef.current, (editor) => {
+					editor.commands.focusFirstSuperPlaceholder?.()
+				})
 			}, 0)
 		}
 
@@ -46,5 +51,5 @@ export function useSlideContentSync({
 				handleSetContentWhenSlideAdded,
 			)
 		}
-	}, [tiptapEditor, updateContent, value])
+	}, [activeEditorRef, updateContent, value])
 }

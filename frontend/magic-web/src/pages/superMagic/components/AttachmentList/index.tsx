@@ -193,6 +193,7 @@ export default function AttachmentList({
 						<div
 							className={styles.fileItem}
 							onClick={(e) => toggleFolder(`/${item.relative_file_path}`, e)}
+							data-testid="toggle-folder"
 						>
 							{/* 使用固定结构的布局 */}
 							<div
@@ -226,7 +227,7 @@ export default function AttachmentList({
 									/>
 								</div>
 								<div className={styles.iconWrapper} style={{ marginLeft: "2px" }}>
-									<img src={FoldIcon} alt="folder" width={18} height={18} />
+									<img src={FoldIcon} alt="folder" width={18} height={18}  data-testid="attachment-list-image"/>
 								</div>
 								<div className={styles.fileNameContainer}>
 									{renderText(item.name, item.name)}
@@ -253,6 +254,7 @@ export default function AttachmentList({
 							e.stopPropagation()
 							handleOpenFile(item)
 						}}
+						data-testid="handle-open-file"
 					>
 						{/* 使用固定结构的布局 */}
 						<div
@@ -360,13 +362,13 @@ export default function AttachmentList({
 					)}
 					{!!attachments?.length && !filteredFiles.length && fileSearchText && (
 						<div className={styles.emptyText}>
-							<img src={topicEmpty} alt="" className={styles.emptyTextIcon} />
+							<img src={topicEmpty} alt="" className={styles.emptyTextIcon}  data-testid="attachment-list-image-2"/>
 							未找到相关文件
 						</div>
 					)}
 					{attachments?.length === 0 && (
 						<div className={styles.emptyText}>
-							<img src={topicEmpty} alt="" className={styles.emptyTextIcon} />
+							<img src={topicEmpty} alt="" className={styles.emptyTextIcon}  data-testid="attachment-list-image-3"/>
 							暂无相关文件
 						</div>
 					)}

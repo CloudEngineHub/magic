@@ -43,6 +43,9 @@ function useMenuActions({ onClose }: UseMenuActionsProps) {
 				break
 			case UserMenuKey.ConsumptionDetails:
 				break
+			case UserMenuKey.DownloadClient:
+				openNewTab("https://www.letsmagic.cn/download")
+				break
 			case UserMenuKey.OnlineFeedback:
 				showOnlineFeedbackModal()
 				break

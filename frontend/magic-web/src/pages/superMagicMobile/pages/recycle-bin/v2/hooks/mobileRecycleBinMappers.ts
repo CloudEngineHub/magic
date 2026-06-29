@@ -29,14 +29,30 @@ const TAB_KEY_TO_TYPE: Record<string, RecycleBinItemData["type"]> = {
 export function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): RecycleBinItemData {
 	const resourceType = item.resource_type as ResourceType
 	const tabKey = RESOURCE_TYPE_TO_TAB[resourceType] ?? "files"
-	const type = TAB_KEY_TO_TYPE[tabKey] ?? "file"
+	const type =
+		resourceType === RESOURCE_TYPE.FILE
+			? item.extra_data?.is_directory
+				? "folder"
+				: "file"
+			: (TAB_KEY_TO_TYPE[tabKey] ?? "file")
 	const deletedBy =
 		item.deleted_by_user?.nickname ?? item.deleted_by_name ?? item.deleted_by ?? ""
 	const deletedByUser = item.deleted_by_user
 		? { nickname: item.deleted_by_user.nickname, avatar: item.deleted_by_user.avatar }
 		: undefined
-	const parentInfo = item.extra_data?.parent_info
-	const path = buildRecycleBinPathLabel({ resourceType, parentInfo, t })
+	const parentInfo = {
+		...item.extra_data?.parent_info,
+		workspace_name:
+			item.extra_data?.parent_info?.workspace_name ?? item.extra_data?.workspace_name,
+		project_name: item.extra_data?.parent_info?.project_name ?? item.extra_data?.project_name,
+		relative_file_path: item.extra_data?.relative_file_path,
+	}
+	const path = buildRecycleBinPathLabel({
+		resourceType,
+		parentInfo,
+		resourceName: item.resource_name,
+		t,
+	})
 	return {
 		id: item.id,
 		type,
@@ -84,6 +100,7 @@ const TYPE_TO_CATEGORY: Record<RecycleBinItemData["type"], RecycleBinItem["categ
 	project: "projects",
 	topic: "topics",
 	file: "files",
+	folder: "files",
 }
 
 export function mobileItemDataToDomain(item: RecycleBinItemData): RecycleBinItem {

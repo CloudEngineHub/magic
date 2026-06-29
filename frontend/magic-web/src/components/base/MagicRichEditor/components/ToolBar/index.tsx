@@ -17,6 +17,7 @@ import { createStyles } from "antd-style"
 import type { HTMLAttributes } from "react"
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 const useStyles = createStyles(({ css }) => {
 	return {
@@ -36,11 +37,21 @@ export default function ToolBar({ editor, ...props }: ToolBarProps) {
 	const { styles } = useStyles()
 	const { t } = useTranslation("interface")
 
-	const headingLevel = editor?.isActive("heading")
-		? editor.getAttributes("heading").level
-		: "paragraph"
+	const headingLevel = runActiveEditor(
+		editor,
+		(activeEditor) =>
+			activeEditor.isActive("heading")
+				? activeEditor.getAttributes("heading").level
+				: "paragraph",
+		"paragraph",
+	)
 
-	const fontSize = Number((editor?.getAttributes("textStyle")?.fontSize ?? "16px").slice(0, -2))
+	const fontSize = runActiveEditor(
+		editor,
+		(activeEditor) =>
+			Number((activeEditor.getAttributes("textStyle")?.fontSize ?? "16px").slice(0, -2)),
+		16,
+	)
 
 	const headingOptions = useMemo(() => {
 		return [
@@ -53,28 +64,63 @@ export default function ToolBar({ editor, ...props }: ToolBarProps) {
 	}, [styles.headingText, t])
 
 	const onHeadingChange = useMemoizedFn((value: "paragraph" | 1 | 2 | 3 | 4 | 5 | 6) => {
-		if (value === "paragraph") {
-			editor?.chain().focus().setParagraph().run()
-		} else {
-			editor?.chain().focus().toggleHeading({ level: value }).run()
-		}
+		runActiveEditor(editor, (activeEditor) => {
+			if (value === "paragraph") {
+				activeEditor.chain().focus().setParagraph().run()
+			} else {
+				activeEditor.chain().focus().toggleHeading({ level: value }).run()
+			}
+		})
 	})
 
 	if (!editor) return null
+
+	const canUndo = runActiveEditor(editor, (activeEditor) => activeEditor.can().undo(), false)
+	const canRedo = runActiveEditor(editor, (activeEditor) => activeEditor.can().redo(), false)
+	const isBold = runActiveEditor(editor, (activeEditor) => activeEditor.isActive("bold"), false)
+	const isItalic = runActiveEditor(editor, (activeEditor) => activeEditor.isActive("italic"), false)
+	const isLeftAlign = runActiveEditor(
+		editor,
+		(activeEditor) => activeEditor.isActive({ textAlign: "left" }),
+		false,
+	)
+	const isCenterAlign = runActiveEditor(
+		editor,
+		(activeEditor) => activeEditor.isActive({ textAlign: "center" }),
+		false,
+	)
+	const isRightAlign = runActiveEditor(
+		editor,
+		(activeEditor) => activeEditor.isActive({ textAlign: "right" }),
+		false,
+	)
+	const isJustifyAlign = runActiveEditor(
+		editor,
+		(activeEditor) => activeEditor.isActive({ textAlign: "justify" }),
+		false,
+	)
 
 	return (
 		<Flex gap={4} wrap="wrap" className={styles.toolbar} {...props}>
 			<MagicButton
 				type="link"
-				disabled={!editor?.can().undo()}
-				onClick={() => editor?.chain().focus().undo().run()}
+				disabled={!canUndo}
+				onClick={() => {
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.chain().focus().undo().run()
+					})
+				}}
 				icon={<MagicIcon component={IconArrowBackUp} stroke={2} />}
 				tip={t("richEditor.undo")}
 			/>
 			<MagicButton
 				type="link"
-				disabled={!editor?.can().redo()}
-				onClick={() => editor?.chain().focus().redo().run()}
+				disabled={!canRedo}
+				onClick={() => {
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.chain().focus().redo().run()
+					})
+				}}
 				icon={<MagicIcon component={IconArrowForwardUp} stroke={2} />}
 				tip={t("richEditor.redo")}
 			/>
@@ -90,42 +136,70 @@ export default function ToolBar({ editor, ...props }: ToolBarProps) {
 				value={fontSize}
 				defaultValue={16}
 				onChange={(value) => {
-					if (value) editor?.chain().focus().setFontSize(`${value}px`).run()
+					if (value) {
+						runActiveEditor(editor, (activeEditor) => {
+							activeEditor.chain().focus().setFontSize(`${value}px`).run()
+						})
+					}
 				}}
 			/>
 			<MagicButton
-				type={editor?.isActive("bold") ? "primary" : "link"}
-				onClick={() => editor?.chain().focus().toggleBold().run()}
+				type={isBold ? "primary" : "link"}
+				onClick={() => {
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.chain().focus().toggleBold().run()
+					})
+				}}
 				icon={<MagicIcon component={IconBold} stroke={2} />}
 				tip={t("richEditor.bold")}
 			/>
 			<MagicButton
-				type={editor?.isActive("italic") ? "primary" : "link"}
-				onClick={() => editor?.chain().focus().toggleItalic().run()}
+				type={isItalic ? "primary" : "link"}
+				onClick={() => {
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.chain().focus().toggleItalic().run()
+					})
+				}}
 				icon={<MagicIcon component={IconItalic} stroke={2} />}
 				tip={t("richEditor.italic")}
 			/>
 			<MagicButton
-				type={editor?.isActive({ textAlign: "left" }) ? "primary" : "link"}
-				onClick={() => editor?.chain().focus().setTextAlign("left").run()}
+				type={isLeftAlign ? "primary" : "link"}
+				onClick={() => {
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.chain().focus().setTextAlign("left").run()
+					})
+				}}
 				icon={<MagicIcon component={IconAlignLeft} />}
 				tip={t("richEditor.leftAlign")}
 			/>
 			<MagicButton
-				type={editor?.isActive({ textAlign: "center" }) ? "primary" : "link"}
-				onClick={() => editor?.chain().focus().setTextAlign("center").run()}
+				type={isCenterAlign ? "primary" : "link"}
+				onClick={() => {
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.chain().focus().setTextAlign("center").run()
+					})
+				}}
 				icon={<MagicIcon component={IconAlignCenter} />}
 				tip={t("richEditor.centerAlign")}
 			/>
 			<MagicButton
-				type={editor?.isActive({ textAlign: "right" }) ? "primary" : "link"}
-				onClick={() => editor?.chain().focus().setTextAlign("right").run()}
+				type={isRightAlign ? "primary" : "link"}
+				onClick={() => {
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.chain().focus().setTextAlign("right").run()
+					})
+				}}
 				icon={<MagicIcon component={IconAlignRight} />}
 				tip={t("richEditor.rightAlign")}
 			/>
 			<MagicButton
-				type={editor?.isActive({ textAlign: "justify" }) ? "primary" : "link"}
-				onClick={() => editor?.chain().focus().setTextAlign("justify").run()}
+				type={isJustifyAlign ? "primary" : "link"}
+				onClick={() => {
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.chain().focus().setTextAlign("justify").run()
+					})
+				}}
 				icon={<MagicIcon component={IconAlignJustified} />}
 				tip={t("richEditor.justifyAlign")}
 			/>

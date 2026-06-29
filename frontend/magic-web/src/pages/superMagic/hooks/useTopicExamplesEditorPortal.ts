@@ -3,6 +3,7 @@ import { RefObject } from "react"
 import { MessageEditorRef } from "../components/MessageEditor/MessageEditor"
 import { TopicMode } from "../pages/Workspace/TopicMode"
 import useTopicExamplesPortal from "./useTopicExamplesPortal"
+import { runActiveEditor } from "../components/MessageEditor/utils/editorLifecycle"
 
 interface UseTopicExamplesEditorPortalParams {
 	editorRef: RefObject<MessageEditorRef | null>
@@ -17,15 +18,16 @@ function useTopicExamplesEditorPortal({
 	topicMode,
 }: UseTopicExamplesEditorPortalParams) {
 	const handleSetExampleContent = useMemoizedFn((content: string | object) => {
-		const editor = editorRef.current?.editor
-		if (!editor) return
-
-		editor.commands.setContent(content, { emitUpdate: true })
+		runActiveEditor(editorRef.current?.editor, (editor) => {
+			editor.commands.setContent(content, { emitUpdate: true })
+		})
 
 		setTimeout(() => {
-			if (!editor.commands.focusFirstSuperPlaceholder()) {
-				editor.commands.focus()
-			}
+			runActiveEditor(editorRef.current?.editor, (editor) => {
+				if (!editor.commands.focusFirstSuperPlaceholder()) {
+					editor.commands.focus()
+				}
+			})
 		}, 100)
 	})
 

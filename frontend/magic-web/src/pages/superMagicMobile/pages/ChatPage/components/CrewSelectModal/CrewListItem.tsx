@@ -19,6 +19,7 @@ function SceneIcon({ scene }: { scene: SceneItem }) {
 				width={SCENE_ICON_SIZE}
 				height={SCENE_ICON_SIZE}
 				className="shrink-0 rounded"
+				data-testid="crew-list-item-image"
 			/>
 		)
 	return <LucideLazyIcon icon={scene.icon} size={SCENE_ICON_SIZE} />

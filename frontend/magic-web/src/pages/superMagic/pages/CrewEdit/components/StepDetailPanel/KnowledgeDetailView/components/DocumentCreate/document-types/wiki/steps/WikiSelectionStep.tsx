@@ -328,6 +328,7 @@ export const WikiSelectionStep = observer(function WikiSelectionStep({
 													isCurrentView && "bg-accent",
 												)}
 												onClick={() => handleWikiClick(wiki.node_ref)}
+												data-testid="handle-wiki-click"
 											>
 												<Checkbox
 													checked={checkboxState}

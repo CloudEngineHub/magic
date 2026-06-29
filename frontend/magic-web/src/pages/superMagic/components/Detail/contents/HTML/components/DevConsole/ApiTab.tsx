@@ -99,7 +99,7 @@ export function ApiTab({ entries }: ApiTabProps) {
 	}
 
 	return (
-		<div ref={scrollRef} className="h-full overflow-y-auto text-xs" onScroll={handleScroll}>
+		<div ref={scrollRef} className="h-full overflow-y-auto text-xs" onScroll={handleScroll} data-testid="handle-scroll">
 			<div
 				style={{
 					height: `${virtualizer.getTotalSize()}px`,
@@ -137,6 +137,7 @@ export function ApiTab({ entries }: ApiTabProps) {
 							<div
 								className="flex cursor-pointer items-center gap-2 px-2 py-1.5 hover:bg-accent/50"
 								onClick={() => toggleExpand(entry.id)}
+								data-testid="toggle-expand"
 							>
 								<ChevronRight
 									size={10}

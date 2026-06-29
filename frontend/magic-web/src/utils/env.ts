@@ -38,6 +38,7 @@ export const env = (
 
 	const defaultCDN = import.meta.env?.MAGIC_CDNHOST || window?.CONFIG?.MAGIC_CDNHOST
 
+
 	if (deployCode && clusterConfig?.[deployCode]?.services && !isCurrentEnv) {
 		const dingTalkConfig = clusterConfig?.[deployCode]?.magic_app?.keyconfig?.find(
 			(item) => item.type === "dingtalk",

@@ -176,7 +176,7 @@ function IdentityLocalizeDialogInner({
 			<div className="flex flex-col gap-2.5">
 				{/* Original (Default) */}
 				<div className="flex flex-col gap-2">
-					<label className="text-sm font-medium leading-none text-foreground">
+					<label className="text-sm font-medium leading-none text-foreground" data-testid="identity-localize-dialog-label">
 						{t("playbook.edit.basicInfo.localeDialog.original")}
 					</label>
 					{multiline ? (
@@ -203,7 +203,7 @@ function IdentityLocalizeDialogInner({
 				{/* Per-locale fields */}
 				{SUPPORTED_LOCALES.map((locale) => (
 					<div key={locale} className="flex flex-col gap-2">
-						<label className="text-sm font-medium leading-none text-foreground">
+						<label className="text-sm font-medium leading-none text-foreground" data-testid="identity-localize-dialog-label-2">
 							{localeLabels[locale]}
 						</label>
 						{multiline ? (

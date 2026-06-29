@@ -31,6 +31,7 @@ export function getFileColor(filetype?: string): string {
 		pdf: "#DC2626",
 		doc: "#2563EB",
 		docx: "#2563EB",
+		docm: "#2563EB",
 		word: "#2563EB",
 		ppt: "#EA580C",
 		pptx: "#EA580C",

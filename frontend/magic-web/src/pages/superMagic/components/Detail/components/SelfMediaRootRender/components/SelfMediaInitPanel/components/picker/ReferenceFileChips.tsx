@@ -58,6 +58,7 @@ export default function ReferenceFileChips({
 						)}
 						onClick={() => onRemove(index)}
 						disabled={disabled}
+						data-testid="on-remove"
 					>
 						<X className={compact ? "size-2.5" : "size-3"} />
 					</button>

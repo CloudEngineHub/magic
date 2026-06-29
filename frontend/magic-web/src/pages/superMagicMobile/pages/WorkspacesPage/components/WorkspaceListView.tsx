@@ -107,7 +107,10 @@ function WorkspaceItem({
 		>
 			{/* 行内容区：h-16 与 SwipeActionRow 外壳高度保持一致 */}
 			{/* Mobile list rows keep a neutral background; selection state is not highlighted. */}
-			<div className="flex h-16 w-full items-center gap-2 rounded-lg px-3 transition-opacity">
+			<div
+				className="flex h-16 w-full items-center gap-2 rounded-lg px-3 transition-opacity"
+				data-testid="workspace-item"
+			>
 				<MobileResourceTypeIcon
 					type="workspace"
 					isRunning={running}
@@ -192,7 +195,7 @@ function WorkspaceListViewInner({
 	const sharedWorkspaceDescription = t("workspace.collaborationProjectsDescV2")
 
 	return (
-		<div className="flex h-full min-h-0 flex-col bg-mobile-background">
+		<div className="flex h-full min-h-0 flex-col bg-mobile-background" data-testid="workspaces-page">
 			{/* Header */}
 			<div className="mobile-page-header">
 				<MobileShellSidebarToggleButton

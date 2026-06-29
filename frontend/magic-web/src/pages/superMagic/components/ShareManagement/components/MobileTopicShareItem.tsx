@@ -68,6 +68,7 @@ function MobileTopicShareItem({
 			<div
 				className="flex cursor-pointer gap-2 rounded-lg p-2 transition-colors hover:bg-muted"
 				onClick={handleItemClick}
+				data-testid="handle-item-click"
 			>
 				{/* 话题模式图标 */}
 				<div className="flex h-5 w-5 flex-shrink-0 items-center justify-center">
@@ -129,6 +130,7 @@ function MobileTopicShareItem({
 								setShowActions(true)
 							}}
 							className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-muted active:bg-muted/80"
+							data-testid="set-show-actions"
 						>
 							<IconDots className="h-5 w-5" />
 						</button>

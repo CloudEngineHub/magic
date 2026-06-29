@@ -140,6 +140,7 @@ function SlidesPresetCard({
 							)}
 							loading="lazy"
 							onLoad={() => setIsThumbnailLoaded(true)}
+							data-testid="set-is-thumbnail-loaded"
 						/>
 					</>
 				) : (
@@ -213,6 +214,7 @@ function SlidesPresetCard({
 									)}
 									loading="lazy"
 									onLoad={() => setIsCollageLoaded(true)}
+									data-testid="set-is-collage-loaded"
 								/>
 								<div className="pointer-events-none absolute inset-0 z-20 ring-1 ring-inset ring-foreground/5" />
 							</div>

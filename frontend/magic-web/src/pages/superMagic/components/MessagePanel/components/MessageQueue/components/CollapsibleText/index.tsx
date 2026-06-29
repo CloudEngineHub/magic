@@ -62,6 +62,7 @@ function CollapsibleText({ content, maxLines = 2, className, onFileClick }: Coll
 					WebkitLineClamp: !isExpanded && shouldShowToggle ? maxLines : "none",
 				}}
 				onClick={shouldShowToggle ? handleToggle : undefined}
+				data-testid="collapsible-text"
 			>
 				<RichText content={content} onFileClick={onFileClick} />
 			</div>

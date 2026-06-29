@@ -501,16 +501,26 @@ validate: ({ state, t }) => {
 - `title`: 区块标题
 - `suffix`: 标题右侧补充文案
 - `noSourceHint`: 没有源图时展示的提示文案
-- `clearLabel`: 清除标记按钮文案
+- `clearLabel`: 重置按钮文案
 - `help`: 区块底部说明文案
-- `brushSize`: 画笔大小，默认 `28`
-- `cropPadding`: 根据涂抹区域裁剪局部图时额外扩出的边距，默认 `40`
+- `brushSize`: 画笔在屏幕上的视觉大小（CSS px），默认 `28`
+- `minBrushSize`: 画笔最小视觉大小，默认 `12`
+- `maxBrushSize`: 画笔最大视觉大小，默认 `120`
+- `brushStep`: 画笔大小滑块步进，默认 `2`
+- `overlayColor`: 涂抹选区的可视化颜色，默认蓝色
+- `overlayOpacity`: 涂抹选区的可视化透明度，默认 `0.42`
+- `maskCropMode`: 裁剪模式，`"rect"` 为矩形裁剪，`"masked"` 为仅保留涂抹形状并让外部透明，默认 `"masked"`
+- `cropPadding`: 根据涂抹区域裁剪局部图时额外扩出的边距，`rect` 模式默认 `40`，`masked` 模式默认 `0`
+- `cropNameSuffix`: 上传裁剪图文件名后缀，默认 `"crop"`，最终格式类似 `原图名-crop-时间戳-序号.png`
+- `previewPixelSize`: 右下角裁剪预览图生成时的最大像素尺寸，默认 `160`
 - `deps`: 额外依赖的 state key，通常至少要包含 `sourceStateKey`
 - `when`: 条件渲染，返回 `false` 时不显示
 
 说明：
 
 - 只有在 `sourceStateKey` 对应图片存在时才会显示画布
+- 工具条默认选中「涂抹」，可切换「擦除」，并通过滑块调整画笔大小
+- 涂抹结束后会在画布右下角显示裁剪预览缩略图，点击「重置」后隐藏
 - 用户在图上涂抹后，kit 会根据涂抹范围计算 bounding box，并从源图裁剪出局部图
 - 裁剪结果会通过 `ctx.assets.uploadFile` 自动上传，并把上传后的 asset 写入 `state[stateKey]`
 - 没有涂抹内容、清空标记、或源图变化时，`state[stateKey]` 会被自动重置为 `null`
@@ -526,7 +536,7 @@ validate: ({ state, t }) => {
 	sourceStateKey: "sourceImage",
 	title: t("section.maskPainter", "标记修复区域（可选）"),
 	noSourceHint: t("maskPainter.noSource", "请先上传待修复图"),
-	clearLabel: t("maskPainter.clear", "清除标记"),
+	clearLabel: t("maskPainter.clear", "重置"),
 	deps: ["sourceImage"],
 	help: t(
 		"maskPainter.help",

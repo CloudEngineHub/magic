@@ -356,6 +356,7 @@ export function MagiClawCreateDialog({
 											<label
 												className="shrink-0 text-sm font-medium leading-none text-foreground"
 												htmlFor="magi-claw-name-input"
+												data-testid="magi-claw-create-dialog-label"
 											>
 												{t("superLobster.createDialog.nameLabel")}
 											</label>

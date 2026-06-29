@@ -47,8 +47,11 @@ export const CollapsedHeader: React.FC<CollapsedHeaderProps> = observer(
 		})
 
 		// 获取共用的状态信息
-		const { hasActiveTasks, allActiveTasksPaused, hasErrors, totalErrorFiles } =
+		const { hasActiveTasks, allActiveTasksPaused, hasErrors, totalErrorFiles, activeTasks } =
 			getSharedState()
+		const hasCreatingFolderTasks = activeTasks.some(
+			(task) => task.state.currentPhase === "creating_folders",
+		)
 
 		// 获取状态图标和文本
 		const getStatusContent = () => {
@@ -58,6 +61,12 @@ export const CollapsedHeader: React.FC<CollapsedHeaderProps> = observer(
 					return {
 						icon: <MagicLoadingIcon size={20} paused={true} />,
 						text: t("folderUpload.collapsed.paused"),
+						progress: `${uploadInfo.totalProcessedFiles}/${uploadInfo.totalFiles}`,
+					}
+				} else if (hasCreatingFolderTasks) {
+					return {
+						icon: <MagicLoadingIcon size={20} />,
+						text: t("folderUpload.collapsed.creatingFolders"),
 						progress: `${uploadInfo.totalProcessedFiles}/${uploadInfo.totalFiles}`,
 					}
 				} else {

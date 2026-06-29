@@ -200,6 +200,7 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 							onMouseEnter={onMouseEnter}
 							onMouseLeave={onMouseLeave}
 							isStreaming={streamState === "reasoning_content"}
+							enableHtmlCodeBlockPreview={false}
 							content={reasoningContent}
 						/>
 						<ScrollBar orientation="vertical" />

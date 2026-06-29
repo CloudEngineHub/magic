@@ -161,6 +161,7 @@ export const PlaybookPanel = observer(function PlaybookPanel() {
 					<label
 						className="ml-2 mr-auto cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
 						onClick={() => handleSelectAll(!allSelected)}
+						data-testid="handle-select-all"
 					>
 						{t("playbook.selectAll")}
 					</label>

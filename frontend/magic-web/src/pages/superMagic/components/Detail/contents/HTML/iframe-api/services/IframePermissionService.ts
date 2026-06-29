@@ -13,6 +13,7 @@ export interface HtmlPermissionConfirmRequest {
 	appName: string
 	mode: "manifest" | "legacy"
 	isLegacy: boolean
+	appConfigLoadError?: string
 	scope: HtmlPermissionScope
 	scopeLabelKey: string
 	reason: string
@@ -23,6 +24,13 @@ export interface HtmlPermissionConfirmRequest {
 export interface HtmlPermissionConfirmResult {
 	allowed: boolean
 	ttlMs: number
+}
+
+export interface HtmlPermissionMissingDeclarationRequest {
+	appName: string
+	scope: HtmlPermissionScope
+	scopeLabelKey: string
+	declaredScopes: HtmlPermissionScope[]
 }
 
 export interface IframePermissionAppInstance {
@@ -44,6 +52,7 @@ export interface IframePermissionServiceConfig {
 	confirmPermission: (
 		request: HtmlPermissionConfirmRequest,
 	) => Promise<HtmlPermissionConfirmResult>
+	onMissingDeclaration?: (request: HtmlPermissionMissingDeclarationRequest) => void
 	appConfigState: HtmlAppConfigState
 	appInstance: IframePermissionAppInstance
 	getNow?: () => number
@@ -137,18 +146,26 @@ export class IframePermissionService {
 
 		const appConfigState = this.cfg.appConfigState
 		if (appConfigState.status === "loading") return false
+		const appConfigLoadError =
+			appConfigState.status === "error" ? appConfigState.error : undefined
 		if (appConfigState.status === "error") {
-			htmlMicroAppPreviewLogger.warn("Permission blocked: app.json unavailable", {
-				scope,
-				error: appConfigState.error,
-			})
-			return false
+			htmlMicroAppPreviewLogger.warn(
+				"Permission fallback: app.json unavailable, using legacy confirmation",
+				{
+					scope,
+					error: appConfigState.error,
+				},
+			)
 		}
 
 		const appConfig = appConfigState.status === "loaded" ? appConfigState.config : null
 		const mode = appConfig ? "manifest" : "legacy"
-		const declared = this.isDeclared(scope, appConfig)
-		if (mode === "manifest" && !declared) return false
+		const declaredScopes = this.getDeclaredScopes(appConfig)
+		const declared = declaredScopes.includes(scope)
+		if (mode === "manifest" && !declared) {
+			this.reportMissingDeclaration(scope, appConfig, declaredScopes)
+			return false
+		}
 
 		const appFingerprint = await this.getAppFingerprint(mode, appConfig)
 		const match = this.buildGrantMatch(scope, mode, appFingerprint)
@@ -168,6 +185,7 @@ export class IframePermissionService {
 			appName: appConfig?.name || "HTML 微应用",
 			mode,
 			isLegacy: mode === "legacy",
+			appConfigLoadError,
 			scope,
 			scopeLabelKey: SCOPE_LABEL_KEYS[scope],
 			reason: appConfig?.permissions?.reason || "",
@@ -186,10 +204,33 @@ export class IframePermissionService {
 		return true
 	}
 
-	private isDeclared(scope: HtmlPermissionScope, appConfig: HTMLAppConfig | null): boolean {
+	private getDeclaredScopes(appConfig: HTMLAppConfig | null): HtmlPermissionScope[] {
 		const scopes = appConfig?.permissions?.scopes
-		if (!Array.isArray(scopes)) return false
-		return scopes.includes(scope)
+		if (!Array.isArray(scopes)) return []
+		return scopes.filter(
+			(item): item is HtmlPermissionScope =>
+				typeof item === "string" &&
+				Object.prototype.hasOwnProperty.call(SCOPE_LABEL_KEYS, item),
+		)
+	}
+
+	private reportMissingDeclaration(
+		scope: HtmlPermissionScope,
+		appConfig: HTMLAppConfig | null,
+		declaredScopes: HtmlPermissionScope[],
+	) {
+		const appName = appConfig?.name || "HTML 微应用"
+		htmlMicroAppPreviewLogger.warn("Permission blocked: scope not declared in app.json", {
+			appName,
+			declaredScopes,
+			scope,
+		})
+		this.cfg.onMissingDeclaration?.({
+			appName,
+			declaredScopes,
+			scope,
+			scopeLabelKey: SCOPE_LABEL_KEYS[scope],
+		})
 	}
 
 	private async getAppFingerprint(

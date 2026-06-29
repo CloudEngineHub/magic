@@ -64,7 +64,7 @@ export const TextInputStep = observer(function TextInputStep({
 	}
 
 	return (
-		<div className="flex h-full flex-col" onKeyDown={handleKeyDown}>
+		<div className="flex h-full flex-col" onKeyDown={handleKeyDown} data-testid="handle-key-down">
 			{/* 固定区域：标题和文档名称输入 */}
 			<div className="shrink-0 space-y-4 px-8 pb-4 pt-0">
 				{/* 文档名称输入 */}

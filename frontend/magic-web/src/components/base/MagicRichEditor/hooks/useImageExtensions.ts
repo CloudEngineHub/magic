@@ -5,6 +5,7 @@ import { FileHandler } from "../extensions/file-handler"
 import { fileToBase64 } from "../utils"
 import type { FileError } from "../utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export interface UseImageExtensionsOptions {
 	/** 允许的 MIME 类型 */
@@ -79,12 +80,14 @@ export function useImageExtensions(options: UseImageExtensionsOptions = {}) {
 					? `${fileName}_${Date.now()}.${fileExt}`
 					: `${fileName}_${Date.now()}`
 
-				editor.commands.insertContent({
-					type: Image.name,
-					attrs: { src, file_name, file_size: file.size },
-				})
+				runActiveEditor(editor, (activeEditor) => {
+					activeEditor.commands.insertContent({
+						type: Image.name,
+						attrs: { src, file_name, file_size: file.size },
+					})
 
-				editor.commands.focus(currentPos + 1)
+					activeEditor.commands.focus(currentPos + 1)
+				})
 			} catch (err) {
 				console.error("Error handling paste:", err)
 				setError("图片粘贴失败，请重试")

@@ -163,6 +163,7 @@ function FileTreeItem({
 			<div
 				className={cx(styles.tableRow, isDirectory && hasChildren && styles.clickableRow)}
 				onClick={handleRowClick}
+				data-testid="handle-row-click"
 			>
 				{/* 名称列 */}
 				<div
@@ -186,6 +187,7 @@ function FileTreeItem({
 									e.stopPropagation() // 阻止事件冒泡
 									handleToggle()
 								}}
+								data-testid="handle-toggle"
 							>
 								<MagicIcon
 									component={isExpanded ? IconChevronDown : IconChevronRight}
@@ -204,7 +206,7 @@ function FileTreeItem({
 						)}
 						<div className={styles.fileIconWrapper}>
 							{isDirectory ? (
-								<img src={FoldIcon} alt="folder" width={18} height={18} />
+								<img src={FoldIcon} alt="folder" width={18} height={18}  data-testid="file-tree-image"/>
 							) : (
 								<MagicFileIcon
 									type={getFileExtension(node.file_name)}
@@ -448,7 +450,7 @@ export default memo(function FileTree(props: FileTreeProps) {
 									justify="center"
 									vertical
 								>
-									<img src={EmptyFiles} alt="empty" />
+									<img src={EmptyFiles} alt="empty"  data-testid="file-tree-image-2"/>
 									<span>{t("fileTree.empty")}</span>
 								</Flex>
 							)}

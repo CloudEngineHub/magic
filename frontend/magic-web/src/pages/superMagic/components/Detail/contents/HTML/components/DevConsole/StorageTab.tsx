@@ -40,6 +40,7 @@ function StorageSection({ title, icon, data, emptyText }: StorageSectionProps) {
 			<button
 				className="flex w-full items-center gap-1.5 px-2 py-1.5 text-xs font-medium hover:bg-accent/50"
 				onClick={() => setExpanded(!expanded)}
+				data-testid="set-expanded"
 			>
 				{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
 				{icon}
@@ -55,9 +56,9 @@ function StorageSection({ title, icon, data, emptyText }: StorageSectionProps) {
 							{emptyText}
 						</div>
 					) : (
-						<table className="w-full text-xs">
+						<table className="w-full text-xs" data-testid="storage-tab-table">
 							<thead>
-								<tr className="border-b border-border/30 text-left text-[10px] text-muted-foreground">
+								<tr className="border-b border-border/30 text-left text-[10px] text-muted-foreground" data-testid="storage-tab-row">
 									<th className="w-1/3 px-2 py-0.5 font-medium">Key</th>
 									<th className="px-2 py-0.5 font-medium">Value</th>
 								</tr>
@@ -70,6 +71,7 @@ function StorageSection({ title, icon, data, emptyText }: StorageSectionProps) {
 										<tr
 											key={key}
 											className="group border-b border-border/20 hover:bg-accent/30"
+											data-testid="storage-tab-row-2"
 										>
 											<td className="break-all px-2 py-0.5 align-top font-mono text-[11px]">
 												{key}
@@ -85,6 +87,7 @@ function StorageSection({ title, icon, data, emptyText }: StorageSectionProps) {
 														<button
 															className="ml-1 text-[10px] text-blue-500 hover:underline"
 															onClick={() => toggleKey(key)}
+															data-testid="toggle-key"
 														>
 															{isExpanded ? "收起" : "展开"}
 														</button>
@@ -120,6 +123,7 @@ function IndexedDBSection({ data, emptyText }: IndexedDBSectionProps) {
 			<button
 				className="flex w-full items-center gap-1.5 px-2 py-1.5 text-xs font-medium hover:bg-accent/50"
 				onClick={() => setExpanded(!expanded)}
+				data-testid="set-expanded-2"
 			>
 				{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
 				<Database size={12} className="text-purple-500" />
@@ -181,6 +185,7 @@ export function StorageTab({ data, onRefresh, loading }: StorageTabProps) {
 				<button
 					onClick={onRefresh}
 					className="flex items-center gap-1 rounded bg-accent px-2 py-1 text-xs hover:bg-accent/80"
+					data-testid="on-refresh"
 				>
 					<RefreshCw size={12} />
 					{t("stylePanel.devConsole.storageRefresh")}
@@ -200,6 +205,7 @@ export function StorageTab({ data, onRefresh, loading }: StorageTabProps) {
 						"flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-accent",
 						loading && "opacity-50",
 					)}
+					data-testid="on-refresh-2"
 				>
 					<RefreshCw size={12} className={loading ? "animate-spin" : ""} />
 					{t("stylePanel.devConsole.storageRefresh")}

@@ -78,6 +78,7 @@ function EditableCapsuleItem({
 							height={16}
 							className="shrink-0 object-contain"
 							loading="lazy"
+							data-testid="editable-capsule-image"
 						/>
 					) : (
 						<LucideLazyIcon icon={item.icon_url} size={16} />

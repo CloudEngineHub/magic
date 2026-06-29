@@ -1,4 +1,4 @@
-/* global MagicPluginKit, registerMagicCanvasPlugin */
+/* global MagicPluginKit, MagicPromptLocale, registerMagicCanvasPlugin */
 
 // ── 颜色数据表 ─────────────────────────────────────────────────────────────────
 const COLOR_CATALOG = [
@@ -337,6 +337,7 @@ function createColorDrawer(panelEl, t, onSelect) {
 					swatchBtn.classList.remove("is-selected")
 					onSelect({ name: color.name, hex: color.hex })
 					syncThemeColorSelection(color.hex)
+					close()
 				})
 				grid.append(wrapper)
 			})
@@ -358,7 +359,7 @@ function createColorDrawer(panelEl, t, onSelect) {
 	colorInput.addEventListener("change", () => {
 		const hex = colorInput.value
 		onSelect({ name: null, hex: hex.toUpperCase() })
-		// close()
+		close()
 	})
 
 	// ── 搜索事件 ──
@@ -528,7 +529,8 @@ function createBodyPartTagsSection({ state, setState, t }) {
 
 function createInitialState() {
 	return {
-		modelImages: [],
+		modelImage: null,
+		cropImage: null,
 		bodyPart: "",
 		color: null,
 		genCount: 1,
@@ -546,13 +548,15 @@ function buildColorChangeRequest({
 	resolution,
 	count,
 	bodyPart,
+	cropImage,
 	color,
 	locale,
 }) {
-	const referenceImages = helpers.collectReferenceIds([baseImage])
+	const hasCrop = Boolean(cropImage)
+	const referenceImages = helpers.collectReferenceIds([baseImage, cropImage].filter(Boolean))
 	return {
 		model_id: modelId,
-		prompt: buildColorChangePrompt(bodyPart, color, locale),
+		prompt: buildColorChangePrompt({ bodyPart, color, locale, hasCrop }),
 		reference_images: referenceImages,
 		size: `${width}x${height}`,
 		resolution,
@@ -563,22 +567,47 @@ function buildColorChangeRequest({
 	}
 }
 
-function buildColorChangePrompt(bodyPart, color, locale) {
+function buildColorChangePrompt({ bodyPart, color, locale, hasCrop }) {
+	const normalizedBodyPart = String(bodyPart ?? "").trim()
 	const colorDesc = color.name ? `${color.name} (${color.hex})` : color.hex
 	if (MagicPromptLocale.isChinese(locale)) {
+		const targetInstruction = hasCrop
+			? normalizedBodyPart
+				? `这是基于参考图 1 的局部换色编辑任务。参考图 1 是唯一的完整原图、构图、主体和输出依据；参考图 2 只是用户涂抹标记出的目标换色区域定位图，不是构图参考、主体参考、商品参考或输出范围参考。换色部位描述为“${normalizedBodyPart}”。请在完全保持参考图 1 原始画幅、主体类型、服饰结构和画面布局不变的前提下，仅将参考图 1 中与参考图 2 对应的目标服饰区域颜色改为 ${colorDesc}。换色部位描述只用于理解该标记区域，不得扩大到未标记区域。`
+				: `这是基于参考图 1 的局部换色编辑任务。参考图 1 是唯一的完整原图、构图、主体和输出依据；参考图 2 只是用户涂抹标记出的目标换色区域定位图，不是构图参考、主体参考、商品参考或输出范围参考。请在完全保持参考图 1 原始画幅、主体类型、服饰结构和画面布局不变的前提下，仅将参考图 1 中与参考图 2 对应的目标服饰区域颜色改为 ${colorDesc}。`
+			: `这是基于参考图 1 的局部换色编辑任务。请仅将参考图 1 中${normalizedBodyPart}的颜色改为 ${colorDesc}，并保持参考图 1 的原始画幅、主体类型、服饰结构和画面布局不变。`
 		return (
-			`将模特身上${bodyPart}的颜色改为 ${colorDesc}。` +
-			"严格保留服装轮廓、面料纹理、模特姿势、肤色、发型、脸部特征、背景场景，以及目标服装部位以外的所有区域。" +
-			"最终画面必须只出现一个人物，不要生成拼贴、对比排版或多人构图。" +
-			"最终结果应自然、真实，并具备专业商业棚拍质感。"
+			targetInstruction +
+			(hasCrop
+				? "最终输出必须是参考图 1 的完整图像，不得输出参考图 2 的局部裁剪、局部放大图、透明蒙版图或只有目标服饰部位的图片。"
+				: "") +
+			"参考图 1 可能是真人模特穿着图、人台图、平铺图、挂拍图或商品图；无论是哪一种，都必须以参考图 1 当前画面为基础，只做目标区域换色，保持参考图 1 当前主体类型、主体数量、承载方式和拍摄状态不变。" +
+			"不得把人台图、平铺图、挂拍图或商品图改成真人模特图，也不得把真人模特图改成人台图、平铺图或商品图。" +
+			"严格保留参考图 1 中的服装轮廓、版型结构、面料纹理、褶皱、高光、阴影、图案、logo、辅料、背景场景、拍摄角度和目标服装部位以外的所有区域。" +
+			"不得新增、删除或替换真人模特、人台、脸、手、腿、身体、姿势、挂架、道具或穿着场景；参考图 1 中原本没有的元素不要生成。" +
+			"未标记或未指定的服装区域、配饰、主体载体、皮肤、头发、背景和商品细节不得跟随目标颜色变化。" +
+			"不要生成拼贴、对比排版、多视图、局部特写或新构图。" +
+			"最终结果应像在原图基础上只修改了目标颜色，自然、真实，并具备专业商业修图质感。"
 		)
 	}
 
+	const targetInstructionEn = hasCrop
+		? normalizedBodyPart
+			? `This is a local recolor editing task based on reference image 1. Reference image 1 is the only source for the original full image, composition, subject, and output. Reference image 2 is only a locator image for the target recolor area painted by the user; it is not a composition reference, subject reference, product reference, or output range reference. The garment area description is "${normalizedBodyPart}". Keep the original canvas, subject type, garment construction, and image layout of reference image 1 completely unchanged, and recolor only the target garment area in reference image 1 that corresponds to reference image 2 to ${colorDesc}. Use the garment area description only to understand the marked region and do not expand it to unmarked areas. `
+			: `This is a local recolor editing task based on reference image 1. Reference image 1 is the only source for the original full image, composition, subject, and output. Reference image 2 is only a locator image for the target recolor area painted by the user; it is not a composition reference, subject reference, product reference, or output range reference. Keep the original canvas, subject type, garment construction, and image layout of reference image 1 completely unchanged, and recolor only the target garment area in reference image 1 that corresponds to reference image 2 to ${colorDesc}. `
+		: `This is a local recolor editing task based on reference image 1. Recolor only the ${normalizedBodyPart} in reference image 1 to ${colorDesc}, while keeping the original canvas, subject type, garment construction, and image layout of reference image 1 unchanged. `
 	return (
-		`Change the color of the ${bodyPart} on the model to ${colorDesc}. ` +
-		"Strictly preserve the garment silhouette, fabric texture, model pose, skin tone, hairstyle, facial features, background scene, and every area outside the target garment part. " +
-		"Only one person should appear in the final image. Do not generate collages, comparison layouts, or multi-person compositions. " +
-		"The final result should look natural, realistic, and like a professional commercial studio photo."
+		targetInstructionEn +
+		(hasCrop
+			? "The final output must be the complete image from reference image 1. Do not output the cropped region from reference image 2, a close-up, a transparent mask image, or an image containing only the target garment part. "
+			: "") +
+		"Reference image 1 may be a real model wearing the garment, a mannequin image, a flat-lay image, a hanging product image, or a product-only image. In all cases, edit based on the current image in reference image 1 only, recolor only the target area, and keep the current subject type, subject count, display method, and shooting state from reference image 1 unchanged. " +
+		"Do not turn a mannequin, flat-lay, hanging product, or product-only image into a real-model image, and do not turn a real-model image into a mannequin, flat-lay, or product-only image. " +
+		"Strictly preserve the garment silhouette, construction, fabric texture, folds, highlights, shadows, patterns, logos, trims, background scene, camera angle, and every area outside the target garment part in reference image 1. " +
+		"Do not add, remove, or replace a real model, mannequin, face, hands, legs, body, pose, hanger, prop, or wearing scene; do not generate elements that are not already present in reference image 1. " +
+		"Unmarked or unspecified garment areas, accessories, subject support, skin, hair, background, and product details must not shift toward the target color. " +
+		"Do not generate collages, comparison layouts, multi-view outputs, close-ups, or a new composition. " +
+		"The final result should look like the original image with only the target color edited, natural, realistic, and professionally retouched."
 	)
 }
 
@@ -611,31 +640,43 @@ registerMagicCanvasPlugin({
 			state: instance.state,
 			modelConfig: {
 				autoLoad: true,
-				defaultModelId: "gemini-3-pro-image-preview",
 				showLoadErrors: true,
 				noModelsMessage: t("error.noModels", "暂无可用 AI 模型"),
 			},
 			sections: [
 				{
-					id: "modelImages",
-					kind: "image-grid",
-					stateKey: "modelImages",
-					title: t("section.modelImages", "模特图"),
+					id: "modelImage",
+					kind: "image-slot",
+					stateKey: "modelImage",
+					title: t("section.modelImage", "服饰图"),
 					required: true,
+					uploadLabel: t("upload.modelImage", "点击上传服饰图"),
+					alt: t("section.modelImage", "服饰图"),
 					help: t(
-						"upload.modelImages.help",
-						"支持上传多张模特图（最多 10 张），仅替换指定服饰部位颜色，保留模特姿态、场景与其他区域。",
+						"upload.modelImage.help",
+						"上传单张服饰图，支持真人模特、人台、平铺、挂拍或商品图；仅替换指定服饰部位颜色，保留原图主体与其他区域。",
 					),
-					addLabel: "+",
-					alt: t("section.modelImages", "模特图"),
-					maxCount: 10,
+				},
+				{
+					id: "maskPainter",
+					kind: "mask-painter",
+					stateKey: "cropImage",
+					sourceStateKey: "modelImage",
+					title: t("section.maskPainter", "标记换色区域（可选）"),
+					noSourceHint: t("maskPainter.noSource", "请先上传服饰图"),
+					clearLabel: t("maskPainter.clear", "重置"),
+					brushSize: 40,
+					deps: ["modelImage"],
+					help: t(
+						"maskPainter.help",
+						"可在服饰图上涂抹需要换色的区域；标记后涂抹区域优先，换色部位仅作为语义补充。",
+					),
 				},
 				{
 					id: "bodyPart",
 					kind: "textarea",
 					stateKey: "bodyPart",
 					title: t("section.bodyPart", "换色部位"),
-					required: true,
 					placeholder: t("bodyPart.placeholder", '如"上衣"、"裤装"、"外套"、"连衣裙"…'),
 					rows: 2,
 					maxLength: 50,
@@ -680,24 +721,36 @@ registerMagicCanvasPlugin({
 			generate: {
 				buttonLabel: `✨ ${t("button.generate", "生成换色图")}`,
 				loadingLabel: t("button.generating", "生成中…"),
-				getIdleHint: ({ state }) => {
-					if (!state.modelImages.length) {
-						return t("empty.modelImages", "请先上传至少 1 张模特图")
+				getIdleHint: ({ state, helpers }) => {
+					const hasRecolorMask =
+						Boolean(state.cropImage) || helpers.hasPendingMask("maskPainter")
+					if (!state.modelImage) {
+						return t("empty.modelImage", "请先上传 1 张服饰图")
 					}
-					if (!state.bodyPart.trim()) {
-						return t("empty.bodyPart", "请先输入换色部位")
+					if (!state.bodyPart.trim() && !hasRecolorMask) {
+						return t("empty.bodyPart", "请先输入或标记换色部位")
 					}
 					if (!state.color) {
 						return t("empty.color", "请先选择颜色")
 					}
 					return ""
 				},
-				isDisabled: ({ state }) =>
-					!state.modelImages.length || !state.bodyPart.trim() || !state.color,
+				isDisabled: ({ state, helpers }) => {
+					const hasRecolorMask =
+						Boolean(state.cropImage) || helpers.hasPendingMask("maskPainter")
+					return (
+						!state.modelImage ||
+						(!state.bodyPart.trim() && !hasRecolorMask) ||
+						!state.color
+					)
+				},
 				validate: ({ state, helpers }) => {
+					if (helpers.collectReferenceIds([state.modelImage]).length !== 1) {
+						return t("error.references", "图片缺少可用于生成的资源标识")
+					}
 					if (
-						helpers.collectReferenceIds(state.modelImages).length !==
-						state.modelImages.length
+						state.cropImage &&
+						helpers.collectReferenceIds([state.cropImage]).length !== 1
 					) {
 						return t("error.references", "图片缺少可用于生成的资源标识")
 					}
@@ -712,44 +765,21 @@ registerMagicCanvasPlugin({
 					const width = selectedSize.genW
 					const height = selectedSize.genH
 
-					if (state.modelImages.length <= 1) {
-						return generateAndPlace(
-							buildColorChangeRequest({
-								modelId: state.modelId,
-								baseImage: state.modelImages[0],
-								helpers,
-								width,
-								height,
-								resolution: state.scale || undefined,
-								count: state.genCount,
-								bodyPart: state.bodyPart.trim(),
-								color: state.color,
-								locale: promptLocale,
-							}),
-						)
-					}
-
-					const results = []
-					for (let index = 0; index < state.genCount; index += 1) {
-						const baseImage = state.modelImages[index % state.modelImages.length]
-						results.push(
-							await generateAndPlace(
-								buildColorChangeRequest({
-									modelId: state.modelId,
-									baseImage,
-									helpers,
-									width,
-									height,
-									resolution: state.scale || undefined,
-									count: 1,
-									bodyPart: state.bodyPart.trim(),
-									color: state.color,
-									locale: promptLocale,
-								}),
-							),
-						)
-					}
-					return results
+					return generateAndPlace(
+						buildColorChangeRequest({
+							modelId: state.modelId,
+							baseImage: state.modelImage,
+							helpers,
+							width,
+							height,
+							resolution: state.scale || undefined,
+							count: state.genCount,
+							bodyPart: state.bodyPart.trim(),
+							cropImage: state.cropImage,
+							color: state.color,
+							locale: promptLocale,
+						}),
+					)
 				},
 			},
 		})

@@ -166,6 +166,7 @@ export default memo(function SearchBody({ keyword, groups = [] }: SearchBodyProp
 													className="absolute rounded-[2px]"
 													width={16}
 													height={16}
+													data-testid="search-body-image"
 												/>
 											}
 											className="absolute rounded-[2px]"
@@ -179,6 +180,7 @@ export default memo(function SearchBody({ keyword, groups = [] }: SearchBodyProp
 										rel="noopener noreferrer"
 										className="line-clamp-2 hyphens-auto whitespace-normal break-words text-sm font-semibold leading-[1.43] text-foreground no-underline hover:text-primary hover:no-underline"
 										title={title}
+										data-testid="search-body-link"
 									>
 										{highlightKeywords(title, itemKeyword)}
 									</a>
@@ -196,6 +198,7 @@ export default memo(function SearchBody({ keyword, groups = [] }: SearchBodyProp
 										rel="noopener noreferrer"
 										className="overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-normal leading-[1.3] text-primary no-underline hover:underline"
 										title={item.url}
+										data-testid="search-body-link-2"
 									>
 										{item.url}
 									</a>

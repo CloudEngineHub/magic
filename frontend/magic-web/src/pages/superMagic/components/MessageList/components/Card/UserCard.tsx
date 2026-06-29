@@ -5,7 +5,7 @@ import { projectStore } from "@/pages/superMagic/stores/core"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { useScheduledTasksModifyModal } from "@/components/business/AccountSetting/pages/ScheduledTasks/hooks/useScheduledTasksModifyModal"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import { IconClockPlus, IconCopy } from "@tabler/icons-react"
+import { IconClockPlus, IconCopy, IconDownload } from "@tabler/icons-react"
 import { useDebounceFn, useMemoizedFn } from "ahooks"
 import { ScheduledTask } from "@/types/scheduledTask"
 import { ScheduledTaskApi, SuperMagicApi } from "@/apis"
@@ -30,12 +30,15 @@ import { extractAllMarkersFromContent } from "@/pages/superMagic/components/Mess
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import AttachmentHoverButton from "./components/AttachmentHoverButton"
+import OptimisticStatusIndicator from "./OptimisticStatusIndicator"
 
 const enum MenuKey {
 	/** 创建定时任务 */
 	CreateTask = "1",
 	/** 复制消息 */
 	CopyMessage = "2",
+	/** 导出对话 */
+	ExportConversation = "3",
 }
 
 /** Base styles for undo/menu buttons (Antd Button overrides) */
@@ -54,11 +57,18 @@ export function withUserNode<
 	const targetComponent = observer((props: T) => {
 		const { node, selectedTopic, className } = props
 		const messageNode = superMagicStore.getMessageNode(node?.app_message_id)
-
+		const optimisticStatus = node?.optimisticMeta?.status as "sending" | "failed" | undefined
 		const { t } = useTranslation("super")
 		const superIdState = getSuperIdState()
-		const { allowRevoke, allowScheduleTaskCreate, allowUserMessageCopy } =
-			useMessageListContext()
+		const {
+			allowRevoke,
+			allowScheduleTaskCreate,
+			allowUserMessageCopy,
+			allowExport,
+			exportModeActive,
+			onExportRequest,
+			onRetryOptimisticMessage,
+		} = useMessageListContext()
 		const { openCreateModal, content } = useScheduledTasksModifyModal()
 
 		const [isCheckUndoLoading, setIsCheckUndoLoading] = useState(false)
@@ -86,8 +96,18 @@ export function withUserNode<
 					),
 					visible: allowScheduleTaskCreate,
 				},
+				{
+					key: MenuKey.ExportConversation,
+					label: (
+						<div className="flex w-full items-center gap-1.5 text-foreground">
+							<IconDownload size={16} className="text-foreground" />
+							<span>{t("export.entry", { defaultValue: "导出对话" })}</span>
+						</div>
+					),
+					visible: allowExport && Boolean(onExportRequest),
+				},
 			].filter((o) => o.visible)
-		}, [t, allowScheduleTaskCreate, allowUserMessageCopy])
+		}, [t, allowScheduleTaskCreate, allowUserMessageCopy, allowExport, onExportRequest])
 
 		const onSaveTask = useMemoizedFn(
 			async (taskData: ScheduledTask.UpdateTask, callback?: () => void) => {
@@ -170,6 +190,9 @@ export function withUserNode<
 						message_content: messageNode,
 					})
 					break
+				case MenuKey.ExportConversation:
+					onExportRequest?.()
+					break
 				default:
 					break
 			}
@@ -229,11 +252,13 @@ export function withUserNode<
 		 */
 		const showUndo = useMemo(() => {
 			return (
+				!optimisticStatus &&
 				node?.status !== MessageStatus.REVOKED &&
 				allowRevoke &&
+				!exportModeActive &&
 				isEmpty(node?.refer_message_id)
 			)
-		}, [node?.status, allowRevoke, node?.refer_message_id])
+		}, [allowRevoke, exportModeActive, node?.refer_message_id, node?.status, optimisticStatus])
 
 		/** 获取消息附件列表 - 从 mentions 中过滤 project_file 和 upload_file 类型 */
 		const attachments = useMemo(() => {
@@ -247,51 +272,74 @@ export function withUserNode<
 
 		const hasAttachments = attachments.length > 0
 
-		return (
+		const actionNode = exportModeActive ? null : (
+			<div
+				className={cn(
+					"mt-1.5 flex w-full gap-1",
+					hasAttachments ? "justify-between" : "justify-end",
+				)}
+			>
+				{/* 左侧：附件按钮 */}
+				{hasAttachments && <AttachmentHoverButton attachments={attachments} t={t} />}
+
+				{/* 右侧：撤回和更多按钮 */}
+				<div className="flex gap-1">
+					{showUndo && (
+						<Button
+							className={cn(undoButtonBase, "w-fit")}
+							disabled={isCheckUndoLoading}
+							onClick={handleMessageUndoConfirm}
+						>
+							{isCheckUndoLoading ? (
+								<Spinner className="animate-spin" size={16} />
+							) : (
+								<Undo2 size={16} />
+							)}
+							<span>{t("common.undo")}</span>
+						</Button>
+					)}
+					{items && items?.length > 0 && (
+						<MagicDropdown menu={{ items, onClick: onMenuClick }} trigger={["click"]}>
+							<span>
+								<Button
+									className={cn(
+										undoButtonBase,
+										"h-6 w-6 justify-center !p-0 text-foreground",
+									)}
+								>
+									<Ellipsis size={16} className="text-foreground" />
+								</Button>
+							</span>
+						</MagicDropdown>
+					)}
+				</div>
+			</div>
+		)
+
+		const contentNode = (
 			<div className={cn("mb-1.5 w-full", className)} data-id={node?.app_message_id}>
 				<WrapperComponent {...props} />
-				<div
-					className={cn(
-						"mt-1.5 flex w-full gap-1",
-						hasAttachments ? "justify-between" : "justify-end",
-					)}
-				>
-					{/* 左侧：附件按钮 */}
-					{hasAttachments && <AttachmentHoverButton attachments={attachments} t={t} />}
+				{actionNode}
+				{content}
+			</div>
+		)
 
-					{/* 右侧：撤回和更多按钮 */}
-					<div className="flex gap-1">
-						{showUndo && (
-							<Button
-								className={cn(undoButtonBase, "w-fit")}
-								disabled={isCheckUndoLoading}
-								onClick={handleMessageUndoConfirm}
-							>
-								{isCheckUndoLoading ? (
-									<Spinner className="animate-spin" size={16} />
-								) : (
-									<Undo2 size={16} />
-								)}
-								<span>{t("common.undo")}</span>
-							</Button>
-						)}
-						{items && items?.length > 0 && (
-							<MagicDropdown
-								menu={{ items, onClick: onMenuClick }}
-								trigger={["click"]}
-							>
-								<span>
-									<Button
-										className={cn(
-											undoButtonBase,
-											"h-6 w-6 justify-center !p-0 text-foreground",
-										)}
-									>
-										<Ellipsis size={16} className="text-foreground" />
-									</Button>
-								</span>
-							</MagicDropdown>
-						)}
+		if (!optimisticStatus) return contentNode
+
+		return (
+			<div className={cn("mb-1.5 w-full", className)} data-id={node?.app_message_id}>
+				<div className="flex w-full gap-1.5">
+					<div className="flex w-5 flex-none flex-col">
+						<div aria-hidden="true" className="h-[22px]" />
+						<div className="flex flex-1 items-center justify-center">
+							<OptimisticStatusIndicator
+								status={optimisticStatus}
+								onRetry={() => onRetryOptimisticMessage?.(node)}
+							/>
+						</div>
+					</div>
+					<div className="min-w-0 flex-1">
+						<WrapperComponent {...props} />
 					</div>
 				</div>
 				{content}

@@ -430,6 +430,7 @@ export type CanvasDesignDataChangeSource =
 export interface CanvasDesignDataChangeMeta {
 	source: CanvasDesignDataChangeSource
 	changedElementIds?: string[]
+	deletedElementIds?: string[]
 	elementNameChanges?: CanvasElementNameChange[]
 }
 

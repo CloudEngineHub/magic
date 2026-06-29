@@ -15,6 +15,24 @@ enableMapSet()
 
 console.log(getTimezones({ locale: "zh_CN" }), getTimezone("Asia/Shanghai"))
 
+async function initMock() {
+	if (!import.meta.env.DEV || import.meta.env.MAGIC_MOCK !== "true") {
+		if ("serviceWorker" in navigator) {
+			const registrations = await navigator.serviceWorker.getRegistrations()
+			for (const registration of registrations) {
+				if (registration.active?.scriptURL?.endsWith("mockServiceWorker.js")) {
+					await registration.unregister()
+					console.log(
+						"[mock] Unregistered mock ServiceWorker:",
+						registration.active?.scriptURL,
+					)
+				}
+			}
+		}
+		return
+	}
+}
+
 /**
  * Start app init first so request middleware can await it,
  * but keep rendering concurrent with bootstrap work.
@@ -22,6 +40,7 @@ console.log(getTimezones({ locale: "zh_CN" }), getTimezone("Asia/Shanghai"))
 appService.init()
 
 async function bootstrap() {
+	await initMock()
 
 	const rootElement = document.getElementById("root")
 	if (!rootElement) throw new Error("Root element not found")

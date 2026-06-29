@@ -158,6 +158,7 @@ function SiderDashboardItem(
 			onContextMenu={handleContextMenuClick}
 			style={indentStyle}
 			onClick={handleExpandToggle}
+			data-testid="handle-context-menu-click"
 		>
 			{data.type === "folder" && (
 				<ActionButton size={20} onClick={handleExpandToggle}>
@@ -178,7 +179,7 @@ function SiderDashboardItem(
 			/>
 			{data.type === "folder" && (
 				<div className={styles.folderIcon}>
-					<img src={FoldIcon} alt="folder" width={18} height={18} />
+					<img src={FoldIcon} alt="folder" width={18} height={18}  data-testid="sider-dashboard-item-image"/>
 				</div>
 			)}
 			{data.type === "dashboard" && (

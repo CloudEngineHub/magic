@@ -91,6 +91,7 @@ export function PresetRealCard({
 					className={`${baseCardClass} preview-card-wrapper font-mono ${
 						variant === "cover" ? "bg-light bg-white" : "bg-neutral bg-[#f2f2f2]"
 					} [background-image:linear-gradient(#e0e0e0_1px,transparent_1px),linear-gradient(90deg,#e0e0e0_1px,transparent_1px)] [background-size:22px_22px]`}
+
 					{...previewAttrs}
 				>
 					<div className="cd-header absolute inset-x-0 top-0 z-10 flex h-[14%] items-center justify-between bg-black px-[7%] text-white">
@@ -169,6 +170,7 @@ export function PresetRealCard({
 						variant === "cover" ? "dt-card dt-cover" : "dt-card dt-content",
 						"rounded-[10px] bg-[#07080d] text-white [background-image:linear-gradient(#24242d_1px,transparent_1px),linear-gradient(90deg,#24242d_1px,transparent_1px)] [background-size:20px_20px]",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="dt-top-bar absolute inset-x-0 top-0 h-[3%] bg-[#d4b07a]" />
@@ -206,6 +208,7 @@ export function PresetRealCard({
 						variant === "cover" ? "ge-card ge-cover" : "ge-card ge-content gray-bg",
 						"rounded-[10px] bg-gradient-to-br from-[#29235c] via-[#6d5dfc] to-[#ff8ec3] text-white",
 					)}
+
 					{...previewAttrs}
 				>
 					{variant === "cover" ? (
@@ -242,6 +245,7 @@ export function PresetRealCard({
 						variant === "cover" ? "pi-card pi-cover" : "pi-card pi-content",
 						"rounded-[12px] bg-white p-[10%] text-[#171717]",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="pi-profile flex items-center gap-[6%]">
@@ -288,6 +292,7 @@ export function PresetRealCard({
 						variant === "cover" ? "fv-card fv-cover" : "fv-card fv-content",
 						"rounded-[9px] bg-[#11100d] text-[#f5e6c8]",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="absolute inset-0 opacity-40 [background-image:radial-gradient(#f1d6a8_1px,transparent_1px)] [background-size:5px_5px]" />
@@ -331,6 +336,7 @@ export function PresetRealCard({
 						variant === "cover" ? "wj-card wj-cover" : "wj-card wj-khaki-page",
 						"rounded-[10px] bg-[#c5bba5] text-[#2c2418]",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="absolute inset-0 [background-image:radial-gradient(rgba(0,0,0,0.14)_1px,transparent_1px)] [background-size:8px_8px]" />
@@ -386,6 +392,7 @@ export function PresetRealCard({
 						variant === "cover" ? "em-card em-cover" : "em-card",
 						"rounded-[9px] bg-[#f3f0e8] p-[9%] text-[#11110f] [background-image:radial-gradient(rgba(17,17,15,0.08)_1px,transparent_1px)] [background-size:4px_4px]",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="absolute inset-[6%] border border-[#11110f]/10" />
@@ -437,6 +444,7 @@ export function PresetRealCard({
 						variant === "cover" ? "sg-card sg-cover" : "sg-card",
 						"rounded-[7px] bg-[#fafaf8] text-[#0a0a0a] [background-image:radial-gradient(rgba(10,10,10,0.11)_1px,transparent_1px)] [background-size:16px_16px]",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="absolute inset-x-0 top-0 h-[3%] bg-[#002fa7]" />
@@ -509,6 +517,7 @@ export function PresetRealCard({
 						variant === "cover" ? "pl-card pl-cover" : "pl-card pl-content",
 						"rounded-[9px] bg-white p-[10%] text-[#111]",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="pl-topbar absolute inset-x-0 top-0 h-[4%] bg-[#e63946]" />
@@ -548,6 +557,7 @@ export function PresetRealCard({
 						baseCardClass,
 						"custom-card rounded-[8px] bg-white p-[12%] text-zinc-900",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="absolute inset-[8%] rounded border border-zinc-900" />
@@ -564,6 +574,7 @@ export function PresetRealCard({
 						baseCardClass,
 						"none-card flex items-center justify-center rounded-[8px] bg-muted/50 text-muted-foreground/50",
 					)}
+
 					{...previewAttrs}
 				>
 					<div className="h-[32%] w-[32%] rounded-full border border-dashed border-current" />

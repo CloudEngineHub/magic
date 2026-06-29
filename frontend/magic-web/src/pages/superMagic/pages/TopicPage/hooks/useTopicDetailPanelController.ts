@@ -106,8 +106,8 @@ export function useTopicDetailPanelController({
 		const handleOpenFileTab = (data: unknown) => {
 			const payload = data as { fileId: string; fileData?: unknown }
 			window.setTimeout(() => {
-				// 允许消息区直接传入临时 fileData，复用右侧详情区打开逻辑。
-				detailRef.current?.openFileTab?.({ file_id: payload.fileId })
+				// Allow messages to pass temporary fileData through the detail panel open flow.
+				detailRef.current?.openFileTab?.(payload.fileData ?? payload.fileData ?? { file_id: payload.fileId })
 			}, DETAIL_OPEN_DELAY_MS)
 			scheduleFileOpenFallback()
 		}
@@ -121,7 +121,7 @@ export function useTopicDetailPanelController({
 		}
 
 		const handleOpenFileTabByPath = (data: unknown) => {
-			// 在 attachmentList 中按 relative_file_path 查找对应文件
+			// Resolve the target file by relative_file_path from attachmentList.
 			const payload = data as {
 				filePath: string
 				fileName: string
@@ -142,10 +142,22 @@ export function useTopicDetailPanelController({
 					})
 				} else {
 					window.setTimeout(() => {
-						detailRef.current?.openFileTab?.({ file_id: matched.file_id })
+						detailRef.current?.openFileTab?.(matched)
 					}, DETAIL_OPEN_DELAY_MS)
 					scheduleFileOpenFallback()
 				}
+				return
+			}
+
+			if (payload.action !== "download") {
+				window.setTimeout(() => {
+					detailRef.current?.openFileTab?.({
+						file_name: payload.fileName,
+						relative_file_path: targetPath,
+						file_path: targetPath,
+					})
+				}, DETAIL_OPEN_DELAY_MS)
+				scheduleFileOpenFallback()
 			}
 		}
 

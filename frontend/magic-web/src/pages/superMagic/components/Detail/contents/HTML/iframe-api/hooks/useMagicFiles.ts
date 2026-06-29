@@ -13,6 +13,7 @@ import { topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import type { HtmlPermissionScope } from "../types"
 
 interface MagicUploadFileData {
@@ -219,9 +220,15 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 
 			replyToIframe(replyType, requestId, { success: true, results })
 
-			pubsub.publish(PubSubEvents.Update_Attachments, () => {
-				magicToast.destroy(MAGIC_UPLOAD_FILES_TOAST_KEY)
-				magicToast.success(t("topicFiles.fileUploadSuccess"))
+			void waitForProjectAttachmentChange(selectedProject?.id, {
+				operations: ["add"],
+				matchMode: "project-any-apply",
+				fallback: "full-refresh",
+				reason: "html-iframe-magic-upload-files",
+				callback: () => {
+					magicToast.destroy(MAGIC_UPLOAD_FILES_TOAST_KEY)
+					magicToast.success(t("topicFiles.fileUploadSuccess"))
+				},
 			})
 		} catch (err) {
 			replyToIframe(replyType, requestId, {

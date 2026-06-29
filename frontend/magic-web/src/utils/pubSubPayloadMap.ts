@@ -4,6 +4,7 @@ import type {
 	SuperMagicEnterEditModeArgs,
 	SuperMagicInsertDragDataToEditorArgs,
 	SuperMagicLocateFileInTreeArgs,
+	SuperMagicRefreshClawScheduledTasksArgs,
 	SuperMagicUpdateActiveFileIdArgs,
 	SuperMagicUpdateAttachmentsArgs,
 	SuperMagicUpdateAttachmentsLoadingArgs,
@@ -136,8 +137,10 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Send_Message_by_Content]: SuperMagicSendMessageByContentArgs
 	/** 附件加载状态变化：传入 loading 布尔值。 */
 	[PubSubEvents.Update_Attachments_Loading]: SuperMagicUpdateAttachmentsLoadingArgs
-	/** 请求刷新附件：可选附带回调。 */
+	/** Request attachment refresh: supports legacy callbacks or projectId/reason payloads. */
 	[PubSubEvents.Update_Attachments]: SuperMagicUpdateAttachmentsArgs
+	/** Refresh the Claw scheduled task list: no args. */
+	[PubSubEvents.Refresh_Claw_Scheduled_Tasks]: SuperMagicRefreshClawScheduledTasksArgs
 	/** 进入文件全选：无参数。 */
 	[PubSubEvents.Select_All_Files]: []
 	/** 取消文件全选：无参数。 */

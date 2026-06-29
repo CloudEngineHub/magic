@@ -4,14 +4,29 @@ interface OpenMessageFileOptions {
 	locateInTree?: boolean
 }
 
-function resolveMessageFileId(fileData: any): string | null {
-	return (
-		fileData?.file_id ||
-		fileData?.data?.file_id ||
-		fileData?.currentFileId ||
-		fileData?.id ||
-		null
-	)
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return Boolean(value && typeof value === "object")
+}
+
+function resolveMessageFileId(fileData: unknown): string | null {
+	if (!isRecord(fileData)) return null
+	const nestedData = fileData.data
+	const fileId =
+		fileData.file_id ||
+		(isRecord(nestedData) ? nestedData.file_id : undefined) ||
+		fileData.currentFileId ||
+		fileData.id
+
+	if (typeof fileId === "string" && fileId.trim()) return fileId
+	if (typeof fileId === "number" && Number.isFinite(fileId)) return String(fileId)
+
+	return null
+}
+
+function isHiddenMessageFile(fileData: unknown): boolean {
+	if (!isRecord(fileData)) return false
+	const nestedData = fileData.data
+	return Boolean(fileData.is_hidden || (isRecord(nestedData) && nestedData.is_hidden))
 }
 
 export function openMessageFile(
@@ -27,7 +42,7 @@ export function openMessageFile(
 		fileData,
 	})
 
-	if (options.locateInTree ?? true) {
+	if (options.locateInTree ?? !isHiddenMessageFile(fileData)) {
 		pubsub.publish(PubSubEvents.Locate_File_In_Tree, fileId)
 	}
 

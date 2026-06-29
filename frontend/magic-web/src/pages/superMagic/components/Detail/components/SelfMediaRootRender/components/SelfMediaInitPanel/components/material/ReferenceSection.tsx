@@ -26,7 +26,7 @@ export default function ReferenceSection({
 	return (
 		<div className={cn("space-y-2", className)}>
 			<div>
-				<label className="mb-1 block text-sm font-semibold">
+				<label className="mb-1 block text-sm font-semibold" data-testid="reference-section-label">
 					{t("detail.selfMedia.initPanel.stepDetail.referencesLabel")}
 				</label>
 				<p className="text-xs text-muted-foreground">
@@ -45,6 +45,7 @@ export default function ReferenceSection({
 						value={text}
 						onChange={(e) => onTextChange(e.target.value)}
 						onBlur={onBlur}
+						data-testid="on-text-change"
 					/>
 					<InlineVoiceButton variant="textarea" value={text} onResult={onTextChange} />
 				</div>

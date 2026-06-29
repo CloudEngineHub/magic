@@ -14,7 +14,7 @@ function FinishTask(props: NodeProps) {
 	const { styles, cx } = useStyle()
 
 	return (
-		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
 			<div className={styles.container}>
 				<Flex className={cx(styles.tag)}>
 					<ToolIconBadge toolName={tool?.name} />

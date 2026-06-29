@@ -39,7 +39,7 @@ function MarkerSuggestionBboxHoverPreview({
 			style={layout.outerContainerStyle}
 		>
 			<div style={layout.cropContainerStyle}>
-				<img src={imageUrl} alt={label} style={layout.imageStyle} />
+				<img src={imageUrl} alt={label} style={layout.imageStyle}  data-testid="marker-suggestion-bbox-hover-preview-image"/>
 				{layout.highlightRectStyle ? (
 					<div style={layout.highlightRectStyle} aria-hidden />
 				) : null}

@@ -40,6 +40,7 @@ function CitationBadge({
 				index,
 				defaultValue: "引用 {{index}}",
 			})}
+			data-testid="citation-badge"
 		>
 			{index}
 		</button>

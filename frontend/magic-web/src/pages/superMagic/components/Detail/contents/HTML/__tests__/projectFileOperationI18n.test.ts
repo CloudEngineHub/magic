@@ -29,6 +29,7 @@ const requiredPermissionAuthorizationKeys = [
 	"content",
 	"contentWithoutReason",
 	"legacyContent",
+	"missingScope",
 	"allow",
 	"deny",
 	"scopes.llmUse",

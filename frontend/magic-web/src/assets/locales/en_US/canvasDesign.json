@@ -135,6 +135,7 @@
 		"defaultName": "Group"
 	},
 	"image": {
+		"batchUploadFailed": "{{failed}}/{{total}} files upload failed",
 		"defaultName": "Image Generator",
 		"empty": "Please send an instruction to generate an image",
 		"errorPrefix": "Image generation failed, ",

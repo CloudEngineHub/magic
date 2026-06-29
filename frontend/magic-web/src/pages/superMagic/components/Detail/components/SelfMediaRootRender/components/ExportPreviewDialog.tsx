@@ -133,7 +133,7 @@ function WechatCoverPreviewImage({
 	return (
 		<div className={cn("overflow-hidden bg-white", className)} data-testid={testId}>
 			{url ? (
-				<img src={url} alt={alt} className="h-full w-full object-cover" draggable={false} />
+				<img src={url} alt={alt} className="h-full w-full object-cover" draggable={false}  data-testid="export-preview-dialog-image"/>
 			) : (
 				<div
 					className={cn(

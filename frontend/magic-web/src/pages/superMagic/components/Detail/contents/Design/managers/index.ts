@@ -4,8 +4,11 @@ export { DesignLoadManager } from "./DesignLoadManager"
 export { DesignSaveManager } from "./DesignSaveManager"
 export type {
 	DesignSaveFailureReason,
+	DesignSaveContext,
 	DesignSaveLifecycleHandlers,
+	DesignSaveMetadata,
 	DesignSaveResult,
+	DesignSaveSource,
 	RemoteUpdateCheckResult,
 } from "./DesignSaveManager"
 export { DesignVersionManager } from "./DesignVersionManager"

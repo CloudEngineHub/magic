@@ -13,6 +13,23 @@ const HTML_PREVIEW_NON_RENDERING_TAG_NAMES = new Set([
 	"title",
 ])
 
+// HTML void 元素：无子节点，标签自身即为可见内容
+const HTML_PREVIEW_VOID_ELEMENT_TAG_NAMES = new Set([
+	"area",
+	"br",
+	"col",
+	"embed",
+	"hr",
+	"img",
+	"input",
+	"source",
+	"track",
+	"wbr",
+])
+
+// 某些元素即使没有子节点，也能依赖自身渲染出可见内容，例如 canvas 由脚本绘制。
+const HTML_PREVIEW_SELF_RENDERING_TAG_NAMES = new Set(["canvas"])
+
 /** 围栏内 HTML 正文：首尾 trim，空内容不计入预览（不再要求必须以 <!DOCTYPE html> 开头） */
 export function normalizeHtmlFenceBodyCode(code: string): string | undefined {
 	const normalized = code.trim()
@@ -87,11 +104,22 @@ export function hasVisibleHtmlPreviewContent(code: string): boolean {
 			return false
 		}
 
+		// void 元素（如 <img>、<br>、<hr> 等）本身即为可见内容
+		if (HTML_PREVIEW_VOID_ELEMENT_TAG_NAMES.has(tagName)) {
+			return true
+		}
+
+		// 可自渲染元素（如 <canvas>）即使没有子节点，也可能产出真实预览内容。
+		if (HTML_PREVIEW_SELF_RENDERING_TAG_NAMES.has(tagName)) {
+			return true
+		}
+
 		if (isEChartsMountContainer(element)) {
 			return true
 		}
 
-		return true
+		// 非 void / 非自渲染元素必须包含可见子内容，避免空壳标签（如未闭合的 <div ...>）触发预览
+		return Array.from(element.childNodes).some(hasVisibleNode)
 	}
 
 	return Array.from(rootNode.childNodes).some(hasVisibleNode)

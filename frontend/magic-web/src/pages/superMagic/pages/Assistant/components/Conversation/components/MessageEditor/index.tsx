@@ -45,6 +45,11 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { MagicTooltip } from "@/components/base"
 import { cn } from "@/lib/utils"
 import {
+	isEditorActive,
+	runActiveEditor,
+	useLatestActiveEditor,
+} from "@/utils/tiptapEditorLifecycle"
+import {
 	messageEditorEditorBase,
 	messageEditorFooterLeft,
 	messageEditorFooterRight,
@@ -121,6 +126,7 @@ function MessageEditor(
 		onChange: stableOnChange,
 		placeholder: placeholder || t("assistant.inputPlaceholder"),
 	})
+	const activeEditorRef = useLatestActiveEditor(tiptapEditor)
 
 	/** 语音输入 */
 	const voiceInputRef = useRef<VoiceInputRef>(null)
@@ -177,7 +183,9 @@ function MessageEditor(
 
 	// Update isEmpty state when content changes
 	const sendDisabled = useMemo(() => {
-		const hasContent = (value && tiptapEditor?.getText()) || files.length > 0
+		const hasContent =
+			(value && isEditorActive(tiptapEditor) ? tiptapEditor.getText() : "") ||
+			files.length > 0
 		// 如果启用了切换Agent，并且没有选择Agent，则认为编辑器为空
 		return !hasContent || (enableSwitchAgent && !agent)
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,13 +223,17 @@ function MessageEditor(
 
 	/** 发送后清理 */
 	const resetContent = useMemoizedFn(() => {
-		tiptapEditor?.chain().clearContent().run()
+		runActiveEditor(activeEditorRef.current, (editor) => {
+			editor.chain().clearContent().run()
+		})
 		if (ConversationBotDataService.residencyContent.length > 0) {
-			tiptapEditor
-				?.chain()
-				.focus()
-				.insertContent(cloneDeep(ConversationBotDataService.residencyContent))
-				.run()
+			runActiveEditor(activeEditorRef.current, (editor) => {
+				editor
+					.chain()
+					.focus()
+					.insertContent(cloneDeep(ConversationBotDataService.residencyContent))
+					.run()
+			})
 		}
 
 		ConversationBotDataService.clearSessionInstructConfig()
@@ -260,9 +272,10 @@ function MessageEditor(
 	})
 
 	handleSendRef.current = () => {
+		const content = runActiveEditor(activeEditorRef.current, (editor) => editor.getJSON())
 		handleSend(
-			tiptapEditor?.getJSON() as JSONContent,
-			isOnlyText(tiptapEditor?.getJSON() as JSONContent),
+			content as JSONContent,
+			content ? isOnlyText(content as JSONContent) : true,
 		)
 	}
 
@@ -284,10 +297,12 @@ function MessageEditor(
 	useEffect(() => {
 		return autorun(() => {
 			if (ReplyStore.replyMessageId) {
-				tiptapEditor?.commands.focus()
+				runActiveEditor(activeEditorRef.current, (editor) => {
+					editor.commands.focus()
+				})
 			}
 		})
-	}, [tiptapEditor])
+	}, [activeEditorRef])
 
 	/**
 	 * 暴露给父组件的接口

@@ -15,12 +15,14 @@ import {
 	type UserInfoGetRequest,
 	type UserInfoScope,
 } from "../types"
+import type { HtmlAppConfigState } from "./IframePermissionService"
 
 export interface UserInfoAuthorizationRequest {
 	appName: string
 	scopes: UserInfoScope[]
 	fields: string[]
 	reason: string
+	appConfigLoadError?: string
 }
 
 export interface IframeUserInfoConfig {
@@ -30,6 +32,8 @@ export interface IframeUserInfoConfig {
 	getUserInfo: () => UserInfo | null
 	/** Optional app.json permissions declaration. */
 	appConfig?: HTMLAppConfig | null
+	/** app.json loading state. Used to separate missing manifest from temporary load failures. */
+	appConfigState?: HtmlAppConfigState
 	/** 当前 HTML 微应用实例标识，例如 projectId + appRootPath。 */
 	appInstanceKey?: string
 	/** 请求敏感用户信息前的宿主侧授权确认。 */
@@ -69,7 +73,19 @@ export class IframeUserInfoService {
 				return
 			}
 
-			const undeclaredScopes = this.getUndeclaredSensitiveScopes(scopes)
+			const sensitiveScopes = scopes.filter((scope) => scope !== USER_INFO_SCOPES.DISPLAY)
+			const appConfigState = this.getAppConfigState()
+			if (sensitiveScopes.length > 0 && appConfigState.status === "loading") {
+				this.cfg.postToIframe({
+					type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
+					requestId: req.requestId,
+					success: false,
+					error: "App config is still loading",
+				})
+				return
+			}
+
+			const undeclaredScopes = this.getUndeclaredSensitiveScopes(scopes, appConfigState)
 			if (undeclaredScopes.length > 0) {
 				this.cfg.postToIframe({
 					type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
@@ -91,7 +107,6 @@ export class IframeUserInfoService {
 				return
 			}
 
-			const sensitiveScopes = scopes.filter((scope) => scope !== USER_INFO_SCOPES.DISPLAY)
 			const authorizedScopes =
 				sensitiveScopes.length > 0 ? this.getAuthorizedScopesForCurrentApp(userInfo) : null
 			const userKeyBeforeAuthorization =
@@ -110,7 +125,11 @@ export class IframeUserInfoService {
 				(scope) => !authorizedScopes?.has(scope),
 			)
 			if (unauthorizedScopes.length > 0) {
-				const allowed = await this.requestAuthorization(unauthorizedScopes, req.reason)
+				const allowed = await this.requestAuthorization(
+					unauthorizedScopes,
+					req.reason,
+					appConfigState.status === "error" ? appConfigState.error : undefined,
+				)
 				if (!allowed) {
 					this.cfg.postToIframe({
 						type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
@@ -183,7 +202,7 @@ export class IframeUserInfoService {
 	}
 
 	private getCurrentAppKey(userInfo: UserInfo): string | null {
-		const appConfig = this.cfg.appConfig
+		const appConfig = this.getLoadedAppConfig()
 		const appInstanceKey = this.cfg.appInstanceKey || "__html_micro_app__"
 		const userKey = this.getCurrentUserKey(userInfo)
 		if (!userKey) return null
@@ -228,37 +247,61 @@ export class IframeUserInfoService {
 		return Array.from(normalized)
 	}
 
-	private getDeclaredScopes(): Set<UserInfoScope> {
-		const unifiedScopes = (this.cfg.appConfig?.permissions?.scopes ?? []).filter(
+	private getAppConfigState(): HtmlAppConfigState {
+		if (this.cfg.appConfigState) return this.cfg.appConfigState
+		if (this.cfg.appConfig) return { status: "loaded", config: this.cfg.appConfig }
+		return { status: "absent" }
+	}
+
+	private getLoadedAppConfig(): HTMLAppConfig | null {
+		const appConfigState = this.getAppConfigState()
+		return appConfigState.status === "loaded" ? appConfigState.config : null
+	}
+
+	private getDeclaredScopes(appConfigState: HtmlAppConfigState): Set<UserInfoScope> {
+		if (appConfigState.status !== "loaded") {
+			return new Set<UserInfoScope>(Object.values(USER_INFO_SCOPES))
+		}
+
+		const unifiedScopes = (appConfigState.config.permissions?.scopes ?? []).filter(
 			(scope): scope is UserInfoScope =>
 				scope === USER_INFO_SCOPES.NAME ||
 				scope === USER_INFO_SCOPES.IDENTITY ||
 				scope === USER_INFO_SCOPES.ORGANIZATION,
 		)
-		const legacyScopes = this.cfg.appConfig?.permissions?.userInfo?.scopes ?? []
+		const legacyScopes = appConfigState.config.permissions?.userInfo?.scopes ?? []
 		const scopes = [...unifiedScopes, ...legacyScopes]
 		return new Set<UserInfoScope>([USER_INFO_SCOPES.DISPLAY, ...scopes])
 	}
 
-	private getUndeclaredSensitiveScopes(scopes: UserInfoScope[]): UserInfoScope[] {
-		const declaredScopes = this.getDeclaredScopes()
+	private getUndeclaredSensitiveScopes(
+		scopes: UserInfoScope[],
+		appConfigState: HtmlAppConfigState,
+	): UserInfoScope[] {
+		const declaredScopes = this.getDeclaredScopes(appConfigState)
 		return scopes.filter(
 			(scope) => scope !== USER_INFO_SCOPES.DISPLAY && !declaredScopes.has(scope),
 		)
 	}
 
-	private async requestAuthorization(scopes: UserInfoScope[], requestReason?: string) {
+	private async requestAuthorization(
+		scopes: UserInfoScope[],
+		requestReason?: string,
+		appConfigLoadError?: string,
+	) {
 		if (!this.cfg.authorizeUserInfo) return false
+		const appConfig = this.getLoadedAppConfig()
 
 		return this.cfg.authorizeUserInfo({
-			appName: this.cfg.appConfig?.name || "HTML 微应用",
+			appName: appConfig?.name || "HTML 微应用",
 			scopes,
 			fields: this.getFieldLabels(scopes),
 			reason:
 				requestReason ||
-				this.cfg.appConfig?.permissions?.reason ||
-				this.cfg.appConfig?.permissions?.userInfo?.reason ||
+				appConfig?.permissions?.reason ||
+				appConfig?.permissions?.userInfo?.reason ||
 				"",
+			appConfigLoadError,
 		})
 	}
 

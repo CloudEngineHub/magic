@@ -12,6 +12,7 @@ import {
 	IconFolder,
 	IconFileSearch,
 } from "@tabler/icons-react"
+import { Box, UsersRound } from "lucide-react"
 import { isEmpty, last } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { useMatch } from "react-router"
@@ -28,7 +29,6 @@ import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
 import { InputWithError } from "@/pages/superMagic/components/TopicFilesButton/components"
-import IconWorkspace from "../../../icons/IconWorkspace"
 import IconProject from "../../../icons/IconProject"
 
 import type { CrossProjectFileOperationModalProps, ViewMode } from "../../types"
@@ -47,6 +47,7 @@ import {
 	MY_CLAW_WORKSPACE_DATA,
 } from "../../../../constants"
 import { MagicClawApi, type MagicClawItem } from "@/apis"
+import { MagiClaw } from "@/enhance/lucide-react"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
 import {
@@ -62,6 +63,9 @@ import { useCreateDirectory } from "../../hooks/useCreateDirectory"
 import { useCreateWorkspace } from "../../hooks/useCreateWorkspace"
 import { useCreateProject } from "../../hooks/useCreateProject"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
+
+const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
 
 function EmptyStateBox({ children }: { children: React.ReactNode }) {
 	return (
@@ -71,6 +75,17 @@ function EmptyStateBox({ children }: { children: React.ReactNode }) {
 			</div>
 		</div>
 	)
+}
+
+function isFixedWorkspace(workspace: Workspace) {
+	return FIXED_WORKSPACE_IDS.has(workspace.id)
+}
+
+function renderWorkspaceIcon(workspaceId: string) {
+	if (workspaceId === SHARE_WORKSPACE_ID) return <UsersRound className="size-4 text-current" />
+	if (workspaceId === MY_CLAW_WORKSPACE_ID)
+		return <MagiClaw className="size-4 text-current" strokeWidth={1.25} />
+	return <Box className="size-4 text-current" />
 }
 
 function CrossProjectFileOperationModal({
@@ -471,7 +486,7 @@ function CrossProjectFileOperationModal({
 		createDirectoryHook.cancelCreateDirectory()
 		createProjectHook.cancelCreateProject()
 		try {
-			const res = await SuperMagicApi.getAttachmentsByProjectId({
+			const res = await loadProjectAttachments({
 				projectId: project.id,
 				temporaryToken:
 					(window as Window & { temporary_token?: string }).temporary_token || "",
@@ -525,7 +540,7 @@ function CrossProjectFileOperationModal({
 				setPath(initialPath)
 
 				// 5. 获取项目文件树
-				const res = await SuperMagicApi.getAttachmentsByProjectId({
+				const res = await loadProjectAttachments({
 					projectId: project.id,
 					temporaryToken:
 						(window as Window & { temporary_token?: string }).temporary_token || "",
@@ -582,12 +597,7 @@ function CrossProjectFileOperationModal({
 
 		// 如果选择了工作区，显示工作区
 		if (currentWorkspace) {
-			const workspaceName =
-				currentWorkspace.id === SHARE_WORKSPACE_ID
-					? t("workspace.shareWorkspaceName")
-					: currentWorkspace.id === MY_CLAW_WORKSPACE_ID
-						? t("workspace.myClawWorkspaceName")
-						: currentWorkspace.name || t("workspace.unnamedWorkspace")
+			const workspaceName = getWorkspaceDisplayName(currentWorkspace)
 			output.push({
 				name: workspaceName,
 				id: currentWorkspace.id,
@@ -621,7 +631,7 @@ function CrossProjectFileOperationModal({
 		}
 
 		return output
-	}, [currentWorkspace, currentProject, path, effectiveViewMode, t])
+	}, [currentWorkspace, currentProject, path, effectiveViewMode, getWorkspaceDisplayName, t])
 
 	// 根据容器宽度计算可显示的面包屑项
 	const breadcrumbItems = useMemo(() => {
@@ -903,7 +913,7 @@ function CrossProjectFileOperationModal({
 			const loadAttachments = async () => {
 				setLoading(true)
 				try {
-					const res = await SuperMagicApi.getAttachmentsByProjectId({
+					const res = await loadProjectAttachments({
 						projectId: selectedProject.id,
 						temporaryToken:
 							(window as Window & { temporary_token?: string }).temporary_token || "",
@@ -1012,7 +1022,7 @@ function CrossProjectFileOperationModal({
 		const shareWorkspace = SHARE_WORKSPACE_DATA(t)
 		// 创建我的龙虾工作区对象
 		const myClawWorkspace = MY_CLAW_WORKSPACE_DATA(t)
-		// 合并工作区列表、共享工作区和我的龙虾工作区
+		// 合并工作区列表和底部固定频道：共享工作区、我的龙虾
 		const allWorkspaces = [...availableWorkspaces, shareWorkspace, myClawWorkspace]
 
 		// 根据搜索关键词过滤工作区（使用显示名称进行匹配，支持未命名工作区和共享工作区）
@@ -1031,12 +1041,17 @@ function CrossProjectFileOperationModal({
 			"flex size-6 shrink-0 items-center justify-center rounded-[4px] bg-fill"
 		const nameClass =
 			"max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap leading-6 text-foreground md:max-w-[400px]"
+		const shouldSeparateFixedChannels =
+			createWorkspaceHook.createWorkspaceShown ||
+			filteredWorkspaces.some((workspace) => !isFixedWorkspace(workspace))
+		let hasRenderedFixedDivider = false
+
 		return (
 			<>
 				{createWorkspaceHook.createWorkspaceShown && (
 					<div className={textFolderItemClass}>
 						<div className={folderIconClass}>
-							<IconWorkspace />
+							<Box className="size-4 text-current" />
 						</div>
 						<InputWithError
 							height={24}
@@ -1056,53 +1071,53 @@ function CrossProjectFileOperationModal({
 					</div>
 				)}
 				{filteredWorkspaces.length > 0 ? (
-					filteredWorkspaces.map((workspace, index) => (
-						<div
-							key={workspace.id || index}
-							className={textFolderItemClass}
-							onClick={() => handleWorkspaceClick(workspace)}
-						>
-							<div className="flex w-full flex-1 items-center justify-between gap-2.5">
-								<div className="flex flex-1 items-center gap-1">
-									<div className={folderIconClass}>
-										<IconWorkspace />
-									</div>
-									<MagicEllipseWithTooltip
-										title={
-											workspace.id === SHARE_WORKSPACE_ID
-												? t("workspace.shareWorkspaceName")
-												: workspace.id === MY_CLAW_WORKSPACE_ID
-													? t("workspace.myClawWorkspaceName")
-													: workspace.name ||
-														t("workspace.unnamedWorkspace")
-										}
-										text={
-											workspace.id === SHARE_WORKSPACE_ID
-												? t("workspace.shareWorkspaceName")
-												: workspace.id === MY_CLAW_WORKSPACE_ID
-													? t("workspace.myClawWorkspaceName")
-													: workspace.name ||
-														t("workspace.unnamedWorkspace")
-										}
-										className={nameClass}
-										placement="topLeft"
-									>
-										{workspace.id === SHARE_WORKSPACE_ID
-											? t("workspace.shareWorkspaceName")
-											: workspace.id === MY_CLAW_WORKSPACE_ID
-												? t("workspace.myClawWorkspaceName")
-												: workspace.name || t("workspace.unnamedWorkspace")}
-									</MagicEllipseWithTooltip>
-								</div>
-								<div className="flex min-w-0 flex-[0_0_500px] shrink items-center justify-end gap-2.5">
-									<IconChevronRight
-										className="size-5 flex-[0_0_20px] shrink-0 text-base text-muted-foreground"
-										size={16}
+					filteredWorkspaces.map((workspace, index) => {
+						const workspaceName = getWorkspaceDisplayName(workspace)
+						const isFixedChannel = isFixedWorkspace(workspace)
+						const shouldRenderDivider =
+							isFixedChannel &&
+							shouldSeparateFixedChannels &&
+							!hasRenderedFixedDivider
+						if (shouldRenderDivider) hasRenderedFixedDivider = true
+
+						return (
+							<React.Fragment key={workspace.id || index}>
+								{shouldRenderDivider && (
+									<div
+										className="my-2 border-t border-border"
+										data-testid="cross-project-file-modal-fixed-workspace-divider"
 									/>
+								)}
+								<div
+									className={textFolderItemClass}
+									onClick={() => handleWorkspaceClick(workspace)}
+									data-testid="handle-workspace-click"
+								>
+									<div className="flex w-full flex-1 items-center justify-between gap-2.5">
+										<div className="flex flex-1 items-center gap-1">
+											<div className={folderIconClass}>
+												{renderWorkspaceIcon(workspace.id)}
+											</div>
+											<MagicEllipseWithTooltip
+												title={workspaceName}
+												text={workspaceName}
+												className={nameClass}
+												placement="topLeft"
+											>
+												{workspaceName}
+											</MagicEllipseWithTooltip>
+										</div>
+										<div className="flex min-w-0 flex-[0_0_500px] shrink items-center justify-end gap-2.5">
+											<IconChevronRight
+												className="size-5 flex-[0_0_20px] shrink-0 text-base text-muted-foreground"
+												size={16}
+											/>
+										</div>
+									</div>
 								</div>
-							</div>
-						</div>
-					))
+							</React.Fragment>
+						)
+					})
 				) : isSearch && fileName ? (
 					<EmptyStateBox>
 						<div className="inline-flex size-12 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-sm">
@@ -1119,7 +1134,7 @@ function CrossProjectFileOperationModal({
 					</EmptyStateBox>
 				) : (
 					<div className="flex w-full flex-1 flex-col items-center justify-center gap-1">
-						<img src={EmptyFilesIcon} alt="" width={200} height={200} />
+						<img src={EmptyFilesIcon} alt="" width={200} height={200}  data-testid="cross-project-file-operation-modal-image"/>
 						<div className="text-sm leading-5 text-foreground/35">
 							{t("selectPathModal.noWorkspace")}
 						</div>
@@ -1220,6 +1235,7 @@ function CrossProjectFileOperationModal({
 								key={project.id || index}
 								className={textFolderItemClass}
 								onClick={() => handleProjectClick(project)}
+								data-testid="handle-project-click"
 							>
 								<div className="flex w-full flex-1 items-center justify-between gap-2.5">
 									<div className="flex flex-1 items-center gap-1">
@@ -1261,7 +1277,7 @@ function CrossProjectFileOperationModal({
 					</EmptyStateBox>
 				) : (
 					<div className="flex w-full flex-1 flex-col items-center justify-center gap-1">
-						<img src={EmptyFilesIcon} alt="" width={200} height={200} />
+						<img src={EmptyFilesIcon} alt="" width={200} height={200}  data-testid="cross-project-file-operation-modal-image-2"/>
 						<div className="text-sm leading-5 text-foreground/35">
 							{t("selectPathModal.noProject")}
 						</div>
@@ -1288,7 +1304,7 @@ function CrossProjectFileOperationModal({
 					>
 						<div className="flex min-w-0 flex-1 items-center gap-1">
 							<div className={folderIconClass}>
-								<img src={FoldIcon} alt="folder" width={14} height={14} />
+								<img src={FoldIcon} alt="folder" width={14} height={14}  data-testid="cross-project-file-operation-modal-image-3"/>
 							</div>
 							<InputWithError
 								height={24}
@@ -1343,6 +1359,7 @@ function CrossProjectFileOperationModal({
 							key={index}
 							className={cn(textFolderItemClass, isDisabled && "disable")}
 							onClick={() => !isDisabled && onDirectoryClick(directory)}
+							data-testid="on-directory-click"
 						>
 							<div className="flex w-full flex-1 items-center justify-between gap-2.5">
 								<div className="flex flex-1 items-center gap-1">
@@ -1353,6 +1370,7 @@ function CrossProjectFileOperationModal({
 												alt="folder"
 												width={14}
 												height={14}
+												data-testid="cross-project-file-operation-modal-image-4"
 											/>
 										) : (
 											<MagicFileIcon
@@ -1474,6 +1492,7 @@ function CrossProjectFileOperationModal({
 														: "pointer",
 												}}
 												onClick={() => onBreadcrumbClick(item)}
+												data-testid="on-breadcrumb-click"
 											>
 												<MagicEllipseWithTooltip
 													title={item.name}
@@ -1530,6 +1549,7 @@ function CrossProjectFileOperationModal({
 																				alt="folder"
 																				width={14}
 																				height={14}
+																				data-testid="cross-project-file-operation-modal-image-5"
 																			/>
 																		</div>
 																		{!subitem.operation && (

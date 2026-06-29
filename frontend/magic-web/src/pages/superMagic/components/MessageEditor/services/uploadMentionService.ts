@@ -8,12 +8,12 @@ import {
 	ProjectFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import { SuperMagicApi } from "@/apis"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { FileData } from "../types"
 import {
 	createUploadFileMentionAttributes,
 	transformUploadFileToProjectFile,
 } from "../utils/mention"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { INSPECTOR_DETAIL_TYPE } from "../extensions/inspector-detail/const"
 
 interface LoggerLike {
@@ -91,8 +91,10 @@ export function insertUploadMentionNodes({
 		attrs: createUploadFileMentionAttributes(fileData),
 	}))
 
-	editor.commands.insertContent(mentions)
-	editor.commands.focus()
+	runActiveEditor(editor, (activeEditor) => {
+		activeEditor.commands.insertContent(mentions)
+		activeEditor.commands.focus()
+	})
 }
 
 export function updateUploadMentionProgress({
@@ -257,7 +259,6 @@ export async function deleteProjectFile({ fileId, logger, onError }: DeleteProje
 
 	try {
 		await SuperMagicApi.deleteFile(fileId)
-		pubsub.publish(PubSubEvents.Update_Attachments)
 	} catch (error) {
 		logger.error("delete project file failed", error)
 		onError?.(error)

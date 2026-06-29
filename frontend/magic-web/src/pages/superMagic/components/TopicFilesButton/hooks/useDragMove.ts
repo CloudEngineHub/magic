@@ -422,6 +422,8 @@ export function useDragMove({
 
 	// 拖拽计数器，用于处理dragenter/dragleave事件的嵌套问题
 	const dragCounterRef = useRef<Map<string, number>>(new Map())
+	const isMovingRef = useRef(isMoving)
+	isMovingRef.current = isMoving
 
 	// 移动提示元素的引用
 	const moveIndicatorRef = useRef<HTMLElement | null>(null)
@@ -533,6 +535,36 @@ export function useDragMove({
 		}
 	}, [debug])
 
+	const updateDragHoverState = useCallback(
+		(
+			nextHoverState: Pick<
+				DragMoveState,
+				"dropTargetFolderId" | "isDragOverRoot" | "dragIndicatorType"
+			> &
+				Partial<Pick<DragMoveState, "isExternalDrag">>,
+		) => {
+			setDragState((prev) => {
+				const nextIsExternalDrag = nextHoverState.isExternalDrag ?? prev.isExternalDrag
+
+				if (
+					prev.dropTargetFolderId === nextHoverState.dropTargetFolderId &&
+					prev.isDragOverRoot === nextHoverState.isDragOverRoot &&
+					prev.dragIndicatorType === nextHoverState.dragIndicatorType &&
+					prev.isExternalDrag === nextIsExternalDrag
+				) {
+					return prev
+				}
+
+				return {
+					...prev,
+					...nextHoverState,
+					isExternalDrag: nextIsExternalDrag,
+				}
+			})
+		},
+		[],
+	)
+
 	// 开始拖拽
 	const handleDragStart = useCallback(
 		(e: React.DragEvent, item: AttachmentItem, selectedItems?: AttachmentItem[]) => {
@@ -542,7 +574,7 @@ export function useDragMove({
 			}
 
 			// 检查是否有文件正在移动中
-			if (isMoving) {
+			if (isMovingRef.current) {
 				e.preventDefault()
 				magicToast.warning(
 					t("topicFiles.dragMove.filesMoving", "文件正在移动中，请稍后再试"),
@@ -593,7 +625,7 @@ export function useDragMove({
 				})
 			}
 		},
-		[allowMove, debug, isMoving, t],
+		[allowMove, debug, t],
 	)
 
 	// 拖拽结束
@@ -662,14 +694,12 @@ export function useDragMove({
 			if (isExternalDrag) {
 				const canDrop = !actualTarget || actualTarget.is_directory
 				if (canDrop) {
-					// 直接设置状态，不管 counter
-					setDragState((prev) => ({
-						...prev,
+					updateDragHoverState({
 						dropTargetFolderId: targetId,
 						isDragOverRoot: actualTarget === null,
 						isExternalDrag: true,
 						dragIndicatorType: "upload",
-					}))
+					})
 
 					// 显示上传提示
 					const targetFolderName = actualTarget?.file_name || t("根目录")
@@ -701,12 +731,12 @@ export function useDragMove({
 				)
 
 				if (canMove) {
-					setDragState((prev) => ({
-						...prev,
+					updateDragHoverState({
 						dropTargetFolderId: targetId,
 						isDragOverRoot: true,
+						isExternalDrag: false,
 						dragIndicatorType: "move",
-					}))
+					})
 
 					// 显示移动提示
 					const targetFolderName = t("根目录")
@@ -750,12 +780,12 @@ export function useDragMove({
 					debug,
 				)
 				if (canMove) {
-					setDragState((prev) => ({
-						...prev,
+					updateDragHoverState({
 						dropTargetFolderId: targetId,
 						isDragOverRoot: false,
+						isExternalDrag: false,
 						dragIndicatorType: "move",
-					}))
+					})
 
 					// 显示移动提示
 					const targetFolderName = actualTarget?.file_name || ""
@@ -786,6 +816,7 @@ export function useDragMove({
 			updateMoveIndicator,
 			showMoveIndicator,
 			hideMoveIndicator,
+			updateDragHoverState,
 		],
 	)
 
@@ -803,13 +834,24 @@ export function useDragMove({
 			if (isExternalDrag) {
 				// 如果是从 fileListArea 调用（targetItem 为 null），清理状态
 				if (targetItem === null) {
-					setDragState((prev) => ({
-						...prev,
-						dropTargetFolderId: null,
-						isDragOverRoot: false,
-						isExternalDrag: false,
-						dragIndicatorType: null,
-					}))
+					setDragState((prev) => {
+						if (
+							prev.dropTargetFolderId === null &&
+							!prev.isDragOverRoot &&
+							!prev.isExternalDrag &&
+							prev.dragIndicatorType === null
+						) {
+							return prev
+						}
+
+						return {
+							...prev,
+							dropTargetFolderId: null,
+							isDragOverRoot: false,
+							isExternalDrag: false,
+							dragIndicatorType: null,
+						}
+					})
 					hideMoveIndicator()
 
 					if (debug) {
@@ -842,12 +884,22 @@ export function useDragMove({
 			if (isRootTarget) {
 				// 如果是从 fileListArea 调用（targetItem 为 null），清理状态
 				if (targetItem === null) {
-					setDragState((prev) => ({
-						...prev,
-						dropTargetFolderId: null,
-						isDragOverRoot: false,
-						dragIndicatorType: null,
-					}))
+					setDragState((prev) => {
+						if (
+							prev.dropTargetFolderId === null &&
+							!prev.isDragOverRoot &&
+							prev.dragIndicatorType === null
+						) {
+							return prev
+						}
+
+						return {
+							...prev,
+							dropTargetFolderId: null,
+							isDragOverRoot: false,
+							dragIndicatorType: null,
+						}
+					})
 					hideMoveIndicator()
 
 					if (debug) {
@@ -887,13 +939,15 @@ export function useDragMove({
 
 			// 只在完全离开时清除目标
 			if (newCounter === 0) {
-				setDragState((prev) => ({
-					...prev,
-					dropTargetFolderId:
-						prev.dropTargetFolderId === targetId ? null : prev.dropTargetFolderId,
-					dragIndicatorType:
-						prev.dropTargetFolderId === targetId ? null : prev.dragIndicatorType,
-				}))
+				setDragState((prev) => {
+					if (prev.dropTargetFolderId !== targetId) return prev
+
+					return {
+						...prev,
+						dropTargetFolderId: null,
+						dragIndicatorType: null,
+					}
+				})
 
 				// 延迟检查是否需要隐藏移动提示，避免快速切换时的闪烁
 				setTimeout(() => {
@@ -977,12 +1031,6 @@ export function useDragMove({
 					e.dataTransfer.dropEffect = "none"
 				}
 			}
-
-			// 更新指示器位置
-			setDragState((prev) => ({
-				...prev,
-				indicatorPosition: { x: e.clientX, y: e.clientY },
-			}))
 		},
 		[
 			allowExternalDrop,

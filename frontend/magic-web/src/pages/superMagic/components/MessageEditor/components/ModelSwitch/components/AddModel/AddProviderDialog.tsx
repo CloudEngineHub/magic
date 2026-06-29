@@ -98,6 +98,7 @@ const ProviderItem = observer(function ProviderItem({
 					className="flex flex-col gap-2.5 p-2"
 					onClick={(e) => e.stopPropagation()}
 					onPointerDown={(e) => e.stopPropagation()}
+					data-testid="add-provider-dialog"
 				>
 					{provider.fields.map((field) => {
 						const fieldErrorMessage = getFieldErrorMessage(field)
@@ -118,7 +119,7 @@ const ProviderItem = observer(function ProviderItem({
 											className={cn(
 												"min-h-20 text-sm",
 												hasError &&
-													"border-destructive focus-visible:ring-destructive/20",
+												"border-destructive focus-visible:ring-destructive/20",
 											)}
 											placeholder={field.placeholder}
 											value={store.providerFields[field.key] ?? ""}
@@ -133,7 +134,7 @@ const ProviderItem = observer(function ProviderItem({
 											className={cn(
 												"h-9 text-sm",
 												hasError &&
-													"border-destructive focus-visible:ring-destructive/20",
+												"border-destructive focus-visible:ring-destructive/20",
 											)}
 											type={
 												field.inputType === "password" ? "password" : "text"

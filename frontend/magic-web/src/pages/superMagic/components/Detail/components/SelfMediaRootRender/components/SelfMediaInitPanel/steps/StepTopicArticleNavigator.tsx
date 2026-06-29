@@ -86,6 +86,7 @@ export default function StepTopicArticleNavigator({
 						)}
 						className="flex h-9 w-9 items-center justify-center rounded-full bg-[#18181b] text-white transition-transform hover:-translate-y-0.5"
 						onClick={() => onCollapsedChange(false)}
+						data-testid="on-collapsed-change"
 					>
 						<ChevronRight size={14} />
 					</button>
@@ -113,6 +114,7 @@ export default function StepTopicArticleNavigator({
 											? "scale-125 bg-[#18181b]"
 											: "bg-[#d4d4d8] hover:bg-[#a1a1aa]",
 									)}
+									data-testid="on-select-article"
 								/>
 							</MagicTooltip>
 						)
@@ -160,6 +162,7 @@ export default function StepTopicArticleNavigator({
 							)}
 							className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f4f4f5] text-[#18181b] transition-colors hover:bg-[#e4e4e7]"
 							onClick={() => onCollapsedChange(true)}
+							data-testid="on-collapsed-change-2"
 						>
 							<ChevronLeft size={14} />
 						</button>
@@ -175,6 +178,7 @@ export default function StepTopicArticleNavigator({
 							)}
 							className="flex h-9 items-center gap-1.5 rounded-full bg-[#18181b] px-3 text-xs font-[800] text-white shadow-[0_12px_24px_rgba(24,24,27,0.14)] transition-transform hover:-translate-y-0.5"
 							onClick={onAdd}
+							data-testid="on-add"
 						>
 							<Plus size={12} />
 							<span className="hidden [@container(min-width:260px)]:inline">
@@ -224,6 +228,7 @@ export default function StepTopicArticleNavigator({
 										: "bg-[#f4f4f5] text-[#18181b] hover:bg-[#ededf0]",
 								)}
 								onClick={handleSelect}
+								data-testid="handle-select"
 							>
 								<div className="flex items-start gap-2.5">
 									<span
@@ -290,6 +295,7 @@ export default function StepTopicArticleNavigator({
 											handleCancelRemove()
 										}
 									}}
+									data-testid="step-topic-article-navigator"
 								>
 									<button
 										ref={cancelRemoveButtonRef}
@@ -301,6 +307,7 @@ export default function StepTopicArticleNavigator({
 												: "bg-[#18181b]/6 text-[#18181b] hover:bg-[#18181b]/10",
 										)}
 										onClick={handleCancelRemove}
+										data-testid="handle-cancel-remove"
 									>
 										<X size={10} />
 										<span>
@@ -314,6 +321,7 @@ export default function StepTopicArticleNavigator({
 										type="button"
 										className="flex items-center gap-0.5 rounded-full bg-[#ff776c] px-2 py-1 text-[10px] font-semibold text-white transition-transform hover:-translate-y-0.5"
 										onClick={() => onConfirmRemove(idx)}
+										data-testid="on-confirm-remove"
 									>
 										<Check size={10} />
 										<span>
@@ -347,6 +355,7 @@ export default function StepTopicArticleNavigator({
 										e.stopPropagation()
 										onRequestRemove(idx)
 									}}
+									data-testid="on-request-remove"
 								>
 									<Trash2 size={12} />
 								</button>

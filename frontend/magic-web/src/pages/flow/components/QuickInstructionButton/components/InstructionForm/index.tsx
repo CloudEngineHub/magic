@@ -27,6 +27,7 @@ import { SendCommand } from "../SendCommand"
 import { InstructionResidency } from "../InstructionResidency"
 import { InsertLocation } from "../InsertLocation"
 import { InstructionMode } from "../InstructionMode"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 interface InstructionListProps {
 	edit: boolean
@@ -134,9 +135,9 @@ const InstructionForm = memo(
 				}
 
 				if (currentInstruction.type !== InstructionType.STATUS) {
-					editorRef.current?.editor?.commands.setContent(
-						combindContent(currentInstruction.content),
-					)
+					runActiveEditor(editorRef.current?.editor, (editor) => {
+						editor.commands.setContent(combindContent(currentInstruction.content))
+					})
 				}
 				setInstructionMode(currentInstruction.instruction_type || InstructionModeType.Chat)
 				updateSendCommandVisibility(
@@ -184,9 +185,9 @@ const InstructionForm = memo(
 
 		/** 插入指令值 */
 		const insertInstruction = useMemoizedFn(() => {
-			editorRef.current?.editor?.commands.insertContent(
-				genTemplateInstructionNode(currentInstruction),
-			)
+			runActiveEditor(editorRef.current?.editor, (editor) => {
+				editor.commands.insertContent(genTemplateInstructionNode(currentInstruction))
+			})
 		})
 
 		// 保存指令说明

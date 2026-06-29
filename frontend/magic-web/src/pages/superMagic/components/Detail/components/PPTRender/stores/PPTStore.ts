@@ -170,7 +170,14 @@ export class PPTStore {
 		// @ts-ignore
 		window.pptStore = this
 
-		makeAutoObservable(this, {}, { autoBind: true })
+		makeAutoObservable(
+			this,
+			{
+				config: false,
+				attachmentListSnapshot: false,
+			} as Record<string, false>,
+			{ autoBind: true },
+		)
 
 		// Setup auto-save for activeIndex when cache is enabled
 		if (config.enableCache !== false) {

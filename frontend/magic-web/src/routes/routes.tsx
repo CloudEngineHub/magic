@@ -239,6 +239,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 			],
 		},
 	]
+	// Split crew/magi-claw/audio routes into mobile shell vs standalone desktop routes.
 	const { mobileShellRoutes, standaloneRoutes: standaloneSuperMagicRoutes } =
 		splitPersistentMobileShellRoutes([
 			...superMagicCrewRoutes,

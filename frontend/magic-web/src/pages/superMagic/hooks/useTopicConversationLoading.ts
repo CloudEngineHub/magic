@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react"
 import { useMemoizedFn } from "ahooks"
-import { isObject } from "lodash-es"
-import { reaction, toJS } from "mobx"
+import { reaction } from "mobx"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
+import { resolveTopicConversationLoadingState } from "./topic-conversation-loading"
 
 interface TopicMessagesChangePayload<TStatus = unknown> {
 	isLoading: boolean
@@ -30,28 +31,38 @@ export function useTopicConversationLoading<TStatus = unknown>({
 	onTopicMessagesChange,
 	selectedTopic,
 }: UseTopicConversationLoadingParams<TStatus>) {
+	const currentTopicId = selectedTopic?.chat_topic_id || ""
 	const [showLoading, setShowLoading] = useState(false)
-	const messages = (superMagicStore.messages?.get(selectedTopic?.chat_topic_id || "") ||
-		[]) as SuperMagicMessageItem[]
+	const [messageState, setMessageState] = useState<{
+		topicId: string
+		messages: SuperMagicMessageItem[]
+	}>(() => {
+		return {
+			topicId: currentTopicId,
+			messages: (superMagicStore.messages?.get(currentTopicId) ||
+				[]) as SuperMagicMessageItem[],
+		}
+	})
+
+	const getOptimisticMessageStatus = useMemoizedFn((message?: SuperMagicMessageItem) => {
+		if (!message || message.role !== "user") return undefined
+		optimisticMessageStore.hydrateFromStorage()
+		return optimisticMessageStore.getStatus(
+			selectedTopic?.chat_topic_id,
+			message.app_message_id,
+		)
+	})
 
 	const handleTopicMessagesChange = useMemoizedFn((topicMessages: SuperMagicMessageItem[]) => {
+		const { isLoading, lastMessage, lastMessageNode } = resolveTopicConversationLoadingState({
+			topicMessages,
+			getMessageNode: (appMessageId) => superMagicStore.getMessageNode(appMessageId),
+			getOptimisticStatus: getOptimisticMessageStatus,
+		})
+
+		setShowLoading(isLoading)
+
 		if (topicMessages.length > 1) {
-			const lastMessageWithRole = topicMessages.findLast((message) => message.role !== "user")
-			const lastMessage = topicMessages[topicMessages.length - 1]
-			const lastMessageNode = superMagicStore.getMessageNode(
-				lastMessageWithRole?.app_message_id,
-			)
-
-			const isLoading =
-				lastMessageNode?.status === "running" ||
-				lastMessageNode?.status === "waiting" ||
-				lastMessage?.type === "rich_text" ||
-				isObject(lastMessageNode?.content) ||
-				Boolean(lastMessageNode?.rich_text?.content) ||
-				Boolean(lastMessageNode?.text?.content)
-
-			setShowLoading(isLoading)
-
 			onTopicMessagesChange?.({
 				isLoading,
 				lastMessage,
@@ -60,19 +71,44 @@ export function useTopicConversationLoading<TStatus = unknown>({
 				selectedTopic,
 				topicMessages,
 			})
-		} else if (topicMessages.length === 1) {
-			setShowLoading(true)
 		}
 	})
 
 	useEffect(() => {
+		const currentTopicMessages = (superMagicStore.messages?.get(currentTopicId) ||
+			[]) as SuperMagicMessageItem[]
+
+		// 调用方依赖返回的 messages 做渲染；
+		// 将 topicId 与 messages 一起存入局部 state，防止切换话题时短暂暴露前一话题的消息缓存。
+		setMessageState({
+			topicId: currentTopicId,
+			messages: currentTopicMessages,
+		})
+		handleTopicMessagesChange(currentTopicMessages)
+	}, [handleTopicMessagesChange, currentTopicId])
+
+	useEffect(() => {
 		return reaction(
-			() => superMagicStore.messages?.get(selectedTopic?.chat_topic_id || "") || [],
-			(topicMessages) => {
-				handleTopicMessagesChange(topicMessages as SuperMagicMessageItem[])
+			() => ({
+				messages: superMagicStore.messages?.get(currentTopicId) || [],
+				// 触碰 sidecar map 让 MobX 追踪它作为依赖；
+				// 仅 optimistic 状态变化时，主消息数组引用不变。
+				_sidecar: optimisticMessageStore.topicOptimisticMap[currentTopicId],
+			}),
+			({ messages: topicMessages }) => {
+				const nextTopicMessages = topicMessages as SuperMagicMessageItem[]
+				setMessageState((prev) => {
+					// 始终产生新的数组引用，让下游消费者能重新渲染，
+					// 即使 MobX observable 数组标识未变。
+					if (prev.topicId === currentTopicId && prev.messages === nextTopicMessages) {
+						return { topicId: currentTopicId, messages: nextTopicMessages.slice() }
+					}
+					return { topicId: currentTopicId, messages: nextTopicMessages }
+				})
+				handleTopicMessagesChange(nextTopicMessages)
 			},
 		)
-	}, [handleTopicMessagesChange, selectedTopic?.chat_topic_id])
+	}, [handleTopicMessagesChange, currentTopicId])
 
 	useEffect(() => {
 		if (!hideLoadingWhenBufferHasContent) {
@@ -80,19 +116,19 @@ export function useTopicConversationLoading<TStatus = unknown>({
 		}
 
 		return reaction(
-			() => superMagicStore.buffer.get(selectedTopic?.chat_topic_id || ""),
+			() => superMagicStore.buffer.get(currentTopicId),
 			(next) => {
 				if (next && next.length > 0) {
 					setShowLoading(false)
 				}
 			},
 		)
-	}, [hideLoadingWhenBufferHasContent, selectedTopic?.chat_topic_id])
+	}, [currentTopicId, hideLoadingWhenBufferHasContent])
 
 	useEffect(() => {
 		setShowLoading(false)
 		onConversationGeneratingChange?.(false)
-	}, [onConversationGeneratingChange, selectedTopic?.chat_topic_id])
+	}, [currentTopicId, onConversationGeneratingChange])
 
 	useEffect(() => {
 		onConversationGeneratingChange?.(showLoading)
@@ -103,7 +139,8 @@ export function useTopicConversationLoading<TStatus = unknown>({
 	}, [onConversationGeneratingChange, showLoading])
 
 	return {
-		messages,
+		// Re-validate topic ownership before returning to prevent exposing the previous topic's messages during switch.
+		messages: messageState.topicId === currentTopicId ? messageState.messages : [],
 		showLoading,
 	}
 }

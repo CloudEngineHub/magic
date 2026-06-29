@@ -195,6 +195,7 @@ function PlaybackControl({
 			className="relative flex flex-1 cursor-pointer items-center"
 			onClick={handleProgressClick}
 			onMouseDown={handleMouseDown}
+			data-testid="handle-progress-click"
 		>
 			<div className="h-2 w-full overflow-hidden rounded-full bg-[#d1d1d1]">
 				<div
@@ -222,7 +223,7 @@ function PlaybackControl({
 					disabled={localStepIndex <= 0}
 					onClick={handlePrevStep}
 				>
-					<img src={StepBack} alt="" width={16} height={16} />
+					<img src={StepBack} alt="" width={16} height={16}  data-testid="playback-control-image"/>
 				</Button>
 
 				{progressTrackJSX}
@@ -233,7 +234,7 @@ function PlaybackControl({
 					disabled={isAtLatest}
 					onClick={handleNextStep}
 				>
-					<img src={StepForward} alt="" width={16} height={16} />
+					<img src={StepForward} alt="" width={16} height={16}  data-testid="playback-control-image-2"/>
 				</Button>
 
 				{onBackToLatest && (
@@ -299,7 +300,7 @@ function PlaybackControl({
 					disabled={localStepIndex <= 0}
 					onClick={handlePrevStep}
 				>
-					<img src={StepBack} alt="" width={16} height={16} />
+					<img src={StepBack} alt="" width={16} height={16}  data-testid="playback-control-image-3"/>
 				</Button>
 
 				{progressTrackJSX}
@@ -310,7 +311,7 @@ function PlaybackControl({
 					disabled={isAtLatest}
 					onClick={handleNextStep}
 				>
-					<img src={StepForward} alt="" width={16} height={16} />
+					<img src={StepForward} alt="" width={16} height={16}  data-testid="playback-control-image-4"/>
 				</Button>
 
 				{onBackToLatest && (

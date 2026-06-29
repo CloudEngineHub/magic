@@ -1,4 +1,5 @@
 import { cloneDeep } from "lodash-es"
+import { toast } from "sonner"
 import type { DesignData } from "../types"
 import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
 import type {
@@ -18,7 +19,9 @@ import type {
 import { DesignLoadManager } from "./DesignLoadManager"
 import {
 	DesignSaveManager,
+	type DesignSaveContext,
 	type DesignSaveLifecycleHandlers,
+	type DesignSaveMetadata,
 	type DesignSaveResult,
 } from "./DesignSaveManager"
 import { DesignVersionManager } from "./DesignVersionManager"
@@ -33,6 +36,7 @@ import {
 	getDesignDraftWriteDebounceMs,
 	readDesignDraft,
 	writeDesignDraft,
+	type DesignDraftEntry,
 	type DesignDraftIdentity,
 	type DesignDraftReason,
 	type DesignDraftWriteResult,
@@ -42,12 +46,28 @@ import {
 	refreshDesignElementConflictsFromRemoteData,
 	type DesignDataElementMergeResult,
 } from "../utils/designDataElementMerge"
-import { tryApplyCanvasDocumentPatch } from "@/components/CanvasDesign/model"
+import {
+	tryApplyCanvasDocumentPatch,
+	tryMergeCanvasElementsByField,
+} from "@/components/CanvasDesign/model"
 
 type ElementLevelMergeConflictResult = Extract<
 	DesignDataElementMergeResult,
 	{ ok: false; isElementLevelConflict: true }
 >
+
+interface LocalDraftBaseSnapshot {
+	baseRemoteVersion: number | null
+	baseRemoteFingerprint: string
+	baseRemoteData?: DesignData
+}
+
+const AUTO_MERGE_TOAST_ID = "design-auto-merge"
+const DESIGN_SAVE_GUARD_LOG_PREFIX = "[DesignSaveGuard]"
+
+function getTopLevelElementCount(data: DesignData | null | undefined): number {
+	return data?.canvas?.elements?.length ?? 0
+}
 
 export interface DesignProjectManagerFactoryParams {
 	stateBag: DesignProjectStateBag
@@ -60,13 +80,17 @@ export interface DesignProjectManagerAPI {
 	magicProjectJsFileId: string | null
 	designData: DesignData
 	updateDesignData: (updater: (draft: DesignData) => void) => void
-	updateDesignDataAndScheduleSave: (updater: (draft: DesignData) => void) => void
+	updateDesignDataAndScheduleSave: (
+		updater: (draft: DesignData) => void,
+		metadata?: DesignSaveMetadata,
+	) => void
 
 	isInitialLoading: boolean
 	isSaving: boolean
 
-	scheduleAutoSave: () => void
+	scheduleAutoSave: (metadata?: DesignSaveMetadata) => void
 	cancelAutoSave: () => void
+	canUpdateCurrentDesignData: () => boolean
 	persistLocalDraft: (
 		designData: DesignData,
 		options?: { immediate?: boolean; reason?: DesignDraftReason },
@@ -101,6 +125,7 @@ export interface DesignProjectManagerAPI {
 	resolveEditedElementConflictsWithLocal: (
 		elementIds: string[],
 		nextDesignData: DesignData,
+		metadata?: DesignSaveMetadata,
 	) => boolean
 
 	isProcessingRevoke: boolean
@@ -122,7 +147,10 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	magicProjectJsFileId: string | null
 	designData: DesignData
 	updateDesignData: (updater: (draft: DesignData) => void) => void
-	updateDesignDataAndScheduleSave: (updater: (draft: DesignData) => void) => void
+	updateDesignDataAndScheduleSave: (
+		updater: (draft: DesignData) => void,
+		metadata?: DesignSaveMetadata,
+	) => void
 
 	isInitialLoading: boolean
 	isSaving: boolean
@@ -147,11 +175,13 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		updateType: "message" | "revoke" | "restore"
 		remoteVersion: number | null
 	} | null = null
+	private versionDataSourceLockCount = 0
 	private baseDesignData: DesignData | null = null
 	private draftSaveTimer: ReturnType<typeof setTimeout> | null = null
 	private pendingDraftSave: {
 		designData: DesignData
 		reason: DesignDraftReason
+		baseSnapshot: LocalDraftBaseSnapshot
 	} | null = null
 	private hasShownLocalDraftUnavailableToast = false
 
@@ -209,6 +239,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				}
 				await this.handleSaveResultConflict(saveResult)
 			},
+			shouldBlockEmptyCanvasSave: (context) => this.shouldBlockUnsafeEmptyCanvasSave(context),
 		}
 		this.saveManager = new DesignSaveManager(
 			stateBag,
@@ -251,6 +282,8 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		const fetchRemoteDesignData: FetchRemoteDesignDataFn = async () =>
 			(await fetchRemoteDesignDataWithVersion())?.data ?? null
 
+		const isVersionDataSourceLocked = () => this.isVersionDataSourceLocked()
+
 		const applyRemoteDesignData: ApplyRemoteDesignDataFn = (
 			newData: DesignData,
 			updateType: "message" | "revoke" | "restore",
@@ -262,7 +295,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		const loadAndApplyRemote: LoadAndApplyRemoteFn = async (
 			updateType: "message" | "revoke" | "restore" = "message",
 		) => {
+			if (isVersionDataSourceLocked()) return false
 			const remote = await fetchRemoteDesignDataWithVersion()
+			if (isVersionDataSourceLocked()) return false
 			if (!remote) return false
 			return applyRemoteDesignData(remote.data, updateType, {
 				remoteVersion: remote.version,
@@ -279,7 +314,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		const listenerOptions: DesignRemoteListenerOptions = {
 			...options,
 			getMagicProjectJsFileId: () => this.stateBag.getMagicProjectJsFileId(),
-			getIsViewingHistory: () => this.getFileVersion() !== undefined,
+			getIsViewingHistory: isVersionDataSourceLocked,
 			getDesignDataName: () => this.stateBag.getDesignData().name,
 			fetchAndSetVersions: () => this.versionManager.fetchFileVersions(),
 			loadAndApplyRemote,
@@ -304,7 +339,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.remoteListener?.updateOptions({
 			...options,
 			getMagicProjectJsFileId: () => this.stateBag.getMagicProjectJsFileId(),
-			getIsViewingHistory: () => this.getFileVersion() !== undefined,
+			getIsViewingHistory: () => this.isVersionDataSourceLocked(),
 			getDesignDataName: () => this.stateBag.getDesignData().name,
 			fetchAndSetVersions: () => this.versionManager.fetchFileVersions(),
 			loadAndApplyRemote: this.loadAndApplyRemoteFn,
@@ -326,6 +361,24 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.baseDesignData = data ? (cloneDeep(data) as DesignData) : null
 	}
 
+	private isVersionDataSourceLocked(): boolean {
+		return this.getFileVersion() !== undefined || this.versionDataSourceLockCount > 0
+	}
+
+	canUpdateCurrentDesignData(): boolean {
+		return !this.isVersionDataSourceLocked()
+	}
+
+	private lockVersionDataSource(): () => void {
+		let released = false
+		this.versionDataSourceLockCount += 1
+		return () => {
+			if (released) return
+			released = true
+			this.versionDataSourceLockCount = Math.max(0, this.versionDataSourceLockCount - 1)
+		}
+	}
+
 	private setSyncedRemoteBaseDesignData(data: DesignData): void {
 		this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(data))
 		this.setBaseDesignData(data)
@@ -341,6 +394,125 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}
 
 		this.setBaseDesignData(currentData)
+	}
+
+	private getBaseRemoteDataForLocalDraft(): DesignData | undefined {
+		return this.baseDesignData ? (cloneDeep(this.baseDesignData) as DesignData) : undefined
+	}
+
+	private getLocalDraftBaseSnapshot(): LocalDraftBaseSnapshot | null {
+		const baseRemoteFingerprint = this.stateBag.getPrevDesignDataFingerprint()
+		if (!baseRemoteFingerprint) {
+			return null
+		}
+		return {
+			baseRemoteVersion: this.stateBag.getMagicProjectJsVersion(),
+			baseRemoteFingerprint,
+			baseRemoteData: this.getBaseRemoteDataForLocalDraft(),
+		}
+	}
+
+	private isUserCanvasDeletionSource(context: DesignSaveContext): boolean {
+		if (context.source === "manual-save" || context.source === "conflict-resolution") {
+			return true
+		}
+		if (context.source !== "canvas-patch" && context.source !== "canvas-full-export") {
+			return false
+		}
+		return context.deletedElementIds.length > 0
+	}
+
+	private shouldBlockUnsafeEmptyCanvasSave(context: DesignSaveContext): boolean {
+		const trustedBaseElementCount = getTopLevelElementCount(this.baseDesignData)
+		const shouldBlock =
+			context.nextElementCount === 0 &&
+			trustedBaseElementCount > 0 &&
+			!this.isUserCanvasDeletionSource(context)
+
+		if (shouldBlock) {
+			this.logBlockedEmptyCanvasSave(context, trustedBaseElementCount)
+		}
+
+		return shouldBlock
+	}
+
+	private logBlockedEmptyCanvasSave(
+		context: DesignSaveContext,
+		trustedBaseElementCount: number,
+	): void {
+		console.warn(
+			DESIGN_SAVE_GUARD_LOG_PREFIX,
+			JSON.stringify({
+				event: "blocked-empty-canvas-save",
+				source: context.source,
+				beforeElementCount: context.beforeElementCount,
+				nextElementCount: context.nextElementCount,
+				trustedBaseElementCount,
+				deletedElementIds: context.deletedElementIds,
+				designDataVersion: context.designData.version,
+				magicProjectJsVersion: context.magicProjectJsVersion,
+				fileVersion: this.getFileVersion(),
+				isVersionDataSourceLocked: this.isVersionDataSourceLocked(),
+				isRemoteApplying: context.isRemoteApplying,
+				fromDraft: context.fromDraft,
+				fromUpgrade: context.fromUpgrade,
+				hasPendingRemoteDesignData: this.pendingRemoteDesignData !== null,
+			}),
+		)
+	}
+
+	private shouldAutoSaveRestoredDraft(localData: DesignData, remoteData: DesignData): boolean {
+		const localElementCount = getTopLevelElementCount(localData)
+		const remoteElementCount = getTopLevelElementCount(remoteData)
+		return localElementCount > 0 || remoteElementCount === 0
+	}
+
+	private enterDraftRestoreConflictForUnsafeEmptyLocal(options: {
+		localData: DesignData
+		remoteData: DesignData
+		baseRemoteData?: DesignData
+		baseVersion?: number | null
+		remoteVersion?: number | null
+		baseFingerprint?: string
+		localFingerprint?: string
+		remoteFingerprint?: string
+	}): void {
+		const conflict = this.buildConflict({
+			reason: "draft-remote-advanced",
+			localData: options.localData,
+			remoteData: options.remoteData,
+			baseVersion: options.baseVersion,
+			localVersion: options.baseVersion,
+			remoteVersion: options.remoteVersion,
+			baseFingerprint: options.baseFingerprint,
+			localFingerprint: options.localFingerprint,
+			remoteFingerprint: options.remoteFingerprint,
+		})
+		this.setConflictState(conflict)
+		this.writeConflictLocalDraftNow(
+			conflict,
+			options.localData,
+			options.baseRemoteData ?? options.remoteData,
+		)
+		console.warn(
+			DESIGN_SAVE_GUARD_LOG_PREFIX,
+			JSON.stringify({
+				event: "blocked-empty-draft-restore-autosave",
+				source: "draft-restore",
+				localElementCount: getTopLevelElementCount(options.localData),
+				remoteElementCount: getTopLevelElementCount(options.remoteData),
+				magicProjectJsVersion: this.stateBag.getMagicProjectJsVersion(),
+				fileVersion: this.getFileVersion(),
+				isVersionDataSourceLocked: this.isVersionDataSourceLocked(),
+			}),
+		)
+	}
+
+	private showAutoMergeToast(): void {
+		const t = this.options.getT?.()
+		toast.info(t?.("design.conflict.autoMerged") ?? "Canvas updates merged", {
+			id: AUTO_MERGE_TOAST_ID,
+		})
 	}
 
 	private hasUnresolvedElementConflicts(
@@ -516,6 +688,80 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		return Array.from(nextElementConflictsById.values())
 	}
 
+	private tryMergeElementConflictIntoData(
+		data: DesignData,
+		elementConflict: DesignElementConflict,
+	): DesignData | null {
+		if (
+			elementConflict.status !== "unresolved" ||
+			elementConflict.reason !== "same-element-changed" ||
+			!elementConflict.baseElement ||
+			!elementConflict.localElement ||
+			!elementConflict.remoteElement ||
+			elementConflict.baseParentId !== elementConflict.localParentId ||
+			elementConflict.baseParentId !== elementConflict.remoteParentId
+		) {
+			return null
+		}
+
+		const mergedElement = tryMergeCanvasElementsByField(
+			elementConflict.baseElement,
+			elementConflict.localElement,
+			elementConflict.remoteElement,
+		)
+		if (!mergedElement) return null
+
+		const patchResult = tryApplyCanvasDocumentPatch(
+			data.canvas,
+			{
+				upserts: [
+					{
+						element: mergedElement,
+						parentId: elementConflict.remoteParentId,
+					},
+				],
+				deletedElementIds: [],
+				changedElementIds: [elementConflict.elementId],
+			},
+			{ strictParent: true },
+		)
+		if (!patchResult.ok) return null
+
+		return {
+			...data,
+			canvas: patchResult.canvas,
+		}
+	}
+
+	private autoMergeElementConflictsIntoData(options: {
+		mergedData: DesignData
+		elementConflicts: DesignElementConflict[]
+	}): {
+		mergedData: DesignData
+		elementConflicts: DesignElementConflict[]
+		didAutoMerge: boolean
+	} {
+		let mergedData = options.mergedData
+		let didAutoMerge = false
+		const elementConflicts: DesignElementConflict[] = []
+
+		options.elementConflicts.forEach((elementConflict) => {
+			const nextMergedData = this.tryMergeElementConflictIntoData(mergedData, elementConflict)
+			if (nextMergedData) {
+				mergedData = nextMergedData
+				didAutoMerge = true
+				return
+			}
+			elementConflicts.push(elementConflict)
+		})
+
+		return {
+			mergedData,
+			elementConflicts,
+			didAutoMerge,
+		}
+	}
+
 	private buildLocalDataFromElementConflicts(
 		mergedData: DesignData,
 		elementConflicts: DesignElementConflict[],
@@ -573,15 +819,22 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			remoteData: options.remoteData,
 			mergeResult: options.mergeResult,
 		})
-		if (!elementConflicts.some(({ status }) => status === "unresolved")) {
+		const autoMergeResult = this.autoMergeElementConflictsIntoData({
+			mergedData: options.mergedData,
+			elementConflicts,
+		})
+		if (!autoMergeResult.elementConflicts.some(({ status }) => status === "unresolved")) {
 			this.clearConflictState()
-			return { refreshed: false }
+			return {
+				refreshed: false,
+				localData: autoMergeResult.didAutoMerge ? autoMergeResult.mergedData : undefined,
+			}
 		}
 
 		const remoteFingerprint = hashDesignDataComparable(options.remoteData)
 		const localData = this.buildLocalDataFromElementConflicts(
-			options.mergedData,
-			elementConflicts,
+			autoMergeResult.mergedData,
+			autoMergeResult.elementConflicts,
 		)
 		const nextConflict: DesignConflict = {
 			...existingConflict,
@@ -593,8 +846,8 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			remoteFingerprint,
 			localData,
 			remoteData: cloneDeep(options.remoteData) as DesignData,
-			mergedData: cloneDeep(options.mergedData) as DesignData,
-			elementConflicts,
+			mergedData: cloneDeep(autoMergeResult.mergedData) as DesignData,
+			elementConflicts: autoMergeResult.elementConflicts,
 		}
 
 		this.setConflictState(nextConflict)
@@ -697,8 +950,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			this.clearBlockingConflictState()
 			this.options.onRemoteDesignDataUpdate?.(oldData, nextDesignData, updateType)
 			if (!elementConflictRefresh.refreshed) {
-				this.persistLocalDraft(mergedData)
-				this.saveManager.scheduleAutoSave()
+				this.persistLocalDraft(nextDesignData)
+				this.saveManager.scheduleAutoSave(undefined, { source: "remote-merge" })
+				this.showAutoMergeToast()
 			}
 			return true
 		} catch {
@@ -716,6 +970,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 		try {
 			const oldData = this.stateBag.getDesignData()
+			const baseRemoteData = cloneDeep(this.baseDesignData) as DesignData
 			const mergedData = mergeResult.mergedData
 			const existingConflict = this.stateBag.getConflictState()
 			const elementConflicts = this.mergeElementConflictsWithLatestRemote({
@@ -741,7 +996,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			this.setSyncedRemoteBaseDesignData(newData)
 			this.options.onRemoteDesignDataUpdate?.(oldData, localData, updateType)
 			this.setConflictState(conflict)
-			this.writeConflictLocalDraftNow(conflict, localData)
+			this.writeConflictLocalDraftNow(conflict, localData, baseRemoteData)
 
 			return true
 		} catch {
@@ -754,6 +1009,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		updateType: "message" | "revoke" | "restore",
 		options?: { remoteVersion?: number | null },
 	): boolean {
+		if (this.isVersionDataSourceLocked()) {
+			return false
+		}
 		if (this.hasUnsafeLocalChanges()) {
 			if (this.tryMergeRemoteDesignData(newData, updateType, options)) {
 				return true
@@ -769,7 +1027,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	private tryApplyPendingRemoteDesignData(): boolean {
 		const pending = this.pendingRemoteDesignData
-		if (!pending || this.hasUnsafeLocalChanges()) return false
+		if (!pending || this.isVersionDataSourceLocked() || this.hasUnsafeLocalChanges()) {
+			return false
+		}
 		const applied = this.applyRemoteDesignDataNow(pending.data, pending.updateType)
 		if (applied && pending.remoteVersion !== null) {
 			this.updateLocalVersionIfNewer(pending.remoteVersion)
@@ -783,16 +1043,22 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.clearConflictState()
 	}
 
-	scheduleAutoSave(): void {
+	scheduleAutoSave(metadata?: DesignSaveMetadata): void {
+		if (this.isVersionDataSourceLocked()) {
+			return
+		}
 		if (this.hasUnresolvedElementConflicts()) {
 			const remoteSaveData = this.getRemoteSaveDataForCurrentElementConflicts()
 			if (!remoteSaveData) {
 				return
 			}
-			this.saveManager.scheduleAutoSave(remoteSaveData)
+			this.saveManager.scheduleAutoSave(remoteSaveData, {
+				...metadata,
+				source: metadata?.source ?? "conflict-resolution",
+			})
 			return
 		}
-		this.saveManager.scheduleAutoSave()
+		this.saveManager.scheduleAutoSave(undefined, metadata)
 	}
 
 	cancelAutoSave(): void {
@@ -816,6 +1082,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			!this.options.isPlaybackMode &&
 			!this.options.isShareRoute &&
 			!this.options.isMobile &&
+			!this.isVersionDataSourceLocked() &&
 			this.getFileVersion() === undefined
 		)
 	}
@@ -832,18 +1099,21 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.pendingDraftSave = null
 	}
 
-	private writeLocalDraftNow(designData: DesignData, reason: DesignDraftReason): void {
+	private writeLocalDraftNow(
+		designData: DesignData,
+		reason: DesignDraftReason,
+		baseSnapshot: LocalDraftBaseSnapshot | null = this.getLocalDraftBaseSnapshot(),
+	): void {
 		if (!this.canUseLocalDraft()) {
 			return
 		}
-		const baseRemoteFingerprint = this.stateBag.getPrevDesignDataFingerprint()
-		if (!baseRemoteFingerprint) {
+		if (!baseSnapshot) {
 			return
 		}
 
 		const localFingerprint = hashDesignDataComparable(designData)
 		const identity = this.getDraftIdentity()
-		if (localFingerprint === baseRemoteFingerprint) {
+		if (localFingerprint === baseSnapshot.baseRemoteFingerprint) {
 			this.clearLocalDraftBecauseAlreadySynced()
 			return
 		}
@@ -854,18 +1124,23 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			{
 				...identity,
 				designProjectBasePath: this.getDesignProjectBasePath(),
-				baseRemoteVersion: this.stateBag.getMagicProjectJsVersion(),
-				baseRemoteFingerprint,
+				baseRemoteVersion: baseSnapshot.baseRemoteVersion,
+				baseRemoteFingerprint: baseSnapshot.baseRemoteFingerprint,
 				localFingerprint,
 				localUpdatedAt: Date.now(),
 				reason,
 				designData,
+				baseRemoteData: baseSnapshot.baseRemoteData,
 			},
 			{ emergency: shouldWriteEmergencyDraft },
 		).then((result) => this.handleLocalDraftWriteResult(result, reason))
 	}
 
-	private writeConflictLocalDraftNow(conflict: DesignConflict, localData: DesignData): void {
+	private writeConflictLocalDraftNow(
+		conflict: DesignConflict,
+		localData: DesignData,
+		baseRemoteData?: DesignData,
+	): void {
 		if (!this.canUseLocalDraft()) {
 			return
 		}
@@ -875,6 +1150,12 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			return
 		}
 
+		const matchingBaseRemoteData =
+			baseRemoteData && hashDesignDataComparable(baseRemoteData) === baseRemoteFingerprint
+				? (cloneDeep(baseRemoteData) as DesignData)
+				: hashDesignDataComparable(conflict.remoteData) === baseRemoteFingerprint
+					? (cloneDeep(conflict.remoteData) as DesignData)
+					: undefined
 		const localFingerprint = hashDesignDataComparable(localData)
 		void writeDesignDraft({
 			...this.getDraftIdentity(),
@@ -885,6 +1166,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			localUpdatedAt: Date.now(),
 			reason: "local-edit",
 			designData: localData,
+			baseRemoteData: matchingBaseRemoteData,
 		}).then((result) => this.handleLocalDraftWriteResult(result, "local-edit"))
 	}
 
@@ -904,17 +1186,27 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		designData: DesignData,
 		options: { immediate?: boolean; reason?: DesignDraftReason } = {},
 	): void {
+		if (this.isVersionDataSourceLocked()) {
+			this.clearPendingLocalDraftTimer()
+			return
+		}
 		const reason = options.reason ?? "local-edit"
 		const draftDesignData = this.getLocalDraftDataForCurrentConflict(designData)
+		const baseSnapshot = this.getLocalDraftBaseSnapshot()
 		if (options.immediate) {
 			this.clearPendingLocalDraftTimer()
-			this.writeLocalDraftNow(draftDesignData, reason)
+			this.writeLocalDraftNow(draftDesignData, reason, baseSnapshot)
+			return
+		}
+		if (!baseSnapshot) {
+			this.clearPendingLocalDraftTimer()
 			return
 		}
 
 		this.pendingDraftSave = {
 			designData: cloneDeep(draftDesignData) as DesignData,
 			reason,
+			baseSnapshot,
 		}
 		if (this.draftSaveTimer) {
 			clearTimeout(this.draftSaveTimer)
@@ -924,7 +1216,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			this.draftSaveTimer = null
 			this.pendingDraftSave = null
 			if (!pending) return
-			this.writeLocalDraftNow(pending.designData, pending.reason)
+			this.writeLocalDraftNow(pending.designData, pending.reason, pending.baseSnapshot)
 		}, getDesignDraftWriteDebounceMs())
 	}
 
@@ -947,6 +1239,80 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	private clearLocalDraftBecauseVersionSwitched(): void {
 		this.clearLocalDraft()
+	}
+
+	private tryMergeRemoteAdvancedDraft(options: {
+		draft: DesignDraftEntry
+		draftData: DesignData
+		baseData: DesignData
+		remoteData: DesignData
+		remoteVersion: number | null
+		remoteFingerprint: string
+	}): boolean {
+		const { draft, draftData, baseData, remoteData, remoteVersion, remoteFingerprint } = options
+		const mergeResult = mergeDesignDataByElement({
+			baseData,
+			localData: draftData,
+			remoteData,
+		})
+		const oldData = this.stateBag.getDesignData()
+
+		if (mergeResult.ok) {
+			const mergedData = mergeResult.mergedData
+			this.stateBag.setters.setDesignData(mergedData)
+			this.setSyncedRemoteBaseDesignData(remoteData)
+			this.options.onRemoteDesignDataUpdate?.(oldData, mergedData, "draft")
+			if (!this.shouldAutoSaveRestoredDraft(mergedData, remoteData)) {
+				this.enterDraftRestoreConflictForUnsafeEmptyLocal({
+					localData: mergedData,
+					remoteData,
+					baseRemoteData: baseData,
+					baseVersion: draft.baseRemoteVersion,
+					remoteVersion,
+					baseFingerprint: draft.baseRemoteFingerprint,
+					localFingerprint: hashDesignDataComparable(mergedData),
+					remoteFingerprint,
+				})
+				return true
+			}
+			this.clearConflictState()
+			this.persistLocalDraft(mergedData, { immediate: true })
+			this.saveManager.scheduleAutoSave(undefined, { source: "draft-restore" })
+			this.showAutoMergeToast()
+			return true
+		}
+
+		if (!mergeResult.isElementLevelConflict) {
+			return false
+		}
+
+		const mergedData = mergeResult.mergedData
+		const elementConflicts = this.buildElementConflicts(mergeResult)
+		const localData = this.buildLocalDataFromElementConflicts(mergedData, elementConflicts)
+		const conflict = this.buildConflict({
+			reason: "element-level-conflict",
+			localData,
+			remoteData,
+			baseVersion: draft.baseRemoteVersion,
+			localVersion: draft.baseRemoteVersion,
+			remoteVersion,
+			baseFingerprint: draft.baseRemoteFingerprint,
+			localFingerprint: hashDesignDataComparable(localData),
+			remoteFingerprint,
+			elementConflicts,
+			mergedData,
+		})
+
+		this.pendingRemoteDesignData = null
+		this.saveManager.cancelAutoSave()
+		this.saveManager.clearRemoteConflict()
+		this.stateBag.setters.setIsSaving(false)
+		this.stateBag.setters.setDesignData(localData)
+		this.setSyncedRemoteBaseDesignData(remoteData)
+		this.options.onRemoteDesignDataUpdate?.(oldData, localData, "draft")
+		this.setConflictState(conflict)
+		this.writeConflictLocalDraftNow(conflict, localData, baseData)
+		return true
 	}
 
 	private async tryRestoreLocalDraftAfterRemoteLoad(): Promise<void> {
@@ -982,6 +1348,24 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			const draftData = cloneDeep(draft.designData) as DesignData
 			const dslBase = this.getDesignProjectBasePath()
 			if (dslBase) normalizeDesignDataPathsAfterLoad(draftData, dslBase)
+			const draftBaseData = draft.baseRemoteData
+				? (cloneDeep(draft.baseRemoteData) as DesignData)
+				: null
+			if (draftBaseData) {
+				if (dslBase) normalizeDesignDataPathsAfterLoad(draftBaseData, dslBase)
+				if (
+					this.tryMergeRemoteAdvancedDraft({
+						draft,
+						draftData,
+						baseData: draftBaseData,
+						remoteData: this.stateBag.getDesignData(),
+						remoteVersion,
+						remoteFingerprint,
+					})
+				) {
+					return
+				}
+			}
 			this.setConflictState(
 				this.buildConflict({
 					reason: "draft-remote-advanced",
@@ -1006,7 +1390,20 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.stateBag.setters.setDesignData(restoredData)
 		this.stateBag.setPrevDesignDataFingerprint(remoteFingerprint)
 		this.options.onRemoteDesignDataUpdate?.(oldData, restoredData, "draft")
-		this.saveManager.scheduleAutoSave()
+		if (!this.shouldAutoSaveRestoredDraft(restoredData, oldData)) {
+			this.enterDraftRestoreConflictForUnsafeEmptyLocal({
+				localData: restoredData,
+				remoteData: oldData,
+				baseRemoteData: this.baseDesignData ?? oldData,
+				baseVersion: draft.baseRemoteVersion,
+				remoteVersion,
+				baseFingerprint: draft.baseRemoteFingerprint || remoteFingerprint,
+				localFingerprint: draft.localFingerprint,
+				remoteFingerprint,
+			})
+			return
+		}
+		this.saveManager.scheduleAutoSave(undefined, { source: "draft-restore" })
 	}
 
 	private async handleSaveResultConflict(saveResult: DesignSaveResult): Promise<boolean> {
@@ -1097,6 +1494,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	}
 
 	async manualSave(): Promise<void> {
+		if (this.isVersionDataSourceLocked()) {
+			return
+		}
 		if (this.hasUnresolvedElementConflicts()) {
 			const remoteSaveData = this.getRemoteSaveDataForCurrentElementConflicts()
 			if (!remoteSaveData) {
@@ -1110,6 +1510,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				allowRemoteConflict: true,
 				designData: remoteSaveData,
 				updateCurrentDesignData: false,
+				source: "conflict-resolution",
 			})
 			if (saveResult.ok) {
 				this.handleSuccessfulSaveResult(saveResult)
@@ -1140,7 +1541,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	}
 
 	syncDesignData(newDesignData: DesignData): void {
-		if (this.hasBlockingConflict()) {
+		if (this.isVersionDataSourceLocked() || this.hasBlockingConflict()) {
 			return
 		}
 		this.saveManager.syncDesignData(newDesignData)
@@ -1170,6 +1571,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	}
 
 	async saveToRemote(): Promise<void> {
+		if (this.isVersionDataSourceLocked()) return
 		if (this.getIsReadOnly()) return
 		if (this.hasUnresolvedElementConflicts()) {
 			const remoteSaveData = this.getRemoteSaveDataForCurrentElementConflicts()
@@ -1182,6 +1584,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			const saveResult = await this.saveManager.commitSave({
 				designData: remoteSaveData,
 				updateCurrentDesignData: false,
+				source: "conflict-resolution",
 			})
 			if (saveResult.ok) {
 				this.handleSuccessfulSaveResult(saveResult)
@@ -1196,7 +1599,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			return
 		}
 		this.stateBag.setters.setIsSaving(true)
-		const saveResult = await this.saveManager.commitSave()
+		const saveResult = await this.saveManager.commitSave({ source: "manual-save" })
 		if (saveResult.ok) {
 			this.handleSuccessfulSaveResult(saveResult)
 			if (
@@ -1245,25 +1648,42 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	}
 
 	async handleChangeFileVersion(version: number, isNewestVersion: boolean): Promise<void> {
-		this.clearPendingRemoteDesignData()
-		this.clearLocalDraftBecauseVersionSwitched()
-		await this.versionManager.handleChangeFileVersion(version, isNewestVersion)
-		this.syncBaseDesignDataFromCurrent()
+		const unlockVersionDataSource = this.lockVersionDataSource()
+		try {
+			this.clearPendingRemoteDesignData()
+			this.clearLocalDraftBecauseVersionSwitched()
+			this.saveManager.cancelAutoSave()
+			await this.versionManager.handleChangeFileVersion(version, isNewestVersion)
+			this.syncBaseDesignDataFromCurrent()
+		} finally {
+			unlockVersionDataSource()
+		}
 	}
 
-	handleReturnLatest(): void {
-		this.clearPendingRemoteDesignData()
-		this.clearLocalDraftBecauseVersionSwitched()
-		void this.versionManager
-			.handleReturnLatest()
-			.then(() => this.syncBaseDesignDataFromCurrent())
+	async handleReturnLatest(): Promise<void> {
+		const unlockVersionDataSource = this.lockVersionDataSource()
+		try {
+			this.clearPendingRemoteDesignData()
+			this.clearLocalDraftBecauseVersionSwitched()
+			this.saveManager.cancelAutoSave()
+			await this.versionManager.handleReturnLatest()
+			this.syncBaseDesignDataFromCurrent()
+		} finally {
+			unlockVersionDataSource()
+		}
 	}
 
 	async handleVersionRollback(version?: number): Promise<void> {
-		this.clearPendingRemoteDesignData()
-		this.clearLocalDraftBecauseVersionSwitched()
-		await this.versionManager.handleVersionRollback(version)
-		this.syncBaseDesignDataFromCurrent()
+		const unlockVersionDataSource = this.lockVersionDataSource()
+		try {
+			this.clearPendingRemoteDesignData()
+			this.clearLocalDraftBecauseVersionSwitched()
+			this.saveManager.cancelAutoSave()
+			await this.versionManager.handleVersionRollback(version)
+			this.syncBaseDesignDataFromCurrent()
+		} finally {
+			unlockVersionDataSource()
+		}
 	}
 
 	fetchFileVersions(): Promise<FileHistoryVersion[]> {
@@ -1340,6 +1760,64 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		return true
 	}
 
+	private tryAutoMergeSingleElementConflict(
+		elementConflict: DesignElementConflict,
+		resolution: "use-local" | "use-remote",
+	): boolean {
+		if (
+			elementConflict.reason !== "same-element-changed" ||
+			!elementConflict.baseElement ||
+			!elementConflict.localElement ||
+			!elementConflict.remoteElement ||
+			elementConflict.baseParentId !== elementConflict.localParentId ||
+			elementConflict.baseParentId !== elementConflict.remoteParentId
+		) {
+			return false
+		}
+
+		const mergedElement = tryMergeCanvasElementsByField(
+			elementConflict.baseElement,
+			elementConflict.localElement,
+			elementConflict.remoteElement,
+		)
+		if (!mergedElement) return false
+
+		const oldData = this.stateBag.getDesignData()
+		const patchResult = tryApplyCanvasDocumentPatch(
+			oldData.canvas,
+			{
+				upserts: [
+					{
+						element: mergedElement,
+						parentId: elementConflict.remoteParentId,
+					},
+				],
+				deletedElementIds: [],
+				changedElementIds: [elementConflict.elementId],
+			},
+			{ strictParent: true },
+		)
+		if (!patchResult.ok) return false
+
+		const nextData: DesignData = {
+			...oldData,
+			canvas: patchResult.canvas,
+		}
+		this.stateBag.setters.setDesignData(nextData)
+		this.options.onRemoteDesignDataUpdate?.(oldData, nextData, "draft")
+		const didResolve = this.resolveElementConflicts({
+			elementIds: [elementConflict.elementId],
+			resolution,
+			nextDesignData: nextData,
+			trigger: "user-edit",
+		})
+		if (didResolve) {
+			this.scheduleAutoSave({ source: "conflict-resolution" })
+			this.showAutoMergeToast()
+		}
+		return didResolve
+	}
+
 	clearConflictState(): void {
 		this.conflictState = null
 		this.stateBag.setters.setConflictState(null)
@@ -1380,6 +1858,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			designData: localData,
 			updateCurrentDesignData: true,
 			skipRemoteUpdateCheck: true,
+			source: "conflict-resolution",
 		})
 		if (saveResult.ok) {
 			this.pendingRemoteDesignData = null
@@ -1407,6 +1886,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			(item) => item.elementId === elementId && item.status === "unresolved",
 		)
 		if (!conflict || !elementConflict) return false
+		if (this.tryAutoMergeSingleElementConflict(elementConflict, "use-local")) {
+			return true
+		}
 
 		const oldData = this.stateBag.getDesignData()
 		const patchResult = tryApplyCanvasDocumentPatch(
@@ -1442,7 +1924,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			trigger: "explicit-local",
 		})
 		if (didResolve) {
-			this.scheduleAutoSave()
+			this.scheduleAutoSave({ source: "conflict-resolution" })
 		}
 		return didResolve
 	}
@@ -1453,6 +1935,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			(item) => item.elementId === elementId && item.status === "unresolved",
 		)
 		if (!conflict || !elementConflict) return false
+		if (this.tryAutoMergeSingleElementConflict(elementConflict, "use-remote")) {
+			return true
+		}
 
 		const oldData = this.stateBag.getDesignData()
 		const patchResult = tryApplyCanvasDocumentPatch(
@@ -1491,7 +1976,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			didResolve &&
 			hashDesignDataComparable(nextData) !== this.stateBag.getPrevDesignDataFingerprint()
 		) {
-			this.scheduleAutoSave()
+			this.scheduleAutoSave({ source: "conflict-resolution" })
 		}
 		return didResolve
 	}
@@ -1499,6 +1984,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	resolveEditedElementConflictsWithLocal(
 		elementIds: string[],
 		nextDesignData: DesignData,
+		metadata?: DesignSaveMetadata,
 	): boolean {
 		if (!elementIds.length) return false
 		const didResolve = this.resolveElementConflicts({
@@ -1508,7 +1994,10 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			trigger: "user-edit",
 		})
 		if (didResolve) {
-			this.scheduleAutoSave()
+			this.scheduleAutoSave({
+				...metadata,
+				source: metadata?.source ?? "canvas-patch",
+			})
 		}
 		return didResolve
 	}
@@ -1518,6 +2007,10 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	}
 }
 
-function noopDesignDataUpdater(_updater: (draft: DesignData) => void): void {
+function noopDesignDataUpdater(
+	_updater: (draft: DesignData) => void,
+	_metadata?: DesignSaveMetadata,
+): void {
 	void _updater
+	void _metadata
 }

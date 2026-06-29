@@ -66,6 +66,42 @@
 		return image?.url ?? image?.src ?? image?.previewUrl ?? ""
 	}
 
+	function getImageFileName(image) {
+		const explicitName =
+			image?.name ??
+			image?.fileName ??
+			image?.filename ??
+			image?.file_name ??
+			image?.originalName ??
+			image?.original_name
+		if (explicitName) return String(explicitName)
+
+		const url = getImageUrl(image)
+		if (!url) return ""
+		const pathname = String(url).split(/[?#]/)[0] ?? ""
+		const fileName = pathname.split("/").filter(Boolean).pop()
+		return fileName ? decodeURIComponent(fileName) : ""
+	}
+
+	function getFileNameStem(fileName) {
+		const baseName = String(fileName ?? "")
+			.split(/[\\/]/)
+			.pop()
+			?.trim()
+		if (!baseName) return ""
+		return baseName.replace(/\.[^.]+$/, "")
+	}
+
+	function sanitizeFileNamePart(value, fallback = "image") {
+		const normalized = String(value ?? "")
+			.trim()
+			.replace(/\s+/g, "-")
+			.replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, "-")
+			.replace(/-+/g, "-")
+			.replace(/^-+|-+$/g, "")
+		return normalized || fallback
+	}
+
 	function inferImageMimeType(fileName) {
 		const extension = String(fileName ?? "")
 			.split(".")
@@ -308,6 +344,57 @@
 		return maxX >= 0 ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } : null
 	}
 
+	function createMaskAlphaCanvas(maskCanvas, cropRect) {
+		const alphaCanvas = document.createElement("canvas")
+		alphaCanvas.width = cropRect.w
+		alphaCanvas.height = cropRect.h
+		const alphaCtx = alphaCanvas.getContext("2d")
+		alphaCtx.drawImage(
+			maskCanvas,
+			cropRect.x,
+			cropRect.y,
+			cropRect.w,
+			cropRect.h,
+			0,
+			0,
+			cropRect.w,
+			cropRect.h,
+		)
+
+		// maskCanvas 是黑白 RGB，黑色区域的 alpha 仍是 255，需要转成真正的透明遮罩。
+		const imageData = alphaCtx.getImageData(0, 0, cropRect.w, cropRect.h)
+		for (let i = 0; i < imageData.data.length; i += 4) {
+			const alpha = imageData.data[i]
+			imageData.data[i] = 255
+			imageData.data[i + 1] = 255
+			imageData.data[i + 2] = 255
+			imageData.data[i + 3] = alpha
+		}
+		alphaCtx.putImageData(imageData, 0, 0)
+		return alphaCanvas
+	}
+
+	function applyMaskToCropCanvas(cropCanvas, maskCanvas, cropRect) {
+		const alphaCanvas = createMaskAlphaCanvas(maskCanvas, cropRect)
+		const cropCtx = cropCanvas.getContext("2d")
+		cropCtx.save()
+		cropCtx.globalCompositeOperation = "destination-in"
+		cropCtx.drawImage(alphaCanvas, 0, 0)
+		cropCtx.restore()
+	}
+
+	function canvasToBlob(canvas, mimeType) {
+		return new Promise((resolve) => {
+			if (!canvas?.toBlob) {
+				resolve(null)
+				return
+			}
+			canvas.toBlob((blob) => {
+				resolve(blob)
+			}, mimeType)
+		})
+	}
+
 	/** 渲染插件面板并返回 view controller */
 	function render(ctx, root, config) {
 		const t = (key, fallback) => ctx.i18n?.t?.(key, fallback) ?? fallback ?? key
@@ -328,6 +415,15 @@
 			sectionViews: {},
 		}
 		let helpers = null
+		let maskCropUploadSequence = 0
+
+		function createMaskCropUploadName(section, sourceAsset) {
+			maskCropUploadSequence += 1
+			const sourceNameStem = getFileNameStem(getImageFileName(sourceAsset))
+			const sourcePrefix = sanitizeFileNamePart(sourceNameStem, "image")
+			const cropSuffix = sanitizeFileNamePart(section.cropNameSuffix || "crop", "crop")
+			return `${sourcePrefix}-${cropSuffix}-${Date.now()}-${maskCropUploadSequence}.png`
+		}
 
 		function getElements() {
 			return {
@@ -695,22 +791,61 @@
 			return []
 		}
 
+		/** 获取仍处于草稿或上传中的遮罩区块，已确认完成的不重复上传 */
+		function isPendingMaskPainterView(sectionView) {
+			// 是否是遮罩涂抹区块
+			if (sectionView?.kind !== "mask-painter") return false
+			// 非激活 panel 中的区块已从 DOM 移除，不应在生成前提交
+			if (sectionView.sectionNode && !sectionView.sectionNode.isConnected) return false
+			// 是否有未确认的涂抹变化
+			const hasPendingMaskChange = sectionView.hasPendingMaskChange?.()
+			// 是否有正在进行的提交
+			const hasCommitInFlight = Boolean(sectionView.getCommitPromise?.())
+			return hasPendingMaskChange || hasCommitInFlight
+		}
+
+		function getPendingMaskPainterViews() {
+			return Object.values(view.sectionViews).filter(isPendingMaskPainterView)
+		}
+
+		function hasPendingMask(sectionId) {
+			if (!sectionId) return getPendingMaskPainterViews().length > 0
+			return isPendingMaskPainterView(view.sectionViews[sectionId])
+		}
+
 		/** 生成 */
 		async function handleGenerate() {
 			if (state.loading) return
-			const validationError = config.generate?.validate?.({ state, helpers, t })
-			if (validationError) {
-				setState({ error: validationError })
-				return
+			const pendingMaskPainters = getPendingMaskPainterViews()
+			if (!pendingMaskPainters.length) {
+				const validationError = config.generate?.validate?.({ state, helpers, t })
+				if (validationError) {
+					setState({ error: validationError })
+					return
+				}
 			}
 
 			setState({ loading: true, error: "" })
-			ctx.ui?.toast?.(
-				config.generate.startMessage ?? t("toast.start", getDefaultStartMessage()),
-				config.generate.startToastType ?? "info",
-			)
 
 			try {
+				if (pendingMaskPainters.length) {
+					await Promise.all(
+						pendingMaskPainters
+							.map((sectionView) => sectionView.commitPendingMask?.())
+							.filter(Boolean),
+					)
+					const validationError = config.generate?.validate?.({ state, helpers, t })
+					if (validationError) {
+						setState({ error: validationError })
+						return
+					}
+				}
+
+				ctx.ui?.toast?.(
+					config.generate.startMessage ?? t("toast.start", getDefaultStartMessage()),
+					config.generate.startToastType ?? "info",
+				)
+
 				if (!ctx.ai?.generateAndPlace) {
 					throw new Error("ctx.ai.generateAndPlace is not connected yet.")
 				}
@@ -1281,42 +1416,161 @@
 			}
 
 			const sourceUrl = getImageUrl(sourceAsset)
-			// maskCanvas 用于记录涂抹结果，displayCanvas 用于显示合成后的预览，二者尺寸与源图一致
+			// maskCanvas 存黑白数据，overlayCanvas 存可视化标记形状，displayCanvas 负责合成展示。
 			const maskCanvas = document.createElement("canvas")
+			const overlayCanvas = document.createElement("canvas")
 			const displayCanvas = document.createElement("canvas")
 			displayCanvas.className = "mpk-mask-canvas"
 			let painting = false
-			let uploadTimer = null
+			let paintMode = "paint"
 			let imgLoaded = false
 			let cursorX = -1
 			let cursorY = -1
 			let hasPendingMaskChange = false
-			// 笔刷大小
-			const brushSize = section.brushSize ?? 28
+			let commitPromise = null
+			let commitVersion = 0
+			let confirmBtn = null
+			let paintBtn = null
+			let eraseBtn = null
+			let brushSlider = null
+			let previewNode = null
+			let previewImage = null
+			let previewVersion = 0
+			const minBrushSize = Math.max(1, Number(section.minBrushSize) || 12)
+			const maxBrushSize = Math.max(minBrushSize, Number(section.maxBrushSize) || 120)
+			const brushStep = Math.max(1, Number(section.brushStep) || 2)
+			let currentBrushSize = clampBrushSize(section.brushSize ?? 28)
+			const overlayStyle = normalizeOverlayStyle(section.overlayColor)
+			const overlayFillStyle = overlayStyle.color
+			const overlayOpacity = clampOverlayOpacity(
+				section.overlayOpacity ?? overlayStyle.opacity,
+			)
 
 			const img = new Image()
 			// cropImg 通过 host 代理 fetch 得到 blob URL，避免 null-origin iframe tainted canvas 问题
 			const cropImg = new Image()
 			let cropImgObjUrl = null
 			let cropImgLoaded = false
+			let cropImgLoadPromise = null
 			if (ctx.assets?.fetchBlob && sourceUrl) {
-				ctx.assets
+				cropImgLoadPromise = ctx.assets
 					.fetchBlob(sourceUrl)
 					.then((blob) => {
-						cropImgObjUrl = URL.createObjectURL(blob)
-						cropImg.onload = () => {
-							cropImgLoaded = true
-							URL.revokeObjectURL(cropImgObjUrl)
-						}
-						cropImg.onerror = () => {
-							URL.revokeObjectURL(cropImgObjUrl)
-						}
-						cropImg.src = cropImgObjUrl
+						return new Promise((resolve) => {
+							cropImgObjUrl = URL.createObjectURL(blob)
+							cropImg.onload = () => {
+								cropImgLoaded = true
+								URL.revokeObjectURL(cropImgObjUrl)
+								resolve(true)
+							}
+							cropImg.onerror = () => {
+								URL.revokeObjectURL(cropImgObjUrl)
+								resolve(false)
+							}
+							cropImg.src = cropImgObjUrl
+						})
 					})
-					.catch(() => {}) // CORS/network fail, crop will be skipped
+					.catch(() => false) // CORS/network fail, crop will be skipped
 			}
 
-			// 刷新显示（先显示原图，再叠加红色半透明的遮罩，最后绘制笔刷预览）
+			// 获取显示缩放比例
+			function getDisplayScale() {
+				const rect = displayCanvas.getBoundingClientRect()
+				if (rect.width > 0) {
+					return displayCanvas.width / rect.width
+				}
+				if (rect.height > 0) {
+					return displayCanvas.height / rect.height
+				}
+				return 1
+			}
+
+			// 将 CSS 像素转换为 canvas 像素
+			function toCanvasPx(cssPx) {
+				const scale = getDisplayScale()
+				if (!Number.isFinite(scale) || scale <= 0) return cssPx
+				return cssPx * scale
+			}
+
+			// 限制 brushSize 的值在 minBrushSize 和 maxBrushSize 之间
+			function clampBrushSize(value) {
+				const parsedValue = Number(value)
+				const safeValue = Number.isFinite(parsedValue) ? parsedValue : 28
+				return Math.max(minBrushSize, Math.min(maxBrushSize, safeValue))
+			}
+
+			// 限制 overlayOpacity 的值在 0-1 之间
+			function clampOverlayOpacity(value) {
+				const parsedValue = Number(value)
+				const safeValue = Number.isFinite(parsedValue) ? parsedValue : 0.42
+				return Math.max(0, Math.min(1, safeValue))
+			}
+
+			// 解析 overlayColor 字符串，返回颜色和透明度对象
+			function normalizeOverlayStyle(value) {
+				const fallback = {
+					color: "rgb(43,139,224)",
+					opacity: 0.42,
+				}
+				if (typeof value !== "string" || !value.trim()) {
+					return fallback
+				}
+				const color = value.trim()
+				const rgbaMatch = color.match(
+					/^rgba\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)$/i,
+				)
+				if (!rgbaMatch) {
+					return {
+						color,
+						opacity: fallback.opacity,
+					}
+				}
+				const opacity = Number(rgbaMatch[4])
+				return {
+					color: `rgb(${rgbaMatch[1]},${rgbaMatch[2]},${rgbaMatch[3]})`,
+					opacity: Number.isFinite(opacity) ? opacity : fallback.opacity,
+				}
+			}
+
+			function getBrushRadius() {
+				return toCanvasPx(currentBrushSize) / 2
+			}
+
+			function drawFilledCircle(context, x, y, radius) {
+				context.beginPath()
+				context.arc(x, y, radius, 0, Math.PI * 2)
+				context.fill()
+			}
+
+			function syncMaskToolState() {
+				if (paintBtn) {
+					const isActive = paintMode === "paint"
+					paintBtn.classList.toggle("is-active", isActive)
+					paintBtn.setAttribute("aria-pressed", isActive ? "true" : "false")
+				}
+				if (eraseBtn) {
+					const isActive = paintMode === "erase"
+					eraseBtn.classList.toggle("is-active", isActive)
+					eraseBtn.setAttribute("aria-pressed", isActive ? "true" : "false")
+				}
+				if (brushSlider) {
+					brushSlider.value = String(currentBrushSize)
+				}
+			}
+
+			function setPaintMode(nextMode) {
+				paintMode = nextMode === "erase" ? "erase" : "paint"
+				syncMaskToolState()
+				redrawDisplay()
+			}
+
+			function setCurrentBrushSize(nextSize) {
+				currentBrushSize = clampBrushSize(nextSize)
+				syncMaskToolState()
+				redrawDisplay()
+			}
+
+			// 刷新显示（先显示原图，再按固定透明度叠加蓝色遮罩，最后绘制笔刷预览）
 			function redrawDisplay() {
 				if (!imgLoaded) return
 				// 画源图
@@ -1324,37 +1578,24 @@
 				dc.clearRect(0, 0, displayCanvas.width, displayCanvas.height)
 				dc.drawImage(img, 0, 0)
 
-				// 把 maskCanvas 的白色区域转成红色半透明叠加
-				const mc = maskCanvas.getContext("2d")
-				const md = mc.getImageData(0, 0, maskCanvas.width, maskCanvas.height)
-				const ov = document.createElement("canvas")
-				ov.width = maskCanvas.width
-				ov.height = maskCanvas.height
-				const oc = ov.getContext("2d")
-				const od = oc.createImageData(maskCanvas.width, maskCanvas.height)
-				for (let i = 0; i < md.data.length; i += 4) {
-					if (md.data[i] > 128) {
-						od.data[i] = 239
-						od.data[i + 1] = 68
-						od.data[i + 2] = 68
-						od.data[i + 3] = 155
-					}
-				}
-				oc.putImageData(od, 0, 0)
-				// 叠加到 displayCanvas 上
-				dc.drawImage(ov, 0, 0)
+				dc.save()
+				dc.globalAlpha = overlayOpacity
+				dc.drawImage(overlayCanvas, 0, 0)
+				dc.restore()
 				// 绘制笔刷预览圆圈
 				if (cursorX >= 0) {
+					const brushRadius = getBrushRadius()
 					dc.save()
 					dc.beginPath()
-					dc.arc(cursorX, cursorY, brushSize / 2, 0, Math.PI * 2)
-					dc.strokeStyle = "rgba(0,0,0,0.6)"
-					dc.lineWidth = 3
+					dc.arc(cursorX, cursorY, brushRadius, 0, Math.PI * 2)
+					dc.strokeStyle = "rgba(0,0,0,0.75)"
+					dc.lineWidth = toCanvasPx(4)
 					dc.stroke()
 					dc.beginPath()
-					dc.arc(cursorX, cursorY, brushSize / 2, 0, Math.PI * 2)
-					dc.strokeStyle = "rgba(255,255,255,0.9)"
-					dc.lineWidth = 1.5
+					dc.arc(cursorX, cursorY, brushRadius, 0, Math.PI * 2)
+					dc.strokeStyle =
+						paintMode === "erase" ? "rgba(255,255,255,0.95)" : "rgba(255,214,10,1)"
+					dc.lineWidth = toCanvasPx(2.5)
 					dc.stroke()
 					dc.restore()
 				}
@@ -1366,9 +1607,14 @@
 				displayCanvas.height = img.naturalHeight
 				maskCanvas.width = img.naturalWidth
 				maskCanvas.height = img.naturalHeight
+				overlayCanvas.width = img.naturalWidth
+				overlayCanvas.height = img.naturalHeight
 				const mc = maskCanvas.getContext("2d")
 				mc.fillStyle = "#000000"
 				mc.fillRect(0, 0, maskCanvas.width, maskCanvas.height)
+				overlayCanvas
+					.getContext("2d")
+					.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height)
 				redrawDisplay()
 			}
 			img.onerror = () => {
@@ -1393,52 +1639,178 @@
 			function doPaint(e) {
 				if (!painting || !imgLoaded) return
 				const { x, y } = getCoords(e)
+				const radius = getBrushRadius()
 				const mc = maskCanvas.getContext("2d")
-				mc.fillStyle = "#ffffff"
-				mc.beginPath()
-				mc.arc(x, y, brushSize / 2, 0, Math.PI * 2)
-				mc.fill()
-				hasPendingMaskChange = true
-				confirmBtn.disabled = false
+				mc.save()
+				mc.fillStyle = paintMode === "erase" ? "#000000" : "#ffffff"
+				drawFilledCircle(mc, x, y, radius)
+				mc.restore()
+
+				const oc = overlayCanvas.getContext("2d")
+				oc.save()
+				if (paintMode === "erase") {
+					oc.globalCompositeOperation = "destination-out"
+					oc.fillStyle = "rgba(0,0,0,1)"
+				} else {
+					oc.globalCompositeOperation = "source-over"
+					oc.fillStyle = overlayFillStyle
+				}
+				drawFilledCircle(oc, x, y, radius)
+				oc.restore()
+				setPendingMaskChange(true)
 				redrawDisplay()
 			}
 
-			function scheduleUpload() {
-				hasPendingMaskChange = false
-				confirmBtn.disabled = true
-				clearTimeout(uploadTimer)
-				uploadTimer = setTimeout(() => {
-					if (cropImgLoaded) {
-						const srcForCrop = cropImg
-						const bbox = getMaskBoundingBox(maskCanvas)
-						if (bbox) {
-							const pad = section.cropPadding ?? 40
-							const cx = Math.max(0, bbox.x - pad)
-							const cy = Math.max(0, bbox.y - pad)
-							const cw = Math.min(maskCanvas.width - cx, bbox.w + pad * 2)
-							const ch = Math.min(maskCanvas.height - cy, bbox.h + pad * 2)
-							const cropCanvas = document.createElement("canvas")
-							cropCanvas.width = cw
-							cropCanvas.height = ch
-							cropCanvas
-								.getContext("2d")
-								.drawImage(srcForCrop, cx, cy, cw, ch, 0, 0, cw, ch)
-							cropCanvas.toBlob((cropBlob) => {
-								if (!cropBlob || !ctx.assets?.uploadFile) return
-								ctx.assets
-									.uploadFile(cropBlob, "crop.png", "image/png")
-									.then((asset) => {
-										setState({ [section.stateKey]: asset })
-									})
-									.catch(() => {})
-							}, "image/png")
-						} else {
-							setState({ [section.stateKey]: null })
-						}
-					} else {
-						setState({ [section.stateKey]: null })
+			function setPendingMaskChange(nextValue) {
+				const hasChanged = hasPendingMaskChange !== nextValue
+				hasPendingMaskChange = nextValue
+				if (confirmBtn) confirmBtn.disabled = !nextValue
+				if (hasChanged) {
+					renderFooter()
+				} else {
+					updateGenerateButtonState()
+				}
+			}
+
+			async function ensureCropImageLoaded() {
+				if (cropImgLoaded) return true
+				if (!cropImgLoadPromise) return false
+				return (await cropImgLoadPromise) === true
+			}
+
+			function createMaskCropCanvas() {
+				const bbox = getMaskBoundingBox(maskCanvas)
+				if (!bbox) return null
+
+				const useMaskedCrop = section.maskCropMode !== "rect"
+				const pad = section.cropPadding ?? (useMaskedCrop ? 0 : 40)
+				const cx = Math.max(0, bbox.x - pad)
+				const cy = Math.max(0, bbox.y - pad)
+				const cw = Math.min(maskCanvas.width - cx, bbox.w + pad * 2)
+				const ch = Math.min(maskCanvas.height - cy, bbox.h + pad * 2)
+				const cropRect = { x: cx, y: cy, w: cw, h: ch }
+				const cropCanvas = document.createElement("canvas")
+				cropCanvas.width = cw
+				cropCanvas.height = ch
+				cropCanvas.getContext("2d").drawImage(cropImg, cx, cy, cw, ch, 0, 0, cw, ch)
+				if (useMaskedCrop) {
+					applyMaskToCropCanvas(cropCanvas, maskCanvas, cropRect)
+				}
+				return cropCanvas
+			}
+
+			function hideMaskPreview() {
+				if (previewNode) previewNode.classList.remove("is-visible")
+				if (previewImage) previewImage.removeAttribute("src")
+			}
+
+			function clearMaskPreview() {
+				previewVersion += 1
+				hideMaskPreview()
+			}
+
+			function createMaskPreviewDataUrl(cropCanvas) {
+				const maxPreviewSize = Math.max(1, Number(section.previewPixelSize) || 160)
+				const maxSourceSize = Math.max(cropCanvas.width, cropCanvas.height)
+				const scale = Math.min(1, maxPreviewSize / maxSourceSize)
+				const previewCanvas = document.createElement("canvas")
+				previewCanvas.width = Math.max(1, Math.round(cropCanvas.width * scale))
+				previewCanvas.height = Math.max(1, Math.round(cropCanvas.height * scale))
+				const previewContext = previewCanvas.getContext("2d")
+				if (!previewContext) return null
+				previewContext.drawImage(cropCanvas, 0, 0, previewCanvas.width, previewCanvas.height)
+				return previewCanvas.toDataURL("image/png")
+			}
+
+			async function updateMaskPreview() {
+				const version = previewVersion + 1
+				previewVersion = version
+				const canCrop = await ensureCropImageLoaded()
+				if (version !== previewVersion) return
+				if (!canCrop || !previewNode || !previewImage) {
+					hideMaskPreview()
+					return
+				}
+				const cropCanvas = createMaskCropCanvas()
+				if (version !== previewVersion) return
+				if (!cropCanvas?.toDataURL) {
+					hideMaskPreview()
+					return
+				}
+				try {
+					const previewDataUrl = createMaskPreviewDataUrl(cropCanvas)
+					if (!previewDataUrl) {
+						hideMaskPreview()
+						return
 					}
-				}, 600)
+					previewImage.src = previewDataUrl
+					previewNode.classList.add("is-visible")
+				} catch (_error) {
+					hideMaskPreview()
+				}
+			}
+
+			function requestMaskPreviewUpdate() {
+				void updateMaskPreview().catch(() => {
+					hideMaskPreview()
+				})
+			}
+
+			async function createMaskCropAsset() {
+				const canCrop = await ensureCropImageLoaded()
+				if (!canCrop || !ctx.assets?.uploadFile) return null
+				const cropCanvas = createMaskCropCanvas()
+				if (!cropCanvas) return null
+
+				const cropBlob = await canvasToBlob(cropCanvas, "image/png")
+				if (!cropBlob) return null
+				return ctx.assets.uploadFile(
+					cropBlob,
+					createMaskCropUploadName(section, sourceAsset),
+					"image/png",
+				)
+			}
+
+			// 裁剪涂抹 bbox，对裁剪图 uploadFile
+			function commitMaskChange() {
+				if (commitPromise) return commitPromise
+
+				setPendingMaskChange(false)
+				const version = commitVersion
+				commitPromise = createMaskCropAsset()
+					.then((asset) => {
+						if (version === commitVersion) {
+							setState({ [section.stateKey]: asset || null })
+						}
+						return asset || null
+					})
+					.catch((error) => {
+						if (version !== commitVersion) return null
+						setState({ [section.stateKey]: null })
+						throw error
+					})
+					.finally(() => {
+						commitPromise = null
+					})
+				return commitPromise
+			}
+
+			// 提交遮罩涂抹结果
+			async function commitPendingMask() {
+				while (commitPromise || hasPendingMaskChange) {
+					if (commitPromise) {
+						await commitPromise
+						continue
+					}
+					if (hasPendingMaskChange) {
+						await commitMaskChange()
+					}
+				}
+			}
+
+			function cancelPendingMaskCommit() {
+				commitVersion += 1
+				setPendingMaskChange(false)
 			}
 
 			displayCanvas.style.cursor = "none"
@@ -1456,6 +1828,7 @@
 			displayCanvas.addEventListener("mouseup", () => {
 				if (!painting) return
 				painting = false
+				requestMaskPreviewUpdate()
 			})
 			displayCanvas.addEventListener("mouseleave", () => {
 				cursorX = -1
@@ -1463,6 +1836,7 @@
 				redrawDisplay()
 				if (!painting) return
 				painting = false
+				requestMaskPreviewUpdate()
 			})
 			displayCanvas.addEventListener(
 				"touchstart",
@@ -1482,42 +1856,95 @@
 				{ passive: false },
 			)
 			displayCanvas.addEventListener("touchend", () => {
+				if (!painting) return
 				painting = false
+				requestMaskPreviewUpdate()
+			})
+			displayCanvas.addEventListener("touchcancel", () => {
+				if (!painting) return
+				painting = false
+				requestMaskPreviewUpdate()
 			})
 
 			const wrap = createElement("div", "mpk-mask-painter")
-			wrap.append(displayCanvas)
+			previewNode = createElement("div", "mpk-mask-preview")
+			previewNode.setAttribute("aria-hidden", "true")
+			previewImage = createElement("img", "mpk-mask-preview-image")
+			previewImage.alt = ""
+			previewNode.append(previewImage)
+			wrap.append(displayCanvas, previewNode)
 
 			const controls = createElement("div", "mpk-mask-controls")
-			const confirmBtn = createElement(
+			confirmBtn = createElement(
 				"button",
 				"mpk-mask-confirm-btn",
-				section.confirmLabel || t("maskPainter.confirm", "确认标记"),
+				section.confirmLabel || t("maskPainter.confirm", "确认"),
 			)
 			confirmBtn.type = "button"
 			confirmBtn.disabled = true
 			confirmBtn.addEventListener("click", () => {
 				if (!hasPendingMaskChange) return
-				scheduleUpload()
+				void commitPendingMask().catch((error) => {
+					setState({
+						error:
+							getErrorMessage(error) ||
+							section.pickErrorMessage ||
+							t("error.pickFiles", "图片上传失败，请重试"),
+					})
+				})
 			})
 			const clearBtn = createElement(
 				"button",
 				"mpk-mask-clear-btn",
-				section.clearLabel || t("maskPainter.clear", "清除标记"),
+				section.clearLabel || t("maskPainter.clear", "重置"),
 			)
 			clearBtn.type = "button"
 			clearBtn.addEventListener("click", () => {
 				const mc = maskCanvas.getContext("2d")
 				mc.fillStyle = "#000000"
 				mc.fillRect(0, 0, maskCanvas.width, maskCanvas.height)
+				overlayCanvas
+					.getContext("2d")
+					.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height)
 				redrawDisplay()
-				hasPendingMaskChange = false
-				confirmBtn.disabled = true
-				clearTimeout(uploadTimer)
+				clearMaskPreview()
+				cancelPendingMaskCommit()
 				const clearPatch = { [section.stateKey]: null }
 				setState(clearPatch)
 			})
-			controls.append(confirmBtn, clearBtn)
+			paintBtn = createElement(
+				"button",
+				"mpk-mask-mode-btn is-active",
+				section.paintLabel || t("maskPainter.paint", "涂抹"),
+			)
+			paintBtn.type = "button"
+			paintBtn.setAttribute("aria-pressed", "true")
+			paintBtn.addEventListener("click", () => setPaintMode("paint"))
+			eraseBtn = createElement(
+				"button",
+				"mpk-mask-mode-btn",
+				section.eraseLabel || t("maskPainter.erase", "擦除"),
+			)
+			eraseBtn.type = "button"
+			eraseBtn.setAttribute("aria-pressed", "false")
+			eraseBtn.addEventListener("click", () => setPaintMode("erase"))
+			const modeGroup = createElement("div", "mpk-mask-mode-group")
+			modeGroup.append(paintBtn, eraseBtn)
+
+			brushSlider = createElement("input", "mpk-mask-brush-slider")
+			brushSlider.type = "range"
+			brushSlider.min = String(minBrushSize)
+			brushSlider.max = String(maxBrushSize)
+			brushSlider.step = String(brushStep)
+			brushSlider.value = String(currentBrushSize)
+			brushSlider.setAttribute("aria-label", t("maskPainter.brushSize", "笔刷大小"))
+			brushSlider.addEventListener("input", () => {
+				setCurrentBrushSize(brushSlider.value)
+			})
+
+			const actions = createElement("div", "mpk-mask-actions")
+			actions.append(confirmBtn, clearBtn)
+			controls.append(modeGroup, brushSlider, actions)
 			sectionNode.append(wrap, controls)
 
 			if (section.help) {
@@ -1526,10 +1953,15 @@
 
 			view.sectionViews[section.id] = {
 				sectionNode,
+				kind: "mask-painter",
 				maskCanvas,
+				overlayCanvas,
 				displayCanvas,
 				lastSourceUrl: sourceUrl,
-				cancelUpload: () => clearTimeout(uploadTimer),
+				cancelUpload: cancelPendingMaskCommit,
+				hasPendingMaskChange: () => hasPendingMaskChange,
+				getCommitPromise: () => commitPromise,
+				commitPendingMask,
 			}
 			return sectionNode
 		}
@@ -1805,7 +2237,10 @@
 							const nextState = { ...state, ...patch }
 							Object.assign(
 								patch,
-								section.patchOnSelect(option.value, getCallbackContext(nextState)) || {},
+								section.patchOnSelect(
+									option.value,
+									getCallbackContext(nextState),
+								) || {},
 							)
 						}
 						setState(patch)
@@ -1928,7 +2363,8 @@
 						const nextState = { ...state, ...patch }
 						Object.assign(
 							patch,
-							section.patchOnSelect(option.value, getCallbackContext(nextState)) || {},
+							section.patchOnSelect(option.value, getCallbackContext(nextState)) ||
+								{},
 						)
 					}
 					setState(patch)
@@ -2240,6 +2676,7 @@
 			collectReferenceIds(items) {
 				return items.map(getImageReferenceId).filter(Boolean)
 			},
+			hasPendingMask,
 		}
 
 		createLayout()

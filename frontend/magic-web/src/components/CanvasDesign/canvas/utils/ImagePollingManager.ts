@@ -123,6 +123,19 @@ export class ImagePollingManager {
 		return true
 	}
 
+	private primeGeneratedImageResource(
+		path: string,
+		fileUrl: string | null | undefined,
+		fileName: string,
+	): void {
+		if (!fileUrl) return
+
+		this.config.canvas.imageResourceManager.primeCache(path, {
+			src: fileUrl,
+			fileName,
+		})
+	}
+
 	/**
 	 * 轮询图片生成结果
 	 */
@@ -149,6 +162,7 @@ export class ImagePollingManager {
 
 			if (result.file_dir && result.file_name) {
 				updateData.src = joinUploadStoragePath(result.file_dir, result.file_name)
+				this.primeGeneratedImageResource(updateData.src, result.file_url, result.file_name)
 
 				const elementData = this.config.getElementData()
 				const imageGenerationTaskMeta = getImageGenerationTaskMeta(elementData)
@@ -165,6 +179,13 @@ export class ImagePollingManager {
 			this.config.canvas.elementManager.update(this.config.elementId, updateData, {
 				silent: false,
 			})
+
+			if (updateData.src && result.file_url) {
+				this.config.canvas.imageResourceManager.loadResource(updateData.src, {
+					variant: "preview",
+					priority: "critical",
+				})
+			}
 
 			// 发出图片结果更新事件
 			this.config.canvas.eventEmitter.emit({

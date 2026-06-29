@@ -26,7 +26,7 @@ function getFileTypeByExtension(extension: string): "excel" | "docx" | "unknown"
 	if (["xlsx", "xls", "csv"].includes(ext)) {
 		return "excel"
 	}
-	if (["docx", "doc"].includes(ext)) {
+	if (["docx", "docm", "doc"].includes(ext)) {
 		return "docx"
 	}
 	return "unknown"
