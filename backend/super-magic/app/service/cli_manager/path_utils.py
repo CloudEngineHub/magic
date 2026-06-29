@@ -33,6 +33,15 @@ class CliPathUtils:
         except ValueError:
             return False
 
+    @staticmethod
+    def is_lexically_under(path: Path, root: Path) -> bool:
+        """返回 path 字面路径是否位于 root 下，不解析路径中的软链。"""
+        try:
+            path.absolute().relative_to(root.absolute())
+            return True
+        except ValueError:
+            return False
+
     @classmethod
     def is_system_path(cls, path: Path) -> bool:
         """返回路径是否位于系统目录下。"""

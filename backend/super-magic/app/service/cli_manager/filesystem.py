@@ -60,7 +60,7 @@ class CliFilesystemPersistence:
 
     async def prepare_app_dir(self, name: str, command_targets: dict[str, Path]) -> tuple[Path, dict[str, Path], list[CliPathLink]]:
         """通过分阶段复制包并在原位置创建软链来准备持久化应用目录。"""
-        if command_targets and all(CliPathUtils.is_under(path, self._paths.root_dir) for path in command_targets.values()):
+        if command_targets and all(CliPathUtils.is_lexically_under(path, self._paths.root_dir) for path in command_targets.values()):
             common_root = await self._common_existing_root([self.infer_install_root(path) for path in command_targets.values()])
             return common_root if common_root else self._paths.root_dir, command_targets, []
 
@@ -88,7 +88,7 @@ class CliFilesystemPersistence:
                 dest = moved_roots[root]
                 updated_targets[command] = dest / target.relative_to(root)
                 continue
-            if CliPathUtils.is_under(root, app_dir):
+            if CliPathUtils.is_lexically_under(root, app_dir):
                 updated_targets[command] = target
                 continue
             dest = await self.build_unique_app_dest(app_dir, root)
@@ -267,7 +267,15 @@ class CliFilesystemPersistence:
         """解析某个命令的持久化目标可执行文件。"""
         registered_target = item.command_targets.get(command)
         if registered_target:
-            return CliPathUtils.expand(registered_target)
+            target = CliPathUtils.expand(registered_target)
+            if CliPathUtils.is_lexically_under(target, self._paths.root_dir):
+                return target
+            if (await async_exists(target) or await async_is_symlink(target)) and CliPathUtils.is_under(target, self._paths.root_dir):
+                return target.resolve(strict=False)
+            recovered_target = await self._find_persisted_command_candidate(item.name, command)
+            if recovered_target:
+                return recovered_target
+            return target
         app_dir = CliPathUtils.expand(item.app_dir)
         direct = app_dir / "bin" / command
         if await async_exists(direct) or await async_is_symlink(direct):
@@ -276,6 +284,23 @@ class CliFilesystemPersistence:
         if prefix_candidate:
             return Path(prefix_candidate).resolve(strict=False)
         return direct
+
+    async def _find_persisted_command_candidate(self, name: str, command: str) -> Path | None:
+        """从已复制的持久应用目录中查找可用于修复旧记录的命令目标。"""
+        base_dir = self._paths.apps_dir / name
+        if not await async_exists(base_dir):
+            return None
+        candidates: list[tuple[int, Path]] = []
+        for entry in await async_scandir(base_dir):
+            candidate = Path(entry.path) / "bin" / command
+            if not await async_exists(candidate) and not await async_is_symlink(candidate):
+                continue
+            if not await async_access(candidate, os.X_OK):
+                continue
+            candidates.append(((await async_stat(candidate)).st_mtime_ns, candidate))
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: item[0])[1]
 
     async def check_app_size(self, app_dir: Path) -> None:
         """对持久化应用目录执行保守的大小和文件数量限制。"""
