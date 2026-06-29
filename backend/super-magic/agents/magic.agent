@@ -27,6 +27,7 @@ skills:
     - name: skill-vetter
     - name: using-mcp
     - name: env-manager
+    - name: cli-manager
     - name: skill-creator
     - name: canvas-designer
     - name: creating-slides

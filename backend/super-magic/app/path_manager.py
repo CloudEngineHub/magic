@@ -475,6 +475,24 @@ class PathManager(BasePathManager):
         return Path.home() / ".magic" / "super-magic.env"
 
     @classmethod
+    def get_cli_manager_dir(cls) -> Path:
+        """获取第三方 CLI 持久化根目录（~/.magic/cli）。"""
+        cls._ensure_app_initialization()
+        return Path.home() / ".magic" / "cli"
+
+    @classmethod
+    def get_cli_manager_bin_dir(cls) -> Path:
+        """获取第三方 CLI 稳定命令入口目录（~/.magic/cli/bin）。"""
+        cls._ensure_app_initialization()
+        return cls.get_cli_manager_dir() / "bin"
+
+    @classmethod
+    def get_cli_manager_registry_file(cls) -> Path:
+        """获取第三方 CLI 持久化注册表文件路径。"""
+        cls._ensure_app_initialization()
+        return cls.get_cli_manager_dir() / "registry.json"
+
+    @classmethod
     def get_process_env_paths(cls) -> list[Path]:
         """返回进程启动时叠加的用户环境变量文件路径列表，按优先级从低到高排列（后者覆盖前者）。
 

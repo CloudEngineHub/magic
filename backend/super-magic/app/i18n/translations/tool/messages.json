@@ -2159,6 +2159,214 @@
         "zh_CN": "变量值",
         "en_US": "Value"
     },
+    "cli_manager.apply.before": {
+        "zh_CN": "正在{{mode}}持久化 CLI「{{name}}」",
+        "en_US": "Persisting CLI \"{{name}}\" with {{mode}} mode"
+    },
+    "cli_manager.apply.after_success": {
+        "zh_CN": "CLI「{{name}}」已持久化",
+        "en_US": "CLI \"{{name}}\" persisted"
+    },
+    "cli_manager.apply.after_failed": {
+        "zh_CN": "CLI「{{name}}」持久化失败：{{error}}",
+        "en_US": "Failed to persist CLI \"{{name}}\": {{error}}"
+    },
+    "cli_manager.list.before": {
+        "zh_CN": "正在查看持久化 CLI（校验：{{validate}}）",
+        "en_US": "Listing persisted CLIs (validate: {{validate}})"
+    },
+    "cli_manager.list.after_success": {
+        "zh_CN": "读取到 {{count}} 个持久化 CLI",
+        "en_US": "Found {{count}} persisted CLI(s)"
+    },
+    "cli_manager.list.after_failed": {
+        "zh_CN": "查看持久化 CLI 失败：{{error}}",
+        "en_US": "Failed to list persisted CLIs: {{error}}"
+    },
+    "cli_manager.remove.before": {
+        "zh_CN": "正在移除持久化 CLI「{{name}}」",
+        "en_US": "Removing persisted CLI \"{{name}}\""
+    },
+    "cli_manager.remove.after_success": {
+        "zh_CN": "CLI「{{name}}」的持久化已移除",
+        "en_US": "Persistence removed for CLI \"{{name}}\""
+    },
+    "cli_manager.remove.after_failed": {
+        "zh_CN": "移除 CLI「{{name}}」持久化失败：{{error}}",
+        "en_US": "Failed to remove persistence for CLI \"{{name}}\": {{error}}"
+    },
+    "cli_manager.detail.apply_success_title": {
+        "zh_CN": "CLI 持久化完成",
+        "en_US": "CLI Persistence Complete"
+    },
+    "cli_manager.detail.apply_failed_title": {
+        "zh_CN": "CLI 持久化失败",
+        "en_US": "CLI Persistence Failed"
+    },
+    "cli_manager.detail.list_success_title": {
+        "zh_CN": "持久化 CLI 列表",
+        "en_US": "Persisted CLIs"
+    },
+    "cli_manager.detail.list_failed_title": {
+        "zh_CN": "持久化 CLI 读取失败",
+        "en_US": "Persisted CLI List Failed"
+    },
+    "cli_manager.detail.remove_success_title": {
+        "zh_CN": "CLI 持久化已移除",
+        "en_US": "CLI Persistence Removed"
+    },
+    "cli_manager.detail.remove_failed_title": {
+        "zh_CN": "CLI 持久化移除失败",
+        "en_US": "CLI Persistence Remove Failed"
+    },
+    "cli_manager.detail.name": {
+        "zh_CN": "名称",
+        "en_US": "Name"
+    },
+    "cli_manager.detail.mode": {
+        "zh_CN": "模式",
+        "en_US": "Mode"
+    },
+    "cli_manager.detail.commands": {
+        "zh_CN": "命令",
+        "en_US": "Commands"
+    },
+    "cli_manager.detail.strategy": {
+        "zh_CN": "策略",
+        "en_US": "Strategy"
+    },
+    "cli_manager.detail.package_manager": {
+        "zh_CN": "包管理器",
+        "en_US": "Package manager"
+    },
+    "cli_manager.detail.status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "cli_manager.detail.bin_dir": {
+        "zh_CN": "命令入口目录",
+        "en_US": "Command bin directory"
+    },
+    "cli_manager.detail.command_routes": {
+        "zh_CN": "命令路由",
+        "en_US": "Command Routes"
+    },
+    "cli_manager.detail.command_entry": {
+        "zh_CN": "命令入口",
+        "en_US": "Command entry"
+    },
+    "cli_manager.detail.command_target": {
+        "zh_CN": "真实目标",
+        "en_US": "Real target"
+    },
+    "cli_manager.detail.registry_file": {
+        "zh_CN": "注册表",
+        "en_US": "Registry file"
+    },
+    "cli_manager.detail.app_links": {
+        "zh_CN": "原路径软链",
+        "en_US": "Original path links"
+    },
+    "cli_manager.detail.config_dirs": {
+        "zh_CN": "配置目录",
+        "en_US": "Config directories"
+    },
+    "cli_manager.detail.env_keys": {
+        "zh_CN": "依赖环境变量",
+        "en_US": "Required env keys"
+    },
+    "cli_manager.detail.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "cli_manager.detail.count": {
+        "zh_CN": "数量",
+        "en_US": "Count"
+    },
+    "cli_manager.detail.validation": {
+        "zh_CN": "校验",
+        "en_US": "Validation"
+    },
+    "cli_manager.detail.remove_state": {
+        "zh_CN": "删除状态目录",
+        "en_US": "Remove state"
+    },
+    "cli_manager.detail.removed_paths": {
+        "zh_CN": "已移除路径数",
+        "en_US": "Removed paths"
+    },
+    "cli_manager.detail.ok": {
+        "zh_CN": "正常",
+        "en_US": "OK"
+    },
+    "cli_manager.detail.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "cli_manager.detail.yes": {
+        "zh_CN": "是",
+        "en_US": "yes"
+    },
+    "cli_manager.detail.no": {
+        "zh_CN": "否",
+        "en_US": "no"
+    },
+    "cli_manager.error.confirmation_required": {
+        "zh_CN": "需要用户明确确认",
+        "en_US": "Explicit user confirmation is required"
+    },
+    "cli_manager.error.command_name_reserved": {
+        "zh_CN": "命令名属于系统保留名称：{{command}}",
+        "en_US": "Command name is reserved: {{command}}"
+    },
+    "cli_manager.error.command_name_conflict": {
+        "zh_CN": "命令名已被占用：{{command}}",
+        "en_US": "Command name is already in use: {{command}}"
+    },
+    "cli_manager.error.command_path_conflict": {
+        "zh_CN": "当前 PATH 中已有同名命令：{{command}}",
+        "en_US": "A command with the same name already exists in PATH: {{command}}"
+    },
+    "cli_manager.error.command_not_found_after_install": {
+        "zh_CN": "安装后未找到命令：{{command}}",
+        "en_US": "Command was not found after install: {{command}}"
+    },
+    "cli_manager.error.command_path_missing": {
+        "zh_CN": "指定的命令路径不存在：{{command}}",
+        "en_US": "Explicit command path does not exist: {{command}}"
+    },
+    "cli_manager.error.command_path_unknown_command": {
+        "zh_CN": "命令路径不属于本次持久化命令：{{command}}",
+        "en_US": "Command path was provided for an unknown command: {{command}}"
+    },
+    "cli_manager.error.cannot_move_install_root": {
+        "zh_CN": "安装根目录过宽或不安全，不能移动",
+        "en_US": "The inferred install root is too broad or unsafe to move"
+    },
+    "cli_manager.error.cannot_locate_install_root": {
+        "zh_CN": "无法可靠定位安装根目录",
+        "en_US": "Cannot reliably locate the install root"
+    },
+    "cli_manager.error.install_command_required": {
+        "zh_CN": "安装模式需要提供安装命令",
+        "en_US": "Install mode requires an install command"
+    },
+    "cli_manager.error.install_command_failed": {
+        "zh_CN": "安装命令执行失败",
+        "en_US": "Install command failed"
+    },
+    "cli_manager.error.not_found": {
+        "zh_CN": "未找到该持久化 CLI：{{name}}",
+        "en_US": "Persisted CLI not found: {{name}}"
+    },
+    "cli_manager.error.size_limit_exceeded": {
+        "zh_CN": "安装产物超过大小或文件数量限制",
+        "en_US": "Persisted CLI exceeds size or file-count limits"
+    },
+    "cli_manager.error.unknown": {
+        "zh_CN": "CLI 管理操作失败",
+        "en_US": "CLI manager operation failed"
+    },
     "oauth2.list_apps.listing": {
         "zh_CN": "正在查看 OAuth2 应用",
         "en_US": "Listing OAuth2 apps"
