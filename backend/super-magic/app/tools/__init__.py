@@ -71,6 +71,7 @@ from app.tools.document_parse import (
     SummarizeDocument,
     UnderstandDocumentImages,
 )
+from app.tools.cli_manager import CliManagerApply, CliManagerList, CliManagerRemove
 from app.tools.env_manager import GetEnv, ListEnv, SetEnv, UnsetEnv
 from app.tools.visual_understanding import VisualUnderstanding
 from app.tools.visual_understanding_webpage import VisualUnderstandingWebpage
@@ -203,6 +204,9 @@ __all__ = [
     "SampleDocumentContent",
     "SummarizeDocument",
     "UnderstandDocumentImages",
+    "CliManagerApply",
+    "CliManagerList",
+    "CliManagerRemove",
     "GetEnv",
     "ListEnv",
     "SetEnv",

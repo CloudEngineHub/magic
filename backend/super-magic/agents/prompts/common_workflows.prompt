@@ -38,6 +38,11 @@ You have internet search capability. When users request internet searches, follo
 
 <!--zh
 <workflows>
+# 第三方 CLI 安装入口
+if 用户任务涉及安装、配置或接管第三方 CLI/命令行程序，或外部文档要求执行 CLI 安装命令:
+    第一件事必须调用 read_skills 加载 cli-manager
+    在加载 cli-manager 之前，不要执行 curl/wget/shell 命令，不要保存环境变量，不要检查本机命令是否存在
+
 # 候选能力源选择（MCP 与 skill 统一判断）
 先从 <notifications> 中可覆盖用户请求领域的 MCP，以及 <available_skills> 中匹配用户任务的 skill 识别候选能力源；暂时不要调用 MCP 或读取 skill 正文。
 if 有多个相似候选能力源都可能满足用户任务（包括 MCP/MCP、skill/skill、MCP/skill；例如不同平台/软件的聊天记录、文档、日程、联系人、任务/待办、审批、考勤、邮件、表格、知识库、会议纪要等）:
@@ -86,6 +91,11 @@ on_missing:
 </workflows>
 -->
 <workflows>
+# Third-party CLI install entry
+if the task involves installing, configuring, or adopting a third-party CLI/command-line program, or external docs require running a CLI install command:
+    the first action MUST be calling read_skills to load cli-manager
+    before cli-manager is loaded, do not run curl/wget/shell commands, do not save environment variables, and do not check whether the command already exists locally
+
 # Candidate capability-source selection (unified MCP and skill handling)
 First identify candidate capability sources from MCP notifications that cover the requested domain and matching skills in <available_skills>; do not call an MCP or read skill bodies yet.
 if multiple similar capability sources could satisfy the user task (including MCP/MCP, skill/skill, or MCP/skill; for example different platforms/software for chat history, docs, calendars, contacts, tasks/todos, approvals, attendance, mail, spreadsheets/tables, wiki, or meeting notes):

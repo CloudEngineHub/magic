@@ -72,7 +72,7 @@ async def async_copy2(src: Union[str, Path], dst: Union[str, Path]) -> None:
 
 
 class CopyConflict(StrEnum):
-    """File conflict strategy for async_copytree."""
+    """目录复制时的冲突处理策略。"""
     ERROR = "error"
     OVERWRITE = "overwrite"
     SKIP = "skip"
@@ -83,6 +83,7 @@ async def async_copytree(
     dst: Union[str, Path],
     on_conflict: CopyConflict = CopyConflict.ERROR,
     exclude: Optional[set] = None,
+    symlinks: bool = False,
 ) -> None:
     """
     异步复制目录树
@@ -95,6 +96,7 @@ async def async_copytree(
             - OVERWRITE: 目录合并，同名文件覆盖
             - SKIP: 目录合并，已有文件保留不动
         exclude: 要跳过的文件名集合（仅匹配文件名，不含路径）
+        symlinks: 是否保留源目录中的软链
 
     Raises:
         FileNotFoundError: 源目录不存在
@@ -116,15 +118,15 @@ async def async_copytree(
             await asyncio.to_thread(
                 shutil.copytree, src_path, dst_path,
                 copy_function=_copy_skip, dirs_exist_ok=True,
-                ignore=ignore_func,
+                ignore=ignore_func, symlinks=symlinks,
             )
         elif on_conflict == CopyConflict.OVERWRITE:
             await asyncio.to_thread(
                 shutil.copytree, src_path, dst_path, dirs_exist_ok=True,
-                ignore=ignore_func,
+                ignore=ignore_func, symlinks=symlinks,
             )
         else:
-            await asyncio.to_thread(shutil.copytree, src_path, dst_path, ignore=ignore_func)
+            await asyncio.to_thread(shutil.copytree, src_path, dst_path, ignore=ignore_func, symlinks=symlinks)
 
         logger.debug(f"异步复制目录完成: {src_path} -> {dst_path}")
 
@@ -339,6 +341,32 @@ async def async_move_file(src: Union[str, Path], dst: Union[str, Path]) -> None:
             raise
 
 
+async def async_move_path(src: Union[str, Path], dst: Union[str, Path]) -> None:
+    """
+    异步移动文件或目录，支持跨文件系统。
+
+    Args:
+        src: 源路径
+        dst: 目标路径
+
+    Raises:
+        FileNotFoundError: 源路径不存在
+        PermissionError: 权限不足
+        OSError: 移动失败
+    """
+    src_path = Path(src)
+    dst_path = Path(dst)
+
+    try:
+        logger.debug(f"开始异步移动路径: {src_path} -> {dst_path}")
+        await async_mkdir(dst_path.parent, parents=True, exist_ok=True)
+        await asyncio.to_thread(shutil.move, str(src_path), str(dst_path))
+        logger.debug(f"异步移动路径完成: {src_path} -> {dst_path}")
+    except Exception as e:
+        logger.error(f"异步移动路径失败 {src_path} -> {dst_path}: {e}")
+        raise
+
+
 async def async_rmdir(path: Union[str, Path]) -> None:
     """
     异步删除空目录
@@ -370,13 +398,18 @@ async def async_rmdir(path: Union[str, Path]) -> None:
         raise
 
 
-async def async_symlink(src: Union[str, Path], dst: Union[str, Path]) -> None:
+async def async_symlink(
+    src: Union[str, Path],
+    dst: Union[str, Path],
+    target_is_directory: bool = False,
+) -> None:
     """
     异步创建软链
 
     Args:
         src: 软链目标路径
         dst: 软链路径
+        target_is_directory: 目标是否为目录，主要用于兼容 Windows 软链语义
 
     Raises:
         FileExistsError: 软链路径已存在
@@ -388,7 +421,7 @@ async def async_symlink(src: Union[str, Path], dst: Union[str, Path]) -> None:
 
     try:
         logger.debug(f"开始异步创建软链: {dst_path} -> {src_path}")
-        await asyncio.to_thread(os.symlink, str(src_path), str(dst_path))
+        await asyncio.to_thread(os.symlink, str(src_path), str(dst_path), target_is_directory=target_is_directory)
         logger.debug(f"异步创建软链完成: {dst_path} -> {src_path}")
     except Exception as e:
         logger.error(f"异步创建软链失败 {dst_path} -> {src_path}: {e}")
@@ -907,6 +940,82 @@ async def async_stat(path: Union[str, Path]):
         return await aiofiles.os.stat(str(path))
     except Exception as e:
         logger.error(f"获取路径状态失败 {path}: {e}")
+        raise
+
+
+async def async_chmod(path: Union[str, Path], mode: int) -> None:
+    """
+    异步修改路径权限。
+
+    Args:
+        path: 文件或目录路径
+        mode: 目标权限位
+
+    Raises:
+        FileNotFoundError: 路径不存在
+        PermissionError: 权限不足
+        OSError: 修改失败
+    """
+    try:
+        await asyncio.to_thread(os.chmod, str(path), mode)
+    except Exception as e:
+        logger.error(f"修改路径权限失败 {path}: {e}")
+        raise
+
+
+async def async_access(path: Union[str, Path], mode: int) -> bool:
+    """
+    异步检查当前进程是否具备指定访问权限。
+
+    Args:
+        path: 文件或目录路径
+        mode: os.R_OK / os.W_OK / os.X_OK 等权限位
+
+    Returns:
+        bool: 是否具备权限
+    """
+    try:
+        return await asyncio.to_thread(os.access, str(path), mode)
+    except Exception as e:
+        logger.error(f"检查路径访问权限失败 {path}: {e}")
+        raise
+
+
+async def async_replace(src: Union[str, Path], dst: Union[str, Path]) -> None:
+    """
+    异步原子替换路径。
+
+    Args:
+        src: 临时源路径
+        dst: 目标路径
+
+    Raises:
+        FileNotFoundError: 源路径不存在
+        PermissionError: 权限不足
+        OSError: 替换失败
+    """
+    try:
+        await asyncio.to_thread(os.replace, str(src), str(dst))
+    except Exception as e:
+        logger.error(f"原子替换路径失败 {src} -> {dst}: {e}")
+        raise
+
+
+async def async_which(command: str, path: Optional[str] = None) -> Optional[str]:
+    """
+    异步查找 PATH 中的可执行命令。
+
+    Args:
+        command: 命令名称
+        path: 可选 PATH 字符串
+
+    Returns:
+        Optional[str]: 命令路径，未找到时返回 None
+    """
+    try:
+        return await asyncio.to_thread(shutil.which, command, path=path)
+    except Exception as e:
+        logger.error(f"查找命令失败 {command}: {e}")
         raise
 
 
