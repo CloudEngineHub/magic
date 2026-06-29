@@ -18,6 +18,7 @@ This skill is for orchestration only. Do not handle installed artifacts yourself
 5. If a tool fails, stop the current install or remove flow and follow the next steps in `result.content`.
 6. Do not read or rely on `extra_info`, `data`, or other internal fields unless a later tool document explicitly requires it.
 7. Use only the parameters shown in this skill. Never pass `resolution`, `resolution_options`, or other guessed internal parameters.
+8. Do not run the actual install command with `shell_exec`. `cli_manager_apply` is responsible for executing the installer after confirmation.
 
 ## Install Flow
 
@@ -27,6 +28,7 @@ This skill is for orchestration only. Do not handle installed artifacts yourself
 4. After the user confirms, call `cli_manager_apply`.
 5. If the install docs require an API key first, load `env-manager` to check or save the required environment variable before continuing.
 6. After install completes, verify and respond based on `result.content`.
+7. If `cli_manager_apply` fails, do not run the CLI with `shell_exec` to turn the flow into a success. Follow the next steps in `result.content` or report that persistence did not complete.
 
 Install a new CLI:
 

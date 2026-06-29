@@ -31,6 +31,8 @@ from app.utils.async_file_utils import (
     async_is_file,
     async_is_symlink,
     async_mkdir,
+    async_read_bytes,
+    async_readlink,
     async_rename,
     async_rmtree,
     async_scandir,
@@ -74,19 +76,6 @@ class CliFilesystemPersistence:
         app_links: list[CliPathLink] = []
         updated_targets: dict[str, Path] = {}
         for command, target in command_targets.items():
-            if CliPathUtils.is_system_path(target):
-                if not await CliPathUtils.looks_like_standalone_binary(target):
-                    raise CliManagerError(
-                        "cannot_locate_install_root",
-                        f"Cannot adopt command from system path: {command}",
-                        command=command,
-                        existing_path=str(target),
-                    )
-                await async_copy2(target, bin_dir / command)
-                await CliPathUtils.make_executable(bin_dir / command)
-                updated_targets[command] = bin_dir / command
-                continue
-
             root = self.infer_install_root(target)
             standalone_target = await self._try_persist_restricted_standalone_command(command, root, target, bin_dir)
             if standalone_target:
@@ -342,7 +331,7 @@ class CliFilesystemPersistence:
             raise
 
     async def _replace_source_with_link(self, source: Path, target: Path, *, target_is_directory: bool | None = None) -> None:
-        """将原路径原子备份后替换为指向持久化目标的软链，失败时恢复备份。"""
+        """将原路径复制备份后替换为指向持久化目标的软链，失败时恢复备份。"""
         backup = self._build_backup_path(source)
         if await async_exists(backup) or await async_is_symlink(backup):
             await self._remove_path(backup)
@@ -351,18 +340,44 @@ class CliFilesystemPersistence:
             await async_symlink(target, source, target_is_directory=await self._resolve_link_directory_flag(target, target_is_directory))
             return
 
-        await async_rename(source, backup)
+        await self._copy_source_to_backup(source, backup)
+        await self._remove_path(source)
         try:
             await async_symlink(target, source, target_is_directory=await self._resolve_link_directory_flag(target, target_is_directory))
         except Exception:
             if not await async_exists(source) and not await async_is_symlink(source):
-                await async_rename(backup, source)
+                await self._restore_backup_to_source(backup, source)
             raise
 
         try:
             await self._remove_path(backup)
         except Exception as exc:
             logger.warning("清理 CLI 原路径备份失败，保留备份文件: %s, error=%s", backup, exc)
+
+    async def _copy_source_to_backup(self, source: Path, backup: Path) -> None:
+        """复制源路径为备份，保留文件、目录和软链形态。"""
+        await async_mkdir(backup.parent, parents=True, exist_ok=True)
+        if await async_is_symlink(source):
+            await async_symlink(await async_readlink(source), backup)
+            return
+        if await async_is_dir(source):
+            await async_copytree(source, backup, symlinks=True)
+            return
+        await async_copy2(source, backup)
+
+    async def _restore_backup_to_source(self, backup: Path, source: Path) -> None:
+        """从复制备份恢复源路径，并删除备份。"""
+        await async_mkdir(source.parent, parents=True, exist_ok=True)
+        if await async_is_symlink(backup):
+            await async_symlink(await async_readlink(backup), source)
+            await async_unlink(backup)
+            return
+        if await async_is_dir(backup):
+            await async_copytree(backup, source, symlinks=True)
+            await async_rmtree(backup)
+            return
+        await async_copy2(backup, source)
+        await async_unlink(backup)
 
     async def _resolve_link_directory_flag(self, target: Path, target_is_directory: bool | None) -> bool:
         """解析创建软链时是否应声明目标为目录。"""
@@ -421,6 +436,8 @@ class CliFilesystemPersistence:
         if await async_is_dir(target) and not await async_is_symlink(target):
             return False
         if not await async_exists(target) and not await async_is_symlink(target):
+            return False
+        if await self._looks_like_external_runtime_wrapper(target):
             return False
 
         probe_dir = self._paths.root_dir / ".probe" / f"{command}-{time.time_ns()}"
@@ -486,6 +503,32 @@ class CliFilesystemPersistence:
         except Exception:
             return False
         return process.returncode == 0
+
+    async def _looks_like_external_runtime_wrapper(self, target: Path) -> bool:
+        """识别依赖外部包目录的脚本入口，避免误当成单文件命令。"""
+        try:
+            text = (await async_read_bytes(target, size=4096)).decode("utf-8", errors="ignore")
+        except Exception:
+            return False
+        lines = text.splitlines()
+        if not lines or not lines[0].startswith("#!"):
+            return False
+        shebang = lines[0].lower()
+        if "python" in shebang:
+            return any(
+                marker in text
+                for marker in (
+                    "pkg_resources",
+                    "load_entry_point(",
+                    "importlib.metadata",
+                    "__requires__",
+                )
+            ) or bool(re.search(r"(?m)^\s*from\s+[A-Za-z_][\w.]*\s+import\s+", text))
+        if "node" in shebang:
+            return "require(" in text or "import " in text
+        if any(runtime in shebang for runtime in ("ruby", "perl")):
+            return bool(re.search(r"(?m)^\s*(require|use)\s+", text))
+        return False
 
     def infer_install_root(self, target: Path) -> Path:
         """根据命令目标路径推断用户级安装根目录。"""
