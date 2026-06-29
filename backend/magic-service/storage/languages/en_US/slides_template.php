@@ -1,0 +1,40 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+return [
+    'validate_failed' => 'Slides template validation failed',
+    'only_official_organization_can_manage' => 'Only the official organization can manage slides templates',
+    'not_found' => 'Slides template not found',
+    'code_generate_failed' => 'Failed to generate slides template code',
+    'file_url_generate_failed' => 'Failed to generate slides template file URL',
+    'label_required' => 'Template label is required',
+    'label_array' => 'Template label must be an array',
+    'label_zh_cn_required' => 'Template Chinese label is required',
+    'label_zh_cn_max' => 'Template Chinese label cannot exceed 100 characters',
+    'label_en_us_required' => 'Template English label is required',
+    'label_en_us_max' => 'Template English label cannot exceed 100 characters',
+    'description_required' => 'Template description is required',
+    'description_array' => 'Template description must be an array',
+    'description_zh_cn_required' => 'Template Chinese description is required',
+    'description_zh_cn_max' => 'Template Chinese description cannot exceed 1000 characters',
+    'description_en_us_required' => 'Template English description is required',
+    'description_en_us_max' => 'Template English description cannot exceed 1000 characters',
+    'thumbnail_file_key_required' => 'Template thumbnail file key is required',
+    'template_file_key_required' => 'Template ZIP file key is required',
+    'file_key_string' => 'File key must be a string',
+    'file_key_max' => 'File key cannot exceed 512 characters',
+    'preview_url_url' => 'Preview URL format is invalid',
+    'preview_url_max' => 'Preview URL cannot exceed 1024 characters',
+    'status_in' => 'Status must be 0 (disabled) or 1 (enabled)',
+    'sort_integer' => 'Sort must be an integer',
+    'page_integer' => 'Page must be an integer',
+    'page_min' => 'Page must be at least 1',
+    'page_size_integer' => 'Page size must be an integer',
+    'page_size_min' => 'Page size must be at least 1',
+    'page_size_max' => 'Page size cannot exceed 200',
+    'keyword_max' => 'Keyword cannot exceed 100 characters',
+    'code_max' => 'Template code cannot exceed 64 characters',
+];

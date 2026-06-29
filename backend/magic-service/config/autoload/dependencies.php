@@ -215,6 +215,8 @@ use App\Domain\Provider\Service\ModelFilter\DefaultOrganizationModelFilter;
 use App\Domain\Provider\Service\ModelFilter\DefaultPackageFilter;
 use App\Domain\Provider\Service\ModelFilter\OrganizationBasedModelFilterInterface;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateRepository;
 use App\Domain\SuperAgent\Service\UsageCalculator\DefaultUsageCalculator;
 use App\Domain\SuperAgent\Service\UsageCalculator\UsageCalculatorInterface;
 use App\Domain\Token\Item\MagicTokenExtra;
@@ -555,6 +557,9 @@ $dependencies = [
     ModeRepositoryInterface::class => ModeRepository::class,
     ModeGroupRepositoryInterface::class => ModeGroupRepository::class,
     ModeGroupRelationRepositoryInterface::class => ModeGroupRelationRepository::class,
+
+    // slides template
+    SlidesTemplateRepositoryInterface::class => SlidesTemplateRepository::class,
 
     OrganizationBasedModelFilterInterface::class => DefaultOrganizationModelFilter::class,
     ProviderControlPolicyInterface::class => DefaultProviderControlPolicy::class,
