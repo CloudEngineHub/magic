@@ -66,7 +66,9 @@ export class ElementManager {
 
 	private elements: Map<string, BaseElement> = new Map()
 	private elementDraggingDisabled = false
+	private viewportGestureDraggingDisabled = false
 	private elementListeningDisabled = false
+	private viewportGestureUnsubscribe?: () => void
 	private batchMode = false
 	private isBatchDeleting = false
 	private pendingBatchDeleteChangeIds: Set<string> = new Set()
@@ -89,6 +91,12 @@ export class ElementManager {
 		this.nodeAdapter = new NodeAdapter({ canvas: this.canvas })
 		// 初始化 ZIndexManager
 		this.zIndexManager = new ZIndexManager(this.canvas)
+		this.viewportGestureUnsubscribe = this.canvas.eventEmitter.on(
+			"viewport:gesture",
+			({ data }) => {
+				this.setViewportGestureDraggingDisabled(data.active)
+			},
+		)
 	}
 
 	/**
@@ -1631,6 +1639,8 @@ export class ElementManager {
 	 * 销毁管理器
 	 */
 	public destroy(): void {
+		this.viewportGestureUnsubscribe?.()
+		this.viewportGestureUnsubscribe = undefined
 		this.clear()
 		this.elements.clear()
 	}
@@ -1888,7 +1898,7 @@ export class ElementManager {
 	 * 必须关闭原生拖拽，否则命中真实节点时会绕过 proxy，只拖动单个元素。
 	 */
 	public canDragElement(elementData: LayerElement): boolean {
-		if (this.elementDraggingDisabled) {
+		if (this.elementDraggingDisabled || this.viewportGestureDraggingDisabled) {
 			return false
 		}
 
@@ -1926,6 +1936,27 @@ export class ElementManager {
 		this.elements.forEach((element) => {
 			const elementData = element.getData()
 			element.setDraggable(this.canDragElement(elementData))
+		})
+	}
+
+	private setViewportGestureDraggingDisabled(disabled: boolean): void {
+		if (this.viewportGestureDraggingDisabled === disabled) {
+			return
+		}
+
+		this.viewportGestureDraggingDisabled = disabled
+		if (disabled) {
+			this.stopAllElementDrags()
+		}
+		this.updateAllElementsDraggable()
+	}
+
+	private stopAllElementDrags(): void {
+		this.elements.forEach((element) => {
+			const node = element.getNode()
+			if (node?.isDragging()) {
+				node.stopDrag()
+			}
 		})
 	}
 

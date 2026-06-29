@@ -1,5 +1,6 @@
 import type {
 	LayerElement,
+	CanvasDeviceInfo,
 	ToolType,
 	ToolKeyEvent,
 	Marker,
@@ -54,6 +55,11 @@ export interface CanvasEventMap {
 		position: { x: number; y: number }
 		source: ViewportChangeSource
 		phase: ViewportChangePhase
+	}
+	"viewport:gesture": {
+		active: boolean
+		source: "touch-pinch" | "webkit-gesture"
+		pointerCount?: number
 	}
 	"viewport:reset": void
 
@@ -182,6 +188,10 @@ export interface CanvasEventMap {
 	"canvas:resize": { width: number; height: number }
 	"canvas:clear": void
 	"canvas:readonly": { readonly: boolean } // 只读状态变化事件
+	"canvas:devicechange": {
+		previous: CanvasDeviceInfo
+		current: CanvasDeviceInfo
+	}
 	"canvas:contextmenu": { x: number; y: number; canvasX: number; canvasY: number } // 画布空白区域右键菜单事件
 	"document:loaded": void // 文档加载完成事件
 	"document:restored": void // 文档恢复事件（撤销/恢复时触发，用于更新 UI 状态）

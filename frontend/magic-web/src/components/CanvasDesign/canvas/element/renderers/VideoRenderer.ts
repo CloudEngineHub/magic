@@ -64,6 +64,7 @@ export class VideoRenderer {
 	private placeholderUsesCenteredLayout = false
 	private renderToken = 0
 	private forceLoadingOverlay = false
+	private touchControlsHideTimer?: ReturnType<typeof setTimeout>
 
 	public destroy(): void {
 		this.clearPlayerUiSubscription()
@@ -93,8 +94,23 @@ export class VideoRenderer {
 	}
 
 	private clearPlayerUiSubscription(): void {
+		this.clearTouchControlsAutoHide()
 		this.playerUnsub?.()
 		this.playerUnsub = undefined
+	}
+
+	private clearTouchControlsAutoHide(): void {
+		if (!this.touchControlsHideTimer) return
+		clearTimeout(this.touchControlsHideTimer)
+		this.touchControlsHideTimer = undefined
+	}
+
+	private scheduleTouchControlsAutoHide(hideControls: () => void): void {
+		this.clearTouchControlsAutoHide()
+		this.touchControlsHideTimer = setTimeout(() => {
+			this.touchControlsHideTimer = undefined
+			hideControls()
+		}, 2500)
 	}
 
 	public resetTransientContent(): void {
@@ -363,6 +379,7 @@ export class VideoRenderer {
 		}
 
 		playButtonGroup.on("mouseenter", () => {
+			this.clearTouchControlsAutoHide()
 			if (
 				!canvas.permissionManager.canUseSelectionToolAffordance() ||
 				!playButtonGroup.visible()
@@ -381,20 +398,52 @@ export class VideoRenderer {
 			canvas.cursorManager.restoreToolCursor()
 			group.getLayer()?.batchDraw()
 		})
+		playButtonGroup.on("touchstart", () => {
+			if (
+				!canvas.permissionManager.canUseSelectionToolAffordance() ||
+				!playButtonGroup.visible()
+			) {
+				return
+			}
+			this.updatePlayButtonHoverState(playButtonBg, triangle, pauseBarsGroup, true)
+			group.getLayer()?.batchDraw()
+		})
+		playButtonGroup.on("touchend touchcancel", () => {
+			if (!canvas.permissionManager.canUseSelectionToolAffordance()) {
+				return
+			}
+			this.updatePlayButtonHoverState(playButtonBg, triangle, pauseBarsGroup, false)
+			group.getLayer()?.batchDraw()
+		})
 
 		// 禁止在 mousedown 上截断冒泡，否则 stage 上的选择工具无法选中/拖拽。
 		// 中心按钮统一负责播放/暂停；双击画面区域仍可切换播放状态。
-		playButtonGroup.on("click tap", () => {
+		playButtonGroup.on("click tap", (event) => {
+			if (this.isTouchLikeKonvaEvent(event)) {
+				showControls()
+				this.scheduleTouchControlsAutoHide(hideControls)
+			}
 			options?.onPlayButtonClick?.()
 		})
 		hit.on("dblclick dbltap", () => {
 			options?.onContentDoubleClick?.()
 		})
-		group.on("mouseenter", showControls)
+		hit.on("tap", (event) => {
+			if (!this.isTouchLikeKonvaEvent(event)) return
+			showControls()
+			this.scheduleTouchControlsAutoHide(hideControls)
+		})
+		group.on("mouseenter", () => {
+			this.clearTouchControlsAutoHide()
+			showControls()
+		})
 		group.on("mouseleave", hideControls)
 		group.on("mousemove", handlePointerMove)
 		group.on("dragmove", handlePointerMove)
-		group.on("dragstart", hideControls)
+		group.on("dragstart", () => {
+			this.clearTouchControlsAutoHide()
+			hideControls()
+		})
 
 		group.add(previewNode)
 		group.add(bufferingOverlay)
@@ -642,6 +691,18 @@ export class VideoRenderer {
 			refs.pauseBarsGroup,
 			false,
 		)
+	}
+
+	private isTouchLikeKonvaEvent(event: Konva.KonvaEventObject<Event>): boolean {
+		const nativeEvent = event.evt
+		if (!nativeEvent) return false
+		if (typeof PointerEvent !== "undefined" && nativeEvent instanceof PointerEvent) {
+			return nativeEvent.pointerType === "touch" || nativeEvent.pointerType === "pen"
+		}
+		if (typeof TouchEvent !== "undefined" && nativeEvent instanceof TouchEvent) {
+			return true
+		}
+		return nativeEvent.type.startsWith("touch")
 	}
 
 	private updatePauseBarsLayout(

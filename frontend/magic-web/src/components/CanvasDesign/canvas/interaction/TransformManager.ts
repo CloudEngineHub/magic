@@ -279,7 +279,7 @@ export class TransformManager {
 		return this.multiSelectionProxy?.dragDistance() ?? 3
 	}
 
-	public startMultiSelectionProxyDrag(event: MouseEvent): boolean {
+	public startMultiSelectionProxyDrag(event: MouseEvent | PointerEvent | TouchEvent): boolean {
 		if (
 			this.canvas.readonly ||
 			!this.multiSelectionProxy ||
@@ -296,6 +296,16 @@ export class TransformManager {
 
 		this.multiSelectionProxy.startDrag({ evt: event })
 		return true
+	}
+
+	public cancelActiveTransformDrag(): void {
+		if (this.multiSelectionProxy?.isDragging()) {
+			this.multiSelectionProxy.stopDrag()
+		}
+		if (this.transformer?.isDragging()) {
+			this.transformer.stopDrag()
+		}
+		this.clearTransformInteractionIntent()
 	}
 
 	private getTransformableElementIds(elementIds: string[]): string[] {

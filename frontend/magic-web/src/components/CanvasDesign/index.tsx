@@ -42,7 +42,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		data = {},
 		marker = {},
 		viewport = {},
-		getIsMobile,
+		getDevice,
 		t,
 		shareHostBottomChrome = false,
 	} = props
@@ -127,7 +127,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 				methods: methods,
 				permissions: permissions,
 			},
-			getIsMobile: getIsMobile,
+			getDevice: getDevice,
 			t: t,
 		})
 
@@ -191,8 +191,8 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	}, [t, canvas])
 
 	useUpdateEffect(() => {
-		canvas?.updateIsMobileDevice(getIsMobile)
-	}, [getIsMobile, canvas])
+		canvas?.updateDeviceInfo(getDevice)
+	}, [getDevice, canvas])
 
 	useUpdateEffect(() => {
 		canvas?.magicConfigManager.update({
@@ -240,7 +240,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 })
 
 const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref) => {
-	const { getIsMobile } = props
+	const { getDevice } = props
 
 	const appContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -278,7 +278,7 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 								<CanvasProvider>
 									<CanvasUIProvider readonly={props.readonly}>
 										<ElementMenuProvider>
-											<LayersUIProvider getIsMobile={getIsMobile}>
+											<LayersUIProvider getDevice={getDevice}>
 												<CanvasDesignContent ref={ref} {...props} />
 											</LayersUIProvider>
 										</ElementMenuProvider>

@@ -5,6 +5,7 @@ import {
 	useRef,
 	useState,
 	type MouseEvent,
+	type PointerEvent,
 	type ReactNode,
 } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover"
@@ -118,6 +119,8 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 	const suppressNextTriggerCloseRef = useRef(false)
 	/** 点击「从项目选择」时 Radix 会在 onClick 前派发关闭；capture 阶段置位以维持外层 Popover 打开 */
 	const suppressNextContentDismissRef = useRef(false)
+	/** touch/pen pointerdown 已主动打开，后续合成 click 不应再交给 Radix trigger toggle */
+	const suppressNextTouchTriggerClickRef = useRef(false)
 	/** 用户已在 trigger 上 pointerdown 进入「本地上传/项目选择」态；此时不应因浮层 mouseenter 退回 hover 列表 */
 	const userChoseClickModeRef = useRef(false)
 	const projectSelectBatchItemsRef = useRef<Array<ReferenceResourcePanelItem | undefined>>([])
@@ -126,6 +129,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		if (!open) {
 			suppressNextTriggerCloseRef.current = false
 			suppressNextContentDismissRef.current = false
+			suppressNextTouchTriggerClickRef.current = false
 			userChoseClickModeRef.current = false
 			projectSelectBatchItemsRef.current = []
 			setIsProjectSelectVisible(false)
@@ -220,6 +224,40 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		suppressNextContentDismissRef.current = true
 	}, [])
 
+	const handleTriggerPointerDown = useCallback(
+		(event: PointerEvent<HTMLDivElement>) => {
+			if (!hoverContent) return
+
+			if (event.pointerType === "touch" || event.pointerType === "pen") {
+				userChoseClickModeRef.current = true
+				setDisplayMode("click")
+				if (!open) {
+					suppressNextTouchTriggerClickRef.current = true
+					onOpenChange(true)
+					return
+				}
+				if (displayMode === "hover") {
+					suppressNextTriggerCloseRef.current = true
+				}
+				return
+			}
+
+			if (!open) return
+			if (displayMode !== "hover") return
+			suppressNextTriggerCloseRef.current = true
+			userChoseClickModeRef.current = true
+			setDisplayMode("click")
+		},
+		[displayMode, hoverContent, onOpenChange, open],
+	)
+
+	const handleTriggerClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
+		if (!suppressNextTouchTriggerClickRef.current) return
+		suppressNextTouchTriggerClickRef.current = false
+		event.preventDefault()
+		event.stopPropagation()
+	}, [])
+
 	const handleSourceSelect = useCallback(
 		(source: ReferenceResourceSourceType) => {
 			onSelectSource(source)
@@ -300,19 +338,14 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 						ref={internalTriggerRef}
 						className={triggerClassName}
 						onMouseEnter={() => {
-							if (hoverContent) {
+							if (hoverContent && !userChoseClickModeRef.current) {
 								setDisplayMode("hover")
 								onMouseEnter()
 							}
 						}}
 						onMouseLeave={hoverContent ? handlePopoverHostMouseLeave : undefined}
-						onPointerDown={() => {
-							if (!hoverContent || !open) return
-							if (displayMode !== "hover") return
-							suppressNextTriggerCloseRef.current = true
-							userChoseClickModeRef.current = true
-							setDisplayMode("click")
-						}}
+						onPointerDown={handleTriggerPointerDown}
+						onClickCapture={handleTriggerClickCapture}
 					>
 						{trigger}
 					</div>
