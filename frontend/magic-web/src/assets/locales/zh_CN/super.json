@@ -2711,7 +2711,6 @@
 				"title": "筛选"
 			},
 			"item": {
-				"deletedBy": "{{username}} 删除",
 				"more": "更多操作",
 				"remainingShort": "剩 {{days}} 天",
 				"selectRow": "选择此项",
@@ -3594,7 +3593,6 @@
 			"retry": "重试"
 		},
 		"item": {
-			"deletedBy": "{{username}} 删除",
 			"deletedOn": "删除于 {{date}}",
 			"more": "更多操作",
 			"pathPrefix": "路径：",

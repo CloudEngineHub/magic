@@ -2711,7 +2711,6 @@
 				"title": "Filter"
 			},
 			"item": {
-				"deletedBy": "{{username}} deleted",
 				"more": "More actions",
 				"remainingShort": "{{days}} days left",
 				"selectRow": "Select this item",
@@ -3592,7 +3591,6 @@
 			"retry": "Retry"
 		},
 		"item": {
-			"deletedBy": "{{username}} deleted",
 			"deletedOn": "Deleted on {{date}}",
 			"more": "More actions",
 			"pathPrefix": "Path: ",
