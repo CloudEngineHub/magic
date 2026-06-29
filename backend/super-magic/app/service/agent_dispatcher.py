@@ -201,6 +201,14 @@ class AgentDispatcher(Base):
         except Exception as e:
             logger.error(f"MagicServiceProvider refresh failed, continuing without it: {e}")
 
+        # 阶段二：init_client_message.json 已就绪，触发 magic-service AI 能力配置加载
+        try:
+            from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
+            from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
+            await ai_ability_config_manager.refresh_provider(MagicServiceAIAbilityProvider())
+        except Exception as e:
+            logger.error(f"MagicServiceAIAbilityProvider refresh failed, continuing without it: {e}")
+
         # 从 init_message.metadata 提取并设置关键字段
         if init_message.metadata:
             # 设置 task_id
@@ -763,6 +771,16 @@ class AgentDispatcher(Base):
             model_config_manager.maybe_refresh_in_background(provider.provider_type)
         except Exception as e:
             logger.warning(f"dispatch_message: model provider check failed, continuing: {e}")
+
+        # 确保 magic-service AI 能力配置已加载，失败不阻断 chat。
+        try:
+            from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
+            from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
+            ability_provider = MagicServiceAIAbilityProvider()
+            await ai_ability_config_manager.ensure_provider_loaded(ability_provider)
+            ai_ability_config_manager.maybe_refresh_in_background(ability_provider.provider_type)
+        except Exception as e:
+            logger.warning(f"dispatch_message: AI ability provider check failed, continuing: {e}")
 
         await self._fill_from_last_dispatch_message(message)
 

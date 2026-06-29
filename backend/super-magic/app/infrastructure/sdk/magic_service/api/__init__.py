@@ -4,6 +4,7 @@ Magic Service API Implementations
 Concrete API implementations for various Magic Service endpoints.
 """
 
+from .ai_ability_api import AiAbilityApi
 from .agent_api import AgentApi
 from .file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
 from .message_schedule_api import MessageScheduleApi
@@ -13,6 +14,7 @@ from app.infrastructure.sdk.magic_service.api.web_scrape_client import WebScrape
 
 
 __all__ = [
+    'AiAbilityApi',
     'AgentApi',
     'FileApi',
     'MessageScheduleApi',

@@ -127,6 +127,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"模型配置管理器初始化失败: {e}")
 
+    # 初始化 AI 能力配置管理器（阶段一：加载 config.yaml 静态配置）
+    try:
+        from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
+        from agentlang.config.ai_abilities.providers.config_yaml_provider import ConfigYamlAIAbilityProvider
+        from app.core.ai_ability_configs import create_ai_ability_config
+        await ai_ability_config_manager.initialize([ConfigYamlAIAbilityProvider(create_ai_ability_config)])
+        logger.info("AI 能力配置管理器初始化完成")
+    except Exception as e:
+        logger.error(f"AI 能力配置管理器初始化失败: {e}")
+
     # 执行启动时残留文件清理检查
     await cleanup_stale_files_on_startup()
 
