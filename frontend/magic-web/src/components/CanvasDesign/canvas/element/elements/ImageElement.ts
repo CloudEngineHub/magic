@@ -899,40 +899,30 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		const path = this.data.src
 		const resolveAbs = this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
+		const canonicalPath = resolveCanonicalResourcePath(path, resolveAbs)
+		const isCurrentResourcePath = (resourcePath: string): boolean =>
+			resourcePath === path ||
+			resolveCanonicalResourcePath(resourcePath, resolveAbs) === canonicalPath
 
 		this.resourceLoadedHandler = ({ data }) => {
-			if (
-				resolveCanonicalResourcePath(data.path, resolveAbs) ===
-				resolveCanonicalResourcePath(path, resolveAbs)
-			) {
+			if (isCurrentResourcePath(data.path)) {
 				this.imageLoadFailureReason = null
 				this.applyResourceFromEvent(data.resource)
 			}
 		}
 		this.resourceDisplayTargetHandler = ({ data }) => {
-			if (
-				data.elementId === this.data.id &&
-				resolveCanonicalResourcePath(data.path, resolveAbs) ===
-					resolveCanonicalResourcePath(path, resolveAbs)
-			) {
+			if (data.elementId === this.data.id && isCurrentResourcePath(data.path)) {
 				this.applyDisplayTargetVariant(data.variant)
 			}
 		}
 		this.resourceDisplayLoadedHandler = ({ data }) => {
-			if (
-				data.elementId === this.data.id &&
-				resolveCanonicalResourcePath(data.path, resolveAbs) ===
-					resolveCanonicalResourcePath(path, resolveAbs)
-			) {
+			if (data.elementId === this.data.id && isCurrentResourcePath(data.path)) {
 				this.imageLoadFailureReason = null
 				this.applyResourceFromEvent(data.resource)
 			}
 		}
 		this.resourceLoadFailedHandler = ({ data }) => {
-			if (
-				resolveCanonicalResourcePath(data.path, resolveAbs) ===
-				resolveCanonicalResourcePath(path, resolveAbs)
-			) {
+			if (isCurrentResourcePath(data.path)) {
 				this.imageLoadFailureReason = data.reason ?? "load-error"
 				this.handleImageLoadFailure()
 			}
@@ -963,8 +953,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (
 			resource &&
 			!this.loadedImage &&
-			resolveCanonicalResourcePath(path, resolveAbs) ===
-				resolveCanonicalResourcePath(this.data.src || "", resolveAbs)
+			(this.data.src === path ||
+				resolveCanonicalResourcePath(this.data.src || "", resolveAbs) === canonicalPath)
 		) {
 			this.applyResourceFromEvent(resource)
 		}
