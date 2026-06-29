@@ -100,6 +100,7 @@ import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
 import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
 import { isMagicSystemFolder } from "./utils/magic-system-folder"
 import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
+import { isMagicApp } from "@/utils/devices"
 
 interface TopicFilesCoreProps {
 	className?: string
@@ -204,6 +205,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const { t, i18n } = useTranslation("super")
 	const { styles, cx } = useStyles({ isExpanded: true })
 	const isMobile = useResponsive().md === false
+	// Magic App can render the desktop layout on iPad, so keep row actions reachable without hover.
+	const shouldShowInlineFileAction = isMobile || isMagicApp
 	const fileListAreaRef = useRef<HTMLDivElement>(null)
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
@@ -1445,7 +1448,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								<MagicSystemFolderIcon size={16} />
 							) : display_config?.type ? (
 								["custom", "micro-app"].includes(display_config?.type) &&
-									(display_config?.type === "custom" || item?.is_directory) ? (
+								(display_config?.type === "custom" || item?.is_directory) ? (
 									<CustomFolderMagicIcon
 										displayConfig={item?.display_config}
 										childrenItems={getChildrenForCustomMetadataIconPath(
@@ -1513,7 +1516,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								className={cx(
 									styles.attachmentAction,
 									"file-item-action",
-									(contextMenuItemId === itemId || isMobile) &&
+									(contextMenuItemId === itemId || shouldShowInlineFileAction) &&
 										"file-item-action-visible",
 								)}
 								data-testid="file-more-actions-button"
@@ -1668,7 +1671,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						{decoration?.icon && !isFileBusy ? (
 							decoration.icon
 						) : item?.display_config?.type === "custom" ||
-							(item?.display_config?.type === "micro-app" && item?.is_directory) ? (
+						  (item?.display_config?.type === "micro-app" && item?.is_directory) ? (
 							<CustomFolderMagicIcon
 								displayConfig={item?.display_config}
 								childrenItems={getChildrenForCustomMetadataIconPath(item, (id) =>
@@ -1713,7 +1716,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								className={cx(styles.ellipsis, isActiveFile && "font-medium")}
 								sideOffset={20}
 							>
-							{item?.file_name}
+								{item?.file_name}
 							</SmartTooltip>
 						)}
 					</div>
@@ -1728,7 +1731,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							className={cx(
 								styles.attachmentAction,
 								"file-item-action",
-								(contextMenuItemId === itemId || isMobile) &&
+								(contextMenuItemId === itemId || shouldShowInlineFileAction) &&
 									"file-item-action-visible",
 							)}
 							data-testid="file-more-actions-button"
@@ -2173,7 +2176,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					}
 					text={
 						crossProjectOperation.isOperating &&
-							crossProjectOperation.operationType === "copy"
+						crossProjectOperation.operationType === "copy"
 							? t("topicFiles.copying")
 							: importOperation.isOperating
 								? t("topicFiles.copying")
