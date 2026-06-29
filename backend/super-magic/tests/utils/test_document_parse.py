@@ -20,6 +20,7 @@ from app.utils.document_parse.models import (
     ExtractionResult,
 )
 from app.utils.document_parse.pdf.pdf_file_validator import PdfFileValidator, PdfValidationErrorCode
+from app.utils.document_parse.pdf.pdf_metadata import PdfMetadata
 from app.utils.document_parse.pdf.pdf_page_snapshot_extractor import PdfPageSnapshotExtractor
 from app.utils.document_parse.pdf.pdf_render_backend import PdfRenderedPage
 from app.utils.document_parse.pdf.pdf_strategy import PdfExtractionStrategy
@@ -97,6 +98,30 @@ async def test_pdf_validator_rejects_invalid_header(tmp_path: Path):
 
     assert result.ok is False
     assert result.error_code == PdfValidationErrorCode.INVALID_HEADER
+
+
+def test_pdf_metadata_selects_deterministic_stratified_pages():
+    assert PdfMetadata._select_sample_pages(0) == []
+    assert PdfMetadata._select_sample_pages(3) == [1, 2, 3]
+    assert PdfMetadata._select_sample_pages(10) == [1, 2, 3, 5, 10]
+
+
+@pytest.mark.asyncio
+async def test_pdf_metadata_records_stratified_sample_pages(tmp_path: Path):
+    import fitz
+
+    source = tmp_path / "sampled.pdf"
+    doc = fitz.open()
+    for page_index in range(10):
+        page = doc.new_page(width=200, height=120)
+        page.insert_text((20, 40), f"Page {page_index + 1} sample text")
+    doc.save(str(source))
+
+    metadata = await PdfMetadata.inspect(source)
+
+    assert metadata["sample_pages"] == 5
+    assert metadata["sampled_pages"] == [1, 2, 3, 5, 10]
+    assert metadata["sampling_strategy"] == "deterministic_stratified"
 
 
 def test_pdf_strategy_adds_snapshots_for_scanned_like_pdf():
