@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/shadcn-ui/input"
 import SuperMagicService from "@/pages/superMagic/services"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { shouldSuppressInputAutoFocusInMagicApp } from "@/utils/inputFocusPolicy"
 
 interface ChatProjectRenameDialogProps {
 	open: boolean
@@ -35,6 +36,7 @@ export function ChatProjectRenameDialog({
 	const { t } = useTranslation("super")
 	const [renameLoading, setRenameLoading] = useState(false)
 	const [projectNameInput, setProjectNameInput] = useState("")
+	const shouldAutoFocusInput = !shouldSuppressInputAutoFocusInMagicApp()
 
 	useEffect(() => {
 		if (open && project) {
@@ -77,6 +79,12 @@ export function ChatProjectRenameDialog({
 			<DialogContent
 				className="sm:max-w-[425px]"
 				data-testid="chat-project-rename-dialog"
+				onOpenAutoFocus={(event) => {
+					if (!shouldAutoFocusInput) {
+						// Radix focuses the first field by default; block it in Magic App WebView.
+						event.preventDefault()
+					}
+				}}
 				onCloseAutoFocus={(event) => {
 					event.preventDefault()
 				}}
@@ -89,7 +97,8 @@ export function ChatProjectRenameDialog({
 						{t("chat.chatNameFieldLabel")}
 					</span>
 					<Input
-						autoFocus
+						// Keep desktop rename efficient while avoiding iPad WebView keyboard occlusion.
+						autoFocus={shouldAutoFocusInput}
 						maxLength={100}
 						value={projectNameInput}
 						placeholder={t("chat.inputChatName")}
