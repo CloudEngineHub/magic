@@ -11,6 +11,7 @@ export { useAdminStore } from "@admin/stores/admin"
 
 export * from "@admin/const/common"
 export { AiModel } from "@admin/const/aiModel"
+export { getAdminLocaleModules, type AdminLocaleModules } from "@admin/locales"
 
 // 5. 导出鉴权中间件
 export { withAuthMiddleware } from "@admin/layouts/BaseLayout/components/AuthMiddleware"

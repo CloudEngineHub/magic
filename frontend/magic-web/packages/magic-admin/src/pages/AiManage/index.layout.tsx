@@ -144,9 +144,7 @@ function AIManagerLayout() {
 		]
 	}, [t, isOfficialOrg, isPersonalOrganization])
 
-	return (
-		<SecondaryLayout items={items} openKeys={[RoutePath.AICustomModel, RoutePath.AIManage]} />
-	)
+	return <SecondaryLayout items={items} openKeys={[RoutePath.AICustomModel, RoutePath.AIInternalEmployeeSkill, RoutePath.AIManage]} />
 }
 
 export default AIManagerLayout

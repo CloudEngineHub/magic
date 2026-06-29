@@ -1,5 +1,6 @@
 import Demo from "../Demo/locales/kk_KZ"
 import MultiLangSetting from "../MultiLangSetting/locales/kk_KZ"
+import UserSelect from "../UserSelect/locales/kk_KZ"
 import SideMenu from "../SideMenu/locales/kk_KZ"
 import SearchSelect from "../SearchSelect/locales/kk_KZ"
 import ButtonGroup from "../ButtonGroup/locales/kk_KZ"
@@ -15,6 +16,7 @@ import TimeFilterPanel from "../TimeFilterPanel/locales/kk_KZ"
 export default {
 	Demo,
 	MultiLangSetting,
+	UserSelect,
 	SideMenu,
 	SearchSelect,
 	ButtonGroup,

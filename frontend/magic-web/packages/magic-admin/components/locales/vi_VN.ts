@@ -1,5 +1,6 @@
 import Demo from "../Demo/locales/vi_VN"
 import MultiLangSetting from "../MultiLangSetting/locales/vi_VN"
+import UserSelect from "../UserSelect/locales/vi_VN"
 import SideMenu from "../SideMenu/locales/vi_VN"
 import SearchSelect from "../SearchSelect/locales/vi_VN"
 import ButtonGroup from "../ButtonGroup/locales/vi_VN"
@@ -15,6 +16,7 @@ import TimeFilterPanel from "../TimeFilterPanel/locales/vi_VN"
 export default {
 	Demo,
 	MultiLangSetting,
+	UserSelect,
 	SideMenu,
 	SearchSelect,
 	ButtonGroup,
