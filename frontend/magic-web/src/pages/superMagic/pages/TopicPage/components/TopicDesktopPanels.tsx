@@ -223,8 +223,8 @@ function TopicDesktopPanels({
 
 				{showProjectResizeHandle && (
 					<TopicResizeHandle
-						onMouseDown={(event) => {
-							startDragProjectSider(event.clientX)
+						onResizeStart={(clientX) => {
+							startDragProjectSider(clientX)
 						}}
 						className={cn("shrink-0", isDraggingProjectSider && "before:opacity-100")}
 					/>
@@ -290,8 +290,8 @@ function TopicDesktopPanels({
 						>
 							<TopicResizeHandle
 								disabled={isConversationPanelCollapsed || !shouldShowDetailPanel}
-								onMouseDown={(event) => {
-									startDragMessagePanel(event.clientX)
+								onResizeStart={(clientX) => {
+									startDragMessagePanel(clientX)
 								}}
 								className={cn(
 									"h-full w-full shrink-0",

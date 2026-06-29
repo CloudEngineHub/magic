@@ -90,7 +90,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 	const {
 		width: workspaceWidthPx,
 		isDragging: isDraggingWorkspace,
-		handleMouseDown: onWorkspaceResizeStart,
+		handleResizeStart: onWorkspaceResizeStart,
 	} = useResizablePanel({
 		minWidth: WORKSPACE_LIST_MIN_PX,
 		maxWidth: WORKSPACE_LIST_MAX_PX,
@@ -102,7 +102,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 	const {
 		width: projectWidthPx,
 		isDragging: isDraggingProject,
-		handleMouseDown: onProjectResizeStart,
+		handleResizeStart: onProjectResizeStart,
 	} = useResizablePanel({
 		minWidth: PROJECT_LIST_MIN_PX,
 		maxWidth: PROJECT_LIST_MAX_PX,
@@ -680,7 +680,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 							>
 								<div style={{ pointerEvents: "auto", height: "100%" }}>
 									<TopicResizeHandle
-										onMouseDown={onWorkspaceResizeStart}
+										onResizeStart={onWorkspaceResizeStart}
 										className={cn(
 											"h-full shrink-0",
 											isDraggingWorkspace && "before:opacity-100",
@@ -795,7 +795,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 								>
 									<div style={{ pointerEvents: "auto", height: "100%" }}>
 										<TopicResizeHandle
-											onMouseDown={onProjectResizeStart}
+											onResizeStart={onProjectResizeStart}
 											className={cn(
 												"h-full shrink-0",
 												isDraggingProject && "before:opacity-100",

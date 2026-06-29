@@ -99,13 +99,15 @@ export function useTopicDesktopLayout({
 			nextClientX = null
 		}
 
-		const handleMouseMove = (event: MouseEvent) => {
+		/** Queues pointer movement so touch and mouse resizing share the same throttled update path. */
+		const handlePointerMove = (event: PointerEvent) => {
 			nextClientX = event.clientX
 			if (rafId !== null) return
 			rafId = window.requestAnimationFrame(flushDragPosition)
 		}
 
-		const handleMouseUp = () => {
+		/** Finalizes drag and persists the latest width when the pointer completes normally. */
+		const handlePointerUp = () => {
 			if (rafId !== null) {
 				window.cancelAnimationFrame(rafId)
 				flushDragPosition()
@@ -113,21 +115,32 @@ export function useTopicDesktopLayout({
 			store.endDrag()
 		}
 
-		document.addEventListener("mousemove", handleMouseMove)
-		document.addEventListener("mouseup", handleMouseUp)
+		/** Cancels drag without persisting widths from a browser-aborted touch gesture. */
+		const handlePointerCancel = () => {
+			if (rafId !== null) {
+				window.cancelAnimationFrame(rafId)
+				rafId = null
+			}
+			store.cancelDrag()
+		}
+
+		document.addEventListener("pointermove", handlePointerMove)
+		document.addEventListener("pointerup", handlePointerUp)
+		document.addEventListener("pointercancel", handlePointerCancel)
 
 		return () => {
 			if (rafId !== null) {
 				window.cancelAnimationFrame(rafId)
 			}
-			document.removeEventListener("mousemove", handleMouseMove)
-			document.removeEventListener("mouseup", handleMouseUp)
+			document.removeEventListener("pointermove", handlePointerMove)
+			document.removeEventListener("pointerup", handlePointerUp)
+			document.removeEventListener("pointercancel", handlePointerCancel)
 		}
 	}, [store, store.isDraggingProjectSider, store.isDraggingMessagePanel])
 
 	useEffect(() => {
 		return () => {
-			store.endDrag()
+			store.cancelDrag()
 		}
 	}, [store])
 

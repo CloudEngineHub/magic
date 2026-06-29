@@ -68,7 +68,12 @@ function CrewEditErrorFallback({ error, onBack }: { error: string; onBack: () =>
 			data-testid="crew-edit-error"
 		>
 			<p className="text-sm text-destructive">{error}</p>
-			<button type="button" className="text-sm text-primary hover:underline" onClick={onBack} data-testid="on-back">
+			<button
+				type="button"
+				className="text-sm text-primary hover:underline"
+				onClick={onBack}
+				data-testid="on-back"
+			>
 				{t("backToMyCrew")}
 			</button>
 		</div>
@@ -340,7 +345,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	const {
 		width: sidebarWidthPx,
 		isDragging: isDraggingSidebar,
-		handleMouseDown: onSidebarResizeStart,
+		handleResizeStart: onSidebarResizeStart,
 	} = useResizablePanel({
 		minWidth: SIDEBAR_MIN_PX,
 		maxWidth: SIDEBAR_MAX_PX,
@@ -352,7 +357,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	const {
 		width: detailPanelWidthPx,
 		isDragging: isDraggingDetail,
-		handleMouseDown: onDetailResizeStart,
+		handleResizeStart: onDetailResizeStart,
 	} = useResizablePanel({
 		minWidth: DETAIL_MIN_PX,
 		maxWidth: DETAIL_MAX_PX,
