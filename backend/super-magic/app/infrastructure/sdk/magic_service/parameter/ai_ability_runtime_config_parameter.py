@@ -6,10 +6,7 @@ Parameter class for querying Magic Service AI ability runtime config.
 
 from typing import Any, Dict
 
-from agentlang.utils.metadata import MetadataUtil
-
 from ..kernel.magic_service_parameter import MagicServiceAbstractParameter
-
 
 class AiAbilityRuntimeConfigParameter(MagicServiceAbstractParameter):
     """Parameter for GET /api/v1/open-api/sandbox/ai-abilities/runtime-config."""
@@ -25,9 +22,3 @@ class AiAbilityRuntimeConfigParameter(MagicServiceAbstractParameter):
     def to_query_params(self) -> Dict[str, Any]:
         """Return query params."""
         return {}
-
-    def to_headers(self) -> Dict[str, str]:
-        """Return headers with Magic/User authorization."""
-        headers = super().to_headers()
-        MetadataUtil.add_magic_and_user_authorization_headers(headers)
-        return headers

@@ -205,7 +205,11 @@ class AgentDispatcher(Base):
         try:
             from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
             from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
-            await ai_ability_config_manager.refresh_provider(MagicServiceAIAbilityProvider())
+            await ai_ability_config_manager.refresh_provider(
+                MagicServiceAIAbilityProvider(
+                    (init_message.dynamic_config or {}).get("ai_abilities")
+                )
+            )
         except Exception as e:
             logger.error(f"MagicServiceAIAbilityProvider refresh failed, continuing without it: {e}")
 
@@ -744,8 +748,12 @@ class AgentDispatcher(Base):
         try:
             from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
             from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
-            ability_provider = MagicServiceAIAbilityProvider()
-            await ai_ability_config_manager.ensure_provider_loaded(ability_provider)
+            dynamic_ai_abilities = (message.dynamic_config or {}).get("ai_abilities")
+            ability_provider = MagicServiceAIAbilityProvider(dynamic_ai_abilities)
+            if isinstance(dynamic_ai_abilities, Mapping) and dynamic_ai_abilities:
+                await ai_ability_config_manager.refresh_provider(ability_provider)
+            else:
+                await ai_ability_config_manager.ensure_provider_loaded(ability_provider)
             ai_ability_config_manager.maybe_refresh_in_background(ability_provider.provider_type)
         except Exception as e:
             logger.warning(f"dispatch_message: AI ability provider check failed, continuing: {e}")
