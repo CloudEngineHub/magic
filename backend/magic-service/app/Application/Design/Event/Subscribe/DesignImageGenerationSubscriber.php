@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Event\Subscribe;
 
+use App\Application\Design\Service\DesignImageOperationConcurrencyService;
 use App\Application\Design\Tool\ImageGeneration\DesignGeneratedImageFileNameTool;
 use App\Application\Design\Tool\ImageGeneration\DesignImageGenerationTaskHandlerFactory;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
@@ -20,6 +21,7 @@ use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
+use App\Infrastructure\Util\Concurrency\ConcurrencyLease;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
@@ -30,7 +32,9 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Hyperf\DbConnection\Db;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
+use Hyperf\Logger\LoggerFactory;
 use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
 use Throwable;
 
 use function Hyperf\Support\retry;
@@ -49,6 +53,10 @@ class DesignImageGenerationSubscriber implements ListenerInterface
 
     private DesignGeneratedImageFileNameTool $generatedImageFileNameTool;
 
+    private DesignImageOperationConcurrencyService $concurrencyService;
+
+    private LoggerInterface $logger;
+
     public function __construct(ContainerInterface $container)
     {
         $this->imageGenerationDomainService = $container->get(ImageGenerationDomainService::class);
@@ -56,6 +64,8 @@ class DesignImageGenerationSubscriber implements ListenerInterface
         $this->fileDomainService = $container->get(FileDomainService::class);
         $this->projectDomainService = $container->get(ProjectDomainService::class);
         $this->generatedImageFileNameTool = $container->get(DesignGeneratedImageFileNameTool::class);
+        $this->concurrencyService = $container->get(DesignImageOperationConcurrencyService::class);
+        $this->logger = $container->get(LoggerFactory::class)->get(static::class);
     }
 
     public function listen(): array
@@ -74,9 +84,26 @@ class DesignImageGenerationSubscriber implements ListenerInterface
 
         $dataIsolation = DesignDataIsolation::create($imageGenerationEntity->getOrganizationCode(), $imageGenerationEntity->getUserId());
 
-        $this->imageGenerationDomainService->markAsProcessing($dataIsolation, $imageGenerationEntity->getId());
-
+        $lease = ConcurrencyLease::unlimited((string) $imageGenerationEntity->getId());
         try {
+            if ($this->concurrencyService->supports($imageGenerationEntity)) {
+                $this->logger->info('design image operation concurrency acquire start', $this->buildConcurrencyLogContext($imageGenerationEntity));
+
+                // 擦除/扩图先抢并发槽；抢不到则保持 pending，等待定时任务重新投递。
+                $lease = $this->concurrencyService->tryAcquire($imageGenerationEntity);
+                $this->logger->info('design image operation concurrency acquire end', $this->buildConcurrencyLogContext($imageGenerationEntity, $lease));
+                if (! $lease->canProceed()) {
+                    return;
+                }
+
+                // 后续 return/异常都会进入 finally，已抢到的槽会在那里统一释放。
+                if (! $this->imageGenerationDomainService->tryMarkAsProcessing($dataIsolation, $imageGenerationEntity->getId())) {
+                    return;
+                }
+            } else {
+                $this->imageGenerationDomainService->markAsProcessing($dataIsolation, $imageGenerationEntity->getId());
+            }
+
             $response = $this->invokeImageGenerationHandler($dataIsolation, $imageGenerationEntity);
             if (! $response) {
                 ExceptionBuilder::throw(DesignErrorCode::ThirdPartyServiceError, 'design.image_generation.generate_image_failed');
@@ -96,6 +123,14 @@ class DesignImageGenerationSubscriber implements ListenerInterface
             $this->completeImageTask($dataIsolation, $imageGenerationEntity, $response);
         } catch (Throwable $throwable) {
             $this->imageGenerationDomainService->markAsFailed($dataIsolation, $imageGenerationEntity->getId(), $throwable->getMessage());
+        } finally {
+            if ($lease->ownsSlot()) {
+                $this->logger->info('design image operation concurrency release start', $this->buildConcurrencyLogContext($imageGenerationEntity, $lease));
+                $released = $this->concurrencyService->release($lease);
+                $this->logger->info('design image operation concurrency release end', $this->buildConcurrencyLogContext($imageGenerationEntity, $lease, [
+                    'released' => $released,
+                ]));
+            }
         }
     }
 
@@ -137,6 +172,8 @@ class DesignImageGenerationSubscriber implements ListenerInterface
             $imageGenerationEntity->getPrompt(),
         );
 
+        $this->ensureOutputDirectoryId($imageGenerationEntity);
+
         $fullPrefix = $this->fileDomainService->getFullPrefix($dataIsolation->getCurrentOrganizationCode());
         $fullFileDir = $imageGenerationEntity->getFullFileDir($fullPrefix);
         $uploadPath = substr($fullFileDir, strlen($fullPrefix));
@@ -164,6 +201,36 @@ class DesignImageGenerationSubscriber implements ListenerInterface
             }
             $imageGenerationEntity->setFileName($completionPayload['file_name']);
         });
+    }
+
+    /**
+     * 队列恢复的任务来自数据库，创建时的 fileDirId 不会随实体持久化，缺失时按 file_dir 重新解析真实输出目录。
+     */
+    private function ensureOutputDirectoryId(ImageGenerationEntity $imageGenerationEntity): void
+    {
+        $fileDirId = $imageGenerationEntity->getFileDirId();
+        if ($fileDirId > 0) {
+            return;
+        }
+
+        $taskFileDir = $this->taskFileDomainService->findEntityByRelativePath(
+            $imageGenerationEntity->getProjectId(),
+            $imageGenerationEntity->getFileDir()
+        );
+        if (! $this->isValidOutputDirectory($imageGenerationEntity, $taskFileDir)) {
+            ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'design.image_generation.file_dir_not_exists', [
+                'file_dir' => $imageGenerationEntity->getFileDir(),
+            ]);
+        }
+
+        $imageGenerationEntity->setFileDirId($taskFileDir->getFileId());
+    }
+
+    private function isValidOutputDirectory(ImageGenerationEntity $imageGenerationEntity, ?TaskFileEntity $taskFileDir): bool
+    {
+        return $taskFileDir instanceof TaskFileEntity
+            && $taskFileDir->getIsDirectory()
+            && $taskFileDir->getProjectId() === $imageGenerationEntity->getProjectId();
     }
 
     /**
@@ -230,5 +297,33 @@ class DesignImageGenerationSubscriber implements ListenerInterface
             'file_name' => '',
             'output_images' => $outputImages,
         ];
+    }
+
+    /**
+     * 并发限制日志只记录排查必需字段，避免输出图片地址、prompt 等业务内容。
+     *
+     * @param array<string, mixed> $extra
+     * @return array<string, mixed>
+     */
+    private function buildConcurrencyLogContext(ImageGenerationEntity $entity, ?ConcurrencyLease $lease = null, array $extra = []): array
+    {
+        $context = [
+            'task_id' => $entity->getId(),
+            'type' => $entity->getType()->value,
+            'project_id' => $entity->getProjectId(),
+            'organization_code' => $entity->getOrganizationCode(),
+            'user_id' => $entity->getUserId(),
+        ];
+
+        if ($lease !== null) {
+            $context += [
+                'pool_name' => $lease->getPoolName(),
+                'resource_id' => $lease->getResourceId(),
+                'can_proceed' => $lease->canProceed(),
+                'owns_slot' => $lease->ownsSlot(),
+            ];
+        }
+
+        return $context + $extra;
     }
 }

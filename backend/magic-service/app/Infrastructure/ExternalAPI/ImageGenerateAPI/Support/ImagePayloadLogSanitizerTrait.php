@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\ImageGenerateAPI\Support;
 
+use App\Infrastructure\Util\File\ImageBase64DataUriParser;
+
 trait ImagePayloadLogSanitizerTrait
 {
     /**

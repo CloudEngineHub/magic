@@ -13,12 +13,11 @@ use App\Application\ModelGateway\Processor\UploadProcessor;
 use App\Application\ModelGateway\Processor\WatermarkProcessor;
 use App\Application\ModelGateway\Struct\ImagePostProcessOptions;
 use App\Application\ModelGateway\Struct\ImageProcessContext;
-use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Domain\ImageGenerate\ValueObject\ImplicitWatermark;
 use App\Domain\ImageGenerate\ValueObject\WatermarkConfig;
 use App\Domain\ModelGateway\Entity\Dto\ImageRemoveBackgroundRequestDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
-use App\Domain\ModelGateway\Event\ImageRemoveBackgroundCompletedEvent;
+use App\Domain\ModelGateway\Event\ImageOperationCompletedEvent;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\ErrorCode\MagicApiErrorCode;
@@ -34,11 +33,9 @@ use App\Infrastructure\Util\File\SecureImageDownloader;
 use App\Infrastructure\Util\File\TemporaryFileManager;
 use App\Infrastructure\Util\SSRF\SSRFUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
-use DateTime;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Di\Annotation\Inject;
 use InvalidArgumentException;
-use Psr\EventDispatcher\EventDispatcherInterface;
 use RuntimeException;
 use Throwable;
 
@@ -62,9 +59,6 @@ class ImageRemoveBackgroundAppService extends AbstractLLMAppService
 
     #[Inject]
     protected SecureImageDownloader $secureImageDownloader;
-
-    #[Inject]
-    protected EventDispatcherInterface $eventDispatcher;
 
     #[Inject]
     protected AiAbilityDomainService $aiAbilityDomainService;
@@ -209,7 +203,15 @@ class ImageRemoveBackgroundAppService extends AbstractLLMAppService
             $responseTime = (int) round((microtime(true) - $startTime) * 1000);
 
             if ($response->isSuccess()) {
-                $this->dispatchCompletedEvent($dataIsolation, $dto, $callTime, $responseTime);
+                $this->dispatchImageOperationCompletedEvent(
+                    $dataIsolation,
+                    $dto,
+                    ImageOperationCompletedEvent::OPERATION_REMOVE_BACKGROUND,
+                    $providerCode,
+                    $callTime,
+                    $responseTime,
+                    (int) round($startTime * 1000)
+                );
             }
 
             $this->logger->info('ImageRemoveBackgroundSuccess', [
@@ -326,45 +328,6 @@ class ImageRemoveBackgroundAppService extends AbstractLLMAppService
             'provider_error_code' => $exception->getProviderErrorCode(),
             'provider' => $exception->getProvider(),
         ]);
-    }
-
-    private function dispatchCompletedEvent(
-        ModelGatewayDataIsolation $dataIsolation,
-        ImageRemoveBackgroundRequestDTO $dto,
-        string $callTime,
-        int $responseTime,
-    ): void {
-        $event = new ImageRemoveBackgroundCompletedEvent();
-        $event->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
-        $event->setUserId($dataIsolation->getCurrentUserId());
-        $event->setImageCount(1);
-        $event->setOriginalModelId($dto->getOriginalModelId());
-        $event->setSourceType($this->resolveSourceType($dataIsolation, $dto));
-        $event->setCallTime($callTime);
-        $event->setResponseTime($responseTime);
-        $event->setTopicId($dto->getTopicId());
-        $event->setTaskId($dto->getTaskId());
-        $event->setAccessTokenId($dataIsolation->getAccessToken()->getId());
-        $event->setAccessTokenName($dataIsolation->getAccessToken()->getName());
-        $event->setSourceId($dataIsolation->getSourceId());
-        $event->setCreatedAt(new DateTime());
-
-        $this->eventDispatcher->dispatch($event);
-    }
-
-    private function resolveSourceType(
-        ModelGatewayDataIsolation $dataIsolation,
-        ImageRemoveBackgroundRequestDTO $dto,
-    ): ImageGenerateSourceEnum {
-        if ($dataIsolation->getAccessToken()->getType()->isUser()) {
-            return ImageGenerateSourceEnum::API_PLATFORM;
-        }
-
-        if (! empty($dto->getTopicId())) {
-            return ImageGenerateSourceEnum::SUPER_MAGIC;
-        }
-
-        return ImageGenerateSourceEnum::API;
     }
 
     /**

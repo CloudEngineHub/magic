@@ -120,6 +120,8 @@ enum AiAbilityCode: string
             self::WebSearch => ['api_key'],
             self::ImageSearch => ['api_key'],
             self::ImageRemoveBackground => ['api_key'],
+            self::ImageEraser => ['api_key', 'access_key', 'secret_key', 'ak', 'sk'],
+            self::ImageExpand => ['api_key', 'access_key', 'secret_key', 'ak', 'sk'],
             self::Ocr => ['access_key', 'secret_key'],
             self::AudioFileRecognition => ['app_key', 'access_key', 'cluster', 'api_key', 'authorization'],
             self::KnowledgeBaseEmbeddingModel => [],

@@ -411,8 +411,8 @@ return [
         'image_eraser' => [
             'code' => 'image_eraser',
             'name' => [
-                'zh_CN' => '橡皮擦',
-                'en_US' => 'Image Eraser',
+                'zh_CN' => '即梦AI-交互编辑',
+                'en_US' => 'Jimeng AI - Interactive Editing',
             ],
             'description' => [
                 'zh_CN' => '本能力覆盖平台所有图片橡皮擦的应用场景，通过AI技术根据标记区域擦除图片内容，并以自然背景无缝填充。',
@@ -424,6 +424,34 @@ return [
             'config' => [
                 'model_id' => env('AI_ABILITY_IMAGE_ERASER_MODEL_ID', null),
                 'prompt' => env('AI_ABILITY_IMAGE_ERASER_PROMPT', ''),
+                'providers' => [
+                    [
+                        'name' => '官方代理服务',
+                        'enable' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_ENABLE', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_ENABLE', true)),
+                        'provider' => 'official_proxy',
+                        'request_url' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_REQUEST_URL', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_URL', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_URL', ''))),
+                        'api_key' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_API_KEY', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_API_KEY', '')),
+                        'timeout' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_TIMEOUT', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_TIMEOUT', 300)),
+                    ],
+                    [
+                        'name' => '火山引擎',
+                        'enable' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_ENABLE', false),
+                        'provider' => 'volcengine',
+                        'access_key' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_ACCESS_KEY', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_AK', '')),
+                        'secret_key' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_SECRET_KEY', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_SK', '')),
+                        'timeout' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_TIMEOUT', 300),
+                    ],
+                    [
+                        'name' => '火山引擎即梦 Inpainting',
+                        'enable' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_ENABLE', false),
+                        'provider' => 'jimeng',
+                        'access_key' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_ACCESS_KEY', env('AI_ABILITY_IMAGE_ERASER_JIMENG_AK', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_ACCESS_KEY', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_AK', '')))),
+                        'secret_key' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_SECRET_KEY', env('AI_ABILITY_IMAGE_ERASER_JIMENG_SK', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_SECRET_KEY', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_SK', '')))),
+                        'prompt' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_PROMPT', '删除'),
+                        'seed' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_SEED', ''),
+                        'timeout' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_TIMEOUT', 300),
+                    ],
+                ],
             ],
         ],
 
@@ -431,8 +459,8 @@ return [
         'image_expand' => [
             'code' => 'image_expand',
             'name' => [
-                'zh_CN' => '扩图',
-                'en_US' => 'Image Expand',
+                'zh_CN' => '即梦AI-智能扩图',
+                'en_US' => 'Jimeng AI - Smart Expand',
             ],
             'description' => [
                 'zh_CN' => '本能力覆盖平台所有图片扩图的应用场景，通过AI技术将图片向外延伸，以符合原图风格、光照和透视的内容填充扩展区域。',
@@ -444,6 +472,34 @@ return [
             'config' => [
                 'model_id' => env('AI_ABILITY_IMAGE_EXPAND_MODEL_ID', null),
                 'prompt' => env('AI_ABILITY_IMAGE_EXPAND_PROMPT', ''),
+                'providers' => [
+                    [
+                        'name' => '官方代理服务',
+                        'enable' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_ENABLE', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_ENABLE', true)),
+                        'provider' => 'official_proxy',
+                        'request_url' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_REQUEST_URL', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_URL', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_URL', ''))),
+                        'api_key' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_API_KEY', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_API_KEY', '')),
+                        'timeout' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_TIMEOUT', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_TIMEOUT', 300)),
+                    ],
+                    [
+                        'name' => '火山引擎',
+                        'enable' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_ENABLE', false),
+                        'provider' => 'volcengine',
+                        'access_key' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_ACCESS_KEY', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_AK', '')),
+                        'secret_key' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_SECRET_KEY', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_SK', '')),
+                        'timeout' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_TIMEOUT', 300),
+                    ],
+                    [
+                        'name' => '火山引擎即梦 Outpainting',
+                        'enable' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_ENABLE', false),
+                        'provider' => 'jimeng',
+                        'access_key' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_ACCESS_KEY', env('AI_ABILITY_IMAGE_EXPAND_JIMENG_AK', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_ACCESS_KEY', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_AK', '')))),
+                        'secret_key' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_SECRET_KEY', env('AI_ABILITY_IMAGE_EXPAND_JIMENG_SK', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_SECRET_KEY', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_SK', '')))),
+                        'prompt' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_PROMPT', ''),
+                        'seed' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_SEED', ''),
+                        'timeout' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_TIMEOUT', 300),
+                    ],
+                ],
             ],
         ],
 

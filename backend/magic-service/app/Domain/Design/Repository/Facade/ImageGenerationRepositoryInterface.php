@@ -9,6 +9,7 @@ namespace App\Domain\Design\Repository\Facade;
 
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
+use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
 
 /**
  * 图片生成任务仓储接口.
@@ -34,6 +35,19 @@ interface ImageGenerationRepositoryInterface
      * 更新任务状态
      */
     public function updateStatus(DesignDataIsolation $dataIsolation, int $id, string $status, ?string $errorMessage = null): void;
+
+    /**
+     * 原子地将 pending 任务标记为 processing，避免重复消费.
+     */
+    public function tryMarkAsProcessing(DesignDataIsolation $dataIsolation, int $id): bool;
+
+    /**
+     * 查询全局待执行任务，用于后台补偿扫描.
+     *
+     * @param array<int, ImageGenerationType|int> $types
+     * @return array<int, ImageGenerationEntity>
+     */
+    public function findPendingByTypes(array $types, int $limit): array;
 
     public function completed(DesignDataIsolation $dataIsolation, int $id, string $fileName): void;
 
