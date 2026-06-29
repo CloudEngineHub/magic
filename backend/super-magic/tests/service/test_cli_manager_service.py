@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -201,6 +202,40 @@ async def test_apply_adopt_persists_single_file_from_system_bin(tmp_path, monkey
 
 
 @pytest.mark.asyncio
+async def test_apply_adopt_rewrites_external_symlink_to_persistent_target(tmp_path, monkeypatch):
+    """验证外部路径软链到持久文件时，注册表记录真实持久目标。"""
+    paths = _build_paths(tmp_path)
+    system_root = tmp_path / "usr-local"
+    existing_target = paths.apps_dir / "mock-cli" / "old" / "bin" / "mock-cli"
+    command_path = system_root / "bin" / "mock-cli"
+    _write_mock_command(existing_target)
+    command_path.parent.mkdir(parents=True, exist_ok=True)
+    command_path.symlink_to(existing_target)
+    monkeypatch.setenv("PATH", str(command_path.parent))
+    monkeypatch.setattr(cli_path_utils, "SYSTEM_ROOTS", (system_root,))
+
+    service = CliManagerService(paths=paths)
+    result = await service.apply(
+        CliApplyRequest(
+            name="mock-cli",
+            mode="adopt",
+            commands=["mock-cli"],
+            confirmed=True,
+        )
+    )
+
+    target = Path(result["command_targets"]["mock-cli"])
+    assert target != command_path
+    assert target.exists()
+    assert target.is_file()
+    assert target.is_relative_to(paths.root_dir)
+    assert command_path.is_symlink()
+    assert command_path.resolve(strict=False) == target.resolve(strict=False)
+    assert Path(result["write_paths"]["app_dir"]).is_relative_to(paths.apps_dir)
+    assert str(command_path) not in (paths.bin_dir / "mock-cli").read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
 async def test_apply_adopt_rejects_broad_local_bin_when_single_file_probe_fails(tmp_path, monkeypatch):
     """验证宽泛 .local 根目录下无法独立启动的命令仍会被拒绝。"""
     home_dir = tmp_path / "sandbox-home"
@@ -325,6 +360,55 @@ async def test_apply_install_adopts_single_file_created_in_system_bin(tmp_path, 
     assert command_path.is_symlink()
     assert command_path.resolve(strict=False) == target.resolve(strict=False)
     assert Path(result["app_links"][0]["source"]) == command_path
+
+
+@pytest.mark.asyncio
+async def test_restore_repairs_external_command_target_from_persisted_app(tmp_path):
+    """验证旧记录误指向外部路径时，会从持久应用目录恢复真实命令目标。"""
+    paths = _build_paths(tmp_path)
+    broken_target = tmp_path / "usr-local" / "bin" / "mock-cli"
+    persistent_command = paths.apps_dir / "mock-cli" / "fixed" / "bin" / "mock-cli"
+    _write_mock_command(persistent_command)
+    paths.registry_file.parent.mkdir(parents=True, exist_ok=True)
+    paths.registry_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "items": [
+                    {
+                        "name": "mock-cli",
+                        "commands": ["mock-cli"],
+                        "install_strategy": "adopt",
+                        "package_manager": "adopt",
+                        "version": "unknown",
+                        "app_dir": str(tmp_path / "usr-local"),
+                        "bin_dir": str(paths.bin_dir),
+                        "command_targets": {"mock-cli": str(broken_target)},
+                        "app_links": [],
+                        "config_dirs": [],
+                        "env_keys": [],
+                        "platform": {"os": "linux", "arch": "x86_64"},
+                        "created_at": "2026-06-29T00:00:00Z",
+                        "updated_at": "2026-06-29T00:00:00Z",
+                        "status": "active",
+                    }
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    service = CliManagerService(paths=paths)
+    result = await service.restore()
+
+    shim_content = (paths.bin_dir / "mock-cli").read_text(encoding="utf-8")
+    registry = json.loads(paths.registry_file.read_text(encoding="utf-8"))
+    repaired_item = registry["items"][0]
+    assert result["restored"] == ["mock-cli"]
+    assert str(persistent_command) in shim_content
+    assert str(broken_target) not in shim_content
+    assert repaired_item["command_targets"]["mock-cli"] == str(persistent_command)
+    assert repaired_item["app_dir"] == str(persistent_command.parent.parent)
 
 
 @pytest.mark.asyncio

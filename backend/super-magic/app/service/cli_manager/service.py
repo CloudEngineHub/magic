@@ -217,20 +217,28 @@ class CliManagerService:
         registry = await self._registry.read()
         restored: list[str] = []
         broken: list[CliRestoreIssue] = []
+        registry_changed = False
         for data in registry["items"]:
             item = CliRegistryItem.from_dict(data)
             if item.status != "active":
                 continue
             try:
-                await self._filesystem.restore_item(item)
+                command_targets = await self._resolve_restore_command_targets(item)
+                item_changed = self._refresh_item_restore_paths(item, command_targets)
+                await self._filesystem.restore_item(item, command_targets=command_targets)
                 validation = await self._filesystem.validate_item(item)
                 if validation["ok"]:
                     restored.append(item.name)
+                    if item_changed:
+                        self._registry.upsert_item(registry, item)
+                        registry_changed = True
                 else:
                     broken.append({"name": item.name, "validation": validation})
             except Exception as exc:
                 logger.warning("[CliManager] restore failed for %s: %s", item.name, exc)
                 broken.append({"name": item.name, "error": str(exc)})
+        if registry_changed:
+            await self._registry.write(registry)
         return {"restored": restored, "broken": broken}
 
     async def _install(self, request: CliApplyRequest, steps: list[CliInstallStep]) -> tuple[str, str]:
@@ -283,6 +291,36 @@ class CliManagerService:
             updated_at=now,
             status="active",
         )
+
+    async def _resolve_restore_command_targets(self, item: CliRegistryItem) -> dict[str, Path]:
+        """恢复前解析命令目标，允许文件系统层修复旧的外部路径记录。"""
+        return {
+            command: await self._filesystem.resolve_command_target_from_item(item, command)
+            for command in item.commands
+        }
+
+    def _refresh_item_restore_paths(self, item: CliRegistryItem, command_targets: dict[str, Path]) -> bool:
+        """将恢复时发现的真实持久化目标写回注册表对象。"""
+        changed = False
+        updated_targets = {command: str(target) for command, target in command_targets.items()}
+        if item.command_targets != updated_targets:
+            item.command_targets = updated_targets
+            changed = True
+
+        if command_targets and all(CliPathUtils.is_lexically_under(target, self._paths.root_dir) for target in command_targets.values()):
+            app_dir = str(self._infer_app_dir_from_targets(command_targets))
+            if item.app_dir != app_dir:
+                item.app_dir = app_dir
+                changed = True
+        return changed
+
+    def _infer_app_dir_from_targets(self, command_targets: dict[str, Path]) -> Path:
+        """根据命令目标推断注册表中的应用目录。"""
+        roots = [self._filesystem.infer_install_root(target) for target in command_targets.values()]
+        if not roots:
+            return self._paths.root_dir
+        common_root = Path(os.path.commonpath([str(root) for root in roots]))
+        return common_root.parent if common_root.name == "bin" else common_root
 
     def _resolve_final_install_strategy(
         self,
