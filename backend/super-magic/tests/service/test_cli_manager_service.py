@@ -10,6 +10,7 @@ from app.service.cli_manager import (
     CommandRunResult,
 )
 from app.service.cli_manager import filesystem as cli_filesystem
+from app.service.cli_manager import path_utils as cli_path_utils
 from app.service.cli_manager.paths import CliManagerPathResolver
 from app.utils.async_file_utils import async_chmod
 
@@ -162,6 +163,44 @@ async def test_apply_adopt_persists_single_file_from_broad_local_bin(tmp_path, m
 
 
 @pytest.mark.asyncio
+async def test_apply_adopt_persists_single_file_from_system_bin(tmp_path, monkeypatch):
+    """验证系统级 bin 下可独立启动的单文件命令只接管命令文件本身。"""
+    paths = _build_paths(tmp_path)
+    system_root = tmp_path / "usr-local"
+    command_path = system_root / "bin" / "mock-cli"
+    _write_mock_command(command_path)
+    monkeypatch.setenv("PATH", str(command_path.parent))
+    monkeypatch.setattr(cli_path_utils, "SYSTEM_ROOTS", (system_root,))
+    original_rename = cli_filesystem.async_rename
+
+    async def mock_rename(src, dst):
+        """确认不会对系统源文件执行 rename。"""
+        assert Path(src) != command_path
+        await original_rename(src, dst)
+
+    monkeypatch.setattr(cli_filesystem, "async_rename", mock_rename)
+
+    service = CliManagerService(paths=paths)
+    result = await service.apply(
+        CliApplyRequest(
+            name="mock-cli",
+            mode="adopt",
+            commands=["mock-cli"],
+            confirmed=True,
+        )
+    )
+
+    target = Path(result["command_targets"]["mock-cli"])
+    assert target.exists()
+    assert target.is_file()
+    assert target != command_path
+    assert command_path.is_symlink()
+    assert command_path.resolve(strict=False) == target.resolve(strict=False)
+    assert Path(result["app_links"][0]["source"]) == command_path
+    assert system_root.exists()
+
+
+@pytest.mark.asyncio
 async def test_apply_adopt_rejects_broad_local_bin_when_single_file_probe_fails(tmp_path, monkeypatch):
     """验证宽泛 .local 根目录下无法独立启动的命令仍会被拒绝。"""
     home_dir = tmp_path / "sandbox-home"
@@ -185,6 +224,41 @@ async def test_apply_adopt_rejects_broad_local_bin_when_single_file_probe_fails(
         )
 
     assert error.value.code == "cannot_move_install_root"
+    assert command_path.exists()
+    assert not command_path.is_symlink()
+
+
+@pytest.mark.asyncio
+async def test_apply_adopt_rejects_system_python_entrypoint_wrapper(tmp_path, monkeypatch):
+    """验证系统目录下依赖外部包的 Python 入口脚本不会被误当作单文件命令。"""
+    paths = _build_paths(tmp_path)
+    system_root = tmp_path / "usr-local"
+    command_path = system_root / "bin" / "mock-cli"
+    command_path.parent.mkdir(parents=True, exist_ok=True)
+    command_path.write_text(
+        "#!/usr/bin/env python3\n"
+        "from mock_package.cli import main\n"
+        "if __name__ == '__main__':\n"
+        "    main()\n",
+        encoding="utf-8",
+    )
+    command_path.chmod(0o755)
+    monkeypatch.setenv("PATH", str(command_path.parent))
+    monkeypatch.setattr(cli_path_utils, "SYSTEM_ROOTS", (system_root,))
+
+    service = CliManagerService(paths=paths)
+    with pytest.raises(CliManagerError) as error:
+        await service.apply(
+            CliApplyRequest(
+                name="mock-cli",
+                mode="adopt",
+                commands=["mock-cli"],
+                confirmed=True,
+            )
+        )
+
+    assert error.value.code == "cannot_move_install_root"
+    assert error.value.context["inferred_root"] == str(system_root.resolve(strict=False))
     assert command_path.exists()
     assert not command_path.is_symlink()
 
@@ -217,6 +291,40 @@ async def test_apply_install_marks_shell_prefix_when_command_lands_in_persistent
     assert result["package_manager"] == "shell"
     assert result["app_links"] == []
     assert Path(result["write_paths"]["app_dir"]) == paths.prefixes_dir / "mock-cli"
+
+
+@pytest.mark.asyncio
+async def test_apply_install_adopts_single_file_created_in_system_bin(tmp_path, monkeypatch):
+    """验证安装脚本落到系统级 bin 后会自动按单文件方式接管。"""
+    paths = _build_paths(tmp_path)
+    system_root = tmp_path / "usr-local"
+    command_path = system_root / "bin" / "mock-cli"
+    monkeypatch.setenv("PATH", str(command_path.parent))
+    monkeypatch.setattr(cli_path_utils, "SYSTEM_ROOTS", (system_root,))
+
+    def mock_command_runner(command: str, cwd: Path, env: dict[str, str], timeout: int) -> CommandRunResult:
+        """模拟 shell 安装器把单文件命令写入系统级 bin。"""
+        _write_mock_command(command_path)
+        return CommandRunResult(exit_code=0, stdout="installed")
+
+    service = CliManagerService(paths=paths, command_runner=mock_command_runner)
+    result = await service.apply(
+        CliApplyRequest(
+            name="mock-cli",
+            mode="install",
+            install_command="curl -fsSL https://example.invalid/install.sh | sh",
+            commands=["mock-cli"],
+            confirmed=True,
+        )
+    )
+
+    target = Path(result["command_targets"]["mock-cli"])
+    assert result["strategy"] == "adopt"
+    assert target.exists()
+    assert target != command_path
+    assert command_path.is_symlink()
+    assert command_path.resolve(strict=False) == target.resolve(strict=False)
+    assert Path(result["app_links"][0]["source"]) == command_path
 
 
 @pytest.mark.asyncio

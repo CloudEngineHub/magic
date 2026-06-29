@@ -95,6 +95,7 @@ class CliManagerToolMixin:
         if "cancel" in options:
             lines.append("- To cancel: stop the flow and report the conflict to the user.")
 
+        lines.append("success_rule: Do not report CLI persistence as successful unless a later cli_manager_apply call returns ok=true.")
         lines.append("do_not_pass: resolution or resolution_options; they are not cli_manager_apply inputs.")
         return lines
 

@@ -38,10 +38,12 @@ PROTECTED_COMMAND_NAMES = {
 SYSTEM_ROOTS = (
     Path("/bin"),
     Path("/sbin"),
+    Path("/usr/local"),
     Path("/usr/bin"),
     Path("/usr/sbin"),
     Path("/usr/lib"),
     Path("/usr/lib64"),
+    Path("/opt"),
     Path("/lib"),
     Path("/lib64"),
     Path("/etc"),

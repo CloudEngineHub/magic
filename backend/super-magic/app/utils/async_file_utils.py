@@ -428,6 +428,26 @@ async def async_symlink(
         raise
 
 
+async def async_readlink(path: Union[str, Path]) -> str:
+    """
+    异步读取软链目标
+
+    Args:
+        path: 软链路径
+
+    Returns:
+        str: 软链保存的目标路径，保留相对路径形式
+
+    Raises:
+        OSError: 路径不是软链或读取失败
+    """
+    try:
+        return await asyncio.to_thread(os.readlink, str(path))
+    except Exception as e:
+        logger.error(f"异步读取软链失败 {path}: {e}")
+        raise
+
+
 async def async_write_json(file_path: Union[str, Path], data: Dict[str, Any], **kwargs) -> None:
     """
     异步写入JSON文件
