@@ -316,7 +316,7 @@
         "en_US": "Deep write"
     },
     "call_subagent": {
-        "zh_CN": "调用子智能体",
+        "zh_CN": "调用数字员工",
         "en_US": "Call sub-agent"
     },
     "call_subagent.crew": {

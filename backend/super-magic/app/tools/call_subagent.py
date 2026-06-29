@@ -3,7 +3,7 @@ from dataclasses import asdict
 import hashlib
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
@@ -72,6 +72,13 @@ class CallSubagentParams(BaseToolParams):
             "parallel tool call output. Also used for in-process scheduler tasks."
         )
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def fill_agent_id(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            values.setdefault("agent_id", values.get("agent_name", ""))
+        return values
 
 
 @tool()
