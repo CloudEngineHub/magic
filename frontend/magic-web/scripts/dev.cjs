@@ -9,22 +9,10 @@ const { spawn } = require("child_process")
 const fs = require("fs")
 const os = require("os")
 const path = require("path")
+const { log, printBanner, writeStep, writeStepResult } = require("./lib/banner.cjs")
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5000
 const DEFAULT_DEV_PORT = 443
-
-// Color codes for output
-const colors = {
-	cyan: "\x1b[36m",
-	yellow: "\x1b[33m",
-	green: "\x1b[32m",
-	red: "\x1b[31m",
-	reset: "\x1b[0m",
-}
-
-function log(message, color = "reset") {
-	console.log(`${colors[color]}${message}${colors.reset}`)
-}
 
 function getPidFilePath(cwd = process.cwd(), tmpDir = os.tmpdir()) {
 	return path.join(tmpDir, `magic-web-dev-${Buffer.from(cwd).toString("hex")}.pid`)
@@ -202,6 +190,7 @@ function createDevController({
 		processRef.on("SIGINT", handleShutdown)
 		processRef.on("SIGTERM", handleShutdown)
 		processRef.on("SIGHUP", handleShutdown)
+		processRef.on("SIGQUIT", handleShutdown)
 		processRef.on("exit", handleProcessExit)
 	}
 
@@ -210,19 +199,35 @@ function createDevController({
 			return Promise.resolve()
 		}
 
+		const { quiet, ...spawnOptions } = options
+
 		return new Promise((resolve, reject) => {
 			const child = spawnCommand(command, args, {
-				stdio: "inherit",
-				shell: true,
+				stdio: quiet ? "pipe" : "inherit",
 				// detached: true puts the child in its own process group so we can kill
 				// the entire group (vite, pnpm watch, esbuild services) on shutdown.
+				// Intentionally no shell: true — direct spawn keeps the child as the
+				// actual process group leader, avoiding orphaned grandchildren through
+				// an intermediate shell process.
 				detached: true,
-				...options,
+				...spawnOptions,
 			})
 
 			activeChild = child
 			activeCommand = [command, ...args].join(" ")
 			writePidFile()
+
+			let capturedOutput = ""
+			if (quiet) {
+				if (child.stdout)
+					child.stdout.on("data", (d) => {
+						capturedOutput += d
+					})
+				if (child.stderr)
+					child.stderr.on("data", (d) => {
+						capturedOutput += d
+					})
+			}
 
 			child.on("close", (code) => {
 				clearShutdownTimer()
@@ -238,7 +243,11 @@ function createDevController({
 				// Treat signal-induced exits (code 130 = SIGINT, code 143 = SIGTERM) and
 				// null (killed by signal) as clean exits when we initiated the shutdown.
 				if (code !== 0 && code !== null && !isShuttingDown) {
-					reject(new Error(`Command failed with code ${code}`))
+					const msg =
+						quiet && capturedOutput
+							? `Command failed with code ${code}\n${capturedOutput}`
+							: `Command failed with code ${code}`
+					reject(new Error(msg))
 				} else {
 					resolve()
 				}
@@ -255,7 +264,11 @@ function createDevController({
 				}
 
 				writePidFile()
-				reject(error)
+				if (quiet && capturedOutput) {
+					reject(new Error(`${error.message}\n${capturedOutput}`))
+				} else {
+					reject(error)
+				}
 			})
 		})
 	}
@@ -276,40 +289,40 @@ async function main(controller = createDevController(), processExit = process.ex
 		controller.writePidFile()
 		controller.registerCleanupHandlers()
 
-		log("Starting development environment...", "green")
+		log("Starting development environment...\n", "green")
 
-		// Sync theme RGB tokens first
-		log("Syncing theme RGB tokens...", "cyan")
-		await controller.runCommand("pnpm", ["run", "generate:theme-rgb-tokens"])
+		writeStep("[1/3] Syncing theme RGB tokens...")
+		await controller.runCommand("pnpm", ["run", "generate:theme-rgb-tokens"], { quiet: true })
 		if (controller.isShutdownRequested()) return
-		log("Theme RGB tokens synced successfully", "green")
+		writeStepResult(true)
 
-		// Generate icon tags first
-		log("Generating icon tags...", "cyan")
-		await controller.runCommand("node", ["scripts/icons/gen-tabler-icon-tags.cjs"])
+		writeStep("[2/3] Generating icon tags...")
+		await controller.runCommand("node", ["scripts/icons/gen-tabler-icon-tags.cjs"], {
+			quiet: true,
+		})
 		if (controller.isShutdownRequested()) return
-		log("Icon tags generated successfully", "green")
+		writeStepResult(true)
 
-		// Generate the same-origin HTML sandbox shell before Vite serves public assets.
-		log("Building husky HTML sandbox shell...", "cyan")
-		await controller.runCommand("pnpm", ["run", "build:iframe"])
+		writeStep("[3/3] Building husky sandbox...")
+		await controller.runCommand("pnpm", ["run", "build:iframe"], { quiet: true })
 		if (controller.isShutdownRequested()) return
-		log("Husky HTML sandbox shell built successfully", "green")
+		writeStepResult(true)
 
-		// Start concurrently with the main app and the husky shell watcher.
-		log("Starting dev servers...", "cyan")
+		const port = getDevPort()
+		printBanner(`Dev server starting on https://localhost:${port} 🚀`)
 		await controller.runCommand(
 			"concurrently",
 			[
-				'"vite"',
-				'"pnpm dev:iframe"',
+				"vite",
+				"pnpm dev:iframe",
+				"pnpm dev:widget",
 				"--names",
-				'"main,husky"',
+				"main,husky,widget",
 				"--prefix-colors",
-				'"cyan,yellow"',
+				"cyan,yellow,magenta",
 				"--kill-others",
 				"--kill-signal",
-				'"SIGTERM"',
+				"SIGTERM",
 				"--kill-timeout",
 				String(getShutdownTimeoutMs()),
 			],
@@ -317,7 +330,8 @@ async function main(controller = createDevController(), processExit = process.ex
 		)
 	} catch (error) {
 		if (!controller.isShutdownRequested()) {
-			log(`Error: ${error.message}`, "red")
+			writeStepResult(false)
+			log(`\n❌ Error: ${error.message}`, "red")
 			processExit(1)
 		}
 	} finally {
