@@ -52,6 +52,7 @@ import {
 	ImageDisplayVariantPersistentCache,
 	type PersistentImageDisplayVariant,
 } from "./ImageDisplayVariantPersistentCache"
+import type { DecodedImageRetentionHint } from "./CanvasVisibilityManager"
 
 export type { ImageSource }
 export type ImageResourceVariant = ImageResourceDecodeVariant
@@ -181,6 +182,12 @@ export interface ImageResourceEntry extends MediaResourceUrlEntry, MediaResource
 	displaySlots: ImageDisplayResourceSlots
 	/** 已加载的 full 资源（只在导出/编辑等场景按需加载） */
 	fullResource: ImageResource | null
+	/** full decoded bitmap 最近访问时间，用于 decoded LRU */
+	fullLastAccessAt: number
+	/** low display object URL 活跃租约数；图层列表等 UI 持有期间不淘汰 low decoded */
+	lowDisplayLeaseCount: number
+	/** 最近一次 decoded bitmap budget 检查时间；预留给后续防抖/诊断 */
+	lastDecodedBudgetEnforcedAt: number
 	/** 已缓存的压缩 body；用于 preview/full 二次解码复用，不等同 decoded bitmap */
 	bodyBlob: Blob | null
 	/** 已缓存 body 对应的 OSS 地址 */
@@ -199,7 +206,35 @@ const DEFAULT_IMAGE_RESOURCE_VARIANT: ImageResourceVariant = "preview"
 const COMPRESSED_BODY_CACHE_TTL_MS = 2 * 60 * 1000
 const COMPRESSED_BODY_CACHE_MAX_BYTES = 256 * 1024 * 1024
 const PREVIEW_LOAD_PIPELINE_CONCURRENCY = 8
+const DECODED_BITMAP_SOFT_BUDGET_BYTES = 160 * 1024 * 1024
+const DECODED_BITMAP_HARD_BUDGET_BYTES = 224 * 1024 * 1024
+const FULL_DECODED_BITMAP_BUDGET_BYTES = 64 * 1024 * 1024
 export type ImageResourceLoadPriority = MediaDecodePriority
+
+type DecodedBitmapCandidateVariant = ImageDisplayResourceVariant | "full"
+type DecodedBitmapRetentionLevel = "visible" | "near"
+
+interface DecodedBitmapBudgetCandidate {
+	path: string
+	entry: ImageResourceEntry
+	variant: DecodedBitmapCandidateVariant
+	resource: ImageResource
+	bytes: number
+	lastAccessAt: number
+}
+
+interface DecodedBitmapBudgetOptions {
+	reason: string
+	exemptResource?: ImageResource
+	softBudgetBytes?: number
+	hardBudgetBytes?: number
+	fullBudgetBytes?: number
+}
+
+interface DecodedBitmapRetentionIndex {
+	visiblePinnedKeys: Set<string>
+	nearProtectedKeys: Set<string>
+}
 
 interface PreviewLoadQueueItem {
 	key: string
@@ -612,9 +647,7 @@ export class ImageResourceManager {
 	): LoadedResource | null {
 		const resource = this.getResourceForVariant(entry, variant)
 		if (!resource?.ossSrc) return null
-		if (variant !== "full" && resource === this.getDisplayResource(entry, variant)) {
-			this.touchDisplayResource(entry, variant)
-		}
+		this.touchDecodedResource(entry, resource)
 		this.setFailureReason(entry, null)
 		return {
 			ossSrc: resource.ossSrc,
@@ -781,6 +814,333 @@ export class ImageResourceManager {
 		return Math.max(1, resource.sourceWidth) * Math.max(1, resource.sourceHeight) * 4
 	}
 
+	private getDecodedBitmapRetentionKey(
+		path: string,
+		variant: DecodedBitmapCandidateVariant,
+	): string {
+		return `${path}::${variant}`
+	}
+
+	private createEmptyDecodedBitmapRetentionIndex(): DecodedBitmapRetentionIndex {
+		return {
+			visiblePinnedKeys: new Set(),
+			nearProtectedKeys: new Set(),
+		}
+	}
+
+	private addDecodedBitmapRetentionHintVariant(
+		retentionIndex: DecodedBitmapRetentionIndex,
+		hint: DecodedImageRetentionHint,
+		variant: ImageResourceVariant | undefined,
+	): void {
+		if (!variant) return
+		const normalizedPath = this.canonicalResourcePath(hint.path)
+		const key = this.getDecodedBitmapRetentionKey(normalizedPath, variant)
+		if (hint.visibilityState === "visible") {
+			retentionIndex.visiblePinnedKeys.add(key)
+			retentionIndex.nearProtectedKeys.delete(key)
+			return
+		}
+		if (!retentionIndex.visiblePinnedKeys.has(key)) {
+			retentionIndex.nearProtectedKeys.add(key)
+		}
+	}
+
+	private getDecodedBitmapRetentionIndex(): DecodedBitmapRetentionIndex {
+		const retentionIndex = this.createEmptyDecodedBitmapRetentionIndex()
+		const visibilityManager = this.canvas.visibilityManager as
+			| {
+					getDecodedImageRetentionSnapshot?: () => DecodedImageRetentionHint[]
+			  }
+			| undefined
+		const hints = visibilityManager?.getDecodedImageRetentionSnapshot?.() ?? []
+		hints.forEach((hint) => {
+			this.addDecodedBitmapRetentionHintVariant(retentionIndex, hint, hint.displayedVariant)
+			this.addDecodedBitmapRetentionHintVariant(retentionIndex, hint, hint.requestedVariant)
+		})
+		return retentionIndex
+	}
+
+	private getDecodedBitmapRetentionLevelForPathVariant(
+		path: string,
+		variant: DecodedBitmapCandidateVariant,
+		retentionIndex: DecodedBitmapRetentionIndex,
+	): DecodedBitmapRetentionLevel | null {
+		const key = this.getDecodedBitmapRetentionKey(path, variant)
+		if (retentionIndex.visiblePinnedKeys.has(key)) return "visible"
+		if (retentionIndex.nearProtectedKeys.has(key)) return "near"
+		return null
+	}
+
+	private getDecodedBitmapRetentionLevel(
+		candidate: DecodedBitmapBudgetCandidate,
+		retentionIndex: DecodedBitmapRetentionIndex,
+	): DecodedBitmapRetentionLevel | null {
+		return this.getDecodedBitmapRetentionLevelForPathVariant(
+			candidate.path,
+			candidate.variant,
+			retentionIndex,
+		)
+	}
+
+	private collectDecodedBitmapBudgetCandidates(): {
+		totalBytes: number
+		fullBytes: number
+		candidates: DecodedBitmapBudgetCandidate[]
+	} {
+		let totalBytes = 0
+		let fullBytes = 0
+		const countedResources = new Set<ImageResource>()
+		const countedFullResources = new Set<ImageResource>()
+		const candidates: DecodedBitmapBudgetCandidate[] = []
+		const addDecodedBytes = (resource: ImageResource): number => {
+			const bytes = this.getDecodedBytes(resource)
+			if (!countedResources.has(resource)) {
+				countedResources.add(resource)
+				totalBytes += bytes
+			}
+			return bytes
+		}
+
+		this.entries.forEach((entry, path) => {
+			for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
+				const slot = this.getDisplayResourceSlot(entry, variant)
+				if (!slot.resource) continue
+				const bytes = addDecodedBytes(slot.resource)
+				candidates.push({
+					path,
+					entry,
+					variant,
+					resource: slot.resource,
+					bytes,
+					lastAccessAt: slot.lastAccessAt,
+				})
+			}
+
+			if (!entry.fullResource) return
+			const bytes = addDecodedBytes(entry.fullResource)
+			if (!countedFullResources.has(entry.fullResource)) {
+				countedFullResources.add(entry.fullResource)
+				fullBytes += bytes
+			}
+			candidates.push({
+				path,
+				entry,
+				variant: "full",
+				resource: entry.fullResource,
+				bytes,
+				lastAccessAt: entry.fullLastAccessAt,
+			})
+		})
+
+		return { totalBytes, fullBytes, candidates }
+	}
+
+	private getDecodedBitmapCandidatePriority(variant: DecodedBitmapCandidateVariant): number {
+		switch (variant) {
+			case "full":
+				return 0
+			case "preview":
+				return 1
+			case "low":
+				return 2
+		}
+	}
+
+	private sortDecodedBitmapCandidates(
+		candidates: DecodedBitmapBudgetCandidate[],
+	): DecodedBitmapBudgetCandidate[] {
+		return [...candidates].sort((a, b) => {
+			const priorityDiff =
+				this.getDecodedBitmapCandidatePriority(a.variant) -
+				this.getDecodedBitmapCandidatePriority(b.variant)
+			if (priorityDiff !== 0) return priorityDiff
+			const accessDiff = a.lastAccessAt - b.lastAccessAt
+			if (accessDiff !== 0) return accessDiff
+			return b.bytes - a.bytes
+		})
+	}
+
+	private isResourceReferencedByAnyEntry(resource: ImageResource): boolean {
+		let referenced = false
+		this.entries.forEach((entry) => {
+			if (referenced) return
+			referenced = this.isResourceStillReferenced(entry, resource)
+		})
+		return referenced
+	}
+
+	private detachDecodedBitmapCandidate(candidate: DecodedBitmapBudgetCandidate): boolean {
+		if (candidate.variant === "full") {
+			if (candidate.entry.fullResource !== candidate.resource) return false
+			this.setFullResource(candidate.entry, null)
+			return true
+		}
+
+		const slot = this.getDisplayResourceSlot(candidate.entry, candidate.variant)
+		if (slot.resource !== candidate.resource) return false
+		slot.resource = null
+		slot.version = null
+		slot.lastAccessAt = 0
+		return true
+	}
+
+	private recordDecodedBitmapEviction(candidate: DecodedBitmapBudgetCandidate): void {
+		this.diagnostics.increment("decodedEvictedCount")
+		this.diagnostics.increment("decodedEvictedBytes", candidate.bytes)
+		switch (candidate.variant) {
+			case "full":
+				this.diagnostics.increment("decodedEvictedFull")
+				break
+			case "preview":
+				this.diagnostics.increment("decodedEvictedPreview")
+				break
+			case "low":
+				this.diagnostics.increment("decodedEvictedLow")
+				break
+		}
+	}
+
+	private invalidateImageLoadRequestForDecodedEviction(path: string): void {
+		const visibilityManager = this.canvas.visibilityManager as
+			| {
+					invalidateImageLoadRequest?: (
+						path: string,
+						variant?: ImageResourceVariant,
+						reason?: string,
+					) => void
+			  }
+			| undefined
+
+		visibilityManager?.invalidateImageLoadRequest?.(path, undefined, "decoded-budget")
+	}
+
+	private evictDecodedBitmapCandidate(
+		candidate: DecodedBitmapBudgetCandidate,
+		closedResources: Set<ImageResource>,
+		reason: string,
+	): { detachedBytes: number; freedBytes: number } {
+		const detached = this.detachDecodedBitmapCandidate(candidate)
+		if (!detached) return { detachedBytes: 0, freedBytes: 0 }
+		this.invalidateImageLoadRequestForDecodedEviction(candidate.path)
+		if (this.isResourceReferencedByAnyEntry(candidate.resource)) {
+			return { detachedBytes: candidate.bytes, freedBytes: 0 }
+		}
+		if (closedResources.has(candidate.resource)) {
+			return { detachedBytes: candidate.bytes, freedBytes: 0 }
+		}
+
+		closedResources.add(candidate.resource)
+		this.closeResourceAfterConsumersSwap(candidate.resource, {
+			path: candidate.path,
+			reason: `decoded-budget:${reason}`,
+		})
+		this.recordDecodedBitmapEviction(candidate)
+		return { detachedBytes: candidate.bytes, freedBytes: candidate.bytes }
+	}
+
+	private enforceDecodedBitmapBudget(options: DecodedBitmapBudgetOptions): void {
+		if (this.destroyed) return
+		const hardBudgetBytes = Math.max(
+			0,
+			options.hardBudgetBytes ?? DECODED_BITMAP_HARD_BUDGET_BYTES,
+		)
+		const softBudgetBytes = Math.max(
+			0,
+			Math.min(options.softBudgetBytes ?? DECODED_BITMAP_SOFT_BUDGET_BYTES, hardBudgetBytes),
+		)
+		const fullBudgetBytes = Math.max(
+			0,
+			options.fullBudgetBytes ?? FULL_DECODED_BITMAP_BUDGET_BYTES,
+		)
+		const budgetState = this.collectDecodedBitmapBudgetCandidates()
+		const { candidates } = budgetState
+		let { totalBytes, fullBytes } = budgetState
+		if (totalBytes <= softBudgetBytes && fullBytes <= fullBudgetBytes) return
+		const retentionIndex = this.getDecodedBitmapRetentionIndex()
+
+		const now = this.getNow()
+		this.entries.forEach((entry) => {
+			entry.lastDecodedBudgetEnforcedAt = now
+		})
+
+		const closedResources = new Set<ImageResource>()
+		const isExemptCandidate = (candidate: DecodedBitmapBudgetCandidate) =>
+			!!options.exemptResource && candidate.resource === options.exemptResource
+		const getRetentionLevel = (candidate: DecodedBitmapBudgetCandidate) =>
+			this.getDecodedBitmapRetentionLevel(candidate, retentionIndex)
+		const isVisiblePinnedCandidate = (candidate: DecodedBitmapBudgetCandidate) =>
+			getRetentionLevel(candidate) === "visible"
+		const isNearProtectedCandidate = (candidate: DecodedBitmapBudgetCandidate) =>
+			getRetentionLevel(candidate) === "near"
+		const isLowLeaseProtectedCandidate = (candidate: DecodedBitmapBudgetCandidate) =>
+			candidate.variant === "low" && candidate.entry.lowDisplayLeaseCount > 0
+		const canEvictDuringFullOrSoftBudget = (candidate: DecodedBitmapBudgetCandidate) =>
+			!isExemptCandidate(candidate) &&
+			!isVisiblePinnedCandidate(candidate) &&
+			!isNearProtectedCandidate(candidate) &&
+			!isLowLeaseProtectedCandidate(candidate)
+		const canEvictDuringHardBudget = (candidate: DecodedBitmapBudgetCandidate) =>
+			!isExemptCandidate(candidate) &&
+			!isVisiblePinnedCandidate(candidate) &&
+			!isNearProtectedCandidate(candidate) &&
+			!isLowLeaseProtectedCandidate(candidate)
+		const canEvictNearDuringHardBudget = (candidate: DecodedBitmapBudgetCandidate) =>
+			!isExemptCandidate(candidate) &&
+			!isVisiblePinnedCandidate(candidate) &&
+			isNearProtectedCandidate(candidate) &&
+			!isLowLeaseProtectedCandidate(candidate)
+		const evictCandidate = (candidate: DecodedBitmapBudgetCandidate) => {
+			const result = this.evictDecodedBitmapCandidate(
+				candidate,
+				closedResources,
+				options.reason,
+			)
+			if (result.detachedBytes > 0 && candidate.variant === "full") {
+				fullBytes = Math.max(0, fullBytes - result.detachedBytes)
+			}
+			if (result.freedBytes > 0) {
+				totalBytes = Math.max(0, totalBytes - result.freedBytes)
+			}
+		}
+
+		for (const candidate of this.sortDecodedBitmapCandidates(
+			candidates.filter(
+				(candidate) =>
+					candidate.variant === "full" && canEvictDuringFullOrSoftBudget(candidate),
+			),
+		)) {
+			if (fullBytes <= fullBudgetBytes) break
+			evictCandidate(candidate)
+		}
+
+		for (const candidate of this.sortDecodedBitmapCandidates(
+			candidates.filter(
+				(candidate) =>
+					(candidate.variant === "full" || candidate.variant === "preview") &&
+					canEvictDuringFullOrSoftBudget(candidate),
+			),
+		)) {
+			if (totalBytes <= softBudgetBytes) break
+			evictCandidate(candidate)
+		}
+
+		if (totalBytes <= hardBudgetBytes) return
+		for (const candidate of this.sortDecodedBitmapCandidates(
+			candidates.filter((candidate) => canEvictDuringHardBudget(candidate)),
+		)) {
+			if (totalBytes <= hardBudgetBytes) break
+			evictCandidate(candidate)
+		}
+		if (totalBytes <= hardBudgetBytes) return
+		for (const candidate of this.sortDecodedBitmapCandidates(
+			candidates.filter((candidate) => canEvictNearDuringHardBudget(candidate)),
+		)) {
+			if (totalBytes <= hardBudgetBytes) break
+			evictCandidate(candidate)
+		}
+	}
+
 	private isFullSizeResource(
 		imageInfo: ImageInfo,
 		sourceWidth: number,
@@ -871,11 +1231,17 @@ export class ImageResourceManager {
 		return this.getDisplayResourceSlot(entry, variant).resource
 	}
 
-	private touchDisplayResource(
-		entry: ImageResourceEntry,
-		variant: ImageDisplayResourceVariant,
-	): void {
-		this.getDisplayResourceSlot(entry, variant).lastAccessAt = this.getNow()
+	private touchDecodedResource(entry: ImageResourceEntry, resource: ImageResource): void {
+		const now = this.getNow()
+		for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
+			const slot = this.getDisplayResourceSlot(entry, variant)
+			if (slot.resource === resource) {
+				slot.lastAccessAt = now
+			}
+		}
+		if (entry.fullResource === resource) {
+			entry.fullLastAccessAt = now
+		}
 	}
 
 	private setDisplayResource(
@@ -897,6 +1263,17 @@ export class ImageResourceManager {
 		if (shouldClosePrevious) {
 			this.closeResource(previousResource, { reason: "display-slot-replaced" })
 		}
+		return previousResource && previousResource !== resource ? previousResource : null
+	}
+
+	private setFullResource(
+		entry: ImageResourceEntry,
+		resource: ImageResource | null,
+		options?: { touch?: boolean },
+	): ImageResource | null {
+		const previousResource = entry.fullResource
+		entry.fullResource = resource
+		entry.fullLastAccessAt = resource && options?.touch !== false ? this.getNow() : 0
 		return previousResource && previousResource !== resource ? previousResource : null
 	}
 
@@ -1035,6 +1412,10 @@ export class ImageResourceManager {
 
 		const loadedResource = this.buildLoadedResource(entry, variant)
 		if (!loadedResource) return null
+		this.enforceDecodedBitmapBudget({
+			reason: "persistent-display-cache-load",
+			exemptResource: resource,
+		})
 		this.emitImageResourceLoaded({
 			path: normalizedSrc,
 			resource: loadedResource,
@@ -1120,7 +1501,7 @@ export class ImageResourceManager {
 		const fullResource = entry.fullResource
 		this.closeUniqueResources([lowResource, previewResource, fullResource], options)
 		this.clearDisplayResources(entry)
-		entry.fullResource = null
+		this.setFullResource(entry, null)
 		this.clearEntryBody(entry)
 		this.clearEntryBodyPromise(entry)
 	}
@@ -1399,8 +1780,9 @@ export class ImageResourceManager {
 
 		const entry = this.entries.get(normalizedSrc)
 		const backingResource = entry ? this.findResourceByLoadedResource(entry, resource) : null
-		if (backingResource?.displayBlob) {
+		if (entry && backingResource?.displayBlob) {
 			const url = URL.createObjectURL(backingResource.displayBlob)
+			entry.lowDisplayLeaseCount += 1
 			let released = false
 			return {
 				url,
@@ -1409,6 +1791,7 @@ export class ImageResourceManager {
 					if (released) return
 					released = true
 					URL.revokeObjectURL(url)
+					entry.lowDisplayLeaseCount = Math.max(0, entry.lowDisplayLeaseCount - 1)
 				},
 			}
 		}
@@ -1446,15 +1829,52 @@ export class ImageResourceManager {
 		let previewDecodedBytes = 0
 		let fullLoaded = 0
 		let fullDecodedBytes = 0
+		let decodedBytesTotal = 0
+		let decodedLowLeaseCount = 0
 		let loadingCount = 0
 		let exchangingCount = 0
 		let fullLoadingCount = 0
+		const retentionIndex = this.getDecodedBitmapRetentionIndex()
+		const countedDecodedResources = new Set<ImageResource>()
+		const pinnedDecodedResources = new Set<ImageResource>()
+		const visiblePinnedResources = new Set<ImageResource>()
+		const nearProtectedResources = new Set<ImageResource>()
+		const addDecodedTotal = (resource: ImageResource | null) => {
+			if (!resource || countedDecodedResources.has(resource)) return
+			countedDecodedResources.add(resource)
+			decodedBytesTotal += this.getDecodedBytes(resource)
+		}
+		const trackRetention = (
+			path: string,
+			variant: DecodedBitmapCandidateVariant,
+			resource: ImageResource | null,
+		) => {
+			if (!resource) return
+			const retentionLevel = this.getDecodedBitmapRetentionLevelForPathVariant(
+				path,
+				variant,
+				retentionIndex,
+			)
+			if (!retentionLevel) return
+			pinnedDecodedResources.add(resource)
+			if (retentionLevel === "visible") {
+				visiblePinnedResources.add(resource)
+				nearProtectedResources.delete(resource)
+				return
+			}
+			if (!visiblePinnedResources.has(resource)) {
+				nearProtectedResources.add(resource)
+			}
+		}
 
-		this.entries.forEach((entry) => {
+		this.entries.forEach((entry, path) => {
+			decodedLowLeaseCount += entry.lowDisplayLeaseCount
 			for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
 				const resource = this.getDisplayResource(entry, variant)
 				if (!resource) continue
 				const decodedBytes = this.getDecodedBytes(resource)
+				addDecodedTotal(resource)
+				trackRetention(path, variant, resource)
 				switch (variant) {
 					case "low":
 						lowLoaded += 1
@@ -1469,6 +1889,8 @@ export class ImageResourceManager {
 			if (entry.fullResource) {
 				fullLoaded += 1
 				fullDecodedBytes += this.getDecodedBytes(entry.fullResource)
+				addDecodedTotal(entry.fullResource)
+				trackRetention(path, "full", entry.fullResource)
 			}
 			if (entry.exchangePromise) exchangingCount += 1
 			for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
@@ -1477,6 +1899,10 @@ export class ImageResourceManager {
 			if (entry.fullLoadingPromise) fullLoadingCount += 1
 		})
 		const bodyCacheSnapshot = this.bodyCache.getSnapshot(this.entries.values())
+		let decodedPinnedBytes = 0
+		pinnedDecodedResources.forEach((resource) => {
+			decodedPinnedBytes += this.getDecodedBytes(resource)
+		})
 
 		const current: ImageResourceCurrentSnapshot = {
 			managerInstanceId: this.managerInstanceId,
@@ -1488,6 +1914,14 @@ export class ImageResourceManager {
 			previewDecodedBytes,
 			fullLoaded,
 			fullDecodedBytes,
+			decodedBytesTotal,
+			decodedBudgetSoftBytes: DECODED_BITMAP_SOFT_BUDGET_BYTES,
+			decodedBudgetHardBytes: DECODED_BITMAP_HARD_BUDGET_BYTES,
+			decodedLowLeaseCount,
+			decodedPinnedBytes,
+			decodedPinnedCount: pinnedDecodedResources.size,
+			decodedVisiblePinnedCount: visiblePinnedResources.size,
+			decodedNearProtectedCount: nearProtectedResources.size,
 			...bodyCacheSnapshot,
 			activePreviewLoadPipelineCount: this.activePreviewLoadPipelineCount,
 			queuedPreviewLoadCount: this.previewLoadQueue.length,
@@ -1548,6 +1982,7 @@ export class ImageResourceManager {
 		const previousLowResource = previousDisplaySlots.low.resource
 		const previousResource = previousDisplaySlots.preview.resource
 		const previousFullResource = entry.fullResource
+		const previousFullLastAccessAt = entry.fullLastAccessAt
 		const previousOssSrc = entry.ossSrc
 		const previousExpiresAt = entry.expiresAt
 		const previousBodyState = this.bodyCache.captureState(entry)
@@ -1570,6 +2005,7 @@ export class ImageResourceManager {
 			entry.contentLength = previousContentLength
 			this.restoreDisplayResourceSlots(entry, previousDisplaySlots)
 			entry.fullResource = previousFullResource
+			entry.fullLastAccessAt = previousFullLastAccessAt
 			this.bodyCache.restoreState(entry, previousBodyState)
 		}
 		const clearDeletedResourceMetadata = () => {
@@ -1611,7 +2047,7 @@ export class ImageResourceManager {
 					})
 				}
 				this.clearDisplayResources(entry)
-				entry.fullResource = null
+				this.setFullResource(entry, null)
 				clearDeletedResourceMetadata()
 				this.clearEntryBody(entry)
 				this.clearEntryBodyPromise(entry)
@@ -1639,7 +2075,7 @@ export class ImageResourceManager {
 				this.setDisplayResource(entry, "preview", null, { closePrevious: false })
 			}
 			if (entry.fullResource === previousFullResource) {
-				entry.fullResource = null
+				this.setFullResource(entry, null)
 			}
 			this.closeResource(previousLowResource, {
 				path: normalizedSrc,
@@ -2052,7 +2488,7 @@ export class ImageResourceManager {
 			let previousResourceToClose: ImageResource | null = null
 			if (variant === "full") {
 				const previousFullResource = entry.fullResource
-				entry.fullResource = resource
+				this.setFullResource(entry, resource)
 				previousResourceToClose =
 					previousFullResource &&
 					previousFullResource !== resource &&
@@ -2103,6 +2539,10 @@ export class ImageResourceManager {
 					reason: "resource-replaced",
 				})
 			}
+			this.enforceDecodedBitmapBudget({
+				reason: "decode-success",
+				exemptResource: resource,
+			})
 
 			this.diagnostics.increment("decodeSuccessCount")
 			return loadedResource
@@ -2148,6 +2588,9 @@ export class ImageResourceManager {
 			backgroundRefreshPromise: null,
 			displaySlots: this.createDisplayResourceSlots(),
 			fullResource: null,
+			fullLastAccessAt: 0,
+			lowDisplayLeaseCount: 0,
+			lastDecodedBudgetEnforcedAt: 0,
 			bodyBlob: null,
 			bodyOssSrc: null,
 			bodyCacheKey: null,

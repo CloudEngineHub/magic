@@ -157,6 +157,7 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 
 type RequestVideoLoad = (candidate: VideoCandidate, reason: string, force?: boolean) => void
 type ShouldRequestImageCandidate = (candidate: ImageCandidate) => boolean
+type UpdateImageRetentionHints = (candidates: ImageCandidate[], lastSeenAt: number) => void
 
 describe("CanvasVisibilityManager video load requests", () => {
 	it("dedupes repeated near video url prewarm candidates", () => {
@@ -291,6 +292,79 @@ describe("CanvasVisibilityManager image load requests", () => {
 		})
 	})
 
+	it("invalidates image load request dedupe state by path and variant", () => {
+		const manager = Object.create(CanvasVisibilityManager.prototype) as {
+			canvas: {
+				magicConfigManager: {
+					config: {
+						methods: Record<string, never>
+					}
+				}
+			}
+			destroyed: boolean
+			registeredImages: Map<string, { elementId: string; path: string }>
+			lastRequestedLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					variant: ImageResourceVariant
+					requestedAt: number
+				}
+			>
+			scheduleRefresh: ReturnType<typeof vi.fn>
+			invalidateImageLoadRequest: CanvasVisibilityManager["invalidateImageLoadRequest"]
+		}
+		manager.canvas = {
+			magicConfigManager: {
+				config: {
+					methods: {},
+				},
+			},
+		}
+		manager.destroyed = false
+		manager.registeredImages = new Map([
+			["image-1", { elementId: "image-1", path: "./images/a.png" }],
+			["image-2", { elementId: "image-2", path: "./images/a.png" }],
+			["image-3", { elementId: "image-3", path: "./images/b.png" }],
+		])
+		manager.lastRequestedLoadState = new Map([
+			["image-1", { priority: "visible", variant: "preview", requestedAt: 1 }],
+			["image-2", { priority: "visible", variant: "full", requestedAt: 1 }],
+			["image-3", { priority: "visible", variant: "preview", requestedAt: 1 }],
+		])
+		manager.scheduleRefresh = vi.fn()
+
+		manager.invalidateImageLoadRequest("./images/a.png", "preview", "decoded-budget")
+
+		expect(manager.lastRequestedLoadState.has("image-1")).toBe(false)
+		expect(manager.lastRequestedLoadState.has("image-2")).toBe(true)
+		expect(manager.lastRequestedLoadState.has("image-3")).toBe(true)
+		expect(manager.scheduleRefresh).toHaveBeenCalledWith(
+			"image:load-request-invalidated:decoded-budget",
+			true,
+		)
+
+		manager.scheduleRefresh.mockClear()
+		manager.invalidateImageLoadRequest("./images/a.png", "low", "decoded-budget")
+		expect(manager.lastRequestedLoadState.has("image-2")).toBe(true)
+		expect(manager.scheduleRefresh).not.toHaveBeenCalled()
+
+		manager.invalidateImageLoadRequest("./images/a.png", undefined, "decoded-budget")
+		expect(manager.lastRequestedLoadState.has("image-2")).toBe(false)
+		expect(manager.lastRequestedLoadState.has("image-3")).toBe(true)
+		expect(manager.scheduleRefresh).toHaveBeenCalledWith(
+			"image:load-request-invalidated:decoded-budget",
+			true,
+		)
+
+		manager.scheduleRefresh.mockClear()
+		manager.invalidateImageLoadRequest("./images/a.png", undefined, "decoded-budget")
+		expect(manager.scheduleRefresh).toHaveBeenCalledWith(
+			"image:load-request-invalidated:decoded-budget",
+			true,
+		)
+	})
+
 	it("caps background image load requests and keeps visible candidates first", () => {
 		const manager = Object.create(CanvasVisibilityManager.prototype) as CanvasVisibilityManager
 		const selectImageCandidatesToLoad = (
@@ -402,6 +476,173 @@ describe("CanvasVisibilityManager image variant switch cooldown", () => {
 	})
 })
 
+describe("CanvasVisibilityManager decoded image retention hints", () => {
+	function createRetentionManager(displayedVariant?: ImageResourceVariant) {
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				elementManager: {
+					getElementInstance: () => {
+						getDisplayResourceVariant?: () => ImageResourceVariant | undefined
+					}
+				}
+				magicConfigManager: {
+					config: {
+						methods: Record<string, never>
+					}
+				}
+			}
+			destroyed: boolean
+			registeredImages: Map<string, { elementId: string; path: string }>
+			lastVisibilityState: Map<string, string>
+			lastRequestedLoadState: Map<string, unknown>
+			imageRetentionHints: Map<string, unknown>
+			scheduleRefresh: ReturnType<typeof vi.fn>
+		}
+		manager.canvas = {
+			elementManager: {
+				getElementInstance: () => ({
+					getDisplayResourceVariant: () => displayedVariant,
+				}),
+			},
+			magicConfigManager: {
+				config: {
+					methods: {},
+				},
+			},
+		}
+		manager.destroyed = false
+		manager.registeredImages = new Map([
+			["image-1", { elementId: "image-1", path: "./images/a.png" }],
+		])
+		manager.lastVisibilityState = new Map()
+		manager.lastRequestedLoadState = new Map()
+		manager.imageRetentionHints = new Map()
+		manager.scheduleRefresh = vi.fn()
+		return manager
+	}
+
+	it("returns visible image retention hints with requested and displayed variants", () => {
+		const manager = createRetentionManager("full")
+		const updateImageRetentionHints = (
+			manager as unknown as { updateImageRetentionHints: UpdateImageRetentionHints }
+		).updateImageRetentionHints
+
+		updateImageRetentionHints.call(
+			manager,
+			[
+				{
+					elementId: "image-1",
+					path: "./images/a.png",
+					priority: "visible",
+					variant: "full",
+					visibilityState: "visible",
+					screenArea: 1_000_000,
+					screenLongEdge: 2000,
+					distanceToViewportCenter: 0,
+				},
+			],
+			performance.now(),
+		)
+
+		expect(manager.getDecodedImageRetentionSnapshot()).toEqual([
+			expect.objectContaining({
+				elementId: "image-1",
+				path: "./images/a.png",
+				visibilityState: "visible",
+				requestedVariant: "full",
+				displayedVariant: "full",
+				screenLongEdge: 2000,
+			}),
+		])
+	})
+
+	it("clears image retention hints on unregister and path update", () => {
+		const manager = createRetentionManager("preview")
+		const updateImageRetentionHints = (
+			manager as unknown as { updateImageRetentionHints: UpdateImageRetentionHints }
+		).updateImageRetentionHints
+
+		updateImageRetentionHints.call(
+			manager,
+			[
+				{
+					elementId: "image-1",
+					path: "./images/a.png",
+					priority: "visible",
+					variant: "preview",
+					visibilityState: "visible",
+					screenArea: 1000,
+					screenLongEdge: 500,
+					distanceToViewportCenter: 0,
+				},
+			],
+			performance.now(),
+		)
+		manager.updateImageElement("image-1", "./images/b.png")
+
+		expect(manager.getDecodedImageRetentionSnapshot()).toEqual([])
+		expect(manager.registeredImages.get("image-1")?.path).toBe("./images/b.png")
+
+		updateImageRetentionHints.call(
+			manager,
+			[
+				{
+					elementId: "image-1",
+					path: "./images/b.png",
+					priority: "visible",
+					variant: "preview",
+					visibilityState: "visible",
+					screenArea: 1000,
+					screenLongEdge: 500,
+					distanceToViewportCenter: 0,
+				},
+			],
+			performance.now(),
+		)
+		manager.unregisterImageElement("image-1")
+
+		expect(manager.getDecodedImageRetentionSnapshot()).toEqual([])
+		expect(manager.registeredImages.has("image-1")).toBe(false)
+	})
+
+	it("keeps retention hints during the grace window and prunes them after expiry", () => {
+		vi.useFakeTimers()
+		try {
+			const manager = createRetentionManager("preview")
+			const updateImageRetentionHints = (
+				manager as unknown as { updateImageRetentionHints: UpdateImageRetentionHints }
+			).updateImageRetentionHints
+
+			updateImageRetentionHints.call(
+				manager,
+				[
+					{
+						elementId: "image-1",
+						path: "./images/a.png",
+						priority: "near",
+						variant: "preview",
+						visibilityState: "near",
+						screenArea: 1000,
+						screenLongEdge: 500,
+						distanceToViewportCenter: 0,
+					},
+				],
+				performance.now(),
+			)
+
+			vi.advanceTimersByTime(1499)
+			expect(manager.getDecodedImageRetentionSnapshot()).toHaveLength(1)
+
+			vi.advanceTimersByTime(2)
+			expect(manager.getDecodedImageRetentionSnapshot()).toEqual([])
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+})
+
 describe("CanvasVisibilityManager content layer hit graph suppression", () => {
 	it("disables content layer listening during viewport movement and restores it after idle", () => {
 		vi.useFakeTimers()
@@ -459,6 +700,9 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			canvas: {
 				elementManager: {
 					findParentIdForElement: () => undefined
+					getElementInstance: () => {
+						getDisplayResourceVariant: () => undefined
+					}
 					isElementVisibleInDataTree: () => boolean
 				}
 				geometryCacheManager: {
@@ -480,6 +724,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			lastVisibilityState: Map<string, string>
 			lastVideoVisibilityState: Map<string, string>
 			lastContainerDisplayVariant: Map<string, ImageResourceVariant>
+			imageRetentionHints: Map<string, unknown>
 			initialVisibleCriticalUntil: number
 			statsSnapshot: Record<string, number>
 			shouldRequestImageCandidate: () => boolean
@@ -498,6 +743,9 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 		manager.canvas = {
 			elementManager: {
 				findParentIdForElement: () => undefined,
+				getElementInstance: () => ({
+					getDisplayResourceVariant: () => undefined,
+				}),
 				isElementVisibleInDataTree: () => true,
 			},
 			geometryCacheManager: {
@@ -514,6 +762,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 		manager.lastVisibilityState = new Map()
 		manager.lastVideoVisibilityState = new Map()
 		manager.lastContainerDisplayVariant = new Map()
+		manager.imageRetentionHints = new Map()
 		manager.initialVisibleCriticalUntil = 0
 		manager.statsSnapshot = {
 			registeredImageCount: 0,
