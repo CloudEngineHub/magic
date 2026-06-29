@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, TYPE_CHECKING
 from urllib.parse import urlparse
 
 from app.infrastructure.sdk.base import SdkBase, SdkContext
+from .api.ai_ability_api import AiAbilityApi
 from .api.agent_api import AgentApi
 from .api.file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
 from .api.magicbase_api import MagicBaseApi
@@ -41,6 +42,7 @@ class MagicService:
 
         # Initialize API routes
         self._routes = {
+            'ai_ability': AiAbilityApi,
             'agent': AgentApi,
             'file': FileApi,  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
             'magicbase': MagicBaseApi,
@@ -76,6 +78,11 @@ class MagicService:
     def agent(self) -> 'AgentApi':
         """Get agent API instance"""
         return self._fetched_definitions['agent']
+
+    @property
+    def ai_ability(self) -> 'AiAbilityApi':
+        """Get AI ability API instance."""
+        return self._fetched_definitions['ai_ability']
 
     @property
     def file(self) -> 'FileApi':

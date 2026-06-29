@@ -4,6 +4,7 @@ Magic Service API Parameters
 Parameter classes for Magic Service API requests.
 """
 
+from .ai_ability_runtime_config_parameter import AiAbilityRuntimeConfigParameter
 from .get_agent_details_parameter import GetAgentDetailsParameter
 from .message_schedule_parameter import MessageScheduleParameter, TimeConfig
 from .oauth2_callback_relay_parameter import OAuth2CallbackRelayParameter
@@ -28,6 +29,7 @@ from .get_magicbase_table_parameter import GetMagicBaseTableParameter
 from .query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
 
 __all__ = [
+    'AiAbilityRuntimeConfigParameter',
     'GetAgentDetailsParameter',
     'MessageScheduleParameter',
     'TimeConfig',

@@ -12,6 +12,7 @@ from .factory import (
 )
 
 # API classes
+from .api.ai_ability_api import AiAbilityApi
 from .api.agent_api import AgentApi
 from .api.magicbase_api import MagicBaseApi
 from .api.message_schedule_api import MessageScheduleApi
@@ -19,6 +20,7 @@ from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.share_api import ShareApi
 
 # Parameter classes
+from .parameter.ai_ability_runtime_config_parameter import AiAbilityRuntimeConfigParameter
 from .parameter.get_agent_details_parameter import GetAgentDetailsParameter
 from .parameter.tool_execute_parameter import ToolExecuteParameter
 from .parameter.search_knowledge_parameter import SearchKnowledgeParameter
@@ -42,6 +44,7 @@ from .parameter.get_magicbase_table_parameter import GetMagicBaseTableParameter
 from .parameter.query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
 
 # Result classes
+from .result.ai_ability_runtime_config_result import AiAbilityRuntimeConfigItem, AiAbilityRuntimeConfigResult
 from .result.agent_details_result import (
     AgentDetailsResult,
     Tool
@@ -87,6 +90,7 @@ __all__ = [
     'MagicServiceConfigError',
 
     # API classes
+    'AiAbilityApi',
     'AgentApi',
     'MagicBaseApi',
     'MessageScheduleApi',
@@ -94,6 +98,7 @@ __all__ = [
     'ShareApi',
 
     # Parameter classes
+    'AiAbilityRuntimeConfigParameter',
     'GetAgentDetailsParameter',
     'ToolExecuteParameter',
     'SearchKnowledgeParameter',
@@ -116,6 +121,8 @@ __all__ = [
     'QueryMagicBaseTablesParameter',
 
     # Result classes
+    'AiAbilityRuntimeConfigResult',
+    'AiAbilityRuntimeConfigItem',
     'AgentDetailsResult',
     'ToolExecuteResult',
     'SearchKnowledgeResult',
