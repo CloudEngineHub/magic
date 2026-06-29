@@ -26,6 +26,11 @@ import type {
 	ImageInfo,
 	LoadedResource,
 	ImageResourceVariant,
+	ImageResourceLoadedHandler,
+	ImageResourceDisplayTargetHandler,
+	ImageResourceDisplayLoadedHandler,
+	ImageResourceWillCloseHandler,
+	ImageResourceLoadFailedHandler,
 } from "../../utils/ImageResourceManager"
 import { getPersistedSourceCrop } from "../../utils/imageCropUtils"
 import { getImageSourceDimensions } from "../../utils/imageSourceUtils"
@@ -90,36 +95,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private ossSrcReject?: (reason?: Error) => void
 
 	// resource:image:loaded / resource:image:load-failed 监听器
-	private resourceLoadedHandler?: (event: {
-		data: { path: string; resource: LoadedResource }
-	}) => void
-	private resourceDisplayTargetHandler?: (event: {
-		data: {
-			elementId: string
-			path: string
-			variant: ImageResourceVariant
-			reason: string
-		}
-	}) => void
-	private resourceDisplayLoadedHandler?: (event: {
-		data: {
-			elementId: string
-			path: string
-			resource: LoadedResource
-			reason: string
-		}
-	}) => void
-	private resourceWillCloseHandler?: (event: {
-		data: {
-			path?: string
-			variant: ImageResourceVariant
-			image: ImageSource
-			reason: string
-		}
-	}) => void
-	private resourceLoadFailedHandler?: (event: {
-		data: { path: string; reason?: ResourceLoadFailureReason }
-	}) => void
+	private resourceLoadedHandler?: ImageResourceLoadedHandler
+	private resourceDisplayTargetHandler?: ImageResourceDisplayTargetHandler
+	private resourceDisplayLoadedHandler?: ImageResourceDisplayLoadedHandler
+	private resourceWillCloseHandler?: ImageResourceWillCloseHandler
+	private resourceLoadFailedHandler?: ImageResourceLoadFailedHandler
+	private resourceSubscriptionCleanups: Array<() => void> = []
 	/** 最后一次加载失败原因（与 resource:image:load-failed 同步） */
 	private imageLoadFailureReason: ResourceLoadFailureReason | null = null
 	/** 最近一次已应用到视图的资源失败签名（用于去重，避免重复 rerender） */
@@ -930,17 +911,28 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.resourceWillCloseHandler = ({ data }) => {
 			this.handleImageSourceWillClose(data.image, data.variant)
 		}
-		this.canvas.eventEmitter.on("resource:image:loaded", this.resourceLoadedHandler)
-		this.canvas.eventEmitter.on(
-			"resource:image:display-target",
-			this.resourceDisplayTargetHandler,
-		)
-		this.canvas.eventEmitter.on(
-			"resource:image:display-loaded",
-			this.resourceDisplayLoadedHandler,
-		)
-		this.canvas.eventEmitter.on("resource:image:will-close", this.resourceWillCloseHandler)
-		this.canvas.eventEmitter.on("resource:image:load-failed", this.resourceLoadFailedHandler)
+		this.resourceSubscriptionCleanups = [
+			this.canvas.imageResourceManager.onImageResourceLoaded(
+				path,
+				this.resourceLoadedHandler,
+			),
+			this.canvas.imageResourceManager.onImageResourceDisplayTarget(
+				this.data.id,
+				this.resourceDisplayTargetHandler,
+			),
+			this.canvas.imageResourceManager.onImageResourceDisplayLoaded(
+				this.data.id,
+				this.resourceDisplayLoadedHandler,
+			),
+			this.canvas.imageResourceManager.onImageResourceWillClose(
+				path,
+				this.resourceWillCloseHandler,
+			),
+			this.canvas.imageResourceManager.onImageResourceLoadFailed(
+				path,
+				this.resourceLoadFailedHandler,
+			),
+		]
 
 		// 同步可能已缓存的资源；不要在监听阶段触发新加载，否则会绕过可见性调度。
 		const resource =
@@ -964,35 +956,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 移除 resource:image:loaded / resource:image:display-loaded / resource:image:load-failed 监听
 	 */
 	private removeResourceLoadedListener(): void {
-		if (this.resourceLoadedHandler) {
-			this.canvas.eventEmitter.off("resource:image:loaded", this.resourceLoadedHandler)
-			this.resourceLoadedHandler = undefined
-		}
-		if (this.resourceDisplayTargetHandler) {
-			this.canvas.eventEmitter.off(
-				"resource:image:display-target",
-				this.resourceDisplayTargetHandler,
-			)
-			this.resourceDisplayTargetHandler = undefined
-		}
-		if (this.resourceDisplayLoadedHandler) {
-			this.canvas.eventEmitter.off(
-				"resource:image:display-loaded",
-				this.resourceDisplayLoadedHandler,
-			)
-			this.resourceDisplayLoadedHandler = undefined
-		}
-		if (this.resourceLoadFailedHandler) {
-			this.canvas.eventEmitter.off(
-				"resource:image:load-failed",
-				this.resourceLoadFailedHandler,
-			)
-			this.resourceLoadFailedHandler = undefined
-		}
-		if (this.resourceWillCloseHandler) {
-			this.canvas.eventEmitter.off("resource:image:will-close", this.resourceWillCloseHandler)
-			this.resourceWillCloseHandler = undefined
-		}
+		this.resourceSubscriptionCleanups.forEach((cleanup) => cleanup())
+		this.resourceSubscriptionCleanups = []
+		this.resourceLoadedHandler = undefined
+		this.resourceDisplayTargetHandler = undefined
+		this.resourceDisplayLoadedHandler = undefined
+		this.resourceLoadFailedHandler = undefined
+		this.resourceWillCloseHandler = undefined
 	}
 
 	/**

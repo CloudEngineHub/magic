@@ -215,6 +215,47 @@ interface PreviewLoadQueueItem {
 	reject: (error: unknown) => void
 }
 
+export interface ImageResourceLoadedEvent {
+	data: { path: string; resource: LoadedResource }
+}
+
+export interface ImageResourceDisplayTargetEvent {
+	data: {
+		elementId: string
+		path: string
+		variant: ImageResourceVariant
+		reason: string
+	}
+}
+
+export interface ImageResourceDisplayLoadedEvent {
+	data: {
+		elementId: string
+		path: string
+		resource: LoadedResource
+		reason: string
+	}
+}
+
+export interface ImageResourceLoadFailedEvent {
+	data: { path: string; reason?: ResourceLoadFailureReason }
+}
+
+export interface ImageResourceWillCloseEvent {
+	data: {
+		path?: string
+		variant: ImageResourceVariant
+		image: ImageSource
+		reason: string
+	}
+}
+
+export type ImageResourceLoadedHandler = (event: ImageResourceLoadedEvent) => void
+export type ImageResourceDisplayTargetHandler = (event: ImageResourceDisplayTargetEvent) => void
+export type ImageResourceDisplayLoadedHandler = (event: ImageResourceDisplayLoadedEvent) => void
+export type ImageResourceLoadFailedHandler = (event: ImageResourceLoadFailedEvent) => void
+export type ImageResourceWillCloseHandler = (event: ImageResourceWillCloseEvent) => void
+
 /**
  * 图片资源管理器
  * 负责管理图片资源的完整生命周期：src(path) -> ossSrc -> ImageSource (ImageBitmap | HTMLImageElement)
@@ -235,9 +276,194 @@ export class ImageResourceManager {
 		maxBytes: COMPRESSED_BODY_CACHE_MAX_BYTES,
 	})
 	private displayVariantPersistentCache = new ImageDisplayVariantPersistentCache()
+	private imageResourceLoadedHandlersByPath = new Map<string, Set<ImageResourceLoadedHandler>>()
+	private imageResourceLoadFailedHandlersByPath = new Map<
+		string,
+		Set<ImageResourceLoadFailedHandler>
+	>()
+	private imageResourceWillCloseHandlersByPath = new Map<
+		string,
+		Set<ImageResourceWillCloseHandler>
+	>()
+	private imageResourceDisplayTargetHandlersByElementId = new Map<
+		string,
+		Set<ImageResourceDisplayTargetHandler>
+	>()
+	private imageResourceDisplayLoadedHandlersByElementId = new Map<
+		string,
+		Set<ImageResourceDisplayLoadedHandler>
+	>()
 
 	private canonicalResourcePath(path: string): string {
 		return this.urlLifecycle.canonicalResourcePath(path)
+	}
+
+	public onImageResourceLoaded(path: string, handler: ImageResourceLoadedHandler): () => void {
+		return this.addPathHandler(this.imageResourceLoadedHandlersByPath, path, handler)
+	}
+
+	public onImageResourceLoadFailed(
+		path: string,
+		handler: ImageResourceLoadFailedHandler,
+	): () => void {
+		return this.addPathHandler(this.imageResourceLoadFailedHandlersByPath, path, handler)
+	}
+
+	public onImageResourceWillClose(
+		path: string,
+		handler: ImageResourceWillCloseHandler,
+	): () => void {
+		return this.addPathHandler(this.imageResourceWillCloseHandlersByPath, path, handler)
+	}
+
+	public onImageResourceDisplayTarget(
+		elementId: string,
+		handler: ImageResourceDisplayTargetHandler,
+	): () => void {
+		return this.addElementHandler(
+			this.imageResourceDisplayTargetHandlersByElementId,
+			elementId,
+			handler,
+		)
+	}
+
+	public onImageResourceDisplayLoaded(
+		elementId: string,
+		handler: ImageResourceDisplayLoadedHandler,
+	): () => void {
+		return this.addElementHandler(
+			this.imageResourceDisplayLoadedHandlersByElementId,
+			elementId,
+			handler,
+		)
+	}
+
+	public emitImageResourceDisplayTarget(data: ImageResourceDisplayTargetEvent["data"]): void {
+		this.canvas.eventEmitter.emit({
+			type: "resource:image:display-target",
+			data,
+		})
+		this.notifyElementHandlers(
+			this.imageResourceDisplayTargetHandlersByElementId,
+			data.elementId,
+			{ data },
+		)
+	}
+
+	private addPathHandler<THandler>(
+		handlersByPath: Map<string, Set<THandler>>,
+		path: string,
+		handler: THandler,
+	): () => void {
+		const key = this.canonicalResourcePath(path)
+		let handlers = handlersByPath.get(key)
+		if (!handlers) {
+			handlers = new Set()
+			handlersByPath.set(key, handlers)
+		}
+		handlers.add(handler)
+		return () => {
+			const currentHandlers = handlersByPath.get(key)
+			if (!currentHandlers) return
+			currentHandlers.delete(handler)
+			if (currentHandlers.size === 0) {
+				handlersByPath.delete(key)
+			}
+		}
+	}
+
+	private addElementHandler<THandler>(
+		handlersByElementId: Map<string, Set<THandler>>,
+		elementId: string,
+		handler: THandler,
+	): () => void {
+		let handlers = handlersByElementId.get(elementId)
+		if (!handlers) {
+			handlers = new Set()
+			handlersByElementId.set(elementId, handlers)
+		}
+		handlers.add(handler)
+		return () => {
+			const currentHandlers = handlersByElementId.get(elementId)
+			if (!currentHandlers) return
+			currentHandlers.delete(handler)
+			if (currentHandlers.size === 0) {
+				handlersByElementId.delete(elementId)
+			}
+		}
+	}
+
+	private notifyPathHandlers<TEvent>(
+		handlersByPath: Map<string, Set<(event: TEvent) => void>>,
+		path: string,
+		event: TEvent,
+	): void {
+		const handlers = handlersByPath.get(this.canonicalResourcePath(path))
+		if (!handlers || handlers.size === 0) return
+		Array.from(handlers).forEach((handler) => handler(event))
+	}
+
+	private notifyAllPathHandlers<TEvent>(
+		handlersByPath: Map<string, Set<(event: TEvent) => void>>,
+		event: TEvent,
+	): void {
+		handlersByPath.forEach((handlers) => {
+			Array.from(handlers).forEach((handler) => handler(event))
+		})
+	}
+
+	private notifyElementHandlers<TEvent>(
+		handlersByElementId: Map<string, Set<(event: TEvent) => void>>,
+		elementId: string,
+		event: TEvent,
+	): void {
+		const handlers = handlersByElementId.get(elementId)
+		if (!handlers || handlers.size === 0) return
+		Array.from(handlers).forEach((handler) => handler(event))
+	}
+
+	private emitImageResourceLoaded(data: ImageResourceLoadedEvent["data"]): void {
+		const event = {
+			type: "resource:image:loaded" as const,
+			data,
+		}
+		this.canvas.eventEmitter.emit(event)
+		this.notifyPathHandlers(this.imageResourceLoadedHandlersByPath, data.path, { data })
+	}
+
+	private emitImageResourceDisplayLoaded(data: ImageResourceDisplayLoadedEvent["data"]): void {
+		const event = {
+			type: "resource:image:display-loaded" as const,
+			data,
+		}
+		this.canvas.eventEmitter.emit(event)
+		this.notifyElementHandlers(
+			this.imageResourceDisplayLoadedHandlersByElementId,
+			data.elementId,
+			{ data },
+		)
+	}
+
+	private emitImageResourceLoadFailed(data: ImageResourceLoadFailedEvent["data"]): void {
+		const event = {
+			type: "resource:image:load-failed" as const,
+			data,
+		}
+		this.canvas.eventEmitter.emit(event)
+		this.notifyPathHandlers(this.imageResourceLoadFailedHandlersByPath, data.path, { data })
+	}
+
+	private emitImageResourceWillClose(data: ImageResourceWillCloseEvent["data"]): void {
+		const event = {
+			type: "resource:image:will-close" as const,
+			data,
+		}
+		this.canvas.eventEmitter.emit(event)
+		if (data.path) {
+			this.notifyPathHandlers(this.imageResourceWillCloseHandlersByPath, data.path, { data })
+			return
+		}
+		this.notifyAllPathHandlers(this.imageResourceWillCloseHandlersByPath, { data })
 	}
 
 	private isAbortError(error: unknown): boolean {
@@ -573,14 +799,11 @@ export class ImageResourceManager {
 		if (!resource) return
 		if (resource.closed) return
 		resource.closed = true
-		this.canvas.eventEmitter.emit({
-			type: "resource:image:will-close",
-			data: {
-				path: options?.path,
-				variant: resource.variant,
-				image: resource.image,
-				reason: options?.reason ?? "resource-close",
-			},
+		this.emitImageResourceWillClose({
+			path: options?.path,
+			variant: resource.variant,
+			image: resource.image,
+			reason: options?.reason ?? "resource-close",
 		})
 		closeImageSource(resource.image)
 	}
@@ -812,9 +1035,9 @@ export class ImageResourceManager {
 
 		const loadedResource = this.buildLoadedResource(entry, variant)
 		if (!loadedResource) return null
-		this.canvas.eventEmitter.emit({
-			type: "resource:image:loaded",
-			data: { path: normalizedSrc, resource: loadedResource },
+		this.emitImageResourceLoaded({
+			path: normalizedSrc,
+			resource: loadedResource,
 		})
 		if (shouldRefreshCached) {
 			this.triggerBackgroundMetadataRefresh(path, normalizedSrc, entry)
@@ -969,12 +1192,9 @@ export class ImageResourceManager {
 			if (this.destroyed) return null
 			if (!result) {
 				if (variant === "preview") {
-					this.canvas.eventEmitter.emit({
-						type: "resource:image:load-failed",
-						data: {
-							path: normalizedSrc,
-							reason: entry.lastFailureReason ?? "load-error",
-						},
+					this.emitImageResourceLoadFailed({
+						path: normalizedSrc,
+						reason: entry.lastFailureReason ?? "load-error",
 					})
 				} else {
 					this.emitVariantLoadFailed(
@@ -1012,12 +1232,9 @@ export class ImageResourceManager {
 			if (this.destroyed) return null
 			if (!result) {
 				if (variant === "preview") {
-					this.canvas.eventEmitter.emit({
-						type: "resource:image:load-failed",
-						data: {
-							path: normalizedSrc,
-							reason: entry.lastFailureReason ?? "load-error",
-						},
+					this.emitImageResourceLoadFailed({
+						path: normalizedSrc,
+						reason: entry.lastFailureReason ?? "load-error",
 					})
 				} else {
 					this.emitVariantLoadFailed(
@@ -1090,12 +1307,9 @@ export class ImageResourceManager {
 			if (this.destroyed) return null
 			if (!ossSrc) {
 				if (variant === "preview") {
-					this.canvas.eventEmitter.emit({
-						type: "resource:image:load-failed",
-						data: {
-							path: normalizedSrc,
-							reason: entry.lastFailureReason ?? "not-found",
-						},
+					this.emitImageResourceLoadFailed({
+						path: normalizedSrc,
+						reason: entry.lastFailureReason ?? "not-found",
 					})
 				}
 				return null
@@ -1151,14 +1365,11 @@ export class ImageResourceManager {
 		if (resource.variant !== "full") return
 		if (!options?.displayTargetElementId) return
 
-		this.canvas.eventEmitter.emit({
-			type: "resource:image:display-loaded",
-			data: {
-				elementId: options.displayTargetElementId,
-				path: this.canonicalResourcePath(path),
-				resource,
-				reason: options.displayTargetReason ?? "display-target",
-			},
+		this.emitImageResourceDisplayLoaded({
+			elementId: options.displayTargetElementId,
+			path: this.canonicalResourcePath(path),
+			resource,
+			reason: options.displayTargetReason ?? "display-target",
 		})
 	}
 
@@ -1407,12 +1618,9 @@ export class ImageResourceManager {
 			} else {
 				restorePreviousResourceState()
 			}
-			this.canvas.eventEmitter.emit({
-				type: "resource:image:load-failed",
-				data: {
-					path: normalizedSrc,
-					reason,
-				},
+			this.emitImageResourceLoadFailed({
+				path: normalizedSrc,
+				reason,
 			})
 			return false
 		}
@@ -1454,12 +1662,9 @@ export class ImageResourceManager {
 		}
 
 		restorePreviousResourceState()
-		this.canvas.eventEmitter.emit({
-			type: "resource:image:load-failed",
-			data: {
-				path: normalizedSrc,
-				reason: entry.lastFailureReason ?? "load-error",
-			},
+		this.emitImageResourceLoadFailed({
+			path: normalizedSrc,
+			reason: entry.lastFailureReason ?? "load-error",
 		})
 		return false
 	}
@@ -1478,7 +1683,10 @@ export class ImageResourceManager {
 			mediaType: "image",
 		})
 		void this.displayVariantPersistentCache.removeByPath(normalizedSrc)
-		this.closeEntryResources(entry)
+		this.closeEntryResources(entry, {
+			path: normalizedSrc,
+			reason: "resource-deleted",
+		})
 		entry.ossSrc = null
 		entry.ossSrcFromCachedFallback = false
 		entry.sourceUrl = null
@@ -1486,9 +1694,9 @@ export class ImageResourceManager {
 		entry.resourceVersion = null
 		entry.sourceUpdatedAt = null
 		entry.contentLength = null
-		this.canvas.eventEmitter.emit({
-			type: "resource:image:load-failed",
-			data: { path: normalizedSrc, reason: "not-found" },
+		this.emitImageResourceLoadFailed({
+			path: normalizedSrc,
+			reason: "not-found",
 		})
 	}
 
@@ -1880,9 +2088,9 @@ export class ImageResourceManager {
 			)
 
 			if (variant !== "full") {
-				this.canvas.eventEmitter.emit({
-					type: "resource:image:loaded",
-					data: { path, resource: loadedResource },
+				this.emitImageResourceLoaded({
+					path,
+					resource: loadedResource,
 				})
 			}
 			if (
@@ -2104,6 +2312,11 @@ export class ImageResourceManager {
 			})
 		})
 		this.entries.clear()
+		this.imageResourceLoadedHandlersByPath.clear()
+		this.imageResourceLoadFailedHandlersByPath.clear()
+		this.imageResourceWillCloseHandlersByPath.clear()
+		this.imageResourceDisplayTargetHandlersByElementId.clear()
+		this.imageResourceDisplayLoadedHandlersByElementId.clear()
 		this.canvas.eventEmitter.off("element:deleted", this.handleElementDeleted)
 		this.canvas.eventEmitter.off("element:batchdeleted", this.handleBatchDeleted)
 		this.canvas.eventEmitter.off("canvas:clear", this.handleCanvasClear)

@@ -1767,14 +1767,11 @@ export class CanvasVisibilityManager {
 			variant: candidate.variant,
 			requestedAt: now(),
 		})
-		this.canvas.eventEmitter.emit({
-			type: "resource:image:display-target",
-			data: {
-				elementId: candidate.elementId,
-				path: candidate.path,
-				variant: candidate.variant,
-				reason,
-			},
+		this.canvas.imageResourceManager.emitImageResourceDisplayTarget({
+			elementId: candidate.elementId,
+			path: candidate.path,
+			variant: candidate.variant,
+			reason,
 		})
 		void this.canvas.imageResourceManager.loadResource(candidate.path, {
 			variant: candidate.variant,

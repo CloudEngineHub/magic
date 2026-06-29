@@ -85,8 +85,13 @@ function createEntry(overrides: Record<string, unknown> = {}) {
 
 function createManager() {
 	const eventEmitter = { emit: vi.fn() }
-	const manager = Object.create(ImageResourceManager.prototype) as ImageResourceManager & {
-		canvas: { id: string; eventEmitter: typeof eventEmitter }
+	const canvasFileUploadManager = { shouldDeferRemoteResourceLoad: vi.fn(() => false) }
+	const manager = Object.create(ImageResourceManager.prototype) as {
+		canvas: {
+			id: string
+			eventEmitter: typeof eventEmitter
+			canvasFileUploadManager: typeof canvasFileUploadManager
+		}
 		managerInstanceId: number
 		destroyed: boolean
 		entries: Map<string, ReturnType<typeof createEntry>>
@@ -95,13 +100,24 @@ function createManager() {
 		decodePixelBudgetGate: MediaDecodePixelBudgetGate
 		bodyCache: MediaResourceBodyCache<ReturnType<typeof createEntry>>
 		diagnostics: ReturnType<typeof createImageResourceDiagnostics>
+		imageResourceLoadedHandlersByPath: Map<string, Set<unknown>>
+		imageResourceLoadFailedHandlersByPath: Map<string, Set<unknown>>
+		imageResourceWillCloseHandlersByPath: Map<string, Set<unknown>>
+		imageResourceDisplayTargetHandlersByElementId: Map<string, Set<unknown>>
+		imageResourceDisplayLoadedHandlersByElementId: Map<string, Set<unknown>>
 		urlLifecycle: {
 			canonicalResourcePath: (path: string) => string
 			clearExpiredOssSrc: () => void
 			applyVirtualResourceBypass: () => void
 		}
+		loadResource: (path: string, options?: Record<string, unknown>) => void
+		getLowImageUrl: (path: string) => Promise<{
+			url: string
+			imageInfo: TestImageResource["imageInfo"]
+			release: () => void
+		} | null>
 	}
-	manager.canvas = { id: "test-canvas", eventEmitter }
+	manager.canvas = { id: "test-canvas", eventEmitter, canvasFileUploadManager }
 	manager.managerInstanceId = 1
 	manager.destroyed = false
 	manager.entries = new Map()
@@ -112,6 +128,11 @@ function createManager() {
 	)
 	manager.bodyCache = new MediaResourceBodyCache({ ttlMs: 120_000, maxBytes: 256 * 1024 * 1024 })
 	manager.diagnostics = createImageResourceDiagnostics()
+	manager.imageResourceLoadedHandlersByPath = new Map()
+	manager.imageResourceLoadFailedHandlersByPath = new Map()
+	manager.imageResourceWillCloseHandlersByPath = new Map()
+	manager.imageResourceDisplayTargetHandlersByElementId = new Map()
+	manager.imageResourceDisplayLoadedHandlersByElementId = new Map()
 	manager.urlLifecycle = {
 		canonicalResourcePath: (path: string) => path,
 		clearExpiredOssSrc: vi.fn(),
@@ -327,7 +348,7 @@ describe("ImageResourceManager load priority defaults", () => {
 	) => "critical" | "visible" | "near" | "background"
 
 	it("preserves explicit priority for body fetch and decode scheduling", () => {
-		const manager = Object.create(ImageResourceManager.prototype) as ImageResourceManager & {
+		const manager = Object.create(ImageResourceManager.prototype) as {
 			getBodyFetchPriorityForVariant: GetPriorityForVariant
 			getDecodePriorityForVariant: GetPriorityForVariant
 		}
@@ -339,7 +360,7 @@ describe("ImageResourceManager load priority defaults", () => {
 	})
 
 	it("keeps existing variant-based priority defaults when no priority is supplied", () => {
-		const manager = Object.create(ImageResourceManager.prototype) as ImageResourceManager & {
+		const manager = Object.create(ImageResourceManager.prototype) as {
 			getBodyFetchPriorityForVariant: GetPriorityForVariant
 			getDecodePriorityForVariant: GetPriorityForVariant
 		}

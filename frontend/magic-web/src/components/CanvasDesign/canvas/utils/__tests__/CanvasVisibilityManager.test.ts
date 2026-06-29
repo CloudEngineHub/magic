@@ -238,14 +238,14 @@ describe("CanvasVisibilityManager video load requests", () => {
 
 describe("CanvasVisibilityManager image load requests", () => {
 	it("passes display target metadata to image resource loads", () => {
-		const emit = vi.fn()
+		const emitImageResourceDisplayTarget = vi.fn()
 		const loadResource = vi.fn()
-		const manager = Object.create(
-			CanvasVisibilityManager.prototype,
-		) as CanvasVisibilityManager & {
+		const manager = Object.create(CanvasVisibilityManager.prototype) as {
 			canvas: {
-				eventEmitter: { emit: typeof emit }
-				imageResourceManager: { loadResource: typeof loadResource }
+				imageResourceManager: {
+					emitImageResourceDisplayTarget: typeof emitImageResourceDisplayTarget
+					loadResource: typeof loadResource
+				}
 			}
 			lastRequestedLoadState: Map<
 				string,
@@ -255,21 +255,13 @@ describe("CanvasVisibilityManager image load requests", () => {
 					requestedAt: number
 				}
 			>
+			requestImageLoad: (candidate: ImageCandidate, reason: string, force?: boolean) => void
 		}
 		manager.canvas = {
-			eventEmitter: { emit },
-			imageResourceManager: { loadResource },
+			imageResourceManager: { emitImageResourceDisplayTarget, loadResource },
 		}
 		manager.lastRequestedLoadState = new Map()
-		const requestImageLoad = (
-			manager as unknown as {
-				requestImageLoad: (
-					candidate: ImageCandidate,
-					reason: string,
-					force?: boolean,
-				) => void
-			}
-		).requestImageLoad.bind(manager)
+		const requestImageLoad = manager.requestImageLoad.bind(manager)
 
 		requestImageLoad(
 			{
@@ -285,14 +277,11 @@ describe("CanvasVisibilityManager image load requests", () => {
 			"viewport:scale",
 		)
 
-		expect(emit).toHaveBeenCalledWith({
-			type: "resource:image:display-target",
-			data: {
-				elementId: "image-1",
-				path: "./images/a.png",
-				variant: "full",
-				reason: "viewport:scale",
-			},
+		expect(emitImageResourceDisplayTarget).toHaveBeenCalledWith({
+			elementId: "image-1",
+			path: "./images/a.png",
+			variant: "full",
+			reason: "viewport:scale",
 		})
 		expect(loadResource).toHaveBeenCalledWith("./images/a.png", {
 			variant: "full",
